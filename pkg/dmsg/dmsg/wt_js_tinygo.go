@@ -27,7 +27,7 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/hashicorp/yamux"
+	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 )

@@ -207,6 +207,8 @@ func main() {
 		"proxyBind":          js.FuncOf(jsProxyBind),
 		"proxyConsumers":     js.FuncOf(jsProxyConsumers),
 		"visorStats":         js.FuncOf(jsVisorStats),
+		"goroutineDump":      js.FuncOf(jsGoroutineDump),
+		"pprof":              js.FuncOf(jsPprof),
 		"skychatSend":        js.FuncOf(jsSkychatSend),
 		"skychatMessages":    js.FuncOf(jsSkychatMessages),
 		"skychatHistory":     js.FuncOf(jsSkychatHistory),

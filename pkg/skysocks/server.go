@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 
 	"github.com/armon/go-socks5"
-	"github.com/hashicorp/yamux"
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"

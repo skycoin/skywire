@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/yamux"
+	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 )
 
 // blackholeConn is a net.Conn whose writes are silently discarded and
