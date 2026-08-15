@@ -85,6 +85,7 @@ Examples:
   skywire cli dmsg probe --skynet <pk> 136           # over skynet (routed transports)
   skywire cli dmsg probe --via tcp://<pk>@host:8801  # direct noise-TCP connection`,
 	Args: func(cmd *cobra.Command, args []string) error {
+		internal.CheckDirectViaScheme(cmd.Flags(), probeVia, "a direct noise-TCP target (tcp://<pk>@host:port)")
 		// --via tcp carries the pk in its URL, so no positional args are
 		// required in that mode.
 		if probeVia != "" {

@@ -64,8 +64,14 @@ func init() {
 			"(any client-supplied copy is stripped) so the backend can do per-PK auth. "+
 			"Bind the backend to loopback only — see docs/guides/skynet-website-auth.md")
 
+	serveWhitelistCmd.Flags().BoolVar(&whitelistForce, "force", false,
+		"confirm clearing a populated whitelist, which reopens the port to all authenticated peers")
+
 	RootCmd.AddCommand(servePortCmd, servePortRmCmd, servePortLsCmd, serveWhitelistCmd)
 }
+
+// whitelistForce guards the `whitelist <port> clear` path.
+var whitelistForce bool
 
 // RootCmd is the `serve` command tree. The bare command (no
 // subcommand) lists registered ports — same data as `serve ls`.
@@ -261,6 +267,16 @@ Examples:
 		spec := strings.TrimSpace(args[1])
 		switch strings.ToLower(spec) {
 		case "clear", "none", "":
+			// Clearing a populated whitelist reopens the port to every
+			// authenticated peer. That is a widening of access with no
+			// other signal to the operator, so require intent — but only
+			// when there is something to lose, so clearing an already
+			// open port stays scriptable.
+			if len(fp.Whitelist) > 0 && !whitelistForce {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf(
+					"port %d is restricted to %d key(s); clearing reopens it to all authenticated peers — pass --force to confirm",
+					port, len(fp.Whitelist)))
+			}
 			fp.Whitelist = nil
 		default:
 			var wl []cipher.PubKey

@@ -143,6 +143,7 @@ var ptyStartCmd = &cobra.Command{
 	Short: "Start dmsgpty session",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		internal.CheckDirectViaScheme(cmd.Flags(), ptyVia, "a direct noise-TCP target (tcp://<pk>@host:port)")
 		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
 		defer cancel()
 
@@ -192,6 +193,7 @@ success, the remote's exit code on non-zero exit, 124 on timeout, 1 on
 RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		internal.CheckDirectViaScheme(cmd.Flags(), ptyVia, "a direct noise-TCP target (tcp://<pk>@host:port)")
 		timeout, err := time.ParseDuration(ptyExecTimeout)
 		if err != nil {
 			return fmt.Errorf("--timeout %q: %w", ptyExecTimeout, err)
