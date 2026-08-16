@@ -1742,8 +1742,8 @@
         body: "<b>Uptime</b> — how consistently each visor has stayed online over 1d / 7d / 30d, the basis for rewards." },
       { route: "#/nodes/services-health", sel: "app-services-health", title: "The mesh: services",
         body: {
-          wasm: "<b>Deployment</b> — the health of the shared services (config, discovery, route-finder, address resolver, uptime tracker) that keep the mesh working. <b>This browser tab probes each one live over dmsg</b> — status, version and latency — right here, the same reach a native visor has. Green is up; a red row is a service that didn't answer.",
-          native: "<b>Deployment</b> — the health of the shared services (config, discovery, route-finder, address resolver, uptime tracker) that keep the mesh working. All of it fetched over dmsg — a visor talking directly to visors around the world." } },
+          wasm: "<b>Deployment</b> — the health of the shared services (config, dmsg discovery, transport discovery, route-finder, address resolver, service discovery) that keep the mesh working. <b>This browser tab probes each one live over dmsg</b> — status, version and latency — right here, the same reach a native visor has. Green is up; a red row is a service that didn't answer.",
+          native: "<b>Deployment</b> — the health of the shared services (config, dmsg discovery, transport discovery, route-finder, address resolver, service discovery) that keep the mesh working. All of it fetched over dmsg — a visor talking directly to visors around the world." } },
 
       { sel: "#skywire-skynet-taskbar", title: "The mesh desktop",
         body: "Tool windows float above the UI. The <b>skynet browser</b> fetches sites over dmsg — anonymous, no DNS, no certificate authorities; sites are addressed by public key (e.g. <code>&lt;pk&gt;.dmsg</code>).",
@@ -1767,6 +1767,10 @@
         body: "The <b>console</b> is a real shell running <i>inside</i> this browser visor — pipes, globbing, control flow, an editor, even <code>jq</code> and <code>awk</code>. Its built-in visor commands — <code>pk</code>, <code>about</code>, <code>visors</code>, <code>net</code>, <code>health</code>, <code>apps</code>, <code>tps</code>, <code>routes</code> — emit JSON straight into the terminal, so you can inspect and script this visor exactly like a native one. No SSH, no install: a full shell for your visor, in the tab.",
         more: { summary: "A shell, in a browser tab",
           panel: "This isn't a remote terminal — there's no server on the other end. The shell (<b>websh</b>) runs in the same wasm runtime as the visor, and its visor commands call straight into the in-tab core, emitting JSON you can pipe through <code>jq</code>/<code>awk</code> like any Unix pipeline. A native visor exposes the same commands through <code>skywire cli</code> on the host; here they live in the browser." } },
+      { wasmOnly: true, action: "files", sel: "@appwin", title: "App: the file browser",
+        body: "The <b>files</b> app is a GUI over that same in-tab filesystem the console shell uses. Open folders, view and edit text files, make new files and folders, delete — and anything you do here the shell sees, and vice-versa. It's a MemMap filesystem living in this browser tab, so like the visor itself it's ephemeral: gone when you close the tab unless you save it out.",
+        more: { summary: "One filesystem, two views",
+          panel: "The shell (<b>websh</b>) and this browser share a single in-memory filesystem inside the wasm runtime — the same bytes, two front-ends. Create a file with <code>echo hi &gt; /notes.txt</code> in the console and it appears here; edit it here and <code>cat /notes.txt</code> in the shell shows your change. Nothing touches the host disk; it's a sandbox in the tab." } },
 
       { sel: "#tb-menu", title: "Your keys, your visor",
         body: {
@@ -2289,6 +2293,81 @@
     return { wb: wb, close: function () { wb.close(); } };
   }
 
+  // createFilesWindow opens a GUI file browser over the SHARED websh filesystem
+  // (globalThis.skywireShell.fs — the same in-tab MemMap FS the terminal uses,
+  // so a file made in the shell shows here and vice-versa). Navigate directories,
+  // view + edit text files, make folders/files, delete. MemMap-backed = ephemeral,
+  // gone when the tab closes, like the rest of the wasm visor.
+  function createFilesWindow(doc, opts) {
+    // skywireShell (+ its fs bridge) is installed by an on-demand shell wasm
+    // instance loaded onto the page by ensureShell() — the SAME instance the
+    // console terminal uses, so both share one filesystem. It isn't present until
+    // then, so load it here rather than reading globalThis.skywireShell up front.
+    var fs = (globalThis.skywireShell && globalThis.skywireShell.fs) || null;
+    var cwd = "/", curFile = null;
+    var wrap = doc.createElement("div");
+    wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;color:#cdd2da;font:12px/1.4 system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden";
+    wrap.innerHTML =
+      '<div style="display:flex;gap:.35em;align-items:center;padding:.4em;border-bottom:1px solid #2a2342">' +
+        '<button id="fb-up" title="up a folder">⬆</button>' +
+        '<code id="fb-path" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b9a7ff"></code>' +
+        '<button id="fb-mkdir" title="new folder">+dir</button>' +
+        '<button id="fb-newfile" title="new file">+file</button>' +
+        '<button id="fb-refresh" title="refresh">⟳</button>' +
+      '</div>' +
+      '<div style="flex:1;display:flex;min-height:0">' +
+        '<div id="fb-list" style="width:44%;overflow:auto;border-right:1px solid #2a2342"></div>' +
+        '<div style="flex:1;display:flex;flex-direction:column;min-width:0">' +
+          '<div style="display:flex;gap:.4em;align-items:center;padding:.35em .5em;border-bottom:1px solid #2a2342">' +
+            '<span id="fb-fname" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9aa0a6">no file selected</span>' +
+            '<button id="fb-save" disabled>save</button>' +
+          '</div>' +
+          '<textarea id="fb-view" spellcheck="false" placeholder="select a text file to view / edit" style="flex:1;margin:0;border:0;resize:none;background:#0b0910;color:#cdd2da;font:12px/1.5 monospace;padding:.5em;outline:none"></textarea>' +
+        '</div>' +
+      '</div>';
+    function q(id) { return wrap.querySelector("#" + id); }
+    function join(a, b) { return a === "/" ? "/" + b : a.replace(/\/+$/, "") + "/" + b; }
+    function fmt(n) { return n < 1024 ? n + "B" : n < 1048576 ? (n / 1024).toFixed(1) + "K" : (n / 1048576).toFixed(1) + "M"; }
+    function setEditor(text, name) { q("fb-view").value = text; curFile = name; q("fb-save").disabled = true; q("fb-fname").textContent = name || "no file selected"; }
+    function openFile(path) { var r = fs.readFile(path); if (r && r.error) { setEditor("", null); alert(r.error); return; } setEditor(r.text || "", path); }
+    function refresh() {
+      if (!fs) { q("fb-list").textContent = "filesystem unavailable (no in-tab shell)"; return; }
+      q("fb-path").textContent = cwd;
+      var res = fs.readDir(cwd), el = q("fb-list"); el.innerHTML = "";
+      if (res && res.error) { el.textContent = "error: " + res.error; return; }
+      var arr = res || [];
+      if (!arr.length) { el.innerHTML = '<div style="padding:.6em;color:#6b7280">(empty)</div>'; return; }
+      arr.forEach(function (it) {
+        var row = doc.createElement("div");
+        row.style.cssText = "display:flex;gap:.5em;align-items:center;padding:.35em .5em;cursor:pointer;border-bottom:1px solid #17131f";
+        row.onmouseenter = function () { row.style.background = "#17131f"; };
+        row.onmouseleave = function () { row.style.background = ""; };
+        row.innerHTML = '<span>' + (it.dir ? "📁" : "📄") + '</span>' +
+          '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + it.name + '</span>' +
+          (it.dir ? "" : '<span style="color:#6b7280">' + fmt(it.size) + '</span>') +
+          '<span class="fb-del" title="delete" style="color:#c0556f;padding:0 .3em">✕</span>';
+        row.onclick = function (e) {
+          if (e.target.classList.contains("fb-del")) { if (confirm("delete " + it.name + "?")) { var r = fs.remove(join(cwd, it.name)); if (r && r.error) { alert(r.error); } if (curFile === join(cwd, it.name)) { setEditor("", null); } refresh(); } return; }
+          if (it.dir) { cwd = join(cwd, it.name); setEditor("", null); refresh(); } else { openFile(join(cwd, it.name)); }
+        };
+        el.appendChild(row);
+      });
+    }
+    q("fb-view").oninput = function () { if (curFile) { q("fb-save").disabled = false; } };
+    q("fb-save").onclick = function () { if (!curFile) { return; } var r = fs.writeFile(curFile, q("fb-view").value); if (r && r.error) { alert(r.error); return; } q("fb-save").disabled = true; refresh(); };
+    q("fb-up").onclick = function () { if (cwd === "/") { return; } cwd = cwd.replace(/\/[^\/]+\/?$/, "") || "/"; setEditor("", null); refresh(); };
+    q("fb-refresh").onclick = refresh;
+    q("fb-mkdir").onclick = function () { var n = prompt("new folder name"); if (!n) { return; } var r = fs.mkdir(join(cwd, n)); if (r && r.error) { alert(r.error); } refresh(); };
+    q("fb-newfile").onclick = function () { var n = prompt("new file name"); if (!n) { return; } var r = fs.writeFile(join(cwd, n), ""); if (r && r.error) { alert(r.error); return; } refresh(); openFile(join(cwd, n)); };
+    var wb = makeWin(doc, { title: "files", root: opts.root, top: opts.top, bottom: opts.bottom, width: "56%", height: "60%", mount: wrap, onclose: function () { if (opts.onClose) { opts.onClose(); } } });
+    if (fs) { refresh(); }
+    else if (typeof ensureShell === "function") {
+      q("fb-list").textContent = "loading filesystem…";
+      ensureShell().then(function (sh) { fs = (sh && sh.fs) || null; refresh(); }).catch(function (e) { q("fb-list").textContent = "shell failed to load: " + (e.message || e); });
+    } else { q("fb-list").textContent = "filesystem unavailable (no in-tab shell)"; }
+    return { wb: wb, close: function () { wb.close(); } };
+  }
+
   // createCliWindow opens a REPL that dispatches a curated command set to the
   // visor's RPC via opts.api(method, path, body) — the wasm core's hvApi() in the
   // wasm visor (function call, no shell needed — works in standalone PWA mode),
@@ -2651,6 +2730,10 @@
     // opens the hosting visor's wallet on either.
     addApp("wallet", function () { openWallet(); });
     addApp("console", function () { openCli(); });
+    // 'files' — a GUI browser over the in-tab websh filesystem (shares the shell's
+    // FS). Wasm-only: the shell + its fs bridge run in the in-tab wasm runtime
+    // (loaded on demand by ensureShell), which the native HV UI doesn't have.
+    if (globalThis.skywireVisor && typeof ensureShell === "function") { addApp("files", function () { openFiles(); }); }
     if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
     addApp("logs", function () { openLog(); });
     addApp("identity", function () { openIdentityDialog(doc, opts); });
@@ -2781,6 +2864,12 @@
         ? createShellWindow(doc, withRoot({ title: "visor shell", onClose: close }))
         : createCliWindow(doc, withRoot({ onClose: close }));
       track(cliWin, "console");
+    }
+    var filesWin = null;
+    function openFiles() {
+      if (focusExisting(filesWin)) { return; }
+      filesWin = createFilesWindow(doc, withRoot({ onClose: function () { untrack(filesWin); filesWin = null; } }));
+      track(filesWin, "files");
     }
     var termWin = null;
     function openTerm() {
@@ -3022,6 +3111,7 @@
           else if (kind === "wallet") { openWallet(); }
           else if (kind === "log") { openLog(); }
           else if (kind === "cli") { openCli(); }
+          else if (kind === "files") { openFiles(); }
           else { return null; }
         } catch (e) { return null; }
         var el = _topDemoWin();

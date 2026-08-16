@@ -238,12 +238,16 @@ export function processData(): void {
         if (status === 'unknown') countUnknown++;
     });
 
-    document.getElementById('total-transports')!.textContent = String(totalTransports);
-    document.getElementById('total-visors')!.textContent = String(visors.size);
+    // Guarded (like count-<type> below): these stat nodes are absent when the bundle
+    // is embedded without the full standalone DOM, or removed mid-refresh when the
+    // host tears the view down — a null here would abort the whole data load.
+    const setStat = (id: string, val: number) => { const el = document.getElementById(id); if (el) el.textContent = String(val); };
+    setStat('total-transports', totalTransports);
+    setStat('total-visors', visors.size);
     // Show uptime tracker totals (not filtered to graph visors)
-    document.getElementById('count-online')!.textContent = String(S.onlineVisors.size);
-    document.getElementById('count-offline')!.textContent = String(S.offlineVisors.size);
-    document.getElementById('count-unknown')!.textContent = String(countUnknown);
+    setStat('count-online', S.onlineVisors.size);
+    setStat('count-offline', S.offlineVisors.size);
+    setStat('count-unknown', countUnknown);
     Object.keys(tc).forEach(k => {
         const el = document.getElementById('count-' + k);
         if (el) { el.textContent = String(tc[k]); }

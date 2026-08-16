@@ -72,11 +72,108 @@ func hasDOM() bool {
 	return d.Truthy() && d.Get("createElement").Type() == js.TypeFunction
 }
 
-// installShell publishes globalThis.skywireShell for browse.js.
+// wasmShellFS is the ONE in-tab filesystem shared by every websh terminal and
+// the GUI file browser — files created in the shell show up in the browser and
+// vice-versa. Seeded once (its /bin, README, etc.). MemMap-backed, so it's
+// ephemeral: gone when the tab closes, like the rest of the wasm visor.
+var (
+	wasmShellFS     afero.Fs
+	wasmShellFSOnce sync.Once
+)
+
+func sharedShellFS() afero.Fs {
+	wasmShellFSOnce.Do(func() {
+		wasmShellFS = afero.NewMemMapFs()
+		_ = shell.Seed(wasmShellFS) //nolint:errcheck
+	})
+	return wasmShellFS
+}
+
+// installShell publishes globalThis.skywireShell for browse.js: open(el) mounts
+// a terminal; fs.* is the file-browser bridge onto the SAME shared filesystem.
 func installShell() {
 	js.Global().Set("skywireShell", js.ValueOf(map[string]interface{}{
 		"open": js.FuncOf(jsOpenShell),
+		"fs": js.ValueOf(map[string]interface{}{
+			"readDir":   js.FuncOf(jsFsReadDir),
+			"readFile":  js.FuncOf(jsFsReadFile),
+			"writeFile": js.FuncOf(jsFsWriteFile),
+			"mkdir":     js.FuncOf(jsFsMkdir),
+			"remove":    js.FuncOf(jsFsRemove),
+		}),
 	}))
+}
+
+func fsErr(e error) any { return map[string]interface{}{"error": e.Error()} }
+
+func fsArgPath(args []js.Value) string {
+	if len(args) == 0 || args[0].Type() != js.TypeString {
+		return ""
+	}
+	p := args[0].String()
+	if p == "" {
+		p = "/"
+	}
+	return filepath.Clean(p)
+}
+
+// jsFsReadDir(path) → [{name,dir,size,mtime}] sorted dirs-first then name.
+func jsFsReadDir(_ js.Value, args []js.Value) any {
+	infos, err := afero.ReadDir(sharedShellFS(), fsArgPath(args))
+	if err != nil {
+		return fsErr(err)
+	}
+	sort.Slice(infos, func(i, j int) bool {
+		if infos[i].IsDir() != infos[j].IsDir() {
+			return infos[i].IsDir()
+		}
+		return infos[i].Name() < infos[j].Name()
+	})
+	out := make([]interface{}, 0, len(infos))
+	for _, fi := range infos {
+		out = append(out, map[string]interface{}{
+			"name": fi.Name(), "dir": fi.IsDir(),
+			"size": float64(fi.Size()), "mtime": fi.ModTime().UnixMilli(),
+		})
+	}
+	return out
+}
+
+// jsFsReadFile(path) → {text} for a UTF-8 file, or {error}. Caps at 2 MiB so a
+// huge file can't wedge the single-threaded runtime rendering it.
+func jsFsReadFile(_ js.Value, args []js.Value) any {
+	b, err := afero.ReadFile(sharedShellFS(), fsArgPath(args))
+	if err != nil {
+		return fsErr(err)
+	}
+	if len(b) > 2<<20 {
+		return map[string]interface{}{"error": "file too large to view (>2 MiB)"}
+	}
+	return map[string]interface{}{"text": string(b), "size": float64(len(b))}
+}
+
+func jsFsWriteFile(_ js.Value, args []js.Value) any {
+	if len(args) < 2 || args[1].Type() != js.TypeString {
+		return fsErr(errors.New("writeFile(path, text)"))
+	}
+	if err := afero.WriteFile(sharedShellFS(), fsArgPath(args), []byte(args[1].String()), 0o644); err != nil {
+		return fsErr(err)
+	}
+	return map[string]interface{}{"ok": true}
+}
+
+func jsFsMkdir(_ js.Value, args []js.Value) any {
+	if err := sharedShellFS().MkdirAll(fsArgPath(args), 0o755); err != nil {
+		return fsErr(err)
+	}
+	return map[string]interface{}{"ok": true}
+}
+
+func jsFsRemove(_ js.Value, args []js.Value) any {
+	if err := sharedShellFS().RemoveAll(fsArgPath(args)); err != nil {
+		return fsErr(err)
+	}
+	return map[string]interface{}{"ok": true}
 }
 
 // jsAwait resolves a value that may be a promise. The visor API is a direct
@@ -367,10 +464,7 @@ func openShell(el js.Value) *shellSession {
 	stdinR, stdinW := io.Pipe()
 	s.stdinW = stdinW
 
-	vfs := afero.NewMemMapFs()
-	if err := shell.Seed(vfs); err != nil {
-		term.WriteString("failed to seed the shell filesystem: " + err.Error() + "\r\n")
-	}
+	vfs := sharedShellFS()
 	sh, err := shell.New(vfs, stdinR, out, out)
 	if err != nil {
 		term.WriteString("failed to start the shell: " + err.Error() + "\r\n")
