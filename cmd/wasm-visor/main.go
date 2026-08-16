@@ -1420,12 +1420,64 @@ func probeServiceHealth(name, dmsgURL string) serviceHealthEntry {
 // probed concurrently; each is a dmsg round-trip. (The dmsg-SERVER rows the
 // native visor also reports are a follow-up — they need the transit-client
 // loopback fix deployed across the fleet to be reachable.)
+// service-health cache. SelfServiceHealth MUST return fast: the HV-UI
+// Services-Health tab polls it via interval(15s)→switchMap(get), so any call
+// that outruns the 15s poll is cancelled before it emits and the tab spins
+// forever. Probing 7 deployment services over dmsg takes several seconds
+// (worse, serialized behind other hvApi calls on the single-threaded runtime),
+// so we serve the last snapshot immediately and refresh in the background.
+var (
+	svcHealthMu         sync.Mutex
+	svcHealthCache      []byte
+	svcHealthAt         time.Time
+	svcHealthRefreshing bool
+)
+
+const svcHealthTTL = 20 * time.Second
+
+// SelfServiceHealth returns the cached deployment-service health table
+// immediately (never blocking the single-threaded runtime) and starts a
+// background refresh when the cache is stale. The first call (cold cache)
+// returns a pre-seeded "checking" table so the tab renders at once; the next
+// poll picks up the probed result. See svcHealthCache for why fast return
+// matters (switchMap cancellation).
 func (visorSelf) SelfServiceHealth() []byte {
 	if dmsgC == nil {
 		return nil
 	}
+	svcHealthMu.Lock()
+	cache := svcHealthCache
+	stale := cache == nil || time.Since(svcHealthAt) >= svcHealthTTL
+	if stale && !svcHealthRefreshing {
+		svcHealthRefreshing = true
+		go func() {
+			b := computeServiceHealth()
+			svcHealthMu.Lock()
+			if b != nil {
+				svcHealthCache = b
+				svcHealthAt = time.Now()
+			}
+			svcHealthRefreshing = false
+			svcHealthMu.Unlock()
+		}()
+	}
+	svcHealthMu.Unlock()
+	if cache != nil {
+		return cache
+	}
+	// Cold cache: render immediately with a pre-seeded table; the background
+	// refresh replaces it with real statuses within a few seconds.
+	if b, err := json.Marshal(serviceHealthSeed()); err == nil {
+		return b
+	}
+	return nil
+}
+
+// serviceHealthProbes lists the deployment services to probe, resolved from the
+// current config each call (config can change at runtime).
+func serviceHealthProbes() []struct{ name, dmsgURL string } {
 	svc := visorcore.ResolveServices(nil)
-	probes := []struct{ name, dmsgURL string }{
+	return []struct{ name, dmsgURL string }{
 		{"Config Service", svc.ConfDmsg},
 		{"Transport Discovery", svc.TransportDiscoveryDmsg},
 		{"DMSG Discovery", svc.DmsgDiscoveryDmsg},
@@ -1434,6 +1486,29 @@ func (visorSelf) SelfServiceHealth() []byte {
 		{"Service Discovery", svc.ServiceDiscoveryDmsg},
 		{"Uptime Tracker", svc.UptimeTrackerDmsg},
 	}
+}
+
+// serviceHealthSeed builds the pre-render table: configured services show
+// CHECKING (a probe is in flight), unconfigured ones N/A.
+func serviceHealthSeed() []serviceHealthEntry {
+	probes := serviceHealthProbes()
+	entries := make([]serviceHealthEntry, len(probes))
+	for i, p := range probes {
+		st := "N/A"
+		if p.dmsgURL != "" {
+			st = "CHECKING"
+		}
+		entries[i] = serviceHealthEntry{Name: p.name, URL: p.dmsgURL, Transport: "dmsg", Status: st}
+	}
+	return entries
+}
+
+// computeServiceHealth probes every configured deployment service's /health over
+// dmsg concurrently and returns the native []ServiceHealthEntry JSON. Blocks up
+// to 9s (only for an unreachable service) — always called from a background
+// goroutine, never inline in an hvApi response.
+func computeServiceHealth() []byte {
+	probes := serviceHealthProbes()
 	entries := make([]serviceHealthEntry, len(probes))
 	// Pre-seed each row so a probe that hasn't returned by the overall deadline
 	// still yields a sensible entry: a configured service shows TIMEOUT, an
