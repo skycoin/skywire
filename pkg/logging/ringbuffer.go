@@ -64,7 +64,7 @@ func (rb *RingBuffer) Write(p []byte) (int, error) {
 
 // Bytes returns a copy of the current buffer contents, oldest first. Once the
 // ring has wrapped (is full) the result is trimmed to the next line boundary so
-// it never starts mid-line — matching the original append-based behaviour.
+// it never starts mid-line — matching the original append-based behavior.
 func (rb *RingBuffer) Bytes() []byte {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
