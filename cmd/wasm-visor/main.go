@@ -1317,7 +1317,55 @@ func (visorSelf) SelfRoutes() []byte {
 // visor. The deployment services are dmsg DIRECT clients reachable since the
 // service-PK seed fix; without this the wasm core 404s /api/network-view and the
 // network-view table + visualizer render empty in the browser.
+// bgCache serves a []byte snapshot instantly and refreshes it in a background
+// goroutine when stale. It exists because the HV-UI tabs poll their self-
+// endpoints via interval→switchMap: a call that outruns the poll interval is
+// cancelled before it emits, so a slow (multi-second dmsg-aggregating) endpoint
+// on the single-threaded wasm runtime would spin the tab forever. Return-cached-
+// -immediately keeps every such call ~instant; the probe runs off the response
+// path. Same shape as the service-health cache above.
+type bgCache struct {
+	mu         sync.Mutex
+	data       []byte
+	at         time.Time
+	refreshing bool
+}
+
+func (c *bgCache) get(ttl time.Duration, compute func() []byte) []byte {
+	c.mu.Lock()
+	cached := c.data
+	stale := cached == nil || time.Since(c.at) >= ttl
+	if stale && !c.refreshing {
+		c.refreshing = true
+		go func() {
+			b := compute()
+			c.mu.Lock()
+			if b != nil {
+				c.data = b
+				c.at = time.Now()
+			}
+			c.refreshing = false
+			c.mu.Unlock()
+		}()
+	}
+	c.mu.Unlock()
+	return cached // nil on a cold cache; the router serves its empty fallback
+}
+
+var netViewCache bgCache
+
+// SelfNetworkView returns the cached network-view aggregation immediately and
+// refreshes in the background (30s TTL). computeNetworkView aggregates SD/TPD/UT
+// over dmsg and takes ~30s — far longer than the tab's poll interval, so it must
+// never run inline in the hvApi response (see bgCache).
 func (visorSelf) SelfNetworkView() []byte {
+	if dmsgC == nil {
+		return nil
+	}
+	return netViewCache.get(30*time.Second, computeNetworkView)
+}
+
+func computeNetworkView() []byte {
 	if dmsgC == nil {
 		return nil
 	}
@@ -1555,7 +1603,30 @@ func computeServiceHealth() []byte {
 // visualizer's EDGES) over dmsg — the same /metrics call the native HV proxies
 // — and returns the raw JSON array unchanged. Mirrors SelfNetworkView's TPD
 // fetch; no aggregation needed, the visualizer parses edges[]/type/live itself.
+var (
+	netTpCacheMu sync.Mutex
+	netTpCache   = map[int]*bgCache{}
+)
+
+// SelfNetworkTransports returns the cached TPD network-wide transport metrics
+// (the visualizer's edges) immediately and refreshes in the background (30s TTL),
+// keyed by the days window. computeNetworkTransports is a multi-second dmsg fetch
+// that must not run inline in the hvApi response (see bgCache).
 func (visorSelf) SelfNetworkTransports(days int) []byte {
+	if dmsgC == nil {
+		return nil
+	}
+	netTpCacheMu.Lock()
+	c := netTpCache[days]
+	if c == nil {
+		c = &bgCache{}
+		netTpCache[days] = c
+	}
+	netTpCacheMu.Unlock()
+	return c.get(30*time.Second, func() []byte { return computeNetworkTransports(days) })
+}
+
+func computeNetworkTransports(days int) []byte {
 	if dmsgC == nil {
 		return nil
 	}
