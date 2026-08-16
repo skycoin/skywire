@@ -557,7 +557,13 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 		// which is why a fresh dial to an arbitrary exit stormed the route-finder.
 		SetupHooks: []router.RouteSetupHook{
 			func(rPK cipher.PubKey, tpm *transport.Manager) error {
-				return tpm.EnsureBestTransport(ctx, rPK)
+				// Skip the DMSG-relay fallback: a browser visor can seldom make a
+				// direct transport to an arbitrary exit, so the fallback created a new
+				// dmsg RELAY transport per exit; unbounded accumulation of those (dmsg
+				// streams + goroutines) wedged the single-threaded runtime. Try only
+				// direct carriers (webrtc/ws/wt); if none works, the route still sets
+				// up multihop over the visor's existing (webrtc) entry transports.
+				return tpm.EnsureBestTransport(ctx, rPK, types.DMSG)
 			},
 		},
 		AwaitSetupListener: setupLis,
