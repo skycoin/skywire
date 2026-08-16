@@ -363,6 +363,16 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		mux.Handle(p, tpvH)
 	}
 
+	// The Angular client-error reporter POSTs console errors here via
+	// navigator.sendBeacon (a RAW request that bypasses the SkywireHttpBackend
+	// gateway), so it must be served by this mux rather than the in-tab core —
+	// otherwise every reported error itself 404s (and, ironically, gets reported).
+	// In the browser the console already IS the log, so accept + discard.
+	mux.HandleFunc("/api/client-log", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`)) //nolint:errcheck
+	})
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
