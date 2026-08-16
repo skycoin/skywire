@@ -103,9 +103,17 @@ require (
 	google.golang.org/protobuf v1.36.12
 )
 
-require github.com/benhoyt/goawk v1.31.0
+require (
+	github.com/0magnet/afero v1.15.1-0.20260816202415-9f9d46a34dcd
+	github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e
+	github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf
+	github.com/0magnet/websh v0.0.0-20260816200521-e9f14eb862c7
+	github.com/0magnet/xterm-go v0.0.0-20260816193539-5beca79629c0
+	github.com/benhoyt/goawk v1.31.0 // indirect
+)
 
 require (
+	github.com/0magnet/u-root v0.16.1-0.20260810212217-0890fe5099f9 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	golang.org/x/mod v0.40.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
@@ -124,7 +132,7 @@ require (
 	github.com/cloudfoundry/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/dunglas/httpsfv v1.1.0 // indirect
-	github.com/dustin/go-humanize v1.0.1
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/josharian/native v1.1.0 // indirect
@@ -158,7 +166,7 @@ require (
 	github.com/prometheus/common v0.70.1 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
@@ -293,9 +301,8 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/arch v0.30.0 // indirect
 	golang.org/x/crypto v0.55.0
-	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90 // indirect
 	golang.org/x/image v0.45.0 // indirect
-	golang.org/x/text v0.41.0
+	golang.org/x/text v0.41.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260810153831-ec0a7760b754 // indirect

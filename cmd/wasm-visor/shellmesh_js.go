@@ -50,8 +50,8 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/0magnet/sh/v3/interp"
-	"github.com/skycoin/skywire/third_party/0magnet/websh/shell"
+	"github.com/0magnet/sh/v3/interp"
+	"github.com/0magnet/websh/shell"
 )
 
 // visorCallTimeout bounds a call to the visor. Warm, these answer in about

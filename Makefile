@@ -414,7 +414,7 @@ tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~
 TINYGO ?= tinygo
 
 # The Go/wasm WebGL tpviz view. Unlike the wasm-visor lane this needs no fork —
-# the engine (third_party/0magnet/cosmos-go) is pure syscall/js, so stock TinyGo
+# the engine (github.com/0magnet/cosmos-go) is pure syscall/js, so stock TinyGo
 # 0.41+ builds it. The artifacts live in pkg/tpviz/legacy/ because that whole
 # directory is go:embed'ed and served next to bundle.js, which loads the module
 # lazily when the "WebGL (Go)" view is selected.

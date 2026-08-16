@@ -6,9 +6,9 @@
 // so the "visor cli" window has been a bespoke REPL in JS: one command per
 // line, no pipes, no scripting, its own history and alias table.
 //
-// This replaces it with websh (third_party/0magnet/websh): a Bash/POSIX
+// This replaces it with websh (github.com/0magnet/websh): a Bash/POSIX
 // interpreter over an in-memory filesystem, rendered by the xterm.js Go port
-// (third_party/0magnet/xterm-go), with the visor's own API as applets whose
+// (github.com/0magnet/xterm-go), with the visor's own API as applets whose
 // JSON output pipes into the shell's jq:
 //
 //	about | jq -r '.public_key, .build.version'
@@ -49,11 +49,11 @@ import (
 	"sync/atomic"
 	"syscall/js"
 
-	"github.com/skycoin/skywire/third_party/0magnet/afero"
-	"github.com/skycoin/skywire/third_party/0magnet/sh/v3/interp"
-	"github.com/skycoin/skywire/third_party/0magnet/websh/shell"
-	"github.com/skycoin/skywire/third_party/0magnet/websh/shell/browser"
-	xterm "github.com/skycoin/skywire/third_party/0magnet/xterm-go"
+	"github.com/0magnet/afero"
+	"github.com/0magnet/sh/v3/interp"
+	"github.com/0magnet/websh/shell"
+	"github.com/0magnet/websh/shell/browser"
+	xterm "github.com/0magnet/xterm-go"
 )
 
 // wasmRole reports how this instance was invoked: "shell" for the DOM-side
