@@ -18,6 +18,11 @@ import { reconcileTPSOverlays } from './tps';
 import { applyGrouping } from './grouping';
 
 export async function fetchAllData(): Promise<boolean> {
+    // The auto-refresh timer can outlive the tp-viz DOM when the bundle is embedded
+    // (e.g. the HV visualizer tab) and the host tears the view down. #container is
+    // the tp-viz root (injected by mount(), removed on teardown); if it's gone the
+    // whole DOM is gone, so bail before any getElementById(...).xxx throws on null.
+    if (!document.getElementById('container')) return false;
     const isRefresh = S.network !== null;
     const loadingEl = document.getElementById('loading');
     const errorEl = document.getElementById('error');
@@ -189,6 +194,8 @@ export async function fetchAllData(): Promise<boolean> {
 }
 
 export function updateCountdown(): void {
+    // Torn-down embedded view: the 1s timer may still fire after #container is gone.
+    if (!document.getElementById('container')) return;
     if (!S.nextRefreshTime) return;
     const remaining = Math.max(0, Math.ceil((S.nextRefreshTime - Date.now()) / 1000));
 
