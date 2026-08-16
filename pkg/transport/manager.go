@@ -947,11 +947,18 @@ func (tm *Manager) EnsureBestTransport(ctx context.Context, remote cipher.PubKey
 		lastErr = err
 	}
 	// Last resort: the DMSG relay — loud, because it means no direct type worked.
-	if _, err := tm.SaveTransport(ctx, remote, types.DMSG, LabelAutomatic); err == nil {
-		tm.Logger.Warnf("auto-transport: all direct types %v failed for %s — created a DMSG RELAY transport (relayed data plane; usually signals a p2p reachability problem)", order, remote)
-		return nil
-	} else if lastErr == nil {
-		lastErr = err
+	// Callers can opt OUT by passing types.DMSG in `skip`: the wasm visor does,
+	// because it can rarely make a direct transport to an arbitrary exit and would
+	// otherwise create a NEW dmsg RELAY transport per exit. Those accumulate
+	// unbounded (each holds dmsg streams + goroutines) and wedge the single-threaded
+	// wasm runtime; it routes multihop over its webrtc entry transports instead.
+	if !skipSet[types.DMSG] {
+		if _, err := tm.SaveTransport(ctx, remote, types.DMSG, LabelAutomatic); err == nil {
+			tm.Logger.Warnf("auto-transport: all direct types %v failed for %s — created a DMSG RELAY transport (relayed data plane; usually signals a p2p reachability problem)", order, remote)
+			return nil
+		} else if lastErr == nil {
+			lastErr = err
+		}
 	}
 	return lastErr
 }

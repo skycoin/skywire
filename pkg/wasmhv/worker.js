@@ -132,6 +132,19 @@
   console.error = function () { forward('error', arguments); real.error.apply(null, arguments); };
   console.warn = function () { forward('warn', arguments); real.warn.apply(null, arguments); };
 
+  // Proxy-log bridge. The wasm visor's skysocks-lite path calls
+  // globalThis.__skywireProxyLog(winId, line) for every exit-selection / route-
+  // setup / request step (emitProxyLog in cmd/wasm-visor/skysocks_js.go — the same
+  // trace `skywire cli proxy start --verbose` prints). In the worker that global
+  // is US, so forward each line to the connected tabs as {t:'proxylog'}. The pages
+  // dispatch it to their own __skywireProxyLog sink (browse.js's per-window pane
+  // and the mesh browser's live interstitial). Kept OFF the {t:'log'} console
+  // channel so a busy page's per-subresource route lines don't flood the visor-log
+  // window.
+  self.__skywireProxyLog = function (winId, line) {
+    try { broadcast({ t: 'proxylog', winId: String(winId == null ? '' : winId), line: String(line == null ? '' : line) }); } catch (e) { /* ignore */ }
+  };
+
   // Variant (go|tinygo) arrives on this worker's URL (hv-boot.js appends it —
   // workers can't read localStorage). It selects BOTH the loader and the blob,
   // which must match toolchains. Empty = the server default.

@@ -75,12 +75,24 @@ func skysocksKey(winID string, pk cipher.PubKey) string { return winID + "|" + p
 var proxyVerbose bool
 
 // emitProxyLog logs a per-window skysocks-lite line to the visor log AND, when the
-// page registered a per-window sink (browse.js's ⚙ proxy-log pane sets
-// globalThis.__skywireProxyLog), forwards it to that browser window by id — so the
-// window shows its own connect / route-setup step explicitly, the way
-// `skywire cli proxy start --verbose` surfaces session establishment.
+// page registered a per-window sink (browse.js's ⚙ proxy-log pane, or the mesh
+// browser's interstitial, set globalThis.__skywireProxyLog), forwards it to that
+// browser window by id — so the window shows its own connect / route-setup step
+// explicitly, the way `skywire cli proxy start --verbose` surfaces session
+// establishment.
 func emitProxyLog(winID, msg string) {
 	vlog(msg)
+	emitProxyLogHook(winID, msg)
+}
+
+// emitProxyLogHook forwards a line to the JS sink ONLY (no visor-log line). Used
+// for the high-frequency per-request progress trace (acquiring exit / attempt /
+// sending / status) that makes the interstitial as detailed as `--verbose` but
+// would flood the visor-log window if echoed there for every subresource. The
+// live interstitial subscribes to the sink for the duration of a navigation, so
+// it still sees every line; after the page loads nothing is subscribed and these
+// are dropped.
+func emitProxyLogHook(winID, msg string) {
 	if h := js.Global().Get("__skywireProxyLog"); h.Type() == js.TypeFunction {
 		h.Invoke(winID, msg)
 	}
@@ -115,11 +127,14 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	// exits (and different windows) establish in parallel.
 	t0 := time.Now()
 	emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] connecting to exit %s — setting up route…", winID, serverPK.Hex()[:8]))
-	// 18s cap: a reachable exit's route (p2p multihop or a freshly-created direct
+	// 28s cap: a reachable exit's route (p2p multihop or a freshly-created direct
 	// transport) sets up in a few seconds; a dead/unroutable one should FAIL so the
 	// caller can try another, not hang. Runs off skysocksMu so exits establish in
-	// parallel.
-	dctx, cancel := context.WithTimeout(ctx, 18*time.Second)
+	// parallel. Was 18s, but that left no margin above the router's route reserve +
+	// the (now 10s) noise-handshake window, so a slow-but-alive loaded exit that the
+	// native client reaches was cut off here; 28s covers reserve + handshake + a
+	// retry with headroom while still failing a truly dead exit promptly enough.
+	dctx, cancel := context.WithTimeout(ctx, 28*time.Second)
 	defer cancel()
 	// Default dial: the router races the route-finder (a multihop route over
 	// EXISTING peer-to-peer transports) against the visor's route-setup hook, which
@@ -341,6 +356,11 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 		// (re-select can take 30-50s when a probed candidate is slow) is the gap
 		// that made the iframe browser less reliable than the native chain.
 		acquireDeadline := time.Now().Add(55 * time.Second)
+		if pinned {
+			emitProxyLogHook(winID, fmt.Sprintf("[skysocks-lite %s] %s %s — using pinned exit %s", winID, method, rawURL, pinnedPK.Hex()[:8]))
+		} else {
+			emitProxyLogHook(winID, fmt.Sprintf("[skysocks-lite %s] %s %s — acquiring a working exit…", winID, method, rawURL))
+		}
 		for attempt := 0; attempt < maxTries; attempt++ {
 			var spk cipher.PubKey
 			if pinned {
@@ -351,6 +371,7 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 				// and keep waiting (bounded by acquireDeadline) rather than giving up.
 				pk := waitFreshProxyExit(tried, 16*time.Second)
 				for pk.Null() && time.Now().Before(acquireDeadline) {
+					emitProxyLogHook(winID, fmt.Sprintf("[skysocks-lite %s] no vetted exit yet — asking the selector for a fresh one…", winID))
 					kickDefaultProxyReselect()
 					pk = waitFreshProxyExit(tried, 12*time.Second)
 				}
@@ -361,6 +382,7 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 				spk = pk
 			}
 			tried[spk] = true
+			emitProxyLogHook(winID, fmt.Sprintf("[skysocks-lite %s] attempt %d/%d — routing via exit %s", winID, attempt+1, maxTries, spk.Hex()[:8]))
 			sess, err := skysocksSession(winID, spk)
 			if err != nil {
 				// skysocksSession already reported the exit dead on a dial failure;
@@ -394,11 +416,12 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 			for k, v := range extraHeaders {
 				req.Header.Set(k, v)
 			}
+			emitProxyLogHook(winID, fmt.Sprintf("[skysocks-lite %s] route ready — sending %s request to %s over exit %s…", winID, method, rawURL, spk.Hex()[:8]))
 			t0 := time.Now()
 			resp, err := client.Do(req)
 			if err != nil {
 				lastErr = err
-				vlog(fmt.Sprintf("[skysocks-lite %s] %s %s via %s FAILED (%dms): %v", winID, method, rawURL, spk.Hex()[:8], time.Since(t0).Milliseconds(), err))
+				emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] %s %s via %s FAILED (%dms): %v", winID, method, rawURL, spk.Hex()[:8], time.Since(t0).Milliseconds(), err))
 				// The route was fine but the fetch failed (dead egress / timeout).
 				// Rotate straight to a standby (rotateAwayFromExit removes this exit,
 				// promotes the standby, and refills the pool excluding it) — NOT
@@ -411,9 +434,14 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 			}
 			defer resp.Body.Close()                               //nolint:errcheck
 			b, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<20)) // 16MB cap
+			// Always forward the result line to the live interstitial (so it shows the
+			// final status/bytes/ms); echo to the visor-log window only when verbose,
+			// so routine subresource fetches don't flood it.
+			resultLine := fmt.Sprintf("[skysocks-lite %s] %s %s via %s → %d (%dB, %dms)", winID, method, rawURL, spk.Hex()[:8], resp.StatusCode, len(b), time.Since(t0).Milliseconds())
 			if proxyVerbose {
-				vlog(fmt.Sprintf("[skysocks-lite %s] %s %s via %s → %d (%dB, %dms)", winID, method, rawURL, spk.Hex()[:8], resp.StatusCode, len(b), time.Since(t0).Milliseconds()))
+				vlog(resultLine)
 			}
+			emitProxyLogHook(winID, resultLine)
 			res := js.Global().Get("Object").New()
 			res.Set("status", resp.StatusCode)
 			buf := js.Global().Get("Uint8Array").New(len(b))
