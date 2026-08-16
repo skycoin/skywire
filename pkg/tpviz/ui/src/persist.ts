@@ -53,18 +53,8 @@ function viewFromURL(): ViewMode | null {
 // Brave with HW accel off) — the Go port renders on plain WebGL2, so it's the
 // safe default.
 export function getInitialView(): ViewMode {
-  const explicit = normalizeView(host.view) || viewFromURL() || normalizeView(safeGet(VIEW_KEY));
-  if (explicit) { return explicit; }
-  // Embedded in the browser (wasm) visor's HV page, the Go/WebGL2 view routinely
-  // comes up BLANK — it fetches an ~11 MB wasm module and needs a working WebGL2
-  // context, which the browser-visor page (software WebGL, a second wasm runtime,
-  // the tab already busy) frequently can't give it, so the tour lands on an empty
-  // canvas that looks broken. The Flat (vis-network, canvas-2D) view renders the
-  // full graph with no GPU and no extra module, so default to it there. Standalone
-  // tp-viz (no skywireVisor bridge on the page) keeps the WebGL-Go default; an
-  // explicit host/URL/localStorage choice always wins over both.
-  try { if ((globalThis as { skywireVisor?: unknown }).skywireVisor) { return 'flat'; } } catch { /* no bridge */ }
-  return 'cosmosgo';
+  return normalizeView(host.view) || viewFromURL() ||
+    normalizeView(safeGet(VIEW_KEY)) || 'cosmosgo';
 }
 
 // saveView records the active view (localStorage) and reflects it to the URL:
