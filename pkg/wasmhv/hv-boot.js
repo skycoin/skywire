@@ -305,6 +305,12 @@
             try { (m.level === 'error' ? console.error : m.level === 'warn' ? console.warn : console.log)(m.line); } catch (e) {}
             try { if (typeof self.__skylog === 'function') self.__skylog(m.line); } catch (e) {}
             break;
+          case 'proxylog':
+            // Verbose skysocks-lite route trace forwarded from the worker (kept off
+            // the console/log channel). Hand it to the page's proxy-log sink —
+            // browse.js's per-window pane and the mesh browser's live interstitial.
+            try { if (typeof self.__skywireProxyLog === 'function') { self.__skywireProxyLog(m.winId, m.line); } } catch (e) {}
+            break;
           case 'up':
             settled = true;
             hideConnectingNotice();
@@ -418,6 +424,12 @@
             // window (which captures console.*) shows it, and feed __skylog.
             try { (m.level === 'error' ? console.error : m.level === 'warn' ? console.warn : console.log)(m.line); } catch (e) {}
             try { if (typeof self.__skylog === 'function') self.__skylog(m.line); } catch (e) {}
+            break;
+          case 'proxylog':
+            // Verbose skysocks-lite route trace forwarded from the worker (kept off
+            // the console/log channel). Hand it to the page's proxy-log sink —
+            // browse.js's per-window pane and the mesh browser's live interstitial.
+            try { if (typeof self.__skywireProxyLog === 'function') { self.__skywireProxyLog(m.winId, m.line); } } catch (e) {}
             break;
           case 'up':
             clearTimeout(upTimer);
