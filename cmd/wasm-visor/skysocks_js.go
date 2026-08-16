@@ -135,6 +135,28 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	// data plane never carries the skysocks bytes. mux-auto GROW can still adapt an
 	// established single route later.
 	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, router.DefaultDialOptions())
+	// "already being initialized" is NOT an exit failure: another dial to this
+	// exit (a probe, the pre-warm, or a sibling window) is mid-handshake on the
+	// SAME router route-group descriptor, so this concurrent dial is rejected
+	// until that one lands (≤ the 18s dial cap). Treat it as transient — poll our
+	// session cache for the landing session and re-dial a few times — instead of
+	// failing the fetch and (via reportProxyExitDead) marking a perfectly good
+	// exit dead, which caused rotation churn and the "all exits failed" wedge.
+	for attempt := 0; err != nil && strings.Contains(err.Error(), "already being initialized") && attempt < 4; attempt++ {
+		skysocksMu.Lock()
+		if s, ok := skysocksSessions[key]; ok && !s.IsClosed() {
+			skysocksMu.Unlock()
+			emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] reusing concurrently-established session to exit %s", winID, serverPK.Hex()[:8]))
+			return s, nil
+		}
+		skysocksMu.Unlock()
+		select {
+		case <-time.After(600 * time.Millisecond):
+		case <-dctx.Done():
+			return nil, dctx.Err()
+		}
+		conn, err = rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, router.DefaultDialOptions())
+	}
 	if err != nil {
 		emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] route dial to exit %s FAILED (%dms): %v", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
 		// If this was the default instance's auto-selected active exit, hand it to
@@ -313,16 +335,25 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 		}
 		tried := map[cipher.PubKey]bool{}
 		var lastErr error
+		// Total budget to acquire a working exit, spanning re-selection. A native
+		// skysocks-client browser just keeps waiting for a connection, so a clearnet
+		// fetch here must too: hard-failing during the pool-empty recovery window
+		// (re-select can take 30-50s when a probed candidate is slow) is the gap
+		// that made the iframe browser less reliable than the native chain.
+		acquireDeadline := time.Now().Add(55 * time.Second)
 		for attempt := 0; attempt < maxTries; attempt++ {
 			var spk cipher.PubKey
 			if pinned {
 				spk = pinnedPK
 			} else {
-				// Wait for a fresh (not-yet-tried) auto exit. After a rotate the pool
-				// can be momentarily empty while it re-selects a replacement (~10s),
-				// so POLL rather than give up — that wait is what lets a fetch survive
-				// the active exit dying with no warm standby ready.
+				// Wait for a fresh (not-yet-tried) auto exit. After a rotate/clear the
+				// pool can be momentarily empty while it re-selects; kick the selector
+				// and keep waiting (bounded by acquireDeadline) rather than giving up.
 				pk := waitFreshProxyExit(tried, 16*time.Second)
+				for pk.Null() && time.Now().Before(acquireDeadline) {
+					kickDefaultProxyReselect()
+					pk = waitFreshProxyExit(tried, 12*time.Second)
+				}
 				if pk.Null() {
 					lastErr = errors.New("no working proxy exit available")
 					break
