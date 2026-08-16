@@ -52,6 +52,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1548,7 +1549,10 @@ func serviceHealthProbes() []struct{ name, dmsgURL string } {
 		{"Address Resolver", svc.AddressResolverDmsg},
 		{"Route Finder", svc.RouteFinderDmsg},
 		{"Service Discovery", svc.ServiceDiscoveryDmsg},
-		{"Uptime Tracker", svc.UptimeTrackerDmsg},
+		// The standalone Uptime Tracker service is DEPRECATED — uptime is now
+		// TPD-integrated (see the Uptime tab / /uptimes?v=v3). Probing the dead
+		// standalone UT dmsg endpoint only ever TIMEOUTs and paints the whole
+		// Services-Health table "degraded", so it's no longer listed here.
 	}
 }
 
@@ -1568,45 +1572,89 @@ func serviceHealthSeed() []serviceHealthEntry {
 }
 
 // computeServiceHealth probes every configured deployment service's /health over
-// dmsg concurrently and returns the native []ServiceHealthEntry JSON. Blocks up
-// to 9s (only for an unreachable service) — always called from a background
-// goroutine, never inline in an hvApi response.
+// dmsg AND lists the dmsg servers this visor is connected to (matching
+// `skywire cli svc health`). It PUBLISHES the table incrementally into
+// svcHealthCache so the tab fills in progressively — each row flips from CHECKING
+// as its probe returns — rather than all-or-nothing at the end. Always called
+// from a background goroutine (never inline in an hvApi response); blocks up to
+// 9s only for an unreachable service.
 func computeServiceHealth() []byte {
 	probes := serviceHealthProbes()
 	entries := make([]serviceHealthEntry, len(probes))
-	// Pre-seed each row so a probe that hasn't returned by the overall deadline
-	// still yields a sensible entry: a configured service shows TIMEOUT, an
-	// unconfigured one N/A. This is what keeps the table from hanging on a single
-	// slow/dead service (e.g. the decommissioned standalone uptime tracker).
 	for i, p := range probes {
 		st := "N/A"
 		if p.dmsgURL != "" {
-			st = "TIMEOUT"
+			st = "CHECKING"
 		}
 		entries[i] = serviceHealthEntry{Name: p.name, URL: p.dmsgURL, Transport: "dmsg", Status: st}
 	}
+	// The dmsg SERVERS this visor holds a session with — `svc health` lists these
+	// too. We hold an active session with each (that's how AllSessions knows them),
+	// so they're reachable by definition: seed them OK. We deliberately do NOT probe
+	// their /health over dmsg the way the deployment services are probed: a dmsg
+	// server serves /health on its transit dmsg CLIENT entry, reachable only via a
+	// DIFFERENT relay (the native HV uses its discovery-routed dmsg-HTTP client plus
+	// the all_servers ip:port cache). Dialing the server's PK through the very
+	// session we hold with it finds no local client session for that PK and blocks
+	// past the deadline — an empty version and pure dead-air. The per-server version
+	// stays a native-CLI capability (`svc health`), not a browser one.
+	if dmsgC != nil {
+		var srvPKs []string
+		for _, s := range dmsgC.AllSessions() {
+			srvPKs = append(srvPKs, s.RemotePK().Hex())
+		}
+		sort.Strings(srvPKs) // stable order across polls (AllSessions map order is random)
+		for _, pk := range srvPKs {
+			entries = append(entries, serviceHealthEntry{Name: "DMSG Server", URL: "dmsg://" + pk + ":80", Transport: "dmsg", Status: "OK"})
+		}
+	}
 	var mu sync.Mutex
+	// publish snapshots the (partial) table into svcHealthCache — progressive load.
+	// Call while holding mu.
+	publish := func() {
+		if b, err := json.Marshal(entries); err == nil {
+			svcHealthMu.Lock()
+			svcHealthCache = b
+			svcHealthAt = time.Now()
+			svcHealthMu.Unlock()
+		}
+	}
+	mu.Lock()
+	publish() // render the seeded table at once
+	mu.Unlock()
 	var wg sync.WaitGroup
 	for i, p := range probes {
+		if p.dmsgURL == "" {
+			continue // unconfigured → N/A, no probe
+		}
 		wg.Add(1)
-		go func(i int, name, url string) {
+		go func(idx int, name, url string) {
 			defer wg.Done()
 			e := probeServiceHealth(name, url)
 			mu.Lock()
-			entries[i] = e
+			entries[idx] = e
+			publish()
 			mu.Unlock()
 		}(i, p.name, p.dmsgURL)
 	}
 	done := make(chan struct{})
 	go func() { wg.Wait(); close(done) }()
-	// Overall deadline. Every reachable deployment service answers /health in well
-	// under a second over dmsg, so 9s never truncates a healthy one; it only caps
-	// how long an unreachable service can hold up the whole table.
 	select {
 	case <-done:
 	case <-time.After(9 * time.Second):
 	}
+	// At the deadline: a deployment service still CHECKING = TIMEOUT; a dmsg server
+	// still CHECKING is nonetheless connected (we hold its session) = OK.
 	mu.Lock()
+	for i := range entries {
+		if entries[i].Status == "CHECKING" {
+			if entries[i].Name == "DMSG Server" {
+				entries[i].Status = "OK"
+			} else {
+				entries[i].Status = "TIMEOUT"
+			}
+		}
+	}
 	b, err := json.Marshal(entries)
 	mu.Unlock()
 	if err != nil {

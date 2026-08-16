@@ -67,12 +67,9 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 		{"Route Finder", svcURLs{v.conf.Routing.RouteFinder, v.conf.Routing.RouteFinderDmsg}},
 		{"Service Discovery", svcURLs{v.conf.Launcher.ServiceDisc, v.conf.Launcher.ServiceDiscDmsg}},
 	}
-	if v.conf.UptimeTracker != nil {
-		httpServices = append(httpServices, struct {
-			name string
-			urls svcURLs
-		}{"Uptime Tracker", svcURLs{v.conf.UptimeTracker.Addr, v.conf.UptimeTracker.AddrDmsg}})
-	}
+	// The standalone Uptime Tracker service is DEPRECATED — uptime is now
+	// TPD-integrated (/uptimes?v=v3). Its dmsg endpoint no longer answers, so
+	// probing it only paints Services-Health "degraded"; it's no longer listed.
 
 	// Probe every service over dmsg only — plain HTTP to deployment services is
 	// no longer supported. v.dmsgHTTP connects through a direct client with
