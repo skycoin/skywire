@@ -329,6 +329,20 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		cipherGz := wasmbin.GetVariantGz(cipherVar)
 		cipherExec := wasmbin.WasmExecJSVariant(cipherVar)
 		mux.HandleFunc("/wallet/", func(w http.ResponseWriter, r *http.Request) {
+			// The wallet is an IFRAME surface for the HV UI's ☰ wallet, not a
+			// first-class page: its node API is routed through
+			// window.parent.skywireVisor, which only exists when it's framed by the
+			// booted HV. A TOP-LEVEL navigation to a wallet HTML page
+			// (Sec-Fetch-Dest: document) is out of context — bounce it into the HV
+			// UI. Framed loads (Sec-Fetch-Dest: iframe / empty on older browsers)
+			// and asset fetches (script/style/fetch/…) fall through and serve
+			// normally. The standalone top-level wallet is the separate
+			// `skywire skycoin web` path, not this one.
+			isWalletDoc := r.URL.Path == "/wallet/" || r.URL.Path == "/wallet/index.html" || r.URL.Path == "/wallet/config"
+			if isWalletDoc && r.Header.Get("Sec-Fetch-Dest") == "document" {
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
 			if r.URL.Path == "/wallet/" || r.URL.Path == "/wallet/index.html" {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Header().Set("Cache-Control", "no-cache")
