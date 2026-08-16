@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription, interval, startWith } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 
@@ -84,7 +84,7 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
   drillError: { [name: string]: string } = {};
   drillLoading: { [name: string]: boolean } = {};
 
-  constructor(private healthSvc: ServiceHealthService, private api: ApiService) {
+  constructor(private healthSvc: ServiceHealthService, private api: ApiService, private cdr: ChangeDetectorRef) {
     super();
     this.tabsData = homeTabsData();
   }
@@ -104,10 +104,12 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
           this.loading = false;
           this.error = null;
           this.lastUpdated = new Date();
+          this.cdr.markForCheck();
         },
         error: (err) => {
           this.loading = false;
           this.error = err?.message || 'Failed to fetch services health';
+          this.cdr.markForCheck();
         },
       });
 
@@ -124,9 +126,11 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
           next: (rows: RSNRemoteStat[]) => {
             this.rsnStats = Array.isArray(rows) ? rows : [];
             this.rsnLoading = false;
+            this.cdr.markForCheck();
           },
           error: () => {
             this.rsnLoading = false;
+            this.cdr.markForCheck();
           },
         });
     } else {
@@ -182,10 +186,12 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
           } catch {
             this.drillBody[entry.name] = String(raw);
           }
+          this.cdr.markForCheck();
         },
         error: (err) => {
           this.drillLoading[entry.name] = false;
           this.drillError[entry.name] = err?.error?.error || err?.message || 'fetch failed';
+          this.cdr.markForCheck();
         },
       });
     }
