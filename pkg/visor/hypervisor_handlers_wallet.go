@@ -168,6 +168,15 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		rest := chi.URLParam(r, "*")
+		// The wallet is an IFRAME surface for the HV UI's ☰ wallet / Angular wallet
+		// tab, not a first-class page. A TOP-LEVEL navigation to a wallet HTML page
+		// (Sec-Fetch-Dest: document) is out of context — bounce it into the HV UI.
+		// Framed loads (Sec-Fetch-Dest: iframe / empty) and asset+API requests fall
+		// through and serve normally.
+		if (rest == "" || rest == "index.html" || rest == "config") && r.Header.Get("Sec-Fetch-Dest") == "document" {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
 		// The ONE wallet config page (mode / coin nodes / BTC / skysocks exit),
 		// embedded via iframe by the ☰ wallet window AND the Angular wallet tab.
 		if rest == "config" {
