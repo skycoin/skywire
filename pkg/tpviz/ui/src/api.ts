@@ -77,16 +77,23 @@ export async function fetchAllData(): Promise<boolean> {
             setIPGroupsEnabled(!!(S.ipGroupsData && S.ipGroupsData.enabled));
             const ipGroupsLabel = document.getElementById('ip-groups-label');
             const uniqueIpsStat = document.getElementById('unique-ips-stat');
+            // These IP-group controls live in the standalone tp-viz index.html but
+            // are absent when the bundle is embedded elsewhere (e.g. the HV visualizer
+            // tab) — and the auto-refresh timer can also fire fetchAllData after the
+            // host DOM has been torn down. Guard every element (as uniqueIpsStat
+            // already is) so a null never throws and kills the whole data load.
+            const clusterIp = document.getElementById('cluster-ip') as HTMLInputElement | null;
+            const totalUniqueIps = document.getElementById('total-unique-ips');
             if (S.ipGroupsEnabled && S.ipGroupsData!.total_groups > 1) {
-                ipGroupsLabel!.style.display = 'block';
-                (document.getElementById('cluster-ip') as HTMLInputElement).checked = true;
+                if (ipGroupsLabel) ipGroupsLabel.style.display = 'block';
+                if (clusterIp) clusterIp.checked = true;
                 if (uniqueIpsStat) {
                     uniqueIpsStat.style.display = '';
-                    document.getElementById('total-unique-ips')!.textContent = String(S.ipGroupsData!.total_groups);
+                    if (totalUniqueIps) totalUniqueIps.textContent = String(S.ipGroupsData!.total_groups);
                 }
                 console.log('IP groups data loaded:', S.ipGroupsData!.total_groups, 'groups,', Object.keys(S.ipGroupsData!.groups).length, 'visors');
             } else {
-                ipGroupsLabel!.style.display = 'none';
+                if (ipGroupsLabel) ipGroupsLabel.style.display = 'none';
                 if (uniqueIpsStat) uniqueIpsStat.style.display = 'none';
                 console.log('IP groups not available or only 1 group');
             }
@@ -185,19 +192,24 @@ export function updateCountdown(): void {
     if (!S.nextRefreshTime) return;
     const remaining = Math.max(0, Math.ceil((S.nextRefreshTime - Date.now()) / 1000));
 
+    // cache-info is a standalone-tp-viz element; null when embedded (HV visualizer)
+    // or after the host DOM is torn down while this timer keeps firing. Guard it.
+    const cacheInfo = document.getElementById('cache-info');
     if (remaining === 0 && !S.isRefreshing) {
         setIsRefreshing(true);
-        document.getElementById('cache-info')!.innerHTML = 'Refreshing...';
+        if (cacheInfo) cacheInfo.innerHTML = 'Refreshing...';
         console.log('Auto-refresh triggered at', new Date().toLocaleTimeString());
 
         fetchAllData()
             .then(() => {
                 console.log('Auto-refresh succeeded at', new Date().toLocaleTimeString());
-                document.getElementById('cache-info')!.innerHTML = 'Refresh complete';
+                const el = document.getElementById('cache-info');
+                if (el) el.innerHTML = 'Refresh complete';
             })
             .catch(err => {
                 console.error('Auto-refresh failed:', err);
-                document.getElementById('cache-info')!.innerHTML = 'Refresh failed: ' + err.message;
+                const el = document.getElementById('cache-info');
+                if (el) el.innerHTML = 'Refresh failed: ' + err.message;
             })
             .finally(() => {
                 console.log('Auto-refresh finished, syncing with server');
@@ -207,7 +219,7 @@ export function updateCountdown(): void {
                 }, 500);
             });
     } else if (!S.isRefreshing) {
-        document.getElementById('cache-info')!.innerHTML = 'Auto-refresh in: ' + formatCountdown(remaining);
+        if (cacheInfo) cacheInfo.innerHTML = 'Auto-refresh in: ' + formatCountdown(remaining);
     }
 }
 
