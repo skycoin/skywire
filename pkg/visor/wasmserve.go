@@ -313,6 +313,21 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		walletIndex = bytes.Replace(walletIndex,
 			[]byte(`<base href="/">`),
 			[]byte(`<base href="/wallet/">`+walletDmsgFetchShim()), 1)
+		// Cipher: the skycoin-web wallet keeps key material in the browser via its
+		// window.SkycoinCipher globals, published by skycoin-lite/wasmcipher.Register()
+		// which the embedded wasm-visor blob calls (no boot() needed). It falls back
+		// to loading assets/scripts/skycoin-lite.wasm + wasm_exec.js when the globals
+		// aren't already present — which is the case in THIS iframe, a window separate
+		// from the SharedWorker running the visor. So serve the joint-compiled visor
+		// blob AS the cipher (no separate ~1.8 MB skycoin-lite build), exactly like
+		// `skywire skycoin web` does via cmd/skycoin's registerCipherWasm. Prefer the
+		// smaller TinyGo pair when embedded (this page uses only the cipher).
+		cipherVar := wasmbin.Default()
+		if wasmbin.Has(wasmbin.TinyGo) {
+			cipherVar = wasmbin.TinyGo
+		}
+		cipherGz := wasmbin.GetVariantGz(cipherVar)
+		cipherExec := wasmbin.WasmExecJSVariant(cipherVar)
 		mux.HandleFunc("/wallet/", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/wallet/" || r.URL.Path == "/wallet/index.html" {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -324,6 +339,25 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Header().Set("Cache-Control", "no-cache")
 				_, _ = w.Write([]byte(wasmhv.WalletConfigHTML)) //nolint:errcheck
+				return
+			}
+			if r.URL.Path == "/wallet/assets/scripts/skycoin-lite.wasm" && len(cipherGz) > 0 {
+				w.Header().Set("Content-Type", "application/wasm")
+				w.Header().Set("Cache-Control", "no-cache")
+				if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+					w.Header().Set("Content-Encoding", "gzip")
+					_, _ = w.Write(cipherGz) //nolint:errcheck
+					return
+				}
+				if wasm, derr := wasmbin.GetVariant(cipherVar); derr == nil {
+					_, _ = w.Write(wasm) //nolint:errcheck
+				}
+				return
+			}
+			if r.URL.Path == "/wallet/assets/scripts/wasm_exec.js" && len(cipherExec) > 0 {
+				w.Header().Set("Content-Type", "application/javascript")
+				w.Header().Set("Cache-Control", "no-cache")
+				_, _ = w.Write(cipherExec) //nolint:errcheck
 				return
 			}
 			walletFiles.ServeHTTP(w, r)
