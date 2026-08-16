@@ -167,6 +167,29 @@ func proxyKeepaliveLoop(kctx context.Context) {
 			}
 			pingProxyExit("pool-warm-"+spk.Hex()[:8], spk) // best-effort warmth
 		}
+		// Keep the SHARED user-facing sessions (owner = defaultProxyID, the key a
+		// browser fetch resolves to) HOT for every pool exit — active AND standbys.
+		// The pings above use throwaway windows for liveness POLICY; those do NOT
+		// keep the route a real fetch reuses alive, so without this the shared route
+		// goes cold and each navigation (and every promotion) cold-dials a fresh
+		// multihop route (~30-45s) instead of reusing a live one — the gap vs a
+		// native skysocks-client that holds one persistent route. Ping the live
+		// session to keep it warm; re-establish (best-effort) any that dropped.
+		for _, spk := range standbys {
+			if spk.Null() {
+				continue
+			}
+			skysocksMu.Lock()
+			s, ok := skysocksSessions[skysocksKey(defaultProxyID, spk)]
+			alive := ok && s != nil && !s.IsClosed()
+			skysocksMu.Unlock()
+			if alive {
+				sess := s
+				go func() { _, _ = sess.Ping() }() //nolint:errcheck // keep the shared route warm
+			} else {
+				prewarmDefaultSession(spk) // re-open the shared route in the background
+			}
+		}
 	}
 }
 
