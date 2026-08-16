@@ -64,6 +64,13 @@ export async function fetchAllData(): Promise<boolean> {
             fetchWithTimeout(API_BASE + '/api/dmsg/servers').catch(e => { console.log('DMSG fetch error:', e.message); return null; })
         ]);
 
+        // The fetches above take seconds; the embedded host (HV visualizer tab) can
+        // tear the view down while they're in flight — removing #container and every
+        // stat node together. Re-check here, after the awaits, before the DOM-mutation
+        // phase below (graph counters, local-visor panel, grouping) touches nodes that
+        // are now null. The top-of-function guard can't cover a teardown mid-fetch.
+        if (!document.getElementById('container')) return false;
+
         if (utResp && utResp.ok) {
             setUptimeData(await utResp.json());
             processUptimeData();
