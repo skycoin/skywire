@@ -433,6 +433,22 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 	dmsgC = c
 	vlog("dmsg: ok")
 	go refreshSelfPublicIP(ctx)
+	// Pre-warm the heavy HV-UI aggregation caches shortly after boot (once dmsg
+	// sessions are up) so the Services-Health, Network and Transports tabs render
+	// immediately on first visit instead of triggering a cold multi-second
+	// aggregation that the tab's short poll would cancel. Once populated, bgCache
+	// serves the snapshot instantly and refreshes in the background forever after.
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(20 * time.Second):
+		}
+		var vs visorSelf
+		vs.SelfServiceHealth()
+		vs.SelfNetworkView()
+		vs.SelfNetworkTransports(1)
+	}()
 
 	// 2. transport manager (dmsg-only). The transport-discovery client registers
 	// the tab's transport edges OVER DMSG (net/http-free), against the deployment's
@@ -1362,7 +1378,7 @@ func (visorSelf) SelfNetworkView() []byte {
 	if dmsgC == nil {
 		return nil
 	}
-	return netViewCache.get(30*time.Second, computeNetworkView)
+	return netViewCache.get(5*time.Minute, computeNetworkView)
 }
 
 func computeNetworkView() []byte {
@@ -1623,7 +1639,7 @@ func (visorSelf) SelfNetworkTransports(days int) []byte {
 		netTpCache[days] = c
 	}
 	netTpCacheMu.Unlock()
-	return c.get(30*time.Second, func() []byte { return computeNetworkTransports(days) })
+	return c.get(2*time.Minute, func() []byte { return computeNetworkTransports(days) })
 }
 
 func computeNetworkTransports(days int) []byte {
