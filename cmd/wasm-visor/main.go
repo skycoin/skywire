@@ -1496,9 +1496,17 @@ var (
 	svcHealthCache      []byte
 	svcHealthAt         time.Time
 	svcHealthRefreshing bool
+	svcHealthSettled    bool // last compute had dmsg up AND every deployment service OK
 )
 
-const svcHealthTTL = 20 * time.Second
+// Once the table has settled (dmsg up, all deployment services OK) we relax to a
+// slow poll; until then we re-probe quickly so the tab converges to green within
+// a few seconds of dmsg coming up instead of sitting on a stale cold-boot snapshot
+// for a full slow-TTL cycle.
+const (
+	svcHealthTTL       = 20 * time.Second
+	svcHealthWarmupTTL = 4 * time.Second
+)
 
 // SelfServiceHealth returns the cached deployment-service health table
 // immediately (never blocking the single-threaded runtime) and starts a
@@ -1512,7 +1520,11 @@ func (visorSelf) SelfServiceHealth() []byte {
 	}
 	svcHealthMu.Lock()
 	cache := svcHealthCache
-	stale := cache == nil || time.Since(svcHealthAt) >= svcHealthTTL
+	ttl := svcHealthTTL
+	if !svcHealthSettled {
+		ttl = svcHealthWarmupTTL // not green yet — re-probe quickly to converge
+	}
+	stale := cache == nil || time.Since(svcHealthAt) >= ttl
 	if stale && !svcHealthRefreshing {
 		svcHealthRefreshing = true
 		go func() {
@@ -1643,20 +1655,35 @@ func computeServiceHealth() []byte {
 	case <-done:
 	case <-time.After(9 * time.Second):
 	}
-	// At the deadline: a deployment service still CHECKING = TIMEOUT; a dmsg server
-	// still CHECKING is nonetheless connected (we hold its session) = OK.
+	// At the deadline, resolve any row still CHECKING. A dmsg SERVER is reachable
+	// by definition (we hold its session) → OK. A deployment service that didn't
+	// answer is only a real TIMEOUT (red) when dmsg is actually UP — a health check
+	// is a single dmsg round-trip (~1-2s once a session exists). If dmsg has NO
+	// session yet (cold boot, or slow under load), the service isn't unreachable,
+	// we simply can't have reached it — so leave it CHECKING (neutral) rather than
+	// painting the whole table red. The short warmup TTL then re-probes until dmsg
+	// is up and the rows flip green.
+	dmsgReady := dmsgC != nil && len(dmsgC.AllSessions()) > 0
 	mu.Lock()
+	allOK := true
 	for i := range entries {
 		if entries[i].Status == "CHECKING" {
 			if entries[i].Name == "DMSG Server" {
 				entries[i].Status = "OK"
-			} else {
+			} else if dmsgReady {
 				entries[i].Status = "TIMEOUT"
 			}
+			// dmsg not ready → keep CHECKING (neutral)
+		}
+		if entries[i].Name != "DMSG Server" && entries[i].Status != "OK" {
+			allOK = false
 		}
 	}
 	b, err := json.Marshal(entries)
 	mu.Unlock()
+	svcHealthMu.Lock()
+	svcHealthSettled = allOK && dmsgReady
+	svcHealthMu.Unlock()
 	if err != nil {
 		return nil
 	}
