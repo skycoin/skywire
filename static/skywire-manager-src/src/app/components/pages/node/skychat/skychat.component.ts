@@ -254,6 +254,15 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       // provided key — the component only reads node.localPk — and start the
       // same data flows the routed subscription would have kicked off.
       this.node = { localPk: this.embeddedNodeKey } as Node;
+      // Embedded chat (the wasm HV's ☰ Chat, ?embed=1) is always THIS local
+      // visor. The synthesized node carries no build_info, so tag arch='wasm'
+      // when the in-process skychat hooks exist — otherwise connectSSE falls
+      // through to the /skychat/proxy/sse HTTP server a wasm visor doesn't run
+      // (404 + a permanent "Disconnected — retrying…").
+      const bridge = (window as any).skywireVisor;
+      if (bridge && typeof bridge.skychatMessages === 'function') {
+        (this.node as any).arch = 'wasm';
+      }
       this.connectSSE();
       this.tryLoadPeers();
       this.refreshPasswordState();
