@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription, interval, startWith } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 
@@ -64,7 +64,7 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
 
   private sub!: Subscription;
 
-  constructor(private nodeService: NodeService) {
+  constructor(private nodeService: NodeService, private cdr: ChangeDetectorRef) {
     super();
     this.tabsData = homeTabsData();
   }
@@ -84,6 +84,7 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
         error: (err) => {
           this.loading = false;
           this.error = err?.message || 'Failed to fetch network view';
+          this.cdr.markForCheck();
         },
       });
 
@@ -97,6 +98,7 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
       error: (err) => {
         this.loading = false;
         this.error = err?.message || 'Failed to fetch network view';
+        this.cdr.markForCheck();
       },
     });
   }
@@ -107,6 +109,7 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
     this.error = null;
     this.lastUpdated = new Date();
     this.applyFilters();
+    this.cdr.markForCheck();
   }
 
   ngOnDestroy(): void {

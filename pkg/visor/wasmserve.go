@@ -350,7 +350,16 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	tpvH := tpvSrv.Handler()
 	mux.Handle("/tp-viz/", http.StripPrefix("/tp-viz", tpvH))
 	mux.Handle("/tp-viz", http.StripPrefix("/tp-viz", tpvH))
-	for _, p := range []string{"/api/transports", "/api/services", "/api/uptimes", "/api/local-visor", "/api/ip-groups", "/api/dmsg/servers"} {
+	// The tp-viz bundle fetches these with ABSOLUTE /api/* paths (they bypass the
+	// Angular SkywireHttpBackend), plus opens the /ws/local-visor socket. Mirror
+	// the full native-HV set; omitting /api/health + /api/tps/status left the
+	// visualizer 404ing on every poll (and the WS failing).
+	for _, p := range []string{
+		"/api/transports", "/api/services", "/api/uptimes", "/api/local-visor",
+		"/api/ip-groups", "/api/dmsg/servers", "/api/health", "/api/tps/status",
+		"/api/tps/add-transport", "/api/tps/remove-transport", "/api/tps/refresh-transports",
+		"/api/local/add-transport", "/api/local/remove-transport", "/ws/local-visor",
+	} {
 		mux.Handle(p, tpvH)
 	}
 
