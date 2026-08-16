@@ -267,8 +267,8 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 	}
 	rawURL := args[2].String()
 	var body []byte
-	if len(args) > 3 && !args[3].IsNull() && !args[3].IsUndefined() {
-		body = []byte(args[3].String())
+	if len(args) > 3 {
+		body = jsBodyBytes(args[3])
 	}
 	// Optional 5th arg: the browser window id, so each window gets its own
 	// skysocks-lite session (see skysocksSessions). Absent → shared default.
