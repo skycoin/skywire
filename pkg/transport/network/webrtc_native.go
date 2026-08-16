@@ -43,7 +43,15 @@ const dcReadBuf = 96 * 1024
 func newWebRTCAPI() *webrtc.API {
 	se := webrtc.SettingEngine{}
 	se.DetachDataChannels()
-	return webrtc.NewAPI(webrtc.WithSettingEngine(se))
+	// Empty MediaEngine: skywire uses WebRTC for DATA CHANNELS ONLY, never audio/
+	// video. With the default MediaEngine pion registers audio/video codecs and
+	// starts SRTP/SRTCP + RTP/RTCP media-processor goroutines per PeerConnection
+	// (observed on public exits: ~4-5 parked media goroutines each — hundreds on a
+	// busy node, e.g. a Raspberry Pi exit at 1000+ goroutines, wasting CPU the
+	// route-setup handshake then competes for). Data channels (SCTP over the
+	// application m-line) need no media codecs, so a MediaEngine with none
+	// suppresses all that machinery.
+	return webrtc.NewAPI(webrtc.WithSettingEngine(se), webrtc.WithMediaEngine(&webrtc.MediaEngine{}))
 }
 
 func webrtcConfig(iceURLs []string) webrtc.Configuration {
