@@ -103,12 +103,16 @@ func sessionOwner(winID string) string {
 // pool is topped up in the background. This is what makes the wallet / iframe
 // browser "just work" AND survive a dead first pick.
 const (
-	proxyRaceN      = 8 // candidates probed concurrently each round — over a
-	//                     heterogeneous mesh, random exits range from ~1s to the
-	//                     ~18s probe cap; racing more and taking the first to route
-	//                     (= fastest route setup) keeps the active + warm standbys
-	//                     on fast exits instead of landing on a slow multihop one.
-	proxyPoolTarget = 3 // vetted exits kept: 1 active + up to 2 hot standbys
+	proxyRaceN = 4 // candidates probed concurrently each round. The wasm visor
+	//                runs on ONE JS thread, and every probe drives a CPU-heavy
+	//                route setup (noise + ML-KEM PQ handshake); racing 8 at once
+	//                starved each so the per-route noise handshake missed the
+	//                router's handshakeAwaitTimeout on loaded exits — where the
+	//                native client (many cores, persistent transports) succeeds to
+	//                the SAME exit. Cross-checked: exits the wasm visor failed on
+	//                connected fine natively in 0.5-0.9s. 4 keeps a little
+	//                selection choice while giving each probe enough CPU to finish.
+	proxyPoolTarget = 2 // vetted exits kept: 1 active + 1 hot standby
 )
 
 var (
@@ -363,8 +367,10 @@ func startDefaultProxyAuto(ctx context.Context, sdPK cipher.PubKey) {
 func selectProxyPool(ctx context.Context, sdPK cipher.PubKey, avoid cipher.PubKey) bool {
 	cands := pickRandomProxyExits(ctx, sdPK, proxyRaceN, avoid)
 	if len(cands) == 0 {
+		emitProxyLog("pool-select", "[skysocks-lite] no proxy exits available from service discovery")
 		return false
 	}
+	emitProxyLog("pool-select", fmt.Sprintf("[skysocks-lite] selecting exit — racing %d candidate(s) to find the fastest route", len(cands)))
 	type probeRes struct {
 		pk cipher.PubKey
 		ok bool
@@ -388,7 +394,7 @@ func selectProxyPool(ctx context.Context, sdPK cipher.PubKey, avoid cipher.PubKe
 			proxyPoolMu.Unlock()
 			_ = setProxyExit(defaultProxyID, r.pk) //nolint:errcheck
 			reArmDefaultAuto()
-			vlog(fmt.Sprintf("[skysocks-lite] active proxy exit: %s", exitShort(r.pk)))
+			emitProxyLog("pool-select", fmt.Sprintf("[skysocks-lite] active proxy exit selected: %s", exitShort(r.pk)))
 			prewarmDefaultSession(r.pk) // establish the SHARED user session now → first fetch is instant
 			continue
 		}
@@ -400,7 +406,7 @@ func selectProxyPool(ctx context.Context, sdPK cipher.PubKey, avoid cipher.PubKe
 		}
 		proxyPoolMu.Unlock()
 		if added {
-			vlog(fmt.Sprintf("[skysocks-lite] standby proxy exit ready: %s", exitShort(r.pk)))
+			emitProxyLog("pool-select", fmt.Sprintf("[skysocks-lite] standby proxy exit ready: %s", exitShort(r.pk)))
 			// Keep the standby's route WARM under the shared default owner (same key
 			// a user fetch resolves to) so promotion — rotateAwayFromExit on a real
 			// exit failure, or a manual switch — REUSES a live session instead of

@@ -15,15 +15,66 @@
      __V_ORIGIN__ and __SUFFIX__ are substituted by wasm-serve at request time. -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>mesh://loading…</title>
+<title>Connecting over skywire…</title>
 <style>
-  html,body{margin:0;height:100%;background:#0b0d17;color:#c7cbe6;font:14px/1.5 system-ui,sans-serif}
-  #mesh-boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px}
-  #mesh-boot .sp{width:26px;height:26px;border:3px solid #2b3163;border-top-color:#7c83ff;border-radius:50%;animation:spin 1s linear infinite}
+  :root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#7a80a8;--accent:#7c83ff;--accent2:#a06bff;--err:#ff6b8a;--card:#131629;--line:#2b3163}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  #mesh-boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}
+  .card{width:min(440px,92vw);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:26px 26px 24px;box-shadow:0 14px 44px rgba(0,0,0,.5);text-align:center}
+  .brand{display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:16px}
+  .brand svg{width:24px;height:24px;flex:none}
+  .brand b{font-weight:600;letter-spacing:.4px;font-size:15px;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sp{width:34px;height:34px;margin:8px auto 16px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .9s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-  #mesh-boot small{opacity:.6}
+  .icon{font-size:30px;line-height:1;margin:2px auto 12px;display:none}
+  #mesh-title{font-size:16px;font-weight:600;color:#e7e9ff;margin:0 0 6px}
+  #mesh-msg{color:var(--fg);margin:0}
+  #mesh-detail{color:var(--muted);font-size:12.5px;word-break:break-word;margin:9px 0 0;display:none}
+  .steps{list-style:none;padding:0;margin:16px 0 4px;text-align:left;font-size:12.5px;color:var(--muted);max-width:280px;margin-left:auto;margin-right:auto}
+  .steps li{padding:3px 0 3px 24px;position:relative;transition:color .2s}
+  .steps li::before{content:"○";position:absolute;left:3px;color:var(--line)}
+  .steps li.active{color:var(--fg)}
+  .steps li.active::before{content:"◐";color:var(--accent);animation:spin 1.4s linear infinite;display:inline-block}
+  .steps li.done{color:var(--muted)}
+  .steps li.done::before{content:"●";color:var(--accent)}
+  .btn{display:inline-block;margin-top:18px;padding:8px 20px;border:1px solid var(--accent);border-radius:9px;background:transparent;color:var(--accent);font:inherit;font-size:13px;cursor:pointer}
+  .btn:hover{background:var(--accent);color:#0b0d17}
+  #mesh-host{display:block;margin-top:14px;font:12px/1.4 ui-monospace,SFMono-Regular,monospace;color:var(--muted);opacity:.75;word-break:break-all}
+  .err #mesh-title{color:var(--err)}
+  .err .sp{display:none}
+  #mesh-log-h{margin:16px 0 5px;font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);text-align:left;display:none}
+  #mesh-log{text-align:left;background:#0c0f1e;border:1px solid var(--line);border-radius:9px;padding:7px 10px;max-height:184px;overflow-y:auto;font:11.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;color:#8b90bd;display:none}
+  #mesh-log .ln{white-space:pre-wrap;word-break:break-word;padding:.5px 0}
+  #mesh-log .ln.hi{color:#b9bdff}
+  #mesh-log .ln.ok{color:#7fe0a1}
+  #mesh-log .ln.warn{color:#ffcf6b}
+  #mesh-log .ln.err{color:var(--err)}
 </style>
-<div id="mesh-boot"><div class="sp"></div><div id="mesh-msg">Connecting to the mesh…</div><small id="mesh-host"></small></div>
+<div id="mesh-boot">
+  <div class="card" id="mesh-card">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="4.5" r="2.3" fill="#7c83ff"/><circle cx="4.5" cy="17" r="2.3" fill="#a06bff"/>
+        <circle cx="19.5" cy="17" r="2.3" fill="#a06bff"/><circle cx="12" cy="12" r="1.7" fill="#c7cbe6"/>
+        <path d="M12 6.8 12 10.3M10.6 12.9 6.2 15.6M13.4 12.9 17.8 15.6" stroke="#4a5199" stroke-width="1.3" stroke-linecap="round"/>
+      </svg>
+      <b>skywire</b>
+    </div>
+    <div class="sp" id="mesh-sp"></div>
+    <div class="icon" id="mesh-icon"></div>
+    <h1 id="mesh-title">Connecting over the mesh…</h1>
+    <p id="mesh-msg">Establishing a private route to this site.</p>
+    <p id="mesh-detail"></p>
+    <ul class="steps" id="mesh-steps">
+      <li data-step="visor">Reaching your in-tab visor</li>
+      <li data-step="route">Finding a working exit &amp; route</li>
+      <li data-step="fetch">Loading the page over skywire</li>
+    </ul>
+    <div id="mesh-log-h">Connection log</div>
+    <div id="mesh-log" aria-live="polite"></div>
+    <small id="mesh-host"></small>
+  </div>
+</div>
 <script>
 (function () {
   'use strict';
@@ -55,12 +106,107 @@
   // we just tell V which shortid we are, then send RAW request URLs (V maps them).
   var SHORTID = location.hostname.slice(0, Math.max(0, location.hostname.length - SUFFIX.length));
 
+  // --- branded interstitial UI helpers -------------------------------------
+  function $(id) { return document.getElementById(id); }
+  // setStep drives the little checklist so the user can see WHERE the connection
+  // is (reaching the visor / building a route / loading) rather than a mute spinner.
+  function setStep(name, state) {
+    var li = document.querySelector('#mesh-steps li[data-step="' + name + '"]');
+    if (li) { li.classList.remove('active', 'done'); if (state) li.classList.add(state); }
+  }
+  function setStatus(title, msg) {
+    var t = $('mesh-title'), m = $('mesh-msg');
+    if (t && title != null) t.textContent = title;
+    if (m && msg != null) m.textContent = msg;
+  }
+  // classify maps a raw transport error to a branded, human interstitial. Transient
+  // states (exit selection / route setup / unreachable-right-now) auto-retry; hard
+  // states (visor unreachable, HTTP error, unknown) show a Retry button + attribution.
+  function classify(raw) {
+    var s = String(raw || '').toLowerCase();
+    var detail = String(raw || '').replace(/^mesh:\s*/, '');
+    if (/all exits failed|no working proxy|no proxy exit|proxy exit available|fresh proxy exit/.test(s))
+      return { kind: 'transient', icon: '🛰️', title: 'Finding a working exit…', msg: 'The visor is selecting a proxy exit and building a private route. This can take a few seconds on first use.', detail: '' };
+    if (/parent timeout|visor parent|must be embedded|helper/.test(s))
+      return { kind: 'visor', icon: '🔌', title: 'Can’t reach your visor', msg: 'The in-tab skywire visor isn’t responding. Make sure its tab is open and has finished booting, then retry.', detail: detail };
+    if (/timeout waiting for root|deadline exceeded|timeout|timed out/.test(s))
+      return { kind: 'transient', icon: '⏳', title: 'No response yet', msg: 'The site hasn’t responded over the mesh yet. Retrying…', detail: '' };
+    if (/http [45]\d\d/.test(s))
+      return { kind: 'http', icon: '🌐', title: 'The site returned an error', msg: detail, detail: '' };
+    if (/\b202\b|cannot connect|delegated|unreachable|dial|refused|no route/.test(s))
+      return { kind: 'transient', icon: '🛰️', title: 'Service unreachable right now', msg: 'Couldn’t reach this service over the mesh. Retrying…', detail: '' };
+    return { kind: 'hard', icon: '⚠️', title: 'Couldn’t load over the mesh', msg: detail || 'The page did not load through the skywire proxy.', detail: '' };
+  }
+  var MAX_AUTO_RETRY = 4;
+  function retryCount() { try { return parseInt(sessionStorage.getItem('mbRetry') || '0', 10) || 0; } catch (e) { return 0; } }
+  function bumpRetry() { try { sessionStorage.setItem('mbRetry', String(retryCount() + 1)); } catch (e) {} }
+  function clearRetry() { try { sessionStorage.removeItem('mbRetry'); } catch (e) {} }
+
   function fail(msg) {
-    var m = document.getElementById('mesh-msg'); if (m) { m.textContent = msg; }
-    var b = document.getElementById('mesh-boot'); if (b) { b.querySelector('.sp').style.display = 'none'; }
+    var c = classify(msg);
+    var card = $('mesh-card'), sp = $('mesh-sp'), ic = $('mesh-icon'), det = $('mesh-detail'), steps = $('mesh-steps');
+    if (c.kind === 'transient' && retryCount() < MAX_AUTO_RETRY) {
+      // Keep the branded loading look — the visor is actively recovering. Reload to
+      // re-run the boot (which reuses the visor's now-warming route) automatically.
+      bumpRetry();
+      var n = retryCount();
+      setStatus(c.title, c.msg + ' (attempt ' + n + '/' + MAX_AUTO_RETRY + ')');
+      setTimeout(function () { location.reload(); }, 3500);
+      return;
+    }
+    // Hard error (or retries exhausted): branded error card + Retry.
+    clearRetry();
+    if (card) card.classList.add('err');
+    if (sp) sp.style.display = 'none';
+    if (steps) steps.style.display = 'none';
+    if (ic) { ic.textContent = c.icon; ic.style.display = 'block'; }
+    setStatus(c.title, c.msg);
+    if (det && c.detail) { det.textContent = c.detail; det.style.display = 'block'; }
+    if (card && !$('mesh-retry')) {
+      var b = document.createElement('button');
+      b.id = 'mesh-retry'; b.className = 'btn'; b.textContent = 'Retry';
+      b.onclick = function () { clearRetry(); location.reload(); };
+      card.appendChild(b);
+    }
   }
 
-  var hostEl = document.getElementById('mesh-host'); if (hostEl) hostEl.textContent = SHORTID;
+  var hostEl = $('mesh-host'); if (hostEl) hostEl.textContent = SHORTID;
+  setStep('visor', 'active');
+  // Reassure on a slow-but-not-failed first connect (route setup can take a few s).
+  var slowHint = setTimeout(function () {
+    if (!$('mesh-card') || $('mesh-card').classList.contains('err')) return;
+    var m = $('mesh-msg'); if (m && !/taking a little longer/.test(m.textContent))
+      m.textContent = 'Building a private route — this is taking a little longer than usual.';
+  }, 9000);
+
+  // onProxyLog renders one verbose route-setup line (streamed live from the visor,
+  // the same trace as `skywire cli proxy start --verbose`) into the connection log,
+  // colors it by kind, and nudges the step checklist off its milestones so the
+  // summary stays in sync with the detail.
+  var logEl = $('mesh-log'), logHdr = $('mesh-log-h');
+  function lineKind(line) {
+    if (/FAILED|error|dead|unreachable|dropped/i.test(line)) return 'err';
+    if (/rotating|no vetted exit|retry|retrying|failed probe|never connected/i.test(line)) return 'warn';
+    if (/established|→ 2\d\d|vetted|selected|ready|pre-warmed|reuse|recovered/i.test(line)) return 'ok';
+    if (/selecting|connecting|acquiring|sending|attempt|routing via|racing/i.test(line)) return 'hi';
+    return '';
+  }
+  function onProxyLog(winId, line) {
+    if (!logEl || !line) return;
+    if (logHdr) logHdr.style.display = 'block';
+    logEl.style.display = 'block';
+    var d = document.createElement('div');
+    d.className = 'ln ' + lineKind(line);
+    d.textContent = line;
+    logEl.appendChild(d);
+    while (logEl.childNodes.length > 200) { logEl.removeChild(logEl.firstChild); }
+    logEl.scrollTop = logEl.scrollHeight;
+    if (/selecting|racing|acquiring|asking the selector|no vetted/i.test(line)) { setStep('visor', 'done'); setStep('route', 'active'); }
+    if (/connecting to exit|setting up route|attempt \d|routing via exit/i.test(line)) { setStep('visor', 'done'); setStep('route', 'active'); }
+    if (/route\+session .*established|active proxy exit selected|reuse session|reusing concurrently|route ready/i.test(line)) { setStep('route', 'done'); setStep('fetch', 'active'); }
+    if (/sending .*request/i.test(line)) { setStep('route', 'done'); setStep('fetch', 'active'); }
+    if (/→ \d{3}/.test(line)) { setStep('fetch', 'done'); }
+  }
 
   // --- bridge to the PARENT visor app (V) ----------------------------------
   // This browse origin B is embedded as an iframe INSIDE the visor app V (the
@@ -115,7 +261,11 @@
       if (!port.__wired) {
         port.__wired = true;
         port.onmessage = function (ev) {
-          var d = ev.data || {}; var cb = pending[d.id];
+          var d = ev.data || {};
+          // Interim verbose route-setup line (forwarded from the visor's proxy log)
+          // — render it, don't resolve the fetch.
+          if (d.progress) { onProxyLog(d.progress.winId, d.progress.line); return; }
+          var cb = pending[d.id];
           if (cb) { delete pending[d.id]; cb(d); }
         };
       }
@@ -159,7 +309,11 @@
   window.__mb = { step: 'start', helperReady: false, topStatus: null, topLen: 0, err: null };
   Promise.all([
     registerSW().then(function () { window.__mb.step = 'sw-registered'; }),
-    ensureHelper().then(function () { window.__mb.helperReady = true; window.__mb.step = 'helper-ready'; })
+    ensureHelper().then(function () {
+      window.__mb.helperReady = true; window.__mb.step = 'helper-ready';
+      setStep('visor', 'done'); setStep('route', 'active');
+      setStatus('Building a route over skywire…', 'Selecting an exit and establishing a private route to this site.');
+    })
   ]).then(function () {
     window.__mb.step = 'fetching-top';
     var path = location.pathname + location.search;
@@ -170,13 +324,16 @@
     window.__mb.topLen = (res && res.body) ? res.body.byteLength : 0;
     if (!res || res.error) { window.__mb.err = (res && res.error) || 'no response'; fail('mesh: ' + ((res && res.error) || 'no response')); return; }
     if ((res.status | 0) >= 400) { fail('mesh: HTTP ' + res.status); return; }
+    // Success: the route is up and the page arrived — finish the checklist, clear
+    // the auto-retry budget, then replace the shell with the real page ON THIS
+    // ORIGIN. Subresources it requests are relative/absolute to B and the SW handles them.
+    clearTimeout(slowHint); clearRetry();
+    setStep('route', 'done'); setStep('fetch', 'done');
     var html = '';
     if (res.body) { try { html = new TextDecoder('utf-8').decode(new Uint8Array(res.body)); } catch (e) { html = ''; } }
-    // Replace the shell with the real page ON THIS ORIGIN. Subresources it
-    // requests are relative/absolute to B and get intercepted by the SW.
     document.open();
     document.write(html);
     document.close();
-  }).catch(function (err) { try { window.__mb.err = String(err); window.__mb.step = 'catch'; } catch (e) {} fail('mesh: ' + String(err)); });
+  }).catch(function (err) { try { window.__mb.err = String(err); window.__mb.step = 'catch'; } catch (e) {} clearTimeout(slowHint); fail('mesh: ' + String(err)); });
 })();
 </script>

@@ -50,7 +50,13 @@ const (
 	// under the per-route setup-timeout — faster success AND fewer outright
 	// timeouts. A genuinely slow-but-alive route that trips this just costs
 	// one extra (now cheaper) retry. See DialRoutes.
-	handshakeAwaitTimeout = 6 * time.Second
+	// 10s (was 6s): a loaded exit — often a resource-constrained ARM board
+	// carrying 1000+ goroutines — can take longer than 6s to return its half of
+	// the route-group noise handshake, and a slower initiator (the single-threaded
+	// wasm visor) makes that worse; 6s spuriously failed dials to healthy-but-busy
+	// exits that a faster peer reaches fine. 10s stays well under the per-route
+	// setup budget while tolerating those.
+	handshakeAwaitTimeout = 10 * time.Second
 
 	maxHops       = 1000
 	retryDuration = 2 * time.Second
