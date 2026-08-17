@@ -2,6 +2,7 @@
   "test": {
     "conf_dmsg": "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80",
     "wss_domain_suffix": "theskywirenetwork.net",
+    "browse_origin_suffix": ".haltingstate.net",
     "route_setup_nodes": [
       "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557",
       "024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438"
@@ -97,6 +98,7 @@
   "prod": {
     "conf_dmsg": "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80",
     "wss_domain_suffix": "theskywirenetwork.net",
+    "browse_origin_suffix": ".haltingstate.net",
     "route_setup_nodes": [
       "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557",
       "024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438"

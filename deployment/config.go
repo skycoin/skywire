@@ -214,7 +214,17 @@ type Services struct {
 	// server's local config. A dmsg server applies it only when its own PK is a
 	// known fleet server (IsKnownDmsgServer) — a third party running this binary
 	// never mis-advertises this domain for a PK with no DNS record.
-	WSSDomainSuffix        string `json:"wss_domain_suffix,omitempty"`
+	WSSDomainSuffix string `json:"wss_domain_suffix,omitempty"`
+	// BrowseOriginSuffix is the deployment-wide domain the "real-origin" browse
+	// path (pkg/visor/meshproxy.go, the wasm SW browse origin, and the hosted
+	// Caddy front) serves untrusted mesh content under — e.g. ".haltingstate.net"
+	// (a SEPARATE eTLD+1 from the visor app on WSSDomainSuffix, so untrusted
+	// browsed content is cookie/origin-isolated from the visor identity). Lives
+	// here so the domain is defined in exactly one place instead of being
+	// hardcoded across the serve flags / config-gen / docs; consumers read it via
+	// deployment.Prod.BrowseOriginSuffix. Empty (the local default) means the
+	// browse origin uses ".mesh.localhost" (loopback, secure-context, no cert).
+	BrowseOriginSuffix     string `json:"browse_origin_suffix,omitempty"`
 	DmsgDiscoveryDmsg      string `json:"dmsg_discovery_dmsg,omitempty"`
 	TransportDiscoveryDmsg string `json:"transport_discovery_dmsg,omitempty"`
 	AddressResolverDmsg    string `json:"address_resolver_dmsg,omitempty"`
