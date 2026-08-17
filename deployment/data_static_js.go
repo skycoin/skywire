@@ -52,8 +52,9 @@ var prodData = Services{
 		mustPubKey("0327e2cf1d2e516ecbfdbd616a87489cc92a73af97335d5c8c29eafb5d8882264a"),
 		mustPubKey("03abbb3eff140cf3dce468b3fa5a28c80fa02c6703d7b952be6faaf2050990ebf4"),
 	},
-	ConfDmsg:        "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80",
-	WSSDomainSuffix: "theskywirenetwork.net",
+	ConfDmsg:           "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80",
+	WSSDomainSuffix:    "theskywirenetwork.net",
+	BrowseOriginSuffix: ".haltingstate.net",
 	DmsgServers: []DmsgServerEntry{
 		{Static: "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb", Server: struct {
 			Address   string `json:"address"`
@@ -133,8 +134,9 @@ var testData = Services{
 		mustPubKey("0327e2cf1d2e516ecbfdbd616a87489cc92a73af97335d5c8c29eafb5d8882264a"),
 		mustPubKey("03abbb3eff140cf3dce468b3fa5a28c80fa02c6703d7b952be6faaf2050990ebf4"),
 	},
-	ConfDmsg:        "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80",
-	WSSDomainSuffix: "theskywirenetwork.net",
+	ConfDmsg:           "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80",
+	WSSDomainSuffix:    "theskywirenetwork.net",
+	BrowseOriginSuffix: ".haltingstate.net",
 	DmsgServers: []DmsgServerEntry{
 		{Static: "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb", Server: struct {
 			Address   string `json:"address"`
