@@ -4,7 +4,104 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/routing"
 )
+
+// mustPK parses a hex public key or fails the test.
+func mustPK(t *testing.T, hex string) cipher.PubKey {
+	t.Helper()
+	var pk cipher.PubKey
+	if err := pk.Set(hex); err != nil {
+		t.Fatalf("bad pk %q: %v", hex, err)
+	}
+	return pk
+}
+
+// TestMuxBwIntermediates pins the intermediate-extraction used by the
+// disjoint-route planner: every hop endpoint that is neither src nor dst,
+// de-duplicated, in first-seen order. A direct (single-hop) route has none.
+// This is the key the planner uses to reject routes that share an
+// intermediate — the crux of making the N mux routes actually disjoint.
+func TestMuxBwIntermediates(t *testing.T) {
+	src := mustPK(t, "03cb5eb5741df4d66492f96f89b55861def1e23850583c499805d96e053f9bceac")
+	dst := mustPK(t, "0248bac07d82b54864959d293181ee6c3dc6e1771e28cca8dd80acac94e36aa164")
+	mid1 := mustPK(t, "02880cc291ef1620b7d69b3b7b5cadb30d2d97bfe9070e07f6f0c4b6f7a5c8a17a")
+	mid2 := mustPK(t, "026d060827a030ef1ea39ee67555c9800e8ca539e6e80d735b98a73c311d8d9f51")
+	tp := uuid.New()
+
+	t.Run("two-hop route yields the single intermediate", func(t *testing.T) {
+		r := routing.Route{Hops: []routing.Hop{
+			{From: src, To: mid1, TpID: tp},
+			{From: mid1, To: dst, TpID: tp},
+		}}
+		got := muxBwIntermediates(r, src, dst)
+		if len(got) != 1 || got[0] != mid1 {
+			t.Fatalf("got %v, want [%s]", got, mid1)
+		}
+	})
+
+	t.Run("three-hop route yields both intermediates, deduped", func(t *testing.T) {
+		r := routing.Route{Hops: []routing.Hop{
+			{From: src, To: mid1, TpID: tp},
+			{From: mid1, To: mid2, TpID: tp},
+			{From: mid2, To: dst, TpID: tp},
+		}}
+		got := muxBwIntermediates(r, src, dst)
+		if len(got) != 2 || got[0] != mid1 || got[1] != mid2 {
+			t.Fatalf("got %v, want [%s %s]", got, mid1, mid2)
+		}
+	})
+
+	t.Run("direct route has no intermediates", func(t *testing.T) {
+		r := routing.Route{Hops: []routing.Hop{{From: src, To: dst, TpID: tp}}}
+		if got := muxBwIntermediates(r, src, dst); len(got) != 0 {
+			t.Fatalf("direct route intermediates = %v, want empty", got)
+		}
+	})
+}
+
+// TestMuxBwRoutingHopsToInfoAndReverse pins the calc-route → explicit-dial
+// conversion: forward hops carry TpID/From/To (TpType intentionally dropped,
+// as PingContextWithRoute resolves by TpID), and the reverse is the forward
+// reversed with From/To swapped — matching the shape `route calc` emits and
+// `proxy mux set --legs` dials.
+func TestMuxBwRoutingHopsToInfoAndReverse(t *testing.T) {
+	src := mustPK(t, "03cb5eb5741df4d66492f96f89b55861def1e23850583c499805d96e053f9bceac")
+	dst := mustPK(t, "0248bac07d82b54864959d293181ee6c3dc6e1771e28cca8dd80acac94e36aa164")
+	mid := mustPK(t, "02880cc291ef1620b7d69b3b7b5cadb30d2d97bfe9070e07f6f0c4b6f7a5c8a17a")
+	tp1 := uuid.New()
+	tp2 := uuid.New()
+
+	fwd := muxBwRoutingHopsToInfo([]routing.Hop{
+		{From: src, To: mid, TpID: tp1},
+		{From: mid, To: dst, TpID: tp2},
+	})
+	if len(fwd) != 2 {
+		t.Fatalf("forward len = %d, want 2", len(fwd))
+	}
+	if fwd[0].TpID != tp1.String() || fwd[0].From != src.String() || fwd[0].To != mid.String() {
+		t.Errorf("forward[0] = %+v", fwd[0])
+	}
+	if fwd[0].TpType != "" {
+		t.Errorf("TpType should be empty (resolved by TpID), got %q", fwd[0].TpType)
+	}
+
+	rev := muxBwReverseHops(fwd)
+	if len(rev) != 2 {
+		t.Fatalf("reverse len = %d, want 2", len(rev))
+	}
+	// reverse[0] is forward[last] with From/To swapped.
+	if rev[0].TpID != tp2.String() || rev[0].From != dst.String() || rev[0].To != mid.String() {
+		t.Errorf("reverse[0] = %+v, want swapped last forward hop", rev[0])
+	}
+	if rev[1].TpID != tp1.String() || rev[1].From != mid.String() || rev[1].To != src.String() {
+		t.Errorf("reverse[1] = %+v, want swapped first forward hop", rev[1])
+	}
+}
 
 // TestNormalizeMuxBwRequestIdleBaselineImpliesProbeRtt pins the
 // implies-relationship: setting idle_baseline_duration_ns > 0 turns
