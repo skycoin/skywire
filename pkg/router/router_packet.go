@@ -107,7 +107,29 @@ func (r *router) dispatchToRouteGroup(ctx context.Context, packet routing.Packet
 	if r.pending.park(desc, packet, time.Now()) {
 		return nil
 	}
+	r.logMissingDesc(desc, packet.RouteID())
 	return errRouteDescNotExist
+}
+
+// logMissingDesc surfaces, at WARN, the descriptor a frame resolved to versus
+// the descriptors the router currently holds route groups for. It is the
+// diagnostic for aux-mux-leg frames that hit errRouteDescNotExist: it shows
+// whether the leg's consume-rule descriptor simply doesn't match the group's
+// key (a keying bug) or is absent (a registration race). Fires only on the
+// actual failure, so it is low-frequency.
+func (r *router) logMissingDesc(want routing.RouteDescriptor, routeID routing.RouteID) {
+	r.mx.Lock()
+	nsKeys := make([]string, 0, len(r.rgsNs))
+	for k := range r.rgsNs {
+		nsKeys = append(nsKeys, k.String())
+	}
+	rawKeys := make([]string, 0, len(r.rgsRaw))
+	for k := range r.rgsRaw {
+		rawKeys = append(rawKeys, k.String())
+	}
+	r.mx.Unlock()
+	r.logger.Warnf("route descriptor does not exist: routeID=%d want=%s rgsNs=%v rgsRaw=%v",
+		routeID, want.String(), nsKeys, rawKeys)
 }
 
 // handleDataHandshakePacket handles data and handshake packets.

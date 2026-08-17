@@ -83,8 +83,25 @@ func (r *router) appendRouteAsymmetric(nrg *NoiseRouteGroup, rules routing.EdgeR
 		r.rt.DelRules([]routing.RouteID{rules.Reverse.KeyRouteID()})
 	}
 
+	r.drainPendingToGroup(nrg, rules.Desc)
+
 	r.logger.Debugf("Appended asymmetric mux route (fwd=%v rev=%v) to RouteGroup %s", addFwd, addRev, &rules.Desc)
 	return nil
+}
+
+// drainPendingToGroup re-dispatches any transport frames that were parked for
+// desc before an aux mux leg's rules were installed. The initial route drains
+// r.pending in saveRouteGroupRules; the aux-append paths did not — so a
+// handshake/data frame that raced the aux-leg rule-save was parked and never
+// redelivered, and the leg then never carried data (surfacing as
+// "route descriptor does not exist"). desc is the group's descriptor, so the
+// parked frames resolve to nrg.
+func (r *router) drainPendingToGroup(nrg *NoiseRouteGroup, desc routing.RouteDescriptor) {
+	for _, pp := range r.pending.take(desc) {
+		if err := nrg.handlePacket(pp.pkt); err != nil {
+			r.logger.WithError(err).Debug("Failed to re-dispatch parked packet after mux-leg append")
+		}
+	}
 }
 
 // appendRouteToGroup adds an additional transport/rule pair to an existing
@@ -129,6 +146,8 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	if err := rg.writePacket(context.Background(), lastTp, packet, lastRule.KeyRouteID()); err != nil {
 		r.logger.WithError(err).Warn("Failed to send handshake on additional mux transport")
 	}
+
+	r.drainPendingToGroup(nrg, rules.Desc)
 
 	r.logger.Debugf("Appended mux route via transport %s to RouteGroup %s", nextTpID, &rules.Desc)
 	return nil
