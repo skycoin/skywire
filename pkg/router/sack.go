@@ -6,6 +6,18 @@ import (
 	"time"
 )
 
+// retxMinAge is how long an un-acknowledged sequence must have been
+// outstanding before a SACK gap will retransmit it. The mux legs ride
+// reliable, ordered transports, so a sequence missing from the receiver's
+// contiguous run is almost always just IN FLIGHT on a slower leg (latency
+// skew), not lost. Retransmitting it on sight is spurious and self-amplifies:
+// each early retx arrives out of order, provoking another SACK, provoking more
+// retx (the observed ~7x traffic storm that wedged mux>1). Holding off until a
+// sequence is overdue by more than any realistic inter-leg skew means a merely
+// reordered packet arrives and is acked (purged) first, and only a genuinely
+// lost one — a dead leg, which liveness prunes — is ever retransmitted.
+const retxMinAge = 750 * time.Millisecond
+
 // sackTracker tracks received sequence numbers on the receiver side and
 // generates SACK feedback (last contiguous seq + 64-bit bitmap).
 type sackTracker struct {
@@ -142,8 +154,11 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, bitmap uint64) []uint32
 			// Bit is set: packet received, purge from buffer
 			delete(rb.entries, checkSeq)
 		} else {
-			// Bit is not set: packet missing, retransmit if we have it
-			if _, ok := rb.entries[checkSeq]; ok {
+			// Bit is not set: packet missing. Retransmit only if it is
+			// genuinely overdue — a sequence still within retxMinAge of when it
+			// was sent is presumed in flight on a slower leg (mux latency skew),
+			// not lost, so retransmitting it would be spurious.
+			if e, ok := rb.entries[checkSeq]; ok && time.Since(e.sentAt) >= retxMinAge {
 				retransmit = append(retransmit, checkSeq)
 			}
 		}
