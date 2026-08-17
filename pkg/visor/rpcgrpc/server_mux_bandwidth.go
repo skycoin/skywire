@@ -516,6 +516,15 @@ func (s *PingServer) muxBwPlanDisjointRoutes(
 		return nil, fmt.Errorf("no transport entries available")
 	}
 
+	// TpID -> carrier kind, so each planned hop can carry its transport
+	// type for per-leg telemetry (routing.Hop drops it).
+	tpTypes := make(map[string]string, len(entries))
+	for _, e := range entries {
+		if e != nil {
+			tpTypes[e.ID.String()] = string(e.Type)
+		}
+	}
+
 	graph, err := routeFinder.NewGraphWithDepth(ctx, newCalcMemStore(entries), srcPK, maxHops)
 	if err != nil {
 		return nil, fmt.Errorf("build graph: %w", err)
@@ -533,7 +542,7 @@ func (s *PingServer) muxBwPlanDisjointRoutes(
 					return true
 				}
 			}
-			fwd := muxBwRoutingHopsToInfo(r.Hops)
+			fwd := muxBwRoutingHopsToInfo(r.Hops, tpTypes)
 			plans = append(plans, muxBwRoutePlan{forward: fwd, reverse: muxBwReverseHops(fwd)})
 			for _, pk := range inter {
 				usedInter[pk] = struct{}{}
@@ -571,16 +580,21 @@ func muxBwIntermediates(r routing.Route, src, dst cipher.PubKey) []cipher.PubKey
 }
 
 // muxBwRoutingHopsToInfo converts route-finder routing.Hops into the
-// RouteHopInfo wire shape the explicit-hops dial path consumes. Only
-// TpID/From/To are carried — TpType is unused by PingContextWithRoute (it
-// resolves the transport by TpID), matching StreamCalcRoutes' emit.
-func muxBwRoutingHopsToInfo(hops []routing.Hop) []RouteHopInfo {
+// RouteHopInfo wire shape the explicit-hops dial path consumes. TpID/From/To
+// drive the dial (PingContextWithRoute resolves the transport by TpID);
+// TpType is filled from tpTypes (TpID -> carrier kind) purely so the plan can
+// serve as the per-leg identity source for telemetry — the explicit-hops dial
+// leaves the conn's RouteHopDetails empty, so the plan is the only reliable
+// place to read each leg's intermediate PK + carrier from.
+func muxBwRoutingHopsToInfo(hops []routing.Hop, tpTypes map[string]string) []RouteHopInfo {
 	out := make([]RouteHopInfo, 0, len(hops))
 	for _, h := range hops {
+		id := h.TpID.String()
 		out = append(out, RouteHopInfo{
-			TpID: h.TpID.String(),
-			From: h.From.String(),
-			To:   h.To.String(),
+			TpID:   id,
+			From:   h.From.String(),
+			To:     h.To.String(),
+			TpType: tpTypes[id],
 		})
 	}
 	return out
@@ -592,7 +606,7 @@ func muxBwRoutingHopsToInfo(hops []routing.Hop) []RouteHopInfo {
 func muxBwReverseHops(fwd []RouteHopInfo) []RouteHopInfo {
 	rev := make([]RouteHopInfo, len(fwd))
 	for i, h := range fwd {
-		rev[len(fwd)-1-i] = RouteHopInfo{TpID: h.TpID, From: h.To, To: h.From}
+		rev[len(fwd)-1-i] = RouteHopInfo{TpID: h.TpID, From: h.To, To: h.From, TpType: h.TpType}
 	}
 	return rev
 }
@@ -665,13 +679,26 @@ func (s *PingServer) muxBwSetupRoute(
 		// (mux-bw NDJSON, mux-bw-tui dashboard, treeprobe harness)
 		// can verify route diversity from this field.
 		ref := PingRouteRef{PK: cfg.TargetPK, Index: rs.index}
-		hops := s.visor.GetPingRouteDetailsAt(ref)
-		for _, h := range hops {
+		// Normalize the leg's hops to (tpID, from, to, tpType) tuples. Prefer
+		// the conn's recorded details; the explicit-hops dial path (disjoint
+		// planner) leaves those empty, so fall back to this leg's plan hops
+		// (rs.fwdHops) — authoritative for what we actually dialed.
+		type hopTuple struct{ tpID, from, to, tpType string }
+		var hopTuples []hopTuple
+		for _, h := range s.visor.GetPingRouteDetailsAt(ref) {
+			hopTuples = append(hopTuples, hopTuple{h.TpID, h.From, h.To, h.TpType})
+		}
+		if len(hopTuples) == 0 {
+			for _, h := range rs.fwdHops {
+				hopTuples = append(hopTuples, hopTuple{h.TpID, h.From, h.To, h.TpType})
+			}
+		}
+		for _, h := range hopTuples {
 			ev.Hops = append(ev.Hops, &RouteHop{
-				TpId:   h.TpID,
-				From:   h.From,
-				To:     h.To,
-				TpType: h.TpType,
+				TpId:   h.tpID,
+				From:   h.from,
+				To:     h.to,
+				TpType: h.tpType,
 			})
 		}
 		// Capture the leg's identity from its first hop for the
@@ -679,10 +706,10 @@ func (s *PingServer) muxBwSetupRoute(
 		// egresses on; intermediatePK = the first intermediate visor
 		// (first hop's `to`), left empty for a direct route where the
 		// only hop lands straight on the target (no intermediate).
-		if len(hops) > 0 {
-			rs.transportKind = hops[0].TpType
-			if len(hops) > 1 {
-				rs.intermediatePK = hops[0].To
+		if len(hopTuples) > 0 {
+			rs.transportKind = hopTuples[0].tpType
+			if len(hopTuples) > 1 {
+				rs.intermediatePK = hopTuples[0].to
 			}
 		}
 	}

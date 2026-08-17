@@ -67,38 +67,42 @@ func TestMuxBwIntermediates(t *testing.T) {
 }
 
 // TestMuxBwRoutingHopsToInfoAndReverse pins the calc-route → explicit-dial
-// conversion: forward hops carry TpID/From/To (TpType intentionally dropped,
-// as PingContextWithRoute resolves by TpID), and the reverse is the forward
-// reversed with From/To swapped — matching the shape `route calc` emits and
-// `proxy mux set --legs` dials.
+// conversion: forward hops carry TpID/From/To (TpType filled from the
+// tpTypes map so the plan can serve as the per-leg telemetry identity source),
+// and the reverse is the forward reversed with From/To swapped — matching the
+// shape `route calc` emits and `proxy mux set --legs` dials.
 func TestMuxBwRoutingHopsToInfoAndReverse(t *testing.T) {
 	src := mustPK(t, "03cb5eb5741df4d66492f96f89b55861def1e23850583c499805d96e053f9bceac")
 	dst := mustPK(t, "0248bac07d82b54864959d293181ee6c3dc6e1771e28cca8dd80acac94e36aa164")
 	mid := mustPK(t, "02880cc291ef1620b7d69b3b7b5cadb30d2d97bfe9070e07f6f0c4b6f7a5c8a17a")
 	tp1 := uuid.New()
 	tp2 := uuid.New()
+	tpTypes := map[string]string{tp1.String(): "stcpr", tp2.String(): "sudph"}
 
 	fwd := muxBwRoutingHopsToInfo([]routing.Hop{
 		{From: src, To: mid, TpID: tp1},
 		{From: mid, To: dst, TpID: tp2},
-	})
+	}, tpTypes)
 	if len(fwd) != 2 {
 		t.Fatalf("forward len = %d, want 2", len(fwd))
 	}
 	if fwd[0].TpID != tp1.String() || fwd[0].From != src.String() || fwd[0].To != mid.String() {
 		t.Errorf("forward[0] = %+v", fwd[0])
 	}
-	if fwd[0].TpType != "" {
-		t.Errorf("TpType should be empty (resolved by TpID), got %q", fwd[0].TpType)
+	if fwd[0].TpType != "stcpr" {
+		t.Errorf("TpType should be filled from the type map, got %q", fwd[0].TpType)
 	}
 
 	rev := muxBwReverseHops(fwd)
 	if len(rev) != 2 {
 		t.Fatalf("reverse len = %d, want 2", len(rev))
 	}
-	// reverse[0] is forward[last] with From/To swapped.
+	// reverse[0] is forward[last] with From/To swapped; TpType is preserved.
 	if rev[0].TpID != tp2.String() || rev[0].From != dst.String() || rev[0].To != mid.String() {
 		t.Errorf("reverse[0] = %+v, want swapped last forward hop", rev[0])
+	}
+	if rev[0].TpType != "sudph" {
+		t.Errorf("reverse[0] TpType should be preserved, got %q", rev[0].TpType)
 	}
 	if rev[1].TpID != tp1.String() || rev[1].From != mid.String() || rev[1].To != src.String() {
 		t.Errorf("reverse[1] = %+v, want swapped first forward hop", rev[1])
