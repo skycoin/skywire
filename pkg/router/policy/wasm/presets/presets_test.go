@@ -10,7 +10,7 @@ import (
 
 func TestNames(t *testing.T) {
 	names := Names()
-	want := map[string]bool{"app-mux": false, "rotating-bw": false, "latency-adaptive": false}
+	want := map[string]bool{"app-mux": false, "rotating-bw": false, "latency-adaptive": false, "elastic-mux": false, "probe-and-prune": false}
 	for _, n := range names {
 		if _, ok := want[n]; ok {
 			want[n] = true
@@ -24,7 +24,7 @@ func TestNames(t *testing.T) {
 }
 
 func TestHas(t *testing.T) {
-	for _, n := range []string{"app-mux", "rotating-bw", "latency-adaptive"} {
+	for _, n := range []string{"app-mux", "rotating-bw", "latency-adaptive", "elastic-mux", "probe-and-prune"} {
 		if !Has(n) {
 			t.Errorf("Has(%q) = false, want true", n)
 		}
@@ -45,6 +45,8 @@ func TestDescribe(t *testing.T) {
 		"app-mux":          "app-mux — per-app static mux: vpn-client mux=4/min_hops=2, skychat single low-latency route, others default.",
 		"rotating-bw":      "rotating-bw — mux=4 multi-hop for proxy/vpn/skynet with a leg rotated every 90s (bandwidth spread + traffic-analysis resistance).",
 		"latency-adaptive": "latency-adaptive — mux=4 multi-hop that evicts the slowest leg each 30s (when its EWMA-smoothed latency is a >=1.5x-median outlier) until the leg set converges to low-latency disjoint paths, then holds (hysteresis-damped; no churn once converged).",
+		"elastic-mux":      "elastic-mux — AIMD scaling of the mux leg count to load: grows a leg (up to 6) when the group is saturated, releases one (down to 2) when idle.",
+		"probe-and-prune":  "probe-and-prune — periodically adds one speculative leg over a fresh path, observes its EWMA latency a few ticks, and keeps it only if it beats the current worst leg (continuous explore/exploit).",
 	}
 	for name, want := range cases {
 		got, ok := Describe(name)
@@ -138,6 +140,64 @@ func TestLatencyAdaptiveDecides(t *testing.T) {
 	}
 	if spec.Mux != 4 {
 		t.Errorf("Mux = %d, want 4", spec.Mux)
+	}
+	if spec.MinHops != 2 {
+		t.Errorf("MinHops = %d, want 2", spec.MinHops)
+	}
+	if spec.RotationIntervalSeconds != 30 {
+		t.Errorf("RotationIntervalSeconds = %d, want 30", spec.RotationIntervalSeconds)
+	}
+}
+
+// TestElasticMuxDecides loads the embedded bundle with the elastic-mux
+// preset stamped and asserts a skysocks-client dial gets the modest seed
+// spec (mux=2/min_hops=2, re-evaluated every 20s) that on_tick's AIMD
+// controller then grows or shrinks — proving name dispatch selects the
+// elastic-mux logic.
+func TestElasticMuxDecides(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("elastic-mux", Bundle(),
+		policywasm.WithPreset("elastic-mux"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	spec, err := l.Decide(context.Background(),
+		policy.RoutingContext{App: "skysocks-client"}, nil)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if spec.Mux != 2 {
+		t.Errorf("Mux = %d, want 2", spec.Mux)
+	}
+	if spec.MinHops != 2 {
+		t.Errorf("MinHops = %d, want 2", spec.MinHops)
+	}
+	if spec.RotationIntervalSeconds != 20 {
+		t.Errorf("RotationIntervalSeconds = %d, want 20", spec.RotationIntervalSeconds)
+	}
+}
+
+// TestProbeAndPruneDecides loads the embedded bundle with the
+// probe-and-prune preset stamped and asserts a skysocks-client dial gets
+// the steady 3-way established spec (mux=3/min_hops=2, re-evaluated every
+// 30s) that on_tick's explore/exploit state machine refines — proving name
+// dispatch selects the probe-and-prune logic.
+func TestProbeAndPruneDecides(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("probe-and-prune", Bundle(),
+		policywasm.WithPreset("probe-and-prune"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	spec, err := l.Decide(context.Background(),
+		policy.RoutingContext{App: "skysocks-client"}, nil)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if spec.Mux != 3 {
+		t.Errorf("Mux = %d, want 3", spec.Mux)
 	}
 	if spec.MinHops != 2 {
 		t.Errorf("MinHops = %d, want 2", spec.MinHops)
