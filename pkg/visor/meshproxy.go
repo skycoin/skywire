@@ -42,6 +42,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxyinterstitial"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetweb"
@@ -225,11 +226,35 @@ func (v *Visor) newMeshReverseProxy(resolve meshResolveFn) (*httputil.ReversePro
 			return nil // headers pass through verbatim (the whole point vs. the old bridge)
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			if me, _ := r.Context().Value(meshErrKey).(string); me != "" {
-				http.Error(w, "mesh proxy: "+me, http.StatusBadGateway)
+			ctx := r.Context()
+			frameHost, _ := ctx.Value(meshFrameHostKey).(string)
+			if frameHost == "" {
+				frameHost = r.Host
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+			// Bad hostname / resolve failure — a hard error page, no retry.
+			if me, _ := ctx.Value(meshErrKey).(string); me != "" {
+				w.WriteHeader(http.StatusBadGateway)
+				_, _ = fmt.Fprint(w, proxyinterstitial.Page(frameHost, me, true)) //nolint:errcheck,gosec // Page() html-escapes target/detail
 				return
 			}
-			http.Error(w, "mesh proxy: "+err.Error(), http.StatusBadGateway)
+
+			// Route still warming (route/session setup in flight) — serve the
+			// branded auto-refreshing interstitial so the browser shows
+			// "building a route over skywire…" and retries, instead of a bare
+			// 502. This is the real-origin counterpart of the resolving proxy's
+			// interstitial: because the browse frame loads from a trusted local
+			// origin (<pk>.mesh.localhost / *.haltingstate.net), the page renders
+			// even over HTTPS — no TLS-MITM needed. A genuine (non-transient)
+			// failure falls through to the hard-error variant.
+			if proxyinterstitial.IsTransient(err) {
+				w.WriteHeader(http.StatusOK)
+				_, _ = fmt.Fprint(w, proxyinterstitial.Page(frameHost, "", false)) //nolint:errcheck,gosec // Page() html-escapes target/detail
+				return
+			}
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = fmt.Fprint(w, proxyinterstitial.Page(frameHost, err.Error(), true)) //nolint:errcheck,gosec // Page() html-escapes target/detail
 		},
 	}, nil
 }
