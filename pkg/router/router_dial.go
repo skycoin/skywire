@@ -2216,7 +2216,17 @@ func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, 
 	if err != nil {
 		return fmt.Errorf("rotation add-leg: setup-node dial: %w", err)
 	}
-	if err := r.appendRouteAsymmetric(nrg, muxRules, true, false); err != nil {
+	// Append the replacement leg FULL-DUPLEX (forward + reverse). Forward-only
+	// deletes the initiator's consume (reverse) rule for this leg — but the
+	// setup-node dial already installed that rule on the far end, which marks the
+	// leg ready on our forward handshake and then spreads its bulk (download)
+	// stream onto it. With the initiator's consume rule gone those packets are
+	// dropped (errRouteDescNotExist), so the leg black-holes (recv=0) and, because
+	// the reorder buffer is lossless, the missing sequences head-of-line-stall the
+	// primary leg too — a net 0-byte transfer. aliveLegCount counts forward legs,
+	// so a send-only leg still satisfies the degree target while being a download
+	// blackhole. Keeping the reverse rule lets the aggregated download land here.
+	if err := r.appendRouteAsymmetric(nrg, muxRules, true, true); err != nil {
 		return fmt.Errorf("rotation add-leg: append: %w", err)
 	}
 	log.Infof("Rotation aux leg established via tp %s", muxRules.Forward.NextTransportID())
