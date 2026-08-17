@@ -58,7 +58,7 @@ func TestConnServesHTTP(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("content-type = %q", ct)
 	}
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body) //nolint:errcheck
 	if !strings.Contains(string(body), "Building a route") {
 		t.Error("body is not the interstitial page")
 	}
@@ -84,7 +84,7 @@ func TestServeSOCKS5_HTTPPort(t *testing.T) {
 	cli, srv := net.Pipe()
 	defer cli.Close() //nolint:errcheck
 	done := make(chan error, 1)
-	go func() { done <- ServeSOCKS5(srv, ""); srv.Close() }() //nolint:errcheck
+	go func() { done <- ServeSOCKS5(srv, ""); srv.Close() }() //nolint:errcheck,gosec
 
 	_ = cli.SetDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
 	// greeting: VER=5, 1 method, no-auth
@@ -115,7 +115,7 @@ func TestServeSOCKS5_HTTPPort(t *testing.T) {
 		t.Fatal(err)
 	}
 	buf := make([]byte, 4096)
-	n, _ := cli.Read(buf)
+	n, _ := cli.Read(buf) //nolint:errcheck
 	if !strings.Contains(string(buf[:n]), "Building a route") {
 		t.Errorf("did not receive interstitial; got %q", string(buf[:n]))
 	}
@@ -128,13 +128,13 @@ func TestServeSOCKS5_HTTPSDeclined(t *testing.T) {
 	cli, srv := net.Pipe()
 	defer cli.Close() //nolint:errcheck
 	done := make(chan error, 1)
-	go func() { done <- ServeSOCKS5(srv, ""); srv.Close() }() //nolint:errcheck
+	go func() { done <- ServeSOCKS5(srv, ""); srv.Close() }() //nolint:errcheck,gosec
 
 	_ = cli.SetDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
-	cli.Write([]byte{0x05, 0x01, 0x00})                  //nolint:errcheck
-	io.ReadFull(cli, make([]byte, 2))                    //nolint:errcheck
+	cli.Write([]byte{0x05, 0x01, 0x00})                  //nolint:errcheck,gosec
+	io.ReadFull(cli, make([]byte, 2))                    //nolint:errcheck,gosec
 	// CONNECT 1.2.3.4:443 (IPv4 atyp)
-	cli.Write([]byte{0x05, 0x01, 0x00, 0x01, 1, 2, 3, 4, 0x01, 0xBB}) //nolint:errcheck
+	cli.Write([]byte{0x05, 0x01, 0x00, 0x01, 1, 2, 3, 4, 0x01, 0xBB}) //nolint:errcheck,gosec
 	if err := <-done; err == nil {
 		t.Error("expected ServeSOCKS5 to decline the 443 request")
 	}

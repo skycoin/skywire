@@ -208,7 +208,7 @@ func ServeSOCKS5(conn net.Conn, detail string) error {
 
 	tmp := make([]byte, 2)
 	// Greeting: VER=5, NMETHODS, METHODS[NMETHODS].
-	if _, err := readFull(conn, tmp); err != nil {
+	if err := readFull(conn, tmp); err != nil {
 		return err
 	}
 	if tmp[0] != 0x05 {
@@ -216,7 +216,7 @@ func ServeSOCKS5(conn net.Conn, detail string) error {
 	}
 	nMethods := int(tmp[1])
 	if nMethods > 0 {
-		if _, err := readFull(conn, make([]byte, nMethods)); err != nil {
+		if err := readFull(conn, make([]byte, nMethods)); err != nil {
 			return err
 		}
 	}
@@ -226,7 +226,7 @@ func ServeSOCKS5(conn net.Conn, detail string) error {
 	}
 	// Request: VER=5, CMD, RSV, ATYP, ADDR, PORT.
 	head := make([]byte, 4)
-	if _, err := readFull(conn, head); err != nil {
+	if err := readFull(conn, head); err != nil {
 		return err
 	}
 	if head[0] != 0x05 {
@@ -236,23 +236,23 @@ func ServeSOCKS5(conn net.Conn, detail string) error {
 	switch head[3] {
 	case 0x01: // IPv4
 		b := make([]byte, 4)
-		if _, err := readFull(conn, b); err != nil {
+		if err := readFull(conn, b); err != nil {
 			return err
 		}
 		host = net.IP(b).String()
 	case 0x03: // domain
 		l := make([]byte, 1)
-		if _, err := readFull(conn, l); err != nil {
+		if err := readFull(conn, l); err != nil {
 			return err
 		}
 		b := make([]byte, int(l[0]))
-		if _, err := readFull(conn, b); err != nil {
+		if err := readFull(conn, b); err != nil {
 			return err
 		}
 		host = string(b)
 	case 0x04: // IPv6
 		b := make([]byte, 16)
-		if _, err := readFull(conn, b); err != nil {
+		if err := readFull(conn, b); err != nil {
 			return err
 		}
 		host = net.IP(b).String()
@@ -260,7 +260,7 @@ func ServeSOCKS5(conn net.Conn, detail string) error {
 		return fmt.Errorf("unsupported socks5 atyp 0x%02x", head[3])
 	}
 	portB := make([]byte, 2)
-	if _, err := readFull(conn, portB); err != nil {
+	if err := readFull(conn, portB); err != nil {
 		return err
 	}
 	port := int(portB[0])<<8 | int(portB[1])
@@ -284,16 +284,16 @@ func ServeSOCKS5(conn net.Conn, detail string) error {
 
 // readFull is io.ReadFull without pulling io into a file that otherwise
 // doesn't need it; keeps the SOCKS5 parse self-contained.
-func readFull(conn net.Conn, p []byte) (int, error) {
+func readFull(conn net.Conn, p []byte) error {
 	got := 0
 	for got < len(p) {
 		n, err := conn.Read(p[got:])
 		got += n
 		if err != nil {
-			return got, err
+			return err
 		}
 	}
-	return got, nil
+	return nil
 }
 
 // IsTransient classifies a dial error as a route-setup-in-progress condition
