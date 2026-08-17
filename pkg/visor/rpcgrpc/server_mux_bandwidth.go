@@ -36,6 +36,8 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	routeFinder "github.com/skycoin/skywire/pkg/route-finder/store"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // Defaults for unset MuxBandwidthRequest fields.
@@ -51,6 +53,11 @@ const (
 	// block the pump WaitGroup past the measurement window. Shrunk to the
 	// remaining ctx per-iteration in muxBwProbeLoop.
 	muxBwProbeTimeout = 5 * time.Second
+	// defaultMuxBwMaxHops caps the route-finder BFS depth when
+	// pre-computing the N disjoint mux routes. Mirrors StreamCalcRoutes'
+	// zero-max-hops default so mux-bw's route planning matches what
+	// `route calc` would return for the same target.
+	defaultMuxBwMaxHops = 5
 	// muxBwWarmupDuration is how long to push traffic before measuring,
 	// when probing, so the idle baseline and load phases both run on a
 	// WARM route (routing rules settled at every hop, hop transports
@@ -132,6 +139,14 @@ type muxBwRouteState struct {
 	// activeFlag flips false when the goroutine exits (success or
 	// failure). The sampler reads this to compute active_routes.
 	activeFlag atomic.Bool
+	// fwdHops/revHops, when populated, pin THIS route to an explicit
+	// pre-computed DISJOINT path (distinct intermediate visor). Set by
+	// the disjoint-route planner before the dial loop so each leg rides
+	// its own path instead of N-copies of the finder's single best
+	// route. Empty → muxBwSetupRoute falls back to the finder dial
+	// (MinHops), preserving prior behavior.
+	fwdHops []RouteHopInfo
+	revHops []RouteHopInfo
 }
 
 // StreamMuxBandwidth is the canonical implementation of the RPC.
@@ -160,14 +175,45 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		}
 	}
 
+	// Phase 0: pre-compute up to cfg.Routes DISJOINT routes to the
+	// target — each via a DISTINCT intermediate visor — using the same
+	// transport-graph BFS that `route calc --count N` rides. Each leg is
+	// then dialed with its explicit ForwardHops/ReverseHops so the N
+	// routes are genuinely disjoint rather than N copies of the
+	// route-finder's single best path (the bug this fixes: `--routes 4
+	// --min-hops 2` returned R0=R1=R2=R3, all through one intermediate).
+	//
+	// Best-effort: if planning fails (no TPD graph, build error) or
+	// yields nothing, we fall back to the per-route finder dial (MinHops)
+	// so behavior degrades to the previous path rather than failing.
+	plans, planErr := s.muxBwPlanDisjointRoutes(ctx, cfg.TargetPK, cfg.MinHops, defaultMuxBwMaxHops, cfg.Routes)
+	if planErr != nil {
+		s.log.Debugf("StreamMuxBandwidth: disjoint route planning failed (%v); falling back to finder dial", planErr)
+		plans = nil
+	}
+
+	// Graceful degradation: when the graph yields fewer disjoint routes
+	// than requested, dial the ones found. Done still reports
+	// RoutesRequested = cfg.Routes so the shortfall is visible. When
+	// planning produced nothing we keep cfg.Routes states on the finder
+	// path (unchanged fallback behavior).
+	numRoutes := cfg.Routes
+	if len(plans) > 0 && len(plans) < numRoutes {
+		numRoutes = len(plans)
+	}
+
 	// Phase 1: dial all routes in parallel. Each goroutine emits a
 	// RouteEstablished event when its setup completes (success or
 	// failure). Routes that fail setup are excluded from the pump
 	// phase; the pump_time clock starts after ALL setup goroutines
 	// have either succeeded or returned setup errors.
-	routes := make([]*muxBwRouteState, cfg.Routes)
-	for i := 0; i < cfg.Routes; i++ {
+	routes := make([]*muxBwRouteState, numRoutes)
+	for i := 0; i < numRoutes; i++ {
 		routes[i] = &muxBwRouteState{index: i}
+		if i < len(plans) {
+			routes[i].fwdHops = plans[i].forward
+			routes[i].revHops = plans[i].reverse
+		}
 	}
 
 	// Dedicated probe route. When probing, the RTT probe rides its OWN
@@ -183,7 +229,7 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 
 	setupWg := &sync.WaitGroup{}
 	setupStart := time.Now()
-	for i := 0; i < cfg.Routes; i++ {
+	for i := range routes {
 		setupWg.Add(1)
 		go func(rs *muxBwRouteState) {
 			defer setupWg.Done()
@@ -413,6 +459,131 @@ func muxBwDropRouteEstablished(emit func(isMuxBandwidthEvent_Payload)) func(isMu
 	}
 }
 
+// muxBwRoutePlan is one pre-computed disjoint route to the target: the
+// forward hop list plus its mirrored reverse. muxBwSetupRoute dials it
+// via PingConf.ForwardHops/ReverseHops (explicit path, finder skipped).
+type muxBwRoutePlan struct {
+	forward []RouteHopInfo
+	reverse []RouteHopInfo
+}
+
+// muxBwPlanDisjointRoutes computes up to `count` routes to dstPK whose
+// intermediate visors are mutually DISJOINT, honoring minHops. It builds
+// the transport graph from the same source `route calc` and StreamCalcRoutes
+// use (VisorAPI.FetchAllTransportEntries → route-finder BFS), then greedily
+// selects shortest-first paths, skipping any whose intermediate PKs overlap
+// an already-selected route. This is what turns "N copies of the finder's
+// single best route" into a genuine N-way disjoint mux.
+//
+// Returns fewer than `count` (or an empty slice) when the graph can't yield
+// that many disjoint paths — callers degrade gracefully rather than fail. A
+// non-nil error means the graph itself was unavailable (no transports, build
+// failure); callers fall back to the per-route finder dial.
+func (s *PingServer) muxBwPlanDisjointRoutes(
+	ctx context.Context,
+	dstPK cipher.PubKey,
+	minHops, maxHops, count int,
+) ([]muxBwRoutePlan, error) {
+	if count <= 0 {
+		return nil, nil
+	}
+	if minHops < 0 {
+		minHops = 0
+	}
+	if maxHops <= 0 {
+		maxHops = defaultMuxBwMaxHops
+	}
+
+	srcPK := s.visor.LocalPK()
+	entries, err := s.visor.FetchAllTransportEntries(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch transports: %w", err)
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("no transport entries available")
+	}
+
+	graph, err := routeFinder.NewGraphWithDepth(ctx, newCalcMemStore(entries), srcPK, maxHops)
+	if err != nil {
+		return nil, fmt.Errorf("build graph: %w", err)
+	}
+
+	plans := make([]muxBwRoutePlan, 0, count)
+	usedInter := make(map[cipher.PubKey]struct{})
+	streamErr := graph.StreamRoutesWithCap(ctx, srcPK, dstPK, minHops, maxHops, routeFinder.DefaultMaxBFSQueue,
+		func(r routing.Route) bool {
+			inter := muxBwIntermediates(r, srcPK, dstPK)
+			for _, pk := range inter {
+				if _, seen := usedInter[pk]; seen {
+					// Shares an intermediate with an already-selected
+					// route — not disjoint; keep searching.
+					return true
+				}
+			}
+			fwd := muxBwRoutingHopsToInfo(r.Hops)
+			plans = append(plans, muxBwRoutePlan{forward: fwd, reverse: muxBwReverseHops(fwd)})
+			for _, pk := range inter {
+				usedInter[pk] = struct{}{}
+			}
+			return len(plans) < count
+		})
+	// ErrRouteNotFound after emitting ≥1 route is a clean end-of-search,
+	// not a failure — same translation StreamCalcRoutes applies.
+	if streamErr != nil && (len(plans) == 0 || streamErr != routeFinder.ErrRouteNotFound) {
+		return plans, streamErr
+	}
+	return plans, nil
+}
+
+// muxBwIntermediates returns the DISTINCT intermediate visor PKs of a route
+// — every hop endpoint that is neither the source nor the destination. A
+// direct (single-hop) route has none. Used to test two routes for
+// intermediate-disjointness.
+func muxBwIntermediates(r routing.Route, src, dst cipher.PubKey) []cipher.PubKey {
+	seen := make(map[cipher.PubKey]struct{})
+	out := make([]cipher.PubKey, 0, len(r.Hops))
+	for _, h := range r.Hops {
+		for _, pk := range [2]cipher.PubKey{h.From, h.To} {
+			if pk == src || pk == dst {
+				continue
+			}
+			if _, ok := seen[pk]; ok {
+				continue
+			}
+			seen[pk] = struct{}{}
+			out = append(out, pk)
+		}
+	}
+	return out
+}
+
+// muxBwRoutingHopsToInfo converts route-finder routing.Hops into the
+// RouteHopInfo wire shape the explicit-hops dial path consumes. Only
+// TpID/From/To are carried — TpType is unused by PingContextWithRoute (it
+// resolves the transport by TpID), matching StreamCalcRoutes' emit.
+func muxBwRoutingHopsToInfo(hops []routing.Hop) []RouteHopInfo {
+	out := make([]RouteHopInfo, 0, len(hops))
+	for _, h := range hops {
+		out = append(out, RouteHopInfo{
+			TpID: h.TpID.String(),
+			From: h.From.String(),
+			To:   h.To.String(),
+		})
+	}
+	return out
+}
+
+// muxBwReverseHops mirrors a forward hop list into its reverse: hops in
+// reverse order with From/To swapped. Same derivation the CLI's `route calc`
+// uses so the reverse leg matches what `proxy mux set --legs` would dial.
+func muxBwReverseHops(fwd []RouteHopInfo) []RouteHopInfo {
+	rev := make([]RouteHopInfo, len(fwd))
+	for i, h := range fwd {
+		rev[len(fwd)-1-i] = RouteHopInfo{TpID: h.TpID, From: h.To, To: h.From}
+	}
+	return rev
+}
+
 // muxBwSetupRoute dials one route + emits a RouteEstablished event.
 // Marks rs.established on success so the pump phase knows which
 // routes to spin up.
@@ -436,6 +607,16 @@ func (s *PingServer) muxBwSetupRoute(
 		RouteIndex:     rs.index,
 		MinHops:        cfg.MinHops, // enforce --min-hops at the router-finder layer
 		SetupTimeoutNs: cfg.SetupTimeout.Nanoseconds(),
+	}
+	// When the disjoint-route planner assigned this leg an explicit path,
+	// dial it directly (skips the finder). This is what makes the N routes
+	// genuinely disjoint — each rides its own pre-computed distinct-
+	// intermediate path. The visor's DialPing explicit-hops branch takes
+	// priority over MinHops, so the field stays set only as the fallback
+	// signal when no plan exists.
+	if len(rs.fwdHops) > 0 && len(rs.revHops) > 0 {
+		conf.ForwardHops = rs.fwdHops
+		conf.ReverseHops = rs.revHops
 	}
 	setupCtx, cancel := context.WithTimeout(ctx, cfg.SetupTimeout)
 	defer cancel()
