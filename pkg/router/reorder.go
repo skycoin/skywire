@@ -4,8 +4,6 @@ package router
 import (
 	"sort"
 	"sync"
-
-	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // reorderBuffer holds out-of-order packets and delivers them in sequence order.
@@ -16,14 +14,12 @@ type reorderBuffer struct {
 	nextSeq uint32            // next expected sequence number
 	buf     map[uint32][]byte // out-of-order packets: seq -> payload
 	maxGap  int               // max buffered packets before force-flush
-	log     *logging.Logger   // diagnostic (mux-hang debugging); may be nil
 }
 
-func newReorderBuffer(maxGap int, log *logging.Logger) *reorderBuffer {
+func newReorderBuffer(maxGap int) *reorderBuffer {
 	return &reorderBuffer{
 		buf:    make(map[uint32][]byte),
 		maxGap: maxGap,
-		log:    log,
 	}
 }
 
@@ -47,15 +43,7 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 
 		// Force flush if buffer is too large (prevents unbounded memory)
 		if len(rb.buf) >= rb.maxGap {
-			if rb.log != nil {
-				rb.log.Warnf("MUXDIAG reorder FORCE-FLUSH (out-of-order): maxGap=%d nextSeq=%d waiting-for=%d buffered=%d — this corrupts the ordered stream",
-					rb.maxGap, rb.nextSeq, rb.nextSeq, len(rb.buf))
-			}
 			return rb.flushAll()
-		}
-		if rb.log != nil && len(rb.buf)%8 == 1 {
-			rb.log.Warnf("MUXDIAG reorder STALL: got seq=%d but waiting-for nextSeq=%d, buffered=%d/%d",
-				seq, rb.nextSeq, len(rb.buf), rb.maxGap)
 		}
 		return nil
 	}

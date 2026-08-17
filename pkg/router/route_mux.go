@@ -55,8 +55,7 @@ type routeMux struct {
 	logger *logging.Logger
 
 	// Sequence numbering for outgoing packets
-	writeSeq      uint32 // atomic: next outgoing sequence number
-	recvDiagCount uint64 // atomic: MUXDIAG received-packet counter (debug)
+	writeSeq uint32 // atomic: next outgoing sequence number
 	tpIndex  uint32 // atomic: round-robin fallback index for transport selection
 
 	// Incoming packet reordering
@@ -91,7 +90,7 @@ type routeMux struct {
 func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 	m := &routeMux{
 		logger:      logger,
-		reorderBuf:  newReorderBuffer(64, logger),
+		reorderBuf:  newReorderBuffer(64),
 		tpSelector:  newTransportSelector(),
 		sackEnabled: sackEnabled,
 		sackTracker: newSACKTracker(),
@@ -338,9 +337,6 @@ func (m *routeMux) snapshotLegs() []LegStats {
 // Returns the packet and the sequence number used.
 func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte) (routing.Packet, uint32, error) {
 	seq := atomic.AddUint32(&m.writeSeq, 1) - 1
-	if m.logger != nil && (seq < 5 || seq%200 == 0) {
-		m.logger.Warnf("MUXDIAG send seq=%d routeID=%d len=%d", seq, routeID, len(data))
-	}
 	packet, err := routing.MakeSequencedDataPacket(routeID, seq, data)
 	if err != nil {
 		return nil, 0, err
@@ -364,14 +360,6 @@ func (m *routeMux) deliverData(seq uint32, data []byte) (delivered [][]byte, gap
 	}
 
 	delivered = m.reorderBuf.Insert(seq, data)
-
-	if m.logger != nil {
-		c := atomic.AddUint64(&m.recvDiagCount, 1)
-		if c <= 5 || c%200 == 0 {
-			m.logger.Warnf("MUXDIAG recv#%d seq=%d nextSeq=%d delivered=%d pending=%d",
-				c, seq, m.reorderBuf.NextSeq(), len(delivered), m.reorderBuf.Pending())
-		}
-	}
 
 	// Sync SACK tracker with reorder buffer delivery state
 	if m.sackEnabled && m.sackTracker != nil {
