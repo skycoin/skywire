@@ -69,6 +69,7 @@ func init() {
 		setAppWhitelistCmd,
 		setAppNetworkInterfaceCmd,
 		setAppPKCmd,
+		setAppRoutingPolicyCmd,
 	)
 	registerAppCmd.Flags().StringVarP(&appName, "appname", "a", "", "name of the app")
 	registerAppCmd.Flags().StringVarP(&localPath, "localpath", "p", "./local", "path of the local folder")
@@ -445,6 +446,27 @@ var setAppAutostartCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAutoStart(args[0], autostart))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+var setAppRoutingPolicyCmd = &cobra.Command{
+	Use:   "routing-policy <name> <policy>",
+	Short: "Set an app's routing policy at runtime (no restart)",
+	Long: "\n  Install or replace an app's per-dial routing policy on a RUNNING app\n" +
+		"  without restarting it — the route-selection hook is swapped live.\n\n" +
+		"  <policy> accepts:\n" +
+		"    preset:<name>   a built-in preset (see 'route policy list')\n" +
+		"    @/path.star     a Starlark policy file (hot-reloaded on change)\n" +
+		"    @/path.wasm     a compiled WASM policy file (hot-reloaded on change)\n" +
+		"    \"\" or \"none\"     clear any previously-installed override",
+	Args: cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SetAppRoutingPolicy(args[0], args[1]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }
