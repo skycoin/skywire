@@ -51,10 +51,26 @@ func (r *router) appendRouteAsymmetric(nrg *NoiseRouteGroup, rules routing.EdgeR
 		}
 		nrg.rg.mu.Lock()
 		for _, existing := range nrg.rg.tps {
-			if existing != nil && existing.Entry.Type == tptypes.DMSG {
+			if existing == nil {
+				continue
+			}
+			if existing.Entry.Type == tptypes.DMSG {
 				nrg.rg.mu.Unlock()
 				r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
 				return errors.New("refusing to mux: route group already contains a DMSG transport")
+			}
+			// Enforce the mux invariant: two legs must never share a transport
+			// (the router-side analogue of a route not looping through the same
+			// visor twice). The route-finder fallback in establishMuxRoutes
+			// honors ExcludeIntermediatePKs but NOT ExcludeTransportIDs, so a
+			// disjoint-path miss lets it return the leg-1 transport again —
+			// producing two route-IDs over one physical link, which stalls the
+			// mux data plane. Reject the duplicate here so the group degrades to
+			// the legs it does have (down to single-route) instead of breaking.
+			if existing.Entry.ID == nextTpID {
+				nrg.rg.mu.Unlock()
+				r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+				return fmt.Errorf("refusing to append mux leg over transport %s already in the group", nextTpID)
 			}
 		}
 		nrg.rg.mu.Unlock()
@@ -125,9 +141,17 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	}
 	nrg.rg.mu.Lock()
 	for _, existing := range nrg.rg.tps {
-		if existing != nil && existing.Entry.Type == tptypes.DMSG {
+		if existing == nil {
+			continue
+		}
+		if existing.Entry.Type == tptypes.DMSG {
 			nrg.rg.mu.Unlock()
 			return errors.New("refusing to mux: route group already contains a DMSG transport")
+		}
+		// Mux invariant: no two legs share a transport (see appendRouteAsymmetric).
+		if existing.Entry.ID == nextTpID {
+			nrg.rg.mu.Unlock()
+			return fmt.Errorf("refusing to append mux leg over transport %s already in the group", nextTpID)
 		}
 	}
 	nrg.rg.mu.Unlock()
