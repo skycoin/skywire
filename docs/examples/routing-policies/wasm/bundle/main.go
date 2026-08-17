@@ -135,6 +135,10 @@ func decideRoute(inPtr, inLen uint32) uint64 {
 		spec = decideRotatingBW(input.Ctx)
 	case "latency-adaptive":
 		spec = decideLatencyAdaptive(input.Ctx)
+	case "elastic-mux":
+		spec = decideElasticMux(input.Ctx)
+	case "probe-and-prune":
+		spec = decideProbeAndPrune(input.Ctx)
 	case "app-mux":
 		spec = decideAppMux(input.Ctx)
 	default:
@@ -214,6 +218,48 @@ func decideLatencyAdaptive(ctx routingContextWire) routeSpecWire {
 	return routeSpecWire{}
 }
 
+// decideElasticMux is the elastic-mux preset's decide logic. It starts
+// deliberately MODEST — a 2-way mux over multi-hop — and lets the on_tick
+// AIMD controller grow or shrink the leg count to match observed load.
+// Unlike the static-mux presets (which pin a fixed width), the initial
+// Mux here is only a seed: RotationIntervalSeconds=20 makes on_tick fire
+// often enough to react to load swings, and Distribution "auto" lets the
+// host weight bytes toward the faster legs while the count floats.
+// Non-target apps get the empty spec (defaults).
+func decideElasticMux(ctx routingContextWire) routeSpecWire {
+	switch ctx.App {
+	case "vpn-client", "skysocks-client", "skynet-client":
+		return routeSpecWire{
+			Mux:                     2,
+			MinHops:                 2,
+			RotationIntervalSeconds: 20,
+			Distribution:            "auto",
+		}
+	}
+	return routeSpecWire{}
+}
+
+// decideProbeAndPrune is the probe-and-prune preset's decide logic. It
+// holds a steady 3-way mux over multi-hop as the "established" set that
+// on_tick continuously refines: every 30s the tick controller adds one
+// speculative leg over a fresh path, watches it for a few ticks, and
+// keeps it only if it beats the current worst leg (else discards it), so
+// the established set drifts toward lower latency without ever growing
+// past its target. Distribution "auto" weights bytes toward the faster
+// legs meanwhile. Non-target apps get the empty spec (defaults).
+func decideProbeAndPrune(ctx routingContextWire) routeSpecWire {
+	switch ctx.App {
+	case "vpn-client", "skysocks-client", "skynet-client":
+		return routeSpecWire{
+			Mux:                     3,
+			MinHops:                 2,
+			RotationIntervalSeconds: 30,
+			Distribution:            "auto",
+		}
+	}
+	return routeSpecWire{}
+}
+
 // targetMux is the mux size the rotating-bw policy aims to maintain.
 // Kept in sync with the Mux value returned from decideRotatingBW so
 // on_tick can reason about "are we at target?"
@@ -232,6 +278,10 @@ func onTick(inPtr, inLen uint32) uint64 {
 		return tickRotatingBW(input)
 	case "latency-adaptive":
 		return tickLatencyAdaptive(input)
+	case "elastic-mux":
+		return tickElasticMux(input)
+	case "probe-and-prune":
+		return tickProbeAndPrune(input)
 	default:
 		return 0
 	}
@@ -433,6 +483,335 @@ func tickLatencyAdaptive(input tickInputWire) uint64 {
 		})
 	}
 	// Converged: all alive legs comparably fast — hold.
+	return 0
+}
+
+// --- elastic-mux: AIMD scaling of the mux leg count to load ---
+//
+// elastic-mux treats the mux width as a control variable, not a constant.
+// Its on_tick runs a classic AIMD (additive-increase / multiplicative-…
+// here just single-step-decrease) controller over the group's aggregate
+// received throughput:
+//
+//	SATURATED (throughput near the observed peak) → ADD one leg. Under
+//	real load more disjoint paths raise the aggregate the group can pull,
+//	so we grow — additively, one leg per tick — up to a hard cap.
+//	IDLE (throughput far below peak, for two consecutive ticks) → DROP one
+//	leg. The width bought under load is now wasted transport state and
+//	fleet bandwidth, so we release it — one leg at a time, down to a floor.
+//	Otherwise → hold.
+//
+// The controller drives its decisions off an EWMA of the per-tick
+// received-byte DELTA (recv_bytes is a monotonic counter; the increment
+// since last tick is this interval's throughput), NOT the raw delta.
+// Raw per-tick byte deltas on the live mesh are extremely spiky — a bulk
+// download arrives in bursts, so one tick reads near-zero and the next
+// reads a full window — and an AIMD loop driven by the raw value would
+// oscillate (grow, shrink, grow) chasing that jitter. Smoothing the
+// delta with an EWMA (α=0.3) gives a stable load signal the controller
+// can compare against a slowly-decaying running peak without thrashing.
+
+// elasticPrevRecv holds each leg's last-seen recv_bytes counter, keyed by
+// the STABLE transport_id (index shifts as legs drop/add), so the next
+// tick can compute that leg's byte delta. Stale keys are pruned each tick.
+var elasticPrevRecv = map[string]uint64{}
+
+// elasticSeen is a scratch set (reused, cleared each tick) recording which
+// transport_ids appear this tick, so stale elasticPrevRecv keys can be
+// pruned. Package-global only to avoid a per-tick allocation.
+var elasticSeen = map[string]bool{}
+
+// elasticThroughputEWMA is the smoothed aggregate received throughput
+// (sum of alive legs' per-tick recv_bytes deltas), the load signal the
+// AIMD controller acts on. elasticPeak is the running high-water mark of
+// that smoothed signal, decayed a little each tick so a transient burst
+// long past stops holding the bar artificially high. elasticIdleCount is
+// the consecutive-idle tick counter (so a single quiet tick can't shrink
+// the group). elasticSeeded guards the one-time seed on the first tick
+// that observes non-zero throughput.
+var (
+	elasticThroughputEWMA float64
+	elasticPeak           float64
+	elasticIdleCount      int
+	elasticSeeded         bool
+)
+
+const (
+	// elasticFloor / elasticCap bound the leg count AIMD may reach.
+	elasticFloor = 2
+	elasticCap   = 6
+	// elasticAlpha is the EWMA smoothing factor for the throughput signal
+	// (newest delta weighted 30%, running average 70%).
+	elasticAlpha = 0.3
+	// elasticPeakDecay bleeds the running peak down ~2%/tick so the
+	// saturation bar tracks a sustained drop in achievable throughput
+	// instead of being pinned forever by one historical burst.
+	elasticPeakDecay = 0.98
+)
+
+// tickElasticMux is the elastic-mux AIMD controller. See the block comment
+// above for the load model and why the signal is a smoothed byte-delta.
+//
+//	alive_count == 0                         → no-op (nothing measured)
+//	smoothed >= 0.80*peak && alive < cap     → add one leg (grow to load)
+//	smoothed <  0.25*peak for >=2 ticks
+//	  && alive > floor                       → drop oldest leg (release)
+//	otherwise                                → hold
+func tickElasticMux(input tickInputWire) uint64 {
+	// Compute this interval's aggregate received byte-delta over alive
+	// legs, refreshing each leg's prev-counter, and record presence for
+	// stale-key pruning. Also find the oldest (lowest-index) alive leg to
+	// release when shrinking, and count alive legs.
+	for k := range elasticSeen {
+		delete(elasticSeen, k)
+	}
+	var rawTotal float64
+	aliveCount := 0
+	oldestAliveIdx := -1
+	for _, l := range input.Legs {
+		if !l.Alive {
+			continue
+		}
+		aliveCount++
+		if oldestAliveIdx == -1 || l.Index < oldestAliveIdx {
+			oldestAliveIdx = l.Index
+		}
+		tid := l.TransportID
+		if tid == "" {
+			continue
+		}
+		elasticSeen[tid] = true
+		if prev, ok := elasticPrevRecv[tid]; ok && l.RecvBytes >= prev {
+			// Only fold in a non-negative delta; a counter that went
+			// backwards means a reset/new leg, not real throughput.
+			rawTotal += float64(l.RecvBytes - prev)
+		}
+		elasticPrevRecv[tid] = l.RecvBytes
+	}
+	// Prune prev-counters for transport_ids no longer present.
+	for tid := range elasticPrevRecv {
+		if !elasticSeen[tid] {
+			delete(elasticPrevRecv, tid)
+		}
+	}
+	if aliveCount == 0 {
+		return 0
+	}
+
+	// Fold the raw delta into the smoothed signal and maintain the peak.
+	// Seed both on the first tick that sees real throughput so the signal
+	// starts on a genuine value rather than ramping up from zero.
+	if !elasticSeeded {
+		if rawTotal > 0 {
+			elasticThroughputEWMA = rawTotal
+			elasticPeak = rawTotal
+			elasticSeeded = true
+		}
+		// No load signal yet — hold and keep measuring.
+		return 0
+	}
+	elasticThroughputEWMA = elasticAlpha*rawTotal + (1-elasticAlpha)*elasticThroughputEWMA
+	elasticPeak *= elasticPeakDecay
+	if elasticThroughputEWMA > elasticPeak {
+		elasticPeak = elasticThroughputEWMA
+	}
+	if elasticPeak <= 0 {
+		return 0
+	}
+
+	smoothed := elasticThroughputEWMA
+	// Track consecutive idle ticks independently of whether we can act on
+	// them, so the "two quiet ticks" requirement is about load, not width.
+	if smoothed < 0.25*elasticPeak {
+		elasticIdleCount++
+	} else {
+		elasticIdleCount = 0
+	}
+
+	// Additive increase: saturated and below the cap → grow one leg.
+	if smoothed >= 0.80*elasticPeak && aliveCount < elasticCap {
+		return writeAction(rotationActionWire{AddLeg: true})
+	}
+	// Decrease: sustained idle and above the floor → release one leg.
+	// Reset the idle counter after acting so we step down gracefully
+	// (one leg every two idle ticks) rather than collapsing to the floor.
+	if elasticIdleCount >= 2 && aliveCount > elasticFloor {
+		elasticIdleCount = 0
+		return writeAction(rotationActionWire{DropLegs: []int{oldestAliveIdx}})
+	}
+	// Hold.
+	return 0
+}
+
+// --- probe-and-prune: continuous explore/exploit over a fresh path ---
+//
+// probe-and-prune keeps a fixed-width "established" set (probeTarget legs)
+// but never stops looking for a better path than the ones it holds. Its
+// on_tick is a small state machine:
+//
+//	EXPLORE: when idle and exactly at target width, add ONE speculative
+//	leg over a fresh path (the host picks the candidate; on_tick can only
+//	request an add). The next tick identifies that new leg by diffing the
+//	current transport_ids against the pre-add "known" set, and puts it on
+//	probation (probeTID / probeAge).
+//	OBSERVE: let the probe run probeObserveTicks ticks so its EWMA latency
+//	(same stable-transport_id-keyed smoothing latency-adaptive uses) is a
+//	real measurement, not first-packet noise.
+//	EXPLOIT: compare the probe's smoothed latency to the WORST (highest-
+//	EWMA) established leg. If the probe is better, it GRADUATES — drop the
+//	worst established leg, and the probe takes its place. If not, the
+//	experiment FAILED — drop the probe itself. Either way width returns to
+//	target and the cycle repeats.
+//
+// Net effect: the established set ratchets toward lower latency one path
+// at a time, spending at most one extra leg's worth of transport state
+// while a probe is in flight, and never growing past target permanently.
+
+// probeEWMA is the per-leg smoothed latency, keyed by stable transport_id
+// (same rationale as latAdaptEWMA). probeSeen is the reused prune scratch
+// set; probeAliveIdx maps transport_id → current leg index each tick so a
+// DropLegs decision made about a transport can be translated to the index
+// the host expects. prevKnownTIDs snapshots the established set just before
+// an add so the following tick can diff out the newly-added probe leg.
+var (
+	probeEWMA     = map[string]float64{}
+	probeSeen     = map[string]bool{}
+	probeAliveIdx = map[string]int{}
+	prevKnownTIDs = map[string]bool{}
+)
+
+// probeTID is the transport_id of the leg currently on probation ("" =
+// none). probeAge counts ticks since the probe was adopted. probePending
+// is set the tick we request the add, so the next tick knows to adopt the
+// newly-appeared leg as the probe.
+var (
+	probeTID     string
+	probeAge     int
+	probePending bool
+)
+
+const (
+	// probeTarget is the established-set width probe-and-prune maintains
+	// (matches decideProbeAndPrune's Mux). A probe transiently makes it
+	// target+1.
+	probeTarget = 3
+	// probeObserveTicks is how many ticks a probe runs before it is judged,
+	// so its EWMA latency reflects steady behavior, not startup noise.
+	probeObserveTicks = 3
+	// probeAlpha is the latency EWMA smoothing factor (as in latency-…).
+	probeAlpha = 0.3
+)
+
+// tickProbeAndPrune is the probe-and-prune explore/exploit controller. See
+// the block comment above for the state machine.
+func tickProbeAndPrune(input tickInputWire) uint64 {
+	// Update per-leg latency EWMA, map transport_id → index, count alive,
+	// and record presence for stale-key pruning.
+	for k := range probeSeen {
+		delete(probeSeen, k)
+	}
+	for k := range probeAliveIdx {
+		delete(probeAliveIdx, k)
+	}
+	aliveCount := 0
+	for _, l := range input.Legs {
+		tid := l.TransportID
+		if tid == "" {
+			continue
+		}
+		probeSeen[tid] = true
+		if !l.Alive {
+			continue
+		}
+		aliveCount++
+		probeAliveIdx[tid] = l.Index
+		// Fold in only real measurements; latency_ms==0 means "unknown".
+		if l.LatencyMs > 0 {
+			sample := float64(l.LatencyMs)
+			if prev, ok := probeEWMA[tid]; ok {
+				probeEWMA[tid] = probeAlpha*sample + (1-probeAlpha)*prev
+			} else {
+				probeEWMA[tid] = sample
+			}
+		}
+	}
+	// Prune EWMA keys for transport_ids no longer present.
+	for tid := range probeEWMA {
+		if !probeSeen[tid] {
+			delete(probeEWMA, tid)
+		}
+	}
+
+	// Adopt: if we requested an add last tick, the new leg should now be
+	// present — it is the alive transport_id absent from the pre-add known
+	// set. Put it on probation.
+	if probePending {
+		probePending = false
+		for tid := range probeAliveIdx {
+			if !prevKnownTIDs[tid] {
+				probeTID = tid
+				probeAge = 0
+				break
+			}
+		}
+	}
+
+	// Active probe: observe, then graduate-or-discard.
+	if probeTID != "" {
+		idx, alive := probeAliveIdx[probeTID]
+		if !alive {
+			// Probe died on its own — abandon the experiment.
+			probeTID = ""
+			probeAge = 0
+			return 0
+		}
+		probeAge++
+		if probeAge < probeObserveTicks {
+			return 0
+		}
+		// Judge: probe's smoothed latency vs the worst established leg.
+		probeSm, okProbe := probeEWMA[probeTID]
+		worstIdx := -1
+		worstSm := -1.0
+		for tid, i := range probeAliveIdx {
+			if tid == probeTID {
+				continue
+			}
+			sm, ok := probeEWMA[tid]
+			if !ok {
+				continue
+			}
+			if sm > worstSm {
+				worstSm = sm
+				worstIdx = i
+			}
+		}
+		if !okProbe || worstIdx < 0 {
+			// Not enough latency signal to judge yet — keep observing.
+			return 0
+		}
+		probeTID = ""
+		if probeSm < worstSm {
+			// Probe graduates: prune the worst established leg; the probe
+			// stays and becomes part of the established set next tick.
+			return writeAction(rotationActionWire{DropLegs: []int{worstIdx}})
+		}
+		// Failed experiment: prune the probe itself, keep the incumbents.
+		return writeAction(rotationActionWire{DropLegs: []int{idx}})
+	}
+
+	// Explore: no probe in flight and exactly at target width → snapshot
+	// the known set and request one speculative leg over a fresh path.
+	if !probePending && aliveCount == probeTarget {
+		for k := range prevKnownTIDs {
+			delete(prevKnownTIDs, k)
+		}
+		for tid := range probeAliveIdx {
+			prevKnownTIDs[tid] = true
+		}
+		probePending = true
+		return writeAction(rotationActionWire{AddLeg: true})
+	}
 	return 0
 }
 
