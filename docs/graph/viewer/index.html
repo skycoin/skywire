@@ -8,6 +8,11 @@
     <link rel="stylesheet" crossorigin href="assets/index-D27RSPSK.css">
     <script>
       // Added by scripts/graph-snapshot.sh — see ATTRIBUTION.
+      try {
+        if (!localStorage.getItem('cbm-display')) {
+          localStorage.setItem('cbm-display', '{"edgeBrightness":0.3,"nodeGlow":0.3,"bloom":0.2}');
+        }
+      } catch (e) {}
       if (!new URLSearchParams(location.search).get('project')) {
         location.replace('?tab=graph&project=skywire' + location.hash);
       }

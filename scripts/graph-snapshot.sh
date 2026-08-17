@@ -11,16 +11,17 @@
 #     path, which resolves to the wrong place when the site is served from a
 #     subdirectory. Both are rewritten to be relative here.
 #   - the trick: a static host ignores the query string, so a single file at
-#     api/layout answers /api/layout?project=skywire&max_nodes=5000 and every
-#     other combination of parameters the viewer asks for. The node-count
-#     control in the UI therefore does nothing on the published site; the
-#     snapshot is whatever NODES was when it was generated.
+#     api/layout.json answers every request the viewer makes for a layout,
+#     whatever parameters it appends. The node-count control in the UI therefore
+#     does nothing on the published site; the snapshot is whatever NODES was set
+#     to when it was generated. The .json extension is not decoration — it is
+#     what gets the file a compressible content type and so a gzipped response.
 #
 # The upstream project is MIT licensed (Copyright (c) 2025 DeusData); the notice
 # ships alongside the bundle in docs/graph/viewer/ATTRIBUTION.
 #
 #   ./scripts/graph-snapshot.sh                       # defaults below
-#   NODES=20000 ./scripts/graph-snapshot.sh           # a denser snapshot
+#   NODES=5000 ./scripts/graph-snapshot.sh            # a smaller snapshot
 #   UI=http://localhost:9749 ./scripts/graph-snapshot.sh
 #
 # Prerequisites: codebase-memory-mcp running with its UI enabled, having indexed
@@ -34,12 +35,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 UI="${UI:-http://localhost:9749}"
-NODES="${NODES:-5000}"
+NODES="${NODES:-60000}"
 PUB_PROJECT="${PUB_PROJECT:-skywire}"
 OUT="${OUT:-docs/graph/viewer}"
 BIN="${BIN:-codebase-memory-mcp}"
 REPO_URL="${REPO_URL:-https://github.com/skycoin/skywire}"
 REPO_BRANCH="${REPO_BRANCH:-develop}"
+
+# The viewer's contrast controls, which it stores under "cbm-display". Its own
+# defaults are 1/1/1, at which a graph of this size is a white ball; these were
+# picked by looking at the result. Ranges are 0.1 to 3.
+DISPLAY_DEFAULTS="${DISPLAY_DEFAULTS:-{\"edgeBrightness\":0.3,\"nodeGlow\":0.3,\"bloom\":0.2}}"
 
 # Whichever local checkout was indexed: the name is derived from its path, so it
 # is asked for rather than assumed. The first project whose name contains the
@@ -74,11 +80,34 @@ mkdir -p "$OUT/assets" "$OUT/api"
 curl -fsS "$UI/" -o "$OUT/index.html"
 sed -i -E 's#(src|href)="/assets/#\1="assets/#g' "$OUT/index.html"
 
+# Two things the page has to do for itself once there is no server behind it.
+#
 # Without ?project= the viewer asks the server which projects exist, over a POST
 # to /rpc that a static host cannot answer — it then renders nothing at all. So
-# the parameters are supplied if they are missing, which makes the page work
-# however it is arrived at rather than only from a link that knows to add them.
-sed -i "s#</head>#  <script>\n      // Added by scripts/graph-snapshot.sh — see ATTRIBUTION.\n      if (!new URLSearchParams(location.search).get('project')) {\n        location.replace('?tab=graph\&project=${PUB_PROJECT}' + location.hash);\n      }\n    </script>\n  </head>#" "$OUT/index.html"
+# the parameters are supplied when they are missing, and any link works.
+#
+# And a graph this size arrives washed out to white: the viewer's own Display
+# panel says as much, and its contrast settings live in localStorage. They are
+# seeded here only when nothing is stored, so the first view is legible and a
+# visitor who moves the sliders keeps what they chose.
+cat >"$OUT/.inject.html" <<INJECT
+    <script>
+      // Added by scripts/graph-snapshot.sh — see ATTRIBUTION.
+      try {
+        if (!localStorage.getItem('cbm-display')) {
+          localStorage.setItem('cbm-display', '$DISPLAY_DEFAULTS');
+        }
+      } catch (e) {}
+      if (!new URLSearchParams(location.search).get('project')) {
+        location.replace('?tab=graph&project=$PUB_PROJECT' + location.hash);
+      }
+    </script>
+INJECT
+awk -v frag="$OUT/.inject.html" '
+	/<\/head>/ && !done { while ((getline line < frag) > 0) print line; done = 1 }
+	{ print }
+' "$OUT/index.html" >"$OUT/.index.new" && mv "$OUT/.index.new" "$OUT/index.html"
+rm -f "$OUT/.inject.html"
 
 # --- the bundle, with its asset and API paths made relative ------------
 # The filenames are content-hashed, so they are read out of the page rather
@@ -95,12 +124,18 @@ done
 for js in "$OUT"/assets/*.js; do
 	[ -e "$js" ] || continue
 	sed -i -E 's#"/api/#"api/#g; s#`/api/#`api/#g; s#"/assets/#"assets/#g' "$js"
+	# A static host picks the content type from the extension, and only a type
+	# it knows to be compressible is gzipped on the way out. An extension-less
+	# api/layout would be an opaque blob served whole; api/layout.json is
+	# application/json, which GitHub Pages compresses — the full graph is 36 MB
+	# on disk and about a sixth of that over the wire.
+	sed -i 's#`api/layout?#`api/layout.json?#g' "$js"
 done
 
 # --- the data ---------------------------------------------------------
 # One file per endpoint. The query string is ignored by a static host, so
-# api/layout answers every request the viewer makes for a layout.
-curl -fsS "$UI/api/layout?project=$SRC_PROJECT&max_nodes=$NODES" -o "$OUT/api/layout"
+# api/layout.json answers every request the viewer makes for a layout.
+curl -fsS "$UI/api/layout?project=$SRC_PROJECT&max_nodes=$NODES" -o "$OUT/api/layout.json"
 
 # The two innocuous ones the page reads on boot. Some endpoints want the project
 # and some reject it, so both are tried; an empty object stands in if neither
@@ -129,7 +164,7 @@ EOF
 # The indexed name is derived from the checkout path and prefixes every
 # qualified name in the payload. Rewrite it so the published site says nothing
 # about anybody's home directory.
-sed -i "s#${SRC_PROJECT}#${PUB_PROJECT}#g" "$OUT/api/layout"
+sed -i "s#${SRC_PROJECT}#${PUB_PROJECT}#g" "$OUT/api/layout.json"
 
 # Then prove it. The needles are the indexed name and the checkout path — not a
 # bare "/home/", because the graph legitimately contains this repository's HTTP
@@ -144,26 +179,28 @@ done
 
 # And check it is still JSON, since the rewrite above is textual.
 if command -v jq >/dev/null 2>&1; then
-	jq -e '.nodes and .edges' "$OUT/api/layout" >/dev/null ||
+	jq -e '.nodes and .edges' "$OUT/api/layout.json" >/dev/null ||
 		{ echo "graph-snapshot: the layout is not valid JSON after rewriting" >&2; exit 1; }
-	echo "graph-snapshot: $(jq -r '"\(.nodes|length) nodes, \(.edges|length) edges, of \(.total_nodes) indexed"' "$OUT/api/layout")"
+	echo "graph-snapshot: $(jq -r '"\(.nodes|length) nodes, \(.edges|length) edges, of \(.total_nodes) indexed"' "$OUT/api/layout.json")"
 else
 	echo "graph-snapshot: jq not found; skipped the JSON check"
 fi
 
 cat >"$OUT/ATTRIBUTION" <<'EOF'
 The viewer in this directory (index.html and assets/) is the graph UI from
-codebase-memory-mcp, redistributed with two changes: its asset and API paths are
-made relative so it can be served from a subdirectory, and index.html supplies
-default query parameters when it is opened without any, because without them the
+codebase-memory-mcp, redistributed with three changes: its asset and API paths
+are made relative so it can be served from a subdirectory; index.html supplies
+default query parameters when opened without any, because without them the
 viewer asks the server to enumerate projects over a POST that a static host
-cannot answer.
+cannot answer; and it seeds the viewer's own contrast settings, which default
+to a value at which a graph this size renders as a white ball, only when the
+visitor has not set them.
 
     https://github.com/DeusData/codebase-memory-mcp
 
 MIT License. Copyright (c) 2025 DeusData.
 
-api/layout is generated from this repository by scripts/graph-snapshot.sh.
+api/layout.json is generated from this repository by scripts/graph-snapshot.sh.
 EOF
 
 echo "graph-snapshot: done"
