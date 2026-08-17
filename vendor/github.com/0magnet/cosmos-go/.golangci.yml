@@ -1,0 +1,78 @@
+# Mirrors the linter selection and settings used by skywire, so that code
+# shared between this repo and skywire's third_party copy is held to one
+# standard. Deliberate differences: skywire vendors its dependencies and this
+# repo does not, so modules-download-mode is left at the default; skywire's
+# repo-specific path exclusions and staticcheck text suppressions are not
+# carried over — findings here are fixed rather than silenced.
+version: "2"
+run:
+  concurrency: 4
+  issues-exit-code: 1
+  tests: true
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
+linters:
+  default: none
+  enable:
+    - errcheck
+    - gosec
+    - ineffassign
+    - misspell
+    - nakedret
+    - revive
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+  settings:
+    dupl:
+      threshold: 100
+    errcheck:
+      check-type-assertions: false
+      check-blank: true
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    gocyclo:
+      min-complexity: 10
+    lll:
+      line-length: 120
+      tab-width: 1
+    misspell:
+      locale: US
+    nakedret:
+      max-func-lines: 30
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
+    unparam:
+      check-exported: false
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
+  exclusions:
+    generated: lax
+    paths:
+      - vendor/
+      - third_party/
+      - node_modules
+issues:
+  new: false
+  # golangci-lint truncates by default (50 per linter, 3 per identical
+  # message), which silently hides most findings in a repo like this one
+  # where the same idiom repeats across every applet. Report everything.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+  settings:
+    gofmt:
+      simplify: true

@@ -2,7 +2,7 @@
 
 // Package wasmgl pkg/tpviz/wasmgl/wasmgl.go
 // The Go/wasm WebGL view for tpviz: the same GPU force-directed graph the
-// TypeScript view draws, with the engine (third_party/0magnet/cosmos-go, a Go
+// TypeScript view draws, with the engine (github.com/0magnet/cosmos-go, a Go
 // port of cosmos.gl 2.6.3) and the group-boundary overlay both in Go.
 //
 // # Why this exists next to the TypeScript view rather than replacing it
@@ -34,7 +34,7 @@ import (
 	"syscall/js"
 	"unsafe"
 
-	cosmos "github.com/skycoin/skywire/third_party/0magnet/cosmos-go"
+	cosmos "github.com/0magnet/cosmos-go"
 )
 
 // view is the module's single graph instance. tpviz shows one WebGL view at a

@@ -2,7 +2,7 @@
 
 // Package main cmd/websh-probe/main.go c3-vis-wasm
 // Command websh-probe compile-checks the browser terminal stack vendored in
-// third_party/0magnet: the xterm.js port (terminal emulator) and websh (a
+// github.com/0magnet: the xterm.js port (terminal emulator) and websh (a
 // bash-like shell over a virtual filesystem). It is a BUILD-ONLY probe — not a
 // runnable terminal — and exists so both wasm lanes keep that code honest:
 // `make build-wasm` (standard Go) and `make build-wasm-tinygo` (TinyGo) both
@@ -13,8 +13,8 @@
 package main
 
 import (
-	"github.com/skycoin/skywire/third_party/0magnet/websh/shell"
-	xterm "github.com/skycoin/skywire/third_party/0magnet/xterm-go"
+	"github.com/0magnet/websh/shell"
+	xterm "github.com/0magnet/xterm-go"
 )
 
 func main() {
