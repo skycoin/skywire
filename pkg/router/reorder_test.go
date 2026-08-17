@@ -7,7 +7,7 @@ import (
 )
 
 func TestReorderBuffer_InOrder(t *testing.T) {
-	rb := newReorderBuffer(64)
+	rb := newReorderBuffer(64, nil)
 	d := rb.Insert(0, []byte("a"))
 	assert.Equal(t, [][]byte{[]byte("a")}, d)
 	d = rb.Insert(1, []byte("b"))
@@ -18,7 +18,7 @@ func TestReorderBuffer_InOrder(t *testing.T) {
 }
 
 func TestReorderBuffer_OutOfOrder(t *testing.T) {
-	rb := newReorderBuffer(64)
+	rb := newReorderBuffer(64, nil)
 	// Packet 1 arrives before packet 0
 	d := rb.Insert(1, []byte("b"))
 	assert.Nil(t, d)
@@ -31,7 +31,7 @@ func TestReorderBuffer_OutOfOrder(t *testing.T) {
 }
 
 func TestReorderBuffer_GapThenFill(t *testing.T) {
-	rb := newReorderBuffer(64)
+	rb := newReorderBuffer(64, nil)
 	// Packets arrive: 0, 2, 3, 1
 	d := rb.Insert(0, []byte("a"))
 	assert.Equal(t, [][]byte{[]byte("a")}, d)
@@ -48,7 +48,7 @@ func TestReorderBuffer_GapThenFill(t *testing.T) {
 }
 
 func TestReorderBuffer_Duplicate(t *testing.T) {
-	rb := newReorderBuffer(64)
+	rb := newReorderBuffer(64, nil)
 	rb.Insert(0, []byte("a"))
 	// Duplicate of seq 0
 	d := rb.Insert(0, []byte("a_dup"))
@@ -56,7 +56,7 @@ func TestReorderBuffer_Duplicate(t *testing.T) {
 }
 
 func TestReorderBuffer_ForceFlush(t *testing.T) {
-	rb := newReorderBuffer(3)
+	rb := newReorderBuffer(3, nil)
 	// Skip seq 0, send 1, 2, 3 — triggers flush at maxGap=3
 	rb.Insert(1, []byte("b"))
 	rb.Insert(2, []byte("c"))
