@@ -43,10 +43,18 @@ func loadPolicyEngine(path string, src []byte, clock fixedClock) (policyTestEngi
 		fmt.Fprintf(os.Stderr, "[policy log] "+format+"\n", args...)
 	}
 	if strings.EqualFold(filepath.Ext(path), ".wasm") {
-		return policywasm.NewEvaluator(path, src,
+		opts := []policywasm.Option{
 			policywasm.WithClock(clock),
 			policywasm.WithLogger(logger),
-		)
+		}
+		// A "preset:<name>.wasm" path selects a preset out of the
+		// combined bundle — stamp the name so the module dispatches to
+		// it. A plain @file.wasm path is a single-preset module and
+		// gets no stamp.
+		if name, ok := strings.CutPrefix(path, "preset:"); ok {
+			opts = append(opts, policywasm.WithPreset(strings.TrimSuffix(name, ".wasm")))
+		}
+		return policywasm.NewEvaluator(path, src, opts...)
 	}
 	return policy.NewEvaluator(path, string(src),
 		policy.WithClock(clock),
@@ -155,7 +163,7 @@ var policyShowCmd = &cobra.Command{
 			fmt.Print(src)
 			return nil
 		}
-		if _, ok := wasmpresets.Module(name); ok {
+		if wasmpresets.Has(name) {
 			if desc, ok := wasmpresets.Describe(name); ok && desc != "" {
 				fmt.Println(desc)
 			}
@@ -182,8 +190,11 @@ func resolvePolicySource() (string, []byte, error) {
 		if src, ok := presets.Source(policyPresetName); ok {
 			return "preset:" + policyPresetName + ".star", []byte(src), nil
 		}
-		if mod, ok := wasmpresets.Module(policyPresetName); ok {
-			return "preset:" + policyPresetName + ".wasm", mod, nil
+		if wasmpresets.Has(policyPresetName) {
+			// The combined bundle carries every preset; the ".wasm"
+			// path dispatches to the wasm backend and the "preset:"
+			// prefix tells loadPolicyEngine which name to stamp.
+			return "preset:" + policyPresetName + ".wasm", wasmpresets.Bundle(), nil
 		}
 		return "", nil, fmt.Errorf("unknown preset %q; available: %s", policyPresetName, strings.Join(allPresetNames(), ", "))
 	case policyScriptPath != "":
