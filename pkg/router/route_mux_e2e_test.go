@@ -1,7 +1,9 @@
 package router
 
 import (
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -159,5 +161,57 @@ func TestMux_RecoversLostPacketViaRetx(t *testing.T) {
 		if got[i] != byte(i) {
 			t.Fatalf("after retx: byte %d = %d, want %d", i, got[i], byte(i))
 		}
+	}
+}
+
+// --- send-driving tests (using the createMuxRouteGroup harness) -------------
+// These exercise the SEND path (RouteGroup.Write -> nextTransport ->
+// selectTransport -> rg.write) with 2 legs, reproducing the live scenario
+// where an aux leg starts NOT ready. The send must never stall: it must fall
+// back to the always-ready primary leg 0.
+
+func TestMux_SendDrivingWithUnreadyAuxLeg(t *testing.T) {
+	rg, _, conns := createMuxRouteGroup(t, 2)
+	defer func() {
+		for _, c := range conns {
+			c.Close() //nolint:errcheck
+		}
+	}()
+
+	// Live scenario: aux leg (index 1) not yet proven-ready by inbound traffic.
+	rg.mu.Lock()
+	rg.mux.ready[1] = false
+	rg.mu.Unlock()
+
+	_ = rg.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
+	for i := 0; i < 300; i++ {
+		n, err := rg.Write([]byte{byte(i)})
+		if err != nil {
+			t.Fatalf("write %d STALLED/errored with an unready aux leg: %v (send-driving falls over instead of using ready leg 0)", i, err)
+		}
+		if n != 1 {
+			t.Fatalf("write %d: n=%d want 1", i, n)
+		}
+	}
+}
+
+func TestMux_SendDistributesAcrossReadyLegs(t *testing.T) {
+	rg, _, conns := createMuxRouteGroup(t, 2) // both legs marked ready by helper
+	defer func() {
+		for _, c := range conns {
+			c.Close() //nolint:errcheck
+		}
+	}()
+
+	_ = rg.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
+	for i := 0; i < 400; i++ {
+		if _, err := rg.Write([]byte{byte(i)}); err != nil {
+			t.Fatalf("write %d failed: %v", i, err)
+		}
+	}
+	s0 := atomic.LoadUint64(&rg.mux.legs[0].sentBytes)
+	s1 := atomic.LoadUint64(&rg.mux.legs[1].sentBytes)
+	if s0 == 0 || s1 == 0 {
+		t.Fatalf("traffic not split across both ready legs: leg0=%d leg1=%d (mux funneled to one)", s0, s1)
 	}
 }
