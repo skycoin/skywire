@@ -2035,6 +2035,33 @@ func (r *router) establishMuxRoutes(
 		}
 		consecutiveFailures = 0
 
+		// The route-finder fallback ignores ExcludeTransportIDs, so it can hand
+		// back a leg whose first hop reuses a transport already used by the
+		// group (or an earlier planned leg). If we planned + dialed it, the
+		// setup node would provision the leg on the far end, and only then would
+		// appendRouteAsymmetric reject it locally — leaving the group
+		// half-provisioned and its noise stream unable to open (the routes>=2
+		// hang). Drop such a plan HERE, before the dial, so the far end is never
+		// told about a leg we will reject. excludeIDs seeds with the primary
+		// transport and accumulates each accepted plan's first hop below.
+		if len(muxFwd) > 0 {
+			dup := false
+			for _, ex := range excludeIDs {
+				if muxFwd[0].TpID == ex {
+					dup = true
+					break
+				}
+			}
+			if dup {
+				log.Debugf("Mux route %d/%d: planned leg reuses transport %s already in the group (route-finder fallback); skipping to avoid a half-provisioned group",
+					i+1, maxCount, muxFwd[0].TpID)
+				continue
+			}
+			// Reserve this leg's first-hop transport so later plans (and the
+			// local-calc exclude set) diverge from it too.
+			excludeIDs = append(excludeIDs, muxFwd[0].TpID)
+		}
+
 		muxKeepAlive := DefaultRouteKeepAlive
 		if opts != nil && opts.KeepAlive > 0 {
 			muxKeepAlive = opts.KeepAlive

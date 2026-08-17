@@ -51,10 +51,26 @@ func (r *router) appendRouteAsymmetric(nrg *NoiseRouteGroup, rules routing.EdgeR
 		}
 		nrg.rg.mu.Lock()
 		for _, existing := range nrg.rg.tps {
-			if existing != nil && existing.Entry.Type == tptypes.DMSG {
+			if existing == nil {
+				continue
+			}
+			if existing.Entry.Type == tptypes.DMSG {
 				nrg.rg.mu.Unlock()
 				r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
 				return errors.New("refusing to mux: route group already contains a DMSG transport")
+			}
+			// Enforce the mux invariant: two legs must never share a transport
+			// (the router-side analog of a route not looping through the same
+			// visor twice). The route-finder fallback in establishMuxRoutes
+			// honors ExcludeIntermediatePKs but NOT ExcludeTransportIDs, so a
+			// disjoint-path miss lets it return the leg-1 transport again —
+			// producing two route-IDs over one physical link, which stalls the
+			// mux data plane. Reject the duplicate here so the group degrades to
+			// the legs it does have (down to single-route) instead of breaking.
+			if existing.Entry.ID == nextTpID {
+				nrg.rg.mu.Unlock()
+				r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+				return fmt.Errorf("refusing to append mux leg over transport %s already in the group", nextTpID)
 			}
 		}
 		nrg.rg.mu.Unlock()
@@ -83,8 +99,25 @@ func (r *router) appendRouteAsymmetric(nrg *NoiseRouteGroup, rules routing.EdgeR
 		r.rt.DelRules([]routing.RouteID{rules.Reverse.KeyRouteID()})
 	}
 
+	r.drainPendingToGroup(nrg, rules.Desc)
+
 	r.logger.Debugf("Appended asymmetric mux route (fwd=%v rev=%v) to RouteGroup %s", addFwd, addRev, &rules.Desc)
 	return nil
+}
+
+// drainPendingToGroup re-dispatches any transport frames that were parked for
+// desc before an aux mux leg's rules were installed. The initial route drains
+// r.pending in saveRouteGroupRules; the aux-append paths did not — so a
+// handshake/data frame that raced the aux-leg rule-save was parked and never
+// redelivered, and the leg then never carried data (surfacing as
+// "route descriptor does not exist"). desc is the group's descriptor, so the
+// parked frames resolve to nrg.
+func (r *router) drainPendingToGroup(nrg *NoiseRouteGroup, desc routing.RouteDescriptor) {
+	for _, pp := range r.pending.take(desc) {
+		if err := nrg.handlePacket(pp.pkt); err != nil {
+			r.logger.WithError(err).Debug("Failed to re-dispatch parked packet after mux-leg append")
+		}
+	}
 }
 
 // appendRouteToGroup adds an additional transport/rule pair to an existing
@@ -108,9 +141,17 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	}
 	nrg.rg.mu.Lock()
 	for _, existing := range nrg.rg.tps {
-		if existing != nil && existing.Entry.Type == tptypes.DMSG {
+		if existing == nil {
+			continue
+		}
+		if existing.Entry.Type == tptypes.DMSG {
 			nrg.rg.mu.Unlock()
 			return errors.New("refusing to mux: route group already contains a DMSG transport")
+		}
+		// Mux invariant: no two legs share a transport (see appendRouteAsymmetric).
+		if existing.Entry.ID == nextTpID {
+			nrg.rg.mu.Unlock()
+			return fmt.Errorf("refusing to append mux leg over transport %s already in the group", nextTpID)
 		}
 	}
 	nrg.rg.mu.Unlock()
@@ -129,6 +170,8 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	if err := rg.writePacket(context.Background(), lastTp, packet, lastRule.KeyRouteID()); err != nil {
 		r.logger.WithError(err).Warn("Failed to send handshake on additional mux transport")
 	}
+
+	r.drainPendingToGroup(nrg, rules.Desc)
 
 	r.logger.Debugf("Appended mux route via transport %s to RouteGroup %s", nextTpID, &rules.Desc)
 	return nil
