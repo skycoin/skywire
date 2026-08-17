@@ -10,7 +10,7 @@ import (
 
 func TestNames(t *testing.T) {
 	names := Names()
-	want := map[string]bool{"app-mux": false, "rotating-bw": false}
+	want := map[string]bool{"app-mux": false, "rotating-bw": false, "latency-adaptive": false}
 	for _, n := range names {
 		if _, ok := want[n]; ok {
 			want[n] = true
@@ -24,7 +24,7 @@ func TestNames(t *testing.T) {
 }
 
 func TestHas(t *testing.T) {
-	for _, n := range []string{"app-mux", "rotating-bw"} {
+	for _, n := range []string{"app-mux", "rotating-bw", "latency-adaptive"} {
 		if !Has(n) {
 			t.Errorf("Has(%q) = false, want true", n)
 		}
@@ -42,8 +42,9 @@ func TestBundle(t *testing.T) {
 
 func TestDescribe(t *testing.T) {
 	cases := map[string]string{
-		"app-mux":     "app-mux — per-app static mux: vpn-client mux=4/min_hops=2, skychat single low-latency route, others default.",
-		"rotating-bw": "rotating-bw — mux=4 multi-hop for proxy/vpn/skynet with a leg rotated every 90s (bandwidth spread + traffic-analysis resistance).",
+		"app-mux":          "app-mux — per-app static mux: vpn-client mux=4/min_hops=2, skychat single low-latency route, others default.",
+		"rotating-bw":      "rotating-bw — mux=4 multi-hop for proxy/vpn/skynet with a leg rotated every 90s (bandwidth spread + traffic-analysis resistance).",
+		"latency-adaptive": "latency-adaptive — asymmetric mux (1 lean upstream, 4-way adaptive downstream) that evicts the slowest leg each 30s until the leg set converges to low latency (hysteresis-damped; no churn once converged).",
 	}
 	for name, want := range cases {
 		got, ok := Describe(name)
@@ -113,5 +114,38 @@ func TestRotatingBWDecides(t *testing.T) {
 	}
 	if spec.Distribution != "weighted: 1, 1, 1, 1" {
 		t.Errorf("Distribution = %q, want weighted: 1, 1, 1, 1", spec.Distribution)
+	}
+}
+
+// TestLatencyAdaptiveDecides loads the embedded bundle with the
+// latency-adaptive preset stamped and asserts a skysocks-client dial gets
+// the asymmetric spec: a single lean upstream leg (forward_mux=1) paired
+// with a 4-way multi-hop downstream fan-out (reverse_mux=4,
+// reverse_min_hops=2) that re-evaluates every 30s — proving name dispatch
+// selects the latency-adaptive logic.
+func TestLatencyAdaptiveDecides(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("latency-adaptive", Bundle(),
+		policywasm.WithPreset("latency-adaptive"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	spec, err := l.Decide(context.Background(),
+		policy.RoutingContext{App: "skysocks-client"}, nil)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if spec.ForwardMux != 1 {
+		t.Errorf("ForwardMux = %d, want 1", spec.ForwardMux)
+	}
+	if spec.ReverseMux != 4 {
+		t.Errorf("ReverseMux = %d, want 4", spec.ReverseMux)
+	}
+	if spec.ReverseMinHops != 2 {
+		t.Errorf("ReverseMinHops = %d, want 2", spec.ReverseMinHops)
+	}
+	if spec.RotationIntervalSeconds != 30 {
+		t.Errorf("RotationIntervalSeconds = %d, want 30", spec.RotationIntervalSeconds)
 	}
 }
