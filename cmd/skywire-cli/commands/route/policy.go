@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router/policy"
 	"github.com/skycoin/skywire/pkg/router/policy/presets"
 	policywasm "github.com/skycoin/skywire/pkg/router/policy/wasm"
+	wasmpresets "github.com/skycoin/skywire/pkg/router/policy/wasm/presets"
 )
 
 // policyTestEngine is the minimal surface `route policy test` / `bench`
@@ -68,14 +69,14 @@ func init() {
 	policyTestCmd.Flags().StringVarP(&policyScriptPath, "script", "s", "",
 		"path to the skylark policy file (.star)")
 	policyTestCmd.Flags().StringVarP(&policyPresetName, "preset", "p", "",
-		"built-in preset name to test instead of a --script file (see `route policy list`)")
+		"built-in preset name (Starlark or [wasm]) to test instead of a --script file (see `route policy list`)")
 	policyTestCmd.Flags().StringVarP(&policyDialJSON, "dial", "d", "{}",
 		"synthetic dial context as JSON — see the docs for the schema")
 
 	policyBenchCmd.Flags().StringVarP(&policyScriptPath, "script", "s", "",
 		"path to the skylark policy file (.star)")
 	policyBenchCmd.Flags().StringVarP(&policyPresetName, "preset", "p", "",
-		"built-in preset name to benchmark instead of a --script file")
+		"built-in preset name (Starlark or [wasm]) to benchmark instead of a --script file")
 	policyBenchCmd.Flags().IntVarP(&policyBenchIter, "iter", "n", 100_000,
 		"number of evaluations to run")
 }
@@ -103,6 +104,14 @@ func presetSummary(name string) string {
 	return ""
 }
 
+// allPresetNames returns every selectable preset name (Starlark then
+// WASM), used in "unknown preset" error messages.
+func allPresetNames() []string {
+	names := append([]string{}, presets.Names()...)
+	names = append(names, wasmpresets.Names()...)
+	return names
+}
+
 var policyListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List the built-in routing-policy presets",
@@ -110,6 +119,9 @@ var policyListCmd = &cobra.Command{
 compiling a file via the config value:
 
   "routing": { "policy_per_dial": "preset:<name>" }
+
+Presets come in two flavors: Starlark (interpreted at load) and
+compiled WASM (tagged [wasm]). Both are selected the same way.
 
 Preview one with ` + "`route policy test --preset <name>`" + ` or read its
 source with ` + "`route policy show <name>`" + `.`,
@@ -121,21 +133,36 @@ source with ` + "`route policy show <name>`" + `.`,
 				fmt.Println(name)
 			}
 		}
+		for _, name := range wasmpresets.Names() {
+			label := name + "  [wasm]"
+			if s, ok := wasmpresets.Describe(name); ok && s != "" {
+				fmt.Printf("%-20s %s\n", label, s)
+			} else {
+				fmt.Println(label)
+			}
+		}
 		return nil
 	},
 }
 
 var policyShowCmd = &cobra.Command{
 	Use:   "show <name>",
-	Short: "Print a built-in preset's Starlark source",
+	Short: "Print a built-in preset's Starlark source (or a WASM preset's summary)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(_ *cobra.Command, args []string) error {
-		src, ok := presets.Source(args[0])
-		if !ok {
-			return fmt.Errorf("unknown preset %q; available: %s", args[0], strings.Join(presets.Names(), ", "))
+		name := args[0]
+		if src, ok := presets.Source(name); ok {
+			fmt.Print(src)
+			return nil
 		}
-		fmt.Print(src)
-		return nil
+		if _, ok := wasmpresets.Module(name); ok {
+			if desc, ok := wasmpresets.Describe(name); ok && desc != "" {
+				fmt.Println(desc)
+			}
+			fmt.Printf("compiled WASM module — no source; see docs/examples/routing-policies/wasm/%s/main.go\n", name)
+			return nil
+		}
+		return fmt.Errorf("unknown preset %q; available: %s", name, strings.Join(allPresetNames(), ", "))
 	},
 }
 
@@ -148,11 +175,17 @@ func resolvePolicySource() (string, []byte, error) {
 	case policyPresetName != "" && policyScriptPath != "":
 		return "", nil, errors.New("pass only one of --preset or --script")
 	case policyPresetName != "":
-		src, ok := presets.Source(policyPresetName)
-		if !ok {
-			return "", nil, fmt.Errorf("unknown preset %q; available: %s", policyPresetName, strings.Join(presets.Names(), ", "))
+		// Prefer Starlark on a name collision (there are none today),
+		// then fall back to a compiled WASM preset. The returned path's
+		// extension (.star / .wasm) is what loadPolicyEngine dispatches
+		// on, so the right backend evaluates the module.
+		if src, ok := presets.Source(policyPresetName); ok {
+			return "preset:" + policyPresetName + ".star", []byte(src), nil
 		}
-		return "preset:" + policyPresetName + ".star", []byte(src), nil
+		if mod, ok := wasmpresets.Module(policyPresetName); ok {
+			return "preset:" + policyPresetName + ".wasm", mod, nil
+		}
+		return "", nil, fmt.Errorf("unknown preset %q; available: %s", policyPresetName, strings.Join(allPresetNames(), ", "))
 	case policyScriptPath != "":
 		src, err := os.ReadFile(policyScriptPath) //nolint:gosec
 		if err != nil {
@@ -326,30 +359,32 @@ func (c fixedClock) Now() time.Time { return c.t }
 // specToJSON projects RouteSpec into a JSON-printable form. The
 // Chosen field uses a *Candidate; we flatten it for display.
 type specJSON struct {
-	Chosen         *policy.Candidate `json:"chosen,omitempty"`
-	ReverseChosen  *policy.Candidate `json:"reverse_chosen,omitempty"`
-	Mux            int               `json:"mux"`
-	ForwardMux     int               `json:"forward_mux,omitempty"`
-	ReverseMux     int               `json:"reverse_mux,omitempty"`
-	MinHops        int               `json:"min_hops"`
-	ForwardMinHops int               `json:"forward_min_hops,omitempty"`
-	ReverseMinHops int               `json:"reverse_min_hops,omitempty"`
-	Fallback       string            `json:"fallback,omitempty"`
-	Distribution   string            `json:"distribution,omitempty"`
+	Chosen                  *policy.Candidate `json:"chosen,omitempty"`
+	ReverseChosen           *policy.Candidate `json:"reverse_chosen,omitempty"`
+	Mux                     int               `json:"mux"`
+	ForwardMux              int               `json:"forward_mux,omitempty"`
+	ReverseMux              int               `json:"reverse_mux,omitempty"`
+	MinHops                 int               `json:"min_hops"`
+	ForwardMinHops          int               `json:"forward_min_hops,omitempty"`
+	ReverseMinHops          int               `json:"reverse_min_hops,omitempty"`
+	RotationIntervalSeconds int               `json:"rotation_interval_seconds,omitempty"`
+	Fallback                string            `json:"fallback,omitempty"`
+	Distribution            string            `json:"distribution,omitempty"`
 }
 
 func specToJSON(s policy.RouteSpec) specJSON {
 	return specJSON{
-		Chosen:         s.Chosen,
-		ReverseChosen:  s.ReverseChosen,
-		Mux:            s.Mux,
-		ForwardMux:     s.ForwardMux,
-		ReverseMux:     s.ReverseMux,
-		MinHops:        s.MinHops,
-		ForwardMinHops: s.ForwardMinHops,
-		ReverseMinHops: s.ReverseMinHops,
-		Fallback:       s.Fallback,
-		Distribution:   s.Distribution,
+		Chosen:                  s.Chosen,
+		ReverseChosen:           s.ReverseChosen,
+		Mux:                     s.Mux,
+		ForwardMux:              s.ForwardMux,
+		ReverseMux:              s.ReverseMux,
+		MinHops:                 s.MinHops,
+		ForwardMinHops:          s.ForwardMinHops,
+		ReverseMinHops:          s.ReverseMinHops,
+		RotationIntervalSeconds: s.RotationIntervalSeconds,
+		Fallback:                s.Fallback,
+		Distribution:            s.Distribution,
 	}
 }
 
