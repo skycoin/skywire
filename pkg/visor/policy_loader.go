@@ -14,6 +14,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/router/policy"
 	policywasm "github.com/skycoin/skywire/pkg/router/policy/wasm"
+	wasmpresets "github.com/skycoin/skywire/pkg/router/policy/wasm/presets"
 )
 
 // policyEngine is the runtime triple a caller needs after loading
@@ -34,6 +35,21 @@ type policyEngine struct {
 func loadPolicyEngine(raw string, provider policy.Provider, logger func(string, ...interface{})) (*policyEngine, error) {
 	if raw == "" || raw == "none" {
 		return nil, nil
+	}
+	// preset:<name> resolves to a compiled WASM preset when the name
+	// matches one embedded in pkg/router/policy/wasm/presets; otherwise
+	// it falls through to the Starlark loader, which handles star
+	// presets (and errors on an unknown name).
+	if name, ok := strings.CutPrefix(raw, "preset:"); ok {
+		if mod, found := wasmpresets.Module(name); found {
+			l, err := policywasm.NewLoaderBytes(name, mod,
+				policywasm.WithLogger(logger),
+				policywasm.WithProvider(provider))
+			if err != nil {
+				return nil, err
+			}
+			return &policyEngine{engine: l, watch: l.Watch, tag: "router.policy.wasm"}, nil
+		}
 	}
 	if isWasmPath(raw) {
 		l, err := policywasm.NewLoader(raw,
