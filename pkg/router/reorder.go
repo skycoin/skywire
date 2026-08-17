@@ -4,7 +4,20 @@ package router
 import (
 	"sort"
 	"sync"
+	"time"
 )
+
+// reorderTimeout bounds how long the reorder buffer will hold a frontier gap
+// open before releasing it (delivering past the missing sequence). It is the
+// time-based companion to maxGap: maxGap caps memory, reorderTimeout caps
+// head-of-line latency. With reliable leg transports a genuine gap only occurs
+// when a leg dies mid-stream and the SACK retransmit has not yet refilled it;
+// rather than stall the stream until liveness prunes that leg, release the gap
+// after this long so the flow degrades to lossy-but-moving (never a hard 0-byte
+// stall — the graceful-degradation contract for mux>1). Comfortably larger than
+// any realistic inter-leg latency skew so normal reordering is never released
+// early. A var (not const) so tests can shrink it.
+var reorderTimeout = 1500 * time.Millisecond
 
 // reorderBuffer holds out-of-order packets and delivers them in sequence order.
 // When mux mode distributes packets across multiple transports, they may arrive
@@ -13,7 +26,18 @@ type reorderBuffer struct {
 	mu      sync.Mutex
 	nextSeq uint32            // next expected sequence number
 	buf     map[uint32][]byte // out-of-order packets: seq -> payload
-	maxGap  int               // max buffered packets before force-flush
+	// gapSince is when the current frontier gap opened (buffer went non-empty
+	// while waiting for nextSeq). Zero when the buffer is empty / fully caught
+	// up. Used to release a gap that has stayed open longer than reorderTimeout.
+	gapSince time.Time
+	// maxGap is the emergency cap: the max out-of-order packets held before a
+	// last-resort force-flush that skips the missing sequence. Because the leg
+	// transports are reliable/ordered, a gap is latency skew (the missing seq
+	// is in flight and will arrive), so this cap is sized (see reorderWindow)
+	// to never trip in normal mux operation — hitting it means a leg has died
+	// and stopped delivering, and flushing (lossy) is preferable to stalling
+	// the stream forever while liveness prunes that leg.
+	maxGap int
 }
 
 func newReorderBuffer(maxGap int) *reorderBuffer {
@@ -41,7 +65,27 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 		copy(cp, data)
 		rb.buf[seq] = cp
 
-		// Force flush if buffer is too large (prevents unbounded memory)
+		// Mark when this frontier gap opened, so it can be released if it
+		// stays open too long (a dead leg the SACK retransmit has not yet
+		// refilled).
+		if rb.gapSince.IsZero() {
+			rb.gapSince = time.Now()
+		}
+
+		// Time-based release: a gap held longer than reorderTimeout is treated
+		// as a dead leg rather than skew — flush past it so the stream keeps
+		// moving (lossy) instead of stalling until liveness prunes the leg.
+		if !rb.gapSince.IsZero() && time.Since(rb.gapSince) >= reorderTimeout {
+			return rb.flushAll()
+		}
+
+		// Emergency backstop only: with reliable leg transports the missing
+		// seq arrives within the skew window and drains the buffer, so this
+		// never trips in normal operation. Reaching it means a leg has gone
+		// dead mid-stream; force-flush (lossy, skips the gap) to avoid a
+		// permanent stall until liveness prunes the leg. It is NOT the normal
+		// reorder path — do not lower maxGap to "save memory": that reintroduces
+		// the mux>1 corruption bug.
 		if len(rb.buf) >= rb.maxGap {
 			return rb.flushAll()
 		}
@@ -61,6 +105,15 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 		delivered = append(delivered, next)
 		delete(rb.buf, rb.nextSeq)
 		rb.nextSeq++
+	}
+
+	// Frontier advanced. If nothing remains buffered the gap is fully closed;
+	// otherwise a new frontier gap (the next missing seq) is now open, so time
+	// it from here.
+	if len(rb.buf) == 0 {
+		rb.gapSince = time.Time{}
+	} else {
+		rb.gapSince = time.Now()
 	}
 
 	return delivered
@@ -90,6 +143,9 @@ func (rb *reorderBuffer) flushAll() [][]byte {
 	if len(seqs) > 0 {
 		rb.nextSeq = seqs[len(seqs)-1] + 1
 	}
+
+	// Buffer drained — the gap is closed (skipped).
+	rb.gapSince = time.Time{}
 
 	return delivered
 }

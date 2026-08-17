@@ -1799,7 +1799,10 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 
 		delivered, gapDetected := rg.mux.deliverData(seq, data)
 
-		if gapDetected {
+		// A gap is the normal case for mux (legs interleave), so rate-limit the
+		// SACK: without this, latency-skew reordering fires a SACK goroutine per
+		// out-of-order packet — thousands per second under load.
+		if gapDetected && rg.mux.shouldSendSACK() {
 			go rg.sendSACK() //nolint:errcheck
 		}
 

@@ -4,6 +4,7 @@ package router
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -58,6 +59,13 @@ type routeMux struct {
 	writeSeq uint32 // atomic: next outgoing sequence number
 	tpIndex  uint32 // atomic: round-robin fallback index for transport selection
 
+	// lastSACKNano rate-limits receiver-side SACK feedback. Cross-leg
+	// reordering from latency skew makes nearly every packet arrive
+	// out-of-order, so firing a SACK per out-of-order packet would spawn a
+	// goroutine and emit a control packet thousands of times per second.
+	// atomic: UnixNano of the last SACK we sent.
+	lastSACKNano int64
+
 	// Incoming packet reordering
 	reorderBuf *reorderBuffer
 
@@ -86,15 +94,36 @@ type routeMux struct {
 	ready []bool
 }
 
+// reorderWindow bounds how far the receiver's reorder buffer will hold
+// out-of-order packets waiting for a gap to fill before it force-flushes.
+//
+// The underlying leg transports (stcpr / squicr / sudph) are RELIABLE and
+// ordered, so a gap across mux legs is not loss — it is latency SKEW: the
+// "missing" sequence is simply in flight on a slower leg and arrives within
+// the inter-leg skew window. The buffer must therefore HOLD the gap until it
+// fills, never skip it: skipping delivers an out-of-order hole that corrupts
+// the noise/TLS byte stream riding the mux (the old maxGap=64 force-flush was
+// the root cause of mux>1 wedging under load — the fast leg routinely ran 64
+// ahead of a ~tens-of-ms-slower leg, triggering a destructive flush every
+// time). Sized to absorb the bandwidth-delay-product of a realistic skew
+// (hundreds of ms at multi-MB/s aggregate) so normal mux>1 operation never
+// flushes. A flush at this cap is a last-resort OOM guard for a genuinely
+// stalled/dead leg — which per-leg liveness prunes, after which the peer
+// retransmits that leg's unacked sequences on the surviving legs.
+const reorderWindow = 2048
+
 // newRouteMux creates a new routeMux instance with all sub-components initialized.
 func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 	m := &routeMux{
 		logger:      logger,
-		reorderBuf:  newReorderBuffer(64),
+		reorderBuf:  newReorderBuffer(reorderWindow),
 		tpSelector:  newTransportSelector(),
 		sackEnabled: sackEnabled,
 		sackTracker: newSACKTracker(),
-		retxBuf:     newRetxBuffer(128),
+		// Sender-side retx window kept in step with the receiver's reorder
+		// window so a genuinely-lost sequence is still held for retransmit
+		// while the receiver is holding the gap open for it.
+		retxBuf: newRetxBuffer(reorderWindow),
 	}
 	return m
 }
@@ -367,6 +396,24 @@ func (m *routeMux) deliverData(seq uint32, data []byte) (delivered [][]byte, gap
 	}
 
 	return delivered, gapDetected
+}
+
+// sackMinInterval is the minimum spacing between receiver-side SACKs. It is
+// well under retxMinAge so a genuine loss is still signaled several times
+// before the sender's retransmit timer fires, while collapsing the flood of
+// per-packet SACKs that latency-skew reordering would otherwise produce.
+const sackMinInterval = 25 * time.Millisecond
+
+// shouldSendSACK reports whether enough time has elapsed since the last SACK to
+// send another, rate-limiting SACK feedback under heavy cross-leg reordering.
+// Concurrency-safe: only the goroutine that wins the CAS returns true.
+func (m *routeMux) shouldSendSACK() bool {
+	now := time.Now().UnixNano()
+	prev := atomic.LoadInt64(&m.lastSACKNano)
+	if now-prev < int64(sackMinInterval) {
+		return false
+	}
+	return atomic.CompareAndSwapInt64(&m.lastSACKNano, prev, now)
 }
 
 // generateSACK returns the current SACK state for sending to the peer.
