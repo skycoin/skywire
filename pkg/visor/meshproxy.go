@@ -32,6 +32,7 @@ package visor
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -39,6 +40,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -171,6 +173,241 @@ func (v *Visor) meshRoundTripper() *meshTransport {
 	return &meshTransport{dmsg: v.dmsgHTTP.Transport, skynet: v.skynetHTTPTransport()}
 }
 
+// meshInterstitialSoftTimeout bounds how long a COLD (not-yet-warm) top-level
+// navigation waits for real content before we hand the browser the branded,
+// auto-refreshing interstitial instead. Kept a touch above a typical warm dmsg
+// stream dial but well under the ~13 s a cold multi-hop route can take, so a
+// route that warms quickly still streams real content on the first load (no
+// interstitial flash) while a genuinely cold one shows the page fast.
+const meshInterstitialSoftTimeout = 4 * time.Second
+
+// meshInterstitialRT wraps the raw dmsg/skynet dispatcher with a fast-path for
+// cold-route warm-up. httputil.ReverseProxy only invokes ErrorHandler on a
+// PROMPT error, but the failure mode we care about is the opposite: a cold-but-
+// reachable route makes the round-trip BLOCK for many seconds and then succeed,
+// so the browser just hangs on a blank frame while the route warms. This RT
+// detects that case and serves the interstitial within meshInterstitialSoftTimeout
+// while the real round-trip keeps running on a DETACHED context — establishing
+// the dmsg session (pooled in dmsgC) / skynet route and recycling the warmed
+// stream into the dmsghttp idle pool — so the browser's meta-refresh reload
+// finds the route warm and streams real content.
+//
+// Why the warm-up converges rather than restarting every refresh:
+//   - The background round-trip runs on context.WithoutCancel(req context): when
+//     ServeHTTP returns after we write the interstitial and the inbound request is
+//     canceled, the in-flight dmsg/route setup is NOT torn down. A naive per-request
+//     deadline would cancel it and every refresh would start setup from scratch.
+//   - Only ONE warm-up runs per destination at a time (inFlight dedup), so a burst
+//     of refreshes to a still-cold host can't pile up detached dials/streams.
+//   - Once any round-trip to a destination succeeds it is marked warm, and warm
+//     destinations bypass the soft deadline entirely and block for the real
+//     response. This bounds the interstitial to genuine route warm-up: a slow but
+//     reachable ORIGIN (route already up, server just slow) is waited out, not
+//     papered over with a refresh loop.
+type meshInterstitialRT struct {
+	next http.RoundTripper
+	soft time.Duration
+
+	mu       sync.Mutex
+	warm     map[string]struct{} // destinations with a confirmed round-trip
+	inFlight map[string]struct{} // destinations with a warm-up dial in progress
+}
+
+func newMeshInterstitialRT(next http.RoundTripper, soft time.Duration) *meshInterstitialRT {
+	return &meshInterstitialRT{
+		next:     next,
+		soft:     soft,
+		warm:     map[string]struct{}{},
+		inFlight: map[string]struct{}{},
+	}
+}
+
+// meshDestKey identifies the destination a request targets, for the warm/in-flight
+// registries. The outbound URL host is "<hexpk>:<port>" (set in Rewrite); the net
+// label keeps the dmsg and skynet variants of one PK distinct.
+func meshDestKey(req *http.Request) string {
+	network, _ := req.Context().Value(meshNetKey).(string)
+	return network + "|" + req.URL.Host
+}
+
+// interstitialEligible reports whether a request may be answered with an HTML
+// interstitial. Only a top-level document GET qualifies: injecting an HTML page
+// in place of a subresource (image/script/style/XHR) or a non-idempotent method
+// would corrupt the page or silently drop a body. Fetch Metadata
+// (Sec-Fetch-Dest) is authoritative when present; otherwise we fall back to an
+// HTML-accepting Accept header. This is what bounds a slow SUBRESOURCE from ever
+// getting the interstitial — it always waits for (or errors on) real content.
+func interstitialEligible(req *http.Request) bool {
+	if req.Method != http.MethodGet {
+		return false
+	}
+	if dest := req.Header.Get("Sec-Fetch-Dest"); dest != "" {
+		return dest == "document"
+	}
+	return strings.Contains(strings.ToLower(req.Header.Get("Accept")), "text/html")
+}
+
+func (rt *meshInterstitialRT) isWarm(key string) bool {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	_, ok := rt.warm[key]
+	return ok
+}
+
+func (rt *meshInterstitialRT) markWarm(key string) {
+	rt.mu.Lock()
+	rt.warm[key] = struct{}{}
+	rt.mu.Unlock()
+}
+
+// coolDown forgets a warm destination after a warm-path round-trip failed, so the
+// next navigation may show the interstitial again instead of blocking on a route
+// that has since gone cold (e.g. the pooled dmsg session dropped).
+func (rt *meshInterstitialRT) coolDown(key string) {
+	rt.mu.Lock()
+	delete(rt.warm, key)
+	rt.mu.Unlock()
+}
+
+// acquireWarmup marks key as having a warm-up in progress and reports whether THIS
+// caller won the right to run it. Losers serve the interstitial immediately without
+// starting a second dial.
+func (rt *meshInterstitialRT) acquireWarmup(key string) bool {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if _, busy := rt.inFlight[key]; busy {
+		return false
+	}
+	rt.inFlight[key] = struct{}{}
+	return true
+}
+
+func (rt *meshInterstitialRT) releaseWarmup(key string) {
+	rt.mu.Lock()
+	delete(rt.inFlight, key)
+	rt.mu.Unlock()
+}
+
+type meshRTResult struct {
+	resp *http.Response
+	err  error
+}
+
+// RoundTrip implements http.RoundTripper.
+func (rt *meshInterstitialRT) RoundTrip(req *http.Request) (*http.Response, error) {
+	// A resolve failure stashed by Rewrite is a hard error (bad host / no suffix);
+	// render the branded error page rather than dialing "invalid.mesh".
+	if me, _ := req.Context().Value(meshErrKey).(string); me != "" {
+		return rt.interstitialResponse(req, me, true), nil
+	}
+
+	key := meshDestKey(req)
+
+	// Warm destination, or a request that can't carry an HTML page: block for the
+	// real response (any delay here is a slow origin, not route warm-up).
+	if !interstitialEligible(req) || rt.isWarm(key) {
+		resp, err := rt.next.RoundTrip(req)
+		switch {
+		case err == nil:
+			rt.markWarm(key)
+		case rt.isWarm(key):
+			rt.coolDown(key)
+		}
+		return resp, err
+	}
+
+	// Cold + eligible. Only one warm-up dial per destination: concurrent cold
+	// requests (or rapid refreshes) get the interstitial without piling up dials.
+	if !rt.acquireWarmup(key) {
+		return rt.interstitialResponse(req, "", false), nil
+	}
+
+	// Run the real round-trip on a DETACHED context so it survives this request
+	// being canceled once we write the interstitial — that is what lets the route
+	// warm and PERSIST for the next (meta-refresh) request instead of restarting.
+	detached := req.WithContext(context.WithoutCancel(req.Context()))
+	ch := make(chan meshRTResult, 1)
+	go func() {
+		resp, err := rt.next.RoundTrip(detached)
+		ch <- meshRTResult{resp: resp, err: err}
+	}()
+
+	timer := time.NewTimer(rt.soft)
+	defer timer.Stop()
+	select {
+	case res := <-ch:
+		rt.releaseWarmup(key)
+		if res.err != nil {
+			// Failed before the soft deadline: auto-refresh for a transient
+			// warm-up signal, hard error otherwise.
+			return rt.interstitialResponse(req, res.err.Error(), !proxyinterstitial.IsTransient(res.err)), nil
+		}
+		rt.markWarm(key)
+		return res.resp, nil
+	case <-timer.C:
+		// Still warming. Keep the detached round-trip running in the background so
+		// the dmsg session / skynet route establishes and the stream recycles into
+		// the idle pool; then serve the interstitial now.
+		go func() {
+			res := <-ch
+			rt.releaseWarmup(key)
+			if res.err == nil {
+				rt.markWarm(key)
+				drainAndClose(res.resp)
+			}
+		}()
+		return rt.interstitialResponse(req, "", false), nil
+	}
+}
+
+// interstitialResponse builds a synthetic *http.Response carrying the branded
+// interstitial for req, so ReverseProxy streams it to the browser exactly like an
+// upstream response (ModifyResponse's rewriteMeshLocation only touches 3xx, so a
+// 200/502 interstitial passes through untouched).
+func (rt *meshInterstitialRT) interstitialResponse(req *http.Request, detail string, isError bool) *http.Response {
+	body := proxyinterstitial.Page(meshInterstitialTarget(req), detail, isError)
+	status := http.StatusOK
+	if isError {
+		status = http.StatusBadGateway
+	}
+	h := make(http.Header)
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Cache-Control", "no-store, must-revalidate")
+	return &http.Response{
+		StatusCode:    status,
+		Status:        fmt.Sprintf("%d %s", status, http.StatusText(status)),
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Header:        h,
+		Body:          io.NopCloser(strings.NewReader(body)),
+		ContentLength: int64(len(body)),
+		Request:       req,
+	}
+}
+
+// meshInterstitialTarget is the human-facing host shown on the interstitial:
+// prefer the upstream vhost, fall back to the inbound frame host.
+func meshInterstitialTarget(req *http.Request) string {
+	ctx := req.Context()
+	if vhost, _ := ctx.Value(meshVhostKey).(string); vhost != "" {
+		return vhost
+	}
+	frameHost, _ := ctx.Value(meshFrameHostKey).(string)
+	return frameHost
+}
+
+// drainAndClose recycles a warmed-up response's dmsg stream back into the
+// dmsghttp idle pool (pooledBody.Close returns a fully-drained stream to the
+// pool), so the browser's next request reuses the warm stream.
+func drainAndClose(resp *http.Response) {
+	if resp == nil || resp.Body == nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck
+	_ = resp.Body.Close()                 //nolint:errcheck
+}
+
 // peelNetLabel strips an optional "<net>" selector label ("dmsg"/"skynet") that
 // sits immediately before the origin suffix, returning the remaining host-core
 // and the selected network ("" = auto). core is the host with the suffix already
@@ -192,7 +429,9 @@ func (v *Visor) newMeshReverseProxy(resolve meshResolveFn) (*httputil.ReversePro
 		return nil, fmt.Errorf("dmsg HTTP client not ready")
 	}
 	return &httputil.ReverseProxy{
-		Transport: v.meshRoundTripper(), // dmsg/skynet dispatcher (streaming)
+		// dmsg/skynet dispatcher (streaming), wrapped with the cold-route fast-path
+		// that serves the branded auto-refreshing interstitial while a route warms.
+		Transport: newMeshInterstitialRT(v.meshRoundTripper(), meshInterstitialSoftTimeout),
 		// Rewrite (not Director): does NOT auto-add X-Forwarded-* (privacy) and lets
 		// us stash per-request state in the outbound context instead of leaking
 		// X-Mesh-* headers to the upstream site.
@@ -225,36 +464,32 @@ func (v *Visor) newMeshReverseProxy(resolve meshResolveFn) (*httputil.ReversePro
 			rewriteMeshLocation(resp, frameHost, vhost)
 			return nil // headers pass through verbatim (the whole point vs. the old bridge)
 		},
+		// ErrorHandler only fires for the residual error paths the interstitial RT
+		// forwards verbatim (warm-but-now-failing, or a non-navigation request that
+		// errored). Render the branded page for navigations; a subresource that
+		// errored gets a plain status so we never inject HTML into it.
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			ctx := r.Context()
-			frameHost, _ := ctx.Value(meshFrameHostKey).(string)
-			if frameHost == "" {
-				frameHost = r.Host
+			detail := err.Error()
+			isError := true
+			if me, _ := r.Context().Value(meshErrKey).(string); me != "" {
+				detail = me
+			} else {
+				isError = !proxyinterstitial.IsTransient(err)
+			}
+			if !interstitialEligible(r) {
+				http.Error(w, "mesh proxy: "+detail, http.StatusBadGateway)
+				return
+			}
+			status := http.StatusOK
+			if isError {
+				status = http.StatusBadGateway
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-			// Bad hostname / resolve failure — a hard error page, no retry.
-			if me, _ := ctx.Value(meshErrKey).(string); me != "" {
-				w.WriteHeader(http.StatusBadGateway)
-				_, _ = fmt.Fprint(w, proxyinterstitial.Page(frameHost, me, true)) //nolint:errcheck,gosec // Page() html-escapes target/detail
-				return
-			}
-
-			// Route still warming (route/session setup in flight) — serve the
-			// branded auto-refreshing interstitial so the browser shows
-			// "building a route over skywire…" and retries, instead of a bare
-			// 502. This is the real-origin counterpart of the resolving proxy's
-			// interstitial: because the browse frame loads from a trusted local
-			// origin (<pk>.mesh.localhost / *.haltingstate.net), the page renders
-			// even over HTTPS — no TLS-MITM needed. A genuine (non-transient)
-			// failure falls through to the hard-error variant.
-			if proxyinterstitial.IsTransient(err) {
-				w.WriteHeader(http.StatusOK)
-				_, _ = fmt.Fprint(w, proxyinterstitial.Page(frameHost, "", false)) //nolint:errcheck,gosec // Page() html-escapes target/detail
-				return
-			}
-			w.WriteHeader(http.StatusBadGateway)
-			_, _ = fmt.Fprint(w, proxyinterstitial.Page(frameHost, err.Error(), true)) //nolint:errcheck,gosec // Page() html-escapes target/detail
+			w.Header().Set("Cache-Control", "no-store, must-revalidate")
+			w.WriteHeader(status)
+			// proxyinterstitial.Page HTML-escapes target and detail, so the rendered
+			// document carries no unescaped request-derived content (no XSS).
+			_, _ = io.WriteString(w, proxyinterstitial.Page(meshInterstitialTarget(r), detail, isError)) //nolint:errcheck,gosec // G705: Page escapes all interpolated values
 		},
 	}, nil
 }
