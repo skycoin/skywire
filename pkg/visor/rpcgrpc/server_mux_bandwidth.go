@@ -147,6 +147,19 @@ type muxBwRouteState struct {
 	// (MinHops), preserving prior behavior.
 	fwdHops []RouteHopInfo
 	revHops []RouteHopInfo
+	// intermediatePK / transportKind are this leg's distinguishing
+	// identity, captured from the route's chosen FIRST hop during
+	// setup (the same hop data the route_established event carries).
+	// intermediatePK is the first hop's `to` PK — the first
+	// intermediate — left empty for a direct (single-hop) route.
+	// transportKind is the first hop's transport type (stcpr, sudph,
+	// dmsg, ...). Both are written once in muxBwSetupRoute, on the
+	// success path, BEFORE the pump phase begins (the setup
+	// WaitGroup happens-before the sampler goroutine), then only read
+	// by the sampler — so plain fields are race-free and need no
+	// atomics.
+	intermediatePK string
+	transportKind  string
 }
 
 // StreamMuxBandwidth is the canonical implementation of the RPC.
@@ -652,13 +665,25 @@ func (s *PingServer) muxBwSetupRoute(
 		// (mux-bw NDJSON, mux-bw-tui dashboard, treeprobe harness)
 		// can verify route diversity from this field.
 		ref := PingRouteRef{PK: cfg.TargetPK, Index: rs.index}
-		for _, h := range s.visor.GetPingRouteDetailsAt(ref) {
+		hops := s.visor.GetPingRouteDetailsAt(ref)
+		for _, h := range hops {
 			ev.Hops = append(ev.Hops, &RouteHop{
 				TpId:   h.TpID,
 				From:   h.From,
 				To:     h.To,
 				TpType: h.TpType,
 			})
+		}
+		// Capture the leg's identity from its first hop for the
+		// per-leg sampler. transportKind = the carrier this leg
+		// egresses on; intermediatePK = the first intermediate visor
+		// (first hop's `to`), left empty for a direct route where the
+		// only hop lands straight on the target (no intermediate).
+		if len(hops) > 0 {
+			rs.transportKind = hops[0].TpType
+			if len(hops) > 1 {
+				rs.intermediatePK = hops[0].To
+			}
 		}
 	}
 	emit(&MuxBandwidthEvent_RouteEstablished{RouteEstablished: ev})
@@ -764,6 +789,13 @@ func (s *PingServer) muxBwSamplerLoop(
 	var lastSent, lastRecv uint64
 	lastTick := pumpStart
 
+	// Per-leg previous-sample counters, indexed by position in the
+	// routes slice, so each leg's inst_*_bps is a delta since ITS own
+	// last reading — mirroring how the aggregate inst rate is computed
+	// from lastSent/lastRecv.
+	lastLegSent := make([]uint64, len(routes))
+	lastLegRecv := make([]uint64, len(routes))
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -776,12 +808,39 @@ func (s *PingServer) muxBwSamplerLoop(
 
 			var totalSent, totalRecv uint64
 			var activeRoutes int32
-			for _, r := range routes {
-				totalSent += r.bytesSent.Load()
-				totalRecv += r.bytesRecv.Load()
-				if r.activeFlag.Load() {
+			// Per-leg breakdown, emitted alongside the aggregate. One
+			// entry per route, in route-index order, carrying the leg's
+			// cumulative bytes, its per-interval instant rates, and its
+			// distinguishing identity (intermediate PK + transport kind).
+			legs := make([]*MuxLegSample, 0, len(routes))
+			for i, r := range routes {
+				legSent := r.bytesSent.Load()
+				legRecv := r.bytesRecv.Load()
+				totalSent += legSent
+				totalRecv += legRecv
+				alive := r.activeFlag.Load()
+				if alive {
 					activeRoutes++
 				}
+
+				legInstSendBps := 0.0
+				legInstRecvBps := 0.0
+				if intervalSec > 0 {
+					legInstSendBps = float64((legSent-lastLegSent[i])*8) / intervalSec
+					legInstRecvBps = float64((legRecv-lastLegRecv[i])*8) / intervalSec
+				}
+				lastLegSent[i], lastLegRecv[i] = legSent, legRecv
+
+				legs = append(legs, &MuxLegSample{
+					RouteIndex:     int32(r.index), //nolint:gosec // route index fits int32
+					IntermediatePk: r.intermediatePK,
+					TransportKind:  r.transportKind,
+					BytesSent:      int64(legSent), //nolint:gosec // pumped byte totals fit int64
+					BytesRecv:      int64(legRecv), //nolint:gosec // pumped byte totals fit int64
+					InstSendBps:    legInstSendBps,
+					InstRecvBps:    legInstRecvBps,
+					Alive:          alive,
+				})
 			}
 
 			instantSendBps := 0.0
@@ -815,6 +874,7 @@ func (s *PingServer) muxBwSamplerLoop(
 				AvgSendBps:     avgSendBps,
 				AvgRecvBps:     avgRecvBps,
 				ActiveRoutes:   activeRoutes,
+				Legs:           legs,
 			}})
 		}
 	}

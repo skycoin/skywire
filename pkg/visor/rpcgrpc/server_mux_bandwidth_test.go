@@ -1,7 +1,9 @@
 package rpcgrpc
 
 import (
+	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -347,4 +349,122 @@ func TestBuildRouteFailureEvent(t *testing.T) {
 			t.Error("ErrorMessage must be populated even when bytes are zero")
 		}
 	})
+}
+
+// TestMuxBwSamplerEmitsPerLeg pins requirement #3 of the per-leg
+// measurement work: the sampler must emit one MuxLegSample per route
+// alongside the aggregate, carrying that leg's identity (intermediate
+// PK + transport kind), cumulative bytes, and a non-zero instant rate
+// computed from the delta since the previous sample. The sampler
+// touches no PingServer fields, so a zero-value server is enough to
+// drive it — no VisorAPI mock required.
+func TestMuxBwSamplerEmitsPerLeg(t *testing.T) {
+	const (
+		midStcpr = "0323c77f295e4930dbb053b6109dae1a992a996e9858cb000a85636e5967c27ae9"
+	)
+
+	r0 := &muxBwRouteState{index: 0, intermediatePK: midStcpr, transportKind: "stcpr"}
+	r0.established.Store(true)
+	r0.activeFlag.Store(true)
+	r0.bytesSent.Store(40000)
+	r0.bytesRecv.Store(39000)
+
+	// r1 is a "direct" leg: no intermediate, and marked not-alive to
+	// prove the alive flag mirrors activeFlag rather than being hardcoded.
+	r1 := &muxBwRouteState{index: 1, intermediatePK: "", transportKind: "sudph"}
+	r1.established.Store(true)
+	r1.activeFlag.Store(false)
+	r1.bytesSent.Store(10000)
+	r1.bytesRecv.Store(9000)
+
+	routes := []*muxBwRouteState{r0, r1}
+	cfg := &muxBwCfg{SampleInterval: 15 * time.Millisecond}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var (
+		mu      sync.Mutex
+		got     *MuxBandwidthSample
+		gotOnce = make(chan struct{})
+	)
+	emit := func(p isMuxBandwidthEvent_Payload) {
+		s, ok := p.(*MuxBandwidthEvent_Sample)
+		if !ok {
+			return
+		}
+		mu.Lock()
+		if got == nil {
+			got = s.Sample
+			close(gotOnce)
+		}
+		mu.Unlock()
+	}
+
+	peakSend, peakRecv := 0.0, 0.0
+	go (&PingServer{}).muxBwSamplerLoop(ctx, cfg, routes, time.Now(), &peakSend, &peakRecv, emit)
+
+	select {
+	case <-gotOnce:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sampler emitted no MuxBandwidthSample within 2s")
+	}
+	cancel()
+
+	mu.Lock()
+	sample := got
+	mu.Unlock()
+
+	if len(sample.Legs) != 2 {
+		t.Fatalf("legs = %d, want 2", len(sample.Legs))
+	}
+
+	// Aggregate must still be the sum of the legs (backward-compatible).
+	if sample.BytesSent != 50000 || sample.BytesReceived != 48000 {
+		t.Errorf("aggregate bytes = %d/%d, want 50000/48000", sample.BytesSent, sample.BytesReceived)
+	}
+	if sample.ActiveRoutes != 1 {
+		t.Errorf("active_routes = %d, want 1 (only r0 alive)", sample.ActiveRoutes)
+	}
+
+	byIdx := map[int32]*MuxLegSample{}
+	for _, l := range sample.Legs {
+		byIdx[l.RouteIndex] = l
+	}
+
+	l0 := byIdx[0]
+	if l0 == nil {
+		t.Fatal("missing leg for route_index 0")
+	}
+	if l0.IntermediatePk != midStcpr {
+		t.Errorf("leg0 intermediate_pk = %q, want %q", l0.IntermediatePk, midStcpr)
+	}
+	if l0.TransportKind != "stcpr" {
+		t.Errorf("leg0 transport_kind = %q, want stcpr", l0.TransportKind)
+	}
+	if l0.BytesSent != 40000 || l0.BytesRecv != 39000 {
+		t.Errorf("leg0 bytes = %d/%d, want 40000/39000", l0.BytesSent, l0.BytesRecv)
+	}
+	if !l0.Alive {
+		t.Error("leg0 alive = false, want true")
+	}
+	// First sample's inst rate is delta-since-zero, so a leg that moved
+	// bytes must report a strictly positive rate.
+	if l0.InstSendBps <= 0 || l0.InstRecvBps <= 0 {
+		t.Errorf("leg0 inst rates = %.1f/%.1f, want > 0", l0.InstSendBps, l0.InstRecvBps)
+	}
+
+	l1 := byIdx[1]
+	if l1 == nil {
+		t.Fatal("missing leg for route_index 1")
+	}
+	if l1.IntermediatePk != "" {
+		t.Errorf("leg1 intermediate_pk = %q, want empty (direct)", l1.IntermediatePk)
+	}
+	if l1.TransportKind != "sudph" {
+		t.Errorf("leg1 transport_kind = %q, want sudph", l1.TransportKind)
+	}
+	if l1.Alive {
+		t.Error("leg1 alive = true, want false (activeFlag false)")
+	}
 }
