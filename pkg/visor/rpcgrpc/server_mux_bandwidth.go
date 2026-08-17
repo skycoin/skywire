@@ -147,6 +147,19 @@ type muxBwRouteState struct {
 	// (MinHops), preserving prior behavior.
 	fwdHops []RouteHopInfo
 	revHops []RouteHopInfo
+	// intermediatePK / transportKind are this leg's distinguishing
+	// identity, captured from the route's chosen FIRST hop during
+	// setup (the same hop data the route_established event carries).
+	// intermediatePK is the first hop's `to` PK — the first
+	// intermediate — left empty for a direct (single-hop) route.
+	// transportKind is the first hop's transport type (stcpr, sudph,
+	// dmsg, ...). Both are written once in muxBwSetupRoute, on the
+	// success path, BEFORE the pump phase begins (the setup
+	// WaitGroup happens-before the sampler goroutine), then only read
+	// by the sampler — so plain fields are race-free and need no
+	// atomics.
+	intermediatePK string
+	transportKind  string
 }
 
 // StreamMuxBandwidth is the canonical implementation of the RPC.
@@ -503,6 +516,15 @@ func (s *PingServer) muxBwPlanDisjointRoutes(
 		return nil, fmt.Errorf("no transport entries available")
 	}
 
+	// TpID -> carrier kind, so each planned hop can carry its transport
+	// type for per-leg telemetry (routing.Hop drops it).
+	tpTypes := make(map[string]string, len(entries))
+	for _, e := range entries {
+		if e != nil {
+			tpTypes[e.ID.String()] = string(e.Type)
+		}
+	}
+
 	graph, err := routeFinder.NewGraphWithDepth(ctx, newCalcMemStore(entries), srcPK, maxHops)
 	if err != nil {
 		return nil, fmt.Errorf("build graph: %w", err)
@@ -520,7 +542,7 @@ func (s *PingServer) muxBwPlanDisjointRoutes(
 					return true
 				}
 			}
-			fwd := muxBwRoutingHopsToInfo(r.Hops)
+			fwd := muxBwRoutingHopsToInfo(r.Hops, tpTypes)
 			plans = append(plans, muxBwRoutePlan{forward: fwd, reverse: muxBwReverseHops(fwd)})
 			for _, pk := range inter {
 				usedInter[pk] = struct{}{}
@@ -558,16 +580,21 @@ func muxBwIntermediates(r routing.Route, src, dst cipher.PubKey) []cipher.PubKey
 }
 
 // muxBwRoutingHopsToInfo converts route-finder routing.Hops into the
-// RouteHopInfo wire shape the explicit-hops dial path consumes. Only
-// TpID/From/To are carried — TpType is unused by PingContextWithRoute (it
-// resolves the transport by TpID), matching StreamCalcRoutes' emit.
-func muxBwRoutingHopsToInfo(hops []routing.Hop) []RouteHopInfo {
+// RouteHopInfo wire shape the explicit-hops dial path consumes. TpID/From/To
+// drive the dial (PingContextWithRoute resolves the transport by TpID);
+// TpType is filled from tpTypes (TpID -> carrier kind) purely so the plan can
+// serve as the per-leg identity source for telemetry — the explicit-hops dial
+// leaves the conn's RouteHopDetails empty, so the plan is the only reliable
+// place to read each leg's intermediate PK + carrier from.
+func muxBwRoutingHopsToInfo(hops []routing.Hop, tpTypes map[string]string) []RouteHopInfo {
 	out := make([]RouteHopInfo, 0, len(hops))
 	for _, h := range hops {
+		id := h.TpID.String()
 		out = append(out, RouteHopInfo{
-			TpID: h.TpID.String(),
-			From: h.From.String(),
-			To:   h.To.String(),
+			TpID:   id,
+			From:   h.From.String(),
+			To:     h.To.String(),
+			TpType: tpTypes[id],
 		})
 	}
 	return out
@@ -579,7 +606,7 @@ func muxBwRoutingHopsToInfo(hops []routing.Hop) []RouteHopInfo {
 func muxBwReverseHops(fwd []RouteHopInfo) []RouteHopInfo {
 	rev := make([]RouteHopInfo, len(fwd))
 	for i, h := range fwd {
-		rev[len(fwd)-1-i] = RouteHopInfo{TpID: h.TpID, From: h.To, To: h.From}
+		rev[len(fwd)-1-i] = RouteHopInfo{TpID: h.TpID, From: h.To, To: h.From, TpType: h.TpType}
 	}
 	return rev
 }
@@ -652,13 +679,38 @@ func (s *PingServer) muxBwSetupRoute(
 		// (mux-bw NDJSON, mux-bw-tui dashboard, treeprobe harness)
 		// can verify route diversity from this field.
 		ref := PingRouteRef{PK: cfg.TargetPK, Index: rs.index}
+		// Normalize the leg's hops to (tpID, from, to, tpType) tuples. Prefer
+		// the conn's recorded details; the explicit-hops dial path (disjoint
+		// planner) leaves those empty, so fall back to this leg's plan hops
+		// (rs.fwdHops) — authoritative for what we actually dialed.
+		type hopTuple struct{ tpID, from, to, tpType string }
+		var hopTuples []hopTuple
 		for _, h := range s.visor.GetPingRouteDetailsAt(ref) {
+			hopTuples = append(hopTuples, hopTuple{h.TpID, h.From, h.To, h.TpType})
+		}
+		if len(hopTuples) == 0 {
+			for _, h := range rs.fwdHops {
+				hopTuples = append(hopTuples, hopTuple{h.TpID, h.From, h.To, h.TpType})
+			}
+		}
+		for _, h := range hopTuples {
 			ev.Hops = append(ev.Hops, &RouteHop{
-				TpId:   h.TpID,
-				From:   h.From,
-				To:     h.To,
-				TpType: h.TpType,
+				TpId:   h.tpID,
+				From:   h.from,
+				To:     h.to,
+				TpType: h.tpType,
 			})
+		}
+		// Capture the leg's identity from its first hop for the
+		// per-leg sampler. transportKind = the carrier this leg
+		// egresses on; intermediatePK = the first intermediate visor
+		// (first hop's `to`), left empty for a direct route where the
+		// only hop lands straight on the target (no intermediate).
+		if len(hopTuples) > 0 {
+			rs.transportKind = hopTuples[0].tpType
+			if len(hopTuples) > 1 {
+				rs.intermediatePK = hopTuples[0].to
+			}
 		}
 	}
 	emit(&MuxBandwidthEvent_RouteEstablished{RouteEstablished: ev})
@@ -764,6 +816,13 @@ func (s *PingServer) muxBwSamplerLoop(
 	var lastSent, lastRecv uint64
 	lastTick := pumpStart
 
+	// Per-leg previous-sample counters, indexed by position in the
+	// routes slice, so each leg's inst_*_bps is a delta since ITS own
+	// last reading — mirroring how the aggregate inst rate is computed
+	// from lastSent/lastRecv.
+	lastLegSent := make([]uint64, len(routes))
+	lastLegRecv := make([]uint64, len(routes))
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -776,12 +835,39 @@ func (s *PingServer) muxBwSamplerLoop(
 
 			var totalSent, totalRecv uint64
 			var activeRoutes int32
-			for _, r := range routes {
-				totalSent += r.bytesSent.Load()
-				totalRecv += r.bytesRecv.Load()
-				if r.activeFlag.Load() {
+			// Per-leg breakdown, emitted alongside the aggregate. One
+			// entry per route, in route-index order, carrying the leg's
+			// cumulative bytes, its per-interval instant rates, and its
+			// distinguishing identity (intermediate PK + transport kind).
+			legs := make([]*MuxLegSample, 0, len(routes))
+			for i, r := range routes {
+				legSent := r.bytesSent.Load()
+				legRecv := r.bytesRecv.Load()
+				totalSent += legSent
+				totalRecv += legRecv
+				alive := r.activeFlag.Load()
+				if alive {
 					activeRoutes++
 				}
+
+				legInstSendBps := 0.0
+				legInstRecvBps := 0.0
+				if intervalSec > 0 {
+					legInstSendBps = float64((legSent-lastLegSent[i])*8) / intervalSec
+					legInstRecvBps = float64((legRecv-lastLegRecv[i])*8) / intervalSec
+				}
+				lastLegSent[i], lastLegRecv[i] = legSent, legRecv
+
+				legs = append(legs, &MuxLegSample{
+					RouteIndex:     int32(r.index), //nolint:gosec // route index fits int32
+					IntermediatePk: r.intermediatePK,
+					TransportKind:  r.transportKind,
+					BytesSent:      int64(legSent), //nolint:gosec // pumped byte totals fit int64
+					BytesRecv:      int64(legRecv), //nolint:gosec // pumped byte totals fit int64
+					InstSendBps:    legInstSendBps,
+					InstRecvBps:    legInstRecvBps,
+					Alive:          alive,
+				})
 			}
 
 			instantSendBps := 0.0
@@ -815,6 +901,7 @@ func (s *PingServer) muxBwSamplerLoop(
 				AvgSendBps:     avgSendBps,
 				AvgRecvBps:     avgRecvBps,
 				ActiveRoutes:   activeRoutes,
+				Legs:           legs,
 			}})
 		}
 	}
