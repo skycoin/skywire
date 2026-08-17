@@ -60,7 +60,7 @@ func (r *router) appendRouteAsymmetric(nrg *NoiseRouteGroup, rules routing.EdgeR
 				return errors.New("refusing to mux: route group already contains a DMSG transport")
 			}
 			// Enforce the mux invariant: two legs must never share a transport
-			// (the router-side analogue of a route not looping through the same
+			// (the router-side analog of a route not looping through the same
 			// visor twice). The route-finder fallback in establishMuxRoutes
 			// honors ExcludeIntermediatePKs but NOT ExcludeTransportIDs, so a
 			// disjoint-path miss lets it return the leg-1 transport again —

@@ -17,10 +17,10 @@ import (
 // arrival orders (in-order, interleaved-across-legs, with loss), and we assert
 // the receiver reassembles the ORIGINAL ordered stream with no gaps.
 
-func newTestMux(t *testing.T, legs int) *routeMux {
+func newTestMux(t *testing.T) *routeMux {
 	t.Helper()
 	m := newRouteMux(logging.MustGetLogger("muxtest"), true)
-	m.growLegs(legs)
+	m.growLegs(2)
 	return m
 }
 
@@ -32,8 +32,8 @@ func collect(dst *[]byte, delivered [][]byte) {
 }
 
 func TestMux_InOrderDelivery(t *testing.T) {
-	send := newTestMux(t, 2)
-	recv := newTestMux(t, 2)
+	send := newTestMux(t)
+	recv := newTestMux(t)
 
 	var got []byte
 	for i := 0; i < 200; i++ {
@@ -59,8 +59,8 @@ func TestMux_InOrderDelivery(t *testing.T) {
 // (the whole point of mux): odd seqs "arrive" on leg B slightly after even seqs
 // on leg A. The reorder buffer must still reassemble the original order.
 func TestMux_InterleavedLegs(t *testing.T) {
-	send := newTestMux(t, 2)
-	recv := newTestMux(t, 2)
+	send := newTestMux(t)
+	recv := newTestMux(t)
 
 	type pkt struct {
 		seq  uint32
@@ -111,8 +111,8 @@ func TestMux_InterleavedLegs(t *testing.T) {
 // receiver must deliver the full ordered stream. If this fails, the SACK/retx
 // recovery loop is broken — which is the live routes>=2 stall.
 func TestMux_RecoversLostPacketViaRetx(t *testing.T) {
-	send := newTestMux(t, 2)
-	recv := newTestMux(t, 2)
+	send := newTestMux(t)
+	recv := newTestMux(t)
 
 	// Wrap 20 payloads; drop seq==5 on first pass.
 	type pkt struct {
@@ -174,7 +174,7 @@ func TestMux_SendDrivingWithUnreadyAuxLeg(t *testing.T) {
 	rg, _, conns := createMuxRouteGroup(t, 2)
 	defer func() {
 		for _, c := range conns {
-			c.Close() //nolint:errcheck
+			c.Close() //nolint:errcheck,gosec
 		}
 	}()
 
@@ -199,7 +199,7 @@ func TestMux_SendDistributesAcrossReadyLegs(t *testing.T) {
 	rg, _, conns := createMuxRouteGroup(t, 2) // both legs marked ready by helper
 	defer func() {
 		for _, c := range conns {
-			c.Close() //nolint:errcheck
+			c.Close() //nolint:errcheck,gosec
 		}
 	}()
 
