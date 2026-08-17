@@ -44,7 +44,7 @@ func TestDescribe(t *testing.T) {
 	cases := map[string]string{
 		"app-mux":          "app-mux — per-app static mux: vpn-client mux=4/min_hops=2, skychat single low-latency route, others default.",
 		"rotating-bw":      "rotating-bw — mux=4 multi-hop for proxy/vpn/skynet with a leg rotated every 90s (bandwidth spread + traffic-analysis resistance).",
-		"latency-adaptive": "latency-adaptive — mux=4 multi-hop that evicts the slowest leg each 30s (when it is a >=1.5x-median outlier) until the leg set converges to low-latency disjoint paths, then holds (hysteresis-damped; no churn once converged).",
+		"latency-adaptive": "latency-adaptive — mux=4 multi-hop that evicts the slowest leg each 30s (when its EWMA-smoothed latency is a >=1.5x-median outlier) until the leg set converges to low-latency disjoint paths, then holds (hysteresis-damped; no churn once converged).",
 	}
 	for name, want := range cases {
 		got, ok := Describe(name)

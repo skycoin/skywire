@@ -359,6 +359,7 @@ func (h *Hook) OnTick(info router.DialInfo, legs []router.LegInfo) router.Rotati
 		policyLegs = append(policyLegs, LegInfo{
 			Index:       l.Index,
 			Kind:        l.Kind,
+			TransportID: l.TransportID,
 			LatencyMs:   l.LatencyMs,
 			Alive:       l.Alive,
 			SentBytes:   l.SentBytes,
@@ -405,6 +406,7 @@ func (h *Hook) OnLegChange(info router.DialInfo, legs []router.LegInfo, change r
 		policyLegs = append(policyLegs, LegInfo{
 			Index:       l.Index,
 			Kind:        l.Kind,
+			TransportID: l.TransportID,
 			LatencyMs:   l.LatencyMs,
 			Alive:       l.Alive,
 			SentBytes:   l.SentBytes,

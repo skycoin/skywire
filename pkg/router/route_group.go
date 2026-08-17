@@ -761,6 +761,7 @@ func (rg *RouteGroup) snapshotLegs() []LegInfo {
 		l := LegInfo{Index: i, Alive: false}
 		if tp != nil {
 			l.Kind = string(tp.Entry.Type)
+			l.TransportID = tp.Entry.ID.String()
 			l.Alive = !tp.IsClosed()
 			if stats := tp.GetLatencyStats(); stats.Avg > 0 {
 				l.LatencyMs = int(stats.Avg)
