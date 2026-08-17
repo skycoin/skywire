@@ -83,6 +83,15 @@ func TestRetxBuffer_RetransmitList(t *testing.T) {
 		rb.Store(i, []byte{byte(i)})
 	}
 
+	// Age the stored entries past retxMinAge: ProcessSACK only lists a missing
+	// sequence for retransmit once it has been unacknowledged longer than that
+	// guard (a younger gap is presumed in flight on a slower mux leg, not lost).
+	// Without this the freshly-Store'd entries are "too young" and the list is
+	// empty. See retxMinAge in sack.go.
+	for _, e := range rb.entries {
+		e.sentAt = e.sentAt.Add(-2 * retxMinAge)
+	}
+
 	// SACK: lastContiguous=2, bitmap=0b1010 (seq 3 missing, 4 received, 5 missing, 6 received)
 	retx := rb.ProcessSACK(2, 0b1010)
 	assert.Contains(t, retx, uint32(3))
