@@ -16,6 +16,7 @@ package wasm
 type LegInfoWire struct {
 	Index       int      `json:"index"`
 	Kind        string   `json:"kind"`
+	TransportID string   `json:"transport_id,omitempty"`
 	LatencyMs   int      `json:"latency_ms"`
 	Alive       bool     `json:"alive"`
 	SentBytes   uint64   `json:"sent_bytes,omitempty"`

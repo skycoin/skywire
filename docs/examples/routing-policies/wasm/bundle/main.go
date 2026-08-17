@@ -60,6 +60,7 @@ type decideInputWire struct {
 type legInfoWire struct {
 	Index       int      `json:"index"`
 	Kind        string   `json:"kind"`
+	TransportID string   `json:"transport_id"`
 	LatencyMs   int      `json:"latency_ms"`
 	Alive       bool     `json:"alive"`
 	SentBytes   uint64   `json:"sent_bytes,omitempty"`
@@ -280,6 +281,29 @@ func tickRotatingBW(input tickInputWire) uint64 {
 	return writeOutput(out)
 }
 
+// latAdaptEWMA holds the exponentially-weighted moving average of each
+// leg's latency_ms, keyed by the leg's STABLE transport_id (not its
+// index, which shifts as the tps[] slice compacts on drop/add). This is
+// the per-leg state that lets tickLatencyAdaptive act on a smoothed
+// signal rather than the raw instantaneous latency — on the live mesh a
+// single leg's latency_ms jumps around wildly tick-to-tick (e.g.
+// 75→245→13000→180), and evicting on the raw value chases that noise.
+// Keys are pruned each tick to the current alive-or-present leg set so a
+// dropped transport's entry doesn't linger.
+var latAdaptEWMA = map[string]float64{}
+
+// latAdaptSeen is a scratch set reused each tick to record which
+// transport_ids appear in the current leg snapshot, so stale keys can be
+// pruned from latAdaptEWMA. Package-global (rather than tick-local) only
+// to avoid a per-tick allocation; it is cleared at the top of every tick.
+var latAdaptSeen = map[string]bool{}
+
+// latAdaptAlpha is the EWMA smoothing factor. 0.3 weights the newest
+// sample at 30% and the running average at 70% — enough to track a
+// genuine sustained latency shift within a few ticks while damping a
+// lone transient spike to a fraction of its raw magnitude.
+const latAdaptAlpha = 0.3
+
 // tickLatencyAdaptive is the latency-adaptive rotation logic. It differs
 // from rotating-bw in what it evicts and WHEN:
 //
@@ -288,38 +312,91 @@ func tickRotatingBW(input tickInputWire) uint64 {
 //	traffic-analysis resistance.
 //
 //	latency-adaptive instead drops the SLOWEST alive leg, and ONLY when
-//	that leg is a clear outlier — its measured latency_ms is at least
-//	1.5x the median of the alive legs. This hysteresis band means: once
-//	the set has converged to a cluster of comparably-fast legs (worst <
-//	1.5x median), NO leg qualifies and the policy holds — no churn. It
-//	converges toward a low-latency disjoint set and then stops thrashing,
-//	the opposite of rotating-bw's every-tick rotation.
+//	that leg is a clear outlier — its SMOOTHED latency is at least 1.5x
+//	the median of the alive legs' smoothed latencies. This hysteresis
+//	band means: once the set has converged to a cluster of comparably-
+//	fast legs (worst < 1.5x median), NO leg qualifies and the policy
+//	holds — no churn. It converges toward a low-latency disjoint set and
+//	then stops thrashing, the opposite of rotating-bw's every-tick
+//	rotation.
+//
+// The eviction decision runs on an EWMA of each leg's latency, keyed by
+// the leg's stable transport_id, rather than on the raw per-tick
+// latency_ms. Raw latency on the live mesh is noisy — one leg can read
+// 75ms one tick and 13000ms the next with no real change in its quality —
+// and evicting on the instantaneous value chases that noise, tearing down
+// a perfectly good leg on a transient spike. Smoothing filters those
+// spikes so eviction fires only on a PERSISTENT latency difference. The
+// stable transport_id key is what makes a per-leg average meaningful at
+// all: the leg's index shifts when the slice compacts, so index-keyed
+// state would smear one leg's history onto another after any drop.
 //
 //	alive_count == 0            → no-op (nothing measured yet)
 //	alive_count <  target_mux   → add only (recover toward target; never
 //	                              shrink below it)
 //	alive_count >= target_mux &&
-//	  worst_latency > 0 &&
-//	  worst >= 1.5 * median     → drop slowest + add + exclude its hops
+//	  smoothed_worst > 0 &&
+//	  smoothed_worst >=
+//	    1.5 * smoothed_median   → drop slowest + add + exclude its hops
 //	                              (evict the outlier; exclude its
 //	                              intermediates so the replacement differs)
 //	otherwise (converged)       → no-op (hold; do not churn)
 func tickLatencyAdaptive(input tickInputWire) uint64 {
 	const targetMux = 4
 
+	// Update the per-leg EWMA and record which transport_ids are present
+	// this tick so stale keys can be pruned afterward.
+	for k := range latAdaptSeen {
+		delete(latAdaptSeen, k)
+	}
+	for _, l := range input.Legs {
+		tid := l.TransportID
+		if tid == "" {
+			continue
+		}
+		latAdaptSeen[tid] = true
+		// Only fold in a real measurement; latency_ms==0 means "unknown"
+		// and must not drag the average toward zero.
+		if l.Alive && l.LatencyMs > 0 {
+			sample := float64(l.LatencyMs)
+			if prev, ok := latAdaptEWMA[tid]; ok {
+				latAdaptEWMA[tid] = latAdaptAlpha*sample + (1-latAdaptAlpha)*prev
+			} else {
+				// Seed with the first sample so the average starts on the
+				// leg's own latency rather than climbing from zero.
+				latAdaptEWMA[tid] = sample
+			}
+		}
+	}
+	// Prune EWMA keys for transport_ids no longer in the leg set so a
+	// dropped leg's history can't resurface if its index is later reused.
+	for tid := range latAdaptEWMA {
+		if !latAdaptSeen[tid] {
+			delete(latAdaptEWMA, tid)
+		}
+	}
+
+	// Evict-slowest-outlier logic, run on the SMOOTHED latencies. Only
+	// alive legs with a known smoothed latency participate.
 	aliveCount := 0
 	worstIdx := -1
-	worstLatency := -1
-	var lat []int
+	worstSmoothed := -1.0
+	var smoothed []float64
 	var worstHops []string
 	for _, l := range input.Legs {
 		if !l.Alive {
 			continue
 		}
 		aliveCount++
-		lat = append(lat, l.LatencyMs)
-		if l.LatencyMs > worstLatency {
-			worstLatency = l.LatencyMs
+		sm, ok := latAdaptEWMA[l.TransportID]
+		if !ok {
+			// No smoothed value yet (leg never reported a latency) — it
+			// can't be judged an outlier this tick.
+			continue
+		}
+		smoothed = append(smoothed, sm)
+		if sm > worstSmoothed {
+			worstSmoothed = sm
 			worstIdx = l.Index
 			worstHops = l.Hops
 		}
@@ -330,21 +407,25 @@ func tickLatencyAdaptive(input tickInputWire) uint64 {
 	if aliveCount < targetMux {
 		return writeAction(rotationActionWire{AddLeg: true})
 	}
-
-	// Median latency of the alive legs.
-	sort.Ints(lat)
-	var median int
-	if n := len(lat); n%2 == 1 {
-		median = lat[n/2]
-	} else {
-		median = (lat[n/2-1] + lat[n/2]) / 2
+	// Need at least a couple of smoothed samples to compute a meaningful
+	// median; otherwise hold.
+	if len(smoothed) < 2 || worstIdx < 0 || worstSmoothed <= 0 {
+		return 0
 	}
 
-	// Hysteresis: only evict a clear outlier (worst >= 1.5x median).
-	// Once the set has converged (worst < 1.5x median) this is false for
-	// every leg, so we hold and stop churning. Integer form of
-	// worst >= 1.5*median is 2*worst >= 3*median.
-	if worstLatency > 0 && worstIdx >= 0 && 2*worstLatency >= 3*median {
+	// Median of the alive legs' smoothed latencies.
+	sort.Float64s(smoothed)
+	var median float64
+	if n := len(smoothed); n%2 == 1 {
+		median = smoothed[n/2]
+	} else {
+		median = (smoothed[n/2-1] + smoothed[n/2]) / 2
+	}
+
+	// Hysteresis: only evict a clear outlier (smoothed worst >= 1.5x
+	// smoothed median). Once the set has converged this is false for every
+	// leg, so we hold and stop churning.
+	if median > 0 && worstSmoothed >= 1.5*median {
 		return writeAction(rotationActionWire{
 			DropLegs:    []int{worstIdx},
 			AddLeg:      true,
