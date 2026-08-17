@@ -39,6 +39,7 @@ import (
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxyinterstitial"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/skynetweb"
 )
@@ -304,6 +305,28 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 			if err != nil || origPort == "" {
 				origPort = "80"
 			}
+
+			// On a transient failure (dmsg route/session still warming, or a
+			// not-yet-ready upstream like a booting skysocks-client) for a
+			// plaintext-HTTP request, answer with a branded auto-refreshing
+			// interstitial instead of a bare SOCKS error — the browser shows
+			// "building a route over skywire…" and retries once the route is
+			// warm, rather than a raw connection reset. Raw-TLS (443) and other
+			// non-HTTP ports fall through to the real error (an HTML page can't
+			// ride those). This defer runs before the panic-recover defer on a
+			// normal error return, and no-ops on success (conn != nil).
+			defer func() {
+				if dialErr != nil && conn == nil &&
+					proxyinterstitial.ShouldServe(origPort) && proxyinterstitial.IsTransient(dialErr) {
+					target := origHost
+					if target == "" {
+						target = addr
+					}
+					log.WithField("host", target).WithField("err", dialErr).
+						Debug("SOCKS5 → serving branded route interstitial")
+					conn, dialErr = proxyinterstitial.Conn(target, "", false), nil
+				}
+			}()
 
 			if _, ok := dialCtx.Value(dmsgResolverPortKey).(string); ok {
 				// Reserved synthetic directory: serve the alias index in-process.

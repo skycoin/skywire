@@ -9,10 +9,11 @@ import (
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 
 	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/proxyinterstitial"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 )
 
 // Client implement multiplexing proxy client using yamux.
@@ -88,6 +89,20 @@ func (c *Client) ListenAndServe(addr string) error {
 
 		stream, err := c.session.Open()
 		if err != nil {
+			// The mesh route/session to the exit is down (exit restart, all
+			// mux legs dropped). Before tearing down for reconnect, serve the
+			// waiting browser a branded "building a route over skywire…"
+			// interstitial for a plaintext-HTTP request so it retries once the
+			// route is back, instead of a bare connection failure. Best-effort
+			// and deadline-bounded (see ServeSOCKS5); declined for HTTPS/other
+			// ports. Runs in a goroutine that owns conn so the reconnect below
+			// isn't delayed by a slow browser.
+			go func(bc net.Conn) {
+				if serr := proxyinterstitial.ServeSOCKS5(bc, ""); serr != nil && c.appCl != nil {
+					c.appCl.Log().Debugf("route-down interstitial not served: %v", serr)
+				}
+				bc.Close() //nolint:errcheck,gosec
+			}(conn)
 			c.close()
 
 			return fmt.Errorf("error opening yamux stream: %w", err)

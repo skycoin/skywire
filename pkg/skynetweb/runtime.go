@@ -31,6 +31,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxyinterstitial"
 	"github.com/skycoin/skywire/pkg/skynet"
 	"github.com/skycoin/skywire/pkg/skynetca"
 )
@@ -228,6 +229,30 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 			}()
 
 			origHost, _ := dialCtx.Value(skynetOrigHostKey{}).(string)
+
+			// Transient-failure interstitial (see pkg/dmsgweb/runtime.go for the
+			// full rationale): on a route-still-warming / upstream-not-ready
+			// failure for a plaintext-HTTP request, serve a branded
+			// auto-refreshing "building a route over skywire…" page in place of
+			// a bare SOCKS error so the browser retries once the route is warm.
+			// Raw-TLS (443) and non-HTTP ports fall through to the real error.
+			// Runs before the panic-recover defer on a normal return; no-ops on
+			// success or panic.
+			defer func() {
+				if retErr == nil || retConn != nil {
+					return
+				}
+				_, port, _ := net.SplitHostPort(addr) //nolint:errcheck
+				if proxyinterstitial.ShouldServe(port) && proxyinterstitial.IsTransient(retErr) {
+					target := origHost
+					if target == "" {
+						target = addr
+					}
+					log.WithField("host", target).WithField("err", retErr).
+						Debug("SOCKS5 → serving branded route interstitial")
+					retConn, retErr = proxyinterstitial.Conn(target, "", false), nil
+				}
+			}()
 
 			// Check if hostname matches .skynet suffix.
 			if origHost != "" && isSkynetHost(origHost, cfg.DomainSuffix) {
