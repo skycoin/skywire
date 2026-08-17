@@ -1,0 +1,12 @@
+The viewer in this directory (index.html and assets/) is the graph UI from
+codebase-memory-mcp, redistributed with two changes: its asset and API paths are
+made relative so it can be served from a subdirectory, and index.html supplies
+default query parameters when it is opened without any, because without them the
+viewer asks the server to enumerate projects over a POST that a static host
+cannot answer.
+
+    https://github.com/DeusData/codebase-memory-mcp
+
+MIT License. Copyright (c) 2025 DeusData.
+
+api/layout is generated from this repository by scripts/graph-snapshot.sh.

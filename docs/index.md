@@ -31,6 +31,11 @@ extend, or understand a Skywire deployment.
 
     Eligibility rules for the Skywire reward distribution.
 
+- :material-graph-outline: **[Code Graph](graph/)**
+
+    The source as a three-dimensional map — every function and type a
+    node, every call an edge. A way to see the shape of the codebase.
+
 </div>
 
 !!! note "Per-app and per-service docs"
