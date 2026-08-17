@@ -142,7 +142,7 @@ github.com/benhoyt/goawk/parser
 # github.com/beorn7/perks v1.0.1
 ## explicit; go 1.11
 github.com/beorn7/perks/quantile
-# github.com/bitfield/script v0.24.3
+# github.com/bitfield/script v0.25.0
 ## explicit; go 1.25.0
 github.com/bitfield/script
 # github.com/blang/semver v3.5.1+incompatible
@@ -330,7 +330,7 @@ github.com/docker/go-units
 # github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1
 ## explicit
 github.com/droundy/goopt
-# github.com/dunglas/httpsfv v1.1.0
+# github.com/dunglas/httpsfv v1.1.1
 ## explicit; go 1.14
 github.com/dunglas/httpsfv
 # github.com/dustin/go-humanize v1.0.1
@@ -915,7 +915,7 @@ github.com/pion/transport/v4/reuseport
 github.com/pion/transport/v4/stdnet
 github.com/pion/transport/v4/utils/xor
 github.com/pion/transport/v4/vnet
-# github.com/pion/turn/v5 v5.0.12
+# github.com/pion/turn/v5 v5.0.13
 ## explicit; go 1.24.0
 github.com/pion/turn/v5
 github.com/pion/turn/v5/internal/allocation
