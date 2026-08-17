@@ -7,56 +7,35 @@
 // compiled policy by name — no fetching or compiling a .wasm on the
 // target.
 //
-// Each *.wasm file in this directory is a preset; the preset name is
-// the filename without the ".wasm" suffix. Descriptions come from the
-// embedded manifest.json (name → one-line summary). Adding a preset is
-// dropping the built module here and adding its manifest line.
+// This is now the COMBINED single-module form (#3942 amortization done).
+// A single embedded bundle.wasm carries every preset and dispatches by
+// name at call time: the host stamps the selected preset into the
+// decide/tick input wire (via policywasm.WithPreset) and the guest
+// switches on it. This replaces the earlier per-file embed where each
+// preset shipped its own ~500KB copy of the TinyGo runtime — the
+// runtime is now paid once and each extra preset adds only its own few
+// KB of logic.
 //
-// This uses a per-file embed to keep the registry trivially inspectable
-// (one .wasm == one preset). If the preset count grows enough that N
-// separate multi-hundred-KB blobs become a size concern, a future
-// combined-single-bundle (#3942 amortization) could replace the
-// per-file embed with one bundle indexed by name — the public API here
-// (Names/Module/Describe) is the seam that would stay stable.
+// The manifest.json (name → one-line summary) is the source of truth
+// for which preset names exist (Names/Has) and their descriptions
+// (Describe). Adding a preset is: add its case to the bundle guest
+// (docs/examples/routing-policies/wasm/bundle/main.go), rebuild
+// bundle.wasm, copy it here, and add its manifest line.
 package presets
 
 import (
-	"embed"
+	_ "embed"
 	"encoding/json"
-	"io/fs"
 	"sort"
-	"strings"
 )
 
-//go:embed *.wasm
-var wasmFS embed.FS
+//go:embed bundle.wasm
+var bundleWASM []byte
 
 //go:embed manifest.json
 var manifestJSON []byte
 
-var (
-	registry     = loadRegistry()
-	descriptions = loadManifest()
-)
-
-func loadRegistry() map[string][]byte {
-	m := map[string][]byte{}
-	entries, err := fs.ReadDir(wasmFS, ".")
-	if err != nil {
-		return m
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".wasm") {
-			continue
-		}
-		b, err := wasmFS.ReadFile(e.Name())
-		if err != nil {
-			continue
-		}
-		m[strings.TrimSuffix(e.Name(), ".wasm")] = b
-	}
-	return m
-}
+var descriptions = loadManifest()
 
 func loadManifest() map[string]string {
 	m := map[string]string{}
@@ -64,11 +43,15 @@ func loadManifest() map[string]string {
 	return m
 }
 
-// Module returns the embedded compiled WASM bytes for a preset name,
-// if it exists.
-func Module(name string) ([]byte, bool) {
-	b, ok := registry[name]
-	return b, ok
+// Bundle returns the embedded combined WASM module carrying every
+// preset. Callers load it once and select a preset by stamping its name
+// via policywasm.WithPreset(name); the module dispatches internally.
+func Bundle() []byte { return bundleWASM }
+
+// Has reports whether name is a known WASM preset (manifest membership).
+func Has(name string) bool {
+	_, ok := descriptions[name]
+	return ok
 }
 
 // Describe returns the one-line manifest description for a preset name,
@@ -80,8 +63,8 @@ func Describe(name string) (string, bool) {
 
 // Names returns the available WASM preset names, sorted.
 func Names() []string {
-	names := make([]string, 0, len(registry))
-	for n := range registry {
+	names := make([]string, 0, len(descriptions))
+	for n := range descriptions {
 		names = append(names, n)
 	}
 	sort.Strings(names)
