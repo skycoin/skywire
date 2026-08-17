@@ -44,7 +44,7 @@ func TestDescribe(t *testing.T) {
 	cases := map[string]string{
 		"app-mux":          "app-mux — per-app static mux: vpn-client mux=4/min_hops=2, skychat single low-latency route, others default.",
 		"rotating-bw":      "rotating-bw — mux=4 multi-hop for proxy/vpn/skynet with a leg rotated every 90s (bandwidth spread + traffic-analysis resistance).",
-		"latency-adaptive": "latency-adaptive — asymmetric mux (1 lean upstream, 4-way adaptive downstream) that evicts the slowest leg each 30s until the leg set converges to low latency (hysteresis-damped; no churn once converged).",
+		"latency-adaptive": "latency-adaptive — mux=4 multi-hop that evicts the slowest leg each 30s (when it is a >=1.5x-median outlier) until the leg set converges to low-latency disjoint paths, then holds (hysteresis-damped; no churn once converged).",
 	}
 	for name, want := range cases {
 		got, ok := Describe(name)
@@ -136,14 +136,11 @@ func TestLatencyAdaptiveDecides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decide: %v", err)
 	}
-	if spec.ForwardMux != 1 {
-		t.Errorf("ForwardMux = %d, want 1", spec.ForwardMux)
+	if spec.Mux != 4 {
+		t.Errorf("Mux = %d, want 4", spec.Mux)
 	}
-	if spec.ReverseMux != 4 {
-		t.Errorf("ReverseMux = %d, want 4", spec.ReverseMux)
-	}
-	if spec.ReverseMinHops != 2 {
-		t.Errorf("ReverseMinHops = %d, want 2", spec.ReverseMinHops)
+	if spec.MinHops != 2 {
+		t.Errorf("MinHops = %d, want 2", spec.MinHops)
 	}
 	if spec.RotationIntervalSeconds != 30 {
 		t.Errorf("RotationIntervalSeconds = %d, want 30", spec.RotationIntervalSeconds)

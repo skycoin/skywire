@@ -195,11 +195,17 @@ func decideRotatingBW(ctx routingContextWire) routeSpecWire {
 func decideLatencyAdaptive(ctx routingContextWire) routeSpecWire {
 	switch ctx.App {
 	case "vpn-client", "skysocks-client", "skynet-client":
+		// Symmetric mux=4: the on_tick evict-slowest logic acts on the
+		// route group's forward legs (rg.tps) — the only legs the tick
+		// hook sees (reverse-only legs live in rg.rvs and are invisible
+		// to on_tick). An asymmetric 1-up/4-down shape would put the 4
+		// adaptive legs on the reverse side where on_tick can't manage
+		// them, making the eviction a no-op. Symmetric mux gives on_tick
+		// 4 real legs to converge over. (The lean-upstream refinement
+		// awaits a router change exposing reverse legs to the tick hook.)
 		return routeSpecWire{
-			ForwardMux:              1,
-			ForwardMinHops:          1,
-			ReverseMux:              4,
-			ReverseMinHops:          2,
+			Mux:                     4,
+			MinHops:                 2,
 			RotationIntervalSeconds: 30,
 			Distribution:            "auto",
 		}
