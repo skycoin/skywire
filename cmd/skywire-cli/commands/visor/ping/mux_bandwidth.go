@@ -340,6 +340,11 @@ type muxBwTracker struct {
 	routeFailure []*rpcgrpc.MuxRouteFailure
 	done         *rpcgrpc.MuxBandwidthDone
 	srvErr       string
+	// lastSample retains the most recent per-second sample so the
+	// final summary can print a one-line-per-leg breakdown (cumulative
+	// bytes + last-interval rates + the leg's intermediate/transport
+	// identity). The aggregate totals still come from the Done event.
+	lastSample *rpcgrpc.MuxBandwidthSample
 }
 
 func newMuxBwTracker() *muxBwTracker {
@@ -352,6 +357,8 @@ func (t *muxBwTracker) record(ev *rpcgrpc.MuxBandwidthEvent) {
 		t.routeSet = append(t.routeSet, p.RouteEstablished)
 	case *rpcgrpc.MuxBandwidthEvent_RouteFailure:
 		t.routeFailure = append(t.routeFailure, p.RouteFailure)
+	case *rpcgrpc.MuxBandwidthEvent_Sample:
+		t.lastSample = p.Sample
 	case *rpcgrpc.MuxBandwidthEvent_Done:
 		t.done = p.Done
 	case *rpcgrpc.MuxBandwidthEvent_Error:
@@ -389,6 +396,41 @@ func (t *muxBwTracker) printSummary(w io.Writer) {
 				float64(r.SetupLatencyNs)/1e6, len(r.Hops), path, extra)
 		}
 		tw.Flush() //nolint:errcheck,gosec
+	}
+
+	// Per-leg bandwidth breakdown, read off the final sample. Cheap
+	// (one line per leg, once) and gives the policy-measurement
+	// operator each leg's cumulative bytes + last-interval rates +
+	// distinguishing intermediate/transport at a glance.
+	if t.lastSample != nil && len(t.lastSample.Legs) > 0 {
+		fmt.Fprintln(w, "\nper-leg (final sample):") //nolint:errcheck
+		lw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		//nolint:errcheck // human-mode summary; errors here aren't actionable
+		fmt.Fprintln(lw, "leg\talive\ttp\tintermediate\tsent\trecv\tinst_send\tinst_recv")
+		legs := t.lastSample.Legs
+		sort.Slice(legs, func(i, j int) bool {
+			return legs[i].RouteIndex < legs[j].RouteIndex
+		})
+		for _, l := range legs {
+			alive := "✓"
+			if !l.Alive {
+				alive = "✗"
+			}
+			inter := l.IntermediatePk
+			if inter == "" {
+				inter = "(direct)"
+			}
+			tp := l.TransportKind
+			if tp == "" {
+				tp = "-"
+			}
+			//nolint:errcheck // human-mode summary; errors here aren't actionable
+			fmt.Fprintf(lw, "R%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				l.RouteIndex, alive, tp, inter,
+				fmtBytes(uint64(l.BytesSent)), fmtBytes(uint64(l.BytesRecv)), //nolint:gosec // non-negative byte totals
+				fmtBps(l.InstSendBps), fmtBps(l.InstRecvBps))
+		}
+		lw.Flush() //nolint:errcheck,gosec
 	}
 
 	if t.done == nil {

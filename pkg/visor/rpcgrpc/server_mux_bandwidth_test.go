@@ -1,7 +1,9 @@
 package rpcgrpc
 
 import (
+	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -65,38 +67,42 @@ func TestMuxBwIntermediates(t *testing.T) {
 }
 
 // TestMuxBwRoutingHopsToInfoAndReverse pins the calc-route → explicit-dial
-// conversion: forward hops carry TpID/From/To (TpType intentionally dropped,
-// as PingContextWithRoute resolves by TpID), and the reverse is the forward
-// reversed with From/To swapped — matching the shape `route calc` emits and
-// `proxy mux set --legs` dials.
+// conversion: forward hops carry TpID/From/To (TpType filled from the
+// tpTypes map so the plan can serve as the per-leg telemetry identity source),
+// and the reverse is the forward reversed with From/To swapped — matching the
+// shape `route calc` emits and `proxy mux set --legs` dials.
 func TestMuxBwRoutingHopsToInfoAndReverse(t *testing.T) {
 	src := mustPK(t, "03cb5eb5741df4d66492f96f89b55861def1e23850583c499805d96e053f9bceac")
 	dst := mustPK(t, "0248bac07d82b54864959d293181ee6c3dc6e1771e28cca8dd80acac94e36aa164")
 	mid := mustPK(t, "02880cc291ef1620b7d69b3b7b5cadb30d2d97bfe9070e07f6f0c4b6f7a5c8a17a")
 	tp1 := uuid.New()
 	tp2 := uuid.New()
+	tpTypes := map[string]string{tp1.String(): "stcpr", tp2.String(): "sudph"}
 
 	fwd := muxBwRoutingHopsToInfo([]routing.Hop{
 		{From: src, To: mid, TpID: tp1},
 		{From: mid, To: dst, TpID: tp2},
-	})
+	}, tpTypes)
 	if len(fwd) != 2 {
 		t.Fatalf("forward len = %d, want 2", len(fwd))
 	}
 	if fwd[0].TpID != tp1.String() || fwd[0].From != src.String() || fwd[0].To != mid.String() {
 		t.Errorf("forward[0] = %+v", fwd[0])
 	}
-	if fwd[0].TpType != "" {
-		t.Errorf("TpType should be empty (resolved by TpID), got %q", fwd[0].TpType)
+	if fwd[0].TpType != "stcpr" {
+		t.Errorf("TpType should be filled from the type map, got %q", fwd[0].TpType)
 	}
 
 	rev := muxBwReverseHops(fwd)
 	if len(rev) != 2 {
 		t.Fatalf("reverse len = %d, want 2", len(rev))
 	}
-	// reverse[0] is forward[last] with From/To swapped.
+	// reverse[0] is forward[last] with From/To swapped; TpType is preserved.
 	if rev[0].TpID != tp2.String() || rev[0].From != dst.String() || rev[0].To != mid.String() {
 		t.Errorf("reverse[0] = %+v, want swapped last forward hop", rev[0])
+	}
+	if rev[0].TpType != "sudph" {
+		t.Errorf("reverse[0] TpType should be preserved, got %q", rev[0].TpType)
 	}
 	if rev[1].TpID != tp1.String() || rev[1].From != mid.String() || rev[1].To != src.String() {
 		t.Errorf("reverse[1] = %+v, want swapped first forward hop", rev[1])
@@ -347,4 +353,122 @@ func TestBuildRouteFailureEvent(t *testing.T) {
 			t.Error("ErrorMessage must be populated even when bytes are zero")
 		}
 	})
+}
+
+// TestMuxBwSamplerEmitsPerLeg pins requirement #3 of the per-leg
+// measurement work: the sampler must emit one MuxLegSample per route
+// alongside the aggregate, carrying that leg's identity (intermediate
+// PK + transport kind), cumulative bytes, and a non-zero instant rate
+// computed from the delta since the previous sample. The sampler
+// touches no PingServer fields, so a zero-value server is enough to
+// drive it — no VisorAPI mock required.
+func TestMuxBwSamplerEmitsPerLeg(t *testing.T) {
+	const (
+		midStcpr = "0323c77f295e4930dbb053b6109dae1a992a996e9858cb000a85636e5967c27ae9"
+	)
+
+	r0 := &muxBwRouteState{index: 0, intermediatePK: midStcpr, transportKind: "stcpr"}
+	r0.established.Store(true)
+	r0.activeFlag.Store(true)
+	r0.bytesSent.Store(40000)
+	r0.bytesRecv.Store(39000)
+
+	// r1 is a "direct" leg: no intermediate, and marked not-alive to
+	// prove the alive flag mirrors activeFlag rather than being hardcoded.
+	r1 := &muxBwRouteState{index: 1, intermediatePK: "", transportKind: "sudph"}
+	r1.established.Store(true)
+	r1.activeFlag.Store(false)
+	r1.bytesSent.Store(10000)
+	r1.bytesRecv.Store(9000)
+
+	routes := []*muxBwRouteState{r0, r1}
+	cfg := &muxBwCfg{SampleInterval: 15 * time.Millisecond}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var (
+		mu      sync.Mutex
+		got     *MuxBandwidthSample
+		gotOnce = make(chan struct{})
+	)
+	emit := func(p isMuxBandwidthEvent_Payload) {
+		s, ok := p.(*MuxBandwidthEvent_Sample)
+		if !ok {
+			return
+		}
+		mu.Lock()
+		if got == nil {
+			got = s.Sample
+			close(gotOnce)
+		}
+		mu.Unlock()
+	}
+
+	peakSend, peakRecv := 0.0, 0.0
+	go (&PingServer{}).muxBwSamplerLoop(ctx, cfg, routes, time.Now(), &peakSend, &peakRecv, emit)
+
+	select {
+	case <-gotOnce:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sampler emitted no MuxBandwidthSample within 2s")
+	}
+	cancel()
+
+	mu.Lock()
+	sample := got
+	mu.Unlock()
+
+	if len(sample.Legs) != 2 {
+		t.Fatalf("legs = %d, want 2", len(sample.Legs))
+	}
+
+	// Aggregate must still be the sum of the legs (backward-compatible).
+	if sample.BytesSent != 50000 || sample.BytesReceived != 48000 {
+		t.Errorf("aggregate bytes = %d/%d, want 50000/48000", sample.BytesSent, sample.BytesReceived)
+	}
+	if sample.ActiveRoutes != 1 {
+		t.Errorf("active_routes = %d, want 1 (only r0 alive)", sample.ActiveRoutes)
+	}
+
+	byIdx := map[int32]*MuxLegSample{}
+	for _, l := range sample.Legs {
+		byIdx[l.RouteIndex] = l
+	}
+
+	l0 := byIdx[0]
+	if l0 == nil {
+		t.Fatal("missing leg for route_index 0")
+	}
+	if l0.IntermediatePk != midStcpr {
+		t.Errorf("leg0 intermediate_pk = %q, want %q", l0.IntermediatePk, midStcpr)
+	}
+	if l0.TransportKind != "stcpr" {
+		t.Errorf("leg0 transport_kind = %q, want stcpr", l0.TransportKind)
+	}
+	if l0.BytesSent != 40000 || l0.BytesRecv != 39000 {
+		t.Errorf("leg0 bytes = %d/%d, want 40000/39000", l0.BytesSent, l0.BytesRecv)
+	}
+	if !l0.Alive {
+		t.Error("leg0 alive = false, want true")
+	}
+	// First sample's inst rate is delta-since-zero, so a leg that moved
+	// bytes must report a strictly positive rate.
+	if l0.InstSendBps <= 0 || l0.InstRecvBps <= 0 {
+		t.Errorf("leg0 inst rates = %.1f/%.1f, want > 0", l0.InstSendBps, l0.InstRecvBps)
+	}
+
+	l1 := byIdx[1]
+	if l1 == nil {
+		t.Fatal("missing leg for route_index 1")
+	}
+	if l1.IntermediatePk != "" {
+		t.Errorf("leg1 intermediate_pk = %q, want empty (direct)", l1.IntermediatePk)
+	}
+	if l1.TransportKind != "sudph" {
+		t.Errorf("leg1 transport_kind = %q, want sudph", l1.TransportKind)
+	}
+	if l1.Alive {
+		t.Error("leg1 alive = true, want false (activeFlag false)")
+	}
 }
