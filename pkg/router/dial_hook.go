@@ -269,10 +269,18 @@ type LegChangeHook interface {
 // Alive reflects whether the transport is currently serving (not
 // closed / nil).
 type LegInfo struct {
-	Index     int
-	Kind      string
-	LatencyMs int
-	Alive     bool
+	Index int
+	Kind  string
+	// TransportID is the leg transport's stable UUID
+	// (ManagedTransport.Entry.ID) as a string. Unlike Index — which
+	// shifts when legs are dropped/added and the tps[] slice compacts
+	// — TransportID identifies the same underlying transport across
+	// ticks, so an on_tick policy can key per-leg state (e.g. an EWMA
+	// of latency) by it and smooth signals over time. Empty for a nil
+	// leg slot.
+	TransportID string
+	LatencyMs   int
+	Alive       bool
 	// SentBytes / RecvBytes are the leg transport's cumulative
 	// payload-byte counters (ManagedTransport.GetBandwidth). Lets a
 	// policy's on_tick rotate a leg after it carries a byte threshold

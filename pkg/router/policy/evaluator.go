@@ -361,6 +361,7 @@ func (e *Evaluator) OnTick(ctx context.Context, rctx RoutingContext, legs []LegI
 type LegInfo struct {
 	Index       int
 	Kind        string
+	TransportID string
 	LatencyMs   int
 	Alive       bool
 	SentBytes   uint64

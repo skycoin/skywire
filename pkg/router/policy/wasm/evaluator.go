@@ -427,6 +427,7 @@ func wireFromLegs(legs []policy.LegInfo) []LegInfoWire {
 		out[i] = LegInfoWire{
 			Index:       l.Index,
 			Kind:        l.Kind,
+			TransportID: l.TransportID,
 			LatencyMs:   l.LatencyMs,
 			Alive:       l.Alive,
 			SentBytes:   l.SentBytes,
