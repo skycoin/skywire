@@ -63,6 +63,12 @@ type RoutingContextWire struct {
 type DecideInputWire struct {
 	Ctx        RoutingContextWire `json:"ctx"`
 	Candidates []CandidateWire    `json:"candidates"`
+	// Preset names the active preset when this module is the
+	// combined bundle (pkg/router/policy/wasm/presets/bundle.wasm),
+	// so its decide_route can dispatch by name. Empty for a plain
+	// single-preset @file.wasm module — single-preset guests ignore
+	// the unknown field, so populating it is ABI-compatible.
+	Preset string `json:"preset,omitempty"`
 }
 
 // LegChangeInputWire is the JSON envelope the host passes into
@@ -72,6 +78,8 @@ type LegChangeInputWire struct {
 	Ctx    RoutingContextWire `json:"ctx"`
 	Legs   []LegInfoWire      `json:"legs"`
 	Change LegChangeWire      `json:"change"`
+	// Preset — see DecideInputWire.Preset.
+	Preset string `json:"preset,omitempty"`
 }
 
 // RouteSpecWire mirrors policy.RouteSpec as a JSON wire type.
@@ -98,6 +106,8 @@ type RouteSpecWire struct {
 type TickInputWire struct {
 	Ctx  RoutingContextWire `json:"ctx"`
 	Legs []LegInfoWire      `json:"legs"`
+	// Preset — see DecideInputWire.Preset.
+	Preset string `json:"preset,omitempty"`
 }
 
 // RotationActionWire mirrors policy.RotationAction as a JSON wire

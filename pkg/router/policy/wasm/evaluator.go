@@ -66,6 +66,10 @@ type Evaluator struct {
 	clock    Clock
 	maxSteps int64
 	logger   func(format string, args ...interface{})
+	// preset, when non-empty, is stamped into the decide/tick/leg
+	// input wire so a combined bundle module can dispatch by name.
+	// Empty for a plain single-preset module.
+	preset string
 
 	mu           sync.Mutex
 	instance     api.Module
@@ -94,6 +98,13 @@ func WithLogger(f func(format string, args ...interface{})) Option {
 // WithClock injects a Clock for ctx.NowUnixNano stamping.
 func WithClock(c Clock) Option {
 	return func(e *Evaluator) { e.clock = c }
+}
+
+// WithPreset stamps the given preset name into every decide/tick/leg
+// input wire so the combined bundle module can dispatch by name. Leave
+// unset (empty) for a plain single-preset @file.wasm module.
+func WithPreset(name string) Option {
+	return func(e *Evaluator) { e.preset = name }
 }
 
 type systemClock struct{}
@@ -215,6 +226,7 @@ func (e *Evaluator) Decide(ctx context.Context, rctx policy.RoutingContext, cand
 	input := DecideInputWire{
 		Ctx:        wireFromCtx(rctx),
 		Candidates: wireFromCandidates(candidates),
+		Preset:     e.preset,
 	}
 	out, err := e.call(ctx, e.exportDecide, "decide_route", input)
 	if err != nil {
@@ -239,8 +251,9 @@ func (e *Evaluator) OnTick(ctx context.Context, rctx policy.RoutingContext, legs
 		rctx.Now = e.clock.Now()
 	}
 	input := TickInputWire{
-		Ctx:  wireFromCtx(rctx),
-		Legs: wireFromLegs(legs),
+		Ctx:    wireFromCtx(rctx),
+		Legs:   wireFromLegs(legs),
+		Preset: e.preset,
 	}
 	wire, err := e.callRotation(ctx, e.exportTick, "on_tick", input)
 	if err != nil {
@@ -319,6 +332,7 @@ func (e *Evaluator) OnLegChange(ctx context.Context, rctx policy.RoutingContext,
 		Ctx:    wireFromCtx(rctx),
 		Legs:   wireFromLegs(legs),
 		Change: LegChangeWire{Event: change.Event, LegIndex: change.LegIndex},
+		Preset: e.preset,
 	}
 	return e.callExport(ctx, e.exportLeg, "on_leg_change", input)
 }

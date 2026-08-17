@@ -41,8 +41,9 @@ func loadPolicyEngine(raw string, provider policy.Provider, logger func(string, 
 	// it falls through to the Starlark loader, which handles star
 	// presets (and errors on an unknown name).
 	if name, ok := strings.CutPrefix(raw, "preset:"); ok {
-		if mod, found := wasmpresets.Module(name); found {
-			l, err := policywasm.NewLoaderBytes(name, mod,
+		if wasmpresets.Has(name) {
+			l, err := policywasm.NewLoaderBytes(name, wasmpresets.Bundle(),
+				policywasm.WithPreset(name),
 				policywasm.WithLogger(logger),
 				policywasm.WithProvider(provider))
 			if err != nil {

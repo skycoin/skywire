@@ -23,16 +23,20 @@ func TestNames(t *testing.T) {
 	}
 }
 
-func TestModule(t *testing.T) {
-	mod, ok := Module("app-mux")
-	if !ok {
-		t.Fatal("Module(app-mux): not found")
+func TestHas(t *testing.T) {
+	for _, n := range []string{"app-mux", "rotating-bw"} {
+		if !Has(n) {
+			t.Errorf("Has(%q) = false, want true", n)
+		}
 	}
-	if len(mod) == 0 {
-		t.Error("Module(app-mux): empty bytes")
+	if Has("does-not-exist") {
+		t.Error("Has(does-not-exist) = true, want false")
 	}
-	if _, ok := Module("does-not-exist"); ok {
-		t.Error("Module(does-not-exist): expected ok=false")
+}
+
+func TestBundle(t *testing.T) {
+	if len(Bundle()) == 0 {
+		t.Error("Bundle(): empty bytes")
 	}
 }
 
@@ -56,17 +60,12 @@ func TestDescribe(t *testing.T) {
 	}
 }
 
-// TestAppMuxDecides loads the embedded app-mux module via the WASM
-// loader and asserts it decides mux=4/min_hops=2 for vpn-client — the
-// same contract pkg/router/policy/wasm/loader_test.go exercises against
-// the on-disk fixture, here proving the embedded copy is a working
-// module.
+// TestAppMuxDecides loads the embedded bundle with the app-mux preset
+// stamped and asserts it decides mux=4/min_hops=2 for vpn-client —
+// proving the combined module dispatches the app-mux logic correctly.
 func TestAppMuxDecides(t *testing.T) {
-	mod, ok := Module("app-mux")
-	if !ok {
-		t.Fatal("Module(app-mux): not found")
-	}
-	l, err := policywasm.NewLoaderBytes("app-mux", mod)
+	l, err := policywasm.NewLoaderBytes("app-mux", Bundle(),
+		policywasm.WithPreset("app-mux"))
 	if err != nil {
 		t.Fatalf("NewLoaderBytes: %v", err)
 	}
@@ -82,5 +81,37 @@ func TestAppMuxDecides(t *testing.T) {
 	}
 	if spec.MinHops != 2 {
 		t.Errorf("MinHops = %d, want 2", spec.MinHops)
+	}
+}
+
+// TestRotatingBWDecides loads the embedded bundle with the rotating-bw
+// preset stamped and asserts a skysocks-client dial gets the mux=4
+// multi-hop rotation spec — proving name dispatch selects the
+// rotating-bw logic (distinct from app-mux, which leaves skysocks-client
+// at defaults).
+func TestRotatingBWDecides(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("rotating-bw", Bundle(),
+		policywasm.WithPreset("rotating-bw"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	spec, err := l.Decide(context.Background(),
+		policy.RoutingContext{App: "skysocks-client"}, nil)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if spec.Mux != 4 {
+		t.Errorf("Mux = %d, want 4", spec.Mux)
+	}
+	if spec.MinHops != 2 {
+		t.Errorf("MinHops = %d, want 2", spec.MinHops)
+	}
+	if spec.RotationIntervalSeconds != 90 {
+		t.Errorf("RotationIntervalSeconds = %d, want 90", spec.RotationIntervalSeconds)
+	}
+	if spec.Distribution != "weighted: 1, 1, 1, 1" {
+		t.Errorf("Distribution = %q, want weighted: 1, 1, 1, 1", spec.Distribution)
 	}
 }
