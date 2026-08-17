@@ -733,6 +733,49 @@ message MuxBandwidthSample {
   // ActiveRoutes is how many of the Routes-requested routes are
   // still pumping. Drops when a route fails mid-run.
   int32 active_routes = 8;
+  // Legs is the per-route breakdown for this sample interval. One
+  // entry per established route, in route-index order. Additive to
+  // the aggregate fields above: consumers measuring adaptive routing
+  // policies read per-leg bandwidth + identity over time from here,
+  // while consumers wanting only the total keep using the aggregate
+  // fields. Empty on runs where no route came up.
+  repeated MuxLegSample legs = 9;
+}
+
+// MuxLegSample is one route's contribution within a single
+// MuxBandwidthSample interval. It carries both the leg's cumulative
+// byte counters and its per-interval instantaneous rates, plus the
+// identity fields (intermediate PK + first-hop transport kind) that
+// distinguish this leg from the others — so a policy-measurement
+// consumer can attribute throughput to a specific path over time.
+message MuxLegSample {
+  // RouteIndex is the same 0..Routes-1 index from the matching
+  // MuxRouteEstablished event, letting consumers join a leg's
+  // per-sample series back to its established path.
+  int32 route_index = 1;
+  // IntermediatePk is the first hop's `to` PK — the leg's
+  // distinguishing intermediate. Empty when the route is direct
+  // (single hop straight to the target, no intermediate).
+  string intermediate_pk = 2;
+  // TransportKind is the first hop's transport type (stcpr, sudph,
+  // dmsg, ...). Lets consumers correlate per-leg throughput with the
+  // carrier the leg egresses on.
+  string transport_kind = 3;
+  // BytesSent / BytesRecv are cumulative for this leg since pump
+  // start (NOT since the last sample) — same epoch as the aggregate
+  // MuxBandwidthSample.BytesSent.
+  int64 bytes_sent = 4;
+  int64 bytes_recv = 5;
+  // InstSendBps / InstRecvBps are this leg's per-interval rates
+  // (delta since the previous sample), in bits-per-second — mirrors
+  // how MuxBandwidthSample.InstantSendBps is computed for the
+  // aggregate.
+  double inst_send_bps = 6;
+  double inst_recv_bps = 7;
+  // Alive is the route's not-failed state — true while the leg's
+  // pump goroutine is still running. Matches the accounting behind
+  // MuxBandwidthSample.ActiveRoutes.
+  bool alive = 8;
 }
 
 // MuxRttProbe is one RTT measurement during the pump. Allows
