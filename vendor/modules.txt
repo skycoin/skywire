@@ -14,9 +14,36 @@ atomicgo.dev/schedule
 fyne.io/systray
 fyne.io/systray/internal/generated/menu
 fyne.io/systray/internal/generated/notifier
+# github.com/0magnet/afero v1.15.1-0.20260816202415-9f9d46a34dcd
+## explicit; go 1.25.0
+github.com/0magnet/afero
+github.com/0magnet/afero/internal/common
+github.com/0magnet/afero/mem
 # github.com/0magnet/coloredcobra v1.0.2
 ## explicit; go 1.15
 github.com/0magnet/coloredcobra
+# github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e
+## explicit; go 1.24
+github.com/0magnet/cosmos-go
+# github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf
+## explicit; go 1.25.0
+github.com/0magnet/sh/v3/expand
+github.com/0magnet/sh/v3/fileutil
+github.com/0magnet/sh/v3/internal
+github.com/0magnet/sh/v3/interp
+github.com/0magnet/sh/v3/pattern
+github.com/0magnet/sh/v3/syntax
+# github.com/0magnet/u-root v0.16.1-0.20260810212217-0890fe5099f9
+## explicit; go 1.25.7
+github.com/0magnet/u-root/pkg/ls
+# github.com/0magnet/websh v0.0.0-20260816200521-e9f14eb862c7
+## explicit; go 1.25.7
+github.com/0magnet/websh/shell
+github.com/0magnet/websh/shell/browser
+# github.com/0magnet/xterm-go v0.0.0-20260816193539-5beca79629c0
+## explicit; go 1.24
+github.com/0magnet/xterm-go
+github.com/0magnet/xterm-go/vt
 # github.com/ActiveState/termtest/conpty v0.5.0
 ## explicit; go 1.12
 github.com/ActiveState/termtest/conpty
@@ -984,8 +1011,8 @@ github.com/rivo/uniseg
 # github.com/robert-nix/ansihtml v1.0.1
 ## explicit; go 1.15
 github.com/robert-nix/ansihtml
-# github.com/rogpeppe/go-internal v1.14.1
-## explicit; go 1.23
+# github.com/rogpeppe/go-internal v1.15.0
+## explicit; go 1.25
 github.com/rogpeppe/go-internal/fmtsort
 # github.com/rs/cors v1.11.1
 ## explicit; go 1.13
@@ -1394,8 +1421,6 @@ golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
 golang.org/x/crypto/tea
 golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
-# golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
-## explicit; go 1.25.0
 # golang.org/x/image v0.45.0
 ## explicit; go 1.25.0
 golang.org/x/image/bmp
