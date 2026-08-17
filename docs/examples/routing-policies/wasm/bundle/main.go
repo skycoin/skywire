@@ -24,6 +24,7 @@ package main
 
 import (
 	"encoding/json"
+	"sort"
 	"unsafe"
 )
 
@@ -57,10 +58,14 @@ type decideInputWire struct {
 }
 
 type legInfoWire struct {
-	Index     int    `json:"index"`
-	Kind      string `json:"kind"`
-	LatencyMs int    `json:"latency_ms"`
-	Alive     bool   `json:"alive"`
+	Index       int      `json:"index"`
+	Kind        string   `json:"kind"`
+	LatencyMs   int      `json:"latency_ms"`
+	Alive       bool     `json:"alive"`
+	SentBytes   uint64   `json:"sent_bytes,omitempty"`
+	RecvBytes   uint64   `json:"recv_bytes,omitempty"`
+	Retransmits uint64   `json:"retransmits,omitempty"`
+	Hops        []string `json:"hops,omitempty"`
 }
 
 type tickInputWire struct {
@@ -127,6 +132,8 @@ func decideRoute(inPtr, inLen uint32) uint64 {
 	switch input.Preset {
 	case "rotating-bw":
 		spec = decideRotatingBW(input.Ctx)
+	case "latency-adaptive":
+		spec = decideLatencyAdaptive(input.Ctx)
 	case "app-mux":
 		spec = decideAppMux(input.Ctx)
 	default:
@@ -178,6 +185,28 @@ func decideRotatingBW(ctx routingContextWire) routeSpecWire {
 	return routeSpecWire{}
 }
 
+// decideLatencyAdaptive is the latency-adaptive preset's decide logic: an
+// ASYMMETRIC spec for bandwidth/proxy apps — a single lean, direct-ok
+// upstream leg (uploads are small) paired with a 4-way multi-hop
+// downstream fan-out (bulk downloads). RotationIntervalSeconds=30 keeps
+// on_tick firing so the downstream set can be re-evaluated and the
+// slowest leg evicted; Distribution "auto" lets the host weight bytes
+// toward the faster legs. Non-target apps get the empty spec (defaults).
+func decideLatencyAdaptive(ctx routingContextWire) routeSpecWire {
+	switch ctx.App {
+	case "vpn-client", "skysocks-client", "skynet-client":
+		return routeSpecWire{
+			ForwardMux:              1,
+			ForwardMinHops:          1,
+			ReverseMux:              4,
+			ReverseMinHops:          2,
+			RotationIntervalSeconds: 30,
+			Distribution:            "auto",
+		}
+	}
+	return routeSpecWire{}
+}
+
 // targetMux is the mux size the rotating-bw policy aims to maintain.
 // Kept in sync with the Mux value returned from decideRotatingBW so
 // on_tick can reason about "are we at target?"
@@ -189,12 +218,16 @@ func onTick(inPtr, inLen uint32) uint64 {
 	if err := json.Unmarshal(readInput(inPtr, inLen), &input); err != nil {
 		return 0
 	}
-	// Only rotating-bw has tick logic; app-mux and unknown presets are
-	// static, so they take no rotation action.
-	if input.Preset != "rotating-bw" {
+	// rotating-bw and latency-adaptive have tick logic; app-mux and
+	// unknown presets are static, so they take no rotation action.
+	switch input.Preset {
+	case "rotating-bw":
+		return tickRotatingBW(input)
+	case "latency-adaptive":
+		return tickLatencyAdaptive(input)
+	default:
 		return 0
 	}
-	return tickRotatingBW(input)
 }
 
 // tickRotatingBW is the verbatim rotating-bw rotation logic.
@@ -234,6 +267,90 @@ func tickRotatingBW(input tickInputWire) uint64 {
 			AddLeg: true,
 		}
 	}
+	out, err := json.Marshal(action)
+	if err != nil {
+		return 0
+	}
+	return writeOutput(out)
+}
+
+// tickLatencyAdaptive is the latency-adaptive rotation logic. It differs
+// from rotating-bw in what it evicts and WHEN:
+//
+//	rotating-bw drops the OLDEST alive leg every single tick — an
+//	unconditional churn that keeps the set drifting for
+//	traffic-analysis resistance.
+//
+//	latency-adaptive instead drops the SLOWEST alive leg, and ONLY when
+//	that leg is a clear outlier — its measured latency_ms is at least
+//	1.5x the median of the alive legs. This hysteresis band means: once
+//	the set has converged to a cluster of comparably-fast legs (worst <
+//	1.5x median), NO leg qualifies and the policy holds — no churn. It
+//	converges toward a low-latency disjoint set and then stops thrashing,
+//	the opposite of rotating-bw's every-tick rotation.
+//
+//	alive_count == 0            → no-op (nothing measured yet)
+//	alive_count <  target_mux   → add only (recover toward target; never
+//	                              shrink below it)
+//	alive_count >= target_mux &&
+//	  worst_latency > 0 &&
+//	  worst >= 1.5 * median     → drop slowest + add + exclude its hops
+//	                              (evict the outlier; exclude its
+//	                              intermediates so the replacement differs)
+//	otherwise (converged)       → no-op (hold; do not churn)
+func tickLatencyAdaptive(input tickInputWire) uint64 {
+	const targetMux = 4
+
+	aliveCount := 0
+	worstIdx := -1
+	worstLatency := -1
+	var lat []int
+	var worstHops []string
+	for _, l := range input.Legs {
+		if !l.Alive {
+			continue
+		}
+		aliveCount++
+		lat = append(lat, l.LatencyMs)
+		if l.LatencyMs > worstLatency {
+			worstLatency = l.LatencyMs
+			worstIdx = l.Index
+			worstHops = l.Hops
+		}
+	}
+	if aliveCount == 0 {
+		return 0
+	}
+	if aliveCount < targetMux {
+		return writeAction(rotationActionWire{AddLeg: true})
+	}
+
+	// Median latency of the alive legs.
+	sort.Ints(lat)
+	var median int
+	if n := len(lat); n%2 == 1 {
+		median = lat[n/2]
+	} else {
+		median = (lat[n/2-1] + lat[n/2]) / 2
+	}
+
+	// Hysteresis: only evict a clear outlier (worst >= 1.5x median).
+	// Once the set has converged (worst < 1.5x median) this is false for
+	// every leg, so we hold and stop churning. Integer form of
+	// worst >= 1.5*median is 2*worst >= 3*median.
+	if worstLatency > 0 && worstIdx >= 0 && 2*worstLatency >= 3*median {
+		return writeAction(rotationActionWire{
+			DropLegs:    []int{worstIdx},
+			AddLeg:      true,
+			ExcludeHops: worstHops,
+		})
+	}
+	// Converged: all alive legs comparably fast — hold.
+	return 0
+}
+
+// writeAction marshals a rotation action and packs it for the host.
+func writeAction(action rotationActionWire) uint64 {
 	out, err := json.Marshal(action)
 	if err != nil {
 		return 0
