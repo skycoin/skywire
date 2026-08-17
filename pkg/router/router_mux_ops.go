@@ -340,9 +340,18 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 			ExcludeDMSG:            true,
 		}
 
-		fwd, rev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
+		// Local calc FIRST, route-finder as fallback — mirroring establishMuxRoutes
+		// and addOneAuxForwardLeg. calculateLocalRoutes honors ExcludeTransportIDs
+		// (and ExcludeIntermediatePKs), so it returns a leg disjoint from the ones
+		// already in the group. The route-finder SERVICE ignores ExcludeTransportIDs,
+		// so querying it first for a direct pair hands back the very transport we are
+		// excluding; the append then rejects it ("refusing to append mux leg over
+		// transport already in the group") and the self-heal loops without ever
+		// growing. The route-finder is still the fallback for a disjoint deep-hop the
+		// local transport cache doesn't cover.
+		fwd, rev, err := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
 		if err != nil {
-			fwd, rev, err = r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
+			fwd, rev, err = r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
 		}
 		if err != nil {
 			consecutiveFailures++
