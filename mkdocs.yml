@@ -91,6 +91,7 @@ nav:
       - Auto-Update: packaging/auto-update.md
       - AUR Packages: packaging/aur-packages.md
   - Specs: specs/index.md
+  - Code Graph: graph/index.md
   - Glossary: glossary.md
   - Rewards: rewards/index.md
   - Blog: https://blog.theskywirenetwork.net
