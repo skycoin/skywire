@@ -312,7 +312,7 @@
     ensureHelper().then(function () {
       window.__mb.helperReady = true; window.__mb.step = 'helper-ready';
       setStep('visor', 'done'); setStep('route', 'active');
-      setStatus('Building a route over skywire…', 'Selecting an exit and establishing a private route to this site.');
+      setStatus('Routing this site over skywire…', 'Connecting through your proxy exit and fetching the page privately. Your mesh route to the exit is reused across sites; each site opens its own connection through it.');
     })
   ]).then(function () {
     window.__mb.step = 'fetching-top';
@@ -331,6 +331,20 @@
     setStep('route', 'done'); setStep('fetch', 'done');
     var html = '';
     if (res.body) { try { html = new TextDecoder('utf-8').decode(new Uint8Array(res.body)); } catch (e) { html = ''; } }
+    // A bare non-HTML payload (raw JSON, plain text) carries no document background
+    // of its own; written as-is it renders on the dark interstitial canvas with the
+    // browser's default black text — illegible. A normal browser shows raw JSON/text
+    // black-on-white, so when the body isn't markup (no leading '<') wrap it in a
+    // light, monospaced document to match that. HTML pages (leading '<') paint their
+    // own background and are written through untouched.
+    if (!/^\s*</.test(html)) {
+      var escd = html.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; });
+      html = '<!doctype html><meta charset=utf-8><meta name=color-scheme content=light>' +
+        '<style>html{background:#fff;color:#111;color-scheme:light}body{margin:0}' +
+        'pre{white-space:pre-wrap;word-break:break-word;margin:0;padding:1rem;' +
+        'font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style>' +
+        '<pre>' + escd + '</pre>';
+    }
     document.open();
     document.write(html);
     document.close();

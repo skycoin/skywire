@@ -67,6 +67,12 @@ type Terminal struct {
 	opened               bool
 
 	funcs []js.Func
+
+	// blinkTimer is the window.setInterval handle for the cursor-blink tick; it
+	// must be cleared in Dispose, otherwise the global interval keeps firing the
+	// (now-released) blink js.Func → "call to released function" every 600ms after
+	// the terminal is torn down (e.g. its window closed).
+	blinkTimer js.Value
 }
 
 // New creates a terminal (nil options = defaults).
@@ -154,7 +160,7 @@ func (t *Terminal) Open(parent js.Value) {
 		}
 		return nil
 	})
-	window.Call("setInterval", blink, 600)
+	t.blinkTimer = window.Call("setInterval", blink, 600)
 }
 
 func (t *Terminal) cursorBlinkEnabled() bool {
@@ -864,11 +870,21 @@ func (t *Terminal) Attach(ws js.Value, bidirectional bool) {
 
 // Dispose releases all registered JS callbacks and removes the DOM.
 func (t *Terminal) Dispose() {
+	// Stop the blink interval BEFORE releasing funcs — the global setInterval
+	// keeps firing regardless of DOM removal, and firing a released js.Func throws
+	// "call to released function". (Element event listeners die with removeChild;
+	// this window-scoped timer does not.)
+	if t.blinkTimer.Truthy() {
+		window.Call("clearInterval", t.blinkTimer)
+		t.blinkTimer = js.Undefined()
+	}
 	if t.resizeObserver.Truthy() {
 		t.resizeObserver.Call("disconnect")
 		t.resizeObserver = js.Value{}
 	}
-	if t.opened && !t.element.IsUndefined() {
+	// Mark closed first so any in-flight scheduleRender/rAF bails (it checks opened).
+	t.opened = false
+	if !t.element.IsUndefined() {
 		parent := t.element.Get("parentElement")
 		if !parent.IsNull() && !parent.IsUndefined() {
 			parent.Call("removeChild", t.element)
@@ -878,7 +894,6 @@ func (t *Terminal) Dispose() {
 		f.Release()
 	}
 	t.funcs = nil
-	t.opened = false
 }
 
 var stylesheetInstalled = false
