@@ -324,6 +324,17 @@ type RotationAction struct {
 	// as the disjoint-intermediate filter.
 	AddLeg      bool
 	ExcludeHops []string
+
+	// DemoteToStandby / PromoteFromStandby move legs between the active set
+	// and warm standby WITHOUT teardown: a demoted leg keeps its rules (the
+	// keepalive/liveness loops keep them alive) but is no longer selected for
+	// sending; promoting clears that instantly, with no route setup. This is
+	// the cheap alternative to Drop+re-dial for policy-driven leg moves — see
+	// docs/warm_standby_legs_rfc.md. Indices are current-tick leg indices, like
+	// DropLegs. Applied before DropLegs (which compacts) so the indices stay
+	// valid.
+	DemoteToStandby    []int
+	PromoteFromStandby []int
 }
 
 // RotationHook fires periodically per active route group, giving

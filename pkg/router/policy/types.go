@@ -210,4 +210,9 @@ type RotationAction struct {
 	DropLegs    []int
 	AddLeg      bool
 	ExcludeHops []string
+	// DemoteToStandby / PromoteFromStandby move legs to/from warm standby
+	// without teardown (kept alive, just not selected for sending). See
+	// router.RotationAction and docs/warm_standby_legs_rfc.md.
+	DemoteToStandby    []int
+	PromoteFromStandby []int
 }
