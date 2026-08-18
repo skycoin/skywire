@@ -280,9 +280,16 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 // mock or future alternative networker silently degrades to single-
 // route, preserving correctness with no extra plumbing).
 func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptionsReq) (net.Conn, error) {
-	if req == nil || (!req.Direct && req.MuxRoutes <= 1 && req.MinHops <= 1 &&
-		req.ForwardMinHops <= 1 && req.ReverseMinHops <= 1 &&
-		req.ForwardMuxRoutes <= 1 && req.ReverseMuxRoutes <= 1) {
+	// Take the default (global-inheriting) path only when the app requested
+	// NOTHING explicit — every per-call field left at its zero value. Any
+	// explicit value, INCLUDING 1, is a per-app override that must reach the
+	// networker: e.g. MuxRoutes=1 / MinHops=1 lets an app force a single /
+	// direct route out from under a visor-global min_hops/mux_routes>1 (which
+	// otherwise forces every skynet app dial into multi-hop mux — wrong for a
+	// 1:1 forward). Zero still means "inherit the visor-global default".
+	if req == nil || (!req.Direct && req.MuxRoutes == 0 && req.MinHops == 0 &&
+		req.ForwardMinHops == 0 && req.ReverseMinHops == 0 &&
+		req.ForwardMuxRoutes == 0 && req.ReverseMuxRoutes == 0) {
 		return appnet.DialContext(ctx, remote)
 	}
 	nw, err := appnet.ResolveNetworker(remote.Net)
