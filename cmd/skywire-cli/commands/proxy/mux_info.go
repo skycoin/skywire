@@ -18,15 +18,19 @@ import (
 )
 
 var (
-	muxInfoApp     string
-	muxInfoWatch   time.Duration
-	muxInfoVerbose bool
+	muxInfoApp      string
+	muxInfoWatch    time.Duration
+	muxInfoVerbose  bool
+	muxInfoNDJSON   string
+	muxInfoDuration time.Duration
 )
 
 func init() {
 	muxInfoCmd.Flags().StringVarP(&muxInfoApp, "name", "n", "skysocks-client", "app name to query (e.g. skysocks-client, vpn-client)")
 	muxInfoCmd.Flags().DurationVarP(&muxInfoWatch, "watch", "w", 0, "refresh interval; 0 prints once and exits (e.g. 1s, 500ms)")
 	muxInfoCmd.Flags().BoolVarP(&muxInfoVerbose, "verbose", "v", false, "show full PKs / transport IDs (default: short hex prefixes)")
+	muxInfoCmd.Flags().StringVar(&muxInfoNDJSON, "ndjson", "", "per-leg telemetry harness: stream NDJSON samples + lifecycle events to FILE ('-' for stdout); interval = --watch (default 1s)")
+	muxInfoCmd.Flags().DurationVar(&muxInfoDuration, "duration", 0, "with --ndjson: stop after this long (0 = until ctrl+c)")
 	addMuxSub(muxInfoCmd, "mux-info")
 }
 
@@ -55,6 +59,12 @@ Examples:
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
+
+		// Per-leg telemetry harness: NDJSON stream for the routing-policy rig.
+		if muxInfoNDJSON != "" {
+			runMuxTelemetry(cmd, func() (any, error) { return rpcClient.RouteGroupMuxInfo(muxInfoApp) })
+			return
+		}
 
 		// One-shot
 		if muxInfoWatch <= 0 {
@@ -113,6 +123,9 @@ type muxLegInfo struct {
 	SentPackets uint64  `json:"sent_packets"`
 	RecvBytes   uint64  `json:"recv_bytes"`
 	RecvPackets uint64  `json:"recv_packets"`
+	Retransmits uint64  `json:"retransmits"`
+	Alive       bool    `json:"alive"`
+	Standby     bool    `json:"standby"`
 }
 
 // muxRateTracker remembers the previous poll's per-leg byte counters so
