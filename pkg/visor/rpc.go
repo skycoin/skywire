@@ -75,6 +75,12 @@ type TransportSummary struct {
 	// ping/pong (or RSN-fallback for old peers). Zero means no
 	// measurement yet. Populated from tp.GetLatency().
 	LatencyMS float64 `json:"latency_ms,omitempty"`
+	// ThroughputBps is the passively-observed peak goodput (bytes/sec)
+	// this transport has carried — a measured CAPACITY lower-bound,
+	// distinct from RTT (a low-latency link can still be low-throughput,
+	// e.g. webrtc). Zero until real traffic has flowed. Populated from
+	// tp.GetThroughputBps().
+	ThroughputBps float64 `json:"throughput_bps,omitempty"`
 	// Initiator is true when this visor dialed out to establish the
 	// transport (outgoing); false when it accepted an inbound dial
 	// (incoming). The transport is bidirectional — this records only
@@ -90,14 +96,15 @@ type TransportLogEntry struct {
 
 func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, isSetup bool) *TransportSummary {
 	summary := &TransportSummary{
-		ID:        tp.Entry.ID,
-		Local:     tm.Local(),
-		Remote:    tp.Remote(),
-		Type:      tp.Type(),
-		IsSetup:   isSetup,
-		Label:     tp.Entry.Label,
-		LatencyMS: tp.GetLatency(),
-		Initiator: tp.IsInitiator(),
+		ID:            tp.Entry.ID,
+		Local:         tm.Local(),
+		Remote:        tp.Remote(),
+		Type:          tp.Type(),
+		IsSetup:       isSetup,
+		Label:         tp.Entry.Label,
+		LatencyMS:     tp.GetLatency(),
+		ThroughputBps: tp.GetThroughputBps(),
+		Initiator:     tp.IsInitiator(),
 	}
 	if includeLogs {
 		summary.Log = tp.LogEntry
