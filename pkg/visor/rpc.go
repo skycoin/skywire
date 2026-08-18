@@ -260,6 +260,13 @@ type MuxLegInfo struct {
 	SentPackets uint64  `json:"sent_packets"`
 	RecvBytes   uint64  `json:"recv_bytes"`
 	RecvPackets uint64  `json:"recv_packets"`
+	// Retransmits is SACK retransmit packets carried by this leg (loss
+	// signal). Alive/Standby are the leg's gate_state: Alive=false once the
+	// transport is closed; Standby=true for a warm standby (rules kept,
+	// not sending). Surfaced for the per-leg telemetry harness.
+	Retransmits uint64 `json:"retransmits"`
+	Alive       bool   `json:"alive"`
+	Standby     bool   `json:"standby"`
 }
 type FetchServiceDataIn struct {
 	Service string

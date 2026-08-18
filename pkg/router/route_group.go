@@ -299,6 +299,12 @@ type MuxLeg struct {
 	// LatencyMS is the transport-level smoothed RTT in ms (the same
 	// value 'tp ls' shows). Zero when no measurement yet.
 	LatencyMS float64 `json:"latency_ms"`
+	// Alive is false once the leg's transport is closed. Standby is true
+	// when the leg is a WARM STANDBY: rules kept alive but not selected
+	// for sending (see docs/warm_standby_legs_rfc.md). Together they are
+	// the leg's gate_state for the per-leg telemetry harness.
+	Alive   bool `json:"alive"`
+	Standby bool `json:"standby"`
 }
 
 // MuxStats returns a point-in-time snapshot of the rg's per-leg
@@ -331,6 +337,10 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 			leg.TpType = string(tp.Entry.Type)
 			leg.RemotePK = tp.Remote().String()
 			leg.LatencyMS = tp.GetLatency()
+			leg.Alive = !tp.IsClosed()
+		}
+		if rg.mux != nil {
+			leg.Standby = rg.mux.isLegStandby(i)
 		}
 		info.Legs = append(info.Legs, leg)
 	}

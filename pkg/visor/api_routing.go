@@ -133,6 +133,9 @@ func (v *Visor) RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error) {
 				SentPackets: leg.SentPackets,
 				RecvBytes:   leg.RecvBytes,
 				RecvPackets: leg.RecvPackets,
+				Retransmits: leg.Retransmits,
+				Alive:       leg.Alive,
+				Standby:     leg.Standby,
 			})
 		}
 		out = append(out, entry)
