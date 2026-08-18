@@ -96,6 +96,15 @@ type ManagedTransport struct {
 	latencyStats LatencyStats
 	latencyMx    sync.RWMutex
 
+	// Passive throughput estimate: the peak goodput this transport has been
+	// OBSERVED to carry (real traffic, no active probe → zero overhead). Guarded
+	// by throughputMx; last* hold the previous sample for the delta.
+	throughputBps     float64
+	throughputMx      sync.RWMutex
+	lastBwSampleNanos int64
+	lastBwSampleSent  uint64
+	lastBwSampleRecv  uint64
+
 	// pingReadyAtNanos is the Unix-nanos timestamp captured on the
 	// first tickPing call after the transport reaches the ready state
 	// (mt.transport != nil). Zero means not-yet-ready. Used by
@@ -286,6 +295,62 @@ func (mt *ManagedTransport) GetBandwidth() *BandwidthData {
 		SentBytes: atomic.LoadUint64(mt.LogEntry.SentBytes),
 		RecvBytes: atomic.LoadUint64(mt.LogEntry.RecvBytes),
 	}
+}
+
+// sampleThroughput folds the goodput achieved SINCE THE LAST SAMPLE into a
+// passive high-watermark capacity estimate. It only observes what real traffic
+// already did (cumulative byte counters) — it never sends anything — so it costs
+// zero bandwidth and never disrupts a live route. Idle intervals (no bytes) do
+// NOT lower the estimate: absence of traffic is not evidence of low capacity.
+// A transport carrying no traffic keeps its last observed peak.
+//
+// Capacity is a lower bound here: passive observation only sees what the traffic
+// used, so a lightly-loaded fast link reads low until it's exercised. The active
+// packet-pair probe (a later phase) fills that gap for idle transports; this
+// phase gives a free, always-correct "this transport HAS done at least X".
+func (mt *ManagedTransport) sampleThroughput(nowNanos int64) {
+	bw := mt.GetBandwidth()
+
+	mt.throughputMx.Lock()
+	defer mt.throughputMx.Unlock()
+
+	// First sample just seeds the baseline; a rate needs two points.
+	if mt.lastBwSampleNanos == 0 {
+		mt.lastBwSampleNanos = nowNanos
+		mt.lastBwSampleSent = bw.SentBytes
+		mt.lastBwSampleRecv = bw.RecvBytes
+		return
+	}
+	elapsed := float64(nowNanos-mt.lastBwSampleNanos) / 1e9
+	if elapsed <= 0 {
+		return
+	}
+	// Guard counter resets (transport re-created): a backwards delta is 0.
+	var d uint64
+	if bw.SentBytes >= mt.lastBwSampleSent {
+		d += bw.SentBytes - mt.lastBwSampleSent
+	}
+	if bw.RecvBytes >= mt.lastBwSampleRecv {
+		d += bw.RecvBytes - mt.lastBwSampleRecv
+	}
+	mt.lastBwSampleNanos = nowNanos
+	mt.lastBwSampleSent = bw.SentBytes
+	mt.lastBwSampleRecv = bw.RecvBytes
+
+	rate := float64(d) / elapsed
+	// High-watermark: capacity is AT LEAST the best goodput ever observed. Blend
+	// a new high with the prior so one spiky interval can't pin it outright.
+	if rate > mt.throughputBps {
+		mt.throughputBps = 0.6*rate + 0.4*mt.throughputBps
+	}
+}
+
+// GetThroughputBps returns the passively-observed peak goodput estimate in
+// bytes/sec (0 if the transport hasn't carried enough traffic to sample yet).
+func (mt *ManagedTransport) GetThroughputBps() float64 {
+	mt.throughputMx.RLock()
+	defer mt.throughputMx.RUnlock()
+	return mt.throughputBps
 }
 
 // transportPingInterval is how often a transport-level ping is sent.
