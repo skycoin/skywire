@@ -53,6 +53,14 @@ type Entry struct {
 
 	// Bandwidth is total bytes (sent + recv), not included in ToBinary/signatures
 	Bandwidth uint64 `json:"bandwidth,omitempty"`
+
+	// ThroughputBps is the PASSIVELY-observed peak goodput (sent+recv bytes/sec)
+	// this transport has achieved carrying real traffic — a lower-bound CAPACITY
+	// estimate, distinct from Latency (RTT, which is throughput-blind: a webrtc
+	// SCTP datachannel has low RTT but poor goodput). 0 until enough traffic has
+	// flowed to sample. Lets route ranking prefer transports MEASURED to be fast
+	// rather than guessing by type. Not part of ToBinary/signatures.
+	ThroughputBps float64 `json:"throughput_bps,omitempty"`
 }
 
 // MakeEntry creates a new transport entry
