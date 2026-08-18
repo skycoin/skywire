@@ -19,6 +19,7 @@ type LegInfoWire struct {
 	TransportID string   `json:"transport_id,omitempty"`
 	LatencyMs   int      `json:"latency_ms"`
 	Alive       bool     `json:"alive"`
+	Standby     bool     `json:"standby,omitempty"`
 	SentBytes   uint64   `json:"sent_bytes,omitempty"`
 	RecvBytes   uint64   `json:"recv_bytes,omitempty"`
 	Retransmits uint64   `json:"retransmits,omitempty"`
