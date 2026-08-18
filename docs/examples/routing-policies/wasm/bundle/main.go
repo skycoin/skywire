@@ -277,9 +277,17 @@ func decideProbeAndPrune(ctx routingContextWire) routeSpecWire {
 func decideAdaptive(ctx routingContextWire) routeSpecWire {
 	switch ctx.App {
 	case "vpn-client", "skysocks-client", "skynet-client":
+		// NOTE: no MinHops here on purpose. min-hops is a PRIVACY CONSTRAINT the
+		// operator owns (session --min-hops / visor config), not a knob for the
+		// performance policy to impose. Leaving it 0 means "inherit" — the
+		// router's EffectiveMinHops takes the strictest of the operator's floor
+		// and this spec, so adaptive optimizes WITHIN the operator's chosen
+		// floor: with the default floor it can use a fast low-hop path; with a
+		// privacy floor set it fans the mux out over multi-hop. Hardcoding
+		// MinHops=2 forced every dial onto slow multi-hop legs even when a fast
+		// direct path existed — measurably worse, not better.
 		return routeSpecWire{
 			Mux:                     adaptDecideMux,
-			MinHops:                 2,
 			RotationIntervalSeconds: 20,
 			Distribution:            "auto",
 		}
@@ -953,10 +961,19 @@ var (
 
 const (
 	// adaptDecideMux is the starting mux width decideAdaptive returns and the
-	// initial size target.
-	adaptDecideMux = 3
+	// initial size target. Start LEAN at 1: the router picks the single fastest
+	// available path, and the on_tick controller GROWS (up to adaptCap) only
+	// when that leg saturates. Starting wide (mux>1) forced every dial to drag
+	// traffic across disjoint sibling legs, which on a fleet with unequal legs
+	// (a fast direct/low-hop path next to slow multi-hop ones) is a throughput
+	// LOSS — the mux reorder buffer stalls on the slowest leg. Lean-start +
+	// grow-on-load keeps the common case fast and only pays for extra legs when
+	// there is load to justify them.
+	adaptDecideMux = 1
 	// adaptFloor / adaptCap bound the leg count the size dimension may reach.
-	adaptFloor = 2
+	// Floor 1 so an unsaturated session stays at its single fast leg; resilience
+	// comes from grow-on-failure + warm standbys, not from always-on wide mux.
+	adaptFloor = 1
 	adaptCap   = 6
 	// adaptAlpha is the EWMA smoothing factor for both the latency and the
 	// throughput signals (newest sample weighted 30%).
