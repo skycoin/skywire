@@ -38,6 +38,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	routeFinder "github.com/skycoin/skywire/pkg/route-finder/store"
 	"github.com/skycoin/skywire/pkg/routing"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // Defaults for unset MuxBandwidthRequest fields.
@@ -516,12 +517,20 @@ func (s *PingServer) muxBwPlanDisjointRoutes(
 		return nil, fmt.Errorf("no transport entries available")
 	}
 
-	// TpID -> carrier kind, so each planned hop can carry its transport
-	// type for per-leg telemetry (routing.Hop drops it).
+	// TpID -> carrier kind + measured throughput. The type feeds per-leg
+	// telemetry (routing.Hop drops it); both feed muxBwTransportCostMs so
+	// disjoint candidates are ranked by transport quality — a slow webrtc
+	// leg loses to a stcpr/quic one, mirroring the client-side ranking
+	// (pkg/router transportCostMs, PR #3989). Previously this planner took
+	// routes in BFS shortest-first order and skipped only for
+	// intermediate-disjointness, so webrtc legs were selected purely because
+	// BFS reached them first — measurably worse under load.
 	tpTypes := make(map[string]string, len(entries))
+	tpThroughput := make(map[string]float64, len(entries))
 	for _, e := range entries {
 		if e != nil {
 			tpTypes[e.ID.String()] = string(e.Type)
+			tpThroughput[e.ID.String()] = e.ThroughputBps
 		}
 	}
 
@@ -530,31 +539,119 @@ func (s *PingServer) muxBwPlanDisjointRoutes(
 		return nil, fmt.Errorf("build graph: %w", err)
 	}
 
-	plans := make([]muxBwRoutePlan, 0, count)
-	usedInter := make(map[cipher.PubKey]struct{})
+	// Collect a bounded candidate pool, then rank by summed transport cost so
+	// disjoint selection prefers fast transports. The cap keeps BFS work
+	// bounded while giving enough diversity to choose between transport types
+	// at the same hop-count.
+	type muxBwCandidate struct {
+		plan  muxBwRoutePlan
+		inter []cipher.PubKey
+		cost  float64
+		hops  int
+	}
+	const muxBwCandidateCap = 128
+	candidates := make([]muxBwCandidate, 0, muxBwCandidateCap)
 	streamErr := graph.StreamRoutesWithCap(ctx, srcPK, dstPK, minHops, maxHops, routeFinder.DefaultMaxBFSQueue,
 		func(r routing.Route) bool {
-			inter := muxBwIntermediates(r, srcPK, dstPK)
-			for _, pk := range inter {
-				if _, seen := usedInter[pk]; seen {
-					// Shares an intermediate with an already-selected
-					// route — not disjoint; keep searching.
-					return true
-				}
-			}
 			fwd := muxBwRoutingHopsToInfo(r.Hops, tpTypes)
-			plans = append(plans, muxBwRoutePlan{forward: fwd, reverse: muxBwReverseHops(fwd)})
-			for _, pk := range inter {
-				usedInter[pk] = struct{}{}
-			}
-			return len(plans) < count
+			candidates = append(candidates, muxBwCandidate{
+				plan:  muxBwRoutePlan{forward: fwd, reverse: muxBwReverseHops(fwd)},
+				inter: muxBwIntermediates(r, srcPK, dstPK),
+				cost:  muxBwRouteCostMs(r.Hops, tpTypes, tpThroughput),
+				hops:  len(r.Hops),
+			})
+			return len(candidates) < muxBwCandidateCap
 		})
 	// ErrRouteNotFound after emitting ≥1 route is a clean end-of-search,
 	// not a failure — same translation StreamCalcRoutes applies.
-	if streamErr != nil && (len(plans) == 0 || streamErr != routeFinder.ErrRouteNotFound) {
-		return plans, streamErr
+	if streamErr != nil && (len(candidates) == 0 || streamErr != routeFinder.ErrRouteNotFound) {
+		return nil, streamErr
+	}
+
+	// Cheapest (fastest transports) first; break ties toward fewer hops. Stable
+	// so equal-cost routes keep BFS order (shortest-first) as the sub-tie-break.
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].cost != candidates[j].cost {
+			return candidates[i].cost < candidates[j].cost
+		}
+		return candidates[i].hops < candidates[j].hops
+	})
+
+	plans := make([]muxBwRoutePlan, 0, count)
+	usedInter := make(map[cipher.PubKey]struct{})
+	for _, c := range candidates {
+		overlap := false
+		for _, pk := range c.inter {
+			if _, seen := usedInter[pk]; seen {
+				overlap = true
+				break
+			}
+		}
+		if overlap {
+			continue
+		}
+		plans = append(plans, c.plan)
+		for _, pk := range c.inter {
+			usedInter[pk] = struct{}{}
+		}
+		if len(plans) >= count {
+			break
+		}
 	}
 	return plans, nil
+}
+
+// muxBwRouteCostMs sums the per-hop transport cost across a route — the ranking
+// key that biases disjoint mux-leg selection toward fast transports. It mirrors
+// pkg/router.transportCostMs (PR #3989): a MEASURED throughput estimate
+// (throughput_bps > 0, from the passive observer / packet-pair probe) is used
+// directly, so a link measured fast scores 0 regardless of type and a congested
+// one is penalized regardless of type; the transport-type prior applies only
+// until a measurement exists. Kept in sync with that function by intent.
+func muxBwRouteCostMs(hops []routing.Hop, tpTypes map[string]string, tpThroughput map[string]float64) float64 {
+	var total float64
+	for _, h := range hops {
+		id := h.TpID.String()
+		total += muxBwTransportCostMs(tpTypes[id], tpThroughput[id])
+	}
+	return total
+}
+
+// muxBwTransportCostMs is the per-hop cost — a mirror of
+// pkg/router.transportCostMs / transportTypeCostMs (PR #3989). Bytes/sec
+// thresholds ≈ 40/10/2/0.4 Mbps; the type prior ranks stcpr/quic best and
+// webrtc/dmsg worst.
+func muxBwTransportCostMs(tpType string, throughputBps float64) float64 {
+	if throughputBps > 0 {
+		switch {
+		case throughputBps >= 5_000_000:
+			return 0
+		case throughputBps >= 1_250_000:
+			return 25
+		case throughputBps >= 250_000:
+			return 100
+		case throughputBps >= 50_000:
+			return 250
+		default:
+			return 400 // measured slow — worse than the webrtc prior
+		}
+	}
+	switch tptypes.Type(tpType) {
+	case tptypes.STCPR, tptypes.QUIC, tptypes.QUICLegacy, tptypes.QUICLegacy2:
+		return 0
+	case tptypes.SUDPH:
+		return 25
+	case tptypes.STCP:
+		return 50
+	case tptypes.WT, tptypes.WTLegacy, tptypes.WS, tptypes.WSLegacy:
+		return 150
+	case tptypes.WEBRTC:
+		return 300
+	case tptypes.DMSG:
+		return 400
+	default:
+		return 100 // unknown type — mild penalty, below webrtc
+	}
 }
 
 // muxBwIntermediates returns the DISTINCT intermediate visor PKs of a route
