@@ -310,9 +310,11 @@ func (e *Evaluator) callRotation(ctx context.Context, fn api.Function, name stri
 
 func rotationFromWire(w RotationActionWire) policy.RotationAction {
 	return policy.RotationAction{
-		DropLegs:    append([]int(nil), w.DropLegs...),
-		AddLeg:      w.AddLeg,
-		ExcludeHops: append([]string(nil), w.ExcludeHops...),
+		DropLegs:           append([]int(nil), w.DropLegs...),
+		AddLeg:             w.AddLeg,
+		ExcludeHops:        append([]string(nil), w.ExcludeHops...),
+		DemoteToStandby:    append([]int(nil), w.DemoteToStandby...),
+		PromoteFromStandby: append([]int(nil), w.PromoteFromStandby...),
 	}
 }
 
