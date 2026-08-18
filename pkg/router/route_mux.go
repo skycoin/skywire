@@ -203,6 +203,52 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 	return nil, nil, -1, ErrNoSuitableTransport
 }
 
+// selectFastestTransport picks the live, ready, non-standby leg with the LOWEST
+// measured latency — the pick for the RETRANSMIT path, independent of the
+// group's configured distribution mode.
+//
+// A retransmitted segment is one the receiver's reorder buffer is head-of-line
+// blocked on: every later segment that already arrived on a fast leg is being
+// withheld until this gap fills. Healing that gap on the FASTEST leg (rather
+// than the normal spray/weight pick, which might re-send it down the very slow
+// leg that stalled it) advances the delivery window in one fast RTT instead of
+// waiting out the reorder timeout. This is what keeps a slow leg from dragging
+// the whole stream: it still carries its share of new data, but its stragglers
+// are rescued on a fast path. Falls back to the first ready leg when no leg has
+// a latency measurement yet.
+func (m *routeMux) selectFastestTransport(tps []*transport.ManagedTransport, fwd []routing.Rule) (*transport.ManagedTransport, routing.Rule, int, error) {
+	if len(tps) == 0 {
+		return nil, nil, -1, ErrNoTransports
+	}
+	if len(fwd) == 0 {
+		return nil, nil, -1, ErrNoRules
+	}
+	bestIdx, firstReady := -1, -1
+	bestLat := -1.0
+	for idx, tp := range tps {
+		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
+			continue
+		}
+		if firstReady < 0 {
+			firstReady = idx
+		}
+		lat := tp.GetLatency()
+		if lat <= 0 {
+			continue // unknown latency — only a last resort
+		}
+		if bestLat < 0 || lat < bestLat {
+			bestLat, bestIdx = lat, idx
+		}
+	}
+	if bestIdx < 0 {
+		bestIdx = firstReady
+	}
+	if bestIdx < 0 {
+		return nil, nil, -1, ErrNoSuitableTransport
+	}
+	return tps[bestIdx], fwd[bestIdx], bestIdx, nil
+}
+
 // growLegs extends the per-leg counter slice to cover at least n
 // legs. Called when transports are appended to the rg (initial setup
 // + AppendRoute). Idempotent — extending past the current size is a
