@@ -281,6 +281,11 @@ type LegInfo struct {
 	TransportID string
 	LatencyMs   int
 	Alive       bool
+	// Standby is true when the leg is a WARM STANDBY: rules installed and
+	// kept alive, but not selected for sending. Lets an on_tick policy see the
+	// current gate state so it can promote a warm spare instead of a cold add,
+	// or demote a leg it wants to keep warm. See docs/warm_standby_legs_rfc.md.
+	Standby bool
 	// SentBytes / RecvBytes are the leg transport's cumulative
 	// payload-byte counters (ManagedTransport.GetBandwidth). Lets a
 	// policy's on_tick rotate a leg after it carries a byte threshold

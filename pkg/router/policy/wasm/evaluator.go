@@ -432,6 +432,7 @@ func wireFromLegs(legs []policy.LegInfo) []LegInfoWire {
 			TransportID: l.TransportID,
 			LatencyMs:   l.LatencyMs,
 			Alive:       l.Alive,
+			Standby:     l.Standby,
 			SentBytes:   l.SentBytes,
 			RecvBytes:   l.RecvBytes,
 			Retransmits: l.Retransmits,
