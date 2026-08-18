@@ -235,6 +235,9 @@ func (a *API) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Logger)
+	// gzip service-discovery JSON responses on the wire (skips small bodies,
+	// honors Vary; net/http clients get transparent gzip).
+	r.Use(middleware.Compress(5))
 	if a.enableMetrics {
 		r.Use(a.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)
