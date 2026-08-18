@@ -12,7 +12,7 @@ import (
 )
 
 func TestPageTransient(t *testing.T) {
-	p := Page("magnetosphere.net", "", false)
+	p := Page("magnetosphere.net", "", "skysocks", false)
 	for _, want := range []string{"<!doctype html>", "http-equiv=\"refresh\"", "skywire", "magnetosphere.net", "Building a route"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("transient page missing %q", want)
@@ -24,7 +24,7 @@ func TestPageTransient(t *testing.T) {
 }
 
 func TestPageError(t *testing.T) {
-	p := Page("example.dmsg", "no route to host", true)
+	p := Page("example.dmsg", "no route to host", "dmsg", true)
 	if strings.Contains(p, "http-equiv=\"refresh\"") {
 		t.Error("error page must not auto-refresh")
 	}
@@ -36,14 +36,14 @@ func TestPageError(t *testing.T) {
 }
 
 func TestPageEscapesTarget(t *testing.T) {
-	p := Page("<script>evil()</script>", "", false)
+	p := Page("<script>evil()</script>", "", "skysocks", false)
 	if strings.Contains(p, "<script>evil()") {
 		t.Error("target host was not HTML-escaped")
 	}
 }
 
 func TestConnServesHTTP(t *testing.T) {
-	c := Conn("host.skynet", "", false)
+	c := Conn("host.skynet", "", "skynet", false)
 	// Write (the browser's request) is discarded but must not error.
 	if _, err := c.Write([]byte("GET / HTTP/1.1\r\nHost: host.skynet\r\n\r\n")); err != nil {
 		t.Fatalf("write: %v", err)
@@ -84,7 +84,7 @@ func TestServeSOCKS5_HTTPPort(t *testing.T) {
 	cli, srv := net.Pipe()
 	defer cli.Close() //nolint:errcheck
 	done := make(chan error, 1)
-	go func() { done <- ServeSOCKS5(srv, ""); srv.Close() }() //nolint:errcheck,gosec
+	go func() { done <- ServeSOCKS5(srv, "", "skysocks"); srv.Close() }() //nolint:errcheck,gosec
 
 	_ = cli.SetDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
 	// greeting: VER=5, 1 method, no-auth
@@ -128,7 +128,7 @@ func TestServeSOCKS5_HTTPSDeclined(t *testing.T) {
 	cli, srv := net.Pipe()
 	defer cli.Close() //nolint:errcheck
 	done := make(chan error, 1)
-	go func() { done <- ServeSOCKS5(srv, ""); srv.Close() }() //nolint:errcheck,gosec
+	go func() { done <- ServeSOCKS5(srv, "", "skysocks"); srv.Close() }() //nolint:errcheck,gosec
 
 	_ = cli.SetDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
 	cli.Write([]byte{0x05, 0x01, 0x00})                  //nolint:errcheck,gosec
@@ -147,6 +147,36 @@ func TestDumpSamples(t *testing.T) {
 	if dir == "" {
 		t.Skip("set INTERSTITIAL_DUMP_DIR to dump sample HTML")
 	}
-	_ = os.WriteFile(dir+"/interstitial_transient.html", []byte(Page("magnetosphere.net", "", false)), 0644)       //nolint:errcheck,gosec
-	_ = os.WriteFile(dir+"/interstitial_error.html", []byte(Page("skycoin.dmsg", "no route to host", true)), 0644) //nolint:errcheck,gosec
+	_ = os.WriteFile(dir+"/interstitial_transient.html", []byte(Page("magnetosphere.net", "", "skysocks", false)), 0644)   //nolint:errcheck,gosec
+	_ = os.WriteFile(dir+"/interstitial_error.html", []byte(Page("skycoin.dmsg", "no route to host", "dmsg", true)), 0644) //nolint:errcheck,gosec
+}
+
+// TestPageMechanismAndSteps pins the interstitial-copy fixes: the fetch step
+// names the concrete mechanism (skysocks/dmsg/skynet, not a generic "over
+// skywire"), the misleading "Finding a working exit" / redundant "Reaching your
+// visor" steps are gone, and the branded Skywire cloud mark is present.
+func TestPageMechanismAndSteps(t *testing.T) {
+	for mech, want := range map[string]string{
+		"skysocks": "Fetching the page over skysocks",
+		"dmsg":     "Fetching the page over dmsg",
+		"skynet":   "Fetching the page over skynet",
+		"":         "Fetching the page over skywire", // unknown → generic
+	} {
+		p := Page("host.example", "", mech, false)
+		if !strings.Contains(p, want) {
+			t.Errorf("mechanism %q: page missing %q", mech, want)
+		}
+	}
+
+	p := Page("host.example", "", "skysocks", false)
+	for _, gone := range []string{"Finding a working exit", "Reaching your skywire visor"} {
+		if strings.Contains(p, gone) {
+			t.Errorf("page still contains stale step %q", gone)
+		}
+	}
+	for _, want := range []string{"Building a route across the mesh", "skcloud"} { // skcloud = the cloud-logo gradient
+		if !strings.Contains(p, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
 }

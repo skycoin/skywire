@@ -365,7 +365,8 @@ func (rt *meshInterstitialRT) RoundTrip(req *http.Request) (*http.Response, erro
 // upstream response (ModifyResponse's rewriteMeshLocation only touches 3xx, so a
 // 200/502 interstitial passes through untouched).
 func (rt *meshInterstitialRT) interstitialResponse(req *http.Request, detail string, isError bool) *http.Response {
-	body := proxyinterstitial.Page(meshInterstitialTarget(req), detail, isError)
+	target := meshInterstitialTarget(req)
+	body := proxyinterstitial.Page(target, detail, meshInterstitialMechanism(target), isError)
 	status := http.StatusOK
 	if isError {
 		status = http.StatusBadGateway
@@ -388,6 +389,21 @@ func (rt *meshInterstitialRT) interstitialResponse(req *http.Request, detail str
 
 // meshInterstitialTarget is the human-facing host shown on the interstitial:
 // prefer the upstream vhost, fall back to the inbound frame host.
+// meshInterstitialMechanism picks the forwarding-surface label for the
+// interstitial's fetch step from the target host: a ".skynet" host is served
+// over skynet, a ".dmsg" host over dmsg. Empty (→ generic "skywire") when the
+// target carries neither suffix.
+func meshInterstitialMechanism(target string) string {
+	switch {
+	case strings.Contains(target, "skynet"):
+		return "skynet"
+	case strings.Contains(target, "dmsg"):
+		return "dmsg"
+	default:
+		return ""
+	}
+}
+
 func meshInterstitialTarget(req *http.Request) string {
 	ctx := req.Context()
 	if vhost, _ := ctx.Value(meshVhostKey).(string); vhost != "" {
@@ -489,7 +505,8 @@ func (v *Visor) newMeshReverseProxy(resolve meshResolveFn) (*httputil.ReversePro
 			w.WriteHeader(status)
 			// proxyinterstitial.Page HTML-escapes target and detail, so the rendered
 			// document carries no unescaped request-derived content (no XSS).
-			_, _ = io.WriteString(w, proxyinterstitial.Page(meshInterstitialTarget(r), detail, isError)) //nolint:errcheck,gosec // G705: Page escapes all interpolated values
+			mt := meshInterstitialTarget(r)
+			_, _ = io.WriteString(w, proxyinterstitial.Page(mt, detail, meshInterstitialMechanism(mt), isError)) //nolint:errcheck,gosec // G705: Page escapes all interpolated values
 		},
 	}, nil
 }

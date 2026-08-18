@@ -250,7 +250,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					}
 					log.WithField("host", target).WithField("err", retErr).
 						Debug("SOCKS5 → serving branded route interstitial")
-					retConn, retErr = proxyinterstitial.Conn(target, "", false), nil
+					retConn, retErr = proxyinterstitial.Conn(target, "", "skynet", false), nil
 				}
 			}()
 

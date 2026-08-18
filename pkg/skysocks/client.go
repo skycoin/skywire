@@ -98,7 +98,7 @@ func (c *Client) ListenAndServe(addr string) error {
 			// ports. Runs in a goroutine that owns conn so the reconnect below
 			// isn't delayed by a slow browser.
 			go func(bc net.Conn) {
-				if serr := proxyinterstitial.ServeSOCKS5(bc, ""); serr != nil && c.appCl != nil {
+				if serr := proxyinterstitial.ServeSOCKS5(bc, "", "skysocks"); serr != nil && c.appCl != nil {
 					c.appCl.Log().Debugf("route-down interstitial not served: %v", serr)
 				}
 				bc.Close() //nolint:errcheck,gosec

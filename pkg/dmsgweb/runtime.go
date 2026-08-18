@@ -324,7 +324,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 					}
 					log.WithField("host", target).WithField("err", dialErr).
 						Debug("SOCKS5 → serving branded route interstitial")
-					conn, dialErr = proxyinterstitial.Conn(target, "", false), nil
+					conn, dialErr = proxyinterstitial.Conn(target, "", "dmsg", false), nil
 				}
 			}()
 
