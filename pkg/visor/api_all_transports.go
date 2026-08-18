@@ -18,6 +18,7 @@ package visor
 import (
 	"errors"
 
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	tpdapi "github.com/skycoin/skywire/pkg/transport-discovery/api"
 )
 
@@ -46,5 +47,7 @@ func (v *Visor) FetchAllTransportsCXO(withSelf bool) ([]byte, error) {
 	if !ok || len(body) == 0 {
 		return nil, ErrTPDAllTransportsNotReady
 	}
-	return body, nil
+	// The CXO publisher gzips the snapshot; return decompressed JSON to callers
+	// (raw bodies from an older publisher pass through unchanged).
+	return cxoutils.Gunzip(body), nil
 }
