@@ -1,6 +1,10 @@
 package transport
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/skycoin/skywire/pkg/routing"
+)
 
 // TestSampleThroughputHighWatermark pins the passive throughput estimator: it
 // tracks the peak observed goodput, and — critically — an IDLE or SLOW interval
@@ -63,5 +67,53 @@ func TestSampleThroughputCounterReset(t *testing.T) {
 	mt.sampleThroughput(base + 2*s)
 	if mt.GetThroughputBps() != 0 {
 		t.Errorf("counter reset must not produce a spurious rate, got %v", mt.GetThroughputBps())
+	}
+}
+
+// TestDispersionBps: bottleneck estimate = bytes-after-first / arrival span.
+func TestDispersionBps(t *testing.T) {
+	// 8 packets of 1400 B, last arrives 10 ms after first → 7*1400 B / 0.01 s.
+	got := dispersionBps(8, 0, 10_000_000, 1400)
+	want := float64(7*1400) / 0.010
+	if got != want {
+		t.Errorf("dispersionBps = %.0f, want %.0f", got, want)
+	}
+	// Degenerate inputs return 0 (never garbage).
+	if dispersionBps(1, 0, 10_000_000, 1400) != 0 {
+		t.Error("count<2 should be 0")
+	}
+	if dispersionBps(8, 100, 100, 1400) != 0 {
+		t.Error("zero span should be 0")
+	}
+	if dispersionBps(8, 200, 100, 1400) != 0 {
+		t.Error("negative span should be 0")
+	}
+}
+
+// TestHandleBwAckRaisesEstimate: a matching ack raises the throughput
+// high-watermark; a stale/absurd one is ignored.
+func TestHandleBwAckRaisesEstimate(t *testing.T) {
+	mt := NewManagedTransportForTest(nil)
+	mt.bwProbeID.Store(7)
+
+	// Matching probeID, 5 MB/s → estimate rises.
+	mt.handleBwAck(routing.MakeTransportBwAckPacket(7, 5_000_000))
+	if mt.GetThroughputBps() != 5_000_000 {
+		t.Fatalf("matching ack should set estimate to 5e6, got %v", mt.GetThroughputBps())
+	}
+	// Stale probeID → ignored.
+	mt.handleBwAck(routing.MakeTransportBwAckPacket(6, 50_000_000))
+	if mt.GetThroughputBps() != 5_000_000 {
+		t.Errorf("stale ack changed estimate: %v", mt.GetThroughputBps())
+	}
+	// Absurd value (> maxReasonableBps) → ignored.
+	mt.handleBwAck(routing.MakeTransportBwAckPacket(7, uint64(maxReasonableBps)+1))
+	if mt.GetThroughputBps() != 5_000_000 {
+		t.Errorf("absurd ack changed estimate: %v", mt.GetThroughputBps())
+	}
+	// A higher valid estimate raises it (active probe measures capacity).
+	mt.handleBwAck(routing.MakeTransportBwAckPacket(7, 20_000_000))
+	if mt.GetThroughputBps() != 20_000_000 {
+		t.Errorf("higher ack should raise estimate, got %v", mt.GetThroughputBps())
 	}
 }
