@@ -114,6 +114,11 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore, 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Recoverer)
+	// gzip responses on the wire — /uptimes is a fleet-wide JSON body polled
+	// constantly by the reward system + CLIs; it compresses ~80-90%. Clients
+	// using net/http get transparent gzip (Accept-Encoding auto-added +
+	// decoded); the middleware skips small bodies and honors Vary.
+	r.Use(middleware.Compress(5))
 	if enableMetrics {
 		r.Use(api.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)

@@ -66,6 +66,9 @@ func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr 
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	// gzip route-finder JSON responses on the wire (skips small bodies,
+	// honors Vary; net/http clients get transparent gzip).
+	r.Use(middleware.Compress(5))
 	if enableMetrics {
 		r.Use(api.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)
