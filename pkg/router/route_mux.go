@@ -92,6 +92,14 @@ type routeMux struct {
 	// stalls on the missing sequence, and the stream hangs until it is
 	// closed (the mux>=2 "0 bytes / close code 0" bug). Guarded by legMu.
 	ready []bool
+	// standby[i] marks leg i as a WARM STANDBY: its rules stay installed and
+	// the keepalive/liveness loops keep it alive, but it is never SELECTED for
+	// sending (folded into legReadyAt). A demoted leg still receives on its
+	// reverse rule — standby is a send-side decision. Promoting a standby leg
+	// is instant (clear the flag) with no route setup, vs the drop→re-dial
+	// tear-and-rebuild. Parallel to ready[]; grown/compacted in lockstep.
+	// Guarded by legMu. See docs/warm_standby_legs_rfc.md.
+	standby []bool
 }
 
 // reorderWindow bounds how far the receiver's reorder buffer will hold
@@ -209,6 +217,10 @@ func (m *routeMux) growLegs(n int) {
 		// not-ready and are marked ready on the first inbound packet.
 		m.ready = append(m.ready, len(m.ready) == 0)
 	}
+	for len(m.standby) < n {
+		// New legs are active, never standby.
+		m.standby = append(m.standby, false)
+	}
 	m.legMu.Unlock()
 }
 
@@ -252,6 +264,18 @@ func (m *routeMux) removeLegs(indices ...int) {
 			m.ready[0] = true // the (possibly newly-promoted) primary is always ready
 		}
 	}
+	if len(m.standby) > 0 {
+		kept := make([]bool, 0, len(m.standby))
+		for i, s := range m.standby {
+			if !drop[i] {
+				kept = append(kept, s)
+			}
+		}
+		m.standby = kept
+		if len(m.standby) > 0 {
+			m.standby[0] = false // the primary leg is never standby
+		}
+	}
 	m.legMu.Unlock()
 }
 
@@ -278,10 +302,40 @@ func (m *routeMux) legReadyAt(idx int) bool {
 	}
 	m.legMu.RLock()
 	defer m.legMu.RUnlock()
+	// A warm-standby leg is never selected for sending, regardless of
+	// readiness — its rules stay installed but it carries no forward traffic.
+	if idx < len(m.standby) && m.standby[idx] {
+		return false
+	}
 	if idx >= len(m.ready) {
 		return idx == 0
 	}
 	return m.ready[idx]
+}
+
+// setLegStandby marks (or clears) leg idx as a warm standby: kept alive but
+// not selected for sending. Bounds-checked; the primary leg (0) cannot be put
+// on standby (a group must always have a selectable send leg). Clearing the
+// flag PROMOTES the leg back to active instantly, with no route setup.
+func (m *routeMux) setLegStandby(idx int, standby bool) {
+	if idx <= 0 {
+		return // leg 0 is never standby
+	}
+	m.legMu.Lock()
+	if idx < len(m.standby) {
+		m.standby[idx] = standby
+	}
+	m.legMu.Unlock()
+}
+
+// isLegStandby reports whether leg idx is a warm standby. Bounds-checked.
+func (m *routeMux) isLegStandby(idx int) bool {
+	if idx < 0 {
+		return false
+	}
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	return idx < len(m.standby) && m.standby[idx]
 }
 
 // recordSent atomically increments the sent-bytes/packets counters
