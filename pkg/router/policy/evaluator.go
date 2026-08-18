@@ -364,6 +364,9 @@ type LegInfo struct {
 	TransportID string
 	LatencyMs   int
 	Alive       bool
+	// Standby mirrors router.LegInfo.Standby: true when the leg is a
+	// warm standby (rules kept alive, not selected for sending).
+	Standby     bool
 	SentBytes   uint64
 	RecvBytes   uint64
 	Retransmits uint64

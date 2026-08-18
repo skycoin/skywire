@@ -63,6 +63,7 @@ type legInfoWire struct {
 	TransportID string   `json:"transport_id"`
 	LatencyMs   int      `json:"latency_ms"`
 	Alive       bool     `json:"alive"`
+	Standby     bool     `json:"standby,omitempty"`
 	SentBytes   uint64   `json:"sent_bytes,omitempty"`
 	RecvBytes   uint64   `json:"recv_bytes,omitempty"`
 	Retransmits uint64   `json:"retransmits,omitempty"`
@@ -90,9 +91,11 @@ type routeSpecWire struct {
 }
 
 type rotationActionWire struct {
-	DropLegs    []int    `json:"drop_legs,omitempty"`
-	AddLeg      bool     `json:"add_leg,omitempty"`
-	ExcludeHops []string `json:"exclude_hops,omitempty"`
+	DropLegs           []int    `json:"drop_legs,omitempty"`
+	AddLeg             bool     `json:"add_leg,omitempty"`
+	ExcludeHops        []string `json:"exclude_hops,omitempty"`
+	DemoteToStandby    []int    `json:"demote_to_standby,omitempty"`
+	PromoteFromStandby []int    `json:"promote_from_standby,omitempty"`
 }
 
 // Required: host-driven memory management.
@@ -966,6 +969,11 @@ const (
 	adaptExploreEvery = 6
 	// adaptObserve is how many ticks a probe runs before it is judged.
 	adaptObserve = 3
+	// adaptStandbyMax caps the warm-standby pool. SHRINK parks an idle leg as a
+	// warm standby (rules kept alive, not sending) instead of tearing it down,
+	// so a later GROW / eviction can promote it with no setup-node round-trip
+	// and no capacity dip. Once the pool is full SHRINK really drops the leg.
+	adaptStandbyMax = 2
 )
 
 // tickAdaptive is the composite arbitrated controller. See the block comment
@@ -985,13 +993,27 @@ func tickAdaptive(input tickInputWire) uint64 {
 	}
 	var rawTotal float64
 	aliveCount := 0
+	standbyCount := 0
 	oldestAliveIdx := -1
+	promotableIdx := -1
 	for _, l := range input.Legs {
 		tid := l.TransportID
 		if tid != "" {
 			adaptSeen[tid] = true
 		}
 		if !l.Alive {
+			continue
+		}
+		// A warm standby is alive (rules kept, kept-alive) but not sending: it
+		// is a spare, not part of the active sending width. Record it as
+		// promotable and skip the active-leg accounting below (adaptAliveIdx,
+		// EWMA, throughput) so the size/latency/explore dimensions reason only
+		// over the legs actually carrying traffic.
+		if l.Standby {
+			standbyCount++
+			if promotableIdx == -1 || l.Index < promotableIdx {
+				promotableIdx = l.Index
+			}
 			continue
 		}
 		aliveCount++
@@ -1063,12 +1085,20 @@ func tickAdaptive(input tickInputWire) uint64 {
 
 	// --- Phase 2: arbitration — at most ONE structural action, by priority.
 
-	// 1. Nothing alive — nothing to act on.
+	// 1. Nothing active — promote a warm spare if one is parked, else nothing
+	// to act on. (All legs standby is degenerate but recoverable without setup.)
 	if aliveCount == 0 {
+		if promotableIdx >= 0 {
+			return writeAction(rotationActionWire{PromoteFromStandby: []int{promotableIdx}})
+		}
 		return 0
 	}
-	// 2. RECOVER: starved below the floor — refill (never gated on a probe).
+	// 2. RECOVER: starved below the floor. Promote a warm standby instantly if
+	// one exists (no setup, no dip); else add a fresh leg. Never gated on a probe.
 	if aliveCount < adaptFloor {
+		if promotableIdx >= 0 {
+			return writeAction(rotationActionWire{PromoteFromStandby: []int{promotableIdx}})
+		}
 		return writeAction(rotationActionWire{AddLeg: true})
 	}
 
@@ -1077,30 +1107,49 @@ func tickAdaptive(input tickInputWire) uint64 {
 	probeInFlight := adaptProbePending || adaptProbeTID != ""
 	if !probeInFlight {
 		// 3. MEMBERSHIP: evict the slowest-EWMA leg iff it is a >=1.5x-median
-		// outlier, and replace it (excluding its hops so the new leg differs).
+		// outlier. If a warm spare is parked, HOT-SWAP: promote it and demote
+		// the outlier in the SAME tick — the width never dips and the promoted
+		// leg needs no setup-node round-trip. The demoted leg stays warm, so a
+		// transient degradation can be undone by promoting it back later. Only
+		// when the pool is empty do we fall back to a cold drop+add.
 		if idx, hops, ok := adaptWorstOutlier(input.Legs); ok {
+			if promotableIdx >= 0 {
+				return writeAction(rotationActionWire{
+					PromoteFromStandby: []int{promotableIdx},
+					DemoteToStandby:    []int{idx},
+				})
+			}
 			return writeAction(rotationActionWire{
 				DropLegs:    []int{idx},
 				AddLeg:      true,
 				ExcludeHops: hops,
 			})
 		}
-		// 4. GROW: saturated and below the cap — add one leg to load.
+		// 4. GROW: saturated and below the cap. Promote a warm spare instantly
+		// if one is parked (no setup, no dip); else add one leg to load.
 		if saturated && aliveCount < adaptCap {
 			adaptTarget = aliveCount + 1
 			if adaptTarget > adaptCap {
 				adaptTarget = adaptCap
 			}
+			if promotableIdx >= 0 {
+				return writeAction(rotationActionWire{PromoteFromStandby: []int{promotableIdx}})
+			}
 			return writeAction(rotationActionWire{AddLeg: true})
 		}
-		// 5. SHRINK: sustained idle and above the floor — release the oldest
-		// leg. Reset the idle counter so we step down one leg per two idle
-		// ticks rather than collapsing to the floor at once.
+		// 5. SHRINK: sustained idle and above the floor. Park the oldest leg as
+		// a WARM STANDBY (rules kept alive, ready to promote) rather than tear
+		// it down — until the pool is full, then really drop it. Reset the idle
+		// counter so we step down one leg per two idle ticks rather than
+		// collapsing to the floor at once.
 		if adaptIdleCount >= 2 && aliveCount > adaptFloor {
 			adaptIdleCount = 0
 			adaptTarget = aliveCount - 1
 			if adaptTarget < adaptFloor {
 				adaptTarget = adaptFloor
+			}
+			if standbyCount < adaptStandbyMax {
+				return writeAction(rotationActionWire{DemoteToStandby: []int{oldestAliveIdx}})
 			}
 			return writeAction(rotationActionWire{DropLegs: []int{oldestAliveIdx}})
 		}
@@ -1120,7 +1169,7 @@ func adaptWorstOutlier(legs []legInfoWire) (int, []string, bool) {
 	var worstHops []string
 	var smoothed []float64
 	for _, l := range legs {
-		if !l.Alive {
+		if !l.Alive || l.Standby {
 			continue
 		}
 		sm, ok := adaptLatEWMA[l.TransportID]

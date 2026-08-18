@@ -772,6 +772,7 @@ func (rg *RouteGroup) snapshotLegs() []LegInfo {
 			}
 			if rg.mux != nil {
 				l.Retransmits = rg.mux.retransmitsAt(i)
+				l.Standby = rg.mux.isLegStandby(i)
 			}
 			l.Hops = sharedHops
 		}
