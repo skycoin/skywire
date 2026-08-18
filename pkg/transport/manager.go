@@ -220,8 +220,10 @@ func (tm *Manager) runTransportMaintenance(ctx context.Context) {
 
 	logTicker := time.NewTicker(logWriteInterval)
 	pingTicker := time.NewTicker(transportPingInterval)
+	bwProbeTicker := time.NewTicker(bwProbeInterval)
 	defer logTicker.Stop()
 	defer pingTicker.Stop()
+	defer bwProbeTicker.Stop()
 
 	for {
 		select {
@@ -233,7 +235,58 @@ func (tm *Manager) runTransportMaintenance(ctx context.Context) {
 			tm.recordAllTransportLogs()
 		case <-pingTicker.C:
 			tm.pingAllTransports()
+		case <-bwProbeTicker.C:
+			tm.probeUnmeasuredTransports()
 		}
+	}
+}
+
+const (
+	// bwProbeInterval is how often the maintenance loop runs a bounded
+	// bandwidth-probe pass.
+	bwProbeInterval = 90 * time.Second
+	// maxBwProbesPerPass caps how many transports are actively probed per pass,
+	// so the fleet-wide overhead stays a trickle (each probe ≈ 11 KB).
+	maxBwProbesPerPass = 3
+	// bwProbeStaleness is how long a transport's throughput estimate is trusted
+	// before it's eligible for a re-probe.
+	bwProbeStaleness = 30 * time.Minute
+)
+
+// probeUnmeasuredTransports sends a packet-pair bandwidth probe to a bounded
+// number of transports that have NO throughput estimate yet (passive
+// observation never saw enough traffic) OR whose estimate is stale — never more
+// than maxBwProbesPerPass per pass. Actively-carrying transports already have a
+// passive estimate, so they are skipped: real traffic is the best probe and it
+// costs nothing.
+func (tm *Manager) probeUnmeasuredTransports() {
+	tm.mx.RLock()
+	snapshot := make([]*ManagedTransport, 0, len(tm.tps))
+	for _, mt := range tm.tps {
+		snapshot = append(snapshot, mt)
+	}
+	tm.mx.RUnlock()
+
+	now := time.Now().UnixNano()
+	staleBefore := now - bwProbeStaleness.Nanoseconds()
+	sent := 0
+	for _, mt := range snapshot {
+		if sent >= maxBwProbesPerPass {
+			return
+		}
+		if mt.getTransport() == nil {
+			continue // not ready
+		}
+		// Skip transports that already have a fresh estimate (passive or a
+		// recent probe). Probe only the never-measured or long-stale ones.
+		if mt.GetThroughputBps() > 0 && mt.bwLastProbeNanos.Load() > staleBefore {
+			continue
+		}
+		if last := mt.bwLastProbeNanos.Load(); last > staleBefore {
+			continue // probed recently
+		}
+		mt.sendBwProbe()
+		sent++
 	}
 }
 
