@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>skywire mux per-leg telemetry</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 13px/1.4 system-ui, sans-serif; margin: 0; padding: 16px;
+         background: #0d1117; color: #c9d1d9; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .sub { color: #8b949e; margin: 0 0 12px; }
+  #drop { border: 1px dashed #30363d; border-radius: 8px; padding: 18px;
+          text-align: center; color: #8b949e; margin-bottom: 12px; }
+  #drop.hot { border-color: #58a6ff; color: #58a6ff; }
+  .controls { display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+              margin-bottom: 10px; }
+  label { user-select: none; }
+  canvas { width: 100%; background: #010409; border: 1px solid #21262d;
+           border-radius: 6px; display: block; margin-bottom: 12px; }
+  #legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+  .lg { display: flex; align-items: center; gap: 5px; }
+  .sw { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+  #stats { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  #stats th, #stats td { border: 1px solid #21262d; padding: 3px 8px; text-align: right; }
+  #stats th:first-child, #stats td:first-child { text-align: left; }
+  .muted { color: #8b949e; }
+  code { background: #161b22; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>skywire mux per-leg telemetry</h1>
+<p class="sub">Load an NDJSON produced by <code>skywire cli proxy mux info --ndjson FILE</code>.</p>
+<div id="drop">Drop <code>run.ndjson</code> here, or <input type="file" id="file" accept=".ndjson,.json,.jsonl,.txt"></div>
+<div class="controls">
+  <label><input type="checkbox" id="mRecv" checked> recv bps</label>
+  <label><input type="checkbox" id="mSend"> send bps</label>
+  <label><input type="checkbox" id="mAgg" checked> aggregate recv</label>
+  <label><input type="checkbox" id="mEvents" checked> policy events</label>
+  <span class="muted" id="summary"></span>
+</div>
+<div id="legend"></div>
+<canvas id="bw" height="300"></canvas>
+<canvas id="rtt" height="200"></canvas>
+<table id="stats"></table>
+
+<script>
+"use strict";
+const COLORS = ["#58a6ff","#3fb950","#f778ba","#d29922","#a371f7","#ff7b72","#79c0ff","#56d364"];
+const EVENT_COLOR = { established:"#3fb950", promoted:"#58a6ff", demoted:"#d29922", failed:"#ff7b72", dropped:"#8b949e" };
+let MODEL = null;
+
+function parseNDJSON(text) {
+  const legs = new Map();      // key legKey -> {rg, idx, kind, color, pts:[{t,send,recv,rtt}]}
+  const events = [];           // {t, type, idx, rg}
+  let t0 = null;
+  const order = [];
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    const s = line.trim();
+    if (!s) continue;
+    let r; try { r = JSON.parse(s); } catch { continue; }
+    if (!r.ts || !r.type) continue;
+    const t = Date.parse(r.ts);
+    if (isNaN(t)) continue;
+    if (t0 === null) t0 = t;
+    const rel = (t - t0) / 1000;
+    if (r.type === "sample") {
+      for (const l of (r.legs || [])) {
+        const key = (r.rg||"") + "#" + l.route_index;
+        let leg = legs.get(key);
+        if (!leg) {
+          leg = { rg:r.rg, idx:l.route_index, kind:l.transport_kind, pk:l.intermediate_pk,
+                  color: COLORS[order.length % COLORS.length], pts:[] };
+          legs.set(key, leg); order.push(key);
+        }
+        leg.pts.push({ t:rel, send:+l.inst_send_bps||0, recv:+l.inst_recv_bps||0,
+                       rtt:+l.rtt_ms||0, gate:l.gate_state });
+      }
+    } else {
+      events.push({ t:rel, type:r.type, idx:r.route_index, rg:r.rg });
+    }
+  }
+  let tMax = 0;
+  for (const leg of legs.values()) for (const p of leg.pts) if (p.t > tMax) tMax = p.t;
+  for (const e of events) if (e.t > tMax) tMax = e.t;
+  return { legs, order, events, tMax: tMax || 1 };
+}
+
+function humanBps(v) {
+  if (v >= 1e9) return (v/1e9).toFixed(1)+"G";
+  if (v >= 1e6) return (v/1e6).toFixed(1)+"M";
+  if (v >= 1e3) return (v/1e3).toFixed(1)+"k";
+  return v.toFixed(0);
+}
+function median(a){ if(!a.length) return 0; const b=[...a].sort((x,y)=>x-y); const m=b.length>>1;
+  return b.length%2 ? b[m] : (b[m-1]+b[m])/2; }
+
+function drawChart(canvas, series, opts) {
+  const dpr = window.devicePixelRatio || 1;
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  canvas.width = cw*dpr; canvas.height = ch*dpr;
+  const g = canvas.getContext("2d"); g.scale(dpr,dpr);
+  g.clearRect(0,0,cw,ch);
+  const padL=64, padR=12, padT=12, padB=22;
+  const W=cw-padL-padR, H=ch-padT-padB;
+  const tMax = MODEL.tMax;
+  let yMax = 0;
+  for (const s of series) for (const p of s.pts) if (p.v > yMax) yMax = p.v;
+  yMax = yMax*1.1 || 1;
+  const X = t => padL + (t/tMax)*W;
+  const Y = v => padT + H - (v/yMax)*H;
+
+  // axes + gridlines
+  g.strokeStyle="#21262d"; g.fillStyle="#8b949e"; g.lineWidth=1; g.font="11px system-ui";
+  for (let i=0;i<=4;i++){ const v=yMax*i/4, y=Y(v);
+    g.beginPath(); g.moveTo(padL,y); g.lineTo(padL+W,y); g.stroke();
+    g.textAlign="right"; g.textBaseline="middle"; g.fillText(opts.fmt(v), padL-6, y); }
+  for (let i=0;i<=6;i++){ const t=tMax*i/6, x=X(t);
+    g.textAlign="center"; g.textBaseline="top"; g.fillText(t.toFixed(0)+"s", x, padT+H+4); }
+
+  // event markers
+  if (opts.events) {
+    for (const e of MODEL.events) {
+      const x=X(e.t); g.strokeStyle=EVENT_COLOR[e.type]||"#8b949e";
+      g.globalAlpha=0.5; g.setLineDash([3,3]);
+      g.beginPath(); g.moveTo(x,padT); g.lineTo(x,padT+H); g.stroke();
+      g.setLineDash([]); g.globalAlpha=1;
+    }
+  }
+  // series
+  for (const s of series) {
+    g.strokeStyle=s.color; g.lineWidth=s.width||1.6; g.globalAlpha=s.alpha||1;
+    if (s.dash) g.setLineDash(s.dash); else g.setLineDash([]);
+    g.beginPath(); let started=false;
+    for (const p of s.pts){ const x=X(p.t), y=Y(p.v);
+      if(!started){g.moveTo(x,y);started=true;} else g.lineTo(x,y); }
+    g.stroke(); g.setLineDash([]); g.globalAlpha=1;
+  }
+}
+
+function render() {
+  if (!MODEL) return;
+  const showRecv=mRecv.checked, showSend=mSend.checked, showAgg=mAgg.checked, showEv=mEvents.checked;
+  const bwSeries=[], rttSeries=[];
+  for (const key of MODEL.order) {
+    const leg = MODEL.legs.get(key);
+    if (showRecv) bwSeries.push({color:leg.color, pts:leg.pts.map(p=>({t:p.t,v:p.recv}))});
+    if (showSend) bwSeries.push({color:leg.color, dash:[4,3], alpha:0.8, pts:leg.pts.map(p=>({t:p.t,v:p.send}))});
+    rttSeries.push({color:leg.color, pts:leg.pts.map(p=>({t:p.t,v:p.rtt}))});
+  }
+  if (showAgg) {
+    // aggregate recv across legs at each distinct timestamp
+    const byT=new Map();
+    for (const leg of MODEL.legs.values()) for (const p of leg.pts)
+      byT.set(p.t,(byT.get(p.t)||0)+p.recv);
+    const pts=[...byT.entries()].sort((a,b)=>a[0]-b[0]).map(([t,v])=>({t,v}));
+    bwSeries.push({color:"#ffffff", width:2.4, pts});
+  }
+  drawChart(bw, bwSeries, {fmt:v=>humanBps(v)+"B/s", events:showEv});
+  drawChart(rtt, rttSeries, {fmt:v=>v.toFixed(0)+"ms", events:showEv});
+  renderLegend(); renderStats();
+  summary.textContent = `${MODEL.legs.size} legs · ${MODEL.events.length} events · ${MODEL.tMax.toFixed(0)}s`;
+}
+
+function renderLegend() {
+  legend.innerHTML="";
+  for (const key of MODEL.order) {
+    const leg=MODEL.legs.get(key);
+    const d=document.createElement("div"); d.className="lg";
+    const pk=(leg.pk||"").slice(0,6);
+    d.innerHTML=`<span class="sw" style="background:${leg.color}"></span>leg ${leg.idx} <span class="muted">${leg.kind||""} ${pk?("· "+pk+"…"):""}</span>`;
+    legend.appendChild(d);
+  }
+}
+
+function renderStats() {
+  let h="<tr><th>leg</th><th>kind</th><th>median recv</th><th>median send</th><th>median rtt</th><th>max retx?</th><th>samples</th></tr>";
+  for (const key of MODEL.order) {
+    const leg=MODEL.legs.get(key);
+    const mr=median(leg.pts.map(p=>p.recv)), ms=median(leg.pts.map(p=>p.send)), mrt=median(leg.pts.map(p=>p.rtt));
+    h+=`<tr><td>${leg.idx}</td><td>${leg.kind||""}</td><td>${humanBps(mr)}B/s</td><td>${humanBps(ms)}B/s</td><td>${mrt.toFixed(0)}ms</td><td>-</td><td>${leg.pts.length}</td></tr>`;
+  }
+  stats.innerHTML=h;
+}
+
+function load(text){ MODEL=parseNDJSON(text); render(); }
+
+const drop=document.getElementById("drop");
+document.getElementById("file").addEventListener("change", e=>{
+  const f=e.target.files[0]; if(!f) return; f.text().then(load);
+});
+["dragover","dragenter"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("hot");}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("hot");}));
+drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) f.text().then(load); });
+for (const id of ["mRecv","mSend","mAgg","mEvents"]) document.getElementById(id).addEventListener("change", render);
+window.addEventListener("resize", render);
+</script>
+</body>
+</html>
