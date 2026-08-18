@@ -236,3 +236,49 @@ func TestAdaptiveDecides(t *testing.T) {
 		t.Errorf("RotationIntervalSeconds = %d, want 20", spec.RotationIntervalSeconds)
 	}
 }
+
+// TestAdaptiveHotSwapsToWarmStandby drives the composite adaptive preset's
+// on_tick with three active legs — one a >=1.5x-median latency outlier — plus
+// one warm standby leg, and asserts it emits the NO-DIP HOT-SWAP: promote the
+// parked spare AND demote the outlier in the SAME action, with no DropLegs and
+// no AddLeg. This proves the gate-5 warm-standby primitive is not just wired
+// through the ABI but actually exercised by the default policy: a degraded leg
+// is swapped for a warm one with no setup-node round-trip and no width dip.
+// See docs/warm_standby_legs_rfc.md.
+func TestAdaptiveHotSwapsToWarmStandby(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("adaptive", Bundle(),
+		policywasm.WithPreset("adaptive"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	// Three active legs: two fast (50ms), one slow (500ms) — a >=1.5x-median
+	// outlier. Leg 3 is a warm standby (Alive but Standby), so the arbiter can
+	// hot-swap instead of a cold drop+add. Distinct transport_ids so the guest's
+	// per-transport EWMA seeds one smoothed sample each on this first tick.
+	legs := []policy.LegInfo{
+		{Index: 0, TransportID: "tid-a", Kind: "dmsg", LatencyMs: 50, Alive: true},
+		{Index: 1, TransportID: "tid-b", Kind: "dmsg", LatencyMs: 50, Alive: true},
+		{Index: 2, TransportID: "tid-c", Kind: "dmsg", LatencyMs: 500, Alive: true},
+		{Index: 3, TransportID: "tid-d", Kind: "dmsg", LatencyMs: 40, Alive: true, Standby: true},
+	}
+	act, err := l.OnTick(context.Background(),
+		policy.RoutingContext{App: "skysocks-client"}, legs)
+	if err != nil {
+		t.Fatalf("OnTick: %v", err)
+	}
+	if len(act.PromoteFromStandby) != 1 || act.PromoteFromStandby[0] != 3 {
+		t.Errorf("PromoteFromStandby = %v, want [3] (the warm spare)", act.PromoteFromStandby)
+	}
+	if len(act.DemoteToStandby) != 1 || act.DemoteToStandby[0] != 2 {
+		t.Errorf("DemoteToStandby = %v, want [2] (the latency outlier)", act.DemoteToStandby)
+	}
+	// The whole point of the hot-swap: no teardown, no cold add.
+	if len(act.DropLegs) != 0 {
+		t.Errorf("DropLegs = %v, want none (hot-swap must not tear down)", act.DropLegs)
+	}
+	if act.AddLeg {
+		t.Error("AddLeg = true, want false (promote a warm spare, not a cold add)")
+	}
+}
