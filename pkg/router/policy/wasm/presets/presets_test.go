@@ -10,7 +10,7 @@ import (
 
 func TestNames(t *testing.T) {
 	names := Names()
-	want := map[string]bool{"app-mux": false, "rotating-bw": false, "latency-adaptive": false, "elastic-mux": false, "probe-and-prune": false}
+	want := map[string]bool{"app-mux": false, "rotating-bw": false, "latency-adaptive": false, "elastic-mux": false, "probe-and-prune": false, "adaptive": false}
 	for _, n := range names {
 		if _, ok := want[n]; ok {
 			want[n] = true
@@ -24,7 +24,7 @@ func TestNames(t *testing.T) {
 }
 
 func TestHas(t *testing.T) {
-	for _, n := range []string{"app-mux", "rotating-bw", "latency-adaptive", "elastic-mux", "probe-and-prune"} {
+	for _, n := range []string{"app-mux", "rotating-bw", "latency-adaptive", "elastic-mux", "probe-and-prune", "adaptive"} {
 		if !Has(n) {
 			t.Errorf("Has(%q) = false, want true", n)
 		}
@@ -47,6 +47,7 @@ func TestDescribe(t *testing.T) {
 		"latency-adaptive": "latency-adaptive — mux=4 multi-hop that evicts the slowest leg each 30s (when its EWMA-smoothed latency is a >=1.5x-median outlier) until the leg set converges to low-latency disjoint paths, then holds (hysteresis-damped; no churn once converged).",
 		"elastic-mux":      "elastic-mux — AIMD scaling of the mux leg count to load: grows a leg (up to 6) when the group is saturated, releases one (down to 2) when idle.",
 		"probe-and-prune":  "probe-and-prune — periodically adds one speculative leg over a fresh path, observes its EWMA latency a few ticks, and keeps it only if it beats the current worst leg (continuous explore/exploit).",
+		"adaptive":         "adaptive — the combined performance default: scales the mux leg count to load (AIMD), evicts the slowest leg toward low-latency convergence, and periodically probes a fresh path and keeps it only if it is better — one arbitrated action per tick.",
 	}
 	for name, want := range cases {
 		got, ok := Describe(name)
@@ -204,5 +205,34 @@ func TestProbeAndPruneDecides(t *testing.T) {
 	}
 	if spec.RotationIntervalSeconds != 30 {
 		t.Errorf("RotationIntervalSeconds = %d, want 30", spec.RotationIntervalSeconds)
+	}
+}
+
+// TestAdaptiveDecides loads the embedded bundle with the composite adaptive
+// preset stamped and asserts a skysocks-client dial gets the converged middle
+// spec (mux=3/min_hops=2, re-evaluated every 20s) that tickAdaptive then
+// steers along all three performance dimensions — proving name dispatch
+// selects the adaptive logic.
+func TestAdaptiveDecides(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("adaptive", Bundle(),
+		policywasm.WithPreset("adaptive"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	spec, err := l.Decide(context.Background(),
+		policy.RoutingContext{App: "skysocks-client"}, nil)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if spec.Mux != 3 {
+		t.Errorf("Mux = %d, want 3", spec.Mux)
+	}
+	if spec.MinHops != 2 {
+		t.Errorf("MinHops = %d, want 2", spec.MinHops)
+	}
+	if spec.RotationIntervalSeconds != 20 {
+		t.Errorf("RotationIntervalSeconds = %d, want 20", spec.RotationIntervalSeconds)
 	}
 }
