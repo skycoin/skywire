@@ -119,7 +119,9 @@ type TickInputWire struct {
 // in — they are not stable across ticks. Policies must re-read
 // the legs slice each tick.
 type RotationActionWire struct {
-	DropLegs    []int    `json:"drop_legs,omitempty"`
-	AddLeg      bool     `json:"add_leg,omitempty"`
-	ExcludeHops []string `json:"exclude_hops,omitempty"`
+	DropLegs           []int    `json:"drop_legs,omitempty"`
+	AddLeg             bool     `json:"add_leg,omitempty"`
+	ExcludeHops        []string `json:"exclude_hops,omitempty"`
+	DemoteToStandby    []int    `json:"demote_to_standby,omitempty"`
+	PromoteFromStandby []int    `json:"promote_from_standby,omitempty"`
 }

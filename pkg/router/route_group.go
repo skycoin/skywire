@@ -1045,8 +1045,22 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 		return
 	}
 	action := hook.OnTick(info, legs)
-	if len(action.DropLegs) == 0 && !action.AddLeg {
+	if len(action.DropLegs) == 0 && !action.AddLeg &&
+		len(action.DemoteToStandby) == 0 && len(action.PromoteFromStandby) == 0 {
 		return
+	}
+
+	// Promote/demote first: they only flip the mux's per-leg standby flag (no
+	// teardown, no compaction), so they must run on the pre-drop indices. A
+	// demoted leg stays in tps[] — kept alive by the keepalive/liveness loops —
+	// but is skipped by selectTransport; promoting re-selects it instantly.
+	if rg.mux != nil {
+		for _, idx := range action.PromoteFromStandby {
+			rg.mux.setLegStandby(idx, false)
+		}
+		for _, idx := range action.DemoteToStandby {
+			rg.mux.setLegStandby(idx, true)
+		}
 	}
 
 	if len(action.DropLegs) > 0 {
