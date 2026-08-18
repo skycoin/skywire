@@ -250,8 +250,12 @@ func (tm *Manager) recordAllTransportLogs() {
 	}
 	tm.mx.RUnlock()
 
+	now := time.Now().UnixNano()
 	for _, mt := range snapshot {
 		mt.recordLog()
+		// Passively fold this interval's observed goodput into the transport's
+		// throughput estimate — same cadence as the log flush, no extra traffic.
+		mt.sampleThroughput(now)
 	}
 }
 
