@@ -139,6 +139,8 @@ func decideRoute(inPtr, inLen uint32) uint64 {
 		spec = decideElasticMux(input.Ctx)
 	case "probe-and-prune":
 		spec = decideProbeAndPrune(input.Ctx)
+	case "adaptive":
+		spec = decideAdaptive(input.Ctx)
 	case "app-mux":
 		spec = decideAppMux(input.Ctx)
 	default:
@@ -260,6 +262,28 @@ func decideProbeAndPrune(ctx routingContextWire) routeSpecWire {
 	return routeSpecWire{}
 }
 
+// decideAdaptive is the COMPOSITE "adaptive" preset's decide logic — the
+// intended converged default. It returns a sensible middle spec that the
+// tickAdaptive controller then steers along all three performance
+// dimensions at once: a 3-way disjoint multi-hop mux (min_hops=2), latency-
+// weighted byte distribution ("auto"), re-evaluated every 20s so on_tick
+// fires often enough to react to load swings, latency drift, and probe
+// results. The Mux of 3 is only the STARTING width — tickAdaptive's AIMD
+// dimension grows it toward the cap under load and shrinks it back toward
+// the floor when idle. Non-target apps get the empty spec (defaults).
+func decideAdaptive(ctx routingContextWire) routeSpecWire {
+	switch ctx.App {
+	case "vpn-client", "skysocks-client", "skynet-client":
+		return routeSpecWire{
+			Mux:                     adaptDecideMux,
+			MinHops:                 2,
+			RotationIntervalSeconds: 20,
+			Distribution:            "auto",
+		}
+	}
+	return routeSpecWire{}
+}
+
 // targetMux is the mux size the rotating-bw policy aims to maintain.
 // Kept in sync with the Mux value returned from decideRotatingBW so
 // on_tick can reason about "are we at target?"
@@ -271,8 +295,9 @@ func onTick(inPtr, inLen uint32) uint64 {
 	if err := json.Unmarshal(readInput(inPtr, inLen), &input); err != nil {
 		return 0
 	}
-	// rotating-bw and latency-adaptive have tick logic; app-mux and
-	// unknown presets are static, so they take no rotation action.
+	// rotating-bw, latency-adaptive, elastic-mux, probe-and-prune and the
+	// composite adaptive preset have tick logic; app-mux and unknown
+	// presets are static, so they take no rotation action.
 	switch input.Preset {
 	case "rotating-bw":
 		return tickRotatingBW(input)
@@ -282,6 +307,8 @@ func onTick(inPtr, inLen uint32) uint64 {
 		return tickElasticMux(input)
 	case "probe-and-prune":
 		return tickProbeAndPrune(input)
+	case "adaptive":
+		return tickAdaptive(input)
 	default:
 		return 0
 	}
@@ -465,12 +492,7 @@ func tickLatencyAdaptive(input tickInputWire) uint64 {
 
 	// Median of the alive legs' smoothed latencies.
 	sort.Float64s(smoothed)
-	var median float64
-	if n := len(smoothed); n%2 == 1 {
-		median = smoothed[n/2]
-	} else {
-		median = (smoothed[n/2-1] + smoothed[n/2]) / 2
-	}
+	median := medianSorted(smoothed)
 
 	// Hysteresis: only evict a clear outlier (smoothed worst >= 1.5x
 	// smoothed median). Once the set has converged this is false for every
@@ -812,6 +834,393 @@ func tickProbeAndPrune(input tickInputWire) uint64 {
 		probePending = true
 		return writeAction(rotationActionWire{AddLeg: true})
 	}
+	return 0
+}
+
+// medianSorted returns the median of an already-sorted float slice (mean of
+// the two middle elements for an even count). Shared by the latency-adaptive
+// and adaptive controllers so the outlier test uses one definition.
+func medianSorted(s []float64) float64 {
+	n := len(s)
+	if n == 0 {
+		return 0
+	}
+	if n%2 == 1 {
+		return s[n/2]
+	}
+	return (s[n/2-1] + s[n/2]) / 2
+}
+
+// --- adaptive: the COMPOSITE performance default (size+membership+explore) ---
+//
+// adaptive is the intended converged default. It runs the three standalone
+// performance controllers — elastic-mux (SIZE: AIMD the leg count to load),
+// latency-adaptive (MEMBERSHIP: evict the slowest leg toward a low-latency
+// set), and probe-and-prune (EXPLORE: speculatively try a fresh path and keep
+// it only if it is better) — under ONE arbitrated on_tick that performs AT
+// MOST ONE structural action (an add OR a drop) per tick.
+//
+// Why one action per tick: each sub-controller can independently want to add
+// or drop a leg on the same tick (load says "grow", latency says "evict the
+// outlier", the explorer says "probe"). Letting them all act would churn the
+// route group — multiple simultaneous adds/drops tear legs up and down faster
+// than the host can build them and faster than the EWMA signals can settle,
+// which is exactly the thrash the smoothing was added to avoid. Arbitrating
+// to a single action per tick lets each dimension make steady, observable
+// progress: the group takes one deliberate step, the next tick re-measures on
+// the settled state, and the highest-priority need is served first.
+//
+// Arbitration priority each tick (first match fires, then return):
+//
+//	1. aliveCount == 0            → hold (nothing measured yet).
+//	2. RECOVER  (aliveCount < floor)                → add one leg. Safety
+//	   first: a group starved below the floor is refilled before anything
+//	   else is considered.
+//	3. MEMBERSHIP (latency): worst alive leg's EWMA latency is a >=1.5x
+//	   outlier over the alive-leg median → drop it + add + exclude its hops.
+//	   Correctness of the set (drop a genuinely bad path) outranks sizing.
+//	4. GROW (load): smoothed throughput >= 0.80*peak and aliveCount < cap →
+//	   add one leg. Under real saturation more disjoint paths raise the
+//	   aggregate the group can pull.
+//	5. SHRINK (idle): smoothed throughput < 0.25*peak for >=2 consecutive
+//	   ticks and aliveCount > floor → drop the oldest leg (release wasted
+//	   width). Reset the idle counter so we step down one leg at a time.
+//	6. EXPLORE: otherwise, when the set is stable (no probe in flight,
+//	   aliveCount == target), every exploreEvery ticks start a probe — add a
+//	   speculative leg, observe its EWMA latency adaptObserve ticks, then keep
+//	   it (drop the worst established leg) only if it beats that worst, else
+//	   prune the probe. This is probe-and-prune's explore/exploit loop.
+//	7. else → hold.
+//
+// Rules 3/4/5 are gated on "no probe in flight": while an experiment is mid-
+// flight (the group is transiently target+1 wide) a membership/grow/shrink
+// action would corrupt the probe's accounting and defeat the one-step-at-a-
+// time discipline, so structural changes pause until the probe graduates or
+// is pruned. The RECOVER rule is never gated — a starved group is refilled
+// regardless. The size target starts at the decide Mux (3) and grow/shrink
+// move it within [floor, cap] so EXPLORE always probes at the current settled
+// width.
+//
+// All three dimensions share ONE set of per-transport_id state, refreshed at
+// the top of EVERY tick before arbitration: a latency EWMA (adaptLatEWMA), a
+// received-byte-delta throughput EWMA + decaying peak (adaptThroughputEWMA /
+// adaptPeak), the consecutive-idle counter (adaptIdleCount), and the probe
+// state machine (adaptProbeTID / adaptProbeAge / adaptProbePending /
+// adaptPrevKnown). Keys are pruned to the present leg set each tick so a
+// dropped transport's history can't linger or smear onto a reused index.
+
+var (
+	// adaptLatEWMA is the per-leg smoothed latency, keyed by stable
+	// transport_id (same rationale as latAdaptEWMA/probeEWMA).
+	adaptLatEWMA = map[string]float64{}
+	// adaptPrevRecv is each leg's last-seen recv_bytes counter, keyed by
+	// transport_id, so the next tick can compute its throughput delta.
+	adaptPrevRecv = map[string]uint64{}
+	// adaptSeen is the reused scratch set of transport_ids present this tick
+	// (for stale-key pruning); adaptAliveIdx maps transport_id → current leg
+	// index for alive legs so a DropLegs decision can be expressed as the
+	// index the host expects. adaptPrevKnown snapshots the established set
+	// just before a probe add so the next tick can diff out the new leg.
+	adaptSeen      = map[string]bool{}
+	adaptAliveIdx  = map[string]int{}
+	adaptPrevKnown = map[string]bool{}
+)
+
+var (
+	// adaptThroughputEWMA / adaptPeak are the smoothed aggregate received
+	// throughput and its slowly-decaying high-water mark (the AIMD load
+	// signal). adaptSeeded guards the one-time seed on the first tick with
+	// real throughput. adaptIdleCount is the consecutive-idle tick counter.
+	adaptThroughputEWMA float64
+	adaptPeak           float64
+	adaptSeeded         bool
+	adaptIdleCount      int
+	// adaptTick counts ticks (drives the explore cadence). adaptTarget is the
+	// current steady width EXPLORE probes at; it starts at the decide Mux and
+	// grow/shrink move it within [floor, cap].
+	adaptTick   int
+	adaptTarget = adaptDecideMux
+	// Probe state machine (see probe-and-prune): adaptProbeTID is the leg on
+	// probation ("" = none), adaptProbeAge counts ticks since adoption,
+	// adaptProbePending is set the tick we request the speculative add.
+	adaptProbeTID     string
+	adaptProbeAge     int
+	adaptProbePending bool
+)
+
+const (
+	// adaptDecideMux is the starting mux width decideAdaptive returns and the
+	// initial size target.
+	adaptDecideMux = 3
+	// adaptFloor / adaptCap bound the leg count the size dimension may reach.
+	adaptFloor = 2
+	adaptCap   = 6
+	// adaptAlpha is the EWMA smoothing factor for both the latency and the
+	// throughput signals (newest sample weighted 30%).
+	adaptAlpha = 0.3
+	// adaptPeakDecay bleeds the throughput peak down ~2%/tick so the
+	// saturation bar tracks a sustained drop rather than one historical burst.
+	adaptPeakDecay = 0.98
+	// adaptExploreEvery is the explore cadence: start a probe every N ticks
+	// when the set is stable.
+	adaptExploreEvery = 6
+	// adaptObserve is how many ticks a probe runs before it is judged.
+	adaptObserve = 3
+)
+
+// tickAdaptive is the composite arbitrated controller. See the block comment
+// above for the load/latency/explore model and the priority ordering.
+func tickAdaptive(input tickInputWire) uint64 {
+	adaptTick++
+
+	// --- Phase 1: refresh the shared per-transport_id state (every tick,
+	// before arbitration). One pass computes the latency EWMA, the aggregate
+	// received byte-delta, the alive count / oldest-alive index / alive
+	// index map, and records presence for stale-key pruning.
+	for k := range adaptSeen {
+		delete(adaptSeen, k)
+	}
+	for k := range adaptAliveIdx {
+		delete(adaptAliveIdx, k)
+	}
+	var rawTotal float64
+	aliveCount := 0
+	oldestAliveIdx := -1
+	for _, l := range input.Legs {
+		tid := l.TransportID
+		if tid != "" {
+			adaptSeen[tid] = true
+		}
+		if !l.Alive {
+			continue
+		}
+		aliveCount++
+		if oldestAliveIdx == -1 || l.Index < oldestAliveIdx {
+			oldestAliveIdx = l.Index
+		}
+		if tid == "" {
+			continue
+		}
+		adaptAliveIdx[tid] = l.Index
+		// Latency EWMA — fold in only real measurements (0 == unknown).
+		if l.LatencyMs > 0 {
+			sample := float64(l.LatencyMs)
+			if prev, ok := adaptLatEWMA[tid]; ok {
+				adaptLatEWMA[tid] = adaptAlpha*sample + (1-adaptAlpha)*prev
+			} else {
+				adaptLatEWMA[tid] = sample
+			}
+		}
+		// Throughput: accumulate this interval's received byte-delta. Only a
+		// non-negative delta is real; a counter that went backwards means a
+		// reset/new leg, not throughput.
+		if prev, ok := adaptPrevRecv[tid]; ok && l.RecvBytes >= prev {
+			rawTotal += float64(l.RecvBytes - prev)
+		}
+		adaptPrevRecv[tid] = l.RecvBytes
+	}
+	// Prune state for transport_ids no longer present.
+	for tid := range adaptLatEWMA {
+		if !adaptSeen[tid] {
+			delete(adaptLatEWMA, tid)
+		}
+	}
+	for tid := range adaptPrevRecv {
+		if !adaptSeen[tid] {
+			delete(adaptPrevRecv, tid)
+		}
+	}
+
+	// Fold the raw delta into the smoothed throughput signal and maintain the
+	// decaying peak. Seed on the first tick with real throughput so the signal
+	// starts on a genuine value rather than ramping from zero. saturated/idle
+	// stay false until seeded, so the size dimension holds until load appears.
+	saturated, idle := false, false
+	if !adaptSeeded {
+		if rawTotal > 0 {
+			adaptThroughputEWMA = rawTotal
+			adaptPeak = rawTotal
+			adaptSeeded = true
+		}
+	} else {
+		adaptThroughputEWMA = adaptAlpha*rawTotal + (1-adaptAlpha)*adaptThroughputEWMA
+		adaptPeak *= adaptPeakDecay
+		if adaptThroughputEWMA > adaptPeak {
+			adaptPeak = adaptThroughputEWMA
+		}
+		if adaptPeak > 0 {
+			saturated = adaptThroughputEWMA >= 0.80*adaptPeak
+			idle = adaptThroughputEWMA < 0.25*adaptPeak
+		}
+	}
+	// Track consecutive idle ticks independently of whether we can act on them
+	// (the "two quiet ticks" requirement is about load, not width).
+	if idle {
+		adaptIdleCount++
+	} else {
+		adaptIdleCount = 0
+	}
+
+	// --- Phase 2: arbitration — at most ONE structural action, by priority.
+
+	// 1. Nothing alive — nothing to act on.
+	if aliveCount == 0 {
+		return 0
+	}
+	// 2. RECOVER: starved below the floor — refill (never gated on a probe).
+	if aliveCount < adaptFloor {
+		return writeAction(rotationActionWire{AddLeg: true})
+	}
+
+	// A probe transiently makes the group target+1 wide; while it is in flight
+	// the size/membership dimensions pause so they can't corrupt its accounting.
+	probeInFlight := adaptProbePending || adaptProbeTID != ""
+	if !probeInFlight {
+		// 3. MEMBERSHIP: evict the slowest-EWMA leg iff it is a >=1.5x-median
+		// outlier, and replace it (excluding its hops so the new leg differs).
+		if idx, hops, ok := adaptWorstOutlier(input.Legs); ok {
+			return writeAction(rotationActionWire{
+				DropLegs:    []int{idx},
+				AddLeg:      true,
+				ExcludeHops: hops,
+			})
+		}
+		// 4. GROW: saturated and below the cap — add one leg to load.
+		if saturated && aliveCount < adaptCap {
+			adaptTarget = aliveCount + 1
+			if adaptTarget > adaptCap {
+				adaptTarget = adaptCap
+			}
+			return writeAction(rotationActionWire{AddLeg: true})
+		}
+		// 5. SHRINK: sustained idle and above the floor — release the oldest
+		// leg. Reset the idle counter so we step down one leg per two idle
+		// ticks rather than collapsing to the floor at once.
+		if adaptIdleCount >= 2 && aliveCount > adaptFloor {
+			adaptIdleCount = 0
+			adaptTarget = aliveCount - 1
+			if adaptTarget < adaptFloor {
+				adaptTarget = adaptFloor
+			}
+			return writeAction(rotationActionWire{DropLegs: []int{oldestAliveIdx}})
+		}
+	}
+
+	// 6/7. EXPLORE (probe/exploit machine) or hold.
+	return adaptExplore(aliveCount)
+}
+
+// adaptWorstOutlier reports the index and hops of the slowest alive leg when
+// its smoothed latency is a >=1.5x-median outlier over the alive legs'
+// smoothed latencies (needs >=2 smoothed samples), else ok=false. This is
+// latency-adaptive's eviction test, run over the shared adaptLatEWMA.
+func adaptWorstOutlier(legs []legInfoWire) (int, []string, bool) {
+	worstIdx := -1
+	worstSm := -1.0
+	var worstHops []string
+	var smoothed []float64
+	for _, l := range legs {
+		if !l.Alive {
+			continue
+		}
+		sm, ok := adaptLatEWMA[l.TransportID]
+		if !ok {
+			continue
+		}
+		smoothed = append(smoothed, sm)
+		if sm > worstSm {
+			worstSm = sm
+			worstIdx = l.Index
+			worstHops = l.Hops
+		}
+	}
+	if len(smoothed) < 2 || worstIdx < 0 || worstSm <= 0 {
+		return -1, nil, false
+	}
+	sort.Float64s(smoothed)
+	median := medianSorted(smoothed)
+	if median > 0 && worstSm >= 1.5*median {
+		return worstIdx, worstHops, true
+	}
+	return -1, nil, false
+}
+
+// adaptExplore is the probe-and-prune explore/exploit machine over the shared
+// probe state. It adopts a pending probe, observes it adaptObserve ticks, then
+// keeps it (dropping the worst established leg) only if it beats that worst —
+// else prunes the probe. When no probe is in flight and the set is stable at
+// target, it starts a fresh probe on the explore cadence.
+func adaptExplore(aliveCount int) uint64 {
+	// Adopt: a probe add requested last tick should now be present — the alive
+	// transport_id absent from the pre-add known set. Put it on probation.
+	if adaptProbePending {
+		adaptProbePending = false
+		for tid := range adaptAliveIdx {
+			if !adaptPrevKnown[tid] {
+				adaptProbeTID = tid
+				adaptProbeAge = 0
+				break
+			}
+		}
+	}
+
+	// Active probe: observe, then graduate-or-discard.
+	if adaptProbeTID != "" {
+		idx, alive := adaptAliveIdx[adaptProbeTID]
+		if !alive {
+			// Probe died on its own — abandon the experiment.
+			adaptProbeTID = ""
+			adaptProbeAge = 0
+			return 0
+		}
+		adaptProbeAge++
+		if adaptProbeAge < adaptObserve {
+			return 0
+		}
+		// Judge: probe's smoothed latency vs the worst established leg.
+		probeSm, okProbe := adaptLatEWMA[adaptProbeTID]
+		worstIdx := -1
+		worstSm := -1.0
+		for tid, i := range adaptAliveIdx {
+			if tid == adaptProbeTID {
+				continue
+			}
+			sm, ok := adaptLatEWMA[tid]
+			if !ok {
+				continue
+			}
+			if sm > worstSm {
+				worstSm = sm
+				worstIdx = i
+			}
+		}
+		if !okProbe || worstIdx < 0 {
+			// Not enough latency signal to judge yet — keep observing.
+			return 0
+		}
+		adaptProbeTID = ""
+		if probeSm < worstSm {
+			// Probe graduates: drop the worst established leg; the probe stays
+			// and joins the established set next tick (width returns to target).
+			return writeAction(rotationActionWire{DropLegs: []int{worstIdx}})
+		}
+		// Failed experiment: prune the probe itself, keep the incumbents.
+		return writeAction(rotationActionWire{DropLegs: []int{idx}})
+	}
+
+	// Explore: on the cadence, when stable at the target width, snapshot the
+	// known set and request one speculative leg over a fresh path.
+	if adaptTick%adaptExploreEvery == 0 && aliveCount == adaptTarget {
+		for k := range adaptPrevKnown {
+			delete(adaptPrevKnown, k)
+		}
+		for tid := range adaptAliveIdx {
+			adaptPrevKnown[tid] = true
+		}
+		adaptProbePending = true
+		return writeAction(rotationActionWire{AddLeg: true})
+	}
+	// Hold.
 	return 0
 }
 
