@@ -105,6 +105,18 @@ type ManagedTransport struct {
 	lastBwSampleSent  uint64
 	lastBwSampleRecv  uint64
 
+	// Active packet-pair bandwidth probe (phase 2). bwProbeID is the last train
+	// we sent; bwLastProbeNanos gates re-probing. The bwRecv* fields track the
+	// train currently being RECEIVED (one at a time), guarded by bwRecvMx, to
+	// compute receive-side inter-arrival dispersion.
+	bwProbeID        atomic.Uint32
+	bwLastProbeNanos atomic.Int64
+	bwRecvMx         sync.Mutex
+	bwRecvProbeID    uint32
+	bwRecvFirstNanos int64
+	bwRecvLastNanos  int64
+	bwRecvCount      int
+
 	// pingReadyAtNanos is the Unix-nanos timestamp captured on the
 	// first tickPing call after the transport reaches the ready state
 	// (mt.transport != nil). Zero means not-yet-ready. Used by
@@ -498,6 +510,12 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			case routing.TransportPongPacket:
 				mt.handleTransportPong(p)
 				continue
+			case routing.TransportBwProbePacket:
+				mt.handleBwProbe(p)
+				continue
+			case routing.TransportBwAckPacket:
+				mt.handleBwAck(p)
+				continue
 			case routing.CascadeSetupPacket, routing.CascadeAckPacket:
 				if mt.cascadeHandler != nil {
 					mt.cascadeHandler(p, mt)
@@ -711,6 +729,136 @@ func (mt *ManagedTransport) handleTransportPong(p routing.Packet) {
 	}
 	mt.SetLatency(rttMs)
 	mt.log.WithField("rtt_ms", fmt.Sprintf("%.2f", rttMs)).Trace("Transport ping RTT")
+}
+
+const (
+	// transportBwProbeTrain is how many back-to-back packets a probe sends.
+	// Enough for a stable inter-arrival dispersion; the whole train is
+	// transportBwProbeTrain × TransportBwProbeSize ≈ 11 KB (not a saturating
+	// burst).
+	transportBwProbeTrain = 8
+	// maxReasonableBps rejects absurd dispersion estimates (a sub-µs span over
+	// loopback/coalesced arrivals yields near-infinite bps). 10 Gbps in bytes.
+	maxReasonableBps = 1.25e9
+)
+
+// dispersionBps computes the bottleneck-bandwidth estimate (bytes/sec) from a
+// received packet-pair train: the bytes that arrived AFTER the first packet,
+// divided by the span between the first and last arrival (a single receiver
+// clock — no clock sync needed). Returns 0 when the train is too short or the
+// span is non-positive. Pure function → unit-testable.
+func dispersionBps(count int, firstNanos, lastNanos int64, pktSize int) float64 { //nolint:unparam // pktSize is a param for test clarity + future variable-size probes
+	if count < 2 {
+		return 0
+	}
+	spanNs := lastNanos - firstNanos
+	if spanNs <= 0 {
+		return 0
+	}
+	bytesAfterFirst := float64(count-1) * float64(pktSize)
+	return bytesAfterFirst / (float64(spanNs) / 1e9)
+}
+
+// sendBwProbe sends a short back-to-back packet-pair train so the PEER can
+// estimate this transport's bottleneck bandwidth from receive-side dispersion
+// and report it back (handleBwAck records it). It writes ~11 KB, NOT a
+// saturating burst; the caller (Manager.probeUnmeasuredTransports) gates it on
+// idle + never-measured + a global rate limit so it never disrupts a live route
+// or strains the fleet's bandwidth.
+func (mt *ManagedTransport) sendBwProbe() {
+	mt.transportMx.Lock()
+	tp := mt.transport
+	mt.transportMx.Unlock()
+	if tp == nil {
+		return
+	}
+	probeID := mt.bwProbeID.Add(1)
+	mt.bwLastProbeNanos.Store(time.Now().UnixNano())
+
+	// Fresh write deadline — same stale-absolute-deadline hazard as the ping.
+	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		mt.log.WithError(err).Debug("bw-probe: set write deadline")
+	}
+	for seq := 0; seq < transportBwProbeTrain; seq++ {
+		p := routing.MakeTransportBwProbePacket(probeID, uint16(seq), transportBwProbeTrain) //nolint:gosec
+		n, err := tp.Write(p)
+		if err != nil {
+			mt.log.WithError(err).Debug("bw-probe: train write failed")
+			return
+		}
+		if n > routing.PacketHeaderSize {
+			mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
+		}
+	}
+}
+
+// handleBwProbe records the receive time of one probe-train packet; on the last
+// packet of the train it computes the inter-arrival dispersion and replies with
+// a TransportBwAck carrying the estimate.
+func (mt *ManagedTransport) handleBwProbe(p routing.Packet) {
+	probeID, _, total, ok := p.BwProbeFields()
+	if !ok || total < 2 {
+		return
+	}
+	now := time.Now().UnixNano()
+
+	mt.bwRecvMx.Lock()
+	if probeID != mt.bwRecvProbeID {
+		mt.bwRecvProbeID = probeID // new train
+		mt.bwRecvFirstNanos = now
+		mt.bwRecvCount = 1
+	} else {
+		mt.bwRecvCount++
+	}
+	mt.bwRecvLastNanos = now
+	count, first, last := mt.bwRecvCount, mt.bwRecvFirstNanos, mt.bwRecvLastNanos
+	done := count >= int(total)
+	if done {
+		mt.bwRecvProbeID = 0 // reset for the next train
+	}
+	mt.bwRecvMx.Unlock()
+	if !done {
+		return
+	}
+
+	estBps := dispersionBps(count, first, last, routing.TransportBwProbeSize)
+	if estBps <= 0 || estBps > maxReasonableBps {
+		return
+	}
+
+	mt.transportMx.Lock()
+	tp := mt.transport
+	mt.transportMx.Unlock()
+	if tp == nil {
+		return
+	}
+	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		mt.log.WithError(err).Debug("bw-probe: set ack write deadline")
+	}
+	ack := routing.MakeTransportBwAckPacket(probeID, uint64(estBps))
+	if n, err := tp.Write(ack); err != nil {
+		mt.log.WithError(err).Debug("bw-probe: ack write failed")
+	} else if n > routing.PacketHeaderSize {
+		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
+	}
+}
+
+// handleBwAck folds the peer's dispersion estimate into the throughput
+// high-watermark. An ACTIVE probe measures capacity, so it can raise the
+// estimate above what passive traffic has yet shown.
+func (mt *ManagedTransport) handleBwAck(p routing.Packet) {
+	probeID, estBps, ok := p.BwAckFields()
+	if !ok || probeID != mt.bwProbeID.Load() { // ignore stale / mismatched
+		return
+	}
+	if estBps == 0 || float64(estBps) > maxReasonableBps {
+		return
+	}
+	mt.throughputMx.Lock()
+	if float64(estBps) > mt.throughputBps {
+		mt.throughputBps = float64(estBps)
+	}
+	mt.throughputMx.Unlock()
 }
 
 func (mt *ManagedTransport) isServing() bool {

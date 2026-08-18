@@ -73,6 +73,10 @@ func (t PacketType) String() string {
 		return "AppDirect"
 	case DatagramPacket:
 		return "Datagram"
+	case TransportBwProbePacket:
+		return "TransportBwProbe"
+	case TransportBwAckPacket:
+		return "TransportBwAck"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -105,7 +109,28 @@ const (
 	SkynetForwardPacket // skynet port forwarding over direct transport (route ID = 0), virtual stream
 	AppDirectPacket     // skywire-network app direct dial over direct transport (route ID = 0), virtual stream
 	DatagramPacket      // faithful-UDP routed datagram (route ID > 0), payload: opaque bytes (AEAD-sealed at the DatagramRouteGroup layer). No sequence number — counter lives in the AEAD nonce (see RFC #2607).
+	// TransportBwProbePacket is one packet of a back-to-back packet-pair
+	// train (route ID = 0) used to estimate a transport's bottleneck
+	// bandwidth from receive-side inter-arrival DISPERSION — a few KB, not a
+	// saturating burst. Payload: probeID(u32) seq(u16) total(u16) + padding to
+	// TransportBwProbeSize so the bottleneck link spaces consecutive packets.
+	TransportBwProbePacket
+	// TransportBwAckPacket carries the receiver's dispersion estimate back to
+	// the prober (route ID = 0). Payload: probeID(u32) estBps(u64).
+	TransportBwAckPacket
 )
+
+// TransportBwProbeSize is the on-wire size of each packet-pair probe packet.
+// ~1400 B (sub-MTU) so consecutive packets are large enough to be spaced by
+// the bottleneck link's serialization delay — the signal dispersion measures.
+const TransportBwProbeSize = 1400
+
+// TransportBwProbeHdr is the meaningful prefix of a probe payload:
+// probeID(4) + seq(2) + total(2); the remainder is padding.
+const TransportBwProbeHdr = 8
+
+// TransportBwAckSize is the ack payload size: probeID(4) + estBps(8).
+const TransportBwAckSize = 12
 
 // Capability bitmap flags for extended handshake negotiation.
 // Transmitted as a little-endian uint16 at HandshakePacket payload bytes 1-2.
@@ -385,6 +410,49 @@ func MakeTransportPongPacket(timestamp int64) Packet {
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], TransportPingPayloadSize)
 	binary.BigEndian.PutUint64(packet[PacketPayloadOffset:], uint64(timestamp)) //nolint:gosec
 	return packet
+}
+
+// MakeTransportBwProbePacket constructs one packet of a bandwidth-probe train
+// (route ID = 0), padded to TransportBwProbeSize.
+func MakeTransportBwProbePacket(probeID uint32, seq, total uint16) Packet {
+	payloadLen := TransportBwProbeSize - PacketHeaderSize
+	packet := make([]byte, PacketHeaderSize+payloadLen)
+	packet[PacketTypeOffset] = byte(TransportBwProbePacket)
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(payloadLen)) //nolint:gosec
+	binary.BigEndian.PutUint32(packet[PacketPayloadOffset:], probeID)
+	binary.BigEndian.PutUint16(packet[PacketPayloadOffset+4:], seq)
+	binary.BigEndian.PutUint16(packet[PacketPayloadOffset+6:], total)
+	return packet
+}
+
+// BwProbeFields returns (probeID, seq, total) from a TransportBwProbePacket
+// payload, and false if the payload is too short.
+func (p Packet) BwProbeFields() (probeID uint32, seq, total uint16, ok bool) {
+	pl := p.Payload()
+	if len(pl) < TransportBwProbeHdr {
+		return 0, 0, 0, false
+	}
+	return binary.BigEndian.Uint32(pl), binary.BigEndian.Uint16(pl[4:]), binary.BigEndian.Uint16(pl[6:]), true
+}
+
+// MakeTransportBwAckPacket constructs the prober-bound estimate reply.
+func MakeTransportBwAckPacket(probeID uint32, estBps uint64) Packet {
+	packet := make([]byte, PacketHeaderSize+TransportBwAckSize)
+	packet[PacketTypeOffset] = byte(TransportBwAckPacket)
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], TransportBwAckSize)
+	binary.BigEndian.PutUint32(packet[PacketPayloadOffset:], probeID)
+	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+4:], estBps)
+	return packet
+}
+
+// BwAckFields returns (probeID, estBps) from a TransportBwAckPacket payload,
+// and false if the payload is too short.
+func (p Packet) BwAckFields() (probeID uint32, estBps uint64, ok bool) {
+	pl := p.Payload()
+	if len(pl) < TransportBwAckSize {
+		return 0, 0, false
+	}
+	return binary.BigEndian.Uint32(pl), binary.BigEndian.Uint64(pl[4:]), true
 }
 
 // MakeCascadeSetupPacket constructs a cascade setup packet (route ID = 0).
