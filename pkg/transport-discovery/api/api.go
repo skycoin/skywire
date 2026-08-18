@@ -135,6 +135,19 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+
+	// Compress the remaining JSON endpoints. The two dominant egress paths
+	// (/all-transports and /transports/edge:<PK>) do NOT rely on this: they
+	// serve a pre-gzipped body straight from their response caches, so the
+	// bytes are compressed once per TTL rather than once per request. This
+	// middleware is a no-op for them -- it skips any response that already
+	// set Content-Encoding -- and exists to cover the endpoints that still
+	// marshal fresh JSON per call, chiefly /all-transports/per-key-stats
+	// (a map entry per unique edge PK) and /metrics. Level 5 keeps the CPU
+	// cost modest; these bodies are highly repetitive JSON, so the ratio is
+	// close to what level 9 would buy.
+	r.Use(middleware.Compress(5))
+
 	if enableMetrics {
 		r.Use(api.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)

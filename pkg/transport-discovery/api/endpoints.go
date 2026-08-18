@@ -276,9 +276,13 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	// Vary must be set on BOTH branches: the response body depends on the
+	// request's Accept-Encoding, so a shared cache in front of TPD would
+	// otherwise be free to serve a stored identity body to a gzip client
+	// (or the reverse) after caching whichever it saw first.
+	w.Header().Set("Vary", "Accept-Encoding")
 	if gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Vary", "Accept-Encoding")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(gz) //nolint:errcheck
 		return
@@ -356,9 +360,13 @@ func (api *API) getAllTransports(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	// Vary must be set on BOTH branches: the response body depends on the
+	// request's Accept-Encoding, so a shared cache in front of TPD would
+	// otherwise be free to serve a stored identity body to a gzip client
+	// (or the reverse) after caching whichever it saw first.
+	w.Header().Set("Vary", "Accept-Encoding")
 	if gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Vary", "Accept-Encoding")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(gz) //nolint:errcheck
 		return
