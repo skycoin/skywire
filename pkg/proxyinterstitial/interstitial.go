@@ -34,15 +34,31 @@ import (
 // two cycles.
 const refreshSeconds = 3
 
-// Page returns the full HTML document for the interstitial. target is the
-// host the browser was trying to reach (shown verbatim, HTML-escaped); detail
-// is an optional one-line status/error string. When isError is true the page
-// renders the hard-failure variant (error styling, no auto-refresh, manual
-// retry button); otherwise it renders the transient variant (spinner +
-// meta-refresh auto-retry).
-func Page(target, detail string, isError bool) string {
+// mechanismLabel maps a transport-mechanism key to the user-facing name shown
+// in the "Fetching the page over …" step. The three native proxy surfaces that
+// serve this page each pass their own: skysocks-client → "skysocks", the
+// dmsgweb resolving proxy → "dmsg", the skynetweb resolving proxy → "skynet".
+// An empty/unknown key degrades to the generic "skywire".
+func mechanismLabel(mechanism string) string {
+	switch strings.ToLower(strings.TrimSpace(mechanism)) {
+	case "skysocks", "dmsg", "skynet":
+		return strings.ToLower(strings.TrimSpace(mechanism))
+	default:
+		return "skywire"
+	}
+}
+
+// Page returns the full HTML document for the interstitial. target is the host
+// the browser was trying to reach (shown verbatim, HTML-escaped); detail is an
+// optional one-line status/error string; mechanism names the forwarding surface
+// ("skysocks" / "dmsg" / "skynet") so the fetch step is specific rather than a
+// generic "over skywire". When isError is true the page renders the
+// hard-failure variant (error styling, no auto-refresh, manual retry button);
+// otherwise it renders the transient variant (spinner + meta-refresh auto-retry).
+func Page(target, detail, mechanism string, isError bool) string {
 	target = html.EscapeString(strings.TrimSpace(target))
 	detail = html.EscapeString(strings.TrimSpace(detail))
+	mech := mechanismLabel(mechanism)
 
 	title := "Connecting over skywire…"
 	heading := "Building a route over the mesh…"
@@ -75,6 +91,11 @@ func Page(target, detail string, isError bool) string {
 		retry = `<button class="btn" onclick="location.reload()">Retry</button>`
 	}
 
+	// Steps describe what is ACTUALLY happening. The page is served BY this
+	// visor's own proxy, so "reaching your visor" is a given, not a step; and
+	// the exit is already selected, so the work is route-building, not
+	// "finding an exit". The fetch step names the concrete mechanism.
+	fetchStep := `<li>Fetching the page over ` + html.EscapeString(mech) + `</li>`
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
 		`<meta name="viewport" content="width=device-width, initial-scale=1">` +
 		refreshMeta +
@@ -86,20 +107,24 @@ func Page(target, detail string, isError bool) string {
 		`<p id="mesh-msg">` + html.EscapeString(msg) + `</p>` +
 		detailBlock +
 		`<ul class="steps" id="mesh-steps">` +
-		`<li class="done">Reaching your skywire visor</li>` +
-		`<li class="active">Finding a working exit &amp; route</li>` +
-		`<li>Loading the page over skywire</li>` +
+		`<li class="active">Building a route across the mesh</li>` +
+		`<li>Opening the encrypted tunnel</li>` +
+		fetchStep +
 		`</ul>` +
 		retry +
 		hostBlock +
 		`</div></div></body></html>`
 }
 
+// brandSVG is the Skywire cloud mark (Skycoin cloud silhouette) filled with the
+// skywire accent gradient, plus the wordmark. Inline + self-contained (no
+// external asset) so it renders under the proxies' strict, no-network context.
 const brandSVG = `<div class="brand">` +
-	`<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">` +
-	`<circle cx="12" cy="4.5" r="2.3" fill="#7c83ff"/><circle cx="4.5" cy="17" r="2.3" fill="#a06bff"/>` +
-	`<circle cx="19.5" cy="17" r="2.3" fill="#a06bff"/><circle cx="12" cy="12" r="1.7" fill="#c7cbe6"/>` +
-	`<path d="M12 6.8 12 10.3M10.6 12.9 6.2 15.6M13.4 12.9 17.8 15.6" stroke="#4a5199" stroke-width="1.3" stroke-linecap="round"/>` +
+	`<svg viewBox="0 0 24 24" aria-hidden="true">` +
+	`<defs><linearGradient id="skcloud" x1="0" y1="0" x2="1" y2="1">` +
+	`<stop offset="0" stop-color="#7c83ff"/><stop offset="1" stop-color="#a06bff"/></linearGradient></defs>` +
+	`<path fill="url(#skcloud)" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 ` +
+	`2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>` +
 	`</svg><b>skywire</b></div>`
 
 const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#7a80a8;--accent:#7c83ff;--accent2:#a06bff;--err:#ff6b8a;--card:#131629;--line:#2b3163}` +
@@ -128,8 +153,8 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#7a80a8;--accent:#7c83ff;--
 // httpResponse wraps the HTML in a minimal HTTP/1.1 response. Connection:close
 // so the browser tears the socket down and honors the meta-refresh cleanly;
 // no-store so a transient page is never cached in place of the real content.
-func httpResponse(target, detail string, isError bool) []byte {
-	bodyStr := Page(target, detail, isError)
+func httpResponse(target, detail, mechanism string, isError bool) []byte {
+	bodyStr := Page(target, detail, mechanism, isError)
 	status := "200 OK"
 	if isError {
 		status = "502 Bad Gateway"
@@ -150,8 +175,8 @@ func httpResponse(target, detail string, isError bool) []byte {
 // request) are discarded. LocalAddr/RemoteAddr return *net.TCPAddr so it can
 // be handed straight to go-socks5, which unconditionally type-asserts the
 // address to *net.TCPAddr when building its BND reply.
-func Conn(target, detail string, isError bool) net.Conn {
-	return &interstitialConn{r: bytes.NewReader(httpResponse(target, detail, isError))}
+func Conn(target, detail, mechanism string, isError bool) net.Conn {
+	return &interstitialConn{r: bytes.NewReader(httpResponse(target, detail, mechanism, isError))}
 }
 
 type interstitialConn struct {
@@ -202,7 +227,7 @@ func ShouldServe(port string) bool {
 // corrupted. Best-effort and deadline-bounded so it never stalls the client's
 // reconnect. Returns nil if it served a page, an error otherwise; the caller
 // closes conn regardless.
-func ServeSOCKS5(conn net.Conn, detail string) error {
+func ServeSOCKS5(conn net.Conn, detail, mechanism string) error {
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
 	defer conn.SetDeadline(time.Time{})                   //nolint:errcheck
 
@@ -278,7 +303,7 @@ func ServeSOCKS5(conn net.Conn, detail string) error {
 	// completes, then answer with the interstitial. We don't need the request
 	// contents — the page is fixed. Bounded single read; ignore EOF.
 	_, _ = conn.Read(make([]byte, 1024)) //nolint:errcheck
-	_, err := conn.Write(httpResponse(host, detail, false))
+	_, err := conn.Write(httpResponse(host, detail, mechanism, false))
 	return err
 }
 
