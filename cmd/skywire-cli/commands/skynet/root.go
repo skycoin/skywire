@@ -35,6 +35,7 @@ var (
 	startFwdMux     int    // per-direction forward MuxRoutes override
 	startRevMux     int    // per-direction reverse MuxRoutes override
 	startDirect     bool   // force a direct-transport-only route (create on demand, dial 1-hop)
+	startRoutingPol string // per-app routing policy (@file.wasm / preset:<name> / "none")
 )
 
 func init() {
@@ -59,6 +60,7 @@ func init() {
 	startCmd.Flags().IntVar(&startFwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)")
 	startCmd.Flags().IntVar(&startRevMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override (download-heavy: --forward-mux 1 --reverse-mux N)")
 	startCmd.Flags().BoolVar(&startDirect, "direct", false, "force a direct-transport-only route: create the transport to the server on demand, dial 1-hop over it, bypass the route-finder; self-heals if the transport drops (e.g. server restart). For reliable control-plane forwards like the rsn-pprof resolving-proxy bridge.")
+	startCmd.Flags().StringVar(&startRoutingPol, "routing-policy", "", "per-app routing policy for this skynet forward's mesh route: @/path/to/policy.wasm, preset:<name>, or \"none\" to clear (parity with `proxy start --routing-policy`)")
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 
 	stopCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of the client instance to stop")
@@ -163,6 +165,15 @@ var startCmd = &cobra.Command{
 		err = rpcClient.DoCustomSetting(appName, arguments)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to configure %s: %w", appName, err))
+		}
+
+		// Install the per-app routing policy BEFORE start, so the forward's
+		// mesh route is dialed under it (parity with proxy start). Only touch
+		// it when the operator passed --routing-policy.
+		if cmd.Flags().Changed("routing-policy") {
+			if perr := rpcClient.SetAppRoutingPolicy(appName, startRoutingPol); perr != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set routing policy on %s: %w", appName, perr))
+			}
 		}
 
 		// Determine launcher mode
