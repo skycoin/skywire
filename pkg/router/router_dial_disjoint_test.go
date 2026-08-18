@@ -88,7 +88,7 @@ func TestPickDisjointPath_NoExcludeReturnsFirst(t *testing.T) {
 		{hop(dst, mid2), hop(mid2, src)},
 	}
 
-	f, r, ok := pickDisjointPath(fwd, rev, nil, nil, nil)
+	f, r, ok := pickDisjointPath(fwd, rev, nil, nil, nil, nil)
 	if !ok {
 		t.Fatal("no-exclude: expected ok=true")
 	}
@@ -118,7 +118,7 @@ func TestPickDisjointPath_SkipsExcludedIntermediate(t *testing.T) {
 		{hop(dst, mid3), hop(mid3, src)},
 	}
 
-	f, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{mid1, mid2}, nil, nil)
+	f, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{mid1, mid2}, nil, nil, nil)
 	if !ok {
 		t.Fatal("exclude mid1+mid2 with mid3 available: expected ok=true")
 	}
@@ -142,7 +142,7 @@ func TestPickDisjointPath_AllExcluded(t *testing.T) {
 		{hop(dst, mid2), hop(mid2, src)},
 	}
 
-	_, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{mid1, mid2}, nil, nil)
+	_, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{mid1, mid2}, nil, nil, nil)
 	if ok {
 		t.Error("all paths excluded: expected ok=false")
 	}
@@ -164,7 +164,7 @@ func TestPickDisjointPath_ReverseAlsoFiltered(t *testing.T) {
 		{hop(dst, midR), hop(midR, src)},
 	}
 
-	_, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{midR}, nil, nil)
+	_, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{midR}, nil, nil, nil)
 	if ok {
 		t.Error("midR excluded but in reverse path: expected ok=false")
 	}
@@ -228,7 +228,7 @@ func TestPathLatencyScore_KnownAndUnknown(t *testing.T) {
 
 	// All hops known: score is the simple sum.
 	lat := map[uuid.UUID]float64{h1.TpID: 50, h2.TpID: 30}
-	score := pathLatencyScore([]routing.Hop{h1, h2}, func(id uuid.UUID) float64 { return lat[id] }, nil)
+	score := pathLatencyScore([]routing.Hop{h1, h2}, func(id uuid.UUID) float64 { return lat[id] }, nil, nil)
 	if score != 80.0 {
 		t.Errorf("known-only: want 80.0, got %.1f", score)
 	}
@@ -237,7 +237,7 @@ func TestPathLatencyScore_KnownAndUnknown(t *testing.T) {
 	// Penalty constant (1000ms) ensures known-good paths outrank
 	// any path with an unknown hop unless the known path is also slow.
 	lat2 := map[uuid.UUID]float64{h1.TpID: 50}
-	score2 := pathLatencyScore([]routing.Hop{h1, h2}, func(id uuid.UUID) float64 { return lat2[id] }, nil)
+	score2 := pathLatencyScore([]routing.Hop{h1, h2}, func(id uuid.UUID) float64 { return lat2[id] }, nil, nil)
 	if score2 != 1050.0 {
 		t.Errorf("one-unknown: want 1050.0 (50 known + 1000 unknown penalty), got %.1f", score2)
 	}
@@ -280,7 +280,7 @@ func TestPickDisjointPath_LatencyRanking(t *testing.T) {
 		latency[p.TpID] = 40
 	}
 
-	f, _, ok := pickDisjointPath(fwd, rev, nil, func(id uuid.UUID) float64 { return latency[id] }, nil)
+	f, _, ok := pickDisjointPath(fwd, rev, nil, func(id uuid.UUID) float64 { return latency[id] }, nil, nil)
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -319,7 +319,7 @@ func TestPickDisjointPath_LatencyRankingWithExclude(t *testing.T) {
 		latency[p.TpID] = 40
 	}
 
-	f, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{midBad}, func(id uuid.UUID) float64 { return latency[id] }, nil)
+	f, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{midBad}, func(id uuid.UUID) float64 { return latency[id] }, nil, nil)
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -349,7 +349,7 @@ func TestPickDisjointPath_NoLatencyRankerLegacyBehavior(t *testing.T) {
 	// Non-empty exclude (just to make the function iterate), but no
 	// ranker. Result should be the first-after-exclude — here, mid1
 	// is not excluded so [0] passes.
-	f, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{mustPK(t)}, nil, nil)
+	f, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{mustPK(t)}, nil, nil, nil)
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -398,7 +398,7 @@ func TestPickDisjointPath_AsymmetricForwardReverse(t *testing.T) {
 		hSlowRev0.TpID: 300, hSlowRev1.TpID: 300, // 600ms total
 	}
 
-	f, r, ok := pickDisjointPath(fwd, rev, nil, func(id uuid.UUID) float64 { return latency[id] }, nil)
+	f, r, ok := pickDisjointPath(fwd, rev, nil, func(id uuid.UUID) float64 { return latency[id] }, nil, nil)
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -430,7 +430,7 @@ func TestPickDisjointPath_AsymmetricExcludeIntersection(t *testing.T) {
 		{hop(dst, mid), hop(mid, src)},
 	}
 
-	_, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{mid}, nil, nil)
+	_, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{mid}, nil, nil, nil)
 	if ok {
 		t.Error("expected ok=false when every reverse candidate touches exclude set")
 	}
@@ -461,13 +461,39 @@ func TestTransportTypeCostBiasesRanking(t *testing.T) {
 	latSame := func(uuid.UUID) float64 { return 100 }
 	typeStcpr := func(uuid.UUID) string { return "stcpr" }
 	typeWebrtc := func(uuid.UUID) string { return "webrtc" }
-	sFast := pathLatencyScore([]routing.Hop{h}, latSame, typeStcpr)
-	sSlow := pathLatencyScore([]routing.Hop{h}, latSame, typeWebrtc)
+	sFast := pathLatencyScore([]routing.Hop{h}, latSame, typeStcpr, nil)
+	sSlow := pathLatencyScore([]routing.Hop{h}, latSame, typeWebrtc, nil)
 	if !(sFast < sSlow) {
 		t.Errorf("stcpr score %v should be < webrtc score %v at equal RTT", sFast, sSlow)
 	}
 	// And nil typeFor is back-compat: RTT only, no type term.
-	if got := pathLatencyScore([]routing.Hop{h}, latSame, nil); got != 100 {
+	if got := pathLatencyScore([]routing.Hop{h}, latSame, nil, nil); got != 100 {
 		t.Errorf("nil typeFor score = %v, want 100 (RTT only)", got)
+	}
+}
+
+// TestTransportCostMsMeasuredOverridesType pins phase 3: a MEASURED throughput
+// decides the cost regardless of transport type — a measured-fast webrtc scores
+// 0 (kept), a measured-slow stcpr scores worst (avoided), and with no
+// measurement the type prior applies.
+func TestTransportCostMsMeasuredOverridesType(t *testing.T) {
+	// No measurement → type prior.
+	if transportCostMs("stcpr", 0) != transportTypeCostMs("stcpr") {
+		t.Error("unmeasured stcpr should use the type prior")
+	}
+	if transportCostMs("webrtc", 0) != transportTypeCostMs("webrtc") {
+		t.Error("unmeasured webrtc should use the type prior")
+	}
+	// Measured FAST webrtc beats measured SLOW stcpr (evidence over type).
+	fastWebrtc := transportCostMs("webrtc", 40_000_000) // ~320 Mbps
+	slowStcpr := transportCostMs("stcpr", 30_000)       // ~240 Kbps
+	if !(fastWebrtc < slowStcpr) {
+		t.Errorf("measured-fast webrtc (%v) should cost less than measured-slow stcpr (%v)", fastWebrtc, slowStcpr)
+	}
+	if fastWebrtc != 0 {
+		t.Errorf("a multi-MB/s link should score 0, got %v", fastWebrtc)
+	}
+	if slowStcpr != 400 {
+		t.Errorf("a sub-400Kbps link should score worst (400), got %v", slowStcpr)
 	}
 }

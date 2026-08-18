@@ -71,8 +71,8 @@ func (r *router) calculateLocalRoutes(_ context.Context, _ *logging.Logger, _, _
 
 // buildHopLookups is source-only; the edge never plans routes, so the lookups
 // it would feed are unused. Return identity-ish stubs.
-func (r *router) buildHopLookups(_ context.Context, _, _ [][]routing.Hop) (latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string) {
-	return func(uuid.UUID) float64 { return 0 }, func(uuid.UUID) string { return "" }
+func (r *router) buildHopLookups(_ context.Context, _, _ [][]routing.Hop) (latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string, throughputFor func(uuid.UUID) float64) {
+	return func(uuid.UUID) float64 { return 0 }, func(uuid.UUID) string { return "" }, func(uuid.UUID) float64 { return 0 }
 }
 
 // stubRouteGroupDialer is the TinyGo RouteGroupDialer: it cannot dial a route

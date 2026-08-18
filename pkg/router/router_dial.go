@@ -988,7 +988,7 @@ fetchRoutesAgain:
 	// each was a separate GetTransportByID per ID — doubling the
 	// TPD query rate per dial and tripping the service's
 	// 30-req/min rate limit on heavier workloads.
-	latencyFor, typeFor := r.buildHopLookups(ctx, paths[forward], paths[backward])
+	latencyFor, typeFor, throughputFor := r.buildHopLookups(ctx, paths[forward], paths[backward])
 
 	// Drop any multihop candidate that contains a DMSG hop. A DMSG
 	// transport relays through a dmsg server (possibly chained via
@@ -1034,7 +1034,7 @@ fetchRoutesAgain:
 				for _, pk := range intermediates {
 					hopHex = append(hopHex, pk.Hex())
 				}
-				latSum := pathLatencyScore(hops, latencyFor, typeFor)
+				latSum := pathLatencyScore(hops, latencyFor, typeFor, throughputFor)
 				out = append(out, CandidateInfo{
 					Hops:         hopHex,
 					EstLatencyMs: int(latSum),
@@ -1070,12 +1070,12 @@ fetchRoutesAgain:
 				var chosenFwd, chosenRev []routing.Hop
 				if haveFwd {
 					chosenFwd = paths[forward][sel.Chosen]
-				} else if best, ok := pickBestDirection(paths[forward], excludeSet, latencyFor, typeFor); ok {
+				} else if best, ok := pickBestDirection(paths[forward], excludeSet, latencyFor, typeFor, throughputFor); ok {
 					chosenFwd = best
 				}
 				if haveRev {
 					chosenRev = paths[backward][sel.ReverseChosen]
-				} else if best, ok := pickBestDirection(paths[backward], excludeSet, latencyFor, typeFor); ok {
+				} else if best, ok := pickBestDirection(paths[backward], excludeSet, latencyFor, typeFor, throughputFor); ok {
 					chosenRev = best
 				}
 				if chosenFwd != nil && chosenRev != nil {
@@ -1090,7 +1090,7 @@ fetchRoutesAgain:
 		}
 	}
 
-	fwdPath, revPath, ok := pickDisjointPath(paths[forward], paths[backward], opts.ExcludeIntermediatePKs, latencyFor, typeFor)
+	fwdPath, revPath, ok := pickDisjointPath(paths[forward], paths[backward], opts.ExcludeIntermediatePKs, latencyFor, typeFor, throughputFor)
 	if !ok {
 		log.Debugf("No route-finder path avoids the %d excluded intermediates; trying local route calc fallback", len(opts.ExcludeIntermediatePKs))
 		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
@@ -1136,11 +1136,11 @@ fetchRoutesAgain:
 // different intermediates means each direction can pick its best
 // available wire, not the best PAIR — which is strictly weaker when
 // the per-direction optimums sit at different indices.
-func pickDisjointPath(forward, reverse [][]routing.Hop, exclude []cipher.PubKey, latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string) ([]routing.Hop, []routing.Hop, bool) {
+func pickDisjointPath(forward, reverse [][]routing.Hop, exclude []cipher.PubKey, latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string, throughputFor func(uuid.UUID) float64) ([]routing.Hop, []routing.Hop, bool) {
 	if len(forward) == 0 || len(reverse) == 0 {
 		return nil, nil, false
 	}
-	if len(exclude) == 0 && latencyFor == nil && typeFor == nil {
+	if len(exclude) == 0 && latencyFor == nil && typeFor == nil && throughputFor == nil {
 		// Hot path: no constraint, no ranker. Preserve the original
 		// first-element behavior so back-compat single-route callers
 		// are unaffected (tests that don't pass a latencyFor).
@@ -1150,8 +1150,8 @@ func pickDisjointPath(forward, reverse [][]routing.Hop, exclude []cipher.PubKey,
 	for _, pk := range exclude {
 		excludeSet[pk] = struct{}{}
 	}
-	fwdPath, fwdOK := pickBestDirection(forward, excludeSet, latencyFor, typeFor)
-	revPath, revOK := pickBestDirection(reverse, excludeSet, latencyFor, typeFor)
+	fwdPath, fwdOK := pickBestDirection(forward, excludeSet, latencyFor, typeFor, throughputFor)
+	revPath, revOK := pickBestDirection(reverse, excludeSet, latencyFor, typeFor, throughputFor)
 	if !fwdOK || !revOK {
 		return nil, nil, false
 	}
@@ -1163,17 +1163,17 @@ func pickDisjointPath(forward, reverse [][]routing.Hop, exclude []cipher.PubKey,
 // When latencyFor is nil, returns the first acceptable candidate (the
 // legacy first-after-exclude behavior — preserved for callers that
 // don't opt into ranking, e.g. the existing tests).
-func pickBestDirection(paths [][]routing.Hop, excludeSet map[cipher.PubKey]struct{}, latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string) ([]routing.Hop, bool) {
+func pickBestDirection(paths [][]routing.Hop, excludeSet map[cipher.PubKey]struct{}, latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string, throughputFor func(uuid.UUID) float64) ([]routing.Hop, bool) {
 	bestIdx := -1
 	bestScore := 0.0
 	for i, p := range paths {
 		if pathTouchesIntermediate(p, excludeSet) {
 			continue
 		}
-		if latencyFor == nil && typeFor == nil {
+		if latencyFor == nil && typeFor == nil && throughputFor == nil {
 			return p, true
 		}
-		score := pathLatencyScore(p, latencyFor, typeFor)
+		score := pathLatencyScore(p, latencyFor, typeFor, throughputFor)
 		if bestIdx < 0 || score < bestScore {
 			bestIdx = i
 			bestScore = score
@@ -1215,6 +1215,31 @@ func transportTypeCostMs(tpType string) float64 {
 	}
 }
 
+// transportCostMs is the per-hop throughput penalty used by route ranking. When
+// a MEASURED throughput estimate exists (throughputBps > 0, from the passive
+// observer / packet-pair probe) it is used DIRECTLY — a link measured fast
+// scores 0 regardless of type, a link measured slow is penalized regardless of
+// type — so ranking is by evidence, and a genuinely-fast webrtc link is kept
+// while a congested stcpr one is avoided. transportTypeCostMs is only the PRIOR,
+// used until a real measurement exists. Bytes/sec thresholds ≈ 40/10/2/0.4 Mbps.
+func transportCostMs(tpType string, throughputBps float64) float64 {
+	if throughputBps <= 0 {
+		return transportTypeCostMs(tpType) // no measurement yet — type prior
+	}
+	switch {
+	case throughputBps >= 5_000_000:
+		return 0
+	case throughputBps >= 1_250_000:
+		return 25
+	case throughputBps >= 250_000:
+		return 100
+	case throughputBps >= 50_000:
+		return 250
+	default:
+		return 400 // measured slow — worse than the webrtc prior
+	}
+}
+
 // pathLatencyScore returns the sum of per-hop avg-latency-ms across a
 // path, treating unknown latencies (latencyFor returning 0) as a high
 // cost so paths with measured latency outrank paths with no signal at
@@ -1227,7 +1252,7 @@ func transportTypeCostMs(tpType string) float64 {
 // transportTypeCostMs) so fast transports outrank slow ones at equal RTT. It
 // is nil-safe: a nil typeFor scores on RTT alone (back-compat for callers /
 // tests that don't thread transport type).
-func pathLatencyScore(path []routing.Hop, latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string) float64 {
+func pathLatencyScore(path []routing.Hop, latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string, throughputFor func(uuid.UUID) float64) float64 {
 	const unknownLatencyCostMs = 1000.0
 	var total float64
 	for _, h := range path {
@@ -1240,8 +1265,15 @@ func pathLatencyScore(path []routing.Hop, latencyFor func(uuid.UUID) float64, ty
 		} else {
 			total += ms
 		}
+		// Throughput penalty: MEASURED capacity when available, else the
+		// transport-type prior. Only applied when typeFor is threaded (the real
+		// dial path); nil typeFor scores on RTT alone (back-compat tests).
 		if typeFor != nil {
-			total += transportTypeCostMs(typeFor(h.TpID))
+			var tp float64
+			if throughputFor != nil {
+				tp = throughputFor(h.TpID)
+			}
+			total += transportCostMs(typeFor(h.TpID), tp)
 		}
 	}
 	return total
@@ -1292,7 +1324,7 @@ func findRouteNum(mux int) uint16 {
 //
 // typeFor returns "" for IDs the lookup failed for — rejectDMSGMultihop
 // treats unknown as "not DMSG" (can't prove it's bad).
-func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) (latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string) {
+func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) (latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string, throughputFor func(uuid.UUID) float64) {
 	unique := make(map[uuid.UUID]struct{})
 	for _, paths := range [][][]routing.Hop{fwd, rev} {
 		for _, p := range paths {
@@ -1303,6 +1335,7 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 	}
 	latencyCache := make(map[uuid.UUID]float64, len(unique))
 	typeCache := make(map[uuid.UUID]string, len(unique))
+	throughputCache := make(map[uuid.UUID]float64, len(unique))
 
 	var misses []uuid.UUID
 	for id := range unique {
@@ -1314,6 +1347,9 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 					latencyCache[id] = stats.Avg
 				}
 				typeCache[id] = string(tp.Entry.Type)
+				if bps := tp.GetThroughputBps(); bps > 0 {
+					throughputCache[id] = bps
+				}
 				continue
 			}
 		}
@@ -1348,12 +1384,16 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 					latencyCache[id] = entry.Latency
 				}
 				typeCache[id] = string(entry.Type)
+				if entry.ThroughputBps > 0 {
+					throughputCache[id] = entry.ThroughputBps
+				}
 			}
 		}
 	}
 
 	return func(id uuid.UUID) float64 { return latencyCache[id] },
-		func(id uuid.UUID) string { return typeCache[id] }
+		func(id uuid.UUID) string { return typeCache[id] },
+		func(id uuid.UUID) float64 { return throughputCache[id] }
 }
 
 // rejectDMSGMultihop returns paths with any multihop candidate
@@ -1795,6 +1835,13 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		}
 	}
 	localTypeFor := func(id uuid.UUID) string { return tpTypeOf[id] }
+	tpThroughput := make(map[uuid.UUID]float64)
+	for _, entry := range allEntries {
+		if entry != nil && entry.ThroughputBps > 0 {
+			tpThroughput[entry.ID] = entry.ThroughputBps
+		}
+	}
+	localThroughputFor := func(id uuid.UUID) float64 { return tpThroughput[id] }
 
 	queue := seed
 	for level := 1; level <= maxHops && len(queue) > 0; level++ {
@@ -1877,9 +1924,9 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		// among same-hop-count candidates.
 		if len(dstCandidates) > 0 {
 			best := dstCandidates[0]
-			bestScore := pathLatencyScore(best, localLatencyFor, localTypeFor)
+			bestScore := pathLatencyScore(best, localLatencyFor, localTypeFor, localThroughputFor)
 			for _, p := range dstCandidates[1:] {
-				if s := pathLatencyScore(p, localLatencyFor, localTypeFor); s < bestScore {
+				if s := pathLatencyScore(p, localLatencyFor, localTypeFor, localThroughputFor); s < bestScore {
 					best = p
 					bestScore = s
 				}
