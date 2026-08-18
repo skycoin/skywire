@@ -936,6 +936,30 @@ func (rg *RouteGroup) nextTransport(payload []byte) (*transport.ManagedTransport
 	return rg.tps[0], rg.fwd[0], 0, nil
 }
 
+// nextFastestTransport is nextTransport's retransmit-path variant: it always
+// routes to the lowest-latency live leg (see routeMux.selectFastestTransport)
+// so a head-of-line-blocking gap is healed on a fast leg, not re-sent down the
+// slow leg that stalled it. Single-leg groups behave identically to
+// nextTransport.
+func (rg *RouteGroup) nextFastestTransport() (*transport.ManagedTransport, routing.Rule, int, error) {
+	if len(rg.tps) == 0 {
+		return nil, nil, -1, ErrNoTransports
+	}
+	if len(rg.fwd) == 0 {
+		return nil, nil, -1, ErrNoRules
+	}
+	if len(rg.tps) != len(rg.fwd) {
+		return nil, nil, -1, ErrRuleTransportMismatch
+	}
+	if rg.mux != nil && len(rg.tps) > 1 {
+		return rg.mux.selectFastestTransport(rg.tps, rg.fwd)
+	}
+	if rg.tps[0] == nil {
+		return nil, nil, -1, ErrBadTransport
+	}
+	return rg.tps[0], rg.fwd[0], 0, nil
+}
+
 // RouteHops returns the list of visor public keys that form the route path.
 // The first element is the first hop from the source, and the last element
 // is the destination visor.
@@ -1926,7 +1950,11 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 		}
 
 		rg.mu.Lock()
-		tp, rule, leg, err := rg.nextTransport(data)
+		// Retransmit on the FASTEST live leg, not the mode-driven spray pick:
+		// this seq is what the peer's reorder buffer is HoL-blocked on, so heal
+		// it on a fast path instead of possibly re-sending it down the slow leg
+		// that stalled it. See routeMux.selectFastestTransport.
+		tp, rule, leg, err := rg.nextFastestTransport()
 		rg.mu.Unlock()
 		if err != nil {
 			return err
