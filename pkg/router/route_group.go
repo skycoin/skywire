@@ -214,6 +214,13 @@ type RouteGroup struct {
 	legPongSeen   map[uuid.UUID]bool
 	legMissed     map[uuid.UUID]int
 	inflightPings map[int64]uuid.UUID
+	// legE2ELatency is the EWMA-smoothed END-TO-END round-trip latency per leg,
+	// keyed by transport ID (survives index shifts), folded from the
+	// leg-liveness pong. This is the leg's TRUE route latency (all hops), unlike
+	// tp.GetLatency() which is only the first-hop transport RTT — so a policy
+	// evicting the "slowest leg" and the fastest-leg retransmit picker judge the
+	// whole path, not just the near edge. Guarded by legLivenessMu.
+	legE2ELatency map[uuid.UUID]float64
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -245,6 +252,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		legPongSeen:        make(map[uuid.UUID]bool),
 		legMissed:          make(map[uuid.UUID]int),
 		inflightPings:      make(map[int64]uuid.UUID),
+		legE2ELatency:      make(map[uuid.UUID]float64),
 	}
 
 	return rg
@@ -773,7 +781,13 @@ func (rg *RouteGroup) snapshotLegs() []LegInfo {
 			l.Kind = string(tp.Entry.Type)
 			l.TransportID = tp.Entry.ID.String()
 			l.Alive = !tp.IsClosed()
-			if stats := tp.GetLatencyStats(); stats.Avg > 0 {
+			// Prefer the measured END-TO-END per-leg latency (whole route) over
+			// the first-hop transport RTT — it is the leg-quality signal the
+			// policy's slowest-leg eviction should judge. Falls back to the
+			// transport RTT until the first liveness pong lands.
+			if e2e := rg.legEndToEndLatencyMs(tp.Entry.ID); e2e > 0 {
+				l.LatencyMs = int(e2e)
+			} else if stats := tp.GetLatencyStats(); stats.Avg > 0 {
 				l.LatencyMs = int(stats.Avg)
 			}
 			if bw := tp.GetBandwidth(); bw != nil {
@@ -788,7 +802,34 @@ func (rg *RouteGroup) snapshotLegs() []LegInfo {
 		}
 		legs = append(legs, l)
 	}
+	// Prune per-leg latency EWMA entries for transports no longer in the group
+	// (rotation retires transport IDs that never return), keeping the map
+	// bounded to the live legs. Caller holds rg.mu; rg.mu → legLivenessMu order.
+	rg.legLivenessMu.Lock()
+	if len(rg.legE2ELatency) > len(rg.tps) {
+		live := make(map[uuid.UUID]struct{}, len(rg.tps))
+		for _, tp := range rg.tps {
+			if tp != nil {
+				live[tp.Entry.ID] = struct{}{}
+			}
+		}
+		for id := range rg.legE2ELatency {
+			if _, ok := live[id]; !ok {
+				delete(rg.legE2ELatency, id)
+			}
+		}
+	}
+	rg.legLivenessMu.Unlock()
 	return legs
+}
+
+// legEndToEndLatencyMs returns the EWMA-smoothed end-to-end round-trip latency
+// for the leg on transport tpID (0 if none measured yet). Takes legLivenessMu;
+// callers may hold rg.mu (the rg.mu → legLivenessMu order is respected).
+func (rg *RouteGroup) legEndToEndLatencyMs(tpID uuid.UUID) float64 {
+	rg.legLivenessMu.Lock()
+	defer rg.legLivenessMu.Unlock()
+	return rg.legE2ELatency[tpID]
 }
 
 // fireLegChange calls the policy's OnLegChange hook (if any) and
@@ -2030,10 +2071,13 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 	// leg-liveness probes, mark that leg alive. A pong arriving AT ALL proves
 	// the leg's end-to-end round trip works, independent of the latency value
 	// (so this runs before the latency sanity-reject below).
+	var pongLegID uuid.UUID
+	var pongLegOK bool
 	rg.legLivenessMu.Lock()
 	if legID, ok := rg.inflightPings[int64(sentAtMs)]; ok { //nolint: gosec
 		rg.legPongSeen[legID] = true
 		delete(rg.inflightPings, int64(sentAtMs)) //nolint: gosec
+		pongLegID, pongLegOK = legID, true
 	}
 	rg.legLivenessMu.Unlock()
 
@@ -2052,6 +2096,21 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 	// underlying transport see the bogus value.
 	if latencyMs <= 0 || latencyMs > transport.MaxReasonableRTTMs {
 		return nil
+	}
+
+	// Fold this leg's measured END-TO-END round trip into its EWMA (keyed by
+	// transport ID). This is the whole-path latency the pong just traversed —
+	// the right per-leg quality signal for the policy's slowest-leg eviction and
+	// the fastest-leg retransmit pick, versus first-hop transport RTT.
+	if pongLegOK {
+		const alpha = 0.3
+		rg.legLivenessMu.Lock()
+		if prev, ok := rg.legE2ELatency[pongLegID]; ok {
+			rg.legE2ELatency[pongLegID] = alpha*latencyMs + (1-alpha)*prev
+		} else {
+			rg.legE2ELatency[pongLegID] = latencyMs
+		}
+		rg.legLivenessMu.Unlock()
 	}
 
 	rg.networkStats.SetLatency(uint32(latencyMs)) //nolint: gosec
