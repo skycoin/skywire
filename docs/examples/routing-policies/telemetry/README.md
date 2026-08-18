@@ -56,6 +56,36 @@ skywire cli proxy mux info --ndjson - --watch 500ms | tee run.ndjson
 skywire cli proxy mux info -n vpn-client --ndjson run.ndjson
 ```
 
+## Running the rig
+
+`run-rig.sh` ties the three pieces together for a reproducible per-preset run:
+install the preset, drive steady load, sample per-leg telemetry to NDJSON.
+
+```sh
+# adaptive, 5 min, forcing multi-hop so a mux group forms, load via the proxy:
+LOAD_URL=http://host/big.bin \
+  docs/examples/routing-policies/telemetry/run-rig.sh adaptive skysocks-client 300 2
+```
+
+Args: `<preset> [app=skysocks-client] [duration_s=300] [min_hops=0]`. Set
+`min_hops` > 1 to force multi-hop so the size/membership dimensions have legs to
+work over even when the exit is directly reachable.
+
+## Controlled far-end (gate 3)
+
+The load the harness measures **must ride the policy app's route group** — i.e.
+go through the proxy. So the controlled far-end is a steady sink reachable via
+the proxy's **exit**, pointed at by `LOAD_URL`, chosen so the far-end is never
+the bottleneck (throughput deltas then attribute to the policy, not peer noise):
+
+- a `/dev/zero` server on the exit visor's localhost (`while true; do nc -lp 8888 </dev/zero; done`, or an HTTP handler streaming zeros), or
+- a stable high-bandwidth file.
+
+`skywire cli visor ping bandwidth <PK>` and `mux-bw <PK>` are a **complementary
+router-level baseline** to a visor you control — steady continuous send/receive
+with per-leg telemetry — but they use their own ping/mux routes, *not* the
+policy app's route group, so they measure raw mux capacity, not a preset.
+
 ## Charting
 
 Open `mux-telemetry-chart.html` in a browser and load `run.ndjson` (file picker
