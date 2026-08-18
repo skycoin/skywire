@@ -25,6 +25,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -143,7 +144,11 @@ func (a *AllTransportsCXOPublisher) publishOnce(ctx context.Context) {
 			a.recordError(err)
 			continue
 		}
-		if err := a.pub.Put(v.path, body); err != nil {
+		// gzip the snapshot before publishing: CXO stores + propagates object
+		// bytes verbatim, so a raw JSON body travels uncompressed. Subscribers
+		// auto-detect + gunzip (cxoutils.Gunzip). See docs — this keeps the CXO
+		// feed from being a bandwidth regression vs the gzipped HTTP endpoint.
+		if err := a.pub.Put(v.path, cxoutils.Gzip(body)); err != nil {
 			a.log.WithError(err).WithField("path", v.path).Warn("publisher Put failed")
 			a.recordError(err)
 			continue

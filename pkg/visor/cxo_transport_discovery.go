@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/transport"
 	tpdapi "github.com/skycoin/skywire/pkg/transport-discovery/api"
 )
@@ -52,6 +53,7 @@ func (c *cxoAwareTPD) GetAllTransports(ctx context.Context) ([]*transport.Entry,
 			defer mgr.ReleaseFor(TabCLITransports)
 			body, _, ok := mgr.Get(FeedTPDAllTransports, tpdapi.AllTransportsPathWithoutSelf)
 			if ok && len(body) > 0 {
+				body = cxoutils.Gunzip(body) // publisher gzips; raw bodies pass through
 				var entries []*transport.Entry
 				if err := json.Unmarshal(body, &entries); err == nil {
 					return entries, nil
