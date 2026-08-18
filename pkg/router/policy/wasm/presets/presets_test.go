@@ -226,11 +226,16 @@ func TestAdaptiveDecides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decide: %v", err)
 	}
-	if spec.Mux != 3 {
-		t.Errorf("Mux = %d, want 3", spec.Mux)
+	// adaptive starts LEAN at mux=1 (single fastest path) and grows under load
+	// via on_tick; starting wide dragged traffic across slow disjoint siblings.
+	if spec.Mux != 1 {
+		t.Errorf("Mux = %d, want 1 (lean start, grow on load)", spec.Mux)
 	}
-	if spec.MinHops != 2 {
-		t.Errorf("MinHops = %d, want 2", spec.MinHops)
+	// adaptive deliberately does NOT set MinHops: min-hops is the operator's
+	// privacy constraint (session/config), not the performance policy's to
+	// impose. 0 means "inherit the operator's floor" via EffectiveMinHops.
+	if spec.MinHops != 0 {
+		t.Errorf("MinHops = %d, want 0 (inherit operator floor)", spec.MinHops)
 	}
 	if spec.RotationIntervalSeconds != 20 {
 		t.Errorf("RotationIntervalSeconds = %d, want 20", spec.RotationIntervalSeconds)
