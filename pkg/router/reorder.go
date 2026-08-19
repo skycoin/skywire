@@ -65,27 +65,37 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 		copy(cp, data)
 		rb.buf[seq] = cp
 
-		// Mark when this frontier gap opened, so it can be released if it
-		// stays open too long (a dead leg the SACK retransmit has not yet
-		// refilled).
+		// Mark when this frontier gap opened, so a stalled leg can be timed for
+		// diagnostics / future fast-prune (see below).
 		if rb.gapSince.IsZero() {
 			rb.gapSince = time.Now()
 		}
 
-		// Time-based release: a gap held longer than reorderTimeout is treated
-		// as a dead leg rather than skew — flush past it so the stream keeps
-		// moving (lossy) instead of stalling until liveness prunes the leg.
-		if !rb.gapSince.IsZero() && time.Since(rb.gapSince) >= reorderTimeout {
-			return rb.flushAll()
-		}
+		// NO time-based skip. The mux carries the route group's NOISE-encrypted
+		// byte stream (router_serve.go wraps the RouteGroup with network.EncryptConn
+		// before the app sees it), and noise is a stateful AEAD: delivering PAST a
+		// missing sequence permanently desyncs the cipher — every later frame then
+		// fails its MAC and yields zero plaintext, turning a transient stall into a
+		// PERMANENT 0-byte wedge. The old time-based flushAll() "released" the gap
+		// to keep the stream "moving (lossy)", but on a noise stream lossy == dead:
+		// it manufactured the exact hard stall it meant to avoid, which is why an
+		// N-leg mux with one black-holing (e.g. webrtc-under-load) leg carried ~0
+		// goodput. Instead HOLD the gap: the receiver's SACK keeps reporting the
+		// missing seq and the sender retransmits it CONTIGUOUSLY from its retx
+		// buffer over a live leg, so the buffer drains in order with the cipher
+		// intact. A leg that stays dead is removed by leg-liveness pruning, after
+		// which its unacked seqs are retransmitted on the survivors. reorderTimeout
+		// is retained as the stall threshold for that diagnostics/prune path.
+		_ = reorderTimeout
 
-		// Emergency backstop only: with reliable leg transports the missing
-		// seq arrives within the skew window and drains the buffer, so this
-		// never trips in normal operation. Reaching it means a leg has gone
-		// dead mid-stream; force-flush (lossy, skips the gap) to avoid a
-		// permanent stall until liveness prunes the leg. It is NOT the normal
-		// reorder path — do not lower maxGap to "save memory": that reintroduces
-		// the mux>1 corruption bug.
+		// Emergency OOM backstop only: with reliable legs the missing seq arrives
+		// (via skew or SACK retransmit) and drains the buffer, so this never trips
+		// in normal operation. Reaching it means a leg has gone dead mid-stream AND
+		// retransmit has not refilled within maxGap packets. Force-flushing here
+		// still skips the gap (and so corrupts a noise stream) — it is a
+		// last-resort guard against unbounded memory, not a recovery path; the
+		// route group's liveness prune + teardown is the real handler. Do NOT lower
+		// maxGap to "save memory": that reintroduces the mux>1 corruption bug.
 		if len(rb.buf) >= rb.maxGap {
 			return rb.flushAll()
 		}
