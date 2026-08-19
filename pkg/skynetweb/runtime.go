@@ -239,18 +239,35 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 			// Runs before the panic-recover defer on a normal return; no-ops on
 			// success or panic.
 			defer func() {
-				if retErr == nil || retConn != nil {
+				if retErr == nil || retConn != nil || !proxyinterstitial.IsTransient(retErr) {
 					return
 				}
 				_, port, _ := net.SplitHostPort(addr) //nolint:errcheck
-				if proxyinterstitial.ShouldServe(port) && proxyinterstitial.IsTransient(retErr) {
-					target := origHost
-					if target == "" {
-						target = addr
-					}
+				target := origHost
+				if target == "" {
+					target = addr
+				}
+				switch {
+				case proxyinterstitial.ShouldServe(port):
 					log.WithField("host", target).WithField("err", retErr).
 						Debug("SOCKS5 → serving branded route interstitial")
-					retConn, retErr = proxyinterstitial.Conn(target, "", "skynet", false), nil
+					retConn, retErr = proxyinterstitial.Conn(target, proxyinterstitial.StatusLine(retErr), "skynet", false), nil
+				case cfg.TLSMITM && isTLSPort(port, cfg.TLSPort):
+					// HTTPS request whose route is still warming: terminate the
+					// browser's TLS locally with a per-host leaf and serve the
+					// interstitial HTML over it (same MITM path as a warm TLS dial,
+					// with the fixed interstitial responder as the "upstream").
+					// If minting fails, fall through to the real error.
+					leaf, lerr := cfg.LeafMinter.For(origHost)
+					if lerr != nil {
+						log.WithField("host", target).WithField("err", lerr).
+							Debug("SOCKS5 → TLS interstitial leaf mint failed; surfacing dial error")
+						return
+					}
+					log.WithField("host", target).WithField("err", retErr).
+						Debug("SOCKS5 → serving branded route interstitial over TLS (MITM)")
+					retConn, retErr = &tcpAddrConn{Conn: skynetca.MITMTerminate(
+						proxyinterstitial.Conn(target, proxyinterstitial.StatusLine(retErr), "skynet", false), leaf)}, nil
 				}
 			}()
 
@@ -466,6 +483,11 @@ func (c *tcpAddrConn) RemoteAddr() net.Addr {
 
 func (c *tcpAddrConn) LocalAddr() net.Addr {
 	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
+}
+
+// isTLSPort reports whether the string port equals the configured TLS-MITM port.
+func isTLSPort(port string, tlsPort uint16) bool {
+	return port != "" && port == fmt.Sprintf("%d", tlsPort)
 }
 
 func isSkynetHost(host, suffix string) bool {
