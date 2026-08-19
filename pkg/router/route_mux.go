@@ -498,6 +498,15 @@ func (m *routeMux) deliverData(seq uint32, data []byte) (delivered [][]byte, gap
 	return delivered, gapDetected
 }
 
+// gapAge exposes the reorder buffer's current frontier-gap age (0 if the stream
+// is contiguous). Used by the route group's fast data-progress prune.
+func (m *routeMux) gapAge() time.Duration {
+	if m.reorderBuf == nil {
+		return 0
+	}
+	return m.reorderBuf.GapAge()
+}
+
 // sackMinInterval is the minimum spacing between receiver-side SACKs. It is
 // well under retxMinAge so a genuine loss is still signaled several times
 // before the sender's retransmit timer fires, while collapsing the flood of

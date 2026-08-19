@@ -44,6 +44,18 @@ const (
 	// its (possibly shared) transport is NOT closed, so a false positive simply
 	// triggers a self-heal re-dial — never an outage, and never the last leg.
 	legPongMissThreshold = 3
+	// legDataProgressInterval is how often the fast data-progress prune samples
+	// each leg's rg-scoped RecvBytes. Much tighter than legLivenessInterval so a
+	// leg that black-holes bulk DATA (while still echoing the tiny liveness ping)
+	// is caught in seconds, not the ~90s the pong-miss path takes — the
+	// difference between a mux that limps at the fragile leg's retransmit tax and
+	// one that sheds the leg and runs at the reliable legs' rate.
+	legDataProgressInterval = 5 * time.Second
+	// legDataStallGapAge is how long a reorder frontier gap must stay open before
+	// the data-progress prune will act. Long enough that ordinary latency-skew
+	// interleave (which closes in well under a second) never trips it; short
+	// enough to react quickly once a leg genuinely stops delivering its share.
+	legDataStallGapAge = 3 * time.Second
 )
 
 var (
@@ -221,6 +233,13 @@ type RouteGroup struct {
 	// evicting the "slowest leg" and the fastest-leg retransmit picker judge the
 	// whole path, not just the near edge. Guarded by legLivenessMu.
 	legE2ELatency map[uuid.UUID]float64
+	// legRecvSnap is each leg's last-sampled rg-scoped RecvBytes, keyed by
+	// transport ID (survives index shifts), for the fast data-progress prune:
+	// an ACTIVE leg whose recv is flat across an interval while the group keeps
+	// receiving AND a reorder gap stays open is black-holing DATA (a leg that
+	// still echoes the tiny liveness ping, so pong-miss liveness never catches
+	// it). Guarded by legLivenessMu.
+	legRecvSnap map[uuid.UUID]uint64
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -253,6 +272,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		legMissed:          make(map[uuid.UUID]int),
 		inflightPings:      make(map[int64]uuid.UUID),
 		legE2ELatency:      make(map[uuid.UUID]float64),
+		legRecvSnap:        make(map[uuid.UUID]uint64),
 	}
 
 	return rg
@@ -1093,6 +1113,12 @@ func (rg *RouteGroup) startOffServiceLoops() {
 	// BEYOND the first hop (invisible to pruneDeadTransports' local tp.IsClosed
 	// check) and drop them so self-heal re-dials a live replacement.
 	go rg.servicePacketLoop("leg-liveness", legLivenessInterval, rg.legLivenessServiceFn)
+	// Fast data-progress prune: catch a leg that black-holes bulk DATA (while
+	// still echoing the tiny liveness ping, so the pong-miss path above never
+	// sees it) in seconds, by watching per-leg recv progress against an open
+	// reorder gap. Restores mux throughput to the reliable legs' rate instead of
+	// limping at the fragile leg's retransmit tax.
+	go rg.servicePacketLoop("leg-dataprogress", legDataProgressInterval, rg.legDataProgressServiceFn)
 	// Note: Automatic ping loop removed. Latency is now measured once at transport creation.
 	// Rotation loop is NOT started here — startOffServiceLoops runs
 	// during initial route-group setup, before the router-side
@@ -1346,6 +1372,130 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 			rg.logger.WithError(err).Debugf("leg-liveness: probe write failed on leg %s", p.id)
 		}
 	}
+}
+
+// legDataProgressServiceFn is the FAST data-plane prune. The pong-miss liveness
+// above only catches a leg that stops echoing the tiny control ping — but a leg
+// (classically webrtc under load) can keep echoing pings while black-holing bulk
+// DATA, so it survives ~90s while taxing the whole mux: every seq it drops is
+// SACK-retransmitted on a live leg, capping aggregate throughput at the fragile
+// leg's rate. This loop samples each leg's rg-scoped RecvBytes every few seconds
+// and, WHEN a reorder frontier gap has stayed open past legDataStallGapAge (i.e.
+// the receiver is genuinely stuck waiting on a missing seq, not just skewed),
+// prunes any ACTIVE leg that delivered ZERO bytes over the interval while the
+// group as a whole kept receiving. Pruning is safe by construction: it never
+// drops the last active leg, keeps a shared transport open, and a false positive
+// merely triggers a self-heal re-dial (see pruneLivenessDeadLegs). Standby legs
+// are excluded (they aren't sent to, so zero recv is expected).
+func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
+	if rg.isClosed() || rg.mux == nil {
+		return
+	}
+
+	rg.mu.Lock()
+	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
+	rg.mu.Unlock()
+
+	stats := rg.mux.snapshotLegs()
+
+	type legRecv struct {
+		id      uuid.UUID
+		recv    uint64
+		standby bool
+	}
+	legs := make([]legRecv, 0, len(tpsCopy))
+	for i, tp := range tpsCopy {
+		if tp == nil || i >= len(stats) {
+			continue
+		}
+		legs = append(legs, legRecv{id: tp.Entry.ID, recv: stats[i].RecvBytes, standby: rg.mux.isLegStandby(i)})
+	}
+
+	// Only judge when the receiver is genuinely stuck on a missing sequence.
+	gapStuck := rg.mux.gapAge() >= legDataStallGapAge
+
+	// Compute per-leg recv deltas vs the last sample and refresh the snapshot.
+	rg.legLivenessMu.Lock()
+	perDelta := make(map[uuid.UUID]uint64, len(legs))
+	var aggDelta uint64
+	liveIDs := make(map[uuid.UUID]struct{}, len(legs))
+	for _, l := range legs {
+		liveIDs[l.id] = struct{}{}
+		if prev, ok := rg.legRecvSnap[l.id]; ok && l.recv >= prev {
+			d := l.recv - prev
+			perDelta[l.id] = d
+			aggDelta += d
+		}
+		rg.legRecvSnap[l.id] = l.recv
+	}
+	for id := range rg.legRecvSnap {
+		if _, ok := liveIDs[id]; !ok {
+			delete(rg.legRecvSnap, id)
+		}
+	}
+	rg.legLivenessMu.Unlock()
+
+	deltas := make([]legRecvDelta, 0, len(legs))
+	for _, l := range legs {
+		deltas = append(deltas, legRecvDelta{id: l.id, delta: perDelta[l.id], standby: l.standby})
+	}
+	dead := selectDataStalledLegs(deltas, gapStuck)
+	if len(dead) > 0 {
+		rg.logger.Infof("leg-dataprogress: fast-pruning %d data-black-holing leg(s) (delivered <1/16 of the fastest leg over %v while group moved %dB, reorder gap stuck %v)",
+			len(dead), legDataProgressInterval, aggDelta, rg.mux.gapAge())
+		rg.pruneLivenessDeadLegs(dead)
+	}
+}
+
+// legRecvDelta is one active-or-standby leg's rg-scoped recv progress over a
+// data-progress interval.
+type legRecvDelta struct {
+	id      uuid.UUID
+	delta   uint64
+	standby bool
+}
+
+// selectDataStalledLegs picks the ACTIVE legs to fast-prune: while the receiver
+// is stuck on a reorder gap (gapStuck) and the group as a whole is moving data,
+// any active leg delivering less than 1/16 of the FASTEST active leg's bytes is
+// black-holing its share (dropped to a trickle) rather than merely being a
+// slower path — the fragile (e.g. webrtc-under-load) leg that taxes the whole
+// mux via SACK retransmits. It never selects so many that fewer than one active
+// leg would remain. Pure (no rg state / locks) so it is unit-tested directly.
+func selectDataStalledLegs(legs []legRecvDelta, gapStuck bool) []uuid.UUID {
+	if !gapStuck {
+		return nil
+	}
+	var agg, top uint64
+	active := 0
+	for _, l := range legs {
+		agg += l.delta
+		if l.standby {
+			continue
+		}
+		active++
+		if l.delta > top {
+			top = l.delta
+		}
+	}
+	// Need the group to be moving data, at least two active legs (never risk the
+	// last one on a heuristic), and a real leader to measure the laggards against.
+	if agg == 0 || active < 2 || top == 0 {
+		return nil
+	}
+	threshold := top / 16
+	var dead []uuid.UUID
+	for _, l := range legs {
+		if l.standby || l.delta > threshold {
+			continue
+		}
+		dead = append(dead, l.id)
+	}
+	// Keep at least one active leg even if several trickle at once.
+	if drop := len(dead); drop > 0 && active-drop < 1 {
+		dead = dead[:active-1]
+	}
+	return dead
 }
 
 // pruneLivenessDeadLegs drops the given black-holing legs (by transport ID) from
