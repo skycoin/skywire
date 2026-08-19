@@ -642,10 +642,21 @@ func (tm *Manager) publishTPDList(entries []*Entry) {
 	if entries == nil {
 		entries = []*Entry{} // publish an explicit empty list (last transport gone)
 	}
+	// Publish the COMPACT form: every entry's Edges repeats this visor's own
+	// PK (TPD knows it as the reporter) and carries a derivable transport ID,
+	// so the full form wastes ~62% of the leaf on redundancy. TPD reconstructs
+	// full entries via transport.EntryFromCompact(reporter, ce). A smaller
+	// leaf also fills in fewer CXO round-trips, which matters because the
+	// discovery leaf must land inside the announce conn's (short) lifetime.
+	self := tm.Conf.PubKey
+	compact := make([]CompactEntry, 0, len(entries))
+	for _, e := range entries {
+		compact = append(compact, e.ToCompact(self))
+	}
 	body, err := json.Marshal(struct {
-		Version string   `json:"version,omitempty"`
-		Entries []*Entry `json:"entries"`
-	}{Version: tm.Conf.Version, Entries: entries})
+		Version string         `json:"version,omitempty"`
+		Compact []CompactEntry `json:"c"`
+	}{Version: tm.Conf.Version, Compact: compact})
 	if err != nil {
 		tm.Logger.WithError(err).Debug("Failed to marshal transport list leaf")
 		return

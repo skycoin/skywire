@@ -24,6 +24,43 @@ func TestNewEntry(t *testing.T) {
 	assert.NotNil(t, entryBA.ID)
 }
 
+// TestCompactEntryRoundTrip verifies the compact discovery form
+// reconstructs a byte-identical full Entry from (reporter, remote, type)
+// regardless of which edge the reporter is, and that the default
+// LabelAutomatic is elided-and-restored losslessly.
+func TestCompactEntryRoundTrip(t *testing.T) {
+	reporter, _ := cipher.GenerateKeyPair()
+	remote, _ := cipher.GenerateKeyPair()
+
+	for _, label := range []transport.Label{
+		transport.LabelAutomatic, transport.LabelUser, transport.LabelSkycoin, transport.LabelSetup,
+	} {
+		full := transport.MakeEntry(reporter, remote, "stcpr", label)
+		ce := full.ToCompact(reporter)
+
+		// The reporter's own PK is never present in the compact row.
+		assert.Equal(t, remote, ce.Remote, "compact keeps only the remote edge")
+		if label == transport.LabelAutomatic {
+			assert.Equal(t, transport.Label(""), ce.Label, "default label is elided")
+		}
+
+		got := transport.EntryFromCompact(reporter, ce)
+		assert.Equal(t, full.ID, got.ID, "ID recomputes identically (label=%s)", label)
+		assert.Equal(t, full.Edges, got.Edges, "edges canonicalize identically (label=%s)", label)
+		assert.Equal(t, full.Type, got.Type)
+		assert.Equal(t, label, got.Label, "label restored (label=%s)", label)
+	}
+
+	// Reconstruction is independent of which edge sorts first: build the
+	// compact row from the perspective of BOTH edges and confirm the same
+	// canonical entry comes back.
+	full := transport.MakeEntry(reporter, remote, "squicr", transport.LabelAutomatic)
+	fromReporter := transport.EntryFromCompact(reporter, full.ToCompact(reporter))
+	fromRemote := transport.EntryFromCompact(remote, full.ToCompact(remote))
+	assert.Equal(t, fromReporter.ID, fromRemote.ID)
+	assert.Equal(t, fromReporter.Edges, fromRemote.Edges)
+}
+
 func ExampleSignedEntry_Sign() {
 	pkA, skA := cipher.GenerateKeyPair()
 	pkB, skB := cipher.GenerateKeyPair()

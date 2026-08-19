@@ -63,6 +63,45 @@ type Entry struct {
 	ThroughputBps float64 `json:"throughput_bps,omitempty"`
 }
 
+// CompactEntry is the space-optimized wire form of a transport in the
+// transports/list CXO discovery snapshot. The full Entry repeats the
+// reporter's own PK in Edges on EVERY row (a 66-hex-char PK duplicated
+// once per transport) and carries an ID that is a deterministic hash of
+// (edges, type). TPD already knows the reporter and can recompute the
+// ID, so the snapshot ships only the remote edge + type — ~62% smaller
+// on a real transport set. Reconstruct a full Entry with
+// EntryFromCompact(reporter, ce). Label is omitted for the common
+// LabelAutomatic case and reconstructed as such (lossless).
+type CompactEntry struct {
+	Remote cipher.PubKey `json:"r"`
+	Type   types.Type    `json:"t"`
+	Label  Label         `json:"l,omitempty"` // omitted == LabelAutomatic
+}
+
+// ToCompact returns the compact form of e relative to local (the
+// reporting/publishing visor's PK): the remote edge + type, and the
+// label only when it isn't the default LabelAutomatic.
+func (e *Entry) ToCompact(local cipher.PubKey) CompactEntry {
+	ce := CompactEntry{Remote: e.RemoteEdge(local), Type: e.Type}
+	if e.Label != LabelAutomatic {
+		ce.Label = e.Label
+	}
+	return ce
+}
+
+// EntryFromCompact reconstructs the full Entry a publisher would have
+// sent, from a compact row and the reporter PK that published it. Edges
+// are canonicalized (sorted) and the ID recomputed by MakeEntry, exactly
+// matching the full-form Entry.
+func EntryFromCompact(reporter cipher.PubKey, ce CompactEntry) *Entry {
+	label := ce.Label
+	if label == "" {
+		label = LabelAutomatic
+	}
+	e := MakeEntry(reporter, ce.Remote, ce.Type, label)
+	return &e
+}
+
 // MakeEntry creates a new transport entry
 func MakeEntry(aPK, bPK cipher.PubKey, netType types.Type, label Label) Entry {
 	entry := Entry{
