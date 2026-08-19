@@ -110,16 +110,12 @@ func HydrateSink(store *Store, sink Sink, publishWindowDays int, now time.Time) 
 				pushed++
 			}
 		}
-		for i := range rec.Daily {
-			d := &rec.Daily[i]
-			if d.Date < cutoff {
-				continue
-			}
-			if data, err := json.Marshal(d); err == nil {
-				sink.Put(dailyTransportPath(rec.ID.String(), d.Date), data)
-				pushed++
-			}
-		}
+		// Daily rollups are deliberately NOT hydrated to the CXO sink: no
+		// subscriber consumes them (TPD's aggregator has no /rollup branch;
+		// the visor's own /stats reads them straight from bbolt), and every
+		// byte on this feed competes with transports/list for the announce
+		// conn's short fill budget. They remain persisted in bbolt (the
+		// TransportRecord above) for the local /stats endpoint.
 	}
 
 	// Tiers: per-tier, per-date bitmap if within window.
