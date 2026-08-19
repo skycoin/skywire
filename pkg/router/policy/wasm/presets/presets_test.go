@@ -106,8 +106,10 @@ func TestRotatingBWDecides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decide: %v", err)
 	}
-	if spec.Mux != 4 {
-		t.Errorf("Mux = %d, want 4", spec.Mux)
+	// targetMux(4) active + 1 warm standby = 5 legs provisioned, so the
+	// rotation can hot-swap the spare in without dropping to 3 active.
+	if spec.Mux != 5 {
+		t.Errorf("Mux = %d, want 5 (targetMux 4 active + 1 warm standby)", spec.Mux)
 	}
 	if spec.MinHops != 2 {
 		t.Errorf("MinHops = %d, want 2", spec.MinHops)
@@ -115,8 +117,50 @@ func TestRotatingBWDecides(t *testing.T) {
 	if spec.RotationIntervalSeconds != 90 {
 		t.Errorf("RotationIntervalSeconds = %d, want 90", spec.RotationIntervalSeconds)
 	}
-	if spec.Distribution != "weighted: 1, 1, 1, 1" {
-		t.Errorf("Distribution = %q, want weighted: 1, 1, 1, 1", spec.Distribution)
+	// Equal spread (not latency-weighted "auto") is the privacy property: no
+	// single relay carries a large fraction of the flow.
+	if spec.Distribution != "round-robin" {
+		t.Errorf("Distribution = %q, want round-robin", spec.Distribution)
+	}
+}
+
+// TestRotatingBWRotatesWarmSwap proves the rotation is a warm hot-swap
+// (promote the standby + demote the oldest active) and NOT the old
+// drop+add tear-and-rebuild — the fix that stops higher-mux rotation from
+// killing the stream. Feeds 4 active legs + 1 warm standby and asserts the
+// action promotes the spare, demotes the oldest active, and drops nothing.
+func TestRotatingBWRotatesWarmSwap(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("rotating-bw", Bundle(),
+		policywasm.WithPreset("rotating-bw"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	// Indices 0..3 active, index 4 a warm standby.
+	legs := []policy.LegInfo{
+		{Index: 0, Kind: "stcpr", Alive: true},
+		{Index: 1, Kind: "stcpr", Alive: true},
+		{Index: 2, Kind: "sudph", Alive: true},
+		{Index: 3, Kind: "stcpr", Alive: true},
+		{Index: 4, Kind: "sudph", Alive: true, Standby: true},
+	}
+	act, err := l.OnTick(context.Background(),
+		policy.RoutingContext{App: "skysocks-client"}, legs)
+	if err != nil {
+		t.Fatalf("OnTick: %v", err)
+	}
+	if len(act.PromoteFromStandby) != 1 || act.PromoteFromStandby[0] != 4 {
+		t.Errorf("PromoteFromStandby = %v, want [4] (the warm spare)", act.PromoteFromStandby)
+	}
+	if len(act.DemoteToStandby) != 1 || act.DemoteToStandby[0] != 0 {
+		t.Errorf("DemoteToStandby = %v, want [0] (the oldest active)", act.DemoteToStandby)
+	}
+	if len(act.DropLegs) != 0 {
+		t.Errorf("DropLegs = %v, want none (warm swap never tears down a live leg)", act.DropLegs)
+	}
+	if act.AddLeg {
+		t.Errorf("AddLeg = true, want false (no re-dial on a steady-state swap)")
 	}
 }
 
