@@ -124,6 +124,36 @@ func TestRotatingBWDecides(t *testing.T) {
 	}
 }
 
+// TestRotatingBWAppliesToCustomSession proves rotating-bw applies to a
+// custom-named app/session (e.g. `proxy start --name g8`, which dials under
+// ctx.App="g8"), not only the built-in binary names. The old app-name switch
+// returned an empty spec for any custom session — so the policy silently never
+// applied (no mux, no rotation). Any non-latency-sensitive app must get the
+// full rotation spec.
+func TestRotatingBWAppliesToCustomSession(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("rotating-bw", Bundle(),
+		policywasm.WithPreset("rotating-bw"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	spec, err := l.Decide(context.Background(),
+		policy.RoutingContext{App: "g8"}, nil) // a custom proxy session name
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if spec.Mux != 5 {
+		t.Errorf("Mux = %d for custom session, want 5 (policy must apply, not no-op)", spec.Mux)
+	}
+	if spec.MinHops != 2 {
+		t.Errorf("MinHops = %d, want 2", spec.MinHops)
+	}
+	if spec.RotationIntervalSeconds != 90 {
+		t.Errorf("RotationIntervalSeconds = %d, want 90 (rotation must be scheduled)", spec.RotationIntervalSeconds)
+	}
+}
+
 // TestRotatingBWRotatesWarmSwap proves the rotation is a warm hot-swap
 // (promote the standby + demote the oldest active) and NOT the old
 // drop+add tear-and-rebuild — the fix that stops higher-mux rotation from
