@@ -174,8 +174,11 @@ func decideAppMux(ctx routingContextWire) routeSpecWire {
 	}
 }
 
-// decideRotatingBW is the verbatim rotating-bw preset logic: mux=4 over
-// multi-hop with a leg rotated every 90s for bandwidth-heavy apps.
+// decideRotatingBW is the rotating-bw (privacy) preset: targetMux active legs
+// over multi-hop with byte load spread EQUALLY across them (traffic-analysis
+// resistance — no single relay sees a large fraction of the flow), plus one
+// extra warm-standby leg so on_tick can rotate the active set every 90s
+// WITHOUT a tear-and-rebuild dip (see tickRotatingBW).
 func decideRotatingBW(ctx routingContextWire) routeSpecWire {
 	switch ctx.App {
 	case "vpn-client", "skysocks-client", "skynet-client":
@@ -184,12 +187,21 @@ func decideRotatingBW(ctx routingContextWire) routeSpecWire {
 		// out. The visor's policy layer treats min_hops>=2 as an
 		// implicit avoid_direct signal on the direct-dial bridge, so
 		// the dial flows to the overlay path where rotation can act on
-		// the resulting route group.
+		// the resulting route group. (Without min_hops>=2 the mux/
+		// distribution below is silently dropped by the direct-dial
+		// fast path — the dial never reaches the overlay.)
 		return routeSpecWire{
-			Mux:                     4,
+			// targetMux active + 1 warm standby: the spare lets the
+			// rotation hot-swap (promote spare, demote oldest active)
+			// with no throughput dip and no route-setup round-trip.
+			Mux:                     targetMux + 1,
 			MinHops:                 2,
 			RotationIntervalSeconds: 90,
-			Distribution:            "weighted: 1, 1, 1, 1",
+			// Equal (round-robin) byte spread across the active legs —
+			// the privacy property. "auto"/latency-weighting would pin
+			// bytes to the fastest leg, defeating the spread. The policy
+			// sets this so it overrides the visor-wide muxMode default.
+			Distribution: "round-robin",
 		}
 	}
 	return routeSpecWire{}
@@ -325,42 +337,65 @@ func onTick(inPtr, inLen uint32) uint64 {
 	}
 }
 
-// tickRotatingBW is the verbatim rotating-bw rotation logic.
+// tickRotatingBW is the rotating-bw rotation logic — a WARM HOT-SWAP, not a
+// tear-and-rebuild. The group is provisioned at targetMux active legs + 1 warm
+// standby (decideRotatingBW asks for targetMux+1). Each rotation:
 //
-//	alive_count >= target_mux  → drop oldest + add  (steady-state
-//	                             rotation: one in, one out, leg set
-//	                             drifts across the eligible-peer set)
-//	alive_count <  target_mux  → add only           (recover toward
-//	                             target without shrinking further)
-//	alive_count == 0           → no-op              (defensive; nothing
-//	                             to rotate yet)
+//	targetMux active + a warm standby → promote the standby + demote the
+//	                                    oldest active (both pure setLegStandby
+//	                                    flag-flips: no teardown, no setup
+//	                                    round-trip, demoted leg stays alive so
+//	                                    its in-flight bytes still drain) → the
+//	                                    active set rotates across the pool with
+//	                                    NO throughput dip.
+//	surplus active, no standby yet    → demote the oldest active to seed the
+//	                                    warm standby (reaches steady state).
+//	below provisioned size            → add a leg (recover the spare / grow).
+//	alive_count == 0                  → no-op (nothing to rotate yet).
 //
-// Gating drop on alive_count >= target_mux means failed adds just delay
-// rotation; the group never shrinks below the target.
+// This replaces the old drop-oldest+add, which tore down a LIVE (sending) leg
+// every rotation — dip at mux=2, fatal stream EOF at mux=4. Demote keeps the
+// leg alive (in-flight data drains); only drop tears down. See the warm-standby
+// RFC and route_group.go OnTick application (promote/demote first, on pre-drop
+// indices).
 func tickRotatingBW(input tickInputWire) uint64 {
-	aliveCount := 0
-	oldestAliveIdx := -1
+	activeCount, aliveCount := 0, 0
+	oldestActiveIdx, standbyIdx := -1, -1
 	for _, l := range input.Legs {
-		if l.Alive {
-			aliveCount++
-			if oldestAliveIdx == -1 || l.Index < oldestAliveIdx {
-				oldestAliveIdx = l.Index
+		if !l.Alive {
+			continue
+		}
+		aliveCount++
+		if l.Standby {
+			if standbyIdx == -1 || l.Index < standbyIdx {
+				standbyIdx = l.Index
 			}
+			continue
+		}
+		activeCount++
+		if oldestActiveIdx == -1 || l.Index < oldestActiveIdx {
+			oldestActiveIdx = l.Index
 		}
 	}
 	if aliveCount == 0 {
 		return 0
 	}
 	var action rotationActionWire
-	if aliveCount >= targetMux {
+	switch {
+	case standbyIdx != -1 && activeCount >= targetMux && oldestActiveIdx != -1:
+		// Steady-state warm swap: spare in, oldest active out (→ next spare).
 		action = rotationActionWire{
-			DropLegs: []int{oldestAliveIdx},
-			AddLeg:   true,
+			PromoteFromStandby: []int{standbyIdx},
+			DemoteToStandby:    []int{oldestActiveIdx},
 		}
-	} else {
-		action = rotationActionWire{
-			AddLeg: true,
-		}
+	case standbyIdx == -1 && activeCount > targetMux && oldestActiveIdx != -1:
+		// Surplus active, no spare yet: demote the oldest to seed the standby.
+		action = rotationActionWire{DemoteToStandby: []int{oldestActiveIdx}}
+	case aliveCount < targetMux+1:
+		// Below the provisioned size (targetMux active + 1 spare): grow.
+		action = rotationActionWire{AddLeg: true}
+	default:
+		return 0
 	}
 	out, err := json.Marshal(action)
 	if err != nil {
