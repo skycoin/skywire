@@ -180,31 +180,34 @@ func decideAppMux(ctx routingContextWire) routeSpecWire {
 // extra warm-standby leg so on_tick can rotate the active set every 90s
 // WITHOUT a tear-and-rebuild dip (see tickRotatingBW).
 func decideRotatingBW(ctx routingContextWire) routeSpecWire {
+	// rotating-bw is OPT-IN per app (proxy/vpn/skynet start --routing-policy, or
+	// visor app arg routing-policy). Apply it to WHATEVER app/session it is
+	// active for — do NOT gate on the built-in binary names. A named proxy
+	// session dials under its SESSION name (e.g. "g8"), not "skysocks-client",
+	// so the old `switch ctx.App { case "skysocks-client", ... }` silently made
+	// the policy a NO-OP for every custom-named session (empty spec → no mux, no
+	// min_hops, no rotation — the reason the rotation never fired live). Only
+	// skip genuinely latency-sensitive apps, where a multi-hop mux is the wrong
+	// shape.
 	switch ctx.App {
-	case "vpn-client", "skysocks-client", "skynet-client":
-		// min_hops=2 already says "no direct transport" — direct is 0
-		// intermediates, so requiring at least 1 intermediate rules it
-		// out. The visor's policy layer treats min_hops>=2 as an
-		// implicit avoid_direct signal on the direct-dial bridge, so
-		// the dial flows to the overlay path where rotation can act on
-		// the resulting route group. (Without min_hops>=2 the mux/
-		// distribution below is silently dropped by the direct-dial
-		// fast path — the dial never reaches the overlay.)
-		return routeSpecWire{
-			// targetMux active + 1 warm standby: the spare lets the
-			// rotation hot-swap (promote spare, demote oldest active)
-			// with no throughput dip and no route-setup round-trip.
-			Mux:                     targetMux + 1,
-			MinHops:                 2,
-			RotationIntervalSeconds: 90,
-			// Equal (round-robin) byte spread across the active legs —
-			// the privacy property. "auto"/latency-weighting would pin
-			// bytes to the fastest leg, defeating the spread. The policy
-			// sets this so it overrides the visor-wide muxMode default.
-			Distribution: "round-robin",
-		}
+	case "skychat", "skychat-client":
+		return routeSpecWire{Mux: 1}
 	}
-	return routeSpecWire{}
+	// min_hops=2 already says "no direct transport" (direct is 0 intermediates);
+	// the visor treats min_hops>=2 as an implicit avoid_direct so the dial flows
+	// to the overlay path where rotation can act. Without it the mux/distribution
+	// is silently dropped by the direct-dial fast path.
+	return routeSpecWire{
+		// targetMux active + 1 warm standby (see tickRotatingBW).
+		Mux:                     targetMux + 1,
+		MinHops:                 2,
+		RotationIntervalSeconds: 90,
+		// Equal (round-robin) byte spread across the active legs — the privacy
+		// property. "auto"/latency-weighting pins bytes to the fastest leg,
+		// defeating the spread; the policy sets this to override the muxMode
+		// default.
+		Distribution: "round-robin",
+	}
 }
 
 // decideLatencyAdaptive is the latency-adaptive preset's decide logic: an
