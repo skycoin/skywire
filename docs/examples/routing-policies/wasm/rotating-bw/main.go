@@ -141,77 +141,90 @@ func decideRoute(inPtr, inLen uint32) uint64 {
 // can reason about "are we at target?"
 const targetMux = 4
 
+// reliableMuxKind reports whether a transport type is reliable enough to ANCHOR
+// a mux active set. stcpr/sudph/squicr/stcp are direct and well-behaved for
+// sustained multiplexed throughput; webrtc/ws/wt and the dmsg relay are not —
+// webrtc especially drops under load, so a mux made entirely of webrtc legs
+// collapses. They are still usable as bonus capacity (promoted for throughput),
+// just never the anchor.
+func reliableMuxKind(kind string) bool {
+	switch kind {
+	case "stcpr", "sudph", "squicr", "stcp":
+		return true
+	}
+	return false
+}
+
 //export on_tick
 func onTick(inPtr, inLen uint32) uint64 {
 	var input tickInputWire
 	if err := json.Unmarshal(readInput(inPtr, inLen), &input); err != nil {
 		return 0
 	}
-	// Rotation policy:
-	//
-	//   alive_count >= target_mux  → drop oldest + add  (steady-
-	//                                 state rotation: one in, one
-	//                                 out, leg set drifts across
-	//                                 the eligible-peer set)
-	//   alive_count <  target_mux  → add only           (recover
-	//                                 toward target without
-	//                                 shrinking further)
-	//   alive_count == 0           → no-op              (defensive;
-	//                                 nothing to rotate yet)
-	//
-	// Why the gating: if drop+add fires every tick and adds fail
-	// in succession (transient remote outage, broken intermediate),
-	// the group would shrink one leg per tick until it hit the
-	// "never drop last alive leg" floor — the rotation would have
-	// to claw all N legs back from a single survivor. Gating drop
-	// on alive_count >= target_mux means failed adds just delay
-	// rotation; the group never shrinks below the target.
-	//
-	// ExcludeHops carries the dropped leg's transport kind as a
-	// (toy) signal — a real policy would pass the dropped leg's
-	// peer-PK chain so the new leg picks a disjoint intermediate
-	// set. This example doesn't have access to per-leg hop PKs
-	// from the wire (LegInfo is index/kind/latency/alive only);
-	// a future ABI extension could expand LegInfoWire with hops
-	// so policies can construct precise excludes.
-	// WARM HOT-SWAP rotation (not tear-and-rebuild). Provisioned at targetMux
-	// active + 1 warm standby; each tick promotes the standby and demotes the
-	// oldest active — pure standby-flag flips, no teardown, no setup round-trip,
-	// and the demoted leg stays alive so its in-flight bytes drain. The active
-	// set rotates across the pool with no throughput dip. (The old drop-oldest+
-	// add tore down a live leg every rotation — dip at mux=2, fatal EOF at mux=4.)
-	activeCount, aliveCount := 0, 0
-	oldestActiveIdx, standbyIdx := -1, -1
+	// Manage the mux by STANDBY, never by dropping. Legs, once established, are
+	// never torn down — the tick only flips each leg's standby flag (no teardown,
+	// no setup round-trip, in-flight bytes drain). Keep ~targetMux legs ACTIVE
+	// anchored on reliable transport types and PARK the rest on warm standby;
+	// promote a webrtc/other leg only when the aggregate throughput needs it (not
+	// enough reliable legs to reach targetMux). An all-reliable anchor keeps the
+	// group alive even as fragile bonus legs come and go. Decisions are on
+	// measurement: leg Kind + standby come from host per-leg telemetry.
+	var relAct, relSb, fragAct, fragSb []int
 	for _, l := range input.Legs {
 		if !l.Alive {
 			continue
 		}
-		aliveCount++
-		if l.Standby {
-			if standbyIdx == -1 || l.Index < standbyIdx {
-				standbyIdx = l.Index
-			}
-			continue
-		}
-		activeCount++
-		if oldestActiveIdx == -1 || l.Index < oldestActiveIdx {
-			oldestActiveIdx = l.Index
+		rel := reliableMuxKind(l.Kind)
+		switch {
+		case l.Standby && rel:
+			relSb = append(relSb, l.Index)
+		case l.Standby:
+			fragSb = append(fragSb, l.Index)
+		case rel:
+			relAct = append(relAct, l.Index)
+		default:
+			fragAct = append(fragAct, l.Index)
 		}
 	}
-	if aliveCount == 0 {
+	active := len(relAct) + len(fragAct)
+	alive := active + len(relSb) + len(fragSb)
+	if alive == 0 {
 		return 0
+	}
+	lo := func(s []int) int {
+		m := s[0]
+		for _, v := range s {
+			if v < m {
+				m = v
+			}
+		}
+		return m
+	}
+	hi := func(s []int) int {
+		m := s[0]
+		for _, v := range s {
+			if v > m {
+				m = v
+			}
+		}
+		return m
 	}
 	var action rotationActionWire
 	switch {
-	case standbyIdx != -1 && activeCount >= targetMux && oldestActiveIdx != -1:
-		action = rotationActionWire{
-			PromoteFromStandby: []int{standbyIdx},
-			DemoteToStandby:    []int{oldestActiveIdx},
-		}
-	case standbyIdx == -1 && activeCount > targetMux && oldestActiveIdx != -1:
-		action = rotationActionWire{DemoteToStandby: []int{oldestActiveIdx}}
-	case aliveCount < targetMux+1:
+	case len(fragAct) > 0 && len(relSb) > 0:
+		action = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}, DemoteToStandby: []int{hi(fragAct)}}
+	case active < targetMux && len(relSb) > 0:
+		action = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}}
+	case active < targetMux && len(fragSb) > 0:
+		action = rotationActionWire{PromoteFromStandby: []int{lo(fragSb)}}
+	case active < targetMux:
 		action = rotationActionWire{AddLeg: true}
+	case active > targetMux && len(fragAct) > 0:
+		action = rotationActionWire{DemoteToStandby: []int{hi(fragAct)}}
+	case active > targetMux:
+		action = rotationActionWire{DemoteToStandby: []int{hi(relAct)}}
+	case len(relSb) > 0 && len(relAct) > 0:
+		action = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}, DemoteToStandby: []int{lo(relAct)}}
 	default:
 		return 0
 	}
