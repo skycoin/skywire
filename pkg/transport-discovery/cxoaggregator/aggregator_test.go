@@ -107,6 +107,45 @@ func TestDispatchLeafTimeline(t *testing.T) {
 	}
 }
 
+// TestDispatchLeafListPaths verifies both the current top-level "tp-list"
+// path and the legacy nested "transports/list" path route to a reconcile,
+// and that the compact rows reconstruct to full entries against the reporter.
+func TestDispatchLeafListPaths(t *testing.T) {
+	reporter, _ := cipher.GenerateKeyPair()
+	remote, _ := cipher.GenerateKeyPair()
+	want := transport.MakeEntry(reporter, remote, "stcpr", transport.LabelAutomatic)
+
+	leaf, err := json.Marshal(transportListLeaf{
+		Version: "v1.2.3",
+		Compact: []transport.CompactEntry{{Remote: remote, Type: "stcpr"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{"tp-list", "transports/list"} {
+		sink := &recordingSink{}
+		a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
+		a.dispatchLeaf(path, leaf, reporter)
+
+		if len(sink.reconciles) != 1 {
+			t.Fatalf("path %q: expected 1 reconcile, got %d", path, len(sink.reconciles))
+		}
+		rc := sink.reconciles[0]
+		if rc.reporter != reporter || rc.version != "v1.2.3" {
+			t.Errorf("path %q: reporter/version mismatch: %v %q", path, rc.reporter, rc.version)
+		}
+		if len(rc.entries) != 1 {
+			t.Fatalf("path %q: expected 1 entry, got %d", path, len(rc.entries))
+		}
+		got := rc.entries[0]
+		if got.ID != want.ID || got.Edges != want.Edges || got.Type != want.Type {
+			t.Errorf("path %q: reconstructed entry mismatch: got id=%v edges=%v; want id=%v edges=%v",
+				path, got.ID, got.Edges, want.ID, want.Edges)
+		}
+	}
+}
+
 func bytesEqual(a, b []byte) bool {
 	if len(a) != len(b) {
 		return false
