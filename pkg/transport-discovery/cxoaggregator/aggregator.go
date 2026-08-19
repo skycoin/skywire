@@ -212,7 +212,15 @@ type Aggregator struct {
 	// briefly drops and redials within the grace window keeps its feed.
 	// Only touched from cleanup() (single goroutine), so no lock.
 	orphanStrikes map[skycipher.PubKey]int
+
+	// dialing guards in-flight dial-backs so the heartbeat cadence can't
+	// storm ConnectPK for the same visor. Keyed by feed PK. Guarded by mu.
+	dialing map[skycipher.PubKey]struct{}
 }
+
+// ensureConnTimeout bounds each dial-back to a visor's CXO node so an
+// unreachable visor doesn't pin a goroutine.
+const ensureConnTimeout = 20 * time.Second
 
 // orphanGraceTicks is how many consecutive cleanup ticks a feed must
 // have zero connected conns before it's reclaimed. At the 2-minute
@@ -321,6 +329,12 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	cxoNode.Config().OnRootReceived = func(_ *node.Conn, r *registry.Root) error {
 		a.log.WithField("visor", cipher.PubKey(r.Pub)).WithField("seq", r.Nonce).
 			Debug("CXO aggregator: root received")
+		// The inbound conn the visor AnnounceTo'd us on closes moments after
+		// delivering this Root, so the immediate fill of its referenced objects
+		// hits "no connections to fill from". Establish a TPD-OWNED outbound
+		// conn to the visor — we hold it, so subsequent Roots (the publisher
+		// re-announces on a heartbeat) have a stable source to fill from.
+		a.ensureConn(r.Pub)
 		return nil
 	}
 	cxoNode.Config().OnRootFilled = func(_ *node.Node, r *registry.Root) {
@@ -469,6 +483,55 @@ func (a *Aggregator) reclaimOrphanFeeds(c *skyobject.Container) {
 		a.log.WithField("visor", cipher.PubKey(feed)).
 			Debug("CXO aggregator: reclaimed orphan feed (no connected conn)")
 	}
+}
+
+// ensureConn keeps a TPD-initiated, persistent CXO connection to a visor whose
+// feed we aggregate. The aggregator otherwise ONLY accepts inbound conns (the
+// visor's AnnounceTo), and those close moments after delivering a Root — so the
+// fill of the Root's referenced objects finds "no connections to fill from" and
+// TPD ingests almost nothing (the transport-discovery gap). A TPD-owned
+// outbound conn survives (we hold it), giving every subsequent Root a stable
+// source to fill from. Idempotent: ConnectPK returns the cached live conn when
+// one exists; a per-PK in-flight guard prevents dial storms under the heartbeat
+// cadence; unreachable visors just fail the bounded dial and are retried on the
+// next Root.
+func (a *Aggregator) ensureConn(feedPK skycipher.PubKey) {
+	if feedPK == (skycipher.PubKey{}) || feedPK == a.cxoNode.ID() {
+		return
+	}
+	a.mu.Lock()
+	if a.dialing == nil {
+		a.dialing = make(map[skycipher.PubKey]struct{})
+	}
+	if _, busy := a.dialing[feedPK]; busy {
+		a.mu.Unlock()
+		return
+	}
+	a.dialing[feedPK] = struct{}{}
+	a.mu.Unlock()
+
+	go func() {
+		defer func() {
+			a.mu.Lock()
+			delete(a.dialing, feedPK)
+			a.mu.Unlock()
+		}()
+		var pk cipher.PubKey
+		copy(pk[:], feedPK[:])
+		ctx, cancel := context.WithTimeout(context.Background(), ensureConnTimeout)
+		defer cancel()
+		if _, err := a.cxoNode.DMSG().ConnectPK(ctx, pk); err != nil {
+			a.log.WithError(err).WithField("visor", cipher.PubKey(feedPK)).
+				Debug("CXO aggregator: dial-back to visor failed; will retry on next Root")
+			return
+		}
+		// Warm conn established/confirmed — nudge a reconcile so we subscribe
+		// on it promptly (idempotent via alreadySubscribed).
+		select {
+		case a.nudge <- struct{}{}:
+		default:
+		}
+	}()
 }
 
 // reconcile walks the current CXO conn set and subscribes to every
