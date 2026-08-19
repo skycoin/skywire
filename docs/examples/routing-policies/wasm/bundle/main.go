@@ -337,67 +337,103 @@ func onTick(inPtr, inLen uint32) uint64 {
 	}
 }
 
-// tickRotatingBW is the rotating-bw rotation logic — a WARM HOT-SWAP, not a
-// tear-and-rebuild. The group is provisioned at targetMux active legs + 1 warm
-// standby (decideRotatingBW asks for targetMux+1). Each rotation:
-//
-//	targetMux active + a warm standby → promote the standby + demote the
-//	                                    oldest active (both pure setLegStandby
-//	                                    flag-flips: no teardown, no setup
-//	                                    round-trip, demoted leg stays alive so
-//	                                    its in-flight bytes still drain) → the
-//	                                    active set rotates across the pool with
-//	                                    NO throughput dip.
-//	surplus active, no standby yet    → demote the oldest active to seed the
-//	                                    warm standby (reaches steady state).
-//	below provisioned size            → add a leg (recover the spare / grow).
-//	alive_count == 0                  → no-op (nothing to rotate yet).
-//
-// This replaces the old drop-oldest+add, which tore down a LIVE (sending) leg
-// every rotation — dip at mux=2, fatal stream EOF at mux=4. Demote keeps the
-// leg alive (in-flight data drains); only drop tears down. See the warm-standby
-// RFC and route_group.go OnTick application (promote/demote first, on pre-drop
-// indices).
+// reliableMuxKind reports whether a transport type is reliable enough to ANCHOR
+// a mux active set. stcpr/sudph/squicr/stcp are direct, well-behaved for
+// sustained multiplexed throughput. webrtc (SCTP-over-DTLS), ws, wt and the dmsg
+// relay are NOT — webrtc especially has poor sustained throughput and drops
+// under load; a mux made entirely of webrtc legs collapses. They are still
+// USABLE as bonus capacity (promoted for throughput), just never the anchor.
+func reliableMuxKind(kind string) bool {
+	switch kind {
+	case "stcpr", "sudph", "squicr", "stcp":
+		return true
+	}
+	return false
+}
+
+// tickRotatingBW manages the mux by STANDBY, never by dropping. Legs, once
+// established, are never torn down — the tick only flips each leg's standby flag
+// (setLegStandby: no teardown, no setup round-trip, in-flight bytes drain). The
+// policy keeps ~targetMux legs ACTIVE, anchored on reliable transport types, and
+// PARKS the rest on warm standby; it promotes a webrtc/other leg only when it
+// needs the aggregate throughput (not enough reliable legs to reach targetMux).
+// This is why an all-reliable anchor keeps the group alive even as fragile
+// bonus legs come and go, and it spreads bytes across the reliable set over time
+// for the privacy property — all with no throughput dip. One flag-flip per tick
+// (the ABI applies one RotationAction). Decisions are on MEASUREMENT: leg Kind +
+// standby state come from the host per-leg telemetry (hook.go).
 func tickRotatingBW(input tickInputWire) uint64 {
-	activeCount, aliveCount := 0, 0
-	oldestActiveIdx, standbyIdx := -1, -1
+	var relAct, relSb, fragAct, fragSb []int
 	for _, l := range input.Legs {
 		if !l.Alive {
 			continue
 		}
-		aliveCount++
-		if l.Standby {
-			if standbyIdx == -1 || l.Index < standbyIdx {
-				standbyIdx = l.Index
-			}
-			continue
-		}
-		activeCount++
-		if oldestActiveIdx == -1 || l.Index < oldestActiveIdx {
-			oldestActiveIdx = l.Index
+		rel := reliableMuxKind(l.Kind)
+		switch {
+		case l.Standby && rel:
+			relSb = append(relSb, l.Index)
+		case l.Standby:
+			fragSb = append(fragSb, l.Index)
+		case rel:
+			relAct = append(relAct, l.Index)
+		default:
+			fragAct = append(fragAct, l.Index)
 		}
 	}
-	if aliveCount == 0 {
+	active := len(relAct) + len(fragAct)
+	alive := active + len(relSb) + len(fragSb)
+	if alive == 0 {
 		return 0
 	}
-	var action rotationActionWire
-	switch {
-	case standbyIdx != -1 && activeCount >= targetMux && oldestActiveIdx != -1:
-		// Steady-state warm swap: spare in, oldest active out (→ next spare).
-		action = rotationActionWire{
-			PromoteFromStandby: []int{standbyIdx},
-			DemoteToStandby:    []int{oldestActiveIdx},
+	lo := func(s []int) int {
+		m := s[0]
+		for _, v := range s {
+			if v < m {
+				m = v
+			}
 		}
-	case standbyIdx == -1 && activeCount > targetMux && oldestActiveIdx != -1:
-		// Surplus active, no spare yet: demote the oldest to seed the standby.
-		action = rotationActionWire{DemoteToStandby: []int{oldestActiveIdx}}
-	case aliveCount < targetMux+1:
-		// Below the provisioned size (targetMux active + 1 spare): grow.
-		action = rotationActionWire{AddLeg: true}
+		return m
+	}
+	hi := func(s []int) int {
+		m := s[0]
+		for _, v := range s {
+			if v > m {
+				m = v
+			}
+		}
+		return m
+	}
+
+	var a rotationActionWire
+	switch {
+	case len(fragAct) > 0 && len(relSb) > 0:
+		// UPGRADE quality: a fragile leg is carrying while a reliable spare sits
+		// idle — promote the reliable, park the fragile. No drop, no dip.
+		a = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}, DemoteToStandby: []int{hi(fragAct)}}
+	case active < targetMux && len(relSb) > 0:
+		// Below target — fill with a reliable spare first.
+		a = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}}
+	case active < targetMux && len(fragSb) > 0:
+		// Below target, only fragile spares left — promote one for the aggregate
+		// throughput (a slow leg beats a missing one). Kept as bonus, not anchor.
+		a = rotationActionWire{PromoteFromStandby: []int{lo(fragSb)}}
+	case active < targetMux:
+		// Below target and no spares to promote — establish another leg.
+		a = rotationActionWire{AddLeg: true}
+	case active > targetMux && len(fragAct) > 0:
+		// Above target — park a fragile leg (keep it warm, never drop).
+		a = rotationActionWire{DemoteToStandby: []int{hi(fragAct)}}
+	case active > targetMux:
+		// Above target, all reliable — park the newest to settle at target.
+		a = rotationActionWire{DemoteToStandby: []int{hi(relAct)}}
+	case len(relSb) > 0 && len(relAct) > 0:
+		// At target, all-reliable: gentle crawl — rotate the reliable active set
+		// through the reliable spare (spread bytes for privacy), no dip, no drop.
+		a = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}, DemoteToStandby: []int{lo(relAct)}}
 	default:
 		return 0
 	}
-	out, err := json.Marshal(action)
+	out, err := json.Marshal(a)
 	if err != nil {
 		return 0
 	}
