@@ -134,27 +134,32 @@ var startCmd = &cobra.Command{
 			arguments["appPort"] = clientAppPort
 		}
 
-		if startRoutes > 1 {
+		// Forward a routing flag whenever the operator EXPLICITLY set it — even to
+		// 1 — so a per-app override (e.g. --routes 1 / --min-hops 1 to force a
+		// single/direct route out from under a visor-global mux_routes/min_hops>1)
+		// actually reaches the app. Unset flags are omitted → the app inherits the
+		// visor-global default.
+		if cmd.Flags().Changed("routes") {
 			arguments["--routes"] = fmt.Sprintf("%d", startRoutes)
 		}
 
-		if startMinHops > 1 {
+		if cmd.Flags().Changed("min-hops") {
 			arguments["--min-hops"] = fmt.Sprintf("%d", startMinHops)
 		}
 
-		if startFwdMinHops > 1 {
+		if cmd.Flags().Changed("forward-min-hops") {
 			arguments["--forward-min-hops"] = fmt.Sprintf("%d", startFwdMinHops)
 		}
 
-		if startRevMinHops > 1 {
+		if cmd.Flags().Changed("reverse-min-hops") {
 			arguments["--reverse-min-hops"] = fmt.Sprintf("%d", startRevMinHops)
 		}
 
-		if startFwdMux > 0 {
+		if cmd.Flags().Changed("forward-mux") {
 			arguments["--forward-mux"] = fmt.Sprintf("%d", startFwdMux)
 		}
 
-		if startRevMux > 0 {
+		if cmd.Flags().Changed("reverse-mux") {
 			arguments["--reverse-mux"] = fmt.Sprintf("%d", startRevMux)
 		}
 
