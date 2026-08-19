@@ -58,6 +58,12 @@ func proxyHost(addr string) string {
 	return addr
 }
 
+// isTLSPort reports whether the string port equals the configured TLS-MITM port.
+func isTLSPort(port string, tlsPort uint16) bool {
+	p, err := strconv.ParseUint(strings.TrimSpace(port), 10, 16)
+	return err == nil && uint16(p) == tlsPort
+}
+
 // Config configures a dmsgweb runtime. Two operating modes:
 //
 //  1. ResolveAddr empty → SOCKS5 resolver mode. Any hostname ending
@@ -316,15 +322,34 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 			// ride those). This defer runs before the panic-recover defer on a
 			// normal error return, and no-ops on success (conn != nil).
 			defer func() {
-				if dialErr != nil && conn == nil &&
-					proxyinterstitial.ShouldServe(origPort) && proxyinterstitial.IsTransient(dialErr) {
-					target := origHost
-					if target == "" {
-						target = addr
-					}
+				if dialErr == nil || conn != nil || !proxyinterstitial.IsTransient(dialErr) {
+					return
+				}
+				target := origHost
+				if target == "" {
+					target = addr
+				}
+				switch {
+				case proxyinterstitial.ShouldServe(origPort):
 					log.WithField("host", target).WithField("err", dialErr).
 						Debug("SOCKS5 → serving branded route interstitial")
-					conn, dialErr = proxyinterstitial.Conn(target, "", "dmsg", false), nil
+					conn, dialErr = proxyinterstitial.Conn(target, proxyinterstitial.StatusLine(dialErr), "dmsg", false), nil
+				case cfg.TLSMITM && isTLSPort(origPort, cfg.TLSPort):
+					// HTTPS request whose route is still warming: terminate the
+					// browser's TLS locally with a per-host leaf and serve the
+					// interstitial HTML over it — same MITM path as a warm TLS
+					// dial, but the "upstream" is the fixed interstitial responder.
+					// If minting fails, fall through to the real error.
+					leaf, lerr := cfg.LeafMinter.For(origHost)
+					if lerr != nil {
+						log.WithField("host", target).WithField("err", lerr).
+							Debug("SOCKS5 → TLS interstitial leaf mint failed; surfacing dial error")
+						return
+					}
+					log.WithField("host", target).WithField("err", dialErr).
+						Debug("SOCKS5 → serving branded route interstitial over TLS (MITM)")
+					conn, dialErr = &tcpAddrConn{Conn: skynetca.MITMTerminate(
+						proxyinterstitial.Conn(target, proxyinterstitial.StatusLine(dialErr), "dmsg", false), leaf)}, nil
 				}
 			}()
 
