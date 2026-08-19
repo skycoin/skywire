@@ -407,31 +407,39 @@ func tickRotatingBW(input tickInputWire) uint64 {
 		return m
 	}
 
+	// NEVER emit AddLeg / DropLegs here — leg GROWTH and death-replacement are the
+	// route group's own self-heal job (it tops up to the mux degree on any leg
+	// death; aliveLegCount counts standby legs, so parking one never triggers a
+	// re-grow). on_tick chasing the count with adds only fought self-heal and made
+	// a flapping webrtc leg thrash (drop→add→drop). on_tick's ONLY job is to pick
+	// which established legs are ACTIVE vs parked — pure standby flips, no churn.
 	var a rotationActionWire
 	switch {
-	case len(fragAct) > 0 && len(relSb) > 0:
-		// UPGRADE quality: a fragile leg is carrying while a reliable spare sits
-		// idle — promote the reliable, park the fragile. No drop, no dip.
-		a = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}, DemoteToStandby: []int{hi(fragAct)}}
-	case active < targetMux && len(relSb) > 0:
-		// Below target — fill with a reliable spare first.
-		a = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}}
-	case active < targetMux && len(fragSb) > 0:
-		// Below target, only fragile spares left — promote one for the aggregate
-		// throughput (a slow leg beats a missing one). Kept as bonus, not anchor.
-		a = rotationActionWire{PromoteFromStandby: []int{lo(fragSb)}}
-	case active < targetMux:
-		// Below target and no spares to promote — establish another leg.
-		a = rotationActionWire{AddLeg: true}
-	case active > targetMux && len(fragAct) > 0:
-		// Above target — park a fragile leg (keep it warm, never drop).
+	case len(relAct) >= 1 && len(fragAct) > 0:
+		// A reliable leg is already carrying — PARK a fragile (webrtc) active leg
+		// so the reliable anchor(s) carry the stream and a webrtc drop can't
+		// disrupt it. Fragile legs stay warm on standby (never dropped), promoted
+		// only if the reliable anchor is lost (below). One per tick; repeats until
+		// the active set is reliable-only.
 		a = rotationActionWire{DemoteToStandby: []int{hi(fragAct)}}
-	case active > targetMux:
-		// Above target, all reliable — park the newest to settle at target.
+	case len(fragAct) > 0 && len(relSb) > 0:
+		// No reliable leg active yet, but a reliable spare exists — swap it in for
+		// a fragile one (promote reliable, park fragile). No drop, no dip.
+		a = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}, DemoteToStandby: []int{hi(fragAct)}}
+	case len(relAct) < targetMux && len(relSb) > 0:
+		// Below the reliable-active target — promote a reliable spare.
+		a = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}}
+	case len(relAct) == 0 && len(fragAct) == 0 && len(fragSb) > 0:
+		// No reliable legs at all and nothing active — promote a fragile spare so
+		// SOME leg carries (a slow/flaky leg beats a dead group). Bonus, not anchor.
+		a = rotationActionWire{PromoteFromStandby: []int{lo(fragSb)}}
+	case len(relAct) > targetMux:
+		// More reliable active than target — park the newest to settle at target.
 		a = rotationActionWire{DemoteToStandby: []int{hi(relAct)}}
-	case len(relSb) > 0 && len(relAct) > 0:
-		// At target, all-reliable: gentle crawl — rotate the reliable active set
-		// through the reliable spare (spread bytes for privacy), no dip, no drop.
+	case len(fragAct) == 0 && len(relSb) > 0 && len(relAct) > 0:
+		// Steady state, reliable-only active with a reliable spare: gentle crawl —
+		// rotate the reliable active set through the spare (spread bytes for
+		// privacy). No dip, no drop.
 		a = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}, DemoteToStandby: []int{lo(relAct)}}
 	default:
 		return 0
