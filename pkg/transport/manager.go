@@ -627,8 +627,25 @@ func (tm *Manager) currentBareEntries() []*Entry {
 	return out
 }
 
+// tpdListPath is the CXO leaf path for the transport-list discovery snapshot.
+// It is a TOP-LEVEL leaf (a direct child of the feed Root), deliberately NOT
+// nested under "transports/" with the per-transport telemetry subtrees.
+//
+// Why top-level: TPD fills the entire Root before it can read any leaf, and the
+// announce conn is short-lived, so the fill routinely breaks partway (see the
+// aggregator's partial-fill recovery). CXO fills top-down, and the Root has only
+// a handful of top-level children ("transports", "tiers", "services", this) — so
+// this leaf's inline bytes live in the Root's first (single-page) child index,
+// fetched in the first round-trips and almost always present even in a truncated
+// fill. Under the old "transports/list" path it was one of hundreds of children
+// of the "transports" node and sorted LAST (uuids begin with a hex digit, "list"
+// with 'l'), so a large visor's fill broke long before reaching it and discovery
+// converged only slowly. TPD reads this path first and falls back to the legacy
+// "transports/list" for visors that predate this change.
+const tpdListPath = "tp-list"
+
 // publishTPDList publishes this visor's full transport list as a single CXO snapshot
-// leaf (transports/list). TPD's cxoaggregator RECONCILES against it — registers every
+// leaf (tpdListPath). TPD's cxoaggregator RECONCILES against it — registers every
 // entry and deregisters any of this visor's transports absent from the list — so a
 // removed transport needs no explicit tombstone (absence = deletion) and a missed
 // update self-heals on the next publish. This is the declarative unification of the
@@ -661,7 +678,7 @@ func (tm *Manager) publishTPDList(entries []*Entry) {
 		tm.Logger.WithError(err).Debug("Failed to marshal transport list leaf")
 		return
 	}
-	if err := pub.Put("transports/list", body); err != nil {
+	if err := pub.Put(tpdListPath, body); err != nil {
 		tm.Logger.WithError(err).Debug("Failed to publish transport list leaf to CXO")
 	}
 }

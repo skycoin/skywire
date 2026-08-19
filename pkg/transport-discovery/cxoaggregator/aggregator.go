@@ -242,6 +242,14 @@ type Aggregator struct {
 // unreachable visor doesn't pin a goroutine.
 const ensureConnTimeout = 20 * time.Second
 
+// tpdListLeafName is the current top-level CXO leaf path for a visor's
+// transport-list discovery snapshot (mirrors tpdListPath in
+// pkg/transport/manager.go). It is a direct child of the feed Root so its
+// inline bytes land in the Root's first child-index page — reachable in a
+// truncated partial fill, unlike the legacy "transports/list" which sorted
+// last among the "transports" node's per-uuid children.
+const tpdListLeafName = "tp-list"
+
 // orphanGraceTicks is how many consecutive cleanup ticks a feed must
 // have zero connected conns before it's reclaimed. At the 2-minute
 // default CleanupInterval this is a ~4-minute grace, long enough to
@@ -658,17 +666,34 @@ func (a *Aggregator) recoverTransportListOnBreak(r *registry.Root) {
 	if err := r.Refs[0].Value(pack, &rootNode); err != nil {
 		return // root node object itself wasn't fetched before the break
 	}
-	_, tsub, ok := childByName(pack, &rootNode, "transports")
-	if !ok || tsub == nil {
-		return
-	}
-	leaf, _, ok := childByName(pack, tsub, "list")
+	// Prefer the top-level "tp-list" leaf (current visors): it lives in the
+	// Root's small first child-index page, so a truncated fill almost always
+	// has it. Fall back to the legacy nested "transports"/"list" for visors
+	// that predate the top-level move.
+	leaf, dispatchPath, ok := findDiscoveryLeaf(pack, &rootNode)
 	if !ok || leaf == nil {
 		return
 	}
-	a.log.WithField("visor", reporter).Debug("CXO aggregator: recovered transports/list from partial fill")
+	a.log.WithField("visor", reporter).WithField("path", dispatchPath).
+		Debug("CXO aggregator: recovered transport list from partial fill")
 	leafCopy := append([]byte(nil), leaf...)
-	go a.dispatchLeaf("transports/list", leafCopy, reporter)
+	go a.dispatchLeaf(dispatchPath, leafCopy, reporter)
+}
+
+// findDiscoveryLeaf locates the transport-list snapshot leaf in a (possibly
+// partially filled) Root tree, trying the current top-level "tp-list" path
+// first and the legacy nested "transports"/"list" second. Returns the inline
+// leaf bytes and the dispatch path to hand to dispatchLeaf.
+func findDiscoveryLeaf(pack registry.Pack, rootNode *treestore.TreeNode) (leaf []byte, path string, ok bool) {
+	if l, _, found := childByName(pack, rootNode, tpdListLeafName); found && l != nil {
+		return l, tpdListLeafName, true
+	}
+	if _, tsub, found := childByName(pack, rootNode, "transports"); found && tsub != nil {
+		if l, _, found := childByName(pack, tsub, "list"); found && l != nil {
+			return l, "transports/list", true
+		}
+	}
+	return nil, "", false
 }
 
 // childByName returns the inline leaf bytes or the sub-node of n's child
@@ -747,9 +772,10 @@ func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, 
 // Tier and service bitmaps still flow through the CXO cache but
 // aren't yet projected into TPD's redis uptime tables.
 func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubKey) {
-	// transports/list — the full-set snapshot (declarative CRUD). Reconcile the
-	// reporter's transport set against it (register new + deregister absent).
-	if path == "transports/list" {
+	// tp-list (current) / transports/list (legacy) — the full-set snapshot
+	// (declarative CRUD). Reconcile the reporter's transport set against it
+	// (register new + deregister absent).
+	if path == tpdListLeafName || path == "transports/list" {
 		var list transportListLeaf
 		if err := json.Unmarshal(leaf, &list); err != nil {
 			a.log.WithError(err).WithField("path", path).Debug("CXO aggregator: transport list leaf decode failed")
