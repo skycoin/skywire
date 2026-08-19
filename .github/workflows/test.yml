@@ -33,6 +33,24 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
+      # Persist the Go build/test cache ($GOCACHE) across runs so unchanged
+      # packages return cached test results ("ok ... (cached)") on incremental
+      # pushes. setup-go's own cache keys GOCACHE on go.sum only (too coarse for
+      # the test cache); the per-sha key below saves a fresh entry each run and
+      # restore-keys pull the most recent prior cache.
+      - name: Locate Go build cache
+        id: gocache
+        run: echo "dir=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Go build/test cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-gobuild-
+
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
@@ -94,6 +112,21 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
+      # Persist the Go build/test cache ($GOCACHE) across runs so unchanged
+      # packages return cached test results on incremental pushes (see linux job).
+      - name: Locate Go build cache
+        id: gocache
+        run: echo "dir=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Go build/test cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-gobuild-
+
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
@@ -116,6 +149,22 @@ jobs:
           go-version: '1.26.5'
           cache: true
           cache-dependency-path: go.sum
+
+      # Persist the Go build/test cache ($GOCACHE) across runs so unchanged
+      # packages return cached test results on incremental pushes (see linux job).
+      - name: Locate Go build cache
+        id: gocache
+        shell: pwsh
+        run: echo "dir=$(go env GOCACHE)" >> $env:GITHUB_OUTPUT
+
+      - name: Cache Go build/test cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-gobuild-
 
       - uses: golangci/golangci-lint-action@v9
         with:
