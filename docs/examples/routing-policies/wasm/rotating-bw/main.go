@@ -53,6 +53,7 @@ type legInfoWire struct {
 	Kind      string `json:"kind"`
 	LatencyMs int    `json:"latency_ms"`
 	Alive     bool   `json:"alive"`
+	Standby   bool   `json:"standby,omitempty"`
 }
 
 type tickInputWire struct {
@@ -68,9 +69,11 @@ type routeSpecWire struct {
 }
 
 type rotationActionWire struct {
-	DropLegs    []int    `json:"drop_legs,omitempty"`
-	AddLeg      bool     `json:"add_leg,omitempty"`
-	ExcludeHops []string `json:"exclude_hops,omitempty"`
+	DropLegs           []int    `json:"drop_legs,omitempty"`
+	AddLeg             bool     `json:"add_leg,omitempty"`
+	ExcludeHops        []string `json:"exclude_hops,omitempty"`
+	DemoteToStandby    []int    `json:"demote_to_standby,omitempty"`
+	PromoteFromStandby []int    `json:"promote_from_standby,omitempty"`
 }
 
 //export alloc
@@ -116,10 +119,14 @@ func decideRoute(inPtr, inLen uint32) uint64 {
 		// bridge, so the dial flows to the overlay path where
 		// rotation can act on the resulting route group.
 		spec = routeSpecWire{
-			Mux:                     4,
+			// targetMux active + 1 warm standby so on_tick can hot-swap
+			// the spare in with no dip (see onTick).
+			Mux:                     targetMux + 1,
 			MinHops:                 2,
 			RotationIntervalSeconds: 90,
-			Distribution:            "weighted: 1, 1, 1, 1",
+			// Equal spread across active legs = the privacy property
+			// (no relay sees a large share); "auto" would pin to fastest.
+			Distribution: "round-robin",
 		}
 	}
 	out, err := json.Marshal(spec)
@@ -167,29 +174,46 @@ func onTick(inPtr, inLen uint32) uint64 {
 	// from the wire (LegInfo is index/kind/latency/alive only);
 	// a future ABI extension could expand LegInfoWire with hops
 	// so policies can construct precise excludes.
-	aliveCount := 0
-	oldestAliveIdx := -1
+	// WARM HOT-SWAP rotation (not tear-and-rebuild). Provisioned at targetMux
+	// active + 1 warm standby; each tick promotes the standby and demotes the
+	// oldest active — pure standby-flag flips, no teardown, no setup round-trip,
+	// and the demoted leg stays alive so its in-flight bytes drain. The active
+	// set rotates across the pool with no throughput dip. (The old drop-oldest+
+	// add tore down a live leg every rotation — dip at mux=2, fatal EOF at mux=4.)
+	activeCount, aliveCount := 0, 0
+	oldestActiveIdx, standbyIdx := -1, -1
 	for _, l := range input.Legs {
-		if l.Alive {
-			aliveCount++
-			if oldestAliveIdx == -1 || l.Index < oldestAliveIdx {
-				oldestAliveIdx = l.Index
+		if !l.Alive {
+			continue
+		}
+		aliveCount++
+		if l.Standby {
+			if standbyIdx == -1 || l.Index < standbyIdx {
+				standbyIdx = l.Index
 			}
+			continue
+		}
+		activeCount++
+		if oldestActiveIdx == -1 || l.Index < oldestActiveIdx {
+			oldestActiveIdx = l.Index
 		}
 	}
 	if aliveCount == 0 {
 		return 0
 	}
 	var action rotationActionWire
-	if aliveCount >= targetMux {
+	switch {
+	case standbyIdx != -1 && activeCount >= targetMux && oldestActiveIdx != -1:
 		action = rotationActionWire{
-			DropLegs: []int{oldestAliveIdx},
-			AddLeg:   true,
+			PromoteFromStandby: []int{standbyIdx},
+			DemoteToStandby:    []int{oldestActiveIdx},
 		}
-	} else {
-		action = rotationActionWire{
-			AddLeg: true,
-		}
+	case standbyIdx == -1 && activeCount > targetMux && oldestActiveIdx != -1:
+		action = rotationActionWire{DemoteToStandby: []int{oldestActiveIdx}}
+	case aliveCount < targetMux+1:
+		action = rotationActionWire{AddLeg: true}
+	default:
+		return 0
 	}
 	out, err := json.Marshal(action)
 	if err != nil {
