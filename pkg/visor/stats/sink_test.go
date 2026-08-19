@@ -114,12 +114,15 @@ func TestSinkReceivesTransportPutsOnSample(t *testing.T) {
 
 	puts, _ := sink.snapshot()
 	wantCurrent := "transports/" + id.String() + "/current"
-	wantDaily := "transports/" + id.String() + "/2026-04-27/rollup"
 	if _, ok := puts[wantCurrent]; !ok {
 		t.Errorf("missing %s in sink puts; got %v", wantCurrent, keysOf(puts))
 	}
-	if _, ok := puts[wantDaily]; !ok {
-		t.Errorf("missing %s in sink puts; got %v", wantDaily, keysOf(puts))
+	// The daily rollup is persisted to bbolt but intentionally NOT mirrored to
+	// the CXO sink (no subscriber consumes it; it would only steal fill budget
+	// from transports/list on the announce conn). It must be absent here.
+	dontWantDaily := "transports/" + id.String() + "/2026-04-27/rollup"
+	if _, ok := puts[dontWantDaily]; ok {
+		t.Errorf("rollup %s should NOT be published to the CXO sink; got %v", dontWantDaily, keysOf(puts))
 	}
 }
 
