@@ -107,10 +107,14 @@ func TestReorderLosslessBeyondOldMaxGap(t *testing.T) {
 	}
 }
 
-// TestReorderTimeBasedRelease proves a gap that stays open longer than
-// reorderTimeout is released (delivered past the missing sequence) so a dead leg
-// degrades to lossy-but-moving instead of stalling the stream at 0 bytes.
-func TestReorderTimeBasedRelease(t *testing.T) {
+// TestReorderNeverSkipsAcrossTimeout proves a frontier gap is NEVER delivered
+// past, no matter how long it stays open. The mux carries a noise-encrypted
+// (stateful AEAD) byte stream, and skipping a sequence permanently desyncs the
+// cipher — a hard 0-byte wedge, not "lossy but moving". So a stalled leg's gap
+// is HELD until the missing seq arrives (the sender's SACK retransmit refills it
+// contiguously from a live leg), which is what keeps mux>1 usable under a
+// black-holing leg. This is the inverse of the old time-based skip.
+func TestReorderNeverSkipsAcrossTimeout(t *testing.T) {
 	old := reorderTimeout
 	reorderTimeout = 100 * time.Millisecond
 	defer func() { reorderTimeout = old }()
@@ -124,22 +128,31 @@ func TestReorderTimeBasedRelease(t *testing.T) {
 	rb.Insert(2, []byte{2})
 	rb.Insert(3, []byte{3})
 
-	// Before the timeout: another out-of-order packet must NOT release the gap.
+	// Well past the timeout: further out-of-order packets must STILL NOT release
+	// the gap — holding, not skipping, is the only noise-safe behavior.
+	time.Sleep(150 * time.Millisecond)
 	if got := rb.Insert(4, []byte{4}); got != nil {
-		t.Fatalf("gap released before timeout (len=%d): normal skew would be corrupted", len(got))
+		t.Fatalf("gap released across timeout (len=%d): skipping seq corrupts the noise stream", len(got))
+	}
+	if rb.NextSeq() != 1 {
+		t.Fatalf("nextSeq=%d advanced past the held gap, want 1", rb.NextSeq())
 	}
 
-	// After the timeout: the next out-of-order packet releases the gap, skipping
-	// the missing seq 1 so the stream keeps moving.
-	time.Sleep(150 * time.Millisecond)
-	got := rb.Insert(5, []byte{5})
-	if len(got) == 0 {
-		t.Fatalf("gap not released after timeout: dead leg would hard-stall the stream at 0 bytes")
+	// The missing seq 1 finally arrives (SACK retransmit over a live leg): now the
+	// buffer drains in order, contiguously, cipher intact.
+	got := rb.Insert(1, []byte{1})
+	if len(got) != 4 {
+		t.Fatalf("after refill: delivered %d, want 4 (seq 1,2,3,4 in order)", len(got))
 	}
-	if rb.NextSeq() <= 1 {
-		t.Fatalf("nextSeq=%d did not advance past the skipped gap", rb.NextSeq())
+	for i, d := range got {
+		if want := byte(i + 1); d[0] != want {
+			t.Fatalf("delivered[%d]=%d, want %d: not in order", i, d[0], want)
+		}
+	}
+	if rb.NextSeq() != 5 {
+		t.Fatalf("nextSeq=%d after drain, want 5", rb.NextSeq())
 	}
 	if rb.Pending() != 0 {
-		t.Fatalf("pending=%d after release, want 0", rb.Pending())
+		t.Fatalf("pending=%d after full drain, want 0", rb.Pending())
 	}
 }
