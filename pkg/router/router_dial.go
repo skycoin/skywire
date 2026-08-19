@@ -2104,20 +2104,24 @@ func (r *router) establishMuxRoutes(
 			ExcludeDMSG:            true,
 		}
 
-		// Mux aux legs PREFER local route calc: it picks a disjoint first-hop
-		// from the visor's OWN live transports (liveness- + exclusion-aware),
-		// which the stateless latency-weighted route-finder can't — the RF
-		// returns lowest-latency routes that cluster on the same few
-		// intermediates, capping mux bandwidth scaling (measured: disjointness
-		// collapses at high degree → throughput plateaus). The route-finder is
-		// the fallback for when local calc can't reach a disjoint deep-hop.
-		muxFwd, muxRev, err := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
+		// Mux aux legs plan over the GLOBAL TPD graph via the route-finder
+		// FIRST. calculateLocalRoutes only sees THIS visor's live managed
+		// transports — on a NAT'd client that is just the webrtc NAT-traversal
+		// fallback — so preferring it pinned every aux leg to a slow webrtc
+		// first hop while the fast disjoint stcpr paths (which the mux-bw probe
+		// proves exist over the full TPD graph) went unused, collapsing mux
+		// throughput to a single slow leg. The route-finder plans over all of
+		// TPD; the ExcludeIntermediatePKs/ExcludeDMSG in muxOpts keep the legs
+		// disjoint and the transport-type-aware ranking (transportTypeCostMs)
+		// makes the disjoint pick prefer stcpr/quic over webrtc. Local calc is
+		// the fallback for when the RF can't reach a disjoint deep hop.
+		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
 		if err != nil {
-			log.Debugf("Mux route %d/%d: local-calc no path: %v — trying route-finder fallback",
+			log.Debugf("Mux route %d/%d: route-finder no disjoint path: %v — trying local-calc fallback",
 				i+1, maxCount, err)
-			rfFwd, rfRev, rfErr := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
-			if rfErr != nil {
-				log.Debugf("Mux route %d/%d: route-finder fallback also failed: %v", i+1, maxCount, rfErr)
+			lcFwd, lcRev, lcErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
+			if lcErr != nil {
+				log.Debugf("Mux route %d/%d: local-calc fallback also failed: %v", i+1, maxCount, lcErr)
 				consecutiveFailures++
 				if consecutiveFailures >= maxConsecutiveMuxFailures {
 					log.Debugf("Mux route planning: %d consecutive failures; giving up on remaining %d aux slots",
@@ -2126,7 +2130,7 @@ func (r *router) establishMuxRoutes(
 				}
 				continue
 			}
-			muxFwd, muxRev = rfFwd, rfRev
+			muxFwd, muxRev = lcFwd, lcRev
 		}
 		consecutiveFailures = 0
 
@@ -2283,18 +2287,20 @@ func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, 
 		ExcludeDMSG:            true,
 	}
 
-	// Prefer local route calc for the replacement/added leg (disjoint first-hop
-	// from the visor's own live transports); route-finder is the fallback for a
-	// disjoint deep-hop not in the local cache. Same rationale as
-	// establishMuxRoutes — keeps self-healed/rotated legs disjoint and off dead
-	// edges, which the stateless route-finder can't guarantee.
-	muxFwd, muxRev, err := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
+	// Plan the replacement/added leg over the GLOBAL TPD graph via the
+	// route-finder first (same rationale as establishMuxRoutes): local calc is
+	// restricted to this visor's live transports (webrtc on a NAT'd client), so
+	// a self-healed/rotated leg re-collapses to a slow webrtc first hop unless
+	// we let the RF reach fast disjoint stcpr intermediates over the full graph.
+	// The disjoint excludes + transport-type-aware ranking keep it disjoint and
+	// off webrtc; local calc is the fallback for a disjoint deep-hop the RF misses.
+	muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
 	if err != nil {
-		rfFwd, rfRev, rfErr := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
-		if rfErr != nil {
-			return fmt.Errorf("rotation add-leg: no route found (local-calc=%v, route-finder=%v)", err, rfErr)
+		lcFwd, lcRev, lcErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
+		if lcErr != nil {
+			return fmt.Errorf("rotation add-leg: no route found (route-finder=%v, local-calc=%v)", err, lcErr)
 		}
-		muxFwd, muxRev = rfFwd, rfRev
+		muxFwd, muxRev = lcFwd, lcRev
 	}
 
 	muxKeepAlive := DefaultRouteKeepAlive
