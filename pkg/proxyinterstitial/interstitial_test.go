@@ -2,6 +2,7 @@ package proxyinterstitial
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"net"
 	"net/http"
@@ -114,10 +115,20 @@ func TestServeSOCKS5_HTTPPort(t *testing.T) {
 	if _, err := cli.Write([]byte("GET / HTTP/1.1\r\nHost: a.b\r\n\r\n")); err != nil {
 		t.Fatal(err)
 	}
+	// Drain the whole response: the page embeds the branded cloud image as a
+	// base64 data: URI, so the "Building a route" heading falls well past a
+	// single read and net.Pipe writes block until fully consumed.
+	var got bytes.Buffer
 	buf := make([]byte, 4096)
-	n, _ := cli.Read(buf) //nolint:errcheck
-	if !strings.Contains(string(buf[:n]), "Building a route") {
-		t.Errorf("did not receive interstitial; got %q", string(buf[:n]))
+	for {
+		n, err := cli.Read(buf)
+		got.Write(buf[:n])
+		if err != nil {
+			break
+		}
+	}
+	if !strings.Contains(got.String(), "Building a route") {
+		t.Errorf("did not receive interstitial; got %q", got.String())
 	}
 	if err := <-done; err != nil {
 		t.Errorf("ServeSOCKS5: %v", err)
@@ -174,7 +185,7 @@ func TestPageMechanismAndSteps(t *testing.T) {
 			t.Errorf("page still contains stale step %q", gone)
 		}
 	}
-	for _, want := range []string{"Building a route across the mesh", "skcloud"} { // skcloud = the cloud-logo gradient
+	for _, want := range []string{"Building a route across the mesh", `alt="skywire" src="data:image/png;base64,`} { // the embedded Skycoin cloud brand mark
 		if !strings.Contains(p, want) {
 			t.Errorf("page missing %q", want)
 		}
