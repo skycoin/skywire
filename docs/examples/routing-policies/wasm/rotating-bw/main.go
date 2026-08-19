@@ -105,28 +105,22 @@ func decideRoute(inPtr, inLen uint32) uint64 {
 	if err := json.Unmarshal(readInput(inPtr, inLen), &input); err != nil {
 		return 0
 	}
-	// mux=4 over multi-hop, rotation every 90s.
-	// Round-robin distribution spreads bytes evenly across legs.
-	// Bandwidth-heavy apps (vpn-client, skysocks-client) get the
-	// rotation treatment; everything else gets defaults.
+	// rotating-bw is OPT-IN per app — apply it to WHATEVER app/session it is
+	// active for, not just the built-in binary names. A named proxy session
+	// dials under its SESSION name (e.g. "g8"), not "skysocks-client", so gating
+	// on the binary name made the policy a NO-OP for custom-named sessions.
+	// Skip only latency-sensitive apps. min_hops=2 keeps the dial on the overlay
+	// (avoid_direct) so the mux/distribution isn't dropped by the direct path.
 	var spec routeSpecWire
 	switch input.Ctx.App {
-	case "vpn-client", "skysocks-client", "skynet-client":
-		// min_hops=2 already says "no direct transport" — direct
-		// is 0 intermediates, so requiring at least 1 intermediate
-		// rules it out. The visor's policy layer treats min_hops>=2
-		// as an implicit avoid_direct signal on the direct-dial
-		// bridge, so the dial flows to the overlay path where
-		// rotation can act on the resulting route group.
+	case "skychat", "skychat-client":
+		spec = routeSpecWire{Mux: 1}
+	default:
 		spec = routeSpecWire{
-			// targetMux active + 1 warm standby so on_tick can hot-swap
-			// the spare in with no dip (see onTick).
 			Mux:                     targetMux + 1,
 			MinHops:                 2,
 			RotationIntervalSeconds: 90,
-			// Equal spread across active legs = the privacy property
-			// (no relay sees a large share); "auto" would pin to fastest.
-			Distribution: "round-robin",
+			Distribution:            "round-robin",
 		}
 	}
 	out, err := json.Marshal(spec)
