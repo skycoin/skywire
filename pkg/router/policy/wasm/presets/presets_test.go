@@ -164,6 +164,43 @@ func TestRotatingBWRotatesWarmSwap(t *testing.T) {
 	}
 }
 
+// TestRotatingBWParksWebRTC proves the type-aware standby management: when the
+// active set is over target and contains a fragile webrtc leg (alongside a
+// reliable anchor), on_tick PARKS the webrtc leg on standby (never drops it) and
+// leaves the reliable leg active — so a webrtc drop can't collapse the group.
+func TestRotatingBWParksWebRTC(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("rotating-bw", Bundle(),
+		policywasm.WithPreset("rotating-bw"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	// 1 reliable (stcpr) + 4 fragile (webrtc) all active — over targetMux(4).
+	legs := []policy.LegInfo{
+		{Index: 0, Kind: "stcpr", Alive: true},
+		{Index: 1, Kind: "webrtc", Alive: true},
+		{Index: 2, Kind: "webrtc", Alive: true},
+		{Index: 3, Kind: "webrtc", Alive: true},
+		{Index: 4, Kind: "webrtc", Alive: true},
+	}
+	act, err := l.OnTick(context.Background(),
+		policy.RoutingContext{App: "skysocks-client"}, legs)
+	if err != nil {
+		t.Fatalf("OnTick: %v", err)
+	}
+	if len(act.DropLegs) != 0 {
+		t.Errorf("DropLegs = %v, want none (never drop — park on standby instead)", act.DropLegs)
+	}
+	if len(act.DemoteToStandby) != 1 {
+		t.Fatalf("DemoteToStandby = %v, want exactly one leg parked", act.DemoteToStandby)
+	}
+	// The parked leg must be a webrtc one (index 1-4), never the reliable anchor (0).
+	if act.DemoteToStandby[0] == 0 {
+		t.Errorf("parked the reliable stcpr anchor (idx 0); want a webrtc leg parked instead")
+	}
+}
+
 // TestLatencyAdaptiveDecides loads the embedded bundle with the
 // latency-adaptive preset stamped and asserts a skysocks-client dial gets
 // the asymmetric spec: a single lean upstream leg (forward_mux=1) paired
