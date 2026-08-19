@@ -136,7 +136,27 @@ type transportEntryLeaf struct {
 // pkg/transport/manager.go (publishTPDList) publishes the same JSON.
 type transportListLeaf struct {
 	Version string             `json:"version,omitempty"`
-	Entries []*transport.Entry `json:"entries"`
+	Entries []*transport.Entry `json:"entries,omitempty"` // legacy full form (pre-compact visors)
+	// Compact is the space-optimized form: each row is the remote edge +
+	// type only (the reporter's own PK and the derivable transport ID are
+	// dropped — ~62% smaller). Reconstructed to full entries via
+	// transport.EntryFromCompact(reporter, ce). Visors on develop publish
+	// this; older visors still publish Entries, which are read as-is.
+	Compact []transport.CompactEntry `json:"c,omitempty"`
+}
+
+// entries returns the reconstructed full-entry set from whichever form
+// the publisher sent: the compact rows (reconstructed against reporter)
+// when present, else the legacy full Entries.
+func (l *transportListLeaf) entries(reporter cipher.PubKey) []*transport.Entry {
+	if len(l.Compact) > 0 {
+		out := make([]*transport.Entry, 0, len(l.Compact))
+		for _, ce := range l.Compact {
+			out = append(out, transport.EntryFromCompact(reporter, ce))
+		}
+		return out
+	}
+	return l.Entries
 }
 
 // tombstoneLeaf is the wire shape for transports/<uuid>/tombstone
@@ -737,7 +757,7 @@ func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubK
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := a.sink.ReconcileTransportsFromCXO(ctx, list.Entries, reporter, list.Version); err != nil {
+		if err := a.sink.ReconcileTransportsFromCXO(ctx, list.entries(reporter), reporter, list.Version); err != nil {
 			a.log.WithError(err).WithField("reporter", reporter).Debug("CXO aggregator: ReconcileTransportsFromCXO failed")
 		}
 		return
