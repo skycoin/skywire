@@ -250,8 +250,11 @@ func TestLatencyAdaptiveDecides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decide: %v", err)
 	}
-	if spec.Mux != 4 {
-		t.Errorf("Mux = %d, want 4", spec.Mux)
+	// targetMux(4) active + 1 warm standby reserve = 5 legs provisioned, so
+	// evicting the slowest leg is a no-dip hot-swap (promote spare, demote
+	// outlier) rather than a cold drop+add.
+	if spec.Mux != 5 {
+		t.Errorf("Mux = %d, want 5 (targetMux 4 active + 1 warm standby)", spec.Mux)
 	}
 	if spec.MinHops != 2 {
 		t.Errorf("MinHops = %d, want 2", spec.MinHops)
@@ -396,5 +399,86 @@ func TestAdaptiveHotSwapsToWarmStandby(t *testing.T) {
 	}
 	if act.AddLeg {
 		t.Error("AddLeg = true, want false (promote a warm spare, not a cold add)")
+	}
+}
+
+// TestLatencyAdaptiveTrimsReserveToStandby drives latency-adaptive with all 5
+// provisioned legs active (no outlier) and asserts it PARKS the oldest as a warm
+// standby to reach the 4-wide active target — evict-by-demote, never a teardown.
+// That parked leg is the reserve the hot-swap eviction later draws on. Exercises
+// the shared classifyLegs/shedActive no-dip helpers the modernized performance
+// presets (latency-adaptive / elastic-mux / probe-and-prune) all use.
+func TestLatencyAdaptiveTrimsReserveToStandby(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("latency-adaptive", Bundle(),
+		policywasm.WithPreset("latency-adaptive"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	// 5 active legs, comparable latency (no outlier). activeCount(5) > target(4)
+	// → park the oldest (index 0) as a warm standby, no teardown.
+	legs := []policy.LegInfo{
+		{Index: 0, TransportID: "tid-a", Kind: "stcpr", LatencyMs: 100, Alive: true},
+		{Index: 1, TransportID: "tid-b", Kind: "stcpr", LatencyMs: 100, Alive: true},
+		{Index: 2, TransportID: "tid-c", Kind: "stcpr", LatencyMs: 100, Alive: true},
+		{Index: 3, TransportID: "tid-d", Kind: "stcpr", LatencyMs: 100, Alive: true},
+		{Index: 4, TransportID: "tid-e", Kind: "stcpr", LatencyMs: 100, Alive: true},
+	}
+	act, err := l.OnTick(context.Background(),
+		policy.RoutingContext{App: "skysocks-client"}, legs)
+	if err != nil {
+		t.Fatalf("OnTick: %v", err)
+	}
+	if len(act.DemoteToStandby) != 1 || act.DemoteToStandby[0] != 0 {
+		t.Errorf("DemoteToStandby = %v, want [0] (park oldest to reach target)", act.DemoteToStandby)
+	}
+	if len(act.DropLegs) != 0 {
+		t.Errorf("DropLegs = %v, want none (never tear down)", act.DropLegs)
+	}
+	if act.AddLeg {
+		t.Error("AddLeg = true, want false")
+	}
+}
+
+// TestLatencyAdaptiveEvictsByHotSwap drives latency-adaptive at the 4-wide
+// active target with one >=1.5x-median latency outlier plus a warm standby, and
+// asserts a NO-DIP hot-swap: promote the spare AND demote the outlier in one
+// action, no DropLegs, no AddLeg. This is the modernization's core claim —
+// the slowest leg is swapped out for a warm one with no width dip and no
+// re-dial, replacing the old cold drop+add.
+func TestLatencyAdaptiveEvictsByHotSwap(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("latency-adaptive", Bundle(),
+		policywasm.WithPreset("latency-adaptive"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	// 4 active legs (three 50ms, one 500ms outlier) + 1 warm standby (index 4).
+	// activeCount==target(4); worst 500ms >= 1.5x median(50) → hot-swap it out.
+	legs := []policy.LegInfo{
+		{Index: 0, TransportID: "tid-a", Kind: "stcpr", LatencyMs: 50, Alive: true},
+		{Index: 1, TransportID: "tid-b", Kind: "stcpr", LatencyMs: 50, Alive: true},
+		{Index: 2, TransportID: "tid-c", Kind: "stcpr", LatencyMs: 50, Alive: true},
+		{Index: 3, TransportID: "tid-d", Kind: "stcpr", LatencyMs: 500, Alive: true},
+		{Index: 4, TransportID: "tid-e", Kind: "stcpr", LatencyMs: 40, Alive: true, Standby: true},
+	}
+	act, err := l.OnTick(context.Background(),
+		policy.RoutingContext{App: "skysocks-client"}, legs)
+	if err != nil {
+		t.Fatalf("OnTick: %v", err)
+	}
+	if len(act.PromoteFromStandby) != 1 || act.PromoteFromStandby[0] != 4 {
+		t.Errorf("PromoteFromStandby = %v, want [4] (warm spare)", act.PromoteFromStandby)
+	}
+	if len(act.DemoteToStandby) != 1 || act.DemoteToStandby[0] != 3 {
+		t.Errorf("DemoteToStandby = %v, want [3] (the latency outlier)", act.DemoteToStandby)
+	}
+	if len(act.DropLegs) != 0 {
+		t.Errorf("DropLegs = %v, want none (hot-swap, no teardown)", act.DropLegs)
+	}
+	if act.AddLeg {
+		t.Error("AddLeg = true, want false")
 	}
 }

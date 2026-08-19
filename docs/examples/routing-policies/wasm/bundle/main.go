@@ -228,8 +228,13 @@ func decideLatencyAdaptive(ctx routingContextWire) routeSpecWire {
 		// them, making the eviction a no-op. Symmetric mux gives on_tick
 		// 4 real legs to converge over. (The lean-upstream refinement
 		// awaits a router change exposing reverse legs to the tick hook.)
+		//
+		// Mux is targetMux+1 (5): one leg beyond the 4-wide active target is a
+		// WARM RESERVE the on_tick controller parks on standby, so evicting the
+		// slowest leg is a hot-swap (promote the spare, demote the outlier) with
+		// no width dip — the no-dip discipline shared with rotating-bw.
 		return routeSpecWire{
-			Mux:                     4,
+			Mux:                     5,
 			MinHops:                 2,
 			RotationIntervalSeconds: 30,
 			Distribution:            "auto",
@@ -546,18 +551,19 @@ func tickLatencyAdaptive(input tickInputWire) uint64 {
 		}
 	}
 
-	// Evict-slowest-outlier logic, run on the SMOOTHED latencies. Only
-	// alive legs with a known smoothed latency participate.
-	aliveCount := 0
+	// Evict-slowest-outlier logic, run on the SMOOTHED latencies over the
+	// ACTIVE legs only — warm-standby spares aren't carrying traffic and
+	// aren't judged. Membership changes are standby flips (no teardown): the
+	// group runs targetMux active + a warm reserve, so evicting the outlier is
+	// a hot-swap (promote a spare, demote the outlier) with no width dip.
+	sets := classifyLegs(input.Legs)
 	worstIdx := -1
 	worstSmoothed := -1.0
 	var smoothed []float64
-	var worstHops []string
 	for _, l := range input.Legs {
-		if !l.Alive {
+		if !l.Alive || l.Standby {
 			continue
 		}
-		aliveCount++
 		sm, ok := latAdaptEWMA[l.TransportID]
 		if !ok {
 			// No smoothed value yet (leg never reported a latency) — it
@@ -568,14 +574,17 @@ func tickLatencyAdaptive(input tickInputWire) uint64 {
 		if sm > worstSmoothed {
 			worstSmoothed = sm
 			worstIdx = l.Index
-			worstHops = l.Hops
 		}
 	}
-	if aliveCount == 0 {
-		return 0
+	// Below target width: recover by promoting a warm spare (no dip), or add a
+	// fresh leg when none is parked. Covers activeCount==0.
+	if sets.activeCount < targetMux {
+		return growActive(sets)
 	}
-	if aliveCount < targetMux {
-		return writeAction(rotationActionWire{AddLeg: true})
+	// Above target width (the warm reserve is still active): park the oldest as
+	// a standby spare so a later eviction can hot-swap without a dip.
+	if sets.activeCount > targetMux {
+		return shedActive(sets, sets.oldestActive)
 	}
 	// Need at least a couple of smoothed samples to compute a meaningful
 	// median; otherwise hold.
@@ -583,21 +592,18 @@ func tickLatencyAdaptive(input tickInputWire) uint64 {
 		return 0
 	}
 
-	// Median of the alive legs' smoothed latencies.
+	// Median of the active legs' smoothed latencies.
 	sort.Float64s(smoothed)
 	median := medianSorted(smoothed)
 
-	// Hysteresis: only evict a clear outlier (smoothed worst >= 1.5x
-	// smoothed median). Once the set has converged this is false for every
-	// leg, so we hold and stop churning.
+	// Hysteresis: only evict a clear outlier (smoothed worst >= 1.5x smoothed
+	// median). Hot-swap it out (promote a warm spare + demote the outlier) so
+	// the width never dips; the demoted leg stays warm for a later re-promote.
+	// Once the set has converged this is false for every leg, so we hold.
 	if median > 0 && worstSmoothed >= 1.5*median {
-		return writeAction(rotationActionWire{
-			DropLegs:    []int{worstIdx},
-			AddLeg:      true,
-			ExcludeHops: worstHops,
-		})
+		return swapActive(sets, worstIdx)
 	}
-	// Converged: all alive legs comparably fast — hold.
+	// Converged: all active legs comparably fast — hold.
 	return 0
 }
 
@@ -681,24 +687,23 @@ func tickElasticMux(input tickInputWire) uint64 {
 		delete(elasticSeen, k)
 	}
 	var rawTotal float64
-	aliveCount := 0
-	oldestAliveIdx := -1
+	// active/standby partition: only ACTIVE legs carry traffic and count
+	// toward the AIMD width; standby spares are the warm reserve a grow
+	// promotes back with no dip.
+	sets := classifyLegs(input.Legs)
 	for _, l := range input.Legs {
 		if !l.Alive {
 			continue
-		}
-		aliveCount++
-		if oldestAliveIdx == -1 || l.Index < oldestAliveIdx {
-			oldestAliveIdx = l.Index
 		}
 		tid := l.TransportID
 		if tid == "" {
 			continue
 		}
 		elasticSeen[tid] = true
-		if prev, ok := elasticPrevRecv[tid]; ok && l.RecvBytes >= prev {
-			// Only fold in a non-negative delta; a counter that went
-			// backwards means a reset/new leg, not real throughput.
+		// Only fold an ACTIVE leg's non-negative delta into the load signal.
+		// Standby spares don't send; their counter is still tracked so it
+		// doesn't read as a reset when the leg is later re-promoted.
+		if prev, ok := elasticPrevRecv[tid]; ok && l.RecvBytes >= prev && !l.Standby {
 			rawTotal += float64(l.RecvBytes - prev)
 		}
 		elasticPrevRecv[tid] = l.RecvBytes
@@ -709,7 +714,11 @@ func tickElasticMux(input tickInputWire) uint64 {
 			delete(elasticPrevRecv, tid)
 		}
 	}
-	if aliveCount == 0 {
+	if sets.activeCount == 0 {
+		// Nothing active: promote a warm spare if one is parked, else hold.
+		if sets.promotable >= 0 {
+			return growActive(sets)
+		}
 		return 0
 	}
 
@@ -743,16 +752,20 @@ func tickElasticMux(input tickInputWire) uint64 {
 		elasticIdleCount = 0
 	}
 
-	// Additive increase: saturated and below the cap → grow one leg.
-	if smoothed >= 0.80*elasticPeak && aliveCount < elasticCap {
-		return writeAction(rotationActionWire{AddLeg: true})
+	// Additive increase: saturated and below the cap → grow one leg. Promote a
+	// warm spare (parked by an earlier shrink) with no dip when one exists;
+	// otherwise add a fresh leg under genuine load.
+	if smoothed >= 0.80*elasticPeak && sets.activeCount < elasticCap {
+		return growActive(sets)
 	}
-	// Decrease: sustained idle and above the floor → release one leg.
-	// Reset the idle counter after acting so we step down gracefully
-	// (one leg every two idle ticks) rather than collapsing to the floor.
-	if elasticIdleCount >= 2 && aliveCount > elasticFloor {
+	// Decrease: sustained idle and above the floor → release one leg by PARKING
+	// it as a warm standby (no teardown; re-promoted instantly when load
+	// returns), falling back to a real drop only once the standby pool is full.
+	// Reset the idle counter after acting so we step down gracefully (one leg
+	// every two idle ticks) rather than collapsing to the floor.
+	if elasticIdleCount >= 2 && sets.activeCount > elasticFloor {
 		elasticIdleCount = 0
-		return writeAction(rotationActionWire{DropLegs: []int{oldestAliveIdx}})
+		return shedActive(sets, sets.oldestActive)
 	}
 	// Hold.
 	return 0
@@ -828,7 +841,8 @@ func tickProbeAndPrune(input tickInputWire) uint64 {
 	for k := range probeAliveIdx {
 		delete(probeAliveIdx, k)
 	}
-	aliveCount := 0
+	sets := classifyLegs(input.Legs)
+	activeCount := 0
 	for _, l := range input.Legs {
 		tid := l.TransportID
 		if tid == "" {
@@ -838,9 +852,8 @@ func tickProbeAndPrune(input tickInputWire) uint64 {
 		if !l.Alive {
 			continue
 		}
-		aliveCount++
-		probeAliveIdx[tid] = l.Index
-		// Fold in only real measurements; latency_ms==0 means "unknown".
+		// Fold in only real measurements; latency_ms==0 means "unknown". EWMA
+		// tracks any alive leg (harmless for a standby spare).
 		if l.LatencyMs > 0 {
 			sample := float64(l.LatencyMs)
 			if prev, ok := probeEWMA[tid]; ok {
@@ -849,6 +862,14 @@ func tickProbeAndPrune(input tickInputWire) uint64 {
 				probeEWMA[tid] = sample
 			}
 		}
+		// Only ACTIVE legs form the "established" set the probe machine
+		// manages; a warm standby (a previously graduated-out incumbent,
+		// parked not torn down) is neither an established leg nor the probe.
+		if l.Standby {
+			continue
+		}
+		activeCount++
+		probeAliveIdx[tid] = l.Index
 	}
 	// Prune EWMA keys for transport_ids no longer present.
 	for tid := range probeEWMA {
@@ -907,17 +928,21 @@ func tickProbeAndPrune(input tickInputWire) uint64 {
 		}
 		probeTID = ""
 		if probeSm < worstSm {
-			// Probe graduates: prune the worst established leg; the probe
-			// stays and becomes part of the established set next tick.
-			return writeAction(rotationActionWire{DropLegs: []int{worstIdx}})
+			// Probe graduates: PARK the worst established leg as a warm standby
+			// (no teardown — it re-promotes instantly if a leg later dies)
+			// rather than tearing it down; the probe stays and joins the
+			// established set next tick. Evict-by-demote, no capacity dip.
+			return shedActive(sets, worstIdx)
 		}
-		// Failed experiment: prune the probe itself, keep the incumbents.
+		// Failed experiment: drop the SPECULATIVE probe leg (it was added fresh
+		// this cycle, so removing it just returns the group to target — no
+		// working leg is lost), keeping the incumbents.
 		return writeAction(rotationActionWire{DropLegs: []int{idx}})
 	}
 
-	// Explore: no probe in flight and exactly at target width → snapshot
+	// Explore: no probe in flight and exactly at target ACTIVE width → snapshot
 	// the known set and request one speculative leg over a fresh path.
-	if !probePending && aliveCount == probeTarget {
+	if !probePending && activeCount == probeTarget {
 		for k := range prevKnownTIDs {
 			delete(prevKnownTIDs, k)
 		}
@@ -942,6 +967,91 @@ func medianSorted(s []float64) float64 {
 		return s[n/2]
 	}
 	return (s[n/2-1] + s[n/2]) / 2
+}
+
+// --- shared no-dip controller helpers -------------------------------------
+//
+// Every adaptive controller manages an ACTIVE sending set drawn from a
+// slightly larger warm pool. Membership changes are expressed as warm-standby
+// flips, never teardowns: a demoted leg keeps its rules alive and re-promotes
+// instantly, so the active width never dips during an eviction or a load
+// swing. GROWTH of the underlying leg pool stays the route group's self-heal
+// job (aliveLegCount counts standby, so parking never re-grows); on_tick only
+// picks which legs are active. This is the rotating-bw discipline, factored
+// out so latency-adaptive / elastic-mux / probe-and-prune / adaptive share it.
+
+// nodipStandbyMax caps the warm-standby pool a shed/park may hold before it
+// falls back to a real teardown, so parked-but-unused legs don't accumulate.
+const nodipStandbyMax = 2
+
+// legSets is the per-tick active/standby partition of a route group's legs.
+// active = alive && !standby (carrying traffic); standby = alive && standby
+// (warm spares, promoted with no setup round-trip).
+type legSets struct {
+	activeCount  int
+	standbyCount int
+	oldestActive int // lowest-index active leg (the "oldest" to shed); -1 if none
+	promotable   int // lowest-index standby leg (spare to promote); -1 if none
+}
+
+// classifyLegs partitions the leg snapshot into active/standby counts and the
+// two indices the controllers act on (oldest active to shed, lowest standby to
+// promote).
+func classifyLegs(legs []legInfoWire) legSets {
+	s := legSets{oldestActive: -1, promotable: -1}
+	for _, l := range legs {
+		if !l.Alive {
+			continue
+		}
+		if l.Standby {
+			s.standbyCount++
+			if s.promotable == -1 || l.Index < s.promotable {
+				s.promotable = l.Index
+			}
+			continue
+		}
+		s.activeCount++
+		if s.oldestActive == -1 || l.Index < s.oldestActive {
+			s.oldestActive = l.Index
+		}
+	}
+	return s
+}
+
+// growActive raises the active width by one with no setup dip when a warm
+// spare is parked (instant promote); otherwise it requests a genuinely fresh
+// leg (real capacity addition under load — not a tear-and-rebuild).
+func growActive(s legSets) uint64 {
+	if s.promotable >= 0 {
+		return writeAction(rotationActionWire{PromoteFromStandby: []int{s.promotable}})
+	}
+	return writeAction(rotationActionWire{AddLeg: true})
+}
+
+// swapActive evicts leg idx and fills its slot from the warm reserve in the
+// SAME tick so the active width never dips (hot-swap). When no spare is parked
+// it parks idx alone and lets a subsequent grow refill from the reserve —
+// still no teardown, just a transient one-leg dip until self-heal/grow catches
+// up.
+func swapActive(s legSets, idx int) uint64 {
+	if s.promotable >= 0 {
+		return writeAction(rotationActionWire{
+			PromoteFromStandby: []int{s.promotable},
+			DemoteToStandby:    []int{idx},
+		})
+	}
+	return writeAction(rotationActionWire{DemoteToStandby: []int{idx}})
+}
+
+// shedActive removes leg idx from the active set with no capacity dip: parks it
+// as a warm standby (instant re-promote) while the pool has room, else tears it
+// down. Used by the idle-shrink / prune dimensions — the parked legs become the
+// warm reserve a later grow promotes back.
+func shedActive(s legSets, idx int) uint64 {
+	if s.standbyCount < nodipStandbyMax {
+		return writeAction(rotationActionWire{DemoteToStandby: []int{idx}})
+	}
+	return writeAction(rotationActionWire{DropLegs: []int{idx}})
 }
 
 // --- adaptive: the COMPOSITE performance default (size+membership+explore) ---
@@ -1254,8 +1364,16 @@ func tickAdaptive(input tickInputWire) uint64 {
 		}
 	}
 
-	// 6/7. EXPLORE (probe/exploit machine) or hold.
-	return adaptExplore(aliveCount)
+	// 6/7. EXPLORE (probe/exploit machine) or hold. Hand the active/standby
+	// partition down so a graduating probe parks (not tears down) the incumbent
+	// it displaces.
+	sets := legSets{
+		activeCount:  aliveCount,
+		standbyCount: standbyCount,
+		oldestActive: oldestAliveIdx,
+		promotable:   promotableIdx,
+	}
+	return adaptExplore(sets)
 }
 
 // adaptWorstOutlier reports the index and hops of the slowest alive leg when
@@ -1298,7 +1416,8 @@ func adaptWorstOutlier(legs []legInfoWire) (int, []string, bool) {
 // keeps it (dropping the worst established leg) only if it beats that worst —
 // else prunes the probe. When no probe is in flight and the set is stable at
 // target, it starts a fresh probe on the explore cadence.
-func adaptExplore(aliveCount int) uint64 {
+func adaptExplore(sets legSets) uint64 {
+	aliveCount := sets.activeCount
 	// Adopt: a probe add requested last tick should now be present — the alive
 	// transport_id absent from the pre-add known set. Put it on probation.
 	if adaptProbePending {
@@ -1348,11 +1467,15 @@ func adaptExplore(aliveCount int) uint64 {
 		}
 		adaptProbeTID = ""
 		if probeSm < worstSm {
-			// Probe graduates: drop the worst established leg; the probe stays
-			// and joins the established set next tick (width returns to target).
-			return writeAction(rotationActionWire{DropLegs: []int{worstIdx}})
+			// Probe graduates: PARK the worst established leg as a warm standby
+			// (no teardown — it re-promotes instantly if a leg later dies)
+			// rather than tearing it down; the probe stays and joins the
+			// established set next tick. Evict-by-demote, no capacity dip.
+			return shedActive(sets, worstIdx)
 		}
-		// Failed experiment: prune the probe itself, keep the incumbents.
+		// Failed experiment: drop the SPECULATIVE probe leg (added fresh this
+		// cycle, so removing it just returns the group to target — no working
+		// leg lost), keeping the incumbents.
 		return writeAction(rotationActionWire{DropLegs: []int{idx}})
 	}
 
