@@ -402,9 +402,12 @@ func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.T
 	if data, err := json.Marshal(rec.Current); err == nil {
 		mirrors = append(mirrors, mirrorPair{path: currentTransportPath(idStr), data: data})
 	}
-	if data, err := json.Marshal(row); err == nil {
-		mirrors = append(mirrors, mirrorPair{path: dailyTransportPath(idStr, today), data: data})
-	}
+	// The daily rollup (row) is persisted to bbolt above (PutTransportRecord)
+	// but deliberately NOT mirrored to the CXO sink: no subscriber reads it
+	// (TPD's aggregator has no /rollup branch; the visor's own /stats reads it
+	// from bbolt), and publishing a per-transport-per-minute leaf onto the
+	// telemetry feed steals fill budget from transports/list on the
+	// short-lived announce conn — the constraint behind the discovery gap.
 
 	slot := SlotForTime(now)
 	if err := stx.MarkTransportSlot(idStr, now, slot); err != nil {
