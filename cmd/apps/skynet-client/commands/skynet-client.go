@@ -225,7 +225,12 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	appCl.Log().Infof("Per-accept dial shape: %s", dialShape)
 
 	rawDial := func() (net.Conn, error) {
-		if direct || routes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 || fwdMux > 1 || revMux > 1 {
+		// Any EXPLICIT per-call value (>=1), including 1, is a per-app override
+		// of the visor-global min_hops/mux_routes — so `--routes 1` / `--min-hops 1`
+		// force a single / direct route out from under a global mux_routes/min_hops>1
+		// (which otherwise forces this 1:1 forward into multi-hop mux and breaks it).
+		// Unset (0) still inherits the global default via the plain Dial path.
+		if direct || routes >= 1 || minHops >= 1 || fwdMinHops >= 1 || revMinHops >= 1 || fwdMux >= 1 || revMux >= 1 {
 			return appCl.DialWithOptions(connApp, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
 		}
 		return appCl.Dial(connApp)
