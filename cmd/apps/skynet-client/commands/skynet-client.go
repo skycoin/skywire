@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -22,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynet"
+	"github.com/skycoin/skywire/pkg/skyroute"
 )
 
 const (
@@ -183,24 +185,27 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 
 	appCl.SetStatusOrLog(appserver.AppDetailedStatusStarting)
 
-	// Build a dial factory the client calls per-accept. The factory
-	// captures appCl + remote endpoint so each local connection gets
-	// its own independent remote tunnel — necessary because the
-	// skynet wire is raw bytes with no per-connection framing, so
-	// concurrent (or even tightly-sequenced) local conns sharing a
-	// single remoteConn would interleave their payloads. Using
-	// SkyForwardingServerPort (47, built-in visor service) avoids
-	// the noise-handshake race condition that hits app-layer dials.
-	connApp := appnet.Addr{
-		Net:    netType,
-		PubKey: remotePK,
-		Port:   routing.Port(skyenv.SkyForwardingServerPort),
+	// dialWithShape performs the actual app-level dial to a given
+	// forwarding port, applying the mux/min-hops shape. Any EXPLICIT
+	// per-call value (>=1), including 1, is a per-app override of the
+	// visor-global min_hops/mux_routes — so `--routes 1` / `--min-hops 1`
+	// force a single / direct route out from under a global
+	// mux_routes/min_hops>1 (which otherwise forces this forward into
+	// multi-hop mux and breaks it). Unset (0) inherits the global default
+	// via the plain Dial path.
+	dialWithShape := func(port uint16) (net.Conn, error) {
+		addr := appnet.Addr{Net: netType, PubKey: remotePK, Port: routing.Port(port)}
+		if direct || routes >= 1 || minHops >= 1 || fwdMinHops >= 1 || revMinHops >= 1 || fwdMux >= 1 || revMux >= 1 {
+			return appCl.DialWithOptions(addr, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
+		}
+		return appCl.Dial(addr)
 	}
 
 	// Build a single log line describing the dial shape (mux + min-hops
 	// + per-direction). Suppress unset fields so the common case stays
 	// short.
-	dialShape := fmt.Sprintf("%s on port %d", remotePK.Hex(), skyenv.SkyForwardingServerPort)
+	dialShape := fmt.Sprintf("%s via mux port %d (fallback %d)", remotePK.Hex(),
+		skyenv.SkyForwardingMuxPort, skyenv.SkyForwardingServerPort)
 	if routes > 1 {
 		dialShape += fmt.Sprintf(" with %d parallel mux routes", routes)
 	}
@@ -224,16 +229,53 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	}
 	appCl.Log().Infof("Per-accept dial shape: %s", dialShape)
 
+	// rawDial57 is the 1:1 legacy path: a fresh route group to
+	// SkyForwardingServerPort per accept. Kept as the fallback for
+	// older far-ends that don't serve the yamux mux port. The mux
+	// shape (routes/min-hops) never SUSTAINS on this path — each accept
+	// tore down its route group immediately — so it's only a
+	// compatibility fallback, not the mux carrier.
+	rawDial57 := func() (net.Conn, error) {
+		return dialWithShape(skyenv.SkyForwardingServerPort)
+	}
+
+	// skyroute.Pool holds ONE route group open to SkyForwardingMuxPort
+	// (59) and yamux-muxes every local accept over it. This is the fix
+	// that makes the forward ACTUALLY carry the mux: the N parallel mux
+	// routes are established ONCE at the route-group level (the port-59
+	// dial), the group's keepalive keeps those hops warm, and each local
+	// TCP accept becomes a yamux STREAM over that single warm group.
+	// Per-stream yamux framing is what lets many local conns share one
+	// route group without interleaving their bytes — the exact reason
+	// the old code dialed a fresh 1:1 conn per accept (and so never
+	// sustained a mux). The far-end serves this via acceptSkyForwardingMux
+	// → serveSkyForwardingMuxSession, running the same ready-byte +
+	// port-request handshake on each accepted stream, so Client.Connect
+	// works unchanged per stream.
+	pool := skyroute.New(skyroute.DefaultIdleTTL, appCl.Log())
+	defer func() { _ = pool.Close() }() //nolint:errcheck
+
+	dialToMux := func(dctx context.Context, muxPort uint16) (net.Conn, error) {
+		return dialWithShape(muxPort)
+	}
+
+	// poolKey pins one warm route group per (peer, remote port, shape).
+	// Distinct shapes hold independent groups instead of clobbering.
+	poolKey := fmt.Sprintf("%s:%d:r%d:h%d:fh%d:rh%d:fm%d:rm%d:d%t",
+		remotePK.Hex(), remotePort, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
+
 	rawDial := func() (net.Conn, error) {
-		// Any EXPLICIT per-call value (>=1), including 1, is a per-app override
-		// of the visor-global min_hops/mux_routes — so `--routes 1` / `--min-hops 1`
-		// force a single / direct route out from under a global mux_routes/min_hops>1
-		// (which otherwise forces this 1:1 forward into multi-hop mux and breaks it).
-		// Unset (0) still inherits the global default via the plain Dial path.
-		if direct || routes >= 1 || minHops >= 1 || fwdMinHops >= 1 || revMinHops >= 1 || fwdMux >= 1 || revMux >= 1 {
-			return appCl.DialWithOptions(connApp, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
+		stream, err := pool.OpenStream(ctx, poolKey, dialToMux)
+		if err == nil {
+			return stream, nil
 		}
-		return appCl.Dial(connApp)
+		if errors.Is(err, skyroute.ErrNoMux) {
+			// Older far-end without the yamux mux port — fall back to a
+			// 1:1 dial on SkyForwardingServerPort.
+			appCl.Log().Debug("Remote lacks mux forwarding port; falling back to 1:1 port-57 dial")
+			return rawDial57()
+		}
+		return nil, err
 	}
 
 	// --reconnect wraps rawDial in a retry loop bounded only by ctx.
