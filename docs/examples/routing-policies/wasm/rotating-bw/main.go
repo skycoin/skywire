@@ -203,21 +203,24 @@ func onTick(inPtr, inLen uint32) uint64 {
 		}
 		return m
 	}
+	// NEVER emit AddLeg/DropLegs — growth + death-replacement are the route
+	// group's self-heal job (aliveLegCount counts standby, so parking never
+	// re-grows). on_tick only picks ACTIVE vs parked — pure standby flips, no
+	// churn. Prefer a reliable-only active set so the stream never rides a
+	// flapping webrtc leg.
 	var action rotationActionWire
 	switch {
+	case len(relAct) >= 1 && len(fragAct) > 0:
+		action = rotationActionWire{DemoteToStandby: []int{hi(fragAct)}}
 	case len(fragAct) > 0 && len(relSb) > 0:
 		action = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}, DemoteToStandby: []int{hi(fragAct)}}
-	case active < targetMux && len(relSb) > 0:
+	case len(relAct) < targetMux && len(relSb) > 0:
 		action = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}}
-	case active < targetMux && len(fragSb) > 0:
+	case len(relAct) == 0 && len(fragAct) == 0 && len(fragSb) > 0:
 		action = rotationActionWire{PromoteFromStandby: []int{lo(fragSb)}}
-	case active < targetMux:
-		action = rotationActionWire{AddLeg: true}
-	case active > targetMux && len(fragAct) > 0:
-		action = rotationActionWire{DemoteToStandby: []int{hi(fragAct)}}
-	case active > targetMux:
+	case len(relAct) > targetMux:
 		action = rotationActionWire{DemoteToStandby: []int{hi(relAct)}}
-	case len(relSb) > 0 && len(relAct) > 0:
+	case len(fragAct) == 0 && len(relSb) > 0 && len(relAct) > 0:
 		action = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}, DemoteToStandby: []int{lo(relAct)}}
 	default:
 		return 0
