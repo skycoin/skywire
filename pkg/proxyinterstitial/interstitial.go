@@ -21,6 +21,8 @@ package proxyinterstitial
 
 import (
 	"bytes"
+	_ "embed"
+	"encoding/base64"
 	"fmt"
 	"html"
 	"net"
@@ -101,7 +103,7 @@ func Page(target, detail, mechanism string, isError bool) string {
 		refreshMeta +
 		`<title>` + title + `</title><style>` + css + `</style></head>` +
 		`<body><div id="mesh-boot"><div class="card` + cls + `" id="mesh-card">` +
-		brandSVG +
+		brandMark +
 		`<div class="sp" id="mesh-sp"></div>` +
 		`<h1 id="mesh-title">` + html.EscapeString(heading) + `</h1>` +
 		`<p id="mesh-msg">` + html.EscapeString(msg) + `</p>` +
@@ -116,23 +118,30 @@ func Page(target, detail, mechanism string, isError bool) string {
 		`</div></div></body></html>`
 }
 
-// brandSVG is the Skywire cloud mark (Skycoin cloud silhouette) filled with the
-// skywire accent gradient, plus the wordmark. Inline + self-contained (no
-// external asset) so it renders under the proxies' strict, no-network context.
-const brandSVG = `<div class="brand">` +
-	`<svg viewBox="0 0 24 24" aria-hidden="true">` +
-	`<defs><linearGradient id="skcloud" x1="0" y1="0" x2="1" y2="1">` +
-	`<stop offset="0" stop-color="#7c83ff"/><stop offset="1" stop-color="#a06bff"/></linearGradient></defs>` +
-	`<path fill="url(#skcloud)" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 ` +
-	`2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>` +
-	`</svg><b>skywire</b></div>`
+// skywireCloudPNG is the official Skycoin/Skywire striped-cloud brand mark
+// (the cloud-only icon, no wordmark). It is the exact same asset the Angular
+// manager UI ships as assets/img/skywire-icon.png, copied into this package so
+// it can be embedded and served under the proxies' strict, no-network context
+// (a raw data: URI, no external fetch). Using the real brand cloud instead of
+// a generic Material Design cloud silhouette.
+//
+//go:embed skywire-cloud.png
+var skywireCloudPNG []byte
+
+// brandMark is the branded header: the Skycoin cloud mark as an inline data:
+// URI <img> plus the skywire wordmark. Self-contained so it renders with no
+// network access, matching the interstitial's injection context.
+var brandMark = `<div class="brand">` +
+	`<img alt="skywire" src="data:image/png;base64,` +
+	base64.StdEncoding.EncodeToString(skywireCloudPNG) +
+	`"><b>skywire</b></div>`
 
 const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#7a80a8;--accent:#7c83ff;--accent2:#a06bff;--err:#ff6b8a;--card:#131629;--line:#2b3163}` +
 	`html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}` +
 	`#mesh-boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}` +
 	`.card{width:min(440px,92vw);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:26px;box-shadow:0 14px 44px rgba(0,0,0,.5);text-align:center}` +
 	`.brand{display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:16px}` +
-	`.brand svg{width:24px;height:24px;flex:none}` +
+	`.brand img{width:24px;height:24px;flex:none}` +
 	`.brand b{font-weight:600;letter-spacing:.4px;font-size:15px;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}` +
 	`.sp{width:34px;height:34px;margin:8px auto 16px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .9s linear infinite}` +
 	`@keyframes spin{to{transform:rotate(360deg)}}` +
@@ -319,6 +328,33 @@ func readFull(conn net.Conn, p []byte) error {
 		}
 	}
 	return nil
+}
+
+// StatusLine turns a transient dial error into a short, human-facing status
+// line for the interstitial's detail slot — so the page shows WHY it is waiting
+// (a live-ish progress cue) instead of a blank card. It deliberately does not
+// echo the raw Go error (yamux/socks internals, PKs) which is noise to a user;
+// callers that want the raw error on the page can pass it as detail directly.
+// The mapping mirrors the transient signals IsTransient keys on.
+func StatusLine(err error) string {
+	if err == nil {
+		return ""
+	}
+	s := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(s, "202"), strings.Contains(s, "delegated"), strings.Contains(s, "not ready"):
+		return "Waiting for the exit to accept the session…"
+	case strings.Contains(s, "no route"), strings.Contains(s, "route not"), strings.Contains(s, "no suitable transport"):
+		return "Building a route to the exit across the mesh…"
+	case strings.Contains(s, "session"):
+		return "Opening the encrypted session to the exit…"
+	case strings.Contains(s, "timeout"), strings.Contains(s, "deadline"), strings.Contains(s, "i/o timeout"):
+		return "The route is still warming up — retrying…"
+	case strings.Contains(s, "refused"), strings.Contains(s, "cannot connect"), strings.Contains(s, "unreachable"):
+		return "The exit is not reachable yet — retrying…"
+	default:
+		return "Establishing a route over the mesh…"
+	}
 }
 
 // IsTransient classifies a dial error as a route-setup-in-progress condition
