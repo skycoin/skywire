@@ -129,6 +129,19 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 	return delivered
 }
 
+// GapAge reports how long the current frontier gap has been open, or 0 if the
+// buffer is contiguous (no gap). The route group's fast data-progress prune uses
+// it to tell a genuinely stuck receiver (a gap held while SACK retransmits) from
+// ordinary latency-skew interleave.
+func (rb *reorderBuffer) GapAge() time.Duration {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	if rb.gapSince.IsZero() {
+		return 0
+	}
+	return time.Since(rb.gapSince)
+}
+
 // flushAll delivers all buffered packets in sequence order and resets.
 // Called when the gap exceeds maxGap to prevent unbounded memory growth.
 // The caller must hold rb.mu.
