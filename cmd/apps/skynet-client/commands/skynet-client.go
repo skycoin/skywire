@@ -255,7 +255,9 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	pool := skyroute.New(skyroute.DefaultIdleTTL, appCl.Log())
 	defer func() { _ = pool.Close() }() //nolint:errcheck
 
-	dialToMux := func(dctx context.Context, muxPort uint16) (net.Conn, error) {
+	// The DialRoute signature carries a ctx for route-setup cancellation,
+	// but appCl's dial helpers take no ctx, so it's intentionally ignored.
+	dialToMux := func(_ context.Context, muxPort uint16) (net.Conn, error) {
 		return dialWithShape(muxPort)
 	}
 
