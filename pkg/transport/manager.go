@@ -108,6 +108,12 @@ type Manager struct {
 	tpdLeafPubMu sync.RWMutex
 	tpdLeafPub   TPDLeafPublisher
 
+	// conformance holds the most recent publish-then-verify check of our
+	// published transport set against what TPD reflects for our edge. See
+	// conformance.go — it makes discovery drift observable instead of silent.
+	conformanceMu sync.RWMutex
+	conformance   DiscoveryConformance
+
 	// regNudge signals the re-registration loop to run soon (after a short debounce).
 	// Sent after accepting a new transport so it gets batch-registered quickly.
 	regNudge chan struct{}
@@ -189,12 +195,13 @@ func (tm *Manager) Serve(ctx context.Context) {
 	// for cleanup, reconnect, re-registration, deferred deletion, and
 	// transport-maintenance goroutines (the latter replaces what used
 	// to be 2 goroutines per ManagedTransport)
-	tm.wg.Add(6)
+	tm.wg.Add(7)
 	go tm.cleanupTransports(ctx)
 	go tm.runReconnectPersistent(ctx)
 	go tm.runReRegisterTransports(ctx)
 	go tm.runDeferredDeletions(ctx)
 	go tm.runTransportMaintenance(ctx)
+	go tm.runDiscoveryConformance(ctx)
 	go func() { defer tm.wg.Done(); tm.serveLockWatchdog(ctx.Done()) }()
 	tm.Logger.Debug("transport manager is serving.")
 }
