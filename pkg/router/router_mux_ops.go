@@ -340,18 +340,21 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 			ExcludeDMSG:            true,
 		}
 
-		// Local calc FIRST, route-finder as fallback — mirroring establishMuxRoutes
-		// and addOneAuxForwardLeg. calculateLocalRoutes honors ExcludeTransportIDs
-		// (and ExcludeIntermediatePKs), so it returns a leg disjoint from the ones
-		// already in the group. The route-finder SERVICE ignores ExcludeTransportIDs,
-		// so querying it first for a direct pair hands back the very transport we are
-		// excluding; the append then rejects it ("refusing to append mux leg over
-		// transport already in the group") and the self-heal loops without ever
-		// growing. The route-finder is still the fallback for a disjoint deep-hop the
-		// local transport cache doesn't cover.
-		fwd, rev, err := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
+		// Route-finder FIRST, local calc as fallback — matching the initial mux
+		// planning in establishMuxRoutes/addOneAuxForwardLeg (router_dial.go:2118,
+		// 2297) since #3986/#3990. The route-finder plans over the WHOLE TPD graph
+		// and its transport-type-aware ranking (transportTypeCostMs) makes the
+		// disjoint pick prefer stcpr/quic over webrtc — the difference that lets a
+		// grown leg land on a reliable intermediate (like mux-bw's planner) instead
+		// of a flaky webrtc one that collapses under load. Disjointness is enforced
+		// by ExcludeIntermediatePKs (which the finder honors via the disjoint
+		// post-filter); the stale ExcludeTransportIDs concern only bit the DIRECT
+		// (1-hop) case, and aux mux legs are multi-hop (min_hops>=1 here, and >=2
+		// for the multi-hop presets). Local calc is the fallback for a disjoint
+		// deep hop the finder can't reach.
+		fwd, rev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
 		if err != nil {
-			fwd, rev, err = r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
+			fwd, rev, err = r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
 		}
 		if err != nil {
 			consecutiveFailures++
