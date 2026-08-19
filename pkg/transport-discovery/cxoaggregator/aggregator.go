@@ -345,6 +345,9 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	cxoNode.Config().OnFillingBreaks = func(_ *node.Node, r *registry.Root, reason error) {
 		a.log.WithError(reason).WithField("visor", cipher.PubKey(r.Pub)).WithField("seq", r.Nonce).
 			Warn("CXO aggregator: root filling broke")
+		// Discovery-critical recovery: a broken full-tree fill still usually
+		// left transports/list in the store (see recoverTransportListOnBreak).
+		a.recoverTransportListOnBreak(r)
 	}
 	return a, nil
 }
@@ -598,6 +601,87 @@ func (a *Aggregator) handleRootFilled(r *registry.Root) {
 		return
 	}
 	a.walkAndDispatch(pack, &rootNode, "", reporter)
+}
+
+// recoverTransportListOnBreak is the OnFillingBreaks best-effort path.
+//
+// A visor's Root carries the small transports/list discovery leaf PLUS
+// its bulky per-transport telemetry subtrees (transports/<uuid>/current,
+// timeline, tier/service bitmaps). CXO fills the WHOLE Root before
+// OnRootFilled fires, and under fleet load the delivering inbound conn
+// dies mid-fill — measured live, only ~2-transport trees finish in the
+// conn's window, so any visor with a real transport set (median 5, up to
+// hundreds) never lands its discovery data and TPD reflected ~9% of the
+// graph. But CXO fills top-down and keeps whatever objects it fetched
+// (closeFiller does not roll back the store), so the small top-level
+// transports/list leaf is usually already present when the fill breaks
+// on a deep telemetry object. Extract and dispatch JUST that leaf so
+// discovery lands even when the full telemetry fill can't complete;
+// telemetry self-heals on a later fill that does finish.
+//
+// The redis reconcile runs on a detached goroutine so a slow store write
+// can't stall the CXO node's event loop (this callback fires on it, and
+// under mass breaks it fires hundreds of times per reconcile window).
+func (a *Aggregator) recoverTransportListOnBreak(r *registry.Root) {
+	if r == nil || len(r.Refs) == 0 {
+		return
+	}
+	reporter := cipher.PubKey(r.Pub)
+	if reporter == (cipher.PubKey{}) {
+		return
+	}
+	pack, err := a.cxoNode.Container().Pack(r, treestore.Registry)
+	if err != nil {
+		return
+	}
+	var rootNode treestore.TreeNode
+	if err := r.Refs[0].Value(pack, &rootNode); err != nil {
+		return // root node object itself wasn't fetched before the break
+	}
+	_, tsub, ok := childByName(pack, &rootNode, "transports")
+	if !ok || tsub == nil {
+		return
+	}
+	leaf, _, ok := childByName(pack, tsub, "list")
+	if !ok || leaf == nil {
+		return
+	}
+	a.log.WithField("visor", reporter).Debug("CXO aggregator: recovered transports/list from partial fill")
+	leafCopy := append([]byte(nil), leaf...)
+	go a.dispatchLeaf("transports/list", leafCopy, reporter)
+}
+
+// childByName returns the inline leaf bytes or the sub-node of n's child
+// with the given name. It tolerates objects a partial fill never fetched:
+// an unreadable child (its object absent from the store) simply yields
+// ok=false rather than erroring the whole walk. Exactly one of leaf/sub
+// is non-nil on ok=true.
+func childByName(pack registry.Pack, n *treestore.TreeNode, name string) (leaf []byte, sub *treestore.TreeNode, ok bool) {
+	count, err := n.Children.Len(pack)
+	if err != nil {
+		return nil, nil, false
+	}
+	for i := 0; i < count; i++ {
+		var entry treestore.TreeEntry
+		if _, err := n.Children.ValueByIndex(pack, i, &entry); err != nil {
+			continue // this child's index object wasn't fetched; skip it
+		}
+		if entry.Name != name {
+			continue
+		}
+		if len(entry.Leaf) > 0 {
+			return entry.Leaf, nil, true
+		}
+		if entry.Sub.Hash != (skycipher.SHA256{}) {
+			var s treestore.TreeNode
+			if err := entry.Sub.Value(pack, &s); err != nil {
+				return nil, nil, false // sub-node object not fetched
+			}
+			return nil, &s, true
+		}
+		return nil, nil, false
+	}
+	return nil, nil, false
 }
 
 // walkAndDispatch recursively descends a TreeStore tree and routes
