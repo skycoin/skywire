@@ -12,6 +12,7 @@ themselves up to date.
   `skywire`, `skyrepo`) and the variant PKGBUILDs that also produce the
   auto-update packages and the Debian `.deb`s.
 
-For the underlying rolling-release / CI machinery that all three update paths
-track (the `skywire-commit` branch and the `:test` Docker tag), see
+For the underlying rolling-release machinery that all three update paths track
+(tracking `develop`, tagged releases, pinned commits, and the prebuilt-binary
+pre-releases), see
 [AUTO_UPDATE.md](https://github.com/skycoin/skywire/blob/develop/AUTO_UPDATE.md).

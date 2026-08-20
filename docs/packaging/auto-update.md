@@ -12,11 +12,12 @@ running more than one at once is redundant and can fight over the binary.
 | **2. source auto-update** | `skywire-autoupdate` | `skywire-update.service` + `.timer` | daily (`+` up to 1 h jitter) | `go install github.com/skycoin/skywire@<commit>` → `/opt/skywire/bin/skywire` | nodes that build from source and track the rolling release |
 | **3. docker auto-pull** | `skywire-docker-autopull` | `skywire-docker-autopull.service` + `.timer` | every 5 min | `docker pull` + `docker compose up -d --force-recreate` | container deployments |
 
-All three ultimately track the same **rolling release**: CI advances the
-`skywire-commit` branch to the latest commit on `develop` for which every
-platform's tests passed, and warms the Go module proxy so that commit is
-installable worldwide. See [Skywire Auto-Update (rolling release / CI)](https://github.com/skycoin/skywire/blob/develop/AUTO_UPDATE.md)
-for how the `skywire-commit` branch and the `:test` Docker tag are produced.
+All three ultimately track the same **rolling release** off `develop`: the
+source updater installs the tip of `develop` (or a tagged release / pinned
+commit / prebuilt binary — see the channels below), and the docker path tracks
+the `:test` Docker tag. See [Skywire Auto-Update](https://github.com/skycoin/skywire/blob/develop/AUTO_UPDATE.md)
+for the update channels and how the prebuilt-binary pre-releases and the `:test`
+Docker tag are produced.
 
 ---
 
@@ -139,16 +140,20 @@ Persistent=true
 ### What `/usr/bin/skywire-update` does
 
 1. Sources `/etc/skywire.conf` for its settings (`SKYENV`).
-2. Resolves the target commit from `UPDATE_CHANNEL` (default `stable` = the
-   latest CI-tested commit, resolved with
-   `go run github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit`
-   using `GOPROXY=direct`; also accepts `develop`, `latest`, or an explicit
-   `<commit-hash>`).
+2. Resolves the target from `UPDATE_CHANNEL` (default `develop` = the tip of
+   the `develop` branch). Also accepts `latest` (the latest tagged release),
+   an explicit `<commit-hash>`, or `binary` / `binary-develop` / `binary-master`
+   (download a prebuilt linux binary from the rolling `<branch>-latest` GitHub
+   pre-release, verified against `SHA256SUMS`, instead of building from source).
 3. Compares that target to the running binary (`skywire -b`) and exits early
    if nothing changed.
-4. Builds as the unprivileged `skywire-build` user (home
-   `/var/lib/skywire-build`) with `go install github.com/skycoin/skywire@<target>`
-   (`GOFLAGS=-trimpath`), installs the result to `/opt/skywire/bin/skywire`.
+4. For the source channels, builds as the unprivileged `skywire-build` user
+   (home `/var/lib/skywire-build`) with
+   `go install github.com/skycoin/skywire@<target>` (`GOFLAGS=-trimpath`).
+   The build tries `GOPROXY=direct` first and falls back to the default module
+   proxy if the direct git fetch fails; `GOPROXY_MODE=direct|proxy` forces one
+   mode. For the `binary*` channels, downloads and verifies the prebuilt binary
+   instead. Either way, installs the result to `/opt/skywire/bin/skywire`.
 5. Runs `skywire autoconfig`, then `systemctl restart skywire` (plus anything
    in `RESTART_SERVICES`) if the service is active.
 6. Prunes the Go build/module caches on exit.
@@ -171,7 +176,7 @@ systemctl disable --now skywire-update.timer # stop auto-updating
 
 !!! info "Companion docker updater in the same package"
     `skywire-autoupdate` **also** ships `skywire-docker-update.service` /
-    `.timer` (every 30 min), which resolves the CI-tested commit, does
+    `.timer` (every 30 min), which resolves the latest develop commit, does
     `docker pull skycoin/skywire:<sha>`, retags it `:test`, and recreates the
     compose stack. It is **not enabled by default**. Do not confuse it with the
     separately-packaged `skywire-docker-autopull` below — they are two
