@@ -116,6 +116,41 @@ type VisorAPI interface {
 	// transport exists or its latency is not yet sampled. Powers the
 	// ping-tree UseTransportLatency fast-path at level-1.
 	GetTransportLatencyByRemotePK(remotePK cipher.PubKey) float64
+	// RouteGroupMuxInfo returns the per-mux-leg counters for every active
+	// route group tagged with appName — the same data the unary
+	// RouteGroupMuxInfo net/rpc call returns, projected into the
+	// rpcgrpc-local mirror so this package stays free of pkg/visor
+	// imports. Powers StreamRouteGroupMuxInfo (the smooth server-stream
+	// backing 'cli proxy mux plot'). Returns an empty slice (not an
+	// error) when the app has no route group yet.
+	RouteGroupMuxInfo(appName string) ([]RouteGroupMuxInfoData, error)
+}
+
+// RouteGroupMuxInfoData mirrors visor.MuxRouteGroupInfo at the rpcgrpc
+// boundary so VisorAPI doesn't pull pkg/visor into rpcgrpc's import
+// graph. The adapter at the visor's init transcribes the visor type
+// into this one.
+type RouteGroupMuxInfoData struct {
+	MuxEnabled  bool
+	SACKEnabled bool
+	Legs        []RouteGroupMuxLegData
+}
+
+// RouteGroupMuxLegData mirrors visor.MuxLegInfo — one leg (route) within
+// a mux'd route group.
+type RouteGroupMuxLegData struct {
+	Index       int
+	TransportID string
+	TpType      string
+	RemotePK    string
+	LatencyMS   float64
+	SentBytes   uint64
+	SentPackets uint64
+	RecvBytes   uint64
+	RecvPackets uint64
+	Retransmits uint64
+	Alive       bool
+	Standby     bool
 }
 
 // GroupMessageData mirrors visor.GroupMessage one-for-one but lives in

@@ -104,6 +104,18 @@ service PingService {
   // server-side bandwidth-pump, events stream as they happen,
   // ctx.Done() at every iteration, bounded internal channel.
   rpc StreamMuxBandwidth(MuxBandwidthRequest) returns (stream MuxBandwidthEvent);
+
+  // StreamRouteGroupMuxInfo streams a running app's per-leg mux
+  // telemetry on a fixed cadence — the server-streaming equivalent of
+  // the unary RouteGroupMuxInfo net/rpc call that 'cli proxy mux plot'
+  // (default, watch-a-running-app mode) polls. Lets that plot update
+  // smoothly/continuously like the --pk StreamMuxBandwidth path,
+  // instead of the choppy 1 Hz unary gob poll. Each sample carries the
+  // same []visor.MuxRouteGroupInfo per-leg breakdown the unary RPC
+  // returns. The handler never errors the stream on a transient absent
+  // route group — it emits an empty sample and keeps sampling, so the
+  // plot renders an empty frame until the app dials.
+  rpc StreamRouteGroupMuxInfo(StreamRouteGroupMuxInfoRequest) returns (stream RouteGroupMuxInfoSample);
 }
 
 message PingRequest {
@@ -902,4 +914,62 @@ message MuxBandwidthDone {
 message MuxBandwidthError {
   string code = 1;
   string message = 2;
+}
+
+// StreamRouteGroupMuxInfoRequest configures a live route-group mux
+// telemetry stream for a running app. See StreamRouteGroupMuxInfo.
+message StreamRouteGroupMuxInfoRequest {
+  // AppName scopes the telemetry to route groups tagged with this app
+  // (skysocks-client, vpn-client, ...). Empty returns every mux'd route
+  // group the visor has — matching the unary RouteGroupMuxInfo("").
+  string app_name = 1;
+  // SampleIntervalNs is how often a RouteGroupMuxInfoSample is emitted.
+  // 0 falls back to 500 ms; the handler floors it to a 100 ms minimum
+  // so a client can't spin the visor. Nanoseconds (proto convention
+  // used throughout this service).
+  int64 sample_interval_ns = 2;
+}
+
+// RouteGroupMuxInfoSample is one snapshot of a running app's mux'd
+// route-group telemetry, emitted every sample_interval_ns. Mirrors the
+// []visor.MuxRouteGroupInfo the unary RouteGroupMuxInfo RPC returns.
+message RouteGroupMuxInfoSample {
+  // TimestampNs is server-side wall time at emit.
+  int64 timestamp_ns = 1;
+  // RouteGroups is one entry per active route group tagged with the
+  // requested app. Empty when the app has no route group yet — the
+  // stream stays open and keeps sampling rather than erroring.
+  repeated RouteGroupMuxInfo route_groups = 2;
+}
+
+// RouteGroupMuxInfo is one route group's mux state plus its per-leg
+// counters. Field-for-field mirror of visor.MuxRouteGroupInfo (minus
+// the descriptor, which the plot consumer does not render).
+message RouteGroupMuxInfo {
+  bool mux_enabled = 1;
+  bool sack_enabled = 2;
+  repeated RouteGroupMuxLeg legs = 3;
+}
+
+// RouteGroupMuxLeg is one leg (route) within a mux'd group — mirror of
+// visor.MuxLegInfo.
+message RouteGroupMuxLeg {
+  // RouteIndex is the leg's stable index within the group
+  // (visor.MuxLegInfo.Index).
+  int32 route_index = 1;
+  string transport_id = 2;
+  // TransportKind is the leg's transport type (stcpr, sudph, dmsg, ...)
+  // — visor.MuxLegInfo.TpType.
+  string transport_kind = 3;
+  string remote_pk = 4;
+  double latency_ms = 5;
+  uint64 sent_bytes = 6;
+  uint64 sent_packets = 7;
+  uint64 recv_bytes = 8;
+  uint64 recv_packets = 9;
+  uint64 retransmits = 10;
+  // Alive is false once the leg's transport is closed; Standby is true
+  // for a warm standby (rules kept, not sending) — the leg's gate_state.
+  bool alive = 11;
+  bool standby = 12;
 }
