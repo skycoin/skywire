@@ -1,0 +1,93 @@
+# Publish a rolling, compressed linux binary per merge — the artifact half of a
+# download-and-install auto-update, so hosts stop compiling skywire from source.
+#
+# Why: the source-build updater (skywire-autoupdate: `go install
+# github.com/skycoin/skywire@<ref>`) is fragile — it needs a working Go
+# toolchain, GOPROXY=direct reach to git for every dependency, several GB of
+# disk, and ~1-2 min CPU on every host. Any of those failing silently strands a
+# host on its last-good commit (observed 2026-08-20: the whole fleet stuck for
+# hours while develop itself built fine). A prebuilt binary the host just
+# downloads + verifies + installs removes all of that.
+#
+# This publishes to a SINGLE rolling pre-release per branch (tag
+# `<branch>-latest`, e.g. `develop-latest`), replaced in place on each merge.
+# It is deliberately NOT a tagged semver release: prerelease=true and a fixed
+# rolling tag keep it out of the packaging/versioning flow (AUR/apt/MSI), which
+# key off real `vX.Y.Z` tags. The client half (an UPDATE_CHANNEL=binary path in
+# skywire-autoupdate that pulls the matching arch archive, checks SHA256SUMS,
+# and installs) is a separate change in that package.
+name: Publish Binary
+
+on:
+  push:
+    branches: [develop, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create/replace the rolling release
+
+# Serialize per branch so a burst of merges doesn't race on the rolling release
+# (same rationale as Deploy). No cancel-in-progress: every commit still builds.
+concurrency:
+  group: publish-binary-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Install zstd
+        run: sudo apt-get update && sudo apt-get install -y zstd
+
+      - name: Build + compress linux binaries (amd64, arm64, armv7)
+        run: |
+          set -euo pipefail
+          BRANCH="${GITHUB_REF##*/}"
+          VERSION="$(git describe --always --match 'v[0-9]*')"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          COMMIT="$(git rev-list -1 HEAD)"
+          BASE="github.com/skycoin/skywire"
+          UTIL="$BASE/pkg/skywire-utilities/pkg/buildinfo"
+          # Same stamping as `make build`, plus -s -w to shrink the artifact.
+          LDFLAGS="-s -w -X ${UTIL}.version=${VERSION} -X ${UTIL}.date=${DATE} -X ${UTIL}.commit=${COMMIT} -X ${BASE}/pkg/visor.BuildTag=${BRANCH}"
+          mkdir -p dist
+          for arch in amd64 arm64 arm; do
+            echo "==> building linux/${arch}"
+            GOOS=linux GOARCH="${arch}" GOARM=7 CGO_ENABLED=0 \
+              go build -trimpath -mod=vendor -ldflags="${LDFLAGS}" -o skywire ./cmd/skywire
+            zstd -19 -q -f -o "dist/skywire-linux-${arch}.zst" skywire
+            rm -f skywire
+          done
+          ( cd dist && sha256sum *.zst > SHA256SUMS )
+          {
+            echo "BRANCH=${BRANCH}"
+            echo "VERSION=${VERSION}"
+          } >> "$GITHUB_ENV"
+          echo "built ${VERSION} for amd64/arm64/armv7:"; ls -la dist
+
+      - name: Replace the rolling <branch>-latest pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${BRANCH}-latest"
+          # Delete the old rolling release + its tag, then recreate pointing at
+          # this commit — the simplest way to keep exactly one rolling artifact
+          # set that always matches the freshly-built commit.
+          gh release delete "${TAG}" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "${TAG}" dist/skywire-linux-*.zst dist/SHA256SUMS \
+            --target "${GITHUB_SHA}" \
+            --prerelease \
+            --title "${BRANCH} latest (${VERSION})" \
+            --notes "Rolling ${BRANCH} build, replaced on every merge. Version ${VERSION}, commit ${GITHUB_SHA}. NOT a tagged release — for the download-and-install auto-updater, not for packaging."
