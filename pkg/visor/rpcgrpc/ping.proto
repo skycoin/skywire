@@ -635,6 +635,27 @@ message MuxBandwidthRequest {
   // true at the handler — without probes there's nothing to
   // measure.
   int64 idle_baseline_duration_ns = 11;
+
+  // RoutingPolicy, when non-empty, drives this run through the WASM /
+  // Starlark routing-policy engine instead of the pure-measurement path.
+  // Accepts the same values as the visor's routing.policy_per_dial config:
+  // "preset:<name>" (a compiled bundle preset — rotating-bw, elastic-mux,
+  // latency-adaptive, app-mux, adaptive, probe-and-prune), "@/path/to.wasm",
+  // "@/path/to.star", or an inline Starlark string. When set, the handler
+  // (a) calls the engine's decide_route to pick the mux leg count + min-hops
+  // at setup, and (b) fires the engine's on_tick hook against the live per-leg
+  // stats on the sample cadence, applying the returned add/drop/promote/demote
+  // leg actions — the in-process rig that proves a preset is demonstrably
+  // adaptive over a live multiplexed route. Empty = the untouched mux-bw
+  // baseline. This is the `policy-bw` CLI sibling's surface.
+  string routing_policy = 12;
+
+  // PolicyApp is the app name the routing-policy engine sees as
+  // RoutingContext.App — presets branch on it (latency-adaptive acts on
+  // vpn-client/skysocks-client/skynet-client; app-mux is per-app). Only
+  // meaningful when routing_policy is set; the handler defaults it to
+  // "skysocks-client" so the bandwidth-oriented presets are exercised.
+  string policy_app = 13;
 }
 
 // MuxBandwidthEvent is one entry on the stream. Exactly one oneof
@@ -665,7 +686,37 @@ message MuxBandwidthEvent {
     // the pump goroutine died so the consumer can attribute throughput
     // contributions accurately.
     MuxRouteFailure route_failure = 15;
+    // LegLifecycle fires when the routing-policy on_tick hook mutates the
+    // leg set — a leg added, dropped, promoted from warm standby, or demoted
+    // to it. Only emitted on policy-driven (`policy-bw`) runs; the pure
+    // mux-bw baseline never mutates its leg set mid-run so never emits these.
+    // Lets the telemetry chart render hot-swaps against the per-leg bandwidth
+    // series.
+    MuxLegLifecycle leg_lifecycle = 16;
   }
+}
+
+// MuxLegLifecycle records one policy-driven leg-set mutation from the
+// on_tick hook. The rig is the in-process analog of the route group's
+// RotationAction executor (add/drop/promote/demote), so a preset's adaptive
+// behavior is visible as a stream of these events interleaved with the
+// per-leg MuxBandwidthSample series.
+message MuxLegLifecycle {
+  // Event is one of "added", "dropped", "promoted", "demoted".
+  string event = 1;
+  // RouteIndex is the affected leg's index at the time of the event.
+  int32 route_index = 2;
+  // GateState is the leg's resulting warm-standby gate state: "active"
+  // (selected for pumping) or "standby" (kept alive via keepalive but not
+  // pumped). Mirrors router.LegInfo.Standby observed by the on_tick ABI.
+  string gate_state = 3;
+  // IntermediatePk / TransportKind identify the affected leg's path — same
+  // fields as MuxLegSample so a consumer can join the event to the series.
+  string intermediate_pk = 4;
+  string transport_kind = 5;
+  // ElapsedNs is time since pump-start when the mutation was applied. Same
+  // epoch as MuxBandwidthSample.ElapsedNs.
+  int64 elapsed_ns = 6;
 }
 
 // MuxRouteEstablished records one route's setup outcome.
@@ -776,6 +827,17 @@ message MuxLegSample {
   // pump goroutine is still running. Matches the accounting behind
   // MuxBandwidthSample.ActiveRoutes.
   bool alive = 8;
+  // LatencyMs is the leg's EWMA-smoothed round-trip latency in
+  // milliseconds, sampled by the per-leg policy probe. 0 = unknown (no
+  // measurement yet). Only populated on policy-driven runs — the pure
+  // baseline uses a single dedicated probe route, not per-leg probes.
+  // This is the signal latency-adaptive / adaptive presets evict on.
+  int32 latency_ms = 9;
+  // Standby is the leg's warm-standby gate state: true when the policy
+  // demoted this leg (kept alive via keepalive, not pumped). Lets the
+  // telemetry consumer see the gate flip in the per-sample series, not
+  // just at the lifecycle event.
+  bool standby = 10;
 }
 
 // MuxRttProbe is one RTT measurement during the pump. Allows
