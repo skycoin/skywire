@@ -1,128 +1,77 @@
 # Skywire Auto-Update
 
-Skywire uses a rolling-release auto-update mechanism. The CI pipeline tracks the latest commit on `develop` for which all tests passed, and visors can update themselves using standard Go tooling.
+Skywire uses a rolling-release auto-update mechanism. Visors track the tip of
+`develop` (or a tagged release, a pinned commit, or a prebuilt binary) and update
+themselves either by rebuilding from source with standard Go tooling or by
+downloading a verified prebuilt binary.
 
-## How It Works
+## Update Channels
 
-### CI Pipeline
+The auto-updater (`skywire-update`, shipped by the `skywire-autoupdate` AUR
+package and the apt `.deb`) resolves its target from `UPDATE_CHANNEL` in
+`/etc/skywire.conf`:
 
-1. A PR is merged to `develop`
-2. The `Test` workflow runs on all 3 platforms (linux, darwin, windows)
-3. If ALL tests pass, the `update-commit` job:
-   - Updates the `skywire-commit` branch with the tested commit SHA
-   - Warms the Go module proxy cache so the commit is immediately available worldwide
-4. The `Deploy` workflow (independent) builds and pushes Docker images to Docker Hub, tagged with both `:test` and `:<short-sha>`
+| `UPDATE_CHANNEL` | Resolves to |
+|------------------|-------------|
+| `develop` (default) | the tip of the `develop` branch — `go install github.com/skycoin/skywire@develop` |
+| `latest` | the latest tagged release |
+| `<commit-hash>` | a specific pinned commit |
+| `binary` / `binary-develop` / `binary-master` | download the prebuilt linux binary for this arch from the rolling `<branch>-latest` GitHub pre-release, verified against `SHA256SUMS` |
 
-### The `skywire-commit` Branch
+The `develop`, `latest`, and `<commit-hash>` channels build from source. The
+`binary*` channels download a prebuilt, zstd-compressed linux binary instead of
+compiling — useful on hosts without a working Go toolchain or enough disk/CPU to
+build.
 
-An orphan branch in `skycoin/skywire` containing a single Go program that prints the latest tested commit hash:
+## Source Builds
 
-```
-cmd/skywire-commit/main.go   # const Commit = "<sha>"
-go.mod                        # module github.com/skycoin/skywire
-```
-
-This branch has no shared history with `develop` — it's updated by CI only.
-
-## Visor Auto-Update
-
-### Prerequisites
-
-- Go 1.21+ installed (Go 1.23 from bookworm-backports works; Go auto-downloads the required toolchain)
-- `~/go/bin` in `$PATH`
-
-### Get the Latest Tested Commit
-
-Using `go run` with isolated cache (no persistent build artifacts):
+For the source channels, `skywire-update` installs the target with
+`go install github.com/skycoin/skywire@<ref>`:
 
 ```bash
-TMPDIR=$(mktemp -d) && COMMIT=$(GOPROXY=direct GOCACHE=$TMPDIR go run github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit) && rm -rf $TMPDIR
-echo $COMMIT
+go install github.com/skycoin/skywire@develop        # UPDATE_CHANNEL=develop
+go install github.com/skycoin/skywire@<commit-hash>  # UPDATE_CHANNEL=<commit-hash>
 ```
 
-Or install the helper binary (2MB, reusable):
+### GOPROXY
 
-```bash
-GOPROXY=direct go install github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit
-COMMIT=$(~/go/bin/skywire-commit)
-```
+Source builds try `GOPROXY=direct` first (fetching module contents straight from
+git) and automatically fall back to the default module proxy
+(`proxy.golang.org`) if the direct git fetch fails. Set `GOPROXY_MODE` in
+`/etc/skywire.conf` to force one mode:
 
-**Why `GOPROXY=direct`?** `@skywire-commit` is a branch name. The Go module proxy
-(`proxy.golang.org`) caches branch-tip → SHA resolutions for up to 30 minutes —
-so if you run the update right after a CI merge, the proxy may still return the
-previous SHA and your install no-ops (visible as a suspiciously fast "success"
-in well under a second). Setting `GOPROXY=direct` bypasses the proxy and reads
-the SHA straight from GitHub. The actual module download still proceeds with
-the global default; only the branch-tip resolution is forced direct.
+- `GOPROXY_MODE=direct` — only ever fetch direct from git.
+- `GOPROXY_MODE=proxy` — only ever use the default module proxy.
 
-### Install Skywire at the Tested Commit
+The Chinese mirror `goproxy.cn` mirrors `proxy.golang.org`, so Chinese visors
+work with the default (`proxy`) fallback.
 
-```bash
-go install github.com/skycoin/skywire@$COMMIT
-```
+## Prebuilt Binaries
 
-This step does NOT need `GOPROXY=direct` — once you have the exact commit SHA,
-the proxy lookup is content-addressed and returns the right module regardless.
+`.github/workflows/publish-binary.yml` builds a compressed linux binary
+(amd64, arm64, armv7) on every merge to `develop` and `master` and publishes it
+to a single rolling GitHub **pre-release** tagged `<branch>-latest` (e.g.
+`develop-latest`), replaced in place on each merge. Each release ships a
+`SHA256SUMS` file; the `binary*` channels download the matching-arch archive and
+verify it against those checksums before installing.
 
-### One-Liner (isolated, no persistent build artifacts from the commit check)
-
-```bash
-TMPDIR=$(mktemp -d) && go install github.com/skycoin/skywire@$(GOPROXY=direct GOCACHE=$TMPDIR go run github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit && rm -rf $TMPDIR)
-```
-
-### Check if Update is Needed
-
-Compare the installed version to the latest tested commit:
-
-```bash
-CURRENT=$(skywire -b 2>/dev/null | grep -oP 'v.*-\K[a-f0-9]+' || echo "none")
-LATEST=$(~/go/bin/skywire-commit)
-if [ "${LATEST:0:12}" != "$CURRENT" ]; then
-    echo "Update available: $CURRENT -> ${LATEST:0:12}"
-fi
-```
+This is deliberately not a tagged semver release — the rolling tag and
+`prerelease=true` keep it out of the packaging/versioning flow (AUR/apt/MSI),
+which key off real `vX.Y.Z` tags.
 
 ## Deployment Server Auto-Update (Docker)
 
-Docker images are pushed to Docker Hub on every merge to `develop`, tagged with both `:test` and `:<short-sha>`. The `skywire-commit` hash identifies which image is verified by CI.
-
-### Update Script
-
-```bash
-#!/bin/bash
-# Get the latest tested commit. GOPROXY=direct bypasses proxy.golang.org's
-# branch-tip cache (up to 30min TTL) — without it, the resolver can return
-# the previous SHA and the update silently no-ops in ~250ms with exit 0.
-GOPROXY=direct go install github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit
-LATEST=$(~/go/bin/skywire-commit)
-SHORT=${LATEST:0:12}
-CURRENT=$(cat ~/.skywire-deploy-commit 2>/dev/null || echo "none")
-
-if [ "$SHORT" = "$CURRENT" ]; then
-    echo "Up to date at $SHORT"
-    exit 0
-fi
-
-echo "Updating from $CURRENT to $SHORT"
-docker pull skycoin/skywire:$SHORT
-cd /path/to/docker-compose && docker compose up -d --force-recreate
-echo "$SHORT" > ~/.skywire-deploy-commit
-```
-
-## Go Module Proxy and China
-
-The CI warms the Go module proxy (`proxy.golang.org`) after each successful test run, so visors don't need `GOPROXY=direct`. The Chinese mirror `goproxy.cn` mirrors `proxy.golang.org`, so Chinese visors work with the default Go proxy settings.
+Docker images are pushed to Docker Hub on every merge to `develop`, tagged with
+both `:test` and `:<short-sha>`. Container deployments auto-pull the image and
+recreate the compose stack when it changes.
 
 ## Build Cache Management
 
-The Go build cache (`~/.cache/go-build`) grows over time. Periodic cleanup:
+Source builds grow the Go build cache (`~/.cache/go-build`) and module cache
+over time. `skywire-update` prunes these on exit; `MODCACHE_CAP_MB` in
+`/etc/skywire.conf` caps the module cache. To clean manually:
 
 ```bash
-# Remove build cache (safe — rebuilds are just slower the first time)
-go clean -cache
-
-# Check cache size
+go clean -cache      # build cache (safe — rebuilds are just slower the first time)
 du -sh ~/.cache/go-build
 ```
-
-For the `go run` commit check, use the isolated `GOCACHE` pattern shown above to avoid cache growth entirely.
