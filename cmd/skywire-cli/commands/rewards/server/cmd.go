@@ -3,6 +3,7 @@ package clirewardsserver
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -30,6 +31,7 @@ var (
 	wd                  string
 	wlkeys              []cipher.PubKey
 	webPort             uint
+	webBind             string
 	loginNode           string
 	loginNodeAddr       string // resolved URL of login chain node (set at runtime)
 	loginGenesisAddress string // genesis wallet address for login verification (set at runtime)
@@ -49,7 +51,9 @@ var skyenvfile = os.Getenv("SKYENV")
 
 func init() {
 	ServerCmd.CompletionOptions.DisableDefaultCmd = true
-	ServerCmd.Flags().UintVarP(&webPort, "port", "p", scriptExecUint("${WEBPORT:-80}"), "port to serve")
+	defaultWebPort := scriptExecUint("${WEBPORT:-80}")
+	ServerCmd.Flags().UintVarP(&webPort, "port", "p", defaultWebPort, "port to serve (deprecated: use --bind)")
+	ServerCmd.Flags().StringVar(&webBind, "bind", fmt.Sprintf(":%d", defaultWebPort), "listen address host:port to serve on\n(empty host = all interfaces; 127.0.0.1:80 = localhost only)")
 	ServerCmd.Flags().Uint16VarP(&dmsgPort, "dport", "d", scriptExecUint16("${DMSGPORT:-80}"), "dmsg port to serve")
 	ServerCmd.Flags().IntVarP(&dmsgSess, "dsess", "e", scriptExecInt("${DMSGSESSIONS:-1}"), "dmsg sessions")
 	msg := "add whitelist keys, comma separated to permit POST of reward transaction to be broadcast"
@@ -94,10 +98,29 @@ skyenv file detected: ` + skyenvfile
 .conf file may also be specified with
 SKYENV=/path/to/fiber.conf fiber run`
 	}(),
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		r := buildRouter()
-		serveStandalone(r)
+		serveStandalone(r, resolveBindAddr(cmd, webBind, webPort))
 	},
+}
+
+// resolveBindAddr computes the effective listen address for the server.
+// --bind wins if set. Otherwise, if the deprecated --port was set, its value
+// is mapped into the host part of the default --bind address (preserving the
+// all-interfaces-vs-localhost semantics of the default). If neither was
+// changed, the default --bind value is used.
+func resolveBindAddr(cmd *cobra.Command, bind string, port uint) string {
+	if cmd.Flags().Changed("bind") {
+		return bind
+	}
+	if cmd.Flags().Changed("port") {
+		host, _, err := net.SplitHostPort(bind)
+		if err != nil {
+			host = ""
+		}
+		return net.JoinHostPort(host, strconv.FormatUint(uint64(port), 10))
+	}
+	return bind
 }
 
 // RewardConfig holds configuration for the reward system when hosted
