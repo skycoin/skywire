@@ -935,7 +935,47 @@ func (c *Cache) setFilling(
 	// incItem instead of the Set, but for filling items
 	// it's equal to call incFilling
 
-	return c.incFilling(key, inc, it)
+	rc, err = c.incFilling(key, inc, it)
+	if err == data.ErrNotFound {
+		// Filling-invariant repair. A "filling" item (val==nil, so
+		// isFilling()==true) is tracked on the assumption that its value
+		// still lives in the CXDS — incFilling only Get/Inc's it, never
+		// writes. That invariant is violated when the backing object is
+		// deleted (refcount GC / prune racing a cache eviction, or a
+		// crash-restart residue) while the placeholder lingers in c.is.
+		// A plain Inc can't recover, but Set carries the value, so persist
+		// it afresh instead of returning "not found".
+		//
+		// Without this, an evicted object that is ALSO a filling
+		// placeholder can never be restored: every re-Set re-hits the
+		// missing backing and returns "not found". That is exactly the
+		// TPD / [stats] publisher freeze — treestore's self-heal re-encode
+		// (#4036) drops its encode cache and re-Set's every object to
+		// re-materialise the evicted one, but for a filling placeholder
+		// this path silently refused to write, so the retry failed
+		// identically and the served Root froze forever (heartbeat
+		// "republish failed: not found" every tick). #4036's own test only
+		// exercised a cache-DISABLED node, where Set writes straight to the
+		// DB and this trap can't arise.
+		if len(val) == 0 {
+			return rc, err // nothing to restore with
+		}
+		if len(val) > c.c.conf.MaxObjectSize {
+			return rc, &ObjectIsTooLargeError{key}
+		}
+		// Write with inc PLUS the outstanding filler incs (it.fc), so the
+		// stored refcount accounts for both the caller's new reference and
+		// the fillers already tracked against this placeholder — mirroring
+		// setWanted's inc+wincs accounting. hard rc = urc - it.fc.
+		var urc uint32
+		if urc, err = c.db().Set(key, val, inc+it.fc); err != nil {
+			return rc, err
+		}
+		c.stat.addWritingDBRequest()
+		rc = int(urc) - it.fc
+		err = c.putFillingItem(val, int(urc), it)
+	}
+	return rc, err
 }
 
 // Set adds value to DB and to the Cache if it's enabled.
