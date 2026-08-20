@@ -41,8 +41,16 @@ var uptimePublishDays = []int{1, 7, 30}
 // would just republish identical Roots.
 const uptimePublishInterval = 60 * time.Second
 
-// UptimeCXOPublisher publishes `[]VisorSummary` (v3 shape) for each
-// of uptimePublishDays at "uptimes/days/<n>". Closed by Close.
+// UptimeCXOPublisher publishes the network-wide visor-uptime aggregate for
+// each of uptimePublishDays. Rather than one monolithic `[]VisorSummary` leaf
+// per window at "uptimes/days/<n>" (which, at fleet scale with the v3 288-char
+// timeline strings, exceeded CXO's 16 MB MaxObjectSize and failed the Put with
+// "object is too large" — the serve-side feed the subscriber could never
+// fill), it writes one small per-visor leaf at "uptimes/days/<n>/<pkHex>". No
+// single object is fleet-sized, so the Put always succeeds; content-addressing
+// re-broadcasts only the visors whose bucket changed; and a subscriber whose
+// fill truncates still salvages every per-visor leaf that landed (see the
+// treestore subscriber's partial-fill recovery). Closed by Close.
 type UptimeCXOPublisher struct {
 	api *API
 	pub *treestore.Publisher
@@ -51,8 +59,31 @@ type UptimeCXOPublisher struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 
+	// prevPKs tracks, per day-window, the set of per-visor leaf hex-PK
+	// segments published on the previous tick, so this tick can emit delete
+	// ops for visors that dropped out of the aggregate (a naive Put-only
+	// refresh would leave their stale leaves lingering forever). Touched only
+	// from the single publish loop goroutine, so no lock.
+	prevPKs map[int]map[string]struct{}
+
 	mu        sync.Mutex
 	lastError error
+}
+
+// compactVisorSummary is the space-optimized per-visor uptime leaf written at
+// "uptimes/days/<n>/<pkHex>". It carries the same data as store.VisorSummary
+// but encodes each day's Timeline as the raw 36-byte MSB-first bitmap (base64
+// in JSON) instead of the 288-char '.'/' ' string — 8x smaller for the field
+// that dominates the payload and the reason the monolithic leaf blew past
+// MaxObjectSize. Re-declared verbatim on the reader side (pkg/visor's
+// FetchVisorUptimeCXO), which reconstructs the full store.VisorSummary v3
+// shape; keep the JSON tags in sync across both.
+type compactVisorSummary struct {
+	PK       cipher.PubKey     `json:"pk"`
+	Online   bool              `json:"on"`
+	Version  string            `json:"v,omitempty"`
+	Daily    map[string]string `json:"d,omitempty"`
+	Timeline map[string][]byte `json:"tb,omitempty"` // date -> 36-byte bitmap
 }
 
 // StartUptimeCXOPublisher constructs a publisher backed by the given
@@ -79,11 +110,12 @@ func StartUptimeCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, 
 
 	pubCtx, cancel := context.WithCancel(ctx)
 	up := &UptimeCXOPublisher{
-		api:    api,
-		pub:    pub,
-		log:    log,
-		cancel: cancel,
-		done:   make(chan struct{}),
+		api:     api,
+		pub:     pub,
+		log:     log,
+		cancel:  cancel,
+		done:    make(chan struct{}),
+		prevPKs: make(map[int]map[string]struct{}),
 	}
 	if logger != nil {
 		logger.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgTPDUptimeCXOPort).
@@ -149,19 +181,77 @@ func (u *UptimeCXOPublisher) publishOnce(ctx context.Context) {
 		// Trim Daily and Timeline to the requested day window so the
 		// payload doesn't carry more than the subscriber asked for.
 		trimmed := trimSummariesToDays(enriched, days, now)
-		body, err := json.Marshal(trimmed)
+		u.publishWindow(days, trimmed)
+	}
+}
+
+// publishWindow writes one small per-visor leaf at "uptimes/days/<n>/<pkHex>"
+// for every summary, plus delete ops for any visor published last tick that
+// is gone this tick, in a single PutBatch. Splitting the window into per-visor
+// leaves (each a compactVisorSummary with bitmap timelines) keeps every CXO
+// object well under MaxObjectSize — the whole point of the change: the
+// monolithic []VisorSummary leaf failed the Put once the fleet's v3 timelines
+// pushed it past 16 MB.
+func (u *UptimeCXOPublisher) publishWindow(days int, summaries []store.VisorSummary) {
+	base := uptimePath(days)
+	live := make(map[string]struct{}, len(summaries))
+	ops := make([]treestore.PutOp, 0, len(summaries))
+	for i := range summaries {
+		hexPK := summaries[i].PK.Hex()
+		body, err := json.Marshal(toCompactVisorSummary(summaries[i]))
 		if err != nil {
-			u.log.WithError(err).WithField("days", days).Warn("uptime marshal failed")
+			u.log.WithError(err).WithField("days", days).Warn("uptime per-visor marshal failed")
 			u.recordError(err)
 			continue
 		}
-		path := uptimePath(days)
-		if err := u.pub.Put(path, body); err != nil {
-			u.log.WithError(err).WithField("path", path).Warn("uptime publisher Put failed")
-			u.recordError(err)
-			continue
+		live[hexPK] = struct{}{}
+		ops = append(ops, treestore.PutOp{Path: base + "/" + hexPK, Value: body})
+	}
+	// Delete leaves for visors that dropped out of the aggregate since the
+	// previous tick (nil Value = delete). Without this, a visor that leaves
+	// the cache keeps a stale leaf forever.
+	for hexPK := range u.prevPKs[days] {
+		if _, still := live[hexPK]; !still {
+			ops = append(ops, treestore.PutOp{Path: base + "/" + hexPK, Value: nil})
 		}
 	}
+	if err := u.pub.PutBatch(ops); err != nil {
+		u.log.WithError(err).WithField("days", days).Warn("uptime publisher PutBatch failed")
+		u.recordError(err)
+		return
+	}
+	u.prevPKs[days] = live
+}
+
+// toCompactVisorSummary converts a store.VisorSummary (v3 shape, 288-char
+// timeline strings) to the compact per-visor leaf shape, packing each day's
+// timeline into its 36-byte bitmap.
+func toCompactVisorSummary(s store.VisorSummary) compactVisorSummary {
+	c := compactVisorSummary{
+		PK:      s.PK,
+		Online:  s.Online,
+		Version: s.Version,
+		Daily:   s.Daily,
+	}
+	if len(s.Timeline) > 0 {
+		c.Timeline = make(map[string][]byte, len(s.Timeline))
+		for date, line := range s.Timeline {
+			c.Timeline[date] = timelineStringToBitmap(line)
+		}
+	}
+	return c
+}
+
+// timelineStringToBitmap packs a v3 288-char '.'/' ' timeline string into the
+// 36-byte MSB-first bitmap redis/pkg/visor-stats already use ('.' = bit set).
+func timelineStringToBitmap(line string) []byte {
+	bm := make([]byte, 36)
+	for i := 0; i < len(line) && i < 288; i++ {
+		if line[i] == '.' {
+			bm[i/8] |= 1 << uint(7-i%8)
+		}
+	}
+	return bm
 }
 
 func (u *UptimeCXOPublisher) recordError(err error) {
