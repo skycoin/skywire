@@ -78,6 +78,8 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/policy/preset"
+	"github.com/skycoin/skywire/pkg/router/policy/presethook"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -147,6 +149,36 @@ func pageHTTPS() bool {
 		return false
 	}
 	return loc.Get("protocol").String() == "https:"
+}
+
+// wasmRoutingPolicyPreset reads the routing-policy preset name from the page URL
+// (?routing_policy=<name>), validating it against the built-in preset set. It
+// returns "" (no policy) when the param is absent, empty, or names an unknown
+// preset — so the default is unchanged no-policy behavior and a typo can't
+// silently apply the app-mux fallback. This is the wasm-visor's analog of the
+// native visor's routing.policy config field.
+func wasmRoutingPolicyPreset() string {
+	loc := js.Global().Get("location")
+	if !loc.Truthy() {
+		return ""
+	}
+	search := loc.Get("search")
+	if !search.Truthy() {
+		return ""
+	}
+	usp := js.Global().Get("URLSearchParams")
+	if !usp.Truthy() {
+		return ""
+	}
+	v := usp.New(search.String()).Call("get", "routing_policy")
+	if !v.Truthy() {
+		return ""
+	}
+	name := v.String()
+	if !preset.Has(name) {
+		return ""
+	}
+	return name
 }
 
 func main() {
@@ -554,6 +586,19 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 	// svc.MinHops is 1 (origination enabled; a direct transport still downgrades to
 	// a 0-intermediate-hop path).
 	vlog("router: New + serve…")
+	// Routing policy: a browser leaf can't host wazero (wasm-in-wasm), so it
+	// can't run the embedded bundle.wasm the native visor evaluates for
+	// "preset:<name>". Instead it runs the SAME preset decide/tick logic compiled
+	// in as native Go (pkg/router/policy/preset, the single source of truth) via
+	// presethook, wired here as the router's DialHook — the one integration point
+	// (pkg/visor/init_router.go builds the wazero-backed equivalent on native).
+	// Opt-in and configurable: the preset name comes from the ?routing_policy=
+	// query param; unset ⇒ nil DialHook ⇒ unchanged (no-policy) behavior.
+	var dialHook router.DialHook
+	if name := wasmRoutingPolicyPreset(); name != "" {
+		dialHook = presethook.New(name, nil)
+		vlog(fmt.Sprintf("router: routing policy preset %q active (native-Go preset engine)", name))
+	}
 	r, err := visorcore.BuildRouter(ctx, visorcore.RouterDeps{
 		DmsgC:            dmsgC,
 		PubKey:           pk,
@@ -563,6 +608,7 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 		RouteGroupDialer: rgDialer,
 		SetupNodes:       svc.RouteSetupNodes,
 		MinHops:          svc.MinHops,
+		DialHook:         dialHook,
 		// Route-setup hook: on an app dial (min_hops=1, no --existing-tp) the
 		// router races this against the route-finder to create a DIRECT transport
 		// to the peer — the browser edge's missing half (a native visor registers
