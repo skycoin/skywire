@@ -8,28 +8,39 @@
 // runtime is paid once; each extra preset adds only its own few KB of
 // logic.
 //
+// This file is now a THIN SHIM. The preset decide/tick logic itself lives
+// ONCE, as pure Go, in github.com/skycoin/skywire/pkg/router/policy/preset
+// (the single source of truth). This shim keeps only the wasm ABI: the
+// JSON wire types, the alloc/free/read/write linear-memory glue, and the
+// //export decide_route / on_tick entry points. Each entry point unmarshals
+// the wire input, converts it to the shared preset types, calls into the
+// preset package, and marshals the result back out. The NATIVE visor runs
+// the compiled bundle.wasm via wazero; the WASM (browser/TinyGo) visor
+// compiles the SAME preset package in directly (it cannot host wazero —
+// wasm-in-wasm), so both paths make byte-identical decisions.
+//
 // This is the module embedded at pkg/router/policy/wasm/presets/
 // bundle.wasm and selected by config as "preset:<name>" (see
 // pkg/visor/policy_loader.go). The per-preset standalone examples next
 // to this dir (app-mux/, rotating-bw/) stay as pedagogical single-preset
 // modules; this one is their union.
 //
-// Build with TinyGo:
+// Build with TinyGo (from this directory):
 //
-//	cd docs/examples/routing-policies/wasm/bundle
-//	tinygo build -target=wasi -no-debug -opt=2 -o bundle.wasm .
-//
-// then copy it over pkg/router/policy/wasm/presets/bundle.wasm.
+//	tinygo build -target=wasi -no-debug -opt=2 \
+//	  -o ../../../../pkg/router/policy/wasm/presets/bundle.wasm .
 package main
 
 import (
 	"encoding/json"
-	"sort"
-	"strings"
 	"unsafe"
+
+	"github.com/skycoin/skywire/pkg/router/policy/preset"
 )
 
-// Wire types — kept in sync with pkg/router/policy/wasm/abi.go.
+// Wire types — kept in sync with pkg/router/policy/wasm/abi.go. These are the
+// JSON envelopes the host (wazero) marshals across linear memory; the guest
+// converts them to/from the pure preset.* types.
 
 type candidateWire struct {
 	Hops           []string `json:"hops"`
@@ -99,6 +110,13 @@ type rotationActionWire struct {
 	PromoteFromStandby []int    `json:"promote_from_standby,omitempty"`
 }
 
+// engine holds the adaptive tick controllers' per-transport_id state for this
+// module instance. One package-global instance mirrors the bundle's original
+// package-global tick state (the host instantiates one wazero module per policy
+// load, so this is created fresh per load); the native visor constructs its own
+// preset.Engine per evaluator the same way.
+var engine = preset.New()
+
 // Required: host-driven memory management.
 
 //export alloc
@@ -133,411 +151,12 @@ func decideRoute(inPtr, inLen uint32) uint64 {
 	if err := json.Unmarshal(readInput(inPtr, inLen), &input); err != nil {
 		return 0
 	}
-	var spec routeSpecWire
-	switch input.Preset {
-	case "rotating-bw":
-		spec = decideRotatingBW(input.Ctx)
-	case "latency-adaptive":
-		spec = decideLatencyAdaptive(input.Ctx)
-	case "elastic-mux":
-		spec = decideElasticMux(input.Ctx)
-	case "probe-and-prune":
-		spec = decideProbeAndPrune(input.Ctx)
-	case "adaptive":
-		spec = decideAdaptive(input.Ctx)
-	case "app-mux":
-		spec = decideAppMux(input.Ctx)
-	case "geo-avoid":
-		spec = decideGeoAvoid(input.Ctx, input.Candidates)
-	case "transport-diverse":
-		spec = decideTransportDiverse(input.Ctx, input.Candidates)
-	case "trust-tiered":
-		spec = decideTrustTiered(input.Ctx, input.Candidates)
-	case "time-of-day":
-		spec = decideTimeOfDay(input.Ctx)
-	default:
-		// Empty / unknown preset: fall back to the per-app app-mux
-		// behavior so a bare bundle still does something sensible.
-		spec = decideAppMux(input.Ctx)
-	}
-	out, err := json.Marshal(spec)
+	spec := preset.Decide(input.Preset, ctxToPreset(input.Ctx), candsToPreset(input.Candidates))
+	out, err := json.Marshal(specToWire(spec))
 	if err != nil {
 		return 0
 	}
 	return writeOutput(out)
-}
-
-// decideAppMux is the verbatim app-mux preset logic: per-app static mux
-// + min_hops; latency-sensitive apps stay single-route, bandwidth apps
-// get parallel legs.
-func decideAppMux(ctx routingContextWire) routeSpecWire {
-	switch ctx.App {
-	case "vpn-client":
-		return routeSpecWire{Mux: 4, MinHops: 2}
-	case "skychat":
-		// Chat is latency-sensitive — single route, lowest mux.
-		return routeSpecWire{Mux: 1}
-	default:
-		// Everything else: visor defaults (empty spec).
-		return routeSpecWire{}
-	}
-}
-
-// decideRotatingBW is the rotating-bw (privacy) preset: targetMux active legs
-// over multi-hop with byte load spread EQUALLY across them (traffic-analysis
-// resistance — no single relay sees a large fraction of the flow), plus one
-// extra warm-standby leg so on_tick can rotate the active set every 90s
-// WITHOUT a tear-and-rebuild dip (see tickRotatingBW).
-func decideRotatingBW(ctx routingContextWire) routeSpecWire {
-	// rotating-bw is OPT-IN per app (proxy/vpn/skynet start --routing-policy, or
-	// visor app arg routing-policy). Apply it to WHATEVER app/session it is
-	// active for — do NOT gate on the built-in binary names. A named proxy
-	// session dials under its SESSION name (e.g. "g8"), not "skysocks-client",
-	// so the old `switch ctx.App { case "skysocks-client", ... }` silently made
-	// the policy a NO-OP for every custom-named session (empty spec → no mux, no
-	// min_hops, no rotation — the reason the rotation never fired live). Only
-	// skip genuinely latency-sensitive apps, where a multi-hop mux is the wrong
-	// shape.
-	switch ctx.App {
-	case "skychat", "skychat-client":
-		return routeSpecWire{Mux: 1}
-	}
-	// min_hops=2 already says "no direct transport" (direct is 0 intermediates);
-	// the visor treats min_hops>=2 as an implicit avoid_direct so the dial flows
-	// to the overlay path where rotation can act. Without it the mux/distribution
-	// is silently dropped by the direct-dial fast path.
-	return routeSpecWire{
-		// targetMux active + 1 warm standby (see tickRotatingBW).
-		Mux:                     targetMux + 1,
-		MinHops:                 2,
-		RotationIntervalSeconds: 90,
-		// Equal (round-robin) byte spread across the active legs — the privacy
-		// property. "auto"/latency-weighting pins bytes to the fastest leg,
-		// defeating the spread; the policy sets this to override the muxMode
-		// default.
-		Distribution: "round-robin",
-	}
-}
-
-// decideLatencyAdaptive is the latency-adaptive preset's decide logic: an
-// ASYMMETRIC spec for bandwidth/proxy apps — a single lean, direct-ok
-// upstream leg (uploads are small) paired with a 4-way multi-hop
-// downstream fan-out (bulk downloads). RotationIntervalSeconds=30 keeps
-// on_tick firing so the downstream set can be re-evaluated and the
-// slowest leg evicted; Distribution "auto" lets the host weight bytes
-// toward the faster legs. Non-target apps get the empty spec (defaults).
-func decideLatencyAdaptive(ctx routingContextWire) routeSpecWire {
-	switch ctx.App {
-	case "vpn-client", "skysocks-client", "skynet-client":
-		// Symmetric mux=4: the on_tick evict-slowest logic acts on the
-		// route group's forward legs (rg.tps) — the only legs the tick
-		// hook sees (reverse-only legs live in rg.rvs and are invisible
-		// to on_tick). An asymmetric 1-up/4-down shape would put the 4
-		// adaptive legs on the reverse side where on_tick can't manage
-		// them, making the eviction a no-op. Symmetric mux gives on_tick
-		// 4 real legs to converge over. (The lean-upstream refinement
-		// awaits a router change exposing reverse legs to the tick hook.)
-		//
-		// Mux is targetMux+1 (5): one leg beyond the 4-wide active target is a
-		// WARM RESERVE the on_tick controller parks on standby, so evicting the
-		// slowest leg is a hot-swap (promote the spare, demote the outlier) with
-		// no width dip — the no-dip discipline shared with rotating-bw.
-		return routeSpecWire{
-			Mux:                     5,
-			MinHops:                 2,
-			RotationIntervalSeconds: 30,
-			Distribution:            "auto",
-		}
-	}
-	return routeSpecWire{}
-}
-
-// decideElasticMux is the elastic-mux preset's decide logic. It starts
-// deliberately MODEST — a 2-way mux over multi-hop — and lets the on_tick
-// AIMD controller grow or shrink the leg count to match observed load.
-// Unlike the static-mux presets (which pin a fixed width), the initial
-// Mux here is only a seed: RotationIntervalSeconds=20 makes on_tick fire
-// often enough to react to load swings, and Distribution "auto" lets the
-// host weight bytes toward the faster legs while the count floats.
-// Non-target apps get the empty spec (defaults).
-func decideElasticMux(ctx routingContextWire) routeSpecWire {
-	switch ctx.App {
-	case "vpn-client", "skysocks-client", "skynet-client":
-		return routeSpecWire{
-			Mux:                     2,
-			MinHops:                 2,
-			RotationIntervalSeconds: 20,
-			Distribution:            "auto",
-		}
-	}
-	return routeSpecWire{}
-}
-
-// decideProbeAndPrune is the probe-and-prune preset's decide logic. It
-// holds a steady 3-way mux over multi-hop as the "established" set that
-// on_tick continuously refines: every 30s the tick controller adds one
-// speculative leg over a fresh path, watches it for a few ticks, and
-// keeps it only if it beats the current worst leg (else discards it), so
-// the established set drifts toward lower latency without ever growing
-// past its target. Distribution "auto" weights bytes toward the faster
-// legs meanwhile. Non-target apps get the empty spec (defaults).
-func decideProbeAndPrune(ctx routingContextWire) routeSpecWire {
-	switch ctx.App {
-	case "vpn-client", "skysocks-client", "skynet-client":
-		return routeSpecWire{
-			Mux:                     3,
-			MinHops:                 2,
-			RotationIntervalSeconds: 30,
-			Distribution:            "auto",
-		}
-	}
-	return routeSpecWire{}
-}
-
-// decideAdaptive is the COMPOSITE "adaptive" preset's decide logic — the
-// intended converged default. It returns a sensible middle spec that the
-// tickAdaptive controller then steers along all three performance
-// dimensions at once: a 3-way disjoint multi-hop mux (min_hops=2), latency-
-// weighted byte distribution ("auto"), re-evaluated every 20s so on_tick
-// fires often enough to react to load swings, latency drift, and probe
-// results. The Mux of 3 is only the STARTING width — tickAdaptive's AIMD
-// dimension grows it toward the cap under load and shrinks it back toward
-// the floor when idle. Non-target apps get the empty spec (defaults).
-func decideAdaptive(ctx routingContextWire) routeSpecWire {
-	switch ctx.App {
-	case "vpn-client", "skysocks-client", "skynet-client":
-		// NOTE: no MinHops here on purpose. min-hops is a PRIVACY CONSTRAINT the
-		// operator owns (session --min-hops / visor config), not a knob for the
-		// performance policy to impose. Leaving it 0 means "inherit" — the
-		// router's EffectiveMinHops takes the strictest of the operator's floor
-		// and this spec, so adaptive optimizes WITHIN the operator's chosen
-		// floor: with the default floor it can use a fast low-hop path; with a
-		// privacy floor set it fans the mux out over multi-hop. Hardcoding
-		// MinHops=2 forced every dial onto slow multi-hop legs even when a fast
-		// direct path existed — measurably worse, not better.
-		return routeSpecWire{
-			Mux:                     adaptDecideMux,
-			RotationIntervalSeconds: 20,
-			Distribution:            "auto",
-		}
-	}
-	return routeSpecWire{}
-}
-
-// targetMux is the mux size the rotating-bw policy aims to maintain.
-// Kept in sync with the Mux value returned from decideRotatingBW so
-// on_tick can reason about "are we at target?"
-const targetMux = 4
-
-// --- conditional presets: constrain WHICH path is chosen, by route metadata ---
-//
-// Unlike the performance presets (which return a mux/min-hops SHAPE and let the
-// host pick candidates), these pick a specific forward candidate via
-// spec.Chosen so the selected route provably honors a CONSTRAINT expressed over
-// the candidate's own metadata — the per-hop country (hops_geo), the per-hop
-// transport types (transport_kinds), the hop PKs (hops) — or the wall clock
-// (now_unix_nano). They are decide-time only (no on_tick): the constraint is a
-// property of the chosen route, not something that drifts over the session.
-// Parameters come from cli_overrides so the operator configures the constraint
-// (avoid_geo / trusted_pks / business_hours) without a new preset.
-
-// splitSet parses a comma/space-separated override value into a lowercased
-// membership set. Empty input yields an empty (never-nil) set.
-func splitSet(s string) map[string]bool {
-	out := map[string]bool{}
-	for _, f := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' }) {
-		if f != "" {
-			out[strings.ToLower(f)] = true
-		}
-	}
-	return out
-}
-
-// decideGeoAvoid picks the lowest-latency forward candidate whose hops transit
-// NONE of the blocked countries in cli_overrides["avoid_geo"] (comma-separated
-// ISO country codes). Constraint: the chosen route never passes through a
-// blocked geography. If no candidate is clean (or none are offered) it returns
-// the empty spec, deferring to the router rather than forcing a violating path.
-func decideGeoAvoid(ctx routingContextWire, cands []candidateWire) routeSpecWire {
-	blocked := splitSet(ctx.CLIOverrides["avoid_geo"])
-	if len(blocked) == 0 || len(cands) == 0 {
-		return routeSpecWire{} // nothing to enforce
-	}
-	var best *candidateWire
-	for i := range cands {
-		if candidateTransitsBlockedGeo(cands[i], blocked) {
-			continue
-		}
-		if best == nil || cands[i].EstLatencyMs < best.EstLatencyMs {
-			c := cands[i]
-			best = &c
-		}
-	}
-	if best == nil {
-		return routeSpecWire{} // every candidate violates; let the router decide
-	}
-	return routeSpecWire{Chosen: best, MinHops: 2}
-}
-
-// candidateTransitsBlockedGeo reports whether any of the candidate's per-hop
-// countries is in the blocked set.
-func candidateTransitsBlockedGeo(c candidateWire, blocked map[string]bool) bool {
-	for _, g := range c.HopsGeo {
-		if blocked[strings.ToLower(g)] {
-			return true
-		}
-	}
-	return false
-}
-
-// decideTransportDiverse picks the forward candidate whose hops span the MOST
-// distinct transport types (ties broken by lower latency). Constraint: the
-// chosen route maximizes transport-type diversity, so no single transport
-// technology failing (e.g. all-stcpr under a firewall change) takes the whole
-// path down. Empty spec when no candidates are offered.
-func decideTransportDiverse(ctx routingContextWire, cands []candidateWire) routeSpecWire {
-	var best *candidateWire
-	bestDiversity := -1
-	for i := range cands {
-		d := distinctCount(cands[i].TransportKinds)
-		switch {
-		case d > bestDiversity:
-			c := cands[i]
-			best, bestDiversity = &c, d
-		case d == bestDiversity && best != nil && cands[i].EstLatencyMs < best.EstLatencyMs:
-			c := cands[i]
-			best = &c
-		}
-	}
-	if best == nil {
-		return routeSpecWire{}
-	}
-	// A mux of 2 over the diverse path keeps a spare leg on a different carrier.
-	return routeSpecWire{Chosen: best, Mux: 2, MinHops: 2}
-}
-
-// distinctCount counts unique (case-folded) entries in a slice.
-func distinctCount(xs []string) int {
-	seen := map[string]bool{}
-	for _, x := range xs {
-		seen[strings.ToLower(x)] = true
-	}
-	return len(seen)
-}
-
-// decideTrustTiered prefers routes that transit ONLY trusted intermediaries
-// (cli_overrides["trusted_pks"], comma-separated hop PKs). It is TIERED: a
-// fully-trusted candidate wins outright (lowest latency among them); if none is
-// fully trusted it falls back to the candidate with the MOST trusted hops, so
-// the route is as trusted as the topology allows rather than failing closed.
-// Empty spec when no trust set is configured or no candidates are offered.
-func decideTrustTiered(ctx routingContextWire, cands []candidateWire) routeSpecWire {
-	trusted := splitSet(ctx.CLIOverrides["trusted_pks"])
-	if len(trusted) == 0 || len(cands) == 0 {
-		return routeSpecWire{}
-	}
-	var bestFull, bestPartial *candidateWire
-	bestPartialScore := -1
-	for i := range cands {
-		n := trustedHopCount(cands[i], trusted)
-		if len(cands[i].Hops) > 0 && n == len(cands[i].Hops) {
-			if bestFull == nil || cands[i].EstLatencyMs < bestFull.EstLatencyMs {
-				c := cands[i]
-				bestFull = &c
-			}
-		}
-		if n > bestPartialScore {
-			c := cands[i]
-			bestPartial, bestPartialScore = &c, n
-		}
-	}
-	if bestFull != nil {
-		return routeSpecWire{Chosen: bestFull, MinHops: 2}
-	}
-	if bestPartial != nil {
-		return routeSpecWire{Chosen: bestPartial, MinHops: 2}
-	}
-	return routeSpecWire{}
-}
-
-// trustedHopCount counts how many of a candidate's hops are in the trusted set.
-func trustedHopCount(c candidateWire, trusted map[string]bool) int {
-	n := 0
-	for _, h := range c.Hops {
-		if trusted[strings.ToLower(h)] {
-			n++
-		}
-	}
-	return n
-}
-
-// decideTimeOfDay switches the route SHAPE by wall-clock hour (UTC), derived
-// from ctx.now_unix_nano — no clock import, just arithmetic on the host-stamped
-// timestamp. During the configured business-hours window
-// (cli_overrides["business_hours"] = "START-END", default "9-17") it returns a
-// lean single-route shape (latency-sensitive daytime traffic); outside it,
-// a wide privacy mux with byte-spread and rotation (bulk/overnight). Constraint:
-// the emitted shape is a deterministic function of the hour.
-func decideTimeOfDay(ctx routingContextWire) routeSpecWire {
-	startH, endH := parseHourRange(ctx.CLIOverrides["business_hours"], 9, 17)
-	if inHourRange(hourOfDayUTC(ctx.NowUnixNano), startH, endH) {
-		return routeSpecWire{Mux: 1} // business hours: lean + low-latency
-	}
-	// off-hours: privacy-wide mux (mirrors rotating-bw's shape)
-	return routeSpecWire{Mux: 4, MinHops: 2, Distribution: "round-robin", RotationIntervalSeconds: 90}
-}
-
-// hourOfDayUTC returns the UTC hour (0-23) of a unix-nanosecond timestamp using
-// only integer arithmetic (avoids a "time" import in the wasm guest).
-func hourOfDayUTC(unixNano int64) int {
-	if unixNano <= 0 {
-		return 0
-	}
-	secOfDay := (unixNano / 1e9) % 86400
-	return int(secOfDay / 3600)
-}
-
-// parseHourRange parses "START-END" (24h) from an override, falling back to the
-// given defaults on empty/malformed input.
-func parseHourRange(s string, defStart, defEnd int) (int, int) {
-	a, b, ok := strings.Cut(strings.TrimSpace(s), "-")
-	if !ok {
-		return defStart, defEnd
-	}
-	start, okA := atoiHour(a)
-	end, okB := atoiHour(b)
-	if !okA || !okB {
-		return defStart, defEnd
-	}
-	return start, end
-}
-
-// atoiHour parses a 0-23 hour string; returns ok=false otherwise.
-func atoiHour(s string) (int, bool) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, false
-	}
-	n := 0
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return 0, false
-		}
-		n = n*10 + int(r-'0')
-	}
-	if n < 0 || n > 23 {
-		return 0, false
-	}
-	return n, true
-}
-
-// inHourRange reports whether hour is within [start, end), handling a window
-// that wraps past midnight (start > end, e.g. 22-6).
-func inHourRange(hour, start, end int) bool {
-	if start <= end {
-		return hour >= start && hour < end
-	}
-	return hour >= start || hour < end // wraps midnight
 }
 
 //export on_tick
@@ -546,1182 +165,152 @@ func onTick(inPtr, inLen uint32) uint64 {
 	if err := json.Unmarshal(readInput(inPtr, inLen), &input); err != nil {
 		return 0
 	}
-	// rotating-bw, latency-adaptive, elastic-mux, probe-and-prune and the
-	// composite adaptive preset have tick logic; app-mux and unknown
-	// presets are static, so they take no rotation action.
-	switch input.Preset {
-	case "rotating-bw":
-		return tickRotatingBW(input)
-	case "latency-adaptive":
-		return tickLatencyAdaptive(input)
-	case "elastic-mux":
-		return tickElasticMux(input)
-	case "probe-and-prune":
-		return tickProbeAndPrune(input)
-	case "adaptive":
-		return tickAdaptive(input)
-	default:
-		return 0
-	}
-}
-
-// reliableMuxKind reports whether a transport type is reliable enough to ANCHOR
-// a mux active set. stcpr/sudph/squicr/stcp are direct, well-behaved for
-// sustained multiplexed throughput. webrtc (SCTP-over-DTLS), ws, wt and the dmsg
-// relay are NOT — webrtc especially has poor sustained throughput and drops
-// under load; a mux made entirely of webrtc legs collapses. They are still
-// USABLE as bonus capacity (promoted for throughput), just never the anchor.
-func reliableMuxKind(kind string) bool {
-	switch kind {
-	case "stcpr", "sudph", "squicr", "stcp":
-		return true
-	}
-	return false
-}
-
-// tickRotatingBW manages the mux by STANDBY, never by dropping. Legs, once
-// established, are never torn down — the tick only flips each leg's standby flag
-// (setLegStandby: no teardown, no setup round-trip, in-flight bytes drain). The
-// policy keeps ~targetMux legs ACTIVE, anchored on reliable transport types, and
-// PARKS the rest on warm standby; it promotes a webrtc/other leg only when it
-// needs the aggregate throughput (not enough reliable legs to reach targetMux).
-// This is why an all-reliable anchor keeps the group alive even as fragile
-// bonus legs come and go, and it spreads bytes across the reliable set over time
-// for the privacy property — all with no throughput dip. One flag-flip per tick
-// (the ABI applies one RotationAction). Decisions are on MEASUREMENT: leg Kind +
-// standby state come from the host per-leg telemetry (hook.go).
-func tickRotatingBW(input tickInputWire) uint64 {
-	var relAct, relSb, fragAct, fragSb []int
-	for _, l := range input.Legs {
-		if !l.Alive {
-			continue
-		}
-		rel := reliableMuxKind(l.Kind)
-		switch {
-		case l.Standby && rel:
-			relSb = append(relSb, l.Index)
-		case l.Standby:
-			fragSb = append(fragSb, l.Index)
-		case rel:
-			relAct = append(relAct, l.Index)
-		default:
-			fragAct = append(fragAct, l.Index)
-		}
-	}
-	active := len(relAct) + len(fragAct)
-	alive := active + len(relSb) + len(fragSb)
-	if alive == 0 {
-		return 0
-	}
-	lo := func(s []int) int {
-		m := s[0]
-		for _, v := range s {
-			if v < m {
-				m = v
-			}
-		}
-		return m
-	}
-	hi := func(s []int) int {
-		m := s[0]
-		for _, v := range s {
-			if v > m {
-				m = v
-			}
-		}
-		return m
-	}
-
-	// NEVER emit AddLeg / DropLegs here — leg GROWTH and death-replacement are the
-	// route group's own self-heal job (it tops up to the mux degree on any leg
-	// death; aliveLegCount counts standby legs, so parking one never triggers a
-	// re-grow). on_tick chasing the count with adds only fought self-heal and made
-	// a flapping webrtc leg thrash (drop→add→drop). on_tick's ONLY job is to pick
-	// which established legs are ACTIVE vs parked — pure standby flips, no churn.
-	var a rotationActionWire
-	switch {
-	case len(relAct) >= 1 && len(fragAct) > 0:
-		// A reliable leg is already carrying — PARK a fragile (webrtc) active leg
-		// so the reliable anchor(s) carry the stream and a webrtc drop can't
-		// disrupt it. Fragile legs stay warm on standby (never dropped), promoted
-		// only if the reliable anchor is lost (below). One per tick; repeats until
-		// the active set is reliable-only.
-		a = rotationActionWire{DemoteToStandby: []int{hi(fragAct)}}
-	case len(fragAct) > 0 && len(relSb) > 0:
-		// No reliable leg active yet, but a reliable spare exists — swap it in for
-		// a fragile one (promote reliable, park fragile). No drop, no dip.
-		a = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}, DemoteToStandby: []int{hi(fragAct)}}
-	case len(relAct) < targetMux && len(relSb) > 0:
-		// Below the reliable-active target — promote a reliable spare.
-		a = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}}
-	case len(relAct) == 0 && len(fragAct) == 0 && len(fragSb) > 0:
-		// No reliable legs at all and nothing active — promote a fragile spare so
-		// SOME leg carries (a slow/flaky leg beats a dead group). Bonus, not anchor.
-		a = rotationActionWire{PromoteFromStandby: []int{lo(fragSb)}}
-	case len(relAct) > targetMux:
-		// More reliable active than target — park the newest to settle at target.
-		a = rotationActionWire{DemoteToStandby: []int{hi(relAct)}}
-	case len(fragAct) == 0 && len(relSb) > 0 && len(relAct) > 0:
-		// Steady state, reliable-only active with a reliable spare: gentle crawl —
-		// rotate the reliable active set through the spare (spread bytes for
-		// privacy). No dip, no drop.
-		a = rotationActionWire{PromoteFromStandby: []int{lo(relSb)}, DemoteToStandby: []int{lo(relAct)}}
-	default:
-		return 0
-	}
-	out, err := json.Marshal(a)
+	action := engine.OnTick(input.Preset, legsToPreset(input.Legs))
+	out, err := json.Marshal(actionToWire(action))
 	if err != nil {
 		return 0
 	}
 	return writeOutput(out)
 }
 
-// latAdaptEWMA holds the exponentially-weighted moving average of each
-// leg's latency_ms, keyed by the leg's STABLE transport_id (not its
-// index, which shifts as the tps[] slice compacts on drop/add). This is
-// the per-leg state that lets tickLatencyAdaptive act on a smoothed
-// signal rather than the raw instantaneous latency — on the live mesh a
-// single leg's latency_ms jumps around wildly tick-to-tick (e.g.
-// 75→245→13000→180), and evicting on the raw value chases that noise.
-// Keys are pruned each tick to the current alive-or-present leg set so a
-// dropped transport's entry doesn't linger.
-var latAdaptEWMA = map[string]float64{}
+// --- wire <-> preset conversions ---
 
-// latAdaptSeen is a scratch set reused each tick to record which
-// transport_ids appear in the current leg snapshot, so stale keys can be
-// pruned from latAdaptEWMA. Package-global (rather than tick-local) only
-// to avoid a per-tick allocation; it is cleared at the top of every tick.
-var latAdaptSeen = map[string]bool{}
-
-// latAdaptAlpha is the EWMA smoothing factor. 0.3 weights the newest
-// sample at 30% and the running average at 70% — enough to track a
-// genuine sustained latency shift within a few ticks while damping a
-// lone transient spike to a fraction of its raw magnitude.
-const latAdaptAlpha = 0.3
-
-// tickLatencyAdaptive is the latency-adaptive rotation logic. It differs
-// from rotating-bw in what it evicts and WHEN:
-//
-//	rotating-bw drops the OLDEST alive leg every single tick — an
-//	unconditional churn that keeps the set drifting for
-//	traffic-analysis resistance.
-//
-//	latency-adaptive instead drops the SLOWEST alive leg, and ONLY when
-//	that leg is a clear outlier — its SMOOTHED latency is at least 1.5x
-//	the median of the alive legs' smoothed latencies. This hysteresis
-//	band means: once the set has converged to a cluster of comparably-
-//	fast legs (worst < 1.5x median), NO leg qualifies and the policy
-//	holds — no churn. It converges toward a low-latency disjoint set and
-//	then stops thrashing, the opposite of rotating-bw's every-tick
-//	rotation.
-//
-// The eviction decision runs on an EWMA of each leg's latency, keyed by
-// the leg's stable transport_id, rather than on the raw per-tick
-// latency_ms. Raw latency on the live mesh is noisy — one leg can read
-// 75ms one tick and 13000ms the next with no real change in its quality —
-// and evicting on the instantaneous value chases that noise, tearing down
-// a perfectly good leg on a transient spike. Smoothing filters those
-// spikes so eviction fires only on a PERSISTENT latency difference. The
-// stable transport_id key is what makes a per-leg average meaningful at
-// all: the leg's index shifts when the slice compacts, so index-keyed
-// state would smear one leg's history onto another after any drop.
-//
-//	alive_count == 0            → no-op (nothing measured yet)
-//	alive_count <  target_mux   → add only (recover toward target; never
-//	                              shrink below it)
-//	alive_count >= target_mux &&
-//	  smoothed_worst > 0 &&
-//	  smoothed_worst >=
-//	    1.5 * smoothed_median   → drop slowest + add + exclude its hops
-//	                              (evict the outlier; exclude its
-//	                              intermediates so the replacement differs)
-//	otherwise (converged)       → no-op (hold; do not churn)
-func tickLatencyAdaptive(input tickInputWire) uint64 {
-	const targetMux = 4
-
-	// Update the per-leg EWMA and record which transport_ids are present
-	// this tick so stale keys can be pruned afterward.
-	for k := range latAdaptSeen {
-		delete(latAdaptSeen, k)
+func ctxToPreset(c routingContextWire) preset.Context {
+	return preset.Context{
+		App:               c.App,
+		PeerPK:            c.PeerPK,
+		Port:              c.Port,
+		NowUnixNano:       c.NowUnixNano,
+		CLIOverrides:      c.CLIOverrides,
+		IsDirectDial:      c.IsDirectDial,
+		TransportKind:     c.TransportKind,
+		ReverseCandidates: candsToPreset(c.ReverseCandidates),
 	}
-	for _, l := range input.Legs {
-		tid := l.TransportID
-		if tid == "" {
-			continue
-		}
-		latAdaptSeen[tid] = true
-		// Only fold in a real measurement; latency_ms==0 means "unknown"
-		// and must not drag the average toward zero.
-		if l.Alive && l.LatencyMs > 0 {
-			sample := float64(l.LatencyMs)
-			if prev, ok := latAdaptEWMA[tid]; ok {
-				latAdaptEWMA[tid] = latAdaptAlpha*sample + (1-latAdaptAlpha)*prev
-			} else {
-				// Seed with the first sample so the average starts on the
-				// leg's own latency rather than climbing from zero.
-				latAdaptEWMA[tid] = sample
-			}
-		}
-	}
-	// Prune EWMA keys for transport_ids no longer in the leg set so a
-	// dropped leg's history can't resurface if its index is later reused.
-	for tid := range latAdaptEWMA {
-		if !latAdaptSeen[tid] {
-			delete(latAdaptEWMA, tid)
-		}
-	}
-
-	// Evict-slowest-outlier logic, run on the SMOOTHED latencies over the
-	// ACTIVE legs only — warm-standby spares aren't carrying traffic and
-	// aren't judged. Membership changes are standby flips (no teardown): the
-	// group runs targetMux active + a warm reserve, so evicting the outlier is
-	// a hot-swap (promote a spare, demote the outlier) with no width dip.
-	sets := classifyLegs(input.Legs)
-	worstIdx := -1
-	worstSmoothed := -1.0
-	var smoothed []float64
-	for _, l := range input.Legs {
-		if !l.Alive || l.Standby {
-			continue
-		}
-		sm, ok := latAdaptEWMA[l.TransportID]
-		if !ok {
-			// No smoothed value yet (leg never reported a latency) — it
-			// can't be judged an outlier this tick.
-			continue
-		}
-		smoothed = append(smoothed, sm)
-		if sm > worstSmoothed {
-			worstSmoothed = sm
-			worstIdx = l.Index
-		}
-	}
-	// Below target width: recover by promoting a warm spare (no dip), or add a
-	// fresh leg when none is parked. Covers activeCount==0.
-	if sets.activeCount < targetMux {
-		return growActive(sets)
-	}
-	// Above target width (the warm reserve is still active): park the oldest as
-	// a standby spare so a later eviction can hot-swap without a dip.
-	if sets.activeCount > targetMux {
-		return shedActive(sets, sets.oldestActive)
-	}
-	// Need at least a couple of smoothed samples to compute a meaningful
-	// median; otherwise hold.
-	if len(smoothed) < 2 || worstIdx < 0 || worstSmoothed <= 0 {
-		return 0
-	}
-
-	// Median of the active legs' smoothed latencies.
-	sort.Float64s(smoothed)
-	median := medianSorted(smoothed)
-
-	// Hysteresis: only evict a clear outlier (smoothed worst >= 1.5x smoothed
-	// median). Hot-swap it out (promote a warm spare + demote the outlier) so
-	// the width never dips; the demoted leg stays warm for a later re-promote.
-	// Once the set has converged this is false for every leg, so we hold.
-	if median > 0 && worstSmoothed >= 1.5*median {
-		return swapActive(sets, worstIdx)
-	}
-	// Converged: all active legs comparably fast — hold.
-	return 0
 }
 
-// --- elastic-mux: AIMD scaling of the mux leg count to load ---
-//
-// elastic-mux treats the mux width as a control variable, not a constant.
-// Its on_tick runs a classic AIMD (additive-increase / multiplicative-…
-// here just single-step-decrease) controller over the group's aggregate
-// received throughput:
-//
-//	SATURATED (throughput near the observed peak) → ADD one leg. Under
-//	real load more disjoint paths raise the aggregate the group can pull,
-//	so we grow — additively, one leg per tick — up to a hard cap.
-//	IDLE (throughput far below peak, for two consecutive ticks) → DROP one
-//	leg. The width bought under load is now wasted transport state and
-//	fleet bandwidth, so we release it — one leg at a time, down to a floor.
-//	Otherwise → hold.
-//
-// The controller drives its decisions off an EWMA of the per-tick
-// received-byte DELTA (recv_bytes is a monotonic counter; the increment
-// since last tick is this interval's throughput), NOT the raw delta.
-// Raw per-tick byte deltas on the live mesh are extremely spiky — a bulk
-// download arrives in bursts, so one tick reads near-zero and the next
-// reads a full window — and an AIMD loop driven by the raw value would
-// oscillate (grow, shrink, grow) chasing that jitter. Smoothing the
-// delta with an EWMA (α=0.3) gives a stable load signal the controller
-// can compare against a slowly-decaying running peak without thrashing.
-
-// elasticPrevRecv holds each leg's last-seen recv_bytes counter, keyed by
-// the STABLE transport_id (index shifts as legs drop/add), so the next
-// tick can compute that leg's byte delta. Stale keys are pruned each tick.
-var elasticPrevRecv = map[string]uint64{}
-
-// elasticSeen is a scratch set (reused, cleared each tick) recording which
-// transport_ids appear this tick, so stale elasticPrevRecv keys can be
-// pruned. Package-global only to avoid a per-tick allocation.
-var elasticSeen = map[string]bool{}
-
-// elasticThroughputEWMA is the smoothed aggregate received throughput
-// (sum of alive legs' per-tick recv_bytes deltas), the load signal the
-// AIMD controller acts on. elasticPeak is the running high-water mark of
-// that smoothed signal, decayed a little each tick so a transient burst
-// long past stops holding the bar artificially high. elasticIdleCount is
-// the consecutive-idle tick counter (so a single quiet tick can't shrink
-// the group). elasticSeeded guards the one-time seed on the first tick
-// that observes non-zero throughput.
-var (
-	elasticThroughputEWMA float64
-	elasticPeak           float64
-	elasticIdleCount      int
-	elasticSeeded         bool
-)
-
-const (
-	// elasticFloor / elasticCap bound the leg count AIMD may reach.
-	elasticFloor = 2
-	elasticCap   = 6
-	// elasticAlpha is the EWMA smoothing factor for the throughput signal
-	// (newest delta weighted 30%, running average 70%).
-	elasticAlpha = 0.3
-	// elasticPeakDecay bleeds the running peak down ~2%/tick so the
-	// saturation bar tracks a sustained drop in achievable throughput
-	// instead of being pinned forever by one historical burst.
-	elasticPeakDecay = 0.98
-)
-
-// tickElasticMux is the elastic-mux AIMD controller. See the block comment
-// above for the load model and why the signal is a smoothed byte-delta.
-//
-//	alive_count == 0                         → no-op (nothing measured)
-//	smoothed >= 0.80*peak && alive < cap     → add one leg (grow to load)
-//	smoothed <  0.25*peak for >=2 ticks
-//	  && alive > floor                       → drop oldest leg (release)
-//	otherwise                                → hold
-func tickElasticMux(input tickInputWire) uint64 {
-	// Compute this interval's aggregate received byte-delta over alive
-	// legs, refreshing each leg's prev-counter, and record presence for
-	// stale-key pruning. Also find the oldest (lowest-index) alive leg to
-	// release when shrinking, and count alive legs.
-	for k := range elasticSeen {
-		delete(elasticSeen, k)
+func candsToPreset(cs []candidateWire) []preset.Candidate {
+	if cs == nil {
+		return nil
 	}
-	var rawTotal float64
-	// active/standby partition: only ACTIVE legs carry traffic and count
-	// toward the AIMD width; standby spares are the warm reserve a grow
-	// promotes back with no dip.
-	sets := classifyLegs(input.Legs)
-	for _, l := range input.Legs {
-		if !l.Alive {
-			continue
-		}
-		tid := l.TransportID
-		if tid == "" {
-			continue
-		}
-		elasticSeen[tid] = true
-		// Only fold an ACTIVE leg's non-negative delta into the load signal.
-		// Standby spares don't send; their counter is still tracked so it
-		// doesn't read as a reset when the leg is later re-promoted.
-		if prev, ok := elasticPrevRecv[tid]; ok && l.RecvBytes >= prev && !l.Standby {
-			rawTotal += float64(l.RecvBytes - prev)
-		}
-		elasticPrevRecv[tid] = l.RecvBytes
+	out := make([]preset.Candidate, len(cs))
+	for i, c := range cs {
+		out[i] = candToPreset(c)
 	}
-	// Prune prev-counters for transport_ids no longer present.
-	for tid := range elasticPrevRecv {
-		if !elasticSeen[tid] {
-			delete(elasticPrevRecv, tid)
-		}
-	}
-	if sets.activeCount == 0 {
-		// Nothing active: promote a warm spare if one is parked, else hold.
-		if sets.promotable >= 0 {
-			return growActive(sets)
-		}
-		return 0
-	}
-
-	// Fold the raw delta into the smoothed signal and maintain the peak.
-	// Seed both on the first tick that sees real throughput so the signal
-	// starts on a genuine value rather than ramping up from zero.
-	if !elasticSeeded {
-		if rawTotal > 0 {
-			elasticThroughputEWMA = rawTotal
-			elasticPeak = rawTotal
-			elasticSeeded = true
-		}
-		// No load signal yet — hold and keep measuring.
-		return 0
-	}
-	elasticThroughputEWMA = elasticAlpha*rawTotal + (1-elasticAlpha)*elasticThroughputEWMA
-	elasticPeak *= elasticPeakDecay
-	if elasticThroughputEWMA > elasticPeak {
-		elasticPeak = elasticThroughputEWMA
-	}
-	if elasticPeak <= 0 {
-		return 0
-	}
-
-	smoothed := elasticThroughputEWMA
-	// Track consecutive idle ticks independently of whether we can act on
-	// them, so the "two quiet ticks" requirement is about load, not width.
-	if smoothed < 0.25*elasticPeak {
-		elasticIdleCount++
-	} else {
-		elasticIdleCount = 0
-	}
-
-	// Additive increase: saturated and below the cap → grow one leg. Promote a
-	// warm spare (parked by an earlier shrink) with no dip when one exists;
-	// otherwise add a fresh leg under genuine load.
-	if smoothed >= 0.80*elasticPeak && sets.activeCount < elasticCap {
-		return growActive(sets)
-	}
-	// Decrease: sustained idle and above the floor → release one leg by PARKING
-	// it as a warm standby (no teardown; re-promoted instantly when load
-	// returns), falling back to a real drop only once the standby pool is full.
-	// Reset the idle counter after acting so we step down gracefully (one leg
-	// every two idle ticks) rather than collapsing to the floor.
-	if elasticIdleCount >= 2 && sets.activeCount > elasticFloor {
-		elasticIdleCount = 0
-		return shedActive(sets, sets.oldestActive)
-	}
-	// Hold.
-	return 0
+	return out
 }
 
-// --- probe-and-prune: continuous explore/exploit over a fresh path ---
-//
-// probe-and-prune keeps a fixed-width "established" set (probeTarget legs)
-// but never stops looking for a better path than the ones it holds. Its
-// on_tick is a small state machine:
-//
-//	EXPLORE: when idle and exactly at target width, add ONE speculative
-//	leg over a fresh path (the host picks the candidate; on_tick can only
-//	request an add). The next tick identifies that new leg by diffing the
-//	current transport_ids against the pre-add "known" set, and puts it on
-//	probation (probeTID / probeAge).
-//	OBSERVE: let the probe run probeObserveTicks ticks so its EWMA latency
-//	(same stable-transport_id-keyed smoothing latency-adaptive uses) is a
-//	real measurement, not first-packet noise.
-//	EXPLOIT: compare the probe's smoothed latency to the WORST (highest-
-//	EWMA) established leg. If the probe is better, it GRADUATES — drop the
-//	worst established leg, and the probe takes its place. If not, the
-//	experiment FAILED — drop the probe itself. Either way width returns to
-//	target and the cycle repeats.
-//
-// Net effect: the established set ratchets toward lower latency one path
-// at a time, spending at most one extra leg's worth of transport state
-// while a probe is in flight, and never growing past target permanently.
-
-// probeEWMA is the per-leg smoothed latency, keyed by stable transport_id
-// (same rationale as latAdaptEWMA). probeSeen is the reused prune scratch
-// set; probeAliveIdx maps transport_id → current leg index each tick so a
-// DropLegs decision made about a transport can be translated to the index
-// the host expects. prevKnownTIDs snapshots the established set just before
-// an add so the following tick can diff out the newly-added probe leg.
-var (
-	probeEWMA     = map[string]float64{}
-	probeSeen     = map[string]bool{}
-	probeAliveIdx = map[string]int{}
-	prevKnownTIDs = map[string]bool{}
-)
-
-// probeTID is the transport_id of the leg currently on probation ("" =
-// none). probeAge counts ticks since the probe was adopted. probePending
-// is set the tick we request the add, so the next tick knows to adopt the
-// newly-appeared leg as the probe.
-var (
-	probeTID     string
-	probeAge     int
-	probePending bool
-)
-
-const (
-	// probeTarget is the established-set width probe-and-prune maintains
-	// (matches decideProbeAndPrune's Mux). A probe transiently makes it
-	// target+1.
-	probeTarget = 3
-	// probeObserveTicks is how many ticks a probe runs before it is judged,
-	// so its EWMA latency reflects steady behavior, not startup noise.
-	probeObserveTicks = 3
-	// probeAlpha is the latency EWMA smoothing factor (as in latency-…).
-	probeAlpha = 0.3
-)
-
-// tickProbeAndPrune is the probe-and-prune explore/exploit controller. See
-// the block comment above for the state machine.
-func tickProbeAndPrune(input tickInputWire) uint64 {
-	// Update per-leg latency EWMA, map transport_id → index, count alive,
-	// and record presence for stale-key pruning.
-	for k := range probeSeen {
-		delete(probeSeen, k)
+func candToPreset(c candidateWire) preset.Candidate {
+	return preset.Candidate{
+		Hops:           c.Hops,
+		HopsGeo:        c.HopsGeo,
+		EstLatencyMs:   c.EstLatencyMs,
+		TransportKinds: c.TransportKinds,
 	}
-	for k := range probeAliveIdx {
-		delete(probeAliveIdx, k)
-	}
-	sets := classifyLegs(input.Legs)
-	activeCount := 0
-	for _, l := range input.Legs {
-		tid := l.TransportID
-		if tid == "" {
-			continue
-		}
-		probeSeen[tid] = true
-		if !l.Alive {
-			continue
-		}
-		// Fold in only real measurements; latency_ms==0 means "unknown". EWMA
-		// tracks any alive leg (harmless for a standby spare).
-		if l.LatencyMs > 0 {
-			sample := float64(l.LatencyMs)
-			if prev, ok := probeEWMA[tid]; ok {
-				probeEWMA[tid] = probeAlpha*sample + (1-probeAlpha)*prev
-			} else {
-				probeEWMA[tid] = sample
-			}
-		}
-		// Only ACTIVE legs form the "established" set the probe machine
-		// manages; a warm standby (a previously graduated-out incumbent,
-		// parked not torn down) is neither an established leg nor the probe.
-		if l.Standby {
-			continue
-		}
-		activeCount++
-		probeAliveIdx[tid] = l.Index
-	}
-	// Prune EWMA keys for transport_ids no longer present.
-	for tid := range probeEWMA {
-		if !probeSeen[tid] {
-			delete(probeEWMA, tid)
-		}
-	}
-
-	// Adopt: if we requested an add last tick, the new leg should now be
-	// present — it is the alive transport_id absent from the pre-add known
-	// set. Put it on probation.
-	if probePending {
-		probePending = false
-		for tid := range probeAliveIdx {
-			if !prevKnownTIDs[tid] {
-				probeTID = tid
-				probeAge = 0
-				break
-			}
-		}
-	}
-
-	// Active probe: observe, then graduate-or-discard.
-	if probeTID != "" {
-		idx, alive := probeAliveIdx[probeTID]
-		if !alive {
-			// Probe died on its own — abandon the experiment.
-			probeTID = ""
-			probeAge = 0
-			return 0
-		}
-		probeAge++
-		if probeAge < probeObserveTicks {
-			return 0
-		}
-		// Judge: probe's smoothed latency vs the worst established leg.
-		probeSm, okProbe := probeEWMA[probeTID]
-		worstIdx := -1
-		worstSm := -1.0
-		for tid, i := range probeAliveIdx {
-			if tid == probeTID {
-				continue
-			}
-			sm, ok := probeEWMA[tid]
-			if !ok {
-				continue
-			}
-			if sm > worstSm {
-				worstSm = sm
-				worstIdx = i
-			}
-		}
-		if !okProbe || worstIdx < 0 {
-			// Not enough latency signal to judge yet — keep observing.
-			return 0
-		}
-		probeTID = ""
-		if probeSm < worstSm {
-			// Probe graduates: PARK the worst established leg as a warm standby
-			// (no teardown — it re-promotes instantly if a leg later dies)
-			// rather than tearing it down; the probe stays and joins the
-			// established set next tick. Evict-by-demote, no capacity dip.
-			return shedActive(sets, worstIdx)
-		}
-		// Failed experiment: drop the SPECULATIVE probe leg (it was added fresh
-		// this cycle, so removing it just returns the group to target — no
-		// working leg is lost), keeping the incumbents.
-		return writeAction(rotationActionWire{DropLegs: []int{idx}})
-	}
-
-	// Explore: no probe in flight and exactly at target ACTIVE width → snapshot
-	// the known set and request one speculative leg over a fresh path.
-	if !probePending && activeCount == probeTarget {
-		for k := range prevKnownTIDs {
-			delete(prevKnownTIDs, k)
-		}
-		for tid := range probeAliveIdx {
-			prevKnownTIDs[tid] = true
-		}
-		probePending = true
-		return writeAction(rotationActionWire{AddLeg: true})
-	}
-	return 0
 }
 
-// medianSorted returns the median of an already-sorted float slice (mean of
-// the two middle elements for an even count). Shared by the latency-adaptive
-// and adaptive controllers so the outlier test uses one definition.
-func medianSorted(s []float64) float64 {
-	n := len(s)
-	if n == 0 {
-		return 0
+func legsToPreset(ls []legInfoWire) []preset.LegInfo {
+	if ls == nil {
+		return nil
 	}
-	if n%2 == 1 {
-		return s[n/2]
+	out := make([]preset.LegInfo, len(ls))
+	for i, l := range ls {
+		out[i] = preset.LegInfo{
+			Index:       l.Index,
+			Kind:        l.Kind,
+			TransportID: l.TransportID,
+			LatencyMs:   l.LatencyMs,
+			Alive:       l.Alive,
+			Standby:     l.Standby,
+			SentBytes:   l.SentBytes,
+			RecvBytes:   l.RecvBytes,
+			Retransmits: l.Retransmits,
+			Hops:        l.Hops,
+		}
 	}
-	return (s[n/2-1] + s[n/2]) / 2
+	return out
 }
 
-// --- shared no-dip controller helpers -------------------------------------
-//
-// Every adaptive controller manages an ACTIVE sending set drawn from a
-// slightly larger warm pool. Membership changes are expressed as warm-standby
-// flips, never teardowns: a demoted leg keeps its rules alive and re-promotes
-// instantly, so the active width never dips during an eviction or a load
-// swing. GROWTH of the underlying leg pool stays the route group's self-heal
-// job (aliveLegCount counts standby, so parking never re-grows); on_tick only
-// picks which legs are active. This is the rotating-bw discipline, factored
-// out so latency-adaptive / elastic-mux / probe-and-prune / adaptive share it.
-
-// nodipStandbyMax caps the warm-standby pool a shed/park may hold before it
-// falls back to a real teardown, so parked-but-unused legs don't accumulate.
-const nodipStandbyMax = 2
-
-// legSets is the per-tick active/standby partition of a route group's legs.
-// active = alive && !standby (carrying traffic); standby = alive && standby
-// (warm spares, promoted with no setup round-trip).
-type legSets struct {
-	activeCount  int
-	standbyCount int
-	oldestActive int // lowest-index active leg (the "oldest" to shed); -1 if none
-	promotable   int // lowest-index standby leg (spare to promote); -1 if none
+func specToWire(s preset.Spec) routeSpecWire {
+	w := routeSpecWire{
+		Mux:                     s.Mux,
+		ForwardMux:              s.ForwardMux,
+		ReverseMux:              s.ReverseMux,
+		MinHops:                 s.MinHops,
+		ForwardMinHops:          s.ForwardMinHops,
+		ReverseMinHops:          s.ReverseMinHops,
+		Fallback:                s.Fallback,
+		Distribution:            s.Distribution,
+		RotationIntervalSeconds: s.RotationIntervalSeconds,
+	}
+	if s.Chosen != nil {
+		c := candToWire(*s.Chosen)
+		w.Chosen = &c
+	}
+	if s.ReverseChosen != nil {
+		c := candToWire(*s.ReverseChosen)
+		w.ReverseChosen = &c
+	}
+	return w
 }
 
-// classifyLegs partitions the leg snapshot into active/standby counts and the
-// two indices the controllers act on (oldest active to shed, lowest standby to
-// promote).
-func classifyLegs(legs []legInfoWire) legSets {
-	s := legSets{oldestActive: -1, promotable: -1}
-	for _, l := range legs {
-		if !l.Alive {
-			continue
-		}
-		if l.Standby {
-			s.standbyCount++
-			if s.promotable == -1 || l.Index < s.promotable {
-				s.promotable = l.Index
-			}
-			continue
-		}
-		s.activeCount++
-		if s.oldestActive == -1 || l.Index < s.oldestActive {
-			s.oldestActive = l.Index
-		}
+func candToWire(c preset.Candidate) candidateWire {
+	return candidateWire{
+		Hops:           c.Hops,
+		HopsGeo:        c.HopsGeo,
+		EstLatencyMs:   c.EstLatencyMs,
+		TransportKinds: c.TransportKinds,
 	}
-	return s
 }
 
-// growActive raises the active width by one with no setup dip when a warm
-// spare is parked (instant promote); otherwise it requests a genuinely fresh
-// leg (real capacity addition under load — not a tear-and-rebuild).
-func growActive(s legSets) uint64 {
-	if s.promotable >= 0 {
-		return writeAction(rotationActionWire{PromoteFromStandby: []int{s.promotable}})
+func actionToWire(a preset.RotationAction) rotationActionWire {
+	return rotationActionWire{
+		DropLegs:           a.DropLegs,
+		AddLeg:             a.AddLeg,
+		ExcludeHops:        a.ExcludeHops,
+		DemoteToStandby:    a.DemoteToStandby,
+		PromoteFromStandby: a.PromoteFromStandby,
 	}
-	return writeAction(rotationActionWire{AddLeg: true})
 }
 
-// swapActive evicts leg idx and fills its slot from the warm reserve in the
-// SAME tick so the active width never dips (hot-swap). When no spare is parked
-// it parks idx alone and lets a subsequent grow refill from the reserve —
-// still no teardown, just a transient one-leg dip until self-heal/grow catches
-// up.
-func swapActive(s legSets, idx int) uint64 {
-	if s.promotable >= 0 {
-		return writeAction(rotationActionWire{
-			PromoteFromStandby: []int{s.promotable},
-			DemoteToStandby:    []int{idx},
-		})
-	}
-	return writeAction(rotationActionWire{DemoteToStandby: []int{idx}})
+// --- thin per-preset wrappers used by main_test.go (the conditional-preset
+// constraint tests). They delegate to the shared preset package so the tests
+// exercise the single source of truth through the wire types. ---
+
+func decideGeoAvoid(ctx routingContextWire, cands []candidateWire) routeSpecWire {
+	return specToWire(preset.Decide("geo-avoid", ctxToPreset(ctx), candsToPreset(cands)))
 }
 
-// shedActive removes leg idx from the active set with no capacity dip: parks it
-// as a warm standby (instant re-promote) while the pool has room, else tears it
-// down. Used by the idle-shrink / prune dimensions — the parked legs become the
-// warm reserve a later grow promotes back.
-func shedActive(s legSets, idx int) uint64 {
-	if s.standbyCount < nodipStandbyMax {
-		return writeAction(rotationActionWire{DemoteToStandby: []int{idx}})
-	}
-	return writeAction(rotationActionWire{DropLegs: []int{idx}})
+func decideTransportDiverse(ctx routingContextWire, cands []candidateWire) routeSpecWire {
+	return specToWire(preset.Decide("transport-diverse", ctxToPreset(ctx), candsToPreset(cands)))
 }
 
-// --- adaptive: the COMPOSITE performance default (size+membership+explore) ---
-//
-// adaptive is the intended converged default. It runs the three standalone
-// performance controllers — elastic-mux (SIZE: AIMD the leg count to load),
-// latency-adaptive (MEMBERSHIP: evict the slowest leg toward a low-latency
-// set), and probe-and-prune (EXPLORE: speculatively try a fresh path and keep
-// it only if it is better) — under ONE arbitrated on_tick that performs AT
-// MOST ONE structural action (an add OR a drop) per tick.
-//
-// Why one action per tick: each sub-controller can independently want to add
-// or drop a leg on the same tick (load says "grow", latency says "evict the
-// outlier", the explorer says "probe"). Letting them all act would churn the
-// route group — multiple simultaneous adds/drops tear legs up and down faster
-// than the host can build them and faster than the EWMA signals can settle,
-// which is exactly the thrash the smoothing was added to avoid. Arbitrating
-// to a single action per tick lets each dimension make steady, observable
-// progress: the group takes one deliberate step, the next tick re-measures on
-// the settled state, and the highest-priority need is served first.
-//
-// Arbitration priority each tick (first match fires, then return):
-//
-//	1. aliveCount == 0            → hold (nothing measured yet).
-//	2. RECOVER  (aliveCount < floor)                → add one leg. Safety
-//	   first: a group starved below the floor is refilled before anything
-//	   else is considered.
-//	3. MEMBERSHIP (latency): worst alive leg's EWMA latency is a >=1.5x
-//	   outlier over the alive-leg median → drop it + add + exclude its hops.
-//	   Correctness of the set (drop a genuinely bad path) outranks sizing.
-//	4. GROW (load): smoothed throughput >= 0.80*peak and aliveCount < cap →
-//	   add one leg. Under real saturation more disjoint paths raise the
-//	   aggregate the group can pull.
-//	5. SHRINK (idle): smoothed throughput < 0.25*peak for >=2 consecutive
-//	   ticks and aliveCount > floor → drop the oldest leg (release wasted
-//	   width). Reset the idle counter so we step down one leg at a time.
-//	6. EXPLORE: otherwise, when the set is stable (no probe in flight,
-//	   aliveCount == target), every exploreEvery ticks start a probe — add a
-//	   speculative leg, observe its EWMA latency adaptObserve ticks, then keep
-//	   it (drop the worst established leg) only if it beats that worst, else
-//	   prune the probe. This is probe-and-prune's explore/exploit loop.
-//	7. else → hold.
-//
-// Rules 3/4/5 are gated on "no probe in flight": while an experiment is mid-
-// flight (the group is transiently target+1 wide) a membership/grow/shrink
-// action would corrupt the probe's accounting and defeat the one-step-at-a-
-// time discipline, so structural changes pause until the probe graduates or
-// is pruned. The RECOVER rule is never gated — a starved group is refilled
-// regardless. The size target starts at the decide Mux (3) and grow/shrink
-// move it within [floor, cap] so EXPLORE always probes at the current settled
-// width.
-//
-// All three dimensions share ONE set of per-transport_id state, refreshed at
-// the top of EVERY tick before arbitration: a latency EWMA (adaptLatEWMA), a
-// received-byte-delta throughput EWMA + decaying peak (adaptThroughputEWMA /
-// adaptPeak), the consecutive-idle counter (adaptIdleCount), and the probe
-// state machine (adaptProbeTID / adaptProbeAge / adaptProbePending /
-// adaptPrevKnown). Keys are pruned to the present leg set each tick so a
-// dropped transport's history can't linger or smear onto a reused index.
-
-var (
-	// adaptLatEWMA is the per-leg smoothed latency, keyed by stable
-	// transport_id (same rationale as latAdaptEWMA/probeEWMA).
-	adaptLatEWMA = map[string]float64{}
-	// adaptPrevRecv is each leg's last-seen recv_bytes counter, keyed by
-	// transport_id, so the next tick can compute its throughput delta.
-	adaptPrevRecv = map[string]uint64{}
-	// adaptSeen is the reused scratch set of transport_ids present this tick
-	// (for stale-key pruning); adaptAliveIdx maps transport_id → current leg
-	// index for alive legs so a DropLegs decision can be expressed as the
-	// index the host expects. adaptPrevKnown snapshots the established set
-	// just before a probe add so the next tick can diff out the new leg.
-	adaptSeen      = map[string]bool{}
-	adaptAliveIdx  = map[string]int{}
-	adaptPrevKnown = map[string]bool{}
-)
-
-var (
-	// adaptThroughputEWMA / adaptPeak are the smoothed aggregate received
-	// throughput and its slowly-decaying high-water mark (the AIMD load
-	// signal). adaptSeeded guards the one-time seed on the first tick with
-	// real throughput. adaptIdleCount is the consecutive-idle tick counter.
-	adaptThroughputEWMA float64
-	adaptPeak           float64
-	adaptSeeded         bool
-	adaptIdleCount      int
-	// adaptTick counts ticks (drives the explore cadence). adaptTarget is the
-	// current steady width EXPLORE probes at; it starts at the decide Mux and
-	// grow/shrink move it within [floor, cap].
-	adaptTick   int
-	adaptTarget = adaptDecideMux
-	// Probe state machine (see probe-and-prune): adaptProbeTID is the leg on
-	// probation ("" = none), adaptProbeAge counts ticks since adoption,
-	// adaptProbePending is set the tick we request the speculative add.
-	adaptProbeTID     string
-	adaptProbeAge     int
-	adaptProbePending bool
-)
-
-const (
-	// adaptDecideMux is the starting mux width decideAdaptive returns and the
-	// initial size target. Start LEAN at 1: the router picks the single fastest
-	// available path, and the on_tick controller GROWS (up to adaptCap) only
-	// when that leg saturates. Starting wide (mux>1) forced every dial to drag
-	// traffic across disjoint sibling legs, which on a fleet with unequal legs
-	// (a fast direct/low-hop path next to slow multi-hop ones) is a throughput
-	// LOSS — the mux reorder buffer stalls on the slowest leg. Lean-start +
-	// grow-on-load keeps the common case fast and only pays for extra legs when
-	// there is load to justify them.
-	adaptDecideMux = 1
-	// adaptFloor / adaptCap bound the leg count the size dimension may reach.
-	// Floor 1 so an unsaturated session stays at its single fast leg; resilience
-	// comes from grow-on-failure + warm standbys, not from always-on wide mux.
-	adaptFloor = 1
-	adaptCap   = 6
-	// adaptAlpha is the EWMA smoothing factor for both the latency and the
-	// throughput signals (newest sample weighted 30%).
-	adaptAlpha = 0.3
-	// adaptPeakDecay bleeds the throughput peak down ~2%/tick so the
-	// saturation bar tracks a sustained drop rather than one historical burst.
-	adaptPeakDecay = 0.98
-	// adaptExploreEvery is the explore cadence: start a probe every N ticks
-	// when the set is stable.
-	adaptExploreEvery = 6
-	// adaptObserve is how many ticks a probe runs before it is judged.
-	adaptObserve = 3
-	// adaptStandbyMax caps the warm-standby pool. SHRINK parks an idle leg as a
-	// warm standby (rules kept alive, not sending) instead of tearing it down,
-	// so a later GROW / eviction can promote it with no setup-node round-trip
-	// and no capacity dip. Once the pool is full SHRINK really drops the leg.
-	adaptStandbyMax = 2
-)
-
-// tickAdaptive is the composite arbitrated controller. See the block comment
-// above for the load/latency/explore model and the priority ordering.
-func tickAdaptive(input tickInputWire) uint64 {
-	adaptTick++
-
-	// --- Phase 1: refresh the shared per-transport_id state (every tick,
-	// before arbitration). One pass computes the latency EWMA, the aggregate
-	// received byte-delta, the alive count / oldest-alive index / alive
-	// index map, and records presence for stale-key pruning.
-	for k := range adaptSeen {
-		delete(adaptSeen, k)
-	}
-	for k := range adaptAliveIdx {
-		delete(adaptAliveIdx, k)
-	}
-	var rawTotal float64
-	aliveCount := 0
-	standbyCount := 0
-	oldestAliveIdx := -1
-	promotableIdx := -1
-	for _, l := range input.Legs {
-		tid := l.TransportID
-		if tid != "" {
-			adaptSeen[tid] = true
-		}
-		if !l.Alive {
-			continue
-		}
-		// A warm standby is alive (rules kept, kept-alive) but not sending: it
-		// is a spare, not part of the active sending width. Record it as
-		// promotable and skip the active-leg accounting below (adaptAliveIdx,
-		// EWMA, throughput) so the size/latency/explore dimensions reason only
-		// over the legs actually carrying traffic.
-		if l.Standby {
-			standbyCount++
-			if promotableIdx == -1 || l.Index < promotableIdx {
-				promotableIdx = l.Index
-			}
-			continue
-		}
-		aliveCount++
-		if oldestAliveIdx == -1 || l.Index < oldestAliveIdx {
-			oldestAliveIdx = l.Index
-		}
-		if tid == "" {
-			continue
-		}
-		adaptAliveIdx[tid] = l.Index
-		// Latency EWMA — fold in only real measurements (0 == unknown).
-		if l.LatencyMs > 0 {
-			sample := float64(l.LatencyMs)
-			if prev, ok := adaptLatEWMA[tid]; ok {
-				adaptLatEWMA[tid] = adaptAlpha*sample + (1-adaptAlpha)*prev
-			} else {
-				adaptLatEWMA[tid] = sample
-			}
-		}
-		// Throughput: accumulate this interval's received byte-delta. Only a
-		// non-negative delta is real; a counter that went backwards means a
-		// reset/new leg, not throughput.
-		if prev, ok := adaptPrevRecv[tid]; ok && l.RecvBytes >= prev {
-			rawTotal += float64(l.RecvBytes - prev)
-		}
-		adaptPrevRecv[tid] = l.RecvBytes
-	}
-	// Prune state for transport_ids no longer present.
-	for tid := range adaptLatEWMA {
-		if !adaptSeen[tid] {
-			delete(adaptLatEWMA, tid)
-		}
-	}
-	for tid := range adaptPrevRecv {
-		if !adaptSeen[tid] {
-			delete(adaptPrevRecv, tid)
-		}
-	}
-
-	// Fold the raw delta into the smoothed throughput signal and maintain the
-	// decaying peak. Seed on the first tick with real throughput so the signal
-	// starts on a genuine value rather than ramping from zero. saturated/idle
-	// stay false until seeded, so the size dimension holds until load appears.
-	saturated, idle := false, false
-	if !adaptSeeded {
-		if rawTotal > 0 {
-			adaptThroughputEWMA = rawTotal
-			adaptPeak = rawTotal
-			adaptSeeded = true
-		}
-	} else {
-		adaptThroughputEWMA = adaptAlpha*rawTotal + (1-adaptAlpha)*adaptThroughputEWMA
-		adaptPeak *= adaptPeakDecay
-		if adaptThroughputEWMA > adaptPeak {
-			adaptPeak = adaptThroughputEWMA
-		}
-		if adaptPeak > 0 {
-			saturated = adaptThroughputEWMA >= 0.80*adaptPeak
-			idle = adaptThroughputEWMA < 0.25*adaptPeak
-		}
-	}
-	// Track consecutive idle ticks independently of whether we can act on them
-	// (the "two quiet ticks" requirement is about load, not width).
-	if idle {
-		adaptIdleCount++
-	} else {
-		adaptIdleCount = 0
-	}
-
-	// --- Phase 2: arbitration — at most ONE structural action, by priority.
-
-	// 1. Nothing active — promote a warm spare if one is parked, else nothing
-	// to act on. (All legs standby is degenerate but recoverable without setup.)
-	if aliveCount == 0 {
-		if promotableIdx >= 0 {
-			return writeAction(rotationActionWire{PromoteFromStandby: []int{promotableIdx}})
-		}
-		return 0
-	}
-	// 2. RECOVER: starved below the floor. Promote a warm standby instantly if
-	// one exists (no setup, no dip); else add a fresh leg. Never gated on a probe.
-	if aliveCount < adaptFloor {
-		if promotableIdx >= 0 {
-			return writeAction(rotationActionWire{PromoteFromStandby: []int{promotableIdx}})
-		}
-		return writeAction(rotationActionWire{AddLeg: true})
-	}
-
-	// A probe transiently makes the group target+1 wide; while it is in flight
-	// the size/membership dimensions pause so they can't corrupt its accounting.
-	probeInFlight := adaptProbePending || adaptProbeTID != ""
-	if !probeInFlight {
-		// 3. MEMBERSHIP: evict the slowest-EWMA leg iff it is a >=1.5x-median
-		// outlier. If a warm spare is parked, HOT-SWAP: promote it and demote
-		// the outlier in the SAME tick — the width never dips and the promoted
-		// leg needs no setup-node round-trip. The demoted leg stays warm, so a
-		// transient degradation can be undone by promoting it back later. Only
-		// when the pool is empty do we fall back to a cold drop+add.
-		if idx, hops, ok := adaptWorstOutlier(input.Legs); ok {
-			if promotableIdx >= 0 {
-				return writeAction(rotationActionWire{
-					PromoteFromStandby: []int{promotableIdx},
-					DemoteToStandby:    []int{idx},
-				})
-			}
-			return writeAction(rotationActionWire{
-				DropLegs:    []int{idx},
-				AddLeg:      true,
-				ExcludeHops: hops,
-			})
-		}
-		// 4. GROW: saturated and below the cap. Promote a warm spare instantly
-		// if one is parked (no setup, no dip); else add one leg to load.
-		if saturated && aliveCount < adaptCap {
-			adaptTarget = aliveCount + 1
-			if adaptTarget > adaptCap {
-				adaptTarget = adaptCap
-			}
-			if promotableIdx >= 0 {
-				return writeAction(rotationActionWire{PromoteFromStandby: []int{promotableIdx}})
-			}
-			return writeAction(rotationActionWire{AddLeg: true})
-		}
-		// 5. SHRINK: sustained idle and above the floor. Park the oldest leg as
-		// a WARM STANDBY (rules kept alive, ready to promote) rather than tear
-		// it down — until the pool is full, then really drop it. Reset the idle
-		// counter so we step down one leg per two idle ticks rather than
-		// collapsing to the floor at once.
-		if adaptIdleCount >= 2 && aliveCount > adaptFloor {
-			adaptIdleCount = 0
-			adaptTarget = aliveCount - 1
-			if adaptTarget < adaptFloor {
-				adaptTarget = adaptFloor
-			}
-			if standbyCount < adaptStandbyMax {
-				return writeAction(rotationActionWire{DemoteToStandby: []int{oldestAliveIdx}})
-			}
-			return writeAction(rotationActionWire{DropLegs: []int{oldestAliveIdx}})
-		}
-	}
-
-	// 6/7. EXPLORE (probe/exploit machine) or hold. Hand the active/standby
-	// partition down so a graduating probe parks (not tears down) the incumbent
-	// it displaces.
-	sets := legSets{
-		activeCount:  aliveCount,
-		standbyCount: standbyCount,
-		oldestActive: oldestAliveIdx,
-		promotable:   promotableIdx,
-	}
-	return adaptExplore(sets)
+func decideTrustTiered(ctx routingContextWire, cands []candidateWire) routeSpecWire {
+	return specToWire(preset.Decide("trust-tiered", ctxToPreset(ctx), candsToPreset(cands)))
 }
 
-// adaptWorstOutlier reports the index and hops of the slowest alive leg when
-// its smoothed latency is a >=1.5x-median outlier over the alive legs'
-// smoothed latencies (needs >=2 smoothed samples), else ok=false. This is
-// latency-adaptive's eviction test, run over the shared adaptLatEWMA.
-func adaptWorstOutlier(legs []legInfoWire) (int, []string, bool) {
-	worstIdx := -1
-	worstSm := -1.0
-	var worstHops []string
-	var smoothed []float64
-	for _, l := range legs {
-		if !l.Alive || l.Standby {
-			continue
-		}
-		sm, ok := adaptLatEWMA[l.TransportID]
-		if !ok {
-			continue
-		}
-		smoothed = append(smoothed, sm)
-		if sm > worstSm {
-			worstSm = sm
-			worstIdx = l.Index
-			worstHops = l.Hops
-		}
-	}
-	if len(smoothed) < 2 || worstIdx < 0 || worstSm <= 0 {
-		return -1, nil, false
-	}
-	sort.Float64s(smoothed)
-	median := medianSorted(smoothed)
-	if median > 0 && worstSm >= 1.5*median {
-		return worstIdx, worstHops, true
-	}
-	return -1, nil, false
+func decideTimeOfDay(ctx routingContextWire) routeSpecWire {
+	return specToWire(preset.Decide("time-of-day", ctxToPreset(ctx), nil))
 }
 
-// adaptExplore is the probe-and-prune explore/exploit machine over the shared
-// probe state. It adopts a pending probe, observes it adaptObserve ticks, then
-// keeps it (dropping the worst established leg) only if it beats that worst —
-// else prunes the probe. When no probe is in flight and the set is stable at
-// target, it starts a fresh probe on the explore cadence.
-func adaptExplore(sets legSets) uint64 {
-	aliveCount := sets.activeCount
-	// Adopt: a probe add requested last tick should now be present — the alive
-	// transport_id absent from the pre-add known set. Put it on probation.
-	if adaptProbePending {
-		adaptProbePending = false
-		for tid := range adaptAliveIdx {
-			if !adaptPrevKnown[tid] {
-				adaptProbeTID = tid
-				adaptProbeAge = 0
-				break
-			}
-		}
+// distinctCount counts unique (case-folded) entries — used by main_test.go to
+// assert transport-diverse picked the most-diverse route.
+func distinctCount(xs []string) int {
+	seen := map[string]bool{}
+	for _, x := range xs {
+		seen[toLower(x)] = true
 	}
-
-	// Active probe: observe, then graduate-or-discard.
-	if adaptProbeTID != "" {
-		idx, alive := adaptAliveIdx[adaptProbeTID]
-		if !alive {
-			// Probe died on its own — abandon the experiment.
-			adaptProbeTID = ""
-			adaptProbeAge = 0
-			return 0
-		}
-		adaptProbeAge++
-		if adaptProbeAge < adaptObserve {
-			return 0
-		}
-		// Judge: probe's smoothed latency vs the worst established leg.
-		probeSm, okProbe := adaptLatEWMA[adaptProbeTID]
-		worstIdx := -1
-		worstSm := -1.0
-		for tid, i := range adaptAliveIdx {
-			if tid == adaptProbeTID {
-				continue
-			}
-			sm, ok := adaptLatEWMA[tid]
-			if !ok {
-				continue
-			}
-			if sm > worstSm {
-				worstSm = sm
-				worstIdx = i
-			}
-		}
-		if !okProbe || worstIdx < 0 {
-			// Not enough latency signal to judge yet — keep observing.
-			return 0
-		}
-		adaptProbeTID = ""
-		if probeSm < worstSm {
-			// Probe graduates: PARK the worst established leg as a warm standby
-			// (no teardown — it re-promotes instantly if a leg later dies)
-			// rather than tearing it down; the probe stays and joins the
-			// established set next tick. Evict-by-demote, no capacity dip.
-			return shedActive(sets, worstIdx)
-		}
-		// Failed experiment: drop the SPECULATIVE probe leg (added fresh this
-		// cycle, so removing it just returns the group to target — no working
-		// leg lost), keeping the incumbents.
-		return writeAction(rotationActionWire{DropLegs: []int{idx}})
-	}
-
-	// Explore: on the cadence, when stable at the target width, snapshot the
-	// known set and request one speculative leg over a fresh path.
-	if adaptTick%adaptExploreEvery == 0 && aliveCount == adaptTarget {
-		for k := range adaptPrevKnown {
-			delete(adaptPrevKnown, k)
-		}
-		for tid := range adaptAliveIdx {
-			adaptPrevKnown[tid] = true
-		}
-		adaptProbePending = true
-		return writeAction(rotationActionWire{AddLeg: true})
-	}
-	// Hold.
-	return 0
+	return len(seen)
 }
 
-// writeAction marshals a rotation action and packs it for the host.
-func writeAction(action rotationActionWire) uint64 {
-	out, err := json.Marshal(action)
-	if err != nil {
-		return 0
+// toLower is a tiny ASCII lowercaser so distinctCount stays dependency-free.
+func toLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + ('a' - 'A')
+		}
 	}
-	return writeOutput(out)
+	return string(b)
 }
 
 // main is required by the WASI target but isn't called by the host at
