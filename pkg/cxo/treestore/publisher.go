@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
+	"github.com/skycoin/skywire/pkg/cxo/data"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	cxotransport "github.com/skycoin/skywire/pkg/cxo/node/transport"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject"
@@ -1123,38 +1125,68 @@ func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 		r         *registry.Root
 	)
 
-	err = c.Cache.WithBatch(func() error {
-		var err error
-		rootNode, err = encodeNode(up, root, nil, &freshSubs)
-		if err != nil {
-			return err
-		}
+	// attempt runs one full encode+save inside a single CXDS batch.
+	// It's a closure so publishRoot can run it twice: if the first
+	// attempt hits an object that was evicted from the local CXDS while
+	// its hash was still pinned in the encode-cache, we drop the whole
+	// encode-cache on the snapshot and re-encode from in-memory content
+	// (re-serializing + re-Adding every object, re-saving the evicted
+	// one) and retry once. freshSubs is reset at the start of each
+	// attempt because encodeNode APPENDS to it.
+	attempt := func() error {
+		freshSubs = nil
+		return c.Cache.WithBatch(func() error {
+			var err error
+			rootNode, err = encodeNode(up, root, nil, &freshSubs)
+			if err != nil {
+				return err
+			}
 
-		rootSchema, err := Registry.SchemaByName("cxo.treestore.TreeNode")
-		if err != nil {
-			return err
-		}
+			rootSchema, err := Registry.SchemaByName("cxo.treestore.TreeNode")
+			if err != nil {
+				return err
+			}
 
-		var rootDyn registry.Dynamic
-		if err := rootDyn.SetValue(up, &rootNode); err != nil {
-			return err
-		}
-		rootDyn.Schema = rootSchema.Reference()
+			var rootDyn registry.Dynamic
+			if err := rootDyn.SetValue(up, &rootNode); err != nil {
+				return err
+			}
+			rootDyn.Schema = rootSchema.Reference()
 
-		nonce := c.ActiveHead(skycipher.PubKey(p.pk))
-		if nonce == 0 {
-			nonce = 1 // CXO requires a non-zero nonce
-		}
+			nonce := c.ActiveHead(skycipher.PubKey(p.pk))
+			if nonce == 0 {
+				nonce = 1 // CXO requires a non-zero nonce
+			}
 
-		r = &registry.Root{
-			Pub:   skycipher.PubKey(p.pk),
-			Nonce: nonce,
-			Reg:   Registry.Reference(),
-			Refs:  []registry.Dynamic{rootDyn},
-		}
+			r = &registry.Root{
+				Pub:   skycipher.PubKey(p.pk),
+				Nonce: nonce,
+				Reg:   Registry.Reference(),
+				Refs:  []registry.Dynamic{rootDyn},
+			}
 
-		return c.Save(up, r)
-	})
+			return c.Save(up, r)
+		})
+	}
+
+	err = attempt()
+	if err != nil && isMissingObject(err) {
+		// A cached sub-node's object was evicted from the local CXDS
+		// (refcount GC / prune / crash-restart residue) while its hash
+		// stayed pinned in the encode-cache. encodeNode's fast path
+		// reused that stale pubHash without re-serializing, and
+		// Container.Save's reference walk then failed to find the
+		// object to bump its rc. Left unhandled this freezes the
+		// published Root forever — every subsequent republish re-hits
+		// the same missing object. Self-heal: drop the encode-cache on
+		// the whole snapshot (a clone — safe to mutate) and re-encode
+		// from in-memory content, which re-serializes and re-Adds every
+		// object and so re-saves the evicted one, then retry once. If
+		// the retry still errors the feed is genuinely broken.
+		p.log.WithError(err).Warn("treestore: republish hit an evicted cached object — clearing encode cache and re-encoding")
+		clearEncodeCache(root)
+		err = attempt()
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1169,6 +1201,39 @@ func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 	default:
 	}
 	return freshSubs, nil
+}
+
+// isMissingObject reports whether err signals that a referenced CXO
+// object was not found in the local store — the signature of a cached
+// pubHash pointing at an object that has since been evicted. It checks
+// the typed sentinels from both the data and registry layers plus a
+// lowercase "not found" substring, mirroring the detection precedent in
+// skyobject/lastroot_missing_cxds_test.go.
+func isMissingObject(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, data.ErrNotFound) ||
+		errors.Is(err, registry.ErrNotFound) ||
+		strings.Contains(strings.ToLower(err.Error()), "not found")
+}
+
+// clearEncodeCache recursively drops the per-memNode encode cache on n
+// and every descendant (cached=false, pubHash zeroed) so the next
+// encodeNode walk takes the slow path everywhere — re-serializing and
+// re-Adding every object. It is only ever called on the publish
+// SNAPSHOT (a clone produced by cloneMemNode), so mutating it cannot
+// disturb the live tree or its cache; the on-success freshSubs
+// promotion in doPublish is unaffected.
+func clearEncodeCache(n *memNode) {
+	if n == nil {
+		return
+	}
+	n.cached = false
+	n.pubHash = skycipher.SHA256{}
+	for _, sub := range n.subs {
+		clearEncodeCache(sub)
+	}
 }
 
 // freshSub records a sub-tree whose TreeNode was freshly serialized
