@@ -76,7 +76,7 @@ func TestReadUptimeWindowReassemblesPerVisorLeaves(t *testing.T) {
 			Online:   true,
 			Timeline: map[string][]byte{"2026-08-19": timelineBitmap(mkTimeline(slot))},
 		}
-		b, _ := json.Marshal(c)
+		b, _ := json.Marshal(c) //nolint:errcheck
 		return b
 	}
 	mgr := &fakeUptimeMgr{

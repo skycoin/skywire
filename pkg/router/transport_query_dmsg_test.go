@@ -28,7 +28,7 @@ func servePipe(t *testing.T, rcvr interface{}) *gobrpc.Client {
 	}
 	go rpcS.ServeConn(srvConn)
 	cli := gobrpc.NewClient(cliConn)
-	t.Cleanup(func() { _ = cli.Close() })
+	t.Cleanup(func() { cli.Close() }) //nolint:errcheck,gosec
 	return cli
 }
 
