@@ -580,7 +580,14 @@ func (f *fillHead) request(c *Conn, seq uint64, key cipher.SHA256) {
 
 		// incremented by the Want call(s)
 		if _, err := f.node().c.SetWanted(key, x.Value); err != nil {
-			f.node().Fatal("DB failure:", err)
+			// Recoverable DB error storing a received object — signal the fill
+			// as a failed request (same as any other failure above) instead of
+			// crashing the whole visor.
+			f.node().Errorf(err, "SetWanted for %s failed", key.Hex()[:7])
+			select {
+			case f.failureq <- failedRequest{c, seq, key, err}:
+			case <-f.closeq:
+			}
 			return
 		}
 
