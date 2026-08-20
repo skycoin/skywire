@@ -3,6 +3,7 @@ package presets
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/router/policy"
 	policywasm "github.com/skycoin/skywire/pkg/router/policy/wasm"
@@ -480,5 +481,122 @@ func TestLatencyAdaptiveEvictsByHotSwap(t *testing.T) {
 	}
 	if act.AddLeg {
 		t.Error("AddLeg = true, want false")
+	}
+}
+
+// --- conditional presets (constraint over route metadata) ------------------
+//
+// These load the recompiled bundle and prove — through the wazero runtime, not
+// just the native Go logic — that each conditional preset dispatches by name
+// and its decision HONORS ITS CONSTRAINT over synthetic candidates. Constraint-
+// honoring is a deterministic property of the decision, so these need no live
+// mesh (gate-4 for the conditional presets, minus the throughput numbers).
+
+// TestGeoAvoidHonorsConstraint: with avoid_geo=US, the chosen route must not
+// transit a US hop even though the US candidate is the fastest.
+func TestGeoAvoidHonorsConstraint(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("geo-avoid", Bundle(), policywasm.WithPreset("geo-avoid"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	cands := []policy.Candidate{
+		{Hops: []string{"a"}, HopsGeo: []string{"US"}, EstLatencyMs: 10},            // blocked, fastest
+		{Hops: []string{"b"}, HopsGeo: []string{"DE"}, EstLatencyMs: 50},            // clean
+		{Hops: []string{"c", "d"}, HopsGeo: []string{"FR", "US"}, EstLatencyMs: 20}, // blocked (2nd hop)
+	}
+	spec, err := l.Decide(context.Background(),
+		policy.RoutingContext{App: "skysocks-client", CLIOverrides: map[string]string{"avoid_geo": "US"}}, cands)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if spec.Chosen == nil {
+		t.Fatal("geo-avoid returned no Chosen candidate")
+	}
+	for _, g := range spec.Chosen.HopsGeo {
+		if g == "US" {
+			t.Fatalf("geo-avoid chose a route transiting a blocked country: %v", spec.Chosen.HopsGeo)
+		}
+	}
+}
+
+// TestTransportDiverseHonorsConstraint: the chosen route spans the most distinct
+// transport types.
+func TestTransportDiverseHonorsConstraint(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("transport-diverse", Bundle(), policywasm.WithPreset("transport-diverse"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	cands := []policy.Candidate{
+		{Hops: []string{"a", "b"}, TransportKinds: []string{"stcpr", "stcpr"}, EstLatencyMs: 10},
+		{Hops: []string{"c", "d"}, TransportKinds: []string{"stcpr", "sudph"}, EstLatencyMs: 30}, // most diverse
+		{Hops: []string{"e", "f"}, TransportKinds: []string{"sudph", "sudph"}, EstLatencyMs: 5},
+	}
+	spec, err := l.Decide(context.Background(), policy.RoutingContext{App: "skysocks-client"}, cands)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if spec.Chosen == nil {
+		t.Fatal("transport-diverse returned no Chosen candidate")
+	}
+	seen := map[string]bool{}
+	for _, k := range spec.Chosen.TransportKinds {
+		seen[k] = true
+	}
+	if len(seen) != 2 {
+		t.Fatalf("transport-diverse must pick the most-diverse route; got kinds %v", spec.Chosen.TransportKinds)
+	}
+}
+
+// TestTrustTieredHonorsConstraint: prefers the fully-trusted route even when a
+// partially-trusted one is faster.
+func TestTrustTieredHonorsConstraint(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("trust-tiered", Bundle(), policywasm.WithPreset("trust-tiered"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	cands := []policy.Candidate{
+		{Hops: []string{"trustA", "evil"}, EstLatencyMs: 5},    // partial (faster)
+		{Hops: []string{"trustA", "trustB"}, EstLatencyMs: 40}, // fully trusted
+	}
+	spec, err := l.Decide(context.Background(),
+		policy.RoutingContext{App: "skysocks-client", CLIOverrides: map[string]string{"trusted_pks": "trustA,trustB"}}, cands)
+	if err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if spec.Chosen == nil || len(spec.Chosen.Hops) != 2 || spec.Chosen.Hops[1] != "trustB" {
+		t.Fatalf("trust-tiered must prefer the fully-trusted route; got %+v", spec.Chosen)
+	}
+}
+
+// TestTimeOfDayHonorsConstraint: the shape is a deterministic function of the
+// wall-clock hour stamped into the context.
+func TestTimeOfDayHonorsConstraint(t *testing.T) {
+	l, err := policywasm.NewLoaderBytes("time-of-day", Bundle(), policywasm.WithPreset("time-of-day"))
+	if err != nil {
+		t.Fatalf("NewLoaderBytes: %v", err)
+	}
+	defer l.Close() //nolint:errcheck
+
+	biz, err := l.Decide(context.Background(),
+		policy.RoutingContext{App: "skysocks-client", Now: time.Date(2026, 1, 1, 11, 0, 0, 0, time.UTC)}, nil)
+	if err != nil {
+		t.Fatalf("Decide biz: %v", err)
+	}
+	if biz.Mux != 1 {
+		t.Fatalf("business-hours (11:00) shape must be lean mux=1; got %d", biz.Mux)
+	}
+	off, err := l.Decide(context.Background(),
+		policy.RoutingContext{App: "skysocks-client", Now: time.Date(2026, 1, 1, 3, 0, 0, 0, time.UTC)}, nil)
+	if err != nil {
+		t.Fatalf("Decide off: %v", err)
+	}
+	if off.Mux != 4 || off.RotationIntervalSeconds == 0 {
+		t.Fatalf("off-hours (03:00) shape must be a wide rotating mux; got %+v", off)
 	}
 }
