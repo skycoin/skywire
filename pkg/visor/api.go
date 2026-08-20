@@ -33,6 +33,7 @@ type API interface {
 	//visor
 	Overview() (*Overview, error)
 	Summary() (*Summary, error)
+	StateSnapshot() (*StateSnapshot, error)
 	Health() (*HealthInfo, error)
 	IsStartupComplete() bool
 	EnableHypervisor() error
