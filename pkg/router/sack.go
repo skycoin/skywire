@@ -18,11 +18,21 @@ import (
 // lost one — a dead leg, which liveness prunes — is ever retransmitted.
 const retxMinAge = 750 * time.Millisecond
 
+// sackMaxWords bounds the generated bitmap to the reorder window (32 words *
+// 64 = 2048 sequences). Mirrors routing.SACKMaxWords; kept local to avoid a
+// routing import here.
+const sackMaxWords = 32
+
 // sackTracker tracks received sequence numbers on the receiver side and
-// generates SACK feedback (last contiguous seq + 64-bit bitmap).
+// generates SACK feedback: last contiguous seq + a variable-length bitmap that
+// covers the whole outstanding window up to the highest received sequence.
+// Acking the full window (not just the first 64) is what lets the sender purge
+// received-but-above-the-gap sequences from its retx buffer, so a persistent
+// frontier gap can no longer fill that buffer and wedge the stream (#86).
 type sackTracker struct {
 	mu             sync.Mutex
 	lastContiguous uint32
+	highest        uint32 // highest sequence ever recorded (0 = none yet)
 	received       map[uint32]bool
 }
 
@@ -37,6 +47,10 @@ func newSACKTracker() *sackTracker {
 func (st *sackTracker) RecordReceived(seq uint32) (gapDetected bool) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
+
+	if seq > st.highest {
+		st.highest = seq
+	}
 
 	if seq <= st.lastContiguous {
 		return false // duplicate or old
@@ -74,20 +88,35 @@ func (st *sackTracker) AdvanceContiguous(nextSeq uint32) {
 	}
 }
 
-// GenerateSACK returns the current SACK state: last contiguous sequence
-// number and a 64-bit bitmap where bit i == 1 means
-// (lastContiguous + 1 + i) has been received.
-func (st *sackTracker) GenerateSACK() (lastContiguous uint32, bitmap uint64) {
+// GenerateSACK returns the current SACK state: the last contiguous sequence
+// number and a variable-length bitmap covering the whole outstanding window
+// [lastContiguous+1, highest]. Word w, bit i set means
+// (lastContiguous + 1 + w*64 + i) has been received. The window is capped at
+// sackMaxWords*64 sequences (the reorder-buffer bound); trailing empty words
+// are trimmed by the encoder.
+func (st *sackTracker) GenerateSACK() (lastContiguous uint32, words []uint64) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
 	lastContiguous = st.lastContiguous
-	for i := uint32(0); i < 64; i++ {
-		if st.received[lastContiguous+1+i] {
-			bitmap |= 1 << i
+	if st.highest <= lastContiguous {
+		return lastContiguous, nil
+	}
+	span := st.highest - lastContiguous // number of sequences above the contiguous point
+	nWords := int((span + 63) / 64)
+	if nWords > sackMaxWords {
+		nWords = sackMaxWords
+	}
+	words = make([]uint64, nWords)
+	for w := 0; w < nWords; w++ {
+		for i := uint32(0); i < 64; i++ {
+			seq := lastContiguous + 1 + uint32(w)*64 + i
+			if st.received[seq] {
+				words[w] |= 1 << i
+			}
 		}
 	}
-	return
+	return lastContiguous, words
 }
 
 // retxEntry holds a sent packet awaiting acknowledgment.
@@ -112,14 +141,34 @@ func newRetxBuffer(capacity int) *retxBuffer {
 	}
 }
 
-// Store saves a sent packet for potential retransmission.
-// Returns false if the buffer is full (backpressure signal).
+// Store saves a sent packet for potential retransmission. When the buffer is
+// full it evicts the LOWEST outstanding sequence to make room, rather than
+// refusing the newest: a full buffer means a frontier gap has stayed open for a
+// whole reorder window, at which point the receiver has already force-flushed
+// past its lowest held sequence, so that entry can never be usefully
+// retransmitted — dropping it and keeping the newest packet (which still can be)
+// is strictly safer than the reverse. Always returns true (the packet is
+// always stored); the bool is retained for callers/tests.
+//
+// With the full-window SACK (GenerateSACK/ProcessSACK), the sender purges every
+// received sequence above the gap each SACK, so under normal operation the
+// buffer holds only genuine holes plus in-flight sequences and never reaches
+// capacity — this eviction path is a backstop, not the steady state.
 func (rb *retxBuffer) Store(seq uint32, data []byte) bool {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
 	if len(rb.entries) >= rb.capacity {
-		return false
+		var lowest uint32
+		first := true
+		for s := range rb.entries {
+			if first || s < lowest {
+				lowest, first = s, false
+			}
+		}
+		if !first {
+			delete(rb.entries, lowest)
+		}
 	}
 
 	cp := make([]byte, len(data))
@@ -132,33 +181,36 @@ func (rb *retxBuffer) Store(seq uint32, data []byte) bool {
 	return true
 }
 
-// ProcessSACK processes a received SACK and returns sequence numbers that
-// need retransmission (gaps in the bitmap where we have stored data).
-// Also purges acknowledged entries.
-func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, bitmap uint64) []uint32 {
+// ProcessSACK processes a received SACK (last contiguous seq + full-window
+// received bitmap) and returns sequence numbers that need retransmission (holes
+// in the bitmap where we still hold data). It purges every acknowledged entry,
+// including received sequences ABOVE a persistent frontier gap — that whole-
+// window purge is what keeps the buffer from filling behind a stuck gap (#86).
+func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64) []uint32 {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
-	// Purge all entries up to and including lastContiguous
+	// Purge all entries up to and including lastContiguous.
 	for seq := range rb.entries {
 		if seq <= lastContiguous {
 			delete(rb.entries, seq)
 		}
 	}
 
-	// Check bitmap for acknowledged and missing packets
+	// Walk the full received bitmap: set bit -> received, purge; unset bit ->
+	// still missing, retransmit if genuinely overdue (a sequence within
+	// retxMinAge of send is presumed in flight on a slower leg, not lost, so
+	// retransmitting it would be the spurious self-amplifying storm retxMinAge
+	// exists to prevent). Sequences ABOVE the covered window are left in place:
+	// they are the still-in-flight tail the receiver has not reported yet.
 	var retransmit []uint32
-	for i := uint32(0); i < 64; i++ {
-		checkSeq := lastContiguous + 1 + i
-		if bitmap&(1<<i) != 0 {
-			// Bit is set: packet received, purge from buffer
-			delete(rb.entries, checkSeq)
-		} else {
-			// Bit is not set: packet missing. Retransmit only if it is
-			// genuinely overdue — a sequence still within retxMinAge of when it
-			// was sent is presumed in flight on a slower leg (mux latency skew),
-			// not lost, so retransmitting it would be spurious.
-			if e, ok := rb.entries[checkSeq]; ok && time.Since(e.sentAt) >= retxMinAge {
+	for w, word := range words {
+		base := lastContiguous + 1 + uint32(w)*64
+		for i := uint32(0); i < 64; i++ {
+			checkSeq := base + i
+			if word&(1<<i) != 0 {
+				delete(rb.entries, checkSeq)
+			} else if e, ok := rb.entries[checkSeq]; ok && time.Since(e.sentAt) >= retxMinAge {
 				retransmit = append(retransmit, checkSeq)
 			}
 		}
