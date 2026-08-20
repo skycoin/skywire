@@ -131,3 +131,37 @@ Copyright (c) 2017-2022, The xterm.js authors (MIT License)<br>
 Copyright (c) 2014-2016, SourceLair Private Company (MIT License)<br>
 Copyright (c) 2012-2013, Christopher Jeffrey (MIT License)<br>
 Go port copyright (c) 2026 (MIT License)
+## Dependency Graph
+
+Made with [goda](https://github.com/loov/goda):
+
+```
+# GOOS=js: the import edges of a wasm program live in js/wasm-tagged
+# files and are invisible to a host-context run
+GOOS=js GOARCH=wasm go run github.com/loov/goda@latest graph github.com/0magnet/xterm-go/... | dot -Tsvg -o docs/xterm-go-goda-graph.svg
+```
+
+![Dependency Graph](docs/xterm-go-goda-graph.svg "github.com/0magnet/xterm-go Dependency Graph")
+
+## Lines of Code
+
+Made with [gocloc](https://github.com/hhatto/gocloc) (excludes `vendor/`, `node_modules/`, `.git/`):
+
+```
+gocloc --not-match-d='(vendor|node_modules|\.git)' .
+```
+
+```
+-------------------------------------------------------------------------------
+Language                     files          blank        comment           code
+-------------------------------------------------------------------------------
+Go                              36           1201           1535          11108
+JavaScript                       1             56             46            457
+Markdown                         1             40              0             93
+YAML                             1              0              9             69
+HTML                             1              0              0             30
+JSON                             2              0              0             28
+-------------------------------------------------------------------------------
+TOTAL                           42           1297           1590          11785
+-------------------------------------------------------------------------------
+```

@@ -58,6 +58,10 @@ type Theme struct {
 	Cursor              string
 	CursorAccent        string
 	SelectionBackground string
+	// SelectionForeground recolors selected text. Empty leaves each cell its
+	// own foreground, which is what xterm.js does by default and what keeps
+	// syntax coloring readable through a selection.
+	SelectionForeground string
 	Black               string
 	Red                 string
 	Green               string
