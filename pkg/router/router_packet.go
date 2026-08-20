@@ -325,7 +325,7 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 			return err
 		}
 	case routing.SACKPacket:
-		p = routing.MakeSACKPacket(rule.NextRouteID(), packet.SACKLastContiguousSeq(), packet.SACKBitmap())
+		p = routing.MakeSACKPacket(rule.NextRouteID(), packet.SACKLastContiguousSeq(), packet.SACKWords())
 	case routing.DatagramPacket:
 		// Faithful-UDP relay (#2607): re-stamp the next-hop route ID and pass
 		// the opaque (AEAD-sealed) payload through unchanged — intermediaries

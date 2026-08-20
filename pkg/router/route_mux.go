@@ -525,20 +525,21 @@ func (m *routeMux) shouldSendSACK() bool {
 	return atomic.CompareAndSwapInt64(&m.lastSACKNano, prev, now)
 }
 
-// generateSACK returns the current SACK state for sending to the peer.
-func (m *routeMux) generateSACK() (lastContig uint32, bitmap uint64) {
+// generateSACK returns the current SACK state for sending to the peer:
+// the last contiguous sequence plus a full-window received bitmap.
+func (m *routeMux) generateSACK() (lastContig uint32, words []uint64) {
 	if !m.sackEnabled || m.sackTracker == nil {
-		return 0, 0
+		return 0, nil
 	}
 	return m.sackTracker.GenerateSACK()
 }
 
 // processSACK processes a received SACK and returns sequences that need retransmission.
-func (m *routeMux) processSACK(lastContig uint32, bitmap uint64) []uint32 {
+func (m *routeMux) processSACK(lastContig uint32, words []uint64) []uint32 {
 	if !m.sackEnabled || m.retxBuf == nil {
 		return nil
 	}
-	return m.retxBuf.ProcessSACK(lastContig, bitmap)
+	return m.retxBuf.ProcessSACK(lastContig, words)
 }
 
 // getRetxPayload retrieves a stored payload for retransmission.

@@ -144,8 +144,19 @@ const (
 // payloads when mux mode is active.
 const SeqSize = 4
 
-// SACKPayloadSize is the size of a SACK packet payload:
-// last_contiguous_seq (uint32) + bitmap (uint64) = 12 bytes.
+// SACKMaxWords bounds the SACK bitmap to the mux reorder window: each word
+// acknowledges 64 sequences, so 32 words cover 2048 outstanding sequences —
+// the receiver force-flushes its reorder buffer beyond that, so acking further
+// is pointless. Keeps a SACK payload at most 5+32*8 = 261 bytes.
+const SACKMaxWords = 32
+
+// SACKMinPayloadSize is the smallest legal SACK payload:
+// last_contiguous_seq (uint32) + word_count (uint8) = 5 bytes (zero words).
+const SACKMinPayloadSize = 5
+
+// SACKPayloadSize is retained for the wire-compat single-word (legacy 12-byte)
+// SACK shape referenced by size-sensitive callers; the current encoder emits a
+// variable-length body (see MakeSACKPacket).
 const SACKPayloadSize = 12
 
 // CloseCode represents close code for ClosePacket.
@@ -364,16 +375,34 @@ func MakeErrorPacket(id RouteID, errPayload []byte) (Packet, error) {
 }
 
 // MakeSACKPacket constructs a SACK (Selective Acknowledgment) packet.
-// Payload: [last_contiguous_seq (4 bytes BE)][bitmap (8 bytes BE)]
-// bitmap bit i == 1 means (last_contiguous_seq + 1 + i) has been received.
-func MakeSACKPacket(id RouteID, lastContiguousSeq uint32, bitmap uint64) Packet {
-	packet := make([]byte, PacketHeaderSize+SACKPayloadSize)
+// Payload: [last_contiguous_seq (4 bytes BE)][word_count (1 byte)][words...(8 bytes BE each)]
+// For word w and bit i, a set bit means (last_contiguous_seq + 1 + w*64 + i)
+// has been received. The variable-length body lets a SACK acknowledge the whole
+// outstanding window (up to SACKMaxWords*64 sequences), not just the first 64 —
+// without it, a persistent frontier gap leaves the sender unable to purge the
+// received-but-unackable sequences above the gap, its retx buffer fills, new
+// packets stop being stored for retransmission, and a later loss wedges the mux
+// stream permanently (the "carries-then-stalls" failure).
+func MakeSACKPacket(id RouteID, lastContiguousSeq uint32, words []uint64) Packet {
+	if len(words) > SACKMaxWords {
+		words = words[:SACKMaxWords]
+	}
+	// Trim trailing all-zero words: nothing above the last set word is acked,
+	// so they carry no information and only cost bytes.
+	for len(words) > 0 && words[len(words)-1] == 0 {
+		words = words[:len(words)-1]
+	}
+	payloadSize := SACKMinPayloadSize + len(words)*8
+	packet := make([]byte, PacketHeaderSize+payloadSize)
 
 	packet[PacketTypeOffset] = byte(SACKPacket)
 	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
-	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(SACKPayloadSize))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(payloadSize)) //nolint:gosec
 	binary.BigEndian.PutUint32(packet[PacketPayloadOffset:], lastContiguousSeq)
-	binary.BigEndian.PutUint64(packet[PacketPayloadOffset+4:], bitmap)
+	packet[PacketPayloadOffset+4] = byte(len(words)) //nolint:gosec // len(words) <= SACKMaxWords (32), capped above
+	for w, word := range words {
+		binary.BigEndian.PutUint64(packet[PacketPayloadOffset+5+w*8:], word)
+	}
 
 	return packet
 }
@@ -383,9 +412,24 @@ func (p Packet) SACKLastContiguousSeq() uint32 {
 	return binary.BigEndian.Uint32(p[PacketPayloadOffset:])
 }
 
-// SACKBitmap extracts the 64-bit bitmap from a SACK packet.
-func (p Packet) SACKBitmap() uint64 {
-	return binary.BigEndian.Uint64(p[PacketPayloadOffset+4:])
+// SACKWords extracts the received-bitmap words from a SACK packet. Bit (w*64+i)
+// set means (SACKLastContiguousSeq + 1 + w*64 + i) has been received. Returns
+// nil for a malformed / truncated payload (treated as "nothing above the
+// contiguous point acked", which is safe — it only forgoes purging).
+func (p Packet) SACKWords() []uint64 {
+	payload := p.Payload()
+	if len(payload) < SACKMinPayloadSize {
+		return nil
+	}
+	n := int(payload[4])
+	if n > SACKMaxWords || len(payload) < SACKMinPayloadSize+n*8 {
+		return nil
+	}
+	words := make([]uint64, n)
+	for w := 0; w < n; w++ {
+		words[w] = binary.BigEndian.Uint64(payload[5+w*8:])
+	}
+	return words
 }
 
 // TransportPingPayloadSize is the size of a transport ping/pong payload (8 bytes for unix nano timestamp).

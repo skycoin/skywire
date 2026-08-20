@@ -2113,8 +2113,8 @@ func (rg *RouteGroup) sendSACK() error {
 		return nil
 	}
 
-	lastContig, bitmap := rg.mux.generateSACK()
-	packet := routing.MakeSACKPacket(rule.NextRouteID(), lastContig, bitmap)
+	lastContig, words := rg.mux.generateSACK()
+	packet := routing.MakeSACKPacket(rule.NextRouteID(), lastContig, words)
 	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 }
 
@@ -2125,9 +2125,9 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 	}
 
 	lastContig := packet.SACKLastContiguousSeq()
-	bitmap := packet.SACKBitmap()
+	words := packet.SACKWords()
 
-	retxSeqs := rg.mux.processSACK(lastContig, bitmap)
+	retxSeqs := rg.mux.processSACK(lastContig, words)
 	if len(retxSeqs) == 0 {
 		return nil
 	}
