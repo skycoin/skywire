@@ -75,6 +75,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/google/nftables v0.3.0
 	github.com/google/renameio v1.0.1
+	github.com/guptarohit/asciigraph v0.10.0
 	github.com/hanwen/go-fuse/v2 v2.11.0
 	github.com/insomniacslk/dhcp v0.0.0-20260728151720-c308df0fdcef
 	github.com/itchyny/gojq v0.12.19
