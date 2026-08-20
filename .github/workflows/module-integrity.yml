@@ -51,7 +51,7 @@ jobs:
         env:
           GOFLAGS: ""
           GOPROXY: "proxy.golang.org,direct"
-        run: go build -mod=mod -o /dev/null ./cmd/skywire
+        run: go build -mod=mod -o /dev/null .
 
       # tidy must be a no-op on a healthy tree; drift here means go.mod/go.sum
       # don't match the actual imports (what `go install @ref` resolves against).
