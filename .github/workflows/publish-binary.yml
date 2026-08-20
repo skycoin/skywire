@@ -65,7 +65,7 @@ jobs:
           for arch in amd64 arm64 arm; do
             echo "==> building linux/${arch}"
             GOOS=linux GOARCH="${arch}" GOARM=7 CGO_ENABLED=0 \
-              go build -trimpath -mod=vendor -ldflags="${LDFLAGS}" -o skywire ./cmd/skywire
+              go build -trimpath -mod=vendor -ldflags="${LDFLAGS}" -o skywire .
             zstd -19 -q -f -o "dist/skywire-linux-${arch}.zst" skywire
             rm -f skywire
           done
