@@ -60,6 +60,7 @@ require (
 )
 
 require (
+	github.com/0magnet/plot-go v0.0.0-20260820145748-0b260a086d19
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/ccding/go-stun v0.1.6
