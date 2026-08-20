@@ -96,16 +96,16 @@ func TestApplyRotationDemotePromote(t *testing.T) {
 
 // TestApplyRotationDropReindexes pins the drop path: the dropped legs leave the
 // active slice (so subsequent snapshots re-index, matching route-group
-// semantics), their pump is cancelled + flagged inactive, and the executor
+// semantics), their pump is canceled + flagged inactive, and the executor
 // never drops the last alive leg.
 func TestApplyRotationDropReindexes(t *testing.T) {
 	c, events := newTestController(4)
 	start := time.Now()
 
-	cancelled := make([]bool, 4)
+	canceled := make([]bool, 4)
 	for i := range c.active {
 		i := i
-		c.active[i].pumpCancel = func() { cancelled[i] = true }
+		c.active[i].pumpCancel = func() { canceled[i] = true }
 	}
 
 	// Drop legs at positions 0 and 2 (original indices 0 and 2).
@@ -119,11 +119,11 @@ func TestApplyRotationDropReindexes(t *testing.T) {
 		t.Fatalf("drop did not compact correctly: survivor indices = %d,%d want 1,3",
 			c.active[0].index, c.active[1].index)
 	}
-	if !cancelled[0] || !cancelled[2] {
-		t.Errorf("dropped legs' pumps not cancelled: %v", cancelled)
+	if !canceled[0] || !canceled[2] {
+		t.Errorf("dropped legs' pumps not canceled: %v", canceled)
 	}
-	if cancelled[1] || cancelled[3] {
-		t.Errorf("surviving legs' pumps wrongly cancelled: %v", cancelled)
+	if canceled[1] || canceled[3] {
+		t.Errorf("surviving legs' pumps wrongly canceled: %v", canceled)
 	}
 	// all[] retains every leg for the Done totals.
 	if len(c.all) != 4 {

@@ -176,7 +176,7 @@ func (d *DMSG) ConnectPK(ctx context.Context, remotePK cipher.PubKey) (*Conn, er
 	// still dials a real DMSG conn here rather than adopting the TCP one
 	// into the DMSG cache. The deployment nodes this matters for (the TPD
 	// aggregator, the visor stats publisher) are DMSG-only, so in practice
-	// hasPeer only ever returns the DMSG conn — this is defence in depth.
+	// hasPeer only ever returns the DMSG conn — this is defense in depth.
 	var peerID skycipher.PubKey
 	copy(peerID[:], remotePK[:])
 	if existing, ok := d.n.hasPeer(peerID); ok && !existing.IsTCP() && connIsAlive(existing) {
