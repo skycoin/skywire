@@ -25,6 +25,7 @@ package main
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 	"unsafe"
 )
 
@@ -146,6 +147,14 @@ func decideRoute(inPtr, inLen uint32) uint64 {
 		spec = decideAdaptive(input.Ctx)
 	case "app-mux":
 		spec = decideAppMux(input.Ctx)
+	case "geo-avoid":
+		spec = decideGeoAvoid(input.Ctx, input.Candidates)
+	case "transport-diverse":
+		spec = decideTransportDiverse(input.Ctx, input.Candidates)
+	case "trust-tiered":
+		spec = decideTrustTiered(input.Ctx, input.Candidates)
+	case "time-of-day":
+		spec = decideTimeOfDay(input.Ctx)
 	default:
 		// Empty / unknown preset: fall back to the per-app app-mux
 		// behavior so a bare bundle still does something sensible.
@@ -319,6 +328,217 @@ func decideAdaptive(ctx routingContextWire) routeSpecWire {
 // Kept in sync with the Mux value returned from decideRotatingBW so
 // on_tick can reason about "are we at target?"
 const targetMux = 4
+
+// --- conditional presets: constrain WHICH path is chosen, by route metadata ---
+//
+// Unlike the performance presets (which return a mux/min-hops SHAPE and let the
+// host pick candidates), these pick a specific forward candidate via
+// spec.Chosen so the selected route provably honors a CONSTRAINT expressed over
+// the candidate's own metadata — the per-hop country (hops_geo), the per-hop
+// transport types (transport_kinds), the hop PKs (hops) — or the wall clock
+// (now_unix_nano). They are decide-time only (no on_tick): the constraint is a
+// property of the chosen route, not something that drifts over the session.
+// Parameters come from cli_overrides so the operator configures the constraint
+// (avoid_geo / trusted_pks / business_hours) without a new preset.
+
+// splitSet parses a comma/space-separated override value into a lowercased
+// membership set. Empty input yields an empty (never-nil) set.
+func splitSet(s string) map[string]bool {
+	out := map[string]bool{}
+	for _, f := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' }) {
+		if f != "" {
+			out[strings.ToLower(f)] = true
+		}
+	}
+	return out
+}
+
+// decideGeoAvoid picks the lowest-latency forward candidate whose hops transit
+// NONE of the blocked countries in cli_overrides["avoid_geo"] (comma-separated
+// ISO country codes). Constraint: the chosen route never passes through a
+// blocked geography. If no candidate is clean (or none are offered) it returns
+// the empty spec, deferring to the router rather than forcing a violating path.
+func decideGeoAvoid(ctx routingContextWire, cands []candidateWire) routeSpecWire {
+	blocked := splitSet(ctx.CLIOverrides["avoid_geo"])
+	if len(blocked) == 0 || len(cands) == 0 {
+		return routeSpecWire{} // nothing to enforce
+	}
+	var best *candidateWire
+	for i := range cands {
+		if candidateTransitsBlockedGeo(cands[i], blocked) {
+			continue
+		}
+		if best == nil || cands[i].EstLatencyMs < best.EstLatencyMs {
+			c := cands[i]
+			best = &c
+		}
+	}
+	if best == nil {
+		return routeSpecWire{} // every candidate violates; let the router decide
+	}
+	return routeSpecWire{Chosen: best, MinHops: 2}
+}
+
+// candidateTransitsBlockedGeo reports whether any of the candidate's per-hop
+// countries is in the blocked set.
+func candidateTransitsBlockedGeo(c candidateWire, blocked map[string]bool) bool {
+	for _, g := range c.HopsGeo {
+		if blocked[strings.ToLower(g)] {
+			return true
+		}
+	}
+	return false
+}
+
+// decideTransportDiverse picks the forward candidate whose hops span the MOST
+// distinct transport types (ties broken by lower latency). Constraint: the
+// chosen route maximizes transport-type diversity, so no single transport
+// technology failing (e.g. all-stcpr under a firewall change) takes the whole
+// path down. Empty spec when no candidates are offered.
+func decideTransportDiverse(ctx routingContextWire, cands []candidateWire) routeSpecWire {
+	var best *candidateWire
+	bestDiversity := -1
+	for i := range cands {
+		d := distinctCount(cands[i].TransportKinds)
+		switch {
+		case d > bestDiversity:
+			c := cands[i]
+			best, bestDiversity = &c, d
+		case d == bestDiversity && best != nil && cands[i].EstLatencyMs < best.EstLatencyMs:
+			c := cands[i]
+			best = &c
+		}
+	}
+	if best == nil {
+		return routeSpecWire{}
+	}
+	// A mux of 2 over the diverse path keeps a spare leg on a different carrier.
+	return routeSpecWire{Chosen: best, Mux: 2, MinHops: 2}
+}
+
+// distinctCount counts unique (case-folded) entries in a slice.
+func distinctCount(xs []string) int {
+	seen := map[string]bool{}
+	for _, x := range xs {
+		seen[strings.ToLower(x)] = true
+	}
+	return len(seen)
+}
+
+// decideTrustTiered prefers routes that transit ONLY trusted intermediaries
+// (cli_overrides["trusted_pks"], comma-separated hop PKs). It is TIERED: a
+// fully-trusted candidate wins outright (lowest latency among them); if none is
+// fully trusted it falls back to the candidate with the MOST trusted hops, so
+// the route is as trusted as the topology allows rather than failing closed.
+// Empty spec when no trust set is configured or no candidates are offered.
+func decideTrustTiered(ctx routingContextWire, cands []candidateWire) routeSpecWire {
+	trusted := splitSet(ctx.CLIOverrides["trusted_pks"])
+	if len(trusted) == 0 || len(cands) == 0 {
+		return routeSpecWire{}
+	}
+	var bestFull, bestPartial *candidateWire
+	bestPartialScore := -1
+	for i := range cands {
+		n := trustedHopCount(cands[i], trusted)
+		if len(cands[i].Hops) > 0 && n == len(cands[i].Hops) {
+			if bestFull == nil || cands[i].EstLatencyMs < bestFull.EstLatencyMs {
+				c := cands[i]
+				bestFull = &c
+			}
+		}
+		if n > bestPartialScore {
+			c := cands[i]
+			bestPartial, bestPartialScore = &c, n
+		}
+	}
+	if bestFull != nil {
+		return routeSpecWire{Chosen: bestFull, MinHops: 2}
+	}
+	if bestPartial != nil {
+		return routeSpecWire{Chosen: bestPartial, MinHops: 2}
+	}
+	return routeSpecWire{}
+}
+
+// trustedHopCount counts how many of a candidate's hops are in the trusted set.
+func trustedHopCount(c candidateWire, trusted map[string]bool) int {
+	n := 0
+	for _, h := range c.Hops {
+		if trusted[strings.ToLower(h)] {
+			n++
+		}
+	}
+	return n
+}
+
+// decideTimeOfDay switches the route SHAPE by wall-clock hour (UTC), derived
+// from ctx.now_unix_nano — no clock import, just arithmetic on the host-stamped
+// timestamp. During the configured business-hours window
+// (cli_overrides["business_hours"] = "START-END", default "9-17") it returns a
+// lean single-route shape (latency-sensitive daytime traffic); outside it,
+// a wide privacy mux with byte-spread and rotation (bulk/overnight). Constraint:
+// the emitted shape is a deterministic function of the hour.
+func decideTimeOfDay(ctx routingContextWire) routeSpecWire {
+	startH, endH := parseHourRange(ctx.CLIOverrides["business_hours"], 9, 17)
+	if inHourRange(hourOfDayUTC(ctx.NowUnixNano), startH, endH) {
+		return routeSpecWire{Mux: 1} // business hours: lean + low-latency
+	}
+	// off-hours: privacy-wide mux (mirrors rotating-bw's shape)
+	return routeSpecWire{Mux: 4, MinHops: 2, Distribution: "round-robin", RotationIntervalSeconds: 90}
+}
+
+// hourOfDayUTC returns the UTC hour (0-23) of a unix-nanosecond timestamp using
+// only integer arithmetic (avoids a "time" import in the wasm guest).
+func hourOfDayUTC(unixNano int64) int {
+	if unixNano <= 0 {
+		return 0
+	}
+	secOfDay := (unixNano / 1e9) % 86400
+	return int(secOfDay / 3600)
+}
+
+// parseHourRange parses "START-END" (24h) from an override, falling back to the
+// given defaults on empty/malformed input.
+func parseHourRange(s string, defStart, defEnd int) (int, int) {
+	a, b, ok := strings.Cut(strings.TrimSpace(s), "-")
+	if !ok {
+		return defStart, defEnd
+	}
+	start, okA := atoiHour(a)
+	end, okB := atoiHour(b)
+	if !okA || !okB {
+		return defStart, defEnd
+	}
+	return start, end
+}
+
+// atoiHour parses a 0-23 hour string; returns ok=false otherwise.
+func atoiHour(s string) (int, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, false
+	}
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+		n = n*10 + int(r-'0')
+	}
+	if n < 0 || n > 23 {
+		return 0, false
+	}
+	return n, true
+}
+
+// inHourRange reports whether hour is within [start, end), handling a window
+// that wraps past midnight (start > end, e.g. 22-6).
+func inHourRange(hour, start, end int) bool {
+	if start <= end {
+		return hour >= start && hour < end
+	}
+	return hour >= start || hour < end // wraps midnight
+}
 
 //export on_tick
 func onTick(inPtr, inLen uint32) uint64 {
