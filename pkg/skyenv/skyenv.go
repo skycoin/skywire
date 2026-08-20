@@ -121,6 +121,14 @@ const (
 	// needs to be collision-free, which the ports_test guards.
 	DmsgDMSGDRegistrationCXOPort uint16 = 67
 
+	// DmsgTransportQueryPort is the dmsg port a visor listens on to answer
+	// RSN-oracle transport-list queries (see pkg/router/transport_query.go). A
+	// source visor building a 2-hop route dials the destination here, delivers an
+	// RSN-signed TransportQuery, and receives the destination's own transport
+	// list. Control-plane only; served solely when Routing.EnableRSNOracleRoutes
+	// is set (default OFF), so it adds no listener on the default configuration.
+	DmsgTransportQueryPort uint16 = 68
+
 	// DmsgWebRTCSignalPort is the dmsg port the WebRTC carrier exchanges its SDP
 	// offer/answer + ICE candidates on (a visor dials a peer here to open a
 	// signaling stream; the answerer listens). It MUST live in this registry: it

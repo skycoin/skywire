@@ -835,6 +835,33 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 		return localFwd, localRev, localErr
 	}
 
+	// RSN-oracle 2-hop fast path (opt-in, default OFF). For a single-
+	// intermediate route the source computes the route locally from its own
+	// transports intersected with the destination's own transports (fetched
+	// authoritatively from the destination via an RSN-signed query) — no TPD /
+	// route-finder round-trip. Only attempted when the path is enabled AND an
+	// oracle is wired AND the min-hops constraint is 2-hop-satisfiable (a 2-hop
+	// route is exactly one intermediate; a min_hops>=3 request cannot be served
+	// this way and falls through). On any miss (no oracle, no shared
+	// intermediate, delivery error) it falls through to the existing behavior —
+	// zero change when disabled.
+	if r.conf != nil && (r.conf.EnableRSNOracleRoutes || opts.UseRSNOracle2Hop) && src != dst {
+		hi := baseMinHops
+		if e := opts.EffectiveMinHops(true); uint16(e) > hi { //nolint:gosec
+			hi = uint16(e) //nolint:gosec
+		}
+		if e := opts.EffectiveMinHops(false); uint16(e) > hi { //nolint:gosec
+			hi = uint16(e) //nolint:gosec
+		}
+		if hi <= 2 {
+			if oFwd, oRev, oErr := r.oracle2HopRoutes(ctx, log, src, dst, opts); oErr == nil {
+				return oFwd, oRev, nil
+			} else if !errors.Is(oErr, errRSNOracleInert) {
+				log.WithError(oErr).Debug("RSN-oracle 2-hop path missed; falling through to route finder")
+			}
+		}
+	}
+
 	retries := opts.Retries
 
 	log.Debugf("Requesting new routes from %s to %s", src, dst)
