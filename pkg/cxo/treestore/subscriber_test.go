@@ -229,6 +229,58 @@ func TestConnectAndWaitForRootResetsSignal(t *testing.T) {
 	}
 }
 
+// TestSubscriberMergePartialSnapshotInsertUpdateOnly verifies the
+// OnFillingBreaks salvage path: recovered leaves are inserted/updated into
+// the cache and fire change events, an unchanged leaf is a no-op, and leaves
+// already in the cache but ABSENT from the partial recovery are preserved
+// (a partial fill must never delete).
+func TestSubscriberMergePartialSnapshotInsertUpdateOnly(t *testing.T) {
+	s := newTestSubscriber(t)
+	// Seed a prior good snapshot.
+	s.applySnapshot(map[string][]byte{
+		"keep/a": []byte("A"),
+		"upd/b":  []byte("B"),
+	})
+
+	var (
+		gotMu sync.Mutex
+		got   []UpdateEvent
+	)
+	s.OnUpdate(func(changes []UpdateEvent) {
+		gotMu.Lock()
+		defer gotMu.Unlock()
+		got = append(got, changes...)
+	})
+
+	// Partial salvage: upd/b changed, keep/a unchanged (no-op), new/c added.
+	// keep/a is intentionally re-supplied unchanged; new/c is new; the
+	// pre-existing keep/a must survive regardless.
+	s.mergePartialSnapshot(map[string][]byte{
+		"keep/a": []byte("A"),
+		"upd/b":  []byte("B2"),
+		"new/c":  []byte("C"),
+	})
+
+	gotMu.Lock()
+	paths := pathsOf(got)
+	gotMu.Unlock()
+	sort.Strings(paths)
+	if len(paths) != 2 || paths[0] != "new/c" || paths[1] != "upd/b" {
+		t.Fatalf("merge fired events for %v, want [new/c upd/b]", paths)
+	}
+
+	// Cache reflects the merge and preserves the untouched prior leaf.
+	if v, ok := s.Get("keep/a"); !ok || string(v) != "A" {
+		t.Errorf("keep/a = %q,%v; want A,true (preserved)", v, ok)
+	}
+	if v, ok := s.Get("upd/b"); !ok || string(v) != "B2" {
+		t.Errorf("upd/b = %q,%v; want B2,true (updated)", v, ok)
+	}
+	if v, ok := s.Get("new/c"); !ok || string(v) != "C" {
+		t.Errorf("new/c = %q,%v; want C,true (inserted)", v, ok)
+	}
+}
+
 func pathsOf(events []UpdateEvent) []string {
 	out := make([]string, 0, len(events))
 	for _, e := range events {

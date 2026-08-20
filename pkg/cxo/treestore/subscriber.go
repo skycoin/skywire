@@ -875,6 +875,18 @@ func (s *Subscriber) handleFillingBreaks(r *registry.Root, err error) {
 	if r.Pub != skycipher.PubKey(s.feedPK) {
 		return
 	}
+	// Best-effort partial-object salvage. CXO fills top-down and keeps
+	// whatever objects it fetched before the break (the filler doesn't roll
+	// the store back), so a truncated fill of a big/deep tree usually still
+	// has SOME leaves present. handleRootFilled never fires for a broken
+	// fill, so without this the subscriber cache stays empty (or stale) until
+	// a later fill completes end-to-end — the failure mode that leaves TPD's
+	// big serve-side feeds (all-transports, per-visor uptimes) permanently
+	// cache-missing over a flaky link. Walk the partially-filled tree,
+	// tolerating unfetched objects, and MERGE whatever leaves landed into the
+	// cache. This is the subscriber-side analog of the aggregator's
+	// recoverTransportListOnBreak (pkg/transport-discovery/cxoaggregator).
+	s.recoverPartialFill(r)
 	// Proactive recovery (the follow-up this hook's comment anticipated):
 	// ask the watchdog to re-Connect so the publisher re-pushes the Root and
 	// the fill retries, instead of waiting out the quiet threshold (~90s).
@@ -954,6 +966,93 @@ func (s *Subscriber) applySnapshot(snap map[string][]byte) {
 	}
 	if len(changes) > 0 {
 		cb(changes)
+	}
+}
+
+// recoverPartialFill is the OnFillingBreaks salvage path. It walks the
+// (partially filled) Root tree tolerantly — skipping any object the fill
+// never fetched instead of aborting on the first miss — and merges whatever
+// leaves ARE present into the cache. Used only to add/refresh leaves: it
+// never deletes (a leaf absent here may simply not have been fetched, not
+// removed by the publisher), so a partial fill can only improve the cache.
+func (s *Subscriber) recoverPartialFill(r *registry.Root) {
+	if r == nil || len(r.Refs) == 0 {
+		return
+	}
+	pack, err := s.cxoNode.Container().Pack(r, Registry)
+	if err != nil {
+		return
+	}
+	var rootNode TreeNode
+	if err := r.Refs[0].Value(pack, &rootNode); err != nil {
+		return // the root TreeNode object itself wasn't fetched before the break
+	}
+	recovered := make(map[string][]byte)
+	walkTreeBestEffort(pack, &rootNode, "", recovered)
+	if len(recovered) == 0 {
+		return
+	}
+	s.mergePartialSnapshot(recovered)
+}
+
+// mergePartialSnapshot merges recovered leaves into the cache (insert or
+// update only, never delete) and fires the change callback for the leaves
+// that actually changed. Unlike applySnapshot it keeps existing entries that
+// aren't in recovered, so a partial salvage never discards good data.
+func (s *Subscriber) mergePartialSnapshot(recovered map[string][]byte) {
+	s.mu.Lock()
+	if s.cache == nil {
+		s.cache = make(map[string][]byte)
+	}
+	var changes []UpdateEvent
+	cb := s.callback
+	prefixes := s.prefixes
+	for path, newVal := range recovered {
+		if old, had := s.cache[path]; had && bytesEqual(old, newVal) {
+			continue
+		}
+		s.cache[path] = newVal
+		if cb != nil && pathMatchesAny(path, prefixes) {
+			changes = append(changes, UpdateEvent{Path: path, Value: append([]byte(nil), newVal...)})
+		}
+	}
+	s.mu.Unlock()
+
+	if cb != nil && len(changes) > 0 {
+		cb(changes)
+	}
+}
+
+// walkTreeBestEffort is the fault-tolerant variant of walkTree used for
+// partial-fill salvage: a child whose index/sub/leaf object was never
+// fetched (its Value call errors) is simply skipped rather than aborting the
+// whole walk, so every leaf that DID land is still collected.
+func walkTreeBestEffort(pack registry.Pack, node *TreeNode, basePath string, out map[string][]byte) {
+	n, err := node.Children.Len(pack)
+	if err != nil {
+		return
+	}
+	for i := 0; i < n; i++ {
+		var entry TreeEntry
+		if _, err := node.Children.ValueByIndex(pack, i, &entry); err != nil {
+			continue // this child's index object wasn't fetched; skip it
+		}
+		fullPath := entry.Name
+		if basePath != "" {
+			fullPath = basePath + "/" + entry.Name
+		}
+		if len(entry.Leaf) > 0 {
+			out[fullPath] = append([]byte(nil), entry.Leaf...)
+			continue
+		}
+		if entry.Sub.Hash == (skycipher.SHA256{}) {
+			continue
+		}
+		var sub TreeNode
+		if err := entry.Sub.Value(pack, &sub); err != nil {
+			continue // sub-node object not fetched before the break; skip
+		}
+		walkTreeBestEffort(pack, &sub, fullPath, out)
 	}
 }
 
