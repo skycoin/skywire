@@ -77,9 +77,12 @@ var muxPlotCmd = &cobra.Command{
 
 Two sources:
 
-  (default) poll a running app's route group. Reads the same per-leg
-  telemetry the routing-policy on_tick ABI sees (RouteGroupMuxInfo) once
-  per --interval. Shows exactly the legs the app's route group has right now.
+  (default) watch a running app's route group. Reads the same per-leg
+  telemetry the routing-policy on_tick ABI sees (RouteGroupMuxInfo) over a
+  smooth gRPC server-stream (StreamRouteGroupMuxInfo), so it updates
+  continuously like --pk mode rather than choppily per --interval; --interval
+  sets the server-side sample cadence. Shows exactly the legs the app's route
+  group has right now. Falls back to the unary poll against an older visor.
 
   --pk <peer>  measure a controlled, self-driven mux route to a peer you
   control (StreamMuxBandwidth) — the reliable multi-leg demonstrator, since
@@ -125,7 +128,25 @@ Examples:
 		defer rpcClient.Close() //nolint:errcheck,gosec
 
 		muxPlotSubject = muxPlotApp
-		runMuxPlot(func() (any, error) { return rpcClient.RouteGroupMuxInfo(muxPlotApp) })
+		poll := func() (any, error) { return rpcClient.RouteGroupMuxInfo(muxPlotApp) }
+
+		// --tui stays on the unary-poll path: livetui drives its own
+		// interval Refresh loop (poll-shaped), so the blocking-Recv stream
+		// doesn't fit it. The smooth-stream win is for the default ANSI
+		// redraw below.
+		if muxPlotTUI {
+			runMuxPlot(poll)
+			return
+		}
+
+		// Default: consume the StreamRouteGroupMuxInfo server-stream so the
+		// plot updates smoothly/continuously (like --pk's StreamMuxBandwidth)
+		// instead of the choppy per-tick unary gob poll. If the stream RPC is
+		// unavailable (older visor / no gRPC surface) it returns false and we
+		// transparently fall back to the unary poll — same output, just choppy.
+		if !runMuxPlotInfoStream(cmd, poll) {
+			runMuxPlot(poll)
+		}
 	},
 }
 
@@ -308,6 +329,105 @@ func runMuxPlotStream(cmd *cobra.Command) {
 		default:
 		}
 	}
+}
+
+// runMuxPlotInfoStream drives the default (watch-a-running-app) mode over
+// the StreamRouteGroupMuxInfo server-stream — the smooth continuous
+// counterpart of runMuxPlot's per-tick unary poll. It blocks on
+// stream.Recv() and repaints each sample as it lands, so the chart tracks
+// the app's route group the way --pk mode tracks its ad-hoc route.
+//
+// Returns true once it has driven the stream (to EOF / ctrl+c / a mid-run
+// error). Returns FALSE without rendering when the stream is unavailable —
+// the gRPC endpoint won't connect, the RPC is unimplemented on an older
+// visor (first Recv errors before any sample), etc. — so the caller can
+// fall back to the unary poll. --interval sets the server-side sample
+// cadence (sample_interval_ns).
+func runMuxPlotInfoStream(cmd *cobra.Command, _ func() (any, error)) bool {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	client, err := rpcgrpc.NewPingClient(clirpc.Addr)
+	if err != nil {
+		// gRPC surface unreachable — let the caller poll instead.
+		return false
+	}
+	defer client.Close() //nolint:errcheck,gosec
+
+	stream, err := client.StreamRouteGroupMuxInfo(ctx, &rpcgrpc.StreamRouteGroupMuxInfoRequest{
+		AppName:          muxPlotApp,
+		SampleIntervalNs: muxPlotInterval.Nanoseconds(),
+	})
+	if err != nil {
+		return false
+	}
+
+	tracks := map[int]*legTrack{}
+	gotSample := false
+	for {
+		sample, recvErr := stream.Recv()
+		if recvErr != nil {
+			if recvErr == io.EOF || errors.Is(recvErr, context.Canceled) {
+				fmt.Print("\n")
+				return true
+			}
+			// A failure before the FIRST sample most likely means the RPC
+			// is unimplemented on an older visor (gRPC resolves the method
+			// lazily, so an absent handler surfaces here, not at open) —
+			// fall back to the unary poll rather than erroring out.
+			if !gotSample {
+				return false
+			}
+			fmt.Fprintf(os.Stderr, "\nstream recv: %v\n", recvErr)
+			return true
+		}
+		gotSample = true
+		// Mirror the poll path: render only the first (primary) route group,
+		// exactly as runMuxPlot consumes rgs[0]. An empty sample (app has no
+		// route group yet) leaves the last frame in place.
+		if rg, ok := firstMuxRouteGroup(sample); ok {
+			updateTracks(tracks, rg)
+			render(tracks)
+		}
+		select {
+		case <-ctx.Done():
+			fmt.Print("\n")
+			return true
+		default:
+		}
+	}
+}
+
+// firstMuxRouteGroup projects the first route group of a
+// RouteGroupMuxInfoSample into the CLI-side muxRouteGroupInfo the render
+// path (updateTracks) consumes — so the stream feeds exactly the same
+// track-update code the unary poll does. Returns false for an empty sample.
+func firstMuxRouteGroup(sample *rpcgrpc.RouteGroupMuxInfoSample) (muxRouteGroupInfo, bool) {
+	if sample == nil || len(sample.RouteGroups) == 0 {
+		return muxRouteGroupInfo{}, false
+	}
+	g := sample.RouteGroups[0]
+	rg := muxRouteGroupInfo{
+		MuxEnabled:  g.MuxEnabled,
+		SACKEnabled: g.SackEnabled,
+	}
+	for _, leg := range g.Legs {
+		rg.Legs = append(rg.Legs, muxLegInfo{
+			Index:       int(leg.RouteIndex),
+			TransportID: leg.TransportId,
+			TpType:      leg.TransportKind,
+			RemotePK:    leg.RemotePk,
+			LatencyMS:   leg.LatencyMs,
+			SentBytes:   leg.SentBytes,
+			SentPackets: leg.SentPackets,
+			RecvBytes:   leg.RecvBytes,
+			RecvPackets: leg.RecvPackets,
+			Retransmits: leg.Retransmits,
+			Alive:       leg.Alive,
+			Standby:     leg.Standby,
+		})
+	}
+	return rg, true
 }
 
 // updateTracksFromLegs feeds one StreamMuxBandwidth sample's per-leg breakdown

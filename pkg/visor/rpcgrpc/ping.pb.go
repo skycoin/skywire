@@ -7,11 +7,12 @@
 package rpcgrpc
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -4192,6 +4193,329 @@ func (x *MuxBandwidthError) GetMessage() string {
 	return ""
 }
 
+// StreamRouteGroupMuxInfoRequest configures a live route-group mux
+// telemetry stream for a running app. See StreamRouteGroupMuxInfo.
+type StreamRouteGroupMuxInfoRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// AppName scopes the telemetry to route groups tagged with this app
+	// (skysocks-client, vpn-client, ...). Empty returns every mux'd route
+	// group the visor has — matching the unary RouteGroupMuxInfo("").
+	AppName string `protobuf:"bytes,1,opt,name=app_name,json=appName,proto3" json:"app_name,omitempty"`
+	// SampleIntervalNs is how often a RouteGroupMuxInfoSample is emitted.
+	// 0 falls back to 500 ms; the handler floors it to a 100 ms minimum
+	// so a client can't spin the visor. Nanoseconds (proto convention
+	// used throughout this service).
+	SampleIntervalNs int64 `protobuf:"varint,2,opt,name=sample_interval_ns,json=sampleIntervalNs,proto3" json:"sample_interval_ns,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *StreamRouteGroupMuxInfoRequest) Reset() {
+	*x = StreamRouteGroupMuxInfoRequest{}
+	mi := &file_ping_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamRouteGroupMuxInfoRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamRouteGroupMuxInfoRequest) ProtoMessage() {}
+
+func (x *StreamRouteGroupMuxInfoRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamRouteGroupMuxInfoRequest.ProtoReflect.Descriptor instead.
+func (*StreamRouteGroupMuxInfoRequest) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *StreamRouteGroupMuxInfoRequest) GetAppName() string {
+	if x != nil {
+		return x.AppName
+	}
+	return ""
+}
+
+func (x *StreamRouteGroupMuxInfoRequest) GetSampleIntervalNs() int64 {
+	if x != nil {
+		return x.SampleIntervalNs
+	}
+	return 0
+}
+
+// RouteGroupMuxInfoSample is one snapshot of a running app's mux'd
+// route-group telemetry, emitted every sample_interval_ns. Mirrors the
+// []visor.MuxRouteGroupInfo the unary RouteGroupMuxInfo RPC returns.
+type RouteGroupMuxInfoSample struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// TimestampNs is server-side wall time at emit.
+	TimestampNs int64 `protobuf:"varint,1,opt,name=timestamp_ns,json=timestampNs,proto3" json:"timestamp_ns,omitempty"`
+	// RouteGroups is one entry per active route group tagged with the
+	// requested app. Empty when the app has no route group yet — the
+	// stream stays open and keeps sampling rather than erroring.
+	RouteGroups   []*RouteGroupMuxInfo `protobuf:"bytes,2,rep,name=route_groups,json=routeGroups,proto3" json:"route_groups,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RouteGroupMuxInfoSample) Reset() {
+	*x = RouteGroupMuxInfoSample{}
+	mi := &file_ping_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RouteGroupMuxInfoSample) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RouteGroupMuxInfoSample) ProtoMessage() {}
+
+func (x *RouteGroupMuxInfoSample) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RouteGroupMuxInfoSample.ProtoReflect.Descriptor instead.
+func (*RouteGroupMuxInfoSample) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *RouteGroupMuxInfoSample) GetTimestampNs() int64 {
+	if x != nil {
+		return x.TimestampNs
+	}
+	return 0
+}
+
+func (x *RouteGroupMuxInfoSample) GetRouteGroups() []*RouteGroupMuxInfo {
+	if x != nil {
+		return x.RouteGroups
+	}
+	return nil
+}
+
+// RouteGroupMuxInfo is one route group's mux state plus its per-leg
+// counters. Field-for-field mirror of visor.MuxRouteGroupInfo (minus
+// the descriptor, which the plot consumer does not render).
+type RouteGroupMuxInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MuxEnabled    bool                   `protobuf:"varint,1,opt,name=mux_enabled,json=muxEnabled,proto3" json:"mux_enabled,omitempty"`
+	SackEnabled   bool                   `protobuf:"varint,2,opt,name=sack_enabled,json=sackEnabled,proto3" json:"sack_enabled,omitempty"`
+	Legs          []*RouteGroupMuxLeg    `protobuf:"bytes,3,rep,name=legs,proto3" json:"legs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RouteGroupMuxInfo) Reset() {
+	*x = RouteGroupMuxInfo{}
+	mi := &file_ping_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RouteGroupMuxInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RouteGroupMuxInfo) ProtoMessage() {}
+
+func (x *RouteGroupMuxInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RouteGroupMuxInfo.ProtoReflect.Descriptor instead.
+func (*RouteGroupMuxInfo) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *RouteGroupMuxInfo) GetMuxEnabled() bool {
+	if x != nil {
+		return x.MuxEnabled
+	}
+	return false
+}
+
+func (x *RouteGroupMuxInfo) GetSackEnabled() bool {
+	if x != nil {
+		return x.SackEnabled
+	}
+	return false
+}
+
+func (x *RouteGroupMuxInfo) GetLegs() []*RouteGroupMuxLeg {
+	if x != nil {
+		return x.Legs
+	}
+	return nil
+}
+
+// RouteGroupMuxLeg is one leg (route) within a mux'd group — mirror of
+// visor.MuxLegInfo.
+type RouteGroupMuxLeg struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// RouteIndex is the leg's stable index within the group
+	// (visor.MuxLegInfo.Index).
+	RouteIndex  int32  `protobuf:"varint,1,opt,name=route_index,json=routeIndex,proto3" json:"route_index,omitempty"`
+	TransportId string `protobuf:"bytes,2,opt,name=transport_id,json=transportId,proto3" json:"transport_id,omitempty"`
+	// TransportKind is the leg's transport type (stcpr, sudph, dmsg, ...)
+	// — visor.MuxLegInfo.TpType.
+	TransportKind string  `protobuf:"bytes,3,opt,name=transport_kind,json=transportKind,proto3" json:"transport_kind,omitempty"`
+	RemotePk      string  `protobuf:"bytes,4,opt,name=remote_pk,json=remotePk,proto3" json:"remote_pk,omitempty"`
+	LatencyMs     float64 `protobuf:"fixed64,5,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
+	SentBytes     uint64  `protobuf:"varint,6,opt,name=sent_bytes,json=sentBytes,proto3" json:"sent_bytes,omitempty"`
+	SentPackets   uint64  `protobuf:"varint,7,opt,name=sent_packets,json=sentPackets,proto3" json:"sent_packets,omitempty"`
+	RecvBytes     uint64  `protobuf:"varint,8,opt,name=recv_bytes,json=recvBytes,proto3" json:"recv_bytes,omitempty"`
+	RecvPackets   uint64  `protobuf:"varint,9,opt,name=recv_packets,json=recvPackets,proto3" json:"recv_packets,omitempty"`
+	Retransmits   uint64  `protobuf:"varint,10,opt,name=retransmits,proto3" json:"retransmits,omitempty"`
+	// Alive is false once the leg's transport is closed; Standby is true
+	// for a warm standby (rules kept, not sending) — the leg's gate_state.
+	Alive         bool `protobuf:"varint,11,opt,name=alive,proto3" json:"alive,omitempty"`
+	Standby       bool `protobuf:"varint,12,opt,name=standby,proto3" json:"standby,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RouteGroupMuxLeg) Reset() {
+	*x = RouteGroupMuxLeg{}
+	mi := &file_ping_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RouteGroupMuxLeg) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RouteGroupMuxLeg) ProtoMessage() {}
+
+func (x *RouteGroupMuxLeg) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RouteGroupMuxLeg.ProtoReflect.Descriptor instead.
+func (*RouteGroupMuxLeg) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *RouteGroupMuxLeg) GetRouteIndex() int32 {
+	if x != nil {
+		return x.RouteIndex
+	}
+	return 0
+}
+
+func (x *RouteGroupMuxLeg) GetTransportId() string {
+	if x != nil {
+		return x.TransportId
+	}
+	return ""
+}
+
+func (x *RouteGroupMuxLeg) GetTransportKind() string {
+	if x != nil {
+		return x.TransportKind
+	}
+	return ""
+}
+
+func (x *RouteGroupMuxLeg) GetRemotePk() string {
+	if x != nil {
+		return x.RemotePk
+	}
+	return ""
+}
+
+func (x *RouteGroupMuxLeg) GetLatencyMs() float64 {
+	if x != nil {
+		return x.LatencyMs
+	}
+	return 0
+}
+
+func (x *RouteGroupMuxLeg) GetSentBytes() uint64 {
+	if x != nil {
+		return x.SentBytes
+	}
+	return 0
+}
+
+func (x *RouteGroupMuxLeg) GetSentPackets() uint64 {
+	if x != nil {
+		return x.SentPackets
+	}
+	return 0
+}
+
+func (x *RouteGroupMuxLeg) GetRecvBytes() uint64 {
+	if x != nil {
+		return x.RecvBytes
+	}
+	return 0
+}
+
+func (x *RouteGroupMuxLeg) GetRecvPackets() uint64 {
+	if x != nil {
+		return x.RecvPackets
+	}
+	return 0
+}
+
+func (x *RouteGroupMuxLeg) GetRetransmits() uint64 {
+	if x != nil {
+		return x.Retransmits
+	}
+	return 0
+}
+
+func (x *RouteGroupMuxLeg) GetAlive() bool {
+	if x != nil {
+		return x.Alive
+	}
+	return false
+}
+
+func (x *RouteGroupMuxLeg) GetStandby() bool {
+	if x != nil {
+		return x.Standby
+	}
+	return false
+}
+
 var File_ping_proto protoreflect.FileDescriptor
 
 const file_ping_proto_rawDesc = "" +
@@ -4581,7 +4905,36 @@ const file_ping_proto_rawDesc = "" +
 	"\x14idle_probe_jitter_ns\x18\x16 \x01(\x03R\x11idleProbeJitterNs\"A\n" +
 	"\x11MuxBandwidthError\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage2\xdc\a\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"i\n" +
+	"\x1eStreamRouteGroupMuxInfoRequest\x12\x19\n" +
+	"\bapp_name\x18\x01 \x01(\tR\aappName\x12,\n" +
+	"\x12sample_interval_ns\x18\x02 \x01(\x03R\x10sampleIntervalNs\"{\n" +
+	"\x17RouteGroupMuxInfoSample\x12!\n" +
+	"\ftimestamp_ns\x18\x01 \x01(\x03R\vtimestampNs\x12=\n" +
+	"\froute_groups\x18\x02 \x03(\v2\x1a.rpcgrpc.RouteGroupMuxInfoR\vrouteGroups\"\x86\x01\n" +
+	"\x11RouteGroupMuxInfo\x12\x1f\n" +
+	"\vmux_enabled\x18\x01 \x01(\bR\n" +
+	"muxEnabled\x12!\n" +
+	"\fsack_enabled\x18\x02 \x01(\bR\vsackEnabled\x12-\n" +
+	"\x04legs\x18\x03 \x03(\v2\x19.rpcgrpc.RouteGroupMuxLegR\x04legs\"\x8f\x03\n" +
+	"\x10RouteGroupMuxLeg\x12\x1f\n" +
+	"\vroute_index\x18\x01 \x01(\x05R\n" +
+	"routeIndex\x12!\n" +
+	"\ftransport_id\x18\x02 \x01(\tR\vtransportId\x12%\n" +
+	"\x0etransport_kind\x18\x03 \x01(\tR\rtransportKind\x12\x1b\n" +
+	"\tremote_pk\x18\x04 \x01(\tR\bremotePk\x12\x1d\n" +
+	"\n" +
+	"latency_ms\x18\x05 \x01(\x01R\tlatencyMs\x12\x1d\n" +
+	"\n" +
+	"sent_bytes\x18\x06 \x01(\x04R\tsentBytes\x12!\n" +
+	"\fsent_packets\x18\a \x01(\x04R\vsentPackets\x12\x1d\n" +
+	"\n" +
+	"recv_bytes\x18\b \x01(\x04R\trecvBytes\x12!\n" +
+	"\frecv_packets\x18\t \x01(\x04R\vrecvPackets\x12 \n" +
+	"\vretransmits\x18\n" +
+	" \x01(\x04R\vretransmits\x12\x14\n" +
+	"\x05alive\x18\v \x01(\bR\x05alive\x12\x18\n" +
+	"\astandby\x18\f \x01(\bR\astandby2\xc4\b\n" +
 	"\vPingService\x129\n" +
 	"\n" +
 	"StreamPing\x12\x14.rpcgrpc.PingRequest\x1a\x13.rpcgrpc.PingResult0\x01\x12=\n" +
@@ -4596,7 +4949,8 @@ const file_ping_proto_rawDesc = "" +
 	"\x10StreamCalcRoutes\x12\x1a.rpcgrpc.CalcRoutesRequest\x1a\x12.rpcgrpc.CalcRoute0\x01\x12R\n" +
 	"\x13StreamGroupMessages\x12\x1d.rpcgrpc.GroupMessagesRequest\x1a\x1a.rpcgrpc.GroupMessageEvent0\x01\x12D\n" +
 	"\x0eStreamPingTree\x12\x18.rpcgrpc.PingTreeRequest\x1a\x16.rpcgrpc.PingTreeEvent0\x01\x12P\n" +
-	"\x12StreamMuxBandwidth\x12\x1c.rpcgrpc.MuxBandwidthRequest\x1a\x1a.rpcgrpc.MuxBandwidthEvent0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
+	"\x12StreamMuxBandwidth\x12\x1c.rpcgrpc.MuxBandwidthRequest\x1a\x1a.rpcgrpc.MuxBandwidthEvent0\x01\x12f\n" +
+	"\x17StreamRouteGroupMuxInfo\x12'.rpcgrpc.StreamRouteGroupMuxInfoRequest\x1a .rpcgrpc.RouteGroupMuxInfoSample0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
 
 var (
 	file_ping_proto_rawDescOnce sync.Once
@@ -4610,51 +4964,55 @@ func file_ping_proto_rawDescGZIP() []byte {
 	return file_ping_proto_rawDescData
 }
 
-var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
+var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
 var file_ping_proto_goTypes = []any{
-	(*PingRequest)(nil),              // 0: rpcgrpc.PingRequest
-	(*PingResult)(nil),               // 1: rpcgrpc.PingResult
-	(*DmsgServersRequest)(nil),       // 2: rpcgrpc.DmsgServersRequest
-	(*DmsgServersResponse)(nil),      // 3: rpcgrpc.DmsgServersResponse
-	(*RouteHop)(nil),                 // 4: rpcgrpc.RouteHop
-	(*BandwidthRequest)(nil),         // 5: rpcgrpc.BandwidthRequest
-	(*BandwidthProgress)(nil),        // 6: rpcgrpc.BandwidthProgress
-	(*SystemStatsRequest)(nil),       // 7: rpcgrpc.SystemStatsRequest
-	(*RemoteSystemStatsRequest)(nil), // 8: rpcgrpc.RemoteSystemStatsRequest
-	(*SystemStats)(nil),              // 9: rpcgrpc.SystemStats
-	(*HostInfo)(nil),                 // 10: rpcgrpc.HostInfo
-	(*CpuStat)(nil),                  // 11: rpcgrpc.CpuStat
-	(*MemoryStat)(nil),               // 12: rpcgrpc.MemoryStat
-	(*DiskStat)(nil),                 // 13: rpcgrpc.DiskStat
-	(*NetworkStat)(nil),              // 14: rpcgrpc.NetworkStat
-	(*TempStat)(nil),                 // 15: rpcgrpc.TempStat
-	(*AppLogStreamRequest)(nil),      // 16: rpcgrpc.AppLogStreamRequest
-	(*AppLogEntry)(nil),              // 17: rpcgrpc.AppLogEntry
-	(*CalcRoutesRequest)(nil),        // 18: rpcgrpc.CalcRoutesRequest
-	(*CalcRoute)(nil),                // 19: rpcgrpc.CalcRoute
-	(*CalcHop)(nil),                  // 20: rpcgrpc.CalcHop
-	(*GroupMessagesRequest)(nil),     // 21: rpcgrpc.GroupMessagesRequest
-	(*GroupMessageEvent)(nil),        // 22: rpcgrpc.GroupMessageEvent
-	(*ProcessStat)(nil),              // 23: rpcgrpc.ProcessStat
-	(*PingTreeRequest)(nil),          // 24: rpcgrpc.PingTreeRequest
-	(*PingTreeEvent)(nil),            // 25: rpcgrpc.PingTreeEvent
-	(*PingTreeDiscovered)(nil),       // 26: rpcgrpc.PingTreeDiscovered
-	(*PingTreeResult)(nil),           // 27: rpcgrpc.PingTreeResult
-	(*PingTreeLevelDone)(nil),        // 28: rpcgrpc.PingTreeLevelDone
-	(*PingTreeRunDone)(nil),          // 29: rpcgrpc.PingTreeRunDone
-	(*PingTreeStatusUpdate)(nil),     // 30: rpcgrpc.PingTreeStatusUpdate
-	(*PingTreeServerError)(nil),      // 31: rpcgrpc.PingTreeServerError
-	(*MuxBandwidthRequest)(nil),      // 32: rpcgrpc.MuxBandwidthRequest
-	(*MuxBandwidthEvent)(nil),        // 33: rpcgrpc.MuxBandwidthEvent
-	(*MuxLegLifecycle)(nil),          // 34: rpcgrpc.MuxLegLifecycle
-	(*MuxRouteEstablished)(nil),      // 35: rpcgrpc.MuxRouteEstablished
-	(*MuxRouteFailure)(nil),          // 36: rpcgrpc.MuxRouteFailure
-	(*MuxBandwidthSample)(nil),       // 37: rpcgrpc.MuxBandwidthSample
-	(*MuxLegSample)(nil),             // 38: rpcgrpc.MuxLegSample
-	(*MuxRttProbe)(nil),              // 39: rpcgrpc.MuxRttProbe
-	(*MuxBandwidthDone)(nil),         // 40: rpcgrpc.MuxBandwidthDone
-	(*MuxBandwidthError)(nil),        // 41: rpcgrpc.MuxBandwidthError
-	nil,                              // 42: rpcgrpc.AppLogEntry.FieldsEntry
+	(*PingRequest)(nil),                    // 0: rpcgrpc.PingRequest
+	(*PingResult)(nil),                     // 1: rpcgrpc.PingResult
+	(*DmsgServersRequest)(nil),             // 2: rpcgrpc.DmsgServersRequest
+	(*DmsgServersResponse)(nil),            // 3: rpcgrpc.DmsgServersResponse
+	(*RouteHop)(nil),                       // 4: rpcgrpc.RouteHop
+	(*BandwidthRequest)(nil),               // 5: rpcgrpc.BandwidthRequest
+	(*BandwidthProgress)(nil),              // 6: rpcgrpc.BandwidthProgress
+	(*SystemStatsRequest)(nil),             // 7: rpcgrpc.SystemStatsRequest
+	(*RemoteSystemStatsRequest)(nil),       // 8: rpcgrpc.RemoteSystemStatsRequest
+	(*SystemStats)(nil),                    // 9: rpcgrpc.SystemStats
+	(*HostInfo)(nil),                       // 10: rpcgrpc.HostInfo
+	(*CpuStat)(nil),                        // 11: rpcgrpc.CpuStat
+	(*MemoryStat)(nil),                     // 12: rpcgrpc.MemoryStat
+	(*DiskStat)(nil),                       // 13: rpcgrpc.DiskStat
+	(*NetworkStat)(nil),                    // 14: rpcgrpc.NetworkStat
+	(*TempStat)(nil),                       // 15: rpcgrpc.TempStat
+	(*AppLogStreamRequest)(nil),            // 16: rpcgrpc.AppLogStreamRequest
+	(*AppLogEntry)(nil),                    // 17: rpcgrpc.AppLogEntry
+	(*CalcRoutesRequest)(nil),              // 18: rpcgrpc.CalcRoutesRequest
+	(*CalcRoute)(nil),                      // 19: rpcgrpc.CalcRoute
+	(*CalcHop)(nil),                        // 20: rpcgrpc.CalcHop
+	(*GroupMessagesRequest)(nil),           // 21: rpcgrpc.GroupMessagesRequest
+	(*GroupMessageEvent)(nil),              // 22: rpcgrpc.GroupMessageEvent
+	(*ProcessStat)(nil),                    // 23: rpcgrpc.ProcessStat
+	(*PingTreeRequest)(nil),                // 24: rpcgrpc.PingTreeRequest
+	(*PingTreeEvent)(nil),                  // 25: rpcgrpc.PingTreeEvent
+	(*PingTreeDiscovered)(nil),             // 26: rpcgrpc.PingTreeDiscovered
+	(*PingTreeResult)(nil),                 // 27: rpcgrpc.PingTreeResult
+	(*PingTreeLevelDone)(nil),              // 28: rpcgrpc.PingTreeLevelDone
+	(*PingTreeRunDone)(nil),                // 29: rpcgrpc.PingTreeRunDone
+	(*PingTreeStatusUpdate)(nil),           // 30: rpcgrpc.PingTreeStatusUpdate
+	(*PingTreeServerError)(nil),            // 31: rpcgrpc.PingTreeServerError
+	(*MuxBandwidthRequest)(nil),            // 32: rpcgrpc.MuxBandwidthRequest
+	(*MuxBandwidthEvent)(nil),              // 33: rpcgrpc.MuxBandwidthEvent
+	(*MuxLegLifecycle)(nil),                // 34: rpcgrpc.MuxLegLifecycle
+	(*MuxRouteEstablished)(nil),            // 35: rpcgrpc.MuxRouteEstablished
+	(*MuxRouteFailure)(nil),                // 36: rpcgrpc.MuxRouteFailure
+	(*MuxBandwidthSample)(nil),             // 37: rpcgrpc.MuxBandwidthSample
+	(*MuxLegSample)(nil),                   // 38: rpcgrpc.MuxLegSample
+	(*MuxRttProbe)(nil),                    // 39: rpcgrpc.MuxRttProbe
+	(*MuxBandwidthDone)(nil),               // 40: rpcgrpc.MuxBandwidthDone
+	(*MuxBandwidthError)(nil),              // 41: rpcgrpc.MuxBandwidthError
+	(*StreamRouteGroupMuxInfoRequest)(nil), // 42: rpcgrpc.StreamRouteGroupMuxInfoRequest
+	(*RouteGroupMuxInfoSample)(nil),        // 43: rpcgrpc.RouteGroupMuxInfoSample
+	(*RouteGroupMuxInfo)(nil),              // 44: rpcgrpc.RouteGroupMuxInfo
+	(*RouteGroupMuxLeg)(nil),               // 45: rpcgrpc.RouteGroupMuxLeg
+	nil,                                    // 46: rpcgrpc.AppLogEntry.FieldsEntry
 }
 var file_ping_proto_depIdxs = []int32{
 	4,  // 0: rpcgrpc.PingRequest.forward_hops:type_name -> rpcgrpc.RouteHop
@@ -4668,7 +5026,7 @@ var file_ping_proto_depIdxs = []int32{
 	14, // 8: rpcgrpc.SystemStats.network:type_name -> rpcgrpc.NetworkStat
 	15, // 9: rpcgrpc.SystemStats.temps:type_name -> rpcgrpc.TempStat
 	23, // 10: rpcgrpc.SystemStats.processes:type_name -> rpcgrpc.ProcessStat
-	42, // 11: rpcgrpc.AppLogEntry.fields:type_name -> rpcgrpc.AppLogEntry.FieldsEntry
+	46, // 11: rpcgrpc.AppLogEntry.fields:type_name -> rpcgrpc.AppLogEntry.FieldsEntry
 	20, // 12: rpcgrpc.CalcRoute.hops:type_name -> rpcgrpc.CalcHop
 	26, // 13: rpcgrpc.PingTreeEvent.discovered:type_name -> rpcgrpc.PingTreeDiscovered
 	27, // 14: rpcgrpc.PingTreeEvent.ping_result:type_name -> rpcgrpc.PingTreeResult
@@ -4686,37 +5044,41 @@ var file_ping_proto_depIdxs = []int32{
 	34, // 26: rpcgrpc.MuxBandwidthEvent.leg_lifecycle:type_name -> rpcgrpc.MuxLegLifecycle
 	4,  // 27: rpcgrpc.MuxRouteEstablished.hops:type_name -> rpcgrpc.RouteHop
 	38, // 28: rpcgrpc.MuxBandwidthSample.legs:type_name -> rpcgrpc.MuxLegSample
-	0,  // 29: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
-	0,  // 30: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
-	5,  // 31: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	5,  // 32: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	2,  // 33: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
-	7,  // 34: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
-	7,  // 35: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
-	8,  // 36: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
-	16, // 37: rpcgrpc.PingService.StreamAppLogs:input_type -> rpcgrpc.AppLogStreamRequest
-	18, // 38: rpcgrpc.PingService.StreamCalcRoutes:input_type -> rpcgrpc.CalcRoutesRequest
-	21, // 39: rpcgrpc.PingService.StreamGroupMessages:input_type -> rpcgrpc.GroupMessagesRequest
-	24, // 40: rpcgrpc.PingService.StreamPingTree:input_type -> rpcgrpc.PingTreeRequest
-	32, // 41: rpcgrpc.PingService.StreamMuxBandwidth:input_type -> rpcgrpc.MuxBandwidthRequest
-	1,  // 42: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
-	1,  // 43: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
-	6,  // 44: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	6,  // 45: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	3,  // 46: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
-	9,  // 47: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 48: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 49: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
-	17, // 50: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
-	19, // 51: rpcgrpc.PingService.StreamCalcRoutes:output_type -> rpcgrpc.CalcRoute
-	22, // 52: rpcgrpc.PingService.StreamGroupMessages:output_type -> rpcgrpc.GroupMessageEvent
-	25, // 53: rpcgrpc.PingService.StreamPingTree:output_type -> rpcgrpc.PingTreeEvent
-	33, // 54: rpcgrpc.PingService.StreamMuxBandwidth:output_type -> rpcgrpc.MuxBandwidthEvent
-	42, // [42:55] is the sub-list for method output_type
-	29, // [29:42] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	44, // 29: rpcgrpc.RouteGroupMuxInfoSample.route_groups:type_name -> rpcgrpc.RouteGroupMuxInfo
+	45, // 30: rpcgrpc.RouteGroupMuxInfo.legs:type_name -> rpcgrpc.RouteGroupMuxLeg
+	0,  // 31: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
+	0,  // 32: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
+	5,  // 33: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	5,  // 34: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	2,  // 35: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
+	7,  // 36: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	7,  // 37: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	8,  // 38: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
+	16, // 39: rpcgrpc.PingService.StreamAppLogs:input_type -> rpcgrpc.AppLogStreamRequest
+	18, // 40: rpcgrpc.PingService.StreamCalcRoutes:input_type -> rpcgrpc.CalcRoutesRequest
+	21, // 41: rpcgrpc.PingService.StreamGroupMessages:input_type -> rpcgrpc.GroupMessagesRequest
+	24, // 42: rpcgrpc.PingService.StreamPingTree:input_type -> rpcgrpc.PingTreeRequest
+	32, // 43: rpcgrpc.PingService.StreamMuxBandwidth:input_type -> rpcgrpc.MuxBandwidthRequest
+	42, // 44: rpcgrpc.PingService.StreamRouteGroupMuxInfo:input_type -> rpcgrpc.StreamRouteGroupMuxInfoRequest
+	1,  // 45: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
+	1,  // 46: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
+	6,  // 47: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	6,  // 48: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	3,  // 49: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
+	9,  // 50: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 51: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 52: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
+	17, // 53: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
+	19, // 54: rpcgrpc.PingService.StreamCalcRoutes:output_type -> rpcgrpc.CalcRoute
+	22, // 55: rpcgrpc.PingService.StreamGroupMessages:output_type -> rpcgrpc.GroupMessageEvent
+	25, // 56: rpcgrpc.PingService.StreamPingTree:output_type -> rpcgrpc.PingTreeEvent
+	33, // 57: rpcgrpc.PingService.StreamMuxBandwidth:output_type -> rpcgrpc.MuxBandwidthEvent
+	43, // 58: rpcgrpc.PingService.StreamRouteGroupMuxInfo:output_type -> rpcgrpc.RouteGroupMuxInfoSample
+	45, // [45:59] is the sub-list for method output_type
+	31, // [31:45] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_ping_proto_init() }
@@ -4747,7 +5109,7 @@ func file_ping_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ping_proto_rawDesc), len(file_ping_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   43,
+			NumMessages:   47,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

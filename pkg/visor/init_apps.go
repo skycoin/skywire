@@ -512,6 +512,44 @@ func (a *visorPingAdapter) GetTransportLatencyByRemotePK(remotePK cipher.PubKey)
 	return a.v.GetTransportLatencyByRemotePK(remotePK)
 }
 
+// RouteGroupMuxInfo crosses the rpcgrpc → visor boundary by transcribing
+// the visor's []MuxRouteGroupInfo into the rpcgrpc-local mirror slice.
+// Powers the StreamRouteGroupMuxInfo server-stream (smooth 'cli proxy mux
+// plot' telemetry). The rpcgrpc-side structs exist only to keep that
+// package free of pkg/visor imports.
+func (a *visorPingAdapter) RouteGroupMuxInfo(appName string) ([]rpcgrpc.RouteGroupMuxInfoData, error) {
+	infos, err := a.v.RouteGroupMuxInfo(appName)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]rpcgrpc.RouteGroupMuxInfoData, 0, len(infos))
+	for _, info := range infos {
+		g := rpcgrpc.RouteGroupMuxInfoData{
+			MuxEnabled:  info.MuxEnabled,
+			SACKEnabled: info.SACKEnabled,
+			Legs:        make([]rpcgrpc.RouteGroupMuxLegData, 0, len(info.Legs)),
+		}
+		for _, leg := range info.Legs {
+			g.Legs = append(g.Legs, rpcgrpc.RouteGroupMuxLegData{
+				Index:       leg.Index,
+				TransportID: leg.TransportID,
+				TpType:      leg.TpType,
+				RemotePK:    leg.RemotePK,
+				LatencyMS:   leg.LatencyMS,
+				SentBytes:   leg.SentBytes,
+				SentPackets: leg.SentPackets,
+				RecvBytes:   leg.RecvBytes,
+				RecvPackets: leg.RecvPackets,
+				Retransmits: leg.Retransmits,
+				Alive:       leg.Alive,
+				Standby:     leg.Standby,
+			})
+		}
+		out = append(out, g)
+	}
+	return out, nil
+}
+
 func (a *visorPingAdapter) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
 	return a.v.DialDmsgRPC(pk)
 }
