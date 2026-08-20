@@ -1,0 +1,69 @@
+# Module-mode integrity — catches the class of breakage that strands the fleet.
+#
+# The auto-updater (skywire-autoupdate: /usr/bin/skywire-update) installs new
+# builds with `go install github.com/skycoin/skywire@<ref>` in MODULE mode
+# (no vendor). That path VERIFIES go.sum and resolves every dependency from its
+# source. The rest of CI (test.yml) builds `-mod=vendor`, which uses the checked-
+# in vendor/ tree and does NOT verify go.sum against the module sources — so a
+# go.sum inconsistency, a missing transitive sum entry, an unfetchable/renamed
+# dependency, or a transitive `go`/`toolchain` bump can pass all of CI yet break
+# `skywire-update` on EVERY host, silently stranding the whole fleet on the last
+# good commit (observed 2026-08-20: fleet stuck for hours while CI was green).
+#
+# This job reproduces the updater's module-mode path so that class of regression
+# fails CI here instead of in production. It is deliberately small and fast
+# (verify + a single module-mode build of the main binary) and independent of
+# the flaky e2e job.
+name: Module Integrity
+
+on:
+  pull_request:
+  push:
+    branches: [develop, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  module-mode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      # A missing/wrong go.sum entry fails this instantly — the exact failure a
+      # vendored build never sees.
+      - name: go mod verify
+        run: go mod verify
+
+      # Build the main binary in MODULE mode, resolving deps from source like the
+      # updater does. GOFLAGS is cleared so a repo-level -mod=vendor default can't
+      # mask a module-mode-only break; GOPROXY mirrors a host's reach.
+      - name: Module-mode build (mirrors skywire-update's `go install @ref`)
+        env:
+          GOFLAGS: ""
+          GOPROXY: "proxy.golang.org,direct"
+        run: go build -mod=mod -o /dev/null ./cmd/skywire
+
+      # tidy must be a no-op on a healthy tree; drift here means go.mod/go.sum
+      # don't match the actual imports (what `go install @ref` resolves against).
+      - name: go.mod / go.sum are tidy
+        env:
+          GOFLAGS: ""
+        run: |
+          cp go.mod go.mod.orig; cp go.sum go.sum.orig
+          go mod tidy
+          if ! diff -q go.mod go.mod.orig >/dev/null || ! diff -q go.sum go.sum.orig >/dev/null; then
+            echo "::error::go.mod/go.sum are not tidy — 'go mod tidy' changed them. Run 'go mod tidy && go mod vendor' and commit."
+            diff go.mod.orig go.mod || true
+            diff go.sum.orig go.sum || true
+            exit 1
+          fi
