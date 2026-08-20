@@ -33,6 +33,7 @@ const (
 	PingService_StreamGroupMessages_FullMethodName     = "/rpcgrpc.PingService/StreamGroupMessages"
 	PingService_StreamPingTree_FullMethodName          = "/rpcgrpc.PingService/StreamPingTree"
 	PingService_StreamMuxBandwidth_FullMethodName      = "/rpcgrpc.PingService/StreamMuxBandwidth"
+	PingService_StreamRouteGroupMuxInfo_FullMethodName = "/rpcgrpc.PingService/StreamRouteGroupMuxInfo"
 )
 
 // PingServiceClient is the client API for PingService service.
@@ -127,6 +128,17 @@ type PingServiceClient interface {
 	// server-side bandwidth-pump, events stream as they happen,
 	// ctx.Done() at every iteration, bounded internal channel.
 	StreamMuxBandwidth(ctx context.Context, in *MuxBandwidthRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MuxBandwidthEvent], error)
+	// StreamRouteGroupMuxInfo streams a running app's per-leg mux
+	// telemetry on a fixed cadence — the server-streaming equivalent of
+	// the unary RouteGroupMuxInfo net/rpc call that 'cli proxy mux plot'
+	// (default, watch-a-running-app mode) polls. Lets that plot update
+	// smoothly/continuously like the --pk StreamMuxBandwidth path,
+	// instead of the choppy 1 Hz unary gob poll. Each sample carries the
+	// same []visor.MuxRouteGroupInfo per-leg breakdown the unary RPC
+	// returns. The handler never errors the stream on a transient absent
+	// route group — it emits an empty sample and keeps sampling, so the
+	// plot renders an empty frame until the app dials.
+	StreamRouteGroupMuxInfo(ctx context.Context, in *StreamRouteGroupMuxInfoRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RouteGroupMuxInfoSample], error)
 }
 
 type pingServiceClient struct {
@@ -366,6 +378,25 @@ func (c *pingServiceClient) StreamMuxBandwidth(ctx context.Context, in *MuxBandw
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamMuxBandwidthClient = grpc.ServerStreamingClient[MuxBandwidthEvent]
 
+func (c *pingServiceClient) StreamRouteGroupMuxInfo(ctx context.Context, in *StreamRouteGroupMuxInfoRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RouteGroupMuxInfoSample], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PingService_ServiceDesc.Streams[11], PingService_StreamRouteGroupMuxInfo_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamRouteGroupMuxInfoRequest, RouteGroupMuxInfoSample]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamRouteGroupMuxInfoClient = grpc.ServerStreamingClient[RouteGroupMuxInfoSample]
+
 // PingServiceServer is the server API for PingService service.
 // All implementations must embed UnimplementedPingServiceServer
 // for forward compatibility.
@@ -458,6 +489,17 @@ type PingServiceServer interface {
 	// server-side bandwidth-pump, events stream as they happen,
 	// ctx.Done() at every iteration, bounded internal channel.
 	StreamMuxBandwidth(*MuxBandwidthRequest, grpc.ServerStreamingServer[MuxBandwidthEvent]) error
+	// StreamRouteGroupMuxInfo streams a running app's per-leg mux
+	// telemetry on a fixed cadence — the server-streaming equivalent of
+	// the unary RouteGroupMuxInfo net/rpc call that 'cli proxy mux plot'
+	// (default, watch-a-running-app mode) polls. Lets that plot update
+	// smoothly/continuously like the --pk StreamMuxBandwidth path,
+	// instead of the choppy 1 Hz unary gob poll. Each sample carries the
+	// same []visor.MuxRouteGroupInfo per-leg breakdown the unary RPC
+	// returns. The handler never errors the stream on a transient absent
+	// route group — it emits an empty sample and keeps sampling, so the
+	// plot renders an empty frame until the app dials.
+	StreamRouteGroupMuxInfo(*StreamRouteGroupMuxInfoRequest, grpc.ServerStreamingServer[RouteGroupMuxInfoSample]) error
 	mustEmbedUnimplementedPingServiceServer()
 }
 
@@ -506,6 +548,9 @@ func (UnimplementedPingServiceServer) StreamPingTree(*PingTreeRequest, grpc.Serv
 }
 func (UnimplementedPingServiceServer) StreamMuxBandwidth(*MuxBandwidthRequest, grpc.ServerStreamingServer[MuxBandwidthEvent]) error {
 	return status.Error(codes.Unimplemented, "method StreamMuxBandwidth not implemented")
+}
+func (UnimplementedPingServiceServer) StreamRouteGroupMuxInfo(*StreamRouteGroupMuxInfoRequest, grpc.ServerStreamingServer[RouteGroupMuxInfoSample]) error {
+	return status.Error(codes.Unimplemented, "method StreamRouteGroupMuxInfo not implemented")
 }
 func (UnimplementedPingServiceServer) mustEmbedUnimplementedPingServiceServer() {}
 func (UnimplementedPingServiceServer) testEmbeddedByValue()                     {}
@@ -685,6 +730,17 @@ func _PingService_StreamMuxBandwidth_Handler(srv interface{}, stream grpc.Server
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamMuxBandwidthServer = grpc.ServerStreamingServer[MuxBandwidthEvent]
 
+func _PingService_StreamRouteGroupMuxInfo_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamRouteGroupMuxInfoRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PingServiceServer).StreamRouteGroupMuxInfo(m, &grpc.GenericServerStream[StreamRouteGroupMuxInfoRequest, RouteGroupMuxInfoSample]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamRouteGroupMuxInfoServer = grpc.ServerStreamingServer[RouteGroupMuxInfoSample]
+
 // PingService_ServiceDesc is the grpc.ServiceDesc for PingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -755,6 +811,11 @@ var PingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamMuxBandwidth",
 			Handler:       _PingService_StreamMuxBandwidth_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamRouteGroupMuxInfo",
+			Handler:       _PingService_StreamRouteGroupMuxInfo_Handler,
 			ServerStreams: true,
 		},
 	},
