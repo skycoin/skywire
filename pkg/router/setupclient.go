@@ -144,6 +144,19 @@ func (c *SetupClient) FetchRelayPeers(ctx context.Context) ([]cipher.PubKey, err
 	return resp.Peers, nil
 }
 
+// SignTransportQuery asks the RSN to sign a transport-query capability
+// targeting dst on behalf of src (see the RSN-oracle 2-hop route path). The
+// signed query is carried by the source to dst, which verifies it against its
+// trusted-RSN allowlist before returning its transport list.
+func (c *SetupClient) SignTransportQuery(ctx context.Context, src, dst cipher.PubKey) (*TransportQuery, error) {
+	var resp SignTransportQueryReply
+	if err := c.call(ctx, rpcName+".SignTransportQuery",
+		&SignTransportQueryArgs{RequesterPK: src, TargetPK: dst}, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Query, nil
+}
+
 // DialRouteGroup generates rules for routes from a visor and sends them to visors.
 func (c *SetupClient) DialRouteGroup(ctx context.Context, req routing.BidirectionalRoute) (routing.EdgeRules, error) {
 	var resp routing.EdgeRules

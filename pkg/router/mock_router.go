@@ -444,6 +444,11 @@ func (_m *MockRouter) SetForceLocalRoutes(_a0 bool) {
 	_m.Called(_a0)
 }
 
+// SetDstTransportOracle provides a mock function with given fields: _a0
+func (_m *MockRouter) SetDstTransportOracle(_a0 DstTransportOracle) {
+	_m.Called(_a0)
+}
+
 // SetMuxRoutes provides a mock function with given fields: _a0
 func (_m *MockRouter) SetMuxRoutes(_a0 int) {
 	_m.Called(_a0)

@@ -282,22 +282,23 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// threaded through; the edge passes their zero values.
 	serveCtx, cancel := context.WithCancel(context.Background())
 	r, err := visorcore.BuildRouter(serveCtx, visorcore.RouterDeps{
-		DmsgC:              v.dmsgC,
-		PubKey:             v.conf.PK,
-		SecKey:             v.conf.SK,
-		TransportManager:   v.tpM,
-		RouteFinder:        rfClient,
-		RouteGroupDialer:   rgDialer,
-		SetupNodes:         v.conf.EffectiveRouteSetupNodes(),
-		MinHops:            v.conf.Routing.MinHops,
-		MuxRoutes:          v.conf.Routing.MuxRoutes,
-		AwaitSetupListener: v.awaitSetupListener,
-		Logger:             logger,
-		MasterLogger:       v.MasterLogger(),
-		AppLookup:          appLookup,
-		DialHook:           dialHook,
-		RulesGCInterval:    0, // 0 = DefaultRulesGCInterval (10s)
-		SetupHooks:         routeSetupHooks,
+		DmsgC:                 v.dmsgC,
+		PubKey:                v.conf.PK,
+		SecKey:                v.conf.SK,
+		TransportManager:      v.tpM,
+		RouteFinder:           rfClient,
+		RouteGroupDialer:      rgDialer,
+		SetupNodes:            v.conf.EffectiveRouteSetupNodes(),
+		MinHops:               v.conf.Routing.MinHops,
+		MuxRoutes:             v.conf.Routing.MuxRoutes,
+		AwaitSetupListener:    v.awaitSetupListener,
+		Logger:                logger,
+		MasterLogger:          v.MasterLogger(),
+		AppLookup:             appLookup,
+		DialHook:              dialHook,
+		RulesGCInterval:       0, // 0 = DefaultRulesGCInterval (10s)
+		SetupHooks:            routeSetupHooks,
+		EnableRSNOracleRoutes: v.conf.Routing.EnableRSNOracleRoutes,
 	})
 	if err != nil {
 		cancel()
@@ -321,6 +322,33 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.tpM.SetRouteChecker(func(tpID uuid.UUID) bool {
 		return r.Rules() != nil && routeTableHasTransport(r, tpID)
 	})
+
+	// RSN-oracle 2-hop route path (opt-in, default OFF). When enabled, (a) wire
+	// the source-side oracle so 2-hop routes are computed from D's own
+	// transports (fetched via an RSN-signed query) instead of TPD, and (b) start
+	// the destination-side listener so peers can query THIS visor's transports.
+	// Both are inert unless Routing.EnableRSNOracleRoutes is set, so a default
+	// visor opens no extra listener and its dial path is unchanged.
+	if v.conf.Routing.EnableRSNOracleRoutes {
+		setupNodes := v.conf.EffectiveRouteSetupNodes()
+		if oracle := router.NewDmsgRSNOracle(v.dmsgC, setupNodes, logger); oracle != nil {
+			r.SetDstTransportOracle(oracle)
+			logger.Info("RSN-oracle 2-hop route path enabled (source-side oracle wired)")
+		} else {
+			logger.Warn("RSN-oracle 2-hop route path enabled but no route setup nodes configured; oracle inert")
+		}
+		gw := &router.TransportQueryRPCGateway{
+			LocalPK:     v.conf.PK,
+			TrustedRSNs: func() []cipher.PubKey { return v.conf.EffectiveRouteSetupNodes() },
+			TM:          v.tpM,
+			Log:         logger,
+		}
+		go func() {
+			if err := router.ServeTransportQueryListener(serveCtx, v.dmsgC, gw, logger); err != nil {
+				logger.WithError(err).Warn("RSN-oracle transport-query listener stopped")
+			}
+		}()
+	}
 
 	return nil
 }
