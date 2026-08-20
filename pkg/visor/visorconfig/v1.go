@@ -642,6 +642,16 @@ type Routing struct {
 	// via PUT /api/visors/{pk}/router-settings.
 	TransportPreference []string `json:"transport_preference,omitempty"`
 
+	// EnableRSNOracleRoutes opts INTO the RSN-oracle 2-hop route path: for a
+	// single-intermediate route S->I->D the source computes the route LOCALLY
+	// from its OWN transports intersected with the destination's OWN transports
+	// (fetched authoritatively from D via an RSN-signed transport-query), making
+	// the common route type independent of the transport-discovery service
+	// (TPD). OFF by default; even when true the path is inert until the visor
+	// wires a destination-transport oracle (router.SetDstTransportOracle). TPD is
+	// still used for routes with >=2 intermediates.
+	EnableRSNOracleRoutes bool `json:"enable_rsn_oracle_routes,omitempty"`
+
 	// EnableCascadeRouteSetup opts INTO the source-driven cascade route-setup
 	// path (RSN signs, source injects the cascade down its own transports,
 	// avoiding the RSN's dmsg dependency). It is OFF by default: the cascade

@@ -142,6 +142,17 @@ type Config struct {
 	// its pre-integration shape — zero-cost when no policy is
 	// configured.
 	DialHook DialHook
+
+	// EnableRSNOracleRoutes opts INTO the RSN-oracle 2-hop route path: for a
+	// single-intermediate route S->I->D the source computes the route LOCALLY
+	// from its OWN transports intersected with the destination's OWN transports
+	// (fetched authoritatively from D via an RSN-signed transport-query), making
+	// the common route type independent of the transport-discovery service
+	// (TPD). OFF by default — existing behavior (route finder / TPD-backed local
+	// calc) is unchanged. Even when true the path is inert until a transport-
+	// query deliverer is configured (SetTransportQueryDeliverer); see
+	// rsn_oracle_routes.go. TPD is still used for routes with >=2 intermediates.
+	EnableRSNOracleRoutes bool
 }
 
 // SetDefaults sets default values for certain empty values.
@@ -276,6 +287,16 @@ type DialOptions struct {
 	// Populated by the policy layer (DialAdjustment) from
 	// RouteSpec.RotationIntervalSeconds; zero = no rotation.
 	RotationIntervalSeconds int
+
+	// UseRSNOracle2Hop is the per-dial opt-in for the RSN-oracle 2-hop route
+	// path (rsn_oracle_routes.go). When set — and the router has a transport-
+	// query deliverer configured — fetchBestRoutes computes a single-
+	// intermediate route from the source's own transports intersected with the
+	// destination's own transports (fetched from the destination via an
+	// RSN-signed query) instead of querying TPD/the route finder. OR-ed with the
+	// router-wide Config.EnableRSNOracleRoutes gate. Default false = existing
+	// behavior.
+	UseRSNOracle2Hop bool
 }
 
 // DefaultDialOptions returns default dial options.
@@ -410,6 +431,10 @@ type Router interface {
 	EffectiveMinHops(opts *DialOptions) uint16
 	SetExistingTPOnly(bool)
 	SetForceLocalRoutes(bool)
+	// SetDstTransportOracle wires the RSN-oracle 2-hop route path's
+	// destination-transport oracle (see rsn_oracle_routes.go). nil leaves the
+	// path inert even when Config.EnableRSNOracleRoutes is set.
+	SetDstTransportOracle(DstTransportOracle)
 	SetMuxRoutes(int)
 	SetMuxMode(WeightMode)
 	GetExistingTPOnly() bool
@@ -492,6 +517,45 @@ type router struct {
 	lastRouteCalcTime time.Duration     // last route calculation time (for local routes)
 	lastRouteCalcMu   sync.Mutex        // protects lastRouteCalcTime
 	tpdCache          *tpdSnapshotCache // one-snapshot TTL cache of GetAllTransports, see tpd_cache.go
+	// dstTpOracle fetches a destination visor's OWN transport list
+	// authoritatively from the destination (via an RSN-signed transport-query),
+	// for the RSN-oracle 2-hop route path (rsn_oracle_routes.go). nil by default
+	// → the oracle path is inert even when Config.EnableRSNOracleRoutes is set.
+	// Set via SetDstTransportOracle.
+	dstTpOracle   DstTransportOracle
+	dstTpOracleMu sync.Mutex
+}
+
+// DstTransportOracle fetches a destination visor's OWN transport list
+// authoritatively from the destination. It is the router-facing seam for the
+// RSN-oracle 2-hop route path: the router calls DstTransports(src, dst) and
+// computes the 2-hop route locally from the result. The visor implements it
+// (typically via fetchDstTransportsViaOracle / NewDmsgRSNOracle) since it owns
+// the RSN RPC connection and the S->D delivery transport; the router stays
+// decoupled from both. Declared here (unbuilt-tagged) so the Router interface
+// referencing it compiles on every target.
+type DstTransportOracle interface {
+	DstTransports(ctx context.Context, src, dst cipher.PubKey) ([]*transport.Entry, error)
+}
+
+// SetDstTransportOracle installs the oracle that fetches a destination's own
+// transport list, enabling the RSN-oracle 2-hop route path when
+// Config.EnableRSNOracleRoutes (or DialOptions.UseRSNOracle2Hop) is also set.
+// Until this is called the path stays inert (fetchBestRoutes falls through to
+// its existing route-finder / TPD behavior). The visor implements the oracle by
+// asking the RSN to sign a transport-query and delivering it to the destination
+// (fetchDstTransportsViaOracle is the reference building block).
+func (r *router) SetDstTransportOracle(o DstTransportOracle) {
+	r.dstTpOracleMu.Lock()
+	r.dstTpOracle = o
+	r.dstTpOracleMu.Unlock()
+}
+
+// dstTransportOracle returns the configured oracle (may be nil).
+func (r *router) dstTransportOracle() DstTransportOracle {
+	r.dstTpOracleMu.Lock()
+	defer r.dstTpOracleMu.Unlock()
+	return r.dstTpOracle
 }
 
 // scopedLog returns a logger augmented with app_name=<n> when the
