@@ -83,6 +83,15 @@ type muxBwCfg struct {
 	SampleInterval       time.Duration
 	LocalRoute           bool
 	IdleBaselineDuration time.Duration // 0 = no pre-pump idle probe phase
+	// RoutingPolicy is empty on the pure mux-bw baseline; when set it names the
+	// routing-policy engine driving the run (preset:<name> / @file.wasm /
+	// @file.star / inline Starlark) — see MuxBandwidthRequest.routing_policy.
+	RoutingPolicy string
+	// PolicyApp is the app name the policy engine sees in RoutingContext.App.
+	// Presets branch on it (latency-adaptive acts on vpn-client/skysocks-client/
+	// skynet-client; app-mux is per-app). Defaults to "skysocks-client" so the
+	// bandwidth-oriented presets are exercised out of the box.
+	PolicyApp string
 }
 
 func normalizeMuxBwRequest(req *MuxBandwidthRequest) (muxBwCfg, error) {
@@ -100,6 +109,11 @@ func normalizeMuxBwRequest(req *MuxBandwidthRequest) (muxBwCfg, error) {
 	c.SampleInterval = time.Duration(req.SampleIntervalNs)
 	c.LocalRoute = req.LocalRoute
 	c.IdleBaselineDuration = time.Duration(req.IdleBaselineDurationNs)
+	c.RoutingPolicy = req.RoutingPolicy
+	c.PolicyApp = req.PolicyApp
+	if c.RoutingPolicy != "" && c.PolicyApp == "" {
+		c.PolicyApp = "skysocks-client"
+	}
 
 	// Idle baseline only makes sense when probes are running — force
 	// ProbeRTT on so the operator gets the queueing-delay comparison
@@ -161,6 +175,58 @@ type muxBwRouteState struct {
 	// atomics.
 	intermediatePK string
 	transportKind  string
+
+	// --- policy-bw fields (unused on the pure mux-bw baseline) ---
+	//
+	// standby is the leg's warm-standby gate state, flipped by the on_tick
+	// RotationAction executor (muxBwController.applyRotation). A standby leg
+	// keeps its conn alive via a keepalive PingOnce but is NOT byte-pumped —
+	// the in-process analog of routeMux.setLegStandby. The baseline never sets
+	// it, so muxBwPolicyPumpRoute's standby branch is dead code there.
+	standby atomic.Bool
+	// latencyNsEWMA is the leg's EWMA-smoothed round-trip latency in
+	// nanoseconds (0 = no measurement yet), updated from each echo/keepalive
+	// round-trip. This is the per-leg latency signal the latency-adaptive /
+	// adaptive presets evict on — mux-bw's single dedicated probe route can't
+	// provide it, so the policy path derives it from the pump round-trip.
+	latencyNsEWMA atomic.Int64
+	// pumpCancel cancels JUST this leg's pump goroutine, so the on_tick
+	// executor can drop one leg without tearing down the others. Set by the
+	// controller when it spawns the leg's pump.
+	pumpCancel context.CancelFunc
+}
+
+// muxBwEWMAAlpha weights the newest latency sample when folding it into the
+// per-leg EWMA. 0.3 tracks changes within a handful of samples while damping
+// single-packet spikes — matched to the smoothing the route-group on_tick
+// policies assume when they key an EWMA by TransportID across ticks.
+const muxBwEWMAAlpha = 0.3
+
+// updateLatencyEWMA folds a fresh round-trip sample into the leg's EWMA. The
+// first non-zero sample seeds the average directly. Concurrency-safe via a
+// compare-and-store on the atomic; a lost race just drops one sample, which is
+// harmless for a smoothed signal.
+func (rs *muxBwRouteState) updateLatencyEWMA(sample time.Duration) {
+	if sample <= 0 {
+		return
+	}
+	prev := rs.latencyNsEWMA.Load()
+	if prev == 0 {
+		rs.latencyNsEWMA.Store(sample.Nanoseconds())
+		return
+	}
+	next := int64(muxBwEWMAAlpha*float64(sample.Nanoseconds()) + (1-muxBwEWMAAlpha)*float64(prev))
+	rs.latencyNsEWMA.Store(next)
+}
+
+// latencyMs returns the leg's EWMA latency rounded to whole milliseconds
+// (0 = unknown), for the MuxLegSample / LegInfo wire.
+func (rs *muxBwRouteState) latencyMs() int {
+	ns := rs.latencyNsEWMA.Load()
+	if ns <= 0 {
+		return 0
+	}
+	return int(time.Duration(ns).Milliseconds())
 }
 
 // StreamMuxBandwidth is the canonical implementation of the RPC.
@@ -187,6 +253,21 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		case eventCh <- ev:
 		case <-ctx.Done():
 		}
+	}
+
+	// Phase 0a (policy-bw only): load the routing-policy engine and run its
+	// decide_route hook to pick the mux leg count + min-hops for this run. On
+	// the pure mux-bw baseline (RoutingPolicy=="") ctrl is nil and every policy
+	// branch below is skipped — the baseline path is byte-for-byte unchanged.
+	var ctrl *muxBwController
+	if cfg.RoutingPolicy != "" {
+		var perr error
+		ctrl, perr = s.newMuxBwController(&cfg, emit)
+		if perr != nil {
+			return s.sendMuxBwError(stream, "policy_load", perr.Error())
+		}
+		defer ctrl.close()
+		ctrl.decideAtDial(ctx) // mutates cfg.Routes / cfg.MinHops in place
 	}
 
 	// Phase 0: pre-compute up to cfg.Routes DISJOINT routes to the
@@ -365,24 +446,39 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 	var probesMu sync.Mutex
 
 	pumpWg := &sync.WaitGroup{}
-	for _, r := range routes {
-		if !r.established.Load() {
-			continue
-		}
+	if ctrl != nil {
+		// Policy-bw path: the controller owns the pump goroutines (each with
+		// its own cancel + warm-standby awareness) AND the control loop, which
+		// emits the periodic MuxBandwidthSample and fires the engine's on_tick
+		// hook against the live per-leg stats — applying the returned
+		// add/drop/promote/demote leg actions. It replaces both the baseline
+		// pump-spawn and the baseline sampler.
+		ctrl.startPumps(pumpCtx, routes, pumpStart, pumpWg)
 		pumpWg.Add(1)
-		go func(rs *muxBwRouteState) {
+		go func() {
 			defer pumpWg.Done()
-			defer rs.activeFlag.Store(false)
-			s.muxBwPumpRoute(pumpCtx, &cfg, rs, pumpStart, emit)
-		}(r)
-	}
+			ctrl.controlLoop(pumpCtx, pumpStart)
+		}()
+	} else {
+		for _, r := range routes {
+			if !r.established.Load() {
+				continue
+			}
+			pumpWg.Add(1)
+			go func(rs *muxBwRouteState) {
+				defer pumpWg.Done()
+				defer rs.activeFlag.Store(false)
+				s.muxBwPumpRoute(pumpCtx, &cfg, rs, pumpStart, emit)
+			}(r)
+		}
 
-	// Sampler.
-	pumpWg.Add(1)
-	go func() {
-		defer pumpWg.Done()
-		s.muxBwSamplerLoop(pumpCtx, &cfg, routes, pumpStart, &peakSend, &peakRecv, emit)
-	}()
+		// Sampler.
+		pumpWg.Add(1)
+		go func() {
+			defer pumpWg.Done()
+			s.muxBwSamplerLoop(pumpCtx, &cfg, routes, pumpStart, &peakSend, &peakRecv, emit)
+		}()
+	}
 
 	// Probe (optional) — rides the dedicated probe route, NOT a pump conn,
 	// so the pump's per-call deadline clears can't wipe the probe's read
@@ -399,11 +495,19 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 	pumpWg.Wait()
 	pumpDuration := time.Since(pumpStart)
 
-	// Aggregate totals + emit Done.
+	// Aggregate totals + emit Done. On the policy path legs may have been
+	// added/dropped mid-run, so sum over the controller's full leg history
+	// (dropped legs' bytes are real traffic that happened) and take its
+	// peak readings; the baseline sums the static routes slice.
 	var totalSent, totalRecv uint64
-	for _, r := range routes {
-		totalSent += r.bytesSent.Load()
-		totalRecv += r.bytesRecv.Load()
+	if ctrl != nil {
+		totalSent, totalRecv = ctrl.totals()
+		peakSend, peakRecv = ctrl.peaks()
+	} else {
+		for _, r := range routes {
+			totalSent += r.bytesSent.Load()
+			totalRecv += r.bytesRecv.Load()
+		}
 	}
 	pumpSec := pumpDuration.Seconds()
 	avgSendBps := 0.0
@@ -910,97 +1014,124 @@ func (s *PingServer) muxBwSamplerLoop(
 	ticker := time.NewTicker(cfg.SampleInterval)
 	defer ticker.Stop()
 
-	var lastSent, lastRecv uint64
-	lastTick := pumpStart
-
-	// Per-leg previous-sample counters, indexed by position in the
-	// routes slice, so each leg's inst_*_bps is a delta since ITS own
-	// last reading — mirroring how the aggregate inst rate is computed
-	// from lastSent/lastRecv.
-	lastLegSent := make([]uint64, len(routes))
-	lastLegRecv := make([]uint64, len(routes))
-
+	tracker := newMuxBwSampleTracker(pumpStart)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			now := time.Now()
-			elapsed := now.Sub(pumpStart)
-			intervalSec := now.Sub(lastTick).Seconds()
-			lastTick = now
-
-			var totalSent, totalRecv uint64
-			var activeRoutes int32
-			// Per-leg breakdown, emitted alongside the aggregate. One
-			// entry per route, in route-index order, carrying the leg's
-			// cumulative bytes, its per-interval instant rates, and its
-			// distinguishing identity (intermediate PK + transport kind).
-			legs := make([]*MuxLegSample, 0, len(routes))
-			for i, r := range routes {
-				legSent := r.bytesSent.Load()
-				legRecv := r.bytesRecv.Load()
-				totalSent += legSent
-				totalRecv += legRecv
-				alive := r.activeFlag.Load()
-				if alive {
-					activeRoutes++
-				}
-
-				legInstSendBps := 0.0
-				legInstRecvBps := 0.0
-				if intervalSec > 0 {
-					legInstSendBps = float64((legSent-lastLegSent[i])*8) / intervalSec
-					legInstRecvBps = float64((legRecv-lastLegRecv[i])*8) / intervalSec
-				}
-				lastLegSent[i], lastLegRecv[i] = legSent, legRecv
-
-				legs = append(legs, &MuxLegSample{
-					RouteIndex:     int32(r.index), //nolint:gosec // route index fits int32
-					IntermediatePk: r.intermediatePK,
-					TransportKind:  r.transportKind,
-					BytesSent:      int64(legSent), //nolint:gosec // pumped byte totals fit int64
-					BytesRecv:      int64(legRecv), //nolint:gosec // pumped byte totals fit int64
-					InstSendBps:    legInstSendBps,
-					InstRecvBps:    legInstRecvBps,
-					Alive:          alive,
-				})
-			}
-
-			instantSendBps := 0.0
-			instantRecvBps := 0.0
-			if intervalSec > 0 {
-				instantSendBps = float64((totalSent-lastSent)*8) / intervalSec
-				instantRecvBps = float64((totalRecv-lastRecv)*8) / intervalSec
-			}
-			if instantSendBps > *peakSend {
-				*peakSend = instantSendBps
-			}
-			if instantRecvBps > *peakRecv {
-				*peakRecv = instantRecvBps
-			}
-			lastSent, lastRecv = totalSent, totalRecv
-
-			avgSendBps := 0.0
-			avgRecvBps := 0.0
-			elapsedSec := elapsed.Seconds()
-			if elapsedSec > 0 {
-				avgSendBps = float64(totalSent*8) / elapsedSec
-				avgRecvBps = float64(totalRecv*8) / elapsedSec
-			}
-
-			emit(&MuxBandwidthEvent_Sample{Sample: &MuxBandwidthSample{
-				ElapsedNs:      elapsed.Nanoseconds(),
-				BytesSent:      totalSent,
-				BytesReceived:  totalRecv,
-				InstantSendBps: instantSendBps,
-				InstantRecvBps: instantRecvBps,
-				AvgSendBps:     avgSendBps,
-				AvgRecvBps:     avgRecvBps,
-				ActiveRoutes:   activeRoutes,
-				Legs:           legs,
-			}})
+			// Baseline path: static leg set, no per-leg latency probe
+			// (the dedicated probe route carries RTT). includeLatency=false
+			// keeps latency_ms / standby at their zero values so the pure
+			// mux-bw output is byte-for-byte what it was before policy-bw.
+			sample := tracker.sample(routes, time.Now(), pumpStart, false)
+			*peakSend = tracker.peakSend
+			*peakRecv = tracker.peakRecv
+			emit(&MuxBandwidthEvent_Sample{Sample: sample})
 		}
+	}
+}
+
+// muxBwSampleTracker holds the previous poll's counters so a poll can compute
+// per-interval instant rates for both the aggregate and each leg. Per-leg
+// previous counters are keyed by the leg's STABLE index (muxBwRouteState.index
+// — the PingRouteRef conn key), not slice position, so the policy path's
+// mid-run add/drop can't misalign a leg's delta with another leg's history.
+// Shared by the pure-baseline sampler and the policy control loop so both emit
+// identically-shaped MuxBandwidthSample events.
+type muxBwSampleTracker struct {
+	lastSent, lastRecv uint64
+	lastLeg            map[int]muxBwLegPrev
+	peakSend, peakRecv float64
+	lastTick           time.Time
+}
+
+type muxBwLegPrev struct{ sent, recv uint64 }
+
+func newMuxBwSampleTracker(start time.Time) *muxBwSampleTracker {
+	return &muxBwSampleTracker{lastLeg: map[int]muxBwLegPrev{}, lastTick: start}
+}
+
+// sample folds the current per-route counters into a MuxBandwidthSample and
+// advances the tracker. includeLatency populates each leg's latency_ms /
+// standby from the route state (policy path); the baseline passes false. The
+// caller supplies now so tests can drive deterministic intervals.
+func (t *muxBwSampleTracker) sample(routes []*muxBwRouteState, now, pumpStart time.Time, includeLatency bool) *MuxBandwidthSample {
+	elapsed := now.Sub(pumpStart)
+	intervalSec := now.Sub(t.lastTick).Seconds()
+	t.lastTick = now
+
+	var totalSent, totalRecv uint64
+	var activeRoutes int32
+	legs := make([]*MuxLegSample, 0, len(routes))
+	for _, r := range routes {
+		legSent := r.bytesSent.Load()
+		legRecv := r.bytesRecv.Load()
+		totalSent += legSent
+		totalRecv += legRecv
+		alive := r.activeFlag.Load()
+		if alive {
+			activeRoutes++
+		}
+
+		prev := t.lastLeg[r.index]
+		legInstSendBps := 0.0
+		legInstRecvBps := 0.0
+		if intervalSec > 0 {
+			legInstSendBps = float64((legSent-prev.sent)*8) / intervalSec
+			legInstRecvBps = float64((legRecv-prev.recv)*8) / intervalSec
+		}
+		t.lastLeg[r.index] = muxBwLegPrev{sent: legSent, recv: legRecv}
+
+		leg := &MuxLegSample{
+			RouteIndex:     int32(r.index), //nolint:gosec // route index fits int32
+			IntermediatePk: r.intermediatePK,
+			TransportKind:  r.transportKind,
+			BytesSent:      int64(legSent), //nolint:gosec // pumped byte totals fit int64
+			BytesRecv:      int64(legRecv), //nolint:gosec // pumped byte totals fit int64
+			InstSendBps:    legInstSendBps,
+			InstRecvBps:    legInstRecvBps,
+			Alive:          alive,
+		}
+		if includeLatency {
+			leg.LatencyMs = int32(r.latencyMs()) //nolint:gosec // latency ms fits int32
+			leg.Standby = r.standby.Load()
+		}
+		legs = append(legs, leg)
+	}
+
+	instantSendBps := 0.0
+	instantRecvBps := 0.0
+	if intervalSec > 0 {
+		instantSendBps = float64((totalSent-t.lastSent)*8) / intervalSec
+		instantRecvBps = float64((totalRecv-t.lastRecv)*8) / intervalSec
+	}
+	if instantSendBps > t.peakSend {
+		t.peakSend = instantSendBps
+	}
+	if instantRecvBps > t.peakRecv {
+		t.peakRecv = instantRecvBps
+	}
+	t.lastSent, t.lastRecv = totalSent, totalRecv
+
+	avgSendBps := 0.0
+	avgRecvBps := 0.0
+	elapsedSec := elapsed.Seconds()
+	if elapsedSec > 0 {
+		avgSendBps = float64(totalSent*8) / elapsedSec
+		avgRecvBps = float64(totalRecv*8) / elapsedSec
+	}
+
+	return &MuxBandwidthSample{
+		ElapsedNs:      elapsed.Nanoseconds(),
+		BytesSent:      totalSent,
+		BytesReceived:  totalRecv,
+		InstantSendBps: instantSendBps,
+		InstantRecvBps: instantRecvBps,
+		AvgSendBps:     avgSendBps,
+		AvgRecvBps:     avgRecvBps,
+		ActiveRoutes:   activeRoutes,
+		Legs:           legs,
 	}
 }
 

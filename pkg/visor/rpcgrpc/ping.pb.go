@@ -7,12 +7,11 @@
 package rpcgrpc
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -2942,8 +2941,27 @@ type MuxBandwidthRequest struct {
 	// true at the handler — without probes there's nothing to
 	// measure.
 	IdleBaselineDurationNs int64 `protobuf:"varint,11,opt,name=idle_baseline_duration_ns,json=idleBaselineDurationNs,proto3" json:"idle_baseline_duration_ns,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// RoutingPolicy, when non-empty, drives this run through the WASM /
+	// Starlark routing-policy engine instead of the pure-measurement path.
+	// Accepts the same values as the visor's routing.policy_per_dial config:
+	// "preset:<name>" (a compiled bundle preset — rotating-bw, elastic-mux,
+	// latency-adaptive, app-mux, adaptive, probe-and-prune), "@/path/to.wasm",
+	// "@/path/to.star", or an inline Starlark string. When set, the handler
+	// (a) calls the engine's decide_route to pick the mux leg count + min-hops
+	// at setup, and (b) fires the engine's on_tick hook against the live per-leg
+	// stats on the sample cadence, applying the returned add/drop/promote/demote
+	// leg actions — the in-process rig that proves a preset is demonstrably
+	// adaptive over a live multiplexed route. Empty = the untouched mux-bw
+	// baseline. This is the `policy-bw` CLI sibling's surface.
+	RoutingPolicy string `protobuf:"bytes,12,opt,name=routing_policy,json=routingPolicy,proto3" json:"routing_policy,omitempty"`
+	// PolicyApp is the app name the routing-policy engine sees as
+	// RoutingContext.App — presets branch on it (latency-adaptive acts on
+	// vpn-client/skysocks-client/skynet-client; app-mux is per-app). Only
+	// meaningful when routing_policy is set; the handler defaults it to
+	// "skysocks-client" so the bandwidth-oriented presets are exercised.
+	PolicyApp     string `protobuf:"bytes,13,opt,name=policy_app,json=policyApp,proto3" json:"policy_app,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MuxBandwidthRequest) Reset() {
@@ -3053,6 +3071,20 @@ func (x *MuxBandwidthRequest) GetIdleBaselineDurationNs() int64 {
 	return 0
 }
 
+func (x *MuxBandwidthRequest) GetRoutingPolicy() string {
+	if x != nil {
+		return x.RoutingPolicy
+	}
+	return ""
+}
+
+func (x *MuxBandwidthRequest) GetPolicyApp() string {
+	if x != nil {
+		return x.PolicyApp
+	}
+	return ""
+}
+
 // MuxBandwidthEvent is one entry on the stream. Exactly one oneof
 // payload is set per message.
 type MuxBandwidthEvent struct {
@@ -3066,6 +3098,7 @@ type MuxBandwidthEvent struct {
 	//	*MuxBandwidthEvent_Done
 	//	*MuxBandwidthEvent_Error
 	//	*MuxBandwidthEvent_RouteFailure
+	//	*MuxBandwidthEvent_LegLifecycle
 	Payload       isMuxBandwidthEvent_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3169,6 +3202,15 @@ func (x *MuxBandwidthEvent) GetRouteFailure() *MuxRouteFailure {
 	return nil
 }
 
+func (x *MuxBandwidthEvent) GetLegLifecycle() *MuxLegLifecycle {
+	if x != nil {
+		if x, ok := x.Payload.(*MuxBandwidthEvent_LegLifecycle); ok {
+			return x.LegLifecycle
+		}
+	}
+	return nil
+}
+
 type isMuxBandwidthEvent_Payload interface {
 	isMuxBandwidthEvent_Payload()
 }
@@ -3214,6 +3256,16 @@ type MuxBandwidthEvent_RouteFailure struct {
 	RouteFailure *MuxRouteFailure `protobuf:"bytes,15,opt,name=route_failure,json=routeFailure,proto3,oneof"`
 }
 
+type MuxBandwidthEvent_LegLifecycle struct {
+	// LegLifecycle fires when the routing-policy on_tick hook mutates the
+	// leg set — a leg added, dropped, promoted from warm standby, or demoted
+	// to it. Only emitted on policy-driven (`policy-bw`) runs; the pure
+	// mux-bw baseline never mutates its leg set mid-run so never emits these.
+	// Lets the telemetry chart render hot-swaps against the per-leg bandwidth
+	// series.
+	LegLifecycle *MuxLegLifecycle `protobuf:"bytes,16,opt,name=leg_lifecycle,json=legLifecycle,proto3,oneof"`
+}
+
 func (*MuxBandwidthEvent_RouteEstablished) isMuxBandwidthEvent_Payload() {}
 
 func (*MuxBandwidthEvent_Sample) isMuxBandwidthEvent_Payload() {}
@@ -3225,6 +3277,106 @@ func (*MuxBandwidthEvent_Done) isMuxBandwidthEvent_Payload() {}
 func (*MuxBandwidthEvent_Error) isMuxBandwidthEvent_Payload() {}
 
 func (*MuxBandwidthEvent_RouteFailure) isMuxBandwidthEvent_Payload() {}
+
+func (*MuxBandwidthEvent_LegLifecycle) isMuxBandwidthEvent_Payload() {}
+
+// MuxLegLifecycle records one policy-driven leg-set mutation from the
+// on_tick hook. The rig is the in-process analog of the route group's
+// RotationAction executor (add/drop/promote/demote), so a preset's adaptive
+// behavior is visible as a stream of these events interleaved with the
+// per-leg MuxBandwidthSample series.
+type MuxLegLifecycle struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Event is one of "added", "dropped", "promoted", "demoted".
+	Event string `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
+	// RouteIndex is the affected leg's index at the time of the event.
+	RouteIndex int32 `protobuf:"varint,2,opt,name=route_index,json=routeIndex,proto3" json:"route_index,omitempty"`
+	// GateState is the leg's resulting warm-standby gate state: "active"
+	// (selected for pumping) or "standby" (kept alive via keepalive but not
+	// pumped). Mirrors router.LegInfo.Standby observed by the on_tick ABI.
+	GateState string `protobuf:"bytes,3,opt,name=gate_state,json=gateState,proto3" json:"gate_state,omitempty"`
+	// IntermediatePk / TransportKind identify the affected leg's path — same
+	// fields as MuxLegSample so a consumer can join the event to the series.
+	IntermediatePk string `protobuf:"bytes,4,opt,name=intermediate_pk,json=intermediatePk,proto3" json:"intermediate_pk,omitempty"`
+	TransportKind  string `protobuf:"bytes,5,opt,name=transport_kind,json=transportKind,proto3" json:"transport_kind,omitempty"`
+	// ElapsedNs is time since pump-start when the mutation was applied. Same
+	// epoch as MuxBandwidthSample.ElapsedNs.
+	ElapsedNs     int64 `protobuf:"varint,6,opt,name=elapsed_ns,json=elapsedNs,proto3" json:"elapsed_ns,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MuxLegLifecycle) Reset() {
+	*x = MuxLegLifecycle{}
+	mi := &file_ping_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MuxLegLifecycle) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MuxLegLifecycle) ProtoMessage() {}
+
+func (x *MuxLegLifecycle) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MuxLegLifecycle.ProtoReflect.Descriptor instead.
+func (*MuxLegLifecycle) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *MuxLegLifecycle) GetEvent() string {
+	if x != nil {
+		return x.Event
+	}
+	return ""
+}
+
+func (x *MuxLegLifecycle) GetRouteIndex() int32 {
+	if x != nil {
+		return x.RouteIndex
+	}
+	return 0
+}
+
+func (x *MuxLegLifecycle) GetGateState() string {
+	if x != nil {
+		return x.GateState
+	}
+	return ""
+}
+
+func (x *MuxLegLifecycle) GetIntermediatePk() string {
+	if x != nil {
+		return x.IntermediatePk
+	}
+	return ""
+}
+
+func (x *MuxLegLifecycle) GetTransportKind() string {
+	if x != nil {
+		return x.TransportKind
+	}
+	return ""
+}
+
+func (x *MuxLegLifecycle) GetElapsedNs() int64 {
+	if x != nil {
+		return x.ElapsedNs
+	}
+	return 0
+}
 
 // MuxRouteEstablished records one route's setup outcome.
 type MuxRouteEstablished struct {
@@ -3248,7 +3400,7 @@ type MuxRouteEstablished struct {
 
 func (x *MuxRouteEstablished) Reset() {
 	*x = MuxRouteEstablished{}
-	mi := &file_ping_proto_msgTypes[34]
+	mi := &file_ping_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3260,7 +3412,7 @@ func (x *MuxRouteEstablished) String() string {
 func (*MuxRouteEstablished) ProtoMessage() {}
 
 func (x *MuxRouteEstablished) ProtoReflect() protoreflect.Message {
-	mi := &file_ping_proto_msgTypes[34]
+	mi := &file_ping_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3273,7 +3425,7 @@ func (x *MuxRouteEstablished) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MuxRouteEstablished.ProtoReflect.Descriptor instead.
 func (*MuxRouteEstablished) Descriptor() ([]byte, []int) {
-	return file_ping_proto_rawDescGZIP(), []int{34}
+	return file_ping_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *MuxRouteEstablished) GetRouteIndex() int32 {
@@ -3344,7 +3496,7 @@ type MuxRouteFailure struct {
 
 func (x *MuxRouteFailure) Reset() {
 	*x = MuxRouteFailure{}
-	mi := &file_ping_proto_msgTypes[35]
+	mi := &file_ping_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3356,7 +3508,7 @@ func (x *MuxRouteFailure) String() string {
 func (*MuxRouteFailure) ProtoMessage() {}
 
 func (x *MuxRouteFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_ping_proto_msgTypes[35]
+	mi := &file_ping_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3369,7 +3521,7 @@ func (x *MuxRouteFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MuxRouteFailure.ProtoReflect.Descriptor instead.
 func (*MuxRouteFailure) Descriptor() ([]byte, []int) {
-	return file_ping_proto_rawDescGZIP(), []int{35}
+	return file_ping_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *MuxRouteFailure) GetRouteIndex() int32 {
@@ -3441,7 +3593,7 @@ type MuxBandwidthSample struct {
 
 func (x *MuxBandwidthSample) Reset() {
 	*x = MuxBandwidthSample{}
-	mi := &file_ping_proto_msgTypes[36]
+	mi := &file_ping_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3453,7 +3605,7 @@ func (x *MuxBandwidthSample) String() string {
 func (*MuxBandwidthSample) ProtoMessage() {}
 
 func (x *MuxBandwidthSample) ProtoReflect() protoreflect.Message {
-	mi := &file_ping_proto_msgTypes[36]
+	mi := &file_ping_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3466,7 +3618,7 @@ func (x *MuxBandwidthSample) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MuxBandwidthSample.ProtoReflect.Descriptor instead.
 func (*MuxBandwidthSample) Descriptor() ([]byte, []int) {
-	return file_ping_proto_rawDescGZIP(), []int{36}
+	return file_ping_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *MuxBandwidthSample) GetElapsedNs() int64 {
@@ -3566,14 +3718,25 @@ type MuxLegSample struct {
 	// Alive is the route's not-failed state — true while the leg's
 	// pump goroutine is still running. Matches the accounting behind
 	// MuxBandwidthSample.ActiveRoutes.
-	Alive         bool `protobuf:"varint,8,opt,name=alive,proto3" json:"alive,omitempty"`
+	Alive bool `protobuf:"varint,8,opt,name=alive,proto3" json:"alive,omitempty"`
+	// LatencyMs is the leg's EWMA-smoothed round-trip latency in
+	// milliseconds, sampled by the per-leg policy probe. 0 = unknown (no
+	// measurement yet). Only populated on policy-driven runs — the pure
+	// baseline uses a single dedicated probe route, not per-leg probes.
+	// This is the signal latency-adaptive / adaptive presets evict on.
+	LatencyMs int32 `protobuf:"varint,9,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
+	// Standby is the leg's warm-standby gate state: true when the policy
+	// demoted this leg (kept alive via keepalive, not pumped). Lets the
+	// telemetry consumer see the gate flip in the per-sample series, not
+	// just at the lifecycle event.
+	Standby       bool `protobuf:"varint,10,opt,name=standby,proto3" json:"standby,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MuxLegSample) Reset() {
 	*x = MuxLegSample{}
-	mi := &file_ping_proto_msgTypes[37]
+	mi := &file_ping_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3585,7 +3748,7 @@ func (x *MuxLegSample) String() string {
 func (*MuxLegSample) ProtoMessage() {}
 
 func (x *MuxLegSample) ProtoReflect() protoreflect.Message {
-	mi := &file_ping_proto_msgTypes[37]
+	mi := &file_ping_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3598,7 +3761,7 @@ func (x *MuxLegSample) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MuxLegSample.ProtoReflect.Descriptor instead.
 func (*MuxLegSample) Descriptor() ([]byte, []int) {
-	return file_ping_proto_rawDescGZIP(), []int{37}
+	return file_ping_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *MuxLegSample) GetRouteIndex() int32 {
@@ -3657,6 +3820,20 @@ func (x *MuxLegSample) GetAlive() bool {
 	return false
 }
 
+func (x *MuxLegSample) GetLatencyMs() int32 {
+	if x != nil {
+		return x.LatencyMs
+	}
+	return 0
+}
+
+func (x *MuxLegSample) GetStandby() bool {
+	if x != nil {
+		return x.Standby
+	}
+	return false
+}
+
 // MuxRttProbe is one RTT measurement during the pump. Allows
 // consumers to plot loaded-RTT-over-time and compute queueing delay
 // as (loaded_rtt - baseline_rtt).
@@ -3678,7 +3855,7 @@ type MuxRttProbe struct {
 
 func (x *MuxRttProbe) Reset() {
 	*x = MuxRttProbe{}
-	mi := &file_ping_proto_msgTypes[38]
+	mi := &file_ping_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3690,7 +3867,7 @@ func (x *MuxRttProbe) String() string {
 func (*MuxRttProbe) ProtoMessage() {}
 
 func (x *MuxRttProbe) ProtoReflect() protoreflect.Message {
-	mi := &file_ping_proto_msgTypes[38]
+	mi := &file_ping_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3703,7 +3880,7 @@ func (x *MuxRttProbe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MuxRttProbe.ProtoReflect.Descriptor instead.
 func (*MuxRttProbe) Descriptor() ([]byte, []int) {
-	return file_ping_proto_rawDescGZIP(), []int{38}
+	return file_ping_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *MuxRttProbe) GetSequence() int64 {
@@ -3779,7 +3956,7 @@ type MuxBandwidthDone struct {
 
 func (x *MuxBandwidthDone) Reset() {
 	*x = MuxBandwidthDone{}
-	mi := &file_ping_proto_msgTypes[39]
+	mi := &file_ping_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3791,7 +3968,7 @@ func (x *MuxBandwidthDone) String() string {
 func (*MuxBandwidthDone) ProtoMessage() {}
 
 func (x *MuxBandwidthDone) ProtoReflect() protoreflect.Message {
-	mi := &file_ping_proto_msgTypes[39]
+	mi := &file_ping_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3804,7 +3981,7 @@ func (x *MuxBandwidthDone) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MuxBandwidthDone.ProtoReflect.Descriptor instead.
 func (*MuxBandwidthDone) Descriptor() ([]byte, []int) {
-	return file_ping_proto_rawDescGZIP(), []int{39}
+	return file_ping_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *MuxBandwidthDone) GetTotalBytesSent() uint64 {
@@ -3973,7 +4150,7 @@ type MuxBandwidthError struct {
 
 func (x *MuxBandwidthError) Reset() {
 	*x = MuxBandwidthError{}
-	mi := &file_ping_proto_msgTypes[40]
+	mi := &file_ping_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3985,7 +4162,7 @@ func (x *MuxBandwidthError) String() string {
 func (*MuxBandwidthError) ProtoMessage() {}
 
 func (x *MuxBandwidthError) ProtoReflect() protoreflect.Message {
-	mi := &file_ping_proto_msgTypes[40]
+	mi := &file_ping_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3998,7 +4175,7 @@ func (x *MuxBandwidthError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MuxBandwidthError.ProtoReflect.Descriptor instead.
 func (*MuxBandwidthError) Descriptor() ([]byte, []int) {
-	return file_ping_proto_rawDescGZIP(), []int{40}
+	return file_ping_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *MuxBandwidthError) GetCode() string {
@@ -4278,7 +4455,7 @@ const file_ping_proto_rawDesc = "" +
 	"\amessage\x18\x04 \x01(\tR\amessage\"C\n" +
 	"\x13PingTreeServerError\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xa9\x03\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xef\x03\n" +
 	"\x13MuxBandwidthRequest\x12\x1b\n" +
 	"\ttarget_pk\x18\x01 \x01(\tR\btargetPk\x12\x16\n" +
 	"\x06routes\x18\x02 \x01(\x05R\x06routes\x12\x1f\n" +
@@ -4293,7 +4470,10 @@ const file_ping_proto_rawDesc = "" +
 	"\vlocal_route\x18\n" +
 	" \x01(\bR\n" +
 	"localRoute\x129\n" +
-	"\x19idle_baseline_duration_ns\x18\v \x01(\x03R\x16idleBaselineDurationNs\"\xa0\x03\n" +
+	"\x19idle_baseline_duration_ns\x18\v \x01(\x03R\x16idleBaselineDurationNs\x12%\n" +
+	"\x0erouting_policy\x18\f \x01(\tR\rroutingPolicy\x12\x1d\n" +
+	"\n" +
+	"policy_app\x18\r \x01(\tR\tpolicyApp\"\xe1\x03\n" +
 	"\x11MuxBandwidthEvent\x12!\n" +
 	"\ftimestamp_ns\x18\x01 \x01(\x03R\vtimestampNs\x12K\n" +
 	"\x11route_established\x18\n" +
@@ -4302,8 +4482,19 @@ const file_ping_proto_rawDesc = "" +
 	"\trtt_probe\x18\f \x01(\v2\x14.rpcgrpc.MuxRttProbeH\x00R\brttProbe\x12/\n" +
 	"\x04done\x18\r \x01(\v2\x19.rpcgrpc.MuxBandwidthDoneH\x00R\x04done\x122\n" +
 	"\x05error\x18\x0e \x01(\v2\x1a.rpcgrpc.MuxBandwidthErrorH\x00R\x05error\x12?\n" +
-	"\rroute_failure\x18\x0f \x01(\v2\x18.rpcgrpc.MuxRouteFailureH\x00R\frouteFailureB\t\n" +
-	"\apayload\"\xbc\x01\n" +
+	"\rroute_failure\x18\x0f \x01(\v2\x18.rpcgrpc.MuxRouteFailureH\x00R\frouteFailure\x12?\n" +
+	"\rleg_lifecycle\x18\x10 \x01(\v2\x18.rpcgrpc.MuxLegLifecycleH\x00R\flegLifecycleB\t\n" +
+	"\apayload\"\xd6\x01\n" +
+	"\x0fMuxLegLifecycle\x12\x14\n" +
+	"\x05event\x18\x01 \x01(\tR\x05event\x12\x1f\n" +
+	"\vroute_index\x18\x02 \x01(\x05R\n" +
+	"routeIndex\x12\x1d\n" +
+	"\n" +
+	"gate_state\x18\x03 \x01(\tR\tgateState\x12'\n" +
+	"\x0fintermediate_pk\x18\x04 \x01(\tR\x0eintermediatePk\x12%\n" +
+	"\x0etransport_kind\x18\x05 \x01(\tR\rtransportKind\x12\x1d\n" +
+	"\n" +
+	"elapsed_ns\x18\x06 \x01(\x03R\telapsedNs\"\xbc\x01\n" +
 	"\x13MuxRouteEstablished\x12\x1f\n" +
 	"\vroute_index\x18\x01 \x01(\x05R\n" +
 	"routeIndex\x12(\n" +
@@ -4332,7 +4523,7 @@ const file_ping_proto_rawDesc = "" +
 	"\favg_recv_bps\x18\a \x01(\x01R\n" +
 	"avgRecvBps\x12#\n" +
 	"\ractive_routes\x18\b \x01(\x05R\factiveRoutes\x12)\n" +
-	"\x04legs\x18\t \x03(\v2\x15.rpcgrpc.MuxLegSampleR\x04legs\"\x9b\x02\n" +
+	"\x04legs\x18\t \x03(\v2\x15.rpcgrpc.MuxLegSampleR\x04legs\"\xd4\x02\n" +
 	"\fMuxLegSample\x12\x1f\n" +
 	"\vroute_index\x18\x01 \x01(\x05R\n" +
 	"routeIndex\x12'\n" +
@@ -4344,7 +4535,11 @@ const file_ping_proto_rawDesc = "" +
 	"bytes_recv\x18\x05 \x01(\x03R\tbytesRecv\x12\"\n" +
 	"\rinst_send_bps\x18\x06 \x01(\x01R\vinstSendBps\x12\"\n" +
 	"\rinst_recv_bps\x18\a \x01(\x01R\vinstRecvBps\x12\x14\n" +
-	"\x05alive\x18\b \x01(\bR\x05alive\"}\n" +
+	"\x05alive\x18\b \x01(\bR\x05alive\x12\x1d\n" +
+	"\n" +
+	"latency_ms\x18\t \x01(\x05R\tlatencyMs\x12\x18\n" +
+	"\astandby\x18\n" +
+	" \x01(\bR\astandby\"}\n" +
 	"\vMuxRttProbe\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x03R\bsequence\x12\x1d\n" +
 	"\n" +
@@ -4415,7 +4610,7 @@ func file_ping_proto_rawDescGZIP() []byte {
 	return file_ping_proto_rawDescData
 }
 
-var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
+var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
 var file_ping_proto_goTypes = []any{
 	(*PingRequest)(nil),              // 0: rpcgrpc.PingRequest
 	(*PingResult)(nil),               // 1: rpcgrpc.PingResult
@@ -4451,14 +4646,15 @@ var file_ping_proto_goTypes = []any{
 	(*PingTreeServerError)(nil),      // 31: rpcgrpc.PingTreeServerError
 	(*MuxBandwidthRequest)(nil),      // 32: rpcgrpc.MuxBandwidthRequest
 	(*MuxBandwidthEvent)(nil),        // 33: rpcgrpc.MuxBandwidthEvent
-	(*MuxRouteEstablished)(nil),      // 34: rpcgrpc.MuxRouteEstablished
-	(*MuxRouteFailure)(nil),          // 35: rpcgrpc.MuxRouteFailure
-	(*MuxBandwidthSample)(nil),       // 36: rpcgrpc.MuxBandwidthSample
-	(*MuxLegSample)(nil),             // 37: rpcgrpc.MuxLegSample
-	(*MuxRttProbe)(nil),              // 38: rpcgrpc.MuxRttProbe
-	(*MuxBandwidthDone)(nil),         // 39: rpcgrpc.MuxBandwidthDone
-	(*MuxBandwidthError)(nil),        // 40: rpcgrpc.MuxBandwidthError
-	nil,                              // 41: rpcgrpc.AppLogEntry.FieldsEntry
+	(*MuxLegLifecycle)(nil),          // 34: rpcgrpc.MuxLegLifecycle
+	(*MuxRouteEstablished)(nil),      // 35: rpcgrpc.MuxRouteEstablished
+	(*MuxRouteFailure)(nil),          // 36: rpcgrpc.MuxRouteFailure
+	(*MuxBandwidthSample)(nil),       // 37: rpcgrpc.MuxBandwidthSample
+	(*MuxLegSample)(nil),             // 38: rpcgrpc.MuxLegSample
+	(*MuxRttProbe)(nil),              // 39: rpcgrpc.MuxRttProbe
+	(*MuxBandwidthDone)(nil),         // 40: rpcgrpc.MuxBandwidthDone
+	(*MuxBandwidthError)(nil),        // 41: rpcgrpc.MuxBandwidthError
+	nil,                              // 42: rpcgrpc.AppLogEntry.FieldsEntry
 }
 var file_ping_proto_depIdxs = []int32{
 	4,  // 0: rpcgrpc.PingRequest.forward_hops:type_name -> rpcgrpc.RouteHop
@@ -4472,7 +4668,7 @@ var file_ping_proto_depIdxs = []int32{
 	14, // 8: rpcgrpc.SystemStats.network:type_name -> rpcgrpc.NetworkStat
 	15, // 9: rpcgrpc.SystemStats.temps:type_name -> rpcgrpc.TempStat
 	23, // 10: rpcgrpc.SystemStats.processes:type_name -> rpcgrpc.ProcessStat
-	41, // 11: rpcgrpc.AppLogEntry.fields:type_name -> rpcgrpc.AppLogEntry.FieldsEntry
+	42, // 11: rpcgrpc.AppLogEntry.fields:type_name -> rpcgrpc.AppLogEntry.FieldsEntry
 	20, // 12: rpcgrpc.CalcRoute.hops:type_name -> rpcgrpc.CalcHop
 	26, // 13: rpcgrpc.PingTreeEvent.discovered:type_name -> rpcgrpc.PingTreeDiscovered
 	27, // 14: rpcgrpc.PingTreeEvent.ping_result:type_name -> rpcgrpc.PingTreeResult
@@ -4481,45 +4677,46 @@ var file_ping_proto_depIdxs = []int32{
 	30, // 17: rpcgrpc.PingTreeEvent.status_update:type_name -> rpcgrpc.PingTreeStatusUpdate
 	31, // 18: rpcgrpc.PingTreeEvent.server_error:type_name -> rpcgrpc.PingTreeServerError
 	4,  // 19: rpcgrpc.PingTreeResult.route:type_name -> rpcgrpc.RouteHop
-	34, // 20: rpcgrpc.MuxBandwidthEvent.route_established:type_name -> rpcgrpc.MuxRouteEstablished
-	36, // 21: rpcgrpc.MuxBandwidthEvent.sample:type_name -> rpcgrpc.MuxBandwidthSample
-	38, // 22: rpcgrpc.MuxBandwidthEvent.rtt_probe:type_name -> rpcgrpc.MuxRttProbe
-	39, // 23: rpcgrpc.MuxBandwidthEvent.done:type_name -> rpcgrpc.MuxBandwidthDone
-	40, // 24: rpcgrpc.MuxBandwidthEvent.error:type_name -> rpcgrpc.MuxBandwidthError
-	35, // 25: rpcgrpc.MuxBandwidthEvent.route_failure:type_name -> rpcgrpc.MuxRouteFailure
-	4,  // 26: rpcgrpc.MuxRouteEstablished.hops:type_name -> rpcgrpc.RouteHop
-	37, // 27: rpcgrpc.MuxBandwidthSample.legs:type_name -> rpcgrpc.MuxLegSample
-	0,  // 28: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
-	0,  // 29: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
-	5,  // 30: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	5,  // 31: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	2,  // 32: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
-	7,  // 33: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
-	7,  // 34: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
-	8,  // 35: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
-	16, // 36: rpcgrpc.PingService.StreamAppLogs:input_type -> rpcgrpc.AppLogStreamRequest
-	18, // 37: rpcgrpc.PingService.StreamCalcRoutes:input_type -> rpcgrpc.CalcRoutesRequest
-	21, // 38: rpcgrpc.PingService.StreamGroupMessages:input_type -> rpcgrpc.GroupMessagesRequest
-	24, // 39: rpcgrpc.PingService.StreamPingTree:input_type -> rpcgrpc.PingTreeRequest
-	32, // 40: rpcgrpc.PingService.StreamMuxBandwidth:input_type -> rpcgrpc.MuxBandwidthRequest
-	1,  // 41: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
-	1,  // 42: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
-	6,  // 43: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	6,  // 44: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	3,  // 45: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
-	9,  // 46: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 47: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 48: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
-	17, // 49: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
-	19, // 50: rpcgrpc.PingService.StreamCalcRoutes:output_type -> rpcgrpc.CalcRoute
-	22, // 51: rpcgrpc.PingService.StreamGroupMessages:output_type -> rpcgrpc.GroupMessageEvent
-	25, // 52: rpcgrpc.PingService.StreamPingTree:output_type -> rpcgrpc.PingTreeEvent
-	33, // 53: rpcgrpc.PingService.StreamMuxBandwidth:output_type -> rpcgrpc.MuxBandwidthEvent
-	41, // [41:54] is the sub-list for method output_type
-	28, // [28:41] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	35, // 20: rpcgrpc.MuxBandwidthEvent.route_established:type_name -> rpcgrpc.MuxRouteEstablished
+	37, // 21: rpcgrpc.MuxBandwidthEvent.sample:type_name -> rpcgrpc.MuxBandwidthSample
+	39, // 22: rpcgrpc.MuxBandwidthEvent.rtt_probe:type_name -> rpcgrpc.MuxRttProbe
+	40, // 23: rpcgrpc.MuxBandwidthEvent.done:type_name -> rpcgrpc.MuxBandwidthDone
+	41, // 24: rpcgrpc.MuxBandwidthEvent.error:type_name -> rpcgrpc.MuxBandwidthError
+	36, // 25: rpcgrpc.MuxBandwidthEvent.route_failure:type_name -> rpcgrpc.MuxRouteFailure
+	34, // 26: rpcgrpc.MuxBandwidthEvent.leg_lifecycle:type_name -> rpcgrpc.MuxLegLifecycle
+	4,  // 27: rpcgrpc.MuxRouteEstablished.hops:type_name -> rpcgrpc.RouteHop
+	38, // 28: rpcgrpc.MuxBandwidthSample.legs:type_name -> rpcgrpc.MuxLegSample
+	0,  // 29: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
+	0,  // 30: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
+	5,  // 31: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	5,  // 32: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	2,  // 33: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
+	7,  // 34: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	7,  // 35: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	8,  // 36: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
+	16, // 37: rpcgrpc.PingService.StreamAppLogs:input_type -> rpcgrpc.AppLogStreamRequest
+	18, // 38: rpcgrpc.PingService.StreamCalcRoutes:input_type -> rpcgrpc.CalcRoutesRequest
+	21, // 39: rpcgrpc.PingService.StreamGroupMessages:input_type -> rpcgrpc.GroupMessagesRequest
+	24, // 40: rpcgrpc.PingService.StreamPingTree:input_type -> rpcgrpc.PingTreeRequest
+	32, // 41: rpcgrpc.PingService.StreamMuxBandwidth:input_type -> rpcgrpc.MuxBandwidthRequest
+	1,  // 42: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
+	1,  // 43: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
+	6,  // 44: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	6,  // 45: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	3,  // 46: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
+	9,  // 47: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 48: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 49: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
+	17, // 50: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
+	19, // 51: rpcgrpc.PingService.StreamCalcRoutes:output_type -> rpcgrpc.CalcRoute
+	22, // 52: rpcgrpc.PingService.StreamGroupMessages:output_type -> rpcgrpc.GroupMessageEvent
+	25, // 53: rpcgrpc.PingService.StreamPingTree:output_type -> rpcgrpc.PingTreeEvent
+	33, // 54: rpcgrpc.PingService.StreamMuxBandwidth:output_type -> rpcgrpc.MuxBandwidthEvent
+	42, // [42:55] is the sub-list for method output_type
+	29, // [29:42] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_ping_proto_init() }
@@ -4542,6 +4739,7 @@ func file_ping_proto_init() {
 		(*MuxBandwidthEvent_Done)(nil),
 		(*MuxBandwidthEvent_Error)(nil),
 		(*MuxBandwidthEvent_RouteFailure)(nil),
+		(*MuxBandwidthEvent_LegLifecycle)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -4549,7 +4747,7 @@ func file_ping_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ping_proto_rawDesc), len(file_ping_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   42,
+			NumMessages:   43,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

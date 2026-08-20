@@ -66,35 +66,50 @@ var (
 	muxBwJSON           bool
 	muxBwQuiet          bool
 	muxBwOutFile        string
+	muxBwRoutingPolicy  string
+	muxBwPolicyApp      string
 )
 
-func init() {
-	muxBandwidthCmd.Flags().IntVarP(&muxBwRoutes, "routes", "r", 1,
+// addMuxBwCommonFlags registers the flag set shared by `mux-bw` and its
+// policy-driven sibling `policy-bw`, so the two commands stay in lockstep.
+func addMuxBwCommonFlags(cmd *cobra.Command) {
+	cmd.Flags().IntVarP(&muxBwRoutes, "routes", "r", 1,
 		"number of parallel route connections (1 = baseline single route)")
-	muxBandwidthCmd.Flags().DurationVarP(&muxBwDuration, "duration", "d", 30*time.Second,
+	cmd.Flags().DurationVarP(&muxBwDuration, "duration", "d", 30*time.Second,
 		"how long to pump bytes (excludes route-setup time)")
-	muxBandwidthCmd.Flags().IntVarP(&muxBwPacketSizeKb, "size", "s", 32,
+	cmd.Flags().IntVarP(&muxBwPacketSizeKb, "size", "s", 32,
 		"per-write block size in KB")
-	muxBandwidthCmd.Flags().IntVar(&muxBwMinHops, "min-hops", 0,
+	cmd.Flags().IntVar(&muxBwMinHops, "min-hops", 0,
 		"route-finder min hops constraint (>=2 excludes the direct transport)")
-	muxBandwidthCmd.Flags().DurationVar(&muxBwSetupTimeout, "setup-timeout", 30*time.Second,
+	cmd.Flags().DurationVar(&muxBwSetupTimeout, "setup-timeout", 30*time.Second,
 		"per-route setup timeout")
-	muxBandwidthCmd.Flags().BoolVar(&muxBwProbeRTT, "probe-rtt", false,
+	cmd.Flags().BoolVar(&muxBwProbeRTT, "probe-rtt", false,
 		"also send small-packet RTT probes during the load (queueing-delay measurement)")
-	muxBandwidthCmd.Flags().DurationVar(&muxBwProbeInterval, "probe-interval", 100*time.Millisecond,
+	cmd.Flags().DurationVar(&muxBwProbeInterval, "probe-interval", 100*time.Millisecond,
 		"interval between RTT probes when --probe-rtt is set")
-	muxBandwidthCmd.Flags().DurationVar(&muxBwSampleInterval, "sample-interval", 1*time.Second,
+	cmd.Flags().DurationVar(&muxBwSampleInterval, "sample-interval", 1*time.Second,
 		"interval between MuxBandwidthSample events")
-	muxBandwidthCmd.Flags().BoolVar(&muxBwLocalRoute, "local-route", false,
+	cmd.Flags().BoolVar(&muxBwLocalRoute, "local-route", false,
 		"use locally-cached TPD data for route calculation (faster setup; may be stale)")
-	muxBandwidthCmd.Flags().DurationVar(&muxBwIdleBaseline, "idle-baseline", 0,
+	cmd.Flags().DurationVar(&muxBwIdleBaseline, "idle-baseline", 0,
 		"run an idle RTT-probe phase of this duration BEFORE the bulk pump; the summary then prints queueing delay = loaded_pXX - idle_pXX (implies --probe-rtt)")
-	muxBandwidthCmd.Flags().BoolVarP(&muxBwQuiet, "quiet", "q", false,
+	cmd.Flags().BoolVarP(&muxBwQuiet, "quiet", "q", false,
 		"in human mode: suppress per-event rows; print only setup + summary")
-	muxBandwidthCmd.Flags().StringVarP(&muxBwOutFile, "output", "O", "",
+	cmd.Flags().StringVarP(&muxBwOutFile, "output", "O", "",
 		"append NDJSON of every event to FILE (independent of stdout mode)")
+}
 
+func init() {
+	addMuxBwCommonFlags(muxBandwidthCmd)
 	RootCmd.AddCommand(muxBandwidthCmd)
+
+	addMuxBwCommonFlags(policyBandwidthCmd)
+	policyBandwidthCmd.Flags().StringVar(&muxBwRoutingPolicy, "routing-policy", "",
+		"routing-policy engine driving the run: preset:<name> (rotating-bw, latency-adaptive, elastic-mux, adaptive, probe-and-prune, app-mux), @/path/to.wasm, @/path/to.star, or inline Starlark (REQUIRED)")
+	policyBandwidthCmd.Flags().StringVar(&muxBwPolicyApp, "policy-app", "skysocks-client",
+		"app name the policy engine sees (RoutingContext.App); presets branch on it")
+	_ = policyBandwidthCmd.MarkFlagRequired("routing-policy") //nolint:errcheck
+	RootCmd.AddCommand(policyBandwidthCmd)
 }
 
 var muxBandwidthCmd = &cobra.Command{
@@ -139,6 +154,48 @@ Examples:
 	Run:  runMuxBandwidth,
 }
 
+// policyBandwidthCmd is the policy-driven sibling of mux-bw. It runs the SAME
+// in-process bandwidth rig but hands the leg set to a routing-policy engine:
+// decide_route picks the mux width + min-hops, and on_tick adapts the live leg
+// set (add/drop/promote/demote warm standbys) on the preset's cadence. It is a
+// separate command so the pure-measurement `mux-bw` baseline keeps a clean,
+// policy-free surface; the wire request + stream handler are shared (the server
+// only takes the policy path when routing_policy is set).
+var policyBandwidthCmd = &cobra.Command{
+	Use:   "policy-bw <pk>",
+	Short: "Policy-driven multiplexed-route bandwidth rig — proves a routing-policy preset is adaptive over a live mux",
+	Long: `Pump bytes across a multiplexed route to a peer visor, with the mux
+leg set DRIVEN BY A ROUTING-POLICY ENGINE instead of a fixed plan.
+
+Unlike mux-bw (which dials N disjoint routes and pumps them unchanged),
+policy-bw:
+
+  * calls the policy's decide_route hook at setup to pick the mux leg
+    count + min-hops; and
+  * fires the policy's on_tick hook on the preset's rotation cadence,
+    applying the returned leg actions live — dropping a slow leg, adding
+    a fresh disjoint one, or promoting/demoting warm standbys.
+
+Every leg-set mutation is emitted as a leg_lifecycle event (and each
+leg's warm-standby gate_state + EWMA latency ride the per-leg samples),
+so an NDJSON capture shows the preset adapting over time.
+
+Output shapes match mux-bw exactly (human rows + summary by default,
+--json for NDJSON, --output to tee). --routing-policy is REQUIRED.
+
+Examples:
+
+  # Latency-adaptive over a 5-wide multi-hop mux for 5 minutes, NDJSON:
+  skywire cli visor ping policy-bw <peer-pk> --routing-policy preset:latency-adaptive \
+      --routes 5 --min-hops 2 --duration 5m -O /tmp/policy.ndjson
+
+  # Rotating-bw (privacy) preset, watching the warm-standby hot-swaps:
+  skywire cli visor ping policy-bw <peer-pk> --routing-policy preset:rotating-bw \
+      --min-hops 2 --duration 5m --json`,
+	Args: cobra.ExactArgs(1),
+	Run:  runMuxBandwidth,
+}
+
 func runMuxBandwidth(cmd *cobra.Command, args []string) {
 	// The persistent --json, not a second flag of our own. NDJSON is what
 	// this command means by machine output: one event per line, as they
@@ -168,6 +225,8 @@ func runMuxBandwidth(cmd *cobra.Command, args []string) {
 		SampleIntervalNs:       muxBwSampleInterval.Nanoseconds(),
 		LocalRoute:             muxBwLocalRoute,
 		IdleBaselineDurationNs: muxBwIdleBaseline.Nanoseconds(),
+		RoutingPolicy:          muxBwRoutingPolicy,
+		PolicyApp:              muxBwPolicyApp,
 	}
 
 	stream, err := client.StreamMuxBandwidth(ctx, req)
@@ -312,7 +371,26 @@ func muxBwEmitHumanRow(w io.Writer, ev *rpcgrpc.MuxBandwidthEvent, start time.Ti
 			elapsed, f.RouteIndex,
 			fmtBytes(f.BytesSentBeforeFailure), fmtBytes(f.BytesReceivedBeforeFailure),
 			f.ErrorMessage)
+	case *rpcgrpc.MuxBandwidthEvent_LegLifecycle:
+		l := p.LegLifecycle
+		id := l.IntermediatePk
+		if len(id) > 8 {
+			id = id[:8]
+		}
+		//nolint:errcheck // human-mode log write; errors here aren't actionable
+		fmt.Fprintf(w, "[+%6.2fs] R%d ⟳ policy %s (gate=%s%s%s)\n",
+			elapsed, l.RouteIndex, strings.ToUpper(l.Event), l.GateState,
+			leadIf(" via ", id), leadIf(" ", l.TransportKind))
 	}
+}
+
+// leadIf returns prefix+s when s is non-empty, else "". Keeps the lifecycle
+// row compact when a leg has no intermediate / transport kind to show.
+func leadIf(prefix, s string) string {
+	if s == "" {
+		return ""
+	}
+	return prefix + s
 }
 
 // muxBwRenderHopPath returns "A→B→C" given a Hops slice. The hop's
