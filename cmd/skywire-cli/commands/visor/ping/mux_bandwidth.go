@@ -649,6 +649,12 @@ func classifyMuxBwEvent(ev *rpcgrpc.MuxBandwidthEvent) (string, proto.Message) {
 		return "error", p.Error
 	case *rpcgrpc.MuxBandwidthEvent_RouteFailure:
 		return "route_failure", p.RouteFailure
+	case *rpcgrpc.MuxBandwidthEvent_LegLifecycle:
+		// policy-bw leg-set mutations (added/dropped/promoted/demoted +
+		// gate_state). Without this case the NDJSON emitted them as
+		// {"type":"unknown","data":{}} — invisible to the gate-2 chart, which
+		// renders policy events as markers over the per-leg time series.
+		return "leg_lifecycle", p.LegLifecycle
 	}
 	return "unknown", &rpcgrpc.MuxBandwidthError{}
 }
