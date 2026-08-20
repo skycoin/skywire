@@ -42,7 +42,6 @@ import (
 	cliversion "github.com/skycoin/skywire/cmd/skywire-cli/commands/version"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
-	"github.com/skycoin/skywire/cmd/skywire/commands/web"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cliout"
@@ -110,7 +109,6 @@ func init() {
 	cliutil.RootCmd.GroupID = groupUtil
 	cligot.RootCmd.GroupID = groupUtil
 	cliversion.RootCmd.GroupID = groupUtil
-	web.RootCmd.GroupID = groupUtil
 
 	// Install flag-aware `help` command (supports -r/-t/-d). Covers
 	// the case where `skywire cli` is invoked as a subcommand of the
@@ -150,7 +148,6 @@ func init() {
 		cliutil.RootCmd,
 		cligot.RootCmd,
 		cliversion.RootCmd,
-		web.RootCmd,
 
 		// Top-level shortcuts: high-traffic verbs reachable without
 		// the `visor` middle word. Long forms keep working at

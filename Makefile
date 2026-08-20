@@ -344,7 +344,7 @@ clean: ## Clean project: remove created binaries and apps
 
 build-wasm: ## Compile-check every js/wasm binary (GOOS=js GOARCH=wasm), no run — mirrors the CI wasm lane
 	@echo "compile-checking js/wasm binaries..."
-	@for p in ./pkg/tpviz/wasm ./cmd/dmsg-wasm ./cmd/wasm-visor ./cmd/wasm-visor-probe ./cmd/websh-probe ./cmd/skywire/commands/web/wasm; do \
+	@for p in ./pkg/tpviz/wasm ./cmd/dmsg-wasm ./cmd/wasm-visor ./cmd/wasm-visor-probe ./cmd/websh-probe; do \
 		echo "  GOOS=js GOARCH=wasm go build $$p"; \
 		GOOS=js GOARCH=wasm go build -mod=vendor -o /dev/null "$$p" || exit 1; \
 	done

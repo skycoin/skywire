@@ -22,7 +22,6 @@ skywire
 - [dmsg](dmsg/README.md) — DMSG services & utilities
 - [svc](svc/README.md) — Skywire services
 - [visor](visor/README.md) — Skywire Visor
-- [web](web/README.md) — Serve the skywire CLI as a browser-based UI
 
 ## Flags
 
