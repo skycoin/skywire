@@ -899,7 +899,9 @@ func (p *Publisher) runLoop() {
 		case <-p.done:
 			// Final publish attempt to flush any in-flight dirty
 			// state (Close already flushed but be defensive).
-			_ = p.publishIfDirty() //nolint:errcheck
+			if err := p.publishIfDirty(); err != nil {
+				p.log.WithError(err).Debug("treestore: final flush on shutdown failed")
+			}
 			return
 		case <-hb.C:
 			// Re-publish the current Root if nothing has published for a
@@ -919,7 +921,9 @@ func (p *Publisher) runLoop() {
 			case <-timer.C:
 			case <-p.done:
 				timer.Stop()
-				_ = p.publishIfDirty() //nolint:errcheck
+				if err := p.publishIfDirty(); err != nil {
+					p.log.WithError(err).Debug("treestore: final flush on shutdown failed")
+				}
 				return
 			}
 			if err := p.publishIfDirty(); err != nil {
@@ -1106,7 +1110,7 @@ func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 
 	up, err := c.Unpack(skyfromCipher, Registry)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("treestore unpack: %w", err)
 	}
 	defer up.Close() //nolint:errcheck
 
@@ -1188,7 +1192,13 @@ func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 		err = attempt()
 	}
 	if err != nil {
-		return nil, err
+		// Wrap with which-operation context so a future freeze
+		// self-localises in the log. isMissingObject still matches through
+		// the %w wrap (errors.Is + a lowercase "not found" substring both
+		// see the wrapped sentinel), and the self-heal check above runs on
+		// the unwrapped attempt() error, so this wrapping changes nothing
+		// about the retry decision — it only annotates the terminal error.
+		return nil, fmt.Errorf("treestore encode/save: %w", err)
 	}
 	p.cxoNode.Publish(r)
 
