@@ -2,6 +2,7 @@
 package router
 
 import (
+	"sort"
 	"sync"
 	"time"
 )
@@ -235,4 +236,23 @@ func (rb *retxBuffer) Len() int {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 	return len(rb.entries)
+}
+
+// Seqs returns the sequence numbers of every currently-held unacknowledged
+// entry, in ascending order. The buffer is keyed by sequence, not by the leg a
+// packet was sent on, so this is the whole outstanding in-flight window — the
+// input to the demote-time forced retx flush, which re-sends that window onto an
+// active leg before the receiver's SACK round-trip can lose the race with the
+// buffer's aging (the #86 retx-window aged-out gap). Ascending so the lowest gap
+// — the one the receiver's reorder buffer is head-of-line blocked on — heals
+// first.
+func (rb *retxBuffer) Seqs() []uint32 {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	out := make([]uint32, 0, len(rb.entries))
+	for s := range rb.entries {
+		out = append(out, s)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }

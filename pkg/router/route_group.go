@@ -1156,12 +1156,38 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 	// teardown, no compaction), so they must run on the pre-drop indices. A
 	// demoted leg stays in tps[] — kept alive by the keepalive/liveness loops —
 	// but is skipped by selectTransport; promoting re-selects it instantly.
+	demoted := false
 	if rg.mux != nil {
 		for _, idx := range action.PromoteFromStandby {
 			rg.mux.setLegStandby(idx, false)
 		}
 		for _, idx := range action.DemoteToStandby {
 			rg.mux.setLegStandby(idx, true)
+			demoted = true
+		}
+	}
+
+	// Forced retx flush on demote: the instant a leg flips to standby it stops
+	// carrying its in-flight, unACKed sequences. The receiver's post-#4005
+	// no-skip reorder holds that gap open until those sequences arrive; if they
+	// age out of the bounded retx buffer before the receiver's SACK round-trip
+	// asks for them, the sender can no longer resend and the gap wedges forever
+	// (the #86 retx-window aged-out gap, here triggered by the demote itself —
+	// the mechanism behind the live "17MB -> 0 at first demote" stall). So
+	// proactively re-send the whole outstanding in-flight window onto an active,
+	// non-standby leg NOW — a self-issued full SACK recovery — instead of racing
+	// the buffer's aging. The retx buffer is keyed by sequence, not by leg, so
+	// this is a flush of every held sequence, not just the demoted leg's; that is
+	// bounded (retxBuf is bounded), infrequent (rotation cadence), and safe (the
+	// receiver dedups by sequence number, consuming only the actual gap seqs and
+	// dropping the rest). Runs before DropLegs so the data is rescued before any
+	// compaction. If no active leg is available the flush is a safe no-op — leg 0
+	// is never standby, so demoting an aux always leaves a resend target.
+	if demoted && rg.mux != nil {
+		if seqs := rg.mux.heldRetxSeqs(); len(seqs) > 0 {
+			if err := rg.resendSeqs(seqs); err != nil {
+				rg.logger.WithError(err).Debug("demote retx flush: no active leg to resend on")
+			}
 		}
 	}
 
@@ -2134,17 +2160,29 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 
 	rg.logger.Debugf("SACK: retransmitting %d packets", len(retxSeqs))
 
-	for _, seq := range retxSeqs {
+	return rg.resendSeqs(retxSeqs)
+}
+
+// resendSeqs retransmits the given held sequences on the FASTEST live,
+// non-standby leg, mirroring the SACK-driven retransmit path exactly (same wire
+// format via MakeSequencedDataPacket + the same per-leg sent/retransmit
+// accounting). Fastest-leg selection heals a head-of-line-blocking gap on a fast
+// path rather than re-sending it down the slow leg that stalled it — see
+// routeMux.selectFastestTransport. Sequences no longer in the retx buffer are
+// skipped (already acknowledged and purged). Returns the transport-selection
+// error when no active leg is available so the caller decides whether that is
+// fatal (SACK path) or a safe no-op (demote flush — leg 0 is never standby).
+//
+// Shared by handleSACKPacket (receiver asked for these) and the demote-time
+// forced retx flush (rotationServiceFn self-issues the whole in-flight window).
+func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
+	for _, seq := range seqs {
 		data := rg.mux.getRetxPayload(seq)
 		if data == nil {
 			continue
 		}
 
 		rg.mu.Lock()
-		// Retransmit on the FASTEST live leg, not the mode-driven spray pick:
-		// this seq is what the peer's reorder buffer is HoL-blocked on, so heal
-		// it on a fast path instead of possibly re-sending it down the slow leg
-		// that stalled it. See routeMux.selectFastestTransport.
 		tp, rule, leg, err := rg.nextFastestTransport()
 		rg.mu.Unlock()
 		if err != nil {
@@ -2157,7 +2195,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 		}
 
 		if err := rg.writePacket(context.Background(), tp, retxPacket, rule.KeyRouteID()); err != nil {
-			rg.logger.WithError(err).Warnf("SACK: failed to retransmit seq %d", seq)
+			rg.logger.WithError(err).Warnf("failed to retransmit seq %d", seq)
 		} else if leg >= 0 {
 			// Count retransmits against the leg that carried them
 			// (which may differ from the original send leg — the
