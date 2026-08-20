@@ -40,6 +40,21 @@ type Terminal struct {
 	OnTitleChange func(title string)
 	// OnBell fires on BEL.
 	OnBell func()
+	// OnSelectionChange fires when the selected text changes, including when
+	// it is cleared.
+	OnSelectionChange func()
+
+	// CopyOnSelect puts the selection on the clipboard as soon as the mouse is
+	// released, the way X11 fills its primary selection. Off by default: it
+	// overwrites whatever the clipboard was holding, which is not a decision
+	// a terminal should make for everyone.
+	CopyOnSelect bool
+
+	// NoContextMenu leaves the right button to the browser. The terminal draws
+	// its own menu by default, because a browser's Copy acts on the document's
+	// selection and the terminal's is not one — so the browser offers no Copy
+	// over a terminal however much is highlighted.
+	NoContextMenu bool
 
 	colors *ColorSet
 
@@ -56,10 +71,15 @@ type Terminal struct {
 	renderer       renderer
 	resizeObserver js.Value // set by AutoFit
 
+	sel      *selection
+	selInput selectionInput
+	menu     *contextMenu
+
 	cellW, cellH float64
 
 	keyDownHandled       bool
 	renderQueued         bool
+	fitQueued            bool
 	allDirty             bool
 	dirtyStart, dirtyEnd int
 	syncingScroll        bool
@@ -82,6 +102,10 @@ func New(options *vt.Options) *Terminal {
 		blinkVisible: true,
 	}
 	t.colors = NewColorSet(t.Core.Options.Theme)
+	t.sel = newSelection(t.Core.Cols, t.Core.Buffer)
+	t.sel.dirty = t.markSelectionDirty
+	t.sel.changed = t.notifySelection
+	t.selInput.t = t
 	return t
 }
 
@@ -234,11 +258,21 @@ func (t *Terminal) wireCoreEvents() {
 		t.scheduleRender(false)
 	}
 	t.Core.OnScroll = func(int) {
+		// Once the scrollback is full each new line evicts the oldest, and
+		// every line index below it shifts by one — including the ones the
+		// selection is pinned to. Rather than track the drift, drop the
+		// selection at the point it stops meaning what it says.
+		if t.Core.Buffer().Lines.IsFull() {
+			t.sel.drop()
+		}
 		t.allDirty = true
 		t.updateScrollArea()
 		t.scheduleRender(false)
 	}
 	t.Core.OnResize = func(cols, rows int) {
+		// Reflow rewraps the buffer, so the cells a selection names are no
+		// longer the cells it meant.
+		t.sel.drop()
 		t.refreshRowEls()
 		t.updateScrollArea()
 		t.renderer.onResize()
@@ -325,6 +359,11 @@ func (t *Terminal) wireDomEvents() {
 	// keyboard
 	t.textarea.Call("addEventListener", "keydown", t.fn(func(_ js.Value, args []js.Value) any {
 		ev := args[0]
+		// copy and select-all first: they act on the selection rather than
+		// on the program, and must not be forwarded as input
+		if t.selectionKeydown(ev) {
+			return nil
+		}
 		// route through the composition helper first; while composing,
 		// keys must reach the textarea/IME untouched
 		if !t.composition.Keydown(ev.Get("keyCode").Int()) {
@@ -355,6 +394,8 @@ func (t *Terminal) wireDomEvents() {
 			ev.Call("preventDefault")
 			return nil
 		case vt.KeySelectAll:
+			t.SelectAll()
+			ev.Call("preventDefault")
 			return nil
 		}
 		t.keyDownHandled = false
@@ -369,6 +410,8 @@ func (t *Terminal) wireDomEvents() {
 			ev.Call("preventDefault")
 			ev.Call("stopPropagation")
 			t.keyDownHandled = true
+			// Typing is the end of caring about what was selected.
+			t.sel.drop()
 			t.Core.Input(result.Key, true)
 		} else if result.Cancel {
 			ev.Call("preventDefault")
@@ -391,6 +434,7 @@ func (t *Terminal) wireDomEvents() {
 		if len(vt.Utf16Units(key)) == 1 {
 			ev.Call("preventDefault")
 			ev.Call("stopPropagation")
+			t.sel.drop()
 			t.Core.Input(key, true)
 		}
 		return nil
@@ -405,8 +449,12 @@ func (t *Terminal) wireDomEvents() {
 		return nil
 	}))
 
-	// focus terminal on click
+	// focus terminal on click, and start a selection unless the application
+	// has asked for the mouse itself
 	t.element.Call("addEventListener", "mousedown", t.fn(func(_ js.Value, args []js.Value) any {
+		if t.selectionMouseDown(args[0]) {
+			return nil
+		}
 		t.reportMouse(args[0], vt.MouseActionDown)
 		return nil
 	}))
@@ -421,6 +469,10 @@ func (t *Terminal) wireDomEvents() {
 		}
 		return nil
 	}))
+	// A drag carries on wherever the pointer goes, so the rest of it is
+	// watched on the document.
+	t.wireSelection()
+	t.wireContextMenu()
 
 	// wheel: scroll our own viewport (or report to the app)
 	t.element.Call("addEventListener", "wheel", t.fn(func(_ js.Value, args []js.Value) any {
@@ -556,6 +608,36 @@ func (t *Terminal) markCursorRowDirty() {
 	}
 }
 
+// scheduleFit refits on the next frame rather than inside the notification.
+//
+// A ResizeObserver fires for every step of a layout, so a window being dragged
+// or a desktop arranging itself produces a burst of them, and refitting inside
+// each one reflows the buffer that many times to reach one final size.
+//
+// It also keeps Fit out of the callback itself. Compiled with TinyGo, calling
+// into JavaScript from inside a ResizeObserver notification returned an
+// address the shim would not store to —
+//
+//	RangeError: Offset is outside the bounds of the DataView
+//	  at storeValue -> syscall/js.valueCall -> Terminal.Fit -> AutoFit
+//
+// — thrown once per notification, which under a window manager is constant.
+// Deferring to an animation frame does the same work outside that reentrancy.
+func (t *Terminal) scheduleFit() {
+	if t.fitQueued || !t.opened {
+		return
+	}
+	t.fitQueued = true
+	var raf js.Func
+	raf = js.FuncOf(func(js.Value, []js.Value) any {
+		t.fitQueued = false
+		t.Fit()
+		raf.Release()
+		return nil
+	})
+	window.Call("requestAnimationFrame", raf)
+}
+
 func (t *Terminal) scheduleRender(all bool) {
 	if all {
 		t.allDirty = true
@@ -615,7 +697,7 @@ func (d *domRenderer) renderRows(start, end int) {
 		if y == cursorRow {
 			cursorCol = min(b.X, t.Core.Cols()-1)
 		}
-		t.rowEls[y].Set("innerHTML", t.rowHTML(b.Lines.Get(lineIdx), cursorCol))
+		t.rowEls[y].Set("innerHTML", t.rowHTML(b.Lines.Get(lineIdx), lineIdx, cursorCol))
 	}
 }
 
@@ -658,10 +740,11 @@ func (t *Terminal) DisableWebGL() {
 
 // rowHTML builds a row's spans, splitting runs on attribute changes
 // (the DomRendererRowFactory equivalent).
-func (t *Terminal) rowHTML(l *vt.BufferLine, cursorCol int) string {
+func (t *Terminal) rowHTML(l *vt.BufferLine, lineIdx, cursorCol int) string {
 	var sb strings.Builder
 	cols := t.Core.Cols()
 	cell := vt.NewCellData()
+	selected := t.sel.valid()
 
 	var runText strings.Builder
 	var runStyle, runClass string
@@ -692,7 +775,8 @@ func (t *Terminal) rowHTML(l *vt.BufferLine, cursorCol int) string {
 		if chars == "" {
 			chars = " "
 		}
-		style, class := t.cellStyle(&cell.AttributeData, x == cursorCol)
+		style, class := t.cellStyle(&cell.AttributeData, x == cursorCol,
+			selected && t.sel.contains(x, lineIdx))
 		if style != runStyle || class != runClass {
 			flush()
 			runStyle, runClass = style, class
@@ -703,10 +787,22 @@ func (t *Terminal) rowHTML(l *vt.BufferLine, cursorCol int) string {
 	return sb.String()
 }
 
-func (t *Terminal) cellStyle(attr *vt.AttributeData, isCursor bool) (style, class string) {
+func (t *Terminal) cellStyle(attr *vt.AttributeData, isCursor, isSelected bool) (style, class string) {
 	fg, bg := t.colors.ResolveCellColors(attr)
 	var s strings.Builder
 	var classes []string
+
+	// The selection is drawn the same way here as in the WebGL renderer:
+	// by recoloring the cell rather than by overlaying anything, so the two
+	// renderers cannot disagree about what is selected.
+	if isSelected {
+		bg = t.colors.SelectionBgOpaque
+		if t.colors.SelectionFg != "" {
+			fg = t.colors.SelectionFg
+		} else if fg == "" {
+			fg = t.colors.Foreground
+		}
+	}
 
 	if isCursor {
 		switch t.cursorStyle() {
@@ -817,13 +913,13 @@ func (t *Terminal) AutoFit() {
 		// but falling back to the window keeps this from being worse than
 		// not calling it at all.
 		js.Global().Call("addEventListener", "resize", t.fn(func(js.Value, []js.Value) any {
-			t.Fit()
+			t.scheduleFit()
 			return nil
 		}))
 		return
 	}
 	t.resizeObserver = ctor.New(t.fn(func(js.Value, []js.Value) any {
-		t.Fit()
+		t.scheduleFit()
 		return nil
 	}))
 	t.resizeObserver.Call("observe", parent)
@@ -878,13 +974,13 @@ func (t *Terminal) Dispose() {
 		window.Call("clearInterval", t.blinkTimer)
 		t.blinkTimer = js.Undefined()
 	}
+	t.menu.hide()
+	t.unwireSelection()
 	if t.resizeObserver.Truthy() {
 		t.resizeObserver.Call("disconnect")
 		t.resizeObserver = js.Value{}
 	}
-	// Mark closed first so any in-flight scheduleRender/rAF bails (it checks opened).
-	t.opened = false
-	if !t.element.IsUndefined() {
+	if t.opened && !t.element.IsUndefined() {
 		parent := t.element.Get("parentElement")
 		if !parent.IsNull() && !parent.IsUndefined() {
 			parent.Call("removeChild", t.element)
@@ -894,6 +990,7 @@ func (t *Terminal) Dispose() {
 		f.Release()
 	}
 	t.funcs = nil
+	t.opened = false
 }
 
 var stylesheetInstalled = false
@@ -920,8 +1017,13 @@ func ensureStylesheet() {
 .xterm .xterm-viewport::-webkit-scrollbar-thumb { background: #4a4f57; border-radius: 5px; }
 .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover { background: #6b727c; }
 .xterm .xterm-viewport::-webkit-scrollbar-corner { background: transparent; }
-.xterm .xterm-screen { position: relative; z-index: 1; }
-.xterm .xterm-rows { line-height: normal; letter-spacing: 0; white-space: pre; user-select: text; cursor: text; }
+.xterm .xterm-screen { position: relative; z-index: 1; cursor: text; }
+/* The terminal draws its own selection, as a range of buffer cells, so that
+   selecting works the same under both renderers — the WebGL one hides these
+   rows entirely and paints to a canvas, where there is no text for the browser
+   to select. Leaving the browser's selection enabled as well would give two
+   selections that disagree with each other. */
+.xterm .xterm-rows { line-height: normal; letter-spacing: 0; white-space: pre; user-select: none; }
 .xterm .xterm-rows > div { overflow: hidden; }
 .xterm .xterm-rows span { display: inline-block; }
 .xterm .xb { font-weight: bold; }
@@ -933,7 +1035,7 @@ func ensureStylesheet() {
   display: none; position: absolute; white-space: nowrap; z-index: 5;
 }
 .xterm .xterm-composition-view.active { display: block; }
-`
+` + contextMenuCSS
 	styleEl := document.Call("createElement", "style")
 	styleEl.Set("textContent", css)
 	document.Get("head").Call("appendChild", styleEl)
@@ -941,16 +1043,6 @@ func ensureStylesheet() {
 
 func jsPx(v float64) string {
 	return strconv.FormatFloat(v, 'f', -1, 64) + "px"
-}
-
-func rgbCSS(c [3]int) string {
-	const hex = "0123456789abcdef"
-	b := []byte{'#', 0, 0, 0, 0, 0, 0}
-	for i, v := range c {
-		b[1+i*2] = hex[(v>>4)&0xf]
-		b[2+i*2] = hex[v&0xf]
-	}
-	return string(b)
 }
 
 func escapeHTML(s string) string {
