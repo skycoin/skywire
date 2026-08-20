@@ -25,6 +25,9 @@ github.com/0magnet/coloredcobra
 # github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e
 ## explicit; go 1.24
 github.com/0magnet/cosmos-go
+# github.com/0magnet/plot-go v0.0.0-20260820145748-0b260a086d19
+## explicit; go 1.25
+github.com/0magnet/plot-go
 # github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf
 ## explicit; go 1.25.0
 github.com/0magnet/sh/v3/expand

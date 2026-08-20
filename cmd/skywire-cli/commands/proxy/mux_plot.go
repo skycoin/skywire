@@ -4,6 +4,7 @@ package skysocksc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,10 +14,12 @@ import (
 	"syscall"
 	"time"
 
+	plot "github.com/0magnet/plot-go"
 	"github.com/guptarohit/asciigraph"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil/livetui"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
@@ -28,6 +31,8 @@ var (
 	muxPlotHeight   int
 	muxPlotSmooth   int
 	muxPlotRecv     bool
+	muxPlotTUI      bool
+	muxPlotPipeline string
 
 	// --pk mode: measure an ad-hoc mux route rather than poll a running app.
 	muxPlotPK       string
@@ -50,8 +55,10 @@ func init() {
 	muxPlotCmd.Flags().DurationVarP(&muxPlotInterval, "interval", "i", time.Second, "sample/redraw interval")
 	muxPlotCmd.Flags().IntVarP(&muxPlotWindow, "window", "w", 60, "samples of history to keep on screen")
 	muxPlotCmd.Flags().IntVar(&muxPlotHeight, "height", 10, "rows per chart panel")
-	muxPlotCmd.Flags().IntVar(&muxPlotSmooth, "smooth", 0, "EWMA smoothing window in samples (0 = raw)")
+	muxPlotCmd.Flags().IntVar(&muxPlotSmooth, "smooth", 0, "shorthand for appending |sma:N to the pipeline (0 = none)")
+	muxPlotCmd.Flags().StringVarP(&muxPlotPipeline, "pipeline", "p", "", "plot-go processing pipeline for the bandwidth series (default 'roc:<interval>'; e.g. 'roc:1|sma:5', 'roc:1|avg:5')")
 	muxPlotCmd.Flags().BoolVar(&muxPlotRecv, "recv", false, "plot received bandwidth instead of sent")
+	muxPlotCmd.Flags().BoolVar(&muxPlotTUI, "tui", false, "render in a bubbletea alt-screen (flicker-free, resize-aware) instead of ANSI redraw; poll mode only")
 	// --pk mode: plot a controlled, self-measured mux route (StreamMuxBandwidth)
 	// instead of a running app's route group — the reliable multi-leg demonstrator.
 	muxPlotCmd.Flags().StringVar(&muxPlotPK, "pk", "", "measure an ad-hoc mux route to this peer PK instead of polling a running app")
@@ -89,6 +96,9 @@ Examples:
   skywire cli proxy mux plot                     # default app, 1s
   skywire cli proxy mux plot -n vpn-client -i 500ms
   skywire cli proxy mux plot --smooth 5 --window 90
+  # custom plot-go pipeline for the bandwidth series (0magnet/plot-go):
+  skywire cli proxy mux plot -p 'roc:1|sma:5'      # rate-of-change then smooth
+  skywire cli proxy mux plot -p 'roc:1|avg:3'      # rate then block-average every 3
   # controlled 4-leg route to a peer, rotating-bw preset, 5 min:
   skywire cli proxy mux plot --pk <peer-pk> --routes 4 --policy preset:rotating-bw
   # static 5-wide multi-hop mux, watch received bandwidth:
@@ -97,6 +107,11 @@ Examples:
 	Run: func(cmd *cobra.Command, _ []string) {
 		if muxPlotWindow < 8 {
 			muxPlotWindow = 8
+		}
+		// Validate the plot-go pipeline spec up front so a typo fails with a
+		// clear message rather than silently falling back per leg.
+		if _, err := plot.ParsePipeline(effectivePipelineSpec()); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--pipeline: %w", err))
 		}
 		if muxPlotPK != "" {
 			runMuxPlotStream(cmd)
@@ -116,15 +131,59 @@ Examples:
 
 // legTrack is one route's rolling history plus its identity for the legend.
 type legTrack struct {
-	label      string
-	bw         []float64 // Mbps, len == window (ring, oldest first)
-	rtt        []float64 // ms
-	prevSent   uint64
-	prevRecv   uint64
+	label string
+	bw    []float64 // Mbps, len == window (ring, oldest first)
+	rtt   []float64 // ms
+	// bwPipe processes this leg's bandwidth series (0magnet/plot-go): it turns
+	// the raw cumulative byte counter into a rate (roc) and optionally smooths it
+	// (sma/avg), the same job the hand-rolled byte-delta+EWMA used to do — but
+	// via the shared plot pipeline so the -p spec controls it. One Pipeline per
+	// leg (the processors are stateful per stream).
+	bwPipe     *plot.Pipeline
+	lastBw     float64 // held while the pipeline primes/fills its window
 	color      asciigraph.AnsiColor
-	ewmaBw     float64
-	ewmaSeeded bool
 	standbyNow bool
+}
+
+// effectivePipelineSpec is the plot-go pipeline for the bandwidth series: the
+// user's -p verbatim, else a default that converts the cumulative byte counter
+// to a per-interval rate (roc), with --smooth appended as sma if given.
+func effectivePipelineSpec() string {
+	if muxPlotPipeline != "" {
+		return muxPlotPipeline
+	}
+	spec := fmt.Sprintf("roc:%g", muxPlotInterval.Seconds())
+	if muxPlotSmooth > 1 {
+		spec += fmt.Sprintf("|sma:%d", muxPlotSmooth)
+	}
+	return spec
+}
+
+// newLegTrack builds a track with its own plot pipeline instance.
+func newLegTrack(label string, color asciigraph.AnsiColor) *legTrack {
+	pipe, err := plot.ParsePipeline(effectivePipelineSpec())
+	if err != nil { // spec is validated at command start; fall back to identity pass-through
+		pipe = plot.NewPipeline()
+	}
+	return &legTrack{
+		label:  label,
+		bw:     make([]float64, muxPlotWindow),
+		rtt:    make([]float64, muxPlotWindow),
+		bwPipe: pipe,
+		color:  color,
+	}
+}
+
+// pushBW feeds a cumulative byte counter through the leg's pipeline and returns
+// the value for the ring: the pipeline's latest output (Mbps), or the previous
+// value while the pipeline is still priming/filling a window (roc yields nothing
+// on its first sample; sma yields nothing until its window fills).
+func (t *legTrack) pushBW(cumBytes float64) float64 {
+	outs := t.bwPipe.Process([]float64{cumBytes * 8 / 1e6}) // bytes -> megabits
+	if n := len(outs); n > 0 {
+		t.lastBw = outs[n-1]
+	}
+	return t.lastBw
 }
 
 var plotPalette = []asciigraph.AnsiColor{
@@ -132,22 +191,38 @@ var plotPalette = []asciigraph.AnsiColor{
 	asciigraph.Blue, asciigraph.Red, asciigraph.LightGreen, asciigraph.White,
 }
 
-// runMuxPlot drives the poll → ring-buffer → redraw loop until ctrl+c.
+// runMuxPlot drives the poll → pipeline → redraw loop until ctrl+c.
+// Two renderers share one data path: the default plotnet-style ANSI redraw,
+// and (--tui) a bubbletea alt-screen via livetui — flicker-free, resize-aware,
+// scrollback-preserving. The tracks map persists across livetui's interval
+// Refresh calls via the closure; per-leg plot pipelines carry the rate state.
 func runMuxPlot(poll func() (any, error)) {
+	if muxPlotTUI {
+		tracks := map[int]*legTrack{}
+		err := livetui.Run(func(_ context.Context) (string, error) {
+			rgs, pErr := pollMuxRGs(poll)
+			if pErr == nil && len(rgs) > 0 {
+				updateTracks(tracks, rgs[0])
+			}
+			return frame(tracks), nil
+		}, livetui.Options{Title: "skywire mux · " + plotSubject(), Interval: muxPlotInterval})
+		if err != nil && !errors.Is(err, context.Canceled) {
+			fmt.Fprintf(os.Stderr, "tui: %v\n", err)
+		}
+		return
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	tracks := map[int]*legTrack{} // keyed by route index (stable for the rg's life)
-	var prevAt time.Time
 	ticker := time.NewTicker(muxPlotInterval)
 	defer ticker.Stop()
 
 	for {
-		now := time.Now()
 		rgs, err := pollMuxRGs(poll)
 		if err == nil && len(rgs) > 0 {
-			updateTracks(tracks, rgs[0], now, prevAt)
-			prevAt = now
+			updateTracks(tracks, rgs[0])
 			render(tracks)
 		} else if err != nil {
 			fmt.Fprintf(os.Stderr, "\rRouteGroupMuxInfo: %v", err)
@@ -245,29 +320,17 @@ func updateTracksFromLegs(tracks map[int]*legTrack, legs []*rpcgrpc.MuxLegSample
 		seen[idx] = true
 		t, ok := tracks[idx]
 		if !ok {
-			t = &legTrack{
-				label: fmt.Sprintf("R%d·%s·%s", idx, orDash(leg.TransportKind), hopLabel(leg.IntermediatePk)),
-				bw:    make([]float64, muxPlotWindow),
-				rtt:   make([]float64, muxPlotWindow),
-				color: plotPalette[len(tracks)%len(plotPalette)],
-			}
+			t = newLegTrack(fmt.Sprintf("R%d·%s·%s", idx, orDash(leg.TransportKind), hopLabel(leg.IntermediatePk)),
+				plotPalette[len(tracks)%len(plotPalette)])
 			tracks[idx] = t
 		}
-		bps := leg.InstSendBps
+		// Feed the cumulative byte counter through the pipeline (roc -> Mbps),
+		// same as the poll path, so -p means the same thing on both sources.
+		cum := float64(leg.BytesSent)
 		if muxPlotRecv {
-			bps = leg.InstRecvBps
+			cum = float64(leg.BytesRecv)
 		}
-		mbps := bps / 1e6
-		if muxPlotSmooth > 1 {
-			a := 2.0 / float64(muxPlotSmooth+1)
-			if t.ewmaSeeded {
-				t.ewmaBw = a*mbps + (1-a)*t.ewmaBw
-			} else {
-				t.ewmaBw, t.ewmaSeeded = mbps, true
-			}
-			mbps = t.ewmaBw
-		}
-		t.bw = append(t.bw[1:], mbps)
+		t.bw = append(t.bw[1:], t.pushBW(cum))
 		t.rtt = append(t.rtt[1:], float64(leg.LatencyMs))
 		t.standbyNow = leg.Standby
 	}
@@ -328,44 +391,22 @@ func pollMuxRGs(poll func() (any, error)) ([]muxRouteGroupInfo, error) {
 	return rgs, nil
 }
 
-func updateTracks(tracks map[int]*legTrack, rg muxRouteGroupInfo, now, prevAt time.Time) {
-	elapsed := now.Sub(prevAt).Seconds()
-	haveRate := !prevAt.IsZero() && elapsed > 0
+func updateTracks(tracks map[int]*legTrack, rg muxRouteGroupInfo) {
 	seen := map[int]bool{}
 	for _, leg := range rg.Legs {
 		seen[leg.Index] = true
 		t, ok := tracks[leg.Index]
 		if !ok {
-			t = &legTrack{
-				label: fmt.Sprintf("R%d·%s·%s", leg.Index, leg.TpType, shortPK(leg.RemotePK)),
-				bw:    make([]float64, muxPlotWindow),
-				rtt:   make([]float64, muxPlotWindow),
-				color: plotPalette[len(tracks)%len(plotPalette)],
-			}
+			t = newLegTrack(fmt.Sprintf("R%d·%s·%s", leg.Index, leg.TpType, shortPK(leg.RemotePK)),
+				plotPalette[len(tracks)%len(plotPalette)])
 			tracks[leg.Index] = t
 		}
-		mbps := 0.0
-		if haveRate {
-			cur, prev := leg.SentBytes, t.prevSent
-			if muxPlotRecv {
-				cur, prev = leg.RecvBytes, t.prevRecv
-			}
-			if cur >= prev {
-				mbps = float64(cur-prev) * 8 / 1e6 / elapsed
-			}
+		cum := float64(leg.SentBytes)
+		if muxPlotRecv {
+			cum = float64(leg.RecvBytes)
 		}
-		if muxPlotSmooth > 1 {
-			a := 2.0 / float64(muxPlotSmooth+1)
-			if t.ewmaSeeded {
-				t.ewmaBw = a*mbps + (1-a)*t.ewmaBw
-			} else {
-				t.ewmaBw, t.ewmaSeeded = mbps, true
-			}
-			mbps = t.ewmaBw
-		}
-		t.bw = append(t.bw[1:], mbps)
+		t.bw = append(t.bw[1:], t.pushBW(cum))
 		t.rtt = append(t.rtt[1:], leg.LatencyMS)
-		t.prevSent, t.prevRecv = leg.SentBytes, leg.RecvBytes
 		t.standbyNow = leg.Standby
 	}
 	// legs absent this poll: push a 0 sample so a dropped/rotated-out leg decays off-screen.
@@ -377,14 +418,29 @@ func updateTracks(tracks map[int]*legTrack, rg muxRouteGroupInfo, now, prevAt ti
 	}
 }
 
+// render paints one frame to stdout with a clear+home (the plotnet-style ANSI
+// redraw). frame() builds the same content as a string for the --tui renderer.
 func render(tracks map[int]*legTrack) {
+	f := frame(tracks)
+	if f == "" {
+		return
+	}
+	fmt.Print("\x1b[H\x1b[2J" + f) // clear + home, then the frame
+}
+
+// frame assembles one chart frame (bandwidth panel over RTT panel, legend,
+// aggregate, event markers) as a string, without any screen-clear escapes — so
+// it can be piped either through render's ANSI redraw or into the bubbletea
+// alt-screen viewport (livetui) in --tui mode. Empty string when there are no
+// legs to draw yet.
+func frame(tracks map[int]*legTrack) string {
 	idxs := make([]int, 0, len(tracks))
 	for i := range tracks {
 		idxs = append(idxs, i)
 	}
 	sort.Ints(idxs)
 	if len(idxs) == 0 {
-		return
+		return ""
 	}
 	var bwSeries, rttSeries [][]float64
 	var colors []asciigraph.AnsiColor
@@ -410,10 +466,7 @@ func render(tracks map[int]*legTrack) {
 	}
 	agg = fmt.Sprintf("aggregate %s: %.1f Mbps across %d legs", dir, total, len(idxs))
 
-	subject := muxPlotSubject
-	if subject == "" {
-		subject = muxPlotApp
-	}
+	subject := plotSubject()
 	bw := asciigraph.PlotMany(bwSeries, asciigraph.Height(muxPlotHeight), asciigraph.Width(0),
 		asciigraph.SeriesColors(colors...), asciigraph.Precision(1),
 		asciigraph.Caption(fmt.Sprintf("bandwidth  Mbps %s  ·  %s", dir, subject)))
@@ -421,15 +474,16 @@ func render(tracks map[int]*legTrack) {
 		asciigraph.SeriesColors(colors...), asciigraph.Precision(0),
 		asciigraph.Caption("RTT  ms"))
 
-	fmt.Print("\x1b[H\x1b[2J") // clear + home
-	fmt.Printf("skywire mux · %s · %s\n\n", subject, time.Now().Format("15:04:05"))
-	fmt.Println(bw)
-	fmt.Print("\n\n")
-	fmt.Println(rt)
-	fmt.Printf("\n%s\n%s\n", legend, agg)
+	var b strings.Builder
+	fmt.Fprintf(&b, "skywire mux · %s · %s\n\n", subject, time.Now().Format("15:04:05"))
+	b.WriteString(bw)
+	b.WriteString("\n\n\n")
+	b.WriteString(rt)
+	fmt.Fprintf(&b, "\n\n%s\n%s\n", legend, agg)
 	if len(muxPlotEvents) > 0 {
-		fmt.Printf("\nevents: %s\n", strings.Join(tailStrings(muxPlotEvents, 4), "   "))
+		fmt.Fprintf(&b, "\nevents: %s\n", strings.Join(tailStrings(muxPlotEvents, 4), "   "))
 	}
+	return b.String()
 }
 
 // tailStrings returns the last n elements of s (or all if fewer).
@@ -442,3 +496,12 @@ func tailStrings(s []string, n int) []string {
 
 // ansi renders an asciigraph color as its SGR escape for the legend swatches.
 func ansi(c asciigraph.AnsiColor) string { return fmt.Sprintf("\x1b[38;5;%dm", int(c)) }
+
+// plotSubject is the caption/title label for the current run (peer descriptor in
+// --pk mode, else the app name).
+func plotSubject() string {
+	if muxPlotSubject != "" {
+		return muxPlotSubject
+	}
+	return muxPlotApp
+}
