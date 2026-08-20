@@ -1800,7 +1800,8 @@ func BuildHandler() http.Handler {
 }
 
 // serveStandalone starts HTTP and DMSG listeners. Called by the CLI command.
-func serveStandalone(r1 *gin.Engine) {
+// bindAddr is the host:port listen address for the HTTP server.
+func serveStandalone(r1 *gin.Engine, bindAddr string) {
 	log := logging.MustGetLogger("dmsghttp")
 	if dmsgDisc == "" {
 		log.Fatal("Dmsg Discovery URL not specified")
@@ -1855,8 +1856,8 @@ func serveStandalone(r1 *gin.Engine) {
 	// Start serving
 	wg.Add(1)
 	go func() {
-		fmt.Printf("listening on http://127.0.0.1:%d using gin router\n", webPort)
-		r1.Run(fmt.Sprintf(":%d", webPort)) //nolint:errcheck,gosec
+		fmt.Printf("listening on http://%s using gin router\n", bindAddr)
+		r1.Run(bindAddr) //nolint:errcheck,gosec
 		wg.Done()
 	}()
 
