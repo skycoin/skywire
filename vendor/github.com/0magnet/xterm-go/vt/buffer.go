@@ -468,7 +468,13 @@ func (b *Buffer) reflowSmaller(newCols, newRows int) {
 		for i := min(b.Lines.MaxLength()-1, originalLinesLength+countToInsert-1); i >= 0; i-- {
 			if nextToInsert != nil && nextToInsert.start > originalLineIndex+countInsertedSoFar {
 				// insert extra lines here, adjusting i as needed
-				for nextI := len(nextToInsert.newLines) - 1; nextI >= 0; nextI-- {
+				//
+				// i is bounded here as well as by the outer loop. Narrowing to
+				// very few columns wraps one original line into more lines than
+				// the buffer can hold, and without the bound this walks i below
+				// zero and panics with an index of -1. Lines that no longer fit
+				// are dropped, which is what the trim below already assumes.
+				for nextI := len(nextToInsert.newLines) - 1; nextI >= 0 && i >= 0; nextI-- {
 					b.Lines.Set(i, nextToInsert.newLines[nextI])
 					i--
 				}
