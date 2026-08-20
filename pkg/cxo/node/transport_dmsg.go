@@ -8,6 +8,8 @@ import (
 	"errors"
 	"sync"
 
+	skycipher "github.com/skycoin/skycoin/src/cipher"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/node/transport"
 )
@@ -142,6 +144,48 @@ func (d *DMSG) ConnectPK(ctx context.Context, remotePK cipher.PubKey) (*Conn, er
 		// closing Conn.
 		d.n.Debugf(NewOutConnPin, "[dmsg:%s] cached conn is stale; evicting before re-dial", remotePK.String())
 		d.closeConn(c)
+	}
+
+	// Adopt an existing node-level conn to this same peer instead of
+	// dialing a redundant reverse-direction one.
+	//
+	// d.cs (this transport's pk→conn cache) is populated for an ACCEPTED
+	// conn only AFTER initConn returns (acceptConn's addConn), whereas
+	// the node-level pk→conn map (n.pkConns) is set inside onConnInit,
+	// which runs BEFORE the accepted conn's run loop can serve any Root.
+	// So a conn we already hold — e.g. a visor's inbound AnnounceTo that
+	// the TPD aggregator is actively filling a Root from — can be visible
+	// via hasPeer while still missing from d.cs.
+	//
+	// Without this adopt step, ConnectPK (reached from the aggregator's
+	// ensureConn dial-back, from AnnounceTo, and from Subscriber.Connect)
+	// would DIAL a second conn to a peer we already have one to. A CXO
+	// node enforces one conn per NodeID: both handshake.evictStalePeer
+	// and DMSG.addConn close the incumbent the moment a fresh conn for
+	// the same NodeID completes. That redundant dial therefore tears down
+	// the very conn the aggregator is mid-fill on — the transport-
+	// discovery "delivering conn dies mid-fill / ErrNoConnectionsToFill
+	// From" break. A large visor's Root (its ~54 KB transport-list leaf
+	// plus per-transport telemetry subtrees) never finishes filling
+	// because the reverse dial keeps evicting its source, while a small
+	// visor completes inside the sub-second window before the eviction
+	// lands. Adopting the live conn keeps a single, stable conn per peer
+	// for the whole fill — every leaf, telemetry included.
+	//
+	// Guard on !IsTCP so a node that also holds a TCP conn to this peer
+	// still dials a real DMSG conn here rather than adopting the TCP one
+	// into the DMSG cache. The deployment nodes this matters for (the TPD
+	// aggregator, the visor stats publisher) are DMSG-only, so in practice
+	// hasPeer only ever returns the DMSG conn — this is defence in depth.
+	var peerID skycipher.PubKey
+	copy(peerID[:], remotePK[:])
+	if existing, ok := d.n.hasPeer(peerID); ok && !existing.IsTCP() && connIsAlive(existing) {
+		d.n.Debugf(NewOutConnPin, "[dmsg:%s] adopting existing conn; skipping redundant reverse dial", remotePK.String())
+		// Mirror the adopted conn into d.cs so subsequent getConn hits
+		// and closeConn (on teardown) can evict it. addConn is a no-op
+		// when d.cs already points at this same conn (identity-checked).
+		d.addConn(remotePK, existing)
+		return existing, nil
 	}
 
 	// Dial over DMSG
