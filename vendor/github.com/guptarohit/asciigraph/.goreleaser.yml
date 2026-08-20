@@ -1,0 +1,89 @@
+version: 2
+
+# Build customization
+builds:
+  - env:
+      - CGO_ENABLED=0
+    main: ./cmd/asciigraph/main.go
+    ldflags: '-s -w'
+    # GOOS list to build in.
+    # For more info refer to https://golang.org/doc/install/source#environment
+    goos:
+      - linux
+      - darwin
+      - windows
+    # GOARCH to build in.
+    # For more info refer to https://golang.org/doc/install/source#environment
+    goarch:
+      - 386
+      - amd64
+      - arm
+      - arm64
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: windows
+        goarch: arm
+checksum:
+  name_template: '{{ .ProjectName }}_{{ .Version }}_sha512-checksums.txt'
+  algorithm: sha512
+# Archive customization
+archives:
+  - id: tar
+    formats:
+      - tar.gz
+    files:
+      - LICENSE
+      - README.md
+    name_template: >-
+      {{- .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end -}}
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+release:
+  github:
+    owner: guptarohit
+    name: asciigraph
+  draft: false
+  mode: keep-existing
+  replace_existing_artifacts: true
+dockers_v2:
+  - images:
+      - 'ghcr.io/guptarohit/asciigraph'
+    tags:
+      - '{{ .Version }}'
+      - '{{ .Tag }}'
+      - 'v{{ .Major }}'
+      - 'v{{ .Major }}.{{ .Minor }}'
+      - 'latest'
+    dockerfile: goreleaser.dockerfile
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    build_args:
+      VERSION: '{{ .Version }}'
+      COMMIT: '{{ .FullCommit }}'
+      DATE: '{{ .Date }}'
+    labels:
+      org.opencontainers.image.title: '{{ .ProjectName }}'
+      org.opencontainers.image.name: '{{ .ProjectName }}'
+      org.opencontainers.image.description: 'Go package to make lightweight line graphs ╭┈╯ in CLI'
+      org.opencontainers.image.url: 'https://github.com/guptarohit/asciigraph'
+      org.opencontainers.image.source: 'https://github.com/guptarohit/asciigraph'
+      org.opencontainers.image.version: '{{ .Version }}'
+      org.opencontainers.image.created: '{{ .Date }}'
+      org.opencontainers.image.revision: '{{ .FullCommit }}'
+      org.opencontainers.image.licenses: 'BSD-3-Clause'
