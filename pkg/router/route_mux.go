@@ -550,6 +550,17 @@ func (m *routeMux) getRetxPayload(seq uint32) []byte {
 	return m.retxBuf.Get(seq)
 }
 
+// heldRetxSeqs returns every sequence currently held unACKed in the sender's
+// retx buffer, ascending. Nil when SACK/retx is not in play. Used by the
+// demote-time forced retx flush to re-send a parked leg's in-flight range onto
+// an active leg (see RouteGroup.rotationServiceFn).
+func (m *routeMux) heldRetxSeqs() []uint32 {
+	if !m.sackEnabled || m.retxBuf == nil {
+		return nil
+	}
+	return m.retxBuf.Seqs()
+}
+
 // rebuildWeights updates transport selection weights based on current latency.
 func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 	if m.tpSelector != nil {
