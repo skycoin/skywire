@@ -161,6 +161,15 @@ func (mc *mockRPCClient) Overview() (*Overview, error) {
 	return &out, err
 }
 
+// StateSnapshot implements API.
+func (mc *mockRPCClient) StateSnapshot() (*StateSnapshot, error) {
+	summary, err := mc.Summary()
+	if err != nil {
+		return nil, err
+	}
+	return &StateSnapshot{At: time.Now(), Summary: summary}, nil
+}
+
 // Summary implements API.
 func (mc *mockRPCClient) Summary() (*Summary, error) {
 	overview, err := mc.Overview()

@@ -159,6 +159,18 @@ func (r *RPC) Summary(_ *struct{}, out *Summary) (err error) {
 	return nil
 }
 
+// StateSnapshot provides a curated, secrets-free snapshot of the visor's live
+// runtime state (see StateSnapshot in api_state.go).
+func (r *RPC) StateSnapshot(_ *struct{}, out *StateSnapshot) (err error) {
+	defer rpcutil.LogCall(r.log, "StateSnapshot", nil)(out, &err)
+	snap, err := r.visor.StateSnapshot()
+	if err != nil {
+		return err
+	}
+	*out = *snap
+	return nil
+}
+
 // Overview provides a overview of the AppNode.
 func (r *RPC) Overview(_ *struct{}, out *Overview) (err error) {
 	defer rpcutil.LogCall(r.log, "Overview", nil)(out, &err)

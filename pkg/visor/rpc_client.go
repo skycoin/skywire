@@ -224,6 +224,13 @@ func (rc *rpcClient) Summary() (*Summary, error) {
 	return out, err
 }
 
+// StateSnapshot calls StateSnapshot.
+func (rc *rpcClient) StateSnapshot() (*StateSnapshot, error) {
+	out := new(StateSnapshot)
+	err := rc.Call("StateSnapshot", &struct{}{}, out)
+	return out, err
+}
+
 // Overview calls Overview.
 func (rc *rpcClient) Overview() (*Overview, error) {
 	out := new(Overview)
