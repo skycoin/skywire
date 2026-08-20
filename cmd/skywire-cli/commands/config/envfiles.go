@@ -358,11 +358,22 @@ const envfileLinux = `#
 #	installed by the skywire-autoupdate package.
 
 #--	Update channel:
-#	"stable"  = latest commit where all CI tests passed (default)
-#	"develop" = latest develop branch commit (may be untested)
-#	"latest"  = latest tagged release version
-#	"<hash>"  = pin to a specific commit hash
-#UPDATE_CHANNEL=stable
+#	"develop"        = latest develop branch commit (default)
+#	"latest"         = latest tagged release version
+#	"<hash>"         = pin to a specific commit hash
+#	"binary"         = download the prebuilt linux binary for this arch from the
+#	                   rolling <branch>-latest GitHub pre-release, verified against
+#	                   SHA256SUMS — no compile, no Go toolchain. Recommended for
+#	                   unattended hosts (avoids all source-build/network fragility).
+#	"binary-develop" / "binary-master" = force the develop / master prebuilt binary
+#UPDATE_CHANNEL=develop
+
+#--	Go module proxy mode for the source-build channels (develop/latest/<hash>).
+#	Unset (default): try GOPROXY=direct first, then fall back to the default
+#	module proxy (proxy.golang.org) if the direct git fetch fails.
+#	"direct" = only ever fetch direct from git (no proxy fallback)
+#	"proxy"  = only ever use the default module proxy (never direct)
+#GOPROXY_MODE=
 
 #--	Docker deployment directory (for skywire-docker-update)
 #	Set this to enable auto-updating docker-based deployment services.
@@ -569,10 +580,18 @@ const envfileWindows = `#
 #	installed by the skywire-autoupdate package.
 
 #--	Update channel:
-#	"stable"  = latest commit where all CI tests passed (default)
-#	"develop" = latest develop branch commit (may be untested)
-#	"<hash>"  = pin to a specific commit hash
-#$UPDATE_CHANNEL='stable'
+#	"develop"        = latest develop branch commit (default)
+#	"latest"         = latest tagged release version
+#	"<hash>"         = pin to a specific commit hash
+#	"binary"         = download the prebuilt linux binary (no compile) from the
+#	                   rolling <branch>-latest GitHub pre-release, SHA256-verified
+#	"binary-develop" / "binary-master" = force the develop / master prebuilt binary
+#$UPDATE_CHANNEL='develop'
+
+#--	Go module proxy mode for source builds. Unset (default): GOPROXY=direct
+#	first, then fall back to the default proxy if the direct git fetch fails.
+#	"direct" = direct-only (no fallback) ; "proxy" = proxy-only
+#$GOPROXY_MODE=''
 
 #--	Docker deployment directory (for skywire-docker-update)
 #$DEPLOY_DIR=''
