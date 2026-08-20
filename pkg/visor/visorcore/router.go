@@ -41,6 +41,11 @@ type RouterDeps struct {
 	DialHook        router.DialHook
 	RulesGCInterval time.Duration
 	SetupHooks      []router.RouteSetupHook
+
+	// EnableRSNOracleRoutes opts into the RSN-oracle 2-hop route path (default
+	// OFF). Seeded from Routing.EnableRSNOracleRoutes; inert until the visor also
+	// calls router.SetDstTransportOracle.
+	EnableRSNOracleRoutes bool
 }
 
 // BuildRouter assembles router.Config from deps, creates the router, and starts
@@ -52,20 +57,21 @@ type RouterDeps struct {
 // gotcha, or a newly-added Config field reaching only one of the two).
 func BuildRouter(serveCtx context.Context, deps RouterDeps) (router.Router, error) {
 	rConf := &router.Config{
-		Logger:             deps.Logger,
-		MasterLogger:       deps.MasterLogger,
-		PubKey:             deps.PubKey,
-		SecKey:             deps.SecKey,
-		TransportManager:   deps.TransportManager,
-		RouteFinder:        deps.RouteFinder,
-		RouteGroupDialer:   deps.RouteGroupDialer,
-		SetupNodes:         deps.SetupNodes,
-		MinHops:            deps.MinHops,
-		MuxRoutes:          deps.MuxRoutes,
-		AwaitSetupListener: deps.AwaitSetupListener,
-		AppLookup:          deps.AppLookup,
-		DialHook:           deps.DialHook,
-		RulesGCInterval:    deps.RulesGCInterval,
+		Logger:                deps.Logger,
+		MasterLogger:          deps.MasterLogger,
+		PubKey:                deps.PubKey,
+		SecKey:                deps.SecKey,
+		TransportManager:      deps.TransportManager,
+		RouteFinder:           deps.RouteFinder,
+		RouteGroupDialer:      deps.RouteGroupDialer,
+		SetupNodes:            deps.SetupNodes,
+		MinHops:               deps.MinHops,
+		MuxRoutes:             deps.MuxRoutes,
+		AwaitSetupListener:    deps.AwaitSetupListener,
+		AppLookup:             deps.AppLookup,
+		DialHook:              deps.DialHook,
+		RulesGCInterval:       deps.RulesGCInterval,
+		EnableRSNOracleRoutes: deps.EnableRSNOracleRoutes,
 	}
 	r, err := router.New(deps.DmsgC, rConf, deps.SetupHooks)
 	if err != nil {

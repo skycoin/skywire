@@ -5,6 +5,8 @@ package router
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"net"
 	"time"
@@ -150,6 +152,50 @@ func (g *SetupRPCGateway) CascadeSignInstall(args *CascadeSignInstallArgs, reply
 	reply.FwdInstallBytes = fwdBytes
 	reply.RevInstallBytes = revBytes
 	reply.InitEdge = initEdge
+	return nil
+}
+
+// SignTransportQueryArgs is the request for SignTransportQuery: the source asks
+// the RSN to sign a transport-query capability targeting a destination.
+type SignTransportQueryArgs struct {
+	RequesterPK cipher.PubKey // source S making the request
+	TargetPK    cipher.PubKey // destination D whose transports are requested
+}
+
+// SignTransportQueryReply carries the RSN-signed query. The RSN is a pure
+// signing oracle here too: it signs the (RSN, target, requester, nonce) tuple
+// and returns it; it does not contact the destination. The SOURCE carries the
+// signed query to the destination (phase-1: dmsg-direct) and the destination
+// verifies it against its trusted-RSN allowlist before responding.
+type SignTransportQueryReply struct {
+	Query *TransportQuery
+}
+
+// SignTransportQuery is the RSN-side signing endpoint for the RSN-oracle 2-hop
+// route path. It mints a nonce, signs a TransportQuery targeting args.TargetPK
+// on behalf of args.RequesterPK, and returns it. Reuses the RSN keypair the
+// cascade builder already holds (g.Cascade.rsnPK / rsnSK), so the same
+// trusted-RSN authorization that gates cascade route setup gates the query.
+func (g *SetupRPCGateway) SignTransportQuery(args *SignTransportQueryArgs, reply *SignTransportQueryReply) error {
+	log := logging.MustGetLogger("sign-transport-query:" + g.ReqPK.String())
+	if g.Cascade == nil {
+		return errCascadeUnavailable
+	}
+	var nonceBuf [8]byte
+	if _, err := rand.Read(nonceBuf[:]); err != nil {
+		return err
+	}
+	q := &TransportQuery{
+		RSNPK:       g.Cascade.rsnPK,
+		TargetPK:    args.TargetPK,
+		RequesterPK: args.RequesterPK,
+		Nonce:       binary.BigEndian.Uint64(nonceBuf[:]),
+	}
+	if err := q.Sign(g.Cascade.rsnSK); err != nil {
+		log.WithError(err).Warn("SignTransportQuery: sign failed")
+		return err
+	}
+	reply.Query = q
 	return nil
 }
 
