@@ -69,6 +69,17 @@ func (c *PingClient) StreamMuxBandwidth(ctx context.Context, req *MuxBandwidthRe
 	return c.client.StreamMuxBandwidth(ctx, req)
 }
 
+// StreamRouteGroupMuxInfo opens the running-app per-leg mux telemetry
+// stream — the smooth server-streaming replacement for the unary
+// RouteGroupMuxInfo poll that 'cli proxy mux plot' (default mode) rides.
+// Same event-level-control rationale as StreamMuxBandwidth: the CLI
+// consumer drives Recv() and renders each sample as it arrives. Returns
+// the raw generated stream so the caller can distinguish a never-
+// implemented RPC (first Recv errors) and fall back to the unary poll.
+func (c *PingClient) StreamRouteGroupMuxInfo(ctx context.Context, req *StreamRouteGroupMuxInfoRequest) (PingService_StreamRouteGroupMuxInfoClient, error) {
+	return c.client.StreamRouteGroupMuxInfo(ctx, req)
+}
+
 // StreamPing performs pings and calls the callback for each result
 // timeout applies only to the ping phase (after route setup), 0 means no timeout
 // setupTimeout applies to route setup phase, 0 means no timeout

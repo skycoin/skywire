@@ -55,6 +55,7 @@ type fakeVisor struct {
 	snapshotHistoryAfterNs func(string, int64) []GroupMessageData
 	fetchAllTransports     func(context.Context) ([]*transport.Entry, error)
 	transportLatency       func(cipher.PubKey) float64
+	routeGroupMuxInfo      func(string) ([]RouteGroupMuxInfoData, error)
 
 	mu             sync.Mutex
 	groupSendCount int
@@ -97,6 +98,7 @@ func newFakeVisor() *fakeVisor {
 		snapshotHistoryAfterNs: func(string, int64) []GroupMessageData { return nil },
 		fetchAllTransports:     func(context.Context) ([]*transport.Entry, error) { return nil, nil },
 		transportLatency:       func(cipher.PubKey) float64 { return 0 },
+		routeGroupMuxInfo:      func(string) ([]RouteGroupMuxInfoData, error) { return nil, nil },
 	}
 }
 
@@ -154,6 +156,9 @@ func (f *fakeVisor) FetchAllTransportEntries(ctx context.Context) ([]*transport.
 }
 func (f *fakeVisor) GetTransportLatencyByRemotePK(pk cipher.PubKey) float64 {
 	return f.transportLatency(pk)
+}
+func (f *fakeVisor) RouteGroupMuxInfo(app string) ([]RouteGroupMuxInfoData, error) {
+	return f.routeGroupMuxInfo(app)
 }
 
 func (f *fakeVisor) groupSends() int {
@@ -634,5 +639,89 @@ func TestStreamGroupMessagesDelivers(t *testing.T) {
 
 	if fv.groupSends() < 3 {
 		t.Errorf("IncGroupStreamSend called %d times, want >= 3", fv.groupSends())
+	}
+}
+
+// --- StreamRouteGroupMuxInfo -----------------------------------------
+
+// TestStreamRouteGroupMuxInfoDelivers drives the smooth per-leg mux
+// telemetry stream backing 'cli proxy mux plot' (default mode) and
+// verifies each sample carries the fakeVisor's route-group legs.
+func TestStreamRouteGroupMuxInfoDelivers(t *testing.T) {
+	fv := newFakeVisor()
+	fv.routeGroupMuxInfo = func(app string) ([]RouteGroupMuxInfoData, error) {
+		if app != "skysocks-client" {
+			t.Errorf("app = %q, want skysocks-client", app)
+		}
+		return []RouteGroupMuxInfoData{{
+			MuxEnabled:  true,
+			SACKEnabled: true,
+			Legs: []RouteGroupMuxLegData{
+				{Index: 0, TpType: "stcpr", RemotePK: "remote-a", SentBytes: 100, RecvBytes: 200, Alive: true},
+				{Index: 1, TpType: "sudph", RemotePK: "remote-b", SentBytes: 10, RecvBytes: 20, Standby: true},
+			},
+		}}, nil
+	}
+	client, cleanup := newTestServer(t, fv)
+	defer cleanup()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream, err := client.StreamRouteGroupMuxInfo(ctx, &StreamRouteGroupMuxInfoRequest{
+		AppName:          "skysocks-client",
+		SampleIntervalNs: (20 * time.Millisecond).Nanoseconds(),
+	})
+	if err != nil {
+		t.Fatalf("StreamRouteGroupMuxInfo: %v", err)
+	}
+
+	sample, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("first Recv: %v", err)
+	}
+	if len(sample.RouteGroups) != 1 {
+		t.Fatalf("route groups = %d, want 1", len(sample.RouteGroups))
+	}
+	g := sample.RouteGroups[0]
+	if !g.MuxEnabled || !g.SackEnabled {
+		t.Errorf("mux/sack flags not carried: mux=%v sack=%v", g.MuxEnabled, g.SackEnabled)
+	}
+	if len(g.Legs) != 2 {
+		t.Fatalf("legs = %d, want 2", len(g.Legs))
+	}
+	if g.Legs[0].TransportKind != "stcpr" || g.Legs[0].SentBytes != 100 {
+		t.Errorf("leg0 mismatch: kind=%q sent=%d", g.Legs[0].TransportKind, g.Legs[0].SentBytes)
+	}
+	if !g.Legs[1].Standby {
+		t.Errorf("leg1 standby gate not carried")
+	}
+
+	// A second sample must arrive on the ticker (continuous stream).
+	if _, err := stream.Recv(); err != nil {
+		t.Fatalf("second Recv: %v", err)
+	}
+}
+
+// TestStreamRouteGroupMuxInfoEmpty verifies an absent route group is NOT
+// a stream error — the handler emits an empty sample and keeps going so
+// the plot renders an empty frame until the app dials.
+func TestStreamRouteGroupMuxInfoEmpty(t *testing.T) {
+	client, cleanup := newTestServer(t, newFakeVisor()) // default returns nil, nil
+	defer cleanup()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream, err := client.StreamRouteGroupMuxInfo(ctx, &StreamRouteGroupMuxInfoRequest{AppName: "vpn-client"})
+	if err != nil {
+		t.Fatalf("StreamRouteGroupMuxInfo: %v", err)
+	}
+	sample, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("Recv on empty route group errored: %v", err)
+	}
+	if len(sample.RouteGroups) != 0 {
+		t.Errorf("route groups = %d, want 0", len(sample.RouteGroups))
 	}
 }
