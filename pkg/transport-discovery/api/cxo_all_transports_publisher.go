@@ -30,7 +30,46 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/transport"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
+
+// allTransportsWireEntry is the published shape of one transport in the
+// all-transports snapshot. It mirrors transport.Entry MINUS the t_id: the ID
+// is a deterministic hash of (edges, type), so it is fully derivable by the
+// reader (transport.MakeTransportID) and shipping it wastes ~25% of the
+// compressed body — a UUID is high-entropy and does not gzip away. The reader
+// (pkg/visor's FetchAllTransportsCXO) reconstructs the full transport.Entry,
+// recomputing t_id. Keep the JSON tags aligned with transport.Entry so an
+// older subscriber that unmarshals straight into transport.Entry still reads
+// every field it recognizes.
+type allTransportsWireEntry struct {
+	Edges         [2]cipher.PubKey `json:"edges"`
+	Type          types.Type       `json:"type"`
+	Label         transport.Label  `json:"label"`
+	Latency       float64          `json:"latency_ms,omitempty"`
+	Bandwidth     uint64           `json:"bandwidth,omitempty"`
+	ThroughputBps float64          `json:"throughput_bps,omitempty"`
+}
+
+// toWireEntries drops the derivable t_id from each entry for publication.
+func toWireEntries(entries []*transport.Entry) []allTransportsWireEntry {
+	out := make([]allTransportsWireEntry, 0, len(entries))
+	for _, e := range entries {
+		if e == nil {
+			continue
+		}
+		out = append(out, allTransportsWireEntry{
+			Edges:         e.Edges,
+			Type:          e.Type,
+			Label:         e.Label,
+			Latency:       e.Latency,
+			Bandwidth:     e.Bandwidth,
+			ThroughputBps: e.ThroughputBps,
+		})
+	}
+	return out
+}
 
 // allTransportsPublishInterval is the recompute cadence. 60s matches
 // the metrics/uptime publishers; the store's allTransportsCache
@@ -138,7 +177,7 @@ func (a *AllTransportsCXOPublisher) publishOnce(ctx context.Context) {
 			a.recordError(err)
 			continue
 		}
-		body, err := json.Marshal(entries)
+		body, err := json.Marshal(toWireEntries(entries))
 		if err != nil {
 			a.log.WithError(err).WithField("path", v.path).Warn("all-transports marshal failed")
 			a.recordError(err)

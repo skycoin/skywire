@@ -14,11 +14,15 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxosub"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
@@ -165,8 +169,9 @@ func (s *Server) tryCXOUptimes() ([]byte, bool) {
 
 // tryCXOTransports returns the all-transports JSON snapshot from the TPD
 // all-transports feed's local snapshot (the network-wide "without-self" leaf),
-// or ok=false on cache miss. The leaf body is the same JSON GET /all-transports
-// serves, so it forwards unchanged.
+// or ok=false on cache miss. The publisher gzips the leaf and drops each
+// entry's derivable t_id, so the body is gunzipped and its t_id recomputed
+// here — yielding the same plain JSON GET /all-transports serves.
 func (s *Server) tryCXOTransports() ([]byte, bool) {
 	mgr := s.cxoMgr()
 	if mgr == nil {
@@ -183,10 +188,39 @@ func (s *Server) tryCXOTransports() ([]byte, bool) {
 		return true
 	})
 	if b, ok := leaves["transports/all/without-self"]; ok {
-		return b, true
+		return restoreAllTransportsBody(b), true
 	}
 	for _, b := range leaves { // any leaf beats a fallback HTTP round-trip
-		return b, true
+		return restoreAllTransportsBody(b), true
 	}
 	return nil, false
+}
+
+// restoreAllTransportsBody gunzips the published all-transports leaf (a no-op
+// on an already-plain body) and recomputes any derivable t_id the publisher
+// dropped, so the UI sees the same shape GET /all-transports returns. On any
+// decode error the gunzipped bytes are returned as-is.
+func restoreAllTransportsBody(body []byte) []byte {
+	body = cxoutils.Gunzip(body)
+	if len(body) == 0 {
+		return body
+	}
+	var entries []*transport.Entry
+	if err := json.Unmarshal(body, &entries); err != nil {
+		return body
+	}
+	changed := false
+	for _, e := range entries {
+		if e != nil && e.ID == (uuid.UUID{}) {
+			e.ID = transport.MakeTransportID(e.Edges[0], e.Edges[1], e.Type)
+			changed = true
+		}
+	}
+	if !changed {
+		return body
+	}
+	if out, err := json.Marshal(entries); err == nil {
+		return out
+	}
+	return body
 }

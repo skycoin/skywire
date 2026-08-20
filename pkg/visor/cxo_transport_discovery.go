@@ -19,6 +19,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/transport"
 	tpdapi "github.com/skycoin/skywire/pkg/transport-discovery/api"
@@ -56,6 +58,15 @@ func (c *cxoAwareTPD) GetAllTransports(ctx context.Context) ([]*transport.Entry,
 				body = cxoutils.Gunzip(body) // publisher gzips; raw bodies pass through
 				var entries []*transport.Entry
 				if err := json.Unmarshal(body, &entries); err == nil {
+					// The current publisher drops the derivable t_id (see
+					// allTransportsWireEntry in the TPD publisher); recompute any
+					// zero ID from (edges, type). A non-zero ID (older publisher)
+					// is left as-is.
+					for _, e := range entries {
+						if e != nil && e.ID == (uuid.UUID{}) {
+							e.ID = transport.MakeTransportID(e.Edges[0], e.Edges[1], e.Type)
+						}
+					}
 					return entries, nil
 				}
 				// Unmarshal failure: most likely a schema drift between
