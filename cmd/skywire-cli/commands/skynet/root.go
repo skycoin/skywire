@@ -54,6 +54,11 @@ func init() {
 	startCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
 	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "custom name for this client instance (default: skynet-client-<local-port>)")
 	startCmd.Flags().IntVar(&startRoutes, "routes", 0, "number of parallel skynet mux routes (0 or 1 = single route)")
+	// --mux is the cross-group spelling for the same parallel-route count
+	// (`proxy start --mux`). Bound to the same var as --routes; hidden to keep
+	// --routes primary on this command. Passing both = last parsed wins.
+	startCmd.Flags().IntVar(&startRoutes, "mux", 0, "alias for --routes (parallel route count)")
+	startCmd.Flags().MarkHidden("mux") //nolint:errcheck,gosec
 	startCmd.Flags().IntVar(&startMinHops, "min-hops", 0, "force routes through at least this many intermediates (>=2 rejects direct paths)")
 	startCmd.Flags().IntVar(&startFwdMinHops, "forward-min-hops", 0, "per-direction forward MinHops override (>=2 forces multi-hop on forward only)")
 	startCmd.Flags().IntVar(&startRevMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override (>=2 forces multi-hop on reverse only; combine with low/0 --min-hops for direct-upstream + multi-hop-downstream)")
@@ -139,7 +144,7 @@ var startCmd = &cobra.Command{
 		// single/direct route out from under a visor-global mux_routes/min_hops>1)
 		// actually reaches the app. Unset flags are omitted → the app inherits the
 		// visor-global default.
-		if cmd.Flags().Changed("routes") {
+		if cmd.Flags().Changed("routes") || cmd.Flags().Changed("mux") {
 			arguments["--routes"] = fmt.Sprintf("%d", startRoutes)
 		}
 
