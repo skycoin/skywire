@@ -78,9 +78,15 @@ func (h *Hook) Name() string { return h.name }
 // SelectRoute instead.
 func (h *Hook) BeforeDial(_ context.Context, info router.DialInfo) (router.DialAdjustment, error) {
 	spec := preset.Decide(h.name, dialInfoToCtx(info), nil)
-	// MinHops >= 2 (any direction) implies "no direct" — the direct path is a
-	// single 0-intermediate hop — so surface AvoidDirect, matching policy.Hook.
-	avoidDirect := spec.MinHops >= 2 || spec.ForwardMinHops >= 2 || spec.ReverseMinHops >= 2
+	// AvoidDirect = "wants a route-group overlay, not the bare direct-dial
+	// short-circuit." Two reasons, matching policy.Hook: (1) min_hops >= 2 (any
+	// direction) can't be met by a 0-intermediate direct hop; (2) a mux overlay
+	// (Mux/ForwardMux/ReverseMux > 1) needs the route-group path to build its aux
+	// legs. min_hops is a FLOOR, not a ceiling: at min_hops=1 the mux overlay
+	// still applies — the direct route becomes the group's 1-hop forward leg
+	// (floor) with mux legs layered on top; it must never DISABLE the mux.
+	avoidDirect := spec.MinHops >= 2 || spec.ForwardMinHops >= 2 || spec.ReverseMinHops >= 2 ||
+		spec.Mux > 1 || spec.ForwardMux > 1 || spec.ReverseMux > 1
 	return router.DialAdjustment{
 		MuxRoutes:               spec.Mux,
 		ForwardMuxRoutes:        spec.ForwardMux,
