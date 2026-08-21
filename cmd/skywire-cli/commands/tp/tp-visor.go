@@ -85,6 +85,9 @@ var (
 func init() {
 	visorListCmd.Flags().StringVarP(&vSDURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
 	visorListCmd.Flags().StringVarP(&vUTURL, "uturl", "w", deployment.Prod.TransportDiscovery, "uptime tracker url (TPD integrated)")
+	// --tpdurl is the standard spelling for the transport-discovery url used
+	// across the tp subcommands; alias it onto --uturl (same TPD host).
+	visorListCmd.Flags().StringVar(&vUTURL, "tpdurl", deployment.Prod.TransportDiscovery, "transport-discovery url (alias of --uturl)")
 	visorListCmd.Flags().BoolVarP(&vRawData, "raw", "r", false, "print raw json data")
 	visorListCmd.Flags().BoolVarP(&vNoFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	visorListCmd.Flags().StringVar(&vCacheFileSD, "cfs", os.TempDir()+"/visorsd.json", "SD cache file location")
