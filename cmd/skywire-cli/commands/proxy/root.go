@@ -134,4 +134,17 @@ var (
 var RootCmd = &cobra.Command{
 	Use:   "proxy",
 	Short: "Skysocks client",
+	Long: `Control the skysocks SOCKS5 proxy client over the Skywire network.
+
+Discover and test public proxy servers, start/stop a local client that
+exposes a SOCKS5 listener (default 127.0.0.1:1080), and inspect or reshape
+the multiplexed route group behind an active session.
+
+  list     discover proxy servers from service discovery
+  test     probe reachability of proxy servers
+  start    start the client against a server PK (--pk / positional)
+  stop     stop the client (--name / --all)
+  status   show client status + active route legs
+  mux      per-leg telemetry + route-group operations (info/plot/set/...)
+  server   control the local skysocks (SOCKS5) server app`,
 }

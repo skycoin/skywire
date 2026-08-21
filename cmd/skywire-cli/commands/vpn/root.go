@@ -115,4 +115,15 @@ var (
 var RootCmd = &cobra.Command{
 	Use:   "vpn",
 	Short: "VPN client",
+	Long: `Control the VPN client over the Skywire network.
+
+Discover VPN servers, start/stop a full-tunnel vpn-client against a server
+PK, check status, and open the VPN web UI.
+
+  list     discover VPN servers from service discovery
+  start    start the tunnel against a server PK (--pk / positional)
+  stop     stop the vpn client
+  status   show vpn client status
+  server   control the local vpn-server app (Linux only)
+  ui/url   open or print the VPN web-UI URL`,
 }
