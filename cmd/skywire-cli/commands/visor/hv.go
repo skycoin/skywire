@@ -137,7 +137,15 @@ func HypervisorPort(cmdFlags *pflag.FlagSet) string {
 	if err != nil {
 		return visorconfig.HTTPAddr()
 	}
-	return fmt.Sprintf(":%s", ports["hypervisor"])
+	// ports["hypervisor"] is a PortDetail struct; format only its Port
+	// field. Using the whole struct with %s renders "{8000 TCP}", which
+	// leaked into URLs as "http://127.0.0.1:{8000 TCP}/" for `hv ui`,
+	// `vpn ui`, and `vpn url`.
+	hp := ports["hypervisor"].Port
+	if hp == "" {
+		return visorconfig.HTTPAddr()
+	}
+	return fmt.Sprintf(":%s", hp)
 }
 
 var hvUIEnableCmd = &cobra.Command{
