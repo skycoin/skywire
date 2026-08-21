@@ -23,6 +23,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -39,13 +40,16 @@ var sshDestRE = regexp.MustCompile(`^(?:tcp://)?([a-f0-9]{66})@(.+:[^:]+)$`)
 
 // Flags (package-level so cobra can wire them once).
 var (
-	sshSK       cipher.SecKey
-	sshNoVisor  bool
-	sshEnv      []string
-	sshTimeout  string
-	sshNoPty    bool
-	sshDefPort  string
-	sshLegacyPK string //nolint:unused // kept for future "ssh <pk>" + --host shape
+	sshSK         cipher.SecKey
+	sshNoVisor    bool
+	sshEnv        []string
+	sshTimeout    string
+	sshNoPty      bool
+	sshDefPort    string
+	sshTransport  string
+	sshStandalone bool
+	sshVisorKey   bool
+	sshLegacyPK   string //nolint:unused // kept for future "ssh <pk>" + --host shape
 )
 
 func init() {
@@ -62,6 +66,13 @@ func init() {
 		"force exec mode even when no command is given (rarely useful — defaults to interactive when no command, exec when command is present, matching ssh's behavior)")
 	RootCmd.Flags().StringVarP(&sshDefPort, "port", "p", "2022",
 		"default port when the destination omits one (e.g. 'ssh <pk>@host' resolves to <pk>@host:<port>)")
+	RootCmd.Flags().StringVar(&sshTransport, "transport", "auto",
+		"transport: auto|tcp (pty shell is direct-TCP only; dmsg|skynet error — use 'cli pty exec' for those)")
+	RootCmd.Flags().BoolVar(&sshStandalone, "standalone", false,
+		"(not supported for pty shell — accepted for vocabulary parity; errors if set)")
+	RootCmd.Flags().BoolVar(&sshVisorKey, "visor-key", true,
+		"borrow the local visor's SK from "+visorconfig.SkywireConfig()+" for the noise handshake (default true; --sk wins)")
+	_ = RootCmd.Flags().MarkHidden("no-visor-key")
 }
 
 // RootCmd is the `skywire cli pty shell` command — OpenSSH-equivalent client
@@ -98,6 +109,13 @@ Examples:
   # Use a pinned client SK instead of the visor's
   skywire cli pty shell 0323...@1.2.3.4:2022 --sk <hex> -- whoami
 
+Transport: this command is direct-TCP only. --transport auto and
+--transport tcp both select that single path; --transport dmsg /
+skynet error with a pointer to 'cli pty exec', which has the via-visor
+paths. A tcp://<pk>@host:port destination is accepted (the scheme is
+optional); dmsg:// / skynet:// destinations are rejected here.
+--standalone is not supported (errors if set).
+
 The underlying transport is identical to 'cli dmsg pty exec/start
 --via tcp://<pk>@<host>:<port>'; this command is the discoverable
 ssh-shaped alias over that path.`,
@@ -107,7 +125,27 @@ ssh-shaped alias over that path.`,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if sshStandalone {
+			return fmt.Errorf("pty shell: --standalone not supported (this command is direct-TCP only); for a via-visor path use `cli pty exec` / `cli pty start`")
+		}
 		dest := args[0]
+
+		// A tcp:// scheme on the destination is stripped and accepted;
+		// dmsg:// / skynet:// are rejected — pty shell is direct-TCP
+		// only. --transport auto|tcp map to the same TCP path.
+		scheme, rest := internal.SplitTargetScheme(dest)
+		eff, err := internal.ResolveTransport(sshTransport, cmd.Flags().Changed("transport"), scheme)
+		if err != nil {
+			return fmt.Errorf("pty shell: %w", err)
+		}
+		switch eff {
+		case internal.TransportAuto, internal.TransportTCP:
+			// direct-TCP — the only path this command has.
+		default:
+			return fmt.Errorf("pty shell is direct-TCP only; use `cli pty exec --transport %s` for the via-visor path", eff)
+		}
+		dest = rest
+
 		// If the destination omits a port, splice in --port. Doing it
 		// here (not in the regex) avoids ambiguity with IPv6 literals.
 		dest = injectDefaultPort(dest, sshDefPort)
@@ -117,7 +155,13 @@ ssh-shaped alias over that path.`,
 			return err
 		}
 
-		myPK, mySK := resolveSSHIdentity(sshSK, !sshNoVisor)
+		// --visor-key is the canonical spelling; the legacy --no-visor-key
+		// is a hidden opt-out alias. --visor-key wins when both are set.
+		useVisorKey := sshVisorKey
+		if !cmd.Flags().Changed("visor-key") && cmd.Flags().Changed("no-visor-key") {
+			useVisorKey = !sshNoVisor
+		}
+		myPK, mySK := resolveSSHIdentity(sshSK, useVisorKey)
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
 		defer cancel()

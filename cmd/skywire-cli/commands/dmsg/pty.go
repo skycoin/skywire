@@ -59,6 +59,22 @@ var (
 	// forces skynet-only. Useful for unblocking debug when one
 	// strategy in the chain hangs without honoring ctx.
 	ptyScheme string
+	// ptyTransport is the canonical unified transport selector shared
+	// with the other remote-access commands: auto|dmsg|skynet|tcp.
+	// It is the visible spelling of the legacy --scheme (exec) and the
+	// --via direct-TCP path. Default "auto" preserves the historical
+	// behavior (exec: the visor's MultiDialer chain; start: the local
+	// dmsgpty-host proxy).
+	ptyTransport string
+	// ptyStandalone accepts the unified --standalone flag for vocabulary
+	// parity. exec/start have no standalone-dmsg path today, so setting
+	// it returns a clear error rather than silently doing nothing.
+	ptyStandalone bool
+	// ptyVisorKey is the canonical spelling of "borrow the local visor
+	// SK for the noise handshake". The legacy opt-in --via-visor is a
+	// hidden alias; --visor-key wins when both are set. Default false
+	// matches exec/start's historical opt-in behavior.
+	ptyVisorKey bool
 )
 
 // ptyTCPViaRE matches `tcp://<66-hex-pk>@<host:port>` for the --via
@@ -88,6 +104,13 @@ func init() {
 		"local secret key for the --via direct-TCP path's noise handshake (random if unset; pin for stable whitelist authorization)")
 	ptyStartCmd.Flags().BoolVar(&ptyViaVisor, "via-visor", false,
 		"borrow local visor's secret key from "+visorconfig.SkywireConfig()+" for the --via noise handshake (--sk wins if set)")
+	ptyStartCmd.Flags().StringVar(&ptyTransport, "transport", "auto",
+		"transport: auto (local dmsgpty-host proxy) | dmsg (same path) | tcp (direct-TCP, needs a host:port target); skynet is exec-only")
+	ptyStartCmd.Flags().BoolVar(&ptyStandalone, "standalone", false,
+		"(not supported for pty start yet — accepted for vocabulary parity; errors if set)")
+	ptyStartCmd.Flags().BoolVar(&ptyVisorKey, "visor-key", false,
+		"borrow the local visor's SK from "+visorconfig.SkywireConfig()+" for the tcp noise handshake (default false: opt-in; --sk wins)")
+	_ = ptyStartCmd.Flags().MarkHidden("via-visor")
 
 	// Flags for exec command
 	ptyExecCmd.PersistentFlags().StringVarP(&ptyRpcAddr, "rpc", "", "localhost:3435", "RPC server address")
@@ -102,6 +125,14 @@ func init() {
 		"borrow local visor's secret key from "+visorconfig.SkywireConfig()+" for the --via noise handshake (--sk wins if set)")
 	ptyExecCmd.Flags().StringVar(&ptyScheme, "scheme", "",
 		"pin transport: \"dmsg\" (force dmsg only), \"skynet\" (force skynet only), or empty (default MultiDialer chain: skynet first, dmsg fallback)")
+	ptyExecCmd.Flags().StringVar(&ptyTransport, "transport", "auto",
+		"transport: auto (MultiDialer: skynet first, dmsg fallback) | dmsg | skynet (all via-visor) | tcp (direct-TCP, needs a host:port target)")
+	ptyExecCmd.Flags().BoolVar(&ptyStandalone, "standalone", false,
+		"(not supported for pty exec yet — accepted for vocabulary parity; errors if set)")
+	ptyExecCmd.Flags().BoolVar(&ptyVisorKey, "visor-key", false,
+		"borrow the local visor's SK from "+visorconfig.SkywireConfig()+" for the tcp noise handshake (default false: opt-in; --sk wins)")
+	_ = ptyExecCmd.Flags().MarkHidden("scheme")
+	_ = ptyExecCmd.Flags().MarkHidden("via-visor")
 
 	// Flags for ui command
 	ptyUICmd.Flags().StringVarP(&ptyPath, "input", "i", "", "read from specified config file")
@@ -147,19 +178,56 @@ var ptyStartCmd = &cobra.Command{
 		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
 		defer cancel()
 
-		// --via tcp://<pk>@<host:port> bypasses local visor. <pk> in
-		// the URL pins the remote (server) PK; positional <pk> arg is
-		// then optional and ignored if supplied.
+		if ptyStandalone {
+			return fmt.Errorf("pty start: --standalone not supported yet (no standalone-dmsg start path); use the default (via the local dmsgpty-host) or --transport tcp / --via for direct-TCP")
+		}
+		useVisorKey := resolveVisorKeyBorrow(cmd, ptyVisorKey, ptyViaVisor)
+
+		// Normalize the target. A tcp://<pk>@host:port positional or the
+		// --via flag both select direct-TCP; dmsg://<pk> selects the
+		// via-visor path. A bare <pk> uses --transport.
+		via := ptyVia
+		transportChanged := cmd.Flags().Changed("transport")
+		targetScheme := ""
+		if via == "" && len(args) >= 1 {
+			scheme, rest := internal.SplitTargetScheme(args[0])
+			targetScheme = scheme
+			switch scheme {
+			case internal.TransportTCP:
+				via = "tcp://" + rest
+				args = args[1:] // drop the target; no positional command for start
+			case internal.TransportDmsg, internal.TransportSkynet:
+				args = append([]string{rest}, args[1:]...) // bare <pk> in args[0]
+			}
+		}
+		resolveScheme := targetScheme
 		if ptyVia != "" {
-			rPK, addr, err := parseTCPVia(ptyVia)
+			resolveScheme = internal.TransportTCP
+		}
+		eff, err := internal.ResolveTransport(ptyTransport, transportChanged, resolveScheme)
+		if err != nil {
+			return fmt.Errorf("pty start: %w", err)
+		}
+
+		// Direct-TCP: --via flag or a tcp target.
+		if via != "" || eff == internal.TransportTCP {
+			if via == "" {
+				return fmt.Errorf("pty start: --transport tcp needs a host:port target (tcp://<pk>@host:port or --via tcp://<pk>@host:port)")
+			}
+			rPK, addr, err := parseTCPVia(via)
 			if err != nil {
 				return err
 			}
-			myPK, mySK := resolveTCPIdentity(ptySK)
+			myPK, mySK := resolveTCPIdentity(ptySK, useVisorKey)
 			tcpCli := pty.DefaultCLI()
 			return (&tcpCli).StartRemotePtyTCP(ctx, rPK, addr, myPK, mySK, pty.DefaultCmd)
 		}
 
+		// via-visor path (local dmsgpty-host proxy). This path is dmsg;
+		// skynet is not wired for the interactive start command.
+		if eff == internal.TransportSkynet {
+			return fmt.Errorf("pty start: --transport skynet not wired for the interactive start path; use `cli pty exec --transport skynet` for a via-visor skynet exec")
+		}
 		if len(args) < 1 {
 			return fmt.Errorf("pty start: <pk> required (or use --via tcp://<pk>@<host:port>)")
 		}
@@ -190,7 +258,21 @@ Examples:
 
 The local CLI exit code mirrors the remote command's exit code (0 on
 success, the remote's exit code on non-zero exit, 124 on timeout, 1 on
-RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
+RPC-layer failure). stdout flows to local stdout, stderr to local stderr.
+
+Transport (--transport, default auto):
+  auto    the visor's MultiDialer chain (skynet first, dmsg fallback).
+  dmsg    force via-visor dmsg.
+  skynet  force via-visor skynet.
+  tcp     direct noise-TCP; needs a host:port target (--via or a
+          tcp://<pk>@host:port positional).
+--standalone is not supported here (no standalone-dmsg exec path yet).
+
+Target grammar — in addition to the bare <pk>:
+  dmsg://<pk>              select dmsg    (== --transport dmsg)
+  skynet://<pk>            select skynet  (== --transport skynet)
+  tcp://<pk>@host:port     select direct-TCP (command follows the target)
+A target scheme that disagrees with an explicit --transport errors.`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		internal.CheckDirectViaScheme(cmd.Flags(), ptyVia, "a direct noise-TCP target (tcp://<pk>@host:port)")
@@ -201,18 +283,68 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
 		defer cancel()
 
-		// --via tcp://<pk>@<host:port> shifts argument layout: pk is
-		// in the URL, so args are just `<command> [args...]` (no
-		// leading positional pk).
+		if ptyStandalone {
+			return fmt.Errorf("pty exec: --standalone not supported yet (no standalone-dmsg exec path); use --transport dmsg|skynet for the via-visor path or --transport tcp / --via for direct-TCP")
+		}
+		useVisorKey := resolveVisorKeyBorrow(cmd, ptyVisorKey, ptyViaVisor)
+
+		// The legacy --scheme is the hidden alias of --transport. When
+		// only --scheme is set, fold it into --transport so the rest of
+		// the resolution has a single source of truth.
+		transportChanged := cmd.Flags().Changed("transport")
+		if !transportChanged && cmd.Flags().Changed("scheme") {
+			switch ptyScheme {
+			case "":
+				ptyTransport = internal.TransportAuto
+			case "dmsg":
+				ptyTransport = internal.TransportDmsg
+			case "skynet":
+				ptyTransport = internal.TransportSkynet
+			default:
+				return fmt.Errorf("pty exec: bad --scheme %q (want dmsg|skynet or empty)", ptyScheme)
+			}
+			transportChanged = true
+		}
+
+		// Normalize the target. A tcp://<pk>@host:port positional or the
+		// --via flag both select direct-TCP; dmsg://<pk> / skynet://<pk>
+		// select the via-visor scheme. A bare <pk> uses --transport.
+		via := ptyVia
+		targetScheme := ""
+		if via == "" && len(args) >= 1 {
+			scheme, rest := internal.SplitTargetScheme(args[0])
+			targetScheme = scheme
+			switch scheme {
+			case internal.TransportTCP:
+				via = "tcp://" + rest
+				args = args[1:] // drop the target; command starts at args[0]
+			case internal.TransportDmsg, internal.TransportSkynet:
+				args = append([]string{rest}, args[1:]...) // bare <pk> in args[0]
+			}
+		}
+		resolveScheme := targetScheme
 		if ptyVia != "" {
+			resolveScheme = internal.TransportTCP
+		}
+		eff, err := internal.ResolveTransport(ptyTransport, transportChanged, resolveScheme)
+		if err != nil {
+			return fmt.Errorf("pty exec: %w", err)
+		}
+
+		// Direct-TCP: --via flag or a tcp target. pk is in the URL, so
+		// args are just `<command> [args...]`.
+		if via != "" || eff == internal.TransportTCP {
+			if via == "" {
+				return fmt.Errorf("pty exec: --transport tcp needs a host:port target (tcp://<pk>@host:port or --via tcp://<pk>@host:port)")
+			}
 			if len(args) < 1 {
 				return fmt.Errorf("pty exec --via: <command> required")
 			}
-			rPK, addr, err := parseTCPVia(ptyVia)
+			rPK, addr, err := parseTCPVia(via)
 			if err != nil {
 				return err
 			}
-			myPK, mySK := resolveTCPIdentity(ptySK)
+			myPK, mySK := resolveTCPIdentity(ptySK, useVisorKey)
 			name := args[0]
 			var cmdArgs []string
 			if len(args) > 1 {
@@ -226,6 +358,19 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 			}
 			reportExecResult(cmd, resp)
 			return nil
+		}
+
+		// via-visor path (visor RPC DmsgPtyExec). eff maps onto the RPC
+		// Scheme: auto -> "" (MultiDialer), dmsg -> "dmsg", skynet ->
+		// "skynet".
+		scheme := ""
+		switch eff {
+		case internal.TransportAuto:
+			scheme = ""
+		case internal.TransportDmsg:
+			scheme = "dmsg"
+		case internal.TransportSkynet:
+			scheme = "skynet"
 		}
 
 		if len(args) < 2 {
@@ -269,7 +414,7 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 				Env:       ptyExecEnv,
 				TimeoutMS: timeout.Milliseconds(),
 			},
-			Scheme: ptyScheme,
+			Scheme: scheme,
 		})
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
@@ -309,6 +454,21 @@ func reportExecResult(cmd *cobra.Command, resp *pty.CommandExecResult) {
 	}
 }
 
+// resolveVisorKeyBorrow decides whether to borrow the local visor's SK
+// for the direct-TCP noise handshake. The canonical --visor-key wins
+// when explicitly set; the legacy opt-in --via-visor is honored only
+// when --visor-key was not set. When neither is set the historical
+// default holds: exec/start do NOT borrow (they were opt-in).
+func resolveVisorKeyBorrow(cmd *cobra.Command, visorKey, viaVisor bool) bool {
+	if cmd.Flags().Changed("visor-key") {
+		return visorKey
+	}
+	if cmd.Flags().Changed("via-visor") {
+		return viaVisor
+	}
+	return false
+}
+
 // parseTCPVia splits a `tcp://<pk>@<host:port>` URL into the pinned
 // remote PK and the dial-target address. The PK must be the
 // canonical 66-char-hex form; the address is passed through to
@@ -341,7 +501,12 @@ func parseTCPVia(via string) (cipher.PubKey, string, error) {
 //
 // Fatal-exits with a helpful message on a malformed identity
 // source — the caller can't proceed without a valid keypair.
-func resolveTCPIdentity(skFlag cipher.SecKey) (cipher.PubKey, cipher.SecKey) {
+//
+// useVisorKey is the resolved decision (see resolveVisorKeyBorrow)
+// about whether to borrow the local visor's SK; it replaces the direct
+// read of the legacy --via-visor flag so the canonical --visor-key can
+// drive it.
+func resolveTCPIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey, cipher.SecKey) {
 	var zero cipher.SecKey
 	sk := skFlag
 	if sk == zero {
@@ -349,15 +514,15 @@ func resolveTCPIdentity(skFlag cipher.SecKey) (cipher.PubKey, cipher.SecKey) {
 			_ = sk.Set(env) //nolint:errcheck,gosec
 		}
 	}
-	if sk == zero && ptyViaVisor {
+	if sk == zero && useVisorKey {
 		confPath := visorconfig.SkywireConfig()
 		conf, err := visorconfig.ReadFile(confPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "pty --via-visor: read %s: %v\n", confPath, err) //nolint:errcheck
+			fmt.Fprintf(os.Stderr, "pty --visor-key: read %s: %v\n", confPath, err) //nolint:errcheck
 			os.Exit(1)
 		}
 		if conf.SK == zero {
-			fmt.Fprintf(os.Stderr, "pty --via-visor: visor config %s has empty SK\n", confPath) //nolint:errcheck
+			fmt.Fprintf(os.Stderr, "pty --visor-key: visor config %s has empty SK\n", confPath) //nolint:errcheck
 			os.Exit(1)
 		}
 		sk = conf.SK
