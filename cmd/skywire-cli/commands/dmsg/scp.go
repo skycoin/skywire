@@ -20,6 +20,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -35,9 +36,11 @@ import (
 var scpPKPathRe = regexp.MustCompile(`^([a-f0-9]{66}):(.*)$`)
 
 var (
-	scpPort      uint16
-	scpTimeout   time.Duration
-	scpTransport string
+	scpPort       uint16
+	scpTimeout    time.Duration
+	scpTransport  string
+	scpStandalone bool
+	scpVisorKey   bool
 )
 
 // scpTransportAuto is the default for --transport: try the local
@@ -58,7 +61,11 @@ func init() {
 	scpCmd.Flags().DurationVarP(&scpTimeout, "timeout", "t", 5*time.Minute,
 		"transfer timeout (includes dial + payload)")
 	scpCmd.Flags().StringVar(&scpTransport, "transport", scpTransportAuto,
-		"transport: auto (try visor first, fallback dmsg) | dmsg | skynet")
+		"transport: auto (try visor first, fallback dmsg) | dmsg | skynet | tcp (not supported yet)")
+	scpCmd.Flags().BoolVar(&scpStandalone, "standalone", false,
+		"force the standalone-dmsg client path (skip the visor RPC); needs --sk for a stable identity")
+	scpCmd.Flags().BoolVar(&scpVisorKey, "visor-key", true,
+		"via-visor transports run under the visor's own identity; standalone uses --sk (see help)")
 	scpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr,
 		"local visor RPC server address (env: SKYWIRE_RPC). Used for skynet / auto transports.")
 	scpCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "fatal",
@@ -95,6 +102,17 @@ Transport selection (--transport):
   - skynet  routes the transfer over the skywire router via the
             visor's VisorSCP RPC. Requires a local visor with
             appnet TypeSkynet registered.
+  - tcp     not supported yet (there is no dmsgscp TCP host); asking
+            for it errors rather than silently falling back.
+
+--standalone forces the standalone-dmsg client path (same as
+--transport dmsg, but explicit) even when a local visor is reachable.
+
+Target grammar — the PK-bearing arg may also carry a scheme, which
+selects the transport (and must agree with an explicit --transport):
+  skywire cli dmsg scp ./f skynet://<pk>:remote.bin   (upload over skynet)
+  skywire cli dmsg scp dmsg://<pk>:remote.bin ./f     (download over dmsg)
+A bare <pk>:path keeps using --transport.
 
 Identity: --sk gives the standalone dmsg client a stable PK so the
 host's whitelist can authorize it. Without --sk you get a fresh
@@ -114,28 +132,69 @@ standalone dmsg path; the VisorSCP RPC uses the visor's own PK.`,
 			}
 		}
 
-		direction, peerPK, remotePath, localPath, err := classifyArgs(args[0], args[1])
+		// A `<scheme>://` prefix may ride on whichever arg carries the
+		// PK (e.g. skynet://<pk>:remote.bin). Strip it before classify;
+		// the scheme selects the transport (subject to --transport
+		// precedence). A bare <pk>:path is untouched.
+		srcScheme, srcRest := internal.SplitTargetScheme(args[0])
+		dstScheme, dstRest := internal.SplitTargetScheme(args[1])
+
+		direction, peerPK, remotePath, localPath, err := classifyArgs(srcRest, dstRest)
 		if err != nil {
 			return err
 		}
 
-		switch scpTransport {
-		case scpTransportAuto, scpTransportDmsg, scpTransportSkynet:
-		default:
-			return fmt.Errorf("dmsg scp: bad --transport %q (want auto|dmsg|skynet)", scpTransport)
+		// The transport scheme lives on the PK-bearing side.
+		targetScheme := dstScheme
+		if direction == scpDirDownload {
+			targetScheme = srcScheme
+		}
+		eff, err := internal.ResolveTransport(scpTransport, cmd.Flags().Changed("transport"), targetScheme)
+		if err != nil {
+			return fmt.Errorf("dmsg scp: %w", err)
 		}
 
-		// Skynet path requires the visor (CLI has no appnet runtime).
-		if scpTransport == scpTransportSkynet {
+		switch eff {
+		case scpTransportAuto, scpTransportDmsg, scpTransportSkynet:
+		case internal.TransportTCP:
+			return fmt.Errorf("dmsg scp: --transport tcp not supported yet (no dmsgscp TCP host); use dmsg|skynet|auto")
+		default:
+			return fmt.Errorf("dmsg scp: bad --transport %q (want auto|dmsg|skynet)", eff)
+		}
+
+		// The standalone-dmsg path is taken explicitly via --standalone
+		// or implicitly via --transport dmsg; auto (without --standalone)
+		// prefers the visor RPC and only falls back to standalone.
+		standalonePath := scpStandalone || eff == scpTransportDmsg
+
+		// --visor-key is honest about scp's identity model: via-visor
+		// transports run under the visor's own key; the standalone dmsg
+		// path uses --sk (a second client on the visor's PK would collide
+		// in dmsg discovery). Only act when the user set it explicitly.
+		if cmd.Flags().Changed("visor-key") {
+			if scpVisorKey && standalonePath {
+				return fmt.Errorf("dmsg scp: --standalone / --transport dmsg cannot borrow the visor key (dmsg discovery collision); it uses --sk / a random identity")
+			}
+			if !scpVisorKey && !standalonePath {
+				return fmt.Errorf("dmsg scp: --visor-key=false has no effect on the via-visor transports; use --standalone --sk <sk> for a separate identity")
+			}
+		}
+
+		// Skynet path requires the visor (CLI has no appnet runtime) and
+		// has no standalone form.
+		if eff == scpTransportSkynet {
+			if scpStandalone {
+				return fmt.Errorf("dmsg scp: --standalone is dmsg-only; skynet requires the local visor")
+			}
 			return runVisorSCP(visor.VisorSCPTransportSkynet, peerPK, direction, localPath, remotePath, cmd)
 		}
 
-		// Auto path: try the visor's RPC first. The visor's own PK is
-		// stable + already on the peer's whitelist, so we save the
-		// operator from threading --sk. Fall back to standalone dmsg
-		// when --rpc is unreachable (typical for an operator running
-		// the CLI on a host without a local visor).
-		if scpTransport == scpTransportAuto {
+		// Auto path (without --standalone): try the visor's RPC first.
+		// The visor's own PK is stable + already on the peer's whitelist,
+		// so we save the operator from threading --sk. Fall back to
+		// standalone dmsg when --rpc is unreachable (typical for an
+		// operator running the CLI on a host without a local visor).
+		if eff == scpTransportAuto && !scpStandalone {
 			err := runVisorSCP(visor.VisorSCPTransportDmsg, peerPK, direction, localPath, remotePath, cmd)
 			if err == nil {
 				return nil

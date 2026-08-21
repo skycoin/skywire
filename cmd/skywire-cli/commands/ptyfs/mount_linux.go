@@ -32,6 +32,7 @@ import (
 	"github.com/pkg/sftp"
 	"github.com/spf13/cobra"
 
+	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -94,6 +95,14 @@ selected by the target shape and the --standalone flag:
                         listener (cli pty host):
                           skywire cli pty fs mount <pk>@1.2.3.4:2022 ~/mnt/peer
 
+Unified transport (--transport, default auto):
+  auto|dmsg  via-visor bridge (default). dmsg://<pk> selects it too.
+  tcp        direct-TCP; a <pk>@host:port target (or tcp://<pk>@host:port)
+             selects it automatically.
+  skynet     not wired yet (no skynet-via-visor sftp bridge) — errors.
+--standalone still forces the dmsg-standalone client path on a bare <pk>.
+A target scheme that disagrees with an explicit --transport errors.
+
 Runs in the foreground. Send SIGINT (Ctrl-C) or SIGTERM to unmount
 and exit. For a background mount use 'nohup ... &' or a systemd
 unit — there is no daemonize flag by design (operators can compose
@@ -118,50 +127,77 @@ their own supervision).`,
 		ctx, cancel := cmdutil.SignalContext(cmd.Context(), nil)
 		defer cancel()
 
-		switch {
-		case strings.Contains(target, "@"):
+		// A <scheme>:// prefix selects the transport; a bare
+		// <pk>@host:port still implies tcp. dmsg://<pk> is via-visor (or
+		// dmsg-standalone with --standalone); skynet is not wired here.
+		scheme, rest := internal.SplitTargetScheme(target)
+		targetScheme := scheme
+		if targetScheme == "" && strings.Contains(rest, "@") {
+			targetScheme = internal.TransportTCP
+		}
+		eff, err := internal.ResolveTransport(ptyfsTransport, cmd.Flags().Changed("transport"), targetScheme)
+		if err != nil {
+			return fmt.Errorf("ptyfs: %w", err)
+		}
+
+		// --visor-key is canonical; --no-visor-key is the hidden opt-out
+		// alias. --visor-key wins when both are set. Consulted only on
+		// the direct-TCP path — the dmsg paths never borrow the visor key
+		// (a second client on the visor's PK collides in dmsg discovery).
+		useVisorKey := ptyfsVisorKey
+		if !cmd.Flags().Changed("visor-key") && cmd.Flags().Changed("no-visor-key") {
+			useVisorKey = !ptyfsNoVisor
+		}
+
+		switch eff {
+		case internal.TransportSkynet:
+			return fmt.Errorf("ptyfs: --transport skynet not wired yet (no skynet-via-visor sftp bridge); use dmsg|auto (via-visor), --standalone (dmsg-standalone), or tcp")
+
+		case internal.TransportTCP:
 			// standalone-tcp: direct noise-XK TCP to the peer's pty-host.
 			if mountStandalone {
 				return fmt.Errorf("ptyfs: --standalone is for the bare-<pk> dmsg path; a <pk>@host:port target is already standalone TCP")
 			}
-			dest := injectDefaultPort(target, ptyfsDefPort)
+			dest := injectDefaultPort(rest, ptyfsDefPort)
 			rPK, addr, err := parsePTYFSDestination(dest)
 			if err != nil {
 				return err
 			}
-			myPK, mySK := resolvePTYFSIdentity(ptyfsSK, !ptyfsNoVisor)
+			myPK, mySK := resolvePTYFSIdentity(ptyfsSK, useVisorKey)
 			rwc, err := pty.DialSftpTCP(ctx, addr, myPK, mySK, rPK)
 			if err != nil {
 				return err
 			}
 			return runMount(ctx, rwc, rPK, mountpoint, fmt.Sprintf("%s@%s (tcp)", rPK, addr))
 
-		case mountStandalone:
-			// dmsg-standalone: ephemeral dmsg client. NEVER the visor SK
-			// here — a second client registering the visor's PK collides
-			// with the running visor in dmsg discovery — so don't borrow it.
-			rPK, err := parseBarePK(target)
-			if err != nil {
-				return err
-			}
-			myPK, mySK := resolvePTYFSIdentity(ptyfsSK, false)
-			dmsgC, stop, err := startPTYFSDmsgClient(ctx, myPK, mySK)
-			if err != nil {
-				return err
-			}
-			defer stop()
-			rwc, err := pty.DialSftpDmsg(ctx, dmsgC, rPK, skyenv.DmsgPtyPort)
-			if err != nil {
-				return err
-			}
-			return runMount(ctx, rwc, rPK, mountpoint, fmt.Sprintf("%s (dmsg-standalone)", rPK))
-
 		default:
+			// via-visor (auto/dmsg) or dmsg-standalone (--standalone).
+			if mountStandalone {
+				// dmsg-standalone: ephemeral dmsg client. NEVER the visor
+				// SK here — a second client registering the visor's PK
+				// collides with the running visor in dmsg discovery.
+				rPK, err := parseBarePK(rest)
+				if err != nil {
+					return err
+				}
+				myPK, mySK := resolvePTYFSIdentity(ptyfsSK, false)
+				dmsgC, stop, err := startPTYFSDmsgClient(ctx, myPK, mySK)
+				if err != nil {
+					return err
+				}
+				defer stop()
+				rwc, err := pty.DialSftpDmsg(ctx, dmsgC, rPK, skyenv.DmsgPtyPort)
+				if err != nil {
+					return err
+				}
+				return runMount(ctx, rwc, rPK, mountpoint, fmt.Sprintf("%s (dmsg-standalone)", rPK))
+			}
+
 			// via-visor: bridge through the LOCAL visor's authorized dmsg
 			// client to the peer's dmsgpty (port 22). No CLI key needs
 			// whitelisting and there's no discovery collision — the visor
 			// (e.g. the hypervisor) is already authorized to the peer.
-			rPK, err := parseBarePK(target)
+			rPK, err := parseBarePK(rest)
 			if err != nil {
 				return err
 			}
