@@ -262,6 +262,13 @@ func (r *router) DialRoutes(
 		return nil, fmt.Errorf("no transports available; route setup skipped")
 	}
 
+	// escalateToLegacy is flipped on when a cascade-installed route fails its
+	// data-plane handshake (the fingerprint of a destination that doesn't trust
+	// cascade-installed routes — a mixed-cascade fleet). Once set, subsequent
+	// attempts dial through the classic trusted-setup-node path the destination
+	// DOES accept. See WithForceLegacyRouteSetup.
+	escalateToLegacy := false
+
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		var forwardPath, reversePath []routing.Hop
 		var err error
@@ -351,8 +358,26 @@ func (r *router) DialRoutes(
 			Reverse:   reversePath,
 		}
 
-		rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, req)
+		// Bound this single setup attempt so a setup-node / cascade RPC that
+		// accepts but never replies can't wedge the whole dial (and the app in
+		// "starting"). On timeout we fall through to the retry-with-exclude loop
+		// below, which re-fetches a fresh route and tries again. See
+		// routeSetupDialTimeout.
+		setupCtx := ctx
+		if escalateToLegacy {
+			setupCtx = WithForceLegacyRouteSetup(ctx)
+		}
+		dialCtx, cancelDial := context.WithTimeout(setupCtx, routeSetupDialTimeout)
+		rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(dialCtx, log, r.dmsgC, r.conf.SetupNodes, req)
+		cancelDial()
 		if err != nil {
+			// If the PARENT context (the overall dial deadline) is done, stop
+			// retrying and surface it — the per-attempt timeout above only bounds
+			// one attempt, this bounds the whole dial so the caller's Dial RPC
+			// returns and the app's --reconnect loop can re-try from scratch.
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			// On dial failure, attribute to the intermediate that broke
 			// id_reservation and exclude it from the NEXT fetchBestRoutes
 			// pick. The router.DialError carries the PK that failed.
@@ -440,10 +465,26 @@ func (r *router) DialRoutes(
 			// stale-TPD error still fail fast — retrying the same direct path
 			// to a down peer would only burn the budget.
 			deadInter := intermediatePKsOfPath(forwardPath, lPK, rPK)
-			if (len(deadInter) > 0 || errors.Is(err, ErrNoSuitableTransport)) && attempt < maxRetries {
-				for _, ipk := range deadInter {
-					opts = appendExcludeIntermediate(opts, ipk)
-				}
+			// A cascade-installed route that fails its handshake is ALSO the
+			// fingerprint of a destination that does not trust cascade route
+			// setup (rules ACKed over transports, but the destination — running
+			// classic-only setup — rejects the cascade initiator so the
+			// reciprocal route-group handshake never completes). Escalate the
+			// next attempt to the classic trusted-setup-node path the
+			// destination accepts. Worth a retry even for a direct/no-hop route,
+			// since this changes WHO installs the rules (an RSN the destination
+			// trusts), not which intermediates are used.
+			firstLegacyEscalation := false
+			if !escalateToLegacy {
+				escalateToLegacy = true
+				firstLegacyEscalation = true
+				log.WithError(err).Warnf("Route data-plane handshake failed (attempt %d/%d); escalating remaining attempts to the classic setup-node path",
+					attempt, maxRetries)
+			}
+			for _, ipk := range deadInter {
+				opts = appendExcludeIntermediate(opts, ipk)
+			}
+			if (len(deadInter) > 0 || errors.Is(err, ErrNoSuitableTransport) || firstLegacyEscalation) && attempt < maxRetries {
 				log.WithError(err).Warnf("Route setup failed at handshake/data plane (attempt %d/%d); excluding %d intermediate(s) and retrying with a fresh route",
 					attempt, maxRetries, len(deadInter))
 				continue

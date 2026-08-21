@@ -76,7 +76,6 @@ func testRPCIngressGatewayDialOK(t *testing.T, l *logging.Logger, nType appnet.T
 
 	const localPort routing.Port = 100
 
-	dialCtx := context.Background()
 	dialConn := &appcommon.MockConn{}
 	dialConn.On("LocalAddr").Return(dmsg.Addr{Port: uint16(localPort)})
 	dialConn.On("RemoteAddr").Return(dmsg.Addr{})
@@ -84,7 +83,7 @@ func testRPCIngressGatewayDialOK(t *testing.T, l *logging.Logger, nType appnet.T
 	var dialErr error
 
 	n := &appnet.MockNetworker{}
-	n.On("DialContext", dialCtx, dialAddr).Return(dialConn, dialErr)
+	n.On("DialContext", mock.Anything, dialAddr).Return(dialConn, dialErr)
 
 	err := appnet.AddNetworker(nType, n)
 	require.NoError(t, err)
@@ -124,13 +123,12 @@ func testRPCIngressGatewayDialNoMoreSlots(t *testing.T, l *logging.Logger, dialA
 func testRPCIngressGatewayDialError(t *testing.T, l *logging.Logger, nType appnet.Type, dialAddr appnet.Addr) {
 	appnet.ClearNetworkers()
 
-	dialCtx := context.Background()
 	dialErr := errors.New("dial error")
 
 	var dialConn net.Conn
 
 	n := &appnet.MockNetworker{}
-	n.On("DialContext", dialCtx, dialAddr).Return(dialConn, dialErr)
+	n.On("DialContext", mock.Anything, dialAddr).Return(dialConn, dialErr)
 
 	err := appnet.AddNetworker(nType, n)
 	require.NoError(t, err)
@@ -147,7 +145,6 @@ func testRPCIngressGatewayDialErrorWrappingConn(t *testing.T, l *logging.Logger,
 
 	remoteAddr, localAddr := &appcommon.MockAddr{}, &appcommon.MockAddr{}
 
-	dialCtx := context.Background()
 	dialConn := &appcommon.MockConn{}
 
 	dialConn.On("LocalAddr").Return(localAddr)
@@ -156,7 +153,7 @@ func testRPCIngressGatewayDialErrorWrappingConn(t *testing.T, l *logging.Logger,
 	var dialErr error
 
 	n := &appnet.MockNetworker{}
-	n.On("DialContext", dialCtx, dialAddr).Return(dialConn, dialErr)
+	n.On("DialContext", mock.Anything, dialAddr).Return(dialConn, dialErr)
 
 	err := appnet.AddNetworker(nType, n)
 	require.NoError(t, err)
@@ -186,13 +183,12 @@ func TestRPCIngressGateway_DialWithOptions(t *testing.T) {
 
 		const localPort routing.Port = 200
 
-		dialCtx := context.Background()
 		dialConn := &appcommon.MockConn{}
 		dialConn.On("LocalAddr").Return(dmsg.Addr{Port: uint16(localPort)})
 		dialConn.On("RemoteAddr").Return(dmsg.Addr{})
 
 		n := &appnet.MockNetworker{}
-		n.On("DialContext", dialCtx, dialAddr).Return(dialConn, error(nil))
+		n.On("DialContext", mock.Anything, dialAddr).Return(dialConn, error(nil))
 
 		require.NoError(t, appnet.AddNetworker(nType, n))
 
@@ -211,13 +207,12 @@ func TestRPCIngressGateway_DialWithOptions(t *testing.T) {
 
 		const localPort routing.Port = 201
 
-		dialCtx := context.Background()
 		dialConn := &appcommon.MockConn{}
 		dialConn.On("LocalAddr").Return(dmsg.Addr{Port: uint16(localPort)})
 		dialConn.On("RemoteAddr").Return(dmsg.Addr{})
 
 		n := &appnet.MockNetworker{}
-		n.On("DialContext", dialCtx, dialAddr).Return(dialConn, error(nil))
+		n.On("DialContext", mock.Anything, dialAddr).Return(dialConn, error(nil))
 
 		require.NoError(t, appnet.AddNetworker(nType, n))
 
@@ -239,13 +234,12 @@ func TestRPCIngressGateway_DialWithOptions(t *testing.T) {
 
 		const localPort routing.Port = 202
 
-		dialCtx := context.Background()
 		dialConn := &appcommon.MockConn{}
 		dialConn.On("LocalAddr").Return(dmsg.Addr{Port: uint16(localPort)})
 		dialConn.On("RemoteAddr").Return(dmsg.Addr{})
 
 		n := &appnet.MockNetworker{}
-		n.On("DialContext", dialCtx, dialAddr).Return(dialConn, error(nil))
+		n.On("DialContext", mock.Anything, dialAddr).Return(dialConn, error(nil))
 
 		require.NoError(t, appnet.AddNetworker(nType, n))
 
@@ -266,13 +260,12 @@ func TestRPCIngressGateway_DialWithOptions(t *testing.T) {
 
 		const localPort routing.Port = 203
 
-		dialCtx := context.Background()
 		dialConn := &appcommon.MockConn{}
 		dialConn.On("LocalAddr").Return(dmsg.Addr{Port: uint16(localPort)})
 		dialConn.On("RemoteAddr").Return(dmsg.Addr{})
 
 		n := &appnet.MockNetworker{}
-		n.On("DialContext", dialCtx, dialAddr).Return(dialConn, error(nil))
+		n.On("DialContext", mock.Anything, dialAddr).Return(dialConn, error(nil))
 
 		require.NoError(t, appnet.AddNetworker(nType, n))
 

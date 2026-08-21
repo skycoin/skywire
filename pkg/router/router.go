@@ -58,6 +58,21 @@ const (
 	// setup budget while tolerating those.
 	handshakeAwaitTimeout = 10 * time.Second
 
+	// routeSetupDialTimeout bounds a SINGLE route-group setup attempt
+	// (reserve+install via the RouteGroupDialer — the source-driven cascade
+	// or the legacy setup-node RPC). Without it, a setup-node / cascade RPC
+	// that accepts the request but never replies (a hung dmsg session, an
+	// intermediate that churned mid-cascade, or a destination that silently
+	// dropped the setup conn) blocks the dial forever. That is the permanent
+	// "starting" wedge: the app-side Dial RPC — and the app's own retrier — are
+	// blocked inside that one unbounded call, so a transient route drop becomes
+	// a permanent stall with no route group, even with --reconnect. Bounding
+	// each attempt lets the DialRoutes retry loop advance to a fresh candidate
+	// and, on exhaustion, return an error so the app's reconnect loop re-tries.
+	// 30s comfortably covers a slow multi-hop cascade (reserve+install ACKs)
+	// while staying well under the per-dial ceiling.
+	routeSetupDialTimeout = 30 * time.Second
+
 	maxHops       = 1000
 	retryDuration = 2 * time.Second
 	retryInterval = 500 * time.Millisecond
