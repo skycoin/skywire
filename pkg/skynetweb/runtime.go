@@ -32,6 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxyinterstitial"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/skynet"
 	"github.com/skycoin/skywire/pkg/skynetca"
 )
@@ -145,6 +146,12 @@ type Config struct {
 	// Aliases maps a destination label to a PK (e.g. "skywire" -> LocalPK), so
 	// "skywire.skynet" resolves exactly like "<pk>.skynet".
 	Aliases map[string]cipher.PubKey
+
+	// StatusProvider, when non-nil, enables the reserved in-process status hosts
+	// (http://status.skynet/ etc.) served through this proxy — a read-only
+	// diagnostic page (logs + route/transport events + per-leg mux view) for a
+	// surface. Nil disables the status hosts. See pkg/proxystatus.
+	StatusProvider proxystatus.Provider
 }
 
 // Run starts the SOCKS5 proxy. Blocks until ctx is canceled.
@@ -230,6 +237,24 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 
 			origHost, _ := dialCtx.Value(skynetOrigHostKey{}).(string)
 
+			// Reserved status hosts (http://status.skynet/ etc.): served in-process,
+			// never routed out — the read-only diagnostic page for a surface.
+			// Checked before the .skynet match / upstream forward so any status host
+			// is reachable through this proxy. Plaintext HTTP only.
+			if cfg.StatusProvider != nil {
+				_, sport, _ := net.SplitHostPort(addr) //nolint:errcheck
+				if proxyinterstitial.ShouldServe(sport) {
+					if surface, ok := proxystatus.Match(origHost); ok {
+						snap, serr := cfg.StatusProvider.StatusSnapshot(surface)
+						if serr != nil {
+							snap = proxystatus.Snapshot{Surface: surface, Note: "status unavailable: " + serr.Error()}
+						}
+						log.WithField("surface", string(surface)).Debug("SOCKS5 → serving in-process proxy status page")
+						return &tcpAddrConn{Conn: proxystatus.ServeConn(proxystatus.Render(snap))}, nil
+					}
+				}
+			}
+
 			// Transient-failure interstitial (see pkg/dmsgweb/runtime.go for the
 			// full rationale): on a route-still-warming / upstream-not-ready
 			// failure for a plaintext-HTTP request, serve a branded
@@ -252,12 +277,16 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					log.WithField("host", target).WithField("err", retErr).
 						Debug("SOCKS5 → serving branded route interstitial")
 					retConn, retErr = proxyinterstitial.Conn(target, proxyinterstitial.StatusLine(retErr), "skynet", false), nil
-				case cfg.TLSMITM && isTLSPort(port, cfg.TLSPort):
+				case cfg.TLSMITM && isTLSPort(port, cfg.TLSPort) && skynetca.Permits(cfg.LeafMinter, origHost):
 					// HTTPS request whose route is still warming: terminate the
 					// browser's TLS locally with a per-host leaf and serve the
 					// interstitial HTML over it (same MITM path as a warm TLS dial,
 					// with the fixed interstitial responder as the "upstream").
-					// If minting fails, fall through to the real error.
+					// Gated on Permits so a clearnet-HTTPS request (a host the
+					// name-constrained CA can't cover) falls through to the real
+					// error rather than logging a guaranteed "does not match
+					// permitted suffix" mint failure. If minting still fails, fall
+					// through to the real error.
 					leaf, lerr := cfg.LeafMinter.For(origHost)
 					if lerr != nil {
 						log.WithField("host", target).WithField("err", lerr).

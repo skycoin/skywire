@@ -98,6 +98,16 @@ func Page(target, detail, mechanism string, isError bool) string {
 	// the exit is already selected, so the work is route-building, not
 	// "finding an exit". The fetch step names the concrete mechanism.
 	fetchStep := `<li>Fetching the page over ` + html.EscapeString(mech) + `</li>`
+
+	// Footer: a subtle brand line, plus a "view proxy status" affordance that
+	// deep-links to this surface's reserved diagnostic host (served in-process by
+	// the same proxy — see pkg/proxystatus). Only a concrete mechanism has a
+	// status host; the generic "skywire" fallback shows just the brand line.
+	footer := `<div class="foot">routed privately over the skywire mesh`
+	if h := statusHost(mech); h != "" {
+		footer += ` &middot; <a href="http://` + html.EscapeString(h) + `/">proxy status ›</a>`
+	}
+	footer += `</div>`
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
 		`<meta name="viewport" content="width=device-width, initial-scale=1">` +
 		refreshMeta +
@@ -115,7 +125,21 @@ func Page(target, detail, mechanism string, isError bool) string {
 		`</ul>` +
 		retry +
 		hostBlock +
+		footer +
 		`</div></div></body></html>`
+}
+
+// statusHost returns the reserved status host for a mechanism label
+// ("skysocks" → "status.skysocks"), or "" for the generic "skywire" fallback
+// (which has no dedicated surface). Kept local so this package stays
+// dependency-free; the value mirrors pkg/proxystatus.Host.
+func statusHost(mech string) string {
+	switch mech {
+	case "skysocks", "dmsg", "skynet":
+		return "status." + mech
+	default:
+		return ""
+	}
 }
 
 // skywireCloudPNG is the official Skycoin/Skywire striped-cloud brand mark
@@ -157,6 +181,8 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#7a80a8;--accent:#7c83ff;--
 	`.btn{display:inline-block;margin-top:18px;padding:8px 20px;border:1px solid var(--accent);border-radius:9px;background:transparent;color:var(--accent);font:inherit;font-size:13px;cursor:pointer}` +
 	`.btn:hover{background:var(--accent);color:#0b0d17}` +
 	`#mesh-host{display:block;margin-top:14px;font:12px/1.4 ui-monospace,SFMono-Regular,monospace;color:var(--muted);opacity:.75;word-break:break-all}` +
+	`.foot{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)}` +
+	`.foot a{color:var(--accent);text-decoration:none}.foot a:hover{text-decoration:underline}` +
 	`.err #mesh-title{color:var(--err)}.err .sp{display:none}`
 
 // httpResponse wraps the HTML in a minimal HTTP/1.1 response. Connection:close
