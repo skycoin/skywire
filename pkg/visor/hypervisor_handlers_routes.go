@@ -192,6 +192,36 @@ func (hv *Hypervisor) getRouteGroups() http.HandlerFunc {
 	})
 }
 
+// getRouteMux surfaces live per-mux-leg route telemetry for one app's
+// active route group(s) over HTTP — the browser-reachable seam behind the
+// route visualizer (/route-viz). It wraps the visor's RouteGroupMuxInfo RPC,
+// which until now was only reachable from `cli proxy mux info`.
+//
+//	GET /api/visors/{pk}/route-mux?app=<name>   (app defaults to skysocks-client)
+//
+// Each returned route group carries its descriptor plus a per-leg list with
+// transport id/type, next-hop PK, smoothed latency, rg-scoped byte/packet
+// counters, SACK retransmits, and the leg's alive/standby gate state — enough
+// for the page to render the legs live and derive throughput from the byte
+// deltas between polls.
+func (hv *Hypervisor) getRouteMux() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		app := r.URL.Query().Get("app")
+		if app == "" {
+			app = "skysocks-client"
+		}
+		infos, err := ctx.API.RouteGroupMuxInfo(app)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		if infos == nil {
+			infos = []MuxRouteGroupInfo{}
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, infos)
+	})
+}
+
 // getRoutingPolicies surfaces the installed routing-policy state
 // for the hypervisor UI's routing tab. Returns
 // {default?, per_app: {appName: PolicyInfo}}.

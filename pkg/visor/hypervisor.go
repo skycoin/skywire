@@ -854,6 +854,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
 				r.Delete("/visors/{pk}/routes/", hv.deleteRoutes())
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
+				r.Get("/visors/{pk}/route-mux", hv.getRouteMux())
 				r.Get("/visors/{pk}/routing-policies", hv.getRoutingPolicies())
 				r.Post("/visors/{pk}/shutdown", hv.shutdown())
 				r.Post("/visors/{pk}/restart", hv.restart())
@@ -1073,6 +1074,14 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			r.Get("/api/dmsg/entries", tpvHandler.ServeHTTP)
 			r.Get("/api/dmsg/health", tpvHandler.ServeHTTP)
 		}
+
+		// Route visualizer: a self-contained static page (no Angular build)
+		// that live-renders an app's active route group(s) per-leg from the
+		// /api/visors/{pk}/route-mux endpoint. Mounted before the SPA catch-all
+		// so /route-viz is claimed here; the page fetches the authed /api same
+		// origin. See docs/design/route-visualizer.md.
+		r.Get("/route-viz", hv.getRouteViz())
+		r.Get("/route-viz/", hv.getRouteViz())
 
 		// HV-served skycoin wallet: embedded /wallet/ static + node API proxied
 		// over the visor's dmsg client — no skycoin-web process/port, the native
