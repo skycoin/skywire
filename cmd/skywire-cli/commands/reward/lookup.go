@@ -28,6 +28,7 @@ var (
 	lookupServer   string
 	lookupFile     string
 	lookupRewarded bool
+	lookupLogLvl   string
 )
 
 func init() {
@@ -36,6 +37,9 @@ func init() {
 	lookupCmd.Flags().StringVarP(&lookupServer, "server", "S", deployment.Prod.RewardSystemDmsg, "reward system dmsg address (dmsg://<pk>:<port>)")
 	lookupCmd.Flags().StringVarP(&lookupFile, "file", "f", "", "file of public keys, one per line")
 	lookupCmd.Flags().BoolVar(&lookupRewarded, "rewarded-only", false, "only show days with a nonzero reward")
+	// Default to 'error' so the dmsg bootstrap's debug chatter doesn't bury
+	// the result table; raise to debug/trace when diagnosing dmsg reachability.
+	lookupCmd.Flags().StringVarP(&lookupLogLvl, "loglvl", "s", "error", "[ debug | info | warn | error | fatal | panic | trace ]")
 }
 
 // lookupDayReward mirrors one entry of the reward server's
@@ -92,6 +96,9 @@ Examples:
 		base := strings.TrimRight(lookupServer, "/")
 		if !strings.HasPrefix(base, "dmsg://") {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--server must be a dmsg:// address (got %q)", base))
+		}
+		if lvl, err := logging.LevelFromString(lookupLogLvl); err == nil {
+			logging.SetLevel(lvl)
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
