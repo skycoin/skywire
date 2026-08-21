@@ -629,6 +629,13 @@ type Routing struct {
 	// MuxRoutes is the number of parallel routes to establish per connection.
 	// 0 or 1 = single route (default), >1 = route multiplexing across transports.
 	MuxRoutes int `json:"mux_routes,omitempty"`
+	// ParallelRouteSetup is the number of candidate route groups whose setup
+	// DialRoutes races concurrently per attempt (first to complete its
+	// handshake wins). 0 (unset) uses the built-in default (a small N); 1
+	// forces the legacy strictly-sequential setup (clean rollback switch).
+	// This is the steady-connection fix: it stops a run of dead candidates
+	// from burning the dial ceiling and wedging an app in "starting".
+	ParallelRouteSetup int `json:"parallel_route_setup,omitempty"`
 	// TransportPreference is the transport-type priority order, most-preferred
 	// first. It decides both which existing transport a route rides when
 	// several reach the same peer, and which type the visor tries to CREATE
