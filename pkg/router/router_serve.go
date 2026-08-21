@@ -200,7 +200,34 @@ func (r *router) serveSetup() {
 
 // nolint: gocyclo
 //
+// awaitHandshakeAck blocks until the peer's reciprocal setup handshake closes
+// processed, or ctx expires (returning ctx.Err()). When retransmit is non-nil
+// and interval > 0 (the initiator), it re-invokes retransmit every interval so
+// a single lost setup-handshake packet on the multi-hop route recovers within
+// the interval instead of eating the whole handshake-await timeout and dropping
+// a live dial. The responder passes retransmit == nil: it has nothing to
+// re-send until the forward handshake arrives (whereupon processed closes).
+//
 //gocyclo:ignore
+func awaitHandshakeAck(ctx context.Context, processed <-chan struct{}, retransmit func(), interval time.Duration) error {
+	var tickC <-chan time.Time
+	if retransmit != nil && interval > 0 {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		tickC = ticker.C
+	}
+	for {
+		select {
+		case <-processed:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tickC:
+			retransmit()
+		}
+	}
+}
+
 func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRules, nsConf noise.Config, appName string, datagram bool) (*NoiseRouteGroup, error) {
 	// Check context before starting
 	if ctx.Err() != nil {
@@ -277,9 +304,23 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	hsCtx, hsCancel := context.WithTimeout(ctx, handshakeAwaitTimeout)
 	defer hsCancel()
 
-	select {
-	case <-rg.handshakeProcessed:
-	case <-hsCtx.Done():
+	// The initiator re-sends its handshake on handshakeRetransmitInterval while
+	// waiting for the reciprocal handshake: the setup handshake is a single
+	// unreliable packet over the multi-hop route with no ARQ (the mux reorder/SACK
+	// layer does not exist yet), so a single lost handshake packet would otherwise
+	// eat the whole handshakeAwaitTimeout and drop a live dial. The responder
+	// passes no retransmit — it has nothing to re-send until it has received the
+	// forward handshake (after which it re-acks from handlePacket on any duplicate).
+	var retransmit func()
+	if nsConf.Initiator {
+		retransmit = func() {
+			if err := rg.sendHandshake(true); err != nil {
+				log.WithError(err).Debugf("Handshake retransmit failed for %s", &rules.Desc)
+			}
+		}
+	}
+
+	if err := awaitHandshakeAck(hsCtx, rg.handshakeProcessed, retransmit, handshakeRetransmitInterval); err != nil {
 		// Check if parent context was canceled (e.g., setup timeout)
 		if ctx.Err() != nil {
 			log.Debugf("Route group setup canceled for %s: %v", &rules.Desc, ctx.Err())
