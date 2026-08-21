@@ -139,7 +139,24 @@ transport type, or --json to dump raw JSON for piping.`,
 			if tpUptimeVersion != "" && tpUptimeVersion != "v1" {
 				q = "?v=" + tpUptimeVersion
 			}
-			raw := cachedFetch(cmd, "/uptimes/transports"+q, "uptimes-transports-"+tpUptimeVersion, nil)
+			// The full per-transport list is a large payload (tens of
+			// thousands of rows) and can exceed the visor RPC DmsgHTTP
+			// timeout when the CXO snapshot is cold, returning empty.
+			// Rather than dying with a bare "empty response", degrade to
+			// the small /metrics/uptime aggregate (the same source `-m`
+			// uses) so the user still gets real network numbers, with a
+			// clear note on how to pull the full list.
+			raw := cachedFetchAllowEmpty(cmd, "/uptimes/transports"+q, "uptimes-transports-"+tpUptimeVersion, nil)
+			if raw == "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: full per-transport list from /uptimes/transports was unavailable (large payload timed out over the visor RPC); showing the /metrics/uptime aggregate instead. For per-transport rows use --no-rpc (direct DMSG has a longer timeout), scope with --ids/--visors, or try a lighter --v v1.\n") //nolint:errcheck,gosec
+				mraw := cachedFetch(cmd, "/metrics/uptime", "metrics-uptime", nil)
+				var nu uptimestats.NetworkUptime
+				if err := json.Unmarshal([]byte(mraw), &nu); err != nil {
+					fatal(cmd, fmt.Errorf("parse /metrics/uptime: %w", err))
+				}
+				internal.PrintOutput(cmd.Flags(), nu, formatNetworkUptime(nu))
+				return
+			}
 			var entries []uptimestats.TransportSummary
 			if err := json.Unmarshal([]byte(raw), &entries); err != nil {
 				fatal(cmd, fmt.Errorf("parse /uptimes/transports: %w", err))
@@ -154,13 +171,21 @@ transport type, or --json to dump raw JSON for piping.`,
 // every other CLI command. The cacheKey is hashed when filterArgs is
 // non-nil so different filter selections get separate cache files.
 func cachedFetch(cmd *cobra.Command, path, cacheKey string, filterArgs interface{}) string {
-	fullURL := strings.TrimRight(tpUptimeBaseURL, "/") + path
-	cf := tpUptimeCacheFile(cacheKey, filterArgs)
-	raw := clirpc.FetchCachedServiceURL(cmd.Flags(), cf, fullURL, tpUptimeCacheAge)
+	raw := cachedFetchAllowEmpty(cmd, path, cacheKey, filterArgs)
 	if raw == "" {
+		fullURL := strings.TrimRight(tpUptimeBaseURL, "/") + path
 		fatal(cmd, fmt.Errorf("empty response from %s", fullURL))
 	}
 	return raw
+}
+
+// cachedFetchAllowEmpty is cachedFetch without the fatal-on-empty: it
+// returns "" so the caller can degrade gracefully (e.g. fall back to a
+// lighter endpoint) instead of exiting.
+func cachedFetchAllowEmpty(cmd *cobra.Command, path, cacheKey string, filterArgs interface{}) string {
+	fullURL := strings.TrimRight(tpUptimeBaseURL, "/") + path
+	cf := tpUptimeCacheFile(cacheKey, filterArgs)
+	return clirpc.FetchCachedServiceURL(cmd.Flags(), cf, fullURL, tpUptimeCacheAge)
 }
 
 func tpUptimeCacheFile(key string, filterArgs interface{}) string {

@@ -847,6 +847,16 @@ func FetchIntegratedUptimes(cmdFlags *pflag.FlagSet, tpdBase, cachefile string, 
 	return FetchCachedServiceURL(cmdFlags, cachefile, IntegratedUptimeURL(tpdBase), cacheFilesAge)
 }
 
+// FetchIntegratedUptimesDays is FetchIntegratedUptimes with an explicit
+// uptime window (days ∈ {1,7,30}). Online-status-only callers (visor
+// list / online filters) pass days=1: the .on flag is present in every
+// window, so pulling the 30-day daily bitmap for thousands of visors is
+// pure over-fetch that bloats the payload past the RPC DmsgHTTP timeout.
+// Matches the days=1 usage in pv / sd / proxy / vpn.
+func FetchIntegratedUptimesDays(cmdFlags *pflag.FlagSet, tpdBase, cachefile string, cacheFilesAge, days int) string {
+	return FetchCachedServiceURL(cmdFlags, cachefile, IntegratedUptimeURLDays(tpdBase, days), cacheFilesAge)
+}
+
 var (
 	cliCacheOnce sync.Once
 	cliCache     *clicache.Cache
