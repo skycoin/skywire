@@ -22,6 +22,27 @@ type LeafMinter interface {
 	For(host string) (*tls.Certificate, error)
 }
 
+// HostPermitter is optionally implemented by a LeafMinter to report — WITHOUT
+// attempting a mint — whether it can issue a leaf for host. Callers that decide
+// whether to route a request down the TLS-MITM path (e.g. the resolving proxies'
+// HTTPS interstitial) use this to skip hosts the name-constrained CA can't cover
+// (arbitrary clearnet HTTPS), rather than calling For and logging its expected
+// "does not match any permitted suffix" failure on every such request.
+type HostPermitter interface {
+	Permits(host string) bool
+}
+
+// Permits reports whether m can mint a leaf for host. A LeafMinter that
+// implements HostPermitter is asked directly; any other implementation is
+// treated optimistically (the mint itself still enforces its constraints). This
+// keeps the check non-breaking — LeafMinter itself is unchanged.
+func Permits(m LeafMinter, host string) bool {
+	if hp, ok := m.(HostPermitter); ok {
+		return hp.Permits(host)
+	}
+	return m != nil
+}
+
 // LeafOptions configures a CachedMinter.
 type LeafOptions struct {
 	Validity          time.Duration
@@ -101,6 +122,10 @@ func (m *CachedMinter) fresh(c *tls.Certificate) bool {
 	return leaf != nil && time.Until(leaf.NotAfter) > m.opts.RenewBefore
 }
 
+// Permits implements HostPermitter: it reports whether host falls under one of
+// this minter's permitted suffixes, without minting or caching anything.
+func (m *CachedMinter) Permits(host string) bool { return m.permitted(host) }
+
 func (m *CachedMinter) permitted(host string) bool {
 	for _, suf := range m.opts.PermittedSuffixes {
 		// Subdomain semantics: the suffix matches when host ends
@@ -171,3 +196,7 @@ func (s staticMinter) For(_ string) (*tls.Certificate, error) {
 	}
 	return s.leaf, nil
 }
+
+// Permits implements HostPermitter: a static minter serves any host (it holds a
+// single fixed leaf), provided it has one.
+func (s staticMinter) Permits(_ string) bool { return s.leaf != nil }

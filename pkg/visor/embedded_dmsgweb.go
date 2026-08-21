@@ -36,6 +36,7 @@ import (
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/dmsgweb"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -76,6 +77,11 @@ type EmbeddedDmsgWeb struct {
 	// (v.dmsgDC); nil disables the path.
 	directClient    *dmsg.Client
 	directServerPKs map[cipher.PubKey]struct{}
+
+	// statusProvider serves the reserved in-process status hosts through this
+	// proxy (http://status.dmsg/ etc.). Set by initEmbeddedDmsgWeb; nil disables
+	// the status hosts.
+	statusProvider proxystatus.Provider
 
 	mu        sync.Mutex
 	running   bool
@@ -246,6 +252,8 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 	// Direct-client path for non-discovery dmsg servers.
 	cfg.DirectClient = e.directClient
 	cfg.DirectServerPKs = e.directServerPKs
+	// Reserved in-process status hosts (http://status.dmsg/ etc.).
+	cfg.StatusProvider = e.statusProvider
 
 	// Optional TLS MITM. CA load failure is non-fatal — the
 	// resolver continues without MITM and logs the reason.
@@ -461,6 +469,7 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 
 	aliases, dmsgSet := resolverAliasesAndDmsgServers(v)
 	runtime := newEmbeddedDmsgWeb(ctx, v.dmsgC, v.dmsgDC, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, aliases, dmsgSet, cfg, log)
+	runtime.statusProvider = v.proxyStatusProvider()
 	v.initLock.Lock()
 	v.embeddedDmsgWeb = runtime
 	v.initLock.Unlock()

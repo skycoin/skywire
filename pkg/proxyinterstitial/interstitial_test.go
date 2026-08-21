@@ -43,6 +43,20 @@ func TestPageEscapesTarget(t *testing.T) {
 	}
 }
 
+func TestPageStatusFooter(t *testing.T) {
+	// A concrete mechanism links to its reserved status host.
+	for _, mech := range []string{"skysocks", "dmsg", "skynet"} {
+		p := Page("host."+mech, "", mech, false)
+		if !strings.Contains(p, "http://status."+mech+"/") {
+			t.Errorf("mechanism %q: page missing status-host link", mech)
+		}
+	}
+	// The generic fallback has no dedicated surface, so no status link.
+	if p := Page("host", "", "", false); strings.Contains(p, "http://status.") {
+		t.Error("generic mechanism should not link a status host")
+	}
+}
+
 func TestConnServesHTTP(t *testing.T) {
 	c := Conn("host.skynet", "", "skynet", false)
 	// Write (the browser's request) is discarded but must not error.

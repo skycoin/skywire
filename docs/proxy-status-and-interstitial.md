@@ -1,0 +1,80 @@
+# Proxy status hosts + HTTPS interstitial
+
+Two related features on the embedded-web-proxy surface (`dmsg_web`,
+`skynet_web`, and the `skysocks-client` tunnel they chain to).
+
+## 1. Interstitial over HTTPS
+
+The branded "building a route over the mesh…" interstitial
+(`pkg/proxyinterstitial`) is injected by the resolving proxies' SOCKS5 `Dial`
+callback when a route to the target is still warming. For plaintext HTTP it is
+spliced in directly; for HTTPS it must ride a locally-terminated TLS session
+(TLS MITM) because a raw-TLS tunnel can't carry an HTML page.
+
+TLS termination uses a **name-constrained** local CA (`pkg/skynetca`) that can
+only mint leaves for `.skynet` and `.dmsg`. The live bug was that the HTTPS
+interstitial path attempted a mint for **every** TLS-port dial failure —
+including clearnet HTTPS forwarded to the upstream `skysocks-client` — which the
+CA can never cover, producing a `host does not match permitted suffix` error on
+every such request.
+
+Fix: `skynetca.Permits(minter, host)` (a non-breaking optional interface,
+`HostPermitter`, implemented by `CachedMinter`) reports whether the CA can cover
+a host **without** minting. The HTTPS-interstitial path in both resolving
+proxies now gates on it:
+
+```
+case cfg.TLSMITM && isTLSPort(port) && skynetca.Permits(cfg.LeafMinter, origHost):
+    // mint leaf, MITM-terminate, serve interstitial HTML over TLS
+```
+
+So a `.skynet`/`.dmsg` HTTPS target reliably renders the interstitial over TLS,
+while a clearnet HTTPS target (which cannot be MITM'd by a name-constrained CA
+anyway) cleanly falls through to the real error instead of a per-request log
+spam. The page itself gained a footer with a deep-link to the surface's status
+host (below).
+
+## 2. Per-proxy status hosts
+
+Each proxy serves a read-only diagnostic page at a reserved, well-known host
+**through itself**, mirroring the existing in-process `home.<suffix>` host:
+
+| host                | surface   | underlying app    |
+|---------------------|-----------|-------------------|
+| `http://status.dmsg/`      | dmsg     | `dmsgweb`          |
+| `http://status.skynet/`    | skynet   | `skynetweb`        |
+| `http://status.skysocks/`  | skysocks | `skysocks-client`  |
+
+`pkg/proxystatus` owns the surface taxonomy, host matcher (`Match`), the
+in-process HTTP responder (`ServeConn`, same net.Pipe trick as
+`serveHomeInProcess`), the read-only `Snapshot` shape + `Provider` interface, and
+the HTML renderer. Both resolving proxies' `Dial` callbacks check `Match(host)`
+**before** suffix resolution / upstream forwarding, so any of the three hosts is
+reachable through either proxy (a browser typically points at one).
+
+The visor implements `proxystatus.Provider`
+(`pkg/visor/embedded_proxystatus.go`) entirely on **existing** read APIs:
+
+- **logging** — `Visor.LogsSince(app)` tails the app's log store;
+- **mux view** — `Visor.RouteGroupMuxInfo(app)` gives the same per-leg
+  bandwidth/RTT/retransmit telemetry `cli proxy mux plot` renders, drawn as a
+  static per-leg bandwidth-share table (meta-refreshes to stay live);
+- **running** — `procManager.ProcByName(app)`.
+
+MVP status vs. scaffold:
+
+- **`status.skysocks`** is the fully-realized MVP (logs + live mux view for the
+  route group where multiplexing actually happens).
+- **`status.dmsg` / `status.skynet`** share the identical page; their mux
+  section is empty until/unless their route group is tagged for
+  `RouteGroupMuxInfo`.
+- **route/transport events** render an empty section today — the collection
+  buffer is the scaffolded extension point.
+
+### Extension seam: route control
+
+The MVP is deliberately read-only. The page renders a disabled "route control"
+section, and `Snapshot`/`Provider` are shaped so control lands additively: add a
+mutating method to `proxystatus.Provider` and implement it on the existing visor
+mux-reshape API (`AddMuxRoute` / `RemoveMuxRoute` / `SetMuxMode`) plus dmsg relay
+selection — no wire reshape, no new plumbing in the proxies.

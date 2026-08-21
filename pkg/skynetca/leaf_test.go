@@ -22,6 +22,24 @@ func TestMinter_RejectsForbiddenSuffix(t *testing.T) {
 	}
 }
 
+func TestPermits(t *testing.T) {
+	ca, key, _ := GenerateCA(CAOptions{}) //nolint:errcheck,gosec
+	m := NewMinter(ca, key, LeafOptions{})
+
+	// The CachedMinter implements HostPermitter, so the free Permits helper
+	// reports the same verdict the mint would — without minting.
+	if !Permits(m, testPK+".skynet") {
+		t.Error("Permits should allow a .skynet host")
+	}
+	if Permits(m, "example.com") {
+		t.Error("Permits should reject a clearnet host the CA can't cover")
+	}
+	// A nil minter permits nothing.
+	if Permits(nil, testPK+".skynet") {
+		t.Error("Permits(nil, …) should be false")
+	}
+}
+
 func TestMinter_AcceptsSkynetAndDmsg(t *testing.T) {
 	ca, key, _ := GenerateCA(CAOptions{}) //nolint:errcheck,gosec
 	m := NewMinter(ca, key, LeafOptions{})
