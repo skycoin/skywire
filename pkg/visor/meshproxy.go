@@ -208,18 +208,27 @@ const meshInterstitialSoftTimeout = 4 * time.Second
 type meshInterstitialRT struct {
 	next http.RoundTripper
 	soft time.Duration
+	// streamMax bounds how long the streaming interstitial holds the browser
+	// open waiting on the detached round-trip before it stops streaming and
+	// offers a manual retry (the background round-trip keeps running).
+	streamMax time.Duration
 
 	mu       sync.Mutex
 	warm     map[string]struct{} // destinations with a confirmed round-trip
 	inFlight map[string]struct{} // destinations with a warm-up dial in progress
 }
 
+// meshStreamMax is the default streaming-interstitial hold time (a touch above a
+// cold multi-hop route's worst case, so the "route up → reload" lands live).
+const meshStreamMax = 25 * time.Second
+
 func newMeshInterstitialRT(next http.RoundTripper, soft time.Duration) *meshInterstitialRT {
 	return &meshInterstitialRT{
-		next:     next,
-		soft:     soft,
-		warm:     map[string]struct{}{},
-		inFlight: map[string]struct{}{},
+		next:      next,
+		soft:      soft,
+		streamMax: meshStreamMax,
+		warm:      map[string]struct{}{},
+		inFlight:  map[string]struct{}{},
 	}
 }
 
@@ -346,18 +355,76 @@ func (rt *meshInterstitialRT) RoundTrip(req *http.Request) (*http.Response, erro
 		rt.markWarm(key)
 		return res.resp, nil
 	case <-timer.C:
-		// Still warming. Keep the detached round-trip running in the background so
-		// the dmsg session / skynet route establishes and the stream recycles into
-		// the idle pool; then serve the interstitial now.
-		go func() {
-			res := <-ch
+		// Still warming. Stream the branded interstitial with LIVE progress from
+		// the SAME detached round-trip (the real in-flight attempt) and reload
+		// into content the moment it lands — instead of a static page + blind
+		// meta-refresh. The detached round-trip keeps running regardless, so the
+		// route establishes and the warmed stream recycles into the idle pool.
+		return rt.streamingInterstitialResponse(req, ch, key), nil
+	}
+}
+
+// streamingInterstitialResponse returns a chunked/streamed interstitial whose
+// body renders live route-setup progress driven by the detached round-trip on
+// ch: an initial "building a route" line, then — when the real round-trip lands
+// — either a "route up" line + a reload into live content (success), or the real
+// error + a manual retry. It shares the exact rendering (StreamOpen/Step/Close)
+// with the SOCKS-path streaming interstitial. The ReverseProxy flushes each
+// fragment (FlushInterval < 0 in newMeshReverseProxy), so the browser paints
+// progressively. This is the interstitial surface with a genuine in-flight
+// attempt to observe (the others re-drive one via a probe).
+func (rt *meshInterstitialRT) streamingInterstitialResponse(req *http.Request, ch <-chan meshRTResult, key string) *http.Response {
+	target := meshInterstitialTarget(req)
+	mech := meshInterstitialMechanism(target)
+	label := mech
+	if label == "" {
+		label = "skywire"
+	}
+	pr, pw := io.Pipe()
+	go func() {
+		defer pw.Close()                                                                                      //nolint:errcheck
+		_, _ = io.WriteString(pw, proxyinterstitial.StreamOpen(target, mech))                                 //nolint:errcheck
+		_, _ = io.WriteString(pw, proxyinterstitial.StreamStep("Building a route over "+label+"…", "active")) //nolint:errcheck
+		timer := time.NewTimer(rt.streamMax)
+		defer timer.Stop()
+		select {
+		case res := <-ch:
 			rt.releaseWarmup(key)
 			if res.err == nil {
 				rt.markWarm(key)
 				drainAndClose(res.resp)
+				_, _ = io.WriteString(pw, proxyinterstitial.StreamStep("Route group up", "done")) //nolint:errcheck
+				_, _ = io.WriteString(pw, proxyinterstitial.StreamClose(true, ""))                //nolint:errcheck
+				return
 			}
-		}()
-		return rt.interstitialResponse(req, "", false), nil
+			_, _ = io.WriteString(pw, proxyinterstitial.StreamStep(proxyinterstitial.StatusLine(res.err), "err")) //nolint:errcheck
+			_, _ = io.WriteString(pw, proxyinterstitial.StreamClose(false, res.err.Error()))                      //nolint:errcheck
+		case <-timer.C:
+			// Stop streaming but let the detached round-trip finish + recycle.
+			go func() {
+				res := <-ch
+				rt.releaseWarmup(key)
+				if res.err == nil {
+					rt.markWarm(key)
+					drainAndClose(res.resp)
+				}
+			}()
+			_, _ = io.WriteString(pw, proxyinterstitial.StreamStep("route still warming — try again", "err")) //nolint:errcheck
+			_, _ = io.WriteString(pw, proxyinterstitial.StreamClose(false, "route still warming"))            //nolint:errcheck
+		}
+	}()
+	h := make(http.Header)
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Cache-Control", "no-store, must-revalidate")
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Status:     "200 OK",
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Header:     h,
+		Body:       pr,
+		Request:    req,
 	}
 }
 
@@ -447,8 +514,13 @@ func (v *Visor) newMeshReverseProxy(resolve meshResolveFn) (*httputil.ReversePro
 	}
 	return &httputil.ReverseProxy{
 		// dmsg/skynet dispatcher (streaming), wrapped with the cold-route fast-path
-		// that serves the branded auto-refreshing interstitial while a route warms.
+		// that serves the branded interstitial (now streaming live route-setup
+		// progress) while a route warms.
 		Transport: newMeshInterstitialRT(v.meshRoundTripper(), meshInterstitialSoftTimeout),
+		// Flush each write to the client immediately: the streaming interstitial
+		// paints progress fragments as they arrive, and mesh sites that stream
+		// (SSE / chunked) reach the browser promptly rather than being buffered.
+		FlushInterval: -1,
 		// Rewrite (not Director): does NOT auto-add X-Forwarded-* (privacy) and lets
 		// us stash per-request state in the outbound context instead of leaking
 		// X-Mesh-* headers to the upstream site.
