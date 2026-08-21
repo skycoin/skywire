@@ -729,12 +729,23 @@ func init() {
 // RootCmd is the root command for skywire-cli rewards
 var RootCmd = &cobra.Command{
 	Use:   "rewards",
-	Short: "calculate rewards from uptime data & collected surveys",
+	Short: "reward-system operator toolchain (calculate & distribute rewards)",
 	Long: `
-Collect surveys:  skywire-cli log
-Fetch uptimes:    skywire-cli ut > ut.txt
+This plural 'rewards' command is the reward-system OPERATOR toolchain that
+runs the daily reward distribution: collect surveys/transports/bandwidth,
+fetch uptimes, calculate per-visor shares, and serve the metrics UI.
 
-Process rewards:  skywire-cli rewards --process
+Node operators who only want to set their own reward address or check their
+payout history want the singular command instead: 'skywire cli reward'.
+
+Typical manual pipeline:
+  Collect surveys:  skywire-cli log
+  Fetch uptimes:    skywire-cli ut > ut.txt
+  Process rewards:  skywire-cli rewards --process
+
+The 'rewards run' subcommand performs the whole hourly cycle in-process
+(the systemd unit calls it); the bare 'rewards' command calculates a single
+day from data already on disk.
 
 Architectures:
 ` + fmt.Sprintf("%v", append(rewards.Architectures, "null", "all")) + `
@@ -1432,7 +1443,15 @@ func init() {
 
 var testCmd = &cobra.Command{
 	Use:   "svc",
-	Short: "verify services in survey",
+	Short: "verify a visor's service config against the deployment",
+	Long: `Verify that the service configuration reported in a collected survey
+(node-info.json under --lpath/<pk>/) matches the prod deployment's
+services-config.json — i.e. the visor is pointed at the correct
+dmsg-discovery / transport-discovery / route-finder / etc.
+
+Requires a survey for the given --pk to already be present under --lpath
+(collect with 'skywire cli log'). stun_servers are omitted from the
+comparison. Detects both http and dmsghttp service configs.`,
 	Run: func(_ *cobra.Command, _ []string) {
 		var err error
 		if log == nil {

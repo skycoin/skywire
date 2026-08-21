@@ -52,7 +52,7 @@ func init() {
 	}
 	rewardCmd.Flags().BoolVarP(&isRead, "read", "r", false, "print the skycoin reward address & exit"+readFlagTxt)
 	cHiddenFlags = append(cHiddenFlags, "read")
-	rewardCmd.Flags().BoolVarP(&isDeleteFile, "delete", "d", false, "delete reward addresss file - opt out of rewards")
+	rewardCmd.Flags().BoolVarP(&isDeleteFile, "delete", "d", false, "delete reward address file - opt out of rewards")
 	cHiddenFlags = append(cHiddenFlags, "delete")
 	rewardCmd.Flags().StringVar(&bulkPKsCSV, "pks", "",
 		"comma-separated visor PKs (via hypervisor) to set reward address on")
@@ -63,6 +63,20 @@ func init() {
 		rewardCmd.Flags().MarkHidden(j) //nolint:errcheck,gosec
 	}
 
+	// Compute the dynamic Long text (which dials the visor RPC to show the
+	// currently-set reward address) lazily — only when help for this command
+	// is actually requested. Evaluating it in the command literal ran the RPC
+	// dial on every single skywire-cli invocation, unrelated commands included.
+	defaultHelpFunc := rewardCmd.HelpFunc()
+	rewardCmd.SetHelpFunc(func(c *cobra.Command, a []string) {
+		// The help func is inherited by subcommands; only recompute the
+		// dynamic Long for the reward command itself, or we'd clobber the
+		// Long of 'reward lookup' / 'reward rules' with the address string.
+		if c == rewardCmd {
+			c.Long = longText()
+		}
+		defaultHelpFunc(c, a)
+	})
 }
 
 // RootCmd is rewardCmd
@@ -70,6 +84,16 @@ var RootCmd = rewardCmd
 
 const longtext = `
 	reward address setting
+
+	This is the node-operator command: it manages THIS visor's reward
+	address and looks up reward history. It is distinct from the plural
+	'skywire cli rewards' command, which is the reward-system operator
+	toolchain (calculate/distribute rewards, collect data, serve the UI).
+
+	Subcommands:
+	  reward            set / read this visor's skycoin reward address
+	  reward lookup     query the reward server for a PK's payout history
+	  reward rules      display the mainnet reward eligibility rules
 
 	Sets the skycoin reward address or xpub key for the visor.
 	Accepts either a skycoin address or a BIP44 account-level xpub key.
@@ -165,8 +189,10 @@ func longText() string {
 var rewardCmd = &cobra.Command{
 	Use:                   "reward <address | xpub> || [flags]",
 	DisableFlagsInUseLine: true,
-	Short:                 "skycoin reward address or xpub key",
-	Long:                  longText(),
+	Short:                 "set or read this visor's skycoin reward address",
+	// Long is set lazily by the SetHelpFunc registered in init() so the
+	// visor-RPC lookup of the current address only runs when help is shown.
+	Long: longtext,
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		//--all unhides flags, prints help menu, and exits
 		if isAll {
@@ -211,7 +237,7 @@ var rewardCmd = &cobra.Command{
 					internal.PrintError(cmd.Flags(), err)
 				}
 			}
-			os.Exit(1)
+			os.Exit(0)
 			return
 		}
 		//print reward address and exit

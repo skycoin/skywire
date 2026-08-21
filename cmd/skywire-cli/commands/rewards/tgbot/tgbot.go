@@ -26,7 +26,14 @@ func init() {
 var RootCmd = &cobra.Command{
 	Use:   "bot",
 	Short: "reward notification telegram bot",
-	Long:  "reward notification telegram bot",
+	Long: `Reward notification telegram bot.
+
+Watches the reward transaction file (--watch) and posts the per-day stats
+for each newly-broadcast reward transaction to a telegram chat.
+
+Requires two environment variables:
+  TG_BOT_TOKEN   telegram bot API token
+  TG_CHAT_ID     numeric telegram chat ID to post into`,
 	Run: func(_ *cobra.Command, _ []string) {
 		chatIDStr := os.Getenv("TG_CHAT_ID")
 		chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
