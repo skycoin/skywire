@@ -12,7 +12,6 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -126,9 +125,15 @@ the given dmsg discovery. Output honors --json / --jq like every other command.`
 			}
 		}
 
-		// Always a document: the survey IS the output, so there is no human
-		// rendering to choose between — the printer just decides indentation.
-		internal.Catch(cmd.Flags(), cliout.Fprint(cmd.OutOrStdout(), true, survey))
+		// The survey IS the output, so its human rendering is just the pretty
+		// JSON. Route through the flag-aware printer so --json/--jq/--shape all
+		// work like every other command: default prints the JSON document,
+		// --jq filters it, --shape prints the skeleton.
+		human, merr := json.MarshalIndent(survey, "", "  ")
+		if merr != nil {
+			internal.Catch(cmd.Flags(), merr)
+		}
+		internal.PrintOutput(cmd.Flags(), survey, string(human)+"\n")
 	},
 }
 
