@@ -27,11 +27,24 @@ func init() {
 	RootCmd.Flags().BoolVarP(&compactOutput, "compact-output", "c", false, "compact output (no pretty printing)")
 }
 
-// RootCmd is the jq command
+// RootCmd is the jq command. It is exposed to users as `skywire cli util jq`
+// (the util parent unhides it); it stays Hidden as a bare top-level command so
+// it doesn't clutter the root help. To filter the JSON output of ANY skywire
+// command, prefer the built-in `--jq` global flag (e.g. `cli visor info --jq
+// .overview`) — this standalone processor is for piping arbitrary JSON.
 var RootCmd = &cobra.Command{
-	Use:    "jq <filter> [file...]",
-	Short:  "jq-like JSON processor (gojq)",
-	Long:   "Process JSON using jq filter syntax (powered by gojq)",
+	Use:   "jq <filter> [file...]",
+	Short: "jq-like JSON processor (gojq)",
+	Long: `Process JSON using jq filter syntax (powered by gojq).
+
+Reads JSON from stdin (or the given files) and applies the filter, the same way
+the standard jq(1) does. Canonically invoked as ` + "`skywire cli util jq`" + `.
+
+  echo '{"a":1,"b":2}' | skywire cli util jq '.a'
+  skywire cli util jq -r '.items[].name' data.json
+
+To filter the output of another skywire command, use the built-in --jq global
+flag instead of piping through this:  skywire cli pv --stats --jq '.count'.`,
 	Hidden: true,
 	Args:   cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {

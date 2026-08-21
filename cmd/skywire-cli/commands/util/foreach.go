@@ -120,6 +120,12 @@ Exit codes:
 		}
 
 		jsonMode, _ := cmd.Flags().GetBool("json") //nolint:errcheck
+		// --json emits a clean NDJSON stream; the human per-target headers
+		// would otherwise interleave with it on stdout and corrupt the
+		// output for downstream parsers. So --json implies --quiet.
+		if jsonMode {
+			foreachQuiet = true
+		}
 		results := runForeach(cmd.Context(), targets, template)
 
 		anyNonZero, anyTimeout := false, false

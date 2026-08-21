@@ -17,7 +17,13 @@ func init() {
 
 var tpCmd = &cobra.Command{
 	Use:   "tp",
-	Short: "display collected transport bandwidth logging",
+	Short: "Display collected transport-bandwidth logs",
+	Long: `Collate and display the per-transport bandwidth CSVs collected by ` + "`cli log`" + `.
+
+Reads the daily *.csv files under --dir, sorts and de-duplicates the rows, and
+color-codes them: blue = unchanged counters between samples, yellow = changed,
+red = a zero reading. Registered only when /bin/bash is present (the collation
+is a bundled bash+awk script).`,
 	Run: func(_ *cobra.Command, _ []string) {
 		tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh")
 		if err != nil {
