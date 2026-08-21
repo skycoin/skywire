@@ -1978,7 +1978,9 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 			}
 			rg.mu.Unlock()
 		}
+		firstHandshake := false
 		rg.handshakeProcessedOnce.Do(func() {
+			firstHandshake = true
 			// first packet is handshake packet, so we're communicating with the new visor
 			rg.encrypt = true
 			if packet.Payload()[0] == 0 {
@@ -2004,6 +2006,21 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 
 			close(rg.handshakeProcessed)
 		})
+		// A duplicate forward handshake means the initiator's retransmit loop is
+		// still running because its reciprocal (reverse) handshake never arrived —
+		// most likely that single reverse-ack packet was lost. Re-emit our reverse
+		// handshake so the initiator's retransmit can complete instead of eating
+		// the whole handshake-await timeout. Only the responder (which sends its
+		// handshake in reply to the forward one) re-acks; the initiator's own
+		// resends are what drive this. Sent from a goroutine so we never block the
+		// router read loop, and never while holding rg.mu (sendHandshake locks it).
+		if !firstHandshake && !rg.initiator {
+			go func() {
+				if err := rg.sendHandshake(rg.encrypt); err != nil {
+					rg.logger.Debugf("Failed to re-ack duplicate handshake: %v", err)
+				}
+			}()
+		}
 	case routing.PingPacket:
 		return rg.handlePingPacket(packet)
 	case routing.PongPacket:

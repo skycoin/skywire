@@ -78,6 +78,19 @@ const (
 	retryInterval = 500 * time.Millisecond
 )
 
+// handshakeRetransmitInterval is how often the initiator re-sends its setup
+// handshake packet while waiting (up to handshakeAwaitTimeout) for the peer's
+// reciprocal handshake. The route-group setup handshake is a single unreliable
+// packet over the multi-hop route: unlike data frames it is not carried by the
+// mux reorder/SACK machinery (which is not built until the handshake completes),
+// so a single lost handshake packet on any hop has no ARQ to recover it and the
+// initiator would otherwise block for the entire handshakeAwaitTimeout and drop
+// an otherwise-live dial. Retransmitting on this interval recovers a lost
+// handshake in ~1s instead of failing at 10s. A slow-but-alive path is
+// unaffected: the reciprocal handshake closes handshakeProcessed and stops the
+// retransmits. Set to 0 to disable retransmission (legacy single-shot behavior).
+var handshakeRetransmitInterval = 1 * time.Second
+
 var (
 	// ErrUnknownPacketType is returned when packet type is unknown.
 	ErrUnknownPacketType = errors.New("unknown packet type")
