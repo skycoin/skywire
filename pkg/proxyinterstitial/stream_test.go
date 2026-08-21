@@ -17,7 +17,11 @@ import (
 // the fully de-chunked body.
 func readStreamBody(t *testing.T, c net.Conn, reqLine string) string {
 	t.Helper()
-	go func() { _, _ = c.Write([]byte(reqLine)) }()
+	go func() {
+		if _, err := c.Write([]byte(reqLine)); err != nil {
+			return // reader finished + closed the pipe first — benign in this test
+		}
+	}()
 	resp, err := http.ReadResponse(bufio.NewReader(c), nil)
 	if err != nil {
 		t.Fatalf("ReadResponse: %v", err)

@@ -20,6 +20,8 @@ func (hv *Hypervisor) getRouteViz() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
-		_, _ = w.Write(routeVizHTML)
+		if _, err := w.Write(routeVizHTML); err != nil {
+			hv.log(r).WithError(err).Debug("route-viz page write failed")
+		}
 	}
 }

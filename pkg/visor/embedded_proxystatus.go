@@ -66,7 +66,8 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 	snap := proxystatus.Snapshot{Surface: surface, App: app}
 
 	if p.v.procM != nil {
-		_, snap.Running = p.v.procM.ProcByName(app)
+		proc, ok := p.v.procM.ProcByName(app)
+		snap.Running = ok && proc != nil
 	}
 
 	// Logs (best-effort): the store may not exist for an internal app that has
