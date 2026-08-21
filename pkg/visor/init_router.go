@@ -5,6 +5,7 @@ package visor
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/ccding/go-stun/stun"
@@ -300,6 +301,18 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		RulesGCInterval:       0, // 0 = DefaultRulesGCInterval (10s)
 		SetupHooks:            routeSetupHooks,
 		EnableRSNOracleRoutes: v.conf.Routing.EnableRSNOracleRoutes,
+		// Default ON: a nil field (older configs) or explicit true excludes
+		// same-LAN peers as routing intermediates. See Routing.ExcludeSameLanHops.
+		ExcludeSameLANHops: v.conf.Routing.ExcludeSameLanHops == nil || *v.conf.Routing.ExcludeSameLanHops,
+		// SelfPublicIP feeds the same-LAN filter's NAT-hairpin check (a peer
+		// reached at our own public IP). Read live from STUN; nil until resolved.
+		SelfPublicIP: func() net.IP {
+			if v.stun.client != nil && v.stun.client.PublicIP != nil {
+				return net.ParseIP(v.stun.client.PublicIP.IP())
+			}
+			return nil
+		},
+
 	})
 	if err != nil {
 		cancel()

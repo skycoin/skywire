@@ -3,6 +3,7 @@ package visorcore
 
 import (
 	"context"
+	"net"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -47,6 +48,12 @@ type RouterDeps struct {
 	// OFF). Seeded from Routing.EnableRSNOracleRoutes; inert until the visor also
 	// calls router.SetDstTransportOracle.
 	EnableRSNOracleRoutes bool
+
+	// ExcludeSameLANHops (default ON) drops same-LAN peers as routing
+	// intermediates; see router.Config.ExcludeSameLANHops. SelfPublicIP feeds its
+	// NAT-hairpin check (nil until STUN resolves).
+	ExcludeSameLANHops bool
+	SelfPublicIP       func() net.IP
 }
 
 // BuildRouter assembles router.Config from deps, creates the router, and starts
@@ -74,6 +81,8 @@ func BuildRouter(serveCtx context.Context, deps RouterDeps) (router.Router, erro
 		DialHook:              deps.DialHook,
 		RulesGCInterval:       deps.RulesGCInterval,
 		EnableRSNOracleRoutes: deps.EnableRSNOracleRoutes,
+		ExcludeSameLANHops:    deps.ExcludeSameLANHops,
+		SelfPublicIP:          deps.SelfPublicIP,
 	}
 	r, err := router.New(deps.DmsgC, rConf, deps.SetupHooks)
 	if err != nil {
