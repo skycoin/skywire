@@ -115,7 +115,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status")
 	RootCmd.Flags().StringVar(&cacheDirSD, "cds", cacheDirPath(dep.ServiceDiscovery), "SD cache dir (\"\" to disable)")
 	RootCmd.Flags().StringVar(&cacheDirTPD, "cdt", cacheDirPath(dep.TransportDiscovery), "TPD cache dir, shared by transports + uptime (\"\" to disable)")
-	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "refetch cached data older than n minutes (0 = always fetch fresh, e.g. for `watch`)")
+	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "refetch cached data older than n minutes (0 = always fetch fresh, e.g. for 'watch')")
 	RootCmd.Flags().StringVarP(&country, "country", "c", "", "filter by country code")
 	RootCmd.Flags().StringVarP(&version, "version", "v", "", "filter by version")
 	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")

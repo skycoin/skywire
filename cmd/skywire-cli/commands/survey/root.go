@@ -63,8 +63,15 @@ var RootCmd = surveyCmd
 var surveyCmd = &cobra.Command{
 	Use:                   "survey",
 	DisableFlagsInUseLine: true,
-	Short:                 "system survey",
-	Long:                  "print the system survey",
+	Short:                 "Print the local system survey",
+	Long: `Print this machine's system survey as JSON — the same document a visor
+publishes for reward-eligibility and diagnostics: hardware/OS facts, the
+skywire version, the configured deployment service URLs, the reward address,
+and (with --config) the visor public key.
+
+With --config / --pkg / --user the survey is enriched from a visor config
+(public key + service URLs). --dmsg-disc looks the machine's public IP up via
+the given dmsg discovery. Output honors --json / --jq like every other command.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		if pkg {
 			confPath = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
