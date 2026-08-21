@@ -951,7 +951,7 @@ func (c *Cache) setFilling(
 		// missing backing and returns "not found". That is exactly the
 		// TPD / [stats] publisher freeze — treestore's self-heal re-encode
 		// (#4036) drops its encode cache and re-Set's every object to
-		// re-materialise the evicted one, but for a filling placeholder
+		// re-materialize the evicted one, but for a filling placeholder
 		// this path silently refused to write, so the retry failed
 		// identically and the served Root froze forever (heartbeat
 		// "republish failed: not found" every tick). #4036's own test only

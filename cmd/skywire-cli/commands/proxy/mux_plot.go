@@ -373,7 +373,7 @@ func parseMuxPlotOverrides(pairs []string) (map[string]string, error) {
 // visor (first Recv errors before any sample), etc. — so the caller can
 // fall back to the unary poll. --interval sets the server-side sample
 // cadence (sample_interval_ns).
-func runMuxPlotInfoStream(cmd *cobra.Command, _ func() (any, error)) bool {
+func runMuxPlotInfoStream(_ *cobra.Command, _ func() (any, error)) bool {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
