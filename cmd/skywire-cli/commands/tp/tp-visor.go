@@ -15,7 +15,53 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/uptimestats"
 )
+
+// visorOnlineJQFilter builds the jq expression that keeps only the SD
+// visors whose public key appears in the uptime "online" set, optionally
+// narrowing by country/version. The SD visor address is "pk:port" while
+// the uptime .pk is the bare public key, so the address MUST have its
+// port stripped before matching — otherwise the join never hits and
+// every visor is filtered out (the historical "tp v returns 0" bug).
+func visorOnlineJQFilter(country, version string) string {
+	countryCond := ""
+	if country != "" {
+		countryCond = ` | select(.geo.country == "` + country + `")`
+	}
+	versionCond := ""
+	if version != "" {
+		versionCond = ` | select(.version == "` + version + `")`
+	}
+	return `
+	[ .ut[] | select(.on) | .pk ] as $online
+	| .sd[]
+	| select((.address | split(":")[0]) as $pk | $pk | IN($online[]))` + countryCond + versionCond + `
+	| "\(.address) \(.geo.country) \(.version)"
+	`
+}
+
+// onlineDataUsable reports whether an /uptimes payload can drive the
+// online filter: it must be non-empty JSON AND contain at least one
+// visor flagged on. An all-offline (or empty-array) payload means the
+// online-status source is not reporting live state — filtering against
+// it would zero out every visor, which reads as "no public visors
+// exist". Callers treat a false return as "fail open, list unfiltered".
+func onlineDataUsable(uts string) bool {
+	if uts == "" {
+		return false
+	}
+	var entries []uptimestats.VisorSummary
+	if err := json.Unmarshal([]byte(uts), &entries); err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.Online {
+			return true
+		}
+	}
+	return false
+}
 
 var (
 	visorServiceType = servicedisc.ServiceTypeVisor
@@ -91,7 +137,24 @@ Set cache file location to "" to avoid using cache files`,
 			return
 		}
 
-		// --- No filtering case ---
+		// --- Online-status data (days=1: we only read .on) ---
+		// Fetch the uptime data up-front so we can detect the "online
+		// source unavailable" case and fail OPEN rather than silently
+		// filtering every visor out. The full visor-uptime list can time
+		// out over the visor RPC (large payload, CXO miss); when that
+		// happens uts is "" and joining against it would zero the result,
+		// which reads as "no public visors exist" — a lie. Fall through to
+		// the unfiltered (--noton) path with a warning instead.
+		online := ""
+		if !vNoFilterOnline {
+			online = clirpc.FetchIntegratedUptimesDays(cmd.Flags(), vUTURL, vCacheFileUT, vCacheFilesAge, 1)
+			if !onlineDataUsable(online) {
+				fmt.Fprintln(cmd.ErrOrStderr(), "warning: transport-discovery online-status data unavailable (no visor is reporting live-online); listing all registered visors unfiltered (retry, or use -o to silence this)") //nolint:errcheck,gosec
+				vNoFilterOnline = true
+			}
+		}
+
+		// --- No filtering case (or fail-open when online data is missing) ---
 		if vNoFilterOnline {
 			sdJQ := `.[]`
 			if vCountry != "" {
@@ -116,28 +179,11 @@ Set cache file location to "" to avoid using cache files`,
 		}
 
 		// --- Filtering by online status via jq join ---
-		uts := clirpc.FetchIntegratedUptimes(cmd.Flags(), vUTURL, vCacheFileUT, vCacheFilesAge)
-		if uts == "" {
-			uts = "[]"
-		}
-		joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, uts)
+		// online is non-empty here: the fail-open branch above already
+		// diverted the empty case to the unfiltered path.
+		joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, online)
 
-		// Build jq filter with optional country and version conditions
-		countryCond := ""
-		if vCountry != "" {
-			countryCond = ` | select(.geo.country == "` + vCountry + `")`
-		}
-		versionCond := ""
-		if vVersion != "" {
-			versionCond = ` | select(.version == "` + vVersion + `")`
-		}
-
-		jqFilter := `
-		[ .ut[] | select(.on) | .pk ] as $online
-		| .sd[]
-		| select(.address as $pk | $pk | IN($online[]))` + countryCond + versionCond + `
-		| "\(.address) \(.geo.country) \(.version)"
-		`
+		jqFilter := visorOnlineJQFilter(vCountry, vVersion)
 
 		if vIsStats {
 			count, err := script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").CountLines()
