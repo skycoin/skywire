@@ -183,6 +183,10 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#7a80a8;--accent:#7c83ff;--
 	`#mesh-host{display:block;margin-top:14px;font:12px/1.4 ui-monospace,SFMono-Regular,monospace;color:var(--muted);opacity:.75;word-break:break-all}` +
 	`.foot{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)}` +
 	`.foot a{color:var(--accent);text-decoration:none}.foot a:hover{text-decoration:underline}` +
+	// Streaming (chunked) variant: live per-attempt progress lines. Reuses the
+	// .steps list; adds a completed (◐→●), errored (✗) and "route up" style.
+	`.steps li.err{color:var(--err)}.steps li.err::before{content:"✗";color:var(--err);animation:none}` +
+	`.ready{color:var(--accent);margin:12px 0 0;font-size:13px;font-weight:600}` +
 	`.err #mesh-title{color:var(--err)}.err .sp{display:none}`
 
 // httpResponse wraps the HTML in a minimal HTTP/1.1 response. Connection:close

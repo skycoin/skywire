@@ -274,9 +274,19 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				}
 				switch {
 				case proxyinterstitial.ShouldServe(port):
+					// Stream REAL route-setup progress over a chunked response,
+					// driving a fresh skynet dial via a probe and reloading into live
+					// content once the route is warm; HTTP/1.0 clients fall back to the
+					// one-shot page inside StreamConn. Wrapped in tcpAddrConn for
+					// go-socks5's *net.TCPAddr BND assertion (the stream conn is a
+					// net.Pipe). See pkg/dmsgweb/runtime.go for the rationale.
 					log.WithField("host", target).WithField("err", retErr).
-						Debug("SOCKS5 → serving branded route interstitial")
-					retConn, retErr = proxyinterstitial.Conn(target, proxyinterstitial.StatusLine(retErr), "skynet", false), nil
+						Debug("SOCKS5 → serving streaming route interstitial")
+					retConn, retErr = &tcpAddrConn{Conn: proxyinterstitial.StreamConn(context.Background(), proxyinterstitial.StreamConfig{
+						Target:    target,
+						Mechanism: "skynet",
+						Probe:     skynetRedialProbe(dialer, cfg, upstream, origHost, addr),
+					})}, nil
 				case cfg.TLSMITM && isTLSPort(port, cfg.TLSPort) && skynetca.Permits(cfg.LeafMinter, origHost):
 					// HTTPS request whose route is still warming: terminate the
 					// browser's TLS locally with a per-host leaf and serve the
@@ -517,6 +527,47 @@ func (c *tcpAddrConn) LocalAddr() net.Addr {
 // isTLSPort reports whether the string port equals the configured TLS-MITM port.
 func isTLSPort(port string, tlsPort uint16) bool {
 	return port != "" && port == fmt.Sprintf("%d", tlsPort)
+}
+
+// skynetRedialProbe builds a proxyinterstitial.Probe that re-attempts the dial
+// the streaming interstitial stands in for. For a .skynet target it re-drives a
+// real skynet dial (route setup + handshake) via the same SkynetDialer and
+// reports ready (nil) once it succeeds — a coarse but real signal, since the
+// router exposes no per-hop setup event to observe. A non-.skynet target
+// re-attempts the upstream/direct forward. The probe closes the opened
+// conn immediately; the browser's reload then rides the now-warm route.
+func skynetRedialProbe(dialer SkynetDialer, cfg Config, upstream *upstreamForwarder, origHost, addr string) proxyinterstitial.Probe {
+	return func(ctx context.Context) error {
+		if origHost != "" && isSkynetHost(origHost, cfg.DomainSuffix) {
+			_, addrPort, _ := net.SplitHostPort(addr) //nolint:errcheck
+			hostWithPort := origHost
+			if addrPort != "" && addrPort != "80" {
+				hostWithPort = origHost + ":" + addrPort
+			}
+			_, route, dest, hport, err := ParseResolverHost(hostWithPort, cfg.DomainSuffix, cfg.Aliases)
+			if err != nil {
+				return err
+			}
+			c, e := dialer.DialSkynet(ctx, dest, hport, route)
+			if e == nil {
+				_ = c.Close() //nolint:errcheck
+			}
+			return e
+		}
+		var (
+			c net.Conn
+			e error
+		)
+		if upstream != nil {
+			c, e = upstream.dial("tcp", addr)
+		} else {
+			c, e = net.Dial("tcp", addr)
+		}
+		if e == nil {
+			_ = c.Close() //nolint:errcheck
+		}
+		return e
+	}
 }
 
 func isSkynetHost(host, suffix string) bool {
