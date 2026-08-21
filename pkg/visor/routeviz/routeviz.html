@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skywire Route Visualizer</title>
+<style>
+  :root {
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1a1d21;
+    --muted:#6b7280; --line:#e3e6ea; --accent:#3f6fff; --accent-ink:#fff;
+    --active:#12a150; --standby:#c98a00; --dead:#d13438;
+    --stcp:#3f6fff; --stcpr:#8a5cf6; --sudp:#0ea5a4; --dmsg:#e0731d; --other:#6b7280;
+    --shadow:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#14171c; --panel:#1c2027; --ink:#e6e9ee; --muted:#9aa3af;
+      --line:#2a2f38; --accent:#5b83ff; --shadow:0 1px 2px rgba(0,0,0,.3); }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45}
+  header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);
+    padding:12px 20px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;box-shadow:var(--shadow)}
+  h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
+  h1 .tag{font-size:10px;font-weight:600;color:var(--accent);border:1px solid var(--accent);
+    border-radius:4px;padding:1px 5px;margin-left:8px;vertical-align:middle;text-transform:uppercase;letter-spacing:.5px}
+  .ctrls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-left:auto}
+  label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:2px}
+  select,input{font-family:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);
+    border-radius:6px;background:var(--bg);color:var(--ink)}
+  select{min-width:190px}
+  input[type=text]{width:150px}
+  input[type=number]{width:70px}
+  button{font-family:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);border-radius:6px;
+    background:var(--accent);color:var(--accent-ink);cursor:pointer;font-weight:600}
+  button.ghost{background:var(--bg);color:var(--ink)}
+  main{padding:20px;max-width:1180px;margin:0 auto}
+  .status{font-size:12px;color:var(--muted);margin-bottom:14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--muted)}
+  .dot.live{background:var(--active);box-shadow:0 0 0 3px rgba(18,161,80,.18)}
+  .empty{padding:48px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}
+  .rg{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);
+    margin-bottom:18px;overflow:hidden}
+  .rg-head{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+  .rg-desc{font-family:var(--mono);font-size:13px;font-weight:600}
+  .rg-meta{font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
+  .pill{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+    padding:2px 7px;border-radius:100px;color:#fff;white-space:nowrap}
+  .pill.active{background:var(--active)} .pill.standby{background:var(--standby)} .pill.dead{background:var(--dead)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
+    font-weight:600;padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  .mono{font-family:var(--mono);font-size:12.5px}
+  .tp{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;
+    padding:2px 7px;border-radius:5px;color:#fff}
+  .tp.stcp{background:var(--stcp)} .tp.stcpr{background:var(--stcpr)} .tp.sudp{background:var(--sudp)}
+  .tp.dmsg{background:var(--dmsg)} .tp.other{background:var(--other)}
+  .share{position:relative;min-width:90px}
+  .share .bar{height:6px;border-radius:3px;background:var(--accent);opacity:.85}
+  .share .track{height:6px;border-radius:3px;background:var(--line)}
+  .share span{font-size:11px;color:var(--muted)}
+  .path{font-family:var(--mono);font-size:12px;color:var(--muted);padding:6px 16px 12px;display:flex;
+    align-items:center;gap:6px;flex-wrap:wrap}
+  .path b{color:var(--ink)} .path .arrow{color:var(--accent)}
+  .num{font-variant-numeric:tabular-nums}
+  .err{color:var(--dead);font-size:12px}
+  .foot{font-size:11.5px;color:var(--muted);margin-top:24px;line-height:1.6}
+  code{font-family:var(--mono);background:var(--bg);padding:1px 5px;border-radius:4px;border:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Route Visualizer <span class="tag">scaffold</span></h1>
+  <div class="ctrls">
+    <div><label for="visor">Visor</label><select id="visor"></select></div>
+    <div><label for="app">App</label><input id="app" type="text" list="apps" value="skysocks-client"><datalist id="apps"></datalist></div>
+    <div><label for="iv">Refresh</label><input id="iv" type="number" min="0" step="0.5" value="1"> s</div>
+    <div><label>&nbsp;</label><button id="pause" class="ghost">Pause</button></div>
+  </div>
+</header>
+<main>
+  <div class="status">
+    <span><span class="dot" id="livedot"></span> <span id="statustxt">starting…</span></span>
+    <span id="polltxt"></span>
+  </div>
+  <div id="out"></div>
+  <div class="foot">
+    <b>What this shows.</b> Each card is one active <em>route group</em> for the selected app; each row is a
+    <em>mux leg</em> — a parallel route to the same destination. Rates are derived from the byte deltas between
+    polls (rg-scoped, this visor's view). Gate state: <span class="pill active">active</span>
+    <span class="pill standby">warm standby</span> <span class="pill dead">dead</span>.<br>
+    <b>Scaffold scope.</b> Data source is the live <code>/api/visors/{pk}/route-mux</code> endpoint
+    (RouteGroupMuxInfo). Per-leg rows show the leg's <em>next-hop</em> PK + transport; full multi-hop
+    per-leg paths and a route-over-graph layout are designed but not yet wired
+    (see <code>docs/design/route-visualizer.md</code>).
+  </div>
+</main>
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  const visorSel=$('#visor'), appIn=$('#app'), ivIn=$('#iv'), pauseBtn=$('#pause'),
+        out=$('#out'), statustxt=$('#statustxt'), polltxt=$('#polltxt'), livedot=$('#livedot'),
+        appsList=$('#apps');
+  let timer=null, paused=false, prev=new Map(), prevAt=0;
+
+  const shortPK = pk => !pk?'?':(pk.length<=12?pk:pk.slice(0,6)+'…'+pk.slice(-4));
+  const shortTp = id => !id?'-':(id.length<=10?id:id.slice(0,8)+'…');
+  const tpClass = t => ['stcp','stcpr','sudp','dmsg'].includes((t||'').toLowerCase())?(t||'').toLowerCase():'other';
+  function human(n){ n=+n||0; const u=['B','K','M','G','T']; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++;} return (i?n.toFixed(1):n.toFixed(0))+u[i]; }
+  function rate(bps){ return bps>0? human(bps)+'/s':'0B/s'; }
+
+  async function loadVisors(){
+    try{
+      const r=await fetch('/api/visors',{credentials:'same-origin'});
+      const v=await r.json();
+      visorSel.innerHTML='';
+      (v||[]).forEach(o=>{
+        const pk=o.local_pk||o.public_key||''; if(!pk) return;
+        const opt=document.createElement('option'); opt.value=pk;
+        opt.textContent=shortPK(pk)+(o.hostname?(' · '+o.hostname):'');
+        visorSel.appendChild(opt);
+        opt._apps=(o.apps||[]).map(a=>a.name).filter(Boolean);
+      });
+      onVisorChange();
+    }catch(e){ statustxt.innerHTML='<span class="err">could not list visors: '+e+'</span>'; }
+  }
+  function onVisorChange(){
+    const opt=visorSel.selectedOptions[0];
+    appsList.innerHTML='';
+    (opt&&opt._apps||['skysocks-client','vpn-client']).forEach(n=>{
+      const o=document.createElement('option'); o.value=n; appsList.appendChild(o);
+    });
+  }
+
+  function render(rgs){
+    if(!rgs||!rgs.length){ out.innerHTML='<div class="empty">No active route group for <b>'+appIn.value+'</b> on this visor.<br>Start the app and generate traffic, then it appears here.</div>'; prev.clear(); return; }
+    const now=Date.now()/1000, elapsed=now-prevAt, haveRates=prevAt>0&&elapsed>0, next=new Map();
+    let html='';
+    rgs.forEach((rg,ri)=>{
+      const d=rg.desc||{}, key=`${d.src_pk}:${d.src_port}>${d.dst_pk}:${d.dst_port}`;
+      const legs=(rg.legs||[]).slice().sort((a,b)=>a.index-b.index);
+      // pass 1: rates + totals
+      let totR=0,totS=0; const rr=[],sr=[];
+      legs.forEach((l,i)=>{
+        const k=key+'#'+l.index, p=prev.get(k);
+        let r=0,s=0;
+        if(haveRates&&p){ if(l.recv_bytes>=p.r) r=(l.recv_bytes-p.r)/elapsed; if(l.sent_bytes>=p.s) s=(l.sent_bytes-p.s)/elapsed; }
+        rr[i]=r; sr[i]=s; totR+=r; totS+=s; next.set(k,{r:l.recv_bytes,s:l.sent_bytes});
+      });
+      let active=0;
+      html+='<div class="rg"><div class="rg-head">'+
+        '<span class="rg-desc">'+shortPK(d.src_pk)+':'+d.src_port+' <span class="path arrow" style="padding:0">→</span> '+shortPK(d.dst_pk)+':'+d.dst_port+'</span>'+
+        '<span class="rg-meta"><span>mux '+(rg.mux_enabled?'on':'off')+'</span><span>sack '+(rg.sack_enabled?'on':'off')+'</span><span>'+legs.length+' leg'+(legs.length!=1?'s':'')+'</span></span></div>';
+      html+='<table><thead><tr><th>Leg</th><th>Transport</th><th>Next hop</th><th>Latency</th><th class="num">Recv/s</th><th class="num">Sent/s</th><th>Share</th><th class="num">Retx</th><th>State</th><th class="num">Recv</th><th class="num">Sent</th></tr></thead><tbody>';
+      legs.forEach((l,i)=>{
+        const gate = !l.alive?['dead','dead']:(l.standby?['standby','standby']:['active','active']);
+        if(gate[0]==='active'&&(rr[i]>0||sr[i]>0)) active++;
+        const share = totR>0? Math.round(rr[i]/totR*100):0;
+        html+='<tr>'+
+          '<td class="mono">'+l.index+'</td>'+
+          '<td><span class="tp '+tpClass(l.tp_type)+'">'+(l.tp_type||'?')+'</span> <span class="mono" style="color:var(--muted)">'+shortTp(l.transport_id)+'</span></td>'+
+          '<td class="mono">'+shortPK(l.remote_pk)+'</td>'+
+          '<td class="num">'+(l.latency_ms>0?Math.round(l.latency_ms)+'ms':'–')+'</td>'+
+          '<td class="num">'+(haveRates?rate(rr[i]):'–')+'</td>'+
+          '<td class="num">'+(haveRates?rate(sr[i]):'–')+'</td>'+
+          '<td class="share">'+(haveRates?('<div class="track"><div class="bar" style="width:'+share+'%"></div></div><span>'+share+'%</span>'):'<span>–</span>')+'</td>'+
+          '<td class="num">'+(l.retransmits||0)+'</td>'+
+          '<td><span class="pill '+gate[0]+'">'+gate[1]+'</span></td>'+
+          '<td class="num">'+human(l.recv_bytes)+'</td>'+
+          '<td class="num">'+human(l.sent_bytes)+'</td>'+
+          '</tr>';
+      });
+      html+='</tbody></table>';
+      // per-leg mini route path (SRC → next-hop → DST); full intermediate path is a design gap.
+      legs.forEach(l=>{
+        html+='<div class="path"><b>'+shortPK(d.src_pk)+'</b><span class="arrow">──('+(l.tp_type||'?')+')──▶</span><b>'+shortPK(l.remote_pk)+'</b><span class="arrow">┄┄▶</span><b>'+shortPK(d.dst_pk)+'</b> <span>leg '+l.index+'</span></div>';
+      });
+      if(haveRates) html+='<div class="path">total recv/s '+rate(totR)+' · sent/s '+rate(totS)+' · '+active+'/'+legs.length+' legs active</div>';
+      html+='</div>';
+    });
+    out.innerHTML=html; prev=next; prevAt=now;
+  }
+
+  async function poll(){
+    const pk=visorSel.value; if(!pk){ return; }
+    const app=encodeURIComponent(appIn.value||'skysocks-client');
+    try{
+      const r=await fetch('/api/visors/'+pk+'/route-mux?app='+app,{credentials:'same-origin'});
+      if(!r.ok){ throw new Error('HTTP '+r.status); }
+      const data=await r.json();
+      render(data);
+      livedot.classList.add('live'); statustxt.textContent='connected'; polltxt.textContent='updated '+new Date().toLocaleTimeString();
+    }catch(e){
+      livedot.classList.remove('live'); statustxt.innerHTML='<span class="err">'+e+'</span>';
+    }
+  }
+  function schedule(){
+    if(timer) clearInterval(timer); timer=null;
+    const s=parseFloat(ivIn.value); if(paused||!(s>0)) return;
+    timer=setInterval(poll, s*1000);
+  }
+  visorSel.addEventListener('change',()=>{ onVisorChange(); prev.clear(); prevAt=0; poll(); });
+  appIn.addEventListener('change',()=>{ prev.clear(); prevAt=0; poll(); });
+  ivIn.addEventListener('change',schedule);
+  pauseBtn.addEventListener('click',()=>{ paused=!paused; pauseBtn.textContent=paused?'Resume':'Pause'; schedule(); if(!paused) poll(); });
+
+  loadVisors().then(()=>{ poll(); schedule(); });
+})();
+</script>
+</body>
+</html>
