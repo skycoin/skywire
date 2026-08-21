@@ -55,13 +55,12 @@ func TestRPCIngressClient_Dial(t *testing.T) {
 
 		dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
-		dialCtx := context.Background()
 		dialConn := &appcommon.MockConn{}
 		dialConn.On("LocalAddr").Return(dmsgLocal)
 		dialConn.On("RemoteAddr").Return(dmsgRemote)
 
 		n := &appnet.MockNetworker{}
-		n.On("DialContext", dialCtx, remote).Return(dialConn, testhelpers.NoErr)
+		n.On("DialContext", mock.Anything, remote).Return(dialConn, testhelpers.NoErr)
 
 		appnet.ClearNetworkers()
 		err := appnet.AddNetworker(appnet.TypeDmsg, n)
@@ -83,12 +82,11 @@ func TestRPCIngressClient_Dial(t *testing.T) {
 
 		_, _, _, remote := prepAddrs()
 
-		dialCtx := context.Background()
 		var dialConn net.Conn
 		dialErr := errors.New("dial error")
 
 		n := &appnet.MockNetworker{}
-		n.On("DialContext", dialCtx, remote).Return(dialConn, dialErr)
+		n.On("DialContext", mock.Anything, remote).Return(dialConn, dialErr)
 
 		appnet.ClearNetworkers()
 		err := appnet.AddNetworker(appnet.TypeDmsg, n)
@@ -114,13 +112,12 @@ func TestRPCIngressClient_DialWithOptions(t *testing.T) {
 
 		dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
-		dialCtx := context.Background()
 		dialConn := &appcommon.MockConn{}
 		dialConn.On("LocalAddr").Return(dmsgLocal)
 		dialConn.On("RemoteAddr").Return(dmsgRemote)
 
 		n := &appnet.MockNetworker{}
-		n.On("DialContext", dialCtx, remote).Return(dialConn, testhelpers.NoErr)
+		n.On("DialContext", mock.Anything, remote).Return(dialConn, testhelpers.NoErr)
 
 		appnet.ClearNetworkers()
 		require.NoError(t, appnet.AddNetworker(appnet.TypeDmsg, n))
@@ -146,13 +143,12 @@ func TestRPCIngressClient_DialWithOptions(t *testing.T) {
 
 		dmsgLocal, dmsgRemote, _, remote := prepAddrs()
 
-		dialCtx := context.Background()
 		dialConn := &appcommon.MockConn{}
 		dialConn.On("LocalAddr").Return(dmsgLocal)
 		dialConn.On("RemoteAddr").Return(dmsgRemote)
 
 		n := &appnet.MockNetworker{}
-		n.On("DialContext", dialCtx, remote).Return(dialConn, testhelpers.NoErr)
+		n.On("DialContext", mock.Anything, remote).Return(dialConn, testhelpers.NoErr)
 
 		appnet.ClearNetworkers()
 		require.NoError(t, appnet.AddNetworker(appnet.TypeDmsg, n))

@@ -17,6 +17,19 @@ import (
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
 
+// dialSetupCeiling is the overall deadline for a single app Dial RPC's route
+// setup. The router's DialRoutes bounds each individual setup attempt
+// (routeSetupDialTimeout) and its own retry budget, but the dial context was
+// previously context.Background() with NO deadline: a route-setup path that
+// blocked indefinitely (a setup-node / cascade RPC that accepted but never
+// replied, a destination that dropped the setup conn) left the app's Dial RPC
+// — and its retrier — blocked inside that one call, so a dropped route wedged
+// the app permanently in "starting" even with --reconnect. This ceiling
+// guarantees the Dial RPC returns so the app's reconnect loop can re-try from
+// scratch. It is generous enough to cover a slow multi-hop setup with retries;
+// legitimate setups complete in seconds.
+const dialSetupCeiling = 90 * time.Second
+
 // RPCIOErr is used to return an error coming from network stack.
 //
 // Since client is implemented as an RPC client, we need to correctly
@@ -243,7 +256,12 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 	if r.proc != nil {
 		appName = r.proc.conf.AppName
 	}
-	dialCtx := appnet.WithAppName(context.Background(), appName)
+	// Bound the whole setup so a stuck route-setup path can't wedge the app in
+	// "starting" forever (see dialSetupCeiling). The ctx scopes only the dial /
+	// route setup, not the returned conn's lifetime, so a long-lived route group
+	// is unaffected.
+	dialCtx, cancelDial := context.WithTimeout(appnet.WithAppName(context.Background(), appName), dialSetupCeiling)
+	defer cancelDial()
 	conn, err := dialWithMuxRoutes(dialCtx, remote, req)
 	if err != nil {
 		free()

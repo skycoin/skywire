@@ -36,7 +36,15 @@ func (r *RPC) App(appName *string, reply *appserver.AppState) (err error) {
 	defer rpcutil.LogCall(r.log, "App", nil)(reply, &err)
 
 	app, err := r.visor.App(*appName)
-	*reply = *app
+	// Guard the nil-deref (#85): during the early post-restart window the app
+	// launcher isn't wired yet, so App() returns (nil, ErrAppLauncherNotAvailable).
+	// An app polling its own state over RPC right after a restart (the
+	// --reconnect path does exactly this) would otherwise panic the visor's RPC
+	// handler on `*reply = *app`. Leave reply at its zero value and surface the
+	// error instead.
+	if app != nil {
+		*reply = *app
+	}
 
 	return err
 }
