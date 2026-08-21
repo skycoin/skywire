@@ -58,8 +58,9 @@ type Engine struct {
 }
 
 // New returns an Engine with initialized state maps and the
-// adaptive size target seeded to the decide mux, matching the
-// bundle's package-global initializers.
+// adaptive steady active target seeded to adaptRevActive (the reverse
+// active width decideAdaptive requests, minus its warm-standby reserve),
+// matching the bundle's package-global initializers.
 func New() *Engine {
 	return &Engine{
 		latAdaptEWMA:    map[string]float64{},
@@ -75,7 +76,7 @@ func New() *Engine {
 		adaptSeen:       map[string]bool{},
 		adaptAliveIdx:   map[string]int{},
 		adaptPrevKnown:  map[string]bool{},
-		adaptTarget:     adaptDecideMux,
+		adaptTarget:     adaptRevActive,
 	}
 }
 
@@ -482,7 +483,15 @@ func (e *Engine) tickProbeAndPrune(legs []LegInfo) RotationAction {
 // --- adaptive (composite) ---
 
 const (
-	adaptDecideMux    = 1
+	// adaptFwdActive is the lean forward (upstream / request) leg count: a
+	// single low-latency route, so the request path never pays mux
+	// head-of-line cost. adaptRevActive is the steady active reverse (bulk
+	// download) width; adaptStandbyMax warm spares are established alongside it
+	// and parked by tickAdaptive for instant, dip-free promotion. The reverse
+	// mux decideAdaptive requests is therefore adaptRevActive + adaptStandbyMax,
+	// and the tick's steady active target (adaptTarget) seeds to adaptRevActive.
+	adaptFwdActive    = 1
+	adaptRevActive    = 2
 	adaptFloor        = 1
 	adaptCap          = 6
 	adaptAlpha        = 0.3
@@ -505,6 +514,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	aliveCount := 0
 	standbyCount := 0
 	oldestAliveIdx := -1
+	newestAliveIdx := -1
 	promotableIdx := -1
 	for _, l := range legs {
 		tid := l.TransportID
@@ -524,6 +534,9 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		aliveCount++
 		if oldestAliveIdx == -1 || l.Index < oldestAliveIdx {
 			oldestAliveIdx = l.Index
+		}
+		if l.Index > newestAliveIdx {
+			newestAliveIdx = l.Index
 		}
 		if tid == "" {
 			continue
@@ -604,6 +617,19 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 				AddLeg:      true,
 				ExcludeHops: hops,
 			}
+		}
+		// Proactive warm standby: once no leg is a latency outlier and we're not
+		// under load, hold the surplus above the steady active target as warm
+		// standby — established, kept alive, ready for instant (dip-free)
+		// promotion — WITHOUT waiting for an idle signal. The asymmetric decide
+		// seeds adaptRevActive+adaptStandbyMax reverse legs; the router brings
+		// them all up active, and this parks the surplus down to adaptTarget on
+		// the first ticks. Park the NEWEST surplus leg (highest index) — never
+		// leg 0, the primary/forward leg the router refuses to demote
+		// (route_mux.setLegStandby). Suppressed while saturated so a burst keeps
+		// its full width (the saturated branch below instead GROWS the target).
+		if !saturated && aliveCount > e.adaptTarget && standbyCount < adaptStandbyMax && newestAliveIdx > 0 {
+			return RotationAction{DemoteToStandby: []int{newestAliveIdx}}
 		}
 		if saturated && aliveCount < adaptCap {
 			e.adaptTarget = aliveCount + 1

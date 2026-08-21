@@ -19,7 +19,9 @@ func TestDecide_ShapePresets(t *testing.T) {
 		{"latency-adaptive", Context{App: "vpn-client"}, Spec{Mux: 5, MinHops: 2, RotationIntervalSeconds: 30, Distribution: "auto"}},
 		{"elastic-mux", Context{App: "skynet-client"}, Spec{Mux: 2, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "auto"}},
 		{"probe-and-prune", Context{App: "skynet-client"}, Spec{Mux: 3, MinHops: 2, RotationIntervalSeconds: 30, Distribution: "auto"}},
-		{"adaptive", Context{App: "vpn-client"}, Spec{Mux: 1, RotationIntervalSeconds: 20, Distribution: "auto"}},
+		{"adaptive", Context{App: "vpn-client"}, Spec{ForwardMux: 1, ReverseMux: 4, RotationIntervalSeconds: 20, Distribution: "auto"}},
+		{"adaptive/chat", Context{App: "skychat"}, Spec{Mux: 1}},
+		{"adaptive/custom-session", Context{App: "g8"}, Spec{ForwardMux: 1, ReverseMux: 4, RotationIntervalSeconds: 20, Distribution: "auto"}},
 	}
 	for _, tc := range cases {
 		presetName, _, _ := splitName(tc.name)
@@ -70,12 +72,15 @@ func TestDecide_Adaptive(t *testing.T) {
 	}
 
 	// Real metadata present → pick the max-distinct-kinds candidate (b), and keep
-	// the seed shape otherwise (mux=1, rotation=20, auto, MinHops=0).
+	// the asymmetric seed shape otherwise (fwd=1, rev=active+standby=4,
+	// rotation=20, auto, MinHops=0 inherited).
 	got := Decide("adaptive", Context{App: "skysocks-client"}, diverse)
 	if got.Chosen == nil || got.Chosen.Hops[0] != "b" {
 		t.Fatalf("adaptive should seed the most transport-diverse route (b); got %+v", got.Chosen)
 	}
-	if got.Mux != 1 || got.RotationIntervalSeconds != 20 || got.Distribution != "auto" || got.MinHops != 0 {
+	if got.ForwardMux != 1 || got.ReverseMux != adaptRevActive+adaptStandbyMax ||
+		got.RotationIntervalSeconds != 20 || got.Distribution != "auto" ||
+		got.MinHops != 0 || got.Mux != 0 {
 		t.Errorf("adaptive seed shape changed: %+v", got)
 	}
 
@@ -103,9 +108,63 @@ func TestDecide_Adaptive(t *testing.T) {
 		t.Fatalf("adaptive must not refine on empty/unknown kinds; got %+v", got.Chosen)
 	}
 
-	// Non-client app → empty spec regardless of candidates.
-	if got := Decide("adaptive", Context{App: "skychat"}, diverse); !reflect.DeepEqual(got, Spec{}) {
-		t.Errorf("adaptive for a non-client app should be the empty spec; got %+v", got)
+	// Latency-sensitive chat → single lean route regardless of candidates
+	// (no mux, no Chosen refinement).
+	if got := Decide("adaptive", Context{App: "skychat"}, diverse); !reflect.DeepEqual(got, Spec{Mux: 1}) {
+		t.Errorf("adaptive for chat should be a single lean route; got %+v", got)
+	}
+
+	// App-agnostic: an unknown / custom-named session still gets the adaptive
+	// asymmetric mux (not the empty spec) — the fix must apply to EVERY app that
+	// dials a route group, not a hardcoded allowlist.
+	if got := Decide("adaptive", Context{App: "some-custom-app"}, nil); got.ForwardMux != 1 || got.ReverseMux != adaptRevActive+adaptStandbyMax {
+		t.Errorf("adaptive must apply to any non-chat app; got %+v", got)
+	}
+}
+
+// TestEngine_OnTick_AdaptiveHoldsWarmStandby asserts the adaptive default
+// PROACTIVELY parks the surplus reverse legs as warm standby (down to the
+// steady active target) instead of waiting for an idle signal, and never parks
+// leg 0 (the primary / forward leg the router refuses to demote). The decide
+// seeds adaptRevActive+adaptStandbyMax reverse legs; the router brings them up
+// active; the first ticks must demote the newest surplus legs to standby.
+func TestEngine_OnTick_AdaptiveHoldsWarmStandby(t *testing.T) {
+	e := New()
+	// adaptRevActive+adaptStandbyMax legs all active (as the router first
+	// establishes them). Steady active target = adaptRevActive.
+	total := adaptRevActive + adaptStandbyMax
+	legs := make([]LegInfo, total)
+	for i := range legs {
+		legs[i] = LegInfo{Index: i, TransportID: string(rune('a' + i)), Kind: "stcpr", LatencyMs: 40, Alive: true}
+	}
+
+	// Park the surplus (total-adaptRevActive legs), newest first, one per tick.
+	parked := map[int]bool{}
+	for tick := 0; tick < adaptStandbyMax; tick++ {
+		act := e.OnTick("adaptive", legs)
+		if len(act.DemoteToStandby) != 1 {
+			t.Fatalf("tick %d: expected one proactive demote, got %+v", tick, act)
+		}
+		idx := act.DemoteToStandby[0]
+		if idx == 0 {
+			t.Fatalf("tick %d: must never park leg 0 (primary/forward leg)", tick)
+		}
+		if parked[idx] {
+			t.Fatalf("tick %d: leg %d parked twice", tick, idx)
+		}
+		parked[idx] = true
+		// Reflect the park in the next snapshot (as the route group would).
+		legs[idx].Standby = true
+	}
+
+	// Steady state: adaptRevActive active + adaptStandbyMax standby → no further
+	// structural change (no dip, no churn).
+	if act := e.OnTick("adaptive", legs); !reflect.DeepEqual(act, RotationAction{}) {
+		t.Errorf("at steady active target the adaptive tick must be a no-op; got %+v", act)
+	}
+	// The parked legs are the newest (highest-index) ones, leg 0 always active.
+	if parked[0] {
+		t.Fatalf("leg 0 must stay active")
 	}
 }
 

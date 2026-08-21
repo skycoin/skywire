@@ -48,7 +48,7 @@ func TestDescribe(t *testing.T) {
 		"latency-adaptive": "latency-adaptive — mux=4 multi-hop that evicts the slowest leg each 30s (when its EWMA-smoothed latency is a >=1.5x-median outlier) until the leg set converges to low-latency disjoint paths, then holds (hysteresis-damped; no churn once converged).",
 		"elastic-mux":      "elastic-mux — AIMD scaling of the mux leg count to load: grows a leg (up to 6) when the group is saturated, releases one (down to 2) when idle.",
 		"probe-and-prune":  "probe-and-prune — periodically adds one speculative leg over a fresh path, observes its EWMA latency a few ticks, and keeps it only if it beats the current worst leg (continuous explore/exploit).",
-		"adaptive":         "adaptive — the combined performance default: scales the mux leg count to load (AIMD), evicts the slowest leg toward low-latency convergence, and periodically probes a fresh path and keeps it only if it is better — one arbitrated action per tick.",
+		"adaptive":         "adaptive — the combined performance default (app-agnostic, chat excepted): a lean single forward leg plus a wider reverse (download) mux sized active+standby, proactively holding warm-standby spares for dip-free promotion; on_tick scales the active width to load (AIMD), evicts the slowest leg toward low-latency convergence, and periodically probes a fresh path and keeps it only if it is better — one arbitrated action per tick.",
 	}
 	for name, want := range cases {
 		got, ok := Describe(name)
@@ -341,10 +341,18 @@ func TestAdaptiveDecides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decide: %v", err)
 	}
-	// adaptive starts LEAN at mux=1 (single fastest path) and grows under load
-	// via on_tick; starting wide dragged traffic across slow disjoint siblings.
-	if spec.Mux != 1 {
-		t.Errorf("Mux = %d, want 1 (lean start, grow on load)", spec.Mux)
+	// adaptive is ASYMMETRIC by default: a single lean forward (request/upstream)
+	// leg and a wider reverse (bulk download) mux sized active+standby, so the
+	// router establishes warm spares up front and on_tick parks the surplus for
+	// dip-free promotion. Symmetric Mux stays 0 (per-direction overrides win).
+	if spec.Mux != 0 {
+		t.Errorf("Mux = %d, want 0 (per-direction overrides drive adaptive)", spec.Mux)
+	}
+	if spec.ForwardMux != 1 {
+		t.Errorf("ForwardMux = %d, want 1 (lean upstream)", spec.ForwardMux)
+	}
+	if spec.ReverseMux != 4 {
+		t.Errorf("ReverseMux = %d, want 4 (2 active + 2 warm standby)", spec.ReverseMux)
 	}
 	// adaptive deliberately does NOT set MinHops: min-hops is the operator's
 	// privacy constraint (session/config), not the performance policy's to
