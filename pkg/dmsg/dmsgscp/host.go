@@ -32,6 +32,7 @@ import (
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // Whitelist is an alias for pty.Whitelist so operators can pass
@@ -107,7 +108,8 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 //
 // Authorization (whitelist check) happens per-stream and works
 // uniformly across listener types because remoteAddrToPK handles
-// both dmsg.Addr and appnet.Addr shapes.
+// dmsg.Addr plus both skynet shapes (appnet.Addr direct-transport +
+// routing.Addr route-group).
 func (h *Host) ServeListener(ctx context.Context, lis net.Listener) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -170,14 +172,30 @@ func (h *Host) ServeListener(ctx context.Context, lis net.Listener) error {
 }
 
 // remoteAddrToPK extracts a cipher.PubKey from an accepted conn's
-// RemoteAddr. Supports dmsg.Addr (dmsg listener) and appnet.Addr
-// (skynet listener via the skywire router). Unrecognized address
-// types return ok=false; the caller logs + closes the connection.
+// RemoteAddr. Supports dmsg.Addr (dmsg listener) and, for the skynet
+// mirror, BOTH address shapes the SkywireNetworker's accepted conns
+// carry:
+//
+//   - appnet.Addr — the direct-transport accept path (a vstream over
+//     an existing direct transport to the peer).
+//   - routing.Addr — the route-group accept path (DialRoutes →
+//     NoiseRouteGroup, whose RemoteAddr resolves to the route
+//     descriptor's source).
+//
+// Recognizing routing.Addr is required for skynet parity: without it,
+// every route-group-backed scp conn (including self-dial, which has no
+// direct transport and always falls into DialRoutes) is silently
+// rejected here and closed, surfacing to the client as a bare EOF on
+// the ready-ack. This mirrors the dmsgpty extractor skywireConnPK in
+// pkg/visor/init_dmsg_skywire.go, which had the identical fix applied.
+// Unrecognized address types return ok=false; the caller logs + closes.
 func remoteAddrToPK(addr net.Addr) (cipher.PubKey, bool) {
 	switch a := addr.(type) {
 	case dmsg.Addr:
 		return a.PK, true
 	case appnet.Addr:
+		return a.PubKey, true
+	case routing.Addr:
 		return a.PubKey, true
 	}
 	return cipher.PubKey{}, false
