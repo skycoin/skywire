@@ -68,7 +68,12 @@ func emitPretty(cmd *cobra.Command, data []byte) {
 var tpdCmd = &cobra.Command{
 	Use:   "tpd",
 	Short: "Transport Discovery endpoints",
-	Long:  "\n    Query Transport Discovery service endpoints",
+	Long: `Query Transport Discovery (TPD) read endpoints over the mesh.
+
+By default each subcommand fetches via the local visor's RPC (DMSG-HTTP);
+pass --direct to fetch with a CLI-owned client instead. All output honors
+--json. Network-wide views (stats, versions, bandwidth without --pk) need no
+arguments; per-visor / per-transport views take --pk / --id / --pks / --ids.`,
 }
 
 func init() {
@@ -141,8 +146,10 @@ func init() {
 }
 
 var tpdVisorStatsCmd = &cobra.Command{
-	Use:   "visor-stats",
-	Short: "Transport count statistics for a specific visor",
+	Use:     "visor-stats",
+	Short:   "Transport count statistics for a specific visor",
+	Long:    "Transport count statistics for one visor (TPD /transports/stats/<pk>).\n\n  skywire cli svc tpd visor-stats -p <visor-pk>",
+	Example: "  skywire cli svc tpd visor-stats -p 02b3...",
 	Run: func(cmd *cobra.Command, _ []string) {
 		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/transports/stats/"+tpdVisorStatsPK, deployment.Prod.TransportDiscovery)
 		if err != nil {
@@ -161,6 +168,7 @@ func init() {
 var tpdBandwidthCmd = &cobra.Command{
 	Use:   "bandwidth",
 	Short: "Bandwidth data (network-wide or per-visor)",
+	Long:  "Bandwidth data from TPD. With no --pk: the network-wide /metric rollup.\nWith --pk <visor-pk>: that visor's /bandwidth/visor/<pk> history.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		path := "/metric"
 		if tpdBandwidthVisorPK != "" {
@@ -184,6 +192,7 @@ func init() {
 var tpdBandwidthTpCmd = &cobra.Command{
 	Use:   "bandwidth-tp",
 	Short: "Bandwidth history for a specific transport",
+	Long:  "Bandwidth history for one transport (TPD /bandwidth/transport/<id>).\n\n  skywire cli svc tpd bandwidth-tp -i <transport-uuid>",
 	Run: func(cmd *cobra.Command, _ []string) {
 		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/bandwidth/transport/"+tpdBandwidthTpID, deployment.Prod.TransportDiscovery)
 		if err != nil {
@@ -203,6 +212,7 @@ func init() {
 var tpdVersionsPKCmd = &cobra.Command{
 	Use:   "versions-pk",
 	Short: "Version info for specific public keys",
+	Long:  "Version info for one or more visors (TPD /versions/<pks>).\n\n  skywire cli svc tpd versions-pk -p <pk1>,<pk2>",
 	Run: func(cmd *cobra.Command, _ []string) {
 		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/versions/"+tpdVersionsPKs, deployment.Prod.TransportDiscovery)
 		if err != nil {
@@ -222,6 +232,7 @@ func init() {
 var tpdMetricsVisorCmd = &cobra.Command{
 	Use:   "metrics-visor",
 	Short: "Metrics for specific visor(s)",
+	Long:  "Transport metrics for one or more visors (TPD /metrics/visor/<pks>).\n\n  skywire cli svc tpd metrics-visor -p <pk1>,<pk2>",
 	Run: func(cmd *cobra.Command, _ []string) {
 		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/metrics/visor/"+tpdMetricsVisorPKs, deployment.Prod.TransportDiscovery)
 		if err != nil {
@@ -241,6 +252,7 @@ func init() {
 var tpdMetricsTpCmd = &cobra.Command{
 	Use:   "metrics-tp",
 	Short: "Metrics for specific transport(s)",
+	Long:  "Metrics for one or more transports (TPD /metrics/<ids>).\n\n  skywire cli svc tpd metrics-tp -i <id1>,<id2>",
 	Run: func(cmd *cobra.Command, _ []string) {
 		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/metrics/"+tpdMetricsTpIDs, deployment.Prod.TransportDiscovery)
 		if err != nil {
@@ -255,7 +267,14 @@ var tpdMetricsTpCmd = &cobra.Command{
 var dmsgdCmd = &cobra.Command{
 	Use:   "dmsgd",
 	Short: "DMSG Discovery endpoints",
-	Long:  "\n    Query DMSG Discovery service endpoints",
+	Long: `Query DMSG Discovery read endpoints over the mesh.
+
+  all-servers     every registered dmsg server entry
+  server-clients  clients grouped by the server they session with
+  clients --pk    clients currently sessioned with one dmsg server
+
+Fetches via the local visor's RPC by default; --direct uses a CLI-owned
+client. Output honors --json.`,
 }
 
 func init() {
@@ -300,6 +319,7 @@ func init() {
 var dmsgdServerClientsPKCmd = &cobra.Command{
 	Use:   "clients",
 	Short: "List clients for a specific DMSG server",
+	Long:  "List the clients currently sessioned with one dmsg server\n(DMSG-discovery /dmsg-discovery/server/<pk>/clients).\n\n  skywire cli svc dmsgd clients -p <server-pk>",
 	Run: func(cmd *cobra.Command, _ []string) {
 		data, err := fetchViaVisorOrDirect(cmd, "dmsgd", "/dmsg-discovery/server/"+dmsgdServerClientsPK+"/clients", deployment.Prod.DmsgDiscovery)
 		if err != nil {
@@ -314,7 +334,12 @@ var dmsgdServerClientsPKCmd = &cobra.Command{
 var arCmd = &cobra.Command{
 	Use:   "ar",
 	Short: "Address Resolver endpoints",
-	Long:  "\n    Query Address Resolver service endpoints",
+	Long: `Query the Address Resolver (AR) over the mesh.
+
+Bare 'ar' fetches /transports — the AR's view of stcpr/sudph-registered
+edges. 'ar check <pk>' asks whether one visor is registered (without
+revealing its IP). Fetches via the local visor's RPC by default; --direct
+uses a CLI-owned client. Output honors --json.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		data, err := fetchViaVisorOrDirect(cmd, "ar", "/transports", deployment.Prod.AddressResolver)
 		if err != nil {
@@ -350,6 +375,16 @@ sessions show as "(down: <duration>)"; sessions shorter than
 		}
 		data, err := fetchViaVisorOrDirect(cmd, "tpd", path, deployment.Prod.TransportDiscovery)
 		if err != nil {
+			// A 503 here means the TPD is up but has no session recorder
+			// enabled (pkg/serviceuptime not wired on this deployment's
+			// build), or the endpoint predates it. That's an expected,
+			// operator-actionable state — not a CLI failure — so report it
+			// plainly instead of dumping a raw RPC/HTTP error + exit 1.
+			if strings.Contains(err.Error(), "503") || strings.Contains(err.Error(), "404") {
+				fmt.Fprintln(cmd.ErrOrStderr(), "svc tpd uptime: the transport-discovery reports no session history (HTTP 503/404 from /uptime/sessions).") //nolint:errcheck
+				fmt.Fprintln(cmd.ErrOrStderr(), "This deployment's TPD build does not record its own session history (pkg/serviceuptime not enabled).")    //nolint:errcheck
+				return
+			}
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		var sessions []serviceuptime.SessionRecord
@@ -372,13 +407,23 @@ sessions show as "(down: <duration>)"; sessions shorter than
 
 // --- NM subcommand ---
 
+// nmCmd is a stand-in: the network-monitor has no URL in the embedded
+// deployment.Services set (only keyring PKs exist for it), so there is no
+// dedicated endpoint to query. Until one is wired in, this probes the
+// transport-discovery /health as the closest liveness signal and says so.
+// FOLLOW-UP: give the network monitor a real deployment URL + endpoint, or
+// drop this subcommand.
 var nmCmd = &cobra.Command{
 	Use:   "nm",
-	Short: "Network Monitor status",
-	Long:  "\n    Query Network Monitor service status",
+	Short: "Network Monitor status (currently probes TPD /health — no NM endpoint deployed)",
+	Long: `Query network-monitor liveness.
+
+NOTE: the network monitor has no URL in the embedded deployment set (only
+keyring public keys), so there is no dedicated endpoint to hit yet. This
+command probes the transport-discovery /health as the closest available
+liveness signal — treat the result as "is the discovery tier up", not as a
+network-monitor-specific status.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Network monitor URL isn't in the standard deployment config,
-		// so we try a known path or fall back
 		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/health", deployment.Prod.TransportDiscovery)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
