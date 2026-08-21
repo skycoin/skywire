@@ -108,7 +108,10 @@ func TestServeConn(t *testing.T) {
 func hexLum(h string) float64 {
 	h = strings.TrimPrefix(h, "#")
 	c := func(i int) float64 {
-		v, _ := strconv.ParseInt(h[i:i+2], 16, 0)
+		v, err := strconv.ParseInt(h[i:i+2], 16, 0)
+		if err != nil {
+			return 0
+		}
 		s := float64(v) / 255
 		if s <= 0.03928 {
 			return s / 12.92
