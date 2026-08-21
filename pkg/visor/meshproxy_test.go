@@ -222,6 +222,7 @@ func TestInterstitialRTColdServesTransient(t *testing.T) {
 	g := &gateRT{release: make(chan struct{})} // blocks until released
 	defer close(g.release)                     // let the warm-up dial finish at teardown
 	rt := newMeshInterstitialRT(g, 30*time.Millisecond)
+	rt.streamMax = 60 * time.Millisecond // bound the streaming hold so the test is fast
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req := meshCtxReq(t, ctx, "dmsg", true)
@@ -238,10 +239,17 @@ func TestInterstitialRTColdServesTransient(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	body := readBody(t, resp)
-	for _, want := range []string{"Building a route", `http-equiv="refresh"`, "site.example"} {
+	// The cold path now STREAMS live progress (chunked) rather than serving a
+	// one-shot meta-refresh page: the opening shell + a progress line, and — since
+	// the warm-up dial stays gated past streamMax here — a manual retry, with NO
+	// client meta-refresh (the streamed page reloads via script on success).
+	for _, want := range []string{"Building a route", "site.example", "Retry"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("interstitial body missing %q", want)
+			t.Errorf("streamed interstitial body missing %q", want)
 		}
+	}
+	if strings.Contains(body, `http-equiv="refresh"`) {
+		t.Error("streaming interstitial should not use a client meta-refresh")
 	}
 
 	// A background warm-up dial was started, and it ran on a detached context that
@@ -252,6 +260,35 @@ func TestInterstitialRTColdServesTransient(t *testing.T) {
 	cancel() // cancel the inbound request
 	if dctx := g.ctx(); dctx.Err() != nil {
 		t.Fatalf("detached upstream context was canceled by the inbound request: %v", dctx.Err())
+	}
+}
+
+// When the detached round-trip lands while the streaming interstitial is still
+// held open, the stream finishes with a "route up" line and a reload-into-content
+// script (no manual retry) — the live-progress success path.
+func TestInterstitialRTStreamingReloadsOnReady(t *testing.T) {
+	g := &gateRT{release: make(chan struct{})} // gated, then released to succeed
+	rt := newMeshInterstitialRT(g, 30*time.Millisecond)
+	rt.streamMax = 5 * time.Second
+
+	req := meshCtxReq(t, context.Background(), "dmsg", true)
+	resp, err := rt.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("RoundTrip: %v", err)
+	}
+	close(g.release) // let the detached (real) round-trip complete successfully
+
+	body := readBody(t, resp)
+	for _, want := range []string{"Building a route", "Route group up", "location.replace(location.href)"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("streamed success body missing %q\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "Retry") {
+		t.Error("streamed success should not show a manual retry")
+	}
+	if !rt.isWarm(meshDestKey(req)) {
+		t.Error("destination should be marked warm after the streamed round-trip succeeded")
 	}
 }
 
