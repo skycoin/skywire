@@ -28,8 +28,11 @@ func init() {
 
 var rulesCmd = &cobra.Command{
 	Use:   "rules",
-	Short: "display the mainnet rules",
-	Long:  "display the mainnet rules",
+	Short: "display the mainnet reward eligibility rules",
+	Long: `Display the mainnet reward eligibility rules (embedded at build time).
+
+By default the markdown is rendered for the terminal. Use --raw to print
+the original markdown source, or --html to render it as an HTML fragment.`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if rawFile {
 			fmt.Println(rewards.MainnetRules)
