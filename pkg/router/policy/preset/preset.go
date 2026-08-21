@@ -233,18 +233,44 @@ func decideProbeAndPrune(ctx Context) Spec {
 }
 
 // decideAdaptive is the COMPOSITE "adaptive" preset's decide logic — the
-// intended converged default (and the wired default for the client apps; see
-// the config generator's configureRouting). It returns a lean seed spec that
-// tickAdaptive then steers along size/latency/explore at once. No MinHops here
-// on purpose: min-hops is a privacy constraint the operator owns; leaving it 0
-// means "inherit" so adaptive optimizes within the operator's chosen floor.
+// intended converged default (the config generator wires "preset:adaptive").
 //
-// The one refinement over the seed spec: when real transport-kind metadata is
-// present, adaptive picks the most transport-diverse forward candidate as the
-// initial route (identical selection to decideTransportDiverse — max distinct
+// It is deliberately APP-AGNOSTIC: every overlay app — vpn-client,
+// skysocks-client, skynet-client, the resolving-proxy / skynet-browser chain,
+// and any future skynet consumer that dials a route group — gets the adaptive
+// asymmetric mux. The one exception is latency-sensitive chat, which stays a
+// single lean route (same idiom as the rotating-bw / app-mux presets). The
+// behavior keys on traffic SHAPE (latency-sensitive vs. throughput), never on a
+// hardcoded allowlist of built-in binary names, so a custom-named proxy/vpn
+// session ("g8", …) is covered too — the reason the old three-name switch made
+// the policy a silent no-op for renamed sessions.
+//
+// Shape — ASYMMETRIC forward/reverse with a proactively-held warm standby pool:
+//   - ForwardMux=1: a single lean forward leg. The upstream / request path is
+//     latency-sensitive and pays no mux head-of-line cost.
+//   - ReverseMux=adaptRevActive+adaptStandbyMax: the reverse (download) leg pool
+//     the router establishes up front. tickAdaptive keeps the STEADY active
+//     width at adaptRevActive (=1) — so an interactive / idle flow rides ONE
+//     healthy leg and is never scattered+reordered across a wide mux — and parks
+//     the rest (adaptStandbyMax legs) as an always-on warm-standby reserve. The
+//     reverse mux WIDENS only under SUSTAINED bulk load (promoting warm spares,
+//     dip-free) and shrinks back when the load ends. tickAdaptive also keeps
+//     gross-latency-outlier / dead legs OUT of the active set and rate-limits
+//     reshapes (hysteresis + cooldown) so the active set stays stable under real
+//     long-lived connections.
+//
+// No MinHops here on purpose: min-hops is a privacy constraint the operator
+// owns; leaving it 0 means "inherit" so adaptive optimizes within the
+// operator's chosen floor. The reverse aux legs still come out disjoint and
+// multi-hop because establishMuxRoutes excludes the primary's (direct)
+// transport and picks distinct-intermediate paths for the spares.
+//
+// The one path refinement: when real transport-kind metadata is present,
+// adaptive seeds the most transport-diverse forward candidate as the initial
+// route (identical selection to decideTransportDiverse — max distinct
 // TransportKinds, ties broken by lower EstLatencyMs). This only ever REFINES
-// which single route the mux seeds from; every other field is unchanged and
-// tickAdaptive's sizing/evict/probe/warm-standby machinery is untouched.
+// which single route the mux seeds from; sizing/evict/probe/warm-standby stay
+// tickAdaptive's job.
 //
 // Graceful degradation is load-bearing: with no candidates, or when every
 // candidate has empty/unknown TransportKinds (the wasm guest / NopProvider
@@ -252,18 +278,20 @@ func decideProbeAndPrune(ctx Context) Spec {
 // as before — so this can never break the wasm or no-provider path.
 func decideAdaptive(ctx Context, cands []Candidate) Spec {
 	switch ctx.App {
-	case "vpn-client", "skysocks-client", "skynet-client":
-		spec := Spec{
-			Mux:                     adaptDecideMux,
-			RotationIntervalSeconds: 20,
-			Distribution:            "auto",
-		}
-		if anyKnownTransportKind(cands) {
-			spec.Chosen = mostTransportDiverse(cands)
-		}
-		return spec
+	case "skychat", "skychat-client":
+		// Latency-sensitive chat: single lean route, lowest mux.
+		return Spec{Mux: 1}
 	}
-	return Spec{}
+	spec := Spec{
+		ForwardMux:              adaptFwdActive,
+		ReverseMux:              adaptRevActive + adaptStandbyMax,
+		RotationIntervalSeconds: 20,
+		Distribution:            "auto",
+	}
+	if anyKnownTransportKind(cands) {
+		spec.Chosen = mostTransportDiverse(cands)
+	}
+	return spec
 }
 
 // anyKnownTransportKind reports whether any candidate carries a non-empty
