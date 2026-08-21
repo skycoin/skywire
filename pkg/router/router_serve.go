@@ -200,7 +200,6 @@ func (r *router) serveSetup() {
 
 // nolint: gocyclo
 //
-//gocyclo:ignore
 // awaitHandshakeAck blocks until the peer's reciprocal setup handshake closes
 // processed, or ctx expires (returning ctx.Err()). When retransmit is non-nil
 // and interval > 0 (the initiator), it re-invokes retransmit every interval so
@@ -208,6 +207,8 @@ func (r *router) serveSetup() {
 // the interval instead of eating the whole handshake-await timeout and dropping
 // a live dial. The responder passes retransmit == nil: it has nothing to
 // re-send until the forward handshake arrives (whereupon processed closes).
+//
+//gocyclo:ignore
 func awaitHandshakeAck(ctx context.Context, processed <-chan struct{}, retransmit func(), interval time.Duration) error {
 	var tickC <-chan time.Time
 	if retransmit != nil && interval > 0 {

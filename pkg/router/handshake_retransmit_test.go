@@ -114,7 +114,11 @@ func TestAwaitHandshakeAck_TimeoutAfterRetransmits(t *testing.T) {
 // transport (more than the single legacy shot) until the deadline.
 func TestRouteGroup_InitiatorRetransmitsHandshake(t *testing.T) {
 	rg, _, _ := createMuxRouteGroup(t, 1)
-	t.Cleanup(func() { _ = rg.Close() })
+	t.Cleanup(func() {
+		if cerr := rg.Close(); cerr != nil {
+			t.Logf("route group close: %v", cerr)
+		}
+	})
 	rg.initiator = true
 
 	conn := newCountingTransport()
@@ -126,7 +130,11 @@ func TestRouteGroup_InitiatorRetransmitsHandshake(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 130*time.Millisecond)
 	defer cancel()
-	retransmit := func() { _ = rg.sendHandshake(true) }
+	retransmit := func() {
+		if herr := rg.sendHandshake(true); herr != nil {
+			t.Logf("retransmit handshake: %v", herr)
+		}
+	}
 	err := awaitHandshakeAck(ctx, rg.handshakeProcessed, retransmit, 25*time.Millisecond)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.GreaterOrEqual(t, conn.writeCount(), 2, "initiator should retransmit the handshake packet repeatedly")
@@ -137,7 +145,11 @@ func TestRouteGroup_InitiatorRetransmitsHandshake(t *testing.T) {
 // re-sends its handshake so the initiator's retransmit loop can complete.
 func TestRouteGroup_ResponderReAcksDuplicateHandshake(t *testing.T) {
 	rg, _, _ := createMuxRouteGroup(t, 1)
-	t.Cleanup(func() { _ = rg.Close() })
+	t.Cleanup(func() {
+		if cerr := rg.Close(); cerr != nil {
+			t.Logf("route group close: %v", cerr)
+		}
+	})
 	require.False(t, rg.initiator, "createMuxRouteGroup builds a responder")
 
 	conn := newCountingTransport()
