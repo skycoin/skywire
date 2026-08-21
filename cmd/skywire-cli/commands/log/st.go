@@ -27,7 +27,13 @@ func init() {
 //nolint:errcheck
 var stCmd = &cobra.Command{
 	Use:   "st",
-	Short: "survey tree",
+	Short: "Render collected surveys as a color tree",
+	Long: `Render the surveys collected by ` + "`cli log`" + ` as a color-coded tree.
+
+Walks the collection directory (--lcdir) and prints, per visor: health.json
+(green if fetched within the hour, else red), node-info.json (with the reported
+skywire_version), and any transport-bandwidth CSVs. With --ut it also shows each
+visor's current online status + last-two-days uptime, read from /tmp/ut.json.`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if pubKey != "" { //nolint:errcheck
 			pks := strings.Split(pubKey, ",")

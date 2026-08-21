@@ -63,7 +63,7 @@ func init() {
 
 var logCmd = &cobra.Command{
 	Use:   "log",
-	Short: "survey & transport log collection",
+	Short: "Survey & transport-log collection",
 	Long:  fmt.Sprintf("Fetch health, survey, and transport logging from visors which are online in the TPD-integrated uptime tracker\n%[1]s/uptimes?v=v3\n%[1]s/uptimes?v=v3&visors=<pk1>;<pk2>;<pk3>", deployment.Prod.TransportDiscovery),
 	Run: func(cmd *cobra.Command, _ []string) {
 		log := logging.MustGetLogger("log-collecting")
