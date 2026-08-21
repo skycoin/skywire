@@ -181,6 +181,22 @@ type Config struct {
 	// query deliverer is configured (SetTransportQueryDeliverer); see
 	// rsn_oracle_routes.go. TPD is still used for routes with >=2 intermediates.
 	EnableRSNOracleRoutes bool
+
+	// FailedHopExclusionTTL configures the self-heal failed-path exclusion
+	// (dead-edge route-setup fix, the route-level-failover follow-up to the
+	// #4057 handshake retransmit). When a route's setup handshake fails to
+	// complete within handshakeAwaitTimeout, its intermediate hops are held on
+	// a per-destination suspect list for this duration so the NEXT dial (an
+	// app-reconnect after a wedge) excludes them up front and picks a different
+	// route instead of re-selecting the same dead hop. The exclusion expires
+	// after the TTL — a hop that was merely busy/restarting is retried once it
+	// recovers (self-heal); it is never permanently blacklisted.
+	//
+	//   0  (the default) → use defaultSuspectHopTTL (feature ON).
+	//   <0               → disable cross-dial persistence (bounded grace still
+	//                      applies within a single DialRoutes call).
+	//   >0               → custom TTL.
+	FailedHopExclusionTTL time.Duration
 }
 
 // SetDefaults sets default values for certain empty values.
@@ -552,6 +568,12 @@ type router struct {
 	// Set via SetDstTransportOracle.
 	dstTpOracle   DstTransportOracle
 	dstTpOracleMu sync.Mutex
+	// suspectHops is the self-heal failed-path exclusion cache: intermediates
+	// whose route-group setup handshake recently failed, keyed by destination,
+	// each expiring after Config.FailedHopExclusionTTL. Seeded into a dial's
+	// opts.ExcludeIntermediatePKs at DialRoutes entry and written on a
+	// handshake/data-plane setup failure. See suspect_hops.go.
+	suspectHops *suspectHopCache
 }
 
 // DstTransportOracle fetches a destination visor's OWN transport list
@@ -659,6 +681,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		trustedVisors:   trustedVisors,
 		routeSetupHooks: routeSetupHooks,
 		tpdCache:        newTPDSnapshotCache(),
+		suspectHops:     newSuspectHopCache(resolveFailedHopExclusionTTL(config.FailedHopExclusionTTL)),
 	}
 
 	go r.rulesGCLoop()

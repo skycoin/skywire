@@ -269,6 +269,25 @@ func (r *router) DialRoutes(
 	// DOES accept. See WithForceLegacyRouteSetup.
 	escalateToLegacy := false
 
+	// Self-heal failed-path exclusion: seed this dial's exclude set with any
+	// intermediates that recently failed route-group setup to this destination
+	// (see the handshake/data-plane failure branch below + suspect_hops.go).
+	// This is what carries the exclusion across the app's reconnect loop: each
+	// reconnect enters DialRoutes with a FRESH opts, so without this the hard-won
+	// knowledge that a hop is dead is lost and the finder — ranking by latency,
+	// not liveness — hands back the same dead-hop candidate set, wedging the app
+	// in "starting". Bounded grace: an entry only lands in the cache after a FULL
+	// handshakeAwaitTimeout failure (never a first transient loss, which #4057's
+	// retransmit recovers), and expires after Config.FailedHopExclusionTTL so a
+	// recovered hop is retried. No-op when the cache is disabled or empty.
+	for _, pk := range r.suspectHops.suspects(rPK) {
+		opts = appendExcludeIntermediate(opts, pk)
+	}
+	if n := len(opts.ExcludeIntermediatePKs); n > 0 {
+		log.WithField("excluded_intermediates", n).
+			Debug("Seeded dial with recently-failed intermediate exclusions (self-heal)")
+	}
+
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		var forwardPath, reversePath []routing.Hop
 		var err error
@@ -465,6 +484,16 @@ func (r *router) DialRoutes(
 			// stale-TPD error still fail fast — retrying the same direct path
 			// to a down peer would only burn the budget.
 			deadInter := intermediatePKsOfPath(forwardPath, lPK, rPK)
+			// Persist the dead intermediates across dials (self-heal exclusion):
+			// the handshake await ran its FULL window (#4057 retransmitted the
+			// whole setup handshake with no reciprocal) before saveRouteGroupRules
+			// returned, so this is a confirmed dead / non-forwarding path, not a
+			// transient loss. Marking here means the app's reconnect loop — which
+			// re-enters DialRoutes with fresh opts — starts by excluding this hop
+			// instead of re-selecting it, which is what breaks the perpetual
+			// "starting" wedge. Expires after Config.FailedHopExclusionTTL so a
+			// recovered hop rejoins the candidate set.
+			r.suspectHops.mark(rPK, deadInter)
 			// A cascade-installed route that fails its handshake is ALSO the
 			// fingerprint of a destination that does not trust cascade route
 			// setup (rules ACKed over transports, but the destination — running
@@ -948,6 +977,26 @@ fetchRoutesAgain:
 	fwdNum := findRouteNum(opts.EffectiveMuxRoutes(true))
 	revNum := findRouteNum(opts.EffectiveMuxRoutes(false))
 
+	// Widen the requested candidate count when intermediates are excluded
+	// (disjoint-mux, or — the dead-edge case — the failed-hop self-heal
+	// exclusion). The finder defaults to 3 candidates ranked by latency, and
+	// when a dead-but-low-latency intermediary sits on ALL of the top-3 paths
+	// (the funnel that wedges the app: every candidate shares the same
+	// second-to-last hop), the post-filter drops every one and the disjoint
+	// pick has nothing left — even though an alternate path avoiding the dead
+	// hop exists deeper in the finder's BFS order. Asking for more candidates
+	// surfaces those alternates so the exclusion can actually fail over.
+	// Bounded by the finder's own ceiling; only widens (never shrinks below the
+	// mux-driven count).
+	if len(opts.ExcludeIntermediatePKs) > 0 {
+		if fwdNum < widenedRouteCandidates {
+			fwdNum = widenedRouteCandidates
+		}
+		if revNum < widenedRouteCandidates {
+			revNum = widenedRouteCandidates
+		}
+	}
+
 	var paths map[routing.PathEdges][][]routing.Hop
 	if fwdMinHops == revMinHops {
 		// Common path: single query covers both directions. One count
@@ -1355,6 +1404,12 @@ func pathLatencyScore(path []routing.Hop, latencyFor func(uuid.UUID) float64, ty
 const (
 	baseRouteCandidates = 3
 	muxRouteHeadroom    = 2
+	// widenedRouteCandidates is the per-edge count requested from the route-
+	// finder once any intermediate is excluded, so alternates that avoid the
+	// excluded hop(s) are surfaced past the default top-3 (which can all funnel
+	// through a single dead intermediary). Matches the finder's routesCeiling —
+	// the most it will ever return — so nothing usable is left unseen.
+	widenedRouteCandidates uint16 = 20
 )
 
 // findRouteNum returns the per-edge route count to request from the
