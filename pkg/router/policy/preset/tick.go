@@ -45,16 +45,16 @@ type Engine struct {
 	adaptPrevRecv       map[string]uint64
 	adaptSeen           map[string]bool
 	adaptAliveIdx       map[string]int
-	adaptPrevKnown      map[string]bool
 	adaptThroughputEWMA float64
 	adaptPeak           float64
 	adaptSeeded         bool
 	adaptIdleCount      int
-	adaptTick           int
 	adaptTarget         int
-	adaptProbeTID       string
-	adaptProbeAge       int
-	adaptProbePending   bool
+	// health + anti-churn state
+	adaptCooldown  int            // ticks to hold the active set steady after a reshape
+	adaptSatTicks  int            // consecutive saturated ticks (grow only on a sustained signal)
+	adaptUnhealthy map[string]int // per-active-leg consecutive gross-outlier-latency ticks
+	adaptStall     map[string]int // per-active-leg consecutive no-throughput ticks under load
 }
 
 // New returns an Engine with initialized state maps and the
@@ -75,7 +75,8 @@ func New() *Engine {
 		adaptPrevRecv:   map[string]uint64{},
 		adaptSeen:       map[string]bool{},
 		adaptAliveIdx:   map[string]int{},
-		adaptPrevKnown:  map[string]bool{},
+		adaptUnhealthy:  map[string]int{},
+		adaptStall:      map[string]int{},
 		adaptTarget:     adaptRevActive,
 	}
 }
@@ -484,26 +485,44 @@ func (e *Engine) tickProbeAndPrune(legs []LegInfo) RotationAction {
 
 const (
 	// adaptFwdActive is the lean forward (upstream / request) leg count: a
-	// single low-latency route, so the request path never pays mux
-	// head-of-line cost. adaptRevActive is the steady active reverse (bulk
-	// download) width; adaptStandbyMax warm spares are established alongside it
-	// and parked by tickAdaptive for instant, dip-free promotion. The reverse
-	// mux decideAdaptive requests is therefore adaptRevActive + adaptStandbyMax,
-	// and the tick's steady active target (adaptTarget) seeds to adaptRevActive.
-	adaptFwdActive    = 1
-	adaptRevActive    = 2
-	adaptFloor        = 1
-	adaptCap          = 6
-	adaptAlpha        = 0.3
-	adaptPeakDecay    = 0.98
-	adaptExploreEvery = 6
-	adaptObserve      = 3
-	adaptStandbyMax   = 2
+	// single low-latency route, so the request path never pays mux head-of-line
+	// cost. adaptRevActive is the STEADY active reverse width — deliberately 1:
+	// an interactive / idle flow rides ONE good leg (leg 0) and is never
+	// scattered+reordered across high-variance legs. The reverse mux only WIDENS
+	// under sustained bulk load (tickAdaptive promotes warm spares), then shrinks
+	// back. adaptStandbyMax warm spares are established alongside and parked for
+	// instant promotion, so decideAdaptive requests ReverseMux =
+	// adaptRevActive + adaptStandbyMax, and adaptTarget seeds to adaptRevActive.
+	adaptFwdActive = 1
+	adaptRevActive = 1
+	adaptCap       = 6
+	adaptAlpha     = 0.3
+	adaptPeakDecay = 0.98
+	// adaptStandbyMax is the warm-standby reserve the proactive park fills to.
+	// adaptStandbyMin is the HARD FLOOR load may NEVER drain below: under
+	// saturation the tick grows the active width with a FRESH leg rather than
+	// promoting the last warm spare, so at least adaptStandbyMin instant-promote
+	// legs are always parked and ready. This keeps warm standby a resilience
+	// reserve (covers an active-leg drop with zero re-establish dip) instead of
+	// load headroom that peak traffic empties to zero.
+	adaptStandbyMax = 2
+	adaptStandbyMin = 1
+	// Health + anti-churn. A leg is a gross-outlier (kept OUT of the active mux,
+	// where the no-skip reorder buffer would head-of-line-stall on it) when its
+	// EWMA latency exceeds the absolute ceiling OR adaptOutlierMult x the active
+	// median. A signal must persist adaptHysteresis consecutive ticks before it
+	// reshapes the set, and adaptReshapeCooldown ticks of steadiness follow any
+	// reshape — so the active set does not add/drop/promote/park every tick
+	// (each reshape disrupts in-flight flows). adaptStallTicks catches a leg that
+	// is alive but passes no traffic while the group is loaded (a dead 0-byte
+	// leg) and evicts it too.
+	adaptLatCeilingMs    = 1500
+	adaptOutlierMult     = 3.0
+	adaptHysteresis      = 3
+	adaptReshapeCooldown = 3
 )
 
 func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
-	e.adaptTick++
-
 	for k := range e.adaptSeen {
 		delete(e.adaptSeen, k)
 	}
@@ -513,9 +532,9 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	var rawTotal float64
 	aliveCount := 0
 	standbyCount := 0
-	oldestAliveIdx := -1
 	newestAliveIdx := -1
 	promotableIdx := -1
+	movedRecv := make(map[string]bool)
 	for _, l := range legs {
 		tid := l.TransportID
 		if tid != "" {
@@ -532,9 +551,6 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 			continue
 		}
 		aliveCount++
-		if oldestAliveIdx == -1 || l.Index < oldestAliveIdx {
-			oldestAliveIdx = l.Index
-		}
 		if l.Index > newestAliveIdx {
 			newestAliveIdx = l.Index
 		}
@@ -550,8 +566,9 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 				e.adaptLatEWMA[tid] = sample
 			}
 		}
-		if prev, ok := e.adaptPrevRecv[tid]; ok && l.RecvBytes >= prev {
+		if prev, ok := e.adaptPrevRecv[tid]; ok && l.RecvBytes > prev {
 			rawTotal += float64(l.RecvBytes - prev)
+			movedRecv[tid] = true
 		}
 		e.adaptPrevRecv[tid] = l.RecvBytes
 	}
@@ -590,169 +607,196 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		e.adaptIdleCount = 0
 	}
 
-	if aliveCount == 0 {
-		if promotableIdx >= 0 {
-			return RotationAction{PromoteFromStandby: []int{promotableIdx}}
-		}
-		return RotationAction{}
+	// Anti-churn cooldown: after any reshape, hold the active set steady for a
+	// few ticks so a transient signal can't reshape the mux every tick (each
+	// reshape disrupts in-flight flows).
+	if e.adaptCooldown > 0 {
+		e.adaptCooldown--
 	}
-	if aliveCount < adaptFloor {
-		if promotableIdx >= 0 {
-			return RotationAction{PromoteFromStandby: []int{promotableIdx}}
-		}
-		return RotationAction{AddLeg: true}
-	}
-
-	probeInFlight := e.adaptProbePending || e.adaptProbeTID != ""
-	if !probeInFlight {
-		if idx, hops, ok := e.adaptWorstOutlier(legs); ok {
-			if promotableIdx >= 0 {
-				return RotationAction{
-					PromoteFromStandby: []int{promotableIdx},
-					DemoteToStandby:    []int{idx},
-				}
-			}
-			return RotationAction{
-				DropLegs:    []int{idx},
-				AddLeg:      true,
-				ExcludeHops: hops,
-			}
-		}
-		// Proactive warm standby: once no leg is a latency outlier and we're not
-		// under load, hold the surplus above the steady active target as warm
-		// standby — established, kept alive, ready for instant (dip-free)
-		// promotion — WITHOUT waiting for an idle signal. The asymmetric decide
-		// seeds adaptRevActive+adaptStandbyMax reverse legs; the router brings
-		// them all up active, and this parks the surplus down to adaptTarget on
-		// the first ticks. Park the NEWEST surplus leg (highest index) — never
-		// leg 0, the primary/forward leg the router refuses to demote
-		// (route_mux.setLegStandby). Suppressed while saturated so a burst keeps
-		// its full width (the saturated branch below instead GROWS the target).
-		if !saturated && aliveCount > e.adaptTarget && standbyCount < adaptStandbyMax && newestAliveIdx > 0 {
-			return RotationAction{DemoteToStandby: []int{newestAliveIdx}}
-		}
-		if saturated && aliveCount < adaptCap {
-			e.adaptTarget = aliveCount + 1
-			if e.adaptTarget > adaptCap {
-				e.adaptTarget = adaptCap
-			}
-			if promotableIdx >= 0 {
-				return RotationAction{PromoteFromStandby: []int{promotableIdx}}
-			}
-			return RotationAction{AddLeg: true}
-		}
-		if e.adaptIdleCount >= 2 && aliveCount > adaptFloor {
-			e.adaptIdleCount = 0
-			e.adaptTarget = aliveCount - 1
-			if e.adaptTarget < adaptFloor {
-				e.adaptTarget = adaptFloor
-			}
-			if standbyCount < adaptStandbyMax {
-				return RotationAction{DemoteToStandby: []int{oldestAliveIdx}}
-			}
-			return RotationAction{DropLegs: []int{oldestAliveIdx}}
-		}
+	// Sustained-saturation streak — grow only on a multi-tick signal, not a blip.
+	if saturated {
+		e.adaptSatTicks++
+	} else {
+		e.adaptSatTicks = 0
 	}
 
-	sets := legSets{
-		activeCount:  aliveCount,
-		standbyCount: standbyCount,
-		oldestActive: oldestAliveIdx,
-		promotable:   promotableIdx,
-	}
-	return e.adaptExplore(sets)
-}
-
-func (e *Engine) adaptWorstOutlier(legs []LegInfo) (int, []string, bool) {
-	worstIdx := -1
-	worstSm := -1.0
-	var worstHops []string
-	var smoothed []float64
+	// Active-set latency median (EWMA) for gross-outlier classification, plus the
+	// per-active-leg health streaks. A leg (never leg 0) that reads a
+	// gross-latency-outlier, OR is alive-but-passes-no-traffic while the group is
+	// loaded (a dead 0-byte leg), for adaptHysteresis consecutive ticks is
+	// UNHEALTHY and must leave the active mux — where the no-skip reorder buffer
+	// would otherwise head-of-line-stall on it. Hysteresis keeps a single spike
+	// from churning the set.
+	var activeSm []float64
 	for _, l := range legs {
 		if !l.Alive || l.Standby {
 			continue
 		}
-		sm, ok := e.adaptLatEWMA[l.TransportID]
-		if !ok {
+		if sm, ok := e.adaptLatEWMA[l.TransportID]; ok && sm > 0 {
+			activeSm = append(activeSm, sm)
+		}
+	}
+	activeMedian := 0.0
+	if len(activeSm) > 0 {
+		sort.Float64s(activeSm)
+		activeMedian = medianSorted(activeSm)
+	}
+	groupLoaded := rawTotal > 0
+	unhealthyIdx := -1
+	unhealthyTID := ""
+	var unhealthyHops []string
+	for _, l := range legs {
+		if !l.Alive || l.Standby || l.Index == 0 || l.TransportID == "" {
 			continue
 		}
-		smoothed = append(smoothed, sm)
-		if sm > worstSm {
-			worstSm = sm
-			worstIdx = l.Index
-			worstHops = l.Hops
+		tid := l.TransportID
+		if legUnhealthyLat(e.adaptLatEWMA[tid], activeMedian) {
+			e.adaptUnhealthy[tid]++
+		} else {
+			delete(e.adaptUnhealthy, tid)
+		}
+		if groupLoaded && !movedRecv[tid] {
+			e.adaptStall[tid]++
+		} else {
+			delete(e.adaptStall, tid)
+		}
+		if unhealthyIdx == -1 && (e.adaptUnhealthy[tid] >= adaptHysteresis || e.adaptStall[tid] >= adaptHysteresis) {
+			unhealthyIdx = l.Index
+			unhealthyTID = tid
+			unhealthyHops = l.Hops
 		}
 	}
-	if len(smoothed) < 2 || worstIdx < 0 || worstSm <= 0 {
-		return -1, nil, false
+	for tid := range e.adaptUnhealthy {
+		if !e.adaptSeen[tid] {
+			delete(e.adaptUnhealthy, tid)
+		}
 	}
-	sort.Float64s(smoothed)
-	median := medianSorted(smoothed)
-	if median > 0 && worstSm >= 1.5*median {
-		return worstIdx, worstHops, true
-	}
-	return -1, nil, false
-}
-
-func (e *Engine) adaptExplore(sets legSets) RotationAction {
-	aliveCount := sets.activeCount
-	if e.adaptProbePending {
-		e.adaptProbePending = false
-		for tid := range e.adaptAliveIdx {
-			if !e.adaptPrevKnown[tid] {
-				e.adaptProbeTID = tid
-				e.adaptProbeAge = 0
-				break
-			}
+	for tid := range e.adaptStall {
+		if !e.adaptSeen[tid] {
+			delete(e.adaptStall, tid)
 		}
 	}
 
-	if e.adaptProbeTID != "" {
-		idx, alive := e.adaptAliveIdx[e.adaptProbeTID]
-		if !alive {
-			e.adaptProbeTID = ""
-			e.adaptProbeAge = 0
-			return RotationAction{}
+	// healthyPromotable = the lowest-index standby leg SAFE to bring into the
+	// active set (alive, not a known gross-latency-outlier). A bad standby stays
+	// parked — harmless keepalive — rather than being promoted into a stalling
+	// active mux.
+	healthyPromotable := -1
+	for _, l := range legs {
+		if !l.Alive || !l.Standby {
+			continue
 		}
-		e.adaptProbeAge++
-		if e.adaptProbeAge < adaptObserve {
-			return RotationAction{}
+		if legUnhealthyLat(float64(l.LatencyMs), activeMedian) {
+			continue
 		}
-		probeSm, okProbe := e.adaptLatEWMA[e.adaptProbeTID]
-		worstIdx := -1
-		worstSm := -1.0
-		for tid, i := range e.adaptAliveIdx {
-			if tid == e.adaptProbeTID {
-				continue
-			}
-			sm, ok := e.adaptLatEWMA[tid]
-			if !ok {
-				continue
-			}
-			if sm > worstSm {
-				worstSm = sm
-				worstIdx = i
-			}
+		if healthyPromotable == -1 || l.Index < healthyPromotable {
+			healthyPromotable = l.Index
 		}
-		if !okProbe || worstIdx < 0 {
-			return RotationAction{}
-		}
-		e.adaptProbeTID = ""
-		if probeSm < worstSm {
-			return shedActive(sets, worstIdx)
-		}
-		return RotationAction{DropLegs: []int{idx}}
 	}
 
-	if e.adaptTick%adaptExploreEvery == 0 && aliveCount == e.adaptTarget {
-		for k := range e.adaptPrevKnown {
-			delete(e.adaptPrevKnown, k)
+	// (0) No active legs — bring one up, preferring a healthy warm spare.
+	if aliveCount == 0 {
+		if healthyPromotable >= 0 {
+			return RotationAction{PromoteFromStandby: []int{healthyPromotable}}
 		}
-		for tid := range e.adaptAliveIdx {
-			e.adaptPrevKnown[tid] = true
+		if promotableIdx >= 0 {
+			return RotationAction{PromoteFromStandby: []int{promotableIdx}}
 		}
-		e.adaptProbePending = true
 		return RotationAction{AddLeg: true}
 	}
+
+	// (1) Drop recovery (safety — bypasses the cooldown). An active leg died
+	// (active fell below the steady target): promote a HEALTHY warm spare
+	// INSTANTLY and re-establish a replacement to restore the floor — zero
+	// re-dial dip. Restoring lost capacity outranks every optimization.
+	if aliveCount < e.adaptTarget {
+		if healthyPromotable >= 0 {
+			return RotationAction{PromoteFromStandby: []int{healthyPromotable}, AddLeg: true}
+		}
+		return RotationAction{AddLeg: true}
+	}
+
+	// (2) Evict a SUSTAINED-unhealthy active leg (the health gate — the fix for
+	// stuttering connections). Never leg 0, never the last active leg. Hot-swap a
+	// healthy spare in when one exists; else park the bad leg (drop only when the
+	// reserve is full, excluding its hops so self-heal re-dials a different path).
+	if unhealthyIdx > 0 && aliveCount > 1 {
+		e.adaptCooldown = adaptReshapeCooldown
+		delete(e.adaptUnhealthy, unhealthyTID)
+		delete(e.adaptStall, unhealthyTID)
+		if healthyPromotable >= 0 {
+			return RotationAction{PromoteFromStandby: []int{healthyPromotable}, DemoteToStandby: []int{unhealthyIdx}}
+		}
+		if standbyCount < adaptStandbyMax {
+			return RotationAction{DemoteToStandby: []int{unhealthyIdx}}
+		}
+		return RotationAction{DropLegs: []int{unhealthyIdx}, ExcludeHops: unhealthyHops}
+	}
+
+	// Under cooldown, hold the set steady (anti-churn) — no optimization reshape.
+	if e.adaptCooldown > 0 {
+		return RotationAction{}
+	}
+
+	// (3) Proactive park: converge the surplus down to the steady active target
+	// as warm standby (establishes the reserve at dial; never leg 0; not under
+	// load). This is what makes an idle / interactive flow settle onto ONE leg.
+	// No cooldown: park is self-limiting (only fires while over-provisioned) and
+	// stops once active == target, so it converges quickly at dial without churn.
+	if !saturated && aliveCount > e.adaptTarget && standbyCount < adaptStandbyMax && newestAliveIdx > 0 {
+		return RotationAction{DemoteToStandby: []int{newestAliveIdx}}
+	}
+
+	// (4) Grow the active width ONLY on SUSTAINED bulk saturation (multi-tick),
+	// consuming surplus standby above the floor first, else a fresh leg — so the
+	// wide mux is reserved for real bulk load and never drains the reserve below
+	// adaptStandbyMin.
+	if e.adaptSatTicks >= adaptHysteresis && aliveCount < adaptCap {
+		e.adaptTarget = aliveCount + 1
+		if e.adaptTarget > adaptCap {
+			e.adaptTarget = adaptCap
+		}
+		e.adaptSatTicks = 0
+		e.adaptCooldown = adaptReshapeCooldown
+		if healthyPromotable >= 0 && standbyCount > adaptStandbyMin {
+			return RotationAction{PromoteFromStandby: []int{healthyPromotable}}
+		}
+		return RotationAction{AddLeg: true}
+	}
+
+	// (5) Shrink on SUSTAINED idle back toward the single-leg steady target, so a
+	// finished bulk transfer releases its extra legs (parked to the reserve, or
+	// dropped once it is full). Never leg 0.
+	if e.adaptIdleCount >= adaptHysteresis && aliveCount > adaptRevActive && newestAliveIdx > 0 {
+		e.adaptIdleCount = 0
+		e.adaptTarget = aliveCount - 1
+		if e.adaptTarget < adaptRevActive {
+			e.adaptTarget = adaptRevActive
+		}
+		e.adaptCooldown = adaptReshapeCooldown
+		if standbyCount < adaptStandbyMax {
+			return RotationAction{DemoteToStandby: []int{newestAliveIdx}}
+		}
+		return RotationAction{DropLegs: []int{newestAliveIdx}}
+	}
+
 	return RotationAction{}
+}
+
+// legUnhealthyLat reports whether a latency (ms) is a gross outlier — above the
+// absolute ceiling, or more than adaptOutlierMult times the active-set median.
+// A non-positive latency is "unknown" (not yet measured) and treated as healthy
+// (optimistic): an unknown leg promoted into the active set is evicted later if
+// its EWMA reveals it is bad, so unknowns never block bringing capacity up.
+func legUnhealthyLat(lat, median float64) bool {
+	if lat <= 0 {
+		return false
+	}
+	if lat > adaptLatCeilingMs {
+		return true
+	}
+	if median > 0 && lat > adaptOutlierMult*median {
+		return true
+	}
+	return false
 }

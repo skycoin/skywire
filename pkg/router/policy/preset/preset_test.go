@@ -19,9 +19,9 @@ func TestDecide_ShapePresets(t *testing.T) {
 		{"latency-adaptive", Context{App: "vpn-client"}, Spec{Mux: 5, MinHops: 2, RotationIntervalSeconds: 30, Distribution: "auto"}},
 		{"elastic-mux", Context{App: "skynet-client"}, Spec{Mux: 2, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "auto"}},
 		{"probe-and-prune", Context{App: "skynet-client"}, Spec{Mux: 3, MinHops: 2, RotationIntervalSeconds: 30, Distribution: "auto"}},
-		{"adaptive", Context{App: "vpn-client"}, Spec{ForwardMux: 1, ReverseMux: 4, RotationIntervalSeconds: 20, Distribution: "auto"}},
+		{"adaptive", Context{App: "vpn-client"}, Spec{ForwardMux: 1, ReverseMux: 3, RotationIntervalSeconds: 20, Distribution: "auto"}},
 		{"adaptive/chat", Context{App: "skychat"}, Spec{Mux: 1}},
-		{"adaptive/custom-session", Context{App: "g8"}, Spec{ForwardMux: 1, ReverseMux: 4, RotationIntervalSeconds: 20, Distribution: "auto"}},
+		{"adaptive/custom-session", Context{App: "g8"}, Spec{ForwardMux: 1, ReverseMux: 3, RotationIntervalSeconds: 20, Distribution: "auto"}},
 	}
 	for _, tc := range cases {
 		presetName, _, _ := splitName(tc.name)
@@ -176,6 +176,234 @@ func TestDecide_TimeOfDay(t *testing.T) {
 	off := Decide("time-of-day", Context{NowUnixNano: 3 * h}, nil)
 	if off.Mux != 4 || off.Distribution != "round-robin" || off.RotationIntervalSeconds == 0 {
 		t.Errorf("off-hours should be a wide rotating mux; got %+v", off)
+	}
+}
+
+// seedSaturatedAdaptive puts an Engine into a deterministically SATURATED view
+// with its steady active target at `target`, so a single OnTick exercises the
+// saturation-growth path without a multi-tick warmup. The two active legs t0/t1
+// carry half of `peak` in fresh RecvBytes each (prevRecv seeded to 0), so the
+// tick recomputes throughputEWMA==peak → saturated. Same-package test reaches
+// the unexported controller state directly.
+// seedSaturatedAdaptive puts an Engine into a deterministically SATURATED view
+// with its steady active target at `target` and the sustained-saturation streak
+// already met, so a single OnTick exercises the saturation-growth path without a
+// multi-tick warmup. The active leg t0 carries `peak` fresh RecvBytes
+// (prevRecv==0) so the tick recomputes throughputEWMA==peak → saturated.
+// Same-package test reaches the unexported controller state directly.
+func seedSaturatedAdaptive(target int) *Engine {
+	const peak = 1_000_000.0
+	e := New()
+	e.adaptSeeded = true
+	e.adaptThroughputEWMA = peak
+	e.adaptPeak = peak
+	e.adaptTarget = target
+	e.adaptSatTicks = adaptHysteresis
+	e.adaptPrevRecv["t0"] = 0
+	return e
+}
+
+// activeLeg / standbyLeg build the two leg shapes the tick tests present.
+func activeLeg(idx int, tid string, recv uint64) LegInfo {
+	return LegInfo{Index: idx, TransportID: tid, Kind: "stcpr", LatencyMs: 40, Alive: true, RecvBytes: recv}
+}
+
+func standbyLeg(idx int, tid string) LegInfo {
+	return LegInfo{Index: idx, TransportID: tid, Kind: "stcpr", LatencyMs: 40, Alive: true, Standby: true}
+}
+
+// TestEngine_OnTick_AdaptiveStandbyFloor asserts the always-on warm-standby
+// floor: under sustained saturation the reserve is never drained below
+// adaptStandbyMin (load grows the ACTIVE width with a fresh leg instead), yet
+// surplus standby ABOVE the floor is still usable for load, and an active-leg
+// DROP is covered by an instant promote plus a re-establish that restores the
+// floor.
+func TestEngine_OnTick_AdaptiveStandbyFloor(t *testing.T) {
+	// (A) At the floor + sustained saturation → grow with a FRESH leg, never
+	// drain the last warm spare. One active leg (== target 1) + one standby at
+	// the floor.
+	e := seedSaturatedAdaptive(1)
+	atFloor := []LegInfo{
+		activeLeg(0, "t0", 1_000_000),
+		standbyLeg(1, "s0"),
+	}
+	if got := e.OnTick("adaptive", atFloor); !reflect.DeepEqual(got, RotationAction{AddLeg: true}) {
+		t.Errorf("saturated at the standby floor must AddLeg (not drain the reserve); got %+v", got)
+	}
+
+	// (B) Surplus standby ABOVE the floor + saturated → the surplus spare may be
+	// promoted for load (efficient), keeping the floor intact.
+	e = seedSaturatedAdaptive(1)
+	surplus := []LegInfo{
+		activeLeg(0, "t0", 1_000_000),
+		standbyLeg(1, "s0"),
+		standbyLeg(2, "s1"),
+	}
+	got := e.OnTick("adaptive", surplus)
+	if len(got.PromoteFromStandby) != 1 || got.AddLeg {
+		t.Errorf("saturated with surplus standby should promote the surplus spare (no AddLeg); got %+v", got)
+	}
+
+	// (C) An active leg DROPPED (active < target) → promote a warm spare INSTANTLY
+	// and re-establish a replacement, restoring the floor with zero re-dial dip.
+	e = seedSaturatedAdaptive(2) // target 2 but only one active leg present
+	dropped := []LegInfo{
+		activeLeg(0, "t0", 1_000_000),
+		standbyLeg(1, "s0"),
+		standbyLeg(2, "s1"),
+	}
+	got = e.OnTick("adaptive", dropped)
+	if len(got.PromoteFromStandby) != 1 || !got.AddLeg {
+		t.Errorf("an active-leg drop must promote a spare AND re-establish one (restore the floor); got %+v", got)
+	}
+
+	// (D) Sustained saturation, modeled end-to-end: the standby reserve must never
+	// fall below adaptStandbyMin across many heavy-load ticks, and the active
+	// width must grow.
+	eng := New()
+	active, standby := adaptRevActive, adaptStandbyMax
+	var recv uint64
+	build := func() []LegInfo {
+		legs := make([]LegInfo, 0, active+standby)
+		for i := 0; i < active; i++ {
+			legs = append(legs, activeLeg(i, "a"+string(rune('0'+i)), recv))
+		}
+		for i := 0; i < standby; i++ {
+			legs = append(legs, standbyLeg(active+i, "s"+string(rune('0'+i))))
+		}
+		return legs
+	}
+	for tick := 0; tick < 40; tick++ {
+		recv += 5_000_000 // heavy sustained load on every active leg
+		act := eng.OnTick("adaptive", build())
+		for range act.PromoteFromStandby {
+			if standby > 0 {
+				standby--
+				active++
+			}
+		}
+		for range act.DemoteToStandby {
+			if active > 1 {
+				active--
+				standby++
+			}
+		}
+		if act.AddLeg {
+			active++
+		}
+		for range act.DropLegs {
+			if active > 0 {
+				active--
+			}
+		}
+		if standby < adaptStandbyMin {
+			t.Fatalf("tick %d: standby reserve %d fell below floor %d (action %+v)", tick, standby, adaptStandbyMin, act)
+		}
+	}
+	if active <= adaptRevActive {
+		t.Errorf("sustained saturation should grow the active width beyond the %d-leg seed; active=%d", adaptRevActive, active)
+	}
+	if standby < adaptStandbyMin {
+		t.Errorf("standby reserve ended below floor: %d < %d", standby, adaptStandbyMin)
+	}
+}
+
+// TestEngine_OnTick_AdaptiveEvictsGrossOutlier asserts the health gate: a
+// gross-latency-outlier active leg is kept OUT of the active mux (evicted after
+// the hysteresis window), while a leg merely slower-than-median is NOT evicted
+// (only GROSS outliers, so the set doesn't churn on normal variance). Leg 0 is
+// never evicted.
+func TestEngine_OnTick_AdaptiveEvictsGrossOutlier(t *testing.T) {
+	// Two active legs at the target (leg 0 healthy, leg 1 a 2000ms gross outlier)
+	// plus a healthy warm spare. Target 2 so the set is at steady width (no
+	// grow/park), isolating the health decision.
+	e := New()
+	e.adaptTarget = 2
+	legs := []LegInfo{
+		{Index: 0, TransportID: "t0", Kind: "stcpr", LatencyMs: 50, Alive: true},
+		{Index: 1, TransportID: "t1", Kind: "stcpr", LatencyMs: 2000, Alive: true},
+		{Index: 2, TransportID: "s0", Kind: "stcpr", LatencyMs: 45, Alive: true, Standby: true},
+	}
+	// Below the hysteresis threshold: no reshape yet (a single spike must not
+	// churn the active set).
+	for i := 0; i < adaptHysteresis-1; i++ {
+		if got := e.OnTick("adaptive", legs); !reflect.DeepEqual(got, RotationAction{}) {
+			t.Fatalf("tick %d: outlier below hysteresis must not reshape; got %+v", i, got)
+		}
+	}
+	// Once sustained, the outlier (leg 1, never leg 0) is evicted — hot-swapped
+	// for the healthy warm spare (promote s0 @2, demote leg 1).
+	got := e.OnTick("adaptive", legs)
+	if len(got.DemoteToStandby) != 1 || got.DemoteToStandby[0] != 1 {
+		t.Errorf("sustained gross outlier (leg 1) must be evicted from the active set; got %+v", got)
+	}
+	if len(got.PromoteFromStandby) != 1 || got.PromoteFromStandby[0] != 2 {
+		t.Errorf("eviction should hot-swap the healthy warm spare in; got %+v", got)
+	}
+	if got.DropLegs != nil {
+		t.Errorf("hot-swap must not tear down; got %+v", got)
+	}
+}
+
+// TestEngine_OnTick_AdaptiveStableUnderSteady asserts anti-churn: under steady
+// (sustained-bulk) conditions the active set does NOT flap every tick — the
+// hysteresis + cooldown rate-limit reshapes, and the set CONVERGES to a stable
+// width and then stops reshaping (a long tail of no-ops). This is the fix for
+// the observed "active set churns constantly, disrupting in-flight flows."
+func TestEngine_OnTick_AdaptiveStableUnderSteady(t *testing.T) {
+	eng := New()
+	active, standby := adaptRevActive, adaptStandbyMax
+	var recv uint64
+	build := func() []LegInfo {
+		legs := make([]LegInfo, 0, active+standby)
+		for i := 0; i < active; i++ {
+			legs = append(legs, activeLeg(i, "a"+string(rune('0'+i)), recv))
+		}
+		for i := 0; i < standby; i++ {
+			legs = append(legs, standbyLeg(active+i, "s"+string(rune('0'+i))))
+		}
+		return legs
+	}
+	reshapes, tail := 0, 0
+	for tick := 0; tick < 40; tick++ {
+		recv += 5_000_000
+		act := eng.OnTick("adaptive", build())
+		if len(act.PromoteFromStandby)+len(act.DemoteToStandby)+len(act.DropLegs) > 0 || act.AddLeg {
+			reshapes++
+			tail = 0
+		} else {
+			tail++
+		}
+		for range act.PromoteFromStandby {
+			if standby > 0 {
+				standby--
+				active++
+			}
+		}
+		for range act.DemoteToStandby {
+			if active > 1 {
+				active--
+				standby++
+			}
+		}
+		if act.AddLeg {
+			active++
+		}
+		for range act.DropLegs {
+			if active > 0 {
+				active--
+			}
+		}
+	}
+	// Anti-churn: far fewer reshapes than ticks (cooldown + hysteresis rate-limit
+	// — not a change every tick).
+	if reshapes > 12 {
+		t.Errorf("too many reshapes under steady load (churn): %d in 40 ticks", reshapes)
+	}
+	// Convergence: the set settles onto a stable width and holds (a long tail of
+	// no-ops), rather than perpetually reshaping.
+	if tail < 5 {
+		t.Errorf("adaptive did not converge to a stable set; trailing no-ops=%d", tail)
 	}
 }
 

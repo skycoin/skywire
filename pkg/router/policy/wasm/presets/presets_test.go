@@ -48,7 +48,7 @@ func TestDescribe(t *testing.T) {
 		"latency-adaptive": "latency-adaptive — mux=4 multi-hop that evicts the slowest leg each 30s (when its EWMA-smoothed latency is a >=1.5x-median outlier) until the leg set converges to low-latency disjoint paths, then holds (hysteresis-damped; no churn once converged).",
 		"elastic-mux":      "elastic-mux — AIMD scaling of the mux leg count to load: grows a leg (up to 6) when the group is saturated, releases one (down to 2) when idle.",
 		"probe-and-prune":  "probe-and-prune — periodically adds one speculative leg over a fresh path, observes its EWMA latency a few ticks, and keeps it only if it beats the current worst leg (continuous explore/exploit).",
-		"adaptive":         "adaptive — the combined performance default (app-agnostic, chat excepted): a lean single forward leg plus a wider reverse (download) mux sized active+standby, proactively holding warm-standby spares for dip-free promotion; on_tick scales the active width to load (AIMD), evicts the slowest leg toward low-latency convergence, and periodically probes a fresh path and keeps it only if it is better — one arbitrated action per tick.",
+		"adaptive":         "adaptive — the app-agnostic performance+stability default (chat excepted): a single lean forward leg and a reverse mux that stays at ONE healthy leg for interactive/idle flows and only widens under sustained bulk load; holds an always-on warm-standby reserve for instant dip-free promotion, keeps gross-latency-outlier and dead legs OUT of the active mux, and rate-limits reshapes (hysteresis + cooldown) so the active set stays stable — one arbitrated action per tick.",
 	}
 	for name, want := range cases {
 		got, ok := Describe(name)
@@ -351,8 +351,8 @@ func TestAdaptiveDecides(t *testing.T) {
 	if spec.ForwardMux != 1 {
 		t.Errorf("ForwardMux = %d, want 1 (lean upstream)", spec.ForwardMux)
 	}
-	if spec.ReverseMux != 4 {
-		t.Errorf("ReverseMux = %d, want 4 (2 active + 2 warm standby)", spec.ReverseMux)
+	if spec.ReverseMux != 3 {
+		t.Errorf("ReverseMux = %d, want 3 (1 active + 2 warm standby)", spec.ReverseMux)
 	}
 	// adaptive deliberately does NOT set MinHops: min-hops is the operator's
 	// privacy constraint (session/config), not the performance policy's to
@@ -365,15 +365,16 @@ func TestAdaptiveDecides(t *testing.T) {
 	}
 }
 
-// TestAdaptiveHotSwapsToWarmStandby drives the composite adaptive preset's
-// on_tick with three active legs — one a >=1.5x-median latency outlier — plus
-// one warm standby leg, and asserts it emits the NO-DIP HOT-SWAP: promote the
-// parked spare AND demote the outlier in the SAME action, with no DropLegs and
-// no AddLeg. This proves the gate-5 warm-standby primitive is not just wired
-// through the ABI but actually exercised by the default policy: a degraded leg
-// is swapped for a warm one with no setup-node round-trip and no width dip.
-// See docs/warm_standby_legs_rfc.md.
-func TestAdaptiveHotSwapsToWarmStandby(t *testing.T) {
+// TestAdaptiveParksToSingleActiveLeg drives the composite adaptive preset's
+// on_tick through the WASM bundle with three over-provisioned active legs and no
+// load, and asserts it PARKS the surplus (newest first, never leg 0) down to the
+// single steady active leg — the property that makes an interactive / idle flow
+// ride ONE good leg instead of being scattered+reordered across a wide mux. The
+// parked legs become the warm-standby reserve. This exercises the gate-5
+// warm-standby primitive through the wasm ABI end to end; the detailed
+// health/anti-churn arbitration is unit-tested natively in the preset package
+// and cross-checked for wazero parity in parity_test.go.
+func TestAdaptiveParksToSingleActiveLeg(t *testing.T) {
 	l, err := policywasm.NewLoaderBytes("adaptive", Bundle(),
 		policywasm.WithPreset("adaptive"))
 	if err != nil {
@@ -381,34 +382,53 @@ func TestAdaptiveHotSwapsToWarmStandby(t *testing.T) {
 	}
 	defer l.Close() //nolint:errcheck
 
-	// Three active legs: two fast (50ms), one slow (500ms) — a >=1.5x-median
-	// outlier. Leg 3 is a warm standby (Alive but Standby), so the arbiter can
-	// hot-swap instead of a cold drop+add. Distinct transport_ids so the guest's
-	// per-transport EWMA seeds one smoothed sample each on this first tick.
 	legs := []policy.LegInfo{
-		{Index: 0, TransportID: "tid-a", Kind: "dmsg", LatencyMs: 50, Alive: true},
-		{Index: 1, TransportID: "tid-b", Kind: "dmsg", LatencyMs: 50, Alive: true},
-		{Index: 2, TransportID: "tid-c", Kind: "dmsg", LatencyMs: 500, Alive: true},
-		{Index: 3, TransportID: "tid-d", Kind: "dmsg", LatencyMs: 40, Alive: true, Standby: true},
+		{Index: 0, TransportID: "tid-a", Kind: "stcpr", LatencyMs: 50, Alive: true},
+		{Index: 1, TransportID: "tid-b", Kind: "stcpr", LatencyMs: 50, Alive: true},
+		{Index: 2, TransportID: "tid-c", Kind: "stcpr", LatencyMs: 50, Alive: true},
 	}
-	act, err := l.OnTick(context.Background(),
-		policy.RoutingContext{App: "skysocks-client"}, legs)
-	if err != nil {
-		t.Fatalf("OnTick: %v", err)
+	// Drive a few ticks, applying each park to the snapshot as the route group
+	// would, until the surplus is parked down to one active leg.
+	for tick := 0; tick < 4; tick++ {
+		act, err := l.OnTick(context.Background(),
+			policy.RoutingContext{App: "skysocks-client"}, legs)
+		if err != nil {
+			t.Fatalf("tick %d OnTick: %v", tick, err)
+		}
+		if len(act.DropLegs) != 0 || act.AddLeg {
+			t.Fatalf("tick %d: parking must not tear down or cold-add; got %+v", tick, act)
+		}
+		for _, idx := range act.DemoteToStandby {
+			if idx == 0 {
+				t.Fatalf("tick %d: must never park leg 0 (the primary/forward leg)", tick)
+			}
+			legs[idx].Standby = true
+		}
 	}
-	if len(act.PromoteFromStandby) != 1 || act.PromoteFromStandby[0] != 3 {
-		t.Errorf("PromoteFromStandby = %v, want [3] (the warm spare)", act.PromoteFromStandby)
+	active, standby := 0, 0
+	for _, l := range legs {
+		if l.Standby {
+			standby++
+		} else {
+			active++
+		}
 	}
-	if len(act.DemoteToStandby) != 1 || act.DemoteToStandby[0] != 2 {
-		t.Errorf("DemoteToStandby = %v, want [2] (the latency outlier)", act.DemoteToStandby)
+	if active != 1 || !legsActiveIsLeg0(legs) {
+		t.Errorf("adaptive should settle on a single active leg (leg 0); active=%d", active)
 	}
-	// The whole point of the hot-swap: no teardown, no cold add.
-	if len(act.DropLegs) != 0 {
-		t.Errorf("DropLegs = %v, want none (hot-swap must not tear down)", act.DropLegs)
+	if standby != 2 {
+		t.Errorf("the two parked legs should form the warm-standby reserve; standby=%d", standby)
 	}
-	if act.AddLeg {
-		t.Error("AddLeg = true, want false (promote a warm spare, not a cold add)")
+}
+
+// legsActiveIsLeg0 reports whether the only non-standby (active) leg is leg 0.
+func legsActiveIsLeg0(legs []policy.LegInfo) bool {
+	for _, l := range legs {
+		if !l.Standby && l.Index != 0 {
+			return false
+		}
 	}
+	return true
 }
 
 // TestLatencyAdaptiveTrimsReserveToStandby drives latency-adaptive with all 5

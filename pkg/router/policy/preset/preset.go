@@ -248,13 +248,16 @@ func decideProbeAndPrune(ctx Context) Spec {
 // Shape — ASYMMETRIC forward/reverse with a proactively-held warm standby pool:
 //   - ForwardMux=1: a single lean forward leg. The upstream / request path is
 //     latency-sensitive and pays no mux head-of-line cost.
-//   - ReverseMux=adaptRevActive+adaptStandbyMax: a wider reverse (bulk download)
-//     mux. The router establishes ALL of these up front; tickAdaptive parks the
-//     surplus (adaptStandbyMax legs) as warm standby — established, kept alive,
-//     not carrying traffic — so a saturation spike promotes a spare instantly
-//     with no setup dip, and demotes it back when load falls (the no-dip
-//     primitive). This is what makes the DEFAULT hold warm spares proactively,
-//     not only grow reactively.
+//   - ReverseMux=adaptRevActive+adaptStandbyMax: the reverse (download) leg pool
+//     the router establishes up front. tickAdaptive keeps the STEADY active
+//     width at adaptRevActive (=1) — so an interactive / idle flow rides ONE
+//     healthy leg and is never scattered+reordered across a wide mux — and parks
+//     the rest (adaptStandbyMax legs) as an always-on warm-standby reserve. The
+//     reverse mux WIDENS only under SUSTAINED bulk load (promoting warm spares,
+//     dip-free) and shrinks back when the load ends. tickAdaptive also keeps
+//     gross-latency-outlier / dead legs OUT of the active set and rate-limits
+//     reshapes (hysteresis + cooldown) so the active set stays stable under real
+//     long-lived connections.
 //
 // No MinHops here on purpose: min-hops is a privacy constraint the operator
 // owns; leaving it 0 means "inherit" so adaptive optimizes within the
