@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -56,6 +57,10 @@ type EmbeddedSkynetWeb struct {
 	cfg        *visorconfig.SkynetWebConfig
 	log        *logging.Logger
 	stats      *skynetweb.Stats
+	// statusProvider serves the reserved in-process status hosts through this
+	// proxy (http://status.skynet/ etc.). Set by initEmbeddedSkynetWeb; nil
+	// disables the status hosts.
+	statusProvider proxystatus.Provider
 
 	mu        sync.Mutex
 	running   bool
@@ -202,6 +207,8 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		}
 	}
 	cfg.Aliases = resolverAliasMap(e.cfg.Alias, e.localPK)
+	// Reserved in-process status hosts (http://status.skynet/ etc.).
+	cfg.StatusProvider = e.statusProvider
 
 	// Optional TLS MITM mode. Loading the CA can fail (file
 	// missing, permissions, malformed) — those failures are not
@@ -547,6 +554,7 @@ func initEmbeddedSkynetWeb(ctx context.Context, v *Visor, log *logging.Logger) e
 		return nil
 	}
 	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, v.conf.SkynetWeb, log)
+	runtime.statusProvider = v.proxyStatusProvider()
 	v.initLock.Lock()
 	v.embeddedSkynetWeb = runtime
 	v.initLock.Unlock()
