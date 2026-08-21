@@ -1254,6 +1254,15 @@ func configureRouting() {
 
 	if policyPerDial != "" {
 		conf.Routing.PolicyPerDial = policyPerDial
+	} else {
+		// Default routing policy: the "adaptive" composite preset — scales the
+		// mux leg count to load (AIMD), evicts the slowest leg, periodically
+		// probes a fresh path, and (with the metadata provider) picks the most
+		// transport-diverse forward candidate. It is a no-op for latency-
+		// sensitive/other apps and shapes vpn/skysocks/skynet client dials.
+		// Overridable via --policy (POLICYPERDIAL) or a per-app launcher
+		// routing_policy; preserved across regen (below).
+		conf.Routing.PolicyPerDial = "preset:adaptive"
 	}
 
 	if oldConfCache != nil && oldConfCache.Routing != nil {
