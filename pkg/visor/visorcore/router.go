@@ -33,6 +33,7 @@ type RouterDeps struct {
 	SetupNodes         []cipher.PubKey
 	MinHops            uint16
 	MuxRoutes          int
+	ParallelRouteSetup int
 	AwaitSetupListener *dmsg.Listener
 	Logger             *logging.Logger
 	MasterLogger       *logging.MasterLogger
@@ -67,6 +68,7 @@ func BuildRouter(serveCtx context.Context, deps RouterDeps) (router.Router, erro
 		SetupNodes:            deps.SetupNodes,
 		MinHops:               deps.MinHops,
 		MuxRoutes:             deps.MuxRoutes,
+		ParallelRouteSetup:    deps.ParallelRouteSetup,
 		AwaitSetupListener:    deps.AwaitSetupListener,
 		AppLookup:             deps.AppLookup,
 		DialHook:              deps.DialHook,

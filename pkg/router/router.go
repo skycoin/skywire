@@ -146,6 +146,27 @@ type Config struct {
 	// (~20s worst-case) transport dial first. Set true to restore the legacy
 	// synchronous behavior (create-transport-then-route) as a safety valve.
 	DisableRaceRouteSetup bool
+	// ParallelRouteSetup is the number of candidate route groups whose
+	// reciprocal-handshake setup DialRoutes races CONCURRENTLY per dial
+	// attempt (top-K candidates the route-finder returned, ranked by
+	// latency/suspect-liveness). The FIRST candidate to complete its
+	// handshake WINS and immediately becomes the working route — the dial
+	// returns on it without waiting for a "better" one; the losers are
+	// canceled and torn down. This collapses establishment from "up to
+	// N×handshakeAwaitTimeout" (the old one-candidate-at-a-time retry loop,
+	// where every dead / non-forwarding candidate burned the full ~10s
+	// handshake await before the next was tried — up to the ~90s dial ceiling,
+	// leaving the app wedged in "starting") down to roughly one RTT. A dead-hop
+	// candidate simply loses the race instead of blocking the whole dial, so
+	// the app converges to a working route (single multihop at min_hops>=2,
+	// or direct at min_hops==1) instead of wedging.
+	//
+	// 1 = strictly-sequential behavior (a clean rollback switch). 0 (unset)
+	// is normalized to defaultParallelRouteSetup by SetDefaults; values above
+	// maxParallelRouteSetup are clamped. Losing / failed candidates' intermediate
+	// hops are marked suspect for a short TTL so the NEXT dial front-loads
+	// known-good hops (see suspectHopCache; composes with #4063).
+	ParallelRouteSetup int
 	// AwaitSetupListener, if non-nil, is used instead of opening a fresh
 	// listener on DmsgAwaitSetupPort. This lets callers reserve the port
 	// earlier in init (before the transport manager is ready) so peers
@@ -199,6 +220,15 @@ func (c *Config) SetDefaults() {
 
 	if c.MaxHops == 0 {
 		c.MaxHops = maxHops
+	}
+
+	// 0 (unset) => race the default number of candidates. An operator who
+	// wants the legacy strictly-sequential setup sets this to 1 explicitly.
+	if c.ParallelRouteSetup == 0 {
+		c.ParallelRouteSetup = defaultParallelRouteSetup
+	}
+	if c.ParallelRouteSetup > maxParallelRouteSetup {
+		c.ParallelRouteSetup = maxParallelRouteSetup
 	}
 }
 
@@ -266,6 +296,12 @@ type DialOptions struct {
 	// router's visor-wide muxMode default."
 	Distribution DistributionConfig
 	KeepAlive    time.Duration // Route keepalive (0 = DefaultRouteKeepAlive). Routes idle longer expire.
+	// ParallelRouteSetup, when > 0, overrides Config.ParallelRouteSetup
+	// for this dial only — the number of candidate route groups whose
+	// setup is raced concurrently (first to complete its handshake wins).
+	// 1 forces sequential setup for this dial; 0 inherits the visor
+	// config. See Config.ParallelRouteSetup.
+	ParallelRouteSetup int
 	// AppName is the originating app's name. Set by appnet's
 	// DialContextWithOptions when the caller threaded a context
 	// carrying it (RPCIngressGateway.Dial uses appnet.WithAppName).
@@ -545,6 +581,7 @@ type router struct {
 	lastRouteCalcTime time.Duration     // last route calculation time (for local routes)
 	lastRouteCalcMu   sync.Mutex        // protects lastRouteCalcTime
 	tpdCache          *tpdSnapshotCache // one-snapshot TTL cache of GetAllTransports, see tpd_cache.go
+	suspects          *suspectHopCache  // short-TTL penalty cache for intermediates that lost/failed a setup race (see parallel_route_setup.go)
 	// dstTpOracle fetches a destination visor's OWN transport list
 	// authoritatively from the destination (via an RSN-signed transport-query),
 	// for the RSN-oracle 2-hop route path (rsn_oracle_routes.go). nil by default
@@ -659,6 +696,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		trustedVisors:   trustedVisors,
 		routeSetupHooks: routeSetupHooks,
 		tpdCache:        newTPDSnapshotCache(),
+		suspects:        newSuspectHopCache(handshakeAwaitTimeout),
 	}
 
 	go r.rulesGCLoop()
