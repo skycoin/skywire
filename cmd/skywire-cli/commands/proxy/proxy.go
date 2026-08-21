@@ -80,14 +80,20 @@ func init() {
 	startCmd.Flags().BoolVar(&existingTpOnly, "existing-tp", false, "only use existing transports, don't create new ones")
 	startCmd.Flags().BoolVar(&forceLocalRoutes, "local-route", false, "calculate routes locally instead of using route finder")
 	startCmd.Flags().IntVar(&muxRoutes, "mux", 1, "parallel mux routes: 0=unlimited (every distinct path), 1=disabled (default), 2+=N routes")
+	// --routes is the cross-group spelling for the same parallel-route count
+	// (`skynet start --routes`, `proxy mux plot --routes`, `proxy mux auto`).
+	// Bound to the same var as --mux so either spelling works; hidden to keep
+	// the primary `--mux` name on this command. Passing both = last parsed wins.
+	startCmd.Flags().IntVar(&muxRoutes, "routes", 1, "alias for --mux (parallel route count)")
+	startCmd.Flags().MarkHidden("routes") //nolint:errcheck,gosec
 	startCmd.Flags().StringVar(&muxMode, "mux-mode", "auto", "mux weight distribution mode: auto (latency-based) or equal (round-robin)")
 	startCmd.Flags().Uint16Var(&minHops, "min-hops", 1, "minimum routing hops for this session (1=no minimum). Set on the visor before app start; rolled back is not automatic — restart visor or re-run with --min-hops=1 to revert.")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits")
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	startCmd.Flags().BoolVar(&reconnect, "reconnect", true, "in-process reconnect on route-group collapse: proxy keeps re-dialing with backoff instead of dropping the SOCKS5 listener; --reconnect=false restores exit-on-failure")
-	startCmd.Flags().StringVar(&startRoutingPolicy, "routing-policy", "", "per-app routing policy: @/path/to/policy.star or @/path/to/policy.wasm (\"\" or \"none\" clears any previously-installed override)")
-	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
-	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
+	startCmd.Flags().StringVar(&startRoutingPolicy, "routing-policy", "", "per-app routing policy: @/path/to/policy.star, @/path/to/policy.wasm, or preset:<name> (\"\" or \"none\" clears any previously-installed override)")
+	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks clients")
+	stopCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of the skysocks client to stop")
 	dep := getDeployment()
 	defaultTestEnv := isTestEnv()
 
@@ -547,7 +553,16 @@ var statusCmd = &cobra.Command{
 							tmpSrv = state.Args[idx+1]
 						}
 						if arg == "--addr" {
-							tmpAddr = "127.0.0.1" + state.Args[idx+1]
+							// --addr may be a bare port (":1080") or a full
+							// host:port ("127.0.0.1:1095"). Only prepend the
+							// loopback host for the bare-port short form —
+							// otherwise the display doubled up as
+							// "127.0.0.1127.0.0.1:1095".
+							if strings.HasPrefix(state.Args[idx+1], ":") {
+								tmpAddr = "127.0.0.1" + state.Args[idx+1]
+							} else {
+								tmpAddr = state.Args[idx+1]
+							}
 						}
 					}
 					// For a running client, surface the active route group(s) so
