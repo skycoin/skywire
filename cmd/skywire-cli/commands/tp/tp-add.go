@@ -46,7 +46,7 @@ var (
 )
 
 func init() {
-	addTpCmd.Flags().StringVarP(&rpk, "rpk", "r", "", "remote public key.")
+	addTpCmd.Flags().StringVarP(&rpk, "rpk", "r", "", "remote public key (alternative to the positional argument)")
 	addTpCmd.Flags().StringVarP(&transportType, "type", "t", "", "type of transport to add.")
 	addTpCmd.Flags().DurationVarP(&timeout, "timeout", "o", 0, "if specified, sets an operation timeout")
 	addTpCmd.Flags().IntVarP(&retries, "retries", "n", 1, "number of times to retry per transport type")
@@ -66,12 +66,21 @@ var addTpCmd = &cobra.Command{
 	Use:   "add <public-key> [public-key]...",
 	Short: "Add transport(s) to one or more remote public keys",
 	Long: `
-    Add transport(s)
-		Accepts one or more remote public keys as arguments.
-		If the transport type is unspecified,
-		the visor will attempt to establish a transport
-		in the following order: stcpr, sudph, dmsg`,
-	Args:                  cobra.MinimumNArgs(1),
+    Add transport(s) from the LOCAL visor to one or more remote public keys.
+		Public keys are given positionally (tp add <pk> [pk]...); a single key
+		may instead be given with -r/--rpk. If the transport type is
+		unspecified, the visor tries each type in preference order, with the
+		dmsg relay last-resort. Use --remote <visor-pk> to instead request the
+		transport on a REMOTE visor via the Transport Setup Node (TPS).`,
+	// Require at least one public key, but allow it to arrive via -r/--rpk
+	// or --remote instead of positionally (so `tp add -r <pk>` works rather
+	// than erroring "requires at least 1 arg").
+	Args: func(_ *cobra.Command, args []string) error {
+		if len(args) == 0 && rpk == "" {
+			return fmt.Errorf("requires at least one remote public key (positional, or via -r/--rpk)")
+		}
+		return nil
+	},
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Validate against the canonical type set (types.Known()) rather than a

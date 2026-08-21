@@ -20,18 +20,29 @@ var (
 
 func init() {
 	rmTpCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all transports")
-	rmTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "remove transport of given ID")
+	rmTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "transport ID to remove (may also be given positionally: tp rm <id>)")
 	rmTpCmd.Flags().StringSliceVar(&rmRemoteVisors, "remote", nil, "remove transport on remote visor(s) via embedded TPS (comma-separated PKs)")
+	// --tp is the historical spelling for the remote transport ID(s); keep it
+	// working as a hidden alias but steer users to the standard -i/--id
+	// (comma-separated when removing several on a remote via --remote).
 	rmTpCmd.Flags().StringSliceVar(&rmRemoteTransports, "tp", nil, "transport ID(s) to remove on remote visor (comma-separated, use with --remote)")
+	_ = rmTpCmd.Flags().MarkHidden("tp") //nolint:errcheck
 	rmTpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 }
 
 var rmTpCmd = &cobra.Command{
-	Use:                   "rm",
+	Use:                   "rm [id]",
 	Short:                 "Remove transport(s) by id",
-	Long:                  "\n    Remove transport(s) by id\n\n    Use --remote with --tp to remove transports on a remote visor via the embedded TPS",
+	Long:                  "\n    Remove transport(s) by id — from the LOCAL visor by default.\n\n    The transport ID may be passed positionally (tp rm <id>) or with -i/--id.\n    Use --remote <visor-pk> with -i/--id to remove transports on a REMOTE\n    visor via the embedded Transport Setup Node (TPS); see also `tps rm`.",
 	DisableFlagsInUseLine: true,
-	Run: func(cmd *cobra.Command, _ []string) {
+	Args:                  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		// Accept the transport ID positionally (tp rm <id>) as well as via
+		// -i/--id, matching `tp add <pk>`. The explicit flag wins if both given.
+		if tpID == "" && len(args) > 0 {
+			tpID = args[0]
+		}
+
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -39,8 +50,13 @@ var rmTpCmd = &cobra.Command{
 
 		// Handle --remote flag: remove transport on remote visor(s) via embedded TPS
 		if len(rmRemoteVisors) > 0 {
+			// The remote transport ID(s) may come from --tp (legacy, multiple)
+			// or -i/--id / the positional arg (single). Prefer --tp when set.
+			if len(rmRemoteTransports) == 0 && tpID != "" {
+				rmRemoteTransports = []string{tpID}
+			}
 			if len(rmRemoteTransports) == 0 {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--tp flag required with --remote to specify transport ID(s)"))
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("-i/--id (or --tp) required with --remote to specify transport ID(s)"))
 			}
 
 			// Parse all remote visor PKs
