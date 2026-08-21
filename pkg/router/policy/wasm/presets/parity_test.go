@@ -155,6 +155,9 @@ func TestDecideParity_NativeMatchesWazero(t *testing.T) {
 		{"elastic-mux", "elastic-mux", policy.RoutingContext{App: "skysocks-client"}, nil},
 		{"probe-and-prune", "probe-and-prune", policy.RoutingContext{App: "skynet-client"}, nil},
 		{"adaptive", "adaptive", policy.RoutingContext{App: "vpn-client"}, nil},
+		// adaptive with real transport-kind metadata: both paths must seed the
+		// most transport-diverse forward candidate (cand b, 2 distinct kinds).
+		{"adaptive/diverse", "adaptive", policy.RoutingContext{App: "skysocks-client"}, cands},
 		{"geo-avoid", "geo-avoid", policy.RoutingContext{App: "skysocks-client", CLIOverrides: map[string]string{"avoid_geo": "US"}}, cands},
 		{"geo-avoid/noclean", "geo-avoid", policy.RoutingContext{App: "skysocks-client", CLIOverrides: map[string]string{"avoid_geo": "US,DE,FR"}}, cands},
 		{"transport-diverse", "transport-diverse", policy.RoutingContext{App: "skysocks-client"}, cands},
