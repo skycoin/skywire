@@ -109,7 +109,7 @@ func Decide(name string, ctx Context, cands []Candidate) Spec {
 	case "probe-and-prune":
 		return decideProbeAndPrune(ctx)
 	case "adaptive":
-		return decideAdaptive(ctx)
+		return decideAdaptive(ctx, cands)
 	case "app-mux":
 		return decideAppMux(ctx)
 	case "geo-avoid":
@@ -233,20 +233,73 @@ func decideProbeAndPrune(ctx Context) Spec {
 }
 
 // decideAdaptive is the COMPOSITE "adaptive" preset's decide logic — the
-// intended converged default. It returns a lean seed spec that tickAdaptive
-// then steers along size/latency/explore at once. No MinHops here on purpose:
-// min-hops is a privacy constraint the operator owns; leaving it 0 means
-// "inherit" so adaptive optimizes within the operator's chosen floor.
-func decideAdaptive(ctx Context) Spec {
+// intended converged default (and the wired default for the client apps; see
+// the config generator's configureRouting). It returns a lean seed spec that
+// tickAdaptive then steers along size/latency/explore at once. No MinHops here
+// on purpose: min-hops is a privacy constraint the operator owns; leaving it 0
+// means "inherit" so adaptive optimizes within the operator's chosen floor.
+//
+// The one refinement over the seed spec: when real transport-kind metadata is
+// present, adaptive picks the most transport-diverse forward candidate as the
+// initial route (identical selection to decideTransportDiverse — max distinct
+// TransportKinds, ties broken by lower EstLatencyMs). This only ever REFINES
+// which single route the mux seeds from; every other field is unchanged and
+// tickAdaptive's sizing/evict/probe/warm-standby machinery is untouched.
+//
+// Graceful degradation is load-bearing: with no candidates, or when every
+// candidate has empty/unknown TransportKinds (the wasm guest / NopProvider
+// path leaves Kind ""), Chosen stays nil and the router picks the path exactly
+// as before — so this can never break the wasm or no-provider path.
+func decideAdaptive(ctx Context, cands []Candidate) Spec {
 	switch ctx.App {
 	case "vpn-client", "skysocks-client", "skynet-client":
-		return Spec{
+		spec := Spec{
 			Mux:                     adaptDecideMux,
 			RotationIntervalSeconds: 20,
 			Distribution:            "auto",
 		}
+		if anyKnownTransportKind(cands) {
+			spec.Chosen = mostTransportDiverse(cands)
+		}
+		return spec
 	}
 	return Spec{}
+}
+
+// anyKnownTransportKind reports whether any candidate carries a non-empty
+// transport kind — the signal that real kind metadata is available. When it is
+// false (no candidates, or the wasm/NopProvider path where every kind is ""),
+// diversity-based refinement is skipped so the caller keeps its default.
+func anyKnownTransportKind(cands []Candidate) bool {
+	for i := range cands {
+		for _, k := range cands[i].TransportKinds {
+			if strings.TrimSpace(k) != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// mostTransportDiverse returns the forward candidate whose hops span the MOST
+// distinct transport kinds (ties broken by lower EstLatencyMs), or nil when no
+// candidates are offered. Shared by the transport-diverse preset and the
+// adaptive composite so both rank routes identically.
+func mostTransportDiverse(cands []Candidate) *Candidate {
+	var best *Candidate
+	bestDiversity := -1
+	for i := range cands {
+		d := distinctCount(cands[i].TransportKinds)
+		switch {
+		case d > bestDiversity:
+			c := cands[i]
+			best, bestDiversity = &c, d
+		case d == bestDiversity && best != nil && cands[i].EstLatencyMs < best.EstLatencyMs:
+			c := cands[i]
+			best = &c
+		}
+	}
+	return best
 }
 
 // --- conditional presets: constrain WHICH path is chosen, by route metadata ---
@@ -303,19 +356,7 @@ func candidateTransitsBlockedGeo(c Candidate, blocked map[string]bool) bool {
 // distinct transport types (ties broken by lower latency). Empty spec when no
 // candidates are offered.
 func decideTransportDiverse(_ Context, cands []Candidate) Spec {
-	var best *Candidate
-	bestDiversity := -1
-	for i := range cands {
-		d := distinctCount(cands[i].TransportKinds)
-		switch {
-		case d > bestDiversity:
-			c := cands[i]
-			best, bestDiversity = &c, d
-		case d == bestDiversity && best != nil && cands[i].EstLatencyMs < best.EstLatencyMs:
-			c := cands[i]
-			best = &c
-		}
-	}
+	best := mostTransportDiverse(cands)
 	if best == nil {
 		return Spec{}
 	}
