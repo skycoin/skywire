@@ -29,3 +29,32 @@ type RouteGroupDialer interface {
 		req routing.BidirectionalRoute,
 	) (routing.EdgeRules, cipher.PubKey, error) // Returns rules and the connected setup node PK
 }
+
+// forceLegacyCtxKey carries a per-dial request to skip the source-driven
+// cascade and use the classic trusted-setup-node path (the RSN dials each
+// hop, including the destination, over dmsg). It is threaded through the dial
+// context rather than DialOptions so it can be flipped on mid-retry inside
+// DialRoutes without touching the RouteGroupDialer interface.
+type forceLegacyCtxKey struct{}
+
+// WithForceLegacyRouteSetup returns a context that instructs a
+// cascade-capable RouteGroupDialer to bypass the source-driven cascade and use
+// the classic setup-node path for this dial.
+//
+// Rationale: the source-driven cascade installs rules at the destination over
+// transports, verified by the destination's CascadeHandler via the RSN
+// signature. A destination that does NOT run cascade route-setup only trusts
+// the classic setup nodes (route_setup_nodes) and rejects a cascade-installed
+// route — the route group's reciprocal handshake then never completes and the
+// dial fails. The classic path routes setup through an RSN the destination
+// already trusts, so escalating to it recovers the dial against a mixed fleet.
+func WithForceLegacyRouteSetup(ctx context.Context) context.Context {
+	return context.WithValue(ctx, forceLegacyCtxKey{}, true)
+}
+
+// forceLegacyRouteSetup reports whether ctx requests the classic setup-node
+// path (see WithForceLegacyRouteSetup).
+func forceLegacyRouteSetup(ctx context.Context) bool {
+	v, _ := ctx.Value(forceLegacyCtxKey{}).(bool)
+	return v
+}
