@@ -47,9 +47,8 @@ func init() {
 
 	// Remove transport flags
 	rmCmd.Flags().StringVarP(&targetPK, "target", "t", "", "target visor public key")
-	rmCmd.Flags().StringVarP(&tpID, "id", "i", "", "transport ID to remove")
+	rmCmd.Flags().StringVarP(&tpID, "id", "i", "", "transport ID to remove (may also be given positionally: tps rm -t <pk> <id>)")
 	rmCmd.MarkFlagRequired("target") //nolint:errcheck,gosec
-	rmCmd.MarkFlagRequired("id")     //nolint:errcheck,gosec
 
 	// List transports flags
 	listCmd.Flags().StringVarP(&targetPK, "target", "t", "", "target visor public key")
@@ -121,10 +120,22 @@ The target visor must trust this visor's TPS public key.`,
 }
 
 var rmCmd = &cobra.Command{
-	Use:   "rm",
+	Use:   "rm [id]",
 	Short: "Remove transport on target visor",
-	Long:  `Request the target visor to remove a transport by ID.`,
-	Run: func(cmd *cobra.Command, _ []string) {
+	Long: `Request the target visor to remove a transport by ID via TPS.
+
+The transport ID may be passed positionally (tps rm -t <pk> <id>) or with
+-i/--id. Equivalent to ` + "`tp rm --remote <pk> -i <id>`" + `.`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		// Accept the transport ID positionally as well as via -i/--id.
+		if tpID == "" && len(args) > 0 {
+			tpID = args[0]
+		}
+		if tpID == "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("transport ID required (positionally: tps rm -t <pk> <id>, or with -i/--id)"))
+		}
+
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RPC connection failed: %w", err))
