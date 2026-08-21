@@ -32,7 +32,14 @@ var (
 var RootCmd = &cobra.Command{
 	Use:   "rg",
 	Short: "Route group management",
-	Long:  "View active route groups, their associated apps, and live traffic stats.",
+	Long: `View active route groups, their associated apps, and live traffic stats.
+
+A route group is the set of installed routing rules that carry one app
+connection (initiator + responder legs, plus any multiplexed transports).
+This is the app-centric, bandwidth-annotated view; ` + "`skywire cli route groups`" + `
+shows the same groups at the rule level, and bare ` + "`skywire cli route`" + `
+lists the individual rules. None of these query the route-finder — for a
+remote path lookup use ` + "`skywire cli route find`" + `.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Default to listing route groups when no subcommand given
 		listCmd.Run(cmd, args)

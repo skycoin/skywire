@@ -53,6 +53,13 @@ func init() {
 	traceCmd.Flags().SortFlags = false
 	traceCmd.Flags().Uint16VarP(&traceMinHops, "min", "n", 1, "minimum hops requested from route finder")
 	traceCmd.Flags().Uint16VarP(&traceMaxHops, "max", "x", 5, "maximum hops requested from route finder")
+	// Hidden long-form aliases; keep the hop-bound vocabulary identical to
+	// `route find` / `route calc` while leaving --min/--max as the spelling
+	// shown in help.
+	traceCmd.Flags().Uint16Var(&traceMinHops, "min-hops", 1, "minimum hops (alias for --min)")
+	traceCmd.Flags().Uint16Var(&traceMaxHops, "max-hops", 5, "maximum hops (alias for --max)")
+	traceCmd.Flags().MarkHidden("min-hops") //nolint:errcheck,gosec
+	traceCmd.Flags().MarkHidden("max-hops") //nolint:errcheck,gosec
 	traceCmd.Flags().DurationVarP(&traceTimeout, "timeout", "t", 10*time.Second,
 		"route-finder request timeout")
 	traceCmd.Flags().StringVarP(&traceRfURL, "rf", "a", deployment.Prod.RouteFinder,
