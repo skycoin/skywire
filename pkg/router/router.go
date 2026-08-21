@@ -556,6 +556,12 @@ type Router interface {
 	// an empty slice if no rg's are active for the app.
 	RouteGroupMuxInfoForApp(appName string) []MuxInfo
 
+	// RouteGroupMuxInfoAll returns mux snapshots for EVERY active
+	// route group, regardless of the app it is tagged with. Powers the
+	// whole-runtime `cli visor state` view where the per-leg mux shape
+	// of all route groups (not just one app's) is wanted at once.
+	RouteGroupMuxInfoAll() []MuxInfo
+
 	// Routing table related methods
 	RoutesCount() int
 	Rules() []routing.Rule
