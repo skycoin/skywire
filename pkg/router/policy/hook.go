@@ -190,15 +190,25 @@ func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.Dia
 	if err != nil {
 		return router.DialAdjustment{}, err
 	}
-	// MinHops >= 2 (on any direction) implies "no direct" because
-	// the direct path is 0 intermediates / 1 hop. Surfacing that
-	// implication on the direct-dial bridge avoids a foot-gun where
-	// a policy seemingly enforced multi-hop but the direct short-
-	// circuit silently let traffic through anyway. No separate
-	// avoid_direct knob — min_hops is the canonical way to spell it.
+	// AvoidDirect means "this dial wants a route-group OVERLAY, not the
+	// bare direct-transport short-circuit." Two independent reasons:
+	//
+	//  1. MinHops >= 2 (any direction) — the direct path is 0 intermediates
+	//     / 1 hop, so a multi-hop floor can't be met by it. Without this the
+	//     direct short-circuit silently let traffic through a policy that
+	//     seemingly enforced multi-hop.
+	//  2. A mux OVERLAY (Mux/ForwardMux/ReverseMux > 1) — a single direct
+	//     transport is one conn; the aux mux legs can only be built on the
+	//     route-group path. Crucially this holds at min_hops=1: min_hops is a
+	//     FLOOR ("direct is permitted"), never a ceiling that DISABLES the
+	//     mux. The direct route still serves as the route group's 1-hop
+	//     forward leg (the floor) with the mux legs layered on top.
 	avoidDirect := spec.MinHops >= 2 ||
 		spec.ForwardMinHops >= 2 ||
-		spec.ReverseMinHops >= 2
+		spec.ReverseMinHops >= 2 ||
+		spec.Mux > 1 ||
+		spec.ForwardMux > 1 ||
+		spec.ReverseMux > 1
 	adj := router.DialAdjustment{
 		MuxRoutes:               spec.Mux,
 		ForwardMuxRoutes:        spec.ForwardMux,
