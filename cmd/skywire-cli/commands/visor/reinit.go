@@ -15,7 +15,7 @@ var module string
 
 func init() {
 	RootCmd.AddCommand(reinitCmd)
-	reinitCmd.Flags().StringVarP(&module, "module", "m", "", "target module for reinitiating.")
+	reinitCmd.Flags().StringVarP(&module, "module", "m", "", "target module to reinitiate (required)")
 }
 
 var reinitCmd = &cobra.Command{
@@ -24,7 +24,7 @@ var reinitCmd = &cobra.Command{
 	Long:  "\n  Reinitiate modules",
 	Run: func(cmd *cobra.Command, _ []string) {
 		if module == "" {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("No module choosed for reinitiate"))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("no module selected; pass --module/-m"))
 		}
 
 		rpcClient, err := clirpc.Client(cmd.Flags())

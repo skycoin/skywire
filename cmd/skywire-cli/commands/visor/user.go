@@ -16,7 +16,8 @@ import (
 )
 
 func init() {
-	userCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	// --rpc is already provided as a persistent flag on RootCmd
+	// (see root.go); no need to redeclare a local one here.
 	RootCmd.AddCommand(userCmd)
 }
 
