@@ -223,7 +223,14 @@ func humanBytes(n uint64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
-const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#7a80a8;--accent:#7c83ff;--accent2:#a06bff;--ok:#4ad9a4;--warn:#ff6b8a;--standby:#e0b64a;--card:#131629;--line:#2b3163}` +
+// css: the dark default is tuned so every text token clears WCAG AA (≥4.5:1 for
+// body text) against --bg/--card — notably --muted (#a2a8cc ≈ 8:1 on --bg),
+// which every low-emphasis label (pills, table headers, .hint/.empty, footer,
+// log tail) uses. The light block re-darkens --muted AND the status colors
+// (--ok/--warn/--standby), whose dark-mode brights are illegible on a light
+// background, so the same ≥4.5:1 floor holds in both schemes. The accent
+// gradient and overall identity are unchanged.
+const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--accent2:#a06bff;--ok:#4ad9a4;--warn:#ff6b8a;--standby:#e0b64a;--card:#131629;--line:#2b3163}` +
 	`*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--fg);font:13.5px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}` +
 	`body{max-width:60rem;margin:0 auto;padding:1.2rem 1rem 3rem}` +
 	`header{display:flex;align-items:baseline;gap:.8rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.7rem}` +
@@ -245,9 +252,10 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#7a80a8;--accent:#7c83ff;--
 	`pre.log{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 ui-monospace,SFMono-Regular,monospace;` +
 	`white-space:pre-wrap;word-break:break-word;max-height:26rem;overflow:auto;color:var(--fg)}` +
 	`ul.events{margin:.3rem 0;padding-left:1.1rem;font-size:12px}ul.events li{margin:.1rem 0}` +
-	`.seam{opacity:.75}.controls{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem}` +
+	`.seam{opacity:.9}.controls{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem}` +
 	`.controls button{font:inherit;font-size:12px;padding:.2rem .6rem;border:1px dashed var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:not-allowed}` +
 	`code{color:var(--accent);font-size:11.5px}` +
 	`footer{margin-top:2rem;padding-top:.7rem;border-top:1px solid var(--line);color:var(--muted);font-size:12px}` +
 	`footer a{color:var(--accent);text-decoration:none}footer a:hover{text-decoration:underline}` +
-	`@media(prefers-color-scheme:light){:root{--bg:#f6f7fb;--fg:#222;--muted:#666;--card:#fff;--line:#e2e4ef;--accent:#5a61e6;--accent2:#8a4fe0}}`
+	`@media(prefers-color-scheme:light){:root{--bg:#f6f7fb;--fg:#1c1e26;--muted:#4a4f63;--card:#fff;--line:#d3d6e4;--accent:#4149d6;--accent2:#7b3fd0;--ok:#0a7a4c;--warn:#c02a48;--standby:#7a5c00}` +
+	`h2,.surface{color:#1c1e26}}`

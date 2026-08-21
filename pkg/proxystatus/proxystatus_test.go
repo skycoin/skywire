@@ -2,7 +2,9 @@ package proxystatus
 
 import (
 	"bufio"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -98,5 +100,71 @@ func TestServeConn(t *testing.T) {
 	}
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("content-type = %q", ct)
+	}
+}
+
+// --- WCAG contrast (the dark + light legibility fix) ---------------------------
+
+func hexLum(h string) float64 {
+	h = strings.TrimPrefix(h, "#")
+	c := func(i int) float64 {
+		v, _ := strconv.ParseInt(h[i:i+2], 16, 0)
+		s := float64(v) / 255
+		if s <= 0.03928 {
+			return s / 12.92
+		}
+		return math.Pow((s+0.055)/1.055, 2.4)
+	}
+	r, g, b := c(0), c(2), c(4)
+	return 0.2126*r + 0.7152*g + 0.0722*b
+}
+
+func contrast(fg, bg string) float64 {
+	l1, l2 := hexLum(fg)+0.05, hexLum(bg)+0.05
+	if l1 < l2 {
+		l1, l2 = l2, l1
+	}
+	return l1 / l2
+}
+
+// TestContrastAA locks the legibility fix: every text token the status page uses
+// must clear WCAG AA body-text contrast (>=4.5:1) against the surface it sits on,
+// in BOTH the dark default and the light prefers-color-scheme block.
+func TestContrastAA(t *testing.T) {
+	const (
+		darkBG, darkCard, darkMuted, darkFG = "#0b0d17", "#131629", "#a2a8cc", "#c7cbe6"
+		lightBG, lightMuted, lightFG        = "#f6f7fb", "#4a4f63", "#1c1e26"
+		lightOK, lightWarn, lightStandby    = "#0a7a4c", "#c02a48", "#7a5c00"
+	)
+	pairs := []struct {
+		name   string
+		fg, bg string
+	}{
+		{"dark muted on bg", darkMuted, darkBG},
+		{"dark muted on card", darkMuted, darkCard},
+		{"dark fg on bg", darkFG, darkBG},
+		{"light muted on bg", lightMuted, lightBG},
+		{"light fg on bg", lightFG, lightBG},
+		{"light ok on bg", lightOK, lightBG},
+		{"light warn on bg", lightWarn, lightBG},
+		{"light standby on bg", lightStandby, lightBG},
+	}
+	for _, p := range pairs {
+		if r := contrast(p.fg, p.bg); r < 4.5 {
+			t.Errorf("%s: contrast %.2f:1 < 4.5:1", p.name, r)
+		}
+	}
+	// The token values asserted above must actually be the ones the stylesheet
+	// ships, or the test guards nothing.
+	for _, want := range []string{darkMuted, lightMuted, lightOK, lightWarn, lightStandby} {
+		if !strings.Contains(css, want) {
+			t.Errorf("css missing asserted token %s", want)
+		}
+	}
+	// The old low-contrast greys must be gone.
+	for _, gone := range []string{"#7a80a8", "--muted:#666"} {
+		if strings.Contains(css, gone) {
+			t.Errorf("css still contains low-contrast token %q", gone)
+		}
 	}
 }
