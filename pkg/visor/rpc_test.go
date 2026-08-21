@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -85,6 +86,24 @@ func TestUptime(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.GreaterOrEqual(t, res, 1.0)
+}
+
+// TestApp_NilLauncherNoPanic covers the #85 nil-deref guard: during the early
+// post-restart window the app launcher (v.appL) isn't wired yet, so
+// Visor.App() returns (nil, ErrAppLauncherNotAvailable). An app polling its own
+// state over RPC right after a restart — exactly what the --reconnect path does
+// — must get the error back, NOT panic the visor's RPC handler on `*reply = *app`.
+func TestApp_NilLauncherNoPanic(t *testing.T) {
+	rpc := &RPC{visor: &Visor{}, log: logrus.New()} // appL is nil
+	name := "skysocks-client"
+	var reply appserver.AppState
+
+	require.NotPanics(t, func() {
+		err := rpc.App(&name, &reply)
+		require.ErrorIs(t, err, ErrAppLauncherNotAvailable)
+	})
+	// reply stays at its zero value (no crash, no bogus state).
+	assert.Equal(t, appserver.AppState{}, reply)
 }
 
 // func TestRegisterAndDeregisterApp(t *testing.T) {

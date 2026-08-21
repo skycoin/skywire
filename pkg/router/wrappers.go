@@ -53,6 +53,16 @@ func (d *setupNodeDialer) SetCascadeOrigin(p cascadeOriginProcessor) {
 	d.cascadeOrigin = p
 }
 
+// cascadeEnabled reports whether this dial should use the source-driven
+// cascade. It requires a configured source-side builder AND origin processor
+// AND that the caller has not forced the classic setup-node path for this dial
+// (see WithForceLegacyRouteSetup — DialRoutes flips it on after a
+// cascade-installed route fails its data-plane handshake, the fingerprint of a
+// destination that doesn't trust cascade route setup).
+func (d *setupNodeDialer) cascadeEnabled(ctx context.Context) bool {
+	return d.srcCascade != nil && d.cascadeOrigin != nil && !forceLegacyRouteSetup(ctx)
+}
+
 // CascadeAckRegistry exposes the source-side cascade builder's ack registry
 // so the router's CascadeHandler can share it. ACKs for source-driven
 // cascades arrive on the visor's single registered cascade handler and must
@@ -191,7 +201,12 @@ func (d *setupNodeDialer) Dial(
 	// transports (not the RSN's). This avoids the RSN having to dial each
 	// hop over dmsg (the dmsg-202 failure mode for zombie sessions). Fall
 	// back to the legacy DMSG DialRouteGroup if the RSN is un-upgraded.
-	if d.srcCascade != nil && d.cascadeOrigin != nil {
+	//
+	// forceLegacyRouteSetup (set by DialRoutes when a prior cascade attempt's
+	// route failed its data-plane handshake — the signature of a destination
+	// that doesn't trust cascade-installed routes) skips the cascade entirely
+	// so this dial goes through the classic setup node the destination trusts.
+	if d.cascadeEnabled(ctx) {
 		rules, cascErr := runSourceCascade(ctx, log, client.RPCClient(), d.cascadeOrigin, req)
 		if cascErr == nil {
 			return rules, connectedNode, nil
@@ -236,8 +251,9 @@ func (d *setupNodeDialer) dialViaTransport(
 
 	// Prefer the source-driven cascade: the RSN only signs, and we inject the
 	// cascades down our own transports. Fall back to the legacy DialRouteGroup
-	// RPC if the RSN doesn't implement the CascadeSign* methods.
-	if d.srcCascade != nil && d.cascadeOrigin != nil {
+	// RPC if the RSN doesn't implement the CascadeSign* methods, or when the
+	// caller forces the classic path (see WithForceLegacyRouteSetup).
+	if d.cascadeEnabled(ctx) {
 		rules, cascErr := runSourceCascade(ctx, log, rpcC, d.cascadeOrigin, req)
 		if cascErr == nil {
 			return rules, nil
