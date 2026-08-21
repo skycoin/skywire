@@ -202,6 +202,27 @@ type Config struct {
 	// query deliverer is configured (SetTransportQueryDeliverer); see
 	// rsn_oracle_routes.go. TPD is still used for routes with >=2 intermediates.
 	EnableRSNOracleRoutes bool
+
+	// ExcludeSameLANHops, when true (the default the visor wires from
+	// routing.exclude_same_lan_hops), makes route calculation drop candidate
+	// INTERMEDIATE hops that sit on this visor's own local network — a peer
+	// reached over a private/RFC1918 endpoint, or (the NAT-hairpin case) a peer
+	// reached at this visor's own public IP or its /24. Routing a remote-
+	// destination path through a same-LAN peer adds a hop but no path diversity
+	// (same first-mile link, NAT and failure domain) and can fold the path back
+	// onto the source network; for a mux it also starves genuinely-diverse aux
+	// legs because the same-LAN peer wins on latency and is re-picked every
+	// rotation. Same-LAN peers remain fully usable as direct dial DESTINATIONS —
+	// only their use as intermediates is suppressed. The exclusion is computed
+	// from live transports via TransportManager.SameLANPeers(SelfPublicIP()).
+	ExcludeSameLANHops bool
+	// SelfPublicIP returns this visor's current public IP (from STUN), or nil
+	// when not yet known. Used only by the ExcludeSameLANHops filter to catch
+	// the NAT-hairpin case (a same-LAN peer reached at our own public IP). nil
+	// getter or nil result is fine — the private-IP and local-interface /24
+	// checks still apply.
+	SelfPublicIP func() net.IP
+
 }
 
 // SetDefaults sets default values for certain empty values.

@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -1517,6 +1518,83 @@ func (tm *Manager) TransportRemoteAddrs() []string {
 	}
 
 	return addrs
+}
+
+// SameLANPeers returns the PKs of directly-connected non-DMSG peers whose
+// transport endpoint IP is on the same local network as this visor. Two cases
+// are treated as same-LAN:
+//   - the peer's endpoint is a private / RFC1918 (non-public) IP — a transport
+//     reached over a private address is by definition a LAN neighbor; and
+//   - the NAT-hairpin case: the peer's endpoint is a PUBLIC IP that matches the
+//     visor's own public IP (self) exactly, or shares its /24, or shares the /24
+//     of any local interface IP. Two visors behind one NAT that both registered
+//     their public IP reach each other by hairpinning off that IP.
+//
+// Such peers make poor routing INTERMEDIATES to a remote destination: routing
+// through them adds a hop but no path diversity (same first-mile link, same NAT
+// and failure domain) and can fold the path back onto the source's own network.
+// Callers feed the result into DialOptions.ExcludeIntermediatePKs. self may be
+// nil when the public IP is not yet known (STUN pending) — the private-IP and
+// local-interface /24 checks still apply.
+func (tm *Manager) SameLANPeers(self net.IP) []cipher.PubKey {
+	localIPs, _ := netutil.LocalNetworkInterfaceIPs()
+
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
+
+	var out []cipher.PubKey
+	for _, tp := range tm.tps {
+		if tp.Entry.Type == types.DMSG {
+			continue
+		}
+		netTp := tp.getTransport()
+		if netTp == nil {
+			continue
+		}
+		host := netTp.RemoteRawAddr().String()
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		ip := net.ParseIP(host)
+		if ip == nil {
+			continue
+		}
+		if isSameLANEndpoint(ip, self, localIPs) {
+			out = append(out, tp.Remote())
+		}
+	}
+	return out
+}
+
+// isSameLANEndpoint reports whether peer is on the local network relative to the
+// visor's own public IP (self, may be nil) and its local interface IPs.
+func isSameLANEndpoint(peer, self net.IP, localIPs []net.IP) bool {
+	if peer == nil {
+		return false
+	}
+	// A private / non-public endpoint is only reachable over the LAN.
+	if !netutil.IsPublicIP(peer) {
+		return true
+	}
+	// NAT hairpin: peer is reached at our own public IP (or its /24).
+	if self != nil && (peer.Equal(self) || sameIPv4Slash24(peer, self)) {
+		return true
+	}
+	for _, l := range localIPs {
+		if sameIPv4Slash24(peer, l) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameIPv4Slash24 reports whether a and b are IPv4 addresses in the same /24.
+func sameIPv4Slash24(a, b net.IP) bool {
+	a4, b4 := a.To4(), b.To4()
+	if a4 == nil || b4 == nil {
+		return false
+	}
+	return a4[0] == b4[0] && a4[1] == b4[1] && a4[2] == b4[2]
 }
 
 // hostIsIP reports whether raw's host component is a literal IP (accepting an
