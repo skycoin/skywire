@@ -12,6 +12,14 @@ import (
 )
 
 func init() {
+	// Every diag subcommand talks to the local visor over RPC, so
+	// each takes --rpc (bound to the shared clirpc.Addr) for parity
+	// with the other visor-RPC dmsg commands.
+	for _, c := range []*cobra.Command{porterStatsCmd, porterResetCmd, porterDiagCmd, reconnectCmd} {
+		c.Flags().SortFlags = false
+		c.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr,
+			"RPC server address (env: SKYWIRE_RPC)")
+	}
 	diagCmd.AddCommand(porterStatsCmd)
 	diagCmd.AddCommand(porterResetCmd)
 	diagCmd.AddCommand(porterDiagCmd)
@@ -22,12 +30,21 @@ func init() {
 var diagCmd = &cobra.Command{
 	Use:   "diag",
 	Short: "DMSG runtime diagnostics",
-	Long:  "Inspect and manage the visor's DMSG subsystem at runtime.",
+	Long: `Inspect and manage this visor's DMSG subsystem at runtime.
+
+Reads/acts on the live visor over --rpc. porter / porter-diag are
+read-only; porter-reset and reconnect are corrective actions that
+disrupt in-flight dmsg streams — use them to recover a wedged client,
+not routinely.`,
 }
 
 var porterStatsCmd = &cobra.Command{
 	Use:   "porter",
 	Short: "Show ephemeral port reservation counts",
+	Long: `Show how many ephemeral dmsg ports are currently reserved on the
+main (and, when present, embedded RSN) dmsg clients, out of the 16384
+ephemeral-port ceiling. A count climbing toward the ceiling points at
+port-space exhaustion; 'dmsg diag porter-reset' recovers it.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -98,6 +115,10 @@ Use this to investigate ephemeral port exhaustion root causes.`,
 var reconnectCmd = &cobra.Command{
 	Use:   "reconnect",
 	Short: "Force close and reconnect all DMSG sessions",
+	Long: `Force-close every active dmsg session on the visor's main client.
+The reconnect loop re-dials to the configured sessions_count target
+within ~15s. Disruptive: in-flight dmsg streams (routes, proxied
+apps) are torn down — use it to unwedge a stuck client, not routinely.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {

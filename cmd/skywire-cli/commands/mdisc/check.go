@@ -41,7 +41,8 @@ var (
 
 func init() {
 	RootCmd.AddCommand(checkCmd)
-	checkCmd.Flags().StringVar(&mdURL, "url", getDeployment().DmsgDiscovery, "specify alternative DMSG discovery url")
+	// --url is a persistent flag on the mdisc root (see root.go), so
+	// `mdisc check --url ...` and `--testenv` are inherited here.
 	checkCmd.Flags().DurationVar(&checkTimeout, "timeout", 15*time.Second, "per-server probe timeout")
 	checkCmd.Flags().BoolVar(&checkWarnOnly, "warn-only", false, "always exit 0 (report problems without failing)")
 }

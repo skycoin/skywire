@@ -111,34 +111,54 @@ func init() {
 		// `skywire cli ut mdisc` for consistency with the other
 		// uptime-data sources. See cmd/skywire-cli/commands/ut/mdisc.go.
 	)
-	RootCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
-	RootCmd.Flags().StringVar(&cacheDirDMSGD, "cdd", cacheDirPath(dep.DmsgDiscovery), "DMSG cache dir (\"\" to disable)")
-	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache file if older than n minutes")
+	// --testenv / --url / --cdd / --cfa are persistent so every
+	// subcommand (entry, servers, check) honors them, not just the
+	// bare `mdisc` entries listing. The testenv override (below, in
+	// PersistentPreRun) then applies to all of them uniformly.
+	RootCmd.PersistentFlags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
+	RootCmd.PersistentFlags().StringVar(&cacheDirDMSGD, "cdd", cacheDirPath(dep.DmsgDiscovery), "DMSG cache dir (\"\" to disable)")
+	RootCmd.PersistentFlags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache file if older than n minutes")
+	RootCmd.PersistentFlags().StringVar(&mdURL, "url", dep.DmsgDiscovery, "specify alternative DMSG discovery url")
+	// --stats only shapes the bare `mdisc` entries listing (count of
+	// dmsg clients), so it stays local to the root command.
 	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
-	entryCmd.Flags().StringVar(&mdURL, "url", dep.DmsgDiscovery, "specify alternative DMSG discovery url")
-	RootCmd.Flags().StringVar(&mdURL, "url", dep.DmsgDiscovery, "specify alternative DMSG discovery url")
-	availableServersCmd.Flags().StringVar(&mdURL, "url", dep.DmsgDiscovery, "specify alternative DMSG discovery url")
+}
+
+// applyTestEnv switches mdURL / cache dir to the test deployment when
+// --testenv is set and neither was pinned explicitly. Runs before
+// every mdisc subcommand via PersistentPreRun so `mdisc entry
+// --testenv`, `mdisc servers --testenv`, and `mdisc check --testenv`
+// all behave like the bare `mdisc --testenv`.
+func applyTestEnv(cmd *cobra.Command) {
+	if testEnv && !isTestEnv() {
+		if !cmd.Flags().Changed("url") {
+			mdURL = deployment.Test.DmsgDiscovery
+		}
+		if !cmd.Flags().Changed("cdd") {
+			cacheDirDMSGD = cacheDirPath(deployment.Test.DmsgDiscovery)
+		}
+	}
 }
 
 // RootCmd is the command that contains sub-commands which interacts with DMSG services.
 var RootCmd = &cobra.Command{
 	Use:   "mdisc",
 	Short: "Query DMSG Discovery",
-	Long: `Query DMSG Discovery
-	list entries in dmsg discovery
+	Long: `Query DMSG Discovery.
 
-Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
+The bare command lists the dmsg clients registered in discovery (add
+--stats for just a count). Subcommands:
+  entry <pk>   fetch one registered entry (client or server)
+  servers      list dmsg servers by load (connected~ / avail-sess)
+  check        probe every server's advertised wss front (DNS/TLS/426)
+
+--url points at an alternative discovery; --testenv (or SKYWIRETEST=1)
+selects the test deployment. Both apply to every subcommand.`,
+	// applyTestEnv runs for the root and every subcommand.
+	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+		applyTestEnv(cmd)
+	},
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Handle --testenv flag: override URL and cache dir that weren't explicitly set
-		if testEnv && !isTestEnv() {
-			if !cmd.Flags().Changed("url") {
-				mdURL = deployment.Test.DmsgDiscovery
-			}
-			if !cmd.Flags().Changed("cdd") {
-				cacheDirDMSGD = cacheDirPath(deployment.Test.DmsgDiscovery)
-			}
-		}
-
 		// Build full URL
 		dmsgFullURL := mdURL + "/dmsg-discovery/entries"
 
@@ -153,9 +173,14 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 }
 
 var entryCmd = &cobra.Command{
-	Use:   "entry <visor-public-key>",
-	Short: "Fetch an entry",
-	Args:  cobra.ExactArgs(1),
+	Use:   "entry <public-key>",
+	Short: "Fetch one dmsg-discovery entry (client or server)",
+	Long: `Fetch and print the dmsg-discovery entry for a single public key.
+
+Works for both client and server entries: a client entry shows its
+delegated servers; a server entry shows its address and capacity.
+Resolves over RPC -> dmsg -> HTTP, so a dmsg:// --url works too.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		pk := internal.ParsePK(cmd.Flags(), "visor-public-key", args[0])
 		masterLogger.SetLevel(logrus.InfoLevel)

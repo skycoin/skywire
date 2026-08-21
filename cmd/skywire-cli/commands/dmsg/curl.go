@@ -42,7 +42,7 @@ var (
 
 func init() {
 	curlCmd.Flags().SortFlags = false
-	curlCmd.Flags().StringVarP(&rpcAddr, "rpc", "", "localhost:3435", "RPC server address")
+	curlCmd.Flags().StringVarP(&rpcAddr, "rpc", "", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	curlCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "fatal", "[ debug | warn | error | fatal | panic | trace | info ]")
 	curlCmd.Flags().VarP(&sk, "sk", "s", "use a custom secret key (starts new dmsg client instead of using visor's)")
 	curlCmd.Flags().StringVarP(&curlData, "data", "d", "", "HTTP POST data")
