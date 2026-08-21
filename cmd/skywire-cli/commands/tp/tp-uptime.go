@@ -49,7 +49,11 @@ func defaultTpUptimeCacheDir() string {
 }
 
 func init() {
-	tpUptimeCmd.Flags().StringVar(&tpUptimeBaseURL, "url", deployment.Prod.TransportDiscovery, "transport-discovery base URL")
+	// --tpdurl is the standard spelling shared with `tp disc` / `tp tree`;
+	// --url is kept as a hidden alias so existing invocations keep working.
+	tpUptimeCmd.Flags().StringVar(&tpUptimeBaseURL, "tpdurl", deployment.Prod.TransportDiscovery, "transport-discovery url")
+	tpUptimeCmd.Flags().StringVar(&tpUptimeBaseURL, "url", deployment.Prod.TransportDiscovery, "transport-discovery base URL (alias of --tpdurl)")
+	_ = tpUptimeCmd.Flags().MarkHidden("url") //nolint:errcheck
 	tpUptimeCmd.Flags().StringVarP(&tpUptimeVersion, "v", "v", "v2", "response version (v1|v2|v3)")
 	tpUptimeCmd.Flags().BoolVarP(&tpUptimeMetrics, "metrics", "m", false, "fetch network-wide /metrics/uptime aggregate instead of per-transport rows")
 	tpUptimeCmd.Flags().StringSliceVar(&tpUptimeIDs, "ids", nil, "filter to these transport IDs (comma-separated UUIDs) — uses /metrics/uptime/{ids}")

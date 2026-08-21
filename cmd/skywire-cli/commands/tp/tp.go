@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -98,17 +99,22 @@ func init() {
 var tpCmd = &cobra.Command{
 	Use:   "tp",
 	Short: "View and manage transports",
-	Long: `Display and manage transports of the local visor
+	Long: `Display and manage transports of the LOCAL visor.
 
-	Transports are bidirectional communication protocols
-	used between two Skywire Visors (or Transport Edges)
+	Transports are bidirectional communication protocols used between two
+	Skywire Visors (or Transport Edges). Each Transport is a unique 16-byte
+	UUID (the Transport ID) with a Transport Type identifying its
+	implementation. Types: stcp stcpr sudph dmsg squic webrtc ws wt
 
-	Each Transport is represented as a unique 16 byte (128 bit)
-	UUID value called the Transport ID
-	and has a Transport Type that identifies
-	a specific implementation of the Transport.
+	This command has three distinct transport views:
+	  tp                      LOCAL visor's live transports (this command)
+	  tp --remote <pk>        a REMOTE visor's live transports, via the
+	                          Transport Setup Node (see also 'tps list')
+	  tp all / tp tpd-stats   the whole-network view registered in the
+	                          Transport Discovery (TPD)
 
-	Types: stcp stcpr sudph dmsg
+	--more/-m enriches rows with version/country/service info (extra fetches).
+	--live/-L is an interactive TUI and requires a TTY.
 `,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
@@ -331,11 +337,34 @@ var tpCmd = &cobra.Command{
 		transports, err := rpcClient.Transports(filterTypes, pks, showLogs)
 		internal.Catch(cmd.Flags(), err)
 
-		if showMore {
-			utData = clirpc.FetchIntegratedUptimes(cmd.Flags(), utURL, cacheFileUT, cacheFilesAge)
-			proxyData = clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileSDProxy, sdURL+"/api/services?type="+servicedisc.ServiceTypeProxy, cacheFilesAge)
-			vpnData = clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileSDVPN, sdURL+"/api/services?type="+servicedisc.ServiceTypeVPN, cacheFilesAge)
-			visorData = clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileSDVisor, sdURL+"/api/services?type="+servicedisc.ServiceTypeVisor, cacheFilesAge)
+		// --more enrichment: version (from TPD-integrated uptimes) and
+		// country/service tags (from service-discovery). Only bother when
+		// there are transports to annotate — a filtered query (`-p`/`-i`)
+		// that matches nothing must not pay for four network fetches. The
+		// four are independent, so run them concurrently instead of
+		// serially (they dominate the command's wall time), and pull the
+		// uptimes with days=1: only the .version/.on fields are read here,
+		// so the 30-day daily bitmap for every visor was pure over-fetch.
+		if showMore && len(transports) > 0 {
+			var wg sync.WaitGroup
+			wg.Add(4)
+			go func() {
+				defer wg.Done()
+				utData = clirpc.FetchIntegratedUptimesDays(cmd.Flags(), utURL, cacheFileUT, cacheFilesAge, 1)
+			}()
+			go func() {
+				defer wg.Done()
+				proxyData = clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileSDProxy, sdURL+"/api/services?type="+servicedisc.ServiceTypeProxy, cacheFilesAge)
+			}()
+			go func() {
+				defer wg.Done()
+				vpnData = clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileSDVPN, sdURL+"/api/services?type="+servicedisc.ServiceTypeVPN, cacheFilesAge)
+			}()
+			go func() {
+				defer wg.Done()
+				visorData = clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileSDVisor, sdURL+"/api/services?type="+servicedisc.ServiceTypeVisor, cacheFilesAge)
+			}()
+			wg.Wait()
 		}
 
 		// Get transport logs for bandwidth display
