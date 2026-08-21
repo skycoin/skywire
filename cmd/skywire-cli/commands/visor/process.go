@@ -93,9 +93,6 @@ var reloadCmd = &cobra.Command{
 	},
 }
 
-func init() {
-}
-
 var suspendCmd = &cobra.Command{
 	Use:   "suspend",
 	Short: "Suspend visor (tear down networking, keep local RPC)",

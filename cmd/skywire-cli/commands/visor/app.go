@@ -72,7 +72,11 @@ func init() {
 	)
 	registerAppCmd.Flags().StringVarP(&appName, "appname", "a", "", "name of the app")
 	registerAppCmd.Flags().StringVarP(&localPath, "localpath", "p", "./local", "path of the local folder")
-	deregisterAppCmd.Flags().StringVarP(&procKey, "procKey", "k", "", "proc key of the app to deregister")
+	deregisterAppCmd.Flags().StringVarP(&procKey, "proc-key", "k", "", "proc key of the app to deregister")
+	// Backward-compat: the original camelCase spelling. Same target var,
+	// hidden so `--help` shows only the standardized kebab-case flag.
+	deregisterAppCmd.Flags().StringVar(&procKey, "procKey", "", "deprecated alias for --proc-key")
+	_ = deregisterAppCmd.Flags().MarkHidden("procKey") //nolint:errcheck
 	startAppCmd.Flags().BoolVar(&useInternal, "internal", false, "force internal launcher")
 	startAppCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
 	startAppCmd.MarkFlagsMutuallyExclusive("internal", "external")
