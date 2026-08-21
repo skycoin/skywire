@@ -1193,7 +1193,7 @@ func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 	}
 	if err != nil {
 		// Wrap with which-operation context so a future freeze
-		// self-localises in the log. isMissingObject still matches through
+		// self-localizes in the log. isMissingObject still matches through
 		// the %w wrap (errors.Is + a lowercase "not found" substring both
 		// see the wrapped sentinel), and the self-heal check above runs on
 		// the unwrapped attempt() error, so this wrapping changes nothing
