@@ -497,6 +497,22 @@ func (c *Conn) getter() (cg skyobject.Getter) {
 	return &cget{c}
 }
 
+// Getter returns a skyobject.Getter that fetches single objects by hash
+// from this connection's remote peer on demand (one RqObject request per
+// Get, hash-verified, bounded by the connection's ResponseTimeout).
+//
+// Unlike a Root fill it neither walks an object graph nor writes anything
+// to the node's container: each Get is an isolated request/response for
+// exactly the requested object, and the caller decides what (if anything)
+// to keep. Pairing it with (*Container).Preview yields a bounded,
+// on-demand read of one chosen path through a Root without triggering or
+// interfering with a concurrent whole-Root fill. The TPD aggregator uses
+// this to pull just the small tp-list discovery leaf out of a Root whose
+// bulky telemetry subtree can't finish filling within the conn's window.
+func (c *Conn) Getter() skyobject.Getter {
+	return c.getter()
+}
+
 // signalClose idempotently closes closeq to signal shutdown. Multiple paths
 // race to signal it — run()'s receiveMsg/onConnect failure branches, the idle
 // watchdog, and external Close() (including concurrent closeAll iteration) — so
