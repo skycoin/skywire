@@ -1230,6 +1230,14 @@ func configureRouting() {
 		RouteFinderTimeout: visorconfig.DefaultTimeout,
 		MinHops:            minHopsValue(),
 		CalculateRoutes:    enableCalculateRoutes,
+		// Default routing policy: the "adaptive" composite preset. It is a no-op
+		// for latency-sensitive/other apps (decideAdaptive returns the empty spec
+		// for anything but the client apps) and shapes vpn-client/skysocks-client/
+		// skynet-client dials — seeding the most transport-diverse route, then
+		// letting on_tick size/evict/probe adaptively. Overridable: an explicit
+		// routing.policy_per_dial or a per-app launcher routing_policy wins, and
+		// it is preserved across regen (see below).
+		PolicyPerDial: "preset:adaptive",
 		// Cascade route setup is opt-in (--cascade); the legacy setup-node
 		// path stays the default until the cascade multihop data-plane bug
 		// is fixed and enough of the network has updated to support it.
@@ -1251,6 +1259,14 @@ func configureRouting() {
 		// it back off, edit enable_cascade_route_setup in the JSON directly.
 		if oldConfCache.Routing.EnableCascadeRouteSetup {
 			conf.Routing.EnableCascadeRouteSetup = true
+		}
+		// Respect an explicit routing policy chosen in the previous config
+		// (any non-empty value the operator set, including "none"). Only a
+		// config that never specified one falls through to the adaptive default
+		// above, so regenerating an untouched config opts it into the new
+		// default while never clobbering a deliberate choice.
+		if oldConfCache.Routing.PolicyPerDial != "" {
+			conf.Routing.PolicyPerDial = oldConfCache.Routing.PolicyPerDial
 		}
 	}
 }
