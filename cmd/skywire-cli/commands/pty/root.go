@@ -26,14 +26,25 @@ import (
 var RootCmd = &cobra.Command{
 	Use:   "pty",
 	Short: "Remote shell & filesystem over the skywire pty subsystem (key-addressed, noise-XK)",
-	Long: `skywire cli pty — remote shell and remote-filesystem access over the
-skywire pty subsystem. Every form is keyed by public key over a noise-XK
-connection; there is no SSH involved (the names parallel ssh/sshd/sshfs only
-by analogy).
+	Long: `skywire cli pty — remote shell, remote command exec, and remote-
+filesystem access over the skywire pty subsystem. Every form is keyed by
+public key over a noise-XK connection; there is no SSH involved (the names
+parallel ssh/sshd/sshfs only by analogy).
 
+  pty exec   run a one-shot command on a peer visor (no TTY; scriptable)
+  pty start  open an interactive shell to a peer over the dmsg overlay
+  pty shell  open an interactive shell / one-shot exec over direct-TCP
+  pty fs     mount a peer's filesystem (sftp + FUSE)
   pty host   serve the pty subsystem on a TCP port (peers connect by PK)
-  pty shell  open a remote shell to a peer
-  pty fs     mount a peer's filesystem (sftp + FUSE)`,
+  pty list   list the visors currently connected over dmsg
+  pty ui     open the dmsgpty web UI in a browser
+  pty url    print the dmsgpty web UI URL
+
+Transport vocabulary (shared with 'cli dmsg scp'): --transport
+auto|dmsg|skynet|tcp, with per-command support (see each subcommand's
+--help for its own matrix). 'auto' preserves each command's historical
+default. Scheme-prefixed targets — dmsg://<pk>, skynet://<pk>,
+tcp://<pk>@host:port — select the transport inline.`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
