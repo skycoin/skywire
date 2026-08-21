@@ -636,6 +636,19 @@ type Routing struct {
 	// This is the steady-connection fix: it stops a run of dead candidates
 	// from burning the dial ceiling and wedging an app in "starting".
 	ParallelRouteSetup int `json:"parallel_route_setup,omitempty"`
+
+	// ExcludeSameLanHops, when nil or true (the default), makes route
+	// calculation drop candidate INTERMEDIATE hops that sit on this visor's own
+	// local network — a peer reached over a private/RFC1918 endpoint, or (the
+	// NAT-hairpin case) a peer reached at this visor's own public IP / its /24.
+	// Routing a remote-destination path through a same-LAN peer adds a hop but
+	// no path diversity (same first-mile link, NAT and failure domain) and
+	// starves a mux of genuinely-diverse aux legs (the same-LAN peer wins on
+	// latency and is re-picked every rotation). Same-LAN peers remain usable as
+	// direct dial DESTINATIONS; only their use as intermediates is suppressed.
+	// Set to false only for deliberate LAN-relay topologies. Pointer so an
+	// absent field (older configs) defaults ON.
+	ExcludeSameLanHops *bool `json:"exclude_same_lan_hops,omitempty"`
 	// TransportPreference is the transport-type priority order, most-preferred
 	// first. It decides both which existing transport a route rides when
 	// several reach the same peer, and which type the visor tries to CREATE
