@@ -47,15 +47,43 @@ func init() {
 	findCmd.Flags().Uint16VarP(&frMinHops, "min", "n", 1, "minimum hops")
 	findCmd.Flags().Uint16VarP(&frMaxHops, "max", "x", 1000, "maximum hops")
 	findCmd.Flags().DurationVarP(&timeout, "timeout", "t", 10*time.Second, "request timeout")
-	findCmd.Flags().StringVarP(&frAddr, "addr", "a", rfURL, "route finder service address")
+	// --rf is the canonical name for the route-finder address (matches
+	// `route trace --rf`). --addr is kept as a hidden backward-compatible
+	// alias — both write frAddr, and the -a shorthand now belongs to --rf.
+	findCmd.Flags().StringVarP(&frAddr, "rf", "a", rfURL, "route finder service address")
+	findCmd.Flags().StringVar(&frAddr, "addr", rfURL, "route finder service address (deprecated alias for --rf)")
+	findCmd.Flags().MarkHidden("addr") //nolint:errcheck,gosec
+	// --min-hops / --max-hops are hidden long-form aliases for --min /
+	// --max, giving the whole group one greppable hop-bound vocabulary
+	// without breaking the short spellings.
+	findCmd.Flags().Uint16Var(&frMinHops, "min-hops", 1, "minimum hops (alias for --min)")
+	findCmd.Flags().Uint16Var(&frMaxHops, "max-hops", 1000, "maximum hops (alias for --max)")
+	findCmd.Flags().MarkHidden("min-hops") //nolint:errcheck,gosec
+	findCmd.Flags().MarkHidden("max-hops") //nolint:errcheck,gosec
 }
 
-// RootCmd is the command that queries the route finder.
+// findCmd queries the Route Finder service for the hop path(s) between two
+// visors. This is a REMOTE query against the route-finder graph — it does
+// NOT read or install any local routing rules (bare `skywire cli route`
+// does that). A "route" here is the ordered list of hops (transport IDs +
+// visor PKs) the route-finder would stitch into a rule chain; each hop
+// rides exactly one transport between two visors.
 var findCmd = &cobra.Command{
 	Use:   "find <public-key> | <public-key-visor-1> <public-key-visor-2>",
-	Short: "Query the Route Finder",
-	Long: `Query the Route Finder
-Assumes the local visor public key as an argument if only one argument is given`,
+	Short: "Query the Route Finder for a hop path between two visors",
+	Long: `Query the Route Finder service for the route (hop path) between two visors.
+
+This is a live query against the route-finder graph; it neither reads nor
+installs local routing rules. Compare the sibling commands:
+
+  route find    query the route-finder for a path to a destination (REMOTE)
+  route         list the routing rules currently installed here (LOCAL)
+  route calc    compute a path locally from transport-discovery data (no RF)
+
+A route is an ordered chain of hops; each hop traverses one transport
+between two visors (a transport is a single peer-to-peer link, a route is
+the whole chain). If only one public key is given, the local visor's key
+is assumed as the source.`,
 	// Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var srcPK, dstPK cipher.PubKey
@@ -216,6 +244,7 @@ var RootCmd = routeCmd
 func init() {
 	routeCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	routeCmd.AddCommand(
+		lsRuleCmd,
 		rmRuleCmd,
 		addRuleCmd,
 		findCmd,
@@ -256,8 +285,23 @@ func init() {
 
 var routeCmd = &cobra.Command{
 	Use:   "route",
-	Short: "View and set rules",
-	Long:  "View and set routing rules",
+	Short: "View and set this visor's local routing rules",
+	Long: `View and set the routing rules installed on the LOCAL visor.
+
+Run without a subcommand (or ` + "`route ls`" + `) to list the routing rules
+currently installed here. A route is a chain of rules (forward /
+intermediary-forward / consume) that together carry traffic along a path
+of transports; each forward rule references the next transport and route
+ID in the chain. A rule is local state on THIS visor — distinct from a
+transport (a single link to one peer) and from the route-finder (which
+computes paths but installs nothing).
+
+  route            list installed routing rules (local, this visor)
+  route ls         alias for the bare listing above
+  route find       query the route-finder for a path (remote query)
+  route calc       compute a path locally from transport-discovery data
+  route groups     list active route groups (also: ` + "`skywire cli rg ls`" + `)
+  route add / rm   install / remove individual rules`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -296,6 +340,30 @@ var routeCmd = &cobra.Command{
 		} else {
 			printRoutingRules(cmd.Flags(), rules...)
 		}
+	},
+}
+
+// lsRuleCmd is an explicit alias for the bare `route` listing, so the
+// local-rules query has the same `ls` verb operators reach for elsewhere
+// (`rg ls`, `tp ls`, ...). It lists every installed routing rule; the
+// bare command's --rid/--nrid/--live selectors stay on `route` itself.
+var lsRuleCmd = &cobra.Command{
+	Use:   "ls",
+	Short: "List this visor's installed routing rules (alias for bare `route`)",
+	Long: `List the routing rules currently installed on the local visor.
+
+Same output as running ` + "`skywire cli route`" + ` with no subcommand — a
+convenience alias so local-rule listing uses the same ls verb as
+` + "`route groups`/`rg ls`" + `. To query the route-finder instead (a remote
+path lookup, not local rules) use ` + "`route find`" + `.`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		rules, err := rpcClient.RoutingRules()
+		internal.Catch(cmd.Flags(), err)
+		printRoutingRules(cmd.Flags(), rules...)
 	},
 }
 
