@@ -355,9 +355,20 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 				}
 				switch {
 				case proxyinterstitial.ShouldServe(origPort):
+					// Stream REAL route-setup progress: hold the browser open with a
+					// chunked response and drive a fresh dial via a probe, flushing a
+					// line per real attempt, then reload into live content once the
+					// route is warm. Falls back to the one-shot page for an HTTP/1.0
+					// client (handled inside StreamConn). Wrapped in tcpAddrConn: the
+					// stream conn is a net.Pipe (pipeAddr), and go-socks5 asserts
+					// *net.TCPAddr on the returned conn when building its BND reply.
 					log.WithField("host", target).WithField("err", dialErr).
-						Debug("SOCKS5 → serving branded route interstitial")
-					conn, dialErr = proxyinterstitial.Conn(target, proxyinterstitial.StatusLine(dialErr), "dmsg", false), nil
+						Debug("SOCKS5 → serving streaming route interstitial")
+					conn, dialErr = &tcpAddrConn{Conn: proxyinterstitial.StreamConn(context.Background(), proxyinterstitial.StreamConfig{
+						Target:    target,
+						Mechanism: "dmsg",
+						Probe:     dmsgRedialProbe(dmsgC, upstream, cfg, origHost, addr, origPort),
+					})}, nil
 				case cfg.TLSMITM && isTLSPort(origPort, cfg.TLSPort) && skynetca.Permits(cfg.LeafMinter, origHost):
 					// HTTPS request whose route is still warming: terminate the
 					// browser's TLS locally with a per-host leaf and serve the
@@ -584,6 +595,51 @@ func (f *upstreamForwarder) dial(network, addr string) (net.Conn, error) {
 	}
 	f.mu.Unlock()
 	return conn, err
+}
+
+// dmsgRedialProbe builds a proxyinterstitial.Probe that re-attempts the dial the
+// streaming interstitial stands in for, reporting the route ready (nil) once it
+// succeeds. It is a READINESS probe: for a .dmsg destination it re-dials the
+// destination directly (the common case) — a coarse but real signal, since
+// pkg/router/dmsg expose no per-hop setup event to observe (see
+// pkg/proxyinterstitial/stream.go). A non-.dmsg target re-attempts the
+// upstream/direct forward. On success the opened stream is closed immediately;
+// the browser's reload then rides the now-warm session/route.
+func dmsgRedialProbe(dmsgC *dmsg.Client, upstream *upstreamForwarder, cfg Config, origHost, addr, origPort string) proxyinterstitial.Probe {
+	return func(ctx context.Context) error {
+		hostOnly := origHost
+		if i := strings.IndexByte(hostOnly, ':'); i >= 0 {
+			hostOnly = hostOnly[:i]
+		}
+		if strings.HasSuffix(hostOnly, cfg.DomainSuffix) {
+			hp := origHost
+			if origPort != "" && origPort != "80" {
+				hp = origHost + ":" + origPort
+			}
+			_, _, dest, port, perr := skynetweb.ParseResolverHost(hp, cfg.DomainSuffix, cfg.Aliases)
+			if perr != nil {
+				return perr
+			}
+			c, e := dmsgC.Dial(ctx, dmsg.Addr{PK: dest, Port: port})
+			if e == nil {
+				_ = c.Close() //nolint:errcheck
+			}
+			return e
+		}
+		var (
+			c net.Conn
+			e error
+		)
+		if upstream != nil {
+			c, e = upstream.dial("tcp", addr)
+		} else {
+			c, e = net.Dial("tcp", addr)
+		}
+		if e == nil {
+			_ = c.Close() //nolint:errcheck
+		}
+		return e
+	}
 }
 
 // Context keys used by the SOCKS5 resolver ↔ Dial callback handshake.

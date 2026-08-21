@@ -34,6 +34,50 @@ anyway) cleanly falls through to the real error instead of a per-request log
 spam. The page itself gained a footer with a deep-link to the surface's status
 host (below).
 
+## 1b. Streaming interstitial (live route-setup progress)
+
+The interstitial can hold the browser connection OPEN and stream **live** route-
+setup progress via HTTP chunked transfer-encoding, instead of the one-shot
+`Content-Length` page + client meta-refresh. `pkg/proxyinterstitial/stream.go`
+(`StreamConn` / `DriveStream` / `StreamOpen`+`StreamStep`+`StreamClose`) renders a
+progressive-HTML shell and flushes a line per real attempt, then — once the route
+is up — flushes a final chunk that reloads the page into the now-live content.
+
+**What signal is real (the seam).** The interstitial is minted *after* a dial has
+already failed transiently; there is no in-flight route-setup to subscribe to at
+that point, and `pkg/router` exposes **no** per-hop / noise-handshake progress
+hook — `DialOptions` has no observer, and even the mux-telemetry harness only
+synthesizes coarse `RouteEstablished`/failed events around its own `DialRoutes`
+call. So the granular `finding route → 2-hop via <pk> → noise handshake → route
+group up` narrative is **not observable today**. Two honest sources are used
+instead:
+
+- **browse-origin** (`meshInterstitialRT`): it already runs the real cold-route
+  round-trip in the background; the stream renders that actual in-flight
+  attempt's outcome (`streamingInterstitialResponse`, flushed via the reverse
+  proxy's `FlushInterval < 0`).
+- **SOCKS resolving proxies** (`dmsgweb` / `skynetweb`): the mint point has no
+  live attempt, so the streamer DRIVES a fresh one via a `Probe` (`dmsgRedialProbe`
+  / `skynetRedialProbe`) and streams each real attempt's `StatusLine` + the
+  success. Coarse, but real.
+
+The **missing seam** to get the granular lines is a router-side progress callback
+— e.g. `DialOptions.OnProgress func(phase RouteSetupPhase)` invoked by
+`DialRoutes` / the cascade setup path as hops resolve and the noise handshake
+completes. That lives in `pkg/router` (owned separately) and is intentionally
+**not** added here; this PR streams only the coarse signal actually available and
+does not fabricate per-hop events. `pkg/skysocks`'s `ServeSOCKS5` mint point is
+also left one-shot: it tears its session down for reconnect, with no attempt to
+drive/observe from that function.
+
+**Fallback.** `StreamConn` reads the request first and serves the existing
+one-shot meta-refresh page to an HTTP/1.0 client; a nil probe / absent event
+source likewise degrades to the static page.
+
+**Liveness tie-in.** The same probe *is* the "is-my-connection-up" signal; a
+future `status.*` mux view can share it as a WS/WT liveness indicator (extension
+point, not built here).
+
 ## 2. Per-proxy status hosts
 
 Each proxy serves a read-only diagnostic page at a reserved, well-known host
