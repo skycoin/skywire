@@ -33,6 +33,7 @@ package cxoaggregator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"sync"
@@ -236,6 +237,28 @@ type Aggregator struct {
 	// dialing guards in-flight dial-backs so the heartbeat cadence can't
 	// storm ConnectPK for the same visor. Keyed by feed PK. Guarded by mu.
 	dialing map[skycipher.PubKey]struct{}
+
+	// fetching coalesces in-flight targeted discovery-leaf fetches so a
+	// visor that republishes rapidly can't spawn a pile of concurrent
+	// per-object request goroutines for the same feed. Keyed by feed PK.
+	// Guarded by mu.
+	fetching map[skycipher.PubKey]struct{}
+
+	// lastList caches the most-recent successfully decoded transport-list
+	// snapshot per reporter PK. A transient targeted-fetch failure (the
+	// delivering conn closed before the handful of tp-list objects
+	// arrived) re-applies the last good full set on the next Root, holding
+	// the reporter's transports against the redis TTL until a fresh fetch
+	// lands. Dropped when the feed is reclaimed (reclaimOrphanFeeds).
+	// Guarded by mu.
+	lastList map[skycipher.PubKey]cachedList
+}
+
+// cachedList is the last good decoded transport-list snapshot for a
+// reporter, kept so a failed targeted fetch can re-apply it (fallback #2).
+type cachedList struct {
+	entries []*transport.Entry
+	version string
 }
 
 // ensureConnTimeout bounds each dial-back to a visor's CXO node so an
@@ -249,6 +272,27 @@ const ensureConnTimeout = 20 * time.Second
 // truncated partial fill, unlike the legacy "transports/list" which sorted
 // last among the "transports" node's per-uuid children.
 const tpdListLeafName = "tp-list"
+
+// maxTargetedFetchObjects caps how many objects the targeted
+// discovery-leaf fetch (reconcileTargeted) will request from a visor for
+// one Root. The tp-list path is the registry + root TreeNode + the small
+// top-level Children index page(s) + the tp-list TreeEntry — a handful of
+// objects. The cap bounds a malicious or oversized Root so a crafted deep
+// top-level index can't drive unbounded per-object requests to the peer.
+const maxTargetedFetchObjects = 64
+
+// targetedFetchTimeout bounds the whole targeted discovery-leaf fetch
+// (all per-object requests for one Root together). Each underlying object
+// request is separately bounded by the conn's ResponseTimeout; this is
+// the ceiling on the sequential walk so a slow-drip peer can't pin the
+// fetch goroutine.
+const targetedFetchTimeout = 30 * time.Second
+
+// errTargetedFetchBudget is returned by boundedGetter once the object
+// count or wall-clock budget for a targeted fetch is exhausted. It
+// unwinds the treestore walk cleanly (childByName treats an unreadable
+// child as absent) rather than hanging.
+var errTargetedFetchBudget = errors.New("cxoaggregator: targeted discovery fetch budget exceeded")
 
 // orphanGraceTicks is how many consecutive cleanup ticks a feed must
 // have zero connected conns before it's reclaimed. At the 2-minute
@@ -321,6 +365,8 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 		done:          make(chan struct{}),
 		nudge:         make(chan struct{}, 1),
 		orphanStrikes: make(map[skycipher.PubKey]int),
+		fetching:      make(map[skycipher.PubKey]struct{}),
+		lastList:      make(map[skycipher.PubKey]cachedList),
 	}
 	// Subscribe to a visor's feed the moment it dials in, rather than
 	// waiting up to ReconcileInterval (30s) for the next poll. A fresh
@@ -354,7 +400,7 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	//     failed (timeout, peer drop, missing object). Logged at Warn
 	//     so it surfaces at the default log level — without this,
 	//     fill failures are silent.
-	cxoNode.Config().OnRootReceived = func(_ *node.Conn, r *registry.Root) error {
+	cxoNode.Config().OnRootReceived = func(c *node.Conn, r *registry.Root) error {
 		a.log.WithField("visor", cipher.PubKey(r.Pub)).WithField("seq", r.Nonce).
 			Debug("CXO aggregator: root received")
 		// The inbound conn the visor AnnounceTo'd us on closes moments after
@@ -363,6 +409,16 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 		// conn to the visor — we hold it, so subsequent Roots (the publisher
 		// re-announces on a heartbeat) have a stable source to fill from.
 		a.ensureConn(r.Pub)
+		// Discovery decoupled from the whole-Root telemetry fill: pull JUST
+		// the small tp-list leaf path off this Root now, over the delivering
+		// conn, independent of the 90s MaxFillingTime fill of the bulky
+		// per-transport telemetry subtree (which for a busy visor never
+		// completes in the conn's window — the discovery gap). The full list
+		// lands from a handful of objects, so it survives the same short conn
+		// that a whole-tree fill can't. Detached so its blocking per-object
+		// requests can't stall the CXO node's per-head event loop (this
+		// callback runs on it).
+		a.reconcileTargeted(c, r)
 		return nil
 	}
 	cxoNode.Config().OnRootFilled = func(_ *node.Node, r *registry.Root) {
@@ -511,6 +567,12 @@ func (a *Aggregator) reclaimOrphanFeeds(c *skyobject.Container) {
 				Debug("CXO aggregator: DelFeed orphan feed failed; will retry next tick")
 			continue
 		}
+		// Drop the reporter's cached transport-list snapshot: the feed is
+		// gone (its Roots deleted), so there's nothing to re-apply and the
+		// entry would otherwise pin memory as visor PKs churn.
+		a.mu.Lock()
+		delete(a.lastList, feed)
+		a.mu.Unlock()
 		a.log.WithField("visor", cipher.PubKey(feed)).
 			Debug("CXO aggregator: reclaimed orphan feed (no connected conn)")
 	}
@@ -678,6 +740,179 @@ func (a *Aggregator) recoverTransportListOnBreak(r *registry.Root) {
 		Debug("CXO aggregator: recovered transport list from partial fill")
 	leafCopy := append([]byte(nil), leaf...)
 	go a.dispatchLeaf(dispatchPath, leafCopy, reporter)
+}
+
+// reconcileTargeted decouples discovery from the whole-Root telemetry fill.
+//
+// On every OnRootReceived it does a BOUNDED, TARGETED fetch of just the
+// tp-list leaf path — registry, root TreeNode, the small top-level Children
+// index page(s), and the tp-list TreeEntry — over the delivering conn, and
+// reconciles the reporter's full transport set immediately. This is
+// INDEPENDENT of the 90s MaxFillingTime whole-Root fill and of
+// OnFillingBreaks: the telemetry subtree fill can still run and fail as
+// before; discovery no longer waits on it. Because the tp-list snapshot is a
+// single inlined TreeEntry, landing that handful of path objects lands the
+// ENTIRE transport list — where the whole-tree fill of a busy visor's
+// hundreds of telemetry objects can't complete in the short-lived conn's
+// window (the ~10% discovery gap this fixes).
+//
+// Objects are read through a Preview pack: found in the aggregator's CXO
+// store if the concurrent fill already fetched them, else requested from the
+// remote peer on demand and held in memory only — never written to the store,
+// so this neither competes with nor disturbs the whole-Root fill or the
+// cleanup sweep.
+//
+// Idempotent vs the OnRootFilled path: both call the declarative
+// ReconcileTransportsFromCXO (register-all + deregister-absent), so if the
+// whole-Root fill also later completes it simply re-applies the same set.
+//
+// Runs on a detached goroutine (the per-object requests block on the network)
+// and is coalesced per feed so a rapidly republishing visor can't pile up
+// concurrent fetches.
+func (a *Aggregator) reconcileTargeted(conn *node.Conn, r *registry.Root) {
+	if conn == nil || r == nil || len(r.Refs) == 0 {
+		return
+	}
+	reporter := cipher.PubKey(r.Pub)
+	// A root with no publisher identity can't be attributed to a visor —
+	// same guard as handleRootFilled, so a zero-PK root never writes under
+	// the null key.
+	if reporter == (cipher.PubKey{}) {
+		return
+	}
+
+	// Coalesce: one in-flight targeted fetch per feed. A visor that
+	// republishes rapidly (or delivers the same Root on several conns)
+	// otherwise spawns a goroutine + per-object request burst each time.
+	a.mu.Lock()
+	if a.fetching == nil {
+		a.fetching = make(map[skycipher.PubKey]struct{})
+	}
+	if _, busy := a.fetching[r.Pub]; busy {
+		a.mu.Unlock()
+		return
+	}
+	a.fetching[r.Pub] = struct{}{}
+	a.mu.Unlock()
+
+	go func() {
+		defer func() {
+			a.mu.Lock()
+			delete(a.fetching, r.Pub)
+			a.mu.Unlock()
+		}()
+
+		entries, version, ok := a.fetchDiscoveryLeaf(conn, r)
+		if ok {
+			// Fresh full snapshot: cache it (so a later failed fetch can
+			// re-apply it) and reconcile.
+			a.mu.Lock()
+			a.lastList[r.Pub] = cachedList{entries: entries, version: version}
+			a.mu.Unlock()
+			a.applyReconcile(entries, reporter, version)
+			return
+		}
+		// Fetch failed (conn closed mid-fetch, leaf absent, or budget hit):
+		// re-apply the last good snapshot if we have one so the reporter's
+		// transports survive the redis TTL until a later Root lands fresh.
+		// Gated on receiving a Root, so a truly-gone visor (no more Roots)
+		// stops being refreshed and its transports expire normally.
+		a.mu.Lock()
+		cached, has := a.lastList[r.Pub]
+		a.mu.Unlock()
+		if has {
+			a.applyReconcile(cached.entries, reporter, cached.version)
+		}
+	}()
+}
+
+// fetchDiscoveryLeaf builds a Preview pack over conn (remote on-demand,
+// in-memory object fetch) and walks JUST the tp-list path with the same
+// partial-tolerant helpers the OnFillingBreaks recovery uses. Fetching is
+// bounded by object count (maxTargetedFetchObjects) and wall clock
+// (targetedFetchTimeout) via boundedGetter, so a huge or hostile Root can't
+// wedge the fetch. Returns the reconstructed full entry set and true iff the
+// leaf was present and decoded cleanly.
+func (a *Aggregator) fetchDiscoveryLeaf(conn *node.Conn, r *registry.Root) (entries []*transport.Entry, version string, ok bool) {
+	return a.fetchDiscoveryLeafWithGetter(conn.Getter(), r)
+}
+
+// fetchDiscoveryLeafWithGetter is the getter-parameterized core of
+// fetchDiscoveryLeaf, split out so the targeted walk/decode can be exercised
+// against a synthetic Getter (no live conn) in tests.
+func (a *Aggregator) fetchDiscoveryLeafWithGetter(g skyobject.Getter, r *registry.Root) (entries []*transport.Entry, version string, ok bool) {
+	reporter := cipher.PubKey(r.Pub)
+	bg := newBoundedGetter(g, maxTargetedFetchObjects, targetedFetchTimeout)
+	pack, err := a.cxoNode.Container().Preview(r, bg)
+	if err != nil {
+		a.log.WithError(err).WithField("visor", reporter).
+			Debug("CXO aggregator: targeted preview pack failed")
+		return nil, "", false
+	}
+	var rootNode treestore.TreeNode
+	if err := r.Refs[0].Value(pack, &rootNode); err != nil {
+		a.log.WithError(err).WithField("visor", reporter).
+			Debug("CXO aggregator: targeted root node fetch failed")
+		return nil, "", false
+	}
+	leaf, path, found := findDiscoveryLeaf(pack, &rootNode)
+	if !found || leaf == nil {
+		return nil, "", false
+	}
+	var list transportListLeaf
+	if err := json.Unmarshal(leaf, &list); err != nil {
+		a.log.WithError(err).WithField("visor", reporter).WithField("path", path).
+			Debug("CXO aggregator: targeted transport list decode failed")
+		return nil, "", false
+	}
+	a.log.WithField("visor", reporter).WithField("path", path).
+		Debug("CXO aggregator: targeted discovery-leaf fetch landed transport list")
+	return list.entries(reporter), list.Version, true
+}
+
+// applyReconcile hands a reporter's full transport set to the sink. Shared by
+// the fresh targeted fetch and the cached re-apply; the sink call is
+// declarative (register-all + deregister-absent) so repeated application is a
+// no-op.
+func (a *Aggregator) applyReconcile(entries []*transport.Entry, reporter cipher.PubKey, version string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := a.sink.ReconcileTransportsFromCXO(ctx, entries, reporter, version); err != nil {
+		a.log.WithError(err).WithField("reporter", reporter).
+			Debug("CXO aggregator: targeted ReconcileTransportsFromCXO failed")
+	}
+}
+
+// boundedGetter wraps a skyobject.Getter with an object-count cap and a
+// wall-clock deadline. It bounds the targeted discovery-leaf fetch so a Root
+// with a hostile or oversized top-level index can't drive unbounded
+// per-object requests to a peer or pin the fetch goroutine. Once either bound
+// is exceeded every subsequent Get returns errTargetedFetchBudget, which
+// unwinds the treestore walk cleanly (childByName treats an unreadable child
+// as absent) rather than hanging.
+type boundedGetter struct {
+	inner    skyobject.Getter
+	max      int
+	deadline time.Time
+
+	mu    sync.Mutex
+	count int
+}
+
+func newBoundedGetter(inner skyobject.Getter, max int, within time.Duration) *boundedGetter {
+	return &boundedGetter{inner: inner, max: max, deadline: time.Now().Add(within)}
+}
+
+// Get satisfies skyobject.Getter.
+func (b *boundedGetter) Get(key skycipher.SHA256) (val []byte, err error) {
+	b.mu.Lock()
+	if b.count >= b.max || time.Now().After(b.deadline) {
+		b.mu.Unlock()
+		return nil, errTargetedFetchBudget
+	}
+	b.count++
+	b.mu.Unlock()
+	return b.inner.Get(key)
 }
 
 // findDiscoveryLeaf locates the transport-list snapshot leaf in a (possibly
