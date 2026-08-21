@@ -270,6 +270,81 @@ func (r *router) DialRoutes(
 	escalateToLegacy := false
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// PARALLEL candidate route-group setup — the steady-connection fix.
+		// When configured (K>1) and this isn't the cold-start transport-
+		// creation race (hookDone==nil), local-route mode, or an operator
+		// route-selecting policy, fetch the top-K candidates in ONE finder
+		// query and race their setup concurrently. The FIRST candidate to
+		// complete its reciprocal handshake WINS and is returned immediately
+		// as the working base — a dead/non-forwarding candidate loses the race
+		// instead of burning the full handshake await and blocking the dial.
+		// On total race failure we exclude the raced intermediates (already
+		// marked suspect) and fall through to the sequential path this same
+		// attempt, which carries the local-calc fallback.
+		if K := r.effectiveParallelK(opts); K > 1 && hookDone == nil && !forceLocal && !r.hasRouteSelectingHook() {
+			keepAlive := DefaultRouteKeepAlive
+			if opts != nil && opts.KeepAlive > 0 {
+				keepAlive = opts.KeepAlive
+			}
+			candidates, ferr := r.fetchCandidateRoutes(ctx, log, lPK, rPK, opts, baseMinHops, keepAlive, forwardDesc, K)
+			if ferr == nil && len(candidates) >= 2 {
+				nsConf := noise.Config{
+					LocalPK:   r.conf.PubKey,
+					LocalSK:   r.conf.SecKey,
+					RemotePK:  rPK,
+					Initiator: true,
+				}
+				appName := ""
+				datagram := false
+				if opts != nil {
+					appName = opts.AppName
+					datagram = opts.Datagram
+				}
+				dial := func(dctx context.Context, c routing.BidirectionalRoute) (routing.EdgeRules, cipher.PubKey, error) {
+					return r.conf.RouteGroupDialer.Dial(dctx, log, r.dmsgC, r.conf.SetupNodes, c)
+				}
+				handshake := func(hctx context.Context, _ routing.BidirectionalRoute, rules routing.EdgeRules) (*NoiseRouteGroup, error) {
+					if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+						return nil, err
+					}
+					nrg, err := r.saveRouteGroupRules(hctx, rules, nsConf, appName, datagram)
+					if err != nil {
+						// Free the local key route IDs so the next candidate /
+						// attempt can reserve cleanly (mirrors the sequential path).
+						r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+						return nil, err
+					}
+					return nrg, nil
+				}
+				onLoser := func(c routing.BidirectionalRoute) {
+					// Penalize the losing/failed candidate's intermediates so the
+					// NEXT dial front-loads known-good hops. Armed here for EVERY
+					// failure mode (reservation, handshake-timeout, ctx-deadline),
+					// which is the arming gap #4063 alone had.
+					r.suspects.armAll(intermediatePKsOfPath(c.Forward, lPK, rPK))
+				}
+				nrg, rules, winIdx, rerr := r.raceCandidateSetup(ctx, log, candidates, dial, handshake, onLoser)
+				if rerr == nil {
+					return r.finishDial(ctx, log, nrg, rules, candidates[winIdx].Forward, forwardDesc, opts, rPK, lPort, rPort), nil
+				}
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				// Every raced candidate failed. Exclude their intermediates and
+				// fall through to the sequential path (fresh finder query +
+				// local-calc fallback) this same attempt.
+				for _, c := range candidates {
+					for _, ipk := range intermediatePKsOfPath(c.Forward, lPK, rPK) {
+						opts = appendExcludeIntermediate(opts, ipk)
+					}
+				}
+				log.WithError(rerr).Warnf("Parallel route setup: all %d candidate(s) failed (attempt %d/%d); excluding intermediates, falling back to sequential setup",
+					len(candidates), attempt, maxRetries)
+			}
+			// ferr != nil or <2 candidates: fall through to the sequential path,
+			// which has the full retry/local-calc machinery.
+		}
+
 		var forwardPath, reversePath []routing.Hop
 		var err error
 		if hookDone != nil {
@@ -492,100 +567,123 @@ func (r *router) DialRoutes(
 			return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 		}
 
-		// Store the complete forward route hops for later retrieval
-		nrg.SetForwardHops(forwardPath)
-
-		nrg.rg.startOffServiceLoops()
-
-		log.Debugf("Created new routes to %s on port %d", rPK, lPort)
-
-		// Establish additional mux routes if requested
-		r.establishMuxRoutes(ctx, nrg, opts, forwardDesc, rules.Forward.NextTransportID())
-
-		// Apply per-dial distribution policy (from a routing-
-		// policy script via DialAdjustment.Distribution, or a
-		// CLI caller populating DialOptions.Distribution
-		// directly). No-op when Mode is DistributionUnset.
-		// Must run AFTER establishMuxRoutes so the selector's
-		// rebuild sees every leg, not just the primary.
-		nrg.rg.applyDistribution(opts.Distribution)
-
-		// Wire the post-setup leg-change hook (RFC #2882 phase 6).
-		// The dial-side DialHook may also implement LegChangeHook;
-		// when it does, the route group fires on_leg_change
-		// callbacks whenever its leg set mutates after this point
-		// (additional aux legs from appendRouteToGroup, or
-		// transport-close pruning).
-		if lch, ok := r.conf.DialHook.(LegChangeHook); ok && lch != nil {
-			nrg.rg.SetLegChangeHook(lch, DialInfo{
-				AppName: opts.AppName,
-				PeerPK:  rPK,
-				LPort:   lPort,
-				RPort:   rPort,
-			})
-		}
-
-		// Add-leg callback for any multiplexed dial. It closes over the
-		// dial context + forwardDesc so a replacement leg matches the
-		// original dial shape (same peer, ports, min-hops, app). Used by
-		// BOTH the route group's self-healing (restore the degree in the
-		// background when a leg dies) AND the periodic rotation hook
-		// (policy on_tick / bandwidth-spreading, RFC #2882).
-		muxTarget := 1
-		if opts != nil {
-			if eff := opts.EffectiveMuxRoutes(true); eff > muxTarget {
-				muxTarget = eff
-			}
-			if eff := opts.EffectiveMuxRoutes(false); eff > muxTarget {
-				muxTarget = eff
-			}
-		}
-		if muxTarget > 1 {
-			optsCopy := *opts
-			fwdDescCopy := forwardDesc
-			nrgCapture := nrg
-			applyAdd := func(excludeHops []string) {
-				addCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
-				excludePKs := make([]cipher.PubKey, 0, len(excludeHops))
-				for _, h := range excludeHops {
-					var pk cipher.PubKey
-					if err := pk.Set(h); err == nil {
-						excludePKs = append(excludePKs, pk)
-					}
-				}
-				if err := r.addOneAuxForwardLeg(addCtx, nrgCapture, &optsCopy, fwdDescCopy, excludePKs); err != nil {
-					r.logger.WithError(err).Debug("Mux add-leg failed; route group keeps current leg set")
-				}
-			}
-			// Self-healing: any leg death triggers a background replacement
-			// dial to restore the requested degree, while surviving legs
-			// carry the traffic. General to every mux dial, not just ones
-			// with a rotation policy.
-			nrg.rg.SetSelfHeal(applyAdd, muxTarget)
-
-			// Top up an initial shortfall: establishMuxRoutes sets up aux
-			// legs best-effort, so a flaky intermediate can leave the group
-			// below the requested degree at dial time. Heal it now in the
-			// background (same mechanism as runtime leg death) — the dial
-			// still returns immediately on the legs that did establish.
-			nrg.rg.maybeSelfHeal()
-
-			// Periodic rotation (policy on_tick) reuses the same callback.
-			if rh, ok := r.conf.DialHook.(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
-				interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
-				nrg.rg.SetRotation(rh, applyAdd, interval)
-			}
-		}
-
-		// NOTE: no MinHops restore needed — baseMinHops is a local var now,
-		// r.conf.MinHops is never mutated by the dial path.
-
-		return nrg, nil
+		// The route group is up: this is the working base. Wire mux
+		// growth / self-heal / hooks on top and return.
+		return r.finishDial(ctx, log, nrg, rules, forwardPath, forwardDesc, opts, rPK, lPort, rPort), nil
 	}
 
 	// Should never reach here, but handle it gracefully
 	return nil, fmt.Errorf("failed to establish route after %d attempts", maxRetries)
+}
+
+// finishDial wires the post-setup machinery onto a freshly-established route
+// group (the never-dropped working base) and returns it as a net.Conn: stores
+// the forward hops, starts the service loops, grows any requested mux legs on
+// top (best-effort, in the background — they never unseat the base), applies
+// the per-dial distribution policy, and installs the leg-change / rotation /
+// self-heal hooks. Shared by the sequential setup path and the parallel race
+// winner so both converge to identical post-setup behavior.
+func (r *router) finishDial(
+	ctx context.Context,
+	log *logging.Logger,
+	nrg *NoiseRouteGroup,
+	rules routing.EdgeRules,
+	forwardPath []routing.Hop,
+	forwardDesc routing.RouteDescriptor,
+	opts *DialOptions,
+	rPK cipher.PubKey,
+	lPort, rPort routing.Port,
+) net.Conn {
+	// Store the complete forward route hops for later retrieval
+	nrg.SetForwardHops(forwardPath)
+
+	nrg.rg.startOffServiceLoops()
+
+	log.Debugf("Created new routes to %s on port %d", rPK, lPort)
+
+	// Establish additional mux routes if requested
+	r.establishMuxRoutes(ctx, nrg, opts, forwardDesc, rules.Forward.NextTransportID())
+
+	// Apply per-dial distribution policy (from a routing-
+	// policy script via DialAdjustment.Distribution, or a
+	// CLI caller populating DialOptions.Distribution
+	// directly). No-op when Mode is DistributionUnset.
+	// Must run AFTER establishMuxRoutes so the selector's
+	// rebuild sees every leg, not just the primary.
+	nrg.rg.applyDistribution(opts.Distribution)
+
+	// Wire the post-setup leg-change hook (RFC #2882 phase 6).
+	// The dial-side DialHook may also implement LegChangeHook;
+	// when it does, the route group fires on_leg_change
+	// callbacks whenever its leg set mutates after this point
+	// (additional aux legs from appendRouteToGroup, or
+	// transport-close pruning).
+	if lch, ok := r.conf.DialHook.(LegChangeHook); ok && lch != nil {
+		nrg.rg.SetLegChangeHook(lch, DialInfo{
+			AppName: opts.AppName,
+			PeerPK:  rPK,
+			LPort:   lPort,
+			RPort:   rPort,
+		})
+	}
+
+	// Add-leg callback for any multiplexed dial. It closes over the
+	// dial context + forwardDesc so a replacement leg matches the
+	// original dial shape (same peer, ports, min-hops, app). Used by
+	// BOTH the route group's self-healing (restore the degree in the
+	// background when a leg dies) AND the periodic rotation hook
+	// (policy on_tick / bandwidth-spreading, RFC #2882).
+	muxTarget := 1
+	if opts != nil {
+		if eff := opts.EffectiveMuxRoutes(true); eff > muxTarget {
+			muxTarget = eff
+		}
+		if eff := opts.EffectiveMuxRoutes(false); eff > muxTarget {
+			muxTarget = eff
+		}
+	}
+	if muxTarget > 1 {
+		optsCopy := *opts
+		fwdDescCopy := forwardDesc
+		nrgCapture := nrg
+		applyAdd := func(excludeHops []string) {
+			addCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			excludePKs := make([]cipher.PubKey, 0, len(excludeHops))
+			for _, h := range excludeHops {
+				var pk cipher.PubKey
+				if err := pk.Set(h); err == nil {
+					excludePKs = append(excludePKs, pk)
+				}
+			}
+			if err := r.addOneAuxForwardLeg(addCtx, nrgCapture, &optsCopy, fwdDescCopy, excludePKs); err != nil {
+				r.logger.WithError(err).Debug("Mux add-leg failed; route group keeps current leg set")
+			}
+		}
+		// Self-healing: any leg death triggers a background replacement
+		// dial to restore the requested degree, while surviving legs
+		// carry the traffic. General to every mux dial, not just ones
+		// with a rotation policy.
+		nrg.rg.SetSelfHeal(applyAdd, muxTarget)
+
+		// Top up an initial shortfall: establishMuxRoutes sets up aux
+		// legs best-effort, so a flaky intermediate can leave the group
+		// below the requested degree at dial time. Heal it now in the
+		// background (same mechanism as runtime leg death) — the dial
+		// still returns immediately on the legs that did establish.
+		nrg.rg.maybeSelfHeal()
+
+		// Periodic rotation (policy on_tick) reuses the same callback.
+		if rh, ok := r.conf.DialHook.(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
+			interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
+			nrg.rg.SetRotation(rh, applyAdd, interval)
+		}
+	}
+
+	// NOTE: no MinHops restore needed — baseMinHops is a local var now,
+	// r.conf.MinHops is never mutated by the dial path.
+
+	return nrg
 }
 
 // setupPingRoute sets up a ping route with the given forward and reverse paths.
