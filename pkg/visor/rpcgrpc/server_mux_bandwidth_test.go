@@ -221,6 +221,37 @@ func TestNormalizeMuxBwRequest(t *testing.T) {
 		}
 	})
 
+	t.Run("cli_overrides carried through verbatim", func(t *testing.T) {
+		req := &MuxBandwidthRequest{
+			TargetPk:      validPK,
+			RoutingPolicy: "preset:geo-avoid",
+			CliOverrides: map[string]string{
+				"avoid_geo":      "RU,CN",
+				"trusted_pks":    "aa,bb",
+				"business_hours": "9-17",
+			},
+		}
+		c, err := normalizeMuxBwRequest(req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for k, want := range req.CliOverrides {
+			if got := c.CliOverrides[k]; got != want {
+				t.Errorf("CliOverrides[%q] = %q, want %q", k, got, want)
+			}
+		}
+	})
+
+	t.Run("nil cli_overrides stays nil (baseline unchanged)", func(t *testing.T) {
+		c, err := normalizeMuxBwRequest(&MuxBandwidthRequest{TargetPk: validPK})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if c.CliOverrides != nil {
+			t.Errorf("CliOverrides = %v, want nil for an absent override map", c.CliOverrides)
+		}
+	})
+
 	t.Run("negative values fall back to defaults", func(t *testing.T) {
 		// Proto int32 lets negatives through the wire; the handler
 		// should treat them as "default" rather than propagate

@@ -92,6 +92,13 @@ type muxBwCfg struct {
 	// skynet-client; app-mux is per-app). Defaults to "skysocks-client" so the
 	// bandwidth-oriented presets are exercised out of the box.
 	PolicyApp string
+	// CliOverrides carries the operator's ad-hoc `--override key=value` flags
+	// into the routing-policy engine's RoutingContext.CLIOverrides — the map the
+	// conditional presets read (geo-avoid=avoid_geo, trust-tiered=trusted_pks,
+	// time-of-day=business_hours). Nil/empty leaves every preset on its built-in
+	// defaults, so the baseline and the adaptive presets are byte-for-byte
+	// unchanged. See MuxBandwidthRequest.cli_overrides.
+	CliOverrides map[string]string
 }
 
 func normalizeMuxBwRequest(req *MuxBandwidthRequest) (muxBwCfg, error) {
@@ -111,6 +118,7 @@ func normalizeMuxBwRequest(req *MuxBandwidthRequest) (muxBwCfg, error) {
 	c.IdleBaselineDuration = time.Duration(req.IdleBaselineDurationNs)
 	c.RoutingPolicy = req.RoutingPolicy
 	c.PolicyApp = req.PolicyApp
+	c.CliOverrides = req.CliOverrides
 	if c.RoutingPolicy != "" && c.PolicyApp == "" {
 		c.PolicyApp = "skysocks-client"
 	}
