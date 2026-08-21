@@ -14,7 +14,14 @@
 //     dial hot path more than once every refreshTTL.
 //  2. Direct-transport IP → embedded geoip. Catches direct
 //     neighbors that don't advertise as a service.
-//  3. "??" — the policy script's filter falls through.
+//  3. AR-resolve IP → embedded geoip. Catches AR-registered
+//     intermediaries that are neither advertised as a service nor
+//     directly connected — the common geo-avoid hop. The AR
+//     Resolve hits the network, so it runs OFF the dial hot path:
+//     a miss fires a single background resolve (deduped) and
+//     caches the result (including negatives) per-PK on a TTL;
+//     geo-avoid converges over a couple of selections.
+//  4. "??" — the policy script's filter falls through.
 //
 // SD snapshot source is the CXO subscription manager (zero
 // network cost when running) with an HTTP fallback (the existing
@@ -23,6 +30,8 @@
 package visor
 
 import (
+	"context"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +42,7 @@ import (
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -52,6 +62,27 @@ func parsePK(s string) (cipher.PubKey, bool) {
 // 5 minutes keeps the snapshot fresh enough for routing policy
 // without burning CXO walks on every dial.
 const sdGeoRefreshTTL = 5 * time.Minute
+
+// arGeoTTL bounds how long an AR-resolved country (or negative
+// result) is cached per PK. An AR registration's reachable IP —
+// and therefore its country — is stable on the order of hours; a
+// long TTL keeps the AR out of the dial path to at most one
+// resolve per PK per window. arResolveTimeout bounds each
+// background Resolve so a slow/unreachable AR can't leak
+// goroutines.
+const (
+	arGeoTTL         = 30 * time.Minute
+	arResolveTimeout = 4 * time.Second
+)
+
+// arGeoEntry is one cached AR-resolved country. country is the ISO
+// code, or "??" for a negative result (resolve failed / no IP / no
+// geoip hit) so a miss isn't re-resolved on every dial within the
+// TTL.
+type arGeoEntry struct {
+	country string
+	expires time.Time
+}
 
 // visorPolicyProvider implements router/policy.Provider on top of
 // the running visor's state. Construct via newVisorPolicyProvider
@@ -73,6 +104,18 @@ type visorPolicyProvider struct {
 
 	hypervisors map[string]struct{} // hex PK → present
 	trusted     map[string]struct{} // hex PK → present (dmsgpty whitelist + hypervisors)
+
+	// AR-resolve geo cache. Fills the gap between the SD snapshot
+	// (advertised services only) and the direct-transport IP (direct
+	// neighbors only): an intermediary hop that is AR-registered but
+	// neither advertised nor directly connected. Populated
+	// asynchronously — Resolve hits the AR server, so it never runs
+	// on the dial hot path — and cached per-PK (including negatives)
+	// on arGeoTTL. arInFlight dedups concurrent resolves for the
+	// same PK.
+	arMu       sync.Mutex
+	arGeo      map[string]arGeoEntry
+	arInFlight map[string]struct{}
 }
 
 func newVisorPolicyProvider(v *Visor) *visorPolicyProvider {
@@ -81,6 +124,8 @@ func newVisorPolicyProvider(v *Visor) *visorPolicyProvider {
 		visor:       v,
 		hypervisors: make(map[string]struct{}),
 		trusted:     make(map[string]struct{}),
+		arGeo:       make(map[string]arGeoEntry),
+		arInFlight:  make(map[string]struct{}),
 	}
 
 	// Embedded geoip DB. Failure to open isn't fatal — Geo() just
@@ -137,9 +182,118 @@ func (p *visorPolicyProvider) Geo(pk string) string {
 					return res.CountryCode
 				}
 			}
+			// 3. AR-resolve IP + embedded geoip (off hot path).
+			if c := p.arGeoForPK(pubkey, pkLower); c != "" {
+				return c
+			}
 		}
 	}
 	return "??"
+}
+
+// arGeoForPK returns the cached AR-resolved country for pkLower, or
+// "" when it isn't known (yet). On a cache miss — or an expired
+// entry — it fires a SINGLE background resolve (deduped by
+// arInFlight) and returns "" immediately, so the dial hot path
+// never blocks on the AR server. The resolved country lands in the
+// cache for the next dial; a geo-avoid selection converges once the
+// background resolve completes. A cached "??" (negative) is
+// reported as "" so Geo() falls through to its final "??".
+func (p *visorPolicyProvider) arGeoForPK(pk cipher.PubKey, pkLower string) string {
+	p.arMu.Lock()
+	if e, ok := p.arGeo[pkLower]; ok && time.Now().Before(e.expires) {
+		c := e.country
+		p.arMu.Unlock()
+		if c == "??" {
+			return ""
+		}
+		return c
+	}
+	// Miss/expired: only spend a resolve when we actually can (AR
+	// client + geoip db present) and no resolve is already running
+	// for this PK.
+	if p.tpM == nil || p.geoDB == nil {
+		p.arMu.Unlock()
+		return ""
+	}
+	if _, running := p.arInFlight[pkLower]; running {
+		p.arMu.Unlock()
+		return ""
+	}
+	p.arInFlight[pkLower] = struct{}{}
+	p.arMu.Unlock()
+
+	go p.resolveARGeo(pk, pkLower)
+	return ""
+}
+
+// resolveARGeo resolves pk's reachable IP via the AR client and
+// looks up its country in the embedded geoip db, caching the result
+// (or a "??" negative) under arGeoTTL. Runs in its own goroutine off
+// the dial path; always records SOMETHING so arInFlight is cleared
+// and the miss isn't retried until the TTL lapses.
+func (p *visorPolicyProvider) resolveARGeo(pk cipher.PubKey, pkLower string) {
+	country := "??"
+	defer func() {
+		p.arMu.Lock()
+		p.arGeo[pkLower] = arGeoEntry{country: country, expires: time.Now().Add(arGeoTTL)}
+		delete(p.arInFlight, pkLower)
+		p.arMu.Unlock()
+	}()
+
+	if p.tpM == nil {
+		return
+	}
+	ar := p.tpM.ARClient()
+	if ar == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), arResolveTimeout)
+	defer cancel()
+
+	// stcpr and sudph both carry a routable RemoteAddr; try the
+	// preferred direct type first, then the UDP-hole-punched one.
+	for _, netType := range []tptypes.Type{tptypes.STCPR, tptypes.SUDPH} {
+		vd, err := ar.Resolve(ctx, string(netType), pk)
+		if err != nil {
+			continue
+		}
+		if c := p.countryFromVisorData(vd); c != "" {
+			country = c
+			return
+		}
+	}
+}
+
+// countryFromVisorData extracts the reachable IP (v4 preferred, v6
+// fallback) from an AR record and returns its embedded-geoip country
+// code, or "" when no IP resolves to a country.
+func (p *visorPolicyProvider) countryFromVisorData(vd addrresolver.VisorData) string {
+	for _, addr := range []string{vd.RemoteAddr, vd.RemoteAddrV6} {
+		ip := hostFromAddr(addr)
+		if ip == "" {
+			continue
+		}
+		p.geoMu.Lock()
+		res, err := geoip.Lookup(p.geoDB, ip)
+		p.geoMu.Unlock()
+		if err == nil && res != nil && res.CountryCode != "" {
+			return res.CountryCode
+		}
+	}
+	return ""
+}
+
+// hostFromAddr returns the host portion of a "host:port" address, or
+// the input unchanged when it carries no port. Empty in, empty out.
+func hostFromAddr(addr string) string {
+	if addr == "" {
+		return ""
+	}
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		return host
+	}
+	return addr
 }
 
 // sdGeoForPK returns the country code for pk from the SD snapshot,
