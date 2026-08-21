@@ -130,6 +130,16 @@ func (v *Visor) dialSCPSkynet(ctx context.Context, rPK cipher.PubKey, port uint1
 	if _, err := appnet.ResolveNetworker(appnet.TypeSkynet); err != nil {
 		return nil, fmt.Errorf("skynet networker not registered: %w", err)
 	}
+	// Best-effort: ensure a direct (stcpr→sudph) transport to the peer
+	// exists so skynet has a real route to dial over instead of
+	// blocking to the caller's deadline. This mirrors the pty skynet
+	// dialer (skywireDialer.DialStream), which is what makes `cli pty
+	// exec --scheme skynet` stable; without it the appnet dial below
+	// has no route and stalls. The error is intentionally swallowed —
+	// exactly as the pty path does — so the dial still runs and
+	// surfaces its own "no route" error if the peer is genuinely
+	// unreachable (or is a non-visor host that can't peer a transport).
+	_ = v.ensureFastTransport(rPK) //nolint:errcheck // best-effort; the dial below handles a genuine miss
 	return appnet.DialContext(ctx, appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: rPK,
