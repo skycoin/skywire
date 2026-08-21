@@ -2204,6 +2204,17 @@ func (r *router) establishMuxRoutes(
 	// aux routes diverge from ALL prior ones.
 	excludePKs := intermediatesOfRouteGroup(nrg, lPK, rPK)
 
+	// Also exclude same-LAN peers as aux-leg intermediates. A leg that hops
+	// through a peer on our OWN local network (a private/RFC1918 endpoint, or —
+	// the NAT-hairpin case — our own public IP) provides ZERO path diversity:
+	// same first-mile link, same NAT, same failure domain. Worse, such a peer
+	// usually has the lowest latency (it's local), so the route-finder ranks it
+	// first and the rotation loop re-selects that same useless leg every tick,
+	// starving genuinely-diverse aux legs. Applying this only to aux legs (never
+	// the primary) keeps connectivity unchanged — the primary may still route
+	// through a same-LAN peer if that is the only path.
+	excludePKs = appendUniquePKs(excludePKs, r.sameLANExcludedPKs())
+
 	// Thread MinHops + AppName from the parent dial through to each
 	// aux route. Without MinHops, fetchBestRoutes for the aux dial
 	// drops back to r.conf.MinHops (usually 1) and the route-finder
@@ -2415,9 +2426,13 @@ func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, 
 	lPK := forwardDesc.SrcPK()
 	rPK := forwardDesc.DstPK()
 
-	// Existing intermediates from the route group + policy excludes.
+	// Existing intermediates from the route group + policy excludes + same-LAN
+	// peers (see establishMuxRoutes: a same-LAN intermediate has best latency but
+	// zero path diversity, so without this the rotation loop re-adds that same
+	// useless leg every tick).
 	excludePKs := intermediatesOfRouteGroup(nrg, lPK, rPK)
 	excludePKs = append(excludePKs, extraExcludePKs...)
+	excludePKs = appendUniquePKs(excludePKs, r.sameLANExcludedPKs())
 
 	// Existing tp IDs to exclude (prevents picking the same
 	// transports the route group already uses).
@@ -2607,6 +2622,43 @@ func appendExcludeIntermediate(opts *DialOptions, pk cipher.PubKey) *DialOptions
 	}
 	opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, pk)
 	return opts
+}
+
+// sameLANExcludedPKs returns the PKs of directly-connected peers that sit on
+// this visor's own local network, to be excluded as routing INTERMEDIATES when
+// routing.exclude_same_lan_hops is enabled (Config.ExcludeSameLANHops). Returns
+// nil when the feature is off, the transport manager is absent, or no peer is
+// same-LAN. See transport.Manager.SameLANPeers for the same-LAN definition. The
+// visor's own public IP (for the NAT-hairpin case) is read from the SelfPublicIP
+// getter; a nil getter or nil result still catches private-endpoint peers.
+func (r *router) sameLANExcludedPKs() []cipher.PubKey {
+	if r.conf == nil || !r.conf.ExcludeSameLANHops || r.tm == nil {
+		return nil
+	}
+	var self net.IP
+	if r.conf.SelfPublicIP != nil {
+		self = r.conf.SelfPublicIP()
+	}
+	return r.tm.SameLANPeers(self)
+}
+
+// appendUniquePKs appends every pk in add that is not already in base,
+// preserving order. Nil-safe on both arguments.
+func appendUniquePKs(base, add []cipher.PubKey) []cipher.PubKey {
+	if len(add) == 0 {
+		return base
+	}
+	seen := make(map[cipher.PubKey]struct{}, len(base))
+	for _, pk := range base {
+		seen[pk] = struct{}{}
+	}
+	for _, pk := range add {
+		if _, ok := seen[pk]; !ok {
+			base = append(base, pk)
+			seen[pk] = struct{}{}
+		}
+	}
+	return base
 }
 
 // intermediatePKsOfPath returns the distinct intermediate-visor PKs of a
