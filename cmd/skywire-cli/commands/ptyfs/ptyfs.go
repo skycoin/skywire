@@ -20,6 +20,7 @@ package cliptyfs
 import (
 	"github.com/spf13/cobra"
 
+	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -28,9 +29,11 @@ import (
 // all-platforms file because init() registers them on RootCmd
 // regardless of OS, and the linux-only mount path consumes them.
 var (
-	ptyfsSK      cipher.SecKey
-	ptyfsNoVisor bool
-	ptyfsDefPort string
+	ptyfsSK        cipher.SecKey
+	ptyfsNoVisor   bool
+	ptyfsDefPort   string
+	ptyfsTransport string
+	ptyfsVisorKey  bool
 )
 
 // RootCmd is `skywire cli pty fs`. Subcommands are registered per
@@ -50,7 +53,7 @@ Same trust model as 'skywire cli pty shell':
   authorized keys -> dmsgpty whitelist on the server side
   client auth     -> client PK alone, derived from the local visor's
                      SK by default (override with --sk or
-                     --no-visor-key)
+                     --visor-key=false)
 
 Linux-only — FUSE is required, and the host process must be allowed
 to mount via FUSE (typically by group membership or a passwordless
@@ -76,4 +79,9 @@ func init() {
 		"don't borrow the local visor's SK from "+visorconfig.SkywireConfig()+" — use --sk or a random one instead")
 	RootCmd.PersistentFlags().StringVarP(&ptyfsDefPort, "port", "p", "2022",
 		"default port when the destination omits one (e.g. '<pk>@host' resolves to <pk>@host:<port>)")
+	RootCmd.PersistentFlags().StringVar(&ptyfsTransport, "transport", internal.TransportAuto,
+		"transport: auto|dmsg (via-visor) | tcp (direct, needs a <pk>@host:port target); skynet is not wired, --standalone forces standalone-dmsg")
+	RootCmd.PersistentFlags().BoolVar(&ptyfsVisorKey, "visor-key", true,
+		"borrow the local visor's SK from "+visorconfig.SkywireConfig()+" for the tcp noise handshake (default true; --sk wins)")
+	_ = RootCmd.PersistentFlags().MarkHidden("no-visor-key")
 }
