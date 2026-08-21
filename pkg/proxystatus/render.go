@@ -93,11 +93,13 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 		`<th>leg</th><th>transport</th><th>peer</th><th>sent</th><th>bandwidth (sent share)</th>` +
 		`<th>recv</th><th>rtt</th><th>rtx</th><th>state</th></tr></thead><tbody>`)
 	for _, l := range snap.Legs {
-		pct := int(l.SentBytes * 100 / maxSent)
+		// share is 0..100 (maxSent is the per-leg max, >=1) — kept as uint64 and
+		// printed directly so there's no uint64->int narrowing to overflow-check.
+		share := l.SentBytes * 100 / maxSent
 		state, scls := legState(l)
 		fmt.Fprintf(b, `<tr><td>R%d</td><td>%s</td><td class="pk">%s</td><td>%s</td>`,
 			l.Index, html.EscapeString(orDash(l.TpType)), html.EscapeString(shortPK(l.RemotePK)), humanBytes(l.SentBytes))
-		fmt.Fprintf(b, `<td class="barcell"><span class="bar %s" style="width:%d%%"></span></td>`, scls, pct)
+		fmt.Fprintf(b, `<td class="barcell"><span class="bar %s" style="width:%d%%"></span></td>`, scls, share)
 		fmt.Fprintf(b, `<td>%s</td><td>%.0f ms</td><td>%d</td><td class="%s">%s</td></tr>`,
 			humanBytes(l.RecvBytes), l.LatencyMS, l.Retransmits, scls, state)
 	}
