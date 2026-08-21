@@ -168,13 +168,32 @@ Examples:
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("probe failed: %w", err))
 		}
 
-		scheme, suffix := probeSchemeSuffix()
-		state := "unreachable"
-		if reachable {
-			state = "reachable"
-		}
-		fmt.Printf("%s://%s:%d%s — %s (%s)\n", scheme, pk, port, suffix, state, latency.Round(time.Millisecond))
+		emitProbeResult(cmd, pk, uint16(port), reachable, latency)
 	},
+}
+
+// emitProbeResult prints one single-port probe result, honoring the
+// global --json flag (the multi-port sweep already does). Keeps the
+// human line identical to what the command has always printed.
+func emitProbeResult(cmd *cobra.Command, pk cipher.PubKey, port uint16, reachable bool, latency time.Duration) {
+	scheme, suffix := probeSchemeSuffix()
+	if jsonMode, _ := cmd.Flags().GetBool(internal.JSONString); jsonMode { //nolint:errcheck
+		b, _ := json.MarshalIndent(struct { //nolint:errcheck
+			PK        string `json:"pk"`
+			Port      uint16 `json:"port"`
+			Transport string `json:"transport"`
+			Server    string `json:"server,omitempty"`
+			Reachable bool   `json:"reachable"`
+			LatencyMS int64  `json:"latency_ms"`
+		}{pk.String(), port, scheme, probeServer, reachable, latency.Milliseconds()}, "", "  ")
+		fmt.Println(string(b))
+		return
+	}
+	state := "unreachable"
+	if reachable {
+		state = "reachable"
+	}
+	fmt.Printf("%s://%s:%d%s — %s (%s)\n", scheme, pk, port, suffix, state, latency.Round(time.Millisecond))
 }
 
 // rpcProbeOne dispatches a single RPC-mode probe by the selected transport.
@@ -250,12 +269,26 @@ func runTCPProbe(cmd *cobra.Command) {
 	start := time.Now()
 	conn, err := tcpnoise.Dial(ctx, hostPort, myPK, mySK, rPK)
 	latency := time.Since(start)
-	if err != nil {
-		fmt.Printf("tcp://%s@%s — unreachable (%s)\n", rPK, hostPort, latency.Round(time.Millisecond))
+	reachable := err == nil
+	if conn != nil {
+		_ = conn.Close() //nolint:errcheck
+	}
+	if jsonMode, _ := cmd.Flags().GetBool(internal.JSONString); jsonMode { //nolint:errcheck
+		b, _ := json.MarshalIndent(struct { //nolint:errcheck
+			PK        string `json:"pk"`
+			Transport string `json:"transport"`
+			Addr      string `json:"addr"`
+			Reachable bool   `json:"reachable"`
+			LatencyMS int64  `json:"latency_ms"`
+		}{rPK.String(), "tcp", hostPort, reachable, latency.Milliseconds()}, "", "  ")
+		fmt.Println(string(b))
 		return
 	}
-	_ = conn.Close() //nolint:errcheck
-	fmt.Printf("tcp://%s@%s — reachable (%s)\n", rPK, hostPort, latency.Round(time.Millisecond))
+	state := "unreachable"
+	if reachable {
+		state = "reachable"
+	}
+	fmt.Printf("tcp://%s@%s — %s (%s)\n", rPK, hostPort, state, latency.Round(time.Millisecond))
 }
 
 // parseViaTCP turns "tcp://<66-hex-pk>@host:port" into (pk, "host:port").
@@ -476,10 +509,5 @@ func runStandaloneProbe(cmd *cobra.Command, pk cipher.PubKey, port uint16) {
 	}
 	latency := time.Since(start)
 
-	_, suffix := probeSchemeSuffix()
-	state := "unreachable"
-	if reachable {
-		state = "reachable"
-	}
-	fmt.Printf("dmsg://%s:%d%s — %s (%s)\n", pk, port, suffix, state, latency.Round(time.Millisecond))
+	emitProbeResult(cmd, pk, port, reachable, latency)
 }
