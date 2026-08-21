@@ -170,3 +170,45 @@ func TestSnapshotLegsTransportIDStable(t *testing.T) {
 		t.Errorf("leg 1 TransportID=%q want idx:1 fallback", legs[1].TransportID)
 	}
 }
+
+// TestRoutingContextMergesCliOverrides pins the threading point that lets the
+// conditional presets (geo-avoid / trust-tiered / time-of-day) be exercised on
+// the mux-bw rig: the operator's `--override key=value` flags, carried on
+// muxBwCfg.CliOverrides, must land in RoutingContext.CLIOverrides — the map
+// preset.Decide reads — alongside the handler-derived mux_routes / min_hops.
+// An explicit override wins over the handler-derived entry (collide-last).
+func TestRoutingContextMergesCliOverrides(t *testing.T) {
+	c := &muxBwController{cfg: &muxBwCfg{
+		PolicyApp: "skysocks-client",
+		Routes:    4,
+		MinHops:   2,
+		CliOverrides: map[string]string{
+			"avoid_geo": "RU,CN",
+			"min_hops":  "3", // operator override must win over the derived value
+		},
+	}}
+	rctx := c.routingContext()
+	if rctx.CLIOverrides["avoid_geo"] != "RU,CN" {
+		t.Errorf("avoid_geo not threaded: %v", rctx.CLIOverrides)
+	}
+	if rctx.CLIOverrides["mux_routes"] != "4" {
+		t.Errorf("mux_routes derived entry lost: %v", rctx.CLIOverrides)
+	}
+	if rctx.CLIOverrides["min_hops"] != "3" {
+		t.Errorf("operator min_hops override should win (collide-last): %v", rctx.CLIOverrides)
+	}
+}
+
+// TestRoutingContextNilCliOverrides pins that with no --override the derived
+// mux_routes / min_hops are still present and no preset default is disturbed —
+// the baseline / adaptive-preset path is unchanged.
+func TestRoutingContextNilCliOverrides(t *testing.T) {
+	c := &muxBwController{cfg: &muxBwCfg{Routes: 5, MinHops: 2}}
+	rctx := c.routingContext()
+	if rctx.CLIOverrides["mux_routes"] != "5" || rctx.CLIOverrides["min_hops"] != "2" {
+		t.Errorf("derived overrides missing: %v", rctx.CLIOverrides)
+	}
+	if _, ok := rctx.CLIOverrides["avoid_geo"]; ok {
+		t.Errorf("no --override was given, yet a conditional key appeared: %v", rctx.CLIOverrides)
+	}
+}

@@ -2960,7 +2960,15 @@ type MuxBandwidthRequest struct {
 	// vpn-client/skysocks-client/skynet-client; app-mux is per-app). Only
 	// meaningful when routing_policy is set; the handler defaults it to
 	// "skysocks-client" so the bandwidth-oriented presets are exercised.
-	PolicyApp     string `protobuf:"bytes,13,opt,name=policy_app,json=policyApp,proto3" json:"policy_app,omitempty"`
+	PolicyApp string `protobuf:"bytes,13,opt,name=policy_app,json=policyApp,proto3" json:"policy_app,omitempty"`
+	// CliOverrides surfaces the operator's ad-hoc `--override key=value` flags
+	// into the routing-policy engine's RoutingContext.CLIOverrides — the same
+	// map the conditional presets read: geo-avoid (avoid_geo=<CC,CC>),
+	// trust-tiered (trusted_pks=<PK,PK>), time-of-day (business_hours=START-END).
+	// Only meaningful when routing_policy is set. Absent/empty = the preset's
+	// built-in defaults (unchanged behavior). Keys collide-last with the
+	// handler-derived mux_routes / min_hops entries the controller already sets.
+	CliOverrides  map[string]string `protobuf:"bytes,14,rep,name=cli_overrides,json=cliOverrides,proto3" json:"cli_overrides,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3084,6 +3092,13 @@ func (x *MuxBandwidthRequest) GetPolicyApp() string {
 		return x.PolicyApp
 	}
 	return ""
+}
+
+func (x *MuxBandwidthRequest) GetCliOverrides() map[string]string {
+	if x != nil {
+		return x.CliOverrides
+	}
+	return nil
 }
 
 // MuxBandwidthEvent is one entry on the stream. Exactly one oneof
@@ -4779,7 +4794,7 @@ const file_ping_proto_rawDesc = "" +
 	"\amessage\x18\x04 \x01(\tR\amessage\"C\n" +
 	"\x13PingTreeServerError\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xef\x03\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x85\x05\n" +
 	"\x13MuxBandwidthRequest\x12\x1b\n" +
 	"\ttarget_pk\x18\x01 \x01(\tR\btargetPk\x12\x16\n" +
 	"\x06routes\x18\x02 \x01(\x05R\x06routes\x12\x1f\n" +
@@ -4797,7 +4812,11 @@ const file_ping_proto_rawDesc = "" +
 	"\x19idle_baseline_duration_ns\x18\v \x01(\x03R\x16idleBaselineDurationNs\x12%\n" +
 	"\x0erouting_policy\x18\f \x01(\tR\rroutingPolicy\x12\x1d\n" +
 	"\n" +
-	"policy_app\x18\r \x01(\tR\tpolicyApp\"\xe1\x03\n" +
+	"policy_app\x18\r \x01(\tR\tpolicyApp\x12S\n" +
+	"\rcli_overrides\x18\x0e \x03(\v2..rpcgrpc.MuxBandwidthRequest.CliOverridesEntryR\fcliOverrides\x1a?\n" +
+	"\x11CliOverridesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe1\x03\n" +
 	"\x11MuxBandwidthEvent\x12!\n" +
 	"\ftimestamp_ns\x18\x01 \x01(\x03R\vtimestampNs\x12K\n" +
 	"\x11route_established\x18\n" +
@@ -4964,7 +4983,7 @@ func file_ping_proto_rawDescGZIP() []byte {
 	return file_ping_proto_rawDescData
 }
 
-var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
+var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
 var file_ping_proto_goTypes = []any{
 	(*PingRequest)(nil),                    // 0: rpcgrpc.PingRequest
 	(*PingResult)(nil),                     // 1: rpcgrpc.PingResult
@@ -5013,6 +5032,7 @@ var file_ping_proto_goTypes = []any{
 	(*RouteGroupMuxInfo)(nil),              // 44: rpcgrpc.RouteGroupMuxInfo
 	(*RouteGroupMuxLeg)(nil),               // 45: rpcgrpc.RouteGroupMuxLeg
 	nil,                                    // 46: rpcgrpc.AppLogEntry.FieldsEntry
+	nil,                                    // 47: rpcgrpc.MuxBandwidthRequest.CliOverridesEntry
 }
 var file_ping_proto_depIdxs = []int32{
 	4,  // 0: rpcgrpc.PingRequest.forward_hops:type_name -> rpcgrpc.RouteHop
@@ -5035,50 +5055,51 @@ var file_ping_proto_depIdxs = []int32{
 	30, // 17: rpcgrpc.PingTreeEvent.status_update:type_name -> rpcgrpc.PingTreeStatusUpdate
 	31, // 18: rpcgrpc.PingTreeEvent.server_error:type_name -> rpcgrpc.PingTreeServerError
 	4,  // 19: rpcgrpc.PingTreeResult.route:type_name -> rpcgrpc.RouteHop
-	35, // 20: rpcgrpc.MuxBandwidthEvent.route_established:type_name -> rpcgrpc.MuxRouteEstablished
-	37, // 21: rpcgrpc.MuxBandwidthEvent.sample:type_name -> rpcgrpc.MuxBandwidthSample
-	39, // 22: rpcgrpc.MuxBandwidthEvent.rtt_probe:type_name -> rpcgrpc.MuxRttProbe
-	40, // 23: rpcgrpc.MuxBandwidthEvent.done:type_name -> rpcgrpc.MuxBandwidthDone
-	41, // 24: rpcgrpc.MuxBandwidthEvent.error:type_name -> rpcgrpc.MuxBandwidthError
-	36, // 25: rpcgrpc.MuxBandwidthEvent.route_failure:type_name -> rpcgrpc.MuxRouteFailure
-	34, // 26: rpcgrpc.MuxBandwidthEvent.leg_lifecycle:type_name -> rpcgrpc.MuxLegLifecycle
-	4,  // 27: rpcgrpc.MuxRouteEstablished.hops:type_name -> rpcgrpc.RouteHop
-	38, // 28: rpcgrpc.MuxBandwidthSample.legs:type_name -> rpcgrpc.MuxLegSample
-	44, // 29: rpcgrpc.RouteGroupMuxInfoSample.route_groups:type_name -> rpcgrpc.RouteGroupMuxInfo
-	45, // 30: rpcgrpc.RouteGroupMuxInfo.legs:type_name -> rpcgrpc.RouteGroupMuxLeg
-	0,  // 31: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
-	0,  // 32: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
-	5,  // 33: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	5,  // 34: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	2,  // 35: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
-	7,  // 36: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
-	7,  // 37: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
-	8,  // 38: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
-	16, // 39: rpcgrpc.PingService.StreamAppLogs:input_type -> rpcgrpc.AppLogStreamRequest
-	18, // 40: rpcgrpc.PingService.StreamCalcRoutes:input_type -> rpcgrpc.CalcRoutesRequest
-	21, // 41: rpcgrpc.PingService.StreamGroupMessages:input_type -> rpcgrpc.GroupMessagesRequest
-	24, // 42: rpcgrpc.PingService.StreamPingTree:input_type -> rpcgrpc.PingTreeRequest
-	32, // 43: rpcgrpc.PingService.StreamMuxBandwidth:input_type -> rpcgrpc.MuxBandwidthRequest
-	42, // 44: rpcgrpc.PingService.StreamRouteGroupMuxInfo:input_type -> rpcgrpc.StreamRouteGroupMuxInfoRequest
-	1,  // 45: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
-	1,  // 46: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
-	6,  // 47: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	6,  // 48: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	3,  // 49: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
-	9,  // 50: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 51: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 52: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
-	17, // 53: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
-	19, // 54: rpcgrpc.PingService.StreamCalcRoutes:output_type -> rpcgrpc.CalcRoute
-	22, // 55: rpcgrpc.PingService.StreamGroupMessages:output_type -> rpcgrpc.GroupMessageEvent
-	25, // 56: rpcgrpc.PingService.StreamPingTree:output_type -> rpcgrpc.PingTreeEvent
-	33, // 57: rpcgrpc.PingService.StreamMuxBandwidth:output_type -> rpcgrpc.MuxBandwidthEvent
-	43, // 58: rpcgrpc.PingService.StreamRouteGroupMuxInfo:output_type -> rpcgrpc.RouteGroupMuxInfoSample
-	45, // [45:59] is the sub-list for method output_type
-	31, // [31:45] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	47, // 20: rpcgrpc.MuxBandwidthRequest.cli_overrides:type_name -> rpcgrpc.MuxBandwidthRequest.CliOverridesEntry
+	35, // 21: rpcgrpc.MuxBandwidthEvent.route_established:type_name -> rpcgrpc.MuxRouteEstablished
+	37, // 22: rpcgrpc.MuxBandwidthEvent.sample:type_name -> rpcgrpc.MuxBandwidthSample
+	39, // 23: rpcgrpc.MuxBandwidthEvent.rtt_probe:type_name -> rpcgrpc.MuxRttProbe
+	40, // 24: rpcgrpc.MuxBandwidthEvent.done:type_name -> rpcgrpc.MuxBandwidthDone
+	41, // 25: rpcgrpc.MuxBandwidthEvent.error:type_name -> rpcgrpc.MuxBandwidthError
+	36, // 26: rpcgrpc.MuxBandwidthEvent.route_failure:type_name -> rpcgrpc.MuxRouteFailure
+	34, // 27: rpcgrpc.MuxBandwidthEvent.leg_lifecycle:type_name -> rpcgrpc.MuxLegLifecycle
+	4,  // 28: rpcgrpc.MuxRouteEstablished.hops:type_name -> rpcgrpc.RouteHop
+	38, // 29: rpcgrpc.MuxBandwidthSample.legs:type_name -> rpcgrpc.MuxLegSample
+	44, // 30: rpcgrpc.RouteGroupMuxInfoSample.route_groups:type_name -> rpcgrpc.RouteGroupMuxInfo
+	45, // 31: rpcgrpc.RouteGroupMuxInfo.legs:type_name -> rpcgrpc.RouteGroupMuxLeg
+	0,  // 32: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
+	0,  // 33: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
+	5,  // 34: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	5,  // 35: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	2,  // 36: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
+	7,  // 37: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	7,  // 38: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	8,  // 39: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
+	16, // 40: rpcgrpc.PingService.StreamAppLogs:input_type -> rpcgrpc.AppLogStreamRequest
+	18, // 41: rpcgrpc.PingService.StreamCalcRoutes:input_type -> rpcgrpc.CalcRoutesRequest
+	21, // 42: rpcgrpc.PingService.StreamGroupMessages:input_type -> rpcgrpc.GroupMessagesRequest
+	24, // 43: rpcgrpc.PingService.StreamPingTree:input_type -> rpcgrpc.PingTreeRequest
+	32, // 44: rpcgrpc.PingService.StreamMuxBandwidth:input_type -> rpcgrpc.MuxBandwidthRequest
+	42, // 45: rpcgrpc.PingService.StreamRouteGroupMuxInfo:input_type -> rpcgrpc.StreamRouteGroupMuxInfoRequest
+	1,  // 46: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
+	1,  // 47: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
+	6,  // 48: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	6,  // 49: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	3,  // 50: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
+	9,  // 51: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 52: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 53: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
+	17, // 54: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
+	19, // 55: rpcgrpc.PingService.StreamCalcRoutes:output_type -> rpcgrpc.CalcRoute
+	22, // 56: rpcgrpc.PingService.StreamGroupMessages:output_type -> rpcgrpc.GroupMessageEvent
+	25, // 57: rpcgrpc.PingService.StreamPingTree:output_type -> rpcgrpc.PingTreeEvent
+	33, // 58: rpcgrpc.PingService.StreamMuxBandwidth:output_type -> rpcgrpc.MuxBandwidthEvent
+	43, // 59: rpcgrpc.PingService.StreamRouteGroupMuxInfo:output_type -> rpcgrpc.RouteGroupMuxInfoSample
+	46, // [46:60] is the sub-list for method output_type
+	32, // [32:46] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_ping_proto_init() }
@@ -5109,7 +5130,7 @@ func file_ping_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ping_proto_rawDesc), len(file_ping_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   47,
+			NumMessages:   48,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
