@@ -45,6 +45,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxyinterstitial"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetweb"
@@ -641,13 +642,71 @@ func (v *Visor) ServeMeshProxy(ctx context.Context, cfg *visorconfig.BrowseOrigi
 // serveMeshSubdomain runs the single Host-routed reverse-proxy origin. The browse
 // iframe targets <scheme>://<vhost>.<base32pk><suffix>[:port]/ against addr.
 func (v *Visor) serveMeshSubdomain(ctx context.Context, addr string, cfg *visorconfig.BrowseOriginConfig, aliases map[string]cipher.PubKey) error {
-	rp, err := v.newMeshReverseProxy(subdomainResolver(normalizeMeshSuffix(cfg.Suffix), aliases))
+	suffix := normalizeMeshSuffix(cfg.Suffix)
+	rp, err := v.newMeshReverseProxy(subdomainResolver(suffix, aliases))
 	if err != nil {
 		return err
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/", rp)
+	// Reserved proxy-status hosts (status-<surface><suffix>) served over THIS
+	// listener so the browse-origin's real (wildcard) TLS cert covers them —
+	// warning-free HTTPS status pages. Any non-status host falls through to the
+	// reverse proxy. See meshStatusHandler.
+	mux.Handle("/", meshStatusHandler(suffix, v.proxyStatusProvider(), rp))
 	return serveMeshHTTP(ctx, addr, mux, cfg.TLSCert, cfg.TLSKey)
+}
+
+// meshStatusHandler serves the reserved proxy-status pages over the browse-origin
+// listener. They are reached at status-<surface>.<suffix> (e.g.
+// status-skysocks.haltingstate.net) — a SINGLE label under the suffix, so the
+// deployment's real single-level wildcard cert (*.<suffix>, terminated here or by
+// a fronting Caddy) covers them and the page loads over https:// with no browser
+// warning. This is the real-cert alternative to the self-signed skynetca leaf
+// path (pkg/skynetweb): no CA install needed. Any non-status host falls through
+// to next (the reverse proxy). A nil provider disables status here entirely.
+func meshStatusHandler(suffix string, status proxystatus.Provider, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if status != nil {
+			if surface, ok := meshStatusSurface(hostWithoutPort(r.Host), suffix); ok {
+				snap, serr := status.StatusSnapshot(surface)
+				if serr != nil {
+					snap = proxystatus.Snapshot{Surface: surface, Note: "status unavailable: " + serr.Error()}
+				}
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("Cache-Control", "no-store")
+				_, _ = w.Write(proxystatus.Render(snap)) //nolint:errcheck
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// meshStatusSurface reports whether host is a browse-origin status host
+// (status-<surface><suffix>) and which surface it names. The single
+// "status-<surface>" label keeps it under a single-level wildcard cert. Matching
+// is case-insensitive and exact — a multi-label host (a real browse frame) never
+// matches, so status never shadows a <vhost>.<pk><suffix> lookup.
+func meshStatusSurface(host, suffix string) (proxystatus.Surface, bool) {
+	h := strings.ToLower(strings.TrimSpace(host))
+	sfx := strings.ToLower(suffix)
+	if !strings.HasSuffix(h, sfx) {
+		return "", false
+	}
+	label := strings.TrimSuffix(h, sfx)
+	if !strings.HasPrefix(label, "status-") {
+		return "", false
+	}
+	rest := strings.TrimPrefix(label, "status-")
+	if strings.Contains(rest, ".") {
+		return "", false
+	}
+	switch proxystatus.Surface(rest) {
+	case proxystatus.SurfaceDmsg, proxystatus.SurfaceSkynet, proxystatus.SurfaceSkysocks:
+		return proxystatus.Surface(rest), true
+	default:
+		return "", false
+	}
 }
 
 // --- port mode ---------------------------------------------------------------
@@ -817,5 +876,10 @@ func (v *Visor) serveMeshPortMode(ctx context.Context, addr string, cfg *visorco
 		// manager's own scheme://127.0.0.1:<port> origin from the local pool.
 		http.Redirect(w, r, u, http.StatusFound) //nolint:gosec // G710: redirect target is a local loopback origin we minted, not tainted input
 	})
+	// Reserved proxy-status hosts on the portal listener too (served under the
+	// same suffix + real cert). "/open" is the more specific pattern, so this
+	// root handler only sees other paths; a status host renders, everything else
+	// 404s (the portal has no content of its own).
+	mux.Handle("/", meshStatusHandler(normalizeMeshSuffix(cfg.Suffix), v.proxyStatusProvider(), http.NotFoundHandler()))
 	return serveMeshHTTP(ctx, addr, mux, cfg.TLSCert, cfg.TLSKey)
 }
