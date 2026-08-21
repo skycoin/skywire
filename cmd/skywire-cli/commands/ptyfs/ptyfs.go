@@ -83,5 +83,5 @@ func init() {
 		"transport: auto|dmsg (via-visor) | tcp (direct, needs a <pk>@host:port target); skynet is not wired, --standalone forces standalone-dmsg")
 	RootCmd.PersistentFlags().BoolVar(&ptyfsVisorKey, "visor-key", true,
 		"borrow the local visor's SK from "+visorconfig.SkywireConfig()+" for the tcp noise handshake (default true; --sk wins)")
-	_ = RootCmd.PersistentFlags().MarkHidden("no-visor-key")
+	_ = RootCmd.PersistentFlags().MarkHidden("no-visor-key") //nolint:errcheck
 }

@@ -135,7 +135,7 @@ Examples:
 
 		// Build the whitelist. --allow is the inline form; --conf
 		// supplies the file-based form; both are unioned.
-		wl, err := buildSshdWhitelist(sshdConfPath, sshdAllow)
+		wl, wlSize, err := buildSshdWhitelist(sshdConfPath, sshdAllow)
 		if err != nil {
 			return err
 		}
@@ -150,7 +150,7 @@ Examples:
 
 		log.WithField("addr", sshdListen).
 			WithField("pk", pk.String()).
-			WithField("whitelist_size", len(sshdAllow)).
+			WithField("whitelist_size", wlSize).
 			Info("pty host: listening")
 
 		var wg sync.WaitGroup
@@ -217,13 +217,13 @@ func resolveServerSK(confPath, skFromConfPath string) (cipher.SecKey, error) {
 // specified — refusing to start an open server is the safer default
 // (anyone with the server's address + a fresh keypair could otherwise
 // connect, since noise alone doesn't authorize, only the wl does).
-func buildSshdWhitelist(confPath string, inline []string) (pty.Whitelist, error) {
+func buildSshdWhitelist(confPath string, inline []string) (pty.Whitelist, int, error) {
 	keys := make(map[cipher.PubKey]struct{})
 
 	if confPath != "" {
 		c, err := readDmsgptyConf(confPath)
 		if err != nil {
-			return nil, fmt.Errorf("pty host: --conf %s: %w", confPath, err)
+			return nil, 0, fmt.Errorf("pty host: --conf %s: %w", confPath, err)
 		}
 		for _, s := range c.WL {
 			s = strings.TrimSpace(s)
@@ -232,7 +232,7 @@ func buildSshdWhitelist(confPath string, inline []string) (pty.Whitelist, error)
 			}
 			var pk cipher.PubKey
 			if err := pk.Set(s); err != nil {
-				return nil, fmt.Errorf("pty host: --conf %s: invalid pk %q: %w", confPath, s, err)
+				return nil, 0, fmt.Errorf("pty host: --conf %s: invalid pk %q: %w", confPath, s, err)
 			}
 			keys[pk] = struct{}{}
 		}
@@ -246,14 +246,14 @@ func buildSshdWhitelist(confPath string, inline []string) (pty.Whitelist, error)
 			}
 			var pk cipher.PubKey
 			if err := pk.Set(s); err != nil {
-				return nil, fmt.Errorf("pty host: --allow %q invalid: %w", s, err)
+				return nil, 0, fmt.Errorf("pty host: --allow %q invalid: %w", s, err)
 			}
 			keys[pk] = struct{}{}
 		}
 	}
 
 	if len(keys) == 0 {
-		return nil, fmt.Errorf("pty host: refusing to start with an empty whitelist (use --allow <pk>,... or --conf <path>)")
+		return nil, 0, fmt.Errorf("pty host: refusing to start with an empty whitelist (use --allow <pk>,... or --conf <path>)")
 	}
 
 	// Materialize into an in-memory whitelist.
@@ -263,9 +263,9 @@ func buildSshdWhitelist(confPath string, inline []string) (pty.Whitelist, error)
 	}
 	wl := pty.NewMemoryWhitelist()
 	if err := wl.Add(pks...); err != nil {
-		return nil, fmt.Errorf("pty host: build whitelist: %w", err)
+		return nil, 0, fmt.Errorf("pty host: build whitelist: %w", err)
 	}
-	return wl, nil
+	return wl, len(pks), nil
 }
 
 // readDmsgptyConf reads a standalone dmsgpty config.json. Wraps

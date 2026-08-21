@@ -72,7 +72,7 @@ func init() {
 		"(not supported for pty shell — accepted for vocabulary parity; errors if set)")
 	RootCmd.Flags().BoolVar(&sshVisorKey, "visor-key", true,
 		"borrow the local visor's SK from "+visorconfig.SkywireConfig()+" for the noise handshake (default true; --sk wins)")
-	_ = RootCmd.Flags().MarkHidden("no-visor-key")
+	_ = RootCmd.Flags().MarkHidden("no-visor-key") //nolint:errcheck
 }
 
 // RootCmd is the `skywire cli pty shell` command — OpenSSH-equivalent client
@@ -94,7 +94,7 @@ Compared to OpenSSH:
   authorized_keys       ↔ dmsgpty whitelist on the server side
   password / pubkey     ↔ client PK alone, derived from the local
                           visor's SK by default (override with --sk
-                          or --no-visor-key)
+                          or --visor-key=false)
   TCP :22 default       ↔ TCP :2022 default (--port to override)
   ssh -t / ssh <cmd>    ↔ no positional command → interactive pty
                           positional command after '--' → exec mode
@@ -171,7 +171,7 @@ ssh-shaped alias over that path.`,
 		// Interactive when no positional command follows.
 		if len(args) == 1 {
 			if sshNoPty {
-				return fmt.Errorf("ssh: --no-pty requires a command to exec")
+				return fmt.Errorf("pty shell: --no-pty requires a command to exec")
 			}
 			return (&cli).StartRemotePtyTCP(ctx, rPK, addr, myPK, mySK, pty.DefaultCmd)
 		}
@@ -179,7 +179,7 @@ ssh-shaped alias over that path.`,
 		// Exec mode.
 		timeout, err := time.ParseDuration(sshTimeout)
 		if err != nil {
-			return fmt.Errorf("ssh: --timeout %q: %w", sshTimeout, err)
+			return fmt.Errorf("pty shell: --timeout %q: %w", sshTimeout, err)
 		}
 		name := args[1]
 		var cmdArgs []string
@@ -188,7 +188,7 @@ ssh-shaped alias over that path.`,
 		}
 		resp, err := (&cli).ExecRemoteTCP(ctx, rPK, addr, myPK, mySK, name, cmdArgs, sshEnv, nil, timeout)
 		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "ssh: %v\n", err) //nolint:errcheck
+			fmt.Fprintf(cmd.ErrOrStderr(), "pty shell: %v\n", err) //nolint:errcheck
 			os.Exit(1)
 		}
 		reportSSHExec(cmd, resp)
@@ -204,11 +204,11 @@ ssh-shaped alias over that path.`,
 func parseSSHDestination(dest string) (cipher.PubKey, string, error) {
 	m := sshDestRE.FindStringSubmatch(dest)
 	if m == nil {
-		return cipher.PubKey{}, "", fmt.Errorf("ssh: destination %q must be <66-hex-pk>@<host:port> (optionally prefixed tcp://)", dest)
+		return cipher.PubKey{}, "", fmt.Errorf("pty shell: destination %q must be <66-hex-pk>@<host:port> (optionally prefixed tcp://)", dest)
 	}
 	var pk cipher.PubKey
 	if err := pk.Set(m[1]); err != nil {
-		return cipher.PubKey{}, "", fmt.Errorf("ssh: destination PK invalid: %w", err)
+		return cipher.PubKey{}, "", fmt.Errorf("pty shell: destination PK invalid: %w", err)
 	}
 	return pk, m[2], nil
 }
@@ -263,11 +263,11 @@ func resolveSSHIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey, 
 		confPath := visorconfig.SkywireConfig()
 		conf, err := visorconfig.ReadFile(confPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ssh: --visor-key read %s: %v\n", confPath, err) //nolint:errcheck
+			fmt.Fprintf(os.Stderr, "pty shell: --visor-key read %s: %v\n", confPath, err) //nolint:errcheck
 			os.Exit(1)
 		}
 		if conf.SK == zero {
-			fmt.Fprintf(os.Stderr, "ssh: --visor-key: visor config %s has empty SK\n", confPath) //nolint:errcheck
+			fmt.Fprintf(os.Stderr, "pty shell: --visor-key: visor config %s has empty SK\n", confPath) //nolint:errcheck
 			os.Exit(1)
 		}
 		sk = conf.SK
@@ -278,7 +278,7 @@ func resolveSSHIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey, 
 	}
 	pk, err := sk.PubKey()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ssh: failed to derive PK from --sk: %v\n", err) //nolint:errcheck
+		fmt.Fprintf(os.Stderr, "pty shell: failed to derive PK from --sk: %v\n", err) //nolint:errcheck
 		os.Exit(1)
 	}
 	return pk, sk
