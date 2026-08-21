@@ -128,12 +128,17 @@ func init() {
 	utCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
 	utCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
 	utCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
-	utCmd.Flags().BoolVarP(&isMoreStats, "stats2", "t", false, "count of versions")
+	utCmd.Flags().BoolVarP(&isMoreStats, "stats2", "t", false, "with --on: tally online visors by version instead of listing PKs")
 	utCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime percentage\n\r")
 	utCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.TransportDiscovery), "UT cache dir (\"\" to disable)\n\r")
 	utCmd.Flags().StringVar(&cacheDirTPD, "cdt", cacheDirPath(dep.TransportDiscovery), "TPD cache dir (\"\" to disable)\n\r")
 	utCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes\n\r")
 	utCmd.Flags().StringVarP(&utURL, "url", "u", dep.TransportDiscovery, "specify alternative (TPD-integrated) uptime tracker url\n\r")
+	// --uturl is a hidden alias for --url, matching the flag name `skywire cli
+	// sd` uses for the same discovery. Lets the two discovery commands' URL
+	// flags be spelled the same way without breaking the older --url / -u form.
+	utCmd.Flags().StringVar(&utURL, "uturl", dep.TransportDiscovery, "(alias for --url) TPD-integrated uptime tracker url")
+	utCmd.Flags().MarkHidden("uturl") //nolint:errcheck,gosec
 	utCmd.Flags().StringVar(&tpdURL, "tpdurl", dep.TransportDiscovery, "transport discovery url")
 	utCmd.Flags().StringVarP(&versionFilter, "version", "v", "", "filter visors by exact version")
 	utCmd.Flags().StringVar(&minVersion, "min-version", "", "filter visors with version >= specified (e.g. v1.3.34)")
@@ -147,11 +152,28 @@ func init() {
 var utCmd = &cobra.Command{
 	Use:   "ut",
 	Short: "Query uptime tracker",
-	Long:  fmt.Sprintf("query the TPD-integrated uptime tracker\n\n%v/uptimes?v=v3\n\nCheck local visor daily uptime percent with:\n\n$ skywire-cli ut -n0 -k $(skywire-cli visor pk)\n\nSet cache dir to \"\" to avoid using cache files\n\nUse --testenv or SKYWIRETEST=1 to use test deployment services.", getDeployment().TransportDiscovery),
+	Long: fmt.Sprintf(`Query the TPD-integrated uptime tracker.
+
+  %v/uptimes?v=v3
+
+Bare 'ut' reports per-day uptime percentages from the transport-discovery
+integrated endpoint. The same uptime data is published by every discovery;
+subcommands query the other sources with an identical output/flag shape:
+
+  ut sd     service-discovery integrated /uptimes
+  ut mdisc  dmsg-discovery integrated /uptimes (most accurate 'reachable via dmsg')
+  ut tpd    transport-discovery integrated /uptimes (feeds the rewards pipeline)
+
+Check the local visor's daily uptime percent with:
+
+  $ skywire cli ut -n0 -k $(skywire cli visor pk)
+
+Set the cache dir to "" to avoid using cache files.
+Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment().TransportDiscovery),
 	Run: func(cmd *cobra.Command, _ []string) {
 		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
 		if testEnv && !isTestEnv() {
-			if !cmd.Flags().Changed("url") {
+			if !cmd.Flags().Changed("url") && !cmd.Flags().Changed("uturl") {
 				utURL = deployment.Test.TransportDiscovery
 			}
 			if !cmd.Flags().Changed("tpdurl") {
@@ -222,14 +244,19 @@ var utCmd = &cobra.Command{
 			return filtered
 		}
 
-		// Helper to parse version string like "v1.3.34" or "v1.3.34 dirty"
+		// Helper to parse version string like "v1.3.34", "v1.3.34 dirty",
+		// or a git-describe build "v1.3.92-0-c190075ad0a7".
 		parseVersion := func(v string) (major, minor, patch int, ok bool) {
 			if v == "" {
 				return 0, 0, 0, false
 			}
-			// Remove "v" prefix and anything after space
+			// Remove "v" prefix and any build/commit suffix. Cut at the
+			// first space OR hyphen so the trailing "-<n>-g<commit>" of a
+			// git-describe version doesn't make the patch segment
+			// unparseable (which previously dropped every -suffixed build
+			// from --min-version results).
 			v = strings.TrimPrefix(v, "v")
-			if idx := strings.Index(v, " "); idx != -1 {
+			if idx := strings.IndexAny(v, " -"); idx != -1 {
 				v = v[:idx]
 			}
 			parts := strings.Split(v, ".")

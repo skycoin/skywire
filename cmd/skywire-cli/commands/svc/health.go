@@ -51,7 +51,17 @@ type CarrierProbe struct {
 var RootCmd = &cobra.Command{
 	Use:   "svc",
 	Short: "Query skywire deployment services",
-	Long:  "\n    Query skywire deployment services (health, stats)",
+	Long: `Query the skywire DEPLOYMENT services over the mesh (read-only).
+
+  health  /health of every deployment service (fast first look; also lists PKs)
+  tpd     Transport Discovery read endpoints (stats, versions, bandwidth, ...)
+  dmsgd   DMSG Discovery read endpoints (servers, clients)
+  ar      Address Resolver (/transports; 'ar check <pk>' for registration)
+  nm      network-monitor liveness (stand-in: probes TPD /health)
+
+Deployment services are DMSG-only. Subcommands fetch via the local visor's
+RPC by default and fall back to a CLI-owned client; pass --direct to force
+the direct path. Output honors --json.`,
 }
 
 func init() {
