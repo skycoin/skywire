@@ -71,6 +71,34 @@ MVP status vs. scaffold:
 - **route/transport events** render an empty section today — the collection
   buffer is the scaffolded extension point.
 
+### Reaching status over HTTPS (real cert, no warning)
+
+The in-process SOCKS path above serves the status pages over **plain HTTP** at
+bare hosts (`status.skysocks` etc.) — fine through the resolving proxy, but a
+browser hitting `https://status.skysocks/` would need the self-signed skynetca CA
+installed to avoid a warning.
+
+For a warning-free `https://`, the status pages are **also** served through the
+browse-origin listener (`pkg/visor/meshproxy.go`, gated by `BrowseOrigin.Enable`),
+which already terminates TLS with the deployment's **real** wildcard cert
+(`BrowseOrigin.TLSCert`/`TLSKey`, or a fronting Caddy) under `BrowseOrigin.Suffix`
+(e.g. `.haltingstate.net`). Reached at a **single-label** host so a single-level
+wildcard (`*.<suffix>`) covers it:
+
+    https://status-skysocks.haltingstate.net/
+    https://status-dmsg.haltingstate.net/
+    https://status-skynet.haltingstate.net/
+
+`meshStatusHandler` intercepts these hosts on the browse-origin mux (both
+`subdomain` and `port` modes) **before** the reverse proxy, renders the same
+`proxystatus` page, and lets every other (browse-frame) host fall through. This is
+the real-cert alternative to the name-constrained skynetca leaf path in
+`pkg/skynetweb` — no CA install. When browse-origin is disabled or unconfigured in
+a deployment, the plain-HTTP SOCKS path remains the fallback.
+
+Note the wildcard is single-level: `status-<surface>.<suffix>` is covered, but a
+multi-label host is not — which is also why the matcher rejects multi-label hosts.
+
 ### Extension seam: route control
 
 The MVP is deliberately read-only. The page renders a disabled "route control"
