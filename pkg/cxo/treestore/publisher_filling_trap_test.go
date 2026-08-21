@@ -18,7 +18,7 @@ import (
 //
 // #4036 added a self-heal to publishRoot: on a "not found" during
 // encode+save it drops the encode cache on the snapshot and re-encodes
-// from memory (re-Set'ing every object) to re-materialise an evicted
+// from memory (re-Set'ing every object) to re-materialize an evicted
 // object, then retries once. Its regression test (TestPublisherSelfHeals
 // EvictedCachedObject) runs on a CACHE-DISABLED node, where Cache.Set
 // writes straight to the CXDS — so the re-Set always restores the object
@@ -133,7 +133,7 @@ func TestPublisherSelfHealsFillingTrapObject(t *testing.T) {
 	}
 
 	// The trapped object must be back in the store — proving Set (not just
-	// Inc) re-materialised it via the setFilling repair.
+	// Inc) re-materialized it via the setFilling repair.
 	if _, _, err := cxds.Get(staticHash, 0); err != nil {
 		t.Fatalf("staticHash should be restored by the setFilling repair: %v", err)
 	}

@@ -33,7 +33,11 @@ func newInMemNode(t *testing.T) *node.Node {
 	if err != nil {
 		t.Fatalf("NewNode: %v", err)
 	}
-	t.Cleanup(func() { _ = n.Close() })
+	t.Cleanup(func() {
+		if err := n.Close(); err != nil {
+			t.Logf("node close: %v", err)
+		}
+	})
 	return n
 }
 
@@ -50,7 +54,11 @@ func buildBigRoot(t *testing.T, nTransports, nTelemetry int) (*skyobject.Contain
 	if err != nil {
 		t.Fatalf("treestore.New: %v", err)
 	}
-	t.Cleanup(func() { _ = pub.Close() })
+	t.Cleanup(func() {
+		if err := pub.Close(); err != nil {
+			t.Logf("publisher close: %v", err)
+		}
+	})
 
 	// tp-list: the full transport set as one inlined snapshot leaf, compact form.
 	compact := make([]transport.CompactEntry, 0, nTransports)
@@ -69,7 +77,10 @@ func buildBigRoot(t *testing.T, nTransports, nTelemetry int) (*skyobject.Contain
 	// A bulky telemetry subtree: this is the part whose whole-Root fill
 	// times out in production. The targeted fetch must NOT need any of it.
 	for i := 0; i < nTelemetry; i++ {
-		snap, _ := json.Marshal(liveSnapshot{SentBytes: uint64(i), RecvBytes: uint64(i), SampledAt: time.Now().UTC(), Type: "stcpr"})
+		snap, err := json.Marshal(liveSnapshot{SentBytes: uint64(i), RecvBytes: uint64(i), SampledAt: time.Now().UTC(), Type: "stcpr"})
+		if err != nil {
+			t.Fatalf("marshal telemetry: %v", err)
+		}
 		path := fmt.Sprintf("transports/%040x-telemetry-%d/current", i, i)
 		if err := pub.Put(path, snap); err != nil {
 			t.Fatalf("Put telemetry: %v", err)
@@ -219,7 +230,11 @@ func TestTargetedFetchMissingLeafCleanMiss(t *testing.T) {
 	if err != nil {
 		t.Fatalf("treestore.New: %v", err)
 	}
-	t.Cleanup(func() { _ = pub.Close() })
+	t.Cleanup(func() {
+		if err := pub.Close(); err != nil {
+			t.Logf("publisher close: %v", err)
+		}
+	})
 	// Only telemetry, no tp-list leaf.
 	if err := pub.Put("transports/deadbeef/current", []byte(`{"sent_bytes":1,"recv_bytes":1}`)); err != nil {
 		t.Fatal(err)
