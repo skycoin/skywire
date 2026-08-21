@@ -132,13 +132,17 @@ func init() {
 var RootCmd = &cobra.Command{
 	Use:   "sd",
 	Short: "Service discovery network statistics",
-	Long: fmt.Sprintf(`Display combined service discovery and transport statistics
+	Long: fmt.Sprintf(`Display combined service discovery and transport statistics.
 
 Combines data from:
-- Service Discovery: %v/api/services
-- Transport Discovery: %v/all-transports
+- Service Discovery: %v/api/services (proxy / vpn / visor entries)
+- Transport Discovery: %v/all-transports (transport counts by type)
+- Uptime Tracker: online/offline status (color-coded rows)
 
-Shows public keys with their services and transport counts by type.
+Shows public keys with their advertised services and transport counts by
+type (stcpr/sudph/dmsg/stcp). Filter with --country, --version, --min
+(minimum transport count); --noton keeps offline/not-in-UT visors. --json
+emits the combined rows as machine-readable output.
 
 Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		getDeployment().ServiceDiscovery,
