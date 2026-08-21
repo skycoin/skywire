@@ -41,6 +41,7 @@ var (
 	muxPlotDuration time.Duration
 	muxPlotPolicy   string
 	muxPlotSizeKb   int
+	muxPlotOverride []string
 
 	// muxPlotSubject is the caption/header label for the current run (the app
 	// name in poll mode, or a peer descriptor in --pk mode).
@@ -67,6 +68,7 @@ func init() {
 	muxPlotCmd.Flags().DurationVar(&muxPlotDuration, "duration", 5*time.Minute, "[--pk] how long to pump bytes")
 	muxPlotCmd.Flags().StringVar(&muxPlotPolicy, "policy", "", "[--pk] routing-policy preset (e.g. preset:rotating-bw); empty = static mux")
 	muxPlotCmd.Flags().IntVar(&muxPlotSizeKb, "size", 32, "[--pk] per-write block size in KB")
+	muxPlotCmd.Flags().StringArrayVar(&muxPlotOverride, "override", nil, "[--pk] routing-policy CLI override key=value (repeatable): e.g. --override avoid_geo=RU,CN (geo-avoid), --override trusted_pks=<pk,pk> (trust-tiered), --override business_hours=9-17 (time-of-day)")
 	addMuxSub(muxPlotCmd, "mux-plot")
 }
 
@@ -273,6 +275,11 @@ func runMuxPlotStream(cmd *cobra.Command) {
 	}
 	defer client.Close() //nolint:errcheck,gosec
 
+	overrides, err := parseMuxPlotOverrides(muxPlotOverride)
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--override: %w", err))
+	}
+
 	req := &rpcgrpc.MuxBandwidthRequest{
 		TargetPk:         muxPlotPK,
 		Routes:           int32(muxPlotRoutes), //nolint:gosec
@@ -282,6 +289,7 @@ func runMuxPlotStream(cmd *cobra.Command) {
 		SetupTimeoutNs:   (30 * time.Second).Nanoseconds(),
 		SampleIntervalNs: muxPlotInterval.Nanoseconds(),
 		RoutingPolicy:    muxPlotPolicy,
+		CliOverrides:     overrides,
 	}
 	stream, err := client.StreamMuxBandwidth(ctx, req)
 	if err != nil {
@@ -329,6 +337,28 @@ func runMuxPlotStream(cmd *cobra.Command) {
 		default:
 		}
 	}
+}
+
+// parseMuxPlotOverrides turns the repeatable `--override key=value` flag into
+// the CLIOverrides map the routing-policy engine reads (the conditional presets
+// key off avoid_geo / trusted_pks / business_hours). Returns nil for no flags so
+// an absent --override leaves every preset on its built-in defaults. The value
+// may itself contain '=' (only the first splits key from value); an empty key
+// is rejected.
+func parseMuxPlotOverrides(pairs []string) (map[string]string, error) {
+	if len(pairs) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(pairs))
+	for _, p := range pairs {
+		k, v, ok := strings.Cut(p, "=")
+		k = strings.TrimSpace(k)
+		if !ok || k == "" {
+			return nil, fmt.Errorf("invalid override %q (want key=value)", p)
+		}
+		out[k] = v
+	}
+	return out, nil
 }
 
 // runMuxPlotInfoStream drives the default (watch-a-running-app) mode over

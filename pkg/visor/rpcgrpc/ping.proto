@@ -668,6 +668,15 @@ message MuxBandwidthRequest {
   // meaningful when routing_policy is set; the handler defaults it to
   // "skysocks-client" so the bandwidth-oriented presets are exercised.
   string policy_app = 13;
+
+  // CliOverrides surfaces the operator's ad-hoc `--override key=value` flags
+  // into the routing-policy engine's RoutingContext.CLIOverrides — the same
+  // map the conditional presets read: geo-avoid (avoid_geo=<CC,CC>),
+  // trust-tiered (trusted_pks=<PK,PK>), time-of-day (business_hours=START-END).
+  // Only meaningful when routing_policy is set. Absent/empty = the preset's
+  // built-in defaults (unchanged behavior). Keys collide-last with the
+  // handler-derived mux_routes / min_hops entries the controller already sets.
+  map<string, string> cli_overrides = 14;
 }
 
 // MuxBandwidthEvent is one entry on the stream. Exactly one oneof

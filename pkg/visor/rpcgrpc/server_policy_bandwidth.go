@@ -137,7 +137,9 @@ func (c *muxBwController) close() {
 
 // routingContext builds the RoutingContext the engine sees. App drives the
 // preset's per-app branching; CLIOverrides surface the operator's leg-count /
-// min-hops so a preset can honor or override them.
+// min-hops so a preset can honor or override them, plus any ad-hoc
+// `--override key=value` flags — the map the conditional presets read
+// (geo-avoid=avoid_geo, trust-tiered=trusted_pks, time-of-day=business_hours).
 func (c *muxBwController) routingContext() policy.RoutingContext {
 	overrides := map[string]string{}
 	if c.cfg.Routes > 0 {
@@ -145,6 +147,13 @@ func (c *muxBwController) routingContext() policy.RoutingContext {
 	}
 	if c.cfg.MinHops > 0 {
 		overrides["min_hops"] = strconv.Itoa(c.cfg.MinHops)
+	}
+	// Operator-supplied `--override key=value` pairs land last so an explicit
+	// flag wins over the handler-derived mux_routes / min_hops entries. Nil map
+	// (the baseline / no --override) is a no-op, so every preset keeps its
+	// built-in defaults.
+	for k, v := range c.cfg.CliOverrides {
+		overrides[k] = v
 	}
 	return policy.RoutingContext{
 		App:          c.cfg.PolicyApp,
