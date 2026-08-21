@@ -53,7 +53,25 @@ func init() {
 	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP). dht|auto are accepted for compatibility and also read from TPD, since the DHT store was removed; dht additionally forces the non-streaming local-compute path")
 	calcCmd.Flags().IntVar(&calcQueueCap, "queue-cap", 0, "BFS queue cap (0 = server/local default ~200K, negative = unbounded)")
 	calcCmd.Flags().BoolVar(&calcByLatency, "by-latency", false, "rank routes by cumulative transport latency (lowest first); skips the streaming gRPC path since the full set has to be in hand to sort")
+	// Hidden long-form aliases so the hop-bound vocabulary matches
+	// `route find` / `route trace` (--min/--max stay the visible spelling).
+	calcCmd.Flags().Uint16Var(&calcMinHops, "min-hops", 0, "minimum hops (alias for --min)")
+	calcCmd.Flags().Uint16Var(&calcMaxHops, "max-hops", 5, "maximum hops (alias for --max)")
+	calcCmd.Flags().MarkHidden("min-hops") //nolint:errcheck,gosec
+	calcCmd.Flags().MarkHidden("max-hops") //nolint:errcheck,gosec
 	clirpc.RegisterFetchFlags(calcCmd)
+}
+
+// validCalcSource reports whether s is an accepted --source value.
+// Kept as a single source of truth so the up-front validation and the
+// local-compute switch agree on the accepted set (tpd|auto|dht).
+func validCalcSource(s string) bool {
+	switch strings.ToLower(s) {
+	case "tpd", "auto", "dht":
+		return true
+	default:
+		return false
+	}
 }
 
 var calcCmd = &cobra.Command{
@@ -68,6 +86,14 @@ var calcCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if calcEnable && calcDisable {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot use both --enable and --disable"))
+		}
+
+		// Validate --source up front so an unknown value is rejected on
+		// EVERY path. Previously only the local-compute fallback checked
+		// it, so the streaming gRPC path silently accepted (and ignored)
+		// a bogus --source and returned a route anyway.
+		if !validCalcSource(calcSource) {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|auto|dht", calcSource))
 		}
 
 		// Handle config flags
