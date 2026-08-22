@@ -79,7 +79,6 @@ import (
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/policy/preset"
-	"github.com/skycoin/skywire/pkg/router/policy/presethook"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -158,25 +157,38 @@ func pageHTTPS() bool {
 // silently apply the app-mux fallback. This is the wasm-visor's analog of the
 // native visor's routing.policy config field.
 func wasmRoutingPolicyPreset() string {
+	// Default to the same composite default the native config generator wires
+	// (cmd/skywire-cli/commands/config/gen.go: PolicyPerDial "preset:adaptive"),
+	// so a browser visor gets the adaptive default routing policy out of the box —
+	// no query param needed. In the browser the presethook runs with a nil
+	// (Nop) Provider, so adaptive gracefully degrades to its no-transport-
+	// diversity shape (single lean forward + reverse warm-standby mux, no
+	// per-hop metadata). Overridable via ?routing_policy=<name>; ?routing_policy=
+	// none (or off) explicitly opts out to the legacy no-policy behavior, which
+	// is handy for A/B-ing the default against a plain single route.
+	const defaultPreset = "adaptive"
 	loc := js.Global().Get("location")
 	if !loc.Truthy() {
-		return ""
+		return defaultPreset
 	}
 	search := loc.Get("search")
 	if !search.Truthy() {
-		return ""
+		return defaultPreset
 	}
 	usp := js.Global().Get("URLSearchParams")
 	if !usp.Truthy() {
-		return ""
+		return defaultPreset
 	}
 	v := usp.New(search.String()).Call("get", "routing_policy")
 	if !v.Truthy() {
-		return ""
+		return defaultPreset
 	}
 	name := v.String()
+	if name == "none" || name == "off" {
+		return "" // explicit opt-out → nil DialHook → legacy no-policy behavior
+	}
 	if !preset.Has(name) {
-		return ""
+		return defaultPreset // unknown name → fall back to the default, not no-policy
 	}
 	return name
 }
@@ -592,13 +604,18 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 	// in as native Go (pkg/router/policy/preset, the single source of truth) via
 	// presethook, wired here as the router's DialHook — the one integration point
 	// (pkg/visor/init_router.go builds the wazero-backed equivalent on native).
-	// Opt-in and configurable: the preset name comes from the ?routing_policy=
-	// query param; unset ⇒ nil DialHook ⇒ unchanged (no-policy) behavior.
-	var dialHook router.DialHook
-	if name := wasmRoutingPolicyPreset(); name != "" {
-		dialHook = presethook.New(name, nil)
-		vlog(fmt.Sprintf("router: routing policy preset %q active (native-Go preset engine)", name))
-	}
+	// Default-on and configurable: the preset name comes from wasmRoutingPolicyPreset
+	// (?routing_policy= query param, DEFAULTING to the composite "adaptive" default,
+	// matching the native config-gen default); ?routing_policy=none opts out to the
+	// legacy nil-DialHook no-policy behavior.
+	// Live-switchable routing policy: seed from wasmRoutingPolicyPreset (the
+	// composite "adaptive" default, matching the native config generator) and
+	// let the UI switch it at runtime — to any preset or "none" — via the
+	// routingPolicy JS binding, no reload needed.
+	routingHook := newSwitchableRoutingHook(wasmRoutingPolicyPreset())
+	registerRoutingPolicyJS(routingHook)
+	var dialHook router.DialHook = routingHook
+	vlog(fmt.Sprintf("router: routing policy %q active (native-Go preset engine; switch via routingPolicy())", routingHook.current()))
 	r, err := visorcore.BuildRouter(ctx, visorcore.RouterDeps{
 		DmsgC:            dmsgC,
 		PubKey:           pk,

@@ -23,6 +23,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -38,6 +39,13 @@ import (
 // but no oracle is wired (SetDstTransportOracle was never called), so
 // fetchBestRoutes must fall through to its existing behavior.
 var errRSNOracleInert = errors.New("rsn-oracle: no destination-transport oracle configured")
+
+// oracleQueryTimeout bounds a single RSN-oracle destination-transport query
+// (setup-node dial + RSN signature + dmsg-direct delivery to the destination).
+// Kept short so an unanswerable destination fails fast and the dial falls
+// through to the TPD route-finder — the safety valve that lets RSN-oracle be
+// ON by default. See oracle2HopRoutes.
+const oracleQueryTimeout = 14 * time.Second
 
 // oracleLocalTp is the minimal view of one of the source's own transports the
 // 2-hop computation needs: which peer it reaches and over which transport ID /
@@ -165,7 +173,27 @@ func computeDisjoint2HopRoutes(
 	if len(intermediates) == 0 {
 		return nil, errors.New("rsn-oracle 2-hop: no shared intermediate between src and dst transports")
 	}
+	// Rank intermediates by transport QUALITY, best first, so the mux picks good
+	// legs before poor ones: each aux-leg dial takes intermediates in this order
+	// (excluding those already used), so a well-connected stcpr/squicr path is
+	// chosen ahead of a flaky webrtc one. The cost is the worse of the two hops'
+	// type preferences (lower TypePreference = more preferred: stcpr < squicr <
+	// sudph < stcp < webrtc); ties break on PK for determinism. Without this the
+	// PK-sorted order admitted webrtc first hops that spiked to multi-second
+	// latency and destabilized the group.
+	legCost := func(pk cipher.PubKey) int {
+		s := tptypes.TypePreference(srcByPeer[pk].tpType)
+		d := tptypes.TypePreference(dstByPeer[pk].tpType)
+		if d > s {
+			return d
+		}
+		return s
+	}
 	sort.SliceStable(intermediates, func(i, j int) bool {
+		ci, cj := legCost(intermediates[i]), legCost(intermediates[j])
+		if ci != cj {
+			return ci < cj
+		}
 		return intermediates[i].String() < intermediates[j].String()
 	})
 
@@ -243,7 +271,18 @@ func (r *router) oracle2HopRoutes(ctx context.Context, log *logging.Logger, src,
 		return nil, nil, errors.New("rsn-oracle: transport manager not available")
 	}
 
-	dstEntries, err := oracle.DstTransports(ctx, src, dst)
+	// Bound the oracle query. It is a couple of dmsg round-trips (dial a setup
+	// node for the RSN signature, then deliver the query dmsg-direct to the
+	// destination), so a few seconds is ample for a real answer. Capping it
+	// short is what makes RSN-oracle safe as an ON-by-default: a destination
+	// that cannot answer — a peer on an older build without the transport-query
+	// listener, or one that is simply unreachable — fails FAST here and the dial
+	// falls through to the TPD-backed route-finder, instead of stalling on the
+	// dial's full (~90s) deadline. Inherit an even shorter caller deadline if
+	// one is already tighter.
+	qctx, cancel := context.WithTimeout(ctx, oracleQueryTimeout)
+	defer cancel()
+	dstEntries, err := oracle.DstTransports(qctx, src, dst)
 	if err != nil {
 		return nil, nil, err
 	}

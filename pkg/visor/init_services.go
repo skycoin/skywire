@@ -1562,6 +1562,27 @@ func wireDirectDialPolicyHook(v *Visor, mux *transport.VStreamMux) {
 			return router.ErrDialPolicyDropped
 		}
 		if adj.AvoidDirect {
+			// Same-LAN DESTINATION exception → passthrough. If the peer we
+			// are dialing is itself on our own local network (reached over a
+			// direct transport), forcing an overlay is pointless and wrong:
+			// muxing to a LAN neighbor would have to route its aux legs
+			// through REMOTE intermediates (the same-LAN INTERMEDIATE
+			// exclusion rules out the sane local paths) just to reach a box
+			// on our own LAN. The single direct transport is already the best
+			// path, so honor the direct dial instead of refusing it. (This is
+			// the "direct/LAN → passthrough" arm of the adaptive design; the
+			// remote-destination case still gets the full overlay above.)
+			if v.tpM != nil {
+				var self net.IP
+				if v.stun.client != nil && v.stun.client.PublicIP != nil {
+					self = net.ParseIP(v.stun.client.PublicIP.IP())
+				}
+				for _, pk := range v.tpM.SameLANPeers(self) {
+					if pk == remotePK {
+						return nil // same-LAN destination → direct passthrough
+					}
+				}
+			}
 			// Policy wants overlay even though a direct transport
 			// exists. tryDirectDial in skywire_networker treats
 			// any error as direct-failed, falling through to the

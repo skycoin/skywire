@@ -2240,7 +2240,14 @@ func (r *router) establishMuxRoutes(
 	// Cap on consecutive planning failures. A fully-broken
 	// route-finder + local-calc combo would otherwise pin us for
 	// ~3s × (maxCount-1) iterations on the way to giving up.
-	const maxConsecutiveMuxFailures = 2
+	// Raised from 2: when the oracle sources a big disjoint set (a busy exit
+	// exposes dozens of intermediates), the destination-transport query is
+	// occasionally flaky (a cold dmsg session → transient error) — 2 consecutive
+	// misses stopped the pool at ~3 legs even though many more routes existed.
+	// A higher bound rides through those transient misses to fill the standby
+	// pool, while still bounding a genuinely-exhausted set (planning is
+	// background/best-effort, never blocks the primary).
+	const maxConsecutiveMuxFailures = 5
 
 	// Phase 1 (sequential): plan each aux route. Excludes
 	// propagate iteration-to-iteration so successive aux routes
