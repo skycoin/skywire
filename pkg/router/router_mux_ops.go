@@ -370,6 +370,35 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 		excludePKs = append(excludePKs, intermediatesOfHops(fwd, lPK, rPK)...)
 		excludePKs = append(excludePKs, intermediatesOfHops(rev, rPK, lPK)...)
 
+		// The route-finder honors ExcludeIntermediatePKs but NOT
+		// ExcludeTransportIDs, so with a 1-hop-capable min_hops it can hand back a
+		// leg whose FIRST hop reuses a transport already in the group (e.g. the
+		// direct transport that is already the primary leg). Dialing it would burn
+		// a setup-node round-trip only for appendRouteAsymmetric to reject it
+		// locally ("already in the group") — the churn that hammers the setup node
+		// and oscillates the leg set on every rotation tick. Drop such a plan HERE,
+		// before the dial (same discipline as the initial batch in
+		// router_dial.go's establishMuxRoutes). Its intermediates are already
+		// claimed above, so the next iteration diverges.
+		if len(fwd) > 0 {
+			dup := false
+			for _, ex := range excludeIDs {
+				if fwd[0].TpID == ex {
+					dup = true
+					break
+				}
+			}
+			if dup {
+				consecutiveFailures++
+				log.Debugf("GrowMuxRoute: planned leg %d/%d reuses transport %s already in the group (finder ignores ExcludeTransportIDs); skipping before dial",
+					current+added+1, target, fwd[0].TpID)
+				if consecutiveFailures >= maxConsecutiveFailures {
+					break
+				}
+				continue
+			}
+		}
+
 		if err := r.AddMuxRouteByHops(desc, fwd, rev); err != nil {
 			consecutiveFailures++
 			log.Debugf("GrowMuxRoute: add leg %d/%d failed: %v", current+added+1, target, err)
