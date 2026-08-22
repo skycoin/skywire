@@ -84,16 +84,18 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 			snap.MuxEnabled = infos[0].MuxEnabled
 			for _, leg := range infos[0].Legs {
 				snap.Legs = append(snap.Legs, proxystatus.Leg{
-					Index:       leg.Index,
-					TransportID: leg.TransportID,
-					TpType:      leg.TpType,
-					RemotePK:    leg.RemotePK,
-					LatencyMS:   leg.LatencyMS,
-					SentBytes:   leg.SentBytes,
-					RecvBytes:   leg.RecvBytes,
-					Retransmits: leg.Retransmits,
-					Alive:       leg.Alive,
-					Standby:     leg.Standby,
+					Index:          leg.Index,
+					TransportID:    leg.TransportID,
+					TpType:         leg.TpType,
+					RemotePK:       leg.RemotePK,
+					LatencyMS:      leg.LatencyMS,
+					RouteLatencyMS: leg.RouteLatencyMS,
+					Direct:         leg.Direct,
+					SentBytes:      leg.SentBytes,
+					RecvBytes:      leg.RecvBytes,
+					Retransmits:    leg.Retransmits,
+					Alive:          leg.Alive,
+					Standby:        leg.Standby,
 				})
 			}
 		}

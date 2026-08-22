@@ -324,9 +324,21 @@ type MuxLeg struct {
 	TransportID string `json:"transport_id"`
 	TpType      string `json:"tp_type"`
 	RemotePK    string `json:"remote_pk"`
-	// LatencyMS is the transport-level smoothed RTT in ms (the same
-	// value 'tp ls' shows). Zero when no measurement yet.
+	// LatencyMS is the FIRST-HOP transport RTT in ms (the same value
+	// 'tp ls' shows). For a multihop leg this is only the near edge, NOT
+	// the whole path — use RouteLatencyMS for the end-to-end route.
 	LatencyMS float64 `json:"latency_ms"`
+	// RouteLatencyMS is the leg's TRUE end-to-end route latency in ms —
+	// the EWMA-smoothed round-trip of the per-leg liveness pong across
+	// ALL hops (from legE2ELatency). This is the number a routing policy
+	// judges a leg by; it can differ sharply from LatencyMS on a multihop
+	// leg. Zero until the first pong lands.
+	RouteLatencyMS float64 `json:"route_latency_ms"`
+	// Direct is true when this leg's first hop goes straight to the route
+	// group's destination (a 1-hop/direct route); false means the leg is
+	// multihop (relayed through one or more intermediates). Lets a viewer
+	// tell the direct leg from the multihop legs at a glance.
+	Direct bool `json:"direct"`
 	// Alive is false once the leg's transport is closed. Standby is true
 	// when the leg is a WARM STANDBY: rules kept alive but not selected
 	// for sending (see docs/warm_standby_legs_rfc.md). Together they are
@@ -352,6 +364,7 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 		stats = rg.mux.snapshotLegs()
 	}
 
+	dstPK := rg.desc.DstPK()
 	info.Legs = make([]MuxLeg, 0, len(tpsCopy))
 	for i, tp := range tpsCopy {
 		leg := MuxLeg{}
@@ -365,6 +378,12 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 			leg.TpType = string(tp.Entry.Type)
 			leg.RemotePK = tp.Remote().String()
 			leg.LatencyMS = tp.GetLatency()
+			// TRUE end-to-end route latency (all hops), from the leg-liveness
+			// pong — distinct from the first-hop transport RTT above.
+			leg.RouteLatencyMS = rg.legEndToEndLatencyMs(tp.Entry.ID)
+			// Direct = this leg's first hop reaches the destination itself,
+			// i.e. a 1-hop route; otherwise it is relayed (multihop).
+			leg.Direct = tp.Remote() == dstPK
 			leg.Alive = !tp.IsClosed()
 		}
 		if rg.mux != nil {

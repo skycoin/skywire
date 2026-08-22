@@ -286,9 +286,15 @@ type MuxLegInfo struct {
 	TransportID string  `json:"transport_id"`
 	TpType      string  `json:"tp_type"`
 	RemotePK    string  `json:"remote_pk"`
-	LatencyMS   float64 `json:"latency_ms,omitempty"`
-	SentBytes   uint64  `json:"sent_bytes"`
-	SentPackets uint64  `json:"sent_packets"`
+	// LatencyMS is the FIRST-HOP transport RTT; RouteLatencyMS is the leg's
+	// TRUE end-to-end route latency (all hops, from the leg-liveness pong) —
+	// on a multihop leg the two differ sharply. Direct is true for a 1-hop
+	// route straight to the destination, false for a relayed (multihop) leg.
+	LatencyMS      float64 `json:"latency_ms,omitempty"`
+	RouteLatencyMS float64 `json:"route_latency_ms,omitempty"`
+	Direct         bool    `json:"direct"`
+	SentBytes      uint64  `json:"sent_bytes"`
+	SentPackets    uint64  `json:"sent_packets"`
 	RecvBytes   uint64  `json:"recv_bytes"`
 	RecvPackets uint64  `json:"recv_packets"`
 	// Retransmits is SACK retransmit packets carried by this leg (loss
