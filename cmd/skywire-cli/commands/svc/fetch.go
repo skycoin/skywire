@@ -4,6 +4,7 @@ package clisvc
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -12,10 +13,82 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
 )
 
+// Deployment-selection state, shared by every svc subcommand. Registered
+// as persistent flags on RootCmd (see registerDeploymentFlags) so the
+// whole `svc` tree can point at a non-prod deployment consistently —
+// matching what `sd` / `ut` already offer. All default empty / prod so
+// existing invocations behave exactly as before.
+var (
+	svcTestEnv  bool
+	svcTPDURL   string
+	svcDmsgdURL string
+	svcARURL    string
+)
+
+// svcIsTestEnv mirrors sd/ut: SKYWIRETEST=1 selects the test deployment.
+func svcIsTestEnv() bool { return os.Getenv("SKYWIRETEST") == "1" }
+
+// svcDeployment returns the deployment.Services set the svc commands
+// resolve URLs from, honoring --testenv (or SKYWIRETEST=1).
+func svcDeployment() deployment.Services {
+	if svcTestEnv {
+		return deployment.Test
+	}
+	return deployment.Prod
+}
+
+// baseURLFor resolves the deployment base URL for a svc service key,
+// honoring --testenv and the per-service --tpdurl / --dmsgdurl / --arurl
+// overrides. An explicit override always wins; otherwise the selected
+// deployment's URL is used.
+func baseURLFor(service string) string {
+	dep := svcDeployment()
+	switch service {
+	case "tpd":
+		if svcTPDURL != "" {
+			return svcTPDURL
+		}
+		return dep.TransportDiscovery
+	case "dmsgd":
+		if svcDmsgdURL != "" {
+			return svcDmsgdURL
+		}
+		return dep.DmsgDiscovery
+	case "ar":
+		if svcARURL != "" {
+			return svcARURL
+		}
+		return dep.AddressResolver
+	}
+	return ""
+}
+
+// registerDeploymentFlags installs the deployment-selection + fetch-chain
+// flags on RootCmd's persistent set, so every svc subcommand inherits one
+// consistent vocabulary (--testenv, --tpdurl/--dmsgdurl/--arurl, and the
+// --no-cxo/--no-rpc/--no-dmsg/--sk/--config fetch-chain controls).
+func registerDeploymentFlags() {
+	pf := RootCmd.PersistentFlags()
+	pf.BoolVar(&svcTestEnv, "testenv", svcIsTestEnv(), "use the test deployment services (or set SKYWIRETEST=1)")
+	pf.StringVar(&svcTPDURL, "tpdurl", "", "override the transport-discovery base URL (used by tpd / nm)")
+	pf.StringVar(&svcDmsgdURL, "dmsgdurl", "", "override the dmsg-discovery base URL (used by dmsgd)")
+	pf.StringVar(&svcARURL, "arurl", "", "override the address-resolver base URL (used by ar)")
+	// Fetch-chain controls (--no-cxo/--no-rpc/--no-dmsg/--sk/--config) so
+	// svc can steer the CXO→RPC→DMSG fetch chain like the other groups.
+	// Registered on a throwaway command then merged into the persistent
+	// set, since clirpc.RegisterFetchFlags targets cmd.Flags().
+	fetchFlags := &cobra.Command{}
+	clirpc.RegisterFetchFlags(fetchFlags)
+	pf.AddFlagSet(fetchFlags.Flags())
+}
+
 func init() {
+	registerDeploymentFlags()
+
 	tpdCmd.PersistentFlags().BoolVar(&directQuery, "direct", false, "query directly instead of via visor RPC")
 	tpdCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 
@@ -32,7 +105,9 @@ func init() {
 }
 
 // fetchViaVisorOrDirect fetches data from a service, preferring visor RPC.
-func fetchViaVisorOrDirect(cmd *cobra.Command, service, path, directURL string) ([]byte, error) {
+// The direct/HTTP fallback base URL is resolved from the service key via
+// baseURLFor, so --testenv and the per-service URL overrides apply.
+func fetchViaVisorOrDirect(cmd *cobra.Command, service, path string) ([]byte, error) {
 	if !directQuery {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err == nil {
@@ -43,24 +118,32 @@ func fetchViaVisorOrDirect(cmd *cobra.Command, service, path, directURL string) 
 		}
 	}
 
-	// Fallback via FetchServiceURL (tries DmsgHTTP first, then plain HTTP)
-	url := strings.TrimSuffix(directURL, "/") + path
+	// Fallback via FetchServiceURL (CXO → direct DMSG HTTP chain)
+	url := strings.TrimSuffix(baseURLFor(service), "/") + path
 	return clirpc.FetchServiceURL(cmd.Flags(), url)
 }
 
-// emitPretty routes the response through cliutil.PrintOutput so that
-// --json yields the parsed value (no envelope, no pretty wrap), while
-// the human path still shows pretty-indented JSON.
+// emitPretty renders a raw JSON response. --json / --jq / --shape are
+// routed through the flag-aware cliout printer so they work uniformly;
+// the default human view stays pretty-indented JSON (unchanged).
 func emitPretty(cmd *cobra.Command, data []byte) {
 	var v interface{}
-	if json.Unmarshal(data, &v) == nil {
-		pretty, err := json.MarshalIndent(v, "", "  ")
-		if err == nil {
-			internal.PrintOutput(cmd.Flags(), v, string(pretty)+"\n")
-			return
-		}
+	if err := json.Unmarshal(data, &v); err != nil {
+		// Not JSON — emit the raw body (still honors --json as a string).
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, string(data)))
+		return
 	}
-	internal.PrintOutput(cmd.Flags(), string(data), string(data)+"\n")
+	// Any structured-output flag: let cliout handle it.
+	if cliout.JSONMode(cmd) || cliout.JQFilter(cmd) != "" || cliout.ShapeMode(cmd) {
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, v))
+		return
+	}
+	// Default human view: pretty-indented JSON.
+	if pretty, err := json.MarshalIndent(v, "", "  "); err == nil {
+		fmt.Fprintln(cmd.OutOrStdout(), string(pretty)) //nolint:errcheck,gosec
+		return
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), string(data)) //nolint:errcheck,gosec
 }
 
 // --- TPD subcommands ---
@@ -106,7 +189,7 @@ var tpdStatsCmd = &cobra.Command{
 	Use:   "stats",
 	Short: "Network-wide transport statistics",
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/all-transports/stats", deployment.Prod.TransportDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/all-transports/stats")
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -118,7 +201,7 @@ var tpdVersionsCmd = &cobra.Command{
 	Use:   "versions",
 	Short: "Version statistics from transport discovery",
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/version", deployment.Prod.TransportDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/version")
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -130,7 +213,7 @@ var tpdPerKeyStatsCmd = &cobra.Command{
 	Use:   "per-key-stats",
 	Short: "Per-visor transport statistics",
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/all-transports/per-key-stats", deployment.Prod.TransportDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/all-transports/per-key-stats")
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -151,7 +234,7 @@ var tpdVisorStatsCmd = &cobra.Command{
 	Long:    "Transport count statistics for one visor (TPD /transports/stats/<pk>).\n\n  skywire cli svc tpd visor-stats -p <visor-pk>",
 	Example: "  skywire cli svc tpd visor-stats -p 02b3...",
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/transports/stats/"+tpdVisorStatsPK, deployment.Prod.TransportDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/transports/stats/"+tpdVisorStatsPK)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -174,7 +257,7 @@ var tpdBandwidthCmd = &cobra.Command{
 		if tpdBandwidthVisorPK != "" {
 			path = "/bandwidth/visor/" + tpdBandwidthVisorPK
 		}
-		data, err := fetchViaVisorOrDirect(cmd, "tpd", path, deployment.Prod.TransportDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "tpd", path)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -194,7 +277,7 @@ var tpdBandwidthTpCmd = &cobra.Command{
 	Short: "Bandwidth history for a specific transport",
 	Long:  "Bandwidth history for one transport (TPD /bandwidth/transport/<id>).\n\n  skywire cli svc tpd bandwidth-tp -i <transport-uuid>",
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/bandwidth/transport/"+tpdBandwidthTpID, deployment.Prod.TransportDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/bandwidth/transport/"+tpdBandwidthTpID)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -214,7 +297,7 @@ var tpdVersionsPKCmd = &cobra.Command{
 	Short: "Version info for specific public keys",
 	Long:  "Version info for one or more visors (TPD /versions/<pks>).\n\n  skywire cli svc tpd versions-pk -p <pk1>,<pk2>",
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/versions/"+tpdVersionsPKs, deployment.Prod.TransportDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/versions/"+tpdVersionsPKs)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -234,7 +317,7 @@ var tpdMetricsVisorCmd = &cobra.Command{
 	Short: "Metrics for specific visor(s)",
 	Long:  "Transport metrics for one or more visors (TPD /metrics/visor/<pks>).\n\n  skywire cli svc tpd metrics-visor -p <pk1>,<pk2>",
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/metrics/visor/"+tpdMetricsVisorPKs, deployment.Prod.TransportDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/metrics/visor/"+tpdMetricsVisorPKs)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -254,7 +337,7 @@ var tpdMetricsTpCmd = &cobra.Command{
 	Short: "Metrics for specific transport(s)",
 	Long:  "Metrics for one or more transports (TPD /metrics/<ids>).\n\n  skywire cli svc tpd metrics-tp -i <id1>,<id2>",
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/metrics/"+tpdMetricsTpIDs, deployment.Prod.TransportDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/metrics/"+tpdMetricsTpIDs)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -289,7 +372,7 @@ var dmsgdAllServersCmd = &cobra.Command{
 	Use:   "all-servers",
 	Short: "List all DMSG servers",
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "dmsgd", "/dmsg-discovery/all_servers", deployment.Prod.DmsgDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "dmsgd", "/dmsg-discovery/all_servers")
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -301,7 +384,7 @@ var dmsgdServerClientsCmd = &cobra.Command{
 	Use:   "server-clients",
 	Short: "List all clients grouped by server",
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "dmsgd", "/dmsg-discovery/servers/clients", deployment.Prod.DmsgDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "dmsgd", "/dmsg-discovery/servers/clients")
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -321,7 +404,7 @@ var dmsgdServerClientsPKCmd = &cobra.Command{
 	Short: "List clients for a specific DMSG server",
 	Long:  "List the clients currently sessioned with one dmsg server\n(DMSG-discovery /dmsg-discovery/server/<pk>/clients).\n\n  skywire cli svc dmsgd clients -p <server-pk>",
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "dmsgd", "/dmsg-discovery/server/"+dmsgdServerClientsPK+"/clients", deployment.Prod.DmsgDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "dmsgd", "/dmsg-discovery/server/"+dmsgdServerClientsPK+"/clients")
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -341,7 +424,7 @@ edges. 'ar check <pk>' asks whether one visor is registered (without
 revealing its IP). Fetches via the local visor's RPC by default; --direct
 uses a CLI-owned client. Output honors --json.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "ar", "/transports", deployment.Prod.AddressResolver)
+		data, err := fetchViaVisorOrDirect(cmd, "ar", "/transports")
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -373,7 +456,7 @@ sessions show as "(down: <duration>)"; sessions shorter than
 		if svcUptimeLimit > 0 {
 			path = fmt.Sprintf("%s?limit=%d", path, svcUptimeLimit)
 		}
-		data, err := fetchViaVisorOrDirect(cmd, "tpd", path, deployment.Prod.TransportDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "tpd", path)
 		if err != nil {
 			// A 503 here means the TPD is up but has no session recorder
 			// enabled (pkg/serviceuptime not wired on this deployment's
@@ -424,7 +507,7 @@ command probes the transport-discovery /health as the closest available
 liveness signal — treat the result as "is the discovery tier up", not as a
 network-monitor-specific status.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/health", deployment.Prod.TransportDiscovery)
+		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/health")
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
