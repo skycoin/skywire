@@ -62,19 +62,32 @@ jobs:
           # Same stamping as `make build`, plus -s -w to shrink the artifact.
           LDFLAGS="-s -w -X ${UTIL}.version=${VERSION} -X ${UTIL}.date=${DATE} -X ${UTIL}.commit=${COMMIT} -X ${BASE}/pkg/visor.BuildTag=${BRANCH}"
           mkdir -p dist
-          for arch in amd64 arm64 arm; do
-            echo "==> building linux/${arch}"
-            GOOS=linux GOARCH="${arch}" GOARM=7 CGO_ENABLED=0 \
+          # Build every linux arch the TAGGED releases (release.yml) produce, with
+          # matching archive names + GOARM so the auto-updater's arch->archive map
+          # is identical across the tagged and develop channels: arm = GOARM6
+          # (armv6/soft-float), armhf = GOARM7. CGO_ENABLED=0 means no per-arch
+          # musl toolchain is needed (release.yml uses musl for its cgo build; the
+          # rolling develop build is pure-Go, so plain cross-compilation suffices).
+          build_arch() {
+            local name="$1" goarch="$2" goarm="$3"
+            echo "==> building linux/${name} (GOARCH=${goarch}${goarm:+ GOARM=${goarm}})"
+            GOOS=linux GOARCH="${goarch}" ${goarm:+GOARM="${goarm}"} CGO_ENABLED=0 \
               go build -trimpath -mod=vendor -ldflags="${LDFLAGS}" -o skywire .
-            zstd -19 -q -f -o "dist/skywire-linux-${arch}.zst" skywire
+            zstd -19 -q -f -o "dist/skywire-linux-${name}.zst" skywire
             rm -f skywire
-          done
+          }
+          build_arch amd64   amd64   ""
+          build_arch arm64   arm64   ""
+          build_arch arm     arm     6
+          build_arch armhf   arm     7
+          build_arch 386     386     ""
+          build_arch riscv64 riscv64 ""
           ( cd dist && sha256sum *.zst > SHA256SUMS )
           {
             echo "BRANCH=${BRANCH}"
             echo "VERSION=${VERSION}"
           } >> "$GITHUB_ENV"
-          echo "built ${VERSION} for amd64/arm64/armv7:"; ls -la dist
+          echo "built ${VERSION} for amd64/arm64/arm(v6)/armhf(v7)/386/riscv64:"; ls -la dist
 
       - name: Replace the rolling <branch>-latest pre-release
         env:
