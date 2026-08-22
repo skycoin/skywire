@@ -366,15 +366,26 @@ answers only for its own groups, so discovery still starts from a public key
 somebody gave you.`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
 		var host cipher.PubKey
 		if len(args) == 1 {
 			if err := host.Set(args[0]); err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid host pk: %w", err))
 			}
-		}
-		rpcClient, err := clirpc.Client(cmd.Flags())
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), err)
+		} else {
+			// No host given: the visor answers a zero PK as "self", but a
+			// zero cipher.PubKey cannot be gob-encoded over net/rpc (it
+			// fails with "Invalid public key"), so the request never
+			// reaches that branch. Resolve this visor's own PK up front
+			// and send it explicitly — same self-listing, valid on the wire.
+			ov, err := rpcClient.Overview()
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("resolve local visor pk: %w", err))
+			}
+			host = ov.PubKey
 		}
 		entries, truncated, err := rpcClient.GroupCatalog(host)
 		if err != nil {

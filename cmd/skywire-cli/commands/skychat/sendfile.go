@@ -32,7 +32,7 @@ var (
 
 var sendFileCmd = &cobra.Command{
 	Use:   "send-file <path>",
-	Short: "send a file to a peer (--to) or the active group (--group)",
+	Short: "Send a file to a peer (--to) or the active group (--group)",
 	Long: `Send a local file over skychat.
 
 The file streams peer-to-peer over an encrypted skywire transport (skynet or
