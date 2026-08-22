@@ -83,28 +83,44 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 			`A leg appears here once a route to a destination is warm.</p></section>`)
 		return
 	}
-	var maxSent uint64 = 1
+	var maxSent, maxRecv uint64 = 1, 1
 	for _, l := range snap.Legs {
 		if l.SentBytes > maxSent {
 			maxSent = l.SentBytes
 		}
+		if l.RecvBytes > maxRecv {
+			maxRecv = l.RecvBytes
+		}
 	}
 	b.WriteString(`<table class="mux"><thead><tr>` +
-		`<th>leg</th><th>transport</th><th>peer</th><th>sent</th><th>bandwidth (sent share)</th>` +
-		`<th>recv</th><th>rtt</th><th>rtx</th><th>state</th></tr></thead><tbody>`)
+		`<th>leg</th><th>route</th><th>transport</th><th>peer</th>` +
+		`<th>sent</th><th>bandwidth (sent share)</th>` +
+		`<th>recv</th><th>bandwidth (recv share)</th>` +
+		`<th>tp rtt</th><th>route rtt</th><th>rtx</th><th>state</th></tr></thead><tbody>`)
 	for _, l := range snap.Legs {
-		// share is 0..100 (maxSent is the per-leg max, >=1) — kept as uint64 and
-		// printed directly so there's no uint64->int narrowing to overflow-check.
-		share := l.SentBytes * 100 / maxSent
+		// shares are 0..100 (maxSent/maxRecv are per-leg maxes, >=1) — kept as
+		// uint64 and printed directly so there's no uint64->int narrowing.
+		sentShare := l.SentBytes * 100 / maxSent
+		recvShare := l.RecvBytes * 100 / maxRecv
 		state, scls := legState(l)
-		fmt.Fprintf(b, `<tr><td>R%d</td><td>%s</td><td class="pk">%s</td><td>%s</td>`,
-			l.Index, html.EscapeString(orDash(l.TpType)), html.EscapeString(shortPK(l.RemotePK)), humanBytes(l.SentBytes))
-		fmt.Fprintf(b, `<td class="barcell"><span class="bar %s" style="width:%d%%"></span></td>`, scls, share)
-		fmt.Fprintf(b, `<td>%s</td><td>%.0f ms</td><td>%d</td><td class="%s">%s</td></tr>`,
-			humanBytes(l.RecvBytes), l.LatencyMS, l.Retransmits, scls, state)
+		// route: direct (1-hop) vs multihop (relayed). RouteLatencyMS is the
+		// TRUE end-to-end latency; LatencyMS is only the first-hop transport.
+		routeLabel, routeCls := "multihop", "route-relay"
+		if l.Direct {
+			routeLabel, routeCls = "direct", "route-direct"
+		}
+		fmt.Fprintf(b, `<tr><td>R%d</td><td><span class="rtag %s">%s</span></td><td>%s</td><td class="pk">%s</td>`,
+			l.Index, routeCls, routeLabel, html.EscapeString(orDash(l.TpType)), html.EscapeString(shortPK(l.RemotePK)))
+		fmt.Fprintf(b, `<td>%s</td><td class="barcell"><span class="bar %s" style="width:%d%%"></span></td>`,
+			humanBytes(l.SentBytes), scls, sentShare)
+		fmt.Fprintf(b, `<td>%s</td><td class="barcell"><span class="bar recv %s" style="width:%d%%"></span></td>`,
+			humanBytes(l.RecvBytes), scls, recvShare)
+		fmt.Fprintf(b, `<td>%.0f ms</td><td>%s</td><td>%d</td><td class="%s">%s</td></tr>`,
+			l.LatencyMS, routeRTT(l.RouteLatencyMS), l.Retransmits, scls, state)
 	}
 	b.WriteString(`</tbody></table>`)
-	b.WriteString(`<p class="hint">Bar width is each leg's sent bytes relative to the busiest leg. ` +
+	b.WriteString(`<p class="hint">Bars are each leg's sent / recv bytes relative to the busiest leg. ` +
+		`<b>tp rtt</b> is the first-hop transport; <b>route rtt</b> is the true end-to-end route latency (all hops). ` +
 		`For a live terminal chart use <code>skywire cli proxy mux plot</code>.</p></section>`)
 }
 
@@ -198,6 +214,16 @@ func orDash(s string) string {
 	return s
 }
 
+// routeRTT formats a leg's end-to-end route latency. Zero means no
+// liveness pong has landed yet, shown as an em dash rather than "0 ms"
+// so an unmeasured route isn't misread as instant.
+func routeRTT(ms float64) string {
+	if ms <= 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%.0f ms", ms)
+}
+
 // shortPK renders a public key as its first+last 4 hex chars, or "direct"/"-"
 // for an empty peer.
 func shortPK(pk string) string {
@@ -250,6 +276,10 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`td.pk{font-family:ui-monospace,SFMono-Regular,monospace;color:var(--muted)}` +
 	`td.barcell{width:36%}.bar{display:block;height:.7rem;border-radius:3px;background:var(--accent);min-width:2px}` +
 	`.bar.standby{background:var(--standby)}.bar.warn{background:var(--warn)}` +
+	`.bar.recv{background:var(--recv,#3b9)}` +
+	`.rtag{display:inline-block;padding:0 .4rem;border-radius:3px;font-size:11px;font-weight:600}` +
+	`.rtag.route-direct{background:rgba(60,180,120,.18);color:#2a8}` +
+	`.rtag.route-relay{background:rgba(120,140,200,.18);color:#68a}` +
 	`td.ok{color:var(--ok)}td.warn{color:var(--warn)}td.standby{color:var(--standby)}` +
 	`pre.log{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 ui-monospace,SFMono-Regular,monospace;` +
 	`white-space:pre-wrap;word-break:break-word;max-height:26rem;overflow:auto;color:var(--fg)}` +

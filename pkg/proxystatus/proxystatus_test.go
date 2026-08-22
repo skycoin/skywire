@@ -48,8 +48,8 @@ func TestRenderSections(t *testing.T) {
 		Running:    true,
 		MuxEnabled: true,
 		Legs: []Leg{
-			{Index: 0, TpType: "stcpr", RemotePK: "0311223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", SentBytes: 2048, RecvBytes: 1024, LatencyMS: 42, Alive: true},
-			{Index: 1, TpType: "sudph", SentBytes: 512, Standby: true, Alive: true},
+			{Index: 0, TpType: "stcpr", RemotePK: "0311223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", SentBytes: 2048, RecvBytes: 1024, LatencyMS: 42, RouteLatencyMS: 42, Direct: true, Alive: true},
+			{Index: 1, TpType: "sudph", SentBytes: 512, RecvBytes: 256, LatencyMS: 30, RouteLatencyMS: 480, Direct: false, Standby: true, Alive: true},
 		},
 		Logs:   []string{"line one", "line two"},
 		Events: nil,
@@ -59,6 +59,8 @@ func TestRenderSections(t *testing.T) {
 		"<!doctype html>", "proxy status", "skysocks-client", "per-leg mux",
 		"stcpr", "recent log", "line two", "route control", "read-only preview",
 		"http-equiv=\"refresh\"", "standby", "status.dmsg", "status.skynet",
+		// route observability: route-latency column, direct/multihop badge, recv bar
+		"route rtt", "recv share", "direct", "multihop", "480 ms", "bar recv",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("rendered page missing %q", want)

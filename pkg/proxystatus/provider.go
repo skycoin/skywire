@@ -55,12 +55,17 @@ type Leg struct {
 	TransportID string
 	TpType      string
 	RemotePK    string
-	LatencyMS   float64
-	SentBytes   uint64
-	RecvBytes   uint64
-	Retransmits uint64
-	Alive       bool
-	Standby     bool
+	// LatencyMS is the first-hop transport RTT; RouteLatencyMS is the leg's
+	// true end-to-end route latency (all hops). Direct is true for a 1-hop
+	// route to the destination, false for a multihop (relayed) leg.
+	LatencyMS      float64
+	RouteLatencyMS float64
+	Direct         bool
+	SentBytes      uint64
+	RecvBytes      uint64
+	Retransmits    uint64
+	Alive          bool
+	Standby        bool
 }
 
 // Snapshot is everything a status page renders for one surface. It is a
