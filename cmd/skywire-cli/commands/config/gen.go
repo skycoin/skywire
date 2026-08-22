@@ -336,6 +336,16 @@ func init() {
 	genConfigCmd.Flags().StringVar(&skynetWebProxyAddr, "skynetweb-addr", scriptExecString("${SKYNETWEBADDR}"), "host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-addr")
 
+	// Browse-origin flags: the loopback real-origin browse proxy also serves the
+	// warning-free HTTPS proxy-status pages (status-<surface>.<suffix>) when a real
+	// wildcard cert for *.<suffix> is supplied. Enabled by default (loopback-only).
+	genConfigCmd.Flags().BoolVar(&noBrowseOrigin, "no-browse-origin", scriptExecBool("${NOBROWSEORIGIN:-false}"), "do not serve the loopback real-origin browse proxy / HTTPS proxy-status pages (status-<surface>.<suffix>)")
+	genConfigCmd.Flags().StringVar(&browseOriginSuffix, "browse-suffix", scriptExecString("${BROWSESUFFIX}"), fmt.Sprintf("browse-origin domain suffix (leading dot) for the loopback browse proxy + HTTPS proxy-status pages. Empty = deployment default (%q)", deployment.Prod.BrowseOriginSuffix))
+	genConfigCmd.Flags().StringVar(&browseOriginTLSCert, "browse-tls-cert", scriptExecString("${BROWSETLSCERT}"), "PEM cert for the browse-origin listener — a real wildcard cert for *.<browse-suffix> so status-<surface>.<suffix> loads over warning-free HTTPS. Requires --browse-tls-key; empty = plain HTTP on loopback")
+	gHiddenFlags = append(gHiddenFlags, "browse-tls-cert")
+	genConfigCmd.Flags().StringVar(&browseOriginTLSKey, "browse-tls-key", scriptExecString("${BROWSETLSKEY}"), "PEM key paired with --browse-tls-cert")
+	gHiddenFlags = append(gHiddenFlags, "browse-tls-key")
+
 	// Skychat flags
 	genConfigCmd.Flags().BoolVar(&isSkychatEnable, "servechat", scriptExecBool("${SKYCHAT:-true}"), "autostart skychat")
 	genConfigCmd.Flags().StringVar(&skychatAddr, "chataddr", scriptExecString("${SKYCHATADDR:-"+skyenv.SkychatAddr+"}"), "skychat local address")
@@ -2229,6 +2239,36 @@ func configureResolvingProxies() {
 			Addr:   skyenv.SkymailBridgeAddr,
 			Mode:   "b",
 		}
+	}
+	configureBrowseOrigin()
+}
+
+// configureBrowseOrigin enables, by default, the loopback "real-origin" browse
+// proxy (pkg/visor/meshproxy.go). Its meshStatusHandler serves the proxy-status
+// pages at status-<surface>.<suffix> (e.g. status-skysocks.haltingstate.net) —
+// the native counterpart of the wasm visor's browse origin. Suffix defaults to
+// the deployment's browse_origin_suffix (".haltingstate.net"), matching the wasm
+// surface, so a real single-level wildcard cert *.<suffix> covers the status
+// hosts. TLS activates on that loopback listener ONLY when the operator supplies
+// --browse-tls-cert/--browse-tls-key (the wildcard PRIVATE KEY is a deployment
+// secret and cannot ship in config-gen defaults); until then the listener serves
+// plain HTTP on loopback. There is deliberately NO self-signed fallback: a
+// self-signed cert would defeat the whole point (warning-free HTTPS via a real
+// cert) — the self-signed-leaf path stays on the .skynet TLS-MITM surface
+// (SkynetWebConfig.TLSMITM). Opt out with --no-browse-origin.
+func configureBrowseOrigin() {
+	if noBrowseOrigin {
+		return
+	}
+	suffix := strings.TrimSpace(browseOriginSuffix)
+	if suffix == "" {
+		suffix = deployment.Prod.BrowseOriginSuffix
+	}
+	conf.BrowseOrigin = &visorconfig.BrowseOriginConfig{
+		Enable:  true,
+		Suffix:  suffix,
+		TLSCert: browseOriginTLSCert,
+		TLSKey:  browseOriginTLSKey,
 	}
 }
 
