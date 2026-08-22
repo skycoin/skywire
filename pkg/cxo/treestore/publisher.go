@@ -423,8 +423,20 @@ func (p *Publisher) hydrateFromContainer() error {
 		return fmt.Errorf("decode root TreeNode: %w", err)
 	}
 	hydrated := newMemNode()
-	if err := hydrateMemNode(up, &rootNode, hydrated); err != nil {
+	var dropped []string
+	if err := hydrateMemNode(up, &rootNode, hydrated, &dropped, ""); err != nil {
 		return fmt.Errorf("walk: %w", err)
+	}
+	// A dangling sub-object reference (the filling-trap's persisted form:
+	// a placeholder whose CXDS backing never landed) no longer discards the
+	// WHOLE previously-published tree. hydrateMemNode skips only the affected
+	// subtree; here we surface exactly which object(s) trapped so the culprit
+	// hash is identifiable, then keep the intact remainder as our starting
+	// state. This bounds the TPD under-report to the trapped subtree instead
+	// of dropping every transport this visor had published.
+	if len(dropped) > 0 {
+		p.log.WithField("dropped", dropped).
+			Warn("treestore-pub: hydrate skipped dangling sub-object refs (filling-trap culprits); kept the intact subtrees")
 	}
 	p.root = hydrated
 	return nil
@@ -438,7 +450,11 @@ func (p *Publisher) hydrateFromContainer() error {
 // produces a Root identical to the one we just read — until a Put
 // mutates a path, after which the dirty-path-only re-encode keeps
 // the unchanged subtrees stable.
-func hydrateMemNode(up registry.Pack, node *TreeNode, dest *memNode) error {
+// dropped accumulates "<path>/<name>(<hash16>)" for each sub-object ref that
+// could not be resolved from CXDS (the filling-trap's persisted form). Such a
+// ref is SKIPPED rather than aborting the whole hydrate, so the intact subtrees
+// survive a restart; path threads the ancestor names for a locatable label.
+func hydrateMemNode(up registry.Pack, node *TreeNode, dest *memNode, dropped *[]string, path string) error {
 	n, err := node.Children.Len(up)
 	if err != nil {
 		return err
@@ -455,12 +471,23 @@ func hydrateMemNode(up registry.Pack, node *TreeNode, dest *memNode) error {
 		if entry.Sub.Hash == (skycipher.SHA256{}) {
 			continue
 		}
+		childPath := entry.Name
+		if path != "" {
+			childPath = path + "/" + entry.Name
+		}
 		var sub TreeNode
 		if err := entry.Sub.Value(up, &sub); err != nil {
+			// Best-effort: a missing (unbacked) sub-object drops only its own
+			// subtree — name the culprit hash and continue with the rest. A
+			// non-missing decode error is real corruption; still abort.
+			if isMissingObject(err) {
+				*dropped = append(*dropped, fmt.Sprintf("%s(%s)", childPath, entry.Sub.Hash.Hex()[:16]))
+				continue
+			}
 			return err
 		}
 		child := newMemNode()
-		if err := hydrateMemNode(up, &sub, child); err != nil {
+		if err := hydrateMemNode(up, &sub, child, dropped, childPath); err != nil {
 			return err
 		}
 		dest.subs[entry.Name] = child
