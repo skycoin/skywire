@@ -995,7 +995,15 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 	// this way and falls through). On any miss (no oracle, no shared
 	// intermediate, delivery error) it falls through to the existing behavior —
 	// zero change when disabled.
-	if r.conf != nil && (r.conf.EnableRSNOracleRoutes || opts.UseRSNOracle2Hop) && src != dst {
+	// A direct dial (--direct: EnsureDirectTransport, or UseExistingTpOnly) means
+	// "use the 1-hop direct transport, don't route around it". The RSN-oracle is
+	// a SEPARATE 2-hop path from the route-finder that --direct already bypasses,
+	// so without this guard an enabled oracle still overrode a --direct control
+	// forward with a 2-hop route (observed: a same-LAN :4443 forward routed
+	// US->AU->US at 2.3s instead of over its 3ms direct transport). Skip the
+	// oracle for a direct dial.
+	directDial := opts != nil && (opts.EnsureDirectTransport || opts.UseExistingTpOnly)
+	if r.conf != nil && (r.conf.EnableRSNOracleRoutes || opts.UseRSNOracle2Hop) && src != dst && !directDial {
 		hi := baseMinHops
 		if e := opts.EffectiveMinHops(true); uint16(e) > hi { //nolint:gosec
 			hi = uint16(e) //nolint:gosec
