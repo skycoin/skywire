@@ -342,3 +342,58 @@ func TestTransportSelector_DSCPPriority_NonIPv4FallsToRR(t *testing.T) {
 		t.Errorf("non-IPv4 should never go to leg 0 (no DSCP read), got %d", counts[0])
 	}
 }
+
+// TestTransportSelector_CapacityBootstrap: with no throughput samples yet
+// (bootstrap), capacity mode degenerates to equal round-robin so every leg
+// is exercised and its capacity discovered.
+func TestTransportSelector_CapacityBootstrap(t *testing.T) {
+	ts := newTransportSelector()
+	ts.SetMode(WeightModeCapacity)
+	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
+	ts.Rebuild(tps)
+
+	counts := make(map[int]int)
+	for i := 0; i < 100; i++ {
+		counts[ts.Select()]++
+	}
+	assert.Equal(t, 50, counts[0])
+	assert.Equal(t, 50, counts[1])
+}
+
+// TestTransportSelector_CapacityWeighted: once throughput is measured, the
+// schedule biases toward the fatter leg — UNLIKE latency-weighting, this is
+// driven by bytes carried, not RTT. leg0 moved 700, leg1 100: leg0 gets
+// 1+round(7*700/700)=8 slots, leg1 gets 1+round(7*100/700)=2.
+func TestTransportSelector_CapacityWeighted(t *testing.T) {
+	ts := newTransportSelector()
+	ts.SetMode(WeightModeCapacity)
+	ts.SetCapacityWeights([]float64{700, 100})
+	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
+	ts.Rebuild(tps)
+
+	counts := make(map[int]int)
+	for i := 0; i < ts.Len()*10; i++ {
+		counts[ts.Select()]++
+	}
+	// leg0 carries ~4x leg1, but leg1 is never starved.
+	assert.Greater(t, counts[0], counts[1]*2)
+	assert.Positive(t, counts[1])
+}
+
+// TestTransportSelector_CapacityFloor: a leg with zero recent throughput
+// still gets a floor slot so it keeps carrying (and keeps being measured) —
+// it must never be starved to zero the way pure proportional weighting would.
+func TestTransportSelector_CapacityFloor(t *testing.T) {
+	ts := newTransportSelector()
+	ts.SetMode(WeightModeCapacity)
+	ts.SetCapacityWeights([]float64{1000, 0})
+	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
+	ts.Rebuild(tps)
+
+	counts := make(map[int]int)
+	for i := 0; i < ts.Len()*5; i++ {
+		counts[ts.Select()]++
+	}
+	assert.Positive(t, counts[1], "zero-throughput leg must keep a floor share")
+	assert.Greater(t, counts[0], counts[1])
+}

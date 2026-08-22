@@ -46,6 +46,8 @@ func ParseDistribution(s string) (router.DistributionConfig, error) {
 		return router.DistributionConfig{Mode: router.DistributionRoundRobin}, nil
 	case "latency-adaptive", "latency-aware":
 		return router.DistributionConfig{Mode: router.DistributionLatencyAdaptive}, nil
+	case "capacity", "capacity-weighted":
+		return router.DistributionConfig{Mode: router.DistributionCapacity}, nil
 	}
 
 	// Prefix-based.

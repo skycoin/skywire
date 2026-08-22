@@ -383,6 +383,24 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 
 			return nil, fmt.Errorf("sendHandshake (%s): %w", &rules.Desc, err)
 		}
+
+		// Responder-side download policy. This visor is the BULK SENDER for
+		// this route group: it serves the initiator's downloads over the
+		// reverse legs. The initiator's forward policy (interactive — narrow
+		// to one low-latency leg) never runs here; historically the responder
+		// had NO policy at all and fell back to the visor-wide muxMode (auto,
+		// latency-weighted), so a multi-leg download piled onto the single
+		// fastest leg and never aggregated bandwidth. Put a mux-enabled
+		// responder into the capacity bulk-spread profile so the download
+		// fills every leg toward its throughput. The keep-alive loop's
+		// periodic rebuildWeights keeps the capacity schedule fresh, so this
+		// is dynamic without a rotation goroutine. An operator `proxy mux
+		// mode <x>` (SetMuxMode) still propagates to and overrides this group
+		// live. (Layer 2 will let the initiator signal a specific reverse
+		// preset; until then capacity is the bulk default.)
+		if rg.mux != nil && r.ResponderBulkSpread() {
+			rg.applyDistribution(DistributionConfig{Mode: DistributionCapacity})
+		}
 	}
 
 	if ok && nrg != nil {

@@ -594,6 +594,13 @@ type router struct {
 	existingTpOnlyMu   sync.Mutex       // protects existingTpOnly
 	forceLocalRoutes   bool             // when true, skip route finder and use local route calculation
 	forceLocalRoutesMu sync.Mutex       // protects forceLocalRoutes
+	// responderBulkSpread, when true (the default), puts a mux-enabled
+	// responder route group into the capacity bulk-spread distribution so the
+	// download it serves aggregates bandwidth across its legs instead of
+	// piling onto the single fastest leg (the auto/latency-weighted default).
+	// See router_serve.go. Runtime-settable via SetResponderBulkSpread.
+	responderBulkSpread   bool
+	responderBulkSpreadMu sync.Mutex
 	// protects conf.MinHops, which SetMinHop changes at runtime while dials
 	// are reading it — see SetMinHop / MinHops.
 	minHopsMu         sync.RWMutex
@@ -718,6 +725,10 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		routeSetupHooks: routeSetupHooks,
 		tpdCache:        newTPDSnapshotCache(),
 		suspects:        newSuspectHopCache(handshakeAwaitTimeout),
+		// Default a mux responder to capacity bulk-spread for the downloads it
+		// serves (see router_serve.go); operators can disable via
+		// SetResponderBulkSpread(false).
+		responderBulkSpread: true,
 	}
 
 	go r.rulesGCLoop()
