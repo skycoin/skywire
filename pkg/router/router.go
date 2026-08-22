@@ -222,7 +222,6 @@ type Config struct {
 	// getter or nil result is fine — the private-IP and local-interface /24
 	// checks still apply.
 	SelfPublicIP func() net.IP
-
 }
 
 // SetDefaults sets default values for certain empty values.

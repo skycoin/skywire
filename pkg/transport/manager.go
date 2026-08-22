@@ -1537,7 +1537,7 @@ func (tm *Manager) TransportRemoteAddrs() []string {
 // nil when the public IP is not yet known (STUN pending) — the private-IP and
 // local-interface /24 checks still apply.
 func (tm *Manager) SameLANPeers(self net.IP) []cipher.PubKey {
-	localIPs, _ := netutil.LocalNetworkInterfaceIPs()
+	localIPs, _ := netutil.LocalNetworkInterfaceIPs() //nolint:errcheck // best-effort; nil localIPs handled below
 
 	tm.mx.RLock()
 	defer tm.mx.RUnlock()
