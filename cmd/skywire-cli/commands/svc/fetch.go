@@ -382,7 +382,7 @@ sessions show as "(down: <duration>)"; sessions shorter than
 			// plainly instead of dumping a raw RPC/HTTP error + exit 1.
 			if strings.Contains(err.Error(), "503") || strings.Contains(err.Error(), "404") {
 				fmt.Fprintln(cmd.ErrOrStderr(), "svc tpd uptime: the transport-discovery reports no session history (HTTP 503/404 from /uptime/sessions).") //nolint:errcheck
-				fmt.Fprintln(cmd.ErrOrStderr(), "This deployment's TPD build does not record its own session history (pkg/serviceuptime not enabled).")    //nolint:errcheck
+				fmt.Fprintln(cmd.ErrOrStderr(), "This deployment's TPD build does not record its own session history (pkg/serviceuptime not enabled).")     //nolint:errcheck
 				return
 			}
 			internal.PrintFatalError(cmd.Flags(), err)

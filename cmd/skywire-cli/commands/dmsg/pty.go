@@ -110,7 +110,7 @@ func init() {
 		"(not supported for pty start yet — accepted for vocabulary parity; errors if set)")
 	ptyStartCmd.Flags().BoolVar(&ptyVisorKey, "visor-key", false,
 		"borrow the local visor's SK from "+visorconfig.SkywireConfig()+" for the tcp noise handshake (default false: opt-in; --sk wins)")
-	_ = ptyStartCmd.Flags().MarkHidden("via-visor")
+	_ = ptyStartCmd.Flags().MarkHidden("via-visor") //nolint:errcheck
 
 	// Flags for exec command
 	ptyExecCmd.PersistentFlags().StringVarP(&ptyRpcAddr, "rpc", "", "localhost:3435", "RPC server address")
@@ -131,8 +131,8 @@ func init() {
 		"(not supported for pty exec yet — accepted for vocabulary parity; errors if set)")
 	ptyExecCmd.Flags().BoolVar(&ptyVisorKey, "visor-key", false,
 		"borrow the local visor's SK from "+visorconfig.SkywireConfig()+" for the tcp noise handshake (default false: opt-in; --sk wins)")
-	_ = ptyExecCmd.Flags().MarkHidden("scheme")
-	_ = ptyExecCmd.Flags().MarkHidden("via-visor")
+	_ = ptyExecCmd.Flags().MarkHidden("scheme")    //nolint:errcheck
+	_ = ptyExecCmd.Flags().MarkHidden("via-visor") //nolint:errcheck
 
 	// Flags for ui command
 	ptyUICmd.Flags().StringVarP(&ptyPath, "input", "i", "", "read from specified config file")
