@@ -110,6 +110,7 @@ var (
 	setPublicAutoconnect       string
 	minHops                    int
 	cascadeRouteSetup          bool
+	policyPerDial              string
 	isUsr                      bool
 	isPublic                   bool
 	disablePublicAutoConn      bool

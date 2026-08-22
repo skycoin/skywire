@@ -195,7 +195,7 @@ func init() {
 
 	// Transport flags
 	genConfigCmd.Flags().BoolVarP(&disablePublicAutoConn, "autoconn", "y", scriptExecBool("${DISABLEPUBLICAUTOCONN:-false}"), "disable autoconnect to public visors")
-	gHiddenFlags = append(gHiddenFlags, "hide")
+	gHiddenFlags = append(gHiddenFlags, "autoconn")
 	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", scriptExecBool("${VISORISPUBLIC:-false}"), "publicize visor in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "public")
 	genConfigCmd.Flags().IntVar(&stcprPort, "stcpr", scriptExecInt("${STCPRPORT:-0}"), "tcp transport listening port (0 = random / shared master port)")
@@ -226,6 +226,8 @@ func init() {
 	genConfigCmd.Flags().StringVar(&transportSetupPKs, "tpsetup", scriptExecArray("${TPSETUPPKS[@]}"), msg)
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
 	genConfigCmd.Flags().BoolVar(&cascadeRouteSetup, "cascade", false, "opt into source-driven cascade route setup (default: legacy setup-node path)")
+	genConfigCmd.Flags().StringVar(&policyPerDial, "policy", scriptExecString("${POLICYPERDIAL}"), "per-dial routing policy: preset:<name> (e.g. preset:adaptive), @/path/policy.star, @/path/policy.wasm, inline Starlark, or empty for built-in defaults")
+	gHiddenFlags = append(gHiddenFlags, "policy")
 	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup node")
 	gHiddenFlags = append(gHiddenFlags, "sn")
 	genConfigCmd.Flags().BoolVar(&dmsgDiscConfig, "dmsgdisc", false, "generate config for dmsg-discovery service")
@@ -1250,6 +1252,19 @@ func configureRouting() {
 		conf.Routing.MuxRoutes = muxRoutes
 	}
 
+	if policyPerDial != "" {
+		conf.Routing.PolicyPerDial = policyPerDial
+	} else {
+		// Default routing policy: the "adaptive" composite preset — scales the
+		// mux leg count to load (AIMD), evicts the slowest leg, periodically
+		// probes a fresh path, and (with the metadata provider) picks the most
+		// transport-diverse forward candidate. It is a no-op for latency-
+		// sensitive/other apps and shapes vpn/skysocks/skynet client dials.
+		// Overridable via --policy (POLICYPERDIAL) or a per-app launcher
+		// routing_policy; preserved across regen (below).
+		conf.Routing.PolicyPerDial = "preset:adaptive"
+	}
+
 	if oldConfCache != nil && oldConfCache.Routing != nil {
 		// Preserve the previous min_hops across regen UNLESS --min-hops (or
 		// MINHOPS in skywire.conf) was set to a non-default value this run, in
@@ -1262,12 +1277,15 @@ func configureRouting() {
 		if oldConfCache.Routing.EnableCascadeRouteSetup {
 			conf.Routing.EnableCascadeRouteSetup = true
 		}
-		// Respect an explicit routing policy chosen in the previous config
-		// (any non-empty value the operator set, including "none"). Only a
-		// config that never specified one falls through to the adaptive default
-		// above, so regenerating an untouched config opts it into the new
-		// default while never clobbering a deliberate choice.
-		if oldConfCache.Routing.PolicyPerDial != "" {
+		// Preserve a previously-set per-dial routing policy across regen UNLESS
+		// --policy (or POLICYPERDIAL) was passed this run, in which case the new
+		// value already set above wins. A config that never set one (any
+		// non-empty value the operator chose, including "none", counts as set)
+		// falls through to the adaptive default in the literal above — so
+		// regenerating an untouched config opts into the new default while a
+		// deliberate choice is never clobbered. To clear it, edit policy_per_dial
+		// in the JSON directly.
+		if policyPerDial == "" && oldConfCache.Routing.PolicyPerDial != "" {
 			conf.Routing.PolicyPerDial = oldConfCache.Routing.PolicyPerDial
 		}
 	}
