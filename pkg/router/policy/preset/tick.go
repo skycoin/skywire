@@ -495,7 +495,7 @@ const (
 	// adaptRevActive + adaptStandbyMax, and adaptTarget seeds to adaptRevActive.
 	adaptFwdActive = 1
 	adaptRevActive = 1
-	adaptCap       = 6
+	adaptCap       = 8
 	adaptAlpha     = 0.3
 	adaptPeakDecay = 0.98
 	// adaptStandbyMax is the warm-standby reserve the proactive park fills to.
@@ -505,7 +505,19 @@ const (
 	// legs are always parked and ready. This keeps warm standby a resilience
 	// reserve (covers an active-leg drop with zero re-establish dip) instead of
 	// load headroom that peak traffic empties to zero.
-	adaptStandbyMax = 2
+	// adaptStandbyMax is intentionally LARGE: the adaptive default pre-establishes
+	// a broad pool of DISJOINT warm-standby routes (up to this many) so any of
+	// them can be promoted to carrying at a moment's notice — maximal resilience
+	// and instant, dip-free failover. The router's establishMuxRoutes builds up
+	// to ReverseMux (= adaptRevActive + adaptStandbyMax) best-effort, so it takes
+	// as many as the topology actually offers (e.g. a busy exit exposes dozens of
+	// disjoint intermediates) and no more. The transport-type ranking in the
+	// RSN-oracle picks the best (stcpr/squicr) legs first, and the health-gate
+	// below keeps gross-latency outliers OUT of the ACTIVE set, so a big pool adds
+	// resilience without dragging the carrying legs. Each aux-leg add re-queries
+	// the destination's transports, so the pool refreshes toward newly-appeared
+	// routes as it is maintained.
+	adaptStandbyMax = 12
 	adaptStandbyMin = 1
 	// Health + anti-churn. A leg is a gross-outlier (kept OUT of the active mux,
 	// where the no-skip reorder buffer would head-of-line-stall on it) when its
