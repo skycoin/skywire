@@ -83,28 +83,40 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 			`A leg appears here once a route to a destination is warm.</p></section>`)
 		return
 	}
-	var maxSent uint64 = 1
+	// Per-direction maxima so the sent AND recv bars are each scaled to their
+	// own busiest leg. A proxy download is recv-heavy with tiny sent; scaling
+	// recv against maxSent would flatten the recv bars to nothing (and hide the
+	// download entirely — the symptom that read as "only sent bandwidth").
+	var maxSent, maxRecv uint64 = 1, 1
 	for _, l := range snap.Legs {
 		if l.SentBytes > maxSent {
 			maxSent = l.SentBytes
 		}
+		if l.RecvBytes > maxRecv {
+			maxRecv = l.RecvBytes
+		}
 	}
 	b.WriteString(`<table class="mux"><thead><tr>` +
-		`<th>leg</th><th>transport</th><th>peer</th><th>sent</th><th>bandwidth (sent share)</th>` +
-		`<th>recv</th><th>rtt</th><th>rtx</th><th>state</th></tr></thead><tbody>`)
+		`<th>leg</th><th>transport</th><th>peer</th>` +
+		`<th>sent</th><th>bandwidth (sent share)</th>` +
+		`<th>recv</th><th>bandwidth (recv share)</th>` +
+		`<th>rtt</th><th>rtx</th><th>state</th></tr></thead><tbody>`)
 	for _, l := range snap.Legs {
-		// share is 0..100 (maxSent is the per-leg max, >=1) — kept as uint64 and
+		// shares are 0..100 (each per-direction max is >=1) — kept as uint64 and
 		// printed directly so there's no uint64->int narrowing to overflow-check.
-		share := l.SentBytes * 100 / maxSent
+		sentShare := l.SentBytes * 100 / maxSent
+		recvShare := l.RecvBytes * 100 / maxRecv
 		state, scls := legState(l)
 		fmt.Fprintf(b, `<tr><td>R%d</td><td>%s</td><td class="pk">%s</td><td>%s</td>`,
 			l.Index, html.EscapeString(orDash(l.TpType)), html.EscapeString(shortPK(l.RemotePK)), humanBytes(l.SentBytes))
-		fmt.Fprintf(b, `<td class="barcell"><span class="bar %s" style="width:%d%%"></span></td>`, scls, share)
-		fmt.Fprintf(b, `<td>%s</td><td>%.0f ms</td><td>%d</td><td class="%s">%s</td></tr>`,
-			humanBytes(l.RecvBytes), l.LatencyMS, l.Retransmits, scls, state)
+		fmt.Fprintf(b, `<td class="barcell"><span class="bar %s" style="width:%d%%"></span></td>`, scls, sentShare)
+		fmt.Fprintf(b, `<td>%s</td>`, humanBytes(l.RecvBytes))
+		fmt.Fprintf(b, `<td class="barcell"><span class="bar recv %s" style="width:%d%%"></span></td>`, scls, recvShare)
+		fmt.Fprintf(b, `<td>%.0f ms</td><td>%d</td><td class="%s">%s</td></tr>`,
+			l.LatencyMS, l.Retransmits, scls, state)
 	}
 	b.WriteString(`</tbody></table>`)
-	b.WriteString(`<p class="hint">Bar width is each leg's sent bytes relative to the busiest leg. ` +
+	b.WriteString(`<p class="hint">Bar widths are each leg's sent / recv bytes relative to the busiest leg in that direction. ` +
 		`For a live terminal chart use <code>skywire cli proxy mux plot</code>.</p></section>`)
 }
 
@@ -248,7 +260,7 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`table.mux th{text-align:left;color:var(--muted);font-weight:500;border-bottom:1px solid var(--line);padding:.3rem .4rem;text-transform:uppercase;font-size:10px;letter-spacing:.3px}` +
 	`table.mux td{padding:.3rem .4rem;border-bottom:1px solid rgba(43,49,99,.5);white-space:nowrap}` +
 	`td.pk{font-family:ui-monospace,SFMono-Regular,monospace;color:var(--muted)}` +
-	`td.barcell{width:36%}.bar{display:block;height:.7rem;border-radius:3px;background:var(--accent);min-width:2px}` +
+	`td.barcell{width:18%}.bar{display:block;height:.7rem;border-radius:3px;background:var(--accent);min-width:2px}.bar.recv{background:#2c9c8f}` +
 	`.bar.standby{background:var(--standby)}.bar.warn{background:var(--warn)}` +
 	`td.ok{color:var(--ok)}td.warn{color:var(--warn)}td.standby{color:var(--standby)}` +
 	`pre.log{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 ui-monospace,SFMono-Regular,monospace;` +
