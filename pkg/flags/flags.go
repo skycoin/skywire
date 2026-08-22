@@ -57,7 +57,8 @@ func initColoredCobra(cmd *cobra.Command) {
 // Both templates below support cobra Command Groups (cobra ≥ 1.6):
 // when a command has defined groups via AddGroup, subcommands render
 // under their group's title; ungrouped subcommands fall through to an
-// "Additional Commands:" block. When no groups are defined the old
+// "Additional Commands:" block (emitted whenever not every child has a
+// group, via .AllChildCommandsHaveGroup). When no groups are defined the old
 // flat "Available Commands:" listing is produced, preserving the
 // existing behavior for commands that haven't opted in.
 const helpTemplateNoUsage = `{{with (or .Long .Short)}}{{. | trimTrailingWhitespaces}}
@@ -66,6 +67,9 @@ const helpTemplateNoUsage = `{{with (or .Long .Short)}}{{. | trimTrailingWhitesp
   {{rpad (CommandStyle .Name) (sum .NamePadding 12) }} {{CmdShortStyle .Short}}{{end}}{{end}}
 {{else}}{{$cmds := .Commands}}{{range $group := .Groups}}
 {{HeadingStyle $group.Title}}{{range $cmds}}{{if and (eq .GroupID $group.ID) (ne .Name "completion") .IsAvailableCommand}}
+  {{rpad (CommandStyle .Name) (sum .NamePadding 12) }} {{CmdShortStyle .Short}}{{end}}{{end}}
+{{end}}{{if not .AllChildCommandsHaveGroup}}
+{{HeadingStyle "Additional Commands:"}}{{range $cmds}}{{if and (eq .GroupID "") (ne .Name "completion") .IsAvailableCommand}}
   {{rpad (CommandStyle .Name) (sum .NamePadding 12) }} {{CmdShortStyle .Short}}{{end}}{{end}}
 {{end}}{{end}}
 
@@ -87,6 +91,9 @@ const helpTemplateNoUsage = `{{with (or .Long .Short)}}{{. | trimTrailingWhitesp
 const help = `{{if gt (len .Aliases) 0}}{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}{{if eq (len .Groups) 0}}Available Commands:{{range .Commands}}{{if and (ne .Name "completion") .IsAvailableCommand}}
   {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{else}}{{$cmds := .Commands}}{{range $group := .Groups}}
 {{HeadingStyle $group.Title}}{{range $cmds}}{{if and (eq .GroupID $group.ID) (ne .Name "completion") .IsAvailableCommand}}
+  {{rpad (CommandStyle .Name) (sum .NamePadding 12)}} {{CmdShortStyle .Short}}{{end}}{{end}}
+{{end}}{{if not .AllChildCommandsHaveGroup}}
+{{HeadingStyle "Additional Commands:"}}{{range $cmds}}{{if and (eq .GroupID "") (ne .Name "completion") .IsAvailableCommand}}
   {{rpad (CommandStyle .Name) (sum .NamePadding 12)}} {{CmdShortStyle .Short}}{{end}}{{end}}
 {{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
 
