@@ -240,6 +240,8 @@ func distributionFor(desc string) router.DistributionConfig {
 		return router.DistributionConfig{Mode: router.DistributionRoundRobin}
 	case "auto":
 		return router.DistributionConfig{Mode: router.DistributionAuto}
+	case "capacity":
+		return router.DistributionConfig{Mode: router.DistributionCapacity}
 	default:
 		return router.DistributionConfig{Mode: router.DistributionUnset}
 	}
