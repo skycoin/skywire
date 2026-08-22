@@ -49,6 +49,15 @@ const (
 	// others round-robin across the rest. Non-IPv4 payloads
 	// fall back to round-robin.
 	WeightModeDSCPPriority
+	// WeightModeCapacity weights each leg by its recently-measured
+	// throughput (capacityWeights, set by the mux from per-leg
+	// byte deltas), with a per-leg exploration floor so every live
+	// leg keeps a share. Bootstraps as equal round-robin until the
+	// mux has throughput samples. Contrast WeightModeAuto, which
+	// weights by inverse LATENCY and so starves a fat-but-slow leg;
+	// capacity fills each leg toward its bandwidth — the mode that
+	// actually aggregates throughput across a disjoint mux.
+	WeightModeCapacity
 )
 
 // transportSelector implements weighted transport selection based on latency.
@@ -81,6 +90,11 @@ type transportSelector struct {
 	// for adaptive's GetLatency lookups — avoids reaching back
 	// through the route group's tps[] under a lock per packet.
 	liveTps []*transport.ManagedTransport
+	// capacityWeights holds per-leg recent throughput (bytes moved
+	// since the last rebuild), one entry per leg index, used by
+	// WeightModeCapacity. Set by the mux via SetCapacityWeights
+	// before each Rebuild. Empty / all-zero → equal bootstrap.
+	capacityWeights []float64
 }
 
 func newTransportSelector() *transportSelector {
@@ -95,6 +109,16 @@ func newTransportSelector() *transportSelector {
 func (ts *transportSelector) SetExplicitWeights(w []float64) {
 	ts.mu.Lock()
 	ts.explicitWeights = append([]float64(nil), w...)
+	ts.mu.Unlock()
+}
+
+// SetCapacityWeights stores per-leg recent-throughput weights used
+// by WeightModeCapacity. Caller (the mux) recomputes these from
+// per-leg byte deltas and calls Rebuild afterwards. A copy is kept
+// so the caller may reuse its slice.
+func (ts *transportSelector) SetCapacityWeights(w []float64) {
+	ts.mu.Lock()
+	ts.capacityWeights = append([]float64(nil), w...)
 	ts.mu.Unlock()
 }
 
@@ -162,6 +186,59 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 		}
 		ts.schedule = schedule
 		return
+	}
+
+	// Capacity mode: weight each live leg by its recently-measured
+	// throughput (capacityWeights), with a floor of 1 slot per live leg
+	// so no leg is starved (and so keeps being measured). Until there IS
+	// throughput to weigh by (bootstrap, or a fully-quiet flow) this
+	// deliberately falls through to the latency-weighted Auto schedule
+	// below rather than spraying equally — an equal bootstrap would put
+	// 1/N of the very first packets down a slow aux leg and head-of-line
+	// stall a heterogeneous mux before any capacity is known. Latency-
+	// weighting is the safe cold-start; once bytes flow, the per-leg
+	// deltas arrive and the schedule shifts to true capacity weighting.
+	if ts.mode == WeightModeCapacity {
+		type liveLeg struct {
+			idx int
+			w   float64
+		}
+		live := make([]liveLeg, 0, n)
+		maxW := 0.0
+		for i, tp := range tps {
+			if tp == nil || tp.IsClosed() {
+				continue
+			}
+			w := 0.0
+			if i < len(ts.capacityWeights) && ts.capacityWeights[i] > 0 {
+				w = ts.capacityWeights[i]
+			}
+			if w > maxW {
+				maxW = w
+			}
+			live = append(live, liveLeg{idx: i, w: w})
+		}
+		// maxW == 0 → no throughput samples yet: fall through to Auto
+		// (latency-weighted) for a safe cold-start. len(live)==0 can't
+		// happen here (n>1 and closed legs are skipped, but at least one
+		// is live in a real rebuild); guard anyway.
+		if len(live) > 0 && maxW > 0 {
+			// capacityBias caps how many extra slots the fattest leg
+			// gets over the 1-slot floor. 7 → up to 8:1, enough to
+			// steer bulk toward capacity without ever fully starving a
+			// thin leg (its floor of 1 keeps it live and measured).
+			const capacityBias = 7
+			schedule := make([]int, 0, len(live)*(capacityBias+1))
+			for _, l := range live {
+				count := 1 + int(float64(capacityBias)*(l.w/maxW)+0.5)
+				for j := 0; j < count; j++ {
+					schedule = append(schedule, l.idx)
+				}
+			}
+			ts.schedule = schedule
+			return
+		}
+		// else fall through to Auto (latency-weighted) cold-start.
 	}
 
 	// Explicit mode: operator-supplied fractional weights, one
