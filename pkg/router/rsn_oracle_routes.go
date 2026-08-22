@@ -173,7 +173,27 @@ func computeDisjoint2HopRoutes(
 	if len(intermediates) == 0 {
 		return nil, errors.New("rsn-oracle 2-hop: no shared intermediate between src and dst transports")
 	}
+	// Rank intermediates by transport QUALITY, best first, so the mux picks good
+	// legs before poor ones: each aux-leg dial takes intermediates in this order
+	// (excluding those already used), so a well-connected stcpr/squicr path is
+	// chosen ahead of a flaky webrtc one. The cost is the worse of the two hops'
+	// type preferences (lower TypePreference = more preferred: stcpr < squicr <
+	// sudph < stcp < webrtc); ties break on PK for determinism. Without this the
+	// PK-sorted order admitted webrtc first hops that spiked to multi-second
+	// latency and destabilized the group.
+	legCost := func(pk cipher.PubKey) int {
+		s := tptypes.TypePreference(srcByPeer[pk].tpType)
+		d := tptypes.TypePreference(dstByPeer[pk].tpType)
+		if d > s {
+			return d
+		}
+		return s
+	}
 	sort.SliceStable(intermediates, func(i, j int) bool {
+		ci, cj := legCost(intermediates[i]), legCost(intermediates[j])
+		if ci != cj {
+			return ci < cj
+		}
 		return intermediates[i].String() < intermediates[j].String()
 	})
 
