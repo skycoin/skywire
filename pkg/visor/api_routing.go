@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -108,7 +109,24 @@ func (v *Visor) RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error) {
 	if v.router == nil {
 		return nil, nil
 	}
-	infos := v.router.RouteGroupMuxInfoForApp(appName)
+	return muxRouteGroupInfoFrom(v.router.RouteGroupMuxInfoForApp(appName)), nil
+}
+
+// AllRouteGroupMuxInfo implements API. Returns per-mux-leg counters for
+// EVERY active route group on the visor, regardless of app — the
+// whole-runtime view surfaced in `cli visor state`. Same transcription
+// as RouteGroupMuxInfo, only without the app filter.
+func (v *Visor) AllRouteGroupMuxInfo() ([]MuxRouteGroupInfo, error) {
+	if v.router == nil {
+		return nil, nil
+	}
+	return muxRouteGroupInfoFrom(v.router.RouteGroupMuxInfoAll()), nil
+}
+
+// muxRouteGroupInfoFrom transcribes the router's internal MuxInfo slice
+// into the wire-friendly visor-level MuxRouteGroupInfo shape. Shared by
+// the per-app and all-groups queries so the two stay identical.
+func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 	out := make([]MuxRouteGroupInfo, 0, len(infos))
 	for _, info := range infos {
 		entry := MuxRouteGroupInfo{
@@ -140,7 +158,7 @@ func (v *Visor) RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error) {
 		}
 		out = append(out, entry)
 	}
-	return out, nil
+	return out
 }
 
 // ActiveRoutes implements API.

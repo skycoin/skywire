@@ -598,17 +598,20 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 		}
 
 		oTP := outputTP{
-			Type:      tp.Type,
-			ID:        tp.ID,
-			Remote:    tp.Remote,
-			TpMode:    tpMode,
-			Label:     tp.Label,
-			Version:   version,
-			Country:   country,
-			Services:  services,
-			LatencyMS: tp.LatencyMS,
-			RecvBytes: recvBytes,
-			SentBytes: sentBytes,
+			Type:          tp.Type,
+			ID:            tp.ID,
+			Remote:        tp.Remote,
+			TpMode:        tpMode,
+			Label:         tp.Label,
+			Version:       version,
+			Country:       country,
+			Services:      services,
+			LatencyMS:     tp.LatencyMS,
+			RecvBytes:     recvBytes,
+			SentBytes:     sentBytes,
+			RemoteIP:      tp.RemoteIP,
+			RemoteCountry: tp.RemoteCountry,
+			Endpoint:      tp.Endpoint,
 		}
 		outputTPS = append(outputTPS, oTP)
 
@@ -836,17 +839,20 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		}
 
 		oTP := outputTP{
-			Type:      tp.Type,
-			ID:        tp.ID,
-			Remote:    tp.Remote,
-			TpMode:    tpMode,
-			Label:     tp.Label,
-			Version:   version,
-			Country:   country,
-			Services:  services,
-			LatencyMS: tp.LatencyMS,
-			RecvBytes: recvBytes,
-			SentBytes: sentBytes,
+			Type:          tp.Type,
+			ID:            tp.ID,
+			Remote:        tp.Remote,
+			TpMode:        tpMode,
+			Label:         tp.Label,
+			Version:       version,
+			Country:       country,
+			Services:      services,
+			LatencyMS:     tp.LatencyMS,
+			RecvBytes:     recvBytes,
+			SentBytes:     sentBytes,
+			RemoteIP:      tp.RemoteIP,
+			RemoteCountry: tp.RemoteCountry,
+			Endpoint:      tp.Endpoint,
 		}
 		outputTPS = append(outputTPS, oTP)
 
