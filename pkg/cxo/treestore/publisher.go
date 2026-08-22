@@ -1219,6 +1219,16 @@ func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 		err = attempt()
 	}
 	if err != nil {
+		// DIAGNOSTIC (#4102): a live freeze ([stats]/tp-list feed republish
+		// failing "encode/save: not found") reaches this terminal WITHOUT the
+		// self-heal above ever logging — isMissingObject returned false for an
+		// error whose string is "not found", which its substring check should
+		// have matched. Capture the error's concrete TYPE + the isMissingObject
+		// verdict so the real fix can target the actual path.
+		p.log.WithError(err).
+			WithField("err_type", fmt.Sprintf("%T", err)).
+			WithField("is_missing_object", isMissingObject(err)).
+			Warn("treestore: publishRoot terminal failure — capturing freeze path (#4102)")
 		// Wrap with which-operation context so a future freeze
 		// self-localizes in the log. isMissingObject still matches through
 		// the %w wrap (errors.Is + a lowercase "not found" substring both
