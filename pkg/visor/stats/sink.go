@@ -94,11 +94,16 @@ func HydrateSink(store *Store, sink Sink, publishWindowDays int, now time.Time) 
 	if publishWindowDays <= 0 {
 		return 0, nil
 	}
-	cutoff := now.UTC().AddDate(0, 0, -publishWindowDays).Format(dateFmt)
 	pushed := 0
 
-	// Transports: per-record, push current + each daily row whose
-	// date is within window.
+	// Push ONLY current per-transport snapshots to the CXO sink. TPD is a
+	// discovery service: the feed it fills over the short announce conn must
+	// stay small (transports/list + transports/<id>/current), so it can be
+	// fetched reliably. Historical telemetry — daily rollups, tier/service
+	// bitmaps, and per-transport timeline bitmaps — remains bbolt-only for
+	// the visor's own /stats + `visor state`; re-broadcasting days of history
+	// grew the Root to ~23k objects and broke TPD's fill (the discovery gap).
+	// TPD accumulates its own uptime history from what it observes each cycle.
 	records, err := store.AllTransportRecords()
 	if err != nil {
 		return pushed, fmt.Errorf("hydrate transports: %w", err)
@@ -109,93 +114,6 @@ func HydrateSink(store *Store, sink Sink, publishWindowDays int, now time.Time) 
 				sink.Put(currentTransportPath(rec.ID.String()), data)
 				pushed++
 			}
-		}
-		// Daily rollups are deliberately NOT hydrated to the CXO sink: no
-		// subscriber consumes them (TPD's aggregator has no /rollup branch;
-		// the visor's own /stats reads them straight from bbolt), and every
-		// byte on this feed competes with transports/list for the announce
-		// conn's short fill budget. They remain persisted in bbolt (the
-		// TransportRecord above) for the local /stats endpoint.
-	}
-
-	// Tiers: per-tier, per-date bitmap if within window.
-	tiers, err := store.TierNames()
-	if err != nil {
-		return pushed, fmt.Errorf("hydrate tiers: %w", err)
-	}
-	for _, tier := range tiers {
-		dates, err := store.TierDates(tier)
-		if err != nil {
-			continue
-		}
-		for _, date := range dates {
-			if date < cutoff {
-				continue
-			}
-			d, err := time.Parse(dateFmt, date)
-			if err != nil {
-				continue
-			}
-			bm, err := store.TierBitmap(tier, d)
-			if err != nil {
-				continue
-			}
-			sink.Put(tierBitmapPath(tier, date), bm)
-			pushed++
-		}
-	}
-
-	// Services: same shape as tiers.
-	services, err := store.ServiceNames()
-	if err != nil {
-		return pushed, fmt.Errorf("hydrate services: %w", err)
-	}
-	for _, svc := range services {
-		dates, err := store.ServiceDates(svc)
-		if err != nil {
-			continue
-		}
-		for _, date := range dates {
-			if date < cutoff {
-				continue
-			}
-			d, err := time.Parse(dateFmt, date)
-			if err != nil {
-				continue
-			}
-			bm, err := store.ServiceBitmap(svc, d)
-			if err != nil {
-				continue
-			}
-			sink.Put(serviceBitmapPath(svc, date), bm)
-			pushed++
-		}
-	}
-
-	// Per-transport timeline bitmaps: same wire shape as tier/service.
-	tpIDs, err := store.TransportBitmapIDs()
-	if err != nil {
-		return pushed, fmt.Errorf("hydrate transport bitmaps: %w", err)
-	}
-	for _, id := range tpIDs {
-		dates, err := store.TransportBitmapDates(id)
-		if err != nil {
-			continue
-		}
-		for _, date := range dates {
-			if date < cutoff {
-				continue
-			}
-			d, err := time.Parse(dateFmt, date)
-			if err != nil {
-				continue
-			}
-			bm, err := store.TransportBitmap(id, d)
-			if err != nil {
-				continue
-			}
-			sink.Put(transportTimelinePath(id, date), bm)
-			pushed++
 		}
 	}
 	return pushed, nil
