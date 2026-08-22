@@ -336,20 +336,17 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return r.Rules() != nil && routeTableHasTransport(r, tpID)
 	})
 
-	// RSN-oracle 2-hop route path (opt-in, default OFF). When enabled, (a) wire
-	// the source-side oracle so 2-hop routes are computed from D's own
-	// transports (fetched via an RSN-signed query) instead of TPD, and (b) start
-	// the destination-side listener so peers can query THIS visor's transports.
-	// Both are inert unless Routing.EnableRSNOracleRoutes is set, so a default
-	// visor opens no extra listener and its dial path is unchanged.
-	if v.conf.Routing.EnableRSNOracleRoutes {
-		setupNodes := v.conf.EffectiveRouteSetupNodes()
-		if oracle := router.NewDmsgRSNOracle(v.dmsgC, setupNodes, logger); oracle != nil {
-			r.SetDstTransportOracle(oracle)
-			logger.Info("RSN-oracle 2-hop route path enabled (source-side oracle wired)")
-		} else {
-			logger.Warn("RSN-oracle 2-hop route path enabled but no route setup nodes configured; oracle inert")
-		}
+	// RSN-oracle 2-hop routing. The DESTINATION-side transport-query LISTENER is
+	// ALWAYS on: it answers RSN-signed (TrustedRSNs-gated) queries for THIS
+	// visor's own transports, letting any oracle-enabled peer compute a 2-hop
+	// route to us WITHOUT TPD having our transports. This is the direct
+	// workaround for the TPD fill gap (a busy exit's transports never fully land
+	// in TPD's CXO — [[project_tpd_fill_gap_blocks_mux_diversity]]): a client can
+	// ask us directly. Serving is cheap and signature-gated, so a visor need not
+	// opt into oracle ROUTING to be QUERYABLE — decoupling the two lets an
+	// oracle-enabled client route to any updated node regardless of that node's
+	// own routing config.
+	{
 		gw := &router.TransportQueryRPCGateway{
 			LocalPK:     v.conf.PK,
 			TrustedRSNs: func() []cipher.PubKey { return v.conf.EffectiveRouteSetupNodes() },
@@ -361,6 +358,20 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 				logger.WithError(err).Warn("RSN-oracle transport-query listener stopped")
 			}
 		}()
+	}
+
+	// SOURCE-side oracle (opt-in via Routing.EnableRSNOracleRoutes): compute
+	// 2-hop routes from the destination's own transports (fetched via the
+	// listener above) instead of TPD. Additive + fail-safe — on any miss the
+	// dial falls through to the TPD-backed route-finder unchanged.
+	if v.conf.Routing.EnableRSNOracleRoutes {
+		setupNodes := v.conf.EffectiveRouteSetupNodes()
+		if oracle := router.NewDmsgRSNOracle(v.dmsgC, setupNodes, logger); oracle != nil {
+			r.SetDstTransportOracle(oracle)
+			logger.Info("RSN-oracle 2-hop route path enabled (source-side oracle wired)")
+		} else {
+			logger.Warn("RSN-oracle 2-hop route path enabled but no route setup nodes configured; oracle inert")
+		}
 	}
 
 	return nil
