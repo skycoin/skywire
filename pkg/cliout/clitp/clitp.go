@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
 	store "github.com/skycoin/skywire/pkg/transport-discovery/store"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -64,6 +65,21 @@ type Transport struct {
 	// Only the listing that reconciles against the transport discovery sets
 	// it; it was the field the two former copies disagreed about.
 	Inactive bool `json:"inactive,omitempty"`
+
+	// RemoteIP is the direct remote IP of the underlying connection (empty
+	// for dmsg, which relays through a server). RemoteCountry is the ISO
+	// country the embedded geoip db maps it to. Both come straight from the
+	// visor (TransportSummary), independent of the --more service-discovery
+	// enrichment that fills Country above.
+	RemoteIP      string `json:"remote_ip,omitempty"`
+	RemoteCountry string `json:"remote_country,omitempty"`
+
+	// Endpoint is the per-transport-type low-level connection metadata: the
+	// direct IP:port for stcp/stcpr/sudph/squicr, the relaying dmsg server
+	// PK for dmsg, the QUIC TLS fingerprint/ALPN for squicr, the selected
+	// ICE candidate for webrtc. Secrets-free. nil when the visor reports
+	// none. Carried verbatim from visor.TransportSummary.Endpoint.
+	Endpoint *network.ConnDetails `json:"endpoint,omitempty"`
 }
 
 // Transports is the list form, which is what every tp listing emits — a JSON

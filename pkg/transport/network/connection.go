@@ -71,6 +71,12 @@ type transport struct {
 	// encrypt() before the noise wrapper (stream-only) replaces c.Conn. Nil
 	// for reliable-only transports.
 	dgram DatagramConn
+	// rawConn is the underlying pre-noise net.Conn, captured at handshake time
+	// (before encrypt() replaces c.Conn with the stream-only noise wrapper).
+	// Retained solely so ConnDetails can reach concrete conn types (the QUIC
+	// connection's TLS identity, the webrtc ICE candidate) that are no longer
+	// reachable through the noise wrapper. Read-only for observability.
+	rawConn net.Conn
 }
 
 // Datagram returns the transport's native datagram channel and true when the
@@ -106,7 +112,7 @@ func doHandshake(rawConn net.Conn, hs handshake.Handshake, netType types.Type, t
 		}
 		return nil, err
 	}
-	handshakedConn := &transport{Conn: rawConn, lAddr: lAddr, rAddr: rAddr, transportType: netType}
+	handshakedConn := &transport{Conn: rawConn, rawConn: rawConn, lAddr: lAddr, rAddr: rAddr, transportType: netType}
 	return handshakedConn, nil
 }
 
@@ -246,3 +252,24 @@ func (c *transport) RemotePort() uint16 { return c.rAddr.Port }
 
 // Network returns network of transport
 func (c *transport) Network() types.Type { return c.transportType }
+
+// ConnDetails implements ConnDetailer. Reports the curated, secrets-free
+// connection metadata for this transport: the raw remote/local addresses
+// (the direct TCP peer for stcp/stcpr, the hole-punched UDP endpoint for
+// sudph, the QUIC/ICE peer for squicr/webrtc), whether the type is
+// address-resolver-backed, and — for conns whose concrete type carries
+// more (the QUIC TLS identity, the webrtc candidate) — whatever the
+// pre-noise rawConn contributes via rawConnDetails.
+func (c *transport) ConnDetails() ConnDetails {
+	d := ConnDetails{ARBackedType: arBackedType(c.transportType)}
+	if a := c.RemoteRawAddr(); a != nil {
+		d.RemoteAddr = a.String()
+	}
+	if a := c.LocalRawAddr(); a != nil {
+		d.LocalAddr = a.String()
+	}
+	if rd, ok := c.rawConn.(rawConnDetailer); ok {
+		rd.rawConnDetails(&d)
+	}
+	return d
+}

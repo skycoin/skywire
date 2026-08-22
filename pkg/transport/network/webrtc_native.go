@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -369,6 +370,42 @@ func (c *dcConn) Close() error {
 
 func (c *dcConn) LocalAddr() net.Addr  { return webrtcAddr{} }
 func (c *dcConn) RemoteAddr() net.Addr { return webrtcAddr{} }
+
+// rawConnDetails contributes the webrtc-specific connection metadata to
+// a ConnDetails: the selected ICE candidate pair's local/remote
+// endpoints (the addresses the DataChannel actually flows between —
+// dcConn.RemoteAddr() is only the opaque "webrtc-datachannel"
+// placeholder). Best-effort: before the pair is nominated (or if pion
+// can't report it) the placeholder is left in place. The DTLS
+// fingerprint is not exposed by pion's public API and is left as a
+// known gap. Called by transport.ConnDetails via the pre-noise rawConn.
+func (c *dcConn) rawConnDetails(d *ConnDetails) {
+	if c.pc == nil {
+		return
+	}
+	sctp := c.pc.SCTP()
+	if sctp == nil {
+		return
+	}
+	dtls := sctp.Transport()
+	if dtls == nil {
+		return
+	}
+	ice := dtls.ICETransport()
+	if ice == nil {
+		return
+	}
+	pair, err := ice.GetSelectedCandidatePair()
+	if err != nil || pair == nil {
+		return
+	}
+	if pair.Remote != nil {
+		d.RemoteAddr = net.JoinHostPort(pair.Remote.Address, strconv.Itoa(int(pair.Remote.Port)))
+	}
+	if pair.Local != nil {
+		d.LocalAddr = net.JoinHostPort(pair.Local.Address, strconv.Itoa(int(pair.Local.Port)))
+	}
+}
 
 func (c *dcConn) SetReadDeadline(t time.Time) error {
 	c.mu.Lock()
