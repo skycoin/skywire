@@ -54,6 +54,16 @@ type StateSnapshot struct {
 	// snapshot rather than one-app-at-a-time.
 	MuxRouteGroups []MuxRouteGroupInfo `json:"mux_route_groups,omitempty"`
 
+	// CXOFeeds is the live publish-health of each CXO feed (system
+	// telemetry/tp-list feed first, then user feeds): dirty state, secs
+	// since last OK publish, in-memory leaf/node counts, and any standing
+	// publish error with its concrete type + isMissingObject verdict.
+	// This is the diagnostic surface for TPD-agreement issues — a frozen
+	// stats feed (Frozen=true, a climbing SecsSinceOKPublish, a LastErr)
+	// is exactly why TPD under-reports a visor's transports, and it's now
+	// a query against the live visor (local or --via dmsg://<pk>).
+	CXOFeeds []CXOFeedState `json:"cxo,omitempty"`
+
 	// Notes collects per-section errors ("routing: <err>") so the snapshot is
 	// self-describing about what it could and could not read.
 	Notes []string `json:"notes,omitempty"`
@@ -184,6 +194,10 @@ func (v *Visor) StateSnapshot() (*StateSnapshot, error) {
 		UptimeRecorder:     v.uptimeRecorder != nil,
 		EmbeddedTPS:        v.embeddedTPS != nil,
 		EmbeddedRouteSetup: v.embeddedRouteSetup != nil,
+	}
+
+	if cf := v.CXOFeedStates(); len(cf) > 0 {
+		snap.CXOFeeds = cf
 	}
 
 	return snap, nil
