@@ -97,7 +97,13 @@ func NewLauncher(log logrus.FieldLogger, conf AppLauncherConfig, dmsgC *dmsg.Cli
 
 	// Prepare networks.
 	skyN := appnet.NewSkywireNetworker(log.WithField("_", appnet.TypeSkynet), r)
-	if sn, ok := skyN.(*appnet.SkywireNetworker); ok && conf.MuxRoutes > 1 {
+	// Propagate an EXPLICIT mux_routes setting (>= 1) to the networker. The old
+	// `> 1` gate made mux_routes=1 indistinguishable from unset (both left
+	// sn.MuxRoutes=0), so a visor could not express "exactly one route via a
+	// route group" — mux_routes=1 was silently swallowed and every single-route
+	// dial took the 0-hop direct shortcut instead of forming a route group.
+	// sn.MuxRoutes=1 lets the networker honor that as a single-route-group dial.
+	if sn, ok := skyN.(*appnet.SkywireNetworker); ok && conf.MuxRoutes >= 1 {
 		sn.MuxRoutes = conf.MuxRoutes
 	}
 	if err := appnet.AddNetworker(appnet.TypeSkynet, skyN); err != nil {

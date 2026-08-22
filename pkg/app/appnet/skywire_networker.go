@@ -104,7 +104,12 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 	if opts == nil {
 		opts = router.DefaultDialOptions()
 	}
-	if r.MuxRoutes > 1 && opts.MuxRoutes == 0 {
+	// Apply the visor-global mux_routes as the default when the caller didn't
+	// set a per-dial value. `>= 1` (was `> 1`) so an explicit mux_routes=1 is
+	// honored as a single-route-group dial rather than being swallowed as
+	// "unset" (which would take the 0-hop direct shortcut below and never form
+	// a route group).
+	if r.MuxRoutes >= 1 && opts.MuxRoutes == 0 {
 		opts.MuxRoutes = r.MuxRoutes
 	}
 	// If the caller threaded an app name on the context (e.g.
@@ -114,20 +119,26 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 		opts.AppName = AppNameFromContext(ctx)
 	}
 
-	// Only take the direct shortcut when the caller is fine with a
-	// single 0-hop conn. opts.MinHops > 1 means the caller wants
-	// intermediates (direct is 0 hops); opts.MuxRoutes > 1 means the
-	// caller wants N parallel routes (direct returns one conn).
-	// Without this gate, --routes N / --min-hops K on a skynet
-	// client were silently dropped whenever AppDirectMux had a
-	// transport — see ping-path counterpart #2751.
+	// Only take the direct shortcut when the caller expressed NO routing
+	// preference: min-hops <= 1 AND no explicit mux request. opts.MinHops > 1
+	// means the caller wants intermediates (direct is 0 hops).
+	//
+	// opts.MuxRoutes == 0 (was `<= 1`) is the key distinction: 0 means "unset —
+	// take the fast path"; an EXPLICIT opts.MuxRoutes >= 1 (from `--mux 1`, or
+	// the visor-global mux_routes=1 propagated above) means "form a route group,
+	// even a single-route one" — so mux_routes=1 no longer silently collapses to
+	// the 0-hop direct shortcut and actually establishes a route group. mux >= 2
+	// (N parallel routes) already skipped the shortcut; this extends the same
+	// treatment to an explicit single route. Without this gate, --routes N /
+	// --min-hops K on a skynet client were silently dropped whenever
+	// AppDirectMux had a transport — see ping-path counterpart #2751.
 	//
 	// The visor-global setting counts as much as the per-dial one, and
 	// asking the router is the only way to see it: opts.MinHops == 0 means
 	// "inherit Config.MinHops", so testing opts alone let a VPN client
 	// configured for min_hops=3 take this shortcut and get a single direct
 	// hop — the constraint bypassed before route setup was ever reached.
-	if r.r.EffectiveMinHops(opts) <= 1 && opts.MuxRoutes <= 1 {
+	if r.directShortcutEligible(opts) {
 		if directConn, ok := r.tryDirectDial(addr, opts.AppName); ok {
 			return &SkywireConn{
 				Conn:     directConn,
@@ -146,6 +157,21 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 		nrg:      conn.(*router.NoiseRouteGroup),
 		freePort: freePort,
 	}, nil
+}
+
+// directShortcutEligible reports whether a dial with these opts may take the
+// 0-hop AppDirectMux shortcut (bypassing route-group setup). It is eligible
+// only when the caller expressed NO routing preference:
+//
+//   - min-hops <= 1 (the caller isn't demanding intermediates), AND
+//   - opts.MuxRoutes == 0 (UNSET — "take the fast path"). An explicit
+//     opts.MuxRoutes >= 1 (from `--mux 1`, or the visor-global mux_routes=1
+//     propagated onto opts above) means "form a route group, even a single
+//     one", so mux_routes=1 no longer silently collapses to a 0-hop direct
+//     conn and never forming a route group. mux >= 2 already skipped the
+//     shortcut; this extends the same treatment to an explicit single route.
+func (r *SkywireNetworker) directShortcutEligible(opts *router.DialOptions) bool {
+	return r.r.EffectiveMinHops(opts) <= 1 && opts.MuxRoutes == 0
 }
 
 // DialPacketContext implements PacketNetworker — it opens a faithful-UDP
