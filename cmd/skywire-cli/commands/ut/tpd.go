@@ -6,7 +6,8 @@
 // shape changed (it fetched v1 but then tried to filter by the v2
 // `daily` field, which doesn't exist at v1). Replaced with the shared
 // cliuptime factory so it behaves identically to the sd / mdisc
-// equivalents and fetches v2 by default.
+// equivalents and fetches v3 by default (the version the deployment
+// mirrors over CXO).
 package cliut
 
 import (
@@ -26,8 +27,10 @@ func init() {
 %s/uptimes
 
 Same response shape as sd / mdisc / ut — v1 (pk+on), v2 (+ daily %%),
-v3 (+ per-5-minute timeline bitmap). Default is v2; pass -T / --timeline
-to request v3 and render the bitmap as 24 hourly blocks.
+v3 (+ per-5-minute timeline bitmap). Default is v3 (the version the
+deployment mirrors over CXO, so it hits the cache instead of live dmsg);
+pass --v v1|v2 for the older shapes, or use the graph subcommand to
+render the v3 bitmap as 24 hourly blocks.
 
 Populated by visor heartbeats + transport registrations; the same
 data feeds into the rewards pipeline.`, dep.TransportDiscovery),

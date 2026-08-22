@@ -124,7 +124,11 @@ func newTableCmd(cfg Config) *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&baseURL, "url", cfg.DefaultURL, "discovery base URL")
-	cmd.Flags().StringVarP(&versionStr, "v", "v", "v2", "response version (v1|v2)")
+	// Default to v3: the deployment's CXO feed mirrors the v3&days=30
+	// response, so v3 queries hit the CXO cache. v2 (and v1) always
+	// CXO-miss and fall back to live dmsg, which produces transient
+	// "dmsg 202" errors. v1/v2 remain selectable for the older shapes.
+	cmd.Flags().StringVarP(&versionStr, "v", "v", "v3", "response version (v1|v2|v3)")
 	cmd.Flags().StringVarP(&pkFilter, "pk", "k", "", "only show PKs matching this substring")
 	cmd.Flags().StringSliceVar(&visorFilter, "visors", nil, "server-side filter: only return these PKs (comma-separated)")
 	cmd.Flags().BoolVarP(&onlineOnly, "on", "o", false, "only include online visors")
