@@ -66,6 +66,20 @@ type Leg struct {
 	Retransmits    uint64
 	Alive          bool
 	Standby        bool
+	// Hops is the leg's full forward route (every hop to the destination),
+	// full PKs, per-hop transport type + latency where known.
+	Hops []Hop
+}
+
+// Hop is one hop of a leg's forward route. From/To are FULL public keys —
+// the status page never truncates them. LatencyMS is the hop's transport
+// RTT where known (first hop owned; single-intermediate far hop derived).
+type Hop struct {
+	TpID      string
+	From      string
+	To        string
+	TpType    string
+	LatencyMS float64
 }
 
 // Snapshot is everything a status page renders for one surface. It is a

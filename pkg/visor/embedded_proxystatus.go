@@ -96,6 +96,7 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 					Retransmits:    leg.Retransmits,
 					Alive:          leg.Alive,
 					Standby:        leg.Standby,
+					Hops:           proxyHopsFrom(leg.Hops),
 				})
 			}
 		}
@@ -114,4 +115,23 @@ func appendNote(existing, add string) string {
 		return add
 	}
 	return existing + " · " + add
+}
+
+// proxyHopsFrom transcribes the visor's per-leg MuxHopInfo into the
+// proxystatus.Hop shape the status page renders (full PKs preserved).
+func proxyHopsFrom(hops []MuxHopInfo) []proxystatus.Hop {
+	if len(hops) == 0 {
+		return nil
+	}
+	out := make([]proxystatus.Hop, len(hops))
+	for i, h := range hops {
+		out[i] = proxystatus.Hop{
+			TpID:      h.TpID,
+			From:      h.From,
+			To:        h.To,
+			TpType:    h.TpType,
+			LatencyMS: h.LatencyMS,
+		}
+	}
+	return out
 }
