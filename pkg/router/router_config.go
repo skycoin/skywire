@@ -98,6 +98,25 @@ func (r *router) SetMuxMode(mode WeightMode) {
 	r.logger.Infof("SetMuxMode: %v", mode)
 }
 
+// ResponderBulkSpread reports whether a mux-enabled responder route group
+// should be put into the capacity bulk-spread distribution for the downloads
+// it serves. Default true; see router_serve.go.
+func (r *router) ResponderBulkSpread() bool {
+	r.responderBulkSpreadMu.Lock()
+	defer r.responderBulkSpreadMu.Unlock()
+	return r.responderBulkSpread
+}
+
+// SetResponderBulkSpread toggles responder-side capacity bulk-spread at
+// runtime. Existing route groups are unaffected until they re-establish; an
+// operator `proxy mux mode <x>` still overrides live groups via SetMuxMode.
+func (r *router) SetResponderBulkSpread(on bool) {
+	r.responderBulkSpreadMu.Lock()
+	r.responderBulkSpread = on
+	r.responderBulkSpreadMu.Unlock()
+	r.logger.Infof("SetResponderBulkSpread: %v", on)
+}
+
 // GetExistingTPOnly returns the current value of the existing-tp-only flag.
 func (r *router) GetExistingTPOnly() bool {
 	r.existingTpOnlyMu.Lock()

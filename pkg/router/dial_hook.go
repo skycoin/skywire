@@ -242,6 +242,18 @@ const (
 	// round-robin across the rest. Like sticky:5tuple, meaningful
 	// for VPN apps; non-IPv4 payloads default to round-robin.
 	DistributionDSCPPriority
+	// DistributionCapacity spreads packets in proportion to each
+	// leg's recently-measured throughput (bytes carried since the
+	// last weight rebuild), with an exploration floor so every
+	// live leg keeps carrying (and so keeps being measured). It
+	// bootstraps as equal round-robin until legs have moved bytes.
+	// Unlike DistributionAuto (weights by inverse LATENCY, which
+	// dumps a bulk flow onto the single lowest-latency leg and
+	// starves higher-latency-but-fat legs), capacity weighting
+	// FILLS each leg toward its throughput — the right strategy
+	// for aggregating bandwidth across a disjoint multi-leg route.
+	// This is the adaptive default's bulk-spread mode.
+	DistributionCapacity
 )
 
 // LegChangeHook is an optional hook fired by the route group
@@ -372,6 +384,8 @@ func (m DistributionMode) String() string {
 		return "latency-adaptive"
 	case DistributionDSCPPriority:
 		return "dscp-priority"
+	case DistributionCapacity:
+		return "capacity"
 	}
 	return "unknown"
 }

@@ -46,6 +46,11 @@ type legCounters struct {
 	recvBytes   uint64 // atomic
 	recvPackets uint64 // atomic
 	retransmits uint64 // atomic
+	// lastTotalBytes snapshots sentBytes+recvBytes at the previous
+	// capacity-weight rebuild; the delta since then is this leg's
+	// recent throughput, used by WeightModeCapacity. Touched only
+	// under legMu in rebuildWeights, so it needs no atomic.
+	lastTotalBytes uint64
 }
 
 // routeMux encapsulates route multiplexing state and logic.
@@ -563,7 +568,30 @@ func (m *routeMux) heldRetxSeqs() []uint32 {
 
 // rebuildWeights updates transport selection weights based on current latency.
 func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
-	if m.tpSelector != nil {
-		m.tpSelector.Rebuild(tps)
+	if m.tpSelector == nil {
+		return
 	}
+	// Capacity mode: feed the selector each leg's throughput since
+	// the last rebuild (bytes sent+recv delta) so it can weight the
+	// schedule toward the legs actually moving data. Computed here
+	// (not in the selector) because the mux owns the per-leg byte
+	// counters. The delta resets each rebuild, so the weights track
+	// RECENT throughput, not lifetime totals (which would entrench
+	// whichever leg carried first).
+	if m.tpSelector.Mode() == WeightModeCapacity {
+		m.legMu.Lock()
+		weights := make([]float64, len(m.legs))
+		for i, lc := range m.legs {
+			if lc == nil {
+				continue
+			}
+			total := atomic.LoadUint64(&lc.sentBytes) + atomic.LoadUint64(&lc.recvBytes)
+			delta := total - lc.lastTotalBytes
+			lc.lastTotalBytes = total
+			weights[i] = float64(delta)
+		}
+		m.legMu.Unlock()
+		m.tpSelector.SetCapacityWeights(weights)
+	}
+	m.tpSelector.Rebuild(tps)
 }
