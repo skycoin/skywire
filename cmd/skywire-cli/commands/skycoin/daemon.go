@@ -39,6 +39,18 @@ var daemonListCmd = &cobra.Command{
 		states, err := rpcClient.Apps()
 		internal.Catch(cmd.Flags(), err)
 
+		// daemonEntry is the --json / --jq shape: one row per daemon
+		// instance. Collected alongside the human table so scripted
+		// consumers get structured data instead of the empty object the
+		// prior `nil` argument produced.
+		type daemonEntry struct {
+			Name      string `json:"name"`
+			AutoStart bool   `json:"auto_start"`
+			Status    string `json:"status"`
+			FiberToml string `json:"fiber_toml"`
+		}
+		entries := []daemonEntry{}
+
 		var b bytes.Buffer
 		w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
 		_, _ = fmt.Fprintln(w, "name\tauto_start\tstatus\tfiber_toml") //nolint:errcheck
@@ -59,10 +71,11 @@ var daemonListCmd = &cobra.Command{
 			if fiber == "" {
 				fiber = "(skycoin defaults)"
 			}
+			entries = append(entries, daemonEntry{Name: s.Name, AutoStart: s.AutoStart, Status: status, FiberToml: fiber})
 			_, _ = fmt.Fprintf(w, "%s\t%t\t%s\t%s\n", s.Name, s.AutoStart, status, fiber) //nolint:errcheck
 		}
 		_ = w.Flush() //nolint:errcheck
-		internal.PrintOutput(cmd.Flags(), nil, b.String())
+		internal.PrintOutput(cmd.Flags(), entries, b.String())
 	},
 }
 
