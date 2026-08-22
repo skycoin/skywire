@@ -142,23 +142,43 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 		}
 		for _, leg := range info.Legs {
 			entry.Legs = append(entry.Legs, MuxLegInfo{
-				Index:       leg.Index,
-				TransportID: leg.TransportID,
-				TpType:      leg.TpType,
+				Index:          leg.Index,
+				TransportID:    leg.TransportID,
+				TpType:         leg.TpType,
 				RemotePK:       leg.RemotePK,
 				LatencyMS:      leg.LatencyMS,
 				RouteLatencyMS: leg.RouteLatencyMS,
 				Direct:         leg.Direct,
-				SentBytes:   leg.SentBytes,
-				SentPackets: leg.SentPackets,
-				RecvBytes:   leg.RecvBytes,
-				RecvPackets: leg.RecvPackets,
-				Retransmits: leg.Retransmits,
-				Alive:       leg.Alive,
-				Standby:     leg.Standby,
+				Hops:           muxHopsFrom(leg.Hops),
+				SentBytes:      leg.SentBytes,
+				SentPackets:    leg.SentPackets,
+				RecvBytes:      leg.RecvBytes,
+				RecvPackets:    leg.RecvPackets,
+				Retransmits:    leg.Retransmits,
+				Alive:          leg.Alive,
+				Standby:        leg.Standby,
 			})
 		}
 		out = append(out, entry)
+	}
+	return out
+}
+
+// muxHopsFrom transcribes the router's per-leg RouteHopInfo slice into the
+// wire-friendly MuxHopInfo shape (full PKs preserved).
+func muxHopsFrom(hops []router.RouteHopInfo) []MuxHopInfo {
+	if len(hops) == 0 {
+		return nil
+	}
+	out := make([]MuxHopInfo, len(hops))
+	for i, h := range hops {
+		out[i] = MuxHopInfo{
+			TpID:      h.TpID,
+			From:      h.From,
+			To:        h.To,
+			TpType:    h.TpType,
+			LatencyMS: h.LatencyMS,
+		}
 	}
 	return out
 }
