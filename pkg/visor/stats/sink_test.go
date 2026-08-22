@@ -126,7 +126,10 @@ func TestSinkReceivesTransportPutsOnSample(t *testing.T) {
 	}
 }
 
-func TestSinkReceivesTierAndServiceBitmaps(t *testing.T) {
+// TestTierServiceBitmapsAreBboltOnly asserts the current-only CXO contract:
+// tier/service online-slot bitmaps are written to bbolt (for the visor's own
+// /stats + `visor state`) but are NOT mirrored to the CXO sink TPD reads.
+func TestTierServiceBitmapsAreBboltOnly(t *testing.T) {
 	sink := newRecordingSink()
 	tr := newTrackerWithSink(t, sink)
 	day := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
@@ -138,18 +141,22 @@ func TestSinkReceivesTierAndServiceBitmaps(t *testing.T) {
 	}
 	tr.sample(day)
 
+	// NOT on the CXO sink — historical telemetry stays bbolt-only.
 	puts, _ := sink.snapshot()
-	if _, ok := puts["tiers/process/2026-04-27"]; !ok {
-		t.Errorf("missing tiers/process/2026-04-27; got %v", keysOf(puts))
+	for _, p := range []string{
+		"tiers/process/2026-04-27", "tiers/dmsg/2026-04-27",
+		"services/vpn-server/2026-04-27",
+	} {
+		if _, ok := puts[p]; ok {
+			t.Errorf("%s should NOT be mirrored to the CXO sink; got %v", p, keysOf(puts))
+		}
 	}
-	if _, ok := puts["tiers/dmsg/2026-04-27"]; !ok {
-		t.Errorf("missing tiers/dmsg/2026-04-27; got %v", keysOf(puts))
+	// But present in bbolt.
+	if bm, err := tr.store.TierBitmap("dmsg", day); err != nil || len(bm) == 0 {
+		t.Errorf("tier bitmap should be persisted in bbolt: bm=%v err=%v", bm, err)
 	}
-	if _, ok := puts["tiers/skynet/2026-04-27"]; ok {
-		t.Errorf("skynet was offline; should not be in sink puts")
-	}
-	if _, ok := puts["services/vpn-server/2026-04-27"]; !ok {
-		t.Errorf("missing services/vpn-server/2026-04-27; got %v", keysOf(puts))
+	if bm, err := tr.store.ServiceBitmap("vpn-server", day); err != nil || len(bm) == 0 {
+		t.Errorf("service bitmap should be persisted in bbolt: bm=%v err=%v", bm, err)
 	}
 }
 
@@ -248,7 +255,10 @@ func TestSinkDeletedOnBboltRetentionDrop(t *testing.T) {
 	}
 }
 
-func TestHydrateSinkPushesInWindowOnly(t *testing.T) {
+// TestHydrateSinkPushesCurrentOnly asserts the seed path pushes only current
+// per-transport snapshots to the CXO sink — never historical tier/service or
+// timeline bitmaps (those are bbolt-only and would bloat the TPD feed).
+func TestHydrateSinkPushesCurrentOnly(t *testing.T) {
 	store, err := OpenStore(filepath.Join(t.TempDir(), "stats.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -260,10 +270,17 @@ func TestHydrateSinkPushesInWindowOnly(t *testing.T) {
 	}()
 
 	now := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
-	if err := store.MarkTierSlot("dmsg", now.AddDate(0, 0, -2), 0); err != nil {
+	// A current transport snapshot (should be pushed) ...
+	id := uuid.New()
+	rec := &TransportRecord{
+		ID: id, Type: "stcpr", FirstSeen: now, LastSeen: now,
+		Current: &LiveSnapshot{SentBytes: 10, RecvBytes: 5, SampledAt: now, Type: "stcpr"},
+	}
+	if err := store.PutTransportRecord(rec); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.MarkTierSlot("dmsg", now.AddDate(0, 0, -10), 0); err != nil {
+	// ... plus a tier bitmap in bbolt (should NOT be pushed).
+	if err := store.MarkTierSlot("dmsg", now.AddDate(0, 0, -2), 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -273,14 +290,16 @@ func TestHydrateSinkPushesInWindowOnly(t *testing.T) {
 		t.Fatalf("HydrateSink: %v", err)
 	}
 	if pushed != 1 {
-		t.Errorf("pushed = %d, want 1 (only in-window date)", pushed)
+		t.Errorf("pushed = %d, want 1 (only the current snapshot)", pushed)
 	}
 	puts, _ := sink.snapshot()
-	if _, ok := puts["tiers/dmsg/"+now.AddDate(0, 0, -2).Format("2006-01-02")]; !ok {
-		t.Errorf("in-window date missing from sink: %v", keysOf(puts))
+	if _, ok := puts["transports/"+id.String()+"/current"]; !ok {
+		t.Errorf("current snapshot missing from sink: %v", keysOf(puts))
 	}
-	if _, ok := puts["tiers/dmsg/"+now.AddDate(0, 0, -10).Format("2006-01-02")]; ok {
-		t.Errorf("out-of-window date should not be in sink: %v", keysOf(puts))
+	for _, p := range keysOf(puts) {
+		if p != "transports/"+id.String()+"/current" {
+			t.Errorf("only current snapshots should be hydrated to the sink; got unexpected %q", p)
+		}
 	}
 }
 
