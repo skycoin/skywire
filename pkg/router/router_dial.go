@@ -642,6 +642,17 @@ func (r *router) finishDial(
 			muxTarget = eff
 		}
 	}
+	// A same-LAN destination is best reached over its single direct transport
+	// (ms-latency). Growing a warm-standby mux to it forces the aux legs through
+	// REMOTE 2-hop intermediates (same-LAN peers are excluded as intermediates),
+	// adding latency + rotation churn for zero path diversity — the failure that
+	// muxed a 3ms LAN forward across a 11.5s multi-hop leg. f77b928c fixed only
+	// the direct-dial hook; this stops the warm-standby GROWTH too. Keep it direct.
+	if muxTarget > 1 && r.isSameLANDest(forwardDesc.DstPK()) {
+		r.logger.WithField("dst", forwardDesc.DstPK().String()).
+			Debug("same-LAN destination: forcing direct (no warm-standby mux)")
+		muxTarget = 1
+	}
 	if muxTarget > 1 {
 		optsCopy := *opts
 		fwdDescCopy := forwardDesc
@@ -2664,6 +2675,28 @@ func (r *router) sameLANExcludedPKs() []cipher.PubKey {
 		self = r.conf.SelfPublicIP()
 	}
 	return r.tm.SameLANPeers(self)
+}
+
+// isSameLANDest reports whether dst is a peer on this visor's own local network
+// (private-endpoint or NAT-hairpin, per transport.Manager.SameLANPeers). Unlike
+// sameLANExcludedPKs (the INTERMEDIATE exclusion, gated on ExcludeSameLANHops),
+// this is used for the DESTINATION mux decision and applies regardless of that
+// config: a box on our LAN is always best reached over its single direct
+// transport, never a warm-standby mux through remote intermediates.
+func (r *router) isSameLANDest(dst cipher.PubKey) bool {
+	if r.tm == nil {
+		return false
+	}
+	var self net.IP
+	if r.conf != nil && r.conf.SelfPublicIP != nil {
+		self = r.conf.SelfPublicIP()
+	}
+	for _, pk := range r.tm.SameLANPeers(self) {
+		if pk == dst {
+			return true
+		}
+	}
+	return false
 }
 
 // appendUniquePKs appends every pk in add that is not already in base,

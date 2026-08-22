@@ -54,6 +54,12 @@ func TestDialOptions_EffectiveMuxRoutes(t *testing.T) {
 		// Canonical asymmetric download shape: fwd=1, rev=N.
 		{"asymmetric: fwd=1 rev=4 fwd", &DialOptions{ForwardMuxRoutes: 1, ReverseMuxRoutes: 4}, true, 1},
 		{"asymmetric: fwd=1 rev=4 rev", &DialOptions{ForwardMuxRoutes: 1, ReverseMuxRoutes: 4}, false, 4},
+		// EnsureDirectTransport (--direct) forces a single route regardless of any
+		// policy-set mux — the adaptive policy must not grow a warm-standby mux
+		// over a control-plane direct forward.
+		{"direct overrides symmetric mux fwd", &DialOptions{MuxRoutes: 8, EnsureDirectTransport: true}, true, 1},
+		{"direct overrides symmetric mux rev", &DialOptions{MuxRoutes: 8, EnsureDirectTransport: true}, false, 1},
+		{"direct overrides per-direction mux", &DialOptions{ForwardMuxRoutes: 4, ReverseMuxRoutes: 8, EnsureDirectTransport: true}, false, 1},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

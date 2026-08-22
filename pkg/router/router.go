@@ -434,6 +434,14 @@ func (o *DialOptions) EffectiveMuxRoutes(forward bool) int {
 	if o == nil {
 		return 0
 	}
+	// A direct-transport-only dial (--direct / EnsureDirectTransport) is a 1-hop
+	// control-plane route by definition. The adaptive policy must NOT grow a
+	// warm-standby mux over it — that re-introduces exactly the multi-hop churn
+	// --direct exists to avoid (a control forward spread across rotating 2-hop
+	// legs). Force a single route regardless of any policy-set MuxRoutes.
+	if o.EnsureDirectTransport {
+		return 1
+	}
 	if forward {
 		if o.ForwardMuxRoutes > 0 {
 			return o.ForwardMuxRoutes
