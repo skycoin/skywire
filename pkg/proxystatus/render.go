@@ -109,8 +109,8 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 		if l.Direct {
 			routeLabel, routeCls = "direct", "route-direct"
 		}
-		fmt.Fprintf(b, `<tr><td>R%d</td><td><span class="rtag %s">%s</span></td><td>%s</td><td class="pk">%s</td>`,
-			l.Index, routeCls, routeLabel, html.EscapeString(orDash(l.TpType)), html.EscapeString(shortPK(l.RemotePK)))
+		fmt.Fprintf(b, `<tr><td>R%d</td><td><span class="rtag %s">%s</span></td><td>%s</td><td class="pk"><code class="fpk">%s</code></td>`,
+			l.Index, routeCls, routeLabel, html.EscapeString(orDash(l.TpType)), html.EscapeString(orDash(l.RemotePK)))
 		fmt.Fprintf(b, `<td>%s</td><td class="barcell"><span class="bar %s" style="width:%d%%"></span></td>`,
 			humanBytes(l.SentBytes), scls, sentShare)
 		fmt.Fprintf(b, `<td>%s</td><td class="barcell"><span class="bar recv %s" style="width:%d%%"></span></td>`,
@@ -119,9 +119,44 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 			l.LatencyMS, routeRTT(l.RouteLatencyMS), l.Retransmits, scls, state)
 	}
 	b.WriteString(`</tbody></table>`)
+	writeMuxRoutes(b, snap.Legs)
 	b.WriteString(`<p class="hint">Bars are each leg's sent / recv bytes relative to the busiest leg. ` +
 		`<b>tp rtt</b> is the first-hop transport; <b>route rtt</b> is the true end-to-end route latency (all hops). ` +
 		`For a live terminal chart use <code>skywire cli proxy mux plot</code>.</p></section>`)
+}
+
+// writeMuxRoutes renders each leg's FULL forward route as a hop chain:
+// origin PK ─[tptype rtt]→ hop PK ─[…]→ destination PK. Public keys are
+// shown in full (never truncated); per-hop latency is shown where known.
+func writeMuxRoutes(b *strings.Builder, legs []Leg) {
+	any := false
+	for _, l := range legs {
+		if len(l.Hops) > 0 {
+			any = true
+			break
+		}
+	}
+	if !any {
+		return
+	}
+	b.WriteString(`<h3>full routes</h3><div class="routes">`)
+	for _, l := range legs {
+		if len(l.Hops) == 0 {
+			continue
+		}
+		fmt.Fprintf(b, `<div class="route"><span class="rlabel">R%d</span> <code class="fpk">%s</code>`,
+			l.Index, html.EscapeString(l.Hops[0].From))
+		for _, h := range l.Hops {
+			lat := ""
+			if h.LatencyMS > 0 {
+				lat = fmt.Sprintf(" %.0fms", h.LatencyMS)
+			}
+			fmt.Fprintf(b, ` <span class="hop">─[%s%s]→</span> <code class="fpk">%s</code>`,
+				html.EscapeString(orDash(h.TpType)), html.EscapeString(lat), html.EscapeString(h.To))
+		}
+		b.WriteString(`</div>`)
+	}
+	b.WriteString(`</div>`)
 }
 
 func legState(l Leg) (label, cls string) {
@@ -224,19 +259,6 @@ func routeRTT(ms float64) string {
 	return fmt.Sprintf("%.0f ms", ms)
 }
 
-// shortPK renders a public key as its first+last 4 hex chars, or "direct"/"-"
-// for an empty peer.
-func shortPK(pk string) string {
-	pk = strings.TrimSpace(pk)
-	if pk == "" {
-		return "-"
-	}
-	if len(pk) <= 12 {
-		return pk
-	}
-	return pk[:6] + "…" + pk[len(pk)-4:]
-}
-
 // humanBytes formats a byte count with a binary unit suffix.
 func humanBytes(n uint64) string {
 	const unit = 1024
@@ -280,6 +302,11 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`.rtag{display:inline-block;padding:0 .4rem;border-radius:3px;font-size:11px;font-weight:600}` +
 	`.rtag.route-direct{background:rgba(60,180,120,.18);color:#2a8}` +
 	`.rtag.route-relay{background:rgba(120,140,200,.18);color:#68a}` +
+	`.fpk{font-family:ui-monospace,monospace;font-size:11px;word-break:break-all}` +
+	`.routes{display:flex;flex-direction:column;gap:.5rem;margin:.4rem 0}` +
+	`.route{font-size:12px;line-height:1.7;padding:.4rem .6rem;border:1px solid var(--border,#3334);border-radius:5px;overflow-wrap:anywhere}` +
+	`.route .rlabel{font-weight:700;margin-right:.3rem}` +
+	`.route .hop{color:var(--muted,#8a94a6);white-space:nowrap;font-family:ui-monospace,monospace}` +
 	`td.ok{color:var(--ok)}td.warn{color:var(--warn)}td.standby{color:var(--standby)}` +
 	`pre.log{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 ui-monospace,SFMono-Regular,monospace;` +
 	`white-space:pre-wrap;word-break:break-word;max-height:26rem;overflow:auto;color:var(--fg)}` +

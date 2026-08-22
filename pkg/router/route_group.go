@@ -128,6 +128,15 @@ type RouteGroup struct {
 	// This is the full multi-hop route, not just local transports.
 	forwardHops []routing.Hop
 
+	// legForwardHops stores EACH mux leg's full forward route, keyed by the
+	// leg's first-hop transport ID (survives index shifts, like
+	// legE2ELatency). forwardHops above records only the primary leg; this
+	// captures every leg so the per-leg mux view can show each leg's whole
+	// path (all hops, full PKs, per-hop transport type), not just its first
+	// transport. Populated by SetForwardHops (primary) + AddMuxRouteByHops
+	// (aux legs). Guarded by rg.mu.
+	legForwardHops map[uuid.UUID][]routing.Hop
+
 	// initiator is true when this visor dialed the remote end (called
 	// router.DialRoutes); false when this visor accepted the route via
 	// AcceptRoutes / saveRouteGroupRules from a setup-node request.
@@ -272,6 +281,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		legMissed:          make(map[uuid.UUID]int),
 		inflightPings:      make(map[int64]uuid.UUID),
 		legE2ELatency:      make(map[uuid.UUID]float64),
+		legForwardHops:     make(map[uuid.UUID][]routing.Hop),
 		legRecvSnap:        make(map[uuid.UUID]uint64),
 	}
 
@@ -345,6 +355,12 @@ type MuxLeg struct {
 	// the leg's gate_state for the per-leg telemetry harness.
 	Alive   bool `json:"alive"`
 	Standby bool `json:"standby"`
+	// Hops is this leg's FULL forward route — every hop from this visor to
+	// the destination, with full (untruncated) From/To PKs and per-hop
+	// transport type. Per-hop LatencyMS is filled where known (first hop
+	// owned; single-intermediate far hop derived from route−transport RTT).
+	// Empty when the route path wasn't recorded (legacy/accepted routes).
+	Hops []RouteHopInfo `json:"hops,omitempty"`
 }
 
 // MuxStats returns a point-in-time snapshot of the rg's per-leg
@@ -385,6 +401,25 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 			// i.e. a 1-hop route; otherwise it is relayed (multihop).
 			leg.Direct = tp.Remote() == dstPK
 			leg.Alive = !tp.IsClosed()
+			// Full forward route for this leg (all hops, full PKs, per-hop
+			// transport type). Per-hop latency: hop 0 is the owned transport
+			// RTT; a single-intermediate leg's far hop is derived from
+			// route−transport RTT. legHopsFor takes rg.mu itself (unlocked here).
+			if hops := rg.legHopsFor(tp.Entry.ID); len(hops) > 0 {
+				leg.Hops = make([]RouteHopInfo, len(hops))
+				for hi, h := range hops {
+					leg.Hops[hi] = RouteHopInfo{
+						TpID:   h.TpID.String(),
+						From:   h.From.String(),
+						To:     h.To.String(),
+						TpType: string(transport.TypeFromTransportID(h.TpID, h.From, h.To)),
+					}
+				}
+				leg.Hops[0].LatencyMS = leg.LatencyMS
+				if len(leg.Hops) == 2 && leg.RouteLatencyMS > leg.LatencyMS {
+					leg.Hops[1].LatencyMS = leg.RouteLatencyMS - leg.LatencyMS
+				}
+			}
 		}
 		if rg.mux != nil {
 			leg.Standby = rg.mux.isLegStandby(i)
@@ -1063,9 +1098,14 @@ func (rg *RouteGroup) RouteHops() []cipher.PubKey {
 // RouteHopInfo contains detailed information about a single hop in a route.
 type RouteHopInfo struct {
 	TpID   string `json:"tp_id"`   // Transport ID
-	From   string `json:"from"`    // Source public key
-	To     string `json:"to"`      // Destination public key
+	From   string `json:"from"`    // Source public key (full, never truncated)
+	To     string `json:"to"`      // Destination public key (full, never truncated)
 	TpType string `json:"tp_type"` // Transport type (stcpr, sudph, dmsg)
+	// LatencyMS is this hop's transport RTT in ms, when known. The first
+	// hop is owned locally (tp.GetLatency). For a single-intermediate leg
+	// the far hop is derived (route RTT − first-hop RTT). Deeper hops are
+	// 0 here until sourced from TPD / the setup node's per-transport data.
+	LatencyMS float64 `json:"latency_ms,omitempty"`
 }
 
 // SetForwardHops sets the complete forward route hops.
@@ -1074,6 +1114,35 @@ func (rg *RouteGroup) SetForwardHops(hops []routing.Hop) {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 	rg.forwardHops = hops
+	// Also record under the leg's first-hop transport ID so the per-leg mux
+	// view can show the primary leg's whole path (aux legs are recorded by
+	// AddMuxRouteByHops → recordLegHops).
+	if len(hops) > 0 {
+		rg.legForwardHops[hops[0].TpID] = hops
+	}
+}
+
+// recordLegHops stores a mux leg's full forward route keyed by its
+// first-hop transport ID. Called by AddMuxRouteByHops for aux legs.
+func (rg *RouteGroup) recordLegHops(hops []routing.Hop) {
+	if len(hops) == 0 {
+		return
+	}
+	rg.mu.Lock()
+	rg.legForwardHops[hops[0].TpID] = hops
+	rg.mu.Unlock()
+}
+
+// legHopsFor returns a copy of the full forward route for the leg on
+// transport tpID (nil if not recorded). Callers must NOT hold rg.mu.
+func (rg *RouteGroup) legHopsFor(tpID uuid.UUID) []routing.Hop {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	h, ok := rg.legForwardHops[tpID]
+	if !ok {
+		return nil
+	}
+	return append([]routing.Hop(nil), h...)
 }
 
 // Initiator reports whether this visor dialed the remote end of the route
