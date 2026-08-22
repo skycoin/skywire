@@ -126,6 +126,10 @@ var (
 	skynetWebUpstreamSOCKS     string
 	dmsgWebProxyAddr           string
 	skynetWebProxyAddr         string
+	noBrowseOrigin             bool
+	browseOriginSuffix         string
+	browseOriginTLSCert        string
+	browseOriginTLSKey         string
 	configServicePath          string
 	dmsgHTTPPath               string
 	snConfig                   bool
