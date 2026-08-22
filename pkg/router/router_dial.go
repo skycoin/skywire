@@ -2491,6 +2491,23 @@ func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, 
 		muxFwd, muxRev = lcFwd, lcRev
 	}
 
+	// The route-finder honors ExcludeIntermediatePKs but NOT ExcludeTransportIDs,
+	// so with a 1-hop-capable min_hops it keeps returning a leg whose first hop is
+	// the direct transport that is already the primary leg (excludeIDs holds every
+	// live leg's transport). Dialing it burns a setup-node round-trip every
+	// rotation tick only for appendRouteAsymmetric to reject it locally
+	// ("already in the group") — the dominant warm-standby churn (observed 65 such
+	// dials in a 3-minute window, all for the same transport). Drop the plan HERE,
+	// before the setup-node dial, exactly as establishMuxRoutes/GrowMuxRoute
+	// already do on their planning paths.
+	if len(muxFwd) > 0 {
+		for _, ex := range excludeIDs {
+			if muxFwd[0].TpID == ex {
+				return fmt.Errorf("rotation add-leg: planned leg reuses transport %s already in the group (finder ignores ExcludeTransportIDs); skipping before dial", muxFwd[0].TpID)
+			}
+		}
+	}
+
 	muxKeepAlive := DefaultRouteKeepAlive
 	if opts != nil && opts.KeepAlive > 0 {
 		muxKeepAlive = opts.KeepAlive
