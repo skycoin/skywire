@@ -366,11 +366,28 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// dial falls through to the TPD-backed route-finder unchanged.
 	if v.conf.Routing.EnableRSNOracleRoutes {
 		setupNodes := v.conf.EffectiveRouteSetupNodes()
-		if oracle := router.NewDmsgRSNOracle(v.dmsgC, setupNodes, logger); oracle != nil {
+		// Composite destination-transport oracle:
+		//   1) RSN-signed query to the destination's always-on transport-query
+		//      listener (port 68) — the GENERAL path any visor can use once the
+		//      destination runs the listener; the RSN is a pure signer, so the
+		//      destination itself is authoritative.
+		//   2) visor-RPC (port 65) — a BONUS fallback for destinations THIS visor
+		//      is whitelisted on (hypervisor-managed exits / pty-whitelisted
+		//      peers), which fills the gap until the fleet updates. Never the sole
+		//      source (see dmsg_rpc_transport_oracle.go).
+		// Either way the entries feed computeDisjoint2HopRoutes, which intersects
+		// them with this visor's own transports to yield disjoint 2-hop legs —
+		// TPD-independent, so a busy exit's transports are no longer hidden by the
+		// TPD CXO fill gap.
+		oracle := newCompositeDstOracle(
+			router.NewDmsgRSNOracle(v.dmsgC, setupNodes, logger),
+			newDmsgRPCTransportOracle(v.dmsgC, logger),
+		)
+		if oracle != nil {
 			r.SetDstTransportOracle(oracle)
-			logger.Info("RSN-oracle 2-hop route path enabled (source-side oracle wired)")
+			logger.Info("RSN-oracle 2-hop route path enabled (RSN-signed primary + visor-RPC bonus fallback)")
 		} else {
-			logger.Warn("RSN-oracle 2-hop route path enabled but no route setup nodes configured; oracle inert")
+			logger.Warn("RSN-oracle 2-hop route path enabled but no oracle could be wired; inert")
 		}
 	}
 
