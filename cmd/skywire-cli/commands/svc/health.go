@@ -196,12 +196,15 @@ func printHealthResults(cmd *cobra.Command, results []skyvisor.ServiceHealthEntr
 }
 
 func queryServicesDirect(cmdFlags *pflag.FlagSet) []skyvisor.ServiceHealthEntry {
+	// Honor --testenv (or SKYWIRETEST=1); per-service --*url overrides
+	// apply to the services svc can also query individually.
+	dep := svcDeployment()
 	services := map[string]string{
-		"Transport Discovery": deployment.Prod.TransportDiscovery,
-		"DMSG Discovery":      deployment.Prod.DmsgDiscovery,
-		"Address Resolver":    deployment.Prod.AddressResolver,
-		"Route Finder":        deployment.Prod.RouteFinder,
-		"Service Discovery":   deployment.Prod.ServiceDiscovery,
+		"Transport Discovery": baseURLFor("tpd"),
+		"DMSG Discovery":      baseURLFor("dmsgd"),
+		"Address Resolver":    baseURLFor("ar"),
+		"Route Finder":        dep.RouteFinder,
+		"Service Discovery":   dep.ServiceDiscovery,
 	}
 
 	// Query all services in parallel via visor RPC (DMSG).
