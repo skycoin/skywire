@@ -257,6 +257,10 @@ func (t *Tracker) sample(now time.Time) {
 			}
 		}
 
+		// Tier / service online-slot bitmaps are marked in bbolt for the
+		// visor's own /stats history, but NOT mirrored to the CXO sink —
+		// they are historical telemetry, not current discovery data (see
+		// recordTransportTx for why the TPD feed stays current-only).
 		if probe := t.probes.TierStates; probe != nil {
 			for tier, online := range probe() {
 				if !online {
@@ -265,12 +269,7 @@ func (t *Tracker) sample(now time.Time) {
 				if err := stx.MarkTierSlot(tier, utc, slot); err != nil {
 					t.log.WithError(err).WithField("tier", tier).
 						Debug("Failed to mark tier slot")
-					continue
 				}
-				mirrors = append(mirrors, mirrorPair{
-					path: tierBitmapPath(tier, today),
-					data: stx.TierBitmap(tier, utc),
-				})
 			}
 		}
 
@@ -282,12 +281,7 @@ func (t *Tracker) sample(now time.Time) {
 				if err := stx.MarkServiceSlot(svc, utc, slot); err != nil {
 					t.log.WithError(err).WithField("service", svc).
 						Debug("Failed to mark service slot")
-					continue
 				}
-				mirrors = append(mirrors, mirrorPair{
-					path: serviceBitmapPath(svc, today),
-					data: stx.ServiceBitmap(svc, utc),
-				})
 			}
 		}
 		return nil
@@ -409,15 +403,20 @@ func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.T
 	// telemetry feed steals fill budget from transports/list on the
 	// short-lived announce conn — the constraint behind the discovery gap.
 
+	// The per-transport timeline bitmap is marked in bbolt (below) for the
+	// visor's own /stats + `visor state` consumption, but is NOT mirrored to
+	// the CXO sink. TPD is a discovery service: it only needs current data
+	// (transports/list + transports/<id>/current) and derives its own uptime
+	// history from what it observes each cycle (RecordTransportHeartbeat →
+	// Redis per-date keys). Publishing 7–30 days of per-transport-per-day
+	// bitmaps onto the announce feed was the root of the discovery gap — it
+	// grew the Root to ~23k objects, so TPD couldn't fill it over the short
+	// announce conn and under-reported the transport list. Historical
+	// telemetry stays bbolt-only.
 	slot := SlotForTime(now)
 	if err := stx.MarkTransportSlot(idStr, now, slot); err != nil {
 		t.log.WithError(err).WithField("tp_id", idStr).
 			Debug("Stats: MarkTransportSlot failed")
-	} else {
-		mirrors = append(mirrors, mirrorPair{
-			path: transportTimelinePath(idStr, today),
-			data: stx.TransportBitmap(idStr, now),
-		})
 	}
 	return mirrors, nil
 }
