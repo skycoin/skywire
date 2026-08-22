@@ -1090,7 +1090,19 @@ func (c *Cache) incItem(
 	}
 
 	if it.isFilling() == true { //nolint:staticcheck
-		return c.incFilling(key, inc, it)
+		rc, err = c.incFilling(key, inc, it)
+		if err == data.ErrNotFound {
+			// Diagnostic (#4088): the reference-walk Inc path cannot repair a
+			// filling placeholder whose CXDS backing was evicted (refcount
+			// GC / prune racing eviction) — unlike setFilling (the Set path,
+			// which carries the value). Name the object so the treestore
+			// publish-freeze log identifies its culprit hash instead of a bare
+			// "not found", letting us classify it (Registry/Root/TreeNode) and
+			// target the real fix. %w keeps the ErrNotFound sentinel intact for
+			// the self-heal's isMissingObject (errors.Is + "not found") checks.
+			err = fmt.Errorf("filling object %s missing CXDS backing (Inc path, unrepairable): %w", key.Hex()[:16], err)
+		}
+		return rc, err
 	}
 
 	// remove item if it's cc is zero
