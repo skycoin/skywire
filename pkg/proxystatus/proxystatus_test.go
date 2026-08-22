@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"math"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -48,8 +49,13 @@ func TestRenderSections(t *testing.T) {
 		Running:    true,
 		MuxEnabled: true,
 		Legs: []Leg{
-			{Index: 0, TpType: "stcpr", RemotePK: "0311223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", SentBytes: 2048, RecvBytes: 1024, LatencyMS: 42, RouteLatencyMS: 42, Direct: true, Alive: true},
-			{Index: 1, TpType: "sudph", SentBytes: 512, RecvBytes: 256, LatencyMS: 30, RouteLatencyMS: 480, Direct: false, Standby: true, Alive: true},
+			{Index: 0, TpType: "stcpr", RemotePK: "0311223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", SentBytes: 2048, RecvBytes: 1024, LatencyMS: 42, RouteLatencyMS: 42, Direct: true, Alive: true,
+				Hops: []Hop{{From: "02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee", To: "0311223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "stcpr", LatencyMS: 42}}},
+			{Index: 1, TpType: "sudph", RemotePK: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", SentBytes: 512, RecvBytes: 256, LatencyMS: 30, RouteLatencyMS: 480, Direct: false, Standby: true, Alive: true,
+				Hops: []Hop{
+					{From: "02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee", To: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "sudph", LatencyMS: 30},
+					{From: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", To: "03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "stcpr", LatencyMS: 450},
+				}},
 		},
 		Logs:   []string{"line one", "line two"},
 		Events: nil,
@@ -61,10 +67,18 @@ func TestRenderSections(t *testing.T) {
 		"http-equiv=\"refresh\"", "standby", "status.dmsg", "status.skynet",
 		// route observability: route-latency column, direct/multihop badge, recv bar
 		"route rtt", "recv share", "direct", "multihop", "480 ms", "bar recv",
+		// full routes: section + full (untruncated) hop PKs + per-hop type/latency
+		"full routes", "03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff",
+		"02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee", "450ms",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("rendered page missing %q", want)
 		}
+	}
+	// PKs must never be truncated: no "<hex>…<hex>" shortPK pattern on the page.
+	// (Bare "…" is fine in UI affordances like the disabled "mux mode…" button.)
+	if regexp.MustCompile(`[0-9a-f]…[0-9a-f]`).MatchString(page) {
+		t.Error("status page must not truncate public keys (found hex…hex)")
 	}
 	// The current surface should not be linked back to itself in the footer.
 	if strings.Contains(page, `href="http://status.skysocks/"`) {

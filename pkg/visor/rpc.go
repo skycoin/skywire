@@ -282,10 +282,10 @@ type MuxRouteGroupInfo struct {
 
 // MuxLegInfo is one route in a mux'd group.
 type MuxLegInfo struct {
-	Index       int     `json:"index"`
-	TransportID string  `json:"transport_id"`
-	TpType      string  `json:"tp_type"`
-	RemotePK    string  `json:"remote_pk"`
+	Index       int    `json:"index"`
+	TransportID string `json:"transport_id"`
+	TpType      string `json:"tp_type"`
+	RemotePK    string `json:"remote_pk"`
 	// LatencyMS is the FIRST-HOP transport RTT; RouteLatencyMS is the leg's
 	// TRUE end-to-end route latency (all hops, from the leg-liveness pong) —
 	// on a multihop leg the two differ sharply. Direct is true for a 1-hop
@@ -295,8 +295,8 @@ type MuxLegInfo struct {
 	Direct         bool    `json:"direct"`
 	SentBytes      uint64  `json:"sent_bytes"`
 	SentPackets    uint64  `json:"sent_packets"`
-	RecvBytes   uint64  `json:"recv_bytes"`
-	RecvPackets uint64  `json:"recv_packets"`
+	RecvBytes      uint64  `json:"recv_bytes"`
+	RecvPackets    uint64  `json:"recv_packets"`
 	// Retransmits is SACK retransmit packets carried by this leg (loss
 	// signal). Alive/Standby are the leg's gate_state: Alive=false once the
 	// transport is closed; Standby=true for a warm standby (rules kept,
@@ -304,6 +304,20 @@ type MuxLegInfo struct {
 	Retransmits uint64 `json:"retransmits"`
 	Alive       bool   `json:"alive"`
 	Standby     bool   `json:"standby"`
+	// Hops is the leg's full forward route (every hop to the destination),
+	// with full PKs and per-hop transport type + latency where known.
+	Hops []MuxHopInfo `json:"hops,omitempty"`
+}
+
+// MuxHopInfo is one hop of a mux leg's forward route. From/To are FULL
+// public keys (never truncated). LatencyMS is the hop's transport RTT
+// where known (first hop owned; single-intermediate far hop derived).
+type MuxHopInfo struct {
+	TpID      string  `json:"tp_id"`
+	From      string  `json:"from"`
+	To        string  `json:"to"`
+	TpType    string  `json:"tp_type"`
+	LatencyMS float64 `json:"latency_ms,omitempty"`
 }
 type FetchServiceDataIn struct {
 	Service string
