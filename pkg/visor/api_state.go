@@ -39,9 +39,40 @@ type StateSnapshot struct {
 	Persistent    []transport.PersistentTransports `json:"persistent_transports,omitempty"`
 	Modules       ModulePresence                   `json:"modules"`
 
+	// RouterConfig is the routing configuration actually IN FORCE at
+	// runtime (min_hops / mux_routes / force_local / existing_tp_only
+	// / transport_preference are the live router values, which can
+	// differ from the config file after a runtime set; cascade +
+	// policy_per_dial are the configured source). This is the
+	// policy-vs-globals view — what the router will do independent of
+	// any per-app routing policy.
+	RouterConfig *EffectiveRoutingConfig `json:"router_config,omitempty"`
+	// MuxRouteGroups is the per-leg mux shape of EVERY active route
+	// group (the same RouteGroupMuxInfo 'mux plot' reads), so the live
+	// multipath layout — each leg's transport, type, remote, rtt,
+	// bandwidth, and alive/standby gate state — is visible in one
+	// snapshot rather than one-app-at-a-time.
+	MuxRouteGroups []MuxRouteGroupInfo `json:"mux_route_groups,omitempty"`
+
 	// Notes collects per-section errors ("routing: <err>") so the snapshot is
 	// self-describing about what it could and could not read.
 	Notes []string `json:"notes,omitempty"`
+}
+
+// EffectiveRoutingConfig is the routing configuration in force at
+// runtime. MinHops/MuxRoutes/ForceLocalRoutes/ExistingTPOnly/
+// TransportPreference are read from the live router (GetRouterSettings),
+// so they reflect any runtime set that diverged from the config file;
+// EnableCascadeRouteSetup and PolicyPerDial are the configured source
+// (PolicyPerDial is a path/inline-source string, never a secret).
+type EffectiveRoutingConfig struct {
+	MinHops                 uint16   `json:"min_hops"`
+	MuxRoutes               int      `json:"mux_routes"`
+	ForceLocalRoutes        bool     `json:"force_local_routes"`
+	ExistingTPOnly          bool     `json:"existing_tp_only"`
+	TransportPreference     []string `json:"transport_preference,omitempty"`
+	EnableCascadeRouteSetup bool     `json:"enable_cascade_route_setup"`
+	PolicyPerDial           string   `json:"policy_per_dial,omitempty"`
 }
 
 // ModulePresence reports which optional subsystems are wired on this visor.
@@ -99,6 +130,29 @@ func (v *Visor) StateSnapshot() (*StateSnapshot, error) {
 		note("route_groups", err)
 	} else {
 		snap.RouteGroups = len(rgs)
+	}
+
+	if mrgs, err := v.AllRouteGroupMuxInfo(); err != nil {
+		note("mux_route_groups", err)
+	} else if len(mrgs) > 0 {
+		snap.MuxRouteGroups = mrgs
+	}
+
+	if rc, err := v.GetRouterSettings(); err != nil {
+		note("router_config", err)
+	} else {
+		erc := &EffectiveRoutingConfig{
+			MinHops:             rc.MinHops,
+			MuxRoutes:           rc.MuxRoutes,
+			ForceLocalRoutes:    rc.ForceLocalRoutes,
+			ExistingTPOnly:      rc.ExistingTPOnly,
+			TransportPreference: rc.TransportPreference,
+		}
+		if v.conf != nil && v.conf.Routing != nil {
+			erc.EnableCascadeRouteSetup = v.conf.Routing.EnableCascadeRouteSetup
+			erc.PolicyPerDial = v.conf.Routing.PolicyPerDial
+		}
+		snap.RouterConfig = erc
 	}
 
 	if rp, err := v.RoutingPolicies(); err != nil {

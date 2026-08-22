@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
@@ -86,6 +87,24 @@ type TransportSummary struct {
 	// (incoming). The transport is bidirectional — this records only
 	// who originated it, for in/out reporting.
 	Initiator bool `json:"initiator"`
+	// RemoteIP is the host portion of the underlying transport's raw
+	// remote address (e.g. "1.2.3.4"). Empty for dmsg — which relays
+	// through a server rather than dialing the peer directly, so an
+	// empty RemoteIP is itself the "relayed, not direct" signal.
+	// Populated from tp.RemoteIP().
+	RemoteIP string `json:"remote_ip,omitempty"`
+	// RemoteCountry is the ISO country code the embedded geoip db maps
+	// RemoteIP to (the same db the routing-policy provider uses). Empty
+	// when there is no direct IP (dmsg) or no geoip hit.
+	RemoteCountry string `json:"remote_country,omitempty"`
+	// Endpoint carries the per-transport-type low-level connection
+	// metadata — the direct IP:port for stcp/stcpr/sudph/squicr, the
+	// relaying dmsg server PK for dmsg, the QUIC TLS fingerprint/ALPN
+	// for squicr, the selected ICE candidate for webrtc. Secrets-free
+	// (dmsg = server PK only, never a secret key). nil when the
+	// transport isn't serving or its type exposes no details.
+	// Populated from tp.ConnDetails().
+	Endpoint *network.ConnDetails `json:"endpoint,omitempty"`
 }
 type TransportLogEntry struct {
 	TpID      uuid.UUID `json:"tp_id"`
@@ -108,6 +127,11 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 	}
 	if includeLogs {
 		summary.Log = tp.LogEntry
+	}
+	summary.Endpoint = tp.ConnDetails()
+	summary.RemoteIP = tp.RemoteIP()
+	if summary.RemoteIP != "" {
+		summary.RemoteCountry = geoCountryForIP(summary.RemoteIP)
 	}
 	return summary
 }

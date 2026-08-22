@@ -536,6 +536,18 @@ func (_m *MockRouter) RouteGroupMuxInfoForApp(_a0 string) []MuxInfo {
 	return r0
 }
 
+// RouteGroupMuxInfoAll provides a mock function with no fields
+func (_m *MockRouter) RouteGroupMuxInfoAll() []MuxInfo {
+	ret := _m.Called()
+	var r0 []MuxInfo
+	if rf, ok := ret.Get(0).(func() []MuxInfo); ok {
+		r0 = rf()
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]MuxInfo)
+	}
+	return r0
+}
+
 // ActiveRouteStatuses provides a mock function with no fields
 func (_m *MockRouter) ActiveRouteStatuses() []RouteStatus {
 	ret := _m.Called()

@@ -112,6 +112,27 @@ func (r *router) RouteGroupMuxInfoForApp(appName string) []MuxInfo {
 	return out
 }
 
+// RouteGroupMuxInfoAll implements Router. Returns a mux snapshot for
+// every established (noise) route group, with no app-name filter — the
+// whole-runtime view `cli visor state` surfaces. Same MuxStats() the
+// per-app query and 'mux plot' read; only the filter differs.
+func (r *router) RouteGroupMuxInfoAll() []MuxInfo {
+	r.mx.Lock()
+	rgs := make([]*NoiseRouteGroup, 0, len(r.rgsNs))
+	for _, nrg := range r.rgsNs {
+		if nrg != nil && nrg.rg != nil {
+			rgs = append(rgs, nrg)
+		}
+	}
+	r.mx.Unlock()
+
+	out := make([]MuxInfo, 0, len(rgs))
+	for _, nrg := range rgs {
+		out = append(out, nrg.rg.MuxStats())
+	}
+	return out
+}
+
 func (r *router) initializingRouteGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
