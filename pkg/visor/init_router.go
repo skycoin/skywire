@@ -312,7 +312,6 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 			}
 			return nil
 		},
-
 	})
 	if err != nil {
 		cancel()
