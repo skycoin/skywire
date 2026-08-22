@@ -136,6 +136,16 @@ func (api *API) ReconcileTransportsFromCXO(ctx context.Context, entries []*trans
 	// exactly what a tombstone was in the delta model.
 	existing, err := api.store.GetTransportsByEdgeNoLatency(ctx, reporter)
 	if err != nil {
+		// A reporter with no prior transports in the store (first snapshot, or all
+		// aged out) returns ErrTransportNotFound here. That is not a reconcile
+		// failure — the register step above already landed this snapshot's
+		// entries, and there is simply nothing absent to deregister. Treating it
+		// as an error made every fresh/re-announcing visor's reconcile log
+		// "ReconcileTransportsFromCXO failed: get existing: transport not found"
+		// and return non-nil, which the aggregator surfaces as a fill failure.
+		if errors.Is(err, store.ErrTransportNotFound) {
+			return nil
+		}
 		return fmt.Errorf("get existing: %w", err)
 	}
 	for _, e := range existing {
