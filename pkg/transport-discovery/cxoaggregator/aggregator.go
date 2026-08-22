@@ -859,6 +859,7 @@ func (a *Aggregator) fetchDiscoveryLeafWithGetter(g skyobject.Getter, r *registr
 	if !found || leaf == nil {
 		return nil, "", false
 	}
+	leaf = cxoutils.Gunzip(leaf) // publisher may gzip; raw bodies pass through
 	var list transportListLeaf
 	if err := json.Unmarshal(leaf, &list); err != nil {
 		a.log.WithError(err).WithField("visor", reporter).WithField("path", path).
@@ -1007,6 +1008,12 @@ func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, 
 // Tier and service bitmaps still flow through the CXO cache but
 // aren't yet projected into TPD's redis uptime tables.
 func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubKey) {
+	// Publishers may gzip leaf bodies (bandwidth/storage parity with the
+	// HTTP path). Gunzip is self-describing — it magic-byte-detects gzip and
+	// passes raw bodies through unchanged — so this reads both compressed and
+	// uncompressed feeds, which is what lets a visor switch to gzip without
+	// breaking a TPD that predates it (deploy this reader first).
+	leaf = cxoutils.Gunzip(leaf)
 	// tp-list (current) / transports/list (legacy) — the full-set snapshot
 	// (declarative CRUD). Reconcile the reporter's transport set against it
 	// (register new + deregister absent).
