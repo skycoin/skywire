@@ -47,10 +47,16 @@ type ManagerConfig struct {
 	PersistentTransportsCache []PersistentTransports
 	PTpsCacheMu               sync.RWMutex
 	Version                   string // Visor version for reporting to TPD
-	// ARTransportLimit controls AR registration:
-	//   0 = stay registered (default)
-	//   N > 0 = deregister after N transports
-	//   N < 0 = never register
+	// ARTransportLimit is a static, config-only switch for AR registration:
+	//   >= 0 = register with the address resolver (default)
+	//   <  0 = never register
+	// It is deliberately NOT a runtime load-shed: a running visor must never
+	// deregister itself from AR because it hit some transport count — AR
+	// discoverability is what lets peers dial it, and dropping it silently
+	// breaks reachability. Runtime load-shedding is the public-visor SD drain
+	// (PublicVisorConfig.MaxTransports), which pauses SERVICE-DISCOVERY
+	// registration on a DISTINCT-PEER count and resumes when it drops — see
+	// pkg/app/appdisc PublicVisorUpdater.
 	ARTransportLimit int
 	// NoDirectTransports, when true, refuses to CREATE (dial out) any DIRECT
 	// peer-to-peer transport (stcpr/sudph/stcp/squicr/swsr/swtr/webrtc). DMSG — a
@@ -124,12 +130,6 @@ type Manager struct {
 	delQueue   []uuid.UUID
 	delQueueMu sync.Mutex
 	delNudge   chan struct{}
-
-	// arDeregistered tracks whether the visor has deregistered from AR
-	// due to ar_transport_limit being reached. Once true, it stays true
-	// until the visor restarts.
-	arDeregistered   bool
-	arDeregisteredMu sync.Mutex
 
 	// cascadeHandler handles cascade protocol packets (route ID 0) on any transport.
 	cascadeHandler   func(p routing.Packet, mt *ManagedTransport)
@@ -713,35 +713,6 @@ func (tm *Manager) SetCascadeHandler(h func(p routing.Packet, mt *ManagedTranspo
 	tm.mx.RUnlock()
 }
 
-// checkARLimit checks if the transport count has reached the AR transport limit.
-// If so, deregisters from the address resolver. This is a one-way action —
-// the visor stays deregistered until restart.
-func (tm *Manager) checkARLimit() {
-	limit := tm.Conf.ARTransportLimit
-	if limit <= 0 {
-		return // 0 = no limit, negative = never registered
-	}
-
-	tm.arDeregisteredMu.Lock()
-	if tm.arDeregistered {
-		tm.arDeregisteredMu.Unlock()
-		return
-	}
-
-	count := tm.TransportCount()
-	if count >= limit {
-		tm.arDeregistered = true
-		tm.arDeregisteredMu.Unlock()
-		tm.Logger.WithField("count", count).WithField("limit", limit).
-			Info("AR transport limit reached — deregistering from address resolver")
-		if err := tm.closeARClient(); err != nil {
-			tm.Logger.WithError(err).Warn("Failed to close AR client during deregistration")
-		}
-	} else {
-		tm.arDeregisteredMu.Unlock()
-	}
-}
-
 // ShouldRegisterAR returns false if the AR transport limit is negative
 // (never register). Callers should check this during visor initialization.
 func (tm *Manager) ShouldRegisterAR() bool {
@@ -1153,9 +1124,6 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		}()
 
 		tm.tps[tpID] = mTp
-
-		// Check AR transport limit after accepting a new transport.
-		go tm.checkARLimit()
 	} else {
 		// Transport already exists. Before allowing Accept() to tear down the
 		// underlying connection (via setTransport), check whether any routing
@@ -1464,8 +1432,6 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	// dial ctx would kill the QUIC datagram loop prematurely). #2607.
 	go mTp.Serve(tm.readCh) //nolint:gosec // G118: long-lived transport goroutine, not request-scoped
 
-	// Check AR transport limit after dialing a new transport.
-	go tm.checkARLimit()
 	tm.Logger.Debugf("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
 
 	// Latency is now measured at the transport level via transport-level
