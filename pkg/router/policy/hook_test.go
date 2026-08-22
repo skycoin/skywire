@@ -865,9 +865,13 @@ def decide_route(ctx, candidates):
 }
 
 func TestHook_BeforeDial_AvoidDirectFalseWhenNoSignal(t *testing.T) {
+	// No signal = no mux overlay and min_hops<=1. A mux>1 overlay
+	// (even at min_hops=1) DOES imply AvoidDirect — aux legs must be
+	// disjoint from the direct transport — so it is NOT a no-signal
+	// case; see TestHook_BeforeDial_AvoidDirectImpliedByMux.
 	src := `
 def decide_route(ctx, candidates):
-    return RouteSpec(mux=2, min_hops=1)
+    return RouteSpec(mux=1, min_hops=1)
 `
 	loader, err := NewLoader(src)
 	if err != nil {
@@ -884,6 +888,51 @@ def decide_route(ctx, candidates):
 	}
 	if adj.AvoidDirect {
 		t.Errorf("AvoidDirect=true, want false (no signal)")
+	}
+}
+
+func TestHook_BeforeDial_AvoidDirectImpliedByMux(t *testing.T) {
+	// A mux overlay (mux/forward_mux/reverse_mux > 1) implies
+	// AvoidDirect even at min_hops=1: the overlay's aux legs must be
+	// disjoint from the single direct transport, or they are not a
+	// route-group overlay at all. min_hops governs hop count, not
+	// whether an overlay is wanted.
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"mux>1", `
+def decide_route(ctx, candidates):
+    return RouteSpec(mux=2, min_hops=1)
+`},
+		{"forward_mux>1", `
+def decide_route(ctx, candidates):
+    return RouteSpec(forward_mux=2, min_hops=1)
+`},
+		{"reverse_mux>1", `
+def decide_route(ctx, candidates):
+    return RouteSpec(reverse_mux=2, min_hops=1)
+`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			loader, err := NewLoader(c.src)
+			if err != nil {
+				t.Fatalf("NewLoader: %v", err)
+			}
+			defer loader.Close() //nolint:errcheck
+			h := NewHook(loader)
+			pk := cipher.PubKey{}
+			pk[0] = 0x02
+			info := router.DialInfo{AppName: "x", PeerPK: pk, IsDirectDial: true}
+			adj, err := h.BeforeDial(context.Background(), info)
+			if err != nil {
+				t.Fatalf("BeforeDial: %v", err)
+			}
+			if !adj.AvoidDirect {
+				t.Errorf("AvoidDirect=false, want true (implied by %s)", c.name)
+			}
+		})
 	}
 }
 
