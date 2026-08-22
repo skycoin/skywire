@@ -89,6 +89,18 @@ func init() {
 var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update a config file",
+	Long: `Update an existing skywire config file in place.
+
+The target file must already exist; use 'config gen' to create one. Select the
+target with -i/--input (read from) and -o/--output (write to); when only one is
+given it is used for both. -p/--pkg targets the package config and -u/--user the
+$HOME config. With no flags the running visor's app/service config subcommands
+(hv, sc, ss, vpnc, vpns) rewrite launcher app args; 'svc' refreshes the local
+services-config.json from the bootstrap service.
+
+Top-level flags update service endpoints (-a/--endpoints), the log level
+(--log-level), public autoconnect (--public-autoconn true|false) and the routing
+min-hops (--set-minhop). Passing -b/--url a value implies --endpoints.`,
 	PreRun: func(_ *cobra.Command, _ []string) {
 		if isUpdateEndpoints && (serviceConfURL == "") {
 			if !isTestEnv {
@@ -101,7 +113,7 @@ var updateCmd = &cobra.Command{
 		checkConfig()
 	},
 	Run: func(cmd *cobra.Command, _ []string) {
-		if cmd.Flags().Changed("serviceConfURL") {
+		if cmd.Flags().Changed("url") {
 			isUpdateEndpoints = true
 		}
 		conf = initUpdate()
@@ -395,7 +407,7 @@ var vpnServerUpdateCmd = &cobra.Command{
 		case "":
 			break
 		default:
-			logger.Fatal("Unrecognized vpn server autostart value: ", setVPNServerSecure)
+			logger.Fatal("Unrecognized vpn server autostart value: ", setVPNServerAutostart)
 		}
 		if isResetVPNServer {
 			resetAppsConfig(conf, "vpn-server")

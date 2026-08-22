@@ -353,6 +353,10 @@ const envfileLinux = `#
 #--	Number of parallel mux routes per connection (default 0)
 #MUXROUTES=0
 
+#--	Per-dial routing policy: preset:<name> (e.g. preset:adaptive),
+#	@/path/policy.star, @/path/policy.wasm, inline Starlark, or empty
+#POLICYPERDIAL=''
+
 ### Auto-Update (skywire-autoupdate package) ############################
 #	These settings are only used by the skywire-update script
 #	installed by the skywire-autoupdate package.
@@ -574,6 +578,10 @@ const envfileWindows = `#
 
 #--	Number of parallel mux routes per connection (default 0)
 #$MUXROUTES=0
+
+#--	Per-dial routing policy: preset:<name> (e.g. preset:adaptive),
+#	@/path/policy.star, @/path/policy.wasm, inline Starlark, or empty
+#$POLICYPERDIAL=''
 
 ### Auto-Update (skywire-autoupdate package) ############################
 #	These settings are only used by the skywire-update script

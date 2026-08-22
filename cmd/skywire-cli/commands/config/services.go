@@ -40,12 +40,12 @@ var servicesCmd = &cobra.Command{
 
 		servicesConf, err := fetchServicesConf(cmd.Flags())
 		if err != nil {
-			log.WithError(err).Error("Cannot fetching updated services-config data")
+			log.WithError(err).Error("Cannot fetch updated services-config data")
 		}
 
 		file, err := json.MarshalIndent(servicesConf, "", " ")
 		if err != nil {
-			log.WithError(err).Error("Error accurs during marshal content to json file")
+			log.WithError(err).Error("Error marshaling content to json file")
 		}
 
 		err = os.WriteFile(path, file, 0600)
