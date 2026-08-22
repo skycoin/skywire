@@ -74,6 +74,19 @@ type Publisher struct {
 	// encode-cache walk (no re-serialize).
 	lastPublishNs atomic.Int64
 
+	// errMu guards the last-publish-error introspection fields below.
+	// Kept separate from mu so PublishState() (called from `skywire cli
+	// visor state`) never contends with the publish loop that holds mu
+	// across the clone/encode window. recordPublishErr is called on every
+	// publishRoot terminal failure; clearPublishErr on every successful
+	// Publish — so LastErr reflects only a STANDING failure. A transient
+	// error the next tick cleared leaves these empty.
+	errMu          sync.Mutex
+	lastErrMsg     string
+	lastErrType    string
+	lastErrMissing bool
+	lastErrNs      int64
+
 	// allow gates which subscriber PKs may connect. nil-set means the
 	// allowlist is disabled (any subscriber is accepted). NewWithDMSG
 	// wires this state into the CXO node's OnSubscribeRemote hook
@@ -517,6 +530,108 @@ func (p *Publisher) Node() *node.Node {
 // for counter semantics.
 func (p *Publisher) Stats() node.PublisherStats {
 	return p.cxoNode.Stats()
+}
+
+// PublishState is a secrets-free snapshot of this feed's publish
+// health, surfaced by `skywire cli visor state` under .cxo. It exposes
+// the exact freeze signature — Dirty (in-memory changes awaiting
+// publish) alongside a climbing SecsSinceOKPublish and a standing
+// LastErr — so a stuck feed (the failure mode behind TPD under-
+// reporting a visor's transports) is a single query against the live
+// visor, local or --via dmsg://<pk>, not a log hunt.
+type PublishState struct {
+	FeedPK             string  `json:"feed_pk"`
+	Dirty              bool    `json:"dirty"`
+	DirtyGen           uint64  `json:"dirty_gen"`
+	LeafCount          int     `json:"leaf_count"`
+	NodeCount          int     `json:"node_count"`
+	SecsSinceOKPublish float64 `json:"secs_since_ok_publish"`
+	LastErr            string  `json:"last_err,omitempty"`
+	LastErrType        string  `json:"last_err_type,omitempty"`
+	LastErrMissingObj  bool    `json:"last_err_is_missing_object,omitempty"`
+	SecsSinceErr       float64 `json:"secs_since_err,omitempty"`
+	// Frozen is true when there is a STANDING publish error AND the
+	// in-memory tree has unpublished changes: the feed has advanced but
+	// no Root has been saved since the failure, so subscribers (e.g.
+	// TPD) are pinned to a stale snapshot. A transient error the next
+	// tick cleared leaves LastErr empty and this false.
+	Frozen bool `json:"frozen"`
+}
+
+// PublishState returns a live introspection snapshot of this feed's
+// publish health. Cheap: one mu-guarded tree count plus atomic/errMu
+// loads; safe to call concurrently with the publish loop.
+func (p *Publisher) PublishState() PublishState {
+	p.mu.Lock()
+	dirty := p.dirty
+	gen := p.dirtyGen
+	leaves, nodes := countTree(p.root)
+	p.mu.Unlock()
+
+	st := PublishState{
+		FeedPK:    p.pk.Hex(),
+		Dirty:     dirty,
+		DirtyGen:  gen,
+		LeafCount: leaves,
+		NodeCount: nodes,
+	}
+	if last := p.lastPublishNs.Load(); last != 0 {
+		st.SecsSinceOKPublish = time.Since(time.Unix(0, last)).Seconds()
+	}
+
+	p.errMu.Lock()
+	st.LastErr = p.lastErrMsg
+	st.LastErrType = p.lastErrType
+	st.LastErrMissingObj = p.lastErrMissing
+	if p.lastErrNs != 0 {
+		st.SecsSinceErr = time.Since(time.Unix(0, p.lastErrNs)).Seconds()
+	}
+	p.errMu.Unlock()
+
+	st.Frozen = dirty && st.LastErr != ""
+	return st
+}
+
+// recordPublishErr stores a standing publish failure for PublishState.
+func (p *Publisher) recordPublishErr(err error) {
+	p.errMu.Lock()
+	p.lastErrMsg = err.Error()
+	p.lastErrType = fmt.Sprintf("%T", err)
+	p.lastErrMissing = isMissingObject(err)
+	p.lastErrNs = time.Now().UnixNano()
+	p.errMu.Unlock()
+}
+
+// clearPublishErr drops any standing publish failure after a success.
+func (p *Publisher) clearPublishErr() {
+	p.errMu.Lock()
+	if p.lastErrMsg != "" {
+		p.lastErrMsg = ""
+		p.lastErrType = ""
+		p.lastErrMissing = false
+		p.lastErrNs = 0
+	}
+	p.errMu.Unlock()
+}
+
+// countTree walks the in-memory tree and returns the total leaf and
+// node counts. Callers must hold p.mu.
+func countTree(n *memNode) (leaves, nodes int) {
+	if n == nil {
+		return 0, 0
+	}
+	nodes = 1
+	for _, v := range n.leaves {
+		if v != nil {
+			leaves++
+		}
+	}
+	for _, sub := range n.subs {
+		l, nn := countTree(sub)
+		leaves += l
+		nodes += nn
+	}
+	return leaves, nodes
 }
 
 // SetAllowlist atomically replaces the subscriber allowlist. nil
@@ -1219,16 +1334,14 @@ func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 		err = attempt()
 	}
 	if err != nil {
-		// DIAGNOSTIC (#4102): a live freeze ([stats]/tp-list feed republish
-		// failing "encode/save: not found") reaches this terminal WITHOUT the
-		// self-heal above ever logging — isMissingObject returned false for an
-		// error whose string is "not found", which its substring check should
-		// have matched. Capture the error's concrete TYPE + the isMissingObject
-		// verdict so the real fix can target the actual path.
-		p.log.WithError(err).
-			WithField("err_type", fmt.Sprintf("%T", err)).
-			WithField("is_missing_object", isMissingObject(err)).
-			Warn("treestore: publishRoot terminal failure — capturing freeze path (#4102)")
+		// Record the standing failure for live introspection. `skywire
+		// cli visor state --jq '.cxo'` reads this back (err msg, concrete
+		// %T type, and the isMissingObject verdict) so a frozen feed is a
+		// query against the running visor — locally or --via dmsg://<pk>
+		// against any fleet node — instead of waiting for a log line to
+		// fire and catching it in a grep window. Supersedes the #4102
+		// log-only diagnostic.
+		p.recordPublishErr(err)
 		// Wrap with which-operation context so a future freeze
 		// self-localizes in the log. isMissingObject still matches through
 		// the %w wrap (errors.Is + a lowercase "not found" substring both
@@ -1237,6 +1350,9 @@ func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 		// about the retry decision — it only annotates the terminal error.
 		return nil, fmt.Errorf("treestore encode/save: %w", err)
 	}
+	// Success: clear any standing error so PublishState().Frozen falls
+	// back to false the moment the feed recovers.
+	p.clearPublishErr()
 	p.cxoNode.Publish(r)
 
 	// Nudge the cleanup goroutine. Non-blocking: if cleanup is already

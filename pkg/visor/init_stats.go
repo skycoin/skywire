@@ -82,6 +82,10 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 		if v.tpM != nil {
 			v.tpM.SetTPDLeafPublisher(pub)
 		}
+		// Retain the publisher so `skywire cli visor state --jq '.cxo'`
+		// can read its live freeze/publish health (this is the feed TPD
+		// subscribes to for the visor's transport list).
+		v.setSystemCXOPub(pub)
 	}
 
 	tracker.Run(v.ctx)
