@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -257,6 +258,14 @@ type Visor struct {
 	// in ListCXOFeeds via systemCXOFeed below.
 	cxoUserFeeds   map[string]*cxoUserFeed
 	cxoUserFeedsMu sync.Mutex
+
+	// systemCXOPub is the telemetry/tp-list feed publisher (the one
+	// initStats wires on skyenv.DmsgCXOPort and hands to the transport
+	// manager as the TPD leaf publisher). Retained here — beyond being
+	// closed in the stats close-stack — so CXOFeedStates can read its
+	// live PublishState for `skywire cli visor state`. Guarded by
+	// cxoUserFeedsMu. nil until initStats runs (or if Stats.Disabled).
+	systemCXOPub *treestore.Publisher
 
 	// pairing holds the chat-pair feed manager + bbolt store +
 	// inbound message ring. Populated by init_pairing.go after

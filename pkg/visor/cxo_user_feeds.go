@@ -204,6 +204,57 @@ func (v *Visor) ListCXOFeeds() []logserver.CXOFeedEntry {
 	return out
 }
 
+// setSystemCXOPub retains the telemetry/tp-list feed publisher so
+// CXOFeedStates can read its live PublishState. Called once by initStats.
+func (v *Visor) setSystemCXOPub(pub *treestore.Publisher) {
+	v.cxoUserFeedsMu.Lock()
+	v.systemCXOPub = pub
+	v.cxoUserFeedsMu.Unlock()
+}
+
+// CXOFeedState pairs a feed's identity (name + dmsg port) with its live
+// publish-health snapshot. Surfaced by StateSnapshot under .cxo.
+type CXOFeedState struct {
+	Name string `json:"name"`
+	Port uint16 `json:"port,omitempty"`
+	treestore.PublishState
+}
+
+// CXOFeedStates returns the live PublishState of the system telemetry
+// feed plus every user feed. The system feed (the one TPD subscribes to
+// for a visor's transport list) is first. Empty when no publisher is
+// wired (Stats.Disabled or pre-init). Reads are cheap and concurrency-
+// safe — see treestore.Publisher.PublishState.
+func (v *Visor) CXOFeedStates() []CXOFeedState {
+	v.cxoUserFeedsMu.Lock()
+	sysPub := v.systemCXOPub
+	users := make([]*cxoUserFeed, 0, len(v.cxoUserFeeds))
+	for _, fd := range v.cxoUserFeeds {
+		users = append(users, fd)
+	}
+	v.cxoUserFeedsMu.Unlock()
+
+	var out []CXOFeedState
+	if sysPub != nil {
+		out = append(out, CXOFeedState{
+			Name:         systemCXOFeedName,
+			Port:         skyenv.DmsgCXOPort,
+			PublishState: sysPub.PublishState(),
+		})
+	}
+	for _, fd := range users {
+		if fd.pub == nil {
+			continue
+		}
+		out = append(out, CXOFeedState{
+			Name:         fd.name,
+			Port:         fd.port,
+			PublishState: fd.pub.PublishState(),
+		})
+	}
+	return out
+}
+
 // closeAllCXOUserFeeds stops every user feed. Called from the visor
 // close stack on shutdown.
 func (v *Visor) closeAllCXOUserFeeds() error {
