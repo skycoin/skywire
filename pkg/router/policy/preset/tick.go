@@ -505,19 +505,21 @@ const (
 	// legs are always parked and ready. This keeps warm standby a resilience
 	// reserve (covers an active-leg drop with zero re-establish dip) instead of
 	// load headroom that peak traffic empties to zero.
-	// adaptStandbyMax is intentionally LARGE: the adaptive default pre-establishes
-	// a broad pool of DISJOINT warm-standby routes (up to this many) so any of
-	// them can be promoted to carrying at a moment's notice — maximal resilience
-	// and instant, dip-free failover. The router's establishMuxRoutes builds up
-	// to ReverseMux (= adaptRevActive + adaptStandbyMax) best-effort, so it takes
-	// as many as the topology actually offers (e.g. a busy exit exposes dozens of
-	// disjoint intermediates) and no more. The transport-type ranking in the
-	// RSN-oracle picks the best (stcpr/squicr) legs first, and the health-gate
-	// below keeps gross-latency outliers OUT of the ACTIVE set, so a big pool adds
-	// resilience without dragging the carrying legs. Each aux-leg add re-queries
-	// the destination's transports, so the pool refreshes toward newly-appeared
-	// routes as it is maintained.
-	adaptStandbyMax = 12
+	// adaptStandbyMax sizes the warm-standby pool to "ALL VIABLE routes", not an
+	// arbitrary number: the adaptive default pre-establishes a disjoint standby
+	// route on every existing transport that can reach the destination (a 2-hop
+	// leg src->I->dst reuses the ALREADY-UP src->I transport — no new first hop),
+	// so any of them can be promoted to carrying at a moment's notice for maximal
+	// resilience and instant, dip-free failover. This is a high SANITY CAP, not a
+	// target: establishMuxRoutes builds up to ReverseMux (= adaptRevActive +
+	// adaptStandbyMax) best-effort and takes only as many as the topology's
+	// disjoint-intermediate set actually offers (dozens at a busy exit, a handful
+	// at a sparse one). The RSN-oracle transport-type ranking picks the best
+	// (stcpr/squicr) legs first and the health-gate keeps latency outliers OUT of
+	// the ACTIVE set, so a big pool is pure resilience headroom, not load on the
+	// carrying legs. Each aux-leg add re-queries the destination's transports, so
+	// the pool refreshes toward newly-appeared routes as it is maintained.
+	adaptStandbyMax = 31
 	adaptStandbyMin = 1
 	// Health + anti-churn. A leg is a gross-outlier (kept OUT of the active mux,
 	// where the no-skip reorder buffer would head-of-line-stall on it) when its
