@@ -1230,13 +1230,15 @@ func configureRouting() {
 		RouteFinderTimeout: visorconfig.DefaultTimeout,
 		MinHops:            minHopsValue(),
 		CalculateRoutes:    enableCalculateRoutes,
-		// Default routing policy: the "adaptive" composite preset. It is a no-op
-		// for latency-sensitive/other apps (decideAdaptive returns the empty spec
-		// for anything but the client apps) and shapes vpn-client/skysocks-client/
-		// skynet-client dials — seeding the most transport-diverse route, then
-		// letting on_tick size/evict/probe adaptively. Overridable: an explicit
-		// routing.policy_per_dial or a per-app launcher routing_policy wins, and
-		// it is preserved across regen (see below).
+		// Default routing policy: the "adaptive" composite preset. It is
+		// app-agnostic — every overlay app that dials a route group (proxy, vpn,
+		// skynet-client, the resolving-proxy/browser chain, custom-named
+		// sessions) gets a lean single forward leg plus a wider reverse
+		// (download) mux sized active+standby, seeding the most transport-diverse
+		// route, then letting on_tick hold warm standby / size / evict / probe
+		// adaptively. Only latency-sensitive chat stays a single lean route.
+		// Overridable: an explicit routing.policy_per_dial or a per-app launcher
+		// routing_policy wins, and it is preserved across regen (see below).
 		PolicyPerDial: "preset:adaptive",
 		// Cascade route setup is opt-in (--cascade); the legacy setup-node
 		// path stays the default until the cascade multihop data-plane bug
