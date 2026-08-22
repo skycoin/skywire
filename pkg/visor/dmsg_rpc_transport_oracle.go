@@ -11,6 +11,7 @@ package visor
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -111,15 +112,27 @@ func newCompositeDstOracle(oracles ...router.DstTransportOracle) router.DstTrans
 	return &compositeDstOracle{oracles: live}
 }
 
+// perSourceTimeout bounds EACH member's attempt so a slow/failing source (e.g.
+// the RSN listener on a destination that doesn't run it, or a cold dmsg session)
+// cannot starve the next source of budget. Without this, a shared deadline let
+// the first attempt burn all of it and the second (the one that actually works)
+// never ran.
+const perSourceTimeout = 6 * time.Second
+
 func (c *compositeDstOracle) DstTransports(ctx context.Context, src, dst cipher.PubKey) ([]*transport.Entry, error) {
 	var lastErr error
 	for _, o := range c.oracles {
-		entries, err := o.DstTransports(ctx, src, dst)
+		mctx, cancel := context.WithTimeout(ctx, perSourceTimeout)
+		entries, err := o.DstTransports(mctx, src, dst)
+		cancel()
 		if err == nil && len(entries) > 0 {
 			return entries, nil
 		}
 		if err != nil {
 			lastErr = err
+		}
+		if ctx.Err() != nil { // overall budget exhausted
+			break
 		}
 	}
 	if lastErr != nil {

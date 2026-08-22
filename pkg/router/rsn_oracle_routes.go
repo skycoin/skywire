@@ -45,7 +45,7 @@ var errRSNOracleInert = errors.New("rsn-oracle: no destination-transport oracle 
 // Kept short so an unanswerable destination fails fast and the dial falls
 // through to the TPD route-finder — the safety valve that lets RSN-oracle be
 // ON by default. See oracle2HopRoutes.
-const oracleQueryTimeout = 5 * time.Second
+const oracleQueryTimeout = 14 * time.Second
 
 // oracleLocalTp is the minimal view of one of the source's own transports the
 // 2-hop computation needs: which peer it reaches and over which transport ID /
