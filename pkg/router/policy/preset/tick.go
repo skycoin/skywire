@@ -55,6 +55,11 @@ type Engine struct {
 	adaptSatTicks  int            // consecutive saturated ticks (grow only on a sustained signal)
 	adaptUnhealthy map[string]int // per-active-leg consecutive gross-outlier-latency ticks
 	adaptStall     map[string]int // per-active-leg consecutive no-throughput ticks under load
+
+	// ledbat (delay-based scavenger)
+	ledbatEWMA map[string]float64 // per-leg EWMA-smoothed one-way-ish delay (ms)
+	ledbatBase map[string]float64 // per-leg base (running-min smoothed) delay (ms)
+	ledbatSeen map[string]bool    // transport_ids present this tick (for GC)
 }
 
 // New returns an Engine with initialized state maps and the
@@ -78,6 +83,9 @@ func New() *Engine {
 		adaptUnhealthy:  map[string]int{},
 		adaptStall:      map[string]int{},
 		adaptTarget:     adaptRevActive,
+		ledbatEWMA:      map[string]float64{},
+		ledbatBase:      map[string]float64{},
+		ledbatSeen:      map[string]bool{},
 	}
 }
 
@@ -97,6 +105,8 @@ func (e *Engine) OnTick(name string, legs []LegInfo) RotationAction {
 		return e.tickProbeAndPrune(legs)
 	case "adaptive":
 		return e.tickAdaptive(legs)
+	case "ledbat":
+		return e.tickLedbat(legs)
 	default:
 		return RotationAction{}
 	}
@@ -822,4 +832,125 @@ func legUnhealthyLat(lat, median float64) bool {
 		return true
 	}
 	return false
+}
+
+// --- ledbat (delay-based scavenger) ---
+
+const (
+	// ledbatAlpha is the EWMA smoothing factor for the per-leg delay signal —
+	// matched to the other controllers so a leg's smoothed delay reacts at the
+	// same rate everywhere.
+	ledbatAlpha = 0.3
+	// ledbatTargetMs is the LEDBAT queuing-delay target (RFC 6817 uses 100ms; a
+	// tighter 60ms here makes the scavenger yield sooner). When a leg's smoothed
+	// delay rises more than this above its own base (min) delay, the flow is
+	// judged to be queuing — i.e. causing congestion — and the controller backs
+	// off. While every active leg stays within the target of its base, there is
+	// no self-induced queuing and the controller may grow.
+	ledbatTargetMs = 60.0
+	// ledbatMinActive is the yield floor: the controller shrinks the active set
+	// toward this width under congestion but never below it, so the flow always
+	// keeps one leg making progress.
+	ledbatMinActive = 1
+)
+
+// tickLedbat is the ledbat preset's on_tick controller: a delay-based,
+// background/scavenger congestion response over the mux active set. It tracks
+// each leg's EWMA-smoothed delay and a per-leg base (running-min) delay, then
+// derives the queuing delay (smoothed - base):
+//
+//   - BACK OFF (yield): if ANY active leg's queuing delay exceeds ledbatTargetMs
+//     — the flow is causing congestion — demote the HIGHEST-queuing-delay active
+//     leg (never leg 0) to warm standby, shrinking the active set toward
+//     ledbatMinActive. Parked, not torn down, so it can be re-promoted for free
+//     when the congestion clears.
+//   - GROW: if every active leg reads within the target of its base (no
+//     self-induced queuing) and the active set is below ledbatMux, promote one
+//     warm standby leg back. Growth only ever draws on the parked reserve — the
+//     scavenger never dials fresh legs beyond its lean provisioned width.
+//
+// One arbitrated action per tick, like the other controllers. Pure integer/
+// float arithmetic and map state only (no time.Now / rand) so it is
+// deterministic and identical under wazero and native compilation.
+func (e *Engine) tickLedbat(legs []LegInfo) RotationAction {
+	for k := range e.ledbatSeen {
+		delete(e.ledbatSeen, k)
+	}
+	for _, l := range legs {
+		tid := l.TransportID
+		if tid == "" {
+			continue
+		}
+		e.ledbatSeen[tid] = true
+		if !l.Alive || l.LatencyMs <= 0 {
+			continue
+		}
+		sample := float64(l.LatencyMs)
+		if prev, ok := e.ledbatEWMA[tid]; ok {
+			e.ledbatEWMA[tid] = ledbatAlpha*sample + (1-ledbatAlpha)*prev
+		} else {
+			e.ledbatEWMA[tid] = sample
+		}
+		sm := e.ledbatEWMA[tid]
+		if b, ok := e.ledbatBase[tid]; !ok || sm < b {
+			e.ledbatBase[tid] = sm
+		}
+	}
+	for tid := range e.ledbatEWMA {
+		if !e.ledbatSeen[tid] {
+			delete(e.ledbatEWMA, tid)
+		}
+	}
+	for tid := range e.ledbatBase {
+		if !e.ledbatSeen[tid] {
+			delete(e.ledbatBase, tid)
+		}
+	}
+
+	sets := classifyLegs(legs)
+	// No active legs — bring one up from the parked reserve (no fresh dial).
+	if sets.activeCount == 0 {
+		if sets.promotable >= 0 {
+			return RotationAction{PromoteFromStandby: []int{sets.promotable}}
+		}
+		return RotationAction{}
+	}
+
+	// Queuing delay across the active set. maxQ (including leg 0) decides whether
+	// the flow is congesting; worstIdx (excluding leg 0) is the demote target so
+	// the primary leg is never parked.
+	maxQ := 0.0
+	worstIdx := -1
+	worstQ := 0.0
+	for _, l := range legs {
+		if !l.Alive || l.Standby {
+			continue
+		}
+		sm, ok := e.ledbatEWMA[l.TransportID]
+		if !ok {
+			continue
+		}
+		q := sm - e.ledbatBase[l.TransportID]
+		if q > maxQ {
+			maxQ = q
+		}
+		if l.Index == 0 {
+			continue
+		}
+		if worstIdx == -1 || q > worstQ {
+			worstIdx, worstQ = l.Index, q
+		}
+	}
+
+	// BACK OFF: congestion detected — park the worst active (non-primary) leg,
+	// yielding capacity, until we reach the floor.
+	if maxQ > ledbatTargetMs && sets.activeCount > ledbatMinActive && worstIdx >= 0 {
+		return RotationAction{DemoteToStandby: []int{worstIdx}}
+	}
+
+	// GROW: no self-induced queuing and below the cap — re-promote one parked leg.
+	if maxQ <= ledbatTargetMs && sets.activeCount < ledbatMux && sets.promotable >= 0 {
+		return RotationAction{PromoteFromStandby: []int{sets.promotable}}
+	}
+	return RotationAction{}
 }

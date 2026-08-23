@@ -20,6 +20,7 @@ func Names() []string {
 		"transport-diverse",
 		"trust-tiered",
 		"time-of-day",
+		"ledbat",
 	}
 }
 

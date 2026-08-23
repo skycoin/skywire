@@ -22,6 +22,8 @@ func TestDecide_ShapePresets(t *testing.T) {
 		{"adaptive", Context{App: "vpn-client"}, Spec{ForwardMux: 1, ReverseMux: 3, RotationIntervalSeconds: 20, Distribution: "auto"}},
 		{"adaptive/chat", Context{App: "skychat"}, Spec{Mux: 1}},
 		{"adaptive/custom-session", Context{App: "g8"}, Spec{ForwardMux: 1, ReverseMux: 3, RotationIntervalSeconds: 20, Distribution: "auto"}},
+		{"ledbat", Context{App: "skysocks-client"}, Spec{Mux: 3, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "auto"}},
+		{"ledbat/chat", Context{App: "skychat"}, Spec{Mux: 1}},
 	}
 	for _, tc := range cases {
 		presetName, _, _ := splitName(tc.name)
@@ -425,5 +427,108 @@ func TestEngine_OnTick_RotatingBWParksFragile(t *testing.T) {
 	want := RotationAction{DemoteToStandby: []int{1}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("rotating-bw should park the fragile active leg; got %+v want %+v", got, want)
+	}
+}
+
+// TestEngine_OnTick_LedbatBacksOffOnQueuingDelay drives the ledbat scavenger
+// with three active legs where leg 2's delay climbs far above its base (min)
+// delay while legs 0 and 1 stay near theirs. Once leg 2's smoothed queuing delay
+// exceeds the target, the controller must BACK OFF by parking the highest-delay
+// non-primary active leg (leg 2) to warm standby — yielding capacity — and never
+// tear a leg down or touch leg 0.
+func TestEngine_OnTick_LedbatBacksOffOnQueuingDelay(t *testing.T) {
+	e := New()
+	// Legs 0,1 hold a steady ~40ms; leg 2 starts at its base 40ms then spikes to
+	// 300ms so its EWMA rises well past base+target (60ms).
+	steady := func(lat2 int) []LegInfo {
+		return []LegInfo{
+			{Index: 0, TransportID: "t0", Kind: "stcpr", LatencyMs: 40, Alive: true},
+			{Index: 1, TransportID: "t1", Kind: "stcpr", LatencyMs: 40, Alive: true},
+			{Index: 2, TransportID: "t2", Kind: "stcpr", LatencyMs: lat2, Alive: true},
+		}
+	}
+	// First tick seeds base=40 for every leg (EWMA==sample), no queuing yet.
+	if got := e.OnTick("ledbat", steady(40)); !reflect.DeepEqual(got, RotationAction{}) {
+		t.Fatalf("seed tick: at base delay, no queuing → no-op; got %+v", got)
+	}
+	// Now leg 2 congests. Feed the spike until its EWMA queuing delay crosses the
+	// target and the controller backs off (parks leg 2). Bounded loop.
+	var got RotationAction
+	for i := 0; i < 10; i++ {
+		got = e.OnTick("ledbat", steady(300))
+		if len(got.DemoteToStandby) > 0 {
+			break
+		}
+		if !reflect.DeepEqual(got, RotationAction{}) {
+			t.Fatalf("pre-backoff tick %d: expected no-op or the backoff demote; got %+v", i, got)
+		}
+	}
+	if len(got.DemoteToStandby) != 1 || got.DemoteToStandby[0] != 2 {
+		t.Fatalf("ledbat must park the highest-queuing-delay non-primary leg (2); got %+v", got)
+	}
+	if got.DropLegs != nil {
+		t.Errorf("back-off parks, never tears down; got DropLegs=%v", got.DropLegs)
+	}
+	if len(got.PromoteFromStandby) != 0 || got.AddLeg {
+		t.Errorf("back-off must not grow; got %+v", got)
+	}
+}
+
+// TestEngine_OnTick_LedbatNeverParksBelowFloor asserts the yield floor: even when
+// the sole non-primary active leg is congesting, ledbat shrinks only to a single
+// active leg (leg 0) and then holds — it never parks leg 0, so the flow always
+// keeps one leg making progress.
+func TestEngine_OnTick_LedbatNeverParksBelowFloor(t *testing.T) {
+	e := New()
+	legs := func(lat1 int, oneStandby bool) []LegInfo {
+		return []LegInfo{
+			{Index: 0, TransportID: "t0", Kind: "stcpr", LatencyMs: 40, Alive: true},
+			{Index: 1, TransportID: "t1", Kind: "stcpr", LatencyMs: lat1, Alive: true, Standby: oneStandby},
+		}
+	}
+	// Seed base=40 for both legs.
+	e.OnTick("ledbat", legs(40, false))
+	// Congest leg 1 until it is parked, then confirm at the floor (leg 0 only
+	// active, leg 1 standby) the controller does NOT keep demoting.
+	parked := false
+	for i := 0; i < 10 && !parked; i++ {
+		got := e.OnTick("ledbat", legs(300, false))
+		if len(got.DemoteToStandby) == 1 && got.DemoteToStandby[0] == 1 {
+			parked = true
+		} else if len(got.DemoteToStandby) > 0 {
+			t.Fatalf("must only ever park leg 1 (never leg 0); got %+v", got)
+		}
+	}
+	if !parked {
+		t.Fatal("leg 1 never parked despite sustained queuing delay")
+	}
+	// At the floor (1 active), a still-congested snapshot must be a no-op — leg 0
+	// is never parked.
+	if got := e.OnTick("ledbat", legs(300, true)); len(got.DemoteToStandby) != 0 || got.DropLegs != nil {
+		t.Errorf("at the yield floor ledbat must hold, never park leg 0; got %+v", got)
+	}
+}
+
+// TestEngine_OnTick_LedbatGrowsWhenNoQueuing asserts the grow rule: with a parked
+// reserve leg and every active leg reading near its base (no self-induced
+// queuing), the controller re-promotes a parked leg — up to the ledbatMux cap —
+// drawing only on the reserve (no fresh dial).
+func TestEngine_OnTick_LedbatGrowsWhenNoQueuing(t *testing.T) {
+	e := New()
+	// Leg 0 active near base, legs 1 and 2 parked. No queuing anywhere.
+	legs := []LegInfo{
+		{Index: 0, TransportID: "t0", Kind: "stcpr", LatencyMs: 40, Alive: true},
+		{Index: 1, TransportID: "t1", Kind: "stcpr", LatencyMs: 40, Alive: true, Standby: true},
+		{Index: 2, TransportID: "t2", Kind: "stcpr", LatencyMs: 40, Alive: true, Standby: true},
+	}
+	got := e.OnTick("ledbat", legs)
+	if len(got.PromoteFromStandby) != 1 || got.PromoteFromStandby[0] != 1 {
+		t.Fatalf("no queuing + below cap → promote the lowest-index parked leg (1); got %+v", got)
+	}
+	if got.AddLeg {
+		t.Errorf("grow must draw on the reserve, never dial fresh; got AddLeg=true")
+	}
+	if len(got.DemoteToStandby) != 0 || got.DropLegs != nil {
+		t.Errorf("grow must not shed; got %+v", got)
 	}
 }
