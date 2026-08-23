@@ -397,9 +397,18 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 			// TRUE end-to-end route latency (all hops), from the leg-liveness
 			// pong — distinct from the first-hop transport RTT above.
 			leg.RouteLatencyMS = rg.legEndToEndLatencyMs(tp.Entry.ID)
-			// Direct = this leg's first hop reaches the destination itself,
-			// i.e. a 1-hop route; otherwise it is relayed (multihop).
-			leg.Direct = tp.Remote() == dstPK
+			// Direct = this leg's first hop reaches the route group's FAR
+			// endpoint itself, i.e. a 1-hop route; otherwise it is relayed
+			// (multihop). The far endpoint is whichever descriptor end is not
+			// this visor: for a client-initiated route group (e.g. skysocks-
+			// client → exit) the local visor is the descriptor's Dst and the far
+			// peer is its Src, so comparing only against DstPK mislabels a
+			// genuinely direct leg as multihop. A leg's first-hop transport
+			// remote can never be this visor's own PK (self-loops are excluded),
+			// so matching EITHER descriptor end means it reached the far one
+			// directly — orientation-independent. A relayed leg's first hop lands
+			// on an intermediate (neither Src nor Dst), so this stays false.
+			leg.Direct = tp.Remote() == dstPK || tp.Remote() == rg.desc.SrcPK()
 			leg.Alive = !tp.IsClosed()
 			// Full forward route for this leg (all hops, full PKs, per-hop
 			// transport type). Per-hop latency: hop 0 is the owned transport
