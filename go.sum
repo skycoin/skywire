@@ -74,8 +74,8 @@ github.com/0magnet/plot-go v0.0.0-20260820145748-0b260a086d19 h1:HDuBSefzYQcFM69
 github.com/0magnet/plot-go v0.0.0-20260820145748-0b260a086d19/go.mod h1:LCfGAHo2mK7Su2xbCf9xwiLrlXt/YOcGW7LZ4owtiCk=
 github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf h1:3tImGgrBxM3/eC13YeT8WsT5B3E3dxmHtozvgo0xtpo=
 github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf/go.mod h1:IdyC3iqIKArn4KOl0a58dV2spH0PH6pLJKOZYB2kFR0=
-github.com/0magnet/termanim v0.0.0-20260823195938-f88b1541cfcd h1:uIU35LENZsiWRfDWTBAoQKwe4S5MccJXu5dlBB/0u1w=
-github.com/0magnet/termanim v0.0.0-20260823195938-f88b1541cfcd/go.mod h1:z/hEqBGeyX7Az2HZbJqgMEZo5eJf4SBcxKCZTZ1X4jU=
+github.com/0magnet/termanim v0.0.0-20260823220926-60f3279a072f h1:ERQdvVBjLtHJSHuDOj3NaayEFINQL53Kfdhrzk5A6gs=
+github.com/0magnet/termanim v0.0.0-20260823220926-60f3279a072f/go.mod h1:z/hEqBGeyX7Az2HZbJqgMEZo5eJf4SBcxKCZTZ1X4jU=
 github.com/0magnet/u-root v0.16.1-0.20260810212217-0890fe5099f9 h1:akt/1o/SlArz8M/n+piy0eyKaBa83wrxQmrLgh6FlPU=
 github.com/0magnet/u-root v0.16.1-0.20260810212217-0890fe5099f9/go.mod h1:fId14v+rNp1A0ZKHJPZZyiu9dfgWKEs7nbyvKrku3bo=
 github.com/0magnet/websh v0.0.0-20260816200521-e9f14eb862c7 h1:09IjBB/rJMVtrkn4i1571Nq+iSMEIsjv7S4zlJzKEuQ=
