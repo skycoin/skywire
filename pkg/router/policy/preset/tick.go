@@ -513,13 +513,22 @@ const (
 	// resilience and instant, dip-free failover. This is a high SANITY CAP, not a
 	// target: establishMuxRoutes builds up to ReverseMux (= adaptRevActive +
 	// adaptStandbyMax) best-effort and takes only as many as the topology's
-	// disjoint-intermediate set actually offers (dozens at a busy exit, a handful
-	// at a sparse one). The RSN-oracle transport-type ranking picks the best
-	// (stcpr/squicr) legs first and the health-gate keeps latency outliers OUT of
-	// the ACTIVE set, so a big pool is pure resilience headroom, not load on the
-	// carrying legs. Each aux-leg add re-queries the destination's transports, so
-	// the pool refreshes toward newly-appeared routes as it is maintained.
-	adaptStandbyMax = 31
+	// disjoint-intermediate set actually offers. The RSN-oracle transport-type
+	// ranking picks the best (stcpr/squicr) legs first and the health-gate keeps
+	// latency outliers OUT of the ACTIVE set.
+	//
+	// MEASURED 2026-08-22: a big pool is NOT free. Standing up 31 DISJOINT
+	// multi-hop reverse routes over the churny mesh is a setup-node dial storm —
+	// each warm-standby leg needs its own route-setup handshake, they fail with
+	// "setup-node dial: context deadline exceeded" and self-heal re-dials forever,
+	// and a bulk download over the resulting 32-leg group STALLS (10MB timed out;
+	// 100KB ran at ~8 KB/s) instead of aggregating. A proxy wants a small, fully-
+	// fillable pool: 1 active + 2 standby (ReverseMux=3) — the shape the preset
+	// tests already assert. The source const had DRIFTED to 31 while the tests /
+	// intended shape stayed at 3; this realigns native to that, and bundle.wasm
+	// is rebuilt to match so native↔wazero decisions are identical again.
+	// Resilience comes from the pool being HEALTHY, not huge.
+	adaptStandbyMax = 2
 	adaptStandbyMin = 1
 	// Health + anti-churn. A leg is a gross-outlier (kept OUT of the active mux,
 	// where the no-skip reorder buffer would head-of-line-stall on it) when its
