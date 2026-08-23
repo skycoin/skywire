@@ -50,11 +50,11 @@ func TestRenderSections(t *testing.T) {
 		MuxEnabled: true,
 		Legs: []Leg{
 			{Index: 0, TpType: "stcpr", RemotePK: "0311223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", SentBytes: 2048, RecvBytes: 1024, LatencyMS: 42, RouteLatencyMS: 42, Direct: true, Alive: true,
-				Hops: []Hop{{From: "02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee", To: "0311223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "stcpr", LatencyMS: 42}}},
+				Hops: []Hop{{TpID: "tp0aaaaaaa-0000-0000-0000-000000000000", From: "02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee", To: "0311223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "stcpr", LatencyMS: 42}}},
 			{Index: 1, TpType: "sudph", RemotePK: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", SentBytes: 512, RecvBytes: 256, LatencyMS: 30, RouteLatencyMS: 480, Direct: false, Standby: true, Alive: true,
 				Hops: []Hop{
-					{From: "02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee", To: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "sudph", LatencyMS: 30},
-					{From: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", To: "03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "stcpr", LatencyMS: 450},
+					{TpID: "tp1bbbbbbb-1111-1111-1111-111111111111", From: "02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee", To: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "sudph", LatencyMS: 30},
+					{TpID: "tp2ccccccc-2222-2222-2222-222222222222", From: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", To: "03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "stcpr", LatencyMS: 450},
 				}},
 		},
 		Logs:   []string{"line one", "line two"},
@@ -71,11 +71,22 @@ func TestRenderSections(t *testing.T) {
 		"<main id=\"live\">", "new WebSocket", "/ws",
 		`location.origin.replace(/^http/,"ws")`, "sendCmd",
 		"standby", "status.dmsg", "status.skynet",
-		// route observability: route-latency column, direct/multihop badge, recv bar
-		"route rtt", "recv share", "direct", "multihop", "480 ms", "bar recv",
-		// full routes: section + full (untruncated) hop PKs + per-hop type/latency
-		"full routes", "03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff",
-		"02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee", "450ms",
+		// route observability: route-latency metric (hint), direct/multihop tag, recv bar
+		"route rtt", "direct", "multihop", "480 ms", "bar recv",
+		// ONE unified route tree rooted at the local visor: the flat mux table +
+		// separate "full routes" chains folded into a single box-drawing tree.
+		// Root (this visor / source accent), branch + leaf glyphs, exit accent, the
+		// FULL (untruncated) hop PKs, per-edge transport (id + type + latency), and
+		// per-leg telemetry on indented continuation (tdetail) lines.
+		`class="tree"`, `class="guide"`, "├──", "└─┬", "└──",
+		`class="tline src"`, `class="tline dst"`, "this visor", "exit",
+		"03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff",
+		"02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee",
+		"via ", "stcpr 450ms", "sudph 30ms",
+		// first-hop transport id is shown and click-to-copy
+		`class="ftid copy"`, "tp2ccccccc-2222-2222-2222-222222222222",
+		// per-leg telemetry relocated onto continuation lines beneath the leaf PK
+		`class="tdetail"`, "│",
 		// UX pass: selection-guard + identical-fragment skip in the live script,
 		// click-to-copy affordance (execCommand fallback for the HTTP context),
 		// the WebSocket live indicator, route-group summary, and staged control tags.
