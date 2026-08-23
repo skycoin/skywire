@@ -266,7 +266,17 @@ func ShouldServe(port string) bool {
 // corrupted. Best-effort and deadline-bounded so it never stalls the client's
 // reconnect. Returns nil if it served a page, an error otherwise; the caller
 // closes conn regardless.
-func ServeSOCKS5(conn net.Conn, detail, mechanism string) error {
+//
+// statusOverride lets the caller answer a reserved in-process host (e.g.
+// status.skysocks) itself instead of the interstitial: once the CONNECT target
+// host is parsed and the SOCKS5 reply + browser request have been exchanged, if
+// statusOverride != nil and it returns a non-nil body for that host, the body is
+// written verbatim as the HTTP response and the interstitial is skipped. This
+// keeps the reserved status page reachable exactly when the exit is down — the
+// moment the user most needs to see why — which the interstitial would otherwise
+// shadow. Pass nil for the plain interstitial-only behaviour. The closure lives
+// in the caller so this package stays free of any pkg/proxystatus dependency.
+func ServeSOCKS5(conn net.Conn, detail, mechanism string, statusOverride func(host string) []byte) error {
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
 	defer conn.SetDeadline(time.Time{})                   //nolint:errcheck
 
@@ -339,9 +349,18 @@ func ServeSOCKS5(conn net.Conn, detail, mechanism string) error {
 		return err
 	}
 	// Drain a chunk of the (short) HTTP request so the browser's write
-	// completes, then answer with the interstitial. We don't need the request
-	// contents — the page is fixed. Bounded single read; ignore EOF.
+	// completes, then answer. We don't need the request contents — the response
+	// is fixed. Bounded single read; ignore EOF.
 	_, _ = conn.Read(make([]byte, 1024)) //nolint:errcheck
+	// A reserved in-process host (e.g. status.skysocks) is answered by the
+	// caller's override rather than the interstitial, so it stays reachable
+	// while the exit is down.
+	if statusOverride != nil {
+		if body := statusOverride(host); body != nil {
+			_, err := conn.Write(body)
+			return err
+		}
+	}
 	_, err := conn.Write(httpResponse(host, detail, mechanism, false))
 	return err
 }
