@@ -403,8 +403,9 @@ func parseRotationAction(v starlark.Value) (RotationAction, error) {
 		return RotationAction{}, fmt.Errorf("expected struct, got %s", v.Type())
 	}
 	out := RotationAction{
-		AddLeg:      readBoolField(s, "add_leg"),
-		ExcludeHops: readStrListField(s, "exclude_hops"),
+		AddLeg:        readBoolField(s, "add_leg"),
+		AddForwardLeg: readBoolField(s, "add_forward_leg"),
+		ExcludeHops:   readStrListField(s, "exclude_hops"),
 	}
 	if drops, err := s.Attr("drop_legs"); err == nil && drops != nil {
 		if _, isNone := drops.(starlark.NoneType); !isNone {

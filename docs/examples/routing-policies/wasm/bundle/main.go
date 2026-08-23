@@ -108,6 +108,7 @@ type rotationActionWire struct {
 	ExcludeHops        []string `json:"exclude_hops,omitempty"`
 	DemoteToStandby    []int    `json:"demote_to_standby,omitempty"`
 	PromoteFromStandby []int    `json:"promote_from_standby,omitempty"`
+	AddForwardLeg      bool     `json:"add_forward_leg,omitempty"`
 }
 
 // engine holds the adaptive tick controllers' per-transport_id state for this
@@ -269,6 +270,7 @@ func actionToWire(a preset.RotationAction) rotationActionWire {
 		ExcludeHops:        a.ExcludeHops,
 		DemoteToStandby:    a.DemoteToStandby,
 		PromoteFromStandby: a.PromoteFromStandby,
+		AddForwardLeg:      a.AddForwardLeg,
 	}
 }
 

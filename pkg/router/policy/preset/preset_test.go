@@ -620,3 +620,174 @@ func TestEngine_OnTick_CoupledNoGrowUnderLoss(t *testing.T) {
 		t.Errorf("coupled should shed the lossy leg (1) instead; got %+v", got)
 	}
 }
+
+// --- adaptive BIDIRECTIONAL sizing (forward/upload widening) ---
+//
+// These exercise the SentBytes-driven forward controller added alongside the
+// existing RecvBytes-driven reverse controller. adaptiveSim is a faithful
+// mini-router: it feeds the engine a leg snapshot, applies the returned
+// RotationAction to the leg set (append on AddLeg/AddForwardLeg, flip Standby on
+// promote/demote, remove on drop), then advances the cumulative byte counters
+// for the next tick — so the engine sees leg growth react to its own actions.
+type adaptiveSim struct {
+	e           *Engine
+	legs        []LegInfo
+	nextTID     int
+	sawAddFwd   bool
+	sawAddLeg   bool
+	sawPromote  bool
+	sentPerTick uint64 // bytes added to each ACTIVE leg's SentBytes each tick
+	recvPerTick uint64 // bytes added to each ACTIVE leg's RecvBytes each tick
+}
+
+func newAdaptiveSim(sentPerTick, recvPerTick uint64) *adaptiveSim {
+	s := &adaptiveSim{e: New(), sentPerTick: sentPerTick, recvPerTick: recvPerTick, nextTID: 1}
+	// Steady start: one active forward/primary leg (leg 0). No standby — the
+	// simplest shape that isolates the sizing controllers.
+	s.legs = []LegInfo{{Index: 0, TransportID: "t0", Kind: "stcpr", LatencyMs: 40, Alive: true}}
+	return s
+}
+
+func (s *adaptiveSim) activeCount() int {
+	n := 0
+	for _, l := range s.legs {
+		if l.Alive && !l.Standby {
+			n++
+		}
+	}
+	return n
+}
+
+func (s *adaptiveSim) reindex() {
+	for i := range s.legs {
+		s.legs[i].Index = i
+	}
+}
+
+func (s *adaptiveSim) step() RotationAction {
+	act := s.e.OnTick("adaptive", s.legs)
+	if act.AddForwardLeg {
+		s.sawAddFwd = true
+	}
+	if act.AddLeg {
+		s.sawAddLeg = true
+	}
+	if len(act.PromoteFromStandby) > 0 {
+		s.sawPromote = true
+	}
+	// Apply promote/demote first (index-stable), then drops (compact), then adds.
+	for _, idx := range act.PromoteFromStandby {
+		if idx >= 0 && idx < len(s.legs) {
+			s.legs[idx].Standby = false
+		}
+	}
+	for _, idx := range act.DemoteToStandby {
+		if idx >= 0 && idx < len(s.legs) {
+			s.legs[idx].Standby = true
+		}
+	}
+	if len(act.DropLegs) > 0 {
+		drop := map[int]bool{}
+		for _, idx := range act.DropLegs {
+			drop[idx] = true
+		}
+		var kept []LegInfo
+		for i, l := range s.legs {
+			if !drop[i] {
+				kept = append(kept, l)
+			}
+		}
+		s.legs = kept
+		s.reindex()
+	}
+	if act.AddLeg || act.AddForwardLeg {
+		tid := "t" + string(rune('a'+s.nextTID))
+		s.nextTID++
+		s.legs = append(s.legs, LegInfo{Index: len(s.legs), TransportID: tid, Kind: "stcpr", LatencyMs: 40, Alive: true})
+	}
+	// Advance cumulative counters on the ACTIVE legs for the next snapshot.
+	for i := range s.legs {
+		if s.legs[i].Alive && !s.legs[i].Standby {
+			s.legs[i].SentBytes += s.sentPerTick
+			s.legs[i].RecvBytes += s.recvPerTick
+		}
+	}
+	return act
+}
+
+// TestEngine_OnTick_AdaptiveForwardWidensOnUpload asserts an upload-heavy flow
+// (growing SentBytes, flat RecvBytes) widens the FORWARD mux via AddForwardLeg
+// while the reverse controller stays completely lean (no AddLeg, reverse target
+// unchanged at adaptRevActive).
+func TestEngine_OnTick_AdaptiveForwardWidensOnUpload(t *testing.T) {
+	s := newAdaptiveSim(1_000_000, 0) // heavy upload, zero download
+	for i := 0; i < 20; i++ {
+		s.step()
+	}
+	if !s.sawAddFwd {
+		t.Fatalf("upload-heavy flow must widen forward via AddForwardLeg; never saw one")
+	}
+	if s.sawAddLeg {
+		t.Errorf("upload-heavy flow must NOT grow the reverse/full-duplex set (AddLeg)")
+	}
+	if s.e.adaptTarget != adaptRevActive {
+		t.Errorf("reverse target must stay lean at %d; got %d", adaptRevActive, s.e.adaptTarget)
+	}
+	if s.e.adaptFwdTarget <= adaptFwdActive {
+		t.Errorf("forward target must have widened above %d; got %d", adaptFwdActive, s.e.adaptFwdTarget)
+	}
+	if s.activeCount() <= 1 {
+		t.Errorf("forward widening must have added at least one active send leg; active=%d", s.activeCount())
+	}
+}
+
+// TestEngine_OnTick_AdaptiveReverseWidensOnDownload is the REGRESSION guard: a
+// download-heavy flow (growing RecvBytes, flat SentBytes) must still widen the
+// reverse set via AddLeg exactly as before, and must NOT trip the new forward
+// controller (no AddForwardLeg; forward target stays at adaptFwdActive).
+func TestEngine_OnTick_AdaptiveReverseWidensOnDownload(t *testing.T) {
+	s := newAdaptiveSim(0, 1_000_000) // zero upload, heavy download
+	for i := 0; i < 20; i++ {
+		s.step()
+	}
+	if !s.sawAddLeg && !s.sawPromote {
+		t.Fatalf("download-heavy flow must widen the reverse set (AddLeg/promote); saw neither")
+	}
+	if s.sawAddFwd {
+		t.Errorf("download-heavy flow must NOT trip the forward controller (AddForwardLeg)")
+	}
+	if s.e.adaptFwdTarget != adaptFwdActive {
+		t.Errorf("forward target must stay lean at %d on a download flow; got %d", adaptFwdActive, s.e.adaptFwdTarget)
+	}
+	if s.e.adaptTarget <= adaptRevActive {
+		t.Errorf("reverse target must have widened above %d; got %d", adaptRevActive, s.e.adaptTarget)
+	}
+}
+
+// TestEngine_OnTick_AdaptiveForwardCollapsesOnIdle asserts a forward-widened
+// flow collapses back to the lean single forward leg once the upload goes idle
+// (forward target returns to adaptFwdActive and the active set shrinks).
+func TestEngine_OnTick_AdaptiveForwardCollapsesOnIdle(t *testing.T) {
+	s := newAdaptiveSim(1_000_000, 0)
+	for i := 0; i < 20; i++ { // widen under upload
+		s.step()
+	}
+	if s.e.adaptFwdTarget <= adaptFwdActive {
+		t.Fatalf("precondition: forward must be widened; got fwdTarget=%d", s.e.adaptFwdTarget)
+	}
+	grown := s.activeCount()
+	// Upload stops: flat SentBytes and RecvBytes from here on.
+	s.sentPerTick, s.recvPerTick = 0, 0
+	for i := 0; i < 40; i++ {
+		s.step()
+	}
+	if s.e.adaptFwdTarget != adaptFwdActive {
+		t.Errorf("idle must collapse forward target back to %d; got %d", adaptFwdActive, s.e.adaptFwdTarget)
+	}
+	if s.activeCount() >= grown {
+		t.Errorf("idle must shed the extra forward legs; active stayed %d (peak %d)", s.activeCount(), grown)
+	}
+	if s.activeCount() != 1 {
+		t.Errorf("idle steady state must be a single active forward leg; active=%d", s.activeCount())
+	}
+}

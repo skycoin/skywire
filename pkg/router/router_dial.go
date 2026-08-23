@@ -703,7 +703,26 @@ func (r *router) finishDial(
 		// Periodic rotation (policy on_tick) reuses the same callback.
 		if rh, ok := r.conf.DialHook.(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
 			interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
-			nrg.rg.SetRotation(rh, applyAdd, interval)
+			// Forward-only add-leg callback: the adaptive preset's AddForwardLeg
+			// (upload-saturation widen) dials an aux leg addFwd=true/addRev=false
+			// so the extra upstream send capacity does not enlarge the
+			// reverse/download set. Distinct from applyAdd (full-duplex) so the
+			// two directions size independently.
+			applyAddForward := func(excludeHops []string) {
+				addCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				excludePKs := make([]cipher.PubKey, 0, len(excludeHops))
+				for _, h := range excludeHops {
+					var pk cipher.PubKey
+					if err := pk.Set(h); err == nil {
+						excludePKs = append(excludePKs, pk)
+					}
+				}
+				if err := r.addOneAuxSendLeg(addCtx, nrgCapture, &optsCopy, fwdDescCopy, excludePKs); err != nil {
+					r.logger.WithError(err).Debug("Mux forward add-leg failed; route group keeps current leg set")
+				}
+			}
+			nrg.rg.SetRotation(rh, applyAdd, applyAddForward, interval)
 		}
 	}
 
@@ -2477,6 +2496,29 @@ func (r *router) establishMuxRoutes(
 // leg set); the rotation goroutine logs and waits for the next
 // tick.
 func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *DialOptions, forwardDesc routing.RouteDescriptor, extraExcludePKs []cipher.PubKey) error {
+	return r.addOneAuxLeg(ctx, nrg, opts, forwardDesc, extraExcludePKs, true)
+}
+
+// addOneAuxSendLeg dials one additional FORWARD-ONLY aux leg
+// (appendRouteAsymmetric addFwd=true / addRev=false) and appends it to nrg.
+// Used by the rotation hook for a RotationAction.AddForwardLeg — the adaptive
+// preset's upload-saturation widen. It adds upstream send capacity WITHOUT a
+// paired reverse rule, so it does not enlarge the reverse/download set.
+//
+// Caveat (see the full-duplex note in addOneAuxLeg): a leg with no local
+// reverse (consume) rule black-holes any DOWNLOAD the far end spreads onto it.
+// That is acceptable here precisely because this leg is grown for an
+// upload-dominant flow (little reverse traffic) and the leg-dataprogress /
+// leg-liveness prunes evict it if the far end mis-spreads bulk download onto
+// it. It is the "forward actuation can't fully mirror reverse" corner: the warm
+// standby pool is full-duplex, so a forward-only widen must be a fresh leg.
+func (r *router) addOneAuxSendLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *DialOptions, forwardDesc routing.RouteDescriptor, extraExcludePKs []cipher.PubKey) error {
+	return r.addOneAuxLeg(ctx, nrg, opts, forwardDesc, extraExcludePKs, false)
+}
+
+// addOneAuxLeg is the shared implementation behind addOneAuxForwardLeg
+// (addRev=true, full-duplex) and addOneAuxSendLeg (addRev=false, forward-only).
+func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *DialOptions, forwardDesc routing.RouteDescriptor, extraExcludePKs []cipher.PubKey, addRev bool) error {
 	if nrg == nil || nrg.rg == nil {
 		return fmt.Errorf("route group nil")
 	}
@@ -2582,20 +2624,22 @@ func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, 
 	if err != nil {
 		return fmt.Errorf("rotation add-leg: setup-node dial: %w", err)
 	}
-	// Append the replacement leg FULL-DUPLEX (forward + reverse). Forward-only
-	// deletes the initiator's consume (reverse) rule for this leg — but the
-	// setup-node dial already installed that rule on the far end, which marks the
-	// leg ready on our forward handshake and then spreads its bulk (download)
-	// stream onto it. With the initiator's consume rule gone those packets are
-	// dropped (errRouteDescNotExist), so the leg black-holes (recv=0) and, because
-	// the reorder buffer is lossless, the missing sequences head-of-line-stall the
-	// primary leg too — a net 0-byte transfer. aliveLegCount counts forward legs,
-	// so a send-only leg still satisfies the degree target while being a download
-	// blackhole. Keeping the reverse rule lets the aggregated download land here.
-	if err := r.appendRouteAsymmetric(nrg, muxRules, true, true); err != nil {
+	// Append the leg. Full-duplex (addRev=true, the default rotation/self-heal
+	// path): forward-only would delete the initiator's consume (reverse) rule for
+	// this leg — but the setup-node dial already installed that rule on the far
+	// end, which marks the leg ready on our forward handshake and then spreads its
+	// bulk (download) stream onto it. With the initiator's consume rule gone those
+	// packets are dropped (errRouteDescNotExist), so the leg black-holes (recv=0)
+	// and, because the reorder buffer is lossless, the missing sequences
+	// head-of-line-stall the primary leg too — a net 0-byte transfer. So the
+	// full-duplex path keeps the reverse rule. addRev=false is used ONLY by the
+	// adaptive preset's forward-only (AddForwardLeg) upload widen, where the flow
+	// is upload-dominant so little download lands here, and the data-progress /
+	// liveness prunes evict the leg if the far end mis-spreads download onto it.
+	if err := r.appendRouteAsymmetric(nrg, muxRules, true, addRev); err != nil {
 		return fmt.Errorf("rotation add-leg: append: %w", err)
 	}
-	log.Infof("Rotation aux leg established via tp %s", muxRules.Forward.NextTransportID())
+	log.Infof("Rotation aux leg established (addRev=%v) via tp %s", addRev, muxRules.Forward.NextTransportID())
 	return nil
 }
 
