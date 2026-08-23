@@ -597,6 +597,7 @@ type router struct {
 	datagramPorts      map[routing.Port]struct{}                       // local ports with faithful-UDP intent; the accept side builds a datagram sibling only for these (#2607 on-demand-by-local-intent)
 	acceptDatagram     chan datagramAccept                             // accept-side datagram siblings, drained by AcceptDatagram (the forwarded_ports.udp server loop)
 	pending            *pendingPackets                                 // frames parked during the rule-save -> route-group-register window (see router_pending.go)
+	pendingLegs        *pendingLegs                                    // aux mux legs buffered while their route group is still initializing (see router_pending_legs.go, #80)
 	rpcSrv             *rpc.Server
 	accept             chan routing.EdgeRules
 	done               chan struct{}
@@ -731,6 +732,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		datagramPorts:   make(map[routing.Port]struct{}),
 		acceptDatagram:  make(chan datagramAccept, acceptDatagramBuf),
 		pending:         newPendingPackets(),
+		pendingLegs:     newPendingLegs(),
 		rpcSrv:          rpc.NewServer(),
 		accept:          make(chan routing.EdgeRules, acceptSize),
 		done:            make(chan struct{}),

@@ -120,6 +120,19 @@ func (r *router) drainPendingToGroup(nrg *NoiseRouteGroup, desc routing.RouteDes
 	}
 }
 
+// drainPendingLegs appends every aux mux leg buffered for desc while its route
+// group was still initializing (rgsRaw), through the guarded append path. Called
+// by saveRouteGroupRules right after the group registers into rgsNs (#80). Each
+// append carries the DMSG-refusal + duplicate-transport-ID guards, sends the
+// per-leg handshake, and drains any transport frames parked for the new leg.
+func (r *router) drainPendingLegs(nrg *NoiseRouteGroup, desc routing.RouteDescriptor) {
+	for _, pl := range r.pendingLegs.take(desc) {
+		if err := r.appendRouteToGroup(nrg, pl.rules); err != nil {
+			r.logger.WithError(err).Debugf("Failed to append buffered aux mux leg for %s", &desc)
+		}
+	}
+}
+
 // appendRouteToGroup adds an additional transport/rule pair to an existing
 // mux-enabled NoiseRouteGroup. Used for establishing additional parallel routes.
 func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRules) error {
