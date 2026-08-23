@@ -5,6 +5,7 @@ package router
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -208,19 +209,35 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 		return fmt.Errorf("SaveRoutingRules: %w", err)
 	}
 
-	// Check if we already have an active mux-enabled route group for this descriptor.
-	// If so, append the additional route instead of creating a new connection.
+	// Check if we already have a route group for this descriptor. If so, these
+	// rules are an ADDITIONAL (aux) mux leg for it, not a new connection — never
+	// push them to r.accept (that path builds a duplicate group; on the responder
+	// it deletes the leg's rules or blocks the whole handshake-await, collapsing
+	// the mux back toward one leg, #80).
+	//
+	// Two cases:
+	//   - The group is already live (rgsNs) with mux enabled → append now.
+	//   - The group is still initializing (rgsRaw): its rg.mux is not set yet (the
+	//     responder creates it lazily when the primary forward handshake lands),
+	//     so we cannot append yet. Buffer the leg and drain it through the same
+	//     guarded append the moment the group registers (saveRouteGroupRules).
 	r.mx.Lock()
 	if nrg, ok := r.rgsNs[rules.Desc]; ok && nrg != nil && nrg.rg.mux != nil {
 		r.mx.Unlock()
-
-		nextTpID := rules.Forward.NextTransportID()
-		tp := r.tm.Transport(nextTpID)
-		if tp == nil {
-			return fmt.Errorf("transport %s not found for additional mux route", nextTpID)
+		// Route through appendRouteToGroup so the DMSG-refusal and
+		// duplicate-transport-ID guards apply (the old inline append skipped
+		// them), and the peer is handshaked on the new leg.
+		return r.appendRouteToGroup(nrg, rules)
+	}
+	if _, initializing := r.rgsRaw[rules.Desc]; initializing {
+		// Park under r.mx so the group cannot transition rgsRaw -> rgsNs (and
+		// drain) between our check and our park, which would strand this leg.
+		parked := r.pendingLegs.park(rules.Desc, rules, time.Now())
+		r.mx.Unlock()
+		if !parked {
+			return fmt.Errorf("pending-leg buffer full for initializing route group %s", &rules.Desc)
 		}
-		nrg.rg.appendRules(rules.Forward, rules.Reverse, tp)
-		r.logger.Debugf("Appended additional mux route to existing RouteGroup for %s", &rules.Desc)
+		r.logger.Debugf("Buffered aux mux leg for initializing route group %s", &rules.Desc)
 		return nil
 	}
 	r.mx.Unlock()
