@@ -8,7 +8,6 @@ package commands
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -77,15 +76,6 @@ func init() {
 	RootCmd.Flags().StringVar(&uptimeDB, "uptime-db", tpd.DefaultUptimeDB, "path for the service-self uptime bbolt store (empty disables)")
 }
 
-// exampleJSON marshals v to indented JSON with color, returning empty string on error
-func exampleJSON(v interface{}) string {
-	b, err := json.MarshalIndent(v, "    ", "  ")
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
 // generateExamples creates example responses from actual struct types
 func generateExamples() string {
 	pk1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
@@ -139,32 +129,32 @@ GET /uptimes
 
 GET /security/nonces/{pk}
   %s`,
-		exampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]interface{}{
 			"build_info": map[string]string{"version": "v1.3.29"}, "started_at": "2024-01-15T10:00:00Z",
 			"dmsg_address": pk1 + ":80", "dmsg_servers": []string{pk2},
 		}),
-		exampleJSON([]map[string]interface{}{{
+		cmdutil.ExampleJSON([]map[string]interface{}{{
 			"entry":      map[string]interface{}{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
 			"signatures": []string{sig, sig}, "registered": 1705312800, "latency_ms": 45.2,
 		}}),
-		exampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]interface{}{
 			"total_transports": 150, "by_type": map[string]int{"stcpr": 100, "sudph": 50}, "unique_visors": 75,
 		}),
-		exampleJSON(map[string]map[string]int{pk1: {"total": 5, "stcpr": 3, "sudph": 2}}),
-		exampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]map[string]int{pk1: {"total": 5, "stcpr": 3, "sudph": 2}}),
+		cmdutil.ExampleJSON(map[string]interface{}{
 			"entry":      map[string]interface{}{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
 			"signatures": []string{sig, sig}, "registered": 1705312800,
 		}),
-		exampleJSON(map[string]interface{}{"total": 5, "by_type": map[string]int{"stcpr": 3, "sudph": 2}}),
-		exampleJSON([]map[string]interface{}{{
+		cmdutil.ExampleJSON(map[string]interface{}{"total": 5, "by_type": map[string]int{"stcpr": 3, "sudph": 2}}),
+		cmdutil.ExampleJSON([]map[string]interface{}{{
 			"entry":      map[string]interface{}{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
 			"signatures": []string{sig, sig},
 		}}),
-		exampleJSON([]string{tpID}),
-		exampleJSON([]transport.BandwidthData{{SentBytes: 1073741824, RecvBytes: 2147483648}}),
-		exampleJSON(transport.BandwidthData{SentBytes: 5368709120, RecvBytes: 10737418240}),
-		exampleJSON([]map[string]interface{}{{"pk": pk1, "on": true, "tp_count": 5}}),
-		exampleJSON(map[string]interface{}{"nonce": 12345}),
+		cmdutil.ExampleJSON([]string{tpID}),
+		cmdutil.ExampleJSON([]transport.BandwidthData{{SentBytes: 1073741824, RecvBytes: 2147483648}}),
+		cmdutil.ExampleJSON(transport.BandwidthData{SentBytes: 5368709120, RecvBytes: 10737418240}),
+		cmdutil.ExampleJSON([]map[string]interface{}{{"pk": pk1, "on": true, "tp_count": 5}}),
+		cmdutil.ExampleJSON(map[string]interface{}{"nonce": 12345}),
 	)
 }
 
@@ -248,7 +238,7 @@ func buildConfig() (*tpd.Config, error) {
 		Tag:             tag,
 		Testing:         testing,
 		Mode:            mode,
-		Whitelist:       commaSplit(whitelistKeys),
+		Whitelist:       cmdutil.CommaSplit(whitelistKeys),
 		TestEnvironment: testEnvironment,
 		StoreDataPath:   storeDataPath,
 		UptimeDB:        uptimeDB,
@@ -334,23 +324,7 @@ func mergeFile(dst, src *tpd.Config) {
 	}
 }
 
-func commaSplit(s string) []string {
-	if s == "" {
-		return nil
-	}
-	out := make([]string, 0, 4)
-	for _, p := range strings.Split(s, ",") {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

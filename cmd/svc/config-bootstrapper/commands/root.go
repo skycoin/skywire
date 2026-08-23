@@ -40,15 +40,6 @@ var (
 	mode           string
 )
 
-// exampleJSON marshals v to indented JSON with color, returning empty string on error
-func exampleJSON(v interface{}) string {
-	b, err := json.MarshalIndent(v, "    ", "  ")
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
 // generateExamples creates example responses from actual struct types
 func generateExamples() string {
 	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
@@ -89,8 +80,8 @@ GET /health - api.HealthCheckResponse
 
 GET / - visorconfig.Services
 %s`,
-		exampleJSON(healthExample),
-		exampleJSON(servicesExample))
+		cmdutil.ExampleJSON(healthExample),
+		cmdutil.ExampleJSON(servicesExample))
 }
 
 func init() {
@@ -231,7 +222,5 @@ func readConfig(log *logging.Logger, confPath string) (config api.Config) {
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

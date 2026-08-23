@@ -3,7 +3,6 @@ package commands
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -89,15 +88,6 @@ func init() {
 	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
 }
 
-// exampleJSON marshals v to indented JSON with color, returning empty string on error
-func exampleJSON(v interface{}) string {
-	b, err := json.MarshalIndent(v, "    ", "  ")
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
 // generateExamples creates example responses from actual struct types
 func generateExamples() string {
 	exPK1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
@@ -135,27 +125,27 @@ GET /visor-ips?month=all (private API)
 
 GET /security/nonces/{pk}
   %s`,
-		exampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]interface{}{
 			"build_info":   map[string]string{"version": "v1.3.29"},
 			"started_at":   "2024-01-15T10:00:00Z",
 			"dmsg_address": exPK1 + ":80",
 			"dmsg_servers": []string{exPK2},
 		}),
-		exampleJSON([]map[string]interface{}{{
+		cmdutil.ExampleJSON([]map[string]interface{}{{
 			"pk": exPK1, "online": true, "version": "v1.3.29",
 			"ip": "192.168.1.1", "country": "US", "city": "New York",
 		}}),
-		exampleJSON(store.UptimeResponse{
+		cmdutil.ExampleJSON(store.UptimeResponse{
 			{Key: exPK1, Online: true, Version: "v1.3.29"},
 			{Key: exPK2, Online: false},
 		}),
-		exampleJSON(store.UptimeResponseV2{{
+		cmdutil.ExampleJSON(store.UptimeResponseV2{{
 			Key: exPK1, Online: true, Version: "v1.3.29",
 			DailyOnlineHistory: map[string]string{"2024-01-15": "95.5", "2024-01-14": "100.0"},
 		}}),
-		exampleJSON(store.UptimeDef{Key: exPK1, Online: true, Version: "v1.3.29"}),
-		exampleJSON(map[string]string{exPK1: "192.168.1.1", exPK2: "10.0.0.1"}),
-		exampleJSON(map[string]interface{}{"nonce": 12345}),
+		cmdutil.ExampleJSON(store.UptimeDef{Key: exPK1, Online: true, Version: "v1.3.29"}),
+		cmdutil.ExampleJSON(map[string]string{exPK1: "192.168.1.1", exPK2: "10.0.0.1"}),
+		cmdutil.ExampleJSON(map[string]interface{}{"nonce": 12345}),
 	)
 }
 

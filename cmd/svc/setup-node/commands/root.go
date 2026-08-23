@@ -37,15 +37,6 @@ var (
 	pprofAddr    string
 )
 
-// exampleJSON marshals v to indented JSON with color, returning empty string on error
-func exampleJSON(v interface{}) string {
-	b, err := json.MarshalIndent(v, "    ", "  ")
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
 // generateExamples creates example config
 func generateExamples() string {
 	return fmt.Sprintf(`
@@ -55,7 +46,7 @@ Example Config:
 Generate Keys:
   skywire cli config gen-keys | tee sn-keys.txt
   # Line 1: public_key, Line 2: secret_key`,
-		exampleJSON(router.SetupConfig{
+		cmdutil.ExampleJSON(router.SetupConfig{
 			Dmsg: dmsgc.DmsgConfig{
 				Discovery:     deployment.Prod.DmsgDiscovery,
 				SessionsCount: 1,
@@ -220,7 +211,5 @@ var checkHealthCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

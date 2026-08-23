@@ -16,6 +16,8 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	skydexclient "github.com/skycoin/skycoin/cmd/skydex-client/commands"
 	skymarket "github.com/skycoin/skycoin/src/skydex/market"
 	"github.com/spf13/cobra"
@@ -96,9 +98,7 @@ var RootCmd = &cobra.Command{
 
 // Execute executes the root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }
 
 // appnetDialer is the skywire MarketDialer: it dials the market's public key

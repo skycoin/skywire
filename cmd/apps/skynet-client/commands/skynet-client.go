@@ -11,6 +11,8 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -368,7 +370,5 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }
