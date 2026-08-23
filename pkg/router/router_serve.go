@@ -18,6 +18,14 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
+// errRouteGroupInitializing is returned by saveRouteGroupRules when a route
+// group for the same descriptor is already being wrapped with noise (present in
+// rgsRaw). It is a typed sentinel so AcceptRoutes can tell this benign
+// "the leg belongs to a group that already exists" case apart from a real
+// failure and skip deleting the leg's rules (#80 Fix B). Deleting them here is
+// exactly what black-holes an aux mux leg that raced the primary's setup.
+var errRouteGroupInitializing = errors.New("noise route group already being initialized")
+
 // AcceptRoutes should block until we receive an AddRules packet from SetupNode
 // that contains ConsumeRule(s) or ForwardRule(s).
 // Then the following should happen:
@@ -63,6 +71,15 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 	datagram := r.isDatagramPort(rules.Desc.DstPort())
 	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, "", datagram)
 	if err != nil {
+		// A route group for this descriptor is already initializing: these rules
+		// belong to an additional (aux) mux leg the existing group should adopt,
+		// not to a failed new group. Deleting them would black-hole the leg —
+		// exactly the #80 collapse. With Fix A the leg is buffered and drained on
+		// registration, so leave its rules in place and don't treat this as fatal.
+		if errors.Is(err, errRouteGroupInitializing) {
+			r.logger.WithError(err).Debugf("Aux leg for initializing route group %s; leaving rules for adoption", &rules.Desc)
+			return nil, err
+		}
 		// Clean up saved rules if route group setup fails
 		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
@@ -117,6 +134,10 @@ func (r *router) Serve(ctx context.Context) error {
 	// Reclaim frames parked during the route-group registration window whose
 	// route group never registers (see router_pending.go).
 	go r.pending.runSweep(ctx, r.logger)
+
+	// Reclaim aux mux legs buffered for a route group that never registers
+	// (its setup handshake failed); see router_pending_legs.go, #80.
+	go r.pendingLegs.runSweep(ctx, r.logger)
 
 	return nil
 }
@@ -252,7 +273,7 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	if _, ok := r.rgsRaw[rules.Desc]; ok {
 		r.mx.Unlock()
 		log.Warnf("Desc %s already reserved, skipping...", &rules.Desc)
-		return nil, fmt.Errorf("noise route group with desc %s already being initialized", &rules.Desc)
+		return nil, fmt.Errorf("%w: desc %s", errRouteGroupInitializing, &rules.Desc)
 	}
 
 	// we need to close currently existing wrapped rg if there's one
@@ -456,6 +477,14 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	r.rgsNs[rules.Desc] = nrg
 	delete(r.rgsRaw, rules.Desc)
 	r.mx.Unlock()
+
+	// Drain any aux mux legs that arrived (via IntroduceRules) while this group
+	// was still initializing in rgsRaw (#80). They were buffered instead of being
+	// pushed to r.accept — where AcceptRoutes' second saveRouteGroupRules would
+	// have deleted their rules or blocked the whole handshake-await, collapsing
+	// the group. On the initiator this is a no-op: the initiator dials its own aux
+	// legs and never receives them via IntroduceRules.
+	r.drainPendingLegs(nrg, rules.Desc)
 
 	// Faithful-UDP (#2607): when this end intends datagram mode for the
 	// route, build a DatagramRouteGroup sibling over the same rules +
