@@ -3,9 +3,14 @@ package skysocks
 
 import (
 	"bytes"
+	"crypto/sha1" //nolint:gosec // RFC6455 mandates SHA-1 for the WebSocket accept key
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -354,9 +359,9 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool) {
 // being shadowed by the interstitial. Any other host returns nil, leaving the
 // interstitial in place. statusSnapshot already reports "no active session to
 // the exit" when the session is down, which is the correct content here. (Only
-// the one-shot page is served on this path — the SSE variant needs a live
-// stream that the override's fixed-body model can't carry; the page's own
-// meta-refresh keeps it current.)
+// the one-shot page is served on this path — the live WebSocket needs a duplex
+// stream that the override's fixed-body model can't carry; the page's inline
+// script reconnects the WebSocket once the conn is back.)
 func (c *Client) statusOverride(host string) []byte {
 	if surface, ok := proxystatus.Match(host); ok && surface == proxystatus.SurfaceSkysocks {
 		return statusHTTPResponse(proxystatus.Render(c.statusSnapshot()))
@@ -365,9 +370,10 @@ func (c *Client) statusOverride(host string) []byte {
 }
 
 // serveStatusPage completes the SOCKS5 CONNECT with a success reply, reads the
-// browser's HTTP request, and routes on its path: "/sse" opens a live Server-Sent
-// Events stream (serveStatusSSE); anything else gets the one-shot rendered
-// status.skysocks page. Best-effort: any write failure just drops the conn.
+// browser's HTTP request, and routes on its path: "/ws" upgrades to a live,
+// bidirectional WebSocket (serveStatusWS); anything else gets the one-shot
+// rendered status.skysocks page. Best-effort: any write failure just drops the
+// conn.
 func (c *Client) serveStatusPage(conn, stream net.Conn) {
 	// CONNECT success with a dummy BND.ADDR/PORT so the browser proceeds to send
 	// its HTTP request.
@@ -383,11 +389,14 @@ func (c *Client) serveStatusPage(conn, stream net.Conn) {
 	n, _ := conn.Read(buf)                //nolint:errcheck // best-effort; page is fixed
 	_ = conn.SetReadDeadline(time.Time{}) //nolint:errcheck
 
-	if statusRequestPath(buf[:n]) == "/sse" {
+	if statusRequestPath(buf[:n]) == "/ws" {
 		// status is served entirely in-process, so the exit-side yamux stream is
-		// unused — close it now so a long-lived SSE stream doesn't pin one open.
+		// unused — close it now so the long-lived WS loop doesn't pin one open.
 		stream.Close() //nolint:errcheck,gosec
-		c.serveStatusSSE(conn)
+		if !wsHandshake(conn, buf[:n]) {
+			return
+		}
+		c.serveStatusWS(conn)
 		return
 	}
 
@@ -398,7 +407,7 @@ func (c *Client) serveStatusPage(conn, stream net.Conn) {
 // statusRequestPath extracts the request-target path from an HTTP request line
 // ("METHOD SP PATH SP VERSION"), stripping any query string. It defaults to "/"
 // for anything it can't parse, so a malformed request falls through to the
-// full-page render rather than the SSE stream.
+// full-page render rather than the WebSocket upgrade.
 func statusRequestPath(req []byte) string {
 	line := req
 	if i := bytes.IndexByte(line, '\n'); i >= 0 {
@@ -415,70 +424,277 @@ func statusRequestPath(req []byte) string {
 	return string(p)
 }
 
-// SSE stream tuning. sseTickInterval is how often a fresh live-region fragment is
-// pushed — ~1s is responsive enough to watch a route warm without thrashing.
-// sseWriteTimeout bounds each write so a wedged/stalled browser conn errors out
-// (ending the goroutine) instead of blocking on a full send buffer forever.
+// --- status.skysocks WebSocket control channel -------------------------------
+//
+// The live status region is pushed to the browser over a WebSocket (RFC6455)
+// carried on the hijacked plaintext SOCKS stream, replacing the earlier one-way
+// SSE stream. WebSocket is bidirectional: the same conn carries fragment pushes
+// server→browser AND control commands browser→server, so the page can become a
+// proxy control surface. The handshake and framing are hand-rolled (a few dozen
+// lines) rather than pulling in a library, because the conn is an already-
+// hijacked raw net.Conn with no http.ResponseWriter for a library's server
+// Accept() to hijack.
+
+// WebSocket loop tuning. wsPushInterval is how often a fresh live-region fragment
+// is pushed — ~1s is responsive enough to watch a route warm without thrashing.
+// wsPingInterval keeps an idle conn alive (the browser auto-replies PONG, which
+// also resets the read deadline). wsReadTimeout must exceed wsPingInterval so an
+// idle-but-healthy conn is not torn down; wsWriteTimeout bounds each write so a
+// wedged browser errors out instead of blocking forever.
 const (
-	sseTickInterval = time.Second
-	sseWriteTimeout = 10 * time.Second
+	wsPushInterval = time.Second
+	wsPingInterval = 25 * time.Second
+	wsReadTimeout  = 90 * time.Second
+	wsWriteTimeout = 10 * time.Second
 )
 
-// serveStatusSSE streams the live status region to the browser as Server-Sent
-// Events over the hijacked (plaintext HTTP/1.1) SOCKS stream: no TLS/upgrade
-// handshake, just an event-stream response the browser's EventSource consumes. It
-// writes the SSE header, pushes the current fragment immediately, then once per
-// tick. It returns — releasing this goroutine and the conn — when the client goes
-// away (write error / write deadline) or the client shuts down (closeC), so a
-// session reconnect or proxy restart cannot leak the goroutine. The loop is
-// ctx/timer-light (one ticker, no per-tick goroutine) so it is safe under the
-// single-threaded wasm runtime, though that path is not normally exercised there.
-func (c *Client) serveStatusSSE(conn net.Conn) {
-	const hdr = "HTTP/1.1 200 OK\r\n" +
-		"Content-Type: text/event-stream\r\n" +
-		"Cache-Control: no-store\r\n" +
-		"Connection: keep-alive\r\n\r\n"
-	_ = conn.SetWriteDeadline(time.Now().Add(sseWriteTimeout)) //nolint:errcheck
-	if _, err := conn.Write([]byte(hdr)); err != nil {
-		return
-	}
+// RFC6455 opcodes (only the ones this endpoint uses).
+const (
+	wsOpText  = 0x1
+	wsOpClose = 0x8
+	wsOpPing  = 0x9
+	wsOpPong  = 0xA
+)
 
-	// Push once immediately so the client syncs without waiting a full tick.
-	if !c.writeSSEFragment(conn) {
+// wsGUID is the RFC6455 magic appended to Sec-WebSocket-Key before the SHA-1.
+const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+// wsHandshake completes the RFC6455 opening handshake over the hijacked plaintext
+// stream: it reads the client's Sec-WebSocket-Key out of the already-buffered
+// request bytes and replies "101 Switching Protocols" with the computed
+// Sec-WebSocket-Accept (base64(sha1(key + wsGUID))). Returns false (dropping the
+// conn) when the request is not a well-formed upgrade.
+func wsHandshake(conn net.Conn, req []byte) bool {
+	key := httpHeaderValue(req, "Sec-WebSocket-Key")
+	if key == "" || !strings.EqualFold(httpHeaderValue(req, "Upgrade"), "websocket") {
+		return false
+	}
+	sum := sha1.Sum([]byte(key + wsGUID)) //nolint:gosec // RFC6455 mandates SHA-1 here
+	accept := base64.StdEncoding.EncodeToString(sum[:])
+	resp := "HTTP/1.1 101 Switching Protocols\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-WebSocket-Accept: " + accept + "\r\n\r\n"
+	_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout)) //nolint:errcheck
+	_, err := conn.Write([]byte(resp))
+	_ = conn.SetWriteDeadline(time.Time{}) //nolint:errcheck
+	return err == nil
+}
+
+// httpHeaderValue returns the value of the named header (case-insensitive) from a
+// raw HTTP request, or "" if absent.
+func httpHeaderValue(req []byte, name string) string {
+	for _, ln := range strings.Split(string(req), "\n") {
+		ln = strings.TrimRight(ln, "\r")
+		i := strings.IndexByte(ln, ':')
+		if i < 0 {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(ln[:i]), name) {
+			return strings.TrimSpace(ln[i+1:])
+		}
+	}
+	return ""
+}
+
+// wsConn serializes server→client frame writes (the push loop, PONG replies and
+// resync responses all share one conn) behind a mutex.
+type wsConn struct {
+	conn net.Conn
+	mu   sync.Mutex
+}
+
+// write emits one server→client frame (never masked, per RFC6455) with a bounded
+// write deadline.
+func (w *wsConn) write(opcode byte, payload []byte) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	_ = w.conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout)) //nolint:errcheck
+	return wsWriteFrame(w.conn, opcode, payload)
+}
+
+// statusControlCmd is the JSON shape of a browser→server control frame on the
+// status.skysocks WebSocket, e.g. {"cmd":"resync"}. Kept deliberately small; the
+// mux-control commands add fields here when they land (see handleStatusControl).
+type statusControlCmd struct {
+	Cmd string `json:"cmd"`
+}
+
+// serveStatusWS runs the bidirectional status WebSocket over the hijacked
+// (already-upgraded) plaintext SOCKS stream. A reader goroutine consumes
+// browser→server frames (control commands, PING, CLOSE) while the main loop
+// pushes a fresh live-region fragment every wsPushInterval and a keepalive PING
+// every wsPingInterval. It returns — releasing this goroutine, the reader and the
+// conn — when the browser goes away (read/write error or CLOSE) or the client
+// shuts down (closeC), so a session reconnect or proxy restart cannot leak it.
+// The loop is ctx/timer-light (two tickers, no per-tick goroutine) so it is safe
+// under the single-threaded wasm runtime, though that path is not normally
+// exercised there.
+func (c *Client) serveStatusWS(conn net.Conn) {
+	w := &wsConn{conn: conn}
+	stopC := make(chan struct{})
+	var stopOnce sync.Once
+	stop := func() { stopOnce.Do(func() { close(stopC) }) }
+
+	// Reader: browser→server frames. Blocks in wsReadFrame; the read deadline
+	// (reset each iteration) plus closeC/stopC guarantee it can't wedge.
+	go func() {
+		defer stop()
+		for {
+			select {
+			case <-stopC:
+				return
+			case <-c.closeC:
+				return
+			default:
+			}
+			_ = conn.SetReadDeadline(time.Now().Add(wsReadTimeout)) //nolint:errcheck
+			op, payload, err := wsReadFrame(conn)
+			if err != nil {
+				return
+			}
+			switch op {
+			case wsOpText:
+				c.handleStatusControl(payload, w)
+			case wsOpPing:
+				if err := w.write(wsOpPong, payload); err != nil {
+					return
+				}
+			case wsOpClose:
+				return
+			default:
+				// wsOpPong / continuation / binary: ignore.
+			}
+		}
+	}()
+
+	// Push once immediately so the browser syncs without waiting a full tick.
+	if err := w.write(wsOpText, proxystatus.RenderFragment(c.statusSnapshot())); err != nil {
+		stop()
 		return
 	}
-	ticker := time.NewTicker(sseTickInterval)
-	defer ticker.Stop()
+	push := time.NewTicker(wsPushInterval)
+	ping := time.NewTicker(wsPingInterval)
+	defer push.Stop()
+	defer ping.Stop()
 	for {
 		select {
 		case <-c.closeC:
+			stop()
 			return
-		case <-ticker.C:
-			if !c.writeSSEFragment(conn) {
+		case <-stopC:
+			return
+		case <-push.C:
+			if err := w.write(wsOpText, proxystatus.RenderFragment(c.statusSnapshot())); err != nil {
+				stop()
+				return
+			}
+		case <-ping.C:
+			if err := w.write(wsOpPing, nil); err != nil {
+				stop()
 				return
 			}
 		}
 	}
 }
 
-// writeSSEFragment renders the current live-region fragment (rebuilt each tick via
-// the same statusSnapshot() path the full page uses) and writes it as one SSE
-// event. The fragment's internal newlines (the <pre> log block) are preserved by
-// emitting one "data:" line per source line — the browser's EventSource rejoins
-// them with '\n' — so no newline escaping is needed. Returns false when the write
-// fails (client gone / past its write deadline), signaling the caller to stop.
-func (c *Client) writeSSEFragment(conn net.Conn) bool {
-	frag := proxystatus.RenderFragment(c.statusSnapshot())
-	var b bytes.Buffer
-	for _, line := range bytes.Split(frag, []byte("\n")) {
-		b.WriteString("data: ")
-		b.Write(line)
-		b.WriteByte('\n')
+// handleStatusControl dispatches a browser→server control frame (JSON, e.g.
+// {"cmd":"resync"}). This is the seam that turns the read-only status page into a
+// proxy control surface. Only SAFE, already-available actions are wired here:
+//
+//   - "resync": push a fresh live-region fragment immediately.
+//
+// TODO(mux-control): the mux-op commands the page previews as disabled buttons —
+// "add_leg", "drop_leg", "mux_mode", "rebuild" — are the next step. They mutate
+// the surface's route group and so need an app→visor mux-control RPC that does not
+// exist yet. The building blocks are already present (visor.RouteGroupMuxInfo for
+// the current legs, router.AddMuxRoute to grow one, and the `cli proxy mux set`
+// reconcile path for mode/rebuild); exposing them over the app RPC as a mutating
+// proxystatus.Provider method is OUT OF SCOPE here. When that lands, add the cases
+// below and enable the matching buttons in pkg/proxystatus/render.go.
+func (c *Client) handleStatusControl(payload []byte, w *wsConn) {
+	var cmd statusControlCmd
+	if err := json.Unmarshal(payload, &cmd); err != nil {
+		return
 	}
-	b.WriteByte('\n')                                          // blank line terminates the event
-	_ = conn.SetWriteDeadline(time.Now().Add(sseWriteTimeout)) //nolint:errcheck
-	_, err := conn.Write(b.Bytes())
-	return err == nil
+	switch cmd.Cmd {
+	case "resync":
+		_ = w.write(wsOpText, proxystatus.RenderFragment(c.statusSnapshot())) //nolint:errcheck
+	case "add_leg", "drop_leg", "mux_mode", "rebuild":
+		// TODO(mux-control): wire once the app→visor mux-control RPC exists.
+	default:
+		// Unknown/unwired command: ignore.
+	}
+}
+
+// wsWriteFrame writes a single unmasked (server→client) RFC6455 frame: FIN set,
+// the given opcode, and payload. It implements the 7-bit, 16-bit (126) and 64-bit
+// (127) length forms; the status fragment is a few KB, so the 16-bit path is the
+// common one.
+func wsWriteFrame(conn net.Conn, opcode byte, payload []byte) error {
+	var hdr []byte
+	b0 := byte(0x80) | opcode // FIN + opcode
+	n := len(payload)
+	switch {
+	case n < 126:
+		hdr = []byte{b0, byte(n)} //nolint:gosec // n<126 fits one byte
+	case n < 1<<16:
+		hdr = []byte{b0, 126, byte(n >> 8), byte(n)} //nolint:gosec // n<65536: high+low bytes
+	default:
+		var ext [8]byte
+		binary.BigEndian.PutUint64(ext[:], uint64(n)) //nolint:gosec // len() is non-negative
+		hdr = append([]byte{b0, 127}, ext[:]...)
+	}
+	if _, err := conn.Write(hdr); err != nil {
+		return err
+	}
+	if n == 0 {
+		return nil
+	}
+	_, err := conn.Write(payload)
+	return err
+}
+
+// wsReadFrame reads a single client→server RFC6455 frame and returns its opcode
+// and unmasked payload. Client frames MUST be masked (RFC6455 §5.1); the 4-byte
+// masking key is applied to the payload here. The 7-bit and 16-bit length forms
+// are handled (a control command is tiny); a 64-bit length is rejected as
+// oversized rather than trusted.
+func wsReadFrame(conn net.Conn) (opcode byte, payload []byte, err error) {
+	h := make([]byte, 2)
+	if _, err = io.ReadFull(conn, h); err != nil {
+		return 0, nil, err
+	}
+	opcode = h[0] & 0x0f
+	masked := h[1]&0x80 != 0
+	n := int(h[1] & 0x7f)
+	switch n {
+	case 126:
+		ext := make([]byte, 2)
+		if _, err = io.ReadFull(conn, ext); err != nil {
+			return 0, nil, err
+		}
+		n = int(ext[0])<<8 | int(ext[1])
+	case 127:
+		return 0, nil, fmt.Errorf("ws frame too large")
+	}
+	var mask []byte
+	if masked {
+		mask = make([]byte, 4)
+		if _, err = io.ReadFull(conn, mask); err != nil {
+			return 0, nil, err
+		}
+	}
+	payload = make([]byte, n)
+	if _, err = io.ReadFull(conn, payload); err != nil {
+		return 0, nil, err
+	}
+	if masked {
+		for i := range payload {
+			payload[i] ^= mask[i&3]
+		}
+	}
+	return opcode, payload, nil
 }
 
 // statusSnapshot builds the read-only status.skysocks snapshot. The rich
