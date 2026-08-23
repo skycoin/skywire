@@ -1114,7 +1114,7 @@ func (c *Cache) incItem(
 	}
 
 	rc = it.cc - it.fc // hard rc
-	return
+	return rc, err
 }
 
 // under lock
