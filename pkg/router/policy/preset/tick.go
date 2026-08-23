@@ -50,6 +50,21 @@ type Engine struct {
 	adaptSeeded         bool
 	adaptIdleCount      int
 	adaptTarget         int
+	// forward (upload / SentBytes) sizing — the exact mirror of the reverse
+	// (RecvBytes) machine above, driven by SentBytes deltas. adaptFwdTarget is
+	// the forward active width (seeded to adaptFwdActive); an upload-heavy flow
+	// widens it under sustained SENT saturation and collapses it back when the
+	// upload goes idle, using the SAME EWMA/peak/hysteresis/cooldown constants
+	// as the reverse side. When SentBytes never advances the whole forward
+	// machine stays dormant (adaptFwdSeeded never trips), so a download-only or
+	// idle flow behaves byte-identically to the reverse-only controller.
+	adaptPrevSent          map[string]uint64
+	adaptFwdThroughputEWMA float64
+	adaptFwdPeak           float64
+	adaptFwdSeeded         bool
+	adaptFwdIdleCount      int
+	adaptFwdTarget         int
+	adaptFwdSatTicks       int
 	// health + anti-churn state
 	adaptCooldown  int            // ticks to hold the active set steady after a reshape
 	adaptSatTicks  int            // consecutive saturated ticks (grow only on a sustained signal)
@@ -85,11 +100,13 @@ func New() *Engine {
 		prevKnownTIDs:   map[string]bool{},
 		adaptLatEWMA:    map[string]float64{},
 		adaptPrevRecv:   map[string]uint64{},
+		adaptPrevSent:   map[string]uint64{},
 		adaptSeen:       map[string]bool{},
 		adaptAliveIdx:   map[string]int{},
 		adaptUnhealthy:  map[string]int{},
 		adaptStall:      map[string]int{},
 		adaptTarget:     adaptRevActive,
+		adaptFwdTarget:  adaptFwdActive,
 		ledbatEWMA:      map[string]float64{},
 		ledbatBase:      map[string]float64{},
 		ledbatSeen:      map[string]bool{},
@@ -508,9 +525,13 @@ func (e *Engine) tickProbeAndPrune(legs []LegInfo) RotationAction {
 // --- adaptive (composite) ---
 
 const (
-	// adaptFwdActive is the lean forward (upstream / request) leg count: a
-	// single low-latency route, so the request path never pays mux head-of-line
-	// cost. adaptRevActive is the STEADY active reverse width — deliberately 1:
+	// adaptFwdActive is the STEADY lean forward (upstream / request) leg count: a
+	// single low-latency route, so an interactive / idle request path pays no mux
+	// head-of-line cost. Like the reverse side it is only a STEADY floor: the
+	// forward mux WIDENS under sustained UPLOAD (SentBytes) saturation — tickAdaptive
+	// grows adaptFwdTarget and emits AddForwardLeg (forward-only aux legs) — then
+	// collapses back to adaptFwdActive when the upload goes idle. adaptRevActive is
+	// the STEADY active reverse width — deliberately 1:
 	// an interactive / idle flow rides ONE good leg (leg 0) and is never
 	// scattered+reordered across high-variance legs. The reverse mux only WIDENS
 	// under sustained bulk load (tickAdaptive promotes warm spares), then shrinks
@@ -577,6 +598,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		delete(e.adaptAliveIdx, k)
 	}
 	var rawTotal float64
+	var rawSent float64
 	aliveCount := 0
 	standbyCount := 0
 	newestAliveIdx := -1
@@ -618,6 +640,12 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 			movedRecv[tid] = true
 		}
 		e.adaptPrevRecv[tid] = l.RecvBytes
+		// Forward (upload) throughput — the SentBytes mirror of the RecvBytes
+		// accumulation above. Feeds the independent forward sizing machine.
+		if prev, ok := e.adaptPrevSent[tid]; ok && l.SentBytes > prev {
+			rawSent += float64(l.SentBytes - prev)
+		}
+		e.adaptPrevSent[tid] = l.SentBytes
 	}
 	for tid := range e.adaptLatEWMA {
 		if !e.adaptSeen[tid] {
@@ -627,6 +655,11 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	for tid := range e.adaptPrevRecv {
 		if !e.adaptSeen[tid] {
 			delete(e.adaptPrevRecv, tid)
+		}
+	}
+	for tid := range e.adaptPrevSent {
+		if !e.adaptSeen[tid] {
+			delete(e.adaptPrevSent, tid)
 		}
 	}
 
@@ -654,6 +687,35 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		e.adaptIdleCount = 0
 	}
 
+	// Forward (upload) saturation/idle — the SentBytes mirror of the block
+	// above, using the SAME EWMA smoothing, peak decay, and 0.80/0.25
+	// saturated/idle thresholds. Stays fully dormant (fwdSaturated / fwdIdle
+	// both false, adaptFwdSeeded never set) while SentBytes is flat, so a
+	// download-only or idle flow evolves exactly as before.
+	fwdSaturated, fwdIdle := false, false
+	if !e.adaptFwdSeeded {
+		if rawSent > 0 {
+			e.adaptFwdThroughputEWMA = rawSent
+			e.adaptFwdPeak = rawSent
+			e.adaptFwdSeeded = true
+		}
+	} else {
+		e.adaptFwdThroughputEWMA = adaptAlpha*rawSent + (1-adaptAlpha)*e.adaptFwdThroughputEWMA
+		e.adaptFwdPeak *= adaptPeakDecay
+		if e.adaptFwdThroughputEWMA > e.adaptFwdPeak {
+			e.adaptFwdPeak = e.adaptFwdThroughputEWMA
+		}
+		if e.adaptFwdPeak > 0 {
+			fwdSaturated = e.adaptFwdThroughputEWMA >= 0.80*e.adaptFwdPeak
+			fwdIdle = e.adaptFwdThroughputEWMA < 0.25*e.adaptFwdPeak
+		}
+	}
+	if fwdIdle {
+		e.adaptFwdIdleCount++
+	} else {
+		e.adaptFwdIdleCount = 0
+	}
+
 	// Anti-churn cooldown: after any reshape, hold the active set steady for a
 	// few ticks so a transient signal can't reshape the mux every tick (each
 	// reshape disrupts in-flight flows).
@@ -665,6 +727,12 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		e.adaptSatTicks++
 	} else {
 		e.adaptSatTicks = 0
+	}
+	// Forward sustained-saturation streak (upload analog).
+	if fwdSaturated {
+		e.adaptFwdSatTicks++
+	} else {
+		e.adaptFwdSatTicks = 0
 	}
 
 	// Active-set latency median (EWMA) for gross-outlier classification, plus the
@@ -741,6 +809,20 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		}
 	}
 
+	// desiredActive is the combined active-leg width the group converges to:
+	// the reverse steady/grown target PLUS any extra forward legs the upload
+	// machine has grown (forwardExtra). Folding the forward growth into the
+	// convergence target is what stops the reverse-side park/drop-recovery
+	// rules from immediately tearing down a leg the forward machine just added.
+	// When the forward machine is dormant (SentBytes flat) forwardExtra is 0
+	// and desiredActive == adaptTarget, so every rule below behaves exactly as
+	// the reverse-only controller did.
+	forwardExtra := e.adaptFwdTarget - adaptFwdActive
+	desiredActive := e.adaptTarget + forwardExtra
+	if desiredActive > adaptCap {
+		desiredActive = adaptCap
+	}
+
 	// (0) No active legs — bring one up, preferring a healthy warm spare.
 	if aliveCount == 0 {
 		if healthyPromotable >= 0 {
@@ -756,7 +838,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// (active fell below the steady target): promote a HEALTHY warm spare
 	// INSTANTLY and re-establish a replacement to restore the floor — zero
 	// re-dial dip. Restoring lost capacity outranks every optimization.
-	if aliveCount < e.adaptTarget {
+	if aliveCount < desiredActive {
 		if healthyPromotable >= 0 {
 			return RotationAction{PromoteFromStandby: []int{healthyPromotable}, AddLeg: true}
 		}
@@ -790,7 +872,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// load). This is what makes an idle / interactive flow settle onto ONE leg.
 	// No cooldown: park is self-limiting (only fires while over-provisioned) and
 	// stops once active == target, so it converges quickly at dial without churn.
-	if !saturated && aliveCount > e.adaptTarget && standbyCount < adaptStandbyMax && newestAliveIdx > 0 {
+	if !saturated && !fwdSaturated && aliveCount > desiredActive && standbyCount < adaptStandbyMax && newestAliveIdx > 0 {
 		return RotationAction{DemoteToStandby: []int{newestAliveIdx}}
 	}
 
@@ -799,7 +881,10 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// wide mux is reserved for real bulk load and never drains the reserve below
 	// adaptStandbyMin.
 	if e.adaptSatTicks >= adaptHysteresis && aliveCount < adaptCap {
-		e.adaptTarget = aliveCount + 1
+		// Grow the REVERSE target by one. Subtract forwardExtra so the reverse
+		// width tracks only the download legs even when forward growth has
+		// enlarged aliveCount (a no-op when the forward machine is dormant).
+		e.adaptTarget = aliveCount - forwardExtra + 1
 		if e.adaptTarget > adaptCap {
 			e.adaptTarget = adaptCap
 		}
@@ -811,14 +896,50 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		return RotationAction{AddLeg: true}
 	}
 
+	// (4b) Grow the FORWARD width on SUSTAINED upload saturation — the exact
+	// mirror of (4), driven by SentBytes. Emits AddForwardLeg so the router
+	// appends the aux leg forward-only (appendRouteAsymmetric addFwd=true,
+	// addRev=false): the extra upstream send capacity is added WITHOUT enlarging
+	// the reverse/download set. Bounded by the same adaptCap as the reverse side.
+	// A fresh leg (not a warm-standby promote) is used because the standby pool
+	// is full-duplex — promoting one would also grow the reverse set.
+	if e.adaptFwdSatTicks >= adaptHysteresis && aliveCount < adaptCap && desiredActive < adaptCap {
+		e.adaptFwdTarget++
+		if e.adaptFwdTarget > adaptCap {
+			e.adaptFwdTarget = adaptCap
+		}
+		e.adaptFwdSatTicks = 0
+		e.adaptCooldown = adaptReshapeCooldown
+		return RotationAction{AddForwardLeg: true}
+	}
+
 	// (5) Shrink on SUSTAINED idle back toward the single-leg steady target, so a
 	// finished bulk transfer releases its extra legs (parked to the reserve, or
-	// dropped once it is full). Never leg 0.
-	if e.adaptIdleCount >= adaptHysteresis && aliveCount > adaptRevActive && newestAliveIdx > 0 {
+	// dropped once it is full). Never leg 0. The reverse-portion width
+	// (aliveCount-forwardExtra) gates this so forward-grown legs aren't shrunk
+	// here (rule 5b owns them).
+	if e.adaptIdleCount >= adaptHysteresis && aliveCount-forwardExtra > adaptRevActive && newestAliveIdx > 0 {
 		e.adaptIdleCount = 0
-		e.adaptTarget = aliveCount - 1
+		e.adaptTarget = aliveCount - forwardExtra - 1
 		if e.adaptTarget < adaptRevActive {
 			e.adaptTarget = adaptRevActive
+		}
+		e.adaptCooldown = adaptReshapeCooldown
+		if standbyCount < adaptStandbyMax {
+			return RotationAction{DemoteToStandby: []int{newestAliveIdx}}
+		}
+		return RotationAction{DropLegs: []int{newestAliveIdx}}
+	}
+
+	// (5b) Shrink the FORWARD width on SUSTAINED upload idle back toward the lean
+	// single forward leg — the mirror of (5), driven by SentBytes idle. Parks the
+	// newest leg to the reserve (or drops it once the reserve is full). Never
+	// leg 0.
+	if e.adaptFwdIdleCount >= adaptHysteresis && e.adaptFwdTarget > adaptFwdActive && aliveCount > adaptFwdActive && newestAliveIdx > 0 {
+		e.adaptFwdIdleCount = 0
+		e.adaptFwdTarget--
+		if e.adaptFwdTarget < adaptFwdActive {
+			e.adaptFwdTarget = adaptFwdActive
 		}
 		e.adaptCooldown = adaptReshapeCooldown
 		if standbyCount < adaptStandbyMax {

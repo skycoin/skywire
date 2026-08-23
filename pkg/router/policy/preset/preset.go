@@ -92,6 +92,11 @@ type RotationAction struct {
 	ExcludeHops        []string
 	DemoteToStandby    []int
 	PromoteFromStandby []int
+	// AddForwardLeg requests one more FORWARD-ONLY aux leg (the router appends
+	// it addFwd=true / addRev=false) — extra upstream send capacity that does
+	// NOT enlarge the reverse/download set. The adaptive preset emits this on
+	// sustained upload saturation, the forward-direction mirror of AddLeg.
+	AddForwardLeg bool
 }
 
 // Decide dispatches to the named preset's decide logic. The name

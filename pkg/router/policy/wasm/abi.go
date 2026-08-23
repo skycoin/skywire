@@ -125,4 +125,5 @@ type RotationActionWire struct {
 	ExcludeHops        []string `json:"exclude_hops,omitempty"`
 	DemoteToStandby    []int    `json:"demote_to_standby,omitempty"`
 	PromoteFromStandby []int    `json:"promote_from_standby,omitempty"`
+	AddForwardLeg      bool     `json:"add_forward_leg,omitempty"`
 }

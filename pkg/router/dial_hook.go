@@ -352,6 +352,14 @@ type RotationAction struct {
 	// valid.
 	DemoteToStandby    []int
 	PromoteFromStandby []int
+
+	// AddForwardLeg requests one more FORWARD-ONLY aux leg — appended
+	// addFwd=true / addRev=false so it adds upstream send capacity without
+	// enlarging the reverse/download set. The rotation loop dials it via the
+	// forward-only add callback (router.addOneAuxSendLeg). The forward-
+	// direction mirror of AddLeg; emitted by the adaptive preset under
+	// sustained upload (SentBytes) saturation. ExcludeHops applies to it too.
+	AddForwardLeg bool
 }
 
 // RotationHook fires periodically per active route group, giving
