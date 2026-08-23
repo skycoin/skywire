@@ -8,5 +8,6 @@
   "geo-avoid": "geo-avoid — chooses the lowest-latency route whose hops transit NONE of the countries in cli_overrides.avoid_geo (comma-separated ISO codes); defers rather than pick a violating path when none is clean.",
   "transport-diverse": "transport-diverse — chooses the route whose hops span the most distinct transport types (ties broken by latency), so no single transport technology failing takes the path down; seeds a mux of 2.",
   "trust-tiered": "trust-tiered — prefers routes transiting only trusted intermediaries (cli_overrides.trusted_pks); tiered fallback to the most-trusted route available rather than failing closed.",
-  "time-of-day": "time-of-day — switches route shape by wall-clock hour (cli_overrides.business_hours, default 9-17): lean single route during business hours, wide rotating privacy mux off-hours."
+  "time-of-day": "time-of-day — switches route shape by wall-clock hour (cli_overrides.business_hours, default 9-17): lean single route during business hours, wide rotating privacy mux off-hours.",
+  "ledbat": "ledbat — EXPERIMENTAL delay-based background/scavenger multipath (LEDBAT-inspired): a lean mux=3 that tracks each leg's queuing delay (smoothed delay above its base/min) and BACKS OFF — parks the highest-delay active leg toward a single leg — once queuing exceeds ~60ms, yielding to other traffic, then re-promotes parked legs (up to 3) only while every active leg stays near its base. Does not change any default."
 }
