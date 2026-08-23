@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -651,6 +652,21 @@ func (r *router) finishDial(
 	if muxTarget > 1 && r.isSameLANDest(forwardDesc.DstPK()) {
 		r.logger.WithField("dst", forwardDesc.DstPK().String()).
 			Debug("same-LAN destination: forcing direct (no warm-standby mux)")
+		muxTarget = 1
+	}
+	// A control-plane destination port (dmsgpty, RPC, setup-node, hypervisor,
+	// transport-setup, CXO telemetry, …) carries small request/response control
+	// traffic, never bulk data — so the bandwidth-spreading warm-standby mux is
+	// pure cost: it grows a large pool of multi-hop aux legs whose setup-node
+	// dials churn (context deadline exceeded), and a multi-round-trip control
+	// handshake (e.g. dmsgpty noise-XK) times out over the churning legs while a
+	// single 1-hop request would have completed. Observed live as a 32-leg mux on
+	// the pty port (22) that never carried a byte. Keep control channels direct;
+	// this is the port-keyed complement to the --direct / same-LAN no-mux gates.
+	if muxTarget > 1 && isControlPlanePort(rPort) {
+		r.logger.WithField("dst", forwardDesc.DstPK().String()).
+			WithField("port", rPort).
+			Debug("control-plane destination port: forcing direct (no warm-standby mux)")
 		muxTarget = 1
 	}
 	if muxTarget > 1 {
@@ -2683,6 +2699,36 @@ func (r *router) sameLANExcludedPKs() []cipher.PubKey {
 		self = r.conf.SelfPublicIP()
 	}
 	return r.tm.SameLANPeers(self)
+}
+
+// controlPlanePorts is the set of reserved skywire service ports that carry
+// small control / telemetry traffic (never bulk data). A route group whose
+// destination lands on one of these must not grow a bandwidth-spreading
+// warm-standby mux (see the gate in dialRoutesFwd). Mirrors the reserved
+// service ports in pkg/skyenv; app data ports (skysocks 3, skysocks-client 13,
+// vpn 43/44, the port-59 forward pool, skychat 1, dynamic ports) are absent so
+// they keep their mux.
+var controlPlanePorts = map[uint16]struct{}{
+	skyenv.DmsgCtrlPort:                  {}, // 7
+	skyenv.DmsgPingPort:                  {}, // 8
+	skyenv.DmsgPtyPort:                   {}, // 22 — the observed 32-leg-mux victim
+	skyenv.DmsgSetupPort:                 {}, // 36
+	skyenv.DmsgHypervisorPort:            {}, // 46
+	skyenv.DmsgTransportSetupPort:        {}, // 47
+	skyenv.DmsgTransportSetupServicePort: {}, // 48
+	skyenv.DmsgGRPCPort:                  {}, // 49
+	skyenv.DmsgVisorRPCPort:              {}, // 65
+	skyenv.DmsgTransportQueryPort:        {}, // 68
+	skyenv.DmsgDHTPort:                   {}, // 100
+	skyenv.DmsgAwaitSetupPort:            {}, // 136
+}
+
+// isControlPlanePort reports whether p is a reserved control/telemetry service
+// port (not bulk data) — such route groups stay single-route (no warm-standby
+// mux). See controlPlanePorts.
+func isControlPlanePort(p routing.Port) bool {
+	_, ok := controlPlanePorts[uint16(p)]
+	return ok
 }
 
 // isSameLANDest reports whether dst is a peer on this visor's own local network
