@@ -332,7 +332,7 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool) {
 	// leaf, so status.skysocks is HTTP-only by design.
 	if surface, ok := proxystatus.Match(host); ok && surface == proxystatus.SurfaceSkysocks {
 		clearDeadlines(conn, stream)
-		c.serveStatusPage(conn)
+		c.serveStatusPage(conn, stream)
 		return false
 	}
 
@@ -344,20 +344,121 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool) {
 	return true
 }
 
-// serveStatusPage completes the SOCKS5 CONNECT with a success reply, drains the
-// browser's (short, fixed-response) HTTP request, then writes the rendered
+// serveStatusPage completes the SOCKS5 CONNECT with a success reply, reads the
+// browser's HTTP request, and routes on its path: "/sse" opens a live Server-Sent
+// Events stream (serveStatusSSE); anything else gets the one-shot rendered
 // status.skysocks page. Best-effort: any write failure just drops the conn.
-func (c *Client) serveStatusPage(conn net.Conn) {
+func (c *Client) serveStatusPage(conn, stream net.Conn) {
 	// CONNECT success with a dummy BND.ADDR/PORT so the browser proceeds to send
 	// its HTTP request.
 	if _, err := conn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0}); err != nil {
 		return
 	}
+	// Read the request so we can route on its path. status.skysocks is HTTP-only
+	// (the resolver CA forbids a .skysocks TLS leaf), so this is plaintext; a GET's
+	// request line + headers arrive in the first packet, so one bounded read is
+	// enough.
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
-	_, _ = conn.Read(make([]byte, 2048))                      //nolint:errcheck // drain request; page is fixed
-	_ = conn.SetReadDeadline(time.Time{})                     //nolint:errcheck
+	buf := make([]byte, 2048)
+	n, _ := conn.Read(buf)                //nolint:errcheck // best-effort; page is fixed
+	_ = conn.SetReadDeadline(time.Time{}) //nolint:errcheck
+
+	if statusRequestPath(buf[:n]) == "/sse" {
+		// status is served entirely in-process, so the exit-side yamux stream is
+		// unused — close it now so a long-lived SSE stream doesn't pin one open.
+		stream.Close() //nolint:errcheck,gosec
+		c.serveStatusSSE(conn)
+		return
+	}
+
 	body := proxystatus.Render(c.statusSnapshot())
 	_, _ = conn.Write(statusHTTPResponse(body)) //nolint:errcheck
+}
+
+// statusRequestPath extracts the request-target path from an HTTP request line
+// ("METHOD SP PATH SP VERSION"), stripping any query string. It defaults to "/"
+// for anything it can't parse, so a malformed request falls through to the
+// full-page render rather than the SSE stream.
+func statusRequestPath(req []byte) string {
+	line := req
+	if i := bytes.IndexByte(line, '\n'); i >= 0 {
+		line = line[:i]
+	}
+	fields := bytes.Fields(line)
+	if len(fields) < 2 {
+		return "/"
+	}
+	p := fields[1]
+	if i := bytes.IndexByte(p, '?'); i >= 0 {
+		p = p[:i]
+	}
+	return string(p)
+}
+
+// SSE stream tuning. sseTickInterval is how often a fresh live-region fragment is
+// pushed — ~1s is responsive enough to watch a route warm without thrashing.
+// sseWriteTimeout bounds each write so a wedged/stalled browser conn errors out
+// (ending the goroutine) instead of blocking on a full send buffer forever.
+const (
+	sseTickInterval = time.Second
+	sseWriteTimeout = 10 * time.Second
+)
+
+// serveStatusSSE streams the live status region to the browser as Server-Sent
+// Events over the hijacked (plaintext HTTP/1.1) SOCKS stream: no TLS/upgrade
+// handshake, just an event-stream response the browser's EventSource consumes. It
+// writes the SSE header, pushes the current fragment immediately, then once per
+// tick. It returns — releasing this goroutine and the conn — when the client goes
+// away (write error / write deadline) or the client shuts down (closeC), so a
+// session reconnect or proxy restart cannot leak the goroutine. The loop is
+// ctx/timer-light (one ticker, no per-tick goroutine) so it is safe under the
+// single-threaded wasm runtime, though that path is not normally exercised there.
+func (c *Client) serveStatusSSE(conn net.Conn) {
+	const hdr = "HTTP/1.1 200 OK\r\n" +
+		"Content-Type: text/event-stream\r\n" +
+		"Cache-Control: no-store\r\n" +
+		"Connection: keep-alive\r\n\r\n"
+	_ = conn.SetWriteDeadline(time.Now().Add(sseWriteTimeout)) //nolint:errcheck
+	if _, err := conn.Write([]byte(hdr)); err != nil {
+		return
+	}
+
+	// Push once immediately so the client syncs without waiting a full tick.
+	if !c.writeSSEFragment(conn) {
+		return
+	}
+	ticker := time.NewTicker(sseTickInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-c.closeC:
+			return
+		case <-ticker.C:
+			if !c.writeSSEFragment(conn) {
+				return
+			}
+		}
+	}
+}
+
+// writeSSEFragment renders the current live-region fragment (rebuilt each tick via
+// the same statusSnapshot() path the full page uses) and writes it as one SSE
+// event. The fragment's internal newlines (the <pre> log block) are preserved by
+// emitting one "data:" line per source line — the browser's EventSource rejoins
+// them with '\n' — so no newline escaping is needed. Returns false when the write
+// fails (client gone / past its write deadline), signaling the caller to stop.
+func (c *Client) writeSSEFragment(conn net.Conn) bool {
+	frag := proxystatus.RenderFragment(c.statusSnapshot())
+	var b bytes.Buffer
+	for _, line := range bytes.Split(frag, []byte("\n")) {
+		b.WriteString("data: ")
+		b.Write(line)
+		b.WriteByte('\n')
+	}
+	b.WriteByte('\n')                                          // blank line terminates the event
+	_ = conn.SetWriteDeadline(time.Now().Add(sseWriteTimeout)) //nolint:errcheck
+	_, err := conn.Write(b.Bytes())
+	return err == nil
 }
 
 // statusSnapshot builds the read-only status.skysocks snapshot. The rich

@@ -64,7 +64,10 @@ func TestRenderSections(t *testing.T) {
 	for _, want := range []string{
 		"<!doctype html>", "proxy status", "skysocks-client", "per-leg mux",
 		"stcpr", "recent log", "line two", "route control", "read-only preview",
-		"http-equiv=\"refresh\"", "standby", "status.dmsg", "status.skynet",
+		// live push (skysocks): the SSE script + swap target replace the old meta
+		// refresh, which must be gone for this surface.
+		"<main id=\"live\">", "EventSource", "/sse",
+		"standby", "status.dmsg", "status.skynet",
 		// route observability: route-latency column, direct/multihop badge, recv bar
 		"route rtt", "recv share", "direct", "multihop", "480 ms", "bar recv",
 		// full routes: section + full (untruncated) hop PKs + per-hop type/latency
@@ -83,6 +86,56 @@ func TestRenderSections(t *testing.T) {
 	// The current surface should not be linked back to itself in the footer.
 	if strings.Contains(page, `href="http://status.skysocks/"`) {
 		t.Error("footer should not link the current surface to itself")
+	}
+	// The skysocks surface is kept live by SSE, so the old meta refresh must be
+	// gone (it would fight the in-place swap with a full-page reload).
+	if strings.Contains(page, `http-equiv="refresh"`) {
+		t.Error("skysocks status page must not use meta refresh (SSE live-push replaces it)")
+	}
+}
+
+// TestRenderFragmentIsLiveRegionOnly verifies RenderFragment emits the live
+// content (pills/mux/log) WITHOUT the page shell, so it can be pushed as an SSE
+// payload and swapped into <main id="live">. It must be identical to the shell's
+// live region — same source of truth.
+func TestRenderFragmentIsLiveRegionOnly(t *testing.T) {
+	snap := Snapshot{
+		Surface: SurfaceSkysocks, App: "skysocks-client", Running: true,
+		Logs: []string{"frag line"},
+	}
+	frag := string(RenderFragment(snap))
+	for _, want := range []string{"per-leg mux", "recent log", "frag line", `class="pills"`} {
+		if !strings.Contains(frag, want) {
+			t.Errorf("fragment missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{"<!doctype", "<html", "<head", "<style", "<main", "EventSource", "route control", "<footer"} {
+		if strings.Contains(frag, unwanted) {
+			t.Errorf("fragment must not contain shell/static markup %q", unwanted)
+		}
+	}
+	// The fragment must be exactly the inner HTML of the shell's <main id="live">.
+	page := string(Render(snap))
+	const open, closeTag = `<main id="live">`, `</main>`
+	i := strings.Index(page, open)
+	j := strings.Index(page, closeTag)
+	if i < 0 || j < 0 || j < i {
+		t.Fatal("shell is missing the <main id=\"live\"> live region")
+	}
+	if inner := page[i+len(open) : j]; inner != frag {
+		t.Errorf("fragment differs from shell live region:\n frag=%q\ninner=%q", frag, inner)
+	}
+}
+
+// TestRenderDmsgKeepsMetaRefresh guards that non-skysocks surfaces (no SSE
+// endpoint) keep the meta-refresh fallback and do NOT get the skysocks SSE script.
+func TestRenderDmsgKeepsMetaRefresh(t *testing.T) {
+	page := string(Render(Snapshot{Surface: SurfaceDmsg, App: "dmsgweb"}))
+	if !strings.Contains(page, `http-equiv="refresh"`) {
+		t.Error("dmsg status page should keep the meta-refresh fallback")
+	}
+	if strings.Contains(page, "EventSource") {
+		t.Error("dmsg status page must not emit the skysocks SSE script")
 	}
 }
 
