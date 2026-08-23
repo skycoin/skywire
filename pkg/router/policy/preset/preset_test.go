@@ -532,3 +532,91 @@ func TestEngine_OnTick_LedbatGrowsWhenNoQueuing(t *testing.T) {
 		t.Errorf("grow must not shed; got %+v", got)
 	}
 }
+
+// TestDecide_Coupled pins the coupled preset's decide shape: a modest symmetric
+// mux over the multi-hop overlay with best-leg (auto) byte weighting for target
+// apps, a single lean route for chat, defaults for everything else.
+func TestDecide_Coupled(t *testing.T) {
+	if got := Decide("coupled", Context{App: "skysocks-client"}, nil); !reflect.DeepEqual(
+		got, Spec{Mux: 4, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "auto"}) {
+		t.Errorf("coupled/proxy: Decide=%+v", got)
+	}
+	if got := Decide("coupled", Context{App: "skychat"}, nil); !reflect.DeepEqual(got, Spec{Mux: 1}) {
+		t.Errorf("coupled/chat: Decide=%+v want {Mux:1}", got)
+	}
+	if got := Decide("coupled", Context{App: "other"}, nil); !reflect.DeepEqual(got, Spec{}) {
+		t.Errorf("coupled/other: Decide=%+v want {}", got)
+	}
+}
+
+// TestEngine_OnTick_CoupledShedsWorstOnLoss drives the coupled controller with a
+// clean 4-wide active set, then makes one leg's retransmits rise, and asserts the
+// COUPLED DECREASE: the worst (lossy) leg is shed to standby — a lone demote,
+// concentrating traffic on the good legs.
+func TestEngine_OnTick_CoupledShedsWorstOnLoss(t *testing.T) {
+	e := New()
+	base := func(retrans2 uint64) []LegInfo {
+		return []LegInfo{
+			{Index: 0, TransportID: "t0", Kind: "stcpr", LatencyMs: 50, Alive: true},
+			{Index: 1, TransportID: "t1", Kind: "stcpr", LatencyMs: 50, Alive: true},
+			{Index: 2, TransportID: "t2", Kind: "stcpr", LatencyMs: 50, Alive: true, Retransmits: retrans2},
+			{Index: 3, TransportID: "t3", Kind: "stcpr", LatencyMs: 50, Alive: true},
+		}
+	}
+	// Tick 1 establishes the retransmit baseline; a clean 4-wide set at the ceiling
+	// is a no-op (no grow, no loss to shed).
+	if got := e.OnTick("coupled", base(0)); !reflect.DeepEqual(got, RotationAction{}) {
+		t.Fatalf("baseline tick must be a no-op; got %+v", got)
+	}
+	// Tick 2: leg 2's retransmits jumped → rising loss → shed the worst leg (2).
+	got := e.OnTick("coupled", base(100))
+	if len(got.DemoteToStandby) != 1 || got.DemoteToStandby[0] != 2 {
+		t.Errorf("coupled must shed the lossy leg (2) to standby; got %+v", got)
+	}
+	if got.AddLeg || len(got.PromoteFromStandby) != 0 || len(got.DropLegs) != 0 {
+		t.Errorf("coupled decrease must be a lone demote (no grow/drop); got %+v", got)
+	}
+}
+
+// TestEngine_OnTick_CoupledCautiousPromoteWhenClean asserts the COUPLED INCREASE:
+// a loss-free active set below the ceiling with a warm spare promotes AT MOST one
+// leg (LIA's cautious coupled increase).
+func TestEngine_OnTick_CoupledCautiousPromoteWhenClean(t *testing.T) {
+	e := New()
+	legs := []LegInfo{
+		{Index: 0, TransportID: "t0", Kind: "stcpr", LatencyMs: 50, Alive: true},
+		{Index: 1, TransportID: "t1", Kind: "stcpr", LatencyMs: 50, Alive: true},
+		{Index: 2, TransportID: "t2", Kind: "stcpr", LatencyMs: 50, Alive: true},
+		{Index: 3, TransportID: "s0", Kind: "stcpr", LatencyMs: 45, Alive: true, Standby: true},
+	}
+	got := e.OnTick("coupled", legs)
+	if len(got.PromoteFromStandby) != 1 || got.PromoteFromStandby[0] != 3 {
+		t.Errorf("clean active set below the ceiling must cautiously promote the spare; got %+v", got)
+	}
+	if got.AddLeg || len(got.DemoteToStandby) != 0 || len(got.DropLegs) != 0 {
+		t.Errorf("cautious increase must be a lone promote; got %+v", got)
+	}
+}
+
+// TestEngine_OnTick_CoupledNoGrowUnderLoss is the coupling property: even with a
+// warm spare available and the active set below the ceiling, rising loss on an
+// active leg FORBIDS growth — the controller sheds the lossy leg instead of
+// promoting. (The loss baseline is seeded white-box so the rise reads on the very
+// first tick, without an intervening clean tick consuming the spare.)
+func TestEngine_OnTick_CoupledNoGrowUnderLoss(t *testing.T) {
+	e := New()
+	e.coupledPrevRetransmits["t1"] = 0
+	legs := []LegInfo{
+		{Index: 0, TransportID: "t0", Kind: "stcpr", LatencyMs: 50, Alive: true},
+		{Index: 1, TransportID: "t1", Kind: "stcpr", LatencyMs: 50, Alive: true, Retransmits: 100},
+		{Index: 2, TransportID: "t2", Kind: "stcpr", LatencyMs: 50, Alive: true},
+		{Index: 3, TransportID: "s0", Kind: "stcpr", LatencyMs: 45, Alive: true, Standby: true},
+	}
+	got := e.OnTick("coupled", legs)
+	if len(got.PromoteFromStandby) != 0 {
+		t.Errorf("coupled must NOT grow while an active leg shows rising loss (a spare is available); got %+v", got)
+	}
+	if len(got.DemoteToStandby) != 1 || got.DemoteToStandby[0] != 1 {
+		t.Errorf("coupled should shed the lossy leg (1) instead; got %+v", got)
+	}
+}

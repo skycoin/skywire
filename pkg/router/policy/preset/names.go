@@ -15,6 +15,7 @@ func Names() []string {
 		"latency-adaptive",
 		"elastic-mux",
 		"probe-and-prune",
+		"coupled",
 		"adaptive",
 		"geo-avoid",
 		"transport-diverse",

@@ -108,6 +108,8 @@ func Decide(name string, ctx Context, cands []Candidate) Spec {
 		return decideElasticMux(ctx)
 	case "probe-and-prune":
 		return decideProbeAndPrune(ctx)
+	case "coupled":
+		return decideCoupled(ctx)
 	case "adaptive":
 		return decideAdaptive(ctx, cands)
 	case "app-mux":
@@ -229,6 +231,36 @@ func decideProbeAndPrune(ctx Context) Spec {
 			MinHops:                 2,
 			RotationIntervalSeconds: 30,
 			Distribution:            "auto",
+		}
+	}
+	return Spec{}
+}
+
+// decideCoupled is the EXPERIMENTAL "coupled" preset's decide logic — a
+// multipath policy inspired by MPTCP's coupled congestion control (LIA/OLIA).
+// It provisions a modest symmetric mux (coupledMux legs) over the multi-hop
+// overlay and asks the host to weight bytes toward the best legs (Distribution
+// "auto" = inverse-latency), NOT spread them equally across a lossy path. The
+// on_tick controller (tickCoupled) then "couples" the aggregate: it grows the
+// active set CAUTIOUSLY — at most one promote per tick, and only when NO active
+// leg shows rising loss (LIA's coupled increase) — and sheds the WORST leg
+// (highest loss, latency-tiebroken) the moment congestion appears, so total
+// aggressiveness stays bounded and traffic concentrates on the good legs.
+// Latency-sensitive chat stays a single lean route; non-target apps inherit the
+// visor default.
+func decideCoupled(ctx Context) Spec {
+	switch ctx.App {
+	case "skychat", "skychat-client":
+		return Spec{Mux: 1}
+	case "vpn-client", "skysocks-client", "skynet-client":
+		return Spec{
+			Mux:                     coupledMux,
+			MinHops:                 2,
+			RotationIntervalSeconds: 20,
+			// Weight bytes toward the lowest-latency/lowest-loss legs (the
+			// "coupled" bias) rather than round-robin's equal spread across a
+			// congested leg.
+			Distribution: "auto",
 		}
 	}
 	return Spec{}

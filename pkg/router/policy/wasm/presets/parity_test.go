@@ -154,6 +154,8 @@ func TestDecideParity_NativeMatchesWazero(t *testing.T) {
 		{"latency-adaptive/other", "latency-adaptive", policy.RoutingContext{App: "skychat"}, nil},
 		{"elastic-mux", "elastic-mux", policy.RoutingContext{App: "skysocks-client"}, nil},
 		{"probe-and-prune", "probe-and-prune", policy.RoutingContext{App: "skynet-client"}, nil},
+		{"coupled", "coupled", policy.RoutingContext{App: "skysocks-client"}, nil},
+		{"coupled/chat", "coupled", policy.RoutingContext{App: "skychat"}, nil},
 		{"adaptive", "adaptive", policy.RoutingContext{App: "vpn-client"}, nil},
 		// adaptive with real transport-kind metadata: both paths must seed the
 		// most transport-diverse forward candidate (cand b, 2 distinct kinds).
@@ -271,11 +273,30 @@ func TestTickParity_NativeMatchesWazero(t *testing.T) {
 		{leg(0, "a", "stcpr", 40, true, false, 0), leg(1, "b", "stcpr", 40, true, true, 0), leg(2, "c", "stcpr", 40, true, true, 0)},
 	}
 
+	// coupled: a clean 4-wide set, then rising loss on one leg (shed), a couple of
+	// cooldown ticks, then a clean below-ceiling set with a warm spare (cautious
+	// promote) — exercises both coupled-decrease and coupled-increase.
+	rl := func(idx int, tid string, lat int, retrans uint64) policy.LegInfo {
+		return policy.LegInfo{Index: idx, TransportID: tid, Kind: "stcpr", LatencyMs: lat, Alive: true, Retransmits: retrans}
+	}
+	sb := func(idx int, tid string, lat int) policy.LegInfo {
+		return policy.LegInfo{Index: idx, TransportID: tid, Kind: "stcpr", LatencyMs: lat, Alive: true, Standby: true}
+	}
+	cpl := [][]policy.LegInfo{
+		{rl(0, "a", 50, 0), rl(1, "b", 50, 0), rl(2, "c", 50, 0), rl(3, "d", 50, 0)},
+		{rl(0, "a", 50, 0), rl(1, "b", 50, 0), rl(2, "c", 50, 500), rl(3, "d", 50, 0)},
+		{rl(0, "a", 50, 0), rl(1, "b", 50, 0), rl(3, "d", 50, 0), sb(2, "c", 50)},
+		{rl(0, "a", 50, 0), rl(1, "b", 50, 0), rl(3, "d", 50, 0), sb(2, "c", 50)},
+		{rl(0, "a", 50, 0), rl(1, "b", 50, 0), rl(3, "d", 50, 0), sb(2, "c", 50)},
+		{rl(0, "a", 50, 0), rl(1, "b", 50, 0), rl(3, "d", 50, 0), sb(2, "c", 50)},
+	}
+
 	cases := []tickCase{
 		{"rotating-bw", "rotating-bw", rbw},
 		{"latency-adaptive", "latency-adaptive", la},
 		{"elastic-mux", "elastic-mux", em},
 		{"probe-and-prune", "probe-and-prune", pp},
+		{"coupled", "coupled", cpl},
 		{"adaptive", "adaptive", ad},
 		{"ledbat", "ledbat", lb},
 	}
