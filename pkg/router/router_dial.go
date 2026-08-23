@@ -2471,6 +2471,17 @@ func (r *router) establishMuxRoutes(
 					p.slot, maxCount, p.addFwd, p.addRev, err)
 				return
 			}
+			// Record this leg's full forward route so the per-leg mux view shows
+			// its whole path (all hops, full PKs, per-hop transport type) instead
+			// of falling back to the first-hop transport's remote — which for a
+			// multihop leg is the first INTERMEDIATE, mislabeled as the exit. Only
+			// when the forward leg was actually appended (addFwd); a reverse-only
+			// slot installs no forward transport to key the hops on. The forward
+			// path's first-hop TpID matches muxRules.Forward.NextTransportID (the
+			// transport appendRouteAsymmetric registered), so legHopsFor finds it.
+			if p.addFwd {
+				nrg.rg.recordLegHops(p.req.Forward)
+			}
 			log.Infof("Mux route %d/%d established (fwd=%v rev=%v) via tp %s",
 				p.slot, maxCount, p.addFwd, p.addRev, muxRules.Forward.NextTransportID())
 		}(p)
@@ -2639,6 +2650,10 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 	if err := r.appendRouteAsymmetric(nrg, muxRules, true, addRev); err != nil {
 		return fmt.Errorf("rotation add-leg: append: %w", err)
 	}
+	// Record this leg's full forward route (addFwd is always true here) so the
+	// per-leg mux view shows its whole path instead of the first-hop transport's
+	// remote — which for a multihop leg is the first intermediate, not the exit.
+	nrg.rg.recordLegHops(muxFwd)
 	log.Infof("Rotation aux leg established (addRev=%v) via tp %s", addRev, muxRules.Forward.NextTransportID())
 	return nil
 }
