@@ -2353,6 +2353,22 @@ func (r *router) establishMuxRoutes(
 		}
 		consecutiveFailures = 0
 
+		// Hard mux invariants (post-fetch gate). Even though excludePKs is fed
+		// to the finder as ExcludeIntermediatePKs, the local-calc fallback and
+		// finder misses can still return a leg that overlaps an existing leg's
+		// intermediates or loops through a visor twice. Reject such a candidate
+		// HERE — before the setup-node dial — and claim its intermediates so the
+		// next slot diverges from it. excludePKs is the running union of every
+		// prior leg's intermediates (both directions), so it serves as the used
+		// set for the forward and reverse checks alike.
+		if !validMuxLeg(muxFwd, muxRev, lPK, rPK, excludePKs, excludePKs) {
+			log.Debugf("Mux route %d/%d: candidate rejected — intra-route loop or intermediate overlap with an existing leg; skipping",
+				i+1, maxCount)
+			excludePKs = append(excludePKs, intermediatesOfHops(muxFwd, lPK, rPK)...)
+			excludePKs = append(excludePKs, intermediatesOfHops(muxRev, rPK, lPK)...)
+			continue
+		}
+
 		// The route-finder fallback ignores ExcludeTransportIDs, so it can hand
 		// back a leg whose first hop reuses a transport already used by the
 		// group (or an earlier planned leg). If we planned + dialed it, the
@@ -2524,6 +2540,15 @@ func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, 
 			return fmt.Errorf("rotation add-leg: no route found (route-finder=%v, local-calc=%v)", err, lcErr)
 		}
 		muxFwd, muxRev = lcFwd, lcRev
+	}
+
+	// Hard mux invariants (post-fetch gate): the planned leg must be loop-free
+	// and its intermediates disjoint from every existing leg. excludePKs holds
+	// the group's intermediates plus the caller's exclude hints, so it is the
+	// used set for both directions. A violating candidate is skipped (the
+	// rotation goroutine keeps the current leg set and retries next tick).
+	if !validMuxLeg(muxFwd, muxRev, lPK, rPK, excludePKs, excludePKs) {
+		return errors.New("rotation add-leg: planned leg violates mux invariants (intra-route loop or intermediate overlap with an existing leg)")
 	}
 
 	// The route-finder honors ExcludeIntermediatePKs but NOT ExcludeTransportIDs,
@@ -2793,4 +2818,90 @@ func intermediatePKsOfPath(hops []routing.Hop, src, dst cipher.PubKey) []cipher.
 		out = append(out, pk)
 	}
 	return out
+}
+
+// routeIntermediates returns the de-duplicated set of intermediate-visor PKs
+// of a hop sequence: every visor appearing as a hop endpoint (From or To)
+// other than this visor (src) and the destination (dst). For a direct 1-hop
+// route src->dst it returns nil (no intermediates). Unlike
+// intermediatePKsOfPath it inspects BOTH edges of every hop, so an
+// intermediate that a malformed candidate lists only as a From (never a To)
+// is still reported — the disjointness guarantee must not depend on the
+// route being well-formed.
+func routeIntermediates(fwd []routing.Hop, src, dst cipher.PubKey) []cipher.PubKey {
+	seen := make(map[cipher.PubKey]struct{}, 2*len(fwd))
+	var out []cipher.PubKey
+	add := func(pk cipher.PubKey) {
+		if pk == src || pk == dst || pk == (cipher.PubKey{}) {
+			return
+		}
+		if _, ok := seen[pk]; ok {
+			return
+		}
+		seen[pk] = struct{}{}
+		out = append(out, pk)
+	}
+	for _, h := range fwd {
+		add(h.From)
+		add(h.To)
+	}
+	return out
+}
+
+// hasLoop reports whether a forward hop chain passes through the same visor
+// more than once (an intra-route loop). The visor visit order is the first
+// hop's From followed by every hop's To; a repeat anywhere in that sequence
+// is a loop. A route that loops through a visor twice can send traffic in a
+// circle with no way for the endpoints to detect it.
+func hasLoop(fwd []routing.Hop) bool {
+	if len(fwd) == 0 {
+		return false
+	}
+	seen := make(map[cipher.PubKey]struct{}, len(fwd)+1)
+	seen[fwd[0].From] = struct{}{}
+	for _, h := range fwd {
+		if _, ok := seen[h.To]; ok {
+			return true
+		}
+		seen[h.To] = struct{}{}
+	}
+	return false
+}
+
+// disjointFrom reports whether cand shares no PK with used (the set
+// intersection is empty). An empty cand — a direct, zero-intermediate leg —
+// is trivially disjoint and always accepted.
+func disjointFrom(cand, used []cipher.PubKey) bool {
+	if len(cand) == 0 || len(used) == 0 {
+		return true
+	}
+	set := make(map[cipher.PubKey]struct{}, len(used))
+	for _, pk := range used {
+		set[pk] = struct{}{}
+	}
+	for _, pk := range cand {
+		if _, ok := set[pk]; ok {
+			return false
+		}
+	}
+	return true
+}
+
+// validMuxLeg reports whether a candidate leg satisfies the two hard mux
+// invariants given the intermediates already claimed by the group's other
+// legs (usedFwd for the forward direction, usedRev for the reverse): the
+// forward and reverse paths must each be loop-free, and each direction's
+// intermediates must be fully disjoint from the corresponding used set. It
+// is the post-fetch gate applied to every candidate before it is committed
+// as a leg — the route-finder honors ExcludeIntermediatePKs but its
+// local-calc fallback and finder misses can still return an overlapping or
+// looping path.
+func validMuxLeg(fwd, rev []routing.Hop, src, dst cipher.PubKey, usedFwd, usedRev []cipher.PubKey) bool {
+	if hasLoop(fwd) || hasLoop(rev) {
+		return false
+	}
+	if !disjointFrom(routeIntermediates(fwd, src, dst), usedFwd) {
+		return false
+	}
+	return disjointFrom(routeIntermediates(rev, dst, src), usedRev)
 }
