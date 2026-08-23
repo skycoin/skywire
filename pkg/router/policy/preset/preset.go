@@ -120,6 +120,8 @@ func Decide(name string, ctx Context, cands []Candidate) Spec {
 		return decideTrustTiered(ctx, cands)
 	case "time-of-day":
 		return decideTimeOfDay(ctx)
+	case "ledbat":
+		return decideLedbat(ctx)
 	default:
 		return decideAppMux(ctx)
 	}
@@ -328,6 +330,36 @@ func mostTransportDiverse(cands []Candidate) *Candidate {
 		}
 	}
 	return best
+}
+
+// ledbatMux is the small symmetric mux the ledbat preset provisions and the
+// hard CAP its on_tick controller may grow the active set back up to. It is
+// deliberately lean: ledbat is a background / scavenger policy, so it holds few
+// legs and yields (shrinks toward one) the moment it detects it is queuing.
+const ledbatMux = 3
+
+// decideLedbat is the EXPERIMENTAL ledbat preset's decide logic — a delay-based,
+// background/scavenger multipath policy inspired by LEDBAT congestion control
+// (RFC 6817). It provisions a small symmetric mux (ledbatMux legs) over
+// multi-hop with "auto" (latency-weighted) byte distribution, re-evaluated every
+// 20s so on_tick can shrink or grow the active set from the measured queuing
+// delay. Latency-sensitive chat stays a single lean route (same idiom as the
+// other presets). The scavenger behavior itself lives in tickLedbat: it starts
+// at the small provisioned width and BACKS OFF toward a single leg whenever a
+// leg's smoothed delay rises meaningfully above its own base (min) delay —
+// yielding capacity to other traffic — and grows back up to ledbatMux only while
+// every active leg reads near its base (no self-induced queuing).
+func decideLedbat(ctx Context) Spec {
+	switch ctx.App {
+	case "skychat", "skychat-client":
+		return Spec{Mux: 1}
+	}
+	return Spec{
+		Mux:                     ledbatMux,
+		MinHops:                 2,
+		RotationIntervalSeconds: 20,
+		Distribution:            "auto",
+	}
 }
 
 // --- conditional presets: constrain WHICH path is chosen, by route metadata ---
