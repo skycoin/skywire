@@ -56,10 +56,10 @@ func (o *dmsgRPCTransportOracle) DstTransports(ctx context.Context, _, dst ciphe
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = conn.Close() }()
+	defer func() { _ = conn.Close() }() //nolint:errcheck
 	// Bound the RPC round-trip to the oracle's deadline (net/rpc ignores ctx).
 	if dl, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(dl)
+		_ = conn.SetDeadline(dl) //nolint:errcheck
 	}
 
 	api := NewRPCClient(o.log, conn, RPCPrefix, 0)
