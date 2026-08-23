@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 	"sync"
 
@@ -113,6 +114,26 @@ func isPooledConnShutdown(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "connection is shut down")
 }
 
+// isReserveResetErr reports whether err is a reservation call that failed
+// because the underlying stream was reset/closed — either handed back already
+// dead (isPooledConnShutdown, net/rpc "connection is shut down") OR reset WHILE
+// the ReserveIDs call was in flight. In the mid-call case net/rpc terminates
+// the pending call with the raw read error (io.EOF / io.ErrUnexpectedEOF), and
+// a locally-closed conn surfaces as net.ErrClosed — none of which contain the
+// "connection is shut down" string, so without this they fell straight through
+// as an un-retried hard leg failure ("reserve routeID from <pk> failed: EOF").
+// This is the dominant multi-leg (mux) setup churn: the primary leg sets up
+// alone and succeeds, then the aux legs fan out as a concurrent burst over one
+// shared DMSG client and one of the in-flight reserve streams gets reset. All
+// of these are worth a single fresh-dial retry (a reachable hop succeeds; a
+// genuinely dead one still fails, bounded by the per-call rpcDeadline).
+func isReserveResetErr(err error) bool {
+	return isPooledConnShutdown(err) ||
+		errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, net.ErrClosed)
+}
+
 // redial discards a dead client and dials a fresh one for pk, replacing it in
 // the client map so the later rule-install reuses the live connection. Returns
 // nil when no fresh connection can be established (caller surfaces the original
@@ -175,17 +196,18 @@ func (idr *idReserver) ReserveIDs(ctx context.Context) error {
 				return
 			}
 			rtIDs, err := client.ReserveIDs(ctx, n)
-			if isPooledConnShutdown(err) {
-				// Stale pooled connection. ClientPool.Get's liveness check
-				// (client_pool.go) only discards conns idle past the stream
-				// read deadline — so a conn that died for any OTHER reason (the
-				// intermediate restarted, its dmsg session/transport dropped)
-				// is handed back as a corpse and this first call returns
-				// "connection is shut down". Re-dial fresh ONCE and retry: a
-				// reachable hop succeeds on the retry, a genuinely-dead one
-				// still fails below. This was the dominant route-setup failure
-				// (id_reservation, ~59% on a live RSN) — a single bad pooled
-				// conn was failing the whole reservation with no retry.
+			if isReserveResetErr(err) {
+				// The reserve stream was dead-on-arrival ("connection is shut
+				// down" — ClientPool.Get's liveness check only discards conns
+				// idle past the read deadline, so a conn that died for any
+				// OTHER reason (intermediate restarted, dmsg session/transport
+				// dropped) is handed back as a corpse) OR was reset WHILE the
+				// call was in flight (raw io.EOF, the mux aux-leg burst case).
+				// Re-dial fresh ONCE and retry: a reachable hop succeeds on the
+				// retry, a genuinely-dead one still fails below. This was the
+				// dominant route-setup failure (id_reservation, ~59% on a live
+				// RSN) — a single bad/reset stream failed the whole reservation
+				// with no retry.
 				if fresh := idr.redial(ctx, pk, client); fresh != nil {
 					rtIDs, err = fresh.ReserveIDs(ctx, n)
 				}
