@@ -38,11 +38,20 @@ type Tracker struct {
 	// exposes only 7.
 	publishKeep time.Duration
 
-	mu         sync.Mutex
-	sink       Sink
-	baselines  map[uuid.UUID]bandwidthBaseline
-	lastDay    string // YYYY-MM-DD UTC of the most recent sample
-	lastPruned time.Time
+	mu        sync.Mutex
+	sink      Sink
+	baselines map[uuid.UUID]bandwidthBaseline
+	// mirroredCurrent is the set of transport IDs whose
+	// transports/<id>/current leaf is currently published to the sink.
+	// Each sample reconciles it against the live probe set: IDs that
+	// dropped out (transport closed) get their current leaf sink-deleted
+	// so the discovery feed reflects only live transports (absence =
+	// dead). Without this, a closed transport's current leaf — published
+	// once while it was live — lingers on the feed for the visor's whole
+	// uptime, accumulating across churn and bloating the Root TPD fills.
+	mirroredCurrent map[uuid.UUID]struct{}
+	lastDay         string // YYYY-MM-DD UTC of the most recent sample
+	lastPruned      time.Time
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -124,15 +133,32 @@ func NewTracker(store *Store, probes Probes, conf Config) *Tracker {
 		publishKeep = time.Duration(conf.RetentionDays) * 24 * time.Hour
 	}
 	return &Tracker{
-		store:       store,
-		log:         conf.Logger,
-		probes:      probes,
-		interval:    conf.SampleInterval,
-		keep:        time.Duration(conf.RetentionDays) * 24 * time.Hour,
-		publishKeep: publishKeep,
-		sink:        noopSink{},
-		baselines:   make(map[uuid.UUID]bandwidthBaseline),
+		store:           store,
+		log:             conf.Logger,
+		probes:          probes,
+		interval:        conf.SampleInterval,
+		keep:            time.Duration(conf.RetentionDays) * 24 * time.Hour,
+		publishKeep:     publishKeep,
+		sink:            noopSink{},
+		baselines:       make(map[uuid.UUID]bandwidthBaseline),
+		mirroredCurrent: make(map[uuid.UUID]struct{}),
 	}
+}
+
+// SeedMirroredCurrent records the set of transport IDs whose `current`
+// leaf was already pushed to the sink before the sampler started —
+// typically the live set hydrated by HydrateSink at startup. Seeding it
+// means a transport that was live at hydrate but dies before the first
+// sample still gets its stale current leaf reconciled away (deleted) on
+// that first sample, rather than lingering because the sampler never
+// "saw" it live. Call before Run. The passed map is adopted directly.
+func (t *Tracker) SeedMirroredCurrent(ids map[uuid.UUID]struct{}) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if ids == nil {
+		ids = make(map[uuid.UUID]struct{})
+	}
+	t.mirroredCurrent = ids
 }
 
 // Store returns the underlying bbolt-backed store. Exposed so HTTP
@@ -244,10 +270,19 @@ func (t *Tracker) sample(now time.Time) {
 	// (post-mutation state), so we snapshot them inside and dispatch
 	// outside.
 	var mirrors []mirrorPair
+	// liveTP is the set of transport IDs the probe reported live this
+	// tick. Non-nil (possibly empty) whenever the Transports probe ran,
+	// so reconcileCurrentLeaves can distinguish "no probe" (leave the
+	// mirrored set alone) from "probe returned zero live transports"
+	// (delete every previously-mirrored current leaf).
+	var liveTP map[uuid.UUID]struct{}
 
 	txErr := t.store.UpdateSample(func(stx *SampleTx) error {
 		if probe := t.probes.Transports; probe != nil {
-			for _, tp := range probe() {
+			tps := probe()
+			liveTP = make(map[uuid.UUID]struct{}, len(tps))
+			for _, tp := range tps {
+				liveTP[tp.ID] = struct{}{}
 				if pairs, err := t.recordTransportTx(stx, tp, utc, today); err != nil {
 					t.log.WithError(err).WithField("tp_id", tp.ID).
 						Debug("Failed to record transport sample")
@@ -292,6 +327,41 @@ func (t *Tracker) sample(now time.Time) {
 	}
 
 	t.sinkPutBatch(mirrors)
+	t.reconcileCurrentLeaves(liveTP)
+}
+
+// reconcileCurrentLeaves diffs the live transport set reported by this
+// tick's probe against the set of current leaves currently mirrored to
+// the sink, and sink-deletes the leaf for any transport that is no
+// longer live (closed transport). This is the per-`current` analog of
+// the date-based sink-prune the retention path already does for daily
+// rollups and timeline bitmaps: a closed transport's current snapshot
+// must reconcile away (absence = dead) so it stops bloating the Root
+// TPD fills. bbolt retention is untouched — the visor's local /stats
+// history for a recently-closed transport stays intact.
+//
+// live == nil means the Transports probe didn't run this tick; leave
+// the mirrored set alone. An empty (non-nil) live set correctly deletes
+// every previously-mirrored current leaf.
+func (t *Tracker) reconcileCurrentLeaves(live map[uuid.UUID]struct{}) {
+	if live == nil {
+		return
+	}
+	t.mu.Lock()
+	var stale []uuid.UUID
+	for id := range t.mirroredCurrent {
+		if _, ok := live[id]; !ok {
+			stale = append(stale, id)
+		}
+	}
+	// Every live transport re-Put its current leaf this tick (idempotent),
+	// so the mirrored set now equals the live set.
+	t.mirroredCurrent = live
+	t.mu.Unlock()
+
+	for _, id := range stale {
+		t.sinkDelete(currentTransportPath(id.String()))
+	}
 }
 
 // sinkPutBatch fans the sample's mirror writes into a single sink

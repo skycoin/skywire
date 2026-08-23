@@ -255,6 +255,90 @@ func TestSinkDeletedOnBboltRetentionDrop(t *testing.T) {
 	}
 }
 
+// TestSinkDeletesCurrentWhenTransportGoesDead drives two live
+// transports through a sample (both publish a current leaf), then a
+// second sample where one has closed (probe no longer returns it). The
+// closed transport's current leaf must be sink-Deleted; the still-live
+// one's must remain and never be deleted.
+func TestSinkDeletesCurrentWhenTransportGoesDead(t *testing.T) {
+	sink := newRecordingSink()
+	tr := newTrackerWithSink(t, sink)
+	live := uuid.New()
+	dying := uuid.New()
+	t0 := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
+
+	probe := func() []TransportProbe {
+		return []TransportProbe{
+			{ID: live, Type: "stcpr", SentBytes: 10, RecvBytes: 10},
+			{ID: dying, Type: "stcpr", SentBytes: 20, RecvBytes: 20},
+		}
+	}
+	tr.probes.Transports = probe
+	tr.sample(t0)
+
+	puts, _ := sink.snapshot()
+	if _, ok := puts[currentTransportPath(live.String())]; !ok {
+		t.Fatalf("live current leaf missing after first sample")
+	}
+	if _, ok := puts[currentTransportPath(dying.String())]; !ok {
+		t.Fatalf("dying current leaf missing after first sample")
+	}
+
+	// Second sample: `dying` has closed and is no longer in the probe.
+	tr.probes.Transports = func() []TransportProbe {
+		return []TransportProbe{{ID: live, Type: "stcpr", SentBytes: 15, RecvBytes: 15}}
+	}
+	tr.sample(t0.Add(time.Minute))
+
+	puts, dels := sink.snapshot()
+	foundDel := false
+	for _, d := range dels {
+		if d == currentTransportPath(dying.String()) {
+			foundDel = true
+		}
+		if d == currentTransportPath(live.String()) {
+			t.Errorf("live transport current leaf was deleted; must persist")
+		}
+	}
+	if !foundDel {
+		t.Errorf("dead transport current leaf was not sink-deleted; dels=%v", dels)
+	}
+	if _, ok := puts[currentTransportPath(dying.String())]; ok {
+		t.Errorf("dead transport current leaf still present in sink puts")
+	}
+	if _, ok := puts[currentTransportPath(live.String())]; !ok {
+		t.Errorf("live transport current leaf missing after second sample")
+	}
+}
+
+// TestSeedMirroredCurrentReconcilesStaleLeaf seeds the tracker with an
+// ID that is not in the first sample's live probe (a transport that
+// died between hydrate and the first sample) and asserts its stale
+// current leaf is reconciled away on that first sample.
+func TestSeedMirroredCurrentReconcilesStaleLeaf(t *testing.T) {
+	sink := newRecordingSink()
+	tr := newTrackerWithSink(t, sink)
+	seededDead := uuid.New()
+	live := uuid.New()
+	tr.SeedMirroredCurrent(map[uuid.UUID]struct{}{seededDead: {}})
+
+	tr.probes.Transports = func() []TransportProbe {
+		return []TransportProbe{{ID: live, Type: "stcpr", SentBytes: 1, RecvBytes: 1}}
+	}
+	tr.sample(time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC))
+
+	_, dels := sink.snapshot()
+	found := false
+	for _, d := range dels {
+		if d == currentTransportPath(seededDead.String()) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("seeded-dead transport current leaf not reconciled away; dels=%v", dels)
+	}
+}
+
 // TestHydrateSinkPushesCurrentOnly asserts the seed path pushes only current
 // per-transport snapshots to the CXO sink — never historical tier/service or
 // timeline bitmaps (those are bbolt-only and would bloat the TPD feed).
@@ -285,7 +369,7 @@ func TestHydrateSinkPushesCurrentOnly(t *testing.T) {
 	}
 
 	sink := newRecordingSink()
-	pushed, err := HydrateSink(store, sink, 7, now)
+	pushed, err := HydrateSink(store, sink, 7, now, nil)
 	if err != nil {
 		t.Fatalf("HydrateSink: %v", err)
 	}
@@ -300,6 +384,70 @@ func TestHydrateSinkPushesCurrentOnly(t *testing.T) {
 		if p != "transports/"+id.String()+"/current" {
 			t.Errorf("only current snapshots should be hydrated to the sink; got unexpected %q", p)
 		}
+	}
+}
+
+// TestHydrateSinkPushesLiveTransportsCurrentOnly seeds the store with a
+// mix of live and dead transport records and asserts HydrateSink pushes
+// a `current` leaf for exactly the live set — the dead-but-retained
+// records stay bbolt-only and off the discovery feed.
+func TestHydrateSinkPushesLiveTransportsCurrentOnly(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "stats.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Logf("store.Close: %v", err)
+		}
+	}()
+
+	now := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
+	live := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()} // N = 3
+	dead := []uuid.UUID{uuid.New(), uuid.New()}             // M = 2
+	for _, id := range append(append([]uuid.UUID{}, live...), dead...) {
+		rec := &TransportRecord{
+			ID:        id,
+			Type:      "stcpr",
+			FirstSeen: now.Add(-time.Hour),
+			LastSeen:  now,
+			Current:   &LiveSnapshot{SentBytes: 1, RecvBytes: 1, SampledAt: now, Type: "stcpr"},
+		}
+		if err := store.PutTransportRecord(rec); err != nil {
+			t.Fatalf("PutTransportRecord: %v", err)
+		}
+	}
+
+	liveSet := map[uuid.UUID]struct{}{}
+	for _, id := range live {
+		liveSet[id] = struct{}{}
+	}
+	isLive := func(id uuid.UUID) bool { _, ok := liveSet[id]; return ok }
+
+	sink := newRecordingSink()
+	if _, err := HydrateSink(store, sink, 7, now, isLive); err != nil {
+		t.Fatalf("HydrateSink: %v", err)
+	}
+
+	puts, _ := sink.snapshot()
+	for _, id := range live {
+		if _, ok := puts[currentTransportPath(id.String())]; !ok {
+			t.Errorf("live transport %s: current leaf missing from sink", id)
+		}
+	}
+	for _, id := range dead {
+		if _, ok := puts[currentTransportPath(id.String())]; ok {
+			t.Errorf("dead transport %s: current leaf must NOT be on the sink", id)
+		}
+	}
+	nCurrent := 0
+	for p := range puts {
+		if len(p) > len("/current") && p[len(p)-len("/current"):] == "/current" {
+			nCurrent++
+		}
+	}
+	if nCurrent != len(live) {
+		t.Errorf("current leaves pushed = %d, want %d (live only)", nCurrent, len(live))
 	}
 }
 
