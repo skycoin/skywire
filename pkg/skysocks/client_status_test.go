@@ -106,9 +106,9 @@ func socks5Connect(t *testing.T, addr, host string, port uint16) net.Conn {
 	if method[0] != 0x05 || method[1] != 0x00 {
 		t.Fatalf("unexpected method reply %v", method)
 	}
-	req := []byte{0x05, 0x01, 0x00, 0x03, byte(len(host))}
+	req := []byte{0x05, 0x01, 0x00, 0x03, byte(len(host))} //nolint:gosec
 	req = append(req, []byte(host)...)
-	req = append(req, byte(port>>8), byte(port))
+	req = append(req, byte(port>>8), byte(port)) //nolint:gosec
 	if _, err := conn.Write(req); err != nil {
 		t.Fatal(err)
 	}

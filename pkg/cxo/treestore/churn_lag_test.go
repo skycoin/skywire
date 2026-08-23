@@ -78,7 +78,7 @@ func (c *churnSub) waitConverge(want int, timeout time.Duration) (time.Duration,
 func newChurnPair(t *testing.T, batchWindow time.Duration) (*Publisher, *churnSub) {
 	t.Helper()
 	_, skA := cipher.GenerateKeyPair()
-	pkA := cipher.PubKey{}
+	var pkA cipher.PubKey
 	{
 		// derive pkA from skA so subscriber can address the feed
 		pk, err := skA.PubKey()
