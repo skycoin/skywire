@@ -37,9 +37,17 @@ func Render(snap Snapshot) []byte {
 	}
 	fmt.Fprintf(&b, "<title>%s proxy status · skywire</title><style>%s</style></head><body>", surface, css)
 
-	// Header + brand.
+	// Header + brand. The live indicator sits OUTSIDE <main id="live"> (in the
+	// static header) on purpose: the WebSocket swap replaces the live region's
+	// innerHTML, so an indicator inside it would be wiped on every push. liveScript
+	// drives it (connecting → live → reconnecting); it renders as a neutral dot for
+	// no-JS / non-skysocks surfaces.
 	b.WriteString(`<header><div class="brand"><b>skywire</b> proxy status</div>`)
-	fmt.Fprintf(&b, `<div class="surface">%s</div></header>`, surface)
+	fmt.Fprintf(&b, `<div class="surface">%s</div>`, surface)
+	if live {
+		b.WriteString(`<span id="wsstat" class="wsstat wait" title="live update stream"><i class="dot"></i>connecting</span>`)
+	}
+	b.WriteString(`</header>`)
 
 	// Live region: server-rendered here for the initial paint, then (skysocks)
 	// swapped in place by the SSE script. RenderFragment renders the identical
@@ -90,15 +98,40 @@ func RenderFragment(snap Snapshot) []byte {
 // resort. window.sendCmd(obj) sends a JSON control frame (e.g. {cmd:"resync"}) and
 // is the seam the route-control buttons use. Emitted only for the skysocks surface
 // (the only one with a /ws handler).
-const liveScript = `<script>(function(){var t,ws;` +
+//
+// Selection guard (the copy-without-fighting-the-repaint fix): before swapping the
+// live region we check window.getSelection(); while the user has a non-collapsed
+// selection we stash the newest fragment in `pend` and return, so the ~1s push
+// cadence can't destroy a highlight mid-copy. The deferred fragment is applied the
+// moment the selection collapses (selectionchange). apply() also skips the DOM
+// write entirely when the incoming fragment is byte-identical to what's shown, so a
+// steady surface stops repainting at all — no needless innerHTML churn.
+//
+// Copy affordance: a delegated click handler copies any [data-copy] element's full
+// value (untruncated PKs, transport ids) to the clipboard, using the async
+// Clipboard API when available and falling back to execCommand('copy') so it works
+// over plain HTTP (status.skysocks is not a secure context). It flashes the element
+// green briefly. The live indicator (#wsstat) is driven here too.
+const liveScript = `<script>(function(){var t,ws,pend=null,last=null;` +
+	`function stat(s,c){var el=document.getElementById("wsstat");if(el){el.textContent=s;el.className="wsstat "+c;el.insertAdjacentHTML("afterbegin",'<i class="dot"></i>');}}` +
 	`function slow(){if(!t){t=setTimeout(function(){location.reload();},15000);}}` +
 	`function url(){return location.origin.replace(/^http/,"ws")+"/ws";}` +
-	`function connect(){try{ws=new WebSocket(url());}catch(e){slow();return;}` +
-	`ws.onmessage=function(e){if(t){clearTimeout(t);t=null;}var el=document.getElementById("live");if(el){el.innerHTML=e.data;}};` +
-	`ws.onclose=function(){ws=null;slow();setTimeout(connect,2000);};` +
+	`function selecting(){var s=window.getSelection();return !!(s&&!s.isCollapsed&&String(s));}` +
+	`function apply(h){if(h===last){return;}var el=document.getElementById("live");if(el){el.innerHTML=h;last=h;}}` +
+	`function push(h){if(selecting()){pend=h;return;}apply(h);}` +
+	`document.addEventListener("selectionchange",function(){if(pend!==null&&!selecting()){var h=pend;pend=null;apply(h);}});` +
+	`function connect(){stat("connecting","wait");try{ws=new WebSocket(url());}catch(e){slow();return;}` +
+	`ws.onopen=function(){stat("live","ok");};` +
+	`ws.onmessage=function(e){if(t){clearTimeout(t);t=null;}stat("live","ok");push(e.data);};` +
+	`ws.onclose=function(){ws=null;stat("reconnecting","warn");slow();setTimeout(connect,2000);};` +
 	`ws.onerror=function(){try{ws.close();}catch(e){}};}` +
-	`window.sendCmd=function(o){try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(o));}}catch(e){}};` +
-	`connect();})();</script>`
+	`window.sendCmd=function(o){try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(o));return true;}}catch(e){}return false;};` +
+	`function flash(el,cls){if(!el){return;}el.classList.add(cls);setTimeout(function(){el.classList.remove(cls);},800);}` +
+	`function fb(txt){try{var a=document.createElement("textarea");a.value=txt;a.setAttribute("readonly","");a.style.position="fixed";a.style.opacity="0";document.body.appendChild(a);a.select();document.execCommand("copy");document.body.removeChild(a);return true;}catch(e){return false;}}` +
+	`function copy(txt,el){function ok(){flash(el,"copied");}if(navigator.clipboard&&navigator.clipboard.writeText&&window.isSecureContext){navigator.clipboard.writeText(txt).then(ok,function(){if(fb(txt)){ok();}});}else if(fb(txt)){ok();}}` +
+	`document.addEventListener("click",function(e){var el=e.target.closest?e.target.closest("[data-copy]"):null;if(el){e.preventDefault();copy(el.getAttribute("data-copy")||el.textContent,el);}});` +
+	`window.rsync=function(btn){var ok=sendCmd({cmd:"resync"});flash(btn,ok?"flash":"deny");return ok;};` +
+	`document.body.classList.add("js");connect();})();</script>`
 
 // writeLiveRegion writes the dynamic status content (pills, per-leg mux, events,
 // recent log) shared by Render (page shell) and RenderFragment (SSE push).
@@ -151,7 +184,8 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 			`A leg appears here once a route to a destination is warm.</p></section>`)
 		return
 	}
-	var maxSent, maxRecv uint64 = 1, 1
+	var maxSent, maxRecv, totSent, totRecv uint64 = 1, 1, 0, 0
+	var nActive, nStandby, nClosed int
 	for _, l := range snap.Legs {
 		if l.SentBytes > maxSent {
 			maxSent = l.SentBytes
@@ -159,7 +193,31 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 		if l.RecvBytes > maxRecv {
 			maxRecv = l.RecvBytes
 		}
+		totSent += l.SentBytes
+		totRecv += l.RecvBytes
+		switch {
+		case !l.Alive:
+			nClosed++
+		case l.Standby:
+			nStandby++
+		default:
+			nActive++
+		}
 	}
+	// Scannable route-group summary: leg census + aggregate throughput, so the
+	// operator gets the shape of the group before reading the per-leg table.
+	b.WriteString(`<div class="rgsummary">`)
+	writeStat(b, "legs", fmt.Sprintf("%d", len(snap.Legs)), "")
+	writeStat(b, "active", fmt.Sprintf("%d", nActive), "ok")
+	if nStandby > 0 {
+		writeStat(b, "standby", fmt.Sprintf("%d", nStandby), "standby")
+	}
+	if nClosed > 0 {
+		writeStat(b, "closed", fmt.Sprintf("%d", nClosed), "warn")
+	}
+	writeStat(b, "sent", humanBytes(totSent), "")
+	writeStat(b, "recv", humanBytes(totRecv), "")
+	b.WriteString(`</div>`)
 	b.WriteString(`<table class="mux"><thead><tr>` +
 		`<th>leg</th><th>route</th><th>transport</th><th>peer</th>` +
 		`<th>sent</th><th>bandwidth (sent share)</th>` +
@@ -177,19 +235,20 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 		if l.Direct {
 			routeLabel, routeCls = "direct", "route-direct"
 		}
-		fmt.Fprintf(b, `<tr><td>R%d</td><td><span class="rtag %s">%s</span></td><td>%s</td><td class="pk"><code class="fpk">%s</code></td>`,
-			l.Index, routeCls, routeLabel, html.EscapeString(orDash(l.TpType)), html.EscapeString(orDash(l.RemotePK)))
+		fmt.Fprintf(b, `<tr><td>R%d</td><td><span class="rtag %s">%s</span></td><td>%s</td><td class="pk">%s</td>`,
+			l.Index, routeCls, routeLabel, html.EscapeString(orDash(l.TpType)), copyablePK(l.RemotePK))
 		fmt.Fprintf(b, `<td>%s</td><td class="barcell"><span class="bar %s" style="width:%d%%"></span></td>`,
 			humanBytes(l.SentBytes), scls, sentShare)
 		fmt.Fprintf(b, `<td>%s</td><td class="barcell"><span class="bar recv %s" style="width:%d%%"></span></td>`,
 			humanBytes(l.RecvBytes), scls, recvShare)
-		fmt.Fprintf(b, `<td>%.0f ms</td><td>%s</td><td>%d</td><td class="%s">%s</td></tr>`,
+		fmt.Fprintf(b, `<td>%.0f ms</td><td>%s</td><td>%d</td><td><span class="badge %s">%s</span></td></tr>`,
 			l.LatencyMS, routeRTT(l.RouteLatencyMS), l.Retransmits, scls, state)
 	}
 	b.WriteString(`</tbody></table>`)
 	writeMuxRoutes(b, snap.Legs)
 	b.WriteString(`<p class="hint">Bars are each leg's sent / recv bytes relative to the busiest leg. ` +
 		`<b>tp rtt</b> is the first-hop transport; <b>route rtt</b> is the true end-to-end route latency (all hops). ` +
+		`Click any public key to copy it. ` +
 		`For a live terminal chart use <code>skywire cli proxy mux plot</code>.</p></section>`)
 }
 
@@ -212,15 +271,15 @@ func writeMuxRoutes(b *strings.Builder, legs []Leg) {
 		if len(l.Hops) == 0 {
 			continue
 		}
-		fmt.Fprintf(b, `<div class="route"><span class="rlabel">R%d</span> <code class="fpk">%s</code>`,
-			l.Index, html.EscapeString(l.Hops[0].From))
+		fmt.Fprintf(b, `<div class="route"><span class="rlabel">R%d</span> %s`,
+			l.Index, copyablePK(l.Hops[0].From))
 		for _, h := range l.Hops {
 			lat := ""
 			if h.LatencyMS > 0 {
 				lat = fmt.Sprintf(" %.0fms", h.LatencyMS)
 			}
-			fmt.Fprintf(b, ` <span class="hop">─[%s%s]→</span> <code class="fpk">%s</code>`,
-				html.EscapeString(orDash(h.TpType)), html.EscapeString(lat), html.EscapeString(h.To))
+			fmt.Fprintf(b, ` <span class="hop">─[%s%s]→</span> %s`,
+				html.EscapeString(orDash(h.TpType)), html.EscapeString(lat), copyablePK(h.To))
 		}
 		b.WriteString(`</div>`)
 	}
@@ -284,16 +343,18 @@ func writeControlSeam(b *strings.Builder, snap Snapshot) {
 	b.WriteString(`<section class="seam"><h2>route control <small>read-only preview</small></h2>`)
 	switch snap.Surface {
 	case SurfaceSkysocks:
-		b.WriteString(`<p>The live view refreshes over a WebSocket; <b>resync</b> forces an ` +
-			`immediate push. Route mutation (add/drop leg, mux mode, rebuild) is planned — ` +
-			`those controls are inert until the mux-control RPC lands.</p><div class="controls">`)
-		// Live: sends {cmd:"resync"} over the WebSocket (see liveScript / handleStatusControl).
-		b.WriteString(`<button type="button" class="live" onclick="sendCmd({cmd:'resync'})">resync</button>`)
-		// TODO(mux-control): enable once the app→visor mux-control RPC exists.
-		b.WriteString(`<button disabled title="needs the mux-control RPC (TODO)">add leg</button>` +
-			`<button disabled title="needs the mux-control RPC (TODO)">drop leg</button>` +
-			`<button disabled title="needs the mux-control RPC (TODO)">mux mode…</button>` +
-			`<button disabled title="needs the mux-control RPC (TODO)">rebuild route</button>`)
+		b.WriteString(`<p>The live view streams over a WebSocket; <b>resync</b> forces an ` +
+			`immediate push. Route mutation is a <b>read-only preview</b> — add/drop leg, mux mode ` +
+			`and rebuild are staged for the upcoming mux-control RPC and stay disabled until it lands.</p><div class="controls">`)
+		// Live: sends {cmd:"resync"} over the WebSocket (rsync flashes the button on
+		// success — see liveScript / handleStatusControl).
+		b.WriteString(`<button type="button" class="live" onclick="rsync(this)">resync</button>`)
+		// TODO(mux-control): enable once the app→visor mux-control RPC exists. The
+		// "soon" tag marks them as staged-not-broken.
+		for _, label := range []string{"add leg", "drop leg", "mux mode…", "rebuild route"} {
+			fmt.Fprintf(b, `<button disabled title="staged for the mux-control RPC (not yet available)">%s<span class="soon">soon</span></button>`,
+				html.EscapeString(label))
+		}
 	case SurfaceSkynet:
 		b.WriteString(`<p>Selecting routes and relays from here is planned. Today these are inert; ` +
 			`the MVP status page is read-only.</p><div class="controls">`)
@@ -328,6 +389,30 @@ func writeFooter(b *strings.Builder, snap Snapshot) {
 }
 
 // --- small helpers -----------------------------------------------------------
+
+// writeStat renders one chip in the route-group summary: an uppercase label and
+// its value, optionally tinted (ok/standby/warn) so leg census reads at a glance.
+func writeStat(b *strings.Builder, k, v, cls string) {
+	c := "stat"
+	if cls != "" {
+		c += " " + cls
+	}
+	fmt.Fprintf(b, `<span class="%s"><i>%s</i> %s</span>`, c, html.EscapeString(k), html.EscapeString(v))
+}
+
+// copyablePK renders a FULL (never truncated) public key as a click-to-copy
+// monospace cell. The [data-copy] attribute carries the exact value the delegated
+// copy handler writes to the clipboard; an empty key renders as an inert dash with
+// no copy affordance. Progressive enhancement: with JS off the key is still plain
+// selectable text (word-break:break-all).
+func copyablePK(pk string) string {
+	pk = strings.TrimSpace(pk)
+	if pk == "" {
+		return `<code class="fpk">-</code>`
+	}
+	esc := html.EscapeString(pk)
+	return `<code class="fpk copy" data-copy="` + esc + `" title="click to copy">` + esc + `</code>`
+}
 
 func orDash(s string) string {
 	if strings.TrimSpace(s) == "" {
@@ -373,12 +458,24 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`header{display:flex;align-items:baseline;gap:.8rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.7rem}` +
 	`.brand b{font-weight:600;letter-spacing:.4px;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}` +
 	`.brand{font-size:1rem}.surface{margin-left:auto;font:600 1.1rem ui-monospace,SFMono-Regular,monospace;color:#e7e9ff}` +
+	`.wsstat{display:inline-flex;align-items:center;gap:.35rem;margin-left:.7rem;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}` +
+	`.wsstat .dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--muted);flex:none}` +
+	`.wsstat.ok{color:var(--ok)}.wsstat.ok .dot{background:var(--ok);box-shadow:0 0 6px var(--ok);animation:pulse 2s infinite}` +
+	`.wsstat.warn{color:var(--warn)}.wsstat.warn .dot{background:var(--warn)}` +
+	`.wsstat.wait{color:var(--standby)}.wsstat.wait .dot{background:var(--standby)}` +
+	`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}` +
 	`.pills{display:flex;flex-wrap:wrap;gap:.4rem;margin:.9rem 0}` +
 	`.pill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:.15rem .6rem;font-size:12px}` +
 	`.pill i{color:var(--muted);font-style:normal;margin-right:.25rem;text-transform:uppercase;font-size:10px;letter-spacing:.4px}` +
 	`.pill.ok{border-color:var(--ok);color:var(--ok)}.pill.warn{border-color:var(--warn);color:var(--warn)}` +
 	`h2{font-size:.95rem;margin:1.6rem 0 .5rem;color:#e7e9ff;font-weight:600}h2 small{color:var(--muted);font-weight:400;font-size:11px;margin-left:.4rem}` +
 	`.note{color:var(--standby)}.empty,.hint{color:var(--muted);font-size:12px}` +
+	`.rgsummary{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .7rem}` +
+	`.stat{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:.15rem .55rem;font-size:12px}` +
+	`.stat i{color:var(--muted);font-style:normal;margin-right:.3rem;text-transform:uppercase;font-size:10px;letter-spacing:.4px}` +
+	`.stat.ok{color:var(--ok)}.stat.warn{color:var(--warn)}.stat.standby{color:var(--standby)}` +
+	`.badge{display:inline-block;padding:.02rem .4rem;border-radius:999px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;border:1px solid currentColor}` +
+	`.badge.ok{color:var(--ok)}.badge.warn{color:var(--warn)}.badge.standby{color:var(--standby)}` +
 	`table.mux{width:100%;border-collapse:collapse;font-size:12px}` +
 	`table.mux th{text-align:left;color:var(--muted);font-weight:500;border-bottom:1px solid var(--line);padding:.3rem .4rem;text-transform:uppercase;font-size:10px;letter-spacing:.3px}` +
 	`table.mux td{padding:.3rem .4rem;border-bottom:1px solid rgba(43,49,99,.5);white-space:nowrap}` +
@@ -390,6 +487,9 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`.rtag.route-direct{background:rgba(60,180,120,.18);color:#2a8}` +
 	`.rtag.route-relay{background:rgba(120,140,200,.18);color:#68a}` +
 	`.fpk{font-family:ui-monospace,monospace;font-size:11px;word-break:break-all}` +
+	`.copy{border-radius:3px;transition:background .15s,color .15s}` +
+	`body.js .copy{cursor:pointer}body.js .copy:hover{background:rgba(124,131,255,.14)}` +
+	`.copy.copied{background:var(--ok);color:#04120c}.copy.copied::after{content:" ✓ copied";font-size:10px;letter-spacing:.3px}` +
 	`.routes{display:flex;flex-direction:column;gap:.5rem;margin:.4rem 0}` +
 	`.route{font-size:12px;line-height:1.7;padding:.4rem .6rem;border:1px solid var(--border,#3334);border-radius:5px;overflow-wrap:anywhere}` +
 	`.route .rlabel{font-weight:700;margin-right:.3rem}` +
@@ -400,8 +500,12 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`ul.events{margin:.3rem 0;padding-left:1.1rem;font-size:12px}ul.events li{margin:.1rem 0}` +
 	`.seam{opacity:.9}.controls{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem}` +
 	`.controls button{font:inherit;font-size:12px;padding:.2rem .6rem;border:1px dashed var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:not-allowed}` +
+	`.controls button{position:relative}` +
+	`.controls button .soon{margin-left:.35rem;font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;border:1px solid currentColor;border-radius:999px;padding:0 .25rem;opacity:.75;vertical-align:middle}` +
 	`.controls button.live{border:1px solid var(--accent);color:var(--accent);cursor:pointer}` +
 	`.controls button.live:hover{background:rgba(124,131,255,.12)}` +
+	`.controls button.live.flash{background:var(--ok);border-color:var(--ok);color:#04120c}` +
+	`.controls button.live.deny{background:var(--warn);border-color:var(--warn);color:#fff}` +
 	`code{color:var(--accent);font-size:11.5px}` +
 	`footer{margin-top:2rem;padding-top:.7rem;border-top:1px solid var(--line);color:var(--muted);font-size:12px}` +
 	`footer a{color:var(--accent);text-decoration:none}footer a:hover{text-decoration:underline}` +
