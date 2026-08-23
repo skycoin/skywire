@@ -9,8 +9,8 @@ import (
 
 // refreshSeconds is the fallback full-page reload cadence for surfaces that have
 // no live-push endpoint (status.dmsg, status.skynet). status.skysocks is kept in
-// sync by an SSE stream instead (see liveScript / RenderFragment) and omits the
-// meta refresh entirely.
+// sync by a WebSocket stream instead (see liveScript / RenderFragment) and omits
+// the meta refresh entirely.
 const refreshSeconds = 4
 
 // maxLogLines caps how many recent log lines the page renders, newest at the
@@ -22,10 +22,10 @@ const maxLogLines = 200
 // (matching the proxies' strict no-network serving context).
 //
 // For the skysocks surface the live region (pills, per-leg mux, events, log) is
-// wrapped in <main id="live"> and kept current by an inline SSE script that swaps
-// just that element on each server push — the server-rendered markup is the
-// initial paint, so the page still works with JS/SSE unavailable. Other surfaces
-// have no SSE endpoint and fall back to a meta refresh, as before.
+// wrapped in <main id="live"> and kept current by an inline WebSocket script that
+// swaps just that element on each server push — the server-rendered markup is the
+// initial paint, so the page still works with JS/WebSocket unavailable. Other
+// surfaces have no WebSocket endpoint and fall back to a meta refresh, as before.
 func Render(snap Snapshot) []byte {
 	var b strings.Builder
 	surface := html.EscapeString(string(snap.Surface))
@@ -62,28 +62,43 @@ func Render(snap Snapshot) []byte {
 // RenderFragment renders ONLY the live region — the inner HTML of
 // <main id="live"> (pills, per-leg mux, events, recent log) — with no
 // <html>/<head>/<style> shell. It is the single source of truth for the live
-// markup: Render composes the page shell around it, and the skysocks-client SSE
-// handler pushes it verbatim so the browser swaps the region in place without a
-// full-page reload. Newlines in the fragment (the <pre> log block) are preserved
-// by the SSE framing (one data: line per source line), so no escaping is needed.
+// markup: Render composes the page shell around it, and the skysocks-client
+// WebSocket handler pushes it verbatim as one TEXT frame so the browser swaps the
+// region in place (el.innerHTML = frame) without a full-page reload. Newlines in
+// the fragment (the <pre> log block) ride through the TEXT frame as-is, so no
+// escaping is needed.
 func RenderFragment(snap Snapshot) []byte {
 	var b strings.Builder
 	writeLiveRegion(&b, snap)
 	return []byte(b.String())
 }
 
-// liveScript opens an EventSource to http://status.skysocks/sse and replaces the
-// live region's innerHTML on each push — a seamless live update in place of the
-// old jarring full-page meta refresh. Progressive enhancement: the server-
-// rendered initial paint stands alone, so the page still works with JS or SSE
-// unavailable. A healthy message cancels any pending fallback; if the stream
-// breaks and does not recover, it falls back to a slow (15s) reload rather than
-// the old 1–4s one. Emitted only for the skysocks surface (the only one with an
-// /sse handler).
-const liveScript = `<script>(function(){var t;function slow(){if(!t){t=setTimeout(function(){location.reload();},15000);}}` +
-	`try{var es=new EventSource("http://status.skysocks/sse");` +
-	`es.onmessage=function(e){if(t){clearTimeout(t);t=null;}var el=document.getElementById("live");if(el){el.innerHTML=e.data;}};` +
-	`es.onerror=function(){slow();};}catch(err){slow();}})();</script>`
+// liveScript opens a WebSocket to <origin>/ws and replaces the live region's
+// innerHTML on each server push — a seamless live update in place of the old
+// jarring full-page meta refresh, and a duplex channel so the page can send
+// control commands back (window.sendCmd). The URL is derived from the page's OWN
+// origin — location.origin.replace(/^http/,"ws") + "/ws" — never a hardcoded
+// http://status.skysocks/… absolute: an absolute http:// subrequest is force-
+// upgraded to https by the browser's HTTPS-Only Mode and then fails on the HTTP-
+// only .skysocks host, whereas the relative form inherits the page's actual
+// (non-upgraded) ws:// scheme and host.
+//
+// Progressive enhancement: the server-rendered initial paint stands alone, so the
+// page still works with JS or WebSocket unavailable. A healthy message cancels any
+// pending fallback. On close/error it reconnects after a short backoff (2s);
+// only if reconnects never recover does the slow (15s) full reload fire as a last
+// resort. window.sendCmd(obj) sends a JSON control frame (e.g. {cmd:"resync"}) and
+// is the seam the route-control buttons use. Emitted only for the skysocks surface
+// (the only one with a /ws handler).
+const liveScript = `<script>(function(){var t,ws;` +
+	`function slow(){if(!t){t=setTimeout(function(){location.reload();},15000);}}` +
+	`function url(){return location.origin.replace(/^http/,"ws")+"/ws";}` +
+	`function connect(){try{ws=new WebSocket(url());}catch(e){slow();return;}` +
+	`ws.onmessage=function(e){if(t){clearTimeout(t);t=null;}var el=document.getElementById("live");if(el){el.innerHTML=e.data;}};` +
+	`ws.onclose=function(){ws=null;slow();setTimeout(connect,2000);};` +
+	`ws.onerror=function(){try{ws.close();}catch(e){}};}` +
+	`window.sendCmd=function(o){try{if(ws&&ws.readyState===1){ws.send(JSON.stringify(o));}}catch(e){}};` +
+	`connect();})();</script>`
 
 // writeLiveRegion writes the dynamic status content (pills, per-leg mux, events,
 // recent log) shared by Render (page shell) and RenderFragment (SSE push).
@@ -258,20 +273,39 @@ func writeLogsSection(b *strings.Builder, snap Snapshot) {
 	b.WriteString(`</pre></section>`)
 }
 
-// writeControlSeam renders the (disabled) route-control preview. This is the
-// documented extension point: a future write-capable page enables these
-// controls and calls a mutating Provider method. It is intentionally inert now
-// so the MVP stays read-only.
+// writeControlSeam renders the route-control panel. For skysocks the "resync"
+// button is live — it proves the WebSocket send path by calling window.sendCmd
+// (defined in liveScript), which the server answers with an immediate fragment
+// push. The mux-op buttons (add/drop leg, mux mode, rebuild) stay disabled: they
+// mutate the route group and need an app→visor mux-control RPC that does not exist
+// yet (see the TODO in pkg/skysocks/client.go handleStatusControl). Non-skysocks
+// surfaces have no WebSocket and keep the fully-inert preview.
 func writeControlSeam(b *strings.Builder, snap Snapshot) {
 	b.WriteString(`<section class="seam"><h2>route control <small>read-only preview</small></h2>`)
-	b.WriteString(`<p>Selecting routes and relays from here is planned. Today these are inert; ` +
-		`the MVP status page is read-only.</p><div class="controls">`)
 	switch snap.Surface {
-	case SurfaceSkynet, SurfaceSkysocks:
+	case SurfaceSkysocks:
+		b.WriteString(`<p>The live view refreshes over a WebSocket; <b>resync</b> forces an ` +
+			`immediate push. Route mutation (add/drop leg, mux mode, rebuild) is planned — ` +
+			`those controls are inert until the mux-control RPC lands.</p><div class="controls">`)
+		// Live: sends {cmd:"resync"} over the WebSocket (see liveScript / handleStatusControl).
+		b.WriteString(`<button type="button" class="live" onclick="sendCmd({cmd:'resync'})">resync</button>`)
+		// TODO(mux-control): enable once the app→visor mux-control RPC exists.
+		b.WriteString(`<button disabled title="needs the mux-control RPC (TODO)">add leg</button>` +
+			`<button disabled title="needs the mux-control RPC (TODO)">drop leg</button>` +
+			`<button disabled title="needs the mux-control RPC (TODO)">mux mode…</button>` +
+			`<button disabled title="needs the mux-control RPC (TODO)">rebuild route</button>`)
+	case SurfaceSkynet:
+		b.WriteString(`<p>Selecting routes and relays from here is planned. Today these are inert; ` +
+			`the MVP status page is read-only.</p><div class="controls">`)
 		b.WriteString(`<button disabled>add leg</button><button disabled>drop leg</button>` +
 			`<button disabled>mux mode…</button><button disabled>rebuild route</button>`)
 	case SurfaceDmsg:
+		b.WriteString(`<p>Selecting routes and relays from here is planned. Today these are inert; ` +
+			`the MVP status page is read-only.</p><div class="controls">`)
 		b.WriteString(`<button disabled>pick dmsg relay…</button><button disabled>reconnect</button>`)
+	default:
+		b.WriteString(`<p>Selecting routes and relays from here is planned. Today these are inert; ` +
+			`the MVP status page is read-only.</p><div class="controls">`)
 	}
 	b.WriteString(`</div></section>`)
 }
@@ -366,6 +400,8 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`ul.events{margin:.3rem 0;padding-left:1.1rem;font-size:12px}ul.events li{margin:.1rem 0}` +
 	`.seam{opacity:.9}.controls{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem}` +
 	`.controls button{font:inherit;font-size:12px;padding:.2rem .6rem;border:1px dashed var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:not-allowed}` +
+	`.controls button.live{border:1px solid var(--accent);color:var(--accent);cursor:pointer}` +
+	`.controls button.live:hover{background:rgba(124,131,255,.12)}` +
 	`code{color:var(--accent);font-size:11.5px}` +
 	`footer{margin-top:2rem;padding-top:.7rem;border-top:1px solid var(--line);color:var(--muted);font-size:12px}` +
 	`footer a{color:var(--accent);text-decoration:none}footer a:hover{text-decoration:underline}` +
