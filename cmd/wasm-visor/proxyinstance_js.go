@@ -113,6 +113,18 @@ const (
 	//                connected fine natively in 0.5-0.9s. 4 keeps a little
 	//                selection choice while giving each probe enough CPU to finish.
 	proxyPoolTarget = 2 // vetted exits kept: 1 active + 1 hot standby
+
+	// proxyProbeConcurrency caps how many candidate exits are route-established
+	// simultaneously. Same root cause as the 8→4 proxyRaceN reduction above: each
+	// probe drives a CPU-heavy noise + ML-KEM PQ handshake on the ONE JS thread,
+	// and running several at once starves each so its per-route handshake misses
+	// the router's handshakeAwaitTimeout — observed as a 0/15 wasm-browse failure
+	// (reverse-leg "rule not found" / "handshake not received") even with 45
+	// transports and through an exit the native client uses reliably. Capping the
+	// in-flight probes to 2 (from 4) roughly doubles the CPU each handshake gets
+	// while still racing for a fast first success; the pool still fills to
+	// proxyPoolTarget as the remaining candidates drain.
+	proxyProbeConcurrency = 2
 )
 
 var (
@@ -376,8 +388,19 @@ func selectProxyPool(ctx context.Context, sdPK cipher.PubKey, avoid cipher.PubKe
 		ok bool
 	}
 	resc := make(chan probeRes, len(cands))
+	// Bound how many exits are route-established AT ONCE. Each probeExit sets
+	// up a real multi-hop skysocks route; firing all proxyRaceN concurrently
+	// makes several route-group setups contend for the same route-ID space,
+	// setup-node and dmsg client at once, which under a browser visor's slow
+	// multi-hop setup manifests as reverse-leg route-ID churn ("rule not found"
+	// / "handshake not received") — the wasm-browse #80 failure. A small
+	// concurrency cap keeps a fast first-success race while cutting that
+	// contention; the result loop below still drains every candidate.
+	sem := make(chan struct{}, proxyProbeConcurrency)
 	for _, pk := range cands {
 		go func(pk cipher.PubKey) {
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			resc <- probeRes{pk, probeExit(pk)}
 		}(pk)
 	}
