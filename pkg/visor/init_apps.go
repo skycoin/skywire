@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -46,6 +47,22 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	}
 
 	v.pushCloseStack("launcher.proc_manager", procM.Close)
+
+	// Wire the read-only app→visor status RPC so an app that serves its own
+	// reserved status host (skysocks-client's status.skysocks) can render the
+	// visor's rich per-leg mux telemetry — the same view the visor-side
+	// resolving proxies show — instead of only its own local session view. The
+	// closure captures v and resolves the provider lazily at call time.
+	procM.SetProxyStatusFn(func(appName string) (proxystatus.Snapshot, bool) {
+		if appName != skyenv.SkysocksClientName {
+			return proxystatus.Snapshot{}, false
+		}
+		snap, err := v.proxyStatusProvider().StatusSnapshot(proxystatus.SurfaceSkysocks)
+		if err != nil {
+			return proxystatus.Snapshot{}, false
+		}
+		return snap, true
+	})
 
 	// Synthesize Internal-app entries for visor subsystems that
 	// have moved into the launcher's lifecycle per RFC #2775

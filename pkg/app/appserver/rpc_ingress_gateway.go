@@ -12,6 +12,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
@@ -145,6 +146,26 @@ func (r *RPCIngressGateway) Notify(req *NotifyReq, _ *struct{}) (err error) {
 func (r *RPCIngressGateway) SetConnectionDuration(dur int64, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetConnectionDuration", dur)(nil, &err)
 	r.proc.SetConnectionDuration(dur)
+	return nil
+}
+
+// ProxyStatus returns the visor-built rich read-only status snapshot for the
+// calling app (per-leg mux telemetry, recent logs, route/transport events). It
+// lets an app that serves its own reserved status host — skysocks-client's
+// status.skysocks — render the same rich view the visor-side resolving proxies
+// show, instead of only what the app process itself can see. Read-only; an empty
+// snapshot (the visor has no data, or the manager has no builder wired as on the
+// browser wasm-visor) is returned WITHOUT error so the app degrades gracefully
+// to its own local view.
+func (r *RPCIngressGateway) ProxyStatus(_ *struct{}, resp *proxystatus.Snapshot) (err error) {
+	defer rpcutil.LogCall(r.log, "ProxyStatus", nil)(nil, &err)
+	// r.proc is nil in unit tests that construct a bare gateway.
+	if r.proc == nil || r.proc.m == nil {
+		return nil
+	}
+	if snap, ok := r.proc.m.ProxyStatus(r.proc.appName); ok {
+		*resp = snap
+	}
 	return nil
 }
 

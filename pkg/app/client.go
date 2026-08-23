@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -110,6 +111,16 @@ func (c *Client) SetError(appErr string) error {
 // SetAppPort sets app port within the visor.
 func (c *Client) SetAppPort(appPort routing.Port) error {
 	return c.rpcC.SetAppPort(appPort)
+}
+
+// ProxyStatus fetches the visor-built rich read-only status snapshot for this
+// app (per-leg mux telemetry, recent logs, route/transport events). An app that
+// serves its own reserved status host (skysocks-client's status.skysocks)
+// renders this so the page shows the same rich view as the visor-side resolving
+// proxies. An empty snapshot (no error) means the visor had no data; the caller
+// then falls back to its own local view.
+func (c *Client) ProxyStatus() (proxystatus.Snapshot, error) {
+	return c.rpcC.ProxyStatus()
 }
 
 // SetStatusOrLog sets the detailed status and logs the error if any.

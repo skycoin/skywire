@@ -8,6 +8,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	rpc "github.com/skycoin/skywire/pkg/gobrpc"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -61,6 +62,14 @@ func registerIngressRPC(s *rpc.Server, name string, gw *RPCIngressGateway) error
 		}
 		var r struct{}
 		return &r, gw.SetError(&a, &r)
+	})
+	h("ProxyStatus", func(dec *gob.Decoder) (interface{}, error) {
+		var a struct{}
+		if err := dec.Decode(&a); err != nil {
+			return nil, err
+		}
+		var r proxystatus.Snapshot
+		return &r, gw.ProxyStatus(&a, &r)
 	})
 	h("SetAppPort", func(dec *gob.Decoder) (interface{}, error) {
 		var a routing.Port

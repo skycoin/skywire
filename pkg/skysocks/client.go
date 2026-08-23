@@ -360,17 +360,17 @@ func (c *Client) serveStatusPage(conn net.Conn) {
 	_, _ = conn.Write(statusHTTPResponse(body)) //nolint:errcheck
 }
 
-// statusSnapshot builds the read-only status.skysocks snapshot from the client's
-// OWN state. The rich per-leg mux/log view is visor-side (see
-// pkg/visor/embedded_proxystatus.go); skysocks-client is a separate app process
-// whose app RPC exposes no status query, so rather than add cross-process
-// plumbing the page reports what the client itself knows: session liveness and
-// the number of open streams to the exit.
+// statusSnapshot builds the read-only status.skysocks snapshot. The rich
+// per-leg mux/log/event view is visor-side (see
+// pkg/visor/embedded_proxystatus.go) because only the visor sees the route
+// group; skysocks-client is a separate app process. It is fetched over the app
+// RPC (ProxyStatus) and used as the base whenever the visor returned real data.
+// The client's OWN truth about the live yamux session to the exit is then
+// overlaid on top (Running + stream count). When the RPC is unavailable (the
+// browser wasm-visor, or no route group yet) the base is the minimal local
+// snapshot, so status.skysocks always renders.
 func (c *Client) statusSnapshot() proxystatus.Snapshot {
-	snap := proxystatus.Snapshot{
-		Surface: proxystatus.SurfaceSkysocks,
-		App:     skyenv.SkysocksClientName,
-	}
+	snap := c.visorStatusSnapshot()
 	if c.session != nil && !c.session.IsClosed() {
 		snap.Running = true
 		snap.Note = fmt.Sprintf("session to the exit is up · %d open stream(s)", c.session.NumStreams())
@@ -378,6 +378,34 @@ func (c *Client) statusSnapshot() proxystatus.Snapshot {
 		snap.Note = "no active session to the exit"
 	}
 	return snap
+}
+
+// visorStatusSnapshot returns the visor-built rich snapshot when the app RPC is
+// reachable and carried real data (any Legs/Logs/Events); otherwise the minimal
+// local base. Kept separate so the RPC-unavailable path is a clean fallback that
+// never breaks the status page.
+func (c *Client) visorStatusSnapshot() proxystatus.Snapshot {
+	base := proxystatus.Snapshot{
+		Surface: proxystatus.SurfaceSkysocks,
+		App:     skyenv.SkysocksClientName,
+	}
+	if c.appCl == nil {
+		return base
+	}
+	rich, err := c.appCl.ProxyStatus()
+	if err != nil {
+		return base
+	}
+	if len(rich.Legs) == 0 && len(rich.Logs) == 0 && len(rich.Events) == 0 {
+		return base
+	}
+	if rich.Surface == "" {
+		rich.Surface = proxystatus.SurfaceSkysocks
+	}
+	if rich.App == "" {
+		rich.App = skyenv.SkysocksClientName
+	}
+	return rich
 }
 
 // statusHTTPResponse wraps the page in a minimal close-delimited HTTP/1.1
