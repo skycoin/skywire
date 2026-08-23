@@ -178,9 +178,9 @@ func serveSOCKS5CONNECT(t *testing.T, cli net.Conn, host string, port uint16) st
 	if _, err := io.ReadFull(cli, sel); err != nil {
 		t.Fatal(err)
 	}
-	req := []byte{0x05, 0x01, 0x00, 0x03, byte(len(host))}
+	req := []byte{0x05, 0x01, 0x00, 0x03, byte(len(host))} //nolint:gosec // G115: fixed test host/port
 	req = append(req, []byte(host)...)
-	req = append(req, byte(port>>8), byte(port))
+	req = append(req, byte(port>>8), byte(port)) //nolint:gosec // G115: fixed test host/port
 	if _, err := cli.Write(req); err != nil {
 		t.Fatal(err)
 	}
