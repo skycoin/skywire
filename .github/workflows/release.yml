@@ -30,6 +30,9 @@ jobs:
     needs: create-release
     runs-on: ubuntu-latest
     strategy:
+      # Don't let one arch's transient failure (e.g. a flaky module fetch)
+      # cancel the other five — each arch uploads independently.
+      fail-fast: false
       matrix:
         include:
           - arch: amd64
