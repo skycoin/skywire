@@ -239,6 +239,19 @@ func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []rout
 	}
 	nrg.rg.mu.Unlock()
 
+	// Hard mux invariants, enforced at the commit boundary so they hold for
+	// every caller (GrowMuxRoute's planner and external callers that supply
+	// explicit hops alike): (b) neither the forward nor the reverse path may
+	// loop through the same visor twice, and (a) the new leg's intermediates
+	// must be fully disjoint from those already used by the group's legs. This
+	// is the one chokepoint that sees the full hop chain — appendRouteToGroup
+	// only knows the next transport ID — so it is where the whole-path checks
+	// belong.
+	used := intermediatesOfRouteGroup(nrg, lPK, rPK)
+	if !validMuxLeg(fwd, rev, lPK, rPK, used, used) {
+		return errors.New("refusing mux leg: intra-route loop or intermediate overlap with an existing leg (mux legs must be fully disjoint and loop-free)")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -363,6 +376,25 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 		if err != nil {
 			consecutiveFailures++
 			log.Debugf("GrowMuxRoute: no disjoint path for leg %d/%d: %v", current+added+1, target, err)
+			if consecutiveFailures >= maxConsecutiveFailures {
+				break
+			}
+			continue
+		}
+
+		// Hard mux invariants (post-fetch gate): the finder honors
+		// ExcludeIntermediatePKs but its local-calc fallback / a finder miss can
+		// still return a leg that overlaps an existing leg's intermediates or
+		// loops through a visor twice. Reject it, claim its intermediates so the
+		// re-request diverges, and retry. excludePKs is the running union of the
+		// live legs' intermediates plus every prior iteration's, for both
+		// directions.
+		if !validMuxLeg(fwd, rev, lPK, rPK, excludePKs, excludePKs) {
+			excludePKs = append(excludePKs, intermediatesOfHops(fwd, lPK, rPK)...)
+			excludePKs = append(excludePKs, intermediatesOfHops(rev, rPK, lPK)...)
+			consecutiveFailures++
+			log.Debugf("GrowMuxRoute: candidate for leg %d/%d rejected — intra-route loop or intermediate overlap; re-requesting with strengthened excludes",
+				current+added+1, target)
 			if consecutiveFailures >= maxConsecutiveFailures {
 				break
 			}
