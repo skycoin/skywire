@@ -174,9 +174,13 @@ func writePill(b *strings.Builder, k, v, cls string) {
 	fmt.Fprintf(b, `<span class="%s"><i>%s</i> %s</span>`, c, html.EscapeString(k), v)
 }
 
-// writeMuxSection renders the per-leg mux view: one row per leg with a
-// bandwidth bar sized to its share of the busiest leg (a static, no-JS analog of
-// the `cli proxy mux plot` panel), plus RTT, retransmits and gate state.
+// writeMuxSection renders the per-leg mux view as one ROUTE TREE per leg —
+// the flat mux table and the separate "full routes" hop chains folded into a
+// single view inspired by `skywire cli tp tree`. Each leg is a header line
+// (route kind + gate state + tp/route RTT + rtx + sent/recv share bars) above a
+// box-drawing tree that traces this visor → intermediate relays → destination,
+// every public key shown in full and click-to-copy. A static, no-JS analog of
+// the `cli proxy mux plot` panel.
 func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	b.WriteString(`<section><h2>route group · per-leg mux</h2>`)
 	if len(snap.Legs) == 0 {
@@ -205,7 +209,7 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 		}
 	}
 	// Scannable route-group summary: leg census + aggregate throughput, so the
-	// operator gets the shape of the group before reading the per-leg table.
+	// operator gets the shape of the group before reading the per-leg trees.
 	b.WriteString(`<div class="rgsummary">`)
 	writeStat(b, "legs", fmt.Sprintf("%d", len(snap.Legs)), "")
 	writeStat(b, "active", fmt.Sprintf("%d", nActive), "ok")
@@ -218,72 +222,106 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	writeStat(b, "sent", humanBytes(totSent), "")
 	writeStat(b, "recv", humanBytes(totRecv), "")
 	b.WriteString(`</div>`)
-	b.WriteString(`<table class="mux"><thead><tr>` +
-		`<th>leg</th><th>route</th><th>transport</th><th>peer</th>` +
-		`<th>sent</th><th>bandwidth (sent share)</th>` +
-		`<th>recv</th><th>bandwidth (recv share)</th>` +
-		`<th>tp rtt</th><th>route rtt</th><th>rtx</th><th>state</th></tr></thead><tbody>`)
+	b.WriteString(`<div class="legs-tree">`)
 	for _, l := range snap.Legs {
-		// shares are 0..100 (maxSent/maxRecv are per-leg maxes, >=1) — kept as
-		// uint64 and printed directly so there's no uint64->int narrowing.
-		sentShare := l.SentBytes * 100 / maxSent
-		recvShare := l.RecvBytes * 100 / maxRecv
-		state, scls := legState(l)
-		// route: direct (1-hop) vs multihop (relayed). RouteLatencyMS is the
-		// TRUE end-to-end latency; LatencyMS is only the first-hop transport.
-		routeLabel, routeCls := "multihop", "route-relay"
-		if l.Direct {
-			routeLabel, routeCls = "direct", "route-direct"
-		}
-		fmt.Fprintf(b, `<tr><td>R%d</td><td><span class="rtag %s">%s</span></td><td>%s</td><td class="pk">%s</td>`,
-			l.Index, routeCls, routeLabel, html.EscapeString(orDash(l.TpType)), copyablePK(l.RemotePK))
-		fmt.Fprintf(b, `<td>%s</td><td class="barcell"><span class="bar %s" style="width:%d%%"></span></td>`,
-			humanBytes(l.SentBytes), scls, sentShare)
-		fmt.Fprintf(b, `<td>%s</td><td class="barcell"><span class="bar recv %s" style="width:%d%%"></span></td>`,
-			humanBytes(l.RecvBytes), scls, recvShare)
-		fmt.Fprintf(b, `<td>%.0f ms</td><td>%s</td><td>%d</td><td><span class="badge %s">%s</span></td></tr>`,
-			l.LatencyMS, routeRTT(l.RouteLatencyMS), l.Retransmits, scls, state)
+		writeLegTree(b, l, maxSent, maxRecv)
 	}
-	b.WriteString(`</tbody></table>`)
-	writeMuxRoutes(b, snap.Legs)
-	b.WriteString(`<p class="hint">Bars are each leg's sent / recv bytes relative to the busiest leg. ` +
+	b.WriteString(`</div>`)
+	b.WriteString(`<p class="hint">Each leg is a route tree — this visor at the root, ` +
+		`<span class="tlabel src">source</span> then relays, the ` +
+		`<span class="tlabel dst">exit</span> at the leaf; per-hop transport type + RTT sit on each branch. ` +
+		`Bars are each leg's sent / recv bytes relative to the busiest leg. ` +
 		`<b>tp rtt</b> is the first-hop transport; <b>route rtt</b> is the true end-to-end route latency (all hops). ` +
 		`Click any public key to copy it. ` +
 		`For a live terminal chart use <code>skywire cli proxy mux plot</code>.</p></section>`)
 }
 
-// writeMuxRoutes renders each leg's FULL forward route as a hop chain:
-// origin PK ─[tptype rtt]→ hop PK ─[…]→ destination PK. Public keys are
-// shown in full (never truncated); per-hop latency is shown where known.
-func writeMuxRoutes(b *strings.Builder, legs []Leg) {
-	any := false
-	for _, l := range legs {
-		if len(l.Hops) > 0 {
-			any = true
-			break
-		}
+// writeLegTree renders one leg as a header line plus its hop tree. The header
+// carries the route kind (direct/multihop), gate state badge, tp/route RTT, rtx
+// and the dual sent/recv share bars; the tree below it traces the leg's forward
+// path with box-drawing glyphs, this visor at the root and the destination/exit
+// at the leaf. maxSent/maxRecv (>=1) scale the share bars against the busiest leg.
+func writeLegTree(b *strings.Builder, l Leg, maxSent, maxRecv uint64) {
+	state, scls := legState(l)
+	// route: direct (1-hop) vs multihop (relayed). RouteLatencyMS is the TRUE
+	// end-to-end latency; LatencyMS is only the first-hop transport.
+	routeLabel, routeCls := "multihop", "route-relay"
+	if l.Direct {
+		routeLabel, routeCls = "direct", "route-direct"
 	}
-	if !any {
+	b.WriteString(`<div class="leg">`)
+	// Header line.
+	b.WriteString(`<div class="leghdr">`)
+	fmt.Fprintf(b, `<span class="rlabel">R%d</span>`, l.Index)
+	fmt.Fprintf(b, `<span class="rtag %s">%s</span>`, routeCls, routeLabel)
+	fmt.Fprintf(b, `<span class="badge %s">%s</span>`, scls, state)
+	fmt.Fprintf(b, `<span class="legm"><i>tp</i>%.0f ms</span>`, l.LatencyMS)
+	fmt.Fprintf(b, `<span class="legm"><i>route</i>%s</span>`, routeRTT(l.RouteLatencyMS))
+	fmt.Fprintf(b, `<span class="legm"><i>rtx</i>%d</span>`, l.Retransmits)
+	b.WriteString(`</div>`)
+	// Sent/recv share bars (kept from the old table — dual bandwidth shares).
+	// shares are 0..100 (maxSent/maxRecv are per-leg maxes, >=1) — printed as
+	// uint64 directly so there's no uint64->int narrowing.
+	sentShare := l.SentBytes * 100 / maxSent
+	recvShare := l.RecvBytes * 100 / maxRecv
+	b.WriteString(`<div class="legbw">`)
+	fmt.Fprintf(b, `<span class="bwlabel">sent %s</span><span class="barcell"><span class="bar %s" style="width:%d%%"></span></span>`,
+		humanBytes(l.SentBytes), scls, sentShare)
+	fmt.Fprintf(b, `<span class="bwlabel">recv %s</span><span class="barcell"><span class="bar recv %s" style="width:%d%%"></span></span>`,
+		humanBytes(l.RecvBytes), scls, recvShare)
+	b.WriteString(`</div>`)
+	// Hop tree.
+	b.WriteString(`<div class="tree">`)
+	if len(l.Hops) == 0 {
+		// Legacy/accepted route with no recorded path: fall back to a single
+		// leaf so nothing breaks — just the destination we do know (RemotePK).
+		writeTreeLine(b, "└── ", "dst", "exit", l.RemotePK, "")
+		b.WriteString(`</div></div>`)
 		return
 	}
-	b.WriteString(`<h3>full routes</h3><div class="routes">`)
-	for _, l := range legs {
-		if len(l.Hops) == 0 {
-			continue
+	// Root: the first hop's From is THIS visor (the route source).
+	writeTreeLine(b, "└─┬ ", "src", "this visor", l.Hops[0].From, "")
+	n := len(l.Hops)
+	for i, h := range l.Hops {
+		indent := strings.Repeat("  ", i+1)
+		glyph := indent + "└── "
+		nodeCls, nodeLabel := "mid", ""
+		if i < n-1 {
+			glyph = indent + "└─┬ " // an intermediate relay: more path below
+		} else {
+			nodeCls, nodeLabel = "dst", "exit" // final To is the destination/exit
 		}
-		fmt.Fprintf(b, `<div class="route"><span class="rlabel">R%d</span> %s`,
-			l.Index, copyablePK(l.Hops[0].From))
-		for _, h := range l.Hops {
-			lat := ""
-			if h.LatencyMS > 0 {
-				lat = fmt.Sprintf(" %.0fms", h.LatencyMS)
-			}
-			fmt.Fprintf(b, ` <span class="hop">─[%s%s]→</span> %s`,
-				html.EscapeString(orDash(h.TpType)), html.EscapeString(lat), copyablePK(h.To))
-		}
-		b.WriteString(`</div>`)
+		writeTreeLine(b, glyph, nodeCls, nodeLabel, h.To, formatHop(h))
+	}
+	b.WriteString(`</div></div>`)
+}
+
+// writeTreeLine writes one visor node line of a leg's hop tree: the box-drawing
+// guide prefix (monospace, spaces preserved so nested levels line up), the FULL
+// click-to-copy public key, an optional source/exit accent label, and optional
+// per-hop transport info (type + RTT on the branch leading into this node).
+// nodeCls (src/dst/mid) tints the source and destination the way `tp tree`
+// color-codes them; intermediates are neutral.
+func writeTreeLine(b *strings.Builder, guide, nodeCls, label, pk, hop string) {
+	fmt.Fprintf(b, `<div class="tline %s"><span class="guide">%s</span>%s`,
+		nodeCls, guide, copyablePK(pk))
+	if label != "" {
+		fmt.Fprintf(b, `<span class="tlabel %s">%s</span>`, nodeCls, html.EscapeString(label))
+	}
+	if hop != "" {
+		fmt.Fprintf(b, `<span class="thop">%s</span>`, html.EscapeString(hop))
 	}
 	b.WriteString(`</div>`)
+}
+
+// formatHop renders a hop's transport type and (where measured) its RTT, e.g.
+// "stcpr 139ms". Zero latency is elided rather than shown as "0ms".
+func formatHop(h Hop) string {
+	t := orDash(h.TpType)
+	if h.LatencyMS > 0 {
+		return fmt.Sprintf("%s %.0fms", t, h.LatencyMS)
+	}
+	return t
 }
 
 func legState(l Leg) (label, cls string) {
@@ -476,11 +514,7 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`.stat.ok{color:var(--ok)}.stat.warn{color:var(--warn)}.stat.standby{color:var(--standby)}` +
 	`.badge{display:inline-block;padding:.02rem .4rem;border-radius:999px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;border:1px solid currentColor}` +
 	`.badge.ok{color:var(--ok)}.badge.warn{color:var(--warn)}.badge.standby{color:var(--standby)}` +
-	`table.mux{width:100%;border-collapse:collapse;font-size:12px}` +
-	`table.mux th{text-align:left;color:var(--muted);font-weight:500;border-bottom:1px solid var(--line);padding:.3rem .4rem;text-transform:uppercase;font-size:10px;letter-spacing:.3px}` +
-	`table.mux td{padding:.3rem .4rem;border-bottom:1px solid rgba(43,49,99,.5);white-space:nowrap}` +
-	`td.pk{font-family:ui-monospace,SFMono-Regular,monospace;color:var(--muted)}` +
-	`td.barcell{width:36%}.bar{display:block;height:.7rem;border-radius:3px;background:var(--accent);min-width:2px}` +
+	`.barcell{display:block}.bar{display:block;height:.7rem;border-radius:3px;background:var(--accent);min-width:2px}` +
 	`.bar.standby{background:var(--standby)}.bar.warn{background:var(--warn)}` +
 	`.bar.recv{background:var(--recv,#3b9)}` +
 	`.rtag{display:inline-block;padding:0 .4rem;border-radius:3px;font-size:11px;font-weight:600}` +
@@ -490,11 +524,24 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`.copy{border-radius:3px;transition:background .15s,color .15s}` +
 	`body.js .copy{cursor:pointer}body.js .copy:hover{background:rgba(124,131,255,.14)}` +
 	`.copy.copied{background:var(--ok);color:#04120c}.copy.copied::after{content:" ✓ copied";font-size:10px;letter-spacing:.3px}` +
-	`.routes{display:flex;flex-direction:column;gap:.5rem;margin:.4rem 0}` +
-	`.route{font-size:12px;line-height:1.7;padding:.4rem .6rem;border:1px solid var(--border,#3334);border-radius:5px;overflow-wrap:anywhere}` +
-	`.route .rlabel{font-weight:700;margin-right:.3rem}` +
-	`.route .hop{color:var(--muted,#8a94a6);white-space:nowrap;font-family:ui-monospace,monospace}` +
-	`td.ok{color:var(--ok)}td.warn{color:var(--warn)}td.standby{color:var(--standby)}` +
+	// Per-leg route trees.
+	`.legs-tree{display:flex;flex-direction:column;gap:.7rem;margin:.4rem 0}` +
+	`.leg{border:1px solid var(--line);border-radius:7px;padding:.5rem .65rem;background:var(--card)}` +
+	`.leghdr{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem}` +
+	`.leghdr .rlabel{font-weight:700}` +
+	`.legm{font-size:11.5px;color:var(--fg)}` +
+	`.legm i{color:var(--muted);font-style:normal;margin-right:.25rem;text-transform:uppercase;font-size:10px;letter-spacing:.3px}` +
+	`.legbw{display:grid;grid-template-columns:auto minmax(4rem,1fr);gap:.2rem .5rem;align-items:center;margin:.4rem 0;max-width:30rem}` +
+	`.bwlabel{font-size:11px;color:var(--muted);white-space:nowrap}` +
+	`.tree{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;line-height:1.65;overflow-x:auto;padding-top:.15rem}` +
+	`.tline{display:flex;align-items:baseline;gap:.3rem;white-space:nowrap}` +
+	`.tline .guide{white-space:pre;color:var(--muted);flex:none}` +
+	`.tline.src>code.fpk{color:var(--accent)}.tline.dst>code.fpk{color:var(--accent2)}` +
+	`.tlabel{font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;border-radius:3px;padding:0 .3rem;flex:none}` +
+	`.tlabel.src{background:rgba(124,131,255,.2);color:var(--accent)}` +
+	`.tlabel.dst{background:rgba(160,107,255,.2);color:var(--accent2)}` +
+	`.tlabel.mid{color:var(--muted)}` +
+	`.thop{color:var(--muted);margin-left:.4rem;font-size:11px;flex:none}` +
 	`pre.log{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 ui-monospace,SFMono-Regular,monospace;` +
 	`white-space:pre-wrap;word-break:break-word;max-height:26rem;overflow:auto;color:var(--fg)}` +
 	`ul.events{margin:.3rem 0;padding-left:1.1rem;font-size:12px}ul.events li{margin:.1rem 0}` +

@@ -71,11 +71,17 @@ func TestRenderSections(t *testing.T) {
 		"<main id=\"live\">", "new WebSocket", "/ws",
 		`location.origin.replace(/^http/,"ws")`, "sendCmd",
 		"standby", "status.dmsg", "status.skynet",
-		// route observability: route-latency column, direct/multihop badge, recv bar
-		"route rtt", "recv share", "direct", "multihop", "480 ms", "bar recv",
-		// full routes: section + full (untruncated) hop PKs + per-hop type/latency
-		"full routes", "03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff",
-		"02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee", "450ms",
+		// route observability: route-latency metric (hint), direct/multihop badge, recv bar
+		"route rtt", "direct", "multihop", "480 ms", "bar recv",
+		// combined per-leg route tree: the flat mux table + separate "full routes"
+		// chains folded into one box-drawing tree per leg — tree container, guides,
+		// source/exit accents, and the FULL (untruncated) hop PKs with per-hop
+		// transport type + latency on the branches.
+		`class="legs-tree"`, `class="tree"`, `class="guide"`, "└─┬", "└──",
+		`class="tline src"`, `class="tline dst"`, "this visor", "exit",
+		"03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff",
+		"02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee",
+		"stcpr 450ms", "sudph 30ms",
 		// UX pass: selection-guard + identical-fragment skip in the live script,
 		// click-to-copy affordance (execCommand fallback for the HTTP context),
 		// the WebSocket live indicator, route-group summary, and staged control tags.
