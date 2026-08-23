@@ -43,8 +43,13 @@ var (
 )
 
 // InitRain makes cmd, and every command under it, print its help over the code
-// rain. Call it once, on the root: cobra looks the help function up on the
-// parent when a command has none of its own, so one call covers the tree.
+// rain.
+//
+// Call it on the root, and call it once the tree is assembled: it walks the
+// commands rather than leaving cobra's inheritance to carry the help function
+// down, so a subcommand added afterwards gets the backdrop only by inheritance
+// and only if nothing in its own subtree installs a help function. See
+// eachDeepestFirst.
 //
 // Deliberately not part of InitFlags. That runs for every binary in this
 // repository, including the services, and this is meant for the one people
@@ -52,11 +57,37 @@ var (
 func InitRain(cmd *cobra.Command) {
 	rainedMu.Lock()
 	defer rainedMu.Unlock()
-	if rained[cmd] {
-		return
+	eachDeepestFirst(cmd, func(c *cobra.Command) {
+		if rained[c] {
+			return
+		}
+		rained[c] = true
+		cobrarain.OnFunc(c, rainOptions)
+	})
+}
+
+// eachDeepestFirst calls fn for every command in the tree, children before
+// parents.
+//
+// Every command rather than just the root, because cobra's inheritance is not
+// enough on its own. It looks the help function up on the parent only when a
+// command has none of its own, and skywire-cli's root installs one for --json
+// — which shadowed the inherited one for the whole of `skywire cli`, so that
+// subtree was the one part of the binary printing its help without a backdrop.
+// Anything else that wraps help in its own init would break the chain the same
+// way, so the tree is covered command by command instead of being relied upon
+// to pass it down.
+//
+// Children before parents is the part that matters. Wrapping a command
+// captures whatever help function it has at that moment, and a command with
+// none of its own reports its parent's — so wrapping a parent first and then
+// its child would wrap the parent's new wrapper a second time and paint the
+// rain twice, over itself.
+func eachDeepestFirst(c *cobra.Command, fn func(*cobra.Command)) {
+	for _, sub := range c.Commands() {
+		eachDeepestFirst(sub, fn)
 	}
-	rained[cmd] = true
-	cobrarain.OnFunc(cmd, rainOptions)
+	fn(c)
 }
 
 // rainOptions decides, per help screen, whether to draw the rain.
