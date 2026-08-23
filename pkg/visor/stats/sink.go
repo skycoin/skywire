@@ -32,6 +32,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // SinkOp is a single (path, value) pair for a batched Put. A nil
@@ -89,27 +91,38 @@ func (t *Tracker) SetSink(s Sink) {
 // in-memory tree from on-disk state so cold subscribers see the full
 // rolling window immediately, not just samples taken after restart.
 //
+// isLive gates which transports' `current` snapshot leaf is broadcast:
+// only transports still live at hydrate time are pushed. The bbolt
+// store retains records for recently-closed transports (inside the
+// retention window) so the visor's own /stats history stays complete,
+// but those dead records must NOT be mirrored to the CXO/TPD discovery
+// feed — every stale `current` leaf bloats the Root that TPD fills over
+// a short-lived announce conn, breaking the fill and starving discovery
+// (only the top slice of transports lands). A nil predicate means "all
+// records are live" (used by tests that don't exercise the live gate).
+//
 // Returns the number of paths pushed.
-func HydrateSink(store *Store, sink Sink, publishWindowDays int, now time.Time) (int, error) {
+func HydrateSink(store *Store, sink Sink, publishWindowDays int, now time.Time, isLive func(id uuid.UUID) bool) (int, error) {
 	if publishWindowDays <= 0 {
 		return 0, nil
 	}
 	pushed := 0
 
-	// Push ONLY current per-transport snapshots to the CXO sink. TPD is a
-	// discovery service: the feed it fills over the short announce conn must
-	// stay small (transports/list + transports/<id>/current), so it can be
-	// fetched reliably. Historical telemetry — daily rollups, tier/service
-	// bitmaps, and per-transport timeline bitmaps — remains bbolt-only for
-	// the visor's own /stats + `visor state`; re-broadcasting days of history
-	// grew the Root to ~23k objects and broke TPD's fill (the discovery gap).
-	// TPD accumulates its own uptime history from what it observes each cycle.
+	// Push ONLY current per-transport snapshots to the CXO sink, and only for
+	// LIVE transports (see isLive above). TPD is a discovery service: the feed
+	// it fills over the short announce conn must stay small (transports/list +
+	// transports/<id>/current), so it can be fetched reliably. Historical
+	// telemetry — daily rollups, tier/service bitmaps, and per-transport
+	// timeline bitmaps — remains bbolt-only for the visor's own /stats +
+	// `visor state`; re-broadcasting days of history grew the Root to ~23k
+	// objects and broke TPD's fill (the discovery gap). TPD accumulates its
+	// own uptime history from what it observes each cycle.
 	records, err := store.AllTransportRecords()
 	if err != nil {
 		return pushed, fmt.Errorf("hydrate transports: %w", err)
 	}
 	for _, rec := range records {
-		if rec.Current != nil {
+		if rec.Current != nil && (isLive == nil || isLive(rec.ID)) {
 			if data, err := json.Marshal(rec.Current); err == nil {
 				sink.Put(currentTransportPath(rec.ID.String()), data)
 				pushed++
