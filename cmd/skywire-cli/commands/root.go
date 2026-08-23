@@ -3,10 +3,11 @@ package commands
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -238,7 +239,5 @@ var RootCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

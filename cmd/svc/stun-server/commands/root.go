@@ -4,7 +4,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,7 +73,5 @@ Requires two distinct IPs for full NAT type detection.
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

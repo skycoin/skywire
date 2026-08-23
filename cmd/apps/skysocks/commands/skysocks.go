@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -160,7 +162,5 @@ func RunSkysocks(ctx context.Context, args []string) error {
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

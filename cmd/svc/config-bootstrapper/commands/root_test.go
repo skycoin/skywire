@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/config-bootstrapper/api"
@@ -24,11 +26,11 @@ func testLog() *logging.Logger { return logging.MustGetLogger("cb-test") }
 // ---- exampleJSON / generateExamples ----------------------------------------
 
 func TestExampleJSON(t *testing.T) {
-	out := exampleJSON(map[string]string{"version": "v1.3.29"})
+	out := cmdutil.ExampleJSON(map[string]string{"version": "v1.3.29"})
 	require.Contains(t, out, "v1.3.29")
 
 	// Unmarshalable value (channel) → json.MarshalIndent fails → "".
-	require.Equal(t, "", exampleJSON(make(chan int)))
+	require.Equal(t, "", cmdutil.ExampleJSON(make(chan int)))
 }
 
 func TestGenerateExamples(t *testing.T) {

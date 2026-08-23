@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -205,9 +207,7 @@ func setAppStatus(appCl *app.Client, log logrus.FieldLogger, status appserver.Ap
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }
 
 func setAppPort(appCl *app.Client, log logrus.FieldLogger, port routing.Port) {
