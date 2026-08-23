@@ -70,13 +70,18 @@ type Options struct {
 	// width. The rows above and below never do.
 	Pad int
 
-	// Dim scales the rain behind the text, out of 256. Zero means 56: still
-	// visible, not competing with the words. 256 does not dim at all, which
-	// looks like the film and is unreadable.
+	// Dim scales the rain, out of 256. Zero means 256, which is to say no
+	// dimming at all: the cell of clear kept either side of every word is what
+	// keeps the text readable, so the rain behind it does not also have to be
+	// turned down.
+	//
+	// It is here for a caller with much more rain on screen than a help
+	// screen has — a full window of it behind a dense layout can be worth
+	// taking down a little.
 	Dim int
 
 	// TextColor is what the text is drawn in. The zero value, ColorDefault,
-	// means a bright green-white that reads against the dimmed rain.
+	// means a bright green-white that reads against the rain.
 	//
 	// It is ignored for text that brought its own colours. There is no sense
 	// in overriding a styler and then being asked where the styling went.
@@ -89,6 +94,27 @@ type Options struct {
 	// report both want plain text and neither wants two hundred colour
 	// changes a line. NO_COLOR and TERM=dumb are honoured the same way.
 	Force bool
+
+	// GapMin makes a run of that many spaces or more transparent, so the rain
+	// shows through it. Zero, the default, makes a line opaque from its first
+	// column to its last word.
+	//
+	// The two settings are for the two kinds of caller. A help screen is a
+	// block of prose and wants the default: a glyph landing in the single
+	// space between two words is read as part of them, and the rain belongs
+	// past the end of the line and on the blank lines between sections.
+	//
+	// A caller composing a whole screen — panes, boxes, a status bar — wants
+	// the other. Its layout pads every line out to the full width with spaces,
+	// so under the default rule the screen would be opaque everywhere and no
+	// rain would show at all. With GapMin set, the padding inside and around
+	// its panes becomes the backdrop and the words stay legible. Four or five
+	// is about right: wide enough that ordinary word spacing and column
+	// alignment stay solid, narrow enough that empty space reads as empty.
+	//
+	// A cell of clear is kept either side of any text, whichever rule is in
+	// force, so the rain never abuts a word.
+	GapMin int
 
 	// Off returns the text unchanged, whatever else is set.
 	//
@@ -119,41 +145,88 @@ func Render(text string, o Options) string {
 		return text
 	}
 
-	pad := o.Pad
-	if pad == 0 {
-		pad = 2
+	l := layout(text, o)
+
+	// The rain is generated at the full width whatever the text does, so a
+	// short help still gets a screen-wide backdrop rather than a green box.
+	rng := rand.New(rand.NewSource(l.seed))
+	steps := o.Steps
+	if steps == 0 {
+		// Enough for the first columns to have fallen off the bottom, plus a
+		// spread so two runs a second apart are not near-identical frames.
+		steps = 3*l.rows + rng.Intn(4*l.rows+40)
 	}
-	dim := o.Dim
-	if dim == 0 {
-		dim = 56
+	m := matrix.New(l.seed)
+	m.Resize(l.cols, l.rows)
+	m.Advance(steps)
+
+	return paint(m, l, o)
+}
+
+// sheet is one text block measured out against a grid: what it is made of, how
+// big the grid is, and where on it the text goes.
+//
+// The measuring is the same whether the rain behind is a still or is running,
+// so it is done once here and handed to paint. See Painter.
+type sheet struct {
+	lines      [][]glyph
+	raw        []string
+	cols, rows int
+	pad        int // rows of rain above and below
+	indent     int // columns the text is moved over by
+	styled     bool
+	gapMin     int
+	textStyle  string
+	dim        int
+	seed       int64
+}
+
+// layout measures text against the width and settles everything about where it
+// goes, without deciding what is behind it.
+func layout(text string, o Options) sheet {
+	s := sheet{
+		pad:    o.Pad,
+		dim:    o.Dim,
+		seed:   o.Seed,
+		gapMin: o.GapMin,
 	}
-	seed := o.Seed
-	if seed == 0 {
-		seed = time.Now().UnixNano()
+	if s.pad == 0 {
+		s.pad = 2
+	}
+	if s.pad < 0 {
+		// Negative asks for none, which zero cannot: zero is the zero value
+		// and has to mean the default. A caller composing a whole screen and
+		// handing it over whole wants the text exactly where it put it.
+		s.pad = 0
+	}
+	if s.dim == 0 {
+		s.dim = 256
+	}
+	if s.seed == 0 {
+		s.seed = time.Now().UnixNano()
 	}
 	textColor := o.TextColor
 	if textColor == tcell.ColorDefault {
 		textColor = tcell.NewRGBColor(190, 255, 190)
 	}
-	textStyle := sgr(textColor, true)
+	s.textStyle = sgr(textColor, true)
 
-	raw := strings.Split(strings.TrimRight(text, "\n"), "\n")
-	lines := make([][]glyph, len(raw))
-	styled := false
-	for i, l := range raw {
+	s.raw = strings.Split(strings.TrimRight(text, "\n"), "\n")
+	s.lines = make([][]glyph, len(s.raw))
+	for i, l := range s.raw {
 		var any bool
-		lines[i], any = parse(l)
-		styled = styled || any
+		s.lines[i], any = parse(l)
+		s.styled = s.styled || any
 	}
 
-	cols := o.Width
-	if cols == 0 {
-		cols = terminalWidth()
+	s.cols = o.Width
+	if s.cols == 0 {
+		s.cols = terminalWidth()
 	}
-	rows := len(lines) + 2*pad
+	s.rows = len(s.lines) + 2*s.pad
 
 	widest := 0
-	for _, l := range lines {
+	for _, l := range s.lines {
 		if len(l) > widest {
 			widest = len(l)
 		}
@@ -162,23 +235,19 @@ func Render(text string, o Options) string {
 	// The indent gives way before the text does. A help screen 78 columns
 	// wide in an 80-column terminal can still have rain above and below it;
 	// what it cannot have is two columns taken off the front of every line.
-	indent := pad
-	for indent > 0 && widest+2*indent > cols {
-		indent--
+	s.indent = s.pad
+	for s.indent > 0 && widest+2*s.indent > s.cols {
+		s.indent--
 	}
 
-	// The rain is generated at the full width whatever the text does, so a
-	// short help still gets a screen-wide backdrop rather than a green box.
-	rng := rand.New(rand.NewSource(seed))
-	steps := o.Steps
-	if steps == 0 {
-		// Enough for the first columns to have fallen off the bottom, plus a
-		// spread so two runs a second apart are not near-identical frames.
-		steps = 3*rows + rng.Intn(4*rows+40)
-	}
-	m := matrix.New(seed)
-	m.Resize(cols, rows)
-	m.Advance(steps)
+	return s
+}
+
+// paint composites the text over whatever frame the rain is currently on.
+func paint(m *matrix.Matrix, s sheet, _ Options) string {
+	lines, raw, cols, rows := s.lines, s.raw, s.cols, s.rows
+	pad, indent, dim := s.pad, s.indent, s.dim
+	styled, textStyle := s.styled, s.textStyle
 
 	grid := make([]matrix.Cell, cols*rows)
 	lit := make([]bool, cols*rows)
@@ -186,14 +255,6 @@ func Render(text string, o Options) string {
 		grid[y*cols+x] = c
 		lit[y*cols+x] = true
 	})
-
-	// The panel is the box the text sits in, dimmed so the words carry. A
-	// per-line halo that followed the ragged right edge was the other option
-	// and it looks like the text has an aura; a rectangle looks like a panel.
-	panelRight := indent + widest + indent
-	if panelRight > cols {
-		panelRight = cols
-	}
 
 	var b strings.Builder
 	b.Grow(rows * cols * 4)
@@ -214,31 +275,15 @@ func Render(text string, o Options) string {
 				continue
 			}
 		}
-		// A line's own span is opaque, spaces and all. Letting the rain
-		// through every gap between words is the obvious thing and it is
-		// unreadable: a glyph lands in the single space between two words and
-		// the eye joins them. Rain shows through the indent, past the end of
-		// the line, and on the blank lines between sections — which is where
-		// it wants to be anyway, since that is where there is room for it.
-		_, to, hasText := span(line)
-		from := -1
-		if hasText {
-			// The span starts at the line's own column 0, not at its first
-			// word: leading indentation is part of the line. In a flag list
-			// the indent is what lines the columns up, and a glyph sitting in
-			// it reads as content — "  ﾚ --json" looks like a typo, not like
-			// something behind the text.
-			//
-			// One clear cell each side of that, or the rain abuts the words:
-			// a glyph hard against the U of Usage reads as part of it.
-			to++
-		}
+		// Which cells of this row belong to the text and which the rain shows
+		// through. See solidRow, and GapMin for the two rules.
+		solid := solidRow(line, cols, indent, s.gapMin)
 
 		// Trailing blanks are dropped, so a row of rain that stops halfway
 		// does not carry sixty spaces and a reset to the end of the line.
 		last := -1
 		for x := 0; x < cols; x++ {
-			if inSpan(x-indent, from, to, hasText) {
+			if solid[x] {
 				if printable(line, x-indent) {
 					last = x
 				}
@@ -251,8 +296,8 @@ func Render(text string, o Options) string {
 		for x := 0; x <= last; x++ {
 			i := x - indent
 
-			// Text, or one of the blanks inside the text's own span.
-			if inSpan(i, from, to, hasText) {
+			// Text, or one of the blanks the text keeps to itself.
+			if solid[x] {
 				if !printable(line, i) {
 					// A blank inside the text keeps whatever style is in
 					// effect rather than resetting to default. Resetting
@@ -294,7 +339,7 @@ func Render(text string, o Options) string {
 			}
 			c := grid[y*cols+x]
 			n := c.Intensity
-			if y >= pad && y-pad < len(lines) && x < panelRight {
+			if dim != 256 {
 				n = n * dim / 256
 			}
 			st := sgr(canvas.Matrix[n], c.Hot)
@@ -400,7 +445,63 @@ func span(line []glyph) (from, to int, ok bool) {
 	return from, to, from >= 0
 }
 
-func inSpan(i, from, to int, ok bool) bool { return ok && i >= from && i <= to }
+// solidRow marks, in grid columns, which cells of a row belong to the text
+// rather than to the rain behind it. A solid cell is drawn from the line —
+// as its glyph, or as a blank where the line has a space.
+//
+// Everything about what the rain shows through is decided here. See GapMin.
+func solidRow(line []glyph, cols, indent, gapMin int) []bool {
+	s := make([]bool, cols)
+	_, to, ok := span(line)
+	if !ok {
+		return s // a blank line is all backdrop
+	}
+	mark := func(i int) {
+		if x := i + indent; x >= 0 && x < cols {
+			s[x] = true
+		}
+	}
+
+	if gapMin <= 0 {
+		// Opaque from the line's own column zero to one past its last word.
+		// Leading indentation is part of the line: in a flag list the indent
+		// is what lines the columns up, and a glyph sitting in it reads as
+		// content.
+		for i := -1; i <= to+1; i++ {
+			mark(i)
+		}
+		return s
+	}
+
+	for i := 0; i <= to; {
+		if line[i].r != ' ' {
+			mark(i)
+			i++
+			continue
+		}
+		j := i
+		for j <= to && line[j].r == ' ' {
+			j++
+		}
+		if j-i < gapMin {
+			// Too narrow to be a gap in the layout — it is the space between
+			// two words, and a glyph in it would join them.
+			for k := i; k < j; k++ {
+				mark(k)
+			}
+		} else {
+			// A hole, less one cell at each end so the rain does not abut the
+			// words on either side of it.
+			if i > 0 {
+				mark(i)
+			}
+			mark(j - 1)
+		}
+		i = j
+	}
+	mark(to + 1)
+	return s
+}
 
 // printable reports whether line has a non-space glyph at i. A space inside a
 // line is drawn blank, not as a hole for the rain to come through.

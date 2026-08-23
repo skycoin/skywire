@@ -214,6 +214,18 @@ func (m *Matrix) Frame(screen tcell.Screen, cols, rows int, dt float64) {
 	if m.cols == 0 || m.rows == 0 {
 		return
 	}
+	m.AdvanceTime(dt)
+	m.draw(screen)
+}
+
+// AdvanceTime runs however many simulation steps dt seconds are worth, keeping
+// the fraction left over for next time.
+//
+// Advance takes whole steps and is what a still frame wants. This is what an
+// animation wants, and it is separate from Frame because not every animation
+// has a tcell.Screen to draw on — one composed into a string a frame at a time
+// needs the clock without the drawing. See matrix/backdrop.
+func (m *Matrix) AdvanceTime(dt float64) {
 	rate := m.StepRate
 	if rate <= 0 {
 		rate = 30
@@ -226,7 +238,6 @@ func (m *Matrix) Frame(screen tcell.Screen, cols, rows int, dt float64) {
 		m.step()
 		m.acc--
 	}
-	m.draw(screen)
 }
 
 // step advances every column by one simulation tick.

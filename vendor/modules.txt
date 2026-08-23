@@ -36,7 +36,7 @@ github.com/0magnet/sh/v3/internal
 github.com/0magnet/sh/v3/interp
 github.com/0magnet/sh/v3/pattern
 github.com/0magnet/sh/v3/syntax
-# github.com/0magnet/termanim v0.0.0-20260823195938-f88b1541cfcd
+# github.com/0magnet/termanim v0.0.0-20260823220926-60f3279a072f
 ## explicit; go 1.24.0
 github.com/0magnet/termanim/canvas
 github.com/0magnet/termanim/matrix
