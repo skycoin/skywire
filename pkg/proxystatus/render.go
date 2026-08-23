@@ -7,10 +7,10 @@ import (
 	"strings"
 )
 
-// refreshSeconds is how often the status page re-fetches itself. The page is a
-// point-in-time Snapshot rendered server-side (no JS/websocket), so a meta
-// refresh is how it stays live — frequent enough to watch a route warm, slow
-// enough not to thrash the proxy.
+// refreshSeconds is the fallback full-page reload cadence for surfaces that have
+// no live-push endpoint (status.dmsg, status.skynet). status.skysocks is kept in
+// sync by an SSE stream instead (see liveScript / RenderFragment) and omits the
+// meta refresh entirely.
 const refreshSeconds = 4
 
 // maxLogLines caps how many recent log lines the page renders, newest at the
@@ -20,49 +20,102 @@ const maxLogLines = 200
 // Render returns the full, self-contained HTML status page for snap. All
 // interpolated values are HTML-escaped; the page loads no external resource
 // (matching the proxies' strict no-network serving context).
+//
+// For the skysocks surface the live region (pills, per-leg mux, events, log) is
+// wrapped in <main id="live"> and kept current by an inline SSE script that swaps
+// just that element on each server push — the server-rendered markup is the
+// initial paint, so the page still works with JS/SSE unavailable. Other surfaces
+// have no SSE endpoint and fall back to a meta refresh, as before.
 func Render(snap Snapshot) []byte {
 	var b strings.Builder
 	surface := html.EscapeString(string(snap.Surface))
+	live := snap.Surface == SurfaceSkysocks
 	b.WriteString("<!doctype html><html lang=en><head><meta charset=utf-8>")
 	b.WriteString(`<meta name=viewport content="width=device-width, initial-scale=1">`)
-	fmt.Fprintf(&b, `<meta http-equiv="refresh" content="%d">`, refreshSeconds)
+	if !live {
+		fmt.Fprintf(&b, `<meta http-equiv="refresh" content="%d">`, refreshSeconds)
+	}
 	fmt.Fprintf(&b, "<title>%s proxy status · skywire</title><style>%s</style></head><body>", surface, css)
 
 	// Header + brand.
 	b.WriteString(`<header><div class="brand"><b>skywire</b> proxy status</div>`)
 	fmt.Fprintf(&b, `<div class="surface">%s</div></header>`, surface)
 
+	// Live region: server-rendered here for the initial paint, then (skysocks)
+	// swapped in place by the SSE script. RenderFragment renders the identical
+	// inner markup so there is one source of truth.
+	b.WriteString(`<main id="live">`)
+	writeLiveRegion(&b, snap)
+	b.WriteString(`</main>`)
+
+	writeControlSeam(&b, snap)
+	writeFooter(&b, snap)
+
+	if live {
+		b.WriteString(liveScript)
+	}
+
+	b.WriteString("</body></html>")
+	return []byte(b.String())
+}
+
+// RenderFragment renders ONLY the live region — the inner HTML of
+// <main id="live"> (pills, per-leg mux, events, recent log) — with no
+// <html>/<head>/<style> shell. It is the single source of truth for the live
+// markup: Render composes the page shell around it, and the skysocks-client SSE
+// handler pushes it verbatim so the browser swaps the region in place without a
+// full-page reload. Newlines in the fragment (the <pre> log block) are preserved
+// by the SSE framing (one data: line per source line), so no escaping is needed.
+func RenderFragment(snap Snapshot) []byte {
+	var b strings.Builder
+	writeLiveRegion(&b, snap)
+	return []byte(b.String())
+}
+
+// liveScript opens an EventSource to http://status.skysocks/sse and replaces the
+// live region's innerHTML on each push — a seamless live update in place of the
+// old jarring full-page meta refresh. Progressive enhancement: the server-
+// rendered initial paint stands alone, so the page still works with JS or SSE
+// unavailable. A healthy message cancels any pending fallback; if the stream
+// breaks and does not recover, it falls back to a slow (15s) reload rather than
+// the old 1–4s one. Emitted only for the skysocks surface (the only one with an
+// /sse handler).
+const liveScript = `<script>(function(){var t;function slow(){if(!t){t=setTimeout(function(){location.reload();},15000);}}` +
+	`try{var es=new EventSource("http://status.skysocks/sse");` +
+	`es.onmessage=function(e){if(t){clearTimeout(t);t=null;}var el=document.getElementById("live");if(el){el.innerHTML=e.data;}};` +
+	`es.onerror=function(){slow();};}catch(err){slow();}})();</script>`
+
+// writeLiveRegion writes the dynamic status content (pills, per-leg mux, events,
+// recent log) shared by Render (page shell) and RenderFragment (SSE push).
+func writeLiveRegion(b *strings.Builder, snap Snapshot) {
+	surface := html.EscapeString(string(snap.Surface))
+
 	// Status pills.
 	b.WriteString(`<div class="pills">`)
-	writePill(&b, "surface", surface, "")
-	writePill(&b, "app", html.EscapeString(snap.App), "")
+	writePill(b, "surface", surface, "")
+	writePill(b, "app", html.EscapeString(snap.App), "")
 	if snap.Running {
-		writePill(&b, "state", "running", "ok")
+		writePill(b, "state", "running", "ok")
 	} else {
-		writePill(&b, "state", "stopped", "warn")
+		writePill(b, "state", "stopped", "warn")
 	}
 	if len(snap.Legs) > 0 {
 		mux := "off"
 		if snap.MuxEnabled {
 			mux = "on"
 		}
-		writePill(&b, "mux", mux, "")
-		writePill(&b, "legs", fmt.Sprintf("%d", len(snap.Legs)), "")
+		writePill(b, "mux", mux, "")
+		writePill(b, "legs", fmt.Sprintf("%d", len(snap.Legs)), "")
 	}
 	b.WriteString(`</div>`)
 
 	if snap.Note != "" {
-		fmt.Fprintf(&b, `<p class="note">%s</p>`, html.EscapeString(snap.Note))
+		fmt.Fprintf(b, `<p class="note">%s</p>`, html.EscapeString(snap.Note))
 	}
 
-	writeMuxSection(&b, snap)
-	writeEventsSection(&b, snap)
-	writeLogsSection(&b, snap)
-	writeControlSeam(&b, snap)
-	writeFooter(&b, snap)
-
-	b.WriteString("</body></html>")
-	return []byte(b.String())
+	writeMuxSection(b, snap)
+	writeEventsSection(b, snap)
+	writeLogsSection(b, snap)
 }
 
 func writePill(b *strings.Builder, k, v, cls string) {
