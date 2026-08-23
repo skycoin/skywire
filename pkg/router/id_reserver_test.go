@@ -4,6 +4,8 @@ package router
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"net/rpc"
 	"strconv"
@@ -353,4 +355,33 @@ func TestIdReserver_ReserveIDs_RetriesStalePooledConn(t *testing.T) {
 	defer d.mu.Unlock()
 	assert.GreaterOrEqual(t, d.n[pkA], 2, "hop A should have been re-dialed")
 	assert.GreaterOrEqual(t, d.n[pkB], 2, "hop B should have been re-dialed")
+}
+
+// TestIsReserveResetErr covers the Fix-#1 decision logic: a reserve call that
+// failed because its stream was reset/closed mid-flight (raw io.EOF from
+// net/rpc's reader, io.ErrUnexpectedEOF, or net.ErrClosed) must be treated as
+// retryable, not just the already-dead "connection is shut down" case. This is
+// the dominant mux aux-leg setup churn ("reserve routeID from <pk> failed: EOF")
+// that previously fell through un-retried.
+func TestIsReserveResetErr(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"shutdown-string", errors.New("connection is shut down"), true},
+		{"raw-eof", io.EOF, true},
+		{"wrapped-eof", fmt.Errorf("reserve: %w", io.EOF), true},
+		{"unexpected-eof", io.ErrUnexpectedEOF, true},
+		{"net-closed", net.ErrClosed, true},
+		{"wrapped-net-closed", fmt.Errorf("dial: %w", net.ErrClosed), true},
+		{"unrelated", errors.New("route not found"), false},
+		{"deadline", context.DeadlineExceeded, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, isReserveResetErr(c.err))
+		})
+	}
 }
