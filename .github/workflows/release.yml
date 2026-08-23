@@ -100,7 +100,7 @@ jobs:
 
       - name: Build skywire release binary
         env:
-          GOPROXY: direct
+          GOPROXY: "https://proxy.golang.org,direct"
           GOSUMDB: "off"
           CGO_ENABLED: "1"
           CC: ${{ github.workspace }}/musl-data/${{ matrix.toolchain }}-cross/bin/${{ matrix.toolchain }}-gcc
@@ -166,7 +166,7 @@ jobs:
 
       - name: Build skywire
         env:
-          GOPROXY: direct
+          GOPROXY: "https://proxy.golang.org,direct"
           GOSUMDB: "off"
           CGO_ENABLED: "1"
           CGO_CFLAGS: -I/usr/local/include -I/opt/homebrew/include -I/opt/homebrew/opt/hidapi/include -I/opt/homebrew/opt/libusb/include
@@ -229,7 +229,7 @@ jobs:
 
       - name: Build skywire
         env:
-          GOPROXY: direct
+          GOPROXY: "https://proxy.golang.org,direct"
           GOSUMDB: "off"
           CGO_ENABLED: "1"
           CGO_CFLAGS: -I/opt/homebrew/include -I/opt/homebrew/opt/hidapi/include -I/opt/homebrew/opt/libusb/include
@@ -329,7 +329,7 @@ jobs:
 
       - name: Build skywire
         env:
-          GOPROXY: direct
+          GOPROXY: "https://proxy.golang.org,direct"
           GOSUMDB: "off"
           GOOS: windows
           GOARCH: ${{ matrix.goarch }}
@@ -364,7 +364,7 @@ jobs:
       - name: Build hardware wallet utility
         if: matrix.arch == 'amd64'
         env:
-          GOPROXY: direct
+          GOPROXY: "https://proxy.golang.org,direct"
           GOSUMDB: "off"
           CGO_ENABLED: "1"
           CGO_CFLAGS: -IC:/msys64/mingw64/include -IC:/msys64/mingw64/include/libusb-1.0
