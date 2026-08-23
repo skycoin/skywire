@@ -4,12 +4,13 @@ package commands
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -110,9 +111,7 @@ var RootCmd = &cobra.Command{
 
 // Execute executes the root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }
 
 // RunVPNRouter is the launcher AppFunc: it brings up the downstream interface,

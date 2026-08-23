@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -26,8 +28,8 @@ import (
 // ---- example helpers -------------------------------------------------------
 
 func TestExampleJSON(t *testing.T) {
-	require.Contains(t, exampleJSON(map[string]string{"k": "v"}), "\"k\"")
-	require.Equal(t, "", exampleJSON(make(chan int))) // marshal error → ""
+	require.Contains(t, cmdutil.ExampleJSON(map[string]string{"k": "v"}), "\"k\"")
+	require.Equal(t, "", cmdutil.ExampleJSON(make(chan int))) // marshal error → ""
 }
 
 func TestGenerateExamples(t *testing.T) {

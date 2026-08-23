@@ -3,7 +3,6 @@ package commands
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -40,14 +39,6 @@ var (
 	mode           string
 )
 
-func exampleJSON(v interface{}) string {
-	b, err := json.MarshalIndent(v, "    ", "  ")
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
 func generateExamples() string {
 	pk1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
 	pk2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
@@ -62,17 +53,17 @@ GET /health
 POST /routes
   Request:  %s
   Response: %s`,
-		exampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]interface{}{
 			"build_info":   map[string]string{"version": "v1.3.29"},
 			"started_at":   "2024-01-15T10:00:00Z",
 			"dmsg_address": pk1 + ":80",
 			"dmsg_servers": []string{pk2},
 		}),
-		exampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]interface{}{
 			"edges": [][]string{{pk1, pk2}},
 			"opts":  map[string]int{"min_hops": 0, "max_hops": 3},
 		}),
-		exampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]interface{}{
 			pk1 + "-" + pk2: [][]map[string]interface{}{{
 				{"t_id": tpID, "from": pk1, "to": pk2},
 			}},
@@ -229,7 +220,5 @@ func mergeFile(dst, src *rf.Config) {
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

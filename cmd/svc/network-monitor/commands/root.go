@@ -58,15 +58,6 @@ var (
 	deregRPCAddr  string // Visor RPC address
 )
 
-// exampleJSON marshals v to indented JSON with color, returning empty string on error
-func exampleJSON(v interface{}) string {
-	b, err := json.MarshalIndent(v, "    ", "  ")
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
 // generateExamples creates example responses from actual struct types
 func generateExamples() string {
 	// GET /health - api.HealthCheckResponse
@@ -105,8 +96,8 @@ GET /health - api.HealthCheckResponse
 
 GET /status - nm.Status
 %s`,
-		exampleJSON(healthExample),
-		exampleJSON(statusExample))
+		cmdutil.ExampleJSON(healthExample),
+		cmdutil.ExampleJSON(statusExample))
 }
 
 func init() {

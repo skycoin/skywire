@@ -10,7 +10,6 @@ import (
 	"context"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -141,12 +140,12 @@ func buildConfig() (*dmsgdisc.Config, error) {
 		EntryTimeout:      services.Duration(entryTimeout),
 		Mode:              mode,
 		AuthPassphrase:    authPassphrase,
-		OfficialServers:   commaSplit(officialServers),
+		OfficialServers:   cmdutil.CommaSplit(officialServers),
 		DmsgServerType:    dmsgServerType,
 		TestMode:          testMode,
 		EnableLoadTesting: enableLoadTesting,
 		TestEnvironment:   testEnvironment,
-		Whitelist:         commaSplit(whitelistKeys),
+		Whitelist:         cmdutil.CommaSplit(whitelistKeys),
 		MetricsAddr:       sf.MetricsAddr,
 		PProfMode:         pprofMode,
 		PProfAddr:         pprofAddr,
@@ -219,20 +218,6 @@ func mergeFile(dst, src *dmsgdisc.Config) {
 	if len(src.DmsgServers) > 0 {
 		dst.DmsgServers = src.DmsgServers
 	}
-}
-
-func commaSplit(s string) []string {
-	if s == "" {
-		return nil
-	}
-	out := make([]string, 0, 4)
-	for _, p := range strings.Split(s, ",") {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 func loadOrGenerateKey(path string) error {

@@ -9,17 +9,19 @@ import (
 	"strings"
 	gotesting "testing"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/stretchr/testify/require"
 )
 
 func TestExampleJSON(t *gotesting.T) {
-	out := exampleJSON(map[string]string{"version": "v1.3.29"})
+	out := cmdutil.ExampleJSON(map[string]string{"version": "v1.3.29"})
 	require.Contains(t, out, "v1.3.29")
 	require.Contains(t, out, "version")
 
 	// An unmarshalable value (channel) makes json.MarshalIndent fail →
 	// exampleJSON returns "".
-	require.Equal(t, "", exampleJSON(make(chan int)))
+	require.Equal(t, "", cmdutil.ExampleJSON(make(chan int)))
 }
 
 func TestGenerateExamples(t *gotesting.T) {
