@@ -76,6 +76,12 @@ func TestRenderSections(t *testing.T) {
 		// full routes: section + full (untruncated) hop PKs + per-hop type/latency
 		"full routes", "03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff",
 		"02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee", "450ms",
+		// UX pass: selection-guard + identical-fragment skip in the live script,
+		// click-to-copy affordance (execCommand fallback for the HTTP context),
+		// the WebSocket live indicator, route-group summary, and staged control tags.
+		"getSelection", "selectionchange", "execCommand",
+		`class="fpk copy"`, "data-copy=", "click to copy",
+		`id="wsstat"`, "reconnecting", `class="rgsummary"`, "rsync(this)", `class="soon"`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("rendered page missing %q", want)
