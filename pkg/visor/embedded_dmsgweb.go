@@ -252,8 +252,10 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 	// Direct-client path for non-discovery dmsg servers.
 	cfg.DirectClient = e.directClient
 	cfg.DirectServerPKs = e.directServerPKs
-	// Reserved in-process status hosts (http://status.dmsg/ etc.).
+	// Reserved in-process status host owned by this layer: only status.dmsg is
+	// answered here; status.skynet / status.skysocks fall through up the chain.
 	cfg.StatusProvider = e.statusProvider
+	cfg.StatusSurface = proxystatus.SurfaceDmsg
 
 	// Optional TLS MITM. CA load failure is non-fatal — the
 	// resolver continues without MITM and logs the reason.

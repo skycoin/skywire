@@ -148,10 +148,35 @@ type Config struct {
 	Aliases map[string]cipher.PubKey
 
 	// StatusProvider, when non-nil, enables the reserved in-process status hosts
-	// (http://status.skynet/ etc.) served through this proxy — a read-only
-	// diagnostic page (logs + route/transport events + per-leg mux view) for a
-	// surface. Nil disables the status hosts. See pkg/proxystatus.
+	// served through this proxy — a read-only diagnostic page (logs +
+	// route/transport events + per-leg mux view) for a surface. Nil disables the
+	// status hosts. See pkg/proxystatus.
 	StatusProvider proxystatus.Provider
+	// StatusSurface scopes which reserved status host THIS proxy layer owns and
+	// answers for (e.g. SurfaceSkynet → only http(s)://status.skynet/). A status
+	// host matching a DIFFERENT surface is NOT served here — it falls through so
+	// the request continues up the proxy chain to the layer that owns it. Empty
+	// means "serve any matched surface" (the pre-scoping behavior), kept so
+	// standalone runtimes and tests need no wiring. Ignored when StatusProvider is
+	// nil.
+	StatusSurface proxystatus.Surface
+}
+
+// ownsStatusSurface reports whether this layer should answer for a matched
+// status surface: true when no surface is configured (serve-any) or the matched
+// surface is exactly the one this layer owns.
+func (cfg Config) ownsStatusSurface(s proxystatus.Surface) bool {
+	return cfg.StatusSurface == "" || cfg.StatusSurface == s
+}
+
+// statusSnapshot fetches the surface's snapshot from the provider, degrading a
+// provider error to a rendered note rather than a failed page.
+func statusSnapshot(cfg Config, surface proxystatus.Surface) proxystatus.Snapshot {
+	snap, err := cfg.StatusProvider.StatusSnapshot(surface)
+	if err != nil {
+		return proxystatus.Snapshot{Surface: surface, Note: "status unavailable: " + err.Error()}
+	}
+	return snap
 }
 
 // Run starts the SOCKS5 proxy. Blocks until ctx is canceled.
@@ -237,20 +262,40 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 
 			origHost, _ := dialCtx.Value(skynetOrigHostKey{}).(string)
 
-			// Reserved status hosts (http://status.skynet/ etc.): served in-process,
-			// never routed out — the read-only diagnostic page for a surface.
-			// Checked before the .skynet match / upstream forward so any status host
-			// is reachable through this proxy. Plaintext HTTP only.
+			// Reserved status host this layer OWNS (http://status.skynet/): served
+			// in-process, never routed out — the read-only diagnostic page for the
+			// surface. Checked before the .skynet match / upstream forward. A status
+			// host for a DIFFERENT surface is NOT served here; it falls through to
+			// the upstream forward so the request reaches the layer that owns it.
+			// Plaintext HTTP only; the owned host is also served over TLS-MITM below.
 			if cfg.StatusProvider != nil {
 				_, sport, _ := net.SplitHostPort(addr) //nolint:errcheck
 				if proxyinterstitial.ShouldServe(sport) {
-					if surface, ok := proxystatus.Match(origHost); ok {
-						snap, serr := cfg.StatusProvider.StatusSnapshot(surface)
-						if serr != nil {
-							snap = proxystatus.Snapshot{Surface: surface, Note: "status unavailable: " + serr.Error()}
-						}
+					if surface, ok := proxystatus.Match(origHost); ok && cfg.ownsStatusSurface(surface) {
 						log.WithField("surface", string(surface)).Debug("SOCKS5 → serving in-process proxy status page")
-						return &tcpAddrConn{Conn: proxystatus.ServeConn(proxystatus.Render(snap))}, nil
+						return &tcpAddrConn{Conn: proxystatus.ServeConn(proxystatus.Render(statusSnapshot(cfg, surface)))}, nil
+					}
+				}
+			}
+
+			// Owned status host over HTTPS: status.skynet is within the resolver
+			// CA's name constraints (.skynet), so a per-host leaf is valid.
+			// Terminate the browser's TLS locally and serve the page over it — the
+			// TLS analog of the plaintext branch above. Only for the surface this
+			// layer owns; a different surface falls through.
+			if cfg.StatusProvider != nil && cfg.TLSMITM {
+				_, sport, _ := net.SplitHostPort(addr) //nolint:errcheck
+				if isTLSPort(sport, cfg.TLSPort) {
+					if surface, ok := proxystatus.Match(origHost); ok && cfg.ownsStatusSurface(surface) {
+						leaf, lerr := cfg.LeafMinter.For(origHost)
+						if lerr != nil {
+							log.WithField("surface", string(surface)).WithField("err", lerr).
+								Debug("SOCKS5 → status-over-TLS leaf mint failed; falling through")
+						} else {
+							log.WithField("surface", string(surface)).Debug("SOCKS5 → serving in-process proxy status page over TLS (MITM)")
+							return &tcpAddrConn{Conn: skynetca.MITMTerminate(
+								proxystatus.ServeConn(proxystatus.Render(statusSnapshot(cfg, surface))), leaf)}, nil
+						}
 					}
 				}
 			}

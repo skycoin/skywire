@@ -207,8 +207,10 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		}
 	}
 	cfg.Aliases = resolverAliasMap(e.cfg.Alias, e.localPK)
-	// Reserved in-process status hosts (http://status.skynet/ etc.).
+	// Reserved in-process status host owned by this layer: only status.skynet is
+	// answered here; status.dmsg / status.skysocks fall through up the chain.
 	cfg.StatusProvider = e.statusProvider
+	cfg.StatusSurface = proxystatus.SurfaceSkynet
 
 	// Optional TLS MITM mode. Loading the CA can fail (file
 	// missing, permissions, malformed) — those failures are not
