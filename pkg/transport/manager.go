@@ -1434,6 +1434,19 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 
 	tm.Logger.Debugf("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
 
+	// Nudge the re-registration loop to publish our transport list soon (same
+	// debounced batch the accept path uses). Without this, a DIAL-ONLY visor —
+	// e.g. a browser/wasm visor, which never accepts inbound transports and so
+	// never hits the accept-path nudge — only publishes its tp-list snapshot on
+	// the 90s re-register ticker. That leaves it unroutable (route-find →
+	// "transport not found") for up to 90s after it dials out, which for a
+	// short-lived tab means effectively never. Nudging here makes an outbound
+	// transport discoverable within the debounce window, symmetric with accept.
+	select {
+	case tm.regNudge <- struct{}{}:
+	default: // nudge already pending
+	}
+
 	// Latency is now measured at the transport level via transport-level
 	// ping/pong frames in the managed transport's pingLoop, so no callback needed.
 
