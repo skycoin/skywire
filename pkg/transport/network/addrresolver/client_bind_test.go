@@ -33,7 +33,7 @@ func TestBindQUIC(t *testing.T) {
 		defer srv.Close()
 
 		c := newReadyClient(t, srv)
-		// Public IP already signalled → bind does not wait the full timeout.
+		// Public IP already signaled → bind does not wait the full timeout.
 		c.SetPublicIP("", "")
 		require.NoError(t, c.BindQUIC(context.Background(), "30300"))
 		<-gotCh
