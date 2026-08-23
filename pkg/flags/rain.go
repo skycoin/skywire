@@ -1,0 +1,100 @@
+// Package flags pkg/flags/rain.go
+//
+// InitRain prints the help screen over a still frame of the Matrix code rain,
+// seeded from the clock so it is different every time. It is decoration and
+// nothing else, and it is confined to the one screen where decoration costs
+// nothing: help is printed once, read, and scrolled past. Nothing parses it.
+//
+// It is off in every case where the output is not a person reading a terminal
+// — see rainOptions.
+package flags
+
+import (
+	"os"
+	"sync"
+
+	"github.com/spf13/cobra"
+
+	"github.com/0magnet/termanim/matrix/backdrop"
+	"github.com/0magnet/termanim/matrix/backdrop/cobrarain"
+
+	"github.com/skycoin/skywire/pkg/cliout"
+)
+
+// NoRainEnv turns the backdrop off while leaving the help colored. NO_COLOR
+// turns off both, which is what NO_COLOR is for; this is for someone who wants
+// the colors and not the rain.
+const NoRainEnv = "SKYWIRE_NO_HELP_RAIN"
+
+var (
+	// plainHelp suppresses the backdrop for the duration of a call that is
+	// producing help text rather than showing it. `help -d` writes markdown
+	// meant to be committed to a file and `help -r` dumps every command in the
+	// tree; neither wants a frame of rain per command, and the markdown would
+	// carry the escapes into the document.
+	plainHelp   bool
+	plainHelpMu sync.Mutex
+
+	// rained records the roots already wired, so calling InitRain twice on one
+	// command does not put the rain behind a screen that already has rain
+	// behind it.
+	rained   = map[*cobra.Command]bool{}
+	rainedMu sync.Mutex
+)
+
+// InitRain makes cmd, and every command under it, print its help over the code
+// rain. Call it once, on the root: cobra looks the help function up on the
+// parent when a command has none of its own, so one call covers the tree.
+//
+// Deliberately not part of InitFlags. That runs for every binary in this
+// repository, including the services, and this is meant for the one people
+// read help in.
+func InitRain(cmd *cobra.Command) {
+	rainedMu.Lock()
+	defer rainedMu.Unlock()
+	if rained[cmd] {
+		return
+	}
+	rained[cmd] = true
+	cobrarain.OnFunc(cmd, rainOptions)
+}
+
+// rainOptions decides, per help screen, whether to draw the rain.
+//
+// Off means "hand back exactly the bytes the help function produced". The
+// cases are every one where the output is not a person reading a terminal:
+//
+//   - machine mode (--json / --jq / --shape), where Help prints a schema for
+//     something else to consume rather than help for someone to read;
+//   - `help -r` and `help -d`, which produce text to keep rather than to look
+//     at, the second of it markdown;
+//   - SKYWIRE_NO_HELP_RAIN, for someone who wants the colors without this.
+//
+// Not a terminal at all — a pipe, a redirect, `--help | less`, a --help pasted
+// into a bug report — is handled inside backdrop, along with NO_COLOR.
+//
+// Machine mode is checked here rather than relied upon by ordering. cliout's
+// own help wrapper and this one are installed in different init functions, and
+// which of them ends up outermost is not something to build on.
+func rainOptions(cmd *cobra.Command) backdrop.Options {
+	plainHelpMu.Lock()
+	plain := plainHelp
+	plainHelpMu.Unlock()
+
+	return backdrop.Options{
+		Off: plain || cliout.MachineMode(cmd) || os.Getenv(NoRainEnv) != "",
+	}
+}
+
+// withPlainHelp runs fn with the backdrop suppressed.
+func withPlainHelp(fn func()) {
+	plainHelpMu.Lock()
+	plainHelp = true
+	plainHelpMu.Unlock()
+	defer func() {
+		plainHelpMu.Lock()
+		plainHelp = false
+		plainHelpMu.Unlock()
+	}()
+	fn()
+}
