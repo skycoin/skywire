@@ -664,7 +664,7 @@ func (s *adaptiveSim) reindex() {
 	}
 }
 
-func (s *adaptiveSim) step() RotationAction {
+func (s *adaptiveSim) step() RotationAction { //nolint:unparam // test helper: return kept for call-site clarity
 	act := s.e.OnTick("adaptive", s.legs)
 	if act.AddForwardLeg {
 		s.sawAddFwd = true
@@ -701,7 +701,7 @@ func (s *adaptiveSim) step() RotationAction {
 		s.reindex()
 	}
 	if act.AddLeg || act.AddForwardLeg {
-		tid := "t" + string(rune('a'+s.nextTID))
+		tid := "t" + string(rune('a'+s.nextTID)) //nolint:gosec // G115: bounded test rune
 		s.nextTID++
 		s.legs = append(s.legs, LegInfo{Index: len(s.legs), TransportID: tid, Kind: "stcpr", LatencyMs: 40, Alive: true})
 	}
