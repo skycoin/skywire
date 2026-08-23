@@ -36,7 +36,10 @@ func Render(snap Snapshot) []byte {
 	if !live {
 		fmt.Fprintf(&b, `<meta http-equiv="refresh" content="%d">`, refreshSeconds)
 	}
-	fmt.Fprintf(&b, "<title>%s proxy status · skywire</title><style>%s</style></head><body>", surface, css)
+	// fontFace (the ~38 KB embedded mononoki woff2) rides in the page shell only, so
+	// the tree's box-drawing glyphs align in a true fixed-width font; it is NOT part
+	// of css/RenderFragment, which the WebSocket restreams every ~1s.
+	fmt.Fprintf(&b, "<title>%s proxy status · skywire</title><style>%s%s</style></head><body>", surface, fontFace, css)
 
 	// Header + brand. The live indicator sits OUTSIDE <main id="live"> (in the
 	// static header) on purpose: the WebSocket swap replaces the live region's
@@ -108,6 +111,13 @@ func RenderFragment(snap Snapshot) []byte {
 // write entirely when the incoming fragment is byte-identical to what's shown, so a
 // steady surface stops repainting at all — no needless innerHTML churn.
 //
+// Scroll guard: replacing the live region's innerHTML resets scroll, so before the
+// swap apply() captures the window offset (scrollX/scrollY) plus any still-scrollable
+// sub-container's offset (the recent-log <pre>'s scrollTop/scrollLeft) and restores
+// them right after. With the route tree now page-level (no inner overflow box), the
+// tree's horizontal scroll IS the window offset, so scrolling the page to read a long
+// PK stays put across the ~1s live pushes instead of snapping back.
+//
 // Copy affordance: a delegated click handler copies any [data-copy] element's full
 // value (untruncated PKs, transport ids) to the clipboard, using the async
 // Clipboard API when available and falling back to execCommand('copy') so it works
@@ -118,7 +128,10 @@ const liveScript = `<script>(function(){var t,ws,pend=null,last=null;` +
 	`function slow(){if(!t){t=setTimeout(function(){location.reload();},15000);}}` +
 	`function url(){return location.origin.replace(/^http/,"ws")+"/ws";}` +
 	`function selecting(){var s=window.getSelection();return !!(s&&!s.isCollapsed&&String(s));}` +
-	`function apply(h){if(h===last){return;}var el=document.getElementById("live");if(el){el.innerHTML=h;last=h;}}` +
+	`function apply(h){if(h===last){return;}var el=document.getElementById("live");if(!el){return;}` +
+	`var sx=window.scrollX,sy=window.scrollY,lg=el.querySelector("pre.log"),lt=lg?lg.scrollTop:0,ll=lg?lg.scrollLeft:0;` +
+	`el.innerHTML=h;last=h;` +
+	`var lg2=el.querySelector("pre.log");if(lg2){lg2.scrollTop=lt;lg2.scrollLeft=ll;}window.scrollTo(sx,sy);}` +
 	`function push(h){if(selecting()){pend=h;return;}apply(h);}` +
 	`document.addEventListener("selectionchange",function(){if(pend!==null&&!selecting()){var h=pend;pend=null;apply(h);}});` +
 	`function connect(){stat("connecting","wait");try{ws=new WebSocket(url());}catch(e){slow();return;}` +
@@ -182,7 +195,7 @@ func writePill(b *strings.Builder, k, v, cls string) {
 // local → … → destination; all paths are prefix-merged into the one tree, so a
 // shared first hop collapses into a single branch that diverges deeper. Each
 // branch/edge carries the transport used for that hop (id + type + rtt) and each
-// leg's end-to-end mux telemetry (direct/multihop, gate state, route-rtt, rtx,
+// leg's end-to-end mux telemetry (hop count, gate state, route-rtt, rtx,
 // sent/recv share bars) hangs off the destination leaf for that leg. A static,
 // no-JS analog of the `cli proxy mux plot` panel.
 func writeMuxSection(b *strings.Builder, snap Snapshot) {
@@ -247,7 +260,8 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	b.WriteString(`<p class="hint">One route tree rooted at ` +
 		`<span class="tlabel src">this visor</span>; branches are the first-hop peers it dials, ` +
 		`each edge showing the transport (id + rtt) and continuing to the ` +
-		`<span class="tlabel dst">exit</span>. Per-leg mux telemetry — direct/multihop, state, ` +
+		`<span class="tlabel dst">exit</span> — so a 1-hop (direct) leg and a multi-hop ` +
+		`leg are visible in the branch itself. Per-leg mux telemetry — hop count, state, ` +
 		`route-rtt, rtx and the sent/recv share bars — hangs off each destination leaf. ` +
 		`Bars are relative to the busiest leg. ` +
 		`<b>tp rtt</b> is the first-hop transport; <b>route rtt</b> is the true end-to-end route latency (all hops). ` +
@@ -382,21 +396,33 @@ func edgeInfo(n *rtNode) string {
 }
 
 // writeLegDetail writes a destination leg's end-to-end mux telemetry as indented
-// rows under its leaf: a summary row (direct/multihop tag, gate-state badge,
-// route-rtt, rtx) and the dual sent/recv share bars. prefix keeps them aligned
+// rows under its leaf: a summary row (hop count, gate-state badge, route-rtt, rtx)
+// and the dual sent/recv share bars. prefix keeps them aligned
 // under the leaf, carrying any open-ancestor │ guides. maxSent/maxRecv (>=1)
 // scale the bars against the busiest leg.
 func writeLegDetail(b *strings.Builder, prefix string, l Leg, maxSent, maxRecv uint64) {
 	state, scls := legState(l)
-	routeLabel, routeCls := "multihop", "route-relay"
-	if l.Direct {
-		routeLabel, routeCls = "direct", "route-direct"
+	// The tree now renders every hop of each leg, so direct-vs-multihop is visible
+	// in the branch itself; the old direct/multihop word is redundant. Keep a
+	// non-redundant at-a-glance hop count instead ("1 hop" / "3 hops"), still tinted
+	// green for a 1-hop (direct) leg and blue for a relayed one. hopCount falls back
+	// to 1 for a legacy leg with no recorded path (the direct root→dest leaf).
+	hops := len(l.Hops)
+	if hops == 0 {
+		hops = 1
 	}
-	// Continuation line 1 — compact scalars: direct/multihop, gate state,
-	// route-rtt (em dash when unmeasured), rtx. tp-rtt lives on the first-hop
-	// edge above (the transport that reaches this leg's first peer).
+	hopLabel, routeCls := fmt.Sprintf("%d hops", hops), "route-relay"
+	if hops == 1 {
+		hopLabel = "1 hop"
+	}
+	if l.Direct {
+		routeCls = "route-direct"
+	}
+	// Continuation line 1 — compact scalars: hop count, gate state, route-rtt (em
+	// dash when unmeasured), rtx. tp-rtt lives on the first-hop edge above (the
+	// transport that reaches this leg's first peer).
 	fmt.Fprintf(b, `<div class="tdetail"><span class="guide">%s</span>`, prefix)
-	fmt.Fprintf(b, `<span class="rtag %s">%s</span><span class="badge %s">%s</span>`, routeCls, routeLabel, scls, state)
+	fmt.Fprintf(b, `<span class="rtag %s">%s</span><span class="badge %s">%s</span>`, routeCls, hopLabel, scls, state)
 	fmt.Fprintf(b, `<span class="legm"><i>route</i>%s</span><span class="legm"><i>rtx</i>%d</span></div>`,
 		routeRTT(l.RouteLatencyMS), l.Retransmits)
 	// Continuation line 2 — the sent/recv share meters. shares are 0..100
@@ -635,13 +661,17 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`.rtag{display:inline-block;padding:0 .4rem;border-radius:3px;font-size:11px;font-weight:600}` +
 	`.rtag.route-direct{background:rgba(60,180,120,.18);color:#2a8}` +
 	`.rtag.route-relay{background:rgba(120,140,200,.18);color:#68a}` +
-	`.fpk{font-family:ui-monospace,monospace;font-size:11px;word-break:break-all}` +
-	`.ftid{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--muted)}` +
+	`.fpk{font-family:'Mononoki',ui-monospace,monospace;font-size:11px;word-break:break-all}` +
+	`.ftid{font-family:'Mononoki',ui-monospace,monospace;font-size:10.5px;color:var(--muted)}` +
 	`.copy{border-radius:3px;transition:background .15s,color .15s}` +
 	`body.js .copy{cursor:pointer}body.js .copy:hover{background:rgba(124,131,255,.14)}` +
 	`.copy.copied{background:var(--ok);color:#04120c}.copy.copied::after{content:" ✓ copied";font-size:10px;letter-spacing:.3px}` +
 	// One unified route tree (root = local visor; branches = first-hop peers).
-	`.tree{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;line-height:1.6;overflow-x:auto;padding:.3rem 0;border:1px solid var(--line);border-radius:7px;background:var(--card);padding:.55rem .65rem}` +
+	// No inner overflow-x box: the tree lays out at page width and the PAGE (body)
+	// scrolls horizontally if the long full PKs run wide, so a scroll position is a
+	// window offset the live-swap can restore — not a nested scroll region that
+	// resets on every push.
+	`.tree{font-family:'Mononoki',ui-monospace,SFMono-Regular,monospace;font-size:11.5px;line-height:1.6;padding:.3rem 0;border:1px solid var(--line);border-radius:7px;background:var(--card);padding:.55rem .65rem}` +
 	`.tline,.tdetail{display:flex;align-items:baseline;gap:.3rem;white-space:nowrap}` +
 	`.tline{margin-top:.1rem}` +
 	`.guide{white-space:pre;color:var(--muted);flex:none}` + // box-drawing trunk/branch cells
@@ -656,8 +686,10 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`.tdetail .legm{color:var(--fg)}.tdetail .legm i{color:var(--muted);font-style:normal;margin-right:.2rem;text-transform:uppercase;font-size:9px;letter-spacing:.3px}` +
 	`.tdetail .bwlabel{color:var(--muted);white-space:nowrap}` +
 	`.tdetail .barcell{display:inline-block;width:7rem;flex:none}` +
-	`pre.log{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 ui-monospace,SFMono-Regular,monospace;` +
-	`white-space:pre-wrap;word-break:break-word;max-height:26rem;overflow:auto;color:var(--fg)}` +
+	// Recent log: keep the vertical max-height scroll, but drop the horizontal
+	// inner scroll — lines wrap (pre-wrap + break-word) so any width is page-level.
+	`pre.log{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 'Mononoki',ui-monospace,SFMono-Regular,monospace;` +
+	`white-space:pre-wrap;word-break:break-word;max-height:26rem;overflow-y:auto;color:var(--fg)}` +
 	`ul.events{margin:.3rem 0;padding-left:1.1rem;font-size:12px}ul.events li{margin:.1rem 0}` +
 	`.seam{opacity:.9}.controls{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem}` +
 	`.controls button{font:inherit;font-size:12px;padding:.2rem .6rem;border:1px dashed var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:not-allowed}` +
