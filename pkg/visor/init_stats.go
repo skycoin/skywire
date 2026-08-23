@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -71,9 +73,18 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 	// own PK (one identity per node).
 	pub, sink := buildStatsPublisher(v, log)
 	if pub != nil {
-		if err := seedSinkFromStore(store, sink, publishWindow, log); err != nil {
+		// Only the currently-live transports' `current` leaf may be
+		// broadcast to the discovery feed. bbolt retains records for
+		// recently-closed transports (local /stats history), but pushing
+		// their stale `current` leaves bloats the Root TPD fills over a
+		// short announce conn and starves discovery. Seed the tracker's
+		// mirrored-current set with this same live set so a transport that
+		// dies between hydrate and the first sample is reconciled away.
+		liveIDs := liveTransportIDs(v)
+		if err := seedSinkFromStore(store, sink, publishWindow, liveIDs, log); err != nil {
 			log.WithError(err).Warn("Stats: hydrating CXO publisher from bbolt failed")
 		}
+		tracker.SeedMirroredCurrent(liveIDs)
 		tracker.SetSink(sink)
 		// Wire the same publisher into the transport manager so its
 		// register / deregister loops mirror the canonical entry +
@@ -231,14 +242,37 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 // seedSinkFromStore copies the in-window slice of bbolt state into
 // the freshly-initialized publisher so cold subscribers see the full
 // rolling window from the first connect, not just data sampled after
-// the visor restarted.
-func seedSinkFromStore(store *stats.Store, sink stats.Sink, publishWindowDays int, log *logging.Logger) error {
-	pushed, err := stats.HydrateSink(store, sink, publishWindowDays, time.Now())
+// the visor restarted. Only the `current` snapshot leaves of transports
+// in liveIDs are broadcast (dead-but-retained records stay bbolt-only).
+func seedSinkFromStore(store *stats.Store, sink stats.Sink, publishWindowDays int, liveIDs map[uuid.UUID]struct{}, log *logging.Logger) error {
+	isLive := func(id uuid.UUID) bool {
+		_, ok := liveIDs[id]
+		return ok
+	}
+	pushed, err := stats.HydrateSink(store, sink, publishWindowDays, time.Now(), isLive)
 	if err != nil {
 		return err
 	}
 	log.WithField("paths", pushed).Debug("Stats: hydrated CXO publisher from bbolt")
 	return nil
+}
+
+// liveTransportIDs snapshots the IDs of the visor's currently-live
+// (non-closed) transports. Mirrors the IsClosed() filter in
+// transportsProbe / countLiveTransports — this is the set whose
+// `current` telemetry leaf is eligible for the CXO/TPD discovery feed.
+func liveTransportIDs(v *Visor) map[uuid.UUID]struct{} {
+	out := make(map[uuid.UUID]struct{})
+	if v.tpM == nil {
+		return out
+	}
+	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if !tp.IsClosed() {
+			out[tp.Entry.ID] = struct{}{}
+		}
+		return true
+	})
+	return out
 }
 
 // cxoSink adapts a treestore.Publisher to the stats.Sink contract.
