@@ -9,6 +9,8 @@ import (
 
 	appnet "github.com/skycoin/skywire/pkg/app/appnet"
 
+	proxystatus "github.com/skycoin/skywire/pkg/proxystatus"
+
 	routing "github.com/skycoin/skywire/pkg/routing"
 
 	time "time"
@@ -204,6 +206,34 @@ func (_m *MockRPCIngressClient) Notify(n NotifyReq) error {
 	}
 
 	return r0
+}
+
+// ProxyStatus provides a mock function with no fields
+func (_m *MockRPCIngressClient) ProxyStatus() (proxystatus.Snapshot, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for ProxyStatus")
+	}
+
+	var r0 proxystatus.Snapshot
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (proxystatus.Snapshot, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() proxystatus.Snapshot); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(proxystatus.Snapshot)
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // Read provides a mock function with given fields: connID, b
