@@ -68,7 +68,11 @@ func startTelemetry(sk cipher.SecKey, tpdPK cipher.PubKey, log *logging.Logger) 
 		return
 	}
 	telemetryPub = pub
-	tpM.SetTPDLeafPublisher(pub) // register/deregister → transports/<uuid>/entry + /tombstone
+	telemetryTPDPK = tpdPK
+	// Wrap the publisher so the expanded visorStats() can introspect exactly what
+	// transport list we publish to TPD (recordingLeafPublisher is observation-only;
+	// it delegates every Put/Delete to pub).
+	tpM.SetTPDLeafPublisher(recordingLeafPublisher{inner: pub}) // publishes the tp-list snapshot leaf TPD ingests
 	vlog(fmt.Sprintf("telemetry: in-memory CXO publisher up (feed %s) — reporting transport bandwidth+latency to TPD %s",
 		pub.Feed().Hex()[:8], tpdPK.Hex()[:8]))
 	go telemetrySampleLoop()
@@ -135,7 +139,9 @@ func telemetryAnnounceLoop(tpdPK cipher.PubKey) {
 		// heartbeat, so we only report failures here, not successes). A single
 		// announce miss is transient and retried next tick; recovery only acts
 		// after recoveryFailThreshold consecutive reports.
-		if err := telemetryPub.AnnounceTo(dctx, tpdPK); err != nil {
+		err := telemetryPub.AnnounceTo(dctx, tpdPK)
+		recordAnnounceResult(err) // introspection: track announce reach (TPD subscribes only after an OK)
+		if err != nil {
 			reportDmsgFailure("telemetry announce failed")
 		}
 	}
