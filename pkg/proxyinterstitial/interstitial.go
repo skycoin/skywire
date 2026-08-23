@@ -274,7 +274,7 @@ func ShouldServe(port string) bool {
 // written verbatim as the HTTP response and the interstitial is skipped. This
 // keeps the reserved status page reachable exactly when the exit is down — the
 // moment the user most needs to see why — which the interstitial would otherwise
-// shadow. Pass nil for the plain interstitial-only behaviour. The closure lives
+// shadow. Pass nil for the plain interstitial-only behavior. The closure lives
 // in the caller so this package stays free of any pkg/proxystatus dependency.
 func ServeSOCKS5(conn net.Conn, detail, mechanism string, statusOverride func(host string) []byte) error {
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck

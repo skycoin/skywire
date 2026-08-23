@@ -72,7 +72,7 @@ const (
 )
 
 // setupInitializingPrimary installs a mux-enabled primary route group for a
-// fresh descriptor into rgsRaw ONLY — modelling the mid-handshake window before
+// fresh descriptor into rgsRaw ONLY — modeling the mid-handshake window before
 // the group registers into rgsNs. Returns the group and its descriptor.
 func (r *router) setupInitializingPrimary(t *testing.T) (*RouteGroup, routing.RouteDescriptor) {
 	t.Helper()
@@ -113,8 +113,8 @@ func (r *router) makeAuxRules(t *testing.T, desc routing.RouteDescriptor, i int)
 	mt.Entry = transport.Entry{ID: auxTpID, Type: "test"}
 	r.tm.InjectTransportForTest(mt)
 
-	fwd := routing.ForwardRule(DefaultRouteKeepAlive, routing.RouteID(1000+i), routing.RouteID(2000+i), auxTpID, local, peer, legTestDstPort, legTestSrcPort)
-	rvs := routing.ConsumeRule(DefaultRouteKeepAlive, routing.RouteID(2000+i), local, peer, legTestSrcPort, legTestDstPort)
+	fwd := routing.ForwardRule(DefaultRouteKeepAlive, routing.RouteID(1000+i), routing.RouteID(2000+i), auxTpID, local, peer, legTestDstPort, legTestSrcPort) //nolint:gosec // G115: bounded small test route IDs
+	rvs := routing.ConsumeRule(DefaultRouteKeepAlive, routing.RouteID(2000+i), local, peer, legTestSrcPort, legTestDstPort)                                   //nolint:gosec // G115: bounded small test route IDs
 	return routing.EdgeRules{Desc: desc, Forward: fwd, Reverse: rvs}
 }
 
@@ -197,7 +197,7 @@ func TestAcceptRoutes_DuplicateDescDoesNotDeleteLeg(t *testing.T) {
 
 // TestMuxSetup_ConcurrentLegsNoCollapse stands up N aux legs concurrently to the
 // same descriptor while the primary sits in rgsRaw, with registration racing the
-// arrivals after a deterministic delay (modelling the responder handshake-await
+// arrivals after a deterministic delay (modeling the responder handshake-await
 // window). The group must converge to N legs, the primary rg must never be
 // closed or replaced, and its src port must be stable. Run under -race.
 func TestMuxSetup_ConcurrentLegsNoCollapse(t *testing.T) {
