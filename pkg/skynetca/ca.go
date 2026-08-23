@@ -1,6 +1,6 @@
 // Package skynetca pkg/skynetca/ca.go c4-app-skynet
 // authority used by the skywire resolver to terminate TLS for
-// `*.skynet` and `*.dmsg` hostnames in the visitor's browser.
+// `*.skynet`, `*.dmsg` and `*.skysocks` hostnames in the visitor's browser.
 //
 // The CA is generated on the visitor's machine, name-constrained
 // via the X.509 nameConstraints extension to the resolver TLDs, and
@@ -42,7 +42,7 @@ import (
 // DefaultPermittedDomains is the set of TLDs the resolver CA is
 // allowed to issue leaf certs for. The leading dot means "any
 // subdomain of"; bare TLDs themselves are not matched.
-var DefaultPermittedDomains = []string{".skynet", ".dmsg"}
+var DefaultPermittedDomains = []string{".skynet", ".dmsg", ".skysocks"}
 
 // CAOptions configures GenerateCA.
 type CAOptions struct {
