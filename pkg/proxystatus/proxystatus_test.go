@@ -71,24 +71,33 @@ func TestRenderSections(t *testing.T) {
 		"<main id=\"live\">", "new WebSocket", "/ws",
 		`location.origin.replace(/^http/,"ws")`, "sendCmd",
 		"standby", "status.dmsg", "status.skynet",
-		// route observability: route-latency metric (hint), per-leg hop count (the
-		// redundant direct/multihop word is gone now every hop renders in the tree),
-		// recv bar. Leg 0 is 1 hop (direct); leg 1 is 2 hops (relayed).
-		"route rtt", "1 hop", "2 hops", "480 ms", "bar recv",
+		// route observability: route-latency metric (hint) + recv bar still render.
+		// The per-leg hop-count word ("1 hop"/"N hops") is GONE — every hop renders in
+		// the tree, so directness/length is read from the branch (guarded absent below).
+		"route rtt", "480 ms", "bar recv",
 		// ONE unified route tree rooted at the local visor: the flat mux table +
 		// separate "full routes" chains folded into a single box-drawing tree.
-		// Root (this visor / source accent), branch + leaf glyphs, exit accent, the
-		// FULL (untruncated) hop PKs, per-edge transport (id + type + latency), and
-		// per-leg telemetry on indented continuation (tdetail) lines.
+		// Root (source accent), branch + leaf glyphs, dest accent, the FULL
+		// (untruncated) hop PKs, per-edge transport (id + type + latency), and per-leg
+		// telemetry on indented continuation (tdetail) lines.
 		`class="tree"`, `class="guide"`, "├──", "└─┬", "└──",
-		`class="tline src"`, `class="tline dst"`, "this visor", "exit",
+		`class="tline src"`, `class="tline dst"`,
+		// Tree header/legend (tp-tree style): color swatches name the source (this
+		// visor) and dest (exit) PK accents and the active/standby state colors, then
+		// the column hints — so the tree is self-describing without per-node word pills.
+		`class="tlegend"`, `class="lgnd src"`, `class="lgnd dst"`,
+		`class="lgnd ok"`, `class="lgnd standby"`, `class="lgnd cols"`,
+		"this visor", "exit", "peer · transport-id · type · rtt",
 		"03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff",
 		"02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee",
 		"via ", "stcpr 450ms", "sudph 30ms",
 		// first-hop transport id is shown and click-to-copy
 		`class="ftid copy"`, "tp2ccccccc-2222-2222-2222-222222222222",
-		// per-leg telemetry relocated onto continuation lines beneath the leaf PK
-		`class="tdetail"`, "│",
+		// per-leg telemetry on continuation lines beneath the leaf PK, tinted by leg
+		// STATE (active=ok green, standby=amber) — the state WORD is gone, replaced by
+		// the state color class + a tiny shape marker (● active / ○ standby).
+		`class="tdetail leg ok"`, `class="tdetail leg standby"`, "│",
+		`class="tstate ok"`, `class="tstate standby"`, "●", "○", `class="bar ok"`,
 		// UX pass: selection-guard + identical-fragment skip in the live script,
 		// click-to-copy affordance (execCommand fallback for the HTTP context),
 		// the WebSocket live indicator, route-group summary, and staged control tags.
@@ -124,12 +133,17 @@ func TestRenderSections(t *testing.T) {
 	if strings.Contains(page, `http-equiv="refresh"`) {
 		t.Error("skysocks status page must not use meta refresh (WebSocket live-push replaces it)")
 	}
-	// The redundant direct/multihop word tags are gone: every hop renders in the
-	// tree, so the reader sees a leg's directness in the branch. Only the hop-count
-	// (matched above) remains. Guard the standalone words as rtag labels.
-	for _, gone := range []string{`class="rtag route-direct">direct<`, `class="rtag route-relay">multihop<`} {
+	// The per-node word pills and per-leg state/hop-count word tags are gone: the
+	// root "this visor" and leaf "exit" pills are replaced by the source/dest PK
+	// color accents; the "active"/"standby" state word and the "N hops" count by the
+	// state color + tree depth. Guard that their markup is absent (the words survive
+	// only in the header legend + hint prose, matched above).
+	for _, gone := range []string{
+		`class="tlabel src">this visor`, `class="tlabel dst">exit`,
+		`class="rtag`, `class="badge`,
+	} {
 		if strings.Contains(page, gone) {
-			t.Errorf("status page must not render the redundant %q label", gone)
+			t.Errorf("status page must not render the removed %q markup", gone)
 		}
 	}
 	// The route tree is now page-level: no inner overflow-x scroll box (the PAGE

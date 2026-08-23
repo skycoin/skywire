@@ -159,7 +159,11 @@ var treeCmd = &cobra.Command{
 		versionFilteredSet := make(map[string]bool) // pk -> true if passes version filter
 
 		if !noFilterOnline || filterByVersion {
-			utsRaw := clirpc.FetchIntegratedUptimes(cmd.Flags(), utURL, cacheFileUT, cacheFilesAge)
+			// Only the current .on / .online / .version field is read below, so
+			// fetch the days=1 window (matching the sibling `tp` command): the online
+			// flag is present in every window and pulling the 30-day daily bitmap for
+			// thousands of visors is pure over-fetch that also bloats the cache.
+			utsRaw := clirpc.FetchIntegratedUptimesDays(cmd.Flags(), utURL, cacheFileUT, cacheFilesAge, 1)
 			if utsRaw == "" {
 				utsRaw = "[]"
 			}
