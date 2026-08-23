@@ -212,7 +212,12 @@ type RouteGroup struct {
 	// See pkg/router/dial_hook.go RotationHook.
 	rotationHook     RotationHook
 	rotationApplyAdd func(excludeHops []string)
-	rotationInterval time.Duration
+	// rotationApplyAddForward dials one FORWARD-ONLY aux leg
+	// (appendRouteAsymmetric addFwd=true/addRev=false) for a
+	// RotationAction.AddForwardLeg — extra upstream send capacity that leaves
+	// the reverse/download set untouched. Nil disables forward widening.
+	rotationApplyAddForward func(excludeHops []string)
+	rotationInterval        time.Duration
 
 	// selfHealAdd restores the multiplexed degree in the background when a
 	// leg dies. pruneDeadTransports drops the dead leg (surviving legs
@@ -748,11 +753,14 @@ func (rg *RouteGroup) SetLegChangeHook(hook LegChangeHook, info DialInfo) {
 // forward leg with the policy's ExcludeHops as the disjoint-
 // intermediate filter. It runs in the rotation goroutine's
 // own context so a slow setup-node dial doesn't block other
-// route groups' rotation.
-func (rg *RouteGroup) SetRotation(hook RotationHook, applyAdd func(excludeHops []string), interval time.Duration) {
+// route groups' rotation. applyAddForward is the FORWARD-ONLY
+// analog (appendRouteAsymmetric addFwd=true/addRev=false), dialed
+// for a RotationAction.AddForwardLeg; nil disables forward widening.
+func (rg *RouteGroup) SetRotation(hook RotationHook, applyAdd, applyAddForward func(excludeHops []string), interval time.Duration) {
 	rg.mu.Lock()
 	rg.rotationHook = hook
 	rg.rotationApplyAdd = applyAdd
+	rg.rotationApplyAddForward = applyAddForward
 	rg.rotationInterval = interval
 	rg.mu.Unlock()
 	// Start the rotation goroutine now (startOffServiceLoops fired
@@ -1239,6 +1247,7 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 	rg.mu.Lock()
 	hook := rg.rotationHook
 	applyAdd := rg.rotationApplyAdd
+	applyAddForward := rg.rotationApplyAddForward
 	info := rg.legChangeInfo
 	legs := rg.snapshotLegs()
 	rg.mu.Unlock()
@@ -1246,7 +1255,7 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 		return
 	}
 	action := hook.OnTick(info, legs)
-	if len(action.DropLegs) == 0 && !action.AddLeg &&
+	if len(action.DropLegs) == 0 && !action.AddLeg && !action.AddForwardLeg &&
 		len(action.DemoteToStandby) == 0 && len(action.PromoteFromStandby) == 0 {
 		return
 	}
@@ -1296,6 +1305,17 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 
 	if action.AddLeg && applyAdd != nil {
 		applyAdd(action.ExcludeHops)
+	}
+
+	// Forward-only widen: extra upstream send leg that leaves the reverse set
+	// untouched. Falls back to the full-duplex add when no forward-only callback
+	// is wired (older dial path) so the widen still happens.
+	if action.AddForwardLeg {
+		if applyAddForward != nil {
+			applyAddForward(action.ExcludeHops)
+		} else if applyAdd != nil {
+			applyAdd(action.ExcludeHops)
+		}
 	}
 }
 

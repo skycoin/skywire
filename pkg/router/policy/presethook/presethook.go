@@ -139,6 +139,7 @@ func (h *Hook) OnTick(_ router.DialInfo, legs []router.LegInfo) router.RotationA
 		ExcludeHops:        action.ExcludeHops,
 		DemoteToStandby:    action.DemoteToStandby,
 		PromoteFromStandby: action.PromoteFromStandby,
+		AddForwardLeg:      action.AddForwardLeg,
 	}
 }
 
