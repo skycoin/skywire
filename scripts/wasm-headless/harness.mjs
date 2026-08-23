@@ -107,5 +107,55 @@ try { aboutObj = JSON.parse(aboutBody); } catch { die(`/api/about not JSON: ${ab
 if (!aboutObj.dmsg_connected) die(`/api/about reports dmsg_connected=false: ${aboutBody.slice(0, 200)}`);
 console.log('hvApi /api/about OK:', aboutBody.slice(0, 120));
 
-console.log('PASS: headless wasm-visor boot → dmsg(ws) → /api core');
+// --- transport-registration introspection smoke -----------------------------
+// Assert the NEW transport_registration object that visorStats() folds in
+// (#4122's introspection surface). This is a SMOKE of the surface's SHAPE, not
+// of a real registration: the loopback dmsg seed has no transport PEER and no
+// live TPD, so there is nothing to dial and nothing to publish a tp-list FOR.
+// We therefore assert only what must hold in an isolated boot — the in-memory
+// CXO publisher came up (publisher_up) and the object is well-formed — and
+// deliberately do NOT assert live_count>0 or tp_list.publishes>0 (no peer).
+//
+// GAP (known backlog): proving that an actual OUTBOUND transport publishes its
+// tp-list PROMPTLY (the #4122 nudge) and becomes route-findable needs a
+// loopback transport PEER + a TPD to ingest the snapshot — a larger harness
+// build-out. Until that exists, the deterministic guard for the nudge itself is
+// the Go unit test TestOutboundSaveNudgesReRegister in
+// pkg/transport/manager_regnudge_test.go, which drives a real outbound
+// SaveTransport and asserts the tp-list snapshot Put fires within the debounce
+// window (well under the 90s re-register ticker).
+if (typeof globalThis.skywireVisor.visorStats !== 'function') {
+  die('skywireVisor.visorStats is not a function (introspection surface missing)');
+}
+const readStats = () => {
+  const raw = globalThis.skywireVisor.visorStats();
+  return typeof raw === 'string' ? JSON.parse(raw) : raw;
+};
+// The telemetry publisher is brought up during boot; poll briefly so a slow
+// bring-up doesn't flake the shape assertions below.
+let treg;
+const regDeadline = Date.now() + DMSG_TIMEOUT_MS;
+for (;;) {
+  const stats = readStats();
+  treg = stats.transport_registration;
+  if (treg && treg.publisher_up === true) break;
+  if (Date.now() > regDeadline) {
+    die(`transport_registration.publisher_up never became true within ${DMSG_TIMEOUT_MS}ms: ` +
+        JSON.stringify(treg));
+  }
+  await sleep(250);
+}
+if (typeof treg !== 'object' || treg === null) die(`transport_registration is not an object: ${JSON.stringify(treg)}`);
+if (treg.publisher_up !== true) die(`transport_registration.publisher_up !== true: ${JSON.stringify(treg)}`);
+for (const k of ['tp_list', 'announce', 'publish_state', 'feed']) {
+  if (!(k in treg)) die(`transport_registration missing key '${k}': ${JSON.stringify(Object.keys(treg))}`);
+}
+if (typeof treg.tp_list !== 'object' || treg.tp_list === null) die(`transport_registration.tp_list is not an object`);
+if (typeof treg.announce !== 'object' || treg.announce === null) die(`transport_registration.announce is not an object`);
+if (typeof treg.publish_state !== 'object' || treg.publish_state === null) die(`transport_registration.publish_state is not an object`);
+if (typeof treg.publish_state.frozen !== 'boolean') die(`transport_registration.publish_state.frozen is not a boolean: ${JSON.stringify(treg.publish_state)}`);
+if (typeof treg.feed !== 'string' || treg.feed.length === 0) die(`transport_registration.feed is not a non-empty string: ${JSON.stringify(treg.feed)}`);
+console.log(`visorStats transport_registration OK: publisher_up=true feed=${treg.feed.slice(0, 8)} frozen=${treg.publish_state.frozen}`);
+
+console.log('PASS: headless wasm-visor boot → dmsg(ws) → /api core → transport_registration introspection');
 process.exit(0);
