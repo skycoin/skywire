@@ -255,18 +255,35 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	root := buildRouteTree(ordered)
 
 	b.WriteString(`<div class="tree">`)
+	writeTreeLegend(b)
 	writeRouteRoot(b, root, maxSent, maxRecv)
 	b.WriteString(`</div>`)
-	b.WriteString(`<p class="hint">One route tree rooted at ` +
-		`<span class="tlabel src">this visor</span>; branches are the first-hop peers it dials, ` +
-		`each edge showing the transport (id + rtt) and continuing to the ` +
-		`<span class="tlabel dst">exit</span> — so a 1-hop (direct) leg and a multi-hop ` +
-		`leg are visible in the branch itself. Per-leg mux telemetry — hop count, state, ` +
-		`route-rtt, rtx and the sent/recv share bars — hangs off each destination leaf. ` +
-		`Bars are relative to the busiest leg. ` +
+	b.WriteString(`<p class="hint">One route tree rooted at this visor (source accent); branches are the ` +
+		`first-hop peers it dials, each edge showing the transport (id + type + rtt) and continuing to the ` +
+		`exit (dest accent) — so a 1-hop (direct) leg and a multi-hop leg are visible in the branch itself, ` +
+		`no hop-count word needed. Leg state is <b>color-coded</b> (see the legend above): active green, ` +
+		`standby amber, dead red — the state word is dropped where the color already says it. Per-leg mux ` +
+		`telemetry — route rtt, rtx and the sent/recv share bars — hangs off each destination leaf; bars are ` +
+		`relative to the busiest leg. ` +
 		`<b>tp rtt</b> is the first-hop transport; <b>route rtt</b> is the true end-to-end route latency (all hops). ` +
 		`Click any public key (or transport id) to copy it. ` +
 		`For a live terminal chart use <code>skywire cli proxy mux plot</code>.</p></section>`)
+}
+
+// writeTreeLegend prints a compact, monospace header/legend above the route tree
+// — mirroring `skywire cli tp tree`'s "Tree *Online … *source *dest  TPID  Type"
+// line. It names the color coding (source/dest PK accents, active/standby/dead
+// state colors) with swatches, then the columns each tree line carries, so the
+// tree is self-describing without a per-node word label on every root and leaf.
+func writeTreeLegend(b *strings.Builder) {
+	b.WriteString(`<div class="tlegend">` +
+		`<span class="lgnd src">source · this visor</span>` +
+		`<span class="lgnd dst">dest · exit</span>` +
+		`<span class="lgnd ok">active</span>` +
+		`<span class="lgnd standby">standby</span>` +
+		`<span class="lgnd warn">dead</span>` +
+		`<span class="lgnd cols">peer · transport-id · type · rtt</span>` +
+		`</div>`)
 }
 
 // rtNode is one visor in the merged route tree. Legs are prefix-merged by their
@@ -328,10 +345,11 @@ func buildRouteTree(legs []Leg) *rtNode {
 
 // writeRouteRoot writes the tree root (the local visor) then its branches.
 func writeRouteRoot(b *strings.Builder, root *rtNode, maxSent, maxRecv uint64) {
-	// Root line: no connector, source accent. An all-legacy group may have no
-	// known local PK — copyablePK renders a dash and nothing breaks.
-	fmt.Fprintf(b, `<div class="tline src"><span class="guide"></span>%s<span class="tlabel src">this visor</span></div>`,
-		copyablePK(root.pk))
+	// Root line: no connector, source accent (the .tline.src PK tint IS the "this
+	// visor" marker now — the word pill is dropped; the legend names the color).
+	// An all-legacy group may have no known local PK — copyablePK renders a dash
+	// and nothing breaks.
+	fmt.Fprintf(b, `<div class="tline src"><span class="guide"></span>%s</div>`, copyablePK(root.pk))
 	for i, pk := range root.order {
 		writeRouteNode(b, root.kids[pk], "", i == len(root.order)-1, maxSent, maxRecv)
 	}
@@ -340,9 +358,10 @@ func writeRouteRoot(b *strings.Builder, root *rtNode, maxSent, maxRecv uint64) {
 // writeRouteNode renders one non-root visor node and recurses. prefix is the
 // box-drawing guide accumulated from ancestors; isLast picks └ vs ├ and whether
 // the descendant guide continues with │ or blank. Each node line shows the FULL
-// click-to-copy PK, the transport of the edge reaching it, and (for a
-// destination) an exit accent; a destination's per-leg mux telemetry is written
-// as indented detail rows beneath it.
+// click-to-copy PK and the transport of the edge reaching it. A destination node
+// gets the dst (exit) accent — the .tline.dst PK tint IS the "exit" marker now,
+// so the word pill is dropped (the legend names the color); its per-leg mux
+// telemetry is written as indented detail rows beneath it.
 func writeRouteNode(b *strings.Builder, n *rtNode, prefix string, isLast bool, maxSent, maxRecv uint64) {
 	branch := "├─"
 	cont := "│   "
@@ -354,14 +373,11 @@ func writeRouteNode(b *strings.Builder, n *rtNode, prefix string, isLast bool, m
 	} else {
 		branch += "── "
 	}
-	nodeCls, label := "mid", ""
+	nodeCls := "mid"
 	if len(n.legs) > 0 {
-		nodeCls, label = "dst", "exit" // a leg terminates here (the destination/exit)
+		nodeCls = "dst" // a leg terminates here (the destination/exit)
 	}
 	fmt.Fprintf(b, `<div class="tline %s"><span class="guide">%s</span>%s`, nodeCls, prefix+branch, copyablePK(n.pk))
-	if label != "" {
-		fmt.Fprintf(b, `<span class="tlabel %s">%s</span>`, nodeCls, label)
-	}
 	if edge := edgeInfo(n); edge != "" {
 		fmt.Fprintf(b, `<span class="thop">%s</span>`, edge)
 	}
@@ -396,33 +412,24 @@ func edgeInfo(n *rtNode) string {
 }
 
 // writeLegDetail writes a destination leg's end-to-end mux telemetry as indented
-// rows under its leaf: a summary row (hop count, gate-state badge, route-rtt, rtx)
-// and the dual sent/recv share bars. prefix keeps them aligned
-// under the leaf, carrying any open-ancestor │ guides. maxSent/maxRecv (>=1)
-// scale the bars against the busiest leg.
+// rows under its leaf: a summary row (state marker, route-rtt, rtx) and the dual
+// sent/recv share bars. prefix keeps them aligned under the leaf, carrying any
+// open-ancestor │ guides. maxSent/maxRecv (>=1) scale the bars against the
+// busiest leg.
+//
+// State is conveyed by COLOR now (scls: ok=active green, standby=amber,
+// warn=dead) — the "active"/"standby"/"closed" word is dropped, the tdetail rows
+// are tinted with the state color and a tiny shape marker (● active / ○ standby
+// / ✕ dead) rides along so the state is still distinguishable for color-blind
+// readers without adding a word. Hop count is dropped too: every hop renders in
+// the branch above, so a reader counts tree levels for it.
 func writeLegDetail(b *strings.Builder, prefix string, l Leg, maxSent, maxRecv uint64) {
-	state, scls := legState(l)
-	// The tree now renders every hop of each leg, so direct-vs-multihop is visible
-	// in the branch itself; the old direct/multihop word is redundant. Keep a
-	// non-redundant at-a-glance hop count instead ("1 hop" / "3 hops"), still tinted
-	// green for a 1-hop (direct) leg and blue for a relayed one. hopCount falls back
-	// to 1 for a legacy leg with no recorded path (the direct root→dest leaf).
-	hops := len(l.Hops)
-	if hops == 0 {
-		hops = 1
-	}
-	hopLabel, routeCls := fmt.Sprintf("%d hops", hops), "route-relay"
-	if hops == 1 {
-		hopLabel = "1 hop"
-	}
-	if l.Direct {
-		routeCls = "route-direct"
-	}
-	// Continuation line 1 — compact scalars: hop count, gate state, route-rtt (em
-	// dash when unmeasured), rtx. tp-rtt lives on the first-hop edge above (the
-	// transport that reaches this leg's first peer).
-	fmt.Fprintf(b, `<div class="tdetail"><span class="guide">%s</span>`, prefix)
-	fmt.Fprintf(b, `<span class="rtag %s">%s</span><span class="badge %s">%s</span>`, routeCls, hopLabel, scls, state)
+	_, scls := legState(l)
+	// Continuation line 1 — compact scalars: state marker, route-rtt (em dash when
+	// unmeasured), rtx. tp-rtt lives on the first-hop edge above (the transport
+	// that reaches this leg's first peer).
+	fmt.Fprintf(b, `<div class="tdetail leg %s"><span class="guide">%s</span>`, scls, prefix)
+	fmt.Fprintf(b, `<span class="tstate %s">%s</span>`, scls, stateMark(l))
 	fmt.Fprintf(b, `<span class="legm"><i>route</i>%s</span><span class="legm"><i>rtx</i>%d</span></div>`,
 		routeRTT(l.RouteLatencyMS), l.Retransmits)
 	// Continuation line 2 — the sent/recv share meters. shares are 0..100
@@ -430,11 +437,26 @@ func writeLegDetail(b *strings.Builder, prefix string, l Leg, maxSent, maxRecv u
 	// there's no uint64->int narrowing.
 	sentShare := l.SentBytes * 100 / maxSent
 	recvShare := l.RecvBytes * 100 / maxRecv
-	fmt.Fprintf(b, `<div class="tdetail"><span class="guide">%s</span>`, prefix)
+	fmt.Fprintf(b, `<div class="tdetail leg %s"><span class="guide">%s</span>`, scls, prefix)
 	fmt.Fprintf(b, `<span class="bwlabel">sent %s</span><span class="barcell"><span class="bar %s" style="width:%d%%"></span></span>`,
 		humanBytes(l.SentBytes), scls, sentShare)
 	fmt.Fprintf(b, `<span class="bwlabel">recv %s</span><span class="barcell"><span class="bar recv %s" style="width:%d%%"></span></span></div>`,
 		humanBytes(l.RecvBytes), scls, recvShare)
+}
+
+// stateMark is the tiny color-blind-safe shape marker for a leg's state: a
+// filled dot for active, a hollow dot for standby, a cross for dead. It carries
+// the same information as the (removed) state word but in one glyph the state
+// color tints.
+func stateMark(l Leg) string {
+	switch {
+	case !l.Alive:
+		return "✕"
+	case l.Standby:
+		return "○"
+	default:
+		return "●"
+	}
 }
 
 // legRank orders legs for the merged tree: the direct active leg (carrying app
@@ -653,14 +675,9 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`.stat{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:.15rem .55rem;font-size:12px}` +
 	`.stat i{color:var(--muted);font-style:normal;margin-right:.3rem;text-transform:uppercase;font-size:10px;letter-spacing:.4px}` +
 	`.stat.ok{color:var(--ok)}.stat.warn{color:var(--warn)}.stat.standby{color:var(--standby)}` +
-	`.badge{display:inline-block;padding:.02rem .4rem;border-radius:999px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;border:1px solid currentColor}` +
-	`.badge.ok{color:var(--ok)}.badge.warn{color:var(--warn)}.badge.standby{color:var(--standby)}` +
 	`.bar{display:block;height:.6rem;border-radius:3px;background:var(--accent);min-width:2px}` +
-	`.bar.standby{background:var(--standby)}.bar.warn{background:var(--warn)}` +
+	`.bar.ok{background:var(--ok)}.bar.standby{background:var(--standby)}.bar.warn{background:var(--warn)}` +
 	`.bar.recv{background:var(--recv,#3b9)}` +
-	`.rtag{display:inline-block;padding:0 .4rem;border-radius:3px;font-size:11px;font-weight:600}` +
-	`.rtag.route-direct{background:rgba(60,180,120,.18);color:#2a8}` +
-	`.rtag.route-relay{background:rgba(120,140,200,.18);color:#68a}` +
 	`.fpk{font-family:'Mononoki',ui-monospace,monospace;font-size:11px;word-break:break-all}` +
 	`.ftid{font-family:'Mononoki',ui-monospace,monospace;font-size:10.5px;color:var(--muted)}` +
 	`.copy{border-radius:3px;transition:background .15s,color .15s}` +
@@ -676,11 +693,23 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`.tline{margin-top:.1rem}` +
 	`.guide{white-space:pre;color:var(--muted);flex:none}` + // box-drawing trunk/branch cells
 	`.tline.src>code.fpk{color:var(--accent);font-weight:600}.tline.dst>code.fpk{color:var(--accent2);font-weight:600}` +
-	`.tlabel{font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;border-radius:3px;padding:0 .3rem;flex:none}` +
-	`.tlabel.src{background:rgba(124,131,255,.2);color:var(--accent)}` +
-	`.tlabel.dst{background:rgba(160,107,255,.2);color:var(--accent2)}` +
-	`.tlabel.mid{color:var(--muted)}` +
+	// Tree header/legend (mirrors `tp tree`'s swatch+column header): color swatches
+	// name the source/dest PK accents and the active/standby/dead state colors, then
+	// the column hints for what each tree line carries. Self-describes the tree so no
+	// per-node word pill is needed on the root ("this visor") or leaves ("exit").
+	`.tlegend{display:flex;flex-wrap:wrap;gap:.15rem .9rem;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);padding-bottom:.4rem;margin-bottom:.4rem;border-bottom:1px solid var(--line)}` +
+	`.lgnd{display:inline-flex;align-items:center;white-space:nowrap}` +
+	`.lgnd::before{content:"\2b24";margin-right:.3rem;font-size:8px;line-height:1}` +
+	`.lgnd.src::before{color:var(--accent)}.lgnd.dst::before{color:var(--accent2)}` +
+	`.lgnd.ok::before{color:var(--ok)}.lgnd.standby::before{color:var(--standby)}.lgnd.warn::before{color:var(--warn)}` +
+	`.lgnd.cols::before{content:none}.lgnd.cols{color:var(--muted);opacity:.85;text-transform:none;letter-spacing:0}` +
 	`.thop{color:var(--muted);margin-left:.35rem;font-size:11px;flex:none}` +
+	// Per-leg state color (replaces the removed active/standby/closed word): the
+	// tdetail rows are tinted and a small shape marker (.tstate) leads each summary
+	// row, color-blind-safe by shape as well as hue.
+	`.tstate{flex:none;font-weight:700;font-size:10px}` +
+	`.tstate.ok{color:var(--ok)}.tstate.standby{color:var(--standby)}.tstate.warn{color:var(--warn)}` +
+	`.tdetail.leg.ok .legm i{color:var(--ok)}.tdetail.leg.standby .legm i{color:var(--standby)}.tdetail.leg.warn .legm i{color:var(--warn)}` +
 	// Continuation (metadata) lines: no branch glyph, aligned under the leaf PK.
 	`.tdetail{font-size:10.5px;color:var(--muted)}` +
 	`.tdetail .legm{color:var(--fg)}.tdetail .legm i{color:var(--muted);font-style:normal;margin-right:.2rem;text-transform:uppercase;font-size:9px;letter-spacing:.3px}` +
