@@ -8,6 +8,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	rpc "github.com/skycoin/skywire/pkg/gobrpc"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -24,6 +25,11 @@ type RPCIngressClient interface {
 	SetConnectionDuration(dur int64) error
 	SetError(appErr string) error
 	SetAppPort(appPort routing.Port) error
+	// ProxyStatus fetches the visor-built rich read-only status snapshot for
+	// this app (per-leg mux telemetry, recent logs, route/transport events).
+	// An empty snapshot (no error) means the visor has no data; the caller
+	// then renders its own local view.
+	ProxyStatus() (proxystatus.Snapshot, error)
 	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
 	// DialWithOptions asks the server to dial remote with per-call
 	// options. Honored fields:
@@ -87,6 +93,15 @@ func (c *rpcIngressClient) SetError(appErr string) error {
 // SetAppPort sets port of an app.
 func (c *rpcIngressClient) SetAppPort(port routing.Port) error {
 	return c.rpc.Call(c.formatMethod("SetAppPort"), &port, nil)
+}
+
+// ProxyStatus sends `ProxyStatus` command to the server.
+func (c *rpcIngressClient) ProxyStatus() (proxystatus.Snapshot, error) {
+	var resp proxystatus.Snapshot
+	if err := c.rpc.Call(c.formatMethod("ProxyStatus"), &struct{}{}, &resp); err != nil {
+		return proxystatus.Snapshot{}, err
+	}
+	return resp, nil
 }
 
 // RPCErr is used to preserve the type of the errors we return via RPC

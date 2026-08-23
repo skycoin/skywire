@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -62,6 +63,16 @@ type ProcManager interface {
 	AppByPort(p routing.Port) (string, bool)
 	ConnectionsSummary(appName string) ([]ConnectionSummary, error)
 	Addr() net.Addr
+	// SetProxyStatusFn wires the builder that turns an app name into the
+	// visor's rich read-only status snapshot (per-leg mux telemetry, recent
+	// logs, route/transport events). An app that serves its own reserved
+	// status host (skysocks-client's status.skysocks) reaches it via the
+	// ProxyStatus app RPC. Nil-safe: unset means ProxyStatus reports "no
+	// snapshot" and the app renders its own local view.
+	SetProxyStatusFn(fn func(appName string) (proxystatus.Snapshot, bool))
+	// ProxyStatus returns the visor-built status snapshot for appName. ok is
+	// false when no builder is wired (wasm/tests) or it has no data for the app.
+	ProxyStatus(appName string) (proxystatus.Snapshot, bool)
 }
 
 // procManager manages skywire applications. It implements `ProcManager`.
@@ -91,6 +102,11 @@ type procManager struct {
 	done chan struct{}
 
 	logStorePath string
+
+	// proxyStatusFn builds the visor's rich read-only status snapshot for an
+	// app that serves its own reserved status host. Set once via
+	// SetProxyStatusFn right after construction; nil is valid (wasm/tests).
+	proxyStatusFn func(appName string) (proxystatus.Snapshot, bool)
 }
 
 // NewProcManager constructs `ProcManager`.
@@ -348,6 +364,26 @@ func (m *procManager) Deregister(key appcommon.ProcKey) error {
 	_, err := m.pop(proc.appName) //nolint:errcheck
 
 	return err
+}
+
+// SetProxyStatusFn wires the visor's status-snapshot builder. See the
+// ProcManager interface doc.
+func (m *procManager) SetProxyStatusFn(fn func(appName string) (proxystatus.Snapshot, bool)) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	m.proxyStatusFn = fn
+}
+
+// ProxyStatus returns the visor-built status snapshot for appName. ok is false
+// when no builder is wired or it has no data for the app.
+func (m *procManager) ProxyStatus(appName string) (proxystatus.Snapshot, bool) {
+	m.mx.RLock()
+	fn := m.proxyStatusFn
+	m.mx.RUnlock()
+	if fn == nil {
+		return proxystatus.Snapshot{}, false
+	}
+	return fn(appName)
 }
 
 func (m *procManager) ProcByName(appName string) (*Proc, bool) {
