@@ -4,6 +4,7 @@ package proxystatus
 import (
 	"fmt"
 	"html"
+	"sort"
 	"strings"
 )
 
@@ -174,13 +175,16 @@ func writePill(b *strings.Builder, k, v, cls string) {
 	fmt.Fprintf(b, `<span class="%s"><i>%s</i> %s</span>`, c, html.EscapeString(k), v)
 }
 
-// writeMuxSection renders the per-leg mux view as one ROUTE TREE per leg —
-// the flat mux table and the separate "full routes" hop chains folded into a
-// single view inspired by `skywire cli tp tree`. Each leg is a header line
-// (route kind + gate state + tp/route RTT + rtx + sent/recv share bars) above a
-// box-drawing tree that traces this visor → intermediate relays → destination,
-// every public key shown in full and click-to-copy. A static, no-JS analog of
-// the `cli proxy mux plot` panel.
+// writeMuxSection renders the route group as ONE unified route tree rooted at
+// the local visor — the flat mux table and the separate "full routes" hop
+// chains folded into a single view inspired by `skywire cli visor ping tree`
+// (one root, branches = the peers this visor reaches). Every leg is a path
+// local → … → destination; all paths are prefix-merged into the one tree, so a
+// shared first hop collapses into a single branch that diverges deeper. Each
+// branch/edge carries the transport used for that hop (id + type + rtt) and each
+// leg's end-to-end mux telemetry (direct/multihop, gate state, route-rtt, rtx,
+// sent/recv share bars) hangs off the destination leaf for that leg. A static,
+// no-JS analog of the `cli proxy mux plot` panel.
 func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	b.WriteString(`<section><h2>route group · per-leg mux</h2>`)
 	if len(snap.Legs) == 0 {
@@ -209,7 +213,7 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 		}
 	}
 	// Scannable route-group summary: leg census + aggregate throughput, so the
-	// operator gets the shape of the group before reading the per-leg trees.
+	// operator gets the shape of the group before reading the route tree.
 	b.WriteString(`<div class="rgsummary">`)
 	writeStat(b, "legs", fmt.Sprintf("%d", len(snap.Legs)), "")
 	writeStat(b, "active", fmt.Sprintf("%d", nActive), "ok")
@@ -222,106 +226,204 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	writeStat(b, "sent", humanBytes(totSent), "")
 	writeStat(b, "recv", humanBytes(totRecv), "")
 	b.WriteString(`</div>`)
-	b.WriteString(`<div class="legs-tree">`)
-	for _, l := range snap.Legs {
-		writeLegTree(b, l, maxSent, maxRecv)
-	}
+
+	// Order legs so the branch carrying app traffic — the direct, active leg —
+	// renders first, then active multihop, then warm standby, then dead. Branch
+	// order in the merged tree follows leg insertion order.
+	ordered := make([]Leg, len(snap.Legs))
+	copy(ordered, snap.Legs)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		ri, rj := legRank(ordered[i]), legRank(ordered[j])
+		if ri != rj {
+			return ri < rj
+		}
+		return ordered[i].Index < ordered[j].Index
+	})
+	root := buildRouteTree(ordered)
+
+	b.WriteString(`<div class="tree">`)
+	writeRouteRoot(b, root, maxSent, maxRecv)
 	b.WriteString(`</div>`)
-	b.WriteString(`<p class="hint">Each leg is a route tree — this visor at the root, ` +
-		`<span class="tlabel src">source</span> then relays, the ` +
-		`<span class="tlabel dst">exit</span> at the leaf; per-hop transport type + RTT sit on each branch. ` +
-		`Bars are each leg's sent / recv bytes relative to the busiest leg. ` +
+	b.WriteString(`<p class="hint">One route tree rooted at ` +
+		`<span class="tlabel src">this visor</span>; branches are the first-hop peers it dials, ` +
+		`each edge showing the transport (id + rtt) and continuing to the ` +
+		`<span class="tlabel dst">exit</span>. Per-leg mux telemetry — direct/multihop, state, ` +
+		`route-rtt, rtx and the sent/recv share bars — hangs off each destination leaf. ` +
+		`Bars are relative to the busiest leg. ` +
 		`<b>tp rtt</b> is the first-hop transport; <b>route rtt</b> is the true end-to-end route latency (all hops). ` +
-		`Click any public key to copy it. ` +
+		`Click any public key (or transport id) to copy it. ` +
 		`For a live terminal chart use <code>skywire cli proxy mux plot</code>.</p></section>`)
 }
 
-// writeLegTree renders one leg as a header line plus its hop tree. The header
-// carries the route kind (direct/multihop), gate state badge, tp/route RTT, rtx
-// and the dual sent/recv share bars; the tree below it traces the leg's forward
-// path with box-drawing glyphs, this visor at the root and the destination/exit
-// at the leaf. maxSent/maxRecv (>=1) scale the share bars against the busiest leg.
-func writeLegTree(b *strings.Builder, l Leg, maxSent, maxRecv uint64) {
+// rtNode is one visor in the merged route tree. Legs are prefix-merged by their
+// PK sequence, so a node may carry the transport of the edge that reaches it
+// (from its parent) and, when it is the destination of one or more legs, those
+// legs' end-to-end telemetry.
+type rtNode struct {
+	pk         string
+	edgeTpID   string  // transport reaching this node from its parent
+	edgeTpType string  // "" / type where known
+	edgeLat    float64 // hop rtt where measured
+	hasEdge    bool    // false only for the root
+	legs       []Leg   // legs whose destination IS this node
+	order      []string
+	kids       map[string]*rtNode
+}
+
+func (n *rtNode) child(pk string) *rtNode {
+	if n.kids == nil {
+		n.kids = map[string]*rtNode{}
+	}
+	c, ok := n.kids[pk]
+	if !ok {
+		c = &rtNode{pk: pk}
+		n.kids[pk] = c
+		n.order = append(n.order, pk)
+	}
+	return c
+}
+
+// buildRouteTree merges every leg's forward path (local → … → dest) into one
+// tree rooted at the local visor. Legs with no recorded path fall back to a
+// direct root → RemotePK leaf so nothing breaks.
+func buildRouteTree(legs []Leg) *rtNode {
+	root := &rtNode{}
+	for _, l := range legs {
+		if root.pk == "" && len(l.Hops) > 0 {
+			root.pk = l.Hops[0].From // local visor PK (same for every leg)
+		}
+	}
+	for _, l := range legs {
+		if len(l.Hops) == 0 {
+			c := root.child(l.RemotePK)
+			c.legs = append(c.legs, l)
+			continue
+		}
+		cur := root
+		for _, h := range l.Hops {
+			c := cur.child(h.To)
+			if !c.hasEdge {
+				c.edgeTpID, c.edgeTpType, c.edgeLat, c.hasEdge = h.TpID, h.TpType, h.LatencyMS, true
+			}
+			cur = c
+		}
+		cur.legs = append(cur.legs, l) // the final To is this leg's destination
+	}
+	return root
+}
+
+// writeRouteRoot writes the tree root (the local visor) then its branches.
+func writeRouteRoot(b *strings.Builder, root *rtNode, maxSent, maxRecv uint64) {
+	// Root line: no connector, source accent. An all-legacy group may have no
+	// known local PK — copyablePK renders a dash and nothing breaks.
+	fmt.Fprintf(b, `<div class="tline src"><span class="guide"></span>%s<span class="tlabel src">this visor</span></div>`,
+		copyablePK(root.pk))
+	for i, pk := range root.order {
+		writeRouteNode(b, root.kids[pk], "", i == len(root.order)-1, maxSent, maxRecv)
+	}
+}
+
+// writeRouteNode renders one non-root visor node and recurses. prefix is the
+// box-drawing guide accumulated from ancestors; isLast picks └ vs ├ and whether
+// the descendant guide continues with │ or blank. Each node line shows the FULL
+// click-to-copy PK, the transport of the edge reaching it, and (for a
+// destination) an exit accent; a destination's per-leg mux telemetry is written
+// as indented detail rows beneath it.
+func writeRouteNode(b *strings.Builder, n *rtNode, prefix string, isLast bool, maxSent, maxRecv uint64) {
+	branch := "├─"
+	cont := "│   "
+	if isLast {
+		branch, cont = "└─", "    "
+	}
+	if len(n.order) > 0 {
+		branch += "┬ "
+	} else {
+		branch += "── "
+	}
+	nodeCls, label := "mid", ""
+	if len(n.legs) > 0 {
+		nodeCls, label = "dst", "exit" // a leg terminates here (the destination/exit)
+	}
+	fmt.Fprintf(b, `<div class="tline %s"><span class="guide">%s</span>%s`, nodeCls, prefix+branch, copyablePK(n.pk))
+	if label != "" {
+		fmt.Fprintf(b, `<span class="tlabel %s">%s</span>`, nodeCls, label)
+	}
+	if edge := edgeInfo(n); edge != "" {
+		fmt.Fprintf(b, `<span class="thop">%s</span>`, edge)
+	}
+	b.WriteString(`</div>`)
+
+	detailPrefix := prefix + cont
+	for _, l := range n.legs {
+		writeLegDetail(b, detailPrefix, l, maxSent, maxRecv)
+	}
+	for i, pk := range n.order {
+		writeRouteNode(b, n.kids[pk], detailPrefix, i == len(n.order)-1, maxSent, maxRecv)
+	}
+}
+
+// edgeInfo renders the transport of the edge reaching a node: "via <tpid> <type>
+// <rtt>ms". The transport id is click-to-copy; a missing id/latency is elided.
+func edgeInfo(n *rtNode) string {
+	if !n.hasEdge {
+		return ""
+	}
+	var s strings.Builder
+	s.WriteString("via ")
+	if strings.TrimSpace(n.edgeTpID) != "" {
+		s.WriteString(copyableID(n.edgeTpID, "transport id"))
+		s.WriteByte(' ')
+	}
+	s.WriteString(html.EscapeString(orDash(n.edgeTpType)))
+	if n.edgeLat > 0 {
+		fmt.Fprintf(&s, " %.0fms", n.edgeLat)
+	}
+	return s.String()
+}
+
+// writeLegDetail writes a destination leg's end-to-end mux telemetry as indented
+// rows under its leaf: a summary row (direct/multihop tag, gate-state badge,
+// route-rtt, rtx) and the dual sent/recv share bars. prefix keeps them aligned
+// under the leaf, carrying any open-ancestor │ guides. maxSent/maxRecv (>=1)
+// scale the bars against the busiest leg.
+func writeLegDetail(b *strings.Builder, prefix string, l Leg, maxSent, maxRecv uint64) {
 	state, scls := legState(l)
-	// route: direct (1-hop) vs multihop (relayed). RouteLatencyMS is the TRUE
-	// end-to-end latency; LatencyMS is only the first-hop transport.
 	routeLabel, routeCls := "multihop", "route-relay"
 	if l.Direct {
 		routeLabel, routeCls = "direct", "route-direct"
 	}
-	b.WriteString(`<div class="leg">`)
-	// Header line.
-	b.WriteString(`<div class="leghdr">`)
-	fmt.Fprintf(b, `<span class="rlabel">R%d</span>`, l.Index)
-	fmt.Fprintf(b, `<span class="rtag %s">%s</span>`, routeCls, routeLabel)
-	fmt.Fprintf(b, `<span class="badge %s">%s</span>`, scls, state)
-	fmt.Fprintf(b, `<span class="legm"><i>tp</i>%.0f ms</span>`, l.LatencyMS)
-	fmt.Fprintf(b, `<span class="legm"><i>route</i>%s</span>`, routeRTT(l.RouteLatencyMS))
-	fmt.Fprintf(b, `<span class="legm"><i>rtx</i>%d</span>`, l.Retransmits)
-	b.WriteString(`</div>`)
-	// Sent/recv share bars (kept from the old table — dual bandwidth shares).
-	// shares are 0..100 (maxSent/maxRecv are per-leg maxes, >=1) — printed as
-	// uint64 directly so there's no uint64->int narrowing.
+	// Continuation line 1 — compact scalars: direct/multihop, gate state,
+	// route-rtt (em dash when unmeasured), rtx. tp-rtt lives on the first-hop
+	// edge above (the transport that reaches this leg's first peer).
+	fmt.Fprintf(b, `<div class="tdetail"><span class="guide">%s</span>`, prefix)
+	fmt.Fprintf(b, `<span class="rtag %s">%s</span><span class="badge %s">%s</span>`, routeCls, routeLabel, scls, state)
+	fmt.Fprintf(b, `<span class="legm"><i>route</i>%s</span><span class="legm"><i>rtx</i>%d</span></div>`,
+		routeRTT(l.RouteLatencyMS), l.Retransmits)
+	// Continuation line 2 — the sent/recv share meters. shares are 0..100
+	// (maxSent/maxRecv are per-leg maxes, >=1) — printed as uint64 directly so
+	// there's no uint64->int narrowing.
 	sentShare := l.SentBytes * 100 / maxSent
 	recvShare := l.RecvBytes * 100 / maxRecv
-	b.WriteString(`<div class="legbw">`)
+	fmt.Fprintf(b, `<div class="tdetail"><span class="guide">%s</span>`, prefix)
 	fmt.Fprintf(b, `<span class="bwlabel">sent %s</span><span class="barcell"><span class="bar %s" style="width:%d%%"></span></span>`,
 		humanBytes(l.SentBytes), scls, sentShare)
-	fmt.Fprintf(b, `<span class="bwlabel">recv %s</span><span class="barcell"><span class="bar recv %s" style="width:%d%%"></span></span>`,
+	fmt.Fprintf(b, `<span class="bwlabel">recv %s</span><span class="barcell"><span class="bar recv %s" style="width:%d%%"></span></span></div>`,
 		humanBytes(l.RecvBytes), scls, recvShare)
-	b.WriteString(`</div>`)
-	// Hop tree.
-	b.WriteString(`<div class="tree">`)
-	if len(l.Hops) == 0 {
-		// Legacy/accepted route with no recorded path: fall back to a single
-		// leaf so nothing breaks — just the destination we do know (RemotePK).
-		writeTreeLine(b, "└── ", "dst", "exit", l.RemotePK, "")
-		b.WriteString(`</div></div>`)
-		return
-	}
-	// Root: the first hop's From is THIS visor (the route source).
-	writeTreeLine(b, "└─┬ ", "src", "this visor", l.Hops[0].From, "")
-	n := len(l.Hops)
-	for i, h := range l.Hops {
-		indent := strings.Repeat("  ", i+1)
-		glyph := indent + "└── "
-		nodeCls, nodeLabel := "mid", ""
-		if i < n-1 {
-			glyph = indent + "└─┬ " // an intermediate relay: more path below
-		} else {
-			nodeCls, nodeLabel = "dst", "exit" // final To is the destination/exit
-		}
-		writeTreeLine(b, glyph, nodeCls, nodeLabel, h.To, formatHop(h))
-	}
-	b.WriteString(`</div></div>`)
 }
 
-// writeTreeLine writes one visor node line of a leg's hop tree: the box-drawing
-// guide prefix (monospace, spaces preserved so nested levels line up), the FULL
-// click-to-copy public key, an optional source/exit accent label, and optional
-// per-hop transport info (type + RTT on the branch leading into this node).
-// nodeCls (src/dst/mid) tints the source and destination the way `tp tree`
-// color-codes them; intermediates are neutral.
-func writeTreeLine(b *strings.Builder, guide, nodeCls, label, pk, hop string) {
-	fmt.Fprintf(b, `<div class="tline %s"><span class="guide">%s</span>%s`,
-		nodeCls, guide, copyablePK(pk))
-	if label != "" {
-		fmt.Fprintf(b, `<span class="tlabel %s">%s</span>`, nodeCls, html.EscapeString(label))
+// legRank orders legs for the merged tree: the direct active leg (carrying app
+// traffic) first, then active multihop, warm standby, then dead legs.
+func legRank(l Leg) int {
+	switch {
+	case !l.Alive:
+		return 3
+	case l.Standby:
+		return 2
+	case l.Direct:
+		return 0
+	default:
+		return 1
 	}
-	if hop != "" {
-		fmt.Fprintf(b, `<span class="thop">%s</span>`, html.EscapeString(hop))
-	}
-	b.WriteString(`</div>`)
-}
-
-// formatHop renders a hop's transport type and (where measured) its RTT, e.g.
-// "stcpr 139ms". Zero latency is elided rather than shown as "0ms".
-func formatHop(h Hop) string {
-	t := orDash(h.TpType)
-	if h.LatencyMS > 0 {
-		return fmt.Sprintf("%s %.0fms", t, h.LatencyMS)
-	}
-	return t
 }
 
 func legState(l Leg) (label, cls string) {
@@ -452,6 +554,19 @@ func copyablePK(pk string) string {
 	return `<code class="fpk copy" data-copy="` + esc + `" title="click to copy">` + esc + `</code>`
 }
 
+// copyableID renders a click-to-copy monospace token (e.g. a transport id) the
+// same way copyablePK does, with a caller-supplied hover title. It sits inside
+// the edge's .thop span, so the source/exit PK tint (a direct-child selector)
+// does not reach it. Empty renders nothing.
+func copyableID(id, what string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ""
+	}
+	esc := html.EscapeString(id)
+	return `<code class="ftid copy" data-copy="` + esc + `" title="click to copy ` + html.EscapeString(what) + `">` + esc + `</code>`
+}
+
 func orDash(s string) string {
 	if strings.TrimSpace(s) == "" {
 		return "-"
@@ -514,34 +629,33 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`.stat.ok{color:var(--ok)}.stat.warn{color:var(--warn)}.stat.standby{color:var(--standby)}` +
 	`.badge{display:inline-block;padding:.02rem .4rem;border-radius:999px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;border:1px solid currentColor}` +
 	`.badge.ok{color:var(--ok)}.badge.warn{color:var(--warn)}.badge.standby{color:var(--standby)}` +
-	`.barcell{display:block}.bar{display:block;height:.7rem;border-radius:3px;background:var(--accent);min-width:2px}` +
+	`.bar{display:block;height:.6rem;border-radius:3px;background:var(--accent);min-width:2px}` +
 	`.bar.standby{background:var(--standby)}.bar.warn{background:var(--warn)}` +
 	`.bar.recv{background:var(--recv,#3b9)}` +
 	`.rtag{display:inline-block;padding:0 .4rem;border-radius:3px;font-size:11px;font-weight:600}` +
 	`.rtag.route-direct{background:rgba(60,180,120,.18);color:#2a8}` +
 	`.rtag.route-relay{background:rgba(120,140,200,.18);color:#68a}` +
 	`.fpk{font-family:ui-monospace,monospace;font-size:11px;word-break:break-all}` +
+	`.ftid{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--muted)}` +
 	`.copy{border-radius:3px;transition:background .15s,color .15s}` +
 	`body.js .copy{cursor:pointer}body.js .copy:hover{background:rgba(124,131,255,.14)}` +
 	`.copy.copied{background:var(--ok);color:#04120c}.copy.copied::after{content:" ✓ copied";font-size:10px;letter-spacing:.3px}` +
-	// Per-leg route trees.
-	`.legs-tree{display:flex;flex-direction:column;gap:.7rem;margin:.4rem 0}` +
-	`.leg{border:1px solid var(--line);border-radius:7px;padding:.5rem .65rem;background:var(--card)}` +
-	`.leghdr{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem}` +
-	`.leghdr .rlabel{font-weight:700}` +
-	`.legm{font-size:11.5px;color:var(--fg)}` +
-	`.legm i{color:var(--muted);font-style:normal;margin-right:.25rem;text-transform:uppercase;font-size:10px;letter-spacing:.3px}` +
-	`.legbw{display:grid;grid-template-columns:auto minmax(4rem,1fr);gap:.2rem .5rem;align-items:center;margin:.4rem 0;max-width:30rem}` +
-	`.bwlabel{font-size:11px;color:var(--muted);white-space:nowrap}` +
-	`.tree{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;line-height:1.65;overflow-x:auto;padding-top:.15rem}` +
-	`.tline{display:flex;align-items:baseline;gap:.3rem;white-space:nowrap}` +
-	`.tline .guide{white-space:pre;color:var(--muted);flex:none}` +
-	`.tline.src>code.fpk{color:var(--accent)}.tline.dst>code.fpk{color:var(--accent2)}` +
+	// One unified route tree (root = local visor; branches = first-hop peers).
+	`.tree{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;line-height:1.6;overflow-x:auto;padding:.3rem 0;border:1px solid var(--line);border-radius:7px;background:var(--card);padding:.55rem .65rem}` +
+	`.tline,.tdetail{display:flex;align-items:baseline;gap:.3rem;white-space:nowrap}` +
+	`.tline{margin-top:.1rem}` +
+	`.guide{white-space:pre;color:var(--muted);flex:none}` + // box-drawing trunk/branch cells
+	`.tline.src>code.fpk{color:var(--accent);font-weight:600}.tline.dst>code.fpk{color:var(--accent2);font-weight:600}` +
 	`.tlabel{font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;border-radius:3px;padding:0 .3rem;flex:none}` +
 	`.tlabel.src{background:rgba(124,131,255,.2);color:var(--accent)}` +
 	`.tlabel.dst{background:rgba(160,107,255,.2);color:var(--accent2)}` +
 	`.tlabel.mid{color:var(--muted)}` +
-	`.thop{color:var(--muted);margin-left:.4rem;font-size:11px;flex:none}` +
+	`.thop{color:var(--muted);margin-left:.35rem;font-size:11px;flex:none}` +
+	// Continuation (metadata) lines: no branch glyph, aligned under the leaf PK.
+	`.tdetail{font-size:10.5px;color:var(--muted)}` +
+	`.tdetail .legm{color:var(--fg)}.tdetail .legm i{color:var(--muted);font-style:normal;margin-right:.2rem;text-transform:uppercase;font-size:9px;letter-spacing:.3px}` +
+	`.tdetail .bwlabel{color:var(--muted);white-space:nowrap}` +
+	`.tdetail .barcell{display:inline-block;width:7rem;flex:none}` +
 	`pre.log{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 ui-monospace,SFMono-Regular,monospace;` +
 	`white-space:pre-wrap;word-break:break-word;max-height:26rem;overflow:auto;color:var(--fg)}` +
 	`ul.events{margin:.3rem 0;padding-left:1.1rem;font-size:12px}ul.events li{margin:.1rem 0}` +
