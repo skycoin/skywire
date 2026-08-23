@@ -71,8 +71,19 @@ jobs:
           build_arch() {
             local name="$1" goarch="$2" goarm="$3"
             echo "==> building linux/${name} (GOARCH=${goarch}${goarm:+ GOARM=${goarm}})"
-            GOOS=linux GOARCH="${goarch}" ${goarm:+GOARM="${goarm}"} CGO_ENABLED=0 \
-              go build -trimpath -mod=vendor -ldflags="${LDFLAGS}" -o skywire .
+            # Use LITERAL assignment prefixes: bash only recognizes env-var
+            # assignment prefixes for literal words at parse time, so putting a
+            # conditional ${goarm:+GOARM=...} expansion there made bash treat the
+            # trailing CGO_ENABLED=0 as a command ("command not found", exit 127).
+            # An explicit if keeps every prefix literal for both the GOARM and the
+            # no-GOARM arches.
+            if [ -n "${goarm}" ]; then
+              GOOS=linux GOARCH="${goarch}" GOARM="${goarm}" CGO_ENABLED=0 \
+                go build -trimpath -mod=vendor -ldflags="${LDFLAGS}" -o skywire .
+            else
+              GOOS=linux GOARCH="${goarch}" CGO_ENABLED=0 \
+                go build -trimpath -mod=vendor -ldflags="${LDFLAGS}" -o skywire .
+            fi
             zstd -19 -q -f -o "dist/skywire-linux-${name}.zst" skywire
             rm -f skywire
           }
