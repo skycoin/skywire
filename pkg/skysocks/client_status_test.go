@@ -176,6 +176,83 @@ func TestStatusSkysocksIntercepted(t *testing.T) {
 	}
 }
 
+// TestStatusSkysocksSSEStream verifies that a CONNECT to status.skysocks with an
+// HTTP request for /sse is answered in-process with an SSE event stream (the live
+// live-region fragment), not the one-shot full page, and is never forwarded to
+// the exit.
+func TestStatusSkysocksSSEStream(t *testing.T) {
+	c, exit := newTestClient(t)
+	defer c.Close() //nolint:errcheck
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := l.Addr().String()
+	_ = l.Close()                              //nolint:errcheck
+	go func() { _ = c.ListenAndServe(addr) }() //nolint:errcheck
+	waitDial(t, addr)
+
+	conn := socks5Connect(t, addr, "status.skysocks", 80)
+	defer conn.Close() //nolint:errcheck
+	if _, err := conn.Write([]byte("GET /sse HTTP/1.1\r\nHost: status.skysocks\r\nAccept: text/event-stream\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
+	br := bufio.NewReader(conn)
+	// Status line + headers: must be an event-stream, not text/html.
+	statusLine, err := br.ReadString('\n')
+	if err != nil || !strings.HasPrefix(statusLine, "HTTP/1.1 200") {
+		t.Fatalf("bad SSE status line %q err=%v", statusLine, err)
+	}
+	var sawEventStream bool
+	for {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			t.Fatalf("reading SSE headers: %v", err)
+		}
+		if strings.Contains(strings.ToLower(line), "text/event-stream") {
+			sawEventStream = true
+		}
+		if line == "\r\n" || line == "\n" {
+			break // end of headers
+		}
+	}
+	if !sawEventStream {
+		t.Fatal("SSE response missing text/event-stream content-type")
+	}
+	// First pushed event: at least one data: line carrying the live fragment.
+	var gotData bool
+	for i := 0; i < 200; i++ {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			t.Fatalf("reading SSE event: %v", err)
+		}
+		if strings.HasPrefix(line, "data: ") {
+			gotData = true
+			if strings.Contains(line, "per-leg mux") {
+				break // reconstructed fragment reached the live region
+			}
+		}
+		if gotData && (line == "\n" || line == "\r\n") {
+			break // event terminated
+		}
+	}
+	if !gotData {
+		t.Fatal("SSE stream produced no data: event")
+	}
+
+	// The exit must never have received a status.skysocks CONNECT.
+	select {
+	case h := <-exit.hostC:
+		if h == "status.skysocks" {
+			t.Fatal("status.skysocks /sse leaked to the exit")
+		}
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
 // TestNonStatusForwardedToExit verifies a regular CONNECT is transparently
 // forwarded to the exit (greeting + request byte-for-byte) and the tunnel
 // carries payload end-to-end.
