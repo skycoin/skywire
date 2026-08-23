@@ -165,6 +165,8 @@ func TestDecideParity_NativeMatchesWazero(t *testing.T) {
 		{"time-of-day/biz", "time-of-day", policy.RoutingContext{App: "skysocks-client", Now: unixNano(11 * oneHour)}, nil},
 		{"time-of-day/off", "time-of-day", policy.RoutingContext{App: "skysocks-client", Now: unixNano(3 * oneHour)}, nil},
 		{"time-of-day/window", "time-of-day", policy.RoutingContext{App: "skysocks-client", Now: unixNano(23 * oneHour), CLIOverrides: map[string]string{"business_hours": "22-6"}}, nil},
+		{"ledbat", "ledbat", policy.RoutingContext{App: "skysocks-client"}, nil},
+		{"ledbat/chat", "ledbat", policy.RoutingContext{App: "skychat"}, nil},
 	}
 
 	for _, tc := range cases {
@@ -259,12 +261,23 @@ func TestTickParity_NativeMatchesWazero(t *testing.T) {
 		{leg(0, "a", "stcpr", 43, true, false, 30001), leg(1, "b", "stcpr", 980, true, false, 30001)},
 	}
 
+	// ledbat: leg 2's delay climbs above its base while legs 0,1 stay near theirs
+	// (the scavenger backs off and parks leg 2); a final recovered snapshot with
+	// parked spares exercises the re-grow path — every step must agree.
+	lb := [][]policy.LegInfo{
+		{leg(0, "a", "stcpr", 40, true, false, 0), leg(1, "b", "stcpr", 40, true, false, 0), leg(2, "c", "stcpr", 40, true, false, 0)},
+		{leg(0, "a", "stcpr", 40, true, false, 0), leg(1, "b", "stcpr", 40, true, false, 0), leg(2, "c", "stcpr", 300, true, false, 0)},
+		{leg(0, "a", "stcpr", 40, true, false, 0), leg(1, "b", "stcpr", 40, true, false, 0), leg(2, "c", "stcpr", 300, true, false, 0)},
+		{leg(0, "a", "stcpr", 40, true, false, 0), leg(1, "b", "stcpr", 40, true, true, 0), leg(2, "c", "stcpr", 40, true, true, 0)},
+	}
+
 	cases := []tickCase{
 		{"rotating-bw", "rotating-bw", rbw},
 		{"latency-adaptive", "latency-adaptive", la},
 		{"elastic-mux", "elastic-mux", em},
 		{"probe-and-prune", "probe-and-prune", pp},
 		{"adaptive", "adaptive", ad},
+		{"ledbat", "ledbat", lb},
 	}
 
 	for _, tc := range cases {
