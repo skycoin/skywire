@@ -66,6 +66,12 @@ func jsVisorStats(js.Value, []js.Value) interface{} {
 	proxyPoolMu.Lock()
 	out["proxy_pool"] = len(proxyPool)
 	proxyPoolMu.Unlock()
+	// Transport-registration / TPD-sync introspection — the wasm analog of
+	// `skywire cli visor state`'s registration view. Answers "why does a route-find
+	// to this browser visor say transport not found": what we've published to TPD
+	// (tp_list), whether the CXO publish is FROZEN on a stale snapshot
+	// (publish_state), and whether our announces reach TPD (announce).
+	out["transport_registration"] = transportRegistrationSnapshot()
 	b, err := json.Marshal(out)
 	if err != nil {
 		return "{}"
