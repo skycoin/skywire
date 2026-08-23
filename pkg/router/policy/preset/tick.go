@@ -60,6 +60,13 @@ type Engine struct {
 	ledbatEWMA map[string]float64 // per-leg EWMA-smoothed one-way-ish delay (ms)
 	ledbatBase map[string]float64 // per-leg base (running-min smoothed) delay (ms)
 	ledbatSeen map[string]bool    // transport_ids present this tick (for GC)
+
+	// coupled (MPTCP-style coupled congestion control)
+	coupledLatEWMA         map[string]float64 // per-leg smoothed latency (worst-leg tiebreak)
+	coupledPrevRetransmits map[string]uint64  // per-leg last-tick retransmit counter (loss delta)
+	coupledPrevSent        map[string]uint64  // per-leg last-tick sent bytes (packet-normalize loss)
+	coupledSeen            map[string]bool    // transport_ids present this tick (stale-state GC)
+	coupledCooldown        int                // ticks held steady after a grow/shed (anti-churn)
 }
 
 // New returns an Engine with initialized state maps and the
@@ -86,6 +93,11 @@ func New() *Engine {
 		ledbatEWMA:      map[string]float64{},
 		ledbatBase:      map[string]float64{},
 		ledbatSeen:      map[string]bool{},
+
+		coupledLatEWMA:         map[string]float64{},
+		coupledPrevRetransmits: map[string]uint64{},
+		coupledPrevSent:        map[string]uint64{},
+		coupledSeen:            map[string]bool{},
 	}
 }
 
@@ -103,6 +115,8 @@ func (e *Engine) OnTick(name string, legs []LegInfo) RotationAction {
 		return e.tickElasticMux(legs)
 	case "probe-and-prune":
 		return e.tickProbeAndPrune(legs)
+	case "coupled":
+		return e.tickCoupled(legs)
 	case "adaptive":
 		return e.tickAdaptive(legs)
 	case "ledbat":
@@ -951,6 +965,158 @@ func (e *Engine) tickLedbat(legs []LegInfo) RotationAction {
 	// GROW: no self-induced queuing and below the cap — re-promote one parked leg.
 	if maxQ <= ledbatTargetMs && sets.activeCount < ledbatMux && sets.promotable >= 0 {
 		return RotationAction{PromoteFromStandby: []int{sets.promotable}}
+	}
+	return RotationAction{}
+}
+
+// --- coupled (MPTCP-style coupled congestion control) ---
+
+const (
+	// coupledMux is the modest symmetric mux the coupled preset provisions and
+	// the CEILING the cautious coupled-increase grows the active set back up to.
+	coupledMux = 4
+	// coupledFloor is the minimum active width the coupled-decrease will never
+	// shed below — the aggregate keeps at least this many legs carrying traffic.
+	coupledFloor = 2
+	// coupledAlpha smooths per-leg latency (the worst-leg tiebreak signal).
+	coupledAlpha = 0.3
+	// coupledCooldownTicks holds the active set steady for a few ticks after any
+	// grow/shed so a transient loss blip can't churn the mux every tick.
+	coupledCooldownTicks = 3
+)
+
+// tickCoupled is the coupled congestion controller. The two congestion signals
+// are per-leg: the RETRANSMIT delta since last tick (loss, packet-normalized by
+// the sent-bytes delta) and the EWMA-smoothed latency. It arbitrates at most one
+// structural change per tick, in priority order:
+//
+//	(0) no active legs        -> bring one up (promote a spare, else dial)
+//	(1) active < floor        -> restore the floor (recovery; bypasses cooldown)
+//	    cooldown active       -> hold steady (anti-churn)
+//	(2) any active leg's loss RISING -> COUPLED DECREASE: shed the WORST leg
+//	    (highest loss, latency-tiebroken; never leg 0, never below the floor),
+//	    concentrating traffic on the good legs instead of equal-spreading it
+//	    across a lossy one.
+//	(3) NO active leg showing rising loss AND active < ceiling -> COUPLED
+//	    INCREASE (LIA-cautious): promote AT MOST one warm spare.
+//
+// Because a shed fires the instant loss appears and a grow fires only when the
+// WHOLE active set is loss-free, aggregate aggressiveness stays bounded — the
+// "coupling" property. Deterministic (no time.Now/rand) for wasm parity.
+func (e *Engine) tickCoupled(legs []LegInfo) RotationAction {
+	for k := range e.coupledSeen {
+		delete(e.coupledSeen, k)
+	}
+	activeCount := 0
+	standbyCount := 0
+	promotable := -1
+	worstIdx := -1
+	worstScore := -1.0
+	anyRisingLoss := false
+	for _, l := range legs {
+		tid := l.TransportID
+		if tid != "" {
+			e.coupledSeen[tid] = true
+		}
+		if !l.Alive {
+			continue
+		}
+		if l.Standby {
+			standbyCount++
+			if promotable == -1 || l.Index < promotable {
+				promotable = l.Index
+			}
+			continue
+		}
+		activeCount++
+		if tid == "" {
+			continue
+		}
+		if l.LatencyMs > 0 {
+			sample := float64(l.LatencyMs)
+			if prev, ok := e.coupledLatEWMA[tid]; ok {
+				e.coupledLatEWMA[tid] = coupledAlpha*sample + (1-coupledAlpha)*prev
+			} else {
+				e.coupledLatEWMA[tid] = sample
+			}
+		}
+		var retransDelta, sentDelta uint64
+		if prev, ok := e.coupledPrevRetransmits[tid]; ok && l.Retransmits >= prev {
+			retransDelta = l.Retransmits - prev
+		}
+		if prev, ok := e.coupledPrevSent[tid]; ok && l.SentBytes >= prev {
+			sentDelta = l.SentBytes - prev
+		}
+		e.coupledPrevRetransmits[tid] = l.Retransmits
+		e.coupledPrevSent[tid] = l.SentBytes
+		if retransDelta > 0 {
+			anyRisingLoss = true
+		}
+		// Loss ratio = retransmits / sent-segments this tick (a ~1KB segment unit;
+		// +1 avoids divide-by-zero when a leg sent nothing). Loss dominates the
+		// worst-leg score; smoothed latency breaks ties. Leg 0 (the primary) is
+		// never a shed candidate.
+		sentSegs := sentDelta / 1024
+		lossRatio := float64(retransDelta) / float64(sentSegs+1)
+		score := lossRatio*1e6 + e.coupledLatEWMA[tid]
+		if l.Index != 0 && score > worstScore {
+			worstScore = score
+			worstIdx = l.Index
+		}
+	}
+	for tid := range e.coupledLatEWMA {
+		if !e.coupledSeen[tid] {
+			delete(e.coupledLatEWMA, tid)
+		}
+	}
+	for tid := range e.coupledPrevRetransmits {
+		if !e.coupledSeen[tid] {
+			delete(e.coupledPrevRetransmits, tid)
+		}
+	}
+	for tid := range e.coupledPrevSent {
+		if !e.coupledSeen[tid] {
+			delete(e.coupledPrevSent, tid)
+		}
+	}
+
+	if e.coupledCooldown > 0 {
+		e.coupledCooldown--
+	}
+
+	// (0) No active legs — bring capacity up (recovery, bypasses cooldown).
+	if activeCount == 0 {
+		if promotable >= 0 {
+			return RotationAction{PromoteFromStandby: []int{promotable}}
+		}
+		return RotationAction{AddLeg: true}
+	}
+	// (1) Restore the floor if an active leg dropped (recovery, bypasses cooldown).
+	if activeCount < coupledFloor {
+		if promotable >= 0 {
+			return RotationAction{PromoteFromStandby: []int{promotable}}
+		}
+		return RotationAction{AddLeg: true}
+	}
+	// Anti-churn: hold the set steady during cooldown.
+	if e.coupledCooldown > 0 {
+		return RotationAction{}
+	}
+
+	// (2) Coupled DECREASE: congestion (rising loss on any active leg) -> shed the
+	// worst leg so aggregate aggressiveness stays bounded.
+	if anyRisingLoss && activeCount > coupledFloor && worstIdx > 0 {
+		e.coupledCooldown = coupledCooldownTicks
+		if standbyCount < nodipStandbyMax {
+			return RotationAction{DemoteToStandby: []int{worstIdx}}
+		}
+		return RotationAction{DropLegs: []int{worstIdx}}
+	}
+	// (3) Coupled INCREASE (LIA-cautious): the whole active set is loss-free and we
+	// are below the ceiling -> promote at most one warm spare.
+	if !anyRisingLoss && activeCount < coupledMux && promotable >= 0 {
+		e.coupledCooldown = coupledCooldownTicks
+		return RotationAction{PromoteFromStandby: []int{promotable}}
 	}
 	return RotationAction{}
 }
