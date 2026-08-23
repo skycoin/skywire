@@ -315,6 +315,7 @@ func rotationFromWire(w RotationActionWire) policy.RotationAction {
 		ExcludeHops:        append([]string(nil), w.ExcludeHops...),
 		DemoteToStandby:    append([]int(nil), w.DemoteToStandby...),
 		PromoteFromStandby: append([]int(nil), w.PromoteFromStandby...),
+		AddForwardLeg:      w.AddForwardLeg,
 	}
 }
 

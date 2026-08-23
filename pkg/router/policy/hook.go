@@ -395,6 +395,7 @@ func (h *Hook) OnTick(info router.DialInfo, legs []router.LegInfo) router.Rotati
 		ExcludeHops:        append([]string(nil), action.ExcludeHops...),
 		DemoteToStandby:    append([]int(nil), action.DemoteToStandby...),
 		PromoteFromStandby: append([]int(nil), action.PromoteFromStandby...),
+		AddForwardLeg:      action.AddForwardLeg,
 	}
 }
 
