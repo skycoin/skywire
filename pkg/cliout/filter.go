@@ -57,7 +57,7 @@ func RegisterOutputFlags(cmd *cobra.Command) {
 func SetJSONHelp(root *cobra.Command) {
 	defaultHelp := root.HelpFunc()
 	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		if !machineMode(cmd) {
+		if !MachineMode(cmd) {
 			defaultHelp(cmd, args)
 			return
 		}
@@ -67,8 +67,10 @@ func SetJSONHelp(root *cobra.Command) {
 	})
 }
 
-// machineMode reports whether any machine-output flag was set.
-func machineMode(cmd *cobra.Command) bool {
+// MachineMode reports whether any machine-output flag was set, which is to say
+// whether Help will print a schema for something else to consume rather than
+// help for someone to read.
+func MachineMode(cmd *cobra.Command) bool {
 	return JSONMode(cmd) || JQFilter(cmd) != "" || ShapeMode(cmd)
 }
 
