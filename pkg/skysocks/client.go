@@ -98,9 +98,12 @@ func (c *Client) ListenAndServe(addr string) error {
 			// route is back, instead of a bare connection failure. Best-effort
 			// and deadline-bounded (see ServeSOCKS5); declined for HTTPS/other
 			// ports. Runs in a goroutine that owns conn so the reconnect below
-			// isn't delayed by a slow browser.
+			// isn't delayed by a slow browser. The status.skysocks override
+			// keeps the in-process status page reachable even now (exit down)
+			// instead of being shadowed by the interstitial — status.skysocks
+			// needs no exit stream, and this is exactly when the user wants it.
 			go func(bc net.Conn) {
-				if serr := proxyinterstitial.ServeSOCKS5(bc, proxyinterstitial.StatusLine(err), "skysocks"); serr != nil && c.appCl != nil {
+				if serr := proxyinterstitial.ServeSOCKS5(bc, proxyinterstitial.StatusLine(err), "skysocks", c.statusOverride); serr != nil && c.appCl != nil {
 					c.appCl.Log().Debugf("route-down interstitial not served: %v", serr)
 				}
 				bc.Close() //nolint:errcheck,gosec
@@ -342,6 +345,23 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool) {
 	}
 	clearDeadlines(conn, stream)
 	return true
+}
+
+// statusOverride is the reserved-host answer handed to
+// proxyinterstitial.ServeSOCKS5's route-down path: for the status.skysocks host
+// it returns the rendered status page (the same one-shot bytes serveStatusPage
+// writes), so the page stays reachable while the exit stream is down instead of
+// being shadowed by the interstitial. Any other host returns nil, leaving the
+// interstitial in place. statusSnapshot already reports "no active session to
+// the exit" when the session is down, which is the correct content here. (Only
+// the one-shot page is served on this path — the SSE variant needs a live
+// stream that the override's fixed-body model can't carry; the page's own
+// meta-refresh keeps it current.)
+func (c *Client) statusOverride(host string) []byte {
+	if surface, ok := proxystatus.Match(host); ok && surface == proxystatus.SurfaceSkysocks {
+		return statusHTTPResponse(proxystatus.Render(c.statusSnapshot()))
+	}
+	return nil
 }
 
 // serveStatusPage completes the SOCKS5 CONNECT with a success reply, reads the
