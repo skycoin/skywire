@@ -71,8 +71,10 @@ func TestRenderSections(t *testing.T) {
 		"<main id=\"live\">", "new WebSocket", "/ws",
 		`location.origin.replace(/^http/,"ws")`, "sendCmd",
 		"standby", "status.dmsg", "status.skynet",
-		// route observability: route-latency metric (hint), direct/multihop tag, recv bar
-		"route rtt", "direct", "multihop", "480 ms", "bar recv",
+		// route observability: route-latency metric (hint), per-leg hop count (the
+		// redundant direct/multihop word is gone now every hop renders in the tree),
+		// recv bar. Leg 0 is 1 hop (direct); leg 1 is 2 hops (relayed).
+		"route rtt", "1 hop", "2 hops", "480 ms", "bar recv",
 		// ONE unified route tree rooted at the local visor: the flat mux table +
 		// separate "full routes" chains folded into a single box-drawing tree.
 		// Root (this visor / source accent), branch + leaf glyphs, exit accent, the
@@ -93,6 +95,16 @@ func TestRenderSections(t *testing.T) {
 		"getSelection", "selectionchange", "execCommand",
 		`class="fpk copy"`, "data-copy=", "click to copy",
 		`id="wsstat"`, "reconnecting", `class="rgsummary"`, "rsync(this)", `class="soon"`,
+		// Scroll preservation across the live-swap: apply() captures the window offset
+		// (and the log <pre>'s inner offset) before el.innerHTML=h and restores it, so
+		// scrolling the page horizontally doesn't snap back on the next ~1s push.
+		"window.scrollX", "window.scrollY", "window.scrollTo(", "pre.log",
+		// Page-level layout: the recent-log block keeps only its vertical max-height
+		// scroll (horizontal wraps / is page-level).
+		"overflow-y:auto",
+		// Embedded mononoki monospace font so the tree's box-drawing glyphs align:
+		// an @font-face woff2 data-URI in the shell + the family on the tree/PK cells.
+		"@font-face", "'Mononoki'", "data:font/woff2;base64,",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("rendered page missing %q", want)
@@ -112,6 +124,19 @@ func TestRenderSections(t *testing.T) {
 	if strings.Contains(page, `http-equiv="refresh"`) {
 		t.Error("skysocks status page must not use meta refresh (WebSocket live-push replaces it)")
 	}
+	// The redundant direct/multihop word tags are gone: every hop renders in the
+	// tree, so the reader sees a leg's directness in the branch. Only the hop-count
+	// (matched above) remains. Guard the standalone words as rtag labels.
+	for _, gone := range []string{`class="rtag route-direct">direct<`, `class="rtag route-relay">multihop<`} {
+		if strings.Contains(page, gone) {
+			t.Errorf("status page must not render the redundant %q label", gone)
+		}
+	}
+	// The route tree is now page-level: no inner overflow-x scroll box (the PAGE
+	// scrolls horizontally instead), so a live-swap can restore the window offset.
+	if strings.Contains(page, "overflow-x:auto") {
+		t.Error("route tree must not use an inner overflow-x box (page-level scroll)")
+	}
 }
 
 // TestRenderFragmentIsLiveRegionOnly verifies RenderFragment emits the live
@@ -129,7 +154,9 @@ func TestRenderFragmentIsLiveRegionOnly(t *testing.T) {
 			t.Errorf("fragment missing %q", want)
 		}
 	}
-	for _, unwanted := range []string{"<!doctype", "<html", "<head", "<style", "<main", "new WebSocket", "route control", "<footer"} {
+	// The ~38 KB embedded font must ride in the page shell only, never in the live
+	// fragment the WebSocket restreams every ~1s.
+	for _, unwanted := range []string{"<!doctype", "<html", "<head", "<style", "<main", "new WebSocket", "route control", "<footer", "@font-face", "data:font/woff2"} {
 		if strings.Contains(frag, unwanted) {
 			t.Errorf("fragment must not contain shell/static markup %q", unwanted)
 		}
