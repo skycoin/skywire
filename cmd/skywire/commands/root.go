@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	pty "github.com/skycoin/skywire/cmd/apps/pty/commands"
@@ -216,7 +218,5 @@ var appsCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

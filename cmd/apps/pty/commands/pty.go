@@ -33,7 +33,8 @@ package commands
 
 import (
 	"fmt"
-	"log"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -178,7 +179,5 @@ the full surface.`,
 // top-level Execute in cmd/skywire/commands/root.go and doesn't
 // call this.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

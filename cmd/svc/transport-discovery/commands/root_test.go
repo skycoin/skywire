@@ -26,11 +26,11 @@ import (
 // ---- exampleJSON / generateExamples ----------------------------------------
 
 func TestExampleJSON(t *gotesting.T) {
-	out := exampleJSON(map[string]string{"version": "v1.3.29"})
+	out := cmdutil.ExampleJSON(map[string]string{"version": "v1.3.29"})
 	require.Contains(t, out, "v1.3.29")
 
 	// Unmarshalable value (channel) → json.MarshalIndent fails → "".
-	require.Equal(t, "", exampleJSON(make(chan int)))
+	require.Equal(t, "", cmdutil.ExampleJSON(make(chan int)))
 }
 
 func TestGenerateExamples(t *gotesting.T) {
@@ -45,10 +45,10 @@ func TestGenerateExamples(t *gotesting.T) {
 // ---- commaSplit ------------------------------------------------------------
 
 func TestCommaSplit(t *gotesting.T) {
-	require.Nil(t, commaSplit(""))
-	require.Equal(t, []string{"a", "b", "c"}, commaSplit("a, b ,c"))
-	require.Equal(t, []string{"x"}, commaSplit(" x "))
-	require.Empty(t, commaSplit(" , , ")) // all blank after trim
+	require.Nil(t, cmdutil.CommaSplit(""))
+	require.Equal(t, []string{"a", "b", "c"}, cmdutil.CommaSplit("a, b ,c"))
+	require.Equal(t, []string{"x"}, cmdutil.CommaSplit(" x "))
+	require.Empty(t, cmdutil.CommaSplit(" , , ")) // all blank after trim
 }
 
 // ---- buildConfig -----------------------------------------------------------

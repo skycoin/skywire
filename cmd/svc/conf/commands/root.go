@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
@@ -135,7 +137,5 @@ func filterServices(svc deployment.Services, keepHTTP, keepDmsg bool) deployment
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }
