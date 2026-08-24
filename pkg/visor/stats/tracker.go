@@ -50,8 +50,21 @@ type Tracker struct {
 	// once while it was live — lingers on the feed for the visor's whole
 	// uptime, accumulating across churn and bloating the Root TPD fills.
 	mirroredCurrent map[uuid.UUID]struct{}
-	lastDay         string // YYYY-MM-DD UTC of the most recent sample
-	lastPruned      time.Time
+	// publishedSig records, per transport, the meaningful signature of
+	// the last `current` leaf actually mirrored to the sink (sent/recv
+	// bytes + latency min/max/avg — NOT SampledAt). A sample tick only
+	// re-Puts a transport's current leaf when its signature differs from
+	// the stored one (or it was never published), so an IDLE transport —
+	// whose only change each tick is SampledAt being bumped to now — no
+	// longer advances the telemetry Root. Without this, every live
+	// transport re-Put its leaf every ~60s (SampledAt alone changing the
+	// content hash), churning the whole Root and starving TPD's whole-Root
+	// fill over the short announce conn. Guarded by mu alongside
+	// mirroredCurrent; entries are dropped when a transport dies (see
+	// reconcileCurrentLeaves) so a returning transport republishes.
+	publishedSig map[uuid.UUID]currentSig
+	lastDay      string // YYYY-MM-DD UTC of the most recent sample
+	lastPruned   time.Time
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -103,6 +116,19 @@ type bandwidthBaseline struct {
 	recv uint64
 }
 
+// currentSig is the value-driven signature of a transport's `current`
+// leaf: the fields TPD actually consumes. It deliberately excludes
+// SampledAt so that a mere timestamp bump on an otherwise-unchanged
+// (idle) transport does not count as a change and does not trigger a
+// re-Put onto the mirror sink.
+type currentSig struct {
+	sent   uint64
+	recv   uint64
+	latMin float64
+	latMax float64
+	latAvg float64
+}
+
 // Config bundles tracker tunables. Zero values mean "use defaults".
 type Config struct {
 	SampleInterval time.Duration // default 1m
@@ -142,6 +168,7 @@ func NewTracker(store *Store, probes Probes, conf Config) *Tracker {
 		sink:            noopSink{},
 		baselines:       make(map[uuid.UUID]bandwidthBaseline),
 		mirroredCurrent: make(map[uuid.UUID]struct{}),
+		publishedSig:    make(map[uuid.UUID]currentSig),
 	}
 }
 
@@ -352,10 +379,15 @@ func (t *Tracker) reconcileCurrentLeaves(live map[uuid.UUID]struct{}) {
 	for id := range t.mirroredCurrent {
 		if _, ok := live[id]; !ok {
 			stale = append(stale, id)
+			// Drop the change-gate baseline too, so if this transport
+			// ID ever returns it republishes rather than being silently
+			// suppressed against a stale signature.
+			delete(t.publishedSig, id)
 		}
 	}
-	// Every live transport re-Put its current leaf this tick (idempotent),
-	// so the mirrored set now equals the live set.
+	// A live transport keeps its current leaf on the sink whether or not
+	// it was re-Put this tick (unchanged transports are intentionally not
+	// re-Put), so the mirrored set is exactly the live set.
 	t.mirroredCurrent = live
 	t.mu.Unlock()
 
@@ -379,6 +411,11 @@ func (t *Tracker) sinkPutBatch(mirrors []mirrorPair) {
 	}
 	t.mu.Lock()
 	sink := t.sink
+	// Record the signature we're about to publish so the next tick's
+	// change-gate compares against what actually reached the sink.
+	for _, m := range mirrors {
+		t.publishedSig[m.id] = m.sig
+	}
 	t.mu.Unlock()
 	ops := make([]SinkOp, 0, len(mirrors))
 	for _, m := range mirrors {
@@ -404,7 +441,13 @@ func (t *Tracker) sinkDelete(path string) {
 // timeline bit, and reads the post-update bitmap — all under the
 // caller's SampleTx. Returns the list of (path, bytes) mirror pairs
 // the caller should push to the sink after the tx commits.
-type mirrorPair = struct {
+// mirrorPair is one current-leaf write queued for the sink after the
+// bbolt tx commits. id/sig identify the transport and the meaningful
+// signature this data represents, so sinkPutBatch can record what was
+// actually published (the change-gate baseline for the next tick).
+type mirrorPair struct {
+	id   uuid.UUID
+	sig  currentSig
 	path string
 	data []byte
 }
@@ -434,13 +477,26 @@ func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.T
 		Type:         rec.Type,
 	}
 
+	sig := currentSig{
+		sent:   tp.SentBytes,
+		recv:   tp.RecvBytes,
+		latMin: tp.LatencyMS.Min,
+		latMax: tp.LatencyMS.Max,
+		latAvg: tp.LatencyMS.Avg,
+	}
+
 	t.mu.Lock()
 	base, ok := t.baselines[tp.ID]
 	if !ok || base.day != today {
 		base = bandwidthBaseline{day: today, sent: tp.SentBytes, recv: tp.RecvBytes}
 		t.baselines[tp.ID] = base
 	}
+	prevSig, published := t.publishedSig[tp.ID]
 	t.mu.Unlock()
+	// Only mirror the current leaf when a meaningful field moved (or it
+	// was never published). SampledAt alone changing every tick must NOT
+	// re-Put an idle transport — that was the Root churn this fixes.
+	sigChanged := !published || prevSig != sig
 
 	deltaSent := uint64(0)
 	deltaRecv := uint64(0)
@@ -463,8 +519,10 @@ func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.T
 
 	var mirrors []mirrorPair
 	idStr := tp.ID.String()
-	if data, err := json.Marshal(rec.Current); err == nil {
-		mirrors = append(mirrors, mirrorPair{path: currentTransportPath(idStr), data: data})
+	if sigChanged {
+		if data, err := json.Marshal(rec.Current); err == nil {
+			mirrors = append(mirrors, mirrorPair{id: tp.ID, sig: sig, path: currentTransportPath(idStr), data: data})
+		}
 	}
 	// The daily rollup (row) is persisted to bbolt above (PutTransportRecord)
 	// but deliberately NOT mirrored to the CXO sink: no subscriber reads it

@@ -14,15 +14,17 @@ import (
 // assert on the post-sample mirror state. Concurrency-safe so it can
 // stand in for a real sink wired into the tracker's sampler goroutine.
 type recordingSink struct {
-	mu   sync.Mutex
-	puts map[string][]byte
-	dels map[string]int // count of Delete calls per path
+	mu       sync.Mutex
+	puts     map[string][]byte
+	putCount map[string]int // count of Put calls per path (survives Delete)
+	dels     map[string]int // count of Delete calls per path
 }
 
 func newRecordingSink() *recordingSink {
 	return &recordingSink{
-		puts: make(map[string][]byte),
-		dels: make(map[string]int),
+		puts:     make(map[string][]byte),
+		putCount: make(map[string]int),
+		dels:     make(map[string]int),
 	}
 }
 
@@ -30,6 +32,16 @@ func (s *recordingSink) Put(path string, value []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.puts[path] = append([]byte(nil), value...)
+	s.putCount[path]++
+}
+
+// putCountFor returns how many times a path was Put across the sink's
+// lifetime — used by the change-gate test to assert idle transports are
+// not re-Put every tick.
+func (s *recordingSink) putCountFor(path string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.putCount[path]
 }
 
 func (s *recordingSink) Delete(path string) {
