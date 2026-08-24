@@ -166,7 +166,9 @@ func TestOutboundSaveNudgesReRegister(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
-		_ = client.tp.Close()
+		if err := client.tp.Close(); err != nil {
+			t.Logf("client.tp.Close: %v", err)
+		}
 	}()
 	tm.Serve(ctx)
 

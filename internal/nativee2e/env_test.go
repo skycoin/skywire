@@ -3,7 +3,7 @@
 
 // Package nativee2e — internal/nativee2e/env_test.go: a NATIVE (no-Docker)
 // client-side e2e harness that runs a small skywire deployment + two visors as
-// host processes on 127.0.0.1, so client behaviour (visor, hypervisor,
+// host processes on 127.0.0.1, so client behavior (visor, hypervisor,
 // skysocks-client, vpn-client) can be tested on macOS and Windows — where the
 // Docker-based internal/integration suite can't run.
 //
