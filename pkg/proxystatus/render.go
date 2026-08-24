@@ -4,8 +4,9 @@ package proxystatus
 import (
 	"fmt"
 	"html"
-	"sort"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/bitree"
 )
 
 // refreshSeconds is the fallback full-page reload cadence for surfaces that have
@@ -210,15 +211,9 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 			`A leg appears here once a route to a destination is warm.</p></section>`)
 		return
 	}
-	var maxSent, maxRecv, totSent, totRecv uint64 = 1, 1, 0, 0
+	var totSent, totRecv uint64
 	var nActive, nStandby, nClosed int
 	for _, l := range snap.Legs {
-		if l.SentBytes > maxSent {
-			maxSent = l.SentBytes
-		}
-		if l.RecvBytes > maxRecv {
-			maxRecv = l.RecvBytes
-		}
 		totSent += l.SentBytes
 		totRecv += l.RecvBytes
 		switch {
@@ -245,227 +240,99 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	writeStat(b, "recv", humanBytes(totRecv), "")
 	b.WriteString(`</div>`)
 
-	// Order legs so the branch carrying app traffic — the direct, active leg —
-	// renders first, then active multihop, then warm standby, then dead. Branch
-	// order in the merged tree follows leg insertion order.
-	ordered := make([]Leg, len(snap.Legs))
-	copy(ordered, snap.Legs)
-	sort.SliceStable(ordered, func(i, j int) bool {
-		ri, rj := legRank(ordered[i]), legRank(ordered[j])
-		if ri != rj {
-			return ri < rj
-		}
-		return ordered[i].Index < ordered[j].Index
-	})
-	root := buildRouteTree(ordered)
-
+	// The route tree itself: ONE shared bilateral model (pkg/proxystatus.RouteTree)
+	// rendered by pkg/bitree — the exact model + geometry `skywire cli proxy tree`
+	// prints, so the page and the terminal never drift. Root = this visor; each
+	// active route is a right branch (its hop chain, dead legs pruned) with a left
+	// summary (R[n], state glyph, route rtt, bandwidth). htmlStyleCell decorates
+	// cells (colored state dot, click-to-copy PKs/tpids) without disturbing the
+	// column alignment (layout is computed from the plain text).
 	b.WriteString(`<div class="tree">`)
 	writeTreeLegend(b)
-	writeRouteRoot(b, root, maxSent, maxRecv)
+	b.WriteString(`<pre class="bitree">`)
+	b.WriteString(bitree.Render(RouteTree(snap), bitree.Options{StyleCell: htmlStyleCell}))
+	b.WriteString(`</pre>`)
 	b.WriteString(`</div>`)
-	b.WriteString(`<p class="hint">One route tree rooted at this visor (source accent); branches are the ` +
-		`first-hop peers it dials, each edge showing the transport (id + type + rtt) and continuing to the ` +
-		`exit (dest accent) — so a 1-hop (direct) leg and a multi-hop leg are visible in the branch itself, ` +
-		`no hop-count word needed. Leg state is <b>color-coded</b> (see the legend above): active green, ` +
-		`standby amber, dead red — the state word is dropped where the color already says it. Per-leg mux ` +
-		`telemetry — route rtt, rtx and the sent/recv share bars — hangs off each destination leaf; bars are ` +
-		`relative to the busiest leg. ` +
-		`<b>tp rtt</b> is the first-hop transport; <b>route rtt</b> is the true end-to-end route latency (all hops). ` +
-		`Click any public key (or transport id) to copy it. ` +
-		`For a live terminal chart use <code>skywire cli proxy mux plot</code>.</p></section>`)
+	b.WriteString(`<p class="hint">One route tree rooted at this visor (source accent); each active route is a ` +
+		`branch — its hop chain to the exit, each hop carrying the transport (type · id · rtt) — with a left ` +
+		`summary block (R[n], a <b>color-coded</b> state dot — active green, standby amber — the route rtt and ` +
+		`its bandwidth X↑ Y↓). Dead legs are pruned. ` +
+		`<b>tp rtt</b> (a hop's column) is that transport; <b>route rtt</b> (the left summary) is the true ` +
+		`end-to-end route latency across all hops. Click any public key (or transport id) to copy it. ` +
+		`The same tree prints from <code>skywire cli proxy tree</code>; for a live chart use ` +
+		`<code>skywire cli proxy mux plot</code>.</p></section>`)
 }
 
 // writeTreeLegend prints a compact, monospace header/legend above the route tree
-// — mirroring `skywire cli tp tree`'s "Tree *Online … *source *dest  TPID  Type"
-// line. It names the color coding (source/dest PK accents, active/standby/dead
-// state colors) with swatches, then the columns each tree line carries, so the
-// tree is self-describing without a per-node word label on every root and leaf.
+// — mirroring `skywire cli tp tree`'s swatch+column header. It names the color
+// coding (source PK accent, active/standby state dot colors) with swatches, then
+// the left-summary and per-hop column hints, so the tree is self-describing
+// without a per-node word label. Dead legs are pruned, so there is no dead
+// swatch.
 func writeTreeLegend(b *strings.Builder) {
 	b.WriteString(`<div class="tlegend">` +
 		`<span class="lgnd src">source · this visor</span>` +
-		`<span class="lgnd dst">dest · exit</span>` +
-		`<span class="lgnd ok">active</span>` +
-		`<span class="lgnd standby">standby</span>` +
-		`<span class="lgnd warn">dead</span>` +
-		`<span class="lgnd cols">peer · transport-id · type · rtt</span>` +
+		`<span class="lgnd ok">active ●</span>` +
+		`<span class="lgnd standby">standby ○</span>` +
+		`<span class="lgnd cols">left: R[n] · state · route-rtt · bw ↑↓ &nbsp; hop: peer · [type] · tpid · tp-rtt</span>` +
 		`</div>`)
 }
 
-// rtNode is one visor in the merged route tree. Legs are prefix-merged by their
-// PK sequence, so a node may carry the transport of the edge that reaches it
-// (from its parent) and, when it is the destination of one or more legs, those
-// legs' end-to-end telemetry.
-type rtNode struct {
-	pk         string
-	edgeTpID   string  // transport reaching this node from its parent
-	edgeTpType string  // "" / type where known
-	edgeLat    float64 // hop rtt where measured
-	hasEdge    bool    // false only for the root
-	legs       []Leg   // legs whose destination IS this node
-	order      []string
-	kids       map[string]*rtNode
-}
-
-func (n *rtNode) child(pk string) *rtNode {
-	if n.kids == nil {
-		n.kids = map[string]*rtNode{}
-	}
-	c, ok := n.kids[pk]
-	if !ok {
-		c = &rtNode{pk: pk}
-		n.kids[pk] = c
-		n.order = append(n.order, pk)
-	}
-	return c
-}
-
-// buildRouteTree merges every leg's forward path (local → … → dest) into one
-// tree rooted at the local visor. Legs with no recorded path fall back to a
-// direct root → RemotePK leaf so nothing breaks.
-func buildRouteTree(legs []Leg) *rtNode {
-	root := &rtNode{}
-	for _, l := range legs {
-		if root.pk == "" && len(l.Hops) > 0 {
-			root.pk = l.Hops[0].From // local visor PK (same for every leg)
-		}
-	}
-	for _, l := range legs {
-		if len(l.Hops) == 0 {
-			c := root.child(l.RemotePK)
-			c.legs = append(c.legs, l)
-			continue
-		}
-		cur := root
-		for _, h := range l.Hops {
-			c := cur.child(h.To)
-			if !c.hasEdge {
-				c.edgeTpID, c.edgeTpType, c.edgeLat, c.hasEdge = h.TpID, h.TpType, h.LatencyMS, true
-			}
-			cur = c
-		}
-		cur.legs = append(cur.legs, l) // the final To is this leg's destination
-	}
-	return root
-}
-
-// writeRouteRoot writes the tree root (the local visor) then its branches.
-func writeRouteRoot(b *strings.Builder, root *rtNode, maxSent, maxRecv uint64) {
-	// Root line: no connector, source accent (the .tline.src PK tint IS the "this
-	// visor" marker now — the word pill is dropped; the legend names the color).
-	// An all-legacy group may have no known local PK — copyablePK renders a dash
-	// and nothing breaks.
-	fmt.Fprintf(b, `<div class="tline src"><span class="guide"></span>%s</div>`, copyablePK(root.pk))
-	for i, pk := range root.order {
-		writeRouteNode(b, root.kids[pk], "", i == len(root.order)-1, maxSent, maxRecv)
-	}
-}
-
-// writeRouteNode renders one non-root visor node and recurses. prefix is the
-// box-drawing guide accumulated from ancestors; isLast picks └ vs ├ and whether
-// the descendant guide continues with │ or blank. Each node line shows the FULL
-// click-to-copy PK and the transport of the edge reaching it. A destination node
-// gets the dst (exit) accent — the .tline.dst PK tint IS the "exit" marker now,
-// so the word pill is dropped (the legend names the color); its per-leg mux
-// telemetry is written as indented detail rows beneath it.
-func writeRouteNode(b *strings.Builder, n *rtNode, prefix string, isLast bool, maxSent, maxRecv uint64) {
-	branch := "├─"
-	cont := "│   "
-	if isLast {
-		branch, cont = "└─", "    "
-	}
-	if len(n.order) > 0 {
-		branch += "┬ "
-	} else {
-		branch += "── "
-	}
-	nodeCls := "mid"
-	if len(n.legs) > 0 {
-		nodeCls = "dst" // a leg terminates here (the destination/exit)
-	}
-	fmt.Fprintf(b, `<div class="tline %s"><span class="guide">%s</span>%s`, nodeCls, prefix+branch, copyablePK(n.pk))
-	if edge := edgeInfo(n); edge != "" {
-		fmt.Fprintf(b, `<span class="thop">%s</span>`, edge)
-	}
-	b.WriteString(`</div>`)
-
-	detailPrefix := prefix + cont
-	for _, l := range n.legs {
-		writeLegDetail(b, detailPrefix, l, maxSent, maxRecv)
-	}
-	for i, pk := range n.order {
-		writeRouteNode(b, n.kids[pk], detailPrefix, i == len(n.order)-1, maxSent, maxRecv)
-	}
-}
-
-// edgeInfo renders the transport of the edge reaching a node: "via <tpid> <type>
-// <rtt>ms". The transport id is click-to-copy; a missing id/latency is elided.
-func edgeInfo(n *rtNode) string {
-	if !n.hasEdge {
-		return ""
-	}
-	var s strings.Builder
-	s.WriteString("via ")
-	if strings.TrimSpace(n.edgeTpID) != "" {
-		s.WriteString(copyableID(n.edgeTpID, "transport id"))
-		s.WriteByte(' ')
-	}
-	s.WriteString(html.EscapeString(orDash(n.edgeTpType)))
-	if n.edgeLat > 0 {
-		fmt.Fprintf(&s, " %.0fms", n.edgeLat)
-	}
-	return s.String()
-}
-
-// writeLegDetail writes a destination leg's end-to-end mux telemetry as indented
-// rows under its leaf: a summary row (state marker, route-rtt, rtx) and the dual
-// sent/recv share bars. prefix keeps them aligned under the leaf, carrying any
-// open-ancestor │ guides. maxSent/maxRecv (>=1) scale the bars against the
-// busiest leg.
-//
-// State is conveyed by COLOR now (scls: ok=active green, standby=amber,
-// warn=dead) — the "active"/"standby"/"closed" word is dropped, the tdetail rows
-// are tinted with the state color and a tiny shape marker (● active / ○ standby
-// / ✕ dead) rides along so the state is still distinguishable for color-blind
-// readers without adding a word. Hop count is dropped too: every hop renders in
-// the branch above, so a reader counts tree levels for it.
-func writeLegDetail(b *strings.Builder, prefix string, l Leg, maxSent, maxRecv uint64) {
-	_, scls := legState(l)
-	// Continuation line 1 — compact scalars: state marker, route-rtt (em dash when
-	// unmeasured), rtx. tp-rtt lives on the first-hop edge above (the transport
-	// that reaches this leg's first peer).
-	fmt.Fprintf(b, `<div class="tdetail leg %s"><span class="guide">%s</span>`, scls, prefix)
-	fmt.Fprintf(b, `<span class="tstate %s">%s</span>`, scls, stateMark(l))
-	fmt.Fprintf(b, `<span class="legm"><i>route</i>%s</span><span class="legm"><i>rtx</i>%d</span></div>`,
-		routeRTT(l.RouteLatencyMS), l.Retransmits)
-	// Continuation line 2 — the sent/recv share meters. shares are 0..100
-	// (maxSent/maxRecv are per-leg maxes, >=1) — printed as uint64 directly so
-	// there's no uint64->int narrowing.
-	sentShare := l.SentBytes * 100 / maxSent
-	recvShare := l.RecvBytes * 100 / maxRecv
-	fmt.Fprintf(b, `<div class="tdetail leg %s"><span class="guide">%s</span>`, scls, prefix)
-	fmt.Fprintf(b, `<span class="bwlabel">sent %s</span><span class="barcell"><span class="bar %s" style="width:%d%%"></span></span>`,
-		humanBytes(l.SentBytes), scls, sentShare)
-	fmt.Fprintf(b, `<span class="bwlabel">recv %s</span><span class="barcell"><span class="bar recv %s" style="width:%d%%"></span></span></div>`,
-		humanBytes(l.RecvBytes), scls, recvShare)
-}
-
-// stateMark is the tiny color-blind-safe shape marker for a leg's state: a
-// filled dot for active, a hollow dot for standby, a cross for dead. It carries
-// the same information as the (removed) state word but in one glyph the state
-// color tints.
-func stateMark(l Leg) string {
-	switch {
-	case !l.Alive:
-		return "✕"
-	case l.Standby:
-		return "○"
+// htmlStyleCell is the page's bitree StyleCell: it decorates each cell with the
+// page's existing color/interaction classes WITHOUT changing display width (the
+// spans it injects are zero-width in the monospace <pre>, and bitree computes
+// layout from the plain text before this runs). PKs and transport ids become
+// click-to-copy; the state dot in the left summary is colored; transport
+// columns are muted.
+func htmlStyleCell(text string, kind bitree.CellKind) string {
+	switch kind {
+	case bitree.CellRoot:
+		return `<span class="src">` + copyablePK(text) + `</span>`
+	case bitree.CellLabel:
+		return copyablePK(text)
+	case bitree.CellColumn:
+		return htmlTreeColumn(text)
+	case bitree.CellLeft:
+		return htmlLegSummary(text)
 	default:
-		return "●"
+		return html.EscapeString(text)
 	}
 }
 
-// legRank orders legs for the merged tree: the direct active leg (carrying app
-// traffic) first, then active multihop, warm standby, then dead legs.
+// htmlTreeColumn styles one trailing hop column. The three columns per hop are,
+// in order, [tp-type], tpid, transport-rtt — so a bracketed or ms-suffixed cell
+// is a muted label and anything else is the (click-to-copy) transport id.
+func htmlTreeColumn(text string) string {
+	switch {
+	case text == "" || text == "-":
+		return html.EscapeString(text)
+	case strings.HasPrefix(text, "["), strings.HasSuffix(text, "ms"):
+		return `<span class="thop">` + html.EscapeString(text) + `</span>`
+	default:
+		return copyableID(text, "transport id")
+	}
+}
+
+// htmlLegSummary colors the left per-route summary: the whole block is tinted by
+// state (ok=active green / standby=amber) and the state dot is emphasized. The
+// leading right-justify padding rides inside the span (harmless in a <pre>).
+// State is read from the glyph the adapter chose, so no state word is needed.
+func htmlLegSummary(text string) string {
+	if strings.TrimSpace(text) == "" {
+		return text // continuation / empty left row
+	}
+	cls, glyph := "ok", GlyphActive
+	if strings.Contains(text, GlyphStandby) {
+		cls, glyph = "standby", GlyphStandby
+	}
+	esc := html.EscapeString(text) // the glyphs/arrows are not HTML-special
+	dot := `<span class="tstate ` + cls + `">` + glyph + `</span>`
+	esc = strings.Replace(esc, glyph, dot, 1)
+	return `<span class="lsum ` + cls + `">` + esc + `</span>`
+}
+
+// legRank orders legs for the tree: the direct active leg (carrying app traffic)
+// first, then active multihop, then warm standby, then dead legs.
 func legRank(l Leg) int {
 	switch {
 	case !l.Alive:
@@ -476,17 +343,6 @@ func legRank(l Leg) int {
 		return 0
 	default:
 		return 1
-	}
-}
-
-func legState(l Leg) (label, cls string) {
-	switch {
-	case !l.Alive:
-		return "closed", "warn"
-	case l.Standby:
-		return "standby", "standby"
-	default:
-		return "active", "ok"
 	}
 }
 
@@ -631,16 +487,6 @@ func orDash(s string) string {
 	return s
 }
 
-// routeRTT formats a leg's end-to-end route latency. Zero means no
-// liveness pong has landed yet, shown as an em dash rather than "0 ms"
-// so an unmeasured route isn't misread as instant.
-func routeRTT(ms float64) string {
-	if ms <= 0 {
-		return "—"
-	}
-	return fmt.Sprintf("%.0f ms", ms)
-}
-
 // humanBytes formats a byte count with a binary unit suffix.
 func humanBytes(n uint64) string {
 	const unit = 1024
@@ -698,10 +544,16 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	// window offset the live-swap can restore — not a nested scroll region that
 	// resets on every push.
 	`.tree{font-family:'Mononoki',ui-monospace,SFMono-Regular,monospace;font-size:11.5px;line-height:1.6;padding:.3rem 0;border:1px solid var(--line);border-radius:7px;background:var(--card);padding:.55rem .65rem}` +
-	`.tline,.tdetail{display:flex;align-items:baseline;gap:.3rem;white-space:nowrap}` +
-	`.tline{margin-top:.1rem}` +
-	`.guide{white-space:pre;color:var(--muted);flex:none}` + // box-drawing trunk/branch cells
-	`.tline.src>code.fpk{color:var(--accent);font-weight:600}.tline.dst>code.fpk{color:var(--accent2);font-weight:600}` +
+	// The route tree is one <pre class="bitree"> of monospace text laid out by
+	// pkg/bitree; every cell decorated by htmlStyleCell must keep the SAME font
+	// metrics or the aligned columns skew, so all inner code/span inherit the
+	// pre's font and never break-word. Alignment is spaces from bitree; the spans
+	// add color/interactivity only.
+	`pre.bitree{font-family:'Mononoki',ui-monospace,SFMono-Regular,monospace;font-size:11.5px;line-height:1.55;margin:0;white-space:pre;color:var(--fg)}` +
+	`pre.bitree code,pre.bitree span{font:inherit;color:inherit;white-space:pre;word-break:normal;background:none;border:0;padding:0}` +
+	`pre.bitree code.fpk{color:var(--fg)}pre.bitree .src code.fpk{color:var(--accent);font-weight:600}` +
+	`pre.bitree code.ftid{color:var(--muted)}pre.bitree .tcol{color:var(--muted)}` +
+	`pre.bitree .lsum.ok{color:var(--ok)}pre.bitree .lsum.standby{color:var(--standby)}` +
 	// Tree header/legend (mirrors `tp tree`'s swatch+column header): color swatches
 	// name the source/dest PK accents and the active/standby/dead state colors, then
 	// the column hints for what each tree line carries. Self-describes the tree so no
@@ -712,18 +564,10 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`.lgnd.src::before{color:var(--accent)}.lgnd.dst::before{color:var(--accent2)}` +
 	`.lgnd.ok::before{color:var(--ok)}.lgnd.standby::before{color:var(--standby)}.lgnd.warn::before{color:var(--warn)}` +
 	`.lgnd.cols::before{content:none}.lgnd.cols{color:var(--muted);opacity:.85;text-transform:none;letter-spacing:0}` +
-	`.thop{color:var(--muted);margin-left:.35rem;font-size:11px;flex:none}` +
-	// Per-leg state color (replaces the removed active/standby/closed word): the
-	// tdetail rows are tinted and a small shape marker (.tstate) leads each summary
-	// row, color-blind-safe by shape as well as hue.
-	`.tstate{flex:none;font-weight:700;font-size:10px}` +
-	`.tstate.ok{color:var(--ok)}.tstate.standby{color:var(--standby)}.tstate.warn{color:var(--warn)}` +
-	`.tdetail.leg.ok .legm i{color:var(--ok)}.tdetail.leg.standby .legm i{color:var(--standby)}.tdetail.leg.warn .legm i{color:var(--warn)}` +
-	// Continuation (metadata) lines: no branch glyph, aligned under the leaf PK.
-	`.tdetail{font-size:10.5px;color:var(--muted)}` +
-	`.tdetail .legm{color:var(--fg)}.tdetail .legm i{color:var(--muted);font-style:normal;margin-right:.2rem;text-transform:uppercase;font-size:9px;letter-spacing:.3px}` +
-	`.tdetail .bwlabel{color:var(--muted);white-space:nowrap}` +
-	`.tdetail .barcell{display:inline-block;width:7rem;flex:none}` +
+	// State dot in the left per-route summary (replaces any active/standby word):
+	// color-blind-safe by shape (● active / ○ standby) as well as hue.
+	`pre.bitree .tstate{font-weight:700}` +
+	`pre.bitree .tstate.ok{color:var(--ok)}pre.bitree .tstate.standby{color:var(--standby)}` +
 	// Recent log: keep the vertical max-height scroll, but drop the horizontal
 	// inner scroll — lines wrap (pre-wrap + break-word) so any width is page-level.
 	`pre.log{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 'Mononoki',ui-monospace,SFMono-Regular,monospace;` +

@@ -71,33 +71,31 @@ func TestRenderSections(t *testing.T) {
 		"<main id=\"live\">", "new WebSocket", "/ws",
 		`location.origin.replace(/^http/,"ws")`, "sendCmd",
 		"standby", "status.dmsg", "status.skynet",
-		// route observability: route-latency metric (hint) + recv bar still render.
-		// The per-leg hop-count word ("1 hop"/"N hops") is GONE — every hop renders in
-		// the tree, so directness/length is read from the branch (guarded absent below).
-		"route rtt", "480 ms", "bar recv",
-		// ONE unified route tree rooted at the local visor: the flat mux table +
-		// separate "full routes" chains folded into a single box-drawing tree.
-		// Root (source accent), branch + leaf glyphs, dest accent, the FULL
-		// (untruncated) hop PKs, per-edge transport (id + type + latency), and per-leg
-		// telemetry on indented continuation (tdetail) lines.
-		`class="tree"`, `class="guide"`, "├──", "└─┬", "└──",
-		`class="tline src"`, `class="tline dst"`,
-		// Tree header/legend (tp-tree style): color swatches name the source (this
-		// visor) and dest (exit) PK accents and the active/standby state colors, then
-		// the column hints — so the tree is self-describing without per-node word pills.
-		`class="tlegend"`, `class="lgnd src"`, `class="lgnd dst"`,
+		// route observability: the left per-route summary carries the end-to-end
+		// route rtt; "route rtt" is also named in the hint prose. The multihop
+		// standby leg's route rtt (480) renders compact ("480ms").
+		"route rtt", "480ms",
+		// ONE shared bilateral route tree (pkg/proxystatus.RouteTree) rendered by
+		// pkg/bitree into a monospace <pre>: root = this visor (source PK), each
+		// active route a right branch (its hop chain), a left summary block, and
+		// aligned trailing hop columns. The exact model+shape `proxy tree` prints.
+		`class="tree"`, `class="bitree"`, "──┬──", "└──",
+		// Tree header/legend (tp-tree style): color swatches name the source PK
+		// accent and the active/standby state dots, then the column hints — dead legs
+		// are pruned so there is no dead swatch.
+		`class="tlegend"`, `class="lgnd src"`,
 		`class="lgnd ok"`, `class="lgnd standby"`, `class="lgnd cols"`,
-		"this visor", "exit", "peer · transport-id · type · rtt",
+		"this visor", "exit", "peer · [type] · tpid",
+		// FULL (never truncated) PKs: the source (root) and the multihop exit.
 		"03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff",
 		"02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee",
-		"via ", "stcpr 450ms", "sudph 30ms",
-		// first-hop transport id is shown and click-to-copy
+		// per-hop transport columns: bracketed type + full tpid (click-to-copy) + rtt.
+		"[stcpr]", "[sudph]", "450ms", "30ms",
 		`class="ftid copy"`, "tp2ccccccc-2222-2222-2222-222222222222",
-		// per-leg telemetry on continuation lines beneath the leaf PK, tinted by leg
-		// STATE (active=ok green, standby=amber) — the state WORD is gone, replaced by
-		// the state color class + a tiny shape marker (● active / ○ standby).
-		`class="tdetail leg ok"`, `class="tdetail leg standby"`, "│",
-		`class="tstate ok"`, `class="tstate standby"`, "●", "○", `class="bar ok"`,
+		// left per-route summary tinted by STATE (ok=active green / standby=amber),
+		// with a color-blind-safe state dot (● active / ○ standby) — no state word.
+		`class="lsum ok"`, `class="lsum standby"`,
+		`class="tstate ok"`, `class="tstate standby"`, "●", "○", "R[0]", "R[1]",
 		// UX pass: selection-guard + identical-fragment skip in the live script,
 		// click-to-copy affordance (execCommand fallback for the HTTP context),
 		// the WebSocket live indicator, route-group summary, and staged control tags.
