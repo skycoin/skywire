@@ -522,7 +522,7 @@ type Transport struct {
 	// HypervisorAutoconnect gates the background dialing of a direct (stcpr/sudph)
 	// transport to each configured hypervisor. A nil pointer means "on" (default),
 	// so configs written before this field existed keep the prior always-on
-	// behaviour; set it to false to keep the hypervisor link on the dmsg relay only.
+	// behavior; set it to false to keep the hypervisor link on the dmsg relay only.
 	HypervisorAutoconnect *bool           `json:"hypervisor_autoconnect,omitempty"`
 	TransportSetupPKs     []cipher.PubKey `json:"transport_setup"`
 	UserTransportSetupPKs []cipher.PubKey `json:"user_transport_setup,omitempty"` // user-added keys, preserved across config refresh
