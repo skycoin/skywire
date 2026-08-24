@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -50,7 +51,7 @@ func init() {
 	calcCmd.Flags().Uint16VarP(&calcMinHops, "min", "n", 0, "minimum hops (0 = use visor's routing.min_hops, fallback 1)")
 	calcCmd.Flags().Uint16VarP(&calcMaxHops, "max", "x", 5, "maximum hops")
 	calcCmd.Flags().IntVarP(&calcCount, "count", "c", 1, "max routes to return (0 = all matching)")
-	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP). dht|auto are accepted for compatibility and also read from TPD, since the DHT store was removed; dht additionally forces the non-streaming local-compute path")
+	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP) | tps (AUTHORITATIVE: src+dst own transports via the setup node, same path as tp --remote; TPD-independent, single-intermediate). dht|auto are accepted for compatibility and also read from TPD, since the DHT store was removed; dht and tps force the non-streaming local-compute path")
 	calcCmd.Flags().IntVar(&calcQueueCap, "queue-cap", 0, "BFS queue cap (0 = server/local default ~200K, negative = unbounded)")
 	calcCmd.Flags().BoolVar(&calcByLatency, "by-latency", false, "rank routes by cumulative transport latency (lowest first); skips the streaming gRPC path since the full set has to be in hand to sort")
 	// Hidden long-form aliases so the hop-bound vocabulary matches
@@ -64,10 +65,10 @@ func init() {
 
 // validCalcSource reports whether s is an accepted --source value.
 // Kept as a single source of truth so the up-front validation and the
-// local-compute switch agree on the accepted set (tpd|auto|dht).
+// local-compute switch agree on the accepted set (tpd|tps|auto|dht).
 func validCalcSource(s string) bool {
 	switch strings.ToLower(s) {
-	case "tpd", "auto", "dht":
+	case "tpd", "tps", "auto", "dht":
 		return true
 	default:
 		return false
@@ -93,7 +94,7 @@ var calcCmd = &cobra.Command{
 		// it, so the streaming gRPC path silently accepted (and ignored)
 		// a bogus --source and returned a route anyway.
 		if !validCalcSource(calcSource) {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|auto|dht", calcSource))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|tps|auto|dht", calcSource))
 		}
 
 		// Handle config flags
@@ -186,7 +187,10 @@ var calcCmd = &cobra.Command{
 		// gRPC streaming path emits routes one-by-one as the BFS
 		// finds them; sorting by latency needs the full set in hand,
 		// so --by-latency forces the local-compute path below.
-		if !calcByLatency && rpcClient != nil && strings.ToLower(calcSource) != "dht" {
+		// tps assembles its graph from the src+dst OWN transports (visor
+		// RPC + setup-node), not the TPD snapshot the gRPC BFS streams
+		// over, so — like dht — it must take the local-compute path below.
+		if !calcByLatency && rpcClient != nil && strings.ToLower(calcSource) != "dht" && strings.ToLower(calcSource) != "tps" {
 			if err := streamRoutesViaGRPC(ctx, cmd, srcPK, dstPK, minHops, calcMaxHops, calcCount, calcQueueCap, calcSource, tpdURL); err == nil {
 				return
 			} else if !isFallbackEligible(err) {
@@ -214,8 +218,18 @@ var calcCmd = &cobra.Command{
 		switch strings.ToLower(calcSource) {
 		case "tpd", "auto", "dht":
 			entries, err = fetchAllTransports(ctx, cmd.Flags(), tpdURL)
+		case "tps":
+			// AUTHORITATIVE source: build the graph from the src and dst
+			// visors' OWN live transports rather than TPD's under-
+			// reflecting global snapshot. The destination's transports are
+			// fetched via the embedded Transport Setup Node (the same
+			// setup-node RPC `tp --remote <pk>` uses), so a single-
+			// intermediate S->I->D route is computable even when the exit's
+			// transports never fully land in TPD's CXO — the fill gap that
+			// otherwise starves the adaptive mux of disjoint legs.
+			entries, err = fetchTPSTransports(rpcClient, srcPK, dstPK)
 		default:
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|auto|dht", calcSource))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|tps|auto|dht", calcSource))
 		}
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -454,6 +468,89 @@ func fetchAllTransports(_ context.Context, cmdFlags *pflag.FlagSet, tpdAddr stri
 	var entries []*transport.Entry
 	if err := json.Unmarshal(body, &entries); err != nil {
 		return nil, err
+	}
+	return entries, nil
+}
+
+// fetchTPSTransports assembles the transport graph for `--source tps`
+// from AUTHORITATIVE per-visor data: the source visor's own transports
+// unioned with the destination visor's own transports. This is exactly
+// what the local BFS needs to enumerate every single-intermediate
+// S->I->D route (an intermediate I qualifies iff src holds a transport
+// to I AND dst holds a transport to I), and it never consults TPD.
+//
+// The destination's live transports come from the embedded Transport
+// Setup Node (rpcClient.TPSGetTransports — the same setup-node query
+// `tp --remote <pk>` uses), so the graph reflects the exit's real
+// connectivity even when TPD's CXO view under-reflects it (the fill gap
+// that starves the adaptive mux of disjoint legs). Each side is read
+// locally when its PK is this visor (rpcClient.Transports), otherwise
+// via TPS. Entries are deduped by transport ID.
+//
+// This mirrors, for the CLI, the router's default-on RSN-oracle 2-hop
+// path (pkg/router/rsn_oracle_routes.go), which already computes
+// single-intermediate routes from the destination's own transports —
+// giving operators a way to reproduce and test that planning offline.
+func fetchTPSTransports(rpcClient visor.API, srcPK, dstPK cipher.PubKey) ([]*transport.Entry, error) {
+	if rpcClient == nil {
+		return nil, fmt.Errorf("--source tps requires a running visor RPC (TPS is served by the local visor)")
+	}
+
+	var localPK cipher.PubKey
+	if ov, err := rpcClient.Overview(); err == nil {
+		localPK = ov.PubKey
+	}
+
+	byID := make(map[uuid.UUID]*transport.Entry)
+	add := func(id uuid.UUID, local, remote cipher.PubKey, t tptypes.Type) {
+		if id == (uuid.UUID{}) {
+			id = transport.MakeTransportID(local, remote, t)
+		}
+		if _, ok := byID[id]; ok {
+			return
+		}
+		e := transport.MakeEntry(local, remote, t, transport.LabelSkycoin)
+		e.ID = id
+		byID[id] = &e
+	}
+
+	// ownTransports adds pk's OWN live transports: read locally when pk is
+	// this visor, otherwise fetched via the embedded TPS (a setup-node
+	// query dialed to pk over dmsg).
+	ownTransports := func(pk cipher.PubKey) error {
+		if !localPK.Null() && pk == localPK {
+			sums, err := rpcClient.Transports(nil, nil, false)
+			if err != nil {
+				return fmt.Errorf("local transports: %w", err)
+			}
+			for _, s := range sums {
+				if s == nil || s.IsSetup {
+					continue
+				}
+				add(s.ID, s.Local, s.Remote, s.Type)
+			}
+			return nil
+		}
+		tps, err := rpcClient.TPSGetTransports(pk)
+		if err != nil {
+			return fmt.Errorf("tps get-transports %s: %w", pk, err)
+		}
+		for _, t := range tps {
+			add(t.ID, t.Local, t.Remote, tptypes.Type(t.Type))
+		}
+		return nil
+	}
+
+	if err := ownTransports(srcPK); err != nil {
+		return nil, err
+	}
+	if err := ownTransports(dstPK); err != nil {
+		return nil, err
+	}
+
+	entries := make([]*transport.Entry, 0, len(byID))
+	for _, e := range byID {
+		entries = append(entries, e)
 	}
 	return entries, nil
 }
