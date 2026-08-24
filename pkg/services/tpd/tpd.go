@@ -26,6 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/svcmode"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -283,6 +284,34 @@ func (s *service) startCXO(
 			agg.Close() //nolint:errcheck,gosec
 		}()
 		logger.WithField("feed_pk", agg.FeedPK()).Info("CXO aggregator running: accepting inbound visor stats feeds")
+	}
+
+	// Second aggregator for the visors' DEDICATED tp-list discovery feed
+	// (DmsgVisorTPListCXOPort). That feed's Root is just the compact
+	// transport-list snapshot leaf, so it fills completely in ~1 round-trip
+	// — the durable cure for the ~10% transport under-report on busy hubs,
+	// whose combined telemetry Root on port 50 can't finish its fill in the
+	// announce conn's window. It shares the same sink: only the declarative
+	// ReconcileTransportsFromCXO path fires (the tp-list feed carries no
+	// per-transport telemetry leaves). Kept on its own node/port so a
+	// visor's tp-list Root never head-collides with its telemetry Root.
+	// A visor that publishes only the legacy combined feed (older binary)
+	// simply never dials this port — the port-50 aggregator above still
+	// reconciles its tp-list from the combined feed (back-compat fallback).
+	tplAgg, err := cxoaggregator.New(h.DmsgClient, sink, cxoaggregator.Config{
+		DmsgPort: skyenv.DmsgVisorTPListCXOPort,
+		Logger:   logging.MustGetLogger("tpd-cxo-tplist-aggregator"),
+	})
+	if err != nil {
+		logger.WithError(err).Error("Failed to start CXO tp-list aggregator, continuing without it")
+	} else {
+		tplAgg.Run(ctx)
+		go func() {
+			<-ctx.Done()
+			tplAgg.Close() //nolint:errcheck,gosec
+		}()
+		logger.WithField("feed_pk", tplAgg.FeedPK()).WithField("dmsg_port", skyenv.DmsgVisorTPListCXOPort).
+			Info("CXO tp-list aggregator running: accepting inbound visor tp-list discovery feeds")
 	}
 
 	if pub, perr := api.StartMetricsCXOPublisher(ctx, tpdAPI, h.DmsgClient, sk, logger); perr != nil {

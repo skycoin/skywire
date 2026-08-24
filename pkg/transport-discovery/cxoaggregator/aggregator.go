@@ -205,6 +205,15 @@ type Config struct {
 	// satisfy CXO's filling protocol).
 	InMemoryDB bool
 	DataDir    string
+	// DmsgPort is the DMSG port this aggregator's CXO node listens on
+	// (and dials visors back on). Zero falls back to
+	// cxotransport.DefaultCXOPort (50), the visor telemetry feed. TPD
+	// runs a SECOND aggregator on skyenv.DmsgVisorTPListCXOPort (69) for
+	// the visors' dedicated tp-list discovery feed, which fills fully
+	// because its Root is tiny — the two feeds MUST be on separate nodes
+	// (hence separate ports) so the same visor PK doesn't deliver two
+	// different Roots to one node and flap its head.
+	DmsgPort uint16
 }
 
 // Aggregator is the CXO subscriber side of the visor-stats data path.
@@ -351,7 +360,11 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	if err != nil {
 		return nil, err
 	}
-	factory := cxotransport.NewDMSGFactory(dmsgC, cxotransport.DefaultCXOPort)
+	dmsgPort := conf.DmsgPort
+	if dmsgPort == 0 {
+		dmsgPort = cxotransport.DefaultCXOPort
+	}
+	factory := cxotransport.NewDMSGFactory(dmsgC, dmsgPort)
 	if err := cxoNode.EnableDMSG(factory); err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
 		return nil, err
