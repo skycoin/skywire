@@ -8,6 +8,7 @@ package cliroute
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	routeFinder "github.com/skycoin/skywire/pkg/route-finder/store"
 	"github.com/skycoin/skywire/pkg/router/policy"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -325,6 +327,85 @@ func TestBestOfDmsgPings(t *testing.T) {
 	// The mock's DmsgPingOnce returns (0, nil), so no sample beats zero
 	// and the function reports "no successful samples".
 	_, err := bestOfDmsgPings(newMock(t), mustPK(t), 3)
+	require.Error(t, err)
+}
+
+// --- calc.go: --source validation + TPS-sourced transport graph ------
+
+func TestValidCalcSource(t *testing.T) {
+	for _, s := range []string{"tpd", "tps", "auto", "dht", "TPS", "Tpd"} {
+		require.Truef(t, validCalcSource(s), "expected %q to be valid", s)
+	}
+	for _, s := range []string{"", "bogus", "http", "oracle"} {
+		require.Falsef(t, validCalcSource(s), "expected %q to be invalid", s)
+	}
+}
+
+// tpsStub embeds the mock visor.API and overrides only the three
+// methods fetchTPSTransports consults: Overview (to learn the local
+// PK), Transports (the local visor's own transports) and
+// TPSGetTransports (a REMOTE visor's own transports, served via the
+// setup node). Everything else defers to the mock.
+type tpsStub struct {
+	visor.API
+	localPK cipher.PubKey
+	local   []*visor.TransportSummary
+	tps     map[cipher.PubKey][]visor.TPSTransportResponse
+}
+
+func (s tpsStub) Overview() (*visor.Overview, error) {
+	return &visor.Overview{PubKey: s.localPK}, nil
+}
+func (s tpsStub) Transports(_ []string, _ []cipher.PubKey, _ bool) ([]*visor.TransportSummary, error) {
+	return s.local, nil
+}
+func (s tpsStub) TPSGetTransports(pk cipher.PubKey) ([]visor.TPSTransportResponse, error) {
+	if v, ok := s.tps[pk]; ok {
+		return v, nil
+	}
+	return nil, fmt.Errorf("no TPS entry for %s", pk)
+}
+
+// TestFetchTPSTransports proves the authoritative graph is assembled
+// from the src visor's OWN transports (read locally) unioned with the
+// dst visor's OWN transports (fetched via the setup node), that a
+// setup-labeled local transport is dropped, and that the resulting
+// entries share the intermediate — so a single-intermediate
+// src->inter->dst route is computable without ever touching TPD.
+func TestFetchTPSTransports(t *testing.T) {
+	src := mustPK(t) // local visor
+	inter := mustPK(t)
+	dst := mustPK(t)
+
+	stub := tpsStub{
+		API:     newMock(t),
+		localPK: src,
+		local: []*visor.TransportSummary{
+			{ID: uuid.New(), Local: src, Remote: inter, Type: tptypes.STCPR},
+			{ID: uuid.New(), Local: src, Remote: inter, Type: tptypes.STCPR, IsSetup: true}, // must be dropped
+		},
+		tps: map[cipher.PubKey][]visor.TPSTransportResponse{
+			dst: {{ID: uuid.New(), Local: dst, Remote: inter, Type: string(tptypes.STCPR)}},
+		},
+	}
+
+	entries, err := fetchTPSTransports(stub, src, dst)
+	require.NoError(t, err)
+	// One src-side edge (setup tp dropped) + one dst-side edge.
+	require.Len(t, entries, 2)
+
+	// The assembled entries must yield a single-intermediate route.
+	memStore := newMemoryStoreFromEntries(entries)
+	graph, err := routeFinder.NewGraphWithDepth(context.Background(), memStore, src, 3)
+	require.NoError(t, err)
+	routes, err := graph.GetRoute(context.Background(), src, dst, 2, 3, 1)
+	require.NoError(t, err)
+	require.NotEmpty(t, routes)
+	require.Equal(t, inter, routes[0].Hops[0].To) // src -> inter -> dst
+}
+
+func TestFetchTPSTransportsNilClient(t *testing.T) {
+	_, err := fetchTPSTransports(nil, mustPK(t), mustPK(t))
 	require.Error(t, err)
 }
 
