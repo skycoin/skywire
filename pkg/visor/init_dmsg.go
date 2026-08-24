@@ -31,6 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	dmsgmetrics "github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgctrl"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgscp"
@@ -981,6 +982,95 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 			return err
 		})
 	}
+
+	return nil
+}
+
+// dmsgOnlyDisc returns a disc.APIClient that registers + resolves the
+// discovery STRICTLY over dmsg, riding the visor's existing dmsg client —
+// no plain-HTTP egress and no second transit client. Replicated from
+// pkg/services/dmsgsrv.newDmsgOnly to avoid pulling that heavy service
+// package (and its import cycle) into pkg/visor. dmsgC must be able to
+// resolve discPK over dmsg.
+func dmsgOnlyDisc(dmsgC *dmsg.Client, discPK cipher.PubKey, log *logging.Logger) dmsgdisc.APIClient {
+	dmsgURL := fmt.Sprintf("http://%s:%d", discPK.Hex(), dmsg.DefaultDmsgHTTPPort)
+	tr := dmsghttp.MakeHTTPTransport(context.Background(), dmsgC)
+	return dmsgdisc.NewHTTP(dmsgURL, &http.Client{Transport: tr}, log)
+}
+
+// initDmsgServer optionally runs a dmsg SERVER in-process under the visor's
+// own PK/SK, reusing the visor's existing dmsg client (v.dmsgC) for discovery
+// instead of standing up a second transit client. Config-gated and default
+// off: it is a no-op unless Dmsg.Server.Enabled is set. The whole point is
+// shared identity + a single dmsg client — so a visor can also be a dmsg
+// server without a redundant transit client. The client-side self-session
+// guard (SkipSelfServer, wired in dmsgc.New) keeps v.dmsgC from dialing this
+// co-resident server.
+func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.conf.Dmsg == nil || v.conf.Dmsg.Server == nil || !v.conf.Dmsg.Server.Enabled {
+		return nil
+	}
+	srvCfg := v.conf.Dmsg.Server
+
+	dmsgC := v.dmsgC
+	if dmsgC == nil {
+		return nil
+	}
+
+	// Wait for the visor's dmsg client to be ready — the server's discovery
+	// registration rides its sessions.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-dmsgC.Ready():
+	}
+
+	// Discovery PK for dmsg-only registration: the visor's dmsg discovery
+	// URL is dmsg://<pk>:port. Without a resolvable discovery PK the server
+	// can't register over dmsg; log and no-op rather than fail visor init.
+	discPK := cmdutil.PKFromDmsgURL(v.conf.Dmsg.DiscoveryDmsg)
+	if discPK == (cipher.PubKey{}) {
+		discPK = cmdutil.PKFromDmsgURL(v.conf.Dmsg.Discovery)
+	}
+	if discPK == (cipher.PubKey{}) {
+		log.Warn("in-process dmsg server enabled but no dmsg discovery PK (Dmsg.DiscoveryDmsg); not starting")
+		return nil
+	}
+
+	localAddr := srvCfg.LocalAddress
+	if localAddr == "" {
+		localAddr = ":8081"
+	}
+
+	srvConf := dmsg.DefaultServerConfig()
+	srv := dmsg.NewServer(v.conf.PK, v.conf.SK, dmsgOnlyDisc(dmsgC, discPK, log), srvConf, dmsgmetrics.NewEmpty())
+	srv.SetLogger(log)
+
+	lis, err := net.Listen("tcp", localAddr)
+	if err != nil {
+		return fmt.Errorf("in-process dmsg server: listen on %s: %w", localAddr, err)
+	}
+
+	go func() {
+		// srv.Serve blocks until the server is closed; PublicAddress is the
+		// advertised address ("" = advertise whatever the listener resolves).
+		if serr := srv.Serve(lis, srvCfg.PublicAddress); serr != nil && !errors.Is(serr, dmsg.ErrClosed) {
+			log.WithError(serr).Warn("in-process dmsg server stopped")
+		}
+	}()
+
+	log.WithField("local_pk", v.conf.PK).
+		WithField("local_address", localAddr).
+		WithField("public_address", srvCfg.PublicAddress).
+		Info("Started in-process dmsg server on the visor key")
+
+	v.pushCloseStack("dmsg_server", func() error {
+		cerr := srv.Close()
+		if lerr := lis.Close(); lerr != nil && !errors.Is(lerr, net.ErrClosed) && cerr == nil {
+			cerr = lerr
+		}
+		return cerr
+	})
 
 	return nil
 }
