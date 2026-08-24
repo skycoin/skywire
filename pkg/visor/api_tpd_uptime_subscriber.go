@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
@@ -89,17 +90,30 @@ type compactVisorSummary struct {
 // from whichever wire form the connected TPD published (dual-parse for the
 // rollout window where publishers and subscribers redeploy independently):
 //
-//   - Legacy: one monolithic leaf at exactly "uptimes/days/<n>" — returned
-//     verbatim (it is already the v3 shape).
-//   - Current: one per-visor leaf at "uptimes/days/<n>/<pkHex>" carrying a
-//     compactVisorSummary — reassembled into `[]store.VisorSummary`, with each
-//     day's bitmap rendered back to the 288-char string so the CLI/hvui
-//     consumers see the exact HTTP /uptimes?v=v3 shape unchanged.
+//   - Current: one gzipped `[]compactVisorSummary` leaf at exactly
+//     "uptimes/days/<n>" — gunzipped and reassembled into `[]store.VisorSummary`,
+//     with each day's bitmap rendered back to the 288-char string so the
+//     CLI/hvui consumers see the exact HTTP /uptimes?v=v3 shape unchanged. One
+//     leaf (not one-per-visor) is what lets the subscriber's Root fill complete
+//     over the transient dmsg conn — see the publisher's type doc.
+//   - Legacy: one per-visor leaf at "uptimes/days/<n>/<pkHex>" carrying a
+//     compactVisorSummary — the previous shape, reassembled the same way. Kept
+//     so a not-yet-redeployed TPD still reads (its Root rarely fills, but when
+//     it does this salvages it).
 //
 // ok is false when neither form has any data yet.
 func readUptimeWindow(mgr uptimeCXOSubMgr, path string) ([]byte, time.Time, bool) {
 	if body, ts, ok := mgr.Get(FeedTPDUptime, path); ok && len(body) > 0 {
-		return body, ts, true
+		var compact []compactVisorSummary
+		if err := json.Unmarshal(cxoutils.Gunzip(body), &compact); err == nil {
+			summaries := make([]store.VisorSummary, 0, len(compact))
+			for i := range compact {
+				summaries = append(summaries, fromCompactVisorSummary(compact[i]))
+			}
+			if out, ok := marshalSummaries(summaries); ok {
+				return out, ts, true
+			}
+		}
 	}
 	var (
 		summaries []store.VisorSummary
@@ -125,13 +139,22 @@ func readUptimeWindow(mgr uptimeCXOSubMgr, path string) ([]byte, time.Time, bool
 	if _, ts, ok := mgr.Get(FeedTPDUptime, firstPath); ok {
 		newest = ts
 	}
-	// Stable order so repeated reads (and cache files) don't churn.
-	sort.Slice(summaries, func(i, j int) bool { return summaries[i].PK.Hex() < summaries[j].PK.Hex() })
-	out, err := json.Marshal(summaries)
-	if err != nil {
+	out, ok := marshalSummaries(summaries)
+	if !ok {
 		return nil, time.Time{}, false
 	}
 	return out, newest, true
+}
+
+// marshalSummaries sorts by PK (stable output so repeated reads and cache files
+// don't churn) and marshals the v3 `[]store.VisorSummary` body.
+func marshalSummaries(summaries []store.VisorSummary) ([]byte, bool) {
+	sort.Slice(summaries, func(i, j int) bool { return summaries[i].PK.Hex() < summaries[j].PK.Hex() })
+	out, err := json.Marshal(summaries)
+	if err != nil {
+		return nil, false
+	}
+	return out, true
 }
 
 // fromCompactVisorSummary reconstructs the full v3 store.VisorSummary from a

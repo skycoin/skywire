@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
@@ -46,18 +47,40 @@ func mkTimeline(setSlot int) string {
 	return string(b)
 }
 
-func TestReadUptimeWindowLegacyMonolith(t *testing.T) {
-	want := []byte(`[{"pk":"000000...","on":true}]`)
+// TestReadUptimeWindowGzippedCompactLeaf exercises the current wire shape: one
+// gzipped []compactVisorSummary leaf at exactly "uptimes/days/<n>". The reader
+// must gunzip, reconstruct the v3 store.VisorSummary shape, and render each
+// bitmap back to the 288-char timeline string.
+func TestReadUptimeWindowGzippedCompactLeaf(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	compact := []compactVisorSummary{{
+		PK:       pk,
+		Online:   true,
+		Version:  "v1.3.99",
+		Timeline: map[string][]byte{"2026-08-19": timelineBitmap(mkTimeline(5))},
+	}}
+	raw, _ := json.Marshal(compact) //nolint:errcheck
 	mgr := &fakeUptimeMgr{
-		snap: map[string][]byte{"uptimes/days/30": want},
+		snap: map[string][]byte{"uptimes/days/30": cxoutils.Gzip(raw)},
 		ts:   time.Unix(1000, 0),
 	}
 	got, ts, ok := readUptimeWindow(mgr, "uptimes/days/30")
-	if !ok || string(got) != string(want) {
-		t.Fatalf("monolith: got %q,%v want verbatim", got, ok)
+	if !ok {
+		t.Fatal("expected gzipped-compact-leaf hit")
 	}
 	if !ts.Equal(time.Unix(1000, 0)) {
-		t.Fatalf("monolith ts = %v", ts)
+		t.Fatalf("ts = %v, want 1000", ts)
+	}
+	var summaries []store.VisorSummary
+	if err := json.Unmarshal(got, &summaries); err != nil {
+		t.Fatalf("unmarshal reconstructed body: %v", err)
+	}
+	if len(summaries) != 1 || summaries[0].PK != pk || !summaries[0].Online {
+		t.Fatalf("summary not reconstructed: %+v", summaries)
+	}
+	tl := summaries[0].Timeline["2026-08-19"]
+	if len(tl) != 288 || tl[5] != '.' {
+		t.Fatalf("timeline not rendered: len=%d slot5=%q", len(tl), string(tl[5]))
 	}
 }
 
