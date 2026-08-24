@@ -45,6 +45,27 @@ type Options struct {
 	FontSize   float64
 	// LineHeight multiplier. Default: 1.
 	LineHeight float64
+
+	// MirrorGlyph reports whether a glyph should be drawn flipped left-to-right.
+	// nil, the default, draws everything the way round the font has it.
+	//
+	// This exists because some glyphs are only correct mirrored and no font
+	// supplies them that way. The Matrix's code rain is the case it was added
+	// for: its katakana are flipped horizontally, drawn as a custom typeface for
+	// the film, and Unicode encodes no mirrored kana — so a terminal cannot ask
+	// for them. The WebGL renderer rasterises each glyph onto a canvas before
+	// packing it into its atlas, and a canvas can be told to draw mirrored, so
+	// the flip costs one transform at the point the glyph is first drawn and
+	// nothing per frame.
+	//
+	// It is a rendering transform and not a font: the cell still holds the
+	// ordinary codepoint, so selecting, copying and reading the buffer are
+	// unaffected, and a terminal that cannot do this shows the glyph unflipped
+	// rather than showing nothing.
+	//
+	// Only the WebGL renderer honours it. The DOM renderer draws real text and
+	// has no rasterisation step to hook.
+	MirrorGlyph func(string) bool
 	// LetterSpacing in px. Default: 0.
 	LetterSpacing float64
 	// Theme colors (CSS color strings; empty = defaults).

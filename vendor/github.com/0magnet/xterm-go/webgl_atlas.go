@@ -39,6 +39,9 @@ type atlasConfig struct {
 	dpr              float64
 	lineHeight       float64
 	colors           *ColorSet
+	// mirrorGlyph reports whether a glyph is drawn flipped left-to-right.
+	// See Options.MirrorGlyph.
+	mirrorGlyph func(string) bool
 }
 
 type rasterizedGlyph struct {
@@ -469,7 +472,24 @@ func (a *textureAtlas) drawToCache(chars string, code uint32, bg, fg, ext uint32
 
 	// draw the character itself
 	if !customGlyph {
-		ctx.Call("fillText", chars, padding, padding+cfg.deviceCharHeight)
+		// A glyph the caller wants mirrored is drawn through a flip about the
+		// middle of its cell. The canvas does the work, once, when the glyph is
+		// first rasterised into the atlas — every frame after that samples the
+		// same texture, so a mirrored terminal costs exactly as much to draw as
+		// an ordinary one.
+		//
+		// The width flipped about is the glyph's own, chWidth cells, so a wide
+		// character lands back on itself rather than beside itself.
+		if cfg.mirrorGlyph != nil && cfg.mirrorGlyph(chars) {
+			w := float64(cfg.deviceCellWidth * chWidth)
+			ctx.Call("save")
+			ctx.Call("translate", float64(padding)*2+w, 0)
+			ctx.Call("scale", -1, 1)
+			ctx.Call("fillText", chars, padding, padding+cfg.deviceCharHeight)
+			ctx.Call("restore")
+		} else {
+			ctx.Call("fillText", chars, padding, padding+cfg.deviceCharHeight)
+		}
 	}
 
 	// strikethrough
