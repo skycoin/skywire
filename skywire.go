@@ -43,12 +43,6 @@ config-gen sets the default node list via SKYCOINWEBNODES.`
 
 func init() {
 	flags.InitFlags(commands.RootCmd, true)
-	// The help screen, over a still frame of the Matrix code rain. Here rather
-	// than in InitFlags because InitFlags runs for every binary in this
-	// repository, including the services, and this is for the one people read
-	// help in. Off for --json/--jq/--shape, for `help -r` and `help -d`, for a
-	// pipe or a redirect, and for NO_COLOR or SKYWIRE_NO_HELP_RAIN.
-	flags.InitRain(commands.RootCmd)
 	// Use/Short/Version and the subcommand tree are set by the package itself
 	// (cmd/skycoin/commands), which assembles skycoin's commands on skywire's
 	// side rather than importing skycoin's own assembly.
@@ -60,6 +54,16 @@ func init() {
 	// after the fact of importing skycoin-web, so the vendored command
 	// stays transport-agnostic upstream.
 	skycoinweb.RootCmd.Long += skywireSkycoinWebHelp
+
+	// The help screen, over a still frame of the Matrix code rain. Here rather
+	// than in InitFlags because InitFlags runs for every binary in this
+	// repository, including the services, and this is for the one people read
+	// help in. Off for --json/--jq/--shape, for `help -r` and `help -d`, for a
+	// pipe or a redirect, and for NO_COLOR or SKYWIRE_NO_HELP_RAIN.
+	//
+	// Last, once every subcommand is in the tree: it walks the commands rather
+	// than relying on cobra to pass the help function down.
+	flags.InitRain(commands.RootCmd)
 }
 
 func main() {
