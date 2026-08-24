@@ -40,10 +40,12 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		ConnectedServersType: "all",
 		Protocol:             "yamux",
 	}
+	hypervisorAutoconnect := skyenv.HypervisorAutoconnect
 	conf.Transport = &Transport{
-		Discovery:         services.TransportDiscovery,
-		AddressResolver:   services.AddressResolver,
-		PublicAutoconnect: skyenv.PublicAutoconnect,
+		Discovery:             services.TransportDiscovery,
+		AddressResolver:       services.AddressResolver,
+		PublicAutoconnect:     skyenv.PublicAutoconnect,
+		HypervisorAutoconnect: &hypervisorAutoconnect,
 		LogStore: &LogStore{
 			// The on-disk CSV log store was retired; "file" is now a no-op that
 			// only earns a deprecation warning at boot (init_transport.go). Default
