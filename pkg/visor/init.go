@@ -111,6 +111,8 @@ var (
 	pi vinit.Module
 	// Dmsg ping module (dmsg direct connection)
 	dmsgPi vinit.Module
+	// In-process dmsg server sharing the visor's PK/SK (config-gated, default off)
+	dmsgSrv vinit.Module
 	// Dmsg server latency tracking (self-ping via each server)
 	dmsgServerLatency vinit.Module
 	// Embedded Transport Setup Node (separate dmsg client with TPS identity)
@@ -225,6 +227,7 @@ func registerModules(logger *logging.MasterLogger) {
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
 	dmsgPi = maker("dmsg_ping", initDmsgPing, &dmsgC)
+	dmsgSrv = maker("dmsg_server", initDmsgServer, &dmsgC)
 	dmsgServerLatency = maker("dmsg_server_latency", initDmsgServerLatency, &dmsgPi)
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm, &stcprC)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
@@ -265,7 +268,7 @@ func registerModules(logger *logging.MasterLogger) {
 	// init_registration_cxo.go.
 	regCXOMod = maker("registration_cxo", initRegistrationCXO, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &meshProxy, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod, &regCXOMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgSrv, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &meshProxy, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod, &regCXOMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.

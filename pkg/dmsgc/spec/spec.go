@@ -94,6 +94,30 @@ type DmsgConfig struct {
 	// rewards-eligible), a stealthy leaf reaching only statically-known
 	// services/servers. Experimental; default stays discovery.
 	DirectOnly bool `json:"direct_only,omitempty"`
+
+	// Server, when non-nil AND Enabled, runs a dmsg SERVER in-process under
+	// the visor's own PK/SK (shared identity), reusing the visor's existing
+	// dmsg client for discovery rather than standing up a second transit
+	// client. Nil (the default) = no in-process server. See DmsgServerConfig.
+	Server *DmsgServerConfig `json:"server,omitempty"`
+}
+
+// DmsgServerConfig configures the OPTIONAL in-process dmsg server co-resident
+// with the visor. Default off (the whole struct is nil in generated configs).
+// The server shares the visor's PK/SK and its dmsg client, so it advertises
+// under the same PK the visor already uses — no second identity, no second
+// transit client.
+type DmsgServerConfig struct {
+	// Enabled gates the in-process server. False (or a nil *DmsgServerConfig)
+	// = the visor runs no server.
+	Enabled bool `json:"enabled"`
+	// LocalAddress is the TCP listen address for inbound sessions. Empty
+	// defaults to ":8081".
+	LocalAddress string `json:"local_address,omitempty"`
+	// PublicAddress is the externally-reachable address advertised in the
+	// server's discovery entry. Empty = don't advertise a public address
+	// (the server is reachable only over whatever the listener resolves to).
+	PublicAddress string `json:"public_address,omitempty"`
 }
 
 // MarshalJSON and UnmarshalJSON live in spec_native.go under

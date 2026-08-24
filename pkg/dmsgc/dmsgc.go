@@ -94,6 +94,10 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 		},
 		ConnectedServersType: primary.ConnectedServersType,
 		Protocol:             primary.Protocol,
+		// When this visor runs a dmsg server in-process under the same PK,
+		// the client must skip its own server entry in the serve loop rather
+		// than dial a transit session to itself.
+		SkipSelfServer: conf.Server != nil && conf.Server.Enabled,
 	}
 	dmsgConf.ClientType = "visor"
 

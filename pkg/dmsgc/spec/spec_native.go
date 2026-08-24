@@ -13,6 +13,18 @@ import (
 	"encoding/json"
 )
 
+// deploymentWithServer inlines a Deployment's fields (embedded, no json
+// tag, so its exported fields are promoted into the surrounding object)
+// and adds the visor-wide `server` key. It is the single-object wire
+// shape so the in-process dmsg-server config round-trips alongside the
+// primary deployment's fields. The array (multi-deployment) shape has no
+// sibling slot for a top-level key, so Server is only (de)serialized in
+// the single-object shape.
+type deploymentWithServer struct {
+	Deployment
+	Server *DmsgServerConfig `json:"server,omitempty"`
+}
+
 // UnmarshalJSON accepts either a single Deployment object or an
 // array of Deployments and populates Deployments + the legacy
 // top-level mirror fields accordingly.
@@ -23,11 +35,12 @@ func (c *DmsgConfig) UnmarshalJSON(data []byte) error {
 			return err
 		}
 	} else {
-		var single Deployment
+		var single deploymentWithServer
 		if err := json.Unmarshal(data, &single); err != nil {
 			return err
 		}
-		c.Deployments = []Deployment{single}
+		c.Deployments = []Deployment{single.Deployment}
+		c.Server = single.Server
 	}
 	c.mirrorPrimary()
 	return nil
@@ -41,11 +54,11 @@ func (c *DmsgConfig) UnmarshalJSON(data []byte) error {
 // so the JSON output is correct.
 func (c DmsgConfig) MarshalJSON() ([]byte, error) {
 	deployments := c.Deployments
-	if len(deployments) == 0 && (c.Discovery != "" || c.DiscoveryDmsg != "" || len(c.Servers) > 0 || c.SessionsCount != 0 || c.ConnectedServersType != "" || c.Protocol != "" || len(c.LANServers) > 0 || c.HypervisorDiscovery != "") {
+	if len(deployments) == 0 && (c.Discovery != "" || c.DiscoveryDmsg != "" || len(c.Servers) > 0 || c.SessionsCount != 0 || c.ConnectedServersType != "" || c.Protocol != "" || len(c.LANServers) > 0 || c.HypervisorDiscovery != "" || c.Server != nil) {
 		deployments = []Deployment{c.toDeployment()}
 	}
 	if len(deployments) == 1 {
-		return json.Marshal(deployments[0])
+		return json.Marshal(deploymentWithServer{Deployment: deployments[0], Server: c.Server})
 	}
 	return json.Marshal(deployments)
 }
