@@ -267,6 +267,16 @@ type Visor struct {
 	// cxoUserFeedsMu. nil until initStats runs (or if Stats.Disabled).
 	systemCXOPub *treestore.Publisher
 
+	// tplistCXOPub is the DEDICATED transport-list discovery feed
+	// publisher (the SECOND CXO node initStats wires under the same visor
+	// identity PK on skyenv.DmsgVisorTPListCXOPort, carrying only the
+	// compact tp-list snapshot leaf). Retained here — beyond being closed
+	// in the stats close-stack — so CXOFeedStates can surface its live
+	// PublishState alongside the telemetry feed. Guarded by
+	// cxoUserFeedsMu. nil when the dedicated publisher didn't start and
+	// initStats fell back to the combined telemetry feed.
+	tplistCXOPub *treestore.Publisher
+
 	// pairing holds the chat-pair feed manager + bbolt store +
 	// inbound message ring. Populated by init_pairing.go after
 	// dmsgC is up. nil when pairing is disabled (dmsgC absent or
