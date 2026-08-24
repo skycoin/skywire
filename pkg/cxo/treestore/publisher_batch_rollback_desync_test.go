@@ -96,7 +96,7 @@ func TestPublisherBatchRollbackDesyncFreeze(t *testing.T) {
 
 	// Fully evict the static branch's objects from the cache AND the CXDS
 	// so attempt-1's reference walk hits a genuine missing object and its
-	// batch rolls back — modelling a pruned/GC'd branch.
+	// batch rolls back — modeling a pruned/GC'd branch.
 	for _, h := range []skycipher.SHA256{staticEntryHash, staticTreeNodeHash} {
 		if _, err := c.Inc(h, -1<<20); err != nil { // drop cache rc → evict from c.is
 			t.Fatalf("Inc(%s) down: %v", h.Hex(), err)
