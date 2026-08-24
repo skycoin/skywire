@@ -53,7 +53,7 @@ func TestPruneDeadCurrentLeavesAfterHydrate(t *testing.T) {
 		BatchWindow: 5 * time.Millisecond,
 	})
 	require.NoError(t, err, "session 2 publisher")
-	defer func() { _ = pub2.Close() }()
+	defer func() { _ = pub2.Close() }() //nolint:errcheck // best-effort teardown
 
 	// Sanity: hydrate brought all four leaves back onto the feed.
 	sink := &cxoSink{pub: pub2, log: log}
