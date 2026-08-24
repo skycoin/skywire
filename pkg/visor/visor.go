@@ -1029,6 +1029,27 @@ func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.En
 	return v.logBcast.Subscribe(f, capacity)
 }
 
+// RecentAppEvents returns the recent app-scoped route/transport events and log
+// lines captured for appName by the log broadcaster's per-app ring, filtered to
+// entries at least as severe as minLevel. Both slices are oldest-first. Returns
+// empty slices (not an error) when nothing has been captured.
+func (v *Visor) RecentAppEvents(appName string, minLevel logrus.Level) (events, logs []logging.Record) {
+	if v.logBcast == nil {
+		return nil, nil
+	}
+	return v.logBcast.RecentByApp(appName, minLevel)
+}
+
+// RecentAppLogMerged returns the recent events+logs for appName merged into one
+// time-ordered slice (oldest first), filtered to entries at least as severe as
+// minLevel. This is the "reading the log" view `cli proxy log` prints.
+func (v *Visor) RecentAppLogMerged(appName string, minLevel logrus.Level) []logging.Record {
+	if v.logBcast == nil {
+		return nil
+	}
+	return v.logBcast.RecentMerged(appName, minLevel)
+}
+
 // SubscribeGroupMessages registers a live subscriber on the visor's
 // group inbox. Every message delivered to the inbox from this point
 // forward is fanned out to the returned channel (bounded; bursts past

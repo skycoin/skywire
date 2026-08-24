@@ -115,6 +115,7 @@ type API interface {
 	SetAppLauncherMode(appName, mode string) error
 	AppHelp(appName string) (string, error)
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
+	RecentAppLog(appName, level string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
