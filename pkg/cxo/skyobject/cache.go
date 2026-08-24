@@ -137,6 +137,16 @@ type Cache struct {
 	// unpinned store and blocks on bbolt's writer lock, which the tx
 	// owns — while the tx owner blocks on c.mx. See WithBatch.
 	batchTx atomic.Pointer[data.CXDS]
+
+	// batchRec, when non-nil, collects the keys whose object value was
+	// (re)written to the batch-scoped CXDS tx during the active WithBatch.
+	// If that tx rolls back (fn returned an error), WithBatch evicts these
+	// keys from c.is so a value that no longer exists in the store is not
+	// left masquerading as cached — the write-behind invariant "value in
+	// c.is ⇒ value in the store". Guarded by c.mx like the rest of the
+	// Cache; nil outside a WithBatch, so it costs nothing off the publish
+	// path. See WithBatch and recordBatchWrite.
+	batchRec map[cipher.SHA256]struct{}
 }
 
 // initialize the Cache
@@ -262,6 +272,11 @@ func (c *Cache) WithBatch(fn func() error) error {
 	// before ever calling us back.
 	defer unlock()
 
+	// Track object-value writes so a rollback can undo their c.is
+	// residue (see batchRec). Allocated under c.mx before the pin goes
+	// live; cleared under c.mx in step (3).
+	c.batchRec = make(map[cipher.SHA256]struct{})
+
 	return c.c.db.CXDS().RunBatch(func(scoped data.CXDS) (err error) {
 		c.batchTx.Store(&scoped)
 		// (2) The pin is visible to everyone who takes c.mx from here
@@ -272,9 +287,52 @@ func (c *Cache) WithBatch(fn func() error) error {
 			c.mx.Lock()
 			held = true
 			c.batchTx.Store(nil)
+			// A non-nil fn error rolled the tx back: every value it wrote
+			// is gone from the store but still sits in c.is (Cache.Set does
+			// db().Set THEN putItem). Evict exactly those so a later re-Set
+			// takes the miss path and re-persists rather than short-
+			// circuiting as a cache hit — the treestore publisher-freeze
+			// desync. On a clean commit the writes are durable; keep them.
+			if err != nil {
+				c.dropBatchWrites()
+			}
+			c.batchRec = nil
 		}()
-		return fn()
+		err = fn()
+		return err
 	})
+}
+
+// recordBatchWrite notes that key's object value was (re)written to the
+// batch-scoped CXDS tx during an active WithBatch, so a subsequent
+// rollback can evict the now-orphaned c.is entry. No-op outside a batch.
+// Called with c.mx held.
+func (c *Cache) recordBatchWrite(key cipher.SHA256) {
+	if c.batchRec != nil {
+		c.batchRec[key] = struct{}{}
+	}
+}
+
+// dropBatchWrites evicts the c.is entries recorded during a WithBatch fn
+// that returned an error (the tx rolled back). Their backing values no
+// longer exist in the store, so leaving them cached would let a later
+// Cache.Set short-circuit as a cache hit and never re-persist them — the
+// exact desync behind the long-uptime [stats]/TPD publisher freeze:
+// attempt-1's failed encode+save rolls back its object writes, attempt-2's
+// self-heal re-encode re-Set's them as no-ops, and the published Root ends
+// up referencing objects absent from the CXDS. Raw removal (no db().Inc)
+// because the store already discarded these on rollback. Called with
+// c.mx held.
+func (c *Cache) dropBatchWrites() {
+	for key := range c.batchRec {
+		it, ok := c.is[key]
+		if !ok {
+			continue
+		}
+		c.amount--
+		c.volume -= len(it.val)
+		delete(c.is, key)
+	}
 }
 
 // call it under lock
@@ -895,6 +953,7 @@ func (c *Cache) setWanted(
 	if err != nil {
 		return rc, err // DB failure
 	}
+	c.recordBatchWrite(key)
 
 	rc = int(urc) - (wincs + it.fc) // hard rc
 
@@ -971,6 +1030,7 @@ func (c *Cache) setFilling(
 		if urc, err = c.db().Set(key, val, inc+it.fc); err != nil {
 			return rc, err
 		}
+		c.recordBatchWrite(key)
 		c.stat.addWritingDBRequest()
 		rc = int(urc) - it.fc
 		err = c.putFillingItem(val, int(urc), it)
@@ -1038,6 +1098,7 @@ func (c *Cache) Set(
 	if err != nil {
 		return rc, err
 	}
+	c.recordBatchWrite(key)
 
 	rc = int(urc)
 	err = c.putItem(key, val, rc)
