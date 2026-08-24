@@ -133,6 +133,14 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 		// second entry).
 		v.setSystemCXOPub(pub)
 		v.setTPListCXOPub(tplistPub)
+
+		// Register both feeds so their subscriber allowlists are recomputed
+		// and re-applied when the peer whitelist changes at runtime (a
+		// connected hypervisor pushing its own hypervisors). Their initial
+		// allowlists are already set at construction via PubConfig above.
+		tpdPK, tpdOK := tpdCXOPeer(v)
+		v.registerGatedCXOFeed(pub, tpdPK, tpdOK)
+		v.registerGatedCXOFeed(tplistPub, tpdPK, tpdOK)
 	}
 
 	tracker.Run(v.ctx)
@@ -259,6 +267,12 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 		return nil, nil
 	}
 	dataDir := filepath.Join(v.conf.LocalPath, "cxo-stats")
+	// Gate the feed: only the peer whitelist (hypervisors + dmsgpty
+	// whitelist + own PK) plus the consuming TPD may subscribe. TPD MUST
+	// be allowed or the announce-conn subscribe is rejected (the hook
+	// keys off the connecting PeerID). nil = OPEN when nothing is known.
+	tpdPK, tpdOK := tpdCXOPeer(v)
+	allow := composeFeedAllowlist(v, tpdPK, tpdOK)
 	// BatchWindow of 10s coalesces stat mutations into ~6 bbolt
 	// commits per minute on this publisher (one per window),
 	// down from ~60 with the previous 1s setting. Stats are sampled
@@ -268,9 +282,10 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 	// datastore by an order of magnitude — meaningful for visors
 	// running on microSD or other write-sensitive media.
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
-		BatchWindow: 10 * time.Second,
-		Logger:      log,
-		DataDir:     dataDir,
+		BatchWindow:         10 * time.Second,
+		Logger:              log,
+		DataDir:             dataDir,
+		SubscriberAllowlist: allow,
 		// Stats CXDS is content-addressed cache; the in-memory tree
 		// (regenerated from stats.db on each restart) authoritatively
 		// owns the value set. Skipping per-tx fdatasync removes the
@@ -300,15 +315,19 @@ func buildTPListPublisher(v *Visor, log *logging.Logger) *treestore.Publisher {
 		return nil
 	}
 	dataDir := filepath.Join(v.conf.LocalPath, "cxo-tplist")
+	// Same gate as the telemetry feed: peer whitelist ∪ consuming TPD.
+	tpdPK, tpdOK := tpdCXOPeer(v)
+	allow := composeFeedAllowlist(v, tpdPK, tpdOK)
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
 		// The tp-list changes only on transport churn; a short window keeps
 		// discovery prompt. Each republish is a single small leaf, so the
 		// fill/eviction churn that plagues the big telemetry Root does not
 		// apply here.
-		BatchWindow: 2 * time.Second,
-		Logger:      log,
-		DataDir:     dataDir,
-		DmsgPort:    skyenv.DmsgVisorTPListCXOPort,
+		BatchWindow:         2 * time.Second,
+		Logger:              log,
+		DataDir:             dataDir,
+		DmsgPort:            skyenv.DmsgVisorTPListCXOPort,
+		SubscriberAllowlist: allow,
 		// Content-addressed, rebuilt from the transport manager's live set
 		// on every publishTPDList — safe to skip per-tx fdatasync.
 		NoSyncCXDS: true,
