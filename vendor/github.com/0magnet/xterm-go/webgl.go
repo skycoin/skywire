@@ -720,6 +720,12 @@ type webglRenderer struct {
 	glyphs *glyphRenderer
 	atlas  *textureAtlas
 
+	// contextLost is set between webglcontextlost and webglcontextrestored.
+	// Every GL call in that window is a no-op that the driver still has to
+	// reject, and the picture it would produce is not on screen anyway.
+	contextLost bool
+	lossFns     []js.Func
+
 	workCell *vt.CellData
 }
 
@@ -754,8 +760,74 @@ func newWebglRenderer(term *Terminal) (r *webglRenderer, err error) {
 		return nil, err
 	}
 
+	r.wireContextLoss()
 	r.onResize()
 	return r, nil
+}
+
+// wireContextLoss keeps the terminal alive across a lost GPU context.
+//
+// A browser caps how many WebGL contexts a page may hold — Chrome's limit is
+// around sixteen — and when a new one is asked for past the cap it EVICTS THE
+// OLDEST. A page that puts a terminal in a window and lets people open windows
+// reaches that on its own: measured here at fifteen terminals, where the first
+// one's context was taken away while the page went on running.
+//
+// preventDefault on the loss event is the load-bearing line. Without it the
+// browser will never restore the context, and no amount of later work can bring
+// the terminal back — it stays a rectangle that used to be a shell, with the
+// renderer issuing draw calls into a dead context that silently do nothing.
+//
+// With it, the browser may restore, and then the GPU-side objects have to be
+// built again: everything made from the context — programs, buffers, the glyph
+// atlas — died with it, while the terminal's own state (its buffer, its shell)
+// never depended on the GPU and is still exactly where it was.
+func (r *webglRenderer) wireContextLoss() {
+	lost := js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) > 0 {
+			args[0].Call("preventDefault")
+		}
+		r.contextLost = true
+		return nil
+	})
+	restored := js.FuncOf(func(js.Value, []js.Value) any {
+		r.contextLost = false
+		r.rebuildGPUState()
+		return nil
+	})
+	r.lossFns = append(r.lossFns, lost, restored)
+	r.canvas.Call("addEventListener", "webglcontextlost", lost)
+	r.canvas.Call("addEventListener", "webglcontextrestored", restored)
+}
+
+// rebuildGPUState remakes everything that lived in the lost context.
+//
+// The context object itself is reused by the browser and is valid again by the
+// time this runs, so it is not fetched afresh; what has to be rebuilt is what
+// was created FROM it. A failure here leaves contextLost set rather than
+// half-built, so the terminal stays quiet instead of drawing garbage.
+func (r *webglRenderer) rebuildGPUState() {
+	if r.atlas != nil {
+		r.atlas.dispose()
+		r.atlas = nil
+	}
+	rects, err := newRectangleRenderer(r.term, r.gl, &r.dims, r.term.colors)
+	if err != nil {
+		r.contextLost = true
+		return
+	}
+	glyphs, err := newGlyphRenderer(r.term, r.gl, &r.dims)
+	if err != nil {
+		r.contextLost = true
+		return
+	}
+	r.rects, r.glyphs = rects, glyphs
+	// onResize rebuilds the dimensions and the atlas and clears the model, and
+	// a cleared atlas makes the next frame a full refresh — so one draw here
+	// puts the whole terminal back rather than waiting for output that may
+	// never come. A shell sitting at a prompt produces nothing on its own.
+	r.onResize()
+	r.renderRows(0, r.term.Core.Rows()-1)
 }
 
 func (r *webglRenderer) updateDimensions() {
@@ -802,6 +874,7 @@ func (r *webglRenderer) refreshCharAtlas() {
 		dpr:              dpr,
 		lineHeight:       maxF(r.term.Core.Options.LineHeight, 1),
 		colors:           r.term.colors,
+		mirrorGlyph:      r.term.Core.Options.MirrorGlyph,
 	}
 	if r.atlas != nil {
 		r.atlas.dispose()
@@ -835,6 +908,9 @@ func (r *webglRenderer) onColorsChanged() {
 }
 
 func (r *webglRenderer) renderRows(start, end int) {
+	if r.contextLost {
+		return // nothing drawn into a lost context ever reaches the screen
+	}
 	// the frame begins; a cleared atlas forces a full model refresh
 	if r.glyphs.beginFrame() {
 		r.model.clear()
@@ -855,6 +931,10 @@ func (r *webglRenderer) dispose() {
 	if r.atlas != nil {
 		r.atlas.dispose()
 	}
+	for _, fn := range r.lossFns {
+		fn.Release()
+	}
+	r.lossFns = nil
 	r.canvas.Call("remove")
 }
 
