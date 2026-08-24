@@ -326,6 +326,10 @@ func (proxyDefaultAPI) LogsSince(_ time.Time, _ string) ([]string, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) RecentAppLog(_, _ string) ([]string, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GetAppStats(_ string) (appserver.AppStats, error) {
 	return appserver.AppStats{}, ErrProxyNotSupported
 }

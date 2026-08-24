@@ -68,6 +68,14 @@ type VerboseStream struct {
 // rpcAddr is typically clirpc.Addr; the gRPC server is multiplexed
 // onto the same port as the standard RPC server via cmux.
 func OpenVerbose(ctx context.Context, rpcAddr string, filter VerboseFilter) (*VerboseStream, error) {
+	return OpenVerboseTo(ctx, rpcAddr, filter, os.Stderr)
+}
+
+// OpenVerboseTo is OpenVerbose with an explicit destination writer for
+// the formatted entries. `proxy start --verbose` streams to stderr (via
+// OpenVerbose); `cli proxy log` streams to stdout so the log is the
+// command's primary output. Behavior is otherwise identical.
+func OpenVerboseTo(ctx context.Context, rpcAddr string, filter VerboseFilter, w io.Writer) (*VerboseStream, error) {
 	if filter.AppName == "" && len(filter.Modules) == 0 {
 		return nil, errors.New("verbose: filter requires AppName or Modules")
 	}
@@ -89,7 +97,7 @@ func OpenVerbose(ctx context.Context, rpcAddr string, filter VerboseFilter) (*Ve
 		defer close(v.done)
 		defer grpcClient.Close() //nolint:errcheck,gosec
 		err := grpcClient.StreamAppLogs(ctx, filter.AppName, false, level, filter.Modules, v.subscribed, func(e *rpcgrpc.AppLogEntry) {
-			emitEntry(os.Stderr, e)
+			emitEntry(w, e)
 		})
 		if err != nil && ctx.Err() == nil {
 			fmt.Fprintf(os.Stderr, "verbose stream ended: %v\n", err)

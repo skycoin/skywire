@@ -607,6 +607,21 @@ func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, e
 	return res, nil
 }
 
+// RecentAppLog calls RecentAppLog.
+func (rc *rpcClient) RecentAppLog(appName, level string) ([]string, error) {
+	res := make([]string, 0)
+
+	err := rc.Call("RecentAppLog", &RecentAppLogRequest{
+		AppName: appName,
+		Level:   level,
+	}, &res)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
 func (rc *rpcClient) GetAppStats(appName string) (appserver.AppStats, error) {
 	var stats appserver.AppStats
 

@@ -17,6 +17,17 @@ func (r *RPC) LogsSince(in *AppLogsRequest, out *[]string) (err error) {
 	return err
 }
 
+// RecentAppLog returns the recent app-scoped route/transport events + log lines
+// captured in the log broadcaster's per-app ring.
+func (r *RPC) RecentAppLog(in *RecentAppLogRequest, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "RecentAppLog", in)(out, &err)
+
+	lines, err := r.visor.RecentAppLog(in.AppName, in.Level)
+	*out = lines
+
+	return err
+}
+
 // SetAppDetailedStatus sets app's detailed status.
 func (r *RPC) SetAppDetailedStatus(in *SetAppStatusIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppDetailedStatus", in)(nil, &err)

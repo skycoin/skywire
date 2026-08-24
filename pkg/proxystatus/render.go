@@ -18,6 +18,11 @@ const refreshSeconds = 4
 // bottom (terminal-tail order). The Provider may return fewer.
 const maxLogLines = 200
 
+// maxEventLines caps how many recent route/transport event lines the page
+// renders (oldest first, matching the Provider's ordering). The Provider may
+// return fewer.
+const maxEventLines = 200
+
 // Render returns the full, self-contained HTML status page for snap. All
 // interpolated values are HTML-escaped; the page loads no external resource
 // (matching the proxies' strict no-network serving context).
@@ -493,8 +498,12 @@ func writeEventsSection(b *strings.Builder, snap Snapshot) {
 		// drop) is an extension point — see the control seam below.
 		b.WriteString(`<p class="empty">No route or transport events captured for this surface yet.</p>`)
 	} else {
+		events := snap.Events
+		if len(events) > maxEventLines {
+			events = events[len(events)-maxEventLines:]
+		}
 		b.WriteString(`<ul class="events">`)
-		for _, e := range snap.Events {
+		for _, e := range events {
 			fmt.Fprintf(b, `<li>%s</li>`, html.EscapeString(e))
 		}
 		b.WriteString(`</ul>`)
