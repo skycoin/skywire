@@ -60,11 +60,17 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 	}
 
 	dataDir := filepath.Join(v.conf.LocalPath, "cxo-registration")
+	// Gate the feed: peer whitelist (hypervisors + dmsgpty whitelist + own
+	// PK) plus the consuming dmsg-discovery. dmsgd MUST be allowed or its
+	// announce-conn subscribe is rejected by the OnSubscribeRemote hook.
+	// dmsgdPK is always known here (we returned early above otherwise).
+	allow := composeFeedAllowlist(v, dmsgdPK, true)
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
-		DmsgPort:    skyenv.DmsgDMSGDRegistrationCXOPort,
-		BatchWindow: registrationBatchWindow,
-		Logger:      log,
-		DataDir:     dataDir,
+		DmsgPort:            skyenv.DmsgDMSGDRegistrationCXOPort,
+		BatchWindow:         registrationBatchWindow,
+		Logger:              log,
+		DataDir:             dataDir,
+		SubscriberAllowlist: allow,
 		// The entry is content-addressed and rebuilt from the dmsg client's
 		// live registration on every restart, so skipping per-tx fdatasync
 		// is safe (matches the telemetry publisher).
@@ -74,6 +80,11 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 		log.WithError(err).Warn("Registration-CXO: publisher init failed; continuing with HTTP registration only")
 		return nil
 	}
+
+	// Register so the feed's subscriber allowlist is recomputed and
+	// re-applied when the peer whitelist changes at runtime. The initial
+	// allowlist is already set at construction via PubConfig above.
+	v.registerGatedCXOFeed(pub, dmsgdPK, true)
 
 	// Mirror every successful primary-discovery registration onto the feed.
 	// The hook runs on the dmsg entry-update goroutine and must not block;

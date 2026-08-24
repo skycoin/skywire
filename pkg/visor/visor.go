@@ -277,6 +277,15 @@ type Visor struct {
 	// initStats fell back to the combined telemetry feed.
 	tplistCXOPub *treestore.Publisher
 
+	// gatedCXOFeeds registers the visor's service-consumed CXO publishers
+	// (stats, tp-list, registration) together with the consuming service's
+	// PK so their subscriber allowlists can be recomputed and re-applied
+	// live whenever the peer whitelist changes (a hypervisor pushing its
+	// own hypervisors via AddPtyWhitelist). See cxo_feed_allowlist.go.
+	// Guarded by gatedCXOFeedsMu.
+	gatedCXOFeeds   []gatedCXOFeed
+	gatedCXOFeedsMu sync.Mutex
+
 	// pairing holds the chat-pair feed manager + bbolt store +
 	// inbound message ring. Populated by init_pairing.go after
 	// dmsgC is up. nil when pairing is disabled (dmsgC absent or
