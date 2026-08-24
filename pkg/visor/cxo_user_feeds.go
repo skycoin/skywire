@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/cmd/apps/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -233,6 +235,42 @@ type CXOFeedState struct {
 	Name string `json:"name"`
 	Port uint16 `json:"port,omitempty"`
 	treestore.PublishState
+	// CurrentLeaves is populated only for the "stats" telemetry feed: it
+	// breaks down the transports/<id>/current leaves the feed carries by
+	// whether each leaf's transport is currently live. Dead > 0 quantifies
+	// the stale-leaf bloat that Fix 1 (pruneDeadCurrentLeaves) removes at
+	// startup and reconcileCurrentLeaves keeps out at steady state.
+	CurrentLeaves *CurrentLeafStats `json:"current_leaves,omitempty"`
+}
+
+// CurrentLeafStats is the live/dead breakdown of the telemetry feed's
+// transports/<id>/current leaf set, computed as the feed's current-leaf
+// path list intersected with the visor's live transport set.
+type CurrentLeafStats struct {
+	Total int `json:"total"`
+	Live  int `json:"live"`
+	Dead  int `json:"dead"`
+}
+
+// currentLeafStats walks the publisher's transports/<id>/current leaves
+// and classifies each by whether its transport is in liveIDs. Cheap: an
+// in-memory tree walk plus a map lookup per leaf.
+func currentLeafStats(pub *treestore.Publisher, liveIDs map[uuid.UUID]struct{}) CurrentLeafStats {
+	var st CurrentLeafStats
+	pub.Walk("transports", func(path string, _ []byte) bool {
+		id, ok := currentLeafUUID(path)
+		if !ok {
+			return true
+		}
+		st.Total++
+		if _, live := liveIDs[id]; live {
+			st.Live++
+		} else {
+			st.Dead++
+		}
+		return true
+	})
+	return st
 }
 
 // CXOFeedStates returns the live PublishState of the system telemetry
@@ -252,10 +290,15 @@ func (v *Visor) CXOFeedStates() []CXOFeedState {
 
 	var out []CXOFeedState
 	if sysPub != nil {
+		// Live/dead current-leaf breakdown for the telemetry feed: the
+		// feed's own current-leaf paths ∩ the live transport set. Directly
+		// quantifies the dead-leaf bloat that starves TPD's Root fill.
+		cls := currentLeafStats(sysPub, liveTransportIDs(v))
 		out = append(out, CXOFeedState{
-			Name:         systemCXOFeedName,
-			Port:         skyenv.DmsgCXOPort,
-			PublishState: sysPub.PublishState(),
+			Name:          systemCXOFeedName,
+			Port:          skyenv.DmsgCXOPort,
+			PublishState:  sysPub.PublishState(),
+			CurrentLeaves: &cls,
 		})
 	}
 	// The dedicated tp-list discovery feed (a second CXO node under the
