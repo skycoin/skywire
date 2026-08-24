@@ -84,6 +84,91 @@ func TestTrackerRecordsTransportLifecycle(t *testing.T) {
 	}
 }
 
+// TestTrackerChangeGateSkipsIdleRePuts drives three transports across
+// three same-day ticks and asserts the mirror change-gate:
+//
+//	(a) an IDLE transport (bytes/latency constant, only SampledAt
+//	    advancing) is Put once and NOT re-Put on later idle ticks;
+//	(b) a transport whose sent/recv bytes change IS re-Put on the
+//	    changing tick, then stops being re-Put once it goes idle;
+//	(c) a transport that goes dead has its current leaf sink-Deleted.
+//
+// This is the per-tick Root-churn reduction: with N live transports of
+// which M are idle between samples, the mirror Put count drops from N to
+// (N-M).
+func TestTrackerChangeGateSkipsIdleRePuts(t *testing.T) {
+	sink := newRecordingSink()
+	tr := newTrackerWithSink(t, sink)
+	idle := uuid.New()
+	changing := uuid.New()
+	dying := uuid.New()
+	t0 := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
+
+	idleProbe := TransportProbe{
+		ID: idle, Type: "stcpr", SentBytes: 100, RecvBytes: 50,
+		LatencyMS: LatencyTriple{Min: 10, Max: 10, Avg: 10},
+	}
+
+	// Tick 1: all three live — each publishes its current leaf once.
+	tr.probes.Transports = func() []TransportProbe {
+		return []TransportProbe{
+			idleProbe,
+			{ID: changing, Type: "stcpr", SentBytes: 200, RecvBytes: 80},
+			{ID: dying, Type: "stcpr", SentBytes: 5, RecvBytes: 5},
+		}
+	}
+	tr.sample(t0)
+	for _, id := range []uuid.UUID{idle, changing, dying} {
+		if n := sink.putCountFor(currentTransportPath(id.String())); n != 1 {
+			t.Fatalf("tick1: %s Put %d times, want 1", id, n)
+		}
+	}
+
+	// Tick 2: idle unchanged (SampledAt advances only), changing grew,
+	// dying has closed (dropped from the probe).
+	tr.probes.Transports = func() []TransportProbe {
+		return []TransportProbe{
+			idleProbe, // identical bytes+latency; only SampledAt would move
+			{ID: changing, Type: "stcpr", SentBytes: 350, RecvBytes: 120},
+		}
+	}
+	tr.sample(t0.Add(time.Minute))
+
+	if n := sink.putCountFor(currentTransportPath(idle.String())); n != 1 {
+		t.Errorf("(a) idle transport re-Put on unchanged tick: Put %d times, want 1", n)
+	}
+	if n := sink.putCountFor(currentTransportPath(changing.String())); n != 2 {
+		t.Errorf("(b) changed transport not re-Put: Put %d times, want 2", n)
+	}
+	_, dels := sink.snapshot()
+	foundDel := false
+	for _, d := range dels {
+		if d == currentTransportPath(dying.String()) {
+			foundDel = true
+		}
+	}
+	if !foundDel {
+		t.Errorf("(c) dead transport current leaf not sink-Deleted; dels=%v", dels)
+	}
+
+	// Tick 3: both remaining transports idle (changing now constant too).
+	// Neither should be re-Put.
+	tr.probes.Transports = func() []TransportProbe {
+		return []TransportProbe{
+			idleProbe,
+			{ID: changing, Type: "stcpr", SentBytes: 350, RecvBytes: 120},
+		}
+	}
+	tr.sample(t0.Add(2 * time.Minute))
+
+	if n := sink.putCountFor(currentTransportPath(idle.String())); n != 1 {
+		t.Errorf("(a) idle transport re-Put on second idle tick: Put %d times, want 1", n)
+	}
+	if n := sink.putCountFor(currentTransportPath(changing.String())); n != 2 {
+		t.Errorf("(b) now-idle transport re-Put after it stopped changing: Put %d times, want 2", n)
+	}
+}
+
 func TestTrackerDayBoundaryAnchorsNewBaseline(t *testing.T) {
 	f := newTrackerFixture(t)
 	id := uuid.New()
