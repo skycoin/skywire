@@ -24,6 +24,15 @@ func (logger *Logger) WithTime(t time.Time) *logrus.Entry {
 	return logger.WithFields(logrus.Fields{}).WithTime(t)
 }
 
+// Tracef logs at trace level (below Debug). The embedded logrus.FieldLogger
+// interface omits the Trace methods, so a *Logger otherwise can't emit at
+// trace without reaching through WithField; this forwards through the entry.
+// Used to keep low-value diagnostics (e.g. the CLI's CXO fetch-chain hit/miss
+// notes) off ordinary stdout, since the CLI's package logger runs at Debug.
+func (logger *Logger) Tracef(format string, args ...interface{}) {
+	logger.WithFields(logrus.Fields{}).Tracef(format, args...)
+}
+
 // WithAppName returns a derived Logger that attaches app_name=<name>
 // to every entry. Empty name is a no-op (returns the receiver).
 // Used by router-side scoping so 'cli proxy start --verbose' can
