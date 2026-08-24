@@ -23,6 +23,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -42,15 +43,23 @@ var uptimePublishDays = []int{1, 7, 30}
 const uptimePublishInterval = 60 * time.Second
 
 // UptimeCXOPublisher publishes the network-wide visor-uptime aggregate for
-// each of uptimePublishDays. Rather than one monolithic `[]VisorSummary` leaf
-// per window at "uptimes/days/<n>" (which, at fleet scale with the v3 288-char
-// timeline strings, exceeded CXO's 16 MB MaxObjectSize and failed the Put with
-// "object is too large" — the serve-side feed the subscriber could never
-// fill), it writes one small per-visor leaf at "uptimes/days/<n>/<pkHex>". No
-// single object is fleet-sized, so the Put always succeeds; content-addressing
-// re-broadcasts only the visors whose bucket changed; and a subscriber whose
-// fill truncates still salvages every per-visor leaf that landed (see the
-// treestore subscriber's partial-fill recovery). Closed by Close.
+// each of uptimePublishDays as ONE gzipped leaf per window at "uptimes/days/<n>"
+// — the same few-large-objects shape as the all-transports publisher, and for
+// the same reason: a subscriber fills a Root over the transient dmsg conn the
+// publisher's re-announce delivers it on, and that conn closes moments later. A
+// Root of a handful of leaves fills in one short burst; a Root fanned out into
+// one leaf PER VISOR PER WINDOW (the previous shape) needs a request round-trip
+// per object, never completes before the conn drops, and every subscriber fill
+// dies with "no connections to fill from" — so the feed published a Root that
+// no one could ever fill (`cli visor cxo status` → tpd-uptime last_err="timeout
+// waiting for Root after 10s", while the 2-leaf all-transports feed synced
+// fine on the same TPD peer).
+//
+// The 16 MB MaxObjectSize that drove the earlier per-visor split is not a
+// problem for a single leaf here: each visor is encoded as a compactVisorSummary
+// (36-byte timeline bitmaps, ~8x smaller than the v3 288-char strings that blew
+// past the limit) and the whole window array is gzipped before the Put, so the
+// stored object is well under 16 MB for any realistic fleet. Closed by Close.
 type UptimeCXOPublisher struct {
 	api *API
 	pub *treestore.Publisher
@@ -58,13 +67,6 @@ type UptimeCXOPublisher struct {
 
 	cancel context.CancelFunc
 	done   chan struct{}
-
-	// prevPKs tracks, per day-window, the set of per-visor leaf hex-PK
-	// segments published on the previous tick, so this tick can emit delete
-	// ops for visors that dropped out of the aggregate (a naive Put-only
-	// refresh would leave their stale leaves lingering forever). Touched only
-	// from the single publish loop goroutine, so no lock.
-	prevPKs map[int]map[string]struct{}
 
 	mu        sync.Mutex
 	lastError error
@@ -110,12 +112,11 @@ func StartUptimeCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, 
 
 	pubCtx, cancel := context.WithCancel(ctx)
 	up := &UptimeCXOPublisher{
-		api:     api,
-		pub:     pub,
-		log:     log,
-		cancel:  cancel,
-		done:    make(chan struct{}),
-		prevPKs: make(map[int]map[string]struct{}),
+		api:    api,
+		pub:    pub,
+		log:    log,
+		cancel: cancel,
+		done:   make(chan struct{}),
 	}
 	if logger != nil {
 		logger.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgTPDUptimeCXOPort).
@@ -185,42 +186,32 @@ func (u *UptimeCXOPublisher) publishOnce(ctx context.Context) {
 	}
 }
 
-// publishWindow writes one small per-visor leaf at "uptimes/days/<n>/<pkHex>"
-// for every summary, plus delete ops for any visor published last tick that
-// is gone this tick, in a single PutBatch. Splitting the window into per-visor
-// leaves (each a compactVisorSummary with bitmap timelines) keeps every CXO
-// object well under MaxObjectSize — the whole point of the change: the
-// monolithic []VisorSummary leaf failed the Put once the fleet's v3 timelines
-// pushed it past 16 MB.
+// publishWindow writes the whole window as ONE gzipped []compactVisorSummary
+// leaf at "uptimes/days/<n>", overwriting the previous tick's value. One leaf
+// (not one-per-visor) is what keeps a subscriber's Root fill completing over
+// the short-lived delivering dmsg conn — see the type doc. The array is always
+// Put (even empty → "[]"), so a Root always exists for a subscriber to sync,
+// exactly like the all-transports publisher; an empty per-visor batch used to
+// publish no Root at all.
 func (u *UptimeCXOPublisher) publishWindow(days int, summaries []store.VisorSummary) {
-	base := uptimePath(days)
-	live := make(map[string]struct{}, len(summaries))
-	ops := make([]treestore.PutOp, 0, len(summaries))
+	compact := make([]compactVisorSummary, 0, len(summaries))
 	for i := range summaries {
-		hexPK := summaries[i].PK.Hex()
-		body, err := json.Marshal(toCompactVisorSummary(summaries[i]))
-		if err != nil {
-			u.log.WithError(err).WithField("days", days).Warn("uptime per-visor marshal failed")
-			u.recordError(err)
-			continue
-		}
-		live[hexPK] = struct{}{}
-		ops = append(ops, treestore.PutOp{Path: base + "/" + hexPK, Value: body})
+		compact = append(compact, toCompactVisorSummary(summaries[i]))
 	}
-	// Delete leaves for visors that dropped out of the aggregate since the
-	// previous tick (nil Value = delete). Without this, a visor that leaves
-	// the cache keeps a stale leaf forever.
-	for hexPK := range u.prevPKs[days] {
-		if _, still := live[hexPK]; !still {
-			ops = append(ops, treestore.PutOp{Path: base + "/" + hexPK, Value: nil})
-		}
-	}
-	if err := u.pub.PutBatch(ops); err != nil {
-		u.log.WithError(err).WithField("days", days).Warn("uptime publisher PutBatch failed")
+	body, err := json.Marshal(compact)
+	if err != nil {
+		u.log.WithError(err).WithField("days", days).Warn("uptime window marshal failed")
 		u.recordError(err)
 		return
 	}
-	u.prevPKs[days] = live
+	// gzip before Put: CXO stores + propagates object bytes verbatim, so a raw
+	// JSON body travels uncompressed. Subscribers auto-detect + gunzip
+	// (cxoutils.Gunzip). Matches the all-transports publisher.
+	if err := u.pub.Put(uptimePath(days), cxoutils.Gzip(body)); err != nil {
+		u.log.WithError(err).WithField("days", days).Warn("uptime publisher Put failed")
+		u.recordError(err)
+		return
+	}
 }
 
 // toCompactVisorSummary converts a store.VisorSummary (v3 shape, 288-char
