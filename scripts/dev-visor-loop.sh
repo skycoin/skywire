@@ -15,16 +15,24 @@ cd "$(dirname "$0")/.." || exit 1 # script lives in scripts/, build from repo ro
 
 VISOR_FLAGS="${VISOR_FLAGS:--sl debug -q http}"
 
+# `go install` drops the binary in GOBIN (or GOPATH/bin) instead of the repo
+# root, so the source tree stays clean and each install is an atomic rename — a
+# running visor keeps its old inode, unlike `go build .`'s in-place overwrite.
+# Resolve the path explicitly rather than relying on PATH.
+SKYWIRE_BIN="$(go env GOBIN)"
+[ -z "$SKYWIRE_BIN" ] && SKYWIRE_BIN="$(go env GOPATH)/bin"
+SKYWIRE_BIN="$SKYWIRE_BIN/skywire"
+
 while true; do
 	echo ">>> building…"
-	if ! time go build .; then
+	if ! time go install .; then
 		echo ">>> build failed — not starting a stale binary; retrying in 5s"
 		sleep 5
 		continue
 	fi
 
 	# shellcheck disable=SC2086 # VISOR_FLAGS is intentionally word-split
-	./skywire visor $VISOR_FLAGS
+	"$SKYWIRE_BIN" visor $VISOR_FLAGS
 	code=$?
 
 	case "$code" in
