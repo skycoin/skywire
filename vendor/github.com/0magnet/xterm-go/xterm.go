@@ -38,6 +38,26 @@ type Terminal struct {
 
 	// OnTitleChange fires when the application sets the window title.
 	OnTitleChange func(title string)
+
+	// OnResize fires after the grid changed size, with the new dimensions.
+	//
+	// USE THIS RATHER THAN Core.OnResize. That field looks equally available —
+	// Attach assigns Core.OnData, so assigning Core.OnResize beside it reads as
+	// the same kind of thing — but Open sets it, and ITS handler is what tells
+	// the renderer to reallocate for the new grid. Overwriting it leaves the
+	// render model sized for the old grid while the renderer reads the new
+	// columns and rows, and the next frame indexes past the end of it:
+	//
+	//	panic: index out of range [6889] with length 6888
+	//	  xterm-go.(*rectangleRenderer).updateBackgrounds
+	//
+	// In wasm that panic ends the Go program, so the symptom is not a
+	// misdrawn terminal but every terminal on the page freezing at once. This
+	// field is fanned out from that handler and cannot displace it.
+	//
+	// It is the hook a pty bridge wants: a resize here is what should become a
+	// TIOCSWINSZ at the far end.
+	OnResize func(cols, rows int)
 	// OnBell fires on BEL.
 	OnBell func()
 	// OnSelectionChange fires when the selected text changes, including when
@@ -277,6 +297,12 @@ func (t *Terminal) wireCoreEvents() {
 		t.updateScrollArea()
 		t.renderer.onResize()
 		t.scheduleRender(true)
+		// Last, and after the renderer: a consumer told about the new size
+		// before the renderer has been reallocated for it may act on the new
+		// grid while the next frame is still drawn against the old one.
+		if t.OnResize != nil {
+			t.OnResize(cols, rows)
+		}
 	}
 	t.Core.OnCursorMove = func() {
 		t.markCursorRowDirty()
@@ -1048,4 +1074,22 @@ func jsPx(v float64) string {
 func escapeHTML(s string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 	return r.Replace(s)
+}
+
+// RefreshGlyphs rebuilds the renderer's glyph cache.
+//
+// Rasterised glyphs are cached, so a change to an option that affects how one
+// is DRAWN rather than which one is drawn — Options.MirrorGlyph is the only one
+// today — is not picked up by itself: the cache still holds the glyphs as they
+// were rasterised before. Everything else that invalidates the cache does so as
+// a side effect of resizing or of the colors changing, which is why this is the
+// only place that needs saying out loud.
+//
+// A no-op on the DOM renderer, which rasterises nothing.
+func (t *Terminal) RefreshGlyphs() {
+	if r, ok := t.renderer.(*webglRenderer); ok {
+		r.refreshCharAtlas()
+		r.model.clear()
+		r.glyphs.clear()
+	}
 }

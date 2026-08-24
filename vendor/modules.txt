@@ -49,7 +49,7 @@ github.com/0magnet/u-root/pkg/ls
 ## explicit; go 1.25.7
 github.com/0magnet/websh/shell
 github.com/0magnet/websh/shell/browser
-# github.com/0magnet/xterm-go v0.0.0-20260820124923-c0b6b4f69bb7
+# github.com/0magnet/xterm-go v0.0.0-20260823191622-8d2bbff87cea
 ## explicit; go 1.24
 github.com/0magnet/xterm-go
 github.com/0magnet/xterm-go/vt
