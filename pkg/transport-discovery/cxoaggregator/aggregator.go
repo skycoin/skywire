@@ -327,6 +327,21 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	}
 
 	cfg := node.NewConfig()
+	// We're DMSG-only — disable the CXO node's default TCP/UDP/RPC
+	// listeners. node.NewConfig defaults TCP.Listen to ":8870" and RPC to
+	// ":8871", and those hardcoded ports mean two Nodes in the same process
+	// collide on bind: NewNode's TCP/RPC Listen returns "address already in
+	// use" and the whole aggregator fails to construct. TPD runs TWO
+	// aggregators in one process (the port-50 telemetry feed and the port-69
+	// tp-list feed), so the SECOND New silently failed here — its node never
+	// came up, so it never dmsg-Listened on its DMSG port and never accepted
+	// the visors' tp-list announces (the persistent visor↔TPD transport-count
+	// gap). None of these listeners are reachable over DMSG anyway; the
+	// publisher path (treestore.NewWithDMSG) already zeroes them for the same
+	// reason.
+	cfg.TCP.Listen = ""
+	cfg.UDP.Listen = ""
+	cfg.RPC = ""
 	// Override the 10m node default: cap hung fills from flapping peers so
 	// their "wanted" objects are released in seconds, not minutes. See the
 	// Config.MaxFillingTime doc for why this is the aggregator's residual
