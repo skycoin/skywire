@@ -121,6 +121,24 @@ const (
 	// needs to be collision-free, which the ports_test guards.
 	DmsgDMSGDRegistrationCXOPort uint16 = 67
 
+	// DmsgVisorTPListCXOPort is the DMSG port the visor's DEDICATED
+	// transport-list (tp-list) discovery feed binds — a second CXO node,
+	// under the SAME visor identity PK as the telemetry publisher on
+	// DmsgCXOPort (50), carrying ONLY the compact tp-list snapshot leaf.
+	// Its Root is a handful of objects, so TPD's aggregator fills it
+	// COMPLETELY in ~1 round-trip — where the combined telemetry Root on
+	// port 50 (hundreds/thousands of transports/<uuid>/current leaves)
+	// routinely breaks its fill partway on a busy hub, landing ~10% of the
+	// transports. Same PK keeps TPD's reporter=feed-PK edge-auth intact
+	// (see cxo_register.go); a distinct node/port keeps the tiny Root out
+	// of the churning telemetry tree AND out of head-collision with it on
+	// the aggregator side (each aggregator node sees one Root per feed PK).
+	// TPD runs a second aggregator here; older TPDs (port 50 only) still
+	// read the tp-list from the combined feed (back-compat fallback).
+	// Numbered 69 (the 50–55 CXO block and 56–68 are all taken); the value
+	// only needs to be collision-free, which ports_test guards.
+	DmsgVisorTPListCXOPort uint16 = 69
+
 	// DmsgTransportQueryPort is the dmsg port a visor listens on to answer
 	// RSN-oracle transport-list queries (see pkg/router/transport_query.go). A
 	// source visor building a 2-hop route dials the destination here, delivers an

@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/stats"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -72,6 +73,7 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 	// just don't get push updates. Publisher feed PK is the visor's
 	// own PK (one identity per node).
 	pub, sink := buildStatsPublisher(v, log)
+	var tplistPub *treestore.Publisher
 	if pub != nil {
 		// Only the currently-live transports' `current` leaf may be
 		// broadcast to the discovery feed. bbolt retains records for
@@ -86,16 +88,33 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 		}
 		tracker.SeedMirroredCurrent(liveIDs)
 		tracker.SetSink(sink)
-		// Wire the same publisher into the transport manager so its
-		// register / deregister loops mirror the canonical entry +
-		// tombstone leaves to TPD's CXO aggregator (dual-write
-		// alongside the HTTP path during migration).
-		if v.tpM != nil {
-			v.tpM.SetTPDLeafPublisher(pub)
+
+		// Dedicated tp-list discovery feed: a SECOND CXO node under the
+		// SAME visor identity PK, on DmsgVisorTPListCXOPort, carrying ONLY
+		// the compact transport-list snapshot leaf (publishTPDList). Its
+		// Root is a handful of objects, so TPD's second aggregator fills it
+		// COMPLETELY in ~1 round-trip — the durable cure for the ~10%
+		// transport under-report on busy hubs, whose combined telemetry
+		// Root on `pub` (DmsgCXOPort) can't finish its whole-Root fill in
+		// the announce conn's window. Same PK keeps TPD's reporter=feed-PK
+		// edge-auth intact. The telemetry leaves (transports/<id>/current)
+		// stay on `pub`. If the dedicated publisher can't start, fall back
+		// to publishing the tp-list on the telemetry feed (legacy combined
+		// behavior) so discovery still works — just without the
+		// fill-completeness win.
+		tplistPub = buildTPListPublisher(v, log)
+		leafPub := pub
+		if tplistPub != nil {
+			leafPub = tplistPub
 		}
-		// Retain the publisher so `skywire cli visor state --jq '.cxo'`
-		// can read its live freeze/publish health (this is the feed TPD
-		// subscribes to for the visor's transport list).
+		// Wire the chosen publisher into the transport manager so its
+		// register / deregister loops mirror the tp-list snapshot leaf to
+		// TPD's CXO aggregator.
+		if v.tpM != nil {
+			v.tpM.SetTPDLeafPublisher(leafPub)
+		}
+		// Retain the telemetry publisher so `skywire cli visor state
+		// --jq '.cxo'` can read its live freeze/publish health.
 		v.setSystemCXOPub(pub)
 	}
 
@@ -105,6 +124,11 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 		err := tracker.Close()
 		if pub != nil {
 			if perr := pub.Close(); perr != nil && err == nil {
+				err = perr
+			}
+		}
+		if tplistPub != nil {
+			if perr := tplistPub.Close(); perr != nil && err == nil {
 				err = perr
 			}
 		}
@@ -132,6 +156,12 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 	if pub != nil {
 		if tpdPK, ok := tpdCXOPeer(v); ok {
 			go runAnnounceLoop(v.ctx, pub, tpdPK, log)
+			// Announce the dedicated tp-list feed to TPD too, on its own
+			// port (DmsgVisorTPListCXOPort) — this is the conn TPD's second
+			// aggregator accepts and fills the tiny discovery Root over.
+			if tplistPub != nil {
+				go runAnnounceLoop(v.ctx, tplistPub, tpdPK, log)
+			}
 		} else {
 			log.Debug("Stats: no Transport.DiscoveryDmsg PK; skipping CXO announce loop")
 		}
@@ -237,6 +267,43 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 	log.WithField("feed_pk", pub.Feed()).WithField("data_dir", dataDir).
 		Info("Stats: CXO publisher running")
 	return pub, &cxoSink{pub: pub, log: log}
+}
+
+// buildTPListPublisher constructs the visor's DEDICATED transport-list
+// (tp-list) discovery feed: a second CXO node, under the SAME identity
+// keypair as the telemetry publisher (so TPD's reporter=feed-PK edge-auth
+// is unchanged), listening on skyenv.DmsgVisorTPListCXOPort. It carries
+// ONLY the compact tp-list snapshot leaf, so its Root stays a handful of
+// objects and TPD's second aggregator fills it completely in ~1 round-trip
+// — the fix for the busy-hub under-report. Returns nil (and the caller
+// falls back to publishing the tp-list on the telemetry feed) when DMSG
+// isn't available or the publisher fails to start.
+func buildTPListPublisher(v *Visor, log *logging.Logger) *treestore.Publisher {
+	if v.dmsgC == nil {
+		return nil
+	}
+	dataDir := filepath.Join(v.conf.LocalPath, "cxo-tplist")
+	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
+		// The tp-list changes only on transport churn; a short window keeps
+		// discovery prompt. Each republish is a single small leaf, so the
+		// fill/eviction churn that plagues the big telemetry Root does not
+		// apply here.
+		BatchWindow: 2 * time.Second,
+		Logger:      log,
+		DataDir:     dataDir,
+		DmsgPort:    skyenv.DmsgVisorTPListCXOPort,
+		// Content-addressed, rebuilt from the transport manager's live set
+		// on every publishTPDList — safe to skip per-tx fdatasync.
+		NoSyncCXDS: true,
+	})
+	if err != nil {
+		log.WithError(err).Warn("Stats: dedicated tp-list CXO publisher init failed; " +
+			"falling back to the combined telemetry feed for discovery")
+		return nil
+	}
+	log.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgVisorTPListCXOPort).
+		WithField("data_dir", dataDir).Info("Stats: dedicated tp-list CXO publisher running")
+	return pub
 }
 
 // seedSinkFromStore copies the in-window slice of bbolt state into
