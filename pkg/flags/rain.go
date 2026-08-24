@@ -129,3 +129,12 @@ func withPlainHelp(fn func()) {
 	}()
 	fn()
 }
+
+// WithPlainHelp runs fn with the backdrop suppressed, and is what anything
+// that captures help text rather than showing it should use.
+//
+// The docs and recursive modes above are the obvious callers. The other is a
+// program that renders help into a pane of its own — an interactive browser
+// over the command tree — which wants cobra's help exactly as it is, colors
+// and all, and will decide for itself what goes behind it.
+func WithPlainHelp(fn func()) { withPlainHelp(fn) }
