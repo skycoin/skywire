@@ -96,3 +96,48 @@ func TestDocAndRecursiveModesLeaveHelpAlone(t *testing.T) {
 		rainedMu.Unlock()
 	}
 }
+
+// The bug this guards: cobra looks the help function up on the parent only
+// when a command has none of its own, and skywire-cli's root installs one for
+// --json. Wiring just the top command left the whole of `skywire cli` printing
+// its help with no backdrop.
+func TestInitRainCoversASubtreeThatShadowsHelp(t *testing.T) {
+	root := &cobra.Command{Use: "root", Run: func(*cobra.Command, []string) {}}
+	shadow := &cobra.Command{Use: "shadow", Run: func(*cobra.Command, []string) {}}
+	// Exactly what cliout.SetJSONHelp does: its own help function, which
+	// cobra will now use for everything beneath it.
+	shadow.SetHelpFunc(func(*cobra.Command, []string) {})
+	leaf := &cobra.Command{Use: "leaf", Run: func(*cobra.Command, []string) {}}
+	shadow.AddCommand(leaf)
+	root.AddCommand(shadow)
+
+	InitRain(root)
+	defer func() {
+		rainedMu.Lock()
+		defer rainedMu.Unlock()
+		for _, c := range []*cobra.Command{root, shadow, leaf} {
+			delete(rained, c)
+		}
+	}()
+
+	for _, c := range []*cobra.Command{root, shadow, leaf} {
+		require.True(t, rained[c], "%s was left without a backdrop", c.Name())
+	}
+}
+
+// Children before parents. Wrapping a command captures whatever help function
+// it has at that moment, and one with none of its own reports its parent's —
+// so parent-first would wrap the parent's new wrapper again and paint the rain
+// over itself.
+func TestEachDeepestFirstVisitsChildrenFirst(t *testing.T) {
+	root := &cobra.Command{Use: "root"}
+	mid := &cobra.Command{Use: "mid"}
+	leaf := &cobra.Command{Use: "leaf"}
+	mid.AddCommand(leaf)
+	root.AddCommand(mid)
+
+	var order []string
+	eachDeepestFirst(root, func(c *cobra.Command) { order = append(order, c.Name()) })
+
+	require.Equal(t, []string{"leaf", "mid", "root"}, order)
+}
