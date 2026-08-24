@@ -26,7 +26,7 @@ fork the working tree is checked out from.
 ## pkgbase `skywire-bin` — prebuilt binary
 
 Installs the **prebuilt release binary** downloaded from the GitHub release
-(`releases/download/v<ver>/skywire-v<ver>-linux-<arch>.tar.gz`, per-arch
+(`releases/download/v<ver>/skywire-v<ver>-linux-<arch>.tar.xz`, per-arch
 `source_*`). No Go toolchain needed. `provides`/`conflicts` = `skywire`, so it
 is interchangeable with the from-source package. Binary lands at
 `/opt/skywire/bin/skywire` with `/usr/bin` symlinks. optdepends: redis,

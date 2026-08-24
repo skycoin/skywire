@@ -68,7 +68,7 @@ jobs:
           cache: false
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y wget tar libusb-1.0-0-dev autoconf automake libtool
+        run: sudo apt-get update && sudo apt-get install -y wget tar xz-utils libusb-1.0-0-dev autoconf automake libtool
 
       - name: Fetch build-libusb-musl.sh
         run: |
@@ -137,16 +137,16 @@ jobs:
           mkdir -p dist
           cp bin/skywire dist/
           cd dist
-          tar -czvf "${ARCHIVE_NAME}.tar.gz" skywire
-          sha256sum "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+          tar -cvf - skywire | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
+          sha256sum "${ARCHIVE_NAME}.tar.xz" > "${ARCHIVE_NAME}.tar.xz.sha256"
 
       - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${{ github.ref_name }}" \
-            dist/skywire-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.gz \
-            dist/skywire-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.gz.sha256 \
+            dist/skywire-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.xz \
+            dist/skywire-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.xz.sha256 \
             --repo ${{ github.repository }} \
             --clobber
 
@@ -186,8 +186,8 @@ jobs:
           mkdir -p dist
           cp bin/skywire dist/
           cd dist
-          tar -czvf "${ARCHIVE_NAME}.tar.gz" skywire
-          shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+          tar -cvf - skywire | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
+          shasum -a 256 "${ARCHIVE_NAME}.tar.xz" > "${ARCHIVE_NAME}.tar.xz.sha256"
 
       - name: Create macOS package
         run: |
@@ -206,8 +206,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${{ github.ref_name }}" \
-            dist/skywire-${{ github.ref_name }}-darwin-amd64.tar.gz \
-            dist/skywire-${{ github.ref_name }}-darwin-amd64.tar.gz.sha256 \
+            dist/skywire-${{ github.ref_name }}-darwin-amd64.tar.xz \
+            dist/skywire-${{ github.ref_name }}-darwin-amd64.tar.xz.sha256 \
             dist/skywire-${{ github.ref_name }}-darwin-amd64.pkg \
             dist/skywire-${{ github.ref_name }}-darwin-amd64.pkg.sha256 \
             --repo ${{ github.repository }} \
@@ -249,8 +249,8 @@ jobs:
           mkdir -p dist
           cp bin/skywire dist/
           cd dist
-          tar -czvf "${ARCHIVE_NAME}.tar.gz" skywire
-          shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+          tar -cvf - skywire | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
+          shasum -a 256 "${ARCHIVE_NAME}.tar.xz" > "${ARCHIVE_NAME}.tar.xz.sha256"
 
       - name: Create macOS package
         run: |
@@ -269,8 +269,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${{ github.ref_name }}" \
-            dist/skywire-${{ github.ref_name }}-darwin-arm64.tar.gz \
-            dist/skywire-${{ github.ref_name }}-darwin-arm64.tar.gz.sha256 \
+            dist/skywire-${{ github.ref_name }}-darwin-arm64.tar.xz \
+            dist/skywire-${{ github.ref_name }}-darwin-arm64.tar.xz.sha256 \
             dist/skywire-${{ github.ref_name }}-darwin-arm64.pkg \
             dist/skywire-${{ github.ref_name }}-darwin-arm64.pkg.sha256 \
             --repo ${{ github.repository }} \
@@ -403,7 +403,7 @@ jobs:
             }
           }
 
-          Compress-Archive -Path "dist\*" -DestinationPath "dist\$ARCHIVE_NAME.zip"
+          Compress-Archive -Path "dist\*" -DestinationPath "dist\$ARCHIVE_NAME.zip" -CompressionLevel Optimal
           Get-FileHash "dist\$ARCHIVE_NAME.zip" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $ARCHIVE_NAME.zip" } > "dist\$ARCHIVE_NAME.zip.sha256"
           Get-ChildItem "dist\" -Exclude "*.zip","*.sha256" | Remove-Item
 
