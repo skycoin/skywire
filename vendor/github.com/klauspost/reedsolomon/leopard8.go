@@ -50,6 +50,10 @@ func newFF8(dataShards, parityShards int, opt options) (*leopardFF8, error) {
 		return nil, ErrMaxShardNum
 	}
 
+	if !leopardFits(dataShards, parityShards, order8) {
+		return nil, ErrInvShardCombo
+	}
+
 	r := &leopardFF8{
 		dataShards:   dataShards,
 		parityShards: parityShards,
@@ -143,7 +147,10 @@ func (r *leopardFF8) encode(shards [][]byte) error {
 	}
 
 	m := ceilPow2(r.parityShards)
-	work := r.workAlloc.Get(m*2, workSize8)
+	work, err := getWork(r.workAlloc, m*2, workSize8)
+	if err != nil {
+		return err
+	}
 	defer r.workAlloc.Put(work)
 
 	mtrunc := min(r.dataShards, m)
@@ -512,7 +519,10 @@ func (r *leopardFF8) reconstruct(shards [][]byte, recoverAll bool) error {
 		}
 	}
 
-	work := r.workAlloc.Get(n, workSize8)
+	work, err := getWork(r.workAlloc, n, workSize8)
+	if err != nil {
+		return err
+	}
 	defer r.workAlloc.Put(work)
 
 	// work <- recovery data
@@ -900,6 +910,12 @@ func refMulAdd8(x, y []byte, log_m ffe8) {
 		}
 		x = x[64:]
 		y = y[64:]
+	}
+	// Callers pair a SIMD prefix with this call, so the remainder can be
+	// shorter than a block. GF(2^8) maps byte for byte, so finish it here.
+	y = y[:len(x)]
+	for i, y1 := range y {
+		x[i] ^= byte(lut.Value[y1])
 	}
 }
 
