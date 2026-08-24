@@ -54,16 +54,9 @@ func init() {
 	// after the fact of importing skycoin-web, so the vendored command
 	// stays transport-agnostic upstream.
 	skycoinweb.RootCmd.Long += skywireSkycoinWebHelp
-
-	// The help screen, over a still frame of the Matrix code rain. Here rather
-	// than in InitFlags because InitFlags runs for every binary in this
-	// repository, including the services, and this is for the one people read
-	// help in. Off for --json/--jq/--shape, for `help -r` and `help -d`, for a
-	// pipe or a redirect, and for NO_COLOR or SKYWIRE_NO_HELP_RAIN.
-	//
-	// Last, once every subcommand is in the tree: it walks the commands rather
-	// than relying on cobra to pass the help function down.
-	flags.InitRain(commands.RootCmd)
+	// Help presentation (the code-rain help screen and the --tui console) is
+	// wired in commands.Execute, so this stays a thin wrapper matching
+	// cmd/skycoin-skywire/skywire.go.
 }
 
 func main() {
