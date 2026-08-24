@@ -570,6 +570,11 @@ func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, err
 	return mc.logS.LogsSince(timestamp)
 }
 
+// RecentAppLog implements API.
+func (mc *mockRPCClient) RecentAppLog(_, _ string) ([]string, error) {
+	return nil, nil
+}
+
 func (mc *mockRPCClient) GetAppStats(_ string) (appserver.AppStats, error) {
 	return appserver.AppStats{}, nil
 }

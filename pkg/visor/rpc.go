@@ -63,6 +63,16 @@ type AppLogsRequest struct {
 	// AppName should match the app name in visor config
 	AppName string `json:"app_name"`
 }
+
+// RecentAppLogRequest asks for the recent app-scoped route/transport events +
+// log lines captured in the log broadcaster's per-app ring.
+type RecentAppLogRequest struct {
+	// AppName should match the app name in visor config.
+	AppName string `json:"app_name"`
+	// Level is the minimum severity ("trace"|"debug"|"info"|"warn"|"error").
+	// Empty defaults to "debug".
+	Level string `json:"level"`
+}
 type TransportSummary struct {
 	ID      uuid.UUID           `json:"id"`
 	Local   cipher.PubKey       `json:"local_pk"`

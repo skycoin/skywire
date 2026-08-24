@@ -15,10 +15,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/policy"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -894,6 +897,23 @@ func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error)
 	}
 
 	return res, nil
+}
+
+// RecentAppLog implements API. It returns the recent app-scoped route/transport
+// events + log lines captured for appName by the log broadcaster's per-app
+// ring, merged into one time-ordered slice and formatted as visor log lines.
+// level is the minimum severity ("trace".."error"; empty defaults to "debug").
+func (v *Visor) RecentAppLog(appName, level string) ([]string, error) {
+	minLevel, err := logging.LevelFromString(level)
+	if err != nil {
+		minLevel = logrus.DebugLevel
+	}
+	recs := v.RecentAppLogMerged(appName, minLevel)
+	out := make([]string, 0, len(recs))
+	for _, r := range recs {
+		out = append(out, r.Format())
+	}
+	return out, nil
 }
 
 // GetAppStats implements API.
