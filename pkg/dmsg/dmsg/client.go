@@ -85,6 +85,15 @@ type Config struct {
 	// ["wt"] or ["ws"]) and is set to ["ws"] in the js/wasm build, which has no
 	// raw socket. Unknown names are ignored.
 	Carriers []string
+
+	// SkipSelfServer, when true, makes the serve loop skip any discovered
+	// server entry whose PK equals this client's own PK. It exists for the
+	// visor that runs a dmsg SERVER in-process under the same PK: without
+	// this the client would try to open a transit session to itself. Default
+	// false — the standalone dmsg-server's transit client relies on reaching
+	// its own PK (see self_session_test.go), so only the co-resident-server
+	// visor sets it.
+	SkipSelfServer bool
 }
 
 // Carrier names for Config.Carriers.
@@ -542,6 +551,14 @@ func (ce *Client) Serve(ctx context.Context) {
 		for n, entry := range entries {
 			if isClosed(ce.done) {
 				return
+			}
+
+			// A visor running its own dmsg server in-process (same PK) must
+			// not open a transit session to itself. Conditional: the
+			// standalone server's transit client DOES reach its own PK, so
+			// this is gated on SkipSelfServer (default false).
+			if ce.conf.SkipSelfServer && entry.Static == ce.pk {
+				continue
 			}
 
 			// Skip dmsg servers without user specific types: official, community, all
