@@ -114,8 +114,12 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 			v.tpM.SetTPDLeafPublisher(leafPub)
 		}
 		// Retain the telemetry publisher so `skywire cli visor state
-		// --jq '.cxo'` can read its live freeze/publish health.
+		// --jq '.cxo'` can read its live freeze/publish health. Retain
+		// the dedicated tp-list publisher the same way so it surfaces as
+		// a second .cxo entry (nil here = combined-feed fallback, no
+		// second entry).
 		v.setSystemCXOPub(pub)
+		v.setTPListCXOPub(tplistPub)
 	}
 
 	tracker.Run(v.ctx)

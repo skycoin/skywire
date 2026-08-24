@@ -34,6 +34,11 @@ import (
 // so user-registered feeds can't collide with it.
 const systemCXOFeedName = "stats"
 
+// tplistCXOFeedName is the well-known name of the visor's dedicated
+// transport-list discovery feed (the second CXO node initStats wires
+// up on skyenv.DmsgVisorTPListCXOPort).
+const tplistCXOFeedName = "tp-list"
+
 // cxoUserFeed wraps a treestore.Publisher with the metadata needed for
 // /feeds discovery and clean teardown.
 type cxoUserFeed struct {
@@ -212,6 +217,16 @@ func (v *Visor) setSystemCXOPub(pub *treestore.Publisher) {
 	v.cxoUserFeedsMu.Unlock()
 }
 
+// setTPListCXOPub retains the dedicated tp-list discovery feed publisher
+// so CXOFeedStates can read its live PublishState. Called once by
+// initStats; pub is nil when the dedicated publisher didn't start (the
+// combined-feed fallback), in which case no second .cxo entry is emitted.
+func (v *Visor) setTPListCXOPub(pub *treestore.Publisher) {
+	v.cxoUserFeedsMu.Lock()
+	v.tplistCXOPub = pub
+	v.cxoUserFeedsMu.Unlock()
+}
+
 // CXOFeedState pairs a feed's identity (name + dmsg port) with its live
 // publish-health snapshot. Surfaced by StateSnapshot under .cxo.
 type CXOFeedState struct {
@@ -228,6 +243,7 @@ type CXOFeedState struct {
 func (v *Visor) CXOFeedStates() []CXOFeedState {
 	v.cxoUserFeedsMu.Lock()
 	sysPub := v.systemCXOPub
+	tplistPub := v.tplistCXOPub
 	users := make([]*cxoUserFeed, 0, len(v.cxoUserFeeds))
 	for _, fd := range v.cxoUserFeeds {
 		users = append(users, fd)
@@ -240,6 +256,16 @@ func (v *Visor) CXOFeedStates() []CXOFeedState {
 			Name:         systemCXOFeedName,
 			Port:         skyenv.DmsgCXOPort,
 			PublishState: sysPub.PublishState(),
+		})
+	}
+	// The dedicated tp-list discovery feed (a second CXO node under the
+	// same visor PK). nil when initStats fell back to the combined feed —
+	// then there is only the one telemetry entry above.
+	if tplistPub != nil {
+		out = append(out, CXOFeedState{
+			Name:         tplistCXOFeedName,
+			Port:         skyenv.DmsgVisorTPListCXOPort,
+			PublishState: tplistPub.PublishState(),
 		})
 	}
 	for _, fd := range users {
