@@ -293,3 +293,106 @@ func TestBoundedGetterBudget(t *testing.T) {
 type getterFunc func(skycipher.SHA256) ([]byte, error)
 
 func (f getterFunc) Get(key skycipher.SHA256) ([]byte, error) { return f(key) }
+
+// walkAllObjects recursively reads every TreeEntry in the Root's tree
+// through a Preview pack backed by g, forcing g to serve (and record)
+// every object the whole tree references — i.e. the full object footprint
+// a subscriber must fill to receive the feed. Returns the count of
+// DISTINCT object hashes requested.
+func walkAllObjects(t *testing.T, aggNode *node.Node, g *servingGetter, r *registry.Root) int {
+	t.Helper()
+	pack, err := aggNode.Container().Preview(r, g)
+	if err != nil {
+		t.Fatalf("Preview: %v", err)
+	}
+	var rootNode treestore.TreeNode
+	if err := r.Refs[0].Value(pack, &rootNode); err != nil {
+		t.Fatalf("root TreeNode: %v", err)
+	}
+	var walk func(n *treestore.TreeNode)
+	walk = func(n *treestore.TreeNode) {
+		count, err := n.Children.Len(pack)
+		if err != nil {
+			return
+		}
+		for i := 0; i < count; i++ {
+			var entry treestore.TreeEntry
+			if _, err := n.Children.ValueByIndex(pack, i, &entry); err != nil {
+				continue
+			}
+			if entry.Sub.Hash != (skycipher.SHA256{}) {
+				var sub treestore.TreeNode
+				if err := entry.Sub.Value(pack, &sub); err == nil {
+					walk(&sub)
+				}
+			}
+		}
+	}
+	walk(&rootNode)
+	distinct := make(map[skycipher.SHA256]struct{}, len(g.requested))
+	for _, k := range g.requested {
+		distinct[k] = struct{}{}
+	}
+	return len(distinct)
+}
+
+// TestDedicatedTPListFeedFillsCompletely is the structural proof behind
+// moving the tp-list onto its OWN CXO feed (skyenv.DmsgVisorTPListCXOPort):
+// a feed that carries ONLY the compact transport-list snapshot leaf (no
+// telemetry) has a tiny object footprint that is INDEPENDENT of the
+// transport count, so its whole Root fills in ~1 round-trip — where the
+// combined telemetry Root's footprint scales with the transport count and
+// routinely can't finish its fill over the short announce conn on a busy
+// hub (the ~10% under-report this fixes). Both are built from the SAME
+// buildBigRoot helper; the only difference is whether the telemetry subtree
+// rides along.
+func TestDedicatedTPListFeedFillsCompletely(t *testing.T) {
+	const nTransports = 500
+
+	// Dedicated feed: tp-list only, NO telemetry — the shape published on
+	// DmsgVisorTPListCXOPort.
+	dedSrc, dedRoot, _ := buildBigRoot(t, nTransports, 0)
+	dedObjs := walkAllObjects(t, newInMemNode(t), &servingGetter{src: dedSrc}, dedRoot)
+
+	// Combined feed: same tp-list PLUS a bulky telemetry tree — the shape on
+	// DmsgCXOPort whose whole-Root fill breaks on a busy hub.
+	combSrc, combRoot, _ := buildBigRoot(t, nTransports, 3000)
+	combObjs := walkAllObjects(t, newInMemNode(t), &servingGetter{src: combSrc}, combRoot)
+
+	t.Logf("Root object footprint at %d transports: dedicated tp-list feed = %d objects, combined telemetry feed (3000 leaves) = %d objects",
+		nTransports, dedObjs, combObjs)
+
+	// The dedicated Root's footprint is a handful of objects and does not
+	// grow with the transport count (the tp-list is one inlined leaf), so it
+	// fits well inside a single fill. The combined Root drags in an object
+	// per telemetry leaf.
+	if dedObjs > maxTargetedFetchObjects {
+		t.Fatalf("dedicated feed footprint = %d objects (> %d): not a one-round-trip fill",
+			dedObjs, maxTargetedFetchObjects)
+	}
+	if combObjs <= dedObjs*10 {
+		t.Fatalf("combined feed footprint = %d vs dedicated %d: expected the telemetry tree to dominate",
+			combObjs, dedObjs)
+	}
+
+	// The dedicated feed lands ALL transports: serving ONLY the objects its
+	// whole tree references (i.e. the entire dedicated feed, telemetry
+	// absent by construction) still reconciles the full list.
+	a := &Aggregator{
+		cxoNode:  newInMemNode(t),
+		sink:     &recordingSink{},
+		log:      logging.MustGetLogger("test"),
+		lastList: make(map[skycipher.PubKey]cachedList),
+		fetching: make(map[skycipher.PubKey]struct{}),
+	}
+	entries, version, ok := a.fetchDiscoveryLeafWithGetter(&servingGetter{src: dedSrc}, dedRoot)
+	if !ok {
+		t.Fatal("dedicated feed: discovery leaf did not land")
+	}
+	if version != "v-test" {
+		t.Errorf("dedicated feed: version = %q, want v-test", version)
+	}
+	if len(entries) != nTransports {
+		t.Fatalf("dedicated feed reconciled %d transports, want all %d", len(entries), nTransports)
+	}
+}
