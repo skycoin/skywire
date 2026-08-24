@@ -26,6 +26,7 @@ import (
 	dmsgprobe "github.com/skycoin/skywire/cmd/dmsg/dmsgprobe/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	"github.com/skycoin/skywire/cmd/skywire/commands/doc"
+	"github.com/skycoin/skywire/cmd/skywire/tui"
 	services "github.com/skycoin/skywire/cmd/svc/skywire-services/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
@@ -218,5 +219,16 @@ var appsCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
+	// Help presentation is wired here rather than in each binary's main so the
+	// root skywire.go stays a thin wrapper (identical to cmd/skycoin-skywire).
+	// At Execute time every subcommand is in the tree (all init()s have run,
+	// including the top-level binary adding skycoin), which InitRain and
+	// tui.Install both require ("last, once every subcommand is in the tree").
+	//
+	//   InitRain   — print help over a still frame of the Matrix code rain.
+	//   tui.Install — --tui opens the interactive console (alt-screen, animated
+	//                 rain) instead of printing help.
+	flags.InitRain(RootCmd)
+	tui.Install(RootCmd)
 	cmdutil.RunRoot(RootCmd)
 }
