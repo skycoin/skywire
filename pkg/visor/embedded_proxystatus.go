@@ -22,6 +22,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -30,6 +33,28 @@ import (
 // page renders the most recent lines within this window (capped again in the
 // renderer), so it shows current activity without scanning the whole store.
 const statusLogLookback = 30 * time.Minute
+
+// statusEventsCap bounds how many recent route/transport event lines the status
+// page carries for a surface. The ring itself is bounded (pkg/logging), but the
+// snapshot takes only the most recent tail so the page stays readable.
+const statusEventsCap = 200
+
+// statusMaxLogLines mirrors the renderer's maxLogLines cap so the snapshot never
+// carries more log lines than the page would render.
+const statusMaxLogLines = 200
+
+// tailRecordLines formats the most recent up-to-cap Records into log lines
+// (oldest first), matching the visor's live log format.
+func tailRecordLines(recs []logging.Record, limit int) []string {
+	if len(recs) > limit {
+		recs = recs[len(recs)-limit:]
+	}
+	out := make([]string, 0, len(recs))
+	for _, r := range recs {
+		out = append(out, r.Format())
+	}
+	return out
+}
 
 // surfaceApp maps a status surface to the underlying app / logger name whose
 // logs and route group the page reflects. skysocks is the highest-value view:
@@ -70,9 +95,23 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 		snap.Running = ok && proc != nil
 	}
 
-	// Logs (best-effort): the store may not exist for an internal app that has
-	// never written, so a fetch error is a note, not a failure.
-	if logs, err := p.v.LogsSince(time.Now().Add(-statusLogLookback), app); err == nil {
+	// Events + Logs come from the log broadcaster's bounded per-app ring — the
+	// same Fire tap that feeds `proxy start --verbose`. Events are the layered
+	// route/transport lifecycle lines (route requests, setup-node connects,
+	// route creation, RSN-oracle legs, handshakes, mux-enable/SACK, mux route
+	// established, distribution, self-heal) tagged app_name=<app>; ring "logs"
+	// are the app's own output.
+	ringEvents, ringLogs := p.v.RecentAppEvents(app, logrus.DebugLevel)
+	if len(ringEvents) > 0 {
+		snap.Events = tailRecordLines(ringEvents, statusEventsCap)
+	}
+
+	// Logs: prefer the richer scoped log captured in the ring (app stdout +
+	// tagged lifecycle). Fall back to the app's bbolt log store when the ring
+	// has nothing yet, so an idle-but-previously-run surface still shows a tail.
+	if len(ringLogs) > 0 {
+		snap.Logs = tailRecordLines(ringLogs, statusMaxLogLines)
+	} else if logs, err := p.v.LogsSince(time.Now().Add(-statusLogLookback), app); err == nil {
 		snap.Logs = logs
 	} else {
 		snap.Note = appendNote(snap.Note, "logs unavailable: "+err.Error())

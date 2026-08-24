@@ -20,11 +20,21 @@ import (
 type Broadcaster struct {
 	mu   sync.RWMutex
 	subs map[*subscription]struct{}
+
+	// ring is a bounded per-app history captured from the same Fire path
+	// that feeds live subscribers (see ring.go). It lets the proxy status
+	// page / `cli proxy log` read back recent app-scoped events + logs
+	// without having held a subscription open.
+	ringMu sync.Mutex
+	rings  map[string]*appRing
 }
 
 // NewBroadcaster constructs an empty Broadcaster.
 func NewBroadcaster() *Broadcaster {
-	return &Broadcaster{subs: make(map[*subscription]struct{})}
+	return &Broadcaster{
+		subs:  make(map[*subscription]struct{}),
+		rings: make(map[string]*appRing),
+	}
 }
 
 // Filter selects which entries reach a subscriber.
@@ -86,6 +96,9 @@ func (b *Broadcaster) Fire(e *logrus.Entry) error {
 		}
 	}
 	b.mu.RUnlock()
+	// Capture into the bounded per-app ring for later read-back. Same tap,
+	// not a second sink.
+	b.record(e)
 	return nil
 }
 
