@@ -60,7 +60,7 @@ and leaves the running proxy untouched.
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to fetch recent app log: %w", err))
 		}
 		for _, ln := range recent {
-			fmt.Fprintln(os.Stdout, ln)
+			fmt.Fprintln(os.Stdout, ln) //nolint:errcheck // best-effort stdout write
 		}
 
 		if !logFollow {

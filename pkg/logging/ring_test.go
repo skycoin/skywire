@@ -16,7 +16,7 @@ func fireEntry(b *Broadcaster, level logrus.Level, module, msg string, fields lo
 	for k, v := range fields {
 		data[k] = v
 	}
-	_ = b.Fire(&logrus.Entry{
+	_ = b.Fire(&logrus.Entry{ //nolint:errcheck // best-effort test hook fire
 		Time:    time.Now(),
 		Level:   level,
 		Message: msg,
@@ -125,7 +125,7 @@ func TestRecentMergedOrdered(t *testing.T) {
 		for k, v := range fields {
 			data[k] = v
 		}
-		_ = b.Fire(&logrus.Entry{Time: at, Level: logrus.InfoLevel, Message: msg, Data: data})
+		_ = b.Fire(&logrus.Entry{Time: at, Level: logrus.InfoLevel, Message: msg, Data: data}) //nolint:errcheck // best-effort test hook fire
 	}
 	push("proc:app1:k", "log-early", nil, base)
 	push("router", "event-mid", logrus.Fields{"app_name": "app1"}, base.Add(time.Second))
