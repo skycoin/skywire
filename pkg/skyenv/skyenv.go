@@ -195,6 +195,10 @@ const (
 
 	// PublicAutoconnect determines if the visor automatically creates stcpr transports to public visors
 	PublicAutoconnect = true
+	// HypervisorAutoconnect determines if the visor automatically creates a direct
+	// (stcpr/sudph) transport to each configured hypervisor, so RPC + skypty ride a
+	// fast p2p path instead of the dmsg relay (dmsg stays the bootstrap/fallback).
+	HypervisorAutoconnect = true
 
 	// Dmsgpty constants.
 

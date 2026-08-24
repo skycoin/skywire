@@ -1002,11 +1002,14 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 		// attempt stcpr / sudph transport creation so subsequent RPC
 		// and skypty dials ride a fast p2p path instead of the dmsg
 		// relay. See init_hypervisor_transport.go for the policy +
-		// reconciliation cadence.
-		go v.autoUpgradeHypervisorTransport(ctx,
-			hvPK,
-			v.MasterLogger().PackageLogger("hypervisor_transport").WithField("hypervisor_pk", hvPK),
-		)
+		// reconciliation cadence. Gated by transport.hypervisor_autoconnect
+		// (nil/absent = on, preserving the prior always-on behaviour).
+		if v.conf.Transport == nil || v.conf.Transport.HypervisorAutoconnect == nil || *v.conf.Transport.HypervisorAutoconnect {
+			go v.autoUpgradeHypervisorTransport(ctx,
+				hvPK,
+				v.MasterLogger().PackageLogger("hypervisor_transport").WithField("hypervisor_pk", hvPK),
+			)
+		}
 
 		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() error {
 			cancel()

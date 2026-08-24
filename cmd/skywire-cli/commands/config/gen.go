@@ -1204,11 +1204,13 @@ func configureTransports() {
 	if isTestEnv {
 		tpLogPath = skyenv.LocalPath + "-testenv/" + skyenv.TpLogStore
 	}
+	hypervisorAutoconnect := skyenv.HypervisorAutoconnect
 	conf.Transport = &visorconfig.Transport{
-		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
-		AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
-		PublicAutoconnect: skyenv.PublicAutoconnect,
-		TransportSetupPKs: services.TransportSetupPKs,
+		Discovery:             services.TransportDiscovery, //utilenv.TpDiscAddr,
+		AddressResolver:       services.AddressResolver,    //utilenv.AddressResolverAddr,
+		PublicAutoconnect:     skyenv.PublicAutoconnect,
+		HypervisorAutoconnect: &hypervisorAutoconnect,
+		TransportSetupPKs:     services.TransportSetupPKs,
 		LogStore: &visorconfig.LogStore{
 			// "file" (the retired on-disk CSV store) is now a no-op that only warns
 			// at boot; default fresh configs to "memory" so they don't carry it.
