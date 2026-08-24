@@ -913,17 +913,23 @@ func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 			if rpcClient, err := Client(cmdFlags); err == nil {
 				resp, err := rpcClient.FetchCXO(visor.FetchCXOArgs{Feed: feed, Path: path})
 				if err == nil && resp != nil && resp.Hit && len(resp.Body) > 0 {
-					logger.Debugf("CXO hit for %s (feed=%s path=%s, root@%s)",
+					// Trace, not Debug: the deployment-service fetch chain
+					// (CXO → RPC → DMSG) is normal plumbing, and the CLI's
+					// package logger runs at Debug by default — so a Debug
+					// here prints this on ordinary read commands (`tp tree`,
+					// `ut`, `pv`) and pollutes their stdout. Trace keeps it
+					// available under an explicit trace level.
+					logger.Tracef("CXO hit for %s (feed=%s path=%s, root@%s)",
 						url, feed, path, resp.LastRootAt.Format(time.RFC3339))
 					return resp.Body, nil
 				}
 				if err != nil {
-					logger.Debugf("CXO probe error for %s: %v", url, err)
+					logger.Tracef("CXO probe error for %s: %v", url, err)
 				} else if resp != nil {
-					logger.Debugf("CXO miss for %s: %s", url, resp.Reason)
+					logger.Tracef("CXO miss for %s: %s", url, resp.Reason)
 				}
 			} else {
-				logger.Debugf("CXO step skipped (no RPC client): %v", err)
+				logger.Tracef("CXO step skipped (no RPC client): %v", err)
 			}
 		}
 	}
