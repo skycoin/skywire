@@ -80,8 +80,8 @@ github.com/0magnet/u-root v0.16.1-0.20260810212217-0890fe5099f9 h1:akt/1o/SlArz8
 github.com/0magnet/u-root v0.16.1-0.20260810212217-0890fe5099f9/go.mod h1:fId14v+rNp1A0ZKHJPZZyiu9dfgWKEs7nbyvKrku3bo=
 github.com/0magnet/websh v0.0.0-20260816200521-e9f14eb862c7 h1:09IjBB/rJMVtrkn4i1571Nq+iSMEIsjv7S4zlJzKEuQ=
 github.com/0magnet/websh v0.0.0-20260816200521-e9f14eb862c7/go.mod h1:ziOzkV+FQYYYC4ivM/F2FwvuloQpljwetB5nyS4ElLI=
-github.com/0magnet/xterm-go v0.0.0-20260820124923-c0b6b4f69bb7 h1:ZeiXWCwdYUfeWWWLs6IpgZ9tYOqyGPbZLLlNGYJi2Lo=
-github.com/0magnet/xterm-go v0.0.0-20260820124923-c0b6b4f69bb7/go.mod h1:W6c6ofSTsxXuQEr1rSZ3qmfOj5a3LGB3uLQBL0/TiKc=
+github.com/0magnet/xterm-go v0.0.0-20260823191622-8d2bbff87cea h1:L0WfJRVQLorMGQo3DktqAPowITCWbiy8/pcZ2O+7qIA=
+github.com/0magnet/xterm-go v0.0.0-20260823191622-8d2bbff87cea/go.mod h1:W6c6ofSTsxXuQEr1rSZ3qmfOj5a3LGB3uLQBL0/TiKc=
 github.com/ActiveState/termtest/conpty v0.5.0 h1:JLUe6YDs4Jw4xNPCU+8VwTpniYOGeKzQg4SM2YHQNA8=
 github.com/ActiveState/termtest/conpty v0.5.0/go.mod h1:LO4208FLsxw6DcNZ1UtuGUMW+ga9PFtX4ntv8Ymg9og=
 github.com/AudriusButkevicius/pfilter v0.0.11 h1:6emuvqNeH1gGlqkML35pEizyPcaxdAN4JO9sdgwcx78=
