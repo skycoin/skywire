@@ -87,6 +87,19 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 			log.WithError(err).Warn("Stats: hydrating CXO publisher from bbolt failed")
 		}
 		tracker.SeedMirroredCurrent(liveIDs)
+		// The publisher hydrates its in-memory tree from the previously-
+		// published Root on startup, so transports/<id>/current leaves for
+		// transports that closed while the visor was down are back on the
+		// feed. They never entered the tracker's mirroredCurrent set (which
+		// only tracks leaves Put since this restart), so the per-tick
+		// reconcile would never prune them. Reconcile them away now, at
+		// hydrate, against the actual live set — making the discovery feed
+		// truly live-only rather than "live-only for leaves written since
+		// the last restart".
+		if pruned := pruneDeadCurrentLeaves(pub, sink, liveIDs); pruned > 0 {
+			log.WithField("pruned", pruned).
+				Info("Stats: pruned dead-transport current leaves persisted on the telemetry feed")
+		}
 		tracker.SetSink(sink)
 
 		// Dedicated tp-list discovery feed: a SECOND CXO node under the
@@ -344,6 +357,52 @@ func liveTransportIDs(v *Visor) map[uuid.UUID]struct{} {
 		return true
 	})
 	return out
+}
+
+// currentLeafUUID parses a telemetry-feed leaf path of the form
+// "transports/<uuid>/current" and returns the transport UUID. ok is
+// false for any path that isn't a well-formed current-snapshot leaf.
+func currentLeafUUID(path string) (uuid.UUID, bool) {
+	segs := strings.Split(path, "/")
+	if len(segs) != 3 || segs[0] != "transports" || segs[2] != "current" {
+		return uuid.UUID{}, false
+	}
+	id, err := uuid.Parse(segs[1])
+	if err != nil {
+		return uuid.UUID{}, false
+	}
+	return id, true
+}
+
+// pruneDeadCurrentLeaves makes the telemetry feed truly live-only at
+// startup. It walks the publisher's existing transports/<id>/current
+// leaves — including any hydrated from the previously-published Root —
+// and sink-deletes every one whose transport isn't in liveIDs. Returns
+// the number pruned.
+//
+// Deletes are collected during the walk and issued after it returns:
+// Publisher.Walk holds the publisher mutex across the visitor and
+// sink.Delete re-enters that mutex through the cxoSink, so deleting
+// inline would deadlock.
+func pruneDeadCurrentLeaves(pub *treestore.Publisher, sink stats.Sink, liveIDs map[uuid.UUID]struct{}) int {
+	if pub == nil || sink == nil {
+		return 0
+	}
+	var stale []string
+	pub.Walk("transports", func(path string, _ []byte) bool {
+		id, ok := currentLeafUUID(path)
+		if !ok {
+			return true
+		}
+		if _, live := liveIDs[id]; !live {
+			stale = append(stale, path)
+		}
+		return true
+	})
+	for _, path := range stale {
+		sink.Delete(path)
+	}
+	return len(stale)
 }
 
 // cxoSink adapts a treestore.Publisher to the stats.Sink contract.
