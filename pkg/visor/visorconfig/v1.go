@@ -514,11 +514,16 @@ type SkymailBridgeConfig struct {
 
 // Transport defines a transport config.
 type Transport struct {
-	Discovery             string          `json:"discovery"`
-	DiscoveryDmsg         string          `json:"discovery_dmsg,omitempty"` // DMSG-HTTP URL for transport discovery (fallback pair with discovery)
-	AddressResolver       string          `json:"address_resolver"`
-	AddressResolverDmsg   string          `json:"address_resolver_dmsg,omitempty"` // DMSG-HTTP URL for address resolver
-	PublicAutoconnect     bool            `json:"public_autoconnect"`
+	Discovery           string `json:"discovery"`
+	DiscoveryDmsg       string `json:"discovery_dmsg,omitempty"` // DMSG-HTTP URL for transport discovery (fallback pair with discovery)
+	AddressResolver     string `json:"address_resolver"`
+	AddressResolverDmsg string `json:"address_resolver_dmsg,omitempty"` // DMSG-HTTP URL for address resolver
+	PublicAutoconnect   bool   `json:"public_autoconnect"`
+	// HypervisorAutoconnect gates the background dialing of a direct (stcpr/sudph)
+	// transport to each configured hypervisor. A nil pointer means "on" (default),
+	// so configs written before this field existed keep the prior always-on
+	// behaviour; set it to false to keep the hypervisor link on the dmsg relay only.
+	HypervisorAutoconnect *bool           `json:"hypervisor_autoconnect,omitempty"`
 	TransportSetupPKs     []cipher.PubKey `json:"transport_setup"`
 	UserTransportSetupPKs []cipher.PubKey `json:"user_transport_setup,omitempty"` // user-added keys, preserved across config refresh
 	TPSetupSK             *cipher.SecKey  `json:"tps_sk,omitempty"`
