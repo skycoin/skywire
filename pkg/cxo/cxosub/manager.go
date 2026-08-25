@@ -125,6 +125,12 @@ const (
 	// geo.country(pk) can resolve multihop intermediates that
 	// advertise themselves as proxy/vpn/visor services.
 	TabRoutingPolicy
+	// TabDmsgEntryLookup is the visor's dmsg-entry-lookup-over-CXO
+	// consumer. Held for the lifetime of the dmsg client so the
+	// clients-by-server snapshot stays warm, letting peer entry
+	// lookups resolve from CXO instead of a fresh HTTP-over-dmsg
+	// Noise handshake. HTTP stays the fallback on a snapshot miss.
+	TabDmsgEntryLookup
 )
 
 // tabFeedDeps maps each tab to the set of feeds it depends on.
@@ -138,6 +144,7 @@ var tabFeedDeps = map[Tab][]Feed{
 	TabCLIServices:       {FeedSDServices},
 	TabCLITransports:     {FeedTPDAllTransports},
 	TabRoutingPolicy:     {FeedSDServices},
+	TabDmsgEntryLookup:   {FeedDMSGDClientsByServer},
 }
 
 // Deps are the host-injected dependencies the manager needs. They
@@ -652,6 +659,26 @@ func (m *Manager) LastError(feed Feed) error {
 	f.snapMu.RLock()
 	defer f.snapMu.RUnlock()
 	return f.lastErr
+}
+
+// LastSync returns the wall-clock time of the feed's most recent
+// successful sync, or the zero time if no cycle has ever completed.
+// Consumers use it as a cheap snapshot-version to memoize a derived
+// index and rebuild it only when the underlying snapshot advances.
+// Safe on a nil receiver.
+func (m *Manager) LastSync(feed Feed) time.Time {
+	if m == nil {
+		return time.Time{}
+	}
+	m.mu.Lock()
+	f, ok := m.feeds[feed]
+	m.mu.Unlock()
+	if !ok || f == nil {
+		return time.Time{}
+	}
+	f.snapMu.RLock()
+	defer f.snapMu.RUnlock()
+	return f.lastSyncAt
 }
 
 // acquireFeedLocked must be called under m.mu.
