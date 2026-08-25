@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
@@ -37,7 +38,7 @@ const (
 	CXOFeedTPDMetrics           = 0 // metrics/days/<n>
 	CXOFeedTPDUptime            = 1 // uptimes/days/<n> — []VisorSummary
 	CXOFeedSDServices           = 2 // services/<type>/<pk>/{entry,tombstone}
-	CXOFeedDMSGDClientsByServer = 3 // clients-by-server/<server>/<client>/{entry,tombstone}
+	CXOFeedDMSGDClientsByServer = 3 // clients-by-server/<server> (batched; legacy .../<client>/entry)
 	CXOFeedTPDAllTransports     = 4 // transports/all/{with-self,without-self}
 )
 
@@ -144,11 +145,11 @@ func (s *Server) tryCXOServices() (map[string]ServiceInfo, bool) {
 // snapshot is empty, or every entry leaf fails to parse — caller
 // falls through to its existing HTTP path.
 //
-// Tombstones are skipped (live entries only). Each leaf carries the
-// full disc.Entry as JSON; the (server, client) PK pair is derivable
-// from the path (clients-by-server/<server>/<client>/entry) but we
-// re-use the server segment for the result map key directly so the
-// shape exactly matches AllClientsByServer's hex-string keys.
+// The current publisher writes ONE batched leaf per server at
+// clients-by-server/<server> (a version-framed, gzipped JSON []Entry);
+// the server segment is the map key and the array is that server's whole
+// client set. Older publishers wrote one leaf per pair at
+// clients-by-server/<server>/<client>/entry — both shapes are read here.
 func (s *Server) tryCXOClientsByServer() (map[string][]*discEntry, bool) {
 	mgr := s.cxoMgr()
 	if mgr == nil {
@@ -157,20 +158,29 @@ func (s *Server) tryCXOClientsByServer() (map[string][]*discEntry, bool) {
 	out := make(map[string][]*discEntry)
 	any := false
 	mgr.Walk(CXOFeedDMSGDClientsByServer, "clients-by-server/", func(path string, body []byte) bool {
-		if !strings.HasSuffix(path, "/entry") {
+		if len(body) == 0 {
 			return true
 		}
-		// path = clients-by-server/<server>/<client>/entry
 		parts := strings.Split(path, "/")
-		if len(parts) != 4 {
+		// Batched per-server leaf: ["clients-by-server", "<server>"].
+		if len(parts) == 2 && parts[1] != "" {
+			entries := decodeClientsBatch(body)
+			if len(entries) == 0 {
+				return true
+			}
+			out[parts[1]] = append(out[parts[1]], entries...)
+			any = true
 			return true
 		}
-		server := parts[1]
+		// Legacy per-item leaf: clients-by-server/<server>/<client>/entry.
+		if len(parts) != 4 || !strings.HasSuffix(path, "/entry") {
+			return true
+		}
 		var entry discEntry
 		if err := json.Unmarshal(body, &entry); err != nil {
 			return true
 		}
-		out[server] = append(out[server], &entry)
+		out[parts[1]] = append(out[parts[1]], &entry)
 		any = true
 		return true
 	})
@@ -178,6 +188,26 @@ func (s *Server) tryCXOClientsByServer() (map[string][]*discEntry, bool) {
 		return nil, false
 	}
 	return out, true
+}
+
+// clientsByServerBatchVersion is the wire-format version byte of the
+// batched per-server leaf (must match the dmsg-discovery publisher's
+// clientsByServerBatchVersion). A leaf with any other version is skipped.
+const clientsByServerBatchVersion = 1
+
+// decodeClientsBatch decodes a batched per-server leaf body into its
+// client entries (tpviz's local discEntry shape). Returns nil on any
+// framing/version/JSON error so a bad leaf is skipped, not misparsed.
+func decodeClientsBatch(body []byte) []*discEntry {
+	version, payload, ok := cxoutils.UnframeGzip(body)
+	if !ok || version != clientsByServerBatchVersion {
+		return nil
+	}
+	var entries []*discEntry
+	if err := json.Unmarshal(payload, &entries); err != nil {
+		return nil
+	}
+	return entries
 }
 
 // discEntry is a tpviz-local mirror of the disc.Entry JSON shape.

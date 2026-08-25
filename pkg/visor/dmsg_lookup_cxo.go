@@ -46,14 +46,25 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // clientsByServerPrefix is the TreeStore path prefix the
-// clients-by-server feed publishes under. Leaves are
-// clients-by-server/<server-pk-hex>/<client-pk-hex>/entry.
+// clients-by-server feed publishes under. The current publisher writes
+// ONE batched leaf per server at clients-by-server/<server-pk-hex>
+// (a version-framed, gzipped JSON []disc.Entry). Older publishers wrote
+// one leaf per pair at clients-by-server/<server>/<client>/entry; the
+// rebuild below reads both shapes.
 const clientsByServerPrefix = "clients-by-server/"
+
+// clientsByServerBatchVersion is the wire-format version byte of the
+// batched per-server leaf (must match the dmsg-discovery publisher's
+// clientsByServerBatchVersion). A leaf with any other version is skipped
+// so a future format bump degrades to the HTTP fallback rather than
+// misparsing.
+const clientsByServerBatchVersion = 1
 
 // dmsgEntryCXOIndex resolves peer discovery entries from the visor's
 // CXO clients-by-server snapshot. It memoizes a client-PK → entry
@@ -140,25 +151,36 @@ func (idx *dmsgEntryCXOIndex) rebuild(mgr *CXOSubscriptionManager, version time.
 	}
 
 	built := make(map[cipher.PubKey]*dmsgdisc.Entry)
+	index := func(entry *dmsgdisc.Entry) {
+		// Only client entries with a usable delegated-server list are
+		// worth serving from CXO; anything else must take the HTTP
+		// path so it resolves authoritatively.
+		if entry == nil || entry.Client == nil || len(entry.Client.DelegatedServers) == 0 {
+			return
+		}
+		built[entry.Static] = entry
+	}
 	mgr.Walk(FeedDMSGDClientsByServer, clientsByServerPrefix, func(path string, body []byte) bool {
-		clientPK, ok := clientPKFromLeafPath(path)
-		if !ok {
+		if len(body) == 0 {
 			return true
 		}
-		if len(body) == 0 {
+		// Batched per-server leaf: clients-by-server/<server> (no extra
+		// path segment). Body is a version-framed gzipped JSON []Entry.
+		if rel := strings.TrimPrefix(path, clientsByServerPrefix); rel != "" && !strings.Contains(rel, "/") {
+			for _, entry := range decodeClientsBatch(body) {
+				index(entry)
+			}
+			return true
+		}
+		// Legacy per-item leaf: clients-by-server/<server>/<client>/entry.
+		if !strings.HasSuffix(path, "/entry") {
 			return true
 		}
 		entry := new(dmsgdisc.Entry)
 		if err := json.Unmarshal(body, entry); err != nil {
 			return true
 		}
-		// Only client entries with a usable delegated-server list are
-		// worth serving from CXO; anything else must take the HTTP
-		// path so it resolves authoritatively.
-		if entry.Client == nil || len(entry.Client.DelegatedServers) == 0 {
-			return true
-		}
-		built[clientPK] = entry
+		index(entry)
 		return true
 	})
 
@@ -170,27 +192,19 @@ func (idx *dmsgEntryCXOIndex) rebuild(mgr *CXOSubscriptionManager, version time.
 	}
 }
 
-// clientPKFromLeafPath parses the <client-pk> out of a
-// clients-by-server/<server-pk>/<client-pk>/entry leaf path. Returns
-// ok=false for any path that isn't a live entry leaf (e.g. a legacy
-// tombstone or a malformed segment).
-func clientPKFromLeafPath(path string) (cipher.PubKey, bool) {
-	if !strings.HasSuffix(path, "/entry") {
-		return cipher.PubKey{}, false
+// decodeClientsBatch decodes a batched per-server leaf body into its
+// client entries. Returns nil on an empty body, an unknown version byte,
+// a gunzip/JSON error, or a malformed array — every failure degrades to
+// "no entries from this leaf" so the resolver falls back to HTTP rather
+// than serving a misparse.
+func decodeClientsBatch(body []byte) []*dmsgdisc.Entry {
+	version, payload, ok := cxoutils.UnframeGzip(body)
+	if !ok || version != clientsByServerBatchVersion {
+		return nil
 	}
-	core := strings.TrimSuffix(strings.TrimPrefix(path, clientsByServerPrefix), "/entry")
-	// core == "<server-pk>/<client-pk>"
-	slash := strings.LastIndexByte(core, '/')
-	if slash < 0 {
-		return cipher.PubKey{}, false
+	var entries []*dmsgdisc.Entry
+	if err := json.Unmarshal(payload, &entries); err != nil {
+		return nil
 	}
-	clientHex := core[slash+1:]
-	if clientHex == "" {
-		return cipher.PubKey{}, false
-	}
-	var pk cipher.PubKey
-	if err := pk.Set(clientHex); err != nil {
-		return cipher.PubKey{}, false
-	}
-	return pk, true
+	return entries
 }
