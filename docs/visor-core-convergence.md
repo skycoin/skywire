@@ -68,7 +68,7 @@ So the valuable convergence (config + the bug-prone register-before-serve + rout
    `cmd/wasm-visor` first (replace direct `deployment.Prod.*` reads). Low risk:
    new package + one wasm consumer; validate the tab still boots/registers/fetches.
 2. **`visorcore.StartDmsg`** — the register-before-serve starter (NewClient →
-   `setTransport` hook → Serve → Ready). `StartDmsgSeeded` and `pkg/dmsgc` + 
+   `setTransport` hook → Serve → Ready). `StartDmsgSeeded` and `pkg/dmsg/dmsgc` + 
    `init_dmsg` both call it, so the #3277 ordering invariant lives in one place.
 3. **`visorcore.BuildTransportManager` / `BuildRouter` / `BuildProcManager`** —
    extract the construction (not the platform-specific InitClient set). wasm-visor

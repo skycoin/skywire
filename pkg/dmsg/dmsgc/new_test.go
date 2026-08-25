@@ -1,4 +1,4 @@
-// Package dmsgc pkg/dmsgc/new_test.go: unit tests for the New constructor,
+// Package dmsgc pkg/dmsg/dmsgc/new_test.go: unit tests for the New constructor,
 // exercising the discovery-wrapping branches (hypervisor proxy, LAN
 // priority, direct/direct-only, multi-deployment seeding).
 package dmsgc

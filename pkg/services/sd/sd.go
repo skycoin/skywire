@@ -14,6 +14,7 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -22,7 +23,6 @@ import (
 	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
 	"github.com/skycoin/skywire/pkg/services"
-	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/svcmode"
 )
 

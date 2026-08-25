@@ -60,7 +60,7 @@ type Deployment struct {
 }
 
 // DmsgConfig is the per-server `dmsg` block. JSON polymorphism
-// mirrors pkg/dmsgc.DmsgConfig: a single Deployment object for
+// mirrors pkg/dmsg/dmsgc.DmsgConfig: a single Deployment object for
 // single-deployment configs, an array of Deployments for
 // multi-deployment configs.
 type DmsgConfig struct {

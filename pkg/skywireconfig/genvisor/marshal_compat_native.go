@@ -55,7 +55,7 @@ import (
 	appspec "github.com/skycoin/skywire/pkg/app/appserver/spec"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	dmsgspec "github.com/skycoin/skywire/pkg/dmsgc/spec"
+	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
 	tspec "github.com/skycoin/skywire/pkg/transport/spec"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"

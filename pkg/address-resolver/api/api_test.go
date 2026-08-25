@@ -20,9 +20,9 @@ import (
 	armetrics "github.com/skycoin/skywire/pkg/address-resolver/metrics"
 	"github.com/skycoin/skywire/pkg/address-resolver/store"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )

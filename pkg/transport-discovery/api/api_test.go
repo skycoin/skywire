@@ -17,10 +17,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
-	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/transport"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/transport-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"

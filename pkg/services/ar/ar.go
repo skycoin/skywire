@@ -16,13 +16,13 @@ import (
 	armetrics "github.com/skycoin/skywire/pkg/address-resolver/metrics"
 	"github.com/skycoin/skywire/pkg/address-resolver/regcxo"
 	"github.com/skycoin/skywire/pkg/address-resolver/store"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/svcmode"
 )
 

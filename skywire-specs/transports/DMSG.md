@@ -71,7 +71,7 @@ DMSG configuration in visor config:
 ## Code References
 
 - Transport adapter: `pkg/transport/network/dmsg.go`
-- DMSG client wrapper: `pkg/dmsgc/dmsgc.go`
+- DMSG client wrapper: `pkg/dmsg/dmsgc/dmsgc.go`
 - Transport type: `pkg/transport/types/types.go` (`DMSG = "dmsg"`)
 
 ## See Also

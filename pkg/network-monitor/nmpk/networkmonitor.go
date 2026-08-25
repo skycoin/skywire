@@ -1,5 +1,5 @@
-// Package networkmonitor pkg/networkmonitor/networkmonitor.go c2-net-monitor
-package networkmonitor
+// Package nmpk pkg/network-monitor/nmpk/networkmonitor.go c2-net-monitor
+package nmpk
 
 // WhitelistPKs store whitelisted keys of network monitor
 type WhitelistPKs map[string]struct{}

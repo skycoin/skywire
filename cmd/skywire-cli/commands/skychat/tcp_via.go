@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire/tcpnoise"
+	"github.com/skycoin/skywire/pkg/dmsg/tcpnoise"
 )
 
 const (

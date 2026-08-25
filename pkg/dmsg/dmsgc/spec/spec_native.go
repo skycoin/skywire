@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package spec pkg/dmsgc/spec/spec_native.go c1-net-dmsg
+// Package spec pkg/dmsg/dmsgc/spec/spec_native.go c1-net-dmsg
 //
 // DmsgConfig's MarshalJSON / UnmarshalJSON — tagged off the WASM
 // path because encoding/json drags reflect runtime helpers
