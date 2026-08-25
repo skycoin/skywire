@@ -102,32 +102,20 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 		}
 		tracker.SetSink(sink)
 
-		// Transport-list discovery feed. CONSOLIDATED default: the tp-list
-		// snapshot leaf rides THIS telemetry feed (`pub`) as a top-level
-		// leaf, so a visor holds ONE CXO node/conn to TPD, not two. TPD's
-		// aggregator extracts the small tp-list leaf via its targeted
-		// discovery-leaf fetch (reconcileTargeted, on every OnRootReceived)
-		// — reliable even when the telemetry Root's deep fill breaks on a
-		// busy hub — so the combined feed keeps the full transport count
-		// without a dedicated second feed. This halves the visor↔TPD
-		// connection count (and the per-session dmsg handshakes) versus the
-		// old two-feed model.
-		//
-		// Safe to consolidate now that #4179 replaced TPD's flat 90s
-		// whole-Root fill cap with a stall timer that RESETS on every
-		// fetched object (plus a hard ceiling): a large-but-progressing
-		// combined Root now completes instead of breaking mid-fill — the
-		// regression that forced the #4171 revert (#4174). Discovery does
-		// not even wait on that whole-Root fill: the targeted tp-list fetch
-		// lands the inlined leaf in a handful of objects independently.
-		//
-		// Opt back into the dedicated port-69 feed with
-		// Stats.DedicatedTPListFeed=true (a SECOND CXO node under the same
-		// visor PK on DmsgVisorTPListCXOPort) — kept as an escape hatch in
-		// case a busy hub is ever seen under-filling on the combined feed.
-		if conf != nil && conf.DedicatedTPListFeed {
-			tplistPub = buildTPListPublisher(v, log)
-		}
+		// Dedicated tp-list discovery feed: a SECOND CXO node under the
+		// SAME visor identity PK, on DmsgVisorTPListCXOPort, carrying ONLY
+		// the compact transport-list snapshot leaf (publishTPDList). Its
+		// Root is a handful of objects, so TPD's second aggregator fills it
+		// COMPLETELY in ~1 round-trip — the durable cure for the ~10%
+		// transport under-report on busy hubs, whose combined telemetry
+		// Root on `pub` (DmsgCXOPort) can't finish its whole-Root fill in
+		// the announce conn's window. Same PK keeps TPD's reporter=feed-PK
+		// edge-auth intact. The telemetry leaves (transports/<id>/current)
+		// stay on `pub`. If the dedicated publisher can't start, fall back
+		// to publishing the tp-list on the telemetry feed (legacy combined
+		// behavior) so discovery still works — just without the
+		// fill-completeness win.
+		tplistPub = buildTPListPublisher(v, log)
 		leafPub := pub
 		if tplistPub != nil {
 			leafPub = tplistPub
