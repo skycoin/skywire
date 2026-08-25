@@ -199,6 +199,18 @@ type Config struct {
 	MaxFillingTime time.Duration
 	// Logger overrides the default tagged logger.
 	Logger *logging.Logger
+	// SecKey binds the aggregator's CXO node identity to TPD's service
+	// secret key so the node's handshake-advertised PK is TPD's KNOWN PK.
+	// This matters because the visor's telemetry / tp-list feeds gate their
+	// subscriber allowlist on the CXO node's PeerID (see pkg/cxo/treestore
+	// allowlist + pkg/visor feed gating): visors allow the TPD PK they hold
+	// in transport.discovery_dmsg. Left zero, node.NewNode generates a
+	// RANDOM keypair, so the aggregator dials every gated visor as an
+	// unknown PK and its subscribe is rejected — TPD then never fills that
+	// visor's transports (the persistent visor↔TPD transport-count gap on
+	// any visor running feed gating). The publisher path (treestore.
+	// NewWithDMSG) binds the same way for the same reason.
+	SecKey cipher.SecKey
 	// InMemoryDB / DataDir control the aggregator's CXO storage.
 	// Default is in-memory (subscribed object cache only — TPD's
 	// authoritative store is redis, the CXO cache exists just to
@@ -327,6 +339,13 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	}
 
 	cfg := node.NewConfig()
+	// Bind the node identity to TPD's service key (when provided) so its
+	// handshake PK is TPD's known PK, matching what gated visors allowlist.
+	// Zero SecKey => node.NewNode mints a random keypair => gated visors
+	// reject the aggregator's subscribe. See Config.SecKey.
+	if conf.SecKey != (cipher.SecKey{}) {
+		cfg.SecKey = skycipher.SecKey(conf.SecKey)
+	}
 	// We're DMSG-only — disable the CXO node's default TCP/UDP/RPC
 	// listeners. node.NewConfig defaults TCP.Listen to ":8870" and RPC to
 	// ":8871", and those hardcoded ports mean two Nodes in the same process
