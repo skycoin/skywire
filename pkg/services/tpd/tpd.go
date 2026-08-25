@@ -21,6 +21,10 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/api"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/cxoaggregator"
+	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -30,10 +34,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/svcmode"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport-discovery/api"
-	"github.com/skycoin/skywire/pkg/transport-discovery/cxoaggregator"
-	tpdiscmetrics "github.com/skycoin/skywire/pkg/transport-discovery/metrics"
-	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
 // Type is the registry key used in services.json blocks.

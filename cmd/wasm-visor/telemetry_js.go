@@ -30,7 +30,7 @@ import (
 // liveSnapshot mirrors the wire shape TPD's cxo-aggregator parses for
 // transports/<uuid>/current (bandwidth + latency). The aggregator re-declares the
 // same struct on its side to keep the dependency one-way; field JSON tags must
-// match both places (pkg/transport-discovery/cxoaggregator/aggregator.go).
+// match both places (pkg/deployment/tpd/cxoaggregator/aggregator.go).
 type liveSnapshot struct {
 	SentBytes    uint64    `json:"sent_bytes"`
 	RecvBytes    uint64    `json:"recv_bytes"`

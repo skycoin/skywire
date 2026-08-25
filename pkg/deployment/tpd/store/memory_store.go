@@ -1,0 +1,329 @@
+// Package store pkg/deployment/tpd/store/memory_store.go c4-net-discovery
+package store
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/transport"
+	types "github.com/skycoin/skywire/pkg/transport/types"
+)
+
+// memoryStore is an in-memory store used for testing purposes only.
+type memoryStore struct {
+	transports map[uuid.UUID]*transport.Entry
+
+	err error
+	mu  sync.Mutex
+}
+
+func newMemoryStore() *memoryStore {
+	return &memoryStore{
+		transports: map[uuid.UUID]*transport.Entry{},
+	}
+}
+
+func (s *memoryStore) SetError(err error) {
+	s.err = err
+}
+
+func (s *memoryStore) RegisterTransportsBatch(ctx context.Context, reporter cipher.PubKey, entries []*transport.SignedEntry) error {
+	for _, entry := range entries {
+		if err := s.RegisterTransport(ctx, reporter, entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RegisterTransport ignores reporter: the in-memory store has no per-edge TTL
+// index (no expiry), so the per-edge-refresh distinction is moot here.
+func (s *memoryStore) RegisterTransport(_ context.Context, _ cipher.PubKey, entry *transport.SignedEntry) error {
+	if s.err != nil {
+		return s.err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if entry.Entry == nil {
+		return ErrBadEntry
+	}
+
+	entry.Registered = time.Now().UnixNano()
+	s.transports[entry.Entry.ID] = entry.Entry
+
+	return nil
+}
+
+func (s *memoryStore) DeregisterTransport(_ context.Context, id uuid.UUID) error {
+	if s.err != nil {
+		return s.err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, ok := s.transports[id]
+	if !ok {
+		return ErrTransportNotFound
+	}
+
+	delete(s.transports, id)
+
+	return nil
+}
+
+func (s *memoryStore) GetTransportByID(_ context.Context, id uuid.UUID) (*transport.Entry, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	v, ok := s.transports[id]
+	if !ok {
+		return nil, ErrTransportNotFound
+	}
+
+	return v, nil
+}
+
+func (s *memoryStore) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	return s.GetTransportsByEdgeNoLatency(ctx, pk)
+}
+
+func (s *memoryStore) GetTransportsByEdgeNoLatency(_ context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	res := make([]*transport.Entry, 0)
+
+	for _, entry := range s.transports {
+		if entry != nil && entry.HasEdge(pk) {
+			res = append(res, entry)
+		}
+	}
+
+	if len(res) == 0 {
+		return nil, ErrTransportNotFound
+	}
+
+	return res, nil
+}
+
+func (s *memoryStore) GetNumberOfTransports(context.Context) (map[types.Type]int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	response := make(map[types.Type]int)
+	for _, entry := range s.transports {
+		response[entry.Type]++
+	}
+	return response, nil
+}
+
+func (s *memoryStore) GetAllTransports(_ context.Context, selfTransports bool) ([]*transport.Entry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var response []*transport.Entry
+	for _, entry := range s.transports {
+		if !selfTransports {
+			if entry.Edges[0] == entry.Edges[1] {
+				continue
+			}
+		}
+		response = append(response, entry)
+	}
+	return response, nil
+}
+
+func (s *memoryStore) Close() {
+
+}
+
+// UpdateBandwidth is a no-op for the in-memory store; bandwidth
+// aggregation is a redis-backed concern and the memory store is only
+// used by tests of higher-level handlers that don't exercise it.
+func (s *memoryStore) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64) error {
+	return nil
+}
+
+// UpdateLatency is a no-op for the same reason as UpdateBandwidth.
+func (s *memoryStore) UpdateLatency(_ context.Context, _ string, _, _, _ float64) error {
+	return nil
+}
+
+// GetTransportBandwidth returns empty slice for memory store (no bandwidth tracking).
+func (s *memoryStore) GetTransportBandwidth(_ context.Context, _ uuid.UUID, _ string, _ int) ([]BandwidthAggregation, error) {
+	return []BandwidthAggregation{}, nil
+}
+
+// GetVisorBandwidth returns empty slice for memory store (no bandwidth tracking).
+func (s *memoryStore) GetVisorBandwidth(_ context.Context, _ cipher.PubKey, _ string, _ int) ([]BandwidthAggregation, error) {
+	return []BandwidthAggregation{}, nil
+}
+
+// GetAllVisorSummaries groups in-memory transports by visor PK, returns uptime summaries.
+// Online status is determined by having active transports.
+// Version and Daily fields require uptime tracker integration.
+func (s *memoryStore) GetAllVisorSummaries(_ context.Context, _ bool, _ bool) ([]VisorSummary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	visorOnline := make(map[cipher.PubKey]bool)
+
+	for _, entry := range s.transports {
+		for _, edge := range entry.Edges {
+			visorOnline[edge] = true
+		}
+	}
+
+	var result []VisorSummary
+	for pk := range visorOnline {
+		result = append(result, VisorSummary{
+			PK:     pk,
+			Online: true,
+		})
+	}
+
+	return result, nil
+}
+
+// RecordHeartbeat is a no-op for memory store.
+func (s *memoryStore) RecordHeartbeat(_ context.Context, _ cipher.PubKey, _ string) error {
+	return nil
+}
+
+// GetDailyTimeline is a no-op for memory store.
+func (s *memoryStore) GetDailyTimeline(_ context.Context, _ string, _ time.Time) map[string]string {
+	return nil
+}
+
+func (s *memoryStore) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID, _ string, _ time.Time) error {
+	return nil
+}
+
+func (s *memoryStore) IngestTransportTimeline(_ context.Context, _ uuid.UUID, _ string, _ []byte) error {
+	return nil
+}
+
+func (s *memoryStore) GetTransportUptimeSummaries(_ context.Context, _ []uuid.UUID, _ bool, _ bool) ([]TransportUptimeSummary, error) {
+	return []TransportUptimeSummary{}, nil
+}
+
+func (s *memoryStore) GetTransportUptimeByVisor(_ context.Context, _ cipher.PubKey, _ bool, _ bool) ([]TransportUptimeSummary, error) {
+	return []TransportUptimeSummary{}, nil
+}
+
+func (s *memoryStore) GetTransportDailyTimeline(_ context.Context, _ string, _ time.Time) map[string]string {
+	return nil
+}
+
+// BackupAndCleanOldBandwidth is a no-op for memory store.
+func (s *memoryStore) BackupAndCleanOldBandwidth(_ context.Context, _ string) error {
+	return nil
+}
+
+// GetNetworkMetrics returns empty network metrics for memory store.
+func (s *memoryStore) GetNetworkMetrics(_ context.Context, _ MetricsQuery) (*NetworkMetricResponse, error) {
+	return &NetworkMetricResponse{
+		Daily:      []DailyAggregate{},
+		Cumulative: &CumulativeAggregate{ByType: make(map[string]*TypeMetricAggregate)},
+	}, nil
+}
+
+// GetVisorAggregateMetrics returns empty visor metrics for memory store.
+func (s *memoryStore) GetVisorAggregateMetrics(_ context.Context, pks []cipher.PubKey, _ MetricsQuery) (map[string]*VisorMetricResponse, error) {
+	result := make(map[string]*VisorMetricResponse)
+	for _, pk := range pks {
+		result[pk.Hex()] = &VisorMetricResponse{
+			Daily:      []DailyVisorAggregate{},
+			Cumulative: &VisorCumulativeAggregate{},
+		}
+	}
+	return result, nil
+}
+
+// GetAllTransportMetrics returns metrics for all transports in memory store.
+func (s *memoryStore) GetAllTransportMetrics(ctx context.Context, query MetricsQuery) ([]TransportMetric, error) {
+	entries, err := s.GetAllTransports(ctx, true)
+	if err != nil {
+		return nil, err
+	}
+	return s.buildTransportMetrics(entries, query), nil
+}
+
+// GetTransportMetricsByIDs returns metrics for specific transports.
+func (s *memoryStore) GetTransportMetricsByIDs(ctx context.Context, ids []uuid.UUID, query MetricsQuery) ([]TransportMetric, error) {
+	var entries []*transport.Entry
+	for _, id := range ids {
+		entry, err := s.GetTransportByID(ctx, id)
+		if err != nil {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return s.buildTransportMetrics(entries, query), nil
+}
+
+// GetTransportMetricsByVisors returns metrics for transports of specified visors.
+func (s *memoryStore) GetTransportMetricsByVisors(ctx context.Context, pks []cipher.PubKey, query MetricsQuery) ([]TransportMetric, error) {
+	seen := make(map[uuid.UUID]bool)
+	var entries []*transport.Entry
+
+	for _, pk := range pks {
+		visorEntries, err := s.GetTransportsByEdge(ctx, pk)
+		if err != nil {
+			continue
+		}
+		for _, entry := range visorEntries {
+			if !seen[entry.ID] {
+				seen[entry.ID] = true
+				entries = append(entries, entry)
+			}
+		}
+	}
+	return s.buildTransportMetrics(entries, query), nil
+}
+
+// buildTransportMetrics builds TransportMetric slice from entries (memory store version).
+func (s *memoryStore) buildTransportMetrics(entries []*transport.Entry, query MetricsQuery) []TransportMetric {
+	var results []TransportMetric
+
+	for _, entry := range entries {
+		// Apply type filter
+		if query.Type != "" && string(entry.Type) != query.Type {
+			continue
+		}
+
+		metric := TransportMetric{
+			ID:    entry.ID.String(),
+			Type:  string(entry.Type),
+			Live:  true, // All in-memory transports are considered live
+			Daily: []DailyEdgeBandwidth{},
+		}
+
+		if query.Edges {
+			metric.Edges = []string{entry.Edges[0].Hex(), entry.Edges[1].Hex()}
+		}
+
+		// Skip transports without any metrics data (no latency and no bandwidth)
+		// Note: memory store doesn't track these, so this filters all unless enhanced
+		if metric.Latency == nil && len(metric.Daily) == 0 {
+			continue
+		}
+
+		results = append(results, metric)
+	}
+
+	return results
+}
