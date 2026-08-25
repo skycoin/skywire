@@ -23,6 +23,10 @@ import (
 type deploymentWithServer struct {
 	Deployment
 	Server *DmsgServerConfig `json:"server,omitempty"`
+	// LookupCXO is a visor-wide flag carried alongside the primary
+	// deployment in the single-object shape (like Server). See
+	// DmsgConfig.LookupCXO.
+	LookupCXO bool `json:"lookup_cxo,omitempty"`
 }
 
 // UnmarshalJSON accepts either a single Deployment object or an
@@ -41,6 +45,7 @@ func (c *DmsgConfig) UnmarshalJSON(data []byte) error {
 		}
 		c.Deployments = []Deployment{single.Deployment}
 		c.Server = single.Server
+		c.LookupCXO = single.LookupCXO
 	}
 	c.mirrorPrimary()
 	return nil
@@ -58,7 +63,7 @@ func (c DmsgConfig) MarshalJSON() ([]byte, error) {
 		deployments = []Deployment{c.toDeployment()}
 	}
 	if len(deployments) == 1 {
-		return json.Marshal(deploymentWithServer{Deployment: deployments[0], Server: c.Server})
+		return json.Marshal(deploymentWithServer{Deployment: deployments[0], Server: c.Server, LookupCXO: c.LookupCXO})
 	}
 	return json.Marshal(deployments)
 }
