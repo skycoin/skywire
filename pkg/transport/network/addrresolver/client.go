@@ -157,6 +157,46 @@ type httpClient struct {
 	ready          chan struct{}
 	closed         chan struct{}
 	delBindSudphWg sync.WaitGroup
+
+	// bindPublishHook, when set via SetBindPublishHook, is invoked with the
+	// canonical transport-type wire name and the exact LocalAddresses payload
+	// on every successful Bind{STCPR,QUIC,WT} and SUDPH (re)registration. It
+	// lets the visor mirror its AR bindings onto a CXO feed
+	// (init_ar_bind_cxo.go) without this package depending on treestore/CXO.
+	// Guarded by bindHookMu; never blocks the bind path (the hook coalesces
+	// into the publisher's batch window).
+	bindHookMu      sync.RWMutex
+	bindPublishHook func(netType string, payload LocalAddresses)
+}
+
+// BindPublisher is the optional extension a caller type-asserts the APIClient
+// to in order to mirror AR bindings onto a side channel (the CXO AR-bind
+// feed). Only the httpClient implements it; keeping it off APIClient avoids
+// touching the mock and the TinyGo-facing client variants (mirrors how
+// SUDPHBinder is an optional extension).
+type BindPublisher interface {
+	// SetBindPublishHook installs fn (or clears it with nil). fn is called
+	// with the canonical transport-type wire name ("stcpr", "sudph",
+	// "squicr", "swtr") and the LocalAddresses the visor just registered.
+	SetBindPublishHook(fn func(netType string, payload LocalAddresses))
+}
+
+// SetBindPublishHook implements BindPublisher.
+func (c *httpClient) SetBindPublishHook(fn func(netType string, payload LocalAddresses)) {
+	c.bindHookMu.Lock()
+	c.bindPublishHook = fn
+	c.bindHookMu.Unlock()
+}
+
+// fireBindPublishHook invokes the installed bind-publish hook, if any. Safe to
+// call with the hook unset. Never panics on a nil hook.
+func (c *httpClient) fireBindPublishHook(netType string, payload LocalAddresses) {
+	c.bindHookMu.RLock()
+	hook := c.bindPublishHook
+	c.bindHookMu.RUnlock()
+	if hook != nil {
+		hook(netType, payload)
+	}
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -544,6 +584,8 @@ func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauthclient.ExtractError(resp.Body))
 	}
+	// Mirror onto the CXO AR-bind feed. Wire name matches types.QUIC.
+	c.fireBindPublishHook("squicr", localAddresses)
 	return nil
 }
 
@@ -607,6 +649,8 @@ func (c *httpClient) BindWT(ctx context.Context, port, certHash string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauthclient.ExtractError(resp.Body))
 	}
+	// Mirror onto the CXO AR-bind feed. Wire name matches types.WT.
+	c.fireBindPublishHook("swtr", localAddresses)
 	return nil
 }
 
@@ -678,6 +722,10 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauthclient.ExtractError(resp.Body))
 	}
+
+	// Mirror the just-registered binding onto the CXO AR-bind feed (when a
+	// publisher installed a hook). Wire name matches types.STCPR.
+	c.fireBindPublishHook("stcpr", localAddresses)
 
 	// #1525 Phase 2b: when v6 is available, fire a SECONDARY POST over
 	// the v6-forced auth client. The AR's bind handler captures the
