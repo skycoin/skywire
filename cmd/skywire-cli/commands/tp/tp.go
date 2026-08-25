@@ -40,7 +40,6 @@ var (
 	logger           = logging.MustGetLogger("skywire-cli")
 	tpTypes          bool
 	showStats        bool
-	statsNetwork     bool
 	utURL            string
 	sdURL            string
 	listRemoteVisors []string
@@ -91,7 +90,6 @@ func init() {
 	tpCmd.Flags().StringVarP(&tpID, "id", "i", "", "display transport matching ID")
 	tpCmd.Flags().BoolVarP(&tpTypes, "tptypes", "u", false, "display transport types used by the local visor")
 	tpCmd.Flags().BoolVarP(&showStats, "stats", "s", false, "show transport statistics (count by type, unique visors)")
-	tpCmd.Flags().BoolVarP(&statsNetwork, "network", "N", false, "with --stats: show the network-wide summary from Transport Discovery instead of the local visor")
 	tpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	tpCmd.Flags().StringSliceVar(&listRemoteVisors, "remote", nil, "list transports on remote visor(s) via TPS (comma-separated PKs)")
 	tpCmd.Flags().BoolVarP(&tpLive, "live", "L", false, "live-refresh mode (bubbletea TUI, 1s tick); shows transport bandwidth/latency updating in place. Skips --more service-disc fetches per tick; not compatible with --remote/--id/--tptypes")
@@ -258,32 +256,6 @@ var tpCmd = &cobra.Command{
 			types, err := rpcClient.TransportTypes()
 			internal.Catch(cmd.Flags(), err)
 			internal.PrintOutput(cmd.Flags(), types, fmt.Sprintln(strings.Join(types, "\n")))
-			return
-		}
-
-		if showStats && statsNetwork {
-			// Network-wide summary from Transport Discovery. The aggregate is
-			// computed server-side (GET /all-transports/stats), so we fetch a
-			// small JSON summary instead of the whole transport list. Older
-			// TPDs without that endpoint fall back to the full /all-transports
-			// fetch, counted client-side.
-			ns := fetchNetworkTransportStats(cmd)
-
-			var b strings.Builder
-			fmt.Fprintf(&b, "Network transports:  %d\n", ns.Total)
-			fmt.Fprintf(&b, "Unique visors:       %d\n\n", ns.UniqueVisors)
-			fmt.Fprintf(&b, "  %-10s %s\n", "type", "total")
-			typeNames := make([]string, 0, len(ns.ByType))
-			for t := range ns.ByType {
-				typeNames = append(typeNames, t)
-			}
-			sort.Strings(typeNames)
-			for _, t := range typeNames {
-				fmt.Fprintf(&b, "  %-10s %d\n", t, ns.ByType[t])
-			}
-			fmt.Fprintf(&b, "  %-10s %d\n", "total", ns.Total)
-
-			internal.PrintOutput(cmd.Flags(), ns, b.String())
 			return
 		}
 
@@ -459,7 +431,7 @@ type statsOutput struct {
 	ByType       map[string]*typeStat `json:"by_type"`
 }
 
-// netStatsOutput is the JSON/text payload for `tp -s -N` (the network-wide
+// netStatsOutput is the JSON/text payload for `tp disc -s` (the network-wide
 // summary from Transport Discovery). Direction (in/out) is a per-visor
 // concept with no network-wide meaning, so only totals are reported.
 type netStatsOutput struct {
@@ -468,13 +440,38 @@ type netStatsOutput struct {
 	UniqueVisors int            `json:"unique_visors"`
 }
 
+// printNetworkTransportSummary fetches the network-wide transport summary from
+// the Transport Discovery at baseURL and writes it via the standard CLI output
+// path (honoring --json/--jq). It is the shared implementation behind
+// `tp disc -s`.
+func printNetworkTransportSummary(cmd *cobra.Command, baseURL string) {
+	ns := fetchNetworkTransportStats(cmd, baseURL)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Network transports:  %d\n", ns.Total)
+	fmt.Fprintf(&b, "Unique visors:       %d\n\n", ns.UniqueVisors)
+	fmt.Fprintf(&b, "  %-10s %s\n", "type", "total")
+	typeNames := make([]string, 0, len(ns.ByType))
+	for t := range ns.ByType {
+		typeNames = append(typeNames, t)
+	}
+	sort.Strings(typeNames)
+	for _, t := range typeNames {
+		fmt.Fprintf(&b, "  %-10s %d\n", t, ns.ByType[t])
+	}
+	fmt.Fprintf(&b, "  %-10s %d\n", "total", ns.Total)
+
+	internal.PrintOutput(cmd.Flags(), ns, b.String())
+}
+
 // fetchNetworkTransportStats returns the network-wide transport summary from
-// Transport Discovery. It prefers the server-side aggregate endpoint
-// (GET /all-transports/stats), so it fetches a small JSON summary rather than
-// the whole transport list. If that endpoint is unavailable (older TPD), it
-// falls back to fetching /all-transports and counting client-side.
-func fetchNetworkTransportStats(cmd *cobra.Command) netStatsOutput {
-	base := strings.TrimRight(utURL, "/")
+// the Transport Discovery at baseURL. It prefers the server-side aggregate
+// endpoint (GET /all-transports/stats), so it fetches a small JSON summary
+// rather than the whole transport list. If that endpoint is unavailable
+// (older TPD), it falls back to fetching /all-transports and counting
+// client-side.
+func fetchNetworkTransportStats(cmd *cobra.Command, baseURL string) netStatsOutput {
+	base := strings.TrimRight(baseURL, "/")
 	if body, err := clirpc.FetchServiceURL(cmd.Flags(), base+"/all-transports/stats"); err == nil {
 		var ns netStatsOutput
 		if json.Unmarshal(body, &ns) == nil && ns.ByType != nil {

@@ -22,14 +22,16 @@ import (
 )
 
 var (
-	tpID    string
-	tpPK    string
-	tpdHTTP bool
+	tpID      string
+	tpPK      string
+	tpdHTTP   bool
+	discStats bool
 )
 
 func init() {
 	discTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "obtain transport of given ID")
 	discTpCmd.Flags().StringVarP(&tpPK, "pk", "p", "", "obtain transports by public key")
+	discTpCmd.Flags().BoolVarP(&discStats, "stats", "s", false, "show the network-wide transport summary (total, by type, unique visors)")
 	discTpCmd.Flags().StringVar(&tpdURL, "tpdurl", deployment.Prod.TransportDiscovery, "transport discovery url")
 	discTpCmd.Flags().BoolVar(&tpdHTTP, "http", false, "skip the structured visor RPC and query transport discovery via the fetch chain (CXO→DmsgHTTP→DMSG)")
 	// Wire the common fetch-path flags (--no-cxo/--no-rpc/--no-dmsg) so this
@@ -44,6 +46,15 @@ var discTpCmd = &cobra.Command{
 	Long:                  "\n    Discover remote transport(s) by ID or public key",
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, _ []string) {
+		// --stats: network-wide transport summary from Transport Discovery.
+		// The aggregate is computed server-side (GET /all-transports/stats),
+		// so we fetch a small JSON summary instead of the whole transport
+		// list; older TPDs without that endpoint fall back to counting the
+		// full /all-transports list client-side. Independent of --id/--pk.
+		if discStats {
+			printNetworkTransportSummary(cmd, tpdURL)
+			return
+		}
 		if tpID == "" && tpPK == "" {
 			internal.PrintFatalError(cmd.Flags(), errors.New("must specify either transport id or public key"))
 			return
