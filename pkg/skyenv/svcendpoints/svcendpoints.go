@@ -8,7 +8,7 @@
 // The PATHS here are deployment-INDEPENDENT (they come from each service's chi
 // router); the ADDRESSES they pair with are deployment-SPECIFIC and supplied by
 // the caller from the visor's resolved config. Keep this file in sync with the
-// services' actual routers (pkg/dmsg/discovery/api, pkg/transport-discovery/api,
+// services' actual routers (pkg/dmsg/discovery/api, pkg/deployment/tpd/api,
 // pkg/deployment/ar/api, pkg/deployment/rf/api, pkg/deployment/sd/api,
 // pkg/deployment/ut/api, and the reward server in
 // cmd/skywire-cli/commands/rewards/server).
@@ -80,7 +80,7 @@ var Manifest = map[string][]Endpoint{
 			{Name: "visors", Desc: "filter to a ;-separated PK list", Example: "pk1;pk2"},
 		}},
 	},
-	// transport-discovery — pkg/transport-discovery/api/api.go
+	// transport-discovery — pkg/deployment/tpd/api/api.go
 	"tpd": {
 		{Method: "GET", Path: "/health", Desc: "service health + build info"},
 		{Method: "GET", Path: "/all-transports", Desc: "all registered transports"},

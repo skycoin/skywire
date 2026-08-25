@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/transport"
-	tpdstore "github.com/skycoin/skywire/pkg/transport-discovery/store"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 

@@ -15,10 +15,10 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	routeFinder "github.com/skycoin/skywire/pkg/deployment/rf/store"
+	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
-	tpdstore "github.com/skycoin/skywire/pkg/transport-discovery/store"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 

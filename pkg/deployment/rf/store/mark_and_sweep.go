@@ -5,8 +5,8 @@ import (
 	"context"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 

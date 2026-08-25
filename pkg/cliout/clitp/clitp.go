@@ -28,8 +28,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	store "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/transport"
-	store "github.com/skycoin/skywire/pkg/transport-discovery/store"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
