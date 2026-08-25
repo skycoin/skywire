@@ -18,6 +18,7 @@ const (
 	MaxConnections        int           = 1000 * 1000
 	MaxPendingConnections int           = 1000
 	MaxFillingTime        time.Duration = 2 * time.Minute
+	MaxTotalFillTime      time.Duration = 10 * time.Minute
 	MaxHeads              int           = 10
 	ListenTCP             string        = ":8870"
 	ListenUDP             string        = "" // don't listen
@@ -137,16 +138,29 @@ type Config struct {
 	// MaxHeads is limit of heads per feed.
 	MaxHeads int
 
-	// MaxFillingTime is the time limit for filling of a Root object. A fill
-	// still running after this long is treated as a broken peer and aborted
-	// with ErrTimeout (the Root refills when the publisher republishes). The
-	// default was 10m, which is pathologically generous — a healthy tree fill
-	// completes in seconds, and a fill hung that long pins all its "wanted"
-	// objects in the cache (which cleanDown skips) for the whole window. That
-	// was the residual TPD aggregator leak (#3562/#3569); 2m keeps ~20-40x
-	// margin over a healthy fill while capping hung fills. The TPD aggregator
-	// pins its own tighter 90s override on top of this.
+	// MaxFillingTime is the STALL limit for filling of a Root object: the max
+	// time a fill may go WITHOUT fetching an object. The timer resets on every
+	// successful object fetch, so a large Root that keeps making progress is
+	// never aborted no matter how long its total fill takes — only a genuinely
+	// stalled peer (no object delivered for this long) is treated as broken and
+	// aborted with ErrTimeout (the Root refills when the publisher republishes).
+	// This replaced a fixed TOTAL-time cap that killed big-but-progressing hub
+	// Roots at the wall clock, which is the residual TPD churn (a single-source
+	// feed whose large Root couldn't finish inside the flat cap never landed).
+	// A hung fill still pins its "wanted" objects in the cache (which cleanDown
+	// skips), so MaxTotalFillTime below bounds the absolute window — that pair
+	// preserves the #3562/#3569 leak guard while letting slow fills complete.
+	// The TPD aggregator pins its own tighter 90s stall override on top of this.
 	MaxFillingTime time.Duration
+
+	// MaxTotalFillTime is the HARD ceiling on a single Root's fill, independent
+	// of progress: even a fill that keeps fetching objects is aborted once it
+	// has run this long in total. It backstops the progress-reset MaxFillingTime
+	// stall timer so a pathological source that dribbles one object every stall
+	// window can't pin "wanted" objects indefinitely (the #3562 leak class).
+	// Must be > MaxFillingTime; if <= 0 the package default (MaxTotalFillTime
+	// const) is used, and a value <= the stall timer is bumped to the default.
+	MaxTotalFillTime time.Duration
 
 	// RPC is RPC listening address. Empty string disables RPC.
 	RPC string
