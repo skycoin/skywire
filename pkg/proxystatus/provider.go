@@ -99,7 +99,19 @@ type Snapshot struct {
 	Legs       []Leg    // current per-leg mux state (empty when no active route group)
 	Logs       []string // recent log lines, oldest first
 	Events     []string // route/transport events affecting this surface, oldest first
+	Streams    []Stream // per-stream detail for the open session (skysocks tunnel), when tracked
 	Note       string   // optional human note (e.g. why a section is empty)
+}
+
+// Stream is one open tunneled stream on the surface's session to the exit — the
+// per-stream detail behind the "N open stream(s)" count. The skysocks-client
+// tracks these locally (id + CONNECT target + age); the underlying yamux layer
+// does not meter per-stream bytes, so bytes are intentionally absent (the
+// route-group totals in the mux section are the byte counters that exist).
+type Stream struct {
+	ID     uint32 // yamux stream id
+	Target string // the CONNECT target host:port the stream carries (never a PK)
+	AgeMS  int64  // how long the stream has been open, milliseconds
 }
 
 // Provider yields a live Snapshot for a surface. Implemented by the visor

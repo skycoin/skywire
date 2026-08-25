@@ -57,13 +57,14 @@ func TestRenderSections(t *testing.T) {
 					{TpID: "tp2ccccccc-2222-2222-2222-222222222222", From: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", To: "03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "stcpr", LatencyMS: 450},
 				}},
 		},
-		Logs:   []string{"line one", "line two"},
-		Events: nil,
+		Logs:    []string{"line two", "[2025-06-01T00:00:00.0000Z] INFO [skysocks-client]: app is running"},
+		Events:  []string{"[2025-06-01T00:00:01.0000Z] WARN [router]: leg demoted"},
+		Streams: []Stream{{ID: 7, Target: "example.com:80", AgeMS: 65000}},
 	}
 	page := string(Render(snap))
 	for _, want := range []string{
 		"<!doctype html>", "proxy status", "skysocks-client", "per-leg mux",
-		"stcpr", "recent log", "line two", "route control", "read-only preview",
+		"stcpr", "route, transport", "line two", "route control", "read-only preview",
 		// live push (skysocks): the WebSocket script + swap target replace the old
 		// meta refresh, which must be gone for this surface. The WS URL is derived
 		// from the page origin (never a hardcoded http://), and sendCmd is the
@@ -72,20 +73,22 @@ func TestRenderSections(t *testing.T) {
 		`location.origin.replace(/^http/,"ws")`, "sendCmd",
 		"standby", "status.dmsg", "status.skynet",
 		// route observability: the left per-route summary carries the end-to-end
-		// route rtt; "route rtt" is also named in the hint prose. The multihop
+		// route rtt; "route-rtt" is also named in the tree legend. The multihop
 		// standby leg's route rtt (480) renders compact ("480ms").
-		"route rtt", "480ms",
+		"route-rtt", "480ms",
 		// ONE shared bilateral route tree (pkg/proxystatus.RouteTree) rendered by
 		// pkg/bitree into a monospace <pre>: root = this visor (source PK), each
 		// active route a right branch (its hop chain), a left summary block, and
 		// aligned trailing hop columns. The exact model+shape `proxy tree` prints.
-		`class="tree"`, `class="bitree"`, "──┬──", "└──",
+		// Unix-tree root anchoring: the source PK is the top-left root and each
+		// route hangs off it via ├──/└── trunk connectors (item 1).
+		`class="tree"`, `class="bitree"`, "├──", "└──",
 		// Tree header/legend (tp-tree style): color swatches name the source PK
 		// accent and the active/standby state dots, then the column hints — dead legs
 		// are pruned so there is no dead swatch.
 		`class="tlegend"`, `class="lgnd src"`,
 		`class="lgnd ok"`, `class="lgnd standby"`, `class="lgnd cols"`,
-		"this visor", "exit", "peer · [type] · tpid",
+		"this visor", "peer · [type] · tpid",
 		// FULL (never truncated) PKs: the source (root) and the multihop exit.
 		"03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff",
 		"02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee",
@@ -112,6 +115,17 @@ func TestRenderSections(t *testing.T) {
 		// Embedded mononoki monospace font so the tree's box-drawing glyphs align:
 		// an @font-face woff2 data-URI in the shell + the family on the tree/PK cells.
 		"@font-face", "'Mononoki'", "data:font/woff2;base64,",
+		// item 3: ONE combined route+transport+log stream, terminal-colored by level
+		// (INFO green / WARN amber / …) in a scrollable window (newest pinned by the
+		// live script). The event + log lines merge in timestamp order.
+		"route, transport &amp; log", `class="ll-info"`, `class="ll-warn"`,
+		"app is running", "leg demoted",
+		// item 5: live up/down rate meters differenced from the cumulative byte totals
+		// by the inline script over the WebSocket pushes.
+		`data-bytes="up"`, `data-bytes="down"`, `data-rate="up"`, `data-rate="down"`, `class="rate"`, "fmtRate",
+		// item 4: the "N open stream(s)" count expands into per-stream rows (id /
+		// target / age) in an expandable section.
+		`class="streams"`, "open streams", "example.com:80",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("rendered page missing %q", want)
@@ -161,7 +175,7 @@ func TestRenderFragmentIsLiveRegionOnly(t *testing.T) {
 		Logs: []string{"frag line"},
 	}
 	frag := string(RenderFragment(snap))
-	for _, want := range []string{"per-leg mux", "recent log", "frag line", `class="pills"`} {
+	for _, want := range []string{"per-leg mux", "route, transport", "frag line", `class="pills"`} {
 		if !strings.Contains(frag, want) {
 			t.Errorf("fragment missing %q", want)
 		}
