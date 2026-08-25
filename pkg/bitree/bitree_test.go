@@ -19,8 +19,9 @@ func TestSingleRoute(t *testing.T) {
 		Label: "EXITPK", Cols: []string{"[stcpr]", "9a3a17e0…", "143ms"},
 		Left: ann("R[0] ● 1.6K↑ 1.5K↓"),
 	}}}
-	want := "this visor\n" +
-		"└── R[0] ● 1.6K↑ 1.5K↓ ───── EXITPK  [stcpr]  9a3a17e0…  143ms"
+	want := "                this visor" + "\n" +
+		"                     │" + "\n" +
+		"R[0] ● 1.6K↑ 1.5K↓ ──┴── EXITPK  [stcpr]  9a3a17e0…  143ms"
 	check(t, "single", Render(root, Options{}), want)
 }
 
@@ -36,13 +37,14 @@ func TestMockupTree(t *testing.T) {
 			Right: []*Node{{Label: "HOP2PK", Cols: []string{"[squicr]", "85086f0c…", "74ms"},
 				Right: []*Node{leaf("EXITPK", "[stcpr]", "da5c74a8…", "133ms")}}}},
 	}}
-	want := "this visor\n" +
-		"├── R[0] ● 1.6K↑ 1.5K↓ ───── EXITPK          [stcpr]   9a3a17e0…  143ms\n" +
-		"├── R[1] ● 0.5K↑ 0.4K↓ ───── HOP1PK          [sudph]   72512b4b…  47ms\n" +
-		"│                            └── EXITPK      [stcpr]   1fafe896…  88ms\n" +
-		"└── R[2] ● 0.2K↑ 0.1K↓ ───── HOP1PK          [webrtc]  38252d68…  61ms\n" +
-		"                             └── HOP2PK      [squicr]  85086f0c…  74ms\n" +
-		"                                 └── EXITPK  [stcpr]   da5c74a8…  133ms"
+	want := "                this visor" + "\n" +
+		"                     │" + "\n" +
+		"R[0] ● 1.6K↑ 1.5K↓ ──┼── EXITPK          [stcpr]   9a3a17e0…  143ms" + "\n" +
+		"R[1] ● 0.5K↑ 0.4K↓ ──┼── HOP1PK          [sudph]   72512b4b…  47ms" + "\n" +
+		"                     │   └── EXITPK      [stcpr]   1fafe896…  88ms" + "\n" +
+		"R[2] ● 0.2K↑ 0.1K↓ ──┴── HOP1PK          [webrtc]  38252d68…  61ms" + "\n" +
+		"                         └── HOP2PK      [squicr]  85086f0c…  74ms" + "\n" +
+		"                             └── EXITPK  [stcpr]   da5c74a8…  133ms"
 	check(t, "mockup", Render(root, Options{}), want)
 }
 
@@ -59,13 +61,14 @@ func TestLeftSubtreeNesting(t *testing.T) {
 		{Label: "HOP1PK", Cols: []string{"[sudph]", "72512b4b…", "47ms"}, Left: ann("R[1] ● 0.5K↑ 0.4K↓"),
 			Right: []*Node{leaf("EXITPK", "[stcpr]", "1fafe896…", "88ms")}},
 	}}
-	want := "this visor\n" +
-		"├──             R[0] ● ───── EXITPK      [stcpr]  9a3a17e0…  143ms\n" +
-		"│      1.6K↑ 1.5K↓ ──┤\n" +
-		"│    rtt 143ms ──┘   │\n" +
-		"│        via stcpr ──┘\n" +
-		"└── R[1] ● 0.5K↑ 0.4K↓ ───── HOP1PK      [sudph]  72512b4b…  47ms\n" +
-		"                             └── EXITPK  [stcpr]  1fafe896…  88ms"
+	want := "                this visor" + "\n" +
+		"                     │" + "\n" +
+		"            R[0] ● ──┼── EXITPK      [stcpr]  9a3a17e0…  143ms" + "\n" +
+		"   1.6K↑ 1.5K↓ ──┤   │" + "\n" +
+		" rtt 143ms ──┘   │   │" + "\n" +
+		"     via stcpr ──┘   │" + "\n" +
+		"R[1] ● 0.5K↑ 0.4K↓ ──┴── HOP1PK      [sudph]  72512b4b…  47ms" + "\n" +
+		"                         └── EXITPK  [stcpr]  1fafe896…  88ms"
 	check(t, "nest", Render(root, Options{}), want)
 }
 
@@ -78,8 +81,9 @@ func TestAlignColumns(t *testing.T) {
 	got := Render(root, Options{AlignColumns: 20})
 	// The single column "x" must appear at a fixed offset regardless of the
 	// short "A" label: tree portion padded to 20 (+3 arm) then ColSep.
-	want := "root\n" +
-		"└── L ───── A                     x"
+	want := "  root" + "\n" +
+		"    │" + "\n" +
+		"L ──┴── A                     x"
 	check(t, "aligncols", got, want)
 }
 
