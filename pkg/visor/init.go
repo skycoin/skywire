@@ -154,6 +154,9 @@ var (
 	// regCXOMod publishes this visor's discovery entry as a CXO feed
 	// (registration-over-CXO) when opted in
 	regCXOMod vinit.Module
+	// arBindCXOMod mirrors this visor's AR bindings onto a CXO feed the
+	// address-resolver aggregates (AR-bind-over-CXO), always-on/additive
+	arBindCXOMod vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 )
@@ -267,8 +270,14 @@ func registerModules(logger *logging.MasterLogger) {
 	// dmsgC (the entry it publishes + the feed's transport). See
 	// init_registration_cxo.go.
 	regCXOMod = maker("registration_cxo", initRegistrationCXO, &dmsgC)
+	// AR-bind-over-CXO publisher: mirror this visor's address-resolver
+	// bindings onto a CXO feed the AR aggregates, off the timer-driven
+	// re-registration (each a fresh dmsg Noise handshake). Depends on the AR
+	// client (the bind hook it publishes from) and dmsgC (the feed transport).
+	// See init_ar_bind_cxo.go.
+	arBindCXOMod = maker("ar_bind_cxo", initARBindCXO, &ar, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgSrv, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &meshProxy, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod, &regCXOMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgSrv, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &meshProxy, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod, &regCXOMod, &arBindCXOMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.

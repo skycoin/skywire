@@ -14,12 +14,14 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/address-resolver/api"
 	armetrics "github.com/skycoin/skywire/pkg/address-resolver/metrics"
+	"github.com/skycoin/skywire/pkg/address-resolver/regcxo"
 	"github.com/skycoin/skywire/pkg/address-resolver/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/services"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/svcmode"
 )
@@ -198,6 +200,27 @@ func (s *service) Run(ctx context.Context) error {
 		return fmt.Errorf("address-resolver: start listeners: %w", err)
 	}
 	defer h.Close()
+
+	// AR-bind-over-CXO aggregator: always-on fan-in path where visors publish
+	// their AR bindings as a CXO feed instead of re-registering over a fresh
+	// dmsg stream (each a full Noise handshake) on a timer. Inert until visors
+	// subscribe (just a listener), purely additive to the authoritative
+	// HTTP/UDP bind path, so it needs no gate. Needs the dmsg client; the API
+	// is the Sink (IngestBindFromCXO). The node identity is bound to the AR's
+	// service SecKey so gated visors accept its subscribe (see #4168).
+	// Best-effort — HTTP/UDP registration is unaffected if it fails to start.
+	if h.DmsgClient != nil {
+		agg, aerr := regcxo.New(h.DmsgClient, arAPI, regcxo.Config{SecKey: sk, Logger: logger})
+		if aerr != nil {
+			logger.WithError(aerr).Error("Failed to start AR-bind-over-CXO aggregator, continuing without it")
+		} else {
+			agg.Run(runCtx)
+			defer func() { _ = agg.Close() }() //nolint:errcheck
+			logger.WithField("feed_pk", agg.FeedPK()).
+				WithField("port", skyenv.DmsgVisorARBindCXOPort).
+				Info("AR-bind-over-CXO aggregator running")
+		}
+	}
 
 	defer arAPI.Close()
 	select {
