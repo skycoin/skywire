@@ -306,8 +306,7 @@ func Render(root *Node, opts Options) string {
 		routes    [][]row
 		leftWidth int // max width of any left block line, across all routes
 	)
-	nRoutes := len(root.Right)
-	for i, route := range root.Right {
+	for _, route := range root.Right {
 		rlines := rightLayout(route, g)
 		var llines []string
 		if len(route.Left) > 0 {
@@ -326,8 +325,13 @@ func Render(root *Node, opts Options) string {
 				leftWidth = dw
 			}
 		}
-		up := i > 0
-		down := i < nRoutes-1
+		// Routes no longer join through a central vertical spine; the root sits
+		// at the top-left and each route hangs off it via a Unix-tree connector
+		// (├──/└──/│) in the left gutter (added in the assembly loop below). So a
+		// route's own junction reflects only left (its summary) and right (its
+		// hops), never an up/down neighbor — a plain horizontal arm.
+		up := false
+		down := false
 		n := len(rlines)
 		if len(llines) > n {
 			n = len(llines)
@@ -389,37 +393,44 @@ func Render(root *Node, opts Options) string {
 		b.WriteByte('\n')
 	}
 
-	// Root label centered over the right region.
-	spineCol := opts.LeftGutter + leftWidth + 1 + 2 // gutter + leftfield + space + 2-cell arm
-	rightStart := spineCol + 1 + 3                  // spine glyph + "── "
-	// Estimate right region width from the widest assembled right side.
-	rightRegionW := treeWidth
-	// account for columns
-	colsTotal := 0
-	for _, cw := range colW {
-		colsTotal += cw + dispWidth(sep)
-	}
-	rightRegionW += colsTotal
-	rootCol := rightStart + (rightRegionW-dispWidth(root.Label))/2
-	if rootCol < 0 {
-		rootCol = 0
-	}
-	writeLine(strings.Repeat(" ", rootCol) + opts.style(root.Label, CellRoot))
+	// Root label anchored at the top-LEFT (the Unix `tree` root), from which every
+	// route hangs via a box-drawing connector in the left gutter — so the whole
+	// thing reads as one connected tree, not a label floating over the branches.
+	writeLine(gutter + opts.style(root.Label, CellRoot))
 
-	for _, rows := range routes {
-		for _, rw := range rows {
+	nRoutes := len(routes)
+	for ri, rows := range routes {
+		lastRoute := ri == nRoutes-1
+		for rj, rw := range rows {
+			// Unix-tree connector joining this route up to the root: the route's
+			// first (anchor) row gets ├──/└──; its continuation rows get │/blank so
+			// the trunk keeps descending past a multi-row route to the next branch.
+			var conn string
+			if rj == 0 {
+				if lastRoute {
+					conn = g.CornerUR + h + h + " " // "└── "
+				} else {
+					conn = g.TeeRight + h + h + " " // "├── "
+				}
+			} else if lastRoute {
+				conn = "    "
+			} else {
+				conn = g.Vertical + "   " // "│   "
+			}
+
 			// Left field (right-justified to leftWidth). Styled after layout so a
 			// color/HTML wrapper may decorate glyphs within it without disturbing
 			// column math (StyleCell must preserve display width).
 			left := opts.style(padLeft(rw.left, leftWidth), CellLeft)
-			// Middle connector: gutter + left field + space + arm(2) + spine.
+			// Middle connector: gutter + trunk connector + left field + space +
+			// arm(2) + spine.
 			var arm string
 			if rw.anchor && rw.hasLeft {
 				arm = h + h
 			} else {
 				arm = "  "
 			}
-			mid := gutter + left + " " + arm + rw.spine
+			mid := gutter + conn + left + " " + arm + rw.spine
 
 			// Right region.
 			var rightText string

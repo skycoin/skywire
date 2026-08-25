@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -30,13 +31,28 @@ type Client struct {
 	listener net.Listener
 	once     sync.Once
 	closeC   chan struct{}
+
+	// streams tracks the currently open tunneled streams so the status page can
+	// expand the "N open stream(s)" count into per-stream rows (id + CONNECT
+	// target + age). yamux does not meter per-stream bytes, so bytes are not
+	// tracked here; only the cheap identity/target/age the sniff already parses.
+	streamsMu sync.Mutex
+	streams   map[uint32]streamMeta
+}
+
+// streamMeta is the per-stream detail the status page surfaces for an open
+// tunneled stream.
+type streamMeta struct {
+	target string
+	since  time.Time
 }
 
 // NewClient constructs a new Client.
 func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 	c := &Client{
-		appCl:  appCl,
-		closeC: make(chan struct{}),
+		appCl:   appCl,
+		closeC:  make(chan struct{}),
+		streams: make(map[uint32]streamMeta),
 	}
 
 	sessionCfg := yamux.DefaultConfig()
@@ -107,12 +123,26 @@ func (c *Client) ListenAndServe(addr string) error {
 			// keeps the in-process status page reachable even now (exit down)
 			// instead of being shadowed by the interstitial — status.skysocks
 			// needs no exit stream, and this is exactly when the user wants it.
+			// A single Open failing does NOT always mean the session is dead: if
+			// the session is still up, the failure was transient and the exit is
+			// reachable. In that case ServeSOCKS5 serves a fall-through reload
+			// (exitReachable=true) instead of pinning the browser on the waiting
+			// interstitial, and we keep listening rather than tearing down — the
+			// browser's reload gets a working stream. Only a genuinely closed
+			// session serves the waiting interstitial and triggers reconnect.
+			reachable := c.session != nil && !c.session.IsClosed()
 			go func(bc net.Conn) {
-				if serr := proxyinterstitial.ServeSOCKS5(bc, proxyinterstitial.StatusLine(err), "skysocks", c.statusOverride); serr != nil && c.appCl != nil {
+				if serr := proxyinterstitial.ServeSOCKS5(bc, proxyinterstitial.StatusLine(err), "skysocks", c.statusOverride, c.exitReachable); serr != nil && c.appCl != nil {
 					c.appCl.Log().Debugf("route-down interstitial not served: %v", serr)
 				}
 				bc.Close() //nolint:errcheck,gosec
 			}(conn)
+			if reachable {
+				if c.appCl != nil {
+					c.appCl.Log().Debugf("yamux stream open failed but session is up; keeping listener: %v", err)
+				}
+				continue
+			}
 			c.close()
 
 			return fmt.Errorf("error opening yamux stream: %w", err)
@@ -196,13 +226,21 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 	// exit. For every non-status request the greeting/method negotiation and the
 	// CONNECT request are forwarded to the exit byte-for-byte, so the exit sees an
 	// identical stream — only status.skysocks diverges.
-	if !c.sniffSOCKS5Status(conn, stream) {
+	proceed, target := c.sniffSOCKS5Status(conn, stream)
+	if !proceed {
 		conn.Close()   //nolint:errcheck,gosec
 		stream.Close() //nolint:errcheck,gosec
 		if c.session.IsClosed() {
 			c.close()
 		}
 		return
+	}
+
+	// Track this stream for the status page's per-stream detail (id + target +
+	// age). Registered here, deregistered when the splice below returns.
+	if id, ok := streamID(stream); ok {
+		c.addStream(id, target)
+		defer c.removeStream(id)
 	}
 
 	const errorCount = 2
@@ -251,46 +289,48 @@ const statusSniffTimeout = 15 * time.Second
 //
 // Returns proceed=true when the caller should continue with the normal
 // bidirectional splice (conn and stream are positioned just past the forwarded
-// handshake). Returns false when the request was served in-process or the
-// connection is unusable; the caller then closes both sides.
-func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool) {
+// handshake); target is then the CONNECT "host:port" the stream carries (or ""
+// when it could not be parsed), for the status page's per-stream detail. Returns
+// false when the request was served in-process or the connection is unusable; the
+// caller then closes both sides.
+func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool, target string) {
 	_ = conn.SetReadDeadline(time.Now().Add(statusSniffTimeout))   //nolint:errcheck
 	_ = stream.SetReadDeadline(time.Now().Add(statusSniffTimeout)) //nolint:errcheck
 
 	// Greeting: VER, NMETHODS, METHODS[NMETHODS] — forwarded to the exit verbatim.
 	hdr := make([]byte, 2)
 	if _, err := io.ReadFull(conn, hdr); err != nil || hdr[0] != 0x05 {
-		return false
+		return false, ""
 	}
 	greeting := make([]byte, 2+int(hdr[1]))
 	greeting[0], greeting[1] = hdr[0], hdr[1]
 	if _, err := io.ReadFull(conn, greeting[2:]); err != nil {
-		return false
+		return false, ""
 	}
 	if _, err := stream.Write(greeting); err != nil {
-		return false
+		return false, ""
 	}
 
 	// Method-selection reply (2 bytes) from the exit — forwarded to the browser.
 	method := make([]byte, 2)
 	if _, err := io.ReadFull(stream, method); err != nil {
-		return false
+		return false, ""
 	}
 	if _, err := conn.Write(method); err != nil {
-		return false
+		return false, ""
 	}
 	// Anything but no-auth accepted: hand the rest off untouched — the auth
 	// sub-negotiation and CONNECT ride through transparently.
 	if method[0] != 0x05 || method[1] != 0x00 {
 		clearDeadlines(conn, stream)
-		return true
+		return true, ""
 	}
 
 	// CONNECT request: VER, CMD, RSV, ATYP, ADDR, PORT. Buffered so a non-status
 	// target is forwarded to the exit byte-for-byte.
 	rhdr := make([]byte, 4)
 	if _, err := io.ReadFull(conn, rhdr); err != nil || rhdr[0] != 0x05 {
-		return false
+		return false, ""
 	}
 	req := append([]byte{}, rhdr...)
 	var host string
@@ -298,18 +338,18 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool) {
 	case 0x01: // IPv4
 		b := make([]byte, 4)
 		if _, err := io.ReadFull(conn, b); err != nil {
-			return false
+			return false, ""
 		}
 		host = net.IP(b).String()
 		req = append(req, b...)
 	case 0x03: // domain
 		l := make([]byte, 1)
 		if _, err := io.ReadFull(conn, l); err != nil {
-			return false
+			return false, ""
 		}
 		b := make([]byte, int(l[0]))
 		if _, err := io.ReadFull(conn, b); err != nil {
-			return false
+			return false, ""
 		}
 		host = string(b)
 		req = append(req, l[0])
@@ -317,23 +357,24 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool) {
 	case 0x04: // IPv6
 		b := make([]byte, 16)
 		if _, err := io.ReadFull(conn, b); err != nil {
-			return false
+			return false, ""
 		}
 		host = net.IP(b).String()
 		req = append(req, b...)
 	default:
 		// Unknown ATYP: forward what we have and let the exit deal with it.
 		if _, err := stream.Write(req); err != nil {
-			return false
+			return false, ""
 		}
 		clearDeadlines(conn, stream)
-		return true
+		return true, ""
 	}
 	portB := make([]byte, 2)
 	if _, err := io.ReadFull(conn, portB); err != nil {
-		return false
+		return false, ""
 	}
 	req = append(req, portB...)
+	port := int(portB[0])<<8 | int(portB[1])
 
 	// Reserved status host: serve the in-process page over HTTP instead of
 	// tunneling to the exit. HTTP only — the resolver CA forbids a .skysocks TLS
@@ -341,15 +382,72 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool) {
 	if surface, ok := proxystatus.Match(host); ok && surface == proxystatus.SurfaceSkysocks {
 		clearDeadlines(conn, stream)
 		c.serveStatusPage(conn, stream)
-		return false
+		return false, ""
 	}
 
 	// Non-status: forward the buffered CONNECT request to the exit and splice.
 	if _, err := stream.Write(req); err != nil {
-		return false
+		return false, ""
 	}
 	clearDeadlines(conn, stream)
-	return true
+	return true, fmt.Sprintf("%s:%d", host, port)
+}
+
+// streamID extracts the yamux stream id from the net.Conn session.Open returns
+// (a *yamux.Stream), for the status page's per-stream detail. Best-effort: an
+// unexpected conn type yields ok=false and the stream simply isn't tracked.
+func streamID(stream net.Conn) (uint32, bool) {
+	if s, ok := stream.(interface{ StreamID() uint32 }); ok {
+		return s.StreamID(), true
+	}
+	return 0, false
+}
+
+// addStream/removeStream/streamSnapshot maintain the open-stream registry the
+// status page reads. All are mutex-guarded and cheap (no per-stream byte
+// metering — yamux does not expose it).
+func (c *Client) addStream(id uint32, target string) {
+	c.streamsMu.Lock()
+	if c.streams == nil {
+		c.streams = make(map[uint32]streamMeta)
+	}
+	c.streams[id] = streamMeta{target: target, since: time.Now()}
+	c.streamsMu.Unlock()
+}
+
+func (c *Client) removeStream(id uint32) {
+	c.streamsMu.Lock()
+	delete(c.streams, id)
+	c.streamsMu.Unlock()
+}
+
+// streamSnapshot returns the currently open streams as sorted proxystatus.Stream
+// rows (by id) for the status page.
+func (c *Client) streamSnapshot() []proxystatus.Stream {
+	c.streamsMu.Lock()
+	defer c.streamsMu.Unlock()
+	if len(c.streams) == 0 {
+		return nil
+	}
+	now := time.Now()
+	out := make([]proxystatus.Stream, 0, len(c.streams))
+	for id, m := range c.streams {
+		out = append(out, proxystatus.Stream{
+			ID:     id,
+			Target: m.target,
+			AgeMS:  now.Sub(m.since).Milliseconds(),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// exitReachable reports whether the yamux session to the exit is currently live.
+// It is the fall-through probe handed to proxyinterstitial.ServeSOCKS5: when the
+// exit is reachable again, the interstitial is replaced by a reload page so the
+// browser proceeds to the intended destination instead of waiting on a spinner.
+func (c *Client) exitReachable() bool {
+	return c.session != nil && !c.session.IsClosed()
 }
 
 // statusOverride is the reserved-host answer handed to
@@ -711,6 +809,8 @@ func (c *Client) statusSnapshot() proxystatus.Snapshot {
 	if c.session != nil && !c.session.IsClosed() {
 		snap.Running = true
 		snap.Note = fmt.Sprintf("session to the exit is up · %d open stream(s)", c.session.NumStreams())
+		// Per-stream detail (id + target + age) behind the count, when tracked.
+		snap.Streams = c.streamSnapshot()
 	} else {
 		snap.Note = "no active session to the exit"
 	}
