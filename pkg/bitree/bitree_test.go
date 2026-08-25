@@ -1,6 +1,20 @@
 package bitree
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
+
+// dispCol returns the display column (rune count) at which sub first appears in
+// s, or -1 if absent.
+func dispCol(s, sub string) int {
+	i := strings.Index(s, sub)
+	if i < 0 {
+		return -1
+	}
+	return utf8.RuneCountInString(s[:i])
+}
 
 func ann(s string) []*Node { return []*Node{{Label: s}} }
 
@@ -19,7 +33,7 @@ func TestSingleRoute(t *testing.T) {
 		Label: "EXITPK", Cols: []string{"[stcpr]", "9a3a17e0…", "143ms"},
 		Left: ann("R[0] ● 1.6K↑ 1.5K↓"),
 	}}}
-	want := "                this visor" + "\n" +
+	want := "                     this visor" + "\n" +
 		"                     │" + "\n" +
 		"R[0] ● 1.6K↑ 1.5K↓ ──┴── EXITPK  [stcpr]  9a3a17e0…  143ms"
 	check(t, "single", Render(root, Options{}), want)
@@ -37,7 +51,7 @@ func TestMockupTree(t *testing.T) {
 			Right: []*Node{{Label: "HOP2PK", Cols: []string{"[squicr]", "85086f0c…", "74ms"},
 				Right: []*Node{leaf("EXITPK", "[stcpr]", "da5c74a8…", "133ms")}}}},
 	}}
-	want := "                this visor" + "\n" +
+	want := "                     this visor" + "\n" +
 		"                     │" + "\n" +
 		"R[0] ● 1.6K↑ 1.5K↓ ──┼── EXITPK          [stcpr]   9a3a17e0…  143ms" + "\n" +
 		"R[1] ● 0.5K↑ 0.4K↓ ──┼── HOP1PK          [sudph]   72512b4b…  47ms" + "\n" +
@@ -61,7 +75,7 @@ func TestLeftSubtreeNesting(t *testing.T) {
 		{Label: "HOP1PK", Cols: []string{"[sudph]", "72512b4b…", "47ms"}, Left: ann("R[1] ● 0.5K↑ 0.4K↓"),
 			Right: []*Node{leaf("EXITPK", "[stcpr]", "1fafe896…", "88ms")}},
 	}}
-	want := "                this visor" + "\n" +
+	want := "                     this visor" + "\n" +
 		"                     │" + "\n" +
 		"            R[0] ● ──┼── EXITPK      [stcpr]  9a3a17e0…  143ms" + "\n" +
 		"   1.6K↑ 1.5K↓ ──┤   │" + "\n" +
@@ -81,10 +95,55 @@ func TestAlignColumns(t *testing.T) {
 	got := Render(root, Options{AlignColumns: 20})
 	// The single column "x" must appear at a fixed offset regardless of the
 	// short "A" label: tree portion padded to 20 (+3 arm) then ColSep.
-	want := "  root" + "\n" +
+	want := "    root" + "\n" +
 		"    │" + "\n" +
 		"L ──┴── A                     x"
 	check(t, "aligncols", got, want)
+}
+
+// TestHeaderRowAligns verifies the optional label-header row is drawn above the
+// root and that its column labels line up EXACTLY with the data columns beneath
+// (the "label tree" header — same peer-pk column, same trailing-column offsets).
+func TestHeaderRowAligns(t *testing.T) {
+	root := &Node{Label: "this visor", Right: []*Node{{
+		Label: "EXITPK", Cols: []string{"[stcpr]", "9a3a17e0…", "143ms"},
+		Left: ann("R[0] ● 1.6K↑ 1.5K↓"),
+	}}}
+	out := Render(root, Options{
+		HeaderLeft:  "R[n]·state·rtt·bw",
+		HeaderLabel: "peer-pk",
+		HeaderCols:  []string{"[type]", "tp-id", "tp-rtt"},
+	})
+	lines := strings.Split(out, "\n")
+	if len(lines) < 4 {
+		t.Fatalf("expected header+root+descender+row, got %d lines:\n%s", len(lines), out)
+	}
+	hdr := lines[0]
+	for _, lbl := range []string{"R[n]", "peer-pk", "[type]", "tp-id", "tp-rtt"} {
+		if !strings.Contains(hdr, lbl) {
+			t.Fatalf("header line missing %q: %q", lbl, hdr)
+		}
+	}
+	if strings.Contains(hdr, "┼") || strings.Contains(hdr, "┬") || strings.Contains(hdr, "┴") {
+		t.Errorf("header row must not carry a spine junction (reads as a route): %q", hdr)
+	}
+	var data string
+	for _, l := range lines {
+		if strings.Contains(l, "EXITPK") {
+			data = l
+		}
+	}
+	// peer label column == data PK label column; each trailing label column ==
+	// its data column.
+	if a, b := dispCol(hdr, "peer-pk"), dispCol(data, "EXITPK"); a != b {
+		t.Errorf("peer-pk col %d != EXITPK col %d\nhdr:  %q\ndata: %q", a, b, hdr, data)
+	}
+	if a, b := dispCol(hdr, "[type]"), dispCol(data, "[stcpr]"); a != b {
+		t.Errorf("[type] col %d != [stcpr] col %d\nhdr:  %q\ndata: %q", a, b, hdr, data)
+	}
+	if a, b := dispCol(hdr, "tp-rtt"), dispCol(data, "143ms"); a != b {
+		t.Errorf("tp-rtt col %d != rtt col %d\nhdr:  %q\ndata: %q", a, b, hdr, data)
+	}
 }
 
 // TestStyleCellPreservesLayout verifies that a zero-width styling wrapper does
