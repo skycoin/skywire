@@ -536,8 +536,9 @@ const (
 	// scattered+reordered across high-variance legs. The reverse mux only WIDENS
 	// under sustained bulk load (tickAdaptive promotes warm spares), then shrinks
 	// back. adaptStandbyMax warm spares are established alongside and parked for
-	// instant promotion, so decideAdaptive requests ReverseMux =
-	// adaptRevActive + adaptStandbyMax, and adaptTarget seeds to adaptRevActive.
+	// instant promotion, so decideAdaptive requests a symmetric Mux =
+	// adaptRevActive + adaptStandbyMax (every leg full-duplex; forward-lean usage
+	// is a send-side decision), and adaptTarget seeds to adaptRevActive.
 	adaptFwdActive = 1
 	adaptRevActive = 1
 	adaptCap       = 8
@@ -556,7 +557,7 @@ const (
 	// leg src->I->dst reuses the ALREADY-UP src->I transport — no new first hop),
 	// so any of them can be promoted to carrying at a moment's notice for maximal
 	// resilience and instant, dip-free failover. This is a high SANITY CAP, not a
-	// target: establishMuxRoutes builds up to ReverseMux (= adaptRevActive +
+	// target: establishMuxRoutes builds up to Mux (= adaptRevActive +
 	// adaptStandbyMax) best-effort and takes only as many as the topology's
 	// disjoint-intermediate set actually offers. The RSN-oracle transport-type
 	// ranking picks the best (stcpr/squicr) legs first and the health-gate keeps

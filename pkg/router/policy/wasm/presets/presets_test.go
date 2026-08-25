@@ -341,18 +341,21 @@ func TestAdaptiveDecides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decide: %v", err)
 	}
-	// adaptive is ASYMMETRIC by default: a single lean forward (request/upstream)
-	// leg and a wider reverse (bulk download) mux sized active+standby, so the
-	// router establishes warm spares up front and on_tick parks the surplus for
-	// dip-free promotion. Symmetric Mux stays 0 (per-direction overrides win).
-	if spec.Mux != 0 {
-		t.Errorf("Mux = %d, want 0 (per-direction overrides drive adaptive)", spec.Mux)
+	// adaptive is SYMMETRIC BIDIRECTIONAL by default: every leg is full-duplex
+	// (Mux=active+standby=3), so ALL legs enter the route group's tps[] (visible
+	// to tickAdaptive and the disjoint-exclude set) and on_tick parks the surplus
+	// as warm standby for dip-free promotion. The forward-lean / reverse-wide
+	// split is now applied at SEND time, not baked into asymmetric rule setup —
+	// which also closes the reverse-only-leg exclusion gap. Per-direction
+	// ForwardMux/ReverseMux stay 0 (symmetric Mux drives it).
+	if spec.Mux != 3 {
+		t.Errorf("Mux = %d, want 3 (1 active + 2 warm standby, full-duplex)", spec.Mux)
 	}
-	if spec.ForwardMux != 1 {
-		t.Errorf("ForwardMux = %d, want 1 (lean upstream)", spec.ForwardMux)
+	if spec.ForwardMux != 0 {
+		t.Errorf("ForwardMux = %d, want 0 (symmetric Mux drives adaptive)", spec.ForwardMux)
 	}
-	if spec.ReverseMux != 3 {
-		t.Errorf("ReverseMux = %d, want 3 (1 active + 2 warm standby)", spec.ReverseMux)
+	if spec.ReverseMux != 0 {
+		t.Errorf("ReverseMux = %d, want 0 (symmetric Mux drives adaptive)", spec.ReverseMux)
 	}
 	// adaptive deliberately does NOT set MinHops: min-hops is the operator's
 	// privacy constraint (session/config), not the performance policy's to

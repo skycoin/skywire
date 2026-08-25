@@ -19,9 +19,9 @@ func TestDecide_ShapePresets(t *testing.T) {
 		{"latency-adaptive", Context{App: "vpn-client"}, Spec{Mux: 5, MinHops: 2, RotationIntervalSeconds: 30, Distribution: "auto"}},
 		{"elastic-mux", Context{App: "skynet-client"}, Spec{Mux: 2, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "auto"}},
 		{"probe-and-prune", Context{App: "skynet-client"}, Spec{Mux: 3, MinHops: 2, RotationIntervalSeconds: 30, Distribution: "auto"}},
-		{"adaptive", Context{App: "vpn-client"}, Spec{ForwardMux: 1, ReverseMux: 3, RotationIntervalSeconds: 20, Distribution: "auto"}},
+		{"adaptive", Context{App: "vpn-client"}, Spec{Mux: adaptRevActive + adaptStandbyMax, RotationIntervalSeconds: 20, Distribution: "auto"}},
 		{"adaptive/chat", Context{App: "skychat"}, Spec{Mux: 1}},
-		{"adaptive/custom-session", Context{App: "g8"}, Spec{ForwardMux: 1, ReverseMux: 3, RotationIntervalSeconds: 20, Distribution: "auto"}},
+		{"adaptive/custom-session", Context{App: "g8"}, Spec{Mux: adaptRevActive + adaptStandbyMax, RotationIntervalSeconds: 20, Distribution: "auto"}},
 		{"ledbat", Context{App: "skysocks-client"}, Spec{Mux: 3, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "auto"}},
 		{"ledbat/chat", Context{App: "skychat"}, Spec{Mux: 1}},
 	}
@@ -74,15 +74,15 @@ func TestDecide_Adaptive(t *testing.T) {
 	}
 
 	// Real metadata present → pick the max-distinct-kinds candidate (b), and keep
-	// the asymmetric seed shape otherwise (fwd=1, rev=active+standby=4,
+	// the symmetric bidirectional seed shape otherwise (mux=active+standby,
 	// rotation=20, auto, MinHops=0 inherited).
 	got := Decide("adaptive", Context{App: "skysocks-client"}, diverse)
 	if got.Chosen == nil || got.Chosen.Hops[0] != "b" {
 		t.Fatalf("adaptive should seed the most transport-diverse route (b); got %+v", got.Chosen)
 	}
-	if got.ForwardMux != 1 || got.ReverseMux != adaptRevActive+adaptStandbyMax ||
+	if got.Mux != adaptRevActive+adaptStandbyMax || got.ForwardMux != 0 || got.ReverseMux != 0 ||
 		got.RotationIntervalSeconds != 20 || got.Distribution != "auto" ||
-		got.MinHops != 0 || got.Mux != 0 {
+		got.MinHops != 0 {
 		t.Errorf("adaptive seed shape changed: %+v", got)
 	}
 
@@ -117,9 +117,9 @@ func TestDecide_Adaptive(t *testing.T) {
 	}
 
 	// App-agnostic: an unknown / custom-named session still gets the adaptive
-	// asymmetric mux (not the empty spec) — the fix must apply to EVERY app that
+	// bidirectional mux (not the empty spec) — the fix must apply to EVERY app that
 	// dials a route group, not a hardcoded allowlist.
-	if got := Decide("adaptive", Context{App: "some-custom-app"}, nil); got.ForwardMux != 1 || got.ReverseMux != adaptRevActive+adaptStandbyMax {
+	if got := Decide("adaptive", Context{App: "some-custom-app"}, nil); got.Mux != adaptRevActive+adaptStandbyMax || got.ForwardMux != 0 || got.ReverseMux != 0 {
 		t.Errorf("adaptive must apply to any non-chat app; got %+v", got)
 	}
 }

@@ -284,19 +284,29 @@ func decideCoupled(ctx Context) Spec {
 // session ("g8", …) is covered too — the reason the old three-name switch made
 // the policy a silent no-op for renamed sessions.
 //
-// Shape — ASYMMETRIC forward/reverse with a proactively-held warm standby pool:
-//   - ForwardMux=1: a single lean forward leg. The upstream / request path is
-//     latency-sensitive and pays no mux head-of-line cost.
-//   - ReverseMux=adaptRevActive+adaptStandbyMax: the reverse (download) leg pool
-//     the router establishes up front. tickAdaptive keeps the STEADY active
-//     width at adaptRevActive (=1) — so an interactive / idle flow rides ONE
-//     healthy leg and is never scattered+reordered across a wide mux — and parks
-//     the rest (adaptStandbyMax legs) as an always-on warm-standby reserve. The
-//     reverse mux WIDENS only under SUSTAINED bulk load (promoting warm spares,
-//     dip-free) and shrinks back when the load ends. tickAdaptive also keeps
-//     gross-latency-outlier / dead legs OUT of the active set and rate-limits
-//     reshapes (hysteresis + cooldown) so the active set stays stable under real
-//     long-lived connections.
+// Shape — SYMMETRIC BIDIRECTIONAL setup, asymmetric USAGE (a send-side decision):
+//   - Mux=adaptRevActive+adaptStandbyMax: every leg is established FULL-DUPLEX
+//     (forward AND reverse rules), so every leg enters the route group's tps[]
+//     and is visible to both tickAdaptive and the disjoint-exclude set. This
+//     replaced the old ForwardMux=1 / ReverseMux=N asymmetry, whose reverse-only
+//     legs (addFwd=false) never entered tps: intermediatesOfRouteGroup (which
+//     derives the exclude set from tps) could not see their intermediates, so
+//     the next aux leg reused one and the destination refused the duplicate
+//     exit-facing transport (failure code 1) — the standby pool never filled and
+//     the group collapsed to LEGS 1. Reverse-only legs were also invisible to
+//     tickAdaptive, so its whole park/promote machine was inert. Full-duplex
+//     setup fixes both.
+//   - The forward-lean / reverse-wide asymmetry is now applied at SEND time, not
+//     baked into the rule setup: tickAdaptive keeps the STEADY active width at 1
+//     (parking the rest as an always-on full-duplex warm-standby reserve), so an
+//     interactive / idle flow rides ONE healthy leg and pays no mux head-of-line
+//     cost. The active set WIDENS only under SUSTAINED bulk load (promoting warm
+//     spares, dip-free) and shrinks back when load ends. Because the standby legs
+//     are full-duplex, that widening is available in EITHER direction and can
+//     flip on demand (upload-saturation grows the forward width via rule 4b)
+//     WITHOUT a rule rebuild. tickAdaptive also keeps gross-latency-outlier /
+//     dead legs OUT of the active set and rate-limits reshapes (hysteresis +
+//     cooldown) so the active set stays stable under real long-lived connections.
 //
 // No MinHops here on purpose: min-hops is a privacy constraint the operator
 // owns; leaving it 0 means "inherit" so adaptive optimizes within the
@@ -322,8 +332,10 @@ func decideAdaptive(ctx Context, cands []Candidate) Spec {
 		return Spec{Mux: 1}
 	}
 	spec := Spec{
-		ForwardMux:              adaptFwdActive,
-		ReverseMux:              adaptRevActive + adaptStandbyMax,
+		// Symmetric Mux => establishMuxRoutes builds every leg FULL-DUPLEX
+		// (fwdCount == revCount). See the Shape note above for why bidirectional
+		// setup replaced the old ForwardMux=1 / ReverseMux=N asymmetry.
+		Mux:                     adaptRevActive + adaptStandbyMax,
 		RotationIntervalSeconds: 20,
 		Distribution:            "auto",
 	}
