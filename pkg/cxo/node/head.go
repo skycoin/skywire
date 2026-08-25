@@ -128,8 +128,12 @@ type fillHead struct {
 	rq chan cipher.SHA256 // request objects (parallelism bounded by filler limit)
 	ff chan error         // filler failure
 
-	ft *time.Timer      // fill timeout
-	tc <-chan time.Time // ------------
+	ft       *time.Timer      // fill STALL timeout (reset on each fetched object)
+	tc       <-chan time.Time // ------------
+	stallDur time.Duration    // the stall window ft is (re)armed with
+
+	hardT  *time.Timer      // hard total-fill ceiling (never reset)
+	hardTc <-chan time.Time // ------------
 
 	tp   time.Time          // start point (start filling, for stat)
 	favg *statutil.Duration // average filling time
@@ -203,7 +207,13 @@ func (n *nodeHead) handle() {
 
 			f.handleDelConn(c)
 
-		case <-f.tc: // filling timeout
+		case <-f.tc: // fill stalled (no object fetched within MaxFillingTime)
+
+			if f.f != nil {
+				f.f.Fail(ErrTimeout)
+			}
+
+		case <-f.hardTc: // hard total-fill ceiling hit (MaxTotalFillTime)
 
 			if f.f != nil {
 				f.f.Fail(ErrTimeout)
@@ -258,8 +268,26 @@ func (f *fillHead) handleSuccess(c *Conn) {
 		// PushBack below until this guard landed.
 		return
 	}
+	f.rearmStall()   // progress: an object arrived, re-arm the stall timer
 	f.fc.PushBack(c) // push
 	f.triggerRequest()
+}
+
+// rearmStall re-arms the MaxFillingTime stall timer after progress (a fetched
+// object). Runs only on the single handle() goroutine, so no lock is needed.
+// Under Go 1.23+ timer semantics Reset alone would suffice, but the Stop+drain
+// keeps it correct on any toolchain if a fire raced into f.tc unread.
+func (f *fillHead) rearmStall() {
+	if f.ft == nil {
+		return
+	}
+	if !f.ft.Stop() {
+		select {
+		case <-f.tc:
+		default:
+		}
+	}
+	f.ft.Reset(f.stallDur)
 }
 
 func (f *fillHead) handleRequestFailure(fr failedRequest) {
@@ -406,7 +434,7 @@ func (f *fillHead) createFiller(cr connRoot) {
 
 	f.tp = time.Now() // time point
 
-	// A non-positive MaxFillingTime would leave f.tc nil and disable the fill
+	// A non-positive MaxFillingTime would leave f.tc nil and disable the stall
 	// timeout entirely, so a peer that flaps mid-fill pins all the fill's
 	// "wanted" objects in the cache until the connection closes (the leak class
 	// behind #3562). Treat <= 0 as "use the default", not "disable".
@@ -414,8 +442,23 @@ func (f *fillHead) createFiller(cr connRoot) {
 	if ft <= 0 {
 		ft = MaxFillingTime
 	}
+	// Hard total-fill ceiling. It must exceed the stall window, or it would
+	// pre-empt the progress-reset stall timer and re-impose a flat total cap
+	// (the very thing that churned big hub Roots). A configured value <= the
+	// stall window (or <= 0) falls back to the package default; if that is
+	// still not larger (an unusually large stall override), use 4x the stall.
+	htime := f.node().config.MaxTotalFillTime
+	if htime <= ft {
+		htime = MaxTotalFillTime
+		if htime <= ft {
+			htime = ft * 4
+		}
+	}
+	f.stallDur = ft
 	f.ft = time.NewTimer(ft)
 	f.tc = f.ft.C
+	f.hardT = time.NewTimer(htime)
+	f.hardTc = f.hardT.C
 
 	f.r = cr
 	f.rq = make(chan cipher.SHA256, f.maxParallel())
@@ -448,10 +491,14 @@ func (f *fillHead) closeFiller() {
 	if f.ft != nil {
 		f.ft.Stop()
 	}
+	if f.hardT != nil {
+		f.hardT.Stop()
+	}
 
 	f.f.Close() //nolint:errcheck,gosec
 
 	f.rqo, f.fc, f.rq = nil, nil, nil
+	f.tc, f.hardTc = nil, nil
 
 	f.r = connRoot{}
 	f.requesting = 0

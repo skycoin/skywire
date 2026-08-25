@@ -183,20 +183,27 @@ type Config struct {
 	// per feed matters. Defaults to 2m. Mirrors the treestore
 	// Publisher's runCleanup, which the aggregator's node lacked.
 	CleanupInterval time.Duration
-	// MaxFillingTime caps how long the CXO node will keep a single Root
-	// fill in flight before aborting it with ErrTimeout. The node default
-	// (node.NewConfig) is 10m, which is far too generous for TPD's
-	// aggregator: it subscribes to every visor feed, and any flapping peer
-	// leaves its fill hung — holding all the fill's "wanted" objects in the
-	// in-memory cache (which cleanDown skips, so LRU can't evict them) for
-	// the full 10m before the timeout fires Unwant. With hundreds of
-	// unstable peers that standing pool of hung-fill memory is the residual
-	// leak the Root-prune cleanup can't reach. The aggregator is best-effort
-	// (an aborted fill just retries when the visor republishes), so we cap
-	// this low — a healthy transport-tree fill completes in seconds, and a
-	// fill still running after this long is a broken peer, not a slow one.
+	// MaxFillingTime is the per-fill STALL cap: the max time a Root fill may
+	// go WITHOUT fetching an object before the CXO node aborts it with
+	// ErrTimeout. The node re-arms this on every fetched object, so a large
+	// hub Root that keeps making progress is never aborted — only a peer that
+	// has genuinely gone quiet mid-fill is. TPD subscribes to every visor feed
+	// and any flapping peer leaves a hung fill holding its "wanted" objects in
+	// the in-memory cache (which cleanDown skips, so LRU can't evict them), so
+	// a tight stall cap releases a dead peer's objects in seconds. The earlier
+	// flat TOTAL cap did the same for dead peers but ALSO killed big-but-slow
+	// live Roots at the wall clock — the residual TPD churn where a large
+	// single-source feed's Root never landed inside 90s. Splitting into a
+	// stall cap (this) + a hard ceiling (MaxTotalFillTime) fixes that without
+	// re-opening the leak. Best-effort (an aborted fill retries on republish).
 	// Defaults to 90s.
 	MaxFillingTime time.Duration
+	// MaxTotalFillTime is the hard ceiling on one Root's total fill time,
+	// independent of progress — the backstop that keeps the progress-reset
+	// MaxFillingTime stall cap from letting a peer that dribbles one object
+	// per stall window pin "wanted" objects indefinitely. Must exceed
+	// MaxFillingTime. Defaults to 5m.
+	MaxTotalFillTime time.Duration
 	// Logger overrides the default tagged logger.
 	Logger *logging.Logger
 	// SecKey binds the aggregator's CXO node identity to TPD's service
@@ -334,6 +341,9 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	if conf.MaxFillingTime <= 0 {
 		conf.MaxFillingTime = 90 * time.Second
 	}
+	if conf.MaxTotalFillTime <= conf.MaxFillingTime {
+		conf.MaxTotalFillTime = 5 * time.Minute
+	}
 	if conf.Logger == nil {
 		conf.Logger = logging.MustGetLogger("tpd-cxo-aggregator")
 	}
@@ -366,6 +376,7 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	// Config.MaxFillingTime doc for why this is the aggregator's residual
 	// memory leak.
 	cfg.MaxFillingTime = conf.MaxFillingTime
+	cfg.MaxTotalFillTime = conf.MaxTotalFillTime
 	cfg.Config = skyobject.NewConfig()
 	cfg.Config.InMemoryDB = conf.InMemoryDB || conf.DataDir == ""
 	if conf.DataDir != "" {
