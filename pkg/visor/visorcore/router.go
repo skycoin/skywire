@@ -44,6 +44,11 @@ type RouterDeps struct {
 	RulesGCInterval time.Duration
 	SetupHooks      []router.RouteSetupHook
 
+	// PolicyOnControlPorts opts the routing policy back in for control-plane
+	// destination ports (default OFF — those ports bypass the policy). Seeded
+	// from Routing.PolicyOnControlPorts. See router.Config.PolicyOnControlPorts.
+	PolicyOnControlPorts bool
+
 	// EnableRSNOracleRoutes opts into the RSN-oracle 2-hop route path (default
 	// OFF). Seeded from Routing.EnableRSNOracleRoutes; inert until the visor also
 	// calls router.SetDstTransportOracle.
@@ -79,6 +84,7 @@ func BuildRouter(serveCtx context.Context, deps RouterDeps) (router.Router, erro
 		AwaitSetupListener:    deps.AwaitSetupListener,
 		AppLookup:             deps.AppLookup,
 		DialHook:              deps.DialHook,
+		PolicyOnControlPorts:  deps.PolicyOnControlPorts,
 		RulesGCInterval:       deps.RulesGCInterval,
 		EnableRSNOracleRoutes: deps.EnableRSNOracleRoutes,
 		ExcludeSameLANHops:    deps.ExcludeSameLANHops,
