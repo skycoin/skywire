@@ -65,7 +65,8 @@ const (
 	// (services/<type>/<pk>/{entry,tombstone}).
 	FeedSDServices
 	// FeedDMSGDClientsByServer is DMSG-D's clients-by-server publisher
-	// (clients-by-server/<server>/<client>/{entry,tombstone}).
+	// (one batched leaf per server at clients-by-server/<server>; older
+	// publishers used clients-by-server/<server>/<client>/entry).
 	FeedDMSGDClientsByServer
 	// FeedTPDAllTransports is TPD's all-transports snapshot publisher
 	// (transports/all/{with-self,without-self}). Used by the CLI's
