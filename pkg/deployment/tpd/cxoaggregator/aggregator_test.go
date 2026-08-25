@@ -11,6 +11,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -87,7 +88,7 @@ func TestDispatchLeafTimeline(t *testing.T) {
 
 	sink := &recordingSink{}
 	a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
-	a.dispatchLeaf("transports/"+id.String()+"/2026-05-04/timeline", bitmap, pk)
+	a.dispatchLeaf("transports/"+id.String()+"/2026-05-04/timeline", bitmap, pk, false)
 
 	if len(sink.timelines) != 1 {
 		t.Fatalf("expected 1 timeline call, got %d", len(sink.timelines))
@@ -126,7 +127,7 @@ func TestDispatchLeafListPaths(t *testing.T) {
 	for _, path := range []string{"tp-list", "transports/list"} {
 		sink := &recordingSink{}
 		a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
-		a.dispatchLeaf(path, leaf, reporter)
+		a.dispatchLeaf(path, leaf, reporter, false)
 
 		if len(sink.reconciles) != 1 {
 			t.Fatalf("path %q: expected 1 reconcile, got %d", path, len(sink.reconciles))
@@ -146,6 +147,113 @@ func TestDispatchLeafListPaths(t *testing.T) {
 	}
 }
 
+// TestParseTelemetryShardPath pins the shard-leaf path grammar.
+func TestParseTelemetryShardPath(t *testing.T) {
+	for sh := uint8(0); sh < telemetrywire.ShardCount; sh++ {
+		got, ok := parseTelemetryShardPath(telemetrywire.LeafPath(sh))
+		if !ok || got != sh {
+			t.Errorf("parseTelemetryShardPath(%q) = %d,%v; want %d,true", telemetrywire.LeafPath(sh), got, ok, sh)
+		}
+	}
+	for _, bad := range []string{
+		"transports/telemetry/", "transports/telemetry/0", "transports/telemetry/1g",
+		"transports/telemetry/AA", "transports/telemetry/100", "transports/list",
+		"transports/" + uuid.New().String() + "/current",
+	} {
+		if _, ok := parseTelemetryShardPath(bad); ok {
+			t.Errorf("parseTelemetryShardPath(%q) parsed; want false", bad)
+		}
+	}
+}
+
+// TestDispatchTelemetryShard proves TPD applies each packed row from a
+// shard leaf exactly as a legacy current snapshot: bandwidth, throughput,
+// latency (partial-zero-gated), and per-type heartbeat with the row's
+// sampled-at as the heartbeat time.
+func TestDispatchTelemetryShard(t *testing.T) {
+	reporter, _ := cipher.GenerateKeyPair()
+	shard := uint8(4)
+	mk := func(low byte) uuid.UUID {
+		var id uuid.UUID
+		id[0] = shard << 4
+		id[15] = low
+		return id
+	}
+	sampledUnix := uint32(1_800_000_000)
+	entries := []telemetrywire.Entry{
+		{ID: mk(1), SentBytes: 100, RecvBytes: 50, ThroughputBps: 4242,
+			LatMin: 10, LatMax: 30, LatAvg: 18, SampledAtUnix: sampledUnix, Type: telemetrywire.TypeSTCPR},
+		// Partial-zero latency → latency dropped, but bandwidth+heartbeat apply.
+		{ID: mk(2), SentBytes: 7, RecvBytes: 8, ThroughputBps: 0,
+			LatMin: 0, LatMax: 0, LatAvg: 0, SampledAtUnix: sampledUnix, Type: telemetrywire.TypeSUDPH},
+	}
+	blob := telemetrywire.EncodeShard(shard, entries)
+
+	sink := &recordingSink{}
+	a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
+	a.dispatchTelemetryShard(telemetrywire.LeafPath(shard), blob, reporter)
+
+	if sink.bandwidths != 2 {
+		t.Errorf("bandwidth calls = %d, want 2", sink.bandwidths)
+	}
+	if len(sink.throughputs) != 1 || sink.throughputs[0] != 4242 {
+		t.Errorf("throughput calls = %v, want [4242] (only the >0 row)", sink.throughputs)
+	}
+	if len(sink.latencies) != 1 {
+		t.Errorf("latency calls = %d, want 1 (partial-zero row dropped)", len(sink.latencies))
+	}
+	if len(sink.heartbeats) != 2 {
+		t.Fatalf("heartbeat calls = %d, want 2", len(sink.heartbeats))
+	}
+	wantAt := time.Unix(int64(sampledUnix), 0).UTC()
+	for _, hb := range sink.heartbeats {
+		if !hb.at.Equal(wantAt) {
+			t.Errorf("heartbeat at = %v, want %v (row sampled_at)", hb.at, wantAt)
+		}
+	}
+	types := map[string]bool{sink.heartbeats[0].tpType: true, sink.heartbeats[1].tpType: true}
+	if !types["stcpr"] || !types["sudph"] {
+		t.Errorf("heartbeat types = %v, want stcpr+sudph", types)
+	}
+}
+
+// TestDispatchTelemetryShardRejectsCorrupt asserts a malformed blob is
+// dropped whole (no partial application).
+func TestDispatchTelemetryShardRejectsCorrupt(t *testing.T) {
+	reporter, _ := cipher.GenerateKeyPair()
+	sink := &recordingSink{}
+	a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
+	a.dispatchTelemetryShard("transports/telemetry/00", []byte{0x02, 0x00, 0xFF}, reporter)
+	if sink.bandwidths != 0 || len(sink.latencies) != 0 || len(sink.heartbeats) != 0 || len(sink.throughputs) != 0 {
+		t.Errorf("corrupt shard produced sink calls: bw=%d lat=%d hb=%d tput=%d",
+			sink.bandwidths, len(sink.latencies), len(sink.heartbeats), len(sink.throughputs))
+	}
+}
+
+// TestDispatchLeafSkipsCurrentWhenShardsPresent asserts that when a Root
+// carries shards (skipCurrent=true), a lingering legacy current leaf is
+// ignored — the shards are authoritative and current must not be
+// double-applied.
+func TestDispatchLeafSkipsCurrentWhenShardsPresent(t *testing.T) {
+	reporter, _ := cipher.GenerateKeyPair()
+	id := uuid.New()
+	leaf, err := json.Marshal(liveSnapshot{SentBytes: 100, RecvBytes: 50, Type: "stcpr", SampledAt: time.Now().UTC()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sink := &recordingSink{}
+	a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
+	a.dispatchLeaf("transports/"+id.String()+"/current", leaf, reporter, true)
+	if sink.bandwidths != 0 || len(sink.heartbeats) != 0 {
+		t.Errorf("current leaf applied despite skipCurrent: bw=%d hb=%d", sink.bandwidths, len(sink.heartbeats))
+	}
+	// Without skipCurrent it applies (fallback path for un-upgraded visors).
+	a.dispatchLeaf("transports/"+id.String()+"/current", leaf, reporter, false)
+	if sink.bandwidths != 1 || len(sink.heartbeats) != 1 {
+		t.Errorf("current leaf not applied on fallback path: bw=%d hb=%d", sink.bandwidths, len(sink.heartbeats))
+	}
+}
+
 func bytesEqual(a, b []byte) bool {
 	if len(a) != len(b) {
 		return false
@@ -161,10 +269,11 @@ func bytesEqual(a, b []byte) bool {
 // recordingSink captures sink calls so tests can assert what dispatchLeaf
 // chose to forward (vs drop on the partial-zero gate).
 type recordingSink struct {
-	mu         sync.Mutex
-	bandwidths int
-	latencies  []struct{ min, max, avg float64 }
-	heartbeats []struct {
+	mu          sync.Mutex
+	bandwidths  int
+	throughputs []float64
+	latencies   []struct{ min, max, avg float64 }
+	heartbeats  []struct {
 		tpType string
 		at     time.Time
 	}
@@ -187,6 +296,12 @@ func (s *recordingSink) UpdateBandwidth(_ context.Context, _ string, _ cipher.Pu
 func (s *recordingSink) UpdateLatency(_ context.Context, _ string, minMS, maxMS, avgMS float64) error {
 	s.mu.Lock()
 	s.latencies = append(s.latencies, struct{ min, max, avg float64 }{minMS, maxMS, avgMS})
+	s.mu.Unlock()
+	return nil
+}
+func (s *recordingSink) UpdateThroughput(_ context.Context, _ string, _ cipher.PubKey, bps float64) error {
+	s.mu.Lock()
+	s.throughputs = append(s.throughputs, bps)
 	s.mu.Unlock()
 	return nil
 }
@@ -293,7 +408,7 @@ func TestDispatchLeafLatencyGate(t *testing.T) {
 			if err != nil {
 				t.Fatalf("marshal: %v", err)
 			}
-			a.dispatchLeaf("transports/"+id.String()+"/current", leaf, pk)
+			a.dispatchLeaf("transports/"+id.String()+"/current", leaf, pk, false)
 			if c.wantBwHit && sink.bandwidths != 1 {
 				t.Errorf("expected 1 bandwidth call, got %d", sink.bandwidths)
 			}
@@ -354,7 +469,7 @@ func TestDispatchLeafHeartbeatGate(t *testing.T) {
 			if err != nil {
 				t.Fatalf("marshal: %v", err)
 			}
-			a.dispatchLeaf("transports/"+id.String()+"/current", leaf, pk)
+			a.dispatchLeaf("transports/"+id.String()+"/current", leaf, pk, false)
 			if c.wantHB {
 				if len(sink.heartbeats) != 1 {
 					t.Fatalf("expected 1 heartbeat call, got %d", len(sink.heartbeats))
@@ -426,7 +541,7 @@ func TestDispatchLeafEntryAndTombstone(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal: %v", err)
 		}
-		a.dispatchLeaf("transports/"+id.String()+"/entry", body, pkA)
+		a.dispatchLeaf("transports/"+id.String()+"/entry", body, pkA, false)
 		if len(sink.registers) != 1 {
 			t.Fatalf("expected 1 register call, got %d", len(sink.registers))
 		}
@@ -451,7 +566,7 @@ func TestDispatchLeafEntryAndTombstone(t *testing.T) {
 			t.Fatalf("marshal: %v", err)
 		}
 		// path declares `id`, but leaf carries a different UUID — must drop.
-		a.dispatchLeaf("transports/"+id.String()+"/entry", body, pkA)
+		a.dispatchLeaf("transports/"+id.String()+"/entry", body, pkA, false)
 		if len(sink.registers) != 0 {
 			t.Errorf("expected drop on id mismatch, got %d registers", len(sink.registers))
 		}
@@ -464,7 +579,7 @@ func TestDispatchLeafEntryAndTombstone(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal: %v", err)
 		}
-		a.dispatchLeaf("transports/"+id.String()+"/tombstone", body, pkA)
+		a.dispatchLeaf("transports/"+id.String()+"/tombstone", body, pkA, false)
 		if len(sink.deregisters) != 1 {
 			t.Fatalf("expected 1 deregister call, got %d", len(sink.deregisters))
 		}
@@ -480,7 +595,7 @@ func TestDispatchLeafEntryAndTombstone(t *testing.T) {
 	t.Run("entry leaf with malformed body is dropped", func(t *testing.T) {
 		sink := &recordingSink{}
 		a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
-		a.dispatchLeaf("transports/"+id.String()+"/entry", []byte("not json"), pkA)
+		a.dispatchLeaf("transports/"+id.String()+"/entry", []byte("not json"), pkA, false)
 		if len(sink.registers) != 0 {
 			t.Errorf("expected drop on bad json, got %d registers", len(sink.registers))
 		}
@@ -502,7 +617,7 @@ func TestDispatchLeafTransportListSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	a.dispatchLeaf("transports/list", body, pkA)
+	a.dispatchLeaf("transports/list", body, pkA, false)
 	if len(sink.reconciles) != 1 {
 		t.Fatalf("expected 1 reconcile call, got %d", len(sink.reconciles))
 	}

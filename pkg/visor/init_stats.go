@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/stats"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -75,47 +76,53 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 	pub, sink := buildStatsPublisher(v, log)
 	var tplistPub *treestore.Publisher
 	if pub != nil {
-		// Only the currently-live transports' `current` leaf may be
-		// broadcast to the discovery feed. bbolt retains records for
-		// recently-closed transports (local /stats history), but pushing
-		// their stale `current` leaves bloats the Root TPD fills over a
-		// short announce conn and starves discovery. Seed the tracker's
-		// mirrored-current set with this same live set so a transport that
-		// dies between hydrate and the first sample is reconciled away.
+		// Only currently-live transports are packed into the telemetry
+		// feed's compact sharded leaves. bbolt retains records for
+		// recently-closed transports (local /stats history), but packing
+		// their stale telemetry would bloat the Root TPD fills over a short
+		// announce conn. Hydrate publishes ≤16 shard leaves from the live
+		// set and returns their signatures, which seed the tracker so the
+		// first sample tick doesn't redundantly re-Put identical shards.
 		liveIDs := liveTransportIDs(v)
-		if err := seedSinkFromStore(store, sink, publishWindow, liveIDs, log); err != nil {
+		shardSigs, err := seedSinkFromStore(store, sink, publishWindow, liveIDs, log)
+		if err != nil {
 			log.WithError(err).Warn("Stats: hydrating CXO publisher from bbolt failed")
 		}
-		tracker.SeedMirroredCurrent(liveIDs)
+		tracker.SeedPublishedShards(shardSigs)
 		// The publisher hydrates its in-memory tree from the previously-
-		// published Root on startup, so transports/<id>/current leaves for
-		// transports that closed while the visor was down are back on the
-		// feed. They never entered the tracker's mirroredCurrent set (which
-		// only tracks leaves Put since this restart), so the per-tick
-		// reconcile would never prune them. Reconcile them away now, at
-		// hydrate, against the actual live set — making the discovery feed
-		// truly live-only rather than "live-only for leaves written since
-		// the last restart".
-		if pruned := pruneDeadCurrentLeaves(pub, sink, liveIDs); pruned > 0 {
+		// published Root on startup. On the FIRST run after upgrading from
+		// the per-transport `current`-leaf format, that Root still holds the
+		// legacy transports/<id>/current leaves (and possibly telemetry
+		// shards for transports now gone). Prune both so the telemetry feed
+		// carries only the freshly-hydrated live shards — the legacy leaves
+		// are never republished (the format is removed) and would otherwise
+		// linger, re-bloating the Root the shape was designed to shrink.
+		if pruned := pruneStaleTelemetryLeaves(pub, sink, liveIDs); pruned > 0 {
 			log.WithField("pruned", pruned).
-				Info("Stats: pruned dead-transport current leaves persisted on the telemetry feed")
+				Info("Stats: pruned stale/legacy telemetry leaves persisted on the feed")
 		}
 		tracker.SetSink(sink)
 
-		// Dedicated tp-list discovery feed: a SECOND CXO node under the
-		// SAME visor identity PK, on DmsgVisorTPListCXOPort, carrying ONLY
-		// the compact transport-list snapshot leaf (publishTPDList). Its
-		// Root is a handful of objects, so TPD's second aggregator fills it
-		// COMPLETELY in ~1 round-trip — the durable cure for the ~10%
-		// transport under-report on busy hubs, whose combined telemetry
-		// Root on `pub` (DmsgCXOPort) can't finish its whole-Root fill in
-		// the announce conn's window. Same PK keeps TPD's reporter=feed-PK
-		// edge-auth intact. The telemetry leaves (transports/<id>/current)
-		// stay on `pub`. If the dedicated publisher can't start, fall back
-		// to publishing the tp-list on the telemetry feed (legacy combined
-		// behavior) so discovery still works — just without the
-		// fill-completeness win.
-		tplistPub = buildTPListPublisher(v, log)
+		// Transport-list discovery leaf. CONSOLIDATED default: the tp-list
+		// snapshot rides THIS telemetry feed (`pub`) as a top-level leaf, so
+		// a visor holds ONE CXO node/conn to TPD, not two. TPD's aggregator
+		// extracts the small tp-list leaf via its targeted discovery-leaf
+		// fetch (reconcileTargeted, on every OnRootReceived) — reliable now
+		// that the sharded telemetry keeps the whole Root small (≈16 shard
+		// leaves + 1 tp-list leaf), the exact condition missing when the
+		// earlier consolidation (#4184) was reverted (#4189) over a bulky
+		// per-transport-leaf Root. This halves the visor↔TPD connection
+		// count (and the per-session dmsg handshakes) versus the two-feed
+		// model.
+		//
+		// Opt back into the dedicated port-69 feed with
+		// Stats.DedicatedTPListFeed=true (a SECOND CXO node under the same
+		// visor PK on DmsgVisorTPListCXOPort) — kept only as a transitional
+		// escape hatch in case a busy hub is ever seen under-filling on the
+		// combined feed.
+		if conf != nil && conf.DedicatedTPListFeed {
+			tplistPub = buildTPListPublisher(v, log)
+		}
 		leafPub := pub
 		if tplistPub != nil {
 			leafPub = tplistPub
@@ -342,22 +349,24 @@ func buildTPListPublisher(v *Visor, log *logging.Logger) *treestore.Publisher {
 	return pub
 }
 
-// seedSinkFromStore copies the in-window slice of bbolt state into
-// the freshly-initialized publisher so cold subscribers see the full
-// rolling window from the first connect, not just data sampled after
-// the visor restarted. Only the `current` snapshot leaves of transports
-// in liveIDs are broadcast (dead-but-retained records stay bbolt-only).
-func seedSinkFromStore(store *stats.Store, sink stats.Sink, publishWindowDays int, liveIDs map[uuid.UUID]struct{}, log *logging.Logger) error {
+// seedSinkFromStore copies the in-window live-transport telemetry from
+// bbolt into the freshly-initialized publisher (as ≤16 compact sharded
+// leaves) so cold subscribers see current telemetry from the first
+// connect, not just data sampled after the visor restarted. Only
+// transports in liveIDs are packed (dead-but-retained records stay
+// bbolt-only). Returns the per-shard signatures pushed, for seeding the
+// tracker's change-gate.
+func seedSinkFromStore(store *stats.Store, sink stats.Sink, publishWindowDays int, liveIDs map[uuid.UUID]struct{}, log *logging.Logger) (map[uint8][32]byte, error) {
 	isLive := func(id uuid.UUID) bool {
 		_, ok := liveIDs[id]
 		return ok
 	}
-	pushed, err := stats.HydrateSink(store, sink, publishWindowDays, time.Now(), isLive)
+	sigs, err := stats.HydrateSink(store, sink, publishWindowDays, time.Now(), isLive)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	log.WithField("paths", pushed).Debug("Stats: hydrated CXO publisher from bbolt")
-	return nil
+	log.WithField("shard_leaves", len(sigs)).Debug("Stats: hydrated CXO publisher from bbolt")
+	return sigs, nil
 }
 
 // liveTransportIDs snapshots the IDs of the visor's currently-live
@@ -393,28 +402,71 @@ func currentLeafUUID(path string) (uuid.UUID, bool) {
 	return id, true
 }
 
-// pruneDeadCurrentLeaves makes the telemetry feed truly live-only at
-// startup. It walks the publisher's existing transports/<id>/current
-// leaves — including any hydrated from the previously-published Root —
-// and sink-deletes every one whose transport isn't in liveIDs. Returns
-// the number pruned.
+// telemetryShardOfPath parses a "transports/telemetry/<sh>" leaf path
+// and returns the shard number. ok is false for any other path. Mirrors
+// telemetrywire.LeafPath's lowercase 2-hex encoding.
+func telemetryShardOfPath(path string) (uint8, bool) {
+	const prefix = "transports/telemetry/"
+	if !strings.HasPrefix(path, prefix) {
+		return 0, false
+	}
+	rest := path[len(prefix):]
+	if len(rest) != 2 {
+		return 0, false
+	}
+	var sh uint8
+	for _, c := range []byte(rest) {
+		var d uint8
+		switch {
+		case c >= '0' && c <= '9':
+			d = c - '0'
+		case c >= 'a' && c <= 'f':
+			d = c - 'a' + 10
+		default:
+			return 0, false
+		}
+		sh = sh<<4 | d
+	}
+	if sh >= telemetrywire.ShardCount {
+		return 0, false
+	}
+	return sh, true
+}
+
+// pruneStaleTelemetryLeaves makes the telemetry feed carry only the
+// freshly-hydrated live shards at startup. It walks the publisher's
+// existing "transports" subtree — including anything hydrated from the
+// previously-published Root — and sink-deletes:
 //
-// Deletes are collected during the walk and issued after it returns:
-// Publisher.Walk holds the publisher mutex across the visitor and
-// sink.Delete re-enters that mutex through the cxoSink, so deleting
-// inline would deadlock.
-func pruneDeadCurrentLeaves(pub *treestore.Publisher, sink stats.Sink, liveIDs map[uuid.UUID]struct{}) int {
+//   - every LEGACY transports/<uuid>/current leaf (the pre-shard format,
+//     which the visor no longer republishes — left in place it would
+//     re-bloat the Root the sharded shape exists to shrink), and
+//   - every transports/telemetry/<sh> shard leaf whose shard has NO live
+//     transport now (so a shard that emptied while the visor was down
+//     doesn't linger).
+//
+// Returns the number pruned. Deletes are collected during the walk and
+// issued after it returns: Publisher.Walk holds the publisher mutex
+// across the visitor and sink.Delete re-enters that mutex through the
+// cxoSink, so deleting inline would deadlock.
+func pruneStaleTelemetryLeaves(pub *treestore.Publisher, sink stats.Sink, liveIDs map[uuid.UUID]struct{}) int {
 	if pub == nil || sink == nil {
 		return 0
 	}
+	liveShards := make(map[uint8]struct{})
+	for id := range liveIDs {
+		liveShards[telemetrywire.ShardOf(id)] = struct{}{}
+	}
 	var stale []string
 	pub.Walk("transports", func(path string, _ []byte) bool {
-		id, ok := currentLeafUUID(path)
-		if !ok {
+		if _, ok := currentLeafUUID(path); ok {
+			stale = append(stale, path) // legacy per-transport current leaf
 			return true
 		}
-		if _, live := liveIDs[id]; !live {
-			stale = append(stale, path)
+		if sh, ok := telemetryShardOfPath(path); ok {
+			if _, live := liveShards[sh]; !live {
+				stale = append(stale, path)
+			}
 		}
 		return true
 	})
@@ -549,13 +601,14 @@ func transportsProbe(v *Visor) func() []stats.TransportProbe {
 			bw := tp.GetBandwidth()
 			lat := tp.GetLatencyStats()
 			out = append(out, stats.TransportProbe{
-				ID:        tp.Entry.ID,
-				Edges:     []cipher.PubKey{tp.Entry.Edges[0], tp.Entry.Edges[1]},
-				Type:      string(tp.Entry.Type),
-				Label:     string(tp.Entry.Label),
-				SentBytes: bw.SentBytes,
-				RecvBytes: bw.RecvBytes,
-				LatencyMS: stats.LatencyTriple{Min: lat.Min, Max: lat.Max, Avg: lat.Avg},
+				ID:            tp.Entry.ID,
+				Edges:         []cipher.PubKey{tp.Entry.Edges[0], tp.Entry.Edges[1]},
+				Type:          string(tp.Entry.Type),
+				Label:         string(tp.Entry.Label),
+				SentBytes:     bw.SentBytes,
+				RecvBytes:     bw.RecvBytes,
+				ThroughputBps: tp.GetThroughputBps(),
+				LatencyMS:     stats.LatencyTriple{Min: lat.Min, Max: lat.Max, Avg: lat.Avg},
 			})
 			return true
 		})

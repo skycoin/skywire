@@ -606,6 +606,10 @@ func (s *memoryStore) UpdateBandwidth(context.Context, string, cipher.PubKey, ui
 func (s *memoryStore) UpdateLatency(context.Context, string, float64, float64, float64) error {
 	return nil
 }
+
+func (s *memoryStore) UpdateThroughput(context.Context, string, cipher.PubKey, float64) error {
+	return nil
+}
 func (s *memoryStore) GetTransportBandwidth(context.Context, uuid.UUID, string, int) ([]store.BandwidthAggregation, error) {
 	return nil, nil
 }

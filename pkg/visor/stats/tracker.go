@@ -12,9 +12,11 @@
 package stats
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
+	"crypto/sha256"
 	"runtime/debug"
+	"sort"
 	"sync"
 	"time"
 
@@ -22,6 +24,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 )
 
 // Tracker periodically samples transport bandwidth/latency and tier
@@ -41,30 +44,19 @@ type Tracker struct {
 	mu        sync.Mutex
 	sink      Sink
 	baselines map[uuid.UUID]bandwidthBaseline
-	// mirroredCurrent is the set of transport IDs whose
-	// transports/<id>/current leaf is currently published to the sink.
-	// Each sample reconciles it against the live probe set: IDs that
-	// dropped out (transport closed) get their current leaf sink-deleted
-	// so the discovery feed reflects only live transports (absence =
-	// dead). Without this, a closed transport's current leaf — published
-	// once while it was live — lingers on the feed for the visor's whole
-	// uptime, accumulating across churn and bloating the Root TPD fills.
-	mirroredCurrent map[uuid.UUID]struct{}
-	// publishedSig records, per transport, the meaningful signature of
-	// the last `current` leaf actually mirrored to the sink (sent/recv
-	// bytes + latency min/max/avg — NOT SampledAt). A sample tick only
-	// re-Puts a transport's current leaf when its signature differs from
-	// the stored one (or it was never published), so an IDLE transport —
-	// whose only change each tick is SampledAt being bumped to now — no
-	// longer advances the telemetry Root. Without this, every live
-	// transport re-Put its leaf every ~60s (SampledAt alone changing the
-	// content hash), churning the whole Root and starving TPD's whole-Root
-	// fill over the short announce conn. Guarded by mu alongside
-	// mirroredCurrent; entries are dropped when a transport dies (see
-	// reconcileCurrentLeaves) so a returning transport republishes.
-	publishedSig map[uuid.UUID]currentSig
-	lastDay      string // YYYY-MM-DD UTC of the most recent sample
-	lastPruned   time.Time
+	// publishedShards records, per shard (0..15), the MEANINGFUL-content
+	// signature of the shard telemetry blob last mirrored to the sink at
+	// transports/telemetry/<sh>. The signature is computed over every
+	// entry's sent/recv/throughput/latency/type — deliberately EXCLUDING
+	// sampled_at (see shardSig) — so a shard whose transports are all idle
+	// (only their timestamps advancing each tick) does NOT re-Put and does
+	// not churn the telemetry Root. A shard is re-Put only when a
+	// meaningful field of one of its transports moves; a shard that goes
+	// empty (all its transports closed) is sink-Deleted and dropped from
+	// this map so it stops occupying the Root. Guarded by mu.
+	publishedShards map[uint8][32]byte
+	lastDay         string // YYYY-MM-DD UTC of the most recent sample
+	lastPruned      time.Time
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -95,13 +87,14 @@ type Probes struct {
 // manager — keeping the type local insulates the package from the
 // wider transport API surface.
 type TransportProbe struct {
-	ID        uuid.UUID
-	Edges     []cipher.PubKey
-	Type      string
-	Label     string
-	SentBytes uint64
-	RecvBytes uint64
-	LatencyMS LatencyTriple
+	ID            uuid.UUID
+	Edges         []cipher.PubKey
+	Type          string
+	Label         string
+	SentBytes     uint64
+	RecvBytes     uint64
+	ThroughputBps float64
+	LatencyMS     LatencyTriple
 }
 
 // LatencyTriple carries the live min/max/avg snapshot. Tracker
@@ -114,19 +107,6 @@ type bandwidthBaseline struct {
 	day  string
 	sent uint64
 	recv uint64
-}
-
-// currentSig is the value-driven signature of a transport's `current`
-// leaf: the fields TPD actually consumes. It deliberately excludes
-// SampledAt so that a mere timestamp bump on an otherwise-unchanged
-// (idle) transport does not count as a change and does not trigger a
-// re-Put onto the mirror sink.
-type currentSig struct {
-	sent   uint64
-	recv   uint64
-	latMin float64
-	latMax float64
-	latAvg float64
 }
 
 // Config bundles tracker tunables. Zero values mean "use defaults".
@@ -167,25 +147,24 @@ func NewTracker(store *Store, probes Probes, conf Config) *Tracker {
 		publishKeep:     publishKeep,
 		sink:            noopSink{},
 		baselines:       make(map[uuid.UUID]bandwidthBaseline),
-		mirroredCurrent: make(map[uuid.UUID]struct{}),
-		publishedSig:    make(map[uuid.UUID]currentSig),
+		publishedShards: make(map[uint8][32]byte),
 	}
 }
 
-// SeedMirroredCurrent records the set of transport IDs whose `current`
-// leaf was already pushed to the sink before the sampler started —
-// typically the live set hydrated by HydrateSink at startup. Seeding it
-// means a transport that was live at hydrate but dies before the first
-// sample still gets its stale current leaf reconciled away (deleted) on
-// that first sample, rather than lingering because the sampler never
-// "saw" it live. Call before Run. The passed map is adopted directly.
-func (t *Tracker) SeedMirroredCurrent(ids map[uuid.UUID]struct{}) {
+// SeedPublishedShards records the shard signatures the sink was already
+// primed with before the sampler started — the live set hydrated by
+// HydrateSink at startup (see the visor's seedSinkFromStore). Seeding
+// them means the first sample tick does NOT redundantly re-Put every
+// shard that hydrate already published with identical content; a shard
+// only re-Puts once one of its transports actually changes. Call before
+// Run. The passed map is adopted directly.
+func (t *Tracker) SeedPublishedShards(sigs map[uint8][32]byte) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if ids == nil {
-		ids = make(map[uuid.UUID]struct{})
+	if sigs == nil {
+		sigs = make(map[uint8][32]byte)
 	}
-	t.mirroredCurrent = ids
+	t.publishedShards = sigs
 }
 
 // Store returns the underlying bbolt-backed store. Exposed so HTTP
@@ -292,29 +271,26 @@ func (t *Tracker) sample(now time.Time) {
 		t.runRetention(utc)
 	}
 
-	// mirrors collects (path, bytes) tuples to push to the sink AFTER
-	// the bbolt tx commits. Reading the bitmaps requires the tx
-	// (post-mutation state), so we snapshot them inside and dispatch
-	// outside.
-	var mirrors []mirrorPair
-	// liveTP is the set of transport IDs the probe reported live this
-	// tick. Non-nil (possibly empty) whenever the Transports probe ran,
-	// so reconcileCurrentLeaves can distinguish "no probe" (leave the
-	// mirrored set alone) from "probe returned zero live transports"
-	// (delete every previously-mirrored current leaf).
-	var liveTP map[uuid.UUID]struct{}
+	// entries collects the per-transport telemetry rows to publish AFTER
+	// the bbolt tx commits, as compact sharded binary leaves. ranProbe
+	// records whether the Transports probe actually ran this tick, so
+	// publishShards can distinguish "no probe" (leave the published shards
+	// alone) from "probe returned zero live transports" (delete every
+	// previously-published shard leaf).
+	var entries []telemetrywire.Entry
+	var ranProbe bool
 
 	txErr := t.store.UpdateSample(func(stx *SampleTx) error {
 		if probe := t.probes.Transports; probe != nil {
+			ranProbe = true
 			tps := probe()
-			liveTP = make(map[uuid.UUID]struct{}, len(tps))
+			entries = make([]telemetrywire.Entry, 0, len(tps))
 			for _, tp := range tps {
-				liveTP[tp.ID] = struct{}{}
-				if pairs, err := t.recordTransportTx(stx, tp, utc, today); err != nil {
+				if e, err := t.recordTransportTx(stx, tp, utc, today); err != nil {
 					t.log.WithError(err).WithField("tp_id", tp.ID).
 						Debug("Failed to record transport sample")
 				} else {
-					mirrors = append(mirrors, pairs...)
+					entries = append(entries, e)
 				}
 			}
 		}
@@ -353,75 +329,97 @@ func (t *Tracker) sample(now time.Time) {
 		return
 	}
 
-	t.sinkPutBatch(mirrors)
-	t.reconcileCurrentLeaves(liveTP)
+	t.publishShards(entries, ranProbe)
 }
 
-// reconcileCurrentLeaves diffs the live transport set reported by this
-// tick's probe against the set of current leaves currently mirrored to
-// the sink, and sink-deletes the leaf for any transport that is no
-// longer live (closed transport). This is the per-`current` analog of
-// the date-based sink-prune the retention path already does for daily
-// rollups and timeline bitmaps: a closed transport's current snapshot
-// must reconcile away (absence = dead) so it stops bloating the Root
-// TPD fills. bbolt retention is untouched — the visor's local /stats
-// history for a recently-closed transport stays intact.
+// publishShards groups this tick's live-transport entries into the 16
+// fixed shards (by telemetrywire.ShardOf), encodes each non-empty shard
+// as one compact binary leaf, and mirrors ONLY the shards whose
+// meaningful content changed since they were last published. A shard
+// that has gone empty (all its transports closed) but was previously
+// published is sink-Deleted, so absence-on-the-feed == dead exactly as
+// the per-transport reconcile used to guarantee. This keeps the
+// telemetry Root at ≤16 telemetry leaves regardless of transport count
+// — the whole point of the sharded shape (a busy hub's ~851
+// per-transport current leaves collapse to ≤16 objects, so TPD's
+// whole-Root fill completes over the short announce conn).
 //
-// live == nil means the Transports probe didn't run this tick; leave
-// the mirrored set alone. An empty (non-nil) live set correctly deletes
-// every previously-mirrored current leaf.
-func (t *Tracker) reconcileCurrentLeaves(live map[uuid.UUID]struct{}) {
-	if live == nil {
+// ranProbe == false means the Transports probe didn't run this tick
+// (no data to reconcile against); leave the published shards untouched.
+//
+// The change-gate signature (shardSig) deliberately excludes each
+// entry's sampled_at, so a shard whose transports are all idle — their
+// only per-tick change being the timestamp advancing — does not re-Put
+// and does not churn the Root, matching the anti-churn guarantee of the
+// old per-transport publishedSig.
+func (t *Tracker) publishShards(entries []telemetrywire.Entry, ranProbe bool) {
+	if !ranProbe {
 		return
 	}
-	t.mu.Lock()
-	var stale []uuid.UUID
-	for id := range t.mirroredCurrent {
-		if _, ok := live[id]; !ok {
-			stale = append(stale, id)
-			// Drop the change-gate baseline too, so if this transport
-			// ID ever returns it republishes rather than being silently
-			// suppressed against a stale signature.
-			delete(t.publishedSig, id)
-		}
-	}
-	// A live transport keeps its current leaf on the sink whether or not
-	// it was re-Put this tick (unchanged transports are intentionally not
-	// re-Put), so the mirrored set is exactly the live set.
-	t.mirroredCurrent = live
-	t.mu.Unlock()
 
-	for _, id := range stale {
-		t.sinkDelete(currentTransportPath(id.String()))
+	// Group by shard, then sort each shard's entries by ID so both the
+	// signature and the encoded blob are byte-stable across ticks.
+	byShard := make(map[uint8][]telemetrywire.Entry, telemetrywire.ShardCount)
+	for _, e := range entries {
+		sh := telemetrywire.ShardOf(e.ID)
+		byShard[sh] = append(byShard[sh], e)
 	}
-}
+	for sh := range byShard {
+		es := byShard[sh]
+		sort.Slice(es, func(i, j int) bool {
+			return bytes.Compare(es[i].ID[:], es[j].ID[:]) < 0
+		})
+		byShard[sh] = es
+	}
 
-// sinkPutBatch fans the sample's mirror writes into a single sink
-// call. The default cxoSink turns this into one Publisher.PutBatch
-// (one mutex acquire, one markDirty) instead of N individual Puts
-// that each contended with transport-manager re-registers and
-// other writers on the publisher's mutex. See pkg/cxo/treestore
-// publisher.go PutBatch for the downstream semantics.
-//
-// Skips when mirrors is empty so an idle sample tick doesn't even
-// take the sink-lookup mutex.
-func (t *Tracker) sinkPutBatch(mirrors []mirrorPair) {
-	if len(mirrors) == 0 {
-		return
-	}
 	t.mu.Lock()
 	sink := t.sink
-	// Record the signature we're about to publish so the next tick's
-	// change-gate compares against what actually reached the sink.
-	for _, m := range mirrors {
-		t.publishedSig[m.id] = m.sig
+	var ops []SinkOp
+	var deletes []string
+	// Re-Put shards whose meaningful content changed; record the new sig.
+	for sh, es := range byShard {
+		sig := shardSig(es)
+		if prev, ok := t.publishedShards[sh]; ok && prev == sig {
+			continue // unchanged — leave the existing leaf in place
+		}
+		t.publishedShards[sh] = sig
+		ops = append(ops, SinkOp{Path: telemetrywire.LeafPath(sh), Value: telemetrywire.EncodeShard(sh, es)})
+	}
+	// Delete shards that were published before but have no live transports now.
+	for sh := range t.publishedShards {
+		if _, still := byShard[sh]; !still {
+			deletes = append(deletes, telemetrywire.LeafPath(sh))
+			delete(t.publishedShards, sh)
+		}
 	}
 	t.mu.Unlock()
-	ops := make([]SinkOp, 0, len(mirrors))
-	for _, m := range mirrors {
-		ops = append(ops, SinkOp{Path: m.path, Value: m.data})
+
+	if len(ops) > 0 {
+		sink.PutBatch(ops)
 	}
-	sink.PutBatch(ops)
+	for _, path := range deletes {
+		sink.Delete(path)
+	}
+}
+
+// shardSig is the byte-stable, sampled_at-EXCLUDING signature of a
+// shard's entries. Two ticks with the same transports carrying the same
+// bandwidth/throughput/latency/type produce the same signature even
+// though each entry's sampled_at advanced — so an idle shard does not
+// re-Put. Entries must already be sorted by ID for stability.
+func shardSig(entries []telemetrywire.Entry) [32]byte {
+	stable := make([]telemetrywire.Entry, len(entries))
+	copy(stable, entries)
+	for i := range stable {
+		stable[i].SampledAtUnix = 0
+	}
+	// Any shard byte works here — the signature only compares content;
+	// ShardOf is identical for every entry in the slice anyway.
+	var sh uint8
+	if len(stable) > 0 {
+		sh = telemetrywire.ShardOf(stable[0].ID)
+	}
+	return sha256.Sum256(telemetrywire.EncodeShard(sh, stable))
 }
 
 // sinkDelete snapshots the sink under the lock and dispatches the
@@ -437,25 +435,15 @@ func (t *Tracker) sinkDelete(path string) {
 }
 
 // recordTransportTx is the in-tx variant of recordTransport. Reads
-// the existing record, merges the new probe, writes back, marks the
-// timeline bit, and reads the post-update bitmap — all under the
-// caller's SampleTx. Returns the list of (path, bytes) mirror pairs
-// the caller should push to the sink after the tx commits.
-// mirrorPair is one current-leaf write queued for the sink after the
-// bbolt tx commits. id/sig identify the transport and the meaningful
-// signature this data represents, so sinkPutBatch can record what was
-// actually published (the change-gate baseline for the next tick).
-type mirrorPair struct {
-	id   uuid.UUID
-	sig  currentSig
-	path string
-	data []byte
-}
-
-func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.Time, today string) ([]mirrorPair, error) {
+// the existing record, merges the new probe, writes back, and marks the
+// timeline bit — all under the caller's SampleTx. Returns the compact
+// telemetrywire.Entry for this transport, which the caller collects and
+// hands to publishShards after the tx commits (the sampled_at-excluding
+// change-gate + shard packing happen there, not per-transport).
+func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.Time, today string) (telemetrywire.Entry, error) {
 	rec, err := stx.GetTransportRecord(tp.ID)
 	if err != nil {
-		return nil, err
+		return telemetrywire.Entry{}, err
 	}
 	if rec == nil {
 		rec = &TransportRecord{
@@ -468,21 +456,14 @@ func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.T
 	}
 	rec.LastSeen = now
 	rec.Current = &LiveSnapshot{
-		SentBytes:    tp.SentBytes,
-		RecvBytes:    tp.RecvBytes,
-		LatencyMinMS: tp.LatencyMS.Min,
-		LatencyMaxMS: tp.LatencyMS.Max,
-		LatencyAvgMS: tp.LatencyMS.Avg,
-		SampledAt:    now,
-		Type:         rec.Type,
-	}
-
-	sig := currentSig{
-		sent:   tp.SentBytes,
-		recv:   tp.RecvBytes,
-		latMin: tp.LatencyMS.Min,
-		latMax: tp.LatencyMS.Max,
-		latAvg: tp.LatencyMS.Avg,
+		SentBytes:     tp.SentBytes,
+		RecvBytes:     tp.RecvBytes,
+		ThroughputBps: tp.ThroughputBps,
+		LatencyMinMS:  tp.LatencyMS.Min,
+		LatencyMaxMS:  tp.LatencyMS.Max,
+		LatencyAvgMS:  tp.LatencyMS.Avg,
+		SampledAt:     now,
+		Type:          rec.Type,
 	}
 
 	t.mu.Lock()
@@ -491,12 +472,7 @@ func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.T
 		base = bandwidthBaseline{day: today, sent: tp.SentBytes, recv: tp.RecvBytes}
 		t.baselines[tp.ID] = base
 	}
-	prevSig, published := t.publishedSig[tp.ID]
 	t.mu.Unlock()
-	// Only mirror the current leaf when a meaningful field moved (or it
-	// was never published). SampledAt alone changing every tick must NOT
-	// re-Put an idle transport — that was the Root churn this fixes.
-	sigChanged := !published || prevSig != sig
 
 	deltaSent := uint64(0)
 	deltaRecv := uint64(0)
@@ -514,29 +490,23 @@ func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.T
 	row.Samples++
 
 	if err := stx.PutTransportRecord(rec); err != nil {
-		return nil, err
+		return telemetrywire.Entry{}, err
 	}
 
-	var mirrors []mirrorPair
 	idStr := tp.ID.String()
-	if sigChanged {
-		if data, err := json.Marshal(rec.Current); err == nil {
-			mirrors = append(mirrors, mirrorPair{id: tp.ID, sig: sig, path: currentTransportPath(idStr), data: data})
-		}
-	}
 	// The daily rollup (row) is persisted to bbolt above (PutTransportRecord)
 	// but deliberately NOT mirrored to the CXO sink: no subscriber reads it
 	// (TPD's aggregator has no /rollup branch; the visor's own /stats reads it
 	// from bbolt), and publishing a per-transport-per-minute leaf onto the
-	// telemetry feed steals fill budget from transports/list on the
+	// telemetry feed steals fill budget from the discovery leaf on the
 	// short-lived announce conn — the constraint behind the discovery gap.
 
 	// The per-transport timeline bitmap is marked in bbolt (below) for the
 	// visor's own /stats + `visor state` consumption, but is NOT mirrored to
-	// the CXO sink. TPD is a discovery service: it only needs current data
-	// (transports/list + transports/<id>/current) and derives its own uptime
-	// history from what it observes each cycle (RecordTransportHeartbeat →
-	// Redis per-date keys). Publishing 7–30 days of per-transport-per-day
+	// the CXO sink. TPD is a discovery service: it needs only the tp-list
+	// discovery leaf plus the compact sharded telemetry, and derives its own
+	// uptime history from what it observes each cycle (RecordTransportHeartbeat
+	// → Redis per-date keys). Publishing 7–30 days of per-transport-per-day
 	// bitmaps onto the announce feed was the root of the discovery gap — it
 	// grew the Root to ~23k objects, so TPD couldn't fill it over the short
 	// announce conn and under-reported the transport list. Historical
@@ -546,7 +516,7 @@ func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.T
 		t.log.WithError(err).WithField("tp_id", idStr).
 			Debug("Stats: MarkTransportSlot failed")
 	}
-	return mirrors, nil
+	return snapshotToEntry(tp.ID, rec.Current), nil
 }
 
 // findOrAppendDaily returns a pointer to today's daily row, creating
