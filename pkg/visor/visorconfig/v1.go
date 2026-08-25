@@ -255,6 +255,24 @@ type Stats struct {
 	// Disabled, when true, skips the entire telemetry store and
 	// associated /stats/* endpoints + CXO publisher.
 	Disabled bool `json:"disabled,omitempty"`
+	// DedicatedTPListFeed, when true, publishes the transport-list
+	// discovery snapshot on its OWN CXO node/port
+	// (skyenv.DmsgVisorTPListCXOPort) instead of on the telemetry feed.
+	//
+	// Default (false) is the CONSOLIDATED single-feed model: the tp-list
+	// leaf rides the telemetry Root as a top-level leaf, so TPD holds ONE
+	// CXO connection per visor instead of two. TPD's aggregator extracts
+	// the tp-list via its targeted discovery-leaf fetch, which lands the
+	// small leaf reliably now that the compact sharded telemetry keeps the
+	// whole Root small (≈16 shard leaves + 1 tp-list leaf) — the condition
+	// that was missing when the earlier consolidation (#4184) had to be
+	// reverted (#4189) over a bulky per-transport-leaf Root. Halving the
+	// visor↔TPD connections cuts TPD's per-connection goroutines and the
+	// per-session dmsg handshake load on the dmsg servers.
+	//
+	// Set true only as a transitional escape hatch — e.g. if a busy hub's
+	// tp-list is ever observed to under-fill on the combined feed.
+	DedicatedTPListFeed bool `json:"dedicated_tplist_feed,omitempty"`
 }
 
 // LogServer configures the dmsghttp log server's optional localhost endpoint.

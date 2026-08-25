@@ -186,6 +186,50 @@ func (s *redisStore) UpdateLatency(ctx context.Context, transportID string, minM
 	return s.client.Set(ctx, s.latencyKey(id), string(raw), latencyTTL).Err()
 }
 
+// UpdateThroughput persists a transport's passively-observed PEAK
+// goodput (bytes/sec) at transport-discovery:tput:<id>, carried on the
+// sharded telemetry feed. It keeps the MAX of the stored value and the
+// incoming one so the higher of the two edges' observations survives a
+// momentarily-idle edge's report (peak, not last-value). Independent of
+// the registration blob, with latency's retention window.
+func (s *redisStore) UpdateThroughput(ctx context.Context, transportID string, reporterPK cipher.PubKey, bps float64) error {
+	// Zero/negative is "no observation this window" — don't overwrite a
+	// good peak with it, and don't attribute to the zero reporter.
+	if bps <= 0 || reporterPK == (cipher.PubKey{}) {
+		return nil
+	}
+	id, err := uuid.Parse(transportID)
+	if err != nil {
+		return fmt.Errorf("invalid transport id %q: %w", transportID, err)
+	}
+	if prev, err := s.getThroughputRecord(ctx, id); err == nil && prev != nil && prev.Bps > bps {
+		bps = prev.Bps // preserve the running peak
+	}
+	rec := ThroughputRecord{Bps: bps, UpdatedAt: time.Now().UTC().Unix()}
+	raw, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	return s.client.Set(ctx, s.throughputKey(id), string(raw), throughputTTL).Err()
+}
+
+// getThroughputRecord reads the durable peak-goodput snapshot for a
+// transport, returning (nil, nil) when no record exists.
+func (s *redisStore) getThroughputRecord(ctx context.Context, id uuid.UUID) (*ThroughputRecord, error) {
+	raw, err := s.client.Get(ctx, s.throughputKey(id)).Result()
+	if errors.Is(err, redis.Nil) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var rec ThroughputRecord
+	if err := json.Unmarshal([]byte(raw), &rec); err != nil {
+		return nil, fmt.Errorf("decode ThroughputRecord: %w", err)
+	}
+	return &rec, nil
+}
+
 // getLatencyRecord reads the durable latency snapshot for a transport,
 // returning (nil, nil) when no record exists.
 func (s *redisStore) getLatencyRecord(ctx context.Context, id uuid.UUID) (*LatencyRecord, error) {

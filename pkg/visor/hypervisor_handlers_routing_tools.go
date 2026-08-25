@@ -288,6 +288,10 @@ func (s *hvCalcStore) UpdateBandwidth(context.Context, string, cipher.PubKey, ui
 func (s *hvCalcStore) UpdateLatency(context.Context, string, float64, float64, float64) error {
 	return nil
 }
+
+func (s *hvCalcStore) UpdateThroughput(context.Context, string, cipher.PubKey, float64) error {
+	return nil
+}
 func (s *hvCalcStore) GetTransportBandwidth(context.Context, uuid.UUID, string, int) ([]tpdstore.BandwidthAggregation, error) {
 	return nil, nil
 }
