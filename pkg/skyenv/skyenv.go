@@ -121,6 +121,29 @@ const (
 	// needs to be collision-free, which the ports_test guards.
 	DmsgDMSGDRegistrationCXOPort uint16 = 67
 
+	// DmsgVisorARBindCXOPort is the dmsg port the Address Resolver's CXO
+	// bind aggregator binds (and each visor's AR-bind publisher binds for
+	// the reverse subscribe). A visor publishes its own AR bindings
+	// (stcpr / sudph reachable addresses) as a CXO feed here and announces
+	// to the AR, which subscribes back and ingests them — moving binding
+	// off the timer-driven HTTP POST /bind (SUDPH re-binds every ~90s, each
+	// a fresh Noise+PQ handshake) that dominates Address Resolver CPU
+	// (~53% in handshakeResponder). Mirrors DmsgDMSGDRegistrationCXOPort
+	// (67) for dmsg-discovery. Numbered 68 to sit beside the registration
+	// port; the value only needs to be collision-free (ports_test guards).
+	DmsgVisorARBindCXOPort uint16 = 68
+
+	// DmsgVisorSDRegCXOPort is the dmsg port the Service Discovery's CXO
+	// registration aggregator binds (and each visor's SD-registration
+	// publisher binds for the reverse subscribe). A visor publishes its own
+	// service-discovery registrations (the app services it runs: vpn,
+	// skysocks, visor, …) as a CXO feed here and announces to the SD, which
+	// subscribes back and ingests them — moving registration off the
+	// timer-driven HTTP POST /services. The SD's reverse services->clients
+	// feed already exists (DmsgSDServicesCXOPort, 53); this is the missing
+	// write side. Numbered 70 (69 is DmsgVisorTPListCXOPort).
+	DmsgVisorSDRegCXOPort uint16 = 70
+
 	// DmsgVisorTPListCXOPort is the DMSG port the visor's DEDICATED
 	// transport-list (tp-list) discovery feed binds — a second CXO node,
 	// under the SAME visor identity PK as the telemetry publisher on
