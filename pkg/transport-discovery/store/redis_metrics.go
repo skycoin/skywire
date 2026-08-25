@@ -427,14 +427,52 @@ func (s *redisStore) GetAllTransportMetrics(ctx context.Context, query MetricsQu
 // buildTransportMetrics reports them Live=false. Edges are recovered from the
 // daily-hash field names (see recoverBandwidthEdges).
 //
-// Cost note: this SCANs the bw:daily:*:<date> keyspace once per day in the
-// window. It runs on the metrics path, which is low-frequency (rewards
-// dashboard / daily reward calc) — acceptable, and mirrors the existing
-// BackupAndCleanOldBandwidth SCAN pattern.
+// The expensive part — the multi-day bw:daily:*:<date> SCAN plus per-candidate
+// edge recovery — is memoized by expiredEntriesCache (see scanExpiredCandidates
+// and expired_entries_cache.go). That memoized set is deliberately
+// registered-INDEPENDENT: the `registered` filter is applied FRESH here on
+// every call so a transport that just (re)registered is dropped immediately
+// rather than being wrongly reported as expired for up to the cache TTL.
 func (s *redisStore) expiredTransportEntries(ctx context.Context, registered map[uuid.UUID]bool, days int) ([]*transport.Entry, map[uuid.UUID]bool) {
 	if days <= 0 || days > 35 {
 		days = 35
 	}
+
+	rawEntries, rawIDs, ok := s.expiredCache.get(days)
+	if !ok {
+		rawEntries, rawIDs = s.scanExpiredCandidates(ctx, days)
+		s.expiredCache.put(days, rawEntries, rawIDs)
+	}
+	if len(rawEntries) == 0 {
+		return nil, nil
+	}
+
+	// Apply the registered filter FRESH on every call (hit or miss). Caching
+	// the post-filter result would let a newly-registered transport keep
+	// showing up as expired (and get double-counted) for up to the TTL; a
+	// newly-expired one appearing up to a TTL late is the acceptable trade.
+	expiredIDs := make(map[uuid.UUID]bool, len(rawIDs))
+	entries := make([]*transport.Entry, 0, len(rawEntries))
+	for _, e := range rawEntries {
+		if registered[e.ID] {
+			continue
+		}
+		entries = append(entries, e)
+		expiredIDs[e.ID] = true
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	return entries, expiredIDs
+}
+
+// scanExpiredCandidates performs the raw, registered-INDEPENDENT SCAN of the
+// bw:daily:*:<date> keyspace across the window and recovers edges for every
+// candidate found. Its result is what expiredEntriesCache memoizes; the
+// caller's `registered` filter is layered on top afterwards (see
+// expiredTransportEntries). It SCANs the keyspace once per day in the window,
+// mirroring the existing BackupAndCleanOldBandwidth SCAN pattern.
+func (s *redisStore) scanExpiredCandidates(ctx context.Context, days int) ([]*transport.Entry, map[uuid.UUID]bool) {
 	now := time.Now().UTC()
 	prefix := serviceName + ":bw:daily:"
 
@@ -447,7 +485,7 @@ func (s *redisStore) expiredTransportEntries(ctx context.Context, registered map
 			// key = transport-discovery:bw:daily:<id>:<date>
 			rest := strings.TrimSuffix(strings.TrimPrefix(iter.Val(), prefix), ":"+dateStr)
 			id, err := uuid.Parse(rest)
-			if err != nil || registered[id] || seen[id] {
+			if err != nil || seen[id] {
 				continue
 			}
 			seen[id] = true
