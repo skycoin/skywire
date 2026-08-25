@@ -57,8 +57,8 @@ func TestRenderSections(t *testing.T) {
 					{TpID: "tp2ccccccc-2222-2222-2222-222222222222", From: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", To: "03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "stcpr", LatencyMS: 450},
 				}},
 		},
-		Logs:    []string{"line two", "[2025-06-01T00:00:00.0000Z] INFO [skysocks-client]: app is running"},
-		Events:  []string{"[2025-06-01T00:00:01.0000Z] WARN [router]: leg demoted"},
+		Logs:    []string{"line two", "[2025-06-01T00:00:00.0000Z] INFO [skysocks-client]: app is running app_name=skysocks-client"},
+		Events:  []string{"[2025-06-01T00:00:01.0000Z] WARN [router]: leg demoted", "[2025-06-01T00:00:02.0000Z] ERROR [dmsgC]: handshake failed close_err=broken pipe"},
 		Streams: []Stream{{ID: 7, Target: "example.com:80", AgeMS: 65000}},
 	}
 	page := string(Render(snap))
@@ -78,11 +78,13 @@ func TestRenderSections(t *testing.T) {
 		"route-rtt", "480ms",
 		// ONE shared bilateral route tree (pkg/proxystatus.RouteTree) rendered by
 		// pkg/bitree into a monospace <pre>: root = this visor (source PK), each
-		// active route a right branch (its hop chain), a left summary block, and
+		// active route a horizontal line crossing a central vertical spine — the
+		// left summary block LEFT of the spine, the hop chain RIGHT of it, and
 		// aligned trailing hop columns. The exact model+shape `proxy tree` prints.
-		// Unix-tree root anchoring: the source PK is the top-left root and each
-		// route hangs off it via ├──/└── trunk connectors (item 1).
-		`class="tree"`, `class="bitree"`, "├──", "└──",
+		// The source PK is anchored at the spine column with a "│" descender into
+		// it; routes join the spine via ┼/┴ junctions; a multihop route's extra
+		// hops hang off the RIGHT with └── connectors.
+		`class="tree"`, `class="bitree"`, "──┼──", "──┴──", "└──", "│",
 		// Tree header/legend (tp-tree style): color swatches name the source PK
 		// accent and the active/standby state dots, then the column hints — dead legs
 		// are pruned so there is no dead swatch.
@@ -115,10 +117,24 @@ func TestRenderSections(t *testing.T) {
 		// Embedded mononoki monospace font so the tree's box-drawing glyphs align:
 		// an @font-face woff2 data-URI in the shell + the family on the tree/PK cells.
 		"@font-face", "'Mononoki'", "data:font/woff2;base64,",
-		// item 3: ONE combined route+transport+log stream, terminal-colored by level
-		// (INFO green / WARN amber / …) in a scrollable window (newest pinned by the
-		// live script). The event + log lines merge in timestamp order.
-		"route, transport &amp; log", `class="ll-info"`, `class="ll-warn"`,
+		// Tree grid CSS so the box-drawing glyphs actually connect: a tight
+		// line-height:1 (vertical │ touch between rows), letter-spacing:0 (── run
+		// continuous), and a real box-drawing monospace fallback after Mononoki.
+		"line-height:1;letter-spacing:0", "'DejaVu Sans Mono'",
+		// The open-streams <details> keeps its open/closed state across the ~1s
+		// WebSocket innerHTML swap (captured before, restored after — like the scroll
+		// guard) so it doesn't snap shut while the operator reads it.
+		"details.streams", "ds.open=dopen",
+		// item 3: ONE combined route+transport+log stream, colored PER TOKEN to match
+		// `proxy start --verbose` (pkg/logging printColored): the [timestamp] grey
+		// (ll-ts), the LEVEL word its level color (INFO green / WARN amber / ERROR red),
+		// the "[prefix]:" cyan (ll-prefix), the message default, and each field KEY
+		// tinted to the level color (value default). ERROR uses a real red (--err), not
+		// the pink --warn. The event + log lines merge in timestamp order.
+		"route, transport &amp; log", `class="ll-info"`, `class="ll-warn"`, `class="ll-error"`,
+		`class="ll-ts"`, `class="ll-prefix"`, "[router]:", "[dmsgC]:",
+		// field key tinted to the level color, its value left default foreground.
+		`<span class="ll-info">app_name</span>=skysocks-client`,
 		"app is running", "leg demoted",
 		// item 5: live up/down rate meters differenced from the cumulative byte totals
 		// by the inline script over the WebSocket pushes.

@@ -145,7 +145,12 @@ const liveScript = `<script>(function(){var t,ws,pend=null,last=null,pv=null;` +
 	`function apply(h){if(h===last){return;}var el=document.getElementById("live");if(!el){return;}` +
 	`var sx=window.scrollX,sy=window.scrollY,lg=el.querySelector("pre.log");` +
 	`var lt=lg?lg.scrollTop:0,ll=lg?lg.scrollLeft:0,pin=lg?(lg.scrollTop+lg.clientHeight>=lg.scrollHeight-4):true;` +
+	// Preserve the open/closed state of the open-streams <details> across the
+	// innerHTML swap (same idea as the scroll/selection guards): the WS restreams
+	// the whole live region every ~1s, which would otherwise snap the dropdown shut.
+	`var dop=el.querySelector("details.streams"),dopen=dop?dop.open:false;` +
 	`el.innerHTML=h;last=h;` +
+	`var ds=el.querySelector("details.streams");if(ds){ds.open=dopen;}` +
 	`var lg2=el.querySelector("pre.log");if(lg2){lg2.scrollTop=pin?lg2.scrollHeight:lt;lg2.scrollLeft=ll;}meters(el);window.scrollTo(sx,sy);}` +
 	`function push(h){if(selecting()){pend=h;return;}apply(h);}` +
 	`document.addEventListener("selectionchange",function(){if(pend!==null&&!selecting()){var h=pend;pend=null;apply(h);}});` +
@@ -378,32 +383,24 @@ func writeStreamsSection(b *strings.Builder, snap Snapshot) {
 	b.WriteString(`</details>`)
 }
 
-// logLevelClass maps a formatted log line ("[ts] LEVEL [module]: msg") to the
-// CSS class that colors it the way `skywire cli proxy start --verbose` colors
-// the level in a terminal: INFO green, WARN amber, ERROR/FATAL/PANIC red, DEBUG
-// blue, TRACE grey. The level token is the first word after the "[timestamp]"
-// prefix; anything unrecognized is left unclassed (default foreground).
-func logLevelClass(line string) string {
-	s := line
-	if strings.HasPrefix(s, "[") {
-		if i := strings.IndexByte(s, ']'); i >= 0 {
-			s = s[i+1:]
-		}
-	}
-	switch strings.ToUpper(strings.TrimSpace(firstToken(s))) {
+// levelClass maps an UPPERCASE log level token to the CSS class that colors it
+// the way `skywire cli proxy start --verbose` colors the level in a terminal:
+// INFO green, WARN amber, ERROR/FATAL/PANIC red, DEBUG blue, TRACE grey. The
+// second return is false for an unrecognized token.
+func levelClass(tok string) (string, bool) {
+	switch strings.ToUpper(tok) {
 	case "INFO":
-		return "ll-info"
+		return "ll-info", true
 	case "WARN", "WARNING":
-		return "ll-warn"
+		return "ll-warn", true
 	case "ERRO", "ERROR", "FATA", "FATAL", "PANI", "PANIC":
-		return "ll-error"
+		return "ll-error", true
 	case "DEBU", "DEBUG":
-		return "ll-debug"
+		return "ll-debug", true
 	case "TRAC", "TRACE":
-		return "ll-trace"
-	default:
-		return ""
+		return "ll-trace", true
 	}
+	return "", false
 }
 
 // firstToken returns the first whitespace-delimited token of s.
@@ -413,6 +410,149 @@ func firstToken(s string) string {
 		return s[:i]
 	}
 	return s
+}
+
+// writeLogLine emits one formatted log line as per-token colored spans matching
+// the terminal logger (pkg/logging printColored). The line shape is
+//
+//	[timestamp] LEVEL [prefix]: message key=value key=value …
+//
+// and each token is colored: the [timestamp] grey, the LEVEL word its level
+// color, the "[prefix]:" token cyan, the message default foreground, and every
+// trailing field's KEY tinted to the level color (its =value left default). A
+// line that doesn't begin with a recognizable "[ts] LEVEL" shape is emitted as
+// plain default-foreground text (unchanged from the pre-token behavior).
+func writeLogLine(b *strings.Builder, line string) {
+	esc := html.EscapeString
+	rest := line
+
+	// [timestamp]
+	var ts string
+	if strings.HasPrefix(rest, "[") {
+		if i := strings.IndexByte(rest, ']'); i >= 0 {
+			ts = rest[:i+1]
+			rest = rest[i+1:]
+		}
+	}
+	// leading spaces + LEVEL
+	sp := leadingSpaces(rest)
+	afterSp := rest[len(sp):]
+	lvlTok := firstToken(afterSp)
+	cls, ok := levelClass(lvlTok)
+	if ts == "" || !ok {
+		b.WriteString(esc(line)) // unrecognized shape: plain default foreground
+		return
+	}
+	b.WriteString(`<span class="ll-ts">`)
+	b.WriteString(esc(ts))
+	b.WriteString(`</span>`)
+	b.WriteString(esc(sp))
+	b.WriteString(`<span class="`)
+	b.WriteString(cls)
+	b.WriteString(`">`)
+	b.WriteString(esc(lvlTok))
+	b.WriteString(`</span>`)
+	rest = afterSp[len(lvlTok):]
+
+	// optional " [prefix]:" — the module token, brackets and trailing colon.
+	sp2 := leadingSpaces(rest)
+	body := rest[len(sp2):]
+	if strings.HasPrefix(body, "[") {
+		if i := strings.IndexByte(body, ']'); i >= 0 && i+1 < len(body) && body[i+1] == ':' {
+			pfx := body[:i+2] // "[module]:"
+			b.WriteString(esc(sp2))
+			b.WriteString(`<span class="ll-prefix">`)
+			b.WriteString(esc(pfx))
+			b.WriteString(`</span>`)
+			rest = body[i+2:]
+			writeLogMsgFields(b, rest, cls)
+			return
+		}
+	}
+	// no valid prefix token: emit the remainder as message + fields.
+	writeLogMsgFields(b, rest, cls)
+}
+
+// writeLogMsgFields emits the message-and-fields tail of a log line: the message
+// (up to the first " key=" field) as default foreground, then each trailing
+// logfmt field with its KEY tinted to cls and its =value left default. Field
+// values may contain spaces (unquoted), so a field runs until the next " key="
+// boundary. Spacing is preserved verbatim.
+func writeLogMsgFields(b *strings.Builder, s, cls string) {
+	esc := html.EscapeString
+	starts := fieldStarts(s)
+	if len(starts) == 0 {
+		b.WriteString(esc(s))
+		return
+	}
+	b.WriteString(esc(s[:starts[0]])) // message
+	for fi, st := range starts {
+		end := len(s)
+		if fi+1 < len(starts) {
+			end = starts[fi+1]
+		}
+		seg := s[st:end] // " key=value…"
+		lead := leadingSpaces(seg)
+		kv := seg[len(lead):]
+		eq := strings.IndexByte(kv, '=')
+		if eq < 0 {
+			b.WriteString(esc(seg))
+			continue
+		}
+		b.WriteString(esc(lead))
+		b.WriteString(`<span class="`)
+		b.WriteString(cls)
+		b.WriteString(`">`)
+		b.WriteString(esc(kv[:eq]))
+		b.WriteString(`</span>`)
+		b.WriteString(esc(kv[eq:])) // "=value"
+	}
+}
+
+// fieldStarts returns the byte offsets in s at which a trailing logfmt field
+// begins — the first byte of the run of space(s) that precedes an identifier
+// immediately followed by '='. Everything before the first offset is the
+// message; each field's value extends to the next offset (so unquoted values
+// with spaces stay whole).
+func fieldStarts(s string) []int {
+	var out []int
+	i := 0
+	for i < len(s) {
+		if s[i] != ' ' {
+			i++
+			continue
+		}
+		j := i
+		for j < len(s) && s[j] == ' ' {
+			j++
+		}
+		k := j
+		for k < len(s) && isIdentByte(s[k]) {
+			k++
+		}
+		if k > j && k < len(s) && s[k] == '=' {
+			out = append(out, i)
+			i = k + 1
+			continue
+		}
+		i = j
+	}
+	return out
+}
+
+// isIdentByte reports whether c may appear in a logfmt field key.
+func isIdentByte(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		(c >= '0' && c <= '9') || c == '_' || c == '.'
+}
+
+// leadingSpaces returns the leading run of ASCII spaces in s.
+func leadingSpaces(s string) string {
+	i := 0
+	for i < len(s) && s[i] == ' ' {
+		i++
+	}
+	return s[:i]
 }
 
 // writeLogSection renders the single, combined route+transport+log stream — the
@@ -433,11 +573,7 @@ func writeLogSection(b *strings.Builder, snap Snapshot) {
 	b.WriteString(`<pre class="log">`)
 	for _, ln := range lines {
 		ln = strings.TrimRight(ln, "\r\n")
-		if cls := logLevelClass(ln); cls != "" {
-			fmt.Fprintf(b, `<span class="%s">%s</span>`, cls, html.EscapeString(ln))
-		} else {
-			b.WriteString(html.EscapeString(ln))
-		}
+		writeLogLine(b, ln)
 		b.WriteByte('\n')
 	}
 	b.WriteString(`</pre></section>`)
@@ -633,7 +769,7 @@ func humanBytes(n uint64) string {
 // (--ok/--warn/--standby), whose dark-mode brights are illegible on a light
 // background, so the same ≥4.5:1 floor holds in both schemes. The accent
 // gradient and overall identity are unchanged.
-const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--accent2:#a06bff;--ok:#4ad9a4;--warn:#ff6b8a;--standby:#e0b64a;--card:#131629;--line:#2b3163}` +
+const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--accent2:#a06bff;--ok:#4ad9a4;--warn:#ff6b8a;--err:#ff5c5c;--cyan:#3fd0d8;--standby:#e0b64a;--card:#131629;--line:#2b3163}` +
 	`*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--fg);font:13.5px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}` +
 	`body{max-width:60rem;margin:0 auto;padding:1.2rem 1rem 3rem}` +
 	`header{display:flex;align-items:baseline;gap:.8rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.7rem}` +
@@ -674,8 +810,17 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	// metrics or the aligned columns skew, so all inner code/span inherit the
 	// pre's font and never break-word. Alignment is spaces from bitree; the spans
 	// add color/interactivity only.
-	`pre.bitree{font-family:'Mononoki',ui-monospace,SFMono-Regular,monospace;font-size:11.5px;line-height:1.55;margin:0;white-space:pre;color:var(--fg)}` +
-	`pre.bitree code,pre.bitree span{font:inherit;color:inherit;white-space:pre;word-break:normal;background:none;border:0;padding:0}` +
+	// The route tree is drawn with box-drawing glyphs (─│┼┴├┘└…) that MUST tile
+	// edge-to-edge to read as connected lines. The embedded 'Mononoki' subset does
+	// not carry the U+2500 box-drawing block (nor the arrows/dots), so those glyphs
+	// fall back per-character to another font — and a fallback glyph sized to ITS
+	// own em never fills a Mononoki cell, leaving gaps. The cure is a SINGLE font
+	// for the whole tree: a system-monospace stack (every common one tiles box
+	// drawing perfectly), so text AND glyphs share one set of metrics and connect.
+	// line-height:1 + letter-spacing:0 keep the vertical │ runs and horizontal ──
+	// runs continuous.
+	`pre.bitree{font-family:'DejaVu Sans Mono','Liberation Mono','Noto Sans Mono',ui-monospace,'Cascadia Mono','Segoe UI Mono',Menlo,Consolas,'Courier New',monospace;font-size:11.5px;line-height:1;letter-spacing:0;margin:0;white-space:pre;color:var(--fg)}` +
+	`pre.bitree code,pre.bitree span{font:inherit;color:inherit;line-height:1;letter-spacing:0;white-space:pre;word-break:normal;background:none;border:0;padding:0}` +
 	`pre.bitree code.fpk{color:var(--fg)}pre.bitree .src code.fpk{color:var(--accent);font-weight:600}` +
 	`pre.bitree code.ftid{color:var(--muted)}pre.bitree .tcol{color:var(--muted)}` +
 	`pre.bitree .lsum.ok{color:var(--ok)}pre.bitree .lsum.standby{color:var(--standby)}` +
@@ -697,11 +842,14 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	// inner scroll — lines wrap (pre-wrap + break-word) so any width is page-level.
 	`pre.log{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 'Mononoki',ui-monospace,SFMono-Regular,monospace;` +
 	`white-space:pre-wrap;word-break:break-word;max-height:26rem;overflow-y:auto;color:var(--fg)}` +
-	// Terminal-colored log levels, matching `proxy start --verbose`: INFO green,
-	// WARN amber, ERROR/FATAL/PANIC red, DEBUG blue, TRACE grey. The tokens already
-	// carry contrast-safe light-mode values, so the coloring holds in both schemes.
-	`pre.log .ll-info{color:var(--ok)}pre.log .ll-warn{color:var(--standby)}pre.log .ll-error{color:var(--warn)}` +
+	// Per-token log coloring, matching `proxy start --verbose` (pkg/logging
+	// printColored): the [timestamp] is grey, the LEVEL word takes its level color
+	// (INFO green, WARN amber, ERROR/FATAL/PANIC red — a real red, not the pink
+	// --warn — DEBUG blue, TRACE grey), the "[prefix]:" token is cyan, the message
+	// is default, and each field key is tinted to the level color (value default).
+	`pre.log .ll-info{color:var(--ok)}pre.log .ll-warn{color:var(--standby)}pre.log .ll-error{color:var(--err)}` +
 	`pre.log .ll-debug{color:var(--accent)}pre.log .ll-trace{color:var(--muted)}` +
+	`pre.log .ll-ts{color:var(--muted)}pre.log .ll-prefix{color:var(--cyan)}` +
 	// Per-stream detail (expandable) behind the "N open stream(s)" count.
 	`details.streams{margin:.5rem 0}details.streams summary{cursor:pointer;font-size:12px;color:var(--muted)}` +
 	`details.streams summary b{color:var(--fg);margin-left:.2rem}` +
@@ -721,5 +869,5 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`code{color:var(--accent);font-size:11.5px}` +
 	`footer{margin-top:2rem;padding-top:.7rem;border-top:1px solid var(--line);color:var(--muted);font-size:12px}` +
 	`footer a{color:var(--accent);text-decoration:none}footer a:hover{text-decoration:underline}` +
-	`@media(prefers-color-scheme:light){:root{--bg:#f6f7fb;--fg:#1c1e26;--muted:#4a4f63;--card:#fff;--line:#d3d6e4;--accent:#4149d6;--accent2:#7b3fd0;--ok:#0a7a4c;--warn:#c02a48;--standby:#7a5c00}` +
+	`@media(prefers-color-scheme:light){:root{--bg:#f6f7fb;--fg:#1c1e26;--muted:#4a4f63;--card:#fff;--line:#d3d6e4;--accent:#4149d6;--accent2:#7b3fd0;--ok:#0a7a4c;--warn:#c02a48;--err:#c8102e;--cyan:#0a6c74;--standby:#7a5c00}` +
 	`h2,.surface{color:#1c1e26}}`
