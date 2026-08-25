@@ -85,12 +85,19 @@ func TestRenderSections(t *testing.T) {
 		// it; routes join the spine via ┼/┴ junctions; a multihop route's extra
 		// hops hang off the RIGHT with └── connectors.
 		`class="tree"`, `class="bitree"`, "──┼──", "──┴──", "└──", "│",
-		// Tree header/legend (tp-tree style): color swatches name the source PK
-		// accent and the active/standby state dots, then the column hints — dead legs
-		// are pruned so there is no dead swatch.
+		// Tree legend, now BELOW the tree, with the state WORDS themselves colored
+		// (source accent / active green / standby amber) — no swatch dot. Dead legs
+		// are pruned so there is no dead entry.
 		`class="tlegend"`, `class="lgnd src"`,
-		`class="lgnd ok"`, `class="lgnd standby"`, `class="lgnd cols"`,
-		"this visor", "peer · [type] · tpid",
+		`class="lgnd ok"`, `class="lgnd standby"`,
+		"this visor",
+		// Label-header row (TreeHeader) rendered inside the tree <pre> as a template
+		// that lines up with the columns beneath: labels in place of the PKs/values.
+		`class="thead"`, "peer-pk", "tp-id", "tp-rtt", "R[n]",
+		// Header up/down throughput meters (moved to the top, between the brand and
+		// the surface name), driven by the inline script from the hidden cumulative
+		// byte counters.
+		`class="rates"`, `class="rmeter up"`, `class="rmeter down"`,
 		// FULL (never truncated) PKs: the source (root) and the multihop exit.
 		"03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff",
 		"02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee",
@@ -106,14 +113,20 @@ func TestRenderSections(t *testing.T) {
 		// the WebSocket live indicator, route-group summary, and staged control tags.
 		"getSelection", "selectionchange", "execCommand",
 		`class="fpk copy"`, "data-copy=", "click to copy",
-		`id="wsstat"`, "reconnecting", `class="rgsummary"`, "rsync(this)", `class="soon"`,
+		`id="wsstat"`, "reconnecting", "rsync(this)", `class="soon"`,
+		// Hidden cumulative byte counters live inside the live region so each push
+		// refreshes them; the visible meters are in the static header.
+		`data-bytes="up" data-val=`, "hidden",
 		// Scroll preservation across the live-swap: apply() captures the window offset
 		// (and the log <pre>'s inner offset) before el.innerHTML=h and restores it, so
 		// scrolling the page horizontally doesn't snap back on the next ~1s push.
 		"window.scrollX", "window.scrollY", "window.scrollTo(", "pre.log",
-		// Page-level layout: the recent-log block keeps only its vertical max-height
-		// scroll (horizontal wraps / is page-level).
-		"overflow-y:auto",
+		// The log pane is a resizable black terminal: black background, user-draggable
+		// height (resize:vertical), its own scroll.
+		"background:#000", "resize:vertical",
+		// The route tree scrolls horizontally in its OWN overflow container (not the
+		// page body) when a long PK runs wide.
+		"overflow-x:auto",
 		// Embedded mononoki monospace font so the tree's box-drawing glyphs align:
 		// an @font-face woff2 data-URI in the shell + the family on the tree/PK cells.
 		"@font-face", "'Mononoki'", "data:font/woff2;base64,",
@@ -174,10 +187,15 @@ func TestRenderSections(t *testing.T) {
 			t.Errorf("status page must not render the removed %q markup", gone)
 		}
 	}
-	// The route tree is now page-level: no inner overflow-x scroll box (the PAGE
-	// scrolls horizontally instead), so a live-swap can restore the window offset.
-	if strings.Contains(page, "overflow-x:auto") {
-		t.Error("route tree must not use an inner overflow-x box (page-level scroll)")
+	// The layout pass removed the status pill row, the leg-census summary line, and
+	// the per-stream metering disclaimer sentence; guard their markup/text is gone.
+	for _, gone := range []string{
+		`class="pills"`, `class="pill"`, `class="rgsummary"`,
+		"not metered at the tunnel",
+	} {
+		if strings.Contains(page, gone) {
+			t.Errorf("status page must no longer contain %q", gone)
+		}
 	}
 }
 
@@ -191,7 +209,7 @@ func TestRenderFragmentIsLiveRegionOnly(t *testing.T) {
 		Logs: []string{"frag line"},
 	}
 	frag := string(RenderFragment(snap))
-	for _, want := range []string{"per-leg mux", "route, transport", "frag line", `class="pills"`} {
+	for _, want := range []string{"per-leg mux", "route, transport", "frag line"} {
 		if !strings.Contains(frag, want) {
 			t.Errorf("fragment missing %q", want)
 		}

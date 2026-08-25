@@ -5,12 +5,16 @@
 // status.skysocks page (+ interstitial) and `skywire cli proxy tree` render
 // from this one model, so the terminal and the page always show the same shape.
 //
-// Layout (rendered by bitree, styled by each surface's own StyleCell):
+// Layout (rendered by bitree, styled by each surface's own StyleCell). The root
+// (source PK) is right-anchored over the spine descender, so ignoring the left
+// summary branches it reads as a normal downward tree with the source PK at top
+// in the same PK column as the hops:
 //
-//		                         this visor (source PK)
-//		R[0] ● 143ms 1.6K↑ 1.5K↓ ──┬── <exit PK>          [stcpr]  <tpid>  143ms
-//		R[1] ● 47ms  0.5K↑ 0.4K↓ ──┴── <hop1 PK>          [sudph]  <tpid>  47ms
-//		                               └── <exit PK>       [stcpr]  <tpid>  88ms
+//		                         <this visor / source PK>
+//		                         │
+//		R[0] ● 143ms 1.6K↑ 1.5K↓ ┬── <exit PK>          [stcpr]  <tpid>  143ms
+//		R[1] ● 47ms  0.5K↑ 0.4K↓ ┴── <hop1 PK>          [sudph]  <tpid>  47ms
+//		                          └── <exit PK>          [stcpr]  <tpid>  88ms
 //
 //	  - Root = this visor (the source PK, taken from any leg's first hop).
 //	  - Each ACTIVE route is a top-level right child; DEAD legs are pruned.
@@ -26,6 +30,8 @@ package proxystatus
 import (
 	"fmt"
 	"sort"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/skycoin/skywire/pkg/bitree"
 )
@@ -68,16 +74,52 @@ func RouteTree(snap Snapshot) *bitree.Node {
 		return legs[i].Index < legs[j].Index
 	})
 
+	w := legSumWidths(legs)
 	for _, l := range legs {
-		root.Right = append(root.Right, routeToNode(l))
+		root.Right = append(root.Right, routeToNode(l, w))
 	}
 	return root
 }
 
+// sumWidths holds the per-field display widths used to pad every route's left
+// summary into fixed columns, so R[n], the route-rtt and the ↑/↓ bandwidth line
+// up vertically across all routes instead of being ragged (only the whole block
+// was right-justified before).
+type sumWidths struct{ idx, rtt, up, down int }
+
+// legSumWidths measures the widest value in each left-summary field across the
+// legs, so legSummary can pad every field to a common column width.
+func legSumWidths(legs []Leg) sumWidths {
+	var w sumWidths
+	for _, l := range legs {
+		if n := len(fmt.Sprintf("R[%d]", l.Index)); n > w.idx {
+			w.idx = n
+		}
+		if n := utf8.RuneCountInString(routeRTTCompact(l.RouteLatencyMS)); n > w.rtt {
+			w.rtt = n
+		}
+		if n := utf8.RuneCountInString(compactBytes(l.SentBytes) + "↑"); n > w.up {
+			w.up = n
+		}
+		if n := utf8.RuneCountInString(compactBytes(l.RecvBytes) + "↓"); n > w.down {
+			w.down = n
+		}
+	}
+	return w
+}
+
+// TreeHeader returns the label-header row fields (left group, peer label,
+// trailing-column labels) for a route tree, shaped so bitree can render them as
+// a template row that lines up with the columns of the tree beneath. Only the
+// page uses it; `proxy tree` renders headerless.
+func TreeHeader() (left, label string, cols []string) {
+	return "R[n] · state · route-rtt · bw ↑↓", "peer-pk", []string{"[type]", "tp-id", "tp-rtt"}
+}
+
 // routeToNode turns one leg into a hop-chain right-branch carrying its left
 // summary on the head (spine) row.
-func routeToNode(l Leg) *bitree.Node {
-	left := &bitree.Node{Label: legSummary(l)}
+func routeToNode(l Leg, w sumWidths) *bitree.Node {
+	left := &bitree.Node{Label: legSummary(l, w)}
 
 	if len(l.Hops) == 0 {
 		// No recorded path: a single leaf at the remote PK.
@@ -105,15 +147,36 @@ func hopToNode(h Hop) *bitree.Node {
 
 // legSummary is the left annotation for a route: identity, state glyph,
 // end-to-end route rtt, and bandwidth. No state word — the glyph (colored by
-// the surface's StyleCell) carries active vs standby.
-func legSummary(l Leg) string {
+// the surface's StyleCell) carries active vs standby. Each field is padded to a
+// common width (w) so the fields line up in fixed columns across all routes: the
+// R[n] identity left-justified, the numeric route-rtt and ↑/↓ bandwidth
+// right-justified.
+func legSummary(l Leg, w sumWidths) string {
 	g := GlyphActive
 	if l.Standby {
 		g = GlyphStandby
 	}
-	return fmt.Sprintf("R[%d] %s %s %s↑ %s↓",
-		l.Index, g, routeRTTCompact(l.RouteLatencyMS),
-		compactBytes(l.SentBytes), compactBytes(l.RecvBytes))
+	idx := padRightRunes(fmt.Sprintf("R[%d]", l.Index), w.idx)
+	rtt := padLeftRunes(routeRTTCompact(l.RouteLatencyMS), w.rtt)
+	up := padLeftRunes(compactBytes(l.SentBytes)+"↑", w.up)
+	down := padLeftRunes(compactBytes(l.RecvBytes)+"↓", w.down)
+	return idx + " " + g + " " + rtt + " " + up + " " + down
+}
+
+// padRightRunes/padLeftRunes pad s to n display columns (rune count), on the
+// right (left-justify) and left (right-justify) respectively.
+func padRightRunes(s string, n int) string {
+	if p := n - utf8.RuneCountInString(s); p > 0 {
+		return s + strings.Repeat(" ", p)
+	}
+	return s
+}
+
+func padLeftRunes(s string, n int) string {
+	if p := n - utf8.RuneCountInString(s); p > 0 {
+		return strings.Repeat(" ", p) + s
+	}
+	return s
 }
 
 // orDashPK returns a full (never truncated) PK or a dash when empty.

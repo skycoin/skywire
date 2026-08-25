@@ -49,6 +49,17 @@ func Render(snap Snapshot) []byte {
 	// drives it (connecting → live → reconnecting); it renders as a neutral dot for
 	// no-JS / non-skysocks surfaces.
 	b.WriteString(`<header><div class="brand"><b>skywire</b> proxy status</div>`)
+	// Live up/down throughput meters ride in the header, between the brand and the
+	// surface name. They are driven by the inline script, which differences the
+	// cumulative byte counters (kept hidden inside the live region, refreshed on
+	// every ~1s WebSocket push) and writes the rate here. The header is static
+	// (outside the swapped live region), so the script targets these spans
+	// document-wide rather than within the live region.
+	if live {
+		b.WriteString(`<div class="rates" title="live throughput (up / down)">` +
+			`<span class="rmeter up"><i>↑</i> <b class="rate" data-rate="up">—/s</b></span>` +
+			`<span class="rmeter down"><i>↓</i> <b class="rate" data-rate="down">—/s</b></span></div>`)
+	}
 	fmt.Fprintf(&b, `<div class="surface">%s</div>`, surface)
 	if live {
 		b.WriteString(`<span id="wsstat" class="wsstat wait" title="live update stream"><i class="dot"></i>connecting</span>`)
@@ -137,13 +148,14 @@ const liveScript = `<script>(function(){var t,ws,pend=null,last=null,pv=null;` +
 	`function fmtRate(b){b=b||0;if(b>=1048576){return (b/1048576).toFixed(1)+"M";}if(b>=1024){return (b/1024).toFixed(1)+"K";}return Math.round(b)+"B";}` +
 	`function meters(el){var now=Date.now(),cur={},ss=el.querySelectorAll(".stat[data-bytes]"),i;` +
 	`for(i=0;i<ss.length;i++){cur[ss[i].getAttribute("data-bytes")]=parseFloat(ss[i].getAttribute("data-val"))||0;}` +
-	`if(pv&&now>pv.t){var dt=(now-pv.t)/1000,rs=el.querySelectorAll(".rate[data-rate]"),k;` +
-	`for(k=0;k<rs.length;k++){var key=rs[k].getAttribute("data-rate"),d=(cur[key]||0)-(pv[key]||0);if(d<0){d=0;}rs[k].textContent="· "+fmtRate(d/dt)+"/s";}}` +
+	`if(pv&&now>pv.t){var dt=(now-pv.t)/1000,rs=document.querySelectorAll(".rate[data-rate]"),k;` +
+	`for(k=0;k<rs.length;k++){var key=rs[k].getAttribute("data-rate"),d=(cur[key]||0)-(pv[key]||0);if(d<0){d=0;}rs[k].textContent=fmtRate(d/dt)+"/s";}}` +
 	`pv={up:cur.up||0,down:cur.down||0,t:now};}` +
 	// Pin the log pane to the newest line unless the user has scrolled up to read
 	// back; restore any horizontal offset and the window offset as before.
 	`function apply(h){if(h===last){return;}var el=document.getElementById("live");if(!el){return;}` +
 	`var sx=window.scrollX,sy=window.scrollY,lg=el.querySelector("pre.log");` +
+	`var tr=el.querySelector(".tree"),trl=tr?tr.scrollLeft:0;` +
 	`var lt=lg?lg.scrollTop:0,ll=lg?lg.scrollLeft:0,pin=lg?(lg.scrollTop+lg.clientHeight>=lg.scrollHeight-4):true;` +
 	// Preserve the open/closed state of the open-streams <details> across the
 	// innerHTML swap (same idea as the scroll/selection guards): the WS restreams
@@ -151,7 +163,8 @@ const liveScript = `<script>(function(){var t,ws,pend=null,last=null,pv=null;` +
 	`var dop=el.querySelector("details.streams"),dopen=dop?dop.open:false;` +
 	`el.innerHTML=h;last=h;` +
 	`var ds=el.querySelector("details.streams");if(ds){ds.open=dopen;}` +
-	`var lg2=el.querySelector("pre.log");if(lg2){lg2.scrollTop=pin?lg2.scrollHeight:lt;lg2.scrollLeft=ll;}meters(el);window.scrollTo(sx,sy);}` +
+	`var lg2=el.querySelector("pre.log");if(lg2){lg2.scrollTop=pin?lg2.scrollHeight:lt;lg2.scrollLeft=ll;}` +
+	`var tr2=el.querySelector(".tree");if(tr2){tr2.scrollLeft=trl;}meters(el);window.scrollTo(sx,sy);}` +
 	`function push(h){if(selecting()){pend=h;return;}apply(h);}` +
 	`document.addEventListener("selectionchange",function(){if(pend!==null&&!selecting()){var h=pend;pend=null;apply(h);}});` +
 	`function connect(){stat("connecting","wait");try{ws=new WebSocket(url());}catch(e){slow();return;}` +
@@ -173,27 +186,6 @@ const liveScript = `<script>(function(){var t,ws,pend=null,last=null,pv=null;` +
 // writeLiveRegion writes the dynamic status content (pills, per-leg mux, events,
 // recent log) shared by Render (page shell) and RenderFragment (SSE push).
 func writeLiveRegion(b *strings.Builder, snap Snapshot) {
-	surface := html.EscapeString(string(snap.Surface))
-
-	// Status pills.
-	b.WriteString(`<div class="pills">`)
-	writePill(b, "surface", surface, "")
-	writePill(b, "app", html.EscapeString(snap.App), "")
-	if snap.Running {
-		writePill(b, "state", "running", "ok")
-	} else {
-		writePill(b, "state", "stopped", "warn")
-	}
-	if len(snap.Legs) > 0 {
-		mux := "off"
-		if snap.MuxEnabled {
-			mux = "on"
-		}
-		writePill(b, "mux", mux, "")
-		writePill(b, "legs", fmt.Sprintf("%d", len(snap.Legs)), "")
-	}
-	b.WriteString(`</div>`)
-
 	if snap.Note != "" {
 		fmt.Fprintf(b, `<p class="note">%s</p>`, html.EscapeString(snap.Note))
 	}
@@ -201,14 +193,6 @@ func writeLiveRegion(b *strings.Builder, snap Snapshot) {
 	writeStreamsSection(b, snap)
 	writeMuxSection(b, snap)
 	writeLogSection(b, snap)
-}
-
-func writePill(b *strings.Builder, k, v, cls string) {
-	c := "pill"
-	if cls != "" {
-		c += " " + cls
-	}
-	fmt.Fprintf(b, `<span class="%s"><i>%s</i> %s</span>`, c, html.EscapeString(k), v)
 }
 
 // writeMuxSection renders the route group as ONE unified route tree rooted at
@@ -229,67 +213,57 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 		return
 	}
 	var totSent, totRecv uint64
-	var nActive, nStandby, nClosed int
 	for _, l := range snap.Legs {
 		totSent += l.SentBytes
 		totRecv += l.RecvBytes
-		switch {
-		case !l.Alive:
-			nClosed++
-		case l.Standby:
-			nStandby++
-		default:
-			nActive++
-		}
 	}
-	// Scannable route-group summary: leg census + aggregate throughput, so the
-	// operator gets the shape of the group before reading the route tree. The
-	// cumulative sent/recv totals carry machine-readable data-bytes attributes so
-	// the live script can difference successive ~1s WebSocket pushes into the live
-	// up/down RATE meters (bytes/sec) beside them — no server-side rate needed and
-	// no per-leg speed field on the wire.
-	b.WriteString(`<div class="rgsummary">`)
-	writeStat(b, "legs", fmt.Sprintf("%d", len(snap.Legs)), "")
-	writeStat(b, "active", fmt.Sprintf("%d", nActive), "ok")
-	if nStandby > 0 {
-		writeStat(b, "standby", fmt.Sprintf("%d", nStandby), "standby")
-	}
-	if nClosed > 0 {
-		writeStat(b, "closed", fmt.Sprintf("%d", nClosed), "warn")
-	}
-	fmt.Fprintf(b, `<span class="stat" data-bytes="up" data-val="%d"><i>up</i> %s <b class="rate" data-rate="up">· —/s</b></span>`, totSent, humanBytes(totSent))
-	fmt.Fprintf(b, `<span class="stat" data-bytes="down" data-val="%d"><i>down</i> %s <b class="rate" data-rate="down">· —/s</b></span>`, totRecv, humanBytes(totRecv))
-	b.WriteString(`</div>`)
+	// Cumulative sent/recv byte counters, kept HIDDEN inside the live region so
+	// each ~1s WebSocket push refreshes them; the inline script differences them
+	// into the live up/down RATE meters shown in the header. No visible leg-census
+	// summary line here — the route tree below carries per-route state/rtt/bw.
+	fmt.Fprintf(b, `<span class="stat" data-bytes="up" data-val="%d" hidden></span>`, totSent)
+	fmt.Fprintf(b, `<span class="stat" data-bytes="down" data-val="%d" hidden></span>`, totRecv)
 
 	// The route tree itself: ONE shared bilateral model (pkg/proxystatus.RouteTree)
 	// rendered by pkg/bitree — the exact model + geometry `skywire cli proxy tree`
-	// prints, so the page and the terminal never drift. Root = this visor; each
-	// active route is a right branch (its hop chain, dead legs pruned) with a left
-	// summary (R[n], state glyph, route rtt, bandwidth). htmlStyleCell decorates
-	// cells (colored state dot, click-to-copy PKs/tpids) without disturbing the
-	// column alignment (layout is computed from the plain text).
+	// prints, so the page and the terminal never drift. Root = this visor (right-
+	// anchored over the spine); each active route is a right branch (its hop chain,
+	// dead legs pruned) with a left summary (R[n], state glyph, route rtt,
+	// bandwidth) padded into fixed columns. A label-header row (TreeHeader) rides
+	// above the tree as a template/legend that lines up with the columns beneath.
+	// htmlStyleCell decorates cells (colored state dot, click-to-copy PKs/tpids)
+	// without disturbing column alignment (layout is computed from the plain text).
+	// The tree is NOT boxed: it flows with the surrounding text at page margins and
+	// scrolls horizontally in its OWN overflow container only if a long PK runs wide.
+	hLeft, hLabel, hCols := TreeHeader()
 	b.WriteString(`<div class="tree">`)
-	writeTreeLegend(b)
 	b.WriteString(`<pre class="bitree">`)
-	b.WriteString(bitree.Render(RouteTree(snap), bitree.Options{StyleCell: htmlStyleCell}))
+	b.WriteString(bitree.Render(RouteTree(snap), bitree.Options{
+		StyleCell:   htmlStyleCell,
+		HeaderLeft:  hLeft,
+		HeaderLabel: hLabel,
+		HeaderCols:  hCols,
+	}))
 	b.WriteString(`</pre>`)
 	b.WriteString(`</div>`)
+	// Legend BELOW the tree: the state words are themselves colored (source accent,
+	// active green, standby amber) — no separate swatch dot.
+	writeTreeLegend(b)
 	b.WriteString(`<p class="hint">The same tree prints from <code>skywire cli proxy tree</code>; for a live chart use ` +
 		`<code>skywire cli proxy mux plot</code>.</p></section>`)
 }
 
-// writeTreeLegend prints a compact, monospace header/legend above the route tree
-// — mirroring `skywire cli tp tree`'s swatch+column header. It names the color
-// coding (source PK accent, active/standby state dot colors) with swatches, then
-// the left-summary and per-hop column hints, so the tree is self-describing
-// without a per-node word label. Dead legs are pruned, so there is no dead
-// swatch.
+// writeTreeLegend prints a compact legend BELOW the route tree. The words
+// themselves are colored in their state colors — "source · this visor" in the
+// source accent, "active" in green, "standby" in amber — instead of a separate
+// swatch dot beside each word. The column hints live in the label-header row
+// above the tree (TreeHeader), so the legend only names the color coding. Dead
+// legs are pruned, so there is no dead entry.
 func writeTreeLegend(b *strings.Builder) {
 	b.WriteString(`<div class="tlegend">` +
 		`<span class="lgnd src">source · this visor</span>` +
 		`<span class="lgnd ok">active ●</span>` +
 		`<span class="lgnd standby">standby ○</span>` +
-		`<span class="lgnd cols">left: R[n] · state · route-rtt · bw ↑↓ &nbsp; hop: peer · [type] · tpid · tp-rtt</span>` +
 		`</div>`)
 }
 
@@ -309,6 +283,10 @@ func htmlStyleCell(text string, kind bitree.CellKind) string {
 		return htmlTreeColumn(text)
 	case bitree.CellLeft:
 		return htmlLegSummary(text)
+	case bitree.CellHeaderLeft, bitree.CellHeaderLabel, bitree.CellHeaderColumn:
+		// The label-header row: template labels standing in for PKs/values, styled
+		// as a muted legend so it reads as a column header, not live data.
+		return `<span class="thead">` + html.EscapeString(text) + `</span>`
 	default:
 		return html.EscapeString(text)
 	}
@@ -378,8 +356,6 @@ func writeStreamsSection(b *strings.Builder, snap Snapshot) {
 			s.ID, html.EscapeString(orDash(s.Target)), html.EscapeString(compactAge(s.AgeMS)))
 	}
 	b.WriteString(`</tbody></table>`)
-	b.WriteString(`<p class="hint">Per-stream byte counts are not metered at the tunnel (yamux) layer; ` +
-		`the route-group <b>sent/recv</b> totals above are the byte counters that exist.</p>`)
 	b.WriteString(`</details>`)
 }
 
@@ -704,16 +680,6 @@ func writeFooter(b *strings.Builder, snap Snapshot) {
 
 // --- small helpers -----------------------------------------------------------
 
-// writeStat renders one chip in the route-group summary: an uppercase label and
-// its value, optionally tinted (ok/standby/warn) so leg census reads at a glance.
-func writeStat(b *strings.Builder, k, v, cls string) {
-	c := "stat"
-	if cls != "" {
-		c += " " + cls
-	}
-	fmt.Fprintf(b, `<span class="%s"><i>%s</i> %s</span>`, c, html.EscapeString(k), html.EscapeString(v))
-}
-
 // copyablePK renders a FULL (never truncated) public key as a click-to-copy
 // monospace cell. The [data-copy] attribute carries the exact value the delegated
 // copy handler writes to the clipboard; an empty key renders as an inert dash with
@@ -748,20 +714,6 @@ func orDash(s string) string {
 	return s
 }
 
-// humanBytes formats a byte count with a binary unit suffix.
-func humanBytes(n uint64) string {
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	div, exp := uint64(unit), 0
-	for x := n / unit; x >= unit; x /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
-}
-
 // css: the dark default is tuned so every text token clears WCAG AA (≥4.5:1 for
 // body text) against --bg/--card — notably --muted (#a2a8cc ≈ 8:1 on --bg),
 // which every low-emphasis label (pills, table headers, .hint/.empty, footer,
@@ -774,23 +726,22 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`body{max-width:60rem;margin:0 auto;padding:1.2rem 1rem 3rem}` +
 	`header{display:flex;align-items:baseline;gap:.8rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.7rem}` +
 	`.brand b{font-weight:600;letter-spacing:.4px;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}` +
-	`.brand{font-size:1rem}.surface{margin-left:auto;font:600 1.1rem ui-monospace,SFMono-Regular,monospace;color:#e7e9ff}` +
+	`.brand{font-size:1rem}.surface{margin-left:.2rem;font:600 1.1rem ui-monospace,SFMono-Regular,monospace;color:#e7e9ff}` +
+	// Live up/down throughput meters in the header, between the brand and the
+	// surface name. Pushed to the right edge (margin-left:auto) so the brand sits
+	// left and the meters+surface group sits right.
+	`.rates{margin-left:auto;display:inline-flex;gap:.7rem;align-items:baseline}` +
+	`.rmeter{font-size:12px;color:var(--muted)}.rmeter i{font-style:normal;margin-right:.15rem}` +
+	`.rmeter.up i{color:var(--ok)}.rmeter.down i{color:var(--cyan)}` +
+	`.rate{color:var(--accent);font-weight:600;font-size:12px;font-family:ui-monospace,SFMono-Regular,monospace}` +
 	`.wsstat{display:inline-flex;align-items:center;gap:.35rem;margin-left:.7rem;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}` +
 	`.wsstat .dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--muted);flex:none}` +
 	`.wsstat.ok{color:var(--ok)}.wsstat.ok .dot{background:var(--ok);box-shadow:0 0 6px var(--ok);animation:pulse 2s infinite}` +
 	`.wsstat.warn{color:var(--warn)}.wsstat.warn .dot{background:var(--warn)}` +
 	`.wsstat.wait{color:var(--standby)}.wsstat.wait .dot{background:var(--standby)}` +
 	`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}` +
-	`.pills{display:flex;flex-wrap:wrap;gap:.4rem;margin:.9rem 0}` +
-	`.pill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:.15rem .6rem;font-size:12px}` +
-	`.pill i{color:var(--muted);font-style:normal;margin-right:.25rem;text-transform:uppercase;font-size:10px;letter-spacing:.4px}` +
-	`.pill.ok{border-color:var(--ok);color:var(--ok)}.pill.warn{border-color:var(--warn);color:var(--warn)}` +
 	`h2{font-size:.95rem;margin:1.6rem 0 .5rem;color:#e7e9ff;font-weight:600}h2 small{color:var(--muted);font-weight:400;font-size:11px;margin-left:.4rem}` +
 	`.note{color:var(--standby)}.empty,.hint{color:var(--muted);font-size:12px}` +
-	`.rgsummary{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .7rem}` +
-	`.stat{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:.15rem .55rem;font-size:12px}` +
-	`.stat i{color:var(--muted);font-style:normal;margin-right:.3rem;text-transform:uppercase;font-size:10px;letter-spacing:.4px}` +
-	`.stat.ok{color:var(--ok)}.stat.warn{color:var(--warn)}.stat.standby{color:var(--standby)}` +
 	`.bar{display:block;height:.6rem;border-radius:3px;background:var(--accent);min-width:2px}` +
 	`.bar.ok{background:var(--ok)}.bar.standby{background:var(--standby)}.bar.warn{background:var(--warn)}` +
 	`.bar.recv{background:var(--recv,#3b9)}` +
@@ -799,12 +750,13 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`.copy{border-radius:3px;transition:background .15s,color .15s}` +
 	`body.js .copy{cursor:pointer}body.js .copy:hover{background:rgba(124,131,255,.14)}` +
 	`.copy.copied{background:var(--ok);color:#04120c}.copy.copied::after{content:" ✓ copied";font-size:10px;letter-spacing:.3px}` +
-	// One unified route tree (root = local visor; branches = first-hop peers).
-	// No inner overflow-x box: the tree lays out at page width and the PAGE (body)
-	// scrolls horizontally if the long full PKs run wide, so a scroll position is a
-	// window offset the live-swap can restore — not a nested scroll region that
-	// resets on every push.
-	`.tree{font-family:'Mononoki',ui-monospace,SFMono-Regular,monospace;font-size:11.5px;line-height:1.6;padding:.3rem 0;border:1px solid var(--line);border-radius:7px;background:var(--card);padding:.55rem .65rem}` +
+	// One unified route tree (root = local visor; branches = first-hop peers). The
+	// tree is NOT boxed: it flows with the surrounding prose at the same page
+	// margins, centered on the page like the text above and below it. It scrolls
+	// horizontally only if a long full PK runs wider than the page, and that scroll
+	// is confined to the tree's OWN overflow container (never the page body); the
+	// live-swap captures and restores that container's scrollLeft.
+	`.tree{margin:.5rem 0;overflow-x:auto;overflow-y:hidden}` +
 	// The route tree is one <pre class="bitree"> of monospace text laid out by
 	// pkg/bitree; every cell decorated by htmlStyleCell must keep the SAME font
 	// metrics or the aligned columns skew, so all inner code/span inherit the
@@ -824,40 +776,42 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`pre.bitree code.fpk{color:var(--fg)}pre.bitree .src code.fpk{color:var(--accent);font-weight:600}` +
 	`pre.bitree code.ftid{color:var(--muted)}pre.bitree .tcol{color:var(--muted)}` +
 	`pre.bitree .lsum.ok{color:var(--ok)}pre.bitree .lsum.standby{color:var(--standby)}` +
-	// Tree header/legend (mirrors `tp tree`'s swatch+column header): color swatches
-	// name the source/dest PK accents and the active/standby/dead state colors, then
-	// the column hints for what each tree line carries. Self-describes the tree so no
-	// per-node word pill is needed on the root ("this visor") or leaves ("exit").
-	`.tlegend{display:flex;flex-wrap:wrap;gap:.15rem .9rem;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);padding-bottom:.4rem;margin-bottom:.4rem;border-bottom:1px solid var(--line)}` +
-	`.lgnd{display:inline-flex;align-items:center;white-space:nowrap}` +
-	`.lgnd::before{content:"\2b24";margin-right:.3rem;font-size:8px;line-height:1}` +
-	`.lgnd.src::before{color:var(--accent)}.lgnd.dst::before{color:var(--accent2)}` +
-	`.lgnd.ok::before{color:var(--ok)}.lgnd.standby::before{color:var(--standby)}.lgnd.warn::before{color:var(--warn)}` +
-	`.lgnd.cols::before{content:none}.lgnd.cols{color:var(--muted);opacity:.85;text-transform:none;letter-spacing:0}` +
+	// Tree legend, BELOW the tree: the WORDS themselves are colored in their state
+	// colors (source accent, active green, standby amber) — no separate swatch dot
+	// beside each word. The column hints now live in the label-header row above the
+	// tree (.thead), so the legend only names the color coding.
+	`.tlegend{display:flex;flex-wrap:wrap;gap:.15rem 1.1rem;font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:.4rem}` +
+	`.lgnd{display:inline-flex;align-items:center;white-space:nowrap;font-weight:600}` +
+	`.lgnd.src{color:var(--accent)}.lgnd.ok{color:var(--ok)}.lgnd.standby{color:var(--standby)}` +
+	// The label-header row rendered inside the tree <pre>: template labels in place
+	// of PKs/values, muted so it reads as a column legend rather than live data.
+	`pre.bitree .thead{color:var(--muted);opacity:.9}` +
 	// State dot in the left per-route summary (replaces any active/standby word):
 	// color-blind-safe by shape (● active / ○ standby) as well as hue.
 	`pre.bitree .tstate{font-weight:700}` +
 	`pre.bitree .tstate.ok{color:var(--ok)}pre.bitree .tstate.standby{color:var(--standby)}` +
-	// Recent log: keep the vertical max-height scroll, but drop the horizontal
-	// inner scroll — lines wrap (pre-wrap + break-word) so any width is page-level.
-	`pre.log{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 'Mononoki',ui-monospace,SFMono-Regular,monospace;` +
-	`white-space:pre-wrap;word-break:break-word;max-height:26rem;overflow-y:auto;color:var(--fg)}` +
+	// Recent log: a black terminal pane. The user can drag it taller/shorter
+	// (resize:vertical) — a generous default height, a sensible floor, and its own
+	// vertical scroll. Lines wrap (pre-wrap + break-word) so width stays page-level.
+	// The background is black in BOTH page themes (it reads as a terminal), so the
+	// token colors below are pinned to fixed bright values rather than the theme
+	// tokens (whose light-mode variants would be illegible on black).
+	`pre.log{background:#000;border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 'Mononoki',ui-monospace,SFMono-Regular,monospace;` +
+	`white-space:pre-wrap;word-break:break-word;height:32rem;min-height:10rem;max-height:80vh;overflow:auto;resize:vertical;color:#c7cbe6}` +
 	// Per-token log coloring, matching `proxy start --verbose` (pkg/logging
-	// printColored): the [timestamp] is grey, the LEVEL word takes its level color
-	// (INFO green, WARN amber, ERROR/FATAL/PANIC red — a real red, not the pink
-	// --warn — DEBUG blue, TRACE grey), the "[prefix]:" token is cyan, the message
-	// is default, and each field key is tinted to the level color (value default).
-	`pre.log .ll-info{color:var(--ok)}pre.log .ll-warn{color:var(--standby)}pre.log .ll-error{color:var(--err)}` +
-	`pre.log .ll-debug{color:var(--accent)}pre.log .ll-trace{color:var(--muted)}` +
-	`pre.log .ll-ts{color:var(--muted)}pre.log .ll-prefix{color:var(--cyan)}` +
+	// printColored) on the black pane: the [timestamp] grey, the LEVEL word its
+	// level color (INFO green, WARN amber, ERROR/FATAL/PANIC a real red, DEBUG blue,
+	// TRACE grey), the "[prefix]:" token cyan, the message default, each field key
+	// tinted to the level color. Fixed hexes so the terminal look holds in both themes.
+	`pre.log .ll-info{color:#4ad9a4}pre.log .ll-warn{color:#e0b64a}pre.log .ll-error{color:#ff5c5c}` +
+	`pre.log .ll-debug{color:#7c83ff}pre.log .ll-trace{color:#a2a8cc}` +
+	`pre.log .ll-ts{color:#a2a8cc}pre.log .ll-prefix{color:#3fd0d8}` +
 	// Per-stream detail (expandable) behind the "N open stream(s)" count.
 	`details.streams{margin:.5rem 0}details.streams summary{cursor:pointer;font-size:12px;color:var(--muted)}` +
 	`details.streams summary b{color:var(--fg);margin-left:.2rem}` +
 	`table.strm{border-collapse:collapse;font-size:11.5px;margin:.4rem 0;font-family:'Mononoki',ui-monospace,SFMono-Regular,monospace}` +
 	`table.strm th,table.strm td{text-align:left;padding:.1rem 1rem .1rem 0;color:var(--fg);white-space:nowrap}` +
 	`table.strm th{color:var(--muted);text-transform:uppercase;font-size:9.5px;letter-spacing:.4px}` +
-	// Live up/down rate meters computed by the inline script from successive pushes.
-	`.stat .rate{margin-left:.2rem;color:var(--accent);font-weight:600;font-size:11px}` +
 	`.seam{opacity:.9}.controls{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem}` +
 	`.controls button{font:inherit;font-size:12px;padding:.2rem .6rem;border:1px dashed var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:not-allowed}` +
 	`.controls button{position:relative}` +
