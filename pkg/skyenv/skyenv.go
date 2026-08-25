@@ -129,9 +129,9 @@ const (
 	// off the timer-driven HTTP POST /bind (SUDPH re-binds every ~90s, each
 	// a fresh Noise+PQ handshake) that dominates Address Resolver CPU
 	// (~53% in handshakeResponder). Mirrors DmsgDMSGDRegistrationCXOPort
-	// (67) for dmsg-discovery. Numbered 68 to sit beside the registration
+	// (67) for dmsg-discovery. Numbered 71 (68 is DmsgTransportQueryPort); sits just past the registration/tp-list
 	// port; the value only needs to be collision-free (ports_test guards).
-	DmsgVisorARBindCXOPort uint16 = 68
+	DmsgVisorARBindCXOPort uint16 = 71
 
 	// DmsgVisorSDRegCXOPort is the dmsg port the Service Discovery's CXO
 	// registration aggregator binds (and each visor's SD-registration
@@ -141,8 +141,8 @@ const (
 	// subscribes back and ingests them — moving registration off the
 	// timer-driven HTTP POST /services. The SD's reverse services->clients
 	// feed already exists (DmsgSDServicesCXOPort, 53); this is the missing
-	// write side. Numbered 70 (69 is DmsgVisorTPListCXOPort).
-	DmsgVisorSDRegCXOPort uint16 = 70
+	// write side. Numbered 72 (adjacent to DmsgVisorARBindCXOPort=71).
+	DmsgVisorSDRegCXOPort uint16 = 72
 
 	// DmsgVisorTPListCXOPort is the DMSG port the visor's DEDICATED
 	// transport-list (tp-list) discovery feed binds — a second CXO node,
