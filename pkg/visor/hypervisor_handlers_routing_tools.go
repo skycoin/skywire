@@ -279,6 +279,9 @@ func (s *hvCalcStore) GetTransportByID(context.Context, uuid.UUID) (*transport.E
 func (s *hvCalcStore) GetNumberOfTransports(context.Context) (map[tptypes.Type]int, error) {
 	return nil, nil
 }
+func (s *hvCalcStore) GetTransportSummary(context.Context, bool) (*tpdstore.TransportSummary, error) {
+	return &tpdstore.TransportSummary{ByType: map[string]int{}}, nil
+}
 func (s *hvCalcStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {
 	return nil, nil
 }

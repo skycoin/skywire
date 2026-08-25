@@ -112,6 +112,46 @@ func TestRegisterTransport(t *testing.T) {
 	assert.Equal(t, sEntry.Entry, resp[0].Entry)
 }
 
+func TestGETAllTransportsStats(t *testing.T) {
+	mock := newTestStore(t)
+	ctx := context.Background()
+	nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
+	nonceMock, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, "")
+	require.NoError(t, err)
+
+	// Seed: two stcpr sharing edge a1, one sudph — 3 transports, 3 types
+	// counted, and 5 unique visors (a1,b1,b2 + the two sudph edges).
+	a1, _ := cipher.GenerateKeyPair()
+	b1, _ := cipher.GenerateKeyPair()
+	b2, _ := cipher.GenerateKeyPair()
+	c1, _ := cipher.GenerateKeyPair()
+	c2, _ := cipher.GenerateKeyPair()
+	seed := []*transport.SignedEntry{
+		{Entry: &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a1, b1), Type: "stcpr"}},
+		{Entry: &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a1, b2), Type: "stcpr"}},
+		{Entry: &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(c1, c2), Type: "sudph"}},
+	}
+	require.NoError(t, mock.RegisterTransportsBatch(ctx, cipher.PubKey{}, seed))
+
+	api := New(nil, mock, nonceMock, false, tpdiscmetrics.NewEmpty(), "", "")
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/all-transports/stats", nil)
+	api.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var resp struct {
+		Total        int            `json:"total_transports"`
+		ByType       map[string]int `json:"by_type"`
+		UniqueVisors int            `json:"unique_visors"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, 3, resp.Total)
+	assert.Equal(t, 2, resp.ByType["stcpr"])
+	assert.Equal(t, 1, resp.ByType["sudph"])
+	assert.Equal(t, 5, resp.UniqueVisors)
+}
+
 func TestRegisterTimeout(t *testing.T) {
 	const timeout = 10 * time.Millisecond
 

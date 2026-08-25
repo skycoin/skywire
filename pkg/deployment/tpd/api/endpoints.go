@@ -392,38 +392,36 @@ func (api *API) getAllTransportsStats(w http.ResponseWriter, r *http.Request) {
 		selfTransports = false
 	}
 
-	entries := api.getTransportsFromCache(selfTransports)
-	if entries == nil {
+	// Warm path: the background-refreshed all-transports cache is already
+	// in RAM, so count off it (no redis round-trip). Cold path: count in
+	// the store via GetTransportSummary — a single index+MGET pass that
+	// never materializes []*transport.Entry.
+	var summary *store.TransportSummary
+	if entries := api.getTransportsFromCache(selfTransports); entries != nil {
+		summary = &store.TransportSummary{ByType: make(map[string]int)}
+		uniqueVisors := make(map[cipher.PubKey]struct{})
+		for _, entry := range entries {
+			summary.Total++
+			summary.ByType[string(entry.Type)]++
+			for _, edge := range entry.Edges {
+				uniqueVisors[edge] = struct{}{}
+			}
+		}
+		summary.UniqueVisors = len(uniqueVisors)
+	} else {
 		var err error
-		entries, err = api.store.GetAllTransports(r.Context(), selfTransports)
+		summary, err = api.store.GetTransportSummary(r.Context(), selfTransports)
 		if err != nil {
 			api.writeError(w, r, err)
 			return
 		}
 	}
-	if len(entries) == 0 {
+	if summary.Total == 0 {
 		api.writeError(w, r, store.ErrTransportNotFound)
 		return
 	}
 
-	// Calculate network-wide statistics
-	byType := make(map[string]int)
-	uniqueVisors := make(map[cipher.PubKey]struct{})
-
-	for _, entry := range entries {
-		byType[string(entry.Type)]++
-		for _, edge := range entry.Edges {
-			uniqueVisors[edge] = struct{}{}
-		}
-	}
-
-	stats := map[string]interface{}{
-		"total_transports": len(entries),
-		"by_type":          byType,
-		"unique_visors":    len(uniqueVisors),
-	}
-
-	httputil.WriteJSON(w, r, http.StatusOK, stats)
+	httputil.WriteJSON(w, r, http.StatusOK, summary)
 }
 
 func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Request) {
