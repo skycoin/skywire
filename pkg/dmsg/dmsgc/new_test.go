@@ -30,7 +30,7 @@ func newClient(t *testing.T, conf *DmsgConfig, direct disc.APIClient, directOnly
 	t.Helper()
 	pk, sk := cipher.GenerateKeyPair()
 	mLog := logging.NewMasterLogger()
-	c := New(pk, sk, testBroadcaster(), conf, &http.Client{}, direct, directOnly, mLog)
+	c := New(pk, sk, testBroadcaster(), conf, &http.Client{}, direct, directOnly, nil, mLog)
 	require.NotNil(t, c)
 	require.Equal(t, pk, c.LocalPK())
 }

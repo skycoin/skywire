@@ -74,7 +74,7 @@ func (d *lanPriorityDisc) AllServers(ctx context.Context) ([]*disc.Entry, error)
 // The caller wires httpC.Transport = MakeHTTPTransport(ctx, dmsgC) AFTER this
 // returns, so discovery HTTP rides the client's own sessions (the empty
 // transport is never used before Serve).
-func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *DmsgConfig, httpC *http.Client, directClient disc.APIClient, directOnly bool, masterLogger *logging.MasterLogger) *dmsg.Client {
+func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *DmsgConfig, httpC *http.Client, directClient disc.APIClient, directOnly bool, entryResolve disc.EntryResolveFunc, masterLogger *logging.MasterLogger) *dmsg.Client {
 	primary := conf.Primary()
 	dmsgConf := &dmsg.Config{
 		MinSessions: primary.SessionsCount,
@@ -154,6 +154,14 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 			primaryC = dmsgclient.NewRegisteringFallbackDiscClient(directClient, primaryC, masterLogger.PackageLogger("dmsgC:disc:fallback"))
 		}
 	}
+
+	// CXO entry-lookup shim, OUTERMOST so it fronts Entry() for peer
+	// client lookups before the direct/HTTP chain: a peer entry already
+	// in the local clients-by-server snapshot resolves with no dmsg
+	// Noise handshake, while a MISS (or a server/self lookup) falls
+	// straight through to the chain below — HTTP stays authoritative.
+	// nil resolver (LookupCXO off) leaves primaryC untouched.
+	primaryC = disc.NewCXOEntryClient(primaryC, entryResolve, masterLogger.PackageLogger("dmsgC:disc:cxo-lookup"))
 
 	dmsgC := dmsg.NewClient(pk, sk, primaryC, dmsgConf)
 	dmsgC.SetLogger(masterLogger.PackageLogger("dmsgC"))

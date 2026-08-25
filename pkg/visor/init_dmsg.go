@@ -218,7 +218,16 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// (dmsgDC) that self-evicted on the dmsg servers.
 	httpC := &http.Client{}
 	directOnly := v.conf.Dmsg != nil && v.conf.Dmsg.DirectOnly
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, &dmsgConf, httpC, v.dClient, directOnly, v.MasterLogger())
+	// When LookupCXO is enabled, front the discovery client with a
+	// resolver that serves peer entries from the local CXO
+	// clients-by-server snapshot (no per-lookup dmsg Noise handshake),
+	// falling back to HTTP on a miss. nil resolver leaves the dmsg
+	// client's discovery chain unchanged.
+	var entryResolve dmsgdisc.EntryResolveFunc
+	if v.conf.Dmsg != nil && v.conf.Dmsg.LookupCXO {
+		entryResolve = v.newDmsgEntryCXOResolver()
+	}
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, &dmsgConf, httpC, v.dClient, directOnly, entryResolve, v.MasterLogger())
 	httpC.Transport = dmsghttp.MakeHTTPTransport(ctx, dmsgC)
 
 	wg := new(sync.WaitGroup)

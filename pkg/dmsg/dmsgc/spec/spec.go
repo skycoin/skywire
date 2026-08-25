@@ -95,6 +95,20 @@ type DmsgConfig struct {
 	// services/servers. Experimental; default stays discovery.
 	DirectOnly bool `json:"direct_only,omitempty"`
 
+	// LookupCXO opts the visor into resolving peer dmsg discovery
+	// entries from the local CXO clients-by-server snapshot before
+	// falling back to an HTTP-over-dmsg lookup. Default false. When
+	// true the visor holds dmsg-discovery's clients-by-server feed
+	// warm (via cxosub) and serves peer entry lookups already in the
+	// snapshot with no per-lookup Noise handshake — the discovery-
+	// service CPU cost the deployment-services-over-CXO roadmap
+	// targets. HTTP stays the fallback on any snapshot miss, so
+	// correctness is unchanged; the flag only trades a periodic bulk
+	// snapshot sync for the per-lookup handshake. Conservative
+	// default-off, matching how CXO features roll out (opt-in first,
+	// then always-on once proven).
+	LookupCXO bool `json:"lookup_cxo,omitempty"`
+
 	// Server, when non-nil AND Enabled, runs a dmsg SERVER in-process under
 	// the visor's own PK/SK (shared identity), reusing the visor's existing
 	// dmsg client for discovery rather than standing up a second transit
