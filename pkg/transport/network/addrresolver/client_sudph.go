@@ -138,6 +138,13 @@ func (c *httpClient) connectSUDPH(filter *pfilter.PacketFilter, hs Handshake) (n
 		return nil, LocalAddresses{}, err
 	}
 
+	// Mirror the SUDPH registration onto the CXO AR-bind feed (when a
+	// publisher installed a hook). Wire name matches types.SUDPH. The AR's
+	// CXO ingest treats SUDPH as keepalive-only (it cannot reproduce the
+	// UDP-observed NAT-mapped address), so this refreshes the store TTL
+	// without a fresh dmsg/Noise handshake on every re-registration.
+	c.fireBindPublishHook("sudph", localAddresses)
+
 	return arConn, localAddresses, nil
 }
 
