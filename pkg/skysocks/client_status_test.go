@@ -177,6 +177,70 @@ func TestStatusSkysocksIntercepted(t *testing.T) {
 	}
 }
 
+// TestStreamRegistryTracksTarget verifies the per-stream detail plumbing (item
+// 4): a normal (non-status) tunneled CONNECT registers an open stream whose
+// CONNECT target the status snapshot surfaces, and the stream is dropped from the
+// registry once the browser conn closes.
+func TestStreamRegistryTracksTarget(t *testing.T) {
+	c, exit := newTestClient(t)
+	defer c.Close() //nolint:errcheck
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := l.Addr().String()
+	_ = l.Close()                              //nolint:errcheck
+	go func() { _ = c.ListenAndServe(addr) }() //nolint:errcheck
+	waitDial(t, addr)
+
+	conn := socks5Connect(t, addr, "example.com", 80)
+
+	// The exit received the forwarded CONNECT — the stream is a real tunnel.
+	select {
+	case h := <-exit.hostC:
+		if h != "example.com" {
+			t.Fatalf("exit received host %q, want example.com", h)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("exit never received the CONNECT")
+	}
+
+	// The open stream is tracked with its target in the status snapshot.
+	found := false
+	for i := 0; i < 100 && !found; i++ {
+		for _, s := range c.statusSnapshot().Streams {
+			if s.Target == "example.com:80" {
+				found = true
+			}
+		}
+		if !found {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if !found {
+		t.Fatal("open stream not tracked in status snapshot")
+	}
+
+	// Closing the browser side tears the stream down and deregisters it.
+	_ = conn.Close() //nolint:errcheck
+	gone := false
+	for i := 0; i < 100 && !gone; i++ {
+		gone = true
+		for _, s := range c.statusSnapshot().Streams {
+			if s.Target == "example.com:80" {
+				gone = false
+			}
+		}
+		if !gone {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if !gone {
+		t.Fatal("closed stream still tracked in status snapshot")
+	}
+}
+
 // wsExpectedAccept is Sec-WebSocket-Accept for wsSampleKey — the RFC6455 §1.3
 // worked example (base64(sha1("dGhlIHNhbXBsZSBub25jZQ==" + GUID))). Asserting the
 // exact value validates the server's accept-key computation.

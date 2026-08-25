@@ -89,7 +89,8 @@ func runSniff(t *testing.T, c *Client) (browser, exit net.Conn, result <-chan bo
 	streamSniff, exitEnd := net.Pipe()
 	res := make(chan bool, 1)
 	go func() {
-		res <- c.sniffSOCKS5Status(connSniff, streamSniff)
+		proceed, _ := c.sniffSOCKS5Status(connSniff, streamSniff)
+		res <- proceed
 		_ = connSniff.Close()   //nolint:errcheck
 		_ = streamSniff.Close() //nolint:errcheck
 	}()

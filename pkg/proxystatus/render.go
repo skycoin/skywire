@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"strings"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/bitree"
 )
@@ -18,11 +19,6 @@ const refreshSeconds = 4
 // maxLogLines caps how many recent log lines the page renders, newest at the
 // bottom (terminal-tail order). The Provider may return fewer.
 const maxLogLines = 200
-
-// maxEventLines caps how many recent route/transport event lines the page
-// renders (oldest first, matching the Provider's ordering). The Provider may
-// return fewer.
-const maxEventLines = 200
 
 // Render returns the full, self-contained HTML status page for snap. All
 // interpolated values are HTML-escaped; the page loads no external resource
@@ -129,15 +125,28 @@ func RenderFragment(snap Snapshot) []byte {
 // Clipboard API when available and falling back to execCommand('copy') so it works
 // over plain HTTP (status.skysocks is not a secure context). It flashes the element
 // green briefly. The live indicator (#wsstat) is driven here too.
-const liveScript = `<script>(function(){var t,ws,pend=null,last=null;` +
+const liveScript = `<script>(function(){var t,ws,pend=null,last=null,pv=null;` +
 	`function stat(s,c){var el=document.getElementById("wsstat");if(el){el.textContent=s;el.className="wsstat "+c;el.insertAdjacentHTML("afterbegin",'<i class="dot"></i>');}}` +
 	`function slow(){if(!t){t=setTimeout(function(){location.reload();},15000);}}` +
 	`function url(){return location.origin.replace(/^http/,"ws")+"/ws";}` +
 	`function selecting(){var s=window.getSelection();return !!(s&&!s.isCollapsed&&String(s));}` +
+	// Live up/down rate meters: difference the cumulative data-val byte totals of the
+	// two rgsummary stats between pushes and divide by elapsed wall time. Counter
+	// resets (route rebuild) clamp to 0. Seeded from the initial render so the first
+	// push measures over the real interval.
+	`function fmtRate(b){b=b||0;if(b>=1048576){return (b/1048576).toFixed(1)+"M";}if(b>=1024){return (b/1024).toFixed(1)+"K";}return Math.round(b)+"B";}` +
+	`function meters(el){var now=Date.now(),cur={},ss=el.querySelectorAll(".stat[data-bytes]"),i;` +
+	`for(i=0;i<ss.length;i++){cur[ss[i].getAttribute("data-bytes")]=parseFloat(ss[i].getAttribute("data-val"))||0;}` +
+	`if(pv&&now>pv.t){var dt=(now-pv.t)/1000,rs=el.querySelectorAll(".rate[data-rate]"),k;` +
+	`for(k=0;k<rs.length;k++){var key=rs[k].getAttribute("data-rate"),d=(cur[key]||0)-(pv[key]||0);if(d<0){d=0;}rs[k].textContent="· "+fmtRate(d/dt)+"/s";}}` +
+	`pv={up:cur.up||0,down:cur.down||0,t:now};}` +
+	// Pin the log pane to the newest line unless the user has scrolled up to read
+	// back; restore any horizontal offset and the window offset as before.
 	`function apply(h){if(h===last){return;}var el=document.getElementById("live");if(!el){return;}` +
-	`var sx=window.scrollX,sy=window.scrollY,lg=el.querySelector("pre.log"),lt=lg?lg.scrollTop:0,ll=lg?lg.scrollLeft:0;` +
+	`var sx=window.scrollX,sy=window.scrollY,lg=el.querySelector("pre.log");` +
+	`var lt=lg?lg.scrollTop:0,ll=lg?lg.scrollLeft:0,pin=lg?(lg.scrollTop+lg.clientHeight>=lg.scrollHeight-4):true;` +
 	`el.innerHTML=h;last=h;` +
-	`var lg2=el.querySelector("pre.log");if(lg2){lg2.scrollTop=lt;lg2.scrollLeft=ll;}window.scrollTo(sx,sy);}` +
+	`var lg2=el.querySelector("pre.log");if(lg2){lg2.scrollTop=pin?lg2.scrollHeight:lt;lg2.scrollLeft=ll;}meters(el);window.scrollTo(sx,sy);}` +
 	`function push(h){if(selecting()){pend=h;return;}apply(h);}` +
 	`document.addEventListener("selectionchange",function(){if(pend!==null&&!selecting()){var h=pend;pend=null;apply(h);}});` +
 	`function connect(){stat("connecting","wait");try{ws=new WebSocket(url());}catch(e){slow();return;}` +
@@ -151,6 +160,9 @@ const liveScript = `<script>(function(){var t,ws,pend=null,last=null;` +
 	`function copy(txt,el){function ok(){flash(el,"copied");}if(navigator.clipboard&&navigator.clipboard.writeText&&window.isSecureContext){navigator.clipboard.writeText(txt).then(ok,function(){if(fb(txt)){ok();}});}else if(fb(txt)){ok();}}` +
 	`document.addEventListener("click",function(e){var el=e.target.closest?e.target.closest("[data-copy]"):null;if(el){e.preventDefault();copy(el.getAttribute("data-copy")||el.textContent,el);}});` +
 	`window.rsync=function(btn){var ok=sendCmd({cmd:"resync"});flash(btn,ok?"flash":"deny");return ok;};` +
+	// Seed the rate baseline from the server-rendered paint and pin the log pane to
+	// its newest line so the tail is visible before the first live push arrives.
+	`var el0=document.getElementById("live");if(el0){meters(el0);var lg0=el0.querySelector("pre.log");if(lg0){lg0.scrollTop=lg0.scrollHeight;}}` +
 	`document.body.classList.add("js");connect();})();</script>`
 
 // writeLiveRegion writes the dynamic status content (pills, per-leg mux, events,
@@ -181,9 +193,9 @@ func writeLiveRegion(b *strings.Builder, snap Snapshot) {
 		fmt.Fprintf(b, `<p class="note">%s</p>`, html.EscapeString(snap.Note))
 	}
 
+	writeStreamsSection(b, snap)
 	writeMuxSection(b, snap)
-	writeEventsSection(b, snap)
-	writeLogsSection(b, snap)
+	writeLogSection(b, snap)
 }
 
 func writePill(b *strings.Builder, k, v, cls string) {
@@ -226,7 +238,11 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 		}
 	}
 	// Scannable route-group summary: leg census + aggregate throughput, so the
-	// operator gets the shape of the group before reading the route tree.
+	// operator gets the shape of the group before reading the route tree. The
+	// cumulative sent/recv totals carry machine-readable data-bytes attributes so
+	// the live script can difference successive ~1s WebSocket pushes into the live
+	// up/down RATE meters (bytes/sec) beside them — no server-side rate needed and
+	// no per-leg speed field on the wire.
 	b.WriteString(`<div class="rgsummary">`)
 	writeStat(b, "legs", fmt.Sprintf("%d", len(snap.Legs)), "")
 	writeStat(b, "active", fmt.Sprintf("%d", nActive), "ok")
@@ -236,8 +252,8 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	if nClosed > 0 {
 		writeStat(b, "closed", fmt.Sprintf("%d", nClosed), "warn")
 	}
-	writeStat(b, "sent", humanBytes(totSent), "")
-	writeStat(b, "recv", humanBytes(totRecv), "")
+	fmt.Fprintf(b, `<span class="stat" data-bytes="up" data-val="%d"><i>up</i> %s <b class="rate" data-rate="up">· —/s</b></span>`, totSent, humanBytes(totSent))
+	fmt.Fprintf(b, `<span class="stat" data-bytes="down" data-val="%d"><i>down</i> %s <b class="rate" data-rate="down">· —/s</b></span>`, totRecv, humanBytes(totRecv))
 	b.WriteString(`</div>`)
 
 	// The route tree itself: ONE shared bilateral model (pkg/proxystatus.RouteTree)
@@ -253,13 +269,7 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	b.WriteString(bitree.Render(RouteTree(snap), bitree.Options{StyleCell: htmlStyleCell}))
 	b.WriteString(`</pre>`)
 	b.WriteString(`</div>`)
-	b.WriteString(`<p class="hint">One route tree rooted at this visor (source accent); each active route is a ` +
-		`branch — its hop chain to the exit, each hop carrying the transport (type · id · rtt) — with a left ` +
-		`summary block (R[n], a <b>color-coded</b> state dot — active green, standby amber — the route rtt and ` +
-		`its bandwidth X↑ Y↓). Dead legs are pruned. ` +
-		`<b>tp rtt</b> (a hop's column) is that transport; <b>route rtt</b> (the left summary) is the true ` +
-		`end-to-end route latency across all hops. Click any public key (or transport id) to copy it. ` +
-		`The same tree prints from <code>skywire cli proxy tree</code>; for a live chart use ` +
+	b.WriteString(`<p class="hint">The same tree prints from <code>skywire cli proxy tree</code>; for a live chart use ` +
 		`<code>skywire cli proxy mux plot</code>.</p></section>`)
 }
 
@@ -346,43 +356,158 @@ func legRank(l Leg) int {
 	}
 }
 
-func writeEventsSection(b *strings.Builder, snap Snapshot) {
-	b.WriteString(`<section><h2>route &amp; transport events</h2>`)
-	if len(snap.Events) == 0 {
-		// Scaffold: event capture is wired but may be empty on an idle surface,
-		// and the richer per-surface event stream (leg promote/demote, transport
-		// drop) is an extension point — see the control seam below.
-		b.WriteString(`<p class="empty">No route or transport events captured for this surface yet.</p>`)
-	} else {
-		events := snap.Events
-		if len(events) > maxEventLines {
-			events = events[len(events)-maxEventLines:]
-		}
-		b.WriteString(`<ul class="events">`)
-		for _, e := range events {
-			fmt.Fprintf(b, `<li>%s</li>`, html.EscapeString(e))
-		}
-		b.WriteString(`</ul>`)
+// writeStreamsSection expands the "N open stream(s)" count into per-stream rows
+// when the surface tracks them (skysocks-client records id + CONNECT target +
+// age locally). It is a native <details> so it stays collapsed by default and
+// costs nothing to skip. Per-stream BYTES are deliberately not shown: the yamux
+// layer carrying the streams does not meter them per stream — the byte counters
+// that exist are the route-group sent/recv totals in the mux section above.
+func writeStreamsSection(b *strings.Builder, snap Snapshot) {
+	if len(snap.Streams) == 0 {
+		return
 	}
-	b.WriteString(`</section>`)
+	fmt.Fprintf(b, `<details class="streams"><summary>open streams <b>%d</b></summary>`, len(snap.Streams))
+	b.WriteString(`<table class="strm"><thead><tr><th>id</th><th>target</th><th>age</th></tr></thead><tbody>`)
+	for _, s := range snap.Streams {
+		fmt.Fprintf(b, `<tr><td>%d</td><td>%s</td><td>%s</td></tr>`,
+			s.ID, html.EscapeString(orDash(s.Target)), html.EscapeString(compactAge(s.AgeMS)))
+	}
+	b.WriteString(`</tbody></table>`)
+	b.WriteString(`<p class="hint">Per-stream byte counts are not metered at the tunnel (yamux) layer; ` +
+		`the route-group <b>sent/recv</b> totals above are the byte counters that exist.</p>`)
+	b.WriteString(`</details>`)
 }
 
-func writeLogsSection(b *strings.Builder, snap Snapshot) {
-	b.WriteString(`<section><h2>recent log</h2>`)
-	lines := snap.Logs
-	if len(lines) > maxLogLines {
-		lines = lines[len(lines)-maxLogLines:]
+// logLevelClass maps a formatted log line ("[ts] LEVEL [module]: msg") to the
+// CSS class that colors it the way `skywire cli proxy start --verbose` colors
+// the level in a terminal: INFO green, WARN amber, ERROR/FATAL/PANIC red, DEBUG
+// blue, TRACE grey. The level token is the first word after the "[timestamp]"
+// prefix; anything unrecognized is left unclassed (default foreground).
+func logLevelClass(line string) string {
+	s := line
+	if strings.HasPrefix(s, "[") {
+		if i := strings.IndexByte(s, ']'); i >= 0 {
+			s = s[i+1:]
+		}
 	}
+	switch strings.ToUpper(strings.TrimSpace(firstToken(s))) {
+	case "INFO":
+		return "ll-info"
+	case "WARN", "WARNING":
+		return "ll-warn"
+	case "ERRO", "ERROR", "FATA", "FATAL", "PANI", "PANIC":
+		return "ll-error"
+	case "DEBU", "DEBUG":
+		return "ll-debug"
+	case "TRAC", "TRACE":
+		return "ll-trace"
+	default:
+		return ""
+	}
+}
+
+// firstToken returns the first whitespace-delimited token of s.
+func firstToken(s string) string {
+	s = strings.TrimLeft(s, " \t")
+	if i := strings.IndexAny(s, " \t"); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+// writeLogSection renders the single, combined route+transport+log stream — the
+// same content `proxy start --verbose` prints — as one terminal-colored,
+// scrollable window (fixed max-height, newest at the bottom). The Snapshot's
+// route/transport lifecycle Events and the process Logs are two views of the one
+// per-app log ring; they are merged in timestamp order into a single tail here so
+// the operator reads one chronological stream instead of two disjoint lists. The
+// live WebSocket restreams this fragment, and the inline script pins the pane to
+// the bottom so the newest line stays visible.
+func writeLogSection(b *strings.Builder, snap Snapshot) {
+	b.WriteString(`<section><h2>route, transport &amp; log</h2>`)
+	lines := combinedLogLines(snap.Events, snap.Logs, maxLogLines)
 	if len(lines) == 0 {
-		b.WriteString(`<p class="empty">No recent log lines for this process.</p></section>`)
+		b.WriteString(`<p class="empty">No route, transport, or log events for this process yet.</p></section>`)
 		return
 	}
 	b.WriteString(`<pre class="log">`)
 	for _, ln := range lines {
-		b.WriteString(html.EscapeString(strings.TrimRight(ln, "\r\n")))
+		ln = strings.TrimRight(ln, "\r\n")
+		if cls := logLevelClass(ln); cls != "" {
+			fmt.Fprintf(b, `<span class="%s">%s</span>`, cls, html.EscapeString(ln))
+		} else {
+			b.WriteString(html.EscapeString(ln))
+		}
 		b.WriteByte('\n')
 	}
 	b.WriteString(`</pre></section>`)
+}
+
+// combinedLogLines merges the route/transport lifecycle events and the process
+// log lines — both formatted "[ts] LEVEL [module]: msg", both oldest-first — into
+// one chronological tail of at most limit lines. Each input is already sorted, so
+// a stable two-pointer merge on the parsed leading timestamp suffices; a line
+// whose timestamp can't be parsed inherits the last seen time so it keeps its
+// relative position instead of jumping.
+func combinedLogLines(events, logs []string, limit int) []string {
+	out := make([]string, 0, len(events)+len(logs))
+	var last time.Time
+	tOf := func(s string) time.Time {
+		if t, ok := parseLogTime(s); ok {
+			last = t
+			return t
+		}
+		return last
+	}
+	i, j := 0, 0
+	for i < len(events) && j < len(logs) {
+		if !tOf(events[i]).After(tOf(logs[j])) {
+			out = append(out, events[i])
+			i++
+		} else {
+			out = append(out, logs[j])
+			j++
+		}
+	}
+	out = append(out, events[i:]...)
+	out = append(out, logs[j:]...)
+	if len(out) > limit {
+		out = out[len(out)-limit:]
+	}
+	return out
+}
+
+// logTimeLayout is the timestamp format the log ring's formatter emits (see
+// pkg/logging recordFormatter): "[2006-01-02T15:04:05.0000Z07:00]".
+const logTimeLayout = "2006-01-02T15:04:05.0000Z07:00"
+
+// parseLogTime extracts the leading "[timestamp]" from a formatted log line.
+func parseLogTime(line string) (time.Time, bool) {
+	if len(line) == 0 || line[0] != '[' {
+		return time.Time{}, false
+	}
+	i := strings.IndexByte(line, ']')
+	if i < 0 {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(logTimeLayout, line[1:i])
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
+// compactAge formats a stream age (milliseconds) as a terse "12s" / "3m" / "1h".
+func compactAge(ms int64) string {
+	d := time.Duration(ms) * time.Millisecond
+	switch {
+	case d >= time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	case d >= time.Minute:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	default:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
 }
 
 // writeControlSeam renders the route-control panel. For skysocks the "resync"
@@ -572,7 +697,19 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	// inner scroll — lines wrap (pre-wrap + break-word) so any width is page-level.
 	`pre.log{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.7rem;font:11.5px/1.5 'Mononoki',ui-monospace,SFMono-Regular,monospace;` +
 	`white-space:pre-wrap;word-break:break-word;max-height:26rem;overflow-y:auto;color:var(--fg)}` +
-	`ul.events{margin:.3rem 0;padding-left:1.1rem;font-size:12px}ul.events li{margin:.1rem 0}` +
+	// Terminal-colored log levels, matching `proxy start --verbose`: INFO green,
+	// WARN amber, ERROR/FATAL/PANIC red, DEBUG blue, TRACE grey. The tokens already
+	// carry contrast-safe light-mode values, so the coloring holds in both schemes.
+	`pre.log .ll-info{color:var(--ok)}pre.log .ll-warn{color:var(--standby)}pre.log .ll-error{color:var(--warn)}` +
+	`pre.log .ll-debug{color:var(--accent)}pre.log .ll-trace{color:var(--muted)}` +
+	// Per-stream detail (expandable) behind the "N open stream(s)" count.
+	`details.streams{margin:.5rem 0}details.streams summary{cursor:pointer;font-size:12px;color:var(--muted)}` +
+	`details.streams summary b{color:var(--fg);margin-left:.2rem}` +
+	`table.strm{border-collapse:collapse;font-size:11.5px;margin:.4rem 0;font-family:'Mononoki',ui-monospace,SFMono-Regular,monospace}` +
+	`table.strm th,table.strm td{text-align:left;padding:.1rem 1rem .1rem 0;color:var(--fg);white-space:nowrap}` +
+	`table.strm th{color:var(--muted);text-transform:uppercase;font-size:9.5px;letter-spacing:.4px}` +
+	// Live up/down rate meters computed by the inline script from successive pushes.
+	`.stat .rate{margin-left:.2rem;color:var(--accent);font-weight:600;font-size:11px}` +
 	`.seam{opacity:.9}.controls{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem}` +
 	`.controls button{font:inherit;font-size:12px;padding:.2rem .6rem;border:1px dashed var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:not-allowed}` +
 	`.controls button{position:relative}` +
