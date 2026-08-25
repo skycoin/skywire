@@ -166,6 +166,16 @@ type TransportUptimeSummary struct {
 	Timeline map[string]string `json:"timeline,omitempty"`
 }
 
+// TransportSummary is a network-wide aggregate of registered transports,
+// computed server-side so a client can obtain the counts without fetching
+// (and counting) the full transport list. Marshals to the same JSON shape
+// as GET /all-transports/stats.
+type TransportSummary struct {
+	Total        int            `json:"total_transports"`
+	ByType       map[string]int `json:"by_type"`
+	UniqueVisors int            `json:"unique_visors"`
+}
+
 // Store stores Transport metadata and generated nonce values.
 type Store interface {
 	TransportStore
@@ -189,6 +199,13 @@ type TransportStore interface {
 	// keys and the JSON decode that follows.
 	GetTransportsByEdgeNoLatency(context.Context, cipher.PubKey) ([]*transport.Entry, error)
 	GetNumberOfTransports(context.Context) (map[types.Type]int, error)
+	// GetTransportSummary returns network-wide aggregate counts (total,
+	// per-type, unique visors) computed in a single index+MGET pass that
+	// never materializes []*transport.Entry — the cheap path behind GET
+	// /all-transports/stats, so a client counting transports doesn't have
+	// to fetch every entry. selfTransports=false excludes loopback
+	// self-transports (Edges[0]==Edges[1]), matching GetAllTransports.
+	GetTransportSummary(ctx context.Context, selfTransports bool) (*TransportSummary, error)
 	GetAllTransports(context.Context, bool) ([]*transport.Entry, error)
 	// Bandwidth ingest (called by the CXO aggregator with the
 	// reporter's cumulative counters; deltas are computed
