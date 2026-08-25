@@ -15,7 +15,7 @@
 # semantics).
 #
 # Trigger: PRs that touch the IPv6 surface, or anything under
-# pkg/dmsg / pkg/address-resolver / pkg/transport/network / the
+# pkg/dmsg / pkg/deployment/ar / pkg/transport/network / the
 # v6-aware compose + config + workflow files themselves. Avoids waking
 # this lane for changes that can't affect v6 (docs, CI for other lanes).
 
@@ -23,7 +23,7 @@ on:
   pull_request:
     paths:
       - 'pkg/dmsg/**'
-      - 'pkg/address-resolver/**'
+      - 'pkg/deployment/ar/**'
       - 'pkg/transport/network/**'
       - 'pkg/services/dmsgsrv/**'
       - 'pkg/services/dmsgdisc/**'

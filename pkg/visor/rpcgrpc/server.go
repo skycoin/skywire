@@ -14,8 +14,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	routeFinder "github.com/skycoin/skywire/pkg/deployment/rf/store"
 	"github.com/skycoin/skywire/pkg/logging"
-	routeFinder "github.com/skycoin/skywire/pkg/route-finder/store"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	tpdstore "github.com/skycoin/skywire/pkg/transport-discovery/store"
