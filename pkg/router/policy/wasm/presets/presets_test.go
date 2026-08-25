@@ -341,15 +341,16 @@ func TestAdaptiveDecides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decide: %v", err)
 	}
-	// adaptive is SYMMETRIC BIDIRECTIONAL by default: every leg is full-duplex
-	// (Mux=active+standby=3), so ALL legs enter the route group's tps[] (visible
-	// to tickAdaptive and the disjoint-exclude set) and on_tick parks the surplus
-	// as warm standby for dip-free promotion. The forward-lean / reverse-wide
-	// split is now applied at SEND time, not baked into asymmetric rule setup —
-	// which also closes the reverse-only-leg exclusion gap. Per-direction
-	// ForwardMux/ReverseMux stay 0 (symmetric Mux drives it).
-	if spec.Mux != 3 {
-		t.Errorf("Mux = %d, want 3 (1 active + 2 warm standby, full-duplex)", spec.Mux)
+	// adaptive is SYMMETRIC BIDIRECTIONAL by default: every leg is full-duplex,
+	// so ALL legs enter the route group's tps[] (visible to tickAdaptive and the
+	// disjoint-exclude set) and on_tick parks the surplus as warm standby for
+	// dip-free promotion. The forward-lean / reverse-wide split is applied at SEND
+	// time, not baked into asymmetric rule setup. Per-direction ForwardMux/
+	// ReverseMux stay 0 (symmetric Mux drives it). Mux = adaptRevActive(1) +
+	// adaptStandbyMax(60) = 61 (uncapped pool, 2026-08-26); this literal mirrors
+	// the native const in pkg/router/policy/preset/tick.go — keep them in sync.
+	if spec.Mux != 61 {
+		t.Errorf("Mux = %d, want 61 (1 active + 60 warm standby, full-duplex)", spec.Mux)
 	}
 	if spec.ForwardMux != 0 {
 		t.Errorf("ForwardMux = %d, want 0 (symmetric Mux drives adaptive)", spec.ForwardMux)
