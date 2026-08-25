@@ -40,8 +40,8 @@ func TestSOCKS5StatusScoping(t *testing.T) {
 				return
 			}
 			go func(c net.Conn) {
-				_ = proxyinterstitial.ServeSOCKS5(c, "upstream-sink", "skysocks", nil) //nolint:errcheck
-				_ = c.Close()                                                          //nolint:errcheck
+				_ = proxyinterstitial.ServeSOCKS5(c, "upstream-sink", "skysocks", nil, nil) //nolint:errcheck
+				_ = c.Close()                                                               //nolint:errcheck
 			}(c)
 		}
 	}()

@@ -253,6 +253,23 @@ func TestServeSOCKS5_StatusOverride(t *testing.T) {
 			t.Errorf("ServeSOCKS5: %v", err)
 		}
 	})
+
+	// A reserved host is served regardless of port: the override is resolved before
+	// the HTTP-only port gate, so even a non-80 CONNECT is answered with the status
+	// page rather than declined as non-HTTP.
+	t.Run("reserved host served on a non-80 port", func(t *testing.T) {
+		cli, srv := net.Pipe()
+		defer cli.Close() //nolint:errcheck
+		done := make(chan error, 1)
+		go func() { done <- ServeSOCKS5(srv, "", "skysocks", override, nil); srv.Close() }() //nolint:errcheck,gosec
+		got := serveSOCKS5CONNECT(t, cli, statusHost, 8443)
+		if !strings.Contains(got, "STATUS-PAGE") {
+			t.Errorf("reserved host on non-80 port did not receive override; got %q", got)
+		}
+		if err := <-done; err != nil {
+			t.Errorf("ServeSOCKS5: %v", err)
+		}
+	})
 }
 
 // TestServeSOCKS5_ExitReachableFallThrough verifies the fall-through fix: when

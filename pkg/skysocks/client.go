@@ -281,23 +281,33 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 const statusSniffTimeout = 15 * time.Second
 
 // sniffSOCKS5Status inspects the SOCKS5 CONNECT target to intercept the reserved
-// status.skysocks host. The greeting is forwarded to the exit verbatim and the
-// exit's method-selection reply is forwarded to the browser verbatim; only the
-// CONNECT request is parsed, and only a status.skysocks target diverges — every
-// other target's request is written to the exit byte-for-byte before splicing,
-// so non-status traffic is identical to a plain tunnel.
+// status.skysocks host, and CRUCIALLY does so WITHOUT any round-trip to the exit:
+// the method-selection reply is answered LOCALLY (no-auth) so the CONNECT target
+// can be read and a status.skysocks request served in-process even when the exit
+// is dead or unreachable — which is exactly when the status page matters most. The
+// exit is contacted only AFTER a non-status target is confirmed; at that point the
+// greeting and CONNECT request are replayed to the exit byte-for-byte, so the exit
+// sees an identical stream and non-status traffic is a plain tunnel.
+//
+// A browser that offers no no-auth method (exotic for a loopback SOCKS client) can
+// not be answered locally; that case falls back to the transparent forward-to-exit
+// handshake, where the exit drives the (auth) negotiation and everything rides
+// through. Such a client is never the browser hitting status.skysocks.
 //
 // Returns proceed=true when the caller should continue with the normal
-// bidirectional splice (conn and stream are positioned just past the forwarded
-// handshake); target is then the CONNECT "host:port" the stream carries (or ""
-// when it could not be parsed), for the status page's per-stream detail. Returns
-// false when the request was served in-process or the connection is unusable; the
-// caller then closes both sides.
+// bidirectional splice (conn and stream are positioned just past the handshake);
+// target is then the CONNECT "host:port" the stream carries (or "" when it could
+// not be parsed), for the status page's per-stream detail. Returns false when the
+// request was served in-process or the connection is unusable; the caller then
+// closes both sides.
 func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool, target string) {
-	_ = conn.SetReadDeadline(time.Now().Add(statusSniffTimeout))   //nolint:errcheck
-	_ = stream.SetReadDeadline(time.Now().Add(statusSniffTimeout)) //nolint:errcheck
+	// Only the browser side gets a read deadline up front: the exit must not be
+	// touched (nor block us) until a non-status target is confirmed, so the reserved
+	// status host stays reachable regardless of exit reachability.
+	_ = conn.SetReadDeadline(time.Now().Add(statusSniffTimeout)) //nolint:errcheck
 
-	// Greeting: VER, NMETHODS, METHODS[NMETHODS] — forwarded to the exit verbatim.
+	// Greeting: VER, NMETHODS, METHODS[NMETHODS]. Buffered so a non-status target's
+	// greeting can be replayed to the exit byte-for-byte.
 	hdr := make([]byte, 2)
 	if _, err := io.ReadFull(conn, hdr); err != nil || hdr[0] != 0x05 {
 		return false, ""
@@ -307,27 +317,21 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool, target 
 	if _, err := io.ReadFull(conn, greeting[2:]); err != nil {
 		return false, ""
 	}
-	if _, err := stream.Write(greeting); err != nil {
-		return false, ""
-	}
 
-	// Method-selection reply (2 bytes) from the exit — forwarded to the browser.
-	method := make([]byte, 2)
-	if _, err := io.ReadFull(stream, method); err != nil {
-		return false, ""
+	// If the browser did not offer no-auth we can't answer locally; fall back to
+	// forwarding the handshake to the exit and letting it drive the negotiation.
+	// (A status.skysocks browser always offers no-auth, so this never shadows it.)
+	if !offersNoAuth(greeting) {
+		return c.forwardExitHandshake(conn, stream, greeting)
 	}
-	if _, err := conn.Write(method); err != nil {
+	// Answer method-selection to the browser ourselves (no-auth) so the CONNECT
+	// target can be read WITHOUT contacting the exit.
+	if _, err := conn.Write([]byte{0x05, 0x00}); err != nil {
 		return false, ""
-	}
-	// Anything but no-auth accepted: hand the rest off untouched — the auth
-	// sub-negotiation and CONNECT ride through transparently.
-	if method[0] != 0x05 || method[1] != 0x00 {
-		clearDeadlines(conn, stream)
-		return true, ""
 	}
 
 	// CONNECT request: VER, CMD, RSV, ATYP, ADDR, PORT. Buffered so a non-status
-	// target is forwarded to the exit byte-for-byte.
+	// target is replayed to the exit byte-for-byte.
 	rhdr := make([]byte, 4)
 	if _, err := io.ReadFull(conn, rhdr); err != nil || rhdr[0] != 0x05 {
 		return false, ""
@@ -362,7 +366,11 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool, target 
 		host = net.IP(b).String()
 		req = append(req, b...)
 	default:
-		// Unknown ATYP: forward what we have and let the exit deal with it.
+		// Unknown ATYP: not a status host — open the exit handshake, forward what
+		// we have, and let the exit deal with the rest via the splice.
+		if err := c.openExit(stream, greeting); err != nil {
+			return false, ""
+		}
 		if _, err := stream.Write(req); err != nil {
 			return false, ""
 		}
@@ -376,21 +384,80 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool, target 
 	req = append(req, portB...)
 	port := int(portB[0])<<8 | int(portB[1])
 
-	// Reserved status host: serve the in-process page over HTTP instead of
-	// tunneling to the exit. HTTP only — the resolver CA forbids a .skysocks TLS
-	// leaf, so status.skysocks is HTTP-only by design.
+	// Reserved status host: serve the in-process page over HTTP. This is reached
+	// with NO exit involvement, so status.skysocks stays reachable when the exit is
+	// down. HTTP only — the resolver CA forbids a .skysocks TLS leaf, so
+	// status.skysocks is HTTP-only by design. serveStatusPage routes "/" (page) and
+	// "/ws" (live WebSocket) on the browser's request.
 	if surface, ok := proxystatus.Match(host); ok && surface == proxystatus.SurfaceSkysocks {
 		clearDeadlines(conn, stream)
 		c.serveStatusPage(conn, stream)
 		return false, ""
 	}
 
-	// Non-status: forward the buffered CONNECT request to the exit and splice.
+	// Non-status: open the exit's SOCKS session now (greeting + method reply) and
+	// replay the buffered CONNECT request, then splice.
+	if err := c.openExit(stream, greeting); err != nil {
+		return false, ""
+	}
 	if _, err := stream.Write(req); err != nil {
 		return false, ""
 	}
 	clearDeadlines(conn, stream)
 	return true, fmt.Sprintf("%s:%d", host, port)
+}
+
+// offersNoAuth reports whether a buffered SOCKS5 greeting (VER, NMETHODS, METHODS…)
+// advertises the no-authentication method (0x00) — the one this transparent client
+// can answer locally without consulting the exit.
+func offersNoAuth(greeting []byte) bool {
+	if len(greeting) < 2 {
+		return false
+	}
+	return bytes.IndexByte(greeting[2:], 0x00) >= 0
+}
+
+// openExit performs the client→exit SOCKS5 method negotiation for a confirmed
+// non-status target: it replays the browser's greeting to the exit and consumes
+// the exit's method-selection reply, which the skysocks exit (no-auth) answers
+// with 05 00. It is called only after the local browser handshake, so it never
+// gates recognition of the reserved status host on the exit being reachable. A
+// read deadline bounds a dead exit so it can't wedge the goroutine.
+func (c *Client) openExit(stream net.Conn, greeting []byte) error {
+	_ = stream.SetReadDeadline(time.Now().Add(statusSniffTimeout)) //nolint:errcheck
+	if _, err := stream.Write(greeting); err != nil {
+		return err
+	}
+	method := make([]byte, 2)
+	if _, err := io.ReadFull(stream, method); err != nil {
+		return err
+	}
+	if method[0] != 0x05 || method[1] != 0x00 {
+		return fmt.Errorf("exit selected non-no-auth method %v", method)
+	}
+	return nil
+}
+
+// forwardExitHandshake is the transparent fallback for a browser that offers no
+// no-auth method: the greeting is forwarded to the exit verbatim and the exit's
+// method-selection reply is forwarded back to the browser, then the connection is
+// spliced so the (auth) sub-negotiation and CONNECT ride through end-to-end. Such a
+// client is never the loopback browser hitting status.skysocks, so leaving status
+// interception off this path is correct.
+func (c *Client) forwardExitHandshake(conn, stream net.Conn, greeting []byte) (proceed bool, target string) {
+	_ = stream.SetReadDeadline(time.Now().Add(statusSniffTimeout)) //nolint:errcheck
+	if _, err := stream.Write(greeting); err != nil {
+		return false, ""
+	}
+	method := make([]byte, 2)
+	if _, err := io.ReadFull(stream, method); err != nil {
+		return false, ""
+	}
+	if _, err := conn.Write(method); err != nil {
+		return false, ""
+	}
+	clearDeadlines(conn, stream)
+	return true, ""
 }
 
 // streamID extracts the yamux stream id from the net.Conn session.Open returns
