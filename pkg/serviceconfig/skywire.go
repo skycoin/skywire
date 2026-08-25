@@ -3,8 +3,8 @@ package config
 
 import (
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 	msg "github.com/skycoin/skywire/pkg/dmsg/dmsgserver"
-	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/router"
 )
 

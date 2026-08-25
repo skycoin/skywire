@@ -1,6 +1,6 @@
-// Package dmsgc pkg/dmsgc/dmsgc.go c1-net-dmsg
+// Package dmsgc pkg/dmsg/dmsgc/dmsgc.go c1-net-dmsg
 // dmsg configuration surface: the wire-format types and their JSON
-// methods live in pkg/dmsgc/spec (WASM-clean), and pkg/dmsgc here
+// methods live in pkg/dmsg/dmsgc/spec (WASM-clean), and pkg/dmsg/dmsgc here
 // aliases them so existing callers keep working unchanged while
 // composing the dmsg.Client constructor and the LAN-priority
 // discovery wrapper that need the heavier transitive deps.
@@ -15,19 +15,19 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
-	"github.com/skycoin/skywire/pkg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Deployment is the wire-format type for one (dmsg-discovery,
-// transit-servers) pair. Aliased from pkg/dmsgc/spec so existing
+// transit-servers) pair. Aliased from pkg/dmsg/dmsgc/spec so existing
 // callers writing `dmsgc.Deployment{...}` keep compiling, while the
 // canonical definition lives in the WASM-clean spec package.
 type Deployment = spec.Deployment
 
 // DmsgConfig is the wire-format type for the visor-side dmsg
-// subsystem configuration. Aliased from pkg/dmsgc/spec; see
+// subsystem configuration. Aliased from pkg/dmsg/dmsgc/spec; see
 // spec.DmsgConfig for the type doc and the JSON-polymorphism notes.
 type DmsgConfig = spec.DmsgConfig
 

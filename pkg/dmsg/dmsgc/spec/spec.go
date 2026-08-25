@@ -1,9 +1,9 @@
-// Package spec pkg/dmsgc/spec/spec.go c1-net-dmsg
+// Package spec pkg/dmsg/dmsgc/spec/spec.go c1-net-dmsg
 // and methods here describe the visor's dmsg-subsystem configuration
 // at the wire (JSON) layer only — no dmsg client construction, no
 // network I/O, no transitive pull on operational packages.
 //
-// Why split: pkg/dmsgc itself imports pkg/dmsg/dmsg (the dmsg client
+// Why split: pkg/dmsg/dmsgc itself imports pkg/dmsg/dmsg (the dmsg client
 // implementation) which transitively brings in pty / ipc / bbolt
 // vendor packages that don't compile under GOOS=js. That made
 // pkg/visor/visorconfig.V1, which has a *dmsgc.DmsgConfig field,
@@ -13,13 +13,13 @@
 // Moving the wire types out into this leaf package lets V1 reference
 // dmsgcspec.DmsgConfig instead — V1 compiles under WASM, the
 // install-page can render and emit live visor configs, and the
-// operational pkg/dmsgc keeps doing its job for the visor binary
+// operational pkg/dmsg/dmsgc keeps doing its job for the visor binary
 // via a `type DmsgConfig = spec.DmsgConfig` alias.
 //
 // All methods on DmsgConfig are pure: JSON marshalers and getters
 // over the in-memory slice. None of them touch network, filesystem,
 // or transitive operational packages. Adding an operational method
-// (one that dials, fetches, etc.) belongs in pkg/dmsgc, not here.
+// (one that dials, fetches, etc.) belongs in pkg/dmsg/dmsgc, not here.
 package spec
 
 import (
@@ -216,7 +216,7 @@ func (c *DmsgConfig) ResolvedServers() []*disc.Entry {
 //
 // Exported (vs the pre-split lowercase pkFromDmsgURL) because the
 // spec package is the natural home for parse helpers that depend
-// only on stdlib + cipher. Internal callers in pkg/dmsgc now use
+// only on stdlib + cipher. Internal callers in pkg/dmsg/dmsgc now use
 // spec.PKFromDmsgURL.
 func PKFromDmsgURL(s string) cipher.PubKey {
 	if s == "" {

@@ -19,7 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
-	"github.com/skycoin/skywire/pkg/networkmonitor"
+	"github.com/skycoin/skywire/pkg/network-monitor/nmpk"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/transport"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/transport-discovery/metrics"
@@ -47,7 +47,7 @@ var (
 	// ErrBadInput occurs in case of bad input
 	ErrBadInput = errors.New("error bad input")
 	// WhitelistPKs store whitelisted pks of network monitor
-	WhitelistPKs = networkmonitor.GetWhitelistPKs()
+	WhitelistPKs = nmpk.GetWhitelistPKs()
 )
 
 // API register all the API endpoints.

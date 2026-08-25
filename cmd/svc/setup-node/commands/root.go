@@ -22,7 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/services/sn"

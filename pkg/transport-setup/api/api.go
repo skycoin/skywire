@@ -70,7 +70,7 @@ func setupDmsgC(conf config.Config, log *logging.Logger) *dmsg.Client {
 	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
 
 	// Single dmsg client with self-hosted dmsg-discovery — matches the
-	// visor's post-#3136 bootstrap (pkg/visor/init_dmsg.go + pkg/dmsgc/
+	// visor's post-#3136 bootstrap (pkg/visor/init_dmsg.go + pkg/dmsg/dmsgc/
 	// dmsgc.go). Plain-HTTP discovery (conf.Dmsg.Discovery) is no longer
 	// supported for deployment services; conf.Dmsg.DiscoveryDmsg is
 	// required.
