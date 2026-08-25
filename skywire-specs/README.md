@@ -455,9 +455,9 @@ If these values are not valid, the *Transport Discovery* should reject the reque
 The code should be in the `skywire-services` repository.
 
 - `/cmd/transport-discovery/transport-discovery.go` is the main executable for the *Transport Discovery*.
-- `/pkg/transport-discovery/api/` contains the RESTFUL API definitions.
-- `/pkg/transport-discovery/store/` contains the definition of the `Storer` interface and it's implementations.
-- `/pkg/transport-discovery/client/` contains the client library that interacts with the *Transport Discovery* server's RESTFUL API.
+- `/pkg/deployment/tpd/api/` contains the RESTFUL API definitions.
+- `/pkg/deployment/tpd/store/` contains the definition of the `Storer` interface and it's implementations.
+- `/pkg/deployment/tpd/client/` contains the client library that interacts with the *Transport Discovery* server's RESTFUL API.
 
 ## Database
 

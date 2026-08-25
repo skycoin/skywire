@@ -22,8 +22,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
+	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
 	"github.com/skycoin/skywire/pkg/transport"
-	tpdapi "github.com/skycoin/skywire/pkg/transport-discovery/api"
 )
 
 // cxoAwareTPD wraps a transport.DiscoveryClient, intercepting

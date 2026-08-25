@@ -8,7 +8,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
-	"github.com/skycoin/skywire/pkg/transport-discovery/store"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 )
 
 // fakeUptimeMgr is a minimal uptimeCXOSubMgr for exercising readUptimeWindow's

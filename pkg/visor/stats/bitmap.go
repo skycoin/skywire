@@ -5,7 +5,7 @@
 // Each UTC day is encoded as 288 bits (one per 5-minute slot) in 36
 // raw bytes. Bit set = the tier or service was online during at least
 // one sampler tick within the slot. The encoding is bit-identical to
-// the format pkg/transport-discovery/store/redis_uptime.go uses for
+// the format pkg/deployment/tpd/store/redis_uptime.go uses for
 // integrated uptime tracking, so renderers and dashboards can consume
 // either source unchanged.
 package stats

@@ -23,7 +23,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
-	"github.com/skycoin/skywire/pkg/transport-discovery/store"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 )
 
 // ErrTPDUptimeNotReady is returned by FetchVisorUptimeCXO when the
@@ -74,7 +74,7 @@ type uptimeCXOSubMgr interface {
 }
 
 // compactVisorSummary mirrors the publisher-side wire shape
-// (pkg/transport-discovery/api/cxo_uptime_publisher.go): a per-visor uptime
+// (pkg/deployment/tpd/api/cxo_uptime_publisher.go): a per-visor uptime
 // leaf whose timeline is the raw 36-byte bitmap rather than the 288-char
 // string. Re-declared here to keep the dependency direction one-way; keep the
 // JSON tags in sync with the publisher.

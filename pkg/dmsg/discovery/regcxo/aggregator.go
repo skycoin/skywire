@@ -14,7 +14,7 @@
 // connection kept warm by the treestore heartbeat. HTTP PUT remains the
 // fallback, so ingest is idempotent (see Sink.IngestEntryFromCXO).
 //
-// Structure mirrors pkg/transport-discovery/cxoaggregator, trimmed to a
+// Structure mirrors pkg/deployment/tpd/cxoaggregator, trimmed to a
 // single "entry" leaf: same connect-driven subscribe, same grace-gated
 // orphan-feed reclaim that keeps the in-memory CXDS from growing without
 // bound as visor PKs churn.

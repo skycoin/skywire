@@ -20,7 +20,7 @@ import (
 // to appear in the list, same shape the consumers already accept from
 // other discovery surfaces).
 //
-// Mirrors the per-edge cache pattern in pkg/transport-discovery/store
+// Mirrors the per-edge cache pattern in pkg/deployment/tpd/store
 // (PRs #2340 and #2342).
 type getAllCache struct {
 	mu  sync.RWMutex

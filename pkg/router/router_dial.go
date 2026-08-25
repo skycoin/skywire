@@ -1196,7 +1196,7 @@ fetchRoutesAgain:
 	// finder service doesn't sort by latency at query time today; the
 	// visor has the same TPD latency data available in-memory (own
 	// transports via tm.GetLatencyStats) + via TPD entries (already
-	// aggregated by pkg/transport-discovery/cxoaggregator from the
+	// aggregated by pkg/deployment/tpd/cxoaggregator from the
 	// CXO telemetry feed). Building the lookup here puts the ranking
 	// in the dial hot path with no extra round-trip cost — local-
 	// transport latency is a constant-time map read; non-local hops

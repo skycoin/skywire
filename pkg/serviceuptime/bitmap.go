@@ -1,6 +1,6 @@
 // Package serviceuptime pkg/serviceuptime/bitmap.go c2-net-discovery
 // uptime bitmap helpers, bit-identical to pkg/visor/stats/bitmap.go
-// and pkg/transport-discovery/store/redis_uptime.go's timeline format.
+// and pkg/deployment/tpd/store/redis_uptime.go's timeline format.
 //
 // Each UTC day is encoded as 288 bits (one per 5-minute slot) in 36
 // raw bytes, MSB-first. Bit set = the recording process was alive

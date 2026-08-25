@@ -1,0 +1,244 @@
+// Package store pkg/deployment/tpd/store/store.go c4-net-discovery
+package store
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/transport"
+	types "github.com/skycoin/skywire/pkg/transport/types"
+)
+
+var (
+	// ErrNotEnoughACKs means that we're still waiting for a visor to confirm the transport registration
+	ErrNotEnoughACKs = errors.New("not enough ACKs")
+
+	// ErrAlreadyRegistered indicates that transport ID is already in use.
+	ErrAlreadyRegistered = errors.New("ID already registered")
+
+	// ErrTransportNotFound indicates that requested transport is not registered.
+	ErrTransportNotFound = errors.New("transport not found")
+
+	// ErrBadEntry is returned when entry is malformed.
+	ErrBadEntry = errors.New("bad entry format")
+
+	// ErrUnknownStoreType means that store type is unknown.
+	ErrUnknownStoreType = errors.New("unknown store type")
+)
+
+// BandwidthAggregation stores aggregated bandwidth for a time period.
+type BandwidthAggregation struct {
+	TransportID string `json:"transport_id"`
+	Period      string `json:"period"`     // "daily", "weekly", "monthly"
+	PeriodKey   string `json:"period_key"` // e.g., "2026-02-10", "2026-W06", "2026-02"
+	Bandwidth   uint64 `json:"bandwidth"`  // total bytes (sent + recv)
+	UpdatedAt   int64  `json:"updated_at"`
+}
+
+// DailyBandwidthEntry stores bandwidth total for a single day.
+type DailyBandwidthEntry struct {
+	Date      string `json:"date"` // "2006-01-02"
+	Bandwidth uint64 `json:"bw"`   // total bytes (sent + recv)
+}
+
+// MetricsQuery contains query parameters for metrics endpoints.
+type MetricsQuery struct {
+	Days      int    // 0 = all available (max 35)
+	Type      string // Filter by transport type (stcpr, sudph, dmsg, stcp)
+	Live      string // Filter by liveness: "true", "false", "all" (default: "all")
+	Edges     bool   // Include actual public keys in response
+	Bandwidth bool   // Include bandwidth data (default: true)
+	Latency   bool   // Include latency data (default: true)
+}
+
+// EdgeBandwidth contains bandwidth data from one edge's perspective.
+type EdgeBandwidth struct {
+	Sent uint64 `json:"sent"` // Cumulative bytes sent
+	Recv uint64 `json:"recv"` // Cumulative bytes received
+}
+
+// TransportLatency contains latency statistics for a transport in microseconds.
+// Latency is at the transport level (not per-edge) since it's round-trip.
+type TransportLatency struct {
+	Min int64 `json:"min"` // Minimum observed latency in microseconds
+	Max int64 `json:"max"` // Maximum observed latency in microseconds
+	Avg int64 `json:"avg"` // Average latency in microseconds
+}
+
+// DailyEdgeBandwidth contains per-day bandwidth with edge A and B data.
+type DailyEdgeBandwidth struct {
+	Date string         `json:"date"`
+	A    *EdgeBandwidth `json:"a,omitempty"`
+	B    *EdgeBandwidth `json:"b,omitempty"`
+}
+
+// TransportMetric contains per-transport metrics with latency at transport level
+// and daily bandwidth breakdowns per edge.
+type TransportMetric struct {
+	ID      string               `json:"id"`
+	Type    string               `json:"type"`
+	Live    bool                 `json:"live"`
+	Edges   []string             `json:"edges,omitempty"`   // Only included if query.Edges=true
+	Latency *TransportLatency    `json:"latency,omitempty"` // Transport-level latency stats
+	Daily   []DailyEdgeBandwidth `json:"daily"`             // Per-day bandwidth by edge
+}
+
+// TypeMetricAggregate contains aggregate metrics for a transport type.
+type TypeMetricAggregate struct {
+	Bandwidth uint64  `json:"bandwidth,omitempty"`
+	Latency   float64 `json:"latency,omitempty"`
+}
+
+// DailyAggregate contains network-wide aggregate for a single day.
+type DailyAggregate struct {
+	Date      string                          `json:"date"`
+	Bandwidth uint64                          `json:"bandwidth,omitempty"`
+	Latency   float64                         `json:"latency,omitempty"`
+	ByType    map[string]*TypeMetricAggregate `json:"by_type,omitempty"`
+}
+
+// CumulativeAggregate contains cumulative totals across all days.
+type CumulativeAggregate struct {
+	Bandwidth uint64                          `json:"bandwidth,omitempty"`
+	Latency   float64                         `json:"latency,omitempty"`
+	ByType    map[string]*TypeMetricAggregate `json:"by_type,omitempty"`
+}
+
+// NetworkMetricResponse is the response for GET /metric.
+type NetworkMetricResponse struct {
+	Daily      []DailyAggregate     `json:"daily"`
+	Cumulative *CumulativeAggregate `json:"cumulative"`
+}
+
+// VisorBandwidthAggregate contains bandwidth totals for a visor.
+type VisorBandwidthAggregate struct {
+	Sent  uint64 `json:"sent"`
+	Recv  uint64 `json:"recv"`
+	Total uint64 `json:"total"`
+}
+
+// DailyVisorAggregate contains per-day visor aggregate data.
+type DailyVisorAggregate struct {
+	Date      string                   `json:"date"`
+	Bandwidth *VisorBandwidthAggregate `json:"bandwidth,omitempty"`
+	Latency   float64                  `json:"latency,omitempty"`
+}
+
+// VisorCumulativeAggregate contains cumulative visor totals.
+type VisorCumulativeAggregate struct {
+	Bandwidth *VisorBandwidthAggregate `json:"bandwidth,omitempty"`
+	Latency   float64                  `json:"latency,omitempty"`
+}
+
+// VisorMetricResponse is the response for a single visor in GET /metric/visor/{pks}.
+type VisorMetricResponse struct {
+	Daily      []DailyVisorAggregate     `json:"daily"`
+	Cumulative *VisorCumulativeAggregate `json:"cumulative"`
+}
+
+// VisorSummary holds a visor's uptime data.
+// This format matches the Uptime Tracker's response format.
+// v3 adds Timeline — a per-day string of 288 chars (one per 5-minute slot)
+// where '.' = heartbeat received and ' ' = missed.
+type VisorSummary struct {
+	PK       cipher.PubKey     `json:"pk"`
+	Online   bool              `json:"on"`
+	Version  string            `json:"version,omitempty"`
+	Daily    map[string]string `json:"daily,omitempty"`
+	Timeline map[string]string `json:"timeline,omitempty"`
+}
+
+// TransportUptimeSummary holds uptime data for a single transport.
+// Edges are omitted by default — include via ?edges=true query param.
+type TransportUptimeSummary struct {
+	ID       uuid.UUID         `json:"id"`
+	Online   bool              `json:"on"`
+	Type     string            `json:"type,omitempty"`
+	EdgeA    string            `json:"edge_a,omitempty"`
+	EdgeB    string            `json:"edge_b,omitempty"`
+	Daily    map[string]string `json:"daily,omitempty"`
+	Timeline map[string]string `json:"timeline,omitempty"`
+}
+
+// Store stores Transport metadata and generated nonce values.
+type Store interface {
+	TransportStore
+}
+
+// TransportStore stores Transport metadata.
+type TransportStore interface {
+	// RegisterTransport registers/refreshes a transport. reporter is the
+	// authenticated registering edge: only that edge's per-edge index TTL is
+	// refreshed, so an offline edge's index expires even while its live peer
+	// keeps re-registering the shared transport. A zero reporter (or one that
+	// is not an edge) falls back to refreshing both edges (legacy behavior).
+	RegisterTransport(context.Context, cipher.PubKey, *transport.SignedEntry) error
+	RegisterTransportsBatch(context.Context, cipher.PubKey, []*transport.SignedEntry) error
+	DeregisterTransport(context.Context, uuid.UUID) error
+	GetTransportByID(context.Context, uuid.UUID) (*transport.Entry, error)
+	GetTransportsByEdge(context.Context, cipher.PubKey) ([]*transport.Entry, error)
+	// GetTransportsByEdgeNoLatency is the cheap variant for callers
+	// (DHT mirror, transport-count stats) that don't need the
+	// durable latency overlay. Skips the per-call MGET on lat:<id>
+	// keys and the JSON decode that follows.
+	GetTransportsByEdgeNoLatency(context.Context, cipher.PubKey) ([]*transport.Entry, error)
+	GetNumberOfTransports(context.Context) (map[types.Type]int, error)
+	GetAllTransports(context.Context, bool) ([]*transport.Entry, error)
+	// Bandwidth ingest (called by the CXO aggregator with the
+	// reporter's cumulative counters; deltas are computed
+	// internally against the per-reporter previous snapshot).
+	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64) error
+	// Latency ingest (called by the CXO aggregator with the
+	// reporter's window min/max/avg in milliseconds). RTT-symmetric,
+	// so last-writer-wins across the two edges is acceptable.
+	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error
+	// Bandwidth query methods (legacy)
+	GetTransportBandwidth(ctx context.Context, tpID uuid.UUID, period string, limit int) ([]BandwidthAggregation, error)
+	GetVisorBandwidth(ctx context.Context, pk cipher.PubKey, period string, limit int) ([]BandwidthAggregation, error)
+	GetAllVisorSummaries(ctx context.Context, v2 bool, timeline bool) ([]VisorSummary, error)
+	RecordHeartbeat(ctx context.Context, pk cipher.PubKey, version string) error
+	GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string
+	// Transport uptime tracking (stcpr/sudph only).
+	// at is the time the heartbeat was *observed* on the visor side
+	// (snap.SampledAt for the CXO path, time.Now() for the HTTP
+	// register path); the slot bit and date bucket derive from it,
+	// so leaf-arrival skew that crosses a 5-minute boundary still
+	// credits the correct slot. Zero time falls back to time.Now().
+	RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string, at time.Time) error
+	// IngestTransportTimeline OR-merges a visor-supplied per-transport
+	// uptime bitmap into the persistent timeline. Used by the CXO
+	// aggregator to absorb the visor's locally-tracked bitmap, which
+	// captures slots TPD's heartbeat path never observed (e.g.
+	// during TPD downtime). bitmap must be 36 bytes; date is the
+	// UTC YYYY-MM-DD the bitmap covers.
+	IngestTransportTimeline(ctx context.Context, tpID uuid.UUID, date string, bitmap []byte) error
+	GetTransportUptimeSummaries(ctx context.Context, tpIDs []uuid.UUID, v2 bool, timeline bool) ([]TransportUptimeSummary, error)
+	GetTransportUptimeByVisor(ctx context.Context, pk cipher.PubKey, v2 bool, timeline bool) ([]TransportUptimeSummary, error)
+	GetTransportDailyTimeline(ctx context.Context, tpID string, now time.Time) map[string]string
+	BackupAndCleanOldBandwidth(ctx context.Context, backupPath string) error
+	// New metrics methods
+	GetNetworkMetrics(ctx context.Context, query MetricsQuery) (*NetworkMetricResponse, error)
+	GetVisorAggregateMetrics(ctx context.Context, pks []cipher.PubKey, query MetricsQuery) (map[string]*VisorMetricResponse, error)
+	GetAllTransportMetrics(ctx context.Context, query MetricsQuery) ([]TransportMetric, error)
+	GetTransportMetricsByIDs(ctx context.Context, ids []uuid.UUID, query MetricsQuery) ([]TransportMetric, error)
+	GetTransportMetricsByVisors(ctx context.Context, pks []cipher.PubKey, query MetricsQuery) ([]TransportMetric, error)
+	Close()
+}
+
+// New constructs a new Store of requested type.
+func New(ctx context.Context, config storeconfig.Config, ttl time.Duration, logger *logging.Logger) (TransportStore, error) {
+	switch config.Type {
+	case storeconfig.Memory:
+		return newMemoryStore(), nil
+	case storeconfig.Redis:
+		return newRedisStore(ctx, config.URL, config.Password, config.PoolSize, ttl, logger)
+	default:
+		return nil, ErrUnknownStoreType
+	}
+}
