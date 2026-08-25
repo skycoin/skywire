@@ -198,6 +198,12 @@ type TransportStore interface {
 	// reporter's window min/max/avg in milliseconds). RTT-symmetric,
 	// so last-writer-wins across the two edges is acceptable.
 	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error
+	// Throughput ingest (called by the CXO aggregator with the
+	// reporter's passively-observed PEAK goodput estimate in bytes/sec,
+	// carried on the sharded telemetry feed). Recorded per-transport with
+	// a peak-preserving max so the higher of the two edges' observations
+	// survives; overlaid onto Entry.ThroughputBps on read.
+	UpdateThroughput(ctx context.Context, transportID string, reporterPK cipher.PubKey, bps float64) error
 	// Bandwidth query methods (legacy)
 	GetTransportBandwidth(ctx context.Context, tpID uuid.UUID, period string, limit int) ([]BandwidthAggregation, error)
 	GetVisorBandwidth(ctx context.Context, pk cipher.PubKey, period string, limit int) ([]BandwidthAggregation, error)

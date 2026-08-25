@@ -3,12 +3,46 @@ package stats
 import (
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 )
+
+// uuidInShard returns a UUID whose telemetrywire shard (byte0>>4) is
+// exactly shard, so a test can place each transport alone in its own
+// shard for deterministic per-shard leaf assertions.
+func uuidInShard(shard uint8) uuid.UUID {
+	id := uuid.New()
+	id[0] = shard << 4 // high nibble = shard, low nibble 0
+	return id
+}
+
+// shardEntries decodes every transports/telemetry/<sh> leaf in the sink
+// snapshot and returns the packed entries keyed by transport ID, plus the
+// set of shard-leaf paths present.
+func shardEntries(puts map[string][]byte) (map[uuid.UUID]telemetrywire.Entry, map[string]struct{}) {
+	entries := make(map[uuid.UUID]telemetrywire.Entry)
+	paths := make(map[string]struct{})
+	for path, v := range puts {
+		if !strings.HasPrefix(path, "transports/telemetry/") {
+			continue
+		}
+		paths[path] = struct{}{}
+		_, es, err := telemetrywire.DecodeShard(v)
+		if err != nil {
+			continue
+		}
+		for _, e := range es {
+			entries[e.ID] = e
+		}
+	}
+	return entries, paths
+}
 
 // recordingSink captures every Put and Delete call so tests can
 // assert on the post-sample mirror state. Concurrency-safe so it can
@@ -125,13 +159,21 @@ func TestSinkReceivesTransportPutsOnSample(t *testing.T) {
 	tr.sample(day)
 
 	puts, _ := sink.snapshot()
-	wantCurrent := "transports/" + id.String() + "/current"
-	if _, ok := puts[wantCurrent]; !ok {
-		t.Errorf("missing %s in sink puts; got %v", wantCurrent, keysOf(puts))
+	wantShard := telemetrywire.LeafPath(telemetrywire.ShardOf(id))
+	if _, ok := puts[wantShard]; !ok {
+		t.Errorf("missing shard leaf %s in sink puts; got %v", wantShard, keysOf(puts))
+	}
+	entries, _ := shardEntries(puts)
+	e, ok := entries[id]
+	if !ok {
+		t.Fatalf("transport %s not packed into any shard leaf; got %v", id, keysOf(puts))
+	}
+	if e.SentBytes != 1000 || e.RecvBytes != 500 {
+		t.Errorf("packed entry bytes = %d/%d, want 1000/500", e.SentBytes, e.RecvBytes)
 	}
 	// The daily rollup is persisted to bbolt but intentionally NOT mirrored to
 	// the CXO sink (no subscriber consumes it; it would only steal fill budget
-	// from transports/list on the announce conn). It must be absent here.
+	// from the discovery leaf on the announce conn). It must be absent here.
 	dontWantDaily := "transports/" + id.String() + "/2026-04-27/rollup"
 	if _, ok := puts[dontWantDaily]; ok {
 		t.Errorf("rollup %s should NOT be published to the CXO sink; got %v", dontWantDaily, keysOf(puts))
@@ -267,33 +309,34 @@ func TestSinkDeletedOnBboltRetentionDrop(t *testing.T) {
 	}
 }
 
-// TestSinkDeletesCurrentWhenTransportGoesDead drives two live
-// transports through a sample (both publish a current leaf), then a
-// second sample where one has closed (probe no longer returns it). The
-// closed transport's current leaf must be sink-Deleted; the still-live
-// one's must remain and never be deleted.
-func TestSinkDeletesCurrentWhenTransportGoesDead(t *testing.T) {
+// TestSinkDeletesShardWhenTransportGoesDead drives two live transports
+// (each alone in its own shard) through a sample, then a second sample
+// where one has closed (probe no longer returns it). The closed
+// transport's now-empty shard leaf must be sink-Deleted; the still-live
+// one's shard remains and is never deleted.
+func TestSinkDeletesShardWhenTransportGoesDead(t *testing.T) {
 	sink := newRecordingSink()
 	tr := newTrackerWithSink(t, sink)
-	live := uuid.New()
-	dying := uuid.New()
+	live := uuidInShard(1)
+	dying := uuidInShard(2)
+	liveLeaf := telemetrywire.LeafPath(telemetrywire.ShardOf(live))
+	dyingLeaf := telemetrywire.LeafPath(telemetrywire.ShardOf(dying))
 	t0 := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
 
-	probe := func() []TransportProbe {
+	tr.probes.Transports = func() []TransportProbe {
 		return []TransportProbe{
 			{ID: live, Type: "stcpr", SentBytes: 10, RecvBytes: 10},
 			{ID: dying, Type: "stcpr", SentBytes: 20, RecvBytes: 20},
 		}
 	}
-	tr.probes.Transports = probe
 	tr.sample(t0)
 
 	puts, _ := sink.snapshot()
-	if _, ok := puts[currentTransportPath(live.String())]; !ok {
-		t.Fatalf("live current leaf missing after first sample")
+	if _, ok := puts[liveLeaf]; !ok {
+		t.Fatalf("live shard leaf missing after first sample")
 	}
-	if _, ok := puts[currentTransportPath(dying.String())]; !ok {
-		t.Fatalf("dying current leaf missing after first sample")
+	if _, ok := puts[dyingLeaf]; !ok {
+		t.Fatalf("dying shard leaf missing after first sample")
 	}
 
 	// Second sample: `dying` has closed and is no longer in the probe.
@@ -305,56 +348,76 @@ func TestSinkDeletesCurrentWhenTransportGoesDead(t *testing.T) {
 	puts, dels := sink.snapshot()
 	foundDel := false
 	for _, d := range dels {
-		if d == currentTransportPath(dying.String()) {
+		if d == dyingLeaf {
 			foundDel = true
 		}
-		if d == currentTransportPath(live.String()) {
-			t.Errorf("live transport current leaf was deleted; must persist")
+		if d == liveLeaf {
+			t.Errorf("live shard leaf was deleted; must persist")
 		}
 	}
 	if !foundDel {
-		t.Errorf("dead transport current leaf was not sink-deleted; dels=%v", dels)
+		t.Errorf("emptied shard leaf was not sink-deleted; dels=%v", dels)
 	}
-	if _, ok := puts[currentTransportPath(dying.String())]; ok {
-		t.Errorf("dead transport current leaf still present in sink puts")
+	if _, ok := puts[dyingLeaf]; ok {
+		t.Errorf("emptied shard leaf still present in sink puts")
 	}
-	if _, ok := puts[currentTransportPath(live.String())]; !ok {
-		t.Errorf("live transport current leaf missing after second sample")
+	if _, ok := puts[liveLeaf]; !ok {
+		t.Errorf("live shard leaf missing after second sample")
 	}
 }
 
-// TestSeedMirroredCurrentReconcilesStaleLeaf seeds the tracker with an
-// ID that is not in the first sample's live probe (a transport that
-// died between hydrate and the first sample) and asserts its stale
-// current leaf is reconciled away on that first sample.
-func TestSeedMirroredCurrentReconcilesStaleLeaf(t *testing.T) {
+// TestSeedPublishedShardsSuppressesRedundantRePut seeds the tracker with
+// the shard signature the hydrate path already published, then samples
+// the same live set with identical content. The seeded shard must NOT be
+// re-Put — the change-gate matches the seeded signature, mirroring how
+// startup hydrate primes the sink and the first tick doesn't churn it.
+func TestSeedPublishedShardsSuppressesRedundantRePut(t *testing.T) {
 	sink := newRecordingSink()
 	tr := newTrackerWithSink(t, sink)
-	seededDead := uuid.New()
-	live := uuid.New()
-	tr.SeedMirroredCurrent(map[uuid.UUID]struct{}{seededDead: {}})
+	id := uuidInShard(3)
+	shard := telemetrywire.ShardOf(id)
+	leaf := telemetrywire.LeafPath(shard)
+	now := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
 
+	probe := func() []TransportProbe {
+		return []TransportProbe{{
+			ID: id, Type: "stcpr", SentBytes: 100, RecvBytes: 50,
+			LatencyMS: LatencyTriple{Min: 10, Max: 10, Avg: 10},
+		}}
+	}
+	// Compute the signature hydrate would have published for this exact
+	// content, and seed the tracker with it.
+	seedEntry := telemetrywire.Entry{
+		ID: id, SentBytes: 100, RecvBytes: 50,
+		LatMin: 10, LatMax: 10, LatAvg: 10, Type: telemetrywire.TypeSTCPR,
+	}
+	tr.SeedPublishedShards(map[uint8][32]byte{shard: shardSig([]telemetrywire.Entry{seedEntry})})
+
+	tr.probes.Transports = probe
+	tr.sample(now)
+
+	if n := sink.putCountFor(leaf); n != 0 {
+		t.Errorf("seeded shard was re-Put despite identical content: Put %d times, want 0", n)
+	}
+
+	// A meaningful change now DOES re-Put the shard.
 	tr.probes.Transports = func() []TransportProbe {
-		return []TransportProbe{{ID: live, Type: "stcpr", SentBytes: 1, RecvBytes: 1}}
+		return []TransportProbe{{
+			ID: id, Type: "stcpr", SentBytes: 200, RecvBytes: 50,
+			LatencyMS: LatencyTriple{Min: 10, Max: 10, Avg: 10},
+		}}
 	}
-	tr.sample(time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC))
-
-	_, dels := sink.snapshot()
-	found := false
-	for _, d := range dels {
-		if d == currentTransportPath(seededDead.String()) {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("seeded-dead transport current leaf not reconciled away; dels=%v", dels)
+	tr.sample(now.Add(time.Minute))
+	if n := sink.putCountFor(leaf); n != 1 {
+		t.Errorf("changed shard not re-Put: Put %d times, want 1", n)
 	}
 }
 
-// TestHydrateSinkPushesCurrentOnly asserts the seed path pushes only current
-// per-transport snapshots to the CXO sink — never historical tier/service or
-// timeline bitmaps (those are bbolt-only and would bloat the TPD feed).
-func TestHydrateSinkPushesCurrentOnly(t *testing.T) {
+// TestHydrateSinkPushesShardsOnly asserts the seed path pushes only the
+// compact sharded telemetry leaves to the CXO sink — never historical
+// tier/service or timeline bitmaps (those are bbolt-only and would bloat
+// the TPD feed).
+func TestHydrateSinkPushesShardsOnly(t *testing.T) {
 	store, err := OpenStore(filepath.Join(t.TempDir(), "stats.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -366,11 +429,11 @@ func TestHydrateSinkPushesCurrentOnly(t *testing.T) {
 	}()
 
 	now := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
-	// A current transport snapshot (should be pushed) ...
-	id := uuid.New()
+	// A current transport snapshot (should be packed into a shard) ...
+	id := uuidInShard(5)
 	rec := &TransportRecord{
 		ID: id, Type: "stcpr", FirstSeen: now, LastSeen: now,
-		Current: &LiveSnapshot{SentBytes: 10, RecvBytes: 5, SampledAt: now, Type: "stcpr"},
+		Current: &LiveSnapshot{SentBytes: 10, RecvBytes: 5, ThroughputBps: 4242, SampledAt: now, Type: "stcpr"},
 	}
 	if err := store.PutTransportRecord(rec); err != nil {
 		t.Fatal(err)
@@ -381,29 +444,34 @@ func TestHydrateSinkPushesCurrentOnly(t *testing.T) {
 	}
 
 	sink := newRecordingSink()
-	pushed, err := HydrateSink(store, sink, 7, now, nil)
+	sigs, err := HydrateSink(store, sink, 7, now, nil)
 	if err != nil {
 		t.Fatalf("HydrateSink: %v", err)
 	}
-	if pushed != 1 {
-		t.Errorf("pushed = %d, want 1 (only the current snapshot)", pushed)
+	if len(sigs) != 1 {
+		t.Errorf("shard sigs = %d, want 1 (only the one live transport's shard)", len(sigs))
 	}
 	puts, _ := sink.snapshot()
-	if _, ok := puts["transports/"+id.String()+"/current"]; !ok {
-		t.Errorf("current snapshot missing from sink: %v", keysOf(puts))
+	wantLeaf := telemetrywire.LeafPath(telemetrywire.ShardOf(id))
+	if _, ok := puts[wantLeaf]; !ok {
+		t.Errorf("shard leaf %s missing from sink: %v", wantLeaf, keysOf(puts))
 	}
 	for _, p := range keysOf(puts) {
-		if p != "transports/"+id.String()+"/current" {
-			t.Errorf("only current snapshots should be hydrated to the sink; got unexpected %q", p)
+		if p != wantLeaf {
+			t.Errorf("only shard leaves should be hydrated to the sink; got unexpected %q", p)
 		}
+	}
+	entries, _ := shardEntries(puts)
+	if e := entries[id]; e.ThroughputBps != 4242 {
+		t.Errorf("packed throughput = %v, want 4242 (float32)", e.ThroughputBps)
 	}
 }
 
-// TestHydrateSinkPushesLiveTransportsCurrentOnly seeds the store with a
-// mix of live and dead transport records and asserts HydrateSink pushes
-// a `current` leaf for exactly the live set — the dead-but-retained
-// records stay bbolt-only and off the discovery feed.
-func TestHydrateSinkPushesLiveTransportsCurrentOnly(t *testing.T) {
+// TestHydrateSinkPacksLiveTransportsOnly seeds the store with a mix of
+// live and dead transport records and asserts HydrateSink packs exactly
+// the live set into shard leaves — the dead-but-retained records stay
+// bbolt-only and off the discovery feed.
+func TestHydrateSinkPacksLiveTransportsOnly(t *testing.T) {
 	store, err := OpenStore(filepath.Join(t.TempDir(), "stats.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -442,24 +510,69 @@ func TestHydrateSinkPushesLiveTransportsCurrentOnly(t *testing.T) {
 	}
 
 	puts, _ := sink.snapshot()
+	entries, _ := shardEntries(puts)
 	for _, id := range live {
-		if _, ok := puts[currentTransportPath(id.String())]; !ok {
-			t.Errorf("live transport %s: current leaf missing from sink", id)
+		if _, ok := entries[id]; !ok {
+			t.Errorf("live transport %s: not packed into any shard leaf", id)
 		}
 	}
 	for _, id := range dead {
-		if _, ok := puts[currentTransportPath(id.String())]; ok {
-			t.Errorf("dead transport %s: current leaf must NOT be on the sink", id)
+		if _, ok := entries[id]; ok {
+			t.Errorf("dead transport %s: must NOT be packed into the sharded feed", id)
 		}
 	}
-	nCurrent := 0
-	for p := range puts {
-		if len(p) > len("/current") && p[len(p)-len("/current"):] == "/current" {
-			nCurrent++
+	if len(entries) != len(live) {
+		t.Errorf("packed entries = %d, want %d (live only)", len(entries), len(live))
+	}
+}
+
+// TestBusyHubHydratesAtMost16Leaves is the ≤16-leaves proof: a busy hub
+// with 800 live transports must hydrate to at most 16 shard leaves, not
+// 800 per-transport leaves — the whole point of the sharded shape (the
+// Root's telemetry object count no longer scales with the transport
+// count, so TPD's whole-Root fill can complete).
+func TestBusyHubHydratesAtMost16Leaves(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "stats.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Logf("store.Close: %v", err)
+		}
+	}()
+
+	now := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
+	const n = 800
+	for i := 0; i < n; i++ {
+		id := uuid.New()
+		rec := &TransportRecord{
+			ID: id, Type: "stcpr", FirstSeen: now, LastSeen: now,
+			Current: &LiveSnapshot{SentBytes: uint64(i), RecvBytes: uint64(i), SampledAt: now, Type: "stcpr"},
+		}
+		if err := store.PutTransportRecord(rec); err != nil {
+			t.Fatalf("PutTransportRecord: %v", err)
 		}
 	}
-	if nCurrent != len(live) {
-		t.Errorf("current leaves pushed = %d, want %d (live only)", nCurrent, len(live))
+
+	sink := newRecordingSink()
+	sigs, err := HydrateSink(store, sink, 7, now, nil)
+	if err != nil {
+		t.Fatalf("HydrateSink: %v", err)
+	}
+	puts, _ := sink.snapshot()
+	entries, shardPaths := shardEntries(puts)
+	if len(shardPaths) > telemetrywire.ShardCount {
+		t.Errorf("hydrated %d leaves, want ≤ %d for %d transports", len(shardPaths), telemetrywire.ShardCount, n)
+	}
+	if len(puts) > telemetrywire.ShardCount {
+		t.Errorf("total sink puts = %d, want ≤ %d (only shard leaves)", len(puts), telemetrywire.ShardCount)
+	}
+	if len(sigs) != len(shardPaths) {
+		t.Errorf("sigs = %d but shard leaves = %d; should match", len(sigs), len(shardPaths))
+	}
+	if len(entries) != n {
+		t.Errorf("packed %d transports across the shards, want %d", len(entries), n)
 	}
 }
 

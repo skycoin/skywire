@@ -53,6 +53,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -67,6 +68,13 @@ import (
 type Sink interface {
 	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64) error
 	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error
+	// UpdateThroughput records a transport's passively-observed PEAK
+	// goodput estimate (bytes/sec), carried on the sharded telemetry feed
+	// alongside the cumulative sent/recv counters. It is a real capacity
+	// metric NOT derivable from those counters (average-over-interval vs
+	// tracked peak). Recorded per-transport, last-writer-wins with a
+	// peak-preserving max.
+	UpdateThroughput(ctx context.Context, transportID string, reporterPK cipher.PubKey, bps float64) error
 	// at is the visor-side observation time (snap.SampledAt), so a
 	// heartbeat that crosses a 5-minute slot boundary in transit
 	// still credits the slot the visor was actually online for.
@@ -106,18 +114,27 @@ type Sink interface {
 // BandwidthSink keep compiling until they migrate.
 type BandwidthSink = Sink
 
-// liveSnapshot mirrors pkg/visor/stats.LiveSnapshot. Re-declared on
-// the TPD side to keep the dependency direction one-way: visor →
-// spec → wire format → TPD-side parser. Field renames must be
-// reflected in both places.
+// liveSnapshot mirrors pkg/visor/stats.LiveSnapshot — the LEGACY,
+// per-transport JSON telemetry leaf published at
+// transports/<uuid>/current by visors that predate the sharded wire
+// format. It is kept as a FALLBACK: a mixed fleet has both upgraded
+// visors (publishing the compact sharded telemetry — see
+// pkg/telemetrywire, dispatched via parseTelemetryShardPath below) and
+// not-yet-upgraded visors (still publishing these current leaves). TPD
+// reads whichever a given visor's Root carries; when a Root has
+// transports/telemetry/* shards it uses those and IGNORES the current
+// leaves (see handleRootFilled's shard-preference). Re-declared here to
+// keep the dependency direction one-way: visor → spec → wire format →
+// TPD-side parser. Field renames must be reflected in both places.
 type liveSnapshot struct {
-	SentBytes    uint64    `json:"sent_bytes"`
-	RecvBytes    uint64    `json:"recv_bytes"`
-	LatencyMinMS float64   `json:"latency_min_ms,omitempty"`
-	LatencyMaxMS float64   `json:"latency_max_ms,omitempty"`
-	LatencyAvgMS float64   `json:"latency_avg_ms,omitempty"`
-	SampledAt    time.Time `json:"sampled_at"`
-	Type         string    `json:"type,omitempty"`
+	SentBytes     uint64    `json:"sent_bytes"`
+	RecvBytes     uint64    `json:"recv_bytes"`
+	ThroughputBps float64   `json:"throughput_bps,omitempty"`
+	LatencyMinMS  float64   `json:"latency_min_ms,omitempty"`
+	LatencyMaxMS  float64   `json:"latency_max_ms,omitempty"`
+	LatencyAvgMS  float64   `json:"latency_avg_ms,omitempty"`
+	SampledAt     time.Time `json:"sampled_at"`
+	Type          string    `json:"type,omitempty"`
 }
 
 // transportEntryLeaf is the wire shape for transports/<uuid>/entry
@@ -748,7 +765,29 @@ func (a *Aggregator) handleRootFilled(r *registry.Root) {
 		a.log.Debug("CXO aggregator: dropping root with zero publisher PK")
 		return
 	}
-	a.walkAndDispatch(pack, &rootNode, "", reporter)
+	// Prefer the compact sharded telemetry when present. An upgraded visor
+	// publishes transports/telemetry/<sh> shards and NO per-transport
+	// current leaves; a not-yet-upgraded visor publishes current leaves and
+	// no shards. If this Root carries any shard, use the shards and ignore
+	// any current leaves (mixed-fleet fallback: current is only consulted
+	// when a Root has no shards at all).
+	skipCurrent := rootHasTelemetryShards(pack, &rootNode)
+	a.walkAndDispatch(pack, &rootNode, "", reporter, skipCurrent)
+}
+
+// rootHasTelemetryShards reports whether the Root's "transports" subtree
+// contains a "telemetry" branch — the marker that this visor publishes
+// the sharded wire format, so its (absent) per-transport current leaves
+// should not be looked for. Tolerant of a partial fill: a missing object
+// simply yields false (treat as legacy), which is safe because a visor
+// that truly publishes shards will have them inline in the small Root.
+func rootHasTelemetryShards(pack registry.Pack, rootNode *treestore.TreeNode) bool {
+	_, tsub, found := childByName(pack, rootNode, "transports")
+	if !found || tsub == nil {
+		return false
+	}
+	_, tel, ok := childByName(pack, tsub, "telemetry")
+	return ok && tel != nil
 }
 
 // recoverTransportListOnBreak is the OnFillingBreaks best-effort path.
@@ -797,7 +836,9 @@ func (a *Aggregator) recoverTransportListOnBreak(r *registry.Root) {
 	a.log.WithField("visor", reporter).WithField("path", dispatchPath).
 		Debug("CXO aggregator: recovered transport list from partial fill")
 	leafCopy := append([]byte(nil), leaf...)
-	go a.dispatchLeaf(dispatchPath, leafCopy, reporter)
+	// This recovery only ever dispatches the tp-list discovery leaf, never a
+	// current leaf, so skipCurrent is irrelevant (pass false).
+	go a.dispatchLeaf(dispatchPath, leafCopy, reporter, false)
 }
 
 // reconcileTargeted decouples discovery from the whole-Root telemetry fill.
@@ -1028,7 +1069,7 @@ func childByName(pack registry.Pack, n *treestore.TreeNode, name string) (leaf [
 // held in CXO's local cache and ignored — daily transport rollups,
 // tier bitmaps, and service bitmaps are received but not yet
 // dispatched anywhere; routing them to redis is a follow-up.
-func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, basePath string, reporter cipher.PubKey) {
+func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, basePath string, reporter cipher.PubKey, skipCurrent bool) {
 	count, err := n.Children.Len(pack)
 	if err != nil {
 		return
@@ -1043,13 +1084,13 @@ func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, 
 			fullPath = basePath + "/" + entry.Name
 		}
 		if len(entry.Leaf) > 0 {
-			a.dispatchLeaf(fullPath, entry.Leaf, reporter)
+			a.dispatchLeaf(fullPath, entry.Leaf, reporter, skipCurrent)
 			continue
 		}
 		if entry.Sub.Hash != (skycipher.SHA256{}) {
 			var sub treestore.TreeNode
 			if err := entry.Sub.Value(pack, &sub); err == nil {
-				a.walkAndDispatch(pack, &sub, fullPath, reporter)
+				a.walkAndDispatch(pack, &sub, fullPath, reporter, skipCurrent)
 			}
 		}
 	}
@@ -1060,12 +1101,26 @@ func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, 
 //
 //	transports/<uuid>/entry               → register (metadata)
 //	transports/<uuid>/tombstone           → deregister
-//	transports/<uuid>/current             → bandwidth + latency + heartbeat
+//	transports/telemetry/<sh>             → sharded bandwidth+throughput+latency+heartbeat
+//	transports/<uuid>/current             → LEGACY per-transport bandwidth+latency+heartbeat
 //	transports/<uuid>/<YYYY-MM-DD>/timeline → per-transport uptime bitmap
+//
+// skipCurrent suppresses the legacy transports/<uuid>/current path when
+// the same Root already carries transports/telemetry/* shards (an
+// upgraded visor): the shards are authoritative and the current leaves,
+// if any lingered, are ignored to avoid double-applying.
 //
 // Tier and service bitmaps still flow through the CXO cache but
 // aren't yet projected into TPD's redis uptime tables.
-func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubKey) {
+func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubKey, skipCurrent bool) {
+	// Sharded telemetry (upgraded visors): one binary leaf per shard packs
+	// every transport in that shard. Decode and apply each row exactly as a
+	// legacy `current` snapshot is applied — bandwidth, throughput, latency,
+	// and per-type uptime heartbeat.
+	if _, ok := parseTelemetryShardPath(path); ok {
+		a.dispatchTelemetryShard(path, leaf, reporter)
+		return
+	}
 	// Publishers may gzip leaf bodies (bandwidth/storage parity with the
 	// HTTP path). Gunzip is self-describing — it magic-byte-detects gzip and
 	// passes raw bodies through unchanged — so this reads both compressed and
@@ -1131,6 +1186,11 @@ func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubK
 	if !ok {
 		return
 	}
+	// This Root also carries sharded telemetry (upgraded visor); the
+	// shards are authoritative, so ignore any lingering legacy current leaf.
+	if skipCurrent {
+		return
+	}
 	var snap liveSnapshot
 	if err := json.Unmarshal(leaf, &snap); err != nil {
 		a.log.WithError(err).WithField("path", path).Debug("CXO aggregator: live snapshot decode failed")
@@ -1138,29 +1198,104 @@ func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubK
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := a.sink.UpdateBandwidth(ctx, id.String(), reporter, snap.SentBytes, snap.RecvBytes); err != nil {
+	a.applyTelemetry(ctx, id, reporter, snap.SentBytes, snap.RecvBytes, snap.ThroughputBps,
+		snap.LatencyMinMS, snap.LatencyMaxMS, snap.LatencyAvgMS, snap.Type, snap.SampledAt)
+}
+
+// dispatchTelemetryShard decodes one transports/telemetry/<sh> binary
+// leaf and applies every packed transport row exactly as a legacy
+// `current` snapshot is applied. A corrupt/truncated/wrong-version blob
+// is dropped whole (DecodeShard validates strictly) rather than
+// partially applied.
+func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter cipher.PubKey) {
+	shard, entries, err := telemetrywire.DecodeShard(leaf)
+	if err != nil {
+		a.log.WithError(err).WithField("path", path).Debug("CXO aggregator: telemetry shard decode failed")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for i := range entries {
+		e := &entries[i]
+		// Belt-and-suspenders: a row whose ID doesn't belong to this shard
+		// signals a malformed/spoofed blob — skip it rather than mis-apply.
+		if telemetrywire.ShardOf(e.ID) != shard {
+			continue
+		}
+		var at time.Time
+		if e.SampledAtUnix > 0 {
+			at = time.Unix(int64(e.SampledAtUnix), 0).UTC()
+		}
+		a.applyTelemetry(ctx, e.ID, reporter, e.SentBytes, e.RecvBytes, float64(e.ThroughputBps),
+			float64(e.LatMin), float64(e.LatMax), float64(e.LatAvg), telemetrywire.CodeToType(e.Type), at)
+	}
+}
+
+// applyTelemetry is the shared per-transport apply used by both the
+// sharded path and the legacy current-leaf path: bandwidth, throughput,
+// latency (partial-zero-gated), and per-type uptime heartbeat.
+func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter cipher.PubKey,
+	sent, recv uint64, throughputBps, latMin, latMax, latAvg float64, tpType string, at time.Time) {
+	if err := a.sink.UpdateBandwidth(ctx, id.String(), reporter, sent, recv); err != nil {
 		a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateBandwidth failed")
+	}
+	if throughputBps > 0 {
+		if err := a.sink.UpdateThroughput(ctx, id.String(), reporter, throughputBps); err != nil {
+			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateThroughput failed")
+		}
 	}
 	// Both edges of a transport publish their own snapshot, and TPD's
 	// store is last-writer-wins. Require all three fields to be > 0 so
 	// a partial-zero snapshot from an edge whose probe never completed
 	// can't clobber a good record written by the other edge.
-	if snap.LatencyMinMS > 0 && snap.LatencyMaxMS > 0 && snap.LatencyAvgMS > 0 {
-		if err := a.sink.UpdateLatency(ctx, id.String(), snap.LatencyMinMS, snap.LatencyMaxMS, snap.LatencyAvgMS); err != nil {
+	if latMin > 0 && latMax > 0 && latAvg > 0 {
+		if err := a.sink.UpdateLatency(ctx, id.String(), latMin, latMax, latAvg); err != nil {
 			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateLatency failed")
 		}
 	}
 	// Heartbeat into the per-transport uptime tables (tp-uptime:*),
 	// previously written only by the HTTP /transports/ register path.
-	// Type is empty on snapshots from pre-uptime visors — skip those
-	// rather than push a heartbeat the store would have to drop on
-	// the type filter (RecordTransportHeartbeat early-returns on any
-	// non-p2p type, but routing here saves the redis round-trip).
-	if snap.Type != "" {
-		if err := a.sink.RecordTransportHeartbeat(ctx, id, snap.Type, snap.SampledAt); err != nil {
+	// Type is empty on snapshots from pre-uptime visors / unknown-type
+	// entries — skip those rather than push a heartbeat the store would
+	// drop on the type filter (RecordTransportHeartbeat early-returns on
+	// any non-p2p type, but routing here saves the redis round-trip).
+	if tpType != "" {
+		if err := a.sink.RecordTransportHeartbeat(ctx, id, tpType, at); err != nil {
 			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: RecordTransportHeartbeat failed")
 		}
 	}
+}
+
+// parseTelemetryShardPath returns the shard number for paths shaped
+// "transports/telemetry/<sh>" (<sh> = lowercase 2-hex 00..0f), or false
+// otherwise. Mirrors telemetrywire.LeafPath.
+func parseTelemetryShardPath(path string) (uint8, bool) {
+	const prefix = "transports/telemetry/"
+	if !strings.HasPrefix(path, prefix) {
+		return 0, false
+	}
+	rest := path[len(prefix):]
+	if len(rest) != 2 {
+		return 0, false
+	}
+	var sh uint8
+	for i := 0; i < 2; i++ {
+		c := rest[i]
+		var d uint8
+		switch {
+		case c >= '0' && c <= '9':
+			d = c - '0'
+		case c >= 'a' && c <= 'f':
+			d = c - 'a' + 10
+		default:
+			return 0, false
+		}
+		sh = sh<<4 | d
+	}
+	if sh >= telemetrywire.ShardCount {
+		return 0, false
+	}
+	return sh, true
 }
 
 // parseTransportTimelinePath returns the transport UUID and date for

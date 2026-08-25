@@ -56,6 +56,22 @@ type LatencyRecord struct {
 // telemetry types share the same observability window.
 const latencyTTL = 35 * 24 * time.Hour
 
+// ThroughputRecord is the durable per-transport PEAK-goodput snapshot
+// persisted at transport-discovery:tput:<id>. Bps is the passively
+// observed peak (an EWMA tracked on the visor and pushed on the sharded
+// telemetry feed); UpdateThroughput keeps the MAX across the two edges'
+// reports so a momentarily-idle edge can't erase the other's peak. Shares
+// latency's retention window and last-writer-wins independence from the
+// registration blob. UpdatedAt is informational (staleness gauge).
+type ThroughputRecord struct {
+	Bps       float64 `json:"bps"`
+	UpdatedAt int64   `json:"updated_at"`
+}
+
+// throughputTTL mirrors latencyTTL — the peak-goodput record shares the
+// same observability window as the other CXO-fed telemetry types.
+const throughputTTL = latencyTTL
+
 type redisStore struct {
 	client       *redis.Client
 	ttl          time.Duration

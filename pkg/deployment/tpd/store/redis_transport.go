@@ -241,6 +241,10 @@ func (s *redisStore) GetTransportByID(ctx context.Context, id uuid.UUID) (*trans
 	if rec != nil && rec.Avg > 0 {
 		entry.Latency = float64(rec.Avg) / 1000.0
 	}
+	trec, _ := s.getThroughputRecord(ctx, id) //nolint:errcheck // best-effort overlay; entry stays usable without throughput
+	if trec != nil && trec.Bps > 0 {
+		entry.ThroughputBps = trec.Bps
+	}
 	return entry, nil
 }
 
@@ -465,6 +469,38 @@ func (s *redisStore) hydrateDurableLatency(ctx context.Context, entries []*trans
 			entries[i].Latency = float64(rec.Avg) / 1000.0
 		}
 	}
+	s.hydrateDurableThroughput(ctx, entries)
+}
+
+// hydrateDurableThroughput overlays the durable peak-goodput snapshot
+// (tput:<id>) onto each entry's ThroughputBps, mirroring
+// hydrateDurableLatency. Best-effort: a missing or unreadable record
+// leaves the entry's own registered value untouched.
+func (s *redisStore) hydrateDurableThroughput(ctx context.Context, entries []*transport.Entry) {
+	if len(entries) == 0 {
+		return
+	}
+	keys := make([]string, len(entries))
+	for i, e := range entries {
+		keys[i] = s.throughputKey(e.ID)
+	}
+	vals, err := s.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return
+	}
+	for i, v := range vals {
+		raw, ok := v.(string)
+		if !ok || raw == "" {
+			continue
+		}
+		var rec ThroughputRecord
+		if err := json.Unmarshal([]byte(raw), &rec); err != nil {
+			continue
+		}
+		if rec.Bps > 0 {
+			entries[i].ThroughputBps = rec.Bps
+		}
+	}
 }
 
 // scanAllTransports is the shared implementation for GetAllTransports and getAllTransportsWithQoS.
@@ -576,6 +612,10 @@ func (s *redisStore) transportKey(id uuid.UUID) string {
 
 func (s *redisStore) latencyKey(id uuid.UUID) string {
 	return serviceName + ":lat:" + id.String()
+}
+
+func (s *redisStore) throughputKey(id uuid.UUID) string {
+	return serviceName + ":tput:" + id.String()
 }
 
 func (s *redisStore) edgeKey(pk cipher.PubKey) string {

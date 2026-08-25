@@ -40,13 +40,20 @@ type TransportRecord struct {
 // field was added — TPD treats that as "skip uptime, but bandwidth
 // and latency still apply" so old visors keep working.
 type LiveSnapshot struct {
-	SentBytes    uint64    `json:"sent_bytes"`
-	RecvBytes    uint64    `json:"recv_bytes"`
-	LatencyMinMS float64   `json:"latency_min_ms,omitempty"`
-	LatencyMaxMS float64   `json:"latency_max_ms,omitempty"`
-	LatencyAvgMS float64   `json:"latency_avg_ms,omitempty"`
-	SampledAt    time.Time `json:"sampled_at"`
-	Type         string    `json:"type,omitempty"`
+	SentBytes uint64 `json:"sent_bytes"`
+	RecvBytes uint64 `json:"recv_bytes"`
+	// ThroughputBps is the transport's passively-observed PEAK goodput
+	// (a tracked EWMA of sent+recv bytes/sec), sourced from
+	// transport.ManagedTransport.GetThroughputBps(). It is a real
+	// capacity metric NOT derivable from the cumulative SentBytes/RecvBytes
+	// counters (those give average-over-interval; this is the tracked
+	// peak), so it is carried alongside them on the telemetry feed.
+	ThroughputBps float64   `json:"throughput_bps,omitempty"`
+	LatencyMinMS  float64   `json:"latency_min_ms,omitempty"`
+	LatencyMaxMS  float64   `json:"latency_max_ms,omitempty"`
+	LatencyAvgMS  float64   `json:"latency_avg_ms,omitempty"`
+	SampledAt     time.Time `json:"sampled_at"`
+	Type          string    `json:"type,omitempty"`
 }
 
 // DailyRollup is the sealed per-day view. Bandwidth values are deltas

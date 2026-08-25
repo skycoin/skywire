@@ -998,6 +998,10 @@ func (s *calcMemStore) UpdateBandwidth(context.Context, string, cipher.PubKey, u
 func (s *calcMemStore) UpdateLatency(context.Context, string, float64, float64, float64) error {
 	return nil
 }
+
+func (s *calcMemStore) UpdateThroughput(context.Context, string, cipher.PubKey, float64) error {
+	return nil
+}
 func (s *calcMemStore) GetTransportBandwidth(context.Context, uuid.UUID, string, int) ([]tpdstore.BandwidthAggregation, error) {
 	return nil, nil
 }

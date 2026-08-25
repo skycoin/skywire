@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 )
 
@@ -236,10 +237,12 @@ type CXOFeedState struct {
 	Port uint16 `json:"port,omitempty"`
 	treestore.PublishState
 	// CurrentLeaves is populated only for the "stats" telemetry feed: it
-	// breaks down the transports/<id>/current leaves the feed carries by
-	// whether each leaf's transport is currently live. Dead > 0 quantifies
-	// the stale-leaf bloat that Fix 1 (pruneDeadCurrentLeaves) removes at
-	// startup and reconcileCurrentLeaves keeps out at steady state.
+	// reports the count of per-transport telemetry rows the feed carries
+	// across its ≤16 compact sharded leaves (transports/telemetry/<sh>).
+	// With the sharded shape every packed row is a LIVE transport (the
+	// sampler re-encodes each shard from the live set every tick), so Live
+	// == Total and Dead is structurally 0 — the stale-leaf bloat the old
+	// per-transport `current` format accumulated no longer exists.
 	CurrentLeaves *CurrentLeafStats `json:"current_leaves,omitempty"`
 	// Allowlist is the set of PKs currently permitted to subscribe to this
 	// feed (nil = OPEN to all). For a service-consumed feed (stats,
@@ -263,29 +266,37 @@ type DeniedSubscriber struct {
 }
 
 // CurrentLeafStats is the live/dead breakdown of the telemetry feed's
-// transports/<id>/current leaf set, computed as the feed's current-leaf
-// path list intersected with the visor's live transport set.
+// per-transport telemetry rows, decoded from the compact sharded leaves
+// (transports/telemetry/<sh>). Each row is classified by whether its
+// transport is in the visor's live set; with the sharded shape the
+// sampler only ever packs live transports, so Dead is normally 0.
 type CurrentLeafStats struct {
 	Total int `json:"total"`
 	Live  int `json:"live"`
 	Dead  int `json:"dead"`
 }
 
-// currentLeafStats walks the publisher's transports/<id>/current leaves
-// and classifies each by whether its transport is in liveIDs. Cheap: an
-// in-memory tree walk plus a map lookup per leaf.
+// currentLeafStats walks the publisher's transports/telemetry/<sh> shard
+// leaves, decodes each, and classifies every packed transport row by
+// whether it's in liveIDs. Cheap: ≤16 in-memory leaf decodes plus a map
+// lookup per row.
 func currentLeafStats(pub *treestore.Publisher, liveIDs map[uuid.UUID]struct{}) CurrentLeafStats {
 	var st CurrentLeafStats
-	pub.Walk("transports", func(path string, _ []byte) bool {
-		id, ok := currentLeafUUID(path)
-		if !ok {
+	pub.Walk("transports", func(path string, value []byte) bool {
+		if _, ok := telemetryShardOfPath(path); !ok {
 			return true
 		}
-		st.Total++
-		if _, live := liveIDs[id]; live {
-			st.Live++
-		} else {
-			st.Dead++
+		_, entries, err := telemetrywire.DecodeShard(value)
+		if err != nil {
+			return true
+		}
+		for _, e := range entries {
+			st.Total++
+			if _, live := liveIDs[e.ID]; live {
+				st.Live++
+			} else {
+				st.Dead++
+			}
 		}
 		return true
 	})

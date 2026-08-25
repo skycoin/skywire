@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 )
 
 // trackerFixture builds a Tracker against a fresh on-disk store and
@@ -84,24 +86,27 @@ func TestTrackerRecordsTransportLifecycle(t *testing.T) {
 	}
 }
 
-// TestTrackerChangeGateSkipsIdleRePuts drives three transports across
-// three same-day ticks and asserts the mirror change-gate:
+// TestTrackerChangeGateSkipsIdleShardRePuts drives three transports —
+// each alone in its own shard so the per-shard change-gate is isolated —
+// across three same-day ticks and asserts:
 //
-//	(a) an IDLE transport (bytes/latency constant, only SampledAt
+//	(a) an IDLE transport's shard (bytes/latency constant, only SampledAt
 //	    advancing) is Put once and NOT re-Put on later idle ticks;
-//	(b) a transport whose sent/recv bytes change IS re-Put on the
+//	(b) a transport whose sent/recv bytes change re-Puts ITS shard on the
 //	    changing tick, then stops being re-Put once it goes idle;
-//	(c) a transport that goes dead has its current leaf sink-Deleted.
+//	(c) a transport that goes dead has its now-empty shard sink-Deleted.
 //
-// This is the per-tick Root-churn reduction: with N live transports of
-// which M are idle between samples, the mirror Put count drops from N to
-// (N-M).
-func TestTrackerChangeGateSkipsIdleRePuts(t *testing.T) {
+// This is the per-tick Root-churn reduction preserved by the sharded
+// shape: an idle shard does not re-Put despite SampledAt advancing.
+func TestTrackerChangeGateSkipsIdleShardRePuts(t *testing.T) {
 	sink := newRecordingSink()
 	tr := newTrackerWithSink(t, sink)
-	idle := uuid.New()
-	changing := uuid.New()
-	dying := uuid.New()
+	idle := uuidInShard(1)
+	changing := uuidInShard(2)
+	dying := uuidInShard(3)
+	idleLeaf := telemetrywire.LeafPath(telemetrywire.ShardOf(idle))
+	changingLeaf := telemetrywire.LeafPath(telemetrywire.ShardOf(changing))
+	dyingLeaf := telemetrywire.LeafPath(telemetrywire.ShardOf(dying))
 	t0 := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
 
 	idleProbe := TransportProbe{
@@ -109,7 +114,7 @@ func TestTrackerChangeGateSkipsIdleRePuts(t *testing.T) {
 		LatencyMS: LatencyTriple{Min: 10, Max: 10, Avg: 10},
 	}
 
-	// Tick 1: all three live — each publishes its current leaf once.
+	// Tick 1: all three live — each shard published once.
 	tr.probes.Transports = func() []TransportProbe {
 		return []TransportProbe{
 			idleProbe,
@@ -118,9 +123,9 @@ func TestTrackerChangeGateSkipsIdleRePuts(t *testing.T) {
 		}
 	}
 	tr.sample(t0)
-	for _, id := range []uuid.UUID{idle, changing, dying} {
-		if n := sink.putCountFor(currentTransportPath(id.String())); n != 1 {
-			t.Fatalf("tick1: %s Put %d times, want 1", id, n)
+	for _, leaf := range []string{idleLeaf, changingLeaf, dyingLeaf} {
+		if n := sink.putCountFor(leaf); n != 1 {
+			t.Fatalf("tick1: %s Put %d times, want 1", leaf, n)
 		}
 	}
 
@@ -134,25 +139,25 @@ func TestTrackerChangeGateSkipsIdleRePuts(t *testing.T) {
 	}
 	tr.sample(t0.Add(time.Minute))
 
-	if n := sink.putCountFor(currentTransportPath(idle.String())); n != 1 {
-		t.Errorf("(a) idle transport re-Put on unchanged tick: Put %d times, want 1", n)
+	if n := sink.putCountFor(idleLeaf); n != 1 {
+		t.Errorf("(a) idle shard re-Put on unchanged tick: Put %d times, want 1", n)
 	}
-	if n := sink.putCountFor(currentTransportPath(changing.String())); n != 2 {
-		t.Errorf("(b) changed transport not re-Put: Put %d times, want 2", n)
+	if n := sink.putCountFor(changingLeaf); n != 2 {
+		t.Errorf("(b) changed shard not re-Put: Put %d times, want 2", n)
 	}
 	_, dels := sink.snapshot()
 	foundDel := false
 	for _, d := range dels {
-		if d == currentTransportPath(dying.String()) {
+		if d == dyingLeaf {
 			foundDel = true
 		}
 	}
 	if !foundDel {
-		t.Errorf("(c) dead transport current leaf not sink-Deleted; dels=%v", dels)
+		t.Errorf("(c) dead transport's empty shard not sink-Deleted; dels=%v", dels)
 	}
 
 	// Tick 3: both remaining transports idle (changing now constant too).
-	// Neither should be re-Put.
+	// Neither shard should be re-Put.
 	tr.probes.Transports = func() []TransportProbe {
 		return []TransportProbe{
 			idleProbe,
@@ -161,11 +166,37 @@ func TestTrackerChangeGateSkipsIdleRePuts(t *testing.T) {
 	}
 	tr.sample(t0.Add(2 * time.Minute))
 
-	if n := sink.putCountFor(currentTransportPath(idle.String())); n != 1 {
-		t.Errorf("(a) idle transport re-Put on second idle tick: Put %d times, want 1", n)
+	if n := sink.putCountFor(idleLeaf); n != 1 {
+		t.Errorf("(a) idle shard re-Put on second idle tick: Put %d times, want 1", n)
 	}
-	if n := sink.putCountFor(currentTransportPath(changing.String())); n != 2 {
-		t.Errorf("(b) now-idle transport re-Put after it stopped changing: Put %d times, want 2", n)
+	if n := sink.putCountFor(changingLeaf); n != 2 {
+		t.Errorf("(b) now-idle shard re-Put after it stopped changing: Put %d times, want 2", n)
+	}
+}
+
+// TestBusyHubSamplePublishesAtMost16Leaves is the ≤16-leaves proof at the
+// sampler level: a single sample of 800 live transports must publish at
+// most 16 shard leaves, not 800 per-transport leaves.
+func TestBusyHubSamplePublishesAtMost16Leaves(t *testing.T) {
+	sink := newRecordingSink()
+	tr := newTrackerWithSink(t, sink)
+	const n = 800
+	probe := make([]TransportProbe, 0, n)
+	for i := 0; i < n; i++ {
+		probe = append(probe, TransportProbe{
+			ID: uuid.New(), Type: "stcpr", SentBytes: uint64(i), RecvBytes: uint64(i),
+		})
+	}
+	tr.probes.Transports = func() []TransportProbe { return probe }
+	tr.sample(time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC))
+
+	puts, _ := sink.snapshot()
+	if len(puts) > telemetrywire.ShardCount {
+		t.Errorf("sample published %d leaves for %d transports, want ≤ %d", len(puts), n, telemetrywire.ShardCount)
+	}
+	entries, _ := shardEntries(puts)
+	if len(entries) != n {
+		t.Errorf("packed %d transports across shards, want %d", len(entries), n)
 	}
 }
 
