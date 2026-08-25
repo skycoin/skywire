@@ -50,6 +50,12 @@ const (
 	// may recolor specific glyphs within it. Styling is applied after layout, so
 	// it must preserve display width.
 	CellLeft
+	// CellHeaderLeft is the label-header row's left field (see Options.Header*).
+	CellHeaderLeft
+	// CellHeaderLabel is the label-header row's right (peer) label.
+	CellHeaderLabel
+	// CellHeaderColumn is a label-header row trailing column label.
+	CellHeaderColumn
 )
 
 // GlyphSet is the set of box-drawing glyphs used by the renderer. The zero
@@ -105,6 +111,21 @@ type Options struct {
 	// (ANSI color codes are fine — they have zero display width). Layout is
 	// computed from the un-styled text, so styling is purely cosmetic.
 	StyleCell func(text string, kind CellKind) string
+	// HeaderLeft/HeaderLabel/HeaderCols, when any is non-empty, render a single
+	// "label header" row shaped like a real tree row but carrying column LABELS
+	// where the data goes: HeaderLeft is the left-summary label group, HeaderLabel
+	// the right (peer) label, and HeaderCols the trailing-column labels. The header
+	// participates in the same leftWidth / tree-width / per-column-width
+	// computation as the data rows, so its labels line up EXACTLY with the columns
+	// beneath it. It is drawn above the root as a horizontal template row (no spine
+	// junction) and styled via CellHeaderLeft / CellHeaderLabel / CellHeaderColumn.
+	HeaderLeft  string
+	HeaderLabel string
+	HeaderCols  []string
+}
+
+func (o Options) hasHeader() bool {
+	return o.HeaderLeft != "" || o.HeaderLabel != "" || len(o.HeaderCols) > 0
 }
 
 func (o Options) glyphs() GlyphSet {
@@ -361,10 +382,29 @@ func Render(root *Node, opts Options) string {
 		routes = append(routes, rows)
 	}
 
+	// The optional label-header row participates in every width computation so its
+	// labels line up exactly with the data columns beneath. Fold its left field
+	// into leftWidth here (before the spine column is derived).
+	if opts.hasHeader() {
+		if dw := dispWidth(opts.HeaderLeft); dw > leftWidth {
+			leftWidth = dw
+		}
+	}
+
 	// Column alignment: max tree width and per-column widths across all
 	// right-side lines.
 	treeWidth := opts.AlignColumns
 	var colW []int
+	foldCols := func(cols []string) {
+		for ci, c := range cols {
+			for len(colW) <= ci {
+				colW = append(colW, 0)
+			}
+			if cw := dispWidth(c); cw > colW[ci] {
+				colW[ci] = cw
+			}
+		}
+	}
 	for _, rows := range routes {
 		for _, rw := range rows {
 			if !rw.hasRight {
@@ -373,15 +413,14 @@ func Render(root *Node, opts Options) string {
 			if tw := rw.right.treeWidth(); tw > treeWidth {
 				treeWidth = tw
 			}
-			for ci, c := range rw.right.cols {
-				for len(colW) <= ci {
-					colW = append(colW, 0)
-				}
-				if cw := dispWidth(c); cw > colW[ci] {
-					colW[ci] = cw
-				}
-			}
+			foldCols(rw.right.cols)
 		}
+	}
+	if opts.hasHeader() {
+		if tw := dispWidth(opts.HeaderLabel); tw > treeWidth {
+			treeWidth = tw
+		}
+		foldCols(opts.HeaderCols)
 	}
 
 	gutter := strings.Repeat(" ", opts.LeftGutter)
@@ -394,16 +433,43 @@ func Render(root *Node, opts Options) string {
 		b.WriteByte('\n')
 	}
 
-	// Root label anchored at the central spine column, with a box-drawing
-	// descender dropping into the top of the spine, so the source PK reads as
-	// connected to the spine rather than floating off over the right-side hops.
 	// spineCol is the 0-based column of the spine glyph: gutter + left field +
 	// the joining space + the 2-cell arm.
 	spineCol := opts.LeftGutter + leftWidth + 1 + 2
-	rootCol := spineCol - dispWidth(root.Label)/2
-	if rootCol < 0 {
-		rootCol = 0
+
+	// Optional label-header row: a template/legend shaped like a data row, drawn
+	// above the root. It uses a horizontal pass-through (g.Horizontal) at the spine
+	// column instead of a junction, so it reads as a column header rather than a
+	// route on the vertical spine. Its columns share leftWidth / treeWidth / colW
+	// with the data, so the labels sit exactly above the values.
+	if opts.hasHeader() {
+		hleft := opts.style(padLeft(opts.HeaderLeft, leftWidth), CellHeaderLeft)
+		hmid := gutter + hleft + " " + h + h + h // left ──<spine=─>
+		htxt := h + h + " " + opts.style(opts.HeaderLabel, CellHeaderLabel)
+		if pad := treeWidth - dispWidth(opts.HeaderLabel); pad > 0 {
+			htxt += strings.Repeat(" ", pad)
+		}
+		for ci, c := range opts.HeaderCols {
+			htxt += sep
+			cell := opts.style(c, CellHeaderColumn)
+			w := 0
+			if ci < len(colW) {
+				w = colW[ci]
+			}
+			if pad := w - dispWidth(c); pad > 0 {
+				cell += strings.Repeat(" ", pad)
+			}
+			htxt += cell
+		}
+		writeLine(hmid + htxt)
 	}
+
+	// Root label right-anchored at the spine column (its first cell sits over the
+	// spine descender), with a box-drawing descender dropping into the top of the
+	// spine. Read without the left summary branches this is a normal downward
+	// tree: the source PK at top, hop chains hanging below it in the same PK
+	// column, so the root aligns with the other PKs instead of floating centered.
+	rootCol := spineCol
 	writeLine(strings.Repeat(" ", rootCol) + opts.style(root.Label, CellRoot))
 	writeLine(strings.Repeat(" ", spineCol) + g.Vertical)
 
