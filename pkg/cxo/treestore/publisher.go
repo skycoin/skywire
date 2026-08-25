@@ -651,6 +651,15 @@ func (p *Publisher) Allowlist() []cipher.PubKey {
 	return p.allow.list()
 }
 
+// Denied returns a snapshot of subscribers the allowlist has turned away
+// (most-recent first). Diagnostic surface for `skywire cli visor state`:
+// a denied PK that isn't the consuming service's expected key is the tell
+// that the service dials in under a different CXO node identity than the
+// one the operator allowlisted.
+func (p *Publisher) Denied() []DeniedSub {
+	return p.allow.deniedList()
+}
+
 // AllowsSubscriber reports whether a subscribe request from pk would
 // pass the gate. NewWithDMSG wires this into the underlying CXO
 // node's OnSubscribeRemote hook automatically. Callers using New
