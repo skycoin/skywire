@@ -15,15 +15,14 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // Connector is the platform-neutral "connect to visors" primitive shared by the
 // native visor (pkg/visor) and the browser wasm-visor. It owns the per-target
-// transport-establishment logic (skip self / existing / same-LAN / dmsg-probe,
-// then SaveTransport) parameterized over the transport TYPE, so the native shell
+// transport-establishment logic (skip self / existing / same-LAN, then
+// SaveTransport) parameterized over the transport TYPE, so the native shell
 // can drive it with [SUDPH, STCPR] while the wasm shell can later drive it with
 // [WS, WT] without the primitive hardcoding either. The platform-coupled pieces
 // (public-visor sourcing, transport-discovery caching, the periodic loop) stay in
@@ -55,10 +54,10 @@ func (c *Connector) ConnectToVisors(
 	currentCount int,
 	trackAll bool, // if true, add to result even on failure (for phase 1 → phase 2 handoff)
 ) (result ConnectPhaseResult, err error) {
-	// Dial the targets CONCURRENTLY (bounded). Each target costs a dmsg probe
-	// (up to HandshakeTimeout) plus a SaveTransport (up to perAttemptTransportTimeout,
-	// 30s), so dialing them sequentially made one slow/dead peer stall the whole
-	// phase for its full timeout — the measured cause of ~26s to the first
+	// Dial the targets CONCURRENTLY (bounded). Each target costs a SaveTransport
+	// (up to perAttemptTransportTimeout, 30s), so dialing them sequentially made
+	// one slow/dead peer stall the whole phase for its full timeout — the measured
+	// cause of ~26s to the first
 	// autoconnect transport. A bounded worker pool overlaps the waits so the phase
 	// finishes in ~the slowest single dial rather than their sum, while the
 	// semaphore keeps a visor from opening dozens of handshakes at once.
@@ -138,26 +137,6 @@ func (c *Connector) ConnectToVisors(
 
 			logger := c.Log.WithField("pk", pk).WithField("type", string(tpType))
 
-			// Probe the candidate on dmsg port 136 before attempting SUDPH
-			// transports (which need DMSG for signaling). Skip the probe for
-			// STCPR — it uses direct TCP and doesn't depend on DMSG. The old
-			// blanket probe was filtering out visors reachable via STCPR but
-			// with broken DMSG paths, reducing public visor transport counts.
-			if tpType != tptypes.STCPR && c.DmsgC != nil {
-				probeCtx, probeCancel := context.WithTimeout(ctx, dmsg.HandshakeTimeout)
-				reachable := c.DmsgC.Probe(probeCtx, pk, skyenv.DmsgAwaitSetupPort)
-				probeCancel()
-				if !reachable {
-					logger.Debug("Skipping visor: dmsg probe failed (unreachable)")
-					if trackAll {
-						mu.Lock()
-						result.Connected = append(result.Connected, pk)
-						mu.Unlock()
-					}
-					return
-				}
-			}
-
 			logger.Debugln("Trying to add transport")
 
 			if err := c.tryEstablishTransport(ctx, pk, tpType, logger); err != nil {
@@ -213,7 +192,7 @@ func ShufflePubKeys(keys []cipher.PubKey) []cipher.PubKey {
 const perAttemptTransportTimeout = 30 * time.Second
 
 // dialConcurrency bounds how many autoconnect dials run at once within a single
-// ConnectToVisors phase. Chosen to overlap the per-target waits (dmsg probe +
+// ConnectToVisors phase. Chosen to overlap the per-target waits (up to a
 // 30s SaveTransport) without letting a visor open an unbounded number of
 // simultaneous transport handshakes.
 const dialConcurrency = 8
