@@ -61,8 +61,9 @@ const (
 	// FeedTPDUptime is TPD's uptime-aggregate publisher
 	// (uptimes/days/<n>).
 	FeedTPDUptime
-	// FeedSDServices is SD's services publisher
-	// (services/<type>/<pk>/{entry,tombstone}).
+	// FeedSDServices is SD's services publisher (one batched leaf per
+	// type at services/<type>/all; older publishers used
+	// services/<type>/<pk>/entry).
 	FeedSDServices
 	// FeedDMSGDClientsByServer is DMSG-D's clients-by-server publisher
 	// (one batched leaf per server at clients-by-server/<server>; older
