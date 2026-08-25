@@ -16,8 +16,8 @@ Visors register their addresses with the Address Resolver when they come online,
 The code should be in the `skycoin/skywire-services` repository:
 
 - `/cmd/address-resolver/address-resolver.go` is the main executable for the *Address Resolver*.
-- `/pkg/address-resolver/api/` contains the RESTFUL API definitions.
-- `/pkg/address-resolver/store/` contains the database storage logic.
+- `/pkg/deployment/ar/api/` contains the RESTFUL API definitions.
+- `/pkg/deployment/ar/store/` contains the database storage logic.
 
 ## Authentication
 

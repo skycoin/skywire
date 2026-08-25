@@ -59,7 +59,7 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	// Single dmsg client with self-hosted dmsg-discovery — matches the
 	// visor's post-#3136 bootstrap (pkg/visor/init_dmsg.go + pkg/dmsg/dmsgc/
 	// dmsgc.go) and the transport-setup service in
-	// pkg/transport-setup/api/api.go. Plain-HTTP discovery
+	// pkg/deployment/tps/api/api.go. Plain-HTTP discovery
 	// (conf.Dmsg.Discovery) is no longer supported for deployment
 	// services; conf.Dmsg.DiscoveryDmsg is required.
 	//

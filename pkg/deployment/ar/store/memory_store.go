@@ -1,0 +1,90 @@
+// Package store pkg/deployment/ar/store/memory_store.go c4-net-discovery
+package store
+
+import (
+	"context"
+	"sync"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	types "github.com/skycoin/skywire/pkg/transport/types"
+)
+
+type memStore struct {
+	mu        sync.Mutex
+	visorData map[types.Type]map[string]addrresolver.VisorData
+}
+
+func newMemoryStore() *memStore {
+	return &memStore{
+		visorData: make(map[types.Type]map[string]addrresolver.VisorData),
+	}
+}
+
+func (s *memStore) Bind(_ context.Context, netType types.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	netType = types.NormalizeType(netType)
+
+	if _, ok := s.visorData[netType]; !ok {
+		s.visorData[netType] = make(map[string]addrresolver.VisorData)
+	}
+
+	// Preserve the other-family RemoteAddr when this bind only carries
+	// one of the two. A dual-stack visor calls Bind twice — once over
+	// IPv4 HTTP (sets RemoteAddr only) and once over IPv6 HTTP (sets
+	// RemoteAddrV6 only). Naive overwrite would clobber the prior
+	// family's record and force-back to single-stack until the next
+	// 90s refresh cycle. Merge preserves whichever family addr the
+	// new payload didn't touch.
+	if existing, ok := s.visorData[netType][pk.String()]; ok {
+		if visorData.RemoteAddr == "" && existing.RemoteAddr != "" {
+			visorData.RemoteAddr = existing.RemoteAddr
+		}
+		if visorData.RemoteAddrV6 == "" && existing.RemoteAddrV6 != "" {
+			visorData.RemoteAddrV6 = existing.RemoteAddrV6
+		}
+	}
+
+	s.visorData[netType][pk.String()] = visorData
+
+	return nil
+}
+
+func (s *memStore) DelBind(_ context.Context, netType types.Type, pk cipher.PubKey) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	netType = types.NormalizeType(netType)
+	delete(s.visorData[netType], pk.String())
+	return nil
+}
+
+func (s *memStore) Resolve(_ context.Context, netType types.Type, pk cipher.PubKey) (addrresolver.VisorData, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	netType = types.NormalizeType(netType)
+
+	tpTypeData, ok := s.visorData[netType]
+	if !ok {
+		return addrresolver.VisorData{}, ErrNoEntry
+	}
+
+	data, ok := tpTypeData[pk.String()]
+	if !ok {
+		return addrresolver.VisorData{}, ErrNoEntry
+	}
+
+	return data, nil
+}
+
+func (s *memStore) GetAll(_ context.Context, netType types.Type) (pks []string, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	netType = types.NormalizeType(netType)
+
+	for pk := range s.visorData[netType] {
+		pks = append(pks, pk)
+	}
+
+	return pks, nil
+}

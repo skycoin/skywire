@@ -28,7 +28,7 @@ import (
 	"github.com/gin-gonic/gin"
 	version "github.com/hashicorp/go-version"
 
-	"github.com/skycoin/skywire/pkg/rewards"
+	"github.com/skycoin/skywire/pkg/deployment/rewards"
 )
 
 // maxSurveyBytes caps a pushed survey. A real node-info survey is a few KB; this

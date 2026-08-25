@@ -1605,9 +1605,9 @@ Route-finder modifies this algorithm by keeping track of all the nodes that reac
 The code should be in the `skycoin/skywire` repository;
 
 - `/cmd/route-finder/route-finder.go` is the main executable for the *Route Finder*.
-- `/pkg/route-finder/api/` contains the RESTFUL API definitions.
-- `/pkg/route-finder/store/` contains the definition of the `Storer` interface and it's implementations [**TODO**].
-- `/pkg/route-finder/client/` contains the client library that interacts with the *Route Finder* service's RESTFUL API.
+- `/pkg/deployment/rf/api/` contains the RESTFUL API definitions.
+- `/pkg/deployment/rf/store/` contains the definition of the `Storer` interface and it's implementations [**TODO**].
+- `/pkg/deployment/rf/client/` contains the client library that interacts with the *Route Finder* service's RESTFUL API.
 
 ## Database
 

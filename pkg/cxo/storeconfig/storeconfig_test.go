@@ -1,4 +1,4 @@
-// Package storeconfig pkg/storeconfig/storeconfig_test.go
+// Package storeconfig pkg/cxo/storeconfig/storeconfig_test.go
 package storeconfig
 
 import (
