@@ -37,6 +37,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout"
 )
 
 const aliasFileName = "skywire/skychat-aliases.json"
@@ -218,11 +219,10 @@ var aliasLsCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 		out := cmd.OutOrStdout()
-		if jsonMode {
-			b, _ := json.MarshalIndent(s.entries, "", "  ") //nolint:errcheck
-			_, _ = out.Write(append(b, '\n'))               //nolint:errcheck
+		// --json / --jq / --shape route through the shared output layer.
+		if cliout.MachineMode(cmd) {
+			internal.Catch(cmd.Flags(), cliout.Print(cmd, s.entries))
 			return
 		}
 		if len(s.entries) == 0 {
