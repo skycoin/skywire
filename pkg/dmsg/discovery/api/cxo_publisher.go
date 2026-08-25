@@ -5,32 +5,51 @@
 // The hypervisor's network visualizer needs to know "which clients
 // are currently delegated to each dmsg server" — the same view
 // AllClientsByServer / ClientsByServer expose over HTTP. This
-// publisher mirrors that as a TreeStore feed:
+// publisher mirrors that as a TreeStore feed.
 //
-//	clients-by-server/<server-pk>/<client-pk>/entry        // JSON disc.Entry
+// # Wire shape: ONE batched leaf per server
 //
-// We deliberately do NOT publish a separate entries/<pk> tree (the
-// non-denormalized form) because no consumer we know of subscribes
-// to per-PK lookups; the network-visualizer pattern is always
-// server-grouped, and AllClientsByServer / ClientsByServer is what
-// the existing http path serves.
+// Each dmsg server gets exactly one leaf carrying that server's whole
+// delegated-client set:
 //
-// On a client SetEntry, the publisher diffs the new DelegatedServers
-// list against the old (if any) and emits:
-//   - Put on clients-by-server/<server>/<client>/entry for every
-//     server in the new list.
-//   - Delete on clients-by-server/<server>/<client>/entry for every
-//     server that was in the old list but not the new (the client
-//     moved off that server). Subscribers learn of removals through
-//     CXO's standard leaf-disappearance event; pre-2026-05-18 we also
-//     wrote a tombstone leaf carrying DeletedAt, but no consumer in
-//     the codebase reads tombstone bodies (tpviz and visor/autoconnect
-//     both explicitly skip them) and the leaves accumulated forever in
-//     the publisher's in-memory CXDS, driving runaway RAM growth on
-//     the deployment box (observed: 327 MB → 921 MB over 12h, with
-//     ~70% of heap in cipher/encoder.Serialize / memoryCXDS.Set under
-//     Refs.AppendValues). Dropping the tombstone write closes the
-//     leak without losing any semantics that's currently read.
+//	clients-by-server/<server-pk>        // FrameGzip(v1, JSON []disc.Entry)
+//
+// Older builds published one leaf PER (server, client) PAIR at
+// clients-by-server/<server>/<client>/entry — O(#pairs), thousands of
+// tiny objects in one Root. A large deployment's Root then could not
+// finish filling over a subscriber's short-lived delivering dmsg conn
+// (only the top slice landed). Batching to one leaf per server drops
+// the object count to O(#servers) (~tens–120), which is what lets the
+// Root fill complete. The only consumers (the visor dmsg-entry lookup
+// resolver and tpviz's network visualizer) want server-grouped data, so
+// per-server batching loses no used addressability.
+//
+// Encoding is JSON+gzip, not fixed-layout binary: a client's disc.Entry
+// carries a signature and a variable-length delegated-server list, so it
+// is the "awkward for binary" case — unlike telemetrywire's fixed 53-byte
+// rows. The per-server array is JSON-marshalled (entries sorted by client
+// PK so unchanged content re-encodes to identical bytes → a wire no-op on
+// CXO's content-addressed store), then framed with a leading version byte
+// and gzipped (cxoutils.FrameGzip). The version byte gates the format:
+// a bumped version is rejected cleanly by an old reader rather than
+// misparsed.
+//
+// # Interop / deploy order
+//
+// Deploy is SERVICE-FIRST. A not-yet-upgraded reader walking the feed
+// looks for the OLD .../<client>/entry leaves, finds none under the new
+// batched shape, reports an empty snapshot, and falls back to HTTP — safe
+// degradation, never a wrong answer. Upgraded readers prefer the batched
+// leaf and still parse an OLD per-item leaf as a fallback, so either
+// publisher shape resolves.
+//
+// A deregistration is the ABSENCE of a client from its server's batched
+// leaf — there is no tombstone leaf class (the old per-(server,client)
+// tombstones were write-only across the codebase and leaked RAM in the
+// publisher's CXDS; observed 327 MB → 921 MB over 12h). Re-encoding a
+// server's single leaf on a membership change is far cheaper than the old
+// whole-tree churn: the tree is now O(#servers) leaves, so each publish
+// clones + encodes a tiny tree.
 //
 // Server entries are ignored by this publisher — a server PK is the
 // path-prefix bucket, not a member of the view.
@@ -41,12 +60,15 @@
 // (mirrors SD's pattern) so the HTTP goroutine never blocks on the
 // treestore.Publisher mutex — which under load is contended by
 // subscriber I/O and can stall register throughput long enough to
-// time out visor heartbeats. Overflow drops are counted; CXO data
-// quality degrades gracefully, HTTP stays fast.
+// time out visor heartbeats. The per-server client state map is owned
+// by that single worker goroutine, so its mutations need no lock.
+// Overflow drops are counted; CXO data quality degrades gracefully,
+// HTTP stays fast.
 package api
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -54,12 +76,18 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
+
+// clientsByServerBatchVersion is the wire-format version byte of the
+// batched per-server leaf body (FrameGzip). Bump on any breaking change
+// to the leaf encoding; readers reject other values and fall back.
+const clientsByServerBatchVersion = 1
 
 // clientsByServerCXOBatchWindow coalesces the publisher's tree mutations before
 // it re-encodes + publishes the clients-by-server tree.
@@ -109,6 +137,12 @@ type ClientsByServerCXOPublisher struct {
 
 	dropped uint64 // atomic; incremented on queue overflow
 
+	// state is the live per-server client set: server PK -> client PK ->
+	// that client's full JSON disc.Entry. Owned exclusively by the single
+	// worker goroutine (run), so it needs no lock; the encode of a
+	// server's batched leaf reads only from here.
+	state map[cipher.PubKey]map[cipher.PubKey][]byte
+
 	mu        sync.Mutex
 	lastError error
 }
@@ -139,6 +173,7 @@ func StartClientsByServerCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, logg
 		log:    log,
 		events: make(chan func(), publishQueueDepth),
 		done:   make(chan struct{}),
+		state:  make(map[cipher.PubKey]map[cipher.PubKey][]byte),
 	}
 	p.wg.Add(1)
 	go p.run()
@@ -211,13 +246,16 @@ func (p *ClientsByServerCXOPublisher) Close() error {
 	return p.pub.Close()
 }
 
-// PublishSetEntry mirrors a set/update of a client entry. Emits Puts
-// for every server in the new DelegatedServers list and tombstones
-// for any server that dropped out (compared to old). Does nothing
-// for server entries (they're path buckets here, not members) or
-// for client entries with empty DelegatedServers (nothing to publish).
-// Non-blocking: the diff and JSON encode happen on the caller's
-// goroutine; the per-server Put/Delete fan-out runs on the worker.
+// PublishSetEntry mirrors a set/update of a client entry. Updates the
+// worker's per-server client state — adding the client to every server
+// in the new DelegatedServers list, removing it from any server it left
+// (compared to old) — and re-encodes each affected server's batched
+// leaf. Does nothing for server entries (they're path buckets here, not
+// members) or for client entries with empty DelegatedServers (the client
+// is absent from every server's leaf, which is exactly a deregistration).
+// Non-blocking: the diff and JSON encode of the entry happen on the
+// caller's goroutine; the state mutation + per-server re-encode/Put runs
+// on the worker.
 func (p *ClientsByServerCXOPublisher) PublishSetEntry(oldEntry, newEntry *disc.Entry) {
 	if p == nil || p.pub == nil || newEntry == nil || newEntry.Client == nil {
 		return
@@ -251,52 +289,30 @@ func (p *ClientsByServerCXOPublisher) PublishSetEntry(oldEntry, newEntry *disc.E
 	}
 
 	p.submit(func() {
-		// Put / re-Put for every server in the new list. CXO is
-		// content-addressed so unchanged bytes are wire-no-ops.
+		dirty := make(map[cipher.PubKey]struct{}, len(newServers)+len(oldServers))
+		// Add / refresh the client under every server in the new list.
 		for srv := range newServers {
-			path := entryLeafPath(srv, clientPK)
-			if err := p.pub.Put(path, body); err != nil {
-				p.log.WithError(err).WithField("path", path).Debug("Failed to publish clients-by-server entry leaf")
-				p.recordError(err)
-				continue
-			}
-			// Defensive: also Delete any tombstone left from an
-			// older binary that wrote them. Idempotent — no-op if
-			// none exists. Avoids a stale tombstone surviving the
-			// upgrade and confusing a future consumer that does
-			// read them.
-			if err := p.pub.Delete(tombstoneLeafPath(srv, clientPK)); err != nil {
-				p.log.WithError(err).Debug("Failed to clear legacy clients-by-server tombstone")
-			}
+			p.stateSet(srv, clientPK, body)
+			dirty[srv] = struct{}{}
 		}
-
-		// Delete the leaf for every server that was in the old list
-		// but not the new. Subscribers see the leaf disappear via
-		// CXO's normal update channel; we deliberately don't write a
-		// tombstone leaf — see the package docstring for the leak
-		// rationale.
+		// Remove the client from every server it left.
 		for srv := range oldServers {
 			if _, kept := newServers[srv]; kept {
 				continue
 			}
-			entryPath := entryLeafPath(srv, clientPK)
-			if err := p.pub.Delete(entryPath); err != nil {
-				p.log.WithError(err).WithField("path", entryPath).
-					Debug("Failed to delete dropped clients-by-server entry leaf")
-			}
+			p.stateDel(srv, clientPK)
+			dirty[srv] = struct{}{}
 		}
+		p.flushServers(dirty)
 	})
 }
 
-// PublishDelEntry mirrors a full client-entry delete: deletes the
-// (server, client) entry leaves for every server the client was
-// previously delegated to. oldEntry is the entry being deleted
-// (caller fetches it from store before the DelEntry call).
-// Non-blocking.
-//
-// Pre-2026-05-18 this also wrote a tombstone leaf per server; see
-// the package docstring for why tombstones were dropped (write-only
-// across the codebase + unbounded in-memory growth).
+// PublishDelEntry mirrors a full client-entry delete: removes the client
+// from every server it was delegated to and re-encodes those servers'
+// batched leaves. oldEntry is the entry being deleted (caller fetches it
+// from store before the DelEntry call). The client's absence from a
+// server's leaf IS the deregistration signal — there is no tombstone
+// leaf (see the package docstring). Non-blocking.
 func (p *ClientsByServerCXOPublisher) PublishDelEntry(oldEntry *disc.Entry) {
 	if p == nil || p.pub == nil || oldEntry == nil || oldEntry.Client == nil {
 		return
@@ -307,18 +323,84 @@ func (p *ClientsByServerCXOPublisher) PublishDelEntry(oldEntry *disc.Entry) {
 		return
 	}
 	p.submit(func() {
+		dirty := make(map[cipher.PubKey]struct{}, len(servers))
 		for srv := range servers {
-			entryPath := entryLeafPath(srv, clientPK)
-			if err := p.pub.Delete(entryPath); err != nil {
-				p.log.WithError(err).Debug("Failed to delete clients-by-server entry leaf on full delete")
-			}
-			// Defensive: clear any tombstone left from an older
-			// binary; idempotent if none exists.
-			if err := p.pub.Delete(tombstoneLeafPath(srv, clientPK)); err != nil {
-				p.log.WithError(err).Debug("Failed to clear legacy clients-by-server tombstone on full delete")
-			}
+			p.stateDel(srv, clientPK)
+			dirty[srv] = struct{}{}
 		}
+		p.flushServers(dirty)
 	})
+}
+
+// stateSet records clientPK's entry body under serverPK. Worker-only.
+func (p *ClientsByServerCXOPublisher) stateSet(serverPK, clientPK cipher.PubKey, body []byte) {
+	clients := p.state[serverPK]
+	if clients == nil {
+		clients = make(map[cipher.PubKey][]byte)
+		p.state[serverPK] = clients
+	}
+	clients[clientPK] = body
+}
+
+// stateDel removes clientPK from serverPK's set. Worker-only.
+func (p *ClientsByServerCXOPublisher) stateDel(serverPK, clientPK cipher.PubKey) {
+	if clients := p.state[serverPK]; clients != nil {
+		delete(clients, clientPK)
+	}
+}
+
+// flushServers re-encodes and Puts the batched leaf for each dirty
+// server, or Deletes it (and drops the server from state) when the
+// server has no delegated clients left. CXO is content-addressed, so a
+// re-Put of an unchanged leaf is a wire no-op. Worker-only.
+func (p *ClientsByServerCXOPublisher) flushServers(dirty map[cipher.PubKey]struct{}) {
+	for srv := range dirty {
+		clients := p.state[srv]
+		path := batchLeafPath(srv)
+		if len(clients) == 0 {
+			delete(p.state, srv)
+			if err := p.pub.Delete(path); err != nil {
+				p.log.WithError(err).WithField("path", path).
+					Debug("Failed to delete emptied clients-by-server leaf")
+			}
+			continue
+		}
+		blob, err := encodeClientsBatch(clients)
+		if err != nil {
+			p.log.WithError(err).WithField("path", path).Debug("Failed to encode clients-by-server batch leaf")
+			p.recordError(err)
+			continue
+		}
+		if err := p.pub.Put(path, blob); err != nil {
+			p.log.WithError(err).WithField("path", path).Debug("Failed to publish clients-by-server batch leaf")
+			p.recordError(err)
+		}
+	}
+}
+
+// encodeClientsBatch serializes a server's client set into one batched
+// leaf body: a JSON array of the clients' disc.Entry objects, sorted by
+// client PK so an unchanged set re-encodes to identical bytes (a CXO
+// wire no-op), then version-framed + gzipped. The array is assembled by
+// concatenating the already-marshalled per-client entry bodies, so each
+// client is encoded exactly once (on the caller's goroutine, in
+// PublishSetEntry) rather than re-marshalled here.
+func encodeClientsBatch(clients map[cipher.PubKey][]byte) ([]byte, error) {
+	pks := make([]cipher.PubKey, 0, len(clients))
+	for pk := range clients {
+		pks = append(pks, pk)
+	}
+	sort.Slice(pks, func(i, j int) bool { return pks[i].Hex() < pks[j].Hex() })
+	payload := make([]byte, 0, 2+len(pks)*256)
+	payload = append(payload, '[')
+	for i, pk := range pks {
+		if i > 0 {
+			payload = append(payload, ',')
+		}
+		payload = append(payload, clients[pk]...)
+	}
+	payload = append(payload, ']')
+	return cxoutils.FrameGzip(clientsByServerBatchVersion, payload), nil
 }
 
 func (p *ClientsByServerCXOPublisher) recordError(err error) {
@@ -334,20 +416,12 @@ func (p *ClientsByServerCXOPublisher) LastError() error {
 	return p.lastError
 }
 
-// EntryLeafPath / TombstoneLeafPath are exported so subscribers can
-// reconstruct paths without duplicating the format string.
-func EntryLeafPath(serverPK, clientPK cipher.PubKey) string {
-	return entryLeafPath(serverPK, clientPK)
-}
-func TombstoneLeafPath(serverPK, clientPK cipher.PubKey) string {
-	return tombstoneLeafPath(serverPK, clientPK)
-}
+// BatchLeafPath is exported so subscribers can reconstruct the batched
+// per-server leaf path without duplicating the format string.
+func BatchLeafPath(serverPK cipher.PubKey) string { return batchLeafPath(serverPK) }
 
-func entryLeafPath(serverPK, clientPK cipher.PubKey) string {
-	return fmt.Sprintf("clients-by-server/%s/%s/entry", serverPK.Hex(), clientPK.Hex())
-}
-func tombstoneLeafPath(serverPK, clientPK cipher.PubKey) string {
-	return fmt.Sprintf("clients-by-server/%s/%s/tombstone", serverPK.Hex(), clientPK.Hex())
+func batchLeafPath(serverPK cipher.PubKey) string {
+	return fmt.Sprintf("clients-by-server/%s", serverPK.Hex())
 }
 
 // pkSet builds a set-of-PK from a slice; small helper to avoid
