@@ -563,18 +563,26 @@ const (
 	// ranking picks the best (stcpr/squicr) legs first and the health-gate keeps
 	// latency outliers OUT of the ACTIVE set.
 	//
-	// MEASURED 2026-08-22: a big pool is NOT free. Standing up 31 DISJOINT
-	// multi-hop reverse routes over the churny mesh is a setup-node dial storm —
-	// each warm-standby leg needs its own route-setup handshake, they fail with
-	// "setup-node dial: context deadline exceeded" and self-heal re-dials forever,
-	// and a bulk download over the resulting 32-leg group STALLS (10MB timed out;
-	// 100KB ran at ~8 KB/s) instead of aggregating. A proxy wants a small, fully-
-	// fillable pool: 1 active + 2 standby (ReverseMux=3) — the shape the preset
-	// tests already assert. The source const had DRIFTED to 31 while the tests /
-	// intended shape stayed at 3; this realigns native to that, and bundle.wasm
-	// is rebuilt to match so native↔wazero decisions are identical again.
-	// Resilience comes from the pool being HEALTHY, not huge.
-	adaptStandbyMax = 2
+	// UNCAPPED 2026-08-26 (operator direction): establish the full disjoint
+	// standby pool the topology offers, not a tiny reserve — one warm-standby
+	// route on every intermediate that can reach the destination, so any can be
+	// promoted at a moment's notice. establishMuxRoutes builds up to Mux
+	// (= adaptRevActive + adaptStandbyMax) best-effort and self-limits to the
+	// disjoint-intermediate set the topology actually has; the RSN-oracle
+	// transport-type ranking picks stcpr/squicr first and the health-gate keeps
+	// latency outliers OUT of the ACTIVE set (adaptCap still caps active width).
+	//
+	// KNOWN RISKS to fix FORWARD as they're observed (MEASURED 2026-08-22 at 31):
+	//   (1) setup-node dial STORM — each standby leg is its own route-setup
+	//       handshake; at scale they fail "setup-node dial: context deadline
+	//       exceeded" and self-heal re-dials forever (the puzzle: the src->I
+	//       transport is UP, yet the route won't set up over it). Real fix =
+	//       pipeline/batch the cascade setup so N legs aren't N handshakes.
+	//   (2) wide-mux download STALL — a bulk transfer over a ~32-leg group timed
+	//       out instead of aggregating; the reorder/aggregation (reorder.go,
+	//       datagram_route_group.go) doesn't scale to many legs (#86 family).
+	// Both are being worked; the pool is uncapped deliberately to surface them.
+	adaptStandbyMax = 60
 	adaptStandbyMin = 1
 	// Health + anti-churn. A leg is a gross-outlier (kept OUT of the active mux,
 	// where the no-skip reorder buffer would head-of-line-stall on it) when its
