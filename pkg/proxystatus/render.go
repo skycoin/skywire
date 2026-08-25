@@ -756,7 +756,11 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	// horizontally only if a long full PK runs wider than the page, and that scroll
 	// is confined to the tree's OWN overflow container (never the page body); the
 	// live-swap captures and restores that container's scrollLeft.
-	`.tree{margin:.5rem 0;overflow-x:auto;overflow-y:hidden}` +
+	// The tree full-bleeds to the viewport width (breaking out of the 60rem body)
+	// so a wide full-PK route set shows whole without a "little" scroll box; the
+	// centered body constrains everything else. overflow-x stays only as a safety
+	// for a set wider than the whole viewport.
+	`.tree{margin:.7rem 0;width:100vw;margin-left:calc(50% - 50vw);padding:0 1rem;overflow-x:auto;overflow-y:hidden}` +
 	// The route tree is one <pre class="bitree"> of monospace text laid out by
 	// pkg/bitree; every cell decorated by htmlStyleCell must keep the SAME font
 	// metrics or the aligned columns skew, so all inner code/span inherit the
