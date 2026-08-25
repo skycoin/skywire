@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )

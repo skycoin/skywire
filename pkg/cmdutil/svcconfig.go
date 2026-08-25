@@ -20,7 +20,7 @@ import (
 // Polymorphism (object vs array) is intentionally NOT supported here
 // — deployment services don't have a multi-deployment use case the
 // way the visor does. If that ever changes, the visor's
-// pkg/dmsgc.DmsgConfig is the precedent.
+// pkg/dmsg/dmsgc.DmsgConfig is the precedent.
 type DmsgConfig struct {
 	// Discovery is the HTTP URL of the dmsg-discovery the service
 	// uses for its own dmsg-client lifecycle (refreshing the server

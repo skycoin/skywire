@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	dmsgspec "github.com/skycoin/skywire/pkg/dmsgc/spec"
+	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
 	tspec "github.com/skycoin/skywire/pkg/transport/spec"
 )

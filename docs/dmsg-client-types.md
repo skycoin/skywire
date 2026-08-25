@@ -50,7 +50,7 @@ Key characteristics:
 
 ### Source
 
-- Implementation: `pkg/dmsgc/dmsgc.go`
+- Implementation: `pkg/dmsg/dmsgc/dmsgc.go`
 - Discovery client: `vendor/github.com/skycoin/dmsg/pkg/disc/client.go` (`NewHTTP()`)
 
 ## DMSG HTTP Client (Visor subsystem)
