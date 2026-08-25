@@ -401,6 +401,60 @@ func (s *redisStore) GetNumberOfTransports(ctx context.Context) (map[types.Type]
 	return response, nil
 }
 
+// GetTransportSummary counts total transports, per-type totals and unique
+// visors in a single index+MGET pass. It decodes only Type and the two
+// edge PKs from each blob — no *transport.Entry allocation and no durable
+// latency overlay — so /all-transports/stats can answer on a cold cache
+// without materializing the whole list.
+func (s *redisStore) GetTransportSummary(ctx context.Context, selfTransports bool) (*TransportSummary, error) {
+	keys, ids, err := s.allTransportKeysFromIndex(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	summary := &TransportSummary{ByType: make(map[string]int)}
+	uniqueVisors := make(map[string]struct{})
+
+	const mgetBatch = 10000
+	var stale []interface{}
+	for i := 0; i < len(keys); i += mgetBatch {
+		end := i + mgetBatch
+		if end > len(keys) {
+			end = len(keys)
+		}
+		vals, err := s.client.MGet(ctx, keys[i:end]...).Result()
+		if err != nil {
+			continue
+		}
+		for j, val := range vals {
+			raw, ok := val.(string)
+			if !ok || raw == "" {
+				stale = append(stale, ids[i+j])
+				continue
+			}
+			var data TransportData
+			if err := json.Unmarshal([]byte(raw), &data); err != nil {
+				continue
+			}
+			if !selfTransports && data.EdgeA == data.EdgeB {
+				continue
+			}
+			summary.Total++
+			summary.ByType[data.Type]++
+			if data.EdgeA != "" {
+				uniqueVisors[data.EdgeA] = struct{}{}
+			}
+			if data.EdgeB != "" {
+				uniqueVisors[data.EdgeB] = struct{}{}
+			}
+		}
+	}
+	s.maybeReapStaleTransports(stale)
+
+	summary.UniqueVisors = len(uniqueVisors)
+	return summary, nil
+}
+
 func (s *redisStore) GetAllTransports(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
 	if entries, ok := s.allTpsCache.Get(selfTransports, false); ok {
 		return entries, nil

@@ -124,6 +124,43 @@ func TestMemoryStore_SelfTransportFilter(t *testing.T) {
 	require.Empty(t, withoutSelf)
 }
 
+func TestMemoryStore_GetTransportSummary(t *testing.T) {
+	ctx := context.Background()
+	s := newMemoryStore()
+
+	// Two stcpr, one sudph. e1 and e2 share edge a1 so the unique-visor
+	// count is < 2*transports.
+	a1, _ := cipher.GenerateKeyPair()
+	b1, _ := cipher.GenerateKeyPair()
+	b2, _ := cipher.GenerateKeyPair()
+	e1 := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a1, b1), Type: types.STCPR}
+	e2 := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a1, b2), Type: types.STCPR}
+	e3, _, _ := memEntry(t, types.SUDPH)
+	require.NoError(t, s.RegisterTransportsBatch(ctx, cipher.PubKey{}, []*transport.SignedEntry{signed(e1), signed(e2), signed(e3)}))
+
+	sum, err := s.GetTransportSummary(ctx, true)
+	require.NoError(t, err)
+	require.Equal(t, 3, sum.Total)
+	require.Equal(t, 2, sum.ByType[string(types.STCPR)])
+	require.Equal(t, 1, sum.ByType[string(types.SUDPH)])
+	// Visors: a1, b1, b2, plus the two edges of e3 = 5 unique.
+	require.Equal(t, 5, sum.UniqueVisors)
+
+	// A self-transport is excluded when selfTransports=false.
+	self, _ := cipher.GenerateKeyPair()
+	selfEntry := &transport.Entry{ID: uuid.New(), Edges: [2]cipher.PubKey{self, self}, Type: types.STCPR}
+	require.NoError(t, s.RegisterTransport(ctx, cipher.PubKey{}, signed(selfEntry)))
+
+	withSelf, err := s.GetTransportSummary(ctx, true)
+	require.NoError(t, err)
+	require.Equal(t, 4, withSelf.Total)
+
+	withoutSelf, err := s.GetTransportSummary(ctx, false)
+	require.NoError(t, err)
+	require.Equal(t, 3, withoutSelf.Total)
+	require.Equal(t, 5, withoutSelf.UniqueVisors)
+}
+
 func TestMemoryStore_NoopAndEmptyMethods(t *testing.T) {
 	ctx := context.Background()
 	s := newMemoryStore()

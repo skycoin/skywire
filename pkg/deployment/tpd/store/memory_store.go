@@ -131,6 +131,28 @@ func (s *memoryStore) GetNumberOfTransports(context.Context) (map[types.Type]int
 	return response, nil
 }
 
+func (s *memoryStore) GetTransportSummary(_ context.Context, selfTransports bool) (*TransportSummary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	summary := &TransportSummary{ByType: make(map[string]int)}
+	uniqueVisors := make(map[cipher.PubKey]struct{})
+	for _, entry := range s.transports {
+		if entry == nil {
+			continue
+		}
+		if !selfTransports && entry.Edges[0] == entry.Edges[1] {
+			continue
+		}
+		summary.Total++
+		summary.ByType[string(entry.Type)]++
+		for _, edge := range entry.Edges {
+			uniqueVisors[edge] = struct{}{}
+		}
+	}
+	summary.UniqueVisors = len(uniqueVisors)
+	return summary, nil
+}
+
 func (s *memoryStore) GetAllTransports(_ context.Context, selfTransports bool) ([]*transport.Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
