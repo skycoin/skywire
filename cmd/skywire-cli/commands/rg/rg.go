@@ -4,7 +4,6 @@ package clirg
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -22,7 +21,6 @@ import (
 )
 
 var (
-	statusJSON   bool
 	statusFilter string
 	statusHops   bool
 	statusLive   bool
@@ -55,8 +53,6 @@ var listCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List active route groups with app associations and live stats",
 	Run: func(cmd *cobra.Command, _ []string) {
-		// The persistent --json, not a second flag of our own.
-		statusJSON = cliout.JSONMode(cmd)
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
@@ -64,12 +60,12 @@ var listCmd = &cobra.Command{
 		defer rpcClient.Close() //nolint:errcheck,gosec
 
 		// --live: bubbletea watch view. Honors --filter and --hops;
-		// not compatible with --json (the structured stream is its own
-		// thing). Re-fetches ActiveRoutes() every tick so bandwidth
-		// counters tick up in place.
+		// not compatible with the machine-output flags (their structured
+		// snapshot is its own thing). Re-fetches ActiveRoutes() every tick
+		// so bandwidth counters tick up in place.
 		if statusLive {
-			if statusJSON {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--live cannot be combined with --json"))
+			if cliout.MachineMode(cmd) {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--live cannot be combined with --json/--jq/--shape"))
 			}
 			err := livetui.Run(func(ctx context.Context) (string, error) {
 				return renderRouteGroupListLive(rpcClient)
@@ -91,10 +87,13 @@ var listCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 
-		if statusJSON {
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", "  ")
-			internal.Catch(cmd.Flags(), enc.Encode(routes))
+		// --json / --jq / --shape all route through the shared output
+		// layer so they behave identically to the rest of the CLI:
+		// --json marshals the route-group slice, --jq filters it, --shape
+		// prints its skeleton. The default (no flag) still renders the
+		// human table below, unchanged.
+		if cliout.MachineMode(cmd) {
+			internal.Catch(cmd.Flags(), cliout.Print(cmd, routes))
 			return
 		}
 
