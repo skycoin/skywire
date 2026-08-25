@@ -115,7 +115,7 @@ linters:
       - linters:
           - staticcheck
         text: "SA5011:"
-        path: "(pkg/calvin/|pkg/config-bootstrapper/api/|pkg/skywireconfig/autoconfigcmd/).*_test\\.go"
+        path: "(pkg/calvin/|pkg/deployment/conf/api/|pkg/skywireconfig/autoconfigcmd/).*_test\\.go"
 issues:
   new: false
 formatters:

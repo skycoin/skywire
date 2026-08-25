@@ -16,7 +16,7 @@ The Config Bootstrapper provides:
 The code should be in the `skycoin/skywire-services` repository:
 
 - `/cmd/config-bootstrapper/config-bootstrapper.go` is the main executable for the *Config Bootstrapper*.
-- `/pkg/config-bootstrapper/api/` contains the RESTFUL API definitions.
+- `/pkg/deployment/conf/api/` contains the RESTFUL API definitions.
 
 ## Database
 

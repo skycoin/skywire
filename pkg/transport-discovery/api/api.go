@@ -15,11 +15,11 @@ import (
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/deployment/monitor/nmpk"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
-	"github.com/skycoin/skywire/pkg/network-monitor/nmpk"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/transport"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/transport-discovery/metrics"
