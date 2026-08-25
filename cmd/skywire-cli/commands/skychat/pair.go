@@ -36,6 +36,7 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/pkg/cliout"
 )
 
 var (
@@ -146,10 +147,9 @@ var pairListCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("decode pair list: %w", err))
 		}
 		out := cmd.OutOrStdout()
-		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
-		if jsonMode {
-			b, _ := json.MarshalIndent(pairs, "", "  ") //nolint:errcheck
-			_, _ = out.Write(append(b, '\n'))           //nolint:errcheck
+		// --json / --jq / --shape route through the shared output layer.
+		if cliout.MachineMode(cmd) {
+			internal.Catch(cmd.Flags(), cliout.Print(cmd, pairs))
 			return
 		}
 		if len(pairs) == 0 {
