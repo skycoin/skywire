@@ -20,11 +20,11 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/deployment/tps/api"
+	"github.com/skycoin/skywire/pkg/deployment/tps/config"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services/tps"
-	"github.com/skycoin/skywire/pkg/transport-setup/api"
-	"github.com/skycoin/skywire/pkg/transport-setup/config"
 )
 
 var (

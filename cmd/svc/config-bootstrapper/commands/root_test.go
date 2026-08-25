@@ -17,7 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/config-bootstrapper/api"
+	"github.com/skycoin/skywire/pkg/deployment/conf/api"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 

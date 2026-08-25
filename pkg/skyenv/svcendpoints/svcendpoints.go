@@ -9,8 +9,8 @@
 // router); the ADDRESSES they pair with are deployment-SPECIFIC and supplied by
 // the caller from the visor's resolved config. Keep this file in sync with the
 // services' actual routers (pkg/dmsg/discovery/api, pkg/transport-discovery/api,
-// pkg/address-resolver/api, pkg/route-finder/api, pkg/service-discovery/api,
-// pkg/uptime-tracker/api, and the reward server in
+// pkg/deployment/ar/api, pkg/deployment/rf/api, pkg/deployment/sd/api,
+// pkg/deployment/ut/api, and the reward server in
 // cmd/skywire-cli/commands/rewards/server).
 //
 // Path parameters are expressed inline in Path with chi's "{name}" syntax and
@@ -104,19 +104,19 @@ var Manifest = map[string][]Endpoint{
 		{Method: "GET", Path: "/versions", Desc: "per-visor versions"},
 		{Method: "GET", Path: "/uptime/now", Desc: "service-self uptime (now)"},
 	},
-	// address-resolver — pkg/address-resolver/api/api.go
+	// address-resolver — pkg/deployment/ar/api/api.go
 	"ar": {
 		{Method: "GET", Path: "/health", Desc: "service health + build info"},
 		{Method: "GET", Path: "/transports", Desc: "registered stcpr/sudph bindings"},
 		{Method: "GET", Path: "/resolve/{type}/{pk}", Desc: "resolve a visor's network address (type = stcpr|sudph)"},
 	},
-	// route-finder — pkg/route-finder/api/api.go
+	// route-finder — pkg/deployment/rf/api/api.go
 	"rf": {
 		{Method: "GET", Path: "/health", Desc: "service health + build info"},
 		{Method: "POST", Path: "/routes", Desc: "find paired routes between two visors",
 			Body: `{"Edges":[["<src-pk>","<dst-pk>"]],"Opts":{"MinHops":0,"MaxHops":0,"NumRoutes":0}}`},
 	},
-	// service-discovery — pkg/service-discovery/api/api.go
+	// service-discovery — pkg/deployment/sd/api/api.go
 	"sd": {
 		{Method: "GET", Path: "/health", Desc: "service health + build info"},
 		{Method: "GET", Path: "/api/services", Desc: "service entries", Query: []Param{
@@ -133,7 +133,7 @@ var Manifest = map[string][]Endpoint{
 			{Name: "visors", Desc: "filter to a ;-separated PK list", Example: "pk1;pk2"},
 		}},
 	},
-	// uptime-tracker — pkg/uptime-tracker/api/api.go
+	// uptime-tracker — pkg/deployment/ut/api/api.go
 	"ut": {
 		{Method: "GET", Path: "/health", Desc: "service health + build info"},
 		{Method: "GET", Path: "/visors", Desc: "all tracked visors"},

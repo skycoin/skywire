@@ -318,7 +318,7 @@ services:
   # disabled (never started by `make e2e-run`, excluded from env_test's
   # expected containers) and its `svc nm` entrypoint monitored services
   # over plain HTTP — including the now-removed uptime-tracker. The
-  # pkg/network-monitor code is unaffected; re-add a dmsg-only container
+  # pkg/deployment/monitor code is unaffected; re-add a dmsg-only container
   # here if e2e network monitoring is wanted again.
 
   e2e-test:

@@ -18,8 +18,8 @@ Visors periodically send heartbeat updates to the Uptime Tracker to indicate the
 The code should be in the `skycoin/skywire-services` repository:
 
 - `/cmd/uptime-tracker/uptime-tracker.go` is the main executable for the *Uptime Tracker*.
-- `/pkg/uptime-tracker/api/` contains the RESTFUL API definitions.
-- `/pkg/uptime-tracker/store/` contains the database storage logic.
+- `/pkg/deployment/ut/api/` contains the RESTFUL API definitions.
+- `/pkg/deployment/ut/store/` contains the database storage logic.
 
 ## Authentication
 

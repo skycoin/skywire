@@ -3,7 +3,7 @@
 
 // Package integration_test — pkg/../internal/integration/transport_setup_test.go:
 // end-to-end coverage for the transport-setup service HTTP API
-// (pkg/transport-setup/api), which the coverage report flagged as having zero
+// (pkg/deployment/tps/api), which the coverage report flagged as having zero
 // unit or e2e coverage.
 //
 // transport-setup is the operator-facing service that manages transports on

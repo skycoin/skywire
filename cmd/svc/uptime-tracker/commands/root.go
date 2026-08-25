@@ -18,6 +18,9 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
+	"github.com/skycoin/skywire/pkg/deployment/ut/api"
+	utmetrics "github.com/skycoin/skywire/pkg/deployment/ut/metrics"
+	"github.com/skycoin/skywire/pkg/deployment/ut/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/geo"
 	"github.com/skycoin/skywire/pkg/httpauth"
@@ -26,9 +29,6 @@ import (
 	"github.com/skycoin/skywire/pkg/pg"
 	"github.com/skycoin/skywire/pkg/svcmode"
 	"github.com/skycoin/skywire/pkg/tcpproxy"
-	"github.com/skycoin/skywire/pkg/uptime-tracker/api"
-	utmetrics "github.com/skycoin/skywire/pkg/uptime-tracker/metrics"
-	"github.com/skycoin/skywire/pkg/uptime-tracker/store"
 )
 
 const (

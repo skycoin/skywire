@@ -25,8 +25,8 @@ Each service entry includes:
 The code should be in the `skycoin/skywire-services` repository:
 
 - `/cmd/service-discovery/service-discovery.go` is the main executable for the *Service Discovery*.
-- `/pkg/service-discovery/api/` contains the RESTFUL API definitions.
-- `/pkg/service-discovery/store/` contains the database storage logic.
+- `/pkg/deployment/sd/api/` contains the RESTFUL API definitions.
+- `/pkg/deployment/sd/store/` contains the database storage logic.
 
 ## Authentication
 

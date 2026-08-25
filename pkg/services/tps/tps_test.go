@@ -17,9 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/deployment/tps/config"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
-	"github.com/skycoin/skywire/pkg/transport-setup/config"
 )
 
 func testLog() *logging.Logger { return logging.MustGetLogger("tps-test") }

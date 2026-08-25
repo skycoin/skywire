@@ -13,9 +13,9 @@ import (
 
 	skycoinlogging "github.com/skycoin/skycoin/src/util/logging"
 
+	stunserver "github.com/skycoin/skywire/pkg/deployment/stun"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
-	"github.com/skycoin/skywire/pkg/stunserver"
 )
 
 // Type is the registry key used in services.json blocks.
