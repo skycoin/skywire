@@ -8,7 +8,7 @@ import (
 )
 
 // TestCountTransportList covers the client-side fallback path of
-// `tp -s -N`: when TPD lacks the /all-transports/stats aggregate endpoint,
+// `tp disc -s`: when TPD lacks the /all-transports/stats aggregate endpoint,
 // the CLI fetches the full /all-transports list and counts it into the same
 // summary shape the endpoint would have returned.
 func TestCountTransportList(t *testing.T) {
