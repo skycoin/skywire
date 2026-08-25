@@ -63,7 +63,7 @@ func (r *router) DialRoutes(
 	// opts.MinHops before route setup, and can refuse the dial
 	// entirely via Fallback="drop". A nil hook short-circuits
 	// the entire block so policy-free deployments pay zero cost.
-	if r.conf.DialHook != nil {
+	if hook := r.effectiveDialHook(rPort); hook != nil {
 		if opts == nil {
 			opts = &DialOptions{}
 		}
@@ -78,7 +78,7 @@ func (r *router) DialRoutes(
 			RPort:        rPort,
 			CLIOverrides: buildCLIOverrides(opts),
 		}
-		if adj, hookErr := r.conf.DialHook.BeforeDial(ctx, info); hookErr != nil {
+		if adj, hookErr := hook.BeforeDial(ctx, info); hookErr != nil {
 			// Failure to evaluate the policy is non-fatal — the
 			// hook's own failure-mode wiring decides whether to
 			// return a "drop" adjustment or fall back to defaults.
@@ -619,7 +619,7 @@ func (r *router) finishDial(
 	// callbacks whenever its leg set mutates after this point
 	// (additional aux legs from appendRouteToGroup, or
 	// transport-close pruning).
-	if lch, ok := r.conf.DialHook.(LegChangeHook); ok && lch != nil {
+	if lch, ok := r.effectiveDialHook(rPort).(LegChangeHook); ok && lch != nil {
 		nrg.rg.SetLegChangeHook(lch, DialInfo{
 			AppName: opts.AppName,
 			PeerPK:  rPK,
@@ -701,7 +701,7 @@ func (r *router) finishDial(
 		nrg.rg.maybeSelfHeal()
 
 		// Periodic rotation (policy on_tick) reuses the same callback.
-		if rh, ok := r.conf.DialHook.(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
+		if rh, ok := r.effectiveDialHook(rPort).(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
 			interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
 			// Forward-only add-leg callback: the adaptive preset's AddForwardLeg
 			// (upload-saturation widen) dials an aux leg addFwd=true/addRev=false
@@ -846,7 +846,7 @@ func (r *router) PingRoute(
 	// too. Same shape as DialRoutes' hook block, minus the
 	// post-mux applyDistribution call — setupPingRoute handles
 	// distribution + leg-change hook wiring downstream.
-	if r.conf.DialHook != nil {
+	if hook := r.effectiveDialHook(rPort); hook != nil {
 		appName := ""
 		if opts != nil {
 			appName = opts.AppName
@@ -858,7 +858,7 @@ func (r *router) PingRoute(
 			RPort:        rPort,
 			CLIOverrides: buildCLIOverrides(opts),
 		}
-		if adj, hookErr := r.conf.DialHook.BeforeDial(ctx, info); hookErr != nil {
+		if adj, hookErr := hook.BeforeDial(ctx, info); hookErr != nil {
 			log.WithError(hookErr).Debug("policy hook errored on PingRoute; proceeding without adjustment")
 		} else if err := applyAdjustment(opts, adj); err != nil {
 			log.WithField("policy_decision", "drop").Info("PingRoute refused by routing policy.")
@@ -2813,6 +2813,32 @@ var controlPlanePorts = map[uint16]struct{}{
 func isControlPlanePort(p routing.Port) bool {
 	_, ok := controlPlanePorts[uint16(p)]
 	return ok
+}
+
+// effectiveDialHook returns the routing-policy DialHook to apply for a dial to
+// rPort, or nil when rPort is a control-plane port. Control/telemetry channels
+// (pty, dmsgctrl, setup, hypervisor RPC, transport-setup, …) must never run the
+// operator's routing policy at all: its per-dial evaluation, warm-standby
+// reserve, and reshape/rotation churn destabilize their small noise-XK
+// handshakes — the pty (port 22) 32-leg mux that "never carried a byte" and the
+// ~seconds-of-reshape that time out a request a single 1-hop route would have
+// completed. These channels always take a plain base route. This is the
+// policy-application complement to the muxTarget>1 no-mux gate in dialRoutesFwd:
+// that keeps an already-policied route from GROWING a mux; this keeps the policy
+// from evaluating/managing (BeforeDial/LegChange/Rotation) the route in the
+// first place, regardless of which policy (adaptive or a custom preset) is set.
+//
+// The control-plane exemption is the DEFAULT but not mandatory: setting
+// Config.PolicyOnControlPorts opts the policy back in for these ports too, for
+// an operator who deliberately wants a policy tuned for control traffic.
+func (r *router) effectiveDialHook(rPort routing.Port) DialHook {
+	if r.conf.DialHook == nil {
+		return nil
+	}
+	if isControlPlanePort(rPort) && !r.conf.PolicyOnControlPorts {
+		return nil
+	}
+	return r.conf.DialHook
 }
 
 // isSameLANDest reports whether dst is a peer on this visor's own local network

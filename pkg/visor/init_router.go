@@ -298,6 +298,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		MasterLogger:          v.MasterLogger(),
 		AppLookup:             appLookup,
 		DialHook:              dialHook,
+		PolicyOnControlPorts:  v.conf.Routing.PolicyOnControlPorts,
 		RulesGCInterval:       0, // 0 = DefaultRulesGCInterval (10s)
 		SetupHooks:            routeSetupHooks,
 		EnableRSNOracleRoutes: v.conf.Routing.EnableRSNOracleRoutes,
