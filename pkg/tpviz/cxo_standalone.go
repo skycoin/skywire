@@ -19,11 +19,11 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxosub"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
 // compactVisorSummaryLeaf mirrors the per-visor uptime leaf the TPD publisher

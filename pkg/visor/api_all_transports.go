@@ -1,7 +1,7 @@
 // Package visor pkg/visor/api_all_transports.go c3-vis-core
 //
 // Reader-side helper for the TPD all-transports CXO snapshot. The
-// publisher lives in pkg/transport-discovery/api/cxo_all_transports_publisher.go
+// publisher lives in pkg/deployment/tpd/api/cxo_all_transports_publisher.go
 // and writes JSON-encoded []*transport.Entry to two paths
 // (transports/all/with-self, transports/all/without-self). This
 // helper Acquires the TabCLITransports tab on the
@@ -22,8 +22,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
+	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
 	"github.com/skycoin/skywire/pkg/transport"
-	tpdapi "github.com/skycoin/skywire/pkg/transport-discovery/api"
 )
 
 // ErrTPDAllTransportsNotReady is returned when the CXO subscriber

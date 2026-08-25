@@ -21,11 +21,11 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	routeFinder "github.com/skycoin/skywire/pkg/deployment/rf/store"
+	store "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/router/policy"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
-	store "github.com/skycoin/skywire/pkg/transport-discovery/store"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"

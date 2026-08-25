@@ -8,18 +8,18 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
 import { homeTabsData } from 'src/app/utils/home-tabs';
 
-/** Mirrors pkg/transport-discovery/store.TransportLatency. */
+/** Mirrors pkg/deployment/tpd/store.TransportLatency. */
 interface TransportLatency {
   min: number; // µs
   max: number;
   avg: number;
 }
 
-/** Mirrors pkg/transport-discovery/store.EdgeBandwidth. */
+/** Mirrors pkg/deployment/tpd/store.EdgeBandwidth. */
 interface EdgeBandwidth { sent: number; recv: number; }
 interface DailyEdgeBandwidth { date: string; a?: EdgeBandwidth; b?: EdgeBandwidth; }
 
-/** Mirrors pkg/transport-discovery/store.TransportMetric. */
+/** Mirrors pkg/deployment/tpd/store.TransportMetric. */
 interface TransportMetric {
   id: string;
   type: string;
