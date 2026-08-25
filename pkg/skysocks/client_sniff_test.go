@@ -97,8 +97,10 @@ func runSniff(t *testing.T, c *Client) (browser, exit net.Conn, result <-chan bo
 	return browserEnd, exitEnd, res
 }
 
-// When the exit selects a method other than no-auth, the client hands off
-// transparently (proceed=true) without buffering/parsing the CONNECT request.
+// When the browser offers NO no-auth method, the client can't answer locally, so
+// it forwards the greeting to the exit and hands off transparently (proceed=true)
+// without buffering/parsing the CONNECT request — the exit drives the (auth)
+// negotiation end-to-end.
 func TestSniff_NonNoAuthHandoff(t *testing.T) {
 	c, _ := newTestClient(t)
 	defer c.Close() //nolint:errcheck
@@ -106,13 +108,14 @@ func TestSniff_NonNoAuthHandoff(t *testing.T) {
 	defer browser.Close() //nolint:errcheck
 	defer exit.Close()    //nolint:errcheck
 
-	// Browser greeting → forwarded to exit verbatim.
-	_, err := browser.Write([]byte{0x05, 0x01, 0x00})
+	// Browser offers ONLY user/pass auth (0x02), no no-auth → forwarded to exit
+	// verbatim (the client cannot answer this locally).
+	_, err := browser.Write([]byte{0x05, 0x01, 0x02})
 	require.NoError(t, err)
 	got := make([]byte, 3)
 	_, err = io.ReadFull(exit, got)
 	require.NoError(t, err)
-	require.Equal(t, []byte{0x05, 0x01, 0x00}, got)
+	require.Equal(t, []byte{0x05, 0x01, 0x02}, got)
 
 	// Exit picks user/pass auth (05 02) → forwarded to browser; sniff hands off.
 	_, err = exit.Write([]byte{0x05, 0x02})
@@ -124,14 +127,15 @@ func TestSniff_NonNoAuthHandoff(t *testing.T) {
 
 	select {
 	case proceed := <-res:
-		require.True(t, proceed, "non-no-auth reply must proceed to a transparent splice")
+		require.True(t, proceed, "non-no-auth greeting must proceed to a transparent splice")
 	case <-time.After(2 * time.Second):
 		t.Fatal("sniff did not return after non-no-auth handoff")
 	}
 }
 
-// An unknown CONNECT address type is forwarded to the exit as-is and the sniff
-// hands off (proceed=true) rather than parsing it.
+// An unknown CONNECT address type is a non-status target: the client answers the
+// browser's no-auth greeting locally, then opens the exit (greeting + no-auth
+// reply), forwards the request as-is, and hands off (proceed=true).
 func TestSniff_UnknownATYPHandoff(t *testing.T) {
 	c, _ := newTestClient(t)
 	defer c.Close() //nolint:errcheck
@@ -139,16 +143,27 @@ func TestSniff_UnknownATYPHandoff(t *testing.T) {
 	defer browser.Close() //nolint:errcheck
 	defer exit.Close()    //nolint:errcheck
 
-	_, err := browser.Write([]byte{0x05, 0x01, 0x00}) // greeting
+	// Browser greeting (offers no-auth) → answered LOCALLY by the client, not the
+	// exit; the exit is not yet contacted.
+	_, err := browser.Write([]byte{0x05, 0x01, 0x00})
 	require.NoError(t, err)
-	_, _ = io.ReadFull(exit, make([]byte, 3)) //nolint:errcheck
-	_, err = exit.Write([]byte{0x05, 0x00})   // no-auth selected
+	method := make([]byte, 2)
+	_, err = io.ReadFull(browser, method)
 	require.NoError(t, err)
-	_, _ = io.ReadFull(browser, make([]byte, 2)) //nolint:errcheck
+	require.Equal(t, []byte{0x05, 0x00}, method)
 
-	// CONNECT with an unknown ATYP (0x09).
+	// CONNECT with an unknown ATYP (0x09): non-status, so the client now opens the
+	// exit — the exit receives the replayed greeting first and answers no-auth.
 	_, err = browser.Write([]byte{0x05, 0x01, 0x00, 0x09})
 	require.NoError(t, err)
+	greeting := make([]byte, 3)
+	_, err = io.ReadFull(exit, greeting)
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x05, 0x01, 0x00}, greeting)
+	_, err = exit.Write([]byte{0x05, 0x00})
+	require.NoError(t, err)
+
+	// Then the forwarded CONNECT request, unknown ATYP preserved.
 	fwd := make([]byte, 4)
 	_, err = io.ReadFull(exit, fwd)
 	require.NoError(t, err)
