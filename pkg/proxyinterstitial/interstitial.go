@@ -269,13 +269,15 @@ func ShouldServe(port string) bool {
 //
 // statusOverride lets the caller answer a reserved in-process host (e.g.
 // status.skysocks) itself instead of the interstitial: once the CONNECT target
-// host is parsed and the SOCKS5 reply + browser request have been exchanged, if
-// statusOverride != nil and it returns a non-nil body for that host, the body is
-// written verbatim as the HTTP response and the interstitial is skipped. This
-// keeps the reserved status page reachable exactly when the exit is down — the
-// moment the user most needs to see why — which the interstitial would otherwise
-// shadow. Pass nil for the plain interstitial-only behavior. The closure lives
-// in the caller so this package stays free of any pkg/proxystatus dependency.
+// host is parsed, if statusOverride != nil and it returns a non-nil body for that
+// host, the SOCKS5 reply is sent, the browser's request drained, and the body
+// written verbatim as the HTTP response — the interstitial is skipped. The
+// override is resolved BEFORE the HTTP-only port gate and the exit-reachability
+// check, and applies regardless of port, so the reserved status page is never
+// declined or shadowed — it stays reachable exactly when the exit is down, the
+// moment the user most needs to see why. Pass nil for the plain interstitial-only
+// behavior. The closure lives in the caller so this package stays free of any
+// pkg/proxystatus dependency.
 //
 // exitReachable is the symmetric fall-through: this function is minted on a dial
 // failure, but that failure can be transient (a single stream open failing while
@@ -346,9 +348,19 @@ func ServeSOCKS5(conn net.Conn, detail, mechanism string, statusOverride func(ho
 		return err
 	}
 	port := int(portB[0])<<8 | int(portB[1])
-	// Only plaintext HTTP can carry an HTML interstitial; decline the rest so
-	// the caller falls back to tearing down (browser sees a normal failure).
-	if !ShouldServe(fmt.Sprintf("%d", port)) {
+	// Resolve the reserved-host override FIRST (it is a pure render of the status
+	// page for a reserved host, e.g. status.skysocks; nil for anything else). A
+	// reserved host is served regardless of port and BEFORE the interstitial's
+	// HTTP-only gate below, so the status page is never declined or shadowed by
+	// the exit being down — the moment the user most needs to see it.
+	var overrideBody []byte
+	if statusOverride != nil {
+		overrideBody = statusOverride(host)
+	}
+	// Only plaintext HTTP can carry an HTML interstitial; decline the rest so the
+	// caller falls back to tearing down (browser sees a normal failure). The
+	// reserved status host is exempt — it was resolved above.
+	if overrideBody == nil && !ShouldServe(fmt.Sprintf("%d", port)) {
 		return fmt.Errorf("socks5 interstitial: non-HTTP port %d", port)
 	}
 	// Reply success with a dummy BND.ADDR/PORT so the client proceeds to send
@@ -363,11 +375,9 @@ func ServeSOCKS5(conn net.Conn, detail, mechanism string, statusOverride func(ho
 	// A reserved in-process host (e.g. status.skysocks) is answered by the
 	// caller's override rather than the interstitial, so it stays reachable
 	// while the exit is down.
-	if statusOverride != nil {
-		if body := statusOverride(host); body != nil {
-			_, err := conn.Write(body)
-			return err
-		}
+	if overrideBody != nil {
+		_, err := conn.Write(overrideBody)
+		return err
 	}
 	// The exit is reachable again (the dial failure was transient) — don't pin the
 	// browser on the waiting spinner; serve a reload that falls through to the

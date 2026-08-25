@@ -177,6 +177,69 @@ func TestStatusSkysocksIntercepted(t *testing.T) {
 	}
 }
 
+// newDeadExitClient builds a client whose peer is a yamux server that ACCEPTS
+// streams but never speaks SOCKS on them — a dead exit process sitting behind a
+// still-open session/route. session.Open() succeeds (so the request reaches the
+// sniff path, not the ServeSOCKS5 route-down path), but any SOCKS negotiation to
+// the exit would hang. It proves status.skysocks is served with zero exit
+// involvement.
+func newDeadExitClient(t *testing.T) *Client {
+	t.Helper()
+	cliConn, exitConn := net.Pipe()
+	sess, err := yamux.Server(exitConn, yamux.DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		for {
+			stream, err := sess.Accept()
+			if err != nil {
+				return
+			}
+			_ = stream // accepted but intentionally never answered
+		}
+	}()
+	c, err := NewClient(cliConn, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// TestStatusSkysocksServedWhenExitDown is the regression test for the bug: a
+// CONNECT to status.skysocks must return the in-process status page even when the
+// exit is unresponsive (session/route up, exit process dead). With the old sniff —
+// which forwarded the greeting to the exit and blocked on the exit's method reply
+// before parsing the CONNECT target — this request stalled on the dead exit and
+// never reached the status handler. The status page must NEVER depend on the exit.
+func TestStatusSkysocksServedWhenExitDown(t *testing.T) {
+	c := newDeadExitClient(t)
+	defer c.Close() //nolint:errcheck
+	addr := startClientListener(t, c)
+
+	// A non-80 CONNECT port also exercises the sniff's port-independent status
+	// match (proxystatus.Match ignores the port): the reserved host is recognized
+	// and served regardless of the port the browser used.
+	conn := socks5Connect(t, addr, "status.skysocks", 8080)
+	defer conn.Close() //nolint:errcheck
+	if _, err := conn.Write([]byte("GET / HTTP/1.1\r\nHost: status.skysocks\r\nConnection: close\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		t.Fatalf("status page not served while exit is down: %v", err)
+	}
+	defer resp.Body.Close()          //nolint:errcheck
+	body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+	if !strings.Contains(string(body), "per-leg mux") {
+		t.Fatalf("status page not served in-process; body=%q", string(body))
+	}
+	if strings.Contains(string(body), "Building a route") {
+		t.Fatalf("status.skysocks was shadowed by the interstitial; body=%q", string(body))
+	}
+}
+
 // TestStreamRegistryTracksTarget verifies the per-stream detail plumbing (item
 // 4): a normal (non-status) tunneled CONNECT registers an open stream whose
 // CONNECT target the status snapshot surfaces, and the stream is dropped from the
