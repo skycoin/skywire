@@ -710,6 +710,15 @@ type Routing struct {
 	// WASM ABI + trade-offs, and `skywire cli route policy
 	// test/bench` for iteration tools.
 	PolicyPerDial string `json:"policy_per_dial,omitempty"`
+
+	// PolicyOnControlPorts opts the routing policy (PolicyPerDial / per-app)
+	// BACK IN for control-plane destination ports (pty 22, dmsgctrl 7, setup
+	// 36, hypervisor RPC 46, transport-setup 47/48, …). Default false: those
+	// small noise-XK control channels bypass the policy and take a plain base
+	// route, because a bandwidth-spreading policy (e.g. the adaptive default)
+	// destabilizes their handshakes — the pty 32-leg-mux footgun. Set true
+	// only with a policy purpose-built for control traffic.
+	PolicyOnControlPorts bool `json:"policy_on_control_ports,omitempty"`
 }
 
 // UptimeTracker configures uptime tracker.

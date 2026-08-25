@@ -192,6 +192,16 @@ type Config struct {
 	// configured.
 	DialHook DialHook
 
+	// PolicyOnControlPorts opts the routing policy (DialHook) BACK IN for
+	// control-plane destination ports (pty, dmsgctrl, setup, hypervisor RPC,
+	// …). Default false: those small noise-XK control channels bypass the
+	// policy entirely and take a plain base route, because its per-dial
+	// evaluation + warm-standby/reshape churn destabilizes their handshakes
+	// (the pty 32-leg-mux footgun). Set true to let the operator's policy
+	// manage control-plane routes too (advanced; e.g. a policy purpose-built
+	// for them). See effectiveDialHook / controlPlanePorts.
+	PolicyOnControlPorts bool
+
 	// EnableRSNOracleRoutes opts INTO the RSN-oracle 2-hop route path: for a
 	// single-intermediate route S->I->D the source computes the route LOCALLY
 	// from its OWN transports intersected with the destination's OWN transports
