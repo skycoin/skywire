@@ -989,6 +989,9 @@ func (s *calcMemStore) GetTransportByID(context.Context, uuid.UUID) (*transport.
 func (s *calcMemStore) GetNumberOfTransports(context.Context) (map[tptypes.Type]int, error) {
 	return nil, nil
 }
+func (s *calcMemStore) GetTransportSummary(context.Context, bool) (*tpdstore.TransportSummary, error) {
+	return &tpdstore.TransportSummary{ByType: map[string]int{}}, nil
+}
 func (s *calcMemStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {
 	return nil, nil
 }
