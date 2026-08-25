@@ -448,19 +448,26 @@ func (a *autoconnector) fetchPubAddresses(ctx context.Context, v *Visor) ([]ciph
 }
 
 // pubVisorsFromCXOSnapshot walks the SD services tree under
-// services/visor/<pk>/entry and returns the PKs as a slice. Empty
+// services/visor/ and returns the visor PKs as a slice. Reads the
+// batched per-type leaf (services/visor/all) preferred, and the legacy
+// per-service leaves (services/visor/<pk>/entry) as a fallback. Empty
 // slice (rather than nil) when the snapshot exists but has no visor
 // entries; nil when the snapshot is missing entirely (caller falls
 // through to HTTP).
 func pubVisorsFromCXOSnapshot(mgr *CXOSubscriptionManager) []cipher.PubKey {
 	var pks []cipher.PubKey
-	mgr.Walk(FeedSDServices, "services/visor/", func(path string, _ []byte) bool {
-		// path = services/visor/<pk>/{entry,tombstone}.
-		// Skip tombstones; live entries only.
+	mgr.Walk(FeedSDServices, "services/visor/", func(path string, body []byte) bool {
+		// Batched per-type leaf: services/visor/all.
+		if strings.HasSuffix(path, "/all") {
+			for _, svc := range decodeServicesBatch(body) {
+				pks = append(pks, svc.Addr.PubKey())
+			}
+			return true
+		}
+		// Legacy per-service leaf: services/visor/<pk>/entry.
 		if !strings.HasSuffix(path, "/entry") {
 			return true
 		}
-		// Strip the prefix and trailing "/entry" to recover the PK.
 		core := strings.TrimSuffix(strings.TrimPrefix(path, "services/visor/"), "/entry")
 		if core == "" {
 			return true
