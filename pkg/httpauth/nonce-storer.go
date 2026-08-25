@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/storeconfig"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 )
 
 // Nonce is used to sign requests in order to avoid replay attack

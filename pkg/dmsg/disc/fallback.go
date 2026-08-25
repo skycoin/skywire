@@ -4,7 +4,7 @@
 //
 // Build-tag-gated off the WASM path because it imports pkg/logging
 // (which wraps logrus, which transitively pulls encoding/json).
-// FallbackClient is constructed only from pkg/dmsgc at visor
+// FallbackClient is constructed only from pkg/dmsg/dmsgc at visor
 // runtime; the WASM install-page graph doesn't reach it.
 //
 // FallbackClient wraps two APIClients (primary + fallback) and tries

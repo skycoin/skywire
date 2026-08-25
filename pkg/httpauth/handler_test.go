@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/httputil"
-	"github.com/skycoin/skywire/pkg/storeconfig"
 )
 
 var testPubKey, testSec = cipher.GenerateKeyPair()

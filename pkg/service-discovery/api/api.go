@@ -25,7 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/metricsutil"
-	"github.com/skycoin/skywire/pkg/networkmonitor"
+	"github.com/skycoin/skywire/pkg/network-monitor/nmpk"
 	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -63,7 +63,7 @@ type HealthCheckResponse struct {
 }
 
 // WhitelistPKs store whitelisted pks of network monitor
-var WhitelistPKs = networkmonitor.GetWhitelistPKs()
+var WhitelistPKs = nmpk.GetWhitelistPKs()
 
 // API represents the service-discovery API.
 type API struct {

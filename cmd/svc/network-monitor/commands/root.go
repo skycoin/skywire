@@ -23,12 +23,12 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/network-monitor/api"
 	"github.com/skycoin/skywire/pkg/network-monitor/store"
 	nm "github.com/skycoin/skywire/pkg/network-monitor/types"
-	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/tcpproxy"
 	"github.com/skycoin/skywire/pkg/visor"
 )

@@ -1,4 +1,4 @@
-// Package tcpnoise pkg/skywire/tcpnoise/tcpnoise_test.go
+// Package tcpnoise pkg/dmsg/tcpnoise/tcpnoise_test.go
 package tcpnoise
 
 import (

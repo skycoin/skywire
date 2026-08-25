@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	nm "github.com/skycoin/skywire/pkg/network-monitor/types"
-	"github.com/skycoin/skywire/pkg/storeconfig"
 )
 
 // TestNewMemory verifies the constructor returns a working in-memory store.

@@ -26,7 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/netutil"
-	"github.com/skycoin/skywire/pkg/networkmonitor"
+	"github.com/skycoin/skywire/pkg/network-monitor/nmpk"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
@@ -46,7 +46,7 @@ var ErrUnauthorizedNetworkMonitor = errors.New("invalid network monitor key")
 var ErrBadInput = errors.New("error bad input")
 
 // WhitelistPKs store whitelisted pks of network monitor
-var WhitelistPKs = networkmonitor.GetWhitelistPKs()
+var WhitelistPKs = nmpk.GetWhitelistPKs()
 
 // API represents the api of the address-resolver service.
 type API struct {
