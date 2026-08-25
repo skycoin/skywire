@@ -5,20 +5,52 @@
 // Subscribers (the hypervisor's network visualizer + tab-specific
 // consumers) read the live set of registered services from a single
 // TreeStore feed instead of polling /api/services?type=... over HTTP.
-// Tree shape:
 //
-//	services/<type>/<pk>/entry        // JSON-encoded servicedisc.Service
-//	services/<type>/<pk>/tombstone    // JSON {"deleted_at": "..."}
+// # Wire shape: ONE batched leaf per service type
 //
-// Type-as-prefix lets a consumer that only cares about one service
-// kind (e.g. just VPN) subscribe to services/vpn/ and skip the rest.
+// Each service type gets exactly one leaf carrying that type's whole
+// live service set:
 //
-// Event-driven: register/update calls Put on success; explicit
-// deregister calls Delete (and Put on the tombstone leaf); expiry
-// sweep emits tombstones for entries the redis cleanup found stale.
-// CXO content-addresses, so re-publishing an unchanged entry is a
-// no-op at the wire layer — heartbeats from a still-alive service
-// don't burn bandwidth.
+//	services/<type>/all        // FrameGzip(v1, JSON []servicedisc.Service)
+//
+// Older builds published one leaf PER service at
+// services/<type>/<pk>/entry (+ an optional /tombstone) — O(#services),
+// one tiny object per registered service. A large deployment's Root then
+// could not finish filling over a subscriber's short-lived delivering
+// dmsg conn. Sharding by type collapses the object count to O(#types)
+// (~10). The batch leaf lives UNDER the type dir (…/all, not a bare
+// services/<type>) so every existing consumer prefix — services/,
+// services/visor/, services/<type>/ — still walks straight onto it; a
+// service PK is 66 hex chars and never collides with the "all" segment.
+//
+// Encoding is JSON+gzip, not fixed-layout binary: servicedisc.Service
+// carries several optional, variable-length nested structs (Geo, VPNInfo,
+// CoinInfo, LocalIPs), so it is the "awkward for binary" case — unlike
+// telemetrywire's fixed rows. Services are sorted by PK so an unchanged
+// set re-encodes to identical bytes (a CXO content-addressed wire no-op),
+// then version-framed + gzipped (cxoutils.FrameGzip). The version byte
+// gates the format: a bumped version is rejected cleanly by an old reader
+// rather than misparsed.
+//
+// # Interop / deploy order
+//
+// Deploy is SERVICE-FIRST. A not-yet-upgraded reader walking a type
+// prefix looks for the OLD .../<pk>/entry leaves, finds only the batched
+// …/all leaf, reports an empty snapshot for that type, and falls back to
+// HTTP — safe degradation. Upgraded readers prefer the batched leaf and
+// still parse OLD per-service leaves, so either publisher shape resolves.
+//
+// A deregistration / expiry is the ABSENCE of a service from its type's
+// batched leaf — there is no tombstone leaf class anymore (the old
+// per-service tombstones were write-only across the codebase).
+//
+// # Heartbeat short-circuit
+//
+// SD's register/heartbeat rate is high. The worker holds the live
+// per-type service set and, on a re-register, compares the new marshalled
+// Service against the stored one; when the materially-visible content is
+// unchanged it skips the re-encode entirely, so a steady heartbeat stream
+// does not churn the tree.
 //
 // HTTP-path decoupling: PutEntry / DelEntry are non-blocking. The
 // HTTP register / deregister handlers call them inline, but the
@@ -27,28 +59,36 @@
 // can block the HTTP goroutine long enough to pile up thousands of
 // pending registrations and stall the entire visor refresh loop.
 // Instead we route every publish through a single buffered-channel
-// worker and drop on overflow. CXO data quality (last-write-wins,
-// up to publishQueueDepth events in flight) degrades gracefully;
-// the HTTP path stays fast.
+// worker and drop on overflow. The per-type service state map is owned
+// by that single worker goroutine, so its mutations need no lock. CXO
+// data quality (last-write-wins, up to publishQueueDepth events in
+// flight) degrades gracefully; the HTTP path stays fast.
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
+
+// servicesBatchVersion is the wire-format version byte of the batched
+// per-type leaf body (FrameGzip). Bump on any breaking change to the
+// leaf encoding; readers reject other values and fall back.
+const servicesBatchVersion = 1
 
 // publishQueueDepth bounds in-flight publish operations. Sized for
 // SD's expected register rate (a few hundred entries refreshing
@@ -69,6 +109,12 @@ type ServicesCXOPublisher struct {
 	wg     sync.WaitGroup
 
 	dropped uint64 // atomic; incremented on queue overflow
+
+	// state is the live per-type service set: service type -> service PK ->
+	// that service's full JSON servicedisc.Service. Owned exclusively by
+	// the single worker goroutine (run), so it needs no lock; the encode of
+	// a type's batched leaf reads only from here.
+	state map[string]map[cipher.PubKey][]byte
 
 	mu        sync.Mutex
 	lastError error
@@ -98,6 +144,7 @@ func StartServicesCXOPublisher(_ context.Context, dmsgC *dmsg.Client, sk cipher.
 		log:    log,
 		events: make(chan func(), publishQueueDepth),
 		done:   make(chan struct{}),
+		state:  make(map[string]map[cipher.PubKey][]byte),
 	}
 	p.wg.Add(1)
 	go p.run()
@@ -180,9 +227,12 @@ func (p *ServicesCXOPublisher) Close() error {
 	return p.pub.Close()
 }
 
-// PutEntry mirrors a service register/update. Idempotent: identical
-// bytes are a no-op at the wire layer. Best-effort and non-blocking:
-// queued for the publish worker; dropped on queue overflow.
+// PutEntry mirrors a service register/update. Updates the worker's
+// per-type service state and re-encodes that type's batched leaf — but
+// only when the service's materially-visible content changed (heartbeat
+// short-circuit), so a steady re-register stream does not churn the tree.
+// Best-effort and non-blocking: queued for the publish worker; dropped on
+// queue overflow.
 func (p *ServicesCXOPublisher) PutEntry(svc *servicedisc.Service) {
 	if p == nil || p.pub == nil || svc == nil {
 		return
@@ -204,47 +254,98 @@ func (p *ServicesCXOPublisher) PutEntry(svc *servicedisc.Service) {
 	svcType := svc.Type
 	pk := svc.Addr.PubKey()
 	p.submit(func() {
-		path := entryPath(svcType, pk)
-		if err := p.pub.Put(path, body); err != nil {
-			p.log.WithError(err).WithField("path", path).Debug("Failed to publish service entry leaf")
-			p.recordError(err)
-			// Also clear any stale tombstone so subscribers don't see
-			// a dead-then-alive flap. Best-effort.
-			_ = p.pub.Delete(tombstonePath(svcType, pk)) //nolint:errcheck
+		// Heartbeat short-circuit: a re-register whose marshalled Service
+		// is byte-identical to what we already hold changes nothing a
+		// subscriber sees, so skip the re-encode entirely.
+		if cur := p.state[svcType]; cur != nil && bytes.Equal(cur[pk], body) {
 			return
 		}
-		// Drop any existing tombstone for the same key — re-registration
-		// after expiry should leave only the live entry leaf.
-		if err := p.pub.Delete(tombstonePath(svcType, pk)); err != nil {
-			p.log.WithError(err).Debug("Failed to clear stale services tombstone")
-		}
+		p.stateSet(svcType, pk, body)
+		p.flushType(svcType)
 	})
 }
 
-// DelEntry mirrors a service deregister or expiry. Removes the entry
-// leaf and writes a tombstone leaf so subscribers see the deletion.
-// Best-effort and non-blocking.
+// DelEntry mirrors a service deregister or expiry. Removes the service
+// from its type's set and re-encodes that type's batched leaf; the
+// service's absence from the leaf IS the deletion signal (no tombstone
+// leaf — see the package docstring). Best-effort and non-blocking.
 func (p *ServicesCXOPublisher) DelEntry(svcType string, pk cipher.PubKey) {
 	if p == nil || p.pub == nil || svcType == "" {
 		return
 	}
-	body, err := json.Marshal(struct {
-		DeletedAt time.Time `json:"deleted_at"`
-	}{DeletedAt: time.Now().UTC()})
-	if err != nil {
-		p.log.WithError(err).Debug("Failed to marshal services tombstone")
+	p.submit(func() {
+		if cur := p.state[svcType]; cur == nil || cur[pk] == nil {
+			return // already absent — nothing to re-encode
+		}
+		p.stateDel(svcType, pk)
+		p.flushType(svcType)
+	})
+}
+
+// stateSet records a service's JSON body under its type. Worker-only.
+func (p *ServicesCXOPublisher) stateSet(svcType string, pk cipher.PubKey, body []byte) {
+	svcs := p.state[svcType]
+	if svcs == nil {
+		svcs = make(map[cipher.PubKey][]byte)
+		p.state[svcType] = svcs
+	}
+	svcs[pk] = body
+}
+
+// stateDel removes a service from its type's set. Worker-only.
+func (p *ServicesCXOPublisher) stateDel(svcType string, pk cipher.PubKey) {
+	if svcs := p.state[svcType]; svcs != nil {
+		delete(svcs, pk)
+	}
+}
+
+// flushType re-encodes and Puts the batched leaf for a type, or Deletes
+// it (and drops the type from state) when the type has no services left.
+// CXO is content-addressed, so a re-Put of an unchanged leaf is a wire
+// no-op. Worker-only.
+func (p *ServicesCXOPublisher) flushType(svcType string) {
+	svcs := p.state[svcType]
+	path := batchLeafPath(svcType)
+	if len(svcs) == 0 {
+		delete(p.state, svcType)
+		if err := p.pub.Delete(path); err != nil {
+			p.log.WithError(err).WithField("path", path).Debug("Failed to delete emptied services leaf")
+		}
 		return
 	}
-	p.submit(func() {
-		if err := p.pub.Delete(entryPath(svcType, pk)); err != nil {
-			p.log.WithError(err).WithField("type", svcType).Debug("Failed to delete service entry leaf")
-			p.recordError(err)
+	blob, err := encodeServicesBatch(svcs)
+	if err != nil {
+		p.log.WithError(err).WithField("path", path).Debug("Failed to encode services batch leaf")
+		p.recordError(err)
+		return
+	}
+	if err := p.pub.Put(path, blob); err != nil {
+		p.log.WithError(err).WithField("path", path).Debug("Failed to publish services batch leaf")
+		p.recordError(err)
+	}
+}
+
+// encodeServicesBatch serializes a type's service set into one batched
+// leaf body: a JSON array of the services, sorted by PK so an unchanged
+// set re-encodes to identical bytes (a CXO wire no-op), then version-
+// framed + gzipped. The array is assembled by concatenating the already-
+// marshalled per-service bodies, so each service is encoded exactly once.
+func encodeServicesBatch(svcs map[cipher.PubKey][]byte) ([]byte, error) {
+	pks := make([]cipher.PubKey, 0, len(svcs))
+	for pk := range svcs {
+		pks = append(pks, pk)
+	}
+	sort.Slice(pks, func(i, j int) bool { return pks[i].Hex() < pks[j].Hex() })
+	payload := make([]byte, 0, 2+len(pks)*256)
+	payload = append(payload, '[')
+	for i, pk := range pks {
+		if i > 0 {
+			payload = append(payload, ',')
 		}
-		if err := p.pub.Put(tombstonePath(svcType, pk), body); err != nil {
-			p.log.WithError(err).WithField("type", svcType).Debug("Failed to publish services tombstone")
-			p.recordError(err)
-		}
-	})
+		payload = append(payload, svcs[pk]...)
+	}
+	payload = append(payload, ']')
+	return cxoutils.FrameGzip(servicesBatchVersion, payload), nil
 }
 
 func (p *ServicesCXOPublisher) recordError(err error) {
@@ -261,14 +362,10 @@ func (p *ServicesCXOPublisher) LastError() error {
 	return p.lastError
 }
 
-// EntryPath / TombstonePath are exported so subscribers can construct
-// the same leaf paths without duplicating the format string.
-func EntryPath(svcType string, pk cipher.PubKey) string     { return entryPath(svcType, pk) }
-func TombstonePath(svcType string, pk cipher.PubKey) string { return tombstonePath(svcType, pk) }
+// BatchLeafPath is exported so subscribers can construct the batched
+// per-type leaf path without duplicating the format string.
+func BatchLeafPath(svcType string) string { return batchLeafPath(svcType) }
 
-func entryPath(svcType string, pk cipher.PubKey) string {
-	return fmt.Sprintf("services/%s/%s/entry", svcType, pk.Hex())
-}
-func tombstonePath(svcType string, pk cipher.PubKey) string {
-	return fmt.Sprintf("services/%s/%s/tombstone", svcType, pk.Hex())
+func batchLeafPath(svcType string) string {
+	return fmt.Sprintf("services/%s/all", svcType)
 }
