@@ -205,6 +205,26 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 			return tp, fwd[idx], idx, nil
 		}
 	}
+
+	// EMERGENCY FAILOVER: no ACTIVE leg is selectable — every active leg is
+	// dead/not-ready. Rather than fail the send (a dead connection), fall through
+	// to any alive, ready WARM-STANDBY leg. The 512-deep standby reserve exists
+	// precisely so the connection survives the instant its active set is lost,
+	// with ZERO promote latency — a parked leg keeps its rules installed and its
+	// transport alive, so it can carry a packet immediately. This is what makes
+	// the warm reserve a real "switch in at a moment's notice" pool instead of
+	// something that only helps on the next 20s rotation tick. The leg-death
+	// trigger + rotation tick restore a proper active set right after; this just
+	// guarantees no gap. legSelectableIgnoringStandby is legReadyAt WITHOUT the
+	// standby exclusion (a parked leg that was active is ready), so it never
+	// picks a leg the peer has not confirmed.
+	for i := uint32(0); i < n; i++ {
+		idx := int((start + i) % n) //nolint:gosec
+		tp := tps[idx]
+		if tp != nil && !tp.IsClosed() && m.legSelectableIgnoringStandby(idx) {
+			return tp, fwd[idx], idx, nil
+		}
+	}
 	return nil, nil, -1, ErrNoSuitableTransport
 }
 
@@ -358,6 +378,25 @@ func (m *routeMux) legReadyAt(idx int) bool {
 	if idx < len(m.standby) && m.standby[idx] {
 		return false
 	}
+	if idx >= len(m.ready) {
+		return idx == 0
+	}
+	return m.ready[idx]
+}
+
+// legSelectableIgnoringStandby reports whether leg idx may carry a packet as an
+// EMERGENCY FAILOVER target — the same readiness gate as legReadyAt but WITHOUT
+// the warm-standby exclusion. A parked leg keeps its rules installed and its
+// transport alive, and was ready (peer-confirmed) before it was parked, so it
+// can carry traffic the instant no active leg is available. selectTransport uses
+// this only as a last resort, after every active leg has been found dead/not-
+// ready, so the connection never dies while ANY leg in the group is alive.
+func (m *routeMux) legSelectableIgnoringStandby(idx int) bool {
+	if idx < 0 {
+		return false
+	}
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
 	if idx >= len(m.ready) {
 		return idx == 0
 	}
