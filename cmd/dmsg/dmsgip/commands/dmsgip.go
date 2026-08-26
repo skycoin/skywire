@@ -95,7 +95,7 @@ var RootCmd = &cobra.Command{
 		defer cancel()
 
 		httpClient = &http.Client{}
-		var dialer proxy.Dialer = proxy.Direct
+		var dialer proxy.Dialer
 
 		if proxyAddr != "" {
 			dialer, err = proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
@@ -103,7 +103,7 @@ var RootCmd = &cobra.Command{
 				dlog.Fatalf("Error creating SOCKS5 dialer: %v", err)
 			}
 			transport := &http.Transport{
-				Dial: dialer.Dial,
+				DialContext: dialer.(proxy.ContextDialer).DialContext,
 			}
 			httpClient = &http.Client{
 				Transport: transport,

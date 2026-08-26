@@ -159,7 +159,7 @@ dmsgweb conf file detected: ` + dwcfg
 			if err != nil {
 				dlog.WithError(err).Fatal("Error creating SOCKS5 dialer")
 			}
-			outerHTTP = &http.Client{Transport: &http.Transport{Dial: d.Dial}}
+			outerHTTP = &http.Client{Transport: &http.Transport{DialContext: d.(proxy.ContextDialer).DialContext}}
 		} else {
 			outerHTTP = &http.Client{}
 		}

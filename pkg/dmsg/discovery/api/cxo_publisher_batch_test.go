@@ -73,10 +73,7 @@ func TestBatchLeafCountIsPerServer(t *testing.T) {
 	// Every server leaf must decode back to exactly its client set.
 	total := 0
 	for srv, clients := range p.state {
-		blob, err := encodeClientsBatch(clients)
-		if err != nil {
-			t.Fatalf("encode server %s: %v", srv.Hex(), err)
-		}
+		blob := encodeClientsBatch(clients)
 		version, payload, ok := cxoutils.UnframeGzip(blob)
 		if !ok || version != clientsByServerBatchVersion {
 			t.Fatalf("unframe server %s: ok=%v version=%d", srv.Hex(), ok, version)
@@ -105,14 +102,8 @@ func TestBatchEncodeDeterministic(t *testing.T) {
 		clientPK, _ := cipher.GenerateKeyPair()
 		p.stateSet(srv, clientPK, mustEntry(t, clientPK, []cipher.PubKey{srv}))
 	}
-	a, err := encodeClientsBatch(p.state[srv])
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := encodeClientsBatch(p.state[srv])
-	if err != nil {
-		t.Fatal(err)
-	}
+	a := encodeClientsBatch(p.state[srv])
+	b := encodeClientsBatch(p.state[srv])
 	if string(a) != string(b) {
 		t.Fatal("encodeClientsBatch not deterministic for an unchanged set")
 	}

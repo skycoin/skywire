@@ -308,6 +308,7 @@ func (s *Swarm) addPeers(peers []msg.PeerInfo) {
 	peers = validPeers
 
 	// Shuffle and cap peers
+	//nolint:gosec // non-crypto peer shuffle for even feed distribution, not security-sensitive
 	mathrand.Shuffle(len(peers), func(i, j int) {
 		peers[i], peers[j] = peers[j], peers[i]
 	})
@@ -529,6 +530,7 @@ func (s *Swarm) randomPeers(count int, filters ...peerFilter) []Peer {
 	}
 
 	var (
+		//nolint:gosec // non-crypto random peer selection for load distribution, not security-sensitive
 		peerIdx = mathrand.Perm(len(filteredPeers))[:count]
 		peers   = make([]Peer, len(peerIdx))
 	)

@@ -292,7 +292,6 @@ HTTP Endpoints:
 			EmbeddedDmsgServers: dmsg.Prod.DmsgServers,
 			SurveyWhitelist:     deployment.Prod.SurveyWhitelist,
 			Log:                 logger,
-			DisableDHT:          true,
 			OnDmsgServersUpdated: func(s []string) {
 				utAPI.DmsgServers = s
 			},

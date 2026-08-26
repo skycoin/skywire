@@ -174,6 +174,9 @@ func (l *bBoltLogStore) Fire(entry *log.Entry) error {
 	defer l.mx.Unlock()
 
 	p, err := entry.String()
+	if err != nil {
+		return err
+	}
 	var substitution = ""
 	str := re.ReplaceAllString(p, substitution)
 
