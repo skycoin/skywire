@@ -580,7 +580,8 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 
 	if atomic.CompareAndSwapInt32(&r.isServing, 0, 1) {
 		go func() {
-			if err := r.serveRouteGroup(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
+			// serveRouteGroup only ever returns a non-nil error.
+			if err := r.serveRouteGroup(ctx); !errors.Is(err, net.ErrClosed) {
 				r.log.WithError(err).Error("serveRouteGroup stopped unexpectedly.")
 			}
 		}()

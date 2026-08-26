@@ -436,7 +436,6 @@ func updateStringArg(conf *Launcher, appName, argName, value string) bool {
 
 			if value == "" {
 				conf.Apps[i].Args = append(conf.Apps[i].Args[:j], conf.Apps[i].Args[j+2:]...)
-				j-- //nolint:ineffassign
 			} else {
 				conf.Apps[i].Args[j+1] = value
 			}

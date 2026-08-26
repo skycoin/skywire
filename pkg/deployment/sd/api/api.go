@@ -827,6 +827,7 @@ func serviceAddrFromParam(r *http.Request) (servicedisc.SWAddr, error) {
 func sampleRandom(services []servicedisc.Service, n int) []servicedisc.Service {
 	result := make([]servicedisc.Service, len(services))
 	copy(result, services)
+	//nolint:gosec // non-crypto random sampling for load distribution across services, not security-sensitive
 	rand.Shuffle(len(result), func(i, j int) {
 		result[i], result[j] = result[j], result[i]
 	})

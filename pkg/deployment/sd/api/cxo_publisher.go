@@ -47,7 +47,7 @@
 // # Heartbeat short-circuit
 //
 // SD's register/heartbeat rate is high. The worker holds the live
-// per-type service set and, on a re-register, compares the new marshalled
+// per-type service set and, on a re-register, compares the new marshaled
 // Service against the stored one; when the materially-visible content is
 // unchanged it skips the re-encode entirely, so a steady heartbeat stream
 // does not churn the tree.
@@ -254,7 +254,7 @@ func (p *ServicesCXOPublisher) PutEntry(svc *servicedisc.Service) {
 	svcType := svc.Type
 	pk := svc.Addr.PubKey()
 	p.submit(func() {
-		// Heartbeat short-circuit: a re-register whose marshalled Service
+		// Heartbeat short-circuit: a re-register whose marshaled Service
 		// is byte-identical to what we already hold changes nothing a
 		// subscriber sees, so skip the re-encode entirely.
 		if cur := p.state[svcType]; cur != nil && bytes.Equal(cur[pk], body) {
@@ -313,12 +313,7 @@ func (p *ServicesCXOPublisher) flushType(svcType string) {
 		}
 		return
 	}
-	blob, err := encodeServicesBatch(svcs)
-	if err != nil {
-		p.log.WithError(err).WithField("path", path).Debug("Failed to encode services batch leaf")
-		p.recordError(err)
-		return
-	}
+	blob := encodeServicesBatch(svcs)
 	if err := p.pub.Put(path, blob); err != nil {
 		p.log.WithError(err).WithField("path", path).Debug("Failed to publish services batch leaf")
 		p.recordError(err)
@@ -329,8 +324,8 @@ func (p *ServicesCXOPublisher) flushType(svcType string) {
 // leaf body: a JSON array of the services, sorted by PK so an unchanged
 // set re-encodes to identical bytes (a CXO wire no-op), then version-
 // framed + gzipped. The array is assembled by concatenating the already-
-// marshalled per-service bodies, so each service is encoded exactly once.
-func encodeServicesBatch(svcs map[cipher.PubKey][]byte) ([]byte, error) {
+// marshaled per-service bodies, so each service is encoded exactly once.
+func encodeServicesBatch(svcs map[cipher.PubKey][]byte) []byte {
 	pks := make([]cipher.PubKey, 0, len(svcs))
 	for pk := range svcs {
 		pks = append(pks, pk)
@@ -345,7 +340,7 @@ func encodeServicesBatch(svcs map[cipher.PubKey][]byte) ([]byte, error) {
 		payload = append(payload, svcs[pk]...)
 	}
 	payload = append(payload, ']')
-	return cxoutils.FrameGzip(servicesBatchVersion, payload), nil
+	return cxoutils.FrameGzip(servicesBatchVersion, payload)
 }
 
 func (p *ServicesCXOPublisher) recordError(err error) {

@@ -578,8 +578,8 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 		<-ctx.Done()
 		_ = lis.Close() //nolint:errcheck
 	}()
-	err = srv.Serve(lis)
-	if err != nil && !errors.Is(err, net.ErrClosed) {
+	// srv.Serve blocks and only ever returns a non-nil error.
+	if err = srv.Serve(lis); !errors.Is(err, net.ErrClosed) {
 		return fmt.Errorf("SOCKS5 serve: %w", err)
 	}
 	return nil

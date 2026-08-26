@@ -27,7 +27,7 @@
 // Encoding is JSON+gzip, not fixed-layout binary: a client's disc.Entry
 // carries a signature and a variable-length delegated-server list, so it
 // is the "awkward for binary" case — unlike telemetrywire's fixed 53-byte
-// rows. The per-server array is JSON-marshalled (entries sorted by client
+// rows. The per-server array is JSON-marshaled (entries sorted by client
 // PK so unchanged content re-encodes to identical bytes → a wire no-op on
 // CXO's content-addressed store), then framed with a leading version byte
 // and gzipped (cxoutils.FrameGzip). The version byte gates the format:
@@ -365,12 +365,7 @@ func (p *ClientsByServerCXOPublisher) flushServers(dirty map[cipher.PubKey]struc
 			}
 			continue
 		}
-		blob, err := encodeClientsBatch(clients)
-		if err != nil {
-			p.log.WithError(err).WithField("path", path).Debug("Failed to encode clients-by-server batch leaf")
-			p.recordError(err)
-			continue
-		}
+		blob := encodeClientsBatch(clients)
 		if err := p.pub.Put(path, blob); err != nil {
 			p.log.WithError(err).WithField("path", path).Debug("Failed to publish clients-by-server batch leaf")
 			p.recordError(err)
@@ -382,10 +377,10 @@ func (p *ClientsByServerCXOPublisher) flushServers(dirty map[cipher.PubKey]struc
 // leaf body: a JSON array of the clients' disc.Entry objects, sorted by
 // client PK so an unchanged set re-encodes to identical bytes (a CXO
 // wire no-op), then version-framed + gzipped. The array is assembled by
-// concatenating the already-marshalled per-client entry bodies, so each
+// concatenating the already-marshaled per-client entry bodies, so each
 // client is encoded exactly once (on the caller's goroutine, in
-// PublishSetEntry) rather than re-marshalled here.
-func encodeClientsBatch(clients map[cipher.PubKey][]byte) ([]byte, error) {
+// PublishSetEntry) rather than re-marshaled here.
+func encodeClientsBatch(clients map[cipher.PubKey][]byte) []byte {
 	pks := make([]cipher.PubKey, 0, len(clients))
 	for pk := range clients {
 		pks = append(pks, pk)
@@ -400,7 +395,7 @@ func encodeClientsBatch(clients map[cipher.PubKey][]byte) ([]byte, error) {
 		payload = append(payload, clients[pk]...)
 	}
 	payload = append(payload, ']')
-	return cxoutils.FrameGzip(clientsByServerBatchVersion, payload), nil
+	return cxoutils.FrameGzip(clientsByServerBatchVersion, payload)
 }
 
 func (p *ClientsByServerCXOPublisher) recordError(err error) {

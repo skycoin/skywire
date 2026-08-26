@@ -492,7 +492,8 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 		_ = lis.Close() //nolint:errcheck
 	}()
 
-	if err := srv.Serve(lis); err != nil && !errors.Is(err, net.ErrClosed) {
+	// srv.Serve blocks and only ever returns a non-nil error.
+	if err := srv.Serve(lis); !errors.Is(err, net.ErrClosed) {
 		return fmt.Errorf("SOCKS5 serve: %w", err)
 	}
 	return nil

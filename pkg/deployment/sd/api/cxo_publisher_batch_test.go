@@ -56,10 +56,7 @@ func TestBatchLeafCountIsPerType(t *testing.T) {
 	// Every type leaf must decode back to exactly its service set.
 	total := 0
 	for svcType, svcs := range p.state {
-		blob, err := encodeServicesBatch(svcs)
-		if err != nil {
-			t.Fatalf("encode type %s: %v", svcType, err)
-		}
+		blob := encodeServicesBatch(svcs)
 		version, payload, ok := cxoutils.UnframeGzip(blob)
 		if !ok || version != servicesBatchVersion {
 			t.Fatalf("unframe type %s: ok=%v version=%d", svcType, ok, version)
@@ -92,14 +89,8 @@ func TestServicesBatchEncodeDeterministic(t *testing.T) {
 		pk, _ := cipher.GenerateKeyPair()
 		p.stateSet("vpn", pk, mustSvc(t, "vpn", pk))
 	}
-	a, err := encodeServicesBatch(p.state["vpn"])
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := encodeServicesBatch(p.state["vpn"])
-	if err != nil {
-		t.Fatal(err)
-	}
+	a := encodeServicesBatch(p.state["vpn"])
+	b := encodeServicesBatch(p.state["vpn"])
 	if string(a) != string(b) {
 		t.Fatal("encodeServicesBatch not deterministic for an unchanged set")
 	}

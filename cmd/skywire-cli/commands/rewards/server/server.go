@@ -1739,15 +1739,12 @@ func buildRouter() *gin.Engine {
 		r1.GET("/index.html", mainPage)
 		// Login chain auto-setup
 		if loginNode == "auto" {
-			addr, cleanup, err := ensureLoginChain(wd)
-			if err != nil {
-				fmt.Printf("Warning: login chain auto-setup failed: %v\n", err)
-				fmt.Println("Continuing without login chain.")
-				loginNode = ""
-			} else {
-				defer cleanup()
-				loginNode = addr
-			}
+			// --login-node auto is no longer supported; ensureLoginChain
+			// always returns an error pointing at the standalone command.
+			_, _, err := ensureLoginChain(wd)
+			fmt.Printf("Warning: login chain auto-setup failed: %v\n", err)
+			fmt.Println("Continuing without login chain.")
+			loginNode = ""
 		}
 
 		// Set login chain variables for the login routes

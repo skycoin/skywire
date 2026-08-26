@@ -76,7 +76,7 @@ func TestProxy(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := &http.Client{Transport: &http.Transport{Dial: proxyDial.Dial}}
+	c := &http.Client{Transport: &http.Transport{DialContext: proxyDial.(proxy.ContextDialer).DialContext}}
 	res, err := c.Get(ts.URL)
 	require.NoError(t, err)
 

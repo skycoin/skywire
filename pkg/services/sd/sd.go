@@ -174,7 +174,6 @@ func (s *service) Run(ctx context.Context) error {
 		EmbeddedDmsgServers: embeddedServers,
 		SurveyWhitelist:     surveyWL,
 		Log:                 log,
-		DisableDHT:          true,
 		OnDmsgServersUpdated: func(svrs []string) {
 			sdAPI.DmsgServers = svrs
 		},
