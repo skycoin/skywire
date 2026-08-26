@@ -347,10 +347,11 @@ func TestAdaptiveDecides(t *testing.T) {
 	// dip-free promotion. The forward-lean / reverse-wide split is applied at SEND
 	// time, not baked into asymmetric rule setup. Per-direction ForwardMux/
 	// ReverseMux stay 0 (symmetric Mux drives it). Mux = adaptRevActive(1) +
-	// adaptStandbyMax(60) = 61 (uncapped pool, 2026-08-26); this literal mirrors
-	// the native const in pkg/router/policy/preset/tick.go — keep them in sync.
-	if spec.Mux != 61 {
-		t.Errorf("Mux = %d, want 61 (1 active + 60 warm standby, full-duplex)", spec.Mux)
+	// adaptStandbyMax(512) = 513 (true uncap, 2026-08-26 — the full disjoint pool
+	// the topology offers, filled in the background); this literal mirrors the
+	// native const in pkg/router/policy/preset/tick.go — keep them in sync.
+	if spec.Mux != 513 {
+		t.Errorf("Mux = %d, want 513 (1 active + 512 warm standby, full-duplex)", spec.Mux)
 	}
 	if spec.ForwardMux != 0 {
 		t.Errorf("ForwardMux = %d, want 0 (symmetric Mux drives adaptive)", spec.ForwardMux)

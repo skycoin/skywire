@@ -802,6 +802,13 @@ func (rg *RouteGroup) aliveLegCount() int {
 	return n
 }
 
+// selfHealNoProgressLimit is how many consecutive self-heal dials may fail to
+// grow the live leg count before the heal concludes the destination's disjoint-
+// intermediate set is exhausted for now and stops (instead of hammering the
+// setup node for the full uncapped target). A later leg death or newly-online
+// transport re-triggers the heal, so this is a backoff, not a cap.
+const selfHealNoProgressLimit = 4
+
 // maybeSelfHeal restores the multiplexed degree after a leg drop. If the live
 // leg count fell below target and no replacement is already in flight, it
 // dials replacement aux legs in the background until the degree is restored
@@ -827,21 +834,48 @@ func (rg *RouteGroup) maybeSelfHeal() {
 	}
 	go func() {
 		defer rg.healInFlight.Store(false)
-		// Each add(nil) blocks ~one setup-node dial and, on success,
-		// appends one leg. Re-check the live count between attempts and
-		// stop as soon as the degree is restored, the group closes, or we
-		// hit the attempt cap (target+1 gives a little headroom for dials
-		// that fail on a bad intermediate before one lands).
+		// Each add(nil) blocks ~one setup-node dial and, on success, appends one
+		// leg. Re-check the live count between attempts and stop as soon as the
+		// degree is restored or the group closes.
+		//
+		// NO-PROGRESS BACKOFF: with the standby pool uncapped (target ~513), the
+		// achievable degree is bounded by the destination's disjoint-intermediate
+		// set, which is usually far below target. Once the pool is filled to what
+		// the topology offers, every further add fails ("failure code 1: transport
+		// already in the group" / "setup-node dial: context deadline exceeded")
+		// and re-dialing target-more times would hammer the setup node for minutes
+		// (the observed storm). So compare the live count before/after each add:
+		// after selfHealNoProgressLimit consecutive adds that grow the degree by
+		// nothing, the disjoint set is exhausted for now — settle at the degree we
+		// have and stop. A later leg death (which frees an intermediate) or newly-
+		// online transports (which open fresh disjoint paths) re-trigger this and
+		// the pool grows again, so the target is never a hard cap — the fill just
+		// tracks the topology instead of storming past it.
+		noProgress := 0
 		for attempt := 0; attempt < target+1; attempt++ {
-			if rg.isClosed() || rg.aliveLegCount() >= target {
+			before := rg.aliveLegCount()
+			if rg.isClosed() || before >= target {
 				return
 			}
 			if rg.logger != nil {
-				rg.logger.WithField("alive", rg.aliveLegCount()).
+				rg.logger.WithField("alive", before).
 					WithField("target", target).
 					Debug("Mux self-heal: dialing replacement leg to restore degree")
 			}
 			add(nil)
+			if rg.aliveLegCount() > before {
+				noProgress = 0
+				continue
+			}
+			noProgress++
+			if noProgress >= selfHealNoProgressLimit {
+				if rg.logger != nil {
+					rg.logger.WithField("alive", rg.aliveLegCount()).
+						WithField("target", target).
+						Debug("Mux self-heal: no disjoint path available right now; settling at current degree")
+				}
+				return
+			}
 		}
 	}()
 }
