@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -27,12 +26,17 @@ import (
 // exactly what black-holes an aux mux leg that raced the primary's setup.
 var errRouteGroupInitializing = errors.New("noise route group already being initialized")
 
-// perFrameNoiseEnabled opts this visor into advertising CapPerFrameNoise (the
-// mux inverse-multiplexer's per-frame AEAD). Gated by an env var so the fleet
-// isn't flipped at once: a route group uses per-frame noise only when BOTH edges
-// have it set, otherwise it falls back to the stream-noise (EncryptConn) wrap.
-// Read once at package init. See docs/inverse_mux_per_frame_noise_rfc.md.
-var perFrameNoiseEnabled = os.Getenv("SKYWIRE_PERFRAME_NOISE") == "1"
+// perFrameNoiseEnabled advertises CapPerFrameNoise (the mux inverse-
+// multiplexer's per-frame AEAD) on every handshake. It is DEFAULT ON: per-frame
+// noise is capability-NEGOTIATED, so it activates only between two edges that
+// both run a build with this on — an un-upgraded peer never advertises the bit
+// and the group transparently falls back to the stream-noise (EncryptConn) wrap.
+// So as the fleet updates, new↔new route groups gain single-stream aggregation
+// with no operator action while old peers are unaffected. It is route-group
+// scoped (not the dmsg RPC control plane), so a regression degrades skynet/proxy
+// route groups but leaves dmsg access intact. See
+// docs/inverse_mux_per_frame_noise_rfc.md.
+const perFrameNoiseEnabled = true
 
 // AcceptRoutes should block until we receive an AddRules packet from SetupNode
 // that contains ConsumeRule(s) or ForwardRule(s).
