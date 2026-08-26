@@ -284,10 +284,11 @@ type RouteGroupInfo struct {
 // MuxRouteGroupInfo is one route-group's mux state plus per-leg
 // counters. Returned by RouteGroupMuxInfo for 'cli proxy mux-info'.
 type MuxRouteGroupInfo struct {
-	Desc        routing.RouteDescriptorFields `json:"desc"`
-	MuxEnabled  bool                          `json:"mux_enabled"`
-	SACKEnabled bool                          `json:"sack_enabled"`
-	Legs        []MuxLegInfo                  `json:"legs"`
+	Desc          routing.RouteDescriptorFields `json:"desc"`
+	MuxEnabled    bool                          `json:"mux_enabled"`
+	SACKEnabled   bool                          `json:"sack_enabled"`
+	PerFrameNoise bool                          `json:"per_frame_noise"`
+	Legs          []MuxLegInfo                  `json:"legs"`
 }
 
 // MuxLegInfo is one route in a mux'd group.

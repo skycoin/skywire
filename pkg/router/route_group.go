@@ -349,6 +349,11 @@ type MuxInfo struct {
 	MuxEnabled bool
 	// SACKEnabled is true when the peers negotiated SACK retx.
 	SACKEnabled bool
+	// PerFrameNoise is true when both edges negotiated CapPerFrameNoise and the
+	// mux is sealing/opening each DATA frame under its own sequence-nonce (the
+	// inverse-multiplexer path, network.EncryptConn bypassed). False means the
+	// group runs the classic stream-noise wrap.
+	PerFrameNoise bool
 	// Legs is in tps[] order. One entry per active mux leg.
 	Legs []MuxLeg
 }
@@ -401,6 +406,7 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 		info.MuxEnabled = true
 		info.SACKEnabled = rg.mux.sackEnabled
 	}
+	info.PerFrameNoise = rg.perFrameNoiseActive
 	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
 	rg.mu.Unlock()
 
