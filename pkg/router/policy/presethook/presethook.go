@@ -243,6 +243,8 @@ func distributionFor(desc string) router.DistributionConfig {
 		return router.DistributionConfig{Mode: router.DistributionAuto}
 	case "capacity":
 		return router.DistributionConfig{Mode: router.DistributionCapacity}
+	case "ecf":
+		return router.DistributionConfig{Mode: router.DistributionECF}
 	default:
 		return router.DistributionConfig{Mode: router.DistributionUnset}
 	}

@@ -4,6 +4,7 @@ package router
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -58,7 +59,71 @@ const (
 	// capacity fills each leg toward its bandwidth — the mode that
 	// actually aggregates throughput across a disjoint mux.
 	WeightModeCapacity
+	// WeightModeECF is a PREDICTIVE hold-back scheduler adapted from ECF
+	// (Earliest Completion First, Lim et al., CoNEXT 2017). Capacity/auto
+	// weighting keeps assigning a share of in-order frames to slower legs; in
+	// a reorder buffer that must deliver strictly in order, every frame on a
+	// slow leg is a head-of-line stall, so goodput/latency-proportional
+	// spraying does NOT aggregate under path heterogeneity (~25% of ideal in
+	// the MPTCP/MP-QUIC literature). ECF instead sends on the fastest leg
+	// while it has send capacity, and spills onto a slower leg ONLY when the
+	// slow leg would deliver its frame sooner than the fast leg can drain its
+	// own backlog — otherwise it holds the frame on the fast leg. skywire has
+	// no TCP cwnd, so the cwnd/"has capacity" test is adapted to a per-leg
+	// bandwidth-delay-product (rate*RTT) and a selector-maintained in-flight
+	// byte estimate; see ecfPick and SelectECF. This is the aggregation mode
+	// that stops a heterogeneous mux from HoL-stalling on its slow legs.
+	WeightModeECF
 )
+
+// ECF (WeightModeECF) tuning constants. Starting values — expect a live-tuning
+// pass. See ecfPick for how each is used.
+const (
+	// ecfBeta is the ECF hysteresis constant. Once the scheduler decides to
+	// hold a frame on the fast leg (waiting latched), it inflates the slow
+	// leg's delivery estimate by (1+ecfBeta) on the next pick, so a marginal
+	// leg does not flap in and out of the spill set packet-to-packet.
+	ecfBeta = 0.25
+	// ecfDefaultFrameBytes is the in-flight increment charged to a leg for a
+	// frame whose size the caller did not supply (control/handshake frames
+	// never reach the ECF pick, so this is only a defensive fallback).
+	ecfDefaultFrameBytes = 1024
+	// ecfRttAlpha / ecfJitterAlpha weight the newest sample in the per-leg
+	// mean-RTT and jitter (sigma) EWMAs the mux maintains for ECF (see
+	// route_mux.go rebuildWeights). Jitter is the ECF sigma margin.
+	ecfRttAlpha    = 0.3
+	ecfJitterAlpha = 0.3
+)
+
+// ecfLegState is the per-leg snapshot the ECF scheduler reasons over — one
+// entry per leg index (parallel to the route group's tps[]). The rate/RTT/
+// jitter/ready fields are refreshed by the mux via SetECFState on the
+// rebuildWeights cadence; inflightBytes is maintained by the selector itself
+// between refreshes (incremented per selected frame, drained by rate over
+// wall-clock), so it survives a refresh (SetECFState carries it forward).
+type ecfLegState struct {
+	// rttMs is the leg's mean round-trip latency estimate in ms (EWMA of
+	// tp.GetLatency()); 0 = unknown (deprioritized in the fast-leg pick).
+	rttMs float64
+	// jitterMs is the ECF sigma: an EWMA of |sample-mean| RTT deviation, used
+	// as the inter-leg jitter margin `d` in the hold-back predicate.
+	jitterMs float64
+	// rateBps is the leg's recent send goodput in bytes/sec (from the mux's
+	// per-leg sent-byte delta over the refresh window); 0 = unknown.
+	rateBps float64
+	// cwndBytes is the ECF cwnd substitute: the leg's bandwidth-delay product
+	// (rateBps * rttMs/1000) — the bytes it can hold in flight in one RTT.
+	// 0 when rate or RTT is unknown, which ecfSaturated treats as "unlimited"
+	// so a cold leg is used (and thus measured) rather than assumed full.
+	cwndBytes float64
+	// ready is true when the leg may be selected for sending (alive, its rule
+	// confirmed, not a warm standby). selectTransport re-validates readiness
+	// after the pick, so this is an optimization, not the safety gate.
+	ready bool
+	// inflightBytes is the selector's estimate of bytes sent-but-not-yet-
+	// delivered on this leg. NOT set by SetECFState — carried across refreshes.
+	inflightBytes float64
+}
 
 // transportSelector implements weighted transport selection based on latency.
 // Faster transports (lower latency) get proportionally more packets.
@@ -95,6 +160,21 @@ type transportSelector struct {
 	// WeightModeCapacity. Set by the mux via SetCapacityWeights
 	// before each Rebuild. Empty / all-zero → equal bootstrap.
 	capacityWeights []float64
+	// ecfLegs holds the per-leg ECF state used by WeightModeECF, one entry
+	// per leg index. Refreshed by the mux via SetECFState; the inflightBytes
+	// field is maintained by SelectECF between refreshes. All ECF state is
+	// guarded by ts.mu — SelectECF takes the write lock because it mutates
+	// inflightBytes (per-packet picks are already serialized per route group
+	// by the caller's rg.mu, so the lock is uncontended except vs the ~5s
+	// SetECFState refresh).
+	ecfLegs []ecfLegState
+	// ecfWaiting latches ECF's hold-back hysteresis (the `waiting` state in
+	// the paper): true after a pick chose to hold on the fast leg, so the
+	// next pick inflates the slow-leg delivery estimate by (1+ecfBeta).
+	ecfWaiting bool
+	// ecfLastNano is the wall-clock (UnixNano) of the previous SelectECF call,
+	// used to drain each leg's inflightBytes by its rate over the elapsed gap.
+	ecfLastNano int64
 }
 
 func newTransportSelector() *transportSelector {
@@ -176,8 +256,28 @@ func (m WeightMode) String() string {
 		return "dscp-priority"
 	case WeightModeCapacity:
 		return "capacity"
+	case WeightModeECF:
+		return "ecf"
 	}
 	return "unknown"
+}
+
+// SetECFState stores the per-leg ECF state used by WeightModeECF. Caller (the
+// mux) recomputes rate/RTT/jitter/ready each refresh and calls Rebuild
+// afterwards. The selector-maintained inflightBytes estimate is carried
+// forward per leg index across refreshes so a refresh does not reset the
+// in-flight accounting. A copy is kept so the caller may reuse its slice.
+func (ts *transportSelector) SetECFState(states []ecfLegState) {
+	ts.mu.Lock()
+	ns := make([]ecfLegState, len(states))
+	copy(ns, states)
+	for i := range ns {
+		if i < len(ts.ecfLegs) {
+			ns[i].inflightBytes = ts.ecfLegs[i].inflightBytes
+		}
+	}
+	ts.ecfLegs = ns
+	ts.mu.Unlock()
 }
 
 // Rebuild recomputes the selection schedule from the current transport latencies.
@@ -372,7 +472,10 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 	// GetLatency. The primary schedule is also populated so a
 	// caller using Select() (no payload) still gets a reasonable
 	// leg.
-	if ts.mode == WeightModeSticky5Tuple || ts.mode == WeightModeLatencyAdaptive {
+	// ECF also builds the live-leg arrays: SelectECF reasons over ecfLegs
+	// (set separately via SetECFState) but the mirrored schedule is the
+	// Select() fallback for control/handshake frames that carry no payload.
+	if ts.mode == WeightModeSticky5Tuple || ts.mode == WeightModeLatencyAdaptive || ts.mode == WeightModeECF {
 		live := make([]int, 0, n)
 		liveTps := make([]*transport.ManagedTransport, 0, n)
 		for i, tp := range tps {
@@ -549,6 +652,8 @@ func (ts *transportSelector) SelectForPayload(p []byte) int {
 		return live[h%uint32(len(live))] //nolint:gosec
 	case WeightModeLatencyAdaptive:
 		return pickLowestLatency(live, liveTps)
+	case WeightModeECF:
+		return ts.SelectECF(len(p))
 	case WeightModeDSCPPriority:
 		if isIPv4DSCPGE(p, dscpThreshold) {
 			return 0
@@ -611,6 +716,181 @@ func isIPv4DSCPGE(p []byte, threshold int) bool {
 	}
 	dscp := int(p[1] >> 2)
 	return dscp >= threshold
+}
+
+// SelectECF returns the leg index for the next DATA frame of the given size
+// under the ECF predictive hold-back scheduler (WeightModeECF). It drains each
+// leg's in-flight estimate for the time elapsed since the previous pick, runs
+// the ecfPick decision, and charges the chosen leg with this frame's size.
+// Takes the write lock because it mutates per-leg inflight state; per-packet
+// picks for a given route group are already serialized by the caller's rg.mu,
+// so the only contention is against the periodic SetECFState refresh.
+//
+// Falls back to the schedule-based pick (mirrored live legs) when there is no
+// ECF state yet (bootstrap) or no leg is ready.
+func (ts *transportSelector) SelectECF(size int) int {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	if len(ts.ecfLegs) == 0 {
+		return ts.scheduleIndexLocked()
+	}
+
+	// Drain inflight by rate*elapsed since the last pick. Because the leg
+	// transports are reliable, a frame put on leg i is delivered ~rttᵢ later;
+	// draining at the leg's send rate approximates that clearance without a
+	// per-frame ack signal (skywire has no per-leg ack attribution).
+	now := time.Now().UnixNano()
+	if ts.ecfLastNano != 0 {
+		dt := float64(now-ts.ecfLastNano) / float64(time.Second)
+		if dt > 0 {
+			for i := range ts.ecfLegs {
+				ts.ecfLegs[i].inflightBytes -= ts.ecfLegs[i].rateBps * dt
+				if ts.ecfLegs[i].inflightBytes < 0 {
+					ts.ecfLegs[i].inflightBytes = 0
+				}
+			}
+		}
+	}
+	ts.ecfLastNano = now
+
+	idx := ecfPick(ts.ecfLegs, ts.ecfWaiting, &ts.ecfWaiting)
+	if idx < 0 {
+		return ts.scheduleIndexLocked()
+	}
+	if size <= 0 {
+		size = ecfDefaultFrameBytes
+	}
+	ts.ecfLegs[idx].inflightBytes += float64(size)
+	return idx
+}
+
+// scheduleIndexLocked returns the next schedule-based leg index. Caller holds
+// ts.mu (the atomic counter is still used so it stays consistent with Select()).
+func (ts *transportSelector) scheduleIndexLocked() int {
+	if len(ts.schedule) == 0 {
+		return 0
+	}
+	idx := atomic.AddUint32(&ts.counter, 1) - 1
+	return ts.schedule[idx%uint32(len(ts.schedule))] //nolint:gosec
+}
+
+// ecfPick is the pure ECF (Earliest Completion First) decision, in FILTER form.
+// Given per-leg state and the latched `waiting` hysteresis flag, it returns the
+// leg index to send the next frame on, or -1 when no leg is ready (caller falls
+// back to the schedule). waitOut, if non-nil, receives the updated `waiting`
+// latch.
+//
+// Adaptation of ECF to skywire's no-cwnd model (every substitution called out):
+//   - "xf has send capacity now"  →  inflightBytes < cwndBytes (ecfSaturated).
+//   - CWND_f (bytes/RTT)          →  cwndBytes, the leg's bandwidth-delay
+//     product rate*RTT. Unknown capacity (cold leg) is treated as unlimited so
+//     the leg is used and thus measured, never assumed full.
+//   - k (backlog not yet drained) →  inflightBytes on the fast leg xf.
+//   - sigma_f / sigma_s (RTT σ)   →  per-leg jitterMs (EWMA of |sample-mean|).
+//
+// The governing rule is the paper's: if the fast leg can drain its whole
+// backlog before the slow leg delivers even one frame, do not use the slow leg.
+// This is the FILTER variant — where full ECF would return NO-LEG and idle
+// briefly waiting for xf, this instead returns xf (send on the fast leg now).
+// The frame then queues on xf's reliable transport rather than being held by
+// the scheduler, which keeps the send path non-blocking. The full wait/idle
+// variant is a follow-up (it needs the send path to handle a "hold this frame"
+// return without dropping or busy-spinning).
+func ecfPick(legs []ecfLegState, waiting bool, waitOut *bool) int {
+	setWait := func(v bool) {
+		if waitOut != nil {
+			*waitOut = v
+		}
+	}
+
+	// xf = ready leg with the smallest (positive) RTT. Ties and unknown-RTT
+	// legs fall back to lowest index (leg 0 is the primary/fastest leg).
+	xf := -1
+	for i := range legs {
+		if !legs[i].ready {
+			continue
+		}
+		if xf < 0 || ecfBetterRTT(legs[i], legs[xf]) {
+			xf = i
+		}
+	}
+	if xf < 0 {
+		return -1
+	}
+
+	// Fast leg still has send capacity (or unknown capacity → cold start):
+	// send on it. This is ECF's first branch and the common case — as long as
+	// the fastest leg is not saturated, nothing spills to a slower leg.
+	if !ecfSaturated(legs[xf]) {
+		setWait(false)
+		return xf
+	}
+
+	// Fast leg saturated: find the next-best ready leg that still has capacity
+	// (xs). If none can take more, stay on xf (its transport queues the frame).
+	xs := -1
+	for i := range legs {
+		if i == xf || !legs[i].ready || ecfSaturated(legs[i]) {
+			continue
+		}
+		if xs < 0 || ecfBetterRTT(legs[i], legs[xs]) {
+			xs = i
+		}
+	}
+	if xs < 0 {
+		setWait(false)
+		return xf
+	}
+
+	// ECF hold-back predicate. n = how many xf-RTTs to drain the fast leg's
+	// backlog; if xf clears that backlog before xs delivers even one frame
+	// (its RTT plus the jitter margin d), hold on xf instead of spilling.
+	rttF, rttS := legs[xf].rttMs, legs[xs].rttMs
+	n := 1.0
+	if legs[xf].cwndBytes > 0 {
+		n = 1 + legs[xf].inflightBytes/legs[xf].cwndBytes
+	}
+	d := legs[xf].jitterMs
+	if legs[xs].jitterMs > d {
+		d = legs[xs].jitterMs
+	}
+	hyst := 1.0
+	if waiting {
+		hyst = 1 + ecfBeta
+	}
+	if n*rttF < hyst*(rttS+d) {
+		// Fast leg wins the race: hold the frame on xf (filter variant — the
+		// paper would idle here; latch waiting for hysteresis on the next pick).
+		setWait(true)
+		return xf
+	}
+	setWait(false)
+	return xs
+}
+
+// ecfSaturated reports whether a leg is carrying a full bandwidth-delay product
+// of un-delivered bytes (no send capacity right now). A leg whose capacity is
+// unknown (no rate/RTT sample yet) is never saturated, so a cold leg is used
+// and measured instead of being assumed full.
+func ecfSaturated(l ecfLegState) bool {
+	if l.cwndBytes <= 0 {
+		return false
+	}
+	return l.inflightBytes >= l.cwndBytes
+}
+
+// ecfBetterRTT reports whether leg a is a better (lower-RTT) fast-leg candidate
+// than leg b. A leg with unknown RTT (0) is the worst candidate — it only wins
+// when the incumbent is also unknown, which the caller's index order breaks.
+func ecfBetterRTT(a, b ecfLegState) bool {
+	if a.rttMs <= 0 {
+		return false
+	}
+	if b.rttMs <= 0 {
+		return true
+	}
+	return a.rttMs < b.rttMs
 }
 
 // pickLowestLatency returns the live-leg index with the smallest

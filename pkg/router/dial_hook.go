@@ -254,6 +254,17 @@ const (
 	// for aggregating bandwidth across a disjoint multi-leg route.
 	// This is the adaptive default's bulk-spread mode.
 	DistributionCapacity
+	// DistributionECF is the predictive Earliest-Completion-First
+	// hold-back scheduler (router.WeightModeECF). Unlike
+	// DistributionCapacity, which sprays a fraction of frames onto
+	// slower legs in proportion to their goodput — and so keeps
+	// head-of-line-stalling the in-order reorder buffer on those slow
+	// legs — ECF sends on the fastest leg while it has send capacity
+	// and only spills onto a slower leg when the slow leg would deliver
+	// its frame sooner than the fast leg can drain its own backlog. It
+	// is the mode that actually aggregates across heterogeneous legs
+	// without paying the slow-leg HoL cost. Per-packet, O(legs).
+	DistributionECF
 )
 
 // LegChangeHook is an optional hook fired by the route group
