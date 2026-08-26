@@ -104,6 +104,28 @@ func (r *router) DialRoutes(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
+	// Multi-tunnel bandwidth aggregation (docs/mux_aggregation_rfc.md step 3).
+	// When the caller opts in (skysocks-client's extra tunnels), diverge this
+	// tunnel from the ones already established to the SAME exit: exclude the
+	// first-hop transports + intermediates that this visor's live route groups
+	// to (rPK, rPort) already occupy, so the new tunnel leaves over a different
+	// first-hop transport and the two tunnels' throughputs SUM. Bounded to
+	// tunnel 2..N — the exclusions are added ONLY when a sibling route group to
+	// this dst already exists (count > 0), so a first/lone dial is untouched.
+	// Additive to any excludes the caller already set (e.g. the mux's own);
+	// the route-finder / local calc treat these as soft preferences and fall
+	// back to a shared path when no disjoint transport is free.
+	if opts.DiversifyTransports {
+		if exIDs, exPKs, count := r.siblingRouteGroupExclusions(lPK, rPK, rPort); count > 0 {
+			opts.ExcludeTransportIDs = append(opts.ExcludeTransportIDs, exIDs...)
+			opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, exPKs...)
+			log.WithField("sibling_tunnels", count).
+				WithField("exclude_tps", len(exIDs)).
+				WithField("exclude_intermediates", len(exPKs)).
+				Debug("Diversifying multi-tunnel dial over disjoint first-hop transports.")
+		}
+	}
+
 	// check if transport exist, then skip minhop value and consider it equal 0.
 	// Per-call opts.MinHops > 1 suppresses this downgrade: the caller has
 	// explicitly demanded a multi-hop path, and silently routing through the
@@ -2754,6 +2776,53 @@ func intermediatesOfRouteGroup(nrg *NoiseRouteGroup, src, dst cipher.PubKey) []c
 		}
 	}
 	return out
+}
+
+// siblingRouteGroupExclusions scans this visor's live route groups for
+// ones that already terminate at the same destination (rPK:rPort) as an
+// about-to-be-dialed tunnel, and returns the first-hop transport IDs and
+// intermediate PKs they occupy. Feeding these into a new dial's
+// ExcludeTransportIDs / ExcludeIntermediatePKs makes the new tunnel leave
+// the source over a DIFFERENT first-hop transport / disjoint intermediate —
+// so N tunnels to one exit aggregate bandwidth instead of splitting a single
+// link (docs/mux_aggregation_rfc.md step 3).
+//
+// rgsNs is keyed by the RECEIVE-side descriptor (Src = remote peer, Dst =
+// this visor), so a sibling group to (rPK, rPort) matches on SrcPK()==rPK &&
+// SrcPort()==rPort; the differing DstPort() is each tunnel's own ephemeral
+// local port. count is the number of matching sibling groups — 0 means this
+// is the first tunnel to that dst and the caller must add NO exclusions
+// (byte-identical to a normal single dial).
+//
+// Locking: the matching *NoiseRouteGroup values are snapshotted under r.mx,
+// then their transports are read WITHOUT r.mx held (each via the group's own
+// rg.mu), so we never hold r.mx while taking a route-group lock.
+func (r *router) siblingRouteGroupExclusions(lPK, rPK cipher.PubKey, rPort routing.Port) (ids []uuid.UUID, pks []cipher.PubKey, count int) {
+	r.mx.Lock()
+	var siblings []*NoiseRouteGroup
+	for desc, nrg := range r.rgsNs {
+		if nrg == nil {
+			continue
+		}
+		if desc.SrcPK() == rPK && desc.SrcPort() == rPort {
+			siblings = append(siblings, nrg)
+		}
+	}
+	r.mx.Unlock()
+
+	count = len(siblings)
+	for _, nrg := range siblings {
+		nrg.rg.mu.Lock()
+		for _, tp := range nrg.rg.tps {
+			if tp == nil {
+				continue
+			}
+			ids = append(ids, tp.Entry.ID)
+		}
+		nrg.rg.mu.Unlock()
+		pks = append(pks, intermediatesOfRouteGroup(nrg, lPK, rPK)...)
+	}
+	return ids, pks, count
 }
 
 // extractFailedIntermediatePK walks an error chain looking for a

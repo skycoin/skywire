@@ -231,6 +231,15 @@ type DialOptionsReq struct {
 	// 1-hop over it, bypassing the route-finder. The `--direct` skynet flag
 	// sets this. In spirit mutually exclusive with MinHops >= 2.
 	Direct bool
+	// DiversifyTransports opts this dial into visor-side auto-diversification
+	// for multi-tunnel bandwidth aggregation (docs/mux_aggregation_rfc.md
+	// step 3). Set by the skysocks-client for its extra tunnels (2..N): the
+	// router excludes the first-hop transports/intermediates already claimed by
+	// this visor's live route groups to the same dst, so each tunnel leaves
+	// over a different first-hop transport and their throughputs sum. Bounded
+	// visor-side to the case where a sibling route group already exists, so a
+	// lone dial is byte-identical to today. See router.DialOptions.
+	DiversifyTransports bool
 }
 
 // Dial dials to the remote.
@@ -326,7 +335,7 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 	// direct route out from under a visor-global min_hops/mux_routes>1 (which
 	// otherwise forces every skynet app dial into multi-hop mux — wrong for a
 	// 1:1 forward). Zero still means "inherit the visor-global default".
-	if req == nil || (!req.Direct && req.MuxRoutes == 0 && req.MinHops == 0 &&
+	if req == nil || (!req.Direct && !req.DiversifyTransports && req.MuxRoutes == 0 && req.MinHops == 0 &&
 		req.ForwardMinHops == 0 && req.ReverseMinHops == 0 &&
 		req.ForwardMuxRoutes == 0 && req.ReverseMuxRoutes == 0) {
 		return appnet.DialContext(ctx, remote)
@@ -348,6 +357,7 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 	opts.ReverseMinHops = req.ReverseMinHops
 	opts.ForwardMuxRoutes = req.ForwardMuxRoutes
 	opts.ReverseMuxRoutes = req.ReverseMuxRoutes
+	opts.DiversifyTransports = req.DiversifyTransports
 	if req.Direct {
 		// Force a 1-hop direct dial that creates the transport on demand and
 		// bypasses the route-finder. Mirrors the policy-layer Fallback="direct"

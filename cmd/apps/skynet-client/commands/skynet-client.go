@@ -211,7 +211,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	dialWithShape := func(port uint16) (net.Conn, error) {
 		addr := appnet.Addr{Net: netType, PubKey: remotePK, Port: routing.Port(port)}
 		if direct || routes >= 1 || minHops >= 1 || fwdMinHops >= 1 || revMinHops >= 1 || fwdMux >= 1 || revMux >= 1 {
-			return appCl.DialWithOptions(addr, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
+			return appCl.DialWithOptions(addr, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, false)
 		}
 		return appCl.Dial(addr)
 	}
