@@ -203,7 +203,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 			close(ddone)
 		}
 
-		conn, err := dialServer(cycleCtx, appCl, pk, serverPort)
+		conn, err := dialServer(cycleCtx, appCl, pk, serverPort, false)
 		if err != nil {
 			// Stop the disconnected listener and wait for it to release :1080.
 			dcancel()
@@ -214,14 +214,12 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// Dial the additional tunnels. Each is an independent route group +
 		// noise + yamux; the client stripes browser conns across them. A tunnel
 		// that fails to dial is skipped (degrade to fewer tunnels) rather than
-		// failing the whole cycle. IMPORTANT: dialServer has NO transport /
-		// intermediate exclusion yet, so these dials may land on the SAME path —
-		// same first-hop transport means they SPLIT one link, not sum it, so this
-		// is plumbing, not real aggregation. Per-tunnel first-hop-transport
-		// exclusion (disjoint-tunnel dial coordination) is the REQUIRED follow-up
-		// before aggregation is real — see docs/mux_aggregation_rfc.md step 3.
+		// failing the whole cycle. diversify=true asks the visor to leave over a
+		// DIFFERENT first-hop transport than the tunnels already dialed to this
+		// exit (disjoint-tunnel coordination), so their throughputs sum instead
+		// of splitting one link — see docs/mux_aggregation_rfc.md step 3.
 		for i := int64(1); i < tunnels; i++ {
-			extra, derr := dialServer(cycleCtx, appCl, pk, serverPort)
+			extra, derr := dialServer(cycleCtx, appCl, pk, serverPort, true)
 			if derr != nil {
 				log.WithError(derr).Warnf("tunnel %d/%d dial failed; continuing with %d tunnel(s)", i+1, tunnels, len(conns))
 				continue
@@ -234,7 +232,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		<-ddone
 		log.Infof("Connected to %v", pk)
 		if len(conns) > 1 {
-			log.Warnf("skysocks-client: %d tunnels dialed, but disjoint-path coordination is NOT implemented — tunnels may share the same first-hop transport (split, not sum: no real aggregation). Follow-up: per-tunnel transport/intermediate exclusion, docs/mux_aggregation_rfc.md step 3.", len(conns))
+			log.Infof("skysocks-client: %d tunnels dialed with visor-side disjoint-path coordination — each extra tunnel is steered off the first-hop transports the earlier ones claimed (docs/mux_aggregation_rfc.md step 3). Tunnels that could not find a disjoint transport fall back to a shared path.", len(conns))
 		}
 		client, err := skysocks.NewMultiClient(conns, appCl)
 		if err != nil {
@@ -320,15 +318,23 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	}
 }
 
-func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey, port routing.Port) (net.Conn, error) {
+// dialServer dials one tunnel to the exit. diversify, set for tunnels 2..N of
+// a --tunnels aggregation, asks the visor to steer this tunnel off the
+// first-hop transports/intermediates the earlier tunnels to this same exit
+// already occupy — so the tunnels leave over DIFFERENT first-hop transports
+// and their throughputs sum instead of splitting one link
+// (docs/mux_aggregation_rfc.md step 3). The visor does all the transport-ID
+// bookkeeping; the app just signals intent. It is a no-op for the first tunnel
+// (no sibling route group to diverge from → dial is identical to today).
+func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey, port routing.Port, diversify bool) (net.Conn, error) {
 	//nolint:errcheck
 	appCl.SetDetailedStatus(appserver.AppDetailedStatusStarting) //nolint:errcheck,gosec
 	// dial one network to the server. On skynet, --direct forces a 1-hop
 	// direct-transport-only dial (create-on-demand, bypass the route-finder +
 	// setup node, self-heals on server restart); dmsg is a plain relay stream.
 	dial := func(_ context.Context, a appnet.Addr) (net.Conn, error) {
-		if a.Net == netType && direct {
-			return appCl.DialWithOptions(a, 0, 0, 0, 0, 0, 0, true)
+		if a.Net == netType && (direct || diversify) {
+			return appCl.DialWithOptions(a, 0, 0, 0, 0, 0, 0, direct, diversify)
 		}
 		return appCl.Dial(a)
 	}
