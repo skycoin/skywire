@@ -247,7 +247,7 @@ func (dg *DatagramRouteGroup) WriteTo(data []byte, addr net.Addr) (int, error) {
 		return 0, ErrPayloadTooBig
 	}
 	if addr != nil {
-		if want := dg.RemoteAddr(); want != nil && addr.String() != want.String() {
+		if want := dg.RemoteAddr(); addr.String() != want.String() {
 			return 0, fmt.Errorf("datagram-route-group: WriteTo addr %s does not match group remote %s", addr, want)
 		}
 	}

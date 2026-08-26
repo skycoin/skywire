@@ -59,6 +59,10 @@ func (m *mockStore) GetNumberOfTransports(context.Context) (map[tptypes.Type]int
 func (m *mockStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {
 	return nil, nil
 }
+func (m *mockStore) GetTransportSummary(context.Context, bool) (*tpdstore.TransportSummary, error) {
+	return &tpdstore.TransportSummary{}, nil
+}
+
 func (m *mockStore) Close() {}
 
 func (m *mockStore) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64) error {
