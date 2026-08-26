@@ -242,19 +242,23 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 	}
 	r.mx.Unlock()
 
+	// Hand the new group off to AcceptRoutes. This send MUST NOT hold r.mx: the
+	// accept buffer can fill (a burst of route setups, or the app-accept loop
+	// mid-handshake), and the only consumer — AcceptRoutes → saveRouteGroupRules
+	// — takes r.mx to drain each item. Holding r.mx across a blocking send
+	// therefore deadlocks the whole router: the sender waits for the consumer to
+	// free a slot while the consumer waits for r.mx, and every other
+	// IntroduceRules, ActiveRouteStatuses and the rules-GC pile up behind the
+	// held lock (observed live: one sender parked in chansend, 1080 waiters, the
+	// visor wedged at ~10k goroutines with route setup failing fleet-wide).
+	// Duplicate sends for the same descriptor are already tolerated downstream —
+	// saveRouteGroupRules detects an initializing group and adopts the rules as
+	// an aux mux leg — so the lock guarded nothing here.
 	select {
+	case r.accept <- rules:
+		return nil
 	case <-r.done:
 		return io.ErrClosedPipe
-	default:
-		r.mx.Lock()
-		defer r.mx.Unlock()
-
-		select {
-		case r.accept <- rules:
-			return nil
-		case <-r.done:
-			return io.ErrClosedPipe
-		}
 	}
 }
 
