@@ -17,6 +17,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
+	"github.com/skycoin/skywire/pkg/dmsg/noise"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -123,6 +124,22 @@ type RouteGroup struct {
 	handshakeProcessed     chan struct{}
 	handshakeProcessedOnce sync.Once
 	encrypt                bool
+
+	// Per-frame noise (inverse-mux). perFrameNoiseWant advertises CapPerFrameNoise
+	// in our handshake (gated by SKYWIRE_PERFRAME_NOISE so it stays opt-in during
+	// rollout). nsConf carries the KK keys (local SK/PK + peer PK), copied from the
+	// same noise.Config that EncryptConn would use. ns is the per-frame session;
+	// perFrameNoiseMsg caches our outgoing KK message so a handshake RETRANSMIT
+	// resends identical bytes instead of re-advancing the noise state machine.
+	// perFrameNoiseActive flips true once ns's transport cipher is ready and the
+	// mux seal/open are wired; from then on EncryptConn is bypassed. Guarded by rg.mu
+	// (set inside handshake processing / sendHandshake, both under mu).
+	perFrameNoiseWant   bool
+	nsConf              noise.Config
+	ns                  *noise.Noise
+	perFrameNoiseMsg    []byte
+	perFrameNoiseActive bool
+	perFrameNoiseOnce   sync.Once
 
 	// forwardHops stores the complete route path as originally calculated.
 	// This is the full multi-hop route, not just local transports.
@@ -2015,6 +2032,67 @@ func (rg *RouteGroup) sendKeepAlive() error {
 	return nil
 }
 
+// perFrameNoiseCap returns CapPerFrameNoise when we want per-frame noise and the
+// group is encrypted (per-frame noise IS the encryption); 0 otherwise.
+func (rg *RouteGroup) perFrameNoiseCap() uint16 {
+	if rg.perFrameNoiseWant && rg.encrypt {
+		return routing.CapPerFrameNoise
+	}
+	return 0
+}
+
+// nextPerFrameNoiseMsg returns the noise KK message to piggyback on THIS
+// handshake send, creating the session on first use. Idempotent across
+// retransmits: once produced, the same bytes are cached and returned so a resend
+// never advances the noise state machine. Initiator: first call builds ns and
+// produces msg1. Responder: ns was created + fed msg1 in handlePacket, so the
+// first call here produces msg2 and completes the responder cipher. Called with
+// rg.mu held.
+func (rg *RouteGroup) nextPerFrameNoiseMsg() ([]byte, error) {
+	if rg.perFrameNoiseMsg != nil {
+		return rg.perFrameNoiseMsg, nil
+	}
+	if rg.ns == nil {
+		ns, err := noise.New(noise.HandshakeKK, rg.nsConf)
+		if err != nil {
+			return nil, err
+		}
+		rg.ns = ns
+	}
+	msg, err := rg.ns.MakeHandshakeMessage()
+	if err != nil {
+		return nil, err
+	}
+	rg.perFrameNoiseMsg = msg
+	if rg.ns.HandshakeFinished() {
+		rg.wirePerFrameNoise()
+	}
+	return msg, nil
+}
+
+// wirePerFrameNoise installs the per-frame seal/open onto the mux and marks the
+// group active, exactly once, the moment the noise transport cipher is ready.
+// The seal/open use the mux frame SEQUENCE as the AEAD nonce; the cipher's
+// Encrypt/Decrypt take an explicit nonce and are stateless (no per-call mutation),
+// so concurrent per-leg send/recv is safe. Called with rg.mu held.
+func (rg *RouteGroup) wirePerFrameNoise() {
+	rg.perFrameNoiseOnce.Do(func() {
+		ns := rg.ns
+		if ns == nil || rg.mux == nil {
+			return
+		}
+		rg.mux.seal = func(seq uint32, plaintext []byte) []byte {
+			return ns.SealWithNonce(uint64(seq), plaintext)
+		}
+		rg.mux.open = func(seq uint32, ciphertext []byte) ([]byte, error) {
+			return ns.OpenWithNonce(uint64(seq), ciphertext)
+		}
+		rg.mux.reorderBuf.SetSkipCapable(true)
+		rg.perFrameNoiseActive = true
+		rg.logger.Debug("Per-frame noise active: mux seal/open wired, reorder skip-capable, EncryptConn bypassed")
+	})
+}
+
 func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
@@ -2034,7 +2112,20 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		}
 
 		rule := rg.fwd[i]
-		packet := routing.MakeHandshakePacket(rule.NextRouteID(), encrypt, routing.CapMux|routing.CapSACK)
+		caps := routing.CapMux | routing.CapSACK
+		var packet routing.Packet
+		if pfn := rg.perFrameNoiseCap(); pfn != 0 {
+			msg, mErr := rg.nextPerFrameNoiseMsg()
+			if mErr != nil {
+				// Never silently drop to plaintext: if the per-frame noise
+				// message can't be produced, abort this handshake rather than
+				// advertise a capability we can't honor.
+				return fmt.Errorf("per-frame noise handshake message: %w", mErr)
+			}
+			packet = routing.MakeHandshakePacketWithNoise(rule.NextRouteID(), encrypt, caps|pfn, msg)
+		} else {
+			packet = routing.MakeHandshakePacket(rule.NextRouteID(), encrypt, caps)
+		}
 
 		err := rg.writePacket(ctx, tp, packet, rule.KeyRouteID())
 		if err == nil {
@@ -2186,6 +2277,50 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 				if sack {
 					rg.logger.Debug("SACK retransmission enabled (both peers support CapSACK)")
 					go rg.servicePacketLoop("sack", rg.cfg.KeepAliveInterval/2, rg.sackServiceFn, nil)
+				}
+
+				// Per-frame noise negotiation (both edges advertised CapPerFrameNoise
+				// and we want it). Piggybacked on the same handshake as the KK
+				// message. Wiring is SYNCHRONOUS here so perFrameNoiseActive is set
+				// before handshakeProcessed closes and saveRouteGroupRules decides
+				// whether to bypass EncryptConn.
+				if rg.perFrameNoiseWant && rg.encrypt && remoteCaps&routing.CapPerFrameNoise != 0 {
+					noiseMsg := packet.HandshakeNoisePayload()
+					if rg.initiator {
+						// Reverse handshake: process the responder's msg2 (our ns
+						// exists from sending msg1) and wire on completion.
+						if rg.ns != nil {
+							if err := rg.ns.ProcessHandshakeMessage(noiseMsg); err != nil {
+								rg.logger.Warnf("per-frame noise: process responder msg2 failed: %v", err)
+							} else if rg.ns.HandshakeFinished() {
+								rg.wirePerFrameNoise()
+							}
+						}
+					} else {
+						// Forward handshake: create our session, process the
+						// initiator's msg1, produce+cache msg2 (this finishes our
+						// cipher and wires the mux synchronously), then emit the
+						// reverse handshake carrying msg2 from a goroutine so we
+						// never block the router read loop.
+						if ns, err := noise.New(noise.HandshakeKK, rg.nsConf); err != nil {
+							rg.logger.Warnf("per-frame noise: session create failed: %v", err)
+						} else {
+							rg.ns = ns
+							if err := rg.ns.ProcessHandshakeMessage(noiseMsg); err != nil {
+								rg.logger.Warnf("per-frame noise: process initiator msg1 failed: %v", err)
+								rg.ns = nil
+							} else if _, err := rg.nextPerFrameNoiseMsg(); err != nil {
+								rg.logger.Warnf("per-frame noise: produce responder msg2 failed: %v", err)
+								rg.ns = nil
+							} else {
+								go func() {
+									if err := rg.sendHandshake(rg.encrypt); err != nil {
+										rg.logger.Debugf("per-frame noise: reverse handshake send failed: %v", err)
+									}
+								}()
+							}
+						}
+					}
 				}
 			}
 

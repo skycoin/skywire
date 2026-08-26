@@ -82,6 +82,17 @@ type routeMux struct {
 	sackTracker *sackTracker // receiver: tracks received seqs for SACK generation
 	retxBuf     *retxBuffer  // sender: holds unACKed packets for retransmission
 
+	// Per-frame noise (inverse-mux). When CapPerFrameNoise is negotiated the
+	// RouteGroup installs these: seal AEAD-encrypts each outgoing frame under
+	// its sequence-nonce (in wrapPayload, before retx storage so retransmits
+	// resend the sealed frame verbatim); open AEAD-decrypts an incoming frame
+	// under its sequence-nonce (in deliverData, before the reorder buffer).
+	// Both nil for stream-noise/plain groups (no-op). Set once at handshake
+	// completion, read on the data path; a plain word write/read is safe under
+	// the RouteGroup's ordering (set-before-first-data, mu-guarded install).
+	seal func(seq uint32, plaintext []byte) []byte
+	open func(seq uint32, ciphertext []byte) ([]byte, error)
+
 	// Per-leg traffic counters parallel to the rg's tps[] / fwd[] /
 	// rvs[] slices. Mutated atomically. Read via Snapshot().
 	// legMu guards the slice itself (extended on AppendRoute), not
@@ -510,6 +521,13 @@ func (m *routeMux) snapshotLegs() []LegStats {
 // Returns the packet and the sequence number used.
 func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte) (routing.Packet, uint32, error) {
 	seq := atomic.AddUint32(&m.writeSeq, 1) - 1
+	// Per-frame AEAD: seal the app payload under seq as the nonce. The sealed
+	// bytes are what go on the wire AND into the retx buffer, so a SACK
+	// retransmit resends the identical sealed frame (same seq ⇒ same nonce ⇒
+	// same ciphertext), and the receiver opens it independently, out of order.
+	if m.seal != nil {
+		data = m.seal(seq, data)
+	}
 	packet, err := routing.MakeSequencedDataPacket(routeID, seq, data)
 	if err != nil {
 		return nil, 0, err
@@ -527,6 +545,22 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte) (routing.Pa
 // and returns any payloads that are now deliverable in order.
 // Also tracks the sequence for SACK generation.
 func (m *routeMux) deliverData(seq uint32, data []byte) (delivered [][]byte, gapDetected bool) {
+	// Per-frame AEAD: open the frame under its sequence-nonce before it enters
+	// the reorder buffer. A frame that fails to open (tamper, or a stale
+	// duplicate whose seq the peer reused after a rekey) is dropped, exactly as
+	// a corrupt packet would be — never delivered. SACK/reorder then treat it as
+	// not-yet-received and it is retransmitted if genuinely missing.
+	if m.open != nil {
+		pt, err := m.open(seq, data)
+		if err != nil {
+			if m.logger != nil {
+				m.logger.WithError(err).Tracef("per-frame open failed for seq %d; dropping", seq)
+			}
+			return nil, false
+		}
+		data = pt
+	}
+
 	// Track for SACK generation
 	if m.sackEnabled && m.sackTracker != nil {
 		gapDetected = m.sackTracker.RecordReceived(seq)

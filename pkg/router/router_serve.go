@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -25,6 +26,13 @@ import (
 // failure and skip deleting the leg's rules (#80 Fix B). Deleting them here is
 // exactly what black-holes an aux mux leg that raced the primary's setup.
 var errRouteGroupInitializing = errors.New("noise route group already being initialized")
+
+// perFrameNoiseEnabled opts this visor into advertising CapPerFrameNoise (the
+// mux inverse-multiplexer's per-frame AEAD). Gated by an env var so the fleet
+// isn't flipped at once: a route group uses per-frame noise only when BOTH edges
+// have it set, otherwise it falls back to the stream-noise (EncryptConn) wrap.
+// Read once at package init. See docs/inverse_mux_per_frame_noise_rfc.md.
+var perFrameNoiseEnabled = os.Getenv("SKYWIRE_PERFRAME_NOISE") == "1"
 
 // AcceptRoutes should block until we receive an AddRules packet from SetupNode
 // that contains ConsumeRule(s) or ForwardRule(s).
@@ -290,6 +298,13 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc, r.mLogger)
 	rg.SetAppName(appName)
 	rg.initiator = nsConf.Initiator
+	// Per-frame noise (inverse-mux): hand the RG the same KK keys EncryptConn
+	// would use, and opt in per the env gate so the whole fleet isn't flipped at
+	// once. When both edges advertise CapPerFrameNoise the RG runs noise per mux
+	// frame and EncryptConn is bypassed (see below); otherwise it falls back to
+	// the stream-noise wrap unchanged.
+	rg.nsConf = nsConf
+	rg.perFrameNoiseWant = perFrameNoiseEnabled
 	rg.appendRules(rules.Forward, rules.Reverse, tp)
 	// we put raw rg so it can be accessible to the router when handshake packets come in
 	r.rgsRaw[rules.Desc] = rg
@@ -435,7 +450,15 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 		log.Debugf("Successfully closed old noise route group")
 	}
 
-	if rg.encrypt {
+	if rg.encrypt && rg.perFrameNoiseActive {
+		// Per-frame noise negotiated: the mux already seals/opens every DATA frame
+		// under its sequence-nonce, so the RouteGroup hands the app plaintext
+		// directly — no stream-noise wrap. (Both edges agreed via CapPerFrameNoise;
+		// if only one wanted it, perFrameNoiseActive is false and we fall through
+		// to the stream wrap below.)
+		nrg = &NoiseRouteGroup{rg: rg, Conn: rg}
+		log.Debugf("Per-frame noise route group ready (%s): EncryptConn bypassed", &rules.Desc)
+	} else if rg.encrypt {
 		// wrapping rg with noise
 		wrappedRG, err := network.EncryptConn(nsConf, rg)
 		if err != nil {
