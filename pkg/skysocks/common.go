@@ -19,7 +19,15 @@ func listenIPC(ipcClient *ipc.Client, appName string, log logrus.FieldLogger, on
 	for {
 		m, err := ipcClient.Read()
 		if err != nil {
-			log.Errorf("%s IPC received error: %v", appName, err)
+			// A read error is terminal: golang-ipc closes the receive channel
+			// on error, so every subsequent Read returns immediately with the
+			// same error. Without breaking, this loop spins at full tilt
+			// (hundreds of log lines per millisecond), pegging a CPU core and
+			// starving the app's real work — the same regression already fixed
+			// for skychat's IPC signal loop. Stop the handler and run onClose so
+			// the app tears down cleanly instead of busy-looping.
+			log.Errorf("%s IPC read error, stopping IPC handler: %v", appName, err)
+			break
 		}
 
 		if m != nil {
