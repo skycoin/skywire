@@ -157,33 +157,26 @@ func TestReorderNeverSkipsAcrossTimeout(t *testing.T) {
 	}
 }
 
-// TestReorderBuffer_FlushIfStalled pins the timer-driven flush: a frontier gap
-// held past reorderTimeout with NO new inserts (the in-Insert skip never fires)
-// must be released by FlushIfStalled — but only when skip-capable (per-frame),
-// since releasing a gap on a stateful stream-noise mux would desync the cipher.
-func TestReorderBuffer_FlushIfStalled(t *testing.T) {
+// TestReorderBuffer_NeverSkipsGap pins the reliability contract: the reorder
+// buffer NEVER delivers past a frontier gap on a time basis, no matter how long
+// the gap has been open. The RouteGroup is a reliable ordered stream (TCP/TLS
+// rides it), so skipping a sequence would leave a hole that corrupts the upper
+// protocol (the observed "bad record mac"). The gap is only ever closed by the
+// missing sequence actually arriving — recovery comes from SACK retransmit + the
+// leg-dataprogress prune, not from skipping.
+func TestReorderBuffer_NeverSkipsGap(t *testing.T) {
 	orig := reorderTimeout
 	reorderTimeout = 20 * time.Millisecond
 	defer func() { reorderTimeout = orig }()
 
-	// Not skip-capable: never releases, even when stalled.
 	rb := newReorderBuffer(64)
-	assert.Equal(t, [][]byte{[]byte("a")}, rb.Insert(0, []byte("a"))) // delivered in order
+	assert.Equal(t, [][]byte{[]byte("a")}, rb.Insert(0, []byte("a"))) // seq 0 in order
 	_ = rb.Insert(2, []byte("c"))                                     // gap at seq 1, buffered
-	time.Sleep(40 * time.Millisecond)
-	assert.Nil(t, rb.FlushIfStalled(), "non-skip-capable buffer must never release a gap")
-	assert.Equal(t, 1, rb.Pending(), "seq 2 still held")
-
-	// Skip-capable: releases the stalled gap without a triggering insert.
-	sb := newReorderBuffer(64)
-	sb.SetSkipCapable(true)
-	got := sb.Insert(0, []byte("a"))
-	assert.Equal(t, [][]byte{[]byte("a")}, got)
-	_ = sb.Insert(2, []byte("c")) // gap at seq 1
-	assert.Nil(t, sb.FlushIfStalled(), "gap not yet aged past reorderTimeout")
-	time.Sleep(40 * time.Millisecond)
-	flushed := sb.FlushIfStalled()
-	assert.Equal(t, [][]byte{[]byte("c")}, flushed, "stalled gap released past seq 1")
-	assert.Equal(t, 0, sb.Pending(), "buffer drained after flush")
-	assert.Nil(t, sb.FlushIfStalled(), "nothing left to release")
+	_ = rb.Insert(3, []byte("d"))                                     // still buffered behind the gap
+	time.Sleep(40 * time.Millisecond)                                 // well past reorderTimeout
+	assert.Equal(t, 2, rb.Pending(), "gap must stay held past reorderTimeout — never skip")
+	assert.True(t, rb.GapAge() > reorderTimeout, "gap is aged but still held, not released")
+	// The missing seq 1 finally arrives → in-order delivery of 1,2,3.
+	assert.Equal(t, [][]byte{[]byte("b"), []byte("c"), []byte("d")}, rb.Insert(1, []byte("b")))
+	assert.Equal(t, 0, rb.Pending(), "buffer drained in order once the gap filled")
 }

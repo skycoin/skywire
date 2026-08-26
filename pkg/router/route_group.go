@@ -57,12 +57,12 @@ const (
 	// interleave (which closes in well under a second) never trips it; short
 	// enough to react quickly once a leg genuinely stops delivering its share.
 	legDataStallGapAge = 3 * time.Second
-	// reorderFlushInterval is how often the receive side checks for a reorder
-	// frontier gap that has stalled past reorderTimeout with no arrivals to
-	// trigger the in-Insert skip (see RouteGroup.reorderFlushServiceFn). Shorter
-	// than reorderTimeout (1.5s) so a wedged buffer is released within ~one
-	// reorderTimeout of going silent, not left to hang until the next packet.
-	reorderFlushInterval = 500 * time.Millisecond
+	// reorderStallInterval is how often the receive side checks for a reorder
+	// frontier gap stuck past reorderTimeout and, if so, emits a SACK to prompt
+	// the sender to retransmit the missing seq IN ORDER (see
+	// RouteGroup.reorderStallServiceFn). Shorter than reorderTimeout (1.5s) so a
+	// stalled gap is nudged within ~one reorderTimeout of going silent.
+	reorderStallInterval = 500 * time.Millisecond
 )
 
 var (
@@ -1357,11 +1357,10 @@ func (rg *RouteGroup) startOffServiceLoops() {
 	// reorder gap. Restores mux throughput to the reliable legs' rate instead of
 	// limping at the fragile leg's retransmit tax.
 	go rg.servicePacketLoop("leg-dataprogress", legDataProgressInterval, rg.legDataProgressServiceFn, nil)
-	// Timer-driven reorder flush: release a per-frame reorder frontier gap that
-	// has stalled past reorderTimeout when no packet arrives to trigger the
-	// in-Insert skip. A no-op for non-per-frame groups (flushStalledReorder gates
-	// on skipCapable), so it is safe to start unconditionally.
-	go rg.servicePacketLoop("reorder-flush", reorderFlushInterval, rg.reorderFlushServiceFn, nil)
+	// Timer-driven reorder-stall recovery: when a frontier gap is stuck past
+	// reorderTimeout with no packet arriving to trigger the arrival-driven SACK,
+	// emit a SACK so the sender retransmits the missing seq in order (never skip).
+	go rg.servicePacketLoop("reorder-stall", reorderStallInterval, rg.reorderStallServiceFn, nil)
 	// Note: Automatic ping loop removed. Latency is now measured once at transport creation.
 	// Rotation loop is NOT started here — startOffServiceLoops runs
 	// during initial route-group setup, before the router-side
@@ -1669,32 +1668,25 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 // drops the last active leg, keeps a shared transport open, and a false positive
 // merely triggers a self-heal re-dial (see pruneLivenessDeadLegs). Standby legs
 // are excluded (they aren't sent to, so zero recv is expected).
-// reorderFlushServiceFn periodically releases a reorder frontier gap that has
-// stalled past reorderTimeout so a silent/dead leg degrades to the surviving legs'
-// rate instead of wedging the stream. The skip-flush inside reorder.Insert only
-// runs when a packet arrives to trigger it; a leg that goes fully silent delivers
-// nothing, so without this the gap ages unbounded (observed live at ~10s while the
-// download stalled to zero). Only per-frame-noise groups release (skipCapable) —
-// flushStalledReorder is a no-op otherwise. Released payloads are pushed to readCh
-// on the SAME watched-close path as handleDataPacket so a close can't deadlock.
-func (rg *RouteGroup) reorderFlushServiceFn(_ time.Duration) {
+// reorderStallServiceFn drives IN-ORDER recovery of a stuck reorder gap by asking
+// the sender to retransmit the missing sequence (via a SACK), so a silent/dead leg
+// degrades to the surviving legs' rate WITHOUT ever skipping the gap — skipping
+// would corrupt the reliable ordered byte stream the RouteGroup carries (the
+// bad-record-mac failure that skipping produced under multi-leg churn).
+func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 	if rg.isClosed() || rg.mux == nil || rg.isRemoteClosed() {
 		return
 	}
-	delivered := rg.mux.flushStalledReorder()
-	if len(delivered) == 0 {
-		return
-	}
-	rg.logger.Debugf("reorder flush: released %d buffered payloads past a stalled leg", len(delivered))
-	for _, d := range delivered {
-		select {
-		case <-rg.closed:
-			return
-		case <-rg.remoteClosed:
-			return
-		case rg.readCh <- d:
-		case <-time.After(30 * time.Second):
-			rg.logger.Warn("reorder flush: dropping payload, readCh full for 30s (application not reading)")
+	// A frontier gap held past reorderTimeout means the missing sequence's leg has
+	// likely stalled/died and the normal packet-arrival-driven SACK isn't firing
+	// (nothing is arriving to trigger it). Emit a SACK NOW so the sender resends
+	// the missing seq on a live leg and the gap fills IN ORDER. We never skip the
+	// gap: the RouteGroup is a reliable ordered net.Conn (TCP/TLS rides it), so
+	// delivering past a hole corrupts the stream. The leg-dataprogress prune
+	// concurrently removes a genuinely dead leg so its seqs retransmit on survivors.
+	if rg.mux.gapAge() > reorderTimeout {
+		if err := rg.sendSACK(); err != nil {
+			rg.logger.WithError(err).Debug("reorder-stall SACK failed")
 		}
 	}
 }
@@ -2217,9 +2209,8 @@ func (rg *RouteGroup) wirePerFrameNoise() {
 		rg.mux.open = func(seq uint32, ciphertext []byte) ([]byte, error) {
 			return ns.OpenWithNonce(uint64(seq), ciphertext)
 		}
-		rg.mux.reorderBuf.SetSkipCapable(true)
 		rg.perFrameNoiseActive = true
-		rg.logger.Debug("Per-frame noise active: mux seal/open wired, reorder skip-capable, EncryptConn bypassed")
+		rg.logger.Debug("Per-frame noise active: mux seal/open wired, EncryptConn bypassed")
 	})
 }
 
