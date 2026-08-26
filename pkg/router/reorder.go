@@ -153,6 +153,27 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 	return delivered
 }
 
+// FlushIfStalled releases a frontier gap that has stayed open past reorderTimeout
+// WITHOUT waiting for a new packet to arrive. The skip check inside Insert only
+// fires on the next out-of-order insert; a leg that goes fully silent delivers
+// nothing to trigger it, so the buffer would otherwise wedge indefinitely — a gap
+// held open with no arrivals to release it (observed live as a reorder gap aging
+// to ~10s while the download stalled to zero). A periodic caller invokes this so a
+// stalled reorder degrades to the surviving legs' rate promptly instead of
+// wedging. Only releases when skip-capable (per-frame noise) — matching Insert's
+// skip gate, since releasing a gap on a stateful stream-noise mux would desync the
+// cipher. Returns the flushed payloads in sequence order, or nil when there is
+// nothing to release.
+func (rb *reorderBuffer) FlushIfStalled() [][]byte {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	if rb.skipCapable && !rb.gapSince.IsZero() && len(rb.buf) > 0 &&
+		time.Since(rb.gapSince) > reorderTimeout {
+		return rb.flushAll()
+	}
+	return nil
+}
+
 // GapAge reports how long the current frontier gap has been open, or 0 if the
 // buffer is contiguous (no gap). The route group's fast data-progress prune uses
 // it to tell a genuinely stuck receiver (a gap held while SACK retransmits) from
