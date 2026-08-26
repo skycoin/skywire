@@ -843,6 +843,7 @@ func TestRefs_DescendFrom(t *testing.T) {
 		}
 
 		err = refs.DescendFrom(pack, 1,
+			//nolint:unparam // signature required by registry.IterateFunc callback
 			func(i int, hash cipher.SHA256) (err error) {
 				if !(i == 0 || i == 1) {
 					t.Error("wrong index given", i)

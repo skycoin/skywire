@@ -236,7 +236,6 @@ func (s *service) Run(ctx context.Context) error {
 		EmbeddedDmsgServers: embeddedServers,
 		SurveyWhitelist:     surveyWL,
 		Log:                 logger,
-		DisableDHT:          true,
 		OnDmsgServersUpdated: func(s []string) {
 			tpdAPI.DmsgServers = s
 		},

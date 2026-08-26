@@ -117,7 +117,7 @@ func server() {
 			dlog.WithError(err).Fatal("Error creating SOCKS5 dialer")
 		}
 		transport := &http.Transport{
-			Dial: dialer.Dial,
+			DialContext: dialer.(proxy.ContextDialer).DialContext,
 		}
 		httpClient = &http.Client{
 			Transport: transport,

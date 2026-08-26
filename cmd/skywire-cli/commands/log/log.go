@@ -164,6 +164,7 @@ var logCmd = &cobra.Command{
 			return
 		}
 		//randomize the order of the survey collection - workaround for hanging
+		//nolint:gosec // non-crypto shuffle to spread collection order, not security-sensitive
 		rand.Shuffle(len(uptimes), func(i, j int) {
 			uptimes[i], uptimes[j] = uptimes[j], uptimes[i]
 		})
