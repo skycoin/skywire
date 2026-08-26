@@ -318,6 +318,26 @@ type DialOptions struct {
 	// they have constraints to express.
 	ExcludeIntermediatePKs []cipher.PubKey
 	ExcludeDMSG            bool // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
+	// DiversifyTransports opts this dial into visor-side auto-
+	// diversification for bandwidth aggregation (docs/mux_aggregation_rfc.md
+	// step 3). When set, DialRoutes looks up THIS visor's currently-live
+	// route groups to the SAME destination PK:port and seeds
+	// ExcludeTransportIDs / ExcludeIntermediatePKs with their first-hop
+	// transports + intermediates, so a new tunnel to an exit leaves over a
+	// DIFFERENT first-hop transport than the tunnels already established to
+	// it — their throughputs then SUM instead of splitting one link.
+	//
+	// It is bounded and safe by construction: the exclusions are added ONLY
+	// when >= 1 sibling route group to the exact same dst already exists (the
+	// skysocks multi-tunnel "tunnel 2..N" case). A lone dial (tunnel 1, or
+	// any app that dials a dst once) finds no sibling and is byte-identical
+	// to today. It reuses the mux's own disjoint machinery, but across route
+	// groups rather than across legs within one group. Set by the
+	// skysocks-client for its extra tunnels; unset everywhere else, so
+	// single-dials, control-plane forwards and same-LAN/direct dials are
+	// untouched. Falls back gracefully — if no disjoint transport is free the
+	// dial proceeds on a shared path (a shared tunnel beats no tunnel).
+	DiversifyTransports bool
 	// Distribution overrides the route group's per-packet
 	// distribution strategy when set (Mode != DistributionUnset).
 	// Populated either by a routing-policy script (see

@@ -203,7 +203,7 @@ func (c *Client) SetAppPortOrLog(port routing.Port) {
 
 // Dial dials the remote visor using `remote`.
 func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
-	return c.dial(remote, 0, 0, 0, 0, 0, 0, false)
+	return c.dial(remote, 0, 0, 0, 0, 0, 0, false, false)
 }
 
 // DialWithOptions dials remote with per-call dial options.
@@ -230,8 +230,15 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 //   - direct: when true, forces a direct-transport-only dial — the router
 //     creates a direct transport to the remote if none exists and dials
 //     1-hop over it, bypassing the route-finder (the `--direct` skynet flag).
-func (c *Client) DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int, direct bool) (net.Conn, error) {
-	return c.dial(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
+//   - diversify: when true, opts this dial into visor-side multi-tunnel
+//     transport diversification (docs/mux_aggregation_rfc.md step 3). The
+//     visor excludes the first-hop transports/intermediates already claimed
+//     by this visor's live route groups to the same dst, so a new tunnel to
+//     an exit leaves over a DIFFERENT first-hop transport and the tunnels'
+//     throughputs sum. Set by skysocks-client for tunnel 2..N; harmless on a
+//     lone dial (no sibling route group → no exclusions → identical to Dial).
+func (c *Client) DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int, direct, diversify bool) (net.Conn, error) {
+	return c.dial(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, diversify)
 }
 
 // dial is the common body for Dial + DialWithOptions. When all opts
@@ -239,14 +246,14 @@ func (c *Client) DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinH
 // existing wire shape for non-mux callers); otherwise sends the
 // DialWithOptions request so the server-side knows to take the
 // SkywireNetworker per-call-opts path.
-func (c *Client) dial(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int, direct bool) (net.Conn, error) {
+func (c *Client) dial(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int, direct, diversify bool) (net.Conn, error) {
 	var (
 		connID    uint16
 		localPort routing.Port
 		err       error
 	)
-	if direct || muxRoutes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 || fwdMux > 1 || revMux > 1 {
-		connID, localPort, err = c.rpcC.DialWithOptions(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
+	if direct || diversify || muxRoutes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 || fwdMux > 1 || revMux > 1 {
+		connID, localPort, err = c.rpcC.DialWithOptions(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, diversify)
 	} else {
 		connID, localPort, err = c.rpcC.Dial(remote)
 	}
