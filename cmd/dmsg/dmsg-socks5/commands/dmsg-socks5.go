@@ -296,8 +296,7 @@ var proxyCmd = &cobra.Command{
 		}
 		proxyListenAddr := fmt.Sprintf("127.0.0.1:%d", proxyPort)
 		dlog.Infof("Serving SOCKS5 proxy on %s", proxyListenAddr)
-		if err := server.ListenAndServe("tcp", proxyListenAddr); err != nil {
-			dlog.Fatalf("Error serving SOCKS5 proxy: %v", err)
-		}
+		// ListenAndServe blocks and only ever returns a non-nil error.
+		dlog.Fatalf("Error serving SOCKS5 proxy: %v", server.ListenAndServe("tcp", proxyListenAddr))
 	},
 }

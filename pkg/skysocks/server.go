@@ -129,10 +129,9 @@ func (s *Server) Serve(l net.Listener) error {
 		}
 
 		go func() {
-			if err := s.socks.Serve(session); err != nil {
-				if s.appCl != nil {
-					s.appCl.Log().Errorf("Failed to start SOCKS5 server: %v", err)
-				}
+			// socks.Serve blocks and only ever returns a non-nil error.
+			if err := s.socks.Serve(session); s.appCl != nil {
+				s.appCl.Log().Errorf("Failed to start SOCKS5 server: %v", err)
 			}
 		}()
 	}

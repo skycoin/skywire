@@ -7,6 +7,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
@@ -51,8 +53,8 @@ func TestCXOEntryClient_NilResolverPassesThrough(t *testing.T) {
 
 func TestCXOEntryClient_HitServesFromCXO(t *testing.T) {
 	var pk, srv cipher.PubKey
-	_ = pk.Set("02e40731f3ab6d11d31c466429297f4869f299a7821108409c5e36b840253e4ba7")
-	_ = srv.Set("02190003862c24f69e2cf47e1cf0efaa3dc1d866ba6a24067de34c363058212c73")
+	require.NoError(t, pk.Set("02e40731f3ab6d11d31c466429297f4869f299a7821108409c5e36b840253e4ba7"))
+	require.NoError(t, srv.Set("02190003862c24f69e2cf47e1cf0efaa3dc1d866ba6a24067de34c363058212c73"))
 
 	resolved := clientEntry(pk, srv)
 	stub := &stubAPIClient{entry: nil, err: errors.New("HTTP should not be called")}
@@ -74,7 +76,7 @@ func TestCXOEntryClient_HitServesFromCXO(t *testing.T) {
 
 func TestCXOEntryClient_MissFallsBackToHTTP(t *testing.T) {
 	var pk cipher.PubKey
-	_ = pk.Set("02e40731f3ab6d11d31c466429297f4869f299a7821108409c5e36b840253e4ba7")
+	require.NoError(t, pk.Set("02e40731f3ab6d11d31c466429297f4869f299a7821108409c5e36b840253e4ba7"))
 
 	httpEntry := clientEntry(pk)
 	stub := &stubAPIClient{entry: httpEntry}
@@ -96,7 +98,7 @@ func TestCXOEntryClient_MissFallsBackToHTTP(t *testing.T) {
 
 func TestCXOEntryClient_HitWithoutDelegatedServersFallsBack(t *testing.T) {
 	var pk cipher.PubKey
-	_ = pk.Set("02e40731f3ab6d11d31c466429297f4869f299a7821108409c5e36b840253e4ba7")
+	require.NoError(t, pk.Set("02e40731f3ab6d11d31c466429297f4869f299a7821108409c5e36b840253e4ba7"))
 
 	// Resolver "hits" but the entry has no delegated servers — useless
 	// for dialing, so the wrapped client must still be consulted.
