@@ -158,6 +158,8 @@ type treeLegInfo struct {
 	Direct         bool          `json:"direct"`
 	SentBytes      uint64        `json:"sent_bytes"`
 	RecvBytes      uint64        `json:"recv_bytes"`
+	GoodputUpBps   float64       `json:"goodput_up_bps,omitempty"`
+	GoodputDownBps float64       `json:"goodput_down_bps,omitempty"`
 	Retransmits    uint64        `json:"retransmits"`
 	Alive          bool          `json:"alive"`
 	Standby        bool          `json:"standby"`
@@ -192,6 +194,8 @@ func (rg treeRouteGroup) toSnapshot() proxystatus.Snapshot {
 			Direct:         l.Direct,
 			SentBytes:      l.SentBytes,
 			RecvBytes:      l.RecvBytes,
+			GoodputUpBps:   l.GoodputUpBps,
+			GoodputDownBps: l.GoodputDownBps,
 			Retransmits:    l.Retransmits,
 			Alive:          l.Alive,
 			Standby:        l.Standby,

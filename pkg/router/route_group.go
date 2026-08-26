@@ -485,7 +485,20 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 					}
 				}
 				leg.Hops[0].LatencyMS = leg.LatencyMS
-				if len(leg.Hops) == 2 && leg.RouteLatencyMS > leg.LatencyMS {
+				// For a DIRECT (1-hop) leg the whole route IS this single
+				// transport hop, so its live end-to-end route latency and the
+				// hop's transport RTT are the same physical measurement. Prefer
+				// the E2E value (RouteLatencyMS) — it is the EWMA-smoothed
+				// leg-liveness pong sampled every legLivenessInterval (30s),
+				// whereas leg.LatencyMS is tp.GetLatency(): the RAW last sample
+				// of the 60s transport-ping loop (SetLatency overwrites Avg, it
+				// is not smoothed), so a single spike sticks for up to a minute
+				// and the tree's left route-rtt and right transport-rtt disagree.
+				// Mirrors snapshotLegs' E2E-preferred latency. Multihop legs keep
+				// the near-edge transport RTT on hop 0.
+				if leg.Direct && leg.RouteLatencyMS > 0 {
+					leg.Hops[0].LatencyMS = leg.RouteLatencyMS
+				} else if len(leg.Hops) == 2 && leg.RouteLatencyMS > leg.LatencyMS {
 					leg.Hops[1].LatencyMS = leg.RouteLatencyMS - leg.LatencyMS
 				}
 			}
