@@ -257,7 +257,7 @@ Example:
 }
 
 var muxModeCmd = &cobra.Command{
-	Use:   "mode <auto|equal|capacity>",
+	Use:   "mode <auto|equal|capacity|ecf>",
 	Short: "Change mux scheduler weighting at runtime",
 	Long: `Set the mux transport-selection mode for the visor.
 
@@ -272,12 +272,22 @@ var muxModeCmd = &cobra.Command{
              and a slow one carries little — the thin-spread aggregation
              mode. A just-promoted leg starts at a small cold-leg floor
              share and ramps as its goodput proves out.
+  ecf      - Earliest Completion First: predictive hold-back. Sends on
+             the fastest leg while it has send capacity and only spills
+             onto a slower leg when that leg would deliver its frame
+             sooner than the fast leg can drain its own backlog —
+             otherwise it holds the frame on the fast leg. Unlike
+             capacity (which still sprays a share onto slow legs and
+             head-of-line-stalls the reorder buffer on them), ECF
+             aggregates across heterogeneous legs without paying the
+             slow-leg HoL cost.
 
 Affects every active and future mux'd route group on this visor
 IMMEDIATELY (the router re-applies the mode to live route groups). The
 setting persists to skywire-config.json so it survives restart.
 
 Example:
+  skywire cli proxy mux mode ecf        # predictive earliest-completion-first
   skywire cli proxy mux mode capacity   # goodput-weighted thin spread
   skywire cli proxy mux info --watch 1s
   skywire cli proxy mux mode auto       # back to latency-weighted`,
@@ -286,9 +296,9 @@ Example:
 	Run: func(cmd *cobra.Command, args []string) {
 		mode := args[0]
 		switch mode {
-		case "auto", "equal", "capacity":
+		case "auto", "equal", "capacity", "ecf":
 		default:
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("mode must be 'auto', 'equal', or 'capacity', got %q", mode))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("mode must be 'auto', 'equal', 'capacity', or 'ecf', got %q", mode))
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {

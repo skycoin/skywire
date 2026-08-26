@@ -94,6 +94,16 @@ type legCounters struct {
 	lastRateNano      int64
 	goodputUpBps      float64
 	goodputDownBps    float64
+	// ECF (WeightModeECF) per-leg state, maintained by rebuildWeights' ECF
+	// branch (under legMu, off the data path). ecfLastSentBytes snapshots the
+	// sent counter at the previous ECF refresh so the delta over the refresh
+	// window is this leg's send rate (kept separate from lastTotalBytes /
+	// lastRateSentBytes so the ECF sampler never disturbs the capacity or
+	// telemetry samplers). ecfRttMs / ecfJitterMs are the EWMA'd mean RTT and
+	// jitter (sigma) the ECF predicate consumes.
+	ecfLastSentBytes uint64
+	ecfRttMs         float64
+	ecfJitterMs      float64
 }
 
 // routeMux encapsulates route multiplexing state and logic.
@@ -159,6 +169,11 @@ type routeMux struct {
 	// tear-and-rebuild. Parallel to ready[]; grown/compacted in lockstep.
 	// Guarded by legMu. See docs/warm_standby_legs_rfc.md.
 	standby []bool
+
+	// ecfLastRebuildNano is the wall-clock (UnixNano) of the previous ECF-state
+	// refresh, used to turn each leg's sent-byte delta into a bytes/sec rate.
+	// Touched only under legMu in rebuildWeights' ECF branch.
+	ecfLastRebuildNano int64
 
 	// standbyNewLegs makes every NEWLY-grown aux leg (index > 0) enter the
 	// warm-standby pool instead of going straight into the active send set.
@@ -246,7 +261,8 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 		case WeightModeSizeThreshold,
 			WeightModeSticky5Tuple,
 			WeightModeLatencyAdaptive,
-			WeightModeDSCPPriority:
+			WeightModeDSCPPriority,
+			WeightModeECF:
 			idx := m.tpSelector.SelectForPayload(payload)
 			if idx < len(tps) {
 				tp := tps[idx]
@@ -854,6 +870,68 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 		}
 		m.legMu.Unlock()
 		m.tpSelector.SetCapacityWeights(weights)
+	}
+	// ECF mode: build the per-leg {rate, RTT, jitter, ready, BDP} snapshot the
+	// predictive scheduler reasons over. Rate is the sent-byte delta over the
+	// refresh window (computed here, not from snapshotLegs, so it works even
+	// when nothing is observing the telemetry page). RTT is the leg's first-hop
+	// transport latency (tp.GetLatency(), ms) — the end-to-end route latency
+	// would be more accurate but is not reachable from the mux; noted as a
+	// follow-up. Jitter is an EWMA of |RTT-mean|, the ECF sigma margin.
+	if m.tpSelector.Mode() == WeightModeECF {
+		m.legMu.Lock()
+		now := time.Now().UnixNano()
+		var elapsed float64
+		if m.ecfLastRebuildNano != 0 {
+			elapsed = float64(now-m.ecfLastRebuildNano) / float64(time.Second)
+		}
+		states := make([]ecfLegState, len(m.legs))
+		for i, lc := range m.legs {
+			if lc == nil {
+				continue
+			}
+			// Send rate over the refresh window (bytes/sec).
+			sent := atomic.LoadUint64(&lc.sentBytes)
+			var rate float64
+			if elapsed > 0 {
+				rate = float64(byteDelta(sent, lc.ecfLastSentBytes)) / elapsed
+			}
+			lc.ecfLastSentBytes = sent
+			// RTT EWMA + jitter (sigma) EWMA.
+			var rttMs float64
+			if i < len(tps) && tps[i] != nil {
+				rttMs = tps[i].GetLatency()
+			}
+			if rttMs > 0 {
+				if lc.ecfRttMs == 0 {
+					lc.ecfRttMs = rttMs
+				} else {
+					dev := rttMs - lc.ecfRttMs
+					if dev < 0 {
+						dev = -dev
+					}
+					lc.ecfJitterMs = ecfJitterAlpha*dev + (1-ecfJitterAlpha)*lc.ecfJitterMs
+					lc.ecfRttMs = ecfRttAlpha*rttMs + (1-ecfRttAlpha)*lc.ecfRttMs
+				}
+			}
+			ready := true
+			if i < len(m.standby) && m.standby[i] {
+				ready = false
+			}
+			if i < len(m.ready) && !m.ready[i] {
+				ready = false
+			}
+			states[i] = ecfLegState{
+				rttMs:     lc.ecfRttMs,
+				jitterMs:  lc.ecfJitterMs,
+				rateBps:   rate,
+				cwndBytes: rate * lc.ecfRttMs / 1000.0,
+				ready:     ready,
+			}
+		}
+		m.ecfLastRebuildNano = now
+		m.legMu.Unlock()
+		m.tpSelector.SetECFState(states)
 	}
 	m.tpSelector.Rebuild(tps)
 }
