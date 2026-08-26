@@ -98,7 +98,7 @@ func (r *RPC) ServiceHealth(_ *struct{}, out *[]ServiceHealthEntry) (err error) 
 
 // SetMinHops sets min_hops in visor's routing config
 func (r *RPC) SetMinHops(n *uint16, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetMinHops", *n)
+	defer rpcutil.LogCall(r.log, "SetMinHops", *n)(nil, &err)
 	err = r.visor.SetMinHops(*n)
 	return
 }
@@ -146,6 +146,20 @@ func (r *RPC) SetMuxRoutes(n *int, _ *struct{}) (err error) {
 func (r *RPC) SetMuxMode(mode *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetMuxMode", *mode)(nil, &err)
 	err = r.visor.SetMuxMode(*mode)
+	return err
+}
+
+// SetMuxCap sets the adaptive mux active-width ceiling (aggregation ceiling)
+func (r *RPC) SetMuxCap(n *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMuxCap", *n)(nil, &err)
+	err = r.visor.SetMuxCap(*n)
+	return err
+}
+
+// SetMuxWidth sets the adaptive mux steady active download width (the floor)
+func (r *RPC) SetMuxWidth(n *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMuxWidth", *n)(nil, &err)
+	err = r.visor.SetMuxWidth(*n)
 	return err
 }
 

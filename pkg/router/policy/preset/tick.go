@@ -8,7 +8,10 @@
 // original global-state behavior exactly.
 package preset
 
-import "sort"
+import (
+	"sort"
+	"sync/atomic"
+)
 
 // Engine holds the per-transport_id smoothing state and probe/AIMD
 // bookkeeping the adaptive tick controllers accumulate across
@@ -108,7 +111,7 @@ func New() *Engine {
 		adaptUnhealthy:  map[string]int{},
 		adaptStall:      map[string]int{},
 		adaptRecvRate:   map[string]float64{},
-		adaptTarget:     adaptRevActive,
+		adaptTarget:     AdaptRevActive(),
 		adaptFwdTarget:  adaptFwdActive,
 		ledbatEWMA:      map[string]float64{},
 		ledbatBase:      map[string]float64{},
@@ -543,8 +546,6 @@ const (
 	// adaptRevActive + adaptStandbyMax (every leg full-duplex; forward-lean usage
 	// is a send-side decision), and adaptTarget seeds to adaptRevActive.
 	adaptFwdActive = 1
-	adaptRevActive = 1
-	adaptCap       = 8
 	adaptAlpha     = 0.3
 	adaptPeakDecay = 0.98
 	// adaptStandbyMax is the warm-standby reserve the proactive park fills to.
@@ -622,7 +623,66 @@ const (
 	adaptThroughputOutlierFrac = 0.25
 )
 
+// Runtime-tunable adaptive widths (see the const block above). Stored atomically
+// so an operator can retune the mux's active width LIVE over the mux-control RPC
+// (skywire cli proxy mux width / cap) without a rebuild — the adaptive engine
+// reads them (via AdaptRevActive / AdaptCap) every tick on a per-route-group
+// goroutine while the setter runs on the RPC goroutine. Defaults: a floor of 4
+// active download legs (more than one by default) and a ceiling of 60 (the
+// ~50-60-leg aggregation target).
+var (
+	adaptRevActiveV atomic.Int64
+	adaptCapV       atomic.Int64
+)
+
+func init() {
+	adaptRevActiveV.Store(4)
+	adaptCapV.Store(60)
+}
+
+// AdaptRevActive returns the current steady active reverse width (the floor).
+func AdaptRevActive() int { return int(adaptRevActiveV.Load()) }
+
+// AdaptCap returns the current hard ceiling on active mux width.
+func AdaptCap() int { return int(adaptCapV.Load()) }
+
+// SetAdaptRevActive sets the steady active reverse width (the floor the engine
+// converges to when idle). Clamped to [1, AdaptCap()]. Takes effect on the next
+// tick of every adaptive route group.
+func SetAdaptRevActive(n int) int {
+	if n < 1 {
+		n = 1
+	}
+	if cap := AdaptCap(); n > cap {
+		n = cap
+	}
+	adaptRevActiveV.Store(int64(n))
+	return n
+}
+
+// SetAdaptCap sets the hard ceiling on active mux width (the aggregation
+// ceiling). Clamped to [1, adaptStandbyMax]; pulls adaptRevActive down if it
+// would exceed the new cap. Takes effect on the next tick.
+func SetAdaptCap(n int) int {
+	if n < 1 {
+		n = 1
+	}
+	if n > adaptStandbyMax {
+		n = adaptStandbyMax
+	}
+	adaptCapV.Store(int64(n))
+	if AdaptRevActive() > n {
+		adaptRevActiveV.Store(int64(n))
+	}
+	return n
+}
+
 func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
+	// Snapshot the runtime-tunable widths once per tick (lock-free atomic loads)
+	// so every read below sees a consistent value even if the mux-control RPC
+	// retunes them mid-tick, and so no scattered read site races the setter.
+	adaptCap := AdaptCap()
+	adaptRevActive := AdaptRevActive()
 	for k := range e.adaptSeen {
 		delete(e.adaptSeen, k)
 	}
