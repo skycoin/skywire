@@ -270,6 +270,57 @@ func TestEngine_OnTick_AdaptiveEvictsLowThroughputLeg(t *testing.T) {
 	}
 }
 
+// TestEngine_OnTick_AdaptiveSwapsBadPrimary asserts that a SUSTAINED gross-
+// outlier primary (leg 0) — the one leg every other rule exempts — is swapped
+// out via DropLegs:[0] once a healthy active alternative exists, so a bad
+// primary (e.g. a webrtc-second-hop leg dragging at >ceiling latency) can't ride
+// forever. The drop lets the router promote a healthy aux into the primary slot.
+func TestEngine_OnTick_AdaptiveSwapsBadPrimary(t *testing.T) {
+	e := New()
+	e.adaptTarget = 4 // 4 active, no surplus to park (isolates the primary swap)
+	mk := func() []LegInfo {
+		return []LegInfo{
+			{Index: 0, TransportID: "p", Kind: "stcpr", LatencyMs: 2000, Alive: true}, // gross-outlier primary (> ceiling)
+			{Index: 1, TransportID: "a", Kind: "stcpr", LatencyMs: 100, Alive: true},
+			{Index: 2, TransportID: "b", Kind: "stcpr", LatencyMs: 110, Alive: true},
+			{Index: 3, TransportID: "c", Kind: "stcpr", LatencyMs: 90, Alive: true},
+		}
+	}
+	swapped := false
+	for tick := 0; tick < 6; tick++ {
+		act := e.OnTick("adaptive", mk())
+		for _, idx := range act.DropLegs {
+			if idx == 0 {
+				swapped = true
+			}
+		}
+		if swapped {
+			break
+		}
+	}
+	if !swapped {
+		t.Error("a sustained gross-outlier primary with a healthy alternative must be swapped out via DropLegs:[0]")
+	}
+
+	// A HEALTHY primary must never be swapped (no churn on a good primary).
+	e2 := New()
+	e2.adaptTarget = 4
+	good := []LegInfo{
+		{Index: 0, TransportID: "p", Kind: "stcpr", LatencyMs: 95, Alive: true},
+		{Index: 1, TransportID: "a", Kind: "stcpr", LatencyMs: 100, Alive: true},
+		{Index: 2, TransportID: "b", Kind: "stcpr", LatencyMs: 110, Alive: true},
+		{Index: 3, TransportID: "c", Kind: "stcpr", LatencyMs: 90, Alive: true},
+	}
+	for tick := 0; tick < 6; tick++ {
+		act := e2.OnTick("adaptive", good)
+		for _, idx := range act.DropLegs {
+			if idx == 0 {
+				t.Fatalf("tick %d: a healthy primary must never be swapped; got %+v", tick, act)
+			}
+		}
+	}
+}
+
 // TestEngine_OnTick_AdaptiveCapsActiveUnderLoad asserts the active set is capped
 // at adaptCap even when the group reads SATURATED. During the uncap fill, legs
 // are born active and route-setup traffic keeps the group saturated — the park
