@@ -801,11 +801,20 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		}
 	}
 
-	// healthyPromotable = the lowest-index standby leg SAFE to bring into the
-	// active set (alive, not a known gross-latency-outlier). A bad standby stays
-	// parked — harmless keepalive — rather than being promoted into a stalling
-	// active mux.
-	healthyPromotable := -1
+	// healthyPromotable = the standby leg SAFE and BEST to bring into the active
+	// set: alive, not a known gross-latency-outlier, and — among those — the
+	// FASTEST by measured latency (lowest LatencyMs, which snapshotLegs sources
+	// from the live end-to-end route latency, not the stale first-hop transport
+	// sample). Growing onto the fastest reserve leg keeps the active mux the
+	// lowest-latency set, so a widening download never pulls a slow leg in ahead
+	// of a fast one. A standby whose latency is not yet measured (LatencyMs<=0)
+	// is a lower-priority fallback (lowest index) used only when no measured-
+	// healthy spare exists — an unknown leg is promoted optimistically and
+	// evicted later by rule (2) if its EWMA reveals it is bad. A bad standby
+	// stays parked (harmless keepalive) rather than stalling the active mux.
+	healthyPromotable := -1 // fastest measured-healthy standby
+	healthyPromLat := 0.0   // its latency (for the running min)
+	healthyUnknown := -1    // lowest-index healthy standby with no latency yet
 	for _, l := range legs {
 		if !l.Alive || !l.Standby {
 			continue
@@ -813,9 +822,20 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		if legUnhealthyLat(float64(l.LatencyMs), activeMedian) {
 			continue
 		}
-		if healthyPromotable == -1 || l.Index < healthyPromotable {
-			healthyPromotable = l.Index
+		lat := float64(l.LatencyMs)
+		if lat <= 0 {
+			if healthyUnknown == -1 || l.Index < healthyUnknown {
+				healthyUnknown = l.Index
+			}
+			continue
 		}
+		if healthyPromotable == -1 || lat < healthyPromLat {
+			healthyPromotable = l.Index
+			healthyPromLat = lat
+		}
+	}
+	if healthyPromotable == -1 {
+		healthyPromotable = healthyUnknown
 	}
 
 	// desiredActive is the combined active-leg width the group converges to:
@@ -877,12 +897,63 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	}
 
 	// (3) Proactive park: converge the surplus down to the steady active target
-	// as warm standby (establishes the reserve at dial; never leg 0; not under
-	// load). This is what makes an idle / interactive flow settle onto ONE leg.
-	// No cooldown: park is self-limiting (only fires while over-provisioned) and
-	// stops once active == target, so it converges quickly at dial without churn.
+	// as warm standby, parking ALL surplus legs in ONE tick and SLOWEST-first.
+	// Establishes the reserve at dial (never leg 0; not under load) and is what
+	// makes an idle / interactive flow settle onto the fastest few legs.
+	//
+	// Two properties matter here, both driven by the live end-to-end route
+	// latency (snapshotLegs sources LegInfo.LatencyMs from legEndToEndLatencyMs,
+	// not the stale first-hop transport RTT):
+	//   - ALL surplus at once: with the mux uncapped (adaptStandbyMax=60) the
+	//     router brings up ~60 legs ALL born active; a one-leg-per-tick park can
+	//     never catch up, leaving a 25-30-wide active mux whose no-skip reorder
+	//     buffer head-of-line-stalls on its slowest leg (measured: 335 B took
+	//     22 s over a 28-wide idle mux). Parking the whole surplus in one tick
+	//     collapses that to the lean target immediately.
+	//   - SLOWEST-first: the surplus we shed is the highest-latency active legs,
+	//     so the set we KEEP active is always the fastest desiredActive legs. A
+	//     slow leg never sits active while a faster leg is parked.
+	// Cooldown is set after a bulk park so the freshly-lean set settles before
+	// any optimization reshape; drop-recovery (1) and unhealthy-evict (2) still
+	// bypass it, so safety is preserved.
 	if !saturated && !fwdSaturated && aliveCount > desiredActive && standbyCount < adaptStandbyMax && newestAliveIdx > 0 {
-		return RotationAction{DemoteToStandby: []int{newestAliveIdx}}
+		// Rank active non-leg-0 legs by smoothed latency, slowest first. Use the
+		// EWMA where we have it, else the raw sample; an unmeasured leg sorts as
+		// slowest (parked first) so unknowns don't linger in the active set.
+		type actLeg struct {
+			idx int
+			lat float64
+		}
+		var act []actLeg
+		for _, l := range legs {
+			if !l.Alive || l.Standby || l.Index == 0 {
+				continue
+			}
+			lat := e.adaptLatEWMA[l.TransportID]
+			if lat <= 0 {
+				lat = float64(l.LatencyMs)
+			}
+			if lat <= 0 {
+				lat = adaptLatCeilingMs // unknown → park first
+			}
+			act = append(act, actLeg{l.Index, lat})
+		}
+		sort.Slice(act, func(i, j int) bool { return act[i].lat > act[j].lat })
+		surplus := aliveCount - desiredActive
+		if room := adaptStandbyMax - standbyCount; surplus > room {
+			surplus = room
+		}
+		if surplus > len(act) {
+			surplus = len(act)
+		}
+		if surplus > 0 {
+			demote := make([]int, surplus)
+			for i := 0; i < surplus; i++ {
+				demote[i] = act[i].idx
+			}
+			e.adaptCooldown = adaptReshapeCooldown
+			return RotationAction{DemoteToStandby: demote}
+		}
 	}
 
 	// (4) Grow the active width ONLY on SUSTAINED bulk saturation (multi-tick),
