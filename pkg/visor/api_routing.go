@@ -136,9 +136,10 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 				DstPort: info.Desc.DstPort(),
 				SrcPort: info.Desc.SrcPort(),
 			},
-			MuxEnabled:  info.MuxEnabled,
-			SACKEnabled: info.SACKEnabled,
-			Legs:        make([]MuxLegInfo, 0, len(info.Legs)),
+			MuxEnabled:    info.MuxEnabled,
+			SACKEnabled:   info.SACKEnabled,
+			PerFrameNoise: info.PerFrameNoise,
+			Legs:          make([]MuxLegInfo, 0, len(info.Legs)),
 		}
 		for _, leg := range info.Legs {
 			entry.Legs = append(entry.Legs, MuxLegInfo{
