@@ -1129,6 +1129,8 @@ func (rg *RouteGroup) applyDistribution(cfg DistributionConfig) {
 		wm = WeightModeLatencyAdaptive
 	case DistributionCapacity:
 		wm = WeightModeCapacity
+	case DistributionECF:
+		wm = WeightModeECF
 	case DistributionDSCPPriority:
 		wm = WeightModeDSCPPriority
 		rg.mux.tpSelector.SetDSCPThreshold(cfg.DSCPThreshold)
