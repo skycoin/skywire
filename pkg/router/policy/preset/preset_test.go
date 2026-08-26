@@ -270,6 +270,53 @@ func TestEngine_OnTick_AdaptiveEvictsLowThroughputLeg(t *testing.T) {
 	}
 }
 
+// TestEngine_OnTick_AdaptiveCapsActiveUnderLoad asserts the active set is capped
+// at adaptCap even when the group reads SATURATED. During the uncap fill, legs
+// are born active and route-setup traffic keeps the group saturated — the park
+// must still cap active at adaptCap (parking the slowest excess) so the reorder
+// buffer never spans more than adaptCap legs; only born-active excess is shed,
+// never below adaptCap under load.
+func TestEngine_OnTick_AdaptiveCapsActiveUnderLoad(t *testing.T) {
+	e := seedSaturatedAdaptive(1)
+	const n = 20
+	legs := make([]LegInfo, n)
+	for i := range legs {
+		tid := string(rune('a' + i))
+		var recv uint64
+		if i == 0 {
+			tid = "t0"       // matches seedSaturatedAdaptive's prevRecv key
+			recv = 1_000_000 // fresh delta keeps the group saturated this tick
+		}
+		// distinct latencies: leg i = 20+i*10 ms, so higher index = slower.
+		legs[i] = LegInfo{Index: i, TransportID: tid, Kind: "stcpr", LatencyMs: 20 + i*10, Alive: true, RecvBytes: recv}
+	}
+	act := e.OnTick("adaptive", legs)
+	wantParked := n - adaptCap
+	if len(act.DemoteToStandby) != wantParked {
+		t.Fatalf("under load, active must be capped at adaptCap=%d: want %d parked, got %d: %+v",
+			adaptCap, wantParked, len(act.DemoteToStandby), act)
+	}
+	parked := map[int]bool{}
+	for _, idx := range act.DemoteToStandby {
+		if idx == 0 {
+			t.Fatalf("must never park leg 0; got %+v", act.DemoteToStandby)
+		}
+		parked[idx] = true
+	}
+	// The adaptCap kept-active legs are the fastest (leg 0 + legs 1..adaptCap-1);
+	// the n-adaptCap slowest (highest index) are parked.
+	for i := adaptCap; i < n; i++ {
+		if !parked[i] {
+			t.Errorf("slowest excess legs must be parked to cap active at adaptCap: leg %d (%dms) not parked", i, 20+i*10)
+		}
+	}
+	for i := 1; i < adaptCap; i++ {
+		if parked[i] {
+			t.Errorf("fastest legs must stay active under load: leg %d (%dms) was parked", i, 20+i*10)
+		}
+	}
+}
+
 func TestDecide_TimeOfDay(t *testing.T) {
 	const h = int64(3600) * 1_000_000_000
 	if got := Decide("time-of-day", Context{NowUnixNano: 11 * h}, nil); got.Mux != 1 {
