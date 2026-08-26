@@ -698,23 +698,6 @@ func (m *routeMux) deliverData(seq uint32, data []byte) (delivered [][]byte, gap
 	return delivered, gapDetected
 }
 
-// flushStalledReorder releases a reorder frontier gap that has stalled past
-// reorderTimeout with no arrivals to trigger the in-Insert skip (see
-// reorderBuffer.FlushIfStalled), then advances the SACK tracker to the new
-// contiguous frontier exactly as deliverData does. Returns the released payloads
-// in order (nil when nothing is stalled). A no-op unless the group negotiated
-// per-frame noise (skipCapable), so it is safe to call on every group.
-func (m *routeMux) flushStalledReorder() [][]byte {
-	if m.reorderBuf == nil {
-		return nil
-	}
-	delivered := m.reorderBuf.FlushIfStalled()
-	if len(delivered) > 0 && m.sackEnabled && m.sackTracker != nil {
-		m.sackTracker.AdvanceContiguous(m.reorderBuf.NextSeq())
-	}
-	return delivered
-}
-
 // gapAge exposes the reorder buffer's current frontier-gap age (0 if the stream
 // is contiguous). Used by the route group's fast data-progress prune.
 func (m *routeMux) gapAge() time.Duration {
