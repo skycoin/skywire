@@ -2,7 +2,6 @@
 package router
 
 import (
-	"sort"
 	"sync"
 	"time"
 )
@@ -60,6 +59,18 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 
 	// Buffer out-of-order packet
 	if seq != rb.nextSeq {
+		// Emergency OOM backstop: if the buffer is already at capacity, DROP this
+		// out-of-order packet rather than skip the gap (delivering past the missing
+		// seq corrupts the reliable stream — the bad-record-mac failure). The buffer
+		// stays bounded at maxGap; the dropped seq is re-requested by SACK and
+		// retransmitted, and the real recovery is the leg-dataprogress prune removing
+		// the dead leg so its seqs retransmit on a live one and the frontier drains
+		// IN ORDER. If the gap never fills, keepalive/liveness closes the group
+		// cleanly — a stall, never corruption. maxGap (reorderWindow) is sized to the
+		// aggregate BDP so this is only reached on a genuine mid-stream leg death.
+		if len(rb.buf) >= rb.maxGap {
+			return nil
+		}
 		// Make a copy since the underlying packet buffer may be reused
 		cp := make([]byte, len(data))
 		copy(cp, data)
@@ -96,17 +107,6 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 		// only ever closed by the missing seq actually arriving (skew or retransmit),
 		// never by skipping it.
 
-		// Emergency OOM backstop only: with reliable legs the missing seq arrives
-		// (via skew or SACK retransmit) and drains the buffer, so this never trips
-		// in normal operation. Reaching it means a leg has gone dead mid-stream AND
-		// retransmit has not refilled within maxGap packets. Force-flushing here
-		// still skips the gap (and so corrupts a noise stream) — it is a
-		// last-resort guard against unbounded memory, not a recovery path; the
-		// route group's liveness prune + teardown is the real handler. Do NOT lower
-		// maxGap to "save memory": that reintroduces the mux>1 corruption bug.
-		if len(rb.buf) >= rb.maxGap {
-			return rb.flushAll()
-		}
 		return nil
 	}
 
@@ -148,37 +148,6 @@ func (rb *reorderBuffer) GapAge() time.Duration {
 		return 0
 	}
 	return time.Since(rb.gapSince)
-}
-
-// flushAll delivers all buffered packets in sequence order and resets.
-// Called when the gap exceeds maxGap to prevent unbounded memory growth.
-// The caller must hold rb.mu.
-func (rb *reorderBuffer) flushAll() [][]byte {
-	if len(rb.buf) == 0 {
-		return nil
-	}
-
-	seqs := make([]uint32, 0, len(rb.buf))
-	for seq := range rb.buf {
-		seqs = append(seqs, seq)
-	}
-	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
-
-	delivered := make([][]byte, 0, len(seqs))
-	for _, seq := range seqs {
-		delivered = append(delivered, rb.buf[seq])
-		delete(rb.buf, seq)
-	}
-
-	// Advance nextSeq past all delivered
-	if len(seqs) > 0 {
-		rb.nextSeq = seqs[len(seqs)-1] + 1
-	}
-
-	// Buffer drained — the gap is closed (skipped).
-	rb.gapSince = time.Time{}
-
-	return delivered
 }
 
 // Pending returns the number of packets currently buffered out-of-order.

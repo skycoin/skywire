@@ -190,7 +190,16 @@ type routeMux struct {
 // flushes. A flush at this cap is a last-resort OOM guard for a genuinely
 // stalled/dead leg — which per-leg liveness prunes, after which the peer
 // retransmits that leg's unacked sequences on the surviving legs.
-const reorderWindow = 2048
+// Sized to the aggregate bandwidth-delay-product per the MPTCP receive-buffer
+// requirement B >= 2*sum(BW)*RTT_max: at the ~500 Mbps gigabit target with a
+// ~350 ms slowest-active-leg RTT that is ~46 MB ~= 32Ki packets, so the old 2Ki
+// (~2.8 MB) window was ~16x too small — it collapsed throughput under wide-mux
+// skew and hit the OOM backstop. This is the CAP, not steady occupancy: normal
+// skew buffers only a handful; only a very lagged/dead leg approaches it, and at
+// the cap the buffer now DROPS excess (never skips) while the leg-dataprogress
+// prune + SACK retransmit refill the frontier in order. TODO: make adaptive to
+// the measured RTT_max of the active set instead of a flat gigabit-sized cap.
+const reorderWindow = 32768
 
 // newRouteMux creates a new routeMux instance with all sub-components initialized.
 func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
