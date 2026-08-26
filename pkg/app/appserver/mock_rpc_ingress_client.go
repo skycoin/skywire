@@ -127,9 +127,9 @@ func (_m *MockRPCIngressClient) Dial(remote appnet.Addr) (uint16, routing.Port, 
 	return r0, r1, r2
 }
 
-// DialWithOptions provides a mock function with given fields: remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux
-func (_m *MockRPCIngressClient) DialWithOptions(remote appnet.Addr, muxRoutes int, minHops int, fwdMinHops int, revMinHops int, fwdMux int, revMux int, direct bool) (uint16, routing.Port, error) {
-	ret := _m.Called(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
+// DialWithOptions provides a mock function with given fields: remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, diversify
+func (_m *MockRPCIngressClient) DialWithOptions(remote appnet.Addr, muxRoutes int, minHops int, fwdMinHops int, revMinHops int, fwdMux int, revMux int, direct bool, diversify bool) (uint16, routing.Port, error) {
+	ret := _m.Called(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, diversify)
 
 	if len(ret) == 0 {
 		panic("no return value specified for DialWithOptions")
@@ -138,23 +138,23 @@ func (_m *MockRPCIngressClient) DialWithOptions(remote appnet.Addr, muxRoutes in
 	var r0 uint16
 	var r1 routing.Port
 	var r2 error
-	if rf, ok := ret.Get(0).(func(appnet.Addr, int, int, int, int, int, int, bool) (uint16, routing.Port, error)); ok {
-		return rf(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
+	if rf, ok := ret.Get(0).(func(appnet.Addr, int, int, int, int, int, int, bool, bool) (uint16, routing.Port, error)); ok {
+		return rf(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, diversify)
 	}
-	if rf, ok := ret.Get(0).(func(appnet.Addr, int, int, int, int, int, int, bool) uint16); ok {
-		r0 = rf(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
+	if rf, ok := ret.Get(0).(func(appnet.Addr, int, int, int, int, int, int, bool, bool) uint16); ok {
+		r0 = rf(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, diversify)
 	} else {
 		r0 = ret.Get(0).(uint16)
 	}
 
-	if rf, ok := ret.Get(1).(func(appnet.Addr, int, int, int, int, int, int, bool) routing.Port); ok {
-		r1 = rf(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
+	if rf, ok := ret.Get(1).(func(appnet.Addr, int, int, int, int, int, int, bool, bool) routing.Port); ok {
+		r1 = rf(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, diversify)
 	} else {
 		r1 = ret.Get(1).(routing.Port)
 	}
 
-	if rf, ok := ret.Get(2).(func(appnet.Addr, int, int, int, int, int, int, bool) error); ok {
-		r2 = rf(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
+	if rf, ok := ret.Get(2).(func(appnet.Addr, int, int, int, int, int, int, bool, bool) error); ok {
+		r2 = rf(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, diversify)
 	} else {
 		r2 = ret.Error(2)
 	}
