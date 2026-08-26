@@ -38,6 +38,22 @@ type reorderBuffer struct {
 	// and stopped delivering, and flushing (lossy) is preferable to stalling
 	// the stream forever while liveness prunes that leg.
 	maxGap int
+
+	// skipCapable is set when the group negotiated per-frame noise. Each mux
+	// DATA frame is then an INDEPENDENT AEAD unit (sealed under its sequence), so
+	// delivering PAST a missing sequence no longer desyncs any cipher — the whole
+	// reason the no-skip rule existed. With it set, a frontier gap that stays open
+	// past reorderTimeout (a leg genuinely stuck, SACK not yet refilled) is
+	// RELEASED (delivered lossy-but-moving) instead of held, and the OOM
+	// force-flush becomes a clean skip rather than a cipher-corrupting one.
+	skipCapable bool
+}
+
+// SetSkipCapable enables/disables the per-frame-noise skip path (see skipCapable).
+func (rb *reorderBuffer) SetSkipCapable(v bool) {
+	rb.mu.Lock()
+	rb.skipCapable = v
+	rb.mu.Unlock()
 }
 
 func newReorderBuffer(maxGap int) *reorderBuffer {
@@ -86,7 +102,15 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 		// intact. A leg that stays dead is removed by leg-liveness pruning, after
 		// which its unacked seqs are retransmitted on the survivors. reorderTimeout
 		// is retained as the stall threshold for that diagnostics/prune path.
-		_ = reorderTimeout
+		// Per-frame noise: each frame is its own AEAD unit, so releasing a gap no
+		// longer desyncs a cipher. A frontier gap held past reorderTimeout means a
+		// leg is stuck and SACK has not refilled in time; release it (lossy but
+		// moving) rather than hold. In normal operation SACK retransmit refills the
+		// gap well within reorderTimeout, so this only fires on a genuinely stuck
+		// leg — exactly the case that used to wedge a stream-noise mux at 0 goodput.
+		if rb.skipCapable && !rb.gapSince.IsZero() && time.Since(rb.gapSince) > reorderTimeout {
+			return rb.flushAll()
+		}
 
 		// Emergency OOM backstop only: with reliable legs the missing seq arrives
 		// (via skew or SACK retransmit) and drains the buffer, so this never trips
