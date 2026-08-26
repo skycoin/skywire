@@ -326,7 +326,7 @@ func (r *router) DialRoutes(
 				}
 				nrg, rules, winIdx, rerr := r.raceCandidateSetup(ctx, log, candidates, dial, handshake, onLoser)
 				if rerr == nil {
-					return r.finishDial(ctx, log, nrg, rules, candidates[winIdx].Forward, forwardDesc, opts, rPK, lPort, rPort), nil
+					return r.finishDial(log, nrg, rules, candidates[winIdx].Forward, forwardDesc, opts, rPK, lPort, rPort), nil
 				}
 				if ctx.Err() != nil {
 					return nil, ctx.Err()
@@ -570,7 +570,7 @@ func (r *router) DialRoutes(
 
 		// The route group is up: this is the working base. Wire mux
 		// growth / self-heal / hooks on top and return.
-		return r.finishDial(ctx, log, nrg, rules, forwardPath, forwardDesc, opts, rPK, lPort, rPort), nil
+		return r.finishDial(log, nrg, rules, forwardPath, forwardDesc, opts, rPK, lPort, rPort), nil
 	}
 
 	// Should never reach here, but handle it gracefully
@@ -585,7 +585,6 @@ func (r *router) DialRoutes(
 // self-heal hooks. Shared by the sequential setup path and the parallel race
 // winner so both converge to identical post-setup behavior.
 func (r *router) finishDial(
-	ctx context.Context,
 	log *logging.Logger,
 	nrg *NoiseRouteGroup,
 	rules routing.EdgeRules,
@@ -602,23 +601,14 @@ func (r *router) finishDial(
 
 	log.Debugf("Created new routes to %s on port %d", rPK, lPort)
 
-	// Establish additional mux routes if requested
-	r.establishMuxRoutes(ctx, nrg, opts, forwardDesc, rules.Forward.NextTransportID())
-
-	// Apply per-dial distribution policy (from a routing-
-	// policy script via DialAdjustment.Distribution, or a
-	// CLI caller populating DialOptions.Distribution
-	// directly). No-op when Mode is DistributionUnset.
-	// Must run AFTER establishMuxRoutes so the selector's
-	// rebuild sees every leg, not just the primary.
-	nrg.rg.applyDistribution(opts.Distribution)
-
 	// Wire the post-setup leg-change hook (RFC #2882 phase 6).
 	// The dial-side DialHook may also implement LegChangeHook;
 	// when it does, the route group fires on_leg_change
 	// callbacks whenever its leg set mutates after this point
 	// (additional aux legs from appendRouteToGroup, or
-	// transport-close pruning).
+	// transport-close pruning). This just installs a callback; wire
+	// it before spawning the async leg establishment so legs that
+	// come up in the background already fire the hook.
 	if lch, ok := r.effectiveDialHook(rPort).(LegChangeHook); ok && lch != nil {
 		nrg.rg.SetLegChangeHook(lch, DialInfo{
 			AppName: opts.AppName,
@@ -670,9 +660,13 @@ func (r *router) finishDial(
 		muxTarget = 1
 	}
 	if muxTarget > 1 {
+		// Capture everything the async establishment needs into locals so the
+		// goroutine never races the dial return: a COPY of opts, the route
+		// descriptor, the route group, and the primary transport id.
 		optsCopy := *opts
 		fwdDescCopy := forwardDesc
 		nrgCapture := nrg
+		primaryTpID := rules.Forward.NextTransportID()
 		applyAdd := func(excludeHops []string) {
 			addCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -690,17 +684,14 @@ func (r *router) finishDial(
 		// Self-healing: any leg death triggers a background replacement
 		// dial to restore the requested degree, while surviving legs
 		// carry the traffic. General to every mux dial, not just ones
-		// with a rotation policy.
+		// with a rotation policy. This only installs the callback (no
+		// dialing) — wire it before the async establishment below so the
+		// machinery is ready as legs appear.
 		nrg.rg.SetSelfHeal(applyAdd, muxTarget)
 
-		// Top up an initial shortfall: establishMuxRoutes sets up aux
-		// legs best-effort, so a flaky intermediate can leave the group
-		// below the requested degree at dial time. Heal it now in the
-		// background (same mechanism as runtime leg death) — the dial
-		// still returns immediately on the legs that did establish.
-		nrg.rg.maybeSelfHeal()
-
 		// Periodic rotation (policy on_tick) reuses the same callback.
+		// Like SetSelfHeal, this only installs a callback / starts the
+		// rotation ticker — no dialing — so it stays synchronous.
 		if rh, ok := r.effectiveDialHook(rPort).(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
 			interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
 			// Forward-only add-leg callback: the adaptive preset's AddForwardLeg
@@ -724,6 +715,37 @@ func (r *router) finishDial(
 			}
 			nrg.rg.SetRotation(rh, applyAdd, applyAddForward, interval)
 		}
+
+		// SLOW part: establishing the foreground mux legs plans each aux
+		// leg through the route-finder, which can block for tens of seconds
+		// when the RF times out. Run it in the background so Dial returns as
+		// soon as the primary route + route group are up — the app serves on
+		// the primary immediately and the mux legs fill in behind it. Use a
+		// fresh background context: the dial's ctx may be canceled once Dial
+		// returns, which would abort the establishment mid-flight.
+		go func() {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+
+			r.establishMuxRoutes(bgCtx, nrgCapture, &optsCopy, fwdDescCopy, primaryTpID)
+
+			// Apply per-dial distribution policy AFTER establishMuxRoutes so
+			// the selector's rebuild sees every leg, not just the primary.
+			// (appendForwardLeg also rebuilds weights on each add, so weights
+			// refresh as legs come up regardless; this preserves the ordering
+			// to be safe.) No-op when Distribution.Mode is DistributionUnset.
+			nrgCapture.rg.applyDistribution(optsCopy.Distribution)
+
+			// Top up an initial shortfall: establishMuxRoutes sets up aux
+			// legs best-effort, so a flaky intermediate can leave the group
+			// below the requested degree. Heal it now (same mechanism as
+			// runtime leg death). Runs after the callbacks were wired above.
+			nrgCapture.rg.maybeSelfHeal()
+		}()
+	} else {
+		// No mux: establishMuxRoutes would be a no-op (maxCount <= 1), so
+		// just apply the per-dial distribution policy synchronously.
+		nrg.rg.applyDistribution(opts.Distribution)
 	}
 
 	// NOTE: no MinHops restore needed — baseMinHops is a local var now,
