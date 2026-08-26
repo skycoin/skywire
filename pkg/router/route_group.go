@@ -2053,11 +2053,26 @@ func (rg *RouteGroup) nextPerFrameNoiseMsg() ([]byte, error) {
 		return rg.perFrameNoiseMsg, nil
 	}
 	if rg.ns == nil {
+		// Only the KK INITIATOR opens the session here (it writes msg1 first).
+		// A responder must READ the initiator's msg1 before it can write msg2 —
+		// that happens in handlePacket, which creates the session. Until then a
+		// responder has nothing to piggyback, so return no message rather than
+		// call MakeHandshakeMessage out of turn (which the noise state machine
+		// rejects: "unexpected call to WriteMessage should be ReadMessage").
+		if !rg.nsConf.Initiator {
+			return nil, nil
+		}
 		ns, err := noise.New(noise.HandshakeKK, rg.nsConf)
 		if err != nil {
 			return nil, err
 		}
 		rg.ns = ns
+	}
+	// Never write out of turn: only produce a message when the noise pattern says
+	// it is ours to write. A resend of an already-produced message returns the
+	// cached bytes above, so this only gates the FIRST production of each message.
+	if !rg.ns.WriterTurn() {
+		return nil, nil
 	}
 	msg, err := rg.ns.MakeHandshakeMessage()
 	if err != nil {
@@ -2122,7 +2137,18 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 				// advertise a capability we can't honor.
 				return fmt.Errorf("per-frame noise handshake message: %w", mErr)
 			}
-			packet = routing.MakeHandshakePacketWithNoise(rule.NextRouteID(), encrypt, caps|pfn, msg)
+			if msg != nil {
+				packet = routing.MakeHandshakePacketWithNoise(rule.NextRouteID(), encrypt, caps|pfn, msg)
+			} else {
+				// No per-frame message to carry yet (responder that has not read
+				// the initiator's msg1). Send a plain handshake WITHOUT the
+				// CapPerFrameNoise bit this round — advertising it without a
+				// message would make the peer try to open a nil handshake. The
+				// responder emits msg2 (with the cap) from handlePacket once it
+				// has processed the forward handshake; the initiator retransmits
+				// until then.
+				packet = routing.MakeHandshakePacket(rule.NextRouteID(), encrypt, caps)
+			}
 		} else {
 			packet = routing.MakeHandshakePacket(rule.NextRouteID(), encrypt, caps)
 		}
