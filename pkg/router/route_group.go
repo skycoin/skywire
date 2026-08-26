@@ -172,6 +172,12 @@ type RouteGroup struct {
 	remoteClosedOnce sync.Once
 	remoteClosed     chan struct{}
 	closed           chan struct{}
+	// rotateNow signals the rotation service loop to run its on_tick controller
+	// IMMEDIATELY, out of band from the periodic interval — fired on a leg death
+	// so a warm standby is promoted the instant an active leg is lost, instead of
+	// waiting up to a full rotation interval. Buffered (1) and sent non-blocking,
+	// so a death during an in-progress tick just coalesces into one extra run.
+	rotateNow chan struct{}
 	// used to wait for all the `Close` packets to run through the loop and come back.
 	// Atomic counter + channel instead of sync.WaitGroup to avoid
 	// "WaitGroup reused before previous Wait returned" panics.
@@ -278,6 +284,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		readBuf:            bytes.Buffer{},
 		remoteClosed:       make(chan struct{}),
 		closed:             make(chan struct{}),
+		rotateNow:          make(chan struct{}, 1),
 		readDeadline:       deadline.MakePipeDeadline(),
 		writeDeadline:      deadline.MakePipeDeadline(),
 		handshakeProcessed: make(chan struct{}),
@@ -771,7 +778,7 @@ func (rg *RouteGroup) SetRotation(hook RotationHook, applyAdd, applyAddForward f
 	// startOffServiceLoops' loops do — a Close() racing with
 	// SetRotation just terminates the loop immediately.
 	if interval > 0 && hook != nil {
-		go rg.servicePacketLoop("rotation", interval, rg.rotationServiceFn)
+		go rg.servicePacketLoop("rotation", interval, rg.rotationServiceFn, rg.rotateNow)
 	}
 }
 
@@ -808,6 +815,20 @@ func (rg *RouteGroup) aliveLegCount() int {
 // setup node for the full uncapped target). A later leg death or newly-online
 // transport re-triggers the heal, so this is a backoff, not a cap.
 const selfHealNoProgressLimit = 4
+
+// signalRotate wakes the rotation loop to run its on_tick controller NOW, out of
+// band from the periodic interval — called on a leg death so drop-recovery
+// promotes a warm standby into the active set immediately instead of on the next
+// interval. Non-blocking (buffered-1 + default): a death during an in-progress
+// tick coalesces into a single extra run, and a nil channel (a route group built
+// without rotation) is a no-op. The selector's emergency standby fallback keeps
+// traffic flowing in the meantime; this restores a proper active set right after.
+func (rg *RouteGroup) signalRotate() {
+	select {
+	case rg.rotateNow <- struct{}{}:
+	default:
+	}
+}
 
 // maybeSelfHeal restores the multiplexed degree after a leg drop. If the live
 // leg count fell below target and no replacement is already in flight, it
@@ -1249,17 +1270,17 @@ func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
 }
 
 func (rg *RouteGroup) startOffServiceLoops() {
-	go rg.servicePacketLoop("keep-alive", rg.cfg.KeepAliveInterval, rg.keepAliveServiceFn)
+	go rg.servicePacketLoop("keep-alive", rg.cfg.KeepAliveInterval, rg.keepAliveServiceFn, nil)
 	// Per-leg end-to-end liveness (issue #2): detect mux legs that black-hole
 	// BEYOND the first hop (invisible to pruneDeadTransports' local tp.IsClosed
 	// check) and drop them so self-heal re-dials a live replacement.
-	go rg.servicePacketLoop("leg-liveness", legLivenessInterval, rg.legLivenessServiceFn)
+	go rg.servicePacketLoop("leg-liveness", legLivenessInterval, rg.legLivenessServiceFn, nil)
 	// Fast data-progress prune: catch a leg that black-holes bulk DATA (while
 	// still echoing the tiny liveness ping, so the pong-miss path above never
 	// sees it) in seconds, by watching per-leg recv progress against an open
 	// reorder gap. Restores mux throughput to the reliable legs' rate instead of
 	// limping at the fragile leg's retransmit tax.
-	go rg.servicePacketLoop("leg-dataprogress", legDataProgressInterval, rg.legDataProgressServiceFn)
+	go rg.servicePacketLoop("leg-dataprogress", legDataProgressInterval, rg.legDataProgressServiceFn, nil)
 	// Note: Automatic ping loop removed. Latency is now measured once at transport creation.
 	// Rotation loop is NOT started here — startOffServiceLoops runs
 	// during initial route-group setup, before the router-side
@@ -1397,6 +1418,7 @@ func (rg *RouteGroup) dropLegsByIndex(indices []int) {
 		rg.fireLegChange("dropped", idx)
 	}
 	if len(droppedIdx) > 0 {
+		rg.signalRotate()
 		rg.maybeSelfHeal()
 	}
 	if rg.logger != nil && len(closed) > 0 {
@@ -1746,10 +1768,17 @@ func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
 	for _, idx := range droppedIdx {
 		rg.fireLegChange("liveness-dead", idx)
 	}
+	rg.signalRotate()
 	rg.maybeSelfHeal()
 }
 
-func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f sendServicePacketFn) {
+// servicePacketLoop runs f every interval until the group closes. trigger, when
+// non-nil, is an out-of-band wake channel: a receive on it runs f immediately
+// (in addition to the periodic tick) — used by the rotation loop so a leg death
+// promotes a warm standby at once rather than on the next interval. Pass nil for
+// loops that only need the periodic cadence (a nil channel never fires in the
+// select, so those loops are unchanged).
+func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f sendServicePacketFn, trigger <-chan struct{}) {
 	if interval <= 0 {
 		// No keep-alive — routes persist indefinitely. Just wait for close.
 		select {
@@ -1770,6 +1799,8 @@ func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f s
 			rg.logger.Debugf("RouteGroup closed, stopping %s loop", name)
 			return
 		case <-ticker.C:
+			f(interval)
+		case <-trigger:
 			f(interval)
 		}
 	}
@@ -1812,6 +1843,7 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 		rg.fireLegChange("dropped", idx)
 	}
 	if len(droppedLegs) > 0 {
+		rg.signalRotate()
 		rg.maybeSelfHeal()
 	}
 }
@@ -2153,7 +2185,7 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 				rg.logger.Debug("Route multiplexing enabled (both peers support CapMux)")
 				if sack {
 					rg.logger.Debug("SACK retransmission enabled (both peers support CapSACK)")
-					go rg.servicePacketLoop("sack", rg.cfg.KeepAliveInterval/2, rg.sackServiceFn)
+					go rg.servicePacketLoop("sack", rg.cfg.KeepAliveInterval/2, rg.sackServiceFn, nil)
 				}
 			}
 
