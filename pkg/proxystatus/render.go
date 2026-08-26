@@ -760,7 +760,10 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	// so a wide full-PK route set shows whole without a "little" scroll box; the
 	// centered body constrains everything else. overflow-x stays only as a safety
 	// for a set wider than the whole viewport.
-	`.tree{margin:.7rem 0;width:100vw;margin-left:calc(50% - 50vw);padding:0 1rem;overflow-x:auto;overflow-y:hidden}` +
+	// text-align:center centers the inline-block <pre> within the full-bleed
+	// container so a normal-width tree sits in the middle of the page; the pre
+	// keeps its own text-align:left so the box-drawing branches still line up.
+	`.tree{margin:.7rem 0;width:100vw;margin-left:calc(50% - 50vw);padding:0 1rem;overflow-x:auto;overflow-y:hidden;text-align:center}` +
 	// The route tree is one <pre class="bitree"> of monospace text laid out by
 	// pkg/bitree; every cell decorated by htmlStyleCell must keep the SAME font
 	// metrics or the aligned columns skew, so all inner code/span inherit the
@@ -775,7 +778,7 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	// drawing perfectly), so text AND glyphs share one set of metrics and connect.
 	// line-height:1 + letter-spacing:0 keep the vertical │ runs and horizontal ──
 	// runs continuous.
-	`pre.bitree{font-family:'DejaVu Sans Mono','Liberation Mono','Noto Sans Mono',ui-monospace,'Cascadia Mono','Segoe UI Mono',Menlo,Consolas,'Courier New',monospace;font-size:11.5px;line-height:1;letter-spacing:0;margin:0;white-space:pre;color:var(--fg)}` +
+	`pre.bitree{display:inline-block;text-align:left;font-family:'DejaVu Sans Mono','Liberation Mono','Noto Sans Mono',ui-monospace,'Cascadia Mono','Segoe UI Mono',Menlo,Consolas,'Courier New',monospace;font-size:11.5px;line-height:1;letter-spacing:0;margin:0 auto;white-space:pre;color:var(--fg)}` +
 	`pre.bitree code,pre.bitree span{font:inherit;color:inherit;line-height:1;letter-spacing:0;white-space:pre;word-break:normal;background:none;border:0;padding:0}` +
 	`pre.bitree code.fpk{color:var(--fg)}pre.bitree .src code.fpk{color:var(--accent);font-weight:600}` +
 	`pre.bitree code.ftid{color:var(--muted)}pre.bitree .tcol{color:var(--muted)}` +
