@@ -50,6 +50,7 @@ var (
 	reconnectDelay int64
 	direct         bool
 	dmsgFallback   bool
+	tunnels        int64
 )
 
 func init() {
@@ -71,6 +72,10 @@ func init() {
 	RootCmd.Flags().Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between in-process reconnect attempts")
 	RootCmd.Flags().BoolVar(&direct, "direct", false, "force a direct-transport-only route to the server (create the transport on demand, dial 1-hop, bypass the route-finder + setup node); self-heals when the server restarts")
 	RootCmd.Flags().BoolVar(&dmsgFallback, "dmsg-fallback", false, "if the skynet (route) dial to the server fails, fall back to a direct dmsg stream (opt-in: dmsg relays via a dmsg server — higher latency + the server sees both endpoint PKs)")
+	// N independent tunnels (route group + noise + yamux each); browser conns are
+	// striped across them by the least-loaded policy so throughput sums. Default 1
+	// == the single-tunnel pre-aggregation behavior. See docs/mux_aggregation_rfc.md.
+	RootCmd.Flags().Int64Var(&tunnels, "tunnels", 1, "number of independent tunnels to stripe connections across (1 = today's behavior; >1 aggregates ONLY over disjoint routes — see --help)")
 }
 
 // RootCmd is the root command for skysocks
@@ -106,6 +111,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		fs.Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between reconnect attempts")
 		fs.BoolVar(&direct, "direct", false, "force a direct-transport-only route to the server (1-hop, bypass the route-finder + setup node); self-heals on server restart")
 		fs.BoolVar(&dmsgFallback, "dmsg-fallback", false, "fall back to a direct dmsg stream if the skynet dial fails")
+		fs.Int64Var(&tunnels, "tunnels", 1, "number of independent tunnels to stripe connections across")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -198,15 +204,39 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		}
 
 		conn, err := dialServer(cycleCtx, appCl, pk, serverPort)
+		if err != nil {
+			// Stop the disconnected listener and wait for it to release :1080.
+			dcancel()
+			<-ddone
+			return fmt.Errorf("dial server: %w", err)
+		}
+		conns := []net.Conn{conn}
+		// Dial the additional tunnels. Each is an independent route group +
+		// noise + yamux; the client stripes browser conns across them. A tunnel
+		// that fails to dial is skipped (degrade to fewer tunnels) rather than
+		// failing the whole cycle. IMPORTANT: dialServer has NO transport /
+		// intermediate exclusion yet, so these dials may land on the SAME path —
+		// same first-hop transport means they SPLIT one link, not sum it, so this
+		// is plumbing, not real aggregation. Per-tunnel first-hop-transport
+		// exclusion (disjoint-tunnel dial coordination) is the REQUIRED follow-up
+		// before aggregation is real — see docs/mux_aggregation_rfc.md step 3.
+		for i := int64(1); i < tunnels; i++ {
+			extra, derr := dialServer(cycleCtx, appCl, pk, serverPort)
+			if derr != nil {
+				log.WithError(derr).Warnf("tunnel %d/%d dial failed; continuing with %d tunnel(s)", i+1, tunnels, len(conns))
+				continue
+			}
+			conns = append(conns, extra)
+		}
 		// Stop the disconnected listener and wait for it to release :1080 before the
 		// live Client rebinds the same addr.
 		dcancel()
 		<-ddone
-		if err != nil {
-			return fmt.Errorf("dial server: %w", err)
-		}
 		log.Infof("Connected to %v", pk)
-		client, err := skysocks.NewClient(conn, appCl)
+		if len(conns) > 1 {
+			log.Warnf("skysocks-client: %d tunnels dialed, but disjoint-path coordination is NOT implemented — tunnels may share the same first-hop transport (split, not sum: no real aggregation). Follow-up: per-tunnel transport/intermediate exclusion, docs/mux_aggregation_rfc.md step 3.", len(conns))
+		}
+		client, err := skysocks.NewMultiClient(conns, appCl)
 		if err != nil {
 			return fmt.Errorf("new client: %w", err)
 		}
