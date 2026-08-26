@@ -121,6 +121,7 @@ var (
 	muxRoutes          int
 	muxMode            string
 	minHops            uint16
+	startTunnels       int
 	startVerbose       bool
 	startVerboseLevel  string
 	reconnect          bool
