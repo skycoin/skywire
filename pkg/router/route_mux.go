@@ -55,6 +55,12 @@ const (
 	// observers refreshing closer than this reuse the stored rate rather than
 	// dividing a tiny byte delta by a tiny interval into a spurious spike.
 	goodputMinSampleNano = int64(250 * time.Millisecond)
+	// capacityColdFloorFrac is the floor share a just-promoted active leg gets
+	// under WeightModeCapacity, as a fraction of the fastest active leg's weight.
+	// Big enough that a fresh leg carries a measurable trickle to prove its
+	// goodput and ramp; small enough that a persistently slow leg stays near it
+	// and can't open a large reorder gap. See rebuildWeights.
+	capacityColdFloorFrac = 0.15
 )
 
 type legCounters struct {
@@ -769,6 +775,7 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 	if m.tpSelector.Mode() == WeightModeCapacity {
 		m.legMu.Lock()
 		weights := make([]float64, len(m.legs))
+		var maxW float64
 		for i, lc := range m.legs {
 			if lc == nil {
 				continue
@@ -776,7 +783,39 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 			total := atomic.LoadUint64(&lc.sentBytes) + atomic.LoadUint64(&lc.recvBytes)
 			delta := total - lc.lastTotalBytes
 			lc.lastTotalBytes = total
+			// A warm-standby leg carries no send traffic — it must get zero
+			// weight so the scheduler never steers a packet onto a parked leg
+			// (which the receiver isn't expecting on that route and would stall
+			// the reorder frontier on). Keep sampling its byte counter above so a
+			// later promotion starts from a fresh delta, not a stale backlog.
+			if i < len(m.standby) && m.standby[i] {
+				weights[i] = 0
+				continue
+			}
 			weights[i] = float64(delta)
+			if weights[i] > maxW {
+				maxW = weights[i]
+			}
+		}
+		// Cold-leg floor (the weighted-RAMP): a just-promoted active leg has moved
+		// ~no bytes yet, so its raw delta is ~0 — under pure capacity weighting it
+		// would get ~no traffic and thus never accumulate the goodput it needs to
+		// earn a real share (a starvation deadlock). Give every active, non-standby
+		// leg a floor share = capacityColdFloorFrac of the fastest active leg, so a
+		// fresh leg carries a THIN trickle, measures its goodput, and ramps up as
+		// its delta grows — while a genuinely slow leg stays near the floor and can
+		// never open a big reorder gap. Skipped when the whole group is idle
+		// (maxW == 0) so an idle mux doesn't manufacture phantom weight.
+		if maxW > 0 {
+			floor := maxW * capacityColdFloorFrac
+			for i, lc := range m.legs {
+				if lc == nil || (i < len(m.standby) && m.standby[i]) {
+					continue
+				}
+				if weights[i] < floor {
+					weights[i] = floor
+				}
+			}
 		}
 		m.legMu.Unlock()
 		m.tpSelector.SetCapacityWeights(weights)

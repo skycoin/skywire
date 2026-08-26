@@ -1703,6 +1703,17 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 			len(dead), legDataProgressInterval, aggDelta, rg.mux.gapAge())
 		rg.pruneLivenessDeadLegs(dead)
 	}
+
+	// Refresh transport-selection weights on this fast cadence so
+	// WeightModeCapacity tracks RECENT goodput within seconds instead of the
+	// ~5min keep-alive cadence — essential for the weighted-ramp (a promoted leg
+	// earns its share within a few ticks, a fading leg loses it just as fast).
+	// Cheap: a per-leg byte-delta under the mux lock plus a selector rebuild.
+	rg.mu.Lock()
+	if rg.mux != nil && len(rg.tps) > 1 {
+		rg.mux.rebuildWeights(rg.tps)
+	}
+	rg.mu.Unlock()
 }
 
 // legRecvDelta is one active-or-standby leg's rg-scoped recv progress over a

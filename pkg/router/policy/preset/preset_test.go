@@ -17,12 +17,12 @@ func TestDecide_ShapePresets(t *testing.T) {
 		{"rotating-bw", Context{App: "skysocks-client"}, Spec{Mux: 5, MinHops: 2, RotationIntervalSeconds: 90, Distribution: "round-robin"}},
 		{"rotating-bw/chat", Context{App: "skychat"}, Spec{Mux: 1}},
 		{"latency-adaptive", Context{App: "vpn-client"}, Spec{Mux: 5, MinHops: 2, RotationIntervalSeconds: 30, Distribution: "auto"}},
-		{"elastic-mux", Context{App: "skynet-client"}, Spec{Mux: 2, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "auto"}},
+		{"elastic-mux", Context{App: "skynet-client"}, Spec{Mux: 2, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "capacity"}},
 		{"probe-and-prune", Context{App: "skynet-client"}, Spec{Mux: 3, MinHops: 2, RotationIntervalSeconds: 30, Distribution: "auto"}},
-		{"adaptive", Context{App: "vpn-client"}, Spec{Mux: adaptRevActive + adaptStandbyMax, RotationIntervalSeconds: 20, Distribution: "auto"}},
+		{"adaptive", Context{App: "vpn-client"}, Spec{Mux: AdaptRevActive() + adaptStandbyMax, RotationIntervalSeconds: 20, Distribution: "capacity"}},
 		{"adaptive/chat", Context{App: "skychat"}, Spec{Mux: 1}},
-		{"adaptive/custom-session", Context{App: "g8"}, Spec{Mux: adaptRevActive + adaptStandbyMax, RotationIntervalSeconds: 20, Distribution: "auto"}},
-		{"ledbat", Context{App: "skysocks-client"}, Spec{Mux: 3, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "auto"}},
+		{"adaptive/custom-session", Context{App: "g8"}, Spec{Mux: AdaptRevActive() + adaptStandbyMax, RotationIntervalSeconds: 20, Distribution: "capacity"}},
+		{"ledbat", Context{App: "skysocks-client"}, Spec{Mux: 3, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "capacity"}},
 		{"ledbat/chat", Context{App: "skychat"}, Spec{Mux: 1}},
 	}
 	for _, tc := range cases {
@@ -80,7 +80,7 @@ func TestDecide_Adaptive(t *testing.T) {
 	if got.Chosen == nil || got.Chosen.Hops[0] != "b" {
 		t.Fatalf("adaptive should seed the most transport-diverse route (b); got %+v", got.Chosen)
 	}
-	if got.Mux != adaptRevActive+adaptStandbyMax || got.ForwardMux != 0 || got.ReverseMux != 0 ||
+	if got.Mux != AdaptRevActive()+adaptStandbyMax || got.ForwardMux != 0 || got.ReverseMux != 0 ||
 		got.RotationIntervalSeconds != 20 || got.Distribution != "auto" ||
 		got.MinHops != 0 {
 		t.Errorf("adaptive seed shape changed: %+v", got)
@@ -119,7 +119,7 @@ func TestDecide_Adaptive(t *testing.T) {
 	// App-agnostic: an unknown / custom-named session still gets the adaptive
 	// bidirectional mux (not the empty spec) — the fix must apply to EVERY app that
 	// dials a route group, not a hardcoded allowlist.
-	if got := Decide("adaptive", Context{App: "some-custom-app"}, nil); got.Mux != adaptRevActive+adaptStandbyMax || got.ForwardMux != 0 || got.ReverseMux != 0 {
+	if got := Decide("adaptive", Context{App: "some-custom-app"}, nil); got.Mux != AdaptRevActive()+adaptStandbyMax || got.ForwardMux != 0 || got.ReverseMux != 0 {
 		t.Errorf("adaptive must apply to any non-chat app; got %+v", got)
 	}
 }
@@ -128,24 +128,24 @@ func TestDecide_Adaptive(t *testing.T) {
 // PROACTIVELY parks the surplus reverse legs as warm standby (down to the
 // steady active target) instead of waiting for an idle signal, and never parks
 // leg 0 (the primary / forward leg the router refuses to demote). The decide
-// seeds adaptRevActive+adaptStandbyMax reverse legs; the router brings them up
+// seeds AdaptRevActive()+adaptStandbyMax reverse legs; the router brings them up
 // active; the first ticks must demote the newest surplus legs to standby.
 func TestEngine_OnTick_AdaptiveHoldsWarmStandby(t *testing.T) {
 	e := New()
-	// adaptRevActive+adaptStandbyMax legs all active (as the router first
+	// AdaptRevActive()+adaptStandbyMax legs all active (as the router first
 	// establishes them — every leg is born active). Steady active target =
-	// adaptRevActive.
-	total := adaptRevActive + adaptStandbyMax
+	// AdaptRevActive().
+	total := AdaptRevActive() + adaptStandbyMax
 	legs := make([]LegInfo, total)
 	for i := range legs {
 		legs[i] = LegInfo{Index: i, TransportID: string(rune('a' + i)), Kind: "stcpr", LatencyMs: 40, Alive: true}
 	}
 
-	// ONE tick parks the WHOLE surplus (total-adaptRevActive legs) at once — the
+	// ONE tick parks the WHOLE surplus (total-AdaptRevActive() legs) at once — the
 	// bulk fast-converge that stops a wide uncapped mux from lingering as a
 	// head-of-line-stalling active set. Leg 0 (primary) is never parked.
 	act := e.OnTick("adaptive", legs)
-	wantParked := total - adaptRevActive
+	wantParked := total - AdaptRevActive()
 	if len(act.DemoteToStandby) != wantParked {
 		t.Fatalf("expected a bulk park of %d surplus legs in one tick, got %d: %+v",
 			wantParked, len(act.DemoteToStandby), act)
@@ -165,7 +165,7 @@ func TestEngine_OnTick_AdaptiveHoldsWarmStandby(t *testing.T) {
 		t.Fatalf("expected %d distinct parked legs, got %d", wantParked, len(parked))
 	}
 
-	// Steady state: adaptRevActive active + adaptStandbyMax standby → no further
+	// Steady state: AdaptRevActive() active + adaptStandbyMax standby → no further
 	// structural change (no dip, no churn).
 	if act := e.OnTick("adaptive", legs); !reflect.DeepEqual(act, RotationAction{}) {
 		t.Errorf("at steady active target the adaptive tick must be a no-op; got %+v", act)
@@ -322,12 +322,18 @@ func TestEngine_OnTick_AdaptiveSwapsBadPrimary(t *testing.T) {
 }
 
 // TestEngine_OnTick_AdaptiveCapsActiveUnderLoad asserts the active set is capped
-// at adaptCap even when the group reads SATURATED. During the uncap fill, legs
+// at AdaptCap() even when the group reads SATURATED. During the uncap fill, legs
 // are born active and route-setup traffic keeps the group saturated — the park
-// must still cap active at adaptCap (parking the slowest excess) so the reorder
-// buffer never spans more than adaptCap legs; only born-active excess is shed,
-// never below adaptCap under load.
+// must still cap active at AdaptCap() (parking the slowest excess) so the reorder
+// buffer never spans more than AdaptCap() legs; only born-active excess is shed,
+// never below AdaptCap() under load.
 func TestEngine_OnTick_AdaptiveCapsActiveUnderLoad(t *testing.T) {
+	// Pin the runtime-tunable cap to 8 so this test exercises the capping logic
+	// deterministically regardless of the shipped default (which is now 60).
+	restoreCap := AdaptCap()
+	SetAdaptCap(8)
+	defer SetAdaptCap(restoreCap)
+
 	e := seedSaturatedAdaptive(1)
 	const n = 20
 	legs := make([]LegInfo, n)
@@ -342,10 +348,10 @@ func TestEngine_OnTick_AdaptiveCapsActiveUnderLoad(t *testing.T) {
 		legs[i] = LegInfo{Index: i, TransportID: tid, Kind: "stcpr", LatencyMs: 20 + i*10, Alive: true, RecvBytes: recv}
 	}
 	act := e.OnTick("adaptive", legs)
-	wantParked := n - adaptCap
+	wantParked := n - AdaptCap()
 	if len(act.DemoteToStandby) != wantParked {
-		t.Fatalf("under load, active must be capped at adaptCap=%d: want %d parked, got %d: %+v",
-			adaptCap, wantParked, len(act.DemoteToStandby), act)
+		t.Fatalf("under load, active must be capped at AdaptCap()=%d: want %d parked, got %d: %+v",
+			AdaptCap(), wantParked, len(act.DemoteToStandby), act)
 	}
 	parked := map[int]bool{}
 	for _, idx := range act.DemoteToStandby {
@@ -354,14 +360,14 @@ func TestEngine_OnTick_AdaptiveCapsActiveUnderLoad(t *testing.T) {
 		}
 		parked[idx] = true
 	}
-	// The adaptCap kept-active legs are the fastest (leg 0 + legs 1..adaptCap-1);
-	// the n-adaptCap slowest (highest index) are parked.
-	for i := adaptCap; i < n; i++ {
+	// The AdaptCap() kept-active legs are the fastest (leg 0 + legs 1..AdaptCap()-1);
+	// the n-AdaptCap() slowest (highest index) are parked.
+	for i := AdaptCap(); i < n; i++ {
 		if !parked[i] {
-			t.Errorf("slowest excess legs must be parked to cap active at adaptCap: leg %d (%dms) not parked", i, 20+i*10)
+			t.Errorf("slowest excess legs must be parked to cap active at AdaptCap(): leg %d (%dms) not parked", i, 20+i*10)
 		}
 	}
-	for i := 1; i < adaptCap; i++ {
+	for i := 1; i < AdaptCap(); i++ {
 		if parked[i] {
 			t.Errorf("fastest legs must stay active under load: leg %d (%dms) was parked", i, 20+i*10)
 		}
@@ -461,7 +467,7 @@ func TestEngine_OnTick_AdaptiveStandbyFloor(t *testing.T) {
 	// fall below adaptStandbyMin across many heavy-load ticks, and the active
 	// width must grow.
 	eng := New()
-	active, standby := adaptRevActive, adaptStandbyMax
+	active, standby := AdaptRevActive(), adaptStandbyMax
 	var recv uint64
 	build := func() []LegInfo {
 		legs := make([]LegInfo, 0, active+standby)
@@ -500,8 +506,8 @@ func TestEngine_OnTick_AdaptiveStandbyFloor(t *testing.T) {
 			t.Fatalf("tick %d: standby reserve %d fell below floor %d (action %+v)", tick, standby, adaptStandbyMin, act)
 		}
 	}
-	if active <= adaptRevActive {
-		t.Errorf("sustained saturation should grow the active width beyond the %d-leg seed; active=%d", adaptRevActive, active)
+	if active <= AdaptRevActive() {
+		t.Errorf("sustained saturation should grow the active width beyond the %d-leg seed; active=%d", AdaptRevActive(), active)
 	}
 	if standby < adaptStandbyMin {
 		t.Errorf("standby reserve ended below floor: %d < %d", standby, adaptStandbyMin)
@@ -552,7 +558,7 @@ func TestEngine_OnTick_AdaptiveEvictsGrossOutlier(t *testing.T) {
 // the observed "active set churns constantly, disrupting in-flight flows."
 func TestEngine_OnTick_AdaptiveStableUnderSteady(t *testing.T) {
 	eng := New()
-	active, standby := adaptRevActive, adaptStandbyMax
+	active, standby := AdaptRevActive(), adaptStandbyMax
 	var recv uint64
 	build := func() []LegInfo {
 		legs := make([]LegInfo, 0, active+standby)
@@ -736,7 +742,7 @@ func TestEngine_OnTick_LedbatGrowsWhenNoQueuing(t *testing.T) {
 // apps, a single lean route for chat, defaults for everything else.
 func TestDecide_Coupled(t *testing.T) {
 	if got := Decide("coupled", Context{App: "skysocks-client"}, nil); !reflect.DeepEqual(
-		got, Spec{Mux: 4, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "auto"}) {
+		got, Spec{Mux: 4, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "capacity"}) {
 		t.Errorf("coupled/proxy: Decide=%+v", got)
 	}
 	if got := Decide("coupled", Context{App: "skychat"}, nil); !reflect.DeepEqual(got, Spec{Mux: 1}) {
@@ -916,7 +922,7 @@ func (s *adaptiveSim) step() RotationAction { //nolint:unparam // test helper: r
 // TestEngine_OnTick_AdaptiveForwardWidensOnUpload asserts an upload-heavy flow
 // (growing SentBytes, flat RecvBytes) widens the FORWARD mux via AddForwardLeg
 // while the reverse controller stays completely lean (no AddLeg, reverse target
-// unchanged at adaptRevActive).
+// unchanged at AdaptRevActive()).
 func TestEngine_OnTick_AdaptiveForwardWidensOnUpload(t *testing.T) {
 	s := newAdaptiveSim(1_000_000, 0) // heavy upload, zero download
 	for i := 0; i < 20; i++ {
@@ -928,8 +934,8 @@ func TestEngine_OnTick_AdaptiveForwardWidensOnUpload(t *testing.T) {
 	if s.sawAddLeg {
 		t.Errorf("upload-heavy flow must NOT grow the reverse/full-duplex set (AddLeg)")
 	}
-	if s.e.adaptTarget != adaptRevActive {
-		t.Errorf("reverse target must stay lean at %d; got %d", adaptRevActive, s.e.adaptTarget)
+	if s.e.adaptTarget != AdaptRevActive() {
+		t.Errorf("reverse target must stay lean at %d; got %d", AdaptRevActive(), s.e.adaptTarget)
 	}
 	if s.e.adaptFwdTarget <= adaptFwdActive {
 		t.Errorf("forward target must have widened above %d; got %d", adaptFwdActive, s.e.adaptFwdTarget)
@@ -957,8 +963,8 @@ func TestEngine_OnTick_AdaptiveReverseWidensOnDownload(t *testing.T) {
 	if s.e.adaptFwdTarget != adaptFwdActive {
 		t.Errorf("forward target must stay lean at %d on a download flow; got %d", adaptFwdActive, s.e.adaptFwdTarget)
 	}
-	if s.e.adaptTarget <= adaptRevActive {
-		t.Errorf("reverse target must have widened above %d; got %d", adaptRevActive, s.e.adaptTarget)
+	if s.e.adaptTarget <= AdaptRevActive() {
+		t.Errorf("reverse target must have widened above %d; got %d", AdaptRevActive(), s.e.adaptTarget)
 	}
 }
 

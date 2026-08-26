@@ -149,6 +149,20 @@ func (r *RPC) SetMuxMode(mode *string, _ *struct{}) (err error) {
 	return err
 }
 
+// SetMuxCap sets the adaptive mux active-width ceiling (aggregation ceiling)
+func (r *RPC) SetMuxCap(n *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMuxCap", *n)(nil, &err)
+	err = r.visor.SetMuxCap(*n)
+	return err
+}
+
+// SetMuxWidth sets the adaptive mux steady active download width (the floor)
+func (r *RPC) SetMuxWidth(n *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMuxWidth", *n)(nil, &err)
+	err = r.visor.SetMuxWidth(*n)
+	return err
+}
+
 // GetRouterSettings returns the unified runtime router knobs.
 func (r *RPC) GetRouterSettings(_ *struct{}, out *RouterSettings) (err error) {
 	defer rpcutil.LogCall(r.log, "GetRouterSettings", nil)(out, &err)

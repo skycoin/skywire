@@ -335,9 +335,14 @@ func decideAdaptive(ctx Context, cands []Candidate) Spec {
 		// Symmetric Mux => establishMuxRoutes builds every leg FULL-DUPLEX
 		// (fwdCount == revCount). See the Shape note above for why bidirectional
 		// setup replaced the old ForwardMux=1 / ReverseMux=N asymmetry.
-		Mux:                     adaptRevActive + adaptStandbyMax,
+		Mux:                     AdaptRevActive() + adaptStandbyMax,
 		RotationIntervalSeconds: 20,
-		Distribution:            "auto",
+		// Goodput-weighted thin spread: each active leg's share tracks its
+		// recently-measured throughput, with a cold-leg floor so a fresh leg
+		// ramps in (see rebuildWeights). Live-tunable to auto/equal via the
+		// mux-control RPC. This is the aggregation default — a slow leg carries
+		// little and can't stall the reorder frontier.
+		Distribution: "capacity",
 	}
 	if anyKnownTransportKind(cands) {
 		spec.Chosen = mostTransportDiverse(cands)
