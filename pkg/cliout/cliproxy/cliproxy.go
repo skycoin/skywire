@@ -40,6 +40,12 @@ func (m MuxOp) Human(w io.Writer) error {
 	case "remove":
 		_, err := fmt.Fprintf(w, "removed mux leg via transport %s on app=%s\n", m.TransportID, m.App)
 		return err
+	case "cap":
+		_, err := fmt.Fprintf(w, "mux active-width cap set to %s\n", m.Mode)
+		return err
+	case "width":
+		_, err := fmt.Fprintf(w, "mux steady active width set to %s\n", m.Mode)
+		return err
 	default:
 		_, err := fmt.Fprintf(w, "mux mode set to %s\n", m.Mode)
 		return err
