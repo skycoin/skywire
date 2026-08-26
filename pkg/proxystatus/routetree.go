@@ -117,6 +117,70 @@ func legSumWidths(legs []Leg) sumWidths {
 	return w
 }
 
+// hopColorLevels is how many distinct hop-DEPTH colors the tree cycles through
+// before wrapping (hop-l1 … hop-lN). Realistic routes here are 1-hop direct or
+// 2-3 hop, so four levels cover the common depth with headroom; deeper hops
+// reuse a hue by wrapping (level → ((level-1) % hopColorLevels) + 1).
+const hopColorLevels = 4
+
+// hopClass returns the CSS class the tree paints a hop PK with, given its role:
+// "hop-exit" for a leg's final destination (the exit), or "hop-lN" for an
+// intermediate at hop DEPTH n (level 1 = first intermediate after the source),
+// cycling every hopColorLevels. The source PK is not passed here — it keeps its
+// own source accent (CellRoot).
+func hopClass(exit bool, level int) string {
+	if exit {
+		return "hop-exit"
+	}
+	return fmt.Sprintf("hop-l%d", ((level-1)%hopColorLevels)+1)
+}
+
+// hopClassMap projects a Snapshot's live legs into a PK→hop-color-class map used
+// by the page's StyleCell to color each hop PK by its DEPTH: the EXIT (any leg's
+// final destination) red ("hop-exit"), every level-1 intermediate one color,
+// every level-2 another, and so on ("hop-lN"). Coloring is by depth across all
+// legs, not by leg, so a hop at the same depth in different legs shares a color.
+// Exit wins over an intermediate role for the same PK; among intermediate roles
+// the SHALLOWEST depth wins. A direct (1-hop) leg has no intermediate: its final
+// hop — or, when no hop path is recorded, its RemotePK — is the exit.
+func hopClassMap(snap Snapshot) map[string]string {
+	exit := make(map[string]bool)
+	level := make(map[string]int)
+	mark := func(pk string, isExit bool, lvl int) {
+		if pk == "" {
+			return
+		}
+		if isExit {
+			exit[pk] = true
+			return
+		}
+		if prev, ok := level[pk]; !ok || lvl < prev {
+			level[pk] = lvl
+		}
+	}
+	for _, l := range snap.Legs {
+		if !l.Alive {
+			continue
+		}
+		if len(l.Hops) == 0 {
+			mark(l.RemotePK, true, 0) // no recorded path: the remote IS the exit
+			continue
+		}
+		n := len(l.Hops)
+		for i, h := range l.Hops {
+			mark(h.To, i == n-1, i+1) // last hop → exit; else intermediate depth i+1
+		}
+	}
+	out := make(map[string]string, len(exit)+len(level))
+	for pk, lvl := range level {
+		out[pk] = hopClass(false, lvl)
+	}
+	for pk := range exit { // exit precedence: overwrite any intermediate role
+		out[pk] = hopClass(true, 0)
+	}
+	return out
+}
+
 // TreeHeader returns the label-header row fields (left group, peer label,
 // trailing-column labels) for a route tree, shaped so bitree can render them as
 // a template row that lines up with the columns of the tree beneath. Only the
