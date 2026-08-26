@@ -288,7 +288,26 @@ type MuxRouteGroupInfo struct {
 	MuxEnabled    bool                          `json:"mux_enabled"`
 	SACKEnabled   bool                          `json:"sack_enabled"`
 	PerFrameNoise bool                          `json:"per_frame_noise"`
-	Legs          []MuxLegInfo                  `json:"legs"`
+	// Distribution names how the mux spreads outbound packets across its legs
+	// (weight mode: "auto", "round-robin", "weighted", "capacity",
+	// "latency-adaptive", "sticky:5tuple", "size-threshold", "dscp-priority").
+	// Empty for a single-leg / non-mux group.
+	Distribution string `json:"distribution,omitempty"`
+	// ReorderPending is the number of received packets buffered out-of-order
+	// (head-of-line-blocking depth); ReorderGapAgeMS is how long the current
+	// reorder frontier gap has stayed open in ms (0 when contiguous). A rising
+	// pending count with a growing gap age marks a stalled/black-holing leg.
+	ReorderPending  int     `json:"reorder_pending,omitempty"`
+	ReorderGapAgeMS float64 `json:"reorder_gap_age_ms,omitempty"`
+	// WriteSeq is the total DATA frames this mux has emitted outbound — a cheap
+	// aggregate send-progress counter across all legs.
+	WriteSeq uint32 `json:"write_seq,omitempty"`
+	// AggSentBytes / AggRecvBytes are the rg-scoped totals summed across every
+	// leg (what this route group moved, distinct from per-transport totals that
+	// also count other groups sharing the transport).
+	AggSentBytes uint64       `json:"agg_sent_bytes,omitempty"`
+	AggRecvBytes uint64       `json:"agg_recv_bytes,omitempty"`
+	Legs         []MuxLegInfo `json:"legs"`
 }
 
 // MuxLegInfo is one route in a mux'd group.
