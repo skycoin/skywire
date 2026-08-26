@@ -29,7 +29,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.0'
           cache: true
           cache-dependency-path: go.sum
 
@@ -53,7 +53,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.13.1
 
       - name: Install Dependencies
         shell: bash
@@ -80,7 +80,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.0'
           cache: true
           cache-dependency-path: go.sum
 
@@ -108,7 +108,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.0'
           cache: true
           cache-dependency-path: go.sum
 
@@ -129,7 +129,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.13.1
 
       - name: Checking Format and Testing
         run: |
@@ -146,7 +146,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.0'
           cache: true
           cache-dependency-path: go.sum
 
@@ -168,7 +168,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.13.1
 
       - name: Install Requirements
         shell: pwsh
@@ -193,7 +193,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.0'
           cache: true
           cache-dependency-path: go.sum
 
@@ -221,7 +221,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.0'
           cache: true
           cache-dependency-path: go.sum
 
@@ -270,7 +270,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.0'
           cache: true
           cache-dependency-path: go.sum
 
@@ -292,7 +292,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.0'
           cache: true
           cache-dependency-path: go.sum
 
@@ -314,7 +314,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.0'
           cache: true
           cache-dependency-path: go.sum
 
@@ -342,7 +342,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.0'
           cache: true
           cache-dependency-path: go.sum
 
@@ -428,7 +428,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.0'
           cache: true
           cache-dependency-path: go.sum
 
