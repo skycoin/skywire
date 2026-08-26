@@ -66,10 +66,11 @@ type Engine struct {
 	adaptFwdTarget         int
 	adaptFwdSatTicks       int
 	// health + anti-churn state
-	adaptCooldown  int            // ticks to hold the active set steady after a reshape
-	adaptSatTicks  int            // consecutive saturated ticks (grow only on a sustained signal)
-	adaptUnhealthy map[string]int // per-active-leg consecutive gross-outlier-latency ticks
-	adaptStall     map[string]int // per-active-leg consecutive no-throughput ticks under load
+	adaptCooldown  int                // ticks to hold the active set steady after a reshape
+	adaptSatTicks  int                // consecutive saturated ticks (grow only on a sustained signal)
+	adaptUnhealthy map[string]int     // per-active-leg consecutive gross-outlier-latency ticks
+	adaptStall     map[string]int     // per-active-leg consecutive low/no-throughput ticks under load
+	adaptRecvRate  map[string]float64 // per-active-leg EWMA recv byte-rate (throughput signal)
 
 	// ledbat (delay-based scavenger)
 	ledbatEWMA map[string]float64 // per-leg EWMA-smoothed one-way-ish delay (ms)
@@ -105,6 +106,7 @@ func New() *Engine {
 		adaptAliveIdx:   map[string]int{},
 		adaptUnhealthy:  map[string]int{},
 		adaptStall:      map[string]int{},
+		adaptRecvRate:   map[string]float64{},
 		adaptTarget:     adaptRevActive,
 		adaptFwdTarget:  adaptFwdActive,
 		ledbatEWMA:      map[string]float64{},
@@ -593,10 +595,18 @@ const (
 	// (each reshape disrupts in-flight flows). adaptStallTicks catches a leg that
 	// is alive but passes no traffic while the group is loaded (a dead 0-byte
 	// leg) and evicts it too.
-	adaptLatCeilingMs    = 1500
-	adaptOutlierMult     = 3.0
-	adaptHysteresis      = 3
-	adaptReshapeCooldown = 3
+	//
+	// The stall gate is throughput-graded, not just zero/non-zero: a leg whose
+	// EWMA recv-rate is below adaptThroughputOutlierFrac of the active-set MEDIAN
+	// recv-rate — a grossly-low-throughput leg, e.g. a webrtc data channel that
+	// carries a fraction of what the stcpr legs do — drags the no-skip reorder
+	// buffer exactly like a dead leg and is evicted the same way. Zero traffic is
+	// the frac=0 special case, so this strictly widens the old dead-leg gate.
+	adaptLatCeilingMs          = 1500
+	adaptOutlierMult           = 3.0
+	adaptHysteresis            = 3
+	adaptReshapeCooldown       = 3
+	adaptThroughputOutlierFrac = 0.25
 )
 
 func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
@@ -644,9 +654,24 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 				e.adaptLatEWMA[tid] = sample
 			}
 		}
-		if prev, ok := e.adaptPrevRecv[tid]; ok && l.RecvBytes > prev {
-			rawTotal += float64(l.RecvBytes - prev)
-			movedRecv[tid] = true
+		if prev, ok := e.adaptPrevRecv[tid]; ok {
+			if l.RecvBytes > prev {
+				d := float64(l.RecvBytes - prev)
+				rawTotal += d
+				movedRecv[tid] = true
+				// Per-leg recv-rate EWMA — the throughput signal the low-outlier
+				// stall gate ranks on. Smoothed like latency so one busy/quiet
+				// tick doesn't reclassify a leg.
+				if r, ok := e.adaptRecvRate[tid]; ok {
+					e.adaptRecvRate[tid] = adaptAlpha*d + (1-adaptAlpha)*r
+				} else {
+					e.adaptRecvRate[tid] = d
+				}
+			} else if r, ok := e.adaptRecvRate[tid]; ok {
+				// No traffic this tick: decay toward zero so a leg that STOPS
+				// delivering falls below the active median and is caught.
+				e.adaptRecvRate[tid] = (1 - adaptAlpha) * r
+			}
 		}
 		e.adaptPrevRecv[tid] = l.RecvBytes
 		// Forward (upload) throughput — the SentBytes mirror of the RecvBytes
@@ -664,6 +689,11 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	for tid := range e.adaptPrevRecv {
 		if !e.adaptSeen[tid] {
 			delete(e.adaptPrevRecv, tid)
+		}
+	}
+	for tid := range e.adaptRecvRate {
+		if !e.adaptSeen[tid] {
+			delete(e.adaptRecvRate, tid)
 		}
 	}
 	for tid := range e.adaptPrevSent {
@@ -752,6 +782,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// would otherwise head-of-line-stall on it. Hysteresis keeps a single spike
 	// from churning the set.
 	var activeSm []float64
+	var activeRates []float64
 	for _, l := range legs {
 		if !l.Alive || l.Standby {
 			continue
@@ -759,11 +790,22 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		if sm, ok := e.adaptLatEWMA[l.TransportID]; ok && sm > 0 {
 			activeSm = append(activeSm, sm)
 		}
+		if r, ok := e.adaptRecvRate[l.TransportID]; ok && r > 0 {
+			activeRates = append(activeRates, r)
+		}
 	}
 	activeMedian := 0.0
 	if len(activeSm) > 0 {
 		sort.Float64s(activeSm)
 		activeMedian = medianSorted(activeSm)
+	}
+	// Active-set MEDIAN recv-rate — the throughput yardstick a leg is judged a
+	// low-outlier against. Only meaningful with ≥2 rate samples (a single active
+	// leg has no peer to be an outlier of).
+	activeMedianRate := 0.0
+	if len(activeRates) >= 2 {
+		sort.Float64s(activeRates)
+		activeMedianRate = medianSorted(activeRates)
 	}
 	groupLoaded := rawTotal > 0
 	unhealthyIdx := -1
@@ -779,7 +821,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		} else {
 			delete(e.adaptUnhealthy, tid)
 		}
-		if groupLoaded && !movedRecv[tid] {
+		if groupLoaded && (!movedRecv[tid] || legLowThroughput(e.adaptRecvRate[tid], activeMedianRate)) {
 			e.adaptStall[tid]++
 		} else {
 			delete(e.adaptStall, tid)
@@ -1047,6 +1089,20 @@ func legUnhealthyLat(lat, median float64) bool {
 		return true
 	}
 	return false
+}
+
+// legLowThroughput reports whether an active leg's EWMA recv-rate is a gross
+// LOW outlier — below adaptThroughputOutlierFrac of the active-set median rate.
+// Such a leg is delivering a fraction of what its peers do (a low-bandwidth path
+// like a webrtc data channel), so it drags the no-skip reorder buffer and is
+// evicted from the active mux like a dead leg. Guards: an unknown median (0, too
+// few active legs to compare) or an unknown rate (leg not yet measured) is NOT
+// an outlier — throughput ranking needs a peer set and a sample to judge against.
+func legLowThroughput(rate, medianRate float64) bool {
+	if medianRate <= 0 {
+		return false
+	}
+	return rate < adaptThroughputOutlierFrac*medianRate
 }
 
 // --- ledbat (delay-based scavenger) ---
