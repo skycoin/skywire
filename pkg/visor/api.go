@@ -139,6 +139,8 @@ type API interface {
 	GetRouterSettings() (RouterSettings, error)
 	SetRouterSettings(s RouterSettings) error
 	SetMuxMode(mode string) error
+	SetMuxCap(n int) error
+	SetMuxWidth(n int) error
 
 	//transports
 	TransportTypes() ([]string, error)

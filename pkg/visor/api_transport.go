@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/policy/preset"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -178,6 +179,23 @@ func (v *Visor) SetMuxMode(mode string) error {
 	}
 	v.router.SetMuxMode(m)
 	v.log.Infof("SetMuxMode: %v", mode)
+	return nil
+}
+
+// SetMuxCap implements API. Sets the hard ceiling on adaptive mux active width
+// (the aggregation ceiling) at runtime — the adaptive engine reads it on the
+// next tick of every route group, so it takes effect live without a restart.
+func (v *Visor) SetMuxCap(n int) error {
+	applied := preset.SetAdaptCap(n)
+	v.log.Infof("SetMuxCap: requested %d, applied %d", n, applied)
+	return nil
+}
+
+// SetMuxWidth implements API. Sets the steady active download width (the floor
+// the adaptive engine converges to when idle) at runtime. Takes effect live.
+func (v *Visor) SetMuxWidth(n int) error {
+	applied := preset.SetAdaptRevActive(n)
+	v.log.Infof("SetMuxWidth: requested %d, applied %d", n, applied)
 	return nil
 }
 

@@ -840,6 +840,16 @@ func (rc *rpcClient) SetMuxMode(mode string) error {
 	return rc.Call("SetMuxMode", &mode, &struct{}{})
 }
 
+// SetMuxCap sets the adaptive mux active-width ceiling at runtime.
+func (rc *rpcClient) SetMuxCap(n int) error {
+	return rc.Call("SetMuxCap", &n, &struct{}{})
+}
+
+// SetMuxWidth sets the adaptive mux steady active download width at runtime.
+func (rc *rpcClient) SetMuxWidth(n int) error {
+	return rc.Call("SetMuxWidth", &n, &struct{}{})
+}
+
 // GetRouterSettings returns the unified runtime router knobs.
 func (rc *rpcClient) GetRouterSettings() (RouterSettings, error) {
 	var out RouterSettings
