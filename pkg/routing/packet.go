@@ -138,6 +138,13 @@ const (
 	CapMux     uint16 = 1 << 0 // Supports route multiplexing (sequenced DataPackets)
 	CapSACK    uint16 = 1 << 1 // Supports SACK retransmission
 	CapCascade uint16 = 1 << 2 // Supports cascade route setup protocol
+	// CapPerFrameNoise: the peer supports per-frame AEAD inside the mux (each
+	// sequenced DATA frame independently sealed with its sequence as the nonce),
+	// so noise is no longer a stateful stream wrapper and the reorder buffer may
+	// deliver out of order. When BOTH edges advertise it, the route-group
+	// handshake also carries a piggybacked noise KK message (after the 3-byte
+	// enc+caps prefix), and network.EncryptConn is bypassed.
+	CapPerFrameNoise uint16 = 1 << 3
 )
 
 // SeqSize is the byte size of the sequence number prepended to DataPacket
@@ -355,6 +362,30 @@ func (p Packet) HandshakeCapabilities() uint16 {
 		return binary.LittleEndian.Uint16(payload[1:3])
 	}
 	return 0
+}
+
+// MakeHandshakePacketWithNoise builds a handshake packet whose payload is the
+// standard [enc][caps] prefix followed by a piggybacked noise KK handshake
+// message. Used only when CapPerFrameNoise is negotiated; a nil/empty noiseMsg
+// yields the same 3-byte payload as MakeHandshakePacket.
+func MakeHandshakePacketWithNoise(id RouteID, supportEncryption bool, capabilities uint16, noiseMsg []byte) Packet {
+	payload := make([]byte, 3+len(noiseMsg))
+	if supportEncryption {
+		payload[0] = 1
+	}
+	binary.LittleEndian.PutUint16(payload[1:3], capabilities)
+	copy(payload[3:], noiseMsg)
+	return MakeHandshakePacketRaw(id, payload)
+}
+
+// HandshakeNoisePayload returns the piggybacked noise handshake message from an
+// extended handshake payload (bytes after the 3-byte enc+caps prefix), or nil.
+func (p Packet) HandshakeNoisePayload() []byte {
+	payload := p.Payload()
+	if len(payload) > 3 {
+		return payload[3:]
+	}
+	return nil
 }
 
 // MakeErrorPacket constructs a new ErrorPacket.
