@@ -122,6 +122,7 @@ func (s *Server) Serve(l net.Listener) error {
 
 		sessionCfg := yamux.DefaultConfig()
 		sessionCfg.EnableKeepAlive = false
+		sessionCfg.MaxStreamWindowSize = muxStreamWindowBytes
 		session, err := yamux.Server(conn, sessionCfg)
 		if err != nil {
 			return fmt.Errorf("yamux server failure: %w", err)

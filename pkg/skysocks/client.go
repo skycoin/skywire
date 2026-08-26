@@ -24,6 +24,20 @@ import (
 	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 )
 
+// muxStreamWindowBytes is the per-stream yamux flow-control window skysocks
+// advertises, raised from yamux's 256 KB default. Throughput over a reliable
+// stream is bounded by window / RTT (the bandwidth-delay product); the skywire
+// mesh path has a high RTT (~0.5-1 s end-to-end across relays), so the 256 KB
+// default caps a single skysocks stream at ~256 KB/s regardless of the
+// underlying link — measured live at ~250 KB/s on a 100 Mbps card whose exit
+// egressed at 200 MB/s. 16 MB gives 16 MB/s at 1 s RTT (128 Mbps), saturating a
+// 100 Mbps card with headroom; yamux only buffers up to the window's worth of
+// ACTUALLY in-flight data, so idle/interactive streams pay nothing and a bulk
+// stream costs at most this much receive buffer. The receiver's window governs
+// each direction, so the client value speeds downloads and the server value
+// speeds uploads.
+const muxStreamWindowBytes = 16 * 1024 * 1024
+
 // Client implement multiplexing proxy client using yamux.
 type Client struct {
 	appCl    *app.Client
@@ -57,6 +71,7 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 
 	sessionCfg := yamux.DefaultConfig()
 	sessionCfg.EnableKeepAlive = false
+	sessionCfg.MaxStreamWindowSize = muxStreamWindowBytes
 	session, err := yamux.Client(conn, sessionCfg)
 	if err != nil {
 		return nil, fmt.Errorf("error creating client: yamux: %w", err)
