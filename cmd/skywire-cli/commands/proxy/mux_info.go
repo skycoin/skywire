@@ -108,9 +108,10 @@ type muxRouteGroupInfo struct {
 		DstPort int    `json:"dst_port"`
 		SrcPort int    `json:"src_port"`
 	} `json:"desc"`
-	MuxEnabled  bool         `json:"mux_enabled"`
-	SACKEnabled bool         `json:"sack_enabled"`
-	Legs        []muxLegInfo `json:"legs"`
+	MuxEnabled    bool         `json:"mux_enabled"`
+	SACKEnabled   bool         `json:"sack_enabled"`
+	PerFrameNoise bool         `json:"per_frame_noise"`
+	Legs          []muxLegInfo `json:"legs"`
 }
 
 type muxLegInfo struct {
@@ -191,11 +192,11 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 	next := make(map[string]muxLegBytes)
 
 	for ri, rg := range rgs {
-		fmt.Printf("rg[%d] %s:%d → %s:%d  mux=%v sack=%v  legs=%d\n",
+		fmt.Printf("rg[%d] %s:%d → %s:%d  mux=%v sack=%v perframe=%v  legs=%d\n",
 			ri,
 			shortPK(rg.Desc.SrcPK), rg.Desc.SrcPort,
 			shortPK(rg.Desc.DstPK), rg.Desc.DstPort,
-			rg.MuxEnabled, rg.SACKEnabled, len(rg.Legs))
+			rg.MuxEnabled, rg.SACKEnabled, rg.PerFrameNoise, len(rg.Legs))
 
 		// Sort legs by index so the row order is stable across snapshots.
 		sort.SliceStable(rg.Legs, func(i, j int) bool { return rg.Legs[i].Index < rg.Legs[j].Index })
