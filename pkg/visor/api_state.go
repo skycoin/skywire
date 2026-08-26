@@ -177,7 +177,10 @@ func (v *Visor) StateSnapshot() (*StateSnapshot, error) {
 		snap.Apps = apps
 	}
 
-	if tps, err := v.Transports(nil, nil, false); err != nil {
+	// logs=true so each TransportSummary.Log carries the transport's
+	// cumulative recv/sent byte counters — the passive throughput totals an
+	// operator debugging a slow/idle link wants, surfaced without a second call.
+	if tps, err := v.Transports(nil, nil, true); err != nil {
 		note("transports", err)
 	} else {
 		snap.Transports = tps

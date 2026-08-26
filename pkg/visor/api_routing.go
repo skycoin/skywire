@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -136,12 +137,18 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 				DstPort: info.Desc.DstPort(),
 				SrcPort: info.Desc.SrcPort(),
 			},
-			MuxEnabled:    info.MuxEnabled,
-			SACKEnabled:   info.SACKEnabled,
-			PerFrameNoise: info.PerFrameNoise,
-			Legs:          make([]MuxLegInfo, 0, len(info.Legs)),
+			MuxEnabled:      info.MuxEnabled,
+			SACKEnabled:     info.SACKEnabled,
+			PerFrameNoise:   info.PerFrameNoise,
+			Distribution:    info.Distribution,
+			ReorderPending:  info.ReorderPending,
+			ReorderGapAgeMS: float64(info.ReorderGapAge) / float64(time.Millisecond),
+			WriteSeq:        info.WriteSeq,
+			Legs:            make([]MuxLegInfo, 0, len(info.Legs)),
 		}
 		for _, leg := range info.Legs {
+			entry.AggSentBytes += leg.SentBytes
+			entry.AggRecvBytes += leg.RecvBytes
 			entry.Legs = append(entry.Legs, MuxLegInfo{
 				Index:          leg.Index,
 				TransportID:    leg.TransportID,

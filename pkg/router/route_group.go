@@ -354,6 +354,20 @@ type MuxInfo struct {
 	// inverse-multiplexer path, network.EncryptConn bypassed). False means the
 	// group runs the classic stream-noise wrap.
 	PerFrameNoise bool
+	// Distribution names how the mux spreads outbound packets across its legs
+	// (the transportSelector weight mode: "auto", "round-robin", "weighted",
+	// "capacity", "latency-adaptive", "sticky:5tuple", "size-threshold",
+	// "dscp-priority"). Empty for a non-mux group.
+	Distribution string
+	// ReorderPending is the number of received packets currently buffered
+	// out-of-order (head-of-line-blocking depth); ReorderGapAge is how long the
+	// current reorder frontier gap has stayed open (0 when contiguous). A rising
+	// pending count with a growing gap age is a stalled/black-holing leg.
+	ReorderPending int
+	ReorderGapAge  time.Duration
+	// WriteSeq is the total DATA frames this mux has emitted outbound — a cheap
+	// aggregate send-progress counter across all legs.
+	WriteSeq uint32
 	// Legs is in tps[] order. One entry per active mux leg.
 	Legs []MuxLeg
 }
@@ -405,6 +419,10 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 	if rg.mux != nil {
 		info.MuxEnabled = true
 		info.SACKEnabled = rg.mux.sackEnabled
+		info.Distribution = rg.mux.distributionMode().String()
+		info.ReorderPending = rg.mux.reorderPending()
+		info.ReorderGapAge = rg.mux.gapAge()
+		info.WriteSeq = rg.mux.writeSeqValue()
 	}
 	info.PerFrameNoise = rg.perFrameNoiseActive
 	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)

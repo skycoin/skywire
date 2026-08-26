@@ -585,6 +585,31 @@ func (m *routeMux) gapAge() time.Duration {
 	return m.reorderBuf.GapAge()
 }
 
+// reorderPending reports how many packets are currently buffered out-of-order
+// on the receive side (0 when the stream is contiguous). A climbing value while
+// a gap stays open is the head-of-line-blocking signal for a stalled leg.
+func (m *routeMux) reorderPending() int {
+	if m.reorderBuf == nil {
+		return 0
+	}
+	return m.reorderBuf.Pending()
+}
+
+// writeSeqValue returns the count of DATA frames this mux has emitted (the next
+// outgoing sequence number). A cheap aggregate outbound-progress counter.
+func (m *routeMux) writeSeqValue() uint32 {
+	return atomic.LoadUint32(&m.writeSeq)
+}
+
+// distributionMode returns the selector's current weight mode (how packets are
+// spread across the legs). WeightModeAuto when the selector is absent.
+func (m *routeMux) distributionMode() WeightMode {
+	if m.tpSelector == nil {
+		return WeightModeAuto
+	}
+	return m.tpSelector.Mode()
+}
+
 // sackMinInterval is the minimum spacing between receiver-side SACKs. It is
 // well under retxMinAge so a genuine loss is still signaled several times
 // before the sender's retransmit timer fires, while collapsing the flood of
