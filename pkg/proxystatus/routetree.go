@@ -10,21 +10,25 @@
 // summary branches it reads as a normal downward tree with the source PK at top
 // in the same PK column as the hops:
 //
-//		                         <this visor / source PK>
-//		                         │
-//		R[0] ● 143ms 1.6K↑ 1.5K↓ ┬── <exit PK>          [stcpr]  <tpid>  143ms
-//		R[1] ● 47ms  0.5K↑ 0.4K↓ ┴── <hop1 PK>          [sudph]  <tpid>  47ms
-//		                          └── <exit PK>          [stcpr]  <tpid>  88ms
+//		                                         <this visor / source PK>
+//		                                         │
+//		R[0] ● 143ms  1.6K↑ 8.1K/s ███░  1.5K↓ 12K/s ██░░ ┬── <exit PK>  [stcpr]  <tpid>  143ms
+//		R[1] ● 47ms   0.5K↑ 2.0K/s █░░░  0.4K↓  3K/s █░░░ ┴── <hop1 PK>  [sudph]  <tpid>  47ms
+//		                                                   └── <exit PK>  [stcpr]  <tpid>  88ms
 //
 //	  - Root = this visor (the source PK, taken from any leg's first hop).
 //	  - Each ACTIVE route is a top-level right child; DEAD legs are pruned.
 //	  - The LEFT block of a route is its per-route summary: R[n], a state glyph
 //	    (● active / ○ standby — the caller colors it, no state words), the
-//	    end-to-end ROUTE rtt, and bandwidth X↑ Y↓.
+//	    end-to-end ROUTE rtt, then per direction the cumulative bytes (X↑ / Y↓),
+//	    the live goodput RATE (send-rate / recv-rate) and a SHARE bar — this
+//	    route's fraction of the group's aggregate up / down goodput.
 //	  - The RIGHT branch of a route is its hop chain; each hop node's label is the
 //	    peer PK (never truncated) and its trailing columns are [<tp-type>],
-//	    <tpid>, <transport-rtt> — the per-hop TRANSPORT rtt (distinct from the
-//	    route rtt on the left).
+//	    <tpid>, <transport-rtt> — the per-hop TRANSPORT rtt. For a DIRECT (1-hop)
+//	    leg this equals the left ROUTE rtt (same physical link, same live
+//	    measurement); on a multihop leg the near-edge transport rtt and the
+//	    whole-path route rtt differ.
 package proxystatus
 
 import (
@@ -74,9 +78,20 @@ func RouteTree(snap Snapshot) *bitree.Node {
 		return legs[i].Index < legs[j].Index
 	})
 
+	// Aggregate per-direction goodput across the surviving (alive) legs — the
+	// denominator each route's share bar is drawn against (this route's fraction
+	// of the whole group's up / down goodput). Summed here rather than plumbed
+	// from AggGoodput*Bps so the shared adapter stays self-contained on the leg
+	// list both surfaces already carry.
+	var aggUp, aggDown float64
+	for _, l := range legs {
+		aggUp += l.GoodputUpBps
+		aggDown += l.GoodputDownBps
+	}
+
 	w := legSumWidths(legs)
 	for _, l := range legs {
-		root.Right = append(root.Right, routeToNode(l, w))
+		root.Right = append(root.Right, routeToNode(l, w, aggUp, aggDown))
 	}
 	return root
 }
@@ -101,11 +116,16 @@ const (
 	rttColWidth = 6
 	// bwColWidth fits "0B↑" through "999.9K↑" / "15.3M↑" (compactBytes + arrow).
 	bwColWidth = 7
-	// gpColWidth fits the per-leg goodput rate cell, "—" through "999.9K/s" /
+	// gpColWidth fits a per-direction goodput rate cell, "—" through "999.9K/s" /
 	// "15.3M/s" (compactBytes + "/s"). Same pin-the-width reasoning as bwColWidth:
 	// the rate changes on every live push, so a fixed column keeps the tree that
-	// follows it column-stable.
+	// follows it column-stable. Used for BOTH the up-rate and the down-rate.
 	gpColWidth = 9
+	// shareBarWidth is the cell count of each per-direction bandwidth-SHARE bar
+	// (████░ style) — this route's fraction of the route-group's aggregate
+	// up-goodput / down-goodput. Constant width by construction, so it never
+	// reflows the tree as the shares shift on a live push.
+	shareBarWidth = 5
 )
 
 // legSumWidths measures the widest R[n] identity across the legs (that count is
@@ -191,13 +211,14 @@ func hopClassMap(snap Snapshot) map[string]string {
 // a template row that lines up with the columns of the tree beneath. Only the
 // page uses it; `proxy tree` renders headerless.
 func TreeHeader() (left, label string, cols []string) {
-	return "R[n] · state · route-rtt · bw ↑↓ · goodput/s", "peer-pk", []string{"[type]", "tp-id", "tp-rtt"}
+	return "R[n] · state · route-rtt · ↑bytes rate share · ↓bytes rate share", "peer-pk", []string{"[type]", "tp-id", "tp-rtt"}
 }
 
 // routeToNode turns one leg into a hop-chain right-branch carrying its left
-// summary on the head (spine) row.
-func routeToNode(l Leg, w sumWidths) *bitree.Node {
-	left := &bitree.Node{Label: legSummary(l, w)}
+// summary on the head (spine) row. aggUp/aggDown are the route-group's
+// aggregate up/down goodput, the denominators for this leg's share bars.
+func routeToNode(l Leg, w sumWidths, aggUp, aggDown float64) *bitree.Node {
+	left := &bitree.Node{Label: legSummary(l, w, aggUp, aggDown)}
 
 	if len(l.Hops) == 0 {
 		// No recorded path: a single leaf at the remote PK.
@@ -224,12 +245,14 @@ func hopToNode(h Hop) *bitree.Node {
 }
 
 // legSummary is the left annotation for a route: identity, state glyph,
-// end-to-end route rtt, and bandwidth. No state word — the glyph (colored by
-// the surface's StyleCell) carries active vs standby. Each field is padded to a
-// common width (w) so the fields line up in fixed columns across all routes: the
-// R[n] identity left-justified, the numeric route-rtt and ↑/↓ bandwidth
-// right-justified.
-func legSummary(l Leg, w sumWidths) string {
+// end-to-end route rtt, and per-direction bandwidth. No state word — the glyph
+// (colored by the surface's StyleCell) carries active vs standby. Each field is
+// padded to a common width (w) so the fields line up in fixed columns across all
+// routes. The bandwidth is shown per direction: the cumulative ↑ byte total then
+// this route's live send-RATE and its share of the group's up-goodput, then the
+// ↓ total, live recv-RATE and its share of the group's down-goodput. aggUp/aggDown
+// are the group's aggregate up/down goodput (the share-bar denominators).
+func legSummary(l Leg, w sumWidths, aggUp, aggDown float64) string {
 	g := GlyphActive
 	if l.Standby {
 		g = GlyphStandby
@@ -237,9 +260,14 @@ func legSummary(l Leg, w sumWidths) string {
 	idx := padRightRunes(fmt.Sprintf("R[%d]", l.Index), w.idx)
 	rtt := padLeftRunes(routeRTTCompact(l.RouteLatencyMS), w.rtt)
 	up := padLeftRunes(compactBytes(l.SentBytes)+"↑", w.up)
+	upRate := padLeftRunes(compactRate(l.GoodputUpBps), w.gp)
+	upBar := shareBar(l.GoodputUpBps, aggUp, shareBarWidth)
 	down := padLeftRunes(compactBytes(l.RecvBytes)+"↓", w.down)
-	gp := padLeftRunes(compactRate(l.GoodputBps), w.gp)
-	return idx + " " + g + " " + rtt + " " + up + " " + down + " " + gp
+	downRate := padLeftRunes(compactRate(l.GoodputDownBps), w.gp)
+	downBar := shareBar(l.GoodputDownBps, aggDown, shareBarWidth)
+	return idx + " " + g + " " + rtt +
+		"  " + up + " " + upRate + " " + upBar +
+		"  " + down + " " + downRate + " " + downBar
 }
 
 // compactRate formats a goodput rate (bytes/sec) for the fixed-width leg cell:
@@ -251,6 +279,26 @@ func compactRate(bps float64) string {
 		return "—"
 	}
 	return compactBytes(uint64(bps)) + "/s"
+}
+
+// shareBar renders a fixed-width unicode meter (████░) of val's fraction of
+// total — this route's share of the group's aggregate up- or down-goodput. The
+// filled cell count rounds val/total*width; an all-empty bar (░░░░░) means no
+// share (total is zero, or this leg is idle in that direction). Constant width by
+// construction so it never reflows the columns to its right on a live push. Same
+// glyph block as the tree's box-drawing, so the system-monospace stack tiles it.
+func shareBar(val, total float64, width int) string {
+	filled := 0
+	if total > 0 && val > 0 {
+		filled = int(val/total*float64(width) + 0.5)
+		if filled > width {
+			filled = width
+		}
+		if filled == 0 {
+			filled = 1 // a nonzero share always shows at least one cell
+		}
+	}
+	return strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
 }
 
 // padRightRunes/padLeftRunes pad s to n display columns (rune count), on the
