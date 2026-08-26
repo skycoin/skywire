@@ -2058,8 +2058,18 @@ func (rg *RouteGroup) sendKeepAlive() error {
 
 // perFrameNoiseCap returns CapPerFrameNoise when we want per-frame noise and the
 // group is encrypted (per-frame noise IS the encryption); 0 otherwise.
-func (rg *RouteGroup) perFrameNoiseCap() uint16 {
-	if rg.perFrameNoiseWant && rg.encrypt {
+// perFrameNoiseCap reports the CapPerFrameNoise bit iff this side wants per-frame
+// noise AND the handshake being sent is encrypted. It takes `encrypt` as an
+// argument rather than reading rg.encrypt because rg.encrypt is only set when a
+// handshake is RECEIVED (handlePacket) — on the INITIATOR's first send (from
+// saveRouteGroupRules, before it has received anything) rg.encrypt is still its
+// zero value (false). Gating on the field there would strip the cap + noise
+// message from the initiator's msg1, so the responder never sees per-frame
+// offered and the whole group silently falls back to stream noise. sendHandshake
+// already carries the correct encrypt value as its argument (initiator: always
+// true; responder: rg.encrypt, which is set by then).
+func (rg *RouteGroup) perFrameNoiseCap(encrypt bool) uint16 {
+	if rg.perFrameNoiseWant && encrypt {
 		return routing.CapPerFrameNoise
 	}
 	return 0
@@ -2153,7 +2163,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		rule := rg.fwd[i]
 		caps := routing.CapMux | routing.CapSACK
 		var packet routing.Packet
-		if pfn := rg.perFrameNoiseCap(); pfn != 0 {
+		if pfn := rg.perFrameNoiseCap(encrypt); pfn != 0 {
 			msg, mErr := rg.nextPerFrameNoiseMsg()
 			if mErr != nil {
 				// Never silently drop to plaintext: if the per-frame noise
