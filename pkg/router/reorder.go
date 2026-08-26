@@ -38,22 +38,6 @@ type reorderBuffer struct {
 	// and stopped delivering, and flushing (lossy) is preferable to stalling
 	// the stream forever while liveness prunes that leg.
 	maxGap int
-
-	// skipCapable is set when the group negotiated per-frame noise. Each mux
-	// DATA frame is then an INDEPENDENT AEAD unit (sealed under its sequence), so
-	// delivering PAST a missing sequence no longer desyncs any cipher — the whole
-	// reason the no-skip rule existed. With it set, a frontier gap that stays open
-	// past reorderTimeout (a leg genuinely stuck, SACK not yet refilled) is
-	// RELEASED (delivered lossy-but-moving) instead of held, and the OOM
-	// force-flush becomes a clean skip rather than a cipher-corrupting one.
-	skipCapable bool
-}
-
-// SetSkipCapable enables/disables the per-frame-noise skip path (see skipCapable).
-func (rb *reorderBuffer) SetSkipCapable(v bool) {
-	rb.mu.Lock()
-	rb.skipCapable = v
-	rb.mu.Unlock()
 }
 
 func newReorderBuffer(maxGap int) *reorderBuffer {
@@ -101,16 +85,16 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 		// buffer over a live leg, so the buffer drains in order with the cipher
 		// intact. A leg that stays dead is removed by leg-liveness pruning, after
 		// which its unacked seqs are retransmitted on the survivors. reorderTimeout
-		// is retained as the stall threshold for that diagnostics/prune path.
-		// Per-frame noise: each frame is its own AEAD unit, so releasing a gap no
-		// longer desyncs a cipher. A frontier gap held past reorderTimeout means a
-		// leg is stuck and SACK has not refilled in time; release it (lossy but
-		// moving) rather than hold. In normal operation SACK retransmit refills the
-		// gap well within reorderTimeout, so this only fires on a genuinely stuck
-		// leg — exactly the case that used to wedge a stream-noise mux at 0 goodput.
-		if rb.skipCapable && !rb.gapSince.IsZero() && time.Since(rb.gapSince) > reorderTimeout {
-			return rb.flushAll()
-		}
+		// is retained as the stall threshold for the diagnostics/prune path and to
+		// drive a timer-based SACK (RouteGroup.reorderStallServiceFn) that asks the
+		// sender to RETRANSMIT the stuck sequence on a live leg — filling the gap IN
+		// ORDER. There is deliberately NO time-based SKIP here: the RouteGroup is a
+		// reliable, ordered net.Conn (a TCP/TLS stream rides it), so delivering PAST
+		// a missing sequence leaves a HOLE in the byte stream and the upper protocol
+		// dies ("bad record mac"). Per-frame noise makes each FRAME independently
+		// decryptable, but the reassembled STREAM must still be gapless — so a gap is
+		// only ever closed by the missing seq actually arriving (skew or retransmit),
+		// never by skipping it.
 
 		// Emergency OOM backstop only: with reliable legs the missing seq arrives
 		// (via skew or SACK retransmit) and drains the buffer, so this never trips
@@ -151,27 +135,6 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 	}
 
 	return delivered
-}
-
-// FlushIfStalled releases a frontier gap that has stayed open past reorderTimeout
-// WITHOUT waiting for a new packet to arrive. The skip check inside Insert only
-// fires on the next out-of-order insert; a leg that goes fully silent delivers
-// nothing to trigger it, so the buffer would otherwise wedge indefinitely — a gap
-// held open with no arrivals to release it (observed live as a reorder gap aging
-// to ~10s while the download stalled to zero). A periodic caller invokes this so a
-// stalled reorder degrades to the surviving legs' rate promptly instead of
-// wedging. Only releases when skip-capable (per-frame noise) — matching Insert's
-// skip gate, since releasing a gap on a stateful stream-noise mux would desync the
-// cipher. Returns the flushed payloads in sequence order, or nil when there is
-// nothing to release.
-func (rb *reorderBuffer) FlushIfStalled() [][]byte {
-	rb.mu.Lock()
-	defer rb.mu.Unlock()
-	if rb.skipCapable && !rb.gapSince.IsZero() && len(rb.buf) > 0 &&
-		time.Since(rb.gapSince) > reorderTimeout {
-		return rb.flushAll()
-	}
-	return nil
 }
 
 // GapAge reports how long the current frontier gap has been open, or 0 if the

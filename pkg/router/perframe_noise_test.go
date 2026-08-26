@@ -46,7 +46,6 @@ func TestPerFrameMuxDataPathRoundTrip(t *testing.T) {
 
 	recv := newRouteMux(log, true)
 	recv.open = func(seq uint32, ct []byte) ([]byte, error) { return nR.OpenWithNonce(uint64(seq), ct) }
-	recv.reorderBuf.SetSkipCapable(true)
 
 	const routeID = routing.RouteID(42)
 	const n = 200
