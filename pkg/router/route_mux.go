@@ -38,12 +38,17 @@ type LegStats struct {
 	// the signal a routing policy needs to shed lossy intermediates and
 	// the scheduler needs to deweight them.
 	Retransmits uint64
-	// GoodputBps is this leg's recent goodput — the EWMA of (sent+recv)
-	// bytes per second over the telemetry refresh window (~1s for the
-	// status page). Distinct from the cumulative SentBytes/RecvBytes
-	// counters above: it is the RATE a throughput display (and a
-	// capacity-weighting policy) wants, not the lifetime total. 0 until a
-	// second sample lands. Sampled in snapshotLegs.
+	// GoodputUpBps / GoodputDownBps are this leg's recent goodput split by
+	// direction — the EWMA of the SENT (up) and RECV (down) byte deltas per
+	// second over the telemetry refresh window (~1s for the status page).
+	// Distinct from the cumulative SentBytes/RecvBytes counters above: they
+	// are the RATE each direction is moving now, not the lifetime total. 0
+	// until a second sample lands. Sampled in snapshotLegs.
+	GoodputUpBps   float64
+	GoodputDownBps float64
+	// GoodputBps is the combined (up+down) recent goodput, retained as the
+	// sum of GoodputUpBps+GoodputDownBps for back-compat with callers that
+	// want a single figure.
 	GoodputBps float64
 }
 
@@ -70,15 +75,19 @@ type legCounters struct {
 	lastTotalBytes uint64
 	// Goodput-rate sampling (bytes/sec EWMA over the observer's refresh
 	// window), maintained by snapshotLegs — NOT the data path and NOT the
-	// capacity rebuild. lastRateBytes/lastRateNano snapshot sent+recv and the
-	// wall clock at the previous sample; the delta over the elapsed window,
-	// EWMA-smoothed, is goodputBps. Kept separate from lastTotalBytes (which
-	// the capacity rebuild resets on its own cadence) so the two samplers
-	// never disturb each other. Touched under legMu (snapshotLegs upgrades to
-	// a write lock for the sample), so no atomic needed.
-	lastRateBytes uint64
-	lastRateNano  int64
-	goodputBps    float64
+	// capacity rebuild. lastRateSentBytes/lastRateRecvBytes/lastRateNano
+	// snapshot the sent counter, recv counter and wall clock at the previous
+	// sample; each direction's delta over the elapsed window, EWMA-smoothed,
+	// is goodputUpBps (sent/sec) / goodputDownBps (recv/sec). Kept separate
+	// from lastTotalBytes (which the capacity rebuild resets on its own
+	// cadence) so the two samplers never disturb each other. Touched under
+	// legMu (snapshotLegs upgrades to a write lock for the sample), so no
+	// atomic needed.
+	lastRateSentBytes uint64
+	lastRateRecvBytes uint64
+	lastRateNano      int64
+	goodputUpBps      float64
+	goodputDownBps    float64
 }
 
 // routeMux encapsulates route multiplexing state and logic.
@@ -563,29 +572,33 @@ func (m *routeMux) snapshotLegs() []LegStats {
 	for i, c := range m.legs {
 		sent := atomic.LoadUint64(&c.sentBytes)
 		recv := atomic.LoadUint64(&c.recvBytes)
-		m.sampleGoodput(c, sent+recv, now)
+		m.sampleGoodput(c, sent, recv, now)
 		out[i] = LegStats{
-			Index:       i,
-			SentBytes:   sent,
-			SentPackets: atomic.LoadUint64(&c.sentPackets),
-			RecvBytes:   recv,
-			RecvPackets: atomic.LoadUint64(&c.recvPackets),
-			Retransmits: atomic.LoadUint64(&c.retransmits),
-			GoodputBps:  c.goodputBps,
+			Index:          i,
+			SentBytes:      sent,
+			SentPackets:    atomic.LoadUint64(&c.sentPackets),
+			RecvBytes:      recv,
+			RecvPackets:    atomic.LoadUint64(&c.recvPackets),
+			Retransmits:    atomic.LoadUint64(&c.retransmits),
+			GoodputUpBps:   c.goodputUpBps,
+			GoodputDownBps: c.goodputDownBps,
+			GoodputBps:     c.goodputUpBps + c.goodputDownBps,
 		}
 	}
 	m.legMu.Unlock()
 	return out
 }
 
-// sampleGoodput updates leg c's goodput EWMA from the total (sent+recv) byte
-// count observed at wall-clock now (UnixNano). Caller holds legMu for writing.
-// The first observation only seeds the baseline (no rate emitted). To keep the
-// metric stable when several observers interleave, samples closer together than
-// goodputMinSampleNano are skipped and the stored rate is left unchanged.
-func (m *routeMux) sampleGoodput(c *legCounters, total uint64, now int64) {
+// sampleGoodput updates leg c's per-direction goodput EWMAs from the sent and
+// recv byte counters observed at wall-clock now (UnixNano). Caller holds legMu
+// for writing. The first observation only seeds the baseline (no rate emitted).
+// To keep the metric stable when several observers interleave, samples closer
+// together than goodputMinSampleNano are skipped and the stored rates are left
+// unchanged.
+func (m *routeMux) sampleGoodput(c *legCounters, sent, recv uint64, now int64) {
 	if c.lastRateNano == 0 {
-		c.lastRateBytes = total
+		c.lastRateSentBytes = sent
+		c.lastRateRecvBytes = recv
 		c.lastRateNano = now
 		return
 	}
@@ -593,18 +606,31 @@ func (m *routeMux) sampleGoodput(c *legCounters, total uint64, now int64) {
 	if elapsed < goodputMinSampleNano {
 		return
 	}
-	var delta uint64
-	if total >= c.lastRateBytes {
-		delta = total - c.lastRateBytes
-	}
-	sample := float64(delta) / (float64(elapsed) / float64(time.Second))
-	if c.goodputBps == 0 {
-		c.goodputBps = sample
-	} else {
-		c.goodputBps = goodputEWMAAlpha*sample + (1-goodputEWMAAlpha)*c.goodputBps
-	}
-	c.lastRateBytes = total
+	secs := float64(elapsed) / float64(time.Second)
+	c.goodputUpBps = ewmaRate(c.goodputUpBps, byteDelta(sent, c.lastRateSentBytes), secs)
+	c.goodputDownBps = ewmaRate(c.goodputDownBps, byteDelta(recv, c.lastRateRecvBytes), secs)
+	c.lastRateSentBytes = sent
+	c.lastRateRecvBytes = recv
 	c.lastRateNano = now
+}
+
+// byteDelta is cur-prev, clamped at 0 so a counter reset (route rebuild) yields
+// no negative rate.
+func byteDelta(cur, prev uint64) uint64 {
+	if cur >= prev {
+		return cur - prev
+	}
+	return 0
+}
+
+// ewmaRate folds a byte delta over secs seconds into the running bytes/sec EWMA
+// (goodputEWMAAlpha weights the newest sample). A zero prior seeds directly.
+func ewmaRate(prev float64, delta uint64, secs float64) float64 {
+	sample := float64(delta) / secs
+	if prev == 0 {
+		return sample
+	}
+	return goodputEWMAAlpha*sample + (1-goodputEWMAAlpha)*prev
 }
 
 // wrapPayload creates a sequenced data packet and optionally stores it for retransmission.

@@ -134,6 +134,8 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 					RecvBytes:      leg.RecvBytes,
 					Retransmits:    leg.Retransmits,
 					GoodputBps:     leg.GoodputBps,
+					GoodputUpBps:   leg.GoodputUpBps,
+					GoodputDownBps: leg.GoodputDownBps,
 					Alive:          leg.Alive,
 					Standby:        leg.Standby,
 					Hops:           proxyHopsFrom(leg.Hops),
