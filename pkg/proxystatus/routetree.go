@@ -85,7 +85,7 @@ func RouteTree(snap Snapshot) *bitree.Node {
 // summary into fixed columns, so R[n], the route-rtt and the ↑/↓ bandwidth line
 // up vertically across all routes instead of being ragged (only the whole block
 // was right-justified before).
-type sumWidths struct{ idx, rtt, up, down int }
+type sumWidths struct{ idx, rtt, up, down, gp int }
 
 // Fixed display widths (monospace cells) for the MUTABLE numeric fields of a
 // route's left summary — the route rtt and the ↑/↓ byte counts. These values
@@ -101,6 +101,11 @@ const (
 	rttColWidth = 6
 	// bwColWidth fits "0B↑" through "999.9K↑" / "15.3M↑" (compactBytes + arrow).
 	bwColWidth = 7
+	// gpColWidth fits the per-leg goodput rate cell, "—" through "999.9K/s" /
+	// "15.3M/s" (compactBytes + "/s"). Same pin-the-width reasoning as bwColWidth:
+	// the rate changes on every live push, so a fixed column keeps the tree that
+	// follows it column-stable.
+	gpColWidth = 9
 )
 
 // legSumWidths measures the widest R[n] identity across the legs (that count is
@@ -108,7 +113,7 @@ const (
 // value push) and pins the mutable numeric fields to their fixed column widths so
 // they never reflow as the values update. legSummary pads every field to these.
 func legSumWidths(legs []Leg) sumWidths {
-	w := sumWidths{rtt: rttColWidth, up: bwColWidth, down: bwColWidth}
+	w := sumWidths{rtt: rttColWidth, up: bwColWidth, down: bwColWidth, gp: gpColWidth}
 	for _, l := range legs {
 		if n := len(fmt.Sprintf("R[%d]", l.Index)); n > w.idx {
 			w.idx = n
@@ -186,7 +191,7 @@ func hopClassMap(snap Snapshot) map[string]string {
 // a template row that lines up with the columns of the tree beneath. Only the
 // page uses it; `proxy tree` renders headerless.
 func TreeHeader() (left, label string, cols []string) {
-	return "R[n] · state · route-rtt · bw ↑↓", "peer-pk", []string{"[type]", "tp-id", "tp-rtt"}
+	return "R[n] · state · route-rtt · bw ↑↓ · goodput/s", "peer-pk", []string{"[type]", "tp-id", "tp-rtt"}
 }
 
 // routeToNode turns one leg into a hop-chain right-branch carrying its left
@@ -233,7 +238,19 @@ func legSummary(l Leg, w sumWidths) string {
 	rtt := padLeftRunes(routeRTTCompact(l.RouteLatencyMS), w.rtt)
 	up := padLeftRunes(compactBytes(l.SentBytes)+"↑", w.up)
 	down := padLeftRunes(compactBytes(l.RecvBytes)+"↓", w.down)
-	return idx + " " + g + " " + rtt + " " + up + " " + down
+	gp := padLeftRunes(compactRate(l.GoodputBps), w.gp)
+	return idx + " " + g + " " + rtt + " " + up + " " + down + " " + gp
+}
+
+// compactRate formats a goodput rate (bytes/sec) for the fixed-width leg cell:
+// "12.4K/s" style via compactBytes, or "—" when the rate is zero/unmeasured
+// (no second sample yet, or an idle leg). The rate is the leg's recent goodput,
+// distinct from the cumulative ↑/↓ byte counters beside it.
+func compactRate(bps float64) string {
+	if bps <= 0 {
+		return "—"
+	}
+	return compactBytes(uint64(bps)) + "/s"
 }
 
 // padRightRunes/padLeftRunes pad s to n display columns (rune count), on the
