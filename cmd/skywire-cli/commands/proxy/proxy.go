@@ -88,6 +88,7 @@ func init() {
 	startCmd.Flags().MarkHidden("routes") //nolint:errcheck,gosec
 	startCmd.Flags().StringVar(&muxMode, "mux-mode", "auto", "mux weight distribution mode: auto (latency-based) or equal (round-robin)")
 	startCmd.Flags().Uint16Var(&minHops, "min-hops", 1, "minimum routing hops for this session (1=no minimum). Set on the visor before app start; rolled back is not automatic — restart visor or re-run with --min-hops=1 to revert.")
+	startCmd.Flags().IntVar(&startTunnels, "tunnels", 1, "number of independent tunnels (route group + noise + yamux each) to stripe browser connections across; 1 = today's behavior. >1 AGGREGATES bandwidth: each extra tunnel is auto-steered by the visor onto a DIFFERENT first-hop transport (disjoint path) so their throughputs sum. Best paired with --mux 1 (one leg per tunnel).")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits")
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	startCmd.Flags().BoolVar(&reconnect, "reconnect", true, "in-process reconnect on route-group collapse: proxy keeps re-dialing with backoff instead of dropping the SOCKS5 listener; --reconnect=false restores exit-on-failure")
@@ -265,6 +266,16 @@ var startCmd = &cobra.Command{
 			arguments["--srv"] = pubkey.String()
 
 			arguments["--addr"] = addr
+
+			// --tunnels N: the skysocks-client app opens N independent tunnels
+			// (route group + noise + yamux each) and stripes browser connections
+			// across them; the visor auto-diversifies each extra tunnel onto a
+			// disjoint first-hop transport so their bandwidth sums (the aggregation
+			// path, docs/mux_aggregation_rfc.md). Only pass it when >1 so the app's
+			// Args stay identical to today for the default single-tunnel case.
+			if startTunnels > 1 {
+				arguments["--tunnels"] = fmt.Sprintf("%d", startTunnels)
+			}
 
 			if httpAddr != "" {
 				arguments["--http"] = httpAddr
