@@ -889,14 +889,23 @@ func (c *Client) statusSnapshot() proxystatus.Snapshot {
 // local base. Kept separate so the RPC-unavailable path is a clean fallback that
 // never breaks the status page.
 func (c *Client) visorStatusSnapshot() proxystatus.Snapshot {
+	return baseStatusSnapshot(c.appCl)
+}
+
+// baseStatusSnapshot builds the status.skysocks base snapshot from the app RPC:
+// the visor-built rich snapshot when the RPC is reachable and carried real data
+// (any Legs/Logs/Events), otherwise the minimal local base. It carries NO live
+// session facts (Running/Note/Streams are overlaid by the caller) so it can be
+// shared by the live Client and the sessionless disconnected listener alike.
+func baseStatusSnapshot(appCl *app.Client) proxystatus.Snapshot {
 	base := proxystatus.Snapshot{
 		Surface: proxystatus.SurfaceSkysocks,
 		App:     skyenv.SkysocksClientName,
 	}
-	if c.appCl == nil {
+	if appCl == nil {
 		return base
 	}
-	rich, err := c.appCl.ProxyStatus()
+	rich, err := appCl.ProxyStatus()
 	if err != nil {
 		return base
 	}
