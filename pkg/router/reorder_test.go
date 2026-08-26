@@ -156,3 +156,34 @@ func TestReorderNeverSkipsAcrossTimeout(t *testing.T) {
 		t.Fatalf("pending=%d after full drain, want 0", rb.Pending())
 	}
 }
+
+// TestReorderBuffer_FlushIfStalled pins the timer-driven flush: a frontier gap
+// held past reorderTimeout with NO new inserts (the in-Insert skip never fires)
+// must be released by FlushIfStalled — but only when skip-capable (per-frame),
+// since releasing a gap on a stateful stream-noise mux would desync the cipher.
+func TestReorderBuffer_FlushIfStalled(t *testing.T) {
+	orig := reorderTimeout
+	reorderTimeout = 20 * time.Millisecond
+	defer func() { reorderTimeout = orig }()
+
+	// Not skip-capable: never releases, even when stalled.
+	rb := newReorderBuffer(64)
+	assert.Equal(t, [][]byte{[]byte("a")}, rb.Insert(0, []byte("a"))) // delivered in order
+	_ = rb.Insert(2, []byte("c"))                    // gap at seq 1, buffered
+	time.Sleep(40 * time.Millisecond)
+	assert.Nil(t, rb.FlushIfStalled(), "non-skip-capable buffer must never release a gap")
+	assert.Equal(t, 1, rb.Pending(), "seq 2 still held")
+
+	// Skip-capable: releases the stalled gap without a triggering insert.
+	sb := newReorderBuffer(64)
+	sb.SetSkipCapable(true)
+	got := sb.Insert(0, []byte("a"))
+	assert.Equal(t, [][]byte{[]byte("a")}, got)
+	_ = sb.Insert(2, []byte("c")) // gap at seq 1
+	assert.Nil(t, sb.FlushIfStalled(), "gap not yet aged past reorderTimeout")
+	time.Sleep(40 * time.Millisecond)
+	flushed := sb.FlushIfStalled()
+	assert.Equal(t, [][]byte{[]byte("c")}, flushed, "stalled gap released past seq 1")
+	assert.Equal(t, 0, sb.Pending(), "buffer drained after flush")
+	assert.Nil(t, sb.FlushIfStalled(), "nothing left to release")
+}
