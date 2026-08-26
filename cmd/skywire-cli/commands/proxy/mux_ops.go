@@ -37,6 +37,8 @@ import (
 	"io"
 	"os"
 
+	"strconv"
+
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
@@ -62,6 +64,66 @@ func init() {
 	addMuxSub(muxAddCmd, "mux-add")
 	addMuxSub(muxRmCmd, "mux-rm")
 	addMuxSub(muxModeCmd, "mux-mode")
+	addMuxSub(muxCapCmd, "mux-cap")
+	addMuxSub(muxWidthCmd, "mux-width")
+}
+
+var muxCapCmd = &cobra.Command{
+	Use:   "cap <n>",
+	Short: "Set the adaptive mux active-width ceiling at runtime",
+	Long: `Set the MAXIMUM number of ACTIVE mux legs the adaptive engine may grow to
+under sustained load — the aggregation ceiling. Applies LIVE to this visor's
+adaptive route groups on their next tick (no restart). Send-side is a per-visor
+decision, so set it independently on each end (e.g. over the pty to the exit).
+
+Example:
+  skywire cli proxy mux cap 60     # allow aggregation up to 60 active legs`,
+	Args:                  cobra.ExactArgs(1),
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n < 1 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cap must be a positive integer, got %q", args[0]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+		defer rpcClient.Close() //nolint:errcheck,gosec
+		if err := rpcClient.SetMuxCap(n); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxCap: %w", err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "cap", App: muxOpsApp, Mode: args[0]}))
+	},
+}
+
+var muxWidthCmd = &cobra.Command{
+	Use:   "width <n>",
+	Short: "Set the adaptive mux steady active download width at runtime",
+	Long: `Set the STEADY active download width — the floor number of active mux legs
+the adaptive engine converges to when idle (more than one spreads a bulk flow
+proactively before saturation instead of ramping from a single leg). Applies
+LIVE on the next tick; clamped to [1, cap]. Set per-visor, per-end.
+
+Example:
+  skywire cli proxy mux width 8    # keep 8 legs active by default`,
+	Args:                  cobra.ExactArgs(1),
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n < 1 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("width must be a positive integer, got %q", args[0]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+		defer rpcClient.Close() //nolint:errcheck,gosec
+		if err := rpcClient.SetMuxWidth(n); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxWidth: %w", err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "width", App: muxOpsApp, Mode: args[0]}))
+	},
 }
 
 // routePair mirrors the shape 'cli route calc --json' emits.
@@ -195,30 +257,38 @@ Example:
 }
 
 var muxModeCmd = &cobra.Command{
-	Use:   "mode <auto|equal>",
+	Use:   "mode <auto|equal|capacity>",
 	Short: "Change mux scheduler weighting at runtime",
 	Long: `Set the mux transport-selection mode for the visor.
 
-  auto    - latency-weighted: lower-latency legs get more packets.
-            Best when the legs have different RTTs (the typical case)
-            because it minimizes head-of-line stalls in SACK reorder.
-  equal   - round-robin: each leg gets equal share. Useful when legs
-            have similar latency and you want to verify aggregation
-            behavior without the auto-mode masking it.
+  auto     - latency-weighted: lower-latency legs get more packets.
+             Best when the legs have different RTTs (the typical case)
+             because it minimizes head-of-line stalls in SACK reorder.
+  equal    - round-robin: each leg gets equal share. Useful when legs
+             have similar latency and you want to verify aggregation
+             behavior without the auto-mode masking it.
+  capacity - goodput-weighted: each leg's share tracks its recently-
+             measured throughput (bytes/sec), so a fast leg carries more
+             and a slow one carries little — the thin-spread aggregation
+             mode. A just-promoted leg starts at a small cold-leg floor
+             share and ramps as its goodput proves out.
 
-Affects every active and future mux'd route group on this visor.
-The setting persists to skywire-config.json so it survives restart.
+Affects every active and future mux'd route group on this visor
+IMMEDIATELY (the router re-applies the mode to live route groups). The
+setting persists to skywire-config.json so it survives restart.
 
 Example:
-  skywire cli proxy mux mode equal      # before measuring aggregation
+  skywire cli proxy mux mode capacity   # goodput-weighted thin spread
   skywire cli proxy mux info --watch 1s
-  skywire cli proxy mux mode auto       # back to weighted`,
+  skywire cli proxy mux mode auto       # back to latency-weighted`,
 	Args:                  cobra.ExactArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		mode := args[0]
-		if mode != "auto" && mode != "equal" {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("mode must be 'auto' or 'equal', got %q", mode))
+		switch mode {
+		case "auto", "equal", "capacity":
+		default:
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("mode must be 'auto', 'equal', or 'capacity', got %q", mode))
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {

@@ -398,6 +398,14 @@ func (proxyDefaultAPI) SetMuxMode(_ string) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) SetMuxCap(_ int) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) SetMuxWidth(_ int) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) TransportTypes() ([]string, error) {
 	return nil, ErrProxyNotSupported
 }
