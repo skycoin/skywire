@@ -133,30 +133,36 @@ func TestDecide_Adaptive(t *testing.T) {
 func TestEngine_OnTick_AdaptiveHoldsWarmStandby(t *testing.T) {
 	e := New()
 	// adaptRevActive+adaptStandbyMax legs all active (as the router first
-	// establishes them). Steady active target = adaptRevActive.
+	// establishes them — every leg is born active). Steady active target =
+	// adaptRevActive.
 	total := adaptRevActive + adaptStandbyMax
 	legs := make([]LegInfo, total)
 	for i := range legs {
 		legs[i] = LegInfo{Index: i, TransportID: string(rune('a' + i)), Kind: "stcpr", LatencyMs: 40, Alive: true}
 	}
 
-	// Park the surplus (total-adaptRevActive legs), newest first, one per tick.
+	// ONE tick parks the WHOLE surplus (total-adaptRevActive legs) at once — the
+	// bulk fast-converge that stops a wide uncapped mux from lingering as a
+	// head-of-line-stalling active set. Leg 0 (primary) is never parked.
+	act := e.OnTick("adaptive", legs)
+	wantParked := total - adaptRevActive
+	if len(act.DemoteToStandby) != wantParked {
+		t.Fatalf("expected a bulk park of %d surplus legs in one tick, got %d: %+v",
+			wantParked, len(act.DemoteToStandby), act)
+	}
 	parked := map[int]bool{}
-	for tick := 0; tick < adaptStandbyMax; tick++ {
-		act := e.OnTick("adaptive", legs)
-		if len(act.DemoteToStandby) != 1 {
-			t.Fatalf("tick %d: expected one proactive demote, got %+v", tick, act)
-		}
-		idx := act.DemoteToStandby[0]
+	for _, idx := range act.DemoteToStandby {
 		if idx == 0 {
-			t.Fatalf("tick %d: must never park leg 0 (primary/forward leg)", tick)
+			t.Fatalf("must never park leg 0 (primary/forward leg); got %+v", act.DemoteToStandby)
 		}
 		if parked[idx] {
-			t.Fatalf("tick %d: leg %d parked twice", tick, idx)
+			t.Fatalf("leg %d parked twice in one action", idx)
 		}
 		parked[idx] = true
-		// Reflect the park in the next snapshot (as the route group would).
-		legs[idx].Standby = true
+		legs[idx].Standby = true // reflect the park, as the route group would
+	}
+	if len(parked) != wantParked {
+		t.Fatalf("expected %d distinct parked legs, got %d", wantParked, len(parked))
 	}
 
 	// Steady state: adaptRevActive active + adaptStandbyMax standby → no further
@@ -164,9 +170,42 @@ func TestEngine_OnTick_AdaptiveHoldsWarmStandby(t *testing.T) {
 	if act := e.OnTick("adaptive", legs); !reflect.DeepEqual(act, RotationAction{}) {
 		t.Errorf("at steady active target the adaptive tick must be a no-op; got %+v", act)
 	}
-	// The parked legs are the newest (highest-index) ones, leg 0 always active.
 	if parked[0] {
 		t.Fatalf("leg 0 must stay active")
+	}
+}
+
+// TestEngine_OnTick_AdaptiveParksSlowestFirst verifies the bulk proactive park
+// sheds the HIGHEST-latency active legs first, so the set kept active is always
+// the fastest desiredActive legs (never a slow leg while a faster one is parked).
+func TestEngine_OnTick_AdaptiveParksSlowestFirst(t *testing.T) {
+	e := New()
+	// Hold the active target at 3 so the park leaves a >1 active set whose
+	// membership we can check. Legs 0..5 active; distinct latencies. Leg 0 is
+	// always kept; of the rest the two fastest must be kept, the three slowest
+	// parked.
+	e.adaptTarget = 3
+	lat := []int{50, 500, 20, 300, 10, 400} // idx -> latency
+	legs := make([]LegInfo, len(lat))
+	for i := range legs {
+		legs[i] = LegInfo{Index: i, TransportID: string(rune('a' + i)), Kind: "stcpr", LatencyMs: lat[i], Alive: true}
+	}
+	act := e.OnTick("adaptive", legs)
+	// desiredActive=3 → park the 3 slowest of the 5 non-leg-0 legs: idx 5 (400),
+	// idx 1 (500), idx 3 (300). Keep leg 0 (always) + idx 2 (20) + idx 4 (10).
+	got := map[int]bool{}
+	for _, i := range act.DemoteToStandby {
+		got[i] = true
+	}
+	for _, slow := range []int{1, 3, 5} {
+		if !got[slow] {
+			t.Errorf("slowest legs must be parked first: leg %d (%dms) not parked; got %+v", slow, lat[slow], act.DemoteToStandby)
+		}
+	}
+	for _, fast := range []int{0, 2, 4} {
+		if got[fast] {
+			t.Errorf("fastest legs must stay active: leg %d (%dms) was parked; got %+v", fast, lat[fast], act.DemoteToStandby)
+		}
 	}
 }
 
