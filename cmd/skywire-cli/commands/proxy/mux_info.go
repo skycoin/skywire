@@ -108,10 +108,14 @@ type muxRouteGroupInfo struct {
 		DstPort int    `json:"dst_port"`
 		SrcPort int    `json:"src_port"`
 	} `json:"desc"`
-	MuxEnabled    bool         `json:"mux_enabled"`
-	SACKEnabled   bool         `json:"sack_enabled"`
-	PerFrameNoise bool         `json:"per_frame_noise"`
-	Legs          []muxLegInfo `json:"legs"`
+	MuxEnabled      bool         `json:"mux_enabled"`
+	SACKEnabled     bool         `json:"sack_enabled"`
+	PerFrameNoise   bool         `json:"per_frame_noise"`
+	Distribution    string       `json:"distribution,omitempty"`
+	ReorderPending  int          `json:"reorder_pending,omitempty"`
+	ReorderGapAgeMS float64      `json:"reorder_gap_age_ms,omitempty"`
+	WriteSeq        uint32       `json:"write_seq,omitempty"`
+	Legs            []muxLegInfo `json:"legs"`
 }
 
 type muxLegInfo struct {
@@ -197,6 +201,16 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 			shortPK(rg.Desc.SrcPK), rg.Desc.SrcPort,
 			shortPK(rg.Desc.DstPK), rg.Desc.DstPort,
 			rg.MuxEnabled, rg.SACKEnabled, rg.PerFrameNoise, len(rg.Legs))
+		if rg.MuxEnabled {
+			// dist + reorder frontier: a rising pending with a growing gap age is
+			// the head-of-line-blocking stall signal for a black-holing leg.
+			gap := "0"
+			if rg.ReorderGapAgeMS > 0 {
+				gap = fmt.Sprintf("%.0fms", rg.ReorderGapAgeMS)
+			}
+			fmt.Printf("       dist=%s  reorder_pending=%d  gap_age=%s  write_seq=%d\n",
+				rg.Distribution, rg.ReorderPending, gap, rg.WriteSeq)
+		}
 
 		// Sort legs by index so the row order is stable across snapshots.
 		sort.SliceStable(rg.Legs, func(i, j int) bool { return rg.Legs[i].Index < rg.Legs[j].Index })

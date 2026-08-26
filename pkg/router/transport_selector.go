@@ -155,6 +155,31 @@ func (ts *transportSelector) Mode() WeightMode {
 	return ts.mode
 }
 
+// String renders the weight mode as the same lowercase token the routing-
+// policy DSL's DistributionMode uses, so an operator reading `visor state`
+// sees exactly the value they would set via a policy's `distribution=`.
+func (m WeightMode) String() string {
+	switch m {
+	case WeightModeAuto:
+		return "auto"
+	case WeightModeEqual:
+		return "round-robin"
+	case WeightModeExplicit:
+		return "weighted"
+	case WeightModeSizeThreshold:
+		return "size-threshold"
+	case WeightModeSticky5Tuple:
+		return "sticky:5tuple"
+	case WeightModeLatencyAdaptive:
+		return "latency-adaptive"
+	case WeightModeDSCPPriority:
+		return "dscp-priority"
+	case WeightModeCapacity:
+		return "capacity"
+	}
+	return "unknown"
+}
+
 // Rebuild recomputes the selection schedule from the current transport latencies.
 // Called periodically (e.g., every keep-alive cycle) and when transports change.
 // tps must not be modified concurrently (caller holds RouteGroup.mu or equivalent).
