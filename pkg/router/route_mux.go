@@ -144,6 +144,19 @@ type routeMux struct {
 	// tear-and-rebuild. Parallel to ready[]; grown/compacted in lockstep.
 	// Guarded by legMu. See docs/warm_standby_legs_rfc.md.
 	standby []bool
+
+	// standbyNewLegs makes every NEWLY-grown aux leg (index > 0) enter the
+	// warm-standby pool instead of going straight into the active send set.
+	// The primary leg (index 0) is never affected. Set only when a promoting
+	// rotation engine is wired (SetRotation), so the engine's paced,
+	// goodput-gated growActive/promote path admits legs one per tick as its
+	// throughput signal warrants — instead of every dialed leg going hot the
+	// instant it receives its first inbound packet (markLegReady), which
+	// floods the active set faster than the reactive stall gate can demote and
+	// churns the group into collapse. When false (no rotation engine) new legs
+	// stay active-on-add so a non-adaptive group never strands aux legs in
+	// standby. Guarded by legMu.
+	standbyNewLegs bool
 }
 
 // reorderWindow bounds how far the receiver's reorder buffer will hold
@@ -328,9 +341,21 @@ func (m *routeMux) growLegs(n int) {
 		m.ready = append(m.ready, len(m.ready) == 0)
 	}
 	for len(m.standby) < n {
-		// New legs are active, never standby.
-		m.standby = append(m.standby, false)
+		// The primary leg (index 0, the first append) is always active. Aux
+		// legs enter warm standby when standbyNewLegs is set (a promoting
+		// rotation engine is wired), so the engine promotes them one per tick
+		// as its goodput signal warrants instead of all going hot at once.
+		m.standby = append(m.standby, m.standbyNewLegs && len(m.standby) > 0)
 	}
+	m.legMu.Unlock()
+}
+
+// SetStandbyNewLegs controls whether newly-grown aux legs enter warm standby on
+// add (see the standbyNewLegs field). Called by the route group when a promoting
+// rotation engine is wired, before aux legs are appended. Idempotent.
+func (m *routeMux) SetStandbyNewLegs(v bool) {
+	m.legMu.Lock()
+	m.standbyNewLegs = v
 	m.legMu.Unlock()
 }
 
