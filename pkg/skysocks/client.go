@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
@@ -48,8 +49,10 @@ const muxStreamWindowBytes = 16 * 1024 * 1024
 // aggregation design in docs/mux_aggregation_rfc.md. N is configurable; the
 // default is a single tunnel (N==1), which is byte-for-byte the pre-aggregation
 // behavior. Multiple tunnels only genuinely aggregate once they leave over
-// disjoint first-hop transports; that disjoint-dial coordination is the required
-// follow-up (RFC step 3) and is NOT implemented here.
+// disjoint first-hop transports; the visor steers the extra tunnels onto disjoint
+// first-hop transports (#4214), and this Client keeps N of them healthy — a dead
+// tunnel is re-dialed as a fresh disjoint replacement (maybeRedial, RFC steps
+// 3-4). Throughput-based eviction of a slow-but-alive tunnel is a follow-up.
 type Client struct {
 	appCl *app.Client
 	// sessions holds the live tunnels (>=1). Guarded by sessionsMu because
@@ -66,6 +69,23 @@ type Client struct {
 	// tracked here; only the cheap identity/target/age the sniff already parses.
 	streamsMu sync.Mutex
 	streams   map[uint32]streamMeta
+
+	// Multi-tunnel liveness management (docs/mux_aggregation_rfc.md steps 3-4).
+	// target is the desired number of live tunnels (N from --tunnels). When a
+	// tunnel dies and the live count falls below target — but at least one tunnel
+	// survives — the keepalive loop re-dials a fresh DISJOINT replacement via the
+	// redial callback, so aggregation width is restored instead of bleeding down.
+	// redial dials one diversify=true tunnel; it is wired FROM the app
+	// (cmd/apps/skysocks-client) because the dial lives there, not in this package
+	// (SetTunnelRedial). redialInFlight bounds it to a single in-flight re-dial;
+	// redialFails backs off after consecutive failures so a persistently
+	// unreachable exit is not hammered. All three are guarded by redialMu except
+	// redialInFlight, which is its own atomic single-flight guard.
+	redialMu       sync.Mutex
+	target         int
+	redial         func() (net.Conn, error)
+	redialFails    int
+	redialInFlight atomic.Bool
 }
 
 // streamMeta is the per-stream detail the status page surfaces for an open
@@ -103,6 +123,12 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 		appCl:   appCl,
 		closeC:  make(chan struct{}),
 		streams: make(map[uint32]streamMeta),
+		// One tunnel is the default target: with N==1 the sole tunnel's death is
+		// total collapse (handled by the app's --reconnect), so N==1 never
+		// re-dials — byte-identical to the pre-aggregation build. NewMultiClient
+		// raises this to the conn count, and the app sets --tunnels via
+		// SetTunnelTarget so a re-dial can refill even after a short initial dial.
+		target: 1,
 	}
 
 	session, err := newYamuxSession(conn)
@@ -134,6 +160,10 @@ func NewMultiClient(conns []net.Conn, appCl *app.Client) (*Client, error) {
 			return nil, err
 		}
 	}
+	// Target the number of tunnels we actually built. The app overrides this
+	// with the requested --tunnels via SetTunnelTarget so a re-dial refills to
+	// the full width even when some initial dials fell short.
+	c.SetTunnelTarget(len(conns))
 	return c, nil
 }
 
@@ -150,6 +180,139 @@ func (c *Client) AddTunnel(conn net.Conn) error {
 	c.sessions = append(c.sessions, session)
 	c.sessionsMu.Unlock()
 	return nil
+}
+
+// SetTunnelTarget sets the desired number of live tunnels N. When a tunnel dies
+// and the live count falls below N (but at least one tunnel survives), the
+// keepalive loop re-dials a replacement via the SetTunnelRedial callback. The app
+// sets this to --tunnels so a re-dial restores the full aggregation width even if
+// some initial dials fell short. Values < 1 are clamped to 1 — a single tunnel
+// never re-dials (its death is total collapse, owned by the app's --reconnect).
+func (c *Client) SetTunnelTarget(n int) {
+	if n < 1 {
+		n = 1
+	}
+	c.redialMu.Lock()
+	c.target = n
+	c.redialMu.Unlock()
+}
+
+// SetTunnelRedial wires the app's disjoint-diversify dial into the Client so the
+// keepalive loop can re-dial a dead tunnel's replacement. The dial itself lives in
+// the app (cmd/apps/skysocks-client) — it needs the server PK, the retrier and the
+// appnet fallback machinery the Client has no handle on — so the app closes over
+// its dialServer(...,diversify=true) call and hands it here. fn must return a fresh
+// dialed route-group conn (the same kind NewMultiClient wraps); the loop wraps it
+// in a yamux session via AddTunnel. A nil fn (the default, and the single-tunnel
+// case) disables re-dial entirely.
+func (c *Client) SetTunnelRedial(fn func() (net.Conn, error)) {
+	c.redialMu.Lock()
+	c.redial = fn
+	c.redialMu.Unlock()
+}
+
+// liveSessionCount returns the number of tunnels still up.
+func (c *Client) liveSessionCount() int {
+	n := 0
+	for _, s := range c.snapshotSessions() {
+		if s != nil && !s.IsClosed() {
+			n++
+		}
+	}
+	return n
+}
+
+// resetRedialBackoff clears the consecutive-failure counter so re-dial is armed
+// again. Called when a FRESH tunnel death is observed (the live count dropped), so
+// an exit that had gone quiet is retried once it loses another tunnel rather than
+// staying permanently backed off.
+func (c *Client) resetRedialBackoff() {
+	c.redialMu.Lock()
+	c.redialFails = 0
+	c.redialMu.Unlock()
+}
+
+// maxRedialFails bounds consecutive failed re-dials before the keepalive loop
+// stops re-trying until the NEXT tunnel death re-arms it (resetRedialBackoff).
+// Without this a persistently-unreachable exit would spin a re-dial on every
+// liveness tick forever.
+const maxRedialFails = 3
+
+// maybeRedial re-dials ONE replacement tunnel when the live count (passed in, to
+// avoid re-snapshotting) has fallen below the target N — restoring aggregation
+// width after a tunnel dies. It is a no-op unless a re-dial callback is wired
+// (SetTunnelRedial) and:
+//
+//   - never re-dials once EVERY tunnel is closed (live <= 0): that is total
+//     collapse, which the app's outer --reconnect runCycle owns — re-dialing here
+//     would duplicate it and fight the whole-client rebuild. With a single tunnel
+//     (N==1) its death is the only death, so N==1 never re-dials: byte-identical
+//     to the pre-aggregation build.
+//   - bounds itself to a SINGLE in-flight re-dial (redialInFlight, an atomic CAS
+//     mirroring the router's healInFlight guard) so a burst of deaths cannot fan
+//     out a storm of concurrent dials.
+//   - backs off after maxRedialFails consecutive failures until the next death.
+//
+// The replacement uses the SAME diversify=true dial as the initial extra tunnels
+// (the callback closes over dialServer), so it steers onto a first-hop transport
+// the survivors don't already occupy (#4214). AddTunnel appends it under the
+// sessions mutex; the shared keepalive loop and pickSession then pick it up.
+//
+// Throughput-based eviction (retiring a slow-but-ALIVE tunnel to cycle in a
+// faster disjoint one — the "drop the underperforming" half of RFC step 4) is a
+// deliberate follow-up: it needs the gigabit validation rig to tune the
+// slow-leg threshold, and mis-tuned it would thrash healthy tunnels. This method
+// is liveness-only: a DEAD tunnel is replaced; a live one is left alone.
+func (c *Client) maybeRedial(live int) {
+	c.redialMu.Lock()
+	fn := c.redial
+	target := c.target
+	if target < 1 {
+		target = 1
+	}
+	backedOff := c.redialFails >= maxRedialFails
+	c.redialMu.Unlock()
+
+	if fn == nil || backedOff || live >= target || live <= 0 {
+		return
+	}
+	if !c.redialInFlight.CompareAndSwap(false, true) {
+		return // a re-dial is already running
+	}
+	go func() {
+		defer c.redialInFlight.Store(false)
+		conn, err := fn()
+		if err != nil {
+			c.redialMu.Lock()
+			c.redialFails++
+			fails := c.redialFails
+			c.redialMu.Unlock()
+			if c.appCl != nil {
+				if fails >= maxRedialFails {
+					c.appCl.Log().Warnf("Tunnel re-dial failed (%d/%d consecutive); backing off until the next tunnel death: %v", fails, maxRedialFails, err)
+				} else {
+					c.appCl.Log().Warnf("Tunnel re-dial failed (%d/%d); retrying next tick: %v", fails, maxRedialFails, err)
+				}
+			}
+			return
+		}
+		if aerr := c.AddTunnel(conn); aerr != nil {
+			_ = conn.Close() //nolint:errcheck,gosec
+			c.redialMu.Lock()
+			c.redialFails++
+			c.redialMu.Unlock()
+			if c.appCl != nil {
+				c.appCl.Log().Warnf("Tunnel re-dial connected but wrapping it failed: %v", aerr)
+			}
+			return
+		}
+		c.redialMu.Lock()
+		c.redialFails = 0
+		c.redialMu.Unlock()
+		if c.appCl != nil {
+			c.appCl.Log().Infof("Re-dialed a replacement tunnel; %d live tunnel(s) toward target %d", c.liveSessionCount(), target)
+		}
+	}()
 }
 
 // snapshotSessions returns a copy of the current tunnel set for lock-free
@@ -353,13 +516,19 @@ const (
 // stops routing to it (dropping just that tunnel's streams); the whole client is
 // torn down for reconnect only once EVERY tunnel is closed. With a single tunnel
 // (N==1) this is exactly the prior behavior: the one tunnel dying closes the
-// client. Per-tunnel re-dial of a dropped tunnel (instead of only skipping it) is
-// the disjoint-dial follow-up — see docs/mux_aggregation_rfc.md step 3.
+// client.
+//
+// After retiring the dead ones, when the live count has fallen below the target N
+// (but at least one tunnel survives) it re-dials a fresh DISJOINT replacement via
+// maybeRedial — the "cycle in a fresh disjoint tunnel" half of the aggregation
+// convergence (docs/mux_aggregation_rfc.md steps 3-4). A single tunnel never
+// re-dials: its death is total collapse, owned by the app's --reconnect.
 func (c *Client) sessionKeepAliveLoop() {
 	ticker := time.NewTicker(livenessProbeInterval)
 	defer ticker.Stop()
 
 	fails := make(map[*yamux.Session]int)
+	prevLive := -1
 	for {
 		select {
 		case <-c.closeC:
@@ -391,6 +560,15 @@ func (c *Client) sessionKeepAliveLoop() {
 
 				return
 			}
+			// A FRESH death (live count dropped since the last tick) re-arms the
+			// re-dial backoff, so an exit that had gone quiet is retried once it
+			// loses another tunnel instead of staying permanently backed off.
+			live := c.liveSessionCount()
+			if prevLive >= 0 && live < prevLive {
+				c.resetRedialBackoff()
+			}
+			prevLive = live
+			c.maybeRedial(live)
 		}
 	}
 }

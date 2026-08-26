@@ -218,6 +218,22 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// DIFFERENT first-hop transport than the tunnels already dialed to this
 		// exit (disjoint-tunnel coordination), so their throughputs sum instead
 		// of splitting one link — see docs/mux_aggregation_rfc.md step 3.
+		//
+		// The loop is SEQUENTIAL by design, and that is what makes the
+		// diversification reliable: the visor's sibling-exclusion scan
+		// (router.siblingRouteGroupExclusions, #4214) diverts tunnel i+1 off the
+		// first-hop transports tunnel i already holds ONLY if tunnel i's route
+		// group is already visible in the visor's live set (rgsNs). It is: the
+		// visor registers the primary route group — with its first-hop transport
+		// in rg.tps — into rgsNs SYNCHRONOUSLY inside saveRouteGroupRules, before
+		// DialRoutes (and thus this RPC dial) returns. #4209 defers only the
+		// AUXILIARY mux legs asynchronously, and skysocks tunnels request no mux
+		// (muxRoutes=0), so each tunnel is single-leg with nothing left to
+		// register late. Because each dialServer call below returns only after its
+		// tunnel is registered, tunnel i is always seen by tunnel i+1's exclusion
+		// scan — no inter-dial delay or route-group poll is needed. (The exclusion
+		// is a soft preference: if fewer than N disjoint transports exist, tunnels
+		// fall back to a shared path.)
 		for i := int64(1); i < tunnels; i++ {
 			extra, derr := dialServer(cycleCtx, appCl, pk, serverPort, true)
 			if derr != nil {
@@ -237,6 +253,26 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		client, err := skysocks.NewMultiClient(conns, appCl)
 		if err != nil {
 			return fmt.Errorf("new client: %w", err)
+		}
+		// Keep N healthy tunnels: when one dies, the client re-dials a fresh
+		// disjoint replacement (docs/mux_aggregation_rfc.md steps 3-4). The dial
+		// lives here (it needs the server PK + retrier + appnet fallback), so we
+		// hand the Client the SAME diversify=true dial the extra tunnels used;
+		// the visor steers the replacement off the survivors' first-hop transports
+		// (#4214). Target the requested --tunnels so a re-dial also refills the
+		// width when some initial dials fell short. Only wire re-dial for N>1: at
+		// N==1 the client never re-dials (its lone tunnel's death is total
+		// collapse, handled by the --reconnect loop above), keeping the default
+		// path byte-identical. The Client bounds re-dial to one in-flight attempt
+		// and backs off on repeated failure, so this cannot fight the outer
+		// runCycle: it only replaces individual dead tunnels while the client is
+		// otherwise alive; if EVERY tunnel dies, ListenAndServe returns and the
+		// runCycle re-dials the whole client.
+		client.SetTunnelTarget(int(tunnels))
+		if tunnels > 1 {
+			client.SetTunnelRedial(func() (net.Conn, error) {
+				return dialServer(cycleCtx, appCl, pk, serverPort, true)
+			})
 		}
 		// Close the client when the outer ctx fires so
 		// ListenAndServe returns. With --reconnect the loop
