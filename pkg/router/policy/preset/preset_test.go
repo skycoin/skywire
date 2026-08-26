@@ -17,12 +17,12 @@ func TestDecide_ShapePresets(t *testing.T) {
 		{"rotating-bw", Context{App: "skysocks-client"}, Spec{Mux: 5, MinHops: 2, RotationIntervalSeconds: 90, Distribution: "round-robin"}},
 		{"rotating-bw/chat", Context{App: "skychat"}, Spec{Mux: 1}},
 		{"latency-adaptive", Context{App: "vpn-client"}, Spec{Mux: 5, MinHops: 2, RotationIntervalSeconds: 30, Distribution: "auto"}},
-		{"elastic-mux", Context{App: "skynet-client"}, Spec{Mux: 2, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "capacity"}},
+		{"elastic-mux", Context{App: "skynet-client"}, Spec{Mux: 2, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "auto"}},
 		{"probe-and-prune", Context{App: "skynet-client"}, Spec{Mux: 3, MinHops: 2, RotationIntervalSeconds: 30, Distribution: "auto"}},
 		{"adaptive", Context{App: "vpn-client"}, Spec{Mux: AdaptRevActive() + adaptStandbyMax, RotationIntervalSeconds: 20, Distribution: "capacity"}},
 		{"adaptive/chat", Context{App: "skychat"}, Spec{Mux: 1}},
 		{"adaptive/custom-session", Context{App: "g8"}, Spec{Mux: AdaptRevActive() + adaptStandbyMax, RotationIntervalSeconds: 20, Distribution: "capacity"}},
-		{"ledbat", Context{App: "skysocks-client"}, Spec{Mux: 3, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "capacity"}},
+		{"ledbat", Context{App: "skysocks-client"}, Spec{Mux: 3, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "auto"}},
 		{"ledbat/chat", Context{App: "skychat"}, Spec{Mux: 1}},
 	}
 	for _, tc := range cases {
@@ -81,7 +81,7 @@ func TestDecide_Adaptive(t *testing.T) {
 		t.Fatalf("adaptive should seed the most transport-diverse route (b); got %+v", got.Chosen)
 	}
 	if got.Mux != AdaptRevActive()+adaptStandbyMax || got.ForwardMux != 0 || got.ReverseMux != 0 ||
-		got.RotationIntervalSeconds != 20 || got.Distribution != "auto" ||
+		got.RotationIntervalSeconds != 20 || got.Distribution != "capacity" ||
 		got.MinHops != 0 {
 		t.Errorf("adaptive seed shape changed: %+v", got)
 	}
@@ -557,6 +557,17 @@ func TestEngine_OnTick_AdaptiveEvictsGrossOutlier(t *testing.T) {
 // width and then stops reshaping (a long tail of no-ops). This is the fix for
 // the observed "active set churns constantly, disrupting in-flight flows."
 func TestEngine_OnTick_AdaptiveStableUnderSteady(t *testing.T) {
+	// Pin the runtime-tunable widths to the values this test's convergence/churn
+	// assertions were written against (cap 8, floor 1), independent of the shipped
+	// defaults (now 60 / 4). Set the cap first so the low floor is not clamped, and
+	// restore in reverse.
+	restoreCap := AdaptCap()
+	SetAdaptCap(8)
+	defer SetAdaptCap(restoreCap)
+	restoreW := AdaptRevActive()
+	SetAdaptRevActive(1)
+	defer SetAdaptRevActive(restoreW)
+
 	eng := New()
 	active, standby := AdaptRevActive(), adaptStandbyMax
 	var recv uint64
@@ -742,7 +753,7 @@ func TestEngine_OnTick_LedbatGrowsWhenNoQueuing(t *testing.T) {
 // apps, a single lean route for chat, defaults for everything else.
 func TestDecide_Coupled(t *testing.T) {
 	if got := Decide("coupled", Context{App: "skysocks-client"}, nil); !reflect.DeepEqual(
-		got, Spec{Mux: 4, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "capacity"}) {
+		got, Spec{Mux: 4, MinHops: 2, RotationIntervalSeconds: 20, Distribution: "auto"}) {
 		t.Errorf("coupled/proxy: Decide=%+v", got)
 	}
 	if got := Decide("coupled", Context{App: "skychat"}, nil); !reflect.DeepEqual(got, Spec{Mux: 1}) {
@@ -924,6 +935,17 @@ func (s *adaptiveSim) step() RotationAction { //nolint:unparam // test helper: r
 // while the reverse controller stays completely lean (no AddLeg, reverse target
 // unchanged at AdaptRevActive()).
 func TestEngine_OnTick_AdaptiveForwardWidensOnUpload(t *testing.T) {
+	// Pin the widths to the values this test asserts against (cap 8, floor 1),
+	// independent of the shipped defaults (now 60 / 4). Pin BEFORE newAdaptiveSim
+	// so New() seeds adaptTarget from the pinned floor. Set cap first, restore in
+	// reverse.
+	restoreCap := AdaptCap()
+	SetAdaptCap(8)
+	defer SetAdaptCap(restoreCap)
+	restoreW := AdaptRevActive()
+	SetAdaptRevActive(1)
+	defer SetAdaptRevActive(restoreW)
+
 	s := newAdaptiveSim(1_000_000, 0) // heavy upload, zero download
 	for i := 0; i < 20; i++ {
 		s.step()
@@ -972,6 +994,17 @@ func TestEngine_OnTick_AdaptiveReverseWidensOnDownload(t *testing.T) {
 // flow collapses back to the lean single forward leg once the upload goes idle
 // (forward target returns to adaptFwdActive and the active set shrinks).
 func TestEngine_OnTick_AdaptiveForwardCollapsesOnIdle(t *testing.T) {
+	// Pin the widths to the values this test asserts against (cap 8, floor 1) so
+	// the idle steady state collapses to a SINGLE active leg, independent of the
+	// shipped defaults (now 60 / 4). Pin BEFORE newAdaptiveSim. Set cap first,
+	// restore in reverse.
+	restoreCap := AdaptCap()
+	SetAdaptCap(8)
+	defer SetAdaptCap(restoreCap)
+	restoreW := AdaptRevActive()
+	SetAdaptRevActive(1)
+	defer SetAdaptRevActive(restoreW)
+
 	s := newAdaptiveSim(1_000_000, 0)
 	for i := 0; i < 20; i++ { // widen under upload
 		s.step()
