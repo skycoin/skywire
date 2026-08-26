@@ -98,7 +98,7 @@ func (r *RPC) ServiceHealth(_ *struct{}, out *[]ServiceHealthEntry) (err error) 
 
 // SetMinHops sets min_hops in visor's routing config
 func (r *RPC) SetMinHops(n *uint16, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetMinHops", *n)
+	defer rpcutil.LogCall(r.log, "SetMinHops", *n)(nil, &err)
 	err = r.visor.SetMinHops(*n)
 	return
 }
