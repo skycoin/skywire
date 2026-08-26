@@ -169,7 +169,7 @@ func TestReorderBuffer_FlushIfStalled(t *testing.T) {
 	// Not skip-capable: never releases, even when stalled.
 	rb := newReorderBuffer(64)
 	assert.Equal(t, [][]byte{[]byte("a")}, rb.Insert(0, []byte("a"))) // delivered in order
-	_ = rb.Insert(2, []byte("c"))                    // gap at seq 1, buffered
+	_ = rb.Insert(2, []byte("c"))                                     // gap at seq 1, buffered
 	time.Sleep(40 * time.Millisecond)
 	assert.Nil(t, rb.FlushIfStalled(), "non-skip-capable buffer must never release a gap")
 	assert.Equal(t, 1, rb.Pending(), "seq 2 still held")

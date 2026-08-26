@@ -360,8 +360,9 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		if err != nil {
 			return nil, fmt.Errorf("error getting AvailableServers: %w", err)
 		}
-		// randomize dmsg servers list
-		rand.Shuffle(len(servers), func(i, j int) {
+		// randomize dmsg servers list for load distribution (not security-
+		// sensitive — a weak RNG is fine and crypto/rand would be needless).
+		rand.Shuffle(len(servers), func(i, j int) { //nolint:gosec // non-crypto shuffle for dmsg-server load distribution
 			servers[i], servers[j] = servers[j], servers[i]
 		})
 		for _, server := range servers {
