@@ -310,8 +310,12 @@ type MuxRouteGroupInfo struct {
 	// AggGoodputBps is the route-group's recent goodput — the sum of the
 	// per-leg goodput RATES (bytes/sec), i.e. what the whole group is moving
 	// right now, distinct from the cumulative AggSentBytes/AggRecvBytes totals.
-	AggGoodputBps float64      `json:"agg_goodput_bps,omitempty"`
-	Legs          []MuxLegInfo `json:"legs"`
+	// AggGoodputUpBps/AggGoodputDownBps split it by direction (sum of the
+	// per-leg send-rates / recv-rates); AggGoodputBps is their sum.
+	AggGoodputBps     float64      `json:"agg_goodput_bps,omitempty"`
+	AggGoodputUpBps   float64      `json:"agg_goodput_up_bps,omitempty"`
+	AggGoodputDownBps float64      `json:"agg_goodput_down_bps,omitempty"`
+	Legs              []MuxLegInfo `json:"legs"`
 }
 
 // MuxLegInfo is one route in a mux'd group.
@@ -340,9 +344,13 @@ type MuxLegInfo struct {
 	// per second over the telemetry refresh window (~1s for the status page).
 	// The RATE the leg is currently moving, as opposed to the cumulative
 	// SentBytes/RecvBytes totals. 0 until a second sample lands.
-	GoodputBps float64 `json:"goodput_bps,omitempty"`
-	Alive      bool    `json:"alive"`
-	Standby    bool    `json:"standby"`
+	// GoodputUpBps/GoodputDownBps split it by direction (send-rate / recv-rate);
+	// GoodputBps is their sum.
+	GoodputBps     float64 `json:"goodput_bps,omitempty"`
+	GoodputUpBps   float64 `json:"goodput_up_bps,omitempty"`
+	GoodputDownBps float64 `json:"goodput_down_bps,omitempty"`
+	Alive          bool    `json:"alive"`
+	Standby        bool    `json:"standby"`
 	// Hops is the leg's full forward route (every hop to the destination),
 	// with full PKs and per-hop transport type + latency where known.
 	Hops []MuxHopInfo `json:"hops,omitempty"`
