@@ -584,7 +584,19 @@ const (
 	//       out instead of aggregating; the reorder/aggregation (reorder.go,
 	//       datagram_route_group.go) doesn't scale to many legs (#86 family).
 	// Both are being worked; the pool is uncapped deliberately to surface them.
-	adaptStandbyMax = 60
+	//
+	// TRUE UNCAP 2026-08-26: raised 60 -> 512 so the standby pool is the full
+	// disjoint set the topology offers (a warm visor exposes ~480 disjoint
+	// intermediates to a busy exit), not an arbitrary ceiling. 512 sits above any
+	// realistic single-exit disjoint count, so the binding limit is the topology,
+	// discovered by the self-heal's no-progress backoff (route_group.go) — it
+	// fills to what actually establishes and stops, re-probing as new transports
+	// come online. Risk (1) above is contained two ways: establishMuxRoutes now
+	// caps its FOREGROUND initial dial (initialForegroundMux) so the dial returns
+	// fast on a lean mux, and the background self-heal fills the rest one leg at a
+	// time with the no-progress backoff — so uncapping the pool never becomes a
+	// dial storm at connect time.
+	adaptStandbyMax = 512
 	adaptStandbyMin = 1
 	// Health + anti-churn. A leg is a gross-outlier (kept OUT of the active mux,
 	// where the no-skip reorder buffer would head-of-line-stall on it) when its

@@ -2202,6 +2202,17 @@ func hopPath(path []routing.Hop) string {
 // stale-entry leaks. The most useful case is fwd=1 + rev=N for
 // download-heavy workloads (1 forward upstream + N reverse legs that
 // aggregate the bulk payload).
+// initialForegroundMux bounds how many mux legs establishMuxRoutes sets up
+// SYNCHRONOUSLY at dial time. The standby pool is uncapped (adaptStandbyMax=512),
+// but dialing hundreds of legs at connect would storm the setup node and stall
+// the connection before it serves; so the foreground dial builds a lean mux (a
+// few active + a small warm reserve) and returns, and the background self-heal
+// fills the rest of the disjoint pool one leg at a time (see SetSelfHeal /
+// maybeSelfHeal). Chosen well above the adaptive active cap (adaptCap=8) so a
+// download can grow onto warm legs immediately, but small enough that the
+// initial dial is a handful of parallel setups, not a storm.
+const initialForegroundMux = 16
+
 func (r *router) establishMuxRoutes(
 	ctx context.Context,
 	nrg *NoiseRouteGroup,
@@ -2223,6 +2234,17 @@ func (r *router) establishMuxRoutes(
 	maxCount := fwdCount
 	if revCount > maxCount {
 		maxCount = revCount
+	}
+	// Cap the FOREGROUND initial dial. With the standby pool uncapped
+	// (adaptStandbyMax=512 → Mux ~513), planning+dialing every leg here — at
+	// connect time, Phase-2 in parallel — would be a setup-node dial storm that
+	// stalls the connection before it serves a byte. Instead set up a lean mux
+	// now (a few active + a small warm reserve) so the dial returns fast, and let
+	// the BACKGROUND self-heal (SetSelfHeal target = full Mux) fill the rest of
+	// the disjoint pool one leg at a time. The reverse/forward split is preserved
+	// below; this only bounds how many legs are attempted synchronously.
+	if maxCount > initialForegroundMux {
+		maxCount = initialForegroundMux
 	}
 	if maxCount <= 1 || nrg.rg.mux == nil {
 		return
