@@ -64,8 +64,13 @@ type Leg struct {
 	SentBytes      uint64
 	RecvBytes      uint64
 	Retransmits    uint64
-	Alive          bool
-	Standby        bool
+	// GoodputBps is this leg's recent goodput — the EWMA of (sent+recv) bytes
+	// per second over the page's refresh window (~1s), i.e. the RATE the leg is
+	// moving now, distinct from the cumulative SentBytes/RecvBytes counters. 0
+	// until a second sample lands.
+	GoodputBps float64
+	Alive      bool
+	Standby    bool
 	// Hops is the leg's full forward route (every hop to the destination),
 	// full PKs, per-hop transport type + latency where known.
 	Hops []Hop

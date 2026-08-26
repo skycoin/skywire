@@ -149,6 +149,7 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 		for _, leg := range info.Legs {
 			entry.AggSentBytes += leg.SentBytes
 			entry.AggRecvBytes += leg.RecvBytes
+			entry.AggGoodputBps += leg.GoodputBps
 			entry.Legs = append(entry.Legs, MuxLegInfo{
 				Index:          leg.Index,
 				TransportID:    leg.TransportID,
@@ -163,6 +164,7 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 				RecvBytes:      leg.RecvBytes,
 				RecvPackets:    leg.RecvPackets,
 				Retransmits:    leg.Retransmits,
+				GoodputBps:     leg.GoodputBps,
 				Alive:          leg.Alive,
 				Standby:        leg.Standby,
 			})
