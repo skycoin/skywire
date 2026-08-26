@@ -209,6 +209,67 @@ func TestEngine_OnTick_AdaptiveParksSlowestFirst(t *testing.T) {
 	}
 }
 
+func TestLegLowThroughput(t *testing.T) {
+	// No median (fewer than 2 active rate samples) → never an outlier.
+	if legLowThroughput(0, 0) || legLowThroughput(10, 0) {
+		t.Error("unknown median must never classify a leg as a low-throughput outlier")
+	}
+	// Below adaptThroughputOutlierFrac (0.25) of the median → outlier.
+	if !legLowThroughput(10, 100) {
+		t.Error("10 vs median 100 (0.10) must be a low-throughput outlier")
+	}
+	if !legLowThroughput(24, 100) {
+		t.Error("24 vs median 100 (0.24 < 0.25) must be a low-throughput outlier")
+	}
+	// At/above the fraction → healthy (carrying a fair share).
+	if legLowThroughput(30, 100) {
+		t.Error("30 vs median 100 (0.30 > 0.25) must be healthy")
+	}
+}
+
+// TestEngine_OnTick_AdaptiveEvictsLowThroughputLeg drives a loaded group where
+// one active leg (never leg 0) delivers a fraction of what its peers do — a
+// webrtc-style low-bandwidth path — and asserts the tick evicts it from the
+// active mux (park or hot-swap) after the health hysteresis, so it stops
+// dragging the no-skip reorder buffer. Latencies are equal so the ONLY signal
+// is throughput.
+func TestEngine_OnTick_AdaptiveEvictsLowThroughputLeg(t *testing.T) {
+	e := New()
+	e.adaptTarget = 4 // keep 4 active so nothing is parked for being surplus
+	// A warm standby (idx 4) so the eviction can hot-swap rather than starve.
+	recv := []uint64{0, 0, 0, 0, 0}
+	mk := func() []LegInfo {
+		legs := make([]LegInfo, 5)
+		for i := range legs {
+			legs[i] = LegInfo{Index: i, TransportID: string(rune('a' + i)), Kind: "stcpr", LatencyMs: 50, Alive: true, RecvBytes: recv[i]}
+		}
+		legs[4].Standby = true
+		return legs
+	}
+	evicted := false
+	for tick := 0; tick < 8; tick++ {
+		// Legs 1,2,3 carry a full share; leg 3 carries ~2% (low outlier).
+		recv[1] += 100000
+		recv[2] += 100000
+		recv[3] += 2000
+		act := e.OnTick("adaptive", mk())
+		for _, idx := range act.DemoteToStandby {
+			if idx == 3 {
+				evicted = true
+			}
+			if idx == 0 {
+				t.Fatalf("tick %d: must never evict leg 0; got %+v", tick, act)
+			}
+		}
+		if evicted {
+			break
+		}
+	}
+	if !evicted {
+		t.Error("a sustained low-throughput active leg must be evicted from the active mux")
+	}
+}
+
 func TestDecide_TimeOfDay(t *testing.T) {
 	const h = int64(3600) * 1_000_000_000
 	if got := Decide("time-of-day", Context{NowUnixNano: 11 * h}, nil); got.Mux != 1 {
