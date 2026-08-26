@@ -970,7 +970,26 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// Cooldown is set after a bulk park so the freshly-lean set settles before
 	// any optimization reshape; drop-recovery (1) and unhealthy-evict (2) still
 	// bypass it, so safety is preserved.
-	if !saturated && !fwdSaturated && aliveCount > desiredActive && standbyCount < adaptStandbyMax && newestAliveIdx > 0 {
+	//
+	// PARK FLOOR — the active width we converge DOWN to this tick:
+	//   - idle (not saturated): desiredActive, the lean steady target, so an
+	//     interactive/idle flow settles onto the fastest few legs.
+	//   - under load (saturated): adaptCap — the MAXIMUM the saturation-growth
+	//     rule (4) would ever build. This is the fix for the uncap fill: legs are
+	//     born ACTIVE (self-heal filling the 512-deep reserve), and while the pool
+	//     fills, the route-setup/keepalive traffic reads as "saturated" — so a
+	//     park gated on !saturated stayed suppressed and aliveCount ballooned to
+	//     dozens of active legs (HoL-stalling the no-skip reorder buffer) even
+	//     though rule 4 would never grow the active set beyond adaptCap. So the
+	//     park ALWAYS caps active at adaptCap, and only trims below it (to
+	//     desiredActive) when genuinely idle. Under a real bulk download active is
+	//     already at adaptCap, so this only sheds born-active excess, never the
+	//     legs the download is using.
+	parkFloor := desiredActive
+	if (saturated || fwdSaturated) && parkFloor < adaptCap {
+		parkFloor = adaptCap
+	}
+	if aliveCount > parkFloor && standbyCount < adaptStandbyMax && newestAliveIdx > 0 {
 		// Rank active non-leg-0 legs by smoothed latency, slowest first. Use the
 		// EWMA where we have it, else the raw sample; an unmeasured leg sorts as
 		// slowest (parked first) so unknowns don't linger in the active set.
@@ -993,7 +1012,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 			act = append(act, actLeg{l.Index, lat})
 		}
 		sort.Slice(act, func(i, j int) bool { return act[i].lat > act[j].lat })
-		surplus := aliveCount - desiredActive
+		surplus := aliveCount - parkFloor
 		if room := adaptStandbyMax - standbyCount; surplus > room {
 			surplus = room
 		}
