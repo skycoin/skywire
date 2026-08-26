@@ -236,10 +236,16 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	// The tree is NOT boxed: it flows with the surrounding text at page margins and
 	// scrolls horizontally in its OWN overflow container only if a long PK runs wide.
 	hLeft, hLabel, hCols := TreeHeader()
+	// Per-hop color classes, keyed by PK: the exit red, each intermediate hop
+	// LEVEL its own hue (see hopClassMap). Captured in the StyleCell closure so the
+	// PK label cells can be wrapped without disturbing bitree's plain-text layout.
+	hopClasses := hopClassMap(snap)
 	b.WriteString(`<div class="tree">`)
 	b.WriteString(`<pre class="bitree">`)
 	b.WriteString(bitree.Render(RouteTree(snap), bitree.Options{
-		StyleCell:   htmlStyleCell,
+		StyleCell: func(text string, kind bitree.CellKind) string {
+			return htmlStyleCell(text, kind, hopClasses)
+		},
 		HeaderLeft:  hLeft,
 		HeaderLabel: hLabel,
 		HeaderCols:  hCols,
@@ -254,14 +260,19 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 }
 
 // writeTreeLegend prints a compact legend BELOW the route tree. The words
-// themselves are colored in their state colors — "source · this visor" in the
-// source accent, "active" in green, "standby" in amber — instead of a separate
-// swatch dot beside each word. The column hints live in the label-header row
-// above the tree (TreeHeader), so the legend only names the color coding. Dead
-// legs are pruned, so there is no dead entry.
+// themselves are colored in their tree colors — "source · this visor" in the
+// source accent, the hop-DEPTH colors ("hop 1/2/3" per level) and "exit" (red)
+// matching the PK coloring, and "active"/"standby" in their state colors —
+// instead of a separate swatch dot beside each word. The column hints live in
+// the label-header row above the tree (TreeHeader), so the legend only names the
+// color coding. Dead legs are pruned, so there is no dead entry.
 func writeTreeLegend(b *strings.Builder) {
 	b.WriteString(`<div class="tlegend">` +
 		`<span class="lgnd src">source · this visor</span>` +
+		`<span class="lgnd hop-l1">hop 1</span>` +
+		`<span class="lgnd hop-l2">hop 2</span>` +
+		`<span class="lgnd hop-l3">hop 3</span>` +
+		`<span class="lgnd hop-exit">exit</span>` +
 		`<span class="lgnd ok">active ●</span>` +
 		`<span class="lgnd standby">standby ○</span>` +
 		`</div>`)
@@ -273,11 +284,18 @@ func writeTreeLegend(b *strings.Builder) {
 // layout from the plain text before this runs). PKs and transport ids become
 // click-to-copy; the state dot in the left summary is colored; transport
 // columns are muted.
-func htmlStyleCell(text string, kind bitree.CellKind) string {
+func htmlStyleCell(text string, kind bitree.CellKind, hopClasses map[string]string) string {
 	switch kind {
 	case bitree.CellRoot:
 		return `<span class="src">` + copyablePK(text) + `</span>`
 	case bitree.CellLabel:
+		// A hop PK: color it by its role/depth (exit red, intermediates by level).
+		// The class wraps copyablePK so the click-to-copy PK is unchanged; the span
+		// is zero-width text, so bitree's monospace column layout is preserved. The
+		// pk-color CSS (pre.bitree .hop-… code.fpk) mirrors the .src accent selector.
+		if cls := hopClasses[strings.TrimSpace(text)]; cls != "" {
+			return `<span class="` + cls + `">` + copyablePK(text) + `</span>`
+		}
 		return copyablePK(text)
 	case bitree.CellColumn:
 		return htmlTreeColumn(text)
@@ -721,7 +739,12 @@ func orDash(s string) string {
 // (--ok/--warn/--standby), whose dark-mode brights are illegible on a light
 // background, so the same ≥4.5:1 floor holds in both schemes. The accent
 // gradient and overall identity are unchanged.
-const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--accent2:#a06bff;--ok:#4ad9a4;--warn:#ff6b8a;--err:#ff5c5c;--cyan:#3fd0d8;--standby:#e0b64a;--card:#131629;--line:#2b3163}` +
+const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--accent2:#a06bff;--ok:#4ad9a4;--warn:#ff6b8a;--err:#ff5c5c;--cyan:#3fd0d8;--standby:#e0b64a;--card:#131629;--line:#2b3163;` +
+	// Route-tree hop colors: the EXIT (any leg's destination) red, and each
+	// intermediate hop LEVEL its own hue (level 1..4, then the classes cycle). All
+	// chosen for legibility on the tree's dark ground; the light block re-darkens
+	// them below so they clear the same contrast floor on a light background.
+	`--hop-exit:#ff5c5c;--hop1:#4fc3f7;--hop2:#c48cff;--hop3:#ffb74d;--hop4:#4dd0a0}` +
 	`*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--fg);font:13.5px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}` +
 	`body{max-width:60rem;margin:0 auto;padding:1.2rem 1rem 3rem}` +
 	`header{display:flex;align-items:baseline;gap:.8rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.7rem}` +
@@ -785,6 +808,13 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`pre.bitree{display:inline-block;text-align:left;font-family:'DejaVu Sans Mono','Liberation Mono','Noto Sans Mono',ui-monospace,'Cascadia Mono','Segoe UI Mono',Menlo,Consolas,'Courier New',monospace;font-variant-numeric:tabular-nums;font-size:11.5px;line-height:1;letter-spacing:0;margin:0 auto;white-space:pre;color:var(--fg)}` +
 	`pre.bitree code,pre.bitree span{font:inherit;color:inherit;line-height:1;letter-spacing:0;white-space:pre;word-break:normal;background:none;border:0;padding:0}` +
 	`pre.bitree code.fpk{color:var(--fg)}pre.bitree .src code.fpk{color:var(--accent);font-weight:600}` +
+	// Hop coloring, mirroring the .src accent selector: the exit PK red, each
+	// intermediate hop LEVEL its own hue. The span wraps copyablePK, so this
+	// direct-child selector tints the PK code without reaching the trailing
+	// transport columns (those sit in their own .thop/.ftid spans).
+	`pre.bitree .hop-exit code.fpk{color:var(--hop-exit);font-weight:600}` +
+	`pre.bitree .hop-l1 code.fpk{color:var(--hop1)}pre.bitree .hop-l2 code.fpk{color:var(--hop2)}` +
+	`pre.bitree .hop-l3 code.fpk{color:var(--hop3)}pre.bitree .hop-l4 code.fpk{color:var(--hop4)}` +
 	`pre.bitree code.ftid{color:var(--muted)}pre.bitree .tcol{color:var(--muted)}` +
 	`pre.bitree .lsum.ok{color:var(--ok)}pre.bitree .lsum.standby{color:var(--standby)}` +
 	// Tree legend, BELOW the tree: the WORDS themselves are colored in their state
@@ -794,6 +824,10 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`.tlegend{display:flex;flex-wrap:wrap;gap:.15rem 1.1rem;font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:.4rem}` +
 	`.lgnd{display:inline-flex;align-items:center;white-space:nowrap;font-weight:600}` +
 	`.lgnd.src{color:var(--accent)}.lgnd.ok{color:var(--ok)}.lgnd.standby{color:var(--standby)}` +
+	// Hop-color legend entries: the WORD itself carries the tree's hop hue so the
+	// coloring is self-documenting (exit red, hop 1/2/3 by level).
+	`.lgnd.hop-exit{color:var(--hop-exit)}.lgnd.hop-l1{color:var(--hop1)}` +
+	`.lgnd.hop-l2{color:var(--hop2)}.lgnd.hop-l3{color:var(--hop3)}` +
 	// The label-header row rendered inside the tree <pre>: template labels in place
 	// of PKs/values, muted so it reads as a column legend rather than live data.
 	`pre.bitree .thead{color:var(--muted);opacity:.9}` +
@@ -834,5 +868,8 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`code{color:var(--accent);font-size:11.5px}` +
 	`footer{margin-top:2rem;padding-top:.7rem;border-top:1px solid var(--line);color:var(--muted);font-size:12px}` +
 	`footer a{color:var(--accent);text-decoration:none}footer a:hover{text-decoration:underline}` +
-	`@media(prefers-color-scheme:light){:root{--bg:#f6f7fb;--fg:#1c1e26;--muted:#4a4f63;--card:#fff;--line:#d3d6e4;--accent:#4149d6;--accent2:#7b3fd0;--ok:#0a7a4c;--warn:#c02a48;--err:#c8102e;--cyan:#0a6c74;--standby:#7a5c00}` +
+	`@media(prefers-color-scheme:light){:root{--bg:#f6f7fb;--fg:#1c1e26;--muted:#4a4f63;--card:#fff;--line:#d3d6e4;--accent:#4149d6;--accent2:#7b3fd0;--ok:#0a7a4c;--warn:#c02a48;--err:#c8102e;--cyan:#0a6c74;--standby:#7a5c00;` +
+	// Re-darken the hop hues for a light background so exit + each hop level stay
+	// legible (the dark-mode brights wash out on white).
+	`--hop-exit:#c8102e;--hop1:#0a6fb0;--hop2:#6a3fd0;--hop3:#a85a00;--hop4:#0a7a4c}` +
 	`h2,.surface{color:#1c1e26}}`

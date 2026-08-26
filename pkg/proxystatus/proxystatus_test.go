@@ -91,6 +91,13 @@ func TestRenderSections(t *testing.T) {
 		`class="tlegend"`, `class="lgnd src"`,
 		`class="lgnd ok"`, `class="lgnd standby"`,
 		"this visor",
+		// Hop-level coloring: the EXIT PK (each leg's destination) is wrapped red
+		// ("hop-exit") and each intermediate hop LEVEL its own class ("hop-lN"). The
+		// standby leg has a level-1 intermediate (03bb…) before its exit (03cc…). The
+		// legend documents exit + hop-1/2/3 colors below the tree.
+		`<span class="hop-exit">`, `<span class="hop-l1">`,
+		`class="lgnd hop-exit"`, `class="lgnd hop-l1"`, `class="lgnd hop-l2"`, `class="lgnd hop-l3"`,
+		"--hop-exit:", "--hop1:",
 		// Label-header row (TreeHeader) rendered inside the tree <pre> as a template
 		// that lines up with the columns beneath: labels in place of the PKs/values.
 		`class="thead"`, "peer-pk", "tp-id", "tp-rtt", "R[n]",
