@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/google/uuid"
@@ -26,12 +28,23 @@ var (
 	tpPK      string
 	tpdHTTP   bool
 	discStats bool
+	discType  string
 )
+
+// pkLocalSentinel is the NoOptDefVal for --pk: a bare `-p` (the flag present
+// with no value) resolves to the LOCAL visor's public key via the visor RPC.
+// It is a placeholder no real (hex) public key can collide with.
+const pkLocalSentinel = "local"
 
 func init() {
 	discTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "obtain transport of given ID")
-	discTpCmd.Flags().StringVarP(&tpPK, "pk", "p", "", "obtain transports by public key")
-	discTpCmd.Flags().BoolVarP(&discStats, "stats", "s", false, "show the network-wide transport summary (total, by type, unique visors)")
+	discTpCmd.Flags().StringVarP(&tpPK, "pk", "p", "", "obtain transports by public key (bare -p = the local visor pk)")
+	// A bare `-p` (present, no value) resolves to the local visor pk.
+	if f := discTpCmd.Flags().Lookup("pk"); f != nil {
+		f.NoOptDefVal = pkLocalSentinel
+	}
+	discTpCmd.Flags().BoolVarP(&discStats, "stats", "s", false, "transport summary (count by type, total); network-wide, or for one visor with --pk")
+	discTpCmd.Flags().StringVarP(&discType, "type", "t", "", "list the public keys involved in transports of the given type (e.g. stcpr, sudph, dmsg)")
 	discTpCmd.Flags().StringVar(&tpdURL, "tpdurl", deployment.Prod.TransportDiscovery, "transport discovery url")
 	discTpCmd.Flags().BoolVar(&tpdHTTP, "http", false, "skip the structured visor RPC and query transport discovery via the fetch chain (CXO→DmsgHTTP→DMSG)")
 	// Wire the common fetch-path flags (--no-cxo/--no-rpc/--no-dmsg) so this
@@ -41,18 +54,50 @@ func init() {
 }
 
 var discTpCmd = &cobra.Command{
-	Use:                   "disc",
-	Short:                 "Discover remote transport(s)",
-	Long:                  "\n    Discover remote transport(s) by ID or public key",
+	Use:   "disc",
+	Short: "Discover remote transport(s)",
+	Long: `
+    Discover remote transport(s) by ID or public key.
+
+    --stats/-s              network-wide transport summary (total, by type, unique visors)
+    --stats --pk <pk>       the same summary computed over ONE visor's transports
+    --stats -p              (bare -p) same, for the LOCAL visor's pk
+    --type/-t <type>        list the public keys involved in transports of a type
+    --type <type> --pk <pk> that visor's peers on the given transport type
+
+Examples:
+  skywire cli tp disc --id <transport-id>
+  skywire cli tp disc --pk <public-key>
+  skywire cli tp disc -s
+  skywire cli tp disc -sp <public-key>
+  skywire cli tp disc -sp
+  skywire cli tp disc --type webrtc
+  skywire cli tp disc --type stcpr --pk <public-key>`,
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, _ []string) {
-		// --stats: network-wide transport summary from Transport Discovery.
-		// The aggregate is computed server-side (GET /all-transports/stats),
-		// so we fetch a small JSON summary instead of the whole transport
-		// list; older TPDs without that endpoint fall back to counting the
-		// full /all-transports list client-side. Independent of --id/--pk.
+		// A bare `-p` (or `--pk` with an empty value) means "the local visor
+		// pk" — resolve the sentinel to the real hex pk once here so every
+		// path below (discovery, per-key stats, keys-by-type) sees a real key.
+		resolveLocalPKSentinel(cmd)
+
+		// --type: list the unique public keys involved in transports of a
+		// given type. Standalone it is network-wide; with --pk it is that
+		// visor's peers on that type. Independent of --id.
+		if discType != "" {
+			printKeysByType(cmd, tpdURL, discType, tpPK)
+			return
+		}
+
+		// --stats: transport summary from Transport Discovery. Without --pk
+		// this is the network-wide aggregate (computed server-side via
+		// GET /all-transports/stats when available). With --pk it is the same
+		// shape of summary computed over just that visor's transports.
 		if discStats {
-			printNetworkTransportSummary(cmd, tpdURL)
+			if tpPK == "" {
+				printNetworkTransportSummary(cmd, tpdURL)
+			} else {
+				printVisorTransportSummary(cmd, tpdURL, tpPK)
+			}
 			return
 		}
 		if tpID == "" && tpPK == "" {
@@ -125,8 +170,33 @@ var discTpCmd = &cobra.Command{
 	},
 }
 
-// getTransportByID queries transport discovery for a transport by ID using FetchServiceURL
-func getTransportByID(cmdFlags *pflag.FlagSet, baseURL string, id uuid.UUID) (*transport.Entry, error) {
+// resolveLocalPKSentinel turns a bare `-p` (tpPK == pkLocalSentinel) into the
+// local visor's hex public key via the visor RPC. It is a no-op when --pk was
+// given an explicit value or omitted entirely. Resolving the local pk requires
+// the visor RPC (there is no other source of "this visor's" key), so a bare
+// `-p` combined with --no-rpc is a fatal error.
+func resolveLocalPKSentinel(cmd *cobra.Command) {
+	if tpPK != pkLocalSentinel {
+		return
+	}
+	rpcClient, err := clirpc.Client(cmd.Flags())
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot resolve local visor pk (visor RPC unavailable): %w", err))
+		return
+	}
+	overview, err := rpcClient.Overview()
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cannot resolve local visor pk: %w", err))
+		return
+	}
+	tpPK = overview.PubKey.Hex()
+}
+
+// fetchAllTransportEntries fetches and decodes the full /all-transports list
+// from Transport Discovery via FetchServiceURL (DmsgHTTP → plain HTTP, honoring
+// --no-cxo/--no-rpc/--no-dmsg). It is the shared fetch behind the by-ID,
+// by-edge, per-key-stats and keys-by-type paths.
+func fetchAllTransportEntries(cmdFlags *pflag.FlagSet, baseURL string) ([]*transport.Entry, error) {
 	url := fmt.Sprintf("%s/all-transports", baseURL)
 	body, err := clirpc.FetchServiceURL(cmdFlags, url)
 	if err != nil {
@@ -136,6 +206,15 @@ func getTransportByID(cmdFlags *pflag.FlagSet, baseURL string, id uuid.UUID) (*t
 	var entries []*transport.Entry
 	if err := json.Unmarshal(body, &entries); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return entries, nil
+}
+
+// getTransportByID queries transport discovery for a transport by ID using FetchServiceURL
+func getTransportByID(cmdFlags *pflag.FlagSet, baseURL string, id uuid.UUID) (*transport.Entry, error) {
+	entries, err := fetchAllTransportEntries(cmdFlags, baseURL)
+	if err != nil {
+		return nil, err
 	}
 
 	// Find the transport by ID
@@ -150,15 +229,9 @@ func getTransportByID(cmdFlags *pflag.FlagSet, baseURL string, id uuid.UUID) (*t
 
 // getTransportsByEdge queries transport discovery for transports by edge public key using FetchServiceURL
 func getTransportsByEdge(cmdFlags *pflag.FlagSet, baseURL string, pk cipher.PubKey) ([]*transport.Entry, error) {
-	url := fmt.Sprintf("%s/all-transports", baseURL)
-	body, err := clirpc.FetchServiceURL(cmdFlags, url)
+	allEntries, err := fetchAllTransportEntries(cmdFlags, baseURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query transport discovery: %w", err)
-	}
-
-	var allEntries []*transport.Entry
-	if err := json.Unmarshal(body, &allEntries); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, err
 	}
 
 	// Filter transports by edge
@@ -197,6 +270,147 @@ func PrintTransportEntries(cmdFlags *pflag.FlagSet, entries ...*transport.Entry)
 	}
 	internal.Catch(cmdFlags, w.Flush())
 	internal.PrintOutput(cmdFlags, outputEntries, b.String())
+}
+
+// visorNetStatsOutput is the JSON/text payload for `tp disc -s --pk <pk>` (the
+// per-visor transport summary from Transport Discovery). It mirrors
+// netStatsOutput's shape but names the visor and reports its unique peer count.
+type visorNetStatsOutput struct {
+	PK           string         `json:"pk"`
+	Total        int            `json:"total_transports"`
+	ByType       map[string]int `json:"by_type"`
+	UniqueVisors int            `json:"unique_visors"`
+}
+
+// aggregateVisorTransports counts a single visor's transports by type and
+// collects the set of distinct peer visors (the other edge of each transport).
+// entries are expected to already be that visor's transports (both edges), as
+// returned by getTransportsByEdge.
+func aggregateVisorTransports(entries []*transport.Entry, pk cipher.PubKey) (byType map[string]int, peers map[cipher.PubKey]struct{}) {
+	byType = make(map[string]int)
+	peers = make(map[cipher.PubKey]struct{})
+	for _, e := range entries {
+		byType[string(e.Type)]++
+		peer := e.Edges[0]
+		if peer == pk {
+			peer = e.Edges[1]
+		}
+		peers[peer] = struct{}{}
+	}
+	return byType, peers
+}
+
+// printVisorTransportSummary fetches one visor's transports from Transport
+// Discovery (reusing the by-edge fetch) and prints the same shape of summary as
+// the network-wide `tp disc -s`, but computed only over that visor's
+// transports. It is the shared implementation behind `tp disc -s --pk <pk>`.
+func printVisorTransportSummary(cmd *cobra.Command, baseURL, pkStr string) {
+	var pk cipher.PubKey
+	internal.Catch(cmd.Flags(), pk.Set(pkStr))
+
+	entries, err := getTransportsByEdge(cmd.Flags(), baseURL, pk)
+	internal.Catch(cmd.Flags(), err)
+
+	byType, peers := aggregateVisorTransports(entries, pk)
+	vs := visorNetStatsOutput{
+		PK:           pk.Hex(),
+		Total:        len(entries),
+		ByType:       byType,
+		UniqueVisors: len(peers),
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Visor transports:  %d  (%s)\n", vs.Total, vs.PK)
+	fmt.Fprintf(&b, "Unique peers:      %d\n\n", vs.UniqueVisors)
+	fmt.Fprintf(&b, "  %-10s %s\n", "type", "total")
+	typeNames := make([]string, 0, len(byType))
+	for t := range byType {
+		typeNames = append(typeNames, t)
+	}
+	sort.Strings(typeNames)
+	for _, t := range typeNames {
+		fmt.Fprintf(&b, "  %-10s %d\n", t, byType[t])
+	}
+	fmt.Fprintf(&b, "  %-10s %d\n", "total", vs.Total)
+
+	internal.PrintOutput(cmd.Flags(), vs, b.String())
+}
+
+// keysByTypeOutput is the JSON/text payload for `tp disc --type <type>`: the
+// distinct public keys involved in transports of that type. When scoped to a
+// single visor (--pk), PK names the visor and PKs are its peers on that type.
+type keysByTypeOutput struct {
+	Type  string   `json:"type"`
+	PK    string   `json:"pk,omitempty"`
+	Count int      `json:"count"`
+	PKs   []string `json:"pks"`
+}
+
+// collectKeysByType returns the sorted, de-duplicated hex public keys involved
+// in transports of tpType. When hasFilter is set, only transports touching
+// filter are considered and only the PEER edge (the other end) is collected —
+// i.e. filter's peers on that transport type.
+func collectKeysByType(entries []*transport.Entry, tpType string, filter cipher.PubKey, hasFilter bool) []string {
+	set := make(map[cipher.PubKey]struct{})
+	for _, e := range entries {
+		if string(e.Type) != tpType {
+			continue
+		}
+		if hasFilter {
+			switch filter {
+			case e.Edges[0]:
+				set[e.Edges[1]] = struct{}{}
+			case e.Edges[1]:
+				set[e.Edges[0]] = struct{}{}
+			}
+			continue
+		}
+		set[e.Edges[0]] = struct{}{}
+		set[e.Edges[1]] = struct{}{}
+	}
+	pks := make([]string, 0, len(set))
+	for pk := range set {
+		pks = append(pks, pk.Hex())
+	}
+	sort.Strings(pks)
+	return pks
+}
+
+// printKeysByType fetches /all-transports, filters to transports of the given
+// type, and prints the distinct public keys involved — network-wide, or (when
+// pkFilter is set) the peers of that visor on the given type.
+func printKeysByType(cmd *cobra.Command, baseURL, tpType, pkFilter string) {
+	entries, err := fetchAllTransportEntries(cmd.Flags(), baseURL)
+	internal.Catch(cmd.Flags(), err)
+
+	var filter cipher.PubKey
+	hasFilter := pkFilter != ""
+	if hasFilter {
+		internal.Catch(cmd.Flags(), filter.Set(pkFilter))
+	}
+
+	pks := collectKeysByType(entries, tpType, filter, hasFilter)
+
+	out := keysByTypeOutput{
+		Type:  tpType,
+		Count: len(pks),
+		PKs:   pks,
+	}
+	if hasFilter {
+		out.PK = filter.Hex()
+	}
+
+	var b strings.Builder
+	if hasFilter {
+		fmt.Fprintf(&b, "%d %s peer(s) of %s:\n", out.Count, tpType, out.PK)
+	} else {
+		fmt.Fprintf(&b, "%d public key(s) on %s transports:\n", out.Count, tpType)
+	}
+	for _, pk := range pks {
+		fmt.Fprintf(&b, "%s\n", pk)
+	}
+
+	internal.PrintOutput(cmd.Flags(), out, b.String())
 }
 
 type transportID uuid.UUID
