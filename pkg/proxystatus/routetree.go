@@ -87,22 +87,31 @@ func RouteTree(snap Snapshot) *bitree.Node {
 // was right-justified before).
 type sumWidths struct{ idx, rtt, up, down int }
 
-// legSumWidths measures the widest value in each left-summary field across the
-// legs, so legSummary can pad every field to a common column width.
+// Fixed display widths (monospace cells) for the MUTABLE numeric fields of a
+// route's left summary — the route rtt and the ↑/↓ byte counts. These values
+// change on every ~1s live WebSocket push, so measuring their width per snapshot
+// (as the idx field still is) would let the column — and the box-drawing branch
+// and PK that follow it — shift horizontally whenever a digit is added or
+// dropped (1ms→342ms→1203ms, 9B→2.4K→15.3M). Pinning them to a constant width
+// wide enough for the realistic operating range keeps everything to their right
+// column-stable across updates. padLeftRunes only pads (never truncates), so a
+// rare out-of-range value still renders whole.
+const (
+	// rttColWidth fits "—" through "9999ms" (a slower route is pruned as dead).
+	rttColWidth = 6
+	// bwColWidth fits "0B↑" through "999.9K↑" / "15.3M↑" (compactBytes + arrow).
+	bwColWidth = 7
+)
+
+// legSumWidths measures the widest R[n] identity across the legs (that count is
+// structural — it only changes when a route is added or dropped, not on a live
+// value push) and pins the mutable numeric fields to their fixed column widths so
+// they never reflow as the values update. legSummary pads every field to these.
 func legSumWidths(legs []Leg) sumWidths {
-	var w sumWidths
+	w := sumWidths{rtt: rttColWidth, up: bwColWidth, down: bwColWidth}
 	for _, l := range legs {
 		if n := len(fmt.Sprintf("R[%d]", l.Index)); n > w.idx {
 			w.idx = n
-		}
-		if n := utf8.RuneCountInString(routeRTTCompact(l.RouteLatencyMS)); n > w.rtt {
-			w.rtt = n
-		}
-		if n := utf8.RuneCountInString(compactBytes(l.SentBytes) + "↑"); n > w.up {
-			w.up = n
-		}
-		if n := utf8.RuneCountInString(compactBytes(l.RecvBytes) + "↓"); n > w.down {
-			w.down = n
 		}
 	}
 	return w

@@ -778,7 +778,11 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	// drawing perfectly), so text AND glyphs share one set of metrics and connect.
 	// line-height:1 + letter-spacing:0 keep the vertical │ runs and horizontal ──
 	// runs continuous.
-	`pre.bitree{display:inline-block;text-align:left;font-family:'DejaVu Sans Mono','Liberation Mono','Noto Sans Mono',ui-monospace,'Cascadia Mono','Segoe UI Mono',Menlo,Consolas,'Courier New',monospace;font-size:11.5px;line-height:1;letter-spacing:0;margin:0 auto;white-space:pre;color:var(--fg)}` +
+	// font-variant-numeric:tabular-nums renders every digit at equal advance width
+	// (belt-and-suspenders with the fixed-width Go padding of the mutable rtt/byte
+	// fields) so live value updates never shift the aligned tree columns even if a
+	// fallback font's digits are proportional.
+	`pre.bitree{display:inline-block;text-align:left;font-family:'DejaVu Sans Mono','Liberation Mono','Noto Sans Mono',ui-monospace,'Cascadia Mono','Segoe UI Mono',Menlo,Consolas,'Courier New',monospace;font-variant-numeric:tabular-nums;font-size:11.5px;line-height:1;letter-spacing:0;margin:0 auto;white-space:pre;color:var(--fg)}` +
 	`pre.bitree code,pre.bitree span{font:inherit;color:inherit;line-height:1;letter-spacing:0;white-space:pre;word-break:normal;background:none;border:0;padding:0}` +
 	`pre.bitree code.fpk{color:var(--fg)}pre.bitree .src code.fpk{color:var(--accent);font-weight:600}` +
 	`pre.bitree code.ftid{color:var(--muted)}pre.bitree .tcol{color:var(--muted)}` +
