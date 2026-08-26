@@ -106,12 +106,28 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${BRANCH}-latest"
-          # Delete the old rolling release + its tag, then recreate pointing at
-          # this commit — the simplest way to keep exactly one rolling artifact
-          # set that always matches the freshly-built commit.
-          gh release delete "${TAG}" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "${TAG}" dist/skywire-linux-*.zst dist/SHA256SUMS \
-            --target "${GITHUB_SHA}" \
-            --prerelease \
-            --title "${BRANCH} latest (${VERSION})" \
-            --notes "Rolling ${BRANCH} build, replaced on every merge. Version ${VERSION}, commit ${GITHUB_SHA}. NOT a tagged release — for the download-and-install auto-updater, not for packaging."
+          NOTES="Rolling ${BRANCH} build, replaced on every merge. Version ${VERSION}, commit ${GITHUB_SHA}. NOT a tagged release — for the download-and-install auto-updater, not for packaging."
+          # Upsert the rolling release IN PLACE. Never delete before a successful
+          # publish: a failed/rate-limited `gh release create` after the delete
+          # step would strand the fleet's binary auto-updater with no release to
+          # download (observed 2026-08-26 — an HTTP 403 on create, after the
+          # delete had already wiped develop-latest). If the release exists,
+          # retarget it and clobber its assets; if it does not (or was wiped),
+          # create it fresh — so this step also self-heals a previously-deleted
+          # rolling release on the next run.
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            git tag -f "${TAG}" "${GITHUB_SHA}"
+            git push -f origin "refs/tags/${TAG}"
+            gh release edit "${TAG}" \
+              --target "${GITHUB_SHA}" \
+              --prerelease \
+              --title "${BRANCH} latest (${VERSION})" \
+              --notes "${NOTES}"
+            gh release upload "${TAG}" dist/skywire-linux-*.zst dist/SHA256SUMS --clobber
+          else
+            gh release create "${TAG}" dist/skywire-linux-*.zst dist/SHA256SUMS \
+              --target "${GITHUB_SHA}" \
+              --prerelease \
+              --title "${BRANCH} latest (${VERSION})" \
+              --notes "${NOTES}"
+          fi
