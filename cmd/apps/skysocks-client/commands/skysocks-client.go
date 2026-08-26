@@ -178,7 +178,30 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	// only on a clean ctx-done stop; any other return is a
 	// (re-)connect trigger when --reconnect is set.
 	runCycle := func() error {
+		// Bind :1080 up front and serve status.skysocks (and the branded
+		// interstitial for real traffic) in-process WHILE we dial the exit, so the
+		// reserved diagnostic page is reachable during the "still connecting" window
+		// instead of connection-refused. The live Client can only be built from the
+		// dialed session conn, so this sessionless listener owns :1080 until the dial
+		// succeeds, then releases it to client.ListenAndServe below. Best-effort: if
+		// the bind fails we just skip it and dial as before.
+		dctx, dcancel := context.WithCancel(cycleCtx)
+		ddone := make(chan struct{})
+		if lis, lerr := net.Listen("tcp", addr); lerr == nil {
+			go func() {
+				defer close(ddone)
+				skysocks.ServeDisconnected(dctx, lis, appCl)
+			}()
+		} else {
+			log.WithError(lerr).Debug("disconnected status listener not bound")
+			close(ddone)
+		}
+
 		conn, err := dialServer(cycleCtx, appCl, pk, serverPort)
+		// Stop the disconnected listener and wait for it to release :1080 before the
+		// live Client rebinds the same addr.
+		dcancel()
+		<-ddone
 		if err != nil {
 			return fmt.Errorf("dial server: %w", err)
 		}
