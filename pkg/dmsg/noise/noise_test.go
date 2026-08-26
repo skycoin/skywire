@@ -281,3 +281,40 @@ func TestSealOpenWithNonce(t *testing.T) {
 	require.Equal(t, encN, nI.GetEncNonce(), "SealWithNonce must not advance encNonce")
 	require.Equal(t, decN, nR.GetDecNonce(), "OpenWithNonce must not advance decNonce")
 }
+
+// TestWriterTurn validates the handshake-turn accessor used by the mux per-frame
+// integration to avoid calling MakeHandshakeMessage out of turn (the bug that
+// broke live per-frame route groups: a responder writing msg2 before reading
+// msg1). Initiator writes first (msg1) then reads; responder reads (msg1) then
+// writes (msg2); neither may write when it is not their turn.
+func TestWriterTurn(t *testing.T) {
+	pkI, skI := cipher.GenerateKeyPair()
+	pkR, skR := cipher.GenerateKeyPair()
+	nI, err := New(HandshakeKK, Config{LocalPK: pkI, LocalSK: skI, RemotePK: pkR, Initiator: true})
+	require.NoError(t, err)
+	nR, err := New(HandshakeKK, Config{LocalPK: pkR, LocalSK: skR, RemotePK: pkI, Initiator: false})
+	require.NoError(t, err)
+
+	// Start of KK: initiator writes msg1, responder must NOT write yet.
+	require.True(t, nI.WriterTurn(), "initiator writes msg1 first")
+	require.False(t, nR.WriterTurn(), "responder must read msg1 before writing")
+
+	msg1, err := nI.MakeHandshakeMessage()
+	require.NoError(t, err)
+	// After writing msg1 the initiator reads next; the responder still owes a read.
+	require.False(t, nI.WriterTurn(), "initiator reads msg2 next")
+	require.False(t, nR.WriterTurn(), "responder still must read msg1")
+
+	require.NoError(t, nR.ProcessHandshakeMessage(msg1))
+	// Now it IS the responder's turn to write msg2.
+	require.True(t, nR.WriterTurn(), "responder writes msg2 after reading msg1")
+
+	msg2, err := nR.MakeHandshakeMessage()
+	require.NoError(t, err)
+	require.NoError(t, nI.ProcessHandshakeMessage(msg2))
+
+	// Handshake complete on both sides; neither writes further.
+	require.True(t, nI.HandshakeFinished() && nR.HandshakeFinished())
+	require.False(t, nI.WriterTurn())
+	require.False(t, nR.WriterTurn())
+}
