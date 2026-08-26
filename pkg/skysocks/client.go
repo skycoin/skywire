@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -39,12 +40,25 @@ import (
 const muxStreamWindowBytes = 16 * 1024 * 1024
 
 // Client implement multiplexing proxy client using yamux.
+//
+// The client holds N independent yamux sessions ("tunnels"), each over its own
+// dialed route-group conn. Accepted browser connections are striped across the
+// tunnels by pickSession (least-loaded live tunnel), so throughput sums across
+// disjoint routes with zero cross-tunnel reorder — the connection-striped
+// aggregation design in docs/mux_aggregation_rfc.md. N is configurable; the
+// default is a single tunnel (N==1), which is byte-for-byte the pre-aggregation
+// behavior. Multiple tunnels only genuinely aggregate once they leave over
+// disjoint first-hop transports; that disjoint-dial coordination is the required
+// follow-up (RFC step 3) and is NOT implemented here.
 type Client struct {
-	appCl    *app.Client
-	session  *yamux.Session
-	listener net.Listener
-	once     sync.Once
-	closeC   chan struct{}
+	appCl *app.Client
+	// sessions holds the live tunnels (>=1). Guarded by sessionsMu because
+	// AddTunnel appends while the accept loop / keepalive read concurrently.
+	sessions   []*yamux.Session
+	sessionsMu sync.Mutex
+	listener   net.Listener
+	once       sync.Once
+	closeC     chan struct{}
 
 	// streams tracks the currently open tunneled streams so the status page can
 	// expand the "N open stream(s)" count into per-stream rows (id + CONNECT
@@ -61,14 +75,16 @@ type streamMeta struct {
 	since  time.Time
 }
 
-// NewClient constructs a new Client.
-func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
-	c := &Client{
-		appCl:   appCl,
-		closeC:  make(chan struct{}),
-		streams: make(map[uint32]streamMeta),
-	}
+// errAllTunnelsDown is the synthetic stream-open error used when every tunnel
+// is closed so pickSession returns nil and there is no live session to Open() a
+// real error from. It drives the same route-down interstitial + reconnect path a
+// single closed session took before.
+var errAllTunnelsDown = errors.New("all tunnels to the exit are down")
 
+// newYamuxSession wraps a dialed route-group conn in a yamux client session with
+// skysocks's flow-control window. Shared by NewClient and AddTunnel so every
+// tunnel is configured identically.
+func newYamuxSession(conn net.Conn) (*yamux.Session, error) {
 	sessionCfg := yamux.DefaultConfig()
 	sessionCfg.EnableKeepAlive = false
 	sessionCfg.MaxStreamWindowSize = muxStreamWindowBytes
@@ -76,12 +92,147 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error creating client: yamux: %w", err)
 	}
+	return session, nil
+}
 
-	c.session = session
+// NewClient constructs a new single-tunnel Client. Signature unchanged: this is
+// the common case and every existing caller/test builds one tunnel this way. Use
+// AddTunnel (or NewMultiClient) to stripe browser connections across N tunnels.
+func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
+	c := &Client{
+		appCl:   appCl,
+		closeC:  make(chan struct{}),
+		streams: make(map[uint32]streamMeta),
+	}
+
+	session, err := newYamuxSession(conn)
+	if err != nil {
+		return nil, err
+	}
+	c.sessions = []*yamux.Session{session}
 
 	go c.sessionKeepAliveLoop()
 
 	return c, nil
+}
+
+// NewMultiClient constructs a Client striping across one tunnel per conn. With a
+// single conn it is identical to NewClient. The N conns must already be dialed
+// (ideally over disjoint routes — see the disjoint-dial follow-up in
+// docs/mux_aggregation_rfc.md step 3); this constructor only wraps them.
+func NewMultiClient(conns []net.Conn, appCl *app.Client) (*Client, error) {
+	if len(conns) == 0 {
+		return nil, errors.New("skysocks: NewMultiClient needs at least one conn")
+	}
+	c, err := NewClient(conns[0], appCl)
+	if err != nil {
+		return nil, err
+	}
+	for _, conn := range conns[1:] {
+		if err := c.AddTunnel(conn); err != nil {
+			_ = c.Close() //nolint:errcheck
+			return nil, err
+		}
+	}
+	return c, nil
+}
+
+// AddTunnel wraps an additional dialed route-group conn in a yamux session and
+// appends it to the tunnel set. The shared keepalive loop and pickSession pick it
+// up automatically. This is the extension point the disjoint-dial coordinator
+// (RFC step 3) will call to grow the tunnel set at runtime.
+func (c *Client) AddTunnel(conn net.Conn) error {
+	session, err := newYamuxSession(conn)
+	if err != nil {
+		return err
+	}
+	c.sessionsMu.Lock()
+	c.sessions = append(c.sessions, session)
+	c.sessionsMu.Unlock()
+	return nil
+}
+
+// snapshotSessions returns a copy of the current tunnel set for lock-free
+// iteration by callers (keepalive, status).
+func (c *Client) snapshotSessions() []*yamux.Session {
+	c.sessionsMu.Lock()
+	defer c.sessionsMu.Unlock()
+	out := make([]*yamux.Session, len(c.sessions))
+	copy(out, c.sessions)
+	return out
+}
+
+// leastLoaded returns the index of the smallest non-negative count, or -1 when
+// every count is negative — the sentinel a closed/skipped tunnel is given. Ties
+// resolve to the lowest index so selection is deterministic. Extracted as a pure
+// function so the least-loaded striping policy is unit-testable without a live
+// yamux session.
+func leastLoaded(counts []int) int {
+	best := -1
+	for i, n := range counts {
+		if n < 0 {
+			continue
+		}
+		if best == -1 || n < counts[best] {
+			best = i
+		}
+	}
+	return best
+}
+
+// pickSession returns the least-loaded live tunnel (fewest open yamux streams),
+// skipping any closed tunnel, or nil when every tunnel is closed. This is the
+// connection-striping policy: each accepted browser conn goes to the tunnel with
+// the most spare capacity. With a single tunnel it always returns that tunnel
+// while it is live (identical to the pre-aggregation c.session).
+func (c *Client) pickSession() *yamux.Session {
+	c.sessionsMu.Lock()
+	defer c.sessionsMu.Unlock()
+	if len(c.sessions) == 0 {
+		return nil
+	}
+	counts := make([]int, len(c.sessions))
+	for i, s := range c.sessions {
+		if s == nil || s.IsClosed() {
+			counts[i] = -1
+			continue
+		}
+		counts[i] = s.NumStreams()
+	}
+	idx := leastLoaded(counts)
+	if idx < 0 {
+		return nil
+	}
+	return c.sessions[idx]
+}
+
+// anySessionLive reports whether at least one tunnel is still up. With a single
+// tunnel this is exactly !session.IsClosed().
+func (c *Client) anySessionLive() bool {
+	for _, s := range c.snapshotSessions() {
+		if s != nil && !s.IsClosed() {
+			return true
+		}
+	}
+	return false
+}
+
+// allSessionsClosed reports whether every tunnel is closed (the whole-client
+// teardown / reconnect trigger). An empty set counts as closed.
+func (c *Client) allSessionsClosed() bool {
+	return !c.anySessionLive()
+}
+
+// totalStreams sums the open stream counts across live tunnels — the aggregate
+// "N open stream(s)" the status page reports.
+func (c *Client) totalStreams() int {
+	total := 0
+	for _, s := range c.snapshotSessions() {
+		if s != nil && !s.IsClosed() {
+			total += s.NumStreams()
+		}
+	}
+	return total
 }
 
 // ListenAndServe start tcp listener on addr and proxies incoming
@@ -125,8 +276,18 @@ func (c *Client) ListenAndServe(addr string) error {
 			c.appCl.Log().Debug("Accepted skysocks client")
 		}
 
-		stream, err := c.session.Open()
-		if err != nil {
+		// Stripe onto the least-loaded live tunnel. pickSession returns nil only
+		// when every tunnel is closed; in that (route-down) case there is no live
+		// session to Open() a real error from, so a sentinel drives the same
+		// interstitial + reconnect path a single closed session took before.
+		sess := c.pickSession()
+		var stream net.Conn
+		if sess != nil {
+			stream, err = sess.Open()
+		} else {
+			err = errAllTunnelsDown
+		}
+		if sess == nil || err != nil {
 			// The mesh route/session to the exit is down (exit restart, all
 			// mux legs dropped). Before tearing down for reconnect, serve the
 			// waiting browser a branded "building a route over skywire…"
@@ -138,14 +299,17 @@ func (c *Client) ListenAndServe(addr string) error {
 			// keeps the in-process status page reachable even now (exit down)
 			// instead of being shadowed by the interstitial — status.skysocks
 			// needs no exit stream, and this is exactly when the user wants it.
-			// A single Open failing does NOT always mean the session is dead: if
-			// the session is still up, the failure was transient and the exit is
-			// reachable. In that case ServeSOCKS5 serves a fall-through reload
-			// (exitReachable=true) instead of pinning the browser on the waiting
-			// interstitial, and we keep listening rather than tearing down — the
-			// browser's reload gets a working stream. Only a genuinely closed
-			// session serves the waiting interstitial and triggers reconnect.
-			reachable := c.session != nil && !c.session.IsClosed()
+			// A single Open failing does NOT always mean all tunnels are dead: if
+			// ANY tunnel is still up, the failure was transient (or just this
+			// tunnel died) and the exit is still reachable. In that case
+			// ServeSOCKS5 serves a fall-through reload (exitReachable=true)
+			// instead of pinning the browser on the waiting interstitial, and we
+			// keep listening rather than tearing down — the browser's reload gets
+			// a working stream on the next-picked tunnel. Only when EVERY tunnel
+			// is closed do we serve the waiting interstitial and trigger
+			// reconnect. With a single tunnel (N==1) this is exactly the prior
+			// behavior.
+			reachable := c.anySessionLive()
 			go func(bc net.Conn) {
 				if serr := proxyinterstitial.ServeSOCKS5(bc, proxyinterstitial.StatusLine(err), "skysocks", c.statusOverride, c.exitReachable); serr != nil && c.appCl != nil {
 					c.appCl.Log().Debugf("route-down interstitial not served: %v", serr)
@@ -154,7 +318,7 @@ func (c *Client) ListenAndServe(addr string) error {
 			}(conn)
 			if reachable {
 				if c.appCl != nil {
-					c.appCl.Log().Debugf("yamux stream open failed but session is up; keeping listener: %v", err)
+					c.appCl.Log().Debugf("yamux stream open failed but a tunnel is up; keeping listener: %v", err)
 				}
 				continue
 			}
@@ -184,31 +348,45 @@ const (
 	livenessFailThreshold = 2
 )
 
+// sessionKeepAliveLoop probes every tunnel and retires the dead ones. A tunnel
+// that fails livenessFailThreshold consecutive pings is closed so pickSession
+// stops routing to it (dropping just that tunnel's streams); the whole client is
+// torn down for reconnect only once EVERY tunnel is closed. With a single tunnel
+// (N==1) this is exactly the prior behavior: the one tunnel dying closes the
+// client. Per-tunnel re-dial of a dropped tunnel (instead of only skipping it) is
+// the disjoint-dial follow-up — see docs/mux_aggregation_rfc.md step 3.
 func (c *Client) sessionKeepAliveLoop() {
 	ticker := time.NewTicker(livenessProbeInterval)
 	defer ticker.Stop()
 
-	fails := 0
+	fails := make(map[*yamux.Session]int)
 	for {
 		select {
 		case <-c.closeC:
 			return
 		case <-ticker.C:
-			if c.session.IsClosed() {
-				c.close()
-
-				return
-			}
-			if c.sessionAlive(livenessProbeTimeout) {
-				fails = 0
-
-				continue
-			}
-			fails++
-			if fails >= livenessFailThreshold {
-				if c.appCl != nil {
-					c.appCl.Log().Warnf("Liveness probe failed %dx; route group gone, closing for reconnect", fails)
+			for _, s := range c.snapshotSessions() {
+				if s.IsClosed() {
+					delete(fails, s)
+					continue
 				}
+				if sessionPingAlive(s, livenessProbeTimeout) {
+					fails[s] = 0
+					continue
+				}
+				fails[s]++
+				if fails[s] >= livenessFailThreshold {
+					if c.appCl != nil {
+						c.appCl.Log().Warnf("Liveness probe failed %dx; tunnel gone, retiring it", fails[s])
+					}
+					// Retire just this tunnel; a closed session is skipped by
+					// pickSession. The whole-client close below fires only when
+					// this leaves no live tunnel.
+					_ = s.Close() //nolint:errcheck
+					delete(fails, s)
+				}
+			}
+			if c.allSessionsClosed() {
 				c.close()
 
 				return
@@ -217,14 +395,14 @@ func (c *Client) sessionKeepAliveLoop() {
 	}
 }
 
-// sessionAlive reports whether a yamux ping round-trips within timeout.
-// A silently torn-down rg conn never pongs; the timer catches that. The
-// ping runs in a goroutine so a wedged ping cannot stall the loop —
+// sessionPingAlive reports whether a yamux ping round-trips on the given session
+// within timeout. A silently torn-down rg conn never pongs; the timer catches
+// that. The ping runs in a goroutine so a wedged ping cannot stall the caller —
 // Close() tears down the session, which unblocks the pending ping.
-func (c *Client) sessionAlive(timeout time.Duration) bool {
+func sessionPingAlive(s *yamux.Session, timeout time.Duration) bool {
 	done := make(chan error, 1)
 	go func() {
-		_, err := c.session.Ping()
+		_, err := s.Ping()
 		done <- err
 	}()
 	select {
@@ -233,6 +411,18 @@ func (c *Client) sessionAlive(timeout time.Duration) bool {
 	case <-time.After(timeout):
 		return false
 	}
+}
+
+// sessionAlive reports whether any tunnel answers a ping within timeout. With a
+// single tunnel it is exactly a ping of that tunnel (retained for the liveness
+// tests and any single-session caller).
+func (c *Client) sessionAlive(timeout time.Duration) bool {
+	for _, s := range c.snapshotSessions() {
+		if s != nil && sessionPingAlive(s, timeout) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Client) handleStream(conn, stream net.Conn) {
@@ -245,7 +435,7 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 	if !proceed {
 		conn.Close()   //nolint:errcheck,gosec
 		stream.Close() //nolint:errcheck,gosec
-		if c.session.IsClosed() {
+		if c.allSessionsClosed() {
 			c.close()
 		}
 		return
@@ -284,7 +474,7 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 		}
 	}
 
-	if c.session.IsClosed() {
+	if c.allSessionsClosed() {
 		c.close()
 	}
 }
@@ -524,12 +714,13 @@ func (c *Client) streamSnapshot() []proxystatus.Stream {
 	return out
 }
 
-// exitReachable reports whether the yamux session to the exit is currently live.
-// It is the fall-through probe handed to proxyinterstitial.ServeSOCKS5: when the
-// exit is reachable again, the interstitial is replaced by a reload page so the
-// browser proceeds to the intended destination instead of waiting on a spinner.
+// exitReachable reports whether at least one tunnel to the exit is currently
+// live. It is the fall-through probe handed to proxyinterstitial.ServeSOCKS5:
+// when the exit is reachable again, the interstitial is replaced by a reload page
+// so the browser proceeds to the intended destination instead of waiting on a
+// spinner. With a single tunnel it is exactly !session.IsClosed().
 func (c *Client) exitReachable() bool {
-	return c.session != nil && !c.session.IsClosed()
+	return c.anySessionLive()
 }
 
 // statusOverride is the reserved-host answer handed to
@@ -888,9 +1079,15 @@ func wsReadFrame(conn net.Conn) (opcode byte, payload []byte, err error) {
 // snapshot, so status.skysocks always renders.
 func (c *Client) statusSnapshot() proxystatus.Snapshot {
 	snap := c.visorStatusSnapshot()
-	if c.session != nil && !c.session.IsClosed() {
+	if c.anySessionLive() {
 		snap.Running = true
-		snap.Note = fmt.Sprintf("session to the exit is up · %d open stream(s)", c.session.NumStreams())
+		snap.Note = fmt.Sprintf("session to the exit is up · %d open stream(s)", c.totalStreams())
+		// With more than one tunnel, surface how many carry the aggregate. A
+		// single tunnel keeps the note byte-identical to the pre-aggregation
+		// build (no "· N tunnel(s)" suffix).
+		if n := len(c.snapshotSessions()); n > 1 {
+			snap.Note = fmt.Sprintf("%s · %d tunnels", snap.Note, n)
+		}
 		// Per-stream detail (id + target + age) behind the count, when tracked.
 		snap.Streams = c.streamSnapshot()
 	} else {
@@ -999,10 +1196,16 @@ func (c *Client) Close() error {
 		}
 
 		close(c.closeC)
-		// Tear down the yamux session so reconnect builds a fresh one
-		// and any in-flight liveness ping unblocks.
-		if c.session != nil {
-			err = c.session.Close()
+		// Tear down every tunnel so reconnect builds fresh ones and any
+		// in-flight liveness ping unblocks. The first close error (if any) is
+		// returned; all sessions are closed regardless.
+		for _, s := range c.snapshotSessions() {
+			if s == nil {
+				continue
+			}
+			if cerr := s.Close(); cerr != nil && err == nil {
+				err = cerr
+			}
 		}
 	})
 
