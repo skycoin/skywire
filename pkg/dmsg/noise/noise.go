@@ -281,6 +281,23 @@ func (ns *Noise) HandshakeFinished() bool {
 	return ns.hs.MessageIndex() == len(ns.pattern.Messages)
 }
 
+// WriterTurn reports whether the NEXT handshake message is ours to WRITE (via
+// MakeHandshakeMessage) rather than to read. The initiator writes the
+// even-indexed handshake messages and reads the odd ones; the responder is the
+// mirror. Callers use this to avoid MakeHandshakeMessage out of turn, which the
+// underlying state machine rejects ("unexpected call to WriteMessage should be
+// ReadMessage"). Returns false once the handshake is finished.
+func (ns *Noise) WriterTurn() bool {
+	if ns.HandshakeFinished() {
+		return false
+	}
+	even := ns.hs.MessageIndex()%2 == 0
+	if ns.init {
+		return even
+	}
+	return !even
+}
+
 // ChannelBinding returns a value that uniquely identifies the completed
 // handshake session — the Noise handshake hash. Both peers derive an identical
 // value, and it is bound to the full transcript (static keys + ephemerals + any
