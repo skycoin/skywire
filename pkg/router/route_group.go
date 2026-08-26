@@ -242,6 +242,13 @@ type RouteGroup struct {
 	rotationApplyAddForward func(excludeHops []string)
 	rotationInterval        time.Duration
 
+	// standbyNewLegs mirrors onto the mux (SetStandbyNewLegs) so newly-grown
+	// aux legs enter warm standby on add and the rotation engine promotes them
+	// one per tick, goodput-gated, instead of every dialed leg going hot at
+	// once and churning the group. Set true when SetRotation wires a promoting
+	// engine. See routeMux.standbyNewLegs.
+	standbyNewLegs bool
+
 	// selfHealAdd restores the multiplexed degree in the background when a
 	// leg dies. pruneDeadTransports drops the dead leg (surviving legs
 	// immediately carry its share via the selector), then maybeSelfHeal
@@ -810,6 +817,15 @@ func (rg *RouteGroup) SetRotation(hook RotationHook, applyAdd, applyAddForward f
 	rg.rotationApplyAdd = applyAdd
 	rg.rotationApplyAddForward = applyAddForward
 	rg.rotationInterval = interval
+	// A promoting rotation engine is wired: route new aux legs through the warm
+	// standby pool on add so the engine admits them one per tick, goodput-gated,
+	// instead of every dialed leg going hot at once. Propagate to the mux if it
+	// already exists; otherwise mux creation in handleHandshake applies it.
+	promoting := interval > 0 && hook != nil
+	rg.standbyNewLegs = promoting
+	if promoting && rg.mux != nil {
+		rg.mux.SetStandbyNewLegs(true)
+	}
 	rg.mu.Unlock()
 	// Start the rotation goroutine now (startOffServiceLoops fired
 	// during initial setup before SetRotation was called, so the
@@ -2328,6 +2344,13 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 			if remoteCaps&routing.CapMux != 0 {
 				sack := remoteCaps&routing.CapSACK != 0
 				rg.mux = newRouteMux(rg.logger, sack)
+				// If a promoting rotation engine was already wired (SetRotation
+				// before the handshake), route new aux legs through warm standby
+				// on add. Set BEFORE growLegs so it governs any aux legs already
+				// present in tps[]; the primary (index 0) is always active.
+				if rg.standbyNewLegs {
+					rg.mux.SetStandbyNewLegs(true)
+				}
 				// rg.tps already has the primary transport at this
 				// point; size the leg counters to match. Subsequent
 				// AppendRoute calls (mux 2/N+) extend the slice via
