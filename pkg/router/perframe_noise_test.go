@@ -94,3 +94,25 @@ func TestPerFrameMuxDataPathRoundTrip(t *testing.T) {
 	delivered, _ := recv2.deliverData(bad.SequenceNumber()+1000, bad.DataPayloadAfterSeq())
 	require.Empty(t, delivered, "frame that fails AEAD open must not be delivered")
 }
+
+// TestPerFrameNoiseCapUsesEncryptArgNotField is a regression test for the bug
+// where the INITIATOR stripped CapPerFrameNoise (and its KK msg1) from its very
+// first handshake: perFrameNoiseCap gated on the rg.encrypt FIELD, which is only
+// set when a handshake is RECEIVED, so on the initiator's first send (before it
+// has received anything) the field was still false and per-frame was never
+// offered — the group silently fell back to stream noise. The cap must be
+// derived from the encrypt ARGUMENT that sendHandshake carries, independent of
+// the not-yet-set field.
+func TestPerFrameNoiseCapUsesEncryptArgNotField(t *testing.T) {
+	rg := &RouteGroup{perFrameNoiseWant: true}
+	// Field is false — exactly the initiator's state at first send.
+	require.False(t, rg.encrypt)
+	require.Equal(t, routing.CapPerFrameNoise, rg.perFrameNoiseCap(true),
+		"initiator must offer CapPerFrameNoise on its first encrypted send even though rg.encrypt is still false")
+	require.Equal(t, uint16(0), rg.perFrameNoiseCap(false),
+		"an unencrypted handshake must not offer per-frame noise")
+
+	rg.perFrameNoiseWant = false
+	require.Equal(t, uint16(0), rg.perFrameNoiseCap(true),
+		"per-frame noise must not be offered when the group does not want it")
+}
