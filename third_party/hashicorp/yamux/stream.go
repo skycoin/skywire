@@ -136,6 +136,26 @@ START:
 	return n, err
 
 WAIT:
+	// Terminate deterministically when the session is gone. The select below
+	// picks uniformly among ready cases, so once shutdownCh is closed a
+	// lingering (or repeatedly re-signaled) recvNotifyCh token can be chosen
+	// over it, sending us back through START with no data and no forward
+	// progress. START only inspects the per-stream state, which stays
+	// streamEstablished until forceClose runs, so we loop straight back to
+	// WAIT. With no read deadline set this loop allocates nothing (timer is
+	// nil), so it never triggers a GC safepoint and, on single-threaded
+	// js/wasm, never yields — one goroutine pegs the only thread and freezes
+	// the whole runtime for as long as the token keeps being re-signaled.
+	// (#3924 added the shutdownCh return case below but left termination
+	// dependent on select fairness; this non-blocking pre-check removes that
+	// dependency.) This must come after the START buffered-data handling so a
+	// half-closed stream still drains its receive buffer before returning.
+	select {
+	case <-s.session.shutdownCh:
+		return 0, ErrSessionShutdown
+	default:
+	}
+
 	var timeout <-chan time.Time
 	var timer *time.Timer
 	readDeadline := s.readDeadline.Load().(time.Time)
@@ -146,14 +166,6 @@ WAIT:
 	}
 	select {
 	case <-s.session.shutdownCh:
-		// Session is gone: no more data will ever arrive on this stream. The
-		// bare fall-through to `goto START` upstream ships spins forever here —
-		// START only inspects the per-stream state, which stays streamEstablished
-		// when a session is torn down mid-Read (common when a dmsg WS/WebRTC
-		// carrier drops during an in-flight dial). shutdownCh is a CLOSED channel,
-		// so the select re-fires it every iteration, re-allocating a timer each
-		// pass: a single goroutine pegs the (single) wasm thread at ~370k
-		// time.NewTimer/s. Return instead of looping.
 		return 0, ErrSessionShutdown
 	case <-s.recvNotifyCh:
 	case <-timeout:
@@ -232,6 +244,19 @@ START:
 	return int(max), err
 
 WAIT:
+	// Symmetric to Read: terminate deterministically when the session is gone.
+	// A torn-down session can never drain the send window, so once shutdownCh
+	// is closed a lingering (or re-signaled) sendNotifyCh token chosen by the
+	// select below sends us back through START with window still 0 and no
+	// progress — the same non-allocating, non-preemptible spin that freezes
+	// single-threaded js/wasm. Re-check shutdown first so the loop always
+	// returns rather than relying on select fairness to eventually pick it.
+	select {
+	case <-s.session.shutdownCh:
+		return 0, ErrSessionShutdown
+	default:
+	}
+
 	var timeout <-chan time.Time
 	var timer *time.Timer
 	writeDeadline := s.writeDeadline.Load().(time.Time)
@@ -242,9 +267,6 @@ WAIT:
 	}
 	select {
 	case <-s.session.shutdownCh:
-		// Symmetric to Read: a torn-down session can never drain the send
-		// window, so the upstream fall-through to `goto START` spins on the
-		// closed shutdownCh (window stays 0) instead of failing the write.
 		return 0, ErrSessionShutdown
 	case <-s.sendNotifyCh:
 	case <-timeout:
