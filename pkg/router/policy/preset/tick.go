@@ -66,11 +66,12 @@ type Engine struct {
 	adaptFwdTarget         int
 	adaptFwdSatTicks       int
 	// health + anti-churn state
-	adaptCooldown  int                // ticks to hold the active set steady after a reshape
-	adaptSatTicks  int                // consecutive saturated ticks (grow only on a sustained signal)
-	adaptUnhealthy map[string]int     // per-active-leg consecutive gross-outlier-latency ticks
-	adaptStall     map[string]int     // per-active-leg consecutive low/no-throughput ticks under load
-	adaptRecvRate  map[string]float64 // per-active-leg EWMA recv byte-rate (throughput signal)
+	adaptCooldown   int                // ticks to hold the active set steady after a reshape
+	adaptSatTicks   int                // consecutive saturated ticks (grow only on a sustained signal)
+	adaptUnhealthy  map[string]int     // per-active-leg consecutive gross-outlier-latency ticks
+	adaptStall      map[string]int     // per-active-leg consecutive low/no-throughput ticks under load
+	adaptRecvRate   map[string]float64 // per-active-leg EWMA recv byte-rate (throughput signal)
+	adaptPrimaryBad int                // consecutive ticks the PRIMARY (leg 0) reads as a gross outlier while a healthy alternative is active
 
 	// ledbat (delay-based scavenger)
 	ledbatEWMA map[string]float64 // per-leg EWMA-smoothed one-way-ish delay (ms)
@@ -855,6 +856,35 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		}
 	}
 
+	// Primary (leg 0) health. The rules above NEVER touch leg 0 — the group must
+	// always keep a selectable send leg — so a bad PRIMARY (a webrtc-second-hop
+	// leg dragging every download it anchors at 2x the latency / a fraction of
+	// the throughput of its peers) would otherwise ride forever, exempt from the
+	// throughput/latency eviction that shed the same drag on any other leg. Track
+	// whether leg 0 is a gross outlier AND a HEALTHY active alternative exists
+	// (so a swap lands on a better primary), with its own hysteresis streak so a
+	// transient spike never swaps the primary. Judged on the same live-latency +
+	// under-load-throughput signals as rule (2).
+	primaryBad := false
+	healthyAltExists := false
+	for _, l := range legs {
+		if !l.Alive || l.Standby || l.TransportID == "" {
+			continue
+		}
+		bad := legUnhealthyLat(e.adaptLatEWMA[l.TransportID], activeMedian) ||
+			(groupLoaded && legLowThroughput(e.adaptRecvRate[l.TransportID], activeMedianRate))
+		if l.Index == 0 {
+			primaryBad = bad
+		} else if !bad {
+			healthyAltExists = true
+		}
+	}
+	if primaryBad && healthyAltExists {
+		e.adaptPrimaryBad++
+	} else {
+		e.adaptPrimaryBad = 0
+	}
+
 	// healthyPromotable = the standby leg SAFE and BEST to bring into the active
 	// set: alive, not a known gross-latency-outlier, and — among those — the
 	// FASTEST by measured latency (lowest LatencyMs, which snapshotLegs sources
@@ -943,6 +973,24 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 			return RotationAction{DemoteToStandby: []int{unhealthyIdx}}
 		}
 		return RotationAction{DropLegs: []int{unhealthyIdx}, ExcludeHops: unhealthyHops}
+	}
+
+	// (2.5) Swap out a SUSTAINED-unhealthy PRIMARY (safety — bypasses the
+	// cooldown). Leg 0 can't be parked to standby (setLegStandby refuses idx 0 —
+	// the group must always have a send leg), so a gross-outlier primary escapes
+	// rule (2) entirely. DROP it instead: dropLegsByIndex flushes leg 0's in-
+	// flight window onto a healthy active leg first, then removeLegs compacts and
+	// promotes the next aux into the primary slot, and self-heal (fired by the
+	// drop) re-dials a replacement into the reserve — a hot-swap of the primary
+	// with the retx buffer rescued. Only fires with a healthy active alternative
+	// present (checked above) and >1 alive leg, so the group is never left on a
+	// worse or single primary; the hysteresis streak keeps a transient spike from
+	// swapping it. If the promoted aux is itself bad, the next tick swaps again
+	// (converging onto the healthy leg), each swap shedding a drag.
+	if e.adaptPrimaryBad >= adaptHysteresis && aliveCount > 1 {
+		e.adaptPrimaryBad = 0
+		e.adaptCooldown = adaptReshapeCooldown
+		return RotationAction{DropLegs: []int{0}}
 	}
 
 	// Under cooldown, hold the set steady (anti-churn) — no optimization reshape.
