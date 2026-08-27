@@ -229,6 +229,15 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 		// while the receiver is holding the gap open for it.
 		retxBuf: newRetxBuffer(reorderWindow),
 	}
+	// Default every mux to ECF (Earliest Completion First). It only spills a
+	// frame onto a slower leg once the fastest leg is saturated (a full BDP in
+	// flight), so it never over-assigns a slow leg and stalls the no-skip reorder
+	// frontier — the failure mode of the old latency-weighted default, where a
+	// low-latency but low-bandwidth leg drew traffic it couldn't clear and the
+	// whole mux collapsed BELOW single-leg rate. Cold/empty ECF state and
+	// single-leg groups fall back to the round-robin schedule in SelectECF, so
+	// they are unaffected. A routing-policy distribution can still override this.
+	m.tpSelector.SetMode(WeightModeECF)
 	return m
 }
 
