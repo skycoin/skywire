@@ -94,6 +94,7 @@ func (v *Visor) VisorSCP(req VisorSCPRequest) error {
 			transport, req.RemotePK, req.Port, err)
 	}
 	client := dmsgscp.NewClient(conn, req.RemotePK)
+	client.SetIdleTimeout(timeout)
 	defer client.Close() //nolint:errcheck,gosec
 
 	switch req.Direction {
