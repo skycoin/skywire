@@ -122,13 +122,32 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 	return results, nil
 }
 
+// healthProbeTimeout bounds a single /health probe. ServiceHealth fans every
+// probe out in parallel and wg.Wait()s on them, so an unresponsive endpoint
+// (notably a dmsg server whose /health does not answer over the discovery-routed
+// path) would otherwise stall the WHOLE call — and every caller of it — for the
+// underlying dmsg-HTTP client's full timeout (~10s). That in turn made the
+// curated `visor state` snapshot (which folds ServiceHealth in) take ~10s and
+// time out under load, misreported downstream as empty/zero. A per-probe bound
+// caps the blast radius: a dead endpoint costs at most this long, not the whole
+// client timeout, while healthy services (normally ~300ms) are unaffected.
+const healthProbeTimeout = 4 * time.Second
+
 // doHealthProbe performs a single GET {baseURL}/health and populates a ServiceHealthEntry.
 func doHealthProbe(client *http.Client, name, baseURL, transport string) ServiceHealthEntry { //nolint:unparam
 	entry := ServiceHealthEntry{Name: name, URL: baseURL, Transport: transport}
 
 	reqURL := strings.TrimSuffix(baseURL, "/") + "/health"
+	ctx, cancel := context.WithTimeout(context.Background(), healthProbeTimeout)
+	defer cancel()
 	start := time.Now()
-	resp, err := client.Get(reqURL) //nolint:gosec
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		entry.Status = "DOWN"
+		entry.Error = err.Error()
+		return entry
+	}
+	resp, err := client.Do(req) //nolint:gosec
 	entry.LatencyMs = time.Since(start).Milliseconds()
 
 	if err != nil {
