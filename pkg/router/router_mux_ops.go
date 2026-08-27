@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -263,6 +264,29 @@ func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []rout
 	used := intermediatesOfRouteGroup(nrg, lPK, rPK)
 	if !validMuxLeg(fwd, rev, lPK, rPK, used, used) {
 		return errors.New("refusing mux leg: intra-route loop or intermediate overlap with an existing leg (mux legs must be fully disjoint and loop-free)")
+	}
+
+	// Reject a leg whose intermediate is a same-LAN peer: routing through a
+	// co-located visor (reached over the LAN, or by NAT-hairpin off our own
+	// public IP) adds a hop with no path diversity and in practice black-holes
+	// bulk data — the deceptively-low-latency LAN short-circuit that poisons the
+	// mux (the fast leg the selector then prefers, stalling the whole group). The
+	// dial path already excludes these via sameLANExcludedPKs; `route calc` does
+	// NOT, so an explicit leg from `mux set` can smuggle one in. Enforce it here,
+	// the one chokepoint every explicit-hops caller passes through.
+	if lan := r.sameLANExcludedPKs(); len(lan) > 0 {
+		lanSet := make(map[cipher.PubKey]struct{}, len(lan))
+		for _, pk := range lan {
+			lanSet[pk] = struct{}{}
+		}
+		for _, h := range fwd {
+			if h.To == rPK {
+				break // reached the destination; the remaining check is moot
+			}
+			if _, bad := lanSet[h.To]; bad {
+				return fmt.Errorf("refusing mux leg: intermediate %s is a same-LAN peer (no path diversity; black-holes bulk data)", h.To)
+			}
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
