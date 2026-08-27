@@ -312,6 +312,51 @@ func TestRouteMuxRemoveLegsPromotesPrimary(t *testing.T) {
 	require.True(t, m.ready[1], "former leg 2 keeps its ready bit")
 }
 
+// TestRemoveMuxRouteByTransportRemovesPrimary proves the router-level guard
+// against removing the primary leg (index 0) is gone: removing the tps[0]
+// transport re-homes the primary onto a surviving leg — the ping/SACK/latency
+// probes read rg.tps[0] LIVE, so the promoted leg transparently takes over, the
+// same way pruneDeadTransports/pruneLegByConsumeRule already re-home index 0.
+// This is the primitive that lets exact route pinning, live direct<->multihop
+// route switching and single-leg pinning reach the operator's exact leg-set
+// with no un-prunable auto primary left behind.
+func TestRemoveMuxRouteByTransportRemovesPrimary(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 3)
+	r := &router{
+		logger: logging.MustGetLogger("remove_primary_test"),
+		rt:     rg.rt,
+		rgsNs:  make(map[routing.RouteDescriptor]*NoiseRouteGroup),
+	}
+	r.rgsNs[rg.desc] = &NoiseRouteGroup{rg: rg, Conn: rg}
+
+	primaryID := mts[0].Entry.ID
+	secondID := mts[1].Entry.ID
+
+	require.NoError(t, r.RemoveMuxRouteByTransport(rg.desc, primaryID),
+		"removing the primary leg (index 0) must be allowed and re-home")
+
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	require.Len(t, rg.tps, 2, "exactly one leg removed")
+	require.Equal(t, secondID, rg.tps[0].Entry.ID,
+		"former leg 1 must be promoted to primary at index 0")
+}
+
+// TestRemoveMuxRouteByTransportKeepsLastLeg confirms the last-leg floor still
+// holds after relaxing the primary guard: the sole remaining leg is never removed.
+func TestRemoveMuxRouteByTransportKeepsLastLeg(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 1)
+	r := &router{
+		logger: logging.MustGetLogger("keep_last_test"),
+		rt:     rg.rt,
+		rgsNs:  make(map[routing.RouteDescriptor]*NoiseRouteGroup),
+	}
+	r.rgsNs[rg.desc] = &NoiseRouteGroup{rg: rg, Conn: rg}
+
+	require.Error(t, r.RemoveMuxRouteByTransport(rg.desc, mts[0].Entry.ID),
+		"removing the only remaining leg must still be refused")
+}
+
 // TestRouteMuxRemoveLegsEmpty is the no-op guard.
 func TestRouteMuxRemoveLegsEmpty(t *testing.T) {
 	m := &routeMux{}
