@@ -89,6 +89,7 @@ func init() {
 	startCmd.Flags().StringVar(&muxMode, "mux-mode", "auto", "mux weight distribution mode: auto (latency-based) or equal (round-robin)")
 	startCmd.Flags().Uint16Var(&minHops, "min-hops", 1, "minimum routing hops for this session (1=no minimum). Set on the visor before app start; rolled back is not automatic — restart visor or re-run with --min-hops=1 to revert.")
 	startCmd.Flags().IntVar(&startTunnels, "tunnels", 1, "number of independent tunnels (route group + noise + yamux each) to stripe browser connections across; 1 = today's behavior. >1 AGGREGATES bandwidth: each extra tunnel is auto-steered by the visor onto a DIFFERENT first-hop transport (disjoint path) so their throughputs sum. Best paired with --mux 1 (one leg per tunnel).")
+	startCmd.Flags().StringVar(&startRoute, "route", "", "pin explicit route(s) chosen by you instead of the route finder: a JSON file of {forward,reverse} hop pairs ('cli route calc <exit> --count N --json' shape). Once the proxy is up its mux legs are reconciled to these — each pinned route is added as a leg and any AUX auto legs are pruned. NOTE: the auto PRIMARY leg (index 0) is privileged and cannot yet be pruned, so it remains alongside the pinned legs; full primary override is the dial-level follow-up. One pair = one pinned route; N pairs = N disjoint legs. Pair with --mux N. Tip: 'route calc --source tps' avoids stale-transport install failures.")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits")
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	startCmd.Flags().BoolVar(&reconnect, "reconnect", true, "in-process reconnect on route-group collapse: proxy keeps re-dialing with backoff instead of dropping the SOCKS5 listener; --reconnect=false restores exit-on-failure")
@@ -422,6 +423,36 @@ var startCmd = &cobra.Command{
 						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln(leader+"Stopped! "+errMsg))
 					}
 				}
+			}
+		}
+
+		// --route: pin the session to EXACTLY the supplied route(s). The app
+		// dialed an auto primary route to come up (above); now reconcile its mux
+		// legs to be exactly the caller's — add each pinned leg, then prune the
+		// auto route and any extras. Full manual override of intermediate
+		// selection (the route finder is bypassed for the working set), sharing
+		// the engine behind `proxy mux set --prune`.
+		if appReachedRunning && startRoute != "" {
+			targets, rErr := readRoutePairs(startRoute)
+			if rErr != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--route: %w", rErr))
+			}
+			// The route group is up once the app reached Running; allow a brief
+			// lag before it is queryable.
+			var res legReconcile
+			for i := 0; i < 10; i++ {
+				res, rErr = reconcileLegs(rpcClient, clientName, 0, targets, true)
+				if rErr == nil {
+					break
+				}
+				time.Sleep(500 * time.Millisecond)
+			}
+			if rErr != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--route reconcile: %w", rErr))
+			}
+			if !startVerbose {
+				fmt.Printf("route pinned: %d leg(s) added, %d pruned, %d already present\n",
+					len(res.added), len(res.removed), res.existing)
 			}
 		}
 
