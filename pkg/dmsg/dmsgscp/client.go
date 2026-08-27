@@ -14,10 +14,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -35,6 +35,18 @@ type Client struct {
 	conn   net.Conn
 	reader *bufio.Reader
 	remote cipher.PubKey
+	// idle is the no-progress deadline applied to the payload copy (see
+	// copyNIdle): the transfer aborts only after this long with zero bytes
+	// moving, never on total duration. Defaults to DefaultIdleTimeout.
+	idle time.Duration
+}
+
+// SetIdleTimeout overrides the payload copy's no-progress deadline. A value
+// <= 0 is ignored (the default stands). Call before Upload/Download.
+func (c *Client) SetIdleTimeout(d time.Duration) {
+	if d > 0 {
+		c.idle = d
+	}
 }
 
 // Dial opens a dmsg.Stream to (rPK:port) and returns a Client
@@ -63,6 +75,7 @@ func NewClient(conn net.Conn, remote cipher.PubKey) *Client {
 		conn:   conn,
 		reader: bufio.NewReader(conn),
 		remote: remote,
+		idle:   DefaultIdleTimeout,
 	}
 }
 
@@ -135,7 +148,7 @@ func (c *Client) Download(remotePath, localPath string) error {
 		return closeErr
 	}
 
-	if _, err := io.CopyN(f, c.reader, hdr.Size); err != nil {
+	if _, err := copyNIdle(f, c.reader, hdr.Size, c.conn, c.idle); err != nil {
 		_ = cleanup(false) //nolint:errcheck
 		return fmt.Errorf("dmsgscp: read payload: %w", err)
 	}
@@ -209,7 +222,7 @@ func (c *Client) Upload(localPath, remotePath string) error {
 	}
 	defer f.Close() //nolint:errcheck
 
-	if _, err := io.CopyN(c.conn, f, info.Size()); err != nil {
+	if _, err := copyNIdle(c.conn, f, info.Size(), c.conn, c.idle); err != nil {
 		return fmt.Errorf("dmsgscp: write payload: %w", err)
 	}
 
