@@ -39,6 +39,13 @@
     color: #cdd2da;   // else near-black on the dark status bar
     .lock-icon { font-size: 16px; vertical-align: middle; margin-right: 4px; color: inherit; }
   }
+
+  // Same near-black-default issue as the password toggle: without an explicit
+  // light color the "Open full page" label + icon are invisible on the dark bar.
+  .sc-open-full {
+    color: #cdd2da;
+    mat-icon { color: inherit; }
+  }
 }
 
 // The skychat panel is dark, but Material form-field labels default to a

@@ -6,9 +6,15 @@
   gap: 6px;
   padding: 0 4px;
 
+  // Material's default mat-button label is near-black (rgba(0,0,0,0.87)),
+  // which is invisible on this dark surface. Force a legible tone for the
+  // inactive tabs; the active tab is brighter and gets the pill background.
+  button {
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
   button.active {
     background-color: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.95);
+    color: rgba(255, 255, 255, 0.95) !important;
   }
 }
 
