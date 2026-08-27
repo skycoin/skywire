@@ -220,3 +220,64 @@ func TestSelectECF_BootstrapFallsBackToSchedule(t *testing.T) {
 	idx := ts.SelectECF(512)
 	assert.Contains(t, []int{0, 1}, idx, "bootstrap falls back to a schedule index")
 }
+
+// TestECFSaturated_CongestionShed asserts a leg whose live RTT ballooned past
+// its baseline is treated as saturated even with cwnd headroom — the fix for
+// the BDP trap where a stalling leg's rising RTT would otherwise inflate its
+// cwnd and pull more traffic onto itself.
+func TestECFSaturated_CongestionShed(t *testing.T) {
+	// Baseline 50ms, cwnd 1MB, only 1KB in flight: normally wide-open.
+	healthy := ecfLegState{rttMs: 60, rttMinMs: 50, cwndBytes: 1e6, inflightBytes: 1000}
+	assert.False(t, ecfSaturated(healthy), "leg near its baseline RTT is not saturated")
+
+	// Same leg, live RTT now 5x baseline (queue building): shed it.
+	congested := ecfLegState{rttMs: 250, rttMinMs: 50, cwndBytes: 1e6, inflightBytes: 1000}
+	assert.True(t, ecfSaturated(congested), "leg whose RTT ballooned past its baseline sheds load")
+
+	// Without a baseline (rttMinMs 0) the congestion check is disabled.
+	noBaseline := ecfLegState{rttMs: 250, rttMinMs: 0, cwndBytes: 1e6, inflightBytes: 1000}
+	assert.False(t, ecfSaturated(noBaseline), "no baseline -> no congestion shed")
+}
+
+// TestECFSaturated_ColdBootstrap asserts a leg of unknown capacity (cwnd==0) is
+// usable only up to a bounded probe budget, so cold start fans out across legs
+// instead of dumping the whole stream on one until the first rate refresh.
+func TestECFSaturated_ColdBootstrap(t *testing.T) {
+	cold := ecfLegState{rttMs: 80, cwndBytes: 0, inflightBytes: 0}
+	assert.False(t, ecfSaturated(cold), "cold leg with no backlog is usable")
+
+	probed := ecfLegState{rttMs: 80, cwndBytes: 0, inflightBytes: ecfColdBootstrapBytes}
+	assert.True(t, ecfSaturated(probed), "cold leg spills once its probe budget is spent")
+}
+
+// TestSelectECF_ColdStartFansOut is the integration proof of the cold-start fix
+// on a homogeneous (tight-RTT-band) leg set — the aggregation case. Two cold
+// legs of similar RTT, the fast one already carrying its probe budget. Pre-fix
+// the hold-back predicate pinned n=1 for cold legs and returned leg 0 for every
+// frame (whole stream on one leg until the first rate refresh); now the probe
+// budget registers as backlog so it spills to the sibling and both get measured.
+func TestSelectECF_ColdStartFansOut(t *testing.T) {
+	ts := newTransportSelector()
+	ts.SetMode(WeightModeECF)
+	ts.SetECFState([]ecfLegState{
+		{rttMs: 40, cwndBytes: 0, inflightBytes: ecfColdBootstrapBytes, ready: true},
+		{rttMs: 45, cwndBytes: 0, inflightBytes: 0, ready: true},
+	})
+	idx := ts.SelectForPayload(make([]byte, 512))
+	assert.Equal(t, 1, idx, "cold fast leg past its probe budget spills to the sibling leg")
+}
+
+// TestSelectECF_ColdStartHoldsFarSlowerLeg is the counterpart: a cold fast leg
+// past its probe budget still holds rather than spill to a far-slower leg (3x
+// RTT) — pure ECF is right there, aggregating onto it would only stall the
+// reorder frontier. Guards the cold-start fix against over-spilling.
+func TestSelectECF_ColdStartHoldsFarSlowerLeg(t *testing.T) {
+	ts := newTransportSelector()
+	ts.SetMode(WeightModeECF)
+	ts.SetECFState([]ecfLegState{
+		{rttMs: 40, cwndBytes: 0, inflightBytes: ecfColdBootstrapBytes, ready: true},
+		{rttMs: 300, cwndBytes: 0, inflightBytes: 0, ready: true},
+	})
+	idx := ts.SelectForPayload(make([]byte, 512))
+	assert.Equal(t, 0, idx, "cold fast leg holds rather than spill to a 3x-slower leg")
+}

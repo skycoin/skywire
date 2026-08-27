@@ -93,6 +93,28 @@ const (
 	// route_mux.go rebuildWeights). Jitter is the ECF sigma margin.
 	ecfRttAlpha    = 0.3
 	ecfJitterAlpha = 0.3
+	// ecfColdBootstrapBytes bounds how much a leg of unknown capacity (no rate
+	// sample yet, cwndBytes==0) may carry before ecfSaturated forces a spill.
+	// Without it a cold leg is "unlimited", so at download start — when every
+	// leg is cold — ECF returns the single lowest-RTT leg for every frame and
+	// dumps the whole stream on it until the first ~5s rate refresh; that leg
+	// then congests and stalls the global reorder frontier. A bounded probe
+	// budget makes cold start fan out across the ready legs (measuring each)
+	// instead of hammering one. ~1 BDP of a 250ms/2Mbps leg.
+	ecfColdBootstrapBytes = 64 * 1024
+	// ecfCongestRttFactor marks a leg saturated (shed load off it) once its
+	// current mean RTT has ballooned past this multiple of its own baseline
+	// (minimum observed) RTT — the queue-buildup signature of a bandwidth-
+	// congested leg. Guards against the BDP trap: cwnd = rate*RTT grows with
+	// RTT, so an inflating RTT would otherwise raise a stalling leg's apparent
+	// capacity and make ECF feed it more, not less.
+	ecfCongestRttFactor = 4.0
+	// ecfRttMinCreep is the per-refresh fraction of the (mean-baseline) RTT gap
+	// by which a leg's baseline RTT creeps upward when no lower sample is seen.
+	// Keeps the baseline a true floor against transient congestion while still
+	// tracking a leg whose genuine latency has risen for good. Applied on the
+	// ~5s rebuildWeights cadence, so ~0.02 ≈ a minutes-scale adaptation.
+	ecfRttMinCreep = 0.02
 )
 
 // ecfLegState is the per-leg snapshot the ECF scheduler reasons over — one
@@ -105,6 +127,12 @@ type ecfLegState struct {
 	// rttMs is the leg's mean round-trip latency estimate in ms (EWMA of
 	// tp.GetLatency()); 0 = unknown (deprioritized in the fast-leg pick).
 	rttMs float64
+	// rttMinMs is the leg's baseline (minimum observed) RTT in ms — the
+	// uncongested latency. Used two ways: as the stable BDP latency for
+	// cwndBytes (so congestion can't inflate a stalling leg's capacity) and,
+	// against the live rttMs, as the congestion signal in ecfSaturated. 0 =
+	// unknown (no congestion check, cwnd falls back to the live RTT).
+	rttMinMs float64
 	// jitterMs is the ECF sigma: an EWMA of |sample-mean| RTT deviation, used
 	// as the inter-leg jitter margin `d` in the hold-back predicate.
 	jitterMs float64
@@ -847,9 +875,18 @@ func ecfPick(legs []ecfLegState, waiting bool, waitOut *bool) int {
 	// backlog; if xf clears that backlog before xs delivers even one frame
 	// (its RTT plus the jitter margin d), hold on xf instead of spilling.
 	rttF, rttS := legs[xf].rttMs, legs[xs].rttMs
+	// n = how many fast-leg RTTs to drain its current backlog. The drain
+	// denominator is the fast leg's cwnd; for a cold leg (cwnd unknown) fall
+	// back to the same bounded probe budget ecfSaturated uses, so the backlog
+	// registers in the hold-back decision instead of n being pinned at 1 (which
+	// would hold every cold-start frame on the single fastest leg).
+	drain := legs[xf].cwndBytes
+	if drain <= 0 {
+		drain = ecfColdBootstrapBytes
+	}
 	n := 1.0
-	if legs[xf].cwndBytes > 0 {
-		n = 1 + legs[xf].inflightBytes/legs[xf].cwndBytes
+	if drain > 0 {
+		n = 1 + legs[xf].inflightBytes/drain
 	}
 	d := legs[xf].jitterMs
 	if legs[xs].jitterMs > d {
@@ -874,8 +911,20 @@ func ecfPick(legs []ecfLegState, waiting bool, waitOut *bool) int {
 // unknown (no rate/RTT sample yet) is never saturated, so a cold leg is used
 // and measured instead of being assumed full.
 func ecfSaturated(l ecfLegState) bool {
+	// Congestion shed: a leg whose live RTT has ballooned well past its own
+	// uncongested baseline is queue-building — treat it as full so ECF spills
+	// to a healthier leg. This must come before the cwnd check: cwnd grows
+	// with RTT, so without this a congesting leg's rising RTT would raise its
+	// apparent capacity and ECF would feed it more, stalling the reorder
+	// frontier (the observed HoL collapse).
+	if l.rttMinMs > 0 && l.rttMs > ecfCongestRttFactor*l.rttMinMs {
+		return true
+	}
 	if l.cwndBytes <= 0 {
-		return false
+		// Unmeasured leg: allow only a bounded probe budget so cold start fans
+		// out across the ready legs instead of dumping the whole stream on the
+		// single lowest-RTT leg until the first rate refresh.
+		return l.inflightBytes >= ecfColdBootstrapBytes
 	}
 	return l.inflightBytes >= l.cwndBytes
 }

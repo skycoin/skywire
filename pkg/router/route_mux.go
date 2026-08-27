@@ -104,6 +104,12 @@ type legCounters struct {
 	ecfLastSentBytes uint64
 	ecfRttMs         float64
 	ecfJitterMs      float64
+	// ecfRttMinMs is the leg's baseline (minimum observed) RTT — the
+	// uncongested latency. It seeds the stable BDP for cwndBytes and, against
+	// the live ecfRttMs, is the congestion signal ecfSaturated reads. Tracked
+	// as a running minimum with a slow upward creep (ecfRttMinCreep) so a leg
+	// whose true latency genuinely rose is not pinned to a stale floor forever.
+	ecfRttMinMs float64
 }
 
 // routeMux encapsulates route multiplexing state and logic.
@@ -914,6 +920,7 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 			if rttMs > 0 {
 				if lc.ecfRttMs == 0 {
 					lc.ecfRttMs = rttMs
+					lc.ecfRttMinMs = rttMs
 				} else {
 					dev := rttMs - lc.ecfRttMs
 					if dev < 0 {
@@ -921,7 +928,22 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 					}
 					lc.ecfJitterMs = ecfJitterAlpha*dev + (1-ecfJitterAlpha)*lc.ecfJitterMs
 					lc.ecfRttMs = ecfRttAlpha*rttMs + (1-ecfRttAlpha)*lc.ecfRttMs
+					// Baseline RTT = running minimum with a slow upward creep: a
+					// transient congestion spike never raises it, but a leg whose
+					// true latency rose for good is eventually tracked.
+					if rttMs < lc.ecfRttMinMs {
+						lc.ecfRttMinMs = rttMs
+					} else {
+						lc.ecfRttMinMs += ecfRttMinCreep * (lc.ecfRttMs - lc.ecfRttMinMs)
+					}
 				}
+			}
+			// BDP latency = the baseline (uncongested) RTT, never the live RTT,
+			// so a stalling leg's inflating RTT cannot grow its own cwnd and pull
+			// more traffic onto itself.
+			bdpRttMs := lc.ecfRttMinMs
+			if bdpRttMs <= 0 {
+				bdpRttMs = lc.ecfRttMs
 			}
 			ready := true
 			if i < len(m.standby) && m.standby[i] {
@@ -932,9 +954,10 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 			}
 			states[i] = ecfLegState{
 				rttMs:     lc.ecfRttMs,
+				rttMinMs:  lc.ecfRttMinMs,
 				jitterMs:  lc.ecfJitterMs,
 				rateBps:   rate,
-				cwndBytes: rate * lc.ecfRttMs / 1000.0,
+				cwndBytes: rate * bdpRttMs / 1000.0,
 				ready:     ready,
 			}
 		}
