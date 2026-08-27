@@ -508,6 +508,32 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	// becomes exactly what the operator asks for (`proxy start --route`,
 	// `proxy mux set --prune`), with no un-prunable auto primary left behind.
 
+	// Retire this leg on the FAR endpoint before tearing down local state, so the
+	// exit stops striping data onto it. Unlike the adaptive drop (dropLegsByIndex
+	// closes the transport, which the peer's liveness eventually notices), a manual
+	// removal leaves the transport UP — so without an explicit signal the far side
+	// keeps SENDING on a leg the receiver has dropped: the send-side desync that
+	// strands the whole downlink (measured: a mux group's agg_recv pinned at ~0
+	// even after the bad leg was replaced by a healthy one, because the exit was
+	// still striping onto the dropped leg). MakeClosePacket with CloseLegRetired
+	// follows this leg's own forward path; the far endpoint's router_packet handler
+	// calls pruneLegByConsumeRule to reclaim its matching consume rule IMMEDIATELY,
+	// with no keepalive/liveness wait. Fire-and-forget in a goroutine with a bounded
+	// context so the network write never blocks under rg.mu; it reads only captured
+	// values, which stay valid after the slices below are compacted.
+	if idx < len(rg.fwd) && rg.fwd[idx] != nil && rg.tps[idx] != nil {
+		retireTp := rg.tps[idx]
+		retireRule := rg.fwd[idx]
+		retire := routing.MakeClosePacket(retireRule.NextRouteID(), routing.CloseLegRetired)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
+			defer cancel()
+			if err := rg.writePacket(ctx, retireTp, retire, retireRule.KeyRouteID()); err != nil {
+				rg.logger.WithError(err).Debugf("leg-retire signal to remote failed for tp %s", tpID)
+			}
+		}()
+	}
+
 	// Collect rule IDs to delete
 	var deadRuleIDs []routing.RouteID
 	if idx < len(rg.fwd) {
