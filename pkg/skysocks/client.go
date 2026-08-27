@@ -401,7 +401,7 @@ func (c *Client) totalStreams() int {
 // ListenAndServe start tcp listener on addr and proxies incoming
 // connection to a remote proxy server.
 func (c *Client) ListenAndServe(addr string) error {
-	l, err := net.Listen("tcp", addr)
+	l, err := ReuseListen(addr)
 	if err != nil {
 		if c.appCl != nil {
 			c.setAppError(err)
