@@ -37,7 +37,68 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cliout/cliproxy"
+	"github.com/skycoin/skywire/pkg/visor"
 )
+
+// legReconcile is the outcome of reconcileLegs: the first-hop transport ids of
+// legs added and (with prune) removed, plus how many targets were already present.
+type legReconcile struct {
+	added, removed []string
+	existing       int
+}
+
+// reconcileLegs makes app's mux legs be AT LEAST (prune=false) or EXACTLY
+// (prune=true) the target set, keyed by each leg's first-hop transport id.
+// It is the shared engine behind `proxy mux set` and `proxy start --route`.
+// The route group must already exist (start the proxy first). Per-leg RPC
+// errors are logged to stderr and skipped rather than aborting the batch.
+func reconcileLegs(rpcClient visor.API, app string, srcPort uint16, targets []routePair, prune bool) (legReconcile, error) {
+	var res legReconcile
+	want := make(map[uuid.UUID]routePair, len(targets))
+	for _, t := range targets {
+		if len(t.Forward) == 0 || len(t.Reverse) == 0 {
+			return res, fmt.Errorf("target leg missing forward or reverse hops")
+		}
+		want[t.Forward[0].TpID] = t
+	}
+
+	infos, err := rpcClient.RouteGroupMuxInfo(app)
+	if err != nil {
+		return res, fmt.Errorf("RouteGroupMuxInfo: %w", err)
+	}
+	current, err := currentLegTpIDs(infos, srcPort)
+	if err != nil {
+		return res, err
+	}
+
+	// Add target legs that aren't present yet.
+	for tp, t := range want {
+		if _, ok := current[tp]; ok {
+			res.existing++
+			continue
+		}
+		if err := rpcClient.AddMuxRoute(app, t.Forward, t.Reverse, srcPort); err != nil {
+			fmt.Fprintf(os.Stderr, "  add leg (first tp=%s): %v\n", tp, err)
+			continue
+		}
+		res.added = append(res.added, fmt.Sprint(tp))
+	}
+
+	// Prune current legs absent from the target set.
+	if prune {
+		for tp := range current {
+			if _, ok := want[tp]; ok {
+				continue
+			}
+			if err := rpcClient.RemoveMuxRoute(app, tp, srcPort); err != nil {
+				fmt.Fprintf(os.Stderr, "  remove leg (tp=%s): %v\n", tp, err)
+				continue
+			}
+			res.removed = append(res.removed, fmt.Sprint(tp))
+		}
+	}
+	return res, nil
+}
 
 var (
 	muxSetApp     string
@@ -149,13 +210,6 @@ Example:
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		want := make(map[uuid.UUID]routePair, len(targets))
-		for _, t := range targets {
-			if len(t.Forward) == 0 || len(t.Reverse) == 0 {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("target leg missing forward or reverse hops"))
-			}
-			want[t.Forward[0].TpID] = t
-		}
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -163,58 +217,23 @@ Example:
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 
-		infos, err := rpcClient.RouteGroupMuxInfo(muxSetApp)
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RouteGroupMuxInfo: %w", err))
-		}
-		current, err := currentLegTpIDs(infos, muxSetSrcPort)
+		res, err := reconcileLegs(rpcClient, muxSetApp, muxSetSrcPort, targets, muxSetPrune)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-
-		// Add target legs that aren't present yet.
-		added, present := 0, 0
-		var addedTps []string
-		for tp, t := range want {
-			if _, ok := current[tp]; ok {
-				present++
-				continue
-			}
-			if err := rpcClient.AddMuxRoute(muxSetApp, t.Forward, t.Reverse, muxSetSrcPort); err != nil {
-				fmt.Fprintf(os.Stderr, "  add leg (first tp=%s): %v\n", tp, err)
-				continue
-			}
-			added++
-			addedTps = append(addedTps, fmt.Sprint(tp))
-			if !cliout.JSONMode(cmd) {
+		if !cliout.JSONMode(cmd) {
+			for _, tp := range res.added {
 				fmt.Printf("+ added leg (first tp=%s)\n", tp)
 			}
-		}
-
-		// Prune current legs absent from the target.
-		var removedTps []string
-		removed := 0
-		if muxSetPrune {
-			for tp := range current {
-				if _, ok := want[tp]; ok {
-					continue
-				}
-				if err := rpcClient.RemoveMuxRoute(muxSetApp, tp, muxSetSrcPort); err != nil {
-					fmt.Fprintf(os.Stderr, "  remove leg (tp=%s): %v\n", tp, err)
-					continue
-				}
-				removed++
-				removedTps = append(removedTps, fmt.Sprint(tp))
-				if !cliout.JSONMode(cmd) {
-					fmt.Printf("- removed leg (tp=%s)\n", tp)
-				}
+			for _, tp := range res.removed {
+				fmt.Printf("- removed leg (tp=%s)\n", tp)
 			}
 		}
 
 		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxSet{
-			App: muxSetApp, Target: len(want),
-			Added: addedTps, Removed: removedTps,
-			Existing: present, Note: pruneNote(muxSetPrune),
+			App: muxSetApp, Target: len(targets),
+			Added: res.added, Removed: res.removed,
+			Existing: res.existing, Note: pruneNote(muxSetPrune),
 		}))
 	},
 }
