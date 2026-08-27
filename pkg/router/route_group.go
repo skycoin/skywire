@@ -1138,7 +1138,13 @@ func (rg *RouteGroup) applyDistribution(cfg DistributionConfig) {
 	case DistributionRoundRobin:
 		wm = WeightModeEqual
 	case DistributionAuto:
-		wm = WeightModeAuto
+		// "auto" now resolves to ECF (completion-aware) rather than the old
+		// latency-weighted schedule: latency-weighting over-assigns a low-latency
+		// but low-bandwidth leg, which lags and stalls the no-skip reorder
+		// frontier, collapsing the mux below single-leg rate. ECF only spills once
+		// the fast leg is saturated, so multi-leg is >= single-leg and aggregates
+		// as the fast leg fills. WeightModeAuto remains available for explicit use.
+		wm = WeightModeECF
 	case DistributionWeighted:
 		wm = WeightModeExplicit
 		rg.mux.tpSelector.SetExplicitWeights(cfg.Weights)
