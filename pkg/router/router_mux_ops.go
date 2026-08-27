@@ -496,13 +496,17 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	if idx < 0 {
 		return fmt.Errorf("transport %s not found in route group", tpID)
 	}
-	// The primary leg (index 0) is privileged throughout the route group:
-	// ping/pong/SACK and latency attribution hardcode tps[0], and the mux
-	// selector treats leg 0 as always-ready. Removing it silently breaks the
-	// group, so refuse it (the last-leg guard above does not cover this).
-	if idx == 0 {
-		return errors.New("cannot remove the primary leg (index 0) of a route group")
-	}
+	// Removing the primary leg (index 0) is ALLOWED and re-homes the primary.
+	// ping/pong/SACK and latency attribution read rg.tps[0] LIVE on each call
+	// (they hold no cached leg reference), and the mux selector is rebuilt
+	// below, so the survivor compacted into index 0 transparently takes over —
+	// the exact re-home pruneDeadTransports (index-0 death) and
+	// pruneLegByConsumeRule (remote leg retire) already perform in production.
+	// The last-leg guard above is the only real floor. Allowing this is what
+	// makes full manual route control work: exact route pinning, live
+	// direct<->multihop route switching, and single-leg pinning — the leg-set
+	// becomes exactly what the operator asks for (`proxy start --route`,
+	// `proxy mux set --prune`), with no un-prunable auto primary left behind.
 
 	// Collect rule IDs to delete
 	var deadRuleIDs []routing.RouteID
