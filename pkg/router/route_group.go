@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -63,6 +64,27 @@ const (
 	// RouteGroup.reorderStallServiceFn). Shorter than reorderTimeout (1.5s) so a
 	// stalled gap is nudged within ~one reorderTimeout of going silent.
 	reorderStallInterval = 500 * time.Millisecond
+
+	// bandDemoteRatio: an ACTIVE leg whose end-to-end latency is more than this
+	// factor off the active-set median (either tail) is demoted to warm standby
+	// so the mux never STRIPES across latency-disparate legs. Striping a 2ms LAN
+	// short-circuit beside a 300ms route opens a reorder gap the size of the
+	// difference on every interleave, HoL-capping (or, if the fast leg
+	// black-holes, stalling) the no-skip reorder buffer — the multi-leg
+	// collapse-to-~0 measured against a healthy single-leg reference. 3.0 matches
+	// the adaptive engine's own high-side outlier multiplier so the two never
+	// fight over the same leg.
+	bandDemoteRatio = 3.0
+	// bandAdmitRatio: a warm-standby leg is re-admitted to the active set only
+	// once it is within this tighter factor of the median. The gap between admit
+	// and demote is hysteresis — it stops a leg hovering at the band edge from
+	// flip-flopping active/standby every interval.
+	bandAdmitRatio = 2.5
+	// bandMinLegs: latency-band admission only runs with at least this many legs
+	// carrying a measured latency. Below it the median is not a meaningful cluster
+	// anchor, and the 1-2 leg pathologies are already handled by the sole-leg
+	// black-hole heal and the data-progress prune.
+	bandMinLegs = 3
 )
 
 var (
@@ -1772,6 +1794,13 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 		rg.mux.rebuildWeights(rg.tps)
 	}
 	rg.mu.Unlock()
+
+	// Keep the active stripe set within a tight latency band so one out-of-band
+	// leg (classically a 2ms LAN short-circuit beside 300ms routes) can't open a
+	// reorder gap that HoL-caps or stalls the whole mux. Same cadence as the
+	// data-progress prune; complementary — the prune sheds a leg that stops
+	// delivering, this parks a leg whose latency is too disparate to stripe with.
+	rg.enforceLatencyBand()
 }
 
 // legRecvDelta is one active-or-standby leg's rg-scoped recv progress over a
@@ -1823,6 +1852,121 @@ func selectDataStalledLegs(legs []legRecvDelta, gapStuck bool) []uuid.UUID {
 		dead = dead[:active-1]
 	}
 	return dead
+}
+
+// bandLeg is one leg's latency-band inputs: its index, measured end-to-end
+// latency (ms; <=0 == not yet measured), whether it is currently a warm standby,
+// and whether it is the primary (index 0, never demoted).
+type bandLeg struct {
+	idx     int
+	latMs   float64
+	standby bool
+	primary bool
+}
+
+// partitionLatencyBand decides which legs to demote to / promote from warm
+// standby so the ACTIVE stripe set stays within a tight latency band around the
+// median. Striping across latency-disparate legs opens a reorder gap the size of
+// the difference (a 2ms LAN short-circuit beside a 300ms route), HoL-capping or
+// stalling the no-skip reorder buffer — the multi-leg collapse. LOW-side demotion
+// (a leg far FASTER than the median — the classic LAN short-circuit artifact that
+// neither the adaptive engine's high-side outlier logic nor a manual preset
+// excludes today) is universal. HIGH-side demotion and re-promotion are gated to
+// manualMode: in adaptive mode the tick owns the high side and a 512-deep warm
+// pool that must not be dumped into the active set. Pure (no locks / rg state) so
+// it is unit-tested directly. Never demotes the primary or the last active leg.
+func partitionLatencyBand(legs []bandLeg, manualMode bool) (demote, promote []int) {
+	known := make([]float64, 0, len(legs))
+	for _, l := range legs {
+		if l.latMs > 0 {
+			known = append(known, l.latMs)
+		}
+	}
+	if len(known) < bandMinLegs {
+		return nil, nil
+	}
+	sort.Float64s(known)
+	med := known[len(known)/2]
+	if med <= 0 {
+		return nil, nil
+	}
+
+	active := 0
+	for _, l := range legs {
+		if !l.standby {
+			active++
+		}
+	}
+
+	for _, l := range legs {
+		if l.latMs <= 0 {
+			continue // unknown latency — leave the leg's state untouched
+		}
+		fasterRatio := med / l.latMs // >1 when the leg is faster than the median
+		slowerRatio := l.latMs / med // >1 when the leg is slower than the median
+		switch {
+		case !l.standby && !l.primary && active > 1 &&
+			(fasterRatio > bandDemoteRatio || (manualMode && slowerRatio > bandDemoteRatio)):
+			demote = append(demote, l.idx)
+			active-- // never demote below one active leg
+		case manualMode && l.standby:
+			symm := slowerRatio
+			if fasterRatio > symm {
+				symm = fasterRatio
+			}
+			if symm <= bandAdmitRatio {
+				promote = append(promote, l.idx)
+				active++
+			}
+		}
+	}
+	return demote, promote
+}
+
+// enforceLatencyBand keeps the mux's active stripe set within a tight latency
+// band (see partitionLatencyBand). Runs on the data-progress cadence so it holds
+// even in a manual (non-adaptive) preset, where nothing else manages the active
+// set. Reads each leg's EWMA end-to-end latency, decides demotions/promotions,
+// and applies them via the mux's send-side standby marker — a demoted leg gets
+// zero scheduler weight and is never striped, so it can no longer open a reorder
+// gap, while its rules stay installed (a warm standby, promotable again if it
+// returns to the band).
+func (rg *RouteGroup) enforceLatencyBand() {
+	if rg.isClosed() || rg.mux == nil {
+		return
+	}
+	rg.mu.Lock()
+	manual := !rg.standbyNewLegs
+	legs := make([]bandLeg, 0, len(rg.tps))
+	for i, tp := range rg.tps {
+		if tp == nil || tp.IsClosed() {
+			continue
+		}
+		legs = append(legs, bandLeg{
+			idx:     i,
+			latMs:   rg.legEndToEndLatencyMs(tp.Entry.ID),
+			standby: rg.mux.isLegStandby(i),
+			primary: i == 0,
+		})
+	}
+	rg.mu.Unlock()
+
+	demote, promote := partitionLatencyBand(legs, manual)
+	for _, idx := range demote {
+		rg.logger.Infof("latency-band: parking leg %d (out-of-band latency) to keep the active stripe set homogeneous", idx)
+		rg.mux.setLegStandby(idx, true)
+	}
+	for _, idx := range promote {
+		rg.logger.Debugf("latency-band: re-admitting leg %d (back within band)", idx)
+		rg.mux.setLegStandby(idx, false)
+	}
+	if len(demote) > 0 || len(promote) > 0 {
+		rg.mu.Lock()
+		if rg.mux != nil {
+			rg.mux.rebuildWeights(rg.tps)
+		}
+		rg.mu.Unlock()
+	}
 }
 
 // pruneLivenessDeadLegs drops the given black-holing legs (by transport ID) from
