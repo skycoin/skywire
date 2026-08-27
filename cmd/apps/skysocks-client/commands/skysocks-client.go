@@ -193,7 +193,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// the bind fails we just skip it and dial as before.
 		dctx, dcancel := context.WithCancel(cycleCtx)
 		ddone := make(chan struct{})
-		if lis, lerr := net.Listen("tcp", addr); lerr == nil {
+		if lis, lerr := skysocks.ReuseListen(addr); lerr == nil {
 			go func() {
 				defer close(ddone)
 				skysocks.ServeDisconnected(dctx, lis, appCl)
