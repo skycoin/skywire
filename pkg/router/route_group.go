@@ -1587,7 +1587,10 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 	}
 	rg.mu.Unlock()
 
-	if len(probes) < 2 {
+	// A single-leg group is still probed (below): a lone black-holing leg has no
+	// failover and self-heal's target<=1 bail never replaces it, so without this
+	// it would sit at zero throughput forever. Only a truly empty group is skipped.
+	if len(probes) == 0 {
 		return
 	}
 
@@ -1627,7 +1630,14 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 	rg.legLivenessMu.Unlock()
 
 	if len(dead) > 0 {
-		rg.pruneLivenessDeadLegs(dead)
+		if len(probes) < 2 {
+			// Sole leg is black-holing. Never drop the last leg (that is an
+			// outage); instead dial a REPLACEMENT via a disjoint path and drop
+			// the dead one only once the replacement is live.
+			rg.healSoleBlackHoledLeg(dead[0])
+		} else {
+			rg.pruneLivenessDeadLegs(dead)
+		}
 	}
 
 	// Probe the surviving legs for the next cycle. Each send-ts is unique
@@ -1886,6 +1896,59 @@ func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
 	}
 	rg.signalRotate()
 	rg.maybeSelfHeal()
+}
+
+// soleLegExcludeHopsLocked returns the intermediate PKs of the route group's
+// recorded (primary) forward path, so a replacement dial can be steered onto a
+// disjoint route. Best-effort: the rg only records the primary forwardHops, so
+// for an aux-only survivor this is a hint, not an exact exclusion — combined with
+// addOneAuxForwardLeg's own avoid-already-used-intermediates planning it is
+// enough to keep the finder off the black-holing path. Caller holds rg.mu.
+func (rg *RouteGroup) soleLegExcludeHopsLocked() []string {
+	if len(rg.forwardHops) <= 1 {
+		return nil
+	}
+	excl := make([]string, 0, len(rg.forwardHops)-1)
+	for _, h := range rg.forwardHops[:len(rg.forwardHops)-1] {
+		excl = append(excl, h.To.String())
+	}
+	return excl
+}
+
+// healSoleBlackHoledLeg replaces a single black-holing leg WITHOUT ever dropping
+// to zero legs. It dials one replacement aux leg via a disjoint path (excluding
+// the current leg's intermediates so the finder cannot re-pick the same
+// black-holing route — classically a deceptively-low-latency LAN short-circuit),
+// and prunes the dead leg only once the replacement is live. maybeSelfHeal cannot
+// do this: it bails when selfHealTarget<=1 (the low-latency-direct / single-route
+// case), which is exactly when a lone leg has no failover and most needs
+// replacing. If no disjoint replacement is available the dead leg is kept (still
+// one leg, not an outage) and a later cycle retries.
+func (rg *RouteGroup) healSoleBlackHoledLeg(deadID uuid.UUID) {
+	rg.mu.Lock()
+	add := rg.selfHealAdd
+	excl := rg.soleLegExcludeHopsLocked()
+	rg.mu.Unlock()
+	if add == nil || rg.isClosed() {
+		return
+	}
+	if !rg.healInFlight.CompareAndSwap(false, true) {
+		return // a replacement is already dialing
+	}
+	go func() {
+		defer rg.healInFlight.Store(false)
+		before := rg.aliveLegCount()
+		add(excl) // dials one disjoint replacement leg (blocks ~one setup dial)
+		if rg.isClosed() {
+			return
+		}
+		if rg.aliveLegCount() > before {
+			// Replacement is live; now it is safe to drop the black-holing leg.
+			rg.pruneLivenessDeadLegs([]uuid.UUID{deadID})
+		} else if rg.logger != nil {
+			rg.logger.Debug("sole-leg heal: no disjoint replacement available; keeping current leg for now")
+		}
+	}()
 }
 
 // servicePacketLoop runs f every interval until the group closes. trigger, when
