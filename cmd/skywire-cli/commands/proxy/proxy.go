@@ -94,6 +94,13 @@ func init() {
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	startCmd.Flags().BoolVar(&reconnect, "reconnect", true, "in-process reconnect on route-group collapse: proxy keeps re-dialing with backoff instead of dropping the SOCKS5 listener; --reconnect=false restores exit-on-failure")
 	startCmd.Flags().StringVar(&startRoutingPolicy, "routing-policy", "", "per-app routing policy: @/path/to/policy.star, @/path/to/policy.wasm, or preset:<name> (\"\" or \"none\" clears any previously-installed override)")
+	startCmd.Flags().BoolVar(&startDirect, "direct", false, "force a DIRECT-transport-only route to the exit: create the transport on demand if none exists, dial 1-hop (bypassing the route-finder + setup node), and self-heal when the transport drops. Bypasses the routing policy and the adaptive mux entirely — the point is a single, stable, policy-free direct leg. Mutually exclusive with --routing-policy, --route, --mux>1, --min-hops>1 and --tunnels>1 (all of which ask for the multi-hop/overlay path --direct exists to avoid); any per-app policy is cleared.")
+	// --direct is a policy-free single-direct-leg dial: it contradicts every flag
+	// that asks for the overlay / multi-hop / multi-leg path. Cobra enforces the
+	// clean pairwise contradictions; the value-dependent ones (--mux>1 etc.) are
+	// checked in Run since a default of 1 is compatible.
+	startCmd.MarkFlagsMutuallyExclusive("direct", "routing-policy")
+	startCmd.MarkFlagsMutuallyExclusive("direct", "route")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks clients")
 	stopCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of the skysocks client to stop")
 	dep := getDeployment()
@@ -128,6 +135,15 @@ func init() {
 // the very first dial the proxy makes already runs through the policy.
 // Passing "" / "none" clears a previously-installed override.
 func applyRoutingPolicy(cmd *cobra.Command, rpcClient visor.API, clientName string) {
+	// --direct is policy-free by definition (a 1-hop control route the policy
+	// engine must not re-home onto the overlay). Actively clear any per-app
+	// policy so a previously-installed override can't linger and fight the
+	// direct dial. This is the flag WINNING over the policy — the operator asked
+	// for a direct route explicitly.
+	if startDirect {
+		internal.Catch(cmd.Flags(), rpcClient.SetAppRoutingPolicy(clientName, "none"))
+		return
+	}
 	if !cmd.Flags().Changed("routing-policy") {
 		return
 	}
@@ -174,13 +190,35 @@ var startCmd = &cobra.Command{
 		// doesn't silently inherit stale state); mux/mux-mode carry their
 		// sentinel/skip semantics inside the helper; --min-hops only fires when
 		// explicitly set (0 is rejected there).
+		// --direct is a single, stable, policy-free direct leg. Reject the
+		// value-dependent contradictions cobra can't (defaults of 1 are fine; only
+		// a request for MORE than one hop/leg/tunnel contradicts direct), then
+		// normalize the session to a single route so the visor-global adaptive mux
+		// can't grow a warm-standby set over the 1-hop control route.
+		if startDirect {
+			if cmd.Flags().Changed("mux") && muxRoutes > 1 {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--direct forces a single direct route; it cannot be combined with --mux %d", muxRoutes))
+			}
+			if cmd.Flags().Changed("min-hops") && minHops > 1 {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--direct is a 1-hop route; it cannot be combined with --min-hops %d", minHops))
+			}
+			if startTunnels > 1 {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--direct is a single route; it cannot be combined with --tunnels %d", startTunnels))
+			}
+			muxRoutes = 1
+			minHops = 1
+		}
+
 		routeOpts := clirpc.RoutingSessionOpts{
 			ExistingTP: &existingTpOnly,
 			LocalRoute: &forceLocalRoutes,
 			MuxRoutes:  &muxRoutes,
 			MuxMode:    &muxMode,
 		}
-		if cmd.Flags().Changed("min-hops") {
+		// For --direct pin the session to a single route (mux=1) so the adaptive
+		// engine does not fight it; the actual direct dial is driven per-connection
+		// by the app's --direct arg (EnsureDirectTransport) below.
+		if cmd.Flags().Changed("min-hops") || startDirect {
 			routeOpts.MinHops = &minHops
 		}
 		if err := clirpc.ApplyRoutingSession(rpcClient, routeOpts); err != nil {
@@ -290,6 +328,15 @@ var startCmd = &cobra.Command{
 			// failure instead of exiting, so a flaky route doesn't
 			// drop the SOCKS5 listener.
 			arguments["--reconnect"] = reconnect
+
+			// --direct: force the skysocks-client to dial the exit over a DIRECT
+			// transport only (1-hop, route-finder + setup-node bypassed, transport
+			// created on demand, self-healing on drop — the app-level --direct
+			// flag, wired to router.EnsureDirectTransport). Like --reconnect it is a
+			// valueless flag-style arg: passing true adds the bare "--direct" token.
+			if startDirect {
+				arguments["--direct"] = true
+			}
 
 			if clientName == "" {
 				clientName = "skysocks-client"
