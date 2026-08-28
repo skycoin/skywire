@@ -32,6 +32,49 @@ defers the stall; it does not remove the HoL dependency. Measured live: an
 window fix, and after it both sit at ~one-leg throughput — the mux selects, it
 does not aggregate.
 
+## The three escapes from the in-order-stream wall
+
+The constraint above — one ordered sequence, no skipping, because the cipher is
+stateful — admits exactly three ways out. They are siblings, not rivals: each
+suits a different workload shape, and the mesh wants all three. Naming them
+together matters, because each one read alone looks like it ought to be the
+general answer, and none of them is.
+
+**(a) Keep one ordered stream, but send out of order so frames arrive in order.**
+A completion-time scheduler dispatches onto a slow leg only when the frame would
+still arrive before the fast leg could drain its own backlog — otherwise it holds
+the fast leg rather than seeding a gap. ECF (Lim et al., CoNEXT'17), BLEST-style
+blocking estimation (Ferlin et al., IFIP'16), DAPS skip-ahead (Sarwar et al.,
+ICC'14). Tracked in #4269; `DistributionECF` is the shipped piece. It narrows the
+window in which a gap opens; it cannot close it, because a leg that dies
+mid-frame still leaves a hole.
+
+**(b) Do not split the stream at all — stripe whole connections.** K connections
+over K disjoint legs are K independent ordered flows: no shared sequence, no
+cross-leg reorder, nothing to head-of-line-block. This is the rest of this
+document, and it is the default for skysocks. It aggregates perfectly for many
+connections and not at all for one, which is precisely the case the other two
+exist to serve.
+
+**(c) Dissolve the ordering.** If the receiver can reconstruct from *any* K of N
+pieces, recovery stops depending on which leg was slow. Two realisations, at
+different layers:
+
+- **Coding** — a sliding-window erasure code across legs, so repair symbols
+  arriving on the FAST legs rebuild a data symbol still in flight on the slow
+  one, making recovery delay independent of that leg's RTT. Tetrys / RFC 9407,
+  with receivers ACKing degrees of freedom rather than sequence numbers (cf.
+  coded TCP, Kim & Médard 2012 — a SOCKS proxy-pair over UDP, architecturally
+  identical to skysocks). Tracked in #4270; the systematic Cauchy-Reed-Solomon
+  core is in `pkg/router/fec.go`.
+- **Position addressing** — a file transfer does not need stream order, because
+  every byte range names its own place. Split one download into parallel `Range:`
+  sub-requests across disjoint routes and reassemble by offset: no reorder
+  buffer, no shared frontier, by construction. Tracked in #4271.
+
+Coding is the only one of the three that lets a *single* flow aggregate across
+heterogeneous legs without requiring the legs to be alike.
+
 ## The redesign: connection-striped independent flows
 
 Stripe at the **connection level, not the packet level.** Each disjoint route
