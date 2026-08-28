@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/redis_uptime_backfill_test.go c4-tpd-uptime
+// Package store pkg/deployment/tpd/store/redis_uptime_backfill_test.go c4-net-discovery
 package store
 
 import (

@@ -1,4 +1,4 @@
-// Package transport pkg/transport/lock_watchdog_test.go c1-net-transport
+// Package transport pkg/transport/lock_watchdog_test.go c2-net-transport
 package transport
 
 import (
