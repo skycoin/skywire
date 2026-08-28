@@ -69,6 +69,19 @@ const (
 	// this much over one legDataProgressInterval so top/64 is a meaningful floor
 	// and a merely-slow or idle group is never judged (~128KB over 5s ≈ 25KB/s).
 	legBlackHoleMinTopBytes = 128 * 1024
+	// soleBlackHole* gate the sole-leg black-hole reaping (see soleLegBlackHoled).
+	// A group down to one active leg whose route has SENT more than
+	// soleBlackHoleSentFloor (a real request went out) but RECEIVED less than
+	// soleBlackHoleRecvFloor (essentially nothing came back), held for
+	// soleBlackHoleTicks consecutive data-progress intervals, is a dead route the
+	// two ordinary prunes cannot see — dial a replacement. The recv floor is a few
+	// packets of handshake/headers; the sent floor rejects an idle group that
+	// never requested anything; the tick count (≥15s at a 5s cadence) rejects a
+	// merely-slow origin. recv is CUMULATIVE, so a route that ever delivered bulk
+	// is never flagged — this targets dead-from-establishment routes.
+	soleBlackHoleRecvFloor = 16 * 1024
+	soleBlackHoleSentFloor = 256
+	soleBlackHoleTicks     = 3
 	// reorderStallInterval is how often the receive side checks for a reorder
 	// frontier gap stuck past reorderTimeout and, if so, emits a SACK to prompt
 	// the sender to retransmit the missing seq IN ORDER (see
@@ -328,6 +341,7 @@ type RouteGroup struct {
 	// the current wedge started (0 = not wedged) and the gap age at the last log,
 	// so a sustained wedge logs ~once per reorderTimeout instead of every tick.
 	// Touched only from the single reorder-stall service goroutine.
+	soleBHTicks          int
 	reorderWedgeTicks    int
 	reorderWedgeLoggedAt time.Duration
 	legMissed            map[uuid.UUID]int
@@ -976,6 +990,29 @@ func (rg *RouteGroup) signalRotate() {
 // one concurrent heal so a flapping leg can't spawn a storm of setup dials.
 //
 // Must NOT be called while holding rg.mu.
+// healReplaceSoleLeg dials ONE replacement leg for a group whose sole active
+// route is black-holing (see the sole-leg reaping in legDataProgressServiceFn).
+// Unlike maybeSelfHeal it is NOT gated on target>1 — a --mux 1 client must be
+// able to escape a dead route — but it still adds only a single leg and is
+// bounded by healInFlight so a persistently-bad route can't spawn a dial storm.
+// Once the second leg is up the ordinary black-hole prune retires the dead one.
+func (rg *RouteGroup) healReplaceSoleLeg() {
+	rg.mu.Lock()
+	add := rg.selfHealAdd
+	rg.mu.Unlock()
+	if add == nil || rg.isClosed() {
+		return
+	}
+	if !rg.healInFlight.CompareAndSwap(false, true) {
+		return // a heal is already dialing
+	}
+	defer rg.healInFlight.Store(false)
+	if rg.logger != nil {
+		rg.logger.Info("sole-leg black-hole: dialing a replacement route")
+	}
+	add(nil) // one setup-node dial; appends one fresh leg on success
+}
+
 func (rg *RouteGroup) maybeSelfHeal() {
 	rg.mu.Lock()
 	add := rg.selfHealAdd
@@ -1890,6 +1927,36 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 		}
 	}
 
+	// SOLE-LEG BLACK-HOLE reaping. A group down to ONE active leg whose route
+	// passes liveness pongs (tiny frames get through) but never delivers bulk
+	// data is invisible to BOTH prunes: pong-liveness sees "alive", and
+	// selectDataStalledLegs bails at active<2 (no leader to compare against). So
+	// a --mux 1 client that lands a black-holing route stays dead forever — the
+	// establishment lottery this fixes. Detect it directly: the sole active leg
+	// has SENT a request (cumulative sent past a floor) yet RECEIVED almost
+	// nothing (cumulative recv under a small floor) for several consecutive
+	// intervals, so dial a REPLACEMENT (bypassing the target<=1 self-heal gate).
+	// Once a second leg is up the ordinary black-hole prune sheds the dead one.
+	activeCnt, soleSent, soleRecv := 0, uint64(0), uint64(0)
+	for i, tp := range tpsCopy {
+		if tp == nil || i >= len(stats) || rg.mux.isLegStandby(i) {
+			continue
+		}
+		activeCnt++
+		soleSent, soleRecv = stats[i].SentBytes, stats[i].RecvBytes
+	}
+	if soleLegBlackHoled(activeCnt, soleSent, soleRecv) {
+		rg.soleBHTicks++
+		if rg.soleBHTicks >= soleBlackHoleTicks {
+			rg.logger.Warnf("sole-leg black-hole: only active route sent %dB but received %dB over %v — dialing a replacement route",
+				soleSent, soleRecv, time.Duration(soleBlackHoleTicks)*legDataProgressInterval)
+			rg.soleBHTicks = 0
+			go rg.healReplaceSoleLeg()
+		}
+	} else {
+		rg.soleBHTicks = 0
+	}
+
 	// Refresh transport-selection weights on this fast cadence so
 	// WeightModeCapacity tracks RECENT goodput within seconds instead of the
 	// ~5min keep-alive cadence — essential for the weighted-ramp (a promoted leg
@@ -1924,6 +1991,14 @@ type legRecvDelta struct {
 // slower path — the fragile (e.g. webrtc-under-load) leg that taxes the whole
 // mux via SACK retransmits. It never selects so many that fewer than one active
 // leg would remain. Pure (no rg state / locks) so it is unit-tested directly.
+// soleLegBlackHoled reports whether a group's ONLY active leg is a data
+// black-hole: a request was sent (cumulative sent past the floor) but almost
+// nothing came back (cumulative recv under the floor). Pure so it is unit-tested
+// directly; the caller applies the consecutive-interval hysteresis and the dial.
+func soleLegBlackHoled(activeCnt int, sent, recv uint64) bool {
+	return activeCnt == 1 && sent > soleBlackHoleSentFloor && recv < soleBlackHoleRecvFloor
+}
+
 func selectDataStalledLegs(legs []legRecvDelta, gapStuck bool) []uuid.UUID {
 	var agg, top uint64
 	active := 0
