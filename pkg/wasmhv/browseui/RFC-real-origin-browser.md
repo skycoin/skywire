@@ -1,9 +1,38 @@
 # RFC: Align the skynet iframe browser with a real browser (real-origin transparent proxy)
 
-Status: draft / for discussion
-Scope: `pkg/wasmhv/browseui/browse.js`, `pkg/visor/api_browse.go`,
-`pkg/visor/hypervisor_handlers_browse.go`, `cmd/wasm-visor/*_js.go`, and the
-reference implementation `pkg/dmsgweb`.
+> **Status: implemented, and not exactly as proposed below. Read this for the
+> reasoning, not for the design.**
+>
+> The substrate this RFC argues for now lives in
+> [github.com/0magnet/realorigin](https://github.com/0magnet/realorigin) and is
+> imported by `pkg/visor/wasmserve.go`. What is current:
+>
+> - `docs/real-origin-browser.md` — how it actually works, including the origin
+>   naming, which this document predates entirely.
+> - `pkg/wasmhv/browse-bootstrap.html` — skywire's navigation shell.
+> - `pkg/wasmhv/browse-transport.js` — the dmsg/skynet/skysocks transport.
+>
+> Three things below were built differently, and each is worth knowing before
+> you trust a paragraph of it:
+>
+> 1. **Navigations are not intercepted.** §4b has the service worker handling
+>    the top navigation as well as subresources. It does not: it returns without
+>    calling `respondWith` when `req.mode` is `'navigate'`, and the server serves
+>    the shell for every path but the worker's. A worker that served the first
+>    page would have to be installed by a page it had not served yet.
+> 2. **There is no cross-origin helper iframe.** §4b has V opening a hidden
+>    helper on B. Storage Partitioning puts such a helper in a different
+>    partition from V's SharedWorker, where it cannot reach the booted visor at
+>    all. The responder is first-party on V instead.
+> 3. **Origins are content-addressed.** This document assumes the target can be
+>    encoded into the hostname. It cannot: a TLS wildcard matches exactly one
+>    label, so no certificate covers a multi-label target. Origins are a
+>    truncated hash of the target — see `docs/real-origin-browser.md`, which
+>    records the schemes that were tried and rejected first.
+>
+> What remains accurate, and is why this file is kept: the problem statement in
+> §1, and the argument that re-implementing the web platform inside a sandboxed
+> `srcdoc` is inherently lossy.
 
 ## 1. Problem
 

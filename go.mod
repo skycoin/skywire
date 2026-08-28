@@ -61,6 +61,7 @@ require (
 
 require (
 	github.com/0magnet/plot-go v0.0.0-20260821233907-fecd5fe3d0f1
+	github.com/0magnet/realorigin v0.1.1
 	github.com/0magnet/termanim v0.0.0-20260823220926-60f3279a072f
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0

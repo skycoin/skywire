@@ -85,29 +85,25 @@ var PWAManifest []byte
 //go:embed sw.js
 var ServiceWorkerJS []byte
 
-// Real-origin mesh browser (RFC §4b) served on the isolated browse origin B
-// (<pkslug>.mesh.localhost) and the visor origin V:
+// Real-origin mesh browser, served on the isolated browse origin B
+// (<id>.mesh.localhost) and the visor origin V.
 //
-//	BrowseSWJS         — transport Service Worker on B: intercepts subresource
-//	                     fetches and relays them through the in-tab visor.
-//	BrowseBootstrapHTML— B navigation shell: registers the SW, stands up the V
-//	                     helper bridge, injects the real mesh HTML into B.
+// The worker, the bridge protocol and the trust boundary come from
+// github.com/0magnet/realorigin — realorigin.ServiceWorkerJS() and
+// realorigin.ResponderJS(). Only two pieces stay here, and both are ours rather
+// than the substrate's:
 //
-// (Distinct from ServiceWorkerJS/sw.js, which is the PWA app-shell cache for V.)
+//	BrowseBootstrapHTML — B's navigation shell. The library ships a plain one;
+//	                      this keeps skywire's, which shows the live route-setup
+//	                      log while a mesh route is being built.
+//	BrowseTransportJS   — the transport realorigin calls: dmsg, skynet and
+//	                      skysocks-lite through V's own first-party visor.
 //
-//go:embed browse-sw.js
-var BrowseSWJS []byte
-
 //go:embed browse-bootstrap.html
 var BrowseBootstrapHTML []byte
 
-// BrowseResponderJS is injected into the visor app origin V: it answers
-// {type:'mesh-hello'} from embedded browse-origin (B) iframes with a MessagePort
-// and services their fetches via V's first-party skywireVisor (the trust
-// boundary). Replaces the partitioned cross-origin helper iframe.
-//
-//go:embed browse-responder.js
-var BrowseResponderJS []byte
+//go:embed browse-transport.js
+var BrowseTransportJS []byte
 
 // PWAIcon192 / PWAIcon512 are the maskable install icons referenced by the
 // manifest, served at /icon-192.png and /icon-512.png.

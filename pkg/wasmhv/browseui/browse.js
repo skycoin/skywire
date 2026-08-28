@@ -327,20 +327,12 @@
     function labelFor(pk) { return /^[0-9a-fA-F]{66}$/.test(pk) ? pkDNSLabel(pk) : pk; }
     // Content-addressed browse origins: origin B is a short, STABLE hash of the
     // target — not the target itself — so ONE wildcard cert covers every site
-    // regardless of PK length, clearnet subdomain depth, or dmsg name-vhosts. The
-    // visor keeps shortid -> descriptor; the B bootstrap asks V for its descriptor
-    // by id at handshake (see browse-responder.js / browse-bootstrap.html).
-    var meshOrigins = (globalThis.__meshOrigins = globalThis.__meshOrigins || {});
-    function originIdFor(canon) {
-      return crypto.subtle.digest("SHA-256", new TextEncoder().encode(canon)).then(function (buf) {
-        var b = new Uint8Array(buf), out = "", bits = 0, val = 0;
-        for (var i = 0; i < b.length && out.length < 20; i++) {
-          val = (val << 8) | b[i]; bits += 8;
-          while (bits >= 5 && out.length < 20) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; }
-        }
-        return out;
-      });
-    }
+    // regardless of PK length, clearnet subdomain depth, or dmsg name-vhosts.
+    //
+    // The hashing and the id -> descriptor map live in realorigin now
+    // (github.com/0magnet/realorigin, served as browse-responder.js). The
+    // canonical strings below are unchanged, so an id is the same as it ever
+    // was and a site keeps the storage it already had.
     // normResolverHost canonicalizes a dmsg/skynet resolver host: strips a trailing
     // .dmsg/.skynet, base32-encodes any 66-hex PK label, re-appends ".<net>". Keeps
     // aliases / base32 / name-vhost labels intact. So "<hex>.dmsg", "<base32>.dmsg",
@@ -355,8 +347,7 @@
     function buildRealOrigin(descriptor, path) {
       var c = realOriginCfg;
       var canon = descriptor.net === "skysocks" ? ("skysocks|" + descriptor.base) : (descriptor.net + "|" + descriptor.host);
-      return originIdFor(canon).then(function (id) {
-        meshOrigins[id] = descriptor;
+      return globalThis.realOrigin.register(canon, descriptor).then(function (id) {
         return (c.scheme || "https") + "://" + id + (c.suffix || ".mesh.localhost") + (c.port ? (":" + c.port) : "") + (path || "/");
       });
     }

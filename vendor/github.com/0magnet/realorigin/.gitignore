@@ -1,0 +1,5 @@
+# Binaries, which belong in /tmp and never in the source tree.
+/realorigin-demo
+*.exe
+*.test
+*.out

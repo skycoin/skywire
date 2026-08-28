@@ -1,0 +1,196 @@
+<!doctype html>
+<!-- bootstrap.html — the shell served for every navigation to a browse origin B.
+     __APP_ORIGIN__ and __SUFFIX__ are substituted by the Go handler.
+
+     It: registers the transport worker for B; handshakes with the app origin
+     A (its parent) to obtain a MessagePort bound to this origin's target;
+     fetches this path over that port; and writes the result into THIS origin
+     with document.write — a genuine origin, so storage, cookies, history and
+     the rest of the platform behave natively for the content.
+
+     Served for EVERY path but the worker, so each navigation re-runs this. The
+     worker deliberately does not handle navigations: it would have to be
+     installed by a page it had not served yet. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connecting…</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0b0d17; color: #c7cbe6;
+               font: 14px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #boot { position: fixed; inset: 0; display: flex; align-items: center;
+          justify-content: center; padding: 24px; box-sizing: border-box; }
+  .card { max-width: 30rem; width: 100%; }
+  h1 { font-size: 1rem; font-weight: 600; margin: 0 0 0.4rem; }
+  p { margin: 0; color: #7a80a8; }
+  .log { margin-top: 1rem; max-height: 9rem; overflow-y: auto;
+         font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+         color: #6f759c; white-space: pre-wrap; word-break: break-word; }
+  .err { color: #ff6b8a; }
+</style>
+
+<div id="boot"><div class="card">
+  <h1 id="ttl">Connecting…</h1>
+  <p id="sub">Fetching this page over the app's own transport.</p>
+  <div class="log" id="log"></div>
+</div></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var SUFFIX = "__SUFFIX__";
+  var APP_ORIGIN = "__APP_ORIGIN__";
+
+  // This frame's id is its own hostname minus the suffix. It is all B knows
+  // about itself: the app holds id -> target and resolves it. B never names a
+  // target, which is what stops one browse origin asking for another's content.
+  var SHORTID = location.hostname.slice(0, Math.max(0, location.hostname.length - SUFFIX.length));
+
+  // A single hard-coded origin would silently drop the handshake whenever the
+  // app is reached by another name for the same deployment (localhost vs
+  // 127.0.0.1, with or without a port). Try each candidate.
+  var APP_ORIGINS = (function () {
+    var out = [];
+    function add(o) { if (o && out.indexOf(o) < 0) { out.push(o); } }
+    add(APP_ORIGIN);
+    try {
+      if (document.referrer) { add(new URL(document.referrer).origin); }
+    } catch (e) {}
+    return out;
+  })();
+
+  var ttl = document.getElementById('ttl');
+  var sub = document.getElementById('sub');
+  var logEl = document.getElementById('log');
+
+  function log(line) {
+    if (!logEl) { return; }
+    logEl.textContent += (logEl.textContent ? '\n' : '') + line;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function fail(msg) {
+    if (ttl) { ttl.textContent = 'Could not load this page'; ttl.className = 'err'; }
+    if (sub) { sub.textContent = msg; }
+  }
+
+  // --- handshake with the app origin ---------------------------------------
+  var appPort = null;
+  function ensureApp() {
+    if (appPort) { return appPort; }
+    appPort = new Promise(function (resolve, reject) {
+      if (!(window.parent && window.parent !== window)) {
+        reject(new Error('a real-origin frame must be embedded in the app'));
+        return;
+      }
+      var to = setTimeout(function () { reject(new Error('the app did not answer')); }, 30000);
+      window.addEventListener('message', function onmsg(e) {
+        if (APP_ORIGINS.indexOf(e.origin) < 0) { return; }
+        if (!e.data || e.data.type !== 'realorigin-ready') { return; }
+        if (e.data.error) {
+          clearTimeout(to);
+          window.removeEventListener('message', onmsg);
+          reject(new Error(e.data.error));
+          return;
+        }
+        if (!e.ports || !e.ports[0]) { return; }
+        clearTimeout(to);
+        window.removeEventListener('message', onmsg);
+        resolve(e.ports[0]);
+      });
+      APP_ORIGINS.forEach(function (o) {
+        try { window.parent.postMessage({ type: 'realorigin-hello', shortid: SHORTID }, o); } catch (e) {}
+      });
+    });
+    return appPort;
+  }
+
+  // appFetch multiplexes every request over the one bound port, correlating by
+  // id. Interim progress lines are rendered rather than resolving a request.
+  var nextId = 1, pending = {};
+  function appFetch(reqObj, transfer) {
+    return ensureApp().then(function (port) {
+      if (!port.__wired) {
+        port.__wired = true;
+        port.onmessage = function (ev) {
+          var d = ev.data || {};
+          if (d.progress) { log(d.progress.line); return; }
+          var cb = pending[d.id];
+          if (cb) { delete pending[d.id]; cb(d); }
+        };
+      }
+      return new Promise(function (resolve) {
+        var id = nextId++;
+        pending[id] = resolve;
+        port.postMessage({ id: id, req: reqObj }, transfer || []);
+      });
+    });
+  }
+
+  // --- relay for the service worker ----------------------------------------
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', function (e) {
+      var d = e.data || {};
+      if (d.type !== 'realorigin-fetch' || !e.ports || !e.ports[0]) { return; }
+      var replyPort = e.ports[0];
+      var r = d.req || {};
+      appFetch({ url: r.url, method: r.method, headers: r.headers, body: r.body }, r.body ? [r.body] : [])
+        .then(function (res) { replyPort.postMessage(res, res.body ? [res.body] : []); })
+        .catch(function (err) { replyPort.postMessage({ error: String(err) }); });
+    });
+  }
+
+  function registerSW() {
+    if (!('serviceWorker' in navigator)) { return Promise.resolve(null); }
+    return navigator.serviceWorker.register('__SW_PATH__', { scope: '/' })
+      .then(function () { return navigator.serviceWorker.ready; })
+      .catch(function () { return null; }); // the document still loads without it
+  }
+
+  // --- boot ----------------------------------------------------------------
+  window.__realOriginBoot = { step: 'start', status: null, len: 0, err: null };
+
+  Promise.all([
+    registerSW().then(function () { window.__realOriginBoot.step = 'sw-registered'; }),
+    ensureApp().then(function () { window.__realOriginBoot.step = 'app-ready'; })
+  ]).then(function () {
+    window.__realOriginBoot.step = 'fetching';
+    var path = location.pathname + location.search;
+    return appFetch({ url: location.href, method: 'GET', headers: {}, body: null, path: path });
+  }).then(function (res) {
+    window.__realOriginBoot.step = 'returned';
+    window.__realOriginBoot.status = res && res.status;
+    window.__realOriginBoot.len = (res && res.body) ? res.body.byteLength : 0;
+    if (!res || res.error) {
+      window.__realOriginBoot.err = (res && res.error) || 'no response';
+      fail(window.__realOriginBoot.err);
+      return;
+    }
+    if ((res.status | 0) >= 400) { fail('HTTP ' + res.status); return; }
+
+    var html = '';
+    if (res.body) {
+      try { html = new TextDecoder('utf-8').decode(new Uint8Array(res.body)); } catch (e) { html = ''; }
+    }
+    // A non-markup payload — raw JSON, plain text — carries no background of its
+    // own, so written as-is it lands on this shell's dark canvas in the browser's
+    // default black and is illegible. An ordinary browser shows such a body
+    // black-on-white; match that. Markup paints its own background and is written
+    // through untouched.
+    if (!/^\s*</.test(html)) {
+      var escd = html.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; });
+      html = '<!doctype html><meta charset=utf-8><meta name=color-scheme content=light>' +
+        '<style>html{background:#fff;color:#111;color-scheme:light}body{margin:0}' +
+        'pre{white-space:pre-wrap;word-break:break-word;margin:0;padding:1rem;' +
+        'font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style>' +
+        '<pre>' + escd + '</pre>';
+    }
+    document.open();
+    document.write(html);
+    document.close();
+  }).catch(function (err) {
+    try { window.__realOriginBoot.err = String(err); window.__realOriginBoot.step = 'catch'; } catch (e) {}
+    fail(String((err && err.message) || err));
+  });
+})();
+</script>
