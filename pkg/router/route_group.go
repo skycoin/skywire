@@ -1882,10 +1882,15 @@ type bandLeg struct {
 // stalling the no-skip reorder buffer — the multi-leg collapse. LOW-side demotion
 // (a leg far FASTER than the median — the classic LAN short-circuit artifact that
 // neither the adaptive engine's high-side outlier logic nor a manual preset
-// excludes today) is universal. HIGH-side demotion and re-promotion are gated to
-// manualMode: in adaptive mode the tick owns the high side and a 512-deep warm
-// pool that must not be dumped into the active set. Pure (no locks / rg state) so
-// it is unit-tested directly. Never demotes the primary or the last active leg.
+// excludes today) is universal. HIGH-side DEMOTION is now also universal: a leg
+// whose latency exceeds bandDemoteRatio*median stalls the no-skip reorder
+// frontier (a self-healed or churned-in 1200ms+ leg beside a 60ms band collapses
+// the mux to ~0), so it is demoted to warm standby in every mode — the observed
+// cause of multi-leg download collapse. Only re-PROMOTION stays gated to
+// manualMode: in adaptive mode the tick owns re-admission and its 512-deep warm
+// pool must not be dumped into the active set (demotion to standby never dumps
+// the pool, so it is safe to run always). Pure (no locks / rg state) so it is
+// unit-tested directly. Never demotes the primary or the last active leg.
 func partitionLatencyBand(legs []bandLeg, manualMode bool) (demote, promote []int) {
 	known := make([]float64, 0, len(legs))
 	for _, l := range legs {
@@ -1917,7 +1922,7 @@ func partitionLatencyBand(legs []bandLeg, manualMode bool) (demote, promote []in
 		slowerRatio := l.latMs / med // >1 when the leg is slower than the median
 		switch {
 		case !l.standby && !l.primary && active > 1 &&
-			(fasterRatio > bandDemoteRatio || (manualMode && slowerRatio > bandDemoteRatio)):
+			(fasterRatio > bandDemoteRatio || slowerRatio > bandDemoteRatio):
 			demote = append(demote, l.idx)
 			active-- // never demote below one active leg
 		case manualMode && l.standby:
