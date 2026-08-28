@@ -483,3 +483,26 @@ func TestDemoteStalledLegsParksNotRemoves(t *testing.T) {
 	rg.demoteStalledLegs([]uuid.UUID{mts[0].Entry.ID})
 	require.False(t, rg.mux.isLegStandby(0), "primary must never be parked by demoteStalledLegs")
 }
+
+func TestSoleLegBlackHoled(t *testing.T) {
+	// active==1, sent a request, got ~nothing -> black-hole
+	if !soleLegBlackHoled(1, 500, 160) {
+		t.Fatal("sole leg with sent=500 recv=160 should be flagged")
+	}
+	// received bulk -> not a black-hole (route delivered)
+	if soleLegBlackHoled(1, 500, 20_000) {
+		t.Fatal("sole leg that received bulk must NOT be flagged")
+	}
+	// idle: never sent a request -> not flagged (avoids churning idle connections)
+	if soleLegBlackHoled(1, 100, 0) {
+		t.Fatal("idle sole leg (no request sent) must NOT be flagged")
+	}
+	// more than one active leg -> the ordinary data-progress prune handles it
+	if soleLegBlackHoled(2, 500, 160) {
+		t.Fatal("multi-leg group must NOT use the sole-leg path")
+	}
+	// zero active legs -> not applicable
+	if soleLegBlackHoled(0, 500, 160) {
+		t.Fatal("zero active legs must NOT be flagged")
+	}
+}
