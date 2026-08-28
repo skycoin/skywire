@@ -585,6 +585,23 @@ func (m *routeMux) swapLegs(i, j int) {
 	}
 }
 
+// activeLegCount reports how many legs are currently active (not warm standby)
+// — the striped set width. Used for wedge/hold diagnostics.
+func (m *routeMux) activeLegCount() int {
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	if len(m.standby) == 0 {
+		return len(m.legs)
+	}
+	active := 0
+	for _, s := range m.standby {
+		if !s {
+			active++
+		}
+	}
+	return active
+}
+
 // isLegStandby reports whether leg idx is a warm standby. Bounds-checked.
 func (m *routeMux) isLegStandby(idx int) bool {
 	if idx < 0 {
@@ -803,6 +820,16 @@ func (m *routeMux) reorderPending() int {
 		return 0
 	}
 	return m.reorderBuf.Pending()
+}
+
+// reorderNextSeq returns the sequence number the receive-side reorder buffer is
+// waiting on (the frontier). When a gap is stuck this is the missing seq whose
+// leg has stalled — the key datum for diagnosing a reorder wedge.
+func (m *routeMux) reorderNextSeq() uint32 {
+	if m.reorderBuf == nil {
+		return 0
+	}
+	return m.reorderBuf.NextSeq()
 }
 
 // writeSeqValue returns the count of DATA frames this mux has emitted (the next
