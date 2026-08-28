@@ -377,17 +377,20 @@ func primaryLegTpID(rg muxRouteGroupInfo) (uuid.UUID, error) {
 	return id, nil
 }
 
-// muxSwitchWaitReady polls until the leg carried over newTpID is present,
-// alive, and out of warm-standby (selectable for sending), or timeout elapses.
-// This is what keeps the switch seamless: the old primary is not retired until
-// the new leg can carry the stream.
+// muxSwitchWaitReady polls until the leg carried over newTpID is present and
+// alive (its rules confirmed end-to-end), or timeout elapses. This is what
+// keeps the switch seamless: the old primary is not retired until the new leg
+// is established and can carry the stream. It need not be out of warm-standby —
+// retiring the old primary promotes the survivor into the active primary slot;
+// requiring non-standby here would deadlock, since the adaptive policy parks a
+// freshly-added leg in the warm pool until load widens the active set.
 func muxSwitchWaitReady(rpcClient visor.API, newTpID uuid.UUID, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	want := newTpID.String()
 	for {
 		if rg, err := muxSwitchSelectRG(rpcClient); err == nil {
 			for _, l := range rg.Legs {
-				if l.TransportID == want && l.Alive && !l.Standby {
+				if l.TransportID == want && l.Alive {
 					return nil
 				}
 			}
