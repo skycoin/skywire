@@ -448,8 +448,9 @@ func cliEndpoints(h *Host) (mux hostMux) {
 
 // dmsgEndpoints returns the endpoints served for remote dmsg connections.
 func dmsgEndpoints(h *Host) (mux hostMux) {
-	mux.Handle(PtyURI, handlePty(h))       //nolint:errcheck,gosec
-	mux.HandleConn(SftpURI, handleSftp(h)) //nolint:errcheck,gosec
+	mux.Handle(PtyURI, handlePty(h))                   //nolint:errcheck,gosec
+	mux.HandleConn(SftpURI, handleSftp(h))             //nolint:errcheck,gosec
+	mux.HandleConn(ExecStreamURI, handleExecStream(h)) //nolint:errcheck,gosec
 	return mux
 }
 

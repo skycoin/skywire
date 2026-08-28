@@ -37,4 +37,11 @@ const (
 	// hands the conn to github.com/pkg/sftp.NewServer instead of the
 	// net/rpc-driven pty gateway. Whitelist gating is identical to PtyURI.
 	SftpURI = "dmsgpty/sftp"
+
+	// ExecStreamURI is the dispatch key for streaming one-shot exec. Separate
+	// from the net/rpc exec gateway because net/rpc cannot stream: this rides
+	// the raw-conn path, and the conn then speaks ordinary HTTP/1.1 so that
+	// chunked encoding carries the output live and HTTP trailers carry the
+	// exit code once it is known. No cap, no truncation.
+	ExecStreamURI = "dmsgpty/exec-stream"
 )
