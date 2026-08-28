@@ -1110,6 +1110,27 @@ func (rg *RouteGroup) legEndToEndLatencyMs(tpID uuid.UUID) float64 {
 	return rg.legE2ELatency[tpID]
 }
 
+// legBandLatencyMs is the latency the latency-band logic reads for a leg: the
+// measured end-to-end EWMA when available, else the first-hop transport RTT as a
+// fallback (the SAME preference the mux-info/visor-state build uses, see the
+// LegInfo.LatencyMs assignment). Without the fallback, enforceLatencyBand read a
+// raw legE2ELatency of 0 for any leg whose liveness pong had not yet landed (aux
+// legs frequently) — so it dropped below bandMinLegs and never parked an
+// out-of-band leg, even though visor-state showed a populated latency via the
+// fallback. Returns 0 only when neither signal exists (leave the leg untouched).
+func (rg *RouteGroup) legBandLatencyMs(tp *transport.ManagedTransport) float64 {
+	if tp == nil {
+		return 0
+	}
+	if e2e := rg.legEndToEndLatencyMs(tp.Entry.ID); e2e > 0 {
+		return e2e
+	}
+	if stats := tp.GetLatencyStats(); stats.Avg > 0 {
+		return stats.Avg
+	}
+	return 0
+}
+
 // fireLegChange calls the policy's OnLegChange hook (if any) and
 // applies the returned DistributionConfig. Must NOT be called
 // while holding rg.mu — applyDistribution acquires it.
@@ -2174,7 +2195,7 @@ func (rg *RouteGroup) enforceLatencyBand() {
 		}
 		legs = append(legs, bandLeg{
 			idx:     i,
-			latMs:   rg.legEndToEndLatencyMs(tp.Entry.ID),
+			latMs:   rg.legBandLatencyMs(tp),
 			standby: rg.mux.isLegStandby(i),
 			primary: i == 0,
 		})
@@ -2198,7 +2219,7 @@ func (rg *RouteGroup) enforceLatencyBand() {
 			}
 			legs = append(legs, bandLeg{
 				idx:     i,
-				latMs:   rg.legEndToEndLatencyMs(tp.Entry.ID),
+				latMs:   rg.legBandLatencyMs(tp),
 				standby: rg.mux.isLegStandby(i),
 				primary: i == 0,
 			})
