@@ -173,6 +173,20 @@ func TestPartitionLatencyBand(t *testing.T) {
 			wantDemote: nil, wantPromote: []int{3},
 		},
 		{
+			name: "slow-skewed set: fast cluster kept, slow legs parked (the A1 HoL fix)",
+			legs: []bandLeg{
+				{idx: 0, latMs: 185, primary: true}, // fast cluster
+				{idx: 1, latMs: 257},                // fast cluster
+				{idx: 2, latMs: 456},                // slow — median(456) would keep it
+				{idx: 3, latMs: 809},                // slow
+			},
+			// median is 456; a median-anchored band would call 185 the outlier and
+			// keep {456,809}. The fast-cluster anchor (185) keeps {185,257} and
+			// parks {456,809} so the stripe set is homogeneous and doesn't HoL.
+			manual: true, tight: true,
+			wantDemote: []int{2, 3}, wantPromote: nil,
+		},
+		{
 			name: "standby 1.7x leg stays standby under tight band (admission withheld)",
 			legs: []bandLeg{
 				{idx: 0, latMs: 150, primary: true},
