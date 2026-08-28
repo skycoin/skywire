@@ -1364,23 +1364,31 @@ func setForceColor(conf *visorconfig.V1) {
 
 // HealthStatsProvider implementation for logserver
 
-// GetTransportCounts returns the count of STCPR and SUDPH transports (excluding "user" labeled).
-func (v *Visor) GetTransportCounts() (stcpr, sudph int) {
+// GetTransportTypeCounts returns a count of live transports keyed by their
+// actual network type (excluding "user" labeled). The key set is derived from
+// the transports present rather than a hardcoded subset, so every current and
+// future transport type (stcpr, sudph, stcp, dmsg, squicr, swsr, swtr, webrtc,
+// …) is represented.
+func (v *Visor) GetTransportTypeCounts() map[string]int {
 	if v.tpM == nil {
-		return 0, 0
+		return nil
 	}
 
 	// Get transports that are not user-created (skycoin + automatic labels)
 	tps := v.tpM.GetTransportsByLabels(transport.LabelSkycoin, transport.LabelAutomatic)
+	counts := make(map[string]int)
 	for _, tp := range tps {
-		switch tp.Type() {
-		case tptypes.STCPR:
-			stcpr++
-		case tptypes.SUDPH:
-			sudph++
-		}
+		counts[string(tp.Type())]++
 	}
-	return stcpr, sudph
+	return counts
+}
+
+// GetTransportCounts returns the count of STCPR and SUDPH transports (excluding
+// "user" labeled). Retained for backward compatibility; GetTransportTypeCounts
+// reports every live transport type.
+func (v *Visor) GetTransportCounts() (stcpr, sudph int) {
+	counts := v.GetTransportTypeCounts()
+	return counts[string(tptypes.STCPR)], counts[string(tptypes.SUDPH)]
 }
 
 // GetNetworkTypes returns the network types used by the visor.
