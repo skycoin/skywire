@@ -312,10 +312,20 @@ type MuxRouteGroupInfo struct {
 	// right now, distinct from the cumulative AggSentBytes/AggRecvBytes totals.
 	// AggGoodputUpBps/AggGoodputDownBps split it by direction (sum of the
 	// per-leg send-rates / recv-rates); AggGoodputBps is their sum.
-	AggGoodputBps     float64      `json:"agg_goodput_bps,omitempty"`
-	AggGoodputUpBps   float64      `json:"agg_goodput_up_bps,omitempty"`
-	AggGoodputDownBps float64      `json:"agg_goodput_down_bps,omitempty"`
-	Legs              []MuxLegInfo `json:"legs"`
+	AggGoodputBps     float64 `json:"agg_goodput_bps,omitempty"`
+	AggGoodputUpBps   float64 `json:"agg_goodput_up_bps,omitempty"`
+	AggGoodputDownBps float64 `json:"agg_goodput_down_bps,omitempty"`
+	// FEC (forward error correction) telemetry. FECEnabled reports whether both
+	// peers negotiated CapFEC on this group. FECRepairBytesSent/Recv are cumulative
+	// repair-frame bytes scheduled onto / received from legs — the TRUE FEC
+	// overhead, separable from data (AggRecvBytes) and retransmit (per-leg
+	// Retransmits). FECReconstructs counts frontier frames recovered from repair
+	// (each a slow-leg head-of-line stall this group avoided).
+	FECEnabled         bool         `json:"fec_enabled,omitempty"`
+	FECRepairBytesSent uint64       `json:"fec_repair_bytes_sent,omitempty"`
+	FECRepairBytesRecv uint64       `json:"fec_repair_bytes_recv,omitempty"`
+	FECReconstructs    uint64       `json:"fec_reconstructs,omitempty"`
+	Legs               []MuxLegInfo `json:"legs"`
 }
 
 // MuxLegInfo is one route in a mux'd group.

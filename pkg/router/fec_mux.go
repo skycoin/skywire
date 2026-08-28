@@ -27,6 +27,7 @@ package router
 import (
 	"encoding/binary"
 	"sync"
+	"sync/atomic"
 )
 
 // FEC block geometry. K data frames + R repair frames per block; recovers all K
@@ -465,6 +466,7 @@ func (m *routeMux) fecTryAdvance() [][]byte {
 		if len(delivered) == 0 {
 			break
 		}
+		atomic.AddUint64(&m.fecReconstructs, 1)
 		out = append(out, delivered...)
 		if m.sackEnabled && m.sackTracker != nil {
 			m.sackTracker.AdvanceContiguous(m.reorderBuf.NextSeq())

@@ -455,6 +455,14 @@ type MuxInfo struct {
 	// WriteSeq is the total DATA frames this mux has emitted outbound — a cheap
 	// aggregate send-progress counter across all legs.
 	WriteSeq uint32
+	// FEC telemetry (see routeMux fec* counters). FECEnabled is true when both
+	// peers negotiated CapFEC. FECRepairBytesSent/Recv are cumulative repair-frame
+	// bytes — the TRUE FEC overhead, separable from data and retransmit.
+	// FECReconstructs counts frontier frames recovered from repair.
+	FECEnabled         bool
+	FECRepairBytesSent uint64
+	FECRepairBytesRecv uint64
+	FECReconstructs    uint64
 	// Legs is in tps[] order. One entry per active mux leg.
 	Legs []MuxLeg
 }
@@ -511,6 +519,10 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 		info.ReorderPending = rg.mux.reorderPending()
 		info.ReorderGapAge = rg.mux.gapAge()
 		info.WriteSeq = rg.mux.writeSeqValue()
+		info.FECEnabled = rg.mux.fecEnabled
+		info.FECRepairBytesSent = atomic.LoadUint64(&rg.mux.fecRepairBytesSent)
+		info.FECRepairBytesRecv = atomic.LoadUint64(&rg.mux.fecRepairBytesRecv)
+		info.FECReconstructs = atomic.LoadUint64(&rg.mux.fecReconstructs)
 	}
 	info.PerFrameNoise = rg.perFrameNoiseActive
 	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
@@ -875,6 +887,7 @@ func (rg *RouteGroup) flushFECRepairs() {
 			continue
 		}
 		ctx, cancel := context.WithCancel(context.Background())
+		atomic.AddUint64(&rg.mux.fecRepairBytesSent, uint64(pkt.Size()))
 		errCh := rg.writePacketAsync(ctx, tp, pkt, rule.KeyRouteID())
 		select {
 		case <-rg.writeDeadline.Wait():
@@ -3380,6 +3393,7 @@ func (rg *RouteGroup) handleRepairPacket(packet routing.Packet) error {
 	if rg.mux == nil || !rg.mux.fecEnabled {
 		return nil
 	}
+	atomic.AddUint64(&rg.mux.fecRepairBytesRecv, uint64(packet.Size()))
 	delivered := rg.mux.fecOnRecvRepair(packet.RepairBlockID(), packet.RepairIndex(), packet.RepairSymLen(), packet.RepairSymbol())
 	for _, d := range delivered {
 		if len(d) == 0 { // FEC padding frame — advances the frontier, not app data
