@@ -54,10 +54,21 @@ const (
 	// one that sheds the leg and runs at the reliable legs' rate.
 	legDataProgressInterval = 5 * time.Second
 	// legDataStallGapAge is how long a reorder frontier gap must stay open before
-	// the data-progress prune will act. Long enough that ordinary latency-skew
-	// interleave (which closes in well under a second) never trips it; short
-	// enough to react quickly once a leg genuinely stops delivering its share.
+	// the data-progress prune's STALLED path acts. Long enough that ordinary
+	// latency-skew interleave (which closes in well under a second) never trips
+	// it; short enough to react quickly once a leg genuinely stops delivering its
+	// share.
 	legDataStallGapAge = 3 * time.Second
+	// legBlackHoleMinTopBytes gates the frontier-HEALTHY black-hole prune: even
+	// when the reorder frontier is not stuck, a leg delivering essentially nothing
+	// (< 1/64 of the leader) while a clearly-moving leader carries the group is a
+	// goodput black-hole — normal latency, ~zero delivery — that the latency-band
+	// demotion never catches. Under an even/round-robin spread it still draws its
+	// share of frames, stalling the frontier and burning retransmits, so it is
+	// shed without waiting for a full stall. The leader must have moved at least
+	// this much over one legDataProgressInterval so top/64 is a meaningful floor
+	// and a merely-slow or idle group is never judged (~128KB over 5s ≈ 25KB/s).
+	legBlackHoleMinTopBytes = 128 * 1024
 	// reorderStallInterval is how often the receive side checks for a reorder
 	// frontier gap stuck past reorderTimeout and, if so, emits a SACK to prompt
 	// the sender to retransmit the missing seq IN ORDER (see
@@ -1706,10 +1717,13 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 // DATA, so it survives ~90s while taxing the whole mux: every seq it drops is
 // SACK-retransmitted on a live leg, capping aggregate throughput at the fragile
 // leg's rate. This loop samples each leg's rg-scoped RecvBytes every few seconds
-// and, WHEN a reorder frontier gap has stayed open past legDataStallGapAge (i.e.
-// the receiver is genuinely stuck waiting on a missing seq, not just skewed),
-// prunes any ACTIVE leg that delivered ZERO bytes over the interval while the
-// group as a whole kept receiving. Pruning is safe by construction: it never
+// and prunes an under-delivering ACTIVE leg (via selectDataStalledLegs) in two
+// regimes: WHEN a reorder frontier gap has stayed open past legDataStallGapAge
+// (the receiver is genuinely stuck on a missing seq) it sheds any leg well below
+// the leader; and even when the frontier is HEALTHY it sheds a pure goodput
+// black-hole — a leg delivering ~zero while a clearly-moving leader carries the
+// group (the normal-latency black-hole the latency band never catches). Pruning
+// is safe by construction: it never
 // drops the last active leg, keeps a shared transport open, and a false positive
 // merely triggers a self-heal re-dial (see pruneLivenessDeadLegs). Standby legs
 // are excluded (they aren't sent to, so zero recv is expected).
@@ -1790,8 +1804,8 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	}
 	dead := selectDataStalledLegs(deltas, gapStuck)
 	if len(dead) > 0 {
-		rg.logger.Infof("leg-dataprogress: fast-pruning %d data-black-holing leg(s) (delivered <1/16 of the fastest leg over %v while group moved %dB, reorder gap stuck %v)",
-			len(dead), legDataProgressInterval, aggDelta, rg.mux.gapAge())
+		rg.logger.Infof("leg-dataprogress: fast-pruning %d data-black-holing leg(s) (delivered a negligible share of the fastest leg over %v while group moved %dB; reorder gap age %v, stuck=%v)",
+			len(dead), legDataProgressInterval, aggDelta, rg.mux.gapAge(), gapStuck)
 		rg.pruneLivenessDeadLegs(dead)
 	}
 
@@ -1830,9 +1844,6 @@ type legRecvDelta struct {
 // mux via SACK retransmits. It never selects so many that fewer than one active
 // leg would remain. Pure (no rg state / locks) so it is unit-tested directly.
 func selectDataStalledLegs(legs []legRecvDelta, gapStuck bool) []uuid.UUID {
-	if !gapStuck {
-		return nil
-	}
 	var agg, top uint64
 	active := 0
 	for _, l := range legs {
@@ -1850,7 +1861,23 @@ func selectDataStalledLegs(legs []legRecvDelta, gapStuck bool) []uuid.UUID {
 	if agg == 0 || active < 2 || top == 0 {
 		return nil
 	}
-	threshold := top / 16
+	// Pick the laggard threshold by how the group is doing:
+	//   - Frontier STUCK: the receiver is stalled on a missing seq, so shed any
+	//     leg well below the leader (< top/16) to recover the survivors' rate.
+	//   - Frontier HEALTHY: only shed a PURE goodput black-hole — a leg delivering
+	//     < 1/64 of a clearly-moving leader. It is dead weight (normal latency, so
+	//     the band demotion misses it) that still draws its round-robin share under
+	//     an even spread and burns retransmits; drop it without waiting for a full
+	//     stall. Gated on a substantial leader so top/64 is a real floor.
+	var threshold uint64
+	if gapStuck {
+		threshold = top / 16
+	} else {
+		if top < legBlackHoleMinTopBytes {
+			return nil
+		}
+		threshold = top / 64
+	}
 	var dead []uuid.UUID
 	for _, l := range legs {
 		if l.standby || l.delta > threshold {
