@@ -1957,22 +1957,51 @@ type bandLeg struct {
 	primary bool
 }
 
+// fastClusterAnchor returns the anchor latency of the FAST cluster in a sorted
+// (ascending) latency slice: the fastest latency whose band window
+// [anchor, demoteRatio*anchor] contains the most legs. The active stripe set is
+// held within [anchor, demoteRatio*anchor].
+//
+// Why not the median: with a small, slow-skewed active set (e.g. 185, 257, 456,
+// 809 ms) the median lands HIGH (456), so the slow legs look "in band" (<2x the
+// median) while the genuinely-fast 185 ms leg looks like the outlier — the band
+// then keeps the slow legs and HoL-throttles the aggregate BELOW a single fast
+// leg (the measured A1 failure). Anchoring on the fast cluster keeps {185, 257}
+// active and parks {456, 809}. Isolated LAN short-circuit artifacts (a 2 ms leg
+// beside a 250 ms cluster) are already kept out of the active set at mux-set time
+// (#4253); the fastest-window-on-tie rule here is chosen for the slow-skew case,
+// so a lone artifact anchors a 1-leg window and loses to the real cluster.
+func fastClusterAnchor(known []float64, demoteRatio float64) float64 {
+	anchor, bestCount := 0.0, -1
+	for _, a := range known {
+		if a <= 0 {
+			continue
+		}
+		cnt := 0
+		for _, l := range known {
+			if l >= a && l <= a*demoteRatio {
+				cnt++
+			}
+		}
+		if cnt > bestCount {
+			bestCount, anchor = cnt, a
+		}
+	}
+	return anchor
+}
+
 // partitionLatencyBand decides which legs to demote to / promote from warm
-// standby so the ACTIVE stripe set stays within a tight latency band around the
-// median. Striping across latency-disparate legs opens a reorder gap the size of
-// the difference (a 2ms LAN short-circuit beside a 300ms route), HoL-capping or
-// stalling the no-skip reorder buffer — the multi-leg collapse. LOW-side demotion
-// (a leg far FASTER than the median — the classic LAN short-circuit artifact that
-// neither the adaptive engine's high-side outlier logic nor a manual preset
-// excludes today) is universal. HIGH-side DEMOTION is now also universal: a leg
-// whose latency exceeds bandDemoteRatio*median stalls the no-skip reorder
-// frontier (a self-healed or churned-in 1200ms+ leg beside a 60ms band collapses
-// the mux to ~0), so it is demoted to warm standby in every mode — the observed
-// cause of multi-leg download collapse. Only re-PROMOTION stays gated to
-// manualMode: in adaptive mode the tick owns re-admission and its 512-deep warm
-// pool must not be dumped into the active set (demotion to standby never dumps
-// the pool, so it is safe to run always). Pure (no locks / rg state) so it is
-// unit-tested directly. Never demotes the primary or the last active leg.
+// standby so the ACTIVE stripe set stays within a tight latency band anchored on
+// the FAST cluster (see fastClusterAnchor). Striping across latency-disparate
+// legs opens a reorder gap the size of the difference (a 2ms LAN short-circuit
+// beside a 300ms route), HoL-capping or stalling the no-skip reorder buffer — the
+// multi-leg collapse. A leg outside [anchor, demoteRatio*anchor] — too slow
+// (high-side stall) OR faster than the fast cluster's floor (a LAN short-circuit
+// artifact) — is demoted to warm standby in every mode. Only re-PROMOTION stays
+// gated to manualMode: in adaptive mode the tick owns re-admission and its
+// 512-deep warm pool must not be dumped into the active set (demotion to standby
+// never dumps the pool, so it is safe to run always). Pure (no locks / rg state)
+// so it is unit-tested directly. Never demotes the primary or the last active leg.
 func partitionLatencyBand(legs []bandLeg, manualMode, tight bool) (demote, promote []int) {
 	demoteRatio, admitRatio := bandDemoteRatio, bandAdmitRatio
 	if tight {
@@ -1988,10 +2017,12 @@ func partitionLatencyBand(legs []bandLeg, manualMode, tight bool) (demote, promo
 		return nil, nil
 	}
 	sort.Float64s(known)
-	med := known[len(known)/2]
-	if med <= 0 {
+	anchor := fastClusterAnchor(known, demoteRatio)
+	if anchor <= 0 {
 		return nil, nil
 	}
+	demoteHi := demoteRatio * anchor // slower than this → high-side stall demote
+	admitHi := admitRatio * anchor   // re-admit only within this tighter band
 
 	active := 0
 	for _, l := range legs {
@@ -2004,22 +2035,14 @@ func partitionLatencyBand(legs []bandLeg, manualMode, tight bool) (demote, promo
 		if l.latMs <= 0 {
 			continue // unknown latency — leave the leg's state untouched
 		}
-		fasterRatio := med / l.latMs // >1 when the leg is faster than the median
-		slowerRatio := l.latMs / med // >1 when the leg is slower than the median
+		inBand := l.latMs >= anchor && l.latMs <= demoteHi
 		switch {
-		case !l.standby && !l.primary && active > 1 &&
-			(fasterRatio > demoteRatio || slowerRatio > demoteRatio):
+		case !l.standby && !l.primary && active > 1 && !inBand:
 			demote = append(demote, l.idx)
 			active-- // never demote below one active leg
-		case manualMode && l.standby:
-			symm := slowerRatio
-			if fasterRatio > symm {
-				symm = fasterRatio
-			}
-			if symm <= admitRatio {
-				promote = append(promote, l.idx)
-				active++
-			}
+		case manualMode && l.standby && l.latMs >= anchor && l.latMs <= admitHi:
+			promote = append(promote, l.idx)
+			active++
 		}
 	}
 	return demote, promote
@@ -2032,13 +2055,16 @@ func partitionLatencyBand(legs []bandLeg, manualMode, tight bool) (demote, promo
 // outlier (a 2ms LAN short-circuit artifact, or a self-healed 14000ms leg that
 // landed at index 0) permanently anchors the active set off-band and wastes an
 // active slot. This picker names a replacement so the primary can CHANGE
-// dynamically instead of being protected in place: when leg 0 is out of band
-// (its faster/slower ratio to the median exceeds demoteRatio) AND a non-primary
-// ACTIVE leg sits within admitRatio of the median, it returns that leg's index —
-// the lowest-latency in-band active candidate, which becomes the new primary via
-// a make-before-break swap (reelectPrimary). It returns ok=false unless a
-// replacement exists, so the group never gives up its anchor without one. Pure
-// (no locks / rg state) so it is unit-tested directly.
+// dynamically instead of being protected in place: when leg 0 is outside the
+// fast-cluster band [anchor, demoteRatio*anchor] AND a non-primary ACTIVE leg
+// sits inside it, it returns that leg's index — the lowest-latency in-band active
+// candidate, which becomes the new primary via a make-before-break swap
+// (reelectPrimary). It returns ok=false unless a replacement exists, so the group
+// never gives up its anchor without one. Anchoring on the fast cluster (not the
+// median) matters here too: a slow-skewed set inflates the median so a genuinely-
+// fast primary looks in-band, or a slow primary looks in-band — the fast-cluster
+// anchor names the real fast leg to promote into the primary slot. Pure (no locks
+// / rg state) so it is unit-tested directly.
 func pickPrimaryReelection(legs []bandLeg, tight bool) (newPrimaryIdx int, ok bool) {
 	demoteRatio, admitRatio := bandDemoteRatio, bandAdmitRatio
 	if tight {
@@ -2058,28 +2084,24 @@ func pickPrimaryReelection(legs []bandLeg, tight bool) (newPrimaryIdx int, ok bo
 		return 0, false
 	}
 	sort.Float64s(known)
-	med := known[len(known)/2]
-	if med <= 0 {
+	anchor := fastClusterAnchor(known, demoteRatio)
+	if anchor <= 0 {
 		return 0, false
 	}
-	// Is the primary itself a gross outlier?
-	pFaster, pSlower := med/primary.latMs, primary.latMs/med
-	if pFaster <= demoteRatio && pSlower <= demoteRatio {
-		return 0, false // primary is in band — leave it
+	// Is the primary itself outside the fast-cluster band?
+	if primary.latMs >= anchor && primary.latMs <= demoteRatio*anchor {
+		return 0, false // primary is in the fast band — leave it
 	}
 	// Find the best (lowest-latency) in-band ACTIVE non-primary replacement.
+	admitHi := admitRatio * anchor
 	bestIdx, bestLat := -1, 0.0
 	for i := range legs {
 		l := legs[i]
 		if l.primary || l.standby || l.latMs <= 0 {
 			continue
 		}
-		symm := l.latMs / med
-		if med/l.latMs > symm {
-			symm = med / l.latMs
-		}
-		if symm > admitRatio {
-			continue // candidate must itself be in band
+		if l.latMs < anchor || l.latMs > admitHi {
+			continue // candidate must itself be in the fast band
 		}
 		if bestIdx == -1 || l.latMs < bestLat {
 			bestIdx, bestLat = l.idx, l.latMs
