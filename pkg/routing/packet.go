@@ -77,6 +77,8 @@ func (t PacketType) String() string {
 		return "TransportBwProbe"
 	case TransportBwAckPacket:
 		return "TransportBwAck"
+	case RepairPacket:
+		return "Repair"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -118,7 +120,19 @@ const (
 	// TransportBwAckPacket carries the receiver's dispersion estimate back to
 	// the prober (route ID = 0). Payload: probeID(u32) estBps(u64).
 	TransportBwAckPacket
+	// RepairPacket carries one FEC repair symbol for the mux data plane (route
+	// ID > 0, same route group as the sequenced DataPackets it protects). Payload:
+	// blockID(u32 BE) idx(u8) then the symbol bytes. When both edges advertise
+	// CapFEC, the sender emits R repair packets per K-frame block onto its fast
+	// legs; a receiver whose reorder frontier is gap-blocked reconstructs the
+	// missing data frame from any K of the block's K+R symbols instead of waiting
+	// for the slow leg. A peer without CapFEC never sees these and is unaffected.
+	RepairPacket
 )
+
+// FECRepairHdr is the fixed prefix of a RepairPacket payload: blockID(4) + idx(1),
+// followed by the repair symbol bytes.
+const FECRepairHdr = 5
 
 // TransportBwProbeSize is the on-wire size of each packet-pair probe packet.
 // ~1400 B (sub-MTU) so consecutive packets are large enough to be spaced by
@@ -155,6 +169,15 @@ const (
 	// adds NO new wire message (the existing SACK carries the frontier); a peer
 	// without this bit cleanly falls back to the reactive SACK behavior.
 	CapHOLRetx uint16 = 1 << 4
+	// CapFEC: the peer supports forward-error-correction inside the mux. When BOTH
+	// edges advertise it (and CapMux, which it requires), the sender groups K
+	// consecutive sequenced DATA frames into a block and emits R RepairPackets on
+	// its fast legs; a receiver whose reorder frontier is gap-blocked reconstructs
+	// the missing data frame from any K of the block's K+R symbols (removing the
+	// wait on the slow leg that striped the frame). Erasure recovery delay is then
+	// bound by the FAST legs, not the slow one. A peer without this bit never
+	// receives RepairPackets and falls back cleanly to reorder+SACK.
+	CapFEC uint16 = 1 << 5
 )
 
 // SeqSize is the byte size of the sequence number prepended to DataPacket
@@ -362,6 +385,41 @@ func (p Packet) SequenceNumber() uint32 {
 // DataPayloadAfterSeq returns the data payload after the sequence number prefix.
 func (p Packet) DataPayloadAfterSeq() []byte {
 	return p[PacketPayloadOffset+SeqSize:]
+}
+
+// MakeRepairPacket constructs a RepairPacket carrying one FEC repair symbol for
+// route group id. Payload: blockID(u32 BE) idx(u8) symbol...
+func MakeRepairPacket(id RouteID, blockID uint32, idx uint8, symbol []byte) (Packet, error) {
+	totalPayload := FECRepairHdr + len(symbol)
+	if totalPayload > math.MaxUint16 {
+		return Packet{}, ErrPayloadTooBig
+	}
+
+	packet := make([]byte, PacketHeaderSize+totalPayload)
+
+	packet[PacketTypeOffset] = byte(RepairPacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(totalPayload)) //nolint:gosec
+	binary.BigEndian.PutUint32(packet[PacketPayloadOffset:], blockID)
+	packet[PacketPayloadOffset+4] = idx
+	copy(packet[PacketPayloadOffset+FECRepairHdr:], symbol)
+
+	return packet, nil
+}
+
+// RepairBlockID extracts the FEC block ID from a RepairPacket.
+func (p Packet) RepairBlockID() uint32 {
+	return binary.BigEndian.Uint32(p[PacketPayloadOffset:])
+}
+
+// RepairIndex extracts the repair-symbol index (0..R-1) from a RepairPacket.
+func (p Packet) RepairIndex() uint8 {
+	return p[PacketPayloadOffset+4]
+}
+
+// RepairSymbol returns the repair symbol bytes of a RepairPacket.
+func (p Packet) RepairSymbol() []byte {
+	return p[PacketPayloadOffset+FECRepairHdr:]
 }
 
 // HandshakeCapabilities extracts the capability bitmap from an extended handshake payload.

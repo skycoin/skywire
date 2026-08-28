@@ -148,3 +148,31 @@ func TestMakeErrorPacket(t *testing.T) {
 	assert.Equal(t, RouteID(2), packet.RouteID())
 	assert.Equal(t, []byte("foo"), packet.Payload())
 }
+
+func TestMakeRepairPacketRoundTrip(t *testing.T) {
+	id := RouteID(0xDEADBEEF)
+	blockID := uint32(12345)
+	idx := uint8(2)
+	symbol := make([]byte, 16*1024)
+	for i := range symbol {
+		symbol[i] = byte(i * 31)
+	}
+
+	p, err := MakeRepairPacket(id, blockID, idx, symbol)
+	if err != nil {
+		t.Fatalf("MakeRepairPacket: %v", err)
+	}
+	if p.Type() != RepairPacket {
+		t.Fatalf("type = %v want RepairPacket", p.Type())
+	}
+	if p.RouteID() != id {
+		t.Fatalf("routeID = %v want %v", p.RouteID(), id)
+	}
+	if p.RepairBlockID() != blockID {
+		t.Fatalf("blockID = %d want %d", p.RepairBlockID(), blockID)
+	}
+	if p.RepairIndex() != idx {
+		t.Fatalf("idx = %d want %d", p.RepairIndex(), idx)
+	}
+	require.Equal(t, symbol, p.RepairSymbol())
+}
