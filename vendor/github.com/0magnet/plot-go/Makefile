@@ -83,16 +83,24 @@ test: ## Run tests. Falls back to the js/wasm ones where nothing builds here
 
 # The exec wrapper Go ships for running a js/wasm binary under Node. It is what
 # makes `go test` work for code the host cannot build at all.
-WASMEXEC = $(shell go env GOROOT)/lib/wasm/go_js_wasm_exec
+# The wrapper moved from misc/wasm to lib/wasm in Go 1.24, and CI may install
+# either side of that, so both are tried. Empty means this toolchain cannot
+# run js/wasm tests at all.
+WASMEXEC = $(shell for d in lib misc; do p="$$(go env GOROOT)/$$d/wasm/go_js_wasm_exec"; if [ -x "$$p" ]; then echo "$$p"; break; fi; done)
 
 test-wasm: ## Run the js/wasm tests under Node
-	@if [ ! -x "$(WASMEXEC)" ]; then \
-		echo 'no js/wasm exec wrapper in this Go installation; skipping'; exit 0; fi
-	@command -v node >/dev/null || { echo 'node is not installed; skipping'; exit 0; }
+	@# One shell for the whole target. An `exit 0` in a recipe line of its own
+	@# ends that line and nothing else, so the earlier form announced it was
+	@# skipping and then ran the tests regardless, against the exec wrapper it
+	@# had just reported missing.
 	@# Node has no DOM: document, window and requestAnimationFrame are all
 	@# undefined. JS core is there, and a fake document can be installed from
 	@# Go with js.Global().Set, which is how the DOM-facing code is covered.
-	@if [ -n "$(JSPKGS)" ]; then \
+	@if [ -z "$(WASMEXEC)" ]; then \
+		echo 'no js/wasm exec wrapper in this Go installation; skipping'; \
+	elif ! command -v node >/dev/null; then \
+		echo 'node is not installed; skipping'; \
+	elif [ -n "$(JSPKGS)" ]; then \
 		CGO_ENABLED=0 GOOS=js GOARCH=wasm ${OPTS} go test -exec="$(WASMEXEC)" $(JSPKGS); \
 	else \
 		echo 'no js/wasm packages'; \
@@ -125,9 +133,14 @@ test-browser: ## Run the js/wasm tests in a headless browser (needs wasmbrowsert
 # build wherever Go does. These targets are what says so rather than assumes it.
 test-tinygo: ## Run the tests under TinyGo, and build the wasm targets
 	@command -v tinygo >/dev/null || { echo 'tinygo is not installed; skipping'; exit 0; }
-	tinygo test ./...
-	tinygo build -target=wasip1 -o /dev/null ./cmd/plot-go
-	tinygo build -target=wasm -o /dev/null ./cmd/plot-go
+	@# TinyGo trails each new Go release by some weeks; until it catches up,
+	@# building against the newer Go fails outright. The helper reports the
+	@# newest Go this TinyGo accepts, or "auto" once the system one will do.
+	@# Resolved once and reused, so the three commands agree and ask once.
+	TC=$$(sh scripts/tinygo-toolchain.sh); \
+		GOTOOLCHAIN=$$TC tinygo test ./... && \
+		GOTOOLCHAIN=$$TC tinygo build -target=wasip1 -o /dev/null ./cmd/plot-go && \
+		GOTOOLCHAIN=$$TC tinygo build -target=wasm -o /dev/null ./cmd/plot-go
 
 build-wasm: ## Check the wasm targets build with the Go toolchain
 	CGO_ENABLED=0 GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/plot-go

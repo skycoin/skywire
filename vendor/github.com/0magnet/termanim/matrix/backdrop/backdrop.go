@@ -41,7 +41,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
+	"github.com/gdamore/tcell/v3"
 	"golang.org/x/term"
 
 	"github.com/0magnet/termanim/canvas"

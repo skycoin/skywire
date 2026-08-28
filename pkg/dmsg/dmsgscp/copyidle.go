@@ -30,7 +30,7 @@ func copyNIdle(dst io.Writer, src io.Reader, n int64, conn net.Conn, idle time.D
 	var done int64
 	for done < n {
 		if idle > 0 {
-			_ = conn.SetDeadline(time.Now().Add(idle))
+			_ = conn.SetDeadline(time.Now().Add(idle)) //nolint:errcheck // advisory idle deadline; a set failure surfaces on the next Read/Write
 		}
 		want := n - done
 		if want > int64(len(buf)) {
@@ -55,7 +55,7 @@ func copyNIdle(dst io.Writer, src io.Reader, n int64, conn net.Conn, idle time.D
 		}
 	}
 	if idle > 0 {
-		_ = conn.SetDeadline(time.Time{})
+		_ = conn.SetDeadline(time.Time{}) //nolint:errcheck // clearing the deadline is best-effort
 	}
 	if done < n {
 		return done, io.ErrUnexpectedEOF

@@ -12,7 +12,7 @@ package canvas
 import (
 	"time"
 
-	"github.com/gdamore/tcell/v2"
+	"github.com/gdamore/tcell/v3"
 )
 
 // The two glyphs the surface is drawn with. tcell passes them through unchanged
@@ -274,13 +274,10 @@ func run(screen tcell.Screen, opt Options, resize func(cols, rows int), frame fu
 	// it after this returns.
 	screen.HideCursor()
 
-	// Events come over a channel so the frame loop never blocks in PollEvent.
-	// tcell closes the channel when the screen is finalised, which is how a
-	// closed pane ends this goroutine instead of leaving it spinning forever.
-	events := make(chan tcell.Event)
-	quit := make(chan struct{})
-	go screen.ChannelEvents(events, quit)
-	defer close(quit)
+	// Events come over a channel so the frame loop never blocks waiting for one.
+	// tcell closes it when the screen is finalised, which is how a closed pane
+	// ends this goroutine instead of leaving it spinning forever.
+	events := screen.EventQ()
 
 	tick := time.NewTicker(time.Second / time.Duration(fps))
 	defer tick.Stop()
@@ -298,10 +295,17 @@ func run(screen tcell.Screen, opt Options, resize func(cols, rows int), frame fu
 			}
 			switch ev := ev.(type) {
 			case *tcell.EventKey:
+				// A key arrives twice where the terminal reports releases as
+				// well as presses. Quitting on the release would end the
+				// animation on the way out of a keystroke meant for something
+				// else, and would fire twice for the one that was meant.
+				if !ev.Pressed() {
+					continue
+				}
 				switch {
 				case ev.Key() == tcell.KeyEscape,
 					ev.Key() == tcell.KeyCtrlC,
-					ev.Rune() == 'q', ev.Rune() == 'Q':
+					ev.Str() == "q", ev.Str() == "Q":
 					return nil
 				}
 			case *tcell.EventResize:
