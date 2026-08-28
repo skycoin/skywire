@@ -1,4 +1,4 @@
-// Package visor pkg/visor/skynet_relay_dial.go c2-vis-net
+// Package visor pkg/visor/skynet_relay_dial.go c3-vis-core
 //
 // Relay tier for the SKYNET dialer (DialSkynet), i.e. `.skynet` hosts only.
 // When there's no direct transport to a destination, reach it through a 1-hop

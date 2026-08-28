@@ -1,4 +1,4 @@
-// Package visor pkg/visor/wasmserve_test.go c4-vis-mesh
+// Package visor pkg/visor/wasmserve_test.go c3-vis-core
 package visor
 
 import (
