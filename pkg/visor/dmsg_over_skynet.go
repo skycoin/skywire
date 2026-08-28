@@ -1,4 +1,4 @@
-// Package visor pkg/visor/dmsg_over_skynet.go c2-vis-net
+// Package visor pkg/visor/dmsg_over_skynet.go c3-vis-core
 //
 // "dmsg over skynet transports": serve a .dmsg fetch by reaching the peer's
 // :80 over a skynet transport via the VStreamMux relay (direct → 1-hop relay,
