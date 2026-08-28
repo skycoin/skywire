@@ -84,7 +84,7 @@ func (r *router) appendRouteAsymmetric(nrg *NoiseRouteGroup, rules routing.EdgeR
 		lastTp := rg.tps[lastIdx]
 		lastRule := rg.fwd[lastIdx]
 		rg.mu.Unlock()
-		packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, routing.CapMux|routing.CapSACK)
+		packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, routing.CapMux|routing.CapSACK|routing.CapHOLRetx)
 		if err := rg.writePacket(context.Background(), lastTp, packet, lastRule.KeyRouteID()); err != nil {
 			r.logger.WithError(err).Warn("Failed to send handshake on additional mux transport")
 		}
@@ -180,7 +180,7 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	lastRule := rg.fwd[lastIdx]
 	rg.mu.Unlock()
 
-	packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, routing.CapMux|routing.CapSACK)
+	packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, routing.CapMux|routing.CapSACK|routing.CapHOLRetx)
 	if err := rg.writePacket(context.Background(), lastTp, packet, lastRule.KeyRouteID()); err != nil {
 		r.logger.WithError(err).Warn("Failed to send handshake on additional mux transport")
 	}
