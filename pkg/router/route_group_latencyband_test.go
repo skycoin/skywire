@@ -187,6 +187,31 @@ func TestPartitionLatencyBand(t *testing.T) {
 			wantDemote: []int{2, 3}, wantPromote: nil,
 		},
 		{
+			name: "goodput gate: a BUSY out-of-band leg is spared, an idle one is parked",
+			legs: []bandLeg{
+				{idx: 0, latMs: 180, primary: true},
+				{idx: 1, latMs: 257},
+				{idx: 2, latMs: 456, recvDelta: 1_000_000}, // out-of-band but DELIVERING → self-queuing latency, keep
+				{idx: 3, latMs: 809, recvDelta: 0},         // out-of-band AND not delivering → genuinely bad, park
+			},
+			// Without the gate the slow-skew fix parks {2,3}; with per-leg goodput,
+			// leg 2's high latency is its own queue (it's busy) so it stays, and only
+			// the idle-slow leg 3 is parked.
+			manual: true, tight: true,
+			wantDemote: []int{3}, wantPromote: nil,
+		},
+		{
+			name: "goodput gate: all legs delivering → none demoted despite latency spread",
+			legs: []bandLeg{
+				{idx: 0, latMs: 180, primary: true},
+				{idx: 1, latMs: 257, recvDelta: 900_000},
+				{idx: 2, latMs: 456, recvDelta: 800_000},
+				{idx: 3, latMs: 809, recvDelta: 700_000}, // busy: >=0.15*max → spared
+			},
+			manual: true, tight: true,
+			wantDemote: nil, wantPromote: nil,
+		},
+		{
 			name: "standby 1.7x leg stays standby under tight band (admission withheld)",
 			legs: []bandLeg{
 				{idx: 0, latMs: 150, primary: true},
@@ -373,7 +398,7 @@ func TestEnforceLatencyBandParksArtifactLeg(t *testing.T) {
 	rg.legLivenessMu.Unlock()
 
 	// createMuxRouteGroup starts every leg active (standbyNewLegs=false == manual).
-	rg.enforceLatencyBand()
+	rg.enforceLatencyBand(nil)
 
 	require.True(t, rg.mux.isLegStandby(3), "the 2ms artifact leg must be parked to warm standby")
 	for _, i := range []int{0, 1, 2} {
@@ -384,7 +409,7 @@ func TestEnforceLatencyBandParksArtifactLeg(t *testing.T) {
 	rg.legLivenessMu.Lock()
 	rg.legE2ELatency[mts[3].Entry.ID] = 150
 	rg.legLivenessMu.Unlock()
-	rg.enforceLatencyBand()
+	rg.enforceLatencyBand(nil)
 	require.False(t, rg.mux.isLegStandby(3), "leg back within band is re-admitted in manual mode")
 }
 
@@ -409,7 +434,7 @@ func TestEnforceLatencyBandReelectsBadPrimary(t *testing.T) {
 	rg.legE2ELatency[mts[3].Entry.ID] = 145
 	rg.legLivenessMu.Unlock()
 
-	rg.enforceLatencyBand()
+	rg.enforceLatencyBand(nil)
 
 	// The primary slot must now hold a healthy in-band leg, not the old 2ms one.
 	rg.mu.Lock()
