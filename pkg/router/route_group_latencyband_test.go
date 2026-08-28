@@ -417,3 +417,30 @@ func TestEnforceLatencyBandReelectsBadPrimary(t *testing.T) {
 	rg.mu.Unlock()
 	require.True(t, parkedOld, "the displaced 2ms artifact must be parked to warm standby after re-election")
 }
+
+// TestDemoteStalledLegsParksNotRemoves verifies the manual-mode data-progress
+// path parks a stalled leg to warm standby and KEEPS it in the group (so its
+// in-flight sequences keep draining the reorder frontier and the pinned set is
+// preserved), instead of removing it the way the adaptive prune does.
+func TestDemoteStalledLegsParksNotRemoves(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 4)
+	before := len(mts)
+
+	// Park legs 2 and 3 (never the primary, index 0).
+	rg.demoteStalledLegs([]uuid.UUID{mts[2].Entry.ID, mts[3].Entry.ID})
+
+	// Still present — nothing removed.
+	rg.mu.Lock()
+	after := len(rg.tps)
+	rg.mu.Unlock()
+	require.Equal(t, before, after, "manual-mode demote must not remove legs from the group")
+
+	require.True(t, rg.mux.isLegStandby(2), "stalled leg 2 parked to standby")
+	require.True(t, rg.mux.isLegStandby(3), "stalled leg 3 parked to standby")
+	require.False(t, rg.mux.isLegStandby(0), "primary anchor is never parked")
+	require.False(t, rg.mux.isLegStandby(1), "healthy leg 1 stays active")
+
+	// The primary is never parked even if named as stalled.
+	rg.demoteStalledLegs([]uuid.UUID{mts[0].Entry.ID})
+	require.False(t, rg.mux.isLegStandby(0), "primary must never be parked by demoteStalledLegs")
+}

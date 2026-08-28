@@ -1768,6 +1768,7 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 
 	rg.mu.Lock()
 	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
+	manual := !rg.standbyNewLegs
 	rg.mu.Unlock()
 
 	stats := rg.mux.snapshotLegs()
@@ -1815,9 +1816,25 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	}
 	dead := selectDataStalledLegs(deltas, gapStuck)
 	if len(dead) > 0 {
-		rg.logger.Infof("leg-dataprogress: fast-pruning %d data-black-holing leg(s) (delivered a negligible share of the fastest leg over %v while group moved %dB; reorder gap age %v, stuck=%v)",
-			len(dead), legDataProgressInterval, aggDelta, rg.mux.gapAge(), gapStuck)
-		rg.pruneLivenessDeadLegs(dead)
+		if manual {
+			// Manual mode = the operator (or a static-mux policy, rotation_interval
+			// = 0) pinned this leg set. REMOVING a leg mid-stream orphans the
+			// sequences the sender already stripe-assigned to it, permanently
+			// wedging the no-skip reorder frontier (the observed 3-leg → 1-leg
+			// collapse that then stalls at 0 B/s). Instead PARK the stalled legs to
+			// warm standby: a standby leg is only excluded from SEND scheduling, it
+			// still RECEIVES, so its in-flight sequences keep draining the frontier,
+			// and the operator's pinned set is preserved and re-promotable once it
+			// recovers. Removal + self-heal-redial stays the ADAPTIVE-mode behavior,
+			// where churning a dead leg for a fresh one is the intent.
+			rg.logger.Infof("leg-dataprogress: parking %d stalled leg(s) to warm standby (manual mode — pinned set kept for recovery, not removed; reorder gap age %v, stuck=%v)",
+				len(dead), rg.mux.gapAge(), gapStuck)
+			rg.demoteStalledLegs(dead)
+		} else {
+			rg.logger.Infof("leg-dataprogress: fast-pruning %d data-black-holing leg(s) (delivered a negligible share of the fastest leg over %v while group moved %dB; reorder gap age %v, stuck=%v)",
+				len(dead), legDataProgressInterval, aggDelta, rg.mux.gapAge(), gapStuck)
+			rg.pruneLivenessDeadLegs(dead)
+		}
 	}
 
 	// Refresh transport-selection weights on this fast cadence so
@@ -2164,6 +2181,45 @@ func (rg *RouteGroup) enforceLatencyBand() {
 // one leg, so a false positive at worst causes a self-heal re-dial — never an
 // outage. Mirrors pruneDeadTransports' removal, selecting by liveness instead
 // of tp.IsClosed().
+// demoteStalledLegs parks the given legs (by transport ID) to WARM STANDBY
+// instead of removing them — the manual-mode counterpart to pruneLivenessDeadLegs.
+// A standby leg keeps its rules installed and its transport up and still RECEIVES
+// (standby is a send-side exclusion only), so any sequences the sender already
+// assigned to it keep arriving and draining the no-skip reorder frontier — no
+// orphaned gap, no wedge. The primary anchor (index 0) is never parked (a group
+// must always have a selectable send leg); if the primary itself is the stalled
+// one, enforceLatencyBand's re-election moves a healthy leg into slot 0 on the
+// next cadence. The parked legs stay in the group, re-promotable by the band pass
+// once their goodput recovers, so a manually-pinned set is preserved across a
+// transient stall instead of being torn down.
+func (rg *RouteGroup) demoteStalledLegs(deadIDs []uuid.UUID) {
+	deadSet := make(map[uuid.UUID]struct{}, len(deadIDs))
+	for _, id := range deadIDs {
+		deadSet[id] = struct{}{}
+	}
+	rg.mu.Lock()
+	var idxs []int
+	for i, tp := range rg.tps {
+		if i == 0 || tp == nil {
+			continue // never park the primary anchor
+		}
+		if _, dead := deadSet[tp.Entry.ID]; dead {
+			idxs = append(idxs, i)
+		}
+	}
+	rg.mu.Unlock()
+	for _, i := range idxs {
+		rg.mux.setLegStandby(i, true)
+	}
+	if len(idxs) > 0 {
+		rg.mu.Lock()
+		if rg.mux != nil {
+			rg.mux.rebuildWeights(rg.tps)
+		}
+		rg.mu.Unlock()
+	}
+}
+
 func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
 	deadSet := make(map[uuid.UUID]struct{}, len(deadIDs))
 	for _, id := range deadIDs {
