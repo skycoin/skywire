@@ -145,6 +145,16 @@ const (
 	// handshake also carries a piggybacked noise KK message (after the 3-byte
 	// enc+caps prefix), and network.EncryptConn is bypassed.
 	CapPerFrameNoise uint16 = 1 << 3
+	// CapHOLRetx: the peer supports PROACTIVE head-of-line retransmit inside the
+	// mux. When BOTH edges advertise it (and CapSACK, which it reuses), a receiver
+	// whose reorder frontier has been gap-blocked for ~one fastest-live-leg RTT
+	// prompts the sender with a SACK, and the sender immediately retransmits the
+	// stuck frontier seq on its fastest live leg — bypassing the reactive
+	// retxMinAge/reorderTimeout waits — so a single multi-leg download's stall is
+	// bounded by a fast-leg RTT instead of collapsing below single-leg rate. It
+	// adds NO new wire message (the existing SACK carries the frontier); a peer
+	// without this bit cleanly falls back to the reactive SACK behavior.
+	CapHOLRetx uint16 = 1 << 4
 )
 
 // SeqSize is the byte size of the sequence number prepended to DataPacket
