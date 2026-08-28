@@ -105,6 +105,14 @@ var BrowseBootstrapHTML []byte
 //go:embed browse-transport.js
 var BrowseTransportJS []byte
 
+// BrowseSWLoaderJS boots the Go/wasm transport worker in place of realorigin's
+// JS one, and is served only when `hv serve --browse-origin-wasm` asks for it.
+// __WASM_EXEC__ and __WASM_URL__ are substituted with the paths the same origin
+// serves those two files from.
+//
+//go:embed browse-sw-loader.js
+var BrowseSWLoaderJS []byte
+
 // PWAIcon192 / PWAIcon512 are the maskable install icons referenced by the
 // manifest, served at /icon-192.png and /icon-512.png.
 //
