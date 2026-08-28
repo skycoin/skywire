@@ -46,6 +46,9 @@ func (m MuxOp) Human(w io.Writer) error {
 	case "width":
 		_, err := fmt.Fprintf(w, "mux steady active width set to %s\n", m.Mode)
 		return err
+	case "switch":
+		_, err := fmt.Fprintf(w, "switched primary route to a %d-hop leg (first tp=%s) on app=%s; old primary retired\n", m.Hops, m.TransportID, m.App)
+		return err
 	default:
 		_, err := fmt.Fprintf(w, "mux mode set to %s\n", m.Mode)
 		return err
