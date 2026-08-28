@@ -102,6 +102,11 @@ const (
 	// HELD. Failover mode (1 active + standbys) is unaffected — it never stripes.
 	bandDemoteRatioTight = 2.0
 	bandAdmitRatioTight  = 1.6
+	// goodputGateFrac: an active leg delivering at least this fraction of the
+	// best active leg's recent goodput is spared from latency demotion (its high
+	// measured latency is self-inflicted queuing, not a bad route — BBR/bufferbloat
+	// principle). 0.15 matches the capacity scheduler's cold-leg floor share.
+	goodputGateFrac = 0.15
 	// bandMinLegs: latency-band admission only runs with at least this many legs
 	// carrying a measured latency. Below it the median is not a meaningful cluster
 	// anchor, and the 1-2 leg pathologies are already handled by the sole-leg
@@ -1901,7 +1906,7 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	// reorder gap that HoL-caps or stalls the whole mux. Same cadence as the
 	// data-progress prune; complementary — the prune sheds a leg that stops
 	// delivering, this parks a leg whose latency is too disparate to stripe with.
-	rg.enforceLatencyBand()
+	rg.enforceLatencyBand(perDelta)
 }
 
 // legRecvDelta is one active-or-standby leg's rg-scoped recv progress over a
@@ -1970,12 +1975,15 @@ func selectDataStalledLegs(legs []legRecvDelta, gapStuck bool) []uuid.UUID {
 
 // bandLeg is one leg's latency-band inputs: its index, measured end-to-end
 // latency (ms; <=0 == not yet measured), whether it is currently a warm standby,
-// and whether it is the primary (index 0, never demoted).
+// whether it is the primary (index 0, never demoted), and its recent delivered
+// goodput (recvDelta, bytes over the last data-progress interval) used to gate
+// latency demotion (see the goodput-gate note in partitionLatencyBand).
 type bandLeg struct {
-	idx     int
-	latMs   float64
-	standby bool
-	primary bool
+	idx       int
+	latMs     float64
+	standby   bool
+	primary   bool
+	recvDelta uint64
 }
 
 // fastClusterAnchor returns the anchor latency of the FAST cluster in a sorted
@@ -2045,6 +2053,27 @@ func partitionLatencyBand(legs []bandLeg, manualMode, tight bool) (demote, promo
 	demoteHi := demoteRatio * anchor // slower than this → high-side stall demote
 	admitHi := admitRatio * anchor   // re-admit only within this tighter band
 
+	// GOODPUT GATE (BBR/bufferbloat): the leg latency above is measured by an
+	// IN-BAND liveness pong that shares the leg's FIFO send queue with bulk data,
+	// so UNDER LOAD it reads base_RTT + self-inflicted queuing delay — the BUSIEST
+	// leg reads the HIGHEST latency. Demoting an ACTIVE leg on that would shed the
+	// best-utilized leg. So an active leg is demoted on latency ONLY IF it is also
+	// LOW-goodput: a leg delivering its share is working (its high latency is its
+	// own queue), keep it; a leg out-of-band AND barely delivering is genuinely
+	// bad (idle-slow route, or HoL-stalling the frontier), park it. maxDelta is the
+	// best active leg's recent delivered bytes; the gate self-disables when the
+	// group is IDLE (maxDelta==0) — there the pong isn't queued behind data, so
+	// latency is meaningful and the plain latency band applies. This also makes the
+	// gate starvation-safe (BBR's application-limited rule): a leg the scheduler
+	// starved reads LOW idle latency (good route, idle), so it is in-band and never
+	// a demote candidate to begin with.
+	var maxDelta uint64
+	for _, l := range legs {
+		if !l.standby && l.recvDelta > maxDelta {
+			maxDelta = l.recvDelta
+		}
+	}
+
 	active := 0
 	for _, l := range legs {
 		if !l.standby {
@@ -2057,8 +2086,11 @@ func partitionLatencyBand(legs []bandLeg, manualMode, tight bool) (demote, promo
 			continue // unknown latency — leave the leg's state untouched
 		}
 		inBand := l.latMs >= anchor && l.latMs <= demoteHi
+		// Under load, spare a busy (>= goodputGateFrac of the best) active leg from
+		// latency demotion — its latency is self-queuing, not route quality.
+		busy := maxDelta > 0 && float64(l.recvDelta) >= goodputGateFrac*float64(maxDelta)
 		switch {
-		case !l.standby && !l.primary && active > 1 && !inBand:
+		case !l.standby && !l.primary && active > 1 && !inBand && !busy:
 			demote = append(demote, l.idx)
 			active-- // never demote below one active leg
 		case manualMode && l.standby && l.latMs >= anchor && l.latMs <= admitHi:
@@ -2176,7 +2208,7 @@ func (rg *RouteGroup) reelectPrimary(newIdx int) {
 // zero scheduler weight and is never striped, so it can no longer open a reorder
 // gap, while its rules stay installed (a warm standby, promotable again if it
 // returns to the band).
-func (rg *RouteGroup) enforceLatencyBand() {
+func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 	if rg.isClosed() || rg.mux == nil {
 		return
 	}
@@ -2194,10 +2226,11 @@ func (rg *RouteGroup) enforceLatencyBand() {
 			continue
 		}
 		legs = append(legs, bandLeg{
-			idx:     i,
-			latMs:   rg.legBandLatencyMs(tp),
-			standby: rg.mux.isLegStandby(i),
-			primary: i == 0,
+			idx:       i,
+			latMs:     rg.legBandLatencyMs(tp),
+			standby:   rg.mux.isLegStandby(i),
+			primary:   i == 0,
+			recvDelta: recvDeltas[tp.Entry.ID],
 		})
 	}
 	rg.mu.Unlock()
@@ -2218,10 +2251,11 @@ func (rg *RouteGroup) enforceLatencyBand() {
 				continue
 			}
 			legs = append(legs, bandLeg{
-				idx:     i,
-				latMs:   rg.legBandLatencyMs(tp),
-				standby: rg.mux.isLegStandby(i),
-				primary: i == 0,
+				idx:       i,
+				latMs:     rg.legBandLatencyMs(tp),
+				standby:   rg.mux.isLegStandby(i),
+				primary:   i == 0,
+				recvDelta: recvDeltas[tp.Entry.ID],
 			})
 		}
 		rg.mu.Unlock()
