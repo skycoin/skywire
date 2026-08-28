@@ -321,7 +321,7 @@ func (s *Stream) prepareFields(init bool, lAddr, rAddr Addr) error {
 	// this dmsg stream (yamux/smux/QUIC) — identical across transports, so the
 	// relay never sees client↔client plaintext regardless of dmsg-over-QUIC.
 	s.nsConn = noise.NewReadWriter(s.muxStream(), s.ns)
-	s.log = s.ses.log.WithField("stream", s.lAddr.ShortString()+"->"+s.rAddr.ShortString())
+	s.log = s.ses.log.WithField("stream", s.lAddr.String()+"->"+s.rAddr.String())
 	return nil
 }
 
