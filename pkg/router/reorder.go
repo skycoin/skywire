@@ -6,16 +6,15 @@ import (
 	"time"
 )
 
-// reorderTimeout bounds how long the reorder buffer will hold a frontier gap
-// open before releasing it (delivering past the missing sequence). It is the
-// time-based companion to maxGap: maxGap caps memory, reorderTimeout caps
-// head-of-line latency. With reliable leg transports a genuine gap only occurs
-// when a leg dies mid-stream and the SACK retransmit has not yet refilled it;
-// rather than stall the stream until liveness prunes that leg, release the gap
-// after this long so the flow degrades to lossy-but-moving (never a hard 0-byte
-// stall — the graceful-degradation contract for mux>1). Comfortably larger than
-// any realistic inter-leg latency skew so normal reordering is never released
-// early. A var (not const) so tests can shrink it.
+// reorderTimeout is how long a frontier gap may stay open before it counts as a
+// stall. It does NOT release the gap: see Insert, which never skips a missing
+// sequence, because the mux carries a stateful-AEAD noise stream and delivering
+// past a hole desyncs the cipher permanently. It drives the diagnostics and
+// leg-prune paths, and the timer-based SACK (RouteGroup.reorderStallServiceFn)
+// that asks the sender to retransmit the stuck sequence on a live leg, filling
+// the gap IN ORDER. Comfortably larger than any realistic inter-leg latency skew,
+// so ordinary reordering never reads as a stall. A var (not const) so tests can
+// shrink it.
 var reorderTimeout = 1500 * time.Millisecond
 
 // reorderBuffer holds out-of-order packets and delivers them in sequence order.
@@ -27,15 +26,17 @@ type reorderBuffer struct {
 	buf     map[uint32][]byte // out-of-order packets: seq -> payload
 	// gapSince is when the current frontier gap opened (buffer went non-empty
 	// while waiting for nextSeq). Zero when the buffer is empty / fully caught
-	// up. Used to release a gap that has stayed open longer than reorderTimeout.
+	// up. Read by the stall paths that reorderTimeout feeds; it never releases
+	// the gap itself.
 	gapSince time.Time
-	// maxGap is the emergency cap: the max out-of-order packets held before a
-	// last-resort force-flush that skips the missing sequence. Because the leg
-	// transports are reliable/ordered, a gap is latency skew (the missing seq
-	// is in flight and will arrive), so this cap is sized (see reorderWindow)
-	// to never trip in normal mux operation — hitting it means a leg has died
-	// and stopped delivering, and flushing (lossy) is preferable to stalling
-	// the stream forever while liveness prunes that leg.
+	// maxGap is the emergency cap: the most out-of-order packets held before
+	// further ones are DROPPED. Dropping the arrival, not skipping the gap, is
+	// the whole point — skipping would corrupt the noise stream (see Insert),
+	// whereas a dropped seq is simply re-requested by SACK and retransmitted.
+	// Because the leg transports are reliable/ordered, a gap is latency skew
+	// (the missing seq is in flight and will arrive), so this cap is sized (see
+	// reorderWindow) to the aggregate BDP and is only reached on a genuine
+	// mid-stream leg death.
 	maxGap int
 }
 
