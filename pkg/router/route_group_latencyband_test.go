@@ -53,15 +53,26 @@ func TestPartitionLatencyBand(t *testing.T) {
 			wantDemote: []int{3}, wantPromote: nil,
 		},
 		{
-			name: "high-side outlier kept active in adaptive mode (tick owns the high side)",
+			name: "high-side outlier demoted in adaptive mode too (frontier-stall guard)",
 			legs: []bandLeg{
 				{idx: 0, latMs: 150, primary: true},
 				{idx: 1, latMs: 155},
 				{idx: 2, latMs: 145},
-				{idx: 3, latMs: 700},
+				{idx: 3, latMs: 700}, // ~4.6x median: stalls the reorder frontier
+			},
+			manual:     false, // demotion-to-standby is universal; only re-promotion stays manual
+			wantDemote: []int{3}, wantPromote: nil,
+		},
+		{
+			name: "self-healed 1200ms leg demoted out of a 60ms band in adaptive mode",
+			legs: []bandLeg{
+				{idx: 0, latMs: 54, primary: true},
+				{idx: 1, latMs: 64},
+				{idx: 2, latMs: 91},
+				{idx: 3, latMs: 1223}, // the observed collapse-causing churn-in leg
 			},
 			manual:     false,
-			wantDemote: nil, wantPromote: nil,
+			wantDemote: []int{3}, wantPromote: nil,
 		},
 		{
 			name: "primary is never demoted even when it is the outlier",
