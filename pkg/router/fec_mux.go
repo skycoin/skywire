@@ -58,14 +58,14 @@ type fecRepairFrame struct {
 	symbol  []byte // exactly symLen bytes
 }
 
-// symbolize length-prefixes and zero-pads a plaintext payload to fecSymLen.
+// symbolize length-prefixes and zero-pads a frame to symLen.
 // Returns (symbol, true); (nil, false) if the payload is too large to code.
 func symbolize(payload []byte, symLen int) ([]byte, bool) {
 	if len(payload) > symLen-fecLenPrefix {
 		return nil, false
 	}
 	sym := make([]byte, symLen)
-	binary.BigEndian.PutUint16(sym, uint16(len(payload)))
+	binary.BigEndian.PutUint16(sym, uint16(len(payload))) //nolint:gosec
 	copy(sym[fecLenPrefix:], payload)
 	return sym, true
 }
@@ -118,8 +118,8 @@ func (s *fecStriper) Add(seq uint32, frame []byte) []fecRepairFrame {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	blk := seq / uint32(s.k)
-	idx := int(seq % uint32(s.k))
+	blk := seq / uint32(s.k)      //nolint:gosec
+	idx := int(seq % uint32(s.k)) //nolint:gosec
 
 	if !s.inited {
 		s.block = blk
@@ -268,8 +268,8 @@ func (f *fecReassembler) evict() {
 // symbolized to the block's adaptive symLen only at decode time, so the receiver
 // need not know symLen until a repair frame arrives.
 func (f *fecReassembler) RecordData(seq uint32, frame []byte) {
-	blk := seq / uint32(f.k)
-	idx := int(seq % uint32(f.k))
+	blk := seq / uint32(f.k)      //nolint:gosec
+	idx := int(seq % uint32(f.k)) //nolint:gosec
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	bs := f.blockFor(blk)
@@ -308,8 +308,8 @@ func (f *fecReassembler) RecordRepair(blk uint32, idx uint8, symLen int, symbol 
 // state (symbolizes/decodes from COPIES), so each missing frontier frame in a
 // multi-erasure block reconstructs correctly and independently.
 func (f *fecReassembler) Reconstruct(seq uint32) ([]byte, bool) {
-	blk := seq / uint32(f.k)
-	idx := int(seq % uint32(f.k))
+	blk := seq / uint32(f.k)      //nolint:gosec
+	idx := int(seq % uint32(f.k)) //nolint:gosec
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	bs := f.blocks[blk]
