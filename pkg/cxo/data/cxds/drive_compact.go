@@ -80,7 +80,7 @@ func startupGCCompact(fileName string) (reclaimed int64, err error) {
 	srcOpen := true
 	closeSrc := func() {
 		if srcOpen {
-			_ = src.Close()
+			_ = src.Close() //nolint:errcheck // best-effort cleanup close
 			srcOpen = false
 		}
 	}
@@ -88,13 +88,13 @@ func startupGCCompact(fileName string) (reclaimed int64, err error) {
 
 	// Skip re-scanning a store recently checked that has not grown enough.
 	var checked uint64
-	_ = src.View(func(tx *bolt.Tx) error {
+	_ = src.View(func(tx *bolt.Tx) error { //nolint:errcheck // read-only probe; on error checked stays 0
 		if m := tx.Bucket(metaBucket); m != nil {
 			checked = getUint64Meta(m, gcCheckedSizeKey)
 		}
 		return nil
 	})
-	if checked > 0 && uint64(origSize) <= uint64(float64(checked)*compactRescanGrowth) {
+	if checked > 0 && uint64(origSize) <= uint64(float64(checked)*compactRescanGrowth) { //nolint:gosec // file sizes are non-negative
 		return 0, nil
 	}
 
@@ -110,7 +110,7 @@ func startupGCCompact(fileName string) (reclaimed int64, err error) {
 			if len(v) < 4 {
 				return nil
 			}
-			dv := uint64(len(v) - 4)
+			dv := uint64(len(v) - 4) //nolint:gosec // len>=4 checked above
 			if getRefsCount(v) > 0 {
 				liveVol += dv
 				liveCount++
@@ -126,9 +126,9 @@ func startupGCCompact(fileName string) (reclaimed int64, err error) {
 	totalVol := liveVol + deadVol
 	if totalVol == 0 || float64(deadVol) < compactMinDeadFrac*float64(totalVol) {
 		// Mostly live — remember this size so we don't rescan until it grows.
-		_ = src.Update(func(tx *bolt.Tx) error {
+		_ = src.Update(func(tx *bolt.Tx) error { //nolint:errcheck // best-effort meta write
 			if m := tx.Bucket(metaBucket); m != nil {
-				return putUint64Meta(m, gcCheckedSizeKey, uint64(origSize))
+				return putUint64Meta(m, gcCheckedSizeKey, uint64(origSize)) //nolint:gosec // file sizes are non-negative
 			}
 			return nil
 		})
@@ -137,7 +137,7 @@ func startupGCCompact(fileName string) (reclaimed int64, err error) {
 
 	// Compact: copy version + live objects into a temp file, then swap.
 	tmp := fileName + ".compact"
-	_ = os.Remove(tmp)
+	_ = os.Remove(tmp) //nolint:errcheck // clear any stale temp; absence is fine
 	dst, dErr := bolt.Open(tmp, 0644, &bolt.Options{Timeout: 500 * time.Millisecond})
 	if dErr != nil {
 		return 0, dErr
@@ -182,15 +182,15 @@ func startupGCCompact(fileName string) (reclaimed int64, err error) {
 			})
 		})
 	})
-	_ = dst.Close()
+	_ = dst.Close() //nolint:errcheck // best-effort cleanup close
 	if cErr != nil {
-		_ = os.Remove(tmp)
+		_ = os.Remove(tmp) //nolint:errcheck // discard failed temp
 		return 0, cErr
 	}
 
 	closeSrc() // release the lock before swapping the file
 	if rErr := os.Rename(tmp, fileName); rErr != nil {
-		_ = os.Remove(tmp)
+		_ = os.Remove(tmp) //nolint:errcheck // discard temp on rename failure
 		return 0, rErr
 	}
 	if nfi, e := os.Stat(fileName); e == nil {

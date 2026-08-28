@@ -246,11 +246,11 @@ func nilIfEmpty(v []int) []int {
 
 func TestPickPrimaryReelection(t *testing.T) {
 	tests := []struct {
-		name        string
-		legs        []bandLeg
-		tight       bool
-		wantIdx     int
-		wantOK      bool
+		name    string
+		legs    []bandLeg
+		tight   bool
+		wantIdx int
+		wantOK  bool
 	}{
 		{
 			name: "primary in band: no re-election",
