@@ -289,7 +289,7 @@ func queryServiceViaServer(cmd *cobra.Command) skyvisor.ServiceHealthEntry {
 	if err != nil {
 		internal.PrintFatalError(cmd.Flags(), err)
 	}
-	entry.Transport = "dmsg via " + srv.Static.String()[:8]
+	entry.Transport = "dmsg via " + srv.Static.String()
 
 	myPK, mySK := cipher.GenerateKeyPair()
 	dClient := direct.NewClient(direct.GetAllEntries(cipher.PubKeys{myPK, svcPK}, []*disc.Entry{srv}), log)

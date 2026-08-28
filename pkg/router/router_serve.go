@@ -181,7 +181,14 @@ func (r *router) serveTransportManager(ctx context.Context) {
 				return
 			}
 
-			r.logger.Warnf("Failed to handle transport frame: %v", err)
+			// Rule-not-found / route-descriptor-does-not-exist fire per-packet
+			// for stale or torn-down routes and are normal during teardown, so
+			// demote them to DEBUG; keep genuinely unexpected frame errors at WARN.
+			if errors.Is(err, routing.ErrRuleNotFound) || errors.Is(err, errRouteDescNotExist) {
+				r.logger.WithError(err).Debug("Dropped transport frame for stale route")
+			} else {
+				r.logger.Warnf("Failed to handle transport frame: %v", err)
+			}
 		}
 	}
 }
