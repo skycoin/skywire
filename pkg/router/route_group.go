@@ -840,7 +840,47 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 			rg.mux.recordSent(leg, uint64(packet.Size()))
 		}
 
+		// FEC: if wrapPayload just completed a block, schedule its repair frames
+		// on the fastest live leg (off the data path). Inert unless CapFEC negotiated.
+		if rg.mux != nil && rg.mux.fecEnabled {
+			go rg.flushFECRepairs()
+		}
+
 		return len(data), nil
+	}
+}
+
+// flushFECRepairs drains any queued FEC repair frames and sends each on the
+// FASTEST live leg (the same rationale as retransmits: a repair rescues a
+// slow-leg straggler, so it must not itself ride the slow leg). Best-effort — a
+// repair that fails to send just leaves the receiver on the reorder+SACK
+// fallback for that block. Runs in its own goroutine off the data path.
+func (rg *RouteGroup) flushFECRepairs() {
+	if rg.mux == nil || !rg.mux.fecEnabled {
+		return
+	}
+	frames := rg.mux.fecDrainRepairs()
+	if len(frames) == 0 {
+		return
+	}
+	rg.mu.Lock()
+	tp, rule, _, err := rg.mux.selectFastestTransport(rg.tps, rg.fwd)
+	rg.mu.Unlock()
+	if err != nil || tp == nil || rule == nil {
+		return
+	}
+	for _, f := range frames {
+		pkt, perr := routing.MakeRepairPacket(rule.NextRouteID(), f.blockID, f.idx, f.symbol)
+		if perr != nil {
+			continue
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		errCh := rg.writePacketAsync(ctx, tp, pkt, rule.KeyRouteID())
+		select {
+		case <-rg.writeDeadline.Wait():
+		case <-errCh:
+		}
+		cancel()
 	}
 }
 
@@ -2883,6 +2923,9 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 
 		rule := rg.fwd[i]
 		caps := routing.CapMux | routing.CapSACK | routing.CapHOLRetx
+		if fecWanted {
+			caps |= routing.CapFEC
+		}
 		var packet routing.Packet
 		if pfn := rg.perFrameNoiseCap(encrypt); pfn != 0 {
 			msg, mErr := rg.nextPerFrameNoiseMsg()
@@ -3017,6 +3060,8 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 			close(rg.handshakeProcessed)
 		})
 		return rg.handleDataPacket(packet)
+	case routing.RepairPacket:
+		return rg.handleRepairPacket(packet)
 	case routing.HandshakePacket:
 		// A handshake on an aux leg proves the peer registered that leg's
 		// rule, so it is safe to start sending on it. The primary leg's
@@ -3071,6 +3116,19 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 					if remoteCaps&routing.CapHOLRetx != 0 {
 						rg.mux.holRetxEnabled = true
 						rg.logger.Debug("Proactive HoL retransmit enabled (both peers support CapHOLRetx)")
+					}
+				}
+
+				// FEC negotiation. Requires CapMux (rg.mux set above); both edges
+				// must advertise CapFEC and this visor must want it (SKYWIRE_MUX_FEC=1,
+				// opt-in during rollout). Enables block erasure coding so a
+				// gap-blocked reorder frontier is reconstructed from repair frames on
+				// fast legs instead of waiting on the slow leg.
+				if fecWanted && remoteCaps&routing.CapFEC != 0 {
+					rg.mux.fecEnabled = true
+					rg.mux.fecInit()
+					if rg.mux.fecEnabled {
+						rg.logger.Debug("FEC enabled (both peers support CapFEC)")
 					}
 				}
 
@@ -3254,6 +3312,29 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 		rg.logger.Warn("Dropping packet: readCh full for 30s (application not reading)")
 	}
 
+	return nil
+}
+
+// handleRepairPacket records an incoming FEC repair symbol and delivers any
+// frontier frames the reassembler can now reconstruct (opened, in order). A
+// repair for a group that never negotiated FEC is ignored. Mirrors
+// handleDataPacket's readCh delivery.
+func (rg *RouteGroup) handleRepairPacket(packet routing.Packet) error {
+	if rg.mux == nil || !rg.mux.fecEnabled {
+		return nil
+	}
+	delivered := rg.mux.fecOnRecvRepair(packet.RepairBlockID(), packet.RepairIndex(), packet.RepairSymbol())
+	for _, d := range delivered {
+		select {
+		case <-rg.closed:
+			return io.ErrClosedPipe
+		case <-rg.remoteClosed:
+			return io.ErrClosedPipe
+		case rg.readCh <- d:
+		case <-time.After(30 * time.Second):
+			rg.logger.Warn("Dropping FEC-reconstructed packet: readCh full for 30s (application not reading)")
+		}
+	}
 	return nil
 }
 

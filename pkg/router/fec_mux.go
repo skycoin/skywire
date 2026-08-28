@@ -11,19 +11,32 @@
 // receiver RECONSTRUCTS the missing frame and the frontier advances at the fast
 // leg's rate instead of the slow one.
 //
-// Layering: FEC operates in the PLAINTEXT domain. On send the striper is fed the
-// mux payload BEFORE per-frame seal (route_mux.wrapPayload); on receive the
-// reassembler is fed the plaintext AFTER open (route_mux.deliverData), and a
-// reconstructed symbol is injected as plaintext (it never passes back through
-// open — it is already plaintext). This file is transport-agnostic and driven
-// entirely by (seq, plaintext) and (blockID, idx, symbol) tuples, so it is
-// exhaustively unit-testable without the live mesh (see fec_mux_test.go).
+// Layering: FEC operates in the WIRE (post-seal) domain. On send the striper is
+// fed the on-wire frame payload AFTER per-frame seal (route_mux.wrapPayload); on
+// receive the reassembler is fed the on-wire payload BEFORE open
+// (route_mux.deliverData), and a reconstructed on-wire frame is passed through
+// the normal open() path before entering the reorder buffer. Because repair
+// symbols are linear combinations of already-sealed frames they reveal nothing
+// beyond the ciphertext, so no separate repair-frame nonce is needed and the code
+// works uniformly whether per-frame noise is on or off. This file is
+// transport-agnostic and driven entirely by (seq, wireBytes) and
+// (blockID, idx, symbol) tuples, so it is exhaustively unit-testable without the
+// live mesh (see fec_mux_test.go).
 package router
 
 import (
 	"encoding/binary"
+	"os"
 	"sync"
 )
+
+// fecWanted reports whether this visor advertises CapFEC in the mux handshake.
+// FEC is opt-in during rollout: it needs BOTH peers on a build that enables it,
+// plus live two-node validation, before it can safely become a default. Until
+// then the whole FEC path is inert (CapFEC unadvertised → never negotiated →
+// fecEnabled stays false → wrapPayload/deliverData fast-return). Gate: set
+// SKYWIRE_MUX_FEC=1 on both endpoints.
+var fecWanted = os.Getenv("SKYWIRE_MUX_FEC") == "1"
 
 // FEC block geometry. K data frames + R repair frames per block; recovers all K
 // from any K of the K+R. K=8/R=2 tolerates a full slow/dead leg's share of a
@@ -329,4 +342,108 @@ func (f *fecReassembler) Reconstruct(seq uint32) ([]byte, bool) {
 		}
 	}
 	return desymbolize(data[idx]), true
+}
+
+// --- routeMux integration (see route_mux.go fec* fields) ---
+
+// fecInit constructs the striper + reassembler with the default block geometry.
+// Called once at handshake when CapFEC is negotiated. On bad dims it disables
+// FEC rather than leaving half-built state.
+func (m *routeMux) fecInit() {
+	m.fecStriper = newFECStriper(fecDefaultK, fecDefaultR, fecSymLen)
+	m.fecReassembler = newFECReassembler(fecDefaultK, fecDefaultR, fecSymLen)
+	if m.fecStriper == nil || m.fecReassembler == nil {
+		m.fecStriper = nil
+		m.fecReassembler = nil
+		m.fecEnabled = false
+	}
+}
+
+// fecOnSend feeds one on-wire (post-seal) data-frame payload to the striper and
+// queues any repair frames the completed block produced. Called from wrapPayload.
+func (m *routeMux) fecOnSend(seq uint32, wire []byte) {
+	if !m.fecEnabled || m.fecStriper == nil {
+		return
+	}
+	frames := m.fecStriper.Add(seq, wire)
+	if len(frames) == 0 {
+		return
+	}
+	m.fecRepairMu.Lock()
+	m.fecRepairQ = append(m.fecRepairQ, frames...)
+	m.fecRepairMu.Unlock()
+}
+
+// fecDrainRepairs returns and clears the queued repair frames for the send loop.
+func (m *routeMux) fecDrainRepairs() []fecRepairFrame {
+	if !m.fecEnabled {
+		return nil
+	}
+	m.fecRepairMu.Lock()
+	q := m.fecRepairQ
+	m.fecRepairQ = nil
+	m.fecRepairMu.Unlock()
+	return q
+}
+
+// fecOnRecvData records an on-wire (pre-open) data-frame payload into the
+// reassembler so a sibling in its block can be reconstructed later. Called from
+// deliverData BEFORE open.
+func (m *routeMux) fecOnRecvData(seq uint32, wire []byte) {
+	if !m.fecEnabled || m.fecReassembler == nil {
+		return
+	}
+	m.fecReassembler.RecordData(seq, wire)
+}
+
+// fecOnRecvRepair records a repair symbol and returns any plaintext frames the
+// reorder frontier can now deliver in order (reconstructed + opened). Called from
+// the RepairPacket handler.
+func (m *routeMux) fecOnRecvRepair(blockID uint32, idx uint8, symbol []byte) [][]byte {
+	if !m.fecEnabled || m.fecReassembler == nil {
+		return nil
+	}
+	m.fecReassembler.RecordRepair(blockID, idx, symbol)
+	return m.fecTryAdvance()
+}
+
+// fecTryAdvance reconstructs consecutive gap-blocked frontier frames from the
+// reassembler and inserts them (after open) so the reorder frontier advances
+// without waiting for the slow leg. Returns the plaintext frames newly delivered
+// in order, to be handed to the app exactly like deliverData's return. A
+// reconstructed frame that fails to open is not delivered (a real frame or a
+// retransmit will fill the gap). Double-reconstruction across concurrent callers
+// is harmless: Insert of an already-delivered seq is a discarded no-op.
+func (m *routeMux) fecTryAdvance() [][]byte {
+	if !m.fecEnabled || m.fecReassembler == nil || m.reorderBuf == nil {
+		return nil
+	}
+	var out [][]byte
+	for {
+		next := m.reorderBuf.NextSeq()
+		wire, ok := m.fecReassembler.Reconstruct(next)
+		if !ok {
+			break
+		}
+		data := wire
+		if m.open != nil {
+			pt, err := m.open(next, wire)
+			if err != nil {
+				if m.logger != nil {
+					m.logger.WithError(err).Tracef("FEC-reconstructed seq %d failed open; not delivering", next)
+				}
+				break
+			}
+			data = pt
+		}
+		delivered := m.reorderBuf.Insert(next, data)
+		if len(delivered) == 0 {
+			break
+		}
+		out = append(out, delivered...)
+		if m.sackEnabled && m.sackTracker != nil {
+			m.sackTracker.AdvanceContiguous(m.reorderBuf.NextSeq())
+		}
+	}
+	return out
 }
