@@ -244,6 +244,103 @@ func nilIfEmpty(v []int) []int {
 	return v
 }
 
+func TestPickPrimaryReelection(t *testing.T) {
+	tests := []struct {
+		name        string
+		legs        []bandLeg
+		tight       bool
+		wantIdx     int
+		wantOK      bool
+	}{
+		{
+			name: "primary in band: no re-election",
+			legs: []bandLeg{
+				{idx: 0, latMs: 150, primary: true},
+				{idx: 1, latMs: 160},
+				{idx: 2, latMs: 145},
+			},
+			wantOK: false,
+		},
+		{
+			name: "primary is a 2ms LAN artifact: re-elect fastest in-band active leg",
+			legs: []bandLeg{
+				{idx: 0, latMs: 2, primary: true}, // absurd short-circuit primary
+				{idx: 1, latMs: 160},
+				{idx: 2, latMs: 145}, // fastest in-band non-primary → new primary
+				{idx: 3, latMs: 155},
+			},
+			wantIdx: 2, wantOK: true,
+		},
+		{
+			name: "primary is a 1500ms self-healed leg: re-elect out of the band",
+			legs: []bandLeg{
+				{idx: 0, latMs: 1500, primary: true},
+				{idx: 1, latMs: 240},
+				{idx: 2, latMs: 250},
+				{idx: 3, latMs: 190}, // fastest in-band → new primary
+			},
+			wantIdx: 3, wantOK: true,
+		},
+		{
+			name: "primary out of band but every replacement is standby: keep the anchor",
+			legs: []bandLeg{
+				{idx: 0, latMs: 2, primary: true},
+				{idx: 1, latMs: 240, standby: true},
+				{idx: 2, latMs: 250, standby: true},
+				{idx: 3, latMs: 190, standby: true},
+			},
+			wantOK: false,
+		},
+		{
+			name: "candidate itself out of band is not eligible",
+			legs: []bandLeg{
+				{idx: 0, latMs: 2, primary: true}, // out-of-band primary
+				{idx: 1, latMs: 150},
+				{idx: 2, latMs: 155},
+				{idx: 3, latMs: 900}, // 6x median, not eligible; 1 and 2 are
+			},
+			wantIdx: 1, wantOK: true,
+		},
+		{
+			name: "fewer than bandMinLegs: no re-election",
+			legs: []bandLeg{
+				{idx: 0, latMs: 2, primary: true},
+				{idx: 1, latMs: 200},
+			},
+			wantOK: false,
+		},
+		{
+			name: "2.1x-slow primary: not re-elected under wide band",
+			legs: []bandLeg{
+				{idx: 0, latMs: 330, primary: true}, // 2.06x median(160): within wide 3x
+				{idx: 1, latMs: 150},
+				{idx: 2, latMs: 155},
+				{idx: 3, latMs: 160},
+			},
+			tight: false, wantOK: false,
+		},
+		{
+			name: "2.1x-slow primary: re-elected under tight (aggregation) band",
+			legs: []bandLeg{
+				{idx: 0, latMs: 330, primary: true}, // 2.06x median(160): outside tight 2x
+				{idx: 1, latMs: 150},
+				{idx: 2, latMs: 155},
+				{idx: 3, latMs: 160},
+			},
+			tight: true, wantIdx: 1, wantOK: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			idx, ok := pickPrimaryReelection(tt.legs, tt.tight)
+			require.Equal(t, tt.wantOK, ok, "ok")
+			if tt.wantOK {
+				require.Equal(t, tt.wantIdx, idx, "new primary index")
+			}
+		})
+	}
+}
+
 // TestEnforceLatencyBandParksArtifactLeg drives the full rg path: four active
 // legs where one is a 2ms LAN-short-circuit artifact beside a 150ms cluster. In
 // manual mode enforceLatencyBand must park the artifact into warm standby (so it
@@ -275,4 +372,48 @@ func TestEnforceLatencyBandParksArtifactLeg(t *testing.T) {
 	rg.legLivenessMu.Unlock()
 	rg.enforceLatencyBand()
 	require.False(t, rg.mux.isLegStandby(3), "leg back within band is re-admitted in manual mode")
+}
+
+// TestEnforceLatencyBandReelectsBadPrimary drives the full rg path when the
+// PRIMARY slot (index 0) is itself the out-of-band leg (a 2ms LAN artifact). The
+// primary is exempt from demotion, so the fix must instead re-elect a healthy
+// in-band active leg into slot 0 (make-before-break) and then park the displaced
+// old primary. Verifies the primary slot changes dynamically instead of anchoring
+// the active set off-band.
+func TestEnforceLatencyBandReelectsBadPrimary(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 4)
+
+	oldPrimaryID := mts[0].Entry.ID
+
+	rg.legLivenessMu.Lock()
+	if rg.legE2ELatency == nil {
+		rg.legE2ELatency = map[uuid.UUID]float64{}
+	}
+	rg.legE2ELatency[mts[0].Entry.ID] = 2 // primary is a LAN short-circuit artifact
+	rg.legE2ELatency[mts[1].Entry.ID] = 150
+	rg.legE2ELatency[mts[2].Entry.ID] = 155
+	rg.legE2ELatency[mts[3].Entry.ID] = 145
+	rg.legLivenessMu.Unlock()
+
+	rg.enforceLatencyBand()
+
+	// The primary slot must now hold a healthy in-band leg, not the old 2ms one.
+	rg.mu.Lock()
+	newPrimaryID := rg.tps[0].Entry.ID
+	rg.mu.Unlock()
+	require.NotEqual(t, oldPrimaryID, newPrimaryID, "the out-of-band primary must be re-elected out of slot 0")
+
+	// leg 0 (the new primary) is active; the group still has a selectable anchor.
+	require.False(t, rg.mux.isLegStandby(0), "the re-elected primary is active")
+
+	// The displaced old primary (2ms artifact) must now be parked to warm standby.
+	parkedOld := false
+	rg.mu.Lock()
+	for i, tp := range rg.tps {
+		if tp != nil && tp.Entry.ID == oldPrimaryID {
+			parkedOld = rg.mux.isLegStandby(i)
+		}
+	}
+	rg.mu.Unlock()
+	require.True(t, parkedOld, "the displaced 2ms artifact must be parked to warm standby after re-election")
 }

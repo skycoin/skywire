@@ -1981,6 +1981,106 @@ func partitionLatencyBand(legs []bandLeg, manualMode, tight bool) (demote, promo
 	return demote, promote
 }
 
+// pickPrimaryReelection decides whether the PRIMARY slot (leg 0) should be
+// re-elected onto a healthier leg. The primary is the always-ready, always-
+// selectable anchor, so it is exempt from band demotion (partitionLatencyBand
+// never demotes it) — but that means a primary that is itself a gross latency
+// outlier (a 2ms LAN short-circuit artifact, or a self-healed 14000ms leg that
+// landed at index 0) permanently anchors the active set off-band and wastes an
+// active slot. This picker names a replacement so the primary can CHANGE
+// dynamically instead of being protected in place: when leg 0 is out of band
+// (its faster/slower ratio to the median exceeds demoteRatio) AND a non-primary
+// ACTIVE leg sits within admitRatio of the median, it returns that leg's index —
+// the lowest-latency in-band active candidate, which becomes the new primary via
+// a make-before-break swap (reelectPrimary). It returns ok=false unless a
+// replacement exists, so the group never gives up its anchor without one. Pure
+// (no locks / rg state) so it is unit-tested directly.
+func pickPrimaryReelection(legs []bandLeg, tight bool) (newPrimaryIdx int, ok bool) {
+	demoteRatio, admitRatio := bandDemoteRatio, bandAdmitRatio
+	if tight {
+		demoteRatio, admitRatio = bandDemoteRatioTight, bandAdmitRatioTight
+	}
+	known := make([]float64, 0, len(legs))
+	var primary *bandLeg
+	for i := range legs {
+		if legs[i].primary {
+			primary = &legs[i]
+		}
+		if legs[i].latMs > 0 {
+			known = append(known, legs[i].latMs)
+		}
+	}
+	if primary == nil || primary.latMs <= 0 || len(known) < bandMinLegs {
+		return 0, false
+	}
+	sort.Float64s(known)
+	med := known[len(known)/2]
+	if med <= 0 {
+		return 0, false
+	}
+	// Is the primary itself a gross outlier?
+	pFaster, pSlower := med/primary.latMs, primary.latMs/med
+	if pFaster <= demoteRatio && pSlower <= demoteRatio {
+		return 0, false // primary is in band — leave it
+	}
+	// Find the best (lowest-latency) in-band ACTIVE non-primary replacement.
+	bestIdx, bestLat := -1, 0.0
+	for i := range legs {
+		l := legs[i]
+		if l.primary || l.standby || l.latMs <= 0 {
+			continue
+		}
+		symm := l.latMs / med
+		if med/l.latMs > symm {
+			symm = med / l.latMs
+		}
+		if symm > admitRatio {
+			continue // candidate must itself be in band
+		}
+		if bestIdx == -1 || l.latMs < bestLat {
+			bestIdx, bestLat = l.idx, l.latMs
+		}
+	}
+	if bestIdx == -1 {
+		return 0, false
+	}
+	return bestIdx, true
+}
+
+// reelectPrimary swaps the leg at newIdx into the primary slot (index 0),
+// make-before-break: the parallel tps[]/fwd[]/rvs[] entries and the mux's per-leg
+// counters/readiness/standby markers are exchanged in lockstep so each rule and
+// counter stays attached to its own transport, and the route group — with the
+// noise/yamux session riding it — is never torn down. The chosen leg is already
+// active and carrying (pickPrimaryReelection selects only from the ready, in-band
+// active set), so index 0 has a live send leg the instant the swap returns and
+// the byte stream continues uninterrupted. The displaced old primary lands at
+// newIdx as an ordinary (now demotable) leg, to be parked by the band pass if it
+// is out of band. Caller must NOT hold rg.mu.
+func (rg *RouteGroup) reelectPrimary(newIdx int) {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	if newIdx <= 0 || newIdx >= len(rg.tps) {
+		return
+	}
+	rg.tps[0], rg.tps[newIdx] = rg.tps[newIdx], rg.tps[0]
+	if newIdx < len(rg.fwd) {
+		rg.fwd[0], rg.fwd[newIdx] = rg.fwd[newIdx], rg.fwd[0]
+	}
+	if newIdx < len(rg.rvs) {
+		rg.rvs[0], rg.rvs[newIdx] = rg.rvs[newIdx], rg.rvs[0]
+	}
+	rg.mux.swapLegs(0, newIdx)
+	// forwardHops records the PRIMARY leg's path (used for self-heal shared-hop
+	// exclusion and mux info); re-point it at the new primary's stored hops.
+	if rg.tps[0] != nil {
+		if hops, okHops := rg.legForwardHops[rg.tps[0].Entry.ID]; okHops {
+			rg.forwardHops = hops
+		}
+	}
+	rg.logger.Infof("latency-band: re-elected leg %d into the primary slot (old primary was an out-of-band outlier)", newIdx)
+}
+
 // enforceLatencyBand keeps the mux's active stripe set within a tight latency
 // band (see partitionLatencyBand). Runs on the data-progress cadence so it holds
 // even in a manual (non-adaptive) preset, where nothing else manages the active
@@ -2014,6 +2114,31 @@ func (rg *RouteGroup) enforceLatencyBand() {
 		})
 	}
 	rg.mu.Unlock()
+
+	// If the primary slot itself is a gross latency outlier, re-elect a healthier
+	// active leg into it (make-before-break) BEFORE the band pass. The primary is
+	// exempt from demotion, so without this a bad leg that lands at index 0 (a
+	// LAN-artifact or a self-healed multi-second leg) anchors the active set off-
+	// band forever. After the swap the leg indices have changed, so rebuild the
+	// list; the displaced old primary is now an ordinary leg the band pass can
+	// park.
+	if newPrimary, ok := pickPrimaryReelection(legs, tight); ok {
+		rg.reelectPrimary(newPrimary)
+		rg.mu.Lock()
+		legs = legs[:0]
+		for i, tp := range rg.tps {
+			if tp == nil || tp.IsClosed() {
+				continue
+			}
+			legs = append(legs, bandLeg{
+				idx:     i,
+				latMs:   rg.legEndToEndLatencyMs(tp.Entry.ID),
+				standby: rg.mux.isLegStandby(i),
+				primary: i == 0,
+			})
+		}
+		rg.mu.Unlock()
+	}
 
 	demote, promote := partitionLatencyBand(legs, manual, tight)
 	for _, idx := range demote {
