@@ -34,23 +34,28 @@ import (
 // 4–8 leg group (~1 frame in 8 striped onto it) at a 25% repair overhead. These
 // are the defaults; the negotiated values could later be carried in the handshake.
 const (
-	fecDefaultK = 8
-	fecDefaultR = 2
-	// fecSymLen is the fixed erasure-symbol size. Every data payload is
-	// length-prefixed and zero-padded to this; a payload larger than
-	// fecSymLen-fecLenPrefix cannot be coded and is passed through un-FEC'd
-	// (rare — mux frames are MTU-bounded well under this). 16 KiB covers the
-	// largest mux frame with headroom.
-	fecSymLen    = 16 * 1024
-	fecLenPrefix = 2 // uint16 BE plaintext length inside each symbol
+	fecDefaultK  = 8
+	fecDefaultR  = 2
+	fecLenPrefix = 2 // uint16 BE frame length inside each symbol
+	// fecMaxSymLen caps a block's ADAPTIVE symbol length. A routing DataPacket
+	// payload is at most ~64 KiB, so this covers any on-wire mux frame; a frame
+	// that somehow exceeded it is excluded from coding (stored empty) rather than
+	// silently corrupting the block. Symbol length is NOT fixed: each block sizes
+	// its symbols to max(frame len)+fecLenPrefix, so repair overhead stays at the
+	// design R/K ratio for any frame size — a fixed pad would bloat small-frame
+	// repair and, worse, corrupt frames larger than the pad (they would code as a
+	// zero symbol and reconstruct to an empty frame).
+	fecMaxSymLen = 65535
 )
 
 // fecRepairFrame is one repair symbol ready to be scheduled onto a leg. blockID
-// and idx let the receiver place it into the right block slot (K+idx).
+// and idx place it in the block slot (K+idx); symLen is the block's adaptive
+// symbol length, which the receiver needs to size the block for decoding.
 type fecRepairFrame struct {
 	blockID uint32
 	idx     uint8
-	symbol  []byte // exactly fecSymLen bytes
+	symLen  int
+	symbol  []byte // exactly symLen bytes
 }
 
 // symbolize length-prefixes and zero-pads a plaintext payload to fecSymLen.
@@ -87,40 +92,29 @@ func desymbolize(sym []byte) []byte {
 // the seqs it is fed are contiguous and monotonic (as writeSeq produces); block
 // B owns seqs [B*K, B*K+K-1] with in-block index seq%K. Safe for concurrent Add.
 type fecStriper struct {
-	mu      sync.Mutex
-	coder   *fecBlockCoder
-	k, r    int
-	symLen  int
-	symbols [][]byte // K slots for the block currently filling
-	block   uint32   // blockID currently filling
-	filled  int      // count of non-nil slots in the current block
-	inited  bool
+	mu     sync.Mutex
+	k, r   int
+	frames [][]byte // K slots of RAW frame bytes (copied); nil = empty
+	maxLen int      // longest raw frame in the block currently filling
+	block  uint32   // blockID currently filling
+	filled int      // count of non-nil slots in the current block
+	inited bool
 }
 
-func newFECStriper(k, r, symLen int) *fecStriper {
-	coder := newFECBlockCoder(k, r, symLen)
-	if coder == nil {
+func newFECStriper(k, r int) *fecStriper {
+	if newFECBlockCoder(k, r, 1) == nil { // validate dims (symLen picked per block)
 		return nil
 	}
-	return &fecStriper{
-		coder:   coder,
-		k:       k,
-		r:       r,
-		symLen:  symLen,
-		symbols: make([][]byte, k),
-	}
+	return &fecStriper{k: k, r: r, frames: make([][]byte, k)}
 }
 
-// Add feeds one data frame's plaintext (identified by its mux seq). When the
-// frame completes a block it returns that block's R repair frames to schedule;
-// otherwise it returns nil. A payload too large to symbolize is skipped for
-// coding (the block will simply be short a data symbol; if the frame later needs
-// reconstruction it cannot be — an accepted, rare degradation) — but to keep the
-// MDS invariant we instead treat an un-codable frame as a zero symbol carrying a
-// length prefix of 0 so the block still encodes; the receiver never needs to
-// reconstruct a frame it actually received, and an un-received over-long frame
-// is beyond FEC anyway.
-func (s *fecStriper) Add(seq uint32, plaintext []byte) []fecRepairFrame {
+// Add feeds one on-wire data frame (identified by its mux seq). When the frame
+// completes a block it sizes the block's erasure symbols to the LONGEST frame in
+// the block (+ length prefix), encodes, and returns the R repair frames to
+// schedule; otherwise nil. Frames are stored raw and symbolized only at block
+// completion so the symbol length is exactly what the block needs — never a fixed
+// pad. A frame beyond fecMaxSymLen (never happens on the wire) is stored empty.
+func (s *fecStriper) Add(seq uint32, frame []byte) []fecRepairFrame {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -132,33 +126,43 @@ func (s *fecStriper) Add(seq uint32, plaintext []byte) []fecRepairFrame {
 		s.inited = true
 	}
 	// A seq jump (should not happen with contiguous writeSeq) resets to the new
-	// block to avoid mixing symbols across blocks.
+	// block to avoid mixing frames across blocks.
 	if blk != s.block {
 		s.reset(blk)
 	}
 
-	sym, ok := symbolize(plaintext, s.symLen)
-	if !ok {
-		// Over-long: stand in a zero-length symbol so the block still codes.
-		sym, _ = symbolize(nil, s.symLen)
+	if len(frame) > fecMaxSymLen-fecLenPrefix {
+		frame = nil // defensive: un-codable, stand in an empty frame
 	}
-	if s.symbols[idx] == nil {
+	cp := make([]byte, len(frame))
+	copy(cp, frame)
+	if s.frames[idx] == nil {
 		s.filled++
 	}
-	s.symbols[idx] = sym
+	s.frames[idx] = cp
+	if len(cp) > s.maxLen {
+		s.maxLen = len(cp)
+	}
 
 	if s.filled < s.k {
 		return nil
 	}
-	// Block complete → encode R repair symbols.
-	repair, err := s.coder.Encode(s.symbols)
+	// Block complete → adaptive symbol length = longest frame + prefix.
+	symLen := s.maxLen + fecLenPrefix
+	syms := make([][]byte, s.k)
+	for i, f := range s.frames {
+		sym, _ := symbolize(f, symLen) // fits: len(f) <= maxLen == symLen-prefix
+		syms[i] = sym
+	}
+	coder := newFECBlockCoder(s.k, s.r, symLen)
+	repair, err := coder.Encode(syms)
 	if err != nil {
 		s.reset(blk + 1)
 		return nil
 	}
 	frames := make([]fecRepairFrame, s.r)
 	for i := 0; i < s.r; i++ {
-		frames[i] = fecRepairFrame{blockID: blk, idx: uint8(i), symbol: repair[i]}
+		frames[i] = fecRepairFrame{blockID: blk, idx: uint8(i), symLen: symLen, symbol: repair[i]}
 	}
 	s.reset(blk + 1)
 	return frames
@@ -166,54 +170,54 @@ func (s *fecStriper) Add(seq uint32, plaintext []byte) []fecRepairFrame {
 
 // reset clears the fill state for the next block. Caller holds s.mu.
 func (s *fecStriper) reset(nextBlock uint32) {
-	for i := range s.symbols {
-		s.symbols[i] = nil
+	for i := range s.frames {
+		s.frames[i] = nil
 	}
 	s.filled = 0
+	s.maxLen = 0
 	s.block = nextBlock
 }
 
 // --- receiver: fecReassembler ---
 
-// fecBlockState holds the symbols received for one block until it is fully
-// delivered or evicted. slots[0..K-1] are data symbols, slots[K..K+R-1] repair.
+// fecBlockState holds the RAW frames + repair symbols received for one block
+// until it is fully delivered or evicted. Data frames are stored at their natural
+// size and symbolized to the block's adaptive symLen only at decode time; symLen
+// is learned from the first repair frame (all repairs for a block carry it).
 type fecBlockState struct {
-	slots   [][]byte // len K+R; nil = not yet arrived
-	present []bool   // len K+R
-	got     int      // count of present slots
-	dataGot int      // count of present DATA slots (0..K-1)
+	rawData       [][]byte // K slots of raw received frame bytes; nil = absent
+	repair        [][]byte // R slots of repair symbols (symLen bytes); nil = absent
+	dataPresent   []bool   // K
+	repairPresent []bool   // R
+	got           int      // count of present data + present repair slots
+	symLen        int      // block's adaptive symbol length (0 until a repair arrives)
 }
 
-// fecReassembler retains recently-received symbols per block so that when the
+// fecReassembler retains recently-received frames per block so that when the
 // reorder frontier stalls on a missing seq it can reconstruct it from ≥K of the
 // block's K+R symbols. It keeps a bounded window of blocks (fecWindowBlocks);
 // blocks older than the window are evicted (their data was either delivered or
 // is permanently lost, past FEC's help). Safe for concurrent use.
 type fecReassembler struct {
 	mu     sync.Mutex
-	coder  *fecBlockCoder
 	k, r   int
-	symLen int
 	blocks map[uint32]*fecBlockState
 	// lowBlock is the oldest block still retained; blocks below it are evicted.
 	lowBlock uint32
 	haveLow  bool
 }
 
-// fecWindowBlocks bounds retained blocks (memory = window*(K+R)*symLen). 64
-// blocks * 10 * 16KiB ≈ 10 MiB worst case — ample for reorder depths in practice.
+// fecWindowBlocks bounds retained blocks. 64 blocks * (K+R) * up-to-64KiB is the
+// worst case — ample for reorder depths in practice.
 const fecWindowBlocks = 64
 
-func newFECReassembler(k, r, symLen int) *fecReassembler {
-	coder := newFECBlockCoder(k, r, symLen)
-	if coder == nil {
+func newFECReassembler(k, r int) *fecReassembler {
+	if newFECBlockCoder(k, r, 1) == nil { // validate dims (symLen picked per block)
 		return nil
 	}
 	return &fecReassembler{
-		coder:  coder,
 		k:      k,
 		r:      r,
-		symLen: symLen,
 		blocks: make(map[uint32]*fecBlockState),
 	}
 }
@@ -222,8 +226,10 @@ func (f *fecReassembler) blockFor(blk uint32) *fecBlockState {
 	bs := f.blocks[blk]
 	if bs == nil {
 		bs = &fecBlockState{
-			slots:   make([][]byte, f.k+f.r),
-			present: make([]bool, f.k+f.r),
+			rawData:       make([][]byte, f.k),
+			repair:        make([][]byte, f.r),
+			dataPresent:   make([]bool, f.k),
+			repairPresent: make([]bool, f.r),
 		}
 		f.blocks[blk] = bs
 		if !f.haveLow || blk < f.lowBlock {
@@ -258,88 +264,100 @@ func (f *fecReassembler) evict() {
 	}
 }
 
-// RecordData notes a received data frame's plaintext at its seq. It stores a
-// symbolized copy so the block can be decoded later if a sibling is missing.
-func (f *fecReassembler) RecordData(seq uint32, plaintext []byte) {
-	sym, ok := symbolize(plaintext, f.symLen)
-	if !ok {
-		sym, _ = symbolize(nil, f.symLen)
-	}
+// RecordData stores a received data frame's raw bytes at its seq (copied). It is
+// symbolized to the block's adaptive symLen only at decode time, so the receiver
+// need not know symLen until a repair frame arrives.
+func (f *fecReassembler) RecordData(seq uint32, frame []byte) {
 	blk := seq / uint32(f.k)
 	idx := int(seq % uint32(f.k))
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	bs := f.blockFor(blk)
-	if !bs.present[idx] {
-		bs.present[idx] = true
+	if !bs.dataPresent[idx] {
+		bs.dataPresent[idx] = true
 		bs.got++
-		bs.dataGot++
-		bs.slots[idx] = sym
+		cp := make([]byte, len(frame))
+		copy(cp, frame)
+		bs.rawData[idx] = cp
 	}
 }
 
-// RecordRepair notes a received repair symbol for a block.
-func (f *fecReassembler) RecordRepair(blk uint32, idx uint8, symbol []byte) {
-	if int(idx) >= f.r || len(symbol) != f.symLen {
+// RecordRepair notes a received repair symbol (and the block's adaptive symLen,
+// which every repair for the block carries) for later reconstruction.
+func (f *fecReassembler) RecordRepair(blk uint32, idx uint8, symLen int, symbol []byte) {
+	if int(idx) >= f.r || symLen <= fecLenPrefix || len(symbol) != symLen {
 		return
 	}
-	slot := f.k + int(idx)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	bs := f.blockFor(blk)
-	if !bs.present[slot] {
-		bs.present[slot] = true
+	bs.symLen = symLen
+	if !bs.repairPresent[idx] {
+		bs.repairPresent[idx] = true
 		bs.got++
-		cp := make([]byte, f.symLen)
+		cp := make([]byte, symLen)
 		copy(cp, symbol)
-		bs.slots[slot] = cp
+		bs.repair[idx] = cp
 	}
 }
 
-// Reconstruct attempts to recover the plaintext for a missing seq. It succeeds
-// only when the seq's block already holds ≥K of its K+R symbols AND the seq's
-// own data slot is not already present. Returns (plaintext, true) on success.
-// It is idempotent and side-effect-free on the block state (decodes from COPIES
-// of the received symbols), so each missing frontier frame in a multi-erasure
-// block reconstructs correctly and independently.
+// Reconstruct attempts to recover the on-wire bytes for a missing seq. It
+// succeeds only when the seq's block holds ≥K of its K+R symbols, a repair has
+// set the block's symLen, and the seq's own data slot is absent. Returns
+// (frame, true) on success. It is idempotent and side-effect-free on the block
+// state (symbolizes/decodes from COPIES), so each missing frontier frame in a
+// multi-erasure block reconstructs correctly and independently.
 func (f *fecReassembler) Reconstruct(seq uint32) ([]byte, bool) {
 	blk := seq / uint32(f.k)
 	idx := int(seq % uint32(f.k))
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	bs := f.blocks[blk]
-	if bs == nil || bs.got < f.k || bs.present[idx] {
+	if bs == nil || bs.symLen == 0 || bs.got < f.k || bs.dataPresent[idx] {
 		return nil, false
 	}
-	// Build recv/present of exactly K+R slots for the coder. IMPORTANT: pass
-	// COPIES of the stored symbols, never bs.slots[i] directly — Decode/gfSolve
-	// solves in place and MUTATES the rhs symbol vectors, which would corrupt the
-	// block's retained received symbols and make a subsequent sibling
-	// reconstruction in the same block decode from garbage (the multi-erasure
-	// corruption the end-to-end test exposed). Copying keeps bs.slots pristine so
-	// each missing frontier frame decodes correctly and independently.
+	symLen := bs.symLen
+	// Build recv/present of exactly K+R symLen-sized symbols. Data frames are
+	// symbolized (length-prefixed + padded) to symLen here; repair symbols are
+	// copied. COPIES are essential: Decode/gfSolve solves in place and MUTATES the
+	// rhs vectors, which would corrupt the block's retained symbols and make a
+	// subsequent sibling reconstruction decode from garbage (the multi-erasure
+	// corruption the end-to-end test exposed).
 	recv := make([][]byte, f.k+f.r)
-	for i := 0; i < f.k+f.r; i++ {
-		if bs.present[i] {
-			cp := make([]byte, f.symLen)
-			copy(cp, bs.slots[i])
-			recv[i] = cp
+	present := make([]bool, f.k+f.r)
+	for i := 0; i < f.k; i++ {
+		if bs.dataPresent[i] {
+			sym, ok := symbolize(bs.rawData[i], symLen)
+			if !ok { // a stored frame longer than this block's symLen: inconsistent
+				return nil, false
+			}
+			recv[i] = sym
+			present[i] = true
 		} else {
-			recv[i] = make([]byte, f.symLen) // ignored (present=false)
+			recv[i] = make([]byte, symLen)
 		}
 	}
-	data, err := f.coder.Decode(recv, bs.present)
+	for i := 0; i < f.r; i++ {
+		if bs.repairPresent[i] {
+			cp := make([]byte, symLen)
+			copy(cp, bs.repair[i])
+			recv[f.k+i] = cp
+			present[f.k+i] = true
+		} else {
+			recv[f.k+i] = make([]byte, symLen)
+		}
+	}
+	coder := newFECBlockCoder(f.k, f.r, symLen)
+	if coder == nil {
+		return nil, false
+	}
+	data, err := coder.Decode(recv, present)
 	if err != nil {
 		return nil, false
 	}
-	// Deliberately DO NOT cache the reconstructed data slots back as "present".
-	// Caching would let a sibling gap in the same block decode for free, but it
-	// would also make a later Reconstruct(sibling) short-circuit on present[idx]
-	// and return false WITHOUT the sibling ever being inserted into the reorder
-	// buffer — the frontier would then stall on it forever (the multi-erasure
-	// bug). Decoding is idempotent and cheap for these block sizes, and the
-	// received data+repair symbols remain >= K, so each missing frontier frame is
-	// decoded independently and RETURNED to the caller for insertion.
+	// Do NOT cache decoded siblings back as present — that would strand an
+	// uncached sibling (a later Reconstruct short-circuits on present) and leave
+	// the frontier stalled. Each missing frontier frame decodes independently.
 	return desymbolize(data[idx]), true
 }
 
@@ -349,8 +367,8 @@ func (f *fecReassembler) Reconstruct(seq uint32) ([]byte, bool) {
 // Called once at handshake when CapFEC is negotiated. On bad dims it disables
 // FEC rather than leaving half-built state.
 func (m *routeMux) fecInit() {
-	m.fecStriper = newFECStriper(fecDefaultK, fecDefaultR, fecSymLen)
-	m.fecReassembler = newFECReassembler(fecDefaultK, fecDefaultR, fecSymLen)
+	m.fecStriper = newFECStriper(fecDefaultK, fecDefaultR)
+	m.fecReassembler = newFECReassembler(fecDefaultK, fecDefaultR)
 	if m.fecStriper == nil || m.fecReassembler == nil {
 		m.fecStriper = nil
 		m.fecReassembler = nil
@@ -398,11 +416,11 @@ func (m *routeMux) fecOnRecvData(seq uint32, wire []byte) {
 // fecOnRecvRepair records a repair symbol and returns any plaintext frames the
 // reorder frontier can now deliver in order (reconstructed + opened). Called from
 // the RepairPacket handler.
-func (m *routeMux) fecOnRecvRepair(blockID uint32, idx uint8, symbol []byte) [][]byte {
+func (m *routeMux) fecOnRecvRepair(blockID uint32, idx uint8, symLen int, symbol []byte) [][]byte {
 	if !m.fecEnabled || m.fecReassembler == nil {
 		return nil
 	}
-	m.fecReassembler.RecordRepair(blockID, idx, symbol)
+	m.fecReassembler.RecordRepair(blockID, idx, symLen, symbol)
 	return m.fecTryAdvance()
 }
 

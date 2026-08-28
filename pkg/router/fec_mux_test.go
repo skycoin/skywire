@@ -13,8 +13,8 @@ import (
 // reconstructed byte-identical — the frontier need never wait for the slow leg.
 func TestFECMuxRoundTripReconstruct(t *testing.T) {
 	const k, r = 8, 2
-	st := newFECStriper(k, r, fecSymLen)
-	re := newFECReassembler(k, r, fecSymLen)
+	st := newFECStriper(k, r)
+	re := newFECReassembler(k, r)
 	if st == nil || re == nil {
 		t.Fatal("nil striper/reassembler")
 	}
@@ -47,7 +47,7 @@ func TestFECMuxRoundTripReconstruct(t *testing.T) {
 		t.Fatal("reconstructed with only K-1 symbols — MDS violated")
 	}
 	// One repair frame arrives (on a fast leg) → K symbols present → reconstruct.
-	re.RecordRepair(repairs[0].blockID, repairs[0].idx, repairs[0].symbol)
+	re.RecordRepair(repairs[0].blockID, repairs[0].idx, repairs[0].symLen, repairs[0].symbol)
 	got, ok := re.Reconstruct(missing)
 	if !ok {
 		t.Fatal("reconstruction failed with K symbols present")
@@ -63,8 +63,8 @@ func TestFECMuxRoundTripReconstruct(t *testing.T) {
 // length-prefixed symbol format.
 func TestFECMuxUpToRErasures(t *testing.T) {
 	const k, r = 6, 3
-	st := newFECStriper(k, r, fecSymLen)
-	re := newFECReassembler(k, r, fecSymLen)
+	st := newFECStriper(k, r)
+	re := newFECReassembler(k, r)
 
 	payloads := make([][]byte, k)
 	var repairs []fecRepairFrame
@@ -80,18 +80,17 @@ func TestFECMuxUpToRErasures(t *testing.T) {
 	_ = re // re is rebuilt per-target below so caching does not mask a sibling
 
 	// Drop exactly R data frames {1,2,4}; supply all R repairs → each recovers.
-	// A fresh reassembler per target isolates it (the first Reconstruct caches
-	// its siblings — a real feature, but it must not hide a per-target failure).
+	// A fresh reassembler per target keeps each reconstruction fully independent.
 	drop := map[int]bool{1: true, 2: true, 4: true}
 	for target := range drop {
-		rt := newFECReassembler(k, r, fecSymLen)
+		rt := newFECReassembler(k, r)
 		for seq := 0; seq < k; seq++ {
 			if !drop[seq] {
 				rt.RecordData(uint32(seq), payloads[seq])
 			}
 		}
 		for _, rf := range repairs {
-			rt.RecordRepair(rf.blockID, rf.idx, rf.symbol)
+			rt.RecordRepair(rf.blockID, rf.idx, rf.symLen, rf.symbol)
 		}
 		got, ok := rt.Reconstruct(uint32(target))
 		if !ok {
@@ -108,14 +107,14 @@ func TestFECMuxUpToRErasures(t *testing.T) {
 	// siblings and corrupted the block via Decode's in-place mutation — the
 	// multi-erasure bug the end-to-end test exposed), so a second Reconstruct on
 	// the same block re-decodes from the pristine received symbols and succeeds.
-	reMulti := newFECReassembler(k, r, fecSymLen)
+	reMulti := newFECReassembler(k, r)
 	for seq := 0; seq < k; seq++ {
 		if !drop[seq] {
 			reMulti.RecordData(uint32(seq), payloads[seq])
 		}
 	}
 	for _, rf := range repairs {
-		reMulti.RecordRepair(rf.blockID, rf.idx, rf.symbol)
+		reMulti.RecordRepair(rf.blockID, rf.idx, rf.symLen, rf.symbol)
 	}
 	for target := range drop {
 		got, ok := reMulti.Reconstruct(uint32(target))
@@ -128,8 +127,8 @@ func TestFECMuxUpToRErasures(t *testing.T) {
 	}
 
 	// Fresh block, drop R+1 data frames, supply only R repairs → cannot recover.
-	st2 := newFECStriper(k, r, fecSymLen)
-	re2 := newFECReassembler(k, r, fecSymLen)
+	st2 := newFECStriper(k, r)
+	re2 := newFECReassembler(k, r)
 	var rep2 []fecRepairFrame
 	for seq := 0; seq < k; seq++ {
 		p := []byte(fmt.Sprintf("b-%d", seq))
@@ -145,7 +144,7 @@ func TestFECMuxUpToRErasures(t *testing.T) {
 		}
 	}
 	for _, rf := range rep2 {
-		re2.RecordRepair(rf.blockID, rf.idx, rf.symbol)
+		re2.RecordRepair(rf.blockID, rf.idx, rf.symLen, rf.symbol)
 	}
 	if _, ok := re2.Reconstruct(0); ok {
 		t.Fatal("recovered R+1 erasures with only R repair symbols — MDS violated")
@@ -254,7 +253,7 @@ func TestFECMuxHoLRemoval(t *testing.T) {
 // frames, at the block-closing seq, with correct blockIDs across many blocks.
 func TestFECMuxBlockBoundaries(t *testing.T) {
 	const k, r, blocks = 4, 2, 5
-	st := newFECStriper(k, r, fecSymLen)
+	st := newFECStriper(k, r)
 	emitted := map[uint32]int{}
 	for seq := 0; seq < k*blocks; seq++ {
 		rf := st.Add(uint32(seq), []byte{byte(seq)})

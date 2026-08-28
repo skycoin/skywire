@@ -77,7 +77,7 @@ func TestFECMuxWiredReconstructsSlowLegFrame(t *testing.T) {
 	// The reassembler now holds K-1 data + 1 repair = K symbols → it reconstructs
 	// the sealed frame for seq 3, opens it, and the frontier drains 3..K-1.
 	rf := repair[0]
-	more := recv.fecOnRecvRepair(rf.blockID, rf.idx, rf.symbol)
+	more := recv.fecOnRecvRepair(rf.blockID, rf.idx, rf.symLen, rf.symbol)
 	got = append(got, more...)
 
 	require.Len(t, got, k, "every frame must be delivered after FEC reconstruction")
@@ -186,7 +186,7 @@ func TestFECMuxTailFlushProtectsPartialBlock(t *testing.T) {
 	// Repair arrives → reconstruct seq 2 → frontier drains the rest (real 3,4;
 	// padding 5..7 filtered).
 	rf := repair[0]
-	more := recv.fecOnRecvRepair(rf.blockID, rf.idx, rf.symbol)
+	more := recv.fecOnRecvRepair(rf.blockID, rf.idx, rf.symLen, rf.symbol)
 	for _, x := range more {
 		if len(x) == 0 {
 			continue

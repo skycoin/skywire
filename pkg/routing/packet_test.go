@@ -153,12 +153,13 @@ func TestMakeRepairPacketRoundTrip(t *testing.T) {
 	id := RouteID(0xDEADBEEF)
 	blockID := uint32(12345)
 	idx := uint8(2)
-	symbol := make([]byte, 16*1024)
+	symLen := 4098
+	symbol := make([]byte, symLen)
 	for i := range symbol {
 		symbol[i] = byte(i * 31)
 	}
 
-	p, err := MakeRepairPacket(id, blockID, idx, symbol)
+	p, err := MakeRepairPacket(id, blockID, idx, symLen, symbol)
 	if err != nil {
 		t.Fatalf("MakeRepairPacket: %v", err)
 	}
@@ -173,6 +174,9 @@ func TestMakeRepairPacketRoundTrip(t *testing.T) {
 	}
 	if p.RepairIndex() != idx {
 		t.Fatalf("idx = %d want %d", p.RepairIndex(), idx)
+	}
+	if p.RepairSymLen() != symLen {
+		t.Fatalf("symLen = %d want %d", p.RepairSymLen(), symLen)
 	}
 	require.Equal(t, symbol, p.RepairSymbol())
 }

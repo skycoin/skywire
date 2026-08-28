@@ -130,9 +130,10 @@ const (
 	RepairPacket
 )
 
-// FECRepairHdr is the fixed prefix of a RepairPacket payload: blockID(4) + idx(1),
-// followed by the repair symbol bytes.
-const FECRepairHdr = 5
+// FECRepairHdr is the fixed prefix of a RepairPacket payload: blockID(4) + idx(1)
+// + symLen(2), followed by the repair symbol bytes. symLen is the block's adaptive
+// erasure-symbol length, which the receiver needs to size the block for decoding.
+const FECRepairHdr = 7
 
 // TransportBwProbeSize is the on-wire size of each packet-pair probe packet.
 // ~1400 B (sub-MTU) so consecutive packets are large enough to be spaced by
@@ -388,10 +389,10 @@ func (p Packet) DataPayloadAfterSeq() []byte {
 }
 
 // MakeRepairPacket constructs a RepairPacket carrying one FEC repair symbol for
-// route group id. Payload: blockID(u32 BE) idx(u8) symbol...
-func MakeRepairPacket(id RouteID, blockID uint32, idx uint8, symbol []byte) (Packet, error) {
+// route group id. Payload: blockID(u32 BE) idx(u8) symLen(u16 BE) symbol...
+func MakeRepairPacket(id RouteID, blockID uint32, idx uint8, symLen int, symbol []byte) (Packet, error) {
 	totalPayload := FECRepairHdr + len(symbol)
-	if totalPayload > math.MaxUint16 {
+	if totalPayload > math.MaxUint16 || symLen > math.MaxUint16 {
 		return Packet{}, ErrPayloadTooBig
 	}
 
@@ -402,6 +403,7 @@ func MakeRepairPacket(id RouteID, blockID uint32, idx uint8, symbol []byte) (Pac
 	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(totalPayload)) //nolint:gosec
 	binary.BigEndian.PutUint32(packet[PacketPayloadOffset:], blockID)
 	packet[PacketPayloadOffset+4] = idx
+	binary.BigEndian.PutUint16(packet[PacketPayloadOffset+5:], uint16(symLen)) //nolint:gosec
 	copy(packet[PacketPayloadOffset+FECRepairHdr:], symbol)
 
 	return packet, nil
@@ -415,6 +417,11 @@ func (p Packet) RepairBlockID() uint32 {
 // RepairIndex extracts the repair-symbol index (0..R-1) from a RepairPacket.
 func (p Packet) RepairIndex() uint8 {
 	return p[PacketPayloadOffset+4]
+}
+
+// RepairSymLen extracts the block's adaptive symbol length from a RepairPacket.
+func (p Packet) RepairSymLen() int {
+	return int(binary.BigEndian.Uint16(p[PacketPayloadOffset+5:]))
 }
 
 // RepairSymbol returns the repair symbol bytes of a RepairPacket.
