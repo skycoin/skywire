@@ -73,7 +73,11 @@ type WasmServeConfig struct {
 	// "https://theskywirenetwork.net") that B's bootstrap postMessages to — used
 	// only with BrowseOriginAddr behind a proxy. Empty = derive from Addr (local).
 	VOrigin string
-	Log     *logging.Logger // nil → package default
+	// BrowseWasmSW serves the Go/wasm transport worker on the browse origins
+	// instead of realorigin's JS one. For testing that implementation only —
+	// see browseSWWasm for what the swap gives up on the untrusted origin.
+	BrowseWasmSW bool
+	Log          *logging.Logger // nil → package default
 }
 
 // ServeWasm builds the standalone wasm-visor handler and serves it on
@@ -189,6 +193,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 				TLS:     cfg.TLS,
 				TLSCert: cfg.TLSCert,
 				TLSKey:  cfg.TLSKey,
+				WasmSW:  cfg.BrowseWasmSW,
 				Log:     log,
 			}); err != nil {
 				log.WithError(err).Error("browse-origin bootstrap server failed")
@@ -273,7 +278,21 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// responder calls, and is the only skywire-specific piece. All three are
 	// static — the same bytes work on every origin. The B navigation shell is
 	// host-routed below, since it needs per-request substitution.
-	serveBytes("/browse-sw.js", "text/javascript", realorigin.ServiceWorkerJS())
+	if cfg.BrowseWasmSW {
+		// Opt-in: the same wasm-visor blob V already serves, loaded into the
+		// worker with the browse-sw role. Testing only — see browseSWWasm.
+		loader, assets, err := browseSWWasm(variant)
+		if err != nil {
+			return err
+		}
+		serveBytes("/browse-sw.js", "text/javascript", loader)
+		for p, b := range assets {
+			serveBytes(p, browseSWAssetType(p), b)
+		}
+		log.Warn("serving the Go/wasm transport worker on browse origins — for testing, not deployment")
+	} else {
+		serveBytes("/browse-sw.js", "text/javascript", realorigin.ServiceWorkerJS())
+	}
 	serveBytes("/browse-responder.js", "text/javascript", realorigin.ResponderJS())
 	serveBytes("/browse-transport.js", "text/javascript", wasmhv.BrowseTransportJS)
 	swJS := bytes.ReplaceAll(wasmhv.ServiceWorkerJS, []byte("__BUILD__"), []byte(wasmVer))
@@ -509,6 +528,11 @@ type BrowseOriginConfig struct {
 	TLSCert string          // optional PEM cert (paired with TLSKey)
 	TLSKey  string          // optional PEM key
 	Log     *logging.Logger // nil → package default
+
+	// WasmSW serves the Go/wasm transport worker instead of realorigin's JS one.
+	// For testing that implementation; leave it off for anything deployed. See
+	// browseSWWasm and browse-sw-loader.js for what the swap gives up.
+	WasmSW bool
 }
 
 // ServeBrowseOrigin runs the browse-origin bootstrap server (RFC §4b, hosted mode):
@@ -538,12 +562,21 @@ func ServeBrowseOrigin(ctx context.Context, cfg BrowseOriginConfig) error {
 	//
 	// The worker sits at /browse-sw.js rather than the library's default, because
 	// /sw.js on this origin is already the PWA's app-shell worker.
-	handler, err := realorigin.Handler(realorigin.Config{
+	roCfg := realorigin.Config{
 		Suffix:    suffix,
 		AppOrigin: cfg.VOrigin,
 		SWPath:    "/browse-sw.js",
 		Shell:     wasmhv.BrowseBootstrapHTML,
-	})
+	}
+	if cfg.WasmSW {
+		loader, assets, err := browseSWWasm(wasmbin.Default())
+		if err != nil {
+			return err
+		}
+		roCfg.Worker, roCfg.Assets = loader, assets
+		log.Warn("browse-origin: serving the Go/wasm transport worker — for testing, not deployment")
+	}
+	handler, err := realorigin.Handler(roCfg)
 	if err != nil {
 		return err
 	}
@@ -801,4 +834,53 @@ func randomHex(n int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// Paths the Go/wasm browse worker needs on the browse origin B. They sit beside
+// the worker rather than on V because a service worker fetches its own module,
+// and a cross-origin fetch from B to V would be a request the whole design
+// exists to avoid.
+const (
+	browseSWWasmPath = "/browse-sw.wasm"
+	browseSWExecPath = "/browse-sw-exec.js"
+)
+
+// browseSWWasm builds the opt-in Go/wasm transport worker: the loader with its
+// two asset paths substituted, plus the module and the wasm_exec.js that matches
+// it. The blob is the wasm-visor that is already embedded for V, so choosing this
+// worker costs no second binary — only the bytes of the browse-sw role inside it.
+//
+// It is off unless asked for. See browse-sw-loader.js for why: the JS worker can
+// be audited by reading it, and this one cannot.
+func browseSWWasm(variant wasmbin.Variant) ([]byte, map[string][]byte, error) {
+	if !wasmbin.Embedded() {
+		return nil, nil, fmt.Errorf("browse-origin wasm worker: no wasm-visor is embedded in this build")
+	}
+	if !wasmbin.Has(variant) {
+		variant = wasmbin.Default()
+	}
+	wasm, err := wasmbin.GetVariant(variant)
+	if err != nil {
+		return nil, nil, fmt.Errorf("browse-origin wasm worker: %w", err)
+	}
+	execJS := wasmbin.WasmExecJSVariant(variant)
+	if len(execJS) == 0 {
+		return nil, nil, fmt.Errorf("browse-origin wasm worker: variant %q has no wasm_exec.js", variant)
+	}
+	loader := bytes.ReplaceAll(wasmhv.BrowseSWLoaderJS, []byte("__WASM_EXEC__"), []byte(browseSWExecPath))
+	loader = bytes.ReplaceAll(loader, []byte("__WASM_URL__"), []byte(browseSWWasmPath))
+	return loader, map[string][]byte{
+		browseSWWasmPath: wasm,
+		browseSWExecPath: execJS,
+	}, nil
+}
+
+// browseSWAssetType types the worker's companion files. The wasm one matters:
+// instantiateStreaming refuses a module that does not arrive as application/wasm,
+// and the failure reads like a corrupt module rather than a header problem.
+func browseSWAssetType(p string) string {
+	if strings.HasSuffix(p, ".wasm") {
+		return "application/wasm"
+	}
+	return "text/javascript"
 }
