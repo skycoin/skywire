@@ -177,6 +177,14 @@ type routeMux struct {
 	fecReassembler *fecReassembler
 	fecRepairMu    sync.Mutex
 	fecRepairQ     []fecRepairFrame
+	// FEC telemetry (atomic). fecRepairBytesSent/Recv are cumulative repair-frame
+	// bytes this group scheduled onto / received from legs; fecReconstructs counts
+	// frontier frames recovered from repair (each a slow-leg stall avoided). These
+	// let an observer decompose mux traffic into data vs repair (the true FEC
+	// overhead) vs retransmit, separately from the aggregate byte counters.
+	fecRepairBytesSent uint64
+	fecRepairBytesRecv uint64
+	fecReconstructs    uint64
 
 	// Per-leg traffic counters parallel to the rg's tps[] / fwd[] /
 	// rvs[] slices. Mutated atomically. Read via Snapshot().
