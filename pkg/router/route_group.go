@@ -884,6 +884,51 @@ func (rg *RouteGroup) flushFECRepairs() {
 	}
 }
 
+// fecFlushServiceFn completes a pending partial FEC block on stream idle so the
+// tail frames (the final j<K of a transfer, which Add never codes because the
+// block never fills) gain repair protection. On an idle tick with a partial block
+// pending it emits the K-j remaining slots as empty PADDING frames through the
+// normal send path: each advances writeSeq and the striper, and the K-th
+// completes the block so Add() emits the R repair frames (auto-scheduled onto a
+// fast leg by write). The padding frames are REAL sealed sequenced-data frames,
+// so encoder and decoder agree bit-for-bit in the wire domain (no special
+// nonce), and they also fill the seq gap that the no-skip reorder buffer would
+// otherwise stall on. The receiver records them for FEC and delivers them as
+// 0-byte reads, which the mux delivery loop filters out of the app stream (the
+// app never sends an empty frame — Write rejects len==0 — so an empty delivered
+// payload is unambiguously FEC padding). Bounded by K as a runaway guard.
+func (rg *RouteGroup) fecFlushServiceFn(_ time.Duration) {
+	if rg.mux == nil || !rg.mux.fecEnabled || rg.mux.fecStriper == nil {
+		return
+	}
+	lastSent := time.Unix(0, atomic.LoadInt64(&rg.lastSent))
+	if !fecShouldFlush(time.Now(), lastSent, fecDefaultIdleFlush, rg.mux.fecStriper.hasPartialBlock()) {
+		return
+	}
+	for i := 0; i < fecDefaultK && rg.mux.fecStriper.hasPartialBlock(); i++ {
+		if err := rg.writePaddingFrame(); err != nil {
+			return
+		}
+	}
+}
+
+// writePaddingFrame emits one empty sequenced data frame (a FEC padding frame)
+// through the normal mux send path, bypassing Write's empty-payload short-circuit.
+func (rg *RouteGroup) writePaddingFrame() error {
+	if rg.isClosed() || rg.writeDeadline.Closed() {
+		return io.ErrClosedPipe
+	}
+	var empty []byte
+	rg.mu.Lock()
+	tp, rule, leg, err := rg.nextTransport(empty)
+	rg.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	_, err = rg.write(empty, tp, rule, leg)
+	return err
+}
+
 func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet,
 	ruleID routing.RouteID) chan error {
 	errCh := make(chan error)
@@ -2922,10 +2967,11 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		}
 
 		rule := rg.fwd[i]
-		caps := routing.CapMux | routing.CapSACK | routing.CapHOLRetx
-		if fecWanted {
-			caps |= routing.CapFEC
-		}
+		// CapFEC is advertised unconditionally, like the other mux capabilities:
+		// it only ACTIVATES when the peer also advertises it (both ends on a build
+		// that has it), so an old peer simply never negotiates it and is
+		// unaffected. No config knob — on by default wherever both edges support it.
+		caps := routing.CapMux | routing.CapSACK | routing.CapHOLRetx | routing.CapFEC
 		var packet routing.Packet
 		if pfn := rg.perFrameNoiseCap(encrypt); pfn != 0 {
 			msg, mErr := rg.nextPerFrameNoiseMsg()
@@ -3124,11 +3170,14 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 				// opt-in during rollout). Enables block erasure coding so a
 				// gap-blocked reorder frontier is reconstructed from repair frames on
 				// fast legs instead of waiting on the slow leg.
-				if fecWanted && remoteCaps&routing.CapFEC != 0 {
+				if remoteCaps&routing.CapFEC != 0 {
 					rg.mux.fecEnabled = true
 					rg.mux.fecInit()
 					if rg.mux.fecEnabled {
 						rg.logger.Debug("FEC enabled (both peers support CapFEC)")
+						// Tail protection: flush a pending partial block on idle so
+						// the final <K frames of a transfer gain repair coverage.
+						go rg.servicePacketLoop("fec-flush", fecDefaultIdleFlush, rg.fecFlushServiceFn, nil)
 					}
 				}
 
@@ -3283,6 +3332,14 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 		}
 
 		for _, d := range delivered {
+			// FEC padding frames carry an empty payload (the app never writes a
+			// zero-length frame — Write rejects len==0 — so an empty delivered
+			// payload is unambiguously FEC tail-flush padding). They exist only to
+			// complete a partial block and advance the reorder frontier; drop them
+			// from the app stream instead of surfacing a spurious 0-byte read.
+			if len(d) == 0 {
+				continue
+			}
 			// Both rg.closed (local-initiated close) and
 			// rg.remoteClosed (remote-initiated close) must be
 			// watched here; the latter was previously missing
@@ -3325,6 +3382,9 @@ func (rg *RouteGroup) handleRepairPacket(packet routing.Packet) error {
 	}
 	delivered := rg.mux.fecOnRecvRepair(packet.RepairBlockID(), packet.RepairIndex(), packet.RepairSymbol())
 	for _, d := range delivered {
+		if len(d) == 0 { // FEC padding frame — advances the frontier, not app data
+			continue
+		}
 		select {
 		case <-rg.closed:
 			return io.ErrClosedPipe

@@ -26,17 +26,8 @@ package router
 
 import (
 	"encoding/binary"
-	"os"
 	"sync"
 )
-
-// fecWanted reports whether this visor advertises CapFEC in the mux handshake.
-// FEC is opt-in during rollout: it needs BOTH peers on a build that enables it,
-// plus live two-node validation, before it can safely become a default. Until
-// then the whole FEC path is inert (CapFEC unadvertised → never negotiated →
-// fecEnabled stays false → wrapPayload/deliverData fast-return). Gate: set
-// SKYWIRE_MUX_FEC=1 on both endpoints.
-var fecWanted = os.Getenv("SKYWIRE_MUX_FEC") == "1"
 
 // FEC block geometry. K data frames + R repair frames per block; recovers all K
 // from any K of the K+R. K=8/R=2 tolerates a full slow/dead leg's share of a

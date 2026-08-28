@@ -107,3 +107,95 @@ func TestFECMuxWiredInertWhenDisabled(t *testing.T) {
 	}
 	require.Empty(t, send.fecDrainRepairs(), "no repair frames when FEC disabled")
 }
+
+// TestFECMuxTailFlushProtectsPartialBlock proves the tail-flush wiring: a stream
+// that ends after j<K frames has its final partial block completed by empty
+// PADDING frames (as fecFlushServiceFn emits on idle), so a real tail frame lost
+// on a slow leg is still reconstructable from the block's repair. Padding frames
+// carry empty payloads and are filtered from the app stream (asserted here by
+// collecting only non-empty deliveries).
+func TestFECMuxTailFlushProtectsPartialBlock(t *testing.T) {
+	log := logging.NewMasterLogger().PackageLogger("fec-tailflush-test")
+	nI, nR := kkPair(t)
+
+	send := newRouteMux(log, true)
+	send.seal = func(seq uint32, pt []byte) []byte { return nI.SealWithNonce(uint64(seq), pt) }
+	send.fecEnabled = true
+	send.fecInit()
+
+	recv := newRouteMux(log, true)
+	recv.open = func(seq uint32, ct []byte) ([]byte, error) { return nR.OpenWithNonce(uint64(seq), ct) }
+	recv.fecEnabled = true
+	recv.fecInit()
+
+	const routeID = routing.RouteID(11)
+	const k = fecDefaultK
+	const jReal = 5 // a partial block: 5 real frames, then the stream goes idle
+
+	// helper: collect only non-empty delivered frames (the mux loop filters empties)
+	var got [][]byte
+	deliver := func(pkt routing.Packet) {
+		d, _ := recv.deliverData(pkt.SequenceNumber(), pkt.DataPayloadAfterSeq())
+		for _, x := range d {
+			if len(x) == 0 {
+				continue
+			}
+			got = append(got, x)
+		}
+	}
+
+	// Sender: j real frames.
+	plain := make([][]byte, jReal)
+	realPkts := make([]routing.Packet, jReal)
+	for i := 0; i < jReal; i++ {
+		plain[i] = []byte(fmt.Sprintf("tail-frame-%02d-payload", i))
+		pkt, seq, err := send.wrapPayload(routeID, plain[i])
+		require.NoError(t, err)
+		require.Equal(t, uint32(i), seq)
+		realPkts[i] = pkt
+	}
+	require.Empty(t, send.fecDrainRepairs(), "partial block must not emit repair yet")
+
+	// Idle flush: emit K-j empty padding frames (what writePaddingFrame does). The
+	// K-th frame completes the block and Add queues the repair.
+	padPkts := make([]routing.Packet, 0, k-jReal)
+	for i := jReal; i < k; i++ {
+		var empty []byte
+		pkt, seq, err := send.wrapPayload(routeID, empty)
+		require.NoError(t, err)
+		require.Equal(t, uint32(i), seq)
+		padPkts = append(padPkts, pkt)
+	}
+	repair := send.fecDrainRepairs()
+	require.Len(t, repair, fecDefaultR, "the flush must complete the block and emit R repair frames")
+
+	// Receiver: deliver every real frame EXCEPT the slow-leg victim (seq 2), plus
+	// all padding frames. Frontier stalls at seq 2.
+	const missing = 2
+	for i := 0; i < jReal; i++ {
+		if i == missing {
+			continue
+		}
+		deliver(realPkts[i])
+	}
+	for _, p := range padPkts {
+		deliver(p)
+	}
+	require.Len(t, got, missing, "frontier HoL-blocked at the missing tail frame; only pre-gap real frames delivered")
+
+	// Repair arrives → reconstruct seq 2 → frontier drains the rest (real 3,4;
+	// padding 5..7 filtered).
+	rf := repair[0]
+	more := recv.fecOnRecvRepair(rf.blockID, rf.idx, rf.symbol)
+	for _, x := range more {
+		if len(x) == 0 {
+			continue
+		}
+		got = append(got, x)
+	}
+
+	require.Len(t, got, jReal, "all real tail frames delivered after FEC reconstruction (padding filtered)")
+	for i := 0; i < jReal; i++ {
+		require.Equal(t, plain[i], got[i], "real tail frame %d intact (FEC-reconstructed where withheld)", i)
+	}
+}
