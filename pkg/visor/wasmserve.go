@@ -35,6 +35,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/realorigin"
+
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -119,9 +121,10 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	vh.Write(wasmhv.WorkerJS)
 	vh.Write(wasmhv.BrowseJS)
 	vh.Write(wasmhv.AutoUpdateJS)
-	vh.Write(wasmhv.BrowseSWJS)
+	vh.Write(realorigin.ServiceWorkerJS())
 	vh.Write(wasmhv.BrowseBootstrapHTML)
-	vh.Write(wasmhv.BrowseResponderJS)
+	vh.Write(realorigin.ResponderJS())
+	vh.Write(wasmhv.BrowseTransportJS)
 	wasmVer := hex.EncodeToString(vh.Sum(nil))[:16]
 	// etag is the fingerprint as an HTTP entity tag. The version-bound assets
 	// below are served no-cache + ETag so every load REVALIDATES: unchanged →
@@ -165,7 +168,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	browseOriginJS := "window.__SKYWIRE_BROWSE_ORIGIN__={suffix:" + strconv.Quote(suffix) + ",scheme:" + strconv.Quote(bScheme) + ",port:" + strconv.Quote(bPort) + "};"
 	index := injectWasmBoot(indexB, wasmVer, cfg.Harness, browseOriginJS)
 
-	browseBootstrap := bytes.ReplaceAll(wasmhv.BrowseBootstrapHTML, []byte("__V_ORIGIN__"), []byte(browseScheme+"://"+vHostPort))
+	browseBootstrap := bytes.ReplaceAll(wasmhv.BrowseBootstrapHTML, []byte("__APP_ORIGIN__"), []byte(browseScheme+"://"+vHostPort))
 	browseBootstrap = bytes.ReplaceAll(browseBootstrap, []byte("__SUFFIX__"), []byte(suffix))
 
 	// Hosted two-port mode: when BrowseOriginAddr is set, this SAME process ALSO
@@ -264,12 +267,15 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
 	serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)
 	serveBytes("/icon-512.png", "image/png", wasmhv.PWAIcon512)
-	// Real-origin mesh browser (RFC §4b): the transport SW (served on the B origin,
-	// scope "/") and the V-origin mesh-fetch responder. The B navigation shell is
-	// host-routed below (it needs per-request substitution). browse-sw.js and
-	// browse-responder.js are static — the same bytes work on every origin.
-	serveBytes("/browse-sw.js", "text/javascript", wasmhv.BrowseSWJS)
-	serveBytes("/browse-responder.js", "text/javascript", wasmhv.BrowseResponderJS)
+	// Real-origin mesh browser. The transport worker (served on the B origin at
+	// scope "/") and the responder that answers B's handshake on V both come from
+	// github.com/0magnet/realorigin; browse-transport.js is the transport the
+	// responder calls, and is the only skywire-specific piece. All three are
+	// static — the same bytes work on every origin. The B navigation shell is
+	// host-routed below, since it needs per-request substitution.
+	serveBytes("/browse-sw.js", "text/javascript", realorigin.ServiceWorkerJS())
+	serveBytes("/browse-responder.js", "text/javascript", realorigin.ResponderJS())
+	serveBytes("/browse-transport.js", "text/javascript", wasmhv.BrowseTransportJS)
 	swJS := bytes.ReplaceAll(wasmhv.ServiceWorkerJS, []byte("__BUILD__"), []byte(wasmVer))
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript")
@@ -506,7 +512,7 @@ type BrowseOriginConfig struct {
 }
 
 // ServeBrowseOrigin runs the browse-origin bootstrap server (RFC §4b, hosted mode):
-// for any Host under Suffix it returns the SW bootstrap shell with __V_ORIGIN__ and
+// for any Host under Suffix it returns the SW bootstrap shell with __APP_ORIGIN__ and
 // __SUFFIX__ substituted; /browse-sw.js returns the transport SW. Blocking until ctx
 // is canceled.
 func ServeBrowseOrigin(ctx context.Context, cfg BrowseOriginConfig) error {
@@ -525,25 +531,22 @@ func ServeBrowseOrigin(ctx context.Context, cfg BrowseOriginConfig) error {
 		suffix = "." + suffix
 	}
 
-	// Precompute the bootstrap shell: the SW bootstrap that every browse origin B
-	// serves. It registers browse-sw.js and points the SW at the visitor's in-tab
-	// visor at VOrigin; the transcode substitutions match ServeWasm.
-	bootstrap := bytes.ReplaceAll(wasmhv.BrowseBootstrapHTML, []byte("__V_ORIGIN__"), []byte(cfg.VOrigin))
-	bootstrap = bytes.ReplaceAll(bootstrap, []byte("__SUFFIX__"), []byte(suffix))
-
-	// Caddy only routes *.Suffix here, so no host check is needed: /browse-sw.js is
-	// the transport SW, every other path is the bootstrap shell.
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/browse-sw.js" {
-			w.Header().Set("Content-Type", "text/javascript")
-			w.Header().Set("Cache-Control", "no-cache")
-			_, _ = w.Write(wasmhv.BrowseSWJS) //nolint:errcheck
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write(bootstrap) //nolint:errcheck
+	// The worker, the shell's substitutions and the serve-the-shell-for-every-
+	// other-path rule all come from realorigin. The shell itself is ours: the
+	// library's is deliberately plain, and building a mesh route takes long
+	// enough that the wait is worth narrating.
+	//
+	// The worker sits at /browse-sw.js rather than the library's default, because
+	// /sw.js on this origin is already the PWA's app-shell worker.
+	handler, err := realorigin.Handler(realorigin.Config{
+		Suffix:    suffix,
+		AppOrigin: cfg.VOrigin,
+		SWPath:    "/browse-sw.js",
+		Shell:     wasmhv.BrowseBootstrapHTML,
 	})
+	if err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
@@ -651,9 +654,12 @@ func injectWasmBoot(index []byte, wasmVer string, harness bool, browseOriginJS s
 	}
 	tag += "<script src=\"hv-boot.js\"></script>\n" +
 		"<script src=\"browse.js\"></script>\n" +
-		// Mesh-fetch responder: lets embedded <pk>.mesh.localhost browse iframes
-		// reach THIS app's first-party skywireVisor (RFC §4b real-origin browser).
+		// realorigin's responder owns the trust boundary for embedded
+		// <id>.mesh.localhost browse frames; browse-transport.js gives it the
+		// dmsg/skynet/skysocks transport to call. Order matters: the transport
+		// configures the responder, so it loads after it.
 		"<script src=\"browse-responder.js\"></script>\n" +
+		"<script src=\"browse-transport.js\"></script>\n" +
 		"<script>" + wasmhv.BrowseLauncherJS + "</script>\n" +
 		"<script>window.__SKYWIRE_WASM_VERSION__=" + strconv.Quote(wasmVer) + ";</script>\n" +
 		"<script src=\"autoupdate.js\"></script>\n"
