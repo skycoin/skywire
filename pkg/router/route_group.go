@@ -318,6 +318,13 @@ type RouteGroup struct {
 	// tested. Guarded by legLivenessMu (NEVER held while taking rg.mu).
 	legLivenessMu sync.Mutex
 	legPongSeen   map[uuid.UUID]bool
+
+	// reorderWedge* track the reorder-stall service's WARN throttling: ticks since
+	// the current wedge started (0 = not wedged) and the gap age at the last log,
+	// so a sustained wedge logs ~once per reorderTimeout instead of every tick.
+	// Touched only from the single reorder-stall service goroutine.
+	reorderWedgeTicks    int
+	reorderWedgeLoggedAt time.Duration
 	legMissed     map[uuid.UUID]int
 	inflightPings map[int64]uuid.UUID
 	// legE2ELatency is the EWMA-smoothed END-TO-END round-trip latency per leg,
@@ -1754,10 +1761,30 @@ func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 	// gap: the RouteGroup is a reliable ordered net.Conn (TCP/TLS rides it), so
 	// delivering past a hole corrupts the stream. The leg-dataprogress prune
 	// concurrently removes a genuinely dead leg so its seqs retransmit on survivors.
-	if rg.mux.gapAge() > reorderTimeout {
+	gapAge := rg.mux.gapAge()
+	if gapAge > reorderTimeout {
+		// Observability for the reorder WEDGE (the multi-leg-collapse-to-0-B/s
+		// failure): the frontier has been stuck past the timeout, so the sender's
+		// retransmit isn't refilling the missing seq. Log the stuck seq, how many
+		// packets are dammed behind it, the gap age, and the active-leg count so a
+		// wedge is diagnosable from the log. Throttled to ~once per reorderTimeout
+		// (the service fires every reorderStallInterval) via a transition/decay
+		// counter so a sustained wedge doesn't spam.
+		rg.reorderWedgeTicks++
+		if rg.reorderWedgeTicks == 1 || gapAge > rg.reorderWedgeLoggedAt+reorderTimeout {
+			active := rg.mux.activeLegCount()
+			rg.logger.Warnf("reorder-WEDGE: frontier stuck at seq=%d for %v, pending=%d packets dammed, active_legs=%d — sender retransmit not refilling the gap (SACK re-sent)",
+				rg.mux.reorderNextSeq(), gapAge.Truncate(time.Millisecond), rg.mux.reorderPending(), active)
+			rg.reorderWedgeLoggedAt = gapAge
+		}
 		if err := rg.sendSACK(); err != nil {
 			rg.logger.WithError(err).Debug("reorder-stall SACK failed")
 		}
+	} else if rg.reorderWedgeTicks > 0 {
+		// Gap cleared — log the recovery so the wedge's duration is bounded in the log.
+		rg.logger.Infof("reorder-wedge CLEARED after %d stall ticks (frontier advancing again)", rg.reorderWedgeTicks)
+		rg.reorderWedgeTicks = 0
+		rg.reorderWedgeLoggedAt = 0
 	}
 }
 
@@ -2158,12 +2185,28 @@ func (rg *RouteGroup) enforceLatencyBand() {
 	}
 
 	demote, promote := partitionLatencyBand(legs, manual, tight)
+	// latMs lookup for diagnostics (which latency triggered each decision).
+	latOf := make(map[int]float64, len(legs))
+	for _, l := range legs {
+		latOf[l.idx] = l.latMs
+	}
+	if len(demote) > 0 || len(promote) > 0 {
+		mode := "adaptive"
+		if manual {
+			mode = "manual"
+		}
+		band := "wide"
+		if tight {
+			band = "tight"
+		}
+		rg.logger.Infof("latency-band[%s/%s]: %d active legs, demote=%v promote=%v", mode, band, len(legs), demote, promote)
+	}
 	for _, idx := range demote {
-		rg.logger.Infof("latency-band: parking leg %d (out-of-band latency) to keep the active stripe set homogeneous", idx)
+		rg.logger.Infof("latency-band: parking leg %d to warm standby (latency %.0fms out-of-band, keeping the active stripe set homogeneous)", idx, latOf[idx])
 		rg.mux.setLegStandby(idx, true)
 	}
 	for _, idx := range promote {
-		rg.logger.Debugf("latency-band: re-admitting leg %d (back within band)", idx)
+		rg.logger.Infof("latency-band: re-admitting leg %d to active (latency %.0fms back within band)", idx, latOf[idx])
 		rg.mux.setLegStandby(idx, false)
 	}
 	if len(demote) > 0 || len(promote) > 0 {
