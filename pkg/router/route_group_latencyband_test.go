@@ -16,6 +16,7 @@ func TestPartitionLatencyBand(t *testing.T) {
 		name        string
 		legs        []bandLeg
 		manual      bool
+		tight       bool
 		wantDemote  []int
 		wantPromote []int
 	}{
@@ -138,11 +139,55 @@ func TestPartitionLatencyBand(t *testing.T) {
 			manual:     true,
 			wantDemote: nil, wantPromote: nil,
 		},
+		{
+			name: "moderate 2.1x-slow leg kept in wide (ECF/failover) band",
+			legs: []bandLeg{
+				{idx: 0, latMs: 150, primary: true},
+				{idx: 1, latMs: 155},
+				{idx: 2, latMs: 145},
+				{idx: 3, latMs: 320}, // 2.13x median: within wide 3x band
+			},
+			manual: true, tight: false,
+			wantDemote: nil, wantPromote: nil,
+		},
+		{
+			name: "moderate 2.1x-slow leg demoted in tight (capacity/aggregation) band",
+			legs: []bandLeg{
+				{idx: 0, latMs: 150, primary: true},
+				{idx: 1, latMs: 155},
+				{idx: 2, latMs: 145},
+				{idx: 3, latMs: 320}, // 2.13x median: outside tight 2x band → stalls frontier
+			},
+			manual: true, tight: true,
+			wantDemote: []int{3}, wantPromote: nil,
+		},
+		{
+			name: "standby 1.7x leg re-admitted in wide band but not in tight band",
+			legs: []bandLeg{
+				{idx: 0, latMs: 150, primary: true},
+				{idx: 1, latMs: 160},
+				{idx: 2, latMs: 155},
+				{idx: 3, latMs: 255, standby: true}, // 1.59x median(160): <=2.5 wide admit → re-admitted
+			},
+			manual: true, tight: false,
+			wantDemote: nil, wantPromote: []int{3},
+		},
+		{
+			name: "standby 1.7x leg stays standby under tight band (admission withheld)",
+			legs: []bandLeg{
+				{idx: 0, latMs: 150, primary: true},
+				{idx: 1, latMs: 160},
+				{idx: 2, latMs: 155},
+				{idx: 3, latMs: 300, standby: true}, // 1.875x median(160): >1.6 tight admit → not re-admitted
+			},
+			manual: true, tight: true,
+			wantDemote: nil, wantPromote: nil,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			demote, promote := partitionLatencyBand(tt.legs, tt.manual)
+			demote, promote := partitionLatencyBand(tt.legs, tt.manual, tt.tight)
 			require.Equal(t, tt.wantDemote, nilIfEmpty(idsOf(demote)), "demote set")
 			require.Equal(t, tt.wantPromote, nilIfEmpty(idsOf(promote)), "promote set")
 		})
@@ -163,7 +208,7 @@ func TestPartitionLatencyBandNeverDemotesBelowOne(t *testing.T) {
 	}
 	// median of [2,3,4,900] = 4. Relative to median 4, the 900ms primary is the
 	// slow outlier (protected); the fast ones are near the median → none demoted.
-	demote, _ := partitionLatencyBand(legs, true)
+	demote, _ := partitionLatencyBand(legs, true, false)
 	require.NotContains(t, demote, 0, "primary is never demoted")
 
 	// A cleaner below-one guard case: one real leg + three fast artifacts, median
@@ -176,7 +221,7 @@ func TestPartitionLatencyBandNeverDemotesBelowOne(t *testing.T) {
 		{idx: 2, latMs: 3},
 		{idx: 3, latMs: 900}, // lone slow real leg; median≈3 → 300x slower
 	}
-	demote2, _ := partitionLatencyBand(legs2, true)
+	demote2, _ := partitionLatencyBand(legs2, true, false)
 	activeAfter := 0
 	for _, l := range legs2 {
 		demoted := false
