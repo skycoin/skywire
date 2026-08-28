@@ -79,7 +79,7 @@ scheduled CI job.`,
 			if e.Server == nil {
 				continue
 			}
-			label := e.Static.String()[:8]
+			label := e.Static.String()
 			ws := e.Server.AddressWS
 			if ws == "" {
 				cmd.Printf("!  %s  %-21s  NO AddressWS — unreachable for browser/wasm visors\n", label, e.Server.Address)

@@ -1,6 +1,6 @@
 package canvas
 
-import "github.com/gdamore/tcell/v2"
+import "github.com/gdamore/tcell/v3"
 
 // Palette is a 256-entry colour ramp indexed by intensity.
 //
