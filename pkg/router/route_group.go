@@ -325,8 +325,8 @@ type RouteGroup struct {
 	// Touched only from the single reorder-stall service goroutine.
 	reorderWedgeTicks    int
 	reorderWedgeLoggedAt time.Duration
-	legMissed     map[uuid.UUID]int
-	inflightPings map[int64]uuid.UUID
+	legMissed            map[uuid.UUID]int
+	inflightPings        map[int64]uuid.UUID
 	// legE2ELatency is the EWMA-smoothed END-TO-END round-trip latency per leg,
 	// keyed by transport ID (survives index shifts), folded from the
 	// leg-liveness pong. This is the leg's TRUE route latency (all hops), unlike
