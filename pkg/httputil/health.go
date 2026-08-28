@@ -24,8 +24,14 @@ type HealthCheckResponse struct {
 	PublicAutoconnect bool            `json:"public_autoconnect,omitempty"`
 	StcprCount        int             `json:"stcpr_count,omitempty"`
 	SudphCount        int             `json:"sudph_count,omitempty"`
-	NetworkTypes      []string        `json:"network_types,omitempty"`
-	DHTBootstrap      bool            `json:"dht_bootstrap,omitempty"`
+	// TransportCounts is a count of live transports keyed by their actual
+	// network type (stcpr, sudph, stcp, dmsg, squicr, swsr, swtr, webrtc, …).
+	// The key set is derived from the transports present, so every current and
+	// future transport type is represented — not just stcpr/sudph. The legacy
+	// StcprCount/SudphCount fields remain for backward compatibility.
+	TransportCounts map[string]int `json:"transport_counts,omitempty"`
+	NetworkTypes    []string       `json:"network_types,omitempty"`
+	DHTBootstrap    bool           `json:"dht_bootstrap,omitempty"`
 }
 
 // GetServiceHealth gets the response from the given service url
