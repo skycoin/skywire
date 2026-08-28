@@ -127,6 +127,17 @@ const (
 	// legs; a receiver whose reorder frontier is gap-blocked reconstructs the
 	// missing data frame from any K of the block's K+R symbols instead of waiting
 	// for the slow leg. A peer without CapFEC never sees these and is unaffected.
+	//
+	// FORWARD-COMPAT (see #4270 RLNC note): the `idx` field ties a repair symbol
+	// to a SPECIFIC known Cauchy generator row — i.e. this format assumes the
+	// SENDER generated it (both ends share the generator, so no coefficients are
+	// carried). A future hop-wise variant (an intermediate RECODING symbols, RLNC-
+	// style) produces arbitrary linear combinations that must carry their own
+	// coding vector; that is an ADDITIVE extension (a new packet type or an idx
+	// sentinel selecting a coding-vector layout), NOT a break to this one — and the
+	// decoder is already general (gfSolve solves any coefficient matrix). Keep the
+	// symbol/block framing agnostic about WHO makes repair symbols so the hop-wise
+	// path stays open without a format change.
 	RepairPacket
 )
 
