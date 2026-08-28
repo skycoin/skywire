@@ -127,6 +127,7 @@ var (
 	startVerboseLevel  string
 	reconnect          bool
 	startRoutingPolicy string
+	startDirect        bool
 	// multi-hop testing
 	viaVisor string
 	testEnv  bool
