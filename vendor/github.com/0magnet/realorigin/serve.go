@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -50,6 +52,28 @@ type Config struct {
 	// __APP_ORIGIN__ and __SUFFIX__ are substituted here exactly as they are in
 	// the built-in shell.
 	Shell []byte
+
+	// Worker replaces the transport service worker served at SWPath. Empty uses
+	// the built-in one.
+	//
+	// The built-in worker is deliberately small and names no transport, which is
+	// what makes it auditable on the untrusted origin. A replacement inherits that
+	// responsibility: it runs on B, so whatever it can reach, untrusted content can
+	// reach through it. It must speak the same bridge protocol — relay each
+	// non-navigation fetch to a controlling client as {type:realorigin-fetch}
+	// over a MessagePort and answer with the returned {status, headers, body}.
+	//
+	// A worker that needs companion files (a wasm module and its loader, say)
+	// serves them through Assets.
+	Worker []byte
+
+	// Assets are extra paths served verbatim on the browse origin, e.g.
+	// {"/sw.wasm": mod, "/wasm_exec.js": loader}. Keys are absolute paths and win
+	// over the shell; SWPath still wins over both.
+	//
+	// Every byte here is served to the UNTRUSTED origin, so put nothing in it that
+	// the browsed content should not have.
+	Assets map[string][]byte
 }
 
 const defaultSWPath = "/sw.js"
@@ -89,6 +113,25 @@ func Handler(cfg Config) (http.Handler, error) {
 	// The worker needs no substitution: it learns nothing from configuration,
 	// which is the same reason it can be reused across every transport.
 	worker := swJS
+	if len(cfg.Worker) > 0 {
+		worker = cfg.Worker
+	}
+
+	// Copy the asset map so a later mutation by the caller cannot change what an
+	// already-running server hands to the untrusted origin.
+	var assets map[string][]byte
+	if len(cfg.Assets) > 0 {
+		assets = make(map[string][]byte, len(cfg.Assets))
+		for p, b := range cfg.Assets {
+			if !strings.HasPrefix(p, "/") {
+				p = "/" + p
+			}
+			if p == swPath {
+				return nil, fmt.Errorf("realorigin: asset %q collides with SWPath", p)
+			}
+			assets[p] = b
+		}
+	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == swPath {
@@ -97,6 +140,12 @@ func Handler(cfg Config) (http.Handler, error) {
 			// worker keeps answering with an old bridge protocol.
 			w.Header().Set("Cache-Control", "no-cache")
 			_, _ = w.Write(worker) //nolint:errcheck // a short write to a hung client is the client's problem; there is no recovery here
+			return
+		}
+		if b, ok := assets[r.URL.Path]; ok {
+			w.Header().Set("Content-Type", assetContentType(r.URL.Path))
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = w.Write(b) //nolint:errcheck // as above
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -141,3 +190,22 @@ func (cfg Config) ListenAndServe(ctx context.Context) error {
 // browse origin itself rather than through Handler — a host-routed setup where B
 // and the app share one listener, say. Serve it at Config.SWPath.
 func ServiceWorkerJS() []byte { return swJS }
+
+// assetContentType maps an asset path to a content type. WebAssembly is the one
+// that matters: instantiateStreaming refuses a module that does not arrive as
+// application/wasm, and the failure looks like a corrupt module rather than a
+// header problem.
+func assetContentType(p string) string {
+	switch {
+	case strings.HasSuffix(p, ".wasm"):
+		return "application/wasm"
+	case strings.HasSuffix(p, ".js"):
+		return "text/javascript; charset=utf-8"
+	case strings.HasSuffix(p, ".json"):
+		return "application/json"
+	case strings.HasSuffix(p, ".css"):
+		return "text/css; charset=utf-8"
+	default:
+		return "application/octet-stream"
+	}
+}

@@ -212,6 +212,18 @@ func main() {
 		installNetView()
 		fmt.Println("wasm-visor: netview role — call tpvizGL.init(elId, onEvent)")
 		keepAlive()
+	case "browse-sw":
+		// The transport service worker for a real-origin browse frame
+		// (browsesw_js.go). Opt-in via `hv serve --browse-origin-wasm`; what
+		// every deployment actually serves is realorigin's JS worker.
+		installBrowseSW()
+		fmt.Println("wasm-visor: browse-sw role — transport worker installed")
+		keepAlive()
+	case "inert":
+		// A service worker that was given no role. Booting a visor here could
+		// put one on an untrusted browse origin, so do nothing at all.
+		fmt.Println("wasm-visor: no role assigned in a service worker — idle")
+		keepAlive()
 	}
 	// Publish the skycoin browser cipher on the same page.
 	//
