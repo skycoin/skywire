@@ -7,12 +7,12 @@
        2. embeds a hidden helper iframe on the VISOR origin V (which reaches the
           in-tab SharedWorker wasm visor and mediates fetches — the trust
           boundary; B can only ask it to "fetch a mesh URL", never touch the key),
-       3. relays SW mesh-fetch messages ↔ the helper (same-origin SW <-> the shell
+       3. relays SW realorigin-fetch messages ↔ the helper (same-origin SW <-> the shell
           page <-> cross-origin V helper via postMessage with targetOrigin checks),
        4. fetches the real mesh page over the visor's transports and writes it into
           THIS real origin (document.write — a genuine origin, unlike the old
           sandboxed srcdoc), after which all subresources flow through the SW.
-     __V_ORIGIN__ and __SUFFIX__ are substituted by wasm-serve at request time. -->
+     __APP_ORIGIN__ and __SUFFIX__ are substituted by wasm-serve at request time. -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Connecting over skywire…</title>
@@ -78,11 +78,11 @@
 <script>
 (function () {
   'use strict';
-  var V_ORIGIN = "__V_ORIGIN__";      // visor origin (holds the SharedWorker visor + key)
+  var V_ORIGIN = "__APP_ORIGIN__";      // visor origin (holds the SharedWorker visor + key)
   // Loopback-family equivalence for the LOCAL model. Browse origins are
   // *.mesh.localhost (which resolves to 127.0.0.1), but the visor app V may be
   // loaded at localhost, 127.0.0.1 or [::1] — DISTINCT origins to the browser.
-  // A single hardcoded V_ORIGIN would silently drop the mesh-hello postMessage
+  // A single hardcoded V_ORIGIN would silently drop the realorigin-hello postMessage
   // (and reject the reply) whenever V is opened via a sibling host, hanging the
   // whole browser on "Connecting to the mesh…". Treat the loopback hosts as
   // equivalent: post the hello to each and accept a reply from any of them.
@@ -191,7 +191,7 @@
     if (/selecting|connecting|acquiring|sending|attempt|routing via|racing/i.test(line)) return 'hi';
     return '';
   }
-  function onProxyLog(winId, line) {
+  function onProxyLog(line) {
     if (!logEl || !line) return;
     if (logHdr) logHdr.style.display = 'block';
     logEl.style.display = 'block';
@@ -210,7 +210,7 @@
 
   // --- bridge to the PARENT visor app (V) ----------------------------------
   // This browse origin B is embedded as an iframe INSIDE the visor app V (the
-  // WinBox browser). We post 'mesh-hello' to window.parent (V); V's injected
+  // WinBox browser). We post 'realorigin-hello' to window.parent (V); V's injected
   // browse-responder replies with a MessagePort we post {fetch} to. V validates
   // and calls its OWN first-party skywireVisor.* — we never get the key. (We do
   // NOT create a helper iframe on V: under Storage Partitioning a cross-origin
@@ -228,7 +228,7 @@
       var to = setTimeout(function () { reject(new Error('visor parent timeout')); }, 30000);
       window.addEventListener('message', function onmsg(e) {
         if (V_ORIGINS.indexOf(e.origin) < 0) return;     // only trust V (loopback family)
-        if (!e.data || e.data.type !== 'mesh-helper-ready') return;
+        if (!e.data || e.data.type !== 'realorigin-ready') return;
         if (e.data.error) {                              // V rejected our shortid
           clearTimeout(to);
           window.removeEventListener('message', onmsg);
@@ -247,7 +247,7 @@
       (function hello() {
         if (helperPort || tries > 30) return;
         tries++;
-        V_ORIGINS.forEach(function (o) { try { window.parent.postMessage({ type: 'mesh-hello', shortid: SHORTID }, o); } catch (e) {} });
+        V_ORIGINS.forEach(function (o) { try { window.parent.postMessage({ type: 'realorigin-hello', shortid: SHORTID }, o); } catch (e) {} });
         setTimeout(hello, 300);
       })();
     });
@@ -264,7 +264,7 @@
           var d = ev.data || {};
           // Interim verbose route-setup line (forwarded from the visor's proxy log)
           // — render it, don't resolve the fetch.
-          if (d.progress) { onProxyLog(d.progress.winId, d.progress.line); return; }
+          if (d.progress) { onProxyLog(d.progress.line); return; }
           var cb = pending[d.id];
           if (cb) { delete pending[d.id]; cb(d); }
         };
@@ -277,13 +277,13 @@
   }
 
   // --- SW registration + relay ---------------------------------------------
-  // The SW (browse-sw.js) posts {type:'mesh-fetch'} with a MessageChannel port
+  // The SW (browse-sw.js) posts {type:'realorigin-fetch'} with a MessageChannel port
   // for each subresource; we relay to the helper and reply on that port.
   navigator.serviceWorker && window.addEventListener('message', function () {}); // noop guard
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', function (e) {
       var d = e.data || {};
-      if (d.type !== 'mesh-fetch' || !e.ports || !e.ports[0]) return;
+      if (d.type !== 'realorigin-fetch' || !e.ports || !e.ports[0]) return;
       var replyPort = e.ports[0];
       var r = d.req || {};
       var transfer = r.body ? [r.body] : [];

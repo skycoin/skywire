@@ -72,6 +72,8 @@ github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e h1:fyLB1qUtpMxPe
 github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e/go.mod h1:dp0q1zfKQmTaohUrPEPZbPExxBWLu9DyeaFxKUBnw6Y=
 github.com/0magnet/plot-go v0.0.0-20260821233907-fecd5fe3d0f1 h1:v7XQl9sfYVlGWUznPnxU+yiRax5RoDCMErOjS/q289Q=
 github.com/0magnet/plot-go v0.0.0-20260821233907-fecd5fe3d0f1/go.mod h1:ThCC6/zuD8XAalH8MfOTwIQAIodzZV+OneukgyyU/n8=
+github.com/0magnet/realorigin v0.1.1 h1:C5d6rRJiKkce96Vu6sr7uajb45qnc2P7jg9v+dhg1BM=
+github.com/0magnet/realorigin v0.1.1/go.mod h1:euBTK0AolYVm6OjiDS/MixVUJAKjya315czqqjMg7Go=
 github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf h1:3tImGgrBxM3/eC13YeT8WsT5B3E3dxmHtozvgo0xtpo=
 github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf/go.mod h1:IdyC3iqIKArn4KOl0a58dV2spH0PH6pLJKOZYB2kFR0=
 github.com/0magnet/termanim v0.0.0-20260823220926-60f3279a072f h1:ERQdvVBjLtHJSHuDOj3NaayEFINQL53Kfdhrzk5A6gs=

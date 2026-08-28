@@ -28,6 +28,9 @@ github.com/0magnet/cosmos-go
 # github.com/0magnet/plot-go v0.0.0-20260821233907-fecd5fe3d0f1
 ## explicit; go 1.25
 github.com/0magnet/plot-go
+# github.com/0magnet/realorigin v0.1.1
+## explicit; go 1.25
+github.com/0magnet/realorigin
 # github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf
 ## explicit; go 1.25.0
 github.com/0magnet/sh/v3/expand
