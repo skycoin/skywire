@@ -870,7 +870,7 @@ func (rg *RouteGroup) flushFECRepairs() {
 		return
 	}
 	for _, f := range frames {
-		pkt, perr := routing.MakeRepairPacket(rule.NextRouteID(), f.blockID, f.idx, f.symbol)
+		pkt, perr := routing.MakeRepairPacket(rule.NextRouteID(), f.blockID, f.idx, f.symLen, f.symbol)
 		if perr != nil {
 			continue
 		}
@@ -3380,7 +3380,7 @@ func (rg *RouteGroup) handleRepairPacket(packet routing.Packet) error {
 	if rg.mux == nil || !rg.mux.fecEnabled {
 		return nil
 	}
-	delivered := rg.mux.fecOnRecvRepair(packet.RepairBlockID(), packet.RepairIndex(), packet.RepairSymbol())
+	delivered := rg.mux.fecOnRecvRepair(packet.RepairBlockID(), packet.RepairIndex(), packet.RepairSymLen(), packet.RepairSymbol())
 	for _, d := range delivered {
 		if len(d) == 0 { // FEC padding frame — advances the frontier, not app data
 			continue
