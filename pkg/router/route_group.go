@@ -384,6 +384,10 @@ type MuxInfo struct {
 	MuxEnabled bool
 	// SACKEnabled is true when the peers negotiated SACK retx.
 	SACKEnabled bool
+	// HOLRetxEnabled is true when the peers negotiated CapHOLRetx (proactive
+	// head-of-line retransmit — the frontier-blocking seq is fast-retransmitted on
+	// the fastest leg after ~one fast-leg RTT instead of the reactive waits).
+	HOLRetxEnabled bool
 	// PerFrameNoise is true when both edges negotiated CapPerFrameNoise and the
 	// mux is sealing/opening each DATA frame under its own sequence-nonce (the
 	// inverse-multiplexer path, network.EncryptConn bypassed). False means the
@@ -454,6 +458,7 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 	if rg.mux != nil {
 		info.MuxEnabled = true
 		info.SACKEnabled = rg.mux.sackEnabled
+		info.HOLRetxEnabled = rg.mux.holRetxEnabled
 		info.Distribution = rg.mux.distributionMode().String()
 		info.ReorderPending = rg.mux.reorderPending()
 		info.ReorderGapAge = rg.mux.gapAge()
@@ -2448,7 +2453,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		}
 
 		rule := rg.fwd[i]
-		caps := routing.CapMux | routing.CapSACK
+		caps := routing.CapMux | routing.CapSACK | routing.CapHOLRetx
 		var packet routing.Packet
 		if pfn := rg.perFrameNoiseCap(encrypt); pfn != 0 {
 			msg, mErr := rg.nextPerFrameNoiseMsg()
@@ -2631,6 +2636,13 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 				if sack {
 					rg.logger.Debug("SACK retransmission enabled (both peers support CapSACK)")
 					go rg.servicePacketLoop("sack", rg.cfg.KeepAliveInterval/2, rg.sackServiceFn, nil)
+					// Proactive HoL retransmit reuses the SACK channel, so it is only
+					// enabled when SACK is too. Both peers must advertise CapHOLRetx;
+					// otherwise the group keeps the reactive SACK behavior.
+					if remoteCaps&routing.CapHOLRetx != 0 {
+						rg.mux.holRetxEnabled = true
+						rg.logger.Debug("Proactive HoL retransmit enabled (both peers support CapHOLRetx)")
+					}
 				}
 
 				// Per-frame noise negotiation (both edges advertised CapPerFrameNoise
@@ -2764,6 +2776,25 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 			go rg.sendSACK() //nolint:errcheck
 		}
 
+		// Proactive HoL nudge (CapHOLRetx). When the reorder frontier has stayed
+		// gap-blocked for ~one fastest-live-leg RTT (low floor of a few ms), promptly
+		// send the sender a SACK so it fast-retransmits the stuck frontier seq on a
+		// fast leg — bounding the stall to a fast-leg RTT instead of the reactive
+		// retxMinAge/reorderTimeout waits. Cheap-guarded (only when a gap is actually
+		// buffered) so the common in-order path pays nothing, and rate-limited to one
+		// nudge per fast-leg RTT via its own holSACKNano clock. Arrival-driven: the
+		// fast legs keep delivering out-of-order frames while blocked, so this fires
+		// promptly once the threshold passes without needing a tight timer.
+		if rg.mux.holRetxEnabled && rg.mux.reorderPending() > 0 {
+			rg.mu.Lock()
+			fastMs := rg.mux.fastestLegLatency(rg.tps)
+			rg.mu.Unlock()
+			interval := holPerSeqInterval(fastMs)
+			if rg.mux.gapAge() > holGapThreshold(fastMs) && rg.mux.shouldSendHolSACK(interval) {
+				go rg.sendSACK() //nolint:errcheck
+			}
+		}
+
 		for _, d := range delivered {
 			// Both rg.closed (local-initiated close) and
 			// rg.remoteClosed (remote-initiated close) must be
@@ -2844,7 +2875,24 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 	lastContig := packet.SACKLastContiguousSeq()
 	words := packet.SACKWords()
 
+	// Normal reactive retransmit: holes overdue past retxMinAge.
 	retxSeqs := rg.mux.processSACK(lastContig, words)
+
+	// Proactive HoL retransmit (CapHOLRetx): the frontier-blocking seq (and the
+	// next few contiguous holes) retransmitted NOW on the fastest leg, bypassing
+	// retxMinAge, per-seq rate-limited to one nudge per fast-leg RTT. No-op (nil)
+	// when HoL retx was not negotiated, so a peer without CapHOLRetx keeps the
+	// reactive-only path above. Merged with retxSeqs and de-duplicated so the same
+	// frontier seq is never sent twice for one SACK.
+	if rg.mux.holRetxEnabled {
+		rg.mu.Lock()
+		fastMs := rg.mux.fastestLegLatency(rg.tps)
+		rg.mu.Unlock()
+		if due := rg.mux.proactiveRetxSeqs(lastContig, words, fastMs, time.Now()); len(due) > 0 {
+			retxSeqs = mergeSeqs(retxSeqs, due)
+		}
+	}
+
 	if len(retxSeqs) == 0 {
 		return nil
 	}
@@ -2852,6 +2900,34 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 	rg.logger.Debugf("SACK: retransmitting %d packets", len(retxSeqs))
 
 	return rg.resendSeqs(retxSeqs)
+}
+
+// mergeSeqs returns the union of two seq lists, de-duplicated, so a proactive
+// HoL retransmit and a reactive SACK retransmit that name the same seq in one
+// SACK resend it only once. Order is not significant to resendSeqs (each seq is
+// selected onto the fastest leg independently), so a simple set union suffices.
+func mergeSeqs(a, b []uint32) []uint32 {
+	if len(a) == 0 {
+		return b
+	}
+	if len(b) == 0 {
+		return a
+	}
+	seen := make(map[uint32]struct{}, len(a)+len(b))
+	out := make([]uint32, 0, len(a)+len(b))
+	for _, s := range a {
+		if _, ok := seen[s]; !ok {
+			seen[s] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	for _, s := range b {
+		if _, ok := seen[s]; !ok {
+			seen[s] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // resendSeqs retransmits the given held sequences on the FASTEST live,

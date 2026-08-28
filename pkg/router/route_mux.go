@@ -141,6 +141,16 @@ type routeMux struct {
 	sackTracker *sackTracker // receiver: tracks received seqs for SACK generation
 	retxBuf     *retxBuffer  // sender: holds unACKed packets for retransmission
 
+	// Proactive head-of-line retransmit (see hol_retx.go). holRetxEnabled is true
+	// when both peers advertised CapHOLRetx (implies sackEnabled — it reuses the
+	// SACK wire message). When false the mux keeps today's purely reactive SACK
+	// behavior. holRetx is the sender-side per-seq rate limiter for proactive
+	// retransmits; holSACKNano rate-limits the receiver-side proactive HoL SACK
+	// (separate from lastSACKNano so it doesn't fight the window-ack SACK limiter).
+	holRetxEnabled bool
+	holRetx        *holRetxTracker
+	holSACKNano    int64 // atomic: UnixNano of the last proactive HoL SACK we sent
+
 	// Per-frame noise (inverse-mux). When CapPerFrameNoise is negotiated the
 	// RouteGroup installs these: seal AEAD-encrypts each outgoing frame under
 	// its sequence-nonce (in wrapPayload, before retx storage so retransmits
@@ -234,6 +244,9 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 		// window so a genuinely-lost sequence is still held for retransmit
 		// while the receiver is holding the gap open for it.
 		retxBuf: newRetxBuffer(reorderWindow),
+		// Proactive HoL retransmit tracker is always constructed; it is only
+		// consulted when holRetxEnabled is set at handshake (see hol_retx.go).
+		holRetx: newHolRetxTracker(),
 	}
 	// Default every mux to ECF (Earliest Completion First). It only spills a
 	// frame onto a slower leg once the fastest leg is saturated (a full BDP in
@@ -788,6 +801,22 @@ func (m *routeMux) shouldSendSACK() bool {
 		return false
 	}
 	return atomic.CompareAndSwapInt64(&m.lastSACKNano, prev, now)
+}
+
+// shouldSendHolSACK reports whether enough time has elapsed since the last
+// PROACTIVE HoL SACK to send another, rate-limited to about one fast-leg RTT
+// (interval) so a persistent frontier stall re-nudges the sender roughly once
+// per round-trip rather than on every arriving out-of-order packet. Uses its own
+// holSACKNano clock, independent of the window-ack SACK limiter (shouldSendSACK),
+// so the two never rate-limit each other out. Concurrency-safe: only the
+// goroutine that wins the CAS returns true.
+func (m *routeMux) shouldSendHolSACK(interval time.Duration) bool {
+	now := time.Now().UnixNano()
+	prev := atomic.LoadInt64(&m.holSACKNano)
+	if now-prev < int64(interval) {
+		return false
+	}
+	return atomic.CompareAndSwapInt64(&m.holSACKNano, prev, now)
 }
 
 // generateSACK returns the current SACK state for sending to the peer:
