@@ -91,6 +91,17 @@ const (
 	// and demote is hysteresis — it stops a leg hovering at the band edge from
 	// flip-flopping active/standby every interval.
 	bandAdmitRatio = 2.5
+	// bandDemoteRatioTight / bandAdmitRatioTight are the SAME hysteresis pair but
+	// tighter, used when the mux is in capacity (aggregation) mode. Aggregating a
+	// single stream across M active legs requires the arrivals to be near-in-order
+	// so the no-skip reorder frontier does not stall; a 3x active-band spread
+	// stalls it, the data-progress prune then sheds the laggards, and the active
+	// set collapses toward one leg (the observed capacity-mode collapse from 4
+	// active to 1). A ~2x active band keeps the stripe set homogeneous enough that
+	// the frontier holds and the prune never fires, so the multi-active set is
+	// HELD. Failover mode (1 active + standbys) is unaffected — it never stripes.
+	bandDemoteRatioTight = 2.0
+	bandAdmitRatioTight  = 1.6
 	// bandMinLegs: latency-band admission only runs with at least this many legs
 	// carrying a measured latency. Below it the median is not a meaningful cluster
 	// anchor, and the 1-2 leg pathologies are already handled by the sole-leg
@@ -1918,7 +1929,11 @@ type bandLeg struct {
 // pool must not be dumped into the active set (demotion to standby never dumps
 // the pool, so it is safe to run always). Pure (no locks / rg state) so it is
 // unit-tested directly. Never demotes the primary or the last active leg.
-func partitionLatencyBand(legs []bandLeg, manualMode bool) (demote, promote []int) {
+func partitionLatencyBand(legs []bandLeg, manualMode, tight bool) (demote, promote []int) {
+	demoteRatio, admitRatio := bandDemoteRatio, bandAdmitRatio
+	if tight {
+		demoteRatio, admitRatio = bandDemoteRatioTight, bandAdmitRatioTight
+	}
 	known := make([]float64, 0, len(legs))
 	for _, l := range legs {
 		if l.latMs > 0 {
@@ -1949,7 +1964,7 @@ func partitionLatencyBand(legs []bandLeg, manualMode bool) (demote, promote []in
 		slowerRatio := l.latMs / med // >1 when the leg is slower than the median
 		switch {
 		case !l.standby && !l.primary && active > 1 &&
-			(fasterRatio > bandDemoteRatio || slowerRatio > bandDemoteRatio):
+			(fasterRatio > demoteRatio || slowerRatio > demoteRatio):
 			demote = append(demote, l.idx)
 			active-- // never demote below one active leg
 		case manualMode && l.standby:
@@ -1957,7 +1972,7 @@ func partitionLatencyBand(legs []bandLeg, manualMode bool) (demote, promote []in
 			if fasterRatio > symm {
 				symm = fasterRatio
 			}
-			if symm <= bandAdmitRatio {
+			if symm <= admitRatio {
 				promote = append(promote, l.idx)
 				active++
 			}
@@ -1980,6 +1995,12 @@ func (rg *RouteGroup) enforceLatencyBand() {
 	}
 	rg.mu.Lock()
 	manual := !rg.standbyNewLegs
+	// In capacity (aggregation) mode the active legs stripe a single ordered
+	// stream, so the arrivals must stay near-in-order for the no-skip reorder
+	// frontier to advance; a tighter latency band keeps the held active set
+	// homogeneous and stops the frontier-stall → prune → collapse spiral. In
+	// ECF/failover mode the wider band is fine (only one leg carries data).
+	tight := rg.mux.distributionMode() == WeightModeCapacity
 	legs := make([]bandLeg, 0, len(rg.tps))
 	for i, tp := range rg.tps {
 		if tp == nil || tp.IsClosed() {
@@ -1994,7 +2015,7 @@ func (rg *RouteGroup) enforceLatencyBand() {
 	}
 	rg.mu.Unlock()
 
-	demote, promote := partitionLatencyBand(legs, manual)
+	demote, promote := partitionLatencyBand(legs, manual, tight)
 	for _, idx := range demote {
 		rg.logger.Infof("latency-band: parking leg %d (out-of-band latency) to keep the active stripe set homogeneous", idx)
 		rg.mux.setLegStandby(idx, true)
