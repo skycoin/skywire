@@ -102,24 +102,29 @@ func TestFECMuxUpToRErasures(t *testing.T) {
 		}
 	}
 
-	// The caching path itself must be correct: one Reconstruct fills all R holes;
-	// verify every dropped payload comes back right from a single decode.
-	reCache := newFECReassembler(k, r, fecSymLen)
+	// Multi-erasure on ONE reassembler: every dropped sibling must reconstruct
+	// INDEPENDENTLY and correctly from the same block. Reconstruct deliberately
+	// does NOT cache decoded siblings back as present (that stranded uncached
+	// siblings and corrupted the block via Decode's in-place mutation — the
+	// multi-erasure bug the end-to-end test exposed), so a second Reconstruct on
+	// the same block re-decodes from the pristine received symbols and succeeds.
+	reMulti := newFECReassembler(k, r, fecSymLen)
 	for seq := 0; seq < k; seq++ {
 		if !drop[seq] {
-			reCache.RecordData(uint32(seq), payloads[seq])
+			reMulti.RecordData(uint32(seq), payloads[seq])
 		}
 	}
 	for _, rf := range repairs {
-		reCache.RecordRepair(rf.blockID, rf.idx, rf.symbol)
+		reMulti.RecordRepair(rf.blockID, rf.idx, rf.symbol)
 	}
-	if _, ok := reCache.Reconstruct(1); !ok {
-		t.Fatal("cache-path: first reconstruct failed")
-	}
-	// After the first decode, siblings 2 and 4 are cached present; a direct
-	// Reconstruct now reports them already-present (no re-decode needed).
-	if _, ok := reCache.Reconstruct(2); ok {
-		t.Fatal("cache-path: sibling should already be present after sibling decode")
+	for target := range drop {
+		got, ok := reMulti.Reconstruct(uint32(target))
+		if !ok {
+			t.Fatalf("multi-erasure: sibling seq %d failed to reconstruct independently", target)
+		}
+		if !bytes.Equal(got, payloads[target]) {
+			t.Fatalf("multi-erasure: sibling seq %d payload mismatch (in-place-mutation regression?)", target)
+		}
 	}
 
 	// Fresh block, drop R+1 data frames, supply only R repairs → cannot recover.

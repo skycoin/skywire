@@ -299,8 +299,9 @@ func (f *fecReassembler) RecordRepair(blk uint32, idx uint8, symbol []byte) {
 // Reconstruct attempts to recover the plaintext for a missing seq. It succeeds
 // only when the seq's block already holds ≥K of its K+R symbols AND the seq's
 // own data slot is not already present. Returns (plaintext, true) on success.
-// The reconstructed data symbol is also recorded into the block so a subsequent
-// sibling reconstruction in the same block reuses it.
+// It is idempotent and side-effect-free on the block state (decodes from COPIES
+// of the received symbols), so each missing frontier frame in a multi-erasure
+// block reconstructs correctly and independently.
 func (f *fecReassembler) Reconstruct(seq uint32) ([]byte, bool) {
 	blk := seq / uint32(f.k)
 	idx := int(seq % uint32(f.k))
@@ -310,11 +311,19 @@ func (f *fecReassembler) Reconstruct(seq uint32) ([]byte, bool) {
 	if bs == nil || bs.got < f.k || bs.present[idx] {
 		return nil, false
 	}
-	// Build recv/present of exactly K+R slots for the coder.
+	// Build recv/present of exactly K+R slots for the coder. IMPORTANT: pass
+	// COPIES of the stored symbols, never bs.slots[i] directly — Decode/gfSolve
+	// solves in place and MUTATES the rhs symbol vectors, which would corrupt the
+	// block's retained received symbols and make a subsequent sibling
+	// reconstruction in the same block decode from garbage (the multi-erasure
+	// corruption the end-to-end test exposed). Copying keeps bs.slots pristine so
+	// each missing frontier frame decodes correctly and independently.
 	recv := make([][]byte, f.k+f.r)
 	for i := 0; i < f.k+f.r; i++ {
 		if bs.present[i] {
-			recv[i] = bs.slots[i]
+			cp := make([]byte, f.symLen)
+			copy(cp, bs.slots[i])
+			recv[i] = cp
 		} else {
 			recv[i] = make([]byte, f.symLen) // ignored (present=false)
 		}
@@ -323,15 +332,14 @@ func (f *fecReassembler) Reconstruct(seq uint32) ([]byte, bool) {
 	if err != nil {
 		return nil, false
 	}
-	// Cache all reconstructed data slots so sibling gaps in this block are free.
-	for j := 0; j < f.k; j++ {
-		if !bs.present[j] {
-			bs.present[j] = true
-			bs.got++
-			bs.dataGot++
-			bs.slots[j] = data[j]
-		}
-	}
+	// Deliberately DO NOT cache the reconstructed data slots back as "present".
+	// Caching would let a sibling gap in the same block decode for free, but it
+	// would also make a later Reconstruct(sibling) short-circuit on present[idx]
+	// and return false WITHOUT the sibling ever being inserted into the reorder
+	// buffer — the frontier would then stall on it forever (the multi-erasure
+	// bug). Decoding is idempotent and cheap for these block sizes, and the
+	// received data+repair symbols remain >= K, so each missing frontier frame is
+	// decoded independently and RETURNED to the caller for insertion.
 	return desymbolize(data[idx]), true
 }
 
