@@ -36,6 +36,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"strconv"
 
@@ -47,12 +48,15 @@ import (
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cliout/cliproxy"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 var (
-	muxOpsApp      string
-	muxOpsSrcPort  uint16
-	muxAddRouteSrc string
+	muxOpsApp         string
+	muxOpsSrcPort     uint16
+	muxAddRouteSrc    string
+	muxSwitchRouteSrc string
+	muxSwitchTimeout  time.Duration
 )
 
 func init() {
@@ -63,6 +67,11 @@ func init() {
 	muxRmCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
 	addMuxSub(muxAddCmd, "mux-add")
 	addMuxSub(muxRmCmd, "mux-rm")
+	muxSwitchCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route to switch")
+	muxSwitchCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
+	muxSwitchCmd.Flags().StringVar(&muxSwitchRouteSrc, "route", "-", "new route JSON file ('-' = stdin); shape is 'cli route calc --json' output")
+	muxSwitchCmd.Flags().DurationVar(&muxSwitchTimeout, "ready-timeout", 20*time.Second, "how long to wait for the new leg to carry before retiring the old primary")
+	RootCmd.AddCommand(muxSwitchCmd)
 	addMuxSub(muxModeCmd, "mux-mode")
 	addMuxSub(muxCapCmd, "mux-cap")
 	addMuxSub(muxWidthCmd, "mux-width")
@@ -254,6 +263,140 @@ Example:
 			Op: "remove", App: muxOpsApp, TransportID: fmt.Sprint(tpID),
 		}))
 	},
+}
+
+var muxSwitchCmd = &cobra.Command{
+	Use:   "switch",
+	Short: "Switch a proxy session onto a different route in flight, without dropping the app",
+	Long: `Move the session's PRIMARY route to a caller-supplied one, seamlessly:
+the SOCKS5 connection the app holds is never dropped. Works on a
+single-route (non-mux) session as well as a mux'd one.
+
+Make-before-break: the new route is attached as a leg FIRST, this
+command WAITS for it to become ready (alive and out of standby, i.e.
+actually carrying), and only THEN retires the old primary. The route
+group — and the noise/yamux session riding on it — is never torn
+down; the new leg transparently takes over the primary slot (the same
+re-home a leg death triggers), so the byte stream to the app continues
+uninterrupted.
+
+The new route is read as JSON (default stdin; --route <file>) in the
+{forward, reverse} shape 'cli route calc --json' emits. Its first
+transport must differ from the current primary's.
+
+Example:
+  # switch onto a fresh multihop route
+  skywire cli route calc <exit-pk> --count 1 --json | skywire cli proxy switch
+  # switch onto a DIRECT (1-hop) route
+  skywire cli route calc <exit-pk> --min 1 --max 1 --json | skywire cli proxy switch`,
+	Args:                  cobra.NoArgs,
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, _ []string) {
+		pair, err := readRoutePair(muxSwitchRouteSrc)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if len(pair.Forward) == 0 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("new route has no forward hops"))
+		}
+		newTpID := pair.Forward[0].TpID
+
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+		defer rpcClient.Close() //nolint:errcheck,gosec
+
+		// Identify the current primary leg BEFORE attaching the new one.
+		rg, err := muxSwitchSelectRG(rpcClient)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		oldPrimary, err := primaryLegTpID(rg)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if fmt.Sprint(newTpID) == oldPrimary.String() {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("new route's first transport (%s) is already the current primary; nothing to switch", oldPrimary))
+		}
+
+		// MAKE: attach the new route as a leg alongside the current one.
+		if err := rpcClient.AddMuxRoute(muxOpsApp, pair.Forward, pair.Reverse, muxOpsSrcPort); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("attach new route (current route unchanged): %w", err))
+		}
+
+		// WAIT for the new leg to carry, so the break below is seamless.
+		if err := muxSwitchWaitReady(rpcClient, newTpID, muxSwitchTimeout); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("new leg did not become ready — old primary kept (run 'proxy mux rm %s' to drop the half-attached leg): %w", newTpID, err))
+		}
+
+		// BREAK: retire the old primary; the new leg re-homes into index 0 and
+		// the mux carries the stream on across the swap, so the app never drops.
+		if err := rpcClient.RemoveMuxRoute(muxOpsApp, oldPrimary, muxOpsSrcPort); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("new route ready but retiring old primary %s failed — run 'proxy mux rm %s' to finish the switch: %w", oldPrimary, oldPrimary, err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{
+			Op: "switch", App: muxOpsApp, Hops: len(pair.Forward),
+			TransportID: fmt.Sprint(newTpID),
+		}))
+	},
+}
+
+// muxSwitchSelectRG fetches the app's mux route groups and selects the target
+// one (by --rg src_port when set, else the sole group).
+func muxSwitchSelectRG(rpcClient visor.API) (muxRouteGroupInfo, error) {
+	infos, err := rpcClient.RouteGroupMuxInfo(muxOpsApp)
+	if err != nil {
+		return muxRouteGroupInfo{}, fmt.Errorf("RouteGroupMuxInfo: %w", err)
+	}
+	raw, _ := json.Marshal(infos) //nolint:errcheck
+	var rgs []muxRouteGroupInfo
+	_ = json.Unmarshal(raw, &rgs) //nolint:errcheck
+	if len(rgs) == 0 {
+		return muxRouteGroupInfo{}, fmt.Errorf("no active route groups for app=%s (start the proxy first)", muxOpsApp)
+	}
+	return selectAutoRG(rgs, muxOpsSrcPort)
+}
+
+// primaryLegTpID returns the transport id of the primary leg (lowest Index) —
+// the leg `switch` retires once the new route is carrying.
+func primaryLegTpID(rg muxRouteGroupInfo) (uuid.UUID, error) {
+	if len(rg.Legs) == 0 {
+		return uuid.Nil, fmt.Errorf("route group for app=%s has no legs", muxOpsApp)
+	}
+	primary := rg.Legs[0]
+	for _, l := range rg.Legs[1:] {
+		if l.Index < primary.Index {
+			primary = l
+		}
+	}
+	id, err := uuid.Parse(primary.TransportID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("parse primary transport id %q: %w", primary.TransportID, err)
+	}
+	return id, nil
+}
+
+// muxSwitchWaitReady polls until the leg carried over newTpID is present,
+// alive, and out of warm-standby (selectable for sending), or timeout elapses.
+// This is what keeps the switch seamless: the old primary is not retired until
+// the new leg can carry the stream.
+func muxSwitchWaitReady(rpcClient visor.API, newTpID uuid.UUID, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	want := newTpID.String()
+	for {
+		if rg, err := muxSwitchSelectRG(rpcClient); err == nil {
+			for _, l := range rg.Legs {
+				if l.TransportID == want && l.Alive && !l.Standby {
+					return nil
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out after %s waiting for new leg %s to become ready", timeout, want)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
 var muxModeCmd = &cobra.Command{
