@@ -29,6 +29,7 @@ func TestFECMuxWiredReconstructsSlowLegFrame(t *testing.T) {
 	send.seal = func(seq uint32, pt []byte) []byte { return nI.SealWithNonce(uint64(seq), pt) }
 	send.fecEnabled = true
 	send.fecInit()
+	send.growLegs(2) // multi-leg so FEC activates (single-leg is intentionally skipped)
 	require.True(t, send.fecEnabled, "sender FEC must initialize")
 
 	recv := newRouteMux(log, true)
@@ -122,6 +123,7 @@ func TestFECMuxTailFlushProtectsPartialBlock(t *testing.T) {
 	send.seal = func(seq uint32, pt []byte) []byte { return nI.SealWithNonce(uint64(seq), pt) }
 	send.fecEnabled = true
 	send.fecInit()
+	send.growLegs(2) // multi-leg so FEC activates (single-leg is intentionally skipped)
 
 	recv := newRouteMux(log, true)
 	recv.open = func(seq uint32, ct []byte) ([]byte, error) { return nR.OpenWithNonce(uint64(seq), ct) }
@@ -198,4 +200,22 @@ func TestFECMuxTailFlushProtectsPartialBlock(t *testing.T) {
 	for i := 0; i < jReal; i++ {
 		require.Equal(t, plain[i], got[i], "real tail frame %d intact (FEC-reconstructed where withheld)", i)
 	}
+}
+
+// TestFECMuxSingleLegNoRepair verifies FEC is skipped on a single-leg group even
+// when negotiated: repair on one leg is pure overhead with no HoL to remove, so
+// no repair frames are produced (only a multi-leg group codes).
+func TestFECMuxSingleLegNoRepair(t *testing.T) {
+	log := logging.NewMasterLogger().PackageLogger("fec-singleleg-test")
+	send := newRouteMux(log, true)
+	send.fecEnabled = true
+	send.fecInit()
+	send.growLegs(1) // single leg → FEC must not emit repair
+
+	const routeID = routing.RouteID(13)
+	for i := 0; i < fecDefaultK*3; i++ {
+		_, _, err := send.wrapPayload(routeID, []byte(fmt.Sprintf("f-%02d", i)))
+		require.NoError(t, err)
+	}
+	require.Empty(t, send.fecDrainRepairs(), "single-leg group must not emit FEC repair frames")
 }

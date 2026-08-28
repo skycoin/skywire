@@ -382,6 +382,14 @@ func (m *routeMux) fecOnSend(seq uint32, wire []byte) {
 	if !m.fecEnabled || m.fecStriper == nil {
 		return
 	}
+	// FEC only helps a MULTI-leg group — repair rescues a straggler striped onto a
+	// slow leg. On a single active leg there is no head-of-line wall to remove, so
+	// coding would be pure ~R/K bandwidth overhead for zero benefit (the common
+	// mux=1 proxy). Skip it; when a second leg is added mid-stream the striper
+	// resumes on the next frame and self-realigns on the block boundary.
+	if m.activeLegCount() < 2 {
+		return
+	}
 	frames := m.fecStriper.Add(seq, wire)
 	if len(frames) == 0 {
 		return
