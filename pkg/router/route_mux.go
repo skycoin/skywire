@@ -550,6 +550,41 @@ func (m *routeMux) setLegStandby(idx int, standby bool) {
 	m.legMu.Unlock()
 }
 
+// swapLegs exchanges the mux's per-leg state (counters, readiness, standby
+// marker) between two leg indices so the primary slot (0) can be RE-ELECTED
+// onto a healthier leg without tearing down any route. The caller (RouteGroup.
+// reelectPrimary) swaps the parallel tps[]/fwd[]/rvs[] entries in the same
+// critical section, so leg accounting and rules stay attached to their own
+// transport across the swap. After the swap the new primary (whatever leg landed
+// at index 0) is forced ready and out of standby — it is chosen from the active,
+// carrying set, so this is belt-and-suspenders, not a state change. Bounds-
+// checked; a no-op if either index is out of range or i == j.
+func (m *routeMux) swapLegs(i, j int) {
+	if i == j || i < 0 || j < 0 {
+		return
+	}
+	m.legMu.Lock()
+	defer m.legMu.Unlock()
+	if i < len(m.legs) && j < len(m.legs) {
+		m.legs[i], m.legs[j] = m.legs[j], m.legs[i]
+	}
+	if i < len(m.ready) && j < len(m.ready) {
+		m.ready[i], m.ready[j] = m.ready[j], m.ready[i]
+	}
+	if i < len(m.standby) && j < len(m.standby) {
+		m.standby[i], m.standby[j] = m.standby[j], m.standby[i]
+	}
+	// Re-assert the leg-0 invariants: the primary is always ready and never
+	// standby. (The re-elected leg was active and carrying, so this only guards
+	// against a stale flag.)
+	if len(m.ready) > 0 {
+		m.ready[0] = true
+	}
+	if len(m.standby) > 0 {
+		m.standby[0] = false
+	}
+}
+
 // isLegStandby reports whether leg idx is a warm standby. Bounds-checked.
 func (m *routeMux) isLegStandby(idx int) bool {
 	if idx < 0 {
