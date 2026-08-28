@@ -62,6 +62,10 @@ type HealthStatsProvider interface {
 	IsPublicAutoconnectRunning() bool
 	// GetTransportCounts returns the count of STCPR and SUDPH transports (excluding "user" labeled).
 	GetTransportCounts() (stcpr, sudph int)
+	// GetTransportTypeCounts returns a count of live transports keyed by their
+	// actual network type (excluding "user" labeled) — every present type, not
+	// just stcpr/sudph.
+	GetTransportTypeCounts() map[string]int
 	// GetNetworkTypes returns the network types used by the visor.
 	GetNetworkTypes() []string
 }
@@ -513,6 +517,7 @@ func (api *API) health(c *gin.Context) {
 	if api.healthStatsProvider != nil {
 		resp.PublicAutoconnect = api.healthStatsProvider.IsPublicAutoconnectRunning()
 		resp.StcprCount, resp.SudphCount = api.healthStatsProvider.GetTransportCounts()
+		resp.TransportCounts = api.healthStatsProvider.GetTransportTypeCounts()
 		resp.NetworkTypes = api.healthStatsProvider.GetNetworkTypes()
 	}
 
