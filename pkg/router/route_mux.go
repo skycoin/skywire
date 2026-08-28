@@ -162,6 +162,22 @@ type routeMux struct {
 	seal func(seq uint32, plaintext []byte) []byte
 	open func(seq uint32, ciphertext []byte) ([]byte, error)
 
+	// Forward error correction (fec.go / fec_mux.go). fecEnabled is true when
+	// BOTH peers advertised CapFEC (implies CapMux). FEC operates in the WIRE
+	// (post-seal) domain: the striper batches K on-wire data-frame payloads per
+	// block and emits R repair frames (queued in fecRepairQ for the send loop to
+	// schedule on a fast leg); the reassembler retains on-wire block symbols and,
+	// when the reorder frontier is gap-blocked, reconstructs the missing on-wire
+	// frame from any K of the block's K+R symbols — which is then opened via the
+	// normal per-frame path and inserted, so recovery is bound by the FAST legs
+	// instead of the slow leg. All nil/false unless negotiated (inert — the
+	// pre-integration behavior is preserved byte-for-byte when fecEnabled=false).
+	fecEnabled     bool
+	fecStriper     *fecStriper
+	fecReassembler *fecReassembler
+	fecRepairMu    sync.Mutex
+	fecRepairQ     []fecRepairFrame
+
 	// Per-leg traffic counters parallel to the rg's tps[] / fwd[] /
 	// rvs[] slices. Mutated atomically. Read via Snapshot().
 	// legMu guards the slice itself (extended on AppendRoute), not
@@ -765,6 +781,11 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte) (routing.Pa
 		m.retxBuf.Store(seq, data) //nolint:errcheck
 	}
 
+	// FEC: feed the on-wire (post-seal) payload to the striper. A completed block
+	// queues R repair frames for the send loop (RouteGroup.write) to schedule on a
+	// fast leg. Inert unless CapFEC was negotiated.
+	m.fecOnSend(seq, data)
+
 	return packet, seq, nil
 }
 
@@ -772,6 +793,12 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte) (routing.Pa
 // and returns any payloads that are now deliverable in order.
 // Also tracks the sequence for SACK generation.
 func (m *routeMux) deliverData(seq uint32, data []byte) (delivered [][]byte, gapDetected bool) {
+	// FEC: record the on-wire (pre-open) payload so a sibling in this block can be
+	// reconstructed if it is late/lost on a slow leg. Inert unless CapFEC
+	// negotiated. Must run BEFORE open — reconstruction reproduces the on-wire
+	// frame, which is then opened via the same path below.
+	m.fecOnRecvData(seq, data)
+
 	// Per-frame AEAD: open the frame under its sequence-nonce before it enters
 	// the reorder buffer. A frame that fails to open (tamper, or a stale
 	// duplicate whose seq the peer reused after a rekey) is dropped, exactly as
@@ -798,6 +825,16 @@ func (m *routeMux) deliverData(seq uint32, data []byte) (delivered [][]byte, gap
 	// Sync SACK tracker with reorder buffer delivery state
 	if m.sackEnabled && m.sackTracker != nil {
 		m.sackTracker.AdvanceContiguous(m.reorderBuf.NextSeq())
+	}
+
+	// FEC: if the frontier is now gap-blocked but this frame completed a block's
+	// K-of-(K+R) quorum, reconstruct the stuck frontier frame(s) and append them
+	// to the delivered run so they reach the app in order — no wait on the slow
+	// leg. Inert unless CapFEC negotiated.
+	if m.fecEnabled {
+		if extra := m.fecTryAdvance(); len(extra) > 0 {
+			delivered = append(delivered, extra...)
+		}
 	}
 
 	return delivered, gapDetected
