@@ -25,7 +25,7 @@ github.com/0magnet/coloredcobra
 # github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e
 ## explicit; go 1.24
 github.com/0magnet/cosmos-go
-# github.com/0magnet/plot-go v0.0.0-20260821233907-fecd5fe3d0f1
+# github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408
 ## explicit; go 1.25
 github.com/0magnet/plot-go
 # github.com/0magnet/realorigin v0.1.1
@@ -39,8 +39,8 @@ github.com/0magnet/sh/v3/internal
 github.com/0magnet/sh/v3/interp
 github.com/0magnet/sh/v3/pattern
 github.com/0magnet/sh/v3/syntax
-# github.com/0magnet/termanim v0.0.0-20260823220926-60f3279a072f
-## explicit; go 1.24.0
+# github.com/0magnet/termanim v0.0.0-20260827230242-7dd03f4a292e
+## explicit; go 1.25.0
 github.com/0magnet/termanim/canvas
 github.com/0magnet/termanim/matrix
 github.com/0magnet/termanim/matrix/backdrop
@@ -166,7 +166,7 @@ github.com/blang/semver/v4
 # github.com/bytedance/gopkg v0.1.4
 ## explicit; go 1.18
 github.com/bytedance/gopkg/lang/dirtmake
-# github.com/bytedance/sonic v1.15.2
+# github.com/bytedance/sonic v1.15.3
 ## explicit; go 1.18
 github.com/bytedance/sonic
 github.com/bytedance/sonic/ast
@@ -419,6 +419,13 @@ github.com/gdamore/tcell/v2/terminfo/x/xfce
 github.com/gdamore/tcell/v2/terminfo/x/xterm
 github.com/gdamore/tcell/v2/terminfo/x/xterm_ghostty
 github.com/gdamore/tcell/v2/terminfo/x/xterm_kitty
+# github.com/gdamore/tcell/v3 v3.4.2
+## explicit; go 1.25.0
+github.com/gdamore/tcell/v3
+github.com/gdamore/tcell/v3/color
+github.com/gdamore/tcell/v3/internal/widthutil
+github.com/gdamore/tcell/v3/tty
+github.com/gdamore/tcell/v3/vt
 # github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 ## explicit
 github.com/gen2brain/dlgs
@@ -842,7 +849,7 @@ github.com/pierrec/lz4/v4/internal/xxh32
 # github.com/pion/datachannel v1.6.2
 ## explicit; go 1.24.0
 github.com/pion/datachannel
-# github.com/pion/dtls/v3 v3.1.5
+# github.com/pion/dtls/v3 v3.1.6
 ## explicit; go 1.24.0
 github.com/pion/dtls/v3
 github.com/pion/dtls/v3/internal/ciphersuite
@@ -938,7 +945,7 @@ github.com/pion/turn/v5/internal/client
 github.com/pion/turn/v5/internal/ipnet
 github.com/pion/turn/v5/internal/proto
 github.com/pion/turn/v5/internal/server
-# github.com/pion/webrtc/v4 v4.2.18
+# github.com/pion/webrtc/v4 v4.2.19
 ## explicit; go 1.24.0
 github.com/pion/webrtc/v4
 github.com/pion/webrtc/v4/internal/fmtp
@@ -975,11 +982,11 @@ github.com/prometheus/client_model/go
 ## explicit; go 1.25.0
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/model
-# github.com/prometheus/procfs v0.21.1
+# github.com/prometheus/procfs v0.22.0
 ## explicit; go 1.25.0
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
-github.com/prometheus/procfs/internal/util
+github.com/prometheus/procfs/internal/parsers
 # github.com/pterm/pterm v0.12.83
 ## explicit; go 1.24.0
 github.com/pterm/pterm
@@ -1056,7 +1063,7 @@ github.com/shoenig/go-m1cpu
 # github.com/shopspring/decimal v1.4.0
 ## explicit; go 1.10
 github.com/shopspring/decimal
-# github.com/sirupsen/logrus v1.10.1
+# github.com/sirupsen/logrus v1.10.2
 ## explicit; go 1.23
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
@@ -1351,7 +1358,7 @@ go.etcd.io/bbolt
 go.etcd.io/bbolt/errors
 go.etcd.io/bbolt/internal/common
 go.etcd.io/bbolt/internal/freelist
-# go.mongodb.org/mongo-driver/v2 v2.8.1
+# go.mongodb.org/mongo-driver/v2 v2.8.2
 ## explicit; go 1.19
 go.mongodb.org/mongo-driver/v2/bson
 go.mongodb.org/mongo-driver/v2/internal/binaryutil
@@ -1520,10 +1527,10 @@ golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
 # google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa
 ## explicit; go 1.25.0
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5
 ## explicit; go 1.25.0
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.83.1
+# google.golang.org/grpc v1.83.2
 ## explicit; go 1.25.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes
@@ -1656,7 +1663,7 @@ gorm.io/gorm/utils
 # howett.net/plist v1.0.2-0.20250314012144-ee69052608d9
 ## explicit; go 1.12
 howett.net/plist
-# modernc.org/libc v1.75.5
+# modernc.org/libc v1.75.6
 ## explicit; go 1.25.0
 modernc.org/libc
 modernc.org/libc/errno

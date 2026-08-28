@@ -25,7 +25,7 @@ func TestCopyNIdle_ProgressNeverTimesOut(t *testing.T) {
 
 	go func() {
 		for i := 0; i < chunks; i++ {
-			_ = c2.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			_ = c2.SetWriteDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck // test writer deadline is best-effort
 			if _, err := c2.Write(chunk); err != nil {
 				return
 			}

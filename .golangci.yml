@@ -107,7 +107,7 @@ linters:
       # fail — so this is a platform-stub false positive, not a dead branch.
       - linters:
           - staticcheck
-        text: "SA4023:"
+        text: "SA4023"
         path: "(pkg/vpn/|pkg/vpnrouter/meshgw/|cmd/apps/vpn-router/)"
       # require.NoError-then-use pattern in these tests: staticcheck can't
       # prove the pointer is non-nil after the error check (SA5011), but the

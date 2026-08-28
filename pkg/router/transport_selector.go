@@ -839,7 +839,7 @@ func ecfPick(legs []ecfLegState, waiting bool, waitOut *bool) int {
 		if !legs[i].ready {
 			continue
 		}
-		if xf < 0 || ecfBetterRTT(legs[i], legs[xf]) {
+		if xf < 0 || ecfBetterRTT(legs[i], legs[xf]) { //nolint:gosec // xf is a valid in-range leg index or <0
 			xf = i
 		}
 	}
@@ -862,7 +862,7 @@ func ecfPick(legs []ecfLegState, waiting bool, waitOut *bool) int {
 		if i == xf || !legs[i].ready || ecfSaturated(legs[i]) {
 			continue
 		}
-		if xs < 0 || ecfBetterRTT(legs[i], legs[xs]) {
+		if xs < 0 || ecfBetterRTT(legs[i], legs[xs]) { //nolint:gosec // xs is a valid in-range leg index or <0
 			xs = i
 		}
 	}

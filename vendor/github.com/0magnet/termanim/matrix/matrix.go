@@ -39,7 +39,7 @@ package matrix
 import (
 	"math/rand"
 
-	"github.com/gdamore/tcell/v2"
+	"github.com/gdamore/tcell/v3"
 
 	"github.com/0magnet/termanim/canvas"
 )
@@ -409,14 +409,14 @@ func (m *Matrix) draw(screen tcell.Screen) {
 		for y := 0; y < m.rows; y++ {
 			c, ok := m.cellAt(x, y)
 			if !ok {
-				screen.SetContent(x, y, ' ', nil, tcell.StyleDefault)
+				screen.Put(x, y, canvas.Blank, tcell.StyleDefault) //nolint:errcheck // one cell cannot fail
 				continue
 			}
 			st := tcell.StyleDefault.Foreground(m.Palette[c.Intensity])
 			if c.Hot {
 				st = st.Bold(true)
 			}
-			screen.SetContent(x, y, c.Rune, nil, st)
+			canvas.PutRune(screen, x, y, c.Rune, st)
 		}
 	}
 }
