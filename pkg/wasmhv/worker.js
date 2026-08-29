@@ -145,6 +145,16 @@
     try { broadcast({ t: 'proxylog', winId: String(winId == null ? '' : winId), line: String(line == null ? '' : line) }); } catch (e) { /* ignore */ }
   };
 
+  // Freeze-recovery bridge. When a wake finds the keepalive heartbeat stale (the
+  // SharedWorker was frozen), the wasm visor calls
+  // globalThis.__skywireProxyResume(recovering, gapMs) — true when a suspension is
+  // detected, false once the proxy is re-warmed. Broadcast it to every tab as
+  // {t:'proxy-resume'} so hv-boot.js shows/clears a small corner toast telling the
+  // operator the visor was suspended (not broken) and is re-establishing.
+  self.__skywireProxyResume = function (recovering, gapMs) {
+    try { broadcast({ t: 'proxy-resume', on: !!recovering, gap: Number(gapMs) || 0 }); } catch (e) { /* ignore */ }
+  };
+
   // Variant (go|tinygo) arrives on this worker's URL (hv-boot.js appends it —
   // workers can't read localStorage). It selects BOTH the loader and the blob,
   // which must match toolchains. Empty = the server default.

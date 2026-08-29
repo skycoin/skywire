@@ -206,6 +206,38 @@
     var d = document.getElementById('skywire-connecting-notice');
     if (d && d.parentNode) d.parentNode.removeChild(d);
   }
+
+  // --- "visor resumed from background" status (non-blocking) ---
+  //
+  // Shown when the worker reports (via {t:'proxy-resume', on:true}) that a wake
+  // found its keepalive heartbeat stale — i.e. Chromium had FROZEN the background
+  // SharedWorker, suspending its timers, so the skysocks-lite routes went silently
+  // dead during the idle period. A small corner toast (same idiom as the
+  // connecting notice) tells the operator the visor was suspended, not broken, and
+  // is re-establishing the proxy. Cleared by {t:'proxy-resume', on:false} once an
+  // active exit is warm again, or by a safety timeout so a stalled recovery can't
+  // leave the toast up forever.
+  var resumeNoticeTimer = null;
+  function showResumeNotice() {
+    function add() {
+      if (document.getElementById('skywire-resume-notice')) return;
+      var d = document.createElement('div');
+      d.id = 'skywire-resume-notice';
+      d.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:2147483646;background:rgba(31,25,15,.94);color:#f0d9b5;' +
+        'font:12px/1.5 system-ui,sans-serif;padding:6px 12px;border-radius:6px;border:1px solid #6b5324;box-shadow:0 1px 4px rgba(0,0,0,.4)';
+      d.textContent = 'Visor resumed from background — re-establishing proxy…';
+      document.body.appendChild(d);
+    }
+    if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
+    try { clearTimeout(resumeNoticeTimer); } catch (e) {}
+    resumeNoticeTimer = setTimeout(hideResumeNotice, 120000); // safety: never linger past 2 min
+  }
+  function hideResumeNotice() {
+    try { clearTimeout(resumeNoticeTimer); } catch (e) {}
+    resumeNoticeTimer = null;
+    var d = document.getElementById('skywire-resume-notice');
+    if (d && d.parentNode) d.parentNode.removeChild(d);
+  }
   function becomeLeader(name) {
     if (!(navigator.locks && navigator.locks.request)) {
       try { console.log('[hv-boot] Web Locks unsupported; single-instance guard disabled'); } catch (e) {}
@@ -311,6 +343,11 @@
             // browse.js's per-window pane and the mesh browser's live interstitial.
             try { if (typeof self.__skywireProxyLog === 'function') { self.__skywireProxyLog(m.winId, m.line); } } catch (e) {}
             break;
+          case 'proxy-resume':
+            // The worker was frozen in the background and, on wake, found its
+            // skysocks-lite heartbeat stale — show/clear the "resuming" toast.
+            try { if (m.on) { showResumeNotice(); } else { hideResumeNotice(); } } catch (e) {}
+            break;
           case 'up':
             settled = true;
             hideConnectingNotice();
@@ -369,6 +406,18 @@
       // unloading so it can re-elect the agent / drop the port promptly.
       function reportVis() {
         try { port.postMessage({ t: 'vis', state: (document.visibilityState || 'visible') }); } catch (e) {}
+        // Becoming visible means the SharedWorker just unfroze (Chromium freezes a
+        // background SharedWorker + suspends its timers, so the skysocks-lite
+        // keepalive/pool-warm loops stopped and the active + standby routes went
+        // silently dead during the idle period). Nudge the worker to run a liveness
+        // sweep + re-warm NOW so recovery happens in the background instead of as a
+        // user-visible cold start on the next fetch.
+        try {
+          if ((document.visibilityState || 'visible') === 'visible' &&
+              self.skywireVisor && self.skywireVisor.proxyWake) {
+            self.skywireVisor.proxyWake();
+          }
+        } catch (e) {}
       }
       try {
         document.addEventListener('visibilitychange', reportVis);
@@ -430,6 +479,11 @@
             // the console/log channel). Hand it to the page's proxy-log sink —
             // browse.js's per-window pane and the mesh browser's live interstitial.
             try { if (typeof self.__skywireProxyLog === 'function') { self.__skywireProxyLog(m.winId, m.line); } } catch (e) {}
+            break;
+          case 'proxy-resume':
+            // The worker was frozen in the background and, on wake, found its
+            // skysocks-lite heartbeat stale — show/clear the "resuming" toast.
+            try { if (m.on) { showResumeNotice(); } else { hideResumeNotice(); } } catch (e) {}
             break;
           case 'up':
             clearTimeout(upTimer);

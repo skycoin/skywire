@@ -262,6 +262,7 @@ func main() {
 		"proxyInstances":     js.FuncOf(jsProxyInstances),
 		"setProxyExit":       js.FuncOf(jsSetProxyExit),
 		"proxyKillActive":    js.FuncOf(jsProxyKillActive),
+		"proxyWake":          js.FuncOf(jsProxyWake),
 		"proxyBind":          js.FuncOf(jsProxyBind),
 		"proxyConsumers":     js.FuncOf(jsProxyConsumers),
 		"visorStats":         js.FuncOf(jsVisorStats),
