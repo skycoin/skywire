@@ -55,21 +55,75 @@ const (
 // multihop, then standby, matching the page's reading order. The returned root
 // is nil-safe to render (bitree.Render handles a childless root).
 func RouteTree(snap Snapshot) *bitree.Node {
-	src := "this visor"
-	for _, l := range snap.Legs {
-		if len(l.Hops) > 0 && l.Hops[0].From != "" {
-			src = l.Hops[0].From
-			break
+	root := &bitree.Node{Label: treeSrc(snap)}
+	// TWO-LEVEL view: root → tunnel (stream-level route group) → legs (packet-level
+	// mux). Each tunnel is a --tunnels stream; the legs under it are the mux routes
+	// striping that stream's packets. This makes the two kinds of route
+	// multiplexing legible — which legs belong to which stream — instead of one
+	// flat leg list.
+	if len(snap.Tunnels) > 0 {
+		for _, t := range snap.Tunnels {
+			legNodes := legNodesFor(t.Legs)
+			if len(legNodes) == 0 {
+				continue
+			}
+			tn := &bitree.Node{Label: tunnelLabel(t, len(legNodes))}
+			tn.Right = legNodes
+			root.Right = append(root.Right, tn)
+		}
+		return root
+	}
+	// Flat fallback: a caller that projects a single route group (Tunnels unset).
+	root.Right = legNodesFor(snap.Legs)
+	return root
+}
+
+// treeSrc finds the source PK to label the tree root — this visor, taken from any
+// leg's first hop, across all tunnels (or the flat Legs list).
+func treeSrc(snap Snapshot) string {
+	pick := func(legs []Leg) string {
+		for _, l := range legs {
+			if len(l.Hops) > 0 && l.Hops[0].From != "" {
+				return l.Hops[0].From
+			}
+		}
+		return ""
+	}
+	for _, t := range snap.Tunnels {
+		if s := pick(t.Legs); s != "" {
+			return s
 		}
 	}
-	root := &bitree.Node{Label: src}
+	if s := pick(snap.Legs); s != "" {
+		return s
+	}
+	return "this visor"
+}
 
-	legs := make([]Leg, 0, len(snap.Legs))
-	for _, l := range snap.Legs {
+// tunnelLabel names a stream-level tunnel node: its index and how many
+// packet-level legs stripe under it.
+func tunnelLabel(t Tunnel, nLegs int) string {
+	legWord := "legs"
+	if nLegs == 1 {
+		legWord = "leg"
+	}
+	return fmt.Sprintf("stream %d · %d %s", t.Index, nLegs, legWord)
+}
+
+// legNodesFor prunes dead legs, orders them (direct-active first, then active
+// multihop, then standby), and builds the per-leg route nodes with each leg's
+// share drawn against the aggregate goodput of THIS set (per tunnel when nested,
+// or the whole group in the flat fallback).
+func legNodesFor(all []Leg) []*bitree.Node {
+	legs := make([]Leg, 0, len(all))
+	for _, l := range all {
 		if !l.Alive { // prune dead routes/legs
 			continue
 		}
 		legs = append(legs, l)
+	}
+	if len(legs) == 0 {
+		return nil
 	}
 	sort.SliceStable(legs, func(i, j int) bool {
 		if ri, rj := legRank(legs[i]), legRank(legs[j]); ri != rj {
@@ -77,23 +131,19 @@ func RouteTree(snap Snapshot) *bitree.Node {
 		}
 		return legs[i].Index < legs[j].Index
 	})
-
-	// Aggregate per-direction goodput across the surviving (alive) legs — the
-	// denominator each route's share bar is drawn against (this route's fraction
-	// of the whole group's up / down goodput). Summed here rather than plumbed
-	// from AggGoodput*Bps so the shared adapter stays self-contained on the leg
-	// list both surfaces already carry.
+	// Aggregate per-direction goodput across the surviving legs — the denominator
+	// each route's share bar is drawn against.
 	var aggUp, aggDown float64
 	for _, l := range legs {
 		aggUp += l.GoodputUpBps
 		aggDown += l.GoodputDownBps
 	}
-
 	w := legSumWidths(legs)
+	nodes := make([]*bitree.Node, 0, len(legs))
 	for _, l := range legs {
-		root.Right = append(root.Right, routeToNode(l, w, aggUp, aggDown))
+		nodes = append(nodes, routeToNode(l, w, aggUp, aggDown))
 	}
-	return root
+	return nodes
 }
 
 // sumWidths holds the per-field display widths used to pad every route's left

@@ -79,7 +79,7 @@ the tree companion to 'proxy log' (which streams the events/log).
 			return
 		}
 
-		snap := rgs[0].toSnapshot()
+		snap := snapshotFromGroups(rgs)
 		opts := bitree.Options{}
 		if wantColor(treeColor) {
 			opts.StyleCell = ansiStyleCell
@@ -174,15 +174,10 @@ type treeHopInfo struct {
 	LatencyMS float64 `json:"latency_ms,omitempty"`
 }
 
-// toSnapshot projects the wire route group into the shared proxystatus.Snapshot
-// shape the RouteTree adapter consumes — the exact structure the visor builds
-// for the status page, so the CLI and the page render identically.
-func (rg treeRouteGroup) toSnapshot() proxystatus.Snapshot {
-	snap := proxystatus.Snapshot{
-		Surface:    proxystatus.SurfaceSkysocks,
-		App:        clientName,
-		MuxEnabled: rg.MuxEnabled,
-	}
+// toLegs projects one wire route group's legs into the shared proxystatus.Leg
+// shape the RouteTree adapter consumes.
+func (rg treeRouteGroup) toLegs() []proxystatus.Leg {
+	legs := make([]proxystatus.Leg, 0, len(rg.Legs))
 	for _, l := range rg.Legs {
 		leg := proxystatus.Leg{
 			Index:          l.Index,
@@ -209,7 +204,28 @@ func (rg treeRouteGroup) toSnapshot() proxystatus.Snapshot {
 				LatencyMS: h.LatencyMS,
 			})
 		}
-		snap.Legs = append(snap.Legs, leg)
+		legs = append(legs, leg)
+	}
+	return legs
+}
+
+// snapshotFromGroups projects EVERY wire route group into the shared
+// proxystatus.Snapshot, one Tunnel (stream-level) per group with its own
+// packet-level Legs — the exact structure the visor builds for the status page,
+// so the CLI and the page render the identical two-level tree.
+func snapshotFromGroups(rgs []treeRouteGroup) proxystatus.Snapshot {
+	snap := proxystatus.Snapshot{Surface: proxystatus.SurfaceSkysocks, App: clientName}
+	for i, rg := range rgs {
+		snap.Tunnels = append(snap.Tunnels, proxystatus.Tunnel{
+			Index:      i,
+			ExitPK:     rg.Desc.DstPK,
+			MuxEnabled: rg.MuxEnabled,
+			Legs:       rg.toLegs(),
+		})
+	}
+	if len(snap.Tunnels) > 0 {
+		snap.MuxEnabled = snap.Tunnels[0].MuxEnabled
+		snap.Legs = snap.Tunnels[0].Legs
 	}
 	return snap
 }
