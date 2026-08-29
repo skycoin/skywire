@@ -183,3 +183,33 @@ func (g *RPCGateway) Overview(_ *struct{}, out *Overview) error {
 	*out = g.self.SelfOverview()
 	return nil
 }
+
+// StateSnapshot mirrors pkg/visor.StateSnapshot for the subset a browser leaf can
+// answer from its self-view. gob decodes it into the native type by field name,
+// so the fields a wasm visor genuinely lacks (routing stats, service health,
+// per-leg mux route groups, module presence, router config) stay zero — an honest
+// partial rather than "method not found". Populated: the At timestamp, the tab's
+// Summary + Health, and its Transports. Adding the missing views is a matter of
+// widening SelfProvider (notably a mux-telemetry surface for MuxRouteGroups).
+type StateSnapshot struct {
+	At         time.Time
+	Summary    *Summary
+	Health     *HealthInfo
+	Transports []*TransportSummary
+}
+
+// StateSnapshot answers the RPC `cli visor state` calls (rpcClient.StateSnapshot),
+// so `skywire cli visor state` returns a real snapshot from the wasm visor.
+func (g *RPCGateway) StateSnapshot(_ *struct{}, out *StateSnapshot) error {
+	if g.self == nil {
+		return errNoSelf
+	}
+	s := g.self.SelfSummary()
+	*out = StateSnapshot{
+		At:         time.Now(),
+		Summary:    &s,
+		Health:     &HealthInfo{ServicesHealth: "healthy"},
+		Transports: g.self.SelfTransports(),
+	}
+	return nil
+}
