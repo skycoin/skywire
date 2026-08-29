@@ -373,14 +373,17 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 	// Unidirectional send selection (CapUniDir).
 	// DIRECTION governs which CLASS of leg (direct vs multihop) carries this end's
 	// traffic; WITHIN the class the initiator-mirrored ACTIVE set governs which
-	// legs. selectByDirection is two-tier: it prefers active (standby-aware)
-	// direction-matching legs — so the exit's download fan-out stays bounded to the
-	// few reverse legs the initiator parked active, instead of spraying every
-	// warm-standby reverse leg (which over-subscribes the no-skip reorder frontier,
-	// amplifies retransmits, and wedges the group → the observed collapse-to-0).
-	// Only when NO active leg of the wanted direction exists does it fall back to a
-	// standby leg of that direction (Tier 2), preserving confinement without the
-	// wrong-direction fallback that landed the whole download on the direct leg.
+	// legs. selectByDirection prefers the active (mirrored) class legs — even a
+	// mirrored-active reverse leg that never received inbound bulk (so its
+	// readiness gate never fired) is preferred over the warm-standby reserve — so
+	// the exit's download fan-out stays bounded to the few reverse legs the
+	// initiator parked active instead of spraying every warm-standby reverse leg
+	// (which over-subscribes the no-skip reorder frontier and wedges the group →
+	// the observed collapse-to-0). It returns ok=true (and we use its pick) as long
+	// as ANY leg of the wanted class exists, so the download is NEVER handed to the
+	// wrong-direction direct leg while a reverse leg is available. Only when there
+	// is genuinely no reverse leg does it return ok=false and selection falls
+	// through to the standard path.
 	if directional, wantDirect, dstPK, srcPK := m.dirConfig(); directional {
 		if tp, rule, idx, ok := m.selectByDirection(tps, fwd, wantDirect, dstPK, srcPK); ok {
 			return tp, rule, idx, nil
