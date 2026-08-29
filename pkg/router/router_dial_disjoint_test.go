@@ -497,3 +497,76 @@ func TestTransportCostMsMeasuredOverridesType(t *testing.T) {
 		t.Errorf("a sub-400Kbps link should score worst (400), got %v", slowStcpr)
 	}
 }
+
+// hopVia builds a hop whose first-hop transport is tpID (so a candidate's
+// disjointness at the source can be asserted deterministically).
+func hopVia(tpID uuid.UUID, from, to cipher.PubKey) routing.Hop {
+	return routing.Hop{TpID: tpID, From: from, To: to}
+}
+
+// TestFilterDisjointFirstHop is the core of the multi-tunnel diversify fix:
+// N tunnels to one exit must each request a first-hop transport a sibling
+// tunnel does not already hold. The route-finder ignores ExcludeTransportIDs,
+// so filterDisjointFirstHop is what actually drops the shared-first-hop
+// candidates from the finder response.
+func TestFilterDisjointFirstHop(t *testing.T) {
+	src := mustPK(t)
+	mid := mustPK(t)
+	dst := mustPK(t)
+
+	shared := uuid.New() // the direct stcpr a sibling already occupies
+	altDirect := uuid.New()
+	viaMid := uuid.New()
+
+	directShared := []routing.Hop{hopVia(shared, src, dst)}
+	directAlt := []routing.Hop{hopVia(altDirect, src, dst)}
+	multihop := []routing.Hop{hopVia(viaMid, src, mid), hop(mid, dst)}
+
+	t.Run("empty exclude returns input unchanged", func(t *testing.T) {
+		in := [][]routing.Hop{directShared, multihop}
+		got := filterDisjointFirstHop(in, nil)
+		if len(got) != 2 {
+			t.Fatalf("no exclusions: want all %d candidate(s) kept, got %d", len(in), len(got))
+		}
+	})
+
+	t.Run("drops shared first-hop, keeps disjoint", func(t *testing.T) {
+		in := [][]routing.Hop{directShared, directAlt, multihop}
+		got := filterDisjointFirstHop(in, []uuid.UUID{shared})
+		if len(got) != 2 {
+			t.Fatalf("want 2 disjoint candidate(s), got %d", len(got))
+		}
+		for _, p := range got {
+			if firstHopTransportExcluded(p, []uuid.UUID{shared}) {
+				t.Errorf("kept a candidate that reuses the excluded first hop %s", p[0].TpID)
+			}
+		}
+	})
+
+	t.Run("all shared -> empty (caller falls back)", func(t *testing.T) {
+		// N tunnels, one direct transport: every finder candidate leaves over
+		// the same shared first hop. The filter returns empty so the dialer
+		// can try local-calc / concede to a shared path rather than pretending
+		// disjointness exists.
+		in := [][]routing.Hop{directShared, directShared}
+		got := filterDisjointFirstHop(in, []uuid.UUID{shared})
+		if len(got) != 0 {
+			t.Fatalf("all candidates shared: want empty, got %d", len(got))
+		}
+	})
+
+	t.Run("firstHopTransportExcluded direct and multihop", func(t *testing.T) {
+		if !firstHopTransportExcluded(directShared, []uuid.UUID{shared}) {
+			t.Error("direct route over the excluded tp should be reported excluded")
+		}
+		if firstHopTransportExcluded(directAlt, []uuid.UUID{shared}) {
+			t.Error("direct route over a different tp must not be reported excluded")
+		}
+		if firstHopTransportExcluded(multihop, []uuid.UUID{shared}) {
+			t.Error("multihop leaving over a different first hop must not be reported excluded")
+		}
+		if !firstHopTransportExcluded(multihop, []uuid.UUID{viaMid}) {
+			t.Error("multihop whose first hop IS excluded should be reported excluded")
+		}
+	})
+}

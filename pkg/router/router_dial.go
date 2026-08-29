@@ -1278,6 +1278,40 @@ fetchRoutesAgain:
 		paths[backward] = filtered
 	}
 
+	// Multi-tunnel diversify (opts.DiversifyTransports): steer this extra
+	// tunnel's FIRST HOP off the transports its sibling tunnels to the same
+	// exit already occupy (opts.ExcludeTransportIDs, seeded by
+	// siblingRouteGroupExclusions). The route-finder ranks by latency and does
+	// NOT honor ExcludeTransportIDs, so without this every tunnel is handed the
+	// same preferred (usually the sole direct) first hop and they contend on one
+	// link instead of aggregating — the disjointness the RFC promises collapses.
+	// A direct (0-intermediate) sibling contributes NO ExcludeIntermediatePKs, so
+	// the intermediate-based pickDisjointPath below cannot break the tie on its
+	// own; the first-hop transport-ID is the only distinguishing signal.
+	//
+	// Preference, not a hard cut: restrict the forward candidates to those whose
+	// first-hop transport is not already claimed; if the finder offers none, try
+	// the local BFS (which can build a disjoint multi-hop path, and skips the
+	// excluded direct transport) before conceding. Only when nothing disjoint
+	// exists anywhere do we keep a shared first hop — a shared tunnel still beats
+	// no tunnel, just with limited aggregation, which we log.
+	if opts.DiversifyTransports && len(opts.ExcludeTransportIDs) > 0 {
+		if disjoint := filterDisjointFirstHop(paths[forward], opts.ExcludeTransportIDs); len(disjoint) > 0 {
+			if len(disjoint) != len(paths[forward]) {
+				log.Debugf("diversify: %d/%d forward candidate(s) leave over a disjoint first-hop transport; preferring those",
+					len(disjoint), len(paths[forward]))
+			}
+			paths[forward] = disjoint
+		} else {
+			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
+			if localErr == nil && len(localFwd) > 0 && !firstHopTransportExcluded(localFwd, opts.ExcludeTransportIDs) {
+				log.Debug("diversify: no disjoint first-hop from route finder; using local-calc disjoint path")
+				return localFwd, localRev, nil
+			}
+			log.Warnf("diversify: no disjoint first-hop transport to %s is free; extra tunnel shares an existing first hop (aggregation limited)", dst)
+		}
+	}
+
 	// Routing-policy candidate selection. When the configured
 	// DialHook also implements RouteSelectingHook, hand it the
 	// forward-direction candidates so the operator's script can
@@ -1452,6 +1486,51 @@ func pickBestDirection(paths [][]routing.Hop, excludeSet map[cipher.PubKey]struc
 		return nil, false
 	}
 	return paths[bestIdx], true
+}
+
+// filterDisjointFirstHop returns the candidate paths whose FIRST hop leaves
+// over a transport NOT in excludeTpIDs. It is the route-finder-path counterpart
+// to the local-calc's direct-transport exclusion (calculateLocalRoutes skips an
+// excluded direct tp): the finder ranks purely by latency and ignores
+// ExcludeTransportIDs, so this is what actually keeps a multi-tunnel diversify
+// dial off a first-hop transport a sibling tunnel already holds. Returns the
+// input unchanged when there is nothing to exclude; may return an EMPTY slice
+// when every candidate shares an excluded first hop — the caller decides whether
+// to fall back (local calc / shared path) rather than failing here.
+func filterDisjointFirstHop(cands [][]routing.Hop, excludeTpIDs []uuid.UUID) [][]routing.Hop {
+	if len(cands) == 0 || len(excludeTpIDs) == 0 {
+		return cands
+	}
+	excl := make(map[uuid.UUID]struct{}, len(excludeTpIDs))
+	for _, id := range excludeTpIDs {
+		excl[id] = struct{}{}
+	}
+	out := make([][]routing.Hop, 0, len(cands))
+	for _, hops := range cands {
+		if len(hops) == 0 {
+			continue
+		}
+		if _, bad := excl[hops[0].TpID]; bad {
+			continue
+		}
+		out = append(out, hops)
+	}
+	return out
+}
+
+// firstHopTransportExcluded reports whether the path's first hop leaves over one
+// of excludeTpIDs. Used to confirm a local-calc fallback route is genuinely
+// disjoint before returning it for a diversify dial.
+func firstHopTransportExcluded(hops []routing.Hop, excludeTpIDs []uuid.UUID) bool {
+	if len(hops) == 0 {
+		return false
+	}
+	for _, id := range excludeTpIDs {
+		if hops[0].TpID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // transportTypeCostMs is a per-hop, latency-equivalent penalty that biases
