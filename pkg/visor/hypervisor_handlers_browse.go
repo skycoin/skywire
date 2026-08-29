@@ -63,6 +63,13 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 		case "/browse.js":
 			serveJS(w, browseui.BrowseJS)
 			return
+		case "/winbox.wasm":
+			// The window manager the browse bundle loads. instantiateStreaming
+			// refuses a module that does not arrive as application/wasm.
+			w.Header().Set("Content-Type", "application/wasm")
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = w.Write(browseui.WinBoxWasm()) //nolint:errcheck
+			return
 		case "/skywire-browse-launcher.js":
 			serveJS(w, []byte(nativeBrowseLauncherJS))
 			return
@@ -192,7 +199,7 @@ const uiAutoReloadJS = `(function(){
 // "skynet" button. Authenticated via the dashboard session cookie.
 const nativeBrowseLauncherJS = `(function () {
   function ready() {
-    if (!self.SkywireBrowse || !self.SkywireBrowse.mountPanel || !document.body) { return setTimeout(ready, 200); }
+    if (!self.SkywireBrowse || !self.SkywireBrowse.mountPanel || !document.body || typeof self.WinBox !== "function") { return setTimeout(ready, 200); }
     var localPK = window.__SKYWIRE_LOCAL_PK__ || "";
     function b64e(s) { try { return btoa(unescape(encodeURIComponent(s))); } catch (e) { return btoa(s); } }
     function adapt(j) {

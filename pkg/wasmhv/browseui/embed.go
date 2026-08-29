@@ -6,32 +6,86 @@
 package browseui
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
+	"sync"
+
 	_ "embed"
 )
 
-// winBoxJS is WinBox.js (vendored, Apache-2.0, dependency-free, CSS inlined):
-// the window manager that provides draggable / resizable / minimizable /
-// maximizable window chrome for every mini-desktop window (browse, terminal,
-// log, cli). browse.js uses the global `WinBox` it defines.
+// winBoxWasmGz is the window manager: cmd/winbox-wasm, a Go port of WinBox.js
+// (github.com/0magnet/winbox-go, Apache-2.0) compiled to wasm and gzipped. It
+// provides the draggable / resizable / minimizable / maximizable chrome for
+// every mini-desktop window (browse, terminal, log, cli) by installing the
+// global `WinBox` constructor browse.js calls.
 //
-//go:embed winbox.min.js
-var winBoxJS []byte
+// Committed rather than built here: `go build` produces one host binary, and
+// this is a wasm artifact from a second toolchain. Update it INTENTIONALLY with
+// `make embed-winbox`, which rebuilds, gzips (-n, so an unchanged module yields
+// no diff) and refreshes winbox-exec.js alongside it.
+//
+//go:embed winbox.wasm.gz
+var winBoxWasmGz []byte
+
+// winBoxExecJS is TinyGo's wasm_exec.js, wrapped by `make embed-winbox` so its
+// loader class lands on __winboxGo instead of globalThis.Go — see the comment
+// at the top of the generated file.
+//
+//go:embed winbox-exec.js
+var winBoxExecJS []byte
+
+// winBoxLoaderJS starts the module and publishes __winboxReady.
+//
+//go:embed winbox-loader.js
+var winBoxLoaderJS []byte
 
 // browseJS is browse.js: the dmsg virtual-browser engine + the mini-desktop
-// launcher/windows that build on WinBox.
+// launcher/windows that build on the WinBox global.
 //
 //go:embed browse.js
 var browseJS []byte
 
-// BrowseJS is the full mini-desktop bundle (WinBox.js followed by browse.js)
-// injected into the wasm-visor page and the native hypervisor dashboard as a
-// single script asset. Concatenating here means every consumer
+// BrowseJS is the full mini-desktop bundle — the wasm loader followed by
+// browse.js — injected into the wasm-visor page and the native hypervisor
+// dashboard as a single script asset. Concatenating here means every consumer
 // (pkg/visor's /browse.js handler, pkg/wasmhv's single-file generator, the
-// harness) gets WinBox with no extra serve/inline wiring.
+// harness) gets the window manager with no extra script wiring; only the wasm
+// module itself is a separate fetch, from WinBoxWasm below.
 var BrowseJS = func() []byte {
-	out := make([]byte, 0, len(winBoxJS)+len(browseJS)+4)
-	out = append(out, winBoxJS...)
+	out := make([]byte, 0, len(winBoxExecJS)+len(winBoxLoaderJS)+len(browseJS)+8)
+	out = append(out, winBoxExecJS...)
+	out = append(out, '\n', ';', '\n')
+	out = append(out, winBoxLoaderJS...)
 	out = append(out, '\n', ';', '\n')
 	out = append(out, browseJS...)
 	return out
 }()
+
+// WinBoxWasmGz is the compressed module, for a consumer that ships it inside a
+// page (the single-file generator base64s exactly these bytes) rather than
+// serving it.
+func WinBoxWasmGz() []byte { return winBoxWasmGz }
+
+var (
+	winBoxOnce sync.Once
+	winBoxWasm []byte
+)
+
+// WinBoxWasm is the module as served at /winbox.wasm. Inflated once on first
+// use and kept, since every page load asks for the same ~400 kB.
+func WinBoxWasm() []byte {
+	winBoxOnce.Do(func() {
+		zr, err := gzip.NewReader(bytes.NewReader(winBoxWasmGz))
+		if err != nil {
+			return
+		}
+		defer zr.Close() //nolint:errcheck
+		b, err := io.ReadAll(zr)
+		if err != nil {
+			return
+		}
+		winBoxWasm = b
+	})
+	return winBoxWasm
+}

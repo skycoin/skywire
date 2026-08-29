@@ -63,6 +63,7 @@ require (
 	github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408
 	github.com/0magnet/realorigin v0.2.0
 	github.com/0magnet/termanim v0.0.0-20260827230242-7dd03f4a292e
+	github.com/0magnet/winbox-go v0.0.0-20260829031602-cfd539d747db
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/ccding/go-stun v0.1.6

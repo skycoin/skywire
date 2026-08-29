@@ -26,6 +26,17 @@ var OverrideJS []byte
 // (pkg/wasmhv's gob-mirror test imports pkg/visor).
 var BrowseJS = browseui.BrowseJS
 
+// WinBoxWasm is the window-manager wasm module the browse bundle loads — a Go
+// port of WinBox.js (github.com/0magnet/winbox-go) compiled to wasm. Served at
+// /winbox.wasm by both the `hv serve` page and the native hypervisor UI;
+// base64-inlined instead by the single-file generator, which has no server.
+// Re-exported from the browseui leaf like BrowseJS.
+func WinBoxWasm() []byte { return browseui.WinBoxWasm() }
+
+// WinBoxWasmGz is the same module still compressed, for the single-file
+// generator to inline.
+func WinBoxWasmGz() []byte { return browseui.WinBoxWasmGz() }
+
 // WalletConfigHTML is the single wallet-config page (served at /wallet/config by
 // both the native HV and `hv serve`, embedded via iframe by the ☰ wallet window
 // and the Angular wallet tab). Re-exported from the browseui leaf like BrowseJS.
