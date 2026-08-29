@@ -75,6 +75,14 @@ func (m *routeMux) isDirectional() bool {
 	return m.directional
 }
 
+// dirState snapshots the unidirectional send-selection state (directional +
+// current flip) under legMu for telemetry (MuxStats / visor state).
+func (m *routeMux) dirState() (directional, flipped bool) {
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	return m.directional, m.flipped
+}
+
 // soleBlackHoleExemptRecvFloor is the per-tick GROUP recv above which a
 // directional group's sole ACTIVE (light-direction) leg is exempt from the
 // sole-leg black-hole reaping.
