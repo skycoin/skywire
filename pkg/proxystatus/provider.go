@@ -117,7 +117,28 @@ type Snapshot struct {
 	Logs    []string // recent log lines, oldest first
 	Events  []string // route/transport events affecting this surface, oldest first
 	Streams []Stream // per-stream detail for the open session (skysocks tunnel), when tracked
-	Note    string   // optional human note (e.g. why a section is empty)
+	// RangeSplit summarizes transparent HTTP range-splitting activity on the
+	// surface (skysocks only): whether a split is firing right now and its
+	// cumulative shape. Nil when the surface does not range-split (every
+	// non-skysocks surface, or a skysocks client with the feature disabled). It
+	// makes "is range-split firing" a readable field rather than a log line.
+	RangeSplit *RangeSplit `json:"range_split,omitempty"`
+	Note       string      // optional human note (e.g. why a section is empty)
+}
+
+// RangeSplit is the live range-split summary for the skysocks surface. It is
+// built from the client's atomic counters (pkg/skysocks rangesplit.go), so it is
+// cheap to read at page/watch cadence. ActiveSplits>0 means a splittable download
+// is aggregating across the mesh's tunnels right now; the cumulative totals show
+// it has fired at all and its shape (chunks × streams).
+type RangeSplit struct {
+	Enabled         bool   `json:"enabled"`           // feature is on for this client
+	ActiveSplits    int64  `json:"active_splits"`     // splits in flight right now
+	TotalSplits     uint64 `json:"total_splits"`      // cumulative splits performed
+	TotalChunks     uint64 `json:"total_chunks"`      // cumulative range chunks fetched
+	TotalBytes      uint64 `json:"total_bytes"`       // cumulative bytes delivered via split
+	StreamsPerSplit int    `json:"streams_per_split"` // configured concurrency (streams per split)
+	ChunkSize       int64  `json:"chunk_size"`        // bytes per range request
 }
 
 // Tunnel is one STREAM-level route group — a single --tunnels stream to the exit,

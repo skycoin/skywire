@@ -170,6 +170,18 @@ func (mc *mockRPCClient) StateSnapshot() (*StateSnapshot, error) {
 	return &StateSnapshot{At: time.Now(), Summary: summary}, nil
 }
 
+// StateSnapshotProjected implements API.
+func (mc *mockRPCClient) StateSnapshotProjected(fields []string) (*StateSnapshot, error) {
+	snap, err := mc.StateSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	if set := newStateFieldSet(fields); set != nil && !set.has(SelectSummary) {
+		snap.Summary = nil
+	}
+	return snap, nil
+}
+
 // Summary implements API.
 func (mc *mockRPCClient) Summary() (*Summary, error) {
 	overview, err := mc.Overview()

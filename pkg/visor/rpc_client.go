@@ -231,6 +231,14 @@ func (rc *rpcClient) StateSnapshot() (*StateSnapshot, error) {
 	return out, err
 }
 
+// StateSnapshotProjected calls StateSnapshotProjected with the requested subtree
+// keys, so the server builds only those sections.
+func (rc *rpcClient) StateSnapshotProjected(fields []string) (*StateSnapshot, error) {
+	out := new(StateSnapshot)
+	err := rc.Call("StateSnapshotProjected", &StateSnapshotReq{Fields: fields}, out)
+	return out, err
+}
+
 // Overview calls Overview.
 func (rc *rpcClient) Overview() (*Overview, error) {
 	out := new(Overview)
