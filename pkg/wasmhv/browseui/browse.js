@@ -1084,6 +1084,39 @@
     return _winZ;
   }
 
+  // Raise-on-body-click for IFRAME windows. WinBox already raises a window when
+  // its own body receives a mousedown (internally: k(a.body,"mousedown",()=>
+  // a.focus())). But a click that lands inside a child <iframe> fires in the
+  // iframe's OWN document and never bubbles up to the parent body, so a browse /
+  // terminal / chat / wallet / files window (whose body is a full-bleed iframe)
+  // only ever raised from the title bar — clicking the covered window's page did
+  // nothing, unlike a normal desktop window. Bridge that gap: focusing an iframe
+  // blurs the top window and makes document.activeElement the <iframe> element
+  // (true even for a sandboxed / cross-origin frame — only the element ref, no
+  // content, is read). On that blur, find the owning WinBox and focus() it, which
+  // reuses WinBox's own raise path so the z-index stack stays consistent with the
+  // title bar. Registry + one shared listener; entries are pruned on close.
+  var _winboxRegistry = [];
+  function _winboxRoot(wb) { return wb && (wb.window || wb.g || wb.dom); }
+  if (!globalThis.__skywireWinboxRaiseHooked) {
+    globalThis.__skywireWinboxRaiseHooked = true;
+    globalThis.addEventListener("blur", function () {
+      // Defer one tick so document.activeElement settles onto the new iframe.
+      setTimeout(function () {
+        var ae = document.activeElement;
+        if (!ae || ae.tagName !== "IFRAME") return;
+        var root = ae.closest ? ae.closest(".winbox") : null;
+        if (!root) return;
+        for (var i = 0; i < _winboxRegistry.length; i++) {
+          if (_winboxRoot(_winboxRegistry[i]) === root) {
+            try { _winboxRegistry[i].focus(); } catch (e) {}
+            return;
+          }
+        }
+      }, 0);
+    }, true);
+  }
+
   function makeWin(doc, opts) {
     var cfg = {
       title: opts.title || "window",
@@ -1109,8 +1142,18 @@
     if (opts.bottom != null) cfg.bottom = opts.bottom;
     if (opts.mount) cfg.mount = opts.mount;
     if (opts.url) cfg.url = opts.url;
-    if (opts.onclose) cfg.onclose = opts.onclose;
+    // Wrap onclose so the raise-on-iframe-click registry drops this window (the
+    // real onclose, if any, still runs). Prune here rather than leaking closed
+    // instances that would keep matching a since-reused DOM subtree.
+    var _userClose = opts.onclose;
+    cfg.onclose = function () {
+      for (var i = _winboxRegistry.length - 1; i >= 0; i--) {
+        if (_winboxRegistry[i] === wb) { _winboxRegistry.splice(i, 1); }
+      }
+      if (_userClose) return _userClose.apply(this, arguments);
+    };
     var wb = new WinBox(cfg);
+    _winboxRegistry.push(wb);
     // Bring the new window to the front + focus it (WinBox raises the focused
     // window's z within its own stack; combined with the incrementing base above
     // this guarantees a new window is never obscured by an older one).
