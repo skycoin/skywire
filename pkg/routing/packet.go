@@ -79,6 +79,8 @@ func (t PacketType) String() string {
 		return "TransportBwAck"
 	case RepairPacket:
 		return "Repair"
+	case LegStatePacket:
+		return "LegState"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -139,6 +141,17 @@ const (
 	// symbol/block framing agnostic about WHO makes repair symbols so the hop-wise
 	// path stays open without a format change.
 	RepairPacket
+	// LegStatePacket signals a mux leg's active/standby state to the REMOTE end
+	// (route ID > 0, same route group as the leg it names — the packet is sent ON
+	// that leg, so the leg is identified by the route ID it arrives stamped with,
+	// exactly like an aux-leg HandshakePacket). Payload: one byte, 1 = standby,
+	// 0 = active. Standby is otherwise a purely send-side decision, so on a
+	// DOWNLOAD (the remote is the bulk sender) the remote would stripe across every
+	// established leg — including ones this side has parked — head-of-line-stalling
+	// the no-skip reorder buffer on the slowest. This packet mirrors the parking to
+	// the sender so both ends stripe over the same active set. Gated by CapLegState;
+	// a peer without it never receives one and keeps the send-side-only behavior.
+	LegStatePacket
 )
 
 // FECRepairHdr is the fixed prefix of a RepairPacket payload: blockID(4) + idx(1)
@@ -190,6 +203,14 @@ const (
 	// bound by the FAST legs, not the slow one. A peer without this bit never
 	// receives RepairPackets and falls back cleanly to reorder+SACK.
 	CapFEC uint16 = 1 << 5
+	// CapLegState: the peer supports leg active/standby signaling (LegStatePacket).
+	// When BOTH edges advertise it (and CapMux, which it requires), the side that
+	// parks/promotes a mux leg tells the other end, which mirrors the state on ITS
+	// send side — so on a download the bulk sender stripes only across the legs the
+	// receiver has kept active, instead of every established leg (the wide-mux
+	// head-of-line stall). A peer without this bit never receives one and keeps the
+	// prior send-side-only standby behavior.
+	CapLegState uint16 = 1 << 6
 )
 
 // SeqSize is the byte size of the sequence number prepended to DataPacket
@@ -447,6 +468,33 @@ func (p Packet) RepairSymLen() int {
 // RepairSymbol returns the repair symbol bytes of a RepairPacket.
 func (p Packet) RepairSymbol() []byte {
 	return p[PacketPayloadOffset+FECRepairHdr:]
+}
+
+// LegStatePayloadSize is the LegStatePacket payload: one byte (1=standby, 0=active).
+const LegStatePayloadSize = 1
+
+// MakeLegStatePacket constructs a LegStatePacket announcing that the leg it is
+// sent on is now standby (true) or active (false) on this side, so the remote can
+// mirror the state on its send side. id is the leg's next-hop route ID (the packet
+// is sent ON that leg, exactly like an aux-leg handshake, so the leg is identified
+// by the route it arrives on — no leg index is carried).
+func MakeLegStatePacket(id RouteID, standby bool) Packet {
+	packet := make([]byte, PacketHeaderSize+LegStatePayloadSize)
+	packet[PacketTypeOffset] = byte(LegStatePacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], LegStatePayloadSize)
+	if standby {
+		packet[PacketPayloadOffset] = 1
+	}
+	return packet
+}
+
+// LegStateStandby reports whether a LegStatePacket announces standby (true) or
+// active (false). A malformed/empty payload reads as active (the safe default —
+// it never parks a leg the sender still wants to use).
+func (p Packet) LegStateStandby() bool {
+	payload := p.Payload()
+	return len(payload) >= LegStatePayloadSize && payload[0] == 1
 }
 
 // HandshakeCapabilities extracts the capability bitmap from an extended handshake payload.
