@@ -201,6 +201,47 @@ edit); this RFC specifies them as the phase-2 interface.
   disjoint-first-hop work: the shared plan set *is* the disjoint set to the exit,
   computed once.
 
+## Bottleneck-relative disjointness and logical-route multiplexing (governing model)
+
+The disjointness the pool must enforce is **relative to the binding bottleneck,
+not the transport**. Two legs "conflict" only when they contend for the same
+*bottleneck* resource; sharing a transport is a conflict only when that
+transport's physical link is the bottleneck. This reframes both the sizing above
+and Phase 3.
+
+- **A pool entry is a `(transport, route_id)` logical route, not a transport.** One
+  transport already carries many independent routes — an intermediate forwards by
+  `route_id`, so distinct route-ID chains over the same hop are independent routes,
+  demuxed at each hop. That is why there can be **more disjoint-enough routes than
+  transports** (the "route variants" case): the pool is sized to distinct logical
+  routes, not to `len(transports)`.
+
+- **When the bottleneck is per-flow (the common case here), non-transport-disjoint
+  logical routes still aggregate.** This mux's per-route no-skip reorder frontier
+  is itself a per-flow limiter — a single route stalls below the link's real
+  capacity when one packet head-of-line-blocks it. Parallel logical routes over the
+  *same* physical path are independent reorder domains, so they collectively use
+  more of that link than one route can — the same principle as MPTCP subflows
+  sharing a link, or a download accelerator's parallel connections beating a
+  single-flow rate limit. Only when the physical link is genuinely saturated do
+  co-transport routes stop aggregating (they then merely share it) — at which point
+  transport-disjointness is what buys more capacity.
+
+- **Consequence for the active-set rule.** The `--tunnels` guarantee "the union of
+  all tunnels' active legs must not double-use a route" becomes "…must not
+  double-use the **binding bottleneck**." Two tunnels may share a transport via
+  distinct route-IDs and still aggregate while the per-flow reorder is the limit;
+  they must diverge onto transport-disjoint paths only once that shared link
+  saturates. So the shared pool **admits co-transport logical routes**, and the
+  scheduler spreads the active set across bottlenecks — escalating to
+  transport-disjoint legs only when a link is the actual constraint. It also means
+  standby (warm) routes may freely overlap on transports; disjointness is an
+  active-set-union property, not a per-leg or per-tunnel one.
+
+Phase 3's shared route-ID trunk is the mechanism that makes co-transport logical
+routes cheap to hold warm (one reserved chain, many demuxed consume rules), so
+this governing model and Phase 3 are the same end-state seen from two angles.
+
 ## Migration / coexistence
 
 Phase 1 coexists with the per-group pool with zero negotiation: it is a
