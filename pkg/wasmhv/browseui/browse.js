@@ -1066,7 +1066,7 @@
     };
   }
 
-  // makeWin wraps WinBox (winbox.min.js, vendored) with the mini-desktop
+  // makeWin wraps WinBox (winbox.wasm, a Go port — see winbox-loader.js) with the mini-desktop
   // defaults: dark skynet chrome, mounted into the panel's root container so the
   // whole desktop can be hidden/shown at once, and a high z-base so windows sit
   // over the dashboard. WinBox supplies all window chrome — drag, resize,
