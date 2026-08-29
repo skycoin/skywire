@@ -175,7 +175,7 @@ func fecE2ESetup(t *testing.T, fec bool, legLatencies []time.Duration) (*RouteGr
 		// Close's teardown handshake would otherwise block on timeouts we don't
 		// need in-test.
 		for _, p := range pipes {
-			p.Close() //nolint:errcheck
+			p.Close() //nolint:errcheck,gosec // see the comment above: teardown is deliberately skipped here
 		}
 	}
 	return rgA, rgB, pipes, cleanup
