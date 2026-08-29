@@ -267,6 +267,16 @@ type routeMux struct {
 	// Touched only under legMu in rebuildWeights' ECF branch.
 	ecfLastRebuildNano int64
 
+	// legGroups holds each leg's SHARED-BOTTLENECK group id (RFC 8382; see
+	// bottleneck.go), parallel to legs[]. Legs with the same id are judged to
+	// funnel through one physical pipe, so rebuildWeights counts the group as ONE
+	// unit of capacity instead of N competing pipes. Recomputed each data-progress
+	// tick by the route group and pushed via SetLegGroups; a leg with no entry (or
+	// a value equal to its own index) is its own singleton group — the default, so
+	// a mux with no bottleneck detection behaves exactly as before. Guarded by
+	// legMu.
+	legGroups []int
+
 	// standbyNewLegs makes every NEWLY-grown aux leg (index > 0) enter the
 	// warm-standby pool instead of going straight into the active send set.
 	// The primary leg (index 0) is never affected. Set only when a promoting
@@ -524,6 +534,27 @@ func (m *routeMux) SetStandbyNewLegs(v bool) {
 	m.legMu.Lock()
 	m.standbyNewLegs = v
 	m.legMu.Unlock()
+}
+
+// SetLegGroups records the per-leg shared-bottleneck group ids (see the
+// legGroups field). The slice is copied and is parallel to legs[] in the rg's
+// tps[] order; a shorter slice leaves the trailing legs as singletons. Cheap and
+// idempotent — called each data-progress tick from the route group after it
+// recomputes groups from per-leg OWD statistics.
+func (m *routeMux) SetLegGroups(groups []int) {
+	m.legMu.Lock()
+	m.legGroups = append([]int(nil), groups...)
+	m.legMu.Unlock()
+}
+
+// groupOf returns leg i's shared-bottleneck group id, defaulting to i itself
+// (its own singleton group) when no grouping is recorded for it. Caller holds
+// legMu.
+func (m *routeMux) groupOf(i int) int {
+	if i < len(m.legGroups) {
+		return m.legGroups[i]
+	}
+	return i
 }
 
 // removeLegs drops the given ORIGINAL leg indices from legs[] and ready[] so
@@ -1163,8 +1194,9 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 	// whichever leg carried first).
 	if m.tpSelector.Mode() == WeightModeCapacity {
 		m.legMu.Lock()
-		weights := make([]float64, len(m.legs))
-		var maxW float64
+		// Per-leg recent throughput (bytes moved since the last rebuild).
+		deltas := make([]float64, len(m.legs))
+		active := make([]bool, len(m.legs))
 		for i, lc := range m.legs {
 			if lc == nil {
 				continue
@@ -1172,37 +1204,60 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 			total := atomic.LoadUint64(&lc.sentBytes) + atomic.LoadUint64(&lc.recvBytes)
 			delta := total - lc.lastTotalBytes
 			lc.lastTotalBytes = total
-			// A warm-standby leg carries no send traffic — it must get zero
-			// weight so the scheduler never steers a packet onto a parked leg
-			// (which the receiver isn't expecting on that route and would stall
-			// the reorder frontier on). Keep sampling its byte counter above so a
-			// later promotion starts from a fresh delta, not a stale backlog.
-			if i < len(m.standby) && m.standby[i] {
-				weights[i] = 0
+			deltas[i] = float64(delta)
+			// A warm-standby leg carries no send traffic — it must get zero weight
+			// so the scheduler never steers a packet onto a parked leg (which the
+			// receiver isn't expecting on that route and would stall the reorder
+			// frontier on). Its byte counter was still sampled above so a later
+			// promotion starts from a fresh delta, not a stale backlog.
+			active[i] = !(i < len(m.standby) && m.standby[i])
+		}
+		// SHARED-BOTTLENECK COLLAPSE (RFC 8382): legs that funnel through the same
+		// physical pipe (groupOf()) must be counted as ONE unit of capacity, not N
+		// competing pipes — otherwise a 3-leg shared group out-weighs a lone
+		// independent leg 3:1 and over-subscribes the one pipe while starving the
+		// distinct route. For each group, ONE representative (the active member
+		// moving the most bytes; ties → lowest index) carries the group's AGGREGATE
+		// throughput (the pipe's real rate = sum of its active members' deltas); the
+		// other members get zero send weight so the scheduler stops striping the same
+		// pipe across redundant legs (which only adds reorder cost). Independent legs
+		// are their own singleton group, so this is a no-op for them and the
+		// pre-grouping behavior is unchanged when no bottleneck is detected.
+		rep := make(map[int]int, len(m.legs)) // group id -> representative leg index
+		groupSum := make(map[int]float64, len(m.legs))
+		for i, lc := range m.legs {
+			if lc == nil || !active[i] {
 				continue
 			}
-			weights[i] = float64(delta)
-			if weights[i] > maxW {
-				maxW = weights[i]
+			g := m.groupOf(i)
+			groupSum[g] += deltas[i]
+			cur, ok := rep[g]
+			if !ok || deltas[i] > deltas[cur] {
+				rep[g] = i
 			}
 		}
-		// Cold-leg floor (the weighted-RAMP): a just-promoted active leg has moved
-		// ~no bytes yet, so its raw delta is ~0 — under pure capacity weighting it
-		// would get ~no traffic and thus never accumulate the goodput it needs to
-		// earn a real share (a starvation deadlock). Give every active, non-standby
-		// leg a floor share = capacityColdFloorFrac of the fastest active leg, so a
-		// fresh leg carries a THIN trickle, measures its goodput, and ramps up as
-		// its delta grows — while a genuinely slow leg stays near the floor and can
-		// never open a big reorder gap. Skipped when the whole group is idle
-		// (maxW == 0) so an idle mux doesn't manufacture phantom weight.
+		weights := make([]float64, len(m.legs))
+		var maxW float64
+		for g, r := range rep {
+			weights[r] = groupSum[g]
+			if weights[r] > maxW {
+				maxW = weights[r]
+			}
+		}
+		// Cold-leg floor (the weighted-RAMP): a just-promoted representative has
+		// moved ~no bytes yet, so its raw delta is ~0 — under pure capacity weighting
+		// it would get ~no traffic and thus never accumulate the goodput it needs to
+		// earn a real share (a starvation deadlock). Give every active group's
+		// REPRESENTATIVE a floor share = capacityColdFloorFrac of the fastest group,
+		// so a fresh pipe carries a THIN trickle, measures its goodput, and ramps up.
+		// Applied per group (one floor unit per distinct pipe, never per redundant
+		// co-bottlenecked leg). Skipped when every group is idle (maxW == 0) so an
+		// idle mux doesn't manufacture phantom weight.
 		if maxW > 0 {
 			floor := maxW * capacityColdFloorFrac
-			for i, lc := range m.legs {
-				if lc == nil || (i < len(m.standby) && m.standby[i]) {
-					continue
-				}
-				if weights[i] < floor {
-					weights[i] = floor
+			for _, r := range rep {
+				if weights[r] < floor {
+					weights[r] = floor
 				}
 			}
 		}
