@@ -212,6 +212,8 @@ func legsToPreset(legs []router.LegInfo) []preset.LegInfo {
 			LatencyMs:   l.LatencyMs,
 			Alive:       l.Alive,
 			Standby:     l.Standby,
+			Direct:      l.Direct,
+			Flipped:     l.Flipped,
 			SentBytes:   l.SentBytes,
 			RecvBytes:   l.RecvBytes,
 			Retransmits: l.Retransmits,

@@ -795,6 +795,20 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	var rawTotal float64
 	var rawSent float64
 	aliveCount := 0
+	// nonDLActive counts the ACTIVE legs of a unidirectional group that do NOT
+	// currently carry the DOWNLOAD direction (alive, !Standby, Direct != Flipped).
+	// "Reverse/download" is not an intrinsic leg property — it is the current
+	// send-side direction ASSIGNMENT, which the flip controller can swap: a leg
+	// carries the download when Direct == Flipped (unflipped: the multihop legs;
+	// flipped: the direct leg). The other (upload/light) class must NOT count
+	// toward the download-active budget — that budget is maintained SEPARATELY on
+	// top of it, so the exit always keeps active download-class legs to send on
+	// whichever way the flip sits. Always 0 for a non-directional (symmetric)
+	// group and for the default unflipped case with a single direct upload leg it
+	// equals the direct-leg count — so every computation below is byte-identical
+	// to the old controller for symmetric groups and unchanged for the common
+	// unflipped download.
+	nonDLActive := 0
 	standbyCount := 0
 	newestAliveIdx := -1
 	promotableIdx := -1
@@ -815,6 +829,9 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 			continue
 		}
 		aliveCount++
+		if l.Direct != l.Flipped {
+			nonDLActive++
+		}
 		if l.Index > newestAliveIdx {
 			newestAliveIdx = l.Index
 		}
@@ -1086,15 +1103,29 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	}
 
 	// desiredActive is the combined active-leg width the group converges to:
-	// the reverse steady/grown target PLUS any extra forward legs the upload
-	// machine has grown (forwardExtra). Folding the forward growth into the
-	// convergence target is what stops the reverse-side park/drop-recovery
-	// rules from immediately tearing down a leg the forward machine just added.
-	// When the forward machine is dormant (SentBytes flat) forwardExtra is 0
-	// and desiredActive == adaptTarget, so every rule below behaves exactly as
-	// the reverse-only controller did.
+	// the download steady/grown target PLUS any extra forward legs the upload
+	// machine has grown (forwardExtra) PLUS the active non-download-class leg(s)
+	// of a unidirectional group (nonDLActive). Folding the forward growth into the
+	// convergence target is what stops the download-side park/drop-recovery rules
+	// from immediately tearing down a leg the forward machine just added.
+	//
+	// Adding nonDLActive is the ACTIVE-DOWNLOAD-FLOOR fix (unidirectional groups):
+	// the non-download-class leg (the direct leg unflipped; a multihop leg
+	// flipped) carries only the light/upload direction, so it satisfies NONE of
+	// the download-active budget. Without this, adaptTarget seeds to adaptRevActive
+	// (1) and the lone active upload leg makes aliveCount==1==desiredActive, so
+	// drop-recovery (1) never fires and NO download-class leg is ever promoted —
+	// the exit then has zero active download legs to send on and falls back onto
+	// warm-standby legs (over-subscribing them → reorder wedge → group collapse).
+	// Counting the non-download leg on TOP of the download target makes
+	// desiredActive == nonDLActive + adaptRevActive(download), so drop-recovery
+	// promotes a healthy download-class standby to the floor and holds it there —
+	// a floor, not churn (it bypasses the cooldown like every other capacity-
+	// restore path, and stops the instant the floor is met). nonDLActive is 0 for
+	// a symmetric group, so this is a no-op there and desiredActive ==
+	// adaptTarget + forwardExtra as before.
 	forwardExtra := e.adaptFwdTarget - adaptFwdActive
-	desiredActive := e.adaptTarget + forwardExtra
+	desiredActive := e.adaptTarget + forwardExtra + nonDLActive
 	if desiredActive > adaptCap {
 		desiredActive = adaptCap
 	}
@@ -1293,10 +1324,11 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// wide mux is reserved for real bulk load and never drains the reserve below
 	// adaptStandbyMin.
 	if e.adaptSatTicks >= adaptHysteresis && aliveCount < adaptCap {
-		// Grow the REVERSE target by one. Subtract forwardExtra so the reverse
-		// width tracks only the download legs even when forward growth has
-		// enlarged aliveCount (a no-op when the forward machine is dormant).
-		e.adaptTarget = aliveCount - forwardExtra + 1
+		// Grow the DOWNLOAD target by one. Subtract forwardExtra AND nonDLActive
+		// so the width tracks only the download-class legs, excluding both the
+		// forward-grown aux legs and a unidirectional group's non-download (upload)
+		// leg(s) (both no-ops when absent).
+		e.adaptTarget = aliveCount - forwardExtra - nonDLActive + 1
 		if e.adaptTarget > adaptCap {
 			e.adaptTarget = adaptCap
 		}
@@ -1327,12 +1359,14 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 
 	// (5) Shrink on SUSTAINED idle back toward the single-leg steady target, so a
 	// finished bulk transfer releases its extra legs (parked to the reserve, or
-	// dropped once it is full). Never leg 0. The reverse-portion width
-	// (aliveCount-forwardExtra) gates this so forward-grown legs aren't shrunk
-	// here (rule 5b owns them).
-	if e.adaptIdleCount >= adaptHysteresis && aliveCount-forwardExtra > adaptRevActive && newestAliveIdx > 0 {
+	// dropped once it is full). Never leg 0. The download-portion width
+	// (aliveCount-forwardExtra-nonDLActive) gates this so neither forward-grown
+	// legs nor a unidirectional group's non-download (upload) leg(s) are shrunk
+	// here (rule 5b owns the forward legs; the non-download leg is not a download
+	// leg to release).
+	if e.adaptIdleCount >= adaptHysteresis && aliveCount-forwardExtra-nonDLActive > adaptRevActive && newestAliveIdx > 0 {
 		e.adaptIdleCount = 0
-		e.adaptTarget = aliveCount - forwardExtra - 1
+		e.adaptTarget = aliveCount - forwardExtra - nonDLActive - 1
 		if e.adaptTarget < adaptRevActive {
 			e.adaptTarget = adaptRevActive
 		}

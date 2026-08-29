@@ -366,7 +366,15 @@ type LegInfo struct {
 	Alive       bool
 	// Standby mirrors router.LegInfo.Standby: true when the leg is a
 	// warm standby (rules kept alive, not selected for sending).
-	Standby     bool
+	Standby bool
+	// Direct mirrors router.LegInfo.Direct: true when the leg is the
+	// forward-only DIRECT (1-hop) leg of a unidirectional route group, so a
+	// download-sizing controller keeps it out of the reverse-active budget.
+	Direct bool
+	// Flipped mirrors router.LegInfo.Flipped: the route group's current
+	// unidirectional flip state (same on every leg). A leg carries the download
+	// direction when Direct == Flipped.
+	Flipped     bool
 	SentBytes   uint64
 	RecvBytes   uint64
 	Retransmits uint64
