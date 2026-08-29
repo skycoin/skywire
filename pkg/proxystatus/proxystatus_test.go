@@ -59,7 +59,7 @@ func TestRenderSections(t *testing.T) {
 		},
 		Logs:    []string{"line two", "[2025-06-01T00:00:00.0000Z] INFO [skysocks-client]: app is running app_name=skysocks-client"},
 		Events:  []string{"[2025-06-01T00:00:01.0000Z] WARN [router]: leg demoted", "[2025-06-01T00:00:02.0000Z] ERROR [dmsgC]: handshake failed close_err=broken pipe"},
-		Streams: []Stream{{ID: 7, Target: "example.com:80", AgeMS: 65000}},
+		Streams: []Stream{{ID: 7, Target: "example.com:80", AgeMS: 65000, SentBytes: 4096, RecvBytes: 2 * 1024 * 1024, SentRateBps: 512, RecvRateBps: 1.5 * 1024 * 1024, LatencyMS: 142}},
 	}
 	page := string(Render(snap))
 	for _, want := range []string{
@@ -160,8 +160,14 @@ func TestRenderSections(t *testing.T) {
 		// by the inline script over the WebSocket pushes.
 		`data-bytes="up"`, `data-bytes="down"`, `data-rate="up"`, `data-rate="down"`, `class="rate"`, "fmtRate",
 		// item 4: the "N open stream(s)" count expands into per-stream rows (id /
-		// target / age) in an expandable section.
+		// target / age / up-down bytes / up-down rate / route-group rtt) in an
+		// expandable section. The byte counters are per-stream (metered by the splice
+		// loop); the rate is smoothed; the rtt column is route-group latency, labeled
+		// as such (yamux has no per-stream RTT). The summary carries the aggregate ↑/↓.
 		`class="streams"`, "open streams", "example.com:80",
+		`class="sagg"`, `class="num up"`, `class="num down"`, `class="num rtt"`,
+		"↑ bytes", "↓ bytes", "↑ rate", "↓ rate",
+		"route-group latency", "4.0K", "2.0M", "512B/s", "1.5M/s", "142ms",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("rendered page missing %q", want)
