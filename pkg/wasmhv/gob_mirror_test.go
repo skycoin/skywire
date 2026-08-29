@@ -170,3 +170,21 @@ func TestMirrorArgsEncode(t *testing.T) {
 		require.True(t, got.NoRegister)
 	})
 }
+
+// TestMirrorStateSnapshotEncodes confirms the wasm gateway's StateSnapshot mirror
+// gob-encodes into visor.StateSnapshot — the direction the RPC bridge uses so
+// `cli visor state` decodes a real (partial) snapshot from a browser leaf.
+func TestMirrorStateSnapshotEncodes(t *testing.T) {
+	var got visor.StateSnapshot
+	gobRoundTrip(t, &wasmhv.StateSnapshot{
+		At:         time.Unix(1700000000, 0).UTC(),
+		Summary:    &wasmhv.Summary{Online: true, MinHops: 2},
+		Health:     &wasmhv.HealthInfo{ServicesHealth: "healthy"},
+		Transports: []*wasmhv.TransportSummary{},
+	}, &got)
+	require.NotNil(t, got.Summary)
+	require.True(t, got.Summary.Online)
+	require.NotNil(t, got.Health)
+	require.Equal(t, "healthy", got.Health.ServicesHealth)
+	require.False(t, got.At.IsZero())
+}
