@@ -660,6 +660,21 @@ func (r *router) finishDial(
 			muxTarget = eff
 		}
 	}
+	// Clamp the warm-standby mux target to a REACHABLE ceiling, independent of what
+	// the policy asks. The adaptive preset requests a very large Mux (its
+	// "full disjoint pool" ≈ 513); on a real mesh no single exit offers hundreds of
+	// disjoint paths, so the background self-heal never reaches such a target and
+	// re-dials toward it every tick — a setup-node dial storm ("Closing conn from
+	// untrusted setup node") that resets the route group and collapses bulk
+	// transfers mid-stream (measured: a 10 MB download rode 44+ churning legs and
+	// stalled). Capping here, at the actuation layer, fixes it for ANY policy: the
+	// foreground dial fills the pool once (initialForegroundMux) and the self-heal
+	// simply HOLDS it — held standby legs are never reaped, and the ACTIVE width is
+	// bounded separately by the adaptive engine (adaptCap). Raise this only once the
+	// cascade setup is batched and the no-skip reorder frontier scales to many legs.
+	if muxTarget > maxWarmStandbyMuxTarget {
+		muxTarget = maxWarmStandbyMuxTarget
+	}
 	// A same-LAN destination is best reached over its single direct transport
 	// (ms-latency). Growing a warm-standby mux to it forces the aux legs through
 	// REMOTE 2-hop intermediates (same-LAN peers are excluded as intermediates),
@@ -2261,6 +2276,12 @@ func hopPath(path []routing.Hop) string {
 // download can grow onto warm legs immediately, but small enough that the
 // initial dial is a handful of parallel setups, not a storm.
 const initialForegroundMux = 16
+
+// maxWarmStandbyMuxTarget caps the warm-standby mux degree the self-heal will
+// chase, regardless of the (much larger) Mux a policy may request — see the clamp
+// in the dial path. Set to initialForegroundMux so the foreground dial fills the
+// whole pool and the background self-heal has nothing left to storm on.
+const maxWarmStandbyMuxTarget = initialForegroundMux
 
 func (r *router) establishMuxRoutes(
 	ctx context.Context,
