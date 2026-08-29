@@ -194,7 +194,15 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 		c.appCl.Log().Debugf("range-split: %s %d bytes → %d chunks × %d streams",
 			host, total, numChunks(total, c.rs.chunkSize), c.rs.concurrency)
 	}
+	// Observability counters (surfaced as proxystatus.RangeSplit): this is a
+	// committed multi-chunk split, so record it and mark it in flight for the
+	// duration of the concurrent fetch.
+	c.rsSplits.Add(1)
+	c.rsChunks.Add(uint64(numChunks(total, c.rs.chunkSize))) //nolint:gosec // numChunks>0 here (total>chunkSize)
+	c.rsBytes.Add(uint64(total))                             //nolint:gosec // total>0 checked above
+	c.rsActive.Add(1)
 	c.streamRemainingChunks(conn, req, host, validator, total)
+	c.rsActive.Add(-1)
 	conn.Close() //nolint:errcheck,gosec
 	return host, nil, true
 }

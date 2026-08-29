@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -37,7 +38,7 @@ type StateSnapshot struct {
 	Apps          []*appserver.AppState            `json:"apps,omitempty"`
 	Transports    []*TransportSummary              `json:"transports,omitempty"`
 	Persistent    []transport.PersistentTransports `json:"persistent_transports,omitempty"`
-	Modules       ModulePresence                   `json:"modules"`
+	Modules       *ModulePresence                  `json:"modules,omitempty"`
 
 	// RouterConfig is the routing configuration actually IN FORCE at
 	// runtime (min_hops / mux_routes / force_local / existing_tp_only
@@ -64,9 +65,73 @@ type StateSnapshot struct {
 	// a query against the live visor (local or --via dmsg://<pk>).
 	CXOFeeds []CXOFeedState `json:"cxo,omitempty"`
 
+	// Proxy is the visor-side live proxystatus snapshot for the skysocks
+	// surface — the same per-leg mux telemetry, running flag, and (when the
+	// client pushes it) range-split summary the status.skysocks page renders.
+	// It is OPT-IN: built only for `--select proxy`, never in the full/default
+	// snapshot, so the default payload is unchanged.
+	Proxy *proxystatus.Snapshot `json:"proxy,omitempty"`
+
 	// Notes collects per-section errors ("routing: <err>") so the snapshot is
 	// self-describing about what it could and could not read.
 	Notes []string `json:"notes,omitempty"`
+}
+
+// State*-select keys name the projectable subtrees of a StateSnapshot. Passing a
+// subset to StateSnapshotProjected makes the SERVER build and marshal ONLY those
+// sections, so a cheap `--select mux` skips the expensive transports build (the
+// full snapshot is ~900 KB, dominated by transports at ~307 KB; mux is ~75 KB).
+// The keys match the snapshot's JSON field names (or a short alias) so a --jq
+// expression written against the full snapshot transfers to a projection
+// unchanged.
+const (
+	SelectSummary    = "summary"    // summary
+	SelectHealth     = "health"     // health + service_health
+	SelectRouting    = "routing"    // routing_stats + route_groups + routing_policy + router_config
+	SelectMux        = "mux"        // mux_route_groups (+ route_groups count)
+	SelectApps       = "apps"       // apps
+	SelectTransports = "transports" // transports + persistent_transports
+	SelectModules    = "modules"    // modules
+	SelectCXO        = "cxo"        // cxo feed publish-health
+	SelectProxy      = "proxy"      // visor-side proxystatus snapshot (skysocks); opt-in only
+)
+
+// StateSelectKeys is the documented set of --select keys, in help order.
+var StateSelectKeys = []string{
+	SelectSummary, SelectHealth, SelectRouting, SelectMux,
+	SelectApps, SelectTransports, SelectModules, SelectCXO, SelectProxy,
+}
+
+// stateFieldSet is the parsed --select set. A nil set means "everything in the
+// default full snapshot" (proxy stays opt-in even then). An entry present but
+// unknown is ignored here and surfaced as a Note by the builder.
+type stateFieldSet map[string]bool
+
+// newStateFieldSet parses the requested field keys. An empty/nil fields slice
+// returns a nil set, i.e. build the full default snapshot.
+func newStateFieldSet(fields []string) stateFieldSet {
+	if len(fields) == 0 {
+		return nil
+	}
+	set := make(stateFieldSet, len(fields))
+	for _, f := range fields {
+		if f != "" {
+			set[f] = true
+		}
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	return set
+}
+
+// has reports whether section k should be built. A nil set (no --select) builds
+// every default section; proxy is never a default section (see wantProxy).
+func (s stateFieldSet) has(k string) bool {
+	if k == SelectProxy {
+		return s != nil && s[k]
+	}
+	return s == nil || s[k]
 }
 
 // EffectiveRoutingConfig is the routing configuration in force at
@@ -95,10 +160,24 @@ type ModulePresence struct {
 	EmbeddedRouteSetup bool `json:"embedded_route_setup"`
 }
 
-// StateSnapshot assembles the runtime StateSnapshot. Each section is best-effort
-// and never panics on a not-yet-initialized subsystem; failures are recorded in
-// Notes. Secrets are never included (see the StateSnapshot type doc).
+// StateSnapshot assembles the full runtime StateSnapshot (every default
+// section). It is StateSnapshotProjected(nil).
 func (v *Visor) StateSnapshot() (*StateSnapshot, error) {
+	return v.StateSnapshotProjected(nil)
+}
+
+// StateSnapshotProjected assembles the runtime StateSnapshot, building ONLY the
+// sections named in fields (see the StateSelect* keys). A nil/empty fields slice
+// builds the full default snapshot (proxy stays opt-in). This is the efficiency
+// win behind `cli visor state --select`: `--select mux` skips the ~307 KB
+// transports build entirely, so a 1 s mux watch is cheap.
+//
+// Each requested section is best-effort and never panics on a not-yet-
+// initialized subsystem; failures are recorded in Notes. Secrets are never
+// included (see the StateSnapshot type doc). At + Suspended are always populated
+// (both cheap).
+func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) {
+	want := newStateFieldSet(fields)
 	snap := &StateSnapshot{At: time.Now()}
 	note := func(section string, err error) {
 		if err != nil {
@@ -112,95 +191,121 @@ func (v *Visor) StateSnapshot() (*StateSnapshot, error) {
 		snap.Suspended = susp
 	}
 
-	if sum, err := v.Summary(); err != nil {
-		note("summary", err)
-	} else {
-		snap.Summary = sum
-	}
-
-	if h, err := v.Health(); err != nil {
-		note("health", err)
-	} else {
-		snap.Health = h
-	}
-
-	if sh, err := v.ServiceHealth(); err != nil {
-		note("service_health", err)
-	} else {
-		snap.ServiceHealth = sh
-	}
-
-	if rs, err := v.RoutingStats(); err != nil {
-		note("routing_stats", err)
-	} else {
-		snap.RoutingStats = &rs
-	}
-
-	if rgs, err := v.RouteGroups(); err != nil {
-		note("route_groups", err)
-	} else {
-		snap.RouteGroups = len(rgs)
-	}
-
-	if mrgs, err := v.AllRouteGroupMuxInfo(); err != nil {
-		note("mux_route_groups", err)
-	} else if len(mrgs) > 0 {
-		snap.MuxRouteGroups = mrgs
-	}
-
-	if rc, err := v.GetRouterSettings(); err != nil {
-		note("router_config", err)
-	} else {
-		erc := &EffectiveRoutingConfig{
-			MinHops:             rc.MinHops,
-			MuxRoutes:           rc.MuxRoutes,
-			ForceLocalRoutes:    rc.ForceLocalRoutes,
-			ExistingTPOnly:      rc.ExistingTPOnly,
-			TransportPreference: rc.TransportPreference,
+	if want.has(SelectSummary) {
+		if sum, err := v.Summary(); err != nil {
+			note("summary", err)
+		} else {
+			snap.Summary = sum
 		}
-		if v.conf != nil && v.conf.Routing != nil {
-			erc.EnableCascadeRouteSetup = v.conf.Routing.EnableCascadeRouteSetup
-			erc.PolicyPerDial = v.conf.Routing.PolicyPerDial
+	}
+
+	if want.has(SelectHealth) {
+		if h, err := v.Health(); err != nil {
+			note("health", err)
+		} else {
+			snap.Health = h
 		}
-		snap.RouterConfig = erc
+		if sh, err := v.ServiceHealth(); err != nil {
+			note("service_health", err)
+		} else {
+			snap.ServiceHealth = sh
+		}
 	}
 
-	if rp, err := v.RoutingPolicies(); err != nil {
-		note("routing_policy", err)
-	} else {
-		snap.RoutingPolicy = rp
+	if want.has(SelectRouting) {
+		if rs, err := v.RoutingStats(); err != nil {
+			note("routing_stats", err)
+		} else {
+			snap.RoutingStats = &rs
+		}
+		if rc, err := v.GetRouterSettings(); err != nil {
+			note("router_config", err)
+		} else {
+			erc := &EffectiveRoutingConfig{
+				MinHops:             rc.MinHops,
+				MuxRoutes:           rc.MuxRoutes,
+				ForceLocalRoutes:    rc.ForceLocalRoutes,
+				ExistingTPOnly:      rc.ExistingTPOnly,
+				TransportPreference: rc.TransportPreference,
+			}
+			if v.conf != nil && v.conf.Routing != nil {
+				erc.EnableCascadeRouteSetup = v.conf.Routing.EnableCascadeRouteSetup
+				erc.PolicyPerDial = v.conf.Routing.PolicyPerDial
+			}
+			snap.RouterConfig = erc
+		}
+		if rp, err := v.RoutingPolicies(); err != nil {
+			note("routing_policy", err)
+		} else {
+			snap.RoutingPolicy = rp
+		}
 	}
 
-	if apps, err := v.Apps(); err != nil {
-		note("apps", err)
-	} else {
-		snap.Apps = apps
+	// route_groups is a cheap count wanted by both the routing and mux views.
+	if want.has(SelectRouting) || want.has(SelectMux) {
+		if rgs, err := v.RouteGroups(); err != nil {
+			note("route_groups", err)
+		} else {
+			snap.RouteGroups = len(rgs)
+		}
 	}
 
-	// logs=true so each TransportSummary.Log carries the transport's
-	// cumulative recv/sent byte counters — the passive throughput totals an
-	// operator debugging a slow/idle link wants, surfaced without a second call.
-	if tps, err := v.Transports(nil, nil, true); err != nil {
-		note("transports", err)
-	} else {
-		snap.Transports = tps
+	if want.has(SelectMux) {
+		if mrgs, err := v.AllRouteGroupMuxInfo(); err != nil {
+			note("mux_route_groups", err)
+		} else if len(mrgs) > 0 {
+			snap.MuxRouteGroups = mrgs
+		}
 	}
 
-	if pts, err := v.GetPersistentTransports(); err != nil {
-		note("persistent_transports", err)
-	} else {
-		snap.Persistent = pts
+	if want.has(SelectApps) {
+		if apps, err := v.Apps(); err != nil {
+			note("apps", err)
+		} else {
+			snap.Apps = apps
+		}
 	}
 
-	snap.Modules = ModulePresence{
-		StatsTracker:       v.statsTracker != nil,
-		UptimeRecorder:     v.uptimeRecorder != nil,
-		EmbeddedTPS:        v.embeddedTPS != nil,
-		EmbeddedRouteSetup: v.embeddedRouteSetup != nil,
+	if want.has(SelectTransports) {
+		// logs=true so each TransportSummary.Log carries the transport's
+		// cumulative recv/sent byte counters — the passive throughput totals an
+		// operator debugging a slow/idle link wants, surfaced without a second call.
+		if tps, err := v.Transports(nil, nil, true); err != nil {
+			note("transports", err)
+		} else {
+			snap.Transports = tps
+		}
+		if pts, err := v.GetPersistentTransports(); err != nil {
+			note("persistent_transports", err)
+		} else {
+			snap.Persistent = pts
+		}
 	}
 
-	if cf := v.CXOFeedStates(); len(cf) > 0 {
-		snap.CXOFeeds = cf
+	if want.has(SelectModules) {
+		snap.Modules = &ModulePresence{
+			StatsTracker:       v.statsTracker != nil,
+			UptimeRecorder:     v.uptimeRecorder != nil,
+			EmbeddedTPS:        v.embeddedTPS != nil,
+			EmbeddedRouteSetup: v.embeddedRouteSetup != nil,
+		}
+	}
+
+	if want.has(SelectCXO) {
+		if cf := v.CXOFeedStates(); len(cf) > 0 {
+			snap.CXOFeeds = cf
+		}
+	}
+
+	// proxy is opt-in (never in the default snapshot): the visor-side
+	// proxystatus snapshot for the skysocks surface — per-leg mux telemetry,
+	// running flag, and the range-split summary when the client has pushed it.
+	if want.has(SelectProxy) {
+		if ps, err := v.proxyStatusProvider().StatusSnapshot(proxystatus.SurfaceSkysocks); err != nil {
+			note("proxy", err)
+		} else {
+			snap.Proxy = &ps
+		}
 	}
 
 	return snap, nil
