@@ -70,6 +70,10 @@ func (proxyDefaultAPI) StateSnapshot() (*StateSnapshot, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) StateSnapshotProjected(_ []string) (*StateSnapshot, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) Health() (*HealthInfo, error) {
 	return nil, ErrProxyNotSupported
 }

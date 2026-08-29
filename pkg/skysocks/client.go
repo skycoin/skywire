@@ -95,6 +95,17 @@ type Client struct {
 	// separate tunnels and reassembled, so one download aggregates across the mesh
 	// with no client cooperation. Default-on; the app can retune or disable it.
 	rs rangeSplitConfig
+
+	// rsActive/rsSplits/rsChunks/rsBytes are the range-split observability
+	// counters the status page surfaces (proxystatus.RangeSplit) so "is
+	// range-split firing" is a live field, not just a Debugf. All atomic — the
+	// snapshot reads them without locking, like the per-stream meters. rsActive
+	// is the in-flight split count (Add(1) on commit, Add(-1) on completion); the
+	// rest are monotonic cumulative totals.
+	rsActive atomic.Int64
+	rsSplits atomic.Uint64
+	rsChunks atomic.Uint64
+	rsBytes  atomic.Uint64
 }
 
 // streamMeta is the per-stream detail the status page surfaces for an open
@@ -968,6 +979,25 @@ func (c *Client) removeStream(id uint32) {
 	c.streamsMu.Unlock()
 }
 
+// rangeSplitSnapshot reports the live range-split summary from the atomic
+// counters. It returns nil when range-splitting is disabled (so the status page
+// simply omits the section); when enabled it always reports, so ActiveSplits==0
+// with zero totals reads as "on, nothing splitting yet".
+func (c *Client) rangeSplitSnapshot() *proxystatus.RangeSplit {
+	if !c.rs.enabled {
+		return nil
+	}
+	return &proxystatus.RangeSplit{
+		Enabled:         true,
+		ActiveSplits:    c.rsActive.Load(),
+		TotalSplits:     c.rsSplits.Load(),
+		TotalChunks:     c.rsChunks.Load(),
+		TotalBytes:      c.rsBytes.Load(),
+		StreamsPerSplit: c.rs.concurrency,
+		ChunkSize:       c.rs.chunkSize,
+	}
+}
+
 // streamSnapshot returns the currently open streams as sorted proxystatus.Stream
 // rows (by id) for the status page, carrying each stream's cumulative up/down
 // bytes and a smoothed up/down rate. The rate is an EWMA differenced from the
@@ -1495,6 +1525,10 @@ func (c *Client) statusSnapshot() proxystatus.Snapshot {
 	} else {
 		snap.Note = "no active session to the exit"
 	}
+	// Range-split summary is local client truth (the counters live here, not in
+	// the visor-built base), overlaid like Streams so status.skysocks shows
+	// whether transparent HTTP range-splitting is firing right now.
+	snap.RangeSplit = c.rangeSplitSnapshot()
 	return snap
 }
 

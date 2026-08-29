@@ -34,6 +34,7 @@ type API interface {
 	Overview() (*Overview, error)
 	Summary() (*Summary, error)
 	StateSnapshot() (*StateSnapshot, error)
+	StateSnapshotProjected(fields []string) (*StateSnapshot, error)
 	Health() (*HealthInfo, error)
 	IsStartupComplete() bool
 	EnableHypervisor() error
