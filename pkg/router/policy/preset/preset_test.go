@@ -1028,3 +1028,70 @@ func TestEngine_OnTick_AdaptiveForwardCollapsesOnIdle(t *testing.T) {
 		t.Errorf("idle steady state must be a single active forward leg; active=%d", s.activeCount())
 	}
 }
+
+// TestEngine_OnTick_AdaptiveShedsExcessStandby is the fix for the runtime
+// warm-standby retune: lowering AdaptStandbyMax at runtime must actually SHRINK
+// an already-over-full reserve, not merely stop it from growing. A group parked
+// at the old (larger) pool size, then retuned to a smaller max, must drop the
+// surplus standby legs SLOWEST-first in one converging tick and then go quiet.
+func TestEngine_OnTick_AdaptiveShedsExcessStandby(t *testing.T) {
+	// Snapshot and restore the process-global tunables (other tests read them).
+	origStandby, origCap, origRev := AdaptStandbyMax(), AdaptCap(), AdaptRevActive()
+	defer func() {
+		SetAdaptStandbyMax(origStandby)
+		SetAdaptCap(origCap)
+		SetAdaptRevActive(origRev)
+	}()
+
+	e := New()
+	// One active primary (leg 0) + 12 warm-standby legs, distinct latencies so
+	// the slowest-first drop order is checkable (idx 1 fastest ... idx 12 slowest).
+	const nStandby = 12
+	legs := make([]LegInfo, nStandby+1)
+	legs[0] = LegInfo{Index: 0, TransportID: "p", Kind: "stcpr", LatencyMs: 30, Alive: true}
+	for i := 1; i <= nStandby; i++ {
+		legs[i] = LegInfo{
+			Index: i, TransportID: string(rune('a' + i)), Kind: "stcpr",
+			LatencyMs: 100 + 10*i, Alive: true, Standby: true,
+		}
+	}
+
+	// Retune the reserve DOWN to 4. Surplus = 12 - 4 = 8 legs must be shed.
+	SetAdaptStandbyMax(4)
+	act := e.OnTick("adaptive", legs)
+
+	const wantDrop = nStandby - 4
+	if len(act.DropLegs) != wantDrop {
+		t.Fatalf("expected %d surplus standby legs shed in one tick, got %d: %+v",
+			wantDrop, len(act.DropLegs), act)
+	}
+	dropped := map[int]bool{}
+	for _, idx := range act.DropLegs {
+		if idx == 0 {
+			t.Fatalf("must never shed leg 0 (primary); got %+v", act.DropLegs)
+		}
+		dropped[idx] = true
+	}
+	// The 4 FASTEST standby legs (idx 1..4) must be kept; the 8 slowest shed.
+	for _, keep := range []int{1, 2, 3, 4} {
+		if dropped[keep] {
+			t.Errorf("fastest standby legs must be kept warm: leg %d was shed; got %+v", keep, act.DropLegs)
+		}
+	}
+	for slow := 5; slow <= nStandby; slow++ {
+		if !dropped[slow] {
+			t.Errorf("slowest standby legs must be shed first: leg %d not shed; got %+v", slow, act.DropLegs)
+		}
+	}
+
+	// Reflect the drop (as the route group would) and tick again: the reserve is
+	// now AT the configured size, so the shed rule must be a no-op (converge, not
+	// churn). Drop-recovery/park don't fire at 1 active + 4 standby either.
+	remain := legs[:1]
+	for i := 1; i <= 4; i++ {
+		remain = append(remain, legs[i])
+	}
+	if act := e.OnTick("adaptive", remain); len(act.DropLegs) != 0 {
+		t.Errorf("at the configured reserve size the shed must be a no-op (no churn); got DropLegs=%+v", act.DropLegs)
+	}
+}

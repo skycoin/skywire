@@ -1067,6 +1067,18 @@ func (rg *RouteGroup) SetSelfHeal(applyAdd func(excludeHops []string), target in
 	rg.mu.Unlock()
 }
 
+// setSelfHealTarget updates ONLY the self-heal degree, leaving the applyAdd
+// callback in place. The rotation loop calls this each tick for an adaptive
+// group (see SelfHealTargeter) so a runtime mux retune — lowering the warm-
+// standby reserve or the active width over the mux-control RPC — re-caps the
+// live self-heal target instead of letting maybeSelfHeal keep re-dialing back
+// toward the (larger) dial-time value.
+func (rg *RouteGroup) setSelfHealTarget(target int) {
+	rg.mu.Lock()
+	rg.selfHealTarget = target
+	rg.mu.Unlock()
+}
+
 // aliveLegCount returns the number of live legs (non-nil, unclosed
 // transports). Caller must NOT hold rg.mu.
 func (rg *RouteGroup) aliveLegCount() int {
@@ -1647,6 +1659,16 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 	rg.mu.Unlock()
 	if hook == nil {
 		return
+	}
+	// Track the live self-heal target for an adaptive group: its pool size
+	// (active width + warm-standby reserve) is a runtime tunable, so re-read it
+	// each tick and re-cap maybeSelfHeal's target — lowering the reserve at
+	// runtime then actually stops the self-heal from re-dialing beyond the new
+	// size (the excess parked legs are shed by the tick's own converge-down rule).
+	if st, ok := hook.(SelfHealTargeter); ok {
+		if target, ok := st.SelfHealTarget(); ok {
+			rg.setSelfHealTarget(target)
+		}
 	}
 	action := hook.OnTick(info, legs)
 	if len(action.DropLegs) == 0 && !action.AddLeg && !action.AddForwardLeg &&
