@@ -65,6 +65,32 @@ func (m *routeMux) setFlipped(flipped bool) (changed bool) {
 	return changed
 }
 
+// isDirectional reports whether unidirectional send selection (CapUniDir) is
+// active on this mux.
+func (m *routeMux) isDirectional() bool {
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	return m.directional
+}
+
+// soleBlackHoleExemptRecvFloor is the per-tick GROUP recv above which a
+// directional group's sole ACTIVE (light-direction) leg is exempt from the
+// sole-leg black-hole reaping.
+const soleBlackHoleExemptRecvFloor = 16 * 1024
+
+// soleLegBlackHoleExempt reports whether the sole-leg black-hole reaping should
+// be SKIPPED this tick. Under unidirectional assignment the sole active leg
+// carries only ONE direction — on a download it is the light FORWARD (upload)
+// leg, which sends acks but receives ~nothing because the download flows on the
+// REVERSE (send-standby) mux legs. Judging that leg by its own recv would misread
+// it as a black-hole and prune the direct leg exactly when unidir is working. So
+// skip the reaping when directional AND the GROUP is receiving data on its
+// reverse legs (aggregate recv delta above the floor) — the group is not
+// black-holing even though the sole active leg is quiet on the receive side.
+func soleLegBlackHoleExempt(directional bool, aggRecvDelta uint64) bool {
+	return directional && aggRecvDelta > soleBlackHoleExemptRecvFloor
+}
+
 // dirConfig snapshots the directional state under legMu so the send path reads it
 // once and then uses lock-free pure helpers (avoids re-locking legMu per leg).
 func (m *routeMux) dirConfig() (directional, wantDirect bool, dst, src cipher.PubKey) {
