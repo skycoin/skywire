@@ -357,6 +357,13 @@ type RouteGroup struct {
 	// evicting the "slowest leg" and the fastest-leg retransmit picker judge the
 	// whole path, not just the near edge. Guarded by legLivenessMu.
 	legE2ELatency map[uuid.UUID]float64
+	// legOWD holds each leg's moving window of RAW end-to-end round-trip samples
+	// (ms), keyed by transport ID (survives index shifts), folded from the same
+	// leg-liveness pong as legE2ELatency but BEFORE the EWMA — the OWD-variation
+	// series RFC 8382 shared-bottleneck detection needs (see bottleneck.go). No new
+	// probe traffic: it reuses the pong the liveness loop already sends. Guarded by
+	// legLivenessMu.
+	legOWD map[uuid.UUID]*sbdWindow
 	// legRecvSnap is each leg's last-sampled rg-scoped RecvBytes, keyed by
 	// transport ID (survives index shifts), for the fast data-progress prune:
 	// an ACTIVE leg whose recv is flat across an interval while the group keeps
@@ -397,6 +404,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		legMissed:          make(map[uuid.UUID]int),
 		inflightPings:      make(map[int64]uuid.UUID),
 		legE2ELatency:      make(map[uuid.UUID]float64),
+		legOWD:             make(map[uuid.UUID]*sbdWindow),
 		legForwardHops:     make(map[uuid.UUID][]routing.Hop),
 		legRecvSnap:        make(map[uuid.UUID]uint64),
 	}
@@ -1238,6 +1246,7 @@ func (rg *RouteGroup) snapshotLegs() []LegInfo {
 		for id := range rg.legE2ELatency {
 			if _, ok := live[id]; !ok {
 				delete(rg.legE2ELatency, id)
+				delete(rg.legOWD, id)
 			}
 		}
 	}
@@ -2129,6 +2138,14 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 		rg.soleBHTicks = 0
 	}
 
+	// Detect shared-bottleneck groups from each leg's OWD-variation statistics
+	// (RFC 8382) BEFORE the weight rebuild below, so the capacity weights count
+	// each bottleneck as ONE pipe (not N competing legs) and redundant
+	// co-bottlenecked legs are parked to warm standby. No new probe traffic — the
+	// OWD windows are fed from the leg-liveness pong. The rebuild that follows
+	// picks up both the fresh grouping and any parks.
+	rg.enforceBottleneckGroups(perDelta)
+
 	// Refresh transport-selection weights on this fast cadence so
 	// WeightModeCapacity tracks RECENT goodput within seconds instead of the
 	// ~5min keep-alive cadence — essential for the weighted-ramp (a promoted leg
@@ -2445,6 +2462,71 @@ func (rg *RouteGroup) reelectPrimary(newIdx int) {
 		}
 	}
 	rg.logger.Infof("latency-band: re-elected leg %d into the primary slot (old primary was an out-of-band outlier)", newIdx)
+}
+
+// enforceBottleneckGroups detects SHARED-BOTTLENECK groups among the mux legs
+// from each leg's OWD-variation statistics (RFC 8382; see bottleneck.go), pushes
+// the grouping to the mux (so rebuildWeights counts each bottleneck as ONE unit
+// of capacity instead of N independent competing pipes), and parks redundant
+// co-bottlenecked ACTIVE legs to warm standby (admission prefers legs from
+// DISTINCT groups). Reuses the leg-liveness pong samples already collected — no
+// new probe traffic. Runs on the data-progress cadence, just before the weight
+// rebuild and the latency band; the caller rebuilds the weights immediately after
+// so the parks and grouping take effect the same tick. Never parks the primary or
+// below one active leg per group (pickBottleneckDemotions guarantees this).
+//
+// This is the general-case complement to the same-LAN structural reject (#4253):
+// that check only catches a co-located INTERMEDIATE at leg-creation time; this
+// catches two disjoint routes that funnel through the same uplink, at runtime,
+// from their shared delay-variation signature.
+func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
+	if rg.isClosed() || rg.mux == nil {
+		return
+	}
+	rg.mu.Lock()
+	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
+	rg.mu.Unlock()
+	if len(tpsCopy) < 2 {
+		rg.mux.SetLegGroups(nil) // fewer than two legs — nothing to group
+		return
+	}
+
+	// Per-leg OWD summary statistics from the moving windows (legLivenessMu).
+	stats := make([]sbdStats, len(tpsCopy))
+	rg.legLivenessMu.Lock()
+	for i, tp := range tpsCopy {
+		if tp == nil {
+			continue
+		}
+		if w := rg.legOWD[tp.Entry.ID]; w != nil {
+			stats[i] = computeSBDStats(w.samples())
+		}
+	}
+	rg.legLivenessMu.Unlock()
+
+	groups := groupLegsBySBD(stats)
+	rg.mux.SetLegGroups(groups)
+
+	// Distinct-group admission: park any redundant co-bottlenecked active legs.
+	legs := make([]bottleneckLeg, 0, len(tpsCopy))
+	for i, tp := range tpsCopy {
+		if tp == nil || tp.IsClosed() {
+			continue
+		}
+		legs = append(legs, bottleneckLeg{
+			idx:     i,
+			group:   groups[i],
+			standby: rg.mux.isLegStandby(i),
+			primary: i == 0,
+			goodput: recvDeltas[tp.Entry.ID],
+			latMs:   rg.legBandLatencyMs(tp),
+		})
+	}
+	demote := pickBottleneckDemotions(legs)
+	for _, idx := range demote {
+		rg.logger.Infof("shared-bottleneck: parking leg %d to warm standby (co-bottlenecked with a kept active leg in group %d — one pipe, not two; striping it adds only reorder cost)", idx, groups[idx])
+		rg.mux.setLegStandby(idx, true)
+	}
 }
 
 // enforceLatencyBand keeps the mux's active stripe set within a tight latency
@@ -3883,6 +3965,15 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 		} else {
 			rg.legE2ELatency[pongLegID] = latencyMs
 		}
+		// Fold the RAW sample (pre-EWMA) into this leg's OWD-variation window for
+		// shared-bottleneck detection (RFC 8382). The window records the variation
+		// signature the grouping keys on; the EWMA above records the smoothed level.
+		w := rg.legOWD[pongLegID]
+		if w == nil {
+			w = newSBDWindow()
+			rg.legOWD[pongLegID] = w
+		}
+		w.push(latencyMs)
 		rg.legLivenessMu.Unlock()
 	}
 
