@@ -240,6 +240,12 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	// LEVEL its own hue (see hopClassMap). Captured in the StyleCell closure so the
 	// PK label cells can be wrapped without disturbing bitree's plain-text layout.
 	hopClasses := hopClassMap(snap)
+	// When more than one stream is present, name the two multiplexing LAYERS above
+	// the tree so the stream-boundary nodes and per-stream leg bands below are
+	// self-explanatory.
+	if len(snap.Tunnels) > 1 {
+		writeLayerLegend(b)
+	}
 	b.WriteString(`<div class="tree">`)
 	b.WriteString(`<pre class="bitree">`)
 	b.WriteString(bitree.Render(RouteTree(snap), bitree.Options{
@@ -266,6 +272,17 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 // instead of a separate swatch dot beside each word. The column hints live in
 // the label-header row above the tree (TreeHeader), so the legend only names the
 // color coding. Dead legs are pruned, so there is no dead entry.
+// writeLayerLegend names the TWO route-multiplexing layers the tree shows, so
+// the stream-boundary header nodes (▚) and the per-stream leg accent bands (▏sN)
+// read as two distinct kinds of multiplexing. Rendered only when more than one
+// stream is present (single-stream trees carry no stream chrome to explain).
+func writeLayerLegend(b *strings.Builder) {
+	b.WriteString(`<div class="llayers">` +
+		`<span class="llayer stream-l"><b>` + StreamHeaderGlyph + ` stream</b> · independent route groups (--tunnels)</span>` +
+		`<span class="llayer leg-l"><b>` + StreamBandGlyph + `sN leg</b> · packet-striping mux within a stream</span>` +
+		`</div>`)
+}
+
 func writeTreeLegend(b *strings.Builder) {
 	b.WriteString(`<div class="tlegend">` +
 		`<span class="lgnd src">source · this visor</span>` +
@@ -289,6 +306,12 @@ func htmlStyleCell(text string, kind bitree.CellKind, hopClasses map[string]stri
 	case bitree.CellRoot:
 		return `<span class="src">` + copyablePK(text) + `</span>`
 	case bitree.CellLabel:
+		// A stream-boundary header (the STREAM layer): a different KIND of node than a
+		// hop PK — give it the stream's accent + badge styling rather than PK coloring.
+		if strings.HasPrefix(strings.TrimSpace(text), StreamHeaderGlyph) {
+			return `<span class="streamhdr ` + streamAccentClass(streamIdxOf(text, "stream ")) + `">` +
+				html.EscapeString(text) + `</span>`
+		}
 		// A hop PK: color it by its role/depth (exit red, intermediates by level).
 		// The class wraps copyablePK so the click-to-copy PK is unchanged; the span
 		// is zero-width text, so bitree's monospace column layout is preserved. The
@@ -332,6 +355,23 @@ func htmlLegSummary(text string) string {
 	if strings.TrimSpace(text) == "" {
 		return text // continuation / empty left row
 	}
+	// Peel off an optional leading per-STREAM accent band ("▏s0 "): color it with
+	// that stream's accent (the STREAM layer), OUTSIDE the state-tinted .lsum span,
+	// so the stream accent and the leg's active/standby state coding compose instead
+	// of one overriding the other. The leading padding spaces (bitree's right-
+	// justify) stay ahead of the band. When absent (single-stream view) nothing is
+	// peeled and the summary is styled exactly as before.
+	bandHTML := ""
+	if i := strings.Index(text, StreamBandGlyph); i >= 0 {
+		rest := text[i:]
+		if sp := strings.IndexByte(rest, ' '); sp > 0 {
+			tag := rest[:sp] // "▏s0"
+			bandHTML = html.EscapeString(text[:i]) +
+				`<span class="stream ` + streamAccentClass(streamIdxOf(tag, StreamBandGlyph+"s")) + `">` +
+				html.EscapeString(tag) + `</span> `
+			text = rest[sp+1:] // remainder after the tag + its space
+		}
+	}
 	cls, glyph := "ok", GlyphActive
 	if strings.Contains(text, GlyphStandby) {
 		cls, glyph = "standby", GlyphStandby
@@ -339,7 +379,38 @@ func htmlLegSummary(text string) string {
 	esc := html.EscapeString(text) // the glyphs/arrows are not HTML-special
 	dot := `<span class="tstate ` + cls + `">` + glyph + `</span>`
 	esc = strings.Replace(esc, glyph, dot, 1)
-	return `<span class="lsum ` + cls + `">` + esc + `</span>`
+	return bandHTML + `<span class="lsum ` + cls + `">` + esc + `</span>`
+}
+
+// streamIdxOf extracts the stream index that follows prefix in s (e.g. "stream "
+// in a header label, or "▏s" in a leg band) — the run of digits right after the
+// prefix. Returns 0 when no index is found, so an unparsable label still gets a
+// valid (first) accent rather than no class.
+func streamIdxOf(s, prefix string) int {
+	i := strings.Index(s, prefix)
+	if i < 0 {
+		return 0
+	}
+	j := i + len(prefix)
+	k := j
+	for k < len(s) && s[k] >= '0' && s[k] <= '9' {
+		k++
+	}
+	if k == j {
+		return 0
+	}
+	n := 0
+	for _, c := range s[j:k] {
+		n = n*10 + int(c-'0')
+	}
+	return n
+}
+
+// streamAccentClass maps a stream index to its stable CSS accent class,
+// cycling the small palette (--stream0…) so the accent is stable per index
+// across the ~1s live re-renders.
+func streamAccentClass(idx int) string {
+	return fmt.Sprintf("s%d", ((idx%streamAccentCount)+streamAccentCount)%streamAccentCount)
 }
 
 // legRank orders legs for the tree: the direct active leg (carrying app traffic)
@@ -744,7 +815,13 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	// intermediate hop LEVEL its own hue (level 1..4, then the classes cycle). All
 	// chosen for legibility on the tree's dark ground; the light block re-darkens
 	// them below so they clear the same contrast floor on a light background.
-	`--hop-exit:#ff5c5c;--hop1:#4fc3f7;--hop2:#c48cff;--hop3:#ffb74d;--hop4:#4dd0a0}` +
+	`--hop-exit:#ff5c5c;--hop1:#4fc3f7;--hop2:#c48cff;--hop3:#ffb74d;--hop4:#4dd0a0;` +
+	// Per-STREAM accents (the stream/tunnel layer): a small palette cycled by stream
+	// index (stream N → N % 5), stable per index across live re-renders. Chosen to
+	// stay clear of the state/exit hues (green/amber/red) so the stream accent never
+	// reads as active/standby or exit, and legible on the dark ground; the light
+	// block re-darkens them below to hold the same contrast floor.
+	`--stream0:#7c9cff;--stream1:#ff9e64;--stream2:#e879c9;--stream3:#4dd0e1;--stream4:#c3a6ff}` +
 	`*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--fg);font:13.5px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}` +
 	`body{max-width:60rem;margin:0 auto;padding:1.2rem 1rem 3rem}` +
 	`header{display:flex;align-items:baseline;gap:.8rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.7rem}` +
@@ -817,6 +894,24 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`pre.bitree .hop-l3 code.fpk{color:var(--hop3)}pre.bitree .hop-l4 code.fpk{color:var(--hop4)}` +
 	`pre.bitree code.ftid{color:var(--muted)}pre.bitree .tcol{color:var(--muted)}` +
 	`pre.bitree .lsum.ok{color:var(--ok)}pre.bitree .lsum.standby{color:var(--standby)}` +
+	// STREAM layer coloring. The stream-boundary HEADER node reads as a badge — bold,
+	// its stream accent, a faint accent underline — clearly a different KIND of node
+	// than a leg/hop row. Each leg's leading "▏sN" band carries the same per-stream
+	// accent, tying the leg to its stream WITHOUT touching the state (●/○) or hop-PK
+	// coloring beside it, so the two layers' signals compose.
+	`pre.bitree .streamhdr{font-weight:700;letter-spacing:.3px;border-bottom:1px solid currentColor}` +
+	`pre.bitree .stream{font-weight:700}` +
+	`pre.bitree .streamhdr.s0,pre.bitree .stream.s0{color:var(--stream0)}` +
+	`pre.bitree .streamhdr.s1,pre.bitree .stream.s1{color:var(--stream1)}` +
+	`pre.bitree .streamhdr.s2,pre.bitree .stream.s2{color:var(--stream2)}` +
+	`pre.bitree .streamhdr.s3,pre.bitree .stream.s3{color:var(--stream3)}` +
+	`pre.bitree .streamhdr.s4,pre.bitree .stream.s4{color:var(--stream4)}` +
+	// Two-layer legend above the tree: names the stream (route-group) layer and the
+	// leg (packet-striping) layer so the ▚ header nodes and ▏sN leg bands are
+	// self-explanatory. The markers themselves carry the layer's accent.
+	`.llayers{display:flex;flex-wrap:wrap;gap:.3rem 1.4rem;font-size:11px;margin:.5rem 0 .2rem}` +
+	`.llayer{color:var(--muted)}.llayer b{font-family:ui-monospace,SFMono-Regular,monospace}` +
+	`.llayer.stream-l b{color:var(--stream0)}.llayer.leg-l b{color:var(--stream1)}` +
 	// Tree legend, BELOW the tree: the WORDS themselves are colored in their state
 	// colors (source accent, active green, standby amber) — no separate swatch dot
 	// beside each word. The column hints now live in the label-header row above the
@@ -871,5 +966,8 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`@media(prefers-color-scheme:light){:root{--bg:#f6f7fb;--fg:#1c1e26;--muted:#4a4f63;--card:#fff;--line:#d3d6e4;--accent:#4149d6;--accent2:#7b3fd0;--ok:#0a7a4c;--warn:#c02a48;--err:#c8102e;--cyan:#0a6c74;--standby:#7a5c00;` +
 	// Re-darken the hop hues for a light background so exit + each hop level stay
 	// legible (the dark-mode brights wash out on white).
-	`--hop-exit:#c8102e;--hop1:#0a6fb0;--hop2:#6a3fd0;--hop3:#a85a00;--hop4:#0a7a4c}` +
+	`--hop-exit:#c8102e;--hop1:#0a6fb0;--hop2:#6a3fd0;--hop3:#a85a00;--hop4:#0a7a4c;` +
+	// Re-darken the stream accents for a light background (the dark-mode pastels
+	// wash out on white) so each stream stays legible at the same contrast floor.
+	`--stream0:#3a5bd0;--stream1:#b85c1a;--stream2:#b03592;--stream3:#0a7c88;--stream4:#6a3fd0}` +
 	`h2,.surface{color:#1c1e26}}`
