@@ -333,9 +333,14 @@ func (c *muxBwController) snapshotLegs() []policy.LegInfo {
 			LatencyMs:   r.latencyMs(),
 			Alive:       r.activeFlag.Load(),
 			Standby:     r.standby.Load(),
-			SentBytes:   r.bytesSent.Load(),
-			RecvBytes:   r.bytesRecv.Load(),
-			Hops:        hops,
+			// mux-bw route groups are SYMMETRIC (forward+reverse rules on every
+			// leg), never unidirectional — no leg is a forward-only direct leg, so
+			// the adaptive reverse-active floor is a no-op here.
+			Direct:    false,
+			Flipped:   false,
+			SentBytes: r.bytesSent.Load(),
+			RecvBytes: r.bytesRecv.Load(),
+			Hops:      hops,
 		})
 	}
 	return legs

@@ -87,6 +87,8 @@ type legInfoWire struct {
 	LatencyMs   int      `json:"latency_ms"`
 	Alive       bool     `json:"alive"`
 	Standby     bool     `json:"standby,omitempty"`
+	Direct      bool     `json:"direct,omitempty"`
+	Flipped     bool     `json:"flipped,omitempty"`
 	SentBytes   uint64   `json:"sent_bytes,omitempty"`
 	RecvBytes   uint64   `json:"recv_bytes,omitempty"`
 	Retransmits uint64   `json:"retransmits,omitempty"`
@@ -275,6 +277,8 @@ func legsToPreset(ls []legInfoWire) []preset.LegInfo {
 			LatencyMs:   l.LatencyMs,
 			Alive:       l.Alive,
 			Standby:     l.Standby,
+			Direct:      l.Direct,
+			Flipped:     l.Flipped,
 			SentBytes:   l.SentBytes,
 			RecvBytes:   l.RecvBytes,
 			Retransmits: l.Retransmits,
