@@ -1,7 +1,7 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race wasm-visor embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
+.PHONY : build clean install format  bin build-race wasm-visor embed-wasm-visor embed-wasm-visor-tinygo embed-winbox prune-wasm-embed-history
 .PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-aab android-apk-debug check-mobile-version
 .PHONY : generate services vet check-cg check-help check-inner check-ci
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
@@ -438,7 +438,7 @@ tinygo-wasm-visor: ## Build the FULL browser WASM visor (dmsg+transport+router+a
 	mkdir -p ./build/wasm-visor
 	$(TINYGO) build -target wasm -no-debug -opt=z -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/wasm_exec.js
-	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor/
+	gzip -dc ./pkg/wasmhv/browseui/winbox.wasm.gz > ./build/wasm-visor/winbox.wasm
 	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor/
 	cp ./pkg/wasmhv/hv-boot.js ./build/wasm-visor/
 	cp ./pkg/wasmhv/worker.js ./build/wasm-visor/
@@ -456,7 +456,7 @@ wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into b
 	# instead.
 	GOOS=js GOARCH=wasm go build -buildvcs=true -ldflags="-s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
-	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor-go/
+	gzip -dc ./pkg/wasmhv/browseui/winbox.wasm.gz > ./build/wasm-visor-go/winbox.wasm
 	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/hv-boot.js ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/worker.js ./build/wasm-visor-go/
@@ -499,6 +499,19 @@ embed-wasm-visor-tinygo: embeddable-tree tinygo-wasm-visor ## Update the COMMITT
 	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./pkg/wasmhv/wasmbin/wasmtinygo/wasm_exec.js
 	@echo "updated pkg/wasmhv/wasmbin/wasmtinygo/ (wasm-visor.wasm.gz + wasm_exec.js) — review with 'git status', commit intentionally (~2.9MB blob)."
 
+# The window manager is a wasm artifact from a second toolchain, so like the
+# wasm-visor blobs it is BUILT AND COMMITTED rather than produced by go build.
+# TinyGo trails each Go release by some weeks; if it refuses the system Go, set
+# GOTOOLCHAIN to a version it accepts (e.g. GOTOOLCHAIN=go1.26.7 make embed-winbox).
+# It is small enough (~150 kB gzipped) that updating it is not the event a
+# wasm-visor update is; still, run it intentionally and commit the result.
+embed-winbox: ## Rebuild the COMMITTED window-manager wasm (pkg/wasmhv/browseui/winbox.wasm.gz + winbox-exec.js) from cmd/winbox-wasm. Needs tinygo. Deterministic gzip (-n) so an unchanged module yields no diff.
+	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed"; exit 1; }
+	GOFLAGS=-mod=vendor tinygo build -o /tmp/winbox.wasm -target wasm -no-debug -opt=z ./cmd/winbox-wasm
+	gzip -9 -n -c /tmp/winbox.wasm > ./pkg/wasmhv/browseui/winbox.wasm.gz
+	rm -f /tmp/winbox.wasm
+	@sh ./scripts/wrap-winbox-exec.sh "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./pkg/wasmhv/browseui/winbox-exec.js
+	@echo "updated pkg/wasmhv/browseui/ (winbox.wasm.gz + winbox-exec.js) — review with 'git status' and commit intentionally."
 # embed-wallet was removed: the wallet is now served straight from the VENDORED
 # skycoin module's own embedded dist (skycoin-web/src/gui.DistFS, via
 # visor.WalletUIFS) — a skycoin vendor bump IS the wallet update; there is no

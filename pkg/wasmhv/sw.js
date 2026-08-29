@@ -28,6 +28,7 @@ const PRECACHE = [
   'hv-boot.js',
   'worker.js',
   'browse.js',
+  'winbox.wasm',
 ];
 
 // Content-hashed (immutable) build assets: Angular emits main.<hash>.js,
