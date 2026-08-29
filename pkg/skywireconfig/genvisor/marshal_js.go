@@ -785,6 +785,10 @@ func marshalTransport(w *strings.Builder, t *visorconfig.Transport, indent int) 
 	}
 	o.field("public_autoconnect")
 	writeBool(w, t.PublicAutoconnect)
+	if t.HypervisorAutoconnect != nil {
+		o.field("hypervisor_autoconnect")
+		writeBool(w, *t.HypervisorAutoconnect)
+	}
 	o.field("transport_setup")
 	writePubKeySlice(w, t.TransportSetupPKs, o.indent+1)
 	if len(t.UserTransportSetupPKs) > 0 {
