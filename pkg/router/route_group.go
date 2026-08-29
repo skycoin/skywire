@@ -2990,7 +2990,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		// it only ACTIVATES when the peer also advertises it (both ends on a build
 		// that has it), so an old peer simply never negotiates it and is
 		// unaffected. No config knob — on by default wherever both edges support it.
-		caps := routing.CapMux | routing.CapSACK | routing.CapHOLRetx | routing.CapFEC | routing.CapLegState
+		caps := routing.CapMux | routing.CapSACK | routing.CapHOLRetx | routing.CapFEC | routing.CapLegState | routing.CapUniDir
 		var packet routing.Packet
 		if pfn := rg.perFrameNoiseCap(encrypt); pfn != 0 {
 			msg, mErr := rg.nextPerFrameNoiseMsg()
@@ -3215,6 +3215,18 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 				if remoteCaps&routing.CapLegState != 0 {
 					rg.mux.legStateEnabled = true
 					rg.logger.Debug("Leg-state signaling enabled (both peers support CapLegState)")
+				}
+
+				// Unidirectional send selection negotiation. Both edges must
+				// advertise CapUniDir; then each end restricts its own send to legs
+				// matching its direction (initiator→direct upload, acceptor→multihop
+				// download by default), so the two directions ride disjoint legs
+				// instead of both striping every leg. Local decision from role + leg
+				// directness; the endpoints identify a direct leg (its transport's
+				// remote is one of them).
+				if remoteCaps&routing.CapUniDir != 0 {
+					rg.mux.setDirectional(rg.initiator, rg.desc.DstPK(), rg.desc.SrcPK())
+					rg.logger.Debug("Unidirectional send selection enabled (both peers support CapUniDir)")
 				}
 
 				// FEC negotiation. Requires CapMux (rg.mux set above); both edges

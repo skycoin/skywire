@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -184,6 +185,19 @@ type routeMux struct {
 	// download stall). See handleLegStatePacket / sendLegState in route_group.go.
 	legStateEnabled bool
 
+	// Unidirectional per-leg send selection (CapUniDir, see unidir.go). When
+	// directional is set (both peers advertised CapUniDir), each end restricts its
+	// OWN send to legs matching its direction: the initiator uploads on the DIRECT
+	// (1-hop) leg, the acceptor downloads on the MULTIHOP legs. flipped swaps that
+	// mapping (heavy direction gets the mux). dstPK/srcPK identify a direct leg
+	// (its transport's remote is one of the route-group endpoints). Guarded by
+	// legMu; read as a snapshot (dirConfig) on the send path.
+	directional bool
+	flipped     bool
+	initiator   bool
+	dstPK       cipher.PubKey
+	srcPK       cipher.PubKey
+
 	// Per-frame noise (inverse-mux). When CapPerFrameNoise is negotiated the
 	// RouteGroup installs these: seal AEAD-encrypts each outgoing frame under
 	// its sequence-nonce (in wrapPayload, before retx storage so retransmits
@@ -341,6 +355,16 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 		return nil, nil, -1, ErrNoRules
 	}
 
+	// Unidirectional send selection (CapUniDir): restrict this end's send to legs
+	// matching its direction (initiator→direct, acceptor→multihop, swapped when
+	// flipped) — but only when at least one ready leg matches, so a send never
+	// fails for lack of a direction-matching leg. dirOK gates every pick below.
+	directional, wantDirect, dstPK, srcPK := m.dirConfig()
+	restrictDir := directional && m.dirRestrict(tps, wantDirect, dstPK, srcPK)
+	dirOK := func(tp *transport.ManagedTransport) bool {
+		return !restrictDir || legIsDirect(tp, dstPK, srcPK) == wantDirect
+	}
+
 	// Payload-inspecting modes: ask the selector for a leg
 	// derived from the bytes. Empty payload (handshake / retx)
 	// falls through to the schedule-based pick.
@@ -354,7 +378,7 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 			idx := m.tpSelector.SelectForPayload(payload)
 			if idx < len(tps) {
 				tp := tps[idx]
-				if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
+				if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) && dirOK(tp) {
 					return tp, fwd[idx], idx, nil
 				}
 			}
@@ -366,7 +390,7 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 		idx := m.tpSelector.Select()
 		if idx < len(tps) {
 			tp := tps[idx]
-			if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
+			if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) && dirOK(tp) {
 				return tp, fwd[idx], idx, nil
 			}
 		}
@@ -375,13 +399,14 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 	// Fallback: round-robin with skip-dead and skip-not-ready. An aux leg
 	// the peer has not confirmed yet is skipped so we never send the first
 	// packets onto a route whose rule the peer has not registered; the
-	// primary leg (0) is always ready, so this loop always finds it.
+	// primary leg (0) is always ready, so this loop always finds it. When
+	// direction filtering is active, non-matching legs are skipped here too.
 	n := uint32(len(tps)) //nolint:gosec
 	start := atomic.AddUint32(&m.tpIndex, 1) - 1
 	for i := uint32(0); i < n; i++ {
 		idx := int((start + i) % n) //nolint:gosec
 		tp := tps[idx]
-		if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
+		if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) && dirOK(tp) {
 			return tp, fwd[idx], idx, nil
 		}
 	}
