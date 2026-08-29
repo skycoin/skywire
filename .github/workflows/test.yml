@@ -65,7 +65,10 @@ jobs:
       # golangci-lint already ran above (pinned, cached). check-ci skips the
       # redundant second golangci-lint run but keeps go vet + config-gen smoke
       # + the test suite.
+      # if: always() so a golangci-lint / shell-lint failure above can never
+      # prevent the test suite from running and reporting (#4326).
       - name: Check Format and Run Tests
+        if: always()
         run: make check-ci
 
   # e2e runs as its own job so it executes in parallel with the linux check
@@ -131,13 +134,19 @@ jobs:
         with:
           version: v2.13.1
 
-      - name: Checking Format and Testing
+      # golangci-lint already ran via the action above; don't re-run it inside the
+      # test step, where its exit code would abort before `go test` and hide any
+      # test regression behind a lint finding (#4326).
+      - name: Config smoke
         run: |
-          GO111MODULE=on golangci-lint run -c .golangci.yml ./...
           go run . --help
           go run . cli config gen -dnw
           go run . cli config gen --nofetch -nw
-          GO111MODULE=on go test -cover -timeout=25m -mod=vendor -tags 'no_ci' ./internal/... ./pkg/... ./cmd/skywire-cli/commands/config/...
+
+      # if: always() so a lint (or config-smoke) failure can never blank the suite.
+      - name: Test
+        if: always()
+        run: GO111MODULE=on go test -cover -timeout=25m -mod=vendor -tags 'no_ci' ./internal/... ./pkg/... ./cmd/skywire-cli/commands/config/...
 
   windows:
     runs-on: windows-latest
@@ -174,7 +183,10 @@ jobs:
         shell: pwsh
         run: choco install make
 
+      # if: always() so a lint failure above can never prevent the test suite
+      # from running and reporting (#4326).
       - name: Checking (lint + test)
+        if: always()
         run: |
           $env:GO111MODULE='on'
           make check-windows
