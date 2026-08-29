@@ -1227,6 +1227,16 @@ func (rg *RouteGroup) snapshotLegs() []LegInfo {
 		}
 	}
 
+	// The unidirectional flip state is a per-GROUP property (same for every leg);
+	// snapshot it once. It tells the download-sizing controller which leg class
+	// (direct vs multihop) currently carries the download, since a leg's send-side
+	// direction is an assignment the flip controller can swap. Zero (false) for a
+	// non-directional group.
+	var flipped bool
+	if rg.mux != nil {
+		_, flipped = rg.mux.dirState()
+	}
+
 	legs := make([]LegInfo, 0, len(rg.tps))
 	for i, tp := range rg.tps {
 		l := LegInfo{Index: i, Alive: false}
@@ -1250,6 +1260,12 @@ func (rg *RouteGroup) snapshotLegs() []LegInfo {
 			if rg.mux != nil {
 				l.Retransmits = rg.mux.retransmitsAt(i)
 				l.Standby = rg.mux.isLegStandby(i)
+				// Directional groups only: true for the forward-only DIRECT (1-hop)
+				// leg, false for the multihop reverse/download legs. Always false for
+				// a non-directional (symmetric) mux (dstPK/srcPK stay zero), so the
+				// reverse-active floor is a no-op there.
+				l.Direct = rg.mux.legIsDirectTp(tp)
+				l.Flipped = flipped
 			}
 			l.Hops = sharedHops
 		}
