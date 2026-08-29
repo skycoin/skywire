@@ -2055,7 +2055,16 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 		activeCnt++
 		soleSent, soleRecv = stats[i].SentBytes, stats[i].RecvBytes
 	}
-	if soleLegBlackHoled(activeCnt, soleSent, soleRecv) {
+	// Direction-aware exemption: under unidirectional assignment (CapUniDir) the
+	// sole active leg is the light-direction leg (the direct upload leg on a
+	// download), which receives ~nothing because the download flows on the reverse
+	// mux legs. If the GROUP is receiving on those legs (aggDelta above the floor),
+	// the sole send leg is not a black-hole — reaping it would prune the direct leg
+	// exactly when unidir is doing its job (the leg then re-dials multihop and the
+	// direct/forward binding is lost). Skip the reaping in that case.
+	if soleLegBlackHoleExempt(rg.mux.isDirectional(), aggDelta) {
+		rg.soleBHTicks = 0
+	} else if soleLegBlackHoled(activeCnt, soleSent, soleRecv) {
 		rg.soleBHTicks++
 		if rg.soleBHTicks >= soleBlackHoleTicks {
 			rg.logger.Warnf("sole-leg black-hole: only active route sent %dB but received %dB over %v — dialing a replacement route",

@@ -81,3 +81,24 @@ func TestLegIsDirect(t *testing.T) {
 		t.Fatal("test endpoints must be distinct")
 	}
 }
+
+// TestSoleLegBlackHoleExempt: a directional group receiving on its reverse legs
+// exempts its sole light-direction leg from black-hole reaping; a non-directional
+// group, or a directional group with no group recv, is not exempt.
+func TestSoleLegBlackHoleExempt(t *testing.T) {
+	// directional + group receiving (aggDelta above floor) → exempt.
+	if !soleLegBlackHoleExempt(true, soleBlackHoleExemptRecvFloor+1) {
+		t.Fatal("directional group with healthy recv should be exempt")
+	}
+	// directional but group NOT receiving (idle) → not exempt (a real black-hole).
+	if soleLegBlackHoleExempt(true, 0) {
+		t.Fatal("directional group with no recv should NOT be exempt")
+	}
+	if soleLegBlackHoleExempt(true, soleBlackHoleExemptRecvFloor) {
+		t.Fatal("recv exactly at the floor should NOT be exempt (strictly above)")
+	}
+	// non-directional group → never exempt (old behavior unchanged).
+	if soleLegBlackHoleExempt(false, 10*soleBlackHoleExemptRecvFloor) {
+		t.Fatal("non-directional group must never be exempt")
+	}
+}
