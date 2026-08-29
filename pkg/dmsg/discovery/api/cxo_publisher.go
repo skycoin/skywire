@@ -109,6 +109,19 @@ const clientsByServerBatchVersion = 1
 // publishers run 60s; this sits between that and the old 1s.)
 const clientsByServerCXOBatchWindow = 30 * time.Second
 
+// clientsByServerFlushWindow coalesces the per-server LEAF re-encode (sort +
+// concat + gzip in encodeClientsBatch) the way BatchWindow coalesces the
+// whole-tree publish. Without it, flushServers re-gzipped an affected server's
+// entire client leaf on EVERY materially-changed entry — so under fleet
+// session/delegated-server churn dmsg-discovery burned ~1.6 cores almost entirely
+// in flate (53% of CPU, observed 2026-08-29), re-encoding leaves whose bytes the
+// treestore's content-addressed Put then coalesced away unpublished. Marking the
+// affected servers dirty and re-encoding each at most once per this window
+// collapses the redundant gzips; the encode still reflects the latest state at
+// flush time, so correctness is unchanged. Kept well under BatchWindow so a
+// server's leaf is current in the tree before the 30s publish captures it.
+const clientsByServerFlushWindow = 3 * time.Second
+
 // json is the package-scope jsoniter.ConfigFastest value declared
 // in api.go. We reuse it here to avoid pulling in encoding/json
 // (which collides with the package-scope name) and to match the
@@ -143,6 +156,11 @@ type ClientsByServerCXOPublisher struct {
 	// server's batched leaf reads only from here.
 	state map[cipher.PubKey]map[cipher.PubKey][]byte
 
+	// pendingDirty is the set of servers whose leaf needs re-encoding, drained
+	// on the flush ticker (clientsByServerFlushWindow) instead of per-mutation so
+	// bursty churn re-gzips each server at most once per window. Worker-only.
+	pendingDirty map[cipher.PubKey]struct{}
+
 	mu        sync.Mutex
 	lastError error
 }
@@ -169,11 +187,12 @@ func StartClientsByServerCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, logg
 	pub.SetAllowlist(nil)
 
 	p := &ClientsByServerCXOPublisher{
-		pub:    pub,
-		log:    log,
-		events: make(chan func(), publishQueueDepth),
-		done:   make(chan struct{}),
-		state:  make(map[cipher.PubKey]map[cipher.PubKey][]byte),
+		pub:          pub,
+		log:          log,
+		events:       make(chan func(), publishQueueDepth),
+		done:         make(chan struct{}),
+		state:        make(map[cipher.PubKey]map[cipher.PubKey][]byte),
+		pendingDirty: make(map[cipher.PubKey]struct{}),
 	}
 	p.wg.Add(1)
 	go p.run()
@@ -192,13 +211,40 @@ func StartClientsByServerCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, logg
 // HTTP goroutine never blocks on the mutex.
 func (p *ClientsByServerCXOPublisher) run() {
 	defer p.wg.Done()
+	ticker := time.NewTicker(clientsByServerFlushWindow)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-p.done:
+			p.flushDirty() // best-effort final flush of pending re-encodes
 			return
 		case fn := <-p.events:
 			fn()
+		case <-ticker.C:
+			p.flushDirty()
 		}
+	}
+}
+
+// flushDirty re-encodes + Puts the leaves of every server accumulated in
+// pendingDirty since the last flush, then clears the set. Worker-only; called on
+// the flush ticker (and once more on close). Coalescing the encode here instead
+// of per-mutation is what removes the redundant gzip storm (see
+// clientsByServerFlushWindow).
+func (p *ClientsByServerCXOPublisher) flushDirty() {
+	if len(p.pendingDirty) == 0 {
+		return
+	}
+	dirty := p.pendingDirty
+	p.pendingDirty = make(map[cipher.PubKey]struct{})
+	p.flushServers(dirty)
+}
+
+// markDirty records that each server's leaf needs re-encoding on the next flush
+// tick. Worker-only (called from the submitted mutation closures).
+func (p *ClientsByServerCXOPublisher) markDirty(dirty map[cipher.PubKey]struct{}) {
+	for srv := range dirty {
+		p.pendingDirty[srv] = struct{}{}
 	}
 }
 
@@ -303,7 +349,7 @@ func (p *ClientsByServerCXOPublisher) PublishSetEntry(oldEntry, newEntry *disc.E
 			p.stateDel(srv, clientPK)
 			dirty[srv] = struct{}{}
 		}
-		p.flushServers(dirty)
+		p.markDirty(dirty)
 	})
 }
 
@@ -328,7 +374,7 @@ func (p *ClientsByServerCXOPublisher) PublishDelEntry(oldEntry *disc.Entry) {
 			p.stateDel(srv, clientPK)
 			dirty[srv] = struct{}{}
 		}
-		p.flushServers(dirty)
+		p.markDirty(dirty)
 	})
 }
 

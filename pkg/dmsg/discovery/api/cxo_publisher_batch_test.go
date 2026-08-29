@@ -16,7 +16,10 @@ import (
 // so stateSet / encodeClientsBatch can be exercised without a live
 // treestore.Publisher (pub stays nil; these helpers never touch it).
 func newTestPub() *ClientsByServerCXOPublisher {
-	return &ClientsByServerCXOPublisher{state: make(map[cipher.PubKey]map[cipher.PubKey][]byte)}
+	return &ClientsByServerCXOPublisher{
+		state:        make(map[cipher.PubKey]map[cipher.PubKey][]byte),
+		pendingDirty: make(map[cipher.PubKey]struct{}),
+	}
 }
 
 func mustEntry(t *testing.T, clientPK cipher.PubKey, servers []cipher.PubKey) []byte {
@@ -122,5 +125,34 @@ func TestBatchDelEmptiesServer(t *testing.T) {
 	p.stateDel(srv, clientPK)
 	if got := len(p.state[srv]); got != 0 {
 		t.Fatalf("after del: want 0 clients, got %d", got)
+	}
+}
+
+// TestMarkDirtyCoalesces proves the per-server re-encode is coalesced: repeated
+// markDirty of the same server accumulates a de-duplicated pending set (so the
+// flush ticker re-gzips each server at most once per window instead of per
+// mutation), and flushDirty on an empty set is a safe no-op.
+func TestMarkDirtyCoalesces(t *testing.T) {
+	p := newTestPub()
+	var s1, s2, s3 cipher.PubKey
+	s1[0], s2[0], s3[0] = 1, 2, 3
+
+	// Empty flush is a no-op (must not touch the nil publisher).
+	p.flushDirty()
+	if len(p.pendingDirty) != 0 {
+		t.Fatalf("pendingDirty non-empty after empty flushDirty: %d", len(p.pendingDirty))
+	}
+
+	// Three mutations touching overlapping servers coalesce to the distinct set.
+	p.markDirty(map[cipher.PubKey]struct{}{s1: {}, s2: {}})
+	p.markDirty(map[cipher.PubKey]struct{}{s2: {}}) // s2 again — no duplicate
+	p.markDirty(map[cipher.PubKey]struct{}{s3: {}})
+	if len(p.pendingDirty) != 3 {
+		t.Fatalf("pendingDirty = %d servers, want 3 (deduped)", len(p.pendingDirty))
+	}
+	for _, s := range []cipher.PubKey{s1, s2, s3} {
+		if _, ok := p.pendingDirty[s]; !ok {
+			t.Fatalf("server %x missing from pendingDirty", s[0])
+		}
 	}
 }
