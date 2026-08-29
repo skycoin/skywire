@@ -2,6 +2,7 @@ package proxystatus
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -25,15 +26,15 @@ func twoStreamSnap() Snapshot {
 		return Leg{Index: idx, RemotePK: rgExit, Direct: true, Alive: true, Standby: standby,
 			LatencyMS: 42, RouteLatencyMS: 42, SentBytes: 2048, RecvBytes: 1024,
 			GoodputUpBps: 800, GoodputDownBps: 400,
-			Hops: []Hop{hop("tp-direct-"+string(rune('0'+idx)), rgSrc, rgExit, "stcpr", 42)}}
+			Hops: []Hop{hop("tp-direct-"+strconv.Itoa(idx), rgSrc, rgExit, "stcpr", 42)}}
 	}
 	multiLeg := func(idx int, standby bool) Leg {
 		return Leg{Index: idx, RemotePK: rgExit, Direct: false, Alive: true, Standby: standby,
 			LatencyMS: 30, RouteLatencyMS: 300, SentBytes: 512, RecvBytes: 256,
 			GoodputUpBps: 100, GoodputDownBps: 50,
 			Hops: []Hop{
-				hop("tp-a-"+string(rune('0'+idx)), rgSrc, rgHopA, "sudph", 30),
-				hop("tp-b-"+string(rune('0'+idx)), rgHopA, rgExit, "stcpr", 270),
+				hop("tp-a-"+strconv.Itoa(idx), rgSrc, rgHopA, "sudph", 30),
+				hop("tp-b-"+strconv.Itoa(idx), rgHopA, rgExit, "stcpr", 270),
 			}}
 	}
 	return Snapshot{
