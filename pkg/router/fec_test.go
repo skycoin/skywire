@@ -62,11 +62,11 @@ func decodeWithErasures(t *testing.T, c *fecBlockCoder, data [][]byte, erase []i
 }
 
 func mkData(k, symLen int, seed int64) [][]byte {
-	rng := rand.New(rand.NewSource(seed))
+	rng := rand.New(rand.NewSource(seed)) //nolint:gosec // fixed seed: these tests need reproducible data, not entropy
 	data := make([][]byte, k)
 	for i := range data {
 		data[i] = make([]byte, symLen)
-		rng.Read(data[i])
+		_, _ = rng.Read(data[i]) // math/rand.Read never returns an error
 	}
 	return data
 }
@@ -120,7 +120,10 @@ func TestFECRecoversAllErasurePatterns(t *testing.T) {
 func TestFECErasureBeyondRFails(t *testing.T) {
 	c := newFECBlockCoder(4, 2, 16)
 	data := mkData(4, 16, 7)
-	repair, _ := c.Encode(data)
+	repair, err := c.Encode(data)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
 	recv := make([][]byte, 6)
 	present := make([]bool, 6)
 	for i := 0; i < 4; i++ {
@@ -143,7 +146,10 @@ func TestFECErasureBeyondRFails(t *testing.T) {
 func TestFECSystematicFastPath(t *testing.T) {
 	c := newFECBlockCoder(5, 3, 24)
 	data := mkData(5, 24, 99)
-	repair, _ := c.Encode(data)
+	repair, err := c.Encode(data)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
 	recv := make([][]byte, 8)
 	present := make([]bool, 8)
 	for i := 0; i < 5; i++ {
@@ -162,7 +168,7 @@ func TestFECSystematicFastPath(t *testing.T) {
 
 // TestFECFuzz: random data + random erasure patterns of size <= r always recover.
 func TestFECFuzz(t *testing.T) {
-	rng := rand.New(rand.NewSource(12345))
+	rng := rand.New(rand.NewSource(12345)) //nolint:gosec // fixed seed: the fuzz loop must replay identically on failure
 	for iter := 0; iter < 400; iter++ {
 		k := 1 + rng.Intn(12)
 		r := rng.Intn(6)

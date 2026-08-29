@@ -175,7 +175,7 @@ func TestMakeRepairPacketRoundTrip(t *testing.T) {
 	symLen := 4098
 	symbol := make([]byte, symLen)
 	for i := range symbol {
-		symbol[i] = byte(i * 31)
+		symbol[i] = byte((i * 31) & 0xff) // deliberate wrap: just a repeating fill pattern
 	}
 
 	p, err := MakeRepairPacket(id, blockID, idx, symLen, symbol)
