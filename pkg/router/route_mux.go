@@ -197,6 +197,11 @@ type routeMux struct {
 	initiator   bool
 	dstPK       cipher.PubKey
 	srcPK       cipher.PubKey
+	// Flip-controller hysteresis state (see unidir.go unidirFlipTick). Touched
+	// ONLY by the single unidir-flip loop goroutine, so no lock of their own.
+	flipUpHits   int
+	flipDownHits int
+	flipCooldown int
 
 	// Per-frame noise (inverse-mux). When CapPerFrameNoise is negotiated the
 	// RouteGroup installs these: seal AEAD-encrypts each outgoing frame under
