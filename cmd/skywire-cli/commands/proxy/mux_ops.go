@@ -103,7 +103,7 @@ Example:
 		if err := rpcClient.SetMuxCap(n); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxCap: %w", err))
 		}
-		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "cap", App: muxOpsApp, Mode: args[0]}))
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "cap", App: muxOpsApp, Value: args[0]}))
 	},
 }
 
@@ -132,7 +132,7 @@ Example:
 		if err := rpcClient.SetMuxWidth(n); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxWidth: %w", err))
 		}
-		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "width", App: muxOpsApp, Mode: args[0]}))
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "width", App: muxOpsApp, Value: args[0]}))
 	},
 }
 
@@ -164,7 +164,7 @@ Example:
 		if err := rpcClient.SetMuxStandby(n); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxStandby: %w", err))
 		}
-		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "standby", App: muxOpsApp, Mode: args[0]}))
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "standby", App: muxOpsApp, Value: args[0]}))
 	},
 }
 
