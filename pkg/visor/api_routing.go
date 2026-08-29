@@ -140,6 +140,8 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 			MuxEnabled:         info.MuxEnabled,
 			SACKEnabled:        info.SACKEnabled,
 			PerFrameNoise:      info.PerFrameNoise,
+			Directional:        info.Directional,
+			Flipped:            info.Flipped,
 			Distribution:       info.Distribution,
 			ReorderPending:     info.ReorderPending,
 			ReorderGapAgeMS:    float64(info.ReorderGapAge) / float64(time.Millisecond),
