@@ -62,11 +62,22 @@ type routingContextWire struct {
 
 // decideInputWire carries the Preset name the host stamped so this
 // bundle can dispatch. A single-preset module would omit Preset; here
-// it selects which preset's logic runs.
+// it selects which preset's logic runs. AdaptCap / AdaptRevActive /
+// AdaptStandbyMax carry the host's current runtime-tunable adaptive mux
+// widths (the #4325 fix): this guest runs in its OWN sandboxed linear
+// memory and never sees a host-side setter call, so the host stamps the
+// values here and the guest applies them (applyTunables) before
+// dispatch — making `cli proxy mux cap|width|standby` and per-policy
+// cli_overrides actually retune a preset:* (wasm) visor. Zero = unset
+// (leave the compiled defaults), keeping this ABI-compatible with an
+// older host.
 type decideInputWire struct {
-	Ctx        routingContextWire `json:"ctx"`
-	Candidates []candidateWire    `json:"candidates"`
-	Preset     string             `json:"preset"`
+	Ctx             routingContextWire `json:"ctx"`
+	Candidates      []candidateWire    `json:"candidates"`
+	Preset          string             `json:"preset"`
+	AdaptCap        int                `json:"adapt_cap,omitempty"`
+	AdaptRevActive  int                `json:"adapt_rev_active,omitempty"`
+	AdaptStandbyMax int                `json:"adapt_standby_max,omitempty"`
 }
 
 type legInfoWire struct {
@@ -83,9 +94,12 @@ type legInfoWire struct {
 }
 
 type tickInputWire struct {
-	Ctx    routingContextWire `json:"ctx"`
-	Legs   []legInfoWire      `json:"legs"`
-	Preset string             `json:"preset"`
+	Ctx             routingContextWire `json:"ctx"`
+	Legs            []legInfoWire      `json:"legs"`
+	Preset          string             `json:"preset"`
+	AdaptCap        int                `json:"adapt_cap,omitempty"`
+	AdaptRevActive  int                `json:"adapt_rev_active,omitempty"`
+	AdaptStandbyMax int                `json:"adapt_standby_max,omitempty"`
 }
 
 type routeSpecWire struct {
@@ -112,11 +126,29 @@ type rotationActionWire struct {
 }
 
 // engine holds the adaptive tick controllers' per-transport_id state for this
-// module instance. One package-global instance mirrors the bundle's original
-// package-global tick state (the host instantiates one wazero module per policy
-// load, so this is created fresh per load); the native visor constructs its own
-// preset.Engine per evaluator the same way.
-var engine = preset.New()
+// module instance. One instance mirrors the bundle's original package-global
+// tick state (the host instantiates one wazero module per policy load, so this
+// is created fresh per load); the native visor constructs its own preset.Engine
+// per evaluator the same way.
+//
+// It is created LAZILY on the first tick, NOT as a package-var initializer
+// (`var engine = preset.New()`). TinyGo's compile-time interp pass partially
+// evaluates package-var initializers and left the later map fields of the
+// Engine nil, so the first write to a coupled/ledbat map nil-map-panicked in
+// the guest. Constructing it at runtime through engineForTick sidesteps the
+// interp pass entirely; the parity test's coupled/ledbat/adaptive tick cases
+// guard against a regression.
+var engine *preset.Engine
+
+// engineForTick returns the module's Engine, constructing it on first use.
+// on_tick is serialized by the host (one wazero call at a time), so no locking
+// is needed.
+func engineForTick() *preset.Engine {
+	if engine == nil {
+		engine = preset.New()
+	}
+	return engine
+}
 
 // Required: host-driven memory management.
 
@@ -146,12 +178,32 @@ func writeOutput(data []byte) uint64 {
 	return uint64(ptr) | (uint64(len(data)) << 32)
 }
 
+// applyTunables syncs this guest module's preset-package atomics to the
+// host-stamped runtime widths before dispatch, so the adaptive engine (which
+// reads AdaptCap / AdaptRevActive / AdaptStandbyMax) uses the operator's live /
+// per-policy values instead of the guest's compiled defaults. A zero field is
+// "unset" (an older host, or a single-preset module) — leave that atomic alone.
+// The clamping order matches ApplyOverrideTunables (standby, then cap, then
+// rev-active) so the setters compose identically on both paths.
+func applyTunables(cap, revActive, standbyMax int) {
+	if standbyMax > 0 {
+		preset.SetAdaptStandbyMax(standbyMax)
+	}
+	if cap > 0 {
+		preset.SetAdaptCap(cap)
+	}
+	if revActive > 0 {
+		preset.SetAdaptRevActive(revActive)
+	}
+}
+
 //export decide_route
 func decideRoute(inPtr, inLen uint32) uint64 {
 	var input decideInputWire
 	if err := json.Unmarshal(readInput(inPtr, inLen), &input); err != nil {
 		return 0
 	}
+	applyTunables(input.AdaptCap, input.AdaptRevActive, input.AdaptStandbyMax)
 	spec := preset.Decide(input.Preset, ctxToPreset(input.Ctx), candsToPreset(input.Candidates))
 	out, err := json.Marshal(specToWire(spec))
 	if err != nil {
@@ -166,7 +218,8 @@ func onTick(inPtr, inLen uint32) uint64 {
 	if err := json.Unmarshal(readInput(inPtr, inLen), &input); err != nil {
 		return 0
 	}
-	action := engine.OnTick(input.Preset, legsToPreset(input.Legs))
+	applyTunables(input.AdaptCap, input.AdaptRevActive, input.AdaptStandbyMax)
+	action := engineForTick().OnTick(input.Preset, legsToPreset(input.Legs))
 	out, err := json.Marshal(actionToWire(action))
 	if err != nil {
 		return 0

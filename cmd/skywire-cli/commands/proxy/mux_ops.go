@@ -75,6 +75,7 @@ func init() {
 	addMuxSub(muxModeCmd, "mux-mode")
 	addMuxSub(muxCapCmd, "mux-cap")
 	addMuxSub(muxWidthCmd, "mux-width")
+	addMuxSub(muxStandbyCmd, "mux-standby")
 }
 
 var muxCapCmd = &cobra.Command{
@@ -132,6 +133,38 @@ Example:
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxWidth: %w", err))
 		}
 		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "width", App: muxOpsApp, Mode: args[0]}))
+	},
+}
+
+var muxStandbyCmd = &cobra.Command{
+	Use:   "standby <n>",
+	Short: "Set the adaptive mux warm-standby reserve pool size at runtime",
+	Long: `Set the number of WARM-STANDBY spare legs the adaptive engine holds parked for
+instant, dip-free promotion — the reserve pool decideAdaptive folds into the
+requested mux width (Mux = width + standby). A large pool (the 512 default) keeps
+one warm leg on every disjoint route the topology offers, so an active leg that
+drops is replaced with zero re-establish dip. Applies to the next dial (the mux
+width established) and LIVE to this visor's adaptive route groups on their next
+tick. Set per-visor, per-end.
+
+Example:
+  skywire cli proxy mux standby 64   # hold up to 64 warm spare legs`,
+	Args:                  cobra.ExactArgs(1),
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n < 1 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("standby must be a positive integer, got %q", args[0]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+		defer rpcClient.Close() //nolint:errcheck,gosec
+		if err := rpcClient.SetMuxStandby(n); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxStandby: %w", err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "standby", App: muxOpsApp, Mode: args[0]}))
 	},
 }
 

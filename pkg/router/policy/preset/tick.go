@@ -10,6 +10,7 @@ package preset
 
 import (
 	"sort"
+	"strings"
 	"sync/atomic"
 )
 
@@ -93,6 +94,12 @@ type Engine struct {
 // adaptive steady active target seeded to adaptRevActive (the reverse
 // active width decideAdaptive requests, minus its warm-standby reserve),
 // matching the bundle's package-global initializers.
+//
+// NOTE for the wasm bundle: call this at RUNTIME, not from a package-var
+// initializer (`var engine = preset.New()`). TinyGo's compile-time interp pass
+// partially evaluates such initializers and can leave the later map fields nil,
+// so the guest must construct its Engine lazily on first use (see the bundle's
+// engineOnce). The native path already constructs per route group at runtime.
 func New() *Engine {
 	return &Engine{
 		latAdaptEWMA:    map[string]float64{},
@@ -598,7 +605,12 @@ const (
 	// fast on a lean mux, and the background self-heal fills the rest one leg at a
 	// time with the no-progress backoff — so uncapping the pool never becomes a
 	// dial storm at connect time.
-	adaptStandbyMax = 512
+	//
+	// RUNTIME-TUNABLE 2026-08-29 (#4325): the pool size is no longer a compile-time
+	// constant but a runtime atomic (adaptStandbyMaxV, default 512) read via
+	// AdaptStandbyMax(), so an operator can retune the warm-standby reserve LIVE
+	// over the mux-control RPC (skywire cli proxy mux standby) or per policy via
+	// cli_overrides["adapt_standby_max"] — no rebuild. 512 stays the default.
 	adaptStandbyMin = 1
 	// Health + anti-churn. A leg is a gross-outlier (kept OUT of the active mux,
 	// where the no-skip reorder buffer would head-of-line-stall on it) when its
@@ -625,19 +637,32 @@ const (
 
 // Runtime-tunable adaptive widths (see the const block above). Stored atomically
 // so an operator can retune the mux's active width LIVE over the mux-control RPC
-// (skywire cli proxy mux width / cap) without a rebuild — the adaptive engine
-// reads them (via AdaptRevActive / AdaptCap) every tick on a per-route-group
-// goroutine while the setter runs on the RPC goroutine. Defaults: a floor of 4
-// active download legs (more than one by default) and a ceiling of 60 (the
-// ~50-60-leg aggregation target).
+// (skywire cli proxy mux width / cap / standby) without a rebuild — the adaptive
+// engine reads them (via AdaptRevActive / AdaptCap / AdaptStandbyMax) every tick
+// on a per-route-group goroutine while the setter runs on the RPC goroutine.
+// Defaults: a floor of 1 active download leg (one-healthy-leg steady width), a
+// ceiling of 8 (reorder-safe active width), and a warm-standby reserve of 512
+// (held-warm, never reaped). These are DEFAULTS — all three are overridable at
+// runtime (the setters below, driven by the RPC) and per policy
+// (cli_overrides["adapt_cap"|"adapt_rev_active"|"adapt_standby_max"], applied via
+// ApplyOverrideTunables).
+//
+// These live in the preset package (compiled into BOTH the wasm bundle guest and
+// the native visor). The wasm guest runs in its OWN sandboxed linear memory, so a
+// host-side setter call never reaches it; the host instead stamps the current
+// values into the decide/tick input wire (see pkg/router/policy/wasm) and the
+// guest applies them here before dispatching — so the same three atomics govern
+// both paths and the RPC reaches a preset:* (wasm) visor too (#4325).
 var (
-	adaptRevActiveV atomic.Int64
-	adaptCapV       atomic.Int64
+	adaptRevActiveV  atomic.Int64
+	adaptCapV        atomic.Int64
+	adaptStandbyMaxV atomic.Int64
 )
 
 func init() {
-	adaptRevActiveV.Store(4)
-	adaptCapV.Store(60)
+	adaptRevActiveV.Store(1)
+	adaptCapV.Store(8)
+	adaptStandbyMaxV.Store(512)
 }
 
 // AdaptRevActive returns the current steady active reverse width (the floor).
@@ -645,6 +670,12 @@ func AdaptRevActive() int { return int(adaptRevActiveV.Load()) }
 
 // AdaptCap returns the current hard ceiling on active mux width.
 func AdaptCap() int { return int(adaptCapV.Load()) }
+
+// AdaptStandbyMax returns the current warm-standby reserve pool size — the
+// number of full-duplex spare legs the adaptive default holds parked for
+// instant, dip-free promotion (decideAdaptive requests Mux = AdaptRevActive() +
+// AdaptStandbyMax()).
+func AdaptStandbyMax() int { return int(adaptStandbyMaxV.Load()) }
 
 // SetAdaptRevActive sets the steady active reverse width (the floor the engine
 // converges to when idle). Clamped to [1, AdaptCap()]. Takes effect on the next
@@ -661,14 +692,14 @@ func SetAdaptRevActive(n int) int {
 }
 
 // SetAdaptCap sets the hard ceiling on active mux width (the aggregation
-// ceiling). Clamped to [1, adaptStandbyMax]; pulls adaptRevActive down if it
+// ceiling). Clamped to [1, AdaptStandbyMax()]; pulls adaptRevActive down if it
 // would exceed the new cap. Takes effect on the next tick.
 func SetAdaptCap(n int) int {
 	if n < 1 {
 		n = 1
 	}
-	if n > adaptStandbyMax {
-		n = adaptStandbyMax
+	if max := AdaptStandbyMax(); n > max {
+		n = max
 	}
 	adaptCapV.Store(int64(n))
 	if AdaptRevActive() > n {
@@ -677,12 +708,84 @@ func SetAdaptCap(n int) int {
 	return n
 }
 
+// SetAdaptStandbyMax sets the warm-standby reserve pool size (the held-warm
+// spare-leg count decideAdaptive folds into the requested Mux). Clamped to >= 1;
+// pulls adaptCap (and, transitively, adaptRevActive) down if they would exceed
+// the new pool size. Takes effect on the next dial (Mux width) and tick.
+func SetAdaptStandbyMax(n int) int {
+	if n < 1 {
+		n = 1
+	}
+	adaptStandbyMaxV.Store(int64(n))
+	if AdaptCap() > n {
+		SetAdaptCap(n)
+	}
+	return n
+}
+
+// ApplyOverrideTunables applies any of the three adaptive-width tunables carried
+// in a policy's cli_overrides map — "adapt_cap", "adapt_rev_active",
+// "adapt_standby_max" (decimal integer strings) — to the runtime atomics via the
+// clamping setters. Absent or unparseable keys are left untouched. This is the
+// per-policy / config surface counterpart to the mux-control RPC: an operator can
+// set different widths per routing policy without recompiling. Applied
+// standby-max first, then cap, then rev-active so the clamps compose the same way
+// regardless of which keys are present. Returns true if any value was applied.
+//
+// It mutates the process-global atomics (the same ones the RPC drives), so a
+// policy's configured widths take effect for every adaptive route group — matching
+// the global scope of the RPC knobs. The adaptive preset calls this from
+// decideAdaptive; the wasm host calls it before stamping the input wire so the
+// values reach the sandboxed guest and stay consistent across ticks.
+func ApplyOverrideTunables(overrides map[string]string) bool {
+	if len(overrides) == 0 {
+		return false
+	}
+	applied := false
+	if n, ok := atoiPositive(overrides["adapt_standby_max"]); ok {
+		SetAdaptStandbyMax(n)
+		applied = true
+	}
+	if n, ok := atoiPositive(overrides["adapt_cap"]); ok {
+		SetAdaptCap(n)
+		applied = true
+	}
+	if n, ok := atoiPositive(overrides["adapt_rev_active"]); ok {
+		SetAdaptRevActive(n)
+		applied = true
+	}
+	return applied
+}
+
+// atoiPositive parses a decimal positive-integer string (no sign, no whitespace
+// beyond trimming) with only integer arithmetic so the wasm guest stays free of a
+// strconv dependency it doesn't otherwise need. Returns ok=false for empty or
+// non-numeric input, or a value < 1.
+func atoiPositive(s string) (int, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, false
+	}
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+		n = n*10 + int(r-'0')
+	}
+	if n < 1 {
+		return 0, false
+	}
+	return n, true
+}
+
 func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// Snapshot the runtime-tunable widths once per tick (lock-free atomic loads)
 	// so every read below sees a consistent value even if the mux-control RPC
 	// retunes them mid-tick, and so no scattered read site races the setter.
 	adaptCap := AdaptCap()
 	adaptRevActive := AdaptRevActive()
+	adaptStandbyMax := AdaptStandbyMax()
 	for k := range e.adaptSeen {
 		delete(e.adaptSeen, k)
 	}

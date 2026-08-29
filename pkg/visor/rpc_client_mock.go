@@ -782,6 +782,10 @@ func (mc *mockRPCClient) SetMuxWidth(_ int) error {
 	return nil
 }
 
+func (mc *mockRPCClient) SetMuxStandby(_ int) error {
+	return nil
+}
+
 func (*mockRPCClient) GetRouterSettings() (RouterSettings, error) { return RouterSettings{}, nil }
 func (*mockRPCClient) SetRouterSettings(RouterSettings) error     { return nil }
 

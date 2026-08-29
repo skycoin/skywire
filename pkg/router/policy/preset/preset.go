@@ -326,6 +326,13 @@ func decideCoupled(ctx Context) Spec {
 // path leaves Kind ""), Chosen stays nil and the router picks the path exactly
 // as before — so this can never break the wasm or no-provider path.
 func decideAdaptive(ctx Context, cands []Candidate) Spec {
+	// Per-policy / config surface: apply any adaptive-width tunables carried in
+	// cli_overrides ("adapt_cap" / "adapt_rev_active" / "adapt_standby_max") to
+	// the runtime atomics before sizing, so an operator can set different widths
+	// per routing policy without recompiling — the same knobs the mux-control RPC
+	// drives (see ApplyOverrideTunables). Read exactly like the other presets'
+	// cli_overrides (geo-avoid's avoid_geo, trust-tiered's trusted_pks).
+	ApplyOverrideTunables(ctx.CLIOverrides)
 	switch ctx.App {
 	case "skychat", "skychat-client":
 		// Latency-sensitive chat: single lean route, lowest mux.
@@ -335,7 +342,7 @@ func decideAdaptive(ctx Context, cands []Candidate) Spec {
 		// Symmetric Mux => establishMuxRoutes builds every leg FULL-DUPLEX
 		// (fwdCount == revCount). See the Shape note above for why bidirectional
 		// setup replaced the old ForwardMux=1 / ReverseMux=N asymmetry.
-		Mux:                     AdaptRevActive() + adaptStandbyMax,
+		Mux:                     AdaptRevActive() + AdaptStandbyMax(),
 		RotationIntervalSeconds: 20,
 		// Goodput-weighted thin spread: each active leg's share tracks its
 		// recently-measured throughput, with a cold-leg floor so a fresh leg
