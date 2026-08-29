@@ -117,30 +117,25 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 		snap.Note = appendNote(snap.Note, "logs unavailable: "+err.Error())
 	}
 
-	// Mux legs (best-effort): the surface may have no active route group.
+	// Mux legs (best-effort): the surface may have no active route group. Each
+	// route group is one --tunnels STREAM; its Legs are the PACKET-level mux. Model
+	// every tunnel (not just the first) so the status tree can nest tunnel → legs;
+	// mirror the first tunnel's legs into snap.Legs for back-compat.
 	if infos, err := p.v.RouteGroupMuxInfo(app); err == nil {
-		if len(infos) > 0 {
-			snap.MuxEnabled = infos[0].MuxEnabled
-			for _, leg := range infos[0].Legs {
-				snap.Legs = append(snap.Legs, proxystatus.Leg{
-					Index:          leg.Index,
-					TransportID:    leg.TransportID,
-					TpType:         leg.TpType,
-					RemotePK:       leg.RemotePK,
-					LatencyMS:      leg.LatencyMS,
-					RouteLatencyMS: leg.RouteLatencyMS,
-					Direct:         leg.Direct,
-					SentBytes:      leg.SentBytes,
-					RecvBytes:      leg.RecvBytes,
-					Retransmits:    leg.Retransmits,
-					GoodputBps:     leg.GoodputBps,
-					GoodputUpBps:   leg.GoodputUpBps,
-					GoodputDownBps: leg.GoodputDownBps,
-					Alive:          leg.Alive,
-					Standby:        leg.Standby,
-					Hops:           proxyHopsFrom(leg.Hops),
-				})
+		for ti, info := range infos {
+			t := proxystatus.Tunnel{
+				Index:      ti,
+				ExitPK:     info.Desc.DstPK.String(),
+				MuxEnabled: info.MuxEnabled,
 			}
+			for _, leg := range info.Legs {
+				t.Legs = append(t.Legs, proxyLegFrom(leg))
+			}
+			snap.Tunnels = append(snap.Tunnels, t)
+		}
+		if len(snap.Tunnels) > 0 {
+			snap.MuxEnabled = snap.Tunnels[0].MuxEnabled
+			snap.Legs = snap.Tunnels[0].Legs
 		}
 	} else {
 		snap.Note = appendNote(snap.Note, "mux info unavailable: "+err.Error())
@@ -157,6 +152,29 @@ func appendNote(existing, add string) string {
 		return add
 	}
 	return existing + " · " + add
+}
+
+// proxyLegFrom transcribes one visor MuxLegInfo into the proxystatus.Leg shape
+// the status tree renders. Shared by every tunnel's leg list.
+func proxyLegFrom(leg MuxLegInfo) proxystatus.Leg {
+	return proxystatus.Leg{
+		Index:          leg.Index,
+		TransportID:    leg.TransportID,
+		TpType:         leg.TpType,
+		RemotePK:       leg.RemotePK,
+		LatencyMS:      leg.LatencyMS,
+		RouteLatencyMS: leg.RouteLatencyMS,
+		Direct:         leg.Direct,
+		SentBytes:      leg.SentBytes,
+		RecvBytes:      leg.RecvBytes,
+		Retransmits:    leg.Retransmits,
+		GoodputBps:     leg.GoodputBps,
+		GoodputUpBps:   leg.GoodputUpBps,
+		GoodputDownBps: leg.GoodputDownBps,
+		Alive:          leg.Alive,
+		Standby:        leg.Standby,
+		Hops:           proxyHopsFrom(leg.Hops),
+	}
 }
 
 // proxyHopsFrom transcribes the visor's per-leg MuxHopInfo into the
