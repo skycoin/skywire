@@ -53,6 +53,17 @@ func newSACKTracker() *sackTracker {
 	}
 }
 
+// alreadyBuffered reports whether seq is already held out-of-order in the
+// received set (a buffered duplicate). Read-only; the contiguous/delivered check
+// is done separately against the reorder buffer's NextSeq (which, unlike
+// lastContiguous, has no seq-0-vs-nothing ambiguity). Used to credit a leg's
+// UNIQUE payload only on a seq's FIRST arrival.
+func (st *sackTracker) alreadyBuffered(seq uint32) bool {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.received[seq]
+}
+
 // RecordReceived records that seq has been received. Returns true if this
 // created an out-of-order gap (caller should trigger immediate SACK).
 func (st *sackTracker) RecordReceived(seq uint32) (gapDetected bool) {
