@@ -1628,9 +1628,15 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 	if rg.mux != nil {
 		for _, idx := range action.PromoteFromStandby {
 			rg.mux.setLegStandby(idx, false)
+			// Tell the remote so it also promotes this leg into its send set.
+			rg.sendLegState(idx, false)
 		}
 		for _, idx := range action.DemoteToStandby {
 			rg.mux.setLegStandby(idx, true)
+			// Tell the remote so it stops striping its send traffic across this
+			// leg — the fix for the wide-mux download stall where the bulk-sending
+			// peer fanned data over every established leg, standby or not.
+			rg.sendLegState(idx, true)
 			demoted = true
 		}
 	}
@@ -2984,7 +2990,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		// it only ACTIVATES when the peer also advertises it (both ends on a build
 		// that has it), so an old peer simply never negotiates it and is
 		// unaffected. No config knob — on by default wherever both edges support it.
-		caps := routing.CapMux | routing.CapSACK | routing.CapHOLRetx | routing.CapFEC
+		caps := routing.CapMux | routing.CapSACK | routing.CapHOLRetx | routing.CapFEC | routing.CapLegState
 		var packet routing.Packet
 		if pfn := rg.perFrameNoiseCap(encrypt); pfn != 0 {
 			msg, mErr := rg.nextPerFrameNoiseMsg()
@@ -3121,6 +3127,8 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		return rg.handleDataPacket(packet)
 	case routing.RepairPacket:
 		return rg.handleRepairPacket(packet)
+	case routing.LegStatePacket:
+		return rg.handleLegStatePacket(packet)
 	case routing.HandshakePacket:
 		// A handshake on an aux leg proves the peer registered that leg's
 		// rule, so it is safe to start sending on it. The primary leg's
@@ -3181,6 +3189,17 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 						rg.mux.holRetxEnabled = true
 						rg.logger.Debug("Proactive HoL retransmit enabled (both peers support CapHOLRetx)")
 					}
+				}
+
+				// Leg-state signaling negotiation. Both edges must advertise
+				// CapLegState; then a park/promote is mirrored to the remote so it
+				// stops striping its send traffic across a leg the other end parked
+				// (the wide-mux download stall). No new loop — it rides the existing
+				// rotation park/promote path. A peer without the bit never receives a
+				// LegStatePacket and keeps the send-side-only standby behavior.
+				if remoteCaps&routing.CapLegState != 0 {
+					rg.mux.legStateEnabled = true
+					rg.logger.Debug("Leg-state signaling enabled (both peers support CapLegState)")
 				}
 
 				// FEC negotiation. Requires CapMux (rg.mux set above); both edges
@@ -3415,6 +3434,64 @@ func (rg *RouteGroup) handleRepairPacket(packet routing.Packet) error {
 		}
 	}
 	return nil
+}
+
+// handleLegStatePacket mirrors a peer's leg active/standby decision onto this
+// side's mux, so a leg the peer parked is also parked HERE — i.e. this side stops
+// striping its send traffic across it. The leg is identified by the route ID the
+// packet arrived on (the peer sent it ON that leg), matched against the reverse
+// rules exactly like an aux-leg handshake (markLegReady). Ignored unless
+// CapLegState was negotiated. Never parks leg 0 (setLegStandby enforces that).
+func (rg *RouteGroup) handleLegStatePacket(packet routing.Packet) error {
+	if rg.mux == nil || !rg.mux.legStateEnabled {
+		return nil
+	}
+	standby := packet.LegStateStandby()
+	rid := packet.RouteID()
+	rg.mu.Lock()
+	idx := -1
+	for i, rule := range rg.rvs {
+		if rule != nil && rule.KeyRouteID() == rid {
+			idx = i
+			break
+		}
+	}
+	rg.mu.Unlock()
+	if idx < 0 {
+		return nil // no matching leg (already pruned / unknown route)
+	}
+	rg.mux.setLegStandby(idx, standby)
+	if rg.logger != nil {
+		rg.logger.Debugf("LegState: peer marked leg %d %s", idx, map[bool]string{true: "standby", false: "active"}[standby])
+	}
+	return nil
+}
+
+// sendLegState signals leg idx's new active/standby state to the remote so it
+// mirrors the parking on its send side (CapLegState). Sent ON the leg (its
+// forward rule + transport) so the remote identifies the leg by the route the
+// packet arrives on — the same identity an aux-leg handshake uses. Best-effort:
+// parking keeps the leg's rules and transport installed, so the signal still
+// rides a just-demoted leg. No-op unless CapLegState was negotiated.
+func (rg *RouteGroup) sendLegState(idx int, standby bool) {
+	if rg.mux == nil || !rg.mux.legStateEnabled {
+		return
+	}
+	rg.mu.Lock()
+	var tp *transport.ManagedTransport
+	var rule routing.Rule
+	if idx >= 0 && idx < len(rg.tps) && idx < len(rg.fwd) {
+		tp = rg.tps[idx]
+		rule = rg.fwd[idx]
+	}
+	rg.mu.Unlock()
+	if tp == nil || rule == nil {
+		return
+	}
+	packet := routing.MakeLegStatePacket(rule.NextRouteID(), standby)
+	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
+		rg.logger.WithError(err).Debugf("LegState: failed to signal leg %d", idx)
+	}
 }
 
 func (rg *RouteGroup) handleErrorPacket(packet routing.Packet) error {

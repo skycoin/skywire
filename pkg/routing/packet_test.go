@@ -113,6 +113,25 @@ func TestPacketTypeStringDatagram(t *testing.T) {
 	assert.Equal(t, "Datagram", DatagramPacket.String())
 }
 
+func TestMakeLegStatePacket(t *testing.T) {
+	// Standby=true encodes a 1 byte; the type + route ID round-trip.
+	sb := MakeLegStatePacket(7, true)
+	assert.Equal(t, LegStatePacket, sb.Type())
+	assert.Equal(t, "LegState", sb.Type().String())
+	assert.Equal(t, RouteID(7), sb.RouteID())
+	assert.Equal(t, uint16(LegStatePayloadSize), sb.Size())
+	assert.True(t, sb.LegStateStandby())
+
+	// Active=false encodes a 0 byte.
+	act := MakeLegStatePacket(7, false)
+	assert.False(t, act.LegStateStandby())
+
+	// A truncated/empty payload reads as active (the safe default — never parks a
+	// leg the sender still wants).
+	var empty Packet = []byte{byte(LegStatePacket), 0, 0, 0, 7, 0, 0}
+	assert.False(t, empty.LegStateStandby())
+}
+
 func TestMakePingPacket(t *testing.T) {
 	staticTime, _ := time.Parse(time.RFC3339, "2012-11-01T22:08:41+00:00") //nolint:errcheck
 	timestamp := staticTime.UTC().UnixNano() / int64(time.Millisecond)

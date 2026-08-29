@@ -163,6 +163,14 @@ type routeMux struct {
 	holRetx        *holRetxTracker
 	holSACKNano    int64 // atomic: UnixNano of the last proactive HoL SACK we sent
 
+	// legStateEnabled is true when both peers advertised CapLegState. When set, a
+	// park/promote of a leg is signaled to the remote (LegStatePacket) so it
+	// mirrors the active/standby set on its send side — otherwise standby is a
+	// send-side-only decision and the bulk-sending peer stripes across every
+	// established leg, head-of-line-stalling the reorder frontier (the wide-mux
+	// download stall). See handleLegStatePacket / sendLegState in route_group.go.
+	legStateEnabled bool
+
 	// Per-frame noise (inverse-mux). When CapPerFrameNoise is negotiated the
 	// RouteGroup installs these: seal AEAD-encrypts each outgoing frame under
 	// its sequence-nonce (in wrapPayload, before retx storage so retransmits
