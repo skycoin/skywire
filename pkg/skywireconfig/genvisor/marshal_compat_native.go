@@ -803,6 +803,10 @@ func marshalTransportNative(w *strings.Builder, t *visorconfig.Transport, indent
 	}
 	o.field("public_autoconnect")
 	writeBoolNative(w, t.PublicAutoconnect)
+	if t.HypervisorAutoconnect != nil {
+		o.field("hypervisor_autoconnect")
+		writeBoolNative(w, *t.HypervisorAutoconnect)
+	}
 	o.field("transport_setup")
 	writePubKeyNativeSlice(w, t.TransportSetupPKs, o.indent+1)
 	if len(t.UserTransportSetupPKs) > 0 {
