@@ -352,9 +352,19 @@ build-wasm: ## Compile-check every js/wasm binary (GOOS=js GOARCH=wasm), no run 
 
 build-wasm-tinygo: ## Compile-check every TinyGo wasm binary (-o /dev/null, no run) — mirrors the CI wasm-tinygo lane
 	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/design/tinygo-dmsg-client.md (TinyGo 0.41+)"; exit 1; }
+	@# TinyGo trails Go by weeks after each Go minor, and refuses to run at all
+	@# against a newer one ("requires go version 1.19 through 1.26, got go1.27").
+	@# CI installs the current Go, so this lane went red the day #4221 bumped it.
+	@# The script asks TinyGo what it supports and resolves a matching toolchain,
+	@# printing "auto" once TinyGo has caught up — so no version is written down.
+	@#
+	@# -interp-timeout raises TinyGo's 3m default for the compile-time
+	@# interpreter, which folds skycoin's secp256k1 package init. That fits
+	@# inside the default on a CI runner but not on a slower machine building
+	@# from a cold cache, so the ceiling does not depend on whose machine runs it.
 	@echo "compile-checking TinyGo wasm binaries..."
 	@echo "  tinygo build -target wasip1 ./cmd/dmsg-tinygo-probe"
-	@tinygo build -target wasip1 -no-debug -opt=z -o /dev/null ./cmd/dmsg-tinygo-probe || exit 1
+	@GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasip1 -no-debug -opt=z -interp-timeout 15m -o /dev/null ./cmd/dmsg-tinygo-probe || exit 1
 	@# Only net/http-free binaries belong here: TinyGo 0.41 cannot compile net/http
 	@# for wasm (roundtrip_js.go references an unexported Transport.roundTrip). The
 	@# full js/wasm binaries ./cmd/dmsg-wasm and ./cmd/wasm-visor deliberately use
@@ -362,16 +372,16 @@ build-wasm-tinygo: ## Compile-check every TinyGo wasm binary (-o /dev/null, no r
 	@# standard-Go-only — they are compile-checked by the `build-wasm` lane instead.
 	@for p in ./pkg/tpviz/wasm ./cmd/websh-probe; do \
 		echo "  tinygo build -target wasm $$p"; \
-		tinygo build -target wasm -no-debug -o /dev/null "$$p" || exit 1; \
+		GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasm -no-debug -interp-timeout 15m -o /dev/null "$$p" || exit 1; \
 	done
 	@echo "  tinygo build -target wasi (app-mux routing policy)"
-	@cd docs/examples/routing-policies/wasm/app-mux && tinygo build -target=wasi -no-debug -opt=2 -o /dev/null . || exit 1
+	@cd docs/examples/routing-policies/wasm/app-mux && GOTOOLCHAIN=$$(cd ../../../../.. && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o /dev/null . || exit 1
 	@echo "all TinyGo wasm binaries compile."
 
 test-wasm-policy: ## Rebuild app-mux.wasm from source with TinyGo and run the policy loader test against the FRESH build (real WASM runtime smoke test)
 	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.32+)"; exit 1; }
 	@mkdir -p ./build/wasm-fixtures
-	cd docs/examples/routing-policies/wasm/app-mux && tinygo build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/build/wasm-fixtures/app-mux.wasm" .
+	cd docs/examples/routing-policies/wasm/app-mux && GOTOOLCHAIN=$$(cd ../../../../.. && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/build/wasm-fixtures/app-mux.wasm" .
 	SKYWIRE_APPMUX_WASM="$(CURDIR)/build/wasm-fixtures/app-mux.wasm" go test -mod=vendor -count=1 -v -run TestWasmEvaluator ./pkg/router/policy/wasm/
 
 tpviz-wasm: ## Build transport visualizer WASM binary to build/tpviz (standalone)
@@ -384,12 +394,12 @@ tpviz-wasm-standalone: tpviz-wasm ## Alias for tpviz-wasm (both build standalone
 
 tpviz-wasm-tinygo: ## Build transport visualizer WASM binary with tinygo to build/tpviz (smaller, ~750KB)
 	mkdir -p ./build/tpviz
-	tinygo build -o ./build/tpviz/main.wasm -target wasm -no-debug -opt=z -panic=trap ./pkg/tpviz/wasm
+	GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -o ./build/tpviz/main.wasm -target wasm -no-debug -opt=z -panic=trap ./pkg/tpviz/wasm
 	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/tpviz/
 	cp ./pkg/tpviz/dist/index.html ./build/tpviz/
 
 tinygo-dmsg: ## Build-check the dmsg client under TinyGo (IoT target wasip1); ~2.2MB -opt=z
-	tinygo build -target wasip1 -no-debug -opt=z -o ./build/dmsg-tinygo.wasm ./cmd/dmsg-tinygo-probe
+	GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasip1 -no-debug -opt=z -o ./build/dmsg-tinygo.wasm ./cmd/dmsg-tinygo-probe
 	@echo "built ./build/dmsg-tinygo.wasm — the dmsg client compiles under TinyGo (see docs/design/tinygo-dmsg-client.md)"
 
 dmsg-wasm: ## Build the browser WASM dmsg client + dev harness into build/dmsg-wasm
@@ -401,7 +411,7 @@ dmsg-wasm: ## Build the browser WASM dmsg client + dev harness into build/dmsg-w
 
 tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~21MB) into build/dmsg-wasm
 	mkdir -p ./build/dmsg-wasm
-	tinygo build -target wasm -o ./build/dmsg-wasm/dmsg.wasm ./cmd/dmsg-wasm
+	GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasm -o ./build/dmsg-wasm/dmsg.wasm ./cmd/dmsg-wasm
 	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/dmsg-wasm/
 	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
 	@echo "built ./build/dmsg-wasm (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
