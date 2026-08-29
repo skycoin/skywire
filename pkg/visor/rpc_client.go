@@ -850,6 +850,11 @@ func (rc *rpcClient) SetMuxWidth(n int) error {
 	return rc.Call("SetMuxWidth", &n, &struct{}{})
 }
 
+// SetMuxStandby sets the adaptive mux warm-standby reserve pool size at runtime.
+func (rc *rpcClient) SetMuxStandby(n int) error {
+	return rc.Call("SetMuxStandby", &n, &struct{}{})
+}
+
 // GetRouterSettings returns the unified runtime router knobs.
 func (rc *rpcClient) GetRouterSettings() (RouterSettings, error) {
 	var out RouterSettings

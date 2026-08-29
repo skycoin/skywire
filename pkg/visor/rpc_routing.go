@@ -163,6 +163,13 @@ func (r *RPC) SetMuxWidth(n *int, _ *struct{}) (err error) {
 	return err
 }
 
+// SetMuxStandby sets the adaptive mux warm-standby reserve pool size
+func (r *RPC) SetMuxStandby(n *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMuxStandby", *n)(nil, &err)
+	err = r.visor.SetMuxStandby(*n)
+	return err
+}
+
 // GetRouterSettings returns the unified runtime router knobs.
 func (r *RPC) GetRouterSettings(_ *struct{}, out *RouterSettings) (err error) {
 	defer rpcutil.LogCall(r.log, "GetRouterSettings", nil)(out, &err)

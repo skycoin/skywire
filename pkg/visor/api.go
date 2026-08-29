@@ -141,6 +141,7 @@ type API interface {
 	SetMuxMode(mode string) error
 	SetMuxCap(n int) error
 	SetMuxWidth(n int) error
+	SetMuxStandby(n int) error
 
 	//transports
 	TransportTypes() ([]string, error)

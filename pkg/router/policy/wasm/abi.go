@@ -71,6 +71,18 @@ type DecideInputWire struct {
 	// single-preset @file.wasm module — single-preset guests ignore
 	// the unknown field, so populating it is ABI-compatible.
 	Preset string `json:"preset,omitempty"`
+	// AdaptCap / AdaptRevActive / AdaptStandbyMax carry the host's
+	// current runtime-tunable adaptive mux widths into the sandboxed
+	// guest, which has its own linear memory and never sees a host-side
+	// setter call (the #4325 fix). The guest applies them via the
+	// preset setters before dispatch, so `cli proxy mux cap|width|standby`
+	// (and per-policy cli_overrides) actually retune a preset:* (wasm)
+	// visor. Zero (omitted) means "unset" — an old host or single-preset
+	// module leaves the guest on its compiled defaults, so this stays
+	// ABI-compatible.
+	AdaptCap        int `json:"adapt_cap,omitempty"`
+	AdaptRevActive  int `json:"adapt_rev_active,omitempty"`
+	AdaptStandbyMax int `json:"adapt_standby_max,omitempty"`
 }
 
 // LegChangeInputWire is the JSON envelope the host passes into
@@ -82,6 +94,10 @@ type LegChangeInputWire struct {
 	Change LegChangeWire      `json:"change"`
 	// Preset — see DecideInputWire.Preset.
 	Preset string `json:"preset,omitempty"`
+	// AdaptCap / AdaptRevActive / AdaptStandbyMax — see DecideInputWire.
+	AdaptCap        int `json:"adapt_cap,omitempty"`
+	AdaptRevActive  int `json:"adapt_rev_active,omitempty"`
+	AdaptStandbyMax int `json:"adapt_standby_max,omitempty"`
 }
 
 // RouteSpecWire mirrors policy.RouteSpec as a JSON wire type.
@@ -110,6 +126,10 @@ type TickInputWire struct {
 	Legs []LegInfoWire      `json:"legs"`
 	// Preset — see DecideInputWire.Preset.
 	Preset string `json:"preset,omitempty"`
+	// AdaptCap / AdaptRevActive / AdaptStandbyMax — see DecideInputWire.
+	AdaptCap        int `json:"adapt_cap,omitempty"`
+	AdaptRevActive  int `json:"adapt_rev_active,omitempty"`
+	AdaptStandbyMax int `json:"adapt_standby_max,omitempty"`
 }
 
 // RotationActionWire mirrors policy.RotationAction as a JSON wire

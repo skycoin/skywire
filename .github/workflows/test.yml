@@ -368,6 +368,14 @@ jobs:
       - name: Rebuild app-mux.wasm and run the policy runtime smoke test
         run: make test-wasm-policy
 
+      # Provenance gate for the COMMITTED routing-policy bundle.wasm: a native
+      # visor on a preset:* policy runs this blob via wazero, so a stale one
+      # ships different routing decisions than its source (#4325). This rebuilds
+      # it with the pinned TinyGo above and byte-compares against the committed
+      # copy. Pairs with the wazero<->native parity test (the semantic guard).
+      - name: Check the committed routing-policy bundle.wasm is not stale
+        run: make check-bundle-wasm
+
   # Hypervisor manager UI (Angular). The UI build + lint + unit tests only ever
   # ran as manually-invoked Makefile targets, so a regression that breaks
   # `ng build`, trips an eslint rule, or fails a spec shipped undetected. This
