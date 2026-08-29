@@ -2,9 +2,11 @@
 package router
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -189,16 +191,41 @@ func (m *routeMux) flipStep(up, down float64) (flipped, changed bool) {
 	return cur, false
 }
 
-// dirRestrict reports whether direction filtering should be enforced this pick:
-// true only when directional AND at least one READY leg matches the wanted
-// direction. When no matching leg is available it returns false so selection
-// falls back to any ready leg (a send is never dropped for lack of a
-// direction-matching leg).
-func (m *routeMux) dirRestrict(tps []*transport.ManagedTransport, wantDirect bool, dst, src cipher.PubKey) bool {
-	for idx, tp := range tps {
-		if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) && legIsDirect(tp, dst, src) == wantDirect {
-			return true
+// selectByDirection picks a leg matching this end's send direction, using
+// readiness that IGNORES the standby flag (legSelectableIgnoringStandby) —
+// because under unidirectional assignment DIRECTION governs, and a reverse leg
+// the initiator parked as standby must still be selectable by the exit for the
+// download. It prefers the weighted selector's pick when that pick matches the
+// direction, else round-robins among direction-matching legs. Returns ok=false
+// when no direction-matching leg is ready, so selectTransport falls through to
+// the standard (standby-aware) path rather than dropping the send.
+func (m *routeMux) selectByDirection(tps []*transport.ManagedTransport, fwd []routing.Rule, wantDirect bool, dst, src cipher.PubKey) (*transport.ManagedTransport, routing.Rule, int, bool) {
+	n := len(tps)
+	if n == 0 || len(fwd) == 0 {
+		return nil, nil, -1, false
+	}
+	match := func(idx int) bool {
+		tp := tps[idx]
+		return idx < len(fwd) && tp != nil && !tp.IsClosed() &&
+			m.legSelectableIgnoringStandby(idx) && legIsDirect(tp, dst, src) == wantDirect
+	}
+	// Prefer the scheduler's pick when it already matches the direction, so the
+	// heavy direction still spreads across legs per the mux weights/ECF.
+	if m.tpSelector != nil && m.tpSelector.Len() > 0 {
+		if idx := m.tpSelector.Select(); idx >= 0 && idx < n && match(idx) {
+			return tps[idx], fwd[idx], idx, true
 		}
 	}
-	return false
+	// Round-robin among direction-matching legs.
+	start := int(atomic.AddUint32(&m.tpIndex, 1) - 1)
+	for i := 0; i < n; i++ {
+		idx := ((start % n) + i) % n
+		if idx < 0 {
+			idx += n
+		}
+		if match(idx) {
+			return tps[idx], fwd[idx], idx, true
+		}
+	}
+	return nil, nil, -1, false
 }
