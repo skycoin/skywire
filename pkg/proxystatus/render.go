@@ -73,11 +73,19 @@ func Render(snap Snapshot) []byte {
 	writeLiveRegion(&b, snap)
 	b.WriteString(`</main>`)
 
+	// The GPU route-graph view sits between the live region and the control seam.
+	// It is STATIC (outside <main id="live">) so its WebGL context/layout survive
+	// the live swaps; the live region only restreams the #rgdata JSON it feeds on.
+	if live {
+		writeGraphSection(&b)
+	}
+
 	writeControlSeam(&b, snap)
 	writeFooter(&b, snap)
 
 	if live {
 		b.WriteString(liveScript)
+		b.WriteString(graphScript)
 	}
 
 	b.WriteString("</body></html>")
@@ -183,6 +191,52 @@ const liveScript = `<script>(function(){var t,ws,pend=null,last=null,pv=null;` +
 	`var el0=document.getElementById("live");if(el0){meters(el0);var lg0=el0.querySelector("pre.log");if(lg0){lg0.scrollTop=lg0.scrollHeight;}}` +
 	`document.body.classList.add("js");connect();})();</script>`
 
+// graphScript drives the GPU route-graph view. It reuses the network
+// visualizer's engine WITHOUT any new wasm: it loads the one wasm-visor blob in
+// its "netview" role (globalThis.__SKYWIRE_WASM_ROLE__="netview" before go.run,
+// exactly as pkg/tpviz/ui/src/cosmos-go-graph.ts does), which publishes the
+// generic cosmos-go graph API on globalThis.tpvizGL (pkg/tpviz/wasmgl.Register),
+// then drives tpvizGL.init/setData with the route subgraph the page emits in the
+// #rgdata JSON. /main.wasm and /wasm_exec.js are served same-origin by the
+// skysocks status handler (pkg/skysocks/client.go) out of pkg/wasmhv/wasmbin.
+//
+// Lazy: the ~3 MB blob is fetched only the first time the graph view is opened,
+// so a user who stays on the tree pays nothing. Live: a MutationObserver on the
+// live region re-reads #rgdata on each ~1s push and refreshes the hover-tooltip
+// data every time, but re-feeds the force layout (setData) ONLY when the
+// topology signature changes — so watching bytes tick doesn't relayout the
+// graph. The canvas is static (outside the swapped region) so the settled layout
+// and WebGL context persist. setRouteView flips a <body> class (static, survives
+// swaps) that CSS uses to show/hide the tree vs graph and to light the toggle.
+const graphScript = `<script>(function(){` +
+	`var booted=false,booting=false,nodes=[],sig=null,io=null;` +
+	`function gl(){return window.tpvizGL;}` +
+	`function data(){var el=document.getElementById("rgdata");if(!el){return null;}try{return JSON.parse(el.textContent||"null");}catch(e){return null;}}` +
+	`function tip(){return document.getElementById("rgtip");}` +
+	`function showTip(i,x,y){var n=nodes[i],t=tip();if(!n||!t){return;}t.textContent=n.tip||"";t.style.display="block";t.style.left=(x+14)+"px";t.style.top=(y+14)+"px";}` +
+	`function hideTip(){var t=tip();if(t){t.style.display="none";}}` +
+	`function onEvent(kind,index){var a=arguments;if(kind==="over"){showTip(index,a[2],a[3]);}else if(kind==="out"||kind==="bgclick"){hideTip();}}` +
+	`function payload(d){var n=d.nodes.length,pc=new Array(n),ps=new Float32Array(n),idx={},i;` +
+	`for(i=0;i<n;i++){var nd=d.nodes[i];idx[nd.id]=i;pc[i]=nd.color;ps[i]=nd.size;}` +
+	`var L=d.links.length,lk=new Float32Array(L*2),lw=new Float32Array(L),lc=new Array(L),w=0,j;` +
+	`for(j=0;j<L;j++){var e=d.links[j],s=idx[e.source],t=idx[e.target];if(s===undefined||t===undefined){continue;}lk[w*2]=s;lk[w*2+1]=t;lc[w]=e.color;lw[w]=e.width;w++;}` +
+	`return {positions:new Float32Array(0),pointColors:pc,pointSizes:ps,links:lk.subarray(0,w*2),linkColors:lc.slice(0,w),linkWidths:lw.subarray(0,w),grouped:false,boundaries:[]};}` +
+	`function apply(force){var d=data();if(!d){return;}nodes=d.nodes||[];var g=gl();if(!g){return;}if(force||d.sig!==sig){sig=d.sig;g.setData(payload(d));}}` +
+	`function observe(){if(io){return;}var live=document.getElementById("live");if(!live){return;}io=new MutationObserver(function(){apply(false);});io.observe(live,{childList:true,subtree:true});}` +
+	`function fail(){var c=document.getElementById("rgcanvas");if(c){c.innerHTML='<div class="rgfail">The GPU graph view failed to load (main.wasm). The tree view shows the same routes.</div>';}}` +
+	`function ready(){var g=gl();if(g&&g.ready){booted=true;booting=false;if(!g.init("rgcanvas",onEvent)){setTimeout(function(){g.init("rgcanvas",onEvent);apply(true);observe();},80);}else{apply(true);observe();}return true;}return false;}` +
+	`function boot(){if(booted||booting){return;}booting=true;window.__SKYWIRE_WASM_ROLE__="netview";` +
+	`var s=document.createElement("script");s.src="/wasm_exec.js";s.onerror=function(){booting=false;fail();};` +
+	`s.onload=function(){var G=window.Go;if(!G){booting=false;fail();return;}var go=new G();` +
+	`WebAssembly.instantiateStreaming(fetch("/main.wasm"),go.importObject).then(function(res){go.run(res.instance);` +
+	`var tries=0;(function wait(){if(ready()){return;}if(++tries>150){booting=false;fail();return;}setTimeout(wait,20);})();` +
+	`}).catch(function(){booting=false;fail();});};document.head.appendChild(s);}` +
+	`window.setRouteView=function(v){try{localStorage.setItem("rv",v);}catch(e){}var g=(v==="graph");` +
+	`document.body.classList.toggle("gv-graph",g);document.body.classList.toggle("gv-tree",!g);` +
+	`if(g){if(booted){var gg=gl();if(gg){setTimeout(function(){gg.fit();},60);}}else{boot();}}};` +
+	`var v="tree";try{v=localStorage.getItem("rv")||"tree";}catch(e){}setRouteView(v);` +
+	`})();</script>`
+
 // writeLiveRegion writes the dynamic status content (pills, per-leg mux, events,
 // recent log) shared by Render (page shell) and RenderFragment (SSE push).
 func writeLiveRegion(b *strings.Builder, snap Snapshot) {
@@ -224,6 +278,17 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	fmt.Fprintf(b, `<span class="stat" data-bytes="up" data-val="%d" hidden></span>`, totSent)
 	fmt.Fprintf(b, `<span class="stat" data-bytes="down" data-val="%d" hidden></span>`, totRecv)
 
+	// View toggle (skysocks only): the same route group is shown two ways — the
+	// ASCII bilateral tree (default, no-JS) and a GPU force-directed GRAPH
+	// (routegraph.go → cosmos-go, the network visualizer's engine, served from
+	// the one wasm-visor "netview" blob). The tree is wrapped in .muxtree so the
+	// toggle can hide it when the graph view is active; the graph itself lives in
+	// its own static section (writeGraphSection) whose WebGL context must survive
+	// the ~1s live-region swaps, and is fed the route subgraph from the
+	// #rgdata JSON emitted below (restreamed with the live region).
+	writeViewToggle(b, snap)
+	b.WriteString(`<div class="muxtree">`)
+
 	// The route tree itself: ONE shared bilateral model (pkg/proxystatus.RouteTree)
 	// rendered by pkg/bitree — the exact model + geometry `skywire cli proxy tree`
 	// prints, so the page and the terminal never drift. Root = this visor (right-
@@ -262,7 +327,62 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	// active green, standby amber) — no separate swatch dot.
 	writeTreeLegend(b)
 	b.WriteString(`<p class="hint">The same tree prints from <code>skywire cli proxy tree</code>; for a live chart use ` +
-		`<code>skywire cli proxy mux plot</code>.</p></section>`)
+		`<code>skywire cli proxy mux plot</code>.</p>`)
+	b.WriteString(`</div>`) // .muxtree
+	// The route subgraph the GPU graph view renders, as inert JSON inside the live
+	// region so each ~1s WebSocket push restreams it; the static driver
+	// (graphScript) re-reads it and re-feeds cosmos-go only when the topology
+	// signature changes (routegraph.go topoSig), so live metric updates don't jerk
+	// the force layout. Skysocks only (the only surface that serves the wasm blob).
+	if snap.Surface == SurfaceSkysocks {
+		fmt.Fprintf(b, `<script type="application/json" id="rgdata">%s</script>`, RouteGraphJSON(snap))
+	}
+	b.WriteString(`</section>`)
+}
+
+// writeViewToggle emits the tree/graph view switch (skysocks only, and only when
+// there is a route to graph). The buttons flip a class on <body> — a STATIC
+// element that survives the live-region innerHTML swaps — so the choice sticks
+// across the ~1s pushes even though the buttons themselves are re-rendered each
+// push; their active styling is derived from the body class in CSS. setRouteView
+// (graphScript) also persists the choice in localStorage and lazily boots the
+// wasm the first time the graph is shown.
+func writeViewToggle(b *strings.Builder, snap Snapshot) {
+	if snap.Surface != SurfaceSkysocks || !hasRouteGraph(snap) {
+		return
+	}
+	b.WriteString(`<div class="vtoggle" role="tablist" aria-label="route view">` +
+		`<button type="button" class="vt-tree" onclick="setRouteView('tree')">tree</button>` +
+		`<button type="button" class="vt-graph" onclick="setRouteView('graph')">graph</button>` +
+		`</div>`)
+}
+
+// writeGraphSection emits the STATIC route-graph section (skysocks only): the
+// cosmos-go canvas container, a color legend, and the fixed hover tooltip. It
+// lives OUTSIDE <main id="live"> on purpose — the WebGL context and the settled
+// force layout must persist across the live region's ~1s innerHTML swaps, so the
+// container is never re-created; only the #rgdata JSON inside the live region
+// updates, and the driver re-feeds the engine in place. Hidden by default (the
+// tree is the default view); the toggle reveals it.
+func writeGraphSection(b *strings.Builder) {
+	b.WriteString(`<section id="rgraphsec" aria-label="route graph">`)
+	b.WriteString(`<div id="rgcanvas" class="rgcanvas"></div>`)
+	// Legend: the same color language as the tree (source/exit/hop by depth,
+	// per-stream edge accents) plus active/standby edge styling. The swatch words
+	// carry their own color so the coding is self-documenting.
+	b.WriteString(`<div class="rglegend">` +
+		`<span class="rgl src">● source</span>` +
+		`<span class="rgl exit">● exit</span>` +
+		`<span class="rgl hop1">● hop</span>` +
+		`<span class="rgl s0">— stream 0</span>` +
+		`<span class="rgl s1">— stream 1</span>` +
+		`<span class="rgl standby">— standby (dim)</span>` +
+		`</div>`)
+	b.WriteString(`<p class="hint">GPU force-directed graph of this proxy's routes — the same engine (cosmos-go) ` +
+		`as the network visualizer, driving only THIS visor, its hops and the exit. Hover a node for its ` +
+		`transports and per-leg detail; drag to pan, scroll to zoom. Needs WebGL; the tree view above is the ` +
+		`no-JS fallback.</p></section>`)
+	b.WriteString(`<div id="rgtip" class="rgtip" role="tooltip"></div>`)
 }
 
 // writeTreeLegend prints a compact legend BELOW the route tree. The words
@@ -995,6 +1115,28 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`code{color:var(--accent);font-size:11.5px}` +
 	`footer{margin-top:2rem;padding-top:.7rem;border-top:1px solid var(--line);color:var(--muted);font-size:12px}` +
 	`footer a{color:var(--accent);text-decoration:none}footer a:hover{text-decoration:underline}` +
+	// Tree/graph view toggle. The active button is lit from the <body> class the
+	// toggle sets (gv-tree / gv-graph) — a static hook that survives the ~1s live
+	// swaps — rather than any per-render state, so the highlight stays put.
+	`.vtoggle{display:inline-flex;gap:.3rem;margin:.1rem 0 .6rem}` +
+	`.vtoggle button{font:inherit;font-size:11px;padding:.15rem .7rem;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}` +
+	`.vtoggle button:hover{border-color:var(--accent);color:var(--fg)}` +
+	`body.gv-graph .vtoggle .vt-graph,body:not(.gv-graph) .vtoggle .vt-tree{background:var(--accent);border-color:var(--accent);color:#fff}` +
+	// The GPU graph section is hidden until the graph view is chosen; choosing it
+	// hides the ASCII tree (.muxtree) in the live region. The canvas is a fixed,
+	// user-resizable dark GL surface (cosmos paints its own dark background).
+	`#rgraphsec{display:none;margin-top:.2rem}body.gv-graph #rgraphsec{display:block}body.gv-graph .muxtree{display:none}` +
+	`.rgcanvas{position:relative;width:100%;height:30rem;min-height:18rem;border:1px solid var(--line);border-radius:8px;background:#0b1020;overflow:hidden;resize:vertical}` +
+	`.rgfail{padding:1rem;color:var(--warn);font-size:12px}` +
+	// Node hover tooltip: a fixed, pointer-transparent monospace panel positioned
+	// at the cursor by the driver; pre-wrap keeps the multi-line leg detail + full
+	// (untruncated) PK readable.
+	`.rgtip{display:none;position:fixed;z-index:50;max-width:36rem;white-space:pre-wrap;word-break:break-all;pointer-events:none;background:rgba(6,8,20,.96);color:#c7cbe6;border:1px solid var(--line);border-radius:6px;padding:.4rem .55rem;font:11px/1.45 ui-monospace,SFMono-Regular,monospace;box-shadow:0 4px 18px rgba(0,0,0,.5)}` +
+	// Graph legend: the swatch words carry their own tree/stream colors.
+	`.rglegend{display:flex;flex-wrap:wrap;gap:.15rem 1.1rem;font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:.45rem}` +
+	`.rgl{font-weight:600;white-space:nowrap}` +
+	`.rgl.src{color:var(--accent)}.rgl.exit{color:var(--hop-exit)}.rgl.hop1{color:var(--hop1)}` +
+	`.rgl.s0{color:var(--stream0)}.rgl.s1{color:var(--stream1)}.rgl.standby{color:var(--standby)}` +
 	`@media(prefers-color-scheme:light){:root{--bg:#f6f7fb;--fg:#1c1e26;--muted:#4a4f63;--card:#fff;--line:#d3d6e4;--accent:#4149d6;--accent2:#7b3fd0;--ok:#0a7a4c;--warn:#c02a48;--err:#c8102e;--cyan:#0a6c74;--standby:#7a5c00;` +
 	// Re-darken the hop hues for a light background so exit + each hop level stay
 	// legible (the dark-mode brights wash out on white).
