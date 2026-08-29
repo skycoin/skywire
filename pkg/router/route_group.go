@@ -3139,13 +3139,28 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		if rg.mux != nil {
 			rg.mu.Lock()
 			rid := packet.RouteID()
+			readyLeg := -1
 			for i, rule := range rg.rvs {
 				if rule != nil && rule.KeyRouteID() == rid {
 					rg.mux.markLegReady(i)
+					readyLeg = i
 					break
 				}
 			}
 			rg.mu.Unlock()
+			// Signal the just-ready leg's BORN-standby state to the peer. An aux
+			// leg grown into the warm pool (standbyNewLegs) is standby WITHOUT ever
+			// passing through the rotation engine's demote path — the only place
+			// sendLegState was previously called — so the peer (accept side, no
+			// standby of its own) kept striping its send traffic across it. Now that
+			// the leg's rules are peer-confirmed (this handshake), tell the peer to
+			// park it too, so the bulk-sending direction is bounded to the active
+			// set. Only signals standby legs; leg 0 / active legs are the peer's
+			// default, and the accept side (all-active) never enters this branch.
+			// Sent after the rg.mu unlock — sendLegState takes rg.mu itself.
+			if readyLeg > 0 && rg.mux.isLegStandby(readyLeg) {
+				rg.sendLegState(readyLeg, true)
+			}
 		}
 		firstHandshake := false
 		rg.handshakeProcessedOnce.Do(func() {
