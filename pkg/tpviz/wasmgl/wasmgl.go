@@ -47,7 +47,8 @@ type glView struct {
 	graph     *cosmos.Graph
 	container js.Value
 
-	overlay *overlay
+	overlay  *overlay
+	latCells *latOverlay
 
 	// onEvent is the single callback the TypeScript side installs to receive
 	// clicks, hovers and simulation-end. Passing one function rather than a
@@ -84,6 +85,7 @@ func Register() {
 		"setLatencyGraph": js.FuncOf(jsSetLatencyGraph),
 		"rotateLatency":   js.FuncOf(jsRotateLatency),
 		"latencyStats":    js.FuncOf(jsLatencyStats),
+		"setLatencyCells": js.FuncOf(jsSetLatencyCells),
 		"ready":           true,
 	}
 	js.Global().Set("tpvizGL", js.ValueOf(api))
@@ -226,6 +228,7 @@ func jsInit(_ js.Value, args []js.Value) interface{} {
 	}
 	v.graph = g
 	v.overlay = newOverlay(v)
+	v.latCells = newLatOverlay(v)
 	view = v
 	return true
 }
