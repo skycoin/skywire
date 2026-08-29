@@ -73,7 +73,7 @@ func TestPerFrameMuxDataPathRoundTrip(t *testing.T) {
 	var got [][]byte
 	for _, idx := range order {
 		p := packets[idx]
-		delivered, _ := recv.deliverData(p.SequenceNumber(), p.DataPayloadAfterSeq())
+		delivered, _ := recv.deliverData(-1, p.SequenceNumber(), p.DataPayloadAfterSeq())
 		got = append(got, delivered...)
 	}
 	require.Len(t, got, n, "every frame must eventually be delivered")
@@ -90,7 +90,7 @@ func TestPerFrameMuxDataPathRoundTrip(t *testing.T) {
 	bad, _, err := send.wrapPayload(routeID, []byte("attacker"))
 	require.NoError(t, err)
 	// reset recv2 to expect seq 0
-	delivered, _ := recv2.deliverData(bad.SequenceNumber()+1000, bad.DataPayloadAfterSeq())
+	delivered, _ := recv2.deliverData(-1, bad.SequenceNumber()+1000, bad.DataPayloadAfterSeq())
 	require.Empty(t, delivered, "frame that fails AEAD open must not be delivered")
 }
 
