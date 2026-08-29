@@ -42,6 +42,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	ts "github.com/skycoin/skywire/pkg/transport/setup"
 	"github.com/skycoin/skywire/pkg/visor/logserver/landingpage"
+	"github.com/skycoin/skywire/pkg/wasmhv"
 )
 
 // peerStartedAt is this visor's boot time, reported on /health (StartedAt). Set
@@ -71,6 +72,35 @@ func startPeerServices(mLog *logging.MasterLogger, tsNodes []cipher.PubKey) {
 	go servePeerCtrl()                    // dmsg:7
 	go servePeerPing(mLog)                // dmsg:8
 	go serveTransportSetup(mLog, tsNodes) // dmsg:47
+	go servePeerRPC(mLog, tsNodes)        // dmsg:65 visor net/rpc
+}
+
+// servePeerRPC serves the visor net/rpc gateway (the "app-visor.*" methods the
+// CLI calls — Summary/Health/Transports/StateSnapshot/…) over dmsg on
+// DmsgVisorRPCPort, so `skywire cli ... visor state --via dmsg://<pk>` reaches
+// this browser leaf exactly as it reaches a native visor — not just over the
+// local wasmrpc WebSocket bridge. It serves the SAME gateway rpcbridge_js.go
+// serves (visorSelf + tpController).
+//
+// Gated to the transport-setup trust list (the nodes already authorized to
+// command this visor's transports — the same trust the :47 accept side uses),
+// disabled when that list is empty (fail-closed, like the native visor). Read-only
+// callers outside that list are a follow-up (a broader visor-RPC whitelist).
+func servePeerRPC(mLog *logging.MasterLogger, tsNodes []cipher.PubKey) {
+	log := mLog.PackageLogger("dmsg_visor_rpc")
+	srv, err := wasmhv.NewRPCServer(visorSelf{}, tpController{})
+	if err != nil {
+		vlog("peer: visor-RPC server: " + err.Error())
+		return
+	}
+	authorized := make(map[cipher.PubKey]bool, len(tsNodes))
+	for _, pk := range tsNodes {
+		authorized[pk] = true
+	}
+	vlog(fmt.Sprintf("peer: visor-RPC serving on dmsg:%d (%d trusted node(s))", skyenv.DmsgVisorRPCPort, len(authorized)))
+	if err := wasmhv.ServeRPCOverDmsg(ctx, dmsgC, srv, authorized, log); err != nil {
+		log.WithError(err).Debug("dmsg visor-RPC server stopped")
+	}
 }
 
 // peerDynamicEndpoint serves /health on port 80 with live data, matching the
