@@ -47,6 +47,22 @@ export class RouteService {
   }
 
   /**
+   * Returns the per-leg mux view of the active route groups for one
+   * app (default skysocks-client): each route group with its legs,
+   * per-leg hops, transport/route latency, alive/standby gate state,
+   * up/down goodput, retransmits, and the group-level FEC counters.
+   * This is the richer telemetry behind the status.skysocks route
+   * tree — backend handler getRouteMux
+   * (pkg/visor/hypervisor_handlers_routes.go), returning
+   * []MuxRouteGroupInfo (pkg/visor/rpc.go).
+   */
+  routeMux(nodeKey: string, app?: string) {
+    const q = app ? `?app=${encodeURIComponent(app)}` : '';
+
+    return this.apiService.get(`visors/${nodeKey}/route-mux${q}`);
+  }
+
+  /**
    * Returns the installed routing-policy summary: visor-wide
    * default + per-app overrides, with each engine's source,
    * active state, and backend ("skylark" / "wasm"). Backend

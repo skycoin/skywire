@@ -108,6 +108,226 @@ td.mono.small,
   margin: 8px 0 0 0;
 }
 
+// ------- Mux-tree view (status.skysocks route tree, in Angular) -------
+.mux-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.mux-app-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.route-input-app {
+  width: 150px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: monospace;
+  font-size: 0.85em;
+}
+.mux-reload {
+  color: rgba(255, 255, 255, 0.75) !important;
+  min-width: 0;
+}
+
+// One route group = a card with a header, aggregate line, and legs.
+.mux-group {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.03);
+}
+.mux-group-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 0.88em;
+}
+.mux-src,
+.mux-dst {
+  color: rgba(255, 255, 255, 0.9);
+  word-break: break-all;
+}
+.mux-port {
+  color: rgba(255, 255, 255, 0.5);
+}
+.mux-flow {
+  color: rgba(157, 124, 255, 0.9);
+  margin: 0 4px;
+}
+.mux-spacer {
+  flex: 1 1 auto;
+}
+.mux-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.72);
+}
+.mux-badge.on {
+  background-color: rgba(80, 200, 120, 0.2);
+  color: rgba(140, 230, 170, 0.95);
+}
+.mux-badge.off {
+  background-color: rgba(180, 180, 180, 0.14);
+  color: rgba(200, 200, 200, 0.7);
+}
+.mux-badge.dist {
+  background-color: rgba(120, 160, 220, 0.2);
+  color: rgba(180, 210, 240, 0.95);
+}
+.mux-badge.cap {
+  background-color: rgba(224, 175, 104, 0.18);
+  color: rgba(240, 200, 150, 0.95);
+}
+.mux-badge.fec {
+  background-color: rgba(200, 120, 220, 0.2);
+  color: rgba(230, 170, 240, 0.95);
+}
+
+.mux-group-agg {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  font-family: monospace;
+  font-size: 0.82em;
+  color: rgba(255, 255, 255, 0.7);
+}
+.agg-up {
+  color: rgba(140, 230, 170, 0.95);
+}
+.agg-down {
+  color: rgba(150, 190, 240, 0.95);
+}
+.agg-bytes {
+  color: rgba(255, 255, 255, 0.55);
+}
+.agg-sep {
+  color: rgba(255, 255, 255, 0.3);
+}
+.agg-gap {
+  width: 14px;
+}
+.agg-fec {
+  color: rgba(230, 170, 240, 0.9);
+}
+
+// A leg: state line + indented hop chain.
+.mux-leg {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+.mux-leg[data-state='dead'] {
+  opacity: 0.5;
+}
+.mux-leg-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: monospace;
+  font-size: 0.84em;
+}
+.leg-glyph {
+  font-size: 1.05em;
+  line-height: 1;
+}
+.leg-glyph.st-alive {
+  color: #6ee7a0;
+}
+.leg-glyph.st-standby {
+  color: #e0af68;
+}
+.leg-glyph.st-dead {
+  color: #ff6b6b;
+}
+.leg-id {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+}
+.leg-tag {
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 0.82em;
+  background-color: rgba(80, 200, 120, 0.16);
+  color: rgba(140, 230, 170, 0.9);
+}
+.leg-rtt {
+  color: rgba(255, 255, 255, 0.85);
+}
+.leg-metric.up {
+  color: rgba(140, 230, 170, 0.95);
+}
+.leg-metric.down {
+  color: rgba(150, 190, 240, 0.95);
+}
+.leg-share {
+  display: inline-block;
+  width: 72px;
+  height: 8px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.leg-share-bar {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(110, 231, 160, 0.85), rgba(80, 200, 120, 0.85));
+  transition: width 0.4s ease;
+}
+.leg-retx {
+  color: #ffb454;
+}
+
+.mux-hops {
+  margin: 4px 0 2px 12px;
+  font-family: monospace;
+  font-size: 0.8em;
+}
+.mux-hop {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 1px 0;
+}
+.mux-hop.dim {
+  color: rgba(255, 255, 255, 0.55);
+}
+.hop-connector {
+  color: rgba(255, 255, 255, 0.35);
+}
+.hop-pk {
+  color: rgba(200, 180, 255, 0.92);
+  word-break: break-all;
+}
+.hop-tp-type {
+  color: rgba(255, 255, 255, 0.5);
+}
+.hop-tp-id {
+  color: rgba(255, 255, 255, 0.42);
+  word-break: break-all;
+}
+.hop-rtt {
+  color: rgba(255, 255, 255, 0.75);
+}
+
 // Routing-policy panel styling. Active / inactive badges visually
 // match the rg-role badges (initiator-style for active, dim for
 // inactive). Backend tag is a lower-contrast pill.
