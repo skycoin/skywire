@@ -63,7 +63,12 @@ func (r *router) DialRoutes(
 	// opts.MinHops before route setup, and can refuse the dial
 	// entirely via Fallback="drop". A nil hook short-circuits
 	// the entire block so policy-free deployments pay zero cost.
-	if hook := r.effectiveDialHook(rPort); hook != nil {
+	// dialPolicyHook also returns nil for a --direct dial, which is
+	// policy-free by definition (see its doc).
+	if opts != nil && opts.EnsureDirectTransport {
+		log.Debug("--direct dial: bypassing routing policy (policy-free 1-hop direct leg)")
+	}
+	if hook := r.dialPolicyHook(opts, rPort); hook != nil {
 		if opts == nil {
 			opts = &DialOptions{}
 		}
@@ -2952,6 +2957,22 @@ func (r *router) effectiveDialHook(rPort routing.Port) DialHook {
 		return nil
 	}
 	return r.conf.DialHook
+}
+
+// dialPolicyHook returns the routing-policy hook that should adjust THIS dial, or
+// nil to skip policy entirely. It layers a --direct exemption over
+// effectiveDialHook: a dial with EnsureDirectTransport asked for a single,
+// stable, 1-hop direct leg (no route-finder, no setup node, no adaptive mux), so
+// it is policy-free by definition. Without this, effectiveDialHook still returns
+// the GLOBAL default hook even after the per-app policy override was cleared, and
+// that hook re-imposes the adaptive mux (e.g. policy_mux=513) — sending the router
+// off to chase RSN-oracle / route-finder aux legs alongside the direct primary,
+// which is exactly what --direct exists to avoid.
+func (r *router) dialPolicyHook(opts *DialOptions, rPort routing.Port) DialHook {
+	if opts != nil && opts.EnsureDirectTransport {
+		return nil
+	}
+	return r.effectiveDialHook(rPort)
 }
 
 // isSameLANDest reports whether dst is a peer on this visor's own local network

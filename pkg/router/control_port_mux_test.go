@@ -43,6 +43,28 @@ func TestEffectiveDialHook(t *testing.T) {
 	}
 }
 
+// TestDialPolicyHookDirectBypass: a --direct dial (EnsureDirectTransport) is
+// policy-free — dialPolicyHook returns nil even on a data port with a hook
+// configured, so the global adaptive policy can't re-impose its mux. Non-direct
+// dials still get the hook exactly as effectiveDialHook decides.
+func TestDialPolicyHookDirectBypass(t *testing.T) {
+	hook := stubDialHook{}
+	r := &router{conf: &Config{DialHook: hook}}
+	const dataPort = routing.Port(3) // skysocks — a data port that normally gets the hook
+
+	// Sanity: without --direct the data port gets the hook.
+	if r.dialPolicyHook(&DialOptions{}, dataPort) == nil {
+		t.Fatal("non-direct data-port dial should get the policy hook")
+	}
+	if r.dialPolicyHook(nil, dataPort) == nil {
+		t.Fatal("nil-opts data-port dial should get the policy hook")
+	}
+	// --direct bypasses policy entirely.
+	if r.dialPolicyHook(&DialOptions{EnsureDirectTransport: true}, dataPort) != nil {
+		t.Fatal("--direct dial must bypass the routing policy (dialPolicyHook should be nil)")
+	}
+}
+
 // TestIsControlPlanePort locks the no-mux port set: control/telemetry ports are
 // control-plane (single-route), bulk-data app ports are not (keep their mux).
 func TestIsControlPlanePort(t *testing.T) {
