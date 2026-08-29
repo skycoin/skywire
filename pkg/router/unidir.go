@@ -217,66 +217,85 @@ func (m *routeMux) flipStep(up, down float64) (flipped, changed bool) {
 // stays bounded to the few legs the initiator parked active instead of spraying
 // every warm-standby reverse leg.
 //
-// Two tiers:
+// Four tiers, tried in order (each bounded to the wanted CLASS so the wrong
+// direction — the direct leg on a download — is NEVER selected here):
 //
-//	Tier 1 (normal): active (non-standby), ready, direction-matching legs. This
-//	   honors the mirrored active set — the exit sends the download on the same
-//	   small set the initiator selected, so the reorder frontier is not
-//	   over-subscribed and retransmits do not amplify. The heavy direction still
-//	   spreads across THOSE legs via the weighted selector / round-robin.
-//	Tier 2 (degenerate): if NO active direction-matching leg exists — the
-//	   initiator parked every leg of this direction as standby, e.g. mid-rotation
-//	   — fall back to any alive, ready standby leg of the wanted direction. This
-//	   keeps confinement (the #4311 guarantee: never fall through to the
-//	   standby-aware path, which could pick the wrong-direction direct leg) while
-//	   still bounding to the wanted class. It is the warm-reserve failover, not
-//	   the steady state.
+//	Tier 1 (steady state): active (non-standby), ready, class-matching legs. The
+//	   exit sends the download on the same small mirrored-active set the initiator
+//	   selected, so the reorder frontier is not over-subscribed. The heavy
+//	   direction spreads across THOSE legs via the weighted selector / round-robin.
+//	Tier 2 (active-not-ready): an ACTIVE class leg whose readiness gate has not
+//	   fired. Under CapUniDir the initiator sends its light direction ONLY on the
+//	   direct leg, so the exit's active reverse leg may never receive inbound bulk
+//	   and so is never markLegReady'd — yet its rules were installed on both ends
+//	   when the leg joined the group, so it IS sendable. Preferring it here (over
+//	   any ready STANDBY leg) is what confines the download to the one
+//	   mirrored-active reverse leg instead of spraying the warm-standby reserve —
+//	   the fix for the "active leg not preferred / download on standby legs" bug.
+//	Tier 3 (warm-reserve failover): no active class leg at all (the initiator
+//	   parked every leg of this direction, e.g. mid-rotation) — fall back to a
+//	   ready STANDBY class leg. The #4319 bounding: still the wanted class, still
+//	   the warm reserve; steady state never reaches here.
+//	Tier 4 (last resort before the wrong direction): ANY class leg, ignoring both
+//	   standby and readiness. A reverse leg that exists but is neither active nor
+//	   "ready" is still the RIGHT CLASS, so sending on it preserves the #4311
+//	   confinement guarantee (never the wrong-direction direct leg) when the group
+//	   is momentarily between active/ready states.
 //
-// Returns ok=false only when NO direction-matching leg is selectable at all, so
-// selectTransport falls through to the standard path rather than dropping the send.
+// Returns ok=false only when there is genuinely NO leg of the wanted class at
+// all — then selectTransport falls through and may use the direct leg, because
+// there is no reverse leg to confine the download to.
 func (m *routeMux) selectByDirection(tps []*transport.ManagedTransport, fwd []routing.Rule, wantDirect bool, dst, src cipher.PubKey) (*transport.ManagedTransport, routing.Rule, int, bool) {
 	n := len(tps)
 	if n == 0 || len(fwd) == 0 {
 		return nil, nil, -1, false
 	}
-	// Tier 1: active, ready, direction-matching (standby-aware — bounds fan-out).
-	matchActive := func(idx int) bool {
+	// Base gate: a live, ruled leg whose CLASS (direct vs multihop) matches this
+	// end's send direction. The tiers below layer readiness/standby on top.
+	classOK := func(idx int) bool {
 		tp := tps[idx]
 		return idx < len(fwd) && tp != nil && !tp.IsClosed() &&
-			m.legReadyAt(idx) && legIsDirect(tp, dst, src) == wantDirect
-	}
-	// Prefer the scheduler's pick when it matches AND is active, so the heavy
-	// direction spreads across the active legs per the mux weights/ECF.
-	if m.tpSelector != nil && m.tpSelector.Len() > 0 {
-		if idx := m.tpSelector.Select(); idx >= 0 && idx < n && matchActive(idx) {
-			return tps[idx], fwd[idx], idx, true
-		}
+			legIsDirect(tp, dst, src) == wantDirect
 	}
 	start := int(atomic.AddUint32(&m.tpIndex, 1) - 1)
-	for i := 0; i < n; i++ {
-		idx := ((start % n) + i) % n
-		if idx < 0 {
-			idx += n
+	scan := func(match func(idx int) bool) (*transport.ManagedTransport, routing.Rule, int, bool) {
+		for i := 0; i < n; i++ {
+			idx := ((start % n) + i) % n
+			if idx < 0 {
+				idx += n
+			}
+			if match(idx) {
+				return tps[idx], fwd[idx], idx, true
+			}
 		}
-		if matchActive(idx) {
+		return nil, nil, -1, false
+	}
+
+	// Tier 1: active, ready, class-matching (legReadyAt already excludes standby).
+	// Prefer the scheduler's pick when it qualifies, so the heavy direction spreads
+	// across the active legs per the mux weights/ECF.
+	activeReady := func(idx int) bool { return classOK(idx) && m.legReadyAt(idx) }
+	if m.tpSelector != nil && m.tpSelector.Len() > 0 {
+		if idx := m.tpSelector.Select(); idx >= 0 && idx < n && activeReady(idx) {
 			return tps[idx], fwd[idx], idx, true
 		}
 	}
-	// Tier 2: no ACTIVE direction-matching leg — warm-reserve failover on the
-	// wanted class only (confinement preserved). Rare; logged by the caller.
-	matchAny := func(idx int) bool {
-		tp := tps[idx]
-		return idx < len(fwd) && tp != nil && !tp.IsClosed() &&
-			m.legSelectableIgnoringStandby(idx) && legIsDirect(tp, dst, src) == wantDirect
+	if tp, rule, idx, ok := scan(activeReady); ok {
+		return tp, rule, idx, true
 	}
-	for i := 0; i < n; i++ {
-		idx := ((start % n) + i) % n
-		if idx < 0 {
-			idx += n
-		}
-		if matchAny(idx) {
-			return tps[idx], fwd[idx], idx, true
-		}
+	// Tier 2: active class leg, ignoring the readiness gate — the mirrored-active
+	// reverse leg the exit must send bulk on even though it never received inbound.
+	if tp, rule, idx, ok := scan(func(idx int) bool { return classOK(idx) && !m.isLegStandby(idx) }); ok {
+		return tp, rule, idx, true
+	}
+	// Tier 3: ready standby class leg (warm-reserve failover; ignore standby flag).
+	if tp, rule, idx, ok := scan(func(idx int) bool { return classOK(idx) && m.legSelectableIgnoringStandby(idx) }); ok {
+		return tp, rule, idx, true
+	}
+	// Tier 4: any class leg at all (ignore both standby and readiness) — never the
+	// wrong-direction direct leg while a reverse leg exists.
+	if tp, rule, idx, ok := scan(classOK); ok {
+		return tp, rule, idx, true
 	}
 	return nil, nil, -1, false
 }
