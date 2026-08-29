@@ -51,6 +51,9 @@ var (
 	direct         bool
 	dmsgFallback   bool
 	tunnels        int64
+	rangeSplit     bool
+	rangeConc      int64
+	rangeChunkKiB  int64
 )
 
 func init() {
@@ -76,6 +79,15 @@ func init() {
 	// striped across them by the least-loaded policy so throughput sums. Default 1
 	// == the single-tunnel pre-aggregation behavior. See docs/mux_aggregation_rfc.md.
 	RootCmd.Flags().Int64Var(&tunnels, "tunnels", 1, "number of independent tunnels to stripe connections across (1 = today's behavior; >1 aggregates ONLY over disjoint routes — see --help)")
+	// Transparent HTTP range-splitting: a plain GET to a range-capable :80 origin is
+	// fetched as N concurrent byte ranges over separate tunnels and reassembled, so
+	// one unmodified download (curl or a browser on this proxy) aggregates across the
+	// mesh with no client cooperation. Default-on and auto-detecting (only engages on
+	// a 206-capable origin); HTTPS is unaffected (needs an unconstrained MITM root —
+	// follow-up). Tune or disable via these flags, not a required gate.
+	RootCmd.Flags().BoolVar(&rangeSplit, "range-split", true, "transparently split range-capable HTTP (:80) GETs into concurrent byte ranges across tunnels")
+	RootCmd.Flags().Int64Var(&rangeConc, "range-concurrency", 8, "concurrent range streams per split download")
+	RootCmd.Flags().Int64Var(&rangeChunkKiB, "range-chunk-kib", 4096, "bytes per range request, in KiB")
 }
 
 // RootCmd is the root command for skysocks
@@ -269,6 +281,10 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// otherwise alive; if EVERY tunnel dies, ListenAndServe returns and the
 		// runCycle re-dials the whole client.
 		client.SetTunnelTarget(int(tunnels))
+		// Transparent HTTP range-splitting (default-on; see rangesplit.go). One
+		// range-capable :80 GET is fetched as concurrent byte ranges over separate
+		// tunnels, so a single download aggregates across the mesh.
+		client.SetRangeSplit(rangeSplit, int(rangeConc), rangeChunkKiB*1024)
 		if tunnels > 1 {
 			client.SetTunnelRedial(func() (net.Conn, error) {
 				return dialServer(cycleCtx, appCl, pk, serverPort, true)
