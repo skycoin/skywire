@@ -2,8 +2,24 @@
 package router
 
 import (
+	"time"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
+)
+
+// Flip controller (step 2b). Both ends run unidirFlipServiceFn; each measures the
+// ABSOLUTE upload vs download goodput (mapping its local send/recv by role) and,
+// when the asymmetry inverts and holds, flips the direction→leg-class mapping so
+// the HEAVY direction gets the aggregated mux. Both ends see the same absolute
+// asymmetry, so they flip together (a brief transient where only one has flipped
+// self-corrects on the next tick). Hysteresis + cooldown keep it from flapping.
+const (
+	unidirFlipInterval = 1 * time.Second // flip-controller tick cadence
+	flipRatio          = 2.0             // flip when the heavy direction ≥ this × the light one
+	flipHysteresis     = 3               // consecutive qualifying ticks before flipping
+	flipCooldownTicks  = 3               // ticks to hold after a flip before another
+	flipMinGoodput     = 8192.0          // bytes/sec floor — ignore near-idle noise
 )
 
 // Unidirectional per-leg send selection (CapUniDir). Each end restricts its OWN
@@ -68,6 +84,83 @@ func legIsDirect(tp *transport.ManagedTransport, dst, src cipher.PubKey) bool {
 	}
 	r := tp.Remote()
 	return r == dst || r == src
+}
+
+// unidirFlipTick runs one flip-controller tick: it samples the active legs'
+// absolute upload/download goodput and flips (or reverts) the direction mapping
+// when the heavy direction has out-weighed the light one by flipRatio for
+// flipHysteresis consecutive ticks, then holds for flipCooldownTicks. Returns the
+// current flipped state and whether it changed this tick. Called only from the
+// single unidir-flip loop goroutine, so the hysteresis counters need no lock.
+func (m *routeMux) unidirFlipTick() (flipped, changed bool) {
+	m.legMu.RLock()
+	directional := m.directional
+	initiator := m.initiator
+	m.legMu.RUnlock()
+	if !directional {
+		return m.flipped, false
+	}
+
+	stats := m.snapshotLegs() // samples per-leg goodput EWMAs
+	var up, down float64      // ABSOLUTE upload / download bytes/sec
+	m.legMu.RLock()
+	for i, s := range stats {
+		if i < len(m.standby) && m.standby[i] {
+			continue // active legs only
+		}
+		if initiator {
+			// initiator's local send = upload, local recv = download
+			up += s.GoodputUpBps
+			down += s.GoodputDownBps
+		} else {
+			// acceptor's local send = download, local recv = upload
+			up += s.GoodputDownBps
+			down += s.GoodputUpBps
+		}
+	}
+	m.legMu.RUnlock()
+	return m.flipStep(up, down)
+}
+
+// flipStep applies one hysteresis/cooldown step to the flip state given the
+// current ABSOLUTE upload/download goodput. Split from the sampling so it is unit
+// testable with synthetic rates. Single-goroutine (the flip loop); hysteresis
+// counters need no lock.
+func (m *routeMux) flipStep(up, down float64) (flipped, changed bool) {
+	m.legMu.RLock()
+	directional := m.directional
+	cur := m.flipped
+	m.legMu.RUnlock()
+	if !directional {
+		return cur, false
+	}
+	if m.flipCooldown > 0 {
+		m.flipCooldown--
+		return cur, false
+	}
+
+	switch {
+	case up > flipMinGoodput && up >= flipRatio*down:
+		m.flipUpHits++
+		m.flipDownHits = 0
+	case down > flipMinGoodput && down >= flipRatio*up:
+		m.flipDownHits++
+		m.flipUpHits = 0
+	default:
+		m.flipUpHits, m.flipDownHits = 0, 0
+	}
+
+	if !cur && m.flipUpHits >= flipHysteresis && m.setFlipped(true) {
+		m.flipCooldown = flipCooldownTicks
+		m.flipUpHits = 0
+		return true, true
+	}
+	if cur && m.flipDownHits >= flipHysteresis && m.setFlipped(false) {
+		m.flipCooldown = flipCooldownTicks
+		m.flipDownHits = 0
+		return false, true
+	}
+	return cur, false
 }
 
 // dirRestrict reports whether direction filtering should be enforced this pick:

@@ -1586,6 +1586,12 @@ func (rg *RouteGroup) startOffServiceLoops() {
 	// reorderTimeout with no packet arriving to trigger the arrival-driven SACK,
 	// emit a SACK so the sender retransmits the missing seq in order (never skip).
 	go rg.servicePacketLoop("reorder-stall", reorderStallInterval, rg.reorderStallServiceFn, nil)
+	// Unidirectional flip controller (CapUniDir): both ends run this, so the
+	// direction→leg-class mapping flips together when the traffic asymmetry
+	// inverts (upload outweighs download → the heavy upload gets the mux). No-op
+	// unless directional; the fn self-gates. Cadence matches the reorder-stall
+	// tick so the hysteresis is a small number of seconds.
+	go rg.servicePacketLoop("unidir-flip", unidirFlipInterval, rg.unidirFlipServiceFn, nil)
 	// Note: Automatic ping loop removed. Latency is now measured once at transport creation.
 	// Rotation loop is NOT started here — startOffServiceLoops runs
 	// during initial route-group setup, before the router-side
@@ -3684,6 +3690,24 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 		}
 	}
 	return nil
+}
+
+// unidirFlipServiceFn is the unidirectional flip controller, run as a service
+// loop on BOTH ends. It flips the direction→leg-class mapping when the traffic
+// asymmetry inverts (upload outweighs download → the heavy upload takes the mux,
+// the light download rides the direct leg), and reverts when it swings back.
+// No-op unless CapUniDir negotiated (unidirFlipTick self-gates on directional).
+func (rg *RouteGroup) unidirFlipServiceFn(_ time.Duration) {
+	if rg.mux == nil {
+		return
+	}
+	if flipped, changed := rg.mux.unidirFlipTick(); changed {
+		if flipped {
+			rg.logger.Info("unidir-flip: FLIPPED — upload is now the heavy direction, moved onto the mux (download on the direct leg)")
+		} else {
+			rg.logger.Info("unidir-flip: reverted — download is the heavy direction again, back on the mux (upload on the direct leg)")
+		}
+	}
 }
 
 // sackServiceFn is the periodic SACK sender, run as a service loop.
