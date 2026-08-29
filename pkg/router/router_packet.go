@@ -56,6 +56,13 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		// router dropped every repair packet as ErrUnknownPacketType, so FEC
 		// repair never reached the receiver on ANY route (direct or multihop).
 		return r.dispatchToRouteGroup(ctx, packet)
+	case routing.LegStatePacket:
+		// Mux leg active/standby signal (CapLegState): same route-ID-driven path as
+		// data/repair — forwarded when this visor is an intermediary, else delivered
+		// to the destination route group, which mirrors the leg's state on its send
+		// side. Without this case an intermediary/destination drops it as
+		// ErrUnknownPacketType (the RepairPacket #4297 failure mode).
+		return r.dispatchToRouteGroup(ctx, packet)
 	case routing.DatagramPacket:
 		return r.handleDatagramPacket(ctx, packet)
 	case routing.TransportPingPacket, routing.TransportPongPacket,
@@ -353,6 +360,12 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 		if err != nil {
 			return err
 		}
+	case routing.LegStatePacket:
+		// Mux leg active/standby signal (CapLegState): re-stamp the next-hop route
+		// ID and pass the one state byte through. Without this an intermediate hits
+		// the default and DROPS the signal, so a multihop leg's parking never
+		// reaches the far sender (the RepairPacket #4297 failure mode).
+		p = routing.MakeLegStatePacket(rule.NextRouteID(), packet.LegStateStandby())
 	default:
 		return fmt.Errorf("packet of type %s can't be forwarded", packet.Type())
 	}
