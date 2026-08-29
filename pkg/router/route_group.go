@@ -328,6 +328,10 @@ type RouteGroup struct {
 	selfHealTarget int
 	healInFlight   atomic.Bool
 
+	// dirFanoutTicks throttles the directional confinement/fan-out summary logged
+	// by legDataProgressServiceFn (see there) so a busy download does not spam it.
+	dirFanoutTicks int
+
 	// Per-leg end-to-end liveness (issue #2). Keyed by leg transport ID so the
 	// state survives index shifts from prune/append. legPongSeen records
 	// whether the echo for a leg's probe came back since the last tick;
@@ -1977,13 +1981,19 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 		id      uuid.UUID
 		recv    uint64
 		standby bool
+		direct  bool
 	}
 	legs := make([]legRecv, 0, len(tpsCopy))
 	for i, tp := range tpsCopy {
 		if tp == nil || i >= len(stats) {
 			continue
 		}
-		legs = append(legs, legRecv{id: tp.Entry.ID, recv: stats[i].RecvBytes, standby: rg.mux.isLegStandby(i)})
+		legs = append(legs, legRecv{
+			id:      tp.Entry.ID,
+			recv:    stats[i].RecvBytes,
+			standby: rg.mux.isLegStandby(i),
+			direct:  rg.mux.legIsDirectTp(tp),
+		})
 	}
 
 	// Only judge when the receiver is genuinely stuck on a missing sequence.
@@ -2013,6 +2023,45 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	deltas := make([]legRecvDelta, 0, len(legs))
 	for _, l := range legs {
 		deltas = append(deltas, legRecvDelta{id: l.id, delta: perDelta[l.id], standby: l.standby})
+	}
+
+	// Directional confinement / fan-out observability. Under CapUniDir the download
+	// must ride only the ACTIVE reverse (multihop) legs — the initiator-mirrored
+	// active set. Two failure signatures make the collapse-to-0 diagnosable:
+	//   reverse_standby_recv > 0 — the exit is spraying the download onto standby
+	//     reverse legs it should not use (the fan-out bug that over-subscribes the
+	//     reorder frontier and wedges the group), and
+	//   direct_recv > 0 during a download — confinement broke and payload is
+	//     landing on the wrong-direction direct leg.
+	// Logged only while data is actually moving, throttled, and immediately when a
+	// failure signature appears so a wedge's cause is in the log next to it.
+	if rg.mux.isDirectional() && aggDelta > 0 {
+		var revActive, revStandby, directRecv int
+		for _, l := range legs {
+			if perDelta[l.id] == 0 {
+				continue
+			}
+			switch {
+			case l.direct:
+				directRecv++
+			case l.standby:
+				revStandby++
+			default:
+				revActive++
+			}
+		}
+		rg.dirFanoutTicks++
+		badSignature := revStandby > 0 || directRecv > 0
+		if badSignature || rg.dirFanoutTicks == 1 || rg.dirFanoutTicks%10 == 0 {
+			lvl := rg.logger.Debugf
+			if badSignature {
+				lvl = rg.logger.Warnf
+			}
+			lvl("unidir fan-out: download on reverse_active=%d reverse_STANDBY=%d direct=%d legs (moved %dB; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription)",
+				revActive, revStandby, directRecv, aggDelta)
+		}
+	} else {
+		rg.dirFanoutTicks = 0
 	}
 	dead := selectDataStalledLegs(deltas, gapStuck)
 	if len(dead) > 0 {
