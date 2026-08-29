@@ -211,6 +211,15 @@ const SACKMinPayloadSize = 5
 // variable-length body (see MakeSACKPacket).
 const SACKPayloadSize = 12
 
+// SACKDSACKFieldSize is the size of the optional trailing DSACK field appended by
+// MakeSACKPacketWithDSACK: [flag:1][dsackSeq:4 BE]. A peer that predates the field
+// reads exactly word_count words and ignores these trailing bytes.
+const SACKDSACKFieldSize = 5
+
+// sackDSACKFlag marks the trailing DSACK field as present (guards against a
+// zero-padded or truncated read being misparsed as a DSACK of seq 0).
+const sackDSACKFlag = 0x01
+
 // CloseCode represents close code for ClosePacket.
 type CloseCode byte
 
@@ -501,6 +510,22 @@ func MakeErrorPacket(id RouteID, errPayload []byte) (Packet, error) {
 // packets stop being stored for retransmission, and a later loss wedges the mux
 // stream permanently (the "carries-then-stalls" failure).
 func MakeSACKPacket(id RouteID, lastContiguousSeq uint32, words []uint64) Packet {
+	return makeSACKPacket(id, lastContiguousSeq, words, 0, false)
+}
+
+// MakeSACKPacketWithDSACK is MakeSACKPacket plus a trailing DSACK (duplicate-SACK)
+// field: dsackSeq is a sequence the receiver got AGAIN (a duplicate). On the mux's
+// reliable, ordered legs a duplicate is almost always the sender's own spurious
+// retransmit, so this tells the sender to WIDEN its RACK reorder window — it
+// retransmitted too eagerly (RFC 8985 §7.2 reorder-window adaptation). The field
+// is appended AFTER the received bitmap as [flag:1=0x01][dsackSeq:4 BE]; a peer
+// that predates it reads exactly word_count words (SACKWords) and ignores the
+// trailing bytes, so the packet stays backward compatible with no capability bit.
+func MakeSACKPacketWithDSACK(id RouteID, lastContiguousSeq uint32, words []uint64, dsackSeq uint32) Packet {
+	return makeSACKPacket(id, lastContiguousSeq, words, dsackSeq, true)
+}
+
+func makeSACKPacket(id RouteID, lastContiguousSeq uint32, words []uint64, dsackSeq uint32, dsack bool) Packet {
 	if len(words) > SACKMaxWords {
 		words = words[:SACKMaxWords]
 	}
@@ -510,6 +535,9 @@ func MakeSACKPacket(id RouteID, lastContiguousSeq uint32, words []uint64) Packet
 		words = words[:len(words)-1]
 	}
 	payloadSize := SACKMinPayloadSize + len(words)*8
+	if dsack {
+		payloadSize += SACKDSACKFieldSize
+	}
 	packet := make([]byte, PacketHeaderSize+payloadSize)
 
 	packet[PacketTypeOffset] = byte(SACKPacket)
@@ -519,6 +547,11 @@ func MakeSACKPacket(id RouteID, lastContiguousSeq uint32, words []uint64) Packet
 	packet[PacketPayloadOffset+4] = byte(len(words)) //nolint:gosec // len(words) <= SACKMaxWords (32), capped above
 	for w, word := range words {
 		binary.BigEndian.PutUint64(packet[PacketPayloadOffset+5+w*8:], word)
+	}
+	if dsack {
+		off := PacketPayloadOffset + 5 + len(words)*8
+		packet[off] = sackDSACKFlag
+		binary.BigEndian.PutUint32(packet[off+1:], dsackSeq)
 	}
 
 	return packet
@@ -547,6 +580,28 @@ func (p Packet) SACKWords() []uint64 {
 		words[w] = binary.BigEndian.Uint64(payload[5+w*8:])
 	}
 	return words
+}
+
+// SACKDSACK extracts the optional trailing DSACK (duplicate-SACK) sequence from a
+// SACK packet: the seq the receiver reported getting twice (see
+// MakeSACKPacketWithDSACK). Returns (seq, true) when present, (0, false) when the
+// SACK carries no DSACK field (the common case) or is truncated. The offset is
+// computed from the word_count byte, so it lands exactly past the bitmap the same
+// way SACKWords reads it.
+func (p Packet) SACKDSACK() (uint32, bool) {
+	payload := p.Payload()
+	if len(payload) < SACKMinPayloadSize {
+		return 0, false
+	}
+	n := int(payload[4])
+	if n > SACKMaxWords {
+		return 0, false
+	}
+	off := SACKMinPayloadSize + n*8
+	if len(payload) < off+SACKDSACKFieldSize || payload[off] != sackDSACKFlag {
+		return 0, false
+	}
+	return binary.BigEndian.Uint32(payload[off+1:]), true
 }
 
 // TransportPingPayloadSize is the size of a transport ping/pong payload (8 bytes for unix nano timestamp).
