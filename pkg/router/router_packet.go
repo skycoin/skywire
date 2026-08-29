@@ -49,6 +49,13 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		return r.dispatchToRouteGroup(ctx, packet)
 	case routing.SACKPacket:
 		return r.handleSACKRouterPacket(ctx, packet)
+	case routing.RepairPacket:
+		// FEC repair symbol (#4270): same route-ID-driven path as data/ping —
+		// forwarded when this visor is an intermediary, else delivered to the
+		// destination route group (handleRepairPacket). Without this case the
+		// router dropped every repair packet as ErrUnknownPacketType, so FEC
+		// repair never reached the receiver on ANY route (direct or multihop).
+		return r.dispatchToRouteGroup(ctx, packet)
 	case routing.DatagramPacket:
 		return r.handleDatagramPacket(ctx, packet)
 	case routing.TransportPingPacket, routing.TransportPongPacket,
@@ -332,6 +339,17 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 		// never decrypt, the seal is end-to-end.
 		var err error
 		p, err = routing.MakeDatagramPacket(rule.NextRouteID(), packet.Payload())
+		if err != nil {
+			return err
+		}
+	case routing.RepairPacket:
+		// FEC repair symbol (#4270): re-stamp the next-hop route ID and pass the
+		// block coordinates + symbol through unchanged. Without this an
+		// intermediate hits the default and DROPS the repair, so FEC delivered
+		// zero benefit (and pure overhead) on every MULTIHOP mux leg — the repair
+		// was emitted by the sender but never survived the first relay.
+		var err error
+		p, err = routing.MakeRepairPacket(rule.NextRouteID(), packet.RepairBlockID(), packet.RepairIndex(), packet.RepairSymLen(), packet.RepairSymbol())
 		if err != nil {
 			return err
 		}
