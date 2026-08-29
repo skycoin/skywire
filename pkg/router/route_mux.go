@@ -33,6 +33,12 @@ type LegStats struct {
 	// not what the peer said it sent.
 	RecvBytes   uint64
 	RecvPackets uint64
+	// PayloadBytes is the UNIQUE in-order payload this leg delivered (each seq
+	// counted once, on the leg it first arrived on) — retransmits/duplicates
+	// excluded, so the per-leg values sum to the transfer size and give a
+	// confound-free per-direction attribution (which legs carried the download vs
+	// the upload), unlike RecvBytes which includes retransmit/duplicate inflation.
+	PayloadBytes uint64
 	// Retransmits is how many SACK retransmit packets THIS leg has
 	// carried. A high retransmits:sentPackets ratio marks a lossy leg —
 	// the signal a routing policy needs to shed lossy intermediates and
@@ -74,6 +80,13 @@ type legCounters struct {
 	recvBytes   uint64 // atomic
 	recvPackets uint64 // atomic
 	retransmits uint64 // atomic
+	// payloadBytes is the UNIQUE in-order payload this leg delivered: each
+	// sequence credited once, to the leg it FIRST arrived on. Unlike recvBytes
+	// (every inbound frame, incl. retransmits/duplicates), a retransmit of a seq
+	// already seen on another leg is NOT counted, so the per-leg payloadBytes sum
+	// equals the transfer size and cleanly attributes which legs carried a
+	// direction's data — the confound-free basis for per-direction leg telemetry.
+	payloadBytes uint64 // atomic
 	// lastTotalBytes snapshots sentBytes+recvBytes at the previous
 	// capacity-weight rebuild; the delta since then is this leg's
 	// recent throughput, used by WeightModeCapacity. Touched only
@@ -689,6 +702,19 @@ func (m *routeMux) recordRecv(idx int, n uint64) {
 	m.legMu.RUnlock()
 }
 
+// recordPayload atomically credits leg idx with n bytes of UNIQUE in-order
+// payload (a seq's first arrival). Same bounds-check semantics as recordRecv.
+func (m *routeMux) recordPayload(idx int, n uint64) {
+	if idx < 0 {
+		return
+	}
+	m.legMu.RLock()
+	if idx < len(m.legs) {
+		atomic.AddUint64(&m.legs[idx].payloadBytes, n)
+	}
+	m.legMu.RUnlock()
+}
+
 // recordRetransmit atomically increments the retransmit counter for leg
 // idx (the leg that carried a SACK retransmit). The retransmitted bytes
 // are still recorded via recordSent; this is the separate loss signal.
@@ -737,6 +763,7 @@ func (m *routeMux) snapshotLegs() []LegStats {
 			SentPackets:    atomic.LoadUint64(&c.sentPackets),
 			RecvBytes:      recv,
 			RecvPackets:    atomic.LoadUint64(&c.recvPackets),
+			PayloadBytes:   atomic.LoadUint64(&c.payloadBytes),
 			Retransmits:    atomic.LoadUint64(&c.retransmits),
 			GoodputUpBps:   c.goodputUpBps,
 			GoodputDownBps: c.goodputDownBps,
@@ -827,7 +854,13 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte) (routing.Pa
 // deliverData inserts a received sequenced packet into the reorder buffer
 // and returns any payloads that are now deliverable in order.
 // Also tracks the sequence for SACK generation.
-func (m *routeMux) deliverData(seq uint32, data []byte) (delivered [][]byte, gapDetected bool) {
+//
+// leg is the arrival leg index (the transport this frame came in on). A seq seen
+// here for the FIRST time credits that leg's payloadBytes with the frame's app
+// payload — so per-leg payloadBytes attributes the transfer's unique payload to
+// the legs that actually carried it, retransmits/duplicates excluded. Pass a
+// negative leg to skip attribution (callers/tests without a leg context).
+func (m *routeMux) deliverData(leg int, seq uint32, data []byte) (delivered [][]byte, gapDetected bool) {
 	// FEC: record the on-wire (pre-open) payload so a sibling in this block can be
 	// reconstructed if it is late/lost on a slow leg. Inert unless CapFEC
 	// negotiated. Must run BEFORE open — reconstruction reproduces the on-wire
@@ -848,6 +881,24 @@ func (m *routeMux) deliverData(seq uint32, data []byte) (delivered [][]byte, gap
 			return nil, false
 		}
 		data = pt
+	}
+
+	// Attribute UNIQUE payload to the arrival leg: credit this leg only the FIRST
+	// time a seq arrives, so a retransmit of a seq already seen on another leg is
+	// not double-counted and the per-leg payloadBytes sum equals the transfer
+	// size. Already-delivered is seq < reorderBuf.NextSeq (no seq-0 ambiguity);
+	// already-buffered-out-of-order is the received set. Checked BEFORE
+	// RecordReceived/Insert record this seq.
+	if leg >= 0 {
+		isNew := true
+		if m.reorderBuf != nil && seq < m.reorderBuf.NextSeq() {
+			isNew = false // already delivered
+		} else if m.sackTracker != nil && m.sackTracker.alreadyBuffered(seq) {
+			isNew = false // already buffered out of order
+		}
+		if isNew {
+			m.recordPayload(leg, uint64(len(data)))
+		}
 	}
 
 	// Track for SACK generation

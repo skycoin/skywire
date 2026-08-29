@@ -3336,12 +3336,14 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 	// each leg has its own consume rule). The lookup is O(legs)
 	// but legs is small (typically 1-16) and this only runs for
 	// data packets after we've already paid for noise decryption.
+	arrivalLeg := -1
 	if rg.mux != nil {
 		rg.mu.Lock()
 		rid := packet.RouteID()
 		for i, rule := range rg.rvs {
 			if rule != nil && rule.KeyRouteID() == rid {
 				rg.mux.recordRecv(i, uint64(packet.Size()))
+				arrivalLeg = i
 				// Inbound traffic on leg i proves the peer registered its
 				// rule for this leg, so it is now safe to send on it.
 				rg.mux.markLegReady(i)
@@ -3355,7 +3357,9 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 		seq := packet.SequenceNumber()
 		data := packet.DataPayloadAfterSeq()
 
-		delivered, gapDetected := rg.mux.deliverData(seq, data)
+		// arrivalLeg lets deliverData credit this leg's UNIQUE payload share
+		// (first arrival of a seq), the confound-free per-direction attribution.
+		delivered, gapDetected := rg.mux.deliverData(arrivalLeg, seq, data)
 
 		// A gap is the normal case for mux (legs interleave), so rate-limit the
 		// SACK: without this, latency-skew reordering fires a SACK goroutine per

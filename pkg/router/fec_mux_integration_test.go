@@ -65,7 +65,7 @@ func TestFECMuxWiredReconstructsSlowLegFrame(t *testing.T) {
 			continue
 		}
 		p := packets[i]
-		delivered, _ := recv.deliverData(p.SequenceNumber(), p.DataPayloadAfterSeq())
+		delivered, _ := recv.deliverData(-1, p.SequenceNumber(), p.DataPayloadAfterSeq())
 		got = append(got, delivered...)
 	}
 	// HoL proof: only the contiguous prefix before the gap (0,1,2) came out.
@@ -102,7 +102,7 @@ func TestFECMuxWiredInertWhenDisabled(t *testing.T) {
 		plain[i] = []byte(fmt.Sprintf("plain-%02d", i))
 		pkt, _, err := send.wrapPayload(routeID, plain[i])
 		require.NoError(t, err)
-		delivered, _ := recv.deliverData(pkt.SequenceNumber(), pkt.DataPayloadAfterSeq())
+		delivered, _ := recv.deliverData(-1, pkt.SequenceNumber(), pkt.DataPayloadAfterSeq())
 		require.Len(t, delivered, 1, "in-order delivery, one frame at a time")
 		require.Equal(t, plain[i], delivered[0])
 	}
@@ -137,7 +137,7 @@ func TestFECMuxTailFlushProtectsPartialBlock(t *testing.T) {
 	// helper: collect only non-empty delivered frames (the mux loop filters empties)
 	var got [][]byte
 	deliver := func(pkt routing.Packet) {
-		d, _ := recv.deliverData(pkt.SequenceNumber(), pkt.DataPayloadAfterSeq())
+		d, _ := recv.deliverData(-1, pkt.SequenceNumber(), pkt.DataPayloadAfterSeq())
 		for _, x := range d {
 			if len(x) == 0 {
 				continue

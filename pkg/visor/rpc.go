@@ -345,6 +345,11 @@ type MuxLegInfo struct {
 	SentPackets    uint64  `json:"sent_packets"`
 	RecvBytes      uint64  `json:"recv_bytes"`
 	RecvPackets    uint64  `json:"recv_packets"`
+	// PayloadBytes is the UNIQUE in-order payload this leg delivered (each seq
+	// counted once, retransmits/duplicates excluded) — so per-leg values sum to
+	// the transfer size and cleanly attribute which legs carried a direction's
+	// data, unlike RecvBytes which includes retransmit inflation.
+	PayloadBytes uint64 `json:"payload_bytes"`
 	// Retransmits is SACK retransmit packets carried by this leg (loss
 	// signal). Alive/Standby are the leg's gate_state: Alive=false once the
 	// transport is closed; Standby=true for a warm standby (rules kept,
