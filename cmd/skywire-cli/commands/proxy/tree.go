@@ -102,12 +102,13 @@ func wantColor(mode string) bool {
 }
 
 const (
-	ansiReset  = "\x1b[0m"
-	ansiBold   = "\x1b[1m"
-	ansiDim    = "\x1b[2m"
-	ansiCyan   = "\x1b[36m"
-	ansiGreen  = "\x1b[32m"
-	ansiYellow = "\x1b[33m"
+	ansiReset   = "\x1b[0m"
+	ansiBold    = "\x1b[1m"
+	ansiDim     = "\x1b[2m"
+	ansiCyan    = "\x1b[36m"
+	ansiGreen   = "\x1b[32m"
+	ansiYellow  = "\x1b[33m"
+	ansiMagenta = "\x1b[35m"
 )
 
 // ansiStyleCell colorizes the route tree for a terminal without changing any
@@ -120,6 +121,11 @@ func ansiStyleCell(text string, kind bitree.CellKind) string {
 	case bitree.CellRoot:
 		return ansiBold + ansiCyan + text + ansiReset
 	case bitree.CellLabel:
+		// A stream-boundary header (the STREAM layer) reads as a distinct kind of
+		// node — bold magenta — vs a plain-cyan hop PK, mirroring the page's badge.
+		if strings.HasPrefix(strings.TrimSpace(text), proxystatus.StreamHeaderGlyph) {
+			return ansiBold + ansiMagenta + text + ansiReset
+		}
 		return ansiCyan + text + ansiReset
 	case bitree.CellColumn:
 		return ansiDim + text + ansiReset
