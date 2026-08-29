@@ -7,16 +7,18 @@ import (
 	"time"
 )
 
-// retxMinAge is how long an un-acknowledged sequence must have been
-// outstanding before a SACK gap will retransmit it. The mux legs ride
+// retxMinAge is the FALLBACK reorder-tolerant retransmit age, used only when the
+// caller supplies no RTT-derived threshold (a zero threshold to ProcessSACK).
+// The live path now passes routeMux.rackThreshold (RFC 8985 RACK), which derives
+// the age from the measured per-leg RTTs instead of this fixed constant — so a
+// fast path recovers loss in tens of ms rather than always waiting 750ms, while a
+// slow path can wait longer. The rationale is unchanged: the mux legs ride
 // reliable, ordered transports, so a sequence missing from the receiver's
-// contiguous run is almost always just IN FLIGHT on a slower leg (latency
-// skew), not lost. Retransmitting it on sight is spurious and self-amplifies:
-// each early retx arrives out of order, provoking another SACK, provoking more
-// retx (the observed ~7x traffic storm that wedged mux>1). Holding off until a
-// sequence is overdue by more than any realistic inter-leg skew means a merely
-// reordered packet arrives and is acked (purged) first, and only a genuinely
-// lost one — a dead leg, which liveness prunes — is ever retransmitted.
+// contiguous run is almost always just IN FLIGHT on a slower leg (latency skew),
+// not lost; retransmitting on sight is spurious and self-amplifies (the observed
+// ~7x traffic storm that wedged mux>1). Holding off until a sequence is overdue
+// by more than the realistic inter-leg skew — which the RTT-derived threshold
+// measures directly — means a merely reordered packet is acked (purged) first.
 const retxMinAge = 750 * time.Millisecond
 
 // sackMaxWords bounds the generated bitmap to the reorder window (32 words *
@@ -187,7 +189,15 @@ func (rb *retxBuffer) Store(seq uint32, data []byte) bool {
 // in the bitmap where we still hold data). It purges every acknowledged entry,
 // including received sequences ABOVE a persistent frontier gap — that whole-
 // window purge is what keeps the buffer from filling behind a stuck gap (#86).
-func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64) []uint32 {
+// threshold is the reorder-tolerant loss-detection age (RACK): a still-missing
+// sequence is retransmitted only once it has been outstanding at least this long,
+// so a merely-reordered packet on a slower leg is acked (purged) first. The mux
+// supplies an RTT-derived value (routeMux.rackThreshold); a zero/negative
+// threshold falls back to the fixed retxMinAge for any caller that doesn't.
+func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, threshold time.Duration) []uint32 {
+	if threshold <= 0 {
+		threshold = retxMinAge
+	}
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
@@ -211,7 +221,7 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64) []uint3
 			checkSeq := base + i
 			if word&(1<<i) != 0 {
 				delete(rb.entries, checkSeq)
-			} else if e, ok := rb.entries[checkSeq]; ok && time.Since(e.sentAt) >= retxMinAge {
+			} else if e, ok := rb.entries[checkSeq]; ok && time.Since(e.sentAt) >= threshold {
 				retransmit = append(retransmit, checkSeq)
 			}
 		}
