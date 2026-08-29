@@ -654,6 +654,7 @@ type router struct {
 	lastRouteCalcMu   sync.Mutex        // protects lastRouteCalcTime
 	tpdCache          *tpdSnapshotCache // one-snapshot TTL cache of GetAllTransports, see tpd_cache.go
 	suspects          *suspectHopCache  // short-TTL penalty cache for intermediates that lost/failed a setup race (see parallel_route_setup.go)
+	warmRoutes        *warmRoutePool    // visor-level shared cache of disjoint aux-leg PLANS to an exit, shared across route groups (see warm_route_pool.go / docs/design/shared-warm-route-pool.md)
 	// dstTpOracle fetches a destination visor's OWN transport list
 	// authoritatively from the destination (via an RSN-signed transport-query),
 	// for the RSN-oracle 2-hop route path (rsn_oracle_routes.go). nil by default
@@ -770,6 +771,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		routeSetupHooks: routeSetupHooks,
 		tpdCache:        newTPDSnapshotCache(),
 		suspects:        newSuspectHopCache(handshakeAwaitTimeout),
+		warmRoutes:      newWarmRoutePool(defaultWarmPlanTTL),
 		// Default a mux responder to capacity bulk-spread for the downloads it
 		// serves (see router_serve.go); operators can disable via
 		// SetResponderBulkSpread(false).
