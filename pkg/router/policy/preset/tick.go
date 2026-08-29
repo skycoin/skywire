@@ -1121,6 +1121,54 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		return RotationAction{AddLeg: true}
 	}
 
+	// (1b) Converge the warm-standby reserve DOWN after a runtime retune. The
+	// pool size (adaptStandbyMax) is a LIVE tunable — an operator lowering it over
+	// the mux-control RPC (skywire cli proxy mux standby / width) must actually
+	// shrink an already-over-full reserve, not just stop it growing. The park
+	// rules only ever ADD to standby (each gated on standbyCount < adaptStandbyMax),
+	// so without this a reserve parked at the old, larger size would sit forever
+	// and the re-capped self-heal would never draw it back down. Drop the surplus
+	// SLOWEST-first, so the spares we keep warm are the fastest ones. Standby legs
+	// carry no active traffic, so this is safe to run ahead of the anti-churn
+	// cooldown. This is a DELIBERATE one-shot convergence to the configured size,
+	// NOT per-tick reaping: it fires only while standbyCount genuinely exceeds the
+	// max and goes quiet the instant the pool is at size, so a steady-state group
+	// never churns here. Drop recovery (1) runs first, so a needed active slot is
+	// filled by PROMOTING an excess spare before any is dropped.
+	if standbyCount > adaptStandbyMax {
+		type stbyLeg struct {
+			idx int
+			lat float64
+		}
+		var stby []stbyLeg
+		for _, l := range legs {
+			if !l.Alive || !l.Standby || l.Index == 0 {
+				continue
+			}
+			lat := e.adaptLatEWMA[l.TransportID]
+			if lat <= 0 {
+				lat = float64(l.LatencyMs)
+			}
+			if lat <= 0 {
+				lat = adaptLatCeilingMs // unknown → drop first
+			}
+			stby = append(stby, stbyLeg{l.Index, lat})
+		}
+		sort.Slice(stby, func(i, j int) bool { return stby[i].lat > stby[j].lat })
+		surplus := standbyCount - adaptStandbyMax
+		if surplus > len(stby) {
+			surplus = len(stby)
+		}
+		if surplus > 0 {
+			drop := make([]int, surplus)
+			for i := 0; i < surplus; i++ {
+				drop[i] = stby[i].idx
+			}
+			e.adaptCooldown = adaptReshapeCooldown
+			return RotationAction{DropLegs: drop}
+		}
+	}
+
 	// (2) Evict a SUSTAINED-unhealthy active leg (the health gate — the fix for
 	// stuttering connections). Never leg 0, never the last active leg. Hot-swap a
 	// healthy spare in when one exists; else park the bad leg (drop only when the

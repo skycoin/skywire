@@ -394,6 +394,19 @@ type RotationHook interface {
 	OnTick(info DialInfo, legs []LegInfo) RotationAction
 }
 
+// SelfHealTargeter is an OPTIONAL interface a RotationHook may implement to
+// override the route group's self-heal degree at runtime. A group's self-heal
+// target is otherwise fixed at dial time (SetSelfHeal), but an adaptive
+// preset's pool size is a LIVE tunable (mux width / warm-standby reserve,
+// retuned over the mux-control RPC). A hook that implements this pushes the
+// CURRENT target on every tick, so lowering the pool at runtime actually re-
+// caps the self-heal instead of re-dialing back toward the stale dial-time
+// value. ok=false means "leave the dial-time target unchanged" (a non-adaptive
+// preset, whose target is a fixed policy width).
+type SelfHealTargeter interface {
+	SelfHealTarget() (target int, ok bool)
+}
+
 // String returns the stable label for a DistributionMode. Used
 // by router-side log fields so operator-facing log lines say
 // "round-robin" instead of "1".

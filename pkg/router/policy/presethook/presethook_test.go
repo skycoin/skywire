@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/policy/preset"
 )
 
 func TestBeforeDial_RotatingBWShape(t *testing.T) {
@@ -79,5 +80,46 @@ func TestOnTick_RotatingBWParksFragile(t *testing.T) {
 	want := router.RotationAction{DemoteToStandby: []int{1}}
 	if !reflect.DeepEqual(act, want) {
 		t.Errorf("OnTick rotating-bw: got %+v want %+v", act, want)
+	}
+}
+
+// TestSelfHealTarget_TracksRuntimeTunables asserts the adaptive hook's self-heal
+// target (the value the route group re-caps maybeSelfHeal with each tick) is the
+// LIVE pool size AdaptRevActive()+AdaptStandbyMax(), so lowering the warm-standby
+// reserve at runtime drops the effective target. Non-adaptive presets report
+// ok=false (keep their fixed dial-time target).
+func TestSelfHealTarget_TracksRuntimeTunables(t *testing.T) {
+	origStandby, origCap, origRev := preset.AdaptStandbyMax(), preset.AdaptCap(), preset.AdaptRevActive()
+	defer func() {
+		preset.SetAdaptStandbyMax(origStandby)
+		preset.SetAdaptCap(origCap)
+		preset.SetAdaptRevActive(origRev)
+	}()
+
+	h := New("adaptive", nil)
+	target, ok := h.SelfHealTarget()
+	if !ok {
+		t.Fatal("adaptive hook must report a live self-heal target")
+	}
+	if want := preset.AdaptRevActive() + preset.AdaptStandbyMax(); target != want {
+		t.Fatalf("self-heal target = %d, want AdaptRevActive+AdaptStandbyMax = %d", target, want)
+	}
+
+	// Lower the reserve; the reported target must DROP with it.
+	preset.SetAdaptStandbyMax(8)
+	lowered, ok := h.SelfHealTarget()
+	if !ok {
+		t.Fatal("adaptive hook must still report a target after retune")
+	}
+	if want := preset.AdaptRevActive() + 8; lowered != want {
+		t.Fatalf("after retune self-heal target = %d, want %d", lowered, want)
+	}
+	if lowered >= target {
+		t.Fatalf("lowering the reserve must lower the self-heal target: was %d, now %d", target, lowered)
+	}
+
+	// A non-adaptive preset keeps its fixed dial-time target.
+	if _, ok := New("ledbat", nil).SelfHealTarget(); ok {
+		t.Error("non-adaptive preset must report ok=false (fixed dial-time target)")
 	}
 }
