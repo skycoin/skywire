@@ -65,8 +65,10 @@ type Client struct {
 
 	// streams tracks the currently open tunneled streams so the status page can
 	// expand the "N open stream(s)" count into per-stream rows (id + CONNECT
-	// target + age). yamux does not meter per-stream bytes, so bytes are not
-	// tracked here; only the cheap identity/target/age the sniff already parses.
+	// target + age, plus this stream's own up/down byte counters and a smoothed
+	// transfer rate). The byte counters are metered by a counting wrapper the
+	// splice loop reads through (handleStream), so they are true per-stream totals;
+	// the rate is an EWMA differenced from them in streamSnapshot at page cadence.
 	streamsMu sync.Mutex
 	streams   map[uint32]streamMeta
 
@@ -95,10 +97,50 @@ type Client struct {
 }
 
 // streamMeta is the per-stream detail the status page surfaces for an open
-// tunneled stream.
+// tunneled stream. sent/recv are pointers so the map-by-value copy shares the one
+// counter the splice loop increments (handleStream wraps the yamux conn in a
+// countingConn holding these). The rate/sample fields are mutated only under
+// streamsMu in streamSnapshot, which differences the counters at page cadence
+// into a smoothed bytes/sec rate.
 type streamMeta struct {
 	target string
 	since  time.Time
+	sent   *atomic.Uint64 // cumulative bytes browser→exit (up)
+	recv   *atomic.Uint64 // cumulative bytes exit→browser (down)
+
+	// Rate sampling state (guarded by streamsMu, advanced in streamSnapshot).
+	lastSent   uint64    // sent counter at the last rate sample
+	lastRecv   uint64    // recv counter at the last rate sample
+	lastSample time.Time // wall time of the last rate sample
+	upRate     float64   // smoothed up rate, bytes/sec (EWMA)
+	downRate   float64   // smoothed down rate, bytes/sec (EWMA)
+}
+
+// countingConn wraps a net.Conn to meter the bytes flowing each way through it.
+// rd counts bytes READ from the conn, wr counts bytes WRITTEN to it; both are
+// best-effort (a partial read/write still credits what moved). Used to meter a
+// yamux exit stream: reads are exit→browser (down/recv), writes are browser→exit
+// (up/sent). All other net.Conn methods pass through unchanged.
+type countingConn struct {
+	net.Conn
+	rd *atomic.Uint64
+	wr *atomic.Uint64
+}
+
+func (c *countingConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	if n > 0 {
+		c.rd.Add(uint64(n))
+	}
+	return n, err
+}
+
+func (c *countingConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	if n > 0 {
+		c.wr.Add(uint64(n))
+	}
+	return n, err
 }
 
 // errAllTunnelsDown is the synthetic stream-open error used when every tunnel
@@ -641,9 +683,15 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 	}
 
 	// Track this stream for the status page's per-stream detail (id + target +
-	// age). Registered here, deregistered when the splice below returns.
+	// age + up/down bytes). Registered here, deregistered when the splice below
+	// returns. The returned counters are wired into a countingConn wrapping the
+	// yamux stream so every byte the splice/range-split loop moves is metered:
+	// reads (exit→browser) credit recv/down, writes (browser→exit) credit
+	// sent/up. Wrapping the stream itself catches both the plain splice and the
+	// range-split path, which read/write this same conn.
 	if id, ok := streamID(stream); ok {
-		c.addStream(id, target)
+		up, down := c.addStream(id, target)
+		stream = &countingConn{Conn: stream, rd: down, wr: up}
 		defer c.removeStream(id)
 	}
 
@@ -860,16 +908,57 @@ func streamID(stream net.Conn) (uint32, bool) {
 	return 0, false
 }
 
+// rateSampleMin is the minimum wall interval between two rate samples for a
+// stream: below it the delta is too small to divide cleanly, so streamSnapshot
+// keeps the last smoothed rate instead of recomputing. The status page pushes at
+// ~1s, comfortably above this floor.
+const rateSampleMin = 400 * time.Millisecond
+
+// rateEWMAAlpha weights the newest instantaneous sample against the running
+// smoothed rate (0.5 = equal), so a burst shows promptly but single-sample noise
+// is damped — matching the ~1s page cadence.
+const rateEWMAAlpha = 0.5
+
+// representativeRouteRTT picks a single route-group latency to attach to the
+// per-stream rows: the minimum end-to-end route RTT among the alive legs (the
+// fastest live path the session can use), falling back to the min first-hop
+// transport RTT when no leg reports a route RTT. Returns 0 when nothing is
+// measured. Route-group-level, not per-stream — the streams stripe across these
+// legs and yamux exposes no per-stream RTT.
+func representativeRouteRTT(legs []proxystatus.Leg) float64 {
+	best := 0.0
+	for _, l := range legs {
+		if !l.Alive {
+			continue
+		}
+		cand := l.RouteLatencyMS
+		if cand <= 0 {
+			cand = l.LatencyMS
+		}
+		if cand <= 0 {
+			continue
+		}
+		if best == 0 || cand < best {
+			best = cand
+		}
+	}
+	return best
+}
+
 // addStream/removeStream/streamSnapshot maintain the open-stream registry the
-// status page reads. All are mutex-guarded and cheap (no per-stream byte
-// metering — yamux does not expose it).
-func (c *Client) addStream(id uint32, target string) {
+// status page reads. addStream returns the up/down byte counters for the new
+// stream so the caller can wire them into a countingConn on the yamux stream;
+// the splice loop then meters every byte through them.
+func (c *Client) addStream(id uint32, target string) (up, down *atomic.Uint64) {
+	up, down = new(atomic.Uint64), new(atomic.Uint64)
+	now := time.Now()
 	c.streamsMu.Lock()
 	if c.streams == nil {
 		c.streams = make(map[uint32]streamMeta)
 	}
-	c.streams[id] = streamMeta{target: target, since: time.Now()}
+	c.streams[id] = streamMeta{target: target, since: now, sent: up, recv: down, lastSample: now}
 	c.streamsMu.Unlock()
+	return up, down
 }
 
 func (c *Client) removeStream(id uint32) {
@@ -879,7 +968,13 @@ func (c *Client) removeStream(id uint32) {
 }
 
 // streamSnapshot returns the currently open streams as sorted proxystatus.Stream
-// rows (by id) for the status page.
+// rows (by id) for the status page, carrying each stream's cumulative up/down
+// bytes and a smoothed up/down rate. The rate is an EWMA differenced from the
+// cumulative counters against the previous sample; when called faster than
+// rateSampleMin it reports the last smoothed rate without advancing the sample,
+// so a fast redraw does not divide a tiny delta by a tiny interval. Rate state is
+// mutated in place under streamsMu (the map holds streamMeta by value, so each
+// updated meta is written back).
 func (c *Client) streamSnapshot() []proxystatus.Stream {
 	c.streamsMu.Lock()
 	defer c.streamsMu.Unlock()
@@ -889,10 +984,35 @@ func (c *Client) streamSnapshot() []proxystatus.Stream {
 	now := time.Now()
 	out := make([]proxystatus.Stream, 0, len(c.streams))
 	for id, m := range c.streams {
+		var curSent, curRecv uint64
+		if m.sent != nil {
+			curSent = m.sent.Load()
+		}
+		if m.recv != nil {
+			curRecv = m.recv.Load()
+		}
+		if dt := now.Sub(m.lastSample).Seconds(); dt >= rateSampleMin.Seconds() {
+			upInst := float64(curSent-m.lastSent) / dt
+			downInst := float64(curRecv-m.lastRecv) / dt
+			if m.lastSent == 0 && m.lastRecv == 0 && m.upRate == 0 && m.downRate == 0 {
+				// First sample: seed directly so the first shown rate is the real
+				// average over the stream's opening interval, not half of it.
+				m.upRate, m.downRate = upInst, downInst
+			} else {
+				m.upRate = rateEWMAAlpha*upInst + (1-rateEWMAAlpha)*m.upRate
+				m.downRate = rateEWMAAlpha*downInst + (1-rateEWMAAlpha)*m.downRate
+			}
+			m.lastSent, m.lastRecv, m.lastSample = curSent, curRecv, now
+			c.streams[id] = m
+		}
 		out = append(out, proxystatus.Stream{
-			ID:     id,
-			Target: m.target,
-			AgeMS:  now.Sub(m.since).Milliseconds(),
+			ID:          id,
+			Target:      m.target,
+			AgeMS:       now.Sub(m.since).Milliseconds(),
+			SentBytes:   curSent,
+			RecvBytes:   curRecv,
+			SentRateBps: m.upRate,
+			RecvRateBps: m.downRate,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -1273,8 +1393,17 @@ func (c *Client) statusSnapshot() proxystatus.Snapshot {
 		if n := len(c.snapshotSessions()); n > 1 {
 			snap.Note = fmt.Sprintf("%s · %d tunnels", snap.Note, n)
 		}
-		// Per-stream detail (id + target + age) behind the count, when tracked.
+		// Per-stream detail (id + target + age + up/down bytes/rate) behind the
+		// count, when tracked. yamux exposes no per-stream RTT, so each stream is
+		// tagged with the route-group latency (the session's representative route
+		// RTT to the exit) rather than a faked per-stream number; the renderer
+		// labels the column as route-group latency.
 		snap.Streams = c.streamSnapshot()
+		if rgRTT := representativeRouteRTT(snap.Legs); rgRTT > 0 {
+			for i := range snap.Streams {
+				snap.Streams[i].LatencyMS = rgRTT
+			}
+		}
 	} else {
 		snap.Note = "no active session to the exit"
 	}

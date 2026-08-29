@@ -133,13 +133,25 @@ type Tunnel struct {
 
 // Stream is one open tunneled stream on the surface's session to the exit — the
 // per-stream detail behind the "N open stream(s)" count. The skysocks-client
-// tracks these locally (id + CONNECT target + age); the underlying yamux layer
-// does not meter per-stream bytes, so bytes are intentionally absent (the
-// route-group totals in the mux section are the byte counters that exist).
+// tracks these locally: id + CONNECT target + age, plus the stream's own up/down
+// byte counters and a smoothed transfer rate. The counters are metered by the
+// splice loop that carries the stream (a counting wrapper on the yamux conn), so
+// they are true per-stream totals, distinct from the route-group-wide sent/recv
+// totals in the mux section.
 type Stream struct {
-	ID     uint32 // yamux stream id
-	Target string // the CONNECT target host:port the stream carries (never a PK)
-	AgeMS  int64  // how long the stream has been open, milliseconds
+	ID          uint32  // yamux stream id
+	Target      string  // the CONNECT target host:port the stream carries (never a PK)
+	AgeMS       int64   // how long the stream has been open, milliseconds
+	SentBytes   uint64  // cumulative bytes browser→exit (up) on this stream
+	RecvBytes   uint64  // cumulative bytes exit→browser (down) on this stream
+	SentRateBps float64 // smoothed up rate in bytes/sec (EWMA over the refresh window); 0 until a second sample lands
+	RecvRateBps float64 // smoothed down rate in bytes/sec (EWMA over the refresh window)
+	// LatencyMS is the ROUTE-GROUP latency of the stream's session to the exit,
+	// NOT a per-stream RTT — yamux exposes no per-stream round-trip. It is the
+	// representative route latency of the surface's live legs, attached to every
+	// stream and LABELED as route-group latency by the renderer rather than faked
+	// as a per-stream number. 0 when unmeasured.
+	LatencyMS float64
 }
 
 // Provider yields a live Snapshot for a surface. Implemented by the visor

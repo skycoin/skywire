@@ -430,19 +430,41 @@ func legRank(l Leg) int {
 
 // writeStreamsSection expands the "N open stream(s)" count into per-stream rows
 // when the surface tracks them (skysocks-client records id + CONNECT target +
-// age locally). It is a native <details> so it stays collapsed by default and
-// costs nothing to skip. Per-stream BYTES are deliberately not shown: the yamux
-// layer carrying the streams does not meter them per stream — the byte counters
-// that exist are the route-group sent/recv totals in the mux section above.
+// age, plus this stream's own up/down byte totals and smoothed transfer rate).
+// It is a native <details> so it stays collapsed by default and costs nothing to
+// skip. Each row shows the stream's ↑/↓ bytes and ↑/↓ rate metered by the splice
+// loop carrying it — true per-stream totals, distinct from the route-group-wide
+// sent/recv totals in the mux section above. The latency column carries the
+// ROUTE-GROUP latency (the stream's session RTT to the exit), labeled as such —
+// yamux exposes no per-stream round-trip, so it is not faked per stream. The
+// summary line carries the aggregate ↑/↓ across all open streams.
 func writeStreamsSection(b *strings.Builder, snap Snapshot) {
 	if len(snap.Streams) == 0 {
 		return
 	}
-	fmt.Fprintf(b, `<details class="streams"><summary>open streams <b>%d</b></summary>`, len(snap.Streams))
-	b.WriteString(`<table class="strm"><thead><tr><th>id</th><th>target</th><th>age</th></tr></thead><tbody>`)
+	var aggSent, aggRecv uint64
 	for _, s := range snap.Streams {
-		fmt.Fprintf(b, `<tr><td>%d</td><td>%s</td><td>%s</td></tr>`,
-			s.ID, html.EscapeString(orDash(s.Target)), html.EscapeString(compactAge(s.AgeMS)))
+		aggSent += s.SentBytes
+		aggRecv += s.RecvBytes
+	}
+	fmt.Fprintf(b, `<details class="streams"><summary>open streams <b>%d</b>`+
+		`<span class="sagg"><i class="up">↑</i> %s <i class="down">↓</i> %s</span></summary>`,
+		len(snap.Streams), html.EscapeString(compactBytes(aggSent)), html.EscapeString(compactBytes(aggRecv)))
+	b.WriteString(`<table class="strm"><thead><tr>` +
+		`<th>id</th><th>target</th><th>age</th>` +
+		`<th class="num">↑ bytes</th><th class="num">↓ bytes</th>` +
+		`<th class="num">↑ rate</th><th class="num">↓ rate</th>` +
+		`<th class="num" title="route-group latency (session RTT to the exit) — not per-stream">rg rtt</th>` +
+		`</tr></thead><tbody>`)
+	for _, s := range snap.Streams {
+		fmt.Fprintf(b, `<tr><td>%d</td><td>%s</td><td>%s</td>`+
+			`<td class="num up">%s</td><td class="num down">%s</td>`+
+			`<td class="num up">%s</td><td class="num down">%s</td>`+
+			`<td class="num rtt">%s</td></tr>`,
+			s.ID, html.EscapeString(orDash(s.Target)), html.EscapeString(compactAge(s.AgeMS)),
+			html.EscapeString(compactBytes(s.SentBytes)), html.EscapeString(compactBytes(s.RecvBytes)),
+			html.EscapeString(compactRate(s.SentRateBps)), html.EscapeString(compactRate(s.RecvRateBps)),
+			html.EscapeString(routeRTTCompact(s.LatencyMS)))
 	}
 	b.WriteString(`</tbody></table>`)
 	b.WriteString(`</details>`)
@@ -949,8 +971,18 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	// Per-stream detail (expandable) behind the "N open stream(s)" count.
 	`details.streams{margin:.5rem 0}details.streams summary{cursor:pointer;font-size:12px;color:var(--muted)}` +
 	`details.streams summary b{color:var(--fg);margin-left:.2rem}` +
+	// Aggregate ↑/↓ across all open streams, shown in the summary line beside the
+	// count. The arrows carry the up (green) / down (cyan) accents used elsewhere.
+	`details.streams summary .sagg{margin-left:.6rem;font-family:'Mononoki',ui-monospace,SFMono-Regular,monospace;font-size:11px}` +
+	`details.streams summary .sagg i{font-style:normal;margin:0 .1rem 0 .5rem}` +
+	`details.streams summary .sagg i.up{color:var(--ok)}details.streams summary .sagg i.down{color:var(--cyan)}` +
 	`table.strm{border-collapse:collapse;font-size:11.5px;margin:.4rem 0;font-family:'Mononoki',ui-monospace,SFMono-Regular,monospace}` +
 	`table.strm th,table.strm td{text-align:left;padding:.1rem 1rem .1rem 0;color:var(--fg);white-space:nowrap}` +
+	// Numeric columns (bytes / rate / rtt) are right-aligned and tabular so the
+	// figures line up as they update live; the ↑ columns take the up accent, ↓ the
+	// down/cyan accent, and the route-group rtt stays muted (it is not per-stream).
+	`table.strm td.num,table.strm th.num{text-align:right;font-variant-numeric:tabular-nums}` +
+	`table.strm td.up{color:var(--ok)}table.strm td.down{color:var(--cyan)}table.strm td.rtt{color:var(--muted)}` +
 	`table.strm th{color:var(--muted);text-transform:uppercase;font-size:9.5px;letter-spacing:.4px}` +
 	`.seam{opacity:.9}.controls{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.4rem}` +
 	`.controls button{font:inherit;font-size:12px;padding:.2rem .6rem;border:1px dashed var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:not-allowed}` +
