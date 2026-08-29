@@ -245,8 +245,31 @@ func writeLiveRegion(b *strings.Builder, snap Snapshot) {
 	}
 
 	writeStreamsSection(b, snap)
+	writeRangeSplitSection(b, snap)
 	writeMuxSection(b, snap)
 	writeLogSection(b, snap)
+}
+
+// writeRangeSplitSection renders the transparent HTTP range-split summary when
+// the surface reports one. It makes "is range-split firing" a visible line: a
+// live pill (ACTIVE with the in-flight split count, or IDLE) plus the cumulative
+// shape (splits · chunks · bytes, streams-per-split × chunk-size). Omitted
+// entirely when the surface does not range-split.
+func writeRangeSplitSection(b *strings.Builder, snap Snapshot) {
+	rs := snap.RangeSplit
+	if rs == nil || !rs.Enabled {
+		return
+	}
+	state, cls := "idle", "rs-idle"
+	if rs.ActiveSplits > 0 {
+		state, cls = fmt.Sprintf("active ×%d", rs.ActiveSplits), "rs-active"
+	}
+	fmt.Fprintf(b, `<p class="rsplit"><b>range-split</b> `+
+		`<span class="pill %s">%s</span> `+
+		`<span class="rsagg">%d splits · %d chunks · %s · %d streams/split × %s</span></p>`,
+		cls, html.EscapeString(state),
+		rs.TotalSplits, rs.TotalChunks, html.EscapeString(compactBytes(rs.TotalBytes)),
+		rs.StreamsPerSplit, html.EscapeString(compactBytes(uint64(rs.ChunkSize)))) //nolint:gosec // chunkSize>0
 }
 
 // writeMuxSection renders the route group as ONE unified route tree rooted at

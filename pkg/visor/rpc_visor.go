@@ -171,6 +171,29 @@ func (r *RPC) StateSnapshot(_ *struct{}, out *StateSnapshot) (err error) {
 	return nil
 }
 
+// StateSnapshotReq is the argument to StateSnapshotProjected: the subtree keys
+// (see the StateSelect* constants) to build. Empty builds the full snapshot.
+type StateSnapshotReq struct {
+	Fields []string
+}
+
+// StateSnapshotProjected builds only the requested subtree(s) of the snapshot
+// server-side, so a `--select mux` call skips the expensive transports build.
+// See StateSnapshotProjected in api_state.go.
+func (r *RPC) StateSnapshotProjected(in *StateSnapshotReq, out *StateSnapshot) (err error) {
+	defer rpcutil.LogCall(r.log, "StateSnapshotProjected", in)(out, &err)
+	var fields []string
+	if in != nil {
+		fields = in.Fields
+	}
+	snap, err := r.visor.StateSnapshotProjected(fields)
+	if err != nil {
+		return err
+	}
+	*out = *snap
+	return nil
+}
+
 // Overview provides a overview of the AppNode.
 func (r *RPC) Overview(_ *struct{}, out *Overview) (err error) {
 	defer rpcutil.LogCall(r.log, "Overview", nil)(out, &err)
