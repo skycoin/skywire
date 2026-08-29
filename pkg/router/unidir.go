@@ -104,6 +104,17 @@ func (m *routeMux) dirConfig() (directional, wantDirect bool, dst, src cipher.Pu
 	return m.directional, wantDirect, m.dstPK, m.srcPK
 }
 
+// legIsDirectTp reports whether tp is this route group's DIRECT (1-hop) leg,
+// using the directional endpoints recorded at handshake. Returns false when the
+// mux is not directional (the endpoints are zero). Used for confinement
+// observability (legDataProgressServiceFn).
+func (m *routeMux) legIsDirectTp(tp *transport.ManagedTransport) bool {
+	m.legMu.RLock()
+	dst, src := m.dstPK, m.srcPK
+	m.legMu.RUnlock()
+	return legIsDirect(tp, dst, src)
+}
+
 // legIsDirect reports whether a leg's transport goes straight to a route-group
 // endpoint (a 1-hop / direct leg) rather than through an intermediary.
 func legIsDirect(tp *transport.ManagedTransport, dst, src cipher.PubKey) bool {
@@ -191,39 +202,71 @@ func (m *routeMux) flipStep(up, down float64) (flipped, changed bool) {
 	return cur, false
 }
 
-// selectByDirection picks a leg matching this end's send direction, using
-// readiness that IGNORES the standby flag (legSelectableIgnoringStandby) —
-// because under unidirectional assignment DIRECTION governs, and a reverse leg
-// the initiator parked as standby must still be selectable by the exit for the
-// download. It prefers the weighted selector's pick when that pick matches the
-// direction, else round-robins among direction-matching legs. Returns ok=false
-// when no direction-matching leg is ready, so selectTransport falls through to
-// the standard (standby-aware) path rather than dropping the send.
+// selectByDirection picks a leg matching this end's send direction. Under
+// unidirectional assignment DIRECTION governs which CLASS of leg carries the
+// send (direct vs multihop); WITHIN that class the initiator-mirrored active set
+// (LegState / CapLegState) governs WHICH legs — so the exit's download fan-out
+// stays bounded to the few legs the initiator parked active instead of spraying
+// every warm-standby reverse leg.
+//
+// Two tiers:
+//
+//	Tier 1 (normal): active (non-standby), ready, direction-matching legs. This
+//	   honors the mirrored active set — the exit sends the download on the same
+//	   small set the initiator selected, so the reorder frontier is not
+//	   over-subscribed and retransmits do not amplify. The heavy direction still
+//	   spreads across THOSE legs via the weighted selector / round-robin.
+//	Tier 2 (degenerate): if NO active direction-matching leg exists — the
+//	   initiator parked every leg of this direction as standby, e.g. mid-rotation
+//	   — fall back to any alive, ready standby leg of the wanted direction. This
+//	   keeps confinement (the #4311 guarantee: never fall through to the
+//	   standby-aware path, which could pick the wrong-direction direct leg) while
+//	   still bounding to the wanted class. It is the warm-reserve failover, not
+//	   the steady state.
+//
+// Returns ok=false only when NO direction-matching leg is selectable at all, so
+// selectTransport falls through to the standard path rather than dropping the send.
 func (m *routeMux) selectByDirection(tps []*transport.ManagedTransport, fwd []routing.Rule, wantDirect bool, dst, src cipher.PubKey) (*transport.ManagedTransport, routing.Rule, int, bool) {
 	n := len(tps)
 	if n == 0 || len(fwd) == 0 {
 		return nil, nil, -1, false
 	}
-	match := func(idx int) bool {
+	// Tier 1: active, ready, direction-matching (standby-aware — bounds fan-out).
+	matchActive := func(idx int) bool {
 		tp := tps[idx]
 		return idx < len(fwd) && tp != nil && !tp.IsClosed() &&
-			m.legSelectableIgnoringStandby(idx) && legIsDirect(tp, dst, src) == wantDirect
+			m.legReadyAt(idx) && legIsDirect(tp, dst, src) == wantDirect
 	}
-	// Prefer the scheduler's pick when it already matches the direction, so the
-	// heavy direction still spreads across legs per the mux weights/ECF.
+	// Prefer the scheduler's pick when it matches AND is active, so the heavy
+	// direction spreads across the active legs per the mux weights/ECF.
 	if m.tpSelector != nil && m.tpSelector.Len() > 0 {
-		if idx := m.tpSelector.Select(); idx >= 0 && idx < n && match(idx) {
+		if idx := m.tpSelector.Select(); idx >= 0 && idx < n && matchActive(idx) {
 			return tps[idx], fwd[idx], idx, true
 		}
 	}
-	// Round-robin among direction-matching legs.
 	start := int(atomic.AddUint32(&m.tpIndex, 1) - 1)
 	for i := 0; i < n; i++ {
 		idx := ((start % n) + i) % n
 		if idx < 0 {
 			idx += n
 		}
-		if match(idx) {
+		if matchActive(idx) {
+			return tps[idx], fwd[idx], idx, true
+		}
+	}
+	// Tier 2: no ACTIVE direction-matching leg — warm-reserve failover on the
+	// wanted class only (confinement preserved). Rare; logged by the caller.
+	matchAny := func(idx int) bool {
+		tp := tps[idx]
+		return idx < len(fwd) && tp != nil && !tp.IsClosed() &&
+			m.legSelectableIgnoringStandby(idx) && legIsDirect(tp, dst, src) == wantDirect
+	}
+	for i := 0; i < n; i++ {
+		idx := ((start % n) + i) % n
+		if idx < 0 {
+			idx += n
+		}
+		if matchAny(idx) {
 			return tps[idx], fwd[idx], idx, true
 		}
 	}
