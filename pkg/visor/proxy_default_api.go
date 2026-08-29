@@ -406,6 +406,10 @@ func (proxyDefaultAPI) SetMuxWidth(_ int) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) SetMuxStandby(_ int) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) TransportTypes() ([]string, error) {
 	return nil, ErrProxyNotSupported
 }
