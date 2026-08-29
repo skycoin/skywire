@@ -19,7 +19,7 @@ import (
 // The fields that do not apply are omitted rather than zeroed, so their absence
 // is meaningful.
 type MuxOp struct {
-	// Op is "add", "remove" or "mode".
+	// Op is "add", "remove", "cap", "width", "standby", "switch" or "mode".
 	Op  string `json:"op"`
 	App string `json:"app"`
 
@@ -27,8 +27,12 @@ type MuxOp struct {
 	TransportID string `json:"transport_id,omitempty"`
 	// Hops is the leg's length, for add.
 	Hops int `json:"hops,omitempty"`
-	// Mode is the new setting, for a mode change.
+	// Mode is the new setting, for the "mode" op only.
 	Mode string `json:"mode,omitempty"`
+	// Value is the new numeric setting, for the cap/width/standby ops — kept
+	// separate from Mode so a width/standby retune isn't reported as a "mode"
+	// change.
+	Value string `json:"value,omitempty"`
 }
 
 // Human writes the sentence this used to print.
@@ -41,16 +45,22 @@ func (m MuxOp) Human(w io.Writer) error {
 		_, err := fmt.Fprintf(w, "removed mux leg via transport %s on app=%s\n", m.TransportID, m.App)
 		return err
 	case "cap":
-		_, err := fmt.Fprintf(w, "mux active-width cap set to %s\n", m.Mode)
+		_, err := fmt.Fprintf(w, "mux active-width cap set to %s\n", m.Value)
 		return err
 	case "width":
-		_, err := fmt.Fprintf(w, "mux steady active width set to %s\n", m.Mode)
+		_, err := fmt.Fprintf(w, "mux steady active width set to %s\n", m.Value)
+		return err
+	case "standby":
+		_, err := fmt.Fprintf(w, "mux warm-standby reserve set to %s\n", m.Value)
 		return err
 	case "switch":
 		_, err := fmt.Fprintf(w, "switched primary route to a %d-hop leg (first tp=%s) on app=%s; old primary retired\n", m.Hops, m.TransportID, m.App)
 		return err
-	default:
+	case "mode":
 		_, err := fmt.Fprintf(w, "mux mode set to %s\n", m.Mode)
+		return err
+	default:
+		_, err := fmt.Fprintf(w, "mux op %q applied\n", m.Op)
 		return err
 	}
 }
