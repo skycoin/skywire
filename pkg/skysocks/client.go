@@ -86,6 +86,12 @@ type Client struct {
 	redial         func() (net.Conn, error)
 	redialFails    int
 	redialInFlight atomic.Bool
+
+	// rs configures transparent HTTP range-splitting (see rangesplit.go). A plain
+	// GET to a range-capable :80 origin is fetched as N concurrent byte ranges over
+	// separate tunnels and reassembled, so one download aggregates across the mesh
+	// with no client cooperation. Default-on; the app can retune or disable it.
+	rs rangeSplitConfig
 }
 
 // streamMeta is the per-stream detail the status page surfaces for an open
@@ -129,6 +135,7 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 		// raises this to the conn count, and the app sets --tunnels via
 		// SetTunnelTarget so a re-dial can refill even after a short initial dial.
 		target: 1,
+		rs:     defaultRangeSplitConfig(),
 	}
 
 	session, err := newYamuxSession(conn)
@@ -195,6 +202,20 @@ func (c *Client) SetTunnelTarget(n int) {
 	c.redialMu.Lock()
 	c.target = n
 	c.redialMu.Unlock()
+}
+
+// SetRangeSplit configures transparent HTTP range-splitting. concurrency<1 or
+// chunkSize<1 keep the current value; enabled=false disables the feature entirely
+// (every request splices through unchanged). The app wires this from its flags so
+// the capability is default-on but tunable, not gated behind a required flag.
+func (c *Client) SetRangeSplit(enabled bool, concurrency int, chunkSize int64) {
+	c.rs.enabled = enabled
+	if concurrency >= 1 {
+		c.rs.concurrency = concurrency
+	}
+	if chunkSize >= 1 {
+		c.rs.chunkSize = chunkSize
+	}
 }
 
 // SetTunnelRedial wires the app's disjoint-diversify dial into the Client so the
@@ -626,30 +647,16 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 		defer c.removeStream(id)
 	}
 
-	const errorCount = 2
-
-	errCh := make(chan error, errorCount)
-
-	go func() {
-		_, err := io.Copy(stream, conn)
-		errCh <- err
-	}()
-
-	go func() {
-		_, err := io.Copy(conn, stream)
-		errCh <- err
-	}()
-
-	// Wait for both io.Copy goroutines to finish (exactly 2 sends).
-	for i := 0; i < errorCount; i++ {
-		if err := <-errCh; err != nil && c.appCl != nil {
-			c.appCl.Log().Debugf("Copy error: %v", err)
-		}
-		// Close both sides after the first copy finishes to unblock the other.
-		if i == 0 {
-			conn.Close()   //nolint:errcheck,gosec
-			stream.Close() //nolint:errcheck,gosec
-		}
+	// Transparent HTTP range-splitting: a plain GET to a range-capable :80 origin is
+	// fetched as N concurrent byte ranges over separate tunnels and reassembled, so
+	// one unmodified download aggregates across the mesh. serveHTTPRangeSplit takes
+	// ownership of both ends (splicing through byte-for-byte for anything it cannot
+	// split). Everything else — HTTPS, non-80 ports, feature disabled — splices as
+	// before.
+	if c.rs.enabled && isPort80(target) {
+		c.serveHTTPRangeSplit(conn, stream)
+	} else {
+		c.splicePrefixed(conn, stream, nil)
 	}
 
 	if c.allSessionsClosed() {
