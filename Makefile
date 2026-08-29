@@ -384,6 +384,35 @@ test-wasm-policy: ## Rebuild app-mux.wasm from source with TinyGo and run the po
 	cd docs/examples/routing-policies/wasm/app-mux && GOTOOLCHAIN=$$(cd ../../../../.. && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/build/wasm-fixtures/app-mux.wasm" .
 	SKYWIRE_APPMUX_WASM="$(CURDIR)/build/wasm-fixtures/app-mux.wasm" go test -mod=vendor -count=1 -v -run TestWasmEvaluator ./pkg/router/policy/wasm/
 
+BUNDLE_WASM_SRC = docs/examples/routing-policies/wasm/bundle
+BUNDLE_WASM = pkg/router/policy/wasm/presets/bundle.wasm
+
+bundle-wasm: ## Rebuild the COMMITTED routing-policy bundle.wasm (pkg/router/policy/wasm/presets) from source with TinyGo, then check parity
+	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
+	cd $(BUNDLE_WASM_SRC) && GOTOOLCHAIN=$$(cd "$(CURDIR)" && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/$(BUNDLE_WASM)" .
+	@echo "rebuilt $(BUNDLE_WASM). Verifying native<->wazero parity..."
+	go test -count=1 -run 'TestDecideParity|TestTickParity' ./pkg/router/policy/wasm/presets/
+	@echo "review with 'git status' and commit $(BUNDLE_WASM) intentionally."
+
+check-bundle-wasm: ## Fail if the committed routing-policy bundle.wasm is stale vs a fresh TinyGo build
+	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
+	@# pkg/router/policy/wasm/presets/bundle.wasm is a build artifact committed to
+	@# the repo and embedded in the visor: a native visor on a preset:* policy runs
+	@# it via wazero. A stale one ships DIFFERENT routing decisions (and different
+	@# mux-control tunable defaults) than the source it is a compilation of
+	@# (pkg/router/policy/preset) — exactly #4325. This rebuilds it into a temp file
+	@# and byte-compares, the same provenance guard the check-ui target is for the
+	@# manager UI bundle; the parity test (pkg/router/policy/wasm/presets) is the
+	@# companion SEMANTIC guard. The TinyGo build is byte-reproducible for a given
+	@# toolchain, so run this in a lane with tinygo pinned (the wasm-tinygo lane).
+	@tmp=$$(mktemp) && \
+	( cd $(BUNDLE_WASM_SRC) && GOTOOLCHAIN=$$(cd "$(CURDIR)" && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o "$$tmp" . ) && \
+	if cmp -s "$$tmp" "$(BUNDLE_WASM)"; then rm -f "$$tmp"; echo "The committed routing-policy bundle.wasm is up to date."; else \
+		echo "ERROR: the committed routing-policy bundle.wasm is stale vs a fresh build."; \
+		echo "Run 'make bundle-wasm' and commit the result."; \
+		ls -l "$$tmp" "$(CURDIR)/$(BUNDLE_WASM)"; rm -f "$$tmp"; exit 1; \
+	fi
+
 tpviz-wasm: ## Build transport visualizer WASM binary to build/tpviz (standalone)
 	mkdir -p ./build/tpviz
 	GOOS=js GOARCH=wasm go build -o ./build/tpviz/main.wasm ./pkg/tpviz/wasm
@@ -710,7 +739,7 @@ dep-github-release:
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
 
-.PHONY: check-ui check-onpush
+.PHONY: check-ui check-onpush bundle-wasm check-bundle-wasm
 
 # Manager UI
 install-deps-ui:  ## Install the UI dependencies
