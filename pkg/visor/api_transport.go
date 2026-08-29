@@ -176,8 +176,12 @@ func (v *Visor) SetMuxMode(mode string) error {
 		m = router.WeightModeCapacity
 	case "ecf":
 		m = router.WeightModeECF
+	case "otias":
+		m = router.WeightModeOTIAS
+	case "stms":
+		m = router.WeightModeSTMS
 	default:
-		return fmt.Errorf("unknown mux mode %q (use \"auto\", \"equal\", \"capacity\", or \"ecf\")", mode)
+		return fmt.Errorf("unknown mux mode %q (use \"auto\", \"equal\", \"capacity\", \"ecf\", \"otias\", or \"stms\")", mode)
 	}
 	v.router.SetMuxMode(m)
 	v.log.Infof("SetMuxMode: %v", mode)

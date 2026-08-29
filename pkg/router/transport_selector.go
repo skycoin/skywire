@@ -74,6 +74,24 @@ const (
 	// byte estimate; see ecfPick and SelectECF. This is the aggregation mode
 	// that stops a heterogeneous mux from HoL-stalling on its slow legs.
 	WeightModeECF
+	// WeightModeOTIAS is the Out-of-order Transmission for In-order Arrival
+	// scheduler (Yang et al.). It reasons over the SAME per-leg estimator
+	// snapshot as ECF (ecfLegState), but instead of ECF's fast-leg-with-hold-back
+	// rule it assigns each segment to the leg whose ESTIMATED ARRIVAL is soonest:
+	// queueing delay (current backlog / send rate) + one-way propagation (RTT/2).
+	// Charging the chosen leg makes successive picks fan out by arrival time, so
+	// OTIAS deliberately hands a later segment to a slower-but-idle leg once the
+	// fast leg's queue would make it arrive later. See otiasPick / SelectOTIAS.
+	WeightModeOTIAS
+	// WeightModeSTMS is the Slide Together Multipath Scheduler (Shi et al.,
+	// USENIX ATC 2018). It keeps the head of the stream on the fast leg — filling
+	// that leg's BDP send window first so EARLIER data always rides the fast path
+	// — and only once the fast window is full places the following (later) data
+	// on the soonest-arriving slower leg, so the pieces converge in order. Unlike
+	// ECF, STMS does not decline a slow leg once it is in the active set (ECF's
+	// hold-back predicate); it commits later data to it and lets the reorder
+	// buffer absorb the gap. See stmsPick / SelectSTMS.
+	WeightModeSTMS
 )
 
 // ECF (WeightModeECF) tuning constants. Starting values — expect a live-tuning
@@ -286,8 +304,22 @@ func (m WeightMode) String() string {
 		return "capacity"
 	case WeightModeECF:
 		return "ecf"
+	case WeightModeOTIAS:
+		return "otias"
+	case WeightModeSTMS:
+		return "stms"
 	}
 	return "unknown"
+}
+
+// isPredictive reports whether the mode is one of the completion-time predictive
+// schedulers (ECF/OTIAS/STMS). They all reason over the per-leg ecfLegState
+// snapshot the mux refreshes via SetECFState (RTT/jitter/rate/BDP + the
+// selector-tracked in-flight estimate) rather than a precomputed schedule, so
+// the mux builds that snapshot and the selector mirrors the live legs for the
+// same set of modes.
+func (m WeightMode) isPredictive() bool {
+	return m == WeightModeECF || m == WeightModeOTIAS || m == WeightModeSTMS
 }
 
 // SetECFState stores the per-leg ECF state used by WeightModeECF. Caller (the
@@ -500,10 +532,11 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 	// GetLatency. The primary schedule is also populated so a
 	// caller using Select() (no payload) still gets a reasonable
 	// leg.
-	// ECF also builds the live-leg arrays: SelectECF reasons over ecfLegs
-	// (set separately via SetECFState) but the mirrored schedule is the
-	// Select() fallback for control/handshake frames that carry no payload.
-	if ts.mode == WeightModeSticky5Tuple || ts.mode == WeightModeLatencyAdaptive || ts.mode == WeightModeECF {
+	// The predictive schedulers (ECF/OTIAS/STMS) also build the live-leg arrays:
+	// they reason over ecfLegs (set separately via SetECFState) but the mirrored
+	// schedule is the Select() fallback for control/handshake frames that carry
+	// no payload, and for the cold-start bootstrap before any estimator state.
+	if ts.mode == WeightModeSticky5Tuple || ts.mode == WeightModeLatencyAdaptive || ts.mode.isPredictive() {
 		live := make([]int, 0, n)
 		liveTps := make([]*transport.ManagedTransport, 0, n)
 		for i, tp := range tps {
@@ -682,6 +715,10 @@ func (ts *transportSelector) SelectForPayload(p []byte) int {
 		return pickLowestLatency(live, liveTps)
 	case WeightModeECF:
 		return ts.SelectECF(len(p))
+	case WeightModeOTIAS:
+		return ts.SelectOTIAS(len(p))
+	case WeightModeSTMS:
+		return ts.SelectSTMS(len(p))
 	case WeightModeDSCPPriority:
 		if isIPv4DSCPGE(p, dscpThreshold) {
 			return 0
@@ -763,11 +800,70 @@ func (ts *transportSelector) SelectECF(size int) int {
 	if len(ts.ecfLegs) == 0 {
 		return ts.scheduleIndexLocked()
 	}
+	ts.drainInflightLocked()
 
-	// Drain inflight by rate*elapsed since the last pick. Because the leg
-	// transports are reliable, a frame put on leg i is delivered ~rttᵢ later;
-	// draining at the leg's send rate approximates that clearance without a
-	// per-frame ack signal (skywire has no per-leg ack attribution).
+	idx := ecfPick(ts.ecfLegs, ts.ecfWaiting, &ts.ecfWaiting)
+	if idx < 0 {
+		return ts.scheduleIndexLocked()
+	}
+	ts.chargeInflightLocked(idx, size)
+	return idx
+}
+
+// SelectOTIAS returns the leg index for the next DATA frame under the OTIAS
+// scheduler (WeightModeOTIAS): the ready leg whose estimated ARRIVAL time is
+// soonest (queueing + one-way delay), computed from the same ecfLegState the
+// mux refreshes. Drains the in-flight estimate for the elapsed gap, runs
+// otiasPick, and charges the chosen leg. Falls back to the schedule when there
+// is no estimator state yet or no leg is ready. Takes the write lock because it
+// mutates in-flight state (per-route-group picks are already serialized by the
+// caller's rg.mu, so it only contends with the periodic SetECFState refresh).
+func (ts *transportSelector) SelectOTIAS(size int) int {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	if len(ts.ecfLegs) == 0 {
+		return ts.scheduleIndexLocked()
+	}
+	ts.drainInflightLocked()
+
+	idx := otiasPick(ts.ecfLegs)
+	if idx < 0 {
+		return ts.scheduleIndexLocked()
+	}
+	ts.chargeInflightLocked(idx, size)
+	return idx
+}
+
+// SelectSTMS returns the leg index for the next DATA frame under the STMS
+// scheduler (WeightModeSTMS): the fast leg while its BDP send window has room
+// (head of the stream on the fast path), else the soonest-arriving slower leg
+// with window room (later data slides onto the slow path to converge in order).
+// Same drain/charge accounting as SelectECF/SelectOTIAS; falls back to the
+// schedule when there is no estimator state yet or no leg is ready.
+func (ts *transportSelector) SelectSTMS(size int) int {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	if len(ts.ecfLegs) == 0 {
+		return ts.scheduleIndexLocked()
+	}
+	ts.drainInflightLocked()
+
+	idx := stmsPick(ts.ecfLegs)
+	if idx < 0 {
+		return ts.scheduleIndexLocked()
+	}
+	ts.chargeInflightLocked(idx, size)
+	return idx
+}
+
+// drainInflightLocked drains each leg's in-flight byte estimate by rate*elapsed
+// since the previous predictive pick, then stamps the clock. Shared by the
+// ECF/OTIAS/STMS schedulers: skywire has no per-leg ACK attribution, so a frame
+// put on a reliable leg is modeled as clearing at that leg's send rate (it is
+// delivered ~RTT later). Caller holds ts.mu.
+func (ts *transportSelector) drainInflightLocked() {
 	now := time.Now().UnixNano()
 	if ts.ecfLastNano != 0 {
 		dt := float64(now-ts.ecfLastNano) / float64(time.Second)
@@ -781,16 +877,16 @@ func (ts *transportSelector) SelectECF(size int) int {
 		}
 	}
 	ts.ecfLastNano = now
+}
 
-	idx := ecfPick(ts.ecfLegs, ts.ecfWaiting, &ts.ecfWaiting)
-	if idx < 0 {
-		return ts.scheduleIndexLocked()
-	}
+// chargeInflightLocked adds this frame's bytes to leg idx's in-flight estimate
+// (the amount later picks reason about draining). A non-positive size is charged
+// the defensive default. Caller holds ts.mu.
+func (ts *transportSelector) chargeInflightLocked(idx, size int) {
 	if size <= 0 {
 		size = ecfDefaultFrameBytes
 	}
 	ts.ecfLegs[idx].inflightBytes += float64(size)
-	return idx
 }
 
 // scheduleIndexLocked returns the next schedule-based leg index. Caller holds

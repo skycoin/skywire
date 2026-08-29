@@ -386,7 +386,9 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 			WeightModeSticky5Tuple,
 			WeightModeLatencyAdaptive,
 			WeightModeDSCPPriority,
-			WeightModeECF:
+			WeightModeECF,
+			WeightModeOTIAS,
+			WeightModeSTMS:
 			idx := m.tpSelector.SelectForPayload(payload)
 			if idx < len(tps) {
 				tp := tps[idx]
@@ -1214,7 +1216,12 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 	// transport latency (tp.GetLatency(), ms) — the end-to-end route latency
 	// would be more accurate but is not reachable from the mux; noted as a
 	// follow-up. Jitter is an EWMA of |RTT-mean|, the ECF sigma margin.
-	if m.tpSelector.Mode() == WeightModeECF {
+	//
+	// OTIAS and STMS reason over the SAME ecfLegState snapshot (rate + RTT +
+	// jitter + BDP + the selector-tracked in-flight estimate), so this one
+	// branch feeds all three predictive schedulers; only the per-frame pick in
+	// the selector differs (ecfPick vs otiasPick vs stmsPick).
+	if m.tpSelector.Mode().isPredictive() {
 		m.legMu.Lock()
 		now := time.Now().UnixNano()
 		var elapsed float64

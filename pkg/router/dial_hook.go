@@ -265,6 +265,18 @@ const (
 	// is the mode that actually aggregates across heterogeneous legs
 	// without paying the slow-leg HoL cost. Per-packet, O(legs).
 	DistributionECF
+	// DistributionOTIAS is the Out-of-order Transmission for In-order
+	// Arrival scheduler (router.WeightModeOTIAS). It reuses ECF's per-leg
+	// estimators but assigns each frame to the leg whose estimated ARRIVAL
+	// (backlog drain time + one-way delay) is soonest, deliberately handing
+	// later frames to slower-but-idle legs; the reorder buffer restores order.
+	DistributionOTIAS
+	// DistributionSTMS is the Slide Together Multipath Scheduler
+	// (router.WeightModeSTMS). It keeps the head of the stream on the fast
+	// leg (filling its send window first) and slides later data onto the
+	// soonest-arriving slower leg so pieces converge in order — without ECF's
+	// hold-back decline once a leg is in the active set.
+	DistributionSTMS
 )
 
 // LegChangeHook is an optional hook fired by the route group
@@ -405,6 +417,12 @@ func (m DistributionMode) String() string {
 		return "dscp-priority"
 	case DistributionCapacity:
 		return "capacity"
+	case DistributionECF:
+		return "ecf"
+	case DistributionOTIAS:
+		return "otias"
+	case DistributionSTMS:
+		return "stms"
 	}
 	return "unknown"
 }
