@@ -102,14 +102,33 @@ type Hop struct {
 // wire change. Keep additions additive.
 type Snapshot struct {
 	Surface    Surface
-	App        string   // underlying app/logger name (dmsgweb / skynetweb / skysocks-client)
-	Running    bool     // whether the surface's process/runtime is currently alive
-	MuxEnabled bool     // route group has multiplexing enabled
-	Legs       []Leg    // current per-leg mux state (empty when no active route group)
-	Logs       []string // recent log lines, oldest first
-	Events     []string // route/transport events affecting this surface, oldest first
-	Streams    []Stream // per-stream detail for the open session (skysocks tunnel), when tracked
-	Note       string   // optional human note (e.g. why a section is empty)
+	App        string // underlying app/logger name (dmsgweb / skynetweb / skysocks-client)
+	Running    bool   // whether the surface's process/runtime is currently alive
+	MuxEnabled bool   // route group has multiplexing enabled
+	Legs       []Leg  // current per-leg mux state (empty when no active route group)
+	// Tunnels is the STREAM-level view: one entry per active route group (a
+	// --tunnels stream), each carrying its own PACKET-level mux Legs. The two
+	// levels of route multiplexing are stream (tunnels, disjoint route groups)
+	// over packet (mux legs striping within a group). When populated the route
+	// tree nests tunnel → legs; when empty the tree falls back to the flat Legs
+	// list above (a caller that only projects a single route group). Legs mirrors
+	// Tunnels[0].Legs for back-compat.
+	Tunnels []Tunnel
+	Logs    []string // recent log lines, oldest first
+	Events  []string // route/transport events affecting this surface, oldest first
+	Streams []Stream // per-stream detail for the open session (skysocks tunnel), when tracked
+	Note    string   // optional human note (e.g. why a section is empty)
+}
+
+// Tunnel is one STREAM-level route group — a single --tunnels stream to the exit,
+// carrying its own PACKET-level mux Legs. With --tunnels N there are N tunnels,
+// each auto-steered onto a disjoint first-hop transport; with a single tunnel
+// there is one entry whose Legs are the mux's packet-striped routes.
+type Tunnel struct {
+	Index      int    // tunnel index in dial order (0-based)
+	ExitPK     string // destination exit PK (full, never truncated); same across tunnels
+	MuxEnabled bool   // this tunnel's route group has packet-level mux enabled
+	Legs       []Leg  // this tunnel's packet-level mux legs
 }
 
 // Stream is one open tunneled stream on the surface's session to the exit — the
