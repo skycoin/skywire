@@ -77,34 +77,39 @@ const (
 // is nil-safe to render (bitree.Render handles a childless root).
 //
 // The two multiplexing LAYERS stack: STREAM level (--tunnels, disjoint route
-// groups) over PACKET level (the mux legs striping one stream's packets). With
-// MORE THAN ONE stream the tree makes both legible — each stream gets a
-// stream-boundary header node on the spine followed by its own legs, and every
-// leg summary carries that stream's accent band — so which legs belong to which
-// stream is instantly clear instead of one flat, indistinguishable leg list.
-// With a single stream (or the flat Legs fallback) there is nothing to
-// distinguish, so the legs render clean with no stream chrome.
+// groups) over PACKET level (the mux legs striping one stream's packets). Every
+// stream gets a stream-boundary header node on the spine followed by its own
+// legs. CRUCIALLY the legs are SIBLING spine routes of the header (top-level),
+// not children nested under it — bitree draws the rich left annotation block
+// (R[n], ●/○ state, route-rtt, per-direction ↑/↓ bandwidth + rate + share bars)
+// ONLY for top-level spine routes, so nesting the legs would drop every leg's
+// summary (the #4313 regression this restores).
+//
+// With MORE THAN ONE stream each leg summary additionally carries that stream's
+// accent band ("▏sN") so which leg belongs to which stream is legible. With a
+// single stream there is nothing to distinguish, so the legs render UNBANDED —
+// the tree reads essentially like the original flat per-leg tree, plus a thin
+// "stream 0 · N legs" header. The per-leg summaries are always present.
 func RouteTree(snap Snapshot) *bitree.Node {
 	root := &bitree.Node{Label: treeSrc(snap)}
-	// Multi-stream: one stream-boundary header per tunnel, then that tunnel's legs
-	// (each summary banded with the stream accent) as sibling spine routes. Legs
-	// stay top-level so their rich left summary (R[n], ●/○ state, route-rtt,
-	// per-direction bandwidth + share bars) renders — bitree draws a left
-	// annotation block only for top-level routes.
-	if len(snap.Tunnels) > 1 {
+	// One stream-boundary header per tunnel, then that tunnel's legs as SIBLING
+	// spine routes (top-level, so their rich left summary renders). Legs are
+	// banded with the stream accent only when there is more than one stream to
+	// tell apart; a lone stream renders its legs clean.
+	if len(snap.Tunnels) >= 1 {
+		multi := len(snap.Tunnels) > 1
 		for _, t := range snap.Tunnels {
-			legNodes := legNodesForStream(t.Legs, t.Index)
+			streamIdx := -1 // unbanded: a single stream has nothing to distinguish
+			if multi {
+				streamIdx = t.Index
+			}
+			legNodes := legNodesForStream(t.Legs, streamIdx)
 			if len(legNodes) == 0 {
 				continue
 			}
 			root.Right = append(root.Right, streamHeaderNode(t, len(legNodes)))
 			root.Right = append(root.Right, legNodes...)
 		}
-		return root
-	}
-	// Single stream: render its legs flat, with no per-stream chrome.
-	if len(snap.Tunnels) == 1 {
-		root.Right = legNodesFor(snap.Tunnels[0].Legs)
 		return root
 	}
 	// Flat fallback: a caller that projects a single route group (Tunnels unset).

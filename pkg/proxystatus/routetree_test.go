@@ -51,12 +51,21 @@ func TestRouteTreeTwoLevel(t *testing.T) {
 		t.Errorf("stream-1 leg summary missing its band: %q", root.Right[4].Left[0].Label)
 	}
 
-	// Single stream → no stream chrome: legs hang directly off root, unbanded.
+	// Single stream → a thin stream header, then its legs as SIBLING top-level
+	// spine routes (so their rich left summary renders), UNBANDED (nothing to tell
+	// apart with one stream). This is the #4313 regression fix: a lone stream must
+	// still show every leg's R[n] / bandwidth / branches, not just a bare header.
 	one := RouteTree(Snapshot{Tunnels: []Tunnel{{Index: 0, Legs: []Leg{leg(0, true), leg(1, false)}}}})
-	if len(one.Right) != 2 {
-		t.Fatalf("single stream: root has %d children, want 2 legs", len(one.Right))
+	if len(one.Right) != 3 {
+		t.Fatalf("single stream: root has %d children, want 3 (1 header + 2 legs)", len(one.Right))
 	}
-	if strings.Contains(one.Right[0].Left[0].Label, StreamBandGlyph) {
+	if !strings.HasPrefix(one.Right[0].Label, StreamHeaderGlyph) {
+		t.Error("single-stream: first spine child should be the stream header")
+	}
+	if len(one.Right[1].Left) == 0 || len(one.Right[2].Left) == 0 {
+		t.Error("single-stream legs must be top-level with a left summary (R[n]/bandwidth)")
+	}
+	if strings.Contains(one.Right[1].Left[0].Label, StreamBandGlyph) {
 		t.Error("single-stream leg should not be banded")
 	}
 
