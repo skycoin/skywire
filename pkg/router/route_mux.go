@@ -361,14 +361,16 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 	}
 
 	// Unidirectional send selection (CapUniDir).
-	// DIRECTION — not the send-side standby flag — governs which legs carry this
-	// end's traffic. A reverse (mux) leg is standby on the INITIATOR's send side
-	// (it doesn't upload on it), yet the EXIT must send the download on it; the old
-	// standby-gated filter (legReadyAt excludes standby) found no ready reverse leg
-	// on the exit and fell back to the active direct leg, landing the whole
-	// download on the wrong direction. So select among direction-matching legs with
-	// readiness that IGNORES standby (selectByDirection); fall through to the
-	// standard, standby-aware path only when no direction-matching leg is available.
+	// DIRECTION governs which CLASS of leg (direct vs multihop) carries this end's
+	// traffic; WITHIN the class the initiator-mirrored ACTIVE set governs which
+	// legs. selectByDirection is two-tier: it prefers active (standby-aware)
+	// direction-matching legs — so the exit's download fan-out stays bounded to the
+	// few reverse legs the initiator parked active, instead of spraying every
+	// warm-standby reverse leg (which over-subscribes the no-skip reorder frontier,
+	// amplifies retransmits, and wedges the group → the observed collapse-to-0).
+	// Only when NO active leg of the wanted direction exists does it fall back to a
+	// standby leg of that direction (Tier 2), preserving confinement without the
+	// wrong-direction fallback that landed the whole download on the direct leg.
 	if directional, wantDirect, dstPK, srcPK := m.dirConfig(); directional {
 		if tp, rule, idx, ok := m.selectByDirection(tps, fwd, wantDirect, dstPK, srcPK); ok {
 			return tp, rule, idx, nil
