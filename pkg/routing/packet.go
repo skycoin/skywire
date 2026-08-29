@@ -211,6 +211,17 @@ const (
 	// head-of-line stall). A peer without this bit never receives one and keeps the
 	// prior send-side-only standby behavior.
 	CapLegState uint16 = 1 << 6
+	// CapUniDir: the peer supports UNIDIRECTIONAL per-leg send selection. When BOTH
+	// edges advertise it (and CapMux), each end restricts its OWN send to legs
+	// matching its direction — the initiator (upload/forward) sends on the DIRECT
+	// (1-hop) leg, the acceptor (download/reverse) sends on the MULTIHOP mux legs —
+	// so the light direction rides the low-latency direct transport and the heavy
+	// direction aggregates over the mux, instead of both directions striping every
+	// leg. Each end decides locally from its role + leg directness (no per-packet
+	// signaling); the assignment can later be FLIPPED (heavy direction gets the
+	// mux) via LegState-style coordination. A peer without the bit keeps striping
+	// every leg both ways.
+	CapUniDir uint16 = 1 << 7
 )
 
 // SeqSize is the byte size of the sequence number prepended to DataPacket
