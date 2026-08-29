@@ -36,6 +36,58 @@ interface RouteGroupInfo {
   hops?: RouteGroupHop[];
 }
 
+// Per-leg mux view of a route group, as exposed by the visor's
+// /route-mux endpoint (pkg/visor/rpc.go MuxRouteGroupInfo →
+// MuxLegInfo → MuxHopInfo). This is the richer telemetry the
+// status.skysocks route tree renders; the Routing tab's "Mux tree"
+// view reuses it. Only fields the UI reads are declared strongly;
+// unknown backend additions are tolerated.
+interface MuxHopInfo {
+  tp_id?: string;
+  from?: string;
+  to?: string;
+  tp_type?: string;
+  latency_ms?: number;
+}
+interface MuxLegInfo {
+  index?: number;
+  transport_id?: string;
+  tp_type?: string;
+  remote_pk?: string;
+  latency_ms?: number;        // first-hop transport RTT
+  route_latency_ms?: number;  // end-to-end route RTT
+  direct?: boolean;
+  sent_bytes?: number;
+  recv_bytes?: number;
+  retransmits?: number;
+  goodput_up_bps?: number;
+  goodput_down_bps?: number;
+  alive?: boolean;
+  standby?: boolean;
+  hops?: MuxHopInfo[];
+}
+interface MuxRouteGroupInfo {
+  desc?: {
+    src_pk?: string;
+    dst_pk?: string;
+    src_port?: number;
+    dst_port?: number;
+  };
+  mux_enabled?: boolean;
+  sack_enabled?: boolean;
+  per_frame_noise?: boolean;
+  distribution?: string;
+  agg_sent_bytes?: number;
+  agg_recv_bytes?: number;
+  agg_goodput_up_bps?: number;
+  agg_goodput_down_bps?: number;
+  fec_enabled?: boolean;
+  fec_repair_bytes_sent?: number;
+  fec_repair_bytes_recv?: number;
+  fec_reconstructs?: number;
+  legs?: MuxLegInfo[];
+}
+
 // Route find/calc result shape (one entry per discovered path).
 interface RouteFindHop {
   tp_id?: string;
@@ -51,7 +103,7 @@ interface RouteFindResp {
   routes?: RouteFindEntry[];
 }
 
-type RoutingView = 'rules' | 'groups' | 'find' | 'calc' | 'policies';
+type RoutingView = 'rules' | 'groups' | 'mux' | 'find' | 'calc' | 'policies';
 
 // Routing-policy summary shape returned by
 // /visors/{pk}/routing-policies — mirrors
@@ -98,6 +150,14 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   routeGroupsLoading = false;
   routeGroupsError: string | null = null;
 
+  // Mux-tree view state — the per-leg route-group tree (status.skysocks
+  // style). App selects which app's route groups to inspect; the
+  // backend defaults to skysocks-client when empty.
+  muxApp = 'skysocks-client';
+  muxGroups: MuxRouteGroupInfo[] = [];
+  muxLoading = false;
+  muxError: string | null = null;
+
   // Route-find form state
   findDstPk = '';
   findMinHops = 1;
@@ -124,6 +184,7 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   private trafficSubscription!: Subscription;
   private saveRouterSubscription!: Subscription;
   private groupsSubscription!: Subscription;
+  private muxSubscription!: Subscription;
   private policiesSubscription!: Subscription;
 
   constructor(
@@ -162,6 +223,7 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     this.trafficSubscription?.unsubscribe();
     this.saveRouterSubscription?.unsubscribe();
     this.groupsSubscription?.unsubscribe();
+    this.muxSubscription?.unsubscribe();
     this.policiesSubscription?.unsubscribe();
   }
 
@@ -172,6 +234,9 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     this.activeView = v;
     if (v === 'groups' && !this.groupsSubscription) {
       this.startGroupsPolling();
+    }
+    if (v === 'mux' && !this.muxSubscription) {
+      this.startMuxPolling();
     }
     if (v === 'policies' && !this.policiesSubscription) {
       this.startPoliciesPolling();
@@ -260,6 +325,149 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
       this.changeDetectorRef.markForCheck();
     });
     this.routeGroupsLoading = true;
+  }
+
+  // Mux-tree polling. Per-leg goodput/latency are live figures, so a
+  // 3s cadence keeps the rate meters feeling real without hammering
+  // the RPC. Re-fetches the currently-selected app's route groups.
+  private startMuxPolling() {
+    if (!this.nodePK) {
+ return;
+}
+    this.muxSubscription = interval(3000).pipe(
+      startWith(0),
+      switchMap(() => this.routeService.routeMux(this.nodePK, this.muxApp).pipe(
+        catchError((err) => {
+          this.muxError = err?.message || 'Failed to fetch mux route groups';
+          this.muxLoading = false;
+
+          return of(null);
+        }),
+      )),
+    ).subscribe((groups: any) => {
+      if (groups == null) {
+ return;
+}
+      this.muxError = null;
+      this.muxLoading = false;
+      this.muxGroups = Array.isArray(groups) ? groups : [];
+      this.changeDetectorRef.markForCheck();
+    });
+    this.muxLoading = true;
+  }
+
+  // Restart the mux poll against a different app (from the app input).
+  reloadMux() {
+    this.muxSubscription?.unsubscribe();
+    this.muxSubscription = undefined as any;
+    this.muxGroups = [];
+    this.muxError = null;
+    this.startMuxPolling();
+  }
+
+  // ---- Mux-tree formatting helpers (mirror pkg/proxystatus's
+  // compactBytes / compactRate / routeRTTCompact so the Angular tree
+  // reads like the CLI/status.skysocks tree). ----
+
+  // Human-readable byte count (1.5M, 820K, 42B).
+  fmtBytes(n?: number): string {
+    if (!n || n < 0) {
+ return '0';
+}
+    if (n >= 1024 * 1024 * 1024) {
+ return (n / (1024 * 1024 * 1024)).toFixed(1) + 'G';
+}
+    if (n >= 1024 * 1024) {
+ return (n / (1024 * 1024)).toFixed(1) + 'M';
+}
+    if (n >= 1024) {
+ return (n / 1024).toFixed(1) + 'K';
+}
+
+    return n + 'B';
+  }
+
+  // Human-readable live rate (8.1K/s). Bits-per-second in, bytes out —
+  // the backend already reports goodput in bytes/sec despite the _bps
+  // suffix (see pkg/router MuxStats), so treat the number as bytes/s.
+  fmtRate(bps?: number): string {
+    if (!bps || bps <= 0) {
+ return '0/s';
+}
+
+    return this.fmtBytes(bps) + '/s';
+  }
+
+  // Compact RTT: 143ms, or 1.2s past a second; blank glyph when unknown.
+  fmtRtt(ms?: number): string {
+    if (ms == null || ms < 0) {
+ return '–';
+}
+    if (ms >= 1000) {
+ return (ms / 1000).toFixed(1) + 's';
+}
+
+    return Math.round(ms) + 'ms';
+  }
+
+  // This leg's share (0..1) of the group's aggregate up-goodput — the
+  // width of the share bar, mirroring status.skysocks's shareBar.
+  legUpShare(group: MuxRouteGroupInfo, leg: MuxLegInfo): number {
+    const agg = group.agg_goodput_up_bps || 0;
+    if (agg <= 0) {
+ return 0;
+}
+    const share = (leg.goodput_up_bps || 0) / agg;
+
+    return share < 0 ? 0 : (share > 1 ? 1 : share);
+  }
+
+  // Percentage string for the share bar width.
+  legUpSharePct(group: MuxRouteGroupInfo, leg: MuxLegInfo): string {
+    return (this.legUpShare(group, leg) * 100).toFixed(0) + '%';
+  }
+
+  // Order legs like the status.skysocks tree: alive before standby,
+  // then direct before multihop, then by index. Dead (non-alive,
+  // non-standby) legs sink to the bottom rather than being hidden, so
+  // the operator can still see a leg that just died.
+  sortedLegs(group: MuxRouteGroupInfo): MuxLegInfo[] {
+    const legs = (group.legs || []).slice();
+    const rank = (l: MuxLegInfo): number => {
+      if (l.alive && l.direct) {
+ return 0;
+}
+      if (l.alive) {
+ return 1;
+}
+      if (l.standby) {
+ return 2;
+}
+
+      return 3;
+    };
+    legs.sort((a, b) => {
+      const ra = rank(a), rb = rank(b);
+      if (ra !== rb) {
+ return ra - rb;
+}
+
+      return (a.index || 0) - (b.index || 0);
+    });
+
+    return legs;
+  }
+
+  // Human role label for a leg's gate state (colours it in the template).
+  legState(l: MuxLegInfo): 'alive' | 'standby' | 'dead' {
+    if (l.alive) {
+ return 'alive';
+}
+    if (l.standby) {
+ return 'standby';
+}
+
+    return 'dead';
   }
 
   // Routing-policy snapshot rarely changes (only on config edit

@@ -48,6 +48,11 @@
     {{ 'routing.view.groups' | translate }}
   </button>
   <button mat-button
+          [class.active]="activeView === 'mux'"
+          (click)="setView('mux')">
+    {{ 'routing.view.mux' | translate }}
+  </button>
+  <button mat-button
           [class.active]="activeView === 'find'"
           (click)="setView('find')">
     {{ 'routing.view.find' | translate }}
@@ -235,6 +240,149 @@
             </tr>
           }
         </table>
+      }
+    </div>
+  </div>
+}
+
+@if (activeView === 'mux') {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container">
+      <div class="mux-head">
+        <span class="section-title">{{ 'routing.mux.title' | translate }}</span>
+        <span class="mux-app-picker">
+          <span class="control-label dim">{{ 'routing.mux.app' | translate }}</span>
+          <input matInput class="route-input-app"
+                 [(ngModel)]="muxApp"
+                 (keyup.enter)="reloadMux()"
+                 spellcheck="false" autocomplete="off" />
+          <button mat-button class="mux-reload" (click)="reloadMux()">
+            {{ 'routing.mux.reload' | translate }}
+          </button>
+        </span>
+      </div>
+      <p class="section-desc">{{ 'routing.mux.help' | translate }}</p>
+
+      @if (muxLoading && muxGroups.length === 0) {
+        <div class="loading-row">
+          <mat-spinner [diameter]="16"></mat-spinner>
+          <span class="ml-2">{{ 'routing.mux.loading' | translate }}</span>
+        </div>
+      }
+
+      @if (muxError) {
+        <div class="error-row">{{ muxError }}</div>
+      }
+
+      @if (!muxLoading && muxGroups.length === 0 && !muxError) {
+        <div class="empty-row">{{ 'routing.mux.empty' | translate }}</div>
+      }
+
+      @for (g of muxGroups; track $index) {
+        <div class="mux-group">
+          <!-- Group header: descriptor, distribution mode + capability
+               badges, and aggregate up/down goodput. -->
+          <div class="mux-group-head">
+            <span class="mux-src mono">{{ g.desc?.src_pk || '-' }}</span>
+            <span class="mux-port mono">:{{ g.desc?.src_port }}</span>
+            <span class="mux-flow">→</span>
+            <span class="mux-dst mono">{{ g.desc?.dst_pk || '-' }}</span>
+            <span class="mux-port mono">:{{ g.desc?.dst_port }}</span>
+            <span class="mux-spacer"></span>
+            @if (g.mux_enabled) {
+              <span class="mux-badge on">{{ 'routing.mux.badge-mux' | translate }}</span>
+            } @else {
+              <span class="mux-badge off">{{ 'routing.mux.badge-single' | translate }}</span>
+            }
+            @if (g.distribution) {
+              <span class="mux-badge dist">{{ g.distribution }}</span>
+            }
+            @if (g.sack_enabled) {
+              <span class="mux-badge cap">sack</span>
+            }
+            @if (g.per_frame_noise) {
+              <span class="mux-badge cap">pfn</span>
+            }
+            @if (g.fec_enabled) {
+              <span class="mux-badge fec">fec</span>
+            }
+          </div>
+
+          <div class="mux-group-agg">
+            <span class="agg-up">↑ {{ fmtRate(g.agg_goodput_up_bps) }}</span>
+            <span class="agg-sep">·</span>
+            <span class="agg-bytes">{{ fmtBytes(g.agg_sent_bytes) }}</span>
+            <span class="agg-gap"></span>
+            <span class="agg-down">↓ {{ fmtRate(g.agg_goodput_down_bps) }}</span>
+            <span class="agg-sep">·</span>
+            <span class="agg-bytes">{{ fmtBytes(g.agg_recv_bytes) }}</span>
+            @if (g.fec_enabled) {
+              <span class="agg-gap"></span>
+              <span class="agg-fec" [title]="'routing.mux.fec-title' | translate">
+                fec repair ↑{{ fmtBytes(g.fec_repair_bytes_sent) }}
+                ↓{{ fmtBytes(g.fec_repair_bytes_recv) }} ·
+                {{ g.fec_reconstructs || 0 }} {{ 'routing.mux.reconstructs' | translate }}
+              </span>
+            }
+          </div>
+
+          <!-- Legs: one row per route (leg), highest-priority first.
+               Each shows its state glyph, route RTT, up/down goodput,
+               a share bar (fraction of the group's up-goodput), and an
+               indented hop chain. -->
+          @for (leg of sortedLegs(g); track leg.index) {
+            <div class="mux-leg" [attr.data-state]="legState(leg)">
+              <div class="mux-leg-line">
+                <span class="leg-glyph" [class]="'st-' + legState(leg)">
+                  {{ legState(leg) === 'standby' ? '○' : '●' }}
+                </span>
+                <span class="leg-id">R{{ leg.index }}</span>
+                @if (leg.direct) {
+                  <span class="leg-tag">{{ 'routing.mux.direct' | translate }}</span>
+                }
+                <span class="leg-rtt" [title]="'routing.mux.route-rtt' | translate">
+                  {{ fmtRtt(leg.route_latency_ms) }}
+                </span>
+                <span class="leg-metric up">↑ {{ fmtRate(leg.goodput_up_bps) }}</span>
+                <span class="leg-share">
+                  <span class="leg-share-bar" [style.width]="legUpSharePct(g, leg)"></span>
+                </span>
+                <span class="leg-metric down">↓ {{ fmtRate(leg.goodput_down_bps) }}</span>
+                @if (leg.retransmits) {
+                  <span class="leg-retx" [title]="'routing.mux.retx' | translate">
+                    ⟳{{ leg.retransmits }}
+                  </span>
+                }
+              </div>
+              <!-- Hop chain for this leg (full PKs, never truncated). -->
+              <div class="mux-hops">
+                @for (h of leg.hops; track $index) {
+                  <div class="mux-hop">
+                    <span class="hop-connector">{{ $last ? '└─' : '├─' }}</span>
+                    <span class="hop-pk mono">{{ h.to }}</span>
+                    @if (h.tp_type) {
+                      <span class="hop-tp-type">[{{ h.tp_type }}]</span>
+                    }
+                    @if (h.tp_id) {
+                      <span class="hop-tp-id mono">{{ h.tp_id }}</span>
+                    }
+                    <span class="hop-rtt">{{ fmtRtt(h.latency_ms) }}</span>
+                  </div>
+                }
+                @if (!leg.hops || leg.hops.length === 0) {
+                  <div class="mux-hop dim">
+                    <span class="hop-connector">└─</span>
+                    <span class="hop-pk mono">{{ leg.remote_pk }}</span>
+                    @if (leg.tp_type) {
+                      <span class="hop-tp-type">[{{ leg.tp_type }}]</span>
+                    }
+                    <span class="hop-rtt">{{ fmtRtt(leg.latency_ms) }}</span>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
       }
     </div>
   </div>

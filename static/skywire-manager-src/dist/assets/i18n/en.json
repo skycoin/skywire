@@ -1281,9 +1281,26 @@
     "view": {
       "rules": "Rules",
       "groups": "Route Groups",
+      "mux": "Mux Tree",
       "find": "Find Route",
       "calc": "Calculate",
       "policies": "Policies"
+    },
+    "mux": {
+      "title": "Mux Route Tree",
+      "help": "Live per-leg view of an app's multipath route groups — each route group's legs, their hops (full PKs), route latency, alive/standby state, up/down goodput with a share bar, and FEC counters. Mirrors the status.skysocks route tree.",
+      "app": "App",
+      "reload": "Load",
+      "loading": "Loading mux route groups…",
+      "empty": "No mux route groups for this app.",
+      "badge-mux": "mux",
+      "badge-single": "single",
+      "direct": "direct",
+      "route-rtt": "End-to-end route RTT",
+      "retx": "Retransmits (SACK / loss signal)",
+      "reconstructs": "reconstructs",
+      "fec-title": "Forward error correction: repair bytes sent/received and packets reconstructed",
+      "no-hops": "no hop detail"
     },
     "policies": {
       "title": "Routing Policies",
