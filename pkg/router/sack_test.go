@@ -2,9 +2,11 @@ package router
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -101,7 +103,7 @@ func TestRetxBuffer_StoreAndPurge(t *testing.T) {
 	assert.Equal(t, 10, rb.Len())
 
 	// SACK: lastContiguous=5, bits 0-3 set = seqs 6,7,8,9 received
-	retx := rb.ProcessSACK(5, []uint64{0xF})
+	retx := rb.ProcessSACK(5, []uint64{0xF}, 0)
 	assert.Empty(t, retx)
 	assert.Equal(t, 0, rb.Len())
 }
@@ -119,7 +121,7 @@ func TestRetxBuffer_RetransmitList(t *testing.T) {
 	}
 
 	// SACK: lastContiguous=2, bitmap=0b1010 (seq 3 missing, 4 received, 5 missing, 6 received)
-	retx := rb.ProcessSACK(2, []uint64{0b1010})
+	retx := rb.ProcessSACK(2, []uint64{0b1010}, 0)
 	assert.Contains(t, retx, uint32(3))
 	assert.Contains(t, retx, uint32(5))
 	assert.NotContains(t, retx, uint32(4))
@@ -169,7 +171,7 @@ func TestRetxBuffer_NoFillBehindPersistentGap(t *testing.T) {
 	last, words := st.GenerateSACK()
 	assert.Equal(t, uint32(0), last)
 
-	rb.ProcessSACK(last, words)
+	rb.ProcessSACK(last, words, 0)
 
 	// seq 1 (the hole) retained for retransmit.
 	assert.NotNil(t, rb.Get(1), "the actual gap must stay retransmittable")
@@ -202,4 +204,45 @@ func TestSACKPacket_EmptyAndTrim(t *testing.T) {
 	// round-trips.
 	p2 := routing.MakeSACKPacket(1, 5, []uint64{0b101, 0, 0})
 	assert.Equal(t, []uint64{0b101}, p2.SACKWords())
+}
+
+// TestRackThreshold verifies the RACK retransmit threshold is derived from the
+// live active-leg RTTs (not the fixed 750ms), tolerates the slowest leg, and is
+// floored/capped. A fast path recovers loss far sooner than the old constant.
+func TestRackThreshold(t *testing.T) {
+	log := logging.NewMasterLogger().PackageLogger("rack-test")
+	m := newRouteMux(log, true)
+
+	// No RTT measured yet → conservative default.
+	if got := m.rackThreshold(); got != rackDefaultNoRTT {
+		t.Fatalf("no-RTT threshold = %v, want %v", got, rackDefaultNoRTT)
+	}
+
+	// Give it 4 active legs with a heterogeneous RTT spread; the threshold must
+	// track the SLOWEST active leg × factor (a frame on any leg should arrive
+	// within the slow leg's RTT + margin), well under the old fixed 750ms.
+	m.growLegs(4)
+	rtts := []float64{205, 260, 311, 441}
+	m.legMu.Lock()
+	for i, r := range rtts {
+		m.legs[i].ecfRttMs = r
+	}
+	m.legMu.Unlock()
+	want := time.Duration(rtts[3]*rackReorderFactor) * time.Millisecond // slowest leg × factor
+	if got := m.rackThreshold(); got != want {
+		t.Fatalf("heterogeneous threshold = %v, want %v (slowest 441ms × %.2f)", got, want, rackReorderFactor)
+	}
+	if got := m.rackThreshold(); got >= retxMinAge {
+		t.Fatalf("RACK threshold %v should beat the fixed retxMinAge %v on this path", got, retxMinAge)
+	}
+
+	// A tiny-RTT fast path floors at rackFloor (anti-storm), not near-zero.
+	m.legMu.Lock()
+	for i := range m.legs {
+		m.legs[i].ecfRttMs = 5
+	}
+	m.legMu.Unlock()
+	if got := m.rackThreshold(); got != rackFloor {
+		t.Fatalf("fast-path threshold = %v, want floor %v", got, rackFloor)
+	}
 }

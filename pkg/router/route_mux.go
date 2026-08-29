@@ -940,7 +940,56 @@ func (m *routeMux) processSACK(lastContig uint32, words []uint64) []uint32 {
 	if !m.sackEnabled || m.retxBuf == nil {
 		return nil
 	}
-	return m.retxBuf.ProcessSACK(lastContig, words)
+	return m.retxBuf.ProcessSACK(lastContig, words, m.rackThreshold())
+}
+
+// RACK-TLP retransmit-threshold bounds (RFC 8985 in spirit). Replaces the fixed
+// 750ms retxMinAge with a value derived from the live per-leg RTTs, so loss on a
+// fast path is recovered in tens of ms instead of always waiting ~750ms, while a
+// genuinely slow leg still isn't declared lost prematurely.
+const (
+	rackReorderFactor = 1.25                    // slow-leg RTT × this = the reordering tolerance
+	rackFloor         = 60 * time.Millisecond   // never retransmit sooner than this (anti-storm)
+	rackCeil          = 1500 * time.Millisecond // never wait longer than this
+	rackDefaultNoRTT  = 300 * time.Millisecond  // before any leg RTT is measured
+)
+
+// rackThreshold computes the current reorder-tolerant retransmit threshold from
+// the live ACTIVE-leg RTTs: a sequence is presumed lost (not merely reordered on
+// a slower leg) once it has been outstanding longer than this. The reordering
+// window on a multi-leg mux IS the inter-leg RTT skew, so we bound the threshold
+// at the SLOWEST active leg's RTT × rackReorderFactor — a frame striped onto any
+// leg should arrive within the slow leg's RTT plus a jitter margin; past that it
+// is lost. Adapts per-SACK to the measured path (RFC 8985's RTT-derived expiry),
+// floored/capped to avoid a self-amplifying early-retransmit storm or an
+// unbounded wait. Falls back to a conservative default until RTTs are known.
+func (m *routeMux) rackThreshold() time.Duration {
+	m.legMu.RLock()
+	maxRtt := 0.0
+	for i, lc := range m.legs {
+		if lc == nil {
+			continue
+		}
+		if i < len(m.standby) && m.standby[i] {
+			continue // active legs only
+		}
+		if lc.ecfRttMs > maxRtt {
+			maxRtt = lc.ecfRttMs
+		}
+	}
+	m.legMu.RUnlock()
+
+	if maxRtt <= 0 {
+		return rackDefaultNoRTT
+	}
+	th := time.Duration(maxRtt*rackReorderFactor) * time.Millisecond
+	if th < rackFloor {
+		th = rackFloor
+	}
+	if th > rackCeil {
+		th = rackCeil
+	}
+	return th
 }
 
 // getRetxPayload retrieves a stored payload for retransmission.
