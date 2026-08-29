@@ -403,7 +403,7 @@ func muxSwitchWaitReady(rpcClient visor.API, newTpID uuid.UUID, timeout time.Dur
 }
 
 var muxModeCmd = &cobra.Command{
-	Use:   "mode <auto|equal|capacity|ecf>",
+	Use:   "mode <auto|equal|capacity|ecf|otias|stms>",
 	Short: "Change mux scheduler weighting at runtime",
 	Long: `Set the mux transport-selection mode for the visor.
 
@@ -427,6 +427,17 @@ var muxModeCmd = &cobra.Command{
              head-of-line-stalls the reorder buffer on them), ECF
              aggregates across heterogeneous legs without paying the
              slow-leg HoL cost.
+  otias    - Out-of-order Transmission for In-order Arrival: assigns
+             each frame to the leg whose ESTIMATED ARRIVAL is soonest
+             (backlog drain time + one-way delay), reusing ECF's per-leg
+             estimators. It will deliberately hand a later frame to a
+             slower-but-idle leg once the fast leg's queue would make it
+             arrive later; the reorder buffer restores stream order.
+  stms     - Slide Together Multipath Scheduler: keeps the head of the
+             stream on the fast leg (fills its send window first) and,
+             once that window is full, places the following data on the
+             soonest-arriving slower leg so the pieces converge in order.
+             Unlike ECF it does not decline a slow leg once it is active.
 
 Affects every active and future mux'd route group on this visor
 IMMEDIATELY (the router re-applies the mode to live route groups). The
@@ -442,9 +453,9 @@ Example:
 	Run: func(cmd *cobra.Command, args []string) {
 		mode := args[0]
 		switch mode {
-		case "auto", "equal", "capacity", "ecf":
+		case "auto", "equal", "capacity", "ecf", "otias", "stms":
 		default:
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("mode must be 'auto', 'equal', 'capacity', or 'ecf', got %q", mode))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("mode must be 'auto', 'equal', 'capacity', 'ecf', 'otias', or 'stms', got %q", mode))
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
