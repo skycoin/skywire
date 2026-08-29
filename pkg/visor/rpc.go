@@ -288,6 +288,12 @@ type MuxRouteGroupInfo struct {
 	MuxEnabled    bool                          `json:"mux_enabled"`
 	SACKEnabled   bool                          `json:"sack_enabled"`
 	PerFrameNoise bool                          `json:"per_frame_noise"`
+	// Directional: unidirectional send selection (CapUniDir) is active — each
+	// direction rides a disjoint leg class. Flipped: the direction->leg-class
+	// mapping is swapped (heavy direction took the mux). With per-leg `direct`,
+	// this tells which class carries which direction without log-grepping.
+	Directional bool `json:"directional,omitempty"`
+	Flipped     bool `json:"flipped,omitempty"`
 	// Distribution names how the mux spreads outbound packets across its legs
 	// (weight mode: "auto", "round-robin", "weighted", "capacity",
 	// "latency-adaptive", "sticky:5tuple", "size-threshold", "dscp-priority").

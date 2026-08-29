@@ -453,6 +453,16 @@ type MuxInfo struct {
 	// inverse-multiplexer path, network.EncryptConn bypassed). False means the
 	// group runs the classic stream-noise wrap.
 	PerFrameNoise bool
+	// Directional is true when unidirectional send selection (CapUniDir) is
+	// active on this mux: each direction rides a disjoint leg class instead of
+	// both striping every leg. Flipped reports the current direction->leg-class
+	// mapping. DEFAULT (Flipped=false): this end sends its FORWARD/upload on the
+	// DIRECT (1-hop) leg and its REVERSE/download on the MULTIHOP mux legs.
+	// FLIPPED=true: the mapping is swapped (the heavy direction took the mux).
+	// With the per-leg Direct flag, a reader can tell which class carries which
+	// direction without log-grepping. Both false on a non-directional mux.
+	Directional bool
+	Flipped     bool
 	// Distribution names how the mux spreads outbound packets across its legs
 	// (the transportSelector weight mode: "auto", "round-robin", "weighted",
 	// "capacity", "latency-adaptive", "sticky:5tuple", "size-threshold",
@@ -535,6 +545,7 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 		info.FECRepairBytesSent = atomic.LoadUint64(&rg.mux.fecRepairBytesSent)
 		info.FECRepairBytesRecv = atomic.LoadUint64(&rg.mux.fecRepairBytesRecv)
 		info.FECReconstructs = atomic.LoadUint64(&rg.mux.fecReconstructs)
+		info.Directional, info.Flipped = rg.mux.dirState()
 	}
 	info.PerFrameNoise = rg.perFrameNoiseActive
 	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
