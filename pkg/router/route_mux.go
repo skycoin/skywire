@@ -123,6 +123,18 @@ type routeMux struct {
 	writeSeq uint32 // atomic: next outgoing sequence number
 	tpIndex  uint32 // atomic: round-robin fallback index for transport selection
 
+	// RACK-TLP tail-loss probe + DSACK reorder-window adaptation (see rack_tlp.go).
+	// lastSendNano stamps the last DATA/retransmit frame put on the wire (the TLP
+	// idle timer reads it). tlpProbeCount is the number of consecutive tail probes
+	// fired since the last ack progress — bounded so a truly dead tail doesn't probe
+	// forever. rackFactorMilli is the DSACK-adapted reorder tolerance ×1000: a
+	// duplicate report from the receiver widens it (we retransmitted too eagerly),
+	// clean acks decay it back toward the static baseline. All atomic.
+	lastSendNano    int64
+	tlpProbeCount   int32
+	rackFactorMilli int64
+	lastAckedContig uint32 // atomic: highest SACK lastContiguous seen (ack-progress edge for TLP reset)
+
 	// lastSACKNano rate-limits receiver-side SACK feedback. Cross-leg
 	// reordering from latency skew makes nearly every packet arrive
 	// out-of-order, so firing a SACK per out-of-order packet would spawn a
@@ -271,6 +283,9 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 		// Proactive HoL retransmit tracker is always constructed; it is only
 		// consulted when holRetxEnabled is set at handshake (see hol_retx.go).
 		holRetx: newHolRetxTracker(),
+		// RACK reorder factor starts at the static baseline; DSACK feedback
+		// widens it and clean acks decay it back (see rack_tlp.go).
+		rackFactorMilli: int64(rackReorderFactor * 1000),
 	}
 	// Default every mux to ECF (Earliest Completion First). It only spills a
 	// frame onto a slower leg once the fastest leg is saturated (a full BDP in
@@ -794,6 +809,10 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte) (routing.Pa
 	// fast leg. Inert unless CapFEC was negotiated.
 	m.fecOnSend(seq, data)
 
+	// Stamp the TLP idle timer: new data just went out, so the tail-loss probe
+	// clock restarts. A probe only fires once this stays quiet for a PTO.
+	atomic.StoreInt64(&m.lastSendNano, time.Now().UnixNano())
+
 	return packet, seq, nil
 }
 
@@ -935,12 +954,24 @@ func (m *routeMux) generateSACK() (lastContig uint32, words []uint64) {
 	return m.sackTracker.GenerateSACK()
 }
 
-// processSACK processes a received SACK and returns sequences that need retransmission.
+// processSACK processes a received SACK and returns sequences that need
+// retransmission. Retained for callers/tests that don't carry the DSACK/ack-edge
+// side effects; the live receive path uses onSACKReceived (see rack_tlp.go).
 func (m *routeMux) processSACK(lastContig uint32, words []uint64) []uint32 {
 	if !m.sackEnabled || m.retxBuf == nil {
 		return nil
 	}
 	return m.retxBuf.ProcessSACK(lastContig, words, m.rackThreshold())
+}
+
+// takeDSACK returns a pending DSACK sequence (a duplicate the receiver saw) to
+// attach to the next outgoing SACK, clearing it so it is reported once. Returns
+// (0, false) when SACK is off or no duplicate is pending.
+func (m *routeMux) takeDSACK() (uint32, bool) {
+	if !m.sackEnabled || m.sackTracker == nil {
+		return 0, false
+	}
+	return m.sackTracker.takeDSACK()
 }
 
 // RACK-TLP retransmit-threshold bounds (RFC 8985 in spirit). Replaces the fixed
@@ -964,7 +995,28 @@ const (
 // floored/capped to avoid a self-amplifying early-retransmit storm or an
 // unbounded wait. Falls back to a conservative default until RTTs are known.
 func (m *routeMux) rackThreshold() time.Duration {
+	maxRtt := m.maxActiveLegRTTms()
+	if maxRtt <= 0 {
+		return rackDefaultNoRTT
+	}
+	th := time.Duration(maxRtt*m.rackFactor()) * time.Millisecond
+	if th < rackFloor {
+		th = rackFloor
+	}
+	if th > rackCeil {
+		th = rackCeil
+	}
+	return th
+}
+
+// maxActiveLegRTTms returns the slowest active (non-standby) leg's EWMA RTT in
+// milliseconds, or 0 when no leg has a measured RTT yet. It is the reordering-
+// window basis: a frame striped onto any active leg should arrive within the
+// slowest leg's RTT plus a margin, so both the RACK loss threshold and the TLP
+// probe timeout are derived from it.
+func (m *routeMux) maxActiveLegRTTms() float64 {
 	m.legMu.RLock()
+	defer m.legMu.RUnlock()
 	maxRtt := 0.0
 	for i, lc := range m.legs {
 		if lc == nil {
@@ -977,19 +1029,7 @@ func (m *routeMux) rackThreshold() time.Duration {
 			maxRtt = lc.ecfRttMs
 		}
 	}
-	m.legMu.RUnlock()
-
-	if maxRtt <= 0 {
-		return rackDefaultNoRTT
-	}
-	th := time.Duration(maxRtt*rackReorderFactor) * time.Millisecond
-	if th < rackFloor {
-		th = rackFloor
-	}
-	if th > rackCeil {
-		th = rackCeil
-	}
-	return th
+	return maxRtt
 }
 
 // getRetxPayload retrieves a stored payload for retransmission.

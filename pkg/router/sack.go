@@ -37,6 +37,14 @@ type sackTracker struct {
 	lastContiguous uint32
 	highest        uint32 // highest sequence ever recorded (0 = none yet)
 	received       map[uint32]bool
+
+	// DSACK (duplicate-SACK, RFC 8985 §7.2): a sequence received AGAIN. On the
+	// mux's reliable, ordered legs a duplicate is almost always the sender's own
+	// spurious retransmit, so we surface the most recent one to the sender in the
+	// next SACK; the sender widens its RACK reorder window in response. dsackSeq
+	// holds it, dsackPending gates a single report (cleared once taken).
+	dsackSeq     uint32
+	dsackPending bool
 }
 
 func newSACKTracker() *sackTracker {
@@ -56,7 +64,19 @@ func (st *sackTracker) RecordReceived(seq uint32) (gapDetected bool) {
 	}
 
 	if seq <= st.lastContiguous {
-		return false // duplicate or old
+		// Already delivered in order, now arriving again → a duplicate. Report it
+		// as a DSACK so the sender learns its retransmit of this seq was spurious.
+		st.dsackSeq = seq
+		st.dsackPending = true
+		return false
+	}
+
+	if st.received[seq] {
+		// Duplicate of a still-buffered out-of-order seq → same DSACK signal. Not
+		// a new gap, so report no gap (the original already opened one).
+		st.dsackSeq = seq
+		st.dsackPending = true
+		return false
 	}
 
 	if seq == st.lastContiguous+1 {
@@ -120,6 +140,19 @@ func (st *sackTracker) GenerateSACK() (lastContiguous uint32, words []uint64) {
 		}
 	}
 	return lastContiguous, words
+}
+
+// takeDSACK returns a pending DSACK sequence (a duplicate the receiver saw) and
+// clears the pending flag, so each duplicate is reported to the sender at most
+// once. Returns (0, false) when no duplicate is pending.
+func (st *sackTracker) takeDSACK() (seq uint32, ok bool) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if !st.dsackPending {
+		return 0, false
+	}
+	st.dsackPending = false
+	return st.dsackSeq, true
 }
 
 // retxEntry holds a sent packet awaiting acknowledgment.
@@ -228,6 +261,27 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 	}
 
 	return retransmit
+}
+
+// MaxSeq returns the highest unacknowledged sequence still held (the in-flight
+// tail) and true, or (0, false) when the buffer is empty. It is the sequence a
+// tail-loss probe re-sends: if the tail of a burst was lost the receiver never
+// reports it (its bitmap ends at the last seq it actually got), so only a
+// sender-driven probe of this seq can elicit the SACK that recovers it.
+func (rb *retxBuffer) MaxSeq() (uint32, bool) {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	if len(rb.entries) == 0 {
+		return 0, false
+	}
+	var max uint32
+	first := true
+	for s := range rb.entries {
+		if first || s > max {
+			max, first = s, false
+		}
+	}
+	return max, true
 }
 
 // Get returns the stored payload for a given sequence number, or nil.

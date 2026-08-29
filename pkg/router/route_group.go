@@ -3169,6 +3169,11 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 				if sack {
 					rg.logger.Debug("SACK retransmission enabled (both peers support CapSACK)")
 					go rg.servicePacketLoop("sack", rg.cfg.KeepAliveInterval/2, rg.sackServiceFn, nil)
+					// Tail-Loss Probe: re-send the in-flight tail after an idle PTO so a
+					// lost burst-tail (which the receiver never reports — its bitmap ends
+					// at the last seq it got) recovers in one PTO instead of stalling until
+					// the retx entry ages out (RFC 8985). Reuses the SACK retransmit path.
+					go rg.servicePacketLoop("tlp", tlpCheckInterval, rg.tlpServiceFn, nil)
 					// Proactive HoL retransmit reuses the SACK channel, so it is only
 					// enabled when SACK is too. Both peers must advertise CapHOLRetx;
 					// otherwise the group keeps the reactive SACK behavior.
@@ -3446,7 +3451,16 @@ func (rg *RouteGroup) sendSACK() error {
 	}
 
 	lastContig, words := rg.mux.generateSACK()
-	packet := routing.MakeSACKPacket(rule.NextRouteID(), lastContig, words)
+	// Attach a DSACK (duplicate-SACK) when the receiver saw a repeated sequence,
+	// so the sender can widen its RACK reorder window (it retransmitted too
+	// eagerly). Backward compatible: a peer without the field reads only the
+	// bitmap. No duplicate pending → a plain SACK, unchanged from before.
+	var packet routing.Packet
+	if dsackSeq, ok := rg.mux.takeDSACK(); ok {
+		packet = routing.MakeSACKPacketWithDSACK(rule.NextRouteID(), lastContig, words, dsackSeq)
+	} else {
+		packet = routing.MakeSACKPacket(rule.NextRouteID(), lastContig, words)
+	}
 	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
 }
 
@@ -3458,9 +3472,12 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 
 	lastContig := packet.SACKLastContiguousSeq()
 	words := packet.SACKWords()
+	dsackSeq, hasDSACK := packet.SACKDSACK()
 
-	// Normal reactive retransmit: holes overdue past retxMinAge.
-	retxSeqs := rg.mux.processSACK(lastContig, words)
+	// Normal reactive retransmit: holes overdue past the RACK threshold. Also
+	// advances the ack-progress edge (resets the TLP probe budget) and adapts the
+	// reorder factor from the DSACK signal (widen on a duplicate, decay otherwise).
+	retxSeqs := rg.mux.onSACKReceived(lastContig, words, dsackSeq, hasDSACK)
 
 	// Proactive HoL retransmit (CapHOLRetx): the frontier-blocking seq (and the
 	// next few contiguous holes) retransmitted NOW on the fastest leg, bypassing
@@ -3553,6 +3570,9 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 			// retx selector picks fresh, mirroring the data path).
 			rg.mux.recordSent(leg, uint64(retxPacket.Size()))
 			rg.mux.recordRetransmit(leg) // separate loss signal for leg health
+			// A frame just went out (incl. a TLP probe) — restart the TLP idle
+			// timer so the next probe waits a fresh PTO rather than back-to-back.
+			atomic.StoreInt64(&rg.mux.lastSendNano, time.Now().UnixNano())
 		}
 	}
 	return nil
@@ -3565,6 +3585,26 @@ func (rg *RouteGroup) sackServiceFn(_ time.Duration) {
 	}
 	if err := rg.sendSACK(); err != nil {
 		rg.logger.WithError(err).Warn("Failed to send periodic SACK")
+	}
+}
+
+// tlpServiceFn is the tail-loss probe, run as a service loop. On each tick it asks
+// the mux whether a probe is due (idle ≥ PTO with unacked data and probe budget
+// left); if so it re-sends the in-flight tail sequence on the fastest live leg via
+// the shared retransmit path. The probe either fills a lost tail or draws a SACK
+// that reports the gap, unblocking normal recovery. A no-op whenever data is
+// flowing (the idle timer keeps resetting) or nothing is outstanding.
+func (rg *RouteGroup) tlpServiceFn(_ time.Duration) {
+	if rg.mux == nil || !rg.mux.sackEnabled {
+		return
+	}
+	seq, due := rg.mux.tlpProbeSeq(time.Now())
+	if !due {
+		return
+	}
+	rg.logger.Debugf("TLP: probing tail seq=%d after idle PTO", seq)
+	if err := rg.resendSeqs([]uint32{seq}); err != nil {
+		rg.logger.WithError(err).Debug("TLP: tail probe send failed")
 	}
 }
 
