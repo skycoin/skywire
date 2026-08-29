@@ -92,7 +92,7 @@ func TestFECMuxUpToRErasures(t *testing.T) {
 		for _, rf := range repairs {
 			rt.RecordRepair(rf.blockID, rf.idx, rf.symLen, rf.symbol)
 		}
-		got, ok := rt.Reconstruct(uint32(target))
+		got, ok := rt.Reconstruct(uint32(target)) //nolint:gosec // target ranges over the literal drop set above
 		if !ok {
 			t.Fatalf("seq %d: reconstruction failed with R repairs for R erasures", target)
 		}
@@ -117,7 +117,7 @@ func TestFECMuxUpToRErasures(t *testing.T) {
 		reMulti.RecordRepair(rf.blockID, rf.idx, rf.symLen, rf.symbol)
 	}
 	for target := range drop {
-		got, ok := reMulti.Reconstruct(uint32(target))
+		got, ok := reMulti.Reconstruct(uint32(target)) //nolint:gosec // target ranges over the literal drop set above
 		if !ok {
 			t.Fatalf("multi-erasure: sibling seq %d failed to reconstruct independently", target)
 		}

@@ -79,7 +79,7 @@ func newFECBlockCoder(k, r, symLen int) *fecBlockCoder {
 		row := make([]byte, k)
 		xi := byte(i)
 		for j := 0; j < k; j++ {
-			yj := byte(r + j)
+			yj := byte(r + j)       //nolint:gosec // r+j < r+k <= 256, rejected above
 			row[j] = gfInv(xi ^ yj) // xi != yj always (i<r<=r+j), so xor != 0
 		}
 		cauchy[i] = row
