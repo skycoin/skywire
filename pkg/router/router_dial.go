@@ -2650,20 +2650,48 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 		ExcludeDMSG:            true,
 	}
 
-	// Plan the replacement/added leg over the GLOBAL TPD graph via the
-	// route-finder first (same rationale as establishMuxRoutes): local calc is
-	// restricted to this visor's live transports (webrtc on a NAT'd client), so
-	// a self-healed/rotated leg re-collapses to a slow webrtc first hop unless
-	// we let the RF reach fast disjoint stcpr intermediates over the full graph.
-	// The disjoint excludes + transport-type-aware ranking keep it disjoint and
-	// off webrtc; local calc is the fallback for a disjoint deep-hop the RF misses.
-	muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
-	if err != nil {
-		lcFwd, lcRev, lcErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
-		if lcErr != nil {
-			return fmt.Errorf("rotation add-leg: no route found (route-finder=%v, local-calc=%v)", err, lcErr)
+	// SHARED WARM-ROUTE POOL (phase 1): before the route-finder round-trip, try
+	// the visor-level plan cache. Every mux-enabled group's self-heal/rotation
+	// dials an aux leg through here, so N tunnels aggregating to the same exit
+	// would otherwise each re-run the same route-finder + disjointness work per
+	// leg per tick — the "planning storm". A cached plan is a group-independent
+	// path (no route IDs); it is fed into the SAME setup-node Dial + validMuxLeg
+	// gate below, so a stale plan is rejected exactly like a fresh bad one and a
+	// miss falls through to fetchBestRoutes — the cache can only save work, never
+	// change the leg that gets built. See docs/design/shared-warm-route-pool.md.
+	keyMinHops := uint16(r.conf.MinHops) //nolint:gosec
+	if e := muxOpts.EffectiveMinHops(true); e > 0 {
+		keyMinHops = uint16(e) //nolint:gosec
+	}
+	var muxFwd, muxRev []routing.Hop
+	if cf, cr, ok := r.warmRoutes.bestPlan(rPK, keyMinHops, excludeIDs, excludePKs); ok {
+		muxFwd, muxRev = cf, cr
+		log.WithField("first_tp", func() string {
+			if len(cf) > 0 {
+				return cf[0].TpID.String()
+			}
+			return ""
+		}()).Debug("Mux add-leg: served disjoint plan from shared warm-route pool (skipped route-finder)")
+	} else {
+		// Plan the replacement/added leg over the GLOBAL TPD graph via the
+		// route-finder first (same rationale as establishMuxRoutes): local calc is
+		// restricted to this visor's live transports (webrtc on a NAT'd client), so
+		// a self-healed/rotated leg re-collapses to a slow webrtc first hop unless
+		// we let the RF reach fast disjoint stcpr intermediates over the full graph.
+		// The disjoint excludes + transport-type-aware ranking keep it disjoint and
+		// off webrtc; local calc is the fallback for a disjoint deep-hop the RF misses.
+		fFwd, fRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
+		if err != nil {
+			lcFwd, lcRev, lcErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
+			if lcErr != nil {
+				return fmt.Errorf("rotation add-leg: no route found (route-finder=%v, local-calc=%v)", err, lcErr)
+			}
+			fFwd, fRev = lcFwd, lcRev
 		}
-		muxFwd, muxRev = lcFwd, lcRev
+		muxFwd, muxRev = fFwd, fRev
+		// Populate the shared pool so the NEXT group/leg to this exit reuses this
+		// freshly-discovered disjoint plan instead of re-querying the finder.
+		r.warmRoutes.put(rPK, keyMinHops, muxFwd, muxRev)
 	}
 
 	// Hard mux invariants (post-fetch gate): the planned leg must be loop-free
