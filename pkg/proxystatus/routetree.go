@@ -50,26 +50,65 @@ const (
 	GlyphStandby = "○"
 )
 
+// The two route-multiplexing LAYERS are made visually distinct in the tree:
+//
+//   - StreamBandGlyph is the per-STREAM accent band prefixed onto every leg summary
+//     ("▏s0"), so a leg reads which stream (route group) it belongs to at a
+//     glance; the page colors it per-stream, the terminal shows it monochrome.
+//   - StreamHeaderGlyph marks a STREAM-boundary node on the spine — a different
+//     KIND of node than a leg/hop — so the stream (packet-group) layer reads
+//     clearly apart from the leg (packet-striping) layer beneath it.
+//
+// streamAccentCount is how many distinct per-stream accents the palette cycles
+// before wrapping (stream index N → N % streamAccentCount); the page's CSS
+// defines --stream0…--streamN to match.
+const (
+	// StreamBandGlyph leads a leg's per-stream accent band ("▏sN"); StreamHeaderGlyph
+	// marks a stream-boundary node. Exported so the CLI renderer (a different
+	// package) can detect them to style the two layers, as it does GlyphActive.
+	StreamBandGlyph   = "▏"
+	StreamHeaderGlyph = "▚"
+	streamAccentCount = 5
+)
+
 // RouteTree builds the bilateral route-group model for a Snapshot. Dead legs
 // are pruned; the surviving legs are ordered direct-active first, then active
 // multihop, then standby, matching the page's reading order. The returned root
 // is nil-safe to render (bitree.Render handles a childless root).
+//
+// The two multiplexing LAYERS stack: STREAM level (--tunnels, disjoint route
+// groups) over PACKET level (the mux legs striping one stream's packets). Every
+// stream gets a stream-boundary header node on the spine followed by its own
+// legs. CRUCIALLY the legs are SIBLING spine routes of the header (top-level),
+// not children nested under it — bitree draws the rich left annotation block
+// (R[n], ●/○ state, route-rtt, per-direction ↑/↓ bandwidth + rate + share bars)
+// ONLY for top-level spine routes, so nesting the legs would drop every leg's
+// summary (the #4313 regression this restores).
+//
+// With MORE THAN ONE stream each leg summary additionally carries that stream's
+// accent band ("▏sN") so which leg belongs to which stream is legible. With a
+// single stream there is nothing to distinguish, so the legs render UNBANDED —
+// the tree reads essentially like the original flat per-leg tree, plus a thin
+// "stream 0 · N legs" header. The per-leg summaries are always present.
 func RouteTree(snap Snapshot) *bitree.Node {
 	root := &bitree.Node{Label: treeSrc(snap)}
-	// TWO-LEVEL view: root → tunnel (stream-level route group) → legs (packet-level
-	// mux). Each tunnel is a --tunnels stream; the legs under it are the mux routes
-	// striping that stream's packets. This makes the two kinds of route
-	// multiplexing legible — which legs belong to which stream — instead of one
-	// flat leg list.
-	if len(snap.Tunnels) > 0 {
+	// One stream-boundary header per tunnel, then that tunnel's legs as SIBLING
+	// spine routes (top-level, so their rich left summary renders). Legs are
+	// banded with the stream accent only when there is more than one stream to
+	// tell apart; a lone stream renders its legs clean.
+	if len(snap.Tunnels) >= 1 {
+		multi := len(snap.Tunnels) > 1
 		for _, t := range snap.Tunnels {
-			legNodes := legNodesFor(t.Legs)
+			streamIdx := -1 // unbanded: a single stream has nothing to distinguish
+			if multi {
+				streamIdx = t.Index
+			}
+			legNodes := legNodesForStream(t.Legs, streamIdx)
 			if len(legNodes) == 0 {
 				continue
 			}
-			tn := &bitree.Node{Label: tunnelLabel(t, len(legNodes))}
-			tn.Right = legNodes
-			root.Right = append(root.Right, tn)
+			root.Right = append(root.Right, streamHeaderNode(t, len(legNodes)))
+			root.Right = append(root.Right, legNodes...)
 		}
 		return root
 	}
@@ -100,21 +139,46 @@ func treeSrc(snap Snapshot) string {
 	return "this visor"
 }
 
-// tunnelLabel names a stream-level tunnel node: its index and how many
-// packet-level legs stripe under it.
-func tunnelLabel(t Tunnel, nLegs int) string {
+// streamHeaderNode builds a STREAM-boundary node for the spine — a different
+// kind of node than a leg/hop. Its label is marked with StreamHeaderGlyph so a
+// renderer can style it as a stream header (the page gives it the stream's
+// accent + a badge; the terminal shows the glyph) and names the stream index,
+// its packet-level leg count, and whether packet mux is on. It carries no left
+// summary and no hop chain, so it reads plainly as a layer boundary above the
+// legs that follow it.
+func streamHeaderNode(t Tunnel, nLegs int) *bitree.Node {
 	legWord := "legs"
 	if nLegs == 1 {
 		legWord = "leg"
 	}
-	return fmt.Sprintf("stream %d · %d %s", t.Index, nLegs, legWord)
+	mux := "mux off"
+	if t.MuxEnabled {
+		mux = "mux on"
+	}
+	return &bitree.Node{Label: fmt.Sprintf("%s stream %d · %d %s · %s", StreamHeaderGlyph, t.Index, nLegs, legWord, mux)}
 }
 
-// legNodesFor prunes dead legs, orders them (direct-active first, then active
-// multihop, then standby), and builds the per-leg route nodes with each leg's
-// share drawn against the aggregate goodput of THIS set (per tunnel when nested,
-// or the whole group in the flat fallback).
-func legNodesFor(all []Leg) []*bitree.Node {
+// streamTag is the per-stream accent band prefixed onto a leg's left summary
+// ("▏s0 ") when the leg belongs to a distinguished stream (multi-stream view).
+// The page colors it with that stream's accent; the terminal shows it plain. A
+// negative index yields no tag (single-stream / flat view).
+func streamTag(streamIdx int) string {
+	if streamIdx < 0 {
+		return ""
+	}
+	return fmt.Sprintf("%ss%d ", StreamBandGlyph, streamIdx)
+}
+
+// legNodesFor builds the per-leg route nodes for a single (undistinguished)
+// stream — no per-stream band on the summaries.
+func legNodesFor(all []Leg) []*bitree.Node { return legNodesForStream(all, -1) }
+
+// legNodesForStream prunes dead legs, orders them (direct-active first, then
+// active multihop, then standby), and builds the per-leg route nodes with each
+// leg's share drawn against the aggregate goodput of THIS stream's set. When
+// streamIdx >= 0 each leg summary is banded with that stream's accent tag so the
+// leg reads as belonging to that stream.
+func legNodesForStream(all []Leg, streamIdx int) []*bitree.Node {
 	legs := make([]Leg, 0, len(all))
 	for _, l := range all {
 		if !l.Alive { // prune dead routes/legs
@@ -141,7 +205,7 @@ func legNodesFor(all []Leg) []*bitree.Node {
 	w := legSumWidths(legs)
 	nodes := make([]*bitree.Node, 0, len(legs))
 	for _, l := range legs {
-		nodes = append(nodes, routeToNode(l, w, aggUp, aggDown))
+		nodes = append(nodes, routeToNode(l, w, aggUp, aggDown, streamIdx))
 	}
 	return nodes
 }
@@ -267,8 +331,8 @@ func TreeHeader() (left, label string, cols []string) {
 // routeToNode turns one leg into a hop-chain right-branch carrying its left
 // summary on the head (spine) row. aggUp/aggDown are the route-group's
 // aggregate up/down goodput, the denominators for this leg's share bars.
-func routeToNode(l Leg, w sumWidths, aggUp, aggDown float64) *bitree.Node {
-	left := &bitree.Node{Label: legSummary(l, w, aggUp, aggDown)}
+func routeToNode(l Leg, w sumWidths, aggUp, aggDown float64, streamIdx int) *bitree.Node {
+	left := &bitree.Node{Label: legSummary(l, w, aggUp, aggDown, streamIdx)}
 
 	if len(l.Hops) == 0 {
 		// No recorded path: a single leaf at the remote PK.
@@ -302,7 +366,7 @@ func hopToNode(h Hop) *bitree.Node {
 // this route's live send-RATE and its share of the group's up-goodput, then the
 // ↓ total, live recv-RATE and its share of the group's down-goodput. aggUp/aggDown
 // are the group's aggregate up/down goodput (the share-bar denominators).
-func legSummary(l Leg, w sumWidths, aggUp, aggDown float64) string {
+func legSummary(l Leg, w sumWidths, aggUp, aggDown float64, streamIdx int) string {
 	g := GlyphActive
 	if l.Standby {
 		g = GlyphStandby
@@ -315,7 +379,7 @@ func legSummary(l Leg, w sumWidths, aggUp, aggDown float64) string {
 	down := padLeftRunes(compactBytes(l.RecvBytes)+"↓", w.down)
 	downRate := padLeftRunes(compactRate(l.GoodputDownBps), w.gp)
 	downBar := shareBar(l.GoodputDownBps, aggDown, shareBarWidth)
-	return idx + " " + g + " " + rtt +
+	return streamTag(streamIdx) + idx + " " + g + " " + rtt +
 		"  " + up + " " + upRate + " " + upBar +
 		"  " + down + " " + downRate + " " + downBar
 }
