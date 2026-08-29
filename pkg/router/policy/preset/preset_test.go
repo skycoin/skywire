@@ -514,6 +514,85 @@ func TestEngine_OnTick_AdaptiveStandbyFloor(t *testing.T) {
 	}
 }
 
+// TestEngine_OnTick_AdaptiveReverseFloor is the regression guard for the
+// unidirectional download-collapse bug: with only the DIRECT (upload) leg active
+// and every download-carrying leg parked on warm standby, the exit had ZERO
+// active download legs and fell back to sending the whole download over standby
+// legs (over-subscribing them → reorder wedge → route-group collapse). The
+// adaptive tick must keep a floor of AdaptRevActive() ACTIVE legs of the CURRENT
+// download-direction class (Direct == Flipped), and the OTHER (upload) class's
+// leg must NOT satisfy that floor.
+//
+// It is flip-aware: "reverse/download" is the current send-side assignment, not
+// an intrinsic leg property. The SAME topology (direct leg active, multihop legs
+// on standby) must behave oppositely under the two flip states:
+//   - UNFLIPPED: the download rides the MULTIHOP legs, so the active direct leg
+//     is upload-only and the floor is UNMET → promote a multihop (download)
+//     standby.
+//   - FLIPPED: the download rides the DIRECT leg, so the active direct leg
+//     already satisfies the floor → NO promotion (stable).
+func TestEngine_OnTick_AdaptiveReverseFloor(t *testing.T) {
+	SetAdaptRevActive(1)
+	SetAdaptCap(8)
+
+	// directLeg / multihopStandby build a unidirectional group's two leg classes
+	// at the given flip state. leg 0 is the 1-hop DIRECT leg (always active, never
+	// parked); the spares are multihop download-capable legs held on warm standby.
+	directLeg := func(flipped bool) LegInfo {
+		return LegInfo{Index: 0, TransportID: "d0", Kind: "stcpr", LatencyMs: 40, Alive: true, Direct: true, Flipped: flipped}
+	}
+	multihopStandby := func(idx int, tid string, flipped bool) LegInfo {
+		return LegInfo{Index: idx, TransportID: tid, Kind: "stcpr", LatencyMs: 40, Alive: true, Standby: true, Direct: false, Flipped: flipped}
+	}
+
+	t.Run("unflipped promotes a download (multihop) leg to the floor", func(t *testing.T) {
+		e := New() // fresh: adaptTarget == AdaptRevActive() == 1, idle
+		legs := []LegInfo{
+			directLeg(false),                // active upload leg (download-class = multihop here)
+			multihopStandby(1, "m0", false), // download-capable spare
+			multihopStandby(2, "m1", false),
+		}
+		got := e.OnTick("adaptive", legs)
+		// The lone active leg is the DIRECT (upload) leg — it must NOT satisfy the
+		// download floor, so exactly one download-class standby is promoted (drop
+		// recovery also re-establishes a spare to keep the reserve full).
+		if len(got.PromoteFromStandby) != 1 {
+			t.Fatalf("unflipped: expected one download-leg promotion to the floor; got %+v", got)
+		}
+		if p := got.PromoteFromStandby[0]; p != 1 && p != 2 {
+			t.Fatalf("unflipped: must promote a multihop (download) standby, not the direct leg; promoted index %d", p)
+		}
+		if !got.AddLeg {
+			t.Errorf("unflipped: drop-recovery should re-establish a spare (AddLeg) while restoring the floor; got %+v", got)
+		}
+	})
+
+	t.Run("unflipped direct leg alone does NOT satisfy the reverse floor", func(t *testing.T) {
+		// Isolate the accounting: if the direct leg were (wrongly) counted toward
+		// the download budget, desiredActive would be 1 and the single active leg
+		// would satisfy it → no promotion. Assert a promotion DOES happen.
+		e := New()
+		legs := []LegInfo{directLeg(false), multihopStandby(1, "m0", false)}
+		if got := e.OnTick("adaptive", legs); len(got.PromoteFromStandby) == 0 && !got.AddLeg {
+			t.Fatalf("the direct leg must not count toward the reverse floor; expected a promotion/add, got %+v", got)
+		}
+	})
+
+	t.Run("flipped direct leg carries the download and satisfies the floor", func(t *testing.T) {
+		// Same topology, flipped: the active DIRECT leg is now the download-class
+		// leg, so the floor is met and no download standby need be promoted.
+		e := New()
+		legs := []LegInfo{
+			directLeg(true), // active DIRECT leg == the download class when flipped
+			multihopStandby(1, "m0", true),
+			multihopStandby(2, "m1", true),
+		}
+		if got := e.OnTick("adaptive", legs); !reflect.DeepEqual(got, RotationAction{}) {
+			t.Errorf("flipped: the active direct leg satisfies the download floor; expected no reshape, got %+v", got)
+		}
+	})
+}
+
 // TestEngine_OnTick_AdaptiveEvictsGrossOutlier asserts the health gate: a
 // gross-latency-outlier active leg is kept OUT of the active mux (evicted after
 // the hysteresis window), while a leg merely slower-than-median is NOT evicted

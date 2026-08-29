@@ -321,6 +321,24 @@ type LegInfo struct {
 	// current gate state so it can promote a warm spare instead of a cold add,
 	// or demote a leg it wants to keep warm. See docs/warm_standby_legs_rfc.md.
 	Standby bool
+	// Direct is true when this leg is the DIRECT (forward-only) leg of a
+	// UNIDIRECTIONAL route group: its transport goes straight to a route-group
+	// endpoint (1 hop, no intermediary) and it carries only the forward/upload
+	// direction. Sourced from routeMux.legIsDirectTp, which is false for a
+	// non-directional (symmetric) group — there every leg carries both
+	// directions. Lets the adaptive on_tick maintain a floor of active REVERSE
+	// (download) legs independent of the direct leg, so a download never falls
+	// back onto warm-standby legs for want of an active reverse path.
+	Direct bool
+	// Flipped is the route group's current unidirectional flip state (the same
+	// value on every leg of the group), sourced from routeMux.dirState. Because a
+	// leg's send-side direction is an ASSIGNMENT the flip controller can swap —
+	// not an intrinsic property — the download-direction class is Direct ==
+	// Flipped (unflipped: download rides the multihop legs; flipped: it rides the
+	// direct leg). The adaptive on_tick keeps its active-download floor on that
+	// class, whichever way the flip currently sits. Always false for a
+	// non-directional (symmetric) group.
+	Flipped bool
 	// SentBytes / RecvBytes are the leg transport's cumulative
 	// payload-byte counters (ManagedTransport.GetBandwidth). Lets a
 	// policy's on_tick rotate a leg after it carries a byte threshold

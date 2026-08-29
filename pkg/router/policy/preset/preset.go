@@ -60,6 +60,23 @@ type LegInfo struct {
 	LatencyMs   int
 	Alive       bool
 	Standby     bool
+	// Direct is true when this leg is the DIRECT (forward-only) leg of a
+	// UNIDIRECTIONAL route group — its transport goes straight to a route-group
+	// endpoint (1 hop) and it carries only the forward/upload direction, not the
+	// reverse/download. The adaptive tick keeps it OUT of the reverse-active
+	// budget so a download always maintains its own active reverse legs. Always
+	// false for a non-directional (symmetric) group, where every leg carries both
+	// directions.
+	Direct bool
+	// Flipped is the route group's current unidirectional flip state (the same
+	// value on every leg of a group). "Reverse/download" is not an intrinsic leg
+	// property — it is the current SEND-SIDE direction assignment, which the flip
+	// controller can swap. A leg carries the DOWNLOAD direction when
+	// Direct == Flipped: unflipped (default) the download rides the MULTIHOP legs
+	// (!Direct); flipped it rides the DIRECT leg. The adaptive tick maintains its
+	// active-download floor on the download-direction class, whichever way the
+	// flip currently sits. Always false for a non-directional group.
+	Flipped     bool
 	SentBytes   uint64
 	RecvBytes   uint64
 	Retransmits uint64
