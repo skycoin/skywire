@@ -360,14 +360,19 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 		return nil, nil, -1, ErrNoRules
 	}
 
-	// Unidirectional send selection (CapUniDir): restrict this end's send to legs
-	// matching its direction (initiator→direct, acceptor→multihop, swapped when
-	// flipped) — but only when at least one ready leg matches, so a send never
-	// fails for lack of a direction-matching leg. dirOK gates every pick below.
-	directional, wantDirect, dstPK, srcPK := m.dirConfig()
-	restrictDir := directional && m.dirRestrict(tps, wantDirect, dstPK, srcPK)
-	dirOK := func(tp *transport.ManagedTransport) bool {
-		return !restrictDir || legIsDirect(tp, dstPK, srcPK) == wantDirect
+	// Unidirectional send selection (CapUniDir).
+	// DIRECTION — not the send-side standby flag — governs which legs carry this
+	// end's traffic. A reverse (mux) leg is standby on the INITIATOR's send side
+	// (it doesn't upload on it), yet the EXIT must send the download on it; the old
+	// standby-gated filter (legReadyAt excludes standby) found no ready reverse leg
+	// on the exit and fell back to the active direct leg, landing the whole
+	// download on the wrong direction. So select among direction-matching legs with
+	// readiness that IGNORES standby (selectByDirection); fall through to the
+	// standard, standby-aware path only when no direction-matching leg is available.
+	if directional, wantDirect, dstPK, srcPK := m.dirConfig(); directional {
+		if tp, rule, idx, ok := m.selectByDirection(tps, fwd, wantDirect, dstPK, srcPK); ok {
+			return tp, rule, idx, nil
+		}
 	}
 
 	// Payload-inspecting modes: ask the selector for a leg
@@ -383,7 +388,7 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 			idx := m.tpSelector.SelectForPayload(payload)
 			if idx < len(tps) {
 				tp := tps[idx]
-				if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) && dirOK(tp) {
+				if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
 					return tp, fwd[idx], idx, nil
 				}
 			}
@@ -395,7 +400,7 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 		idx := m.tpSelector.Select()
 		if idx < len(tps) {
 			tp := tps[idx]
-			if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) && dirOK(tp) {
+			if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
 				return tp, fwd[idx], idx, nil
 			}
 		}
@@ -411,7 +416,7 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 	for i := uint32(0); i < n; i++ {
 		idx := int((start + i) % n) //nolint:gosec
 		tp := tps[idx]
-		if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) && dirOK(tp) {
+		if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
 			return tp, fwd[idx], idx, nil
 		}
 	}
