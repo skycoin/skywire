@@ -315,7 +315,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 				caDir = filepath.Join(home, ".skywire", "rangesplit-mitm")
 			}
 			if herr := client.SetHTTPSRangeSplit(caDir); herr != nil {
-				log.WithError(herr).Warn("HTTPS range-splitting requested but its MITM root could not be initialised; :443 will splice through unchanged")
+				log.WithError(herr).Warn("HTTPS range-splitting requested but its MITM root could not be initialized; :443 will splice through unchanged")
 			} else if pemBytes, ok := client.MITMCACertPEM(); ok {
 				log.Warnf("HTTPS range-splitting ENABLED — import this root into your browser to trust intercepted origins; it can forge any host, so remove it when done:\n  CA file: %s\n%s", filepath.Join(caDir, "ca.crt"), string(pemBytes))
 			}

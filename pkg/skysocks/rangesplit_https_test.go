@@ -120,7 +120,7 @@ func TestHTTPSRangeSplitByteIdentity(t *testing.T) {
 	const blobSize = 8 << 20
 	blob := make([]byte, blobSize)
 	for i := range blob {
-		blob[i] = byte(i*131 + 17)
+		blob[i] = byte(i*131 + 17) //nolint:gosec // deterministic test fill; byte wrap is intended
 	}
 	want := sha256Sum(blob)
 

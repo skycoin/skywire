@@ -192,29 +192,26 @@ func (c *Client) serveHTTPSRangeSplit(conn, stream net.Conn, target string) {
 	}
 
 	// 5. Drive the split over the terminated browser conn (btls) and origin conn (otls).
-	if !c.httpsRangeSplitDrive(btls, otls, req, reqHead, host) {
-		// Nothing recoverable remains once we have started consuming the origin
-		// response; drive() has already closed both ends on every exit path.
-		return
-	}
+	//    drive() owns both ends from here and closes them on every path.
+	c.httpsRangeSplitDrive(btls, otls, req, reqHead, host)
 }
 
 // httpsRangeSplitDrive performs the range probe on otls and, on a 206, reassembles
-// the body onto btls. It returns true once it has fully served the response (split,
-// verbatim relay, or a clean truncation) and closed both ends. reqHead is the raw
+// the body onto btls. It owns both ends and closes them once it has served the response (split,
+// verbatim relay, or a clean truncation). reqHead is the raw
 // request block; req is its parsed form.
-func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, reqHead []byte, host string) bool {
+func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, reqHead []byte, host string) {
 	// Probe: original request + Range: bytes=0-(chunk-1). A non-range origin ignores
 	// it and returns its normal 200, kept byte-identical by the relay path below.
 	if _, err := otls.Write(injectRange(reqHead, 0, c.rs.chunkSize-1)); err != nil {
 		closeBoth(btls, otls)
-		return true
+		return
 	}
 	br := bufio.NewReader(otls)
 	statusLine, err := br.ReadString('\n')
 	if err != nil {
 		closeBoth(btls, otls)
-		return true
+		return
 	}
 	if statusCode(statusLine) != 206 {
 		// Origin ignored Range (200) or returned redirect/error: relay verbatim so the
@@ -226,25 +223,25 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 		}
 		_, _ = io.Copy(btls, otls) //nolint:errcheck
 		closeBoth(btls, otls)
-		return true
+		return
 	}
 
 	tp := textproto.NewReader(br)
 	hdr, err := tp.ReadMIMEHeader()
 	if err != nil {
 		closeBoth(btls, otls)
-		return true
+		return
 	}
 	total, okTotal := parseContentRangeTotal(hdr.Get("Content-Range"))
 	if !okTotal || total <= 0 {
 		closeBoth(btls, otls)
-		return true
+		return
 	}
 	validator := ifRangeValidator(hdr)
 
 	if err := writeSynth200(btls, hdr, total); err != nil {
 		closeBoth(btls, otls)
-		return true
+		return
 	}
 
 	// chunk0 body straight from the probe response.
@@ -254,12 +251,12 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 	}
 	if _, err := io.CopyN(btls, br, chunk0Len); err != nil {
 		closeBoth(btls, otls)
-		return true
+		return
 	}
 	otls.Close() //nolint:errcheck,gosec // origin stream0 done; remaining chunks use fresh TLS streams
 	if total <= c.rs.chunkSize {
 		btls.Close() //nolint:errcheck,gosec
-		return true
+		return
 	}
 
 	if c.appCl != nil {
@@ -275,11 +272,10 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 	})
 	c.rsActive.Add(-1)
 	btls.Close() //nolint:errcheck,gosec
-	return true
 }
 
 // fetchChunkTLSRetry fetches one byte range over a fresh TLS-to-origin stream,
-// redialing on churn — the HTTPS analogue of fetchChunkRetry.
+// redialing on churn — the HTTPS analog of fetchChunkRetry.
 func (c *Client) fetchChunkTLSRetry(req *http.Request, host, validator string, start, end int64) ([]byte, error) {
 	var err error
 	for i := 0; i < rsChunkRetries; i++ {
