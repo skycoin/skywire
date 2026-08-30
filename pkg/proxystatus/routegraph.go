@@ -58,6 +58,14 @@ const (
 // exit. ID is the FULL public key (the dedup key and the driver's index key);
 // PK repeats it for the tooltip's copy affordance; Label is a short hex heading
 // only. Color/Size drive the point; Tip is the multi-line hover text.
+//
+// X and Y are the node's DETERMINISTIC seed position, already in cosmos space
+// ([0,rgSpaceSize], centered at rgSpaceSize/2) so the driver hands them straight
+// to tpvizGL.setData's positions array (the way tpviz's grouped layout feeds
+// fixed positions). cosmos-go renders every point at the origin unless seeded, so
+// without these the small route subgraph collapses; with them the graph opens as
+// a recognizable root-left → hops → exit-right fan and the force sim only refines
+// it. See seedRouteLayout.
 type rgNode struct {
 	ID    string  `json:"id"`
 	Label string  `json:"label"`
@@ -66,7 +74,15 @@ type rgNode struct {
 	Size  float64 `json:"size"`
 	Tip   string  `json:"tip"`
 	PK    string  `json:"pk"`
+	X     float64 `json:"x"`
+	Y     float64 `json:"y"`
 }
+
+// rgSpaceSize is cosmos's coordinate space; it MUST match the engine's
+// Config.SpaceSize (pkg/tpviz/wasmgl/overlay.go spaceSize). Seed positions are
+// emitted in this space so setData uses them verbatim (the driver skips the
+// engine's own center-scatter fallback when a position array is present).
+const rgSpaceSize = 8192.0
 
 // rgLink is one hop segment of a leg's forward route (from → to). Color is the
 // leg's STREAM accent; Width reflects the leg's live byte-rate; Active is false
@@ -129,11 +145,12 @@ func hasRouteGraph(snap Snapshot) bool {
 // nodeAcc accumulates a node's role, hop depth (for color) and incident-leg tip
 // lines as the route walk visits it from multiple legs.
 type nodeAcc struct {
-	node   *rgNode
-	lines  []string
-	level  int // shallowest intermediate hop depth (1-based); 0 for root/exit
-	isRoot bool
-	isExit bool
+	node      *rgNode
+	lines     []string
+	level     int // shallowest intermediate hop depth (1-based); 0 for root/exit
+	streamOrd int // ordinal of the first stream that visited this hop; -1 = root/exit (centered)
+	isRoot    bool
+	isExit    bool
 }
 
 // RouteGraphJSON builds the route subgraph as the JSON the status page embeds in
@@ -169,7 +186,7 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 		if a, ok := accByPK[pk]; ok {
 			return a
 		}
-		a := &nodeAcc{node: &rgNode{ID: pk, PK: pk, Label: shortPK(pk), Role: "hop"}}
+		a := &nodeAcc{node: &rgNode{ID: pk, PK: pk, Label: shortPK(pk), Role: "hop"}, streamOrd: -1}
 		accByPK[pk] = a
 		order = append(order, a)
 		return a
@@ -181,7 +198,7 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 	var links []rgLink
 	maxRate := 0.0
 
-	for _, t := range tunnels {
+	for ord, t := range tunnels {
 		streamIdx := t.Index
 		for _, l := range t.Legs {
 			if !l.Alive {
@@ -218,8 +235,13 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 				to := get(h.To)
 				if isExit {
 					to.isExit = true
-				} else if lvl := i + 1; to.level == 0 || lvl < to.level {
-					to.level = lvl
+				} else {
+					if lvl := i + 1; to.level == 0 || lvl < to.level {
+						to.level = lvl
+					}
+					if to.streamOrd < 0 {
+						to.streamOrd = ord // first stream to traverse this hop sets its lane
+					}
 				}
 				from := h.From
 				if from == "" {
@@ -236,8 +258,8 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 		}
 	}
 
-	// Finalize node visuals + tooltips.
-	nodes := make([]rgNode, 0, len(order))
+	// Finalize node visuals (role/color/size drive both the point and the seed
+	// layout below, which reads Role).
 	for _, a := range order {
 		switch {
 		case a.isRoot:
@@ -247,6 +269,15 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 		default:
 			a.node.Role, a.node.Color, a.node.Size = "hop", hopColorFor(a.level), rgHopSize
 		}
+	}
+
+	// Assign the deterministic seed layout (root left, exit right, hops between by
+	// depth, streams fanned vertically) before copying the nodes out, so the graph
+	// opens recognizable instead of collapsed at the origin.
+	seedRouteLayout(order, nStreams)
+
+	nodes := make([]rgNode, 0, len(order))
+	for _, a := range order {
 		a.node.Tip = nodeTip(a, nStreams)
 		nodes = append(nodes, *a.node)
 	}
@@ -261,6 +292,81 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 	}
 
 	return rgGraph{Nodes: nodes, Links: links, Sig: topoSig(nodes, links)}
+}
+
+// seedRouteLayout assigns each node a DETERMINISTIC seed position in cosmos space
+// ([0,rgSpaceSize], centered), mirroring how tpviz's grouped layout hands fixed
+// positions to the same engine. cosmos-go renders every point at the origin
+// unless seeded (its force sim then has coincident points with no direction to
+// separate), so a route subgraph without this collapses into a blob; with it the
+// graph opens as a readable left→right fan and the sim only refines it.
+//
+// Geometry: the horizontal axis is HOP DEPTH — this visor (root) pinned left, the
+// exit pinned right, intermediate hops spread between by their depth. The vertical
+// axis FANS the streams: with more than one --tunnels stream each stream's hops
+// ride their own lane, so the tunnels read as parallel fans converging on the
+// shared root and exit (both centered). A small deterministic per-node jitter
+// breaks the symmetry of parallel same-depth mux legs so the sim can separate
+// them.
+func seedRouteLayout(order []*nodeAcc, nStreams int) {
+	maxLevel := 0
+	for _, a := range order {
+		if a.node.Role == "hop" && a.level > maxLevel {
+			maxLevel = a.level
+		}
+	}
+	maxCol := maxLevel + 1 // the exit sits one column past the deepest hop
+	if maxCol < 1 {
+		maxCol = 1
+	}
+	const (
+		center = rgSpaceSize / 2
+		xLeft  = rgSpaceSize * 0.18
+		xRight = rgSpaceSize * 0.82
+		vSpan  = rgSpaceSize * 0.55 // total vertical spread of the stream fan
+	)
+	lane := vSpan
+	if nStreams > 1 {
+		lane = vSpan / float64(nStreams)
+	}
+	colX := func(col int) float64 {
+		return xLeft + float64(col)/float64(maxCol)*(xRight-xLeft)
+	}
+	laneY := func(ord int) float64 {
+		if nStreams <= 1 || ord < 0 {
+			return center
+		}
+		return center + (float64(ord)-float64(nStreams-1)/2)*lane
+	}
+	for i, a := range order {
+		var col int
+		y := center
+		hop := false
+		switch a.node.Role {
+		case "root":
+			col = 0
+		case "exit":
+			col = maxCol
+		default: // hop
+			hop = true
+			col = a.level
+			if col < 1 {
+				col = 1
+			}
+			y = laneY(a.streamOrd)
+		}
+		x := colX(col)
+		// Root and exit stay clean anchors; hops get a small deterministic jitter
+		// (a hash of their order index in ±0.5) so parallel same-depth same-lane
+		// legs don't stack exactly on top of each other.
+		if hop {
+			j := float64((i*2654435761)&0xffff)/65535.0 - 0.5
+			x += j * (rgSpaceSize * 0.02)
+			y += j * (rgSpaceSize * 0.05)
+		}
+		a.node.X = x
+		a.node.Y = y
+	}
 }
 
 // nodeTip renders a node's hover text: a role heading (with a short PK), the
