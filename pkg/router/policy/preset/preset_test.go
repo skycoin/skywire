@@ -426,12 +426,13 @@ func standbyLeg(idx int, tid string) LegInfo {
 // floor.
 func TestEngine_OnTick_AdaptiveStandbyFloor(t *testing.T) {
 	// (A) At the floor + sustained saturation → grow with a FRESH leg, never
-	// drain the last warm spare. One active leg (== target 1) + one standby at
-	// the floor.
-	e := seedSaturatedAdaptive(1)
+	// drain the last warm spare. Active legs == the download floor (2) + one
+	// standby at the reserve floor.
+	e := seedSaturatedAdaptive(2)
 	atFloor := []LegInfo{
 		activeLeg(0, "t0", 1_000_000),
-		standbyLeg(1, "s0"),
+		activeLeg(1, "t1", 1_000_000),
+		standbyLeg(2, "s0"),
 	}
 	if got := e.OnTick("adaptive", atFloor); !reflect.DeepEqual(got, RotationAction{AddLeg: true}) {
 		t.Errorf("saturated at the standby floor must AddLeg (not drain the reserve); got %+v", got)
@@ -439,11 +440,12 @@ func TestEngine_OnTick_AdaptiveStandbyFloor(t *testing.T) {
 
 	// (B) Surplus standby ABOVE the floor + saturated → the surplus spare may be
 	// promoted for load (efficient), keeping the floor intact.
-	e = seedSaturatedAdaptive(1)
+	e = seedSaturatedAdaptive(2)
 	surplus := []LegInfo{
 		activeLeg(0, "t0", 1_000_000),
-		standbyLeg(1, "s0"),
-		standbyLeg(2, "s1"),
+		activeLeg(1, "t1", 1_000_000),
+		standbyLeg(2, "s0"),
+		standbyLeg(3, "s1"),
 	}
 	got := e.OnTick("adaptive", surplus)
 	if len(got.PromoteFromStandby) != 1 || got.AddLeg {
