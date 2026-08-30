@@ -53,11 +53,19 @@ type rangeSplitConfig struct {
 const (
 	defaultRSConcurrency = 8
 	defaultRSChunkSize   = 4 << 20 // 4 MiB
-	rsChunkRetries       = 3       // per-chunk redial attempts on churn
-	rsHeadLimit          = 64 << 10
-	rsProbeTimeout       = 20 * time.Second
-	rsClassifyTimeout    = 5 * time.Second  // wait for the client's first request bytes
-	rsHeadReadTimeout    = 10 * time.Second // finish reading the header block
+	rsChunkRetries       = 3       // minimum per-chunk attempts before the time budget governs
+	// rsChunkRetryBudget keeps retrying a failed chunk this long before giving up.
+	// A --tunnels rotation briefly drops every tunnel (pickSession → nil →
+	// errAllTunnelsDown); self-heal re-dials within a few seconds, so waiting out
+	// that window recovers the chunk instead of truncating the whole download (the
+	// old 3 instant retries failed in microseconds and killed it).
+	rsChunkRetryBudget     = 15 * time.Second
+	rsChunkRetryBackoff    = 100 * time.Millisecond
+	rsChunkRetryBackoffMax = 2 * time.Second
+	rsHeadLimit            = 64 << 10
+	rsProbeTimeout         = 20 * time.Second
+	rsClassifyTimeout      = 5 * time.Second  // wait for the client's first request bytes
+	rsHeadReadTimeout      = 10 * time.Second // finish reading the header block
 )
 
 func defaultRangeSplitConfig() rangeSplitConfig {
@@ -273,17 +281,38 @@ func (c *Client) streamRemainingChunks(conn net.Conn, total int64, fetch func(st
 	go func() { wg.Wait() }()
 }
 
-// fetchChunkRetry fetches one byte range, redialing a fresh stream on failure.
+// fetchChunkRetry fetches one byte range, redialing a fresh stream on failure and
+// retrying over a time budget so a transient all-tunnels-down window (a --tunnels
+// rotation) is waited out rather than truncating the download.
 func (c *Client) fetchChunkRetry(req *http.Request, host, validator string, start, end int64) ([]byte, error) {
+	return retryWithBudget(func() ([]byte, error) {
+		return c.fetchChunk(req, host, validator, start, end)
+	}, rsChunkRetryBudget, rsChunkRetryBackoff, rsChunkRetryBackoffMax)
+}
+
+// retryWithBudget calls fetch until it succeeds, or until at least rsChunkRetries
+// tries have been made AND the time budget has elapsed, backing off (capped at
+// backoffMax) between attempts. Factored out of fetchChunkRetry so the retry
+// policy is unit-testable with small durations. On persistent failure it returns
+// the last error.
+func retryWithBudget(fetch func() ([]byte, error), budget, backoff, backoffMax time.Duration) ([]byte, error) {
+	deadline := time.Now().Add(budget)
 	var err error
-	for i := 0; i < rsChunkRetries; i++ {
+	for attempt := 1; ; attempt++ {
 		var buf []byte
-		buf, err = c.fetchChunk(req, host, validator, start, end)
-		if err == nil {
+		if buf, err = fetch(); err == nil {
 			return buf, nil
 		}
+		if attempt >= rsChunkRetries && time.Now().After(deadline) {
+			return nil, err
+		}
+		time.Sleep(backoff)
+		if backoff < backoffMax {
+			if backoff *= 2; backoff > backoffMax {
+				backoff = backoffMax
+			}
+		}
 	}
-	return nil, err
 }
 
 // fetchChunk opens a new exit stream, SOCKS5-CONNECTs to host:80, issues a ranged
