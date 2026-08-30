@@ -4,6 +4,7 @@ package skysocks
 import (
 	"bytes"
 	"crypto/sha1" //nolint:gosec // RFC6455 mandates SHA-1 for the WebSocket accept key
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -271,6 +272,32 @@ func (c *Client) SetRangeSplit(enabled bool, concurrency int, chunkSize int64) {
 		c.rs.chunkSize = chunkSize
 	}
 }
+
+// SetHTTPSRangeSplit enables TLS-terminating (:443) range-splitting, loading or
+// creating the unconstrained MITM root under caDir (caDir/ca.crt + ca.key). It is a
+// deliberate security opt-in: the returned root can forge a leaf for any host, so it
+// is never enabled by default, and the operator must import caDir/ca.crt into the
+// browser for the terminated TLS to be trusted (MITMCACertPEM returns it). Errors
+// (unreadable/creatable CA) leave HTTPS range-splitting off.
+func (c *Client) SetHTTPSRangeSplit(caDir string) error {
+	cert, minter, err := loadOrCreateMITMCA(caDir)
+	if err != nil {
+		return err
+	}
+	c.rs.caCert = cert
+	c.rs.minter = minter
+	c.rs.httpsEnabled = true
+	return nil
+}
+
+// SetHTTPSRangeSplitOriginRoots overrides the roots used to verify the REAL origin's
+// certificate (nil = system roots). Intended for tests that stand up an httptest TLS
+// origin; production leaves it nil so origin security is never downgraded.
+func (c *Client) SetHTTPSRangeSplitOriginRoots(pool *x509.CertPool) { c.rs.originRoots = pool }
+
+// MITMCACertPEM returns the PEM of the HTTPS range-split MITM root for the operator
+// to import into a browser. ok is false when HTTPS range-splitting is not configured.
+func (c *Client) MITMCACertPEM() ([]byte, bool) { return c.mitmCACertPEM() }
 
 // SetTunnelRedial wires the app's disjoint-diversify dial into the Client so the
 // keepalive loop can re-dial a dead tunnel's replacement. The dial itself lives in
@@ -769,6 +796,10 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 	// before.
 	if c.rs.enabled && isPort80(target) {
 		c.serveHTTPRangeSplit(conn, stream)
+	} else if c.rs.httpsEnabled && c.rs.minter != nil && isPort443(target) {
+		// Opt-in TLS-terminating split (rangesplit_https.go). Only reached when the
+		// operator enabled it and a minter exists; a plain :443 splices as before.
+		c.serveHTTPSRangeSplit(conn, stream, target)
 	} else {
 		c.splicePrefixed(conn, stream, nil)
 	}
