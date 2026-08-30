@@ -28,6 +28,8 @@ import (
 	"encoding/binary"
 	"sync"
 	"sync/atomic"
+
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // FEC block geometry. K data frames + R repair frames per block; recovers all K
@@ -398,6 +400,73 @@ func (m *routeMux) fecOnSend(seq uint32, wire []byte) {
 	m.fecRepairMu.Lock()
 	m.fecRepairQ = append(m.fecRepairQ, frames...)
 	m.fecRepairMu.Unlock()
+}
+
+// fecStripeActive reports whether the FEC-block striping cap applies: FEC is
+// negotiated and the group has >=2 active legs (a single-leg group can't spread and
+// FEC is skipped there anyway, so the cap would be a pointless no-op).
+func (m *routeMux) fecStripeActive() bool {
+	return m.fecEnabled && m.fecStriper != nil && m.activeLegCount() >= 2
+}
+
+// fecStripeSyncLocked resets the per-block leg counts when the FEC block rolls
+// over. Caller holds fecStripeMu.
+func (m *routeMux) fecStripeSyncLocked(block uint32) {
+	if block != m.fecStripeBlock || m.fecStripeUsed == nil {
+		m.fecStripeBlock = block
+		m.fecStripeUsed = make(map[int]int)
+	}
+}
+
+// fecStripeReassign returns an alternative leg when the raw-selected idx already
+// holds fecDefaultR frames of the CURRENT FEC block (seq/fecDefaultK). Spreading
+// the block so no leg exceeds R frames keeps a fully-stalled leg within FEC's
+// R-erasure recovery. ok=false keeps the original pick — when the cap is inactive,
+// idx still has room, or every alive-ready leg is already block-full (never fail a
+// send for the cap; an over-stripe just falls back to SACK-retransmit as before).
+func (m *routeMux) fecStripeReassign(tps []*transport.ManagedTransport, idx int) (int, bool) {
+	if !m.fecStripeActive() || idx < 0 || idx >= len(tps) {
+		return idx, false
+	}
+	block := atomic.LoadUint32(&m.writeSeq) / fecDefaultK
+	m.fecStripeMu.Lock()
+	defer m.fecStripeMu.Unlock()
+	m.fecStripeSyncLocked(block)
+	if m.fecStripeUsed[idx] < fecDefaultR {
+		return idx, false // the raw pick still has room this block
+	}
+	// idx is full for this block — search round-robin from just past it for an
+	// alive-ready leg with room, so successive blocks fan across the leg set
+	// instead of always collapsing onto leg 0.
+	n := len(tps)
+	for off := 1; off <= n; off++ {
+		j := (idx + off) % n
+		if j == idx {
+			continue
+		}
+		tp := tps[j]
+		if tp == nil || tp.IsClosed() || !m.legReadyAt(j) {
+			continue
+		}
+		if m.fecStripeUsed[j] < fecDefaultR {
+			return j, true
+		}
+	}
+	return idx, false // every alive-ready leg is block-full; keep the pick
+}
+
+// fecStripeUse records that a data frame was committed to leg idx in the current
+// FEC block, so subsequent picks in the same block honor the per-leg R cap. Inert
+// unless the cap is active.
+func (m *routeMux) fecStripeUse(idx int) {
+	if !m.fecStripeActive() || idx < 0 {
+		return
+	}
+	block := atomic.LoadUint32(&m.writeSeq) / fecDefaultK
+	m.fecStripeMu.Lock()
+	m.fecStripeSyncLocked(block)
+	m.fecStripeUsed[idx]++
+	m.fecStripeMu.Unlock()
 }
 
 // fecDrainRepairs returns and clears the queued repair frames for the send loop.
