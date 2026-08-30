@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"io"
 	"net"
 	"net/http"
@@ -453,10 +454,25 @@ func TestExecStreamClientDisconnectKillsCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadResponse: %v", err)
 	}
-	// Wait until the command has actually started before walking away.
+	// Wait until the command has actually started before walking away, and
+	// drain the WHOLE first frame (header + payload), not just its header.
+	// Reading only the header can leave the server mid-write on the
+	// synchronous net.Pipe — the trailing bytes of the chunked-transfer frame
+	// still pending. A client Close while a server write is in flight surfaces
+	// as a write error, which net/http does NOT turn into a request-context
+	// cancellation; the command then runs to its 30-minute default timeout and
+	// this test fails at its own 20s bound (the intermittent CI orphan). By
+	// draining the payload the server returns to an idle read (its
+	// disconnect-detection background read armed), so the Close below reliably
+	// cancels r.Context() and tears the command down.
 	hdr := make([]byte, execStreamFrameHdr)
 	if _, err := io.ReadFull(resp.Body, hdr); err != nil {
 		t.Fatalf("reading first frame header: %v", err)
+	}
+	if payloadLen := binary.BigEndian.Uint32(hdr[1:]); payloadLen > 0 {
+		if _, err := io.ReadFull(resp.Body, make([]byte, payloadLen)); err != nil {
+			t.Fatalf("reading first frame payload: %v", err)
+		}
 	}
 
 	_ = cliConn.Close() //nolint:errcheck

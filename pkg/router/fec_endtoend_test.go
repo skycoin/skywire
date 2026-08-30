@@ -261,9 +261,27 @@ func TestFECMuxEndToEndThroughput(t *testing.T) {
 		return elapsed, perLeg
 	}
 
-	noFEC, noLegs := run(false, hetero)
-	withFEC, fecLegs := run(true, hetero)
-	singleT, _ := run(false, single)
+	// Best-of-N: these are sub-100ms wall-clock measurements over simulated
+	// millisecond legs, so a single GC pause or scheduler hiccup on a loaded
+	// CI runner can inflate one run 3x (observed: a lone withFEC sample at
+	// 163ms against a ~50ms norm) and break the ratio assertions below. Taking
+	// the minimum across a few attempts rejects that transient noise while
+	// still measuring the real pipeline cost — standard practice for a timing
+	// microbenchmark.
+	best := func(fec bool, lats []time.Duration) (time.Duration, []int64) {
+		var bt time.Duration
+		var bl []int64
+		for i := 0; i < 3; i++ {
+			el, legs := run(fec, lats)
+			if i == 0 || el < bt {
+				bt, bl = el, legs
+			}
+		}
+		return bt, bl
+	}
+	noFEC, noLegs := best(false, hetero)
+	withFEC, fecLegs := best(true, hetero)
+	singleT, _ := best(false, single)
 
 	t.Logf("heterogeneous legs %v", hetero)
 	t.Logf("  mux/no-FEC : %v   per-leg bytes=%v", noFEC.Round(time.Millisecond), noLegs)

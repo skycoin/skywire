@@ -81,9 +81,17 @@ func TestConnectPKAdoptsExistingConn(t *testing.T) {
 	defer cancel()
 
 	// A dials B (the visor's AnnounceTo). B accepts an inbound conn.
-	connAB, err := nodeA.DMSG().ConnectPK(ctx, pkB)
-	require.NoError(t, err)
-	require.NotNil(t, connAB)
+	// Retry the first dial: both clients are Ready() (each has a session
+	// and a published entry), but the shared dmsg server can still be
+	// finishing its side of B's session registration, so the very first
+	// forward occasionally 202s ("cannot connect to delegated server").
+	// Production dmsg dials retry through the RSN/circuit-breaker for the
+	// same reason; this settles the in-memory test env deterministically.
+	var connAB *Conn
+	require.Eventually(t, func() bool {
+		connAB, err = nodeA.DMSG().ConnectPK(ctx, pkB)
+		return err == nil && connAB != nil
+	}, 10*time.Second, 100*time.Millisecond, "A could not connect to B: %v", err)
 
 	// B's cxo NodeID for A is pkA (identity == dmsg PK).
 	var idA skycipher.PubKey

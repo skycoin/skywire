@@ -20,22 +20,27 @@ func TestCopyNIdle_ProgressNeverTimesOut(t *testing.T) {
 	defer c2.Close() //nolint:errcheck
 
 	chunk := bytes.Repeat([]byte("x"), 4096)
-	const chunks = 10
+	const chunks = 15
 	total := chunks * len(chunk)
 
+	// Gap and idle window are kept a full order of magnitude apart (50ms vs
+	// 500ms) so ordinary CI scheduling jitter — which on a loaded Windows
+	// runner once stretched a nominal 15ms gap past a 60ms window and tripped
+	// a spurious "read pipe: i/o timeout" — cannot cross the idle deadline.
+	const gap = 50 * time.Millisecond
 	go func() {
 		for i := 0; i < chunks; i++ {
-			_ = c2.SetWriteDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck // test writer deadline is best-effort
+			_ = c2.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck // test writer deadline is best-effort
 			if _, err := c2.Write(chunk); err != nil {
 				return
 			}
-			time.Sleep(15 * time.Millisecond) // gap < idle, but sum >> idle
+			time.Sleep(gap) // gap << idle, but sum >> idle
 		}
 	}()
 
 	var buf bytes.Buffer
-	// idle 60ms; total transfer ~150ms+. Must NOT time out.
-	n, err := copyNIdle(&buf, c1, int64(total), c1, 60*time.Millisecond)
+	// idle 500ms; total transfer ~750ms. Must NOT time out.
+	n, err := copyNIdle(&buf, c1, int64(total), c1, 500*time.Millisecond)
 	require.NoError(t, err)
 	require.Equal(t, int64(total), n)
 	require.Equal(t, total, buf.Len())

@@ -7,7 +7,6 @@ package handshake
 
 import (
 	"errors"
-	"net"
 	"testing"
 	"time"
 
@@ -57,7 +56,7 @@ func TestResponderRejection(t *testing.T) {
 	iAddr := dmsg.Addr{PK: initPK, Port: 10}
 	rAddr := dmsg.Addr{PK: respPK, Port: 11}
 
-	initC, respC := net.Pipe()
+	initC, respC := bufferedPipe()
 	deadline := time.Now().Add(Timeout)
 
 	respErrCh := make(chan error, 1)
