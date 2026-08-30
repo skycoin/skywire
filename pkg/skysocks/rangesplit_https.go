@@ -51,11 +51,11 @@ func isPort443(target string) bool {
 	return port == "443"
 }
 
-// loadOrCreateMITMCA loads the unconstrained MITM root from dir, generating and
+// LoadOrCreateMITMCA loads the unconstrained MITM root from dir, generating and
 // persisting one on first use. dir/ca.crt is the cert to import into the browser;
 // dir/ca.key is its private key (0600). Returns the cert, a leaf minter that will
 // sign for any host, and the cert itself for export.
-func loadOrCreateMITMCA(dir string) (*x509.Certificate, skynetca.LeafMinter, error) {
+func LoadOrCreateMITMCA(dir string) (*x509.Certificate, skynetca.LeafMinter, error) {
 	certPath := filepath.Join(dir, "ca.crt")
 	keyPath := filepath.Join(dir, "ca.key")
 
