@@ -2181,19 +2181,30 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	}
 	dead := selectDataStalledLegs(deltas, gapStuck)
 	if len(dead) > 0 {
-		if manual {
-			// Manual mode = the operator (or a static-mux policy, rotation_interval
-			// = 0) pinned this leg set. REMOVING a leg mid-stream orphans the
-			// sequences the sender already stripe-assigned to it, permanently
-			// wedging the no-skip reorder frontier (the observed 3-leg → 1-leg
-			// collapse that then stalls at 0 B/s). Instead PARK the stalled legs to
-			// warm standby: a standby leg is only excluded from SEND scheduling, it
-			// still RECEIVES, so its in-flight sequences keep draining the frontier,
-			// and the operator's pinned set is preserved and re-promotable once it
-			// recovers. Removal + self-heal-redial stays the ADAPTIVE-mode behavior,
-			// where churning a dead leg for a fresh one is the intent.
-			rg.logger.Infof("leg-dataprogress: parking %d stalled leg(s) to warm standby (manual mode — pinned set kept for recovery, not removed; reorder gap age %v, stuck=%v)",
-				len(dead), rg.mux.gapAge(), gapStuck)
+		// PARK (don't remove) whenever REMOVING a stalled leg would orphan the
+		// sequences the sender already stripe-assigned to it — which permanently
+		// wedges the no-skip reorder frontier (the observed N-leg → 1-leg collapse
+		// that then stalls at 0 B/s). Two cases must park:
+		//   - manual mode: the operator / static-mux policy pinned this set, and
+		//   - a STUCK frontier (gapStuck): the receiver is HoL-blocked on a missing
+		//     seq, so most legs read as "stalled" only because delivery is blocked —
+		//     they are not black-holing. Removing them here is exactly what turned a
+		//     transient stall into a permanent wedge: the sender's SACK retransmits
+		//     of the orphaned seqs then landed on a route whose rule was just torn
+		//     down ("Dropped transport frame for stale route"), so the gap could
+		//     never fill. Parking keeps each leg RECEIVING (its in-flight drains and
+		//     retransmits still land) and re-promotable once the gap clears; the
+		//     active-download floor re-promotes the healthy ones.
+		// Only a genuine black-hole caught while the frontier is HEALTHY
+		// (gapStuck == false) is REMOVED + self-heal-redialed: there is no critical
+		// in-flight to orphan, and churning a dead leg for a fresh one is the intent.
+		if parkStalledLegs(manual, gapStuck) {
+			reason := "manual mode — pinned set kept for recovery"
+			if !manual {
+				reason = "frontier stuck — parking avoids orphaning in-flight (retransmits keep landing)"
+			}
+			rg.logger.Infof("leg-dataprogress: parking %d stalled leg(s) to warm standby (%s; reorder gap age %v, stuck=%v)",
+				len(dead), reason, rg.mux.gapAge(), gapStuck)
 			rg.demoteStalledLegs(dead)
 		} else {
 			rg.logger.Infof("leg-dataprogress: fast-pruning %d data-black-holing leg(s) (delivered a negligible share of the fastest leg over %v while group moved %dB; reorder gap age %v, stuck=%v)",
@@ -2290,6 +2301,16 @@ type legRecvDelta struct {
 func soleLegBlackHoled(activeCnt int, sent, recv uint64) bool {
 	return activeCnt == 1 && sent > soleBlackHoleSentFloor && recv < soleBlackHoleRecvFloor
 }
+
+// parkStalledLegs decides whether data-stalled legs are PARKED to warm standby
+// (non-destructive, re-promotable, keeps the leg receiving so in-flight drains and
+// SACK retransmits still land) rather than REMOVED. Park when the set is pinned
+// (manual/static-mux) OR when the reorder frontier is stuck (gapStuck): a stuck
+// frontier makes many legs read as stalled only because delivery is HoL-blocked,
+// and removing them orphans their in-flight sequences — turning a transient stall
+// into a permanent wedge. Remove only a genuine black-hole caught while the
+// frontier is HEALTHY, where no critical in-flight is orphaned.
+func parkStalledLegs(manual, gapStuck bool) bool { return manual || gapStuck }
 
 func selectDataStalledLegs(legs []legRecvDelta, gapStuck bool) []uuid.UUID {
 	var agg, top uint64
