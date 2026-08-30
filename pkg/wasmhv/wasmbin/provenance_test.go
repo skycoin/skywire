@@ -161,7 +161,11 @@ func TestCommittedWasmNotStale(t *testing.T) {
 				t.Skipf("git rev-list against blob revision %s failed (%v): %s", rev[:12], err, bytes.TrimSpace(out))
 			}
 			if n := strings.TrimSpace(string(out)); n != "0" {
-				commits, _ := exec.Command("git", "-C", root, "log", "--oneline", rev+"..HEAD", "--", strings.Join(blob.staleSrcDirs, " ")).CombinedOutput() //nolint:gosec
+				logArgs := append([]string{"-C", root, "log", "--oneline", rev + "..HEAD", "--"}, blob.staleSrcDirs...)
+				commits, err := exec.Command("git", logArgs...).CombinedOutput() //nolint:errcheck,gosec // best-effort detail for the failure message
+				if err != nil {
+					commits = nil
+				}
 				t.Errorf("%s is STALE: %s commit(s) changed %v since it was built (rev %s).\n"+
 					"The committed blob ships older code than its source (this is how #4330's dmsg-RPC\n"+
 					"shipped missing). Run 'make wasm-visor && make embed-wasm-visor' and commit the result.\n%s",
