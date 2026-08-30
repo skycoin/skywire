@@ -424,6 +424,26 @@ func stampTunables(cap, revActive, standbyMax *int) {
 	*standbyMax = preset.AdaptStandbyMax()
 }
 
+// SelfHealTarget reports the adaptive preset's live pool size — the steady
+// active width plus the warm-standby reserve (AdaptRevActive()+AdaptStandbyMax(),
+// the same figure decideAdaptive requests at dial). Both are runtime atomics
+// retuned over the mux-control RPC (cli proxy mux width / standby), so reporting
+// the current sum lets a running route group re-cap its self-heal when an
+// operator lowers the reserve — instead of storming back toward the dial-time
+// value. Non-adaptive presets keep their fixed dial-time target (ok=false).
+//
+// This mirrors presethook.Hook.SelfHealTarget for the NATIVE preset path. The
+// production hook on a preset:* visor is policy.Hook wrapping the wasm Loader,
+// NOT presethook.Hook, so without this (and the Loader/Hook forwarders) the
+// runtime re-cap never fired on wasm-preset visors and the pool storming toward
+// the dial-time 513 ignored `mux standby`.
+func (e *Evaluator) SelfHealTarget() (int, bool) {
+	if e.preset == "adaptive" {
+		return preset.AdaptRevActive() + preset.AdaptStandbyMax(), true
+	}
+	return 0, false
+}
+
 // wireFromCtx flattens a policy.RoutingContext to its wire shape.
 func wireFromCtx(r policy.RoutingContext) RoutingContextWire {
 	return RoutingContextWire{
