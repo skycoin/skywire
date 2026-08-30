@@ -9,17 +9,19 @@
 // a GET, an already-ranged request, a non-range origin, a small file) falls back
 // to a byte-identical transparent splice.
 //
-// HTTPS (port 443) is NOT handled here: seeing the GET inside TLS requires
-// terminating it at the proxy, and the resolver CA is name-constrained to
-// .skynet/.dmsg/.skysocks (PermittedDNSDomainsCritical), so it cannot mint a
-// browser-trusted leaf for a real origin. Transparent HTTPS range-splitting
-// therefore needs a separate, unconstrained MITM root — a distinct security
-// decision left as follow-up. HTTPS CONNECTs splice through unchanged.
+// HTTPS (port 443) is handled in rangesplit_https.go, but only when the operator
+// has explicitly enabled it: seeing the GET inside TLS requires terminating it at
+// the proxy with a leaf minted by an UNCONSTRAINED local root (the resolver CA is
+// name-constrained to .skynet/.dmsg/.skysocks and cannot cover a real origin). That
+// root can forge any host, so HTTPS range-splitting is off by default and the
+// browser must be told to trust the root; a plain :443 CONNECT splices through
+// unchanged until then.
 package skysocks
 
 import (
 	"bufio"
 	"bytes"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -29,6 +31,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/skynetca"
 )
 
 // rangeSplitConfig tunes transparent HTTP range-splitting. Zero value is
@@ -37,6 +41,13 @@ type rangeSplitConfig struct {
 	enabled     bool
 	concurrency int   // number of concurrent range streams
 	chunkSize   int64 // bytes per range request
+
+	// HTTPS (:443) range-splitting is off unless the operator opts in — it needs a
+	// forge-any-host root the browser is told to trust (see rangesplit_https.go).
+	httpsEnabled bool
+	minter       skynetca.LeafMinter // mints per-host leaves for browser-side TLS termination
+	caCert       *x509.Certificate   // the MITM root, for operator export/import
+	originRoots  *x509.CertPool      // origin-side verification roots (nil = system); tests inject here
 }
 
 const (
@@ -201,16 +212,20 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	c.rsChunks.Add(uint64(numChunks(total, c.rs.chunkSize))) //nolint:gosec // numChunks>0 here (total>chunkSize)
 	c.rsBytes.Add(uint64(total))                             //nolint:gosec // total>0 checked above
 	c.rsActive.Add(1)
-	c.streamRemainingChunks(conn, req, host, validator, total)
+	c.streamRemainingChunks(conn, total, func(start, end int64) ([]byte, error) {
+		return c.fetchChunkRetry(req, host, validator, start, end)
+	})
 	c.rsActive.Add(-1)
 	conn.Close() //nolint:errcheck,gosec
 	return host, nil, true
 }
 
 // streamRemainingChunks fetches [chunkSize, total) as concurrent ranges and writes
-// them to conn in order. Outstanding (in-flight + buffered) chunks are bounded to
-// the configured concurrency so memory stays ~concurrency×chunkSize.
-func (c *Client) streamRemainingChunks(conn net.Conn, req *http.Request, host, validator string, total int64) {
+// them to conn in order, using fetch to retrieve one [start,end] byte range (the
+// caller supplies the plaintext or TLS-over-exit fetch). Outstanding (in-flight +
+// buffered) chunks are bounded to the configured concurrency so memory stays
+// ~concurrency×chunkSize.
+func (c *Client) streamRemainingChunks(conn net.Conn, total int64, fetch func(start, end int64) ([]byte, error)) {
 	type chunk struct {
 		start, end int64
 		buf        []byte
@@ -234,7 +249,7 @@ func (c *Client) streamRemainingChunks(conn net.Conn, req *http.Request, host, v
 			wg.Add(1)
 			go func(ch *chunk) {
 				defer wg.Done()
-				ch.buf, ch.err = c.fetchChunkRetry(req, host, validator, ch.start, ch.end)
+				ch.buf, ch.err = fetch(ch.start, ch.end)
 				close(ch.done)
 			}(ch)
 		}
