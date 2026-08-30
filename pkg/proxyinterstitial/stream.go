@@ -207,9 +207,18 @@ func StreamClose(ok bool, detail string) string {
 	b.WriteString(`</ul>`)
 	if ok {
 		b.WriteString(`<p class="ready">Route up — loading the page…</p>`)
-		// replace() so the interstitial isn't left in history; the reload
-		// re-requests through the proxy and hits the now-warm route.
-		b.WriteString(`<script>location.replace(location.href)</script>`)
+		// Reload the SAME URL — now warm — via replace() so the interstitial isn't
+		// left in history. CRUCIAL: defer the navigation to the load event. This
+		// fragment is parsed while the chunked document is still streaming, and a
+		// browser drops a same-URL replace() issued during load — leaving the page
+		// stuck on "Route up…" until a manual reload. Firing after load (the stream
+		// has closed by then) makes it commit; the readyState guard covers the race
+		// where load already fired, and the timer is a last-resort fallback.
+		b.WriteString(`<script>(function(){var g=false;function go(){if(g)return;g=true;location.replace(location.href);}` +
+			`if(document.readyState==='complete'){go();}else{window.addEventListener('load',go);}` +
+			`setTimeout(go,600);})();</script>`)
+		// No-JS fallback: a body meta-refresh reloads once parsing completes.
+		b.WriteString(`<noscript><meta http-equiv="refresh" content="0"></noscript>`)
 	} else {
 		if d := strings.TrimSpace(detail); d != "" {
 			b.WriteString(`<p id="mesh-detail" style="display:block">` + html.EscapeString(d) + `</p>`)
