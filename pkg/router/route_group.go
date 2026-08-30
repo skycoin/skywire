@@ -3577,6 +3577,22 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 				if remoteCaps&routing.CapLegState != 0 {
 					rg.mux.legStateEnabled = true
 					rg.logger.Debug("Leg-state signaling enabled (both peers support CapLegState)")
+					if !rg.initiator {
+						// Acceptor: the initiator owns the active set and promotes the
+						// legs it wants via the mirror. Default every aux leg to STANDBY
+						// (born-standby + park any already present) so we never send the
+						// bulk direction across a leg the initiator hasn't activated. The
+						// mirror's active signals + periodic resync then promote exactly
+						// the initiator's active set. Without this the acceptor births aux
+						// legs ACTIVE (no promoting engine → standbyNewLegs stays false)
+						// and sprays the download across every established leg until the
+						// lossy event mirror parks it — measured the acceptor holding 23
+						// active while the initiator had 2 (~11x reorder over-subscription,
+						// wedge). Complements honorsMirrorActiveSet (#4351), which stops the
+						// acceptor's OWN controllers from re-admitting.
+						rg.mux.SetStandbyNewLegs(true)
+						rg.mux.parkAllAuxStandby()
+					}
 				}
 
 				// Unidirectional send selection negotiation. Both edges must

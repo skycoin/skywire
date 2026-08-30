@@ -683,6 +683,19 @@ func (m *routeMux) setLegStandby(idx int, standby bool) {
 	m.legMu.Unlock()
 }
 
+// parkAllAuxStandby marks every aux leg (index > 0) as warm standby. Used by the
+// acceptor when leg-state signaling is negotiated so its active set starts EMPTY
+// and is filled only by the initiator's mirror promotes — the acceptor must never
+// send the bulk direction across a leg the initiator hasn't activated. Leg 0 (the
+// primary) is left active.
+func (m *routeMux) parkAllAuxStandby() {
+	m.legMu.Lock()
+	for i := 1; i < len(m.standby); i++ {
+		m.standby[i] = true
+	}
+	m.legMu.Unlock()
+}
+
 // swapLegs exchanges the mux's per-leg state (counters, readiness, standby
 // marker) between two leg indices so the primary slot (0) can be RE-ELECTED
 // onto a healthier leg without tearing down any route. The caller (RouteGroup.
