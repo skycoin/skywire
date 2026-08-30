@@ -55,7 +55,7 @@ func init() {
 	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP) | tps (AUTHORITATIVE: src+dst own transports via the setup node, same path as tp --remote; TPD-independent, single-intermediate). dht|auto are accepted for compatibility and also read from TPD, since the DHT store was removed; dht and tps force the non-streaming local-compute path")
 	calcCmd.Flags().IntVar(&calcQueueCap, "queue-cap", 0, "BFS queue cap (0 = server/local default ~200K, negative = unbounded)")
 	calcCmd.Flags().BoolVar(&calcByLatency, "by-latency", false, "rank routes by cumulative transport latency (lowest first); skips the streaming gRPC path since the full set has to be in hand to sort")
-	calcCmd.Flags().BoolVar(&calcCapacity, "capacity", false, "instead of listing routes, report how many disjoint/multiplexable routes CAN exist to the destination (total, edge-disjoint, single-relay-disjoint, egress/ingress fan) — the ceiling on the warm-standby mux pool. Forces the full-set local-compute path")
+	calcCmd.Flags().BoolVar(&calcCapacity, "capacity", false, "instead of listing routes, report how many disjoint SINGLE-INTERMEDIATE routes CAN exist to the destination — the warm-standby mux pool ceiling. Uses only this visor's + the destination's own transports (setup-node/attached-visor RPC) intersected by peer PK; TPD-free and zero Route-Finder load")
 	// Hidden long-form aliases so the hop-bound vocabulary matches
 	// `route find` / `route trace` (--min/--max stay the visible spelling).
 	calcCmd.Flags().Uint16Var(&calcMinHops, "min-hops", 0, "minimum hops (alias for --min)")
@@ -192,13 +192,21 @@ var calcCmd = &cobra.Command{
 		// tps assembles its graph from the src+dst OWN transports (visor
 		// RPC + setup-node), not the TPD snapshot the gRPC BFS streams
 		// over, so — like dht — it must take the local-compute path below.
-		// --capacity needs the whole route set in hand to count disjoint paths, so
-		// it streams every route (count 0) and analyzes them as they arrive. The
-		// streaming gRPC path handles unbounded without OOMing; local-compute builds
-		// the full path set in memory and would OOM on a dense graph, so --capacity
-		// goes ONLY through streaming (and is refused on the local-compute branch).
+		// --capacity: how many disjoint SINGLE-INTERMEDIATE routes CAN exist to the
+		// destination. It does NOT enumerate the TPD graph (that OOMs on a dense
+		// mesh) — it needs only two transport sets: this visor's own transports and
+		// the destination's (the latter read via the setup node, or the attached
+		// visor's RPC), then intersects their peer PKs. Every peer both ends share is
+		// a disjoint local->relay->exit route; a direct local<->exit transport adds
+		// one more. Bounded, TPD-free, and zero load on the Route Finder.
 		if calcCapacity {
-			calcCount = 0
+			entries, err := fetchTPSTransports(rpcClient, srcPK, dstPK)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("capacity: %w", err))
+			}
+			report, text := routeCapacityTPS(srcPK, dstPK, entries)
+			internal.PrintOutput(cmd.Flags(), report, text)
+			return
 		}
 		if !calcByLatency && rpcClient != nil && strings.ToLower(calcSource) != "dht" && strings.ToLower(calcSource) != "tps" {
 			if err := streamRoutesViaGRPC(ctx, cmd, srcPK, dstPK, minHops, calcMaxHops, calcCount, calcQueueCap, calcSource, tpdURL); err == nil {
@@ -207,13 +215,6 @@ var calcCmd = &cobra.Command{
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
 			// fallback to local compute below
-		}
-
-		// --capacity cannot run on the local-compute branch: it needs every route
-		// (count 0), which this in-memory path enumerates all at once and OOMs on a
-		// dense graph. It is a streaming-only feature.
-		if calcCapacity {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--capacity requires the streaming path: use --source tpd (or auto) with the visor running; it is not available for --source %s / offline", calcSource))
 		}
 
 		// Local fallback path: bounded count only. The streaming path
@@ -334,93 +335,130 @@ var calcCmd = &cobra.Command{
 	},
 }
 
-// routeCapacityInfo is the --capacity report: how many disjoint/multiplexable
-// routes CAN exist to the destination, which is the ceiling the warm-standby mux
-// pool can hold. These are POSSIBLE routes derived from the transport graph, not
-// currently-instantiated route groups.
+// routeCapacityInfo is the --capacity report: how many disjoint SINGLE-INTERMEDIATE
+// routes CAN exist to the destination — the ceiling the warm-standby mux pool can
+// hold. It is computed from just two transport sets (this visor's own transports and
+// the destination's), intersecting their peer PKs: every peer BOTH ends have a
+// transport to is a disjoint local->relay->exit route, and a direct local<->exit
+// transport adds one more. These are POSSIBLE routes, not instantiated route groups.
 type routeCapacityInfo struct {
-	Dst         string `json:"dst"`
-	MaxHops     int    `json:"max_hops"`
-	Total       int    `json:"total_routes"`
-	Direct      int    `json:"direct_routes"`
-	SingleRelay int    `json:"single_relay_routes"`
-	// EgressTransports is the local visor's fan-out toward the dst (distinct
-	// first-hop transports); IngressTransports is the dst's fan-in (distinct
-	// last-hop transports). The smaller bounds the disjoint-path count.
-	EgressTransports  int `json:"egress_transports"`
-	IngressTransports int `json:"ingress_transports"`
-	// EdgeDisjoint is the greedy max set of routes sharing no transport (the real
-	// parallel capacity); DisjointShort restricts that to <=1-relay routes (the
-	// low-latency subset best suited to the mux's active/standby legs).
-	EdgeDisjoint  int `json:"edge_disjoint_routes"`
-	DisjointShort int `json:"disjoint_short_routes"`
-	// HopHistogram maps hop-count -> number of routes.
-	HopHistogram map[int]int `json:"hop_histogram"`
+	Dst    string `json:"dst"`
+	Direct bool   `json:"direct"`
+	// DirectTransports counts distinct direct local<->exit transports (>1 when the
+	// two share more than one transport type).
+	DirectTransports int `json:"direct_transports"`
+	// SingleRelayRoutes is the number of shared intermediates — each is one disjoint
+	// two-hop route. ShortDisjointRoutes adds the direct route when present: the
+	// warm-standby pool ceiling for <=1-relay (low-latency) routes.
+	SingleRelayRoutes   int `json:"single_relay_routes"`
+	ShortDisjointRoutes int `json:"short_disjoint_routes"`
+	// LocalPeers / DstPeers are each end's distinct transport peers (excluding each
+	// other); the smaller bounds how many shared intermediates can exist.
+	LocalPeers int `json:"local_peers"`
+	DstPeers   int `json:"dst_peers"`
+	// RelayTypes maps the route's transport type (the less-preferred of its two hop
+	// types — a route is only as good as its worse hop) to the number of relays it
+	// serves, so the type mix of the pool is visible.
+	RelayTypes map[string]int `json:"relay_types"`
 }
 
-// routeCapacityReport computes the disjoint/multiplex capacity from the full set of
-// forward hop-lists between the source and dst.
-func routeCapacityReport(dst cipher.PubKey, maxHops int, forwards [][]routing.Hop) (routeCapacityInfo, string) {
-	info := routeCapacityInfo{Dst: dst.Hex(), MaxHops: maxHops, Total: len(forwards), HopHistogram: map[int]int{}}
-	firstTps := map[string]struct{}{}
-	lastTps := map[string]struct{}{}
-	for _, f := range forwards {
-		if len(f) == 0 {
-			continue
+// routeCapacityTPS computes single-intermediate route capacity from the combined
+// own-transport sets of src and dst (as returned by fetchTPSTransports): it keeps,
+// per peer, the most-preferred transport type each end has to it, then intersects.
+// Per-edge type preference uses tptypes.TypePreference (STCPR>QUIC>SUDPH>...), so a
+// relay reachable by several types is scored by its best on each side.
+func routeCapacityTPS(src, dst cipher.PubKey, entries []*transport.Entry) (routeCapacityInfo, string) {
+	srcPeers := map[cipher.PubKey]tptypes.Type{}
+	dstPeers := map[cipher.PubKey]tptypes.Type{}
+	directCount := 0
+	var directBest *tptypes.Type
+	keepBest := func(m map[cipher.PubKey]tptypes.Type, peer cipher.PubKey, t tptypes.Type) {
+		if cur, ok := m[peer]; !ok || tptypes.TypePreference(t) < tptypes.TypePreference(cur) {
+			m[peer] = t
 		}
-		info.HopHistogram[len(f)]++
-		switch len(f) {
-		case 1:
-			info.Direct++
-		case 2:
-			info.SingleRelay++
-		}
-		firstTps[f[0].TpID.String()] = struct{}{}
-		lastTps[f[len(f)-1].TpID.String()] = struct{}{}
 	}
-	info.EgressTransports = len(firstTps)
-	info.IngressTransports = len(lastTps)
-	info.EdgeDisjoint = greedyDisjoint(forwards, maxHops) // all hop lengths
-	info.DisjointShort = greedyDisjoint(forwards, 2)      // <=1 relay only
-
-	var b strings.Builder
-	fmt.Fprintf(&b, "route capacity to %s (<=%d hops)\n", dst.Hex(), maxHops)
-	fmt.Fprintf(&b, "  total routes (can exist):   %d\n", info.Total)
-	fmt.Fprintf(&b, "  edge-disjoint routes:       %d   <- max parallel/multiplexable\n", info.EdgeDisjoint)
-	fmt.Fprintf(&b, "  disjoint short (<=1 relay):  %d   <- low-latency standby-pool depth\n", info.DisjointShort)
-	fmt.Fprintf(&b, "  egress transports (local):  %d\n", info.EgressTransports)
-	fmt.Fprintf(&b, "  ingress transports (dst):   %d   <- bounds disjoint paths\n", info.IngressTransports)
-	fmt.Fprintf(&b, "  direct (1-hop): %d   single-relay (2-hop): %d\n", info.Direct, info.SingleRelay)
-	return info, b.String()
-}
-
-// greedyDisjoint returns the greedy-maximal number of routes (whose hop count is
-// <= maxLen) that share no transport id — a lower bound on the edge-disjoint path
-// count. A transport is bidirectional, so its forward TpID identifies the shared
-// resource for both directions.
-func greedyDisjoint(forwards [][]routing.Hop, maxLen int) int {
-	used := map[string]struct{}{}
-	n := 0
-	for _, f := range forwards {
-		if len(f) == 0 || len(f) > maxLen {
+	for _, e := range entries {
+		if e == nil {
 			continue
 		}
-		clash := false
-		for _, h := range f {
-			if _, ok := used[h.TpID.String()]; ok {
-				clash = true
-				break
+		if e.HasEdge(src) {
+			if r := e.RemoteEdge(src); r == dst {
+				directCount++
+				if directBest == nil || tptypes.TypePreference(e.Type) < tptypes.TypePreference(*directBest) {
+					tt := e.Type
+					directBest = &tt
+				}
+			} else {
+				keepBest(srcPeers, r, e.Type)
 			}
 		}
-		if clash {
+		if e.HasEdge(dst) {
+			if r := e.RemoteEdge(dst); r != src {
+				keepBest(dstPeers, r, e.Type)
+			}
+		}
+	}
+
+	relayTypes := map[string]int{}
+	relays := 0
+	for peer, stype := range srcPeers {
+		dtype, ok := dstPeers[peer]
+		if !ok {
 			continue
 		}
-		for _, h := range f {
-			used[h.TpID.String()] = struct{}{}
+		relays++
+		// The route is only as good as its worse hop: report the less-preferred type.
+		rt := stype
+		if tptypes.TypePreference(dtype) > tptypes.TypePreference(stype) {
+			rt = dtype
 		}
-		n++
+		relayTypes[string(rt)]++
 	}
-	return n
+
+	info := routeCapacityInfo{
+		Dst:               dst.Hex(),
+		Direct:            directCount > 0,
+		DirectTransports:  directCount,
+		SingleRelayRoutes: relays,
+		LocalPeers:        len(srcPeers),
+		DstPeers:          len(dstPeers),
+		RelayTypes:        relayTypes,
+	}
+	info.ShortDisjointRoutes = relays
+	if info.Direct {
+		info.ShortDisjointRoutes++
+	}
+
+	// Sorted type mix for the text line, most-preferred first.
+	types := make([]string, 0, len(relayTypes))
+	for t := range relayTypes {
+		types = append(types, t)
+	}
+	sort.Slice(types, func(i, j int) bool {
+		return tptypes.TypePreference(tptypes.Type(types[i])) < tptypes.TypePreference(tptypes.Type(types[j]))
+	})
+	var mix strings.Builder
+	for i, t := range types {
+		if i > 0 {
+			mix.WriteString(" ")
+		}
+		fmt.Fprintf(&mix, "%s:%d", t, relayTypes[t])
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "route capacity to %s (single-intermediate; own+peer transports, TPD-free)\n", dst.Hex())
+	directType := "-"
+	if directBest != nil {
+		directType = string(*directBest)
+	}
+	fmt.Fprintf(&b, "  direct local<->exit:          %v (%d transport(s), best %s)\n", info.Direct, info.DirectTransports, directType)
+	fmt.Fprintf(&b, "  single-relay disjoint routes: %d   <- shared intermediates, each a disjoint 2-hop route\n", info.SingleRelayRoutes)
+	fmt.Fprintf(&b, "  short disjoint total:         %d   <- warm-standby pool ceiling (<=1 relay)\n", info.ShortDisjointRoutes)
+	fmt.Fprintf(&b, "  local peers: %d   exit peers: %d   (smaller bounds the intersection)\n", info.LocalPeers, info.DstPeers)
+	if mix.Len() > 0 {
+		fmt.Fprintf(&b, "  relay route types (worse hop): %s\n", mix.String())
+	}
+	return info, b.String()
 }
 
 // streamRoutesViaGRPC opens the visor's StreamCalcRoutes gRPC stream and
@@ -447,7 +485,6 @@ func streamRoutesViaGRPC(
 	}
 	isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 	var collected []routePair
-	var capForwards [][]routing.Hop // accumulated for --capacity analysis
 
 	emitted := 0
 	cb := func(r *rpcgrpc.CalcRoute) bool {
@@ -458,13 +495,6 @@ func streamRoutesViaGRPC(
 		}
 		rev := reverseHops(fwd)
 		emitted++
-
-		// --capacity streams every route but keeps only its forward hop-list, for
-		// the disjoint-count analysis emitted after the stream completes.
-		if calcCapacity {
-			capForwards = append(capForwards, fwd)
-			return true // count is 0 (unbounded) under --capacity
-		}
 
 		if isJSON {
 			collected = append(collected, routePair{Forward: fwd, Reverse: rev})
@@ -503,11 +533,6 @@ func streamRoutesViaGRPC(
 
 	if emitted == 0 {
 		return fmt.Errorf("no route found: %w", routeFinder.ErrRouteNotFound)
-	}
-	if calcCapacity {
-		report, text := routeCapacityReport(dstPK, int(maxHops), capForwards)
-		internal.PrintOutput(cmd.Flags(), report, text)
-		return nil
 	}
 	if isJSON {
 		// Single-route back-compat shape preserved when count=1.
