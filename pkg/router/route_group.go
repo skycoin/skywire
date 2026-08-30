@@ -2576,6 +2576,10 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	for _, idx := range demote {
 		rg.logger.Infof("shared-bottleneck: parking leg %d to warm standby (co-bottlenecked with a kept active leg in group %d — one pipe, not two; striping it adds only reorder cost)", idx, groups[idx])
 		rg.mux.setLegStandby(idx, true)
+		// Mirror the park to the remote (CapLegState) so the bulk-sending peer
+		// stops striping across this leg — without this the native park is
+		// send-side-only here and the peer keeps spraying the download over it.
+		rg.sendLegState(idx, true)
 	}
 }
 
@@ -2661,10 +2665,14 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 	for _, idx := range demote {
 		rg.logger.Infof("latency-band: parking leg %d to warm standby (latency %.0fms out-of-band, keeping the active stripe set homogeneous)", idx, latOf[idx])
 		rg.mux.setLegStandby(idx, true)
+		// Mirror to the remote so the bulk sender stops striping across this leg
+		// (CapLegState) — the native park is otherwise send-side-only here.
+		rg.sendLegState(idx, true)
 	}
 	for _, idx := range promote {
 		rg.logger.Infof("latency-band: re-admitting leg %d to active (latency %.0fms back within band)", idx, latOf[idx])
 		rg.mux.setLegStandby(idx, false)
+		rg.sendLegState(idx, false)
 	}
 	if len(demote) > 0 || len(promote) > 0 {
 		rg.mu.Lock()
@@ -2800,6 +2808,9 @@ func (rg *RouteGroup) demoteStalledLegs(deadIDs []uuid.UUID) {
 	rg.mu.Unlock()
 	for _, i := range idxs {
 		rg.mux.setLegStandby(i, true)
+		// Mirror to the remote so it also stops sending on the dead leg
+		// (CapLegState); the native park is otherwise send-side-only here.
+		rg.sendLegState(i, true)
 	}
 	if len(idxs) > 0 {
 		rg.mu.Lock()
