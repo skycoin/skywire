@@ -187,8 +187,17 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 			}
 		}
 
-		// Build full URLs
-		utFullURL := clirpc.IntegratedUptimeURL(utURL)
+		// Build full URLs. Online-status callers (-o / -os / -ot) read only
+		// the .on / .version fields, so fetch the days=1 window instead of the
+		// 30-day daily bitmap for every visor — the .on flag is present in
+		// every window, so pulling 30 days of per-visor daily data is pure
+		// over-fetch. The wide window is only needed for the daily-percentage
+		// table (the default output) and its reward.sh disk mirror.
+		utDays := 30
+		if online {
+			utDays = 1
+		}
+		utFullURL := clirpc.IntegratedUptimeURLDays(utURL, utDays)
 		tpdFullURL := tpdURL + "/all-transports"
 
 		// Resolve cache file paths up-front so we can mirror response bodies
@@ -202,7 +211,13 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		// version-history chart on the last good day).
 		utCacheFile := cacheFile(cacheDirUT, utFullURL)
 		uts := clirpc.FetchCachedServiceURL(cmd.Flags(), utCacheFile, utFullURL, cacheFilesAge)
-		writeCacheJSON(utCacheFile, uts)
+		// Only mirror the full days=30 payload to disk. The disk-cache name is
+		// keyed on the URL path alone (/uptimes -> uptimes.json), so a days=1
+		// online fetch would otherwise overwrite the daily table that reward.sh
+		// reads from the same file.
+		if !online {
+			writeCacheJSON(utCacheFile, uts)
+		}
 
 		// Build transport count map if --max-tp is specified
 		var tpCount map[string]int
