@@ -5,10 +5,33 @@ package router
 import (
 	"fmt"
 	"io"
+	"sort"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/routing"
 )
+
+// sortMuxInfos orders a mux-info slice deterministically by route descriptor
+// (dst PK, src PK, dst port, src port). The router holds route groups in a map,
+// so RouteGroupMuxInfo* would otherwise return them in random iteration order —
+// which reshuffled the `cli visor state` / status.skysocks stream tree and the
+// CLI mux-info rows on every refresh. A stable key keeps each tunnel in the same
+// slot as the pool churns around it.
+func sortMuxInfos(out []MuxInfo) {
+	sort.SliceStable(out, func(i, j int) bool {
+		di, dj := &out[i].Desc, &out[j].Desc
+		if a, b := di.DstPK().String(), dj.DstPK().String(); a != b {
+			return a < b
+		}
+		if a, b := di.SrcPK().String(), dj.SrcPK().String(); a != b {
+			return a < b
+		}
+		if a, b := di.DstPort(), dj.DstPort(); a != b {
+			return a < b
+		}
+		return di.SrcPort() < dj.SrcPort()
+	})
+}
 
 // Saves `rules` to the routing table.
 func (r *router) SaveRoutingRules(rules ...routing.Rule) error {
@@ -110,6 +133,7 @@ func (r *router) RouteGroupMuxInfoForApp(appName string) []MuxInfo {
 		}
 		out = append(out, nrg.rg.MuxStats())
 	}
+	sortMuxInfos(out)
 	return out
 }
 
@@ -131,6 +155,7 @@ func (r *router) RouteGroupMuxInfoAll() []MuxInfo {
 	for _, nrg := range rgs {
 		out = append(out, nrg.rg.MuxStats())
 	}
+	sortMuxInfos(out)
 	return out
 }
 
