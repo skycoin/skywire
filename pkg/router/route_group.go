@@ -1590,6 +1590,21 @@ func (rg *RouteGroup) Initiator() bool {
 	return rg.initiator
 }
 
+// honorsMirrorActiveSet reports whether this side must DEFER its active/standby
+// set to the peer's mirror (CapLegState) rather than run its own promote/demote
+// controllers. The initiator owns the active-set decision and mirrors park/promote
+// to the acceptor (see the unidir/mirror comments on routeMux); the ACCEPTOR must
+// honor that mirror. When leg-state signaling is negotiated, the acceptor's own
+// homogeneity controllers (enforceLatencyBand / enforceBottleneckGroups) must NOT
+// run — otherwise they re-admit legs the initiator parked and the bulk sender
+// sprays its send traffic across them (the wide-mux download over-subscription:
+// measured the acceptor holding ~33 active legs while the initiator had ~8, so
+// ~99% of a download rode legs the initiator had parked). With signaling off,
+// both ends keep their local behavior (no mirror to honor).
+func (rg *RouteGroup) honorsMirrorActiveSet() bool {
+	return rg.mux != nil && rg.mux.legStateEnabled && !rg.initiator
+}
+
 // RouteHopDetails returns detailed information about each hop in the route,
 // including transport IDs and types.
 func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
@@ -2571,6 +2586,9 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	if rg.isClosed() || rg.mux == nil {
 		return
 	}
+	if rg.honorsMirrorActiveSet() {
+		return // acceptor: the active set is the initiator's mirror, not ours to size
+	}
 	rg.mu.Lock()
 	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
 	rg.mu.Unlock()
@@ -2633,6 +2651,9 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 	if rg.isClosed() || rg.mux == nil {
 		return
+	}
+	if rg.honorsMirrorActiveSet() {
+		return // acceptor: honor the initiator's mirrored active set; do not re-admit
 	}
 	rg.mu.Lock()
 	manual := !rg.standbyNewLegs
