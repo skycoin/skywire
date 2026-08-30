@@ -108,29 +108,50 @@ type muxRouteGroupInfo struct {
 		DstPort int    `json:"dst_port"`
 		SrcPort int    `json:"src_port"`
 	} `json:"desc"`
-	MuxEnabled      bool         `json:"mux_enabled"`
-	SACKEnabled     bool         `json:"sack_enabled"`
-	PerFrameNoise   bool         `json:"per_frame_noise"`
+	MuxEnabled    bool `json:"mux_enabled"`
+	SACKEnabled   bool `json:"sack_enabled"`
+	PerFrameNoise bool `json:"per_frame_noise"`
+	// Directional/Flipped describe the unidirectional-mux state (CapUniDir): each
+	// direction rides a disjoint leg CLASS, and Flipped tells which class carries
+	// which direction. Absent before now, so "is this group directional" was
+	// invisible from the CLI.
+	Directional     bool         `json:"directional,omitempty"`
+	Flipped         bool         `json:"flipped,omitempty"`
 	Distribution    string       `json:"distribution,omitempty"`
 	ReorderPending  int          `json:"reorder_pending,omitempty"`
 	ReorderGapAgeMS float64      `json:"reorder_gap_age_ms,omitempty"`
 	WriteSeq        uint32       `json:"write_seq,omitempty"`
+	FECEnabled      bool         `json:"fec_enabled,omitempty"`
+	FECReconstructs uint64       `json:"fec_reconstructs,omitempty"`
 	Legs            []muxLegInfo `json:"legs"`
 }
 
 type muxLegInfo struct {
-	Index       int     `json:"index"`
-	TransportID string  `json:"transport_id"`
-	TpType      string  `json:"tp_type"`
-	RemotePK    string  `json:"remote_pk"`
-	LatencyMS   float64 `json:"latency_ms,omitempty"`
-	SentBytes   uint64  `json:"sent_bytes"`
-	SentPackets uint64  `json:"sent_packets"`
-	RecvBytes   uint64  `json:"recv_bytes"`
-	RecvPackets uint64  `json:"recv_packets"`
-	Retransmits uint64  `json:"retransmits"`
-	Alive       bool    `json:"alive"`
-	Standby     bool    `json:"standby"`
+	Index          int     `json:"index"`
+	TransportID    string  `json:"transport_id"`
+	TpType         string  `json:"tp_type"`
+	RemotePK       string  `json:"remote_pk"`
+	LatencyMS      float64 `json:"latency_ms,omitempty"`
+	RouteLatencyMS float64 `json:"route_latency_ms,omitempty"`
+	// Direct is true for a 1-hop leg straight to the far endpoint, false for a
+	// relayed (multihop) leg. The router computes it, but the CLI mirror struct
+	// dropped it — so it read as null in `proxy mux-info --json` even though the
+	// unidirectional split keys on exactly this.
+	Direct      bool   `json:"direct"`
+	SentBytes   uint64 `json:"sent_bytes"`
+	SentPackets uint64 `json:"sent_packets"`
+	RecvBytes   uint64 `json:"recv_bytes"`
+	RecvPackets uint64 `json:"recv_packets"`
+	// PayloadBytes is the unique in-order payload this leg delivered (retransmits
+	// excluded), so per-leg values sum to the transfer size — the clean signal for
+	// which legs carried a direction's data.
+	PayloadBytes   uint64  `json:"payload_bytes"`
+	Retransmits    uint64  `json:"retransmits"`
+	GoodputBps     float64 `json:"goodput_bps,omitempty"`
+	GoodputUpBps   float64 `json:"goodput_up_bps,omitempty"`
+	GoodputDownBps float64 `json:"goodput_down_bps,omitempty"`
+	Alive          bool    `json:"alive"`
+	Standby        bool    `json:"standby"`
 }
 
 // muxRateTracker remembers the previous poll's per-leg byte counters so
