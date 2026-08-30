@@ -176,6 +176,9 @@ func (s *service) Run(ctx context.Context) error {
 
 	enableMetrics := cfg.MetricsAddr != ""
 	rfAPI := api.New(transportStore, logger, enableMetrics, dmsgAddr)
+	// Warm the shared route graph in the background (bound to the server context)
+	// so route requests reuse it instead of each building a per-source graph.
+	rfAPI.StartGraphCache(runCtx)
 
 	resolvedMode, err := svcmode.ResolveMode(cfg.Mode, !sk.Null())
 	if err != nil {

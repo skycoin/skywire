@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -36,6 +37,7 @@ type API struct {
 	http.Handler
 	reqsInFlightCountMiddleware *metricsutil.RequestsInFlightCountMiddleware
 	store                       store.Store
+	graphCache                  *routeFinder.GraphCache
 	startedAt                   time.Time
 	dmsgAddr                    string
 	DmsgServers                 []string
@@ -55,11 +57,11 @@ func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr 
 	api := &API{
 		reqsInFlightCountMiddleware: metricsutil.NewRequestsInFlightCountMiddleware(),
 		store:                       s,
+		graphCache:                  routeFinder.NewGraphCache(s, routeFinder.DefaultCacheRefresh, logger),
 		startedAt:                   time.Now(),
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
 	}
-
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -86,6 +88,14 @@ func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr 
 
 func (a *API) log(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
+}
+
+// StartGraphCache keeps one shared full-network graph warm in the background so
+// route requests no longer each build a per-source graph by walking the store.
+// Bound to ctx (the server lifecycle); until the first build lands, requests fall
+// back to the per-source build. Call once at server start.
+func (a *API) StartGraphCache(ctx context.Context) {
+	go a.graphCache.Run(ctx)
 }
 
 // getPairedRoutes Obtains the available routes for a specific source and destination public key and
@@ -142,22 +152,34 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 		graphDepth = 10
 	}
 
+	// Prefer the shared, background-refreshed full graph — every source reuses the
+	// one cached graph, so a request no longer builds a per-source graph by walking
+	// the store (the redis storm that pegged the route-finder). Until the cache's
+	// first build lands (fullGraph == nil) we fall back to the per-source
+	// depth-limited build, so behavior degrades to the pre-cache path, never breaks.
+	fullGraph := a.graphCache.Get()
+
 	graphs := make(map[cipher.PubKey]*routeFinder.Graph)
 	for _, edge := range grr.Edges {
 		srcPK := edge[0]
-		if _, ok := graphs[srcPK]; !ok {
-			graph, err := routeFinder.NewGraphWithDepth(r.Context(), a.store, srcPK, graphDepth)
-			if err != nil {
-				if err == store.ErrTransportNotFound {
-					a.handleError(w, r, http.StatusNotFound, err)
-					return
-				}
-				a.log(r).WithError(err).Errorf("Error creating graph for src %s", srcPK)
-				a.handleError(w, r, http.StatusInternalServerError, err)
+		if _, ok := graphs[srcPK]; ok {
+			continue
+		}
+		if fullGraph != nil {
+			graphs[srcPK] = fullGraph
+			continue
+		}
+		graph, err := routeFinder.NewGraphWithDepth(r.Context(), a.store, srcPK, graphDepth)
+		if err != nil {
+			if err == store.ErrTransportNotFound {
+				a.handleError(w, r, http.StatusNotFound, err)
 				return
 			}
-			graphs[srcPK] = graph
+			a.log(r).WithError(err).Errorf("Error creating graph for src %s", srcPK)
+			a.handleError(w, r, http.StatusInternalServerError, err)
+			return
 		}
+		graphs[srcPK] = graph
 	}
 
 	routes := make(map[routing.PathEdges][][]routing.Hop)

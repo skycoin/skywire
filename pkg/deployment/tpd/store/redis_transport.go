@@ -478,6 +478,16 @@ func (s *redisStore) GetAllTransports(ctx context.Context, selfTransports bool) 
 // blobs we overlay the durable latency so aggregate-metric paths
 // (GetNetworkMetrics, GetVisorAggregateMetrics) see the same values
 // /metrics surfaces, including across registration churn.
+// GetAllTransportsWithLatency returns every transport with its durable per-edge
+// latency overlaid (the QoS bulk read, same short-TTL cache as GetAllTransports).
+// Exported so the route finder can build its shared graph with latency for
+// latency-weighted routing without the plain GetAllTransports (latency-free) path;
+// callers that only have the base Store interface type-assert for this method and
+// fall back to GetAllTransports when it is absent (e.g. the in-memory store).
+func (s *redisStore) GetAllTransportsWithLatency(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
+	return s.getAllTransportsWithQoS(ctx, selfTransports)
+}
+
 func (s *redisStore) getAllTransportsWithQoS(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
 	if entries, ok := s.allTpsCache.Get(selfTransports, true); ok {
 		return entries, nil
