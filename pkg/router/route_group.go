@@ -2572,6 +2572,7 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 		})
 	}
 	demote := pickBottleneckDemotions(legs)
+	demote = rg.keepReverseFloor(demote, recvDeltas)
 	for _, idx := range demote {
 		rg.logger.Infof("shared-bottleneck: parking leg %d to warm standby (co-bottlenecked with a kept active leg in group %d — one pipe, not two; striping it adds only reorder cost)", idx, groups[idx])
 		rg.mux.setLegStandby(idx, true)
@@ -2640,6 +2641,7 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 	}
 
 	demote, promote := partitionLatencyBand(legs, manual, tight)
+	demote = rg.keepReverseFloor(demote, recvDeltas)
 	// latMs lookup for diagnostics (which latency triggered each decision).
 	latOf := make(map[int]float64, len(legs))
 	for _, l := range legs {
@@ -2671,6 +2673,96 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 		}
 		rg.mu.Unlock()
 	}
+}
+
+// keepReverseFloor filters a park-controller's demote list so it never strands
+// the DOWNLOAD floor — at least one active reverse (download-class) leg must
+// survive. The homogeneity controllers (shared-bottleneck, latency-band) are
+// direction-BLIND: they keep the primary (the DIRECT/upload leg when directional)
+// and one leg per bottleneck group, but nothing guarantees a surviving
+// download-class leg. Parking every download leg leaves reverse_active=0, so the
+// bulk sender (the exit, on a download) has no mirrored active set to confine to
+// (CapLegState) and sprays download across warm-standby legs — over-subscribing
+// the no-skip reorder frontier until it wedges and the group collapses (measured:
+// ~99% of a download riding standby legs, ~55x over-subscription).
+//
+// When the demotions would zero the active download set this keeps the
+// highest-goodput download leg active (floor = 1, the adaptRevActive default;
+// higher floors are the preset tick's DemoteToStandby budget, which pkg/router
+// cannot read without an import cycle). Download-class is flip-aware
+// (Direct == flipped). Non-directional groups have no forward/reverse split and
+// are returned unchanged. Stalled-leg parking (leg-dataprogress) is deliberately
+// NOT guarded — a dead sole reverse leg must still be parked/pruned.
+func (rg *RouteGroup) keepReverseFloor(demote []int, recvDeltas map[uuid.UUID]uint64) []int {
+	if len(demote) == 0 || rg.mux == nil {
+		return demote
+	}
+	directional, flipped := rg.mux.dirState()
+	if !directional {
+		return demote
+	}
+	rg.mu.Lock()
+	tps := append([]*transport.ManagedTransport(nil), rg.tps...)
+	rg.mu.Unlock()
+
+	// Collect the active (non-standby) download-class legs with their goodput.
+	var activeDL []legGoodput
+	for i, tp := range tps {
+		if tp == nil || tp.IsClosed() || rg.mux.isLegStandby(i) {
+			continue
+		}
+		if rg.mux.legIsDirectTp(tp) != flipped { // not a download-class leg
+			continue
+		}
+		activeDL = append(activeDL, legGoodput{idx: i, gp: recvDeltas[tp.Entry.ID]})
+	}
+	demoteSet := make(map[int]bool, len(demote))
+	for _, d := range demote {
+		demoteSet[d] = true
+	}
+	rescue := reverseFloorRescue(activeDL, demoteSet)
+	if rescue < 0 {
+		return demote // floor already met, or no active download leg is being parked
+	}
+	out := make([]int, 0, len(demote))
+	for _, d := range demote {
+		if d != rescue {
+			out = append(out, d)
+		}
+	}
+	rg.logger.Infof("reverse-floor: keeping active download leg %d active (parking it would strand reverse_active=0; the bulk sender needs an active reverse set to confine to, else it sprays download across standby)", rescue)
+	return out
+}
+
+// legGoodput pairs a leg index with its recv-goodput delta, for reverse-floor
+// rescue ranking.
+type legGoodput struct {
+	idx int
+	gp  uint64
+}
+
+// reverseFloorRescue is the pure decision behind keepReverseFloor: given the
+// currently-active download-class legs (activeDL) and which leg indices a park
+// pass wants to demote (demoteSet), it returns the index of the best-goodput leg
+// to KEEP active so the pass never strands reverse_active=0 — or -1 when at least
+// one active download leg already survives the demotions (floor already met) or
+// none of them is being demoted (nothing to rescue).
+func reverseFloorRescue(activeDL []legGoodput, demoteSet map[int]bool) int {
+	survivors := 0
+	bestIdx, bestGP := -1, uint64(0)
+	for _, l := range activeDL {
+		if !demoteSet[l.idx] {
+			survivors++
+			continue
+		}
+		if bestIdx < 0 || l.gp > bestGP {
+			bestIdx, bestGP = l.idx, l.gp
+		}
+	}
+	if survivors >= 1 {
+		return -1
+	}
+	return bestIdx
 }
 
 // pruneLivenessDeadLegs drops the given black-holing legs (by transport ID) from
