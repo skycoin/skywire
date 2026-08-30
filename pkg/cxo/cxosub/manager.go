@@ -349,6 +349,32 @@ func (m *Manager) Get(feed Feed, path string) ([]byte, time.Time, bool) {
 	return out, f.lastSyncAt, true
 }
 
+// SyncedAt returns the timestamp of the most recent successful sync for
+// (feed, path), or ok=false if the feed has no snapshot for that path.
+// Unlike Get it copies no body — it exists so a caller can cheaply key a
+// derived cache on the CXO snapshot's freshness and rebuild only when the
+// timestamp advances, instead of on an independent wall-clock timer.
+func (m *Manager) SyncedAt(feed Feed, path string) (time.Time, bool) {
+	if m == nil {
+		return time.Time{}, false
+	}
+	m.mu.Lock()
+	f, ok := m.feeds[feed]
+	m.mu.Unlock()
+	if !ok || f == nil {
+		return time.Time{}, false
+	}
+	f.snapMu.RLock()
+	defer f.snapMu.RUnlock()
+	if f.snapshot == nil {
+		return time.Time{}, false
+	}
+	if body, ok := f.snapshot[path]; !ok || len(body) == 0 {
+		return time.Time{}, false
+	}
+	return f.lastSyncAt, true
+}
+
 // Walk invokes fn for every (path, body) in the feed's cached
 // snapshot whose path begins with prefix. Returns ok=false (with fn
 // never called) if the feed has no snapshot. Bodies passed to fn
