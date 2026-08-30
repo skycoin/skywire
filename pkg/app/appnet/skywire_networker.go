@@ -567,6 +567,18 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 	log := r.log.WithField("func", "serveRouteGroup")
 
+	// Exponential backoff between successive non-fatal accept failures, reset on
+	// success. AcceptRoutes returns as soon as the setup node delivers an inbound
+	// route-setup; when those arrive back-to-back and each fails the noise
+	// handshake (a stale route, or a peer only reachable over a flaky webrtc/swtr
+	// transport — the common case on a NAT'd browser wasm visor), the old bare
+	// `continue` spun this loop with no pause, pegging the single-threaded wasm
+	// runtime's scheduler (observed on the in-tab visor: bursts of findRunnable/
+	// checkTimers churn while route-setups churned against a slow route finder).
+	// Same proven pattern as net/http.Server.Serve's Accept-error backoff.
+	const backoffMin, backoffMax = 5 * time.Millisecond, time.Second
+	backoff := time.Duration(0)
+
 	for {
 		log.Debug("Awaiting to accept route group...")
 
@@ -578,10 +590,22 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 				return err
 			}
 			// Non-fatal error (e.g., missing transport for a stale route).
-			// Log and continue accepting — don't kill the accept loop.
-			log.WithError(err).Warn("Failed to accept route group, continuing...")
+			// Log and continue accepting — don't kill the accept loop — but back
+			// off so a persistently-failing stream of accepts can't busy-spin.
+			if backoff == 0 {
+				backoff = backoffMin
+			} else if backoff *= 2; backoff > backoffMax {
+				backoff = backoffMax
+			}
+			log.WithError(err).Warnf("Failed to accept route group, retrying in %v...", backoff)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
 			continue
 		}
+		backoff = 0
 
 		log.
 			WithField("local", conn.LocalAddr()).
