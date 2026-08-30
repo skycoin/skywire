@@ -56,8 +56,22 @@ func (m *mockStore) GetTransportsByEdge(_ context.Context, edgePK cipher.PubKey)
 func (m *mockStore) GetNumberOfTransports(context.Context) (map[tptypes.Type]int, error) {
 	return nil, nil
 }
-func (m *mockStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {
-	return nil, nil
+func (m *mockStore) GetAllTransports(_ context.Context, selfTransports bool) ([]*transport.Entry, error) {
+	seen := make(map[[2]cipher.PubKey]struct{})
+	var out []*transport.Entry
+	for _, trs := range m.transports {
+		for _, e := range trs {
+			if _, ok := seen[e.Edges]; ok {
+				continue
+			}
+			if !selfTransports && e.Edges[0] == e.Edges[1] {
+				continue
+			}
+			seen[e.Edges] = struct{}{}
+			out = append(out, e)
+		}
+	}
+	return out, nil
 }
 func (m *mockStore) GetTransportSummary(context.Context, bool) (*tpdstore.TransportSummary, error) {
 	return &tpdstore.TransportSummary{}, nil
