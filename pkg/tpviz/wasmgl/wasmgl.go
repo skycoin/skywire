@@ -47,7 +47,8 @@ type glView struct {
 	graph     *cosmos.Graph
 	container js.Value
 
-	overlay *overlay
+	overlay  *overlay
+	latCells *latOverlay
 
 	// onEvent is the single callback the TypeScript side installs to receive
 	// clicks, hovers and simulation-end. Passing one function rather than a
@@ -69,19 +70,23 @@ type glView struct {
 // wasm-visor rather than a second wasm to embed.
 func Register() {
 	api := map[string]interface{}{
-		"init":       js.FuncOf(jsInit),
-		"setData":    js.FuncOf(jsSetData),
-		"setPhysics": js.FuncOf(jsSetPhysics),
-		"fit":        js.FuncOf(jsFit),
-		"fitIndices": js.FuncOf(jsFitIndices),
-		"zoomBy":     js.FuncOf(jsZoomBy),
-		"focusIndex": js.FuncOf(jsFocusIndex),
-		"selectIdx":  js.FuncOf(jsSelect),
-		"pause":      js.FuncOf(jsPause),
-		"resume":     js.FuncOf(jsResume),
-		"teardown":   js.FuncOf(jsTeardown),
-		"stats":      js.FuncOf(jsStats),
-		"ready":      true,
+		"init":            js.FuncOf(jsInit),
+		"setData":         js.FuncOf(jsSetData),
+		"setPhysics":      js.FuncOf(jsSetPhysics),
+		"fit":             js.FuncOf(jsFit),
+		"fitIndices":      js.FuncOf(jsFitIndices),
+		"zoomBy":          js.FuncOf(jsZoomBy),
+		"focusIndex":      js.FuncOf(jsFocusIndex),
+		"selectIdx":       js.FuncOf(jsSelect),
+		"pause":           js.FuncOf(jsPause),
+		"resume":          js.FuncOf(jsResume),
+		"teardown":        js.FuncOf(jsTeardown),
+		"stats":           js.FuncOf(jsStats),
+		"setLatencyGraph": js.FuncOf(jsSetLatencyGraph),
+		"rotateLatency":   js.FuncOf(jsRotateLatency),
+		"latencyStats":    js.FuncOf(jsLatencyStats),
+		"setLatencyCells": js.FuncOf(jsSetLatencyCells),
+		"ready":           true,
 	}
 	js.Global().Set("tpvizGL", js.ValueOf(api))
 	js.Global().Get("console").Call("log", "[tpviz-gl] Go WebGL view loaded")
@@ -223,6 +228,7 @@ func jsInit(_ js.Value, args []js.Value) interface{} {
 	}
 	v.graph = g
 	v.overlay = newOverlay(v)
+	v.latCells = newLatOverlay(v)
 	view = v
 	return true
 }

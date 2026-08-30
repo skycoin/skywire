@@ -5,7 +5,7 @@
 // and a reset clears everything back to defaults (view → WebGL). Works both
 // standalone (/tp-viz/) and embedded (host passes opts through mount()).
 
-export type ViewMode = 'globe' | 'flat' | 'cosmos' | 'cosmosgo';
+export type ViewMode = 'globe' | 'flat' | 'cosmos' | 'cosmosgo' | 'latency';
 
 const FILTER_KEY = 'tpviz.filters.v1';
 const VIEW_KEY = 'tpviz.view.v1';
