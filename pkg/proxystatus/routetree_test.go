@@ -78,3 +78,24 @@ func TestRouteTreeTwoLevel(t *testing.T) {
 		t.Error("flat fallback should not nest a tunnel level")
 	}
 }
+
+// TestLegOrderStableUnderIndexChurn verifies that legs render in a stable order
+// keyed on identity (intermediate PK), not on their churning Index — so the tree
+// does not reshuffle its branches as the warm-standby pool adds/drops legs.
+func TestLegOrderStableUnderIndexChurn(t *testing.T) {
+	mk := func(idx int, remote string) Leg {
+		return Leg{Index: idx, RemotePK: remote, TransportID: "tp-" + remote, Alive: true, Standby: true,
+			Hops: []Hop{{From: "src", To: remote, TpType: "stcpr"}}}
+	}
+	// Same three routes (by intermediate), presented with DIFFERENT indices/order.
+	a := legNodesForStream([]Leg{mk(0, "pkC"), mk(1, "pkA"), mk(2, "pkB")}, -1)
+	b := legNodesForStream([]Leg{mk(7, "pkB"), mk(3, "pkC"), mk(9, "pkA")}, -1)
+	if len(a) != len(b) || len(a) == 0 {
+		t.Fatalf("leg node counts differ: %d vs %d", len(a), len(b))
+	}
+	for i := range a {
+		if a[i].Label != b[i].Label {
+			t.Fatalf("leg order not stable under index churn at %d: %q vs %q", i, a[i].Label, b[i].Label)
+		}
+	}
+}
