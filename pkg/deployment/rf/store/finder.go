@@ -164,13 +164,14 @@ func (g *Graph) StreamRoutesWithCap(ctx context.Context, source, destination cip
 		return ErrNoRoute
 	}
 
-	type queueItem struct {
-		current *vertex
-		path    []*vertex
-		hops    int
-	}
-
-	queue := []queueItem{{current: sourceVertex, path: []*vertex{sourceVertex}, hops: 0}}
+	// Parent-pointer BFS. Each item points to its PARENT instead of carrying a
+	// copied path slice, so a path's ancestors are SHARED across all sibling
+	// branches rather than duplicated into every descendant. That removes the
+	// per-neighbor make+copy that dominated this function's cost — a CPU profile
+	// of the live route-finder showed ~60% of its time in GC heap-scanning driven
+	// by those path-slice allocations, plus the memmove of the copy. The full
+	// path is materialized once, only when a route is actually emitted.
+	queue := []*bfsItem{{current: sourceVertex, hops: 0}}
 	emitted := 0
 	queueCapHit := false
 
@@ -186,7 +187,7 @@ func (g *Graph) StreamRoutesWithCap(ctx context.Context, source, destination cip
 
 		if item.current == destinationVertex {
 			if item.hops >= minLen && item.hops <= maxLen {
-				route, err := buildRoute(item.path)
+				route, err := buildRoute(pathFromItem(item))
 				if err != nil {
 					return err
 				}
@@ -203,7 +204,7 @@ func (g *Graph) StreamRoutesWithCap(ctx context.Context, source, destination cip
 		}
 
 		for _, neighbor := range item.current.neighbors {
-			if containsVertex(item.path, neighbor) {
+			if itemPathContains(item, neighbor) {
 				continue // avoid cycles
 			}
 
@@ -225,13 +226,9 @@ func (g *Graph) StreamRoutesWithCap(ctx context.Context, source, destination cip
 				break
 			}
 
-			newPath := make([]*vertex, len(item.path)+1)
-			copy(newPath, item.path)
-			newPath[len(item.path)] = neighbor
-
-			queue = append(queue, queueItem{
+			queue = append(queue, &bfsItem{
 				current: neighbor,
-				path:    newPath,
+				parent:  item,
 				hops:    item.hops + 1,
 			})
 		}
@@ -244,6 +241,39 @@ func (g *Graph) StreamRoutesWithCap(ctx context.Context, source, destination cip
 		return ErrRouteNotFound
 	}
 	return nil
+}
+
+// bfsItem is one frontier node of the parent-pointer route BFS: its vertex plus a
+// pointer to the frontier node it was reached FROM. Ancestors are shared across
+// sibling branches instead of being copied into every descendant's path slice,
+// which is what removes the per-neighbor allocation that dominated the search.
+type bfsItem struct {
+	current *vertex
+	parent  *bfsItem
+	hops    int
+}
+
+// itemPathContains reports whether v already lies on the path source→it (walked
+// via parent pointers). This is the cycle check; it is O(hops) and allocation-free.
+func itemPathContains(it *bfsItem, v *vertex) bool {
+	for p := it; p != nil; p = p.parent {
+		if p.current == v {
+			return true
+		}
+	}
+	return false
+}
+
+// pathFromItem materializes the full source→it vertex path (root first) so
+// buildRoute can read consecutive hops. Called ONLY when a route is emitted — not
+// per neighbor expansion — so the one path allocation is paid per result, not per
+// frontier node. it.hops is the index of it.current in the returned slice.
+func pathFromItem(it *bfsItem) []*vertex {
+	path := make([]*vertex, it.hops+1)
+	for p := it; p != nil; p = p.parent {
+		path[p.hops] = p.current
+	}
+	return path
 }
 
 // buildRoute converts a vertex path into a routing.Route by looking up
@@ -265,14 +295,4 @@ func buildRoute(path []*vertex) (routing.Route, error) {
 		})
 	}
 	return route, nil
-}
-
-// containsVertex checks if a vertex exists in the path.
-func containsVertex(path []*vertex, v *vertex) bool {
-	for _, u := range path {
-		if u == v {
-			return true
-		}
-	}
-	return false
 }
