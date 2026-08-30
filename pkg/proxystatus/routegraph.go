@@ -360,7 +360,10 @@ func seedRouteLayout(order []*nodeAcc, nStreams int) {
 		// (a hash of their order index in ±0.5) so parallel same-depth same-lane
 		// legs don't stack exactly on top of each other.
 		if hop {
-			j := float64((i*2654435761)&0xffff)/65535.0 - 0.5
+			// uint32 hash (golden-ratio constant 0x9E3779B1) so the multiply is
+			// well-defined on 32-bit archs (armv7) — plain int overflows there,
+			// which broke the develop-latest publish-binary build.
+			j := float64((uint32(i)*2654435761)&0xffff)/65535.0 - 0.5
 			x += j * (rgSpaceSize * 0.02)
 			y += j * (rgSpaceSize * 0.05)
 		}
