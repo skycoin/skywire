@@ -388,6 +388,20 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 		if tp, rule, idx, ok := m.selectByDirection(tps, fwd, wantDirect, dstPK, srcPK); ok {
 			return tp, rule, idx, nil
 		}
+		// No leg of the wanted class exists. For the LIGHT direction (wantDirect
+		// true = the initiator's forward/upload send, which the unidir model puts
+		// on the DIRECT leg), a multihop-only path has no direct leg to confine to
+		// — falling through to the weighted scheduler would SPRAY the upload across
+		// every forward leg, over-subscribing the no-skip reorder frontier (measured
+		// 67-172MB sent for a 10MB upload from a public node with no direct transport
+		// to the exit, plus stalls). Confine it to the primary leg (0) instead: it is
+		// always active and single, so the upload stays on one leg (full-duplex with
+		// whatever download rides it) rather than spraying. The heavy/download
+		// direction (wantDirect false) keeps its existing fall-through: with no
+		// reverse leg there is genuinely nothing to confine to.
+		if wantDirect && tps[0] != nil && !tps[0].IsClosed() {
+			return tps[0], fwd[0], 0, nil
+		}
 	}
 
 	// Payload-inspecting modes: ask the selector for a leg
