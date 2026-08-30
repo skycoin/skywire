@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -1278,6 +1279,22 @@ fetchRoutesAgain:
 		paths[backward] = filtered
 	}
 
+	// Operator-configured hard exclusion (routing.route_exclude_transport_types):
+	// drop any candidate route that traverses an excluded transport type, so it
+	// never enters the mux leg pool. Unlike transportTypeCostMs (deprioritize), this
+	// removes the route entirely — the fix for flaky types (e.g. webrtc) that wedge
+	// the reorder frontier. Opt-in and empty by default.
+	if len(r.conf.ExcludeTransportTypes) > 0 {
+		if filtered := rejectExcludedTypes(paths[forward], typeFor, r.conf.ExcludeTransportTypes); len(filtered) != len(paths[forward]) {
+			log.Debugf("excluded %d forward candidate(s) by transport type %v", len(paths[forward])-len(filtered), r.conf.ExcludeTransportTypes)
+			paths[forward] = filtered
+		}
+		if filtered := rejectExcludedTypes(paths[backward], typeFor, r.conf.ExcludeTransportTypes); len(filtered) != len(paths[backward]) {
+			log.Debugf("excluded %d reverse candidate(s) by transport type %v", len(paths[backward])-len(filtered), r.conf.ExcludeTransportTypes)
+			paths[backward] = filtered
+		}
+	}
+
 	// Multi-tunnel diversify (opts.DiversifyTransports): steer this extra
 	// tunnel's FIRST HOP off the transports its sibling tunnels to the same
 	// exit already occupy (opts.ExcludeTransportIDs, seeded by
@@ -1752,6 +1769,40 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 //
 // Returns the input slice unchanged when nothing was filtered, to
 // avoid an allocation in the common case.
+// rejectExcludedTypes drops any candidate route (single- OR multi-hop) that
+// traverses a transport type in exclude (case-insensitive). Unlike rejectDMSGMultihop
+// (which spares a direct hop of the type), this removes the type ENTIRELY — the
+// operator asked for it not to be used at all — so even a 1-hop leg of that type is
+// dropped. Empty exclude / nil typeFor is a no-op returning paths unchanged.
+func rejectExcludedTypes(paths [][]routing.Hop, typeFor func(uuid.UUID) string, exclude []string) [][]routing.Hop {
+	if len(paths) == 0 || typeFor == nil || len(exclude) == 0 {
+		return paths
+	}
+	excl := make(map[string]struct{}, len(exclude))
+	for _, e := range exclude {
+		if t := strings.ToLower(strings.TrimSpace(e)); t != "" {
+			excl[t] = struct{}{}
+		}
+	}
+	if len(excl) == 0 {
+		return paths
+	}
+	out := make([][]routing.Hop, 0, len(paths))
+	for _, p := range paths {
+		drop := false
+		for _, h := range p {
+			if _, bad := excl[strings.ToLower(typeFor(h.TpID))]; bad {
+				drop = true
+				break
+			}
+		}
+		if !drop {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func rejectDMSGMultihop(paths [][]routing.Hop, typeFor func(uuid.UUID) string) [][]routing.Hop {
 	if len(paths) == 0 || typeFor == nil {
 		return paths

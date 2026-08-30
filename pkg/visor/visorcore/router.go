@@ -25,19 +25,20 @@ import (
 // Zero values for the optional native-only fields (AppLookup, DialHook,
 // RulesGCInterval, SetupHooks) are correct for a browser edge.
 type RouterDeps struct {
-	DmsgC              *dmsg.Client
-	PubKey             cipher.PubKey
-	SecKey             cipher.SecKey
-	TransportManager   *transport.Manager
-	RouteFinder        rfclient.Client
-	RouteGroupDialer   router.RouteGroupDialer
-	SetupNodes         []cipher.PubKey
-	MinHops            uint16
-	MuxRoutes          int
-	ParallelRouteSetup int
-	AwaitSetupListener *dmsg.Listener
-	Logger             *logging.Logger
-	MasterLogger       *logging.MasterLogger
+	DmsgC                 *dmsg.Client
+	PubKey                cipher.PubKey
+	SecKey                cipher.SecKey
+	TransportManager      *transport.Manager
+	RouteFinder           rfclient.Client
+	RouteGroupDialer      router.RouteGroupDialer
+	SetupNodes            []cipher.PubKey
+	MinHops               uint16
+	MuxRoutes             int
+	ExcludeTransportTypes []string
+	ParallelRouteSetup    int
+	AwaitSetupListener    *dmsg.Listener
+	Logger                *logging.Logger
+	MasterLogger          *logging.MasterLogger
 
 	AppLookup       func(routing.Port) (string, bool)
 	DialHook        router.DialHook
@@ -80,6 +81,7 @@ func BuildRouter(serveCtx context.Context, deps RouterDeps) (router.Router, erro
 		SetupNodes:            deps.SetupNodes,
 		MinHops:               deps.MinHops,
 		MuxRoutes:             deps.MuxRoutes,
+		ExcludeTransportTypes: deps.ExcludeTransportTypes,
 		ParallelRouteSetup:    deps.ParallelRouteSetup,
 		AwaitSetupListener:    deps.AwaitSetupListener,
 		AppLookup:             deps.AppLookup,
