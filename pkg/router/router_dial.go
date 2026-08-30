@@ -2738,7 +2738,7 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 	// gate below, so a stale plan is rejected exactly like a fresh bad one and a
 	// miss falls through to fetchBestRoutes — the cache can only save work, never
 	// change the leg that gets built. See docs/design/shared-warm-route-pool.md.
-	keyMinHops := uint16(r.conf.MinHops) //nolint:gosec
+	keyMinHops := r.conf.MinHops
 	if e := muxOpts.EffectiveMinHops(true); e > 0 {
 		keyMinHops = uint16(e) //nolint:gosec
 	}
