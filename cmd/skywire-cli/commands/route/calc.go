@@ -41,6 +41,7 @@ var (
 	calcSource    string
 	calcQueueCap  int
 	calcByLatency bool
+	calcCapacity  bool
 )
 
 func init() {
@@ -54,6 +55,7 @@ func init() {
 	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP) | tps (AUTHORITATIVE: src+dst own transports via the setup node, same path as tp --remote; TPD-independent, single-intermediate). dht|auto are accepted for compatibility and also read from TPD, since the DHT store was removed; dht and tps force the non-streaming local-compute path")
 	calcCmd.Flags().IntVar(&calcQueueCap, "queue-cap", 0, "BFS queue cap (0 = server/local default ~200K, negative = unbounded)")
 	calcCmd.Flags().BoolVar(&calcByLatency, "by-latency", false, "rank routes by cumulative transport latency (lowest first); skips the streaming gRPC path since the full set has to be in hand to sort")
+	calcCmd.Flags().BoolVar(&calcCapacity, "capacity", false, "instead of listing routes, report how many disjoint/multiplexable routes CAN exist to the destination (total, edge-disjoint, single-relay-disjoint, egress/ingress fan) — the ceiling on the warm-standby mux pool. Forces the full-set local-compute path")
 	// Hidden long-form aliases so the hop-bound vocabulary matches
 	// `route find` / `route trace` (--min/--max stay the visible spelling).
 	calcCmd.Flags().Uint16Var(&calcMinHops, "min-hops", 0, "minimum hops (alias for --min)")
@@ -190,6 +192,14 @@ var calcCmd = &cobra.Command{
 		// tps assembles its graph from the src+dst OWN transports (visor
 		// RPC + setup-node), not the TPD snapshot the gRPC BFS streams
 		// over, so — like dht — it must take the local-compute path below.
+		// --capacity needs the whole route set in hand to count disjoint paths, so
+		// it streams every route (count 0) and analyzes them as they arrive. The
+		// streaming gRPC path handles unbounded without OOMing; local-compute builds
+		// the full path set in memory and would OOM on a dense graph, so --capacity
+		// goes ONLY through streaming (and is refused on the local-compute branch).
+		if calcCapacity {
+			calcCount = 0
+		}
 		if !calcByLatency && rpcClient != nil && strings.ToLower(calcSource) != "dht" && strings.ToLower(calcSource) != "tps" {
 			if err := streamRoutesViaGRPC(ctx, cmd, srcPK, dstPK, minHops, calcMaxHops, calcCount, calcQueueCap, calcSource, tpdURL); err == nil {
 				return
@@ -197,6 +207,13 @@ var calcCmd = &cobra.Command{
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
 			// fallback to local compute below
+		}
+
+		// --capacity cannot run on the local-compute branch: it needs every route
+		// (count 0), which this in-memory path enumerates all at once and OOMs on a
+		// dense graph. It is a streaming-only feature.
+		if calcCapacity {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--capacity requires the streaming path: use --source tpd (or auto) with the visor running; it is not available for --source %s / offline", calcSource))
 		}
 
 		// Local fallback path: bounded count only. The streaming path
@@ -317,6 +334,95 @@ var calcCmd = &cobra.Command{
 	},
 }
 
+// routeCapacityInfo is the --capacity report: how many disjoint/multiplexable
+// routes CAN exist to the destination, which is the ceiling the warm-standby mux
+// pool can hold. These are POSSIBLE routes derived from the transport graph, not
+// currently-instantiated route groups.
+type routeCapacityInfo struct {
+	Dst         string `json:"dst"`
+	MaxHops     int    `json:"max_hops"`
+	Total       int    `json:"total_routes"`
+	Direct      int    `json:"direct_routes"`
+	SingleRelay int    `json:"single_relay_routes"`
+	// EgressTransports is the local visor's fan-out toward the dst (distinct
+	// first-hop transports); IngressTransports is the dst's fan-in (distinct
+	// last-hop transports). The smaller bounds the disjoint-path count.
+	EgressTransports  int `json:"egress_transports"`
+	IngressTransports int `json:"ingress_transports"`
+	// EdgeDisjoint is the greedy max set of routes sharing no transport (the real
+	// parallel capacity); DisjointShort restricts that to <=1-relay routes (the
+	// low-latency subset best suited to the mux's active/standby legs).
+	EdgeDisjoint  int `json:"edge_disjoint_routes"`
+	DisjointShort int `json:"disjoint_short_routes"`
+	// HopHistogram maps hop-count -> number of routes.
+	HopHistogram map[int]int `json:"hop_histogram"`
+}
+
+// routeCapacityReport computes the disjoint/multiplex capacity from the full set of
+// forward hop-lists between the source and dst.
+func routeCapacityReport(dst cipher.PubKey, maxHops int, forwards [][]routing.Hop) (routeCapacityInfo, string) {
+	info := routeCapacityInfo{Dst: dst.Hex(), MaxHops: maxHops, Total: len(forwards), HopHistogram: map[int]int{}}
+	firstTps := map[string]struct{}{}
+	lastTps := map[string]struct{}{}
+	for _, f := range forwards {
+		if len(f) == 0 {
+			continue
+		}
+		info.HopHistogram[len(f)]++
+		switch len(f) {
+		case 1:
+			info.Direct++
+		case 2:
+			info.SingleRelay++
+		}
+		firstTps[f[0].TpID.String()] = struct{}{}
+		lastTps[f[len(f)-1].TpID.String()] = struct{}{}
+	}
+	info.EgressTransports = len(firstTps)
+	info.IngressTransports = len(lastTps)
+	info.EdgeDisjoint = greedyDisjoint(forwards, maxHops) // all hop lengths
+	info.DisjointShort = greedyDisjoint(forwards, 2)      // <=1 relay only
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "route capacity to %s (<=%d hops)\n", dst.Hex(), maxHops)
+	fmt.Fprintf(&b, "  total routes (can exist):   %d\n", info.Total)
+	fmt.Fprintf(&b, "  edge-disjoint routes:       %d   <- max parallel/multiplexable\n", info.EdgeDisjoint)
+	fmt.Fprintf(&b, "  disjoint short (<=1 relay):  %d   <- low-latency standby-pool depth\n", info.DisjointShort)
+	fmt.Fprintf(&b, "  egress transports (local):  %d\n", info.EgressTransports)
+	fmt.Fprintf(&b, "  ingress transports (dst):   %d   <- bounds disjoint paths\n", info.IngressTransports)
+	fmt.Fprintf(&b, "  direct (1-hop): %d   single-relay (2-hop): %d\n", info.Direct, info.SingleRelay)
+	return info, b.String()
+}
+
+// greedyDisjoint returns the greedy-maximal number of routes (whose hop count is
+// <= maxLen) that share no transport id — a lower bound on the edge-disjoint path
+// count. A transport is bidirectional, so its forward TpID identifies the shared
+// resource for both directions.
+func greedyDisjoint(forwards [][]routing.Hop, maxLen int) int {
+	used := map[string]struct{}{}
+	n := 0
+	for _, f := range forwards {
+		if len(f) == 0 || len(f) > maxLen {
+			continue
+		}
+		clash := false
+		for _, h := range f {
+			if _, ok := used[h.TpID.String()]; ok {
+				clash = true
+				break
+			}
+		}
+		if clash {
+			continue
+		}
+		for _, h := range f {
+			used[h.TpID.String()] = struct{}{}
+		}
+		n++
+	}
+	return n
+}
+
 // streamRoutesViaGRPC opens the visor's StreamCalcRoutes gRPC stream and
 // prints each route as it arrives. JSON mode collects routes into a slice
 // and emits one final array; text mode writes one route per arrival
@@ -341,6 +447,7 @@ func streamRoutesViaGRPC(
 	}
 	isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 	var collected []routePair
+	var capForwards [][]routing.Hop // accumulated for --capacity analysis
 
 	emitted := 0
 	cb := func(r *rpcgrpc.CalcRoute) bool {
@@ -351,6 +458,13 @@ func streamRoutesViaGRPC(
 		}
 		rev := reverseHops(fwd)
 		emitted++
+
+		// --capacity streams every route but keeps only its forward hop-list, for
+		// the disjoint-count analysis emitted after the stream completes.
+		if calcCapacity {
+			capForwards = append(capForwards, fwd)
+			return true // count is 0 (unbounded) under --capacity
+		}
 
 		if isJSON {
 			collected = append(collected, routePair{Forward: fwd, Reverse: rev})
@@ -389,6 +503,11 @@ func streamRoutesViaGRPC(
 
 	if emitted == 0 {
 		return fmt.Errorf("no route found: %w", routeFinder.ErrRouteNotFound)
+	}
+	if calcCapacity {
+		report, text := routeCapacityReport(dstPK, int(maxHops), capForwards)
+		internal.PrintOutput(cmd.Flags(), report, text)
+		return nil
 	}
 	if isJSON {
 		// Single-route back-compat shape preserved when count=1.
