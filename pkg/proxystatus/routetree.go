@@ -136,6 +136,12 @@ func treeSrc(snap Snapshot) string {
 	if s := pick(snap.Legs); s != "" {
 		return s
 	}
+	// No leg recorded its forward hops (common for auto/standby legs) — fall back to
+	// the visor's own PK, carried explicitly on the snapshot, so the root is still
+	// the real source rather than a placeholder.
+	if snap.SelfPK != "" {
+		return snap.SelfPK
+	}
 	return "this visor"
 }
 
