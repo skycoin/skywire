@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -54,6 +55,8 @@ var (
 	rangeSplit     bool
 	rangeConc      int64
 	rangeChunkKiB  int64
+	rangeHTTPS     bool
+	rangeHTTPSCA   string
 )
 
 func init() {
@@ -83,11 +86,17 @@ func init() {
 	// fetched as N concurrent byte ranges over separate tunnels and reassembled, so
 	// one unmodified download (curl or a browser on this proxy) aggregates across the
 	// mesh with no client cooperation. Default-on and auto-detecting (only engages on
-	// a 206-capable origin); HTTPS is unaffected (needs an unconstrained MITM root —
-	// follow-up). Tune or disable via these flags, not a required gate.
+	// a 206-capable origin). Tune or disable via these flags, not a required gate.
 	RootCmd.Flags().BoolVar(&rangeSplit, "range-split", true, "transparently split range-capable HTTP (:80) GETs into concurrent byte ranges across tunnels")
 	RootCmd.Flags().Int64Var(&rangeConc, "range-concurrency", 8, "concurrent range streams per split download")
 	RootCmd.Flags().Int64Var(&rangeChunkKiB, "range-chunk-kib", 4096, "bytes per range request, in KiB")
+	// HTTPS (:443) range-splitting terminates the browser's TLS with a leaf minted
+	// by a local UNCONSTRAINED root so the same split works inside TLS. Off by
+	// default and a deliberate security opt-in: the root can forge any host, and the
+	// browser must import it (printed on startup) for the terminated TLS to be
+	// trusted. The origin is still verified normally.
+	RootCmd.Flags().BoolVar(&rangeHTTPS, "range-split-https", false, "ALSO split HTTPS (:443) GETs by terminating TLS with a local MITM root (opt-in; import the printed CA into the browser)")
+	RootCmd.Flags().StringVar(&rangeHTTPSCA, "range-split-https-ca-dir", "", "directory holding the HTTPS range-split MITM root (ca.crt/ca.key); created on first use (default: <home>/.skywire/rangesplit-mitm)")
 }
 
 // RootCmd is the root command for skysocks
@@ -124,6 +133,14 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		fs.BoolVar(&direct, "direct", false, "force a direct-transport-only route to the server (1-hop, bypass the route-finder + setup node); self-heals on server restart")
 		fs.BoolVar(&dmsgFallback, "dmsg-fallback", false, "fall back to a direct dmsg stream if the skynet dial fails")
 		fs.Int64Var(&tunnels, "tunnels", 1, "number of independent tunnels to stripe connections across")
+		// Range-split flags were absent from this launcher subset, so passing any of
+		// them via the visor's app args errored. Bind them here too (same vars as the
+		// cobra flags) so the feature is configurable when the visor launches the app.
+		fs.BoolVar(&rangeSplit, "range-split", true, "split range-capable HTTP (:80) GETs across tunnels")
+		fs.Int64Var(&rangeConc, "range-concurrency", 8, "concurrent range streams per split download")
+		fs.Int64Var(&rangeChunkKiB, "range-chunk-kib", 4096, "bytes per range request, in KiB")
+		fs.BoolVar(&rangeHTTPS, "range-split-https", false, "also split HTTPS (:443) GETs via a local MITM root (opt-in)")
+		fs.StringVar(&rangeHTTPSCA, "range-split-https-ca-dir", "", "directory for the HTTPS range-split MITM root")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -285,6 +302,24 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// range-capable :80 GET is fetched as concurrent byte ranges over separate
 		// tunnels, so a single download aggregates across the mesh.
 		client.SetRangeSplit(rangeSplit, int(rangeConc), rangeChunkKiB*1024)
+		// HTTPS (:443) range-splitting is an explicit security opt-in: enabling it
+		// mints browser leaves from a forge-any-host root, so it is only wired when
+		// asked, and the operator is told exactly which CA to import.
+		if rangeHTTPS {
+			caDir := rangeHTTPSCA
+			if caDir == "" {
+				home, herr := os.UserHomeDir()
+				if herr != nil {
+					home = "."
+				}
+				caDir = filepath.Join(home, ".skywire", "rangesplit-mitm")
+			}
+			if herr := client.SetHTTPSRangeSplit(caDir); herr != nil {
+				log.WithError(herr).Warn("HTTPS range-splitting requested but its MITM root could not be initialised; :443 will splice through unchanged")
+			} else if pemBytes, ok := client.MITMCACertPEM(); ok {
+				log.Warnf("HTTPS range-splitting ENABLED — import this root into your browser to trust intercepted origins; it can forge any host, so remove it when done:\n  CA file: %s\n%s", filepath.Join(caDir, "ca.crt"), string(pemBytes))
+			}
+		}
 		if tunnels > 1 {
 			client.SetTunnelRedial(func() (net.Conn, error) {
 				return dialServer(cycleCtx, appCl, pk, serverPort, true)
