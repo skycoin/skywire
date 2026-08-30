@@ -138,3 +138,39 @@ func TestRejectDMSGMultihop_UnknownTypeTreatedAsAllowed(t *testing.T) {
 		t.Errorf("unknown type treated as DMSG; len(out)=%d, want 1", len(out))
 	}
 }
+
+func TestRejectExcludedTypes(t *testing.T) {
+	tpWR := uuid.New()  // webrtc leg
+	tpST := uuid.New()  // stcpr leg
+	tpMid := uuid.New() // stcpr intermediate
+	src, _ := cipher.GenerateKeyPair()
+	mid, _ := cipher.GenerateKeyPair()
+	dst, _ := cipher.GenerateKeyPair()
+	typeFor := func(id uuid.UUID) string {
+		switch id {
+		case tpWR:
+			return "webrtc"
+		default:
+			return "stcpr"
+		}
+	}
+	paths := [][]routing.Hop{
+		{{TpID: tpWR, From: src, To: dst}},                                    // 1-hop webrtc — dropped
+		{{TpID: tpST, From: src, To: dst}},                                    // 1-hop stcpr — kept
+		{{TpID: tpMid, From: src, To: mid}, {TpID: tpWR, From: mid, To: dst}}, // 2-hop with webrtc 2nd leg — dropped
+	}
+	out := rejectExcludedTypes(paths, typeFor, []string{"WebRTC"}) // case-insensitive
+	if len(out) != 1 {
+		t.Fatalf("len(out)=%d, want 1 (only the pure-stcpr route survives)", len(out))
+	}
+	if out[0][0].TpID != tpST {
+		t.Errorf("surviving route is not the stcpr one")
+	}
+	// Empty exclude / nil typeFor are no-ops.
+	if got := rejectExcludedTypes(paths, typeFor, nil); len(got) != len(paths) {
+		t.Errorf("empty exclude should be a no-op, got %d", len(got))
+	}
+	if got := rejectExcludedTypes(paths, nil, []string{"webrtc"}); len(got) != len(paths) {
+		t.Errorf("nil typeFor should be a no-op, got %d", len(got))
+	}
+}
