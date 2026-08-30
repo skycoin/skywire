@@ -229,6 +229,14 @@ type routeMux struct {
 	fecReassembler *fecReassembler
 	fecRepairMu    sync.Mutex
 	fecRepairQ     []fecRepairFrame
+	// FEC-block striping cap: keep no single leg above fecDefaultR frames of any
+	// K-frame FEC block, so a leg that fully stalls stays within FEC's R-erasure
+	// recovery (a leg carrying >R of a block's K frames exceeds what repair can
+	// reconstruct, and the group falls back to SACK-retransmit — the webrtc wedge).
+	// fecStripeUsed counts, for the CURRENT block, how many frames each leg took.
+	fecStripeMu    sync.Mutex
+	fecStripeBlock uint32
+	fecStripeUsed  map[int]int
 	// FEC telemetry (atomic). fecRepairBytesSent/Recv are cumulative repair-frame
 	// bytes this group scheduled onto / received from legs; fecReconstructs counts
 	// frontier frames recovered from repair (each a slow-leg stall avoided). These
@@ -362,7 +370,25 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 // back to the schedule-based pick.
 //
 // NOTE: not thread-safe, caller must hold the RouteGroup mu.
+// selectTransport picks the leg for the next data frame, then applies the
+// FEC-block striping cap so no leg exceeds fecDefaultR frames per K-frame block.
+// The cap is a thin, best-effort post-pass over selectTransportRaw: it never fails
+// a send (if every alive-ready leg is already block-full it keeps the raw pick),
+// and it is inert unless FEC is negotiated on a multi-leg group — so the
+// pre-integration selection is preserved byte-for-byte when fecEnabled=false.
 func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []routing.Rule, payload []byte) (*transport.ManagedTransport, routing.Rule, int, error) {
+	tp, rule, idx, err := m.selectTransportRaw(tps, fwd, payload)
+	if err != nil || idx < 0 {
+		return tp, rule, idx, err
+	}
+	if alt, ok := m.fecStripeReassign(tps, idx); ok && alt < len(fwd) {
+		tp, rule, idx = tps[alt], fwd[alt], alt
+	}
+	m.fecStripeUse(idx)
+	return tp, rule, idx, nil
+}
+
+func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []routing.Rule, payload []byte) (*transport.ManagedTransport, routing.Rule, int, error) {
 	if len(tps) == 0 {
 		return nil, nil, -1, ErrNoTransports
 	}
