@@ -252,7 +252,11 @@ const graphScript = `<script>(function(){` +
 	`try{localStorage.setItem("sh_"+name,on?"1":"0");}catch(e){}` +
 	// Revealing the graph the first time boots the wasm lazily; a later reveal just
 	// re-fits (the canvas kept its WebGL context and settled layout while hidden).
-	`if(name==="graph"&&!on){if(!booted){boot();}else{var g=gl();if(g){setTimeout(function(){g.fit();},60);}}}};` +
+	// Graph reveal boots it lazily (first time) or resumes the paused engine and
+	// re-fits; graph HIDE pauses the GPU force-sim so a collapsed graph costs no CPU
+	// (a CSS-only hide would keep the simulation and its render loop running).
+	`if(name==="graph"){if(!on){if(!booted){boot();}else{var g=gl();if(g){if(g.resume){g.resume();}setTimeout(function(){g.fit();},60);}}}` +
+	`else{var gp=gl();if(gp&&gp.pause){gp.pause();}}}};` +
 	// On-canvas zoom / fit controls, wired to the SAME cosmos-go API the network
 	// visualizer's +/−/fit buttons use (tpvizGL.zoomBy / fit; zoom-in 1.3,
 	// zoom-out 1/1.3 — see pkg/tpviz/ui/src/events.ts). Wheel-zoom, drag-pan,
@@ -260,9 +264,13 @@ const graphScript = `<script>(function(){` +
 	// canvas itself, so no extra wiring is needed for those.
 	`window.rgZoom=function(f){var g=gl();if(g&&g.zoomBy){g.zoomBy(f);}};` +
 	`window.rgFit=function(){var g=gl();if(g&&g.fit){g.fit();}};` +
-	`["log","tree","graph"].forEach(function(name){if(hidden(name)){document.body.classList.add("sec-hide-"+name);}});` +
-	// Boot the GPU graph now unless the user has it collapsed (then defer to reveal),
-	// since the graph is visible by default alongside the tree and log.
+	`["log","tree"].forEach(function(name){if(hidden(name)){document.body.classList.add("sec-hide-"+name);}});` +
+	// The GPU route graph is OFF by default: it must be explicitly started (its
+	// section "show" toggle boots the ~3 MB netview wasm + force-sim), because a
+	// running force-directed graph pegs CPU. It only stays open across reloads once
+	// the user has turned it on (secToggle writes sh_graph="0" when revealed).
+	`try{if(localStorage.getItem("sh_graph")!=="0"){document.body.classList.add("sec-hide-graph");}}catch(e){document.body.classList.add("sec-hide-graph");}` +
+	// Only boot on load if the user previously left the graph open; default is off.
 	`if(!document.body.classList.contains("sec-hide-graph")){boot();}` +
 	`})();</script>`
 
@@ -447,7 +455,8 @@ func writeGraphSection(b *strings.Builder) {
 		`as the network visualizer, driving only THIS visor, its hops and the exit. It opens seeded ` +
 		`root-left → exit-right with the streams fanned, then the force sim refines it. Hover a node for its ` +
 		`transports and per-leg detail; drag to pan, scroll to zoom. Needs WebGL; the tree above shows the ` +
-		`same routes without it.</p>`)
+		`same routes without it. OFF by default — the force sim uses the GPU/CPU continuously, so it must be ` +
+		`started with "show" and pauses when hidden.</p>`)
 	b.WriteString(`</div>`) // .rgbody
 	b.WriteString(`</section>`)
 	b.WriteString(`<div id="rgtip" class="rgtip" role="tooltip"></div>`)
