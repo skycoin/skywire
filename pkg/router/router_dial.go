@@ -1731,7 +1731,7 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 	// so the same data costs one round-trip per TTL instead of one
 	// per hop per dial.
 	if len(misses) > 0 && r.tm != nil && r.tm.Conf != nil && r.tm.Conf.DiscoveryClient != nil && r.tpdCache != nil {
-		snap, err := r.tpdCache.snapshot(ctx, r.tm.Conf.DiscoveryClient.GetAllTransports)
+		snap, err := r.tpdCache.snapshot(ctx, r.tm.Conf.DiscoveryClient.GetAllTransports, versionProbe(r.tm.Conf.DiscoveryClient))
 		if err != nil {
 			// snap is non-nil when a prior snapshot was served stale;
 			// only a cold-cache failure yields nil. Either way, log
@@ -2027,9 +2027,23 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// replaces N individual GetTransportsByEdge calls with one bulk
 	// fetch AND amortizes that fetch across dials so repeated local
 	// route calculations don't re-pull the whole dataset each time.
-	var allEntries []*transport.Entry
+	// The by-edge and per-TpID metric lookups are derived ONCE per TPD
+	// snapshot (see tpdSnapshot.deriveTransportLookups) rather than rebuilt
+	// from the whole ~16k-entry set on every call. On a NAT'd visor with no
+	// direct transport to dst the early-return above is skipped, so a browse
+	// dial retry loop used to pay four full-dataset map builds + a per-edge
+	// sort per call — enough to peg the single js/wasm thread in GC. When
+	// there is no cache (tpdCache == nil, tests / bare router) we derive the
+	// same lookups locally from a direct fetch.
+	var (
+		allEntries       []*transport.Entry
+		transportsByEdge map[cipher.PubKey][]*transport.Entry
+		tpLatencyMs      map[uuid.UUID]float64
+		tpTypeOf         map[uuid.UUID]string
+		tpThroughput     map[uuid.UUID]float64
+	)
 	if r.tpdCache != nil {
-		snap, serr := r.tpdCache.snapshot(ctx, dc.GetAllTransports)
+		snap, serr := r.tpdCache.snapshot(ctx, dc.GetAllTransports, versionProbe(dc))
 		if snap == nil {
 			// Cold-cache failure only — a stale snapshot would be
 			// returned non-nil. Nothing to compute routes from.
@@ -2037,36 +2051,17 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 			return nil, nil, fmt.Errorf("failed to fetch transport discovery data: %w", serr)
 		}
 		allEntries = snap.entries
+		transportsByEdge = snap.byEdge
+		tpLatencyMs = snap.latencyByID
+		tpTypeOf = snap.typeByID
+		tpThroughput = snap.throughputByID
 	} else {
 		allEntries, err = dc.GetAllTransports(ctx)
 		if err != nil {
 			log.WithError(err).Warn("Failed to fetch all transports for route calculation")
 			return nil, nil, fmt.Errorf("failed to fetch transport discovery data: %w", err)
 		}
-	}
-
-	// Build lookup map: pubkey -> transports involving that pubkey.
-	// Exclude "setup" labeled transports (RSN control-plane only).
-	transportsByEdge := make(map[cipher.PubKey][]*transport.Entry)
-	for _, entry := range allEntries {
-		if entry == nil {
-			continue
-		}
-		if entry.Label == transport.LabelSetup {
-			continue
-		}
-		for _, edge := range entry.Edges {
-			transportsByEdge[edge] = append(transportsByEdge[edge], entry)
-		}
-	}
-	// Sort each edge's transport list by type preference so iteration tries
-	// direct types before DMSG when picking an intermediate-to-dst hop.
-	for edge := range transportsByEdge {
-		entries := transportsByEdge[edge]
-		sort.SliceStable(entries, func(i, j int) bool {
-			return tptypes.TypePreference(entries[i].Type) <
-				tptypes.TypePreference(entries[j].Type)
-		})
+		transportsByEdge, tpLatencyMs, tpTypeOf, tpThroughput = deriveTransportLookups(allEntries)
 	}
 	log.Debugf("Built transport cache with %d entries covering %d visors", len(allEntries), len(transportsByEdge))
 
@@ -2214,32 +2209,12 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// once and the BFS stays linear in graph size.
 	expandedAtDepth := make(map[cipher.PubKey]map[int]bool)
 
-	// Per-TpID latency lookup over the entries we just fetched —
-	// hydrated by the CXO telemetry aggregator on TPD's side. Used to
+	// Per-TpID latency / type / throughput lookups (hydrated by the CXO
+	// telemetry aggregator on TPD's side) come prebuilt from the snapshot
+	// alongside transportsByEdge — see the derive comment above. Used to
 	// rank multiple same-level dst-hits below.
-	tpLatencyMs := make(map[uuid.UUID]float64)
-	for _, entry := range allEntries {
-		if entry == nil {
-			continue
-		}
-		if entry.Latency > 0 {
-			tpLatencyMs[entry.ID] = entry.Latency
-		}
-	}
 	localLatencyFor := func(id uuid.UUID) float64 { return tpLatencyMs[id] }
-	tpTypeOf := make(map[uuid.UUID]string)
-	for _, entry := range allEntries {
-		if entry != nil {
-			tpTypeOf[entry.ID] = string(entry.Type)
-		}
-	}
 	localTypeFor := func(id uuid.UUID) string { return tpTypeOf[id] }
-	tpThroughput := make(map[uuid.UUID]float64)
-	for _, entry := range allEntries {
-		if entry != nil && entry.ThroughputBps > 0 {
-			tpThroughput[entry.ID] = entry.ThroughputBps
-		}
-	}
 	localThroughputFor := func(id uuid.UUID) float64 { return tpThroughput[id] }
 
 	queue := seed
