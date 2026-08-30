@@ -53,6 +53,13 @@ func (c *churnSub) size() int {
 	return len(c.present)
 }
 
+func (c *churnSub) has(path string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.present[path]
+	return ok
+}
+
 func (c *churnSub) snapshot() (int, int, int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -101,9 +108,45 @@ func newChurnPair(t *testing.T, batchWindow time.Duration) (*Publisher, *churnSu
 	t.Cleanup(func() { _ = sub.Close() }) //nolint:errcheck
 	sub.OnUpdate(cs.apply)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	require.NoError(t, sub.ConnectTCP(ctx, addr), "ConnectTCP")
+
+	// Verify the subscription is actually LIVE before the caller starts
+	// measuring. Plain ConnectTCP returns as soon as the Subscribe frame is
+	// queued; on a loaded CI runner it can stay half-attached and deliver
+	// nothing — the observed present=0/events=0/roots=0 flake — and the
+	// reconnect watchdog never rescues it, because it skips any feed that has
+	// not yet seen a single Root (lastUpdateNs==0). (An empty tree pushes no
+	// initial Root, so we cannot just wait for one.) Publish a probe, wait for
+	// it to arrive, and re-Connect if it does not; then delete it and wait for
+	// the removal to propagate, so the caller starts from an empty, verifiably
+	// live subscription.
+	const probe = "__probe__/live"
+	live := false
+	for attempt := 0; attempt < 10 && !live; attempt++ {
+		if attempt > 0 {
+			_ = sub.ConnectTCP(ctx, addr) //nolint:errcheck // best-effort re-attach
+		}
+		require.NoError(t, pub.Put(probe, []byte("x")))
+		require.NoError(t, pub.Flush())
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if cs.has(probe) {
+				live = true
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	require.True(t, live, "subscription never became live (no Root delivered after probe)")
+
+	// Remove the probe and wait for the subscriber to drop it, so present
+	// starts empty and the caller's target counts are exact.
+	require.NoError(t, pub.Delete(probe))
+	require.NoError(t, pub.Flush())
+	require.Eventually(t, func() bool { return !cs.has(probe) }, 10*time.Second, 10*time.Millisecond,
+		"probe deletion never propagated to the subscriber")
 	return pub, cs
 }
 

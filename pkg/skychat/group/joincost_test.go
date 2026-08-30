@@ -60,8 +60,13 @@ func TestJoinPoWBinding(t *testing.T) {
 	}
 
 	// Asking for more than was paid is refused — that is what lets a group
-	// raise its price and have old proofs stop working.
-	if valid, _ := VerifyJoinPoW("group-a", pk, p, bits+8, now); valid {
+	// raise its price and have old proofs stop working. Verify against one
+	// bit more than the proof ACTUALLY achieved: the solver stops at the
+	// first nonce clearing `bits`, but that digest carries >= bits leading
+	// zeros and lands on bits+8 ~1/256 of the time by luck, which used to
+	// flake this assertion. strength+1 can never be satisfied by definition.
+	solved := joinPoWStrength("group-a", pk, p)
+	if valid, _ := VerifyJoinPoW("group-a", pk, p, solved+1, now); valid {
 		t.Error("a proof verified against a higher difficulty than it solved")
 	}
 }

@@ -20,6 +20,27 @@ const (
 	port2 = 11
 )
 
+// bufferedPipe returns an in-memory net.Conn pair that, unlike a raw net.Pipe,
+// does not require every byte of a Write to be consumed before the Write
+// returns. Each direction is pumped by an io.Copy goroutine whose 32KB read
+// buffer swallows a whole frame at once, so the writer is released immediately.
+//
+// A raw net.Pipe deadlocks this handshake on ~6% of runs: json.Encoder emits a
+// frame plus a trailing '\n' (e.g. frame1 is 65 bytes), but the peer's
+// json.Decoder parses the value and stops after the 64 JSON bytes, never
+// reading the newline. On an unbuffered net.Pipe the responder's Write then
+// blocks forever on that one byte while the initiator advances to write the
+// next frame — both sides wedge until the deadline. Real transports (TCP, QUIC,
+// dmsg streams) are buffered, so the stray newline is harmless there; this
+// helper restores that property for the test.
+func bufferedPipe() (net.Conn, net.Conn) {
+	x, p1 := net.Pipe()
+	y, p2 := net.Pipe()
+	go func() { _, _ = io.Copy(p2, p1) }()
+	go func() { _, _ = io.Copy(p1, p2) }()
+	return x, y
+}
+
 func TestHandshake(t *testing.T) {
 	type hsResult struct {
 		lAddr dmsg.Addr
@@ -37,7 +58,7 @@ func TestHandshake(t *testing.T) {
 		iAddr := dmsg.Addr{PK: initPK, Port: port1}
 		rAddr := dmsg.Addr{PK: respPK, Port: port2}
 
-		initC, respC := net.Pipe()
+		initC, respC := bufferedPipe()
 
 		deadline := time.Now().Add(Timeout)
 

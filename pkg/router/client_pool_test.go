@@ -4,6 +4,7 @@ package router
 import (
 	"context"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,13 +19,17 @@ import (
 // so a test can distinguish "reused a pooled connection" from "dialed fresh".
 type countingDialer struct {
 	dials int32
+	mu    sync.Mutex
 	conns []net.Conn // kept so the pipe peers aren't GC'd mid-test
 }
 
 func (d *countingDialer) Dial(_ context.Context, _ cipher.PubKey, _ uint16) (net.Conn, error) {
 	atomic.AddInt32(&d.dials, 1)
 	ours, theirs := net.Pipe()
+	// MakePooledMap dials several PKs concurrently, so guard the slice append.
+	d.mu.Lock()
 	d.conns = append(d.conns, ours, theirs)
+	d.mu.Unlock()
 	return ours, nil
 }
 func (d *countingDialer) Probe(_ context.Context, _ cipher.PubKey, _ uint16) bool { return true }
