@@ -297,6 +297,22 @@ func (r *router) fetchCandidateRoutes(
 	fwdCands := rejectDMSGMultihop(paths[forward], typeFor)
 	revCands := rejectDMSGMultihop(paths[backward], typeFor)
 
+	// Drop candidates traversing an excluded transport type so they never seed
+	// the initial mux leg pool. The primary/aux dials filter in fetchBestRoutes;
+	// this K-candidate race is the other route-finder path and must match, or a
+	// flaky type (e.g. webrtc) leaks into the standby pool and wedges the reorder
+	// frontier. Opt-in, empty by default.
+	if len(r.conf.ExcludeTransportTypes) > 0 {
+		if filtered := rejectExcludedTypes(fwdCands, typeFor, r.conf.ExcludeTransportTypes); len(filtered) != len(fwdCands) {
+			log.Debugf("excluded %d forward candidate(s) by transport type %v", len(fwdCands)-len(filtered), r.conf.ExcludeTransportTypes)
+			fwdCands = filtered
+		}
+		if filtered := rejectExcludedTypes(revCands, typeFor, r.conf.ExcludeTransportTypes); len(filtered) != len(revCands) {
+			log.Debugf("excluded %d reverse candidate(s) by transport type %v", len(revCands)-len(filtered), r.conf.ExcludeTransportTypes)
+			revCands = filtered
+		}
+	}
+
 	fwdRanked := r.rankCandidatePaths(fwdCands, src, dst, opts.ExcludeIntermediatePKs, latencyFor, typeFor, throughputFor, k)
 	revRanked := r.rankCandidatePaths(revCands, dst, src, opts.ExcludeIntermediatePKs, latencyFor, typeFor, throughputFor, k)
 	if len(fwdRanked) == 0 || len(revRanked) == 0 {
