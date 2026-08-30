@@ -767,6 +767,26 @@ func fetchViaDmsgDirect(flags *pflag.FlagSet, dmsgURL string) ([]byte, error) {
 // Returns the response body as a string, or "" if every path failed and
 // there was no cache to fall back on. Errors are logged at debug level.
 func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, cacheFilesAge int) string {
+	// When the URL is mirrored over CXO, the visor's bbolt-backed CXO
+	// subscriber IS the cache: FetchServiceURL's step 0 reads it as a
+	// local snapshot with no round-trip and no rate-limit cost. Layering
+	// the legacy disk-cache staleness window on top of that only shadows
+	// fresh CXO data with an up-to-cacheFilesAge-minutes-old copy — the
+	// exact cause of `ut -os` reporting a stale online count while
+	// `ut tpd -os` (a differently-keyed cache entry that had expired)
+	// showed the live number. So for CXO-backed URLs, skip the clicache
+	// freshness shadow, the write-through, and the stale fallback, and
+	// read straight through. Custom `--url` targets don't match a prod
+	// feed, so they keep the disk-cache path (offline fallback intact).
+	if _, _, cxoBacked := cxoFeedForURL(thisurl); cxoBacked {
+		body, err := FetchServiceURL(cmdFlags, thisurl)
+		if err != nil {
+			logger.Debugf("FetchCachedServiceURL: CXO-backed fetch failed for %s: %v", thisurl, err)
+			return ""
+		}
+		return string(body)
+	}
+
 	cache := getCLICacheIfEnabled(cachefile)
 	maxAge := time.Duration(cacheFilesAge) * time.Minute
 
