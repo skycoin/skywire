@@ -660,7 +660,14 @@ var (
 )
 
 func init() {
-	adaptRevActiveV.Store(1)
+	// Steady active-download floor of 2, not 1: a single active download leg
+	// over-subscribes the no-skip reorder frontier under sustained bulk load and
+	// wedges the transfer (measured live — 1-leg groups truncate at chunk0 and limp
+	// at ~57 KB/s while 2-leg groups run at multi-MB/s). Two legs give the frontier a
+	// second path to make progress on and keep a single leg-death from stranding the
+	// download on one over-subscribed leg. Still well within adaptCap (8) and FEC's
+	// R=2 erasure budget; the pool parks the rest warm.
+	adaptRevActiveV.Store(2)
 	adaptCapV.Store(8)
 	adaptStandbyMaxV.Store(512)
 }
@@ -1125,6 +1132,17 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// a symmetric group, so this is a no-op there and desiredActive ==
 	// adaptTarget + forwardExtra as before.
 	forwardExtra := e.adaptFwdTarget - adaptFwdActive
+	// Honor the steady active-download floor LIVE, every tick. adaptTarget seeds to
+	// adaptRevActive at init, but a runtime SetAdaptRevActive (proxy mux width) only
+	// reached it via the idle-shrink clamp — so a raised floor never took effect
+	// during an active download, and a target that had shrunk to a single leg stayed
+	// there. A lone active download leg over-subscribes the no-skip reorder frontier
+	// and wedges the transfer (measured: 1-leg groups truncate at chunk0 while 2-leg
+	// groups run at line rate), so clamping up to the floor here keeps drop-recovery
+	// restoring at least adaptRevActive download legs even under sustained load.
+	if e.adaptTarget < adaptRevActive {
+		e.adaptTarget = adaptRevActive
+	}
 	desiredActive := e.adaptTarget + forwardExtra + nonDLActive
 	if desiredActive > adaptCap {
 		desiredActive = adaptCap
