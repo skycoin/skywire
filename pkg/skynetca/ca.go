@@ -49,6 +49,12 @@ type CAOptions struct {
 	CommonName       string
 	Validity         time.Duration
 	PermittedDomains []string
+	// Unconstrained omits the X.509 nameConstraints extension entirely, so the CA
+	// can sign a leaf for ANY dnsName. This is the "forge any host" root a real
+	// clearnet HTTPS MITM (e.g. the skysocks-client HTTPS range-splitter) needs,
+	// and is a deliberate security decision: such a root must be created
+	// explicitly, never defaulted. PermittedDomains is ignored when this is set.
+	Unconstrained bool
 }
 
 func (o CAOptions) withDefaults() CAOptions {
@@ -58,14 +64,17 @@ func (o CAOptions) withDefaults() CAOptions {
 	if o.Validity == 0 {
 		o.Validity = 10 * 365 * 24 * time.Hour
 	}
-	if len(o.PermittedDomains) == 0 {
+	// An unconstrained CA carries no permitted-domain list; do not backfill the
+	// resolver defaults onto it.
+	if len(o.PermittedDomains) == 0 && !o.Unconstrained {
 		o.PermittedDomains = append([]string{}, DefaultPermittedDomains...)
 	}
 	return o
 }
 
 // GenerateCA returns a fresh ECDSA P-256 CA suitable for signing
-// leaf certs. Name constraints are applied per opts.PermittedDomains.
+// leaf certs. Name constraints are applied per opts.PermittedDomains,
+// unless opts.Unconstrained is set (no nameConstraints at all).
 func GenerateCA(opts CAOptions) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 	o := opts.withDefaults()
 
@@ -89,11 +98,14 @@ func GenerateCA(opts CAOptions) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 		MaxPathLen:            0,
 		MaxPathLenZero:        true,
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-		// Name constraints are the load-bearing security property:
-		// a leaf signed by this CA can only have a dnsName whose
-		// labels end in one of these suffixes.
-		PermittedDNSDomains:         o.PermittedDomains,
-		PermittedDNSDomainsCritical: true,
+	}
+	// Name constraints are the load-bearing security property: a leaf signed by a
+	// constrained CA can only have a dnsName whose labels end in one of these
+	// suffixes. An unconstrained CA omits the extension so it can sign any host —
+	// only used where the caller has made that MITM decision explicitly.
+	if !o.Unconstrained {
+		tmpl.PermittedDNSDomains = o.PermittedDomains
+		tmpl.PermittedDNSDomainsCritical = true
 	}
 
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
