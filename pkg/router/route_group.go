@@ -3607,11 +3607,12 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 					rg.logger.Debug("Unidirectional send selection enabled (both peers support CapUniDir)")
 				}
 
-				// FEC negotiation. Requires CapMux (rg.mux set above); both edges
-				// must advertise CapFEC and this visor must want it (SKYWIRE_MUX_FEC=1,
-				// opt-in during rollout). Enables block erasure coding so a
-				// gap-blocked reorder frontier is reconstructed from repair frames on
-				// fast legs instead of waiting on the slow leg.
+				// FEC negotiation. Requires CapMux (rg.mux set above); enabled purely
+				// when both edges advertised CapFEC — no flag gate, like every other
+				// mux capability (CapFEC is advertised unconditionally above). Enables
+				// block erasure coding so a gap-blocked reorder frontier is
+				// reconstructed from repair frames on fast legs instead of waiting on
+				// the slow leg.
 				if remoteCaps&routing.CapFEC != 0 {
 					rg.mux.fecEnabled = true
 					rg.mux.fecInit()
