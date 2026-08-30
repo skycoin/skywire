@@ -189,7 +189,7 @@ func TestHTTPSRangeSplitNonRangeOrigin(t *testing.T) {
 // unconstrained CA mints a leaf for an arbitrary clearnet host that verifies against
 // the CA — which a name-constrained CA (the resolver default) cannot do.
 func TestUnconstrainedCAMintsRealHost(t *testing.T) {
-	cert, minter, err := loadOrCreateMITMCA(t.TempDir())
+	cert, minter, err := LoadOrCreateMITMCA(t.TempDir())
 	if err != nil {
 		t.Fatalf("create MITM CA: %v", err)
 	}

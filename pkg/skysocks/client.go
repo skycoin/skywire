@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/proxyinterstitial"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/wasmhv/wasmbin"
 	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 )
@@ -273,20 +274,32 @@ func (c *Client) SetRangeSplit(enabled bool, concurrency int, chunkSize int64) {
 	}
 }
 
-// SetHTTPSRangeSplit enables TLS-terminating (:443) range-splitting, loading or
-// creating the unconstrained MITM root under caDir (caDir/ca.crt + ca.key). It is a
-// deliberate security opt-in: the returned root can forge a leaf for any host, so it
-// is never enabled by default, and the operator must import caDir/ca.crt into the
-// browser for the terminated TLS to be trusted (MITMCACertPEM returns it). Errors
-// (unreadable/creatable CA) leave HTTPS range-splitting off.
-func (c *Client) SetHTTPSRangeSplit(caDir string) error {
-	cert, minter, err := loadOrCreateMITMCA(caDir)
-	if err != nil {
-		return err
+// SetHTTPSRangeSplitMinter enables TLS-terminating (:443) range-splitting on this
+// client using a MITM root + minter the CALLER already created (via
+// LoadOrCreateMITMCA). This is the production path: the CA is a persistent local
+// identity minted ONCE at app startup — independent of any dial — and the same
+// minter is injected into every reconnect's client, so the operator can import the
+// cert before traffic ever flows and it never changes underfoot.
+func (c *Client) SetHTTPSRangeSplitMinter(cert *x509.Certificate, minter skynetca.LeafMinter) {
+	if cert == nil || minter == nil {
+		return
 	}
 	c.rs.caCert = cert
 	c.rs.minter = minter
 	c.rs.httpsEnabled = true
+}
+
+// SetHTTPSRangeSplit is a convenience that loads/creates the MITM root under caDir
+// and enables the feature on this client in one call. Prefer LoadOrCreateMITMCA +
+// SetHTTPSRangeSplitMinter when the CA must exist before the first client is built
+// (so it can be exported up front). Errors (unreadable/creatable CA) leave the
+// feature off.
+func (c *Client) SetHTTPSRangeSplit(caDir string) error {
+	cert, minter, err := LoadOrCreateMITMCA(caDir)
+	if err != nil {
+		return err
+	}
+	c.SetHTTPSRangeSplitMinter(cert, minter)
 	return nil
 }
 

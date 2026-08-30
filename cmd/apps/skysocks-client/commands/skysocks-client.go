@@ -3,6 +3,8 @@ package commands
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"log"
@@ -31,6 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/skysocks"
 )
 
@@ -190,6 +193,35 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		go httpProxy(httpCtx, httpAddr, addr, log)
 	}
 
+	// HTTPS (:443) range-splitting is an explicit security opt-in. Create/load the
+	// MITM root ONCE here, at startup — independent of any dial — so the operator can
+	// import the printed CA before traffic ever flows, and so the SAME persistent
+	// root is injected into every reconnect's client below (it never changes
+	// underfoot). The root can forge a leaf for any host; that is why it is off by
+	// default and must be trusted explicitly.
+	var (
+		mitmCert   *x509.Certificate
+		mitmMinter skynetca.LeafMinter
+	)
+	if rangeHTTPS {
+		caDir := rangeHTTPSCA
+		if caDir == "" {
+			home, herr := os.UserHomeDir()
+			if herr != nil {
+				home = "."
+			}
+			caDir = filepath.Join(home, ".skywire", "rangesplit-mitm")
+		}
+		cert, minter, herr := skysocks.LoadOrCreateMITMCA(caDir)
+		if herr != nil {
+			log.WithError(herr).Warn("HTTPS range-splitting requested but its MITM root could not be initialized; :443 will splice through unchanged")
+		} else {
+			mitmCert, mitmMinter = cert, minter
+			pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
+			log.Warnf("HTTPS range-splitting ENABLED — import this root into your browser to trust intercepted origins; it can forge any host, so remove it when done:\n  CA file: %s\n%s", filepath.Join(caDir, "ca.crt"), string(pemBytes))
+		}
+	}
+
 	// SIGINT goroutine cancels the outer ctx so the cycle loop
 	// breaks out cleanly. Installed once for the proc lifetime;
 	// each cycle's client.ListenAndServe returns when the
@@ -302,23 +334,11 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// range-capable :80 GET is fetched as concurrent byte ranges over separate
 		// tunnels, so a single download aggregates across the mesh.
 		client.SetRangeSplit(rangeSplit, int(rangeConc), rangeChunkKiB*1024)
-		// HTTPS (:443) range-splitting is an explicit security opt-in: enabling it
-		// mints browser leaves from a forge-any-host root, so it is only wired when
-		// asked, and the operator is told exactly which CA to import.
-		if rangeHTTPS {
-			caDir := rangeHTTPSCA
-			if caDir == "" {
-				home, herr := os.UserHomeDir()
-				if herr != nil {
-					home = "."
-				}
-				caDir = filepath.Join(home, ".skywire", "rangesplit-mitm")
-			}
-			if herr := client.SetHTTPSRangeSplit(caDir); herr != nil {
-				log.WithError(herr).Warn("HTTPS range-splitting requested but its MITM root could not be initialized; :443 will splice through unchanged")
-			} else if pemBytes, ok := client.MITMCACertPEM(); ok {
-				log.Warnf("HTTPS range-splitting ENABLED — import this root into your browser to trust intercepted origins; it can forge any host, so remove it when done:\n  CA file: %s\n%s", filepath.Join(caDir, "ca.crt"), string(pemBytes))
-			}
+		// HTTPS (:443) range-splitting: inject the MITM root minted ONCE at startup
+		// (mitmMinter, below) so it is the same persistent CA across every reconnect
+		// and exists before any dial. nil minter = feature off or CA init failed.
+		if mitmMinter != nil {
+			client.SetHTTPSRangeSplitMinter(mitmCert, mitmMinter)
 		}
 		if tunnels > 1 {
 			client.SetTunnelRedial(func() (net.Conn, error) {
