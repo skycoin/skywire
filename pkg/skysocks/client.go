@@ -576,58 +576,112 @@ func (c *Client) ListenAndServe(addr string) error {
 // Liveness-probe tuning for sessionKeepAliveLoop. A route group can be
 // torn down router-side (remote visor restart, all mux legs dropped)
 // WITHOUT the underlying conn delivering EOF, so session.IsClosed() may
-// never flip and ListenAndServe would block forever in Accept(). A timed
-// yamux ping detects that. The interval/timeout are generous and we
-// require consecutive failures so a merely-slow multihop route is not
-// mistaken for a dead one (a false close just costs one reconnect cycle).
-const (
-	livenessProbeInterval = 15 * time.Second
-	livenessProbeTimeout  = 10 * time.Second
-	livenessFailThreshold = 2
-)
-
-// sessionKeepAliveLoop probes every tunnel and retires the dead ones. A tunnel
-// that fails livenessFailThreshold consecutive pings is closed so pickSession
-// stops routing to it (dropping just that tunnel's streams); the whole client is
-// torn down for reconnect only once EVERY tunnel is closed. With a single tunnel
-// (N==1) this is exactly the prior behavior: the one tunnel dying closes the
-// client.
+// never flip and ListenAndServe would block forever in Accept(). A yamux
+// ping detects that: the loop retires a tunnel only after no pong has been
+// seen for sessionHardDeadWindow, which tolerates a merely-slow or
+// transiently reorder-wedged route (a false close costs a reconnect cycle).
 //
-// After retiring the dead ones, when the live count has fallen below the target N
-// (but at least one tunnel survives) it re-dials a fresh DISJOINT replacement via
-// maybeRedial — the "cycle in a fresh disjoint tunnel" half of the aggregation
-// convergence (docs/mux_aggregation_rfc.md steps 3-4). A single tunnel never
-// re-dials: its death is total collapse, owned by the app's --reconnect.
+// livenessProbeInterval is how often the keepalive loop probes each tunnel. A
+// var so tests can drive the loop fast.
+var livenessProbeInterval = 15 * time.Second
+
+// sessionHardDeadWindow is how long a tunnel may go WITHOUT any pong before the
+// keepalive loop retires it as dead. It is deliberately much larger than
+// livenessProbeInterval: the yamux ping/pong are ordinary frames on the
+// RouteGroup, which is a reliable ORDERED stream, so a reorder WEDGE (a missing
+// sequence damming later packets — including the pong — until the sender's
+// retransmit refills it) head-of-line-blocks the pong for as long as the wedge
+// lasts. A single stuck probe therefore does NOT mean the tunnel is dead; the
+// pong still arrives once the wedge clears. Retiring on a couple of stuck probes
+// (the old livenessFailThreshold logic) mistook a transient wedge for a dead
+// conn and tore down the whole route group under download load — the pool
+// "collapse to nothing, then grow back" (new local port on every reconnect). We
+// now retire only after NO pong (even a late one) has been seen for this window,
+// which distinguishes a wedged-but-live tunnel (pongs arrive late) from a
+// genuinely silent/black-holed one (never pongs again). A var so tests can
+// shrink it. Kept comfortably above the worst realistic wedge duration.
+var sessionHardDeadWindow = 45 * time.Second
+
+// sessionKeepAliveLoop probes every tunnel and retires only the genuinely dead
+// ones. Each tick it issues at most one in-flight yamux ping per tunnel; the
+// ping's result — INCLUDING one that arrives late, after its own probe timed
+// out — refreshes that tunnel's "last pong" timestamp. A tunnel is retired only
+// once NO pong (early or late) has been seen for sessionHardDeadWindow. This is
+// the fix for the false-teardown collapse: a reorder WEDGE head-of-line-blocks
+// the in-band pong for a few seconds (it rides the same reliable ordered stream
+// as the dammed data), so the old "2 consecutive stuck pings → retire" logic
+// mistook a transient wedge for a dead conn and tore the whole route group down
+// under download load. Tracking the late pong distinguishes wedged-but-live
+// (pong arrives once the gap fills) from silent/black-holed (never pongs).
+//
+// Retiring a tunnel closes it so pickSession stops routing to it; the whole
+// client is torn down for reconnect only once EVERY tunnel is closed. With a
+// single tunnel (N==1) the one tunnel dying closes the client (its death is
+// total collapse, owned by the app's --reconnect). After retiring, when the live
+// count has fallen below the target N (but at least one tunnel survives) it
+// re-dials a fresh DISJOINT replacement via maybeRedial (docs/mux_aggregation_rfc.md
+// steps 3-4).
 func (c *Client) sessionKeepAliveLoop() {
 	ticker := time.NewTicker(livenessProbeInterval)
 	defer ticker.Stop()
 
-	fails := make(map[*yamux.Session]int)
+	type probeResult struct {
+		s  *yamux.Session
+		ok bool
+	}
+	// resC carries every ping's outcome back to the loop, even outcomes that
+	// arrive long after livenessProbeTimeout (a wedge-delayed pong). Buffered so a
+	// late result never blocks its goroutine when the loop is between ticks.
+	resC := make(chan probeResult, 64)
+	lastPong := make(map[*yamux.Session]time.Time) // last time a pong was seen (early or late)
+	inFlight := make(map[*yamux.Session]bool)      // a ping is outstanding for this session
 	prevLive := -1
+
 	for {
 		select {
 		case <-c.closeC:
 			return
+		case r := <-resC:
+			// A ping completed (possibly late). Clear its in-flight guard and, if it
+			// ponged, mark the tunnel alive as of now — this is what lets a wedge that
+			// clears after the probe deadline keep the tunnel from being retired.
+			inFlight[r.s] = false
+			if r.ok {
+				lastPong[r.s] = time.Now()
+			}
 		case <-ticker.C:
+			now := time.Now()
 			for _, s := range c.snapshotSessions() {
 				if s.IsClosed() {
-					delete(fails, s)
+					delete(lastPong, s)
+					delete(inFlight, s)
 					continue
 				}
-				if sessionPingAlive(s, livenessProbeTimeout) {
-					fails[s] = 0
-					continue
+				if _, seen := lastPong[s]; !seen {
+					lastPong[s] = now // seed on first sight so a never-ponging conn still ages out
 				}
-				fails[s]++
-				if fails[s] >= livenessFailThreshold {
+				// Issue a fresh probe only if the previous one has resolved. A ping
+				// wedged behind a reorder gap keeps its goroutine parked until the gap
+				// fills (or the session closes), so we do not pile up probes; the single
+				// outstanding ping's eventual pong refreshes liveness via resC.
+				if !inFlight[s] {
+					inFlight[s] = true
+					go func(s *yamux.Session) {
+						_, err := s.Ping()
+						select {
+						case resC <- probeResult{s: s, ok: err == nil}:
+						case <-c.closeC:
+						}
+					}(s)
+				}
+				// Retire only after a sustained silence — no pong for the whole window.
+				if now.Sub(lastPong[s]) >= sessionHardDeadWindow {
 					if c.appCl != nil {
-						c.appCl.Log().Warnf("Liveness probe failed %dx; tunnel gone, retiring it", fails[s])
+						c.appCl.Log().Warnf("No pong for %v (> hard-dead window); tunnel gone, retiring it", now.Sub(lastPong[s]).Truncate(time.Second))
 					}
-					// Retire just this tunnel; a closed session is skipped by
-					// pickSession. The whole-client close below fires only when
-					// this leaves no live tunnel.
 					_ = s.Close() //nolint:errcheck
-					delete(fails, s)
+					delete(lastPong, s)
+					delete(inFlight, s)
 				}
 			}
 			if c.allSessionsClosed() {
