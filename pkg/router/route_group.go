@@ -89,6 +89,16 @@ const (
 	// stalled gap is nudged within ~one reorderTimeout of going silent.
 	reorderStallInterval = 500 * time.Millisecond
 
+	// legStateResyncInterval is how often the active-set side re-asserts its
+	// COMPLETE leg standby/active set to the peer (CapLegState). The park/promote
+	// signals are otherwise purely EVENT-driven, so a single dropped LegStatePacket
+	// (loss, a multihop re-stamp miss, or a park that raced the leg's handshake)
+	// desyncs the two ends permanently — the accept side (all-active) then keeps
+	// striping its send traffic across legs this side has parked (the wide-mux
+	// download over-subscription; measured the peer holding 33 active legs while
+	// this side had ~8). A periodic full resync lets any lost event self-correct.
+	legStateResyncInterval = 7 * time.Second
+
 	// bandDemoteRatio: an ACTIVE leg whose end-to-end latency is more than this
 	// factor off the active-set median (either tail) is demoted to warm standby
 	// so the mux never STRIPES across latency-disparate legs. Striping a 2ms LAN
@@ -1642,6 +1652,10 @@ func (rg *RouteGroup) startOffServiceLoops() {
 	// reorderTimeout with no packet arriving to trigger the arrival-driven SACK,
 	// emit a SACK so the sender retransmits the missing seq in order (never skip).
 	go rg.servicePacketLoop("reorder-stall", reorderStallInterval, rg.reorderStallServiceFn, nil)
+	// Periodic leg-state resync: re-assert the full standby/active set to the peer
+	// so a lost park/promote signal self-corrects instead of desyncing the mirror
+	// permanently (CapLegState). No-op unless negotiated; see legStateResyncServiceFn.
+	go rg.servicePacketLoop("legstate-resync", legStateResyncInterval, rg.legStateResyncServiceFn, nil)
 	// Unidirectional flip controller (CapUniDir): both ends run this, so the
 	// direction→leg-class mapping flips together when the traffic asymmetry
 	// inverts (upload outweighs download → the heavy upload gets the mux). No-op
@@ -2024,6 +2038,31 @@ func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 		rg.logger.Infof("reorder-wedge CLEARED after %d stall ticks (frontier advancing again)", rg.reorderWedgeTicks)
 		rg.reorderWedgeTicks = 0
 		rg.reorderWedgeLoggedAt = 0
+	}
+}
+
+// legStateResyncServiceFn periodically re-asserts this side's COMPLETE aux-leg
+// standby/active set to the peer (CapLegState). The park/promote signals are
+// otherwise purely event-driven, so a single dropped LegStatePacket desyncs the
+// two ends permanently: the accept side (all-active) keeps striping its send
+// traffic across legs this side has parked, over-subscribing the no-skip reorder
+// frontier (measured: the peer holding 33 active legs while this side had ~8, so
+// ~99% of a download rode "standby" legs). Re-broadcasting the full set every
+// legStateResyncInterval lets any lost event self-correct so the bulk sender
+// converges on this side's active set. Leg 0 (the primary) is always active and
+// never signaled. No-op unless CapLegState was negotiated.
+func (rg *RouteGroup) legStateResyncServiceFn(_ time.Duration) {
+	if rg.isClosed() || rg.mux == nil || !rg.mux.legStateEnabled || rg.isRemoteClosed() {
+		return
+	}
+	rg.mu.Lock()
+	n := len(rg.tps)
+	rg.mu.Unlock()
+	// sendLegState / isLegStandby are each individually bounds-checked and take
+	// their own locks, so the leg set changing mid-loop is safe (a since-removed
+	// index is a no-op).
+	for idx := 1; idx < n; idx++ {
+		rg.sendLegState(idx, rg.mux.isLegStandby(idx))
 	}
 }
 
