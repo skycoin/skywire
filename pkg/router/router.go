@@ -129,6 +129,10 @@ type Config struct {
 	RulesGCInterval  time.Duration
 	MinHops          uint16
 	MaxHops          uint16
+	// ExcludeTransportTypes hard-excludes routes traversing any of these transport
+	// types from the candidate set (see visorconfig.Routing.RouteExcludeTransportTypes).
+	// Empty = nothing excluded. Lowercased type names.
+	ExcludeTransportTypes []string
 	// MuxRoutes seeds the router's runtime parallel-mux-routes value from
 	// routing.mux_routes at construction, the way MinHops already is. The
 	// dial-time default is applied by the app networker (which the launcher

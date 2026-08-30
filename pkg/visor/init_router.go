@@ -293,6 +293,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		MinHops:               v.conf.Routing.MinHops,
 		MuxRoutes:             v.conf.Routing.MuxRoutes,
 		ParallelRouteSetup:    v.conf.Routing.ParallelRouteSetup,
+		ExcludeTransportTypes: v.conf.Routing.RouteExcludeTransportTypes,
 		AwaitSetupListener:    v.awaitSetupListener,
 		Logger:                logger,
 		MasterLogger:          v.MasterLogger(),
