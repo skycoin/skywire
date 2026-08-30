@@ -685,6 +685,17 @@ type Routing struct {
 	// via PUT /api/visors/{pk}/router-settings.
 	TransportPreference []string `json:"transport_preference,omitempty"`
 
+	// RouteExcludeTransportTypes hard-EXCLUDES routes that traverse any of these
+	// transport types, rather than merely deprioritizing them like
+	// TransportPreference does. A route (in either direction) is dropped from the
+	// candidate set if ANY of its hops rides an excluded type — so an excluded type
+	// never enters the mux leg pool. Intended for types whose flakiness poisons the
+	// mux (e.g. "webrtc": a stalled webrtc leg wedges the no-skip reorder frontier
+	// and truncates downloads). Empty by default (nothing excluded), so it stays
+	// opt-in — a visor that NEEDS a type (e.g. webrtc for a wasm/browser peer) simply
+	// leaves it off its own list. Values use the same names as TransportPreference.
+	RouteExcludeTransportTypes []string `json:"route_exclude_transport_types,omitempty"`
+
 	// EnableRSNOracleRoutes opts INTO the RSN-oracle 2-hop route path: for a
 	// single-intermediate route S->I->D the source computes the route LOCALLY
 	// from its OWN transports intersected with the destination's OWN transports
