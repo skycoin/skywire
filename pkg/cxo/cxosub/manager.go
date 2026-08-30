@@ -174,8 +174,9 @@ type Manager struct {
 	interval time.Duration // cycle period (cxo_subscribe_interval)
 	grace    time.Duration // delay after last release before stopping the cycle
 
-	mu    sync.Mutex
-	feeds map[Feed]*managedFeed
+	mu     sync.Mutex
+	feeds  map[Feed]*managedFeed
+	pinned map[Feed]bool // feeds held continuously (never grace-stopped)
 }
 
 // managedFeed holds a single feed's runtime state.
@@ -707,6 +708,32 @@ func (m *Manager) LastSync(feed Feed) time.Time {
 	f.snapMu.RLock()
 	defer f.snapMu.RUnlock()
 	return f.lastSyncAt
+}
+
+// Pin keeps a feed's sync cycle running continuously by taking one
+// permanent reference: the refcount never falls to zero, so the
+// grace-period teardown never fires. Use it for a feed a core subsystem
+// consults constantly — the router's transport snapshot (FeedTPDAllTransports)
+// is read on every dial's route calculation. Without a pin the ~10s-grace
+// teardown tears the CXO subscription down whenever the last transient
+// consumer goes briefly idle, and the next read re-establishes it — a
+// fresh dmsg + Noise/PQ handshake each time, which on the single-threaded
+// wasm visor is pure churn. Idempotent per feed; the pin is released only
+// by Close.
+func (m *Manager) Pin(fk Feed) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.pinned[fk] {
+		return
+	}
+	if m.pinned == nil {
+		m.pinned = make(map[Feed]bool)
+	}
+	m.pinned[fk] = true
+	m.acquireFeedLocked(fk)
 }
 
 // acquireFeedLocked must be called under m.mu.

@@ -217,21 +217,21 @@ func TestTPDSnapshotCache_VersionKeyedInvalidation(t *testing.T) {
 	}
 	assert.Equal(t, 1, calls, "stable CXO version within TTL must collapse to one fetch")
 
-	// A new CXO snapshot timestamp triggers exactly one refetch, no clock
-	// movement needed — freshness tracks CXO, not the wall clock.
-	ver = time.Unix(2_000, 0)
+	// Advancing the wall clock past the TTL must NOT refetch while the CXO
+	// version is unchanged: the pinned subscription keeps lastSyncAt live,
+	// so a stable version means transports genuinely haven't changed — no
+	// timer refresh over an already-live CXO snapshot.
+	clk.advance(10 * defaultTPDSnapshotTTL)
 	_, err := c.snapshot(context.Background(), fetch, version)
 	require.NoError(t, err)
-	assert.Equal(t, 2, calls, "advanced CXO version must refetch once")
+	assert.Equal(t, 1, calls, "stable CXO version must not refetch on the wall clock")
 
-	// Liveness floor: because the CXO transport feed is refcount-gated and
-	// its lastSyncAt FREEZES when idle, a stable version past the TTL must
-	// still refetch (that refetch re-acquires the feed). Otherwise a frozen
-	// version would pin the cache to a stale snapshot forever.
-	clk.advance(defaultTPDSnapshotTTL + time.Second)
+	// A new CXO snapshot timestamp (a real transport change pushed by the
+	// live subscription) triggers exactly one refetch — no clock movement.
+	ver = time.Unix(2_000, 0)
 	_, err = c.snapshot(context.Background(), fetch, version)
 	require.NoError(t, err)
-	assert.Equal(t, 3, calls, "TTL floor must force a refetch when a frozen version outlives the TTL")
+	assert.Equal(t, 2, calls, "advanced CXO version must refetch once")
 }
 
 // TestTPDSnapshotCache_VersionFallsBackToTTL: a version probe that reports

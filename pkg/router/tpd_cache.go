@@ -86,14 +86,13 @@ type tpdSnapshot struct {
 	typeByID       map[uuid.UUID]string
 	throughputByID map[uuid.UUID]float64
 	// version is the CXO snapshot timestamp this snapshot was built from
-	// (zero when built off the wall-clock TTL path, e.g. a non-CXO
-	// discovery client). When set, the cache reuses this snapshot until
-	// the source reports a newer timestamp — CXO-cadence invalidation
-	// rather than an independent timer.
+	// (zero when built off the non-CXO TTL path). When set, the cache
+	// reuses this snapshot until the pinned CXO subscription pushes a newer
+	// Root — event-driven invalidation, no timer.
 	version time.Time
-	// expires is the wall-clock TTL floor, always set. It governs the
-	// non-CXO path and bounds staleness if the version probe later stops
-	// answering (CXO feed dropped) so the cache can't pin forever.
+	// expires is the wall-clock TTL, set for the non-CXO fallback path
+	// (a discovery client with no version signal — tests, bare HTTP). It is
+	// not consulted on the CXO path.
 	expires time.Time
 }
 
@@ -218,29 +217,28 @@ func (c *tpdSnapshotCache) snapshot(
 	fetchAll func(context.Context) ([]*transport.Entry, error),
 	version func() (time.Time, bool),
 ) (*tpdSnapshot, error) {
-	// CXO-driven path: serve until the source's snapshot timestamp moves
-	// — but keep the TTL as a liveness floor. The CXO transport feed is
-	// refcount-gated (TabCloseGrace ~10s): once route-calc stops holding
-	// it the sync cycle stops and lastSyncAt FREEZES (the snapshot is not
-	// cleared). Cache hits here deliberately don't re-acquire the feed, so
-	// without the floor a stable-but-frozen version would pin this cache
-	// to an old snapshot forever and transports would never refresh. The
-	// floor forces a refetch every TTL even when the version hasn't moved;
-	// that refetch goes through GetAllTransports, which re-acquires the
-	// feed (restarting its cycle) and picks up anything new. So: refresh
-	// immediately when CXO advances, and at worst once per TTL when CXO is
-	// idle — never per call.
+	// CXO-driven path: serve until the source's snapshot timestamp moves —
+	// no wall clock involved. The visor pins FeedTPDAllTransports (see
+	// Manager.Pin), so its CXO subscription is held continuously and
+	// liveServe pushes each new Root into the snapshot; lastSyncAt advances
+	// only on a real transport change. Rebuilding the derived lookups
+	// exactly then — and not otherwise — is correct and event-driven: a
+	// steady network rebuilds nothing, a changed one rebuilds once. There
+	// is deliberately no TTL here; a periodic refetch over an already-live
+	// CXO snapshot would just be a timer cache, which is the thing this
+	// replaces. (The TTL below still governs the non-CXO fallback, where
+	// there is no version signal at all.)
 	if version != nil {
 		if ts, ok := version(); ok {
 			c.mu.RLock()
 			cur := c.snap
 			c.mu.RUnlock()
-			if cur != nil && !cur.version.IsZero() && cur.version.Equal(ts) && c.clock().Before(cur.expires) {
+			if cur != nil && !cur.version.IsZero() && cur.version.Equal(ts) {
 				return cur, nil
 			}
 			c.mu.Lock()
 			defer c.mu.Unlock()
-			if c.snap != nil && !c.snap.version.IsZero() && c.snap.version.Equal(ts) && c.clock().Before(c.snap.expires) {
+			if c.snap != nil && !c.snap.version.IsZero() && c.snap.version.Equal(ts) {
 				return c.snap, nil
 			}
 			entries, err := fetchAll(ctx)
