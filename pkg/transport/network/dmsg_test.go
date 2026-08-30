@@ -50,11 +50,19 @@ func TestDmsgAdapters_EndToEnd(t *testing.T) {
 		}
 	}()
 
-	// A dials B.
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	// A dials B. Retry the first dial: both dmsg clients are Ready() (each
+	// holds MinSessions sessions and a published entry), but the shared dmsg
+	// servers can still be finishing their side of B's session registration,
+	// so the very first forward occasionally 202s ("cannot connect to
+	// delegated server"). Production dmsg dials retry for the same reason;
+	// this settles the in-memory test env deterministically.
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
-	dialed, err := aClient.Dial(ctx, dcB.LocalPK(), port)
-	require.NoError(t, err)
+	var dialed Transport
+	require.Eventually(t, func() bool {
+		dialed, err = aClient.Dial(ctx, dcB.LocalPK(), port)
+		return err == nil && dialed != nil
+	}, 20*time.Second, 100*time.Millisecond, "A could not dial B: %v", err)
 
 	var accepted Transport
 	select {
