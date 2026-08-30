@@ -39,11 +39,31 @@ const dcLabel = "skywire"
 // the largest frame the upper stack writes (Noise messages are <=64 KiB).
 const dcReadBuf = 96 * 1024
 
+// sctpReceiveBufferBytes is the SCTP receive-window (a_rwnd) this carrier
+// advertises, raised from pion's 1 MiB default (pion/sctp initialRecvBufSize).
+// Throughput over a reliable stream is bounded by window / RTT (the
+// bandwidth-delay product): the advertised receiver-window credit caps how much
+// unacknowledged data may be in flight. The skywire mesh path has a high
+// end-to-end RTT (~0.5-1 s across relays), so the 1 MiB default throttles a
+// single DataChannel to ~1 MB/s regardless of the underlying link — and under a
+// full window SCTP flow-control simply stops advancing, which presents as a
+// silent mid-transfer stall (the same class of bug as the 256 KB yamux window,
+// #4211). 16 MiB gives 16 MB/s at 1 s RTT (128 Mbps), saturating a 100 Mbps card
+// with headroom; SCTP only holds up to a window's worth of actually-received-
+// but-unread data, so idle channels pay nothing. The advertised window governs
+// the peer's send rate INTO us, so this value speeds our downloads; the peer's
+// value speeds our uploads once the fleet redeploys. Fits uint32 (a_rwnd is a
+// 32-bit credit) with room to spare.
+const sctpReceiveBufferBytes = 16 * 1024 * 1024
+
 // newWebRTCAPI builds a pion API with detached DataChannels (so we get an
 // io.ReadWriteCloser to adapt to net.Conn instead of pion's callback model).
 func newWebRTCAPI() *webrtc.API {
 	se := webrtc.SettingEngine{}
 	se.DetachDataChannels()
+	// Raise the SCTP receive window off its 1 MiB default so a high-BDP mesh path
+	// isn't flow-control throttled/stalled — see sctpReceiveBufferBytes.
+	se.SetSCTPMaxReceiveBufferSize(sctpReceiveBufferBytes)
 	// Empty MediaEngine: skywire uses WebRTC for DATA CHANNELS ONLY, never audio/
 	// video. With the default MediaEngine pion registers audio/video codecs and
 	// starts SRTP/SRTCP + RTP/RTCP media-processor goroutines per PeerConnection
@@ -260,6 +280,21 @@ type dcConn struct {
 
 func newDCConn(raw datachannel.ReadWriteCloser, pc *webrtc.PeerConnection, signal io.Closer) *dcConn {
 	c := &dcConn{raw: raw, pc: pc, signal: signal, notify: make(chan struct{})}
+	// Surface a dead path promptly. pion's ICE agent already runs consent-freshness
+	// keepalive (a STUN binding every ~2 s, "disconnected" after ~5 s of silence,
+	// "failed" after ~25 s more) — but that liveness verdict was never wired to the
+	// net.Conn, so a DataChannel whose path had died left dcConn.Read blocked on
+	// raw.Read indefinitely (a SILENT stall the mux's route-group liveness could not
+	// evict). Fail the conn as soon as the PeerConnection reaches Failed or Closed so
+	// the stall trips a read error immediately, without adding a redundant app-level
+	// ping on top of ICE's. (A flow-control stall — the BDP trap Lever 1 addresses —
+	// keeps packets flowing, so ICE stays Connected; that path is handled by the
+	// larger receive window and by write-deadline forwarding below.)
+	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
+		if s == webrtc.PeerConnectionStateFailed || s == webrtc.PeerConnectionStateClosed {
+			c.fail(fmt.Errorf("webrtc: peer connection %s", s))
+		}
+	})
 	go c.readPump()
 	return c
 }
@@ -414,8 +449,29 @@ func (c *dcConn) SetReadDeadline(t time.Time) error {
 	c.mu.Unlock()
 	return nil
 }
-func (c *dcConn) SetWriteDeadline(time.Time) error { return nil }
-func (c *dcConn) SetDeadline(t time.Time) error    { return c.SetReadDeadline(t) }
+
+// SetWriteDeadline forwards to the underlying SCTP stream when it supports
+// deadlines (pion's detached DataChannel is a datachannel.ReadWriteCloserDeadliner).
+// Writes otherwise block in raw.Write with no bound, so a wedged channel — the
+// receiver stalled and the SCTP send window exhausted — hangs the writer forever
+// and the upper stack's own write timeout can never trip. Honoring the deadline
+// lets a stall surface as a write timeout at the caller's chosen deadline. Reads
+// keep their dcConn-layer deadline (the readPump owns raw.Read), so only the write
+// side is forwarded here.
+func (c *dcConn) SetWriteDeadline(t time.Time) error {
+	if d, ok := c.raw.(datachannel.ReadWriteCloserDeadliner); ok {
+		return d.SetWriteDeadline(t)
+	}
+	return nil
+}
+func (c *dcConn) SetDeadline(t time.Time) error {
+	werr := c.SetWriteDeadline(t)
+	rerr := c.SetReadDeadline(t)
+	if rerr != nil {
+		return rerr
+	}
+	return werr
+}
 
 type dcTimeout struct{}
 
