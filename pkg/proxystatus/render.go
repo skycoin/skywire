@@ -625,6 +625,12 @@ func legRank(l Leg) int {
 	}
 }
 
+// legStableKey is a leg's stable render identity — its intermediate (RemotePK)
+// then its transport id. Used to order legs WITHIN a role group so a given route
+// keeps its slot across refreshes even as the leg set (and thus per-leg indices)
+// churns while the warm-standby pool grows and shrinks.
+func legStableKey(l Leg) string { return l.RemotePK + "|" + l.TransportID }
+
 // writeStreamsSection expands the "N open stream(s)" count into per-stream rows
 // when the surface tracks them (skysocks-client records id + CONNECT target +
 // age, plus this stream's own up/down byte totals and smoothed transfer rate).
