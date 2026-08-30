@@ -210,23 +210,49 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 			}
 			hops := l.Hops
 			if len(hops) == 0 {
-				// No recorded path: a single edge src → remote(exit).
-				exitPK := l.RemotePK
-				if exitPK == "" {
-					exitPK = t.ExitPK
+				// No recorded forward path (common for auto/standby legs, which the
+				// router does not always record hops for). Synthesize from the leg's
+				// own transport, which is accurate: src → RemotePK IS the real first
+				// hop. For a DIRECT leg RemotePK is the exit; for a relayed leg it is
+				// the first intermediate, so add an inferred continuation
+				// RemotePK → exit (t.ExitPK) — otherwise the intermediate was
+				// mislabeled as the exit and the standby fan never converged.
+				realExit := t.ExitPK
+				remote := l.RemotePK
+				if remote == "" {
+					remote = realExit
 				}
-				if exitPK == "" {
+				if remote == "" {
 					continue
 				}
-				ex := get(exitPK)
-				ex.isExit = true
 				line := legLine(streamIdx, l, "", "", l.TpType, l.LatencyMS)
+				if l.Direct || realExit == "" || remote == realExit {
+					ex := get(remote)
+					ex.isExit = true
+					root.lines = append(root.lines, line)
+					ex.lines = append(ex.lines, line)
+					links = append(links, rgLink{
+						Source: src, Target: remote, Stream: streamIdx,
+						Color: streamColor(streamIdx), Active: !l.Standby, Width: rate, Tip: line,
+					})
+					continue
+				}
+				mid := get(remote)
+				if mid.level == 0 {
+					mid.level = 1
+				}
+				if mid.streamOrd < 0 {
+					mid.streamOrd = ord
+				}
+				ex := get(realExit)
+				ex.isExit = true
 				root.lines = append(root.lines, line)
+				mid.lines = append(mid.lines, line)
 				ex.lines = append(ex.lines, line)
-				links = append(links, rgLink{
-					Source: src, Target: exitPK, Stream: streamIdx,
-					Color: streamColor(streamIdx), Active: !l.Standby, Width: rate, Tip: line,
-				})
+				links = append(links,
+					rgLink{Source: src, Target: remote, Stream: streamIdx, Color: streamColor(streamIdx), Active: !l.Standby, Width: rate, Tip: line},
+					rgLink{Source: remote, Target: realExit, Stream: streamIdx, Color: streamColor(streamIdx), Active: !l.Standby, Width: rate, Tip: line},
+				)
 				continue
 			}
 			n := len(hops)
