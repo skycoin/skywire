@@ -101,11 +101,16 @@ type Hop struct {
 // below are already shaped so a control UI can render alongside them without a
 // wire change. Keep additions additive.
 type Snapshot struct {
-	Surface    Surface
-	App        string // underlying app/logger name (dmsgweb / skynetweb / skysocks-client)
-	Running    bool   // whether the surface's process/runtime is currently alive
-	MuxEnabled bool   // route group has multiplexing enabled
-	Legs       []Leg  // current per-leg mux state (empty when no active route group)
+	Surface Surface
+	App     string // underlying app/logger name (dmsgweb / skynetweb / skysocks-client)
+	// SelfPK is this visor's own public key — the route source. Carried explicitly
+	// so the tree/graph can label the source and place each leg's first hop even
+	// when the legs have no recorded forward-hop path (the router does not always
+	// record it for auto/standby legs); treeSrc falls back to this.
+	SelfPK     string
+	Running    bool  // whether the surface's process/runtime is currently alive
+	MuxEnabled bool  // route group has multiplexing enabled
+	Legs       []Leg // current per-leg mux state (empty when no active route group)
 	// Tunnels is the STREAM-level view: one entry per active route group (a
 	// --tunnels stream), each carrying its own PACKET-level mux Legs. The two
 	// levels of route multiplexing are stream (tunnels, disjoint route groups)

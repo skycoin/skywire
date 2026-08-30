@@ -47,6 +47,52 @@ func twoStreamSnap() Snapshot {
 	}
 }
 
+// TestBuildRouteGraph_HoplessLegsSynthesize verifies legs WITHOUT a recorded
+// forward path (auto/standby legs the router did not record hops for) still render
+// from their own transport: a direct hop-less leg draws src→exit, and a relayed
+// hop-less leg draws src→intermediate→exit — converging on the TRUE exit (t.ExitPK)
+// rather than mislabeling the leg's first-hop intermediate as the exit.
+func TestBuildRouteGraph_HoplessLegsSynthesize(t *testing.T) {
+	snap := Snapshot{
+		Surface: SurfaceSkysocks, App: "skysocks-client", Running: true, MuxEnabled: true, SelfPK: rgSrc,
+		Tunnels: []Tunnel{{Index: 0, ExitPK: rgExit, MuxEnabled: true, Legs: []Leg{
+			{Index: 0, RemotePK: rgExit, Direct: true, Alive: true},  // direct, no hops
+			{Index: 1, RemotePK: rgHopA, Direct: false, Alive: true}, // relayed, no hops
+		}}},
+	}
+	g := buildRouteGraph(snap)
+	roleOf := map[string]string{}
+	for _, n := range g.Nodes {
+		roleOf[n.ID] = n.Role
+	}
+	if roleOf[rgExit] != "exit" {
+		t.Fatalf("rgExit role = %q, want exit", roleOf[rgExit])
+	}
+	if roleOf[rgHopA] == "exit" {
+		t.Fatalf("rgHopA (an intermediate) mislabeled as exit")
+	}
+	if roleOf[rgSrc] != "root" {
+		t.Fatalf("rgSrc role = %q, want root (treeSrc should fall back to SelfPK)", roleOf[rgSrc])
+	}
+	has := func(s, d string) bool {
+		for _, l := range g.Links {
+			if l.Source == s && l.Target == d {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(rgSrc, rgExit) {
+		t.Error("missing direct src→exit link")
+	}
+	if !has(rgSrc, rgHopA) {
+		t.Error("missing relayed src→intermediate link")
+	}
+	if !has(rgHopA, rgExit) {
+		t.Error("missing intermediate→exit convergence link (relayed leg must reach the true exit)")
+	}
+}
+
 func TestBuildRouteGraph_DedupRolesColors(t *testing.T) {
 	g := buildRouteGraph(twoStreamSnap())
 

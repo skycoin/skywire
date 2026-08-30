@@ -121,11 +121,21 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 	// route group is one --tunnels STREAM; its Legs are the PACKET-level mux. Model
 	// every tunnel (not just the first) so the status tree can nest tunnel → legs;
 	// mirror the first tunnel's legs into snap.Legs for back-compat.
+	self := p.v.conf.PK
+	snap.SelfPK = self.String()
 	if infos, err := p.v.RouteGroupMuxInfo(app); err == nil {
 		for ti, info := range infos {
+			// The exit is the descriptor end that is NOT this visor. A client route
+			// group's descriptor carries the local visor as Dst and the exit as Src,
+			// so hardcoding DstPK mislabeled the local visor as the exit; pick the
+			// far end orientation-independently.
+			exit := info.Desc.DstPK
+			if exit == self {
+				exit = info.Desc.SrcPK
+			}
 			t := proxystatus.Tunnel{
 				Index:      ti,
-				ExitPK:     info.Desc.DstPK.String(),
+				ExitPK:     exit.String(),
 				MuxEnabled: info.MuxEnabled,
 			}
 			for _, leg := range info.Legs {
