@@ -24,6 +24,7 @@ package proxystatus
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -200,7 +201,13 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 
 	for ord, t := range tunnels {
 		streamIdx := t.Index
-		for _, l := range t.Legs {
+		// Walk legs in a stable identity order (intermediate, then transport) so the
+		// deterministic seed layout places each route at the same spot across
+		// refreshes — otherwise a churning leg set reshuffled node first-encounter
+		// order and jittered the graph as the pool grew.
+		legs := append([]Leg(nil), t.Legs...)
+		sort.SliceStable(legs, func(i, j int) bool { return legStableKey(legs[i]) < legStableKey(legs[j]) })
+		for _, l := range legs {
 			if !l.Alive {
 				continue
 			}
