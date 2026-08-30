@@ -21,6 +21,7 @@ import { restoreFilters, saveFilters, resetControls, getInitialView, saveView, V
 import { showCosmos, hideCosmos } from './cosmos-graph';
 import { showCosmosGo, hideCosmosGo } from './cosmos-go-graph';
 import { webglActive, webglUpdateData, webglFit, webglZoomBy, webglFocusNode, webglSetPhysics } from './webgl-view';
+import { showLatency, hideLatency } from './latency-view';
 
 export function wireEventListeners(): void {
     // Restore persisted filter/control state BEFORE the first render so the
@@ -214,12 +215,14 @@ export function wireEventListeners(): void {
     const viewFlatBtn = document.getElementById('view-flat');
     const viewCosmosBtn = document.getElementById('view-cosmos');
     const viewCosmosGoBtn = document.getElementById('view-cosmos-go');
+    const viewLatencyBtn = document.getElementById('view-latency');
 
     const clearViewButtons = () => {
         viewGlobeBtn?.classList.remove('active');
         viewFlatBtn?.classList.remove('active');
         viewCosmosBtn?.classList.remove('active');
         viewCosmosGoBtn?.classList.remove('active');
+        viewLatencyBtn?.classList.remove('active');
     };
 
     // activateView switches to one view (globe / flat=legacy / cosmos=WebGL) and
@@ -227,12 +230,20 @@ export function wireEventListeners(): void {
     // buttons, the initial (deep-link/persisted) view, and reset.
     const activateView = (v: ViewMode, persist = true) => {
         clearViewButtons();
+        // Leaving the latency view must clear its cells: the overlay shares a
+        // container with the other WebGL views, so a stale tessellation would
+        // otherwise be drawn over whatever replaced it.
+        if (v !== 'latency') { hideLatency(); }
         if (v === 'globe') {
             viewGlobeBtn?.classList.add('active');
             hideCosmos(); hideCosmosGo(); S.setGlobeViewActive(true); setVoronoiMode(false); showGlobe();
         } else if (v === 'flat') {
             viewFlatBtn?.classList.add('active');
             hideCosmos(); hideCosmosGo(); S.setGlobeViewActive(false); hideGlobe();
+        } else if (v === 'latency') {
+            viewLatencyBtn?.classList.add('active');
+            hideCosmos(); S.setGlobeViewActive(false); hideGlobe(); showCosmosGo();
+            void showLatency();
         } else if (v === 'cosmosgo') {
             viewCosmosGoBtn?.classList.add('active');
             hideCosmos(); S.setGlobeViewActive(false); hideGlobe(); showCosmosGo();
@@ -247,6 +258,7 @@ export function wireEventListeners(): void {
     viewFlatBtn?.addEventListener('click', () => activateView('flat'));
     viewCosmosBtn?.addEventListener('click', () => activateView('cosmos'));
     viewCosmosGoBtn?.addEventListener('click', () => activateView('cosmosgo'));
+    viewLatencyBtn?.addEventListener('click', () => activateView('latency'));
     // Expose the switcher so an embedding host (Angular tab reacting to a ?view=
     // change on an already-open page) can drive the view without re-mounting.
     (window as any).__tpvizSetView = (v: ViewMode) => activateView(v);

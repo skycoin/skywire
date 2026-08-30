@@ -671,6 +671,7 @@ func (s *Server) setupRoutes() {
 
 	// API endpoint for transport data (with caching)
 	s.mux.HandleFunc("/api/transports", s.handleTransports)
+	s.mux.HandleFunc("/api/tp-latency", s.handleLatency)
 
 	// API endpoint for uptime tracker data
 	s.mux.HandleFunc("/api/uptimes", s.handleUptimes)
