@@ -216,12 +216,21 @@ const graphScript = `<script>(function(){` +
 	`function showTip(i,x,y){var n=nodes[i],t=tip();if(!n||!t){return;}t.textContent=n.tip||"";t.style.display="block";t.style.left=(x+14)+"px";t.style.top=(y+14)+"px";}` +
 	`function hideTip(){var t=tip();if(t){t.style.display="none";}}` +
 	`function onEvent(kind,index){var a=arguments;if(kind==="over"){showTip(index,a[2],a[3]);}else if(kind==="out"||kind==="bgclick"){hideTip();}}` +
-	`function payload(d){var n=d.nodes.length,pc=new Array(n),ps=new Float32Array(n),idx={},i;` +
-	`for(i=0;i<n;i++){var nd=d.nodes[i];idx[nd.id]=i;pc[i]=nd.color;ps[i]=nd.size;}` +
+	// payload maps the route subgraph JSON to cosmos-go's typed-array setData
+	// shape. It carries the DETERMINISTIC seed positions per node (x,y in cosmos
+	// space, from routegraph.go seedRouteLayout) as the positions Float32Array —
+	// exactly the way tpviz's grouped layout feeds fixed positions — so the graph
+	// opens as a root-left → exit-right fan instead of a blob at the origin; the
+	// force sim (grouped:false) then only refines it.
+	`function payload(d){var n=d.nodes.length,pc=new Array(n),ps=new Float32Array(n),pp=new Float32Array(n*2),idx={},i;` +
+	`for(i=0;i<n;i++){var nd=d.nodes[i];idx[nd.id]=i;pc[i]=nd.color;ps[i]=nd.size;pp[i*2]=nd.x||0;pp[i*2+1]=nd.y||0;}` +
 	`var L=d.links.length,lk=new Float32Array(L*2),lw=new Float32Array(L),lc=new Array(L),w=0,j;` +
 	`for(j=0;j<L;j++){var e=d.links[j],s=idx[e.source],t=idx[e.target];if(s===undefined||t===undefined){continue;}lk[w*2]=s;lk[w*2+1]=t;lc[w]=e.color;lw[w]=e.width;w++;}` +
-	`return {positions:new Float32Array(0),pointColors:pc,pointSizes:ps,links:lk.subarray(0,w*2),linkColors:lc.slice(0,w),linkWidths:lw.subarray(0,w),grouped:false,boundaries:[]};}` +
-	`function apply(force){var d=data();if(!d){return;}nodes=d.nodes||[];var g=gl();if(!g){return;}if(force||d.sig!==sig){sig=d.sig;g.setData(payload(d));}}` +
+	`return {positions:pp,pointColors:pc,pointSizes:ps,links:lk.subarray(0,w*2),linkColors:lc.slice(0,w),linkWidths:lw.subarray(0,w),grouped:false,boundaries:[]};}` +
+	// On a topology change (or forced first paint) re-feed the layout from the seed
+	// positions and, after letting the sim settle briefly, frame it with fit(). A
+	// metric-only push (same sig) refreshes tooltips but never relayouts.
+	`function apply(force){var d=data();if(!d){return;}nodes=d.nodes||[];var g=gl();if(!g){return;}if(force||d.sig!==sig){sig=d.sig;g.setData(payload(d));if(g.fit){setTimeout(function(){var gg=gl();if(gg){gg.fit();}},1200);}}}` +
 	`function observe(){if(io){return;}var live=document.getElementById("live");if(!live){return;}io=new MutationObserver(function(){apply(false);});io.observe(live,{childList:true,subtree:true});}` +
 	`function fail(){var c=document.getElementById("rgcanvas");if(c){c.innerHTML='<div class="rgfail">The GPU graph view failed to load (main.wasm). The tree view shows the same routes.</div>';}}` +
 	`function ready(){var g=gl();if(g&&g.ready){booted=true;booting=false;if(!g.init("rgcanvas",onEvent)){setTimeout(function(){g.init("rgcanvas",onEvent);apply(true);observe();},80);}else{apply(true);observe();}return true;}return false;}` +
@@ -231,10 +240,30 @@ const graphScript = `<script>(function(){` +
 	`WebAssembly.instantiateStreaming(fetch("/main.wasm"),go.importObject).then(function(res){go.run(res.instance);` +
 	`var tries=0;(function wait(){if(ready()){return;}if(++tries>150){booting=false;fail();return;}setTimeout(wait,20);})();` +
 	`}).catch(function(){booting=false;fail();});};document.head.appendChild(s);}` +
-	`window.setRouteView=function(v){try{localStorage.setItem("rv",v);}catch(e){}var g=(v==="graph");` +
-	`document.body.classList.toggle("gv-graph",g);document.body.classList.toggle("gv-tree",!g);` +
-	`if(g){if(booted){var gg=gl();if(gg){setTimeout(function(){gg.fit();},60);}}else{boot();}}};` +
-	`var v="tree";try{v=localStorage.getItem("rv")||"tree";}catch(e){}setRouteView(v);` +
+	// Per-section collapse. The log, route tree and route graph each get an
+	// independent show/hide toggle; all default to VISIBLE. State rides on a
+	// <body> class (sec-hide-<name>) — a STATIC element that survives the ~1s live
+	// innerHTML swaps, the same trick the streams-<details> open-state and the
+	// static graph canvas use — plus localStorage, so a collapsed section stays
+	// collapsed across pushes and page loads. The toggle buttons themselves are
+	// re-rendered each push but read their label/state from the body class in CSS.
+	`function hidden(name){try{return localStorage.getItem("sh_"+name)==="1";}catch(e){return false;}}` +
+	`window.secToggle=function(name){var on=document.body.classList.toggle("sec-hide-"+name);` +
+	`try{localStorage.setItem("sh_"+name,on?"1":"0");}catch(e){}` +
+	// Revealing the graph the first time boots the wasm lazily; a later reveal just
+	// re-fits (the canvas kept its WebGL context and settled layout while hidden).
+	`if(name==="graph"&&!on){if(!booted){boot();}else{var g=gl();if(g){setTimeout(function(){g.fit();},60);}}}};` +
+	// On-canvas zoom / fit controls, wired to the SAME cosmos-go API the network
+	// visualizer's +/−/fit buttons use (tpvizGL.zoomBy / fit; zoom-in 1.3,
+	// zoom-out 1/1.3 — see pkg/tpviz/ui/src/events.ts). Wheel-zoom, drag-pan,
+	// double-click-zoom and touch pan/pinch are handled natively by the cosmos-go
+	// canvas itself, so no extra wiring is needed for those.
+	`window.rgZoom=function(f){var g=gl();if(g&&g.zoomBy){g.zoomBy(f);}};` +
+	`window.rgFit=function(){var g=gl();if(g&&g.fit){g.fit();}};` +
+	`["log","tree","graph"].forEach(function(name){if(hidden(name)){document.body.classList.add("sec-hide-"+name);}});` +
+	// Boot the GPU graph now unless the user has it collapsed (then defer to reveal),
+	// since the graph is visible by default alongside the tree and log.
+	`if(!document.body.classList.contains("sec-hide-graph")){boot();}` +
 	`})();</script>`
 
 // writeLiveRegion writes the dynamic status content (pills, per-leg mux, events,
@@ -283,12 +312,13 @@ func writeRangeSplitSection(b *strings.Builder, snap Snapshot) {
 // sent/recv share bars) hangs off the destination leaf for that leg. A static,
 // no-JS analog of the `cli proxy mux plot` panel.
 func writeMuxSection(b *strings.Builder, snap Snapshot) {
-	b.WriteString(`<section><h2>route group · per-leg mux</h2>`)
 	if len(snap.Legs) == 0 {
+		b.WriteString(`<section><h2>route group · per-leg mux</h2>`)
 		b.WriteString(`<p class="empty">No active route group for this surface right now. ` +
 			`A leg appears here once a route to a destination is warm.</p></section>`)
 		return
 	}
+	fmt.Fprintf(b, `<section><h2>route group · per-leg mux%s</h2>`, sectionToggle(snap, "tree"))
 	var totSent, totRecv uint64
 	for _, l := range snap.Legs {
 		totSent += l.SentBytes
@@ -301,15 +331,13 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	fmt.Fprintf(b, `<span class="stat" data-bytes="up" data-val="%d" hidden></span>`, totSent)
 	fmt.Fprintf(b, `<span class="stat" data-bytes="down" data-val="%d" hidden></span>`, totRecv)
 
-	// View toggle (skysocks only): the same route group is shown two ways — the
-	// ASCII bilateral tree (default, no-JS) and a GPU force-directed GRAPH
-	// (routegraph.go → cosmos-go, the network visualizer's engine, served from
-	// the one wasm-visor "netview" blob). The tree is wrapped in .muxtree so the
-	// toggle can hide it when the graph view is active; the graph itself lives in
-	// its own static section (writeGraphSection) whose WebGL context must survive
-	// the ~1s live-region swaps, and is fed the route subgraph from the
-	// #rgdata JSON emitted below (restreamed with the live region).
-	writeViewToggle(b, snap)
+	// The ASCII bilateral route tree is wrapped in .muxtree so its own SHOW/HIDE
+	// toggle (in the h2 above) can collapse it independently — it is one of three
+	// always-visible-by-default sections (tree, GPU graph, log) shown stacked on
+	// the page, not a mutually-exclusive view. The GPU graph lives in its own
+	// static section (writeGraphSection) whose WebGL context must survive the ~1s
+	// live-region swaps, fed the route subgraph from the #rgdata JSON emitted below
+	// (restreamed with the live region).
 	b.WriteString(`<div class="muxtree">`)
 
 	// The route tree itself: ONE shared bilateral model (pkg/proxystatus.RouteTree)
@@ -363,21 +391,21 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	b.WriteString(`</section>`)
 }
 
-// writeViewToggle emits the tree/graph view switch (skysocks only, and only when
-// there is a route to graph). The buttons flip a class on <body> — a STATIC
-// element that survives the live-region innerHTML swaps — so the choice sticks
-// across the ~1s pushes even though the buttons themselves are re-rendered each
-// push; their active styling is derived from the body class in CSS. setRouteView
-// (graphScript) also persists the choice in localStorage and lazily boots the
-// wasm the first time the graph is shown.
-func writeViewToggle(b *strings.Builder, snap Snapshot) {
-	if snap.Surface != SurfaceSkysocks || !hasRouteGraph(snap) {
-		return
+// sectionToggle returns the inline SHOW/HIDE button that rides in a section's h2
+// (skysocks only — the only surface with the graphScript that defines secToggle).
+// Clicking it flips a sec-hide-<name> class on <body> — a STATIC element that
+// survives the live-region innerHTML swaps — so the collapsed/expanded choice
+// sticks across the ~1s pushes even though the button is re-rendered each push;
+// its "hide"/"show" label is derived from the body class in CSS. secToggle
+// (graphScript) also persists the choice in localStorage. All sections default to
+// VISIBLE (no body class). Returns "" for non-skysocks surfaces, which have no
+// graphScript and no live swaps.
+func sectionToggle(snap Snapshot, name string) string {
+	if snap.Surface != SurfaceSkysocks {
+		return ""
 	}
-	b.WriteString(`<div class="vtoggle" role="tablist" aria-label="route view">` +
-		`<button type="button" class="vt-tree" onclick="setRouteView('tree')">tree</button>` +
-		`<button type="button" class="vt-graph" onclick="setRouteView('graph')">graph</button>` +
-		`</div>`)
+	return `<button type="button" class="sectoggle" data-sec="` + name + `" ` +
+		`onclick="secToggle('` + name + `')" aria-label="show or hide this section"></button>`
 }
 
 // writeGraphSection emits the STATIC route-graph section (skysocks only): the
@@ -385,11 +413,25 @@ func writeViewToggle(b *strings.Builder, snap Snapshot) {
 // lives OUTSIDE <main id="live"> on purpose — the WebGL context and the settled
 // force layout must persist across the live region's ~1s innerHTML swaps, so the
 // container is never re-created; only the #rgdata JSON inside the live region
-// updates, and the driver re-feeds the engine in place. Hidden by default (the
-// tree is the default view); the toggle reveals it.
+// updates, and the driver re-feeds the engine in place. Visible by DEFAULT,
+// stacked below the route tree; its own SHOW/HIDE toggle collapses the .rgbody
+// (canvas + legend + hint) via a body class, leaving the heading and the WebGL
+// context in place so a later reveal just re-fits.
 func writeGraphSection(b *strings.Builder) {
 	b.WriteString(`<section id="rgraphsec" aria-label="route graph">`)
-	b.WriteString(`<div id="rgcanvas" class="rgcanvas"></div>`)
+	b.WriteString(`<h2>route graph<button type="button" class="sectoggle" data-sec="graph" ` +
+		`onclick="secToggle('graph')" aria-label="show or hide this section"></button></h2>`)
+	b.WriteString(`<div class="rgbody">`)
+	// The cosmos-go engine appends its <canvas> INTO #rgcanvas (it never clears the
+	// container), so these overlay controls coexist with it. Same controls the
+	// network visualizer offers: zoom in / out / fit-all. Wheel-zoom and drag-pan
+	// are native to the canvas and need no wiring.
+	b.WriteString(`<div id="rgcanvas" class="rgcanvas">` +
+		`<div class="rgctl" role="group" aria-label="graph controls">` +
+		`<button type="button" onclick="rgZoom(1.3)" title="zoom in" aria-label="zoom in">+</button>` +
+		`<button type="button" onclick="rgZoom(1/1.3)" title="zoom out" aria-label="zoom out">−</button>` +
+		`<button type="button" onclick="rgFit()" title="fit to view" aria-label="fit to view">⤢</button>` +
+		`</div></div>`)
 	// Legend: the same color language as the tree (source/exit/hop by depth,
 	// per-stream edge accents) plus active/standby edge styling. The swatch words
 	// carry their own color so the coding is self-documenting.
@@ -402,9 +444,12 @@ func writeGraphSection(b *strings.Builder) {
 		`<span class="rgl standby">— standby (dim)</span>` +
 		`</div>`)
 	b.WriteString(`<p class="hint">GPU force-directed graph of this proxy's routes — the same engine (cosmos-go) ` +
-		`as the network visualizer, driving only THIS visor, its hops and the exit. Hover a node for its ` +
-		`transports and per-leg detail; drag to pan, scroll to zoom. Needs WebGL; the tree view above is the ` +
-		`no-JS fallback.</p></section>`)
+		`as the network visualizer, driving only THIS visor, its hops and the exit. It opens seeded ` +
+		`root-left → exit-right with the streams fanned, then the force sim refines it. Hover a node for its ` +
+		`transports and per-leg detail; drag to pan, scroll to zoom. Needs WebGL; the tree above shows the ` +
+		`same routes without it.</p>`)
+	b.WriteString(`</div>`) // .rgbody
+	b.WriteString(`</section>`)
 	b.WriteString(`<div id="rgtip" class="rgtip" role="tooltip"></div>`)
 }
 
@@ -794,7 +839,7 @@ func leadingSpaces(s string) string {
 // live WebSocket restreams this fragment, and the inline script pins the pane to
 // the bottom so the newest line stays visible.
 func writeLogSection(b *strings.Builder, snap Snapshot) {
-	b.WriteString(`<section><h2>route, transport &amp; log</h2>`)
+	fmt.Fprintf(b, `<section><h2>route, transport &amp; log%s</h2>`, sectionToggle(snap, "log"))
 	lines := combinedLogLines(snap.Events, snap.Logs, maxLogLines)
 	if len(lines) == 0 {
 		b.WriteString(`<p class="empty">No route, transport, or log events for this process yet.</p></section>`)
@@ -1138,18 +1183,33 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`code{color:var(--accent);font-size:11.5px}` +
 	`footer{margin-top:2rem;padding-top:.7rem;border-top:1px solid var(--line);color:var(--muted);font-size:12px}` +
 	`footer a{color:var(--accent);text-decoration:none}footer a:hover{text-decoration:underline}` +
-	// Tree/graph view toggle. The active button is lit from the <body> class the
-	// toggle sets (gv-tree / gv-graph) — a static hook that survives the ~1s live
-	// swaps — rather than any per-render state, so the highlight stays put.
-	`.vtoggle{display:inline-flex;gap:.3rem;margin:.1rem 0 .6rem}` +
-	`.vtoggle button{font:inherit;font-size:11px;padding:.15rem .7rem;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}` +
-	`.vtoggle button:hover{border-color:var(--accent);color:var(--fg)}` +
-	`body.gv-graph .vtoggle .vt-graph,body:not(.gv-graph) .vtoggle .vt-tree{background:var(--accent);border-color:var(--accent);color:#fff}` +
-	// The GPU graph section is hidden until the graph view is chosen; choosing it
-	// hides the ASCII tree (.muxtree) in the live region. The canvas is a fixed,
-	// user-resizable dark GL surface (cosmos paints its own dark background).
-	`#rgraphsec{display:none;margin-top:.2rem}body.gv-graph #rgraphsec{display:block}body.gv-graph .muxtree{display:none}` +
+	// Per-section SHOW/HIDE toggle button that rides in each section's h2. Its
+	// "hide"/"show" label comes from the <body> collapse class (a static hook that
+	// survives the ~1s live swaps) via ::after, so it reflects state without any
+	// per-render bookkeeping.
+	`.sectoggle{margin-left:.55rem;font:inherit;font-size:10px;text-transform:uppercase;letter-spacing:.4px;vertical-align:middle;padding:.05rem .5rem;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}` +
+	`.sectoggle:hover{border-color:var(--accent);color:var(--fg)}` +
+	`.sectoggle::after{content:"hide"}` +
+	`body.sec-hide-tree .sectoggle[data-sec="tree"]::after,body.sec-hide-log .sectoggle[data-sec="log"]::after,body.sec-hide-graph .sectoggle[data-sec="graph"]::after{content:"show"}` +
+	// The route tree, GPU graph and log are all shown stacked and VISIBLE by
+	// default; each collapses independently via its body class, hiding only its
+	// body (never its heading, and — for the tree — never the inert #rgdata JSON,
+	// which sits outside .muxtree so it keeps streaming to the still-live graph).
+	// The canvas is a fixed, user-resizable dark GL surface (cosmos paints its own
+	// dark background).
+	`#rgraphsec{margin-top:.2rem}` +
+	`body.sec-hide-tree .muxtree{display:none}` +
+	`body.sec-hide-log pre.log{display:none}` +
+	`body.sec-hide-graph .rgbody{display:none}` +
 	`.rgcanvas{position:relative;width:100%;height:30rem;min-height:18rem;border:1px solid var(--line);border-radius:8px;background:#0b1020;overflow:hidden;resize:vertical}` +
+	// On-canvas zoom/fit controls, overlaid top-right above the GL canvas (the
+	// engine's canvas sits at the default z, these ride above it). Wheel-zoom and
+	// drag-pan are native to the canvas; these mirror the network visualizer's
+	// +/−/fit buttons. The dark ground is fixed (the GL canvas is always dark) so
+	// the control colors are pinned rather than theme tokens.
+	`.rgctl{position:absolute;top:.45rem;right:.45rem;z-index:6;display:flex;flex-direction:column;gap:.3rem}` +
+	`.rgctl button{width:1.8rem;height:1.8rem;padding:0;font:600 15px/1 ui-monospace,SFMono-Regular,monospace;display:flex;align-items:center;justify-content:center;border:1px solid #2b3163;border-radius:6px;background:rgba(11,16,32,.82);color:#c7cbe6;cursor:pointer}` +
+	`.rgctl button:hover{border-color:#7c83ff;color:#7c83ff;background:rgba(11,16,32,.96)}` +
 	`.rgfail{padding:1rem;color:var(--warn);font-size:12px}` +
 	// Node hover tooltip: a fixed, pointer-transparent monospace panel positioned
 	// at the cursor by the driver; pre-wrap keeps the multi-line leg detail + full

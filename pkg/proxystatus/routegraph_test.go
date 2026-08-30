@@ -173,18 +173,27 @@ func TestRouteGraphJSON_Valid(t *testing.T) {
 	}
 }
 
-// TestRenderGraphView asserts the page wires the GPU graph view: the toggle, the
-// static canvas + tooltip, the #rgdata JSON payload, and the driver that boots
-// the wasm-visor netview blob and drives cosmos-go (tpvizGL) — all self-contained
-// and same-origin.
+// TestRenderGraphView asserts the page wires the GPU graph view unified with the
+// tree and log: the per-section collapse toggles, the static canvas + tooltip,
+// the #rgdata JSON payload (now carrying seed positions), and the driver that
+// boots the wasm-visor netview blob and drives cosmos-go (tpvizGL) — all
+// self-contained and same-origin.
 func TestRenderGraphView(t *testing.T) {
 	page := string(Render(twoStreamSnap()))
 	for _, want := range []string{
-		// toggle + view containers
-		`class="vtoggle"`, `onclick="setRouteView('tree')"`, `onclick="setRouteView('graph')"`,
-		`class="muxtree"`, `id="rgraphsec"`, `id="rgcanvas"`, `id="rgtip"`,
-		// route subgraph payload embedded as inert JSON in the live region
-		`<script type="application/json" id="rgdata">`, `"nodes":`, `"links":`, `"sig":`,
+		// independent per-section SHOW/HIDE toggles (log, tree, graph), all
+		// visible by default, replacing the old exclusive tree/graph switch
+		`class="sectoggle"`, `onclick="secToggle('tree')"`, `onclick="secToggle('graph')"`,
+		`onclick="secToggle('log')"`, "window.secToggle",
+		`class="muxtree"`, `id="rgraphsec"`, `class="rgbody"`, `id="rgcanvas"`, `id="rgtip"`,
+		// interactive zoom/fit controls, wired to the cosmos-go zoom/fit API
+		`class="rgctl"`, `onclick="rgZoom(1.3)"`, `onclick="rgZoom(1/1.3)"`, `onclick="rgFit()"`,
+		"window.rgZoom", "window.rgFit", "g.zoomBy",
+		// route subgraph payload embedded as inert JSON in the live region, now
+		// including the deterministic seed positions per node (x,y)
+		`<script type="application/json" id="rgdata">`, `"nodes":`, `"links":`, `"sig":`, `"x":`, `"y":`,
+		// driver hands the seed positions to setData and re-fits after a settle
+		`nd.x`, `nd.y`, "positions:pp",
 		// driver reuses the network visualizer's engine with no new wasm:
 		// netview role → tpvizGL (cosmos-go), served same-origin
 		`__SKYWIRE_WASM_ROLE__`, `"netview"`, "/main.wasm", "/wasm_exec.js",
@@ -196,12 +205,67 @@ func TestRenderGraphView(t *testing.T) {
 			t.Errorf("graph-view page missing %q", want)
 		}
 	}
+	// The old exclusive toggle must be gone.
+	for _, gone := range []string{`class="vtoggle"`, "setRouteView", "gv-graph"} {
+		if strings.Contains(page, gone) {
+			t.Errorf("page still contains removed exclusive-toggle markup %q", gone)
+		}
+	}
+	// The graph section must NOT be display:none-gated (it is visible by default).
+	if strings.Contains(page, `#rgraphsec{display:none`) {
+		t.Error("graph section must not be hidden by default")
+	}
 	// Non-skysocks surfaces get no graph (no wasm route to serve it): no driver,
-	// no canvas, no payload.
+	// no canvas, no payload, no toggles.
 	dmsg := string(Render(Snapshot{Surface: SurfaceDmsg, App: "dmsgweb", Legs: twoStreamSnap().Legs}))
-	for _, gone := range []string{`id="rgdata"`, `id="rgcanvas"`, "tpvizGL", "setRouteView"} {
+	for _, gone := range []string{`id="rgdata"`, `id="rgcanvas"`, "tpvizGL", "secToggle", `class="sectoggle"`} {
 		if strings.Contains(dmsg, gone) {
 			t.Errorf("non-skysocks page must not contain graph markup %q", gone)
 		}
 	}
 }
+
+// TestSeedRouteLayout asserts the deterministic seed layout: this visor (root)
+// pinned left, the exit pinned right, intermediate hops between them, every
+// position inside cosmos space, and — with multiple streams — the per-stream hop
+// lanes fanned to distinct vertical bands.
+func TestSeedRouteLayout(t *testing.T) {
+	g := buildRouteGraph(twoStreamSnap())
+	byID := map[string]rgNode{}
+	for _, n := range g.Nodes {
+		byID[n.ID] = n
+		if n.X < 0 || n.X > rgSpaceSize || n.Y < 0 || n.Y > rgSpaceSize {
+			t.Errorf("node %s seed pos out of space: (%v,%v)", n.ID, n.X, n.Y)
+		}
+	}
+	root, hop, exit := byID[rgSrc], byID[rgHopA], byID[rgExit]
+	if !(root.X < hop.X && hop.X < exit.X) {
+		t.Errorf("want root.X < hop.X < exit.X, got %v %v %v", root.X, hop.X, exit.X)
+	}
+
+	// A two-stream snapshot with a DISTINCT intermediate per stream must place the
+	// two hops on different vertical lanes (the streams fan).
+	hopS0 := "03c0223344556677889900aabbccddeeff00112233445566778899aabbccddeeff"
+	hopS1 := "03d1223344556677889900aabbccddeeff00112233445566778899aabbccddeeff"
+	leg := func(idx int, via string) Leg {
+		return Leg{Index: idx, RemotePK: rgExit, Alive: true, GoodputUpBps: 100,
+			Hops: []Hop{hop2(rgSrc, via, "sudph"), hop2(via, rgExit, "stcpr")}}
+	}
+	fan := Snapshot{Surface: SurfaceSkysocks,
+		Tunnels: []Tunnel{
+			{Index: 0, ExitPK: rgExit, Legs: []Leg{leg(0, hopS0)}},
+			{Index: 1, ExitPK: rgExit, Legs: []Leg{leg(1, hopS1)}},
+		},
+		Legs: []Leg{leg(0, hopS0)},
+	}
+	fg := buildRouteGraph(fan)
+	fb := map[string]rgNode{}
+	for _, n := range fg.Nodes {
+		fb[n.ID] = n
+	}
+	if fb[hopS0].Y == fb[hopS1].Y {
+		t.Errorf("per-stream hops should fan to distinct lanes, both at Y=%v", fb[hopS0].Y)
+	}
+}
+
+func hop2(from, to, typ string) Hop { return Hop{From: from, To: to, TpType: typ} }
