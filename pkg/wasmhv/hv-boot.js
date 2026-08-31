@@ -696,14 +696,44 @@
     // here: bootInSharedWorker waits it out, so multiple tabs always share the one
     // shared visor rather than each spawning a competing dedicated-worker visor.
     await becomeLeader('skywire-wasm-visor');
-    try {
-      pk = await bootInWorker(sk);
-      try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (per-tab Web Worker; UI off the runtime thread; /api → in-wasm core)'); } catch (e) {}
-    } catch (e) {
-      try { console.warn('[hv-boot] worker boot unavailable (' + ((e && e.message) || e) + '); falling back to in-page runtime'); } catch (e2) {}
-      pk = await bootInPage(sk);
-      try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (in-page runtime; edge + hypervisor; /api → in-wasm core)'); } catch (e2) {}
+    // Prefer the off-main-thread dedicated worker, and RETRY it on a transient
+    // boot failure rather than dropping to bootInPage. bootInPage runs the Go/wasm
+    // runtime on the PAGE MAIN THREAD, whose non-yielding scheduler freezes the
+    // whole UI (observed: "page unresponsive" — a transient worker hiccup, e.g.
+    // right after a SharedWorker teardown, was stranding the visor inline). worker.js
+    // is same-origin (served by the page that just loaded), so a transient failure
+    // almost always clears on retry. The in-page path is a LAST RESORT reserved for
+    // environments with no Web Worker support at all — never a landing spot for a
+    // recoverable error while Workers exist.
+    if (typeof Worker !== 'undefined') {
+      var workerErr = null;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        try {
+          pk = await bootInWorker(sk);
+          workerErr = null;
+          break;
+        } catch (e) {
+          workerErr = e;
+          try { console.warn('[hv-boot] dedicated-worker boot attempt ' + (attempt + 1) + '/3 failed (' + ((e && e.message) || e) + ')' + (attempt < 2 ? '; retrying' : '')); } catch (e2) {}
+          if (attempt < 2) { await new Promise(function (r) { setTimeout(r, 500 * (attempt + 1)); }); }
+        }
+      }
+      if (!workerErr) {
+        try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (per-tab Web Worker; UI off the runtime thread; /api → in-wasm core)'); } catch (e) {}
+        return pk;
+      }
+      // Every retry failed while Workers ARE supported: keep the UI responsive and
+      // let the caller (auto-reload / a manual refresh) try again, rather than
+      // freezing the page with an inline runtime. Surface a clear error.
+      try { console.error('[hv-boot] dedicated-worker boot failed after 3 attempts (' + ((workerErr && workerErr.message) || workerErr) + '); NOT falling back to the in-page runtime while Web Workers are supported (it would freeze the UI). Reload to retry.'); } catch (e2) {}
+      throw workerErr;
     }
+    // Only reached where Web Workers are genuinely unavailable (exotic embedding):
+    // run the runtime in-page as the original best-effort path, at the cost of the
+    // main-thread-freeze risk.
+    try { console.warn('[hv-boot] Web Workers unavailable; falling back to in-page runtime (UI may freeze under load)'); } catch (e2) {}
+    pk = await bootInPage(sk);
+    try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (in-page runtime; edge + hypervisor; /api → in-wasm core)'); } catch (e2) {}
     return pk;
   })();
 
