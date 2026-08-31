@@ -157,16 +157,13 @@ func pageHTTPS() bool {
 // silently apply the app-mux fallback. This is the wasm-visor's analog of the
 // native visor's routing.policy config field.
 func wasmRoutingPolicyPreset() string {
-	// Default to the same composite default the native config generator wires
-	// (cmd/skywire-cli/commands/config/gen.go: PolicyPerDial "preset:adaptive"),
-	// so a browser visor gets the adaptive default routing policy out of the box —
-	// no query param needed. In the browser the presethook runs with a nil
-	// (Nop) Provider, so adaptive gracefully degrades to its no-transport-
-	// diversity shape (single lean forward + reverse warm-standby mux, no
-	// per-hop metadata). Overridable via ?routing_policy=<name>; ?routing_policy=
-	// none (or off) explicitly opts out to the legacy no-policy behavior, which
-	// is handy for A/B-ing the default against a plain single route.
-	const defaultPreset = "adaptive"
+	// Match the native config generator's shipped default
+	// (cmd/skywire-cli/commands/config/gen.go: PolicyPerDial "none"): a browser
+	// visor defaults to a plain single route (no mux), since the adaptive preset
+	// is still maturing under load. Opt in via ?routing_policy=adaptive (or any
+	// preset name); keeping this in sync with the native default matters so the
+	// two surfaces behave the same out of the box.
+	const defaultPreset = "none"
 	loc := js.Global().Get("location")
 	if !loc.Truthy() {
 		return defaultPreset
