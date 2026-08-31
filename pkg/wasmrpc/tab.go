@@ -17,7 +17,7 @@ import (
 // Pure Go (yamux + net), so it compiles for js/wasm as well as native — the
 // wasm-visor calls it with a net.Conn wrapping a browser WebSocket.
 func ServeTab(tabConn net.Conn, serve func(stream io.ReadWriteCloser)) error {
-	sess, err := yamux.Client(tabConn, yamux.DefaultConfig())
+	sess, err := yamux.Client(tabConn, bridgeConfig())
 	if err != nil {
 		return err
 	}
