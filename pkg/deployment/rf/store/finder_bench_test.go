@@ -52,3 +52,33 @@ func BenchmarkStreamRoutesDense(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkGetRouteWeightedUncached is the raw per-request search cost — what
+// the route-finder paid on EVERY repeated request before the per-graph memo.
+func BenchmarkGetRouteWeightedUncached(b *testing.B) {
+	g, src, dst := buildDenseGraph(b, 5, 6)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := g.computeRouteWeighted(context.Background(), src, dst, 0, 6, 5, true); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkGetRouteWeightedCached is the fleet's actual pattern: the same
+// (src,dst,params) requested repeatedly against one graph. Every request after
+// the first is a memo hit — the search runs once per graph, not per request.
+func BenchmarkGetRouteWeightedCached(b *testing.B) {
+	g, src, dst := buildDenseGraph(b, 5, 6)
+	if _, err := g.GetRouteWeighted(context.Background(), src, dst, 0, 6, 5, true); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := g.GetRouteWeighted(context.Background(), src, dst, 0, 6, 5, true); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

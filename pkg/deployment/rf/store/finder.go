@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -80,10 +81,56 @@ func (g *Graph) routeLatency(r routing.Route) float64 {
 // high-latency one); when false it returns the shortest-hop routes — identical
 // to GetRoute. Latency mode collects a bounded candidate pool from the same BFS
 // and sorts it, so it stays memory-safe on dense graphs.
+// routeKey identifies a memoized GetRouteWeighted result on a Graph. All
+// fields are comparable, so it is a usable map/sync.Map key directly.
+type routeKey struct {
+	source, destination cipher.PubKey
+	minLen, maxLen      int
+	number              int
+	byLatency           bool
+}
+
+// routeEntry is a once-computed cache slot. once guards the single BFS; the
+// result is immutable afterwards and shared read-only by every caller that
+// hit the same key.
+type routeEntry struct {
+	once   sync.Once
+	routes []routing.Route
+	err    error
+}
+
+// GetRouteWeighted returns up to `number` routes source→destination, memoized
+// per Graph. The exhaustive BFS over the (dense) transport graph is expensive
+// — seconds per request for well-connected pairs — and the fleet re-asks for
+// the same pairs constantly (session churn), so without a cache the
+// route-finder re-runs an identical search on every repeat. The memo collapses
+// those to one BFS per unique request for the life of this graph, and its
+// sync.Once also deduplicates a concurrent thundering herd of identical
+// requests into a single search rather than N. Failures are not cached (the
+// entry is dropped) so a transient miss can be retried immediately; only
+// successful route sets persist, until the next graph rebuild swaps in a fresh
+// (empty) memo. Callers must treat the returned slice as read-only.
 func (g *Graph) GetRouteWeighted(ctx context.Context, source, destination cipher.PubKey, minLen, maxLen, number int, byLatency bool) ([]routing.Route, error) {
 	if number <= 0 {
 		number = 1
 	}
+	key := routeKey{source, destination, minLen, maxLen, number, byLatency}
+	ei, _ := g.routeMemo.LoadOrStore(key, &routeEntry{})
+	e := ei.(*routeEntry)
+	e.once.Do(func() {
+		e.routes, e.err = g.computeRouteWeighted(ctx, source, destination, minLen, maxLen, number, byLatency)
+		if e.err != nil {
+			// Don't cache failures — a later request (or a warmer graph)
+			// may succeed. Concurrent waiters on this same once still see
+			// this error, which is correct: they were part of this attempt.
+			g.routeMemo.Delete(key)
+		}
+	})
+	return e.routes, e.err
+}
+
+// computeRouteWeighted is the uncached search behind GetRouteWeighted.
+func (g *Graph) computeRouteWeighted(ctx context.Context, source, destination cipher.PubKey, minLen, maxLen, number int, byLatency bool) ([]routing.Route, error) {
 	if !byLatency {
 		return g.GetRoute(ctx, source, destination, minLen, maxLen, number)
 	}
