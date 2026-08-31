@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // Honest-probe tuning: a zombie exit (skysocks server down) still forms the route
@@ -583,26 +584,43 @@ func pickRandomProxyExits(ctx context.Context, sdPK cipher.PubKey, n int, avoid 
 	if err := json.Unmarshal(body, &services); err != nil || len(services) == 0 {
 		return nil
 	}
+	// The visor's own DIRECT transport peers are the best first hops: a proxy exit
+	// that IS one of them forms a 1-hop route that sets up near-instantly, versus a
+	// random exit whose multi-hop route can take 30s+ on the single wasm thread — the
+	// dominant cost of time-to-first-proxied-load after boot (the GOAL). So partition
+	// candidates and put direct-peer exits FIRST; random others fill the rest. (Cooled
+	// and self exits are still skipped, so a broken direct peer can't be re-favored.)
+	peers := map[cipher.PubKey]bool{}
+	if tpM != nil {
+		tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+			if tp != nil && !tp.IsClosed() {
+				peers[tp.Entry.RemoteEdge(selfPK)] = true
+			}
+			return true
+		})
+	}
+
 	off := int(time.Now().UnixNano()) % len(services)
 	if off < 0 {
 		off += len(services)
 	}
-	var cand []cipher.PubKey
-	for i := 0; i < len(services) && len(cand) < n; i++ {
+	seen := map[cipher.PubKey]bool{}
+	var near, far []cipher.PubKey
+	for i := 0; i < len(services); i++ {
 		pk := services[(off+i)%len(services)].Addr.PubKey()
-		if pk.Null() || pk == selfPK || pk == avoid || proxyExitCooled(pk) {
-			continue // skip self, the just-failed exit, and any in fail-cooldown
+		if pk.Null() || pk == selfPK || pk == avoid || proxyExitCooled(pk) || seen[pk] {
+			continue // skip self, the just-failed exit, cooled-down exits, and dups
 		}
-		dup := false
-		for _, c := range cand {
-			if c == pk {
-				dup = true
-				break
-			}
+		seen[pk] = true
+		if peers[pk] {
+			near = append(near, pk) // a direct transport peer → 1-hop route
+		} else {
+			far = append(far, pk)
 		}
-		if !dup {
-			cand = append(cand, pk)
-		}
+	}
+	cand := append(near, far...)
+	if len(cand) > n {
+		cand = cand[:n]
 	}
 	return cand
 }
