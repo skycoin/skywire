@@ -302,6 +302,39 @@
       // the shared visor's first boot. Removed the instant the worker reports up.
       showConnectingNotice();
 
+      // --- WEDGED-connection recovery (distinct from a slow boot) ---
+      // A SharedWorker can be ALIVE yet never deliver 'up' to THIS port: its visor
+      // boot silently stalled (bootedPK stays null, so only 'hello' is ever sent), or
+      // it reports booted but the 'up' for this port was lost. The tab then sits on
+      // "Connecting…" forever — the stuck state that only closing+reopening the tab
+      // clears. A slow-but-progressing FIRST boot must still be waited out, so we do
+      // NOT reject into the dedicated-worker fallback (that would spawn a colliding
+      // visor); instead we self-heal by RELOADING (a fresh port re-handshakes and, if
+      // the worker is really booted, immediately gets 'up'). Guard against a reload
+      // loop; if a few reloads don't clear it, stop and tell the operator to reopen.
+      var helloBootedTimer = null;
+      var RELOAD_KEY = 'skywire-sw-connect-reloads';
+      function recoverStuckConnect(why) {
+        if (settled) return;
+        var n = 0;
+        try { n = parseInt(sessionStorage.getItem(RELOAD_KEY) || '0', 10) || 0; } catch (e) {}
+        if (n >= 3) {
+          settled = true;
+          try { console.error('[hv-boot] shared visor stuck (' + why + ') after ' + n + ' reloads — reopen this tab'); } catch (e) {}
+          try {
+            var d = document.getElementById('skywire-connecting-notice');
+            if (d) { d.textContent = 'The shared Skywire visor is stuck — close this tab and open a new one.'; }
+          } catch (e) {}
+          return;
+        }
+        try { sessionStorage.setItem(RELOAD_KEY, String(n + 1)); } catch (e) {}
+        try { console.warn('[hv-boot] shared visor connect stuck (' + why + '); reload attempt ' + (n + 1)); } catch (e) {}
+        setTimeout(function () { try { location.reload(); } catch (e) {} }, 150);
+      }
+      // Blanket net: far beyond any real cold boot, so it only fires on a genuine
+      // stall (bootedPK never set), never on a slow-but-progressing boot.
+      var bootStallTimer = setTimeout(function () { recoverStuckConnect('no up/fatal within 90s'); }, 90000);
+
       function makeProxy(methods) {
         var proxy = {};
         methods.forEach(function (fn) {
@@ -325,6 +358,14 @@
             // The worker is alive and this port is connected; the visor itself
             // may still be booting. Keep waiting patiently for 'up' — there is
             // deliberately no timeout and no fallback on a live connection.
+            // BUT: if the worker reports it is ALREADY booted, worker.js sends 'up'
+            // to this port immediately after 'hello'. Not getting it within a few
+            // seconds means the handshake to THIS port wedged (the exact "stuck on
+            // Connecting…" state, seen after repeated reloads) — recover fast instead
+            // of waiting out the 90s blanket net.
+            if (m.booted && !helloBootedTimer && !settled) {
+              helloBootedTimer = setTimeout(function () { recoverStuckConnect('hello booted but no up in 8s'); }, 8000);
+            }
             break;
           case 'ping':
             // Liveness. The worker cannot see a tab go away (a MessagePort
@@ -350,6 +391,9 @@
             break;
           case 'up':
             settled = true;
+            if (bootStallTimer) { clearTimeout(bootStallTimer); bootStallTimer = null; }
+            if (helloBootedTimer) { clearTimeout(helloBootedTimer); helloBootedTimer = null; }
+            try { sessionStorage.removeItem(RELOAD_KEY); } catch (e) {} // a clean boot resets the reload guard
             hideConnectingNotice();
             // The worker has already booted the shared visor; install the proxy and
             // resolve with the booted PK (do NOT call boot() again — that's the

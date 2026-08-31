@@ -127,14 +127,16 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	// exits (and different windows) establish in parallel.
 	t0 := time.Now()
 	emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] connecting to exit %s — setting up route…", winID, serverPK.Hex()[:8]))
-	// 28s cap: a reachable exit's route (p2p multihop or a freshly-created direct
-	// transport) sets up in a few seconds; a dead/unroutable one should FAIL so the
-	// caller can try another, not hang. Runs off skysocksMu so exits establish in
-	// parallel. Was 18s, but that left no margin above the router's route reserve +
-	// the (now 10s) noise-handshake window, so a slow-but-alive loaded exit that the
-	// native client reaches was cut off here; 28s covers reserve + handshake + a
-	// retry with headroom while still failing a truly dead exit promptly enough.
-	dctx, cancel := context.WithTimeout(ctx, 28*time.Second)
+	// 45s cap: a reachable exit's route sets up in a few seconds; a dead/unroutable
+	// one should FAIL so the caller can try another, not hang. Runs off skysocksMu so
+	// exits establish in parallel. Was 28s — but measurement showed the SAME exits
+	// the NATIVE client establishes in ~25-30s were being cut off here, because on the
+	// single js/wasm thread the reserve + noise handshake runs slower and 28s sat
+	// right at the native establishment time with zero margin. 45s gives the slower
+	// thread headroom to finish a genuinely-working route (which the localRouteMemo +
+	// less route-setup churn now let it reach sooner) while still failing a truly dead
+	// exit promptly enough to rotate.
+	dctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	// Default dial: the router races the route-finder (a multihop route over
 	// EXISTING peer-to-peer transports) against the visor's route-setup hook, which

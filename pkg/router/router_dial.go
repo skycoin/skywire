@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"sort"
 	"strings"
@@ -2041,6 +2042,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		tpLatencyMs      map[uuid.UUID]float64
 		tpTypeOf         map[uuid.UUID]string
 		tpThroughput     map[uuid.UUID]float64
+		snapVersion      time.Time // TPD-snapshot generation, for the local-route memo (zero on the no-cache path)
 	)
 	if r.tpdCache != nil {
 		snap, serr := r.tpdCache.snapshot(ctx, dc.GetAllTransports, versionProbe(dc))
@@ -2055,6 +2057,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		tpLatencyMs = snap.latencyByID
 		tpTypeOf = snap.typeByID
 		tpThroughput = snap.throughputByID
+		snapVersion = snap.version
 	} else {
 		allEntries, err = dc.GetAllTransports(ctx)
 		if err != nil {
@@ -2144,6 +2147,32 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	maxHops := int(r.conf.MaxHops)
 	if maxHops == 0 {
 		maxHops = 7
+	}
+
+	// Local-route memo: the multi-hop BFS below is a pure function of (src, dst,
+	// minHops, maxHops, the TPD snapshot, the local first-hop set), so cache it —
+	// skysocks-lite's warm/keepalive sweep and the routing UI re-request the same
+	// route far faster than the graph changes, and re-running the whole BFS pegs the
+	// single js/wasm thread. Only the plain case (no DisjointMux intermediate
+	// exclusions) is memoized; the mux path varies the exclusions per leg on purpose
+	// and must always recompute.
+	var (
+		memoKey     localRouteKey
+		memoEnabled = len(excludeIntermediates) == 0 && r.localRoutes != nil && !snapVersion.IsZero()
+		localSig    uint64
+	)
+	if memoEnabled {
+		h := fnv.New64a()
+		for i := range localTps {
+			id := localTps[i].id
+			_, _ = h.Write(id[:])
+		}
+		localSig = h.Sum64()
+		memoKey = localRouteKey{src: src, dst: dst, min: minHops, max: maxHops}
+		if fwd, rev, ok := r.localRoutes.get(snapVersion, localSig, memoKey); ok {
+			log.Debugf("Local-route memo hit %s→%s (min=%d max=%d)", src, dst, minHops, maxHops)
+			return fwd, rev, nil
+		}
 	}
 
 	type bfsNode struct {
@@ -2307,12 +2336,81 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 			}
 			log.Debugf("Local BFS found %d-hop route via %v (best of %d same-level candidates, score=%.1fms)",
 				level, hopPath(best), len(dstCandidates), bestScore)
-			return best, reverseHops(best), nil
+			rev := reverseHops(best)
+			if memoEnabled {
+				r.localRoutes.put(snapVersion, localSig, memoKey, best, rev)
+			}
+			return best, rev, nil
 		}
 		queue = nextQueue
 	}
 
 	return nil, nil, fmt.Errorf("local BFS found no path to %s with min_hops=%d max_hops=%d", dst, minHops, maxHops)
+}
+
+// localRouteMemo caches calculateLocalRoutes' multi-hop BFS result. That BFS over
+// the (up to ~16k-edge) TPD graph is the single most expensive thing the wasm
+// visor's route-setup does, and it re-runs on EVERY dial/route-setup — skysocks-
+// lite's warm/keepalive sweep and the routing UI re-request the same (src,dst) far
+// faster than the graph changes, so the same BFS is recomputed over and over. On
+// the single js/wasm thread that pegs mallocgc/GC and starves the very route-setup
+// handshake it feeds (which then times out at ~28s, forcing exclusions that drive
+// yet more local calc — a feedback loop). The BFS result is a pure function of
+// (src, dst, min/max hops, the TPD snapshot, the local first-hop set), so it is
+// safe to memoize on all of those. Single-generation: the whole map resets when
+// the TPD snapshot version OR the local-transport signature changes, so a stale
+// route is never served and the map stays bounded to one graph's worth of entries.
+// Only the plain (no intermediate-exclusion) case is cached — the mux path varies
+// ExcludeIntermediatePKs per leg on purpose and must always recompute.
+type localRouteMemo struct {
+	mu       sync.Mutex
+	version  time.Time
+	localSig uint64
+	m        map[localRouteKey]localRoutePair
+}
+
+type localRouteKey struct {
+	src, dst cipher.PubKey
+	min, max int
+}
+
+type localRoutePair struct{ fwd, rev []routing.Hop }
+
+func newLocalRouteMemo() *localRouteMemo { return &localRouteMemo{} }
+
+// get returns cached (fwd, rev) copies for k when the memo's generation matches
+// the current snapshot version + local signature; a mismatch or miss returns ok
+// false so the caller recomputes (and put resets the generation).
+func (c *localRouteMemo) get(version time.Time, sig uint64, k localRouteKey) (fwd, rev []routing.Hop, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil || !c.version.Equal(version) || c.localSig != sig {
+		return nil, nil, false
+	}
+	p, hit := c.m[k]
+	if !hit {
+		return nil, nil, false
+	}
+	return append([]routing.Hop(nil), p.fwd...), append([]routing.Hop(nil), p.rev...), true
+}
+
+// put stores (fwd, rev) copies for k, resetting the whole generation first when the
+// snapshot version or local signature moved (keeps the map fresh and bounded).
+func (c *localRouteMemo) put(version time.Time, sig uint64, k localRouteKey, fwd, rev []routing.Hop) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil || !c.version.Equal(version) || c.localSig != sig {
+		c.version = version
+		c.localSig = sig
+		c.m = make(map[localRouteKey]localRoutePair)
+	}
+	c.m[k] = localRoutePair{
+		fwd: append([]routing.Hop(nil), fwd...),
+		rev: append([]routing.Hop(nil), rev...),
+	}
 }
 
 // reverseHops builds the reverse path of a forward route by walking
