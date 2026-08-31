@@ -3,6 +3,7 @@ package store
 
 import (
 	"context"
+	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
@@ -56,6 +57,15 @@ type Graph struct {
 	store   store.Store
 	visited map[cipher.PubKey]*vertex
 	graph   map[cipher.PubKey]*vertex
+	// routeMemo caches GetRouteWeighted results for THIS graph instance
+	// (routeKey -> *routeEntry). The graph is immutable once built and the
+	// route-finder swaps in a freshly-built *Graph every refresh cycle, so
+	// the cache's lifetime is exactly the graph's — no explicit
+	// invalidation, and no staleness beyond what the graph snapshot already
+	// carries. It collapses the fleet's repeated identical route requests
+	// (churning clients re-asking for the same src→dst) from a full
+	// exhaustive BFS each time to one BFS per unique request per cycle.
+	routeMemo sync.Map
 }
 
 // NewGraph creates a new Graph accessing given transport store, such Graph is created by exploring
