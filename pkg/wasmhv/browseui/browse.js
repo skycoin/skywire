@@ -147,7 +147,7 @@
       // HTTPS page was misclassified as clearnet and handed to the browser, which
       // blocked it as mixed content ("insecure resource http://skywire.dmsg/")
       // instead of the gateway routing it over the mesh.
-      'function meshHost(u){try{var x=new URL(u,"http://dmsg"+cur);return /\\.(dmsg|skynet)$/i.test(x.hostname)||/^[0-9a-f]{66}$/i.test(x.hostname);}catch(e){return false;}}' +
+      'function meshHost(u){try{var x=new URL(u,"http://dmsg"+cur);return /\\.(dmsg|skynet|skysocks)$/i.test(x.hostname)||/^[0-9a-f]{66}$/i.test(x.hostname);}catch(e){return false;}}' +
       'function meshAbs(u){try{return new URL(u,"http://dmsg"+cur).href;}catch(e){return u;}}' +
       'document.addEventListener("click",function(e){' +
       'var a=e.target.closest?e.target.closest("a[href]"):null;if(!a)return;' +
@@ -1338,7 +1338,10 @@
       try { u = new URL(hadScheme ? v : "http://" + v); } catch (e) { browser.browseTo(v, "/"); return; }
       var host = u.hostname, path = (u.pathname || "/") + (u.search || "");
       // .dmsg/.skynet host, or a bare 66-hex PK → dmsg/skynet site; else clearnet.
-      if (/\.(dmsg|skynet)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
+      // .skysocks is a LOCAL in-process page (the proxy status page) — route it over
+      // the mesh/dmsg path so it renders straight from the visor and is never gated
+      // behind the "Connecting over skywire…" proxy interstitial it reports on.
+      if (/\.(dmsg|skynet|skysocks)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
         browser.browseTo(host + (u.port ? ":" + u.port : ""), path, (u.protocol || "http:").replace(":", ""));
       } else {
         browser.browseToClearnet(hadScheme ? v : "https://" + v);
