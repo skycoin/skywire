@@ -66,6 +66,12 @@ type Graph struct {
 	// (churning clients re-asking for the same src→dst) from a full
 	// exhaustive BFS each time to one BFS per unique request per cycle.
 	routeMemo sync.Map
+	// landmarks holds the precomputed node<->hub route tables for landmark
+	// (transit-node) routing (landmark.go), built once per graph via
+	// landmarkOnce. Like routeMemo, lifetime == this graph's, so no explicit
+	// invalidation is needed. nil until first use / when the feature is off.
+	landmarks    *landmarkTables
+	landmarkOnce sync.Once
 }
 
 // NewGraph creates a new Graph accessing given transport store, such Graph is created by exploring
