@@ -135,6 +135,19 @@ func (g *Graph) computeRouteWeighted(ctx context.Context, source, destination ci
 		return g.GetRoute(ctx, source, destination, minLen, maxLen, number)
 	}
 
+	// Landmark (transit-node) routing: a budget-bounded direct BFS keeps the
+	// optimal answer for every pair it can resolve cheaply, and the expensive
+	// far pairs — the ones that peg the RF with a multi-second exhaustive
+	// search — are answered by composing src->hub->dst instead. Returns
+	// ok=false only when neither the budget BFS nor composition found anything,
+	// in which case we fall through to the full exhaustive BFS below. See
+	// landmark.go.
+	if landmarkRoutingEnabled {
+		if routes, ok := g.routesLandmarkHybrid(ctx, source, destination, minLen, maxLen, number); ok {
+			return routes, nil
+		}
+	}
+
 	// Pool larger than `number` so a lower-latency path that BFS emits a little
 	// later (e.g. one more hop, but faster edges) can still win — bounded so
 	// dense graphs don't blow up the sort.
