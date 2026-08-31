@@ -18,6 +18,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"sync"
 	"syscall/js"
 	"time"
@@ -25,6 +27,14 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+)
+
+// Honest-probe tuning: a zombie exit (skysocks server down) still forms the route
+// group and accepts the SOCKS5 CONNECT — so route formation alone is NOT proof the
+// exit works. probeExit must confirm real end-to-end relay.
+const (
+	probeFetchURL     = "http://ip.skycoin.com"
+	probeFetchTimeout = 8 * time.Second
 )
 
 // defaultProxyID is the id/name of the built-in proxy instance. It matches the
@@ -445,11 +455,35 @@ func probeExit(pk cipher.PubKey) bool {
 		return false
 	}
 	win := "pool-probe-" + pk.Hex()[:8]
-	if _, err := skysocksSession(win, pk); err != nil {
+	sess, err := skysocksSession(win, pk)
+	if err != nil {
 		return false
 	}
-	closeSkysocksWindow(win) // we only needed to confirm routability
-	return true
+	defer closeSkysocksWindow(win)
+	// Route formed — but that alone is NOT proof: a zombie exit (skysocks server
+	// down) forms the route group and its SOCKS5 CONNECT succeeds, yet no data ever
+	// comes back. Confirm the exit actually RELAYS end-to-end by fetching a tiny
+	// clearnet URL through it and requiring a real response byte. Only then is the
+	// exit honestly usable — this is what keeps the pool from locking onto zombie
+	// exits that pass a routability-only probe.
+	client, err := skysocksHTTPClient(sess)
+	if err != nil {
+		return false
+	}
+	fctx, cancel := context.WithTimeout(proxyRetryCtx(), probeFetchTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(fctx, http.MethodGet, probeFetchURL, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	var one [1]byte
+	n, _ := io.ReadFull(resp.Body, one[:])
+	return n > 0 // any byte back = the exit relayed real traffic
 }
 
 // reportProxyExitDead is called when the active auto exit's route dies. If that
@@ -465,9 +499,20 @@ func reportProxyExitDead(pk cipher.PubKey) {
 	proxyConnMu.Lock()
 	retrying := proxyStickyActive[pk]
 	everConnected := proxyEverConnected[pk]
+	proxyExitRecentFails[pk]++
+	flapping := proxyExitRecentFails[pk] >= proxyExitFlapLimit
 	proxyConnMu.Unlock()
 	if retrying {
 		return // a sticky-reconnect loop already owns this exit
+	}
+	if flapping {
+		// Repeated drops (even with intermittent sticky recovery) ⇒ this exit is not
+		// dependable. Stop retaining it: rotateAwayFromExit cools it down and promotes
+		// a standby / reselects a fresh exit — instead of hammering the same one, which
+		// is exactly how the pool used to lock onto two ~50% exits.
+		vlog(fmt.Sprintf("[skysocks-lite] active exit %s flapping (%d drops) — cooling down and rotating", exitShort(pk), proxyExitFlapLimit))
+		rotateAwayFromExit(pk)
+		return
 	}
 	if everConnected {
 		vlog(fmt.Sprintf("[skysocks-lite] active exit %s dropped — retrying same key", exitShort(pk)))
@@ -499,7 +544,8 @@ func rotateAwayFromExit(pk cipher.PubKey) {
 	ctx, sdPK := proxyAutoCtx, proxyAutoSDPK
 	proxyPoolMu.Unlock()
 
-	closeSkysocksExit(pk) // sever any live sessions to the dead exit
+	closeSkysocksExit(pk)  // sever any live sessions to the dead exit
+	cooldownProxyExit(pk)  // don't re-pick this exit for a while — force fresh ones
 	if !next.Null() {
 		_ = setProxyExit(defaultProxyID, next) //nolint:errcheck
 		reArmDefaultAuto()
@@ -544,8 +590,8 @@ func pickRandomProxyExits(ctx context.Context, sdPK cipher.PubKey, n int, avoid 
 	var cand []cipher.PubKey
 	for i := 0; i < len(services) && len(cand) < n; i++ {
 		pk := services[(off+i)%len(services)].Addr.PubKey()
-		if pk.Null() || pk == selfPK || pk == avoid {
-			continue
+		if pk.Null() || pk == selfPK || pk == avoid || proxyExitCooled(pk) {
+			continue // skip self, the just-failed exit, and any in fail-cooldown
 		}
 		dup := false
 		for _, c := range cand {
