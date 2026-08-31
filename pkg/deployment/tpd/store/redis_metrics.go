@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -627,6 +628,14 @@ func (s *redisStore) GetTransportMetricsByVisors(ctx context.Context, pks []ciph
 	return s.buildTransportMetrics(ctx, entries, nil, query)
 }
 
+// parseBWUint parses a decimal bandwidth counter, returning 0 on malformed
+// input. It replaces fmt.Sscanf in the hot per-(entry×day) loop, which
+// allocated a reflect-based scan state on every call.
+func parseBWUint(s string) uint64 {
+	v, _ := strconv.ParseUint(s, 10, 64)
+	return v
+}
+
 // buildTransportMetrics builds TransportMetric slice from entries.
 // Uses Redis pipelining for efficient bulk fetching.
 func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*transport.Entry, expiredIDs map[uuid.UUID]bool, query MetricsQuery) ([]TransportMetric, error) {
@@ -673,6 +682,14 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		return []TransportMetric{}, nil
 	}
 
+	// Precompute uuid.String() once per entry — it was re-run per (entry × day)
+	// building the daily-bandwidth keys below AND again per entry at the end.
+	// On the 30-day window over ~13k transports that is ~390k → ~13k calls.
+	idStrs := make([]string, len(filtered))
+	for i := range filtered {
+		idStrs[i] = filtered[i].entry.ID.String()
+	}
+
 	// Fetch latency data via pipeline. Reads the durable lat:<id> key
 	// (35-day TTL) rather than the tp:<id> registration blob — survives
 	// the 5-minute registration churn that bandwidth has always survived.
@@ -688,21 +705,32 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 
 	// Fetch bandwidth data via pipeline
 	type bwKey struct {
-		idx     int
-		dayIdx  int
-		dateStr string
+		idx    int
+		dayIdx int
 	}
 	var bwKeys []bwKey
 	var bwResults []*redis.StringStringMapCmd
+	// dateStrs[d] is the "2006-01-02" string for day d; shared across all
+	// entries so it is formatted `days` times, not once per (entry × day).
+	var dateStrs []string
 
 	if query.Bandwidth {
+		dateStrs = make([]string, days)
+		for d := 0; d < days; d++ {
+			dateStrs[d] = now.AddDate(0, 0, -d).Format("2006-01-02")
+		}
+		n := len(filtered) * days
+		bwKeys = make([]bwKey, 0, n)
+		bwResults = make([]*redis.StringStringMapCmd, 0, n)
 		pipe := s.client.Pipeline()
-		for i, f := range filtered {
+		for i := range filtered {
+			idStr := idStrs[i]
 			for d := 0; d < days; d++ {
-				t := now.AddDate(0, 0, -d)
-				dateStr := t.Format("2006-01-02")
-				key := s.bandwidthDailyKey(f.entry.ID.String(), t)
-				bwKeys = append(bwKeys, bwKey{idx: i, dayIdx: d, dateStr: dateStr})
+				// Same key as bandwidthDailyKey ("<svc>:bw:daily:<id>:<date>")
+				// but built by concat (single alloc, no fmt reflection) with the
+				// id + date precomputed above rather than re-formatting per day.
+				key := serviceName + ":bw:daily:" + idStr + ":" + dateStrs[d]
+				bwKeys = append(bwKeys, bwKey{idx: i, dayIdx: d})
 				bwResults = append(bwResults, pipe.HGetAll(ctx, key))
 			}
 		}
@@ -711,39 +739,50 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 
 	// Build bandwidth lookup map: entryIdx -> []DailyEdgeBandwidth
 	bwByEntry := make(map[int][]DailyEdgeBandwidth)
+	// Edge hexes and the four field keys depend only on the entry, and bwKeys
+	// are built strictly entry-major, so compute them once per entry (was per
+	// entry × day-with-data — ~390k → ~13k Hex() calls + key concats).
+	lastIdx := -1
+	var kASent, kARecv, kBSent, kBRecv string
 	for i, bk := range bwKeys {
 		result, err := bwResults[i].Result()
 		if err != nil || len(result) == 0 {
 			continue
 		}
 
-		f := filtered[bk.idx]
-		edgeAHex := f.entry.Edges[0].Hex()
-		edgeBHex := f.entry.Edges[1].Hex()
+		if bk.idx != lastIdx {
+			f := filtered[bk.idx]
+			edgeAHex := f.entry.Edges[0].Hex()
+			edgeBHex := f.entry.Edges[1].Hex()
+			kASent, kARecv = edgeAHex+":sent", edgeAHex+":recv"
+			kBSent, kBRecv = edgeBHex+":sent", edgeBHex+":recv"
+			lastIdx = bk.idx
+		}
 
 		// Try to read per-reporter sent/recv fields (new format)
 		var aSent, aRecv, bSent, bRecv uint64
 		hasPerEdge := false
-		if val, ok := result[edgeAHex+":sent"]; ok {
-			fmt.Sscanf(val, "%d", &aSent) //nolint:errcheck,gosec
+		if val, ok := result[kASent]; ok {
+			aSent = parseBWUint(val)
 			hasPerEdge = true
 		}
-		if val, ok := result[edgeAHex+":recv"]; ok {
-			fmt.Sscanf(val, "%d", &aRecv) //nolint:errcheck,gosec
+		if val, ok := result[kARecv]; ok {
+			aRecv = parseBWUint(val)
 			hasPerEdge = true
 		}
-		if val, ok := result[edgeBHex+":sent"]; ok {
-			fmt.Sscanf(val, "%d", &bSent) //nolint:errcheck,gosec
+		if val, ok := result[kBSent]; ok {
+			bSent = parseBWUint(val)
 			hasPerEdge = true
 		}
-		if val, ok := result[edgeBHex+":recv"]; ok {
-			fmt.Sscanf(val, "%d", &bRecv) //nolint:errcheck,gosec
+		if val, ok := result[kBRecv]; ok {
+			bRecv = parseBWUint(val)
 			hasPerEdge = true
 		}
 
+		dateStr := dateStrs[bk.dayIdx]
 		if hasPerEdge && (aSent+aRecv+bSent+bRecv) > 0 {
 			dailyMetric := DailyEdgeBandwidth{
-				Date: bk.dateStr,
+				Date: dateStr,
 				A:    &EdgeBandwidth{Sent: aSent, Recv: aRecv},
 				B:    &EdgeBandwidth{Sent: bSent, Recv: bRecv},
 			}
@@ -752,12 +791,12 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 			// Fallback for old data: split combined total equally
 			var bw uint64
 			if val, ok := result["bandwidth"]; ok {
-				fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
+				bw = parseBWUint(val)
 			}
 			if bw > 0 {
 				halfBW := bw / 2
 				dailyMetric := DailyEdgeBandwidth{
-					Date: bk.dateStr,
+					Date: dateStr,
 					A:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
 					B:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
 				}
@@ -767,10 +806,10 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 	}
 
 	// Build results
-	var results []TransportMetric
+	results := make([]TransportMetric, 0, len(filtered))
 	for i, f := range filtered {
 		metric := TransportMetric{
-			ID:    f.entry.ID.String(),
+			ID:    idStrs[i],
 			Type:  string(f.entry.Type),
 			Live:  f.isLive,
 			Daily: bwByEntry[i],
