@@ -75,6 +75,15 @@ func resolveFetchHost(pkHost string) (resolved, vhost string, homeBody []byte) {
 	if dmsgweb.IsHomeHost(host, ".dmsg") || dmsgweb.IsHomeHost(host, ".skynet") {
 		return "", "", dmsgweb.RenderHomePage(resolverAliases, ".dmsg", selfFetchPK)
 	}
+	// status.skysocks (and any *.skysocks / bare "skysocks") → the LOCAL skysocks-lite
+	// pool status page, rendered in-process. It is deliberately NOT fetched through
+	// the proxy: it's the page you open to see why the proxy is or isn't working, so
+	// it must load even when every exit is down — the nested browser classifies
+	// .skysocks as a mesh host (browse.js go()) so it takes this in-process dmsg path
+	// and never hits the "Connecting over skywire…" interstitial.
+	if lh := strings.ToLower(host); lh == "status.skysocks" || lh == "skysocks" || strings.HasSuffix(lh, ".skysocks") {
+		return "", "", skysocksStatusHTML()
+	}
 	// <vhost>.<r1>…<rN>.<pk>.<suffix> — extract dest PK + vhost via the shared
 	// resolver-host parser (aliases resolve too, so tpd.dmsg / skywire.dmsg work).
 	lower := strings.ToLower(host)
