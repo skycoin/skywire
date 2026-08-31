@@ -43,13 +43,52 @@ const (
 	// suspended. Only then do we surface the "resuming" UI notice — a normal
 	// short hide (worker still ticking) keeps the gap small and stays silent.
 	proxyFreezeGap = 3 * proxyKeepalivePeriod
+	// proxyExitFailCooldown: after an exit is rotated away (dead/flaky), don't
+	// re-select it for this long. Forces the pool to pull FRESH exits from the
+	// hundreds in SD instead of re-locking onto the same broken one.
+	proxyExitFailCooldown = 10 * time.Minute
+	// proxyExitFlapLimit: drops (since the last clean connect) after which we STOP
+	// sticky-retrying the same exit and rotate+cooldown instead. Without this, a
+	// ~50%-reliable exit keeps "recovering" on a sticky retry and is retained
+	// forever, hammering route-setup — the whole "stuck on two broken exits" bug.
+	proxyExitFlapLimit = 3
 )
 
 var (
-	proxyConnMu        sync.Mutex
-	proxyEverConnected = map[cipher.PubKey]bool{} // exits that established a real (non-probe) route
-	proxyStickyActive  = map[cipher.PubKey]bool{} // a sticky-reconnect loop owns this exit
+	proxyConnMu            sync.Mutex
+	proxyEverConnected     = map[cipher.PubKey]bool{}      // exits that established a real (non-probe) route
+	proxyStickyActive      = map[cipher.PubKey]bool{}      // a sticky-reconnect loop owns this exit
+	proxyExitCooldownUntil = map[cipher.PubKey]time.Time{} // exit -> earliest re-select time (fail cooldown)
+	proxyExitRecentFails   = map[cipher.PubKey]int{}       // exit -> drops since its last clean connect
 )
+
+// cooldownProxyExit marks pk unusable for proxyExitFailCooldown so the pool won't
+// re-pick it — called when an exit is rotated away for being dead or flaky.
+func cooldownProxyExit(pk cipher.PubKey) {
+	if pk.Null() {
+		return
+	}
+	proxyConnMu.Lock()
+	proxyExitCooldownUntil[pk] = time.Now().Add(proxyExitFailCooldown)
+	delete(proxyExitRecentFails, pk)
+	proxyConnMu.Unlock()
+}
+
+// proxyExitCooled reports whether pk is still in fail-cooldown (expired entries are
+// swept lazily). pickRandomProxyExits skips cooled exits.
+func proxyExitCooled(pk cipher.PubKey) bool {
+	proxyConnMu.Lock()
+	defer proxyConnMu.Unlock()
+	until, ok := proxyExitCooldownUntil[pk]
+	if !ok {
+		return false
+	}
+	if time.Now().After(until) {
+		delete(proxyExitCooldownUntil, pk)
+		return false
+	}
+	return true
+}
 
 // isProbeProxyWindow reports the SELECTION probe window (pool-probe-*). A probe
 // success only proves momentary routability for pool selection; it must NOT count
@@ -75,6 +114,7 @@ func markProxyExitConnected(pk cipher.PubKey) {
 	}
 	proxyConnMu.Lock()
 	proxyEverConnected[pk] = true
+	delete(proxyExitRecentFails, pk) // a real connection resets the flap counter
 	proxyConnMu.Unlock()
 }
 

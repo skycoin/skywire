@@ -23,6 +23,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -1913,25 +1914,37 @@ func configureApps(log *logging.Logger) {
 				Args: skychatExternalArgs(chatAddr, isSkychatPairEnable),
 			},
 			{
-				Name:      skyenv.SkysocksName,
-				Binary:    "skywire",
-				AutoStart: isProxyServerEnable,
-				Port:      routing.Port(skyenv.SkysocksPort),
-				Args:      []string{"app", "skysocks"},
+				// RestartPolicy on-failure so a crashed skysocks server self-recovers
+				// instead of leaving a ZOMBIE exit: still advertised in SD and still
+				// accepting route setup at the router, but with no app on port 3 to
+				// complete the handshake — every client then times out on it. Without
+				// this a single crash strands the exit until the operator restarts the
+				// visor. (A clean operator stop still respects intent — on-failure only
+				// relaunches on a non-nil exit error.)
+				Name:          skyenv.SkysocksName,
+				Binary:        "skywire",
+				AutoStart:     isProxyServerEnable,
+				Port:          routing.Port(skyenv.SkysocksPort),
+				Args:          []string{"app", "skysocks"},
+				RestartPolicy: string(appcommon.RestartOnFailure),
 			},
 			{
-				Name:      skyenv.SkysocksClientName,
-				Binary:    "skywire",
-				AutoStart: false,
-				Port:      routing.Port(skyenv.SkysocksClientPort),
-				Args:      append([]string{"app", "skysocks-client"}, "--addr", socksClientAddr),
+				Name:          skyenv.SkysocksClientName,
+				Binary:        "skywire",
+				AutoStart:     false,
+				Port:          routing.Port(skyenv.SkysocksClientPort),
+				Args:          append([]string{"app", "skysocks-client"}, "--addr", socksClientAddr),
+				RestartPolicy: string(appcommon.RestartOnFailure),
 			},
 			{
-				Name:      skyenv.VPNServerName,
-				Binary:    "skywire",
-				AutoStart: isVpnServerEnable,
-				Port:      routing.Port(skyenv.VPNServerPort),
-				Args:      []string{"app", "vpn-server"},
+				// Same reasoning as skysocks: a crashed vpn-server shouldn't strand the
+				// exit — recover it on failure.
+				Name:          skyenv.VPNServerName,
+				Binary:        "skywire",
+				AutoStart:     isVpnServerEnable,
+				Port:          routing.Port(skyenv.VPNServerPort),
+				Args:          []string{"app", "vpn-server"},
+				RestartPolicy: string(appcommon.RestartOnFailure),
 			},
 			{
 				// Local LAN/WiFi gateway that NATs downstream clients into the
