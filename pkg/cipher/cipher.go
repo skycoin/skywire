@@ -204,17 +204,56 @@ func (pk PubKey) MarshalText() ([]byte, error) {
 	return out, nil
 }
 
+// pubKeyVerifyCache memoizes the secp256k1 on-curve validation that
+// cipher.PubKeyFromHex → NewPubKey → Verify runs on EVERY PubKey parse. That check
+// decompresses the point (secp256k1 Field Sqr/Sqrt/Mul) — invisible across a native
+// visor's many cores, but a real cost on the SINGLE-THREADED wasm visor, where boot
+// and every discovery poll re-parse PK-heavy JSON (the SD service list, the CXO
+// transport graph — the SAME ~1000 fleet PKs over and over) and re-validate each
+// occurrence, burning the one JS thread (a contributor to the CXO-conn run()-loop
+// wedge that starves TPD ingest). A validated point stays valid forever, so caching
+// by exact 33-byte key is sound; it collapses the repeated validations to one per
+// distinct key. Bounded so an adversarial feed of distinct valid keys can't grow it
+// without limit — the real in-use PK set is far smaller than the cap.
+var (
+	pubKeyVerifyMu    sync.RWMutex
+	pubKeyVerifyCache = make(map[PubKey]struct{}, 1024)
+)
+
+const pubKeyVerifyCacheMax = 1 << 15
+
 // UnmarshalText implements encoding.TextUnmarshaler.
 func (pk *PubKey) UnmarshalText(data []byte) error {
 	if bytes.Count(data, []byte("0")) == len(data) {
 		return nil
 	}
 
-	dPK, err := cipher.PubKeyFromHex(string(data))
-	if err == nil {
-		*pk = PubKey(dPK)
+	// Fast path: an exact key we've already validated skips the expensive secp256k1
+	// point decompression (PubKeyFromHex → Verify). See pubKeyVerifyCache.
+	var cand PubKey
+	if b, derr := hex.DecodeString(string(data)); derr == nil && len(b) == len(cand) {
+		copy(cand[:], b)
+		pubKeyVerifyMu.RLock()
+		_, ok := pubKeyVerifyCache[cand]
+		pubKeyVerifyMu.RUnlock()
+		if ok {
+			*pk = cand
+			return nil
+		}
 	}
-	return err
+
+	dPK, err := cipher.PubKeyFromHex(string(data))
+	if err != nil {
+		return err
+	}
+	*pk = PubKey(dPK)
+	pubKeyVerifyMu.Lock()
+	if len(pubKeyVerifyCache) >= pubKeyVerifyCacheMax {
+		pubKeyVerifyCache = make(map[PubKey]struct{}, 1024) // bound growth; re-warms
+	}
+	pubKeyVerifyCache[PubKey(dPK)] = struct{}{}
+	pubKeyVerifyMu.Unlock()
+	return nil
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler.
