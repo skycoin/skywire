@@ -1244,16 +1244,13 @@ func configureRouting() {
 		RouteFinderTimeout: visorconfig.DefaultTimeout,
 		MinHops:            minHopsValue(),
 		CalculateRoutes:    enableCalculateRoutes,
-		// Default routing policy: the "adaptive" composite preset. It is
-		// app-agnostic — every overlay app that dials a route group (proxy, vpn,
-		// skynet-client, the resolving-proxy/browser chain, custom-named
-		// sessions) gets a lean single forward leg plus a wider reverse
-		// (download) mux sized active+standby, seeding the most transport-diverse
-		// route, then letting on_tick hold warm standby / size / evict / probe
-		// adaptively. Only latency-sensitive chat stays a single lean route.
-		// Overridable: an explicit routing.policy_per_dial or a per-app launcher
-		// routing_policy wins, and it is preserved across regen (see below).
-		PolicyPerDial: "preset:adaptive",
+		// Default routing policy: "none" (a single route, no mux). The adaptive
+		// composite preset is still maturing — it is not yet reliable under load —
+		// so it is NOT the shipped default. Operators opt in explicitly by setting
+		// POLICYPERDIAL in /etc/skywire.conf (or --policy, or a per-app launcher
+		// routing_policy); an explicit skywire.conf value is always honored and
+		// wins over this default (see the resolve logic below).
+		PolicyPerDial: "none",
 		// Cascade route setup is opt-in (--cascade); the legacy setup-node
 		// path stays the default until the cascade multihop data-plane bug
 		// is fixed and enough of the network has updated to support it.
@@ -1278,14 +1275,10 @@ func configureRouting() {
 	if policyPerDial != "" {
 		conf.Routing.PolicyPerDial = policyPerDial
 	} else {
-		// Default routing policy: the "adaptive" composite preset — scales the
-		// mux leg count to load (AIMD), evicts the slowest leg, periodically
-		// probes a fresh path, and (with the metadata provider) picks the most
-		// transport-diverse forward candidate. It is a no-op for latency-
-		// sensitive/other apps and shapes vpn/skysocks/skynet client dials.
-		// Overridable via --policy (POLICYPERDIAL) or a per-app launcher
-		// routing_policy; preserved across regen (below).
-		conf.Routing.PolicyPerDial = "preset:adaptive"
+		// No explicit policy set in /etc/skywire.conf (POLICYPERDIAL) or via
+		// --policy: default to "none" (a single route, no mux). The adaptive
+		// preset is still maturing under load, so it is opt-in until it's solid.
+		conf.Routing.PolicyPerDial = "none"
 	}
 
 	if oldConfCache != nil && oldConfCache.Routing != nil {
@@ -1300,17 +1293,14 @@ func configureRouting() {
 		if oldConfCache.Routing.EnableCascadeRouteSetup {
 			conf.Routing.EnableCascadeRouteSetup = true
 		}
-		// Preserve a previously-set per-dial routing policy across regen UNLESS
-		// --policy (or POLICYPERDIAL) was passed this run, in which case the new
-		// value already set above wins. A config that never set one (any
-		// non-empty value the operator chose, including "none", counts as set)
-		// falls through to the adaptive default in the literal above — so
-		// regenerating an untouched config opts into the new default while a
-		// deliberate choice is never clobbered. To clear it, edit policy_per_dial
-		// in the JSON directly.
-		if policyPerDial == "" && oldConfCache.Routing.PolicyPerDial != "" {
-			conf.Routing.PolicyPerDial = oldConfCache.Routing.PolicyPerDial
-		}
+		// Per-dial routing policy is deliberately NOT preserved from the old JSON
+		// across regen: /etc/skywire.conf (POLICYPERDIAL), surfaced above as
+		// policyPerDial, is the single source of truth. An explicit skywire.conf
+		// value is honored (handled above); otherwise regen adopts the current
+		// default ("none"), so a config that only ever carried the previous
+		// adaptive default flips to none instead of pinning a stale default. A
+		// deliberate choice must live in POLICYPERDIAL (or be re-applied to the
+		// JSON after each regen).
 	}
 }
 
