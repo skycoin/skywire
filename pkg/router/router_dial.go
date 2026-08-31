@@ -2181,7 +2181,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		})
 	}
 	sort.SliceStable(seed, func(i, j int) bool {
-		return seed[i].pk.String() < seed[j].pk.String()
+		return pkLess(seed[i].pk, seed[j].pk)
 	})
 
 	// pkInPath returns true if pk already appears as a From or To in
@@ -2287,7 +2287,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 				children = append(children, bfsNode{pk: nextPK, path: newPath})
 			}
 			sort.SliceStable(children, func(i, j int) bool {
-				return children[i].pk.String() < children[j].pk.String()
+				return pkLess(children[i].pk, children[j].pk)
 			})
 			nextQueue = append(nextQueue, children...)
 		}
