@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
+	"github.com/0magnet/yamux"
 )
 
 // fakeExit acts as the skysocks EXIT: a yamux server that, per stream, performs

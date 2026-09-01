@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/yamux"
 	"github.com/google/uuid"
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"

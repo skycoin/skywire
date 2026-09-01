@@ -36,8 +36,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/yamux"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
 )

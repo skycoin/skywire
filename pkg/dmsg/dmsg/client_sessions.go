@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
+	"github.com/0magnet/yamux"
 	"github.com/xtaci/smux"
 	"golang.org/x/net/proxy"
 

@@ -24,8 +24,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/0magnet/yamux"
 	"github.com/coder/websocket"
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 )

@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
+	"github.com/0magnet/yamux"
 )
 
 // bridgeConfig is the yamux config for BOTH ends of the wasm RPC bridge. It

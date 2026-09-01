@@ -6,9 +6,8 @@ import (
 	"net"
 	"testing"
 
+	"github.com/0magnet/yamux"
 	"github.com/stretchr/testify/require"
-
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 )
 
 // leastLoaded is the pure striping policy: pick the smallest non-negative count

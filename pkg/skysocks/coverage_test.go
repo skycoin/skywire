@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0magnet/yamux"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 )
 
 // addrConn wraps a net.Conn but reports a caller-supplied RemoteAddr, letting a

@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/0magnet/yamux"
 	ipc "github.com/james-barrow/golang-ipc"
 
 	"github.com/skycoin/skywire/pkg/app"
@@ -26,7 +27,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/wasmhv/wasmbin"
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 )
 
 // muxStreamWindowBytes is the per-stream yamux flow-control window skysocks

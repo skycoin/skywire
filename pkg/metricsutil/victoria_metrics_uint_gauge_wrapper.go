@@ -4,7 +4,7 @@ package metricsutil
 import (
 	"sync/atomic"
 
-	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
+	"github.com/0magnet/metrics"
 )
 
 // VictoriaMetricsUintGaugeWrapper wraps Victoria Metrics int gauge encapsulating all the
