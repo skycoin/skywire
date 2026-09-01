@@ -141,15 +141,32 @@ func spliceDmsgServers(content []byte, entries []*disc.Entry) ([]byte, int) {
 	return out, count
 }
 
+// formatDmsgServers renders the entries with every STABLE advertised endpoint:
+// address, address_udp (+ protocol) and address_ws. Dropping address_ws here
+// (as this once did) breaks the browser wasm-visor's boot seeding — on an HTTPS
+// page it can only dial servers whose EMBEDDED entry carries a wss:// URL, so a
+// pull that stripped the field left it bootstrapping from a fraction of the
+// fleet. WT endpoints are deliberately NOT embedded: cert_hash_wt rotates with
+// the server's short-lived self-signed cert, so a static snapshot would pin a
+// stale hash — WT is discovered live instead.
 func formatDmsgServers(entries []*disc.Entry) string {
 	var b strings.Builder
 	b.WriteString(`"dmsg_servers": [`)
 	for i, e := range entries {
 		b.WriteString("\n      {\n")
 		fmt.Fprintf(&b, "        \"static\": %q,\n", e.Static.Hex())
+		if e.Protocol != "" {
+			fmt.Fprintf(&b, "        \"protocol\": %q,\n", e.Protocol)
+		}
 		b.WriteString("        \"server\": {\n")
-		fmt.Fprintf(&b, "          \"address\": %q\n", e.Server.Address)
-		b.WriteString("        }\n      }")
+		fmt.Fprintf(&b, "          \"address\": %q", e.Server.Address)
+		if e.Server.AddressUDP != "" {
+			fmt.Fprintf(&b, ",\n          \"address_udp\": %q", e.Server.AddressUDP)
+		}
+		if e.Server.AddressWS != "" {
+			fmt.Fprintf(&b, ",\n          \"address_ws\": %q", e.Server.AddressWS)
+		}
+		b.WriteString("\n        }\n      }")
 		if i < len(entries)-1 {
 			b.WriteString(",")
 		}

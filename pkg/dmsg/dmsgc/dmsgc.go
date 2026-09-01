@@ -94,6 +94,9 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 		},
 		ConnectedServersType: primary.ConnectedServersType,
 		Protocol:             primary.Protocol,
+		// Ordered carrier preference (tcp/quic/ws/wt) from the visor config —
+		// how this client reaches dmsg servers. Empty = native default.
+		Carriers: primary.Carriers,
 		// When this visor runs a dmsg server in-process under the same PK,
 		// the client must skip its own server entry in the serve loop rather
 		// than dial a transit session to itself.

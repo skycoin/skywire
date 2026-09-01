@@ -1,11 +1,10 @@
 //go:build !tinygo && !(js && wasm)
 
-// Package dmsg pkg/dmsg/dmsg/serve_unified_quic_wt_test.go
+// Package dmsg pkg/dmsg/dmsg/serve_unified_quic_wt_test.go c1-net-dmsg
 package dmsg
 
 import (
 	"context"
-	"io"
 	"net"
 	"testing"
 	"time"
@@ -17,82 +16,106 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-// TestServeUnifiedQUIC_QUICThroughDemux proves that co-hosting WebTransport on the
-// shared quic.Transport (ServeUnifiedQUIC with a non-empty WT URL) does NOT break
-// native dmsg-over-QUIC. The rewrite replaced the broken two-listener design (a
-// quic.Transport permits only ONE listener, so the WT ListenEarly always failed)
-// with a SINGLE ListenEarly whose GetConfigForClient hands back the dmsg identity
-// TLS config for the skywire ALPN and the WT config for "h3". This test drives two
-// QUIC clients through that demux listener and bridges a stream A→B, so a
-// regression in the skywire-ALPN (mutual-TLS) handshake selection would fail here.
-func TestServeUnifiedQUIC_QUICThroughDemux(t *testing.T) {
+// TestUnifiedQUICWTSessions covers the production UDP path (api.go →
+// ServeUnifiedQUIC): dmsg-over-QUIC and dmsg-over-WebTransport ALPN-demuxed on
+// ONE socket. The pre-existing QUIC/WT tests each exercise a dedicated
+// listener (ServeQUIC / ServeWebTransport), so a regression that broke one
+// ALPN branch of the SHARED listener — what every deployed server actually
+// runs — was invisible to the suite.
+func TestUnifiedQUICWTSessions(t *testing.T) {
 	dc := disc.NewMock(0)
 	const maxSessions = 10
 
 	pkSrv, skSrv := GenKeyPair(t, "server")
-	srv := NewServer(pkSrv, skSrv, dc, &ServerConfig{MaxSessions: maxSessions, UpdateInterval: 0}, nil)
-	srv.SetLogger(logging.MustGetLogger("uquic_server"))
+	// A fast UpdateInterval matters: the FIRST self-registration posts only the
+	// TCP address — the optional endpoints (UDP/WS/WT) are merged in by the
+	// periodic read-modify-write refresh, which defaults to one minute.
+	srv := NewServer(pkSrv, skSrv, dc, &ServerConfig{MaxSessions: maxSessions, UpdateInterval: 300 * time.Millisecond}, nil)
+	srv.SetLogger(logging.MustGetLogger("unified_server"))
 
-	udpConn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	// TCP listener: Serve owns the discovery self-registration loop, exactly
+	// like production (api.go runs Serve and ServeUnifiedQUIC side by side).
+	tcpLis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	udpAddr := udpConn.LocalAddr().String()
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	require.NoError(t, err)
 
-	// Serve QUIC + WebTransport on ONE socket. The non-empty WT URL exercises
-	// buildWTServer + the GetConfigForClient ALPN demux (the path that was dead).
-	chSrv := make(chan error, 1)
-	go func() { chSrv <- srv.ServeUnifiedQUIC(udpConn, udpAddr, "https://"+udpAddr+"/dmsg") }()
+	wtURL := "https://" + udpConn.LocalAddr().String() + wtPath
+	chSrv := make(chan error, 2)
+	go func() { chSrv <- srv.Serve(tcpLis, tcpLis.Addr().String()) }()
+	go func() { chSrv <- srv.ServeUnifiedQUIC(udpConn, udpConn.LocalAddr().String(), wtURL) }()
+	t.Cleanup(func() {
+		require.NoError(t, srv.Close())
+		// Drain the serve goroutines best-effort: teardown latency (e.g. the WT
+		// h3 server unwinding) must not hang the suite past its deadline.
+		for i := 0; i < 2; i++ {
+			select {
+			case err := <-chSrv:
+				require.NoError(t, err)
+			case <-time.After(5 * time.Second):
+				return
+			}
+		}
+	})
 
-	srvEntry := disc.NewServerEntry(pkSrv, 0, "", maxSessions)
-	srvEntry.Server.Address = ""
-	srvEntry.Server.AddressUDP = udpAddr
-	srvEntry.Protocol = "quic"
-	require.NoError(t, srvEntry.Sign(skSrv))
-	require.NoError(t, dc.PostEntry(context.Background(), srvEntry))
+	// Wait until the self-registered entry advertises BOTH UDP (quic) and WT.
+	require.Eventually(t, func() bool {
+		e, eerr := dc.Entry(context.Background(), pkSrv)
+		return eerr == nil && e.Server != nil &&
+			e.Protocol == "quic" && e.Server.AddressUDP != "" &&
+			e.Server.AddressWT != "" && e.Server.CertHashWT != ""
+	}, 10*time.Second, 50*time.Millisecond, "server entry never advertised quic+wt")
 
-	quicConf := func() *Config {
-		c := DefaultConfig()
-		c.Protocol = "quic"
+	// One client forced onto each carrier of the shared socket.
+	newClient := func(name, carrier string) *Client {
+		conf := DefaultConfig()
+		conf.Carriers = []string{carrier}
+		pk, sk := GenKeyPair(t, name)
+		c := NewClient(pk, sk, dc, conf)
+		c.SetLogger(logging.MustGetLogger(name))
+		go c.Serve(context.Background())
+		t.Cleanup(func() { require.NoError(t, c.Close()) })
 		return c
 	}
-	pkA, skA := GenKeyPair(t, "client A")
-	clientA := NewClient(pkA, skA, dc, quicConf())
-	clientA.SetLogger(logging.MustGetLogger("uquic_client_A"))
-	go clientA.Serve(context.Background())
+	quicClient := newClient("quic_client", CarrierQUIC)
+	wtClient := newClient("wt_client", CarrierWT)
 
-	pkB, skB := GenKeyPair(t, "client B")
-	clientB := NewClient(pkB, skB, dc, quicConf())
-	clientB.SetLogger(logging.MustGetLogger("uquic_client_B"))
-	go clientB.Serve(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 
-	require.Eventually(t, func() bool {
-		return clientA.SessionCount() > 0 && clientB.SessionCount() > 0
-	}, 10*time.Second, 200*time.Millisecond, "QUIC clients failed to connect through the WT-demux listener")
+	// Raw dmsg-over-QUIC session on the shared listener.
+	require.NoError(t, quicClient.EnsureSession(ctx, entrySnapshot(t, dc, pkSrv)),
+		"raw dmsg-QUIC session over the unified listener")
 
-	sesA, okA := clientA.Session(pkSrv)
-	require.True(t, okA, "client A has no session to the unified server")
-	require.True(t, sesA.SupportsDatagrams(), "session is not a genuine QUIC session")
+	// WebTransport session on the same UDP socket.
+	require.NoError(t, wtClient.EnsureSession(ctx, entrySnapshot(t, dc, pkSrv)),
+		"WebTransport session over the unified listener")
 
-	// Full data path: bridge a stream A→B through the server and round-trip a payload.
-	const port = 8080
-	lis, err := clientB.Listen(port)
+	// A stream through the server proves both sessions relay, not just dial:
+	// wtClient listens, quicClient dials it through the shared-socket server.
+	lis, err := wtClient.Listen(49152)
 	require.NoError(t, err)
-	defer lis.Close() //nolint:errcheck
+	t.Cleanup(func() { require.NoError(t, lis.Close()) })
 
-	connA, err := clientA.DialStream(context.TODO(), Addr{PK: pkB, Port: port})
-	require.NoError(t, err)
-	defer connA.Close() //nolint:errcheck
-	connB, err := lis.Accept()
-	require.NoError(t, err)
-	defer connB.Close() //nolint:errcheck
+	accepted := make(chan error, 1)
+	go func() {
+		s, aerr := lis.AcceptStream()
+		if aerr == nil {
+			_ = s.Close() //nolint:errcheck
+		}
+		accepted <- aerr
+	}()
 
-	payload := cipher.RandByte(4096)
-	go func() { _, _ = connA.Write(payload) }() //nolint:errcheck
-	got := make([]byte, len(payload))
-	_, err = io.ReadFull(connB, got)
-	require.NoError(t, err)
-	require.Equal(t, payload, got, "payload mismatch over QUIC through the WT-demux listener")
+	stream, err := quicClient.DialStream(ctx, Addr{PK: wtClient.LocalPK(), Port: 49152})
+	require.NoError(t, err, "stream QUIC client → WT client through the unified server")
+	require.NoError(t, stream.Close())
+	require.NoError(t, <-accepted)
+}
 
-	require.NoError(t, clientA.Close())
-	require.NoError(t, clientB.Close())
-	require.NoError(t, srv.Close())
+// entrySnapshot fetches pk's current entry from the mock discovery.
+func entrySnapshot(t *testing.T, dc disc.APIClient, pk cipher.PubKey) *disc.Entry {
+	t.Helper()
+	e, err := dc.Entry(context.Background(), pk)
+	require.NoError(t, err)
+	return e
 }

@@ -44,7 +44,12 @@ type Deployment struct {
 	Servers              []*disc.Entry `json:"servers,omitempty"`
 	ConnectedServersType string        `json:"servers_type,omitempty"`
 	Protocol             string        `json:"protocol,omitempty"`
-	LANServers           []*disc.Entry `json:"lan_servers,omitempty"`
+	// Carriers is the ordered carrier preference for reaching dmsg servers —
+	// "tcp", "quic", "ws", "wt" (see dmsg.Config.Carriers). Empty = the native
+	// default (QUIC when the server advertises it, else TCP). Set e.g. ["ws"]
+	// or ["wt"] on networks that only allow 443/HTTPS egress.
+	Carriers   []string      `json:"carriers,omitempty"`
+	LANServers []*disc.Entry `json:"lan_servers,omitempty"`
 	// HypervisorDiscovery is an optional override URL pointing at a
 	// hypervisor-hosted dmsg-discovery proxy. When set, the dmsg client
 	// queries this URL first and falls back to Discovery (the canonical
@@ -83,6 +88,7 @@ type DmsgConfig struct {
 	Servers              []*disc.Entry `json:"-"`
 	ConnectedServersType string        `json:"-"`
 	Protocol             string        `json:"-"`
+	Carriers             []string      `json:"-"`
 	LANServers           []*disc.Entry `json:"-"`
 	HypervisorDiscovery  string        `json:"-"`
 
@@ -156,6 +162,7 @@ func (c *DmsgConfig) mirrorPrimary() {
 	c.Servers = d.Servers
 	c.ConnectedServersType = d.ConnectedServersType
 	c.Protocol = d.Protocol
+	c.Carriers = d.Carriers
 	c.LANServers = d.LANServers
 	c.HypervisorDiscovery = d.HypervisorDiscovery
 }
@@ -169,6 +176,7 @@ func (c *DmsgConfig) toDeployment() Deployment {
 		Servers:              c.Servers,
 		ConnectedServersType: c.ConnectedServersType,
 		Protocol:             c.Protocol,
+		Carriers:             c.Carriers,
 		LANServers:           c.LANServers,
 		HypervisorDiscovery:  c.HypervisorDiscovery,
 	}
