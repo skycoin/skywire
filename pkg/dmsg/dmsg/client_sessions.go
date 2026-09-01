@@ -92,7 +92,13 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 	// mutating entry.Protocol in place is a data race against those readers.
 	// The shallow copy shares the read-only Server pointer, which is fine.
 	e := *entry
-	e.Protocol = ce.conf.Protocol
+	// Override the entry's Protocol only when this client explicitly configures
+	// one. Unconditionally assigning conf.Protocol (usually "") erased the
+	// server's advertised "quic", so every EnsureSession-path dial silently
+	// downgraded to TCP — pickCarrier never saw the QUIC endpoint.
+	if ce.conf.Protocol != "" {
+		e.Protocol = ce.conf.Protocol
+	}
 	// Dial WITHOUT holding sesMx — same re-entrancy hazard as
 	// EnsureAndObtainSession: the dial path can re-enter session
 	// establishment via the self-hosted transport, which would
