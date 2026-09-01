@@ -59,7 +59,7 @@ func (c *DmsgConfig) UnmarshalJSON(data []byte) error {
 // so the JSON output is correct.
 func (c DmsgConfig) MarshalJSON() ([]byte, error) {
 	deployments := c.Deployments
-	if len(deployments) == 0 && (c.Discovery != "" || c.DiscoveryDmsg != "" || len(c.Servers) > 0 || c.SessionsCount != 0 || c.ConnectedServersType != "" || c.Protocol != "" || len(c.LANServers) > 0 || c.HypervisorDiscovery != "" || c.Server != nil) {
+	if len(deployments) == 0 && (c.Discovery != "" || c.DiscoveryDmsg != "" || len(c.Servers) > 0 || c.SessionsCount != 0 || c.ConnectedServersType != "" || c.Protocol != "" || len(c.Carriers) > 0 || len(c.LANServers) > 0 || c.HypervisorDiscovery != "" || c.Server != nil) {
 		deployments = []Deployment{c.toDeployment()}
 	}
 	if len(deployments) == 1 {

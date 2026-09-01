@@ -9,6 +9,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"strings"
@@ -102,6 +103,37 @@ func TestFormatDmsgServers(t *testing.T) {
 func TestFormatDmsgServersSingle(t *testing.T) {
 	out := formatDmsgServers([]*disc.Entry{entry(t, "3.3.3.3:80")})
 	assert.Equal(t, 0, strings.Count(out, "},"))
+}
+
+// TestFormatDmsgServersOptionalEndpoints verifies the pull format PRESERVES the
+// optional advertised endpoints — address_ws, address_udp, protocol. Dropping
+// address_ws (the pre-fix behavior) left the embedded snapshot with no wss://
+// URLs, so an HTTPS-served wasm-visor could only bootstrap from the few servers
+// whose entries were hand-edited. WT fields must stay out: cert_hash_wt rotates.
+func TestFormatDmsgServersOptionalEndpoints(t *testing.T) {
+	e := entry(t, "4.4.4.4:30080")
+	e.Protocol = "quic"
+	e.Server.AddressUDP = "4.4.4.4:30080"
+	e.Server.AddressWS = "wss://example.test/dmsg"
+	e.Server.AddressWT = "https://4.4.4.4:30080/dmsg"
+	e.Server.CertHashWT = "deadbeef"
+
+	out := formatDmsgServers([]*disc.Entry{e})
+
+	assert.Contains(t, out, `"protocol": "quic"`)
+	assert.Contains(t, out, `"address_udp": "4.4.4.4:30080"`)
+	assert.Contains(t, out, `"address_ws": "wss://example.test/dmsg"`)
+	assert.NotContains(t, out, "address_wt")
+	assert.NotContains(t, out, "cert_hash_wt")
+
+	// The rendered block must round-trip as JSON with the fields intact.
+	var parsed struct {
+		DmsgServers []disc.Entry `json:"dmsg_servers"`
+	}
+	require.NoError(t, json.Unmarshal([]byte("{"+out+"}"), &parsed))
+	require.Len(t, parsed.DmsgServers, 1)
+	assert.Equal(t, "quic", parsed.DmsgServers[0].Protocol)
+	assert.Equal(t, "wss://example.test/dmsg", parsed.DmsgServers[0].Server.AddressWS)
 }
 
 const sampleConfig = `{

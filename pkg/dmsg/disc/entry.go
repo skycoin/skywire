@@ -370,4 +370,8 @@ func Copy(dst, src *Entry) {
 	dst.Version = src.Version
 	dst.Sequence = src.Sequence
 	dst.Timestamp = src.Timestamp
+	dst.ClientType = src.ClientType
+	// Protocol is signed like every other field; dropping it here silently
+	// stripped "quic" from entries read back through the mock discovery.
+	dst.Protocol = src.Protocol
 }
