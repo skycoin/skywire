@@ -7,6 +7,16 @@ by Skycoin. Visors are reachable over two encrypted networks — Skywire
 This site collects everything an operator or developer needs to run,
 extend, or understand a Skywire deployment.
 
+Everything ships in one binary. `skywire --help` is the top of the
+command tree:
+
+![skywire --help — the top-level command tree](img/skywire-help.png)
+
+And `skywire --tui` opens an interactive browser of every command and
+its help text — any command can be run straight from it:
+
+![skywire --tui — interactive command browser](img/skywire-tui.gif)
+
 ## Where to start
 
 <div class="grid cards" markdown>
