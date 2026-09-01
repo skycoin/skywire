@@ -29,7 +29,7 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
+	"github.com/0magnet/yamux"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"

@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/sysinfo"
 	"github.com/google/uuid"
 	"github.com/jaypipes/ghw"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/third_party/zcalusic/sysinfo"
 )
 
 // UserConfig contains installation paths for running skywire as the user

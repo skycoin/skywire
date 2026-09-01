@@ -9,9 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0magnet/yamux"
 	"github.com/stretchr/testify/require"
-
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 )
 
 // newRedialConn returns a fresh net.Conn whose peer runs a yamux server draining

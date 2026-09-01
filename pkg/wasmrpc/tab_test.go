@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
+	"github.com/0magnet/yamux"
 	"github.com/stretchr/testify/require"
 )
 

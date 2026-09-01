@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0magnet/gotop/v4/devices"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
-	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
 )
 
 // fakeStatsServer is a minimal PingService server that streams a fixed set
