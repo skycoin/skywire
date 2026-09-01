@@ -99,6 +99,17 @@ var (
 
 func sharedShellFS() afero.Fs {
 	wasmShellFSOnce.Do(func() {
+		// When the page installed jsfs (the in-memory Linux-layout
+		// globalThis.fs — see browseui/jsfs.js), route the shell through the
+		// OS layer so its builtins (cat, ls, jq, redirection) share ONE
+		// filesystem with every `skywire` command execution: what
+		// `skywire cli config gen -rp` writes under /opt/skywire, cat reads.
+		// Without jsfs the historical private MemMapFs stands.
+		if js.Global().Get("jsfs").Truthy() {
+			wasmShellFS = afero.NewOsFs()
+			_ = shell.Seed(wasmShellFS) //nolint:errcheck
+			return
+		}
 		wasmShellFS = afero.NewMemMapFs()
 		_ = shell.Seed(wasmShellFS) //nolint:errcheck
 	})
@@ -439,6 +450,11 @@ var registerVisorApplets = sync.OnceFunc(func() {
 			}
 			return emit(hc, out, compact)
 		})
+
+	// The real skywire CLI, executed per invocation from /skywire.wasm
+	// against the page-shared jsfs (skywirecmd_js.go). Registered only when
+	// the page serves the module.
+	registerSkywireCmd()
 })
 
 // shellSession is one open terminal window: a terminal, a shell, and the

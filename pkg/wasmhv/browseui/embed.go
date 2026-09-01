@@ -46,6 +46,24 @@ var winBoxLoaderJS []byte
 //go:embed browse.js
 var browseJS []byte
 
+// jsfsJS installs the in-memory Linux-layout filesystem as globalThis.fs /
+// globalThis.process (see jsfs.js). It sits at the TOP of the bundle: Go's
+// js/wasm runtime captures globalThis.fs when an instance STARTS, so
+// installing here — before browse.js can instantiate the DOM-side shell and
+// before any skywire command executes — puts every page-realm Go instance on
+// the one shared filesystem. Idempotent; the SharedWorker visor is a separate
+// realm and unaffected.
+//
+//go:embed jsfs.js
+var jsfsJS []byte
+
+// skywireExecJS provides globalThis.skywireExec: per-invocation execution of
+// the full skywire CLI wasm module (served at /skywire.wasm) against jsfs,
+// with swappable stdio so the terminal captures each command's output.
+//
+//go:embed skywire-exec.js
+var skywireExecJS []byte
+
 // BrowseJS is the full mini-desktop bundle — the wasm loader followed by
 // browse.js — injected into the wasm-visor page and the native hypervisor
 // dashboard as a single script asset. Concatenating here means every consumer
@@ -53,12 +71,16 @@ var browseJS []byte
 // harness) gets the window manager with no extra script wiring; only the wasm
 // module itself is a separate fetch, from WinBoxWasm below.
 var BrowseJS = func() []byte {
-	out := make([]byte, 0, len(winBoxExecJS)+len(winBoxLoaderJS)+len(browseJS)+8)
+	out := make([]byte, 0, len(jsfsJS)+len(winBoxExecJS)+len(winBoxLoaderJS)+len(browseJS)+len(skywireExecJS)+16)
+	out = append(out, jsfsJS...)
+	out = append(out, '\n', ';', '\n')
 	out = append(out, winBoxExecJS...)
 	out = append(out, '\n', ';', '\n')
 	out = append(out, winBoxLoaderJS...)
 	out = append(out, '\n', ';', '\n')
 	out = append(out, browseJS...)
+	out = append(out, '\n', ';', '\n')
+	out = append(out, skywireExecJS...)
 	return out
 }()
 

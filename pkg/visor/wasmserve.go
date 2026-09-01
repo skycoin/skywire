@@ -77,6 +77,14 @@ type WasmServeConfig struct {
 	// instead of realorigin's JS one. For testing that implementation only —
 	// see browseSWWasm for what the swap gives up on the untrusted origin.
 	BrowseWasmSW bool
+	// ExecWasmPath, when set, serves the file at /skywire.wasm: the FULL
+	// skywire CLI compiled for GOOS=js (see docs/design), which the page's
+	// terminal executes per command against the shared in-memory filesystem
+	// (browseui/jsfs.js + skywire-exec.js). Empty = the terminal has no
+	// `skywire` command. The blob is too large to embed — build it with
+	//   GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" \
+	//     -trimpath -ldflags "-s -w" -o build/skywire.wasm .
+	ExecWasmPath string
 	Log          *logging.Logger // nil → package default
 }
 
@@ -269,6 +277,17 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
 	serveBytes("/worker.js", "text/javascript", wasmhv.WorkerJS)
 	serveBytes("/browse.js", "text/javascript", wasmhv.BrowseJS)
+	// The full skywire CLI module for the terminal's `skywire` command —
+	// served from disk (too large to embed), gzip left to the transport.
+	// Absent path = 404, and the shell simply doesn't register the command.
+	if cfg.ExecWasmPath != "" {
+		execWasmPath := cfg.ExecWasmPath
+		mux.HandleFunc("/skywire.wasm", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/wasm")
+			w.Header().Set("Cache-Control", "no-cache")
+			http.ServeFile(w, r, execWasmPath)
+		})
+	}
 	serveBytes("/winbox.wasm", "application/wasm", wasmhv.WinBoxWasm())
 	serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
