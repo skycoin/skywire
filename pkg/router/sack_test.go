@@ -128,6 +128,54 @@ func TestRetxBuffer_RetransmitList(t *testing.T) {
 	assert.NotContains(t, retx, uint32(6))
 }
 
+// TestRetxBuffer_RetxBackoffSuppressesDuplicates is the retransmit-storm
+// regression: SACKs arrive every ~25ms, so an overdue hole must be handed out
+// ONCE and then suppressed until its per-entry backoff (threshold, then
+// doubling) elapses — not re-selected by every subsequent SACK for as long as
+// the ack takes to come back. Without the suppression a single hole on a path
+// with seconds of queueing delay is retransmitted hundreds of times.
+func TestRetxBuffer_RetxBackoffSuppressesDuplicates(t *testing.T) {
+	rb := newRetxBuffer(128)
+	rb.Store(3, []byte{3})
+	rb.entries[3].sentAt = time.Now().Add(-2 * retxMinAge)
+
+	// SACK: lastContiguous=2, seq 3 missing, seq 4 received.
+	sack := func() []uint32 { return rb.ProcessSACK(2, []uint64{0b10}, 0) }
+
+	assert.Equal(t, []uint32{3}, sack(), "overdue hole selected on first SACK")
+	assert.Empty(t, sack(), "immediate duplicate SACK must not re-select it")
+	assert.Empty(t, sack())
+
+	// backdate ages the entry's last transmission (both stamps — the selector
+	// keys off the LATER of the two) so the next due-check sees `d` elapsed.
+	backdate := func(d time.Duration) {
+		rb.entries[3].sentAt = time.Now().Add(-d)
+		rb.entries[3].lastTxAt = rb.entries[3].sentAt
+	}
+
+	// After one backoff interval (2×threshold for the 2nd retx) it is due again.
+	backdate(2*retxMinAge + time.Millisecond)
+	assert.Equal(t, []uint32{3}, sack(), "re-selected once the backoff elapses")
+	assert.Empty(t, sack(), "and suppressed again right after")
+
+	// Backoff doubles per retx: the 3rd needs 4×threshold, so 2× is not enough.
+	backdate(2*retxMinAge + time.Millisecond)
+	assert.Empty(t, sack(), "doubled backoff not yet elapsed")
+	backdate(4*retxMinAge + time.Millisecond)
+	assert.Equal(t, []uint32{3}, sack())
+
+	// The cap: retxCount keeps growing but the wait is bounded at
+	// threshold<<retxBackoffMaxShift.
+	for i := 0; i < 10; i++ {
+		backdate(retxMinAge << (retxBackoffMaxShift + 1))
+		assert.Equal(t, []uint32{3}, sack(), "capped backoff stays retryable")
+	}
+
+	// An ack finally purges it regardless of retx state.
+	assert.Empty(t, rb.ProcessSACK(2, []uint64{0b11}, 0))
+	assert.Nil(t, rb.Get(3))
+}
+
 // TestRetxBuffer_CapacityEvictsLowest verifies the full-buffer path now evicts
 // the lowest (oldest, already force-flushed on the receiver) sequence and keeps
 // the newest, instead of silently refusing to store the newest packet.

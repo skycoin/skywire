@@ -2,6 +2,7 @@
 package router
 
 import (
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -171,7 +172,23 @@ type retxEntry struct {
 	seq    uint32
 	data   []byte
 	sentAt time.Time
+	// lastTxAt is when this sequence was last handed out for retransmission
+	// (zero until the first retx). retxCount is how many times it has been.
+	// Together they gate re-retransmission: without them every SACK arriving
+	// within one bloated RTT re-selects the same overdue hole (SACKs come every
+	// ~25ms, a queued-up path can hold a seq for many seconds), and the same
+	// packet is resent hundreds of times — the observed 20×+ wire amplification
+	// of a retransmit storm.
+	lastTxAt  time.Time
+	retxCount uint8
 }
+
+// retxBackoffMaxShift caps the per-entry exponential backoff between successive
+// retransmissions of the SAME sequence at threshold×2^this. Doubling with a cap
+// bounds the worst-case waste per sequence at ~4 copies even when the loss
+// threshold underestimates the true (bufferbloated) RTT, while a genuinely lost
+// retransmit is still retried on a TCP-like doubling schedule.
+const retxBackoffMaxShift = 3
 
 // retxBuffer is a bounded buffer of unacknowledged sent packets for
 // retransmission on SACK-detected loss.
@@ -258,6 +275,15 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 	// retransmitting it would be the spurious self-amplifying storm retxMinAge
 	// exists to prevent). Sequences ABOVE the covered window are left in place:
 	// they are the still-in-flight tail the receiver has not reported yet.
+	//
+	// A hole is aged from its LAST transmission (original send or most recent
+	// retx), with per-entry exponential backoff — otherwise a seq that crossed
+	// the threshold once is re-selected by every subsequent SACK until acked,
+	// and under a feedback delay of several RTTs that is a self-sustaining
+	// retransmit storm. Selection marks the entry here, under rb.mu, so the
+	// decision and the mark are atomic; if the caller then fails to send (no
+	// active leg), the seq simply retries after its backoff.
+	now := time.Now()
 	var retransmit []uint32
 	for w, word := range words {
 		base := lastContiguous + 1 + uint32(w)*64
@@ -265,8 +291,22 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 			checkSeq := base + i
 			if word&(1<<i) != 0 {
 				delete(rb.entries, checkSeq)
-			} else if e, ok := rb.entries[checkSeq]; ok && time.Since(e.sentAt) >= threshold {
-				retransmit = append(retransmit, checkSeq)
+			} else if e, ok := rb.entries[checkSeq]; ok {
+				ref := e.sentAt
+				if e.lastTxAt.After(ref) {
+					ref = e.lastTxAt
+				}
+				shift := e.retxCount
+				if shift > retxBackoffMaxShift {
+					shift = retxBackoffMaxShift
+				}
+				if now.Sub(ref) >= threshold<<shift {
+					retransmit = append(retransmit, checkSeq)
+					e.lastTxAt = now
+					if e.retxCount < math.MaxUint8 {
+						e.retxCount++
+					}
+				}
 			}
 		}
 	}
