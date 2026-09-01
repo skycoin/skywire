@@ -27,6 +27,14 @@ cobra subcommand tree.
 - [standalone-skychat.md](standalone-skychat.md) — `skywire app skychat --standalone --tcp-listen :PORT` for visor-independent chat-app with direct-TCP entry point; port-forwarding caveats
 - [standalone-dmsgpty-host.md](standalone-dmsgpty-host.md) — `skywire dmsg pty host --tcplisten :PORT` for visor-independent pty server with DMSG + TCP modes; port-forwarding caveats
 
+## CLI & network operations
+
+- [cli.md](cli.md) — conventions that apply across the whole command tree: `--json`/`--jq`/`--shape` output, one-call runtime introspection with `visor state`, `--via` remoting, `util foreach` fan-out, `got` mesh fetches, and the `skywire --tui` interactive browser
+- [transports.md](transports.md) — the three sources of transport truth (local, remote-via-TPS, TPD), querying the network's transport graph, creating/removing transports locally and on remote visors, autoconnect
+- [multipath.md](multipath.md) — multiplexed route groups: starting apps with `--mux`, per-leg telemetry (`proxy mux info`), reshaping live groups, `mux-bw` measurements, and the WASM/Starlark routing-policy engine
+- [dmsg-tools.md](dmsg-tools.md) — the dmsg relay network from the CLI: carriers (tcp/quic/wss/WebTransport), server reachability probing (`mdisc check`, `dmsg conf probe`, `self-ping`), per-server pinning, and the standalone curl/cat/scp/iperf utilities
+- [deployment-health.md](deployment-health.md) — health, pprof profiles, and logs of the deployment services **and** any visor, fetched over dmsg: `svc health`, the discovery read APIs, and the survey-whitelist-gated `/debug` surfaces
+
 ## Advanced
 
 - [remote-visor-cli.md](remote-visor-cli.md) — drive a visor on another machine with `skywire cli --via`: the trust model (`hypervisors` / dmsgpty whitelist), hypervisor attach vs the full CLI bridge, the two-terminal remote-diagnosis session, and what of it works against the Android app's visor
