@@ -60,10 +60,14 @@ require (
 )
 
 require (
+	github.com/0magnet/gotop/v4 v4.2.1-0.20260901202627-53911da3ad77
+	github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
 	github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408
 	github.com/0magnet/realorigin v0.2.0
+	github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26
 	github.com/0magnet/termanim v0.0.0-20260827230242-7dd03f4a292e
 	github.com/0magnet/winbox-go v0.0.0-20260829031602-cfd539d747db
+	github.com/0magnet/yamux v0.1.3-0.20260901201804-38cdbd63617a
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/ccding/go-stun v0.1.6
@@ -197,9 +201,9 @@ require (
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/NYTimes/gziphandler v1.1.1 // indirect
-	github.com/VividCortex/ewma v1.2.0
+	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/alecthomas/chroma v0.10.0 // indirect
-	github.com/anatol/smart.go v0.0.0-20260723175002-53b369c3973c
+	github.com/anatol/smart.go v0.0.0-20260723175002-53b369c3973c // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/bytedance/gopkg v0.1.4 // indirect
 	github.com/bytedance/sonic v1.15.3 // indirect
@@ -215,12 +219,12 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/disintegration/imaging v1.6.2
-	github.com/distatus/battery v0.11.0
+	github.com/distatus/battery v0.11.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
-	github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1
+	github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1 // indirect
 	github.com/eliukblau/pixterm/pkg/ansimage v0.0.0-20191210081756-9fb6cf8c2f75 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.10.1
@@ -257,7 +261,7 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20260802145828-341c2f0c90b5 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
-	github.com/mattn/go-runewidth v0.0.28
+	github.com/mattn/go-runewidth v0.0.28 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -275,7 +279,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
-	github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0
+	github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0 // indirect
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/shoenig/go-m1cpu v0.2.2 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
@@ -292,7 +296,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.2 // indirect
 	github.com/valyala/fastrand v1.1.0 // indirect
-	github.com/valyala/histogram v1.2.0
+	github.com/valyala/histogram v1.2.0 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	github.com/xtaci/lossyconn v0.0.0-20200209145036-adba10fffc37 // indirect
 	github.com/xtaci/smux v1.5.57

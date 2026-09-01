@@ -8,10 +8,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/0magnet/yamux"
 	"github.com/armon/go-socks5"
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
