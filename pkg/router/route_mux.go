@@ -1188,8 +1188,21 @@ func (m *routeMux) rackThreshold() time.Duration {
 	if th < rackFloor {
 		th = rackFloor
 	}
-	if th > rackCeil {
-		th = rackCeil
+	// The absolute ceiling bounds the wait for a genuine loss, but it must
+	// never undercut one measured RTT: when queueing delay inflates the
+	// slow-leg EWMA past rackCeil (bufferbloat under load can push it to many
+	// seconds), presuming loss at a fixed 1.5s declares EVERY in-flight packet
+	// lost forever — the observed retransmit storm, which the DSACK-widened
+	// factor could not counter because this same clamp overrode it. Floor the
+	// ceiling at one measured RTT: waiting less than one RTT for an ack is
+	// definitionally spurious, and the wait stays bounded (max(rackCeil, RTT))
+	// rather than unbounded.
+	ceil := rackCeil
+	if rttDur := time.Duration(maxRtt) * time.Millisecond; rttDur > ceil {
+		ceil = rttDur
+	}
+	if th > ceil {
+		th = ceil
 	}
 	return th
 }
