@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/0magnet/yamux"
 	"github.com/chen3feng/safecast"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 	"github.com/xtaci/smux"
 
 	"github.com/skycoin/skywire/pkg/cipher"

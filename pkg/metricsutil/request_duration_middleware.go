@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
+	"github.com/0magnet/metrics"
 )
 
 // RequestDurationMiddleware is a request duration tracking middleware.

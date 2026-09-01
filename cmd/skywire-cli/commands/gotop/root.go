@@ -17,6 +17,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/0magnet/gotop/v4"
+	"github.com/0magnet/gotop/v4/colorschemes"
+	"github.com/0magnet/gotop/v4/devices"
+	"github.com/0magnet/gotop/v4/layout"
+	w "github.com/0magnet/gotop/v4/widgets"
+	"github.com/0magnet/metrics"
 	jj "github.com/cloudfoundry-attic/jibber_jabber"
 	ui "github.com/gizak/termui/v3"
 	"github.com/spf13/cobra"
@@ -26,12 +32,6 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
-	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
-	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4"
-	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/colorschemes"
-	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
-	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/layout"
-	w "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/widgets"
 )
 
 const (

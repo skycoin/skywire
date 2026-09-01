@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
+	"github.com/0magnet/yamux"
 )
 
 // rsFakeExit is a minimal SOCKS5 server over yamux that ignores the requested
