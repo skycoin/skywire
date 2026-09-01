@@ -15,8 +15,8 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/blang/semver/v4"
-	"github.com/pterm/pterm"
 	"github.com/sirupsen/logrus"
+	pterm "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/pterm"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 

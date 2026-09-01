@@ -17,8 +17,8 @@ import (
 	"runtime"
 	"time"
 
+	ipc "github.com/0magnet/golang-ipc"
 	"github.com/elazarl/goproxy"
-	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"

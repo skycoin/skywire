@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 // Package cliskychat cmd/skywire-cli/commands/skychat/tui_unified_io.go c4-vis-cli
 //
 // IO helpers for the unified TUI. Wraps the chat-app's /history/peers

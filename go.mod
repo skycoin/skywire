@@ -26,7 +26,6 @@ require (
 	github.com/gorilla/securecookie v1.1.2
 	github.com/hashicorp/go-version v1.9.0
 	github.com/ivanpirog/coloredcobra v1.0.1
-	github.com/james-barrow/golang-ipc v1.2.4
 	github.com/jaypipes/ghw v0.25.0
 	github.com/json-iterator/go v1.1.12
 	github.com/lib/pq v1.12.3
@@ -47,7 +46,7 @@ require (
 	github.com/toqueteos/webbrowser v1.2.1
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/yuin/goldmark v1.8.5
-	go.etcd.io/bbolt v1.5.0
+	go.etcd.io/bbolt v1.5.0 // indirect
 	golang.org/x/net v0.58.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
@@ -60,6 +59,8 @@ require (
 )
 
 require (
+	github.com/0magnet/bbolt v1.5.1-0.20260901195238-67a8edb71af1
+	github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260901202627-53911da3ad77
 	github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
 	github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408

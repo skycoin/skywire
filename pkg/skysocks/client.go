@@ -18,8 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	ipc "github.com/0magnet/golang-ipc"
 	"github.com/0magnet/yamux"
-	ipc "github.com/james-barrow/golang-ipc"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/proxyinterstitial"

@@ -13,6 +13,9 @@ package skyenv
 // SkywirePath is the platform-specific install root. js/wasm:
 // empty string. The install-page WASM doesn't perform host-side
 // filesystem operations.
+// OS names the runtime platform the way the per-OS skyenv files do.
+const OS = "js"
+
 const SkywirePath = ""
 
 // ConfigJSON is the platform-specific path component for the

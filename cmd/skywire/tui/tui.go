@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 // Package tui cmd/skywire/tui/tui.go
 //
 // An interactive console over the skywire command line: a scrollback of

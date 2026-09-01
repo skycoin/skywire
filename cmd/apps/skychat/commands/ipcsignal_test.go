@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	ipc "github.com/james-barrow/golang-ipc"
+	ipc "github.com/0magnet/golang-ipc"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
