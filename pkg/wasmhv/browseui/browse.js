@@ -289,6 +289,22 @@
   function createBrowser(opts) {
     var frame = opts.frame;
     var fetchDmsg = opts.fetchDmsg || function () { return globalThis.skywireVisor.fetchDmsg.apply(null, arguments); };
+    // Virtual-loopback channel: a host of 127.0.0.1[:port] / localhost[:port]
+    // routes over the page's vnet port table — the listeners of a wasm visor
+    // running IN this page (hypervisor UI :8000, etc.) — instead of dmsg.
+    // vnet.httpFetch returns the same {status, body, headers} shape, so the
+    // whole transcoder pipeline (subresources, favicon, in-site links, the
+    // page's fetch relay) works unchanged against a local listener.
+    function loopbackPort(h) {
+      var m = /^(?:localhost|127\.0\.0\.1|\[::1\]|::1)(?::(\d+))?$/i.exec(String(h || "").trim());
+      return m ? +(m[1] || 80) : 0;
+    }
+    var meshFetch = fetchDmsg;
+    fetchDmsg = function (pkHost, method, path, body) {
+      var lp = loopbackPort(pkHost);
+      if (lp && globalThis.vnet) return globalThis.vnet.httpFetch(lp, method, path, body);
+      return meshFetch(pkHost, method, path, body);
+    };
     // Per-window id so this window's clearnet requests get their OWN
     // skysocks-lite session/route (the Go side keys sessions by winId+exit).
     var winId = opts.winId || ("w" + (globalThis.__skywireBrowserSeq = (globalThis.__skywireBrowserSeq || 0) + 1));
@@ -611,6 +627,7 @@
     // when connected, when a newer navigation supersedes this one, or after ~30s
     // (then the caller proceeds; the overlay is cleared by renderSite/showError).
     async function waitForDmsg(entry, gen) {
+      if (loopbackPort(entry.pk)) { return; } // vnet target — no dmsg involved
       var st = await dmsgStatus();
       if (dmsgUp(st)) { return; }
       resetJourney();
@@ -631,7 +648,9 @@
       setLoading(true);
       try {
         // Real-origin: hand the whole load to the browser via an isolated origin.
-        if (realOriginCfg && entry.kind === "dmsg") {
+        // (Not for virtual-loopback targets — those live inside THIS page's vnet,
+        // which an isolated origin's Service Worker can't reach.)
+        if (realOriginCfg && entry.kind === "dmsg" && !loopbackPort(entry.pk)) {
           var dnet = (entry.scheme === "skynet") ? "skynet" : "dmsg";
           var rurl = await buildRealOrigin({ net: dnet, host: normResolverHost(entry.pk, dnet) }, entry.path);
           frame.removeAttribute("srcdoc");
@@ -651,6 +670,22 @@
           log("real-origin " + rurl);
           setLoading(false);
           return { status: 0, realOrigin: true };
+        }
+        // Virtual-loopback fall-through: nothing in-page listens on this port →
+        // load the REAL host loopback directly in the iframe (e.g. a native
+        // visor's UI on this machine). A running wasm-visor listener shadows
+        // the host port, exactly like a process binding it.
+        var lp0 = loopbackPort(entry.pk);
+        if (lp0 && !(globalThis.vnet && globalThis.vnet.listening(lp0))) {
+          var durl = (entry.scheme === "https" ? "https" : "http") + "://" + entry.pk + (entry.path || "/");
+          currentSitePK = "";
+          frame.removeAttribute("srcdoc");
+          frame.src = durl;
+          if (opts.setAddr) opts.setAddr(durl);
+          try { if (typeof hideConnecting === "function") { hideConnecting(); } } catch (e) {}
+          log("loopback direct (no vnet listener): " + durl);
+          setLoading(false);
+          return { status: 0, direct: true };
         }
         if (entry.kind === "clearnet") {
           var rc = await fetchClearnetEntry(entry.url, gen);
@@ -1342,6 +1377,10 @@
       // the mesh/dmsg path so it renders straight from the visor and is never gated
       // behind the "Connecting over skywire…" proxy interstitial it reports on.
       if (/\.(dmsg|skynet|skysocks)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
+        browser.browseTo(host + (u.port ? ":" + u.port : ""), path, (u.protocol || "http:").replace(":", ""));
+      } else if (/^(localhost|127\.0\.0\.1|::1|\[::1\])$/i.test(host)) {
+        // Virtual loopback: the listeners of a wasm visor running in this
+        // page (hypervisor UI :8000, …), reached over the vnet port table.
         browser.browseTo(host + (u.port ? ":" + u.port : ""), path, (u.protocol || "http:").replace(":", ""));
       } else {
         browser.browseToClearnet(hadScheme ? v : "https://" + v);

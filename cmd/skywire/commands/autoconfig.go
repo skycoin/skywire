@@ -412,9 +412,20 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 	isHypervisor := conf != nil && conf.Hypervisor != nil && conf.Hypervisor.Enable
 
 	if isHypervisor {
-		msg2(fmt.Sprintf("Hypervisor UI Starting now on:\n%shttp://127.0.0.1:8000%s", colorRed, colorReset))
+		// Derive the UI port from the config rather than hardcoding :8000 —
+		// the platform default differs (js binds :8001) and the operator may
+		// have overridden hypervisor.http_addr.
+		hvAddr := visorconfig.HTTPAddr()
+		if conf.Hypervisor != nil && conf.Hypervisor.HTTPAddr != "" {
+			hvAddr = conf.Hypervisor.HTTPAddr
+		}
+		hvPort := hvAddr
+		if i := strings.LastIndex(hvPort, ":"); i >= 0 {
+			hvPort = hvPort[i+1:]
+		}
+		msg2(fmt.Sprintf("Hypervisor UI Starting now on:\n%shttp://127.0.0.1:%s%s", colorRed, hvPort, colorReset))
 		if pubkey != "" {
-			vpnURL := fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s", pubkey)
+			vpnURL := fmt.Sprintf("http://127.0.0.1:%s/#/vpn/%s", hvPort, pubkey)
 			msg2(fmt.Sprintf("Use the vpn:\n%s%s%s", colorRed, vpnURL, colorReset))
 		}
 
@@ -422,7 +433,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		if len(lanIPs) > 0 {
 			hvURLs := "Hypervisor UI LAN access:"
 			for _, ip := range lanIPs {
-				hvURLs += fmt.Sprintf("\n%shttp://%s:8000%s", colorYellow, ip, colorReset)
+				hvURLs += fmt.Sprintf("\n%shttp://%s:%s%s", colorYellow, ip, hvPort, colorReset)
 			}
 			msg2(hvURLs)
 		}

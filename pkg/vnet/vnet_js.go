@@ -119,8 +119,15 @@ func (l *listener) Close() error {
 func (l *listener) Addr() net.Addr { return vnetAddr{port: l.port} }
 
 // conn adapts one side of a vnet pipe to net.Conn. The read path mirrors the
-// wsConnJS pattern: pull buffered chunks, otherwise arm a one-shot readable
-// callback and block (honoring the read deadline).
+// wsConnJS pattern: pull buffered chunks, otherwise arm a readable wakeup and
+// block (honoring the read deadline).
+//
+// SetReadDeadline must interrupt a Read that is ALREADY blocked — net/http's
+// connReader.abortPendingRead relies on exactly that (it sets a long-past
+// deadline and waits for the background Read to return; a Read that only
+// samples the deadline before blocking deadlocks the response teardown, which
+// presented as the hypervisor UI never finishing close-delimited responses).
+// So blocking Reads also listen on dlNotify and re-evaluate on every change.
 type conn struct {
 	id   int
 	side string
@@ -131,10 +138,31 @@ type conn struct {
 	closed    bool
 	rDeadline time.Time
 	notify    chan struct{}
+	dlNotify  chan struct{}
+
+	// wakeCh/wakeFn: reusable readable-wakeup callback for this conn. One
+	// js.Func per conn (never Released — vnet.js drops its reference when
+	// the conn closes, and a released Func invoked by a late microtask
+	// would throw "call to released function" instead).
+	wakeCh chan struct{}
+	wakeFn js.Func
 }
 
 func newConn(id int, side string, port int) *conn {
-	return &conn{id: id, side: side, port: port, notify: make(chan struct{}, 1)}
+	c := &conn{
+		id: id, side: side, port: port,
+		notify:   make(chan struct{}, 1),
+		dlNotify: make(chan struct{}, 1),
+		wakeCh:   make(chan struct{}, 1),
+	}
+	c.wakeFn = js.FuncOf(func(js.Value, []js.Value) interface{} {
+		select {
+		case c.wakeCh <- struct{}{}:
+		default:
+		}
+		return nil
+	})
+	return c
 }
 
 func (c *conn) Read(p []byte) (int, error) {
@@ -170,38 +198,36 @@ func (c *conn) Read(p []byte) (int, error) {
 			return 0, io.EOF
 		}
 
-		// Arm a one-shot wakeup, then wait (with deadline).
-		armed := make(chan struct{}, 1)
-		cb := js.FuncOf(func(js.Value, []js.Value) interface{} {
-			select {
-			case armed <- struct{}{}:
-			default:
-			}
-			return nil
-		})
-		v.Call("onReadable", c.id, c.side, cb)
-
 		var timeout <-chan time.Time
+		var timer *time.Timer
 		if !deadline.IsZero() {
 			d := time.Until(deadline)
 			if d <= 0 {
-				cb.Release()
 				return 0, timeoutError{}
 			}
-			t := time.NewTimer(d)
-			defer t.Stop()
-			timeout = t.C
+			timer = time.NewTimer(d)
+			timeout = timer.C
 		}
+
+		// Arm the wakeup, then wait for data, deadline, deadline CHANGE
+		// (loop back and re-evaluate), or close.
+		v.Call("onReadable", c.id, c.side, c.wakeFn)
+		var err error
 		select {
-		case <-armed:
+		case <-c.wakeCh:
 		case <-timeout:
-			cb.Release()
-			return 0, timeoutError{}
+			err = timeoutError{}
+		case <-c.dlNotify:
+			// re-evaluate the new deadline on the next loop iteration
 		case <-c.notify:
-			cb.Release()
-			return 0, net.ErrClosed
+			err = net.ErrClosed
 		}
-		cb.Release()
+		if timer != nil {
+			timer.Stop()
+		}
+		if err != nil {
+			return 0, err
+		}
 	}
 }
 
@@ -243,6 +269,12 @@ func (c *conn) SetReadDeadline(t time.Time) error {
 	c.mu.Lock()
 	c.rDeadline = t
 	c.mu.Unlock()
+	// Wake a blocked Read so it re-evaluates (and times out immediately if
+	// the new deadline is in the past — the abortPendingRead contract).
+	select {
+	case c.dlNotify <- struct{}{}:
+	default:
+	}
 	return nil
 }
 func (c *conn) SetWriteDeadline(time.Time) error { return nil }

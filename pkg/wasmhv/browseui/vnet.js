@@ -100,5 +100,101 @@
 			wake(c, peer(side));
 			if (c.closed.a && c.closed.b) conns.delete(id);
 		},
+
+		// httpFetch performs ONE HTTP request against a virtual-loopback port
+		// and resolves {status, body:Uint8Array, headers:{lowercased:value}} —
+		// the same shape as skywireVisor.fetchDmsg, so the nested browser can
+		// treat http://127.0.0.1:<port> as just another channel. Speaks
+		// HTTP/1.0 with Connection: close (no chunked encoding — EOF delimits
+		// the body), which Go's http.Server answers natively.
+		httpFetch(port, method, path, body, headers) {
+			return new Promise((resolve, reject) => {
+				const id = this.dial(port);
+				if (id < 0) { reject(new Error('connection refused: 127.0.0.1:' + port)); return; }
+				let done = false;
+				const timer = setTimeout(() => {
+					if (done) return;
+					done = true;
+					this.close(id, 'a');
+					reject(new Error('timeout: 127.0.0.1:' + port));
+				}, 30000);
+				const te = new TextEncoder();
+				let req = (method || 'GET') + ' ' + (path || '/') + ' HTTP/1.0\r\nHost: 127.0.0.1:' + port + '\r\n';
+				const h = headers || {};
+				for (const k in h) { if (Object.prototype.hasOwnProperty.call(h, k)) req += k + ': ' + h[k] + '\r\n'; }
+				let bodyBytes = null;
+				if (body != null) {
+					bodyBytes = (body instanceof Uint8Array) ? body : te.encode(String(body));
+					req += 'Content-Length: ' + bodyBytes.length + '\r\n';
+				}
+				req += 'Connection: close\r\n\r\n';
+				this.send(id, 'a', te.encode(req));
+				if (bodyBytes && bodyBytes.length) this.send(id, 'a', bodyBytes);
+				// Receive: parse the status line + headers as soon as they're
+				// complete, then finish once Content-Length bytes of body have
+				// arrived — servers that keep the connection alive (Go answers
+				// even an HTTP/1.0 Connection: close request without closing
+				// promptly) would hang an EOF-only reader. EOF remains the
+				// fallback delimiter when Content-Length is absent.
+				const chunks = [];
+				let total = 0;
+				let parsed = null; // {status, headers, bodyStart, contentLength}
+				const concat = () => {
+					const all = new Uint8Array(total);
+					let off = 0;
+					for (const c of chunks) { all.set(c, off); off += c.length; }
+					return all;
+				};
+				const tryParseHead = (all) => {
+					let sep = -1; // header/body split at CRLFCRLF
+					for (let i = 0; i + 3 < all.length; i++) {
+						if (all[i] === 13 && all[i + 1] === 10 && all[i + 2] === 13 && all[i + 3] === 10) { sep = i; break; }
+					}
+					if (sep < 0) return null;
+					const head = new TextDecoder().decode(all.subarray(0, sep));
+					const lines = head.split('\r\n');
+					const status = parseInt(lines[0].split(' ')[1] || '0', 10) || 0;
+					const hs = {};
+					for (let i = 1; i < lines.length; i++) {
+						const ci = lines[i].indexOf(':');
+						if (ci > 0) hs[lines[i].slice(0, ci).trim().toLowerCase()] = lines[i].slice(ci + 1).trim();
+					}
+					const cl = /^\d+$/.test(hs['content-length'] || '') ? parseInt(hs['content-length'], 10) : -1;
+					return { status: status, headers: hs, bodyStart: sep + 4, contentLength: cl };
+				};
+				const finish = (all) => {
+					if (done) return;
+					done = true;
+					clearTimeout(timer);
+					this.close(id, 'a');
+					if (!all) all = concat();
+					if (!parsed) parsed = tryParseHead(all);
+					if (!parsed) { reject(new Error('malformed HTTP response from 127.0.0.1:' + port)); return; }
+					let body = all.subarray(parsed.bodyStart);
+					if (parsed.contentLength >= 0 && body.length > parsed.contentLength) body = body.subarray(0, parsed.contentLength);
+					resolve({ status: parsed.status, body: body, headers: parsed.headers });
+				};
+				const pump = () => {
+					if (done) return;
+					for (;;) {
+						const b = this.recv(id, 'a');
+						if (b) {
+							chunks.push(b);
+							total += b.length;
+							if (!parsed || parsed.contentLength >= 0) {
+								const all = concat();
+								if (!parsed) parsed = tryParseHead(all);
+								if (parsed && parsed.contentLength >= 0 && total - parsed.bodyStart >= parsed.contentLength) { finish(all); return; }
+							}
+							continue;
+						}
+						if (this.eof(id, 'a')) { finish(null); return; }
+						this.onReadable(id, 'a', pump);
+						return;
+					}
+				};
+				pump();
+			});
+		},
 	};
 })();
