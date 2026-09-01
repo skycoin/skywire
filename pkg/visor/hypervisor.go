@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"github.com/skycoin/skywire/pkg/vnet"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -224,7 +225,7 @@ func (hv *Hypervisor) startUI() error {
 		WriteTimeout:      10 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	lis, err := net.Listen("tcp", hv.c.HTTPAddr)
+	lis, err := vnet.Listen("tcp", hv.c.HTTPAddr)
 	if err != nil {
 		hv.httpSrv = nil
 		return fmt.Errorf("hypervisor HTTP listen %s: %w", hv.c.HTTPAddr, err)

@@ -33,6 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/vnet"
 	"github.com/skycoin/skywire/pkg/vpn"
 )
 
@@ -605,7 +606,7 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var grpcServer *grpc.Server
 	if cliLocal && !v.cliLocalUp {
 		var err error
-		cliL, err = net.Listen("tcp", v.conf.CLIAddr)
+		cliL, err = vnet.Listen("tcp", v.conf.CLIAddr)
 		if err != nil {
 			return err
 		}

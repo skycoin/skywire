@@ -57,6 +57,15 @@ var browseJS []byte
 //go:embed jsfs.js
 var jsfsJS []byte
 
+// vnetJS installs the page's virtual loopback network (globalThis.vnet):
+// the port table + byte pipes that let the visor's RPC/HTTP listeners in one
+// wasm instance be dialed from the CLI in another — and by the nested
+// browser. Sits with jsfs at the top of the bundle: instances pick it up at
+// start.
+//
+//go:embed vnet.js
+var vnetJS []byte
+
 // skywireExecJS provides globalThis.skywireExec: per-invocation execution of
 // the full skywire CLI wasm module (served at /skywire.wasm) against jsfs,
 // with swappable stdio so the terminal captures each command's output.
@@ -71,8 +80,10 @@ var skywireExecJS []byte
 // harness) gets the window manager with no extra script wiring; only the wasm
 // module itself is a separate fetch, from WinBoxWasm below.
 var BrowseJS = func() []byte {
-	out := make([]byte, 0, len(jsfsJS)+len(winBoxExecJS)+len(winBoxLoaderJS)+len(browseJS)+len(skywireExecJS)+16)
+	out := make([]byte, 0, len(jsfsJS)+len(vnetJS)+len(winBoxExecJS)+len(winBoxLoaderJS)+len(browseJS)+len(skywireExecJS)+20)
 	out = append(out, jsfsJS...)
+	out = append(out, '\n', ';', '\n')
+	out = append(out, vnetJS...)
 	out = append(out, '\n', ';', '\n')
 	out = append(out, winBoxExecJS...)
 	out = append(out, '\n', ';', '\n')

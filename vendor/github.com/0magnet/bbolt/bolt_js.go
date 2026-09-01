@@ -27,7 +27,21 @@ func flock(_ *DB, _ bool, _ time.Duration) error { return nil }
 func funlock(_ *DB) error { return nil }
 
 // fdatasync flushes written data to a file descriptor.
-func fdatasync(db *DB) error { return db.file.Sync() }
+// fdatasync flushes written data and REFRESHES the emulated mapping: a real
+// mmap observes committed pages the moment they hit the file, but our mapping
+// is a copy taken at map time. Re-reading here — the commit flush point —
+// keeps page reads coherent with what the transaction just wrote.
+func fdatasync(db *DB) error {
+	if err := db.file.Sync(); err != nil {
+		return err
+	}
+	if db.dataref != nil {
+		if n, err := db.file.ReadAt(db.dataref, 0); err != nil && err != io.EOF && n == 0 {
+			return err
+		}
+	}
+	return nil
+}
 
 // mmap emulates memory-mapping by reading the file region into a slice.
 func mmap(db *DB, sz int) error {

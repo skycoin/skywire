@@ -19,7 +19,7 @@ fyne.io/systray/internal/generated/notifier
 github.com/0magnet/afero
 github.com/0magnet/afero/internal/common
 github.com/0magnet/afero/mem
-# github.com/0magnet/bbolt v1.5.1-0.20260901195238-67a8edb71af1
+# github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898
 ## explicit; go 1.25.0
 github.com/0magnet/bbolt
 github.com/0magnet/bbolt/errors

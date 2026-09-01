@@ -68,6 +68,8 @@ github.com/0magnet/afero v1.15.1-0.20260816202415-9f9d46a34dcd h1:zhADHH+Lu7o4U1
 github.com/0magnet/afero v1.15.1-0.20260816202415-9f9d46a34dcd/go.mod h1:JsJ3c6VwVpJOB3qUpT6YzgJ8yC+nBLUCcH2nhGLC6fA=
 github.com/0magnet/bbolt v1.5.1-0.20260901195238-67a8edb71af1 h1:J4a0eOZTTcZ6XIOpY6e+o8pc1grnm2C0eR+xFNAUax4=
 github.com/0magnet/bbolt v1.5.1-0.20260901195238-67a8edb71af1/go.mod h1:w+uhwkS5wbYmWTm2Dvvp3AWUR8TNrksPutxoBn4sESY=
+github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898 h1:5UyEWEOaKdF8RAfc/fBxqrpEgsga0NCuRYkA9xegoos=
+github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898/go.mod h1:w+uhwkS5wbYmWTm2Dvvp3AWUR8TNrksPutxoBn4sESY=
 github.com/0magnet/coloredcobra v1.0.2 h1:HmKUcBcpBpbdPv03XyIfH8iMOIG2TDQIkx3GLWGbtf4=
 github.com/0magnet/coloredcobra v1.0.2/go.mod h1:LuB8WMJUz/OsbiFXZnUEtHnpt112tBTZiUTiuAotXoY=
 github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e h1:fyLB1qUtpMxPeZp4MdZu5yLHHR+kLl2MZfhG0djlGIo=
