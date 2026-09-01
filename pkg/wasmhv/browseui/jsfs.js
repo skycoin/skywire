@@ -141,11 +141,20 @@
 	resolve('/dev').node.entries.set('null', devNull);
 	writeFileSeed('/etc/hostname', 'skywire-playground\n');
 	writeFileSeed('/etc/os-release', 'PRETTY_NAME="Skywire Playground (wasm)"\nID=skywire-playground\n');
+	// The SKYENV file, exactly as the Linux packages ship it: PKGENV=true
+	// makes `skywire autoconfig` / `skywire cli config gen` resolve the
+	// package paths (/opt/skywire/skywire.json). Edit it with the shell
+	// the same way you would on Linux.
+	writeFileSeed('/etc/skywire.conf',
+		'#/etc/skywire.conf\n' +
+		'#sourced by `skywire autoconfig` and `skywire cli config gen`\n' +
+		'PKGENV=true\n');
 	writeFileSeed('/home/user/README',
 		'This is an in-memory filesystem shared by the shell and the skywire binary.\n' +
 		'skywire is "installed" under /opt/skywire — try:\n' +
+		'    skywire autoconfig\n' +
 		'    skywire cli config gen -rp\n' +
-		'    cat /opt/skywire/skywire-config.json | jq .pk\n');
+		'    cat /opt/skywire/skywire.json | jq .pk\n');
 
 	// ---- stdio sinks -------------------------------------------------------
 	const td = new TextDecoder();
