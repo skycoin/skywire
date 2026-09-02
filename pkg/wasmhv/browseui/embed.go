@@ -36,6 +36,17 @@ var seedSkywireJS []byte
 //go:embed skywire-exec.js
 var skywireExecJS []byte
 
+// deskBootJS is the shared desk boot (skywireDeskBoot(opts)) behind both
+// desk-first pages: the docs playground and the converged visor page. Served
+// as its own asset (not part of the bundle) because it runs page-level
+// decisions the bundle must stay agnostic of.
+//
+//go:embed desk-boot.js
+var deskBootJS []byte
+
+// DeskBootJS returns desk-boot.js.
+func DeskBootJS() []byte { return deskBootJS }
+
 // BrowseJS is the full mini-desktop bundle — OS layer, window manager loader,
 // browser engine, skywire glue — injected into the wasm-visor page and the
 // native hypervisor dashboard as a single script asset. Concatenating here

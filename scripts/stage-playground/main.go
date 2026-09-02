@@ -25,8 +25,9 @@ func main() {
 		os.Exit(1)
 	}
 	files := map[string][]byte{
-		"bundle.js":   browseui.BrowseJS,
-		"winbox.wasm": browseui.WinBoxWasm(),
+		"bundle.js":    browseui.BrowseJS,
+		"desk-boot.js": browseui.DeskBootJS(),
+		"winbox.wasm":  browseui.WinBoxWasm(),
 	}
 	for name, data := range files {
 		p := filepath.Join(out, name)

@@ -62,12 +62,15 @@
 		return goLoaderPromise;
 	}
 
+	let execSeq = 0;
+
 	async function skywireExec(args, hooks) {
 		if (!globalThis.jsfs || !globalThis.jsfs.installed) {
 			throw new Error('jsfs is not installed — load jsfs.js before running commands');
 		}
 		await ensureGoLoader();
 		const mod = await compileOnce();
+		const iid = 'x' + (++execSeq);
 		const go = new Go();
 		go.argv = ['skywire', ...args];
 		go.env = {
@@ -82,6 +85,22 @@
 			for (const k in hooks.env) {
 				if (Object.prototype.hasOwnProperty.call(hooks.env, k)) go.env[k] = String(hooks.env[k]);
 			}
+		}
+		// Ctrl+C parity: the instance registers a JS-callable interrupt under
+		// this id (cmdutil.SignalContext under js), and hooks.instance hands
+		// the caller a way to invoke it — a foreground `skywire visor` then
+		// shuts down exactly as it would on SIGINT.
+		go.env.SKYWIRE_EXEC_ID = iid;
+		if (hooks && typeof hooks.instance === 'function') {
+			hooks.instance({
+				interrupt() {
+					try {
+						const reg = globalThis.__skywireSignals;
+						const f = reg && reg[iid];
+						if (f) f();
+					} catch (e) { /* instance already gone */ }
+				},
+			});
 		}
 		let code = 0;
 		go.exit = (c) => { code = c; };
@@ -105,6 +124,10 @@
 			await go.run(inst);
 		} finally {
 			stdio.stdout = prev.stdout; stdio.stderr = prev.stderr; stdio.stdin = prev.stdin;
+			try {
+				const reg = globalThis.__skywireSignals;
+				if (reg && reg[iid]) delete reg[iid]; // never call into an exited instance
+			} catch (e) { /* ignore */ }
 		}
 		return code;
 	}

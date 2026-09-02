@@ -33,12 +33,12 @@ func registerSkywireCmd() {
 	}
 	shell.RegisterApplet("skywire",
 		"run the real skywire CLI (full command tree; try: skywire --help)",
-		func(_ context.Context, s *shell.Shell, hc *interp.HandlerContext, args []string) int {
-			return runSkywireWasm(s, hc, args)
+		func(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, args []string) int {
+			return runSkywireWasm(ctx, s, hc, args)
 		})
 }
 
-func runSkywireWasm(s *shell.Shell, hc *interp.HandlerContext, args []string) int {
+func runSkywireWasm(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, args []string) int {
 	exec := js.Global().Get("skywireExec")
 	if !exec.Truthy() {
 		fmt.Fprintln(hc.Stderr, "skywire: skywire-exec.js not loaded") //nolint:errcheck
@@ -93,6 +93,39 @@ func runSkywireWasm(s *shell.Shell, hc *interp.HandlerContext, args []string) in
 	hooks := js.ValueOf(map[string]interface{}{})
 	hooks.Set("stdout", outF)
 	hooks.Set("stderr", errF)
+	// Ctrl+C parity: the shell cancels ctx on ^C; forward that to the command
+	// instance's registered interrupt so a foreground visor shuts down like it
+	// would on SIGINT. hooks.instance is invoked SYNCHRONOUSLY by skywireExec
+	// with { interrupt }, before the command starts.
+	interruptCh := make(chan js.Value, 1)
+	instF := js.FuncOf(func(_ js.Value, a []js.Value) interface{} {
+		if len(a) > 0 && a[0].Truthy() {
+			if f := a[0].Get("interrupt"); f.Type() == js.TypeFunction {
+				select {
+				case interruptCh <- f:
+				default:
+				}
+			}
+		}
+		return nil
+	})
+	defer instF.Release()
+	hooks.Set("instance", instF)
+	watchDone := make(chan struct{})
+	defer close(watchDone)
+	go func() {
+		select {
+		case <-ctx.Done():
+			// Wait for the instance to register if ^C raced its startup —
+			// watchDone ends the wait when the command finishes anyway.
+			select {
+			case f := <-interruptCh:
+				f.Invoke()
+			case <-watchDone:
+			}
+		case <-watchDone:
+		}
+	}()
 	// Terminal identity for the command instance: the help styling (the
 	// coloredcobra colors, the Matrix rain backdrop) decides by TERM/COLUMNS
 	// under js — isatty can't answer through a pipe, so the host says.
