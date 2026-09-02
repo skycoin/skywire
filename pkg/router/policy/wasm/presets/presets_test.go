@@ -346,12 +346,12 @@ func TestAdaptiveDecides(t *testing.T) {
 	// disjoint-exclude set) and on_tick parks the surplus as warm standby for
 	// dip-free promotion. The forward-lean / reverse-wide split is applied at SEND
 	// time, not baked into asymmetric rule setup. Per-direction ForwardMux/
-	// ReverseMux stay 0 (symmetric Mux drives it). Mux = adaptRevActive(1) +
-	// adaptStandbyMax(512) = 513 (true uncap, 2026-08-26 — the full disjoint pool
-	// the topology offers, filled in the background); this literal mirrors the
-	// native const in pkg/router/policy/preset/tick.go — keep them in sync.
-	if spec.Mux != 513 {
-		t.Errorf("Mux = %d, want 513 (1 active + 512 warm standby, full-duplex)", spec.Mux)
+	// ReverseMux stay 0 (symmetric Mux drives it). Mux = adaptRevActive(2, the
+	// #4376 active download-leg floor) + adaptStandbyMax(512, true uncap
+	// 2026-08-26) = 514; these literals mirror the native defaults in
+	// pkg/router/policy/preset/tick.go — keep them in sync.
+	if spec.Mux != 514 {
+		t.Errorf("Mux = %d, want 514 (2 active + 512 warm standby, full-duplex)", spec.Mux)
 	}
 	if spec.ForwardMux != 0 {
 		t.Errorf("ForwardMux = %d, want 0 (symmetric Mux drives adaptive)", spec.ForwardMux)
@@ -372,13 +372,13 @@ func TestAdaptiveDecides(t *testing.T) {
 
 // TestAdaptiveParksToSingleActiveLeg drives the composite adaptive preset's
 // on_tick through the WASM bundle with three over-provisioned active legs and no
-// load, and asserts it PARKS the surplus (newest first, never leg 0) down to the
-// single steady active leg — the property that makes an interactive / idle flow
-// ride ONE good leg instead of being scattered+reordered across a wide mux. The
-// parked legs become the warm-standby reserve. This exercises the gate-5
-// warm-standby primitive through the wasm ABI end to end; the detailed
-// health/anti-churn arbitration is unit-tested natively in the preset package
-// and cross-checked for wazero parity in parity_test.go.
+// load, and asserts it PARKS the surplus (newest first, never leg 0) down to
+// the steady active floor — TWO legs since #4376 (an active download floor so
+// a download always has a second live leg to lean on), the rest becoming the
+// warm-standby reserve. This exercises the gate-5 warm-standby primitive
+// through the wasm ABI end to end; the detailed health/anti-churn arbitration
+// is unit-tested natively in the preset package and cross-checked for wazero
+// parity in parity_test.go.
 func TestAdaptiveParksToSingleActiveLeg(t *testing.T) {
 	l, err := policywasm.NewLoaderBytes("adaptive", Bundle(),
 		policywasm.WithPreset("adaptive"))
@@ -418,11 +418,11 @@ func TestAdaptiveParksToSingleActiveLeg(t *testing.T) {
 			active++
 		}
 	}
-	if active != 1 || !legsActiveIsLeg0(legs) {
-		t.Errorf("adaptive should settle on a single active leg (leg 0); active=%d", active)
+	if active != 2 || legs[0].Standby {
+		t.Errorf("adaptive should settle on the two-leg active floor (#4376) incl leg 0; active=%d", active)
 	}
-	if standby != 2 {
-		t.Errorf("the two parked legs should form the warm-standby reserve; standby=%d", standby)
+	if standby != 1 {
+		t.Errorf("the parked surplus should form the warm-standby reserve; standby=%d", standby)
 	}
 }
 

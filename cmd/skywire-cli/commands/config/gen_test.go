@@ -136,13 +136,21 @@ func runConfigGenWithEnv(t *testing.T, envContent string, extraFlags ...string) 
 		t.Fatal(err)
 	}
 	flags := strings.Join(extraFlags, " ")
-	cmd := `cd ` + root + ` && SKYENV=` + envPath + ` CGO_ENABLED=0 go run -tags "withoutsystray withoutgotop" . cli config gen -n ` + flags
+	// QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING: on runners with small UDP buffer
+	// sysctls (CI), quic-go's std-log warning lands in the captured output
+	// ahead of the JSON and breaks the parse. The trim below is the belt for
+	// any other stray one-off log line.
+	cmd := `cd ` + root + ` && SKYENV=` + envPath + ` CGO_ENABLED=0 QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING=true go run -tags "withoutsystray withoutgotop" . cli config gen -n ` + flags
 	out, err := script.Exec(shell + ` -c '` + cmd + `'`).String()
 	if err != nil {
 		t.Fatalf("config gen failed: %v\noutput: %s", err, out)
 	}
+	jsonOut := out
+	if i := strings.Index(jsonOut, "{"); i > 0 {
+		jsonOut = jsonOut[i:]
+	}
 	var conf visorconfig.V1
-	if err := json.Unmarshal([]byte(out), &conf); err != nil {
+	if err := json.Unmarshal([]byte(jsonOut), &conf); err != nil {
 		t.Fatalf("failed to parse config JSON: %v\noutput: %.200s", err, out)
 	}
 	return &conf
