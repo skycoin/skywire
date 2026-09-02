@@ -100,10 +100,6 @@ func (c *wtClient) dialResolvedWT(ctx context.Context, rPK cipher.PubKey) (net.C
 	return nil, fmt.Errorf("wt: no dialable endpoint for %s", rPK)
 }
 
-// wtPath is the HTTP/3 path the WebTransport endpoint is served on; the
-// advertised URL includes it (e.g. "https://host:port/skywire").
-const wtPath = "/skywire"
-
 const (
 	// wtReRegisterInterval keeps the WT AR entry alive (< the AR's 2-min TTL),
 	// mirroring stcpr/quic.

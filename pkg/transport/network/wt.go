@@ -27,6 +27,11 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
+// wtPath is the HTTP/3 path the WebTransport endpoint is served on; the
+// advertised URL includes it (e.g. "https://host:port/skywire"). Untagged so
+// both the native dial path and the browser AR-resolve dial path share it.
+const wtPath = "/skywire"
+
 // WTEntry is a peer's WebTransport dial target: the https:// endpoint URL and
 // the lowercase SHA-256 hex of the server's self-signed cert (pinned exactly as
 // a browser pins it via serverCertificateHashes).

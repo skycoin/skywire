@@ -157,8 +157,11 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			localSupportsSTCPR := a.tm.IsKnownNetwork(tptypes.STCPR) && a.tm.CanCreateTransport(tptypes.STCPR)
 			localSupportsSQUICR := a.tm.IsKnownNetwork(tptypes.QUIC) && a.tm.CanCreateTransport(tptypes.QUIC)     // QUIC(squicr): 3rd distinct carrier family for route diversity
 			localSupportsWEBRTC := a.tm.IsKnownNetwork(tptypes.WEBRTC) && a.tm.CanCreateTransport(tptypes.WEBRTC) // NAT-traversing (ICE/STUN); reaches more NAT types than sudph hole-punch
-			if !localSupportsSUDPH && !localSupportsSTCPR {
-				a.log.Warn("No supported network types available locally (SUDPH and STCPR both unavailable)")
+			localSupportsWT := a.tm.IsKnownNetwork(tptypes.WT) && a.tm.CanCreateTransport(tptypes.WT)             // WT(swtr): HTTP/3 carrier — one of the three a browser visor can dial
+			localSupportsWS := a.tm.IsKnownNetwork(tptypes.WS) && a.tm.CanCreateTransport(tptypes.WS)             // WS(swsr): WebSocket riding the peer's stcpr port — ditto
+			if !localSupportsSUDPH && !localSupportsSTCPR && !localSupportsSQUICR &&
+				!localSupportsWT && !localSupportsWS && !localSupportsWEBRTC {
+				a.log.Warn("No supported network types available locally — skipping autoconnect cycle")
 				continue
 			}
 
@@ -252,6 +255,8 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			countSUDPH := 0
 			countSQUICR := 0
 			countWEBRTC := 0
+			countSWTR := 0
+			countSWSR := 0
 			existingByPK := make(map[cipher.PubKey]map[tptypes.Type]bool)
 			for _, autoconnTP := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
 				remotePK := autoconnTP.Remote()
@@ -268,6 +273,10 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					countSQUICR++
 				case tptypes.WEBRTC:
 					countWEBRTC++
+				case tptypes.WT:
+					countSWTR++
+				case tptypes.WS:
+					countSWSR++
 				}
 			}
 
@@ -339,6 +348,64 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				countSUDPH += phase3.Count
 			}
 
+			// Phase 3b: WT, then WS, to public visors that still lack ANY direct
+			// transport. These are two of the three carriers a browser visor can
+			// dial (it has no raw TCP/UDP socket): without this phase the
+			// root-binary visor under js could only ever form webrtc — the old
+			// wasm edge's own autoconnect dialed WT/WS and this one didn't. On a
+			// native visor the peers are normally reached by stcpr/sudph/quic
+			// above, so the no-direct filter keeps these phases from stacking
+			// extra transports onto already-reached peers; they only fire where
+			// the lighter families all failed. WT before WS mirrors the global
+			// preference order (…WT > WS > WEBRTC), and whatever succeeds here
+			// is then skipped by the WebRTC fallback's own hasDirect filter.
+			if localSupportsWT || localSupportsWS {
+				hasDirectTP := map[cipher.PubKey]bool{}
+				for _, tp := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
+					switch tp.Type() {
+					case tptypes.WEBRTC, tptypes.DMSG:
+						// webrtc is the tier below; dmsg is the relay baseline
+					default:
+						hasDirectTP[tp.Remote()] = true
+					}
+				}
+				var wtwsTargets []cipher.PubKey
+				for _, pk := range connectedPublicVisors {
+					if !hasDirectTP[pk] {
+						wtwsTargets = append(wtwsTargets, pk)
+					}
+				}
+				if len(wtwsTargets) > 0 && localSupportsWT {
+					a.log.Debug("Phase 3b: Connecting to direct-unreachable public visors via WT (swtr)")
+					phaseWT, err := a.conn.ConnectToVisors(ctx, v.conf.PK, wtwsTargets, tptypes.WT,
+						existingByPK, nil, maxPublicVisors, countSWTR, false)
+					if err != nil {
+						return err
+					}
+					countSWTR += phaseWT.Count
+					for _, pk := range phaseWT.Connected {
+						hasDirectTP[pk] = true
+					}
+				}
+				if localSupportsWS {
+					var wsTargets []cipher.PubKey
+					for _, pk := range wtwsTargets {
+						if !hasDirectTP[pk] {
+							wsTargets = append(wsTargets, pk)
+						}
+					}
+					if len(wsTargets) > 0 {
+						a.log.Debug("Phase 3c: Connecting to direct-unreachable public visors via WS (swsr)")
+						phaseWS, err := a.conn.ConnectToVisors(ctx, v.conf.PK, wsTargets, tptypes.WS,
+							existingByPK, nil, maxPublicVisors, countSWSR, false)
+						if err != nil {
+							return err
+						}
+						countSWSR += phaseWS.Count
+					}
+				}
+			}
+
 			// Phase 4: WebRTC as a LAST-RESORT fallback — only to peers no direct
 			// carrier (stcpr/sudph/squicr) could establish. WebRTC's ICE/STUN reaches
 			// more NAT types than sudph hole-punch, but it's heavy, so we spend it
@@ -388,6 +455,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			a.log.WithField("stcpr", countSTCPR).WithField("sudph", countSUDPH).
 				WithField("squicr", countSQUICR).
 				WithField("webrtc", countWEBRTC).
+				WithField("swtr", countSWTR).WithField("swsr", countSWSR).
 				WithField("public_visors", len(connectedPublicVisors)).
 				Debug("Public autoconnect cycle completed")
 		}
