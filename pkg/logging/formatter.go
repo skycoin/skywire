@@ -4,8 +4,6 @@ package logging
 import (
 	"bytes"
 	"fmt"
-	"io"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -13,7 +11,6 @@ import (
 
 	"github.com/mgutz/ansi"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/term"
 )
 
 const defaultTimestampFormat = time.RFC3339
@@ -171,14 +168,10 @@ func (f *TextFormatter) init(entry *logrus.Entry) {
 	}
 }
 
-func (f *TextFormatter) checkIfTerminal(w io.Writer) bool {
-	switch v := w.(type) {
-	case *os.File:
-		return term.IsTerminal(int(v.Fd())) //nolint:gosec
-	default:
-		return false
-	}
-}
+// checkIfTerminal lives in formatter_istty_native.go / formatter_istty_js.go:
+// isatty answers on native; under js/wasm stdout is always a pipe to the
+// runtime and only the host knows a terminal renders it (it says so via TERM),
+// so the visor's foreground logs in a browser terminal color like native.
 
 // SetColorScheme sets the TextFormatter's color scheme configuration
 func (f *TextFormatter) SetColorScheme(colorScheme *ColorScheme) {

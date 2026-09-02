@@ -72,7 +72,7 @@ github.com/0magnet/sh/v3/syntax
 ## explicit; go 1.22
 github.com/0magnet/sysinfo
 github.com/0magnet/sysinfo/cpuid
-# github.com/0magnet/termanim v0.0.0-20260902084711-a3c08295e7c7
+# github.com/0magnet/termanim v0.0.0-20260902091415-3987061b0ec7
 ## explicit; go 1.25.0
 github.com/0magnet/termanim/canvas
 github.com/0magnet/termanim/matrix

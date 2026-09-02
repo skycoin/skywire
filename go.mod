@@ -68,7 +68,7 @@ require (
 	github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408
 	github.com/0magnet/realorigin v0.2.0
 	github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26
-	github.com/0magnet/termanim v0.0.0-20260902084711-a3c08295e7c7
+	github.com/0magnet/termanim v0.0.0-20260902091415-3987061b0ec7
 	github.com/0magnet/winbox-go v0.0.0-20260902000349-e769f33dd0fa
 	github.com/0magnet/yamux v0.1.3-0.20260901201804-38cdbd63617a
 	github.com/DATA-DOG/go-sqlmock v1.5.2

@@ -287,6 +287,14 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 			w.Header().Set("Cache-Control", "no-cache")
 			http.ServeFile(w, r, execWasmPath)
 		})
+		// /desk — the CONVERGED page: the tab as a Linux host. No SharedWorker
+		// visor; the terminal runs `skywire autoconfig` which starts the FULL
+		// binary's visor in the foreground, a second terminal shows the help,
+		// and once the hypervisor UI listens on the virtual loopback the
+		// nested browser opens it maximized on top. A visor the operator
+		// stopped stays stopped across reloads (desk-boot's session).
+		serveBytes("/desk-boot.js", "text/javascript", wasmhv.DeskBootJS())
+		serveBytes("/desk", "text/html; charset=utf-8", []byte(deskPageHTML))
 	}
 	serveBytes("/winbox.wasm", "application/wasm", wasmhv.WinBoxWasm())
 	serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
@@ -905,3 +913,61 @@ func browseSWAssetType(p string) string {
 	}
 	return "text/javascript"
 }
+
+// deskPageHTML is the converged desk page served at /desk when --exec-wasm is
+// set. Assets come from the routes this server already exposes: /browse.js is
+// the full desk bundle, /wasm-visor.wasm the desk host (raw), /skywire.wasm
+// the command module, /wasm_exec.js?variant=go the matching loader.
+const deskPageHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>skywire</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e0c14;color:#cdd2da;font:14px/1.5 system-ui,sans-serif}
+  #boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8em;z-index:10}
+  #boot .t{color:#9d7cff;font:600 18px system-ui}
+  #boot .s{color:#9aa0a6;font:12px monospace;max-width:44em;text-align:center}
+  #boot.gone{display:none}
+</style>
+</head>
+<body>
+<div id="boot">
+  <div class="t">skywire</div>
+  <div class="s" id="boot-msg">loading…</div>
+</div>
+<script>
+window.__errs = [];
+Error.stackTraceLimit = 300;
+addEventListener('error', function (e) {
+  if (window.__errs.length < 20) {
+    var s = String((e.error && e.error.stack) || e.message || e);
+    window.__errs.push(s.slice(0, 600) + '\n…\n' + s.slice(-2400));
+  }
+});
+</script>
+<script src="/wasm_exec.js?variant=go"></script>
+<script src="/browse.js"></script>
+<script src="/desk-boot.js"></script>
+<script>
+skywireDeskBoot({
+  persistDB: 'skywire-desk',
+  deskWasmURL: '/wasm-visor.wasm',
+  wasmURL: '/skywire.wasm',
+  wasmExecURL: '/wasm_exec.js?variant=go',
+  winboxURL: '/winbox.wasm',
+  autostartVisor: true,
+  helpTerminal: true,
+  hvWindow: true,
+  onStatus: function (s) { var el = document.getElementById('boot-msg'); if (el) el.textContent = s; },
+}).then(function () {
+  document.getElementById('boot').className = 'gone';
+}).catch(function (e) {
+  var el = document.getElementById('boot-msg');
+  if (el) el.textContent = 'boot failed: ' + ((e && e.message) || e);
+});
+</script>
+</body>
+</html>
+`
