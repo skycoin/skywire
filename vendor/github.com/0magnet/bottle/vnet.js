@@ -31,6 +31,9 @@
 		if (cb) { c.wake[side] = null; queueMicrotask(cb); }
 	}
 
+	// Service-worker bridge state (see enableSW below).
+	let swPrefix = null;
+
 	globalThis.vnet = {
 		// listen claims a port; onconn(connId) fires per inbound dial (the
 		// accepter is side 'b' of that conn). Returns false if taken.
@@ -195,6 +198,66 @@
 				};
 				pump();
 			});
+		},
+
+		// enableSW registers the vnet service worker (vnet-sw.js) and installs
+		// the responder that answers its forwarded requests from this page's
+		// port table. Once resolved, swURL() returns REAL same-origin URLs for
+		// virtual ports — an <iframe src=vnet.swURL(8001)> loads a server
+		// running inside this page with fully native resolution (module
+		// graphs, XHR, history), no transcoding. Resolves to true when the
+		// bridge is live, false when service workers are unavailable (no
+		// secure context, file://, browser policy) — callers fall back to
+		// whatever they did before.
+		enableSW(swPath, prefix) {
+			// Default the scope to a vnet/ directory BESIDE the page, so the
+			// bridge works for pages deployed under a subdirectory (GitHub
+			// Pages) exactly as at a server root.
+			if (!prefix) {
+				try { prefix = new URL('vnet/', location.href).pathname; } catch (e) { prefix = '/vnet/'; }
+			}
+			if (swPrefix) return Promise.resolve(true);
+			if (!('serviceWorker' in navigator)) return Promise.resolve(false);
+			navigator.serviceWorker.addEventListener('message', (ev) => {
+				const m = ev.data || {};
+				if (m.type !== 'vnet-fetch' || !ev.ports || !ev.ports[0]) return;
+				const reply = ev.ports[0];
+				if (!this.listening(m.port)) { reply.postMessage({ refused: true }); return; }
+				this.httpFetch(m.port, m.method, m.path, m.body, m.headers)
+					.then((r) => {
+						// Uint8Array bodies structured-clone fine; pass headers as
+						// a plain object (already lowercased by httpFetch).
+						reply.postMessage({ status: r.status, headers: r.headers, body: r.body });
+					})
+					.catch(() => { reply.postMessage({ status: 502, headers: { 'content-type': 'text/plain' }, body: new TextEncoder().encode('vnet: fetch failed') }); });
+			});
+			const url = (swPath || 'vnet-sw.js') + '?prefix=' + encodeURIComponent(prefix);
+			return navigator.serviceWorker.register(url, { scope: prefix })
+				.then((reg) => new Promise((resolve) => {
+					// Wait on THIS registration's worker reaching 'activated'.
+					// (navigator.serviceWorker.ready is the wrong wait here: it
+					// tracks the registration matching the PAGE's URL, and the
+					// registering page normally lives outside the vnet scope —
+					// it would never resolve.)
+					const settle = (w) => {
+						if (!w) { resolve(false); return; }
+						if (w.state === 'activated') { resolve(true); return; }
+						w.addEventListener('statechange', () => {
+							if (w.state === 'activated') resolve(true);
+							else if (w.state === 'redundant') resolve(false);
+						});
+					};
+					settle(reg.active || reg.waiting || reg.installing);
+				}))
+				.then((ok) => { if (ok) swPrefix = prefix; return ok; })
+				.catch(() => false);
+		},
+
+		// swURL returns the real same-origin URL prefix for a virtual port
+		// ('/vnet/8001/'), or null when the service-worker bridge is not live.
+		swURL(port, path) {
+			if (!swPrefix) return null;
+			return swPrefix + port + (path || '/');
 		},
 	};
 })();

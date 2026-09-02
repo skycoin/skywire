@@ -51,10 +51,19 @@
 	function loadSession() {
 		try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) { return null; }
 	}
+	// visorSawUp: whether THIS page ever observed its visor listening. The
+	// session records "stopped" ONLY after up-then-down — a save that fires
+	// while the visor is still booting (visibilitychange the moment another
+	// tab covers the page) must not masquerade as an operator stop, or every
+	// later load skips the autostart forever.
+	var visorSawUp = false;
 	function saveSession() {
 		try {
+			var up = !!(globalThis.vnet && globalThis.vnet.listening(3435));
+			if (up) { visorSawUp = true; }
+			if (!up && !visorSawUp) { return; } // still booting (or never started) — keep the previous verdict
 			localStorage.setItem(SESSION_KEY, JSON.stringify({
-				visorRunning: !!(globalThis.vnet && globalThis.vnet.listening(3435)),
+				visorRunning: up,
 				at: Date.now(),
 			}));
 		} catch (e) { /* storage denied — session just resets to defaults */ }
@@ -69,8 +78,25 @@
 		skywireExec.wasmExecURL = opts.wasmExecURL || 'wasm_exec.js';
 		globalThis.__WINBOX_WASM_URL__ = opts.winboxURL || 'winbox.wasm';
 
+		// The vnet service worker: registered up front (it takes a moment to
+		// activate), so by the time anything opens a loopback window the
+		// nested browser can use real /vnet/<port>/ URLs — native rendering
+		// for the hypervisor UI. Resolves false where SWs are unavailable;
+		// the browser falls back to its transcoder, as before.
+		var swReady = (globalThis.vnet && globalThis.vnet.enableSW)
+			? globalThis.vnet.enableSW(opts.vnetSWURL || 'vnet-sw.js').catch(function () { return false; })
+			: Promise.resolve(false);
+
 		status('restoring filesystem…');
-		return jsfs.persist.enable(opts.persistDB || 'skywire-desk').then(function (p) {
+		return jsfs.persist.enable(opts.persistDB || 'skywire-desk', {
+			// Persist identity + config + user files; NEVER the runtime
+			// stores. A bbolt database snapshotted mid-write restores corrupt
+			// and hangs its consumer on the next boot (the hypervisor module
+			// stalling on a restored users.db) — caches rebuild, keys don't.
+			exclude: function (p) {
+				return /\.db$/.test(p) || p.indexOf('/opt/skywire/local/') === 0 || p === '/opt/skywire/local';
+			},
+		}).then(function (p) {
 			status((p.restored ? 'filesystem restored — ' : '') + 'starting the desk…');
 			// The desk host: the wasm-visor binary in-page. It installs the
 			// shell + the skywireVisor API and waits — boot() is never called,
@@ -104,10 +130,17 @@
 			// Session: remember across reloads whether a visor was RUNNING when
 			// the page went away — a visor the operator stopped stays stopped.
 			var session = loadSession();
-			addEventListener('pagehide', saveSession);
-			addEventListener('visibilitychange', function () {
-				if (document.visibilityState === 'hidden') saveSession();
-			});
+			if (opts.autostartVisor) {
+				addEventListener('pagehide', saveSession);
+				addEventListener('visibilitychange', function () {
+					if (document.visibilityState === 'hidden') saveSession();
+				});
+				// Track up-transitions continuously so a save after a stop can
+				// tell "operator stopped it" from "it never came up".
+				setInterval(function () {
+					if (globalThis.vnet && globalThis.vnet.listening(3435)) { visorSawUp = true; }
+				}, 2000);
+			}
 
 			var startVisor = !!opts.autostartVisor && !(session && session.visorRunning === false);
 			var startedVisor = false;
@@ -121,20 +154,29 @@
 			if (opts.helpTerminal !== false) {
 				panel.openConsole({ title: 'skywire', initCmd: 'skywire --help' });
 			}
-			if (opts.hvWindow && startVisor) {
+			if (opts.hvWindow) {
 				// The hypervisor UI comes up on the virtual loopback a while
 				// after boot (its module waits on the visor tree + dmsg).
-				// Open the window once something actually listens.
+				// Open the window once something actually listens — armed even
+				// when the session suppressed the autostart, so a visor the
+				// operator starts BY HAND still gets its UI window. Autostarted
+				// visors get a bounded wait; the manual case waits as long as
+				// the page lives.
 				(function waitHV(n) {
 					if (globalThis.vnet && globalThis.vnet.listening(hvPort)) {
-						try {
-							var win = panel.openWindow(true); // skipLanding
-							win.browser.browseTo('127.0.0.1:' + hvPort, '/');
-							if (win.wb && win.wb.maximize) win.wb.maximize(true);
-						} catch (e) { console.error('hv window:', e); }
+						// Hold the open until the service-worker question is
+						// settled either way — opening a beat earlier would
+						// route this first load through the transcoder.
+						swReady.then(function () {
+							try {
+								var win = panel.openWindow(true); // skipLanding
+								win.browser.browseTo('127.0.0.1:' + hvPort, '/');
+								if (win.wb && win.wb.maximize) win.wb.maximize(true);
+							} catch (e) { console.error('hv window:', e); }
+						});
 						return;
 					}
-					if (n > 360) return; // ~3min — visor never served a UI; skip
+					if (startVisor && n > 360) return; // ~3min — the autostarted visor never served a UI
 					setTimeout(function () { waitHV(n + 1); }, 500);
 				})(0);
 			}
