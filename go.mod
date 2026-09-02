@@ -64,7 +64,7 @@ require (
 	github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260901202627-53911da3ad77
 	github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
-	github.com/0magnet/netscrape v0.0.0-20260902195455-ed17b71dd13b
+	github.com/0magnet/netscrape v0.0.0-20260902211921-ffd322b843c0
 	github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408
 	github.com/0magnet/realorigin v0.2.0
 	github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26

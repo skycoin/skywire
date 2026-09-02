@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
 	"github.com/armon/go-socks5"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/proxy"
@@ -483,7 +484,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 
 	// Open the listener ourselves so we can close it on ctx cancel —
 	// armon/go-socks5's Serve returns when the listener is closed.
-	lis, err := net.Listen("tcp", lisAddr)
+	lis, err := vnet.Listen("tcp", lisAddr) // bottle/vnet: real socket natively, page port table under js
 	if err != nil {
 		return fmt.Errorf("SOCKS5 listen: %w", err)
 	}

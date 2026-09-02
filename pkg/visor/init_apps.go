@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	mathrand "math/rand"
 	"mime"
 	"net"
 	nrpc "net/rpc"
@@ -119,6 +120,21 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 		})
 	}
 
+	// Proxy-client auto-exit. skysocks-client hard-requires a server key —
+	// autostart with none configured would just crash-loop. Instead of
+	// letting it, defer its autostart and pick an exit from service
+	// discovery in the background (autoStartProxyClient), then start the
+	// app through the same path `cli proxy start` uses. This is what makes
+	// a browser visor's proxy chain work out of the box, and turns the
+	// native "autostart but no PK" misconfiguration into something useful.
+	autoProxyClient := false
+	for i, ac := range apps {
+		if ac.Name == skyenv.SkysocksClientName && ac.AutoStart && !argsContain(ac.Args, "--srv") {
+			apps[i].AutoStart = false
+			autoProxyClient = true
+		}
+	}
+
 	// Prepare launcher.
 	launchConf := launcher.AppLauncherConfig{
 		VisorPK:       v.conf.PK,
@@ -153,7 +169,61 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	v.appL = launch
 	v.initLock.Unlock()
 
+	if autoProxyClient {
+		go v.autoStartProxyClient(v.MasterLogger().PackageLogger("proxy_client_auto")) //nolint:gosec // G118: uses v.ctx, outlives the init ctx by design
+	}
+
 	return nil
+}
+
+// argsContain reports whether an app's args include the given flag.
+func argsContain(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag {
+			return true
+		}
+	}
+	return false
+}
+
+// autoStartProxyClient picks a proxy exit from service discovery and starts
+// skysocks-client on it — the deferred autostart for a config that says
+// "autostart the proxy client" without pinning a server. Retries the whole
+// cycle while the visor lives: discovery needs dmsg up, and early fetches
+// legitimately fail during boot. Exits once the client starts (the app's own
+// retrier + restart policy take over from there).
+func (v *Visor) autoStartProxyClient(log *logging.Logger) {
+	ctx := v.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+		svcs, err := v.ProxyServers("", "")
+		if err != nil || len(svcs) == 0 {
+			continue
+		}
+		// Random order, a handful of candidates per cycle: a dead exit
+		// shouldn't pin the loop, and the whole list shouldn't be dialed.
+		idx := mathrand.Perm(len(svcs))
+		tries := len(idx)
+		if tries > 5 {
+			tries = 5
+		}
+		for _, i := range idx[:tries] {
+			pk := svcs[i].Addr.PubKey().String()
+			if err := v.StartSkysocksClient(pk); err != nil {
+				log.WithError(err).Debug("proxy-client auto-exit candidate failed; trying another")
+				continue
+			}
+			log.WithField("exit", pk).Info("Proxy client auto-started on a discovered exit")
+			return
+		}
+	}
 }
 
 // appsContains reports whether an apps[] slice already contains an

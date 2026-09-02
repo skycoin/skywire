@@ -574,6 +574,22 @@ var genConfigCmd = &cobra.Command{
 		if isUsrEnv {
 			isHypervisor = true
 		}
+		// Browser visor defaults: the resolving-proxy chain + the proxy
+		// client ARE the page's clearnet path (the nested browser chains
+		// dmsgweb :4445 → skynetweb :4446 → skysocks-client :1080 on the
+		// virtual loopback), so they default ON under js — explicit flags
+		// still win either way.
+		if skyenv.OS == "js" {
+			if !cmd.Flags().Changed("dmsgweb") {
+				enableDmsgWeb = true
+			}
+			if !cmd.Flags().Changed("skynetweb") {
+				enableSkynetWeb = true
+			}
+			if !cmd.Flags().Changed("startproxyclient") {
+				enableProxyClientAutostart = true
+			}
+		}
 		//use test deployment
 		if isTestEnv {
 			serviceConfURL = testServiceConfURL
