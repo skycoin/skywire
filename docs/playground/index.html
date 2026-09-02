@@ -18,8 +18,7 @@
   <div class="s" id="boot-msg">loading…</div>
 </div>
 <script>
-// Early error trap: keep full stacks of uncaught errors for diagnosis
-// (devtools-free environments — CI probes, bug reports).
+// Early error trap: keep uncaught-error stacks for diagnosis without devtools.
 window.__errs = [];
 Error.stackTraceLimit = 300;
 addEventListener('error', function (e) {
@@ -29,100 +28,34 @@ addEventListener('error', function (e) {
   }
 });
 </script>
-<!-- Go's wasm_exec loader (standard Go — both modules here are std-Go builds). -->
+<!-- Go's wasm_exec loader (standard Go — every module here is a std-Go build). -->
 <script src="wasm_exec.js"></script>
 <!-- The desk bundle: bottle (jsfs + vnet) → skywire seeding → winbox → browse.js → skywire-exec. -->
 <script src="bundle.js"></script>
+<script src="desk-boot.js"></script>
 <script>
-// The skywire playground: a browser tab laid out like a Linux host.
-//
-// No visor runs by default. The desk (winbox windows over a panel) opens with
-// one terminal already showing `skywire --help`; from there the Linux ritual
-// works exactly as the docs describe it:
+// The skywire playground: a browser tab laid out like a Linux host. No visor
+// runs by default — the desk opens with a terminal that has just run
+// `skywire --help`, and the Linux ritual is typed from there:
 //
 //   skywire autoconfig                        # visor starts IN this terminal
-//   skywire cli visor info                    # from a second terminal
+//   skywire cli visor info                    # from a second terminal (☰ → console)
 //   skywire cli proxy start <exit-pk>         # SOCKS5 on 127.0.0.1:1080
 //   curl -x socks5h://127.0.0.1:1080 https://example.com/
 //
-// and the nested browser reaches the visor's own hypervisor UI at
-// http://127.0.0.1:8001 over the tab's virtual loopback. The filesystem
-// persists in IndexedDB across reloads.
-(function () {
-  'use strict';
-  var msg = function (s) { var el = document.getElementById('boot-msg'); if (el) el.textContent = s; };
-
-  // Command modules are fetched relative to this page; .gz is inflated in-page
-  // (static hosting can't set Content-Encoding).
-  skywireExec.wasmURL = 'skywire.wasm.gz';
-  skywireExec.wasmExecURL = 'wasm_exec.js';
-  globalThis.__WINBOX_WASM_URL__ = 'winbox.wasm';
-
-  function gunzipFetch(url) {
-    return fetch(url).then(function (r) {
-      if (!r.ok) throw new Error('fetch ' + url + ': HTTP ' + r.status);
-      var inflated = r.body.pipeThrough(new DecompressionStream('gzip'));
-      return new Response(inflated, { headers: { 'Content-Type': 'application/wasm' } }).arrayBuffer();
-    });
-  }
-
-  function waitFor(fn, what, tries) {
-    return new Promise(function (res, rej) {
-      var n = 0;
-      (function poll() {
-        var v = fn();
-        if (v) { res(v); return; }
-        if (++n > (tries || 600)) { rej(new Error('timed out waiting for ' + what)); return; }
-        setTimeout(poll, 50);
-      })();
-    });
-  }
-
-  var q = new URLSearchParams(location.search);
-  msg('restoring filesystem…');
-  (q.has('nopersist') ? Promise.resolve({ restored: false }) : jsfs.persist.enable('skywire-playground')).then(function (p) {
-    msg((p.restored ? 'filesystem restored — ' : '') + 'starting the desk…');
-    // Boot the desk host: the wasm-visor binary in-page. It installs the
-    // shell + the skywireVisor API and then waits — the page never calls
-    // boot(), so NO visor runs until you start one in a terminal.
-    return gunzipFetch('wasm-visor.wasm.gz');
-  }).then(function (buf) {
-    var go = new Go();
-    go.exit = function (c) { console.log('DESK-HOST exited, code', c, 'at', Math.round(performance.now()) + 'ms'); };
-    return WebAssembly.instantiate(buf, go.importObject).then(function (r) {
-      go.run(r.instance).then(
-        function () { console.log('DESK-HOST run() resolved at', Math.round(performance.now()) + 'ms'); },
-        function (e) { console.log('DESK-HOST run() rejected:', String(e)); }
-      ); // installs globals, then blocks
-      return Promise.all([
-        waitFor(function () { return globalThis.skywireShell; }, 'the shell'),
-        waitFor(function () { return globalThis.SkywireBrowse; }, 'browse.js'),
-        waitFor(function () { return typeof globalThis.WinBox === 'function'; }, 'the window manager'),
-      ]);
-    });
-  }).then(function () {
-    var sv = globalThis.skywireVisor;
-    var p = globalThis.SkywireBrowse.mountPanel(document, {
-      noTour: true, // the tour narrates the visor page; this desk boots no visor
-      fetchDmsg: function () { return sv.fetchDmsg.apply(null, arguments); },
-      serveContent: function (m) { return sv.serveContent(m); },
-      selfPK: function () { try { return sv.status().pk || ''; } catch (e) { return ''; } },
-      api: function (m, path, body) {
-        return sv.hvApi(m, path, body).then(function (r) {
-          return { status: r.status, body: new TextDecoder().decode(r.body) };
-        });
-      },
-    });
-    globalThis.__skywireDesk = p;
-    document.getElementById('boot').className = 'gone';
-    // Default layout: one terminal, already showing the top-level help.
-    if (!q.has('noconsole')) {
-      p.openConsole({ title: 'skywire', initCmd: q.has('noinit') ? '' : 'skywire --help' });
-    }
-  }).catch(function (e) {
-    msg('boot failed: ' + (e && e.message || e));
-  });
-})();
+// The nested browser reaches the visor's hypervisor UI at http://127.0.0.1:8001
+// over the tab's virtual loopback, and the filesystem persists in IndexedDB.
+skywireDeskBoot({
+  persistDB: 'skywire-playground',
+  autostartVisor: false,
+  helpTerminal: true,
+  onStatus: function (s) { var el = document.getElementById('boot-msg'); if (el) el.textContent = s; },
+}).then(function () {
+  document.getElementById('boot').className = 'gone';
+}).catch(function (e) {
+  var el = document.getElementById('boot-msg');
+  if (el) el.textContent = 'boot failed: ' + ((e && e.message) || e);
+});
 </script>
 </body>
 </html>

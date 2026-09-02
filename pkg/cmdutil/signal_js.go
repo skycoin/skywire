@@ -7,8 +7,36 @@
 // SignalContext compiles and behaves as an ordinary cancelable context.
 package cmdutil
 
-import "os"
+import (
+	"os"
+	"syscall/js"
+)
 
 func listenSignals() []os.Signal {
 	return []os.Signal{os.Interrupt}
+}
+
+// notifyPlatformInterrupt registers a JS-callable interrupt for this
+// instance: globalThis.__skywireSignals[SKYWIRE_EXEC_ID] — invoked by the
+// page (the shell's Ctrl+C handler via skywire-exec.js) to deliver
+// os.Interrupt exactly as a terminal would. Instances launched without an
+// id (a bare harness) register nothing.
+func notifyPlatformInterrupt(ch chan<- os.Signal) {
+	id := os.Getenv("SKYWIRE_EXEC_ID")
+	if id == "" {
+		return
+	}
+	g := js.Global()
+	reg := g.Get("__skywireSignals")
+	if !reg.Truthy() {
+		reg = g.Get("Object").New()
+		g.Set("__skywireSignals", reg)
+	}
+	reg.Set(id, js.FuncOf(func(js.Value, []js.Value) any {
+		select {
+		case ch <- os.Interrupt:
+		default:
+		}
+		return nil
+	}))
 }
