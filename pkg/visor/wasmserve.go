@@ -277,6 +277,10 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
 	serveBytes("/worker.js", "text/javascript", wasmhv.WorkerJS)
 	serveBytes("/browse.js", "text/javascript", wasmhv.BrowseJS)
+	// The vnet service worker: real same-origin /vnet/<port>/ URLs into the
+	// page's virtual loopback, so the nested browser renders in-page servers
+	// (the hypervisor UI SPA) natively. Must live beside the pages (scope cap).
+	serveBytes("/vnet-sw.js", "text/javascript", wasmhv.VNetSWJS())
 	// The full skywire CLI module for the terminal's `skywire` command —
 	// served from disk (too large to embed), gzip left to the transport.
 	// Absent path = 404, and the shell simply doesn't register the command.

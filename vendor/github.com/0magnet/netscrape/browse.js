@@ -289,6 +289,18 @@
   function createBrowser(opts) {
     var frame = opts.frame;
     var fetchDmsg = opts.fetchDmsg || function () { return globalThis.skywireVisor.fetchDmsg.apply(null, arguments); };
+    // The iframe's sandbox is per-navigation state: transcoded/remote content
+    // keeps the original sandbox, while a service-worker vnet load must run
+    // UNsandboxed (an opaque-origin document is not controlled by the page's
+    // service worker, so its module/XHR subresources would bypass the vnet
+    // bridge). The attribute only applies at load time, so flipping it right
+    // before each navigation is exact.
+    var frameSandbox = frame.getAttribute && frame.getAttribute("sandbox");
+    function frameTrusted(on) {
+      if (frameSandbox == null) return; // page runs frames unsandboxed anyway (real-origin build)
+      if (on) frame.removeAttribute("sandbox");
+      else frame.setAttribute("sandbox", frameSandbox);
+    }
     // Virtual-loopback channel: a host of 127.0.0.1[:port] / localhost[:port]
     // routes over the page's vnet port table — the listeners of a wasm visor
     // running IN this page (hypervisor UI :8000, etc.) — instead of dmsg.
@@ -646,6 +658,7 @@
       var gen = ++loadGen;
       resetFavicon(); // default icon now; the site's own favicon replaces it once fetched
       setLoading(true);
+      frameTrusted(false); // every navigation defaults to sandboxed; trusted branches upgrade
       try {
         // Real-origin: hand the whole load to the browser via an isolated origin.
         // (Not for virtual-loopback targets — those live inside THIS page's vnet,
@@ -684,6 +697,23 @@
           if (opts.setAddr) opts.setAddr(durl);
           try { if (typeof hideConnecting === "function") { hideConnecting(); } } catch (e) {}
           log("loopback direct (no vnet listener): " + durl);
+          setLoading(false);
+          return { status: 0, direct: true };
+        }
+        // Virtual-loopback with the service-worker bridge live: load the
+        // in-page server through its REAL same-origin URL (/vnet/<port>/…)
+        // instead of the transcoder. Native resolution end to end — module
+        // graphs (an Angular UI's chunk imports), XHR, history — the
+        // transcoder can't express a module graph in a srcdoc.
+        if (lp0 && globalThis.vnet && globalThis.vnet.swURL && globalThis.vnet.swURL(lp0)) {
+          var surl = globalThis.vnet.swURL(lp0, entry.path || "/");
+          currentSitePK = "";
+          frameTrusted(true); // in-page server: same-trust as the page itself
+          frame.removeAttribute("srcdoc");
+          frame.src = surl;
+          if (opts.setAddr) opts.setAddr("http://" + entry.pk + (entry.path || "/"));
+          try { if (typeof hideConnecting === "function") { hideConnecting(); } } catch (e) {}
+          log("loopback via vnet service worker: " + surl);
           setLoading(false);
           return { status: 0, direct: true };
         }
