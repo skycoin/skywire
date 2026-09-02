@@ -90,8 +90,6 @@ github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf h1:3tImGgrBxM3/eC
 github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf/go.mod h1:IdyC3iqIKArn4KOl0a58dV2spH0PH6pLJKOZYB2kFR0=
 github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26 h1:RJNbvGJNrfmfM/Obdc1lrs1bFQatR3FMInF1FvILaRo=
 github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26/go.mod h1:X0RvvBVc0OJr+hvmABCWXQlPg7J5AUHsuqJrbBCTP8E=
-github.com/0magnet/termanim v0.0.0-20260902084711-a3c08295e7c7 h1:cciKv7kLjHJUO478bgRjpu840ekxQsWJ05KFU4vnsgM=
-github.com/0magnet/termanim v0.0.0-20260902084711-a3c08295e7c7/go.mod h1:cPSnxZQtiiJgktTT32uh/qrwpXnd5bvvu4zcsc6nDK4=
 github.com/0magnet/termanim v0.0.0-20260902091415-3987061b0ec7 h1:OxzO2h+Dd06JGTpg6BICVMJPG4eSGLe2OVEUfzFhE+k=
 github.com/0magnet/termanim v0.0.0-20260902091415-3987061b0ec7/go.mod h1:cPSnxZQtiiJgktTT32uh/qrwpXnd5bvvu4zcsc6nDK4=
 github.com/0magnet/u-root v0.16.1-0.20260810212217-0890fe5099f9 h1:akt/1o/SlArz8M/n+piy0eyKaBa83wrxQmrLgh6FlPU=
