@@ -24,6 +24,7 @@ var (
 	serveBrowseOrigin string
 	serveVOrigin      string
 	serveBrowseWasmSW bool
+	serveExecWasm     string
 )
 
 func init() {
@@ -39,6 +40,7 @@ func init() {
 	serveCmd.Flags().StringVar(&serveBrowseOrigin, "browse-origin", "", "ALSO serve the browse-origin SW bootstrap on this second addr (e.g. 127.0.0.1:7998), for the hosted real-origin browser's B origins. Caddy routes *.<browse-suffix> here; this same process serves V on --addr and B here. Empty = off (V host-routes B on --addr, local mode)")
 	serveCmd.Flags().StringVar(&serveVOrigin, "v-origin", "", "the PUBLIC origin of the visor app V that B's bootstrap postMessages to, e.g. https://theskywirenetwork.net. Only needed with --browse-origin behind a proxy; empty = derive from --addr (local)")
 	serveCmd.Flags().BoolVar(&serveBrowseWasmSW, "browse-origin-wasm", false, "serve the Go/wasm transport worker on the browse origins instead of the JS one. TESTING ONLY — the JS worker is what every deployment serves, and its security property is that a hundred readable lines on the untrusted origin name no transport. This swaps in a slice of the visor binary, which cannot make that claim")
+	serveCmd.Flags().StringVar(&serveExecWasm, "exec-wasm", "", "path to the full skywire CLI wasm module to serve at /skywire.wasm — enables the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags \"withoutsystray withoutgotop\" -o build/skywire.wasm .). Empty = off")
 	RootCmd.AddCommand(serveCmd)
 }
 
@@ -85,6 +87,7 @@ page never asks anyone to type a secret key.`,
 			BrowseOriginAddr: serveBrowseOrigin,
 			VOrigin:          serveVOrigin,
 			BrowseWasmSW:     serveBrowseWasmSW,
+			ExecWasmPath:     serveExecWasm,
 		}); err != nil {
 			cmd.PrintErrln("serve:", err)
 			os.Exit(1)

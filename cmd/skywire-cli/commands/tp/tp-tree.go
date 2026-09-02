@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
-	"github.com/pterm/pterm"
-	"github.com/pterm/pterm/putils"
+	pterm "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/pterm"
+	putils "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/putils"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 

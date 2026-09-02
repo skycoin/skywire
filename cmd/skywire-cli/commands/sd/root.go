@@ -12,7 +12,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/pterm/pterm"
+	pterm "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/pterm"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"

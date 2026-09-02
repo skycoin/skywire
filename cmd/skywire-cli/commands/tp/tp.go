@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/pterm/pterm"
+	pterm "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/pterm"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 

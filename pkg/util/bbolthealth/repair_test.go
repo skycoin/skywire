@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	bolt "go.etcd.io/bbolt"
+	bolt "github.com/0magnet/bbolt"
 )
 
 func TestRepairIfCorrupt_NoFile(t *testing.T) {

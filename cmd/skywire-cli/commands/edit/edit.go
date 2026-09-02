@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 // Package cliedit cmd/skywire-cli/commands/edit/edit.go c4-vis-cli
 package cliedit
 

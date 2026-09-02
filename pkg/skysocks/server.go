@@ -8,9 +8,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	ipc "github.com/0magnet/golang-ipc"
 	"github.com/0magnet/yamux"
 	"github.com/armon/go-socks5"
-	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app"

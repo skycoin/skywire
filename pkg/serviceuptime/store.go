@@ -22,7 +22,7 @@ import (
 	"sort"
 	"time"
 
-	"go.etcd.io/bbolt"
+	"github.com/0magnet/bbolt"
 
 	"github.com/skycoin/skywire/pkg/util/bbolthealth"
 )

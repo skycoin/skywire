@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	httpAddr         = ":8000"
+	httpAddr         = skyenv.DefaultHypervisorHTTPAddr
 	cookieExpiration = 12 * time.Hour
 	hashKeyLen       = 64
 	blockKeyLen      = 32

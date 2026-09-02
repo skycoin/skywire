@@ -1,5 +1,5 @@
-//go:build !js
-// +build !js
+//go:build !tinygo
+// +build !tinygo
 
 // Package history pkg/skychat/history/store_bolt.go c4-app-chat
 //
@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	bolt "go.etcd.io/bbolt"
+	bolt "github.com/0magnet/bbolt"
 )
 
 // BoltStore persists skychat messages to a local BoltDB file.

@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 // Package cliskychat cmd/skywire-cli/commands/skychat/tui_unified.go c4-vis-cli
 //
 // Unified bubbletea TUI: a picker view that lists every conversation

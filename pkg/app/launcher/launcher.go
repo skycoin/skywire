@@ -487,8 +487,7 @@ func (l *AppLauncher) RestartApp(name, binary string) error {
 		return fmt.Errorf("failed to stop %s: %w", name, err)
 	}
 
-	cmd := proc.Cmd()
-	if err := l.StartApp(binary, nil, cmd.Env); err != nil {
+	if err := l.StartApp(binary, nil, procCmdEnv(proc)); err != nil {
 		return fmt.Errorf("failed to start %s: %w", name, err)
 	}
 

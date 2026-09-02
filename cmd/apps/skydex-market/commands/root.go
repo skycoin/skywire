@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 // Package commands cmd/apps/skydex-market/commands/root.go
 //
 // This is the thin skywire wrapper around the SkyDEX market engine, which lives

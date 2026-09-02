@@ -1,5 +1,4 @@
-//go:build !windows
-// +build !windows
+//go:build !windows && !(js && wasm)
 
 // Package osutil pkg/util/osutil/privileges_unix.go c0-com-util
 package osutil

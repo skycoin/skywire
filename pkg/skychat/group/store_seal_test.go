@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	bolt "go.etcd.io/bbolt"
+	bolt "github.com/0magnet/bbolt"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )

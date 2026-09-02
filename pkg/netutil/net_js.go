@@ -11,16 +11,12 @@
 // situation.
 package netutil
 
-import (
-	"errors"
-)
-
-// DefaultNetworkInterface returns an "unsupported on this
-// platform" sentinel error. There's no concept of "the default
-// network interface" inside a browser WASM runtime; this stub
-// exists so packages that transitively depend on netutil for type
-// resolution (struct field references etc.) compile cleanly under
-// GOOS=js without needing per-package WASM-aware build tags.
+// DefaultNetworkInterface reports the loopback name under js/wasm. The
+// browser cannot enumerate host NICs, but callers (the visor Overview,
+// survey enrichment) treat this as informational — returning an error made
+// the whole RPC call fail, which broke `skywire cli visor info` against a
+// visor running in the browser. "lo" is the honest answer for a runtime
+// whose only network is a virtual loopback (pkg/vnet) plus dmsg.
 func DefaultNetworkInterface() (string, error) {
-	return "", errors.New("netutil: DefaultNetworkInterface unsupported under js/wasm")
+	return "lo", nil
 }

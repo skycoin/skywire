@@ -114,9 +114,15 @@ func DmsgServerEntriesToDisc(in []DmsgServerEntry) []*disc.Entry {
 		if err := pk.Set(srv.Static); err != nil {
 			continue
 		}
+		// Carry the FULL advertised endpoint set: dropping AddressWS here
+		// left a ws/wss-carrier client (browsers, js builds) with "no
+		// carrier dialable" even though every fleet server advertises wss.
 		entries = append(entries, &disc.Entry{
 			Static: pk,
-			Server: &disc.Server{Address: srv.Server.Address},
+			Server: &disc.Server{
+				Address:   srv.Server.Address,
+				AddressWS: srv.Server.AddressWS,
+			},
 		})
 	}
 	return entries
