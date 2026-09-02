@@ -382,10 +382,14 @@ type pingState struct {
 	pcktSize int
 }
 
-// geoState caches geolocation data.
+// geoState caches geolocation data, and the public IP as observed by a
+// connected dmsg server (resolvePublicIPForAR). The dmsg-observed IP is what
+// the Overview prefers: it needs no UDP, so it works where STUN cannot — a
+// browser (js/wasm) visor, or any UDP-blocked network.
 type geoState struct {
-	data *GeoData
-	mu   sync.RWMutex
+	data     *GeoData
+	publicIP string
+	mu       sync.RWMutex
 }
 
 // uiState manages the dynamically started/stopped UI server.
