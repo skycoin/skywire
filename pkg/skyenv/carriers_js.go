@@ -3,14 +3,19 @@
 // Package skyenv pkg/skyenv/carriers_js.go c0-com-env
 package skyenv
 
-// DefaultDmsgCarriers pins freshly generated configs to the WebSocket
-// carrier under js/wasm: a browser (or node) runtime has no raw TCP,
-// so the native tcp-first preference can never connect, while every
-// dmsg server in the fleet advertises wss. Writing it into the config
-// keeps the behavior visible and editable rather than hidden in the
-// runtime. Gated !tinygo because the TinyGo install-page build
-// generates configs for NATIVE visors, which must not be pinned to ws.
-var DefaultDmsgCarriers = []string{"ws"}
+// DefaultDmsgCarriers pins freshly generated configs to the two carriers
+// a browser runtime can actually dial, WebTransport preferred: wt is
+// HTTP/3 (lower overhead than wss-over-TLS-over-TCP) and every fleet
+// dmsg server serves it, but the FIRST dial still lands on wss — the
+// embedded server seeds carry no WT cert hashes (they rotate), so wt
+// only becomes dialable once live discovery supplies the hash, and the
+// visor's converge ticker (initDmsg) then re-dials wss sessions over to
+// wt. Listing wt ahead of ws is what arms that convergence
+// (prefersWTOverWS). Writing the pin into the config keeps the behavior
+// visible and editable rather than hidden in the runtime. Gated !tinygo
+// because the TinyGo install-page build generates configs for NATIVE
+// visors, which must not be pinned to browser carriers.
+var DefaultDmsgCarriers = []string{"wt", "ws"}
 
 // DefaultHypervisorHTTPAddr binds the browser visor's hypervisor UI to
 // :8001 instead of the native :8000. The two live in different

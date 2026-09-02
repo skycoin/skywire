@@ -61,6 +61,7 @@
   font-size: 0.85em;
   line-height: 1.35;
   text-align: right; // numeric columns right-aligned so digits stack
+  white-space: nowrap; // a narrow cell must not wrap a count onto the next line — the aligned mini-table is the point
 
   .tp-type {
     text-align: left;
@@ -105,6 +106,7 @@
   font-size: 0.85em;
   line-height: 1.35;
   text-align: right; // numeric column right-aligned so digits stack
+  white-space: nowrap; // same no-wrap guarantee as .tp-counts
 
   .dmsg-type {
     text-align: left;
