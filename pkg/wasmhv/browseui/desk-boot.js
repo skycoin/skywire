@@ -171,6 +171,13 @@
 							try {
 								var win = panel.openWindow(true); // skipLanding
 								win.browser.browseTo('127.0.0.1:' + hvPort, '/');
+								// Default background tabs (browser-style): the
+								// deployment landing page and the proxy status
+								// page ride along behind the hypervisor UI.
+								if (win.openTab) {
+									try { win.openTab('home.dmsg', '/', 'http', true); } catch (e2) {}
+									try { win.openTab('status.skysocks', '/', 'http', true); } catch (e2) {}
+								}
 								if (win.wb && win.wb.maximize) win.wb.maximize(true);
 							} catch (e) { console.error('hv window:', e); }
 						});
