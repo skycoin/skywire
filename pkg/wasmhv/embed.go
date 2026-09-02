@@ -37,6 +37,11 @@ func WinBoxWasm() []byte { return browseui.WinBoxWasm() }
 // generator to inline.
 func WinBoxWasmGz() []byte { return browseui.WinBoxWasmGz() }
 
+// DeskBootJS is the shared desk boot (skywireDeskBoot) behind the desk-first
+// pages — the docs playground and `hv serve`'s /desk. Re-exported from the
+// browseui leaf like BrowseJS.
+func DeskBootJS() []byte { return browseui.DeskBootJS() }
+
 // WalletConfigHTML is the single wallet-config page (served at /wallet/config by
 // both the native HV and `hv serve`, embedded via iframe by the ☰ wallet window
 // and the Angular wallet tab). Re-exported from the browseui leaf like BrowseJS.

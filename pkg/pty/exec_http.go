@@ -211,6 +211,13 @@ type execStreamWriter struct {
 	f      http.Flusher
 	tag    byte
 	framed bool
+	// gone cancels the command's context. A write that fails means the
+	// client is no longer reading — and net/http does NOT cancel r.Context()
+	// for a response-write error (only for a failed READ), so without this a
+	// client that disconnects while a frame is in flight leaves the command
+	// running to its full timeout (the intermittent CI orphan the
+	// client-disconnect test catches).
+	gone context.CancelFunc
 }
 
 func (sw execStreamWriter) Write(p []byte) (int, error) {
@@ -223,6 +230,9 @@ func (sw execStreamWriter) Write(p []byte) (int, error) {
 	if !sw.framed {
 		n, err := sw.w.Write(p)
 		sw.f.Flush()
+		if err != nil && sw.gone != nil {
+			sw.gone()
+		}
 		return n, err
 	}
 	// os/exec hands us whatever the pipe returned, which can exceed one
@@ -233,6 +243,9 @@ func (sw execStreamWriter) Write(p []byte) (int, error) {
 			end = len(p)
 		}
 		if err := writeExecFrame(sw.w, sw.tag, p[off:end]); err != nil {
+			if sw.gone != nil {
+				sw.gone()
+			}
 			return off, err
 		}
 		off = end
@@ -478,13 +491,13 @@ func execStreamHandler(hostCtx context.Context, log *logging.Logger) http.Handle
 		}
 
 		var mu sync.Mutex
-		cmd.Stdout = execStreamWriter{mu: &mu, w: w, f: flusher, tag: execFrameStdout, framed: framed}
-		cmd.Stderr = execStreamWriter{mu: &mu, w: w, f: flusher, tag: execFrameStderr, framed: framed}
+		cmd.Stdout = execStreamWriter{mu: &mu, w: w, f: flusher, tag: execFrameStdout, framed: framed, gone: cancel}
+		cmd.Stderr = execStreamWriter{mu: &mu, w: w, f: flusher, tag: execFrameStderr, framed: framed, gone: cancel}
 
 		if framed {
 			stopKA := make(chan struct{})
 			defer close(stopKA)
-			go keepaliveLoop(stopKA, &mu, w, flusher)
+			go keepaliveLoop(stopKA, &mu, w, flusher, cancel)
 		}
 
 		runErr := cmd.Run()
@@ -507,7 +520,7 @@ func execStreamHandler(hostCtx context.Context, log *logging.Logger) http.Handle
 // command is silent, so the client's dmsg stream keeps extending its read
 // deadline. See the constant for why this is load-bearing rather than
 // cosmetic.
-func keepaliveLoop(stop <-chan struct{}, mu *sync.Mutex, w io.Writer, f http.Flusher) {
+func keepaliveLoop(stop <-chan struct{}, mu *sync.Mutex, w io.Writer, f http.Flusher, gone context.CancelFunc) {
 	t := time.NewTicker(execStreamKeepalive)
 	defer t.Stop()
 	for {
@@ -522,6 +535,12 @@ func keepaliveLoop(stop <-chan struct{}, mu *sync.Mutex, w io.Writer, f http.Flu
 			}
 			mu.Unlock()
 			if err != nil {
+				// The client stopped reading — for an IDLE command this
+				// keepalive is the only writer, so it must also be the one
+				// that tears the command down (see execStreamWriter.gone).
+				if gone != nil {
+					gone()
+				}
 				return
 			}
 		}
