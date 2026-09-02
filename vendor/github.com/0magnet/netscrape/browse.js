@@ -2370,6 +2370,10 @@
       handle = sh.open(mount);
       if (handle && handle.error) { mount.textContent = "shell: " + handle.error; return; }
       if (handle && handle.focus) { handle.focus(); }
+      // initCmd: run one command as if typed — the desk's default layout uses
+      // this ("skywire --help" in the docs playground; "skywire autoconfig"
+      // for a foreground visor terminal).
+      if (opts.initCmd && handle && handle.run) { try { handle.run(opts.initCmd); } catch (e) {} }
     }).catch(function (e) {
       note.textContent = "shell failed to start: " + (e.message || e);
     });
@@ -2412,11 +2416,18 @@
     function join(a, b) { return a === "/" ? "/" + b : a.replace(/\/+$/, "") + "/" + b; }
     function fmt(n) { return n < 1024 ? n + "B" : n < 1048576 ? (n / 1024).toFixed(1) + "K" : (n / 1048576).toFixed(1) + "M"; }
     function setEditor(text, name) { q("fb-view").value = text; curFile = name; q("fb-save").disabled = true; q("fb-fname").textContent = name || "no file selected"; }
-    function openFile(path) { var r = fs.readFile(path); if (r && r.error) { setEditor("", null); alert(r.error); return; } setEditor(r.text || "", path); }
+    // Every fs.* call goes through Promise.resolve: the jsfs-backed bridge
+    // returns Promises (a js.FuncOf that touches the filesystem must not
+    // block), while the plain MemMap bridge still returns values — this
+    // consumes both.
+    function openFile(path) { Promise.resolve(fs.readFile(path)).then(function (r) { if (r && r.error) { setEditor("", null); alert(r.error); return; } setEditor((r && r.text) || "", path); }); }
     function refresh() {
       if (!fs) { q("fb-list").textContent = "filesystem unavailable (no in-tab shell)"; return; }
       q("fb-path").textContent = cwd;
-      var res = fs.readDir(cwd), el = q("fb-list"); el.innerHTML = "";
+      Promise.resolve(fs.readDir(cwd)).then(function (res) { renderList(res); });
+    }
+    function renderList(res) {
+      var el = q("fb-list"); el.innerHTML = "";
       if (res && res.error) { el.textContent = "error: " + res.error; return; }
       var arr = res || [];
       if (!arr.length) { el.innerHTML = '<div style="padding:.6em;color:#6b7280">(empty)</div>'; return; }
@@ -2430,18 +2441,18 @@
           (it.dir ? "" : '<span style="color:#6b7280">' + fmt(it.size) + '</span>') +
           '<span class="fb-del" title="delete" style="color:#c0556f;padding:0 .3em">✕</span>';
         row.onclick = function (e) {
-          if (e.target.classList.contains("fb-del")) { if (confirm("delete " + it.name + "?")) { var r = fs.remove(join(cwd, it.name)); if (r && r.error) { alert(r.error); } if (curFile === join(cwd, it.name)) { setEditor("", null); } refresh(); } return; }
+          if (e.target.classList.contains("fb-del")) { if (confirm("delete " + it.name + "?")) { Promise.resolve(fs.remove(join(cwd, it.name))).then(function (r) { if (r && r.error) { alert(r.error); } if (curFile === join(cwd, it.name)) { setEditor("", null); } refresh(); }); } return; }
           if (it.dir) { cwd = join(cwd, it.name); setEditor("", null); refresh(); } else { openFile(join(cwd, it.name)); }
         };
         el.appendChild(row);
       });
     }
     q("fb-view").oninput = function () { if (curFile) { q("fb-save").disabled = false; } };
-    q("fb-save").onclick = function () { if (!curFile) { return; } var r = fs.writeFile(curFile, q("fb-view").value); if (r && r.error) { alert(r.error); return; } q("fb-save").disabled = true; refresh(); };
+    q("fb-save").onclick = function () { if (!curFile) { return; } Promise.resolve(fs.writeFile(curFile, q("fb-view").value)).then(function (r) { if (r && r.error) { alert(r.error); return; } q("fb-save").disabled = true; refresh(); }); };
     q("fb-up").onclick = function () { if (cwd === "/") { return; } cwd = cwd.replace(/\/[^\/]+\/?$/, "") || "/"; setEditor("", null); refresh(); };
     q("fb-refresh").onclick = refresh;
-    q("fb-mkdir").onclick = function () { var n = prompt("new folder name"); if (!n) { return; } var r = fs.mkdir(join(cwd, n)); if (r && r.error) { alert(r.error); } refresh(); };
-    q("fb-newfile").onclick = function () { var n = prompt("new file name"); if (!n) { return; } var r = fs.writeFile(join(cwd, n), ""); if (r && r.error) { alert(r.error); return; } refresh(); openFile(join(cwd, n)); };
+    q("fb-mkdir").onclick = function () { var n = prompt("new folder name"); if (!n) { return; } Promise.resolve(fs.mkdir(join(cwd, n))).then(function (r) { if (r && r.error) { alert(r.error); } refresh(); }); };
+    q("fb-newfile").onclick = function () { var n = prompt("new file name"); if (!n) { return; } Promise.resolve(fs.writeFile(join(cwd, n), "")).then(function (r) { if (r && r.error) { alert(r.error); return; } refresh(); openFile(join(cwd, n)); }); };
     var wb = makeWin(doc, { title: "files", root: opts.root, top: opts.top, bottom: opts.bottom, width: "56%", height: "60%", mount: wrap, onclose: function () { if (opts.onClose) { opts.onClose(); } } });
     if (fs) { refresh(); }
     else if (typeof ensureShell === "function") {
@@ -2824,9 +2835,12 @@
     // ungated so the native and wasm ☰ menus stay equivalent.
     addApp("about", function () { openAboutDialog(doc, opts); });
     addApp("tour", function () { startTour(doc); });
-    // Offer the tour once, shortly after first load, so newcomers get oriented.
+    // Offer the tour once, shortly after first load, so newcomers get
+    // oriented. opts.noTour skips the auto-offer (the ☰ tour entry stays) —
+    // hosts whose page the tour steps don't describe (the docs playground,
+    // which boots no visor) opt out rather than show an empty walkthrough.
     try {
-      if (!localStorage.getItem(TOUR_SEEN_KEY)) {
+      if (!opts.noTour && !localStorage.getItem(TOUR_SEEN_KEY)) {
         setTimeout(function () { if (!localStorage.getItem(TOUR_SEEN_KEY)) { startTour(doc); } }, 1600);
       }
     } catch (e) {}
@@ -2947,6 +2961,20 @@
         ? createShellWindow(doc, withRoot({ title: "visor shell", onClose: close }))
         : createCliWindow(doc, withRoot({ onClose: close }));
       track(cliWin, "console");
+    }
+    // openConsole always opens a NEW shell window (unlike openCli, which
+    // focuses the existing one) — the desk's default layout wants several
+    // (a visor terminal AND a help terminal). o: {title, initCmd}.
+    function openConsole(o) {
+      o = o || {};
+      var win = null;
+      win = createShellWindow(doc, withRoot({
+        title: o.title || "shell",
+        initCmd: o.initCmd || "",
+        onClose: function () { untrack(win); },
+      }));
+      track(win, o.title || "shell");
+      return win;
     }
     var filesWin = null;
     function openFiles() {
@@ -3208,6 +3236,7 @@
       panel: bar,
       toggle: toggle,
       openWindow: openBrowse,
+      openConsole: openConsole,
       browser: function () { for (var i = wins.length - 1; i >= 0; i--) { if (wins[i].browser) return wins[i].browser; } return null; }
     };
   }

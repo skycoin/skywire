@@ -1065,3 +1065,13 @@ sync-upstream-develop: #sync develop branch with upstream develop branch for for
 	git fetch upstream && \
 	git merge upstream/develop && \
 	git push
+
+playground: wasm-visor ## Build the docs-site playground (static desk page: shell + skywire commands + nested browser, NO auto-started visor) into build/playground
+	mkdir -p ./build/playground
+	GOOS=js GOARCH=wasm go build -buildvcs=true -tags "withoutsystray withoutgotop" -trimpath -ldflags="-s -w" -o ./build/playground/skywire.wasm .
+	gzip -9 -n -f ./build/playground/skywire.wasm
+	gzip -9 -n -c ./build/wasm-visor-go/wasm-visor.wasm > ./build/playground/wasm-visor.wasm.gz
+	cp ./build/wasm-visor-go/wasm_exec.js ./build/playground/
+	go run ./scripts/stage-playground ./build/playground
+	cp ./docs/playground/index.html ./build/playground/
+	@echo "built ./build/playground — serve it statically to test (any static file server)"

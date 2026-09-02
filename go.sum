@@ -70,6 +70,10 @@ github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898 h1:5UyEWEOaKdF8RAf
 github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898/go.mod h1:w+uhwkS5wbYmWTm2Dvvp3AWUR8TNrksPutxoBn4sESY=
 github.com/0magnet/bottle v0.0.0-20260902000600-6494b774e447 h1:vSKXRiZL39cZmrcJWPsikTC+9OemtE4L3IJFooVpN5g=
 github.com/0magnet/bottle v0.0.0-20260902000600-6494b774e447/go.mod h1:02z8sWzqF3QH4SjMxnx5bnysFUqsw9CdUTtIj+CIxkw=
+github.com/0magnet/bottle v0.0.0-20260902073506-4789cd0feb9d h1:Ztjlq+Wxabb+0lUDhqn+MygGy+rb7C40prfVmSC7PG0=
+github.com/0magnet/bottle v0.0.0-20260902073506-4789cd0feb9d/go.mod h1:02z8sWzqF3QH4SjMxnx5bnysFUqsw9CdUTtIj+CIxkw=
+github.com/0magnet/bottle v0.0.0-20260902082749-b333a0d36741 h1:pG8Khjiim9uG72t0H5weqXeI1gZ2IQq4WSwlQLcpquQ=
+github.com/0magnet/bottle v0.0.0-20260902082749-b333a0d36741/go.mod h1:02z8sWzqF3QH4SjMxnx5bnysFUqsw9CdUTtIj+CIxkw=
 github.com/0magnet/coloredcobra v1.0.2 h1:HmKUcBcpBpbdPv03XyIfH8iMOIG2TDQIkx3GLWGbtf4=
 github.com/0magnet/coloredcobra v1.0.2/go.mod h1:LuB8WMJUz/OsbiFXZnUEtHnpt112tBTZiUTiuAotXoY=
 github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e h1:fyLB1qUtpMxPeZp4MdZu5yLHHR+kLl2MZfhG0djlGIo=
@@ -84,6 +88,10 @@ github.com/0magnet/netscrape v0.0.0-20260902000645-4b30ced5f0e8 h1:gu0GSRRY7olGe
 github.com/0magnet/netscrape v0.0.0-20260902000645-4b30ced5f0e8/go.mod h1:8KUKD6yyp1VhFqWG8MYA+xM9CD+6cdjoNoXrhP/QMOM=
 github.com/0magnet/netscrape v0.0.0-20260902011331-a0dbc899674f h1:Te6ZtPW3l0IVjrU9lX+MI/16aqqMjc9R7fHJZVl536o=
 github.com/0magnet/netscrape v0.0.0-20260902011331-a0dbc899674f/go.mod h1:8KUKD6yyp1VhFqWG8MYA+xM9CD+6cdjoNoXrhP/QMOM=
+github.com/0magnet/netscrape v0.0.0-20260902075008-a9577dedb6bf h1:cW4WbV5nZfBzJ6XXyFVFXzLbvl4e/HH7S6ZZWDgPsFY=
+github.com/0magnet/netscrape v0.0.0-20260902075008-a9577dedb6bf/go.mod h1:8KUKD6yyp1VhFqWG8MYA+xM9CD+6cdjoNoXrhP/QMOM=
+github.com/0magnet/netscrape v0.0.0-20260902082747-92e7877355d4 h1:OJEi5t1Apymjs450Y3i6URlzgbPQiZhqayFYKxqazB4=
+github.com/0magnet/netscrape v0.0.0-20260902082747-92e7877355d4/go.mod h1:8KUKD6yyp1VhFqWG8MYA+xM9CD+6cdjoNoXrhP/QMOM=
 github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408 h1:iXCaIMD5kmvYINoBhIVv+nGtN4BRRVe64EDkOUtKvqg=
 github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408/go.mod h1:feFjgv6ByEzXixeUOB4gYwq9G8iv35aQJiYc/8ZHDWg=
 github.com/0magnet/realorigin v0.2.0 h1:+xfvyuQzRGKAtQ88WziCVK3/poPTzc4pvc0i5+kPNUc=

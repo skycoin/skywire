@@ -303,7 +303,12 @@ func main() {
 		installShell()
 	}
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
-	select {} // block forever
+	// keepAlive, not select{}: a bare select parks main with NO pending Go
+	// timer, and if every other goroutine is also asleep (desk mode: nothing
+	// booted, a syscall waiting on a deferred jsfs callback) the scheduler
+	// declares deadlock. keepAlive's sleep keeps a timer pending, so the
+	// runtime idles back to the event loop instead.
+	keepAlive()
 }
 
 // jsBoot(skHex, seedPkHex, seedWsURL, discDmsgAddr) → Promise<selfPkHex>.

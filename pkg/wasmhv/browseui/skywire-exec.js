@@ -24,6 +24,15 @@
 				const url = skywireExec.wasmURL;
 				const resp = await fetch(url);
 				if (!resp.ok) throw new Error('fetch ' + url + ': HTTP ' + resp.status);
+				// A .gz module (static hosting that can't set Content-Encoding —
+				// GitHub Pages serving the raw 158MB is over its file cap, the
+				// ~40MB gzip isn't) is inflated here via DecompressionStream.
+				if (/\.gz(\?|$)/.test(url)) {
+					const inflated = resp.body.pipeThrough(new DecompressionStream('gzip'));
+					return WebAssembly.compileStreaming
+						? WebAssembly.compileStreaming(new Response(inflated, { headers: { 'Content-Type': 'application/wasm' } }))
+						: WebAssembly.compile(await new Response(inflated).arrayBuffer());
+				}
 				return WebAssembly.compileStreaming
 					? WebAssembly.compileStreaming(Promise.resolve(resp))
 					: WebAssembly.compile(await resp.arrayBuffer());
@@ -69,8 +78,18 @@
 		go.exit = (c) => { code = c; };
 		const stdio = globalThis.jsfs.stdio;
 		const prev = { stdout: stdio.stdout, stderr: stdio.stderr, stdin: stdio.stdin };
-		if (hooks && hooks.stdout) stdio.stdout = hooks.stdout;
-		if (hooks && hooks.stderr) stdio.stderr = hooks.stderr;
+		// Deliver output hooks on a MICROTASK, never synchronously: a hook that
+		// writes into another wasm instance (the shell's terminal) would
+		// otherwise nest that instance's frames on top of this command's still-
+		// running wasm stack — two Go runtimes deep, which overflows the JS
+		// call stack and corrupts whichever runtime the RangeError lands in.
+		// The microtask runs once this instance yields, with a clean stack.
+		const deferred = (fn) => (buf) => {
+			const copy = buf.slice();
+			queueMicrotask(() => { try { fn(copy); } catch (e) { /* sink gone */ } });
+		};
+		if (hooks && hooks.stdout) stdio.stdout = deferred(hooks.stdout);
+		if (hooks && hooks.stderr) stdio.stderr = deferred(hooks.stderr);
 		if (hooks && hooks.stdin) stdio.stdin = hooks.stdin;
 		try {
 			const inst = await WebAssembly.instantiate(mod, go.importObject);

@@ -144,63 +144,85 @@ func fsArgPath(args []js.Value) string {
 	return filepath.Clean(p)
 }
 
-// jsFsReadDir(path) → [{name,dir,size,mtime}] sorted dirs-first then name.
+// The fs bridge returns PROMISES: these are js.FuncOf handlers, and with the
+// page's jsfs every afero call parks on a deferred callback — blocking in a
+// FuncOf blocks the whole JS event loop (the same constraint jsOpenShell
+// documents). promise() runs the work on a goroutine; each resolves with the
+// same value shape as before ({error} for failures, never a rejection), so
+// consumers only add an await.
+
+// jsFsReadDir(path) → Promise<[{name,dir,size,mtime}]> sorted dirs-first.
 func jsFsReadDir(_ js.Value, args []js.Value) any {
-	infos, err := afero.ReadDir(sharedShellFS(), fsArgPath(args))
-	if err != nil {
-		return fsErr(err)
-	}
-	sort.Slice(infos, func(i, j int) bool {
-		if infos[i].IsDir() != infos[j].IsDir() {
-			return infos[i].IsDir()
+	path := fsArgPath(args)
+	return promise(func() (interface{}, error) {
+		infos, err := afero.ReadDir(sharedShellFS(), path)
+		if err != nil {
+			return fsErr(err), nil
 		}
-		return infos[i].Name() < infos[j].Name()
-	})
-	out := make([]interface{}, 0, len(infos))
-	for _, fi := range infos {
-		out = append(out, map[string]interface{}{
-			"name": fi.Name(), "dir": fi.IsDir(),
-			"size": float64(fi.Size()), "mtime": fi.ModTime().UnixMilli(),
+		sort.Slice(infos, func(i, j int) bool {
+			if infos[i].IsDir() != infos[j].IsDir() {
+				return infos[i].IsDir()
+			}
+			return infos[i].Name() < infos[j].Name()
 		})
-	}
-	return out
+		out := make([]interface{}, 0, len(infos))
+		for _, fi := range infos {
+			out = append(out, map[string]interface{}{
+				"name": fi.Name(), "dir": fi.IsDir(),
+				"size": float64(fi.Size()), "mtime": fi.ModTime().UnixMilli(),
+			})
+		}
+		return out, nil
+	})
 }
 
-// jsFsReadFile(path) → {text} for a UTF-8 file, or {error}. Caps at 2 MiB so a
-// huge file can't wedge the single-threaded runtime rendering it.
+// jsFsReadFile(path) → Promise<{text}> for a UTF-8 file, or {error}. Caps at
+// 2 MiB so a huge file can't wedge the single-threaded runtime rendering it.
 func jsFsReadFile(_ js.Value, args []js.Value) any {
-	b, err := afero.ReadFile(sharedShellFS(), fsArgPath(args))
-	if err != nil {
-		return fsErr(err)
-	}
-	if len(b) > 2<<20 {
-		return map[string]interface{}{"error": "file too large to view (>2 MiB)"}
-	}
-	return map[string]interface{}{"text": string(b), "size": float64(len(b))}
+	path := fsArgPath(args)
+	return promise(func() (interface{}, error) {
+		b, err := afero.ReadFile(sharedShellFS(), path)
+		if err != nil {
+			return fsErr(err), nil
+		}
+		if len(b) > 2<<20 {
+			return map[string]interface{}{"error": "file too large to view (>2 MiB)"}, nil
+		}
+		return map[string]interface{}{"text": string(b), "size": float64(len(b))}, nil
+	})
 }
 
 func jsFsWriteFile(_ js.Value, args []js.Value) any {
 	if len(args) < 2 || args[1].Type() != js.TypeString {
-		return fsErr(errors.New("writeFile(path, text)"))
+		return promise(func() (interface{}, error) { return fsErr(errors.New("writeFile(path, text)")), nil })
 	}
-	if err := afero.WriteFile(sharedShellFS(), fsArgPath(args), []byte(args[1].String()), 0o644); err != nil {
-		return fsErr(err)
-	}
-	return map[string]interface{}{"ok": true}
+	path, text := fsArgPath(args), args[1].String()
+	return promise(func() (interface{}, error) {
+		if err := afero.WriteFile(sharedShellFS(), path, []byte(text), 0o644); err != nil {
+			return fsErr(err), nil
+		}
+		return map[string]interface{}{"ok": true}, nil
+	})
 }
 
 func jsFsMkdir(_ js.Value, args []js.Value) any {
-	if err := sharedShellFS().MkdirAll(fsArgPath(args), 0o755); err != nil {
-		return fsErr(err)
-	}
-	return map[string]interface{}{"ok": true}
+	path := fsArgPath(args)
+	return promise(func() (interface{}, error) {
+		if err := sharedShellFS().MkdirAll(path, 0o755); err != nil {
+			return fsErr(err), nil
+		}
+		return map[string]interface{}{"ok": true}, nil
+	})
 }
 
 func jsFsRemove(_ js.Value, args []js.Value) any {
-	if err := sharedShellFS().RemoveAll(fsArgPath(args)); err != nil {
-		return fsErr(err)
-	}
-	return map[string]interface{}{"ok": true}
+	path := fsArgPath(args)
+	return promise(func() (interface{}, error) {
+		if err := sharedShellFS().RemoveAll(path); err != nil {
+			return fsErr(err), nil
+		}
+		return map[string]interface{}{"ok": true}, nil
+	})
 }
 
 // jsAwait resolves a value that may be a promise. The visor API is a direct
@@ -703,7 +725,17 @@ func (s *shellSession) close() {
 }
 
 // jsOpenShell implements skywireShell.open(el): mount a terminal running websh
-// in the given element (or element id). Returns { close, fit, focus }.
+// in the given element (or element id). Returns { close, fit, focus, run }.
+//
+// The session is built on a GOROUTINE and the handle returned immediately.
+// This is load-bearing, not a nicety: open() is a js.FuncOf handler, and a
+// FuncOf that blocks blocks the whole JS event loop (syscall/js contract).
+// openShell touches the filesystem (Seed, PopulateBin), and with the page's
+// jsfs those syscalls complete on a MICROTASK — which can never run while the
+// event loop is held. Synchronously opening the shell from JS therefore
+// wedges the tab (or, with same-tick callbacks, nests _resume until g0
+// overflows). Handle calls that arrive before the session is up are queued
+// (run) or dropped (fit/focus — the next resize refits anyway).
 func jsOpenShell(_ js.Value, args []js.Value) interface{} {
 	if len(args) == 0 || !args[0].Truthy() {
 		return js.ValueOf(map[string]interface{}{"error": "open(el): missing mount element"})
@@ -715,15 +747,85 @@ func jsOpenShell(_ js.Value, args []js.Value) interface{} {
 			return js.ValueOf(map[string]interface{}{"error": "open(id): no such element"})
 		}
 	}
-	s := openShell(el)
 
+	var (
+		mu      sync.Mutex
+		s       *shellSession
+		closed  bool
+		pending []string // run() lines queued before the session is up
+	)
+	submit := func(sess *shellSession, cmd string) {
+		sess.term.WriteString(cmd + "\r\n")
+		go func() {
+			defer func() { _ = recover() }() // session closed under us — drop the line
+			sess.lines <- cmd
+		}()
+	}
+	go func() {
+		sess := openShell(el)
+		mu.Lock()
+		if closed {
+			mu.Unlock()
+			sess.close()
+			return
+		}
+		s = sess
+		queued := pending
+		pending = nil
+		mu.Unlock()
+		for _, cmd := range queued {
+			submit(sess, cmd)
+		}
+	}()
+
+	get := func() *shellSession { mu.Lock(); defer mu.Unlock(); return s }
 	handle := js.Global().Get("Object").New()
-	closeFn := js.FuncOf(func(js.Value, []js.Value) any { s.close(); return nil })
-	fitFn := js.FuncOf(func(js.Value, []js.Value) any { s.term.Fit(); return nil })
-	focusFn := js.FuncOf(func(js.Value, []js.Value) any { s.term.Focus(); return nil })
-	s.funcs = append(s.funcs, closeFn, fitFn, focusFn)
+	closeFn := js.FuncOf(func(js.Value, []js.Value) any {
+		mu.Lock()
+		closed = true
+		sess := s
+		mu.Unlock()
+		if sess != nil {
+			sess.close()
+		}
+		return nil
+	})
+	fitFn := js.FuncOf(func(js.Value, []js.Value) any {
+		if sess := get(); sess != nil {
+			sess.term.Fit()
+		}
+		return nil
+	})
+	focusFn := js.FuncOf(func(js.Value, []js.Value) any {
+		if sess := get(); sess != nil {
+			sess.term.Focus()
+		}
+		return nil
+	})
+	// run(cmd): execute one line as if the operator typed it — echoed to the
+	// terminal, then submitted. The desk's default layout uses it to open a
+	// terminal already showing `skywire --help` (or a foreground visor).
+	runFn := js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) == 0 || a[0].String() == "" {
+			return nil
+		}
+		cmd := a[0].String()
+		mu.Lock()
+		sess := s
+		if sess == nil && !closed {
+			pending = append(pending, cmd)
+			mu.Unlock()
+			return nil
+		}
+		mu.Unlock()
+		if sess != nil {
+			submit(sess, cmd)
+		}
+		return nil
+	})
 	handle.Set("close", closeFn)
 	handle.Set("fit", fitFn)
 	handle.Set("focus", focusFn)
+	handle.Set("run", runFn)
 	return handle
 }

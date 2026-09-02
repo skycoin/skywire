@@ -174,8 +174,14 @@
 	// ---- the fs object -----------------------------------------------------
 	function wrap(fn) {
 		// turn a sync impl into the node callback convention with proper
-		// asynchrony (Go's fsCall await expects the callback, and re-entrant
-		// synchronous callbacks into wasm are not allowed mid-syscall).
+		// asynchrony: the callback is delivered on a MICROTASK, after the
+		// calling wasm's stack has unwound. Synchronous delivery would
+		// re-enter the wasm mid-syscall (nested _resume) and a long run of
+		// fs ops then overflows Go's fixed g0 stack. The deferral means the
+		// syscall goroutine parks — so the PROGRAM must always hold at least
+		// one pending Go timer (an idle loop that sleeps, not select{}), or
+		// the Go scheduler declares "all goroutines are asleep" before the
+		// microtask can run. Every skywire wasm entrypoint does.
 		return function (...args) {
 			const cb = args.pop();
 			let res;
@@ -381,6 +387,172 @@
 		},
 	};
 
+	// ---- persistence (IndexedDB) ------------------------------------------
+	// Optional whole-tree snapshots so the filesystem survives page reloads.
+	// jsfs.persist.enable(dbName) restores the last snapshot (REPLACING the
+	// seeded tree — deletions persist too) and then auto-saves: mutating
+	// syscalls mark the tree dirty, a debounce+floor batches the writes, and
+	// pagehide flushes best-effort. Typed arrays structured-clone into
+	// IndexedDB directly, so file data round-trips byte-exact. No-op (resolves
+	// {restored:false}) where IndexedDB is unavailable (node, workers without
+	// IDB) — the contract stays purely in-memory there.
+	const persist = (() => {
+		const STORE = 'tree';
+		const KEY = 'root';
+		let db = null;
+		let enabled = false;
+		let dirty = false;
+		let timer = null;
+		let lastSave = 0;
+		let saveChain = Promise.resolve();
+
+		function serialize() {
+			const out = [];
+			(function walk(node, path) {
+				for (const [name, child] of node.entries) {
+					const p = path + '/' + name;
+					const t = child.mode & 0o170000;
+					if (t === S_IFDIR) {
+						out.push({ p, t: 'd', m: child.mode & 0o7777, mt: child.mtimeMs });
+						walk(child, p);
+					} else if (t === S_IFREG) {
+						out.push({ p, t: 'f', m: child.mode & 0o7777, mt: child.mtimeMs, d: child.data.slice() });
+					} else if (t === S_IFLNK) {
+						out.push({ p, t: 'l', m: child.mode & 0o7777, mt: child.mtimeMs, tgt: child.target });
+					} else if (t === S_IFCHR) {
+						out.push({ p, t: 'c', m: child.mode & 0o7777, mt: child.mtimeMs });
+					}
+				}
+			})(root, '');
+			return out;
+		}
+
+		function applySnapshot(entries) {
+			root.entries.clear();
+			for (const e of entries) {
+				// serialize() emits parents before children, so the parent dir
+				// always exists by the time its entries arrive.
+				const slash = e.p.lastIndexOf('/');
+				const parent = slash === 0 ? root : resolve(e.p.slice(0, slash), true).node;
+				const name = e.p.slice(slash + 1);
+				let node;
+				switch (e.t) {
+				case 'd': node = mknode(S_IFDIR, e.m); break;
+				case 'f':
+					node = mknode(S_IFREG, e.m);
+					node.data = e.d instanceof Uint8Array ? e.d : new Uint8Array(e.d);
+					break;
+				case 'l': node = mknode(S_IFLNK, e.m); node.target = e.tgt || ''; break;
+				case 'c': node = mknode(S_IFCHR, e.m); break;
+				default: continue;
+				}
+				node.mtimeMs = e.mt || now();
+				parent.entries.set(name, node);
+			}
+		}
+
+		function idbOpen(name) {
+			return new Promise((res, rej) => {
+				const rq = indexedDB.open(name, 1);
+				rq.onupgradeneeded = () => { rq.result.createObjectStore(STORE); };
+				rq.onsuccess = () => res(rq.result);
+				rq.onerror = () => rej(rq.error);
+			});
+		}
+		function idbPut(val) {
+			return new Promise((res, rej) => {
+				const tx = db.transaction(STORE, 'readwrite');
+				tx.objectStore(STORE).put(val, KEY);
+				tx.oncomplete = () => res();
+				tx.onerror = () => rej(tx.error);
+			});
+		}
+		function idbGet() {
+			return new Promise((res, rej) => {
+				const tx = db.transaction(STORE, 'readonly');
+				const rq = tx.objectStore(STORE).get(KEY);
+				rq.onsuccess = () => res(rq.result);
+				rq.onerror = () => rej(rq.error);
+			});
+		}
+
+		function save() {
+			if (!enabled || !dirty) return saveChain;
+			dirty = false;
+			lastSave = Date.now();
+			const snap = serialize(); // synchronous copy — consistent by construction
+			saveChain = saveChain
+				.then(() => idbPut({ v: 1, entries: snap, savedAt: Date.now() }))
+				.catch(() => { dirty = true; }); // retry on the next mutation
+			return saveChain;
+		}
+
+		function markDirty() {
+			if (!enabled) return;
+			dirty = true;
+			if (timer) return;
+			// Debounce, with a floor so a chatty writer (the visor's bbolt
+			// stores) batches into one snapshot every few seconds at most.
+			const wait = Math.max(1500, 3000 - (Date.now() - lastSave));
+			timer = setTimeout(() => { timer = null; save(); }, wait);
+		}
+
+		// Wrap the mutating syscalls once, at enable() time. write/writeSync
+		// only count for real files (fd > 2) — stdout/stderr traffic must not
+		// trigger snapshots.
+		function hookMutators() {
+			const names = ['open', 'mkdir', 'rmdir', 'rename', 'unlink', 'truncate',
+				'ftruncate', 'chmod', 'fchmod', 'chown', 'fchown', 'lchown', 'utimes',
+				'link', 'symlink'];
+			for (const n of names) {
+				const orig = fsImpl[n];
+				if (typeof orig !== 'function') continue;
+				fsImpl[n] = function (...args) { markDirty(); return orig.apply(this, args); };
+			}
+			const w = fsImpl.write;
+			fsImpl.write = function (fd, ...rest) { if (fd > 2) markDirty(); return w.call(this, fd, ...rest); };
+			const ws = fsImpl.writeSync;
+			fsImpl.writeSync = function (fd, ...rest) { if (fd > 2) markDirty(); return ws.call(this, fd, ...rest); };
+		}
+
+		return {
+			enable(dbName) {
+				if (enabled) return Promise.resolve({ restored: false });
+				if (typeof indexedDB === 'undefined') return Promise.resolve({ restored: false });
+				return idbOpen(dbName || 'jsfs').then((d) => {
+					db = d;
+					return idbGet();
+				}).then((snap) => {
+					let restored = false;
+					if (snap && Array.isArray(snap.entries)) {
+						applySnapshot(snap.entries);
+						restored = true;
+					}
+					hookMutators();
+					enabled = true;
+					if (typeof addEventListener === 'function') {
+						addEventListener('pagehide', () => { try { save(); } catch (e) { /* best-effort */ } });
+						addEventListener('visibilitychange', () => {
+							try { if (document.visibilityState === 'hidden') save(); } catch (e) { /* best-effort */ }
+						});
+					}
+					return { restored };
+				});
+			},
+			flush() { dirty = true; return save(); },
+			clear() {
+				if (!db) return Promise.resolve();
+				enabled = false;
+				return new Promise((res, rej) => {
+					const tx = db.transaction(STORE, 'readwrite');
+					tx.objectStore(STORE).delete(KEY);
+					tx.oncomplete = () => res();
+					tx.onerror = () => rej(tx.error);
+				});
+			},
+		};
+	})();
+
 	globalThis.fs = fsImpl;
 	globalThis.process = processImpl;
 	globalThis.jsfs = {
@@ -391,5 +563,6 @@
 		readFile(path) { const r = resolve(path, true); if (!r.node || r.node.data === null) return null; return r.node.data; },
 		setCwd(d) { processImpl.chdir(d); },
 		getCwd() { return cwd; },
+		persist,         // IndexedDB snapshots: enable(db) → Promise<{restored}>
 	};
 })();
