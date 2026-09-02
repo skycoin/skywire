@@ -51,10 +51,19 @@
 	function loadSession() {
 		try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) { return null; }
 	}
+	// visorSawUp: whether THIS page ever observed its visor listening. The
+	// session records "stopped" ONLY after up-then-down — a save that fires
+	// while the visor is still booting (visibilitychange the moment another
+	// tab covers the page) must not masquerade as an operator stop, or every
+	// later load skips the autostart forever.
+	var visorSawUp = false;
 	function saveSession() {
 		try {
+			var up = !!(globalThis.vnet && globalThis.vnet.listening(3435));
+			if (up) { visorSawUp = true; }
+			if (!up && !visorSawUp) { return; } // still booting (or never started) — keep the previous verdict
 			localStorage.setItem(SESSION_KEY, JSON.stringify({
-				visorRunning: !!(globalThis.vnet && globalThis.vnet.listening(3435)),
+				visorRunning: up,
 				at: Date.now(),
 			}));
 		} catch (e) { /* storage denied — session just resets to defaults */ }
@@ -104,10 +113,17 @@
 			// Session: remember across reloads whether a visor was RUNNING when
 			// the page went away — a visor the operator stopped stays stopped.
 			var session = loadSession();
-			addEventListener('pagehide', saveSession);
-			addEventListener('visibilitychange', function () {
-				if (document.visibilityState === 'hidden') saveSession();
-			});
+			if (opts.autostartVisor) {
+				addEventListener('pagehide', saveSession);
+				addEventListener('visibilitychange', function () {
+					if (document.visibilityState === 'hidden') saveSession();
+				});
+				// Track up-transitions continuously so a save after a stop can
+				// tell "operator stopped it" from "it never came up".
+				setInterval(function () {
+					if (globalThis.vnet && globalThis.vnet.listening(3435)) { visorSawUp = true; }
+				}, 2000);
+			}
 
 			var startVisor = !!opts.autostartVisor && !(session && session.visorRunning === false);
 			var startedVisor = false;
