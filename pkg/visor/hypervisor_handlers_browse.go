@@ -63,6 +63,14 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 		case "/browse.js":
 			serveJS(w, browseui.BrowseJS)
 			return
+		case "/vnet-sw.js":
+			// bottle's vnet service worker: pages that run in-page servers
+			// (a wasm visor in a tab) register it to give their nested
+			// browser real /vnet/<port>/ URLs. Same asset on every desk-ish
+			// origin, so a page served by the native HV behaves like one
+			// served by `hv serve`.
+			serveJS(w, browseui.VNetSWJS())
+			return
 		case "/winbox.wasm":
 			// The window manager the browse bundle loads. instantiateStreaming
 			// refuses a module that does not arrive as application/wasm.

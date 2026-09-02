@@ -149,8 +149,11 @@ func runConfigGenWithEnv(t *testing.T, envContent string, extraFlags ...string) 
 	if i := strings.Index(jsonOut, "{"); i > 0 {
 		jsonOut = jsonOut[i:]
 	}
+	// Decode (not Unmarshal): a stray log line can land AFTER the config dump
+	// too — the decoder stops at the end of the first JSON value instead of
+	// rejecting the trailing text.
 	var conf visorconfig.V1
-	if err := json.Unmarshal([]byte(jsonOut), &conf); err != nil {
+	if err := json.NewDecoder(strings.NewReader(jsonOut)).Decode(&conf); err != nil {
 		t.Fatalf("failed to parse config JSON: %v\noutput: %.200s", err, out)
 	}
 	return &conf

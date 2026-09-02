@@ -42,6 +42,11 @@ func WinBoxWasmGz() []byte { return browseui.WinBoxWasmGz() }
 // browseui leaf like BrowseJS.
 func DeskBootJS() []byte { return browseui.DeskBootJS() }
 
+// VNetSWJS is bottle's vnet service worker, served beside the desk pages as
+// /vnet-sw.js (a service worker's scope is capped at its script's directory).
+// Re-exported from the browseui leaf like BrowseJS.
+func VNetSWJS() []byte { return browseui.VNetSWJS() }
+
 // WalletConfigHTML is the single wallet-config page (served at /wallet/config by
 // both the native HV and `hv serve`, embedded via iframe by the ☰ wallet window
 // and the Angular wallet tab). Re-exported from the browseui leaf like BrowseJS.

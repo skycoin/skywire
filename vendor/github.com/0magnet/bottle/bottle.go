@@ -33,8 +33,17 @@ var jsfs []byte
 //go:embed vnet.js
 var vnetJS []byte
 
+//go:embed vnet-sw.js
+var vnetSWJS []byte
+
 // JSFS returns jsfs.js — the globalThis.fs / globalThis.process filesystem.
 func JSFS() []byte { return jsfs }
 
 // VNetJS returns vnet.js — the globalThis.vnet virtual loopback network.
 func VNetJS() []byte { return vnetJS }
+
+// VNetSWJS returns vnet-sw.js — the service worker that turns virtual
+// loopback ports into real same-origin URLs (/vnet/<port>/…), so iframes can
+// load in-page servers with native resolution. Serve it at the page's
+// directory as vnet-sw.js and call vnet.enableSW() from the page.
+func VNetSWJS() []byte { return vnetSWJS }

@@ -27,6 +27,7 @@ func main() {
 	files := map[string][]byte{
 		"bundle.js":    browseui.BrowseJS,
 		"desk-boot.js": browseui.DeskBootJS(),
+		"vnet-sw.js":   browseui.VNetSWJS(),
 		"winbox.wasm":  browseui.WinBoxWasm(),
 	}
 	for name, data := range files {

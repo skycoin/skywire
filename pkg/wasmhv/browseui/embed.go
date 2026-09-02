@@ -82,6 +82,14 @@ var BrowseJS = func() []byte {
 	return out
 }()
 
+// VNetSWJS is bottle's vnet service worker — served BESIDE each desk page as
+// vnet-sw.js (a service worker's scope is capped at its script's directory,
+// so it cannot ride inside the bundle). vnet.enableSW() registers it; from
+// then on /vnet/<port>/… are real same-origin URLs into the page's port
+// table, and the nested browser loads in-page servers (the hypervisor UI)
+// with native resolution instead of the transcoder.
+func VNetSWJS() []byte { return bottle.VNetSWJS() }
+
 // WinBoxWasmGz is the compressed module, for a consumer that ships it inside a
 // page (the single-file generator base64s exactly these bytes) rather than
 // serving it.

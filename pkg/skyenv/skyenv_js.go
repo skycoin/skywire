@@ -31,8 +31,13 @@ func PackageConfig() PkgConfig {
 		LauncherBinPath: "/opt/skywire/bin",
 		LocalPath:       "/opt/skywire/local",
 		Hypervisor: Hypervisor{
-			DbPath:     "/opt/skywire/users.db",
-			EnableAuth: true,
+			DbPath: "/opt/skywire/users.db",
+			// No password gate in the tab: the UI is reachable only through
+			// the page's own vnet (same-origin service worker included), so
+			// auth guards nothing — and users.db is deliberately excluded
+			// from filesystem snapshots (bbolt stores restore corrupt), so a
+			// password would evaporate on every reload anyway.
+			EnableAuth: false,
 		},
 	}
 	return pkgConfig

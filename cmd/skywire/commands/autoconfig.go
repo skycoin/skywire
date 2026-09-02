@@ -580,7 +580,15 @@ func generateConfig(r resolvedConfig, hvArg string) error {
 		// no hypervisor
 	case "":
 		// New install? Default to enabling the local hypervisor.
+		// An EXISTING config keeps whatever it has: regen rewrites the
+		// whole file, so without re-asserting -i here a hypervisor that
+		// was only ever enabled by this same implicit default (no
+		// ISHYPERVISOR=true in the env file) would silently lose its UI
+		// on the next autoconfig run.
 		if _, err := os.Stat(r.configPath); os.IsNotExist(err) {
+			args = append(args, "-i")
+			printableArgs = append(printableArgs, "-i")
+		} else if conf, err := visorconfig.ReadFile(r.configPath); err == nil && conf.Hypervisor != nil && conf.Hypervisor.Enable {
 			args = append(args, "-i")
 			printableArgs = append(printableArgs, "-i")
 		}
