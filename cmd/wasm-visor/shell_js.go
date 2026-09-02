@@ -483,6 +483,9 @@ func openShell(el js.Value) *shellSession {
 	// the mesh as the shell's network: dcurl / dial / aliases, addressing
 	// peers by public key over the visor's dmsg session
 	registerMeshApplets()
+	// curl with -x socks5h:// support over the virtual loopback — replaces
+	// websh's fetch()-based curl, so it must register after browser.Register.
+	registerCurl()
 
 	term := xterm.New(nil)
 	term.Open(el)

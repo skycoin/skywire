@@ -811,6 +811,13 @@
     //                    self-transport hop) — the browser/visor does the egress.
     //   <other-PK>    → PROXY: tunnel through that visor's skysocks exit
     //                    (fetchClearnet), IP-anonymous.
+    //   <host:port>   → PROXY via a LOCAL SOCKS5 listener (Firefox-parity):
+    //                    socks5h://127.0.0.1:1080 or bare host:port. The value
+    //                    passes through as the fetchClearnet "exit" and the Go
+    //                    side speaks SOCKS5 to that address over the page's
+    //                    virtual loopback — canonically the in-process
+    //                    skysocks-client app (`skywire cli proxy start <exit>`
+    //                    in a terminal), but any listener on the port works.
     var winUpstream = null; // per-window override; null → fall back to the global
     function globalUpstream() { try { return localStorage.getItem("skywire-upstream-proxy") || ""; } catch (_) { return ""; } }
     function upstream() { return (winUpstream !== null ? winUpstream : globalUpstream()).trim(); }
@@ -1231,7 +1238,7 @@
       '<div id="sb-proxy" style="display:none;flex-direction:column;gap:.4em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342">' +
       '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">' +
       '<span title="blank = clearnet blocked; this visor PK = direct (non-anonymous); another visor PK = via its skysocks server (IP-anonymous exit)">skysocks proxy:</span>' +
-      '<input id="sb-proxy-pk" placeholder="skysocks PK · own PK (direct) · blank (blocked)" style="flex:1;min-width:140px;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      '<input id="sb-proxy-pk" placeholder="skysocks PK · socks5h://127.0.0.1:1080 · own PK (direct) · blank (blocked)" style="flex:1;min-width:140px;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<button id="sb-proxy-self" title="use this visor (direct, non-anonymous)" style="cursor:pointer">self</button>' +
       '<button id="sb-proxy-auto" title="auto: use the default skysocks-client-lite pool (IP-anonymous + automatic failover)" style="cursor:pointer">auto</button>' +
       '<button id="sb-proxy-run" title="pick from skysocks-client-lite instances already running in this visor" style="cursor:pointer">⌄ running</button>' +
