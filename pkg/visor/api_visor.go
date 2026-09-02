@@ -89,6 +89,12 @@ func (v *Visor) Overview() (*Overview, error) {
 		overview.Latitude = v.geo.data.Latitude
 		overview.Longitude = v.geo.data.Longitude
 	}
+	// Prefer the dmsg-observed public IP over STUN's answer: it needs no UDP,
+	// so it is present where STUN can only report failure (a browser visor,
+	// or any UDP-blocked network) — and when both exist they agree anyway.
+	if v.geo.publicIP != "" {
+		overview.PublicIP = v.geo.publicIP
+	}
 	v.geo.mu.RUnlock()
 
 	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
