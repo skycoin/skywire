@@ -137,10 +137,14 @@
 			if (opts.helpTerminal !== false) {
 				panel.openConsole({ title: 'skywire', initCmd: 'skywire --help' });
 			}
-			if (opts.hvWindow && startVisor) {
+			if (opts.hvWindow) {
 				// The hypervisor UI comes up on the virtual loopback a while
 				// after boot (its module waits on the visor tree + dmsg).
-				// Open the window once something actually listens.
+				// Open the window once something actually listens — armed even
+				// when the session suppressed the autostart, so a visor the
+				// operator starts BY HAND still gets its UI window. Autostarted
+				// visors get a bounded wait; the manual case waits as long as
+				// the page lives.
 				(function waitHV(n) {
 					if (globalThis.vnet && globalThis.vnet.listening(hvPort)) {
 						try {
@@ -150,7 +154,7 @@
 						} catch (e) { console.error('hv window:', e); }
 						return;
 					}
-					if (n > 360) return; // ~3min — visor never served a UI; skip
+					if (startVisor && n > 360) return; // ~3min — the autostarted visor never served a UI
 					setTimeout(function () { waitHV(n + 1); }, 500);
 				})(0);
 			}
