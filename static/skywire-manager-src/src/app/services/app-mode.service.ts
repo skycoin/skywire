@@ -13,8 +13,12 @@ import { ApiService } from './api.service';
  */
 @Injectable({ providedIn: 'root' })
 export class AppModeService {
-  /** Human-readable backend mode shown in the top bar. */
-  readonly mode: string;
+  /**
+   * Human-readable backend mode shown in the top bar. Not readonly: the
+   * default label is refined once /api/about reports the backend's actual
+   * architecture (see below).
+   */
+  mode: string;
   /** True for any in-browser/serverless mode (not the native visor-served UI). */
   readonly serverless: boolean;
   /**
@@ -81,6 +85,20 @@ export class AppModeService {
       next: (a: any) => {
         this.version = (a && a.build && a.build.version) || a?.version || '';
         this.localPk = (a && a.public_key) || '';
+        // The window-flag detection above only knows how the PAGE was built —
+        // a vanilla UI served by a wasm visor over the virtual loopback (the
+        // nested-browser window on the desk) carries no flags and would show
+        // as "Native". The backend knows what it actually is: label the
+        // default mode with the serving visor's architecture ("amd64
+        // hypervisor", "wasm hypervisor") once /api/about reports it.
+        if (this.mode === 'Native hypervisor') {
+          const os = a?.build?.os || '';
+          const arch = a?.build?.arch || '';
+          const label = os === 'js' ? 'wasm' : arch;
+          if (label) {
+            this.mode = label + ' hypervisor';
+          }
+        }
       },
       error: () => {},
     });
