@@ -25,7 +25,7 @@ github.com/0magnet/bbolt
 github.com/0magnet/bbolt/errors
 github.com/0magnet/bbolt/internal/common
 github.com/0magnet/bbolt/internal/freelist
-# github.com/0magnet/bottle v0.0.0-20260902192631-211d2d030c2b
+# github.com/0magnet/bottle v0.0.0-20260902200243-44a3a636767a
 ## explicit; go 1.24
 github.com/0magnet/bottle
 github.com/0magnet/bottle/vnet
@@ -51,7 +51,7 @@ github.com/0magnet/gotop/v4/widgets
 # github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
 ## explicit; go 1.24.0
 github.com/0magnet/metrics
-# github.com/0magnet/netscrape v0.0.0-20260902082747-92e7877355d4
+# github.com/0magnet/netscrape v0.0.0-20260902195455-ed17b71dd13b
 ## explicit; go 1.24
 github.com/0magnet/netscrape
 # github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408

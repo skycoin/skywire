@@ -78,6 +78,15 @@
 		skywireExec.wasmExecURL = opts.wasmExecURL || 'wasm_exec.js';
 		globalThis.__WINBOX_WASM_URL__ = opts.winboxURL || 'winbox.wasm';
 
+		// The vnet service worker: registered up front (it takes a moment to
+		// activate), so by the time anything opens a loopback window the
+		// nested browser can use real /vnet/<port>/ URLs — native rendering
+		// for the hypervisor UI. Resolves false where SWs are unavailable;
+		// the browser falls back to its transcoder, as before.
+		var swReady = (globalThis.vnet && globalThis.vnet.enableSW)
+			? globalThis.vnet.enableSW(opts.vnetSWURL || 'vnet-sw.js').catch(function () { return false; })
+			: Promise.resolve(false);
+
 		status('restoring filesystem…');
 		return jsfs.persist.enable(opts.persistDB || 'skywire-desk', {
 			// Persist identity + config + user files; NEVER the runtime
@@ -155,11 +164,16 @@
 				// the page lives.
 				(function waitHV(n) {
 					if (globalThis.vnet && globalThis.vnet.listening(hvPort)) {
-						try {
-							var win = panel.openWindow(true); // skipLanding
-							win.browser.browseTo('127.0.0.1:' + hvPort, '/');
-							if (win.wb && win.wb.maximize) win.wb.maximize(true);
-						} catch (e) { console.error('hv window:', e); }
+						// Hold the open until the service-worker question is
+						// settled either way — opening a beat earlier would
+						// route this first load through the transcoder.
+						swReady.then(function () {
+							try {
+								var win = panel.openWindow(true); // skipLanding
+								win.browser.browseTo('127.0.0.1:' + hvPort, '/');
+								if (win.wb && win.wb.maximize) win.wb.maximize(true);
+							} catch (e) { console.error('hv window:', e); }
+						});
 						return;
 					}
 					if (startVisor && n > 360) return; // ~3min — the autostarted visor never served a UI
