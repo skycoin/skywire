@@ -25,7 +25,7 @@ github.com/0magnet/bbolt
 github.com/0magnet/bbolt/errors
 github.com/0magnet/bbolt/internal/common
 github.com/0magnet/bbolt/internal/freelist
-# github.com/0magnet/bottle v0.0.0-20260902082749-b333a0d36741
+# github.com/0magnet/bottle v0.0.0-20260902192631-211d2d030c2b
 ## explicit; go 1.24
 github.com/0magnet/bottle
 github.com/0magnet/bottle/vnet

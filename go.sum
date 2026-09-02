@@ -68,8 +68,8 @@ github.com/0magnet/afero v1.15.1-0.20260816202415-9f9d46a34dcd h1:zhADHH+Lu7o4U1
 github.com/0magnet/afero v1.15.1-0.20260816202415-9f9d46a34dcd/go.mod h1:JsJ3c6VwVpJOB3qUpT6YzgJ8yC+nBLUCcH2nhGLC6fA=
 github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898 h1:5UyEWEOaKdF8RAfc/fBxqrpEgsga0NCuRYkA9xegoos=
 github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898/go.mod h1:w+uhwkS5wbYmWTm2Dvvp3AWUR8TNrksPutxoBn4sESY=
-github.com/0magnet/bottle v0.0.0-20260902082749-b333a0d36741 h1:pG8Khjiim9uG72t0H5weqXeI1gZ2IQq4WSwlQLcpquQ=
-github.com/0magnet/bottle v0.0.0-20260902082749-b333a0d36741/go.mod h1:02z8sWzqF3QH4SjMxnx5bnysFUqsw9CdUTtIj+CIxkw=
+github.com/0magnet/bottle v0.0.0-20260902192631-211d2d030c2b h1:hjOY9M5g2Ibqf95SfyE1PgaSDcwcUUWISmNn5w3+z0c=
+github.com/0magnet/bottle v0.0.0-20260902192631-211d2d030c2b/go.mod h1:02z8sWzqF3QH4SjMxnx5bnysFUqsw9CdUTtIj+CIxkw=
 github.com/0magnet/coloredcobra v1.0.3-0.20260902084726-57ccbecfc077 h1:cWpt53uNQFCMUl8zmh73xb/EuigbO3Qe+KP4ggpwvy8=
 github.com/0magnet/coloredcobra v1.0.3-0.20260902084726-57ccbecfc077/go.mod h1:Kn7dmRJcnVybFNKY0FNUjLcsivW4FCbAec8ZfVmz51I=
 github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e h1:fyLB1qUtpMxPeZp4MdZu5yLHHR+kLl2MZfhG0djlGIo=

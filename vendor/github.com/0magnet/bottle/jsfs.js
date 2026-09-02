@@ -405,12 +405,19 @@
 		let timer = null;
 		let lastSave = 0;
 		let saveChain = Promise.resolve();
+		// exclude(path) → true skips the file (and, for a dir, its whole
+		// subtree) from snapshots. The host uses it to keep DATABASES out:
+		// a store snapshotted mid-write restores corrupt and can hang its
+		// consumer on the next boot — runtime caches must be rebuilt, not
+		// carried. Configs, keys and user files persist; caches don't.
+		let excludeFn = null;
 
 		function serialize() {
 			const out = [];
 			(function walk(node, path) {
 				for (const [name, child] of node.entries) {
 					const p = path + '/' + name;
+					if (excludeFn && excludeFn(p)) continue;
 					const t = child.mode & 0o170000;
 					if (t === S_IFDIR) {
 						out.push({ p, t: 'd', m: child.mode & 0o7777, mt: child.mtimeMs });
@@ -516,9 +523,10 @@
 		}
 
 		return {
-			enable(dbName) {
+			enable(dbName, opts) {
 				if (enabled) return Promise.resolve({ restored: false });
 				if (typeof indexedDB === 'undefined') return Promise.resolve({ restored: false });
+				if (opts && typeof opts.exclude === 'function') excludeFn = opts.exclude;
 				return idbOpen(dbName || 'jsfs').then((d) => {
 					db = d;
 					return idbGet();

@@ -79,7 +79,15 @@
 		globalThis.__WINBOX_WASM_URL__ = opts.winboxURL || 'winbox.wasm';
 
 		status('restoring filesystem…');
-		return jsfs.persist.enable(opts.persistDB || 'skywire-desk').then(function (p) {
+		return jsfs.persist.enable(opts.persistDB || 'skywire-desk', {
+			// Persist identity + config + user files; NEVER the runtime
+			// stores. A bbolt database snapshotted mid-write restores corrupt
+			// and hangs its consumer on the next boot (the hypervisor module
+			// stalling on a restored users.db) — caches rebuild, keys don't.
+			exclude: function (p) {
+				return /\.db$/.test(p) || p.indexOf('/opt/skywire/local/') === 0 || p === '/opt/skywire/local';
+			},
+		}).then(function (p) {
 			status((p.restored ? 'filesystem restored — ' : '') + 'starting the desk…');
 			// The desk host: the wasm-visor binary in-page. It installs the
 			// shell + the skywireVisor API and waits — boot() is never called,
