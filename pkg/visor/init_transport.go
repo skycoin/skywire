@@ -190,11 +190,17 @@ func (v *Visor) resolvePublicIPForAR(arClient addrresolver.APIClient, log *loggi
 			geoData = local
 		}
 	}
+	v.geo.mu.Lock()
 	if geoData != nil {
-		v.geo.mu.Lock()
 		v.geo.data = geoData
-		v.geo.mu.Unlock()
 	}
+	// Record the determined public IP for the Overview: the dmsg-observed
+	// address works where STUN cannot (browser visors, UDP-blocked networks),
+	// so the UI shows the real IP instead of a STUN failure label.
+	if pIP != "" {
+		v.geo.publicIP = pIP
+	}
+	v.geo.mu.Unlock()
 }
 
 func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
