@@ -4,7 +4,7 @@ package main
 import (
 	"log"
 
-	cc "github.com/ivanpirog/coloredcobra"
+	cc "github.com/0magnet/coloredcobra"
 
 	cligot "github.com/skycoin/skywire/cmd/skywire-cli/commands/got"
 )

@@ -12,8 +12,8 @@ import (
 	"os"
 	"time"
 
+	bolt "github.com/0magnet/bbolt"
 	"github.com/skycoin/skycoin/src/cipher"
-	bolt "go.etcd.io/bbolt"
 
 	"github.com/skycoin/skywire/pkg/cxo/data"
 	"github.com/skycoin/skywire/pkg/util/bbolthealth"

@@ -3,8 +3,8 @@
 // Launcher.Apps field embeds. Splitting it out of pkg/app/appserver
 // keeps V1 importable from GOOS=js consumers without dragging in
 // appserver's operational graph (which transitively pulls
-// github.com/james-barrow/golang-ipc — the per-app IPC channel —
-// and go.etcd.io/bbolt — the app-state store).
+// github.com/0magnet/golang-ipc — the per-app IPC channel —
+// and github.com/0magnet/bbolt — the app-state store).
 //
 // pkg/app/appserver re-exports `AppConfig = spec.AppConfig` so
 // existing callers compile unchanged.

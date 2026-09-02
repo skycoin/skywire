@@ -64,6 +64,7 @@ theme:
 # docs/skywire/ comes out alphabetical, which matches `--help` order).
 nav:
   - Home: index.md
+  - Playground: https://skycoin.github.io/skywire/playground/
   - Guides: guides/README.md
   - Command Reference: skywire/README.md
   - Apps:

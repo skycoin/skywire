@@ -545,8 +545,8 @@ func rotateAwayFromExit(pk cipher.PubKey) {
 	ctx, sdPK := proxyAutoCtx, proxyAutoSDPK
 	proxyPoolMu.Unlock()
 
-	closeSkysocksExit(pk)  // sever any live sessions to the dead exit
-	cooldownProxyExit(pk)  // don't re-pick this exit for a while — force fresh ones
+	closeSkysocksExit(pk) // sever any live sessions to the dead exit
+	cooldownProxyExit(pk) // don't re-pick this exit for a while — force fresh ones
 	if !next.Null() {
 		_ = setProxyExit(defaultProxyID, next) //nolint:errcheck
 		reArmDefaultAuto()

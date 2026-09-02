@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 // Package livetui cmd/skywire-cli/cliutil/livetui/livetui.go c4-vis-cli
 // helper. Wraps any function that produces a string in a scrollable
 // viewport that re-renders on a configurable tick. Used by CLI

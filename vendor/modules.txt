@@ -19,12 +19,25 @@ fyne.io/systray/internal/generated/notifier
 github.com/0magnet/afero
 github.com/0magnet/afero/internal/common
 github.com/0magnet/afero/mem
-# github.com/0magnet/coloredcobra v1.0.2
-## explicit; go 1.15
+# github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898
+## explicit; go 1.25.0
+github.com/0magnet/bbolt
+github.com/0magnet/bbolt/errors
+github.com/0magnet/bbolt/internal/common
+github.com/0magnet/bbolt/internal/freelist
+# github.com/0magnet/bottle v0.0.0-20260902082749-b333a0d36741
+## explicit; go 1.24
+github.com/0magnet/bottle
+github.com/0magnet/bottle/vnet
+# github.com/0magnet/coloredcobra v1.0.3-0.20260902084726-57ccbecfc077
+## explicit; go 1.25.0
 github.com/0magnet/coloredcobra
 # github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e
 ## explicit; go 1.24
 github.com/0magnet/cosmos-go
+# github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
+## explicit; go 1.15
+github.com/0magnet/golang-ipc
 # github.com/0magnet/gotop/v4 v4.2.1-0.20260901202627-53911da3ad77
 ## explicit; go 1.26.4
 github.com/0magnet/gotop/v4
@@ -38,6 +51,9 @@ github.com/0magnet/gotop/v4/widgets
 # github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
 ## explicit; go 1.24.0
 github.com/0magnet/metrics
+# github.com/0magnet/netscrape v0.0.0-20260902082747-92e7877355d4
+## explicit; go 1.24
+github.com/0magnet/netscrape
 # github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408
 ## explicit; go 1.25
 github.com/0magnet/plot-go
@@ -56,7 +72,7 @@ github.com/0magnet/sh/v3/syntax
 ## explicit; go 1.22
 github.com/0magnet/sysinfo
 github.com/0magnet/sysinfo/cpuid
-# github.com/0magnet/termanim v0.0.0-20260827230242-7dd03f4a292e
+# github.com/0magnet/termanim v0.0.0-20260902084711-a3c08295e7c7
 ## explicit; go 1.25.0
 github.com/0magnet/termanim/canvas
 github.com/0magnet/termanim/matrix
@@ -69,10 +85,9 @@ github.com/0magnet/u-root/pkg/ls
 ## explicit; go 1.25.7
 github.com/0magnet/websh/shell
 github.com/0magnet/websh/shell/browser
-# github.com/0magnet/winbox-go v0.0.0-20260829031602-cfd539d747db
+# github.com/0magnet/winbox-go v0.0.0-20260902000349-e769f33dd0fa
 ## explicit; go 1.24
-github.com/0magnet/winbox-go
-github.com/0magnet/winbox-go/jsapi
+github.com/0magnet/winbox-go/dist
 # github.com/0magnet/xterm-go v0.0.0-20260823191622-8d2bbff87cea
 ## explicit; go 1.24
 github.com/0magnet/xterm-go
@@ -666,9 +681,6 @@ github.com/jackc/pgx/v5/stdlib
 ## explicit; go 1.19
 github.com/jackc/puddle/v2
 github.com/jackc/puddle/v2/internal/genstack
-# github.com/james-barrow/golang-ipc v1.2.4
-## explicit; go 1.15
-github.com/james-barrow/golang-ipc
 # github.com/jaypipes/ghw v0.25.0
 ## explicit; go 1.21
 github.com/jaypipes/ghw

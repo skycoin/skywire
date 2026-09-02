@@ -192,7 +192,7 @@ func GenerateStandalone(uiFS fs.FS, wasmExecJS, wasm, overrideJS []byte, cfg Sta
 		// No server to fetch /winbox.wasm from, so the window-manager module
 		// travels inside the page: still gzipped, base64'd, and inflated by
 		// winbox-loader.js — the same shape wasmJS above uses for the visor blob.
-		head += "<script>self.__SKYWIRE_WINBOX_WASM_B64__=\"" + base64.StdEncoding.EncodeToString(WinBoxWasmGz()) + "\";</script>\n" +
+		head += "<script>self.__WINBOX_WASM_B64__=\"" + base64.StdEncoding.EncodeToString(WinBoxWasmGz()) + "\";</script>\n" +
 			"<script>" + jsSafe(BrowseJS) + "</script>" + "\n" +
 			"<script>" + BrowseLauncherJS + "</script>\n"
 	}

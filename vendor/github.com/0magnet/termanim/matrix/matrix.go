@@ -77,6 +77,11 @@ type column struct {
 	// other down it; in the film most of the rain is plain green and the white
 	// heads are scattered through it.
 	hot bool
+
+	// word is the stream's word when Words is set, and next is how far
+	// through it the head has got. Empty means this stream is glyph rain.
+	word []rune
+	next int
 }
 
 // Matrix is the animation. The zero value is not usable; call New.
@@ -94,6 +99,25 @@ type Matrix struct {
 
 	// Glyphs is the alphabet drawn. Replace before the first frame.
 	Glyphs []rune
+
+	// Words makes each stream carry a word rather than random glyphs: the
+	// head emits the word letter by letter as it falls, so a column reads
+	// downward. Empty, the default, is the glyph rain.
+	//
+	// A word shorter than its trail repeats, separated by WordGap blanks.
+	// Words is sampled when a stream starts, so replacing it takes effect on
+	// streams that begin after.
+	Words []string
+
+	// WordGap is the blank cells between one word in a stream and the next.
+	// Zero runs them together, which reads as one long string of letters
+	// rather than as two words.
+	WordGap int
+
+	// FreshWords draws a new word each time a stream finishes one, so a long
+	// column reads as several different words falling rather than as one
+	// word said over and over. The zero value repeats the stream's word.
+	FreshWords bool
 	// Palette runs from the dim tail to the bright head.
 	Palette canvas.Palette
 	// Density is the chance per simulation step that an idle column starts
@@ -173,9 +197,7 @@ func (m *Matrix) Resize(cols, rows int) {
 	for i := range m.changed {
 		m.changed[i] = -1
 	}
-	for i := range m.glyph {
-		m.glyph[i] = m.randGlyph()
-	}
+	m.seedGlyphs()
 	// Stagger the start so the screen does not begin with every column
 	// releasing at once.
 	for x := range m.col {
@@ -183,6 +205,59 @@ func (m *Matrix) Resize(cols, rows int) {
 			m.col[x] = m.newColumn(float64(-m.rng.Intn(rows)))
 		}
 	}
+}
+
+// seedGlyphs fills the buffer before any stream exists, so frame one is
+// rain rather than an empty screen.
+//
+// With Words set it seeds whole words down each column rather than loose
+// letters. A stream lights cells its head has not reached yet, and a
+// column seeded with letters from arbitrary positions would read as a
+// word with a jump in it until the head had passed the whole screen.
+func (m *Matrix) seedGlyphs() {
+	if len(m.Words) == 0 {
+		for i := range m.glyph {
+			m.glyph[i] = m.randGlyph()
+		}
+		return
+	}
+	for x := 0; x < m.cols; x++ {
+		w := []rune(m.Words[m.rng.Intn(len(m.Words))])
+		if len(w) == 0 {
+			continue
+		}
+		period := len(w) + m.WordGap
+		off := m.rng.Intn(period)
+		for y := 0; y < m.rows; y++ {
+			if i := (y + off) % period; i < len(w) {
+				m.glyph[y*m.cols+x] = w[i]
+			} else {
+				m.glyph[y*m.cols+x] = ' '
+			}
+		}
+	}
+}
+
+// nextGlyph is the glyph the head takes as it moves onto a new row: the
+// next letter of the stream's word, or a random one when it has none.
+func (m *Matrix) nextGlyph(c *column) rune {
+	if len(c.word) == 0 {
+		return m.randGlyph()
+	}
+	period := len(c.word) + m.WordGap
+	if m.FreshWords && c.next >= period && len(m.Words) > 0 {
+		// The stream has finished its word (and its gap). Take another
+		// rather than saying the same one again.
+		c.word = []rune(m.Words[m.rng.Intn(len(m.Words))])
+		c.next = 0
+		period = len(c.word) + m.WordGap
+	}
+	i := c.next % period
+	c.next++
+	if i >= len(c.word) {
+		return ' '
+	}
+	return c.word[i]
 }
 
 func (m *Matrix) randGlyph() rune {
@@ -193,7 +268,12 @@ func (m *Matrix) randGlyph() rune {
 }
 
 func (m *Matrix) newColumn(head float64) column {
+	var word []rune
+	if len(m.Words) > 0 {
+		word = []rune(m.Words[m.rng.Intn(len(m.Words))])
+	}
 	return column{
+		word:   word,
 		head:   head,
 		speed:  0.25 + m.rng.Float64()*0.75,
 		length: 6 + m.rng.Intn(m.rows),
@@ -271,6 +351,11 @@ func (m *Matrix) step() {
 		if !c.active {
 			if m.rng.Intn(m.Density) == 0 {
 				*c = m.newColumn(0)
+				// The head only writes when it MOVES to a new row, so the row
+				// it starts on would otherwise keep whatever the buffer was
+				// seeded with. One cell per stream, and with Words set it is
+				// a letter from the wrong place in the wrong word.
+				m.setGlyph(x, int(c.head), m.nextGlyph(c))
 			}
 			continue
 		}
@@ -281,12 +366,14 @@ func (m *Matrix) step() {
 			// The glyph the head has just moved onto is new, so it is drawn new
 			// whatever the beat is doing.
 			if int(c.head) != prev {
-				m.setGlyph(x, int(c.head), m.randGlyph())
+				m.setGlyph(x, int(c.head), m.nextGlyph(c))
 			}
 		}
 
 		// One glyph somewhere in the trail turns over, on the beat.
-		if changing && m.rng.Intn(3) == 0 {
+		// One glyph somewhere in the trail turns over, on the beat. A word
+		// stream is exempt: swapping a letter mid-fall spells something else.
+		if changing && len(c.word) == 0 && m.rng.Intn(3) == 0 {
 			m.changeGlyph(x, m.rng.Intn(m.rows), m.randGlyph())
 		}
 

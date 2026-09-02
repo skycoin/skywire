@@ -5,6 +5,8 @@
 // wasm visor — see project_skycoin_web_internal_app_convergence. The
 // per-platform serving body is the only seam; registration + lifecycle are
 // shared, exactly like skychat.
+//go:build !(js && wasm)
+
 package commands
 
 import (

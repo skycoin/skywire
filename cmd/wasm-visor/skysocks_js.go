@@ -333,6 +333,28 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 		if _, err := url.ParseRequestURI(rawURL); err != nil {
 			return nil, fmt.Errorf("bad url: %w", err)
 		}
+		// Firefox-parity proxy setting: an ADDRESS-shaped "exit"
+		// (socks5h://127.0.0.1:1080, or bare host:port) means "speak SOCKS5 to
+		// that local listener over the page's virtual loopback" instead of
+		// dialing an exit by public key. The canonical listener is the
+		// in-process skysocks-client app (`skywire cli proxy start <exit>`).
+		if sa := socksAddrOf(serverPKHex); sa != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+			defer cancel()
+			emitProxyLogHook(winID, fmt.Sprintf("[proxy %s] %s %s via local socks5 %s…", winID, method, rawURL, sa))
+			t0 := time.Now()
+			status, b, hdr, err := fetchViaSocks(ctx, sa, method, rawURL, body, extraHeaders)
+			if err != nil {
+				emitProxyLog(winID, fmt.Sprintf("[proxy %s] %s %s via %s FAILED (%dms): %v", winID, method, rawURL, sa, time.Since(t0).Milliseconds(), err))
+				return nil, err
+			}
+			resultLine := fmt.Sprintf("[proxy %s] %s %s via %s → %d (%dB, %dms)", winID, method, rawURL, sa, status, len(b), time.Since(t0).Milliseconds())
+			if proxyVerbose {
+				vlog(resultLine)
+			}
+			emitProxyLogHook(winID, resultLine)
+			return shapeFetchResult(status, b, hdr), nil
+		}
 		// A caller-pinned exit (non-empty serverPKHex) is respected as-is — one
 		// attempt, no failover. The iframe browser / wallet leave it empty to use
 		// the default AUTO instance, which we fail over across exits: if a fetch

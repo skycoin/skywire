@@ -12,18 +12,11 @@ name: Docs
 #   - workflow_dispatch: manual rebuild button
 
 on:
+  # Every develop push, not just docs paths: the site now ships the
+  # PLAYGROUND — the full skywire binary compiled to wasm behind a browser
+  # desk — and that must track the code, not just the prose.
   push:
     branches: [develop]
-    paths:
-      - 'docs/**'
-      - 'skywire-specs/**'
-      - 'rewards/**'
-      - 'cmd/apps/*/README.md'
-      - 'cmd/dmsg/*/README.md'
-      - 'cmd/svc/*/README.md'
-      - 'mkdocs.yml'
-      - '.github/workflows/docs.yml'
-      - 'scripts/docs-prepare.sh'
   pull_request:
     paths:
       - 'docs/**'
@@ -60,6 +53,22 @@ jobs:
 
       - name: Stage external doc trees under docs/
         run: bash scripts/docs-prepare.sh
+
+      # The playground: the whole skywire binary compiled to js/wasm plus the
+      # desk (shell + windows + nested browser), served as static files at
+      # /playground/. Skipped on PRs — the wasm build costs minutes and PR
+      # checks only need the docs to build.
+      - uses: actions/setup-go@v6
+        if: github.event_name != 'pull_request'
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Build the playground
+        if: github.event_name != 'pull_request'
+        run: |
+          make playground
+          cp -r build/playground/. docs/playground/
 
       - name: Build
         # No --strict here — the upstream skywire-specs/ and rewards/

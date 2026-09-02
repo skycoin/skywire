@@ -23,7 +23,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
-	ipc "github.com/james-barrow/golang-ipc"
+	ipc "github.com/0magnet/golang-ipc"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"

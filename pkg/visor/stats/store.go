@@ -9,8 +9,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/0magnet/bbolt"
 	"github.com/google/uuid"
-	"go.etcd.io/bbolt"
 
 	"github.com/skycoin/skywire/pkg/util/bbolthealth"
 )

@@ -17,7 +17,7 @@ import (
 	"os"
 	"time"
 
-	bolt "go.etcd.io/bbolt"
+	bolt "github.com/0magnet/bbolt"
 )
 
 // compactMinFileBytes: only stores at least this large on disk are considered —

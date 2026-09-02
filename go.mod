@@ -26,7 +26,6 @@ require (
 	github.com/gorilla/securecookie v1.1.2
 	github.com/hashicorp/go-version v1.9.0
 	github.com/ivanpirog/coloredcobra v1.0.1
-	github.com/james-barrow/golang-ipc v1.2.4
 	github.com/jaypipes/ghw v0.25.0
 	github.com/json-iterator/go v1.1.12
 	github.com/lib/pq v1.12.3
@@ -47,7 +46,7 @@ require (
 	github.com/toqueteos/webbrowser v1.2.1
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/yuin/goldmark v1.8.5
-	go.etcd.io/bbolt v1.5.0
+	go.etcd.io/bbolt v1.5.0 // indirect
 	golang.org/x/net v0.58.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
@@ -60,13 +59,17 @@ require (
 )
 
 require (
+	github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898
+	github.com/0magnet/bottle v0.0.0-20260902082749-b333a0d36741
+	github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260901202627-53911da3ad77
 	github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
+	github.com/0magnet/netscrape v0.0.0-20260902082747-92e7877355d4
 	github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408
 	github.com/0magnet/realorigin v0.2.0
 	github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26
-	github.com/0magnet/termanim v0.0.0-20260827230242-7dd03f4a292e
-	github.com/0magnet/winbox-go v0.0.0-20260829031602-cfd539d747db
+	github.com/0magnet/termanim v0.0.0-20260902084711-a3c08295e7c7
+	github.com/0magnet/winbox-go v0.0.0-20260902000349-e769f33dd0fa
 	github.com/0magnet/yamux v0.1.3-0.20260901201804-38cdbd63617a
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0
@@ -130,7 +133,7 @@ require (
 )
 
 require (
-	github.com/0magnet/coloredcobra v1.0.2 // indirect
+	github.com/0magnet/coloredcobra v1.0.3-0.20260902084726-57ccbecfc077
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect

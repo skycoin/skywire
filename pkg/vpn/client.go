@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	ipc "github.com/james-barrow/golang-ipc"
+	ipc "github.com/0magnet/golang-ipc"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app"
