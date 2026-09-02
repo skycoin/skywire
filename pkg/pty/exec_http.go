@@ -151,13 +151,14 @@ const execStreamMaxFrame = 1 << 20 // 1 MiB
 // The text/plain fallback has no such place, and therefore inherits the
 // 2-minute quiet limit. That is acceptable for a debugging mode.
 //
-// 10s rather than 45s: the keepalive doubles as DISCONNECT DETECTION for an
-// idle command — a client that vanished mid-frame surfaces only when the next
-// write fails (net/http never cancels r.Context() for write errors), so the
-// interval bounds how long an orphaned idle command lingers. 45s left it
-// beyond the disconnect test's 20s patience, and beyond reasonable teardown
-// latency generally.
-const execStreamKeepalive = 10 * time.Second
+// 5s rather than 45s: the keepalive doubles as DISCONNECT DETECTION for an
+// idle command — a client that vanished mid-frame surfaces only when a write
+// FAILS (net/http never cancels r.Context() for write errors), and the first
+// write into a dead TCP conn usually "succeeds" into kernel buffers, so
+// detection takes up to TWO intervals. 10s put that worst case at ~20s —
+// exactly the disconnect test's patience, flaking on slow runners; 5s bounds
+// it near 10s.
+const execStreamKeepalive = 5 * time.Second
 
 // execStreamDefaultTimeout and execStreamMaxTimeout are far longer than the
 // buffered path's 30s / 5min. Those exist to stop `tail -f` being mis-used as
