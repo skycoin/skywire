@@ -245,6 +245,28 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return nil
 	})
 
+	// Carrier convergence. A session can bootstrap on a less-preferred
+	// carrier — a browser visor's FIRST dials are always wss, because the
+	// embedded server seeds carry no WT cert hashes (they rotate) — and
+	// would otherwise stay there forever. Re-dial toward the preferred
+	// carrier as discovery fills in. Self-gating: a no-op unless the
+	// client's carrier preference lists wt ahead of ws, so native visors
+	// (which don't) pay one cheap check per tick.
+	go func() {
+		t := time.NewTicker(30 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if n := dmsgC.UpgradeBrowserSessions(); n > 0 {
+					log.WithField("sessions", n).Info("dmsg: converged sessions to the preferred carrier (wss→wt)")
+				}
+			}
+		}
+	}()
+
 	v.initLock.Lock()
 	v.dmsgC = dmsgC
 	v.dmsgDC = dmsgC // single client: dmsgDC consumers (router, resolver, vpn) ride dmsgC

@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
 
@@ -34,9 +33,6 @@ func (c *wtClient) Start() error {
 	return fmt.Errorf("wt: serving not supported in a browser (no HTTP/3 listener) — dial only: %w", ErrServeDialOnly)
 }
 
-// dialResolvedWT is a no-op in the browser: there is no address-resolver client
-// (addrresolver is !tinygo and pulls quic-go); WT dials come from the table the
-// autoconnect populates with the AR-resolved endpoint + cert hash.
-func (c *wtClient) dialResolvedWT(_ context.Context, _ cipher.PubKey) (net.Conn, error) {
-	return nil, ErrWTEntryNotFound
-}
+// dialResolvedWT lives in wt_browser_resolve.go (std-Go js: AR-resolved, the
+// same record the native dial path uses) / wt_browser_resolve_tinygo.go
+// (TinyGo: table-only — addrresolver is !tinygo and pulls quic-go).
