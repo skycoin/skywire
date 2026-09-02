@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
 	"github.com/armon/go-socks5"
 	"github.com/chen3feng/safecast"
 	"github.com/sirupsen/logrus"
@@ -570,7 +571,10 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 	log.WithField("addr", lisAddr).Debug("Serving SOCKS5 direct proxy")
 	// Open the listener ourselves so we can close it on ctx cancel —
 	// armon/go-socks5's Serve returns when the listener is closed.
-	lis, err := net.Listen("tcp", lisAddr)
+	// bottle/vnet: net.Listen natively; the page's virtual-loopback port
+	// table under js/wasm, so a browser visor's resolving proxy is
+	// dialable at vnet 127.0.0.1:<port> (the nested browser's upstream).
+	lis, err := vnet.Listen("tcp", lisAddr)
 	if err != nil {
 		return fmt.Errorf("SOCKS5 listen: %w", err)
 	}

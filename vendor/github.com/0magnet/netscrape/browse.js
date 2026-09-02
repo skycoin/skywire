@@ -1233,12 +1233,14 @@
     return wb;
   }
 
-  // createWindow builds ONE browse window — a dmsg virtual browser + host/proxy
-  // panels — as a WinBox. WinBox draws the title bar, window buttons and resize
-  // borders; we supply only the body (nav bar + panels + page iframe). opts.root
-  // is the WinBox mount container (so the desktop can be hidden as a unit);
-  // onClose runs when the window is closed. Returns {wb, browser, landHome}.
-  function createWindow(doc, opts, onClose) {
+  // createBrowserPane builds ONE browser TAB's whole surface — nav bar +
+  // collapsible proxy/info panels + the page iframe + its createBrowser
+  // engine. It is the body a browse window shows for its active tab; the
+  // tabbed createWindow below stacks panes and shows one at a time. paneCB
+  // carries {title(t), icon(u)} so the pane reflects its site into its TAB
+  // (and, when active, the window title) instead of owning a WinBox.
+  // Returns {el, browser, landHome, close}.
+  function createBrowserPane(doc, opts, paneCB) {
     var fetchDmsg = opts.fetchDmsg, serveContent = opts.serveContent;
     // The WinBox body: nav bar + collapsible host/proxy panels + the page iframe.
     // No window controls or resize grip here — WinBox draws those.
@@ -1328,17 +1330,7 @@
       '</div>';
 
     function $(id) { return wrap.querySelector("#" + id); }
-    var wb = makeWin(doc, {
-      title: "skynet", root: opts.root, top: opts.top, bottom: opts.bottom, width: "74%", height: "80%", mount: wrap,
-      onclose: function () {
-        // Release this window's skysocks-lite sessions/routes (per-window). browser
-        // is hoisted; it exists by the time onclose fires.
-        try { if (browser && browser.winId && globalThis.skywireVisor && globalThis.skywireVisor.closeWindow) { globalThis.skywireVisor.closeWindow(browser.winId); } } catch (e) {}
-        try { if (browser && browser.winId && globalThis.__skywireBrowserPanes) { delete globalThis.__skywireBrowserPanes[browser.winId]; } } catch (e) {}
-        if (onClose) onClose();
-      }
-    });
-    var win = { wb: wb, el: wrap };
+    var win = { el: wrap };
     var loading = false;
     // Per-window request log: a small ring buffer rendered as a terminal-like pane
     // in the ⚙ panel, so each browser window shows exactly what went through its
@@ -1366,10 +1358,11 @@
       // skywireVisor.* globals), the native HV UI passes /api/browse-backed ones.
       fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK, directViaBackend: opts.directViaBackend,
       log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} plog(m); },
-      // Reflect the current site into the WinBox title bar.
-      setAddr: function (u) { $("sb-addr").value = u; var t = u.replace(/^https?:\/\//, "").slice(0, 18); try { wb.setTitle(t || "skynet"); } catch (e) {} },
-      // Reflect the site's favicon (fetched over the proxy/dmsg) into the title bar.
-      setIcon: function (u) { try { wb.setIcon(u); } catch (e) {} },
+      // Reflect the current site into this pane's TAB (and the window title
+      // when this tab is active) via paneCB.
+      setAddr: function (u) { $("sb-addr").value = u; var t = u.replace(/^https?:\/\//, "").slice(0, 18); try { paneCB.title(t || "skynet"); } catch (e) {} },
+      // Reflect the site's favicon (fetched over the proxy/dmsg) into the tab.
+      setIcon: function (u) { try { paneCB.icon(u); } catch (e) {} },
       // reflect load state into the reload/cancel button (⟳ idle, ✕ while loading)
       onLoading: function (on) { loading = on; var b = $("sb-reload"); b.textContent = on ? "✕" : "⟳"; b.title = on ? "cancel load" : "reload"; },
       // enable/disable back/forward to match history position
@@ -1523,14 +1516,137 @@
     dynBtn.onclick = function () { browser.setClearnetDynamic(!browser.clearnetDynamic()); renderDynBtn(); try { browser.reload(); } catch (e) {} };
 
     // home.dmsg (resolver alias for the deployment landing page), matching the
-    // socks5 resolving proxy's default — landed once per window.
+    // socks5 resolving proxy's default — landed once per pane.
     win.landHome = function () {
       if (!wrap.dataset.landed) { wrap.dataset.landed = "1"; browser.browseTo("home.dmsg", "/"); }
     };
+    // close releases this pane's skysocks-lite sessions/routes + its log sink —
+    // per-pane state keyed by browser.winId. Called by the tab's × and by the
+    // window's onclose (for every remaining pane).
+    win.close = function () {
+      try { if (browser && browser.winId && globalThis.skywireVisor && globalThis.skywireVisor.closeWindow) { globalThis.skywireVisor.closeWindow(browser.winId); } } catch (e) {}
+      try { if (browser && browser.winId && globalThis.__skywireBrowserPanes) { delete globalThis.__skywireBrowserPanes[browser.winId]; } } catch (e) {}
+    };
+
+    return win;
+  }
+
+  // createWindow builds one browse WINDOW: a tab strip over a stack of
+  // browser panes (createBrowserPane) inside a WinBox — browser-style tabs
+  // instead of one window per site. The active pane's title/favicon flow to
+  // its tab and the window title. Returns {wb, el, browser, landHome,
+  // openTab, addTab}; win.browser always points at the ACTIVE tab's engine,
+  // so single-tab callers (deep links, the desk boot) work unchanged.
+  function createWindow(doc, opts, onClose) {
+    var outer = doc.createElement("div");
+    outer.style.cssText = "position:absolute;inset:0;background:#15131c;display:flex;flex-direction:column;overflow:hidden";
+    var strip = doc.createElement("div");
+    strip.style.cssText = "display:flex;gap:2px;align-items:stretch;background:#100d18;border-bottom:1px solid #2a2342;padding:3px 3px 0;min-height:27px;overflow-x:auto;overflow-y:hidden";
+    var body = doc.createElement("div");
+    body.style.cssText = "position:relative;flex:1;min-height:0";
+    outer.appendChild(strip);
+    outer.appendChild(body);
+
+    var tabs = [], active = null, wb = null;
+    function reflectTitle() {
+      if (!wb || !active) return;
+      try { wb.setTitle(active.title || "skynet"); } catch (e) {}
+      try { if (active.iconURL) wb.setIcon(active.iconURL); } catch (e) {}
+    }
+    function activate(t) {
+      if (!t || active === t) return;
+      tabs.forEach(function (x) {
+        // "flex", not "" — the pane's cssText display:flex was overwritten by
+        // the inline "none", and clearing to "" would land on block (iframe
+        // collapses to its 150px default height).
+        x.pane.el.style.display = x === t ? "flex" : "none";
+        x.btn.style.background = x === t ? "#2a2342" : "transparent";
+        x.lbl.style.color = x === t ? "#fff" : "#9aa0a6";
+      });
+      active = t;
+      win.browser = t.pane.browser;
+      reflectTitle();
+    }
+    function closeTab(t) {
+      try { t.pane.close(); } catch (e) {}
+      t.pane.el.remove();
+      t.btn.remove();
+      var i = tabs.indexOf(t);
+      if (i >= 0) tabs.splice(i, 1);
+      if (!tabs.length) { try { wb.close(); } catch (e) {} return; }
+      if (active === t) { active = null; activate(tabs[Math.max(0, i - 1)]); }
+    }
+    function addTab(bg) {
+      var t = { title: "skynet", iconURL: "" };
+      t.btn = doc.createElement("div");
+      t.btn.style.cssText = "display:flex;align-items:center;gap:.4em;max-width:14em;padding:.25em .55em;cursor:pointer;font:11px monospace;border:1px solid #2a2342;border-bottom:0;border-radius:5px 5px 0 0;user-select:none;white-space:nowrap";
+      t.ico = doc.createElement("img");
+      t.ico.style.cssText = "width:12px;height:12px;display:none";
+      t.lbl = doc.createElement("span");
+      t.lbl.style.cssText = "overflow:hidden;text-overflow:ellipsis;color:#9aa0a6";
+      t.lbl.textContent = t.title;
+      var x = doc.createElement("span");
+      x.textContent = "×";
+      x.title = "close tab";
+      x.style.cssText = "cursor:pointer;opacity:.65;padding:0 .1em";
+      x.onclick = function (ev) { ev.stopPropagation(); closeTab(t); };
+      t.btn.appendChild(t.ico); t.btn.appendChild(t.lbl); t.btn.appendChild(x);
+      t.btn.onclick = function () { activate(t); };
+      strip.insertBefore(t.btn, plus);
+      t.pane = createBrowserPane(doc, opts, {
+        title: function (s) {
+          t.title = s || "skynet";
+          t.lbl.textContent = t.title;
+          t.btn.title = t.title;
+          if (active === t) reflectTitle();
+        },
+        icon: function (u) {
+          t.iconURL = u || "";
+          if (u) { t.ico.src = u; t.ico.style.display = ""; } else { t.ico.style.display = "none"; }
+          if (active === t) reflectTitle();
+        },
+      });
+      t.pane.el.style.display = "none";
+      body.appendChild(t.pane.el);
+      tabs.push(t);
+      // bg: open WITHOUT stealing focus (the desk stacks default tabs behind
+      // the hypervisor UI). The first tab always activates.
+      if (!bg || tabs.length === 1) { activate(t); }
+      return t;
+    }
+    var plus = doc.createElement("div");
+    plus.textContent = "+";
+    plus.title = "new tab";
+    plus.style.cssText = "display:flex;align-items:center;padding:.2em .55em;cursor:pointer;color:#9aa0a6;font:13px monospace;user-select:none";
+    plus.onclick = function () { var t = addTab(); t.pane.landHome(); };
+    strip.appendChild(plus);
+
+    wb = makeWin(doc, {
+      title: "skynet", root: opts.root, top: opts.top, bottom: opts.bottom, width: "74%", height: "80%", mount: outer,
+      onclose: function () {
+        tabs.slice().forEach(function (t) { try { t.pane.close(); } catch (e) {} });
+        tabs = [];
+        if (onClose) onClose();
+      }
+    });
+
+    var win = { wb: wb, el: outer };
+    var first = addTab();
+    win.browser = first.pane.browser;
+    // landHome lands the FIRST tab once (the classic single-tab behavior).
+    win.landHome = function () { first.pane.landHome(); };
+    // openTab opens a NEW tab and (optionally) navigates it: openTab(host,
+    // path, scheme) — host as the address-bar would take it (127.0.0.1:8001,
+    // home.dmsg, a PK…). Returns the tab's pane ({browser, …}).
+    win.openTab = function (host, path, scheme, bg) {
+      var t = addTab(bg);
+      if (host) { try { t.pane.browser.browseTo(host, path || "/", scheme); } catch (e) {} }
+      return t.pane;
+    };
+    win.addTab = function (bg) { return addTab(bg).pane; };
     // On a narrow (mobile) viewport, open maximized — a floating window is fiddly
     // to move/resize on a phone; full-screen is the usable default.
     if (((doc.defaultView || window).innerWidth || 9999) < 640) { try { wb.maximize(true); } catch (e) {} }
-
     return win;
   }
 
@@ -2379,35 +2495,107 @@
   // visors net health apps tps routes hvapi — emit JSON straight into it. Go
   // owns everything inside the mount element; this side supplies the frame and
   // closes the session.
+  // createShellWindow opens the TABBED terminal window: each console the desk
+  // (or the ☰ menu) asks for is a TAB of one window rather than its own
+  // WinBox, and + opens more. Every tab is its own session against the one
+  // shared in-tab shell instance (same filesystem). addTab({title, initCmd})
+  // adds one; closing the last tab closes the window.
   function createShellWindow(doc, opts) {
-    var mount = doc.createElement("div");
-    mount.style.cssText = "position:absolute;inset:0;background:#000;overflow:hidden";
-    var note = doc.createElement("div");
-    note.style.cssText = "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa0a6;font:12px monospace";
-    note.textContent = "starting the shell…";
-    mount.appendChild(note);
-    var handle = null;
-    var wb = makeWin(doc, {
-      title: opts.title || "shell", root: opts.root, top: opts.top, bottom: opts.bottom,
-      width: "56%", height: "62%", mount: mount,
+    var wrap = doc.createElement("div");
+    wrap.style.cssText = "position:absolute;inset:0;background:#000;overflow:hidden;display:flex;flex-direction:column";
+    var strip = doc.createElement("div");
+    strip.style.cssText = "display:flex;gap:2px;align-items:stretch;background:#15131c;border-bottom:1px solid #2a2342;padding:3px 3px 0;min-height:26px;overflow-x:auto;overflow-y:hidden";
+    var body = doc.createElement("div");
+    body.style.cssText = "position:relative;flex:1;min-height:0";
+    wrap.appendChild(strip);
+    wrap.appendChild(body);
+
+    var tabs = [], active = null, wb = null;
+    function setTitle() { try { wb.setTitle(active ? active.title : (opts.title || "terminal")); } catch (e) {} }
+    function activate(t) {
+      if (!t || active === t) return;
+      tabs.forEach(function (x) {
+        x.mount.style.display = x === t ? "" : "none";
+        x.btn.style.background = x === t ? "#2a2342" : "transparent";
+        x.lbl.style.color = x === t ? "#fff" : "#9aa0a6";
+      });
+      active = t;
+      setTitle();
+      // xterm sizes itself to a VISIBLE container: refit + refocus on switch.
+      try { if (t.handle && t.handle.fit) t.handle.fit(); } catch (e) {}
+      try { if (t.handle && t.handle.focus) t.handle.focus(); } catch (e) {}
+    }
+    function closeTab(t) {
+      try { if (t.handle && t.handle.close) t.handle.close(); } catch (e) {}
+      t.mount.remove();
+      t.btn.remove();
+      var i = tabs.indexOf(t);
+      if (i >= 0) tabs.splice(i, 1);
+      if (!tabs.length) { try { wb.close(); } catch (e) {} return; }
+      if (active === t) { active = null; activate(tabs[Math.max(0, i - 1)]); }
+    }
+    function addTab(o) {
+      o = o || {};
+      var t = { title: o.title || "shell", handle: null };
+      t.mount = doc.createElement("div");
+      t.mount.style.cssText = "position:absolute;inset:0;background:#000;overflow:hidden;display:none";
+      var note = doc.createElement("div");
+      note.style.cssText = "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa0a6;font:12px monospace";
+      note.textContent = "starting the shell…";
+      t.mount.appendChild(note);
+      body.appendChild(t.mount);
+      t.btn = doc.createElement("div");
+      t.btn.style.cssText = "display:flex;align-items:center;gap:.45em;max-width:12em;padding:.25em .6em;cursor:pointer;font:11px monospace;border:1px solid #2a2342;border-bottom:0;border-radius:5px 5px 0 0;user-select:none;white-space:nowrap";
+      t.lbl = doc.createElement("span");
+      t.lbl.style.cssText = "overflow:hidden;text-overflow:ellipsis;color:#9aa0a6";
+      t.lbl.textContent = t.title;
+      var x = doc.createElement("span");
+      x.textContent = "×";
+      x.title = "close tab";
+      x.style.cssText = "cursor:pointer;opacity:.65;padding:0 .1em";
+      x.onclick = function (ev) { ev.stopPropagation(); closeTab(t); };
+      t.btn.appendChild(t.lbl);
+      t.btn.appendChild(x);
+      t.btn.onclick = function () { activate(t); };
+      strip.insertBefore(t.btn, plus);
+      tabs.push(t);
+      activate(t);
+      ensureShell().then(function (sh) {
+        note.remove();
+        t.handle = sh.open(t.mount);
+        if (t.handle && t.handle.error) { t.mount.textContent = "shell: " + t.handle.error; return; }
+        if (active === t && t.handle && t.handle.focus) { try { t.handle.focus(); } catch (e) {} }
+        // initCmd: run one command as if typed — the desk's default layout uses
+        // this ("skywire --help" in the docs playground; "skywire autoconfig"
+        // for a foreground visor terminal).
+        if (o.initCmd && t.handle && t.handle.run) { try { t.handle.run(o.initCmd); } catch (e) {} }
+      }).catch(function (e) {
+        note.textContent = "shell failed to start: " + (e.message || e);
+      });
+      return t;
+    }
+    var plus = doc.createElement("div");
+    plus.textContent = "+";
+    plus.title = "new terminal tab";
+    plus.style.cssText = "display:flex;align-items:center;padding:.2em .55em;cursor:pointer;color:#9aa0a6;font:13px monospace;user-select:none";
+    plus.onclick = function () { addTab({ title: "shell" }); };
+    strip.appendChild(plus);
+
+    wb = makeWin(doc, {
+      title: opts.title || "terminal", root: opts.root, top: opts.top, bottom: opts.bottom,
+      width: "56%", height: "62%", mount: wrap,
       onclose: function () {
-        try { if (handle && handle.close) { handle.close(); } } catch (e) {}
+        tabs.slice().forEach(function (t) { try { if (t.handle && t.handle.close) { t.handle.close(); } } catch (e) {} });
+        tabs = [];
         if (opts.onClose) { opts.onClose(); }
       }
     });
-    ensureShell().then(function (sh) {
-      note.remove();
-      handle = sh.open(mount);
-      if (handle && handle.error) { mount.textContent = "shell: " + handle.error; return; }
-      if (handle && handle.focus) { handle.focus(); }
-      // initCmd: run one command as if typed — the desk's default layout uses
-      // this ("skywire --help" in the docs playground; "skywire autoconfig"
-      // for a foreground visor terminal).
-      if (opts.initCmd && handle && handle.run) { try { handle.run(opts.initCmd); } catch (e) {} }
-    }).catch(function (e) {
-      note.textContent = "shell failed to start: " + (e.message || e);
-    });
-    return { wb: wb, close: function () { wb.close(); } };
+    addTab({ title: opts.title || "shell", initCmd: opts.initCmd });
+    return {
+      wb: wb,
+      close: function () { wb.close(); },
+      addTab: function (o) { return addTab(o); },
+    };
   }
 
   // createFilesWindow opens a GUI file browser over the SHARED websh filesystem
@@ -2983,27 +3171,34 @@
     }
     var cliWin = null;
     function openCli() {
+      // A tab with a visor in it runs the real shell — as a TAB of the shared
+      // terminal window; the native HV UI overlay (no in-tab visor) keeps the
+      // REPL window.
+      if (globalThis.skywireVisor) { openConsole({ title: "visor shell" }); return; }
       if (focusExisting(cliWin)) { return; }
       var close = function () { untrack(cliWin); cliWin = null; };
-      // A tab with a visor in it runs the real shell; the native HV UI overlay
-      // (no in-tab visor) keeps the REPL.
-      cliWin = globalThis.skywireVisor
-        ? createShellWindow(doc, withRoot({ title: "visor shell", onClose: close }))
-        : createCliWindow(doc, withRoot({ onClose: close }));
+      cliWin = createCliWindow(doc, withRoot({ onClose: close }));
       track(cliWin, "console");
     }
-    // openConsole always opens a NEW shell window (unlike openCli, which
-    // focuses the existing one) — the desk's default layout wants several
-    // (a visor terminal AND a help terminal). o: {title, initCmd}.
+    // openConsole opens a TAB of the shared tabbed terminal window (creating
+    // the window on first use) — the desk's default layout wants several
+    // consoles (a visor terminal AND a help terminal) condensed into tabs
+    // instead of stacked windows. o: {title, initCmd}.
+    var consoleWin = null;
     function openConsole(o) {
       o = o || {};
-      var win = null;
-      win = createShellWindow(doc, withRoot({
+      if (consoleWin && consoleWin.addTab) {
+        consoleWin.addTab({ title: o.title || "shell", initCmd: o.initCmd || "" });
+        try { consoleWin.wb.minimize(false); consoleWin.wb.focus(); } catch (e) {}
+        return consoleWin;
+      }
+      var win = createShellWindow(doc, withRoot({
         title: o.title || "shell",
         initCmd: o.initCmd || "",
-        onClose: function () { untrack(win); },
+        onClose: function () { untrack(win); if (consoleWin === win) { consoleWin = null; } },
       }));
-      track(win, o.title || "shell");
+      consoleWin = win;
+      track(win, "terminal");
       return win;
     }
     var filesWin = null;
