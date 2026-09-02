@@ -1,9 +1,9 @@
 //go:build js && wasm
 
-// Package vnet pkg/vnet/vnet_js.go c0-com-net
+// Package vnet vnet/vnet_js.go
 //
 // js/wasm implementation over the page's virtual loopback network
-// (pkg/wasmhv/browseui/vnet.js). Loopback addresses go through the page port
+// (vnet.js at the module root). Loopback addresses go through the page port
 // table so SEPARATE wasm instances — the visor running in one terminal, the
 // CLI in another, the nested browser fetching the hypervisor UI — share one
 // localhost, exactly as processes on a host do. Non-loopback addresses, and

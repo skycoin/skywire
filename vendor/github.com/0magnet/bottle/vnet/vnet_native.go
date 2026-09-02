@@ -1,6 +1,6 @@
 //go:build !(js && wasm)
 
-// Package vnet pkg/vnet/vnet_native.go c0-com-net
+// Package vnet vnet/vnet_native.go
 //
 // Loopback listen/dial with a browser escape hatch. On native builds these
 // are exactly net.Listen / net.DialTimeout. On js/wasm they route LOOPBACK

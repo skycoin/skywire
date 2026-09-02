@@ -60,14 +60,16 @@ require (
 
 require (
 	github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898
+	github.com/0magnet/bottle v0.0.0-20260902000600-6494b774e447
 	github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260901202627-53911da3ad77
 	github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
+	github.com/0magnet/netscrape v0.0.0-20260902000645-4b30ced5f0e8
 	github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408
 	github.com/0magnet/realorigin v0.2.0
 	github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26
 	github.com/0magnet/termanim v0.0.0-20260827230242-7dd03f4a292e
-	github.com/0magnet/winbox-go v0.0.0-20260829031602-cfd539d747db
+	github.com/0magnet/winbox-go v0.0.0-20260902000349-e769f33dd0fa
 	github.com/0magnet/yamux v0.1.3-0.20260901201804-38cdbd63617a
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0

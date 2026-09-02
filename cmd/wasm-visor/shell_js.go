@@ -100,7 +100,7 @@ var (
 func sharedShellFS() afero.Fs {
 	wasmShellFSOnce.Do(func() {
 		// When the page installed jsfs (the in-memory Linux-layout
-		// globalThis.fs — see browseui/jsfs.js), route the shell through the
+		// globalThis.fs — see github.com/0magnet/bottle jsfs.js), route the shell through the
 		// OS layer so its builtins (cat, ls, jq, redirection) share ONE
 		// filesystem with every `skywire` command execution: what
 		// `skywire cli config gen -rp` writes under /opt/skywire, cat reads.

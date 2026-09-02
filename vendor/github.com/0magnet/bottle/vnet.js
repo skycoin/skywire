@@ -1,15 +1,15 @@
-// pkg/wasmhv/browseui/vnet.js — a virtual loopback network for the page.
+// vnet.js — a virtual loopback network for the page.
 //
-// The missing OS layer for running skywire in the browser like on Linux: on a
-// host, `skywire visor` LISTENS on localhost ports (visor RPC :3435, the
-// hypervisor UI :8000) and `skywire cli` / the browser DIAL them. Wasm
-// instances have no shared network — Go's js runtime simulates loopback only
-// WITHIN one instance — so this provides the between-instances piece: a
-// page-global port table with in-memory duplex byte pipes. The Go side
-// (pkg/vnet) adapts these to net.Listener / net.Conn, so the REAL skywire
-// code paths — the visor's RPC server, the CLI's RPC dial, the hypervisor's
-// HTTP server — work unmodified across instances. The nested browser can
-// resolve http://127.0.0.1:<port> against the same table.
+// The missing OS layer for running localhost-shaped software in the browser:
+// on a host, one process LISTENS on a loopback port and another DIALS it.
+// Wasm instances have no shared network — Go's js runtime simulates loopback
+// only WITHIN one instance — so this provides the between-instances piece: a
+// page-global port table with in-memory duplex byte pipes. The Go side (the
+// vnet subpackage) adapts these to net.Listener / net.Conn, so REAL server
+// and client code — an RPC server in one instance, its CLI in another, an
+// http.Server a page script fetches from — works unmodified across
+// instances. Page JS can resolve http://127.0.0.1:<port> against the same
+// table via httpFetch below.
 //
 // Same-realm v1: all endpoints live in one JS realm (the page). The API is
 // callback-based so a MessagePort bridge can extend it across Workers later.
@@ -103,7 +103,7 @@
 
 		// httpFetch performs ONE HTTP request against a virtual-loopback port
 		// and resolves {status, body:Uint8Array, headers:{lowercased:value}} —
-		// the same shape as skywireVisor.fetchDmsg, so the nested browser can
+		// a fetch-like result shape, so a page-side virtual browser can
 		// treat http://127.0.0.1:<port> as just another channel. Speaks
 		// HTTP/1.0 with Connection: close (no chunked encoding — EOF delimits
 		// the body), which Go's http.Server answers natively.

@@ -2,7 +2,6 @@
 package clirpc
 
 import (
-	"github.com/skycoin/skywire/pkg/vnet"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/0magnet/bottle/vnet"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"

@@ -80,7 +80,7 @@ type WasmServeConfig struct {
 	// ExecWasmPath, when set, serves the file at /skywire.wasm: the FULL
 	// skywire CLI compiled for GOOS=js (see docs/design), which the page's
 	// terminal executes per command against the shared in-memory filesystem
-	// (browseui/jsfs.js + skywire-exec.js). Empty = the terminal has no
+	// (bottle jsfs.js + browseui skywire-exec.js). Empty = the terminal has no
 	// `skywire` command. The blob is too large to embed — build it with
 	//   GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" \
 	//     -trimpath -ldflags "-s -w" -o build/skywire.wasm .

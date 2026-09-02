@@ -5,7 +5,7 @@
 // js/wasm build of pkg/skyenv. Paths mirror the LINUX layout: the browser
 // build runs against a virtual Linux-like filesystem (the page installs an
 // in-memory globalThis.fs seeded with an FHS skeleton — see
-// pkg/wasmhv/browseui/jsfs.js), with skywire "installed" under /opt/skywire
+// github.com/0magnet/bottle jsfs.js + browseui/seed-skywire.js), with skywire "installed" under /opt/skywire
 // exactly as the packages install it. That makes `cli config gen -rp`, the
 // package-path readers, and everything else path-shaped behave the way the
 // docs describe, inside the browser. Environments that provide no filesystem

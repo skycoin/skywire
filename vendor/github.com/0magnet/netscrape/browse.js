@@ -1,6 +1,6 @@
-// browse.js — the dmsg virtual-browser engine, shared by the wasm-visor dev
-// harness (cmd/wasm-visor/index.html loads a copy of this) and the standalone
-// hypervisor overlay (embedded + injected by the generator in visor mode).
+// browse.js — netscrape: the skywire virtual-browser engine + mini-desktop.
+// Consumed by skycoin/skywire (the wasm-visor page and the native hypervisor
+// dashboard inject it via the netscrape Go module's embedded copy).
 //
 // It renders a page fetched over dmsg into a SANDBOXED iframe and routes the
 // whole site over dmsg with no DNS, no IP, no CA:

@@ -2,7 +2,6 @@
 package visor
 
 import (
-	"github.com/skycoin/skywire/pkg/vnet"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -14,6 +13,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/0magnet/bottle/vnet"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"

@@ -1,13 +1,16 @@
-// pkg/wasmhv/browseui/jsfs.js — an in-memory POSIX-ish filesystem installed
+// jsfs.js — an in-memory POSIX-ish filesystem installed
 // as globalThis.fs / globalThis.process BEFORE any Go wasm instance starts.
 //
 // Go's js/wasm runtime routes the ENTIRE os package through this shim
 // (syscall/fs_js.go calls the node-style callback API; wasm_exec.js only
 // stubs it with ENOSYS). Installing a real implementation means every Go
-// instance on the page — the websh shell AND each `skywire ...` command
-// execution — shares ONE filesystem, laid out like a Linux root with skywire
-// "installed": `skywire cli config gen -rp` writes
-// /opt/skywire/skywire-config.json and the shell's cat/jq read it back.
+// instance on the page shares ONE filesystem, laid out like a Linux root —
+// one program writes /etc or /opt files, another (a shell's cat/jq, a second
+// wasm instance) reads them back, exactly as processes on a host would.
+//
+// A generic FHS skeleton is seeded here; application-specific layout (an
+// installed package tree, config files) is the PAGE's job, via the exposed
+// jsfs.mkdirp / jsfs.writeFile helpers, in a script loaded after this one.
 //
 // Contract implemented (what syscall/fs_js.go actually calls):
 //   fs.constants, fs.writeSync(fd,buf) and callback-style open close read
@@ -133,28 +136,14 @@
 		return f;
 	}
 
-	['/bin', '/dev', '/etc/skywire', '/home/user', '/opt/skywire/apps', '/opt/skywire/bin',
-		'/opt/skywire/local', '/proc', '/root', '/run', '/sys', '/usr/bin', '/var/log/skywire',
+	['/bin', '/dev', '/etc', '/home/user', '/opt', '/proc', '/root', '/run', '/sys',
+		'/usr/bin', '/var/log',
 	].forEach((d) => mkdirp(d));
 	mkdirp('/tmp', 0o777);
 	const devNull = mknode(S_IFCHR, 0o666);
 	resolve('/dev').node.entries.set('null', devNull);
-	writeFileSeed('/etc/hostname', 'skywire-playground\n');
-	writeFileSeed('/etc/os-release', 'PRETTY_NAME="Skywire Playground (wasm)"\nID=skywire-playground\n');
-	// The SKYENV file, exactly as the Linux packages ship it: PKGENV=true
-	// makes `skywire autoconfig` / `skywire cli config gen` resolve the
-	// package paths (/opt/skywire/skywire.json). Edit it with the shell
-	// the same way you would on Linux.
-	writeFileSeed('/etc/skywire.conf',
-		'#/etc/skywire.conf\n' +
-		'#sourced by `skywire autoconfig` and `skywire cli config gen`\n' +
-		'PKGENV=true\n');
-	writeFileSeed('/home/user/README',
-		'This is an in-memory filesystem shared by the shell and the skywire binary.\n' +
-		'skywire is "installed" under /opt/skywire — try:\n' +
-		'    skywire autoconfig\n' +
-		'    skywire cli config gen -rp\n' +
-		'    cat /opt/skywire/skywire.json | jq .pk\n');
+	writeFileSeed('/etc/hostname', 'bottle\n');
+	writeFileSeed('/etc/os-release', 'PRETTY_NAME="Bottle (wasm)"\nID=bottle\n');
 
 	// ---- stdio sinks -------------------------------------------------------
 	const td = new TextDecoder();

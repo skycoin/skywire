@@ -25,6 +25,10 @@ github.com/0magnet/bbolt
 github.com/0magnet/bbolt/errors
 github.com/0magnet/bbolt/internal/common
 github.com/0magnet/bbolt/internal/freelist
+# github.com/0magnet/bottle v0.0.0-20260902000600-6494b774e447
+## explicit; go 1.24
+github.com/0magnet/bottle
+github.com/0magnet/bottle/vnet
 # github.com/0magnet/coloredcobra v1.0.2
 ## explicit; go 1.15
 github.com/0magnet/coloredcobra
@@ -47,6 +51,9 @@ github.com/0magnet/gotop/v4/widgets
 # github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
 ## explicit; go 1.24.0
 github.com/0magnet/metrics
+# github.com/0magnet/netscrape v0.0.0-20260902000645-4b30ced5f0e8
+## explicit; go 1.24
+github.com/0magnet/netscrape
 # github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408
 ## explicit; go 1.25
 github.com/0magnet/plot-go
@@ -78,10 +85,9 @@ github.com/0magnet/u-root/pkg/ls
 ## explicit; go 1.25.7
 github.com/0magnet/websh/shell
 github.com/0magnet/websh/shell/browser
-# github.com/0magnet/winbox-go v0.0.0-20260829031602-cfd539d747db
+# github.com/0magnet/winbox-go v0.0.0-20260902000349-e769f33dd0fa
 ## explicit; go 1.24
-github.com/0magnet/winbox-go
-github.com/0magnet/winbox-go/jsapi
+github.com/0magnet/winbox-go/dist
 # github.com/0magnet/xterm-go v0.0.0-20260823191622-8d2bbff87cea
 ## explicit; go 1.24
 github.com/0magnet/xterm-go
