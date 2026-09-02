@@ -39,6 +39,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		Servers:              []*disc.Entry{},
 		ConnectedServersType: "all",
 		Protocol:             "yamux",
+		Carriers:             skyenv.DefaultDmsgCarriers,
 	}
 	hypervisorAutoconnect := skyenv.HypervisorAutoconnect
 	conf.Transport = &Transport{

@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 // Package commands cmd/skycoin/commands/cipherwasm.go c4-app-wallet
 package commands
 

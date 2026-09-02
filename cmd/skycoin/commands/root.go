@@ -28,6 +28,8 @@
 //
 // This changes nothing about skycoin's own binaries. They keep their assembly
 // and their own cipher; this is a second assembly of the same parts.
+//go:build !(js && wasm)
+
 package commands
 
 import (

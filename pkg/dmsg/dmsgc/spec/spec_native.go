@@ -1,4 +1,4 @@
-//go:build !js
+//go:build !tinygo
 
 // Package spec pkg/dmsg/dmsgc/spec/spec_native.go c1-net-dmsg
 //

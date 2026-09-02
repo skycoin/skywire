@@ -17,6 +17,8 @@ import (
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 
+	"github.com/0magnet/bottle/vnet"
+
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -605,7 +607,7 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var grpcServer *grpc.Server
 	if cliLocal && !v.cliLocalUp {
 		var err error
-		cliL, err = net.Listen("tcp", v.conf.CLIAddr)
+		cliL, err = vnet.Listen("tcp", v.conf.CLIAddr)
 		if err != nil {
 			return err
 		}

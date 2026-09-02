@@ -3,7 +3,7 @@
 package main
 
 import (
-	cc "github.com/ivanpirog/coloredcobra"
+	cc "github.com/0magnet/coloredcobra"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/calvin/cmd/calvin/commands"

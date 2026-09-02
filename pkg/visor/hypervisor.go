@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -224,7 +226,7 @@ func (hv *Hypervisor) startUI() error {
 		WriteTimeout:      10 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	lis, err := net.Listen("tcp", hv.c.HTTPAddr)
+	lis, err := vnet.Listen("tcp", hv.c.HTTPAddr)
 	if err != nil {
 		hv.httpSrv = nil
 		return fmt.Errorf("hypervisor HTTP listen %s: %w", hv.c.HTTPAddr, err)

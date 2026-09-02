@@ -1191,10 +1191,14 @@ func configureDMSG() {
 		Servers:              []*disc.Entry{},
 		ConnectedServersType: "all",
 		Protocol:             "yamux",
+		Carriers:             skyenv.DefaultDmsgCarriers,
 	}
 	if oldConfCache != nil && oldConfCache.Dmsg != nil {
 		if oldConfCache.Dmsg.Protocol != "" {
 			conf.Dmsg.Protocol = oldConfCache.Dmsg.Protocol
+		}
+		if len(oldConfCache.Dmsg.Carriers) > 0 {
+			conf.Dmsg.Carriers = oldConfCache.Dmsg.Carriers
 		}
 	}
 }

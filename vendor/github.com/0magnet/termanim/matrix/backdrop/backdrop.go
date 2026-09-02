@@ -37,12 +37,10 @@ package backdrop
 
 import (
 	"math/rand"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v3"
-	"golang.org/x/term"
 
 	"github.com/0magnet/termanim/canvas"
 	"github.com/0magnet/termanim/matrix"
@@ -94,6 +92,23 @@ type Options struct {
 	// report both want plain text and neither wants two hundred colour
 	// changes a line. NO_COLOR and TERM=dumb are honoured the same way.
 	Force bool
+
+	// Words makes the rain spell words instead of glyphs: each stream carries
+	// one, read downward. Empty, the default, is the glyph rain.
+	Words []string
+
+	// WordGap is the blank cells between one word in a stream and the next.
+	// Zero runs them together.
+	WordGap int
+
+	// FreshWords draws a new word each time a stream finishes one, rather
+	// than repeating the stream's word down the whole column.
+	FreshWords bool
+
+	// Height in rows. Zero sizes the frame to the text, which is what a
+	// backdrop wants. A still with no text behind it has nothing to be
+	// sized to, so it says how tall it should be.
+	Height int
 
 	// GapMin makes a run of that many spaces or more transparent, so the rain
 	// shows through it. Zero, the default, makes a line opaque from its first
@@ -157,6 +172,10 @@ func Render(text string, o Options) string {
 		steps = 3*l.rows + rng.Intn(4*l.rows+40)
 	}
 	m := matrix.New(l.seed)
+	// Set before Resize: the seeding that fills the buffer reads it.
+	m.Words = o.Words
+	m.WordGap = o.WordGap
+	m.FreshWords = o.FreshWords
 	m.Resize(l.cols, l.rows)
 	m.Advance(steps)
 
@@ -224,6 +243,9 @@ func layout(text string, o Options) sheet {
 		s.cols = terminalWidth()
 	}
 	s.rows = len(s.lines) + 2*s.pad
+	if o.Height > s.rows {
+		s.rows = o.Height
+	}
 
 	widest := 0
 	for _, l := range s.lines {
@@ -540,21 +562,4 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(buf[i:])
-}
-
-func colorOK() bool {
-	if os.Getenv("NO_COLOR") != "" {
-		return false
-	}
-	if os.Getenv("TERM") == "dumb" {
-		return false
-	}
-	return term.IsTerminal(int(os.Stdout.Fd()))
-}
-
-func terminalWidth() int {
-	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
-		return w
-	}
-	return 80
 }

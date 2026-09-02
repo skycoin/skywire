@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -133,7 +135,7 @@ func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
 
 	// Default: TCP connection to local RPC
 	const rpcDialTimeout = time.Second * 5
-	conn, err := net.DialTimeout("tcp", Addr, rpcDialTimeout)
+	conn, err := vnet.DialTimeout("tcp", Addr, rpcDialTimeout)
 	if err != nil {
 		if !quiet {
 			internal.PrintError(cmdFlags, fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
@@ -220,7 +222,7 @@ func BridgeConn(scheme byte, remotePK cipher.PubKey, port uint16) (net.Conn, err
 		localAddr = DefaultRPCAddr
 	}
 	const dialTimeout = time.Second * 5
-	conn, err := net.DialTimeout("tcp", localAddr, dialTimeout)
+	conn, err := vnet.DialTimeout("tcp", localAddr, dialTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("bridge needs the local visor RPC at %s; dial failed: %w", localAddr, err)
 	}

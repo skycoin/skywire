@@ -44,7 +44,11 @@ type Survey struct {
 	GOARCH         string        `json:"go_arch,omitempty"`
 	SkywireVersion string        `json:"skywire_version,omitempty"`
 	ServicesURLs   Services      `json:"services,omitempty"`
-	DmsgServers    []string      `json:"dmsg_servers,omitempty"`
+	// IPAddr mirrors the native Survey's field so IP-enrichment code (the
+	// survey CLI command) compiles unsplit; on js it is set from the same
+	// dmsg-based IP lookup when one succeeds.
+	IPAddr      string   `json:"ip_address,omitempty"`
+	DmsgServers []string `json:"dmsg_servers,omitempty"`
 }
 
 // SystemSurvey returns an empty Survey on js — no hardware probes.
