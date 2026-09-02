@@ -159,18 +159,17 @@ func (r *router) DialRoutes(
 	// direct transport is already known to TPD). After this, isTpdExist(rPK) is
 	// true → baseMinHops downgrades to 1, and UseExistingTpOnly (set alongside
 	// EnsureDirectTransport) bypasses the route-finder → a 1-hop direct dial.
-	// Creation order follows the configured transport preference
-	// (routing.transport_preference), same as the order the route/transport
-	// SELECTION paths use — one knob decides "which type first" everywhere.
-	// Unset preference = the built-in default = stcpr, sudph, dmsg, exactly
-	// as this list was hardcoded.
+	// Creation order is the host-aware direct-type preference
+	// (EnsureBestTransport): every direct type this visor can actually create,
+	// in the configured preference order, with the DMSG relay as the loud last
+	// resort. The previous hardcoded stcpr→sudph→dmsg list never tried the
+	// browser carriers at all — on a wasm visor (no raw TCP/UDP clients) both
+	// direct attempts failed instantly and --direct minted a dmsg RELAY
+	// transport when a webrtc/ws/wt one was there for the making.
 	if opts != nil && opts.EnsureDirectTransport && !r.isTpdExist(rPK) {
-		for _, nt := range tptypes.PreferredOrder(tptypes.STCPR, tptypes.SUDPH, tptypes.DMSG) {
-			if _, sErr := r.tm.SaveTransport(ctx, rPK, nt, transport.LabelAutomatic); sErr == nil {
-				log.WithField("tp_type", nt).WithField("remote", rPK).
-					Debug("--direct: created direct transport on demand")
-				break
-			}
+		if err := r.tm.EnsureBestTransport(ctx, rPK); err != nil {
+			log.WithError(err).WithField("remote", rPK).
+				Debug("--direct: could not create a direct transport on demand")
 		}
 	}
 	// The downgrade applies only when NOTHING asks for more than one hop —
