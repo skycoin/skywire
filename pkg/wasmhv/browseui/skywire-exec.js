@@ -73,7 +73,16 @@
 		go.env = {
 			HOME: '/home/user', USER: 'user', PWD: globalThis.jsfs.getCwd(),
 			PATH: '/opt/skywire/bin:/usr/bin:/bin', TMPDIR: '/tmp', TERM: 'xterm-256color',
+			COLUMNS: '100', LINES: '30',
 		};
+		// hooks.env: per-invocation environment overrides — the shell passes
+		// the terminal's live COLUMNS/LINES so help styling (colors, the rain
+		// backdrop width) matches the window it renders in.
+		if (hooks && hooks.env) {
+			for (const k in hooks.env) {
+				if (Object.prototype.hasOwnProperty.call(hooks.env, k)) go.env[k] = String(hooks.env[k]);
+			}
+		}
 		let code = 0;
 		go.exit = (c) => { code = c; };
 		const stdio = globalThis.jsfs.stdio;

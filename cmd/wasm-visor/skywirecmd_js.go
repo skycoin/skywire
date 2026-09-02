@@ -33,12 +33,12 @@ func registerSkywireCmd() {
 	}
 	shell.RegisterApplet("skywire",
 		"run the real skywire CLI (full command tree; try: skywire --help)",
-		func(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args []string) int {
-			return runSkywireWasm(hc, args)
+		func(_ context.Context, s *shell.Shell, hc *interp.HandlerContext, args []string) int {
+			return runSkywireWasm(s, hc, args)
 		})
 }
 
-func runSkywireWasm(hc *interp.HandlerContext, args []string) int {
+func runSkywireWasm(s *shell.Shell, hc *interp.HandlerContext, args []string) int {
 	exec := js.Global().Get("skywireExec")
 	if !exec.Truthy() {
 		fmt.Fprintln(hc.Stderr, "skywire: skywire-exec.js not loaded") //nolint:errcheck
@@ -93,6 +93,17 @@ func runSkywireWasm(hc *interp.HandlerContext, args []string) int {
 	hooks := js.ValueOf(map[string]interface{}{})
 	hooks.Set("stdout", outF)
 	hooks.Set("stderr", errF)
+	// Terminal identity for the command instance: the help styling (the
+	// coloredcobra colors, the Matrix rain backdrop) decides by TERM/COLUMNS
+	// under js — isatty can't answer through a pipe, so the host says.
+	if s != nil && s.Size != nil {
+		if cols, rows := s.Size(); cols > 0 {
+			hooks.Set("env", js.ValueOf(map[string]interface{}{
+				"COLUMNS": fmt.Sprintf("%d", cols),
+				"LINES":   fmt.Sprintf("%d", rows),
+			}))
+		}
+	}
 
 	exec.Invoke(js.ValueOf(jsArgs), hooks).Call("then", thenF).Call("catch", catchF)
 	return <-done
