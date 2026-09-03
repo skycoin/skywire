@@ -60,7 +60,7 @@ require (
 )
 
 require (
-	github.com/0magnet/plot-go v0.0.0-20260820145748-0b260a086d19
+	github.com/0magnet/plot-go v0.0.0-20260903022354-39cc12099e67
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/ccding/go-stun v0.1.6
@@ -107,15 +107,15 @@ require (
 
 require (
 	github.com/0magnet/afero v1.15.1-0.20260816202415-9f9d46a34dcd
-	github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e
-	github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf
-	github.com/0magnet/websh v0.0.0-20260816200521-e9f14eb862c7
-	github.com/0magnet/xterm-go v0.0.0-20260820124923-c0b6b4f69bb7
+	github.com/0magnet/cosmos-go v0.0.0-20260903022250-e23c29a95221
+	github.com/0magnet/sh/v3 v3.13.2-0.20260818190530-13d0024da85c
+	github.com/0magnet/websh v0.0.0-20260903023334-1f972db1b545
+	github.com/0magnet/xterm-go v0.0.0-20260903022452-f823b747bcfe
 	github.com/benhoyt/goawk v1.31.0 // indirect
 )
 
 require (
-	github.com/0magnet/u-root v0.16.1-0.20260810212217-0890fe5099f9 // indirect
+	github.com/0magnet/u-root v0.16.1-0.20260814161052-156e0b67262b // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	golang.org/x/mod v0.40.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect

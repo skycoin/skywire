@@ -384,9 +384,9 @@ func (r *glyphRenderer) updateCell(x, y int, code uint32, bg, fg, ext uint32, ch
 		array[i+2] = float32((glyph.sizeX - clipped) / cw)
 		array[i+3] = float32(glyph.sizeY / ch)
 		array[i+4] = 0 // texpage
-		array[i+5] = float32(glyph.texClipX + clipped/atlasPageSize)
+		array[i+5] = float32(glyph.texClipX + clipped/float64(r.atlas.pageSize))
 		array[i+6] = float32(glyph.texClipY)
-		array[i+7] = float32(glyph.sizeClipX - clipped/atlasPageSize)
+		array[i+7] = float32(glyph.sizeClipX - clipped/float64(r.atlas.pageSize))
 		array[i+8] = float32(glyph.sizeClipY)
 	} else {
 		array[i] = float32(-glyph.offsetX + float64(r.dims.deviceCharLeft))
@@ -720,6 +720,12 @@ type webglRenderer struct {
 	glyphs *glyphRenderer
 	atlas  *textureAtlas
 
+	// contextLost is set between webglcontextlost and webglcontextrestored.
+	// Every GL call in that window is a no-op that the driver still has to
+	// reject, and the picture it would produce is not on screen anyway.
+	contextLost bool
+	lossFns     []js.Func
+
 	workCell *vt.CellData
 }
 
@@ -754,8 +760,109 @@ func newWebglRenderer(term *Terminal) (r *webglRenderer, err error) {
 		return nil, err
 	}
 
+	r.wireContextLoss()
 	r.onResize()
 	return r, nil
+}
+
+// wireContextLoss keeps the terminal alive across a lost GPU context.
+//
+// A browser caps how many WebGL contexts a page may hold — Chrome's limit is
+// around sixteen — and when a new one is asked for past the cap it EVICTS THE
+// OLDEST. A page that puts a terminal in a window and lets people open windows
+// reaches that on its own: measured here at fifteen terminals, where the first
+// one's context was taken away while the page went on running.
+//
+// preventDefault on the loss event is the load-bearing line. Without it the
+// browser will never restore the context, and no amount of later work can bring
+// the terminal back — it stays a rectangle that used to be a shell, with the
+// renderer issuing draw calls into a dead context that silently do nothing.
+//
+// With it, the browser may restore, and then the GPU-side objects have to be
+// built again: everything made from the context — programs, buffers, the glyph
+// atlas — died with it, while the terminal's own state (its buffer, its shell)
+// never depended on the GPU and is still exactly where it was.
+func (r *webglRenderer) wireContextLoss() {
+	lost := js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) > 0 {
+			args[0].Call("preventDefault")
+		}
+		r.contextLost = true
+		return nil
+	})
+	restored := js.FuncOf(func(js.Value, []js.Value) any {
+		r.contextLost = false
+		r.rebuildGPUState()
+		return nil
+	})
+	r.lossFns = append(r.lossFns, lost, restored)
+	r.canvas.Call("addEventListener", "webglcontextlost", lost)
+	r.canvas.Call("addEventListener", "webglcontextrestored", restored)
+}
+
+// rebuildGPUState remakes everything that lived in the lost context.
+//
+// The context object itself is reused by the browser and is valid again by the
+// time this runs, so it is not fetched afresh; what has to be rebuilt is what
+// was created FROM it. A failure here leaves contextLost set rather than
+// half-built, so the terminal stays quiet instead of drawing garbage.
+func (r *webglRenderer) rebuildGPUState() {
+	if r.atlas != nil {
+		r.atlas.dispose()
+		r.atlas = nil
+	}
+	rects, err := newRectangleRenderer(r.term, r.gl, &r.dims, r.term.colors)
+	if err != nil {
+		r.contextLost = true
+		return
+	}
+	glyphs, err := newGlyphRenderer(r.term, r.gl, &r.dims)
+	if err != nil {
+		r.contextLost = true
+		return
+	}
+	r.rects, r.glyphs = rects, glyphs
+	// onResize rebuilds the dimensions and the atlas and clears the model, and
+	// a cleared atlas makes the next frame a full refresh — so one draw here
+	// puts the whole terminal back rather than waiting for output that may
+	// never come. A shell sitting at a prompt produces nothing on its own.
+	r.onResize()
+	r.renderRows(0, r.term.Core.Rows()-1)
+}
+
+// snapPx clears the floating-point error out of a device-pixel measurement
+// before it is rounded to a whole pixel.
+//
+// devicePixelRatio is a float32 round-trip of the zoom level, so it is not
+// the number it prints as: at 80% zoom the browser reports
+// 0.800000011920929, whose relative error is 2^-26. A cell height that
+// lands exactly on a device-pixel boundary therefore computes as that
+// boundary plus a few parts in ten million — 21.25 * dpr is
+// 17.00000025331974, not 17 — and jsCeil turns it into 18.
+//
+// One extra device pixel per cell is ~6% at this size, so the canvas comes
+// out taller than the element Fit() sized the grid against and the last
+// rows land outside the viewport: the terminal draws a footer nobody can
+// see. Truncation has the mirror failure, dropping a whole pixel from a
+// value that fell a hair short.
+//
+// The tolerance is relative because the error scales with the measurement,
+// and 1e-6 sits far above the 1.5e-8 that dpr contributes while staying far
+// below any sub-pixel difference a caller could mean.
+func snapPx(v float64) float64 {
+	r := jsRound(v)
+	d := v - r
+	if d < 0 {
+		d = -d
+	}
+	scale := v
+	if scale < 1 {
+		scale = 1
+	}
+	if d < 1e-6*scale {
+		return r
+	}
+	return v
 }
 
 func (r *webglRenderer) updateDimensions() {
@@ -765,8 +872,8 @@ func (r *webglRenderer) updateDimensions() {
 		dpr = 1
 	}
 	d := &r.dims
-	d.deviceCharWidth = int(term.cellW * dpr)
-	d.deviceCharHeight = int(jsCeil(term.cellH / maxF(term.Core.Options.LineHeight, 1) * dpr))
+	d.deviceCharWidth = int(snapPx(term.cellW * dpr))
+	d.deviceCharHeight = int(jsCeil(snapPx(term.cellH / maxF(term.Core.Options.LineHeight, 1) * dpr)))
 	d.deviceCellHeight = int(float64(d.deviceCharHeight) * maxF(term.Core.Options.LineHeight, 1))
 	d.deviceCharTop = 0
 	if term.Core.Options.LineHeight != 1 {
@@ -802,8 +909,10 @@ func (r *webglRenderer) refreshCharAtlas() {
 		dpr:              dpr,
 		lineHeight:       maxF(r.term.Core.Options.LineHeight, 1),
 		colors:           r.term.colors,
+		mirrorGlyph:      r.term.Core.Options.MirrorGlyph,
 	}
 	if r.atlas != nil {
+		cfg.pageSize = r.atlas.pageSize
 		r.atlas.dispose()
 	}
 	r.atlas = newTextureAtlas(cfg)
@@ -835,6 +944,9 @@ func (r *webglRenderer) onColorsChanged() {
 }
 
 func (r *webglRenderer) renderRows(start, end int) {
+	if r.contextLost {
+		return // nothing drawn into a lost context ever reaches the screen
+	}
 	// the frame begins; a cleared atlas forces a full model refresh
 	if r.glyphs.beginFrame() {
 		r.model.clear()
@@ -855,6 +967,10 @@ func (r *webglRenderer) dispose() {
 	if r.atlas != nil {
 		r.atlas.dispose()
 	}
+	for _, fn := range r.lossFns {
+		fn.Release()
+	}
+	r.lossFns = nil
 	r.canvas.Call("remove")
 }
 

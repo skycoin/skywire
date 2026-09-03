@@ -22,13 +22,13 @@ github.com/0magnet/afero/mem
 # github.com/0magnet/coloredcobra v1.0.2
 ## explicit; go 1.15
 github.com/0magnet/coloredcobra
-# github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e
+# github.com/0magnet/cosmos-go v0.0.0-20260903022250-e23c29a95221
 ## explicit; go 1.24
 github.com/0magnet/cosmos-go
-# github.com/0magnet/plot-go v0.0.0-20260820145748-0b260a086d19
+# github.com/0magnet/plot-go v0.0.0-20260903022354-39cc12099e67
 ## explicit; go 1.25
 github.com/0magnet/plot-go
-# github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf
+# github.com/0magnet/sh/v3 v3.13.2-0.20260818190530-13d0024da85c
 ## explicit; go 1.25.0
 github.com/0magnet/sh/v3/expand
 github.com/0magnet/sh/v3/fileutil
@@ -36,14 +36,14 @@ github.com/0magnet/sh/v3/internal
 github.com/0magnet/sh/v3/interp
 github.com/0magnet/sh/v3/pattern
 github.com/0magnet/sh/v3/syntax
-# github.com/0magnet/u-root v0.16.1-0.20260810212217-0890fe5099f9
+# github.com/0magnet/u-root v0.16.1-0.20260814161052-156e0b67262b
 ## explicit; go 1.25.7
 github.com/0magnet/u-root/pkg/ls
-# github.com/0magnet/websh v0.0.0-20260816200521-e9f14eb862c7
+# github.com/0magnet/websh v0.0.0-20260903023334-1f972db1b545
 ## explicit; go 1.25.7
 github.com/0magnet/websh/shell
 github.com/0magnet/websh/shell/browser
-# github.com/0magnet/xterm-go v0.0.0-20260820124923-c0b6b4f69bb7
+# github.com/0magnet/xterm-go v0.0.0-20260903022452-f823b747bcfe
 ## explicit; go 1.24
 github.com/0magnet/xterm-go
 github.com/0magnet/xterm-go/vt

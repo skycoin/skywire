@@ -60,8 +60,14 @@ type Runner struct {
 	tempDir string
 
 	// umask is the file mode creation mask reported and set by the umask
-	// builtin. It is bookkeeping only: this interpreter creates files
-	// through the open handler, which owns permissions.
+	// builtin. Redirections which create a file mask 0666 with it, as in
+	// bash, and pass the result to the open handler.
+	//
+	// Note that on a real OS the process umask applies on top of this, since
+	// it is applied by the kernel rather than by [DefaultOpenHandler]. They
+	// are the same value in bash, where the shell's umask is the process's;
+	// here they are separate, and this one is what a custom open handler —
+	// backed by an in-memory filesystem, say — has to honour itself.
 	umask uint32
 
 	// Params are the current shell parameters, e.g. from running a shell
