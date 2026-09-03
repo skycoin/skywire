@@ -298,7 +298,11 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		// nested browser opens it maximized on top. A visor the operator
 		// stopped stays stopped across reloads (desk-boot's session).
 		serveBytes("/desk-boot.js", "text/javascript", wasmhv.DeskBootJS())
-		deskHTML := []byte(deskPageHTML)
+		deskHTML := deskShellHTML(
+			`<script src="/wasm_exec.js?variant=go"></script>`+"\n"+
+				`<script src="/browse.js"></script>`+"\n"+
+				`<script src="/desk-boot.js"></script>`,
+			deskWasmBootOpts)
 		if cfg.Harness {
 			// Same rule as injectWasmBoot on the standalone page: --harness
 			// injects ctl-bridge.js (its presence IS the harness signal). On
@@ -929,11 +933,32 @@ func browseSWAssetType(p string) string {
 	return "text/javascript"
 }
 
-// deskPageHTML is the converged desk page served at /desk when --exec-wasm is
-// set. Assets come from the routes this server already exposes: /browse.js is
-// the full desk bundle, /wasm-visor.wasm the desk host (raw), /skywire.wasm
-// the command module, /wasm_exec.js?variant=go the matching loader.
-const deskPageHTML = `<!DOCTYPE html>
+// deskWasmBootOpts is the skywireDeskBoot options object for the wasm-served
+// desk (`hv serve --exec-wasm`'s /desk): the tab as a Linux host. Assets come
+// from the routes ServeWasm already exposes: /browse.js is the full desk
+// bundle, /wasm-visor.wasm the desk host (raw), /skywire.wasm the command
+// module, /wasm_exec.js?variant=go the matching loader.
+const deskWasmBootOpts = `{
+  persistDB: 'skywire-desk',
+  deskWasmURL: '/wasm-visor.wasm',
+  wasmURL: '/skywire.wasm',
+  wasmExecURL: '/wasm_exec.js?variant=go',
+  winboxURL: '/winbox.wasm',
+  autostartVisor: true,
+  helpTerminal: true,
+  hvWindow: true,
+}`
+
+// deskShellTemplate is the shared skeleton of the converged desk page (/desk):
+// boot overlay + error capture + the skywireDeskBoot call. ONE skeleton behind
+// both serving contexts — `hv serve`'s wasm desk and the native hypervisor's
+// /desk (hypervisor_handlers_browse.go) — so the two pages cannot drift.
+// __DESK_SCRIPTS__ carries the context's script includes, ending with the
+// /desk-boot.js tag the harness injection keys on; __DESK_OPTS__ carries its
+// skywireDeskBoot options object. onStatus stays in the skeleton (it drives
+// the shared overlay) and is merged UNDER the context opts so a context could
+// still override it.
+const deskShellTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -962,21 +987,11 @@ addEventListener('error', function (e) {
   }
 });
 </script>
-<script src="/wasm_exec.js?variant=go"></script>
-<script src="/browse.js"></script>
-<script src="/desk-boot.js"></script>
+__DESK_SCRIPTS__
 <script>
-skywireDeskBoot({
-  persistDB: 'skywire-desk',
-  deskWasmURL: '/wasm-visor.wasm',
-  wasmURL: '/skywire.wasm',
-  wasmExecURL: '/wasm_exec.js?variant=go',
-  winboxURL: '/winbox.wasm',
-  autostartVisor: true,
-  helpTerminal: true,
-  hvWindow: true,
+skywireDeskBoot(Object.assign({
   onStatus: function (s) { var el = document.getElementById('boot-msg'); if (el) el.textContent = s; },
-}).then(function () {
+}, __DESK_OPTS__)).then(function () {
   document.getElementById('boot').className = 'gone';
 }).catch(function (e) {
   var el = document.getElementById('boot-msg');
@@ -986,3 +1001,9 @@ skywireDeskBoot({
 </body>
 </html>
 `
+
+// deskShellHTML renders the shared desk skeleton for one serving context.
+func deskShellHTML(scriptsHTML, deskOptsJS string) []byte {
+	out := strings.ReplaceAll(deskShellTemplate, "__DESK_SCRIPTS__", scriptsHTML)
+	return []byte(strings.ReplaceAll(out, "__DESK_OPTS__", deskOptsJS))
+}

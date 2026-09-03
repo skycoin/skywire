@@ -81,6 +81,15 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 		case "/skywire-browse-launcher.js":
 			serveJS(w, []byte(nativeBrowseLauncherJS))
 			return
+		case "/desk-boot.js":
+			// The shared desk boot (skywireDeskBoot) — same asset `hv serve`
+			// exposes, so /desk below boots through the one entry point both
+			// serving contexts share.
+			serveJS(w, browseui.DeskBootJS())
+			return
+		case "/desk":
+			hv.serveNativeDesk(w)
+			return
 		case "/", "/index.html":
 			hv.serveInjectedIndex(w, r, fileServer)
 			return
@@ -158,6 +167,54 @@ func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(out) //nolint:errcheck
 }
+
+// serveNativeDesk serves the converged desk shell at /desk on the NATIVE
+// hypervisor UI port — the same page skeleton `skywire cli hv serve` renders
+// (deskShellTemplate in wasmserve.go), in native mode: the browse launcher
+// (the exact script the dashboard injection loads) mounts the desk panel over
+// its /api-backed providers, and desk-boot's native branch opens the Angular
+// dashboard as a same-origin window inside it. NO wasm-visor module is
+// referenced or served on this port — the native visor IS the visor; the desk
+// here is a shell over it, so the in-page-visor machinery stays dormant.
+func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
+	localPK, browseJS := "", ""
+	if hv.visor != nil {
+		localPK = hv.visor.conf.PK.Hex()
+		browseJS = browseOriginInjectJS(hv.visor)
+	}
+	// Mirror serveInjectedIndex's page environment (local PK, browse-origin
+	// mode, served-bundle fingerprint + auto-reloader) so the launcher and the
+	// update behavior are identical on /desk and on the dashboard beneath it.
+	var ver string
+	if hv.c.UIAssets != nil {
+		if f, err := hv.c.UIAssets.Open("index.html"); err == nil {
+			if b, rerr := io.ReadAll(f); rerr == nil {
+				ver = uiVersionHash(b)
+			}
+			_ = f.Close() //nolint:errcheck
+		}
+	}
+	scripts := `<script>window.__SKYWIRE_LOCAL_PK__=` + strconv.Quote(localPK) +
+		`;window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;` + browseJS + `</script>` + "\n" +
+		`<script src="/browse.js"></script>` + "\n" +
+		`<script src="/skywire-browse-launcher.js"></script>` + "\n" +
+		`<script>` + uiAutoReloadJS + `</script>` + "\n" +
+		`<script src="/desk-boot.js"></script>`
+	page := deskShellHTML(scripts, nativeDeskBootOpts)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(page) //nolint:errcheck
+}
+
+// nativeDeskBootOpts is the skywireDeskBoot options object for the
+// native-served /desk: native mode (no wasm anything), dashboard window on
+// the same-origin Angular UI. embed=1 rides in the HASH (the Angular UI is
+// hash-routed) so the iframe's own injected launcher hides its taskbar — the
+// same chrome-less guard the ☰ chat/log windows rely on.
+const nativeDeskBootOpts = `{
+  native: true,
+  dashboardURL: '/#/?embed=1',
+}`
 
 // uiVersionHash fingerprints the served UI bundle (short sha256 of index.html,
 // which embeds the content-hashed chunk names).
@@ -256,7 +313,10 @@ const nativeBrowseLauncherJS = `(function () {
     } catch (e) {}
     // The panel is always on (mountPanel renders the persistent taskbar itself),
     // so there's no floating launch button — apps open from the ☰ menu.
-    void p;
+    // Publish the handle under the same global the wasm desk-boot uses, so the
+    // native /desk page (desk-boot's native branch) can wait on the mounted
+    // panel instead of double-mounting one.
+    self.__skywireDesk = p;
   }
   ready();
 })();`
