@@ -543,6 +543,11 @@
     // dmsg_sessions}). Returns {} if the core isn't booted yet (status() throws).
     function dmsgStatus() {
       return Promise.resolve().then(function () {
+        // opts.dmsgStatus: the page knows better than the in-tab core — the
+        // desk's visor runs as a SEPARATE wasm instance (skywireVisor stays
+        // un-booted there), so the desk reports readiness from the visor's
+        // vnet listeners instead.
+        if (opts.dmsgStatus) { return opts.dmsgStatus() || {}; }
         var v = globalThis.skywireVisor;
         if (v && v.status) { return v.status() || {}; }
         // Native / hosted HV UI (directViaBackend, no in-tab wasm core to
@@ -1356,7 +1361,7 @@
       // Thread the clearnet + self-PK providers from the panel opts so the engine
       // is host-agnostic: the wasm visor passes none (they fall back to the
       // skywireVisor.* globals), the native HV UI passes /api/browse-backed ones.
-      fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK, directViaBackend: opts.directViaBackend,
+      fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK, directViaBackend: opts.directViaBackend, dmsgStatus: opts.dmsgStatus,
       log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} plog(m); },
       // Reflect the current site into this pane's TAB (and the window title
       // when this tab is active) via paneCB.
@@ -2512,6 +2517,27 @@
 
     var tabs = [], active = null, wb = null;
     function setTitle() { try { wb.setTitle(active ? active.title : (opts.title || "terminal")); } catch (e) {} }
+    // ensureOpen starts a tab's shell session the FIRST time the tab is
+    // visible. Opening while hidden would size the xterm 0x0 — everything the
+    // session printed (a foreground visor's whole log) lands garbled in a
+    // zero-width grid, and each write still costs parser + renderer work.
+    // Deferred tabs cost nothing until clicked.
+    function ensureOpen(t) {
+      if (t.opened) return;
+      t.opened = true;
+      ensureShell().then(function (sh) {
+        t.note.remove();
+        t.handle = sh.open(t.mount);
+        if (t.handle && t.handle.error) { t.mount.textContent = "shell: " + t.handle.error; return; }
+        if (active === t && t.handle && t.handle.focus) { try { t.handle.focus(); } catch (e) {} }
+        // initCmd: run one command as if typed — the desk's default layout uses
+        // this ("skywire --help" in the docs playground; "skywire autoconfig"
+        // for a foreground visor terminal).
+        if (t.initCmd && t.handle && t.handle.run) { try { t.handle.run(t.initCmd); } catch (e) {} }
+      }).catch(function (e) {
+        t.note.textContent = "shell failed to start: " + (e.message || e);
+      });
+    }
     function activate(t) {
       if (!t || active === t) return;
       tabs.forEach(function (x) {
@@ -2521,6 +2547,7 @@
       });
       active = t;
       setTitle();
+      ensureOpen(t);
       // xterm sizes itself to a VISIBLE container: refit + refocus on switch.
       try { if (t.handle && t.handle.fit) t.handle.fit(); } catch (e) {}
       try { if (t.handle && t.handle.focus) t.handle.focus(); } catch (e) {}
@@ -2536,13 +2563,13 @@
     }
     function addTab(o) {
       o = o || {};
-      var t = { title: o.title || "shell", handle: null };
+      var t = { title: o.title || "shell", handle: null, initCmd: o.initCmd || "", opened: false };
       t.mount = doc.createElement("div");
       t.mount.style.cssText = "position:absolute;inset:0;background:#000;overflow:hidden;display:none";
-      var note = doc.createElement("div");
-      note.style.cssText = "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa0a6;font:12px monospace";
-      note.textContent = "starting the shell…";
-      t.mount.appendChild(note);
+      t.note = doc.createElement("div");
+      t.note.style.cssText = "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa0a6;font:12px monospace";
+      t.note.textContent = "starting the shell…";
+      t.mount.appendChild(t.note);
       body.appendChild(t.mount);
       t.btn = doc.createElement("div");
       t.btn.style.cssText = "display:flex;align-items:center;gap:.45em;max-width:12em;padding:.25em .6em;cursor:pointer;font:11px monospace;border:1px solid #2a2342;border-bottom:0;border-radius:5px 5px 0 0;user-select:none;white-space:nowrap";
@@ -2559,19 +2586,10 @@
       t.btn.onclick = function () { activate(t); };
       strip.insertBefore(t.btn, plus);
       tabs.push(t);
-      activate(t);
-      ensureShell().then(function (sh) {
-        note.remove();
-        t.handle = sh.open(t.mount);
-        if (t.handle && t.handle.error) { t.mount.textContent = "shell: " + t.handle.error; return; }
-        if (active === t && t.handle && t.handle.focus) { try { t.handle.focus(); } catch (e) {} }
-        // initCmd: run one command as if typed — the desk's default layout uses
-        // this ("skywire --help" in the docs playground; "skywire autoconfig"
-        // for a foreground visor terminal).
-        if (o.initCmd && t.handle && t.handle.run) { try { t.handle.run(o.initCmd); } catch (e) {} }
-      }).catch(function (e) {
-        note.textContent = "shell failed to start: " + (e.message || e);
-      });
+      // bg: add WITHOUT stealing the active tab (the desk keeps its visor
+      // terminal front; a background help tab opens lazily on first click).
+      // The first tab always activates.
+      if (!o.bg || tabs.length === 1) { activate(t); }
       return t;
     }
     var plus = doc.createElement("div");
@@ -3188,8 +3206,8 @@
     function openConsole(o) {
       o = o || {};
       if (consoleWin && consoleWin.addTab) {
-        consoleWin.addTab({ title: o.title || "shell", initCmd: o.initCmd || "" });
-        try { consoleWin.wb.minimize(false); consoleWin.wb.focus(); } catch (e) {}
+        consoleWin.addTab({ title: o.title || "shell", initCmd: o.initCmd || "", bg: !!o.bg });
+        try { consoleWin.wb.minimize(false); if (!o.bg) { consoleWin.wb.focus(); } } catch (e) {}
         return consoleWin;
       }
       var win = createShellWindow(doc, withRoot({
