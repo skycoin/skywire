@@ -114,17 +114,75 @@
 			});
 		}).then(function () {
 			var sv = globalThis.skywireVisor;
+			// The desk's REAL visor is the root binary running in a terminal —
+			// a separate wasm instance the page cannot call. The desk host's
+			// own skywireVisor core is deliberately never booted here, so the
+			// nested browser reaches the mesh THROUGH the running visor's
+			// resolving proxy on the virtual loopback (dmsgweb, vnet:4445,
+			// chained to skynetweb + the proxy client): dmsg/skynet fetches go
+			// SOCKS5-over-vnet. Falls back to the in-page core for a page that
+			// booted it (nothing on the desk does today).
+			var RESOLVER_PORT = 4445;
+			function viaResolver() {
+				return !!(globalThis.vnet && globalThis.vnet.listening(RESOLVER_PORT) && globalThis.vnet.socksHttpFetch);
+			}
+			function resolverHost(pkHost) {
+				var h = String(pkHost || '');
+				// bare 66-hex PK → PK.dmsg (the resolver matches by suffix)
+				if (/^[0-9a-f]{66}$/i.test(h)) return h + '.dmsg';
+				return h;
+			}
 			var panel = globalThis.SkywireBrowse.mountPanel(document, {
 				noTour: true, // the tour narrates the classic visor page
-				fetchDmsg: function () { return sv.fetchDmsg.apply(null, arguments); },
+				fetchDmsg: function (pkHost, method, path, body) {
+					if (viaResolver()) {
+						return globalThis.vnet.socksHttpFetch(RESOLVER_PORT, resolverHost(pkHost) + ':80', method, path, body, {});
+					}
+					return sv.fetchDmsg.apply(null, arguments);
+				},
+				dmsgStatus: function () {
+					// The visor's resolver listening IS mesh readiness for this
+					// page (dmsgweb waits on dmsg internally); without it fall
+					// back to the in-page core's own status.
+					if (viaResolver()) { return { dmsg_connected: true }; }
+					try { return sv.status() || {}; } catch (e) { return {}; }
+				},
 				serveContent: function (m) { return sv.serveContent(m); },
-				selfPK: function () { try { return sv.status().pk || ''; } catch (e) { return ''; } },
+				selfPK: function () {
+					// Sync by contract; served from a cache the poller below
+					// fills from THE visor's /api/about the moment its
+					// hypervisor listens. The in-page core's status() is only
+					// a fallback for a page that booted it.
+					if (deskSelfPK) return deskSelfPK;
+					try { return sv.status().pk || ''; } catch (e) { return ''; }
+				},
 				api: function (m, path, body) {
+					// The one visor's hypervisor API on the virtual loopback.
+					if (globalThis.vnet && globalThis.vnet.listening(hvPort)) {
+						return globalThis.vnet.httpFetch(hvPort, m, path, body, {}).then(function (r) {
+							return { status: r.status, body: new TextDecoder().decode(r.body) };
+						});
+					}
 					return sv.hvApi(m, path, body).then(function (r) {
 						return { status: r.status, body: new TextDecoder().decode(r.body) };
 					});
 				},
 			});
+			// selfPK cache: poll the visor's /api/about once its HV listens;
+			// re-check occasionally in case the operator restarts the visor
+			// under a different identity.
+			var deskSelfPK = '';
+			(function pollPK() {
+				if (globalThis.vnet && globalThis.vnet.listening(hvPort)) {
+					globalThis.vnet.httpFetch(hvPort, 'GET', '/api/about', null, {}).then(function (r) {
+						try {
+							var a = JSON.parse(new TextDecoder().decode(r.body));
+							if (a && a.public_key) deskSelfPK = a.public_key;
+						} catch (e) { /* ignore */ }
+					}).catch(function () { /* ignore */ });
+				}
+				setTimeout(pollPK, deskSelfPK ? 60000 : 3000);
+			})();
 			globalThis.__skywireDesk = panel;
 
 			// Session: remember across reloads whether a visor was RUNNING when
@@ -152,7 +210,10 @@
 				startedVisor = startVisor;
 			}
 			if (opts.helpTerminal !== false) {
-				panel.openConsole({ title: 'skywire', initCmd: 'skywire --help' });
+				// bg: a background TAB of the terminal window — the visor's log
+				// stays front, and this tab's session (and its `skywire --help`)
+				// only starts when first clicked.
+				panel.openConsole({ title: 'skywire', initCmd: 'skywire --help', bg: !!startedVisor });
 			}
 			if (opts.hvWindow) {
 				// The hypervisor UI comes up on the virtual loopback a while

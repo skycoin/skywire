@@ -34,6 +34,93 @@
 	// Service-worker bridge state (see enableSW below).
 	let swPrefix = null;
 
+	// httpExchange runs ONE HTTP/1.0 request/response over an already-open
+	// pipe (side 'a' of conn `id`) and settles the given resolve/reject with
+	// {status, body:Uint8Array, headers:{lowercased:value}}. Shared by
+	// httpFetch (plain pipe) and socksHttpFetch (pipe with a SOCKS5 CONNECT
+	// prelude). HTTP/1.0 + Connection: close — no chunked encoding, EOF
+	// delimits when Content-Length is absent; Content-Length short-circuits
+	// servers that hold the connection open.
+	function httpExchange(v, id, hostLabel, method, path, body, headers, resolve, reject, timeoutMs) {
+		let done = false;
+		const timer = setTimeout(() => {
+			if (done) return;
+			done = true;
+			v.close(id, 'a');
+			reject(new Error('timeout: ' + hostLabel));
+		}, timeoutMs || 30000);
+		const te = new TextEncoder();
+		let req = (method || 'GET') + ' ' + (path || '/') + ' HTTP/1.0\r\nHost: ' + hostLabel + '\r\n';
+		const h = headers || {};
+		for (const k in h) { if (Object.prototype.hasOwnProperty.call(h, k)) req += k + ': ' + h[k] + '\r\n'; }
+		let bodyBytes = null;
+		if (body != null) {
+			bodyBytes = (body instanceof Uint8Array) ? body : te.encode(String(body));
+			req += 'Content-Length: ' + bodyBytes.length + '\r\n';
+		}
+		req += 'Connection: close\r\n\r\n';
+		v.send(id, 'a', te.encode(req));
+		if (bodyBytes && bodyBytes.length) v.send(id, 'a', bodyBytes);
+		const chunks = [];
+		let total = 0;
+		let parsed = null; // {status, headers, bodyStart, contentLength}
+		const concat = () => {
+			const all = new Uint8Array(total);
+			let off = 0;
+			for (const c of chunks) { all.set(c, off); off += c.length; }
+			return all;
+		};
+		const tryParseHead = (all) => {
+			let sep = -1; // header/body split at CRLFCRLF
+			for (let i = 0; i + 3 < all.length; i++) {
+				if (all[i] === 13 && all[i + 1] === 10 && all[i + 2] === 13 && all[i + 3] === 10) { sep = i; break; }
+			}
+			if (sep < 0) return null;
+			const head = new TextDecoder().decode(all.subarray(0, sep));
+			const lines = head.split('\r\n');
+			const status = parseInt(lines[0].split(' ')[1] || '0', 10) || 0;
+			const hs = {};
+			for (let i = 1; i < lines.length; i++) {
+				const ci = lines[i].indexOf(':');
+				if (ci > 0) hs[lines[i].slice(0, ci).trim().toLowerCase()] = lines[i].slice(ci + 1).trim();
+			}
+			const cl = /^\d+$/.test(hs['content-length'] || '') ? parseInt(hs['content-length'], 10) : -1;
+			return { status: status, headers: hs, bodyStart: sep + 4, contentLength: cl };
+		};
+		const finish = (all) => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			v.close(id, 'a');
+			if (!all) all = concat();
+			if (!parsed) parsed = tryParseHead(all);
+			if (!parsed) { reject(new Error('malformed HTTP response from ' + hostLabel)); return; }
+			let respBody = all.subarray(parsed.bodyStart);
+			if (parsed.contentLength >= 0 && respBody.length > parsed.contentLength) respBody = respBody.subarray(0, parsed.contentLength);
+			resolve({ status: parsed.status, body: respBody, headers: parsed.headers });
+		};
+		const pump = () => {
+			if (done) return;
+			for (;;) {
+				const b = v.recv(id, 'a');
+				if (b) {
+					chunks.push(b);
+					total += b.length;
+					if (!parsed || parsed.contentLength >= 0) {
+						const all = concat();
+						if (!parsed) parsed = tryParseHead(all);
+						if (parsed && parsed.contentLength >= 0 && total - parsed.bodyStart >= parsed.contentLength) { finish(all); return; }
+					}
+					continue;
+				}
+				if (v.eof(id, 'a')) { finish(null); return; }
+				v.onReadable(id, 'a', pump);
+				return;
+			}
+		};
+		pump();
+	}
+
 	globalThis.vnet = {
 		// listen claims a port; onconn(connId) fires per inbound dial (the
 		// accepter is side 'b' of that conn). Returns false if taken.
@@ -139,89 +226,95 @@
 			return new Promise((resolve, reject) => {
 				const id = this.dial(port);
 				if (id < 0) { reject(new Error('connection refused: 127.0.0.1:' + port)); return; }
-				let done = false;
-				const timer = setTimeout(() => {
-					if (done) return;
-					done = true;
-					this.close(id, 'a');
-					reject(new Error('timeout: 127.0.0.1:' + port));
-				}, 30000);
-				const te = new TextEncoder();
-				let req = (method || 'GET') + ' ' + (path || '/') + ' HTTP/1.0\r\nHost: 127.0.0.1:' + port + '\r\n';
-				const h = headers || {};
-				for (const k in h) { if (Object.prototype.hasOwnProperty.call(h, k)) req += k + ': ' + h[k] + '\r\n'; }
-				let bodyBytes = null;
-				if (body != null) {
-					bodyBytes = (body instanceof Uint8Array) ? body : te.encode(String(body));
-					req += 'Content-Length: ' + bodyBytes.length + '\r\n';
-				}
-				req += 'Connection: close\r\n\r\n';
-				this.send(id, 'a', te.encode(req));
-				if (bodyBytes && bodyBytes.length) this.send(id, 'a', bodyBytes);
-				// Receive: parse the status line + headers as soon as they're
-				// complete, then finish once Content-Length bytes of body have
-				// arrived — servers that keep the connection alive (Go answers
-				// even an HTTP/1.0 Connection: close request without closing
-				// promptly) would hang an EOF-only reader. EOF remains the
-				// fallback delimiter when Content-Length is absent.
-				const chunks = [];
-				let total = 0;
-				let parsed = null; // {status, headers, bodyStart, contentLength}
-				const concat = () => {
-					const all = new Uint8Array(total);
-					let off = 0;
-					for (const c of chunks) { all.set(c, off); off += c.length; }
-					return all;
+				httpExchange(this, id, '127.0.0.1:' + port, method, path, body, headers, resolve, reject, 30000);
+			});
+		},
+
+		// socksHttpFetch performs ONE HTTP request THROUGH a SOCKS5 proxy
+		// listening on a virtual-loopback port (no auth): CONNECT to
+		// targetHostPort ("home.dmsg:80", "<pk>.dmsg:80", …), then the same
+		// HTTP/1.0 exchange httpFetch speaks. This is how page JS reaches the
+		// in-page visor's RESOLVING PROXIES — the desk's nested browser
+		// fetches dmsg/skynet sites via the visor running in a terminal
+		// (dmsgweb on vnet:4445), which the page cannot address any other way
+		// (the visor is a separate wasm instance with no page API).
+		socksHttpFetch(port, targetHostPort, method, path, body, headers) {
+			const v = this;
+			return new Promise((resolve, reject) => {
+				const id = v.dial(port);
+				if (id < 0) { reject(new Error('connection refused: 127.0.0.1:' + port)); return; }
+				let settled = false;
+				const fail = (msg) => {
+					if (settled) return;
+					settled = true;
+					clearTimeout(hsTimer);
+					v.close(id, 'a');
+					reject(new Error(msg));
 				};
-				const tryParseHead = (all) => {
-					let sep = -1; // header/body split at CRLFCRLF
-					for (let i = 0; i + 3 < all.length; i++) {
-						if (all[i] === 13 && all[i + 1] === 10 && all[i + 2] === 13 && all[i + 3] === 10) { sep = i; break; }
-					}
-					if (sep < 0) return null;
-					const head = new TextDecoder().decode(all.subarray(0, sep));
-					const lines = head.split('\r\n');
-					const status = parseInt(lines[0].split(' ')[1] || '0', 10) || 0;
-					const hs = {};
-					for (let i = 1; i < lines.length; i++) {
-						const ci = lines[i].indexOf(':');
-						if (ci > 0) hs[lines[i].slice(0, ci).trim().toLowerCase()] = lines[i].slice(ci + 1).trim();
-					}
-					const cl = /^\d+$/.test(hs['content-length'] || '') ? parseInt(hs['content-length'], 10) : -1;
-					return { status: status, headers: hs, bodyStart: sep + 4, contentLength: cl };
-				};
-				const finish = (all) => {
-					if (done) return;
-					done = true;
-					clearTimeout(timer);
-					this.close(id, 'a');
-					if (!all) all = concat();
-					if (!parsed) parsed = tryParseHead(all);
-					if (!parsed) { reject(new Error('malformed HTTP response from 127.0.0.1:' + port)); return; }
-					let body = all.subarray(parsed.bodyStart);
-					if (parsed.contentLength >= 0 && body.length > parsed.contentLength) body = body.subarray(0, parsed.contentLength);
-					resolve({ status: parsed.status, body: body, headers: parsed.headers });
-				};
+				const hsTimer = setTimeout(() => fail('timeout: SOCKS5 handshake with 127.0.0.1:' + port), 20000);
+				// Buffered reader over recv for the fixed-size handshake replies.
+				let buf = new Uint8Array(0);
+				let need = 0, onBytes = null;
 				const pump = () => {
-					if (done) return;
+					if (settled) return;
 					for (;;) {
-						const b = this.recv(id, 'a');
+						const b = v.recv(id, 'a');
 						if (b) {
-							chunks.push(b);
-							total += b.length;
-							if (!parsed || parsed.contentLength >= 0) {
-								const all = concat();
-								if (!parsed) parsed = tryParseHead(all);
-								if (parsed && parsed.contentLength >= 0 && total - parsed.bodyStart >= parsed.contentLength) { finish(all); return; }
-							}
+							const nb = new Uint8Array(buf.length + b.length);
+							nb.set(buf, 0); nb.set(b, buf.length);
+							buf = nb;
+							if (onBytes && buf.length >= need) { const cb = onBytes; onBytes = null; cb(); }
 							continue;
 						}
-						if (this.eof(id, 'a')) { finish(null); return; }
-						this.onReadable(id, 'a', pump);
+						if (v.eof(id, 'a')) { fail('SOCKS5 proxy closed during handshake'); return; }
+						v.onReadable(id, 'a', pump);
 						return;
 					}
 				};
-				pump();
+				const read = (n, cb) => {
+					need = n; onBytes = () => {
+						const out = buf.subarray(0, n);
+						buf = buf.subarray(n);
+						cb(out);
+					};
+					if (buf.length >= n) { const cb2 = onBytes; onBytes = null; cb2(); } else { pump(); }
+				};
+				const te = new TextEncoder();
+				const hp = String(targetHostPort);
+				const ci = hp.lastIndexOf(':');
+				const host = ci > 0 ? hp.slice(0, ci) : hp;
+				const tport = ci > 0 ? (parseInt(hp.slice(ci + 1), 10) || 80) : 80;
+				const hostBytes = te.encode(host);
+				if (hostBytes.length > 255) { fail('SOCKS5 host too long'); return; }
+				// greeting: VER=5, one method: no-auth
+				v.send(id, 'a', new Uint8Array([5, 1, 0]));
+				read(2, (g) => {
+					if (g[0] !== 5 || g[1] !== 0) { fail('SOCKS5 method negotiation failed'); return; }
+					// CONNECT: VER CMD RSV ATYP=domain len host port
+					const reqB = new Uint8Array(7 + hostBytes.length);
+					reqB[0] = 5; reqB[1] = 1; reqB[2] = 0; reqB[3] = 3; reqB[4] = hostBytes.length;
+					reqB.set(hostBytes, 5);
+					reqB[5 + hostBytes.length] = (tport >> 8) & 0xff;
+					reqB[6 + hostBytes.length] = tport & 0xff;
+					v.send(id, 'a', reqB);
+					read(4, (r) => {
+						if (r[0] !== 5 || r[1] !== 0) { fail('SOCKS5 CONNECT refused (rep=' + r[1] + ') for ' + hp); return; }
+						// consume the bound address: ATYP decides its length
+						const atyp = r[3];
+						const rest = atyp === 1 ? 4 + 2 : atyp === 4 ? 16 + 2 : -1;
+						const afterBind = () => {
+							if (settled) return;
+							settled = true;
+							clearTimeout(hsTimer);
+							// Splice any early bytes the proxy already relayed back
+							// into the conn queue front? None expected: the server
+							// speaks only after our HTTP request. Hand the pipe to
+							// the shared HTTP exchange.
+							httpExchange(v, id, hp, method, path, body, headers, resolve, reject, 45000);
+						};
+						if (rest > 0) { read(rest, afterBind); } else if (atyp === 3) { read(1, (l) => read(l[0] + 2, afterBind)); } else { fail('SOCKS5 bad ATYP ' + atyp); }
+					});
+				});
 			});
 		},
 
