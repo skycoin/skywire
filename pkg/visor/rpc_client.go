@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/rpc"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,6 +40,35 @@ var (
 	ErrTimeout = errors.New("rpc client timeout")
 )
 
+// closeOnConsecTimeouts is how many CONSECUTIVE per-call deadline
+// expiries (with no completed call in between) it takes before Call
+// gives up on the underlying conn and closes it.
+//
+// Why not close on the first timeout (the old behavior): the
+// hypervisor holds ONE persistent RPC conn per remote visor, shared
+// by the 30s background summary poll, `hv ls` listings, the
+// sub-hypervisor tree probes, and pty/proxy control. Under load — a
+// fleet-wide update ripple, or the re-registration stampede after
+// the hypervisor itself restarts — a Summary reply (which carries
+// every transport summary, easily 100+ entries) can take longer than
+// the 20s call deadline while the conn is perfectly alive. Closing
+// the conn on that single slow call permanently shuts down the
+// net/rpc client ("connection is shut down" on every later call) and
+// the row stays dead until the remote notices the close — up to its
+// 90s idle timeout when close propagation is unreliable (skynet
+// conns) — and redials. Each listing/poll round then re-kills the
+// freshly re-registered conn, so operators saw half the fleet
+// flapping "connection is shut down (cached Ns ago)" for as long as
+// the congestion lasted.
+//
+// Three consecutive timeouts (~60s of nothing completing at the
+// default 20s deadline) still recovers a genuinely blackholed conn
+// on roughly the same timescale as the remote's own 90s idle-redial,
+// without nuking merely-slow conns. Any completed call — success OR
+// a server-side error reply, both prove the conn round-trips —
+// resets the count.
+const closeOnConsecTimeouts = 3
+
 // API provides methods to call an RPC Server.
 // It implements API
 type rpcClient struct {
@@ -48,6 +78,10 @@ type rpcClient struct {
 	client  *rpc.Client
 	prefix  string
 	FixGob  bool
+
+	// consecTimeouts counts per-call deadline expiries since the last
+	// completed call. See closeOnConsecTimeouts.
+	consecTimeouts atomic.Int32
 
 	// proxyTarget, when non-nil, rewrites every Call so the request
 	// goes to the LOCAL visor's TransportRPCCall method (over the
@@ -150,12 +184,46 @@ func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 
 	select {
 	case call := <-rc.client.Go(rc.prefix+"."+method, args, reply, nil).Done:
+		rc.noteCallCompleted(call.Error)
 		return call.Error
 	case <-ctx.Done():
-		if err := rc.conn.Close(); err != nil {
-			rc.log.WithError(err).Warn("Failed to close rpc client after timeout error.")
-		}
+		rc.noteCallTimeout()
 		return ctx.Err()
+	}
+}
+
+// noteCallCompleted resets the consecutive-timeout count when a call
+// actually round-tripped the conn: err == nil, or a server-side error
+// reply (rpc.ServerError) — the server answering proves the conn is
+// alive. Transport-level failures (rpc.ErrShutdown, io errors) prove
+// nothing and leave the count alone.
+func (rc *rpcClient) noteCallCompleted(err error) {
+	if err == nil {
+		rc.consecTimeouts.Store(0)
+		return
+	}
+	var srvErr rpc.ServerError
+	if errors.As(err, &srvErr) {
+		rc.consecTimeouts.Store(0)
+	}
+}
+
+// noteCallTimeout records a per-call deadline expiry, closing the
+// underlying conn once closeOnConsecTimeouts have accumulated with no
+// completed call in between. Closing shuts down the net/rpc client
+// (pending and future calls fail fast) and, where close propagation
+// works, prompts the peer's serve loop to redial.
+func (rc *rpcClient) noteCallTimeout() {
+	n := rc.consecTimeouts.Add(1)
+	if int(n) < closeOnConsecTimeouts {
+		rc.log.WithField("consecutive_timeouts", n).
+			Debug("RPC call timed out; keeping conn (not yet at close threshold).")
+		return
+	}
+	rc.log.WithField("consecutive_timeouts", n).
+		Warn("Closing rpc conn after consecutive call timeouts.")
+	if err := rc.conn.Close(); err != nil {
+		rc.log.WithError(err).Warn("Failed to close rpc client after timeout error.")
 	}
 }
 
@@ -196,13 +264,12 @@ func (rc *rpcClient) callViaProxy(method string, args, reply interface{}) error 
 	var resultBytes json.RawMessage
 	select {
 	case call := <-rc.client.Go(rc.prefix+".TransportRPCCall", req, &resultBytes, nil).Done:
+		rc.noteCallCompleted(call.Error)
 		if call.Error != nil {
 			return call.Error
 		}
 	case <-ctx.Done():
-		if err := rc.conn.Close(); err != nil {
-			rc.log.WithError(err).Warn("Failed to close rpc client after proxy timeout.")
-		}
+		rc.noteCallTimeout()
 		return ctx.Err()
 	}
 
