@@ -203,11 +203,24 @@ func (m *routeMux) proactiveRetxSeqs(lastContiguous uint32, words []uint64, fast
 		return nil
 	}
 	interval := holPerSeqInterval(fastestRTTms)
+	gapTh := holGapThreshold(fastestRTTms)
 	var due []uint32
 	for _, seq := range cand {
 		// Only retransmit seqs we still hold: a seq already purged from the retx
 		// buffer was acknowledged, so it is not the one blocking the frontier.
-		if m.retxBuf.Get(seq) == nil {
+		sentAt, held := m.retxBuf.SentAt(seq)
+		if !held {
+			continue
+		}
+		// Age gate (holGapThreshold): a seq younger than ~one fast-leg RTT
+		// cannot have been acked yet no matter which leg it rode, so a nudge is
+		// spurious by construction — SACKs arrive every few ms and, ungated,
+		// the first SACK naming a seq striped onto a slower leg retransmitted
+		// it at ~25ms of age, then every fast-RTT until the original landed
+		// (measured ~12% duplicate bytes concentrated on the fast leg). Gating
+		// the FIRST nudge on age preserves the design's intent: a genuine stall
+		// is still healed in about one fast round-trip.
+		if now.Sub(sentAt) < gapTh {
 			continue
 		}
 		if m.holRetx.Due(seq, interval, now) {

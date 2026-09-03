@@ -223,7 +223,10 @@ func TestProactiveRetxSeqs(t *testing.T) {
 	// missing) and bit3 set (104 received) — frontier run is 101,102,103.
 	last := uint32(100)
 	words := []uint64{bits(3)}
-	now := time.Unix(0, 0)
+	// Probe one second after the entries are stored (Store stamps sentAt with
+	// the real clock): old enough that the age gate (holGapThreshold) sees a
+	// genuine stall, not a seq still inside its first fast-leg RTT.
+	now := time.Now().Add(time.Second)
 
 	t.Run("capability off -> nil fallback", func(t *testing.T) {
 		m := newMux(false)
@@ -274,6 +277,22 @@ func TestProactiveRetxSeqs(t *testing.T) {
 		later := m.proactiveRetxSeqs(last, words, 20, now.Add(25*time.Millisecond))
 		if !equalSeqs(later, []uint32{101, 102, 103}) {
 			t.Errorf("re-nudge past interval got %v, want [101 102 103]", later)
+		}
+	})
+
+	t.Run("young seq not nudged (age gate)", func(t *testing.T) {
+		m := newMux(true)
+		m.retxBuf.Store(101, []byte("a"))
+		// Probed immediately after send (age ≈ 0 < one fast-leg RTT): the seq
+		// cannot have been acked yet on ANY leg, so a nudge would be spurious
+		// by construction — this is the ungated behavior that duplicated ~12%
+		// of a striped transfer onto the fast leg. Must be nil.
+		if got := m.proactiveRetxSeqs(last, words, 20, time.Now()); got != nil {
+			t.Errorf("seq younger than the gap threshold must not be nudged, got %v", got)
+		}
+		// Same seq once genuinely overdue: nudged.
+		if got := m.proactiveRetxSeqs(last, words, 20, time.Now().Add(time.Second)); !equalSeqs(got, []uint32{101}) {
+			t.Errorf("aged seq must be nudged, got %v, want [101]", got)
 		}
 	})
 
