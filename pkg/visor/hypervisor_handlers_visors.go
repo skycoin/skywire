@@ -607,8 +607,16 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		// deadVisors accumulates PKs that errored Summary inside the
 		// 5s outer arm — evicted from remoteVisors AFTER wg.Wait so
 		// the eviction can't race with the poll goroutines still
-		// reading their captured Conn copies.
-		var deadVisors []cipher.PubKey
+		// reading their captured Conn copies. The failed conn's API is
+		// kept alongside the PK so eviction can verify the map still
+		// holds the SAME conn: a peer that re-registered between our
+		// snapshot and wg.Wait (restart churn does this constantly)
+		// must not have its FRESH conn deleted for the old conn's sins.
+		type deadVisor struct {
+			pk  cipher.PubKey
+			api API
+		}
+		var deadVisors []deadVisor
 		wg := new(sync.WaitGroup)
 		wg.Add(len(remotes))
 
@@ -685,7 +693,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 					// peers' state for the next round.
 					hv.logger.WithError(r.rpcErr).WithField("pk", pk).Warn("Failed to obtain summary via RPC")
 					mu.Lock()
-					deadVisors = append(deadVisors, pk)
+					deadVisors = append(deadVisors, deadVisor{pk: pk, api: c.API})
 					mu.Unlock()
 				case <-time.After(5 * time.Second):
 					hv.logger.WithField("pk", pk).
@@ -727,8 +735,13 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		// via the sweep branch below.
 		if len(deadVisors) > 0 {
 			hv.mu.Lock()
-			for _, pk := range deadVisors {
-				delete(hv.remoteVisors, pk)
+			for _, d := range deadVisors {
+				// Identity check: evict only if the entry is still the
+				// conn that failed. A differing API means the peer
+				// re-registered mid-poll and the new conn is innocent.
+				if cur, ok := hv.remoteVisors[d.pk]; ok && cur.API == d.api {
+					delete(hv.remoteVisors, d.pk)
+				}
 			}
 			hv.mu.Unlock()
 		}
