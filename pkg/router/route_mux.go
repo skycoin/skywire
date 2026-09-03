@@ -993,9 +993,11 @@ func ewmaRate(prev float64, delta uint64, secs float64) float64 {
 	return goodputEWMAAlpha*sample + (1-goodputEWMAAlpha)*prev
 }
 
-// wrapPayload creates a sequenced data packet and optionally stores it for retransmission.
+// wrapPayload creates a sequenced data packet and optionally stores it for
+// retransmission, tagged with the leg it is about to be sent on (-1 = unknown)
+// so the demote-time flush can target only the stranded leg's sequences.
 // Returns the packet and the sequence number used.
-func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte) (routing.Packet, uint32, error) {
+func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte, leg int) (routing.Packet, uint32, error) {
 	seq := atomic.AddUint32(&m.writeSeq, 1) - 1
 	// Per-frame AEAD: seal the app payload under seq as the nonce. The sealed
 	// bytes are what go on the wire AND into the retx buffer, so a SACK
@@ -1011,7 +1013,7 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte) (routing.Pa
 
 	// Store for retransmission before sending
 	if m.sackEnabled && m.retxBuf != nil {
-		m.retxBuf.Store(seq, data) //nolint:errcheck
+		m.retxBuf.Store(seq, data, leg) //nolint:errcheck
 	}
 
 	// FEC: feed the on-wire (post-seal) payload to the striper. A completed block
@@ -1298,6 +1300,31 @@ func (m *routeMux) heldRetxSeqs() []uint32 {
 		return nil
 	}
 	return m.retxBuf.Seqs()
+}
+
+// heldRetxSeqsOnLegs returns the held sequences whose LAST send rode one of the
+// given leg indices (unknown-leg entries included conservatively), ascending.
+// The demote-time flush uses this to rescue only the sequences the demoted
+// leg(s) actually strand, instead of duplicating the whole in-flight window
+// onto the surviving legs.
+func (m *routeMux) heldRetxSeqsOnLegs(legIdxs []int) []uint32 {
+	if !m.sackEnabled || m.retxBuf == nil || len(legIdxs) == 0 {
+		return nil
+	}
+	set := make(map[int]bool, len(legIdxs))
+	for _, idx := range legIdxs {
+		set[idx] = true
+	}
+	return m.retxBuf.HeldSeqsOnLegs(set)
+}
+
+// retxSetLeg re-tags a held sequence's last-send leg after a retransmit moved
+// it to a different leg, keeping the demote-flush attribution honest.
+func (m *routeMux) retxSetLeg(seq uint32, leg int) {
+	if m.retxBuf == nil {
+		return
+	}
+	m.retxBuf.SetLeg(seq, leg)
 }
 
 // rebuildWeights updates transport selection weights based on current latency.
