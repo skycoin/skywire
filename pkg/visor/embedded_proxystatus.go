@@ -135,9 +135,9 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 	// tracks; nothing is fabricated for a layer that does not know it.
 	switch surface {
 	case proxystatus.SurfaceDmsg:
-		p.fillDmsgLayer(&snap)
+		p.fillLayerBounded(&snap, "dmsg layer", p.fillDmsgLayer)
 	case proxystatus.SurfaceSkynet:
-		p.fillSkynetLayer(&snap)
+		p.fillLayerBounded(&snap, "skynet layer", p.fillSkynetLayer)
 	case proxystatus.SurfaceSkysocks:
 		// The skysocks tunnel's state is Legs/Streams/RangeSplit — no layer section.
 	}
@@ -296,6 +296,45 @@ func aliasList(m map[string]cipher.PubKey) []proxystatus.Alias {
 		out = append(out, proxystatus.Alias{Name: name, PK: m[name].String()})
 	}
 	return out
+}
+
+// statusFillBudget bounds each layer-section collector on the status page's
+// request path. The page renders THROUGH the very proxy it describes, so a
+// collector that blocks (on a lock, an RPC, a half-initialized registry) would
+// otherwise hang the whole page forever — observed live on the browser visor:
+// status.skynet never answered while the identical native path rendered in
+// 15ms. Generous enough that a merely-busy visor still fills every section.
+const statusFillBudget = 3 * time.Second
+
+// fillLayerBounded runs fill against a SCRATCH snapshot under statusFillBudget
+// and merges the layer sections into snap only on completion. On timeout the
+// page renders without the section and the note NAMES it — turning a
+// silent environment-specific wedge into a self-diagnosing line. The scratch
+// snapshot is what makes the timeout safe: the abandoned goroutine keeps
+// writing to memory nothing else reads (it is parked on whatever wedged and
+// cannot be killed; one goroutine per timed-out page fetch, bounded by page
+// traffic).
+func (p *visorStatusProvider) fillLayerBounded(snap *proxystatus.Snapshot, name string, fill func(*proxystatus.Snapshot)) {
+	scratch := &proxystatus.Snapshot{Surface: snap.Surface, App: snap.App, Running: snap.Running}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fill(scratch)
+	}()
+	select {
+	case <-done:
+		snap.Running = scratch.Running
+		snap.Layer = scratch.Layer
+		snap.Names = scratch.Names
+		snap.Sessions = scratch.Sessions
+		snap.Forwards = scratch.Forwards
+		snap.Conns = scratch.Conns
+		if scratch.Note != "" {
+			snap.Note = appendNote(snap.Note, scratch.Note)
+		}
+	case <-time.After(statusFillBudget):
+		snap.Note = appendNote(snap.Note, name+" collection timed out after "+statusFillBudget.String()+" — section omitted")
+	}
 }
 
 // fillDmsgLayer populates the dmsg resolving proxy's sections: its layer summary
