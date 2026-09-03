@@ -309,6 +309,25 @@
 									try { win.openTab('status.skysocks', '/', 'http', true); } catch (e2) {}
 								}
 								if (win.wb && win.wb.maximize) win.wb.maximize(true);
+								// One-shot subresources (the Material icon font above
+								// all) are a load-lottery on first paint: the tab opens
+								// the moment the port listens, dozens of asset fetches
+								// land on the still-busy visor, and whichever ones time
+								// out are never retried — APIs re-poll, fonts don't, so
+								// the dashboard renders icon NAMES as text. Self-heal
+								// once: if the icon font hasn't arrived after the page
+								// has had time to settle, reload the frame — by then the
+								// visor is warm and the same fetches complete (verified
+								// live: a manual frame reload cured it every time).
+								setTimeout(function () {
+									try {
+										var fr = document.querySelector('iframe[src^="/vnet/' + hvPort + '"]');
+										if (!fr || !fr.contentWindow || !fr.contentWindow.document.fonts) return;
+										if (!fr.contentWindow.document.fonts.check('24px "Material Icons"')) {
+											fr.contentWindow.location.reload();
+										}
+									} catch (e3) { /* cross-origin or torn-down frame — leave it */ }
+								}, 25000);
 							} catch (e) { console.error('hv window:', e); }
 						});
 						return;
