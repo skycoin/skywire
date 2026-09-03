@@ -158,7 +158,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			localSupportsSQUICR := a.tm.IsKnownNetwork(tptypes.QUIC) && a.tm.CanCreateTransport(tptypes.QUIC)     // QUIC(squicr): 3rd distinct carrier family for route diversity
 			localSupportsWEBRTC := a.tm.IsKnownNetwork(tptypes.WEBRTC) && a.tm.CanCreateTransport(tptypes.WEBRTC) // NAT-traversing (ICE/STUN); reaches more NAT types than sudph hole-punch
 			localSupportsWT := a.tm.IsKnownNetwork(tptypes.WT) && a.tm.CanCreateTransport(tptypes.WT)             // WT(swtr): HTTP/3 carrier — one of the three a browser visor can dial
-			localSupportsWS := a.tm.IsKnownNetwork(tptypes.WS) && a.tm.CanCreateTransport(tptypes.WS)             // WS(swsr): WebSocket riding the peer's stcpr port — ditto
+			localSupportsWS := a.tm.IsKnownNetwork(tptypes.WS) && a.tm.CanCreateTransport(tptypes.WS) && wsPageAllowed() // WS(swsr): WebSocket riding the peer's stcpr port — but an HTTPS page blocks ws:// as mixed content, so don't waste the dials there
 			if !localSupportsSUDPH && !localSupportsSTCPR && !localSupportsSQUICR &&
 				!localSupportsWT && !localSupportsWS && !localSupportsWEBRTC {
 				a.log.Warn("No supported network types available locally — skipping autoconnect cycle")
