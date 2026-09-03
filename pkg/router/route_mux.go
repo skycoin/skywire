@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -999,10 +1001,12 @@ func ewmaRate(prev float64, delta uint64, secs float64) float64 {
 }
 
 // wrapPayload creates a sequenced data packet and optionally stores it for
-// retransmission, tagged with the leg it is about to be sent on (-1 = unknown)
-// so the demote-time flush can target only the stranded leg's sequences.
+// retransmission, tagged with the TRANSPORT UUID of the leg it is about to be
+// sent on (uuid.Nil = unknown) so the demote-time flush can target only the
+// stranded leg's sequences. The tag is the transport identity, not the leg
+// index — indices shift on slice compaction.
 // Returns the packet and the sequence number used.
-func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte, leg int) (routing.Packet, uint32, error) {
+func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte, tpID uuid.UUID) (routing.Packet, uint32, error) {
 	seq := atomic.AddUint32(&m.writeSeq, 1) - 1
 	// Per-frame AEAD: seal the app payload under seq as the nonce. The sealed
 	// bytes are what go on the wire AND into the retx buffer, so a SACK
@@ -1018,7 +1022,7 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte, leg int) (r
 
 	// Store for retransmission before sending
 	if m.sackEnabled && m.retxBuf != nil {
-		m.retxBuf.Store(seq, data, leg) //nolint:errcheck
+		m.retxBuf.Store(seq, data, tpID) //nolint:errcheck
 	}
 
 	// FEC: feed the on-wire (post-seal) payload to the striper. A completed block
@@ -1307,29 +1311,32 @@ func (m *routeMux) heldRetxSeqs() []uint32 {
 	return m.retxBuf.Seqs()
 }
 
-// heldRetxSeqsOnLegs returns the held sequences whose LAST send rode one of the
-// given leg indices (unknown-leg entries included conservatively), ascending.
+// heldRetxSeqsOnTps returns the held sequences whose LAST send rode one of the
+// given transports (unknown-tag entries included conservatively), ascending.
 // The demote-time flush uses this to rescue only the sequences the demoted
 // leg(s) actually strand, instead of duplicating the whole in-flight window
-// onto the surviving legs.
-func (m *routeMux) heldRetxSeqsOnLegs(legIdxs []int) []uint32 {
-	if !m.sackEnabled || m.retxBuf == nil || len(legIdxs) == 0 {
+// onto the surviving legs. Keyed by transport UUID, never leg index — indices
+// shift on slice compaction and a stale index tag wedged live sessions.
+func (m *routeMux) heldRetxSeqsOnTps(tpIDs []uuid.UUID) []uint32 {
+	if !m.sackEnabled || m.retxBuf == nil || len(tpIDs) == 0 {
 		return nil
 	}
-	set := make(map[int]bool, len(legIdxs))
-	for _, idx := range legIdxs {
-		set[idx] = true
+	set := make(map[uuid.UUID]bool, len(tpIDs))
+	for _, id := range tpIDs {
+		if id != uuid.Nil {
+			set[id] = true
+		}
 	}
-	return m.retxBuf.HeldSeqsOnLegs(set)
+	return m.retxBuf.HeldSeqsOnTps(set)
 }
 
-// retxSetLeg re-tags a held sequence's last-send leg after a retransmit moved
-// it to a different leg, keeping the demote-flush attribution honest.
-func (m *routeMux) retxSetLeg(seq uint32, leg int) {
+// retxSetTp re-tags a held sequence's last-send transport after a retransmit
+// moved it to a different leg, keeping the demote-flush attribution honest.
+func (m *routeMux) retxSetTp(seq uint32, tpID uuid.UUID) {
 	if m.retxBuf == nil {
 		return
 	}
-	m.retxBuf.SetLeg(seq, leg)
+	m.retxBuf.SetTpID(seq, tpID)
 }
 
 // rebuildWeights updates transport selection weights based on current latency.

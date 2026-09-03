@@ -1,6 +1,8 @@
 package router
 
 import (
+	"github.com/google/uuid"
+
 	"testing"
 	"time"
 
@@ -98,7 +100,7 @@ func TestSACKTracker_FullWindowBitmap(t *testing.T) {
 func TestRetxBuffer_StoreAndPurge(t *testing.T) {
 	rb := newRetxBuffer(128)
 	for i := uint32(0); i < 10; i++ {
-		assert.True(t, rb.Store(i, []byte{byte(i)}, 0))
+		assert.True(t, rb.Store(i, []byte{byte(i)}, uuid.Nil))
 	}
 	assert.Equal(t, 10, rb.Len())
 
@@ -111,7 +113,7 @@ func TestRetxBuffer_StoreAndPurge(t *testing.T) {
 func TestRetxBuffer_RetransmitList(t *testing.T) {
 	rb := newRetxBuffer(128)
 	for i := uint32(0); i < 8; i++ {
-		rb.Store(i, []byte{byte(i)}, 0)
+		rb.Store(i, []byte{byte(i)}, uuid.Nil)
 	}
 
 	// Age the stored entries past retxMinAge so ProcessSACK will list missing
@@ -136,7 +138,7 @@ func TestRetxBuffer_RetransmitList(t *testing.T) {
 // with seconds of queueing delay is retransmitted hundreds of times.
 func TestRetxBuffer_RetxBackoffSuppressesDuplicates(t *testing.T) {
 	rb := newRetxBuffer(128)
-	rb.Store(3, []byte{3}, 0)
+	rb.Store(3, []byte{3}, uuid.Nil)
 	rb.entries[3].sentAt = time.Now().Add(-2 * retxMinAge)
 
 	// SACK: lastContiguous=2, seq 3 missing, seq 4 received.
@@ -181,10 +183,10 @@ func TestRetxBuffer_RetxBackoffSuppressesDuplicates(t *testing.T) {
 // the newest, instead of silently refusing to store the newest packet.
 func TestRetxBuffer_CapacityEvictsLowest(t *testing.T) {
 	rb := newRetxBuffer(3)
-	assert.True(t, rb.Store(0, []byte("a"), 0))
-	assert.True(t, rb.Store(1, []byte("b"), 0))
-	assert.True(t, rb.Store(2, []byte("c"), 0))
-	assert.True(t, rb.Store(3, []byte("d"), 0)) // full -> evict lowest (0), store 3
+	assert.True(t, rb.Store(0, []byte("a"), uuid.Nil))
+	assert.True(t, rb.Store(1, []byte("b"), uuid.Nil))
+	assert.True(t, rb.Store(2, []byte("c"), uuid.Nil))
+	assert.True(t, rb.Store(3, []byte("d"), uuid.Nil)) // full -> evict lowest (0), store 3
 	assert.Equal(t, 3, rb.Len())
 	assert.Nil(t, rb.Get(0), "lowest seq evicted")
 	assert.Equal(t, []byte("d"), rb.Get(3), "newest seq retained")
@@ -192,7 +194,7 @@ func TestRetxBuffer_CapacityEvictsLowest(t *testing.T) {
 
 func TestRetxBuffer_Get(t *testing.T) {
 	rb := newRetxBuffer(128)
-	rb.Store(42, []byte("hello"), 0)
+	rb.Store(42, []byte("hello"), uuid.Nil)
 	assert.Equal(t, []byte("hello"), rb.Get(42))
 	assert.Nil(t, rb.Get(99))
 }
@@ -207,7 +209,7 @@ func TestRetxBuffer_NoFillBehindPersistentGap(t *testing.T) {
 	const sent = 3000
 	rb := newRetxBuffer(4096) // large so this isolates purge behavior, not eviction
 	for seq := uint32(1); seq <= sent; seq++ {
-		rb.Store(seq, []byte{byte(seq)}, 0)
+		rb.Store(seq, []byte{byte(seq)}, uuid.Nil)
 	}
 
 	// Receiver got 2..3000 but not seq 1 -> lastContiguous stuck at 0.

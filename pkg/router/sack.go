@@ -6,6 +6,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // retxMinAge is the FALLBACK reorder-tolerant retransmit age, used only when the
@@ -172,13 +174,17 @@ type retxEntry struct {
 	seq    uint32
 	data   []byte
 	sentAt time.Time
-	// leg is the mux leg index this sequence was LAST sent on (-1 = unknown).
-	// Recorded at Store time and re-tagged on every retransmit, so the
-	// demote-time flush can resend only the sequences actually stranded on the
-	// demoted leg(s) instead of the whole in-flight window (measured live:
-	// a whole-window flush duplicated 33.8MB against 14.7MB of payload on one
-	// leg of a 20MB transfer).
-	leg int
+	// tpID is the TRANSPORT UUID of the leg this sequence was LAST sent on
+	// (uuid.Nil = unknown). Recorded at Store time and re-tagged on every
+	// retransmit, so the demote-time flush can resend only the sequences
+	// actually stranded on the demoted leg(s) instead of the whole in-flight
+	// window (measured live: a whole-window flush duplicated 33.8MB against
+	// 14.7MB of payload on one leg of a 20MB transfer). The tag is the
+	// transport identity, NOT the leg index: indices shift whenever
+	// pruneDeadTransports compacts tps[] after a leg drop, and an index tag
+	// went stale exactly then — the flush missed genuinely stranded sequences
+	// and the receiver's no-skip frontier wedged into a retransmit storm.
+	tpID uuid.UUID
 	// lastTxAt is when this sequence was last handed out for retransmission
 	// (zero until the first retx). retxCount is how many times it has been.
 	// Together they gate re-retransmission: without them every SACK arriving
@@ -225,7 +231,7 @@ func newRetxBuffer(capacity int) *retxBuffer {
 // received sequence above the gap each SACK, so under normal operation the
 // buffer holds only genuine holes plus in-flight sequences and never reaches
 // capacity — this eviction path is a backstop, not the steady state.
-func (rb *retxBuffer) Store(seq uint32, data []byte, leg int) bool {
+func (rb *retxBuffer) Store(seq uint32, data []byte, tpID uuid.UUID) bool {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
@@ -248,31 +254,33 @@ func (rb *retxBuffer) Store(seq uint32, data []byte, leg int) bool {
 		seq:    seq,
 		data:   cp,
 		sentAt: time.Now(),
-		leg:    leg,
+		tpID:   tpID,
 	}
 	return true
 }
 
-// SetLeg re-tags seq's last-send leg (a retransmit moved it). No-op for a seq
-// no longer held.
-func (rb *retxBuffer) SetLeg(seq uint32, leg int) {
+// SetTpID re-tags seq's last-send transport (a retransmit moved it). No-op for
+// a seq no longer held.
+func (rb *retxBuffer) SetTpID(seq uint32, tpID uuid.UUID) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 	if e, ok := rb.entries[seq]; ok {
-		e.leg = leg
+		e.tpID = tpID
 	}
 }
 
-// HeldSeqsOnLegs returns the held sequences whose last send rode one of the
-// given legs, sorted ascending. Entries with an unknown leg (-1) are included
-// conservatively — better a redundant resend than a stranded gap. Used by the
-// demote-time flush to rescue only what the demoted leg(s) actually strand.
-func (rb *retxBuffer) HeldSeqsOnLegs(legs map[int]bool) []uint32 {
+// HeldSeqsOnTps returns the held sequences whose last send rode one of the
+// given transports, sorted ascending. Entries with an unknown transport
+// (uuid.Nil) are included conservatively — better a redundant resend than a
+// stranded gap. Used by the demote-time flush to rescue only what the demoted
+// leg(s) actually strand; keyed by transport UUID because leg INDICES shift on
+// slice compaction and a stale index tag wedged live sessions.
+func (rb *retxBuffer) HeldSeqsOnTps(tps map[uuid.UUID]bool) []uint32 {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 	seqs := make([]uint32, 0, len(rb.entries))
 	for seq, e := range rb.entries {
-		if e.leg < 0 || legs[e.leg] {
+		if e.tpID == uuid.Nil || tps[e.tpID] {
 			seqs = append(seqs, seq)
 		}
 	}

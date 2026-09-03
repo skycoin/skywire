@@ -131,23 +131,29 @@ func (h demoteHook) OnTick(_ DialInfo, _ []LegInfo) RotationAction {
 func TestMuxDemoteFlushesInFlightSeqs(t *testing.T) {
 	rg, conns := createCapturingMuxRouteGroup(t, 2)
 
-	// Sequences in flight ON LEG 1 (the leg about to be demoted) — these are
-	// stranded by the demote and must be flushed.
+	// Tags are TRANSPORT UUIDs (stable across slice compaction), never leg
+	// indices — an index tag went stale the moment pruneDeadTransports
+	// compacted tps[] and the flush then missed genuinely stranded sequences.
+	leg0ID := rg.tps[0].Entry.ID
+	leg1ID := rg.tps[1].Entry.ID
+
+	// Sequences in flight ON LEG 1's transport (the leg about to be demoted) —
+	// these are stranded by the demote and must be flushed.
 	const nPkts = 32
 	want := make([]uint32, 0, nPkts)
 	for i := 0; i < nPkts; i++ {
-		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i), 0xAA, 0xBB}, 1)
+		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i), 0xAA, 0xBB}, leg1ID)
 		if err != nil {
 			t.Fatalf("wrapPayload: %v", err)
 		}
 		want = append(want, seq)
 	}
-	// Sequences in flight on LEG 0 (stays active) — NOT stranded; the narrowed
-	// flush must leave them to the normal SACK path.
+	// Sequences in flight on LEG 0's transport (stays active) — NOT stranded;
+	// the narrowed flush must leave them to the normal SACK path.
 	const nActive = 8
 	activeSeqs := make(map[uint32]bool, nActive)
 	for i := 0; i < nActive; i++ {
-		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{0xCC, byte(i)}, 0)
+		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{0xCC, byte(i)}, leg0ID)
 		if err != nil {
 			t.Fatalf("wrapPayload(leg0): %v", err)
 		}
@@ -195,7 +201,7 @@ func TestMuxDemoteFlushNoActiveLegIsSafe(t *testing.T) {
 	rg, conns := createCapturingMuxRouteGroup(t, 2)
 
 	for i := 0; i < 8; i++ {
-		if _, _, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i)}, 0); err != nil {
+		if _, _, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i)}, uuid.Nil); err != nil {
 			t.Fatalf("wrapPayload: %v", err)
 		}
 	}
