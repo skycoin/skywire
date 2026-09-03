@@ -53,7 +53,7 @@ func TestPerFrameMuxDataPathRoundTrip(t *testing.T) {
 	packets := make([]routing.Packet, n)
 	for i := 0; i < n; i++ {
 		plain[i] = []byte(fmt.Sprintf("payload-%04d-the-quick-brown-fox", i))
-		pkt, seq, err := send.wrapPayload(routeID, plain[i])
+		pkt, seq, err := send.wrapPayload(routeID, plain[i], 0)
 		require.NoError(t, err)
 		require.Equal(t, uint32(i), seq)
 		packets[i] = pkt
@@ -87,7 +87,7 @@ func TestPerFrameMuxDataPathRoundTrip(t *testing.T) {
 	_ = nI2
 	recv2.open = func(seq uint32, ct []byte) ([]byte, error) { return nR2.OpenWithNonce(uint64(seq), ct) }
 	// Frame sealed by a DIFFERENT sender (wrong key) must fail to open and deliver nothing.
-	bad, _, err := send.wrapPayload(routeID, []byte("attacker"))
+	bad, _, err := send.wrapPayload(routeID, []byte("attacker"), 0)
 	require.NoError(t, err)
 	// reset recv2 to expect seq 0
 	delivered, _ := recv2.deliverData(-1, bad.SequenceNumber()+1000, bad.DataPayloadAfterSeq())

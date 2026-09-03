@@ -116,31 +116,45 @@ func (h demoteHook) OnTick(_ DialInfo, _ []LegInfo) RotationAction {
 // TestMuxDemoteFlushesInFlightSeqs is the wire-correctness proof for the Gate-5
 // no-dip hot-swap. A leg carrying unACKed, in-flight sequences is demoted to
 // warm standby. Those sequences must not be stranded: the demote path must
-// proactively re-send the whole outstanding in-flight window onto an ACTIVE,
-// non-standby leg immediately (a self-issued full SACK recovery), so the peer's
+// proactively re-send the demoted leg's outstanding sequences onto an ACTIVE,
+// non-standby leg immediately (a self-issued SACK recovery), so the peer's
 // no-skip reorder gap fills without waiting for a SACK round-trip that can lose
 // the race with the bounded retx buffer's aging (#86 / the live "17MB -> 0 at
 // first demote" stall).
 //
-// Without the fix the demote merely flips the standby flag and resends nothing,
-// so both capturing legs would record zero DataPackets and this test fails on
-// the "resent onto an active leg" assertion.
+// The flush is NARROWED to the demoted leg's sequences (plus unknown-leg
+// entries): sequences riding still-active legs heal through the normal SACK
+// path, and re-sending them too duplicated the entire in-flight window on
+// every demote (measured live: 33.8MB of duplicates against 14.7MB of payload
+// on one leg of a 20MB transfer). The activeSeqs sent on leg 0 below prove the
+// narrowing: they are held, but must NOT be flushed when leg 1 demotes.
 func TestMuxDemoteFlushesInFlightSeqs(t *testing.T) {
 	rg, conns := createCapturingMuxRouteGroup(t, 2)
 
-	// Send data so the sender holds unACKed sequences in its retx buffer with no
-	// SACK received yet (as if leg 1 were carrying them and they are in flight).
+	// Sequences in flight ON LEG 1 (the leg about to be demoted) — these are
+	// stranded by the demote and must be flushed.
 	const nPkts = 32
 	want := make([]uint32, 0, nPkts)
 	for i := 0; i < nPkts; i++ {
-		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i), 0xAA, 0xBB})
+		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i), 0xAA, 0xBB}, 1)
 		if err != nil {
 			t.Fatalf("wrapPayload: %v", err)
 		}
 		want = append(want, seq)
 	}
-	if got := rg.mux.retxBuf.Len(); got != nPkts {
-		t.Fatalf("retxBuf holds %d unACKed seqs, want %d", got, nPkts)
+	// Sequences in flight on LEG 0 (stays active) — NOT stranded; the narrowed
+	// flush must leave them to the normal SACK path.
+	const nActive = 8
+	activeSeqs := make(map[uint32]bool, nActive)
+	for i := 0; i < nActive; i++ {
+		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{0xCC, byte(i)}, 0)
+		if err != nil {
+			t.Fatalf("wrapPayload(leg0): %v", err)
+		}
+		activeSeqs[seq] = true
+	}
+	if got := rg.mux.retxBuf.Len(); got != nPkts+nActive {
+		t.Fatalf("retxBuf holds %d unACKed seqs, want %d", got, nPkts+nActive)
 	}
 
 	// Demote leg 1 to warm standby via the real rotation apply path.
@@ -156,16 +170,20 @@ func TestMuxDemoteFlushesInFlightSeqs(t *testing.T) {
 		t.Errorf("demoted leg 1 carried %d resent DataPackets, want 0 (%v)", len(got), got)
 	}
 
-	// The active leg (0) must have received a resend of EVERY held sequence, in
-	// ascending order (lowest gap first).
+	// The active leg (0) must have received a resend of every DEMOTED-leg
+	// sequence, ascending (lowest gap first) — and none of the leg-0 sequences
+	// (they are not stranded; re-sending them is the measured duplicate storm).
 	got := conns[0].dataSeqs()
 	if len(got) != len(want) {
 		t.Fatalf("active leg 0 resent %d seqs, want %d (%v)", len(got), len(want), got)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("resend[%d] = seq %d, want %d (full window: got %v want %v)",
+			t.Fatalf("resend[%d] = seq %d, want %d (demoted-leg window: got %v want %v)",
 				i, got[i], want[i], got, want)
+		}
+		if activeSeqs[got[i]] {
+			t.Fatalf("resend included seq %d which rides the ACTIVE leg — flush not narrowed", got[i])
 		}
 	}
 }
@@ -177,7 +195,7 @@ func TestMuxDemoteFlushNoActiveLegIsSafe(t *testing.T) {
 	rg, conns := createCapturingMuxRouteGroup(t, 2)
 
 	for i := 0; i < 8; i++ {
-		if _, _, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i)}); err != nil {
+		if _, _, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i)}, 0); err != nil {
 			t.Fatalf("wrapPayload: %v", err)
 		}
 	}

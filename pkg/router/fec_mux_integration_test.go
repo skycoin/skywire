@@ -47,7 +47,7 @@ func TestFECMuxWiredReconstructsSlowLegFrame(t *testing.T) {
 	packets := make([]routing.Packet, k)
 	for i := 0; i < k; i++ {
 		plain[i] = []byte(fmt.Sprintf("frame-%02d-the-quick-brown-fox-jumps", i))
-		pkt, seq, err := send.wrapPayload(routeID, plain[i])
+		pkt, seq, err := send.wrapPayload(routeID, plain[i], 0)
 		require.NoError(t, err)
 		require.Equal(t, uint32(i), seq)
 		packets[i] = pkt
@@ -100,7 +100,7 @@ func TestFECMuxWiredInertWhenDisabled(t *testing.T) {
 	plain := make([][]byte, n)
 	for i := 0; i < n; i++ {
 		plain[i] = []byte(fmt.Sprintf("plain-%02d", i))
-		pkt, _, err := send.wrapPayload(routeID, plain[i])
+		pkt, _, err := send.wrapPayload(routeID, plain[i], 0)
 		require.NoError(t, err)
 		delivered, _ := recv.deliverData(-1, pkt.SequenceNumber(), pkt.DataPayloadAfterSeq())
 		require.Len(t, delivered, 1, "in-order delivery, one frame at a time")
@@ -151,7 +151,7 @@ func TestFECMuxTailFlushProtectsPartialBlock(t *testing.T) {
 	realPkts := make([]routing.Packet, jReal)
 	for i := 0; i < jReal; i++ {
 		plain[i] = []byte(fmt.Sprintf("tail-frame-%02d-payload", i))
-		pkt, seq, err := send.wrapPayload(routeID, plain[i])
+		pkt, seq, err := send.wrapPayload(routeID, plain[i], 0)
 		require.NoError(t, err)
 		require.Equal(t, uint32(i), seq)
 		realPkts[i] = pkt
@@ -163,7 +163,7 @@ func TestFECMuxTailFlushProtectsPartialBlock(t *testing.T) {
 	padPkts := make([]routing.Packet, 0, k-jReal)
 	for i := jReal; i < k; i++ {
 		var empty []byte
-		pkt, seq, err := send.wrapPayload(routeID, empty)
+		pkt, seq, err := send.wrapPayload(routeID, empty, 0)
 		require.NoError(t, err)
 		require.Equal(t, uint32(i), seq)
 		padPkts = append(padPkts, pkt)
@@ -214,7 +214,7 @@ func TestFECMuxSingleLegNoRepair(t *testing.T) {
 
 	const routeID = routing.RouteID(13)
 	for i := 0; i < fecDefaultK*3; i++ {
-		_, _, err := send.wrapPayload(routeID, []byte(fmt.Sprintf("f-%02d", i)))
+		_, _, err := send.wrapPayload(routeID, []byte(fmt.Sprintf("f-%02d", i)), 0)
 		require.NoError(t, err)
 	}
 	require.Empty(t, send.fecDrainRepairs(), "single-leg group must not emit FEC repair frames")
