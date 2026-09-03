@@ -222,6 +222,8 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	c.rsActive.Add(1)
 	c.streamRemainingChunks(conn, total, func(start, end int64) ([]byte, error) {
 		return c.fetchChunkRetry(req, host, validator, start, end)
+	}, func(w net.Conn, start int64) (int64, error) {
+		return c.streamTailOnce(w, req, host, validator, start, total)
 	})
 	c.rsActive.Add(-1)
 	conn.Close() //nolint:errcheck,gosec
@@ -233,7 +235,18 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 // caller supplies the plaintext or TLS-over-exit fetch). Outstanding (in-flight +
 // buffered) chunks are bounded to the configured concurrency so memory stays
 // ~concurrency×chunkSize.
-func (c *Client) streamRemainingChunks(conn net.Conn, total int64, fetch func(start, end int64) ([]byte, error)) {
+//
+// When a chunk exhausts its retry budget, the split does NOT truncate the
+// download: it degrades to the SEQUENTIAL rescue path — rescue streams
+// [start, total) as one ranged request straight to conn, resumed from the byte
+// offset actually delivered across attempts, so a degraded-but-alive session
+// completes the download slowly instead of emitting a clean-looking short body
+// (observed live: a 50MB download "succeeding" with exactly the first 4MiB
+// chunk). Only when the rescue itself makes no progress does the download end
+// short — and then the browser still detects it (Content-Length mismatch).
+// rescue may be nil (a caller without a sequential path keeps the old
+// truncating behavior).
+func (c *Client) streamRemainingChunks(conn net.Conn, total int64, fetch func(start, end int64) ([]byte, error), rescue func(w net.Conn, start int64) (int64, error)) {
 	type chunk struct {
 		start, end int64
 		buf        []byte
@@ -269,7 +282,10 @@ func (c *Client) streamRemainingChunks(conn net.Conn, total int64, fetch func(st
 			if c.appCl != nil {
 				c.appCl.Log().Debugf("range-split: chunk %d-%d failed: %v", ch.start, ch.end, ch.err)
 			}
-			break // truncate; caller closes conn
+			if rescue != nil {
+				c.rescueTail(conn, ch.start, total, rescue)
+			}
+			break // rescued (or truncated with no rescue); caller closes conn
 		}
 		if _, err := conn.Write(ch.buf); err != nil {
 			break
@@ -279,6 +295,42 @@ func (c *Client) streamRemainingChunks(conn net.Conn, total int64, fetch func(st
 	}
 	// Drain any still-running fetches so their slots free and goroutines exit.
 	go func() { wg.Wait() }()
+}
+
+// rsRescueAttempts is how many consecutive ZERO-PROGRESS rescue attempts end the
+// download. An attempt that delivers any bytes resets the count — the rescue
+// resumes from the delivered offset, so a slow-but-alive session keeps making
+// progress until the download completes, however long that takes.
+const rsRescueAttempts = 3
+
+// rescueTail sequentially streams [start, total) to conn via rescue, resuming
+// from the delivered offset after a failed attempt. It gives up only after
+// rsRescueAttempts consecutive attempts deliver nothing.
+func (c *Client) rescueTail(conn net.Conn, start, total int64, rescue func(w net.Conn, start int64) (int64, error)) {
+	if c.appCl != nil {
+		c.appCl.Log().Warnf("range-split: parallel fetch failed at byte %d/%d — degrading to sequential streaming for the remainder", start, total)
+	}
+	cur := start
+	zero := 0
+	for cur < total && zero < rsRescueAttempts {
+		n, err := rescue(conn, cur)
+		cur += n
+		if n > 0 {
+			zero = 0
+		} else {
+			zero++
+		}
+		if err == nil && cur >= total {
+			break
+		}
+	}
+	if c.appCl != nil {
+		if cur >= total {
+			c.appCl.Log().Infof("range-split: sequential rescue completed the download (%d bytes)", total)
+		} else {
+			c.appCl.Log().Warnf("range-split: sequential rescue gave up at byte %d/%d — download ends short (client detects via Content-Length)", cur, total)
+		}
+	}
 }
 
 // fetchChunkRetry fetches one byte range, redialing a fresh stream on failure and
@@ -313,6 +365,76 @@ func retryWithBudget(fetch func() ([]byte, error), budget, backoff, backoffMax t
 			}
 		}
 	}
+}
+
+// rsRescueIdleTimeout is the per-read progress window of a sequential rescue
+// stream: each successful read refreshes it, so a slow-but-moving tail runs to
+// completion while a genuinely silent stream fails within one window (the same
+// bytes-are-liveness standard the tunnel keepalive applies).
+const rsRescueIdleTimeout = 60 * time.Second
+
+// streamTailOnce makes ONE attempt to stream [start, total) to w over a fresh
+// exit stream: ranged GET like fetchChunk, but the body is copied straight
+// through (never buffered — the tail can be most of the file) under a
+// progress-refreshed idle timeout. Returns the bytes actually written, so the
+// caller resumes from start+written on failure.
+func (c *Client) streamTailOnce(w net.Conn, req *http.Request, host, validator string, start, total int64) (int64, error) {
+	sess := c.pickSession()
+	if sess == nil {
+		return 0, errAllTunnelsDown
+	}
+	st, err := sess.Open()
+	if err != nil {
+		return 0, err
+	}
+	defer st.Close() //nolint:errcheck,gosec
+
+	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
+	if err := c.exitConnect(st, host, 80); err != nil {
+		return 0, err
+	}
+	if _, err := st.Write(buildRangedGet(req, host, validator, start, total-1)); err != nil {
+		return 0, err
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(st), req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusPartialContent {
+		return 0, fmt.Errorf("tail %d-%d: status %d (validator changed?)", start, total-1, resp.StatusCode)
+	}
+	return copyWithIdleTimeout(w, resp.Body, st, total-start, rsRescueIdleTimeout)
+}
+
+// copyWithIdleTimeout copies up to limit bytes from body to dst, refreshing a
+// read deadline on the underlying conn before every read — progress keeps the
+// copy alive indefinitely; idle silence fails it within one window. Returns the
+// bytes written (the caller's resume offset).
+func copyWithIdleTimeout(dst io.Writer, body io.Reader, under net.Conn, limit int64, idle time.Duration) (int64, error) {
+	var written int64
+	buf := make([]byte, 32<<10)
+	for written < limit {
+		_ = under.SetReadDeadline(time.Now().Add(idle)) //nolint:errcheck
+		room := int64(len(buf))
+		if rem := limit - written; rem < room {
+			room = rem
+		}
+		n, err := body.Read(buf[:room])
+		if n > 0 {
+			if _, werr := dst.Write(buf[:n]); werr != nil {
+				return written, werr
+			}
+			written += int64(n)
+		}
+		if err != nil {
+			if err == io.EOF && written >= limit {
+				return written, nil
+			}
+			return written, err
+		}
+	}
+	return written, nil
 }
 
 // fetchChunk opens a new exit stream, SOCKS5-CONNECTs to host:80, issues a ranged
