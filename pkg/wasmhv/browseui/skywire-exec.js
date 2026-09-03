@@ -123,10 +123,25 @@
 		// scrolled to. The tail is mirrored to the console below so a crash
 		// is diagnosable from DevTools / a CDP probe.
 		let stderrTail = '';
+		// routerTail: a SELECTIVE ring of route-establishment lines. The full
+		// tail churns through its window in seconds under dmsg DEBUG spam, so
+		// the one error that explains a failed dial is gone before anyone
+		// looks; these lines are rare and survive.
+		let routerTail = '';
+		let lineBuf = '';
+		const ROUTERISH = /(router|route_setup|RouteGroup|routegroup|setupclient|rule|cascade|rsn)/i;
 		const tailDec = new TextDecoder();
 		const keepTail = (buf) => {
 			try {
-				stderrTail = (stderrTail + tailDec.decode(buf, { stream: true })).slice(-16384);
+				const s = tailDec.decode(buf, { stream: true });
+				stderrTail = (stderrTail + s).slice(-16384);
+				lineBuf += s;
+				let nl;
+				while ((nl = lineBuf.indexOf('\n')) >= 0) {
+					const line = lineBuf.slice(0, nl);
+					lineBuf = lineBuf.slice(nl + 1);
+					if (ROUTERISH.test(line)) { routerTail = (routerTail + line + '\n').slice(-8192); }
+				}
 			} catch (e) { /* ignore */ }
 		};
 		// Live observability: __skywireExecTails[iid]() returns the tail at any
@@ -138,6 +153,7 @@
 			(globalThis.__skywireExecTails = globalThis.__skywireExecTails || {})[iid] =
 				function () { return stderrTail; };
 			globalThis.__skywireExecTails[iid].argv = args.slice();
+			globalThis.__skywireExecTails[iid].router = function () { return routerTail; };
 		} catch (e) { /* ignore */ }
 		{
 			const userErr = (hooks && hooks.stderr) || null;
