@@ -16,6 +16,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/soheilhy/cmux"
+	"golang.org/x/net/proxy"
 	"google.golang.org/grpc"
 
 	"github.com/0magnet/bottle/vnet"
@@ -128,10 +129,20 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	// a browser visor's proxy chain work out of the box, and turns the
 	// native "autostart but no PK" misconfiguration into something useful.
 	autoProxyClient := false
+	pinnedProxy := false
 	for i, ac := range apps {
-		if ac.Name == skyenv.SkysocksClientName && ac.AutoStart && !argsContain(ac.Args, "--srv") {
-			apps[i].AutoStart = false
+		if ac.Name == skyenv.SkysocksClientName && ac.AutoStart {
 			autoProxyClient = true
+			if argsContain(ac.Args, "--srv") {
+				// A pinned exit (an operator's, or one persisted from an
+				// earlier auto-pick) autostarts as configured — but still
+				// gets VERIFIED below, and rotated off if it's dead: a
+				// stale pin otherwise wedges the whole chain behind the
+				// connecting interstitial forever.
+				pinnedProxy = true
+			} else {
+				apps[i].AutoStart = false
+			}
 		}
 	}
 
@@ -170,7 +181,7 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	v.initLock.Unlock()
 
 	if autoProxyClient {
-		go v.autoStartProxyClient(v.MasterLogger().PackageLogger("proxy_client_auto")) //nolint:gosec // G118: uses v.ctx, outlives the init ctx by design
+		go v.autoStartProxyClient(v.MasterLogger().PackageLogger("proxy_client_auto"), pinnedProxy) //nolint:gosec // G118: uses v.ctx, outlives the init ctx by design
 	}
 
 	return nil
@@ -186,16 +197,35 @@ func argsContain(args []string, flag string) bool {
 	return false
 }
 
-// autoStartProxyClient picks a proxy exit from service discovery and starts
-// skysocks-client on it — the deferred autostart for a config that says
-// "autostart the proxy client" without pinning a server. Retries the whole
-// cycle while the visor lives: discovery needs dmsg up, and early fetches
-// legitimately fail during boot. Exits once the client starts (the app's own
-// retrier + restart policy take over from there).
-func (v *Visor) autoStartProxyClient(log *logging.Logger) {
+// autoStartProxyClient picks a proxy exit from service discovery, starts
+// skysocks-client on it, and — critically — VERIFIES the exit end to end
+// before accepting it: route formation and even the SOCKS5 CONNECT succeed
+// against a ZOMBIE exit (skysocks server down behind a live visor), so only a
+// real relayed HTTP response proves the exit works. A candidate that fails
+// verification is stopped and the next one tried; without this the deferred
+// autostart could pin a dead exit forever and the whole chain serves the
+// connecting interstitial indefinitely (observed live on the desk). This is
+// the visor-side port of the old wasm edge's honest pool probe.
+func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
 	ctx := v.ctx
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if pinned {
+		// The launcher autostarted the configured exit; give it a beat, then
+		// hold it to the same end-to-end bar. A live pin wins and we're done;
+		// a dead one is stopped and the discovery rotation below takes over.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(15 * time.Second):
+		}
+		if v.verifyProxyExit(ctx, log) {
+			log.Info("Configured proxy exit verified end to end")
+			return
+		}
+		log.Warn("configured proxy exit failed end-to-end verification; rotating to discovery")
+		_ = v.StopSkysocksClients() //nolint:errcheck
 	}
 	for {
 		select {
@@ -211,19 +241,73 @@ func (v *Visor) autoStartProxyClient(log *logging.Logger) {
 		// shouldn't pin the loop, and the whole list shouldn't be dialed.
 		idx := mathrand.Perm(len(svcs))
 		tries := len(idx)
-		if tries > 5 {
-			tries = 5
+		if tries > 4 {
+			tries = 4
 		}
 		for _, i := range idx[:tries] {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			pk := svcs[i].Addr.PubKey().String()
 			if err := v.StartSkysocksClient(pk); err != nil {
-				log.WithError(err).Debug("proxy-client auto-exit candidate failed; trying another")
+				log.WithError(err).Debug("proxy-client auto-exit candidate failed to start; trying another")
 				continue
 			}
-			log.WithField("exit", pk).Info("Proxy client auto-started on a discovered exit")
-			return
+			if v.verifyProxyExit(ctx, log) {
+				log.WithField("exit", pk).Info("Proxy client auto-started on a VERIFIED exit")
+				return
+			}
+			log.WithField("exit", pk).Warn("proxy-client exit failed end-to-end verification; rotating")
+			_ = v.StopSkysocksClients() //nolint:errcheck
 		}
 	}
+}
+
+// verifyProxyExit fetches a tiny plain-HTTP page through the local skysocks-client
+// listener and reports whether a real relayed response arrived. The dial goes
+// through bottle/vnet, so the SAME code verifies a browser visor's listener
+// on the page's virtual loopback and a native visor's on the real one. Route
+// establishment can take a while on a fresh visor, so it retries within a
+// bounded window before giving the verdict.
+func (v *Visor) verifyProxyExit(ctx context.Context, log *logging.Logger) bool {
+	deadline := time.Now().Add(90 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(10 * time.Second):
+		}
+		sd, err := proxy.SOCKS5("tcp", skyenv.SkysocksClientAddr, nil, vnetProxyDialer{})
+		if err != nil {
+			continue
+		}
+		conn, err := sd.Dial("tcp", "neverssl.com:80")
+		if err != nil {
+			log.WithError(err).Debug("proxy verify: CONNECT failed; retrying within window")
+			continue
+		}
+		_ = conn.SetDeadline(time.Now().Add(15 * time.Second))                                         //nolint:errcheck
+		_, _ = conn.Write([]byte("GET / HTTP/1.0\r\nHost: neverssl.com\r\nConnection: close\r\n\r\n")) //nolint:errcheck
+		one := make([]byte, 16)
+		n, rerr := conn.Read(one)
+		_ = conn.Close() //nolint:errcheck
+		if n > 0 {
+			return true
+		}
+		log.WithError(rerr).Debug("proxy verify: no response byte; retrying within window")
+	}
+	return false
+}
+
+// vnetProxyDialer adapts bottle/vnet dialing to x/net/proxy's Dialer, so the
+// verification dial reaches the skysocks listener on whichever loopback this
+// build actually uses (page vnet under js, the real one natively).
+type vnetProxyDialer struct{}
+
+func (vnetProxyDialer) Dial(network, addr string) (net.Conn, error) {
+	return vnet.DialTimeout(network, addr, 10*time.Second)
 }
 
 // appsContains reports whether an apps[] slice already contains an
