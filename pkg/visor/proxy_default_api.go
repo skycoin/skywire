@@ -566,6 +566,10 @@ func (proxyDefaultAPI) RemoveMuxRoute(_ string, _ uuid.UUID, _ uint16) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) SetMuxDirection(_, _ string) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) ServiceHealth() ([]ServiceHealthEntry, error) {
 	return nil, ErrProxyNotSupported
 }

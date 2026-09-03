@@ -142,6 +142,7 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 			PerFrameNoise:      info.PerFrameNoise,
 			Directional:        info.Directional,
 			Flipped:            info.Flipped,
+			FlipPinned:         info.FlipPinned,
 			Distribution:       info.Distribution,
 			ReorderPending:     info.ReorderPending,
 			ReorderGapAgeMS:    float64(info.ReorderGapAge) / float64(time.Millisecond),
@@ -341,6 +342,38 @@ func (v *Visor) RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) e
 		return err
 	}
 	return v.router.RemoveMuxRouteByTransport(desc, tpID)
+}
+
+// SetMuxDirection implements API. Pins (or releases) the unidirectional
+// direction→leg-class mapping on ALL of the app's active directional route
+// groups — a proxy session can hold several concurrent rg's (one per SOCKS5
+// connection), and pinning only one would leave the others' controllers free
+// to diverge. mode is "auto" (release — the flip controller resumes on both
+// ends), "default" (initiator sends on the direct leg / download rides the
+// multihop mux) or "flipped" (the swapped mapping). Each rg signals the pin to
+// its peer over the wire; against an old peer the pin is best-effort
+// local-only.
+func (v *Visor) SetMuxDirection(appName, mode string) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+	var m byte
+	switch mode {
+	case "auto":
+		m = routing.DirectionAuto
+	case "default":
+		m = routing.DirectionPinDefault
+	case "flipped":
+		m = routing.DirectionPinFlipped
+	default:
+		return fmt.Errorf("mode must be 'auto', 'default' or 'flipped', got %q", mode)
+	}
+	applied, err := v.router.SetMuxDirectionForApp(appName, m)
+	if err != nil {
+		return err
+	}
+	v.log.Infof("SetMuxDirection: %s pinned to %q on %d route group(s)", appName, mode, applied)
+	return nil
 }
 
 // SetMinHops sets min_hops routing config of visor

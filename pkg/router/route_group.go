@@ -473,6 +473,11 @@ type MuxInfo struct {
 	// direction without log-grepping. Both false on a non-directional mux.
 	Directional bool
 	Flipped     bool
+	// FlipPinned is the operator's MANUAL direction pin on a directional group:
+	// "auto" (the flip controller is in charge — the default), "default" or
+	// "flipped" (the mapping is pinned to that state and the controller is
+	// dormant until released via mode auto). Empty on a non-directional mux.
+	FlipPinned string
 	// Distribution names how the mux spreads outbound packets across its legs
 	// (the transportSelector weight mode: "auto", "round-robin", "weighted",
 	// "capacity", "latency-adaptive", "sticky:5tuple", "size-threshold",
@@ -556,6 +561,9 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 		info.FECRepairBytesRecv = atomic.LoadUint64(&rg.mux.fecRepairBytesRecv)
 		info.FECReconstructs = atomic.LoadUint64(&rg.mux.fecReconstructs)
 		info.Directional, info.Flipped = rg.mux.dirState()
+		if info.Directional {
+			info.FlipPinned = flipPinString(rg.mux.flipPinMode())
+		}
 	}
 	info.PerFrameNoise = rg.perFrameNoiseActive
 	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
@@ -3518,6 +3526,8 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		return rg.handleRepairPacket(packet)
 	case routing.LegStatePacket:
 		return rg.handleLegStatePacket(packet)
+	case routing.DirectionPacket:
+		return rg.handleDirectionPacket(packet)
 	case routing.HandshakePacket:
 		// A handshake on an aux leg proves the peer registered that leg's
 		// rule, so it is safe to start sending on it. The primary leg's
@@ -3944,6 +3954,69 @@ func (rg *RouteGroup) sendLegState(idx int, standby bool) {
 	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
 		rg.logger.WithError(err).Debugf("LegState: failed to signal leg %d", idx)
 	}
+}
+
+// SetDirectionPin applies the operator's MANUAL direction pin to this route
+// group and signals it to the peer. mode is routing.DirectionAuto (release —
+// the flip controller resumes on both ends), DirectionPinDefault (initiator
+// sends on the direct leg / download on the multihop mux) or
+// DirectionPinFlipped (the swapped mapping). Errors unless the group is
+// directional (CapUniDir negotiated) — a pin on a symmetric mux would never be
+// read.
+//
+// The pin is coordinated over the wire (DirectionPacket) because a one-sided
+// pin would DESYNC the ends: both could end up sending on the same leg class.
+// It is sent on the PRIMARY leg (leg 0's rule/transport): the pin addresses the
+// GROUP, not one leg, and leg 0 is the one leg that is never standby — the
+// signal always rides an installed, carrying path. Best-effort: an old peer
+// (no DirectionPacket) ignores the frame, leaving the pin local-only — its
+// controller may then fight the pinned mapping, which is why the caller-facing
+// docs call a pin against an old peer best-effort.
+func (rg *RouteGroup) SetDirectionPin(mode byte) error {
+	if mode > routing.DirectionPinFlipped {
+		return fmt.Errorf("invalid direction pin mode %d", mode)
+	}
+	if rg.mux == nil || !rg.mux.isDirectional() {
+		return errors.New("route group is not directional (CapUniDir not negotiated)")
+	}
+	rg.mux.setFlipPin(mode)
+	rg.logger.Infof("direction-pin: local pin set to %q", flipPinString(mode))
+
+	rg.mu.Lock()
+	var tp *transport.ManagedTransport
+	var rule routing.Rule
+	if len(rg.tps) > 0 && len(rg.fwd) > 0 {
+		tp = rg.tps[0]
+		rule = rg.fwd[0]
+	}
+	rg.mu.Unlock()
+	if tp == nil || rule == nil {
+		return nil // pin applied locally; no leg to signal on
+	}
+	packet := routing.MakeDirectionPacket(rule.NextRouteID(), mode)
+	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
+		rg.logger.WithError(err).Warn("direction-pin: failed to signal peer (pin applied locally only)")
+	}
+	return nil
+}
+
+// handleDirectionPacket applies a peer's manual direction pin to this side's
+// mux, so the two ends keep sending on disjoint leg classes: the pinned
+// mapping is mirrored here AND this side's flip controller goes dormant (it
+// would otherwise fight the pin on its next tick). Mode auto releases both
+// ends' controllers. Ignored unless the group is directional — a symmetric mux
+// has no direction mapping to pin.
+func (rg *RouteGroup) handleDirectionPacket(packet routing.Packet) error {
+	if rg.mux == nil || !rg.mux.isDirectional() {
+		return nil
+	}
+	mode := packet.DirectionMode()
+	if mode > routing.DirectionPinFlipped {
+		return nil // unknown mode from a newer peer — ignore, keep current state
+	}
+	rg.mux.setFlipPin(mode)
+	rg.logger.Infof("direction-pin: peer pinned direction mapping to %q", flipPinString(mode))
+	return nil
 }
 
 func (rg *RouteGroup) handleErrorPacket(packet routing.Packet) error {

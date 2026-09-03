@@ -199,3 +199,24 @@ func TestMakeRepairPacketRoundTrip(t *testing.T) {
 	}
 	require.Equal(t, symbol, p.RepairSymbol())
 }
+
+// TestMakeDirectionPacket round-trips the manual direction pin: type, route ID
+// and mode byte survive Make → accessors, and a malformed (empty-payload)
+// packet reads as the safe DirectionAuto.
+func TestMakeDirectionPacket(t *testing.T) {
+	for _, mode := range []byte{DirectionAuto, DirectionPinDefault, DirectionPinFlipped} {
+		p := MakeDirectionPacket(7, mode)
+		assert.Equal(t, DirectionPacket, p.Type())
+		assert.Equal(t, RouteID(7), p.RouteID())
+		assert.Equal(t, uint16(DirectionPayloadSize), p.Size())
+		assert.Equal(t, mode, p.DirectionMode())
+	}
+	// Exact wire shape for pin-flipped: type after LegStatePacket, 1-byte payload.
+	p := MakeDirectionPacket(7, DirectionPinFlipped)
+	expected := []byte{byte(DirectionPacket), 0x0, 0x0, 0x0, 0x7, 0x0, 0x1, 0x2}
+	assert.Equal(t, expected, []byte(p))
+
+	// Truncated payload → DirectionAuto (never forces an unrequested mapping).
+	trunc := Packet(expected[:PacketHeaderSize])
+	assert.Equal(t, DirectionAuto, trunc.DirectionMode())
+}

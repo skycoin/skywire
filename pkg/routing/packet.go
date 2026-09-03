@@ -81,6 +81,8 @@ func (t PacketType) String() string {
 		return "Repair"
 	case LegStatePacket:
 		return "LegState"
+	case DirectionPacket:
+		return "Direction"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -152,6 +154,18 @@ const (
 	// the sender so both ends stripe over the same active set. Gated by CapLegState;
 	// a peer without it never receives one and keeps the send-side-only behavior.
 	LegStatePacket
+	// DirectionPacket pins (or releases) a unidirectional group's direction→
+	// leg-class mapping — the LegState-style coordination the CapUniDir doc
+	// promises for flips, applied to a MANUAL operator pin (route ID > 0, sent on
+	// the group's primary leg). Payload: one byte — 0 = auto (release the pin, the
+	// flip controller resumes), 1 = pin-default (initiator sends on the direct
+	// leg / the download rides the multihop mux), 2 = pin-flipped (the swapped
+	// mapping). Both ends must hold the same mapping or they send on the same leg
+	// class; the receiver applies the pin too, so its flip controller does not
+	// fight the sender's. The wire framing is length-prefixed and unknown types
+	// fall through handlePacket harmlessly, so an OLD peer ignores this packet —
+	// a pin against such a peer is best-effort local-only.
+	DirectionPacket
 )
 
 // FECRepairHdr is the fixed prefix of a RepairPacket payload: blockID(4) + idx(1)
@@ -506,6 +520,48 @@ func MakeLegStatePacket(id RouteID, standby bool) Packet {
 func (p Packet) LegStateStandby() bool {
 	payload := p.Payload()
 	return len(payload) >= LegStatePayloadSize && payload[0] == 1
+}
+
+// DirectionPacket payload modes: the direction→leg-class mapping an operator
+// pins on a unidirectional (CapUniDir) group, or auto to release the pin.
+const (
+	// DirectionAuto releases a manual pin — the flip controller resumes on both
+	// ends from the current mapping.
+	DirectionAuto byte = 0
+	// DirectionPinDefault pins the DEFAULT mapping: the initiator sends on the
+	// DIRECT (1-hop) leg, the acceptor (the download) on the MULTIHOP mux legs.
+	DirectionPinDefault byte = 1
+	// DirectionPinFlipped pins the FLIPPED mapping: the initiator sends on the
+	// multihop mux legs, the acceptor on the direct leg (upload gets the mux).
+	DirectionPinFlipped byte = 2
+)
+
+// DirectionPayloadSize is the DirectionPacket payload: one mode byte.
+const DirectionPayloadSize = 1
+
+// MakeDirectionPacket constructs a DirectionPacket pinning (mode 1/2) or
+// releasing (mode 0) the unidirectional direction→leg-class mapping, addressed
+// to the route group the id belongs to. Sent on the group's primary leg; the
+// receiver applies the same pin so both ends keep sending on disjoint classes.
+func MakeDirectionPacket(id RouteID, mode byte) Packet {
+	packet := make([]byte, PacketHeaderSize+DirectionPayloadSize)
+	packet[PacketTypeOffset] = byte(DirectionPacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], DirectionPayloadSize)
+	packet[PacketPayloadOffset] = mode
+	return packet
+}
+
+// DirectionMode returns a DirectionPacket's mode byte (DirectionAuto /
+// DirectionPinDefault / DirectionPinFlipped). A malformed/empty payload reads
+// as DirectionAuto — the safe default (it never forces a mapping the sender
+// did not ask for; at worst it releases a pin back to the controller).
+func (p Packet) DirectionMode() byte {
+	payload := p.Payload()
+	if len(payload) < DirectionPayloadSize {
+		return DirectionAuto
+	}
+	return payload[0]
 }
 
 // HandshakeCapabilities extracts the capability bitmap from an extended handshake payload.
