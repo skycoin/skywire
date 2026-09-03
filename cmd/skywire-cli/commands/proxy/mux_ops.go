@@ -72,7 +72,9 @@ func init() {
 	muxSwitchCmd.Flags().StringVar(&muxSwitchRouteSrc, "route", "-", "new route JSON file ('-' = stdin); shape is 'cli route calc --json' output")
 	muxSwitchCmd.Flags().DurationVar(&muxSwitchTimeout, "ready-timeout", 20*time.Second, "how long to wait for the new leg to carry before retiring the old primary")
 	RootCmd.AddCommand(muxSwitchCmd)
+	muxDirectionCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route groups to pin")
 	addMuxSub(muxModeCmd, "mux-mode")
+	addMuxSub(muxDirectionCmd, "mux-direction")
 	addMuxSub(muxCapCmd, "mux-cap")
 	addMuxSub(muxWidthCmd, "mux-width")
 	addMuxSub(muxStandbyCmd, "mux-standby")
@@ -501,6 +503,63 @@ Example:
 		}
 		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{
 			Op: "mode", App: muxOpsApp, Mode: mode,
+		}))
+	},
+}
+
+var muxDirectionCmd = &cobra.Command{
+	Use:   "direction <auto|default|flipped>",
+	Short: "Pin which leg class carries each data direction on an active session",
+	Long: `Manually control the unidirectional mux's direction→leg-class mapping —
+which class of leg (the DIRECT 1-hop transport vs the MULTIHOP mux legs)
+carries each data direction on the app's active route groups.
+
+Only meaningful on a DIRECTIONAL group (CapUniDir negotiated by both ends —
+'mux info' shows directional=true); errors otherwise.
+
+  auto     - release the pin: the automatic flip controller resumes on both
+             ends, moving the heavy direction onto the mux when the traffic
+             asymmetry inverts and holds.
+  default  - pin the default mapping: this end (the initiator) sends its
+             upload on the DIRECT leg; the download aggregates over the
+             MULTIHOP mux legs. The download-heavy shape.
+  flipped  - pin the swapped mapping: the upload aggregates over the multihop
+             mux and the download rides the direct leg. The upload-heavy shape.
+
+The pin is COORDINATED over the wire: the peer applies the same pin, so both
+ends keep sending on disjoint leg classes and neither end's flip controller
+fights the mapping. Against an old peer (predating the direction packet) the
+pin is best-effort local-only — the packet is silently ignored there, and the
+peer's controller may still flip its own side.
+
+Applies to ALL of the app's active route groups (a proxy session can hold one
+rg per SOCKS5 connection). 'mux info' shows the live state: flipped= is the
+current mapping, flip_pinned= whether an operator pin holds it.
+
+Example:
+  skywire cli proxy mux direction flipped   # force the upload onto the mux
+  skywire cli proxy mux info --watch 1s     # watch which legs carry each way
+  skywire cli proxy mux direction auto      # hand control back`,
+	Args:                  cobra.ExactArgs(1),
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		mode := args[0]
+		switch mode {
+		case "auto", "default", "flipped":
+		default:
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("direction must be 'auto', 'default' or 'flipped', got %q", mode))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+		defer rpcClient.Close() //nolint:errcheck,gosec
+
+		if err := rpcClient.SetMuxDirection(muxOpsApp, mode); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxDirection: %w", err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{
+			Op: "direction", App: muxOpsApp, Mode: mode,
 		}))
 	},
 }

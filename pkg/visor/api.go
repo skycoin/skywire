@@ -195,6 +195,11 @@ type API interface {
 	AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error
 	GrowMuxRoute(appName string, target, minHops int, srcPort uint16) (int, error)
 	RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error
+	// SetMuxDirection pins (mode "default"/"flipped") or releases (mode
+	// "auto") the unidirectional direction→leg-class mapping on ALL of the
+	// app's active directional route groups. The pin is coordinated with the
+	// peer over the wire; RouteGroupMuxInfo reports the live state.
+	SetMuxDirection(appName, mode string) error
 	ServiceHealth() ([]ServiceHealthEntry, error)
 	FetchServiceData(service, path string) ([]byte, error)
 	SetMinHops(uint16) error

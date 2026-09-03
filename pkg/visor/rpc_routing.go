@@ -215,3 +215,10 @@ func (r *RPC) RemoveMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoveMuxRoute", in)(nil, &err)
 	return r.visor.RemoveMuxRoute(in.AppName, in.TransportID, in.SrcPort)
 }
+
+// SetMuxDirection pins or releases the unidirectional direction mapping on all
+// of an app's active directional route groups
+func (r *RPC) SetMuxDirection(in *MuxDirectionInput, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMuxDirection", in)(nil, &err)
+	return r.visor.SetMuxDirection(in.AppName, in.Mode)
+}

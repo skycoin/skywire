@@ -817,6 +817,10 @@ func (mc *mockRPCClient) RemoveMuxRoute(_ string, _ uuid.UUID, _ uint16) error {
 	return nil
 }
 
+func (mc *mockRPCClient) SetMuxDirection(_, _ string) error {
+	return nil
+}
+
 // RoutingRules implements API.
 func (mc *mockRPCClient) RoutingRules() ([]routing.Rule, error) {
 	return mc.rt.AllRules(), nil

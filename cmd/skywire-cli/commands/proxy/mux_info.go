@@ -115,8 +115,12 @@ type muxRouteGroupInfo struct {
 	// direction rides a disjoint leg CLASS, and Flipped tells which class carries
 	// which direction. Absent before now, so "is this group directional" was
 	// invisible from the CLI.
-	Directional     bool         `json:"directional,omitempty"`
-	Flipped         bool         `json:"flipped,omitempty"`
+	Directional bool `json:"directional,omitempty"`
+	Flipped     bool `json:"flipped,omitempty"`
+	// FlipPinned is the operator's manual direction pin: "auto" (flip controller
+	// in charge), "default" or "flipped" (mapping held by 'proxy mux direction',
+	// controller dormant). Empty on a non-directional mux.
+	FlipPinned      string       `json:"flip_pinned,omitempty"`
 	Distribution    string       `json:"distribution,omitempty"`
 	ReorderPending  int          `json:"reorder_pending,omitempty"`
 	ReorderGapAgeMS float64      `json:"reorder_gap_age_ms,omitempty"`
@@ -256,6 +260,12 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 			}
 			fmt.Printf("       dist=%s  reorder_pending=%d  gap_age=%s  write_seq=%d\n",
 				rg.Distribution, rg.ReorderPending, gap, rg.WriteSeq)
+			// Directional groups: which class carries which direction, and whether
+			// an operator pin ('proxy mux direction') holds the mapping.
+			if rg.Directional {
+				fmt.Printf("       directional=true  flipped=%v  flip_pinned=%s\n",
+					rg.Flipped, rg.FlipPinned)
+			}
 		}
 
 		// Sort legs by index so the row order is stable across snapshots.
