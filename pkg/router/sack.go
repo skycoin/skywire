@@ -346,6 +346,21 @@ func (rb *retxBuffer) Get(seq uint32) []byte {
 	return nil
 }
 
+// SentAt returns when seq was originally sent, and whether the buffer still
+// holds it (an acked/purged seq returns ok=false). The proactive HoL path uses
+// the age to distinguish a seq merely in flight on a slower leg (younger than a
+// reorder window — retransmitting it is spurious by construction) from one
+// genuinely stalling the frontier.
+func (rb *retxBuffer) SentAt(seq uint32) (time.Time, bool) {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+
+	if entry, ok := rb.entries[seq]; ok {
+		return entry.sentAt, true
+	}
+	return time.Time{}, false
+}
+
 // Len returns current buffer occupancy.
 func (rb *retxBuffer) Len() int {
 	rb.mu.Lock()
