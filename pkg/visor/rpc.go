@@ -356,6 +356,13 @@ type MuxLegInfo struct {
 	// the transfer size and cleanly attribute which legs carried a direction's
 	// data, unlike RecvBytes which includes retransmit inflation.
 	PayloadBytes uint64 `json:"payload_bytes"`
+	// DupBytes is inbound DUPLICATE data (seqs already delivered/buffered on
+	// arrival) — the peer's spurious-retransmit waste, which rides the fastest
+	// leg. RepairBytes is inbound FEC repair frames (deliberate overhead).
+	// With PayloadBytes they decompose RecvBytes, so a standby leg showing
+	// traffic is attributable from telemetry.
+	DupBytes    uint64 `json:"dup_bytes"`
+	RepairBytes uint64 `json:"repair_bytes"`
 	// Retransmits is SACK retransmit packets carried by this leg (loss
 	// signal). Alive/Standby are the leg's gate_state: Alive=false once the
 	// transport is closed; Standby=true for a warm standby (rules kept,

@@ -61,9 +61,16 @@ type Leg struct {
 	LatencyMS      float64
 	RouteLatencyMS float64
 	Direct         bool
-	SentBytes      uint64
-	RecvBytes      uint64
-	Retransmits    uint64
+	SentBytes uint64
+	RecvBytes uint64
+	// DupBytes is inbound DUPLICATE data (seqs already delivered/buffered when
+	// they arrived on this leg) — the peer's spurious retransmits, which ride
+	// the fastest leg and otherwise read as payload; RepairBytes is inbound FEC
+	// repair frames. Both decompose RecvBytes so a standby leg showing inbound
+	// traffic is explainable from the page.
+	DupBytes    uint64
+	RepairBytes uint64
+	Retransmits uint64
 	// GoodputBps is this leg's recent goodput — the EWMA of (sent+recv) bytes
 	// per second over the page's refresh window (~1s), i.e. the RATE the leg is
 	// moving now, distinct from the cumulative SentBytes/RecvBytes counters. 0
