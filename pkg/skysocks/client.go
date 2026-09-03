@@ -62,7 +62,15 @@ type Client struct {
 	// AddTunnel appends while the accept loop / keepalive read concurrently.
 	sessions   []*yamux.Session
 	sessionsMu sync.Mutex
-	listener   net.Listener
+	// recvStamp maps each tunnel to the wall time (UnixNano) of the last bytes
+	// READ from its underlying conn, stamped by the recvStampConn wrapper every
+	// tunnel is dialed through. The keepalive loop treats arriving bytes as
+	// liveness evidence alongside pongs: under a bulk transfer on a slow leg the
+	// pong queues BEHIND the data it shares the conn with, so a pong-only
+	// hard-dead window retires the very tunnel that is delivering the download.
+	// Guarded by sessionsMu; entries are deleted where lastPong's are.
+	recvStamp map[*yamux.Session]*atomic.Int64
+	listener  net.Listener
 	once       sync.Once
 	closeC     chan struct{}
 
@@ -163,18 +171,37 @@ func (c *countingConn) Write(p []byte) (int, error) {
 // single closed session took before.
 var errAllTunnelsDown = errors.New("all tunnels to the exit are down")
 
+// recvStampConn wraps a net.Conn to record the wall time of every successful
+// read. The keepalive loop reads the stamp as proof the remote is still
+// sending, so a tunnel mid-download is never retired just because its pong is
+// queued behind the download's own frames (both ride the same conn).
+type recvStampConn struct {
+	net.Conn
+	stamp *atomic.Int64
+}
+
+func (c *recvStampConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	if n > 0 {
+		c.stamp.Store(time.Now().UnixNano())
+	}
+	return n, err
+}
+
 // newYamuxSession wraps a dialed route-group conn in a yamux client session with
-// skysocks's flow-control window. Shared by NewClient and AddTunnel so every
+// skysocks's flow-control window, metering inbound bytes into a receive-time
+// stamp for the keepalive loop. Shared by NewClient and AddTunnel so every
 // tunnel is configured identically.
-func newYamuxSession(conn net.Conn) (*yamux.Session, error) {
+func newYamuxSession(conn net.Conn) (*yamux.Session, *atomic.Int64, error) {
+	stamp := new(atomic.Int64)
 	sessionCfg := yamux.DefaultConfig()
 	sessionCfg.EnableKeepAlive = false
 	sessionCfg.MaxStreamWindowSize = muxStreamWindowBytes
-	session, err := yamux.Client(conn, sessionCfg)
+	session, err := yamux.Client(&recvStampConn{Conn: conn, stamp: stamp}, sessionCfg)
 	if err != nil {
-		return nil, fmt.Errorf("error creating client: yamux: %w", err)
+		return nil, nil, fmt.Errorf("error creating client: yamux: %w", err)
 	}
-	return session, nil
+	return session, stamp, nil
 }
 
 // NewClient constructs a new single-tunnel Client. Signature unchanged: this is
@@ -194,11 +221,12 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 		rs:     defaultRangeSplitConfig(),
 	}
 
-	session, err := newYamuxSession(conn)
+	session, stamp, err := newYamuxSession(conn)
 	if err != nil {
 		return nil, err
 	}
 	c.sessions = []*yamux.Session{session}
+	c.recvStamp = map[*yamux.Session]*atomic.Int64{session: stamp}
 
 	go c.sessionKeepAliveLoop()
 
@@ -235,12 +263,16 @@ func NewMultiClient(conns []net.Conn, appCl *app.Client) (*Client, error) {
 // up automatically. This is the extension point the disjoint-dial coordinator
 // (RFC step 3) will call to grow the tunnel set at runtime.
 func (c *Client) AddTunnel(conn net.Conn) error {
-	session, err := newYamuxSession(conn)
+	session, stamp, err := newYamuxSession(conn)
 	if err != nil {
 		return err
 	}
 	c.sessionsMu.Lock()
 	c.sessions = append(c.sessions, session)
+	if c.recvStamp == nil {
+		c.recvStamp = make(map[*yamux.Session]*atomic.Int64)
+	}
+	c.recvStamp[session] = stamp
 	c.sessionsMu.Unlock()
 	return nil
 }
@@ -432,6 +464,30 @@ func (c *Client) maybeRedial(live int) {
 
 // snapshotSessions returns a copy of the current tunnel set for lock-free
 // iteration by callers (keepalive, status).
+// lastRecvTime returns the wall time of the last bytes read from s's underlying
+// conn (zero time if never / unknown). Read by the keepalive loop as liveness
+// evidence alongside pongs.
+func (c *Client) lastRecvTime(s *yamux.Session) time.Time {
+	c.sessionsMu.Lock()
+	stamp := c.recvStamp[s]
+	c.sessionsMu.Unlock()
+	if stamp == nil {
+		return time.Time{}
+	}
+	if ns := stamp.Load(); ns > 0 {
+		return time.Unix(0, ns)
+	}
+	return time.Time{}
+}
+
+// dropRecvStamp forgets a retired session's receive stamp (map hygiene mirroring
+// the keepalive loop's lastPong deletes).
+func (c *Client) dropRecvStamp(s *yamux.Session) {
+	c.sessionsMu.Lock()
+	delete(c.recvStamp, s)
+	c.sessionsMu.Unlock()
+}
+
 func (c *Client) snapshotSessions() []*yamux.Session {
 	c.sessionsMu.Lock()
 	defer c.sessionsMu.Unlock()
@@ -636,10 +692,12 @@ var livenessProbeInterval = 15 * time.Second
 // (the old livenessFailThreshold logic) mistook a transient wedge for a dead
 // conn and tore down the whole route group under download load — the pool
 // "collapse to nothing, then grow back" (new local port on every reconnect). We
-// now retire only after NO pong (even a late one) has been seen for this window,
-// which distinguishes a wedged-but-live tunnel (pongs arrive late) from a
-// genuinely silent/black-holed one (never pongs again). A var so tests can
-// shrink it. Kept comfortably above the worst realistic wedge duration.
+// now retire only after NO pong (even a late one) AND no inbound bytes have
+// been seen for this window, which distinguishes a wedged-but-live tunnel
+// (pongs arrive late, or the download's own bytes keep arriving while the pong
+// sits behind them) from a genuinely silent/black-holed one (never sends
+// again). A var so tests can shrink it. Kept comfortably above the worst
+// realistic wedge duration.
 var sessionHardDeadWindow = 45 * time.Second
 
 // sessionKeepAliveLoop probes every tunnel and retires only the genuinely dead
@@ -695,6 +753,7 @@ func (c *Client) sessionKeepAliveLoop() {
 				if s.IsClosed() {
 					delete(lastPong, s)
 					delete(inFlight, s)
+					c.dropRecvStamp(s)
 					continue
 				}
 				if _, seen := lastPong[s]; !seen {
@@ -714,14 +773,23 @@ func (c *Client) sessionKeepAliveLoop() {
 						}
 					}(s)
 				}
-				// Retire only after a sustained silence — no pong for the whole window.
-				if now.Sub(lastPong[s]) >= sessionHardDeadWindow {
+				// Retire only after a sustained TOTAL silence — no pong AND no bytes
+				// read from the conn for the whole window. Arriving bytes are liveness
+				// evidence in their own right: under a bulk transfer on a slow leg the
+				// pong queues behind the transfer's own frames, and a pong-only window
+				// would retire the very tunnel delivering the download.
+				lastAlive := lastPong[s]
+				if rt := c.lastRecvTime(s); rt.After(lastAlive) {
+					lastAlive = rt
+				}
+				if now.Sub(lastAlive) >= sessionHardDeadWindow {
 					if c.appCl != nil {
-						c.appCl.Log().Warnf("No pong for %v (> hard-dead window); tunnel gone, retiring it", now.Sub(lastPong[s]).Truncate(time.Second))
+						c.appCl.Log().Warnf("No pong and no inbound bytes for %v (> hard-dead window); tunnel gone, retiring it", now.Sub(lastAlive).Truncate(time.Second))
 					}
 					_ = s.Close() //nolint:errcheck
 					delete(lastPong, s)
 					delete(inFlight, s)
+					c.dropRecvStamp(s)
 				}
 			}
 			if c.allSessionsClosed() {

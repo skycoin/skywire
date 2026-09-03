@@ -221,3 +221,75 @@ func TestKeepAlive_TrueSilenceRetires(t *testing.T) {
 	}
 	t.Fatal("silently-dead tunnel was never retired")
 }
+
+// TestKeepAlive_DataFlowSurvivesPongStarvation is the regression test for the
+// pong-behind-the-download teardown: a peer that keeps SENDING frames but never
+// answers the client's pings (its pong is queued behind bulk data on a slow
+// leg) must survive the hard-dead window — arriving bytes are liveness. The
+// peer here is a raw pipe end emitting valid yamux PING(SYN) frames (inbound
+// bytes the session handles harmlessly) while discarding everything the client
+// sends, so the client's own pings are never ACKed. Once the peer goes fully
+// silent, the tunnel must still retire.
+func TestKeepAlive_DataFlowSurvivesPongStarvation(t *testing.T) {
+	oldInterval, oldWindow := livenessProbeInterval, sessionHardDeadWindow
+	livenessProbeInterval = 15 * time.Millisecond
+	sessionHardDeadWindow = 90 * time.Millisecond
+	t.Cleanup(func() { livenessProbeInterval, sessionHardDeadWindow = oldInterval, oldWindow })
+
+	p1, p2 := net.Pipe()
+	c, err := NewClient(p1, nil)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	t.Cleanup(func() {
+		c.Close() //nolint:errcheck,gosec
+	})
+
+	// Drain everything the client writes (its pings, its PING-ACK replies) so
+	// the synchronous pipe never blocks — and never answer any of it.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := p2.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	// Emit a valid yamux PING(SYN) frame every ~10ms: version 0, type ping (2),
+	// flags SYN (1), stream 0, opaque id. The client session reads it (inbound
+	// bytes = activity) and replies with an ACK our drain goroutine swallows.
+	stopSend := make(chan struct{})
+	go func() {
+		frame := []byte{0, 2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 7}
+		tick := time.NewTicker(10 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-stopSend:
+				return
+			case <-tick.C:
+				if _, err := p2.Write(frame); err != nil {
+					return
+				}
+			}
+		}
+	}()
+
+	// Phase 1: frames flowing, pongs starved — must survive several windows.
+	time.Sleep(4 * sessionHardDeadWindow)
+	if clientClosed(c) {
+		t.Fatal("tunnel with flowing inbound data was retired despite pong starvation")
+	}
+
+	// Phase 2: total silence — must now retire within the window.
+	close(stopSend)
+	deadline := time.Now().Add(8 * sessionHardDeadWindow)
+	for time.Now().Before(deadline) {
+		if clientClosed(c) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("fully-silent tunnel was never retired after data stopped")
+}
