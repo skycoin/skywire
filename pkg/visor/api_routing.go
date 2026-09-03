@@ -172,6 +172,8 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 				RecvBytes:      leg.RecvBytes,
 				RecvPackets:    leg.RecvPackets,
 				PayloadBytes:   leg.PayloadBytes,
+				DupBytes:       leg.DupBytes,
+				RepairBytes:    leg.RepairBytes,
 				Retransmits:    leg.Retransmits,
 				GoodputBps:     leg.GoodputBps,
 				GoodputUpBps:   leg.GoodputUpBps,

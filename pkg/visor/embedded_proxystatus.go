@@ -177,6 +177,8 @@ func proxyLegFrom(leg MuxLegInfo) proxystatus.Leg {
 		Direct:         leg.Direct,
 		SentBytes:      leg.SentBytes,
 		RecvBytes:      leg.RecvBytes,
+		DupBytes:       leg.DupBytes,
+		RepairBytes:    leg.RepairBytes,
 		Retransmits:    leg.Retransmits,
 		GoodputBps:     leg.GoodputBps,
 		GoodputUpBps:   leg.GoodputUpBps,

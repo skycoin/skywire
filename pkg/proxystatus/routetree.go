@@ -251,6 +251,10 @@ const (
 	// up-goodput / down-goodput. Constant width by construction, so it never
 	// reflows the tree as the shares shift on a live push.
 	shareBarWidth = 5
+	// overColWidth fits the inbound-overhead cell ("—" through "999.9K×" /
+	// "15.3M×") — cumulative duplicate + FEC-repair bytes on the leg. Same
+	// pin-the-width reasoning as bwColWidth.
+	overColWidth = 8
 )
 
 // legSumWidths measures the widest R[n] identity across the legs (that count is
@@ -336,7 +340,7 @@ func hopClassMap(snap Snapshot) map[string]string {
 // a template row that lines up with the columns of the tree beneath. Only the
 // page uses it; `proxy tree` renders headerless.
 func TreeHeader() (left, label string, cols []string) {
-	return "R[n] · state · route-rtt · ↑bytes rate share · ↓bytes rate share", "peer-pk", []string{"[type]", "tp-id", "tp-rtt"}
+	return "R[n] · state · route-rtt · ↑bytes rate share · ↓bytes rate share ×over", "peer-pk", []string{"[type]", "tp-id", "tp-rtt"}
 }
 
 // routeToNode turns one leg into a hop-chain right-branch carrying its left
@@ -390,9 +394,22 @@ func legSummary(l Leg, w sumWidths, aggUp, aggDown float64, streamIdx int) strin
 	down := padLeftRunes(compactBytes(l.RecvBytes)+"↓", w.down)
 	downRate := padLeftRunes(compactRate(l.GoodputDownBps), w.gp)
 	downBar := shareBar(l.GoodputDownBps, aggDown, shareBarWidth)
+	over := padLeftRunes(compactOverhead(l.DupBytes, l.RepairBytes), overColWidth)
 	return streamTag(streamIdx) + idx + " " + g + " " + rtt +
 		"  " + up + " " + upRate + " " + upBar +
-		"  " + down + " " + downRate + " " + downBar
+		"  " + down + " " + downRate + " " + downBar + " " + over
+}
+
+// compactOverhead formats a leg's cumulative inbound OVERHEAD — duplicate data
+// (the peer's spurious retransmits, which ride the fastest leg) plus FEC repair
+// frames — for the fixed-width "×" cell beside the ↓ figures. This is what
+// explains a standby leg that shows inbound traffic: its RecvBytes are mostly
+// dup/repair, not striped payload. "—" when zero.
+func compactOverhead(dup, repair uint64) string {
+	if dup+repair == 0 {
+		return "—"
+	}
+	return compactBytes(dup+repair) + "×"
 }
 
 // compactRate formats a goodput rate (bytes/sec) for the fixed-width leg cell:
