@@ -40,6 +40,14 @@ type LegStats struct {
 	// confound-free per-direction attribution (which legs carried the download vs
 	// the upload), unlike RecvBytes which includes retransmit/duplicate inflation.
 	PayloadBytes uint64
+	// DupBytes is inbound DUPLICATE data this leg carried (seqs already
+	// delivered/buffered on arrival) — the peer's spurious-retransmit waste,
+	// which selectFastestTransport concentrates on the fastest leg. RepairBytes
+	// is inbound FEC repair frames (deliberate overhead). Together with
+	// PayloadBytes they decompose RecvBytes so "why is this (standby) leg
+	// receiving" is answerable from telemetry.
+	DupBytes    uint64
+	RepairBytes uint64
 	// Retransmits is how many SACK retransmit packets THIS leg has
 	// carried. A high retransmits:sentPackets ratio marks a lossy leg —
 	// the signal a routing policy needs to shed lossy intermediates and
@@ -88,6 +96,13 @@ type legCounters struct {
 	// equals the transfer size and cleanly attributes which legs carried a
 	// direction's data — the confound-free basis for per-direction leg telemetry.
 	payloadBytes uint64 // atomic
+	// dupBytes is inbound DUPLICATE data on this leg (a seq already delivered
+	// or buffered when it arrived here) — the peer's spurious-retransmit waste,
+	// which rides the fastest leg and otherwise masquerades as payload in
+	// recvBytes. repairBytes is inbound FEC repair frames — deliberate overhead,
+	// counted apart from waste. Both atomic.
+	dupBytes    uint64 // atomic
+	repairBytes uint64 // atomic
 	// lastTotalBytes snapshots sentBytes+recvBytes at the previous
 	// capacity-weight rebuild; the delta since then is this leg's
 	// recent throughput, used by WeightModeCapacity. Touched only
@@ -841,6 +856,38 @@ func (m *routeMux) recordPayload(idx int, n uint64) {
 	m.legMu.RUnlock()
 }
 
+// recordDup atomically credits leg idx with n bytes of DUPLICATE data (a seq
+// that had already been delivered or buffered when it arrived on this leg).
+// Splitting dupBytes out of recvBytes is what attributes a "standby leg with
+// traffic" honestly: the peer's spurious retransmits ride the fastest leg
+// (resendSeqs → selectFastestTransport), which is typically the parked direct
+// leg, and without this counter that flow is indistinguishable from striped
+// payload. Same bounds-check semantics as recordRecv.
+func (m *routeMux) recordDup(idx int, n uint64) {
+	if idx < 0 {
+		return
+	}
+	m.legMu.RLock()
+	if idx < len(m.legs) {
+		atomic.AddUint64(&m.legs[idx].dupBytes, n)
+	}
+	m.legMu.RUnlock()
+}
+
+// recordRepair atomically credits leg idx with n bytes of FEC repair frames.
+// Repairs are overhead by design (they buy gap-fill latency); counting them
+// per leg separates that deliberate cost from spurious-retransmit waste.
+func (m *routeMux) recordRepair(idx int, n uint64) {
+	if idx < 0 {
+		return
+	}
+	m.legMu.RLock()
+	if idx < len(m.legs) {
+		atomic.AddUint64(&m.legs[idx].repairBytes, n)
+	}
+	m.legMu.RUnlock()
+}
+
 // recordRetransmit atomically increments the retransmit counter for leg
 // idx (the leg that carried a SACK retransmit). The retransmitted bytes
 // are still recorded via recordSent; this is the separate loss signal.
@@ -890,6 +937,8 @@ func (m *routeMux) snapshotLegs() []LegStats {
 			RecvBytes:      recv,
 			RecvPackets:    atomic.LoadUint64(&c.recvPackets),
 			PayloadBytes:   atomic.LoadUint64(&c.payloadBytes),
+			DupBytes:       atomic.LoadUint64(&c.dupBytes),
+			RepairBytes:    atomic.LoadUint64(&c.repairBytes),
 			Retransmits:    atomic.LoadUint64(&c.retransmits),
 			GoodputUpBps:   c.goodputUpBps,
 			GoodputDownBps: c.goodputDownBps,
@@ -1024,6 +1073,8 @@ func (m *routeMux) deliverData(leg int, seq uint32, data []byte) (delivered [][]
 		}
 		if isNew {
 			m.recordPayload(leg, uint64(len(data)))
+		} else {
+			m.recordDup(leg, uint64(len(data)))
 		}
 	}
 

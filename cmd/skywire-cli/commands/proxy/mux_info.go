@@ -145,7 +145,12 @@ type muxLegInfo struct {
 	// PayloadBytes is the unique in-order payload this leg delivered (retransmits
 	// excluded), so per-leg values sum to the transfer size — the clean signal for
 	// which legs carried a direction's data.
-	PayloadBytes   uint64  `json:"payload_bytes"`
+	PayloadBytes uint64 `json:"payload_bytes"`
+	// DupBytes / RepairBytes decompose RecvBytes further: inbound duplicates
+	// (the peer's spurious retransmits, concentrated on the fastest leg) and
+	// FEC repair frames (deliberate overhead).
+	DupBytes       uint64  `json:"dup_bytes"`
+	RepairBytes    uint64  `json:"repair_bytes"`
 	Retransmits    uint64  `json:"retransmits"`
 	GoodputBps     float64 `json:"goodput_bps,omitempty"`
 	GoodputUpBps   float64 `json:"goodput_up_bps,omitempty"`

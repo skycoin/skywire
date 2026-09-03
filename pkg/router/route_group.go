@@ -3849,6 +3849,21 @@ func (rg *RouteGroup) handleRepairPacket(packet routing.Packet) error {
 		return nil
 	}
 	atomic.AddUint64(&rg.mux.fecRepairBytesRecv, uint64(packet.Size()))
+	// Per-leg repair accounting: resolve the arrival leg from the packet's route
+	// ID (same reverse-rule match as handleDataPacket) and credit both its recv
+	// counters and the repair-specific one — before this, FEC repairs were
+	// invisible in the per-leg telemetry, so a leg carrying repair overhead was
+	// indistinguishable from an idle one.
+	rg.mu.Lock()
+	rid := packet.RouteID()
+	for i, rule := range rg.rvs {
+		if rule != nil && rule.KeyRouteID() == rid {
+			rg.mux.recordRecv(i, uint64(packet.Size()))
+			rg.mux.recordRepair(i, uint64(packet.Size()))
+			break
+		}
+	}
+	rg.mu.Unlock()
 	delivered := rg.mux.fecOnRecvRepair(packet.RepairBlockID(), packet.RepairIndex(), packet.RepairSymLen(), packet.RepairSymbol())
 	for _, d := range delivered {
 		if len(d) == 0 { // FEC padding frame — advances the frontier, not app data
