@@ -60,16 +60,16 @@ require (
 
 require (
 	github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898
-	github.com/0magnet/bottle v0.0.0-20260903173145-a10f4be2e141
+	github.com/0magnet/bottle v0.0.0-20260903190614-8e8230c230ca
 	github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260901202627-53911da3ad77
 	github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
 	github.com/0magnet/netscrape v0.0.0-20260903034044-052ad8e1f876
-	github.com/0magnet/plot-go v0.0.0-20260903022354-39cc12099e67
-	github.com/0magnet/realorigin v0.2.0
+	github.com/0magnet/plot-go v0.0.0-20260903194102-268453e774b6
+	github.com/0magnet/realorigin v0.2.1
 	github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26
-	github.com/0magnet/termanim v0.0.0-20260903022407-3c9a5cc9ee76
-	github.com/0magnet/winbox-go v0.0.0-20260903022448-a6277067b114
+	github.com/0magnet/termanim v0.0.0-20260903194101-9c4d352424cf
+	github.com/0magnet/winbox-go v0.0.0-20260903205523-d2960fe5bbd0
 	github.com/0magnet/yamux v0.1.3-0.20260901201804-38cdbd63617a
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0
@@ -117,15 +117,15 @@ require (
 
 require (
 	github.com/0magnet/afero v1.15.1-0.20260816202415-9f9d46a34dcd
-	github.com/0magnet/cosmos-go v0.0.0-20260814190035-f5b882c1ea9e
-	github.com/0magnet/sh/v3 v3.13.2-0.20260814172914-eff537668adf
-	github.com/0magnet/websh v0.0.0-20260816200521-e9f14eb862c7
-	github.com/0magnet/xterm-go v0.0.0-20260823191622-8d2bbff87cea
+	github.com/0magnet/cosmos-go v0.0.0-20260903205521-b833a4163dfd
+	github.com/0magnet/sh/v3 v3.13.2-0.20260818190530-13d0024da85c
+	github.com/0magnet/websh v0.0.0-20260903221227-ea9b334dfdf7
+	github.com/0magnet/xterm-go v0.0.0-20260903022452-f823b747bcfe
 	github.com/benhoyt/goawk v1.31.0 // indirect
 )
 
 require (
-	github.com/0magnet/u-root v0.16.1-0.20260810212217-0890fe5099f9 // indirect
+	github.com/0magnet/u-root v0.16.1-0.20260814161052-156e0b67262b // indirect
 	github.com/gdamore/tcell/v3 v3.4.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pion/stun/v4 v4.0.0 // indirect
