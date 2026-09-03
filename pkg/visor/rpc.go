@@ -294,6 +294,10 @@ type MuxRouteGroupInfo struct {
 	// this tells which class carries which direction without log-grepping.
 	Directional bool `json:"directional,omitempty"`
 	Flipped     bool `json:"flipped,omitempty"`
+	// FlipPinned is the operator's MANUAL direction pin on a directional group:
+	// "auto" (flip controller in charge), "default" or "flipped" (mapping pinned,
+	// controller dormant until released). Empty on a non-directional mux.
+	FlipPinned string `json:"flip_pinned,omitempty"`
 	// Distribution names how the mux spreads outbound packets across its legs
 	// (weight mode: "auto", "round-robin", "weighted", "capacity",
 	// "latency-adaptive", "sticky:5tuple", "size-threshold", "dscp-priority").
@@ -417,6 +421,13 @@ type MuxRouteInput struct {
 	// etc.). Zero means "auto-pick if exactly one rg is active for
 	// the app, error otherwise."
 	SrcPort uint16
+}
+
+// MuxDirectionInput carries the app-scoped manual direction pin for
+// SetMuxDirection: Mode is "auto" (release), "default" or "flipped".
+type MuxDirectionInput struct {
+	AppName string
+	Mode    string
 }
 type FilterServersIn struct {
 	Version string

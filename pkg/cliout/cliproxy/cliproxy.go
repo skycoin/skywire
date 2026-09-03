@@ -19,7 +19,8 @@ import (
 // The fields that do not apply are omitted rather than zeroed, so their absence
 // is meaningful.
 type MuxOp struct {
-	// Op is "add", "remove", "cap", "width", "standby", "switch" or "mode".
+	// Op is "add", "remove", "cap", "width", "standby", "switch", "mode" or
+	// "direction".
 	Op  string `json:"op"`
 	App string `json:"app"`
 
@@ -58,6 +59,13 @@ func (m MuxOp) Human(w io.Writer) error {
 		return err
 	case "mode":
 		_, err := fmt.Fprintf(w, "mux mode set to %s\n", m.Mode)
+		return err
+	case "direction":
+		if m.Mode == "auto" {
+			_, err := fmt.Fprintf(w, "mux direction pin released on app=%s (flip controller resumes)\n", m.App)
+			return err
+		}
+		_, err := fmt.Fprintf(w, "mux direction pinned to %s on app=%s\n", m.Mode, m.App)
 		return err
 	default:
 		_, err := fmt.Fprintf(w, "mux op %q applied\n", m.Op)

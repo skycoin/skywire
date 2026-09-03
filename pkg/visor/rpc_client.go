@@ -901,6 +901,13 @@ func (rc *rpcClient) RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint
 	return rc.Call("RemoveMuxRoute", &MuxRouteInput{AppName: appName, TransportID: tpID, SrcPort: srcPort}, &struct{}{})
 }
 
+// SetMuxDirection pins ("default"/"flipped") or releases ("auto") the
+// unidirectional direction→leg-class mapping on all of the app's active
+// directional route groups.
+func (rc *rpcClient) SetMuxDirection(appName, mode string) error {
+	return rc.Call("SetMuxDirection", &MuxDirectionInput{AppName: appName, Mode: mode}, &struct{}{})
+}
+
 // ActiveRoutes returns all active routes with app associations and live stats.
 func (rc *rpcClient) ActiveRoutes() ([]AppRouteStatus, error) {
 	var routes []AppRouteStatus

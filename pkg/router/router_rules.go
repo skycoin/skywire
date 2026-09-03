@@ -159,6 +159,42 @@ func (r *router) RouteGroupMuxInfoAll() []MuxInfo {
 	return out
 }
 
+// SetMuxDirectionForApp implements Router. Applies the operator's manual
+// direction pin to every active rg tagged with appName (same tag walk as
+// RouteGroupMuxInfoForApp). Each pinned rg coordinates the pin with its peer
+// over the wire (RouteGroup.SetDirectionPin); non-directional rg's are counted
+// as errors so a proxy session without CapUniDir reports why nothing happened.
+func (r *router) SetMuxDirectionForApp(appName string, mode byte) (int, error) {
+	if appName == "" {
+		return 0, fmt.Errorf("app name required")
+	}
+	r.mx.Lock()
+	rgs := make([]*NoiseRouteGroup, 0, len(r.rgsNs))
+	for _, nrg := range r.rgsNs {
+		if nrg != nil && nrg.rg != nil && nrg.rg.AppName() == appName {
+			rgs = append(rgs, nrg)
+		}
+	}
+	r.mx.Unlock()
+	if len(rgs) == 0 {
+		return 0, fmt.Errorf("no active route group for app %q", appName)
+	}
+
+	applied := 0
+	var lastErr error
+	for _, nrg := range rgs {
+		if err := nrg.rg.SetDirectionPin(mode); err != nil {
+			lastErr = err
+			continue
+		}
+		applied++
+	}
+	if applied == 0 {
+		return 0, fmt.Errorf("direction pin applied to none of app %q's %d route group(s): %w", appName, len(rgs), lastErr)
+	}
+	return applied, nil
+}
+
 func (r *router) initializingRouteGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()

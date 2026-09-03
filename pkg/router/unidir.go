@@ -83,6 +83,45 @@ func (m *routeMux) dirState() (directional, flipped bool) {
 	return m.directional, m.flipped
 }
 
+// setFlipPin applies (or releases) the operator's MANUAL direction pin. mode is
+// routing.DirectionAuto/DirectionPinDefault/DirectionPinFlipped. Pinning also
+// enforces the pinned mapping immediately (no wait for the next controller
+// tick); releasing leaves the mapping where the pin put it — the controller
+// resumes from there and re-flips only when the traffic asymmetry says so.
+// No-op unless directional (a pin on a symmetric mux would never be read).
+func (m *routeMux) setFlipPin(mode byte) {
+	m.legMu.Lock()
+	if !m.directional {
+		m.legMu.Unlock()
+		return
+	}
+	m.flipPin = mode
+	m.legMu.Unlock()
+	if mode != routing.DirectionAuto {
+		m.setFlipped(mode == routing.DirectionPinFlipped)
+	}
+}
+
+// flipPinMode snapshots the manual direction pin under legMu.
+func (m *routeMux) flipPinMode() byte {
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	return m.flipPin
+}
+
+// flipPinString renders a pin mode for telemetry: "auto" (controller in
+// charge), "default" or "flipped" (operator-pinned mapping).
+func flipPinString(mode byte) string {
+	switch mode {
+	case routing.DirectionPinDefault:
+		return "default"
+	case routing.DirectionPinFlipped:
+		return "flipped"
+	default:
+		return "auto"
+	}
+}
+
 // soleBlackHoleExemptRecvFloor is the per-tick GROUP recv above which a
 // directional group's sole ACTIVE (light-direction) leg is exempt from the
 // sole-leg black-hole reaping.
@@ -143,9 +182,15 @@ func (m *routeMux) unidirFlipTick() (flipped, changed bool) {
 	m.legMu.RLock()
 	directional := m.directional
 	initiator := m.initiator
+	pinned := m.flipPin != routing.DirectionAuto
 	m.legMu.RUnlock()
 	if !directional {
 		return m.flipped, false
+	}
+	// Operator pin: skip the goodput sampling entirely — flipStep enforces the
+	// pinned mapping and keeps the hysteresis counters zeroed while dormant.
+	if pinned {
+		return m.flipStep(0, 0)
 	}
 
 	stats := m.snapshotLegs() // samples per-leg goodput EWMAs
@@ -177,9 +222,20 @@ func (m *routeMux) flipStep(up, down float64) (flipped, changed bool) {
 	m.legMu.RLock()
 	directional := m.directional
 	cur := m.flipped
+	pin := m.flipPin
 	m.legMu.RUnlock()
 	if !directional {
 		return cur, false
+	}
+	// MANUAL pin: the controller is dormant. Enforce the pinned mapping every
+	// tick (idempotent — setFlipped only reports a change when the state moves,
+	// e.g. right after the pin landed or if something else touched flipped) and
+	// zero the hysteresis/cooldown counters so releasing the pin hands the
+	// controller a clean slate instead of a half-accumulated flip decision.
+	if pin != routing.DirectionAuto {
+		m.flipUpHits, m.flipDownHits, m.flipCooldown = 0, 0, 0
+		want := pin == routing.DirectionPinFlipped
+		return want, m.setFlipped(want)
 	}
 	if m.flipCooldown > 0 {
 		m.flipCooldown--

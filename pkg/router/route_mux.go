@@ -212,6 +212,11 @@ type routeMux struct {
 	initiator   bool
 	dstPK       cipher.PubKey
 	srcPK       cipher.PubKey
+	// flipPin is the operator's MANUAL direction pin (see unidir.go setFlipPin):
+	// routing.DirectionAuto (0) leaves the flip controller in charge;
+	// DirectionPinDefault/DirectionPinFlipped force the mapping and put the
+	// controller to sleep until released. Guarded by legMu like flipped.
+	flipPin byte
 	// Flip-controller hysteresis state (see unidir.go unidirFlipTick). Touched
 	// ONLY by the single unidir-flip loop goroutine, so no lock of their own.
 	flipUpHits   int
