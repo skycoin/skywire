@@ -1,6 +1,8 @@
 package router
 
 import (
+	"github.com/google/uuid"
+
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,7 +40,7 @@ func TestMux_InOrderDelivery(t *testing.T) {
 	var got []byte
 	for i := 0; i < 200; i++ {
 		payload := []byte{byte(i)}
-		_, seq, err := send.wrapPayload(routing.RouteID(1), payload, 0)
+		_, seq, err := send.wrapPayload(routing.RouteID(1), payload, uuid.Nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -69,7 +71,7 @@ func TestMux_InterleavedLegs(t *testing.T) {
 	var evens, odds []pkt
 	for i := 0; i < 200; i++ {
 		payload := []byte{byte(i)}
-		_, seq, err := send.wrapPayload(routing.RouteID(1), payload, 0)
+		_, seq, err := send.wrapPayload(routing.RouteID(1), payload, uuid.Nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -122,7 +124,7 @@ func TestMux_RecoversLostPacketViaRetx(t *testing.T) {
 	var pkts []pkt
 	for i := 0; i < 20; i++ {
 		payload := []byte{byte(i)}
-		_, seq, err := send.wrapPayload(routing.RouteID(1), payload, 0)
+		_, seq, err := send.wrapPayload(routing.RouteID(1), payload, uuid.Nil)
 		if err != nil {
 			t.Fatal(err)
 		}

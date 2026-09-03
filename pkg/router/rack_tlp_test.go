@@ -2,6 +2,8 @@
 package router
 
 import (
+	"github.com/google/uuid"
+
 	"sync/atomic"
 	"testing"
 	"time"
@@ -62,9 +64,9 @@ func TestTLPProbeSeq(t *testing.T) {
 	}
 
 	// Outstanding data, but the sender is NOT yet idle for a PTO → no probe.
-	m.retxBuf.Store(10, []byte("a"), 0)
-	m.retxBuf.Store(11, []byte("b"), 0)
-	m.retxBuf.Store(12, []byte("c"), 0) // tail = 12
+	m.retxBuf.Store(10, []byte("a"), uuid.Nil)
+	m.retxBuf.Store(11, []byte("b"), uuid.Nil)
+	m.retxBuf.Store(12, []byte("c"), uuid.Nil) // tail = 12
 	atomic.StoreInt64(&m.lastSendNano, now.UnixNano())
 	if _, due := m.tlpProbeSeq(now.Add(10 * time.Millisecond)); due {
 		t.Fatal("probe due before a full PTO of idle")
