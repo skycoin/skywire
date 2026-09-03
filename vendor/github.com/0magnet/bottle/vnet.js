@@ -41,7 +41,7 @@
 	// prelude). HTTP/1.0 + Connection: close — no chunked encoding, EOF
 	// delimits when Content-Length is absent; Content-Length short-circuits
 	// servers that hold the connection open.
-	function httpExchange(v, id, hostLabel, method, path, body, headers, resolve, reject, timeoutMs) {
+	function httpExchange(v, id, hostLabel, method, path, body, headers, resolve, reject, timeoutMs, preBytes) {
 		let done = false;
 		const timer = setTimeout(() => {
 			if (done) return;
@@ -63,6 +63,9 @@
 		if (bodyBytes && bodyBytes.length) v.send(id, 'a', bodyBytes);
 		const chunks = [];
 		let total = 0;
+		// preBytes: response bytes a caller's prelude reader (the SOCKS
+		// handshake) already pulled off the pipe before handing it over.
+		if (preBytes && preBytes.length) { chunks.push(preBytes); total += preBytes.length; }
 		let parsed = null; // {status, headers, bodyStart, contentLength}
 		const concat = () => {
 			const all = new Uint8Array(total);
@@ -264,6 +267,11 @@
 							nb.set(buf, 0); nb.set(b, buf.length);
 							buf = nb;
 							if (onBytes && buf.length >= need) { const cb = onBytes; onBytes = null; cb(); }
+							// STOP once the handshake settled (afterBind ran inside
+							// that callback): looping on would re-register this pump
+							// as the pipe's one-shot wake callback, stealing every
+							// response byte from the HTTP exchange that took over.
+							if (settled) return;
 							continue;
 						}
 						if (v.eof(id, 'a')) { fail('SOCKS5 proxy closed during handshake'); return; }
@@ -306,11 +314,13 @@
 							if (settled) return;
 							settled = true;
 							clearTimeout(hsTimer);
-							// Splice any early bytes the proxy already relayed back
-							// into the conn queue front? None expected: the server
-							// speaks only after our HTTP request. Hand the pipe to
-							// the shared HTTP exchange.
-							httpExchange(v, id, hp, method, path, body, headers, resolve, reject, 45000);
+							// Hand the pipe to the shared HTTP exchange, along with
+							// any bytes the handshake reader already pulled past the
+							// bind address (a fast server's response can share a
+							// chunk with the reply).
+							const leftover = buf.length ? buf : null;
+							buf = new Uint8Array(0);
+							httpExchange(v, id, hp, method, path, body, headers, resolve, reject, 45000, leftover);
 						};
 						if (rest > 0) { read(rest, afterBind); } else if (atyp === 3) { read(1, (l) => read(l[0] + 2, afterBind)); } else { fail('SOCKS5 bad ATYP ' + atyp); }
 					});
