@@ -126,9 +126,19 @@
 		const tailDec = new TextDecoder();
 		const keepTail = (buf) => {
 			try {
-				stderrTail = (stderrTail + tailDec.decode(buf, { stream: true })).slice(-4096);
+				stderrTail = (stderrTail + tailDec.decode(buf, { stream: true })).slice(-16384);
 			} catch (e) { /* ignore */ }
 		};
+		// Live observability: __skywireExecTails[iid]() returns the tail at any
+		// moment (DevTools, CDP probes, the operator) — the only other copy of
+		// a long-running instance's log lives inside an xterm nobody can read
+		// programmatically. Kept after exit (the crash's last words); replaced
+		// naturally as new instances reuse the registry.
+		try {
+			(globalThis.__skywireExecTails = globalThis.__skywireExecTails || {})[iid] =
+				function () { return stderrTail; };
+			globalThis.__skywireExecTails[iid].argv = args.slice();
+		} catch (e) { /* ignore */ }
 		{
 			const userErr = (hooks && hooks.stderr) || null;
 			const fallbackErr = prev.stderr; // no hook → keep the page's default sink
