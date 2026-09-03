@@ -164,6 +164,8 @@ type treeLegInfo struct {
 	Direct         bool          `json:"direct"`
 	SentBytes      uint64        `json:"sent_bytes"`
 	RecvBytes      uint64        `json:"recv_bytes"`
+	DupBytes       uint64        `json:"dup_bytes"`
+	RepairBytes    uint64        `json:"repair_bytes"`
 	GoodputUpBps   float64       `json:"goodput_up_bps,omitempty"`
 	GoodputDownBps float64       `json:"goodput_down_bps,omitempty"`
 	Retransmits    uint64        `json:"retransmits"`
@@ -195,6 +197,8 @@ func (rg treeRouteGroup) toLegs() []proxystatus.Leg {
 			Direct:         l.Direct,
 			SentBytes:      l.SentBytes,
 			RecvBytes:      l.RecvBytes,
+			DupBytes:       l.DupBytes,
+			RepairBytes:    l.RepairBytes,
 			GoodputUpBps:   l.GoodputUpBps,
 			GoodputDownBps: l.GoodputDownBps,
 			Retransmits:    l.Retransmits,
