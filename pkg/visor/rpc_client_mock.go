@@ -170,6 +170,18 @@ func (mc *mockRPCClient) StateSnapshot() (*StateSnapshot, error) {
 	return &StateSnapshot{At: time.Now(), Summary: summary}, nil
 }
 
+// StateSnapshotProjected implements API.
+func (mc *mockRPCClient) StateSnapshotProjected(fields []string) (*StateSnapshot, error) {
+	snap, err := mc.StateSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	if set := newStateFieldSet(fields); set != nil && !set.has(SelectSummary) {
+		snap.Summary = nil
+	}
+	return snap, nil
+}
+
 // Summary implements API.
 func (mc *mockRPCClient) Summary() (*Summary, error) {
 	overview, err := mc.Overview()
@@ -570,6 +582,11 @@ func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, err
 	return mc.logS.LogsSince(timestamp)
 }
 
+// RecentAppLog implements API.
+func (mc *mockRPCClient) RecentAppLog(_, _ string) ([]string, error) {
+	return nil, nil
+}
+
 func (mc *mockRPCClient) GetAppStats(_ string) (appserver.AppStats, error) {
 	return appserver.AppStats{}, nil
 }
@@ -769,6 +786,18 @@ func (mc *mockRPCClient) SetMuxMode(_ string) error {
 	return nil
 }
 
+func (mc *mockRPCClient) SetMuxCap(_ int) error {
+	return nil
+}
+
+func (mc *mockRPCClient) SetMuxWidth(_ int) error {
+	return nil
+}
+
+func (mc *mockRPCClient) SetMuxStandby(_ int) error {
+	return nil
+}
+
 func (*mockRPCClient) GetRouterSettings() (RouterSettings, error) { return RouterSettings{}, nil }
 func (*mockRPCClient) SetRouterSettings(RouterSettings) error     { return nil }
 
@@ -785,6 +814,10 @@ func (mc *mockRPCClient) GrowMuxRoute(_ string, _, _ int, _ uint16) (int, error)
 }
 
 func (mc *mockRPCClient) RemoveMuxRoute(_ string, _ uuid.UUID, _ uint16) error {
+	return nil
+}
+
+func (mc *mockRPCClient) SetMuxDirection(_, _ string) error {
 	return nil
 }
 

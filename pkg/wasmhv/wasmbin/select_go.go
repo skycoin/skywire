@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !tinygo && !js
 
 // Package wasmbin pkg/wasmhv/wasmbin/select_go.go c3-vis-wasm
 package wasmbin

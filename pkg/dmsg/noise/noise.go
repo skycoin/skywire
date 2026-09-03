@@ -281,6 +281,23 @@ func (ns *Noise) HandshakeFinished() bool {
 	return ns.hs.MessageIndex() == len(ns.pattern.Messages)
 }
 
+// WriterTurn reports whether the NEXT handshake message is ours to WRITE (via
+// MakeHandshakeMessage) rather than to read. The initiator writes the
+// even-indexed handshake messages and reads the odd ones; the responder is the
+// mirror. Callers use this to avoid MakeHandshakeMessage out of turn, which the
+// underlying state machine rejects ("unexpected call to WriteMessage should be
+// ReadMessage"). Returns false once the handshake is finished.
+func (ns *Noise) WriterTurn() bool {
+	if ns.HandshakeFinished() {
+		return false
+	}
+	even := ns.hs.MessageIndex()%2 == 0
+	if ns.init {
+		return even
+	}
+	return !even
+}
+
 // ChannelBinding returns a value that uniquely identifies the completed
 // handshake session — the Noise handshake hash. Both peers derive an identical
 // value, and it is bound to the full transcript (static keys + ephemerals + any
@@ -336,6 +353,36 @@ func (ns *Noise) DecryptUnsafe(ciphertext []byte) ([]byte, error) {
 	}
 	ns.decNonce = recvSeq
 	return ns.dec.Cipher().Decrypt(nil, recvSeq, nil, ciphertext[nonceSize:])
+}
+
+// SealWithNonce encrypts plaintext under the transport-phase cipher using an
+// EXPLICIT nonce supplied by the caller, and does NOT touch the internal
+// encNonce counter. This is the per-frame AEAD primitive for the mux inverse-
+// multiplexer: each mux DATA frame is sealed with its own stream sequence number
+// as the nonce, so frames can be decrypted INDEPENDENTLY and OUT OF ORDER (no
+// stateful cipher to desync). The caller MUST guarantee nonce uniqueness per key
+// — the mux sequence is assigned exactly once per frame, so it is unique by
+// construction. The 8-byte nonce is NOT prepended (unlike EncryptUnsafe): it is
+// carried in the mux packet's own sequence field. Returns nil if the handshake
+// has not produced a transport cipher yet.
+func (ns *Noise) SealWithNonce(nonce uint64, plaintext []byte) []byte {
+	if ns.enc == nil {
+		return nil
+	}
+	return ns.enc.Cipher().Encrypt(nil, nonce, nil, plaintext)
+}
+
+// OpenWithNonce decrypts a frame sealed by SealWithNonce, using the EXPLICIT
+// nonce (the frame's stream sequence). It does NOT touch decNonce and imposes no
+// ordering requirement, so out-of-order arrival across mux legs is fine. Replay
+// is handled one layer up by the reorder buffer (a sequence at or below the
+// delivered frontier is dropped). Returns an error if the handshake has not
+// produced a transport cipher yet or the tag fails to verify.
+func (ns *Noise) OpenWithNonce(nonce uint64, ciphertext []byte) ([]byte, error) {
+	if ns.dec == nil {
+		return nil, ErrInvalidCipherText
+	}
+	return ns.dec.Cipher().Decrypt(nil, nonce, nil, ciphertext)
 }
 
 // NonceMap is a map of used nonces.

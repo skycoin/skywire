@@ -60,6 +60,23 @@ type LegInfo struct {
 	LatencyMs   int
 	Alive       bool
 	Standby     bool
+	// Direct is true when this leg is the DIRECT (forward-only) leg of a
+	// UNIDIRECTIONAL route group — its transport goes straight to a route-group
+	// endpoint (1 hop) and it carries only the forward/upload direction, not the
+	// reverse/download. The adaptive tick keeps it OUT of the reverse-active
+	// budget so a download always maintains its own active reverse legs. Always
+	// false for a non-directional (symmetric) group, where every leg carries both
+	// directions.
+	Direct bool
+	// Flipped is the route group's current unidirectional flip state (the same
+	// value on every leg of a group). "Reverse/download" is not an intrinsic leg
+	// property — it is the current SEND-SIDE direction assignment, which the flip
+	// controller can swap. A leg carries the DOWNLOAD direction when
+	// Direct == Flipped: unflipped (default) the download rides the MULTIHOP legs
+	// (!Direct); flipped it rides the DIRECT leg. The adaptive tick maintains its
+	// active-download floor on the download-direction class, whichever way the
+	// flip currently sits. Always false for a non-directional group.
+	Flipped     bool
 	SentBytes   uint64
 	RecvBytes   uint64
 	Retransmits uint64
@@ -92,6 +109,11 @@ type RotationAction struct {
 	ExcludeHops        []string
 	DemoteToStandby    []int
 	PromoteFromStandby []int
+	// AddForwardLeg requests one more FORWARD-ONLY aux leg (the router appends
+	// it addFwd=true / addRev=false) — extra upstream send capacity that does
+	// NOT enlarge the reverse/download set. The adaptive preset emits this on
+	// sustained upload saturation, the forward-direction mirror of AddLeg.
+	AddForwardLeg bool
 }
 
 // Decide dispatches to the named preset's decide logic. The name
@@ -108,6 +130,8 @@ func Decide(name string, ctx Context, cands []Candidate) Spec {
 		return decideElasticMux(ctx)
 	case "probe-and-prune":
 		return decideProbeAndPrune(ctx)
+	case "coupled":
+		return decideCoupled(ctx)
 	case "adaptive":
 		return decideAdaptive(ctx, cands)
 	case "app-mux":
@@ -120,6 +144,8 @@ func Decide(name string, ctx Context, cands []Candidate) Spec {
 		return decideTrustTiered(ctx, cands)
 	case "time-of-day":
 		return decideTimeOfDay(ctx)
+	case "ledbat":
+		return decideLedbat(ctx)
 	default:
 		return decideAppMux(ctx)
 	}
@@ -232,6 +258,36 @@ func decideProbeAndPrune(ctx Context) Spec {
 	return Spec{}
 }
 
+// decideCoupled is the EXPERIMENTAL "coupled" preset's decide logic — a
+// multipath policy inspired by MPTCP's coupled congestion control (LIA/OLIA).
+// It provisions a modest symmetric mux (coupledMux legs) over the multi-hop
+// overlay and asks the host to weight bytes toward the best legs (Distribution
+// "auto" = inverse-latency), NOT spread them equally across a lossy path. The
+// on_tick controller (tickCoupled) then "couples" the aggregate: it grows the
+// active set CAUTIOUSLY — at most one promote per tick, and only when NO active
+// leg shows rising loss (LIA's coupled increase) — and sheds the WORST leg
+// (highest loss, latency-tiebroken) the moment congestion appears, so total
+// aggressiveness stays bounded and traffic concentrates on the good legs.
+// Latency-sensitive chat stays a single lean route; non-target apps inherit the
+// visor default.
+func decideCoupled(ctx Context) Spec {
+	switch ctx.App {
+	case "skychat", "skychat-client":
+		return Spec{Mux: 1}
+	case "vpn-client", "skysocks-client", "skynet-client":
+		return Spec{
+			Mux:                     coupledMux,
+			MinHops:                 2,
+			RotationIntervalSeconds: 20,
+			// Weight bytes toward the lowest-latency/lowest-loss legs (the
+			// "coupled" bias) rather than round-robin's equal spread across a
+			// congested leg.
+			Distribution: "auto",
+		}
+	}
+	return Spec{}
+}
+
 // decideAdaptive is the COMPOSITE "adaptive" preset's decide logic — the
 // intended converged default (the config generator wires "preset:adaptive").
 //
@@ -245,19 +301,29 @@ func decideProbeAndPrune(ctx Context) Spec {
 // session ("g8", …) is covered too — the reason the old three-name switch made
 // the policy a silent no-op for renamed sessions.
 //
-// Shape — ASYMMETRIC forward/reverse with a proactively-held warm standby pool:
-//   - ForwardMux=1: a single lean forward leg. The upstream / request path is
-//     latency-sensitive and pays no mux head-of-line cost.
-//   - ReverseMux=adaptRevActive+adaptStandbyMax: the reverse (download) leg pool
-//     the router establishes up front. tickAdaptive keeps the STEADY active
-//     width at adaptRevActive (=1) — so an interactive / idle flow rides ONE
-//     healthy leg and is never scattered+reordered across a wide mux — and parks
-//     the rest (adaptStandbyMax legs) as an always-on warm-standby reserve. The
-//     reverse mux WIDENS only under SUSTAINED bulk load (promoting warm spares,
-//     dip-free) and shrinks back when the load ends. tickAdaptive also keeps
-//     gross-latency-outlier / dead legs OUT of the active set and rate-limits
-//     reshapes (hysteresis + cooldown) so the active set stays stable under real
-//     long-lived connections.
+// Shape — SYMMETRIC BIDIRECTIONAL setup, asymmetric USAGE (a send-side decision):
+//   - Mux=adaptRevActive+adaptStandbyMax: every leg is established FULL-DUPLEX
+//     (forward AND reverse rules), so every leg enters the route group's tps[]
+//     and is visible to both tickAdaptive and the disjoint-exclude set. This
+//     replaced the old ForwardMux=1 / ReverseMux=N asymmetry, whose reverse-only
+//     legs (addFwd=false) never entered tps: intermediatesOfRouteGroup (which
+//     derives the exclude set from tps) could not see their intermediates, so
+//     the next aux leg reused one and the destination refused the duplicate
+//     exit-facing transport (failure code 1) — the standby pool never filled and
+//     the group collapsed to LEGS 1. Reverse-only legs were also invisible to
+//     tickAdaptive, so its whole park/promote machine was inert. Full-duplex
+//     setup fixes both.
+//   - The forward-lean / reverse-wide asymmetry is now applied at SEND time, not
+//     baked into the rule setup: tickAdaptive keeps the STEADY active width at 1
+//     (parking the rest as an always-on full-duplex warm-standby reserve), so an
+//     interactive / idle flow rides ONE healthy leg and pays no mux head-of-line
+//     cost. The active set WIDENS only under SUSTAINED bulk load (promoting warm
+//     spares, dip-free) and shrinks back when load ends. Because the standby legs
+//     are full-duplex, that widening is available in EITHER direction and can
+//     flip on demand (upload-saturation grows the forward width via rule 4b)
+//     WITHOUT a rule rebuild. tickAdaptive also keeps gross-latency-outlier /
+//     dead legs OUT of the active set and rate-limits reshapes (hysteresis +
+//     cooldown) so the active set stays stable under real long-lived connections.
 //
 // No MinHops here on purpose: min-hops is a privacy constraint the operator
 // owns; leaving it 0 means "inherit" so adaptive optimizes within the
@@ -277,16 +343,30 @@ func decideProbeAndPrune(ctx Context) Spec {
 // path leaves Kind ""), Chosen stays nil and the router picks the path exactly
 // as before — so this can never break the wasm or no-provider path.
 func decideAdaptive(ctx Context, cands []Candidate) Spec {
+	// Per-policy / config surface: apply any adaptive-width tunables carried in
+	// cli_overrides ("adapt_cap" / "adapt_rev_active" / "adapt_standby_max") to
+	// the runtime atomics before sizing, so an operator can set different widths
+	// per routing policy without recompiling — the same knobs the mux-control RPC
+	// drives (see ApplyOverrideTunables). Read exactly like the other presets'
+	// cli_overrides (geo-avoid's avoid_geo, trust-tiered's trusted_pks).
+	ApplyOverrideTunables(ctx.CLIOverrides)
 	switch ctx.App {
 	case "skychat", "skychat-client":
 		// Latency-sensitive chat: single lean route, lowest mux.
 		return Spec{Mux: 1}
 	}
 	spec := Spec{
-		ForwardMux:              adaptFwdActive,
-		ReverseMux:              adaptRevActive + adaptStandbyMax,
+		// Symmetric Mux => establishMuxRoutes builds every leg FULL-DUPLEX
+		// (fwdCount == revCount). See the Shape note above for why bidirectional
+		// setup replaced the old ForwardMux=1 / ReverseMux=N asymmetry.
+		Mux:                     AdaptRevActive() + AdaptStandbyMax(),
 		RotationIntervalSeconds: 20,
-		Distribution:            "auto",
+		// Goodput-weighted thin spread: each active leg's share tracks its
+		// recently-measured throughput, with a cold-leg floor so a fresh leg
+		// ramps in (see rebuildWeights). Live-tunable to auto/equal via the
+		// mux-control RPC. This is the aggregation default — a slow leg carries
+		// little and can't stall the reorder frontier.
+		Distribution: "capacity",
 	}
 	if anyKnownTransportKind(cands) {
 		spec.Chosen = mostTransportDiverse(cands)
@@ -328,6 +408,36 @@ func mostTransportDiverse(cands []Candidate) *Candidate {
 		}
 	}
 	return best
+}
+
+// ledbatMux is the small symmetric mux the ledbat preset provisions and the
+// hard CAP its on_tick controller may grow the active set back up to. It is
+// deliberately lean: ledbat is a background / scavenger policy, so it holds few
+// legs and yields (shrinks toward one) the moment it detects it is queuing.
+const ledbatMux = 3
+
+// decideLedbat is the EXPERIMENTAL ledbat preset's decide logic — a delay-based,
+// background/scavenger multipath policy inspired by LEDBAT congestion control
+// (RFC 6817). It provisions a small symmetric mux (ledbatMux legs) over
+// multi-hop with "auto" (latency-weighted) byte distribution, re-evaluated every
+// 20s so on_tick can shrink or grow the active set from the measured queuing
+// delay. Latency-sensitive chat stays a single lean route (same idiom as the
+// other presets). The scavenger behavior itself lives in tickLedbat: it starts
+// at the small provisioned width and BACKS OFF toward a single leg whenever a
+// leg's smoothed delay rises meaningfully above its own base (min) delay —
+// yielding capacity to other traffic — and grows back up to ledbatMux only while
+// every active leg reads near its base (no self-induced queuing).
+func decideLedbat(ctx Context) Spec {
+	switch ctx.App {
+	case "skychat", "skychat-client":
+		return Spec{Mux: 1}
+	}
+	return Spec{
+		Mux:                     ledbatMux,
+		MinHops:                 2,
+		RotationIntervalSeconds: 20,
+		Distribution:            "auto",
+	}
 }
 
 // --- conditional presets: constrain WHICH path is chosen, by route metadata ---

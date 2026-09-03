@@ -89,6 +89,12 @@ func (v *Visor) Overview() (*Overview, error) {
 		overview.Latitude = v.geo.data.Latitude
 		overview.Longitude = v.geo.data.Longitude
 	}
+	// Prefer the dmsg-observed public IP over STUN's answer: it needs no UDP,
+	// so it is present where STUN can only report failure (a browser visor,
+	// or any UDP-blocked network) — and when both exist they agree anyway.
+	if v.geo.publicIP != "" {
+		overview.PublicIP = v.geo.publicIP
+	}
 	v.geo.mu.RUnlock()
 
 	localIPs, err := netutil.DefaultNetworkInterfaceIPs()
@@ -114,7 +120,11 @@ func (v *Visor) Overview() (*Overview, error) {
 	// Overview. The hvui consumes this for the operator-friendly
 	// label default + per-node info row; CLI surfaces it in the
 	// `cli visor info` Hypervisor section.
-	if h, err := os.Hostname(); err == nil {
+	// Under js/wasm os.Hostname "succeeds" with the junk value "js"
+	// (the runtime's fake uname nodename) — no real hostname exists in a
+	// tab. Suppress it so the UI's label default falls through to the
+	// public IP instead of every browser visor being labeled "js".
+	if h, err := os.Hostname(); err == nil && runtime.GOOS != "js" {
 		overview.Hostname = h
 	}
 

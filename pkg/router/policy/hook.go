@@ -373,6 +373,8 @@ func (h *Hook) OnTick(info router.DialInfo, legs []router.LegInfo) router.Rotati
 			LatencyMs:   l.LatencyMs,
 			Alive:       l.Alive,
 			Standby:     l.Standby,
+			Direct:      l.Direct,
+			Flipped:     l.Flipped,
 			SentBytes:   l.SentBytes,
 			RecvBytes:   l.RecvBytes,
 			Retransmits: l.Retransmits,
@@ -395,7 +397,30 @@ func (h *Hook) OnTick(info router.DialInfo, legs []router.LegInfo) router.Rotati
 		ExcludeHops:        append([]string(nil), action.ExcludeHops...),
 		DemoteToStandby:    append([]int(nil), action.DemoteToStandby...),
 		PromoteFromStandby: append([]int(nil), action.PromoteFromStandby...),
+		AddForwardLeg:      action.AddForwardLeg,
 	}
+}
+
+// SelfHealTarget implements the optional router.SelfHealTargeter by delegating
+// to the default engine when it exposes a live self-heal degree. The adaptive
+// wasm preset does (its pool size = AdaptRevActive()+AdaptStandbyMax(), both
+// runtime-tunable over the mux-control RPC); every other engine returns
+// ok=false, leaving the route group's fixed dial-time target in place.
+//
+// Without this the production RotationHook (a *policy.Hook wrapping the wasm
+// Loader) did NOT satisfy router.SelfHealTargeter, so the route group's per-tick
+// re-cap was skipped on every preset:* visor and the self-heal kept storming
+// toward its dial-time degree (513) regardless of `cli proxy mux standby`.
+// presethook.Hook implemented this for the native path only.
+func (h *Hook) SelfHealTarget() (int, bool) {
+	loader := h.loaderFor("")
+	if loader == nil {
+		return 0, false
+	}
+	if st, ok := loader.(interface{ SelfHealTarget() (int, bool) }); ok {
+		return st.SelfHealTarget()
+	}
+	return 0, false
 }
 
 // OnLegChange implements router.LegChangeHook. Called by the
@@ -423,6 +448,8 @@ func (h *Hook) OnLegChange(info router.DialInfo, legs []router.LegInfo, change r
 			LatencyMs:   l.LatencyMs,
 			Alive:       l.Alive,
 			Standby:     l.Standby,
+			Direct:      l.Direct,
+			Flipped:     l.Flipped,
 			SentBytes:   l.SentBytes,
 			RecvBytes:   l.RecvBytes,
 			Retransmits: l.Retransmits,

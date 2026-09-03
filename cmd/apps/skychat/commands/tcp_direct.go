@@ -41,7 +41,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire/tcpnoise"
+	"github.com/skycoin/skywire/pkg/dmsg/tcpnoise"
 )
 
 // osGetenv exists only to make the resolveTCPIdentity test path

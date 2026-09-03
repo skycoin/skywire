@@ -15,11 +15,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/stats"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -70,18 +74,80 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 	// just don't get push updates. Publisher feed PK is the visor's
 	// own PK (one identity per node).
 	pub, sink := buildStatsPublisher(v, log)
+	var tplistPub *treestore.Publisher
 	if pub != nil {
-		if err := seedSinkFromStore(store, sink, publishWindow, log); err != nil {
+		// Only currently-live transports are packed into the telemetry
+		// feed's compact sharded leaves. bbolt retains records for
+		// recently-closed transports (local /stats history), but packing
+		// their stale telemetry would bloat the Root TPD fills over a short
+		// announce conn. Hydrate publishes ≤16 shard leaves from the live
+		// set and returns their signatures, which seed the tracker so the
+		// first sample tick doesn't redundantly re-Put identical shards.
+		liveIDs := liveTransportIDs(v)
+		shardSigs, err := seedSinkFromStore(store, sink, publishWindow, liveIDs, log)
+		if err != nil {
 			log.WithError(err).Warn("Stats: hydrating CXO publisher from bbolt failed")
 		}
-		tracker.SetSink(sink)
-		// Wire the same publisher into the transport manager so its
-		// register / deregister loops mirror the canonical entry +
-		// tombstone leaves to TPD's CXO aggregator (dual-write
-		// alongside the HTTP path during migration).
-		if v.tpM != nil {
-			v.tpM.SetTPDLeafPublisher(pub)
+		tracker.SeedPublishedShards(shardSigs)
+		// The publisher hydrates its in-memory tree from the previously-
+		// published Root on startup. On the FIRST run after upgrading from
+		// the per-transport `current`-leaf format, that Root still holds the
+		// legacy transports/<id>/current leaves (and possibly telemetry
+		// shards for transports now gone). Prune both so the telemetry feed
+		// carries only the freshly-hydrated live shards — the legacy leaves
+		// are never republished (the format is removed) and would otherwise
+		// linger, re-bloating the Root the shape was designed to shrink.
+		if pruned := pruneStaleTelemetryLeaves(pub, sink, liveIDs); pruned > 0 {
+			log.WithField("pruned", pruned).
+				Info("Stats: pruned stale/legacy telemetry leaves persisted on the feed")
 		}
+		tracker.SetSink(sink)
+
+		// Transport-list discovery leaf. CONSOLIDATED default: the tp-list
+		// snapshot rides THIS telemetry feed (`pub`) as a top-level leaf, so
+		// a visor holds ONE CXO node/conn to TPD, not two. TPD's aggregator
+		// extracts the small tp-list leaf via its targeted discovery-leaf
+		// fetch (reconcileTargeted, on every OnRootReceived) — reliable now
+		// that the sharded telemetry keeps the whole Root small (≈16 shard
+		// leaves + 1 tp-list leaf), the exact condition missing when the
+		// earlier consolidation (#4184) was reverted (#4189) over a bulky
+		// per-transport-leaf Root. This halves the visor↔TPD connection
+		// count (and the per-session dmsg handshakes) versus the two-feed
+		// model.
+		//
+		// Opt back into the dedicated port-69 feed with
+		// Stats.DedicatedTPListFeed=true (a SECOND CXO node under the same
+		// visor PK on DmsgVisorTPListCXOPort) — kept only as a transitional
+		// escape hatch in case a busy hub is ever seen under-filling on the
+		// combined feed.
+		if conf != nil && conf.DedicatedTPListFeed {
+			tplistPub = buildTPListPublisher(v, log)
+		}
+		leafPub := pub
+		if tplistPub != nil {
+			leafPub = tplistPub
+		}
+		// Wire the chosen publisher into the transport manager so its
+		// register / deregister loops mirror the tp-list snapshot leaf to
+		// TPD's CXO aggregator.
+		if v.tpM != nil {
+			v.tpM.SetTPDLeafPublisher(leafPub)
+		}
+		// Retain the telemetry publisher so `skywire cli visor state
+		// --jq '.cxo'` can read its live freeze/publish health. Retain
+		// the dedicated tp-list publisher the same way so it surfaces as
+		// a second .cxo entry (nil here = combined-feed fallback, no
+		// second entry).
+		v.setSystemCXOPub(pub)
+		v.setTPListCXOPub(tplistPub)
+
+		// Register both feeds so their subscriber allowlists are recomputed
+		// and re-applied when the peer whitelist changes at runtime (a
+		// connected hypervisor pushing its own hypervisors). Their initial
+		// allowlists are already set at construction via PubConfig above.
+		tpdPK, tpdOK := tpdCXOPeer(v)
+		v.registerGatedCXOFeed(pub, tpdPK, tpdOK)
+		v.registerGatedCXOFeed(tplistPub, tpdPK, tpdOK)
 	}
 
 	tracker.Run(v.ctx)
@@ -90,6 +156,11 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 		err := tracker.Close()
 		if pub != nil {
 			if perr := pub.Close(); perr != nil && err == nil {
+				err = perr
+			}
+		}
+		if tplistPub != nil {
+			if perr := tplistPub.Close(); perr != nil && err == nil {
 				err = perr
 			}
 		}
@@ -117,6 +188,12 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 	if pub != nil {
 		if tpdPK, ok := tpdCXOPeer(v); ok {
 			go runAnnounceLoop(v.ctx, pub, tpdPK, log)
+			// Announce the dedicated tp-list feed to TPD too, on its own
+			// port (DmsgVisorTPListCXOPort) — this is the conn TPD's second
+			// aggregator accepts and fills the tiny discovery Root over.
+			if tplistPub != nil {
+				go runAnnounceLoop(v.ctx, tplistPub, tpdPK, log)
+			}
 		} else {
 			log.Debug("Stats: no Transport.DiscoveryDmsg PK; skipping CXO announce loop")
 		}
@@ -197,6 +274,12 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 		return nil, nil
 	}
 	dataDir := filepath.Join(v.conf.LocalPath, "cxo-stats")
+	// Gate the feed: only the peer whitelist (hypervisors + dmsgpty
+	// whitelist + own PK) plus the consuming TPD may subscribe. TPD MUST
+	// be allowed or the announce-conn subscribe is rejected (the hook
+	// keys off the connecting PeerID). nil = OPEN when nothing is known.
+	tpdPK, tpdOK := tpdCXOPeer(v)
+	allow := composeFeedAllowlist(v, tpdPK, tpdOK)
 	// BatchWindow of 10s coalesces stat mutations into ~6 bbolt
 	// commits per minute on this publisher (one per window),
 	// down from ~60 with the previous 1s setting. Stats are sampled
@@ -206,9 +289,10 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 	// datastore by an order of magnitude — meaningful for visors
 	// running on microSD or other write-sensitive media.
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
-		BatchWindow: 10 * time.Second,
-		Logger:      log,
-		DataDir:     dataDir,
+		BatchWindow:         10 * time.Second,
+		Logger:              log,
+		DataDir:             dataDir,
+		SubscriberAllowlist: allow,
 		// Stats CXDS is content-addressed cache; the in-memory tree
 		// (regenerated from stats.db on each restart) authoritatively
 		// owns the value set. Skipping per-tx fdatasync removes the
@@ -224,17 +308,172 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 	return pub, &cxoSink{pub: pub, log: log}
 }
 
-// seedSinkFromStore copies the in-window slice of bbolt state into
-// the freshly-initialized publisher so cold subscribers see the full
-// rolling window from the first connect, not just data sampled after
-// the visor restarted.
-func seedSinkFromStore(store *stats.Store, sink stats.Sink, publishWindowDays int, log *logging.Logger) error {
-	pushed, err := stats.HydrateSink(store, sink, publishWindowDays, time.Now())
-	if err != nil {
-		return err
+// buildTPListPublisher constructs the visor's DEDICATED transport-list
+// (tp-list) discovery feed: a second CXO node, under the SAME identity
+// keypair as the telemetry publisher (so TPD's reporter=feed-PK edge-auth
+// is unchanged), listening on skyenv.DmsgVisorTPListCXOPort. It carries
+// ONLY the compact tp-list snapshot leaf, so its Root stays a handful of
+// objects and TPD's second aggregator fills it completely in ~1 round-trip
+// — the fix for the busy-hub under-report. Returns nil (and the caller
+// falls back to publishing the tp-list on the telemetry feed) when DMSG
+// isn't available or the publisher fails to start.
+func buildTPListPublisher(v *Visor, log *logging.Logger) *treestore.Publisher {
+	if v.dmsgC == nil {
+		return nil
 	}
-	log.WithField("paths", pushed).Debug("Stats: hydrated CXO publisher from bbolt")
-	return nil
+	dataDir := filepath.Join(v.conf.LocalPath, "cxo-tplist")
+	// Same gate as the telemetry feed: peer whitelist ∪ consuming TPD.
+	tpdPK, tpdOK := tpdCXOPeer(v)
+	allow := composeFeedAllowlist(v, tpdPK, tpdOK)
+	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
+		// The tp-list changes only on transport churn; a short window keeps
+		// discovery prompt. Each republish is a single small leaf, so the
+		// fill/eviction churn that plagues the big telemetry Root does not
+		// apply here.
+		BatchWindow:         2 * time.Second,
+		Logger:              log,
+		DataDir:             dataDir,
+		DmsgPort:            skyenv.DmsgVisorTPListCXOPort,
+		SubscriberAllowlist: allow,
+		// Content-addressed, rebuilt from the transport manager's live set
+		// on every publishTPDList — safe to skip per-tx fdatasync.
+		NoSyncCXDS: true,
+	})
+	if err != nil {
+		log.WithError(err).Warn("Stats: dedicated tp-list CXO publisher init failed; " +
+			"falling back to the combined telemetry feed for discovery")
+		return nil
+	}
+	log.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgVisorTPListCXOPort).
+		WithField("data_dir", dataDir).Info("Stats: dedicated tp-list CXO publisher running")
+	return pub
+}
+
+// seedSinkFromStore copies the in-window live-transport telemetry from
+// bbolt into the freshly-initialized publisher (as ≤16 compact sharded
+// leaves) so cold subscribers see current telemetry from the first
+// connect, not just data sampled after the visor restarted. Only
+// transports in liveIDs are packed (dead-but-retained records stay
+// bbolt-only). Returns the per-shard signatures pushed, for seeding the
+// tracker's change-gate.
+func seedSinkFromStore(store *stats.Store, sink stats.Sink, publishWindowDays int, liveIDs map[uuid.UUID]struct{}, log *logging.Logger) (map[uint8][32]byte, error) {
+	isLive := func(id uuid.UUID) bool {
+		_, ok := liveIDs[id]
+		return ok
+	}
+	sigs, err := stats.HydrateSink(store, sink, publishWindowDays, time.Now(), isLive)
+	if err != nil {
+		return nil, err
+	}
+	log.WithField("shard_leaves", len(sigs)).Debug("Stats: hydrated CXO publisher from bbolt")
+	return sigs, nil
+}
+
+// liveTransportIDs snapshots the IDs of the visor's currently-live
+// (non-closed) transports. Mirrors the IsClosed() filter in
+// transportsProbe / countLiveTransports — this is the set whose
+// `current` telemetry leaf is eligible for the CXO/TPD discovery feed.
+func liveTransportIDs(v *Visor) map[uuid.UUID]struct{} {
+	out := make(map[uuid.UUID]struct{})
+	if v.tpM == nil {
+		return out
+	}
+	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if !tp.IsClosed() {
+			out[tp.Entry.ID] = struct{}{}
+		}
+		return true
+	})
+	return out
+}
+
+// currentLeafUUID parses a telemetry-feed leaf path of the form
+// "transports/<uuid>/current" and returns the transport UUID. ok is
+// false for any path that isn't a well-formed current-snapshot leaf.
+func currentLeafUUID(path string) (uuid.UUID, bool) {
+	segs := strings.Split(path, "/")
+	if len(segs) != 3 || segs[0] != "transports" || segs[2] != "current" {
+		return uuid.UUID{}, false
+	}
+	id, err := uuid.Parse(segs[1])
+	if err != nil {
+		return uuid.UUID{}, false
+	}
+	return id, true
+}
+
+// telemetryShardOfPath parses a "transports/telemetry/<sh>" leaf path
+// and returns the shard number. ok is false for any other path. Mirrors
+// telemetrywire.LeafPath's lowercase 2-hex encoding.
+func telemetryShardOfPath(path string) (uint8, bool) {
+	const prefix = "transports/telemetry/"
+	if !strings.HasPrefix(path, prefix) {
+		return 0, false
+	}
+	rest := path[len(prefix):]
+	if len(rest) != 2 {
+		return 0, false
+	}
+	var sh uint8
+	for _, c := range []byte(rest) {
+		var d uint8
+		switch {
+		case c >= '0' && c <= '9':
+			d = c - '0'
+		case c >= 'a' && c <= 'f':
+			d = c - 'a' + 10
+		default:
+			return 0, false
+		}
+		sh = sh<<4 | d
+	}
+	if sh >= telemetrywire.ShardCount {
+		return 0, false
+	}
+	return sh, true
+}
+
+// pruneStaleTelemetryLeaves makes the telemetry feed carry only the
+// freshly-hydrated live shards at startup. It walks the publisher's
+// existing "transports" subtree — including anything hydrated from the
+// previously-published Root — and sink-deletes:
+//
+//   - every LEGACY transports/<uuid>/current leaf (the pre-shard format,
+//     which the visor no longer republishes — left in place it would
+//     re-bloat the Root the sharded shape exists to shrink), and
+//   - every transports/telemetry/<sh> shard leaf whose shard has NO live
+//     transport now (so a shard that emptied while the visor was down
+//     doesn't linger).
+//
+// Returns the number pruned. Deletes are collected during the walk and
+// issued after it returns: Publisher.Walk holds the publisher mutex
+// across the visitor and sink.Delete re-enters that mutex through the
+// cxoSink, so deleting inline would deadlock.
+func pruneStaleTelemetryLeaves(pub *treestore.Publisher, sink stats.Sink, liveIDs map[uuid.UUID]struct{}) int {
+	if pub == nil || sink == nil {
+		return 0
+	}
+	liveShards := make(map[uint8]struct{})
+	for id := range liveIDs {
+		liveShards[telemetrywire.ShardOf(id)] = struct{}{}
+	}
+	var stale []string
+	pub.Walk("transports", func(path string, _ []byte) bool {
+		if _, ok := currentLeafUUID(path); ok {
+			stale = append(stale, path) // legacy per-transport current leaf
+			return true
+		}
+		if sh, ok := telemetryShardOfPath(path); ok {
+			if _, live := liveShards[sh]; !live {
+				stale = append(stale, path)
+			}
+		}
+		return true
+	})
+	for _, path := range stale {
+		sink.Delete(path)
+	}
+	return len(stale)
 }
 
 // cxoSink adapts a treestore.Publisher to the stats.Sink contract.
@@ -362,13 +601,14 @@ func transportsProbe(v *Visor) func() []stats.TransportProbe {
 			bw := tp.GetBandwidth()
 			lat := tp.GetLatencyStats()
 			out = append(out, stats.TransportProbe{
-				ID:        tp.Entry.ID,
-				Edges:     []cipher.PubKey{tp.Entry.Edges[0], tp.Entry.Edges[1]},
-				Type:      string(tp.Entry.Type),
-				Label:     string(tp.Entry.Label),
-				SentBytes: bw.SentBytes,
-				RecvBytes: bw.RecvBytes,
-				LatencyMS: stats.LatencyTriple{Min: lat.Min, Max: lat.Max, Avg: lat.Avg},
+				ID:            tp.Entry.ID,
+				Edges:         []cipher.PubKey{tp.Entry.Edges[0], tp.Entry.Edges[1]},
+				Type:          string(tp.Entry.Type),
+				Label:         string(tp.Entry.Label),
+				SentBytes:     bw.SentBytes,
+				RecvBytes:     bw.RecvBytes,
+				ThroughputBps: tp.GetThroughputBps(),
+				LatencyMS:     stats.LatencyTriple{Min: lat.Min, Max: lat.Max, Avg: lat.Avg},
 			})
 			return true
 		})

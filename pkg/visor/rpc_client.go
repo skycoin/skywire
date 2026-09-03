@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/rpc"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,6 +40,35 @@ var (
 	ErrTimeout = errors.New("rpc client timeout")
 )
 
+// closeOnConsecTimeouts is how many CONSECUTIVE per-call deadline
+// expiries (with no completed call in between) it takes before Call
+// gives up on the underlying conn and closes it.
+//
+// Why not close on the first timeout (the old behavior): the
+// hypervisor holds ONE persistent RPC conn per remote visor, shared
+// by the 30s background summary poll, `hv ls` listings, the
+// sub-hypervisor tree probes, and pty/proxy control. Under load — a
+// fleet-wide update ripple, or the re-registration stampede after
+// the hypervisor itself restarts — a Summary reply (which carries
+// every transport summary, easily 100+ entries) can take longer than
+// the 20s call deadline while the conn is perfectly alive. Closing
+// the conn on that single slow call permanently shuts down the
+// net/rpc client ("connection is shut down" on every later call) and
+// the row stays dead until the remote notices the close — up to its
+// 90s idle timeout when close propagation is unreliable (skynet
+// conns) — and redials. Each listing/poll round then re-kills the
+// freshly re-registered conn, so operators saw half the fleet
+// flapping "connection is shut down (cached Ns ago)" for as long as
+// the congestion lasted.
+//
+// Three consecutive timeouts (~60s of nothing completing at the
+// default 20s deadline) still recovers a genuinely blackholed conn
+// on roughly the same timescale as the remote's own 90s idle-redial,
+// without nuking merely-slow conns. Any completed call — success OR
+// a server-side error reply, both prove the conn round-trips —
+// resets the count.
+const closeOnConsecTimeouts = 3
+
 // API provides methods to call an RPC Server.
 // It implements API
 type rpcClient struct {
@@ -48,6 +78,10 @@ type rpcClient struct {
 	client  *rpc.Client
 	prefix  string
 	FixGob  bool
+
+	// consecTimeouts counts per-call deadline expiries since the last
+	// completed call. See closeOnConsecTimeouts.
+	consecTimeouts atomic.Int32
 
 	// proxyTarget, when non-nil, rewrites every Call so the request
 	// goes to the LOCAL visor's TransportRPCCall method (over the
@@ -150,12 +184,46 @@ func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 
 	select {
 	case call := <-rc.client.Go(rc.prefix+"."+method, args, reply, nil).Done:
+		rc.noteCallCompleted(call.Error)
 		return call.Error
 	case <-ctx.Done():
-		if err := rc.conn.Close(); err != nil {
-			rc.log.WithError(err).Warn("Failed to close rpc client after timeout error.")
-		}
+		rc.noteCallTimeout()
 		return ctx.Err()
+	}
+}
+
+// noteCallCompleted resets the consecutive-timeout count when a call
+// actually round-tripped the conn: err == nil, or a server-side error
+// reply (rpc.ServerError) — the server answering proves the conn is
+// alive. Transport-level failures (rpc.ErrShutdown, io errors) prove
+// nothing and leave the count alone.
+func (rc *rpcClient) noteCallCompleted(err error) {
+	if err == nil {
+		rc.consecTimeouts.Store(0)
+		return
+	}
+	var srvErr rpc.ServerError
+	if errors.As(err, &srvErr) {
+		rc.consecTimeouts.Store(0)
+	}
+}
+
+// noteCallTimeout records a per-call deadline expiry, closing the
+// underlying conn once closeOnConsecTimeouts have accumulated with no
+// completed call in between. Closing shuts down the net/rpc client
+// (pending and future calls fail fast) and, where close propagation
+// works, prompts the peer's serve loop to redial.
+func (rc *rpcClient) noteCallTimeout() {
+	n := rc.consecTimeouts.Add(1)
+	if int(n) < closeOnConsecTimeouts {
+		rc.log.WithField("consecutive_timeouts", n).
+			Debug("RPC call timed out; keeping conn (not yet at close threshold).")
+		return
+	}
+	rc.log.WithField("consecutive_timeouts", n).
+		Warn("Closing rpc conn after consecutive call timeouts.")
+	if err := rc.conn.Close(); err != nil {
+		rc.log.WithError(err).Warn("Failed to close rpc client after timeout error.")
 	}
 }
 
@@ -196,13 +264,12 @@ func (rc *rpcClient) callViaProxy(method string, args, reply interface{}) error 
 	var resultBytes json.RawMessage
 	select {
 	case call := <-rc.client.Go(rc.prefix+".TransportRPCCall", req, &resultBytes, nil).Done:
+		rc.noteCallCompleted(call.Error)
 		if call.Error != nil {
 			return call.Error
 		}
 	case <-ctx.Done():
-		if err := rc.conn.Close(); err != nil {
-			rc.log.WithError(err).Warn("Failed to close rpc client after proxy timeout.")
-		}
+		rc.noteCallTimeout()
 		return ctx.Err()
 	}
 
@@ -228,6 +295,14 @@ func (rc *rpcClient) Summary() (*Summary, error) {
 func (rc *rpcClient) StateSnapshot() (*StateSnapshot, error) {
 	out := new(StateSnapshot)
 	err := rc.Call("StateSnapshot", &struct{}{}, out)
+	return out, err
+}
+
+// StateSnapshotProjected calls StateSnapshotProjected with the requested subtree
+// keys, so the server builds only those sections.
+func (rc *rpcClient) StateSnapshotProjected(fields []string) (*StateSnapshot, error) {
+	out := new(StateSnapshot)
+	err := rc.Call("StateSnapshotProjected", &StateSnapshotReq{Fields: fields}, out)
 	return out, err
 }
 
@@ -607,6 +682,21 @@ func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, e
 	return res, nil
 }
 
+// RecentAppLog calls RecentAppLog.
+func (rc *rpcClient) RecentAppLog(appName, level string) ([]string, error) {
+	res := make([]string, 0)
+
+	err := rc.Call("RecentAppLog", &RecentAppLogRequest{
+		AppName: appName,
+		Level:   level,
+	}, &res)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
 func (rc *rpcClient) GetAppStats(appName string) (appserver.AppStats, error) {
 	var stats appserver.AppStats
 
@@ -825,6 +915,21 @@ func (rc *rpcClient) SetMuxMode(mode string) error {
 	return rc.Call("SetMuxMode", &mode, &struct{}{})
 }
 
+// SetMuxCap sets the adaptive mux active-width ceiling at runtime.
+func (rc *rpcClient) SetMuxCap(n int) error {
+	return rc.Call("SetMuxCap", &n, &struct{}{})
+}
+
+// SetMuxWidth sets the adaptive mux steady active download width at runtime.
+func (rc *rpcClient) SetMuxWidth(n int) error {
+	return rc.Call("SetMuxWidth", &n, &struct{}{})
+}
+
+// SetMuxStandby sets the adaptive mux warm-standby reserve pool size at runtime.
+func (rc *rpcClient) SetMuxStandby(n int) error {
+	return rc.Call("SetMuxStandby", &n, &struct{}{})
+}
+
 // GetRouterSettings returns the unified runtime router knobs.
 func (rc *rpcClient) GetRouterSettings() (RouterSettings, error) {
 	var out RouterSettings
@@ -861,6 +966,13 @@ func (rc *rpcClient) GrowMuxRoute(appName string, target, minHops int, srcPort u
 // srcPort disambiguates as in AddMuxRoute.
 func (rc *rpcClient) RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error {
 	return rc.Call("RemoveMuxRoute", &MuxRouteInput{AppName: appName, TransportID: tpID, SrcPort: srcPort}, &struct{}{})
+}
+
+// SetMuxDirection pins ("default"/"flipped") or releases ("auto") the
+// unidirectional direction→leg-class mapping on all of the app's active
+// directional route groups.
+func (rc *rpcClient) SetMuxDirection(appName, mode string) error {
+	return rc.Call("SetMuxDirection", &MuxDirectionInput{AppName: appName, Mode: mode}, &struct{}{})
 }
 
 // ActiveRoutes returns all active routes with app associations and live stats.

@@ -63,6 +63,21 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 		case "/browse.js":
 			serveJS(w, browseui.BrowseJS)
 			return
+		case "/vnet-sw.js":
+			// bottle's vnet service worker: pages that run in-page servers
+			// (a wasm visor in a tab) register it to give their nested
+			// browser real /vnet/<port>/ URLs. Same asset on every desk-ish
+			// origin, so a page served by the native HV behaves like one
+			// served by `hv serve`.
+			serveJS(w, browseui.VNetSWJS())
+			return
+		case "/winbox.wasm":
+			// The window manager the browse bundle loads. instantiateStreaming
+			// refuses a module that does not arrive as application/wasm.
+			w.Header().Set("Content-Type", "application/wasm")
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = w.Write(browseui.WinBoxWasm()) //nolint:errcheck
+			return
 		case "/skywire-browse-launcher.js":
 			serveJS(w, []byte(nativeBrowseLauncherJS))
 			return
@@ -192,7 +207,7 @@ const uiAutoReloadJS = `(function(){
 // "skynet" button. Authenticated via the dashboard session cookie.
 const nativeBrowseLauncherJS = `(function () {
   function ready() {
-    if (!self.SkywireBrowse || !self.SkywireBrowse.mountPanel || !document.body) { return setTimeout(ready, 200); }
+    if (!self.SkywireBrowse || !self.SkywireBrowse.mountPanel || !document.body || typeof self.WinBox !== "function") { return setTimeout(ready, 200); }
     var localPK = window.__SKYWIRE_LOCAL_PK__ || "";
     function b64e(s) { try { return btoa(unescape(encodeURIComponent(s))); } catch (e) { return btoa(s); } }
     function adapt(j) {

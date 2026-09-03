@@ -26,18 +26,31 @@ var (
 	rewardDays int
 	rewardPK   string
 	rewardAll  bool
-	rewardJSON bool
 )
+
+// rewardHistory is the reward-system response for one visor: the daily
+// payout history the command renders. Promoted from an anonymous struct
+// so --json / --jq / --shape can route through the shared output layer.
+type rewardHistory struct {
+	PK      string             `json:"pk"`
+	Days    int                `json:"days"`
+	History []rewardHistoryDay `json:"history"`
+}
+
+// rewardHistoryDay is one day's payout row.
+type rewardHistoryDay struct {
+	Date   string  `json:"date"`
+	Amount float64 `json:"amount"`
+	Share  float64 `json:"share"`
+	Sent   bool    `json:"sent"`
+	Txid   string  `json:"txid,omitempty"`
+}
 
 var rewardCmd = &cobra.Command{
 	Use:   "reward",
 	Short: "Show reward history for a visor",
 	Long:  "Fetches reward history from the reward system via the visor's DMSG connection.",
 	Run: func(cmd *cobra.Command, args []string) {
-		// The persistent --json from RootCmd, not a second flag of our own:
-		// two variables for one concept meant the answer depended on where
-		// the user put the word.
-		rewardJSON = cliout.JSONMode(cmd)
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			logger.Fatal("RPC connection failed: ", err)
@@ -78,12 +91,12 @@ var rewardCmd = &cobra.Command{
 			if i > 0 {
 				fmt.Println()
 			}
-			fetchAndDisplayReward(rpcClient, rewardDmsg, pk)
+			fetchAndDisplayReward(cmd, rpcClient, rewardDmsg, pk)
 		}
 	},
 }
 
-func fetchAndDisplayReward(rpcClient visor.API, rewardDmsg, pk string) {
+func fetchAndDisplayReward(cmd *cobra.Command, rpcClient visor.API, rewardDmsg, pk string) {
 	url := fmt.Sprintf("%s/skycoin-rewards/visor/%s?days=%d", rewardDmsg, pk, rewardDays)
 
 	resp, err := rpcClient.DmsgHTTP(visor.DmsgHTTPRequest{
@@ -99,25 +112,26 @@ func fetchAndDisplayReward(rpcClient visor.API, rewardDmsg, pk string) {
 		return
 	}
 
-	if rewardJSON {
-		fmt.Println(string(resp.Body))
+	var result rewardHistory
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
+		// --json / --jq / --shape still get something structured: emit the
+		// raw body as a string value so the pipe stays parseable; the human
+		// path can't render an unparseable body, so report it.
+		if cliout.MachineMode(cmd) {
+			if pErr := cliout.Print(cmd, string(resp.Body)); pErr != nil {
+				logger.Fatal(pErr)
+			}
+			return
+		}
+		fmt.Fprintf(os.Stderr, "Failed to parse reward data for %s: %v\n", pk, err)
 		return
 	}
 
-	var result struct {
-		PK      string `json:"pk"`
-		Days    int    `json:"days"`
-		History []struct {
-			Date   string  `json:"date"`
-			Amount float64 `json:"amount"`
-			Share  float64 `json:"share"`
-			Sent   bool    `json:"sent"`
-			Txid   string  `json:"txid,omitempty"`
-		} `json:"history"`
-	}
-
-	if err := json.Unmarshal(resp.Body, &result); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse reward data for %s: %v\n", pk, err)
+	// --json / --jq / --shape route through the shared output layer.
+	if cliout.MachineMode(cmd) {
+		if err := cliout.Print(cmd, result); err != nil {
+			logger.Fatal(err)
+		}
 		return
 	}
 

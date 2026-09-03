@@ -15,11 +15,13 @@ func Names() []string {
 		"latency-adaptive",
 		"elastic-mux",
 		"probe-and-prune",
+		"coupled",
 		"adaptive",
 		"geo-avoid",
 		"transport-diverse",
 		"trust-tiered",
 		"time-of-day",
+		"ledbat",
 	}
 }
 

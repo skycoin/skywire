@@ -111,6 +111,8 @@ var (
 	pi vinit.Module
 	// Dmsg ping module (dmsg direct connection)
 	dmsgPi vinit.Module
+	// In-process dmsg server sharing the visor's PK/SK (config-gated, default off)
+	dmsgSrv vinit.Module
 	// Dmsg server latency tracking (self-ping via each server)
 	dmsgServerLatency vinit.Module
 	// Embedded Transport Setup Node (separate dmsg client with TPS identity)
@@ -152,6 +154,9 @@ var (
 	// regCXOMod publishes this visor's discovery entry as a CXO feed
 	// (registration-over-CXO) when opted in
 	regCXOMod vinit.Module
+	// arBindCXOMod mirrors this visor's AR bindings onto a CXO feed the
+	// address-resolver aggregates (AR-bind-over-CXO), always-on/additive
+	arBindCXOMod vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 )
@@ -225,6 +230,7 @@ func registerModules(logger *logging.MasterLogger) {
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
 	dmsgPi = maker("dmsg_ping", initDmsgPing, &dmsgC)
+	dmsgSrv = maker("dmsg_server", initDmsgServer, &dmsgC)
 	dmsgServerLatency = maker("dmsg_server_latency", initDmsgServerLatency, &dmsgPi)
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm, &stcprC)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)
@@ -264,8 +270,14 @@ func registerModules(logger *logging.MasterLogger) {
 	// dmsgC (the entry it publishes + the feed's transport). See
 	// init_registration_cxo.go.
 	regCXOMod = maker("registration_cxo", initRegistrationCXO, &dmsgC)
+	// AR-bind-over-CXO publisher: mirror this visor's address-resolver
+	// bindings onto a CXO feed the AR aggregates, off the timer-driven
+	// re-registration (each a fresh dmsg Noise handshake). Depends on the AR
+	// client (the bind hook it publishes from) and dmsgC (the feed transport).
+	// See init_ar_bind_cxo.go.
+	arBindCXOMod = maker("ar_bind_cxo", initARBindCXO, &ar, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &meshProxy, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod, &regCXOMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgSrv, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &meshProxy, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod, &regCXOMod, &arBindCXOMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
@@ -348,8 +360,9 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		if err != nil {
 			return nil, fmt.Errorf("error getting AvailableServers: %w", err)
 		}
-		// randomize dmsg servers list
-		rand.Shuffle(len(servers), func(i, j int) {
+		// randomize dmsg servers list for load distribution (not security-
+		// sensitive — a weak RNG is fine and crypto/rand would be needless).
+		rand.Shuffle(len(servers), func(i, j int) { //nolint:gosec // non-crypto shuffle for dmsg-server load distribution
 			servers[i], servers[j] = servers[j], servers[i]
 		})
 		for _, server := range servers {

@@ -54,10 +54,10 @@ go.mod-e
 ./packages
 ./deb
 ./sysroot
-./static/skywire-manager-src/dist/*
-./visor
-./dist-linux
-./dist
+/static/skywire-manager-src/dist/
+/visor
+/dist-linux/
+/dist/
 ./Char
 ./scripts/mac_installer/IconsSkycoin.tar.gz
 ./scripts/mac_installer/icon_128x128.png
@@ -175,3 +175,9 @@ android/app/src/main/jniLibs/
 # `go build -buildvcs` stamps every local visor build +dirty. Ignore it at any
 # depth so a GUI build can't dirty a release binary's version.
 .angular/
+
+# playground: staged by `make playground` / the docs workflow, never committed
+docs/playground/bundle.js
+docs/playground/*.wasm
+docs/playground/*.wasm.gz
+docs/playground/wasm_exec.js

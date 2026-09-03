@@ -12,6 +12,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
@@ -148,6 +149,26 @@ func (r *RPCIngressGateway) SetConnectionDuration(dur int64, _ *struct{}) (err e
 	return nil
 }
 
+// ProxyStatus returns the visor-built rich read-only status snapshot for the
+// calling app (per-leg mux telemetry, recent logs, route/transport events). It
+// lets an app that serves its own reserved status host — skysocks-client's
+// status.skysocks — render the same rich view the visor-side resolving proxies
+// show, instead of only what the app process itself can see. Read-only; an empty
+// snapshot (the visor has no data, or the manager has no builder wired as on the
+// browser wasm-visor) is returned WITHOUT error so the app degrades gracefully
+// to its own local view.
+func (r *RPCIngressGateway) ProxyStatus(_ *struct{}, resp *proxystatus.Snapshot) (err error) {
+	defer rpcutil.LogCall(r.log, "ProxyStatus", nil)(nil, &err)
+	// r.proc is nil in unit tests that construct a bare gateway.
+	if r.proc == nil || r.proc.m == nil {
+		return nil
+	}
+	if snap, ok := r.proc.m.ProxyStatus(r.proc.appName); ok {
+		*resp = snap
+	}
+	return nil
+}
+
 // SetError sets error of an app.
 func (r *RPCIngressGateway) SetError(appErr *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetError", appErr)(nil, &err)
@@ -210,6 +231,15 @@ type DialOptionsReq struct {
 	// 1-hop over it, bypassing the route-finder. The `--direct` skynet flag
 	// sets this. In spirit mutually exclusive with MinHops >= 2.
 	Direct bool
+	// DiversifyTransports opts this dial into visor-side auto-diversification
+	// for multi-tunnel bandwidth aggregation (docs/mux_aggregation_rfc.md
+	// step 3). Set by the skysocks-client for its extra tunnels (2..N): the
+	// router excludes the first-hop transports/intermediates already claimed by
+	// this visor's live route groups to the same dst, so each tunnel leaves
+	// over a different first-hop transport and their throughputs sum. Bounded
+	// visor-side to the case where a sibling route group already exists, so a
+	// lone dial is byte-identical to today. See router.DialOptions.
+	DiversifyTransports bool
 }
 
 // Dial dials to the remote.
@@ -305,7 +335,7 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 	// direct route out from under a visor-global min_hops/mux_routes>1 (which
 	// otherwise forces every skynet app dial into multi-hop mux — wrong for a
 	// 1:1 forward). Zero still means "inherit the visor-global default".
-	if req == nil || (!req.Direct && req.MuxRoutes == 0 && req.MinHops == 0 &&
+	if req == nil || (!req.Direct && !req.DiversifyTransports && req.MuxRoutes == 0 && req.MinHops == 0 &&
 		req.ForwardMinHops == 0 && req.ReverseMinHops == 0 &&
 		req.ForwardMuxRoutes == 0 && req.ReverseMuxRoutes == 0) {
 		return appnet.DialContext(ctx, remote)
@@ -327,6 +357,7 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 	opts.ReverseMinHops = req.ReverseMinHops
 	opts.ForwardMuxRoutes = req.ForwardMuxRoutes
 	opts.ReverseMuxRoutes = req.ReverseMuxRoutes
+	opts.DiversifyTransports = req.DiversifyTransports
 	if req.Direct {
 		// Force a 1-hop direct dial that creates the transport on demand and
 		// bypasses the route-finder. Mirrors the policy-layer Fallback="direct"

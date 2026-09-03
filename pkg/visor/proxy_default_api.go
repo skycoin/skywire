@@ -70,6 +70,10 @@ func (proxyDefaultAPI) StateSnapshot() (*StateSnapshot, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) StateSnapshotProjected(_ []string) (*StateSnapshot, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) Health() (*HealthInfo, error) {
 	return nil, ErrProxyNotSupported
 }
@@ -326,6 +330,10 @@ func (proxyDefaultAPI) LogsSince(_ time.Time, _ string) ([]string, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) RecentAppLog(_, _ string) ([]string, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GetAppStats(_ string) (appserver.AppStats, error) {
 	return appserver.AppStats{}, ErrProxyNotSupported
 }
@@ -391,6 +399,18 @@ func (proxyDefaultAPI) SetRouterSettings(_ RouterSettings) error {
 }
 
 func (proxyDefaultAPI) SetMuxMode(_ string) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) SetMuxCap(_ int) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) SetMuxWidth(_ int) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) SetMuxStandby(_ int) error {
 	return ErrProxyNotSupported
 }
 
@@ -543,6 +563,10 @@ func (proxyDefaultAPI) GrowMuxRoute(_ string, _, _ int, _ uint16) (int, error) {
 }
 
 func (proxyDefaultAPI) RemoveMuxRoute(_ string, _ uuid.UUID, _ uint16) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) SetMuxDirection(_, _ string) error {
 	return ErrProxyNotSupported
 }
 

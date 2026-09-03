@@ -215,4 +215,9 @@ type RotationAction struct {
 	// router.RotationAction and docs/warm_standby_legs_rfc.md.
 	DemoteToStandby    []int
 	PromoteFromStandby []int
+	// AddForwardLeg requests one more FORWARD-ONLY aux leg (router appends it
+	// addFwd=true / addRev=false): extra upstream send capacity that does not
+	// enlarge the reverse/download set. The forward-direction mirror of AddLeg,
+	// emitted by the adaptive preset on sustained upload saturation.
+	AddForwardLeg bool
 }

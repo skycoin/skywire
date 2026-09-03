@@ -22,6 +22,10 @@ func SignalContext(ctx context.Context, log logrus.FieldLogger) (context.Context
 	ch := make(chan os.Signal, 1)
 	listenSigs := listenSignals()
 	signal.Notify(ch, listenSigs...)
+	// js/wasm: nothing ever delivers a POSIX signal, so the platform hook
+	// registers a JS-callable interrupt instead (the browser terminal's
+	// Ctrl+C reaches a foreground visor through it). No-op on native.
+	notifyPlatformInterrupt(ch)
 
 	go func() {
 		select {

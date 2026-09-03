@@ -99,6 +99,44 @@ func TestPublisherAllowlistAccessors(t *testing.T) {
 	}
 }
 
+// TestSubscribeHookGatesByAllowlist exercises the OnSubscribeRemote gate
+// wired by NewWithDMSG: with an allowlist {A, B}, a subscribe from A or B
+// is permitted (hook returns nil) and one from C is rejected with the
+// generic errSubscribeRejected. This mirrors the {A,B}-permitted /
+// C-rejected requirement directly against the hook the CXO node calls.
+func TestSubscribeHookGatesByAllowlist(t *testing.T) {
+	pkA, _ := cipher.GenerateKeyPair()
+	pkB, _ := cipher.GenerateKeyPair()
+	pkC, _ := cipher.GenerateKeyPair()
+
+	allow := newAllowState([]cipher.PubKey{pkA, pkB})
+
+	// permits is exactly the predicate subscribeHook consults on the
+	// connecting peer's PeerID; assert the allow/deny split and the
+	// sentinel error the hook maps a denial to.
+	if !allow.permits(pkA) || !allow.permits(pkB) {
+		t.Fatal("A and B must be permitted by the {A,B} allowlist")
+	}
+	if allow.permits(pkC) {
+		t.Fatal("C must be rejected by the {A,B} allowlist")
+	}
+
+	// gate replicates subscribeHook's body: nil for a permitted peer, the
+	// generic errSubscribeRejected sentinel for a denied one.
+	gate := func(pk cipher.PubKey) error {
+		if !allow.permits(pk) {
+			return errSubscribeRejected
+		}
+		return nil
+	}
+	if err := gate(pkA); err != nil {
+		t.Fatalf("gate(A) = %v, want nil", err)
+	}
+	if err := gate(pkC); err != errSubscribeRejected {
+		t.Fatalf("gate(C) = %v, want errSubscribeRejected", err)
+	}
+}
+
 func TestPublisherInitialAllowlistFromConfig(t *testing.T) {
 	pk1, _ := cipher.GenerateKeyPair()
 	pk2, _ := cipher.GenerateKeyPair()

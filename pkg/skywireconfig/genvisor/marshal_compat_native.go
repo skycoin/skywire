@@ -55,7 +55,7 @@ import (
 	appspec "github.com/skycoin/skywire/pkg/app/appserver/spec"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	dmsgspec "github.com/skycoin/skywire/pkg/dmsgc/spec"
+	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
 	tspec "github.com/skycoin/skywire/pkg/transport/spec"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -803,6 +803,10 @@ func marshalTransportNative(w *strings.Builder, t *visorconfig.Transport, indent
 	}
 	o.field("public_autoconnect")
 	writeBoolNative(w, t.PublicAutoconnect)
+	if t.HypervisorAutoconnect != nil {
+		o.field("hypervisor_autoconnect")
+		writeBoolNative(w, *t.HypervisorAutoconnect)
+	}
 	o.field("transport_setup")
 	writePubKeyNativeSlice(w, t.TransportSetupPKs, o.indent+1)
 	if len(t.UserTransportSetupPKs) > 0 {

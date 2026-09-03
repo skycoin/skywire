@@ -34,6 +34,7 @@ type API interface {
 	Overview() (*Overview, error)
 	Summary() (*Summary, error)
 	StateSnapshot() (*StateSnapshot, error)
+	StateSnapshotProjected(fields []string) (*StateSnapshot, error)
 	Health() (*HealthInfo, error)
 	IsStartupComplete() bool
 	EnableHypervisor() error
@@ -115,6 +116,7 @@ type API interface {
 	SetAppLauncherMode(appName, mode string) error
 	AppHelp(appName string) (string, error)
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
+	RecentAppLog(appName, level string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
 	GetAppConnectionsSummary(appName string) ([]appserver.ConnectionSummary, error)
@@ -138,6 +140,9 @@ type API interface {
 	GetRouterSettings() (RouterSettings, error)
 	SetRouterSettings(s RouterSettings) error
 	SetMuxMode(mode string) error
+	SetMuxCap(n int) error
+	SetMuxWidth(n int) error
+	SetMuxStandby(n int) error
 
 	//transports
 	TransportTypes() ([]string, error)
@@ -190,6 +195,11 @@ type API interface {
 	AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error
 	GrowMuxRoute(appName string, target, minHops int, srcPort uint16) (int, error)
 	RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error
+	// SetMuxDirection pins (mode "default"/"flipped") or releases (mode
+	// "auto") the unidirectional direction→leg-class mapping on ALL of the
+	// app's active directional route groups. The pin is coordinated with the
+	// peer over the wire; RouteGroupMuxInfo reports the live state.
+	SetMuxDirection(appName, mode string) error
 	ServiceHealth() ([]ServiceHealthEntry, error)
 	FetchServiceData(service, path string) ([]byte, error)
 	SetMinHops(uint16) error

@@ -624,23 +624,17 @@ func TestManagerHandlerSetters(t *testing.T) {
 }
 
 func TestManagerARLimit(t *testing.T) {
-	// Default (0) → always register, no deregister.
+	// AR registration is a static, config-only switch: >= 0 registers, < 0 never
+	// registers. There is deliberately NO runtime transport-count deregister —
+	// runtime load-shedding is the public-visor SD drain, not AR.
 	tm := newTestManager(t)
-	require.True(t, tm.ShouldRegisterAR())
-	tm.checkARLimit() // limit 0 → no-op
+	require.True(t, tm.ShouldRegisterAR()) // default 0 → register
 
-	// Negative → never register.
+	tm.Conf.ARTransportLimit = 5
+	require.True(t, tm.ShouldRegisterAR()) // any >= 0 → register
+
 	tm.Conf.ARTransportLimit = -1
-	require.False(t, tm.ShouldRegisterAR())
-
-	// Positive limit reached → deregister branch (arClient nil → safe).
-	tm.Conf.ARTransportLimit = 1
-	mt := NewManagedTransportForTest(newMemTransport())
-	mt.Entry = MakeEntry(tm.Conf.PubKey, mustPK(t), types.STCPR, LabelUser)
-	tm.tps[mt.Entry.ID] = mt
-	tm.checkARLimit()
-	require.True(t, tm.arDeregistered)
-	tm.checkARLimit() // already deregistered → early return
+	require.False(t, tm.ShouldRegisterAR()) // negative → never register
 }
 
 // --- NewManagedTransport + Type --------------------------------------

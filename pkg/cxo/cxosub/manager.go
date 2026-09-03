@@ -61,11 +61,13 @@ const (
 	// FeedTPDUptime is TPD's uptime-aggregate publisher
 	// (uptimes/days/<n>).
 	FeedTPDUptime
-	// FeedSDServices is SD's services publisher
-	// (services/<type>/<pk>/{entry,tombstone}).
+	// FeedSDServices is SD's services publisher (one batched leaf per
+	// type at services/<type>/all; older publishers used
+	// services/<type>/<pk>/entry).
 	FeedSDServices
 	// FeedDMSGDClientsByServer is DMSG-D's clients-by-server publisher
-	// (clients-by-server/<server>/<client>/{entry,tombstone}).
+	// (one batched leaf per server at clients-by-server/<server>; older
+	// publishers used clients-by-server/<server>/<client>/entry).
 	FeedDMSGDClientsByServer
 	// FeedTPDAllTransports is TPD's all-transports snapshot publisher
 	// (transports/all/{with-self,without-self}). Used by the CLI's
@@ -125,6 +127,12 @@ const (
 	// geo.country(pk) can resolve multihop intermediates that
 	// advertise themselves as proxy/vpn/visor services.
 	TabRoutingPolicy
+	// TabDmsgEntryLookup is the visor's dmsg-entry-lookup-over-CXO
+	// consumer. Held for the lifetime of the dmsg client so the
+	// clients-by-server snapshot stays warm, letting peer entry
+	// lookups resolve from CXO instead of a fresh HTTP-over-dmsg
+	// Noise handshake. HTTP stays the fallback on a snapshot miss.
+	TabDmsgEntryLookup
 )
 
 // tabFeedDeps maps each tab to the set of feeds it depends on.
@@ -138,6 +146,7 @@ var tabFeedDeps = map[Tab][]Feed{
 	TabCLIServices:       {FeedSDServices},
 	TabCLITransports:     {FeedTPDAllTransports},
 	TabRoutingPolicy:     {FeedSDServices},
+	TabDmsgEntryLookup:   {FeedDMSGDClientsByServer},
 }
 
 // Deps are the host-injected dependencies the manager needs. They
@@ -165,8 +174,9 @@ type Manager struct {
 	interval time.Duration // cycle period (cxo_subscribe_interval)
 	grace    time.Duration // delay after last release before stopping the cycle
 
-	mu    sync.Mutex
-	feeds map[Feed]*managedFeed
+	mu     sync.Mutex
+	feeds  map[Feed]*managedFeed
+	pinned map[Feed]bool // feeds held continuously (never grace-stopped)
 }
 
 // managedFeed holds a single feed's runtime state.
@@ -338,6 +348,32 @@ func (m *Manager) Get(feed Feed, path string) ([]byte, time.Time, bool) {
 	out := make([]byte, len(body))
 	copy(out, body)
 	return out, f.lastSyncAt, true
+}
+
+// SyncedAt returns the timestamp of the most recent successful sync for
+// (feed, path), or ok=false if the feed has no snapshot for that path.
+// Unlike Get it copies no body — it exists so a caller can cheaply key a
+// derived cache on the CXO snapshot's freshness and rebuild only when the
+// timestamp advances, instead of on an independent wall-clock timer.
+func (m *Manager) SyncedAt(feed Feed, path string) (time.Time, bool) {
+	if m == nil {
+		return time.Time{}, false
+	}
+	m.mu.Lock()
+	f, ok := m.feeds[feed]
+	m.mu.Unlock()
+	if !ok || f == nil {
+		return time.Time{}, false
+	}
+	f.snapMu.RLock()
+	defer f.snapMu.RUnlock()
+	if f.snapshot == nil {
+		return time.Time{}, false
+	}
+	if body, ok := f.snapshot[path]; !ok || len(body) == 0 {
+		return time.Time{}, false
+	}
+	return f.lastSyncAt, true
 }
 
 // Walk invokes fn for every (path, body) in the feed's cached
@@ -652,6 +688,52 @@ func (m *Manager) LastError(feed Feed) error {
 	f.snapMu.RLock()
 	defer f.snapMu.RUnlock()
 	return f.lastErr
+}
+
+// LastSync returns the wall-clock time of the feed's most recent
+// successful sync, or the zero time if no cycle has ever completed.
+// Consumers use it as a cheap snapshot-version to memoize a derived
+// index and rebuild it only when the underlying snapshot advances.
+// Safe on a nil receiver.
+func (m *Manager) LastSync(feed Feed) time.Time {
+	if m == nil {
+		return time.Time{}
+	}
+	m.mu.Lock()
+	f, ok := m.feeds[feed]
+	m.mu.Unlock()
+	if !ok || f == nil {
+		return time.Time{}
+	}
+	f.snapMu.RLock()
+	defer f.snapMu.RUnlock()
+	return f.lastSyncAt
+}
+
+// Pin keeps a feed's sync cycle running continuously by taking one
+// permanent reference: the refcount never falls to zero, so the
+// grace-period teardown never fires. Use it for a feed a core subsystem
+// consults constantly — the router's transport snapshot (FeedTPDAllTransports)
+// is read on every dial's route calculation. Without a pin the ~10s-grace
+// teardown tears the CXO subscription down whenever the last transient
+// consumer goes briefly idle, and the next read re-establishes it — a
+// fresh dmsg + Noise/PQ handshake each time, which on the single-threaded
+// wasm visor is pure churn. Idempotent per feed; the pin is released only
+// by Close.
+func (m *Manager) Pin(fk Feed) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.pinned[fk] {
+		return
+	}
+	if m.pinned == nil {
+		m.pinned = make(map[Feed]bool)
+	}
+	m.pinned[fk] = true
+	m.acquireFeedLocked(fk)
 }
 
 // acquireFeedLocked must be called under m.mu.

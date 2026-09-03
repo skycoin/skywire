@@ -110,6 +110,7 @@ var (
 	setPublicAutoconnect       string
 	minHops                    int
 	cascadeRouteSetup          bool
+	policyPerDial              string
 	isUsr                      bool
 	isPublic                   bool
 	disablePublicAutoConn      bool
@@ -125,6 +126,10 @@ var (
 	skynetWebUpstreamSOCKS     string
 	dmsgWebProxyAddr           string
 	skynetWebProxyAddr         string
+	noBrowseOrigin             bool
+	browseOriginSuffix         string
+	browseOriginTLSCert        string
+	browseOriginTLSKey         string
 	configServicePath          string
 	dmsgHTTPPath               string
 	snConfig                   bool

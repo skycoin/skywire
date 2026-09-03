@@ -14,7 +14,9 @@ package network
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -117,6 +119,23 @@ func (c *quicStreamConn) ReadDatagram(ctx context.Context) ([]byte, error) {
 
 // compile-time assertion that *quicStreamConn provides the native datagram channel.
 var _ DatagramConn = (*quicStreamConn)(nil)
+
+// rawConnDetails contributes the squicr-specific connection metadata —
+// the remote peer's TLS certificate fingerprint (the skywire-PK-bound
+// QUIC identity) and the negotiated ALPN — to a ConnDetails. Called by
+// transport.ConnDetails via the pre-noise rawConn (this concrete type).
+// Reads only public certificate bytes; no secret is exposed.
+func (c *quicStreamConn) rawConnDetails(d *ConnDetails) {
+	if c.conn == nil {
+		return
+	}
+	tlsState := c.conn.ConnectionState().TLS
+	d.ALPN = tlsState.NegotiatedProtocol
+	if len(tlsState.PeerCertificates) > 0 {
+		sum := sha256.Sum256(tlsState.PeerCertificates[0].Raw)
+		d.TLSCertSHA256 = hex.EncodeToString(sum[:])
+	}
+}
 
 func (c *quicStreamConn) Close() error {
 	_ = c.Stream.Close() //nolint:errcheck,gosec // half-close the stream, then the conn

@@ -189,7 +189,11 @@ func GenerateStandalone(uiFS fs.FS, wasmExecJS, wasm, overrideJS []byte, cfg Sta
 	// up). This gives the standalone wasm-visor a real surface to browse skynet/
 	// dmsg sites and self-host content over dmsg — no devtools, no extra page.
 	if cfg.Visor {
-		head += "<script>" + jsSafe(BrowseJS) + "</script>\n" +
+		// No server to fetch /winbox.wasm from, so the window-manager module
+		// travels inside the page: still gzipped, base64'd, and inflated by
+		// winbox-loader.js — the same shape wasmJS above uses for the visor blob.
+		head += "<script>self.__WINBOX_WASM_B64__=\"" + base64.StdEncoding.EncodeToString(WinBoxWasmGz()) + "\";</script>\n" +
+			"<script>" + jsSafe(BrowseJS) + "</script>" + "\n" +
 			"<script>" + BrowseLauncherJS + "</script>\n"
 	}
 
@@ -309,7 +313,7 @@ func wasmBootstrap(wasm []byte, tinygo bool) (string, error) {
 const BrowseLauncherJS = `(function(){
   if(!(window.__SKYWIRE_HV__||{}).visor) return;
   function ready(){
-    if(!self.skywireVisor||!self.skywireVisor.fetchDmsg||!self.SkywireBrowse||!document.body){ return setTimeout(ready,200); }
+    if(!self.skywireVisor||!self.skywireVisor.fetchDmsg||!self.SkywireBrowse||!document.body||typeof self.WinBox!=="function"){ return setTimeout(ready,200); }
     var p=self.SkywireBrowse.mountPanel(document,{
       fetchDmsg:function(){ return self.skywireVisor.fetchDmsg.apply(null,arguments); },
       serveContent:function(m){ return self.skywireVisor.serveContent(m); },

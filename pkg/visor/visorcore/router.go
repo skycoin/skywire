@@ -25,24 +25,30 @@ import (
 // Zero values for the optional native-only fields (AppLookup, DialHook,
 // RulesGCInterval, SetupHooks) are correct for a browser edge.
 type RouterDeps struct {
-	DmsgC              *dmsg.Client
-	PubKey             cipher.PubKey
-	SecKey             cipher.SecKey
-	TransportManager   *transport.Manager
-	RouteFinder        rfclient.Client
-	RouteGroupDialer   router.RouteGroupDialer
-	SetupNodes         []cipher.PubKey
-	MinHops            uint16
-	MuxRoutes          int
-	ParallelRouteSetup int
-	AwaitSetupListener *dmsg.Listener
-	Logger             *logging.Logger
-	MasterLogger       *logging.MasterLogger
+	DmsgC                 *dmsg.Client
+	PubKey                cipher.PubKey
+	SecKey                cipher.SecKey
+	TransportManager      *transport.Manager
+	RouteFinder           rfclient.Client
+	RouteGroupDialer      router.RouteGroupDialer
+	SetupNodes            []cipher.PubKey
+	MinHops               uint16
+	MuxRoutes             int
+	ExcludeTransportTypes []string
+	ParallelRouteSetup    int
+	AwaitSetupListener    *dmsg.Listener
+	Logger                *logging.Logger
+	MasterLogger          *logging.MasterLogger
 
 	AppLookup       func(routing.Port) (string, bool)
 	DialHook        router.DialHook
 	RulesGCInterval time.Duration
 	SetupHooks      []router.RouteSetupHook
+
+	// PolicyOnControlPorts opts the routing policy back in for control-plane
+	// destination ports (default OFF — those ports bypass the policy). Seeded
+	// from Routing.PolicyOnControlPorts. See router.Config.PolicyOnControlPorts.
+	PolicyOnControlPorts bool
 
 	// EnableRSNOracleRoutes opts into the RSN-oracle 2-hop route path (default
 	// OFF). Seeded from Routing.EnableRSNOracleRoutes; inert until the visor also
@@ -75,10 +81,12 @@ func BuildRouter(serveCtx context.Context, deps RouterDeps) (router.Router, erro
 		SetupNodes:            deps.SetupNodes,
 		MinHops:               deps.MinHops,
 		MuxRoutes:             deps.MuxRoutes,
+		ExcludeTransportTypes: deps.ExcludeTransportTypes,
 		ParallelRouteSetup:    deps.ParallelRouteSetup,
 		AwaitSetupListener:    deps.AwaitSetupListener,
 		AppLookup:             deps.AppLookup,
 		DialHook:              deps.DialHook,
+		PolicyOnControlPorts:  deps.PolicyOnControlPorts,
 		RulesGCInterval:       deps.RulesGCInterval,
 		EnableRSNOracleRoutes: deps.EnableRSNOracleRoutes,
 		ExcludeSameLANHops:    deps.ExcludeSameLANHops,

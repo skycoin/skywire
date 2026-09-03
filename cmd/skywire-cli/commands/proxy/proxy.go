@@ -18,8 +18,8 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/blang/semver/v4"
-	"github.com/pterm/pterm"
 	"github.com/sirupsen/logrus"
+	pterm "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/pterm"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 	"golang.org/x/net/proxy"
@@ -88,10 +88,19 @@ func init() {
 	startCmd.Flags().MarkHidden("routes") //nolint:errcheck,gosec
 	startCmd.Flags().StringVar(&muxMode, "mux-mode", "auto", "mux weight distribution mode: auto (latency-based) or equal (round-robin)")
 	startCmd.Flags().Uint16Var(&minHops, "min-hops", 1, "minimum routing hops for this session (1=no minimum). Set on the visor before app start; rolled back is not automatic — restart visor or re-run with --min-hops=1 to revert.")
+	startCmd.Flags().IntVar(&startTunnels, "tunnels", 1, "number of independent tunnels (route group + noise + yamux each) to stripe browser connections across; 1 = today's behavior. >1 AGGREGATES bandwidth: each extra tunnel is auto-steered by the visor onto a DIFFERENT first-hop transport (disjoint path) so their throughputs sum. Best paired with --mux 1 (one leg per tunnel).")
+	startCmd.Flags().StringVar(&startRoute, "route", "", "pin explicit route(s) chosen by you instead of the route finder: a JSON file of {forward,reverse} hop pairs ('cli route calc <exit> --count N --json' shape). Once the proxy is up its mux legs are reconciled to these — each pinned route is added as a leg and any AUX auto legs are pruned. NOTE: the auto PRIMARY leg (index 0) is privileged and cannot yet be pruned, so it remains alongside the pinned legs; full primary override is the dial-level follow-up. One pair = one pinned route; N pairs = N disjoint legs. Pair with --mux N. Tip: 'route calc --source tps' avoids stale-transport install failures.")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits")
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	startCmd.Flags().BoolVar(&reconnect, "reconnect", true, "in-process reconnect on route-group collapse: proxy keeps re-dialing with backoff instead of dropping the SOCKS5 listener; --reconnect=false restores exit-on-failure")
 	startCmd.Flags().StringVar(&startRoutingPolicy, "routing-policy", "", "per-app routing policy: @/path/to/policy.star, @/path/to/policy.wasm, or preset:<name> (\"\" or \"none\" clears any previously-installed override)")
+	startCmd.Flags().BoolVar(&startDirect, "direct", false, "force a DIRECT-transport-only route to the exit: create the transport on demand if none exists, dial 1-hop (bypassing the route-finder + setup node), and self-heal when the transport drops. Bypasses the routing policy and the adaptive mux entirely — the point is a single, stable, policy-free direct leg. Mutually exclusive with --routing-policy, --route, --mux>1, --min-hops>1 and --tunnels>1 (all of which ask for the multi-hop/overlay path --direct exists to avoid); any per-app policy is cleared.")
+	// --direct is a policy-free single-direct-leg dial: it contradicts every flag
+	// that asks for the overlay / multi-hop / multi-leg path. Cobra enforces the
+	// clean pairwise contradictions; the value-dependent ones (--mux>1 etc.) are
+	// checked in Run since a default of 1 is compatible.
+	startCmd.MarkFlagsMutuallyExclusive("direct", "routing-policy")
+	startCmd.MarkFlagsMutuallyExclusive("direct", "route")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks clients")
 	stopCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of the skysocks client to stop")
 	dep := getDeployment()
@@ -126,6 +135,15 @@ func init() {
 // the very first dial the proxy makes already runs through the policy.
 // Passing "" / "none" clears a previously-installed override.
 func applyRoutingPolicy(cmd *cobra.Command, rpcClient visor.API, clientName string) {
+	// --direct is policy-free by definition (a 1-hop control route the policy
+	// engine must not re-home onto the overlay). Actively clear any per-app
+	// policy so a previously-installed override can't linger and fight the
+	// direct dial. This is the flag WINNING over the policy — the operator asked
+	// for a direct route explicitly.
+	if startDirect {
+		internal.Catch(cmd.Flags(), rpcClient.SetAppRoutingPolicy(clientName, "none"))
+		return
+	}
 	if !cmd.Flags().Changed("routing-policy") {
 		return
 	}
@@ -172,13 +190,35 @@ var startCmd = &cobra.Command{
 		// doesn't silently inherit stale state); mux/mux-mode carry their
 		// sentinel/skip semantics inside the helper; --min-hops only fires when
 		// explicitly set (0 is rejected there).
+		// --direct is a single, stable, policy-free direct leg. Reject the
+		// value-dependent contradictions cobra can't (defaults of 1 are fine; only
+		// a request for MORE than one hop/leg/tunnel contradicts direct), then
+		// normalize the session to a single route so the visor-global adaptive mux
+		// can't grow a warm-standby set over the 1-hop control route.
+		if startDirect {
+			if cmd.Flags().Changed("mux") && muxRoutes > 1 {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--direct forces a single direct route; it cannot be combined with --mux %d", muxRoutes))
+			}
+			if cmd.Flags().Changed("min-hops") && minHops > 1 {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--direct is a 1-hop route; it cannot be combined with --min-hops %d", minHops))
+			}
+			if startTunnels > 1 {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--direct is a single route; it cannot be combined with --tunnels %d", startTunnels))
+			}
+			muxRoutes = 1
+			minHops = 1
+		}
+
 		routeOpts := clirpc.RoutingSessionOpts{
 			ExistingTP: &existingTpOnly,
 			LocalRoute: &forceLocalRoutes,
 			MuxRoutes:  &muxRoutes,
 			MuxMode:    &muxMode,
 		}
-		if cmd.Flags().Changed("min-hops") {
+		// For --direct pin the session to a single route (mux=1) so the adaptive
+		// engine does not fight it; the actual direct dial is driven per-connection
+		// by the app's --direct arg (EnsureDirectTransport) below.
+		if cmd.Flags().Changed("min-hops") || startDirect {
 			routeOpts.MinHops = &minHops
 		}
 		if err := clirpc.ApplyRoutingSession(rpcClient, routeOpts); err != nil {
@@ -266,6 +306,16 @@ var startCmd = &cobra.Command{
 
 			arguments["--addr"] = addr
 
+			// --tunnels N: the skysocks-client app opens N independent tunnels
+			// (route group + noise + yamux each) and stripes browser connections
+			// across them; the visor auto-diversifies each extra tunnel onto a
+			// disjoint first-hop transport so their bandwidth sums (the aggregation
+			// path, docs/mux_aggregation_rfc.md). Only pass it when >1 so the app's
+			// Args stay identical to today for the default single-tunnel case.
+			if startTunnels > 1 {
+				arguments["--tunnels"] = fmt.Sprintf("%d", startTunnels)
+			}
+
 			if httpAddr != "" {
 				arguments["--http"] = httpAddr
 			}
@@ -278,6 +328,15 @@ var startCmd = &cobra.Command{
 			// failure instead of exiting, so a flaky route doesn't
 			// drop the SOCKS5 listener.
 			arguments["--reconnect"] = reconnect
+
+			// --direct: force the skysocks-client to dial the exit over a DIRECT
+			// transport only (1-hop, route-finder + setup-node bypassed, transport
+			// created on demand, self-healing on drop — the app-level --direct
+			// flag, wired to router.EnsureDirectTransport). Like --reconnect it is a
+			// valueless flag-style arg: passing true adds the bare "--direct" token.
+			if startDirect {
+				arguments["--direct"] = true
+			}
 
 			if clientName == "" {
 				clientName = "skysocks-client"
@@ -411,6 +470,36 @@ var startCmd = &cobra.Command{
 						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln(leader+"Stopped! "+errMsg))
 					}
 				}
+			}
+		}
+
+		// --route: pin the session to EXACTLY the supplied route(s). The app
+		// dialed an auto primary route to come up (above); now reconcile its mux
+		// legs to be exactly the caller's — add each pinned leg, then prune the
+		// auto route and any extras. Full manual override of intermediate
+		// selection (the route finder is bypassed for the working set), sharing
+		// the engine behind `proxy mux set --prune`.
+		if appReachedRunning && startRoute != "" {
+			targets, rErr := readRoutePairs(startRoute)
+			if rErr != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--route: %w", rErr))
+			}
+			// The route group is up once the app reached Running; allow a brief
+			// lag before it is queryable.
+			var res legReconcile
+			for i := 0; i < 10; i++ {
+				res, rErr = reconcileLegs(rpcClient, clientName, 0, targets, true)
+				if rErr == nil {
+					break
+				}
+				time.Sleep(500 * time.Millisecond)
+			}
+			if rErr != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--route reconcile: %w", rErr))
+			}
+			if !startVerbose {
+				fmt.Printf("route pinned: %d leg(s) added, %d pruned, %d already present\n",
+					len(res.added), len(res.removed), res.existing)
 			}
 		}
 

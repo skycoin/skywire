@@ -80,3 +80,44 @@ func TestMuxStandbyCompactedOnLegRemoval(t *testing.T) {
 		t.Error("the compacted standby leg must remain unselectable")
 	}
 }
+
+// TestMuxStandbyNewLegsOnAdd pins the standby-on-add behavior: with
+// SetStandbyNewLegs(true) (a promoting rotation engine wired), every NEWLY-grown
+// aux leg enters warm standby so the engine promotes them one per tick,
+// goodput-gated, instead of every dialed leg going hot the instant it becomes
+// ready — the flood that churned the group into collapse. The primary leg (0) is
+// always active. With the default (false) new legs stay active-on-add.
+func TestMuxStandbyNewLegsOnAdd(t *testing.T) {
+	// Default: new legs active-on-add (no regression for non-adaptive groups).
+	def := &routeMux{}
+	def.growLegs(3)
+	for _, idx := range []int{0, 1, 2} {
+		if def.isLegStandby(idx) {
+			t.Fatalf("default: leg %d must be active-on-add, got standby", idx)
+		}
+	}
+
+	// Promoting engine wired: aux legs (index > 0) enter standby on add; the
+	// primary stays active.
+	m := &routeMux{}
+	m.SetStandbyNewLegs(true)
+	m.growLegs(4)
+	if m.isLegStandby(0) {
+		t.Error("primary leg 0 must never enter standby on add")
+	}
+	for _, idx := range []int{1, 2, 3} {
+		if !m.isLegStandby(idx) {
+			t.Errorf("aux leg %d must enter standby on add when standbyNewLegs is set", idx)
+		}
+	}
+	// Even after a leg becomes ready (inbound packet), a standby leg is not
+	// selectable until the engine promotes it (clears the flag).
+	m.markLegReady(1)
+	if m.legReadyAt(1) {
+		t.Error("ready-but-standby aux leg must not be selectable until promoted")
+	}
+	m.setLegStandby(1, false) // engine promotes
+	if !m.legReadyAt(1) {
+		t.Error("promoted, ready aux leg must be selectable")
+	}
+}

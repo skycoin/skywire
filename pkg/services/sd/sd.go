@@ -14,15 +14,15 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
+	"github.com/skycoin/skywire/pkg/deployment/sd/api"
+	sdmetrics "github.com/skycoin/skywire/pkg/deployment/sd/metrics"
+	"github.com/skycoin/skywire/pkg/deployment/sd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
-	"github.com/skycoin/skywire/pkg/service-discovery/api"
-	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
-	"github.com/skycoin/skywire/pkg/service-discovery/store"
 	"github.com/skycoin/skywire/pkg/services"
-	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/svcmode"
 )
 
@@ -174,7 +174,6 @@ func (s *service) Run(ctx context.Context) error {
 		EmbeddedDmsgServers: embeddedServers,
 		SurveyWhitelist:     surveyWL,
 		Log:                 log,
-		DisableDHT:          true,
 		OnDmsgServersUpdated: func(svrs []string) {
 			sdAPI.DmsgServers = svrs
 		},

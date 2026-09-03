@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"math"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -48,25 +49,214 @@ func TestRenderSections(t *testing.T) {
 		Running:    true,
 		MuxEnabled: true,
 		Legs: []Leg{
-			{Index: 0, TpType: "stcpr", RemotePK: "0311223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", SentBytes: 2048, RecvBytes: 1024, LatencyMS: 42, Alive: true},
-			{Index: 1, TpType: "sudph", SentBytes: 512, Standby: true, Alive: true},
+			{Index: 0, TpType: "stcpr", RemotePK: "0311223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", SentBytes: 2048, RecvBytes: 1024, LatencyMS: 42, RouteLatencyMS: 42, Direct: true, Alive: true,
+				Hops: []Hop{{TpID: "tp0aaaaaaa-0000-0000-0000-000000000000", From: "02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee", To: "0311223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "stcpr", LatencyMS: 42}}},
+			{Index: 1, TpType: "sudph", RemotePK: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", SentBytes: 512, RecvBytes: 256, LatencyMS: 30, RouteLatencyMS: 480, Direct: false, Standby: true, Alive: true,
+				Hops: []Hop{
+					{TpID: "tp1bbbbbbb-1111-1111-1111-111111111111", From: "02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee", To: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "sudph", LatencyMS: 30},
+					{TpID: "tp2ccccccc-2222-2222-2222-222222222222", From: "03bb223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", To: "03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff", TpType: "stcpr", LatencyMS: 450},
+				}},
 		},
-		Logs:   []string{"line one", "line two"},
-		Events: nil,
+		Logs:    []string{"line two", "[2025-06-01T00:00:00.0000Z] INFO [skysocks-client]: app is running app_name=skysocks-client"},
+		Events:  []string{"[2025-06-01T00:00:01.0000Z] WARN [router]: leg demoted", "[2025-06-01T00:00:02.0000Z] ERROR [dmsgC]: handshake failed close_err=broken pipe"},
+		Streams: []Stream{{ID: 7, Target: "example.com:80", AgeMS: 65000, SentBytes: 4096, RecvBytes: 2 * 1024 * 1024, SentRateBps: 512, RecvRateBps: 1.5 * 1024 * 1024, LatencyMS: 142}},
 	}
 	page := string(Render(snap))
 	for _, want := range []string{
 		"<!doctype html>", "proxy status", "skysocks-client", "per-leg mux",
-		"stcpr", "recent log", "line two", "route control", "read-only preview",
-		"http-equiv=\"refresh\"", "standby", "status.dmsg", "status.skynet",
+		"stcpr", "route, transport", "line two", "route control", "read-only preview",
+		// live push (skysocks): the WebSocket script + swap target replace the old
+		// meta refresh, which must be gone for this surface. The WS URL is derived
+		// from the page origin (never a hardcoded http://), and sendCmd is the
+		// browser→server control seam.
+		"<main id=\"live\">", "new WebSocket", "/ws",
+		`location.origin.replace(/^http/,"ws")`, "sendCmd",
+		"standby", "status.dmsg", "status.skynet",
+		// route observability: the left per-route summary carries the end-to-end
+		// route rtt; "route-rtt" is also named in the tree legend. The multihop
+		// standby leg's route rtt (480) renders compact ("480ms").
+		"route-rtt", "480ms",
+		// ONE shared bilateral route tree (pkg/proxystatus.RouteTree) rendered by
+		// pkg/bitree into a monospace <pre>: root = this visor (source PK), each
+		// active route a horizontal line crossing a central vertical spine — the
+		// left summary block LEFT of the spine, the hop chain RIGHT of it, and
+		// aligned trailing hop columns. The exact model+shape `proxy tree` prints.
+		// The source PK is anchored at the spine column with a "│" descender into
+		// it; routes join the spine via ┼/┴ junctions; a multihop route's extra
+		// hops hang off the RIGHT with └── connectors.
+		`class="tree"`, `class="bitree"`, "──┼──", "──┴──", "└──", "│",
+		// Tree legend, now BELOW the tree, with the state WORDS themselves colored
+		// (source accent / active green / standby amber) — no swatch dot. Dead legs
+		// are pruned so there is no dead entry.
+		`class="tlegend"`, `class="lgnd src"`,
+		`class="lgnd ok"`, `class="lgnd standby"`,
+		"this visor",
+		// Hop-level coloring: the EXIT PK (each leg's destination) is wrapped red
+		// ("hop-exit") and each intermediate hop LEVEL its own class ("hop-lN"). The
+		// standby leg has a level-1 intermediate (03bb…) before its exit (03cc…). The
+		// legend documents exit + hop-1/2/3 colors below the tree.
+		`<span class="hop-exit">`, `<span class="hop-l1">`,
+		`class="lgnd hop-exit"`, `class="lgnd hop-l1"`, `class="lgnd hop-l2"`, `class="lgnd hop-l3"`,
+		"--hop-exit:", "--hop1:",
+		// Label-header row (TreeHeader) rendered inside the tree <pre> as a template
+		// that lines up with the columns beneath: labels in place of the PKs/values.
+		`class="thead"`, "peer-pk", "tp-id", "tp-rtt", "R[n]",
+		// Header up/down throughput meters (moved to the top, between the brand and
+		// the surface name), driven by the inline script from the hidden cumulative
+		// byte counters.
+		`class="rates"`, `class="rmeter up"`, `class="rmeter down"`,
+		// FULL (never truncated) PKs: the source (root) and the multihop exit.
+		"03cc223344556677889900aabbccddeeff00112233445566778899aabbccddeeff",
+		"02aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee",
+		// per-hop transport columns: bracketed type + full tpid (click-to-copy) + rtt.
+		"[stcpr]", "[sudph]", "450ms", "30ms",
+		`class="ftid copy"`, "tp2ccccccc-2222-2222-2222-222222222222",
+		// left per-route summary tinted by STATE (ok=active green / standby=amber),
+		// with a color-blind-safe state dot (● active / ○ standby) — no state word.
+		`class="lsum ok"`, `class="lsum standby"`,
+		`class="tstate ok"`, `class="tstate standby"`, "●", "○", "R[0]", "R[1]",
+		// UX pass: selection-guard + identical-fragment skip in the live script,
+		// click-to-copy affordance (execCommand fallback for the HTTP context),
+		// the WebSocket live indicator, route-group summary, and staged control tags.
+		"getSelection", "selectionchange", "execCommand",
+		`class="fpk copy"`, "data-copy=", "click to copy",
+		`id="wsstat"`, "reconnecting", "rsync(this)", `class="soon"`,
+		// Hidden cumulative byte counters live inside the live region so each push
+		// refreshes them; the visible meters are in the static header.
+		`data-bytes="up" data-val=`, "hidden",
+		// Scroll preservation across the live-swap: apply() captures the window offset
+		// (and the log <pre>'s inner offset) before el.innerHTML=h and restores it, so
+		// scrolling the page horizontally doesn't snap back on the next ~1s push.
+		"window.scrollX", "window.scrollY", "window.scrollTo(", "pre.log",
+		// The log pane is a resizable black terminal: black background, user-draggable
+		// height (resize:vertical), its own scroll.
+		"background:#000", "resize:vertical",
+		// The route tree scrolls horizontally in its OWN overflow container (not the
+		// page body) when a long PK runs wide.
+		"overflow-x:auto",
+		// Embedded mononoki monospace font so the tree's box-drawing glyphs align:
+		// an @font-face woff2 data-URI in the shell + the family on the tree/PK cells.
+		"@font-face", "'Mononoki'", "data:font/woff2;base64,",
+		// Tree grid CSS so the box-drawing glyphs actually connect: a tight
+		// line-height:1 (vertical │ touch between rows), letter-spacing:0 (── run
+		// continuous), and a real box-drawing monospace fallback after Mononoki.
+		"line-height:1;letter-spacing:0", "'DejaVu Sans Mono'",
+		// The open-streams <details> keeps its open/closed state across the ~1s
+		// WebSocket innerHTML swap (captured before, restored after — like the scroll
+		// guard) so it doesn't snap shut while the operator reads it.
+		"details.streams", "ds.open=dopen",
+		// item 3: ONE combined route+transport+log stream, colored PER TOKEN to match
+		// `proxy start --verbose` (pkg/logging printColored): the [timestamp] grey
+		// (ll-ts), the LEVEL word its level color (INFO green / WARN amber / ERROR red),
+		// the "[prefix]:" cyan (ll-prefix), the message default, and each field KEY
+		// tinted to the level color (value default). ERROR uses a real red (--err), not
+		// the pink --warn. The event + log lines merge in timestamp order.
+		"route, transport &amp; log", `class="ll-info"`, `class="ll-warn"`, `class="ll-error"`,
+		`class="ll-ts"`, `class="ll-prefix"`, "[router]:", "[dmsgC]:",
+		// field key tinted to the level color, its value left default foreground.
+		`<span class="ll-info">app_name</span>=skysocks-client`,
+		"app is running", "leg demoted",
+		// item 5: live up/down rate meters differenced from the cumulative byte totals
+		// by the inline script over the WebSocket pushes.
+		`data-bytes="up"`, `data-bytes="down"`, `data-rate="up"`, `data-rate="down"`, `class="rate"`, "fmtRate",
+		// item 4: the "N open stream(s)" count expands into per-stream rows (id /
+		// target / age / up-down bytes / up-down rate / route-group rtt) in an
+		// expandable section. The byte counters are per-stream (metered by the splice
+		// loop); the rate is smoothed; the rtt column is route-group latency, labeled
+		// as such (yamux has no per-stream RTT). The summary carries the aggregate ↑/↓.
+		`class="streams"`, "open streams", "example.com:80",
+		`class="sagg"`, `class="num up"`, `class="num down"`, `class="num rtt"`,
+		"↑ bytes", "↓ bytes", "↑ rate", "↓ rate",
+		"route-group latency", "4.0K", "2.0M", "512B/s", "1.5M/s", "142ms",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("rendered page missing %q", want)
 		}
 	}
+	// PKs must never be truncated: no "<hex>…<hex>" shortPK pattern on the page.
+	// (Bare "…" is fine in UI affordances like the disabled "mux mode…" button.)
+	if regexp.MustCompile(`[0-9a-f]…[0-9a-f]`).MatchString(page) {
+		t.Error("status page must not truncate public keys (found hex…hex)")
+	}
 	// The current surface should not be linked back to itself in the footer.
 	if strings.Contains(page, `href="http://status.skysocks/"`) {
 		t.Error("footer should not link the current surface to itself")
+	}
+	// The skysocks surface is kept live by the WebSocket, so the old meta refresh
+	// must be gone (it would fight the in-place swap with a full-page reload).
+	if strings.Contains(page, `http-equiv="refresh"`) {
+		t.Error("skysocks status page must not use meta refresh (WebSocket live-push replaces it)")
+	}
+	// The per-node word pills and per-leg state/hop-count word tags are gone: the
+	// root "this visor" and leaf "exit" pills are replaced by the source/dest PK
+	// color accents; the "active"/"standby" state word and the "N hops" count by the
+	// state color + tree depth. Guard that their markup is absent (the words survive
+	// only in the header legend + hint prose, matched above).
+	for _, gone := range []string{
+		`class="tlabel src">this visor`, `class="tlabel dst">exit`,
+		`class="rtag`, `class="badge`,
+	} {
+		if strings.Contains(page, gone) {
+			t.Errorf("status page must not render the removed %q markup", gone)
+		}
+	}
+	// The layout pass removed the status pill row, the leg-census summary line, and
+	// the per-stream metering disclaimer sentence; guard their markup/text is gone.
+	for _, gone := range []string{
+		`class="pills"`, `class="pill"`, `class="rgsummary"`,
+		"not metered at the tunnel",
+	} {
+		if strings.Contains(page, gone) {
+			t.Errorf("status page must no longer contain %q", gone)
+		}
+	}
+}
+
+// TestRenderFragmentIsLiveRegionOnly verifies RenderFragment emits the live
+// content (pills/mux/log) WITHOUT the page shell, so it can be pushed as a
+// WebSocket TEXT frame and swapped into <main id="live">. It must be identical to
+// the shell's live region — same source of truth.
+func TestRenderFragmentIsLiveRegionOnly(t *testing.T) {
+	snap := Snapshot{
+		Surface: SurfaceSkysocks, App: "skysocks-client", Running: true,
+		Logs: []string{"frag line"},
+	}
+	frag := string(RenderFragment(snap))
+	for _, want := range []string{"per-leg mux", "route, transport", "frag line"} {
+		if !strings.Contains(frag, want) {
+			t.Errorf("fragment missing %q", want)
+		}
+	}
+	// The ~38 KB embedded font must ride in the page shell only, never in the live
+	// fragment the WebSocket restreams every ~1s.
+	for _, unwanted := range []string{"<!doctype", "<html", "<head", "<style", "<main", "new WebSocket", "route control", "<footer", "@font-face", "data:font/woff2"} {
+		if strings.Contains(frag, unwanted) {
+			t.Errorf("fragment must not contain shell/static markup %q", unwanted)
+		}
+	}
+	// The fragment must be exactly the inner HTML of the shell's <main id="live">.
+	page := string(Render(snap))
+	const open, closeTag = `<main id="live">`, `</main>`
+	i := strings.Index(page, open)
+	j := strings.Index(page, closeTag)
+	if i < 0 || j < 0 || j < i {
+		t.Fatal("shell is missing the <main id=\"live\"> live region")
+	}
+	if inner := page[i+len(open) : j]; inner != frag {
+		t.Errorf("fragment differs from shell live region:\n frag=%q\ninner=%q", frag, inner)
+	}
+}
+
+// TestRenderDmsgKeepsMetaRefresh guards that non-skysocks surfaces (no WebSocket
+// endpoint) keep the meta-refresh fallback and do NOT get the skysocks WebSocket
+// script.
+func TestRenderDmsgKeepsMetaRefresh(t *testing.T) {
+	page := string(Render(Snapshot{Surface: SurfaceDmsg, App: "dmsgweb"}))
+	if !strings.Contains(page, `http-equiv="refresh"`) {
+		t.Error("dmsg status page should keep the meta-refresh fallback")
+	}
+	if strings.Contains(page, "new WebSocket") {
+		t.Error("dmsg status page must not emit the skysocks WebSocket script")
 	}
 }
 
@@ -78,8 +268,12 @@ func TestRenderEscapes(t *testing.T) {
 	}
 }
 
+// TestRenderEmptyMux covers the generic empty-route-group note, on a surface
+// that CAN hold a route group and simply has none right now. The dmsg surface
+// owns no route plane at all and gets its own wording — see
+// TestRenderDmsgEmptyLegsDegrades.
 func TestRenderEmptyMux(t *testing.T) {
-	snap := Snapshot{Surface: SurfaceDmsg, App: "dmsgweb"}
+	snap := Snapshot{Surface: SurfaceSkynet, App: "skynetweb"}
 	page := string(Render(snap))
 	if !strings.Contains(page, "No active route group") {
 		t.Error("empty-mux note missing")

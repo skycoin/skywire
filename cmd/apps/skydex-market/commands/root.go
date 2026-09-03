@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 // Package commands cmd/apps/skydex-market/commands/root.go
 //
 // This is the thin skywire wrapper around the SkyDEX market engine, which lives
@@ -17,6 +19,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/sirupsen/logrus"
 	skydexmarket "github.com/skycoin/skycoin/cmd/skydex-market/commands"
@@ -69,9 +73,7 @@ var RootCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }
 
 // appHost adapts the visor app client to the engine's Host: it supplies the

@@ -13,7 +13,7 @@ docker run -p6379:6379 -d redis
 
 Run the tests:
 ```
-go test ./pkg/transport-discovery/... -race
+go test ./pkg/deployment/tpd/... -race
 ```
 
 Start the server:

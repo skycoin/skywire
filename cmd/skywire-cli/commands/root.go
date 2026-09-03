@@ -3,10 +3,11 @@ package commands
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -201,6 +202,24 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
+	// Reject leftover positional args (i.e. an unknown subcommand).
+	// The standalone `skywire-cli` binary already errors on
+	// `skywire-cli bogus` because cobra's legacyArgs does subcommand
+	// checking for a parent-less root. Under the combined `skywire`
+	// binary `cli` has a parent, so legacyArgs lets the unknown arg
+	// through, and cobra's `!Runnable()` check fires BEFORE arg
+	// validation — so a non-runnable `cli` returns ErrHelp and prints
+	// the ASCII banner instead of an error. Making `cli` runnable (RunE
+	// below) means ValidateArgs runs first; NoArgs then rejects the
+	// stray arg, so `skywire cli bogus` errors cleanly like standalone.
+	Args: cobra.NoArgs,
+	// Runnable so cobra reaches arg validation instead of short-
+	// circuiting to ErrHelp (see Args note). With no args this just
+	// prints help — the same output the previous not-runnable ErrHelp
+	// path produced for a bare `cli` / `skywire cli`.
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		return cmd.Help()
+	},
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		if cliShowAll {
 			for _, name := range cliHiddenFlags {
@@ -220,7 +239,5 @@ var RootCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

@@ -8,7 +8,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
-	dmsgspec "github.com/skycoin/skywire/pkg/dmsgc/spec"
+	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 

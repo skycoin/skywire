@@ -8,10 +8,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	ipc "github.com/0magnet/golang-ipc"
+	"github.com/0magnet/yamux"
 	"github.com/armon/go-socks5"
-	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -122,16 +122,16 @@ func (s *Server) Serve(l net.Listener) error {
 
 		sessionCfg := yamux.DefaultConfig()
 		sessionCfg.EnableKeepAlive = false
+		sessionCfg.MaxStreamWindowSize = muxStreamWindowBytes
 		session, err := yamux.Server(conn, sessionCfg)
 		if err != nil {
 			return fmt.Errorf("yamux server failure: %w", err)
 		}
 
 		go func() {
-			if err := s.socks.Serve(session); err != nil {
-				if s.appCl != nil {
-					s.appCl.Log().Errorf("Failed to start SOCKS5 server: %v", err)
-				}
+			// socks.Serve blocks and only ever returns a non-nil error.
+			if err := s.socks.Serve(session); s.appCl != nil {
+				s.appCl.Log().Errorf("Failed to start SOCKS5 server: %v", err)
 			}
 		}()
 	}

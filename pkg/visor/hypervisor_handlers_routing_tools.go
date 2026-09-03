@@ -17,12 +17,12 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	routeFinder "github.com/skycoin/skywire/pkg/deployment/rf/store"
+	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/rfclient"
-	routeFinder "github.com/skycoin/skywire/pkg/route-finder/store"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
-	tpdstore "github.com/skycoin/skywire/pkg/transport-discovery/store"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -279,6 +279,9 @@ func (s *hvCalcStore) GetTransportByID(context.Context, uuid.UUID) (*transport.E
 func (s *hvCalcStore) GetNumberOfTransports(context.Context) (map[tptypes.Type]int, error) {
 	return nil, nil
 }
+func (s *hvCalcStore) GetTransportSummary(context.Context, bool) (*tpdstore.TransportSummary, error) {
+	return &tpdstore.TransportSummary{ByType: map[string]int{}}, nil
+}
 func (s *hvCalcStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {
 	return nil, nil
 }
@@ -286,6 +289,10 @@ func (s *hvCalcStore) UpdateBandwidth(context.Context, string, cipher.PubKey, ui
 	return nil
 }
 func (s *hvCalcStore) UpdateLatency(context.Context, string, float64, float64, float64) error {
+	return nil
+}
+
+func (s *hvCalcStore) UpdateThroughput(context.Context, string, cipher.PubKey, float64) error {
 	return nil
 }
 func (s *hvCalcStore) GetTransportBandwidth(context.Context, uuid.UUID, string, int) ([]tpdstore.BandwidthAggregation, error) {

@@ -6,8 +6,10 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -19,14 +21,17 @@ type committedBlob struct {
 	// TestCommittedWasmBuiltFromCommit for why the std-Go blob does not require
 	// it yet.
 	goStamped bool
+	// staleSrcDirs, when set, are the repo-relative source dirs whose change since
+	// this blob's stamped revision means the committed blob is stale (see
+	// TestCommittedWasmNotStale). Empty = no staleness check.
+	staleSrcDirs []string
 }
 
 var committedBlobs = []committedBlob{
-	// Not goStamped yet: the committed blob predates the removal of
-	// -buildvcs=false, so it carries no vcs.revision. Once it is regenerated it
-	// will, and this can require it. Until then the check below still rejects a
-	// vcs.modified=true if one appears.
-	{path: filepath.Join("wasmgo", "wasm-visor.wasm.gz")},
+	// Regenerated with -buildvcs=true (#4355), so it now carries vcs.revision and
+	// is required to. staleSrcDirs is the wasm-visor-specific source it compiles;
+	// TestCommittedWasmNotStale fails if any of it changed since the blob's stamp.
+	{path: filepath.Join("wasmgo", "wasm-visor.wasm.gz"), goStamped: true, staleSrcDirs: []string{"cmd/wasm-visor", "pkg/wasmhv"}},
 	{path: filepath.Join("wasmtinygo", "wasm-visor.wasm.gz"), goStamped: true},
 }
 
@@ -104,6 +109,80 @@ func TestCommittedWasmBuiltFromCommit(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCommittedWasmNotStale fails when a committed wasm blob's wasm-visor-specific
+// SOURCE (staleSrcDirs) changed since the commit the blob was built from — i.e. the
+// committed blob ships DIFFERENT code than the sources it is a compilation of. This
+// is the staleness guard TestCommittedWasmBuiltFromCommit deliberately does not do:
+// that one only checks the blob was built from A commit (byte-compare is impossible
+// — the blob is vcs-stamped and self-referential). Here we read the blob's own
+// vcs.revision and ask git whether the wasm-visor source moved past it, EXCLUDING
+// the blob dir itself (committing the blob moves HEAD but must not read as stale).
+//
+// This is what caught #4330: the committed wasm-visor blob shipped WITHOUT the
+// dmsg-RPC gateway for weeks because nothing failed when cmd/wasm-visor changed but
+// the 49 MB blob was not rebuilt. When this fails, run
+// `make wasm-visor && make embed-wasm-visor` and commit the fresh blob.
+//
+// Skips (does not fail) when git is unavailable or the stamped revision is not in
+// history (a shallow CI clone) — a missing baseline is not evidence of staleness.
+func TestCommittedWasmNotStale(t *testing.T) {
+	root, err := repoRoot()
+	if err != nil {
+		t.Skipf("git repo root unavailable (%v) — cannot check staleness", err)
+	}
+	for _, blob := range committedBlobs {
+		if len(blob.staleSrcDirs) == 0 {
+			continue
+		}
+		t.Run(blob.path, func(t *testing.T) {
+			data, err := readBlob(blob.path)
+			if errors.Is(err, os.ErrNotExist) {
+				t.Skipf("%s is not committed in this tree", blob.path)
+			}
+			if err != nil {
+				t.Fatalf("read %s: %v", blob.path, err)
+			}
+			m := goRevision.Find(data)
+			if m == nil {
+				t.Fatalf("%s carries no vcs.revision — cannot check staleness", blob.path)
+			}
+			rev := strings.TrimPrefix(string(m), "vcs.revision=")
+
+			// git rev-list --count <rev>..HEAD -- <srcDirs> :(exclude)<blob dir>
+			args := []string{"-C", root, "rev-list", "--count", rev + "..HEAD", "--"}
+			args = append(args, blob.staleSrcDirs...)
+			args = append(args, ":(exclude)pkg/wasmhv/wasmbin")
+			out, err := exec.Command("git", args...).CombinedOutput() //nolint:gosec // fixed args, no user input
+			if err != nil {
+				// Unknown revision (shallow clone) prints "unknown revision"; treat any
+				// git failure as "cannot establish a baseline" and skip rather than fail.
+				t.Skipf("git rev-list against blob revision %s failed (%v): %s", rev[:12], err, bytes.TrimSpace(out))
+			}
+			if n := strings.TrimSpace(string(out)); n != "0" {
+				logArgs := append([]string{"-C", root, "log", "--oneline", rev + "..HEAD", "--"}, blob.staleSrcDirs...)
+				commits, err := exec.Command("git", logArgs...).CombinedOutput() //nolint:errcheck,gosec // best-effort detail for the failure message
+				if err != nil {
+					commits = nil
+				}
+				t.Errorf("%s is STALE: %s commit(s) changed %v since it was built (rev %s).\n"+
+					"The committed blob ships older code than its source (this is how #4330's dmsg-RPC\n"+
+					"shipped missing). Run 'make wasm-visor && make embed-wasm-visor' and commit the result.\n%s",
+					blob.path, n, blob.staleSrcDirs, rev[:12], bytes.TrimSpace(commits))
+			}
+		})
+	}
+}
+
+// repoRoot returns the git top-level dir, so the staleness check runs pathspecs
+// from a stable base regardless of the test's working directory.
+func repoRoot() (string, error) {
+	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // readBlob decompresses a committed artifact. They are tens of megabytes, so

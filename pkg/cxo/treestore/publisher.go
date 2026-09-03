@@ -74,6 +74,19 @@ type Publisher struct {
 	// encode-cache walk (no re-serialize).
 	lastPublishNs atomic.Int64
 
+	// errMu guards the last-publish-error introspection fields below.
+	// Kept separate from mu so PublishState() (called from `skywire cli
+	// visor state`) never contends with the publish loop that holds mu
+	// across the clone/encode window. recordPublishErr is called on every
+	// publishRoot terminal failure; clearPublishErr on every successful
+	// Publish — so LastErr reflects only a STANDING failure. A transient
+	// error the next tick cleared leaves these empty.
+	errMu          sync.Mutex
+	lastErrMsg     string
+	lastErrType    string
+	lastErrMissing bool
+	lastErrNs      int64
+
 	// allow gates which subscriber PKs may connect. nil-set means the
 	// allowlist is disabled (any subscriber is accepted). NewWithDMSG
 	// wires this state into the CXO node's OnSubscribeRemote hook
@@ -423,8 +436,20 @@ func (p *Publisher) hydrateFromContainer() error {
 		return fmt.Errorf("decode root TreeNode: %w", err)
 	}
 	hydrated := newMemNode()
-	if err := hydrateMemNode(up, &rootNode, hydrated); err != nil {
+	var dropped []string
+	if err := hydrateMemNode(up, &rootNode, hydrated, &dropped, ""); err != nil {
 		return fmt.Errorf("walk: %w", err)
+	}
+	// A dangling sub-object reference (the filling-trap's persisted form:
+	// a placeholder whose CXDS backing never landed) no longer discards the
+	// WHOLE previously-published tree. hydrateMemNode skips only the affected
+	// subtree; here we surface exactly which object(s) trapped so the culprit
+	// hash is identifiable, then keep the intact remainder as our starting
+	// state. This bounds the TPD under-report to the trapped subtree instead
+	// of dropping every transport this visor had published.
+	if len(dropped) > 0 {
+		p.log.WithField("dropped", dropped).
+			Warn("treestore-pub: hydrate skipped dangling sub-object refs (filling-trap culprits); kept the intact subtrees")
 	}
 	p.root = hydrated
 	return nil
@@ -438,7 +463,11 @@ func (p *Publisher) hydrateFromContainer() error {
 // produces a Root identical to the one we just read — until a Put
 // mutates a path, after which the dirty-path-only re-encode keeps
 // the unchanged subtrees stable.
-func hydrateMemNode(up registry.Pack, node *TreeNode, dest *memNode) error {
+// dropped accumulates "<path>/<name>(<hash16>)" for each sub-object ref that
+// could not be resolved from CXDS (the filling-trap's persisted form). Such a
+// ref is SKIPPED rather than aborting the whole hydrate, so the intact subtrees
+// survive a restart; path threads the ancestor names for a locatable label.
+func hydrateMemNode(up registry.Pack, node *TreeNode, dest *memNode, dropped *[]string, path string) error {
 	n, err := node.Children.Len(up)
 	if err != nil {
 		return err
@@ -455,12 +484,23 @@ func hydrateMemNode(up registry.Pack, node *TreeNode, dest *memNode) error {
 		if entry.Sub.Hash == (skycipher.SHA256{}) {
 			continue
 		}
+		childPath := entry.Name
+		if path != "" {
+			childPath = path + "/" + entry.Name
+		}
 		var sub TreeNode
 		if err := entry.Sub.Value(up, &sub); err != nil {
+			// Best-effort: a missing (unbacked) sub-object drops only its own
+			// subtree — name the culprit hash and continue with the rest. A
+			// non-missing decode error is real corruption; still abort.
+			if isMissingObject(err) {
+				*dropped = append(*dropped, fmt.Sprintf("%s(%s)", childPath, entry.Sub.Hash.Hex()[:16]))
+				continue
+			}
 			return err
 		}
 		child := newMemNode()
-		if err := hydrateMemNode(up, &sub, child); err != nil {
+		if err := hydrateMemNode(up, &sub, child, dropped, childPath); err != nil {
 			return err
 		}
 		dest.subs[entry.Name] = child
@@ -492,6 +532,108 @@ func (p *Publisher) Stats() node.PublisherStats {
 	return p.cxoNode.Stats()
 }
 
+// PublishState is a secrets-free snapshot of this feed's publish
+// health, surfaced by `skywire cli visor state` under .cxo. It exposes
+// the exact freeze signature — Dirty (in-memory changes awaiting
+// publish) alongside a climbing SecsSinceOKPublish and a standing
+// LastErr — so a stuck feed (the failure mode behind TPD under-
+// reporting a visor's transports) is a single query against the live
+// visor, local or --via dmsg://<pk>, not a log hunt.
+type PublishState struct {
+	FeedPK             string  `json:"feed_pk"`
+	Dirty              bool    `json:"dirty"`
+	DirtyGen           uint64  `json:"dirty_gen"`
+	LeafCount          int     `json:"leaf_count"`
+	NodeCount          int     `json:"node_count"`
+	SecsSinceOKPublish float64 `json:"secs_since_ok_publish"`
+	LastErr            string  `json:"last_err,omitempty"`
+	LastErrType        string  `json:"last_err_type,omitempty"`
+	LastErrMissingObj  bool    `json:"last_err_is_missing_object,omitempty"`
+	SecsSinceErr       float64 `json:"secs_since_err,omitempty"`
+	// Frozen is true when there is a STANDING publish error AND the
+	// in-memory tree has unpublished changes: the feed has advanced but
+	// no Root has been saved since the failure, so subscribers (e.g.
+	// TPD) are pinned to a stale snapshot. A transient error the next
+	// tick cleared leaves LastErr empty and this false.
+	Frozen bool `json:"frozen"`
+}
+
+// PublishState returns a live introspection snapshot of this feed's
+// publish health. Cheap: one mu-guarded tree count plus atomic/errMu
+// loads; safe to call concurrently with the publish loop.
+func (p *Publisher) PublishState() PublishState {
+	p.mu.Lock()
+	dirty := p.dirty
+	gen := p.dirtyGen
+	leaves, nodes := countTree(p.root)
+	p.mu.Unlock()
+
+	st := PublishState{
+		FeedPK:    p.pk.Hex(),
+		Dirty:     dirty,
+		DirtyGen:  gen,
+		LeafCount: leaves,
+		NodeCount: nodes,
+	}
+	if last := p.lastPublishNs.Load(); last != 0 {
+		st.SecsSinceOKPublish = time.Since(time.Unix(0, last)).Seconds()
+	}
+
+	p.errMu.Lock()
+	st.LastErr = p.lastErrMsg
+	st.LastErrType = p.lastErrType
+	st.LastErrMissingObj = p.lastErrMissing
+	if p.lastErrNs != 0 {
+		st.SecsSinceErr = time.Since(time.Unix(0, p.lastErrNs)).Seconds()
+	}
+	p.errMu.Unlock()
+
+	st.Frozen = dirty && st.LastErr != ""
+	return st
+}
+
+// recordPublishErr stores a standing publish failure for PublishState.
+func (p *Publisher) recordPublishErr(err error) {
+	p.errMu.Lock()
+	p.lastErrMsg = err.Error()
+	p.lastErrType = fmt.Sprintf("%T", err)
+	p.lastErrMissing = isMissingObject(err)
+	p.lastErrNs = time.Now().UnixNano()
+	p.errMu.Unlock()
+}
+
+// clearPublishErr drops any standing publish failure after a success.
+func (p *Publisher) clearPublishErr() {
+	p.errMu.Lock()
+	if p.lastErrMsg != "" {
+		p.lastErrMsg = ""
+		p.lastErrType = ""
+		p.lastErrMissing = false
+		p.lastErrNs = 0
+	}
+	p.errMu.Unlock()
+}
+
+// countTree walks the in-memory tree and returns the total leaf and
+// node counts. Callers must hold p.mu.
+func countTree(n *memNode) (leaves, nodes int) {
+	if n == nil {
+		return 0, 0
+	}
+	nodes = 1
+	for _, v := range n.leaves {
+		if v != nil {
+			leaves++
+		}
+	}
+	for _, sub := range n.subs {
+		l, nn := countTree(sub)
+		leaves += l
+		nodes += nn
+	}
+	return leaves, nodes
+}
+
 // SetAllowlist atomically replaces the subscriber allowlist. nil
 // disables the gate (any subscriber accepted). An empty non-nil
 // slice closes the gate to all subscribers — useful for staging a
@@ -507,6 +649,15 @@ func (p *Publisher) SetAllowlist(pks []cipher.PubKey) {
 // the gate is disabled (open to all).
 func (p *Publisher) Allowlist() []cipher.PubKey {
 	return p.allow.list()
+}
+
+// Denied returns a snapshot of subscribers the allowlist has turned away
+// (most-recent first). Diagnostic surface for `skywire cli visor state`:
+// a denied PK that isn't the consuming service's expected key is the tell
+// that the service dials in under a different CXO node identity than the
+// one the operator allowlisted.
+func (p *Publisher) Denied() []DeniedSub {
+	return p.allow.deniedList()
 }
 
 // AllowsSubscriber reports whether a subscribe request from pk would
@@ -1192,6 +1343,14 @@ func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 		err = attempt()
 	}
 	if err != nil {
+		// Record the standing failure for live introspection. `skywire
+		// cli visor state --jq '.cxo'` reads this back (err msg, concrete
+		// %T type, and the isMissingObject verdict) so a frozen feed is a
+		// query against the running visor — locally or --via dmsg://<pk>
+		// against any fleet node — instead of waiting for a log line to
+		// fire and catching it in a grep window. Supersedes the #4102
+		// log-only diagnostic.
+		p.recordPublishErr(err)
 		// Wrap with which-operation context so a future freeze
 		// self-localizes in the log. isMissingObject still matches through
 		// the %w wrap (errors.Is + a lowercase "not found" substring both
@@ -1200,6 +1359,9 @@ func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 		// about the retry decision — it only annotates the terminal error.
 		return nil, fmt.Errorf("treestore encode/save: %w", err)
 	}
+	// Success: clear any standing error so PublishState().Frozen falls
+	// back to false the moment the feed recovers.
+	p.clearPublishErr()
 	p.cxoNode.Publish(r)
 
 	// Nudge the cleanup goroutine. Non-blocking: if cleanup is already

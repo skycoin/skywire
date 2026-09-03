@@ -15,15 +15,15 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
+	"github.com/skycoin/skywire/pkg/deployment/rf/api"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
-	"github.com/skycoin/skywire/pkg/route-finder/api"
 	"github.com/skycoin/skywire/pkg/services"
-	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/svcmode"
-	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
 // Type is the registry key used in services.json blocks.
@@ -176,6 +176,9 @@ func (s *service) Run(ctx context.Context) error {
 
 	enableMetrics := cfg.MetricsAddr != ""
 	rfAPI := api.New(transportStore, logger, enableMetrics, dmsgAddr)
+	// Warm the shared route graph in the background (bound to the server context)
+	// so route requests reuse it instead of each building a per-source graph.
+	rfAPI.StartGraphCache(runCtx)
 
 	resolvedMode, err := svcmode.ResolveMode(cfg.Mode, !sk.Null())
 	if err != nil {
@@ -217,7 +220,6 @@ func (s *service) Run(ctx context.Context) error {
 		EmbeddedDmsgServers: embeddedServers,
 		SurveyWhitelist:     surveyWL,
 		Log:                 logger,
-		DisableDHT:          true,
 		OnDmsgServersUpdated: func(svrs []string) {
 			rfAPI.DmsgServers = svrs
 		},

@@ -22,10 +22,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/cmd/apps/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 )
 
@@ -33,6 +36,11 @@ import (
 // feed (the one initStats wires up on skyenv.DmsgCXOPort). Reserved
 // so user-registered feeds can't collide with it.
 const systemCXOFeedName = "stats"
+
+// tplistCXOFeedName is the well-known name of the visor's dedicated
+// transport-list discovery feed (the second CXO node initStats wires
+// up on skyenv.DmsgVisorTPListCXOPort).
+const tplistCXOFeedName = "tp-list"
 
 // cxoUserFeed wraps a treestore.Publisher with the metadata needed for
 // /feeds discovery and clean teardown.
@@ -200,6 +208,176 @@ func (v *Visor) ListCXOFeeds() []logserver.CXOFeedEntry {
 	// feeds in port order so listing diffs are deterministic.
 	if len(out) > 2 {
 		sortFeedsByPort(out[1:])
+	}
+	return out
+}
+
+// setSystemCXOPub retains the telemetry/tp-list feed publisher so
+// CXOFeedStates can read its live PublishState. Called once by initStats.
+func (v *Visor) setSystemCXOPub(pub *treestore.Publisher) {
+	v.cxoUserFeedsMu.Lock()
+	v.systemCXOPub = pub
+	v.cxoUserFeedsMu.Unlock()
+}
+
+// setTPListCXOPub retains the dedicated tp-list discovery feed publisher
+// so CXOFeedStates can read its live PublishState. Called once by
+// initStats; pub is nil when the dedicated publisher didn't start (the
+// combined-feed fallback), in which case no second .cxo entry is emitted.
+func (v *Visor) setTPListCXOPub(pub *treestore.Publisher) {
+	v.cxoUserFeedsMu.Lock()
+	v.tplistCXOPub = pub
+	v.cxoUserFeedsMu.Unlock()
+}
+
+// CXOFeedState pairs a feed's identity (name + dmsg port) with its live
+// publish-health snapshot. Surfaced by StateSnapshot under .cxo.
+type CXOFeedState struct {
+	Name string `json:"name"`
+	Port uint16 `json:"port,omitempty"`
+	treestore.PublishState
+	// CurrentLeaves is populated only for the "stats" telemetry feed: it
+	// reports the count of per-transport telemetry rows the feed carries
+	// across its ≤16 compact sharded leaves (transports/telemetry/<sh>).
+	// With the sharded shape every packed row is a LIVE transport (the
+	// sampler re-encodes each shard from the live set every tick), so Live
+	// == Total and Dead is structurally 0 — the stale-leaf bloat the old
+	// per-transport `current` format accumulated no longer exists.
+	CurrentLeaves *CurrentLeafStats `json:"current_leaves,omitempty"`
+	// Allowlist is the set of PKs currently permitted to subscribe to this
+	// feed (nil = OPEN to all). For a service-consumed feed (stats,
+	// tp-list, registration) this MUST contain the consuming service's PK
+	// or that service can't fill — its subscribe is rejected and it shows
+	// up under Denied below.
+	Allowlist []string `json:"allowlist,omitempty"`
+	// Denied lists would-be subscribers the allowlist turned away
+	// (most-recent first). A denied PK that isn't a known peer is the
+	// direct signature of a gating misconfiguration — e.g. TPD dialing in
+	// under a CXO node key that differs from the transport_discovery_dmsg
+	// PK the visor allowlisted.
+	Denied []DeniedSubscriber `json:"denied,omitempty"`
+}
+
+// DeniedSubscriber is one rejected-subscriber record for CXOFeedState.
+type DeniedSubscriber struct {
+	PK     string    `json:"pk"`
+	Count  int       `json:"count"`
+	LastAt time.Time `json:"last_at"`
+}
+
+// CurrentLeafStats is the live/dead breakdown of the telemetry feed's
+// per-transport telemetry rows, decoded from the compact sharded leaves
+// (transports/telemetry/<sh>). Each row is classified by whether its
+// transport is in the visor's live set; with the sharded shape the
+// sampler only ever packs live transports, so Dead is normally 0.
+type CurrentLeafStats struct {
+	Total int `json:"total"`
+	Live  int `json:"live"`
+	Dead  int `json:"dead"`
+}
+
+// currentLeafStats walks the publisher's transports/telemetry/<sh> shard
+// leaves, decodes each, and classifies every packed transport row by
+// whether it's in liveIDs. Cheap: ≤16 in-memory leaf decodes plus a map
+// lookup per row.
+func currentLeafStats(pub *treestore.Publisher, liveIDs map[uuid.UUID]struct{}) CurrentLeafStats {
+	var st CurrentLeafStats
+	pub.Walk("transports", func(path string, value []byte) bool {
+		if _, ok := telemetryShardOfPath(path); !ok {
+			return true
+		}
+		_, entries, err := telemetrywire.DecodeShard(value)
+		if err != nil {
+			return true
+		}
+		for _, e := range entries {
+			st.Total++
+			if _, live := liveIDs[e.ID]; live {
+				st.Live++
+			} else {
+				st.Dead++
+			}
+		}
+		return true
+	})
+	return st
+}
+
+// CXOFeedStates returns the live PublishState of the system telemetry
+// feed plus every user feed. The system feed (the one TPD subscribes to
+// for a visor's transport list) is first. Empty when no publisher is
+// wired (Stats.Disabled or pre-init). Reads are cheap and concurrency-
+// safe — see treestore.Publisher.PublishState.
+// feedGating snapshots a publisher's subscriber allowlist (as hex PKs;
+// nil = open) and the subscribers it has denied, for CXOFeedState.
+func feedGating(pub *treestore.Publisher) (allow []string, denied []DeniedSubscriber) {
+	if pub == nil {
+		return nil, nil
+	}
+	for _, pk := range pub.Allowlist() {
+		allow = append(allow, pk.Hex())
+	}
+	for _, d := range pub.Denied() {
+		denied = append(denied, DeniedSubscriber{
+			PK:     d.PK.Hex(),
+			Count:  d.Count,
+			LastAt: time.Unix(0, d.LastNanos),
+		})
+	}
+	return allow, denied
+}
+
+func (v *Visor) CXOFeedStates() []CXOFeedState {
+	v.cxoUserFeedsMu.Lock()
+	sysPub := v.systemCXOPub
+	tplistPub := v.tplistCXOPub
+	users := make([]*cxoUserFeed, 0, len(v.cxoUserFeeds))
+	for _, fd := range v.cxoUserFeeds {
+		users = append(users, fd)
+	}
+	v.cxoUserFeedsMu.Unlock()
+
+	var out []CXOFeedState
+	if sysPub != nil {
+		// Live/dead current-leaf breakdown for the telemetry feed: the
+		// feed's own current-leaf paths ∩ the live transport set. Directly
+		// quantifies the dead-leaf bloat that starves TPD's Root fill.
+		cls := currentLeafStats(sysPub, liveTransportIDs(v))
+		allow, denied := feedGating(sysPub)
+		out = append(out, CXOFeedState{
+			Name:          systemCXOFeedName,
+			Port:          skyenv.DmsgCXOPort,
+			PublishState:  sysPub.PublishState(),
+			CurrentLeaves: &cls,
+			Allowlist:     allow,
+			Denied:        denied,
+		})
+	}
+	// The dedicated tp-list discovery feed (a second CXO node under the
+	// same visor PK). nil when initStats fell back to the combined feed —
+	// then there is only the one telemetry entry above.
+	if tplistPub != nil {
+		allow, denied := feedGating(tplistPub)
+		out = append(out, CXOFeedState{
+			Name:         tplistCXOFeedName,
+			Port:         skyenv.DmsgVisorTPListCXOPort,
+			PublishState: tplistPub.PublishState(),
+			Allowlist:    allow,
+			Denied:       denied,
+		})
+	}
+	for _, fd := range users {
+		if fd.pub == nil {
+			continue
+		}
+		allow, denied := feedGating(fd.pub)
+		out = append(out, CXOFeedState{
+			Name:         fd.name,
+			Port:         fd.port,
+			PublishState: fd.pub.PublishState(),
+			Allowlist:    allow,
+			Denied:       denied,
+		})
 	}
 	return out
 }

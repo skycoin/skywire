@@ -33,9 +33,9 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/tcpnoise"
 	"github.com/skycoin/skywire/pkg/skychat/dm"
 	"github.com/skycoin/skywire/pkg/skychat/message"
-	"github.com/skycoin/skywire/pkg/skywire/tcpnoise"
 )
 
 // --- harness ----------------------------------------------------------------

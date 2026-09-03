@@ -107,7 +107,7 @@ linters:
       # fail — so this is a platform-stub false positive, not a dead branch.
       - linters:
           - staticcheck
-        text: "SA4023:"
+        text: "SA4023"
         path: "(pkg/vpn/|pkg/vpnrouter/meshgw/|cmd/apps/vpn-router/)"
       # require.NoError-then-use pattern in these tests: staticcheck can't
       # prove the pointer is non-nil after the error check (SA5011), but the
@@ -115,7 +115,7 @@ linters:
       - linters:
           - staticcheck
         text: "SA5011:"
-        path: "(pkg/calvin/|pkg/config-bootstrapper/api/|pkg/skywireconfig/autoconfigcmd/).*_test\\.go"
+        path: "(pkg/calvin/|pkg/deployment/conf/api/|pkg/skywireconfig/autoconfigcmd/).*_test\\.go"
 issues:
   new: false
 formatters:

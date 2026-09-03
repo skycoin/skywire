@@ -19,9 +19,27 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
+	"github.com/0magnet/yamux"
 )
+
+// bridgeConfig is the yamux config for BOTH ends of the wasm RPC bridge. It
+// DISABLES keepalive and uses a long write-timeout on purpose: the tab end runs
+// inside a browser event loop that a CPU-busy wasm-visor (route-setup churn,
+// etc.) can stall for well over yamux's default 10s ConnectionWriteTimeout. With
+// keepalive on, that stall trips "keepalive failed: connection write timeout",
+// yamux tears down the whole session, and every subsequent `skywire cli --rpc`
+// call EOFs. The channel is request/response and short-lived per cli connection,
+// so periodic keepalive liveness buys nothing — a real disconnect surfaces via
+// the WebSocket/TCP close instead. Both ends must agree (each side runs its own
+// keepalive), so host (NewBridge) and tab (ServeTab) share this.
+func bridgeConfig() *yamux.Config {
+	c := yamux.DefaultConfig()
+	c.EnableKeepAlive = false
+	c.ConnectionWriteTimeout = 5 * time.Minute
+	return c
+}
 
 // Bridge fronts ONE tab: a yamux session over the tab's WebSocket connection,
 // plus a local TCP listener whose every accepted connection is piped to a fresh
@@ -38,7 +56,7 @@ type Bridge struct {
 // an OS-assigned ephemeral port). Accepted cli connections are each piped to a
 // new yamux stream. Close tears it all down.
 func NewBridge(tabConn net.Conn, port int, log func(string)) (*Bridge, error) {
-	sess, err := yamux.Server(tabConn, yamux.DefaultConfig())
+	sess, err := yamux.Server(tabConn, bridgeConfig())
 	if err != nil {
 		return nil, fmt.Errorf("wasmrpc: yamux server: %w", err)
 	}

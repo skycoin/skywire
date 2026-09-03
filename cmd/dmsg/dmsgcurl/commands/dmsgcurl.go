@@ -135,7 +135,7 @@ var RootCmd = &cobra.Command{
 				os.Exit(errorCode["COULDNT_RESOLVE_PROXY"])
 			}
 			transport := &http.Transport{
-				Dial: dialer.Dial,
+				DialContext: dialer.(proxy.ContextDialer).DialContext,
 			}
 			httpClient = &http.Client{
 				Transport: transport,

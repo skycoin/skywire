@@ -19,12 +19,13 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
-	routeFinder "github.com/skycoin/skywire/pkg/route-finder/store"
+	routeFinder "github.com/skycoin/skywire/pkg/deployment/rf/store"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -40,6 +41,7 @@ var (
 	calcSource    string
 	calcQueueCap  int
 	calcByLatency bool
+	calcCapacity  bool
 )
 
 func init() {
@@ -50,9 +52,10 @@ func init() {
 	calcCmd.Flags().Uint16VarP(&calcMinHops, "min", "n", 0, "minimum hops (0 = use visor's routing.min_hops, fallback 1)")
 	calcCmd.Flags().Uint16VarP(&calcMaxHops, "max", "x", 5, "maximum hops")
 	calcCmd.Flags().IntVarP(&calcCount, "count", "c", 1, "max routes to return (0 = all matching)")
-	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP). dht|auto are accepted for compatibility and also read from TPD, since the DHT store was removed; dht additionally forces the non-streaming local-compute path")
+	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP) | tps (AUTHORITATIVE: src+dst own transports via the setup node, same path as tp --remote; TPD-independent, single-intermediate). dht|auto are accepted for compatibility and also read from TPD, since the DHT store was removed; dht and tps force the non-streaming local-compute path")
 	calcCmd.Flags().IntVar(&calcQueueCap, "queue-cap", 0, "BFS queue cap (0 = server/local default ~200K, negative = unbounded)")
 	calcCmd.Flags().BoolVar(&calcByLatency, "by-latency", false, "rank routes by cumulative transport latency (lowest first); skips the streaming gRPC path since the full set has to be in hand to sort")
+	calcCmd.Flags().BoolVar(&calcCapacity, "capacity", false, "instead of listing routes, report how many disjoint SINGLE-INTERMEDIATE routes CAN exist to the destination — the warm-standby mux pool ceiling. Uses only this visor's + the destination's own transports (setup-node/attached-visor RPC) intersected by peer PK; TPD-free and zero Route-Finder load")
 	// Hidden long-form aliases so the hop-bound vocabulary matches
 	// `route find` / `route trace` (--min/--max stay the visible spelling).
 	calcCmd.Flags().Uint16Var(&calcMinHops, "min-hops", 0, "minimum hops (alias for --min)")
@@ -64,10 +67,10 @@ func init() {
 
 // validCalcSource reports whether s is an accepted --source value.
 // Kept as a single source of truth so the up-front validation and the
-// local-compute switch agree on the accepted set (tpd|auto|dht).
+// local-compute switch agree on the accepted set (tpd|tps|auto|dht).
 func validCalcSource(s string) bool {
 	switch strings.ToLower(s) {
-	case "tpd", "auto", "dht":
+	case "tpd", "tps", "auto", "dht":
 		return true
 	default:
 		return false
@@ -93,7 +96,7 @@ var calcCmd = &cobra.Command{
 		// it, so the streaming gRPC path silently accepted (and ignored)
 		// a bogus --source and returned a route anyway.
 		if !validCalcSource(calcSource) {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|auto|dht", calcSource))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|tps|auto|dht", calcSource))
 		}
 
 		// Handle config flags
@@ -186,7 +189,26 @@ var calcCmd = &cobra.Command{
 		// gRPC streaming path emits routes one-by-one as the BFS
 		// finds them; sorting by latency needs the full set in hand,
 		// so --by-latency forces the local-compute path below.
-		if !calcByLatency && rpcClient != nil && strings.ToLower(calcSource) != "dht" {
+		// tps assembles its graph from the src+dst OWN transports (visor
+		// RPC + setup-node), not the TPD snapshot the gRPC BFS streams
+		// over, so — like dht — it must take the local-compute path below.
+		// --capacity: how many disjoint SINGLE-INTERMEDIATE routes CAN exist to the
+		// destination. It does NOT enumerate the TPD graph (that OOMs on a dense
+		// mesh) — it needs only two transport sets: this visor's own transports and
+		// the destination's (the latter read via the setup node, or the attached
+		// visor's RPC), then intersects their peer PKs. Every peer both ends share is
+		// a disjoint local->relay->exit route; a direct local<->exit transport adds
+		// one more. Bounded, TPD-free, and zero load on the Route Finder.
+		if calcCapacity {
+			entries, err := fetchTPSTransports(rpcClient, srcPK, dstPK)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("capacity: %w", err))
+			}
+			report, text := routeCapacityTPS(srcPK, dstPK, entries)
+			internal.PrintOutput(cmd.Flags(), report, text)
+			return
+		}
+		if !calcByLatency && rpcClient != nil && strings.ToLower(calcSource) != "dht" && strings.ToLower(calcSource) != "tps" {
 			if err := streamRoutesViaGRPC(ctx, cmd, srcPK, dstPK, minHops, calcMaxHops, calcCount, calcQueueCap, calcSource, tpdURL); err == nil {
 				return
 			} else if !isFallbackEligible(err) {
@@ -214,8 +236,18 @@ var calcCmd = &cobra.Command{
 		switch strings.ToLower(calcSource) {
 		case "tpd", "auto", "dht":
 			entries, err = fetchAllTransports(ctx, cmd.Flags(), tpdURL)
+		case "tps":
+			// AUTHORITATIVE source: build the graph from the src and dst
+			// visors' OWN live transports rather than TPD's under-
+			// reflecting global snapshot. The destination's transports are
+			// fetched via the embedded Transport Setup Node (the same
+			// setup-node RPC `tp --remote <pk>` uses), so a single-
+			// intermediate S->I->D route is computable even when the exit's
+			// transports never fully land in TPD's CXO — the fill gap that
+			// otherwise starves the adaptive mux of disjoint legs.
+			entries, err = fetchTPSTransports(rpcClient, srcPK, dstPK)
 		default:
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|auto|dht", calcSource))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|tps|auto|dht", calcSource))
 		}
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -301,6 +333,132 @@ var calcCmd = &cobra.Command{
 		}
 		internal.PrintOutput(cmd.Flags(), pairs, textBuf.String())
 	},
+}
+
+// routeCapacityInfo is the --capacity report: how many disjoint SINGLE-INTERMEDIATE
+// routes CAN exist to the destination — the ceiling the warm-standby mux pool can
+// hold. It is computed from just two transport sets (this visor's own transports and
+// the destination's), intersecting their peer PKs: every peer BOTH ends have a
+// transport to is a disjoint local->relay->exit route, and a direct local<->exit
+// transport adds one more. These are POSSIBLE routes, not instantiated route groups.
+type routeCapacityInfo struct {
+	Dst    string `json:"dst"`
+	Direct bool   `json:"direct"`
+	// DirectTransports counts distinct direct local<->exit transports (>1 when the
+	// two share more than one transport type).
+	DirectTransports int `json:"direct_transports"`
+	// SingleRelayRoutes is the number of shared intermediates — each is one disjoint
+	// two-hop route. ShortDisjointRoutes adds the direct route when present: the
+	// warm-standby pool ceiling for <=1-relay (low-latency) routes.
+	SingleRelayRoutes   int `json:"single_relay_routes"`
+	ShortDisjointRoutes int `json:"short_disjoint_routes"`
+	// LocalPeers / DstPeers are each end's distinct transport peers (excluding each
+	// other); the smaller bounds how many shared intermediates can exist.
+	LocalPeers int `json:"local_peers"`
+	DstPeers   int `json:"dst_peers"`
+	// RelayTypes maps the route's transport type (the less-preferred of its two hop
+	// types — a route is only as good as its worse hop) to the number of relays it
+	// serves, so the type mix of the pool is visible.
+	RelayTypes map[string]int `json:"relay_types"`
+}
+
+// routeCapacityTPS computes single-intermediate route capacity from the combined
+// own-transport sets of src and dst (as returned by fetchTPSTransports): it keeps,
+// per peer, the most-preferred transport type each end has to it, then intersects.
+// Per-edge type preference uses tptypes.TypePreference (STCPR>QUIC>SUDPH>...), so a
+// relay reachable by several types is scored by its best on each side.
+func routeCapacityTPS(src, dst cipher.PubKey, entries []*transport.Entry) (routeCapacityInfo, string) {
+	srcPeers := map[cipher.PubKey]tptypes.Type{}
+	dstPeers := map[cipher.PubKey]tptypes.Type{}
+	directCount := 0
+	var directBest *tptypes.Type
+	keepBest := func(m map[cipher.PubKey]tptypes.Type, peer cipher.PubKey, t tptypes.Type) {
+		if cur, ok := m[peer]; !ok || tptypes.TypePreference(t) < tptypes.TypePreference(cur) {
+			m[peer] = t
+		}
+	}
+	for _, e := range entries {
+		if e == nil {
+			continue
+		}
+		if e.HasEdge(src) {
+			if r := e.RemoteEdge(src); r == dst {
+				directCount++
+				if directBest == nil || tptypes.TypePreference(e.Type) < tptypes.TypePreference(*directBest) {
+					tt := e.Type
+					directBest = &tt
+				}
+			} else {
+				keepBest(srcPeers, r, e.Type)
+			}
+		}
+		if e.HasEdge(dst) {
+			if r := e.RemoteEdge(dst); r != src {
+				keepBest(dstPeers, r, e.Type)
+			}
+		}
+	}
+
+	relayTypes := map[string]int{}
+	relays := 0
+	for peer, stype := range srcPeers {
+		dtype, ok := dstPeers[peer]
+		if !ok {
+			continue
+		}
+		relays++
+		// The route is only as good as its worse hop: report the less-preferred type.
+		rt := stype
+		if tptypes.TypePreference(dtype) > tptypes.TypePreference(stype) {
+			rt = dtype
+		}
+		relayTypes[string(rt)]++
+	}
+
+	info := routeCapacityInfo{
+		Dst:               dst.Hex(),
+		Direct:            directCount > 0,
+		DirectTransports:  directCount,
+		SingleRelayRoutes: relays,
+		LocalPeers:        len(srcPeers),
+		DstPeers:          len(dstPeers),
+		RelayTypes:        relayTypes,
+	}
+	info.ShortDisjointRoutes = relays
+	if info.Direct {
+		info.ShortDisjointRoutes++
+	}
+
+	// Sorted type mix for the text line, most-preferred first.
+	types := make([]string, 0, len(relayTypes))
+	for t := range relayTypes {
+		types = append(types, t)
+	}
+	sort.Slice(types, func(i, j int) bool {
+		return tptypes.TypePreference(tptypes.Type(types[i])) < tptypes.TypePreference(tptypes.Type(types[j]))
+	})
+	var mix strings.Builder
+	for i, t := range types {
+		if i > 0 {
+			mix.WriteString(" ")
+		}
+		fmt.Fprintf(&mix, "%s:%d", t, relayTypes[t])
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "route capacity to %s (single-intermediate; own+peer transports, TPD-free)\n", dst.Hex())
+	directType := "-"
+	if directBest != nil {
+		directType = string(*directBest)
+	}
+	fmt.Fprintf(&b, "  direct local<->exit:          %v (%d transport(s), best %s)\n", info.Direct, info.DirectTransports, directType)
+	fmt.Fprintf(&b, "  single-relay disjoint routes: %d   <- shared intermediates, each a disjoint 2-hop route\n", info.SingleRelayRoutes)
+	fmt.Fprintf(&b, "  short disjoint total:         %d   <- warm-standby pool ceiling (<=1 relay)\n", info.ShortDisjointRoutes)
+	fmt.Fprintf(&b, "  local peers: %d   exit peers: %d   (smaller bounds the intersection)\n", info.LocalPeers, info.DstPeers)
+	if mix.Len() > 0 {
+		fmt.Fprintf(&b, "  relay route types (worse hop): %s\n", mix.String())
+	}
+	return info, b.String()
 }
 
 // streamRoutesViaGRPC opens the visor's StreamCalcRoutes gRPC stream and
@@ -458,6 +616,89 @@ func fetchAllTransports(_ context.Context, cmdFlags *pflag.FlagSet, tpdAddr stri
 	return entries, nil
 }
 
+// fetchTPSTransports assembles the transport graph for `--source tps`
+// from AUTHORITATIVE per-visor data: the source visor's own transports
+// unioned with the destination visor's own transports. This is exactly
+// what the local BFS needs to enumerate every single-intermediate
+// S->I->D route (an intermediate I qualifies iff src holds a transport
+// to I AND dst holds a transport to I), and it never consults TPD.
+//
+// The destination's live transports come from the embedded Transport
+// Setup Node (rpcClient.TPSGetTransports — the same setup-node query
+// `tp --remote <pk>` uses), so the graph reflects the exit's real
+// connectivity even when TPD's CXO view under-reflects it (the fill gap
+// that starves the adaptive mux of disjoint legs). Each side is read
+// locally when its PK is this visor (rpcClient.Transports), otherwise
+// via TPS. Entries are deduped by transport ID.
+//
+// This mirrors, for the CLI, the router's default-on RSN-oracle 2-hop
+// path (pkg/router/rsn_oracle_routes.go), which already computes
+// single-intermediate routes from the destination's own transports —
+// giving operators a way to reproduce and test that planning offline.
+func fetchTPSTransports(rpcClient visor.API, srcPK, dstPK cipher.PubKey) ([]*transport.Entry, error) {
+	if rpcClient == nil {
+		return nil, fmt.Errorf("--source tps requires a running visor RPC (TPS is served by the local visor)")
+	}
+
+	var localPK cipher.PubKey
+	if ov, err := rpcClient.Overview(); err == nil {
+		localPK = ov.PubKey
+	}
+
+	byID := make(map[uuid.UUID]*transport.Entry)
+	add := func(id uuid.UUID, local, remote cipher.PubKey, t tptypes.Type) {
+		if id == (uuid.UUID{}) {
+			id = transport.MakeTransportID(local, remote, t)
+		}
+		if _, ok := byID[id]; ok {
+			return
+		}
+		e := transport.MakeEntry(local, remote, t, transport.LabelSkycoin)
+		e.ID = id
+		byID[id] = &e
+	}
+
+	// ownTransports adds pk's OWN live transports: read locally when pk is
+	// this visor, otherwise fetched via the embedded TPS (a setup-node
+	// query dialed to pk over dmsg).
+	ownTransports := func(pk cipher.PubKey) error {
+		if !localPK.Null() && pk == localPK {
+			sums, err := rpcClient.Transports(nil, nil, false)
+			if err != nil {
+				return fmt.Errorf("local transports: %w", err)
+			}
+			for _, s := range sums {
+				if s == nil || s.IsSetup {
+					continue
+				}
+				add(s.ID, s.Local, s.Remote, s.Type)
+			}
+			return nil
+		}
+		tps, err := rpcClient.TPSGetTransports(pk)
+		if err != nil {
+			return fmt.Errorf("tps get-transports %s: %w", pk, err)
+		}
+		for _, t := range tps {
+			add(t.ID, t.Local, t.Remote, tptypes.Type(t.Type))
+		}
+		return nil
+	}
+
+	if err := ownTransports(srcPK); err != nil {
+		return nil, err
+	}
+	if err := ownTransports(dstPK); err != nil {
+		return nil, err
+	}
+
+	entries := make([]*transport.Entry, 0, len(byID))
+	for _, e := range byID {
+		entries = append(entries, e)
+	}
+	return entries, nil
+}
+
 // memoryStore wraps fetched transports to implement store.Store for route-finder's Graph
 type memoryStore struct {
 	entries []*transport.Entry
@@ -500,6 +741,9 @@ func (s *memoryStore) GetTransportByID(context.Context, uuid.UUID) (*transport.E
 func (s *memoryStore) GetNumberOfTransports(context.Context) (map[tptypes.Type]int, error) {
 	return nil, nil
 }
+func (s *memoryStore) GetTransportSummary(context.Context, bool) (*store.TransportSummary, error) {
+	return &store.TransportSummary{ByType: map[string]int{}}, nil
+}
 func (s *memoryStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {
 	return s.entries, nil
 }
@@ -507,6 +751,10 @@ func (s *memoryStore) UpdateBandwidth(context.Context, string, cipher.PubKey, ui
 	return nil
 }
 func (s *memoryStore) UpdateLatency(context.Context, string, float64, float64, float64) error {
+	return nil
+}
+
+func (s *memoryStore) UpdateThroughput(context.Context, string, cipher.PubKey, float64) error {
 	return nil
 }
 func (s *memoryStore) GetTransportBandwidth(context.Context, uuid.UUID, string, int) ([]store.BandwidthAggregation, error) {

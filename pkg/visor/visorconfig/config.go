@@ -4,7 +4,7 @@ package visorconfig
 import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	dmsgspec "github.com/skycoin/skywire/pkg/dmsgc/spec"
+	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
 )
@@ -39,11 +39,14 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		Servers:              []*disc.Entry{},
 		ConnectedServersType: "all",
 		Protocol:             "yamux",
+		Carriers:             skyenv.DefaultDmsgCarriers,
 	}
+	hypervisorAutoconnect := skyenv.HypervisorAutoconnect
 	conf.Transport = &Transport{
-		Discovery:         services.TransportDiscovery,
-		AddressResolver:   services.AddressResolver,
-		PublicAutoconnect: skyenv.PublicAutoconnect,
+		Discovery:             services.TransportDiscovery,
+		AddressResolver:       services.AddressResolver,
+		PublicAutoconnect:     skyenv.PublicAutoconnect,
+		HypervisorAutoconnect: &hypervisorAutoconnect,
 		LogStore: &LogStore{
 			// The on-disk CSV log store was retired; "file" is now a no-op that
 			// only earns a deprecation warning at boot (init_transport.go). Default

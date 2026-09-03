@@ -18,6 +18,26 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
+// errRouteGroupInitializing is returned by saveRouteGroupRules when a route
+// group for the same descriptor is already being wrapped with noise (present in
+// rgsRaw). It is a typed sentinel so AcceptRoutes can tell this benign
+// "the leg belongs to a group that already exists" case apart from a real
+// failure and skip deleting the leg's rules (#80 Fix B). Deleting them here is
+// exactly what black-holes an aux mux leg that raced the primary's setup.
+var errRouteGroupInitializing = errors.New("noise route group already being initialized")
+
+// perFrameNoiseEnabled advertises CapPerFrameNoise (the mux inverse-
+// multiplexer's per-frame AEAD) on every handshake. It is DEFAULT ON: per-frame
+// noise is capability-NEGOTIATED, so it activates only between two edges that
+// both run a build with this on — an un-upgraded peer never advertises the bit
+// and the group transparently falls back to the stream-noise (EncryptConn) wrap.
+// So as the fleet updates, new↔new route groups gain single-stream aggregation
+// with no operator action while old peers are unaffected. It is route-group
+// scoped (not the dmsg RPC control plane), so a regression degrades skynet/proxy
+// route groups but leaves dmsg access intact. See
+// docs/inverse_mux_per_frame_noise_rfc.md.
+const perFrameNoiseEnabled = true
+
 // AcceptRoutes should block until we receive an AddRules packet from SetupNode
 // that contains ConsumeRule(s) or ForwardRule(s).
 // Then the following should happen:
@@ -63,6 +83,15 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 	datagram := r.isDatagramPort(rules.Desc.DstPort())
 	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, "", datagram)
 	if err != nil {
+		// A route group for this descriptor is already initializing: these rules
+		// belong to an additional (aux) mux leg the existing group should adopt,
+		// not to a failed new group. Deleting them would black-hole the leg —
+		// exactly the #80 collapse. With Fix A the leg is buffered and drained on
+		// registration, so leave its rules in place and don't treat this as fatal.
+		if errors.Is(err, errRouteGroupInitializing) {
+			r.logger.WithError(err).Debugf("Aux leg for initializing route group %s; leaving rules for adoption", &rules.Desc)
+			return nil, err
+		}
 		// Clean up saved rules if route group setup fails
 		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
 		return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
@@ -118,6 +147,10 @@ func (r *router) Serve(ctx context.Context) error {
 	// route group never registers (see router_pending.go).
 	go r.pending.runSweep(ctx, r.logger)
 
+	// Reclaim aux mux legs buffered for a route group that never registers
+	// (its setup handshake failed); see router_pending_legs.go, #80.
+	go r.pendingLegs.runSweep(ctx, r.logger)
+
 	return nil
 }
 
@@ -148,7 +181,14 @@ func (r *router) serveTransportManager(ctx context.Context) {
 				return
 			}
 
-			r.logger.Warnf("Failed to handle transport frame: %v", err)
+			// Rule-not-found / route-descriptor-does-not-exist fire per-packet
+			// for stale or torn-down routes and are normal during teardown, so
+			// demote them to DEBUG; keep genuinely unexpected frame errors at WARN.
+			if errors.Is(err, routing.ErrRuleNotFound) || errors.Is(err, errRouteDescNotExist) {
+				r.logger.WithError(err).Debug("Dropped transport frame for stale route")
+			} else {
+				r.logger.Warnf("Failed to handle transport frame: %v", err)
+			}
 		}
 	}
 }
@@ -252,7 +292,7 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	if _, ok := r.rgsRaw[rules.Desc]; ok {
 		r.mx.Unlock()
 		log.Warnf("Desc %s already reserved, skipping...", &rules.Desc)
-		return nil, fmt.Errorf("noise route group with desc %s already being initialized", &rules.Desc)
+		return nil, fmt.Errorf("%w: desc %s", errRouteGroupInitializing, &rules.Desc)
 	}
 
 	// we need to close currently existing wrapped rg if there's one
@@ -269,6 +309,13 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc, r.mLogger)
 	rg.SetAppName(appName)
 	rg.initiator = nsConf.Initiator
+	// Per-frame noise (inverse-mux): hand the RG the same KK keys EncryptConn
+	// would use, and opt in per the env gate so the whole fleet isn't flipped at
+	// once. When both edges advertise CapPerFrameNoise the RG runs noise per mux
+	// frame and EncryptConn is bypassed (see below); otherwise it falls back to
+	// the stream-noise wrap unchanged.
+	rg.nsConf = nsConf
+	rg.perFrameNoiseWant = perFrameNoiseEnabled
 	rg.appendRules(rules.Forward, rules.Reverse, tp)
 	// we put raw rg so it can be accessible to the router when handshake packets come in
 	r.rgsRaw[rules.Desc] = rg
@@ -414,7 +461,15 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 		log.Debugf("Successfully closed old noise route group")
 	}
 
-	if rg.encrypt {
+	if rg.encrypt && rg.perFrameNoiseActive {
+		// Per-frame noise negotiated: the mux already seals/opens every DATA frame
+		// under its sequence-nonce, so the RouteGroup hands the app plaintext
+		// directly — no stream-noise wrap. (Both edges agreed via CapPerFrameNoise;
+		// if only one wanted it, perFrameNoiseActive is false and we fall through
+		// to the stream wrap below.)
+		nrg = &NoiseRouteGroup{rg: rg, Conn: rg}
+		log.Debugf("Per-frame noise route group ready (%s): EncryptConn bypassed", &rules.Desc)
+	} else if rg.encrypt {
 		// wrapping rg with noise
 		wrappedRG, err := network.EncryptConn(nsConf, rg)
 		if err != nil {
@@ -456,6 +511,14 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	r.rgsNs[rules.Desc] = nrg
 	delete(r.rgsRaw, rules.Desc)
 	r.mx.Unlock()
+
+	// Drain any aux mux legs that arrived (via IntroduceRules) while this group
+	// was still initializing in rgsRaw (#80). They were buffered instead of being
+	// pushed to r.accept — where AcceptRoutes' second saveRouteGroupRules would
+	// have deleted their rules or blocked the whole handshake-await, collapsing
+	// the group. On the initiator this is a no-op: the initiator dials its own aux
+	// legs and never receives them via IntroduceRules.
+	r.drainPendingLegs(nrg, rules.Desc)
 
 	// Faithful-UDP (#2607): when this end intends datagram mode for the
 	// route, build a DatagramRouteGroup sibling over the same rules +

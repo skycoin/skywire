@@ -21,7 +21,9 @@ import (
 	"sync"
 	"time"
 
-	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
+	ipc "github.com/0magnet/golang-ipc"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -677,9 +679,7 @@ var RootCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }
 
 // RunSkychat runs the skychat app logic. This can be called from the visor or from the CLI.

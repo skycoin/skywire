@@ -28,7 +28,7 @@ import (
 	"github.com/gin-gonic/gin"
 	version "github.com/hashicorp/go-version"
 
-	"github.com/skycoin/skywire/pkg/rewards"
+	"github.com/skycoin/skywire/pkg/deployment/rewards"
 )
 
 // maxSurveyBytes caps a pushed survey. A real node-info survey is a few KB; this
@@ -67,7 +67,12 @@ func registerSurveyIngestRoutes(r1 *gin.Engine, wd string) {
 			return
 		}
 		var meta struct {
-			PubKey         string `json:"pk"`
+			// The survey serializes its public key as "public_key" (see
+			// visorconfig.Survey.PubKey json tag). Reading "pk" here left
+			// PubKey empty for every push, so EqualFold below never matched
+			// and every survey was rejected with "survey pk does not match
+			// sender" (the visor↔reward push always failing on the UI).
+			PubKey         string `json:"public_key"`
 			SkywireVersion string `json:"skywire_version"`
 		}
 		if err := json.Unmarshal(body, &meta); err != nil {

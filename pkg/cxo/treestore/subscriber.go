@@ -885,7 +885,7 @@ func (s *Subscriber) handleFillingBreaks(r *registry.Root, err error) {
 	// cache-missing over a flaky link. Walk the partially-filled tree,
 	// tolerating unfetched objects, and MERGE whatever leaves landed into the
 	// cache. This is the subscriber-side analog of the aggregator's
-	// recoverTransportListOnBreak (pkg/transport-discovery/cxoaggregator).
+	// recoverTransportListOnBreak (pkg/deployment/tpd/cxoaggregator).
 	s.recoverPartialFill(r)
 	// Proactive recovery (the follow-up this hook's comment anticipated):
 	// ask the watchdog to re-Connect so the publisher re-pushes the Root and

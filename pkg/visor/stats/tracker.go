@@ -12,9 +12,11 @@
 package stats
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
+	"crypto/sha256"
 	"runtime/debug"
+	"sort"
 	"sync"
 	"time"
 
@@ -22,6 +24,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 )
 
 // Tracker periodically samples transport bandwidth/latency and tier
@@ -38,11 +41,22 @@ type Tracker struct {
 	// exposes only 7.
 	publishKeep time.Duration
 
-	mu         sync.Mutex
-	sink       Sink
-	baselines  map[uuid.UUID]bandwidthBaseline
-	lastDay    string // YYYY-MM-DD UTC of the most recent sample
-	lastPruned time.Time
+	mu        sync.Mutex
+	sink      Sink
+	baselines map[uuid.UUID]bandwidthBaseline
+	// publishedShards records, per shard (0..15), the MEANINGFUL-content
+	// signature of the shard telemetry blob last mirrored to the sink at
+	// transports/telemetry/<sh>. The signature is computed over every
+	// entry's sent/recv/throughput/latency/type — deliberately EXCLUDING
+	// sampled_at (see shardSig) — so a shard whose transports are all idle
+	// (only their timestamps advancing each tick) does NOT re-Put and does
+	// not churn the telemetry Root. A shard is re-Put only when a
+	// meaningful field of one of its transports moves; a shard that goes
+	// empty (all its transports closed) is sink-Deleted and dropped from
+	// this map so it stops occupying the Root. Guarded by mu.
+	publishedShards map[uint8][32]byte
+	lastDay         string // YYYY-MM-DD UTC of the most recent sample
+	lastPruned      time.Time
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -73,13 +87,14 @@ type Probes struct {
 // manager — keeping the type local insulates the package from the
 // wider transport API surface.
 type TransportProbe struct {
-	ID        uuid.UUID
-	Edges     []cipher.PubKey
-	Type      string
-	Label     string
-	SentBytes uint64
-	RecvBytes uint64
-	LatencyMS LatencyTriple
+	ID            uuid.UUID
+	Edges         []cipher.PubKey
+	Type          string
+	Label         string
+	SentBytes     uint64
+	RecvBytes     uint64
+	ThroughputBps float64
+	LatencyMS     LatencyTriple
 }
 
 // LatencyTriple carries the live min/max/avg snapshot. Tracker
@@ -124,15 +139,32 @@ func NewTracker(store *Store, probes Probes, conf Config) *Tracker {
 		publishKeep = time.Duration(conf.RetentionDays) * 24 * time.Hour
 	}
 	return &Tracker{
-		store:       store,
-		log:         conf.Logger,
-		probes:      probes,
-		interval:    conf.SampleInterval,
-		keep:        time.Duration(conf.RetentionDays) * 24 * time.Hour,
-		publishKeep: publishKeep,
-		sink:        noopSink{},
-		baselines:   make(map[uuid.UUID]bandwidthBaseline),
+		store:           store,
+		log:             conf.Logger,
+		probes:          probes,
+		interval:        conf.SampleInterval,
+		keep:            time.Duration(conf.RetentionDays) * 24 * time.Hour,
+		publishKeep:     publishKeep,
+		sink:            noopSink{},
+		baselines:       make(map[uuid.UUID]bandwidthBaseline),
+		publishedShards: make(map[uint8][32]byte),
 	}
+}
+
+// SeedPublishedShards records the shard signatures the sink was already
+// primed with before the sampler started — the live set hydrated by
+// HydrateSink at startup (see the visor's seedSinkFromStore). Seeding
+// them means the first sample tick does NOT redundantly re-Put every
+// shard that hydrate already published with identical content; a shard
+// only re-Puts once one of its transports actually changes. Call before
+// Run. The passed map is adopted directly.
+func (t *Tracker) SeedPublishedShards(sigs map[uint8][32]byte) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if sigs == nil {
+		sigs = make(map[uint8][32]byte)
+	}
+	t.publishedShards = sigs
 }
 
 // Store returns the underlying bbolt-backed store. Exposed so HTTP
@@ -239,24 +271,34 @@ func (t *Tracker) sample(now time.Time) {
 		t.runRetention(utc)
 	}
 
-	// mirrors collects (path, bytes) tuples to push to the sink AFTER
-	// the bbolt tx commits. Reading the bitmaps requires the tx
-	// (post-mutation state), so we snapshot them inside and dispatch
-	// outside.
-	var mirrors []mirrorPair
+	// entries collects the per-transport telemetry rows to publish AFTER
+	// the bbolt tx commits, as compact sharded binary leaves. ranProbe
+	// records whether the Transports probe actually ran this tick, so
+	// publishShards can distinguish "no probe" (leave the published shards
+	// alone) from "probe returned zero live transports" (delete every
+	// previously-published shard leaf).
+	var entries []telemetrywire.Entry
+	var ranProbe bool
 
 	txErr := t.store.UpdateSample(func(stx *SampleTx) error {
 		if probe := t.probes.Transports; probe != nil {
-			for _, tp := range probe() {
-				if pairs, err := t.recordTransportTx(stx, tp, utc, today); err != nil {
+			ranProbe = true
+			tps := probe()
+			entries = make([]telemetrywire.Entry, 0, len(tps))
+			for _, tp := range tps {
+				if e, err := t.recordTransportTx(stx, tp, utc, today); err != nil {
 					t.log.WithError(err).WithField("tp_id", tp.ID).
 						Debug("Failed to record transport sample")
 				} else {
-					mirrors = append(mirrors, pairs...)
+					entries = append(entries, e)
 				}
 			}
 		}
 
+		// Tier / service online-slot bitmaps are marked in bbolt for the
+		// visor's own /stats history, but NOT mirrored to the CXO sink —
+		// they are historical telemetry, not current discovery data (see
+		// recordTransportTx for why the TPD feed stays current-only).
 		if probe := t.probes.TierStates; probe != nil {
 			for tier, online := range probe() {
 				if !online {
@@ -265,12 +307,7 @@ func (t *Tracker) sample(now time.Time) {
 				if err := stx.MarkTierSlot(tier, utc, slot); err != nil {
 					t.log.WithError(err).WithField("tier", tier).
 						Debug("Failed to mark tier slot")
-					continue
 				}
-				mirrors = append(mirrors, mirrorPair{
-					path: tierBitmapPath(tier, today),
-					data: stx.TierBitmap(tier, utc),
-				})
 			}
 		}
 
@@ -282,12 +319,7 @@ func (t *Tracker) sample(now time.Time) {
 				if err := stx.MarkServiceSlot(svc, utc, slot); err != nil {
 					t.log.WithError(err).WithField("service", svc).
 						Debug("Failed to mark service slot")
-					continue
 				}
-				mirrors = append(mirrors, mirrorPair{
-					path: serviceBitmapPath(svc, today),
-					data: stx.ServiceBitmap(svc, utc),
-				})
 			}
 		}
 		return nil
@@ -297,30 +329,97 @@ func (t *Tracker) sample(now time.Time) {
 		return
 	}
 
-	t.sinkPutBatch(mirrors)
+	t.publishShards(entries, ranProbe)
 }
 
-// sinkPutBatch fans the sample's mirror writes into a single sink
-// call. The default cxoSink turns this into one Publisher.PutBatch
-// (one mutex acquire, one markDirty) instead of N individual Puts
-// that each contended with transport-manager re-registers and
-// other writers on the publisher's mutex. See pkg/cxo/treestore
-// publisher.go PutBatch for the downstream semantics.
+// publishShards groups this tick's live-transport entries into the 16
+// fixed shards (by telemetrywire.ShardOf), encodes each non-empty shard
+// as one compact binary leaf, and mirrors ONLY the shards whose
+// meaningful content changed since they were last published. A shard
+// that has gone empty (all its transports closed) but was previously
+// published is sink-Deleted, so absence-on-the-feed == dead exactly as
+// the per-transport reconcile used to guarantee. This keeps the
+// telemetry Root at ≤16 telemetry leaves regardless of transport count
+// — the whole point of the sharded shape (a busy hub's ~851
+// per-transport current leaves collapse to ≤16 objects, so TPD's
+// whole-Root fill completes over the short announce conn).
 //
-// Skips when mirrors is empty so an idle sample tick doesn't even
-// take the sink-lookup mutex.
-func (t *Tracker) sinkPutBatch(mirrors []mirrorPair) {
-	if len(mirrors) == 0 {
+// ranProbe == false means the Transports probe didn't run this tick
+// (no data to reconcile against); leave the published shards untouched.
+//
+// The change-gate signature (shardSig) deliberately excludes each
+// entry's sampled_at, so a shard whose transports are all idle — their
+// only per-tick change being the timestamp advancing — does not re-Put
+// and does not churn the Root, matching the anti-churn guarantee of the
+// old per-transport publishedSig.
+func (t *Tracker) publishShards(entries []telemetrywire.Entry, ranProbe bool) {
+	if !ranProbe {
 		return
 	}
+
+	// Group by shard, then sort each shard's entries by ID so both the
+	// signature and the encoded blob are byte-stable across ticks.
+	byShard := make(map[uint8][]telemetrywire.Entry, telemetrywire.ShardCount)
+	for _, e := range entries {
+		sh := telemetrywire.ShardOf(e.ID)
+		byShard[sh] = append(byShard[sh], e)
+	}
+	for sh := range byShard {
+		es := byShard[sh]
+		sort.Slice(es, func(i, j int) bool {
+			return bytes.Compare(es[i].ID[:], es[j].ID[:]) < 0
+		})
+		byShard[sh] = es
+	}
+
 	t.mu.Lock()
 	sink := t.sink
-	t.mu.Unlock()
-	ops := make([]SinkOp, 0, len(mirrors))
-	for _, m := range mirrors {
-		ops = append(ops, SinkOp{Path: m.path, Value: m.data})
+	var ops []SinkOp
+	var deletes []string
+	// Re-Put shards whose meaningful content changed; record the new sig.
+	for sh, es := range byShard {
+		sig := shardSig(es)
+		if prev, ok := t.publishedShards[sh]; ok && prev == sig {
+			continue // unchanged — leave the existing leaf in place
+		}
+		t.publishedShards[sh] = sig
+		ops = append(ops, SinkOp{Path: telemetrywire.LeafPath(sh), Value: telemetrywire.EncodeShard(sh, es)})
 	}
-	sink.PutBatch(ops)
+	// Delete shards that were published before but have no live transports now.
+	for sh := range t.publishedShards {
+		if _, still := byShard[sh]; !still {
+			deletes = append(deletes, telemetrywire.LeafPath(sh))
+			delete(t.publishedShards, sh)
+		}
+	}
+	t.mu.Unlock()
+
+	if len(ops) > 0 {
+		sink.PutBatch(ops)
+	}
+	for _, path := range deletes {
+		sink.Delete(path)
+	}
+}
+
+// shardSig is the byte-stable, sampled_at-EXCLUDING signature of a
+// shard's entries. Two ticks with the same transports carrying the same
+// bandwidth/throughput/latency/type produce the same signature even
+// though each entry's sampled_at advanced — so an idle shard does not
+// re-Put. Entries must already be sorted by ID for stability.
+func shardSig(entries []telemetrywire.Entry) [32]byte {
+	stable := make([]telemetrywire.Entry, len(entries))
+	copy(stable, entries)
+	for i := range stable {
+		stable[i].SampledAtUnix = 0
+	}
+	// Any shard byte works here — the signature only compares content;
+	// ShardOf is identical for every entry in the slice anyway.
+	var sh uint8
+	if len(stable) > 0 {
+		sh = telemetrywire.ShardOf(stable[0].ID)
+	}
+	return sha256.Sum256(telemetrywire.EncodeShard(sh, stable))
 }
 
 // sinkDelete snapshots the sink under the lock and dispatches the
@@ -336,19 +435,15 @@ func (t *Tracker) sinkDelete(path string) {
 }
 
 // recordTransportTx is the in-tx variant of recordTransport. Reads
-// the existing record, merges the new probe, writes back, marks the
-// timeline bit, and reads the post-update bitmap — all under the
-// caller's SampleTx. Returns the list of (path, bytes) mirror pairs
-// the caller should push to the sink after the tx commits.
-type mirrorPair = struct {
-	path string
-	data []byte
-}
-
-func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.Time, today string) ([]mirrorPair, error) {
+// the existing record, merges the new probe, writes back, and marks the
+// timeline bit — all under the caller's SampleTx. Returns the compact
+// telemetrywire.Entry for this transport, which the caller collects and
+// hands to publishShards after the tx commits (the sampled_at-excluding
+// change-gate + shard packing happen there, not per-transport).
+func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.Time, today string) (telemetrywire.Entry, error) {
 	rec, err := stx.GetTransportRecord(tp.ID)
 	if err != nil {
-		return nil, err
+		return telemetrywire.Entry{}, err
 	}
 	if rec == nil {
 		rec = &TransportRecord{
@@ -361,13 +456,14 @@ func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.T
 	}
 	rec.LastSeen = now
 	rec.Current = &LiveSnapshot{
-		SentBytes:    tp.SentBytes,
-		RecvBytes:    tp.RecvBytes,
-		LatencyMinMS: tp.LatencyMS.Min,
-		LatencyMaxMS: tp.LatencyMS.Max,
-		LatencyAvgMS: tp.LatencyMS.Avg,
-		SampledAt:    now,
-		Type:         rec.Type,
+		SentBytes:     tp.SentBytes,
+		RecvBytes:     tp.RecvBytes,
+		ThroughputBps: tp.ThroughputBps,
+		LatencyMinMS:  tp.LatencyMS.Min,
+		LatencyMaxMS:  tp.LatencyMS.Max,
+		LatencyAvgMS:  tp.LatencyMS.Avg,
+		SampledAt:     now,
+		Type:          rec.Type,
 	}
 
 	t.mu.Lock()
@@ -394,32 +490,33 @@ func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.T
 	row.Samples++
 
 	if err := stx.PutTransportRecord(rec); err != nil {
-		return nil, err
+		return telemetrywire.Entry{}, err
 	}
 
-	var mirrors []mirrorPair
 	idStr := tp.ID.String()
-	if data, err := json.Marshal(rec.Current); err == nil {
-		mirrors = append(mirrors, mirrorPair{path: currentTransportPath(idStr), data: data})
-	}
 	// The daily rollup (row) is persisted to bbolt above (PutTransportRecord)
 	// but deliberately NOT mirrored to the CXO sink: no subscriber reads it
 	// (TPD's aggregator has no /rollup branch; the visor's own /stats reads it
 	// from bbolt), and publishing a per-transport-per-minute leaf onto the
-	// telemetry feed steals fill budget from transports/list on the
+	// telemetry feed steals fill budget from the discovery leaf on the
 	// short-lived announce conn — the constraint behind the discovery gap.
 
+	// The per-transport timeline bitmap is marked in bbolt (below) for the
+	// visor's own /stats + `visor state` consumption, but is NOT mirrored to
+	// the CXO sink. TPD is a discovery service: it needs only the tp-list
+	// discovery leaf plus the compact sharded telemetry, and derives its own
+	// uptime history from what it observes each cycle (RecordTransportHeartbeat
+	// → Redis per-date keys). Publishing 7–30 days of per-transport-per-day
+	// bitmaps onto the announce feed was the root of the discovery gap — it
+	// grew the Root to ~23k objects, so TPD couldn't fill it over the short
+	// announce conn and under-reported the transport list. Historical
+	// telemetry stays bbolt-only.
 	slot := SlotForTime(now)
 	if err := stx.MarkTransportSlot(idStr, now, slot); err != nil {
 		t.log.WithError(err).WithField("tp_id", idStr).
 			Debug("Stats: MarkTransportSlot failed")
-	} else {
-		mirrors = append(mirrors, mirrorPair{
-			path: transportTimelinePath(idStr, today),
-			data: stx.TransportBitmap(idStr, now),
-		})
 	}
-	return mirrors, nil
+	return snapshotToEntry(tp.ID, rec.Current), nil
 }
 
 // findOrAppendDaily returns a pointer to today's daily row, creating

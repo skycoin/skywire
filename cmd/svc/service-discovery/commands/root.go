@@ -3,7 +3,6 @@ package commands
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -43,15 +42,6 @@ var (
 	mode           string
 )
 
-// exampleJSON marshals v to indented JSON with color, returning empty string on error
-func exampleJSON(v interface{}) string {
-	b, err := json.MarshalIndent(v, "    ", "  ")
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
 // generateExamples creates example responses from actual struct types
 func generateExamples() string {
 	pk1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
@@ -87,19 +77,19 @@ DEL /api/services/deregister/{type} (NM auth headers: NM-PK, NM-Sign)
 
 GET /security/nonces/{pk}
   %s`,
-		exampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]interface{}{
 			"build_info":   map[string]string{"version": "v1.3.29"},
 			"started_at":   "2024-01-15T10:00:00Z",
 			"dmsg_address": pk1 + ":80",
 			"dmsg_servers": []string{pk2},
 		}),
-		exampleJSON([]map[string]interface{}{serviceExample}),
-		exampleJSON(serviceExample),
-		exampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON([]map[string]interface{}{serviceExample}),
+		cmdutil.ExampleJSON(serviceExample),
+		cmdutil.ExampleJSON(map[string]interface{}{
 			"address": pk1 + ":3", "type": "vpn", "version": "v1.3.29",
 		}),
-		exampleJSON([]string{pk1, pk2}),
-		exampleJSON(map[string]interface{}{"nonce": 12345}),
+		cmdutil.ExampleJSON([]string{pk1, pk2}),
+		cmdutil.ExampleJSON(map[string]interface{}{"nonce": 12345}),
 	)
 }
 
@@ -187,7 +177,7 @@ func buildConfig() (*sd.Config, error) {
 		EntryTimeout: services.Duration(entryTimeout),
 		TestMode:     testMode,
 		Mode:         mode,
-		Whitelist:    commaSplit(whitelistKeys),
+		Whitelist:    cmdutil.CommaSplit(whitelistKeys),
 		GeoIP:        geoipURL,
 		DmsgPort:     dmsgPort,
 		Dmsg: cmdutil.DmsgConfig{
@@ -251,20 +241,6 @@ func mergeFile(dst, src *sd.Config) {
 	if len(src.Dmsg.Servers) > 0 {
 		dst.Dmsg.Servers = src.Dmsg.Servers
 	}
-}
-
-func commaSplit(s string) []string {
-	if s == "" {
-		return nil
-	}
-	out := make([]string, 0, 4)
-	for _, p := range strings.Split(s, ",") {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 // Execute executes root CLI command.

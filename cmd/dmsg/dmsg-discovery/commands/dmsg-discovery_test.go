@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/services/dmsgdisc"
 )
@@ -40,14 +41,14 @@ func resetGlobals(t *testing.T) {
 // TestCommaSplit covers the comma-list splitter, including trimming and the
 // dropping of empty segments.
 func TestCommaSplit(t *testing.T) {
-	assert.Nil(t, commaSplit(""))
-	assert.Equal(t, []string{"a", "b", "c"}, commaSplit("a,b,c"))
-	assert.Equal(t, []string{"a", "b"}, commaSplit("  a , , b  "))
-	assert.Equal(t, []string{"solo"}, commaSplit("solo"))
+	assert.Nil(t, cmdutil.CommaSplit(""))
+	assert.Equal(t, []string{"a", "b", "c"}, cmdutil.CommaSplit("a,b,c"))
+	assert.Equal(t, []string{"a", "b"}, cmdutil.CommaSplit("  a , , b  "))
+	assert.Equal(t, []string{"solo"}, cmdutil.CommaSplit("solo"))
 	// Only the empty string returns nil; an all-whitespace input returns a
 	// non-nil but empty slice.
-	assert.Empty(t, commaSplit("  ,  , "))
-	assert.Nil(t, commaSplit(""))
+	assert.Empty(t, cmdutil.CommaSplit("  ,  , "))
+	assert.Nil(t, cmdutil.CommaSplit(""))
 }
 
 // TestMergeFile verifies non-zero src fields override dst and zero fields are

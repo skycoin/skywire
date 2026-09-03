@@ -167,7 +167,7 @@ func BootstrapDmsg(
 	// hundreds of calls/s once dmsg-only routing is in steady state.
 	// Same trick setup-node uses (pkg/router/setupnode.go: see
 	// dmsgServicePKsFromConf) and transport-setup uses
-	// (pkg/transport-setup/api/api.go: dmsgServicePKs).
+	// (pkg/deployment/tps/api/api.go: dmsgServicePKs).
 	keys := cipher.PubKeys{pk}
 	if dmsgDiscoveryDmsg != "" {
 		if discPK := PKFromDmsgURL(dmsgDiscoveryDmsg); !discPK.Null() {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	mathrand "math/rand"
 	"mime"
 	"net"
 	nrpc "net/rpc"
@@ -15,7 +16,10 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/soheilhy/cmux"
+	"golang.org/x/net/proxy"
 	"google.golang.org/grpc"
+
+	"github.com/0magnet/bottle/vnet"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -25,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -46,6 +51,22 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	}
 
 	v.pushCloseStack("launcher.proc_manager", procM.Close)
+
+	// Wire the read-only app→visor status RPC so an app that serves its own
+	// reserved status host (skysocks-client's status.skysocks) can render the
+	// visor's rich per-leg mux telemetry — the same view the visor-side
+	// resolving proxies show — instead of only its own local session view. The
+	// closure captures v and resolves the provider lazily at call time.
+	procM.SetProxyStatusFn(func(appName string) (proxystatus.Snapshot, bool) {
+		if appName != skyenv.SkysocksClientName {
+			return proxystatus.Snapshot{}, false
+		}
+		snap, err := v.proxyStatusProvider().StatusSnapshot(proxystatus.SurfaceSkysocks)
+		if err != nil {
+			return proxystatus.Snapshot{}, false
+		}
+		return snap, true
+	})
 
 	// Synthesize Internal-app entries for visor subsystems that
 	// have moved into the launcher's lifecycle per RFC #2775
@@ -100,6 +121,31 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 		})
 	}
 
+	// Proxy-client auto-exit. skysocks-client hard-requires a server key —
+	// autostart with none configured would just crash-loop. Instead of
+	// letting it, defer its autostart and pick an exit from service
+	// discovery in the background (autoStartProxyClient), then start the
+	// app through the same path `cli proxy start` uses. This is what makes
+	// a browser visor's proxy chain work out of the box, and turns the
+	// native "autostart but no PK" misconfiguration into something useful.
+	autoProxyClient := false
+	pinnedProxy := false
+	for i, ac := range apps {
+		if ac.Name == skyenv.SkysocksClientName && ac.AutoStart {
+			autoProxyClient = true
+			if argsContain(ac.Args, "--srv") {
+				// A pinned exit (an operator's, or one persisted from an
+				// earlier auto-pick) autostarts as configured — but still
+				// gets VERIFIED below, and rotated off if it's dead: a
+				// stale pin otherwise wedges the whole chain behind the
+				// connecting interstitial forever.
+				pinnedProxy = true
+			} else {
+				apps[i].AutoStart = false
+			}
+		}
+	}
+
 	// Prepare launcher.
 	launchConf := launcher.AppLauncherConfig{
 		VisorPK:       v.conf.PK,
@@ -134,7 +180,134 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	v.appL = launch
 	v.initLock.Unlock()
 
+	if autoProxyClient {
+		go v.autoStartProxyClient(v.MasterLogger().PackageLogger("proxy_client_auto"), pinnedProxy) //nolint:gosec // G118: uses v.ctx, outlives the init ctx by design
+	}
+
 	return nil
+}
+
+// argsContain reports whether an app's args include the given flag.
+func argsContain(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag {
+			return true
+		}
+	}
+	return false
+}
+
+// autoStartProxyClient picks a proxy exit from service discovery, starts
+// skysocks-client on it, and — critically — VERIFIES the exit end to end
+// before accepting it: route formation and even the SOCKS5 CONNECT succeed
+// against a ZOMBIE exit (skysocks server down behind a live visor), so only a
+// real relayed HTTP response proves the exit works. A candidate that fails
+// verification is stopped and the next one tried; without this the deferred
+// autostart could pin a dead exit forever and the whole chain serves the
+// connecting interstitial indefinitely (observed live on the desk). This is
+// the visor-side port of the old wasm edge's honest pool probe.
+func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
+	ctx := v.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if pinned {
+		// The launcher autostarted the configured exit; give it a beat, then
+		// hold it to the same end-to-end bar. A live pin wins and we're done;
+		// a dead one is stopped and the discovery rotation below takes over.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(15 * time.Second):
+		}
+		if v.verifyProxyExit(ctx, log) {
+			log.Info("Configured proxy exit verified end to end")
+			return
+		}
+		log.Warn("configured proxy exit failed end-to-end verification; rotating to discovery")
+		_ = v.StopSkysocksClients() //nolint:errcheck
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+		svcs, err := v.ProxyServers("", "")
+		if err != nil || len(svcs) == 0 {
+			continue
+		}
+		// Random order, a handful of candidates per cycle: a dead exit
+		// shouldn't pin the loop, and the whole list shouldn't be dialed.
+		idx := mathrand.Perm(len(svcs))
+		tries := len(idx)
+		if tries > 4 {
+			tries = 4
+		}
+		for _, i := range idx[:tries] {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			pk := svcs[i].Addr.PubKey().String()
+			if err := v.StartSkysocksClient(pk); err != nil {
+				log.WithError(err).Debug("proxy-client auto-exit candidate failed to start; trying another")
+				continue
+			}
+			if v.verifyProxyExit(ctx, log) {
+				log.WithField("exit", pk).Info("Proxy client auto-started on a VERIFIED exit")
+				return
+			}
+			log.WithField("exit", pk).Warn("proxy-client exit failed end-to-end verification; rotating")
+			_ = v.StopSkysocksClients() //nolint:errcheck
+		}
+	}
+}
+
+// verifyProxyExit fetches a tiny plain-HTTP page through the local skysocks-client
+// listener and reports whether a real relayed response arrived. The dial goes
+// through bottle/vnet, so the SAME code verifies a browser visor's listener
+// on the page's virtual loopback and a native visor's on the real one. Route
+// establishment can take a while on a fresh visor, so it retries within a
+// bounded window before giving the verdict.
+func (v *Visor) verifyProxyExit(ctx context.Context, log *logging.Logger) bool {
+	deadline := time.Now().Add(90 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(10 * time.Second):
+		}
+		sd, err := proxy.SOCKS5("tcp", skyenv.SkysocksClientAddr, nil, vnetProxyDialer{})
+		if err != nil {
+			continue
+		}
+		conn, err := sd.Dial("tcp", "neverssl.com:80")
+		if err != nil {
+			log.WithError(err).Debug("proxy verify: CONNECT failed; retrying within window")
+			continue
+		}
+		_ = conn.SetDeadline(time.Now().Add(15 * time.Second))                                         //nolint:errcheck
+		_, _ = conn.Write([]byte("GET / HTTP/1.0\r\nHost: neverssl.com\r\nConnection: close\r\n\r\n")) //nolint:errcheck
+		one := make([]byte, 16)
+		n, rerr := conn.Read(one)
+		_ = conn.Close() //nolint:errcheck
+		if n > 0 {
+			return true
+		}
+		log.WithError(rerr).Debug("proxy verify: no response byte; retrying within window")
+	}
+	return false
+}
+
+// vnetProxyDialer adapts bottle/vnet dialing to x/net/proxy's Dialer, so the
+// verification dial reaches the skysocks listener on whichever loopback this
+// build actually uses (page vnet under js, the real one natively).
+type vnetProxyDialer struct{}
+
+func (vnetProxyDialer) Dial(network, addr string) (net.Conn, error) {
+	return vnet.DialTimeout(network, addr, 10*time.Second)
 }
 
 // appsContains reports whether an apps[] slice already contains an
@@ -588,7 +761,7 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var grpcServer *grpc.Server
 	if cliLocal && !v.cliLocalUp {
 		var err error
-		cliL, err = net.Listen("tcp", v.conf.CLIAddr)
+		cliL, err = vnet.Listen("tcp", v.conf.CLIAddr)
 		if err != nil {
 			return err
 		}
@@ -985,11 +1158,14 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 		// attempt stcpr / sudph transport creation so subsequent RPC
 		// and skypty dials ride a fast p2p path instead of the dmsg
 		// relay. See init_hypervisor_transport.go for the policy +
-		// reconciliation cadence.
-		go v.autoUpgradeHypervisorTransport(ctx,
-			hvPK,
-			v.MasterLogger().PackageLogger("hypervisor_transport").WithField("hypervisor_pk", hvPK),
-		)
+		// reconciliation cadence. Gated by transport.hypervisor_autoconnect
+		// (nil/absent = on, preserving the prior always-on behavior).
+		if v.conf.Transport == nil || v.conf.Transport.HypervisorAutoconnect == nil || *v.conf.Transport.HypervisorAutoconnect {
+			go v.autoUpgradeHypervisorTransport(ctx,
+				hvPK,
+				v.MasterLogger().PackageLogger("hypervisor_transport").WithField("hypervisor_pk", hvPK),
+			)
+		}
 
 		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() error {
 			cancel()

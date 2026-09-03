@@ -26,7 +26,6 @@
 package commands
 
 import (
-	"bytes"
 	"fmt"
 	"net"
 	"os"
@@ -62,19 +61,6 @@ const (
 // over the package-shipped unit; touching the unit file directly
 // would be clobbered by the next package upgrade.
 const systemdDropIn = "/etc/systemd/system/skywire.service.d/skywire-user.conf"
-
-// skywireBin returns the absolute path to the running skywire binary so the
-// sub-invocations below (config gen, reward, -v) target THIS binary rather than
-// a bare "skywire" looked up on PATH. That matters on Windows: the MSI runs
-// autoconfig as a deferred CustomAction at install time, when the install dir is
-// not yet on PATH, so a bare "skywire" would not resolve. Falls back to "skywire"
-// only if os.Executable() fails (e.g. an exotic platform), preserving old behavior.
-func skywireBin() string {
-	if exe, err := os.Executable(); err == nil && exe != "" {
-		return exe
-	}
-	return "skywire"
-}
 
 // autoconfigVals holds the runtime values of the autoconfig flags.
 // Lives at package level so the Run function can read them; the
@@ -305,7 +291,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		msg3(fmt.Sprintf("Updated %s%s%s: %s", colorPurple, target, colorReset, strings.Join(editedKeys, " ")))
 	}
 
-	versionOut, err := exec.Command(skywireBin(), "-v").Output() //nolint:gosec
+	versionOut, err := selfVersion()
 	if err == nil {
 		version := strings.TrimSpace(string(versionOut))
 		if !strings.Contains(version, "unknown") {
@@ -426,9 +412,20 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 	isHypervisor := conf != nil && conf.Hypervisor != nil && conf.Hypervisor.Enable
 
 	if isHypervisor {
-		msg2(fmt.Sprintf("Hypervisor UI Starting now on:\n%shttp://127.0.0.1:8000%s", colorRed, colorReset))
+		// Derive the UI port from the config rather than hardcoding :8000 —
+		// the platform default differs (js binds :8001) and the operator may
+		// have overridden hypervisor.http_addr.
+		hvAddr := visorconfig.HTTPAddr()
+		if conf.Hypervisor != nil && conf.Hypervisor.HTTPAddr != "" {
+			hvAddr = conf.Hypervisor.HTTPAddr
+		}
+		hvPort := hvAddr
+		if i := strings.LastIndex(hvPort, ":"); i >= 0 {
+			hvPort = hvPort[i+1:]
+		}
+		msg2(fmt.Sprintf("Hypervisor UI Starting now on:\n%shttp://127.0.0.1:%s%s", colorRed, hvPort, colorReset))
 		if pubkey != "" {
-			vpnURL := fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s", pubkey)
+			vpnURL := fmt.Sprintf("http://127.0.0.1:%s/#/vpn/%s", hvPort, pubkey)
 			msg2(fmt.Sprintf("Use the vpn:\n%s%s%s", colorRed, vpnURL, colorReset))
 		}
 
@@ -436,7 +433,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		if len(lanIPs) > 0 {
 			hvURLs := "Hypervisor UI LAN access:"
 			for _, ip := range lanIPs {
-				hvURLs += fmt.Sprintf("\n%shttp://%s:8000%s", colorYellow, ip, colorReset)
+				hvURLs += fmt.Sprintf("\n%shttp://%s:%s%s", colorYellow, ip, hvPort, colorReset)
 			}
 			msg2(hvURLs)
 		}
@@ -452,7 +449,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		msg2(fmt.Sprintf("Remote Hypervisor Public Key:\n%s%s%s", colorPurple, strings.TrimSpace(hvPKs), colorReset))
 	}
 
-	rewardOut, err := exec.Command(skywireBin(), "cli", "reward", "-r").Output() //nolint:gosec
+	rewardOut, err := selfRewardAddress()
 	if err == nil && len(rewardOut) > 0 {
 		msg2(fmt.Sprintf("skycoin reward address:\n%s%s%s", colorGreen, strings.TrimSpace(string(rewardOut)), colorReset))
 	}
@@ -460,6 +457,13 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 	if autoconfigVals.Verbose {
 		printWelcome(pubkey, isHypervisor)
 	}
+
+	// Platform-specific final step. Native: no-op (the service restart
+	// already happened in restartOrPrompt, asynchronously). js/wasm:
+	// starts the visor in the FOREGROUND — the browser has no init
+	// system, so autoconfig itself becomes the visor process, exactly
+	// like running `skywire visor -c <path>` in the terminal.
+	finishAutoconfig(resolved)
 }
 
 // defaultSkyenvPath returns the canonical SKYENV file location for
@@ -576,7 +580,15 @@ func generateConfig(r resolvedConfig, hvArg string) error {
 		// no hypervisor
 	case "":
 		// New install? Default to enabling the local hypervisor.
+		// An EXISTING config keeps whatever it has: regen rewrites the
+		// whole file, so without re-asserting -i here a hypervisor that
+		// was only ever enabled by this same implicit default (no
+		// ISHYPERVISOR=true in the env file) would silently lose its UI
+		// on the next autoconfig run.
 		if _, err := os.Stat(r.configPath); os.IsNotExist(err) {
+			args = append(args, "-i")
+			printableArgs = append(printableArgs, "-i")
+		} else if conf, err := visorconfig.ReadFile(r.configPath); err == nil && conf.Hypervisor != nil && conf.Hypervisor.Enable {
 			args = append(args, "-i")
 			printableArgs = append(printableArgs, "-i")
 		}
@@ -585,35 +597,21 @@ func generateConfig(r resolvedConfig, hvArg string) error {
 		printableArgs = append(printableArgs, "-j", hvArg)
 	}
 
+	// Platform-specific gen args (js appends --nofetch: the browser
+	// can't reach the services-config URL cross-origin, and the
+	// embedded fallback is what the fetch failure path would land on
+	// anyway — skip the stall).
+	extra := extraGenArgs()
+	args = append(args, extra...)
+	printableArgs = append(printableArgs, extra...)
+
 	envPrefix := ""
 	if r.skyenvPath != "" {
 		envPrefix = fmt.Sprintf("SKYENV=%s ", r.skyenvPath)
 	}
 	msg3(fmt.Sprintf("Generating skywire config with command:\n  %s%sskywire %s%s", colorCyan, envPrefix, strings.Join(printableArgs, " "), colorReset))
 
-	// Suppress the subprocess's stdout/stderr by default. The DMSG
-	// fetch chatter ([INFO]/[DEBUG] lines) and -w's hidden JSON dump
-	// both go through here and are noise on the happy path. Buffer
-	// stderr; on failure flush it so the operator can see what
-	// broke (missing service-config.json, bad SK, write permission
-	// denied, etc.). If the operator wants the verbose path, the
-	// printableArgs above show the same command without -w to paste
-	// into a terminal.
-	var stderrBuf bytes.Buffer
-	cmd := exec.Command(skywireBin(), args...) //nolint:gosec
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = &stderrBuf
-	cmd.Env = os.Environ()
-	if r.skyenvPath != "" {
-		cmd.Env = append(cmd.Env, "SKYENV="+r.skyenvPath)
-	}
-	if err := cmd.Run(); err != nil {
-		if stderrBuf.Len() > 0 {
-			fmt.Fprint(os.Stderr, stderrBuf.String())
-		}
-		return err
-	}
-	return nil
+	return execConfigGen(r, args)
 }
 
 // writeSystemdDropIn writes a one-section drop-in that pins User=
@@ -664,70 +662,8 @@ func chownInstall(username string) error {
 	})
 }
 
-// restartOrPrompt branches on the resolved mode to pick the right
-// service-manager invocation. Linux: systemctl. Windows: defer to
-// Phase 2 — for now we just tell the operator the manual command
-// they need (`skywire visor -c <path>`) until the Windows Service
-// registration ships.
-//
-// Active unit → restart; inactive → print the start instructions.
-// Never tries to auto-enable: respects operator intent.
-func restartOrPrompt(r resolvedConfig) {
-	if runtime.GOOS == "windows" {
-		msg2(fmt.Sprintf("Start skywire on Windows with (admin PowerShell):\n\t%sskywire visor -c %q%s",
-			colorRed, r.configPath, colorReset))
-		return
-	}
-
-	// pty-safe path: the operator asked us NOT to restart. This is for
-	// updating over the visor's own dmsgpty, where a `systemctl restart
-	// skywire` would tear down the pty session (and this very process)
-	// mid-restart. Config is already written; the operator applies it
-	// out-of-band, decoupled from the session, as the LAST step.
-	if r.noRestart {
-		startCmd := "systemctl start --no-block skywire-autoconfig.service"
-		if r.useUserUnit {
-			startCmd = "systemctl --user start --no-block skywire-autoconfig.service"
-		}
-		msg2(fmt.Sprintf("Config applied WITHOUT restarting skywire (--no-restart).\n\tApply it as your LAST command (safe over dmsgpty):\n\t%s%s%s",
-			colorRed, startCmd, colorReset))
-		return
-	}
-
-	systemctlArgs := []string{}
-	if r.useUserUnit {
-		systemctlArgs = append(systemctlArgs, "--user")
-	}
-
-	// A running `hv serve` (the standalone wasm-visor page) serves the wasm build
-	// EMBEDDED in the running binary, so it goes stale after a binary update until
-	// its service restarts — the reason theskywirenetwork.net can lag develop.
-	// Refresh it here as part of autoconfig, but only if it's ALREADY active
-	// (never start it), and always as a system unit (it isn't a --user service).
-	// A no-op when the unit isn't installed, so this is safe whether or not the
-	// package ships skywire-wasm-visor-serve.service yet.
-	if exec.Command("systemctl", "is-active", "--quiet", "skywire-wasm-visor-serve.service").Run() == nil { //nolint:gosec
-		msg3("Restarting skywire-wasm-visor-serve (hv serve re-embeds the updated blob)…")
-		_ = exec.Command("systemctl", "restart", "skywire-wasm-visor-serve.service").Run() //nolint:errcheck,gosec
-	}
-
-	checkArgs := append(append([]string{}, systemctlArgs...), "is-active", "--quiet", "skywire")
-	if exec.Command("systemctl", checkArgs...).Run() == nil { //nolint:gosec
-		restartArgs := append(append([]string{}, systemctlArgs...), "restart", "skywire")
-		msg3("Restarting skywire service…")
-		_ = exec.Command("systemctl", restartArgs...).Run() //nolint:errcheck,gosec
-		return
-	}
-
-	startCmd := "systemctl"
-	if r.useUserUnit {
-		startCmd += " --user"
-	}
-	msg2(fmt.Sprintf("Start the skywire service with:\n\t%s%s enable --now skywire%s", colorRed, startCmd, colorReset))
-}
-
 func printWelcome(pubkey string, isHypervisor bool) {
-	rewardOut, err := exec.Command(skywireBin(), "cli", "reward", "-r").Output() //nolint:gosec
+	rewardOut, err := selfRewardAddress()
 	if err == nil && len(rewardOut) > 0 {
 		msg2(fmt.Sprintf("skycoin reward address:\n%s%s%s", colorGreen, strings.TrimSpace(string(rewardOut)), colorReset))
 		msg2(fmt.Sprintf("reward metrics:\n%shttps://reward.theskywirenetwork.net%s", colorBlue, colorReset))

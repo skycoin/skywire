@@ -2,21 +2,19 @@
 package router
 
 import (
-	"sort"
 	"sync"
 	"time"
 )
 
-// reorderTimeout bounds how long the reorder buffer will hold a frontier gap
-// open before releasing it (delivering past the missing sequence). It is the
-// time-based companion to maxGap: maxGap caps memory, reorderTimeout caps
-// head-of-line latency. With reliable leg transports a genuine gap only occurs
-// when a leg dies mid-stream and the SACK retransmit has not yet refilled it;
-// rather than stall the stream until liveness prunes that leg, release the gap
-// after this long so the flow degrades to lossy-but-moving (never a hard 0-byte
-// stall — the graceful-degradation contract for mux>1). Comfortably larger than
-// any realistic inter-leg latency skew so normal reordering is never released
-// early. A var (not const) so tests can shrink it.
+// reorderTimeout is how long a frontier gap may stay open before it counts as a
+// stall. It does NOT release the gap: see Insert, which never skips a missing
+// sequence, because the mux carries a stateful-AEAD noise stream and delivering
+// past a hole desyncs the cipher permanently. It drives the diagnostics and
+// leg-prune paths, and the timer-based SACK (RouteGroup.reorderStallServiceFn)
+// that asks the sender to retransmit the stuck sequence on a live leg, filling
+// the gap IN ORDER. Comfortably larger than any realistic inter-leg latency skew,
+// so ordinary reordering never reads as a stall. A var (not const) so tests can
+// shrink it.
 var reorderTimeout = 1500 * time.Millisecond
 
 // reorderBuffer holds out-of-order packets and delivers them in sequence order.
@@ -28,15 +26,17 @@ type reorderBuffer struct {
 	buf     map[uint32][]byte // out-of-order packets: seq -> payload
 	// gapSince is when the current frontier gap opened (buffer went non-empty
 	// while waiting for nextSeq). Zero when the buffer is empty / fully caught
-	// up. Used to release a gap that has stayed open longer than reorderTimeout.
+	// up. Read by the stall paths that reorderTimeout feeds; it never releases
+	// the gap itself.
 	gapSince time.Time
-	// maxGap is the emergency cap: the max out-of-order packets held before a
-	// last-resort force-flush that skips the missing sequence. Because the leg
-	// transports are reliable/ordered, a gap is latency skew (the missing seq
-	// is in flight and will arrive), so this cap is sized (see reorderWindow)
-	// to never trip in normal mux operation — hitting it means a leg has died
-	// and stopped delivering, and flushing (lossy) is preferable to stalling
-	// the stream forever while liveness prunes that leg.
+	// maxGap is the emergency cap: the most out-of-order packets held before
+	// further ones are DROPPED. Dropping the arrival, not skipping the gap, is
+	// the whole point — skipping would corrupt the noise stream (see Insert),
+	// whereas a dropped seq is simply re-requested by SACK and retransmitted.
+	// Because the leg transports are reliable/ordered, a gap is latency skew
+	// (the missing seq is in flight and will arrive), so this cap is sized (see
+	// reorderWindow) to the aggregate BDP and is only reached on a genuine
+	// mid-stream leg death.
 	maxGap int
 }
 
@@ -60,6 +60,18 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 
 	// Buffer out-of-order packet
 	if seq != rb.nextSeq {
+		// Emergency OOM backstop: if the buffer is already at capacity, DROP this
+		// out-of-order packet rather than skip the gap (delivering past the missing
+		// seq corrupts the reliable stream — the bad-record-mac failure). The buffer
+		// stays bounded at maxGap; the dropped seq is re-requested by SACK and
+		// retransmitted, and the real recovery is the leg-dataprogress prune removing
+		// the dead leg so its seqs retransmit on a live one and the frontier drains
+		// IN ORDER. If the gap never fills, keepalive/liveness closes the group
+		// cleanly — a stall, never corruption. maxGap (reorderWindow) is sized to the
+		// aggregate BDP so this is only reached on a genuine mid-stream leg death.
+		if len(rb.buf) >= rb.maxGap {
+			return nil
+		}
 		// Make a copy since the underlying packet buffer may be reused
 		cp := make([]byte, len(data))
 		copy(cp, data)
@@ -85,20 +97,17 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 		// buffer over a live leg, so the buffer drains in order with the cipher
 		// intact. A leg that stays dead is removed by leg-liveness pruning, after
 		// which its unacked seqs are retransmitted on the survivors. reorderTimeout
-		// is retained as the stall threshold for that diagnostics/prune path.
-		_ = reorderTimeout
+		// is retained as the stall threshold for the diagnostics/prune path and to
+		// drive a timer-based SACK (RouteGroup.reorderStallServiceFn) that asks the
+		// sender to RETRANSMIT the stuck sequence on a live leg — filling the gap IN
+		// ORDER. There is deliberately NO time-based SKIP here: the RouteGroup is a
+		// reliable, ordered net.Conn (a TCP/TLS stream rides it), so delivering PAST
+		// a missing sequence leaves a HOLE in the byte stream and the upper protocol
+		// dies ("bad record mac"). Per-frame noise makes each FRAME independently
+		// decryptable, but the reassembled STREAM must still be gapless — so a gap is
+		// only ever closed by the missing seq actually arriving (skew or retransmit),
+		// never by skipping it.
 
-		// Emergency OOM backstop only: with reliable legs the missing seq arrives
-		// (via skew or SACK retransmit) and drains the buffer, so this never trips
-		// in normal operation. Reaching it means a leg has gone dead mid-stream AND
-		// retransmit has not refilled within maxGap packets. Force-flushing here
-		// still skips the gap (and so corrupts a noise stream) — it is a
-		// last-resort guard against unbounded memory, not a recovery path; the
-		// route group's liveness prune + teardown is the real handler. Do NOT lower
-		// maxGap to "save memory": that reintroduces the mux>1 corruption bug.
-		if len(rb.buf) >= rb.maxGap {
-			return rb.flushAll()
-		}
 		return nil
 	}
 
@@ -140,37 +149,6 @@ func (rb *reorderBuffer) GapAge() time.Duration {
 		return 0
 	}
 	return time.Since(rb.gapSince)
-}
-
-// flushAll delivers all buffered packets in sequence order and resets.
-// Called when the gap exceeds maxGap to prevent unbounded memory growth.
-// The caller must hold rb.mu.
-func (rb *reorderBuffer) flushAll() [][]byte {
-	if len(rb.buf) == 0 {
-		return nil
-	}
-
-	seqs := make([]uint32, 0, len(rb.buf))
-	for seq := range rb.buf {
-		seqs = append(seqs, seq)
-	}
-	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
-
-	delivered := make([][]byte, 0, len(seqs))
-	for _, seq := range seqs {
-		delivered = append(delivered, rb.buf[seq])
-		delete(rb.buf, seq)
-	}
-
-	// Advance nextSeq past all delivered
-	if len(seqs) > 0 {
-		rb.nextSeq = seqs[len(seqs)-1] + 1
-	}
-
-	// Buffer drained — the gap is closed (skipped).
-	rb.gapSince = time.Time{}
-
-	return delivered
 }
 
 // Pending returns the number of packets currently buffered out-of-order.

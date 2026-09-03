@@ -100,7 +100,7 @@ func TestMockRPCIngressClient_AllMethods(t *testing.T) {
 	c.On("CloseConn", uint16(1)).Return(nil)
 	c.On("CloseListener", uint16(1)).Return(nil)
 	c.On("Dial", addr).Return(uint16(3), routing.Port(4), nil)
-	c.On("DialWithOptions", addr, 1, 0, 0, 0, 1, 1, false).Return(uint16(3), routing.Port(4), nil)
+	c.On("DialWithOptions", addr, 1, 0, 0, 0, 1, 1, false, false).Return(uint16(3), routing.Port(4), nil)
 	c.On("Listen", addr).Return(uint16(5), nil)
 	c.On("Read", uint16(1), buf).Return(4, nil)
 	c.On("SetAppPort", routing.Port(7)).Return(nil)
@@ -123,7 +123,7 @@ func TestMockRPCIngressClient_AllMethods(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint16(3), connID)
 
-	_, _, err = c.DialWithOptions(addr, 1, 0, 0, 0, 1, 1, false)
+	_, _, err = c.DialWithOptions(addr, 1, 0, 0, 0, 1, 1, false, false)
 	require.NoError(t, err)
 
 	id, err := c.Listen(addr)

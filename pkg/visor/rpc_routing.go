@@ -98,7 +98,7 @@ func (r *RPC) ServiceHealth(_ *struct{}, out *[]ServiceHealthEntry) (err error) 
 
 // SetMinHops sets min_hops in visor's routing config
 func (r *RPC) SetMinHops(n *uint16, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetMinHops", *n)
+	defer rpcutil.LogCall(r.log, "SetMinHops", *n)(nil, &err)
 	err = r.visor.SetMinHops(*n)
 	return
 }
@@ -149,6 +149,27 @@ func (r *RPC) SetMuxMode(mode *string, _ *struct{}) (err error) {
 	return err
 }
 
+// SetMuxCap sets the adaptive mux active-width ceiling (aggregation ceiling)
+func (r *RPC) SetMuxCap(n *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMuxCap", *n)(nil, &err)
+	err = r.visor.SetMuxCap(*n)
+	return err
+}
+
+// SetMuxWidth sets the adaptive mux steady active download width (the floor)
+func (r *RPC) SetMuxWidth(n *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMuxWidth", *n)(nil, &err)
+	err = r.visor.SetMuxWidth(*n)
+	return err
+}
+
+// SetMuxStandby sets the adaptive mux warm-standby reserve pool size
+func (r *RPC) SetMuxStandby(n *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMuxStandby", *n)(nil, &err)
+	err = r.visor.SetMuxStandby(*n)
+	return err
+}
+
 // GetRouterSettings returns the unified runtime router knobs.
 func (r *RPC) GetRouterSettings(_ *struct{}, out *RouterSettings) (err error) {
 	defer rpcutil.LogCall(r.log, "GetRouterSettings", nil)(out, &err)
@@ -193,4 +214,11 @@ func (r *RPC) GrowMuxRoute(in *MuxRouteInput, out *int) (err error) {
 func (r *RPC) RemoveMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoveMuxRoute", in)(nil, &err)
 	return r.visor.RemoveMuxRoute(in.AppName, in.TransportID, in.SrcPort)
+}
+
+// SetMuxDirection pins or releases the unidirectional direction mapping on all
+// of an app's active directional route groups
+func (r *RPC) SetMuxDirection(in *MuxDirectionInput, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetMuxDirection", in)(nil, &err)
+	return r.visor.SetMuxDirection(in.AppName, in.Mode)
 }

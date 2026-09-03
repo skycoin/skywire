@@ -13,7 +13,7 @@ const (
 	// point-to-point with known endpoints, no dmsg-disc, no visor
 	// routing. Apps use this as a reliability floor for
 	// agent-to-agent comms that survives visor restarts and dmsg
-	// infrastructure blips. See pkg/skywire/tcpnoise + #2706.
+	// infrastructure blips. See pkg/dmsg/tcpnoise + #2706.
 	TypeTCPDirect Type = "tcp-direct"
 )
 

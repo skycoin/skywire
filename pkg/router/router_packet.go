@@ -49,6 +49,20 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		return r.dispatchToRouteGroup(ctx, packet)
 	case routing.SACKPacket:
 		return r.handleSACKRouterPacket(ctx, packet)
+	case routing.RepairPacket:
+		// FEC repair symbol (#4270): same route-ID-driven path as data/ping —
+		// forwarded when this visor is an intermediary, else delivered to the
+		// destination route group (handleRepairPacket). Without this case the
+		// router dropped every repair packet as ErrUnknownPacketType, so FEC
+		// repair never reached the receiver on ANY route (direct or multihop).
+		return r.dispatchToRouteGroup(ctx, packet)
+	case routing.LegStatePacket:
+		// Mux leg active/standby signal (CapLegState): same route-ID-driven path as
+		// data/repair — forwarded when this visor is an intermediary, else delivered
+		// to the destination route group, which mirrors the leg's state on its send
+		// side. Without this case an intermediary/destination drops it as
+		// ErrUnknownPacketType (the RepairPacket #4297 failure mode).
+		return r.dispatchToRouteGroup(ctx, packet)
 	case routing.DatagramPacket:
 		return r.handleDatagramPacket(ctx, packet)
 	case routing.TransportPingPacket, routing.TransportPongPacket,
@@ -335,6 +349,23 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 		if err != nil {
 			return err
 		}
+	case routing.RepairPacket:
+		// FEC repair symbol (#4270): re-stamp the next-hop route ID and pass the
+		// block coordinates + symbol through unchanged. Without this an
+		// intermediate hits the default and DROPS the repair, so FEC delivered
+		// zero benefit (and pure overhead) on every MULTIHOP mux leg — the repair
+		// was emitted by the sender but never survived the first relay.
+		var err error
+		p, err = routing.MakeRepairPacket(rule.NextRouteID(), packet.RepairBlockID(), packet.RepairIndex(), packet.RepairSymLen(), packet.RepairSymbol())
+		if err != nil {
+			return err
+		}
+	case routing.LegStatePacket:
+		// Mux leg active/standby signal (CapLegState): re-stamp the next-hop route
+		// ID and pass the one state byte through. Without this an intermediate hits
+		// the default and DROPS the signal, so a multihop leg's parking never
+		// reaches the far sender (the RepairPacket #4297 failure mode).
+		p = routing.MakeLegStatePacket(rule.NextRouteID(), packet.LegStateStandby())
 	default:
 		return fmt.Errorf("packet of type %s can't be forwarded", packet.Type())
 	}

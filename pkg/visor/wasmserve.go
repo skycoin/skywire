@@ -35,6 +35,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/realorigin"
+
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -71,7 +73,19 @@ type WasmServeConfig struct {
 	// "https://theskywirenetwork.net") that B's bootstrap postMessages to — used
 	// only with BrowseOriginAddr behind a proxy. Empty = derive from Addr (local).
 	VOrigin string
-	Log     *logging.Logger // nil → package default
+	// BrowseWasmSW serves the Go/wasm transport worker on the browse origins
+	// instead of realorigin's JS one. For testing that implementation only —
+	// see browseSWWasm for what the swap gives up on the untrusted origin.
+	BrowseWasmSW bool
+	// ExecWasmPath, when set, serves the file at /skywire.wasm: the FULL
+	// skywire CLI compiled for GOOS=js (see docs/design), which the page's
+	// terminal executes per command against the shared in-memory filesystem
+	// (bottle jsfs.js + browseui skywire-exec.js). Empty = the terminal has no
+	// `skywire` command. The blob is too large to embed — build it with
+	//   GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" \
+	//     -trimpath -ldflags "-s -w" -o build/skywire.wasm .
+	ExecWasmPath string
+	Log          *logging.Logger // nil → package default
 }
 
 // ServeWasm builds the standalone wasm-visor handler and serves it on
@@ -118,10 +132,12 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	vh.Write(wasmhv.HvBootJS)
 	vh.Write(wasmhv.WorkerJS)
 	vh.Write(wasmhv.BrowseJS)
+	vh.Write(wasmhv.WinBoxWasmGz())
 	vh.Write(wasmhv.AutoUpdateJS)
-	vh.Write(wasmhv.BrowseSWJS)
+	vh.Write(realorigin.ServiceWorkerJS())
 	vh.Write(wasmhv.BrowseBootstrapHTML)
-	vh.Write(wasmhv.BrowseResponderJS)
+	vh.Write(realorigin.ResponderJS())
+	vh.Write(wasmhv.BrowseTransportJS)
 	wasmVer := hex.EncodeToString(vh.Sum(nil))[:16]
 	// etag is the fingerprint as an HTTP entity tag. The version-bound assets
 	// below are served no-cache + ETag so every load REVALIDATES: unchanged →
@@ -165,7 +181,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	browseOriginJS := "window.__SKYWIRE_BROWSE_ORIGIN__={suffix:" + strconv.Quote(suffix) + ",scheme:" + strconv.Quote(bScheme) + ",port:" + strconv.Quote(bPort) + "};"
 	index := injectWasmBoot(indexB, wasmVer, cfg.Harness, browseOriginJS)
 
-	browseBootstrap := bytes.ReplaceAll(wasmhv.BrowseBootstrapHTML, []byte("__V_ORIGIN__"), []byte(browseScheme+"://"+vHostPort))
+	browseBootstrap := bytes.ReplaceAll(wasmhv.BrowseBootstrapHTML, []byte("__APP_ORIGIN__"), []byte(browseScheme+"://"+vHostPort))
 	browseBootstrap = bytes.ReplaceAll(browseBootstrap, []byte("__SUFFIX__"), []byte(suffix))
 
 	// Hosted two-port mode: when BrowseOriginAddr is set, this SAME process ALSO
@@ -186,6 +202,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 				TLS:     cfg.TLS,
 				TLSCert: cfg.TLSCert,
 				TLSKey:  cfg.TLSKey,
+				WasmSW:  cfg.BrowseWasmSW,
 				Log:     log,
 			}); err != nil {
 				log.WithError(err).Error("browse-origin bootstrap server failed")
@@ -260,16 +277,68 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
 	serveBytes("/worker.js", "text/javascript", wasmhv.WorkerJS)
 	serveBytes("/browse.js", "text/javascript", wasmhv.BrowseJS)
+	// The vnet service worker: real same-origin /vnet/<port>/ URLs into the
+	// page's virtual loopback, so the nested browser renders in-page servers
+	// (the hypervisor UI SPA) natively. Must live beside the pages (scope cap).
+	serveBytes("/vnet-sw.js", "text/javascript", wasmhv.VNetSWJS())
+	// The full skywire CLI module for the terminal's `skywire` command —
+	// served from disk (too large to embed), gzip left to the transport.
+	// Absent path = 404, and the shell simply doesn't register the command.
+	if cfg.ExecWasmPath != "" {
+		execWasmPath := cfg.ExecWasmPath
+		mux.HandleFunc("/skywire.wasm", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/wasm")
+			w.Header().Set("Cache-Control", "no-cache")
+			http.ServeFile(w, r, execWasmPath)
+		})
+		// /desk — the CONVERGED page: the tab as a Linux host. No SharedWorker
+		// visor; the terminal runs `skywire autoconfig` which starts the FULL
+		// binary's visor in the foreground, a second terminal shows the help,
+		// and once the hypervisor UI listens on the virtual loopback the
+		// nested browser opens it maximized on top. A visor the operator
+		// stopped stays stopped across reloads (desk-boot's session).
+		serveBytes("/desk-boot.js", "text/javascript", wasmhv.DeskBootJS())
+		deskHTML := []byte(deskPageHTML)
+		if cfg.Harness {
+			// Same rule as injectWasmBoot on the standalone page: --harness
+			// injects ctl-bridge.js (its presence IS the harness signal). On
+			// the desk it registers the tab and mirrors the foreground visor
+			// instance's stderr ring to /ctl/log, so `curl /ctl/log?tab=<id>`
+			// reads the in-terminal visor's log.
+			deskHTML = bytes.Replace(deskHTML,
+				[]byte(`<script src="/desk-boot.js"></script>`),
+				[]byte("<script src=\"/ctl-bridge.js\"></script>\n<script src=\"/desk-boot.js\"></script>"), 1)
+		}
+		serveBytes("/desk", "text/html; charset=utf-8", deskHTML)
+	}
+	serveBytes("/winbox.wasm", "application/wasm", wasmhv.WinBoxWasm())
 	serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
 	serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)
 	serveBytes("/icon-512.png", "image/png", wasmhv.PWAIcon512)
-	// Real-origin mesh browser (RFC §4b): the transport SW (served on the B origin,
-	// scope "/") and the V-origin mesh-fetch responder. The B navigation shell is
-	// host-routed below (it needs per-request substitution). browse-sw.js and
-	// browse-responder.js are static — the same bytes work on every origin.
-	serveBytes("/browse-sw.js", "text/javascript", wasmhv.BrowseSWJS)
-	serveBytes("/browse-responder.js", "text/javascript", wasmhv.BrowseResponderJS)
+	// Real-origin mesh browser. The transport worker (served on the B origin at
+	// scope "/") and the responder that answers B's handshake on V both come from
+	// github.com/0magnet/realorigin; browse-transport.js is the transport the
+	// responder calls, and is the only skywire-specific piece. All three are
+	// static — the same bytes work on every origin. The B navigation shell is
+	// host-routed below, since it needs per-request substitution.
+	if cfg.BrowseWasmSW {
+		// Opt-in: the same wasm-visor blob V already serves, loaded into the
+		// worker with the browse-sw role. Testing only — see browseSWWasm.
+		loader, assets, err := browseSWWasm(variant)
+		if err != nil {
+			return err
+		}
+		serveBytes("/browse-sw.js", "text/javascript", loader)
+		for p, b := range assets {
+			serveBytes(p, browseSWAssetType(p), b)
+		}
+		log.Warn("serving the Go/wasm transport worker on browse origins — for testing, not deployment")
+	} else {
+		serveBytes("/browse-sw.js", "text/javascript", realorigin.ServiceWorkerJS())
+	}
+	serveBytes("/browse-responder.js", "text/javascript", realorigin.ResponderJS())
+	serveBytes("/browse-transport.js", "text/javascript", wasmhv.BrowseTransportJS)
 	swJS := bytes.ReplaceAll(wasmhv.ServiceWorkerJS, []byte("__BUILD__"), []byte(wasmVer))
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript")
@@ -503,10 +572,15 @@ type BrowseOriginConfig struct {
 	TLSCert string          // optional PEM cert (paired with TLSKey)
 	TLSKey  string          // optional PEM key
 	Log     *logging.Logger // nil → package default
+
+	// WasmSW serves the Go/wasm transport worker instead of realorigin's JS one.
+	// For testing that implementation; leave it off for anything deployed. See
+	// browseSWWasm and browse-sw-loader.js for what the swap gives up.
+	WasmSW bool
 }
 
 // ServeBrowseOrigin runs the browse-origin bootstrap server (RFC §4b, hosted mode):
-// for any Host under Suffix it returns the SW bootstrap shell with __V_ORIGIN__ and
+// for any Host under Suffix it returns the SW bootstrap shell with __APP_ORIGIN__ and
 // __SUFFIX__ substituted; /browse-sw.js returns the transport SW. Blocking until ctx
 // is canceled.
 func ServeBrowseOrigin(ctx context.Context, cfg BrowseOriginConfig) error {
@@ -525,25 +599,31 @@ func ServeBrowseOrigin(ctx context.Context, cfg BrowseOriginConfig) error {
 		suffix = "." + suffix
 	}
 
-	// Precompute the bootstrap shell: the SW bootstrap that every browse origin B
-	// serves. It registers browse-sw.js and points the SW at the visitor's in-tab
-	// visor at VOrigin; the transcode substitutions match ServeWasm.
-	bootstrap := bytes.ReplaceAll(wasmhv.BrowseBootstrapHTML, []byte("__V_ORIGIN__"), []byte(cfg.VOrigin))
-	bootstrap = bytes.ReplaceAll(bootstrap, []byte("__SUFFIX__"), []byte(suffix))
-
-	// Caddy only routes *.Suffix here, so no host check is needed: /browse-sw.js is
-	// the transport SW, every other path is the bootstrap shell.
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/browse-sw.js" {
-			w.Header().Set("Content-Type", "text/javascript")
-			w.Header().Set("Cache-Control", "no-cache")
-			_, _ = w.Write(wasmhv.BrowseSWJS) //nolint:errcheck
-			return
+	// The worker, the shell's substitutions and the serve-the-shell-for-every-
+	// other-path rule all come from realorigin. The shell itself is ours: the
+	// library's is deliberately plain, and building a mesh route takes long
+	// enough that the wait is worth narrating.
+	//
+	// The worker sits at /browse-sw.js rather than the library's default, because
+	// /sw.js on this origin is already the PWA's app-shell worker.
+	roCfg := realorigin.Config{
+		Suffix:    suffix,
+		AppOrigin: cfg.VOrigin,
+		SWPath:    "/browse-sw.js",
+		Shell:     wasmhv.BrowseBootstrapHTML,
+	}
+	if cfg.WasmSW {
+		loader, assets, err := browseSWWasm(wasmbin.Default())
+		if err != nil {
+			return err
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write(bootstrap) //nolint:errcheck
-	})
+		roCfg.Worker, roCfg.Assets = loader, assets
+		log.Warn("browse-origin: serving the Go/wasm transport worker — for testing, not deployment")
+	}
+	handler, err := realorigin.Handler(roCfg)
+	if err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
@@ -651,9 +731,12 @@ func injectWasmBoot(index []byte, wasmVer string, harness bool, browseOriginJS s
 	}
 	tag += "<script src=\"hv-boot.js\"></script>\n" +
 		"<script src=\"browse.js\"></script>\n" +
-		// Mesh-fetch responder: lets embedded <pk>.mesh.localhost browse iframes
-		// reach THIS app's first-party skywireVisor (RFC §4b real-origin browser).
+		// realorigin's responder owns the trust boundary for embedded
+		// <id>.mesh.localhost browse frames; browse-transport.js gives it the
+		// dmsg/skynet/skysocks transport to call. Order matters: the transport
+		// configures the responder, so it loads after it.
 		"<script src=\"browse-responder.js\"></script>\n" +
+		"<script src=\"browse-transport.js\"></script>\n" +
 		"<script>" + wasmhv.BrowseLauncherJS + "</script>\n" +
 		"<script>window.__SKYWIRE_WASM_VERSION__=" + strconv.Quote(wasmVer) + ";</script>\n" +
 		"<script src=\"autoupdate.js\"></script>\n"
@@ -796,3 +879,110 @@ func randomHex(n int) (string, error) {
 	}
 	return hex.EncodeToString(b), nil
 }
+
+// Paths the Go/wasm browse worker needs on the browse origin B. They sit beside
+// the worker rather than on V because a service worker fetches its own module,
+// and a cross-origin fetch from B to V would be a request the whole design
+// exists to avoid.
+const (
+	browseSWWasmPath = "/browse-sw.wasm"
+	browseSWExecPath = "/browse-sw-exec.js"
+)
+
+// browseSWWasm builds the opt-in Go/wasm transport worker: the loader with its
+// two asset paths substituted, plus the module and the wasm_exec.js that matches
+// it. The blob is the wasm-visor that is already embedded for V, so choosing this
+// worker costs no second binary — only the bytes of the browse-sw role inside it.
+//
+// It is off unless asked for. See browse-sw-loader.js for why: the JS worker can
+// be audited by reading it, and this one cannot.
+func browseSWWasm(variant wasmbin.Variant) ([]byte, map[string][]byte, error) {
+	if !wasmbin.Embedded() {
+		return nil, nil, fmt.Errorf("browse-origin wasm worker: no wasm-visor is embedded in this build")
+	}
+	if !wasmbin.Has(variant) {
+		variant = wasmbin.Default()
+	}
+	wasm, err := wasmbin.GetVariant(variant)
+	if err != nil {
+		return nil, nil, fmt.Errorf("browse-origin wasm worker: %w", err)
+	}
+	execJS := wasmbin.WasmExecJSVariant(variant)
+	if len(execJS) == 0 {
+		return nil, nil, fmt.Errorf("browse-origin wasm worker: variant %q has no wasm_exec.js", variant)
+	}
+	loader := bytes.ReplaceAll(wasmhv.BrowseSWLoaderJS, []byte("__WASM_EXEC__"), []byte(browseSWExecPath))
+	loader = bytes.ReplaceAll(loader, []byte("__WASM_URL__"), []byte(browseSWWasmPath))
+	return loader, map[string][]byte{
+		browseSWWasmPath: wasm,
+		browseSWExecPath: execJS,
+	}, nil
+}
+
+// browseSWAssetType types the worker's companion files. The wasm one matters:
+// instantiateStreaming refuses a module that does not arrive as application/wasm,
+// and the failure reads like a corrupt module rather than a header problem.
+func browseSWAssetType(p string) string {
+	if strings.HasSuffix(p, ".wasm") {
+		return "application/wasm"
+	}
+	return "text/javascript"
+}
+
+// deskPageHTML is the converged desk page served at /desk when --exec-wasm is
+// set. Assets come from the routes this server already exposes: /browse.js is
+// the full desk bundle, /wasm-visor.wasm the desk host (raw), /skywire.wasm
+// the command module, /wasm_exec.js?variant=go the matching loader.
+const deskPageHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>skywire</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e0c14;color:#cdd2da;font:14px/1.5 system-ui,sans-serif}
+  #boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8em;z-index:10}
+  #boot .t{color:#9d7cff;font:600 18px system-ui}
+  #boot .s{color:#9aa0a6;font:12px monospace;max-width:44em;text-align:center}
+  #boot.gone{display:none}
+</style>
+</head>
+<body>
+<div id="boot">
+  <div class="t">skywire</div>
+  <div class="s" id="boot-msg">loading…</div>
+</div>
+<script>
+window.__errs = [];
+Error.stackTraceLimit = 300;
+addEventListener('error', function (e) {
+  if (window.__errs.length < 20) {
+    var s = String((e.error && e.error.stack) || e.message || e);
+    window.__errs.push(s.slice(0, 600) + '\n…\n' + s.slice(-2400));
+  }
+});
+</script>
+<script src="/wasm_exec.js?variant=go"></script>
+<script src="/browse.js"></script>
+<script src="/desk-boot.js"></script>
+<script>
+skywireDeskBoot({
+  persistDB: 'skywire-desk',
+  deskWasmURL: '/wasm-visor.wasm',
+  wasmURL: '/skywire.wasm',
+  wasmExecURL: '/wasm_exec.js?variant=go',
+  winboxURL: '/winbox.wasm',
+  autostartVisor: true,
+  helpTerminal: true,
+  hvWindow: true,
+  onStatus: function (s) { var el = document.getElementById('boot-msg'); if (el) el.textContent = s; },
+}).then(function () {
+  document.getElementById('boot').className = 'gone';
+}).catch(function (e) {
+  var el = document.getElementById('boot-msg');
+  if (el) el.textContent = 'boot failed: ' + ((e && e.message) || e);
+});
+</script>
+</body>
+</html>
+`

@@ -29,7 +29,7 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
+	"github.com/0magnet/yamux"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -127,14 +127,16 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	// exits (and different windows) establish in parallel.
 	t0 := time.Now()
 	emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] connecting to exit %s — setting up route…", winID, serverPK.Hex()[:8]))
-	// 28s cap: a reachable exit's route (p2p multihop or a freshly-created direct
-	// transport) sets up in a few seconds; a dead/unroutable one should FAIL so the
-	// caller can try another, not hang. Runs off skysocksMu so exits establish in
-	// parallel. Was 18s, but that left no margin above the router's route reserve +
-	// the (now 10s) noise-handshake window, so a slow-but-alive loaded exit that the
-	// native client reaches was cut off here; 28s covers reserve + handshake + a
-	// retry with headroom while still failing a truly dead exit promptly enough.
-	dctx, cancel := context.WithTimeout(ctx, 28*time.Second)
+	// 45s cap: a reachable exit's route sets up in a few seconds; a dead/unroutable
+	// one should FAIL so the caller can try another, not hang. Runs off skysocksMu so
+	// exits establish in parallel. Was 28s — but measurement showed the SAME exits
+	// the NATIVE client establishes in ~25-30s were being cut off here, because on the
+	// single js/wasm thread the reserve + noise handshake runs slower and 28s sat
+	// right at the native establishment time with zero margin. 45s gives the slower
+	// thread headroom to finish a genuinely-working route (which the localRouteMemo +
+	// less route-setup churn now let it reach sooner) while still failing a truly dead
+	// exit promptly enough to rotate.
+	dctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	// Default dial: the router races the route-finder (a multihop route over
 	// EXISTING peer-to-peer transports) against the visor's route-setup hook, which
@@ -330,6 +332,28 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 	return promise(func() (interface{}, error) {
 		if _, err := url.ParseRequestURI(rawURL); err != nil {
 			return nil, fmt.Errorf("bad url: %w", err)
+		}
+		// Firefox-parity proxy setting: an ADDRESS-shaped "exit"
+		// (socks5h://127.0.0.1:1080, or bare host:port) means "speak SOCKS5 to
+		// that local listener over the page's virtual loopback" instead of
+		// dialing an exit by public key. The canonical listener is the
+		// in-process skysocks-client app (`skywire cli proxy start <exit>`).
+		if sa := socksAddrOf(serverPKHex); sa != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+			defer cancel()
+			emitProxyLogHook(winID, fmt.Sprintf("[proxy %s] %s %s via local socks5 %s…", winID, method, rawURL, sa))
+			t0 := time.Now()
+			status, b, hdr, err := fetchViaSocks(ctx, sa, method, rawURL, body, extraHeaders)
+			if err != nil {
+				emitProxyLog(winID, fmt.Sprintf("[proxy %s] %s %s via %s FAILED (%dms): %v", winID, method, rawURL, sa, time.Since(t0).Milliseconds(), err))
+				return nil, err
+			}
+			resultLine := fmt.Sprintf("[proxy %s] %s %s via %s → %d (%dB, %dms)", winID, method, rawURL, sa, status, len(b), time.Since(t0).Milliseconds())
+			if proxyVerbose {
+				vlog(resultLine)
+			}
+			emitProxyLogHook(winID, resultLine)
+			return shapeFetchResult(status, b, hdr), nil
 		}
 		// A caller-pinned exit (non-empty serverPKHex) is respected as-is — one
 		// attempt, no failover. The iframe browser / wallet leave it empty to use

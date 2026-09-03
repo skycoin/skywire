@@ -26,7 +26,7 @@ func TestGenerateCA_Defaults(t *testing.T) {
 	if !cert.PermittedDNSDomainsCritical {
 		t.Errorf("PermittedDNSDomainsCritical = false, want true")
 	}
-	want := []string{".skynet", ".dmsg"}
+	want := []string{".skynet", ".dmsg", ".skysocks"}
 	got := cert.PermittedDNSDomains
 	if len(got) != len(want) {
 		t.Fatalf("PermittedDNSDomains = %v, want %v", got, want)

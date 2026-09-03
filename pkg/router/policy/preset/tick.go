@@ -8,7 +8,11 @@
 // original global-state behavior exactly.
 package preset
 
-import "sort"
+import (
+	"sort"
+	"strings"
+	"sync/atomic"
+)
 
 // Engine holds the per-transport_id smoothing state and probe/AIMD
 // bookkeeping the adaptive tick controllers accumulate across
@@ -50,17 +54,52 @@ type Engine struct {
 	adaptSeeded         bool
 	adaptIdleCount      int
 	adaptTarget         int
+	// forward (upload / SentBytes) sizing — the exact mirror of the reverse
+	// (RecvBytes) machine above, driven by SentBytes deltas. adaptFwdTarget is
+	// the forward active width (seeded to adaptFwdActive); an upload-heavy flow
+	// widens it under sustained SENT saturation and collapses it back when the
+	// upload goes idle, using the SAME EWMA/peak/hysteresis/cooldown constants
+	// as the reverse side. When SentBytes never advances the whole forward
+	// machine stays dormant (adaptFwdSeeded never trips), so a download-only or
+	// idle flow behaves byte-identically to the reverse-only controller.
+	adaptPrevSent          map[string]uint64
+	adaptFwdThroughputEWMA float64
+	adaptFwdPeak           float64
+	adaptFwdSeeded         bool
+	adaptFwdIdleCount      int
+	adaptFwdTarget         int
+	adaptFwdSatTicks       int
 	// health + anti-churn state
-	adaptCooldown  int            // ticks to hold the active set steady after a reshape
-	adaptSatTicks  int            // consecutive saturated ticks (grow only on a sustained signal)
-	adaptUnhealthy map[string]int // per-active-leg consecutive gross-outlier-latency ticks
-	adaptStall     map[string]int // per-active-leg consecutive no-throughput ticks under load
+	adaptCooldown   int                // ticks to hold the active set steady after a reshape
+	adaptSatTicks   int                // consecutive saturated ticks (grow only on a sustained signal)
+	adaptUnhealthy  map[string]int     // per-active-leg consecutive gross-outlier-latency ticks
+	adaptStall      map[string]int     // per-active-leg consecutive low/no-throughput ticks under load
+	adaptRecvRate   map[string]float64 // per-active-leg EWMA recv byte-rate (throughput signal)
+	adaptPrimaryBad int                // consecutive ticks the PRIMARY (leg 0) reads as a gross outlier while a healthy alternative is active
+
+	// ledbat (delay-based scavenger)
+	ledbatEWMA map[string]float64 // per-leg EWMA-smoothed one-way-ish delay (ms)
+	ledbatBase map[string]float64 // per-leg base (running-min smoothed) delay (ms)
+	ledbatSeen map[string]bool    // transport_ids present this tick (for GC)
+
+	// coupled (MPTCP-style coupled congestion control)
+	coupledLatEWMA         map[string]float64 // per-leg smoothed latency (worst-leg tiebreak)
+	coupledPrevRetransmits map[string]uint64  // per-leg last-tick retransmit counter (loss delta)
+	coupledPrevSent        map[string]uint64  // per-leg last-tick sent bytes (packet-normalize loss)
+	coupledSeen            map[string]bool    // transport_ids present this tick (stale-state GC)
+	coupledCooldown        int                // ticks held steady after a grow/shed (anti-churn)
 }
 
 // New returns an Engine with initialized state maps and the
 // adaptive steady active target seeded to adaptRevActive (the reverse
 // active width decideAdaptive requests, minus its warm-standby reserve),
 // matching the bundle's package-global initializers.
+//
+// NOTE for the wasm bundle: call this at RUNTIME, not from a package-var
+// initializer (`var engine = preset.New()`). TinyGo's compile-time interp pass
+// partially evaluates such initializers and can leave the later map fields nil,
+// so the guest must construct its Engine lazily on first use (see the bundle's
+// engineOnce). The native path already constructs per route group at runtime.
 func New() *Engine {
 	return &Engine{
 		latAdaptEWMA:    map[string]float64{},
@@ -73,11 +112,22 @@ func New() *Engine {
 		prevKnownTIDs:   map[string]bool{},
 		adaptLatEWMA:    map[string]float64{},
 		adaptPrevRecv:   map[string]uint64{},
+		adaptPrevSent:   map[string]uint64{},
 		adaptSeen:       map[string]bool{},
 		adaptAliveIdx:   map[string]int{},
 		adaptUnhealthy:  map[string]int{},
 		adaptStall:      map[string]int{},
-		adaptTarget:     adaptRevActive,
+		adaptRecvRate:   map[string]float64{},
+		adaptTarget:     AdaptRevActive(),
+		adaptFwdTarget:  adaptFwdActive,
+		ledbatEWMA:      map[string]float64{},
+		ledbatBase:      map[string]float64{},
+		ledbatSeen:      map[string]bool{},
+
+		coupledLatEWMA:         map[string]float64{},
+		coupledPrevRetransmits: map[string]uint64{},
+		coupledPrevSent:        map[string]uint64{},
+		coupledSeen:            map[string]bool{},
 	}
 }
 
@@ -95,8 +145,12 @@ func (e *Engine) OnTick(name string, legs []LegInfo) RotationAction {
 		return e.tickElasticMux(legs)
 	case "probe-and-prune":
 		return e.tickProbeAndPrune(legs)
+	case "coupled":
+		return e.tickCoupled(legs)
 	case "adaptive":
 		return e.tickAdaptive(legs)
+	case "ledbat":
+		return e.tickLedbat(legs)
 	default:
 		return RotationAction{}
 	}
@@ -484,18 +538,21 @@ func (e *Engine) tickProbeAndPrune(legs []LegInfo) RotationAction {
 // --- adaptive (composite) ---
 
 const (
-	// adaptFwdActive is the lean forward (upstream / request) leg count: a
-	// single low-latency route, so the request path never pays mux head-of-line
-	// cost. adaptRevActive is the STEADY active reverse width — deliberately 1:
+	// adaptFwdActive is the STEADY lean forward (upstream / request) leg count: a
+	// single low-latency route, so an interactive / idle request path pays no mux
+	// head-of-line cost. Like the reverse side it is only a STEADY floor: the
+	// forward mux WIDENS under sustained UPLOAD (SentBytes) saturation — tickAdaptive
+	// grows adaptFwdTarget and emits AddForwardLeg (forward-only aux legs) — then
+	// collapses back to adaptFwdActive when the upload goes idle. adaptRevActive is
+	// the STEADY active reverse width — deliberately 1:
 	// an interactive / idle flow rides ONE good leg (leg 0) and is never
 	// scattered+reordered across high-variance legs. The reverse mux only WIDENS
 	// under sustained bulk load (tickAdaptive promotes warm spares), then shrinks
 	// back. adaptStandbyMax warm spares are established alongside and parked for
-	// instant promotion, so decideAdaptive requests ReverseMux =
-	// adaptRevActive + adaptStandbyMax, and adaptTarget seeds to adaptRevActive.
+	// instant promotion, so decideAdaptive requests a symmetric Mux =
+	// adaptRevActive + adaptStandbyMax (every leg full-duplex; forward-lean usage
+	// is a send-side decision), and adaptTarget seeds to adaptRevActive.
 	adaptFwdActive = 1
-	adaptRevActive = 1
-	adaptCap       = 6
 	adaptAlpha     = 0.3
 	adaptPeakDecay = 0.98
 	// adaptStandbyMax is the warm-standby reserve the proactive park fills to.
@@ -505,7 +562,55 @@ const (
 	// legs are always parked and ready. This keeps warm standby a resilience
 	// reserve (covers an active-leg drop with zero re-establish dip) instead of
 	// load headroom that peak traffic empties to zero.
-	adaptStandbyMax = 2
+	// adaptStandbyMax sizes the warm-standby pool to "ALL VIABLE routes", not an
+	// arbitrary number: the adaptive default pre-establishes a disjoint standby
+	// route on every existing transport that can reach the destination (a 2-hop
+	// leg src->I->dst reuses the ALREADY-UP src->I transport — no new first hop),
+	// so any of them can be promoted to carrying at a moment's notice for maximal
+	// resilience and instant, dip-free failover. This is a high SANITY CAP, not a
+	// target: establishMuxRoutes builds up to Mux (= adaptRevActive +
+	// adaptStandbyMax) best-effort and takes only as many as the topology's
+	// disjoint-intermediate set actually offers. The RSN-oracle transport-type
+	// ranking picks the best (stcpr/squicr) legs first and the health-gate keeps
+	// latency outliers OUT of the ACTIVE set.
+	//
+	// UNCAPPED 2026-08-26 (operator direction): establish the full disjoint
+	// standby pool the topology offers, not a tiny reserve — one warm-standby
+	// route on every intermediate that can reach the destination, so any can be
+	// promoted at a moment's notice. establishMuxRoutes builds up to Mux
+	// (= adaptRevActive + adaptStandbyMax) best-effort and self-limits to the
+	// disjoint-intermediate set the topology actually has; the RSN-oracle
+	// transport-type ranking picks stcpr/squicr first and the health-gate keeps
+	// latency outliers OUT of the ACTIVE set (adaptCap still caps active width).
+	//
+	// KNOWN RISKS to fix FORWARD as they're observed (MEASURED 2026-08-22 at 31):
+	//   (1) setup-node dial STORM — each standby leg is its own route-setup
+	//       handshake; at scale they fail "setup-node dial: context deadline
+	//       exceeded" and self-heal re-dials forever (the puzzle: the src->I
+	//       transport is UP, yet the route won't set up over it). Real fix =
+	//       pipeline/batch the cascade setup so N legs aren't N handshakes.
+	//   (2) wide-mux download STALL — a bulk transfer over a ~32-leg group timed
+	//       out instead of aggregating; the reorder/aggregation (reorder.go,
+	//       datagram_route_group.go) doesn't scale to many legs (#86 family).
+	// Both are being worked; the pool is uncapped deliberately to surface them.
+	//
+	// TRUE UNCAP 2026-08-26: raised 60 -> 512 so the standby pool is the full
+	// disjoint set the topology offers (a warm visor exposes ~480 disjoint
+	// intermediates to a busy exit), not an arbitrary ceiling. 512 sits above any
+	// realistic single-exit disjoint count, so the binding limit is the topology,
+	// discovered by the self-heal's no-progress backoff (route_group.go) — it
+	// fills to what actually establishes and stops, re-probing as new transports
+	// come online. Risk (1) above is contained two ways: establishMuxRoutes now
+	// caps its FOREGROUND initial dial (initialForegroundMux) so the dial returns
+	// fast on a lean mux, and the background self-heal fills the rest one leg at a
+	// time with the no-progress backoff — so uncapping the pool never becomes a
+	// dial storm at connect time.
+	//
+	// RUNTIME-TUNABLE 2026-08-29 (#4325): the pool size is no longer a compile-time
+	// constant but a runtime atomic (adaptStandbyMaxV, default 512) read via
+	// AdaptStandbyMax(), so an operator can retune the warm-standby reserve LIVE
+	// over the mux-control RPC (skywire cli proxy mux standby) or per policy via
+	// cli_overrides["adapt_standby_max"] — no rebuild. 512 stays the default.
 	adaptStandbyMin = 1
 	// Health + anti-churn. A leg is a gross-outlier (kept OUT of the active mux,
 	// where the no-skip reorder buffer would head-of-line-stall on it) when its
@@ -516,13 +621,178 @@ const (
 	// (each reshape disrupts in-flight flows). adaptStallTicks catches a leg that
 	// is alive but passes no traffic while the group is loaded (a dead 0-byte
 	// leg) and evicts it too.
-	adaptLatCeilingMs    = 1500
-	adaptOutlierMult     = 3.0
-	adaptHysteresis      = 3
-	adaptReshapeCooldown = 3
+	//
+	// The stall gate is throughput-graded, not just zero/non-zero: a leg whose
+	// EWMA recv-rate is below adaptThroughputOutlierFrac of the active-set MEDIAN
+	// recv-rate — a grossly-low-throughput leg, e.g. a webrtc data channel that
+	// carries a fraction of what the stcpr legs do — drags the no-skip reorder
+	// buffer exactly like a dead leg and is evicted the same way. Zero traffic is
+	// the frac=0 special case, so this strictly widens the old dead-leg gate.
+	adaptLatCeilingMs          = 1500
+	adaptOutlierMult           = 3.0
+	adaptHysteresis            = 3
+	adaptReshapeCooldown       = 3
+	adaptThroughputOutlierFrac = 0.25
 )
 
+// Runtime-tunable adaptive widths (see the const block above). Stored atomically
+// so an operator can retune the mux's active width LIVE over the mux-control RPC
+// (skywire cli proxy mux width / cap / standby) without a rebuild — the adaptive
+// engine reads them (via AdaptRevActive / AdaptCap / AdaptStandbyMax) every tick
+// on a per-route-group goroutine while the setter runs on the RPC goroutine.
+// Defaults: a floor of 1 active download leg (one-healthy-leg steady width), a
+// ceiling of 8 (reorder-safe active width), and a warm-standby reserve of 512
+// (held-warm, never reaped). These are DEFAULTS — all three are overridable at
+// runtime (the setters below, driven by the RPC) and per policy
+// (cli_overrides["adapt_cap"|"adapt_rev_active"|"adapt_standby_max"], applied via
+// ApplyOverrideTunables).
+//
+// These live in the preset package (compiled into BOTH the wasm bundle guest and
+// the native visor). The wasm guest runs in its OWN sandboxed linear memory, so a
+// host-side setter call never reaches it; the host instead stamps the current
+// values into the decide/tick input wire (see pkg/router/policy/wasm) and the
+// guest applies them here before dispatching — so the same three atomics govern
+// both paths and the RPC reaches a preset:* (wasm) visor too (#4325).
+var (
+	adaptRevActiveV  atomic.Int64
+	adaptCapV        atomic.Int64
+	adaptStandbyMaxV atomic.Int64
+)
+
+func init() {
+	// Steady active-download floor of 2, not 1: a single active download leg
+	// over-subscribes the no-skip reorder frontier under sustained bulk load and
+	// wedges the transfer (measured live — 1-leg groups truncate at chunk0 and limp
+	// at ~57 KB/s while 2-leg groups run at multi-MB/s). Two legs give the frontier a
+	// second path to make progress on and keep a single leg-death from stranding the
+	// download on one over-subscribed leg. Still well within adaptCap (8) and FEC's
+	// R=2 erasure budget; the pool parks the rest warm.
+	adaptRevActiveV.Store(2)
+	adaptCapV.Store(8)
+	adaptStandbyMaxV.Store(512)
+}
+
+// AdaptRevActive returns the current steady active reverse width (the floor).
+func AdaptRevActive() int { return int(adaptRevActiveV.Load()) }
+
+// AdaptCap returns the current hard ceiling on active mux width.
+func AdaptCap() int { return int(adaptCapV.Load()) }
+
+// AdaptStandbyMax returns the current warm-standby reserve pool size — the
+// number of full-duplex spare legs the adaptive default holds parked for
+// instant, dip-free promotion (decideAdaptive requests Mux = AdaptRevActive() +
+// AdaptStandbyMax()).
+func AdaptStandbyMax() int { return int(adaptStandbyMaxV.Load()) }
+
+// SetAdaptRevActive sets the steady active reverse width (the floor the engine
+// converges to when idle). Clamped to [1, AdaptCap()]. Takes effect on the next
+// tick of every adaptive route group.
+func SetAdaptRevActive(n int) int {
+	if n < 1 {
+		n = 1
+	}
+	if cap := AdaptCap(); n > cap {
+		n = cap
+	}
+	adaptRevActiveV.Store(int64(n))
+	return n
+}
+
+// SetAdaptCap sets the hard ceiling on active mux width (the aggregation
+// ceiling). Clamped to [1, AdaptStandbyMax()]; pulls adaptRevActive down if it
+// would exceed the new cap. Takes effect on the next tick.
+func SetAdaptCap(n int) int {
+	if n < 1 {
+		n = 1
+	}
+	if max := AdaptStandbyMax(); n > max {
+		n = max
+	}
+	adaptCapV.Store(int64(n))
+	if AdaptRevActive() > n {
+		adaptRevActiveV.Store(int64(n))
+	}
+	return n
+}
+
+// SetAdaptStandbyMax sets the warm-standby reserve pool size (the held-warm
+// spare-leg count decideAdaptive folds into the requested Mux). Clamped to >= 1;
+// pulls adaptCap (and, transitively, adaptRevActive) down if they would exceed
+// the new pool size. Takes effect on the next dial (Mux width) and tick.
+func SetAdaptStandbyMax(n int) int {
+	if n < 1 {
+		n = 1
+	}
+	adaptStandbyMaxV.Store(int64(n))
+	if AdaptCap() > n {
+		SetAdaptCap(n)
+	}
+	return n
+}
+
+// ApplyOverrideTunables applies any of the three adaptive-width tunables carried
+// in a policy's cli_overrides map — "adapt_cap", "adapt_rev_active",
+// "adapt_standby_max" (decimal integer strings) — to the runtime atomics via the
+// clamping setters. Absent or unparseable keys are left untouched. This is the
+// per-policy / config surface counterpart to the mux-control RPC: an operator can
+// set different widths per routing policy without recompiling. Applied
+// standby-max first, then cap, then rev-active so the clamps compose the same way
+// regardless of which keys are present. Returns true if any value was applied.
+//
+// It mutates the process-global atomics (the same ones the RPC drives), so a
+// policy's configured widths take effect for every adaptive route group — matching
+// the global scope of the RPC knobs. The adaptive preset calls this from
+// decideAdaptive; the wasm host calls it before stamping the input wire so the
+// values reach the sandboxed guest and stay consistent across ticks.
+func ApplyOverrideTunables(overrides map[string]string) bool {
+	if len(overrides) == 0 {
+		return false
+	}
+	applied := false
+	if n, ok := atoiPositive(overrides["adapt_standby_max"]); ok {
+		SetAdaptStandbyMax(n)
+		applied = true
+	}
+	if n, ok := atoiPositive(overrides["adapt_cap"]); ok {
+		SetAdaptCap(n)
+		applied = true
+	}
+	if n, ok := atoiPositive(overrides["adapt_rev_active"]); ok {
+		SetAdaptRevActive(n)
+		applied = true
+	}
+	return applied
+}
+
+// atoiPositive parses a decimal positive-integer string (no sign, no whitespace
+// beyond trimming) with only integer arithmetic so the wasm guest stays free of a
+// strconv dependency it doesn't otherwise need. Returns ok=false for empty or
+// non-numeric input, or a value < 1.
+func atoiPositive(s string) (int, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, false
+	}
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+		n = n*10 + int(r-'0')
+	}
+	if n < 1 {
+		return 0, false
+	}
+	return n, true
+}
+
 func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
+	// Snapshot the runtime-tunable widths once per tick (lock-free atomic loads)
+	// so every read below sees a consistent value even if the mux-control RPC
+	// retunes them mid-tick, and so no scattered read site races the setter.
+	adaptCap := AdaptCap()
+	adaptRevActive := AdaptRevActive()
+	adaptStandbyMax := AdaptStandbyMax()
 	for k := range e.adaptSeen {
 		delete(e.adaptSeen, k)
 	}
@@ -530,7 +800,22 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		delete(e.adaptAliveIdx, k)
 	}
 	var rawTotal float64
+	var rawSent float64
 	aliveCount := 0
+	// nonDLActive counts the ACTIVE legs of a unidirectional group that do NOT
+	// currently carry the DOWNLOAD direction (alive, !Standby, Direct != Flipped).
+	// "Reverse/download" is not an intrinsic leg property — it is the current
+	// send-side direction ASSIGNMENT, which the flip controller can swap: a leg
+	// carries the download when Direct == Flipped (unflipped: the multihop legs;
+	// flipped: the direct leg). The other (upload/light) class must NOT count
+	// toward the download-active budget — that budget is maintained SEPARATELY on
+	// top of it, so the exit always keeps active download-class legs to send on
+	// whichever way the flip sits. Always 0 for a non-directional (symmetric)
+	// group and for the default unflipped case with a single direct upload leg it
+	// equals the direct-leg count — so every computation below is byte-identical
+	// to the old controller for symmetric groups and unchanged for the common
+	// unflipped download.
+	nonDLActive := 0
 	standbyCount := 0
 	newestAliveIdx := -1
 	promotableIdx := -1
@@ -551,6 +836,9 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 			continue
 		}
 		aliveCount++
+		if l.Direct != l.Flipped {
+			nonDLActive++
+		}
 		if l.Index > newestAliveIdx {
 			newestAliveIdx = l.Index
 		}
@@ -566,11 +854,32 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 				e.adaptLatEWMA[tid] = sample
 			}
 		}
-		if prev, ok := e.adaptPrevRecv[tid]; ok && l.RecvBytes > prev {
-			rawTotal += float64(l.RecvBytes - prev)
-			movedRecv[tid] = true
+		if prev, ok := e.adaptPrevRecv[tid]; ok {
+			if l.RecvBytes > prev {
+				d := float64(l.RecvBytes - prev)
+				rawTotal += d
+				movedRecv[tid] = true
+				// Per-leg recv-rate EWMA — the throughput signal the low-outlier
+				// stall gate ranks on. Smoothed like latency so one busy/quiet
+				// tick doesn't reclassify a leg.
+				if r, ok := e.adaptRecvRate[tid]; ok {
+					e.adaptRecvRate[tid] = adaptAlpha*d + (1-adaptAlpha)*r
+				} else {
+					e.adaptRecvRate[tid] = d
+				}
+			} else if r, ok := e.adaptRecvRate[tid]; ok {
+				// No traffic this tick: decay toward zero so a leg that STOPS
+				// delivering falls below the active median and is caught.
+				e.adaptRecvRate[tid] = (1 - adaptAlpha) * r
+			}
 		}
 		e.adaptPrevRecv[tid] = l.RecvBytes
+		// Forward (upload) throughput — the SentBytes mirror of the RecvBytes
+		// accumulation above. Feeds the independent forward sizing machine.
+		if prev, ok := e.adaptPrevSent[tid]; ok && l.SentBytes > prev {
+			rawSent += float64(l.SentBytes - prev)
+		}
+		e.adaptPrevSent[tid] = l.SentBytes
 	}
 	for tid := range e.adaptLatEWMA {
 		if !e.adaptSeen[tid] {
@@ -580,6 +889,16 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	for tid := range e.adaptPrevRecv {
 		if !e.adaptSeen[tid] {
 			delete(e.adaptPrevRecv, tid)
+		}
+	}
+	for tid := range e.adaptRecvRate {
+		if !e.adaptSeen[tid] {
+			delete(e.adaptRecvRate, tid)
+		}
+	}
+	for tid := range e.adaptPrevSent {
+		if !e.adaptSeen[tid] {
+			delete(e.adaptPrevSent, tid)
 		}
 	}
 
@@ -607,6 +926,35 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		e.adaptIdleCount = 0
 	}
 
+	// Forward (upload) saturation/idle — the SentBytes mirror of the block
+	// above, using the SAME EWMA smoothing, peak decay, and 0.80/0.25
+	// saturated/idle thresholds. Stays fully dormant (fwdSaturated / fwdIdle
+	// both false, adaptFwdSeeded never set) while SentBytes is flat, so a
+	// download-only or idle flow evolves exactly as before.
+	fwdSaturated, fwdIdle := false, false
+	if !e.adaptFwdSeeded {
+		if rawSent > 0 {
+			e.adaptFwdThroughputEWMA = rawSent
+			e.adaptFwdPeak = rawSent
+			e.adaptFwdSeeded = true
+		}
+	} else {
+		e.adaptFwdThroughputEWMA = adaptAlpha*rawSent + (1-adaptAlpha)*e.adaptFwdThroughputEWMA
+		e.adaptFwdPeak *= adaptPeakDecay
+		if e.adaptFwdThroughputEWMA > e.adaptFwdPeak {
+			e.adaptFwdPeak = e.adaptFwdThroughputEWMA
+		}
+		if e.adaptFwdPeak > 0 {
+			fwdSaturated = e.adaptFwdThroughputEWMA >= 0.80*e.adaptFwdPeak
+			fwdIdle = e.adaptFwdThroughputEWMA < 0.25*e.adaptFwdPeak
+		}
+	}
+	if fwdIdle {
+		e.adaptFwdIdleCount++
+	} else {
+		e.adaptFwdIdleCount = 0
+	}
+
 	// Anti-churn cooldown: after any reshape, hold the active set steady for a
 	// few ticks so a transient signal can't reshape the mux every tick (each
 	// reshape disrupts in-flight flows).
@@ -619,6 +967,12 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	} else {
 		e.adaptSatTicks = 0
 	}
+	// Forward sustained-saturation streak (upload analog).
+	if fwdSaturated {
+		e.adaptFwdSatTicks++
+	} else {
+		e.adaptFwdSatTicks = 0
+	}
 
 	// Active-set latency median (EWMA) for gross-outlier classification, plus the
 	// per-active-leg health streaks. A leg (never leg 0) that reads a
@@ -628,6 +982,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// would otherwise head-of-line-stall on it. Hysteresis keeps a single spike
 	// from churning the set.
 	var activeSm []float64
+	var activeRates []float64
 	for _, l := range legs {
 		if !l.Alive || l.Standby {
 			continue
@@ -635,11 +990,22 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		if sm, ok := e.adaptLatEWMA[l.TransportID]; ok && sm > 0 {
 			activeSm = append(activeSm, sm)
 		}
+		if r, ok := e.adaptRecvRate[l.TransportID]; ok && r > 0 {
+			activeRates = append(activeRates, r)
+		}
 	}
 	activeMedian := 0.0
 	if len(activeSm) > 0 {
 		sort.Float64s(activeSm)
 		activeMedian = medianSorted(activeSm)
+	}
+	// Active-set MEDIAN recv-rate — the throughput yardstick a leg is judged a
+	// low-outlier against. Only meaningful with ≥2 rate samples (a single active
+	// leg has no peer to be an outlier of).
+	activeMedianRate := 0.0
+	if len(activeRates) >= 2 {
+		sort.Float64s(activeRates)
+		activeMedianRate = medianSorted(activeRates)
 	}
 	groupLoaded := rawTotal > 0
 	unhealthyIdx := -1
@@ -655,7 +1021,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		} else {
 			delete(e.adaptUnhealthy, tid)
 		}
-		if groupLoaded && !movedRecv[tid] {
+		if groupLoaded && (!movedRecv[tid] || legLowThroughput(e.adaptRecvRate[tid], activeMedianRate)) {
 			e.adaptStall[tid]++
 		} else {
 			delete(e.adaptStall, tid)
@@ -677,11 +1043,49 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		}
 	}
 
-	// healthyPromotable = the lowest-index standby leg SAFE to bring into the
-	// active set (alive, not a known gross-latency-outlier). A bad standby stays
-	// parked — harmless keepalive — rather than being promoted into a stalling
-	// active mux.
-	healthyPromotable := -1
+	// Primary (leg 0) health. The rules above NEVER touch leg 0 — the group must
+	// always keep a selectable send leg — so a bad PRIMARY (a webrtc-second-hop
+	// leg dragging every download it anchors at 2x the latency / a fraction of
+	// the throughput of its peers) would otherwise ride forever, exempt from the
+	// throughput/latency eviction that shed the same drag on any other leg. Track
+	// whether leg 0 is a gross outlier AND a HEALTHY active alternative exists
+	// (so a swap lands on a better primary), with its own hysteresis streak so a
+	// transient spike never swaps the primary. Judged on the same live-latency +
+	// under-load-throughput signals as rule (2).
+	primaryBad := false
+	healthyAltExists := false
+	for _, l := range legs {
+		if !l.Alive || l.Standby || l.TransportID == "" {
+			continue
+		}
+		bad := legUnhealthyLat(e.adaptLatEWMA[l.TransportID], activeMedian) ||
+			(groupLoaded && legLowThroughput(e.adaptRecvRate[l.TransportID], activeMedianRate))
+		if l.Index == 0 {
+			primaryBad = bad
+		} else if !bad {
+			healthyAltExists = true
+		}
+	}
+	if primaryBad && healthyAltExists {
+		e.adaptPrimaryBad++
+	} else {
+		e.adaptPrimaryBad = 0
+	}
+
+	// healthyPromotable = the standby leg SAFE and BEST to bring into the active
+	// set: alive, not a known gross-latency-outlier, and — among those — the
+	// FASTEST by measured latency (lowest LatencyMs, which snapshotLegs sources
+	// from the live end-to-end route latency, not the stale first-hop transport
+	// sample). Growing onto the fastest reserve leg keeps the active mux the
+	// lowest-latency set, so a widening download never pulls a slow leg in ahead
+	// of a fast one. A standby whose latency is not yet measured (LatencyMs<=0)
+	// is a lower-priority fallback (lowest index) used only when no measured-
+	// healthy spare exists — an unknown leg is promoted optimistically and
+	// evicted later by rule (2) if its EWMA reveals it is bad. A bad standby
+	// stays parked (harmless keepalive) rather than stalling the active mux.
+	healthyPromotable := -1 // fastest measured-healthy standby
+	healthyPromLat := 0.0   // its latency (for the running min)
+	healthyUnknown := -1    // lowest-index healthy standby with no latency yet
 	for _, l := range legs {
 		if !l.Alive || !l.Standby {
 			continue
@@ -689,9 +1093,59 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		if legUnhealthyLat(float64(l.LatencyMs), activeMedian) {
 			continue
 		}
-		if healthyPromotable == -1 || l.Index < healthyPromotable {
-			healthyPromotable = l.Index
+		lat := float64(l.LatencyMs)
+		if lat <= 0 {
+			if healthyUnknown == -1 || l.Index < healthyUnknown {
+				healthyUnknown = l.Index
+			}
+			continue
 		}
+		if healthyPromotable == -1 || lat < healthyPromLat {
+			healthyPromotable = l.Index
+			healthyPromLat = lat
+		}
+	}
+	if healthyPromotable == -1 {
+		healthyPromotable = healthyUnknown
+	}
+
+	// desiredActive is the combined active-leg width the group converges to:
+	// the download steady/grown target PLUS any extra forward legs the upload
+	// machine has grown (forwardExtra) PLUS the active non-download-class leg(s)
+	// of a unidirectional group (nonDLActive). Folding the forward growth into the
+	// convergence target is what stops the download-side park/drop-recovery rules
+	// from immediately tearing down a leg the forward machine just added.
+	//
+	// Adding nonDLActive is the ACTIVE-DOWNLOAD-FLOOR fix (unidirectional groups):
+	// the non-download-class leg (the direct leg unflipped; a multihop leg
+	// flipped) carries only the light/upload direction, so it satisfies NONE of
+	// the download-active budget. Without this, adaptTarget seeds to adaptRevActive
+	// (1) and the lone active upload leg makes aliveCount==1==desiredActive, so
+	// drop-recovery (1) never fires and NO download-class leg is ever promoted —
+	// the exit then has zero active download legs to send on and falls back onto
+	// warm-standby legs (over-subscribing them → reorder wedge → group collapse).
+	// Counting the non-download leg on TOP of the download target makes
+	// desiredActive == nonDLActive + adaptRevActive(download), so drop-recovery
+	// promotes a healthy download-class standby to the floor and holds it there —
+	// a floor, not churn (it bypasses the cooldown like every other capacity-
+	// restore path, and stops the instant the floor is met). nonDLActive is 0 for
+	// a symmetric group, so this is a no-op there and desiredActive ==
+	// adaptTarget + forwardExtra as before.
+	forwardExtra := e.adaptFwdTarget - adaptFwdActive
+	// Honor the steady active-download floor LIVE, every tick. adaptTarget seeds to
+	// adaptRevActive at init, but a runtime SetAdaptRevActive (proxy mux width) only
+	// reached it via the idle-shrink clamp — so a raised floor never took effect
+	// during an active download, and a target that had shrunk to a single leg stayed
+	// there. A lone active download leg over-subscribes the no-skip reorder frontier
+	// and wedges the transfer (measured: 1-leg groups truncate at chunk0 while 2-leg
+	// groups run at line rate), so clamping up to the floor here keeps drop-recovery
+	// restoring at least adaptRevActive download legs even under sustained load.
+	if e.adaptTarget < adaptRevActive {
+		e.adaptTarget = adaptRevActive
+	}
+	desiredActive := e.adaptTarget + forwardExtra + nonDLActive
+	if desiredActive > adaptCap {
+		desiredActive = adaptCap
 	}
 
 	// (0) No active legs — bring one up, preferring a healthy warm spare.
@@ -709,11 +1163,59 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// (active fell below the steady target): promote a HEALTHY warm spare
 	// INSTANTLY and re-establish a replacement to restore the floor — zero
 	// re-dial dip. Restoring lost capacity outranks every optimization.
-	if aliveCount < e.adaptTarget {
+	if aliveCount < desiredActive {
 		if healthyPromotable >= 0 {
 			return RotationAction{PromoteFromStandby: []int{healthyPromotable}, AddLeg: true}
 		}
 		return RotationAction{AddLeg: true}
+	}
+
+	// (1b) Converge the warm-standby reserve DOWN after a runtime retune. The
+	// pool size (adaptStandbyMax) is a LIVE tunable — an operator lowering it over
+	// the mux-control RPC (skywire cli proxy mux standby / width) must actually
+	// shrink an already-over-full reserve, not just stop it growing. The park
+	// rules only ever ADD to standby (each gated on standbyCount < adaptStandbyMax),
+	// so without this a reserve parked at the old, larger size would sit forever
+	// and the re-capped self-heal would never draw it back down. Drop the surplus
+	// SLOWEST-first, so the spares we keep warm are the fastest ones. Standby legs
+	// carry no active traffic, so this is safe to run ahead of the anti-churn
+	// cooldown. This is a DELIBERATE one-shot convergence to the configured size,
+	// NOT per-tick reaping: it fires only while standbyCount genuinely exceeds the
+	// max and goes quiet the instant the pool is at size, so a steady-state group
+	// never churns here. Drop recovery (1) runs first, so a needed active slot is
+	// filled by PROMOTING an excess spare before any is dropped.
+	if standbyCount > adaptStandbyMax {
+		type stbyLeg struct {
+			idx int
+			lat float64
+		}
+		var stby []stbyLeg
+		for _, l := range legs {
+			if !l.Alive || !l.Standby || l.Index == 0 {
+				continue
+			}
+			lat := e.adaptLatEWMA[l.TransportID]
+			if lat <= 0 {
+				lat = float64(l.LatencyMs)
+			}
+			if lat <= 0 {
+				lat = adaptLatCeilingMs // unknown → drop first
+			}
+			stby = append(stby, stbyLeg{l.Index, lat})
+		}
+		sort.Slice(stby, func(i, j int) bool { return stby[i].lat > stby[j].lat })
+		surplus := standbyCount - adaptStandbyMax
+		if surplus > len(stby) {
+			surplus = len(stby)
+		}
+		if surplus > 0 {
+			drop := make([]int, surplus)
+			for i := 0; i < surplus; i++ {
+				drop[i] = stby[i].idx
+			}
+			e.adaptCooldown = adaptReshapeCooldown
+			return RotationAction{DropLegs: drop}
+		}
 	}
 
 	// (2) Evict a SUSTAINED-unhealthy active leg (the health gate — the fix for
@@ -733,18 +1235,106 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		return RotationAction{DropLegs: []int{unhealthyIdx}, ExcludeHops: unhealthyHops}
 	}
 
+	// (2.5) Swap out a SUSTAINED-unhealthy PRIMARY (safety — bypasses the
+	// cooldown). Leg 0 can't be parked to standby (setLegStandby refuses idx 0 —
+	// the group must always have a send leg), so a gross-outlier primary escapes
+	// rule (2) entirely. DROP it instead: dropLegsByIndex flushes leg 0's in-
+	// flight window onto a healthy active leg first, then removeLegs compacts and
+	// promotes the next aux into the primary slot, and self-heal (fired by the
+	// drop) re-dials a replacement into the reserve — a hot-swap of the primary
+	// with the retx buffer rescued. Only fires with a healthy active alternative
+	// present (checked above) and >1 alive leg, so the group is never left on a
+	// worse or single primary; the hysteresis streak keeps a transient spike from
+	// swapping it. If the promoted aux is itself bad, the next tick swaps again
+	// (converging onto the healthy leg), each swap shedding a drag.
+	if e.adaptPrimaryBad >= adaptHysteresis && aliveCount > 1 {
+		e.adaptPrimaryBad = 0
+		e.adaptCooldown = adaptReshapeCooldown
+		return RotationAction{DropLegs: []int{0}}
+	}
+
 	// Under cooldown, hold the set steady (anti-churn) — no optimization reshape.
 	if e.adaptCooldown > 0 {
 		return RotationAction{}
 	}
 
 	// (3) Proactive park: converge the surplus down to the steady active target
-	// as warm standby (establishes the reserve at dial; never leg 0; not under
-	// load). This is what makes an idle / interactive flow settle onto ONE leg.
-	// No cooldown: park is self-limiting (only fires while over-provisioned) and
-	// stops once active == target, so it converges quickly at dial without churn.
-	if !saturated && aliveCount > e.adaptTarget && standbyCount < adaptStandbyMax && newestAliveIdx > 0 {
-		return RotationAction{DemoteToStandby: []int{newestAliveIdx}}
+	// as warm standby, parking ALL surplus legs in ONE tick and SLOWEST-first.
+	// Establishes the reserve at dial (never leg 0; not under load) and is what
+	// makes an idle / interactive flow settle onto the fastest few legs.
+	//
+	// Two properties matter here, both driven by the live end-to-end route
+	// latency (snapshotLegs sources LegInfo.LatencyMs from legEndToEndLatencyMs,
+	// not the stale first-hop transport RTT):
+	//   - ALL surplus at once: with the mux uncapped (adaptStandbyMax=60) the
+	//     router brings up ~60 legs ALL born active; a one-leg-per-tick park can
+	//     never catch up, leaving a 25-30-wide active mux whose no-skip reorder
+	//     buffer head-of-line-stalls on its slowest leg (measured: 335 B took
+	//     22 s over a 28-wide idle mux). Parking the whole surplus in one tick
+	//     collapses that to the lean target immediately.
+	//   - SLOWEST-first: the surplus we shed is the highest-latency active legs,
+	//     so the set we KEEP active is always the fastest desiredActive legs. A
+	//     slow leg never sits active while a faster leg is parked.
+	// Cooldown is set after a bulk park so the freshly-lean set settles before
+	// any optimization reshape; drop-recovery (1) and unhealthy-evict (2) still
+	// bypass it, so safety is preserved.
+	//
+	// PARK FLOOR — the active width we converge DOWN to this tick:
+	//   - idle (not saturated): desiredActive, the lean steady target, so an
+	//     interactive/idle flow settles onto the fastest few legs.
+	//   - under load (saturated): adaptCap — the MAXIMUM the saturation-growth
+	//     rule (4) would ever build. This is the fix for the uncap fill: legs are
+	//     born ACTIVE (self-heal filling the 512-deep reserve), and while the pool
+	//     fills, the route-setup/keepalive traffic reads as "saturated" — so a
+	//     park gated on !saturated stayed suppressed and aliveCount ballooned to
+	//     dozens of active legs (HoL-stalling the no-skip reorder buffer) even
+	//     though rule 4 would never grow the active set beyond adaptCap. So the
+	//     park ALWAYS caps active at adaptCap, and only trims below it (to
+	//     desiredActive) when genuinely idle. Under a real bulk download active is
+	//     already at adaptCap, so this only sheds born-active excess, never the
+	//     legs the download is using.
+	parkFloor := desiredActive
+	if (saturated || fwdSaturated) && parkFloor < adaptCap {
+		parkFloor = adaptCap
+	}
+	if aliveCount > parkFloor && standbyCount < adaptStandbyMax && newestAliveIdx > 0 {
+		// Rank active non-leg-0 legs by smoothed latency, slowest first. Use the
+		// EWMA where we have it, else the raw sample; an unmeasured leg sorts as
+		// slowest (parked first) so unknowns don't linger in the active set.
+		type actLeg struct {
+			idx int
+			lat float64
+		}
+		var act []actLeg
+		for _, l := range legs {
+			if !l.Alive || l.Standby || l.Index == 0 {
+				continue
+			}
+			lat := e.adaptLatEWMA[l.TransportID]
+			if lat <= 0 {
+				lat = float64(l.LatencyMs)
+			}
+			if lat <= 0 {
+				lat = adaptLatCeilingMs // unknown → park first
+			}
+			act = append(act, actLeg{l.Index, lat})
+		}
+		sort.Slice(act, func(i, j int) bool { return act[i].lat > act[j].lat })
+		surplus := aliveCount - parkFloor
+		if room := adaptStandbyMax - standbyCount; surplus > room {
+			surplus = room
+		}
+		if surplus > len(act) {
+			surplus = len(act)
+		}
+		if surplus > 0 {
+			demote := make([]int, surplus)
+			for i := 0; i < surplus; i++ {
+				demote[i] = act[i].idx
+			}
+			e.adaptCooldown = adaptReshapeCooldown
+			return RotationAction{DemoteToStandby: demote}
+		}
 	}
 
 	// (4) Grow the active width ONLY on SUSTAINED bulk saturation (multi-tick),
@@ -752,7 +1342,11 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// wide mux is reserved for real bulk load and never drains the reserve below
 	// adaptStandbyMin.
 	if e.adaptSatTicks >= adaptHysteresis && aliveCount < adaptCap {
-		e.adaptTarget = aliveCount + 1
+		// Grow the DOWNLOAD target by one. Subtract forwardExtra AND nonDLActive
+		// so the width tracks only the download-class legs, excluding both the
+		// forward-grown aux legs and a unidirectional group's non-download (upload)
+		// leg(s) (both no-ops when absent).
+		e.adaptTarget = aliveCount - forwardExtra - nonDLActive + 1
 		if e.adaptTarget > adaptCap {
 			e.adaptTarget = adaptCap
 		}
@@ -764,14 +1358,52 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		return RotationAction{AddLeg: true}
 	}
 
+	// (4b) Grow the FORWARD width on SUSTAINED upload saturation — the exact
+	// mirror of (4), driven by SentBytes. Emits AddForwardLeg so the router
+	// appends the aux leg forward-only (appendRouteAsymmetric addFwd=true,
+	// addRev=false): the extra upstream send capacity is added WITHOUT enlarging
+	// the reverse/download set. Bounded by the same adaptCap as the reverse side.
+	// A fresh leg (not a warm-standby promote) is used because the standby pool
+	// is full-duplex — promoting one would also grow the reverse set.
+	if e.adaptFwdSatTicks >= adaptHysteresis && aliveCount < adaptCap && desiredActive < adaptCap {
+		e.adaptFwdTarget++
+		if e.adaptFwdTarget > adaptCap {
+			e.adaptFwdTarget = adaptCap
+		}
+		e.adaptFwdSatTicks = 0
+		e.adaptCooldown = adaptReshapeCooldown
+		return RotationAction{AddForwardLeg: true}
+	}
+
 	// (5) Shrink on SUSTAINED idle back toward the single-leg steady target, so a
 	// finished bulk transfer releases its extra legs (parked to the reserve, or
-	// dropped once it is full). Never leg 0.
-	if e.adaptIdleCount >= adaptHysteresis && aliveCount > adaptRevActive && newestAliveIdx > 0 {
+	// dropped once it is full). Never leg 0. The download-portion width
+	// (aliveCount-forwardExtra-nonDLActive) gates this so neither forward-grown
+	// legs nor a unidirectional group's non-download (upload) leg(s) are shrunk
+	// here (rule 5b owns the forward legs; the non-download leg is not a download
+	// leg to release).
+	if e.adaptIdleCount >= adaptHysteresis && aliveCount-forwardExtra-nonDLActive > adaptRevActive && newestAliveIdx > 0 {
 		e.adaptIdleCount = 0
-		e.adaptTarget = aliveCount - 1
+		e.adaptTarget = aliveCount - forwardExtra - nonDLActive - 1
 		if e.adaptTarget < adaptRevActive {
 			e.adaptTarget = adaptRevActive
+		}
+		e.adaptCooldown = adaptReshapeCooldown
+		if standbyCount < adaptStandbyMax {
+			return RotationAction{DemoteToStandby: []int{newestAliveIdx}}
+		}
+		return RotationAction{DropLegs: []int{newestAliveIdx}}
+	}
+
+	// (5b) Shrink the FORWARD width on SUSTAINED upload idle back toward the lean
+	// single forward leg — the mirror of (5), driven by SentBytes idle. Parks the
+	// newest leg to the reserve (or drops it once the reserve is full). Never
+	// leg 0.
+	if e.adaptFwdIdleCount >= adaptHysteresis && e.adaptFwdTarget > adaptFwdActive && aliveCount > adaptFwdActive && newestAliveIdx > 0 {
+		e.adaptFwdIdleCount = 0
+		e.adaptFwdTarget--
+		if e.adaptFwdTarget < adaptFwdActive {
+			e.adaptFwdTarget = adaptFwdActive
 		}
 		e.adaptCooldown = adaptReshapeCooldown
 		if standbyCount < adaptStandbyMax {
@@ -799,4 +1431,291 @@ func legUnhealthyLat(lat, median float64) bool {
 		return true
 	}
 	return false
+}
+
+// legLowThroughput reports whether an active leg's EWMA recv-rate is a gross
+// LOW outlier — below adaptThroughputOutlierFrac of the active-set median rate.
+// Such a leg is delivering a fraction of what its peers do (a low-bandwidth path
+// like a webrtc data channel), so it drags the no-skip reorder buffer and is
+// evicted from the active mux like a dead leg. Guards: an unknown median (0, too
+// few active legs to compare) or an unknown rate (leg not yet measured) is NOT
+// an outlier — throughput ranking needs a peer set and a sample to judge against.
+func legLowThroughput(rate, medianRate float64) bool {
+	if medianRate <= 0 {
+		return false
+	}
+	return rate < adaptThroughputOutlierFrac*medianRate
+}
+
+// --- ledbat (delay-based scavenger) ---
+
+const (
+	// ledbatAlpha is the EWMA smoothing factor for the per-leg delay signal —
+	// matched to the other controllers so a leg's smoothed delay reacts at the
+	// same rate everywhere.
+	ledbatAlpha = 0.3
+	// ledbatTargetMs is the LEDBAT queuing-delay target (RFC 6817 uses 100ms; a
+	// tighter 60ms here makes the scavenger yield sooner). When a leg's smoothed
+	// delay rises more than this above its own base (min) delay, the flow is
+	// judged to be queuing — i.e. causing congestion — and the controller backs
+	// off. While every active leg stays within the target of its base, there is
+	// no self-induced queuing and the controller may grow.
+	ledbatTargetMs = 60.0
+	// ledbatMinActive is the yield floor: the controller shrinks the active set
+	// toward this width under congestion but never below it, so the flow always
+	// keeps one leg making progress.
+	ledbatMinActive = 1
+)
+
+// tickLedbat is the ledbat preset's on_tick controller: a delay-based,
+// background/scavenger congestion response over the mux active set. It tracks
+// each leg's EWMA-smoothed delay and a per-leg base (running-min) delay, then
+// derives the queuing delay (smoothed - base):
+//
+//   - BACK OFF (yield): if ANY active leg's queuing delay exceeds ledbatTargetMs
+//     — the flow is causing congestion — demote the HIGHEST-queuing-delay active
+//     leg (never leg 0) to warm standby, shrinking the active set toward
+//     ledbatMinActive. Parked, not torn down, so it can be re-promoted for free
+//     when the congestion clears.
+//   - GROW: if every active leg reads within the target of its base (no
+//     self-induced queuing) and the active set is below ledbatMux, promote one
+//     warm standby leg back. Growth only ever draws on the parked reserve — the
+//     scavenger never dials fresh legs beyond its lean provisioned width.
+//
+// One arbitrated action per tick, like the other controllers. Pure integer/
+// float arithmetic and map state only (no time.Now / rand) so it is
+// deterministic and identical under wazero and native compilation.
+func (e *Engine) tickLedbat(legs []LegInfo) RotationAction {
+	for k := range e.ledbatSeen {
+		delete(e.ledbatSeen, k)
+	}
+	for _, l := range legs {
+		tid := l.TransportID
+		if tid == "" {
+			continue
+		}
+		e.ledbatSeen[tid] = true
+		if !l.Alive || l.LatencyMs <= 0 {
+			continue
+		}
+		sample := float64(l.LatencyMs)
+		if prev, ok := e.ledbatEWMA[tid]; ok {
+			e.ledbatEWMA[tid] = ledbatAlpha*sample + (1-ledbatAlpha)*prev
+		} else {
+			e.ledbatEWMA[tid] = sample
+		}
+		sm := e.ledbatEWMA[tid]
+		if b, ok := e.ledbatBase[tid]; !ok || sm < b {
+			e.ledbatBase[tid] = sm
+		}
+	}
+	for tid := range e.ledbatEWMA {
+		if !e.ledbatSeen[tid] {
+			delete(e.ledbatEWMA, tid)
+		}
+	}
+	for tid := range e.ledbatBase {
+		if !e.ledbatSeen[tid] {
+			delete(e.ledbatBase, tid)
+		}
+	}
+
+	sets := classifyLegs(legs)
+	// No active legs — bring one up from the parked reserve (no fresh dial).
+	if sets.activeCount == 0 {
+		if sets.promotable >= 0 {
+			return RotationAction{PromoteFromStandby: []int{sets.promotable}}
+		}
+		return RotationAction{}
+	}
+
+	// Queuing delay across the active set. maxQ (including leg 0) decides whether
+	// the flow is congesting; worstIdx (excluding leg 0) is the demote target so
+	// the primary leg is never parked.
+	maxQ := 0.0
+	worstIdx := -1
+	worstQ := 0.0
+	for _, l := range legs {
+		if !l.Alive || l.Standby {
+			continue
+		}
+		sm, ok := e.ledbatEWMA[l.TransportID]
+		if !ok {
+			continue
+		}
+		q := sm - e.ledbatBase[l.TransportID]
+		if q > maxQ {
+			maxQ = q
+		}
+		if l.Index == 0 {
+			continue
+		}
+		if worstIdx == -1 || q > worstQ {
+			worstIdx, worstQ = l.Index, q
+		}
+	}
+
+	// BACK OFF: congestion detected — park the worst active (non-primary) leg,
+	// yielding capacity, until we reach the floor.
+	if maxQ > ledbatTargetMs && sets.activeCount > ledbatMinActive && worstIdx >= 0 {
+		return RotationAction{DemoteToStandby: []int{worstIdx}}
+	}
+
+	// GROW: no self-induced queuing and below the cap — re-promote one parked leg.
+	if maxQ <= ledbatTargetMs && sets.activeCount < ledbatMux && sets.promotable >= 0 {
+		return RotationAction{PromoteFromStandby: []int{sets.promotable}}
+	}
+	return RotationAction{}
+}
+
+// --- coupled (MPTCP-style coupled congestion control) ---
+
+const (
+	// coupledMux is the modest symmetric mux the coupled preset provisions and
+	// the CEILING the cautious coupled-increase grows the active set back up to.
+	coupledMux = 4
+	// coupledFloor is the minimum active width the coupled-decrease will never
+	// shed below — the aggregate keeps at least this many legs carrying traffic.
+	coupledFloor = 2
+	// coupledAlpha smooths per-leg latency (the worst-leg tiebreak signal).
+	coupledAlpha = 0.3
+	// coupledCooldownTicks holds the active set steady for a few ticks after any
+	// grow/shed so a transient loss blip can't churn the mux every tick.
+	coupledCooldownTicks = 3
+)
+
+// tickCoupled is the coupled congestion controller. The two congestion signals
+// are per-leg: the RETRANSMIT delta since last tick (loss, packet-normalized by
+// the sent-bytes delta) and the EWMA-smoothed latency. It arbitrates at most one
+// structural change per tick, in priority order:
+//
+//	(0) no active legs        -> bring one up (promote a spare, else dial)
+//	(1) active < floor        -> restore the floor (recovery; bypasses cooldown)
+//	    cooldown active       -> hold steady (anti-churn)
+//	(2) any active leg's loss RISING -> COUPLED DECREASE: shed the WORST leg
+//	    (highest loss, latency-tiebroken; never leg 0, never below the floor),
+//	    concentrating traffic on the good legs instead of equal-spreading it
+//	    across a lossy one.
+//	(3) NO active leg showing rising loss AND active < ceiling -> COUPLED
+//	    INCREASE (LIA-cautious): promote AT MOST one warm spare.
+//
+// Because a shed fires the instant loss appears and a grow fires only when the
+// WHOLE active set is loss-free, aggregate aggressiveness stays bounded — the
+// "coupling" property. Deterministic (no time.Now/rand) for wasm parity.
+func (e *Engine) tickCoupled(legs []LegInfo) RotationAction {
+	for k := range e.coupledSeen {
+		delete(e.coupledSeen, k)
+	}
+	activeCount := 0
+	standbyCount := 0
+	promotable := -1
+	worstIdx := -1
+	worstScore := -1.0
+	anyRisingLoss := false
+	for _, l := range legs {
+		tid := l.TransportID
+		if tid != "" {
+			e.coupledSeen[tid] = true
+		}
+		if !l.Alive {
+			continue
+		}
+		if l.Standby {
+			standbyCount++
+			if promotable == -1 || l.Index < promotable {
+				promotable = l.Index
+			}
+			continue
+		}
+		activeCount++
+		if tid == "" {
+			continue
+		}
+		if l.LatencyMs > 0 {
+			sample := float64(l.LatencyMs)
+			if prev, ok := e.coupledLatEWMA[tid]; ok {
+				e.coupledLatEWMA[tid] = coupledAlpha*sample + (1-coupledAlpha)*prev
+			} else {
+				e.coupledLatEWMA[tid] = sample
+			}
+		}
+		var retransDelta, sentDelta uint64
+		if prev, ok := e.coupledPrevRetransmits[tid]; ok && l.Retransmits >= prev {
+			retransDelta = l.Retransmits - prev
+		}
+		if prev, ok := e.coupledPrevSent[tid]; ok && l.SentBytes >= prev {
+			sentDelta = l.SentBytes - prev
+		}
+		e.coupledPrevRetransmits[tid] = l.Retransmits
+		e.coupledPrevSent[tid] = l.SentBytes
+		if retransDelta > 0 {
+			anyRisingLoss = true
+		}
+		// Loss ratio = retransmits / sent-segments this tick (a ~1KB segment unit;
+		// +1 avoids divide-by-zero when a leg sent nothing). Loss dominates the
+		// worst-leg score; smoothed latency breaks ties. Leg 0 (the primary) is
+		// never a shed candidate.
+		sentSegs := sentDelta / 1024
+		lossRatio := float64(retransDelta) / float64(sentSegs+1)
+		score := lossRatio*1e6 + e.coupledLatEWMA[tid]
+		if l.Index != 0 && score > worstScore {
+			worstScore = score
+			worstIdx = l.Index
+		}
+	}
+	for tid := range e.coupledLatEWMA {
+		if !e.coupledSeen[tid] {
+			delete(e.coupledLatEWMA, tid)
+		}
+	}
+	for tid := range e.coupledPrevRetransmits {
+		if !e.coupledSeen[tid] {
+			delete(e.coupledPrevRetransmits, tid)
+		}
+	}
+	for tid := range e.coupledPrevSent {
+		if !e.coupledSeen[tid] {
+			delete(e.coupledPrevSent, tid)
+		}
+	}
+
+	if e.coupledCooldown > 0 {
+		e.coupledCooldown--
+	}
+
+	// (0) No active legs — bring capacity up (recovery, bypasses cooldown).
+	if activeCount == 0 {
+		if promotable >= 0 {
+			return RotationAction{PromoteFromStandby: []int{promotable}}
+		}
+		return RotationAction{AddLeg: true}
+	}
+	// (1) Restore the floor if an active leg dropped (recovery, bypasses cooldown).
+	if activeCount < coupledFloor {
+		if promotable >= 0 {
+			return RotationAction{PromoteFromStandby: []int{promotable}}
+		}
+		return RotationAction{AddLeg: true}
+	}
+	// Anti-churn: hold the set steady during cooldown.
+	if e.coupledCooldown > 0 {
+		return RotationAction{}
+	}
+
+	// (2) Coupled DECREASE: congestion (rising loss on any active leg) -> shed the
+	// worst leg so aggregate aggressiveness stays bounded.
+	if anyRisingLoss && activeCount > coupledFloor && worstIdx > 0 {
+		e.coupledCooldown = coupledCooldownTicks
+		if standbyCount < nodipStandbyMax {
+			return RotationAction{DemoteToStandby: []int{worstIdx}}
+		}
+		return RotationAction{DropLegs: []int{worstIdx}}
+	}
+	// (3) Coupled INCREASE (LIA-cautious): the whole active set is loss-free and we
+	// are below the ceiling -> promote at most one warm spare.
+	if !anyRisingLoss && activeCount < coupledMux && promotable >= 0 {
+		e.coupledCooldown = coupledCooldownTicks
+		return RotationAction{PromoteFromStandby: []int{promotable}}
+	}
+	return RotationAction{}
 }

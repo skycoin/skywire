@@ -266,7 +266,27 @@ func ShouldServe(port string) bool {
 // corrupted. Best-effort and deadline-bounded so it never stalls the client's
 // reconnect. Returns nil if it served a page, an error otherwise; the caller
 // closes conn regardless.
-func ServeSOCKS5(conn net.Conn, detail, mechanism string) error {
+//
+// statusOverride lets the caller answer a reserved in-process host (e.g.
+// status.skysocks) itself instead of the interstitial: once the CONNECT target
+// host is parsed, if statusOverride != nil and it returns a non-nil body for that
+// host, the SOCKS5 reply is sent, the browser's request drained, and the body
+// written verbatim as the HTTP response — the interstitial is skipped. The
+// override is resolved BEFORE the HTTP-only port gate and the exit-reachability
+// check, and applies regardless of port, so the reserved status page is never
+// declined or shadowed — it stays reachable exactly when the exit is down, the
+// moment the user most needs to see why. Pass nil for the plain interstitial-only
+// behavior. The closure lives in the caller so this package stays free of any
+// pkg/proxystatus dependency.
+//
+// exitReachable is the symmetric fall-through: this function is minted on a dial
+// failure, but that failure can be transient (a single stream open failing while
+// the session is actually up). If exitReachable != nil and reports the exit IS
+// reachable at serve time, the waiting "building a route" interstitial would just
+// pin the browser on a spinner even though the route is live — so instead a tiny
+// reload page is served that immediately re-requests the original URL, letting it
+// fall through to the real content. Pass nil to always serve the interstitial.
+func ServeSOCKS5(conn net.Conn, detail, mechanism string, statusOverride func(host string) []byte, exitReachable func() bool) error {
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
 	defer conn.SetDeadline(time.Time{})                   //nolint:errcheck
 
@@ -328,9 +348,19 @@ func ServeSOCKS5(conn net.Conn, detail, mechanism string) error {
 		return err
 	}
 	port := int(portB[0])<<8 | int(portB[1])
-	// Only plaintext HTTP can carry an HTML interstitial; decline the rest so
-	// the caller falls back to tearing down (browser sees a normal failure).
-	if !ShouldServe(fmt.Sprintf("%d", port)) {
+	// Resolve the reserved-host override FIRST (it is a pure render of the status
+	// page for a reserved host, e.g. status.skysocks; nil for anything else). A
+	// reserved host is served regardless of port and BEFORE the interstitial's
+	// HTTP-only gate below, so the status page is never declined or shadowed by
+	// the exit being down — the moment the user most needs to see it.
+	var overrideBody []byte
+	if statusOverride != nil {
+		overrideBody = statusOverride(host)
+	}
+	// Only plaintext HTTP can carry an HTML interstitial; decline the rest so the
+	// caller falls back to tearing down (browser sees a normal failure). The
+	// reserved status host is exempt — it was resolved above.
+	if overrideBody == nil && !ShouldServe(fmt.Sprintf("%d", port)) {
 		return fmt.Errorf("socks5 interstitial: non-HTTP port %d", port)
 	}
 	// Reply success with a dummy BND.ADDR/PORT so the client proceeds to send
@@ -339,11 +369,50 @@ func ServeSOCKS5(conn net.Conn, detail, mechanism string) error {
 		return err
 	}
 	// Drain a chunk of the (short) HTTP request so the browser's write
-	// completes, then answer with the interstitial. We don't need the request
-	// contents — the page is fixed. Bounded single read; ignore EOF.
+	// completes, then answer. We don't need the request contents — the response
+	// is fixed. Bounded single read; ignore EOF.
 	_, _ = conn.Read(make([]byte, 1024)) //nolint:errcheck
+	// A reserved in-process host (e.g. status.skysocks) is answered by the
+	// caller's override rather than the interstitial, so it stays reachable
+	// while the exit is down.
+	if overrideBody != nil {
+		_, err := conn.Write(overrideBody)
+		return err
+	}
+	// The exit is reachable again (the dial failure was transient) — don't pin the
+	// browser on the waiting spinner; serve a reload that falls through to the
+	// intended page, which now loads over the live route.
+	if exitReachable != nil && exitReachable() {
+		_, err := conn.Write(reloadHTTPResponse())
+		return err
+	}
 	_, err := conn.Write(httpResponse(host, detail, mechanism, false))
 	return err
+}
+
+// ReloadPage is the minimal fall-through page served once the exit is reachable
+// again: it immediately re-requests the SAME URL (via location.replace so the
+// interstitial is not left in history), with a meta-refresh=0 fallback for a
+// no-JS browser. The re-request loads the real content over the now-live route.
+func ReloadPage() string {
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
+		`<meta http-equiv="refresh" content="0">` +
+		`<title>Loading…</title></head><body>` +
+		`<script>location.replace(location.href)</script>` +
+		`</body></html>`
+}
+
+// reloadHTTPResponse wraps ReloadPage in a no-store HTTP/1.1 response.
+func reloadHTTPResponse() []byte {
+	body := ReloadPage()
+	var b bytes.Buffer
+	b.WriteString("HTTP/1.1 200 OK\r\n")
+	b.WriteString("Content-Type: text/html; charset=utf-8\r\n")
+	fmt.Fprintf(&b, "Content-Length: %d\r\n", len(body))
+	b.WriteString("Cache-Control: no-store, must-revalidate\r\n")
+	b.WriteString("Connection: close\r\n\r\n")
+	b.WriteString(body)
+	return b.Bytes()
 }
 
 // readFull is io.ReadFull without pulling io into a file that otherwise

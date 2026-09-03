@@ -18,12 +18,13 @@ package visor
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
+	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
 	"github.com/skycoin/skywire/pkg/transport"
-	tpdapi "github.com/skycoin/skywire/pkg/transport-discovery/api"
 )
 
 // cxoAwareTPD wraps a transport.DiscoveryClient, intercepting
@@ -76,6 +77,22 @@ func (c *cxoAwareTPD) GetAllTransports(ctx context.Context) ([]*transport.Entry,
 		}
 	}
 	return c.DiscoveryClient.GetAllTransports(ctx)
+}
+
+// AllTransportsSyncedAt reports when the CXO tpd-all-transports snapshot
+// last advanced, so the router's route-calc cache can invalidate on the
+// CXO sync cadence instead of an independent wall-clock TTL. ok=false
+// (feed not yet primed / CXO unavailable) tells the caller to keep its
+// TTL fallback. Copies no body — a cheap version probe.
+func (c *cxoAwareTPD) AllTransportsSyncedAt() (time.Time, bool) {
+	if c.v == nil {
+		return time.Time{}, false
+	}
+	mgr := c.v.CXOSubMgr()
+	if mgr == nil {
+		return time.Time{}, false
+	}
+	return mgr.SyncedAt(FeedTPDAllTransports, tpdapi.AllTransportsPathWithoutSelf)
 }
 
 // wrapDiscoveryClientWithCXO returns a CXO-aware wrapper around dc.

@@ -11,6 +11,8 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -185,6 +187,19 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 
 	appCl.SetStatusOrLog(appserver.AppDetailedStatusStarting)
 
+	// A skynet-client is a port-forward — a control/tunnel channel (pprof,
+	// debug, dmsgweb, :4443…), not bulk data. So when the operator has set NO
+	// routing flags at all, default to a direct 1-hop route instead of
+	// inheriting the visor-global routing policy: the adaptive default would
+	// otherwise spread this forward across a churning multi-hop warm-standby mux
+	// (observed: a 3ms same-LAN forward muxed across a 11.5s leg, which broke
+	// :4443). Any explicit flag (--direct, --routes, --min-hops, per-direction
+	// mux/min-hops) opts back into the global/explicit shape and wins.
+	if !direct && routes == 0 && minHops == 0 && fwdMinHops == 0 && revMinHops == 0 && fwdMux == 0 && revMux == 0 {
+		direct = true
+		appCl.Log().Info("skynet-client forward: no routing flags set — defaulting to --direct (1-hop, no mux). Pass --routes/--min-hops to opt into the mux.")
+	}
+
 	// dialWithShape performs the actual app-level dial to a given
 	// forwarding port, applying the mux/min-hops shape. Any EXPLICIT
 	// per-call value (>=1), including 1, is a per-app override of the
@@ -196,7 +211,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	dialWithShape := func(port uint16) (net.Conn, error) {
 		addr := appnet.Addr{Net: netType, PubKey: remotePK, Port: routing.Port(port)}
 		if direct || routes >= 1 || minHops >= 1 || fwdMinHops >= 1 || revMinHops >= 1 || fwdMux >= 1 || revMux >= 1 {
-			return appCl.DialWithOptions(addr, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
+			return appCl.DialWithOptions(addr, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, false)
 		}
 		return appCl.Dial(addr)
 	}
@@ -355,7 +370,5 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

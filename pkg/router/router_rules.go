@@ -5,9 +5,33 @@ package router
 import (
 	"fmt"
 	"io"
+	"sort"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/routing"
 )
+
+// sortMuxInfos orders a mux-info slice deterministically by route descriptor
+// (dst PK, src PK, dst port, src port). The router holds route groups in a map,
+// so RouteGroupMuxInfo* would otherwise return them in random iteration order —
+// which reshuffled the `cli visor state` / status.skysocks stream tree and the
+// CLI mux-info rows on every refresh. A stable key keeps each tunnel in the same
+// slot as the pool churns around it.
+func sortMuxInfos(out []MuxInfo) {
+	sort.SliceStable(out, func(i, j int) bool {
+		di, dj := &out[i].Desc, &out[j].Desc
+		if a, b := di.DstPK().String(), dj.DstPK().String(); a != b {
+			return a < b
+		}
+		if a, b := di.SrcPK().String(), dj.SrcPK().String(); a != b {
+			return a < b
+		}
+		if a, b := di.DstPort(), dj.DstPort(); a != b {
+			return a < b
+		}
+		return di.SrcPort() < dj.SrcPort()
+	})
+}
 
 // Saves `rules` to the routing table.
 func (r *router) SaveRoutingRules(rules ...routing.Rule) error {
@@ -109,7 +133,66 @@ func (r *router) RouteGroupMuxInfoForApp(appName string) []MuxInfo {
 		}
 		out = append(out, nrg.rg.MuxStats())
 	}
+	sortMuxInfos(out)
 	return out
+}
+
+// RouteGroupMuxInfoAll implements Router. Returns a mux snapshot for
+// every established (noise) route group, with no app-name filter — the
+// whole-runtime view `cli visor state` surfaces. Same MuxStats() the
+// per-app query and 'mux plot' read; only the filter differs.
+func (r *router) RouteGroupMuxInfoAll() []MuxInfo {
+	r.mx.Lock()
+	rgs := make([]*NoiseRouteGroup, 0, len(r.rgsNs))
+	for _, nrg := range r.rgsNs {
+		if nrg != nil && nrg.rg != nil {
+			rgs = append(rgs, nrg)
+		}
+	}
+	r.mx.Unlock()
+
+	out := make([]MuxInfo, 0, len(rgs))
+	for _, nrg := range rgs {
+		out = append(out, nrg.rg.MuxStats())
+	}
+	sortMuxInfos(out)
+	return out
+}
+
+// SetMuxDirectionForApp implements Router. Applies the operator's manual
+// direction pin to every active rg tagged with appName (same tag walk as
+// RouteGroupMuxInfoForApp). Each pinned rg coordinates the pin with its peer
+// over the wire (RouteGroup.SetDirectionPin); non-directional rg's are counted
+// as errors so a proxy session without CapUniDir reports why nothing happened.
+func (r *router) SetMuxDirectionForApp(appName string, mode byte) (int, error) {
+	if appName == "" {
+		return 0, fmt.Errorf("app name required")
+	}
+	r.mx.Lock()
+	rgs := make([]*NoiseRouteGroup, 0, len(r.rgsNs))
+	for _, nrg := range r.rgsNs {
+		if nrg != nil && nrg.rg != nil && nrg.rg.AppName() == appName {
+			rgs = append(rgs, nrg)
+		}
+	}
+	r.mx.Unlock()
+	if len(rgs) == 0 {
+		return 0, fmt.Errorf("no active route group for app %q", appName)
+	}
+
+	applied := 0
+	var lastErr error
+	for _, nrg := range rgs {
+		if err := nrg.rg.SetDirectionPin(mode); err != nil {
+			lastErr = err
+			continue
+		}
+		applied++
+	}
+	if applied == 0 {
+		return 0, fmt.Errorf("direction pin applied to none of app %q's %d route group(s): %w", appName, len(rgs), lastErr)
+	}
+	return applied, nil
 }
 
 func (r *router) initializingRouteGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
@@ -187,36 +270,56 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 		return fmt.Errorf("SaveRoutingRules: %w", err)
 	}
 
-	// Check if we already have an active mux-enabled route group for this descriptor.
-	// If so, append the additional route instead of creating a new connection.
+	// Check if we already have a route group for this descriptor. If so, these
+	// rules are an ADDITIONAL (aux) mux leg for it, not a new connection — never
+	// push them to r.accept (that path builds a duplicate group; on the responder
+	// it deletes the leg's rules or blocks the whole handshake-await, collapsing
+	// the mux back toward one leg, #80).
+	//
+	// Two cases:
+	//   - The group is already live (rgsNs) with mux enabled → append now.
+	//   - The group is still initializing (rgsRaw): its rg.mux is not set yet (the
+	//     responder creates it lazily when the primary forward handshake lands),
+	//     so we cannot append yet. Buffer the leg and drain it through the same
+	//     guarded append the moment the group registers (saveRouteGroupRules).
 	r.mx.Lock()
 	if nrg, ok := r.rgsNs[rules.Desc]; ok && nrg != nil && nrg.rg.mux != nil {
 		r.mx.Unlock()
-
-		nextTpID := rules.Forward.NextTransportID()
-		tp := r.tm.Transport(nextTpID)
-		if tp == nil {
-			return fmt.Errorf("transport %s not found for additional mux route", nextTpID)
+		// Route through appendRouteToGroup so the DMSG-refusal and
+		// duplicate-transport-ID guards apply (the old inline append skipped
+		// them), and the peer is handshaked on the new leg.
+		return r.appendRouteToGroup(nrg, rules)
+	}
+	if _, initializing := r.rgsRaw[rules.Desc]; initializing {
+		// Park under r.mx so the group cannot transition rgsRaw -> rgsNs (and
+		// drain) between our check and our park, which would strand this leg.
+		parked := r.pendingLegs.park(rules.Desc, rules, time.Now())
+		r.mx.Unlock()
+		if !parked {
+			return fmt.Errorf("pending-leg buffer full for initializing route group %s", &rules.Desc)
 		}
-		nrg.rg.appendRules(rules.Forward, rules.Reverse, tp)
-		r.logger.Debugf("Appended additional mux route to existing RouteGroup for %s", &rules.Desc)
+		r.logger.Debugf("Buffered aux mux leg for initializing route group %s", &rules.Desc)
 		return nil
 	}
 	r.mx.Unlock()
 
+	// Hand the new group off to AcceptRoutes. This send MUST NOT hold r.mx: the
+	// accept buffer can fill (a burst of route setups, or the app-accept loop
+	// mid-handshake), and the only consumer — AcceptRoutes → saveRouteGroupRules
+	// — takes r.mx to drain each item. Holding r.mx across a blocking send
+	// therefore deadlocks the whole router: the sender waits for the consumer to
+	// free a slot while the consumer waits for r.mx, and every other
+	// IntroduceRules, ActiveRouteStatuses and the rules-GC pile up behind the
+	// held lock (observed live: one sender parked in chansend, 1080 waiters, the
+	// visor wedged at ~10k goroutines with route setup failing fleet-wide).
+	// Duplicate sends for the same descriptor are already tolerated downstream —
+	// saveRouteGroupRules detects an initializing group and adopts the rules as
+	// an aux mux leg — so the lock guarded nothing here.
 	select {
+	case r.accept <- rules:
+		return nil
 	case <-r.done:
 		return io.ErrClosedPipe
-	default:
-		r.mx.Lock()
-		defer r.mx.Unlock()
-
-		select {
-		case r.accept <- rules:
-			return nil
-		case <-r.done:
-			return io.ErrClosedPipe
-		}
 	}
 }
 

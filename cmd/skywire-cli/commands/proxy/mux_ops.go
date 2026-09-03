@@ -36,6 +36,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
+
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -45,12 +48,15 @@ import (
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cliout/cliproxy"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 var (
-	muxOpsApp      string
-	muxOpsSrcPort  uint16
-	muxAddRouteSrc string
+	muxOpsApp         string
+	muxOpsSrcPort     uint16
+	muxAddRouteSrc    string
+	muxSwitchRouteSrc string
+	muxSwitchTimeout  time.Duration
 )
 
 func init() {
@@ -61,7 +67,107 @@ func init() {
 	muxRmCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
 	addMuxSub(muxAddCmd, "mux-add")
 	addMuxSub(muxRmCmd, "mux-rm")
+	muxSwitchCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route to switch")
+	muxSwitchCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
+	muxSwitchCmd.Flags().StringVar(&muxSwitchRouteSrc, "route", "-", "new route JSON file ('-' = stdin); shape is 'cli route calc --json' output")
+	muxSwitchCmd.Flags().DurationVar(&muxSwitchTimeout, "ready-timeout", 20*time.Second, "how long to wait for the new leg to carry before retiring the old primary")
+	RootCmd.AddCommand(muxSwitchCmd)
+	muxDirectionCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route groups to pin")
 	addMuxSub(muxModeCmd, "mux-mode")
+	addMuxSub(muxDirectionCmd, "mux-direction")
+	addMuxSub(muxCapCmd, "mux-cap")
+	addMuxSub(muxWidthCmd, "mux-width")
+	addMuxSub(muxStandbyCmd, "mux-standby")
+}
+
+var muxCapCmd = &cobra.Command{
+	Use:   "cap <n>",
+	Short: "Set the adaptive mux active-width ceiling at runtime",
+	Long: `Set the MAXIMUM number of ACTIVE mux legs the adaptive engine may grow to
+under sustained load — the aggregation ceiling. Applies LIVE to this visor's
+adaptive route groups on their next tick (no restart). Send-side is a per-visor
+decision, so set it independently on each end (e.g. over the pty to the exit).
+
+Example:
+  skywire cli proxy mux cap 60     # allow aggregation up to 60 active legs`,
+	Args:                  cobra.ExactArgs(1),
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n < 1 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("cap must be a positive integer, got %q", args[0]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+		defer rpcClient.Close() //nolint:errcheck,gosec
+		if err := rpcClient.SetMuxCap(n); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxCap: %w", err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "cap", App: muxOpsApp, Value: args[0]}))
+	},
+}
+
+var muxWidthCmd = &cobra.Command{
+	Use:   "width <n>",
+	Short: "Set the adaptive mux steady active download width at runtime",
+	Long: `Set the STEADY active download width — the floor number of active mux legs
+the adaptive engine converges to when idle (more than one spreads a bulk flow
+proactively before saturation instead of ramping from a single leg). Applies
+LIVE on the next tick; clamped to [1, cap]. Set per-visor, per-end.
+
+Example:
+  skywire cli proxy mux width 8    # keep 8 legs active by default`,
+	Args:                  cobra.ExactArgs(1),
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n < 1 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("width must be a positive integer, got %q", args[0]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+		defer rpcClient.Close() //nolint:errcheck,gosec
+		if err := rpcClient.SetMuxWidth(n); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxWidth: %w", err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "width", App: muxOpsApp, Value: args[0]}))
+	},
+}
+
+var muxStandbyCmd = &cobra.Command{
+	Use:   "standby <n>",
+	Short: "Set the adaptive mux warm-standby reserve pool size at runtime",
+	Long: `Set the number of WARM-STANDBY spare legs the adaptive engine holds parked for
+instant, dip-free promotion — the reserve pool decideAdaptive folds into the
+requested mux width (Mux = width + standby). A large pool (the 512 default) keeps
+one warm leg on every disjoint route the topology offers, so an active leg that
+drops is replaced with zero re-establish dip. Applies to the next dial (the mux
+width established) and LIVE to this visor's adaptive route groups on their next
+tick. Set per-visor, per-end.
+
+Example:
+  skywire cli proxy mux standby 64   # hold up to 64 warm spare legs`,
+	Args:                  cobra.ExactArgs(1),
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n < 1 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("standby must be a positive integer, got %q", args[0]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+		defer rpcClient.Close() //nolint:errcheck,gosec
+		if err := rpcClient.SetMuxStandby(n); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxStandby: %w", err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{Op: "standby", App: muxOpsApp, Value: args[0]}))
+	},
 }
 
 // routePair mirrors the shape 'cli route calc --json' emits.
@@ -194,31 +300,197 @@ Example:
 	},
 }
 
+var muxSwitchCmd = &cobra.Command{
+	Use:   "switch",
+	Short: "Switch a proxy session onto a different route in flight, without dropping the app",
+	Long: `Move the session's PRIMARY route to a caller-supplied one, seamlessly:
+the SOCKS5 connection the app holds is never dropped. Works on a
+single-route (non-mux) session as well as a mux'd one.
+
+Make-before-break: the new route is attached as a leg FIRST, this
+command WAITS for it to become ready (alive and out of standby, i.e.
+actually carrying), and only THEN retires the old primary. The route
+group — and the noise/yamux session riding on it — is never torn
+down; the new leg transparently takes over the primary slot (the same
+re-home a leg death triggers), so the byte stream to the app continues
+uninterrupted.
+
+The new route is read as JSON (default stdin; --route <file>) in the
+{forward, reverse} shape 'cli route calc --json' emits. Its first
+transport must differ from the current primary's.
+
+Example:
+  # switch onto a fresh multihop route
+  skywire cli route calc <exit-pk> --count 1 --json | skywire cli proxy switch
+  # switch onto a DIRECT (1-hop) route
+  skywire cli route calc <exit-pk> --min 1 --max 1 --json | skywire cli proxy switch`,
+	Args:                  cobra.NoArgs,
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, _ []string) {
+		pair, err := readRoutePair(muxSwitchRouteSrc)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if len(pair.Forward) == 0 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("new route has no forward hops"))
+		}
+		newTpID := pair.Forward[0].TpID
+
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+		defer rpcClient.Close() //nolint:errcheck,gosec
+
+		// Identify the current primary leg BEFORE attaching the new one.
+		rg, err := muxSwitchSelectRG(rpcClient)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		oldPrimary, err := primaryLegTpID(rg)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if fmt.Sprint(newTpID) == oldPrimary.String() {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("new route's first transport (%s) is already the current primary; nothing to switch", oldPrimary))
+		}
+
+		// MAKE: attach the new route as a leg alongside the current one.
+		if err := rpcClient.AddMuxRoute(muxOpsApp, pair.Forward, pair.Reverse, muxOpsSrcPort); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("attach new route (current route unchanged): %w", err))
+		}
+
+		// WAIT for the new leg to carry, so the break below is seamless.
+		if err := muxSwitchWaitReady(rpcClient, newTpID, muxSwitchTimeout); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("new leg did not become ready — old primary kept (run 'proxy mux rm %s' to drop the half-attached leg): %w", newTpID, err))
+		}
+
+		// BREAK: retire the old primary; the new leg re-homes into index 0 and
+		// the mux carries the stream on across the swap, so the app never drops.
+		if err := rpcClient.RemoveMuxRoute(muxOpsApp, oldPrimary, muxOpsSrcPort); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("new route ready but retiring old primary %s failed — run 'proxy mux rm %s' to finish the switch: %w", oldPrimary, oldPrimary, err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{
+			Op: "switch", App: muxOpsApp, Hops: len(pair.Forward),
+			TransportID: fmt.Sprint(newTpID),
+		}))
+	},
+}
+
+// muxSwitchSelectRG fetches the app's mux route groups and selects the target
+// one (by --rg src_port when set, else the sole group).
+func muxSwitchSelectRG(rpcClient visor.API) (muxRouteGroupInfo, error) {
+	infos, err := rpcClient.RouteGroupMuxInfo(muxOpsApp)
+	if err != nil {
+		return muxRouteGroupInfo{}, fmt.Errorf("RouteGroupMuxInfo: %w", err)
+	}
+	raw, _ := json.Marshal(infos) //nolint:errcheck
+	var rgs []muxRouteGroupInfo
+	_ = json.Unmarshal(raw, &rgs) //nolint:errcheck
+	if len(rgs) == 0 {
+		return muxRouteGroupInfo{}, fmt.Errorf("no active route groups for app=%s (start the proxy first)", muxOpsApp)
+	}
+	return selectAutoRG(rgs, muxOpsSrcPort)
+}
+
+// primaryLegTpID returns the transport id of the primary leg (lowest Index) —
+// the leg `switch` retires once the new route is carrying.
+func primaryLegTpID(rg muxRouteGroupInfo) (uuid.UUID, error) {
+	if len(rg.Legs) == 0 {
+		return uuid.Nil, fmt.Errorf("route group for app=%s has no legs", muxOpsApp)
+	}
+	primary := rg.Legs[0]
+	for _, l := range rg.Legs[1:] {
+		if l.Index < primary.Index {
+			primary = l
+		}
+	}
+	id, err := uuid.Parse(primary.TransportID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("parse primary transport id %q: %w", primary.TransportID, err)
+	}
+	return id, nil
+}
+
+// muxSwitchWaitReady polls until the leg carried over newTpID is present and
+// alive (its rules confirmed end-to-end), or timeout elapses. This is what
+// keeps the switch seamless: the old primary is not retired until the new leg
+// is established and can carry the stream. It need not be out of warm-standby —
+// retiring the old primary promotes the survivor into the active primary slot;
+// requiring non-standby here would deadlock, since the adaptive policy parks a
+// freshly-added leg in the warm pool until load widens the active set.
+func muxSwitchWaitReady(rpcClient visor.API, newTpID uuid.UUID, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	want := newTpID.String()
+	for {
+		if rg, err := muxSwitchSelectRG(rpcClient); err == nil {
+			for _, l := range rg.Legs {
+				if l.TransportID == want && l.Alive {
+					return nil
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out after %s waiting for new leg %s to become ready", timeout, want)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
 var muxModeCmd = &cobra.Command{
-	Use:   "mode <auto|equal>",
+	Use:   "mode <auto|equal|capacity|ecf|otias|stms>",
 	Short: "Change mux scheduler weighting at runtime",
 	Long: `Set the mux transport-selection mode for the visor.
 
-  auto    - latency-weighted: lower-latency legs get more packets.
-            Best when the legs have different RTTs (the typical case)
-            because it minimizes head-of-line stalls in SACK reorder.
-  equal   - round-robin: each leg gets equal share. Useful when legs
-            have similar latency and you want to verify aggregation
-            behavior without the auto-mode masking it.
+  auto     - latency-weighted: lower-latency legs get more packets.
+             Best when the legs have different RTTs (the typical case)
+             because it minimizes head-of-line stalls in SACK reorder.
+  equal    - round-robin: each leg gets equal share. Useful when legs
+             have similar latency and you want to verify aggregation
+             behavior without the auto-mode masking it.
+  capacity - goodput-weighted: each leg's share tracks its recently-
+             measured throughput (bytes/sec), so a fast leg carries more
+             and a slow one carries little — the thin-spread aggregation
+             mode. A just-promoted leg starts at a small cold-leg floor
+             share and ramps as its goodput proves out.
+  ecf      - Earliest Completion First: predictive hold-back. Sends on
+             the fastest leg while it has send capacity and only spills
+             onto a slower leg when that leg would deliver its frame
+             sooner than the fast leg can drain its own backlog —
+             otherwise it holds the frame on the fast leg. Unlike
+             capacity (which still sprays a share onto slow legs and
+             head-of-line-stalls the reorder buffer on them), ECF
+             aggregates across heterogeneous legs without paying the
+             slow-leg HoL cost.
+  otias    - Out-of-order Transmission for In-order Arrival: assigns
+             each frame to the leg whose ESTIMATED ARRIVAL is soonest
+             (backlog drain time + one-way delay), reusing ECF's per-leg
+             estimators. It will deliberately hand a later frame to a
+             slower-but-idle leg once the fast leg's queue would make it
+             arrive later; the reorder buffer restores stream order.
+  stms     - Slide Together Multipath Scheduler: keeps the head of the
+             stream on the fast leg (fills its send window first) and,
+             once that window is full, places the following data on the
+             soonest-arriving slower leg so the pieces converge in order.
+             Unlike ECF it does not decline a slow leg once it is active.
 
-Affects every active and future mux'd route group on this visor.
-The setting persists to skywire-config.json so it survives restart.
+Affects every active and future mux'd route group on this visor
+IMMEDIATELY (the router re-applies the mode to live route groups). The
+setting persists to skywire-config.json so it survives restart.
 
 Example:
-  skywire cli proxy mux mode equal      # before measuring aggregation
+  skywire cli proxy mux mode ecf        # predictive earliest-completion-first
+  skywire cli proxy mux mode capacity   # goodput-weighted thin spread
   skywire cli proxy mux info --watch 1s
-  skywire cli proxy mux mode auto       # back to weighted`,
+  skywire cli proxy mux mode auto       # back to latency-weighted`,
 	Args:                  cobra.ExactArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		mode := args[0]
-		if mode != "auto" && mode != "equal" {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("mode must be 'auto' or 'equal', got %q", mode))
+		switch mode {
+		case "auto", "equal", "capacity", "ecf", "otias", "stms":
+		default:
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("mode must be 'auto', 'equal', 'capacity', 'ecf', 'otias', or 'stms', got %q", mode))
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -231,6 +503,63 @@ Example:
 		}
 		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{
 			Op: "mode", App: muxOpsApp, Mode: mode,
+		}))
+	},
+}
+
+var muxDirectionCmd = &cobra.Command{
+	Use:   "direction <auto|default|flipped>",
+	Short: "Pin which leg class carries each data direction on an active session",
+	Long: `Manually control the unidirectional mux's direction→leg-class mapping —
+which class of leg (the DIRECT 1-hop transport vs the MULTIHOP mux legs)
+carries each data direction on the app's active route groups.
+
+Only meaningful on a DIRECTIONAL group (CapUniDir negotiated by both ends —
+'mux info' shows directional=true); errors otherwise.
+
+  auto     - release the pin: the automatic flip controller resumes on both
+             ends, moving the heavy direction onto the mux when the traffic
+             asymmetry inverts and holds.
+  default  - pin the default mapping: this end (the initiator) sends its
+             upload on the DIRECT leg; the download aggregates over the
+             MULTIHOP mux legs. The download-heavy shape.
+  flipped  - pin the swapped mapping: the upload aggregates over the multihop
+             mux and the download rides the direct leg. The upload-heavy shape.
+
+The pin is COORDINATED over the wire: the peer applies the same pin, so both
+ends keep sending on disjoint leg classes and neither end's flip controller
+fights the mapping. Against an old peer (predating the direction packet) the
+pin is best-effort local-only — the packet is silently ignored there, and the
+peer's controller may still flip its own side.
+
+Applies to ALL of the app's active route groups (a proxy session can hold one
+rg per SOCKS5 connection). 'mux info' shows the live state: flipped= is the
+current mapping, flip_pinned= whether an operator pin holds it.
+
+Example:
+  skywire cli proxy mux direction flipped   # force the upload onto the mux
+  skywire cli proxy mux info --watch 1s     # watch which legs carry each way
+  skywire cli proxy mux direction auto      # hand control back`,
+	Args:                  cobra.ExactArgs(1),
+	DisableFlagsInUseLine: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		mode := args[0]
+		switch mode {
+		case "auto", "default", "flipped":
+		default:
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("direction must be 'auto', 'default' or 'flipped', got %q", mode))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
+		}
+		defer rpcClient.Close() //nolint:errcheck,gosec
+
+		if err := rpcClient.SetMuxDirection(muxOpsApp, mode); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxDirection: %w", err))
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{
+			Op: "direction", App: muxOpsApp, Mode: mode,
 		}))
 	},
 }

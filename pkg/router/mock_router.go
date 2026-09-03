@@ -524,12 +524,36 @@ func (_m *MockRouter) RouteGroupMuxInfo(_a0 routing.RouteDescriptor) (MuxInfo, b
 	return r0, r1
 }
 
+// SetMuxDirectionForApp provides a mock function
+func (_m *MockRouter) SetMuxDirectionForApp(_a0 string, _a1 byte) (int, error) {
+	ret := _m.Called(_a0, _a1)
+	var r0 int
+	if rf, ok := ret.Get(0).(func(string, byte) int); ok {
+		r0 = rf(_a0, _a1)
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).(int)
+	}
+	return r0, ret.Error(1)
+}
+
 // RouteGroupMuxInfoForApp provides a mock function
 func (_m *MockRouter) RouteGroupMuxInfoForApp(_a0 string) []MuxInfo {
 	ret := _m.Called(_a0)
 	var r0 []MuxInfo
 	if rf, ok := ret.Get(0).(func(string) []MuxInfo); ok {
 		r0 = rf(_a0)
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]MuxInfo)
+	}
+	return r0
+}
+
+// RouteGroupMuxInfoAll provides a mock function with no fields
+func (_m *MockRouter) RouteGroupMuxInfoAll() []MuxInfo {
+	ret := _m.Called()
+	var r0 []MuxInfo
+	if rf, ok := ret.Get(0).(func() []MuxInfo); ok {
+		r0 = rf()
 	} else if ret.Get(0) != nil {
 		r0 = ret.Get(0).([]MuxInfo)
 	}

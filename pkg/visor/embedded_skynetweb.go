@@ -181,6 +181,29 @@ func (e *EmbeddedSkynetWeb) Upstream() string {
 	return e.cfg.UpstreamSOCKS
 }
 
+// ListenAddr returns the SOCKS5 listener the resolver binds, resolved the same
+// way serve() does (loopback default, default port).
+func (e *EmbeddedSkynetWeb) ListenAddr() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return resolverListenAddr(e.cfg.ProxyAddr, uintOrDefault(e.cfg.ProxyPort, defaultSkynetWebProxyPort))
+}
+
+// Suffix returns the domain suffix the resolver answers for (".skynet").
+func (e *EmbeddedSkynetWeb) Suffix() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return stringOrDefault(e.cfg.DomainSuffix, skynetweb.DefaultDomainSuffix)
+}
+
+// Aliases returns the name→PK bindings the resolver resolves by name — this
+// visor's own alias. The returned map is a copy.
+func (e *EmbeddedSkynetWeb) Aliases() map[string]cipher.PubKey {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return resolverAliasMap(e.cfg.Alias, e.localPK)
+}
+
 func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 	cfg := skynetweb.Config{
 		DomainSuffix:  stringOrDefault(e.cfg.DomainSuffix, skynetweb.DefaultDomainSuffix),
@@ -207,8 +230,10 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		}
 	}
 	cfg.Aliases = resolverAliasMap(e.cfg.Alias, e.localPK)
-	// Reserved in-process status hosts (http://status.skynet/ etc.).
+	// Reserved in-process status host owned by this layer: only status.skynet is
+	// answered here; status.dmsg / status.skysocks fall through up the chain.
 	cfg.StatusProvider = e.statusProvider
+	cfg.StatusSurface = proxystatus.SurfaceSkynet
 
 	// Optional TLS MITM mode. Loading the CA can fail (file
 	// missing, permissions, malformed) — those failures are not
@@ -553,7 +578,24 @@ func initEmbeddedSkynetWeb(ctx context.Context, v *Visor, log *logging.Logger) e
 		log.Warn("skynet_web configured but router not available; skipping")
 		return nil
 	}
-	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, v.conf.SkynetWeb, log)
+	// Auto-chain: no explicit upstream and the proxy client is set to
+	// autostart → forward non-.skynet CONNECTs to it, completing the
+	// dmsgweb → skynetweb → skysocks-client chain from one config. The
+	// upstream may bind later than this proxy (the client's auto-exit
+	// selection runs in the background); until then clearnet CONNECTs
+	// fail exactly as they would with no upstream at all.
+	cfg := v.conf.SkynetWeb
+	if cfg.UpstreamSOCKS == "" && v.conf.Launcher != nil {
+		for _, ac := range v.conf.Launcher.Apps {
+			if ac.Name == skyenv.SkysocksClientName && ac.AutoStart {
+				cfg.UpstreamSOCKS = skyenv.SkysocksClientAddr
+				log.WithField("upstream", cfg.UpstreamSOCKS).
+					Info("Auto-chaining skynetweb → skysocks-client for clearnet")
+				break
+			}
+		}
+	}
+	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, cfg, log)
 	runtime.statusProvider = v.proxyStatusProvider()
 	v.initLock.Lock()
 	v.embeddedSkynetWeb = runtime

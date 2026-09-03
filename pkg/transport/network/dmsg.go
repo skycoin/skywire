@@ -145,3 +145,15 @@ func (c *dmsgTransportAdapter) RemoteRawAddr() net.Addr {
 func (c *dmsgTransportAdapter) Network() types.Type {
 	return types.DMSG
 }
+
+// ConnDetails implements ConnDetailer. dmsg relays through a dmsg.Server
+// rather than dialing the peer directly, so there is no direct remote IP
+// to report (RemoteAddr is deliberately left empty — an empty RemoteAddr
+// is itself the "relayed, not direct" signal). Instead it reports the
+// public key of the dmsg.Server the frames ride through. ServerPK is a
+// public key, never a secret.
+func (c *dmsgTransportAdapter) ConnDetails() ConnDetails {
+	return ConnDetails{
+		DmsgServerPK: c.ServerPK().Hex(),
+	}
+}

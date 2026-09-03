@@ -23,6 +23,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -31,8 +32,8 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
-	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -195,7 +196,7 @@ func init() {
 
 	// Transport flags
 	genConfigCmd.Flags().BoolVarP(&disablePublicAutoConn, "autoconn", "y", scriptExecBool("${DISABLEPUBLICAUTOCONN:-false}"), "disable autoconnect to public visors")
-	gHiddenFlags = append(gHiddenFlags, "hide")
+	gHiddenFlags = append(gHiddenFlags, "autoconn")
 	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", scriptExecBool("${VISORISPUBLIC:-false}"), "publicize visor in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "public")
 	genConfigCmd.Flags().IntVar(&stcprPort, "stcpr", scriptExecInt("${STCPRPORT:-0}"), "tcp transport listening port (0 = random / shared master port)")
@@ -226,6 +227,8 @@ func init() {
 	genConfigCmd.Flags().StringVar(&transportSetupPKs, "tpsetup", scriptExecArray("${TPSETUPPKS[@]}"), msg)
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
 	genConfigCmd.Flags().BoolVar(&cascadeRouteSetup, "cascade", false, "opt into source-driven cascade route setup (default: legacy setup-node path)")
+	genConfigCmd.Flags().StringVar(&policyPerDial, "policy", scriptExecString("${POLICYPERDIAL}"), "per-dial routing policy: preset:<name> (e.g. preset:adaptive), @/path/policy.star, @/path/policy.wasm, inline Starlark, or empty for built-in defaults")
+	gHiddenFlags = append(gHiddenFlags, "policy")
 	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup node")
 	gHiddenFlags = append(gHiddenFlags, "sn")
 	genConfigCmd.Flags().BoolVar(&dmsgDiscConfig, "dmsgdisc", false, "generate config for dmsg-discovery service")
@@ -333,6 +336,16 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-addr")
 	genConfigCmd.Flags().StringVar(&skynetWebProxyAddr, "skynetweb-addr", scriptExecString("${SKYNETWEBADDR}"), "host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-addr")
+
+	// Browse-origin flags: the loopback real-origin browse proxy also serves the
+	// warning-free HTTPS proxy-status pages (status-<surface>.<suffix>) when a real
+	// wildcard cert for *.<suffix> is supplied. Enabled by default (loopback-only).
+	genConfigCmd.Flags().BoolVar(&noBrowseOrigin, "no-browse-origin", scriptExecBool("${NOBROWSEORIGIN:-false}"), "do not serve the loopback real-origin browse proxy / HTTPS proxy-status pages (status-<surface>.<suffix>)")
+	genConfigCmd.Flags().StringVar(&browseOriginSuffix, "browse-suffix", scriptExecString("${BROWSESUFFIX}"), fmt.Sprintf("browse-origin domain suffix (leading dot) for the loopback browse proxy + HTTPS proxy-status pages. Empty = deployment default (%q)", deployment.Prod.BrowseOriginSuffix))
+	genConfigCmd.Flags().StringVar(&browseOriginTLSCert, "browse-tls-cert", scriptExecString("${BROWSETLSCERT}"), "PEM cert for the browse-origin listener — a real wildcard cert for *.<browse-suffix> so status-<surface>.<suffix> loads over warning-free HTTPS. Requires --browse-tls-key; empty = plain HTTP on loopback")
+	gHiddenFlags = append(gHiddenFlags, "browse-tls-cert")
+	genConfigCmd.Flags().StringVar(&browseOriginTLSKey, "browse-tls-key", scriptExecString("${BROWSETLSKEY}"), "PEM key paired with --browse-tls-cert")
+	gHiddenFlags = append(gHiddenFlags, "browse-tls-key")
 
 	// Skychat flags
 	genConfigCmd.Flags().BoolVar(&isSkychatEnable, "servechat", scriptExecBool("${SKYCHAT:-true}"), "autostart skychat")
@@ -560,6 +573,22 @@ var genConfigCmd = &cobra.Command{
 		//enable local hypervisor by default for user
 		if isUsrEnv {
 			isHypervisor = true
+		}
+		// Browser visor defaults: the resolving-proxy chain + the proxy
+		// client ARE the page's clearnet path (the nested browser chains
+		// dmsgweb :4445 → skynetweb :4446 → skysocks-client :1080 on the
+		// virtual loopback), so they default ON under js — explicit flags
+		// still win either way.
+		if skyenv.OS == "js" {
+			if !cmd.Flags().Changed("dmsgweb") {
+				enableDmsgWeb = true
+			}
+			if !cmd.Flags().Changed("skynetweb") {
+				enableSkynetWeb = true
+			}
+			if !cmd.Flags().Changed("startproxyclient") {
+				enableProxyClientAutostart = true
+			}
 		}
 		//use test deployment
 		if isTestEnv {
@@ -1178,10 +1207,14 @@ func configureDMSG() {
 		Servers:              []*disc.Entry{},
 		ConnectedServersType: "all",
 		Protocol:             "yamux",
+		Carriers:             skyenv.DefaultDmsgCarriers,
 	}
 	if oldConfCache != nil && oldConfCache.Dmsg != nil {
 		if oldConfCache.Dmsg.Protocol != "" {
 			conf.Dmsg.Protocol = oldConfCache.Dmsg.Protocol
+		}
+		if len(oldConfCache.Dmsg.Carriers) > 0 {
+			conf.Dmsg.Carriers = oldConfCache.Dmsg.Carriers
 		}
 	}
 }
@@ -1192,11 +1225,13 @@ func configureTransports() {
 	if isTestEnv {
 		tpLogPath = skyenv.LocalPath + "-testenv/" + skyenv.TpLogStore
 	}
+	hypervisorAutoconnect := skyenv.HypervisorAutoconnect
 	conf.Transport = &visorconfig.Transport{
-		Discovery:         services.TransportDiscovery, //utilenv.TpDiscAddr,
-		AddressResolver:   services.AddressResolver,    //utilenv.AddressResolverAddr,
-		PublicAutoconnect: skyenv.PublicAutoconnect,
-		TransportSetupPKs: services.TransportSetupPKs,
+		Discovery:             services.TransportDiscovery, //utilenv.TpDiscAddr,
+		AddressResolver:       services.AddressResolver,    //utilenv.AddressResolverAddr,
+		PublicAutoconnect:     skyenv.PublicAutoconnect,
+		HypervisorAutoconnect: &hypervisorAutoconnect,
+		TransportSetupPKs:     services.TransportSetupPKs,
 		LogStore: &visorconfig.LogStore{
 			// "file" (the retired on-disk CSV store) is now a no-op that only warns
 			// at boot; default fresh configs to "memory" so they don't carry it.
@@ -1230,24 +1265,41 @@ func configureRouting() {
 		RouteFinderTimeout: visorconfig.DefaultTimeout,
 		MinHops:            minHopsValue(),
 		CalculateRoutes:    enableCalculateRoutes,
-		// Default routing policy: the "adaptive" composite preset. It is
-		// app-agnostic — every overlay app that dials a route group (proxy, vpn,
-		// skynet-client, the resolving-proxy/browser chain, custom-named
-		// sessions) gets a lean single forward leg plus a wider reverse
-		// (download) mux sized active+standby, seeding the most transport-diverse
-		// route, then letting on_tick hold warm standby / size / evict / probe
-		// adaptively. Only latency-sensitive chat stays a single lean route.
-		// Overridable: an explicit routing.policy_per_dial or a per-app launcher
-		// routing_policy wins, and it is preserved across regen (see below).
-		PolicyPerDial: "preset:adaptive",
+		// Default routing policy: "none" (a single route, no mux). The adaptive
+		// composite preset is still maturing — it is not yet reliable under load —
+		// so it is NOT the shipped default. Operators opt in explicitly by setting
+		// POLICYPERDIAL in /etc/skywire.conf (or --policy, or a per-app launcher
+		// routing_policy); an explicit skywire.conf value is always honored and
+		// wins over this default (see the resolve logic below).
+		PolicyPerDial: "none",
 		// Cascade route setup is opt-in (--cascade); the legacy setup-node
 		// path stays the default until the cascade multihop data-plane bug
 		// is fixed and enough of the network has updated to support it.
 		EnableCascadeRouteSetup: cascadeRouteSetup,
+		// RSN-oracle 2-hop routing ON by default. It computes single-intermediate
+		// routes from the DESTINATION's own transports (fetched via an RSN-signed
+		// query, served by the always-on transport-query listener) instead of TPD.
+		// This is the fix for the TPD fill gap starving the adaptive mux of disjoint
+		// legs (a busy exit's transports never fully land in TPD's CXO —
+		// project_tpd_fill_gap_blocks_mux_diversity): the client asks the exit
+		// directly. Additive + fail-safe — on any miss (peer on an old build that
+		// doesn't serve queries, no shared intermediate) the dial falls through to
+		// the TPD-backed route-finder unchanged, so it degrades gracefully as the
+		// fleet updates.
+		EnableRSNOracleRoutes: true,
 	}
 
 	if muxRoutes > 0 {
 		conf.Routing.MuxRoutes = muxRoutes
+	}
+
+	if policyPerDial != "" {
+		conf.Routing.PolicyPerDial = policyPerDial
+	} else {
+		// No explicit policy set in /etc/skywire.conf (POLICYPERDIAL) or via
+		// --policy: default to "none" (a single route, no mux). The adaptive
+		// preset is still maturing under load, so it is opt-in until it's solid.
+		conf.Routing.PolicyPerDial = "none"
 	}
 
 	if oldConfCache != nil && oldConfCache.Routing != nil {
@@ -1262,14 +1314,14 @@ func configureRouting() {
 		if oldConfCache.Routing.EnableCascadeRouteSetup {
 			conf.Routing.EnableCascadeRouteSetup = true
 		}
-		// Respect an explicit routing policy chosen in the previous config
-		// (any non-empty value the operator set, including "none"). Only a
-		// config that never specified one falls through to the adaptive default
-		// above, so regenerating an untouched config opts it into the new
-		// default while never clobbering a deliberate choice.
-		if oldConfCache.Routing.PolicyPerDial != "" {
-			conf.Routing.PolicyPerDial = oldConfCache.Routing.PolicyPerDial
-		}
+		// Per-dial routing policy is deliberately NOT preserved from the old JSON
+		// across regen: /etc/skywire.conf (POLICYPERDIAL), surfaced above as
+		// policyPerDial, is the single source of truth. An explicit skywire.conf
+		// value is honored (handled above); otherwise regen adopts the current
+		// default ("none"), so a config that only ever carried the previous
+		// adaptive default flips to none instead of pinning a stale default. A
+		// deliberate choice must live in POLICYPERDIAL (or be re-applied to the
+		// JSON after each regen).
 	}
 }
 
@@ -1882,25 +1934,37 @@ func configureApps(log *logging.Logger) {
 				Args: skychatExternalArgs(chatAddr, isSkychatPairEnable),
 			},
 			{
-				Name:      skyenv.SkysocksName,
-				Binary:    "skywire",
-				AutoStart: isProxyServerEnable,
-				Port:      routing.Port(skyenv.SkysocksPort),
-				Args:      []string{"app", "skysocks"},
+				// RestartPolicy on-failure so a crashed skysocks server self-recovers
+				// instead of leaving a ZOMBIE exit: still advertised in SD and still
+				// accepting route setup at the router, but with no app on port 3 to
+				// complete the handshake — every client then times out on it. Without
+				// this a single crash strands the exit until the operator restarts the
+				// visor. (A clean operator stop still respects intent — on-failure only
+				// relaunches on a non-nil exit error.)
+				Name:          skyenv.SkysocksName,
+				Binary:        "skywire",
+				AutoStart:     isProxyServerEnable,
+				Port:          routing.Port(skyenv.SkysocksPort),
+				Args:          []string{"app", "skysocks"},
+				RestartPolicy: string(appcommon.RestartOnFailure),
 			},
 			{
-				Name:      skyenv.SkysocksClientName,
-				Binary:    "skywire",
-				AutoStart: false,
-				Port:      routing.Port(skyenv.SkysocksClientPort),
-				Args:      append([]string{"app", "skysocks-client"}, "--addr", socksClientAddr),
+				Name:          skyenv.SkysocksClientName,
+				Binary:        "skywire",
+				AutoStart:     false,
+				Port:          routing.Port(skyenv.SkysocksClientPort),
+				Args:          append([]string{"app", "skysocks-client"}, "--addr", socksClientAddr),
+				RestartPolicy: string(appcommon.RestartOnFailure),
 			},
 			{
-				Name:      skyenv.VPNServerName,
-				Binary:    "skywire",
-				AutoStart: isVpnServerEnable,
-				Port:      routing.Port(skyenv.VPNServerPort),
-				Args:      []string{"app", "vpn-server"},
+				// Same reasoning as skysocks: a crashed vpn-server shouldn't strand the
+				// exit — recover it on failure.
+				Name:          skyenv.VPNServerName,
+				Binary:        "skywire",
+				AutoStart:     isVpnServerEnable,
+				Port:          routing.Port(skyenv.VPNServerPort),
+				Args:          []string{"app", "vpn-server"},
+				RestartPolicy: string(appcommon.RestartOnFailure),
 			},
 			{
 				// Local LAN/WiFi gateway that NATs downstream clients into the
@@ -2153,6 +2217,20 @@ func configureApps(log *logging.Logger) {
 		for i, app := range conf.Launcher.Apps {
 			if app.Name == "skysocks-client" {
 				conf.Launcher.Apps[i].AutoStart = true
+				// An autostarted proxy client is meant to stay connected:
+				// reconnect in-process (serving the status page during the gap)
+				// instead of exiting on total collapse and paying a full proc
+				// restart + re-dial per RestartOnFailure cycle.
+				hasReconnect := false
+				for _, a := range conf.Launcher.Apps[i].Args {
+					if a == "--reconnect" {
+						hasReconnect = true
+						break
+					}
+				}
+				if !hasReconnect {
+					conf.Launcher.Apps[i].Args = append(conf.Launcher.Apps[i].Args, "--reconnect")
+				}
 			}
 		}
 	}
@@ -2200,6 +2278,36 @@ func configureResolvingProxies() {
 			Addr:   skyenv.SkymailBridgeAddr,
 			Mode:   "b",
 		}
+	}
+	configureBrowseOrigin()
+}
+
+// configureBrowseOrigin enables, by default, the loopback "real-origin" browse
+// proxy (pkg/visor/meshproxy.go). Its meshStatusHandler serves the proxy-status
+// pages at status-<surface>.<suffix> (e.g. status-skysocks.haltingstate.net) —
+// the native counterpart of the wasm visor's browse origin. Suffix defaults to
+// the deployment's browse_origin_suffix (".haltingstate.net"), matching the wasm
+// surface, so a real single-level wildcard cert *.<suffix> covers the status
+// hosts. TLS activates on that loopback listener ONLY when the operator supplies
+// --browse-tls-cert/--browse-tls-key (the wildcard PRIVATE KEY is a deployment
+// secret and cannot ship in config-gen defaults); until then the listener serves
+// plain HTTP on loopback. There is deliberately NO self-signed fallback: a
+// self-signed cert would defeat the whole point (warning-free HTTPS via a real
+// cert) — the self-signed-leaf path stays on the .skynet TLS-MITM surface
+// (SkynetWebConfig.TLSMITM). Opt out with --no-browse-origin.
+func configureBrowseOrigin() {
+	if noBrowseOrigin {
+		return
+	}
+	suffix := strings.TrimSpace(browseOriginSuffix)
+	if suffix == "" {
+		suffix = deployment.Prod.BrowseOriginSuffix
+	}
+	conf.BrowseOrigin = &visorconfig.BrowseOriginConfig{
+		Enable:  true,
+		Suffix:  suffix,
+		TLSCert: browseOriginTLSCert,
+		TLSKey:  browseOriginTLSKey,
 	}
 }
 

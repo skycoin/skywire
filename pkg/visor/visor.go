@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -258,6 +259,33 @@ type Visor struct {
 	cxoUserFeeds   map[string]*cxoUserFeed
 	cxoUserFeedsMu sync.Mutex
 
+	// systemCXOPub is the telemetry/tp-list feed publisher (the one
+	// initStats wires on skyenv.DmsgCXOPort and hands to the transport
+	// manager as the TPD leaf publisher). Retained here — beyond being
+	// closed in the stats close-stack — so CXOFeedStates can read its
+	// live PublishState for `skywire cli visor state`. Guarded by
+	// cxoUserFeedsMu. nil until initStats runs (or if Stats.Disabled).
+	systemCXOPub *treestore.Publisher
+
+	// tplistCXOPub is the DEDICATED transport-list discovery feed
+	// publisher (the SECOND CXO node initStats wires under the same visor
+	// identity PK on skyenv.DmsgVisorTPListCXOPort, carrying only the
+	// compact tp-list snapshot leaf). Retained here — beyond being closed
+	// in the stats close-stack — so CXOFeedStates can surface its live
+	// PublishState alongside the telemetry feed. Guarded by
+	// cxoUserFeedsMu. nil when the dedicated publisher didn't start and
+	// initStats fell back to the combined telemetry feed.
+	tplistCXOPub *treestore.Publisher
+
+	// gatedCXOFeeds registers the visor's service-consumed CXO publishers
+	// (stats, tp-list, registration) together with the consuming service's
+	// PK so their subscriber allowlists can be recomputed and re-applied
+	// live whenever the peer whitelist changes (a hypervisor pushing its
+	// own hypervisors via AddPtyWhitelist). See cxo_feed_allowlist.go.
+	// Guarded by gatedCXOFeedsMu.
+	gatedCXOFeeds   []gatedCXOFeed
+	gatedCXOFeedsMu sync.Mutex
+
 	// pairing holds the chat-pair feed manager + bbolt store +
 	// inbound message ring. Populated by init_pairing.go after
 	// dmsgC is up. nil when pairing is disabled (dmsgC absent or
@@ -354,10 +382,14 @@ type pingState struct {
 	pcktSize int
 }
 
-// geoState caches geolocation data.
+// geoState caches geolocation data, and the public IP as observed by a
+// connected dmsg server (resolvePublicIPForAR). The dmsg-observed IP is what
+// the Overview prefers: it needs no UDP, so it works where STUN cannot — a
+// browser (js/wasm) visor, or any UDP-blocked network.
 type geoState struct {
-	data *GeoData
-	mu   sync.RWMutex
+	data     *GeoData
+	publicIP string
+	mu       sync.RWMutex
 }
 
 // uiState manages the dynamically started/stopped UI server.
@@ -1010,6 +1042,27 @@ func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.En
 	return v.logBcast.Subscribe(f, capacity)
 }
 
+// RecentAppEvents returns the recent app-scoped route/transport events and log
+// lines captured for appName by the log broadcaster's per-app ring, filtered to
+// entries at least as severe as minLevel. Both slices are oldest-first. Returns
+// empty slices (not an error) when nothing has been captured.
+func (v *Visor) RecentAppEvents(appName string, minLevel logrus.Level) (events, logs []logging.Record) {
+	if v.logBcast == nil {
+		return nil, nil
+	}
+	return v.logBcast.RecentByApp(appName, minLevel)
+}
+
+// RecentAppLogMerged returns the recent events+logs for appName merged into one
+// time-ordered slice (oldest first), filtered to entries at least as severe as
+// minLevel. This is the "reading the log" view `cli proxy log` prints.
+func (v *Visor) RecentAppLogMerged(appName string, minLevel logrus.Level) []logging.Record {
+	if v.logBcast == nil {
+		return nil
+	}
+	return v.logBcast.RecentMerged(appName, minLevel)
+}
+
 // SubscribeGroupMessages registers a live subscriber on the visor's
 // group inbox. Every message delivered to the inbox from this point
 // forward is fanned out to the returned channel (bounded; bursts past
@@ -1315,23 +1368,31 @@ func setForceColor(conf *visorconfig.V1) {
 
 // HealthStatsProvider implementation for logserver
 
-// GetTransportCounts returns the count of STCPR and SUDPH transports (excluding "user" labeled).
-func (v *Visor) GetTransportCounts() (stcpr, sudph int) {
+// GetTransportTypeCounts returns a count of live transports keyed by their
+// actual network type (excluding "user" labeled). The key set is derived from
+// the transports present rather than a hardcoded subset, so every current and
+// future transport type (stcpr, sudph, stcp, dmsg, squicr, swsr, swtr, webrtc,
+// …) is represented.
+func (v *Visor) GetTransportTypeCounts() map[string]int {
 	if v.tpM == nil {
-		return 0, 0
+		return nil
 	}
 
 	// Get transports that are not user-created (skycoin + automatic labels)
 	tps := v.tpM.GetTransportsByLabels(transport.LabelSkycoin, transport.LabelAutomatic)
+	counts := make(map[string]int)
 	for _, tp := range tps {
-		switch tp.Type() {
-		case tptypes.STCPR:
-			stcpr++
-		case tptypes.SUDPH:
-			sudph++
-		}
+		counts[string(tp.Type())]++
 	}
-	return stcpr, sudph
+	return counts
+}
+
+// GetTransportCounts returns the count of STCPR and SUDPH transports (excluding
+// "user" labeled). Retained for backward compatibility; GetTransportTypeCounts
+// reports every live transport type.
+func (v *Visor) GetTransportCounts() (stcpr, sudph int) {
+	counts := v.GetTransportTypeCounts()
+	return counts[string(tptypes.STCPR)], counts[string(tptypes.SUDPH)]
 }
 
 // GetNetworkTypes returns the network types used by the visor.

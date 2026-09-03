@@ -200,6 +200,18 @@ func (l *Loader) OnLegChange(ctx context.Context, rctx policy.RoutingContext, le
 	return eval.OnLegChange(ctx, rctx, legs, change)
 }
 
+// SelfHealTarget forwards to the active Evaluator's SelfHealTarget so the route
+// group's runtime self-heal re-cap (route_group.go, via router.SelfHealTargeter)
+// reaches the adaptive mux tunables. Reports ok=false when no evaluator is
+// loaded or the preset is non-adaptive, leaving the dial-time target in place.
+func (l *Loader) SelfHealTarget() (int, bool) {
+	eval := l.current.Load()
+	if eval == nil {
+		return 0, false
+	}
+	return eval.SelfHealTarget()
+}
+
 // Source returns the human-readable source identifier (file
 // path or "<noop>"). Used by callers for logging.
 func (l *Loader) Source() string { return l.source }

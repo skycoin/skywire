@@ -352,9 +352,19 @@ build-wasm: ## Compile-check every js/wasm binary (GOOS=js GOARCH=wasm), no run 
 
 build-wasm-tinygo: ## Compile-check every TinyGo wasm binary (-o /dev/null, no run) — mirrors the CI wasm-tinygo lane
 	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/design/tinygo-dmsg-client.md (TinyGo 0.41+)"; exit 1; }
+	@# TinyGo trails Go by weeks after each Go minor, and refuses to run at all
+	@# against a newer one ("requires go version 1.19 through 1.26, got go1.27").
+	@# CI installs the current Go, so this lane went red the day #4221 bumped it.
+	@# The script asks TinyGo what it supports and resolves a matching toolchain,
+	@# printing "auto" once TinyGo has caught up — so no version is written down.
+	@#
+	@# -interp-timeout raises TinyGo's 3m default for the compile-time
+	@# interpreter, which folds skycoin's secp256k1 package init. That fits
+	@# inside the default on a CI runner but not on a slower machine building
+	@# from a cold cache, so the ceiling does not depend on whose machine runs it.
 	@echo "compile-checking TinyGo wasm binaries..."
 	@echo "  tinygo build -target wasip1 ./cmd/dmsg-tinygo-probe"
-	@tinygo build -target wasip1 -no-debug -opt=z -o /dev/null ./cmd/dmsg-tinygo-probe || exit 1
+	@GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasip1 -no-debug -opt=z -interp-timeout 15m -o /dev/null ./cmd/dmsg-tinygo-probe || exit 1
 	@# Only net/http-free binaries belong here: TinyGo 0.41 cannot compile net/http
 	@# for wasm (roundtrip_js.go references an unexported Transport.roundTrip). The
 	@# full js/wasm binaries ./cmd/dmsg-wasm and ./cmd/wasm-visor deliberately use
@@ -362,17 +372,46 @@ build-wasm-tinygo: ## Compile-check every TinyGo wasm binary (-o /dev/null, no r
 	@# standard-Go-only — they are compile-checked by the `build-wasm` lane instead.
 	@for p in ./pkg/tpviz/wasm ./cmd/websh-probe; do \
 		echo "  tinygo build -target wasm $$p"; \
-		tinygo build -target wasm -no-debug -o /dev/null "$$p" || exit 1; \
+		GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasm -no-debug -interp-timeout 15m -o /dev/null "$$p" || exit 1; \
 	done
 	@echo "  tinygo build -target wasi (app-mux routing policy)"
-	@cd docs/examples/routing-policies/wasm/app-mux && tinygo build -target=wasi -no-debug -opt=2 -o /dev/null . || exit 1
+	@cd docs/examples/routing-policies/wasm/app-mux && GOTOOLCHAIN=$$(cd ../../../../.. && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o /dev/null . || exit 1
 	@echo "all TinyGo wasm binaries compile."
 
 test-wasm-policy: ## Rebuild app-mux.wasm from source with TinyGo and run the policy loader test against the FRESH build (real WASM runtime smoke test)
 	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.32+)"; exit 1; }
 	@mkdir -p ./build/wasm-fixtures
-	cd docs/examples/routing-policies/wasm/app-mux && tinygo build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/build/wasm-fixtures/app-mux.wasm" .
+	cd docs/examples/routing-policies/wasm/app-mux && GOTOOLCHAIN=$$(cd ../../../../.. && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/build/wasm-fixtures/app-mux.wasm" .
 	SKYWIRE_APPMUX_WASM="$(CURDIR)/build/wasm-fixtures/app-mux.wasm" go test -mod=vendor -count=1 -v -run TestWasmEvaluator ./pkg/router/policy/wasm/
+
+BUNDLE_WASM_SRC = docs/examples/routing-policies/wasm/bundle
+BUNDLE_WASM = pkg/router/policy/wasm/presets/bundle.wasm
+
+bundle-wasm: ## Rebuild the COMMITTED routing-policy bundle.wasm (pkg/router/policy/wasm/presets) from source with TinyGo, then check parity
+	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
+	cd $(BUNDLE_WASM_SRC) && GOTOOLCHAIN=$$(cd "$(CURDIR)" && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/$(BUNDLE_WASM)" .
+	@echo "rebuilt $(BUNDLE_WASM). Verifying native<->wazero parity..."
+	go test -count=1 -run 'TestDecideParity|TestTickParity' ./pkg/router/policy/wasm/presets/
+	@echo "review with 'git status' and commit $(BUNDLE_WASM) intentionally."
+
+check-bundle-wasm: ## Fail if the committed routing-policy bundle.wasm is stale vs a fresh TinyGo build
+	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
+	@# pkg/router/policy/wasm/presets/bundle.wasm is a build artifact committed to
+	@# the repo and embedded in the visor: a native visor on a preset:* policy runs
+	@# it via wazero. A stale one ships DIFFERENT routing decisions (and different
+	@# mux-control tunable defaults) than the source it is a compilation of
+	@# (pkg/router/policy/preset) — exactly #4325. This rebuilds it into a temp file
+	@# and byte-compares, the same provenance guard the check-ui target is for the
+	@# manager UI bundle; the parity test (pkg/router/policy/wasm/presets) is the
+	@# companion SEMANTIC guard. The TinyGo build is byte-reproducible for a given
+	@# toolchain, so run this in a lane with tinygo pinned (the wasm-tinygo lane).
+	@tmp=$$(mktemp) && \
+	( cd $(BUNDLE_WASM_SRC) && GOTOOLCHAIN=$$(cd "$(CURDIR)" && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o "$$tmp" . ) && \
+	if cmp -s "$$tmp" "$(BUNDLE_WASM)"; then rm -f "$$tmp"; echo "The committed routing-policy bundle.wasm is up to date."; else \
+		echo "ERROR: the committed routing-policy bundle.wasm is stale vs a fresh build."; \
+		echo "Run 'make bundle-wasm' and commit the result."; \
+		ls -l "$$tmp" "$(CURDIR)/$(BUNDLE_WASM)"; rm -f "$$tmp"; exit 1; \
+	fi
 
 tpviz-wasm: ## Build transport visualizer WASM binary to build/tpviz (standalone)
 	mkdir -p ./build/tpviz
@@ -384,12 +423,12 @@ tpviz-wasm-standalone: tpviz-wasm ## Alias for tpviz-wasm (both build standalone
 
 tpviz-wasm-tinygo: ## Build transport visualizer WASM binary with tinygo to build/tpviz (smaller, ~750KB)
 	mkdir -p ./build/tpviz
-	tinygo build -o ./build/tpviz/main.wasm -target wasm -no-debug -opt=z -panic=trap ./pkg/tpviz/wasm
+	GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -o ./build/tpviz/main.wasm -target wasm -no-debug -opt=z -panic=trap ./pkg/tpviz/wasm
 	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/tpviz/
 	cp ./pkg/tpviz/dist/index.html ./build/tpviz/
 
 tinygo-dmsg: ## Build-check the dmsg client under TinyGo (IoT target wasip1); ~2.2MB -opt=z
-	tinygo build -target wasip1 -no-debug -opt=z -o ./build/dmsg-tinygo.wasm ./cmd/dmsg-tinygo-probe
+	GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasip1 -no-debug -opt=z -o ./build/dmsg-tinygo.wasm ./cmd/dmsg-tinygo-probe
 	@echo "built ./build/dmsg-tinygo.wasm — the dmsg client compiles under TinyGo (see docs/design/tinygo-dmsg-client.md)"
 
 dmsg-wasm: ## Build the browser WASM dmsg client + dev harness into build/dmsg-wasm
@@ -401,7 +440,7 @@ dmsg-wasm: ## Build the browser WASM dmsg client + dev harness into build/dmsg-w
 
 tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~21MB) into build/dmsg-wasm
 	mkdir -p ./build/dmsg-wasm
-	tinygo build -target wasm -o ./build/dmsg-wasm/dmsg.wasm ./cmd/dmsg-wasm
+	GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasm -o ./build/dmsg-wasm/dmsg.wasm ./cmd/dmsg-wasm
 	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/dmsg-wasm/
 	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
 	@echo "built ./build/dmsg-wasm (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
@@ -428,8 +467,8 @@ tinygo-wasm-visor: ## Build the FULL browser WASM visor (dmsg+transport+router+a
 	mkdir -p ./build/wasm-visor
 	$(TINYGO) build -target wasm -no-debug -opt=z -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/wasm_exec.js
-	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor/
-	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor/
+	gzip -dc ./vendor/github.com/0magnet/winbox-go/dist/winbox.wasm.gz > ./build/wasm-visor/winbox.wasm
+	cp ./vendor/github.com/0magnet/netscrape/browse.js ./build/wasm-visor/
 	cp ./pkg/wasmhv/hv-boot.js ./build/wasm-visor/
 	cp ./pkg/wasmhv/worker.js ./build/wasm-visor/
 	@echo "built ./build/wasm-visor (TinyGo fork) — embed it with 'make embed-wasm-visor-tinygo', then serve the real UI: './skywire cli hv serve --variant tinygo'"
@@ -446,8 +485,8 @@ wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into b
 	# instead.
 	GOOS=js GOARCH=wasm go build -buildvcs=true -ldflags="-s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
-	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor-go/
-	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor-go/
+	gzip -dc ./vendor/github.com/0magnet/winbox-go/dist/winbox.wasm.gz > ./build/wasm-visor-go/winbox.wasm
+	cp ./vendor/github.com/0magnet/netscrape/browse.js ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/hv-boot.js ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/worker.js ./build/wasm-visor-go/
 	@echo "built ./build/wasm-visor-go (standard Go js/wasm) — serve dev: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor-go'"
@@ -489,6 +528,11 @@ embed-wasm-visor-tinygo: embeddable-tree tinygo-wasm-visor ## Update the COMMITT
 	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./pkg/wasmhv/wasmbin/wasmtinygo/wasm_exec.js
 	@echo "updated pkg/wasmhv/wasmbin/wasmtinygo/ (wasm-visor.wasm.gz + wasm_exec.js) — review with 'git status', commit intentionally (~2.9MB blob)."
 
+# embed-winbox was removed: the window manager now lives in
+# github.com/0magnet/winbox-go, whose committed dist/ assets (winbox.wasm.gz +
+# wrapped wasm_exec + loader) are vendored here like any module. To update it:
+# `make dist` in winbox-go, push, then
+# `go get github.com/0magnet/winbox-go@main && go mod vendor` here.
 # embed-wallet was removed: the wallet is now served straight from the VENDORED
 # skycoin module's own embedded dist (skycoin-web/src/gui.DistFS, via
 # visor.WalletUIFS) — a skycoin vendor bump IS the wallet update; there is no
@@ -687,7 +731,7 @@ dep-github-release:
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
 
-.PHONY: check-ui check-onpush
+.PHONY: check-ui check-onpush bundle-wasm check-bundle-wasm
 
 # Manager UI
 install-deps-ui:  ## Install the UI dependencies
@@ -1021,3 +1065,13 @@ sync-upstream-develop: #sync develop branch with upstream develop branch for for
 	git fetch upstream && \
 	git merge upstream/develop && \
 	git push
+
+playground: wasm-visor ## Build the docs-site playground (static desk page: shell + skywire commands + nested browser, NO auto-started visor) into build/playground
+	mkdir -p ./build/playground
+	GOOS=js GOARCH=wasm go build -buildvcs=true -tags "withoutsystray withoutgotop" -trimpath -ldflags="-s -w" -o ./build/playground/skywire.wasm .
+	gzip -9 -n -f ./build/playground/skywire.wasm
+	gzip -9 -n -c ./build/wasm-visor-go/wasm-visor.wasm > ./build/playground/wasm-visor.wasm.gz
+	cp ./build/wasm-visor-go/wasm_exec.js ./build/playground/
+	go run ./scripts/stage-playground ./build/playground
+	cp ./docs/playground/index.html ./build/playground/
+	@echo "built ./build/playground — serve it statically to test (any static file server)"

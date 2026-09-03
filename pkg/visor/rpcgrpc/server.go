@@ -14,11 +14,11 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	routeFinder "github.com/skycoin/skywire/pkg/deployment/rf/store"
+	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/logging"
-	routeFinder "github.com/skycoin/skywire/pkg/route-finder/store"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
-	tpdstore "github.com/skycoin/skywire/pkg/transport-discovery/store"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -989,6 +989,9 @@ func (s *calcMemStore) GetTransportByID(context.Context, uuid.UUID) (*transport.
 func (s *calcMemStore) GetNumberOfTransports(context.Context) (map[tptypes.Type]int, error) {
 	return nil, nil
 }
+func (s *calcMemStore) GetTransportSummary(context.Context, bool) (*tpdstore.TransportSummary, error) {
+	return &tpdstore.TransportSummary{ByType: map[string]int{}}, nil
+}
 func (s *calcMemStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {
 	return nil, nil
 }
@@ -996,6 +999,10 @@ func (s *calcMemStore) UpdateBandwidth(context.Context, string, cipher.PubKey, u
 	return nil
 }
 func (s *calcMemStore) UpdateLatency(context.Context, string, float64, float64, float64) error {
+	return nil
+}
+
+func (s *calcMemStore) UpdateThroughput(context.Context, string, cipher.PubKey, float64) error {
 	return nil
 }
 func (s *calcMemStore) GetTransportBandwidth(context.Context, uuid.UUID, string, int) ([]tpdstore.BandwidthAggregation, error) {

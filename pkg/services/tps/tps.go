@@ -17,10 +17,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/deployment/tps/api"
+	"github.com/skycoin/skywire/pkg/deployment/tps/config"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
-	"github.com/skycoin/skywire/pkg/transport-setup/api"
-	"github.com/skycoin/skywire/pkg/transport-setup/config"
 )
 
 // Type is the registry key used in services.json blocks.

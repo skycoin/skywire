@@ -99,7 +99,7 @@ func TestServeSOCKS5_HTTPPort(t *testing.T) {
 	cli, srv := net.Pipe()
 	defer cli.Close() //nolint:errcheck
 	done := make(chan error, 1)
-	go func() { done <- ServeSOCKS5(srv, "", "skysocks"); srv.Close() }() //nolint:errcheck,gosec
+	go func() { done <- ServeSOCKS5(srv, "", "skysocks", nil, nil); srv.Close() }() //nolint:errcheck,gosec
 
 	_ = cli.SetDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
 	// greeting: VER=5, 1 method, no-auth
@@ -153,7 +153,7 @@ func TestServeSOCKS5_HTTPSDeclined(t *testing.T) {
 	cli, srv := net.Pipe()
 	defer cli.Close() //nolint:errcheck
 	done := make(chan error, 1)
-	go func() { done <- ServeSOCKS5(srv, "", "skysocks"); srv.Close() }() //nolint:errcheck,gosec
+	go func() { done <- ServeSOCKS5(srv, "", "skysocks", nil, nil); srv.Close() }() //nolint:errcheck,gosec
 
 	_ = cli.SetDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
 	cli.Write([]byte{0x05, 0x01, 0x00})                  //nolint:errcheck,gosec
@@ -162,6 +162,168 @@ func TestServeSOCKS5_HTTPSDeclined(t *testing.T) {
 	cli.Write([]byte{0x05, 0x01, 0x00, 0x01, 1, 2, 3, 4, 0x01, 0xBB}) //nolint:errcheck,gosec
 	if err := <-done; err == nil {
 		t.Error("expected ServeSOCKS5 to decline the 443 request")
+	}
+}
+
+// serveSOCKS5CONNECT drives the client half of a SOCKS5 no-auth CONNECT to the
+// given domain:port over cli and returns the full response body the server
+// wrote back (the CONNECT reply is consumed here). Shared by the override tests.
+func serveSOCKS5CONNECT(t *testing.T, cli net.Conn, host string, port uint16) string {
+	t.Helper()
+	_ = cli.SetDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
+	if _, err := cli.Write([]byte{0x05, 0x01, 0x00}); err != nil {
+		t.Fatal(err)
+	}
+	sel := make([]byte, 2)
+	if _, err := io.ReadFull(cli, sel); err != nil {
+		t.Fatal(err)
+	}
+	req := []byte{0x05, 0x01, 0x00, 0x03, byte(len(host))} //nolint:gosec // G115: fixed test host/port
+	req = append(req, []byte(host)...)
+	req = append(req, byte(port>>8), byte(port)) //nolint:gosec // G115: fixed test host/port
+	if _, err := cli.Write(req); err != nil {
+		t.Fatal(err)
+	}
+	reply := make([]byte, 10)
+	if _, err := io.ReadFull(cli, reply); err != nil {
+		t.Fatal(err)
+	}
+	if reply[0] != 0x05 || reply[1] != 0x00 {
+		t.Fatalf("connect reply = %v", reply)
+	}
+	if _, err := cli.Write([]byte("GET / HTTP/1.1\r\nHost: " + host + "\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	var got bytes.Buffer
+	buf := make([]byte, 4096)
+	for {
+		n, err := cli.Read(buf)
+		got.Write(buf[:n])
+		if err != nil {
+			break
+		}
+	}
+	return got.String()
+}
+
+// TestServeSOCKS5_StatusOverride verifies that when a statusOverride is supplied
+// (as skysocks-client does with its status.skysocks page), a CONNECT to the
+// reserved host is answered with the override body — not the interstitial —
+// exactly when the exit is down, while a normal host still gets the interstitial.
+func TestServeSOCKS5_StatusOverride(t *testing.T) {
+	const statusHost = "status.skysocks"
+	const statusBody = "HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nSTATUS-PAGE"
+	override := func(host string) []byte {
+		if host == statusHost {
+			return []byte(statusBody)
+		}
+		return nil
+	}
+
+	t.Run("reserved host serves override", func(t *testing.T) {
+		cli, srv := net.Pipe()
+		defer cli.Close() //nolint:errcheck
+		done := make(chan error, 1)
+		go func() { done <- ServeSOCKS5(srv, "", "skysocks", override, nil); srv.Close() }() //nolint:errcheck,gosec
+		got := serveSOCKS5CONNECT(t, cli, statusHost, 80)
+		if !strings.Contains(got, "STATUS-PAGE") {
+			t.Errorf("status host did not receive override; got %q", got)
+		}
+		if strings.Contains(got, "Building a route") {
+			t.Errorf("status host was shadowed by the interstitial; got %q", got)
+		}
+		if err := <-done; err != nil {
+			t.Errorf("ServeSOCKS5: %v", err)
+		}
+	})
+
+	t.Run("normal host still serves interstitial", func(t *testing.T) {
+		cli, srv := net.Pipe()
+		defer cli.Close() //nolint:errcheck
+		done := make(chan error, 1)
+		go func() { done <- ServeSOCKS5(srv, "", "skysocks", override, nil); srv.Close() }() //nolint:errcheck,gosec
+		got := serveSOCKS5CONNECT(t, cli, "example.com", 80)
+		if !strings.Contains(got, "Building a route") {
+			t.Errorf("normal host did not receive interstitial; got %q", got)
+		}
+		if strings.Contains(got, "STATUS-PAGE") {
+			t.Errorf("normal host wrongly got the override; got %q", got)
+		}
+		if err := <-done; err != nil {
+			t.Errorf("ServeSOCKS5: %v", err)
+		}
+	})
+
+	// A reserved host is served regardless of port: the override is resolved before
+	// the HTTP-only port gate, so even a non-80 CONNECT is answered with the status
+	// page rather than declined as non-HTTP.
+	t.Run("reserved host served on a non-80 port", func(t *testing.T) {
+		cli, srv := net.Pipe()
+		defer cli.Close() //nolint:errcheck
+		done := make(chan error, 1)
+		go func() { done <- ServeSOCKS5(srv, "", "skysocks", override, nil); srv.Close() }() //nolint:errcheck,gosec
+		got := serveSOCKS5CONNECT(t, cli, statusHost, 8443)
+		if !strings.Contains(got, "STATUS-PAGE") {
+			t.Errorf("reserved host on non-80 port did not receive override; got %q", got)
+		}
+		if err := <-done; err != nil {
+			t.Errorf("ServeSOCKS5: %v", err)
+		}
+	})
+}
+
+// TestServeSOCKS5_ExitReachableFallThrough verifies the fall-through fix: when
+// exitReachable reports the exit is up (the dial failure was transient), a normal
+// HTTP CONNECT is answered with the reload page that re-requests the original URL
+// — NOT the waiting "Building a route" interstitial that would pin the browser on
+// a spinner. When exitReachable reports the exit is still down, the interstitial
+// is served as before.
+func TestServeSOCKS5_ExitReachableFallThrough(t *testing.T) {
+	t.Run("reachable serves reload fall-through", func(t *testing.T) {
+		cli, srv := net.Pipe()
+		defer cli.Close() //nolint:errcheck
+		done := make(chan error, 1)
+		up := func() bool { return true }
+		go func() { done <- ServeSOCKS5(srv, "", "skysocks", nil, up); srv.Close() }() //nolint:errcheck,gosec
+		got := serveSOCKS5CONNECT(t, cli, "example.com", 80)
+		if !strings.Contains(got, "location.replace(location.href)") {
+			t.Errorf("reachable exit did not fall through to the reload page; got %q", got)
+		}
+		if strings.Contains(got, "Building a route") {
+			t.Errorf("reachable exit was pinned on the interstitial; got %q", got)
+		}
+		if err := <-done; err != nil {
+			t.Errorf("ServeSOCKS5: %v", err)
+		}
+	})
+
+	t.Run("unreachable still serves interstitial", func(t *testing.T) {
+		cli, srv := net.Pipe()
+		defer cli.Close() //nolint:errcheck
+		done := make(chan error, 1)
+		down := func() bool { return false }
+		go func() { done <- ServeSOCKS5(srv, "", "skysocks", nil, down); srv.Close() }() //nolint:errcheck,gosec
+		got := serveSOCKS5CONNECT(t, cli, "example.com", 80)
+		if !strings.Contains(got, "Building a route") {
+			t.Errorf("unreachable exit did not serve the interstitial; got %q", got)
+		}
+		if strings.Contains(got, "location.replace(location.href)") {
+			t.Errorf("unreachable exit wrongly fell through; got %q", got)
+		}
+		if err := <-done; err != nil {
+			t.Errorf("ServeSOCKS5: %v", err)
+		}
+	})
+}
+
+// TestReloadPage checks the fall-through page re-requests the original URL and
+// does not auto-linger (meta-refresh=0 no-JS fallback + location.replace).
+func TestReloadPage(t *testing.T) {
+	p := ReloadPage()
+	for _, want := range []string{`http-equiv="refresh" content="0"`, "location.replace(location.href)"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("reload page missing %q", want)
+		}
 	}
 }
 

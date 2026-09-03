@@ -20,11 +20,11 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/deployment/tps/api"
+	"github.com/skycoin/skywire/pkg/deployment/tps/config"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services/tps"
-	"github.com/skycoin/skywire/pkg/transport-setup/api"
-	"github.com/skycoin/skywire/pkg/transport-setup/config"
 )
 
 var (
@@ -39,15 +39,6 @@ var (
 	tpType     string
 	nice       bool
 )
-
-// exampleJSON marshals v to indented JSON with color, returning empty string on error
-func exampleJSON(v interface{}) string {
-	b, err := json.MarshalIndent(v, "    ", "  ")
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
 
 // generateExamples creates example responses from actual struct types
 func generateExamples() string {
@@ -68,10 +59,10 @@ POST /remove
 
 GET /{pk}/transports
   %s`,
-		exampleJSON(api.TransportRequest{Type: "stcpr"}),
+		cmdutil.ExampleJSON(api.TransportRequest{Type: "stcpr"}),
 		exTPID,
-		exampleJSON(api.UUIDRequest{}),
-		exampleJSON([]map[string]interface{}{{
+		cmdutil.ExampleJSON(api.UUIDRequest{}),
+		cmdutil.ExampleJSON([]map[string]interface{}{{
 			"id": exTPID, "type": "stcpr",
 			"edges": []string{exPK1, exPK2},
 		}}),
@@ -116,7 +107,7 @@ HTTP Endpoints:
 ` + generateExamples() + `
 
 Example Config:
-` + exampleJSON(config.Config{
+` + cmdutil.ExampleJSON(config.Config{
 		Port: 8080,
 		Dmsg: dmsgc.DmsgConfig{
 			Discovery:     deployment.Prod.DmsgDiscovery,
@@ -253,7 +244,5 @@ var listTPCmd = &cobra.Command{
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

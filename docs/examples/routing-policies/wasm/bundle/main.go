@@ -32,9 +32,6 @@
 package main
 
 import (
-	"encoding/json"
-	"unsafe"
-
 	"github.com/skycoin/skywire/pkg/router/policy/preset"
 )
 
@@ -62,11 +59,22 @@ type routingContextWire struct {
 
 // decideInputWire carries the Preset name the host stamped so this
 // bundle can dispatch. A single-preset module would omit Preset; here
-// it selects which preset's logic runs.
+// it selects which preset's logic runs. AdaptCap / AdaptRevActive /
+// AdaptStandbyMax carry the host's current runtime-tunable adaptive mux
+// widths (the #4325 fix): this guest runs in its OWN sandboxed linear
+// memory and never sees a host-side setter call, so the host stamps the
+// values here and the guest applies them (applyTunables) before
+// dispatch — making `cli proxy mux cap|width|standby` and per-policy
+// cli_overrides actually retune a preset:* (wasm) visor. Zero = unset
+// (leave the compiled defaults), keeping this ABI-compatible with an
+// older host.
 type decideInputWire struct {
-	Ctx        routingContextWire `json:"ctx"`
-	Candidates []candidateWire    `json:"candidates"`
-	Preset     string             `json:"preset"`
+	Ctx             routingContextWire `json:"ctx"`
+	Candidates      []candidateWire    `json:"candidates"`
+	Preset          string             `json:"preset"`
+	AdaptCap        int                `json:"adapt_cap,omitempty"`
+	AdaptRevActive  int                `json:"adapt_rev_active,omitempty"`
+	AdaptStandbyMax int                `json:"adapt_standby_max,omitempty"`
 }
 
 type legInfoWire struct {
@@ -76,6 +84,8 @@ type legInfoWire struct {
 	LatencyMs   int      `json:"latency_ms"`
 	Alive       bool     `json:"alive"`
 	Standby     bool     `json:"standby,omitempty"`
+	Direct      bool     `json:"direct,omitempty"`
+	Flipped     bool     `json:"flipped,omitempty"`
 	SentBytes   uint64   `json:"sent_bytes,omitempty"`
 	RecvBytes   uint64   `json:"recv_bytes,omitempty"`
 	Retransmits uint64   `json:"retransmits,omitempty"`
@@ -83,9 +93,12 @@ type legInfoWire struct {
 }
 
 type tickInputWire struct {
-	Ctx    routingContextWire `json:"ctx"`
-	Legs   []legInfoWire      `json:"legs"`
-	Preset string             `json:"preset"`
+	Ctx             routingContextWire `json:"ctx"`
+	Legs            []legInfoWire      `json:"legs"`
+	Preset          string             `json:"preset"`
+	AdaptCap        int                `json:"adapt_cap,omitempty"`
+	AdaptRevActive  int                `json:"adapt_rev_active,omitempty"`
+	AdaptStandbyMax int                `json:"adapt_standby_max,omitempty"`
 }
 
 type routeSpecWire struct {
@@ -108,70 +121,13 @@ type rotationActionWire struct {
 	ExcludeHops        []string `json:"exclude_hops,omitempty"`
 	DemoteToStandby    []int    `json:"demote_to_standby,omitempty"`
 	PromoteFromStandby []int    `json:"promote_from_standby,omitempty"`
+	AddForwardLeg      bool     `json:"add_forward_leg,omitempty"`
 }
 
-// engine holds the adaptive tick controllers' per-transport_id state for this
-// module instance. One package-global instance mirrors the bundle's original
-// package-global tick state (the host instantiates one wazero module per policy
-// load, so this is created fresh per load); the native visor constructs its own
-// preset.Engine per evaluator the same way.
-var engine = preset.New()
-
-// Required: host-driven memory management.
-
-//export alloc
-func alloc(size uint32) uint32 {
-	buf := make([]byte, size)
-	return uint32(uintptr(unsafe.Pointer(&buf[0]))) //nolint:gosec
-}
-
-//export free
-func free(_, _ uint32) {}
-
-// readInput reads `length` bytes from linear memory at `ptr`.
-func readInput(ptr, length uint32) []byte {
-	return unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), int(length))
-}
-
-// writeOutput allocates a buffer, copies data in, and returns the
-// packed (ptr | len<<32) pair the host can decode.
-func writeOutput(data []byte) uint64 {
-	if len(data) == 0 {
-		return 0
-	}
-	ptr := alloc(uint32(len(data)))
-	dst := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), len(data))
-	copy(dst, data)
-	return uint64(ptr) | (uint64(len(data)) << 32)
-}
-
-//export decide_route
-func decideRoute(inPtr, inLen uint32) uint64 {
-	var input decideInputWire
-	if err := json.Unmarshal(readInput(inPtr, inLen), &input); err != nil {
-		return 0
-	}
-	spec := preset.Decide(input.Preset, ctxToPreset(input.Ctx), candsToPreset(input.Candidates))
-	out, err := json.Marshal(specToWire(spec))
-	if err != nil {
-		return 0
-	}
-	return writeOutput(out)
-}
-
-//export on_tick
-func onTick(inPtr, inLen uint32) uint64 {
-	var input tickInputWire
-	if err := json.Unmarshal(readInput(inPtr, inLen), &input); err != nil {
-		return 0
-	}
-	action := engine.OnTick(input.Preset, legsToPreset(input.Legs))
-	out, err := json.Marshal(actionToWire(action))
-	if err != nil {
-		return 0
-	}
-	return writeOutput(out)
-}
+// The linear-memory ABI (alloc/free/readInput/writeOutput) and the
+// //export entry points live in abi_tinygo.go behind the tinygo tag: their
+// unsafe pointer↔uintptr casts are the standard wasi guest idiom, but they
+// are exactly what `go vet` flags, and nothing native ever runs them.
 
 // --- wire <-> preset conversions ---
 
@@ -221,6 +177,8 @@ func legsToPreset(ls []legInfoWire) []preset.LegInfo {
 			LatencyMs:   l.LatencyMs,
 			Alive:       l.Alive,
 			Standby:     l.Standby,
+			Direct:      l.Direct,
+			Flipped:     l.Flipped,
 			SentBytes:   l.SentBytes,
 			RecvBytes:   l.RecvBytes,
 			Retransmits: l.Retransmits,
@@ -269,6 +227,7 @@ func actionToWire(a preset.RotationAction) rotationActionWire {
 		ExcludeHops:        a.ExcludeHops,
 		DemoteToStandby:    a.DemoteToStandby,
 		PromoteFromStandby: a.PromoteFromStandby,
+		AddForwardLeg:      a.AddForwardLeg,
 	}
 }
 
@@ -315,4 +274,4 @@ func toLower(s string) string {
 
 // main is required by the WASI target but isn't called by the host at
 // decide-time. It runs once at module instantiation.
-func main() {}
+

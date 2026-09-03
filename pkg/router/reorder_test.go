@@ -56,17 +56,22 @@ func TestReorderBuffer_Duplicate(t *testing.T) {
 	assert.Nil(t, d)
 }
 
-func TestReorderBuffer_ForceFlush(t *testing.T) {
+func TestReorderBuffer_MaxGapDropsExcessNeverSkips(t *testing.T) {
+	// At the OOM backstop (maxGap) the buffer DROPS excess out-of-order packets —
+	// it never skips the frontier gap (skipping would corrupt the reliable stream).
 	rb := newReorderBuffer(3)
-	// Skip seq 0, send 1, 2, 3 — triggers flush at maxGap=3
-	rb.Insert(1, []byte("b"))
-	rb.Insert(2, []byte("c"))
-	d := rb.Insert(3, []byte("d"))
-	// Should flush all buffered in order
-	assert.Equal(t, 3, len(d))
-	assert.Equal(t, []byte("b"), d[0])
-	assert.Equal(t, []byte("c"), d[1])
-	assert.Equal(t, []byte("d"), d[2])
+	// Gap at seq 0; buffer 1,2,3 fills to maxGap — none delivered (frontier held).
+	assert.Nil(t, rb.Insert(1, []byte("b")))
+	assert.Nil(t, rb.Insert(2, []byte("c")))
+	assert.Nil(t, rb.Insert(3, []byte("d")))
+	assert.Equal(t, 3, rb.Pending())
+	// At capacity, a further out-of-order packet is DROPPED (not buffered), and the
+	// gap is still NOT skipped — seq 4 will be re-requested via SACK.
+	assert.Nil(t, rb.Insert(4, []byte("e")))
+	assert.Equal(t, 3, rb.Pending(), "buffer bounded at maxGap; excess dropped, gap never skipped")
+	// The missing seq 0 finally arrives -> the frontier drains IN ORDER (0..3).
+	d := rb.Insert(0, []byte("a"))
+	assert.Equal(t, [][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d")}, d)
 	assert.Equal(t, 0, rb.Pending())
 }
 
@@ -155,4 +160,28 @@ func TestReorderNeverSkipsAcrossTimeout(t *testing.T) {
 	if rb.Pending() != 0 {
 		t.Fatalf("pending=%d after full drain, want 0", rb.Pending())
 	}
+}
+
+// TestReorderBuffer_NeverSkipsGap pins the reliability contract: the reorder
+// buffer NEVER delivers past a frontier gap on a time basis, no matter how long
+// the gap has been open. The RouteGroup is a reliable ordered stream (TCP/TLS
+// rides it), so skipping a sequence would leave a hole that corrupts the upper
+// protocol (the observed "bad record mac"). The gap is only ever closed by the
+// missing sequence actually arriving — recovery comes from SACK retransmit + the
+// leg-dataprogress prune, not from skipping.
+func TestReorderBuffer_NeverSkipsGap(t *testing.T) {
+	orig := reorderTimeout
+	reorderTimeout = 20 * time.Millisecond
+	defer func() { reorderTimeout = orig }()
+
+	rb := newReorderBuffer(64)
+	assert.Equal(t, [][]byte{[]byte("a")}, rb.Insert(0, []byte("a"))) // seq 0 in order
+	_ = rb.Insert(2, []byte("c"))                                     // gap at seq 1, buffered
+	_ = rb.Insert(3, []byte("d"))                                     // still buffered behind the gap
+	time.Sleep(40 * time.Millisecond)                                 // well past reorderTimeout
+	assert.Equal(t, 2, rb.Pending(), "gap must stay held past reorderTimeout — never skip")
+	assert.True(t, rb.GapAge() > reorderTimeout, "gap is aged but still held, not released")
+	// The missing seq 1 finally arrives → in-order delivery of 1,2,3.
+	assert.Equal(t, [][]byte{[]byte("b"), []byte("c"), []byte("d")}, rb.Insert(1, []byte("b")))
+	assert.Equal(t, 0, rb.Pending(), "buffer drained in order once the gap filled")
 }

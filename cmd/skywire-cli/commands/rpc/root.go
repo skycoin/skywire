@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -25,8 +27,8 @@ import (
 	"github.com/skycoin/skywire/pkg/clicache"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
-	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -133,7 +135,7 @@ func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
 
 	// Default: TCP connection to local RPC
 	const rpcDialTimeout = time.Second * 5
-	conn, err := net.DialTimeout("tcp", Addr, rpcDialTimeout)
+	conn, err := vnet.DialTimeout("tcp", Addr, rpcDialTimeout)
 	if err != nil {
 		if !quiet {
 			internal.PrintError(cmdFlags, fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
@@ -220,7 +222,7 @@ func BridgeConn(scheme byte, remotePK cipher.PubKey, port uint16) (net.Conn, err
 		localAddr = DefaultRPCAddr
 	}
 	const dialTimeout = time.Second * 5
-	conn, err := net.DialTimeout("tcp", localAddr, dialTimeout)
+	conn, err := vnet.DialTimeout("tcp", localAddr, dialTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("bridge needs the local visor RPC at %s; dial failed: %w", localAddr, err)
 	}
@@ -767,6 +769,26 @@ func fetchViaDmsgDirect(flags *pflag.FlagSet, dmsgURL string) ([]byte, error) {
 // Returns the response body as a string, or "" if every path failed and
 // there was no cache to fall back on. Errors are logged at debug level.
 func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, cacheFilesAge int) string {
+	// When the URL is mirrored over CXO, the visor's bbolt-backed CXO
+	// subscriber IS the cache: FetchServiceURL's step 0 reads it as a
+	// local snapshot with no round-trip and no rate-limit cost. Layering
+	// the legacy disk-cache staleness window on top of that only shadows
+	// fresh CXO data with an up-to-cacheFilesAge-minutes-old copy — the
+	// exact cause of `ut -os` reporting a stale online count while
+	// `ut tpd -os` (a differently-keyed cache entry that had expired)
+	// showed the live number. So for CXO-backed URLs, skip the clicache
+	// freshness shadow, the write-through, and the stale fallback, and
+	// read straight through. Custom `--url` targets don't match a prod
+	// feed, so they keep the disk-cache path (offline fallback intact).
+	if _, _, cxoBacked := cxoFeedForURL(thisurl); cxoBacked {
+		body, err := FetchServiceURL(cmdFlags, thisurl)
+		if err != nil {
+			logger.Debugf("FetchCachedServiceURL: CXO-backed fetch failed for %s: %v", thisurl, err)
+			return ""
+		}
+		return string(body)
+	}
+
 	cache := getCLICacheIfEnabled(cachefile)
 	maxAge := time.Duration(cacheFilesAge) * time.Minute
 
@@ -913,17 +935,23 @@ func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 			if rpcClient, err := Client(cmdFlags); err == nil {
 				resp, err := rpcClient.FetchCXO(visor.FetchCXOArgs{Feed: feed, Path: path})
 				if err == nil && resp != nil && resp.Hit && len(resp.Body) > 0 {
-					logger.Debugf("CXO hit for %s (feed=%s path=%s, root@%s)",
+					// Trace, not Debug: the deployment-service fetch chain
+					// (CXO → RPC → DMSG) is normal plumbing, and the CLI's
+					// package logger runs at Debug by default — so a Debug
+					// here prints this on ordinary read commands (`tp tree`,
+					// `ut`, `pv`) and pollutes their stdout. Trace keeps it
+					// available under an explicit trace level.
+					logger.Tracef("CXO hit for %s (feed=%s path=%s, root@%s)",
 						url, feed, path, resp.LastRootAt.Format(time.RFC3339))
 					return resp.Body, nil
 				}
 				if err != nil {
-					logger.Debugf("CXO probe error for %s: %v", url, err)
+					logger.Tracef("CXO probe error for %s: %v", url, err)
 				} else if resp != nil {
-					logger.Debugf("CXO miss for %s: %s", url, resp.Reason)
+					logger.Tracef("CXO miss for %s: %s", url, resp.Reason)
 				}
 			} else {
-				logger.Debugf("CXO step skipped (no RPC client): %v", err)
+				logger.Tracef("CXO step skipped (no RPC client): %v", err)
 			}
 		}
 	}

@@ -57,7 +57,7 @@ func RegisterOutputFlags(cmd *cobra.Command) {
 func SetJSONHelp(root *cobra.Command) {
 	defaultHelp := root.HelpFunc()
 	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		if !machineMode(cmd) {
+		if !MachineMode(cmd) {
 			defaultHelp(cmd, args)
 			return
 		}
@@ -67,8 +67,10 @@ func SetJSONHelp(root *cobra.Command) {
 	})
 }
 
-// machineMode reports whether any machine-output flag was set.
-func machineMode(cmd *cobra.Command) bool {
+// MachineMode reports whether any machine-output flag was set, which is to say
+// whether Help will print a schema for something else to consume rather than
+// help for someone to read.
+func MachineMode(cmd *cobra.Command) bool {
 	return JSONMode(cmd) || JQFilter(cmd) != "" || ShapeMode(cmd)
 }
 
@@ -140,6 +142,39 @@ func ApplyJQ(src []byte, filter string) (string, error) {
 		sb.WriteByte('\n')
 	}
 	return sb.String(), nil
+}
+
+// ApplyJQCompact runs filter over the JSON in src and returns each result as a
+// COMPACT (single-line) JSON string — the NDJSON-friendly counterpart of
+// ApplyJQ, which pretty-prints. A filter that yields several values returns
+// several strings (each a valid standalone JSON line). Used by streaming
+// (`--watch`) callers so a filtered tick stays one line.
+func ApplyJQCompact(src []byte, filter string) ([]string, error) {
+	query, err := gojq.Parse(filter)
+	if err != nil {
+		return nil, fmt.Errorf("invalid --jq filter: %w", err)
+	}
+	var input interface{}
+	if err := json.Unmarshal(src, &input); err != nil {
+		return nil, fmt.Errorf("decode JSON for --jq: %w", err)
+	}
+	var out []string
+	iter := query.Run(input)
+	for {
+		val, ok := iter.Next()
+		if !ok {
+			break
+		}
+		if err, ok := val.(error); ok {
+			return nil, fmt.Errorf("--jq: %w", err)
+		}
+		b, err := json.Marshal(val)
+		if err != nil {
+			return nil, fmt.Errorf("--jq encode result: %w", err)
+		}
+		out = append(out, string(b))
+	}
+	return out, nil
 }
 
 // orderedMap marshals its entries in insertion order (a Go map sorts keys), so

@@ -36,7 +36,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	routeFinder "github.com/skycoin/skywire/pkg/route-finder/store"
+	routeFinder "github.com/skycoin/skywire/pkg/deployment/rf/store"
 	"github.com/skycoin/skywire/pkg/routing"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )

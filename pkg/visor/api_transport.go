@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/policy/preset"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -173,11 +174,53 @@ func (v *Visor) SetMuxMode(mode string) error {
 		m = router.WeightModeEqual
 	case "capacity":
 		m = router.WeightModeCapacity
+	case "ecf":
+		m = router.WeightModeECF
+	case "otias":
+		m = router.WeightModeOTIAS
+	case "stms":
+		m = router.WeightModeSTMS
 	default:
-		return fmt.Errorf("unknown mux mode %q (use \"auto\", \"equal\", or \"capacity\")", mode)
+		return fmt.Errorf("unknown mux mode %q (use \"auto\", \"equal\", \"capacity\", \"ecf\", \"otias\", or \"stms\")", mode)
 	}
 	v.router.SetMuxMode(m)
 	v.log.Infof("SetMuxMode: %v", mode)
+	return nil
+}
+
+// SetMuxCap implements API. Sets the hard ceiling on adaptive mux active width
+// (the aggregation ceiling) at runtime — the adaptive engine reads it on the
+// next tick of every route group, so it takes effect live without a restart.
+//
+// This drives the process-global preset atomic. For a preset:* (wasm) policy the
+// value now reaches the sandboxed wazero guest via the decide/tick input wire
+// (the host stamps it, the guest applies it before dispatch — see
+// pkg/router/policy/wasm), so the reported applied value is honest for the wasm
+// path too, not only the native/wasm-visor in-process path (#4325).
+func (v *Visor) SetMuxCap(n int) error {
+	applied := preset.SetAdaptCap(n)
+	v.log.Infof("SetMuxCap: requested %d, applied %d (clamped to [1, standby])", n, applied)
+	return nil
+}
+
+// SetMuxWidth implements API. Sets the steady active download width (the floor
+// the adaptive engine converges to when idle) at runtime. Takes effect live.
+// Clamped to [1, cap]; reaches wasm presets via the input wire (see SetMuxCap).
+func (v *Visor) SetMuxWidth(n int) error {
+	applied := preset.SetAdaptRevActive(n)
+	v.log.Infof("SetMuxWidth: requested %d, applied %d (clamped to [1, cap])", n, applied)
+	return nil
+}
+
+// SetMuxStandby implements API. Sets the warm-standby reserve pool size — the
+// number of full-duplex spare legs the adaptive default holds parked for
+// instant, dip-free promotion (decideAdaptive requests Mux = width + standby).
+// Takes effect on the next dial (the requested Mux width) and tick. Clamped to
+// >= 1; pulls cap (and width) down if they would exceed the new pool. Reaches
+// wasm presets via the input wire (see SetMuxCap).
+func (v *Visor) SetMuxStandby(n int) error {
+	applied := preset.SetAdaptStandbyMax(n)
+	v.log.Infof("SetMuxStandby: requested %d, applied %d", n, applied)
 	return nil
 }
 

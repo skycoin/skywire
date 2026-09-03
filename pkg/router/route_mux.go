@@ -6,6 +6,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -33,12 +36,54 @@ type LegStats struct {
 	// not what the peer said it sent.
 	RecvBytes   uint64
 	RecvPackets uint64
+	// PayloadBytes is the UNIQUE in-order payload this leg delivered (each seq
+	// counted once, on the leg it first arrived on) — retransmits/duplicates
+	// excluded, so the per-leg values sum to the transfer size and give a
+	// confound-free per-direction attribution (which legs carried the download vs
+	// the upload), unlike RecvBytes which includes retransmit/duplicate inflation.
+	PayloadBytes uint64
+	// DupBytes is inbound DUPLICATE data this leg carried (seqs already
+	// delivered/buffered on arrival) — the peer's spurious-retransmit waste,
+	// which selectFastestTransport concentrates on the fastest leg. RepairBytes
+	// is inbound FEC repair frames (deliberate overhead). Together with
+	// PayloadBytes they decompose RecvBytes so "why is this (standby) leg
+	// receiving" is answerable from telemetry.
+	DupBytes    uint64
+	RepairBytes uint64
 	// Retransmits is how many SACK retransmit packets THIS leg has
 	// carried. A high retransmits:sentPackets ratio marks a lossy leg —
 	// the signal a routing policy needs to shed lossy intermediates and
 	// the scheduler needs to deweight them.
 	Retransmits uint64
+	// GoodputUpBps / GoodputDownBps are this leg's recent goodput split by
+	// direction — the EWMA of the SENT (up) and RECV (down) byte deltas per
+	// second over the telemetry refresh window (~1s for the status page).
+	// Distinct from the cumulative SentBytes/RecvBytes counters above: they
+	// are the RATE each direction is moving now, not the lifetime total. 0
+	// until a second sample lands. Sampled in snapshotLegs.
+	GoodputUpBps   float64
+	GoodputDownBps float64
+	// GoodputBps is the combined (up+down) recent goodput, retained as the
+	// sum of GoodputUpBps+GoodputDownBps for back-compat with callers that
+	// want a single figure.
+	GoodputBps float64
 }
+
+const (
+	// goodputEWMAAlpha weights the newest goodput sample in the per-leg
+	// bytes/sec EWMA (snapshotLegs). Higher = more responsive, noisier.
+	goodputEWMAAlpha = 0.4
+	// goodputMinSampleNano is the minimum window between goodput samples: two
+	// observers refreshing closer than this reuse the stored rate rather than
+	// dividing a tiny byte delta by a tiny interval into a spurious spike.
+	goodputMinSampleNano = int64(250 * time.Millisecond)
+	// capacityColdFloorFrac is the floor share a just-promoted active leg gets
+	// under WeightModeCapacity, as a fraction of the fastest active leg's weight.
+	// Big enough that a fresh leg carries a measurable trickle to prove its
+	// goodput and ramp; small enough that a persistently slow leg stays near it
+	// and can't open a large reorder gap. See rebuildWeights.
+	capacityColdFloorFrac = 0.15
+)
 
 type legCounters struct {
 	sentBytes   uint64 // atomic
@@ -46,11 +91,56 @@ type legCounters struct {
 	recvBytes   uint64 // atomic
 	recvPackets uint64 // atomic
 	retransmits uint64 // atomic
+	// payloadBytes is the UNIQUE in-order payload this leg delivered: each
+	// sequence credited once, to the leg it FIRST arrived on. Unlike recvBytes
+	// (every inbound frame, incl. retransmits/duplicates), a retransmit of a seq
+	// already seen on another leg is NOT counted, so the per-leg payloadBytes sum
+	// equals the transfer size and cleanly attributes which legs carried a
+	// direction's data — the confound-free basis for per-direction leg telemetry.
+	payloadBytes uint64 // atomic
+	// dupBytes is inbound DUPLICATE data on this leg (a seq already delivered
+	// or buffered when it arrived here) — the peer's spurious-retransmit waste,
+	// which rides the fastest leg and otherwise masquerades as payload in
+	// recvBytes. repairBytes is inbound FEC repair frames — deliberate overhead,
+	// counted apart from waste. Both atomic.
+	dupBytes    uint64 // atomic
+	repairBytes uint64 // atomic
 	// lastTotalBytes snapshots sentBytes+recvBytes at the previous
 	// capacity-weight rebuild; the delta since then is this leg's
 	// recent throughput, used by WeightModeCapacity. Touched only
 	// under legMu in rebuildWeights, so it needs no atomic.
 	lastTotalBytes uint64
+	// Goodput-rate sampling (bytes/sec EWMA over the observer's refresh
+	// window), maintained by snapshotLegs — NOT the data path and NOT the
+	// capacity rebuild. lastRateSentBytes/lastRateRecvBytes/lastRateNano
+	// snapshot the sent counter, recv counter and wall clock at the previous
+	// sample; each direction's delta over the elapsed window, EWMA-smoothed,
+	// is goodputUpBps (sent/sec) / goodputDownBps (recv/sec). Kept separate
+	// from lastTotalBytes (which the capacity rebuild resets on its own
+	// cadence) so the two samplers never disturb each other. Touched under
+	// legMu (snapshotLegs upgrades to a write lock for the sample), so no
+	// atomic needed.
+	lastRateSentBytes uint64
+	lastRateRecvBytes uint64
+	lastRateNano      int64
+	goodputUpBps      float64
+	goodputDownBps    float64
+	// ECF (WeightModeECF) per-leg state, maintained by rebuildWeights' ECF
+	// branch (under legMu, off the data path). ecfLastSentBytes snapshots the
+	// sent counter at the previous ECF refresh so the delta over the refresh
+	// window is this leg's send rate (kept separate from lastTotalBytes /
+	// lastRateSentBytes so the ECF sampler never disturbs the capacity or
+	// telemetry samplers). ecfRttMs / ecfJitterMs are the EWMA'd mean RTT and
+	// jitter (sigma) the ECF predicate consumes.
+	ecfLastSentBytes uint64
+	ecfRttMs         float64
+	ecfJitterMs      float64
+	// ecfRttMinMs is the leg's baseline (minimum observed) RTT — the
+	// uncongested latency. It seeds the stable BDP for cwndBytes and, against
+	// the live ecfRttMs, is the congestion signal ecfSaturated reads. Tracked
+	// as a running minimum with a slow upward creep (ecfRttMinCreep) so a leg
+	// whose true latency genuinely rose is not pinned to a stale floor forever.
+	ecfRttMinMs float64
 }
 
 // routeMux encapsulates route multiplexing state and logic.
@@ -63,6 +153,18 @@ type routeMux struct {
 	// Sequence numbering for outgoing packets
 	writeSeq uint32 // atomic: next outgoing sequence number
 	tpIndex  uint32 // atomic: round-robin fallback index for transport selection
+
+	// RACK-TLP tail-loss probe + DSACK reorder-window adaptation (see rack_tlp.go).
+	// lastSendNano stamps the last DATA/retransmit frame put on the wire (the TLP
+	// idle timer reads it). tlpProbeCount is the number of consecutive tail probes
+	// fired since the last ack progress — bounded so a truly dead tail doesn't probe
+	// forever. rackFactorMilli is the DSACK-adapted reorder tolerance ×1000: a
+	// duplicate report from the receiver widens it (we retransmitted too eagerly),
+	// clean acks decay it back toward the static baseline. All atomic.
+	lastSendNano    int64
+	tlpProbeCount   int32
+	rackFactorMilli int64
+	lastAckedContig uint32 // atomic: highest SACK lastContiguous seen (ack-progress edge for TLP reset)
 
 	// lastSACKNano rate-limits receiver-side SACK feedback. Cross-leg
 	// reordering from latency skew makes nearly every packet arrive
@@ -81,6 +183,90 @@ type routeMux struct {
 	sackEnabled bool         // true when both peers advertised CapSACK
 	sackTracker *sackTracker // receiver: tracks received seqs for SACK generation
 	retxBuf     *retxBuffer  // sender: holds unACKed packets for retransmission
+
+	// Proactive head-of-line retransmit (see hol_retx.go). holRetxEnabled is true
+	// when both peers advertised CapHOLRetx (implies sackEnabled — it reuses the
+	// SACK wire message). When false the mux keeps today's purely reactive SACK
+	// behavior. holRetx is the sender-side per-seq rate limiter for proactive
+	// retransmits; holSACKNano rate-limits the receiver-side proactive HoL SACK
+	// (separate from lastSACKNano so it doesn't fight the window-ack SACK limiter).
+	holRetxEnabled bool
+	holRetx        *holRetxTracker
+	holSACKNano    int64 // atomic: UnixNano of the last proactive HoL SACK we sent
+
+	// legStateEnabled is true when both peers advertised CapLegState. When set, a
+	// park/promote of a leg is signaled to the remote (LegStatePacket) so it
+	// mirrors the active/standby set on its send side — otherwise standby is a
+	// send-side-only decision and the bulk-sending peer stripes across every
+	// established leg, head-of-line-stalling the reorder frontier (the wide-mux
+	// download stall). See handleLegStatePacket / sendLegState in route_group.go.
+	legStateEnabled bool
+
+	// Unidirectional per-leg send selection (CapUniDir, see unidir.go). When
+	// directional is set (both peers advertised CapUniDir), each end restricts its
+	// OWN send to legs matching its direction: the initiator uploads on the DIRECT
+	// (1-hop) leg, the acceptor downloads on the MULTIHOP legs. flipped swaps that
+	// mapping (heavy direction gets the mux). dstPK/srcPK identify a direct leg
+	// (its transport's remote is one of the route-group endpoints). Guarded by
+	// legMu; read as a snapshot (dirConfig) on the send path.
+	directional bool
+	flipped     bool
+	initiator   bool
+	dstPK       cipher.PubKey
+	srcPK       cipher.PubKey
+	// flipPin is the operator's MANUAL direction pin (see unidir.go setFlipPin):
+	// routing.DirectionAuto (0) leaves the flip controller in charge;
+	// DirectionPinDefault/DirectionPinFlipped force the mapping and put the
+	// controller to sleep until released. Guarded by legMu like flipped.
+	flipPin byte
+	// Flip-controller hysteresis state (see unidir.go unidirFlipTick). Touched
+	// ONLY by the single unidir-flip loop goroutine, so no lock of their own.
+	flipUpHits   int
+	flipDownHits int
+	flipCooldown int
+
+	// Per-frame noise (inverse-mux). When CapPerFrameNoise is negotiated the
+	// RouteGroup installs these: seal AEAD-encrypts each outgoing frame under
+	// its sequence-nonce (in wrapPayload, before retx storage so retransmits
+	// resend the sealed frame verbatim); open AEAD-decrypts an incoming frame
+	// under its sequence-nonce (in deliverData, before the reorder buffer).
+	// Both nil for stream-noise/plain groups (no-op). Set once at handshake
+	// completion, read on the data path; a plain word write/read is safe under
+	// the RouteGroup's ordering (set-before-first-data, mu-guarded install).
+	seal func(seq uint32, plaintext []byte) []byte
+	open func(seq uint32, ciphertext []byte) ([]byte, error)
+
+	// Forward error correction (fec.go / fec_mux.go). fecEnabled is true when
+	// BOTH peers advertised CapFEC (implies CapMux). FEC operates in the WIRE
+	// (post-seal) domain: the striper batches K on-wire data-frame payloads per
+	// block and emits R repair frames (queued in fecRepairQ for the send loop to
+	// schedule on a fast leg); the reassembler retains on-wire block symbols and,
+	// when the reorder frontier is gap-blocked, reconstructs the missing on-wire
+	// frame from any K of the block's K+R symbols — which is then opened via the
+	// normal per-frame path and inserted, so recovery is bound by the FAST legs
+	// instead of the slow leg. All nil/false unless negotiated (inert — the
+	// pre-integration behavior is preserved byte-for-byte when fecEnabled=false).
+	fecEnabled     bool
+	fecStriper     *fecStriper
+	fecReassembler *fecReassembler
+	fecRepairMu    sync.Mutex
+	fecRepairQ     []fecRepairFrame
+	// FEC-block striping cap: keep no single leg above fecDefaultR frames of any
+	// K-frame FEC block, so a leg that fully stalls stays within FEC's R-erasure
+	// recovery (a leg carrying >R of a block's K frames exceeds what repair can
+	// reconstruct, and the group falls back to SACK-retransmit — the webrtc wedge).
+	// fecStripeUsed counts, for the CURRENT block, how many frames each leg took.
+	fecStripeMu    sync.Mutex
+	fecStripeBlock uint32
+	fecStripeUsed  map[int]int
+	// FEC telemetry (atomic). fecRepairBytesSent/Recv are cumulative repair-frame
+	// bytes this group scheduled onto / received from legs; fecReconstructs counts
+	// frontier frames recovered from repair (each a slow-leg stall avoided). These
+	// let an observer decompose mux traffic into data vs repair (the true FEC
+	// overhead) vs retransmit, separately from the aggregate byte counters.
+	fecRepairBytesSent uint64
+	fecRepairBytesRecv uint64
+	fecReconstructs    uint64
 
 	// Per-leg traffic counters parallel to the rg's tps[] / fwd[] /
 	// rvs[] slices. Mutated atomically. Read via Snapshot().
@@ -105,6 +291,34 @@ type routeMux struct {
 	// tear-and-rebuild. Parallel to ready[]; grown/compacted in lockstep.
 	// Guarded by legMu. See docs/warm_standby_legs_rfc.md.
 	standby []bool
+
+	// ecfLastRebuildNano is the wall-clock (UnixNano) of the previous ECF-state
+	// refresh, used to turn each leg's sent-byte delta into a bytes/sec rate.
+	// Touched only under legMu in rebuildWeights' ECF branch.
+	ecfLastRebuildNano int64
+
+	// legGroups holds each leg's SHARED-BOTTLENECK group id (RFC 8382; see
+	// bottleneck.go), parallel to legs[]. Legs with the same id are judged to
+	// funnel through one physical pipe, so rebuildWeights counts the group as ONE
+	// unit of capacity instead of N competing pipes. Recomputed each data-progress
+	// tick by the route group and pushed via SetLegGroups; a leg with no entry (or
+	// a value equal to its own index) is its own singleton group — the default, so
+	// a mux with no bottleneck detection behaves exactly as before. Guarded by
+	// legMu.
+	legGroups []int
+
+	// standbyNewLegs makes every NEWLY-grown aux leg (index > 0) enter the
+	// warm-standby pool instead of going straight into the active send set.
+	// The primary leg (index 0) is never affected. Set only when a promoting
+	// rotation engine is wired (SetRotation), so the engine's paced,
+	// goodput-gated growActive/promote path admits legs one per tick as its
+	// throughput signal warrants — instead of every dialed leg going hot the
+	// instant it receives its first inbound packet (markLegReady), which
+	// floods the active set faster than the reactive stall gate can demote and
+	// churns the group into collapse. When false (no rotation engine) new legs
+	// stay active-on-add so a non-adaptive group never strands aux legs in
+	// standby. Guarded by legMu.
+	standbyNewLegs bool
 }
 
 // reorderWindow bounds how far the receiver's reorder buffer will hold
@@ -123,7 +337,16 @@ type routeMux struct {
 // flushes. A flush at this cap is a last-resort OOM guard for a genuinely
 // stalled/dead leg — which per-leg liveness prunes, after which the peer
 // retransmits that leg's unacked sequences on the surviving legs.
-const reorderWindow = 2048
+// Sized to the aggregate bandwidth-delay-product per the MPTCP receive-buffer
+// requirement B >= 2*sum(BW)*RTT_max: at the ~500 Mbps gigabit target with a
+// ~350 ms slowest-active-leg RTT that is ~46 MB ~= 32Ki packets, so the old 2Ki
+// (~2.8 MB) window was ~16x too small — it collapsed throughput under wide-mux
+// skew and hit the OOM backstop. This is the CAP, not steady occupancy: normal
+// skew buffers only a handful; only a very lagged/dead leg approaches it, and at
+// the cap the buffer now DROPS excess (never skips) while the leg-dataprogress
+// prune + SACK retransmit refill the frontier in order. TODO: make adaptive to
+// the measured RTT_max of the active set instead of a flat gigabit-sized cap.
+const reorderWindow = 32768
 
 // newRouteMux creates a new routeMux instance with all sub-components initialized.
 func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
@@ -137,7 +360,22 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 		// window so a genuinely-lost sequence is still held for retransmit
 		// while the receiver is holding the gap open for it.
 		retxBuf: newRetxBuffer(reorderWindow),
+		// Proactive HoL retransmit tracker is always constructed; it is only
+		// consulted when holRetxEnabled is set at handshake (see hol_retx.go).
+		holRetx: newHolRetxTracker(),
+		// RACK reorder factor starts at the static baseline; DSACK feedback
+		// widens it and clean acks decay it back (see rack_tlp.go).
+		rackFactorMilli: int64(rackReorderFactor * 1000),
 	}
+	// Default every mux to ECF (Earliest Completion First). It only spills a
+	// frame onto a slower leg once the fastest leg is saturated (a full BDP in
+	// flight), so it never over-assigns a slow leg and stalls the no-skip reorder
+	// frontier — the failure mode of the old latency-weighted default, where a
+	// low-latency but low-bandwidth leg drew traffic it couldn't clear and the
+	// whole mux collapsed BELOW single-leg rate. Cold/empty ECF state and
+	// single-leg groups fall back to the round-robin schedule in SelectECF, so
+	// they are unaffected. A routing-policy distribution can still override this.
+	m.tpSelector.SetMode(WeightModeECF)
 	return m
 }
 
@@ -154,12 +392,64 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 // back to the schedule-based pick.
 //
 // NOTE: not thread-safe, caller must hold the RouteGroup mu.
+// selectTransport picks the leg for the next data frame, then applies the
+// FEC-block striping cap so no leg exceeds fecDefaultR frames per K-frame block.
+// The cap is a thin, best-effort post-pass over selectTransportRaw: it never fails
+// a send (if every alive-ready leg is already block-full it keeps the raw pick),
+// and it is inert unless FEC is negotiated on a multi-leg group — so the
+// pre-integration selection is preserved byte-for-byte when fecEnabled=false.
 func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []routing.Rule, payload []byte) (*transport.ManagedTransport, routing.Rule, int, error) {
+	tp, rule, idx, err := m.selectTransportRaw(tps, fwd, payload)
+	if err != nil || idx < 0 {
+		return tp, rule, idx, err
+	}
+	if alt, ok := m.fecStripeReassign(tps, idx); ok && alt < len(fwd) {
+		tp, rule, idx = tps[alt], fwd[alt], alt
+	}
+	m.fecStripeUse(idx)
+	return tp, rule, idx, nil
+}
+
+func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []routing.Rule, payload []byte) (*transport.ManagedTransport, routing.Rule, int, error) {
 	if len(tps) == 0 {
 		return nil, nil, -1, ErrNoTransports
 	}
 	if len(fwd) == 0 {
 		return nil, nil, -1, ErrNoRules
+	}
+
+	// Unidirectional send selection (CapUniDir).
+	// DIRECTION governs which CLASS of leg (direct vs multihop) carries this end's
+	// traffic; WITHIN the class the initiator-mirrored ACTIVE set governs which
+	// legs. selectByDirection prefers the active (mirrored) class legs — even a
+	// mirrored-active reverse leg that never received inbound bulk (so its
+	// readiness gate never fired) is preferred over the warm-standby reserve — so
+	// the exit's download fan-out stays bounded to the few reverse legs the
+	// initiator parked active instead of spraying every warm-standby reverse leg
+	// (which over-subscribes the no-skip reorder frontier and wedges the group →
+	// the observed collapse-to-0). It returns ok=true (and we use its pick) as long
+	// as ANY leg of the wanted class exists, so the download is NEVER handed to the
+	// wrong-direction direct leg while a reverse leg is available. Only when there
+	// is genuinely no reverse leg does it return ok=false and selection falls
+	// through to the standard path.
+	if directional, wantDirect, dstPK, srcPK := m.dirConfig(); directional {
+		if tp, rule, idx, ok := m.selectByDirection(tps, fwd, wantDirect, dstPK, srcPK); ok {
+			return tp, rule, idx, nil
+		}
+		// No leg of the wanted class exists. For the LIGHT direction (wantDirect
+		// true = the initiator's forward/upload send, which the unidir model puts
+		// on the DIRECT leg), a multihop-only path has no direct leg to confine to
+		// — falling through to the weighted scheduler would SPRAY the upload across
+		// every forward leg, over-subscribing the no-skip reorder frontier (measured
+		// 67-172MB sent for a 10MB upload from a public node with no direct transport
+		// to the exit, plus stalls). Confine it to the primary leg (0) instead: it is
+		// always active and single, so the upload stays on one leg (full-duplex with
+		// whatever download rides it) rather than spraying. The heavy/download
+		// direction (wantDirect false) keeps its existing fall-through: with no
+		// reverse leg there is genuinely nothing to confine to.
+		if wantDirect && tps[0] != nil && !tps[0].IsClosed() {
+			return tps[0], fwd[0], 0, nil
+		}
 	}
 
 	// Payload-inspecting modes: ask the selector for a leg
@@ -170,7 +460,10 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 		case WeightModeSizeThreshold,
 			WeightModeSticky5Tuple,
 			WeightModeLatencyAdaptive,
-			WeightModeDSCPPriority:
+			WeightModeDSCPPriority,
+			WeightModeECF,
+			WeightModeOTIAS,
+			WeightModeSTMS:
 			idx := m.tpSelector.SelectForPayload(payload)
 			if idx < len(tps) {
 				tp := tps[idx]
@@ -195,13 +488,34 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 	// Fallback: round-robin with skip-dead and skip-not-ready. An aux leg
 	// the peer has not confirmed yet is skipped so we never send the first
 	// packets onto a route whose rule the peer has not registered; the
-	// primary leg (0) is always ready, so this loop always finds it.
+	// primary leg (0) is always ready, so this loop always finds it. When
+	// direction filtering is active, non-matching legs are skipped here too.
 	n := uint32(len(tps)) //nolint:gosec
 	start := atomic.AddUint32(&m.tpIndex, 1) - 1
 	for i := uint32(0); i < n; i++ {
 		idx := int((start + i) % n) //nolint:gosec
 		tp := tps[idx]
 		if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
+			return tp, fwd[idx], idx, nil
+		}
+	}
+
+	// EMERGENCY FAILOVER: no ACTIVE leg is selectable — every active leg is
+	// dead/not-ready. Rather than fail the send (a dead connection), fall through
+	// to any alive, ready WARM-STANDBY leg. The 512-deep standby reserve exists
+	// precisely so the connection survives the instant its active set is lost,
+	// with ZERO promote latency — a parked leg keeps its rules installed and its
+	// transport alive, so it can carry a packet immediately. This is what makes
+	// the warm reserve a real "switch in at a moment's notice" pool instead of
+	// something that only helps on the next 20s rotation tick. The leg-death
+	// trigger + rotation tick restore a proper active set right after; this just
+	// guarantees no gap. legSelectableIgnoringStandby is legReadyAt WITHOUT the
+	// standby exclusion (a parked leg that was active is ready), so it never
+	// picks a leg the peer has not confirmed.
+	for i := uint32(0); i < n; i++ {
+		idx := int((start + i) % n) //nolint:gosec
+		tp := tps[idx]
+		if tp != nil && !tp.IsClosed() && m.legSelectableIgnoringStandby(idx) {
 			return tp, fwd[idx], idx, nil
 		}
 	}
@@ -269,10 +583,43 @@ func (m *routeMux) growLegs(n int) {
 		m.ready = append(m.ready, len(m.ready) == 0)
 	}
 	for len(m.standby) < n {
-		// New legs are active, never standby.
-		m.standby = append(m.standby, false)
+		// The primary leg (index 0, the first append) is always active. Aux
+		// legs enter warm standby when standbyNewLegs is set (a promoting
+		// rotation engine is wired), so the engine promotes them one per tick
+		// as its goodput signal warrants instead of all going hot at once.
+		m.standby = append(m.standby, m.standbyNewLegs && len(m.standby) > 0)
 	}
 	m.legMu.Unlock()
+}
+
+// SetStandbyNewLegs controls whether newly-grown aux legs enter warm standby on
+// add (see the standbyNewLegs field). Called by the route group when a promoting
+// rotation engine is wired, before aux legs are appended. Idempotent.
+func (m *routeMux) SetStandbyNewLegs(v bool) {
+	m.legMu.Lock()
+	m.standbyNewLegs = v
+	m.legMu.Unlock()
+}
+
+// SetLegGroups records the per-leg shared-bottleneck group ids (see the
+// legGroups field). The slice is copied and is parallel to legs[] in the rg's
+// tps[] order; a shorter slice leaves the trailing legs as singletons. Cheap and
+// idempotent — called each data-progress tick from the route group after it
+// recomputes groups from per-leg OWD statistics.
+func (m *routeMux) SetLegGroups(groups []int) {
+	m.legMu.Lock()
+	m.legGroups = append([]int(nil), groups...)
+	m.legMu.Unlock()
+}
+
+// groupOf returns leg i's shared-bottleneck group id, defaulting to i itself
+// (its own singleton group) when no grouping is recorded for it. Caller holds
+// legMu.
+func (m *routeMux) groupOf(i int) int {
+	if i < len(m.legGroups) {
+		return m.legGroups[i]
+	}
+	return i
 }
 
 // removeLegs drops the given ORIGINAL leg indices from legs[] and ready[] so
@@ -364,6 +711,25 @@ func (m *routeMux) legReadyAt(idx int) bool {
 	return m.ready[idx]
 }
 
+// legSelectableIgnoringStandby reports whether leg idx may carry a packet as an
+// EMERGENCY FAILOVER target — the same readiness gate as legReadyAt but WITHOUT
+// the warm-standby exclusion. A parked leg keeps its rules installed and its
+// transport alive, and was ready (peer-confirmed) before it was parked, so it
+// can carry traffic the instant no active leg is available. selectTransport uses
+// this only as a last resort, after every active leg has been found dead/not-
+// ready, so the connection never dies while ANY leg in the group is alive.
+func (m *routeMux) legSelectableIgnoringStandby(idx int) bool {
+	if idx < 0 {
+		return false
+	}
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	if idx >= len(m.ready) {
+		return idx == 0
+	}
+	return m.ready[idx]
+}
+
 // setLegStandby marks (or clears) leg idx as a warm standby: kept alive but
 // not selected for sending. Bounds-checked; the primary leg (0) cannot be put
 // on standby (a group must always have a selectable send leg). Clearing the
@@ -377,6 +743,71 @@ func (m *routeMux) setLegStandby(idx int, standby bool) {
 		m.standby[idx] = standby
 	}
 	m.legMu.Unlock()
+}
+
+// parkAllAuxStandby marks every aux leg (index > 0) as warm standby. Used by the
+// acceptor when leg-state signaling is negotiated so its active set starts EMPTY
+// and is filled only by the initiator's mirror promotes — the acceptor must never
+// send the bulk direction across a leg the initiator hasn't activated. Leg 0 (the
+// primary) is left active.
+func (m *routeMux) parkAllAuxStandby() {
+	m.legMu.Lock()
+	for i := 1; i < len(m.standby); i++ {
+		m.standby[i] = true
+	}
+	m.legMu.Unlock()
+}
+
+// swapLegs exchanges the mux's per-leg state (counters, readiness, standby
+// marker) between two leg indices so the primary slot (0) can be RE-ELECTED
+// onto a healthier leg without tearing down any route. The caller (RouteGroup.
+// reelectPrimary) swaps the parallel tps[]/fwd[]/rvs[] entries in the same
+// critical section, so leg accounting and rules stay attached to their own
+// transport across the swap. After the swap the new primary (whatever leg landed
+// at index 0) is forced ready and out of standby — it is chosen from the active,
+// carrying set, so this is belt-and-suspenders, not a state change. Bounds-
+// checked; a no-op if either index is out of range or i == j.
+func (m *routeMux) swapLegs(i, j int) {
+	if i == j || i < 0 || j < 0 {
+		return
+	}
+	m.legMu.Lock()
+	defer m.legMu.Unlock()
+	if i < len(m.legs) && j < len(m.legs) {
+		m.legs[i], m.legs[j] = m.legs[j], m.legs[i]
+	}
+	if i < len(m.ready) && j < len(m.ready) {
+		m.ready[i], m.ready[j] = m.ready[j], m.ready[i]
+	}
+	if i < len(m.standby) && j < len(m.standby) {
+		m.standby[i], m.standby[j] = m.standby[j], m.standby[i]
+	}
+	// Re-assert the leg-0 invariants: the primary is always ready and never
+	// standby. (The re-elected leg was active and carrying, so this only guards
+	// against a stale flag.)
+	if len(m.ready) > 0 {
+		m.ready[0] = true
+	}
+	if len(m.standby) > 0 {
+		m.standby[0] = false
+	}
+}
+
+// activeLegCount reports how many legs are currently active (not warm standby)
+// — the striped set width. Used for wedge/hold diagnostics.
+func (m *routeMux) activeLegCount() int {
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	if len(m.standby) == 0 {
+		return len(m.legs)
+	}
+	active := 0
+	for _, s := range m.standby {
+		if !s {
+			active++
+		}
+	}
+	return active
 }
 
 // isLegStandby reports whether leg idx is a warm standby. Bounds-checked.
@@ -419,6 +850,51 @@ func (m *routeMux) recordRecv(idx int, n uint64) {
 	m.legMu.RUnlock()
 }
 
+// recordPayload atomically credits leg idx with n bytes of UNIQUE in-order
+// payload (a seq's first arrival). Same bounds-check semantics as recordRecv.
+func (m *routeMux) recordPayload(idx int, n uint64) {
+	if idx < 0 {
+		return
+	}
+	m.legMu.RLock()
+	if idx < len(m.legs) {
+		atomic.AddUint64(&m.legs[idx].payloadBytes, n)
+	}
+	m.legMu.RUnlock()
+}
+
+// recordDup atomically credits leg idx with n bytes of DUPLICATE data (a seq
+// that had already been delivered or buffered when it arrived on this leg).
+// Splitting dupBytes out of recvBytes is what attributes a "standby leg with
+// traffic" honestly: the peer's spurious retransmits ride the fastest leg
+// (resendSeqs → selectFastestTransport), which is typically the parked direct
+// leg, and without this counter that flow is indistinguishable from striped
+// payload. Same bounds-check semantics as recordRecv.
+func (m *routeMux) recordDup(idx int, n uint64) {
+	if idx < 0 {
+		return
+	}
+	m.legMu.RLock()
+	if idx < len(m.legs) {
+		atomic.AddUint64(&m.legs[idx].dupBytes, n)
+	}
+	m.legMu.RUnlock()
+}
+
+// recordRepair atomically credits leg idx with n bytes of FEC repair frames.
+// Repairs are overhead by design (they buy gap-fill latency); counting them
+// per leg separates that deliberate cost from spurious-retransmit waste.
+func (m *routeMux) recordRepair(idx int, n uint64) {
+	if idx < 0 {
+		return
+	}
+	m.legMu.RLock()
+	if idx < len(m.legs) {
+		atomic.AddUint64(&m.legs[idx].repairBytes, n)
+	}
+	m.legMu.RUnlock()
+}
+
 // recordRetransmit atomically increments the retransmit counter for leg
 // idx (the leg that carried a SACK retransmit). The retransmitted bytes
 // are still recorded via recordSent; this is the separate loss signal.
@@ -447,30 +923,98 @@ func (m *routeMux) retransmitsAt(idx int) uint64 {
 	return 0
 }
 
-// snapshotLegs returns a stable copy of the current per-leg counters.
-// Atomic loads, no locking against in-flight increments — the
-// snapshot is point-in-time and the underlying counters keep moving.
+// snapshotLegs returns a stable copy of the current per-leg counters and, as a
+// side effect, samples each leg's goodput RATE (bytes/sec EWMA) over the window
+// since the previous snapshot. The byte/packet counters are point-in-time
+// atomic loads; the rate is maintained under legMu (a write lock) so concurrent
+// observers don't corrupt the per-leg sample state. Called at telemetry/UI
+// cadence (the status page's ~1s push, CLI mux-info), never on the data path.
 func (m *routeMux) snapshotLegs() []LegStats {
-	m.legMu.RLock()
+	now := time.Now().UnixNano()
+	m.legMu.Lock()
 	out := make([]LegStats, len(m.legs))
 	for i, c := range m.legs {
+		sent := atomic.LoadUint64(&c.sentBytes)
+		recv := atomic.LoadUint64(&c.recvBytes)
+		m.sampleGoodput(c, sent, recv, now)
 		out[i] = LegStats{
-			Index:       i,
-			SentBytes:   atomic.LoadUint64(&c.sentBytes),
-			SentPackets: atomic.LoadUint64(&c.sentPackets),
-			RecvBytes:   atomic.LoadUint64(&c.recvBytes),
-			RecvPackets: atomic.LoadUint64(&c.recvPackets),
-			Retransmits: atomic.LoadUint64(&c.retransmits),
+			Index:          i,
+			SentBytes:      sent,
+			SentPackets:    atomic.LoadUint64(&c.sentPackets),
+			RecvBytes:      recv,
+			RecvPackets:    atomic.LoadUint64(&c.recvPackets),
+			PayloadBytes:   atomic.LoadUint64(&c.payloadBytes),
+			DupBytes:       atomic.LoadUint64(&c.dupBytes),
+			RepairBytes:    atomic.LoadUint64(&c.repairBytes),
+			Retransmits:    atomic.LoadUint64(&c.retransmits),
+			GoodputUpBps:   c.goodputUpBps,
+			GoodputDownBps: c.goodputDownBps,
+			GoodputBps:     c.goodputUpBps + c.goodputDownBps,
 		}
 	}
-	m.legMu.RUnlock()
+	m.legMu.Unlock()
 	return out
 }
 
-// wrapPayload creates a sequenced data packet and optionally stores it for retransmission.
+// sampleGoodput updates leg c's per-direction goodput EWMAs from the sent and
+// recv byte counters observed at wall-clock now (UnixNano). Caller holds legMu
+// for writing. The first observation only seeds the baseline (no rate emitted).
+// To keep the metric stable when several observers interleave, samples closer
+// together than goodputMinSampleNano are skipped and the stored rates are left
+// unchanged.
+func (m *routeMux) sampleGoodput(c *legCounters, sent, recv uint64, now int64) {
+	if c.lastRateNano == 0 {
+		c.lastRateSentBytes = sent
+		c.lastRateRecvBytes = recv
+		c.lastRateNano = now
+		return
+	}
+	elapsed := now - c.lastRateNano
+	if elapsed < goodputMinSampleNano {
+		return
+	}
+	secs := float64(elapsed) / float64(time.Second)
+	c.goodputUpBps = ewmaRate(c.goodputUpBps, byteDelta(sent, c.lastRateSentBytes), secs)
+	c.goodputDownBps = ewmaRate(c.goodputDownBps, byteDelta(recv, c.lastRateRecvBytes), secs)
+	c.lastRateSentBytes = sent
+	c.lastRateRecvBytes = recv
+	c.lastRateNano = now
+}
+
+// byteDelta is cur-prev, clamped at 0 so a counter reset (route rebuild) yields
+// no negative rate.
+func byteDelta(cur, prev uint64) uint64 {
+	if cur >= prev {
+		return cur - prev
+	}
+	return 0
+}
+
+// ewmaRate folds a byte delta over secs seconds into the running bytes/sec EWMA
+// (goodputEWMAAlpha weights the newest sample). A zero prior seeds directly.
+func ewmaRate(prev float64, delta uint64, secs float64) float64 {
+	sample := float64(delta) / secs
+	if prev == 0 {
+		return sample
+	}
+	return goodputEWMAAlpha*sample + (1-goodputEWMAAlpha)*prev
+}
+
+// wrapPayload creates a sequenced data packet and optionally stores it for
+// retransmission, tagged with the TRANSPORT UUID of the leg it is about to be
+// sent on (uuid.Nil = unknown) so the demote-time flush can target only the
+// stranded leg's sequences. The tag is the transport identity, not the leg
+// index — indices shift on slice compaction.
 // Returns the packet and the sequence number used.
-func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte) (routing.Packet, uint32, error) {
+func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte, tpID uuid.UUID) (routing.Packet, uint32, error) {
 	seq := atomic.AddUint32(&m.writeSeq, 1) - 1
+	// Per-frame AEAD: seal the app payload under seq as the nonce. The sealed
+	// bytes are what go on the wire AND into the retx buffer, so a SACK
+	// retransmit resends the identical sealed frame (same seq ⇒ same nonce ⇒
+	// same ciphertext), and the receiver opens it independently, out of order.
+	if m.seal != nil {
+		data = m.seal(seq, data)
+	}
 	packet, err := routing.MakeSequencedDataPacket(routeID, seq, data)
 	if err != nil {
 		return nil, 0, err
@@ -478,8 +1022,17 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte) (routing.Pa
 
 	// Store for retransmission before sending
 	if m.sackEnabled && m.retxBuf != nil {
-		m.retxBuf.Store(seq, data) //nolint:errcheck
+		m.retxBuf.Store(seq, data, tpID) //nolint:errcheck
 	}
+
+	// FEC: feed the on-wire (post-seal) payload to the striper. A completed block
+	// queues R repair frames for the send loop (RouteGroup.write) to schedule on a
+	// fast leg. Inert unless CapFEC was negotiated.
+	m.fecOnSend(seq, data)
+
+	// Stamp the TLP idle timer: new data just went out, so the tail-loss probe
+	// clock restarts. A probe only fires once this stays quiet for a PTO.
+	atomic.StoreInt64(&m.lastSendNano, time.Now().UnixNano())
 
 	return packet, seq, nil
 }
@@ -487,7 +1040,55 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte) (routing.Pa
 // deliverData inserts a received sequenced packet into the reorder buffer
 // and returns any payloads that are now deliverable in order.
 // Also tracks the sequence for SACK generation.
-func (m *routeMux) deliverData(seq uint32, data []byte) (delivered [][]byte, gapDetected bool) {
+//
+// leg is the arrival leg index (the transport this frame came in on). A seq seen
+// here for the FIRST time credits that leg's payloadBytes with the frame's app
+// payload — so per-leg payloadBytes attributes the transfer's unique payload to
+// the legs that actually carried it, retransmits/duplicates excluded. Pass a
+// negative leg to skip attribution (callers/tests without a leg context).
+func (m *routeMux) deliverData(leg int, seq uint32, data []byte) (delivered [][]byte, gapDetected bool) {
+	// FEC: record the on-wire (pre-open) payload so a sibling in this block can be
+	// reconstructed if it is late/lost on a slow leg. Inert unless CapFEC
+	// negotiated. Must run BEFORE open — reconstruction reproduces the on-wire
+	// frame, which is then opened via the same path below.
+	m.fecOnRecvData(seq, data)
+
+	// Per-frame AEAD: open the frame under its sequence-nonce before it enters
+	// the reorder buffer. A frame that fails to open (tamper, or a stale
+	// duplicate whose seq the peer reused after a rekey) is dropped, exactly as
+	// a corrupt packet would be — never delivered. SACK/reorder then treat it as
+	// not-yet-received and it is retransmitted if genuinely missing.
+	if m.open != nil {
+		pt, err := m.open(seq, data)
+		if err != nil {
+			if m.logger != nil {
+				m.logger.WithError(err).Tracef("per-frame open failed for seq %d; dropping", seq)
+			}
+			return nil, false
+		}
+		data = pt
+	}
+
+	// Attribute UNIQUE payload to the arrival leg: credit this leg only the FIRST
+	// time a seq arrives, so a retransmit of a seq already seen on another leg is
+	// not double-counted and the per-leg payloadBytes sum equals the transfer
+	// size. Already-delivered is seq < reorderBuf.NextSeq (no seq-0 ambiguity);
+	// already-buffered-out-of-order is the received set. Checked BEFORE
+	// RecordReceived/Insert record this seq.
+	if leg >= 0 {
+		isNew := true
+		if m.reorderBuf != nil && seq < m.reorderBuf.NextSeq() {
+			isNew = false // already delivered
+		} else if m.sackTracker != nil && m.sackTracker.alreadyBuffered(seq) {
+			isNew = false // already buffered out of order
+		}
+		if isNew {
+			m.recordPayload(leg, uint64(len(data)))
+		} else {
+			m.recordDup(leg, uint64(len(data)))
+		}
+	}
+
 	// Track for SACK generation
 	if m.sackEnabled && m.sackTracker != nil {
 		gapDetected = m.sackTracker.RecordReceived(seq)
@@ -500,6 +1101,16 @@ func (m *routeMux) deliverData(seq uint32, data []byte) (delivered [][]byte, gap
 		m.sackTracker.AdvanceContiguous(m.reorderBuf.NextSeq())
 	}
 
+	// FEC: if the frontier is now gap-blocked but this frame completed a block's
+	// K-of-(K+R) quorum, reconstruct the stuck frontier frame(s) and append them
+	// to the delivered run so they reach the app in order — no wait on the slow
+	// leg. Inert unless CapFEC negotiated.
+	if m.fecEnabled {
+		if extra := m.fecTryAdvance(); len(extra) > 0 {
+			delivered = append(delivered, extra...)
+		}
+	}
+
 	return delivered, gapDetected
 }
 
@@ -510,6 +1121,41 @@ func (m *routeMux) gapAge() time.Duration {
 		return 0
 	}
 	return m.reorderBuf.GapAge()
+}
+
+// reorderPending reports how many packets are currently buffered out-of-order
+// on the receive side (0 when the stream is contiguous). A climbing value while
+// a gap stays open is the head-of-line-blocking signal for a stalled leg.
+func (m *routeMux) reorderPending() int {
+	if m.reorderBuf == nil {
+		return 0
+	}
+	return m.reorderBuf.Pending()
+}
+
+// reorderNextSeq returns the sequence number the receive-side reorder buffer is
+// waiting on (the frontier). When a gap is stuck this is the missing seq whose
+// leg has stalled — the key datum for diagnosing a reorder wedge.
+func (m *routeMux) reorderNextSeq() uint32 {
+	if m.reorderBuf == nil {
+		return 0
+	}
+	return m.reorderBuf.NextSeq()
+}
+
+// writeSeqValue returns the count of DATA frames this mux has emitted (the next
+// outgoing sequence number). A cheap aggregate outbound-progress counter.
+func (m *routeMux) writeSeqValue() uint32 {
+	return atomic.LoadUint32(&m.writeSeq)
+}
+
+// distributionMode returns the selector's current weight mode (how packets are
+// spread across the legs). WeightModeAuto when the selector is absent.
+func (m *routeMux) distributionMode() WeightMode {
+	if m.tpSelector == nil {
+		return WeightModeAuto
+	}
+	return m.tpSelector.Mode()
 }
 
 // sackMinInterval is the minimum spacing between receiver-side SACKs. It is
@@ -530,6 +1176,22 @@ func (m *routeMux) shouldSendSACK() bool {
 	return atomic.CompareAndSwapInt64(&m.lastSACKNano, prev, now)
 }
 
+// shouldSendHolSACK reports whether enough time has elapsed since the last
+// PROACTIVE HoL SACK to send another, rate-limited to about one fast-leg RTT
+// (interval) so a persistent frontier stall re-nudges the sender roughly once
+// per round-trip rather than on every arriving out-of-order packet. Uses its own
+// holSACKNano clock, independent of the window-ack SACK limiter (shouldSendSACK),
+// so the two never rate-limit each other out. Concurrency-safe: only the
+// goroutine that wins the CAS returns true.
+func (m *routeMux) shouldSendHolSACK(interval time.Duration) bool {
+	now := time.Now().UnixNano()
+	prev := atomic.LoadInt64(&m.holSACKNano)
+	if now-prev < int64(interval) {
+		return false
+	}
+	return atomic.CompareAndSwapInt64(&m.holSACKNano, prev, now)
+}
+
 // generateSACK returns the current SACK state for sending to the peer:
 // the last contiguous sequence plus a full-window received bitmap.
 func (m *routeMux) generateSACK() (lastContig uint32, words []uint64) {
@@ -539,12 +1201,95 @@ func (m *routeMux) generateSACK() (lastContig uint32, words []uint64) {
 	return m.sackTracker.GenerateSACK()
 }
 
-// processSACK processes a received SACK and returns sequences that need retransmission.
+// processSACK processes a received SACK and returns sequences that need
+// retransmission. Retained for callers/tests that don't carry the DSACK/ack-edge
+// side effects; the live receive path uses onSACKReceived (see rack_tlp.go).
 func (m *routeMux) processSACK(lastContig uint32, words []uint64) []uint32 {
 	if !m.sackEnabled || m.retxBuf == nil {
 		return nil
 	}
-	return m.retxBuf.ProcessSACK(lastContig, words)
+	return m.retxBuf.ProcessSACK(lastContig, words, m.rackThreshold())
+}
+
+// takeDSACK returns a pending DSACK sequence (a duplicate the receiver saw) to
+// attach to the next outgoing SACK, clearing it so it is reported once. Returns
+// (0, false) when SACK is off or no duplicate is pending.
+func (m *routeMux) takeDSACK() (uint32, bool) {
+	if !m.sackEnabled || m.sackTracker == nil {
+		return 0, false
+	}
+	return m.sackTracker.takeDSACK()
+}
+
+// RACK-TLP retransmit-threshold bounds (RFC 8985 in spirit). Replaces the fixed
+// 750ms retxMinAge with a value derived from the live per-leg RTTs, so loss on a
+// fast path is recovered in tens of ms instead of always waiting ~750ms, while a
+// genuinely slow leg still isn't declared lost prematurely.
+const (
+	rackReorderFactor = 1.25                    // slow-leg RTT × this = the reordering tolerance
+	rackFloor         = 60 * time.Millisecond   // never retransmit sooner than this (anti-storm)
+	rackCeil          = 1500 * time.Millisecond // never wait longer than this
+	rackDefaultNoRTT  = 300 * time.Millisecond  // before any leg RTT is measured
+)
+
+// rackThreshold computes the current reorder-tolerant retransmit threshold from
+// the live ACTIVE-leg RTTs: a sequence is presumed lost (not merely reordered on
+// a slower leg) once it has been outstanding longer than this. The reordering
+// window on a multi-leg mux IS the inter-leg RTT skew, so we bound the threshold
+// at the SLOWEST active leg's RTT × rackReorderFactor — a frame striped onto any
+// leg should arrive within the slow leg's RTT plus a jitter margin; past that it
+// is lost. Adapts per-SACK to the measured path (RFC 8985's RTT-derived expiry),
+// floored/capped to avoid a self-amplifying early-retransmit storm or an
+// unbounded wait. Falls back to a conservative default until RTTs are known.
+func (m *routeMux) rackThreshold() time.Duration {
+	maxRtt := m.maxActiveLegRTTms()
+	if maxRtt <= 0 {
+		return rackDefaultNoRTT
+	}
+	th := time.Duration(maxRtt*m.rackFactor()) * time.Millisecond
+	if th < rackFloor {
+		th = rackFloor
+	}
+	// The absolute ceiling bounds the wait for a genuine loss, but it must
+	// never undercut one measured RTT: when queueing delay inflates the
+	// slow-leg EWMA past rackCeil (bufferbloat under load can push it to many
+	// seconds), presuming loss at a fixed 1.5s declares EVERY in-flight packet
+	// lost forever — the observed retransmit storm, which the DSACK-widened
+	// factor could not counter because this same clamp overrode it. Floor the
+	// ceiling at one measured RTT: waiting less than one RTT for an ack is
+	// definitionally spurious, and the wait stays bounded (max(rackCeil, RTT))
+	// rather than unbounded.
+	ceil := rackCeil
+	if rttDur := time.Duration(maxRtt) * time.Millisecond; rttDur > ceil {
+		ceil = rttDur
+	}
+	if th > ceil {
+		th = ceil
+	}
+	return th
+}
+
+// maxActiveLegRTTms returns the slowest active (non-standby) leg's EWMA RTT in
+// milliseconds, or 0 when no leg has a measured RTT yet. It is the reordering-
+// window basis: a frame striped onto any active leg should arrive within the
+// slowest leg's RTT plus a margin, so both the RACK loss threshold and the TLP
+// probe timeout are derived from it.
+func (m *routeMux) maxActiveLegRTTms() float64 {
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	maxRtt := 0.0
+	for i, lc := range m.legs {
+		if lc == nil {
+			continue
+		}
+		if i < len(m.standby) && m.standby[i] {
+			continue // active legs only
+		}
+		if lc.ecfRttMs > maxRtt {
+			maxRtt = lc.ecfRttMs
+		}
+	}
+	return maxRtt
 }
 
 // getRetxPayload retrieves a stored payload for retransmission.
@@ -566,6 +1311,34 @@ func (m *routeMux) heldRetxSeqs() []uint32 {
 	return m.retxBuf.Seqs()
 }
 
+// heldRetxSeqsOnTps returns the held sequences whose LAST send rode one of the
+// given transports (unknown-tag entries included conservatively), ascending.
+// The demote-time flush uses this to rescue only the sequences the demoted
+// leg(s) actually strand, instead of duplicating the whole in-flight window
+// onto the surviving legs. Keyed by transport UUID, never leg index — indices
+// shift on slice compaction and a stale index tag wedged live sessions.
+func (m *routeMux) heldRetxSeqsOnTps(tpIDs []uuid.UUID) []uint32 {
+	if !m.sackEnabled || m.retxBuf == nil || len(tpIDs) == 0 {
+		return nil
+	}
+	set := make(map[uuid.UUID]bool, len(tpIDs))
+	for _, id := range tpIDs {
+		if id != uuid.Nil {
+			set[id] = true
+		}
+	}
+	return m.retxBuf.HeldSeqsOnTps(set)
+}
+
+// retxSetTp re-tags a held sequence's last-send transport after a retransmit
+// moved it to a different leg, keeping the demote-flush attribution honest.
+func (m *routeMux) retxSetTp(seq uint32, tpID uuid.UUID) {
+	if m.retxBuf == nil {
+		return
+	}
+	m.retxBuf.SetTpID(seq, tpID)
+}
+
 // rebuildWeights updates transport selection weights based on current latency.
 func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 	if m.tpSelector == nil {
@@ -580,7 +1353,9 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 	// whichever leg carried first).
 	if m.tpSelector.Mode() == WeightModeCapacity {
 		m.legMu.Lock()
-		weights := make([]float64, len(m.legs))
+		// Per-leg recent throughput (bytes moved since the last rebuild).
+		deltas := make([]float64, len(m.legs))
+		active := make([]bool, len(m.legs))
 		for i, lc := range m.legs {
 			if lc == nil {
 				continue
@@ -588,10 +1363,149 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 			total := atomic.LoadUint64(&lc.sentBytes) + atomic.LoadUint64(&lc.recvBytes)
 			delta := total - lc.lastTotalBytes
 			lc.lastTotalBytes = total
-			weights[i] = float64(delta)
+			deltas[i] = float64(delta)
+			// A warm-standby leg carries no send traffic — it must get zero weight
+			// so the scheduler never steers a packet onto a parked leg (which the
+			// receiver isn't expecting on that route and would stall the reorder
+			// frontier on). Its byte counter was still sampled above so a later
+			// promotion starts from a fresh delta, not a stale backlog.
+			active[i] = !(i < len(m.standby) && m.standby[i])
+		}
+		// SHARED-BOTTLENECK COLLAPSE (RFC 8382): legs that funnel through the same
+		// physical pipe (groupOf()) must be counted as ONE unit of capacity, not N
+		// competing pipes — otherwise a 3-leg shared group out-weighs a lone
+		// independent leg 3:1 and over-subscribes the one pipe while starving the
+		// distinct route. For each group, ONE representative (the active member
+		// moving the most bytes; ties → lowest index) carries the group's AGGREGATE
+		// throughput (the pipe's real rate = sum of its active members' deltas); the
+		// other members get zero send weight so the scheduler stops striping the same
+		// pipe across redundant legs (which only adds reorder cost). Independent legs
+		// are their own singleton group, so this is a no-op for them and the
+		// pre-grouping behavior is unchanged when no bottleneck is detected.
+		rep := make(map[int]int, len(m.legs)) // group id -> representative leg index
+		groupSum := make(map[int]float64, len(m.legs))
+		for i, lc := range m.legs {
+			if lc == nil || !active[i] {
+				continue
+			}
+			g := m.groupOf(i)
+			groupSum[g] += deltas[i]
+			cur, ok := rep[g]
+			if !ok || deltas[i] > deltas[cur] {
+				rep[g] = i
+			}
+		}
+		weights := make([]float64, len(m.legs))
+		var maxW float64
+		for g, r := range rep {
+			weights[r] = groupSum[g]
+			if weights[r] > maxW {
+				maxW = weights[r]
+			}
+		}
+		// Cold-leg floor (the weighted-RAMP): a just-promoted representative has
+		// moved ~no bytes yet, so its raw delta is ~0 — under pure capacity weighting
+		// it would get ~no traffic and thus never accumulate the goodput it needs to
+		// earn a real share (a starvation deadlock). Give every active group's
+		// REPRESENTATIVE a floor share = capacityColdFloorFrac of the fastest group,
+		// so a fresh pipe carries a THIN trickle, measures its goodput, and ramps up.
+		// Applied per group (one floor unit per distinct pipe, never per redundant
+		// co-bottlenecked leg). Skipped when every group is idle (maxW == 0) so an
+		// idle mux doesn't manufacture phantom weight.
+		if maxW > 0 {
+			floor := maxW * capacityColdFloorFrac
+			for _, r := range rep {
+				if weights[r] < floor {
+					weights[r] = floor
+				}
+			}
 		}
 		m.legMu.Unlock()
 		m.tpSelector.SetCapacityWeights(weights)
+	}
+	// ECF mode: build the per-leg {rate, RTT, jitter, ready, BDP} snapshot the
+	// predictive scheduler reasons over. Rate is the sent-byte delta over the
+	// refresh window (computed here, not from snapshotLegs, so it works even
+	// when nothing is observing the telemetry page). RTT is the leg's first-hop
+	// transport latency (tp.GetLatency(), ms) — the end-to-end route latency
+	// would be more accurate but is not reachable from the mux; noted as a
+	// follow-up. Jitter is an EWMA of |RTT-mean|, the ECF sigma margin.
+	//
+	// OTIAS and STMS reason over the SAME ecfLegState snapshot (rate + RTT +
+	// jitter + BDP + the selector-tracked in-flight estimate), so this one
+	// branch feeds all three predictive schedulers; only the per-frame pick in
+	// the selector differs (ecfPick vs otiasPick vs stmsPick).
+	if m.tpSelector.Mode().isPredictive() {
+		m.legMu.Lock()
+		now := time.Now().UnixNano()
+		var elapsed float64
+		if m.ecfLastRebuildNano != 0 {
+			elapsed = float64(now-m.ecfLastRebuildNano) / float64(time.Second)
+		}
+		states := make([]ecfLegState, len(m.legs))
+		for i, lc := range m.legs {
+			if lc == nil {
+				continue
+			}
+			// Send rate over the refresh window (bytes/sec).
+			sent := atomic.LoadUint64(&lc.sentBytes)
+			var rate float64
+			if elapsed > 0 {
+				rate = float64(byteDelta(sent, lc.ecfLastSentBytes)) / elapsed
+			}
+			lc.ecfLastSentBytes = sent
+			// RTT EWMA + jitter (sigma) EWMA.
+			var rttMs float64
+			if i < len(tps) && tps[i] != nil {
+				rttMs = tps[i].GetLatency()
+			}
+			if rttMs > 0 {
+				if lc.ecfRttMs == 0 {
+					lc.ecfRttMs = rttMs
+					lc.ecfRttMinMs = rttMs
+				} else {
+					dev := rttMs - lc.ecfRttMs
+					if dev < 0 {
+						dev = -dev
+					}
+					lc.ecfJitterMs = ecfJitterAlpha*dev + (1-ecfJitterAlpha)*lc.ecfJitterMs
+					lc.ecfRttMs = ecfRttAlpha*rttMs + (1-ecfRttAlpha)*lc.ecfRttMs
+					// Baseline RTT = running minimum with a slow upward creep: a
+					// transient congestion spike never raises it, but a leg whose
+					// true latency rose for good is eventually tracked.
+					if rttMs < lc.ecfRttMinMs {
+						lc.ecfRttMinMs = rttMs
+					} else {
+						lc.ecfRttMinMs += ecfRttMinCreep * (lc.ecfRttMs - lc.ecfRttMinMs)
+					}
+				}
+			}
+			// BDP latency = the baseline (uncongested) RTT, never the live RTT,
+			// so a stalling leg's inflating RTT cannot grow its own cwnd and pull
+			// more traffic onto itself.
+			bdpRttMs := lc.ecfRttMinMs
+			if bdpRttMs <= 0 {
+				bdpRttMs = lc.ecfRttMs
+			}
+			ready := true
+			if i < len(m.standby) && m.standby[i] {
+				ready = false
+			}
+			if i < len(m.ready) && !m.ready[i] {
+				ready = false
+			}
+			states[i] = ecfLegState{
+				rttMs:     lc.ecfRttMs,
+				rttMinMs:  lc.ecfRttMinMs,
+				jitterMs:  lc.ecfJitterMs,
+				rateBps:   rate,
+				cwndBytes: rate * bdpRttMs / 1000.0,
+				ready:     ready,
+			}
+		}
+		m.ecfLastRebuildNano = now
+		m.legMu.Unlock()
+		m.tpSelector.SetECFState(states)
 	}
 	m.tpSelector.Rebuild(tps)
 }

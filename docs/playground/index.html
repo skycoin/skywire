@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>skywire playground</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e0c14;color:#cdd2da;font:14px/1.5 system-ui,sans-serif}
+  #boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8em;z-index:10}
+  #boot .t{color:#9d7cff;font:600 18px system-ui}
+  #boot .s{color:#9aa0a6;font:12px monospace;max-width:44em;text-align:center}
+  #boot.gone{display:none}
+</style>
+</head>
+<body>
+<div id="boot">
+  <div class="t">skywire playground</div>
+  <div class="s" id="boot-msg">loading…</div>
+</div>
+<script>
+// Early error trap: keep uncaught-error stacks for diagnosis without devtools.
+window.__errs = [];
+Error.stackTraceLimit = 300;
+addEventListener('error', function (e) {
+  if (window.__errs.length < 20) {
+    var s = String((e.error && e.error.stack) || e.message || e);
+    window.__errs.push(s.slice(0, 600) + '\n…\n' + s.slice(-2400));
+  }
+});
+</script>
+<!-- Go's wasm_exec loader (standard Go — every module here is a std-Go build). -->
+<script src="wasm_exec.js"></script>
+<!-- The desk bundle: bottle (jsfs + vnet) → skywire seeding → winbox → browse.js → skywire-exec. -->
+<script src="bundle.js"></script>
+<script src="desk-boot.js"></script>
+<script>
+// The skywire playground: a browser tab laid out like a Linux host. No visor
+// runs by default — the desk opens with a terminal that has just run
+// `skywire --help`, and the Linux ritual is typed from there:
+//
+//   skywire autoconfig                        # visor starts IN this terminal
+//   skywire cli visor info                    # from a second terminal (☰ → console)
+//   skywire cli proxy start <exit-pk>         # SOCKS5 on 127.0.0.1:1080
+//   curl -x socks5h://127.0.0.1:1080 https://example.com/
+//
+// The nested browser reaches the visor's hypervisor UI at http://127.0.0.1:8001
+// over the tab's virtual loopback, and the filesystem persists in IndexedDB.
+skywireDeskBoot({
+  persistDB: 'skywire-playground',
+  autostartVisor: false,
+  helpTerminal: true,
+  onStatus: function (s) { var el = document.getElementById('boot-msg'); if (el) el.textContent = s; },
+}).then(function () {
+  document.getElementById('boot').className = 'gone';
+}).catch(function (e) {
+  var el = document.getElementById('boot-msg');
+  if (el) el.textContent = 'boot failed: ' + ((e && e.message) || e);
+});
+</script>
+</body>
+</html>

@@ -47,7 +47,14 @@ func (v *Visor) AddPtyWhitelist(pks []cipher.PubKey) error {
 		v.log.WithField("pk", pk.String()).
 			Info("Adding PK to peer whitelist (transitive hypervisor trust)")
 	}
-	return v.peerWhitelist.Add(pks...)
+	if err := v.peerWhitelist.Add(pks...); err != nil {
+		return err
+	}
+	// The peer whitelist gates the visor's service-consumed CXO feeds
+	// (stats, tp-list, registration). Recompute + re-apply their allowlists
+	// so a newly-trusted hypervisor can immediately subscribe to them.
+	v.refreshGatedCXOAllowlists()
+	return nil
 }
 
 // AddPtyWhitelistIn carries the PKs to merge into the visor's shared

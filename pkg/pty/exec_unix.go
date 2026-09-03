@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !(js && wasm)
 
 // Package pty pkg/pty/exec_unix.go c3-vis-pty
 //

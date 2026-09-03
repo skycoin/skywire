@@ -1,10 +1,14 @@
 package router
 
 import (
+	"github.com/google/uuid"
+
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -96,12 +100,12 @@ func TestSACKTracker_FullWindowBitmap(t *testing.T) {
 func TestRetxBuffer_StoreAndPurge(t *testing.T) {
 	rb := newRetxBuffer(128)
 	for i := uint32(0); i < 10; i++ {
-		assert.True(t, rb.Store(i, []byte{byte(i)}))
+		assert.True(t, rb.Store(i, []byte{byte(i)}, uuid.Nil))
 	}
 	assert.Equal(t, 10, rb.Len())
 
 	// SACK: lastContiguous=5, bits 0-3 set = seqs 6,7,8,9 received
-	retx := rb.ProcessSACK(5, []uint64{0xF})
+	retx := rb.ProcessSACK(5, []uint64{0xF}, 0)
 	assert.Empty(t, retx)
 	assert.Equal(t, 0, rb.Len())
 }
@@ -109,7 +113,7 @@ func TestRetxBuffer_StoreAndPurge(t *testing.T) {
 func TestRetxBuffer_RetransmitList(t *testing.T) {
 	rb := newRetxBuffer(128)
 	for i := uint32(0); i < 8; i++ {
-		rb.Store(i, []byte{byte(i)})
+		rb.Store(i, []byte{byte(i)}, uuid.Nil)
 	}
 
 	// Age the stored entries past retxMinAge so ProcessSACK will list missing
@@ -119,11 +123,59 @@ func TestRetxBuffer_RetransmitList(t *testing.T) {
 	}
 
 	// SACK: lastContiguous=2, bitmap=0b1010 (seq 3 missing, 4 received, 5 missing, 6 received)
-	retx := rb.ProcessSACK(2, []uint64{0b1010})
+	retx := rb.ProcessSACK(2, []uint64{0b1010}, 0)
 	assert.Contains(t, retx, uint32(3))
 	assert.Contains(t, retx, uint32(5))
 	assert.NotContains(t, retx, uint32(4))
 	assert.NotContains(t, retx, uint32(6))
+}
+
+// TestRetxBuffer_RetxBackoffSuppressesDuplicates is the retransmit-storm
+// regression: SACKs arrive every ~25ms, so an overdue hole must be handed out
+// ONCE and then suppressed until its per-entry backoff (threshold, then
+// doubling) elapses — not re-selected by every subsequent SACK for as long as
+// the ack takes to come back. Without the suppression a single hole on a path
+// with seconds of queueing delay is retransmitted hundreds of times.
+func TestRetxBuffer_RetxBackoffSuppressesDuplicates(t *testing.T) {
+	rb := newRetxBuffer(128)
+	rb.Store(3, []byte{3}, uuid.Nil)
+	rb.entries[3].sentAt = time.Now().Add(-2 * retxMinAge)
+
+	// SACK: lastContiguous=2, seq 3 missing, seq 4 received.
+	sack := func() []uint32 { return rb.ProcessSACK(2, []uint64{0b10}, 0) }
+
+	assert.Equal(t, []uint32{3}, sack(), "overdue hole selected on first SACK")
+	assert.Empty(t, sack(), "immediate duplicate SACK must not re-select it")
+	assert.Empty(t, sack())
+
+	// backdate ages the entry's last transmission (both stamps — the selector
+	// keys off the LATER of the two) so the next due-check sees `d` elapsed.
+	backdate := func(d time.Duration) {
+		rb.entries[3].sentAt = time.Now().Add(-d)
+		rb.entries[3].lastTxAt = rb.entries[3].sentAt
+	}
+
+	// After one backoff interval (2×threshold for the 2nd retx) it is due again.
+	backdate(2*retxMinAge + time.Millisecond)
+	assert.Equal(t, []uint32{3}, sack(), "re-selected once the backoff elapses")
+	assert.Empty(t, sack(), "and suppressed again right after")
+
+	// Backoff doubles per retx: the 3rd needs 4×threshold, so 2× is not enough.
+	backdate(2*retxMinAge + time.Millisecond)
+	assert.Empty(t, sack(), "doubled backoff not yet elapsed")
+	backdate(4*retxMinAge + time.Millisecond)
+	assert.Equal(t, []uint32{3}, sack())
+
+	// The cap: retxCount keeps growing but the wait is bounded at
+	// threshold<<retxBackoffMaxShift.
+	for i := 0; i < 10; i++ {
+		backdate(retxMinAge << (retxBackoffMaxShift + 1))
+		assert.Equal(t, []uint32{3}, sack(), "capped backoff stays retryable")
+	}
+
+	// An ack finally purges it regardless of retx state.
+	assert.Empty(t, rb.ProcessSACK(2, []uint64{0b11}, 0))
+	assert.Nil(t, rb.Get(3))
 }
 
 // TestRetxBuffer_CapacityEvictsLowest verifies the full-buffer path now evicts
@@ -131,10 +183,10 @@ func TestRetxBuffer_RetransmitList(t *testing.T) {
 // the newest, instead of silently refusing to store the newest packet.
 func TestRetxBuffer_CapacityEvictsLowest(t *testing.T) {
 	rb := newRetxBuffer(3)
-	assert.True(t, rb.Store(0, []byte("a")))
-	assert.True(t, rb.Store(1, []byte("b")))
-	assert.True(t, rb.Store(2, []byte("c")))
-	assert.True(t, rb.Store(3, []byte("d"))) // full -> evict lowest (0), store 3
+	assert.True(t, rb.Store(0, []byte("a"), uuid.Nil))
+	assert.True(t, rb.Store(1, []byte("b"), uuid.Nil))
+	assert.True(t, rb.Store(2, []byte("c"), uuid.Nil))
+	assert.True(t, rb.Store(3, []byte("d"), uuid.Nil)) // full -> evict lowest (0), store 3
 	assert.Equal(t, 3, rb.Len())
 	assert.Nil(t, rb.Get(0), "lowest seq evicted")
 	assert.Equal(t, []byte("d"), rb.Get(3), "newest seq retained")
@@ -142,7 +194,7 @@ func TestRetxBuffer_CapacityEvictsLowest(t *testing.T) {
 
 func TestRetxBuffer_Get(t *testing.T) {
 	rb := newRetxBuffer(128)
-	rb.Store(42, []byte("hello"))
+	rb.Store(42, []byte("hello"), uuid.Nil)
 	assert.Equal(t, []byte("hello"), rb.Get(42))
 	assert.Nil(t, rb.Get(99))
 }
@@ -157,7 +209,7 @@ func TestRetxBuffer_NoFillBehindPersistentGap(t *testing.T) {
 	const sent = 3000
 	rb := newRetxBuffer(4096) // large so this isolates purge behavior, not eviction
 	for seq := uint32(1); seq <= sent; seq++ {
-		rb.Store(seq, []byte{byte(seq)})
+		rb.Store(seq, []byte{byte(seq)}, uuid.Nil)
 	}
 
 	// Receiver got 2..3000 but not seq 1 -> lastContiguous stuck at 0.
@@ -169,7 +221,7 @@ func TestRetxBuffer_NoFillBehindPersistentGap(t *testing.T) {
 	last, words := st.GenerateSACK()
 	assert.Equal(t, uint32(0), last)
 
-	rb.ProcessSACK(last, words)
+	rb.ProcessSACK(last, words, 0)
 
 	// seq 1 (the hole) retained for retransmit.
 	assert.NotNil(t, rb.Get(1), "the actual gap must stay retransmittable")
@@ -202,4 +254,45 @@ func TestSACKPacket_EmptyAndTrim(t *testing.T) {
 	// round-trips.
 	p2 := routing.MakeSACKPacket(1, 5, []uint64{0b101, 0, 0})
 	assert.Equal(t, []uint64{0b101}, p2.SACKWords())
+}
+
+// TestRackThreshold verifies the RACK retransmit threshold is derived from the
+// live active-leg RTTs (not the fixed 750ms), tolerates the slowest leg, and is
+// floored/capped. A fast path recovers loss far sooner than the old constant.
+func TestRackThreshold(t *testing.T) {
+	log := logging.NewMasterLogger().PackageLogger("rack-test")
+	m := newRouteMux(log, true)
+
+	// No RTT measured yet → conservative default.
+	if got := m.rackThreshold(); got != rackDefaultNoRTT {
+		t.Fatalf("no-RTT threshold = %v, want %v", got, rackDefaultNoRTT)
+	}
+
+	// Give it 4 active legs with a heterogeneous RTT spread; the threshold must
+	// track the SLOWEST active leg × factor (a frame on any leg should arrive
+	// within the slow leg's RTT + margin), well under the old fixed 750ms.
+	m.growLegs(4)
+	rtts := []float64{205, 260, 311, 441}
+	m.legMu.Lock()
+	for i, r := range rtts {
+		m.legs[i].ecfRttMs = r
+	}
+	m.legMu.Unlock()
+	want := time.Duration(rtts[3]*rackReorderFactor) * time.Millisecond // slowest leg × factor
+	if got := m.rackThreshold(); got != want {
+		t.Fatalf("heterogeneous threshold = %v, want %v (slowest 441ms × %.2f)", got, want, rackReorderFactor)
+	}
+	if got := m.rackThreshold(); got >= retxMinAge {
+		t.Fatalf("RACK threshold %v should beat the fixed retxMinAge %v on this path", got, retxMinAge)
+	}
+
+	// A tiny-RTT fast path floors at rackFloor (anti-storm), not near-zero.
+	m.legMu.Lock()
+	for i := range m.legs {
+		m.legs[i].ecfRttMs = 5
+	}
+	m.legMu.Unlock()
+	if got := m.rackThreshold(); got != rackFloor {
+		t.Fatalf("fast-path threshold = %v, want floor %v", got, rackFloor)
+	}
 }

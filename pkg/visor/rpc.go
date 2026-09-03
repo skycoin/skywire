@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
@@ -62,6 +63,16 @@ type AppLogsRequest struct {
 	// AppName should match the app name in visor config
 	AppName string `json:"app_name"`
 }
+
+// RecentAppLogRequest asks for the recent app-scoped route/transport events +
+// log lines captured in the log broadcaster's per-app ring.
+type RecentAppLogRequest struct {
+	// AppName should match the app name in visor config.
+	AppName string `json:"app_name"`
+	// Level is the minimum severity ("trace"|"debug"|"info"|"warn"|"error").
+	// Empty defaults to "debug".
+	Level string `json:"level"`
+}
 type TransportSummary struct {
 	ID      uuid.UUID           `json:"id"`
 	Local   cipher.PubKey       `json:"local_pk"`
@@ -86,6 +97,24 @@ type TransportSummary struct {
 	// (incoming). The transport is bidirectional — this records only
 	// who originated it, for in/out reporting.
 	Initiator bool `json:"initiator"`
+	// RemoteIP is the host portion of the underlying transport's raw
+	// remote address (e.g. "1.2.3.4"). Empty for dmsg — which relays
+	// through a server rather than dialing the peer directly, so an
+	// empty RemoteIP is itself the "relayed, not direct" signal.
+	// Populated from tp.RemoteIP().
+	RemoteIP string `json:"remote_ip,omitempty"`
+	// RemoteCountry is the ISO country code the embedded geoip db maps
+	// RemoteIP to (the same db the routing-policy provider uses). Empty
+	// when there is no direct IP (dmsg) or no geoip hit.
+	RemoteCountry string `json:"remote_country,omitempty"`
+	// Endpoint carries the per-transport-type low-level connection
+	// metadata — the direct IP:port for stcp/stcpr/sudph/squicr, the
+	// relaying dmsg server PK for dmsg, the QUIC TLS fingerprint/ALPN
+	// for squicr, the selected ICE candidate for webrtc. Secrets-free
+	// (dmsg = server PK only, never a secret key). nil when the
+	// transport isn't serving or its type exposes no details.
+	// Populated from tp.ConnDetails().
+	Endpoint *network.ConnDetails `json:"endpoint,omitempty"`
 }
 type TransportLogEntry struct {
 	TpID      uuid.UUID `json:"tp_id"`
@@ -108,6 +137,11 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 	}
 	if includeLogs {
 		summary.Log = tp.LogEntry
+	}
+	summary.Endpoint = tp.ConnDetails()
+	summary.RemoteIP = tp.RemoteIP()
+	if summary.RemoteIP != "" {
+		summary.RemoteCountry = geoCountryForIP(summary.RemoteIP)
 	}
 	return summary
 }
@@ -250,30 +284,119 @@ type RouteGroupInfo struct {
 // MuxRouteGroupInfo is one route-group's mux state plus per-leg
 // counters. Returned by RouteGroupMuxInfo for 'cli proxy mux-info'.
 type MuxRouteGroupInfo struct {
-	Desc        routing.RouteDescriptorFields `json:"desc"`
-	MuxEnabled  bool                          `json:"mux_enabled"`
-	SACKEnabled bool                          `json:"sack_enabled"`
-	Legs        []MuxLegInfo                  `json:"legs"`
+	Desc          routing.RouteDescriptorFields `json:"desc"`
+	MuxEnabled    bool                          `json:"mux_enabled"`
+	SACKEnabled   bool                          `json:"sack_enabled"`
+	PerFrameNoise bool                          `json:"per_frame_noise"`
+	// Directional: unidirectional send selection (CapUniDir) is active — each
+	// direction rides a disjoint leg class. Flipped: the direction->leg-class
+	// mapping is swapped (heavy direction took the mux). With per-leg `direct`,
+	// this tells which class carries which direction without log-grepping.
+	Directional bool `json:"directional,omitempty"`
+	Flipped     bool `json:"flipped,omitempty"`
+	// FlipPinned is the operator's MANUAL direction pin on a directional group:
+	// "auto" (flip controller in charge), "default" or "flipped" (mapping pinned,
+	// controller dormant until released). Empty on a non-directional mux.
+	FlipPinned string `json:"flip_pinned,omitempty"`
+	// Distribution names how the mux spreads outbound packets across its legs
+	// (weight mode: "auto", "round-robin", "weighted", "capacity",
+	// "latency-adaptive", "sticky:5tuple", "size-threshold", "dscp-priority").
+	// Empty for a single-leg / non-mux group.
+	Distribution string `json:"distribution,omitempty"`
+	// ReorderPending is the number of received packets buffered out-of-order
+	// (head-of-line-blocking depth); ReorderGapAgeMS is how long the current
+	// reorder frontier gap has stayed open in ms (0 when contiguous). A rising
+	// pending count with a growing gap age marks a stalled/black-holing leg.
+	ReorderPending  int     `json:"reorder_pending,omitempty"`
+	ReorderGapAgeMS float64 `json:"reorder_gap_age_ms,omitempty"`
+	// WriteSeq is the total DATA frames this mux has emitted outbound — a cheap
+	// aggregate send-progress counter across all legs.
+	WriteSeq uint32 `json:"write_seq,omitempty"`
+	// AggSentBytes / AggRecvBytes are the rg-scoped totals summed across every
+	// leg (what this route group moved, distinct from per-transport totals that
+	// also count other groups sharing the transport).
+	AggSentBytes uint64 `json:"agg_sent_bytes,omitempty"`
+	AggRecvBytes uint64 `json:"agg_recv_bytes,omitempty"`
+	// AggGoodputBps is the route-group's recent goodput — the sum of the
+	// per-leg goodput RATES (bytes/sec), i.e. what the whole group is moving
+	// right now, distinct from the cumulative AggSentBytes/AggRecvBytes totals.
+	// AggGoodputUpBps/AggGoodputDownBps split it by direction (sum of the
+	// per-leg send-rates / recv-rates); AggGoodputBps is their sum.
+	AggGoodputBps     float64 `json:"agg_goodput_bps,omitempty"`
+	AggGoodputUpBps   float64 `json:"agg_goodput_up_bps,omitempty"`
+	AggGoodputDownBps float64 `json:"agg_goodput_down_bps,omitempty"`
+	// FEC (forward error correction) telemetry. FECEnabled reports whether both
+	// peers negotiated CapFEC on this group. FECRepairBytesSent/Recv are cumulative
+	// repair-frame bytes scheduled onto / received from legs — the TRUE FEC
+	// overhead, separable from data (AggRecvBytes) and retransmit (per-leg
+	// Retransmits). FECReconstructs counts frontier frames recovered from repair
+	// (each a slow-leg head-of-line stall this group avoided).
+	FECEnabled         bool         `json:"fec_enabled,omitempty"`
+	FECRepairBytesSent uint64       `json:"fec_repair_bytes_sent,omitempty"`
+	FECRepairBytesRecv uint64       `json:"fec_repair_bytes_recv,omitempty"`
+	FECReconstructs    uint64       `json:"fec_reconstructs,omitempty"`
+	Legs               []MuxLegInfo `json:"legs"`
 }
 
 // MuxLegInfo is one route in a mux'd group.
 type MuxLegInfo struct {
-	Index       int     `json:"index"`
-	TransportID string  `json:"transport_id"`
-	TpType      string  `json:"tp_type"`
-	RemotePK    string  `json:"remote_pk"`
-	LatencyMS   float64 `json:"latency_ms,omitempty"`
-	SentBytes   uint64  `json:"sent_bytes"`
-	SentPackets uint64  `json:"sent_packets"`
-	RecvBytes   uint64  `json:"recv_bytes"`
-	RecvPackets uint64  `json:"recv_packets"`
+	Index       int    `json:"index"`
+	TransportID string `json:"transport_id"`
+	TpType      string `json:"tp_type"`
+	RemotePK    string `json:"remote_pk"`
+	// LatencyMS is the FIRST-HOP transport RTT; RouteLatencyMS is the leg's
+	// TRUE end-to-end route latency (all hops, from the leg-liveness pong) —
+	// on a multihop leg the two differ sharply. Direct is true for a 1-hop
+	// route straight to the destination, false for a relayed (multihop) leg.
+	LatencyMS      float64 `json:"latency_ms,omitempty"`
+	RouteLatencyMS float64 `json:"route_latency_ms,omitempty"`
+	Direct         bool    `json:"direct"`
+	SentBytes      uint64  `json:"sent_bytes"`
+	SentPackets    uint64  `json:"sent_packets"`
+	RecvBytes      uint64  `json:"recv_bytes"`
+	RecvPackets    uint64  `json:"recv_packets"`
+	// PayloadBytes is the UNIQUE in-order payload this leg delivered (each seq
+	// counted once, retransmits/duplicates excluded) — so per-leg values sum to
+	// the transfer size and cleanly attribute which legs carried a direction's
+	// data, unlike RecvBytes which includes retransmit inflation.
+	PayloadBytes uint64 `json:"payload_bytes"`
+	// DupBytes is inbound DUPLICATE data (seqs already delivered/buffered on
+	// arrival) — the peer's spurious-retransmit waste, which rides the fastest
+	// leg. RepairBytes is inbound FEC repair frames (deliberate overhead).
+	// With PayloadBytes they decompose RecvBytes, so a standby leg showing
+	// traffic is attributable from telemetry.
+	DupBytes    uint64 `json:"dup_bytes"`
+	RepairBytes uint64 `json:"repair_bytes"`
 	// Retransmits is SACK retransmit packets carried by this leg (loss
 	// signal). Alive/Standby are the leg's gate_state: Alive=false once the
 	// transport is closed; Standby=true for a warm standby (rules kept,
 	// not sending). Surfaced for the per-leg telemetry harness.
 	Retransmits uint64 `json:"retransmits"`
-	Alive       bool   `json:"alive"`
-	Standby     bool   `json:"standby"`
+	// GoodputBps is this leg's recent goodput — the EWMA of (sent+recv) bytes
+	// per second over the telemetry refresh window (~1s for the status page).
+	// The RATE the leg is currently moving, as opposed to the cumulative
+	// SentBytes/RecvBytes totals. 0 until a second sample lands.
+	// GoodputUpBps/GoodputDownBps split it by direction (send-rate / recv-rate);
+	// GoodputBps is their sum.
+	GoodputBps     float64 `json:"goodput_bps,omitempty"`
+	GoodputUpBps   float64 `json:"goodput_up_bps,omitempty"`
+	GoodputDownBps float64 `json:"goodput_down_bps,omitempty"`
+	Alive          bool    `json:"alive"`
+	Standby        bool    `json:"standby"`
+	// Hops is the leg's full forward route (every hop to the destination),
+	// with full PKs and per-hop transport type + latency where known.
+	Hops []MuxHopInfo `json:"hops,omitempty"`
+}
+
+// MuxHopInfo is one hop of a mux leg's forward route. From/To are FULL
+// public keys (never truncated). LatencyMS is the hop's transport RTT
+// where known (first hop owned; single-intermediate far hop derived).
+type MuxHopInfo struct {
+	TpID      string  `json:"tp_id"`
+	From      string  `json:"from"`
+	To        string  `json:"to"`
+	TpType    string  `json:"tp_type"`
+	LatencyMS float64 `json:"latency_ms,omitempty"`
 }
 type FetchServiceDataIn struct {
 	Service string
@@ -298,6 +421,13 @@ type MuxRouteInput struct {
 	// etc.). Zero means "auto-pick if exactly one rg is active for
 	// the app, error otherwise."
 	SrcPort uint16
+}
+
+// MuxDirectionInput carries the app-scoped manual direction pin for
+// SetMuxDirection: Mode is "auto" (release), "default" or "flipped".
+type MuxDirectionInput struct {
+	AppName string
+	Mode    string
 }
 type FilterServersIn struct {
 	Version string

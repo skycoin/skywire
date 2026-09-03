@@ -97,16 +97,19 @@ func (p *PlaybackStream) run() {
 
 	for bufferLength := range p.request {
 		if !p.state.is(running) {
+			requested = 0
 			continue
 		}
 		requested += bufferLength
 		for requested > 0 {
+			front, back = ensurePlaybackBuffers(front, back, requested)
 			readCount, err := p.r.Read(front[:requested])
 			if err != nil {
 				if err != EndOfData {
 					p.err = err
 				}
 				p.state.set(idle)
+				requested = 0
 				break
 			}
 			if readCount > 0 {
@@ -122,6 +125,13 @@ func (p *PlaybackStream) run() {
 			}
 		}
 	}
+}
+
+func ensurePlaybackBuffers(front, back []byte, requested int) ([]byte, []byte) {
+	if requested <= cap(front) && requested <= cap(back) {
+		return front, back
+	}
+	return make([]byte, requested), make([]byte, requested)
 }
 
 // Handle events for this playback stream in a goroutine.

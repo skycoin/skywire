@@ -63,7 +63,7 @@ func init() {
 	sendCmd.Flags().StringVarP(&message, "msg", "m", "", "message to send (required)")
 	sendCmd.Flags().StringVarP(&sendNet, "net", "n", "skynet", "network type: skynet or dmsg")
 	sendCmd.Flags().DurationVarP(&sendWait, "wait", "w", 5*time.Second, "wait for peer-receipt ack up to this duration (e.g. 5s, 30s); 0 disables wait and returns success on WriteFrame (fire-and-forget). Default 5s gives delivery confirmation.")
-	sendCmd.Flags().IntVarP(&sendRetries, "retries", "r", 1, "extra retry attempts on HTTP/transport failure (default 1). 0 disables retry. Each retry waits 200ms × attempt before retrying. Ack timeouts (peer-side failures with --wait) are NOT retried.")
+	sendCmd.Flags().IntVarP(&sendRetries, "retries", "r", 1, "extra retry attempts on HTTP/transport failure. 0 disables retry. Each retry waits 200ms × attempt before retrying. Ack timeouts (peer-side failures with --wait) are NOT retried.")
 	sendCmd.Flags().BoolVar(&sendVerbose, "verbose", false, "surface per-layer detail to stderr: POST request URL+payload, HTTP response status+headers, ack timing, /status counter deltas (outbound_msg_count / fail / retry / fallback). Use to debug send failures.")
 	sendCmd.Flags().StringVar(&sendVia, "via", "", "bypass local chat-app and dial the remote chat-app directly via noise-TCP: tcp://<pk>@host:port. Survives visor / dmsg outages. Use --sk / -c / DMSGCURL_SK for identity. When set, --to becomes optional (the PK in --via is used).")
 	sendCmd.Flags().StringVar(&tcpViaSK, "sk", "", "identity SK for --via tcp (hex). Overrides env + config.")

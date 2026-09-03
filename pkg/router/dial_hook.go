@@ -254,6 +254,29 @@ const (
 	// for aggregating bandwidth across a disjoint multi-leg route.
 	// This is the adaptive default's bulk-spread mode.
 	DistributionCapacity
+	// DistributionECF is the predictive Earliest-Completion-First
+	// hold-back scheduler (router.WeightModeECF). Unlike
+	// DistributionCapacity, which sprays a fraction of frames onto
+	// slower legs in proportion to their goodput — and so keeps
+	// head-of-line-stalling the in-order reorder buffer on those slow
+	// legs — ECF sends on the fastest leg while it has send capacity
+	// and only spills onto a slower leg when the slow leg would deliver
+	// its frame sooner than the fast leg can drain its own backlog. It
+	// is the mode that actually aggregates across heterogeneous legs
+	// without paying the slow-leg HoL cost. Per-packet, O(legs).
+	DistributionECF
+	// DistributionOTIAS is the Out-of-order Transmission for In-order
+	// Arrival scheduler (router.WeightModeOTIAS). It reuses ECF's per-leg
+	// estimators but assigns each frame to the leg whose estimated ARRIVAL
+	// (backlog drain time + one-way delay) is soonest, deliberately handing
+	// later frames to slower-but-idle legs; the reorder buffer restores order.
+	DistributionOTIAS
+	// DistributionSTMS is the Slide Together Multipath Scheduler
+	// (router.WeightModeSTMS). It keeps the head of the stream on the fast
+	// leg (filling its send window first) and slides later data onto the
+	// soonest-arriving slower leg so pieces converge in order — without ECF's
+	// hold-back decline once a leg is in the active set.
+	DistributionSTMS
 )
 
 // LegChangeHook is an optional hook fired by the route group
@@ -298,6 +321,24 @@ type LegInfo struct {
 	// current gate state so it can promote a warm spare instead of a cold add,
 	// or demote a leg it wants to keep warm. See docs/warm_standby_legs_rfc.md.
 	Standby bool
+	// Direct is true when this leg is the DIRECT (forward-only) leg of a
+	// UNIDIRECTIONAL route group: its transport goes straight to a route-group
+	// endpoint (1 hop, no intermediary) and it carries only the forward/upload
+	// direction. Sourced from routeMux.legIsDirectTp, which is false for a
+	// non-directional (symmetric) group — there every leg carries both
+	// directions. Lets the adaptive on_tick maintain a floor of active REVERSE
+	// (download) legs independent of the direct leg, so a download never falls
+	// back onto warm-standby legs for want of an active reverse path.
+	Direct bool
+	// Flipped is the route group's current unidirectional flip state (the same
+	// value on every leg of the group), sourced from routeMux.dirState. Because a
+	// leg's send-side direction is an ASSIGNMENT the flip controller can swap —
+	// not an intrinsic property — the download-direction class is Direct ==
+	// Flipped (unflipped: download rides the multihop legs; flipped: it rides the
+	// direct leg). The adaptive on_tick keeps its active-download floor on that
+	// class, whichever way the flip currently sits. Always false for a
+	// non-directional (symmetric) group.
+	Flipped bool
 	// SentBytes / RecvBytes are the leg transport's cumulative
 	// payload-byte counters (ManagedTransport.GetBandwidth). Lets a
 	// policy's on_tick rotate a leg after it carries a byte threshold
@@ -352,6 +393,14 @@ type RotationAction struct {
 	// valid.
 	DemoteToStandby    []int
 	PromoteFromStandby []int
+
+	// AddForwardLeg requests one more FORWARD-ONLY aux leg — appended
+	// addFwd=true / addRev=false so it adds upstream send capacity without
+	// enlarging the reverse/download set. The rotation loop dials it via the
+	// forward-only add callback (router.addOneAuxSendLeg). The forward-
+	// direction mirror of AddLeg; emitted by the adaptive preset under
+	// sustained upload (SentBytes) saturation. ExcludeHops applies to it too.
+	AddForwardLeg bool
 }
 
 // RotationHook fires periodically per active route group, giving
@@ -361,6 +410,19 @@ type RotationAction struct {
 // excluding current hops, repeat each tick).
 type RotationHook interface {
 	OnTick(info DialInfo, legs []LegInfo) RotationAction
+}
+
+// SelfHealTargeter is an OPTIONAL interface a RotationHook may implement to
+// override the route group's self-heal degree at runtime. A group's self-heal
+// target is otherwise fixed at dial time (SetSelfHeal), but an adaptive
+// preset's pool size is a LIVE tunable (mux width / warm-standby reserve,
+// retuned over the mux-control RPC). A hook that implements this pushes the
+// CURRENT target on every tick, so lowering the pool at runtime actually re-
+// caps the self-heal instead of re-dialing back toward the stale dial-time
+// value. ok=false means "leave the dial-time target unchanged" (a non-adaptive
+// preset, whose target is a fixed policy width).
+type SelfHealTargeter interface {
+	SelfHealTarget() (target int, ok bool)
 }
 
 // String returns the stable label for a DistributionMode. Used
@@ -386,6 +448,12 @@ func (m DistributionMode) String() string {
 		return "dscp-priority"
 	case DistributionCapacity:
 		return "capacity"
+	case DistributionECF:
+		return "ecf"
+	case DistributionOTIAS:
+		return "otias"
+	case DistributionSTMS:
+		return "stms"
 	}
 	return "unknown"
 }

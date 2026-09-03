@@ -30,9 +30,9 @@ Given the network graph, the Route Finder uses BFS to find paths from source to 
 The code should be in the `skycoin/skywire` repository:
 
 - `/cmd/route-finder/route-finder.go` is the main executable for the *Route Finder*.
-- `/pkg/route-finder/api/` contains the RESTFUL API definitions.
-- `/pkg/route-finder/store/` contains graph building and route finding logic.
-- `/pkg/route-finder/client/` contains the client library that interacts with the *Route Finder* service's RESTFUL API.
+- `/pkg/deployment/rf/api/` contains the RESTFUL API definitions.
+- `/pkg/deployment/rf/store/` contains graph building and route finding logic.
+- `/pkg/deployment/rf/client/` contains the client library that interacts with the *Route Finder* service's RESTFUL API.
 
 ## Database
 

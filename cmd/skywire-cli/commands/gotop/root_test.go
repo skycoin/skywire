@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0magnet/gotop/v4"
+	"github.com/0magnet/gotop/v4/devices"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
-	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4"
-	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
 )
 
 func TestFormatBytes(t *testing.T) {

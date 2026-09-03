@@ -121,10 +121,13 @@ var (
 	muxRoutes          int
 	muxMode            string
 	minHops            uint16
+	startTunnels       int
+	startRoute         string
 	startVerbose       bool
 	startVerboseLevel  string
 	reconnect          bool
 	startRoutingPolicy string
+	startDirect        bool
 	// multi-hop testing
 	viaVisor string
 	testEnv  bool

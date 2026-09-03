@@ -1,4 +1,4 @@
-//go:build !mobile
+//go:build !mobile && !js
 
 // Package geoip pkg/geoip/geoip_embedded.go c0-com-util
 package geoip

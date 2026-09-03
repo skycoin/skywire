@@ -99,6 +99,30 @@ func TestSkywireNetworker_ServeRouteGroupStops(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestSkywireNetworker_DirectShortcutEligible locks the mux_routes=1 fix: the
+// 0-hop direct shortcut is taken ONLY for an unset mux (MuxRoutes==0), so an
+// explicit single route (MuxRoutes==1) forms a route group instead of silently
+// collapsing to a bare direct conn. mux>=2 also skips the shortcut (unchanged).
+// stubRouter.EffectiveMinHops returns 1, so min-hops never gates here.
+func TestSkywireNetworker_DirectShortcutEligible(t *testing.T) {
+	r := stubNetworker(nil)
+	cases := []struct {
+		mux  int
+		want bool
+	}{
+		{0, true},  // unset → fast path
+		{1, false}, // explicit single route → route group
+		{2, false}, // mux → route group
+		{4, false},
+	}
+	for _, c := range cases {
+		got := r.directShortcutEligible(&router.DialOptions{MuxRoutes: c.mux})
+		if got != c.want {
+			t.Errorf("directShortcutEligible(MuxRoutes=%d) = %v, want %v", c.mux, got, c.want)
+		}
+	}
+}
+
 func TestSkywireNetworker_TryDirectDialNoMux(t *testing.T) {
 	r := stubNetworker(nil)
 	pk, _ := cipher.GenerateKeyPair()

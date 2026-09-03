@@ -104,7 +104,12 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 	if opts == nil {
 		opts = router.DefaultDialOptions()
 	}
-	if r.MuxRoutes > 1 && opts.MuxRoutes == 0 {
+	// Apply the visor-global mux_routes as the default when the caller didn't
+	// set a per-dial value. `>= 1` (was `> 1`) so an explicit mux_routes=1 is
+	// honored as a single-route-group dial rather than being swallowed as
+	// "unset" (which would take the 0-hop direct shortcut below and never form
+	// a route group).
+	if r.MuxRoutes >= 1 && opts.MuxRoutes == 0 {
 		opts.MuxRoutes = r.MuxRoutes
 	}
 	// If the caller threaded an app name on the context (e.g.
@@ -114,20 +119,26 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 		opts.AppName = AppNameFromContext(ctx)
 	}
 
-	// Only take the direct shortcut when the caller is fine with a
-	// single 0-hop conn. opts.MinHops > 1 means the caller wants
-	// intermediates (direct is 0 hops); opts.MuxRoutes > 1 means the
-	// caller wants N parallel routes (direct returns one conn).
-	// Without this gate, --routes N / --min-hops K on a skynet
-	// client were silently dropped whenever AppDirectMux had a
-	// transport — see ping-path counterpart #2751.
+	// Only take the direct shortcut when the caller expressed NO routing
+	// preference: min-hops <= 1 AND no explicit mux request. opts.MinHops > 1
+	// means the caller wants intermediates (direct is 0 hops).
+	//
+	// opts.MuxRoutes == 0 (was `<= 1`) is the key distinction: 0 means "unset —
+	// take the fast path"; an EXPLICIT opts.MuxRoutes >= 1 (from `--mux 1`, or
+	// the visor-global mux_routes=1 propagated above) means "form a route group,
+	// even a single-route one" — so mux_routes=1 no longer silently collapses to
+	// the 0-hop direct shortcut and actually establishes a route group. mux >= 2
+	// (N parallel routes) already skipped the shortcut; this extends the same
+	// treatment to an explicit single route. Without this gate, --routes N /
+	// --min-hops K on a skynet client were silently dropped whenever
+	// AppDirectMux had a transport — see ping-path counterpart #2751.
 	//
 	// The visor-global setting counts as much as the per-dial one, and
 	// asking the router is the only way to see it: opts.MinHops == 0 means
 	// "inherit Config.MinHops", so testing opts alone let a VPN client
 	// configured for min_hops=3 take this shortcut and get a single direct
 	// hop — the constraint bypassed before route setup was ever reached.
-	if r.r.EffectiveMinHops(opts) <= 1 && opts.MuxRoutes <= 1 {
+	if r.directShortcutEligible(opts) {
 		if directConn, ok := r.tryDirectDial(addr, opts.AppName); ok {
 			return &SkywireConn{
 				Conn:     directConn,
@@ -146,6 +157,21 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 		nrg:      conn.(*router.NoiseRouteGroup),
 		freePort: freePort,
 	}, nil
+}
+
+// directShortcutEligible reports whether a dial with these opts may take the
+// 0-hop AppDirectMux shortcut (bypassing route-group setup). It is eligible
+// only when the caller expressed NO routing preference:
+//
+//   - min-hops <= 1 (the caller isn't demanding intermediates), AND
+//   - opts.MuxRoutes == 0 (UNSET — "take the fast path"). An explicit
+//     opts.MuxRoutes >= 1 (from `--mux 1`, or the visor-global mux_routes=1
+//     propagated onto opts above) means "form a route group, even a single
+//     one", so mux_routes=1 no longer silently collapses to a 0-hop direct
+//     conn and never forming a route group. mux >= 2 already skipped the
+//     shortcut; this extends the same treatment to an explicit single route.
+func (r *SkywireNetworker) directShortcutEligible(opts *router.DialOptions) bool {
+	return r.r.EffectiveMinHops(opts) <= 1 && opts.MuxRoutes == 0
 }
 
 // DialPacketContext implements PacketNetworker — it opens a faithful-UDP
@@ -554,7 +580,8 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 
 	if atomic.CompareAndSwapInt32(&r.isServing, 0, 1) {
 		go func() {
-			if err := r.serveRouteGroup(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
+			// serveRouteGroup only ever returns a non-nil error.
+			if err := r.serveRouteGroup(ctx); !errors.Is(err, net.ErrClosed) {
 				r.log.WithError(err).Error("serveRouteGroup stopped unexpectedly.")
 			}
 		}()
@@ -567,6 +594,18 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 	log := r.log.WithField("func", "serveRouteGroup")
 
+	// Exponential backoff between successive non-fatal accept failures, reset on
+	// success. AcceptRoutes returns as soon as the setup node delivers an inbound
+	// route-setup; when those arrive back-to-back and each fails the noise
+	// handshake (a stale route, or a peer only reachable over a flaky webrtc/swtr
+	// transport — the common case on a NAT'd browser wasm visor), the old bare
+	// `continue` spun this loop with no pause, pegging the single-threaded wasm
+	// runtime's scheduler (observed on the in-tab visor: bursts of findRunnable/
+	// checkTimers churn while route-setups churned against a slow route finder).
+	// Same proven pattern as net/http.Server.Serve's Accept-error backoff.
+	const backoffMin, backoffMax = 5 * time.Millisecond, time.Second
+	backoff := time.Duration(0)
+
 	for {
 		log.Debug("Awaiting to accept route group...")
 
@@ -578,10 +617,22 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 				return err
 			}
 			// Non-fatal error (e.g., missing transport for a stale route).
-			// Log and continue accepting — don't kill the accept loop.
-			log.WithError(err).Warn("Failed to accept route group, continuing...")
+			// Log and continue accepting — don't kill the accept loop — but back
+			// off so a persistently-failing stream of accepts can't busy-spin.
+			if backoff == 0 {
+				backoff = backoffMin
+			} else if backoff *= 2; backoff > backoffMax {
+				backoff = backoffMax
+			}
+			log.WithError(err).Warnf("Failed to accept route group, retrying in %v...", backoff)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
 			continue
 		}
+		backoff = 0
 
 		log.
 			WithField("local", conn.LocalAddr()).

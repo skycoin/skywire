@@ -33,6 +33,7 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
 	"github.com/skycoin/skywire/pkg/router/policy"
+	"github.com/skycoin/skywire/pkg/router/policy/preset"
 )
 
 // wasmPtr narrows a wazero alloc/return result (uint64) to the uint32
@@ -223,11 +224,21 @@ func (e *Evaluator) Decide(ctx context.Context, rctx policy.RoutingContext, cand
 	if rctx.Now.IsZero() {
 		rctx.Now = e.clock.Now()
 	}
+	// Per-policy config surface: apply any adaptive-width tunables the policy
+	// carries in cli_overrides to the HOST atomics BEFORE stamping the wire, so
+	// (a) the values reach the sandboxed guest via the wire below, and (b) they
+	// persist in the host atomics for subsequent on_tick stamps of this route
+	// group — keeping decide and tick consistent on the native-wazero path. The
+	// guest also applies them (decideAdaptive), but only the host stamp governs
+	// the tick wire, so applying here is what makes config-set widths stick across
+	// ticks. No-op for presets that don't carry these keys.
+	preset.ApplyOverrideTunables(rctx.CLIOverrides)
 	input := DecideInputWire{
 		Ctx:        wireFromCtx(rctx),
 		Candidates: wireFromCandidates(candidates),
 		Preset:     e.preset,
 	}
+	stampTunables(&input.AdaptCap, &input.AdaptRevActive, &input.AdaptStandbyMax)
 	out, err := e.call(ctx, e.exportDecide, "decide_route", input)
 	if err != nil {
 		return policy.RouteSpec{}, err
@@ -255,6 +266,7 @@ func (e *Evaluator) OnTick(ctx context.Context, rctx policy.RoutingContext, legs
 		Legs:   wireFromLegs(legs),
 		Preset: e.preset,
 	}
+	stampTunables(&input.AdaptCap, &input.AdaptRevActive, &input.AdaptStandbyMax)
 	wire, err := e.callRotation(ctx, e.exportTick, "on_tick", input)
 	if err != nil {
 		return policy.RotationAction{}, err
@@ -315,6 +327,7 @@ func rotationFromWire(w RotationActionWire) policy.RotationAction {
 		ExcludeHops:        append([]string(nil), w.ExcludeHops...),
 		DemoteToStandby:    append([]int(nil), w.DemoteToStandby...),
 		PromoteFromStandby: append([]int(nil), w.PromoteFromStandby...),
+		AddForwardLeg:      w.AddForwardLeg,
 	}
 }
 
@@ -336,6 +349,7 @@ func (e *Evaluator) OnLegChange(ctx context.Context, rctx policy.RoutingContext,
 		Change: LegChangeWire{Event: change.Event, LegIndex: change.LegIndex},
 		Preset: e.preset,
 	}
+	stampTunables(&input.AdaptCap, &input.AdaptRevActive, &input.AdaptStandbyMax)
 	return e.callExport(ctx, e.exportLeg, "on_leg_change", input)
 }
 
@@ -396,6 +410,40 @@ func (e *Evaluator) callExport(ctx context.Context, fn api.Function, name string
 	return specFromWire(wire), nil
 }
 
+// stampTunables copies the host's current runtime-tunable adaptive mux widths
+// (the preset package atomics the mux-control RPC and cli_overrides drive) into
+// the input-wire fields, so the sandboxed guest — which cannot see a host-side
+// setter — applies them before dispatch. Passed by pointer so one helper serves
+// the decide / tick / leg-change envelopes without depending on their concrete
+// types. These are always positive (the setters clamp to >= 1), so the
+// `,omitempty` fields are only ever omitted when a value is genuinely unset,
+// never spuriously.
+func stampTunables(cap, revActive, standbyMax *int) {
+	*cap = preset.AdaptCap()
+	*revActive = preset.AdaptRevActive()
+	*standbyMax = preset.AdaptStandbyMax()
+}
+
+// SelfHealTarget reports the adaptive preset's live pool size — the steady
+// active width plus the warm-standby reserve (AdaptRevActive()+AdaptStandbyMax(),
+// the same figure decideAdaptive requests at dial). Both are runtime atomics
+// retuned over the mux-control RPC (cli proxy mux width / standby), so reporting
+// the current sum lets a running route group re-cap its self-heal when an
+// operator lowers the reserve — instead of storming back toward the dial-time
+// value. Non-adaptive presets keep their fixed dial-time target (ok=false).
+//
+// This mirrors presethook.Hook.SelfHealTarget for the NATIVE preset path. The
+// production hook on a preset:* visor is policy.Hook wrapping the wasm Loader,
+// NOT presethook.Hook, so without this (and the Loader/Hook forwarders) the
+// runtime re-cap never fired on wasm-preset visors and the pool storming toward
+// the dial-time 513 ignored `mux standby`.
+func (e *Evaluator) SelfHealTarget() (int, bool) {
+	if e.preset == "adaptive" {
+		return preset.AdaptRevActive() + preset.AdaptStandbyMax(), true
+	}
+	return 0, false
+}
+
 // wireFromCtx flattens a policy.RoutingContext to its wire shape.
 func wireFromCtx(r policy.RoutingContext) RoutingContextWire {
 	return RoutingContextWire{
@@ -433,6 +481,8 @@ func wireFromLegs(legs []policy.LegInfo) []LegInfoWire {
 			LatencyMs:   l.LatencyMs,
 			Alive:       l.Alive,
 			Standby:     l.Standby,
+			Direct:      l.Direct,
+			Flipped:     l.Flipped,
 			SentBytes:   l.SentBytes,
 			RecvBytes:   l.RecvBytes,
 			Retransmits: l.Retransmits,

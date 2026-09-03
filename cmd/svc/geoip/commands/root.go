@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"net/netip"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -40,15 +41,6 @@ func LookupIP(db *geoip2.Reader, ipStr string) (*LookupResult, error) {
 	return lookupIP(db, ipStr)
 }
 
-// exampleJSON marshals v to indented JSON with color, returning empty string on error
-func exampleJSON(v interface{}) string {
-	b, err := json.MarshalIndent(v, "    ", "  ")
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
 // generateExamples creates example responses from actual struct types
 func generateExamples() string {
 	lat := 37.751
@@ -62,7 +54,7 @@ GET /?ip=8.8.8.8
 
 CLI: skywire svc ip 8.8.8.8
   (same response as above)`,
-		exampleJSON(lookupResult{
+		cmdutil.ExampleJSON(lookupResult{
 			IP:            "8.8.8.8",
 			Latitude:      &lat,
 			Longitude:     &lon,
@@ -191,9 +183,7 @@ Usage Examples:
 
 // Execute executes root CLI command
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }
 
 func lookupIP(db *geoip2.Reader, ipStr string) (*lookupResult, error) {

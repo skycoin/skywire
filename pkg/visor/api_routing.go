@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -108,7 +110,24 @@ func (v *Visor) RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error) {
 	if v.router == nil {
 		return nil, nil
 	}
-	infos := v.router.RouteGroupMuxInfoForApp(appName)
+	return muxRouteGroupInfoFrom(v.router.RouteGroupMuxInfoForApp(appName)), nil
+}
+
+// AllRouteGroupMuxInfo implements API. Returns per-mux-leg counters for
+// EVERY active route group on the visor, regardless of app — the
+// whole-runtime view surfaced in `cli visor state`. Same transcription
+// as RouteGroupMuxInfo, only without the app filter.
+func (v *Visor) AllRouteGroupMuxInfo() ([]MuxRouteGroupInfo, error) {
+	if v.router == nil {
+		return nil, nil
+	}
+	return muxRouteGroupInfoFrom(v.router.RouteGroupMuxInfoAll()), nil
+}
+
+// muxRouteGroupInfoFrom transcribes the router's internal MuxInfo slice
+// into the wire-friendly visor-level MuxRouteGroupInfo shape. Shared by
+// the per-app and all-groups queries so the two stay identical.
+func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 	out := make([]MuxRouteGroupInfo, 0, len(infos))
 	for _, info := range infos {
 		entry := MuxRouteGroupInfo{
@@ -118,29 +137,74 @@ func (v *Visor) RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error) {
 				DstPort: info.Desc.DstPort(),
 				SrcPort: info.Desc.SrcPort(),
 			},
-			MuxEnabled:  info.MuxEnabled,
-			SACKEnabled: info.SACKEnabled,
-			Legs:        make([]MuxLegInfo, 0, len(info.Legs)),
+			MuxEnabled:         info.MuxEnabled,
+			SACKEnabled:        info.SACKEnabled,
+			PerFrameNoise:      info.PerFrameNoise,
+			Directional:        info.Directional,
+			Flipped:            info.Flipped,
+			FlipPinned:         info.FlipPinned,
+			Distribution:       info.Distribution,
+			ReorderPending:     info.ReorderPending,
+			ReorderGapAgeMS:    float64(info.ReorderGapAge) / float64(time.Millisecond),
+			WriteSeq:           info.WriteSeq,
+			FECEnabled:         info.FECEnabled,
+			FECRepairBytesSent: info.FECRepairBytesSent,
+			FECRepairBytesRecv: info.FECRepairBytesRecv,
+			FECReconstructs:    info.FECReconstructs,
+			Legs:               make([]MuxLegInfo, 0, len(info.Legs)),
 		}
 		for _, leg := range info.Legs {
+			entry.AggSentBytes += leg.SentBytes
+			entry.AggRecvBytes += leg.RecvBytes
+			entry.AggGoodputBps += leg.GoodputBps
+			entry.AggGoodputUpBps += leg.GoodputUpBps
+			entry.AggGoodputDownBps += leg.GoodputDownBps
 			entry.Legs = append(entry.Legs, MuxLegInfo{
-				Index:       leg.Index,
-				TransportID: leg.TransportID,
-				TpType:      leg.TpType,
-				RemotePK:    leg.RemotePK,
-				LatencyMS:   leg.LatencyMS,
-				SentBytes:   leg.SentBytes,
-				SentPackets: leg.SentPackets,
-				RecvBytes:   leg.RecvBytes,
-				RecvPackets: leg.RecvPackets,
-				Retransmits: leg.Retransmits,
-				Alive:       leg.Alive,
-				Standby:     leg.Standby,
+				Index:          leg.Index,
+				TransportID:    leg.TransportID,
+				TpType:         leg.TpType,
+				RemotePK:       leg.RemotePK,
+				LatencyMS:      leg.LatencyMS,
+				RouteLatencyMS: leg.RouteLatencyMS,
+				Direct:         leg.Direct,
+				Hops:           muxHopsFrom(leg.Hops),
+				SentBytes:      leg.SentBytes,
+				SentPackets:    leg.SentPackets,
+				RecvBytes:      leg.RecvBytes,
+				RecvPackets:    leg.RecvPackets,
+				PayloadBytes:   leg.PayloadBytes,
+				DupBytes:       leg.DupBytes,
+				RepairBytes:    leg.RepairBytes,
+				Retransmits:    leg.Retransmits,
+				GoodputBps:     leg.GoodputBps,
+				GoodputUpBps:   leg.GoodputUpBps,
+				GoodputDownBps: leg.GoodputDownBps,
+				Alive:          leg.Alive,
+				Standby:        leg.Standby,
 			})
 		}
 		out = append(out, entry)
 	}
-	return out, nil
+	return out
+}
+
+// muxHopsFrom transcribes the router's per-leg RouteHopInfo slice into the
+// wire-friendly MuxHopInfo shape (full PKs preserved).
+func muxHopsFrom(hops []router.RouteHopInfo) []MuxHopInfo {
+	if len(hops) == 0 {
+		return nil
+	}
+	out := make([]MuxHopInfo, len(hops))
+	for i, h := range hops {
+		out[i] = MuxHopInfo{
+			TpID:      h.TpID,
+			From:      h.From,
+			To:        h.To,
+			TpType:    h.TpType,
+			LatencyMS: h.LatencyMS,
+		}
+	}
+	return out
 }
 
 // ActiveRoutes implements API.
@@ -278,6 +342,38 @@ func (v *Visor) RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) e
 		return err
 	}
 	return v.router.RemoveMuxRouteByTransport(desc, tpID)
+}
+
+// SetMuxDirection implements API. Pins (or releases) the unidirectional
+// direction→leg-class mapping on ALL of the app's active directional route
+// groups — a proxy session can hold several concurrent rg's (one per SOCKS5
+// connection), and pinning only one would leave the others' controllers free
+// to diverge. mode is "auto" (release — the flip controller resumes on both
+// ends), "default" (initiator sends on the direct leg / download rides the
+// multihop mux) or "flipped" (the swapped mapping). Each rg signals the pin to
+// its peer over the wire; against an old peer the pin is best-effort
+// local-only.
+func (v *Visor) SetMuxDirection(appName, mode string) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+	var m byte
+	switch mode {
+	case "auto":
+		m = routing.DirectionAuto
+	case "default":
+		m = routing.DirectionPinDefault
+	case "flipped":
+		m = routing.DirectionPinFlipped
+	default:
+		return fmt.Errorf("mode must be 'auto', 'default' or 'flipped', got %q", mode)
+	}
+	applied, err := v.router.SetMuxDirectionForApp(appName, m)
+	if err != nil {
+		return err
+	}
+	v.log.Infof("SetMuxDirection: %s pinned to %q on %d route group(s)", appName, mode, applied)
+	return nil
 }
 
 // SetMinHops sets min_hops routing config of visor

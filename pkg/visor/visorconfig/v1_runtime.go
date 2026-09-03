@@ -13,7 +13,7 @@
 // apt-repo install page). The visor binary builds native and
 // includes both files; the WASM build sees only v1.go.
 
-//go:build !js
+//go:build !tinygo
 
 package visorconfig
 
@@ -436,7 +436,6 @@ func updateStringArg(conf *Launcher, appName, argName, value string) bool {
 
 			if value == "" {
 				conf.Apps[i].Args = append(conf.Apps[i].Args[:j], conf.Apps[i].Args[j+2:]...)
-				j-- //nolint:ineffassign
 			} else {
 				conf.Apps[i].Args[j+1] = value
 			}

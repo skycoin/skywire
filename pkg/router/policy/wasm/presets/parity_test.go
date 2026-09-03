@@ -84,14 +84,15 @@ type normAct struct {
 	ExcludeHops        []string
 	DemoteToStandby    []int
 	PromoteFromStandby []int
+	AddForwardLeg      bool
 }
 
 func actFromPolicy(a policy.RotationAction) normAct {
-	return normAct{DropLegs: nzi(a.DropLegs), AddLeg: a.AddLeg, ExcludeHops: nz(a.ExcludeHops), DemoteToStandby: nzi(a.DemoteToStandby), PromoteFromStandby: nzi(a.PromoteFromStandby)}
+	return normAct{DropLegs: nzi(a.DropLegs), AddLeg: a.AddLeg, ExcludeHops: nz(a.ExcludeHops), DemoteToStandby: nzi(a.DemoteToStandby), PromoteFromStandby: nzi(a.PromoteFromStandby), AddForwardLeg: a.AddForwardLeg}
 }
 
 func actFromPreset(a preset.RotationAction) normAct {
-	return normAct{DropLegs: nzi(a.DropLegs), AddLeg: a.AddLeg, ExcludeHops: nz(a.ExcludeHops), DemoteToStandby: nzi(a.DemoteToStandby), PromoteFromStandby: nzi(a.PromoteFromStandby)}
+	return normAct{DropLegs: nzi(a.DropLegs), AddLeg: a.AddLeg, ExcludeHops: nz(a.ExcludeHops), DemoteToStandby: nzi(a.DemoteToStandby), PromoteFromStandby: nzi(a.PromoteFromStandby), AddForwardLeg: a.AddForwardLeg}
 }
 
 func nz(s []string) []string {
@@ -154,6 +155,8 @@ func TestDecideParity_NativeMatchesWazero(t *testing.T) {
 		{"latency-adaptive/other", "latency-adaptive", policy.RoutingContext{App: "skychat"}, nil},
 		{"elastic-mux", "elastic-mux", policy.RoutingContext{App: "skysocks-client"}, nil},
 		{"probe-and-prune", "probe-and-prune", policy.RoutingContext{App: "skynet-client"}, nil},
+		{"coupled", "coupled", policy.RoutingContext{App: "skysocks-client"}, nil},
+		{"coupled/chat", "coupled", policy.RoutingContext{App: "skychat"}, nil},
 		{"adaptive", "adaptive", policy.RoutingContext{App: "vpn-client"}, nil},
 		// adaptive with real transport-kind metadata: both paths must seed the
 		// most transport-diverse forward candidate (cand b, 2 distinct kinds).
@@ -165,6 +168,8 @@ func TestDecideParity_NativeMatchesWazero(t *testing.T) {
 		{"time-of-day/biz", "time-of-day", policy.RoutingContext{App: "skysocks-client", Now: unixNano(11 * oneHour)}, nil},
 		{"time-of-day/off", "time-of-day", policy.RoutingContext{App: "skysocks-client", Now: unixNano(3 * oneHour)}, nil},
 		{"time-of-day/window", "time-of-day", policy.RoutingContext{App: "skysocks-client", Now: unixNano(23 * oneHour), CLIOverrides: map[string]string{"business_hours": "22-6"}}, nil},
+		{"ledbat", "ledbat", policy.RoutingContext{App: "skysocks-client"}, nil},
+		{"ledbat/chat", "ledbat", policy.RoutingContext{App: "skychat"}, nil},
 	}
 
 	for _, tc := range cases {
@@ -259,12 +264,61 @@ func TestTickParity_NativeMatchesWazero(t *testing.T) {
 		{leg(0, "a", "stcpr", 43, true, false, 30001), leg(1, "b", "stcpr", 980, true, false, 30001)},
 	}
 
+	// ledbat: leg 2's delay climbs above its base while legs 0,1 stay near theirs
+	// (the scavenger backs off and parks leg 2); a final recovered snapshot with
+	// parked spares exercises the re-grow path — every step must agree.
+	lb := [][]policy.LegInfo{
+		{leg(0, "a", "stcpr", 40, true, false, 0), leg(1, "b", "stcpr", 40, true, false, 0), leg(2, "c", "stcpr", 40, true, false, 0)},
+		{leg(0, "a", "stcpr", 40, true, false, 0), leg(1, "b", "stcpr", 40, true, false, 0), leg(2, "c", "stcpr", 300, true, false, 0)},
+		{leg(0, "a", "stcpr", 40, true, false, 0), leg(1, "b", "stcpr", 40, true, false, 0), leg(2, "c", "stcpr", 300, true, false, 0)},
+		{leg(0, "a", "stcpr", 40, true, false, 0), leg(1, "b", "stcpr", 40, true, true, 0), leg(2, "c", "stcpr", 40, true, true, 0)},
+	}
+
+	// coupled: a clean 4-wide set, then rising loss on one leg (shed), a couple of
+	// cooldown ticks, then a clean below-ceiling set with a warm spare (cautious
+	// promote) — exercises both coupled-decrease and coupled-increase.
+	rl := func(idx int, tid string, lat int, retrans uint64) policy.LegInfo {
+		return policy.LegInfo{Index: idx, TransportID: tid, Kind: "stcpr", LatencyMs: lat, Alive: true, Retransmits: retrans}
+	}
+	sb := func(idx int, tid string, lat int) policy.LegInfo {
+		return policy.LegInfo{Index: idx, TransportID: tid, Kind: "stcpr", LatencyMs: lat, Alive: true, Standby: true}
+	}
+	cpl := [][]policy.LegInfo{
+		{rl(0, "a", 50, 0), rl(1, "b", 50, 0), rl(2, "c", 50, 0), rl(3, "d", 50, 0)},
+		{rl(0, "a", 50, 0), rl(1, "b", 50, 0), rl(2, "c", 50, 500), rl(3, "d", 50, 0)},
+		{rl(0, "a", 50, 0), rl(1, "b", 50, 0), rl(3, "d", 50, 0), sb(2, "c", 50)},
+		{rl(0, "a", 50, 0), rl(1, "b", 50, 0), rl(3, "d", 50, 0), sb(2, "c", 50)},
+		{rl(0, "a", 50, 0), rl(1, "b", 50, 0), rl(3, "d", 50, 0), sb(2, "c", 50)},
+		{rl(0, "a", 50, 0), rl(1, "b", 50, 0), rl(3, "d", 50, 0), sb(2, "c", 50)},
+	}
+
+	// adaptive UPLOAD-heavy: sustained SentBytes growth on the primary leg with
+	// flat RecvBytes drives the forward (upload) controller — exercises the new
+	// SentBytes path and its AddForwardLeg emission across the wire so native and
+	// wazero must agree step-for-step on the forward-direction sizing too.
+	legS := func(idx int, tid string, sent uint64) policy.LegInfo {
+		return policy.LegInfo{Index: idx, TransportID: tid, Kind: "stcpr", LatencyMs: 40, Alive: true, SentBytes: sent}
+	}
+	up := [][]policy.LegInfo{
+		{legS(0, "a", 1_000_000)},
+		{legS(0, "a", 2_000_000)},
+		{legS(0, "a", 3_000_000)},
+		{legS(0, "a", 4_000_000)},
+		{legS(0, "a", 5_000_000)},
+		{legS(0, "a", 6_000_000), legS(1, "b", 0)},
+		{legS(0, "a", 7_000_000), legS(1, "b", 1_000_000)},
+		{legS(0, "a", 8_000_000), legS(1, "b", 2_000_000)},
+	}
+
 	cases := []tickCase{
 		{"rotating-bw", "rotating-bw", rbw},
 		{"latency-adaptive", "latency-adaptive", la},
 		{"elastic-mux", "elastic-mux", em},
 		{"probe-and-prune", "probe-and-prune", pp},
+		{"coupled", "coupled", cpl},
 		{"adaptive", "adaptive", ad},
+		{"ledbat", "ledbat", lb},
+		{"adaptive-upload", "adaptive", up},
 	}
 
 	for _, tc := range cases {

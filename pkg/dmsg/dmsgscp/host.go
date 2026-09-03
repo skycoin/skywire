@@ -305,7 +305,7 @@ func (h *Host) serveSource(_ context.Context, log logrus.FieldLogger, conn net.C
 
 	// io.CopyN exactly the claimed size — guards against runaway
 	// writes if Stat lied between the header write and the read.
-	if _, err := io.CopyN(conn, f, info.Size()); err != nil {
+	if _, err := copyNIdle(conn, f, info.Size(), conn, DefaultIdleTimeout); err != nil {
 		log.WithError(err).Debug("dmsgscp: payload copy failed.")
 		return
 	}
@@ -406,7 +406,7 @@ func (h *Host) serveSink(_ context.Context, log logrus.FieldLogger, conn net.Con
 		}
 	}
 
-	if _, err := io.CopyN(f, r, hdr.Size); err != nil {
+	if _, err := copyNIdle(f, r, hdr.Size, conn, DefaultIdleTimeout); err != nil {
 		log.WithError(err).Debug("dmsgscp: payload copy failed.")
 		cleanup(false)
 		return

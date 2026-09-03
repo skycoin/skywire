@@ -18,7 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/config-bootstrapper/api"
+	"github.com/skycoin/skywire/pkg/deployment/conf/api"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
@@ -39,15 +39,6 @@ var (
 	pprofAddr      string
 	mode           string
 )
-
-// exampleJSON marshals v to indented JSON with color, returning empty string on error
-func exampleJSON(v interface{}) string {
-	b, err := json.MarshalIndent(v, "    ", "  ")
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
 
 // generateExamples creates example responses from actual struct types
 func generateExamples() string {
@@ -89,8 +80,8 @@ GET /health - api.HealthCheckResponse
 
 GET / - visorconfig.Services
 %s`,
-		exampleJSON(healthExample),
-		exampleJSON(servicesExample))
+		cmdutil.ExampleJSON(healthExample),
+		cmdutil.ExampleJSON(servicesExample))
 }
 
 func init() {
@@ -180,7 +171,6 @@ HTTP Endpoints:
 			EmbeddedDmsgServers: dmsg.Prod.DmsgServers,
 			SurveyWhitelist:     deployment.Prod.SurveyWhitelist,
 			Log:                 logger,
-			DisableDHT:          true,
 		})
 		if err != nil {
 			logger.WithError(err).Fatal("failed to start listeners")
@@ -231,7 +221,5 @@ func readConfig(log *logging.Logger, confPath string) (config api.Config) {
 
 // Execute executes root CLI command.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
-	}
+	cmdutil.RunRoot(RootCmd)
 }

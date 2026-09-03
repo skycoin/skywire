@@ -58,8 +58,8 @@ func init() {
 		"secret key for the standalone dmsg client (random if unset)")
 	scpCmd.Flags().Uint16VarP(&scpPort, "port", "p", dmsgscp.DefaultPort,
 		"remote dmsg port for the dmsgscp host")
-	scpCmd.Flags().DurationVarP(&scpTimeout, "timeout", "t", 5*time.Minute,
-		"transfer timeout (includes dial + payload)")
+	scpCmd.Flags().DurationVarP(&scpTimeout, "timeout", "t", 60*time.Second,
+		"no-progress (idle) timeout: the transfer aborts only after this long with ZERO bytes moving — a progressing transfer of any size never times out (the payload is not capped by total duration)")
 	scpCmd.Flags().StringVar(&scpTransport, "transport", scpTransportAuto,
 		"transport: auto (try visor first, fallback dmsg) | dmsg | skynet | tcp (not supported yet)")
 	scpCmd.Flags().BoolVar(&scpStandalone, "standalone", false,
@@ -204,10 +204,13 @@ standalone dmsg path; the VisorSCP RPC uses the visor's own PK.`,
 
 		// Standalone dmsg path — the CLI bootstraps its own
 		// dmsg.Client and dials peer:port directly.
+		// The signal context is long-lived (no total deadline): the dmsg client
+		// bootstrapped below rides it, and capping it would cap the whole
+		// transfer. Dial gets its own bounded context; the payload is governed by
+		// the client's idle (no-progress) timeout, so a large but progressing
+		// transfer is never cut off.
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
-		ctx, timeoutCancel := context.WithTimeout(ctx, scpTimeout)
-		defer timeoutCancel()
 
 		myPK, mySK := resolveChatIdentity(sk)
 		if !cmd.Flags().Changed("sk") && os.Getenv("DMSG_SK") == "" {
@@ -222,11 +225,14 @@ standalone dmsg path; the VisorSCP RPC uses the visor's own PK.`,
 		}
 		defer closeDmsg()
 
-		c, err := dmsgscp.Dial(ctx, dmsgC, peerPK, scpPort)
+		dialCtx, dialCancel := context.WithTimeout(ctx, scpTimeout)
+		c, err := dmsgscp.Dial(dialCtx, dmsgC, peerPK, scpPort)
+		dialCancel()
 		if err != nil {
 			return err
 		}
 		defer c.Close() //nolint:errcheck
+		c.SetIdleTimeout(scpTimeout)
 
 		switch direction {
 		case scpDirDownload:

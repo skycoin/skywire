@@ -29,7 +29,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -53,7 +53,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: latest
 
       - name: Install Dependencies
         shell: bash
@@ -65,7 +65,10 @@ jobs:
       # golangci-lint already ran above (pinned, cached). check-ci skips the
       # redundant second golangci-lint run but keeps go vet + config-gen smoke
       # + the test suite.
+      # if: always() so a golangci-lint / shell-lint failure above can never
+      # prevent the test suite from running and reporting (#4326).
       - name: Check Format and Run Tests
+        if: always()
         run: make check-ci
 
   # e2e runs as its own job so it executes in parallel with the linux check
@@ -80,7 +83,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -108,7 +111,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -129,15 +132,21 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: latest
 
-      - name: Checking Format and Testing
+      # golangci-lint already ran via the action above; don't re-run it inside the
+      # test step, where its exit code would abort before `go test` and hide any
+      # test regression behind a lint finding (#4326).
+      - name: Config smoke
         run: |
-          GO111MODULE=on golangci-lint run -c .golangci.yml ./...
           go run . --help
           go run . cli config gen -dnw
           go run . cli config gen --nofetch -nw
-          GO111MODULE=on go test -cover -timeout=25m -mod=vendor -tags 'no_ci' ./internal/... ./pkg/... ./cmd/skywire-cli/commands/config/...
+
+      # if: always() so a lint (or config-smoke) failure can never blank the suite.
+      - name: Test
+        if: always()
+        run: GO111MODULE=on go test -cover -timeout=25m -mod=vendor -tags 'no_ci' ./internal/... ./pkg/... ./cmd/skywire-cli/commands/config/...
 
   windows:
     runs-on: windows-latest
@@ -146,7 +155,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -168,13 +177,16 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: latest
 
       - name: Install Requirements
         shell: pwsh
         run: choco install make
 
+      # if: always() so a lint failure above can never prevent the test suite
+      # from running and reporting (#4326).
       - name: Checking (lint + test)
+        if: always()
         run: |
           $env:GO111MODULE='on'
           make check-windows
@@ -193,7 +205,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -221,7 +233,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -270,7 +282,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -292,7 +304,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26.5'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -314,13 +326,13 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: 'lts/*'
 
       - name: Headless wasm-visor smoke (boot → dmsg(ws) → /api)
         run: ./scripts/wasm-headless/run.sh
@@ -342,19 +354,27 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
       - uses: acifani/setup-tinygo@v3
         with:
-          tinygo-version: '0.41.1'
+          tinygo-version: '0.42.0'
 
       - name: Compile-check TinyGo wasm binaries
         run: make build-wasm-tinygo
 
       - name: Rebuild app-mux.wasm and run the policy runtime smoke test
         run: make test-wasm-policy
+
+      # Provenance gate for the COMMITTED routing-policy bundle.wasm: a native
+      # visor on a preset:* policy runs this blob via wazero, so a stale one
+      # ships different routing decisions than its source (#4325). This rebuilds
+      # it with the pinned TinyGo above and byte-compares against the committed
+      # copy. Pairs with the wazero<->native parity test (the semantic guard).
+      - name: Check the committed routing-policy bundle.wasm is not stale
+        run: make check-bundle-wasm
 
   # Hypervisor manager UI (Angular). The UI build + lint + unit tests only ever
   # ran as manually-invoked Makefile targets, so a regression that breaks
@@ -373,7 +393,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: 'lts/*'
           cache: npm
           cache-dependency-path: static/skywire-manager-src/package-lock.json
 
@@ -428,9 +448,9 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
       - name: Run redis-backed store tests
-        run: go test -mod=vendor -timeout=5m ./pkg/address-resolver/store/... ./pkg/dmsg/discovery/store/...
+        run: go test -mod=vendor -timeout=5m ./pkg/deployment/ar/store/... ./pkg/dmsg/discovery/store/...

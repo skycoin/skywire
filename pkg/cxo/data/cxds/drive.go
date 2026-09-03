@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	bolt "github.com/0magnet/bbolt"
 	"github.com/skycoin/skycoin/src/cipher"
-	bolt "go.etcd.io/bbolt"
 
 	"github.com/skycoin/skywire/pkg/cxo/data"
 	"github.com/skycoin/skywire/pkg/util/bbolthealth"
@@ -102,6 +102,14 @@ func NewDriveCXDSWithOptions(fileName string, opts DriveOptions) (ds data.CXDS, 
 		if _, statErr := os.Stat(fileName); os.IsNotExist(statErr) {
 			created = true
 		}
+	}
+
+	// Startup GC + compaction: reclaim accumulated dead (rc==0) volume and shrink
+	// the file when the store has bloated (bbolt never shrinks on delete). Runs
+	// before the main handle opens (it takes the file lock itself). Best-effort:
+	// on a fresh file it is a no-op, and any failure is logged and swallowed.
+	if !created {
+		maybeStartupGCCompact(fileName)
 	}
 
 	var b *bolt.DB

@@ -1,4 +1,4 @@
-// Package climdisc cmd/skywire-cli/commands/mdisc/check.go c2-ops-deployment
+// Package climdisc cmd/skywire-cli/commands/mdisc/check.go c4-vis-cli
 //
 // `skywire cli mdisc check` — deployment health probe for the dmsg-server wss
 // fronts. A browser/wasm visor can ONLY bootstrap over wss (the seed entry
@@ -79,7 +79,7 @@ scheduled CI job.`,
 			if e.Server == nil {
 				continue
 			}
-			label := e.Static.String()[:8]
+			label := e.Static.String()
 			ws := e.Server.AddressWS
 			if ws == "" {
 				cmd.Printf("!  %s  %-21s  NO AddressWS — unreachable for browser/wasm visors\n", label, e.Server.Address)

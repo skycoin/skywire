@@ -313,8 +313,12 @@ func TestHydrateMemNodeWalksLeavesAndSubTrees(t *testing.T) {
 	}
 
 	dest := newMemNode()
-	if err := hydrateMemNode(up, &outerNode, dest); err != nil {
+	var dropped []string
+	if err := hydrateMemNode(up, &outerNode, dest, &dropped, ""); err != nil {
 		t.Fatalf("hydrateMemNode: %v", err)
+	}
+	if len(dropped) != 0 {
+		t.Fatalf("hydrateMemNode: unexpected dropped refs on intact tree: %v", dropped)
 	}
 	if got, want := string(dest.leaves["alpha"]), "alpha-value"; got != want {
 		t.Errorf("dest.leaves[alpha]: got %q want %q", got, want)
@@ -325,5 +329,59 @@ func TestHydrateMemNodeWalksLeavesAndSubTrees(t *testing.T) {
 	}
 	if got, want := string(beta.leaves["deep"]), "deep-value"; got != want {
 		t.Errorf("dest.subs[beta].leaves[deep]: got %q want %q", got, want)
+	}
+}
+
+// TestHydrateMemNodeSkipsDanglingSubRef pins the best-effort contract: a
+// sub-entry whose Sub.Hash has no CXDS backing (the filling-trap's persisted
+// form) must NOT abort the whole hydrate. The intact sibling leaf survives,
+// the dangling ref is reported (naming its hash) in `dropped`, and no error is
+// returned — so a single trapped object bounds the loss to its own subtree
+// rather than dropping every previously-published leaf to an empty tree.
+func TestHydrateMemNodeSkipsDanglingSubRef(t *testing.T) {
+	dir := t.TempDir()
+	_, sk := cipher.GenerateKeyPair()
+
+	n := fileBackedNode(t, dir, sk)
+	defer func() {
+		_ = n.Close() //nolint:errcheck
+	}()
+
+	c := n.Container()
+	up, err := c.Unpack(skycipher.SecKey(sk), Registry)
+	if err != nil {
+		t.Fatalf("Unpack: %v", err)
+	}
+	defer func() {
+		_ = up.Close() //nolint:errcheck
+	}()
+
+	// A real leaf plus a sub-entry pointing at an object that was never
+	// saved through the pack — Value() on it resolves to ErrNotFound.
+	ghostHash := skycipher.SumSHA256([]byte("ghost-treenode-never-saved"))
+	goodLeaf := TreeEntry{Name: "alpha", Leaf: []byte("alpha-value")}
+	danglingSub := TreeEntry{Name: "ghost", Sub: registry.Ref{Hash: ghostHash}}
+	outerNode := TreeNode{}
+	if err := outerNode.Children.AppendValues(up, goodLeaf, danglingSub); err != nil {
+		t.Fatalf("outer.AppendValues: %v", err)
+	}
+
+	dest := newMemNode()
+	var dropped []string
+	if err := hydrateMemNode(up, &outerNode, dest, &dropped, ""); err != nil {
+		t.Fatalf("hydrateMemNode: dangling sub-ref must not abort the walk: %v", err)
+	}
+	if got, want := string(dest.leaves["alpha"]), "alpha-value"; got != want {
+		t.Errorf("intact sibling leaf lost: got %q want %q", got, want)
+	}
+	if _, ok := dest.subs["ghost"]; ok {
+		t.Errorf("dangling subtree should have been skipped, not materialized")
+	}
+	if len(dropped) != 1 {
+		t.Fatalf("dropped: got %v, want exactly one entry naming the ghost ref", dropped)
+	}
+	if !bytes.Contains([]byte(dropped[0]), []byte("ghost")) ||
+		!bytes.Contains([]byte(dropped[0]), []byte(ghostHash.Hex()[:16])) {
+		t.Errorf("dropped entry should name the path and culprit hash: %q", dropped[0])
 	}
 }

@@ -128,6 +128,21 @@ func (h *Hook) SelectRoute(_ context.Context, info router.DialInfo, forward, rev
 	return sel, nil
 }
 
+// SelfHealTarget implements router.SelfHealTargeter for the adaptive preset,
+// whose self-heal degree is its live pool size — the steady active width plus
+// the warm-standby reserve (Mux = AdaptRevActive()+AdaptStandbyMax(), the same
+// figure decideAdaptive requests at dial). Both are runtime atomics retuned
+// over the mux-control RPC (skywire cli proxy mux width / standby), so pushing
+// the current sum every tick lets a running route group re-cap its self-heal
+// when an operator lowers the reserve — instead of re-dialing back toward the
+// dial-time value. Every other preset keeps its fixed dial-time target (ok=false).
+func (h *Hook) SelfHealTarget() (int, bool) {
+	if h.name == "adaptive" {
+		return preset.AdaptRevActive() + preset.AdaptStandbyMax(), true
+	}
+	return 0, false
+}
+
 // OnTick implements router.RotationHook: it runs the preset's stateful tick
 // controller over the current leg snapshot and returns the structural action
 // (promote/demote/add/drop) for the route group to apply.
@@ -139,6 +154,7 @@ func (h *Hook) OnTick(_ router.DialInfo, legs []router.LegInfo) router.RotationA
 		ExcludeHops:        action.ExcludeHops,
 		DemoteToStandby:    action.DemoteToStandby,
 		PromoteFromStandby: action.PromoteFromStandby,
+		AddForwardLeg:      action.AddForwardLeg,
 	}
 }
 
@@ -196,6 +212,8 @@ func legsToPreset(legs []router.LegInfo) []preset.LegInfo {
 			LatencyMs:   l.LatencyMs,
 			Alive:       l.Alive,
 			Standby:     l.Standby,
+			Direct:      l.Direct,
+			Flipped:     l.Flipped,
 			SentBytes:   l.SentBytes,
 			RecvBytes:   l.RecvBytes,
 			Retransmits: l.Retransmits,
@@ -242,6 +260,8 @@ func distributionFor(desc string) router.DistributionConfig {
 		return router.DistributionConfig{Mode: router.DistributionAuto}
 	case "capacity":
 		return router.DistributionConfig{Mode: router.DistributionCapacity}
+	case "ecf":
+		return router.DistributionConfig{Mode: router.DistributionECF}
 	default:
 		return router.DistributionConfig{Mode: router.DistributionUnset}
 	}

@@ -430,7 +430,10 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	// dispatches arrive over real unreliable datagrams (no HOL blocking). The
 	// context is canceled when Serve returns (i.e. mt.done fires), unblocking
 	// the blocking ReadDatagram.
-	if dc, ok := datagramConnOf(mt.transport); ok {
+	mt.transportMx.Lock()
+	tp := mt.transport
+	mt.transportMx.Unlock()
+	if dc, ok := datagramConnOf(tp); ok {
 		mt.wg.Add(1)
 		// Serve is a transport-lifetime goroutine with no request-scoped
 		// parent; Background is correct here. Canceled below when Serve returns.
@@ -1354,4 +1357,23 @@ func (mt *ManagedTransport) RemoteIP() string {
 		return ""
 	}
 	return host
+}
+
+// ConnDetails returns the underlying network.Transport's curated,
+// secrets-free connection metadata (direct remote/local addr, dmsg
+// relay server PK, QUIC TLS identity, webrtc ICE candidate), or nil
+// when the transport isn't serving or its type exposes no details.
+// The visor's TransportSummary carries this onto `cli visor state` /
+// `cli tp`. No secret key is ever included.
+func (mt *ManagedTransport) ConnDetails() *network.ConnDetails {
+	tp := mt.getTransport()
+	if tp == nil {
+		return nil
+	}
+	d, ok := tp.(network.ConnDetailer)
+	if !ok {
+		return nil
+	}
+	cd := d.ConnDetails()
+	return &cd
 }

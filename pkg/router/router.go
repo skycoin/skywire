@@ -129,6 +129,10 @@ type Config struct {
 	RulesGCInterval  time.Duration
 	MinHops          uint16
 	MaxHops          uint16
+	// ExcludeTransportTypes hard-excludes routes traversing any of these transport
+	// types from the candidate set (see visorconfig.Routing.RouteExcludeTransportTypes).
+	// Empty = nothing excluded. Lowercased type names.
+	ExcludeTransportTypes []string
 	// MuxRoutes seeds the router's runtime parallel-mux-routes value from
 	// routing.mux_routes at construction, the way MinHops already is. The
 	// dial-time default is applied by the app networker (which the launcher
@@ -192,6 +196,16 @@ type Config struct {
 	// configured.
 	DialHook DialHook
 
+	// PolicyOnControlPorts opts the routing policy (DialHook) BACK IN for
+	// control-plane destination ports (pty, dmsgctrl, setup, hypervisor RPC,
+	// …). Default false: those small noise-XK control channels bypass the
+	// policy entirely and take a plain base route, because its per-dial
+	// evaluation + warm-standby/reshape churn destabilizes their handshakes
+	// (the pty 32-leg-mux footgun). Set true to let the operator's policy
+	// manage control-plane routes too (advanced; e.g. a policy purpose-built
+	// for them). See effectiveDialHook / controlPlanePorts.
+	PolicyOnControlPorts bool
+
 	// EnableRSNOracleRoutes opts INTO the RSN-oracle 2-hop route path: for a
 	// single-intermediate route S->I->D the source computes the route LOCALLY
 	// from its OWN transports intersected with the destination's OWN transports
@@ -222,7 +236,6 @@ type Config struct {
 	// getter or nil result is fine — the private-IP and local-interface /24
 	// checks still apply.
 	SelfPublicIP func() net.IP
-
 }
 
 // SetDefaults sets default values for certain empty values.
@@ -309,6 +322,26 @@ type DialOptions struct {
 	// they have constraints to express.
 	ExcludeIntermediatePKs []cipher.PubKey
 	ExcludeDMSG            bool // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
+	// DiversifyTransports opts this dial into visor-side auto-
+	// diversification for bandwidth aggregation (docs/mux_aggregation_rfc.md
+	// step 3). When set, DialRoutes looks up THIS visor's currently-live
+	// route groups to the SAME destination PK:port and seeds
+	// ExcludeTransportIDs / ExcludeIntermediatePKs with their first-hop
+	// transports + intermediates, so a new tunnel to an exit leaves over a
+	// DIFFERENT first-hop transport than the tunnels already established to
+	// it — their throughputs then SUM instead of splitting one link.
+	//
+	// It is bounded and safe by construction: the exclusions are added ONLY
+	// when >= 1 sibling route group to the exact same dst already exists (the
+	// skysocks multi-tunnel "tunnel 2..N" case). A lone dial (tunnel 1, or
+	// any app that dials a dst once) finds no sibling and is byte-identical
+	// to today. It reuses the mux's own disjoint machinery, but across route
+	// groups rather than across legs within one group. Set by the
+	// skysocks-client for its extra tunnels; unset everywhere else, so
+	// single-dials, control-plane forwards and same-LAN/direct dials are
+	// untouched. Falls back gracefully — if no disjoint transport is free the
+	// dial proceeds on a shared path (a shared tunnel beats no tunnel).
+	DiversifyTransports bool
 	// Distribution overrides the route group's per-packet
 	// distribution strategy when set (Mode != DistributionUnset).
 	// Populated either by a routing-policy script (see
@@ -435,6 +468,14 @@ func (o *DialOptions) EffectiveMuxRoutes(forward bool) int {
 	if o == nil {
 		return 0
 	}
+	// A direct-transport-only dial (--direct / EnsureDirectTransport) is a 1-hop
+	// control-plane route by definition. The adaptive policy must NOT grow a
+	// warm-standby mux over it — that re-introduces exactly the multi-hop churn
+	// --direct exists to avoid (a control forward spread across rotating 2-hop
+	// legs). Force a single route regardless of any policy-set MuxRoutes.
+	if o.EnsureDirectTransport {
+		return 1
+	}
 	if forward {
 		if o.ForwardMuxRoutes > 0 {
 			return o.ForwardMuxRoutes
@@ -532,6 +573,13 @@ type Router interface {
 	GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int) (int, error)
 	RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error
 
+	// SetMuxDirectionForApp applies a manual unidirectional direction pin
+	// (routing.DirectionAuto / DirectionPinDefault / DirectionPinFlipped) to
+	// EVERY active directional route group tagged with the named app (a proxy
+	// session can hold several concurrent rg's). Returns how many groups the
+	// pin was applied to; errors when the app has no active directional group.
+	SetMuxDirectionForApp(appName string, mode byte) (int, error)
+
 	// RouteGroupHops returns the stored forward route hops for the route group
 	// matching the given descriptor (or its inversion). Returns nil if no
 	// matching route group is found.
@@ -556,6 +604,12 @@ type Router interface {
 	// client connection to skysocks-client gets its own rg). Returns
 	// an empty slice if no rg's are active for the app.
 	RouteGroupMuxInfoForApp(appName string) []MuxInfo
+
+	// RouteGroupMuxInfoAll returns mux snapshots for EVERY active
+	// route group, regardless of the app it is tagged with. Powers the
+	// whole-runtime `cli visor state` view where the per-leg mux shape
+	// of all route groups (not just one app's) is wanted at once.
+	RouteGroupMuxInfoAll() []MuxInfo
 
 	// Routing table related methods
 	RoutesCount() int
@@ -584,6 +638,7 @@ type router struct {
 	datagramPorts      map[routing.Port]struct{}                       // local ports with faithful-UDP intent; the accept side builds a datagram sibling only for these (#2607 on-demand-by-local-intent)
 	acceptDatagram     chan datagramAccept                             // accept-side datagram siblings, drained by AcceptDatagram (the forwarded_ports.udp server loop)
 	pending            *pendingPackets                                 // frames parked during the rule-save -> route-group-register window (see router_pending.go)
+	pendingLegs        *pendingLegs                                    // aux mux legs buffered while their route group is still initializing (see router_pending_legs.go, #80)
 	rpcSrv             *rpc.Server
 	accept             chan routing.EdgeRules
 	done               chan struct{}
@@ -609,7 +664,9 @@ type router struct {
 	lastRouteCalcTime time.Duration     // last route calculation time (for local routes)
 	lastRouteCalcMu   sync.Mutex        // protects lastRouteCalcTime
 	tpdCache          *tpdSnapshotCache // one-snapshot TTL cache of GetAllTransports, see tpd_cache.go
+	localRoutes       *localRouteMemo   // memoized calculateLocalRoutes BFS, keyed on snapshot version + local first-hop set
 	suspects          *suspectHopCache  // short-TTL penalty cache for intermediates that lost/failed a setup race (see parallel_route_setup.go)
+	warmRoutes        *warmRoutePool    // visor-level shared cache of disjoint aux-leg PLANS to an exit, shared across route groups (see warm_route_pool.go / docs/design/shared-warm-route-pool.md)
 	// dstTpOracle fetches a destination visor's OWN transport list
 	// authoritatively from the destination (via an RSN-signed transport-query),
 	// for the RSN-oracle 2-hop route path (rsn_oracle_routes.go). nil by default
@@ -718,13 +775,16 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		datagramPorts:   make(map[routing.Port]struct{}),
 		acceptDatagram:  make(chan datagramAccept, acceptDatagramBuf),
 		pending:         newPendingPackets(),
+		pendingLegs:     newPendingLegs(),
 		rpcSrv:          rpc.NewServer(),
 		accept:          make(chan routing.EdgeRules, acceptSize),
 		done:            make(chan struct{}),
 		trustedVisors:   trustedVisors,
 		routeSetupHooks: routeSetupHooks,
 		tpdCache:        newTPDSnapshotCache(),
+		localRoutes:     newLocalRouteMemo(),
 		suspects:        newSuspectHopCache(handshakeAwaitTimeout),
+		warmRoutes:      newWarmRoutePool(defaultWarmPlanTTL),
 		// Default a mux responder to capacity bulk-spread for the downloads it
 		// serves (see router_serve.go); operators can disable via
 		// SetResponderBulkSpread(false).

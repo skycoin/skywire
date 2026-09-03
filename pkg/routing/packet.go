@@ -77,6 +77,12 @@ func (t PacketType) String() string {
 		return "TransportBwProbe"
 	case TransportBwAckPacket:
 		return "TransportBwAck"
+	case RepairPacket:
+		return "Repair"
+	case LegStatePacket:
+		return "LegState"
+	case DirectionPacket:
+		return "Direction"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -118,7 +124,54 @@ const (
 	// TransportBwAckPacket carries the receiver's dispersion estimate back to
 	// the prober (route ID = 0). Payload: probeID(u32) estBps(u64).
 	TransportBwAckPacket
+	// RepairPacket carries one FEC repair symbol for the mux data plane (route
+	// ID > 0, same route group as the sequenced DataPackets it protects). Payload:
+	// blockID(u32 BE) idx(u8) then the symbol bytes. When both edges advertise
+	// CapFEC, the sender emits R repair packets per K-frame block onto its fast
+	// legs; a receiver whose reorder frontier is gap-blocked reconstructs the
+	// missing data frame from any K of the block's K+R symbols instead of waiting
+	// for the slow leg. A peer without CapFEC never sees these and is unaffected.
+	//
+	// FORWARD-COMPAT (see #4270 RLNC note): the `idx` field ties a repair symbol
+	// to a SPECIFIC known Cauchy generator row — i.e. this format assumes the
+	// SENDER generated it (both ends share the generator, so no coefficients are
+	// carried). A future hop-wise variant (an intermediate RECODING symbols, RLNC-
+	// style) produces arbitrary linear combinations that must carry their own
+	// coding vector; that is an ADDITIVE extension (a new packet type or an idx
+	// sentinel selecting a coding-vector layout), NOT a break to this one — and the
+	// decoder is already general (gfSolve solves any coefficient matrix). Keep the
+	// symbol/block framing agnostic about WHO makes repair symbols so the hop-wise
+	// path stays open without a format change.
+	RepairPacket
+	// LegStatePacket signals a mux leg's active/standby state to the REMOTE end
+	// (route ID > 0, same route group as the leg it names — the packet is sent ON
+	// that leg, so the leg is identified by the route ID it arrives stamped with,
+	// exactly like an aux-leg HandshakePacket). Payload: one byte, 1 = standby,
+	// 0 = active. Standby is otherwise a purely send-side decision, so on a
+	// DOWNLOAD (the remote is the bulk sender) the remote would stripe across every
+	// established leg — including ones this side has parked — head-of-line-stalling
+	// the no-skip reorder buffer on the slowest. This packet mirrors the parking to
+	// the sender so both ends stripe over the same active set. Gated by CapLegState;
+	// a peer without it never receives one and keeps the send-side-only behavior.
+	LegStatePacket
+	// DirectionPacket pins (or releases) a unidirectional group's direction→
+	// leg-class mapping — the LegState-style coordination the CapUniDir doc
+	// promises for flips, applied to a MANUAL operator pin (route ID > 0, sent on
+	// the group's primary leg). Payload: one byte — 0 = auto (release the pin, the
+	// flip controller resumes), 1 = pin-default (initiator sends on the direct
+	// leg / the download rides the multihop mux), 2 = pin-flipped (the swapped
+	// mapping). Both ends must hold the same mapping or they send on the same leg
+	// class; the receiver applies the pin too, so its flip controller does not
+	// fight the sender's. The wire framing is length-prefixed and unknown types
+	// fall through handlePacket harmlessly, so an OLD peer ignores this packet —
+	// a pin against such a peer is best-effort local-only.
+	DirectionPacket
 )
+
+// FECRepairHdr is the fixed prefix of a RepairPacket payload: blockID(4) + idx(1)
+// + symLen(2), followed by the repair symbol bytes. symLen is the block's adaptive
+// erasure-symbol length, which the receiver needs to size the block for decoding.
+const FECRepairHdr = 7
 
 // TransportBwProbeSize is the on-wire size of each packet-pair probe packet.
 // ~1400 B (sub-MTU) so consecutive packets are large enough to be spaced by
@@ -138,6 +191,51 @@ const (
 	CapMux     uint16 = 1 << 0 // Supports route multiplexing (sequenced DataPackets)
 	CapSACK    uint16 = 1 << 1 // Supports SACK retransmission
 	CapCascade uint16 = 1 << 2 // Supports cascade route setup protocol
+	// CapPerFrameNoise: the peer supports per-frame AEAD inside the mux (each
+	// sequenced DATA frame independently sealed with its sequence as the nonce),
+	// so noise is no longer a stateful stream wrapper and the reorder buffer may
+	// deliver out of order. When BOTH edges advertise it, the route-group
+	// handshake also carries a piggybacked noise KK message (after the 3-byte
+	// enc+caps prefix), and network.EncryptConn is bypassed.
+	CapPerFrameNoise uint16 = 1 << 3
+	// CapHOLRetx: the peer supports PROACTIVE head-of-line retransmit inside the
+	// mux. When BOTH edges advertise it (and CapSACK, which it reuses), a receiver
+	// whose reorder frontier has been gap-blocked for ~one fastest-live-leg RTT
+	// prompts the sender with a SACK, and the sender immediately retransmits the
+	// stuck frontier seq on its fastest live leg — bypassing the reactive
+	// retxMinAge/reorderTimeout waits — so a single multi-leg download's stall is
+	// bounded by a fast-leg RTT instead of collapsing below single-leg rate. It
+	// adds NO new wire message (the existing SACK carries the frontier); a peer
+	// without this bit cleanly falls back to the reactive SACK behavior.
+	CapHOLRetx uint16 = 1 << 4
+	// CapFEC: the peer supports forward-error-correction inside the mux. When BOTH
+	// edges advertise it (and CapMux, which it requires), the sender groups K
+	// consecutive sequenced DATA frames into a block and emits R RepairPackets on
+	// its fast legs; a receiver whose reorder frontier is gap-blocked reconstructs
+	// the missing data frame from any K of the block's K+R symbols (removing the
+	// wait on the slow leg that striped the frame). Erasure recovery delay is then
+	// bound by the FAST legs, not the slow one. A peer without this bit never
+	// receives RepairPackets and falls back cleanly to reorder+SACK.
+	CapFEC uint16 = 1 << 5
+	// CapLegState: the peer supports leg active/standby signaling (LegStatePacket).
+	// When BOTH edges advertise it (and CapMux, which it requires), the side that
+	// parks/promotes a mux leg tells the other end, which mirrors the state on ITS
+	// send side — so on a download the bulk sender stripes only across the legs the
+	// receiver has kept active, instead of every established leg (the wide-mux
+	// head-of-line stall). A peer without this bit never receives one and keeps the
+	// prior send-side-only standby behavior.
+	CapLegState uint16 = 1 << 6
+	// CapUniDir: the peer supports UNIDIRECTIONAL per-leg send selection. When BOTH
+	// edges advertise it (and CapMux), each end restricts its OWN send to legs
+	// matching its direction — the initiator (upload/forward) sends on the DIRECT
+	// (1-hop) leg, the acceptor (download/reverse) sends on the MULTIHOP mux legs —
+	// so the light direction rides the low-latency direct transport and the heavy
+	// direction aggregates over the mux, instead of both directions striping every
+	// leg. Each end decides locally from its role + leg directness (no per-packet
+	// signaling); the assignment can later be FLIPPED (heavy direction gets the
+	// mux) via LegState-style coordination. A peer without the bit keeps striping
+	// every leg both ways.
+	CapUniDir uint16 = 1 << 7
 )
 
 // SeqSize is the byte size of the sequence number prepended to DataPacket
@@ -158,6 +256,15 @@ const SACKMinPayloadSize = 5
 // SACK shape referenced by size-sensitive callers; the current encoder emits a
 // variable-length body (see MakeSACKPacket).
 const SACKPayloadSize = 12
+
+// SACKDSACKFieldSize is the size of the optional trailing DSACK field appended by
+// MakeSACKPacketWithDSACK: [flag:1][dsackSeq:4 BE]. A peer that predates the field
+// reads exactly word_count words and ignores these trailing bytes.
+const SACKDSACKFieldSize = 5
+
+// sackDSACKFlag marks the trailing DSACK field as present (guards against a
+// zero-padded or truncated read being misparsed as a DSACK of seq 0).
+const sackDSACKFlag = 0x01
 
 // CloseCode represents close code for ClosePacket.
 type CloseCode byte
@@ -347,6 +454,116 @@ func (p Packet) DataPayloadAfterSeq() []byte {
 	return p[PacketPayloadOffset+SeqSize:]
 }
 
+// MakeRepairPacket constructs a RepairPacket carrying one FEC repair symbol for
+// route group id. Payload: blockID(u32 BE) idx(u8) symLen(u16 BE) symbol...
+func MakeRepairPacket(id RouteID, blockID uint32, idx uint8, symLen int, symbol []byte) (Packet, error) {
+	totalPayload := FECRepairHdr + len(symbol)
+	if totalPayload > math.MaxUint16 || symLen > math.MaxUint16 {
+		return Packet{}, ErrPayloadTooBig
+	}
+
+	packet := make([]byte, PacketHeaderSize+totalPayload)
+
+	packet[PacketTypeOffset] = byte(RepairPacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(totalPayload)) //nolint:gosec
+	binary.BigEndian.PutUint32(packet[PacketPayloadOffset:], blockID)
+	packet[PacketPayloadOffset+4] = idx
+	binary.BigEndian.PutUint16(packet[PacketPayloadOffset+5:], uint16(symLen)) //nolint:gosec
+	copy(packet[PacketPayloadOffset+FECRepairHdr:], symbol)
+
+	return packet, nil
+}
+
+// RepairBlockID extracts the FEC block ID from a RepairPacket.
+func (p Packet) RepairBlockID() uint32 {
+	return binary.BigEndian.Uint32(p[PacketPayloadOffset:])
+}
+
+// RepairIndex extracts the repair-symbol index (0..R-1) from a RepairPacket.
+func (p Packet) RepairIndex() uint8 {
+	return p[PacketPayloadOffset+4]
+}
+
+// RepairSymLen extracts the block's adaptive symbol length from a RepairPacket.
+func (p Packet) RepairSymLen() int {
+	return int(binary.BigEndian.Uint16(p[PacketPayloadOffset+5:]))
+}
+
+// RepairSymbol returns the repair symbol bytes of a RepairPacket.
+func (p Packet) RepairSymbol() []byte {
+	return p[PacketPayloadOffset+FECRepairHdr:]
+}
+
+// LegStatePayloadSize is the LegStatePacket payload: one byte (1=standby, 0=active).
+const LegStatePayloadSize = 1
+
+// MakeLegStatePacket constructs a LegStatePacket announcing that the leg it is
+// sent on is now standby (true) or active (false) on this side, so the remote can
+// mirror the state on its send side. id is the leg's next-hop route ID (the packet
+// is sent ON that leg, exactly like an aux-leg handshake, so the leg is identified
+// by the route it arrives on — no leg index is carried).
+func MakeLegStatePacket(id RouteID, standby bool) Packet {
+	packet := make([]byte, PacketHeaderSize+LegStatePayloadSize)
+	packet[PacketTypeOffset] = byte(LegStatePacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], LegStatePayloadSize)
+	if standby {
+		packet[PacketPayloadOffset] = 1
+	}
+	return packet
+}
+
+// LegStateStandby reports whether a LegStatePacket announces standby (true) or
+// active (false). A malformed/empty payload reads as active (the safe default —
+// it never parks a leg the sender still wants to use).
+func (p Packet) LegStateStandby() bool {
+	payload := p.Payload()
+	return len(payload) >= LegStatePayloadSize && payload[0] == 1
+}
+
+// DirectionPacket payload modes: the direction→leg-class mapping an operator
+// pins on a unidirectional (CapUniDir) group, or auto to release the pin.
+const (
+	// DirectionAuto releases a manual pin — the flip controller resumes on both
+	// ends from the current mapping.
+	DirectionAuto byte = 0
+	// DirectionPinDefault pins the DEFAULT mapping: the initiator sends on the
+	// DIRECT (1-hop) leg, the acceptor (the download) on the MULTIHOP mux legs.
+	DirectionPinDefault byte = 1
+	// DirectionPinFlipped pins the FLIPPED mapping: the initiator sends on the
+	// multihop mux legs, the acceptor on the direct leg (upload gets the mux).
+	DirectionPinFlipped byte = 2
+)
+
+// DirectionPayloadSize is the DirectionPacket payload: one mode byte.
+const DirectionPayloadSize = 1
+
+// MakeDirectionPacket constructs a DirectionPacket pinning (mode 1/2) or
+// releasing (mode 0) the unidirectional direction→leg-class mapping, addressed
+// to the route group the id belongs to. Sent on the group's primary leg; the
+// receiver applies the same pin so both ends keep sending on disjoint classes.
+func MakeDirectionPacket(id RouteID, mode byte) Packet {
+	packet := make([]byte, PacketHeaderSize+DirectionPayloadSize)
+	packet[PacketTypeOffset] = byte(DirectionPacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], DirectionPayloadSize)
+	packet[PacketPayloadOffset] = mode
+	return packet
+}
+
+// DirectionMode returns a DirectionPacket's mode byte (DirectionAuto /
+// DirectionPinDefault / DirectionPinFlipped). A malformed/empty payload reads
+// as DirectionAuto — the safe default (it never forces a mapping the sender
+// did not ask for; at worst it releases a pin back to the controller).
+func (p Packet) DirectionMode() byte {
+	payload := p.Payload()
+	if len(payload) < DirectionPayloadSize {
+		return DirectionAuto
+	}
+	return payload[0]
+}
+
 // HandshakeCapabilities extracts the capability bitmap from an extended handshake payload.
 // Returns 0 if the payload is too short (old visor).
 func (p Packet) HandshakeCapabilities() uint16 {
@@ -355,6 +572,30 @@ func (p Packet) HandshakeCapabilities() uint16 {
 		return binary.LittleEndian.Uint16(payload[1:3])
 	}
 	return 0
+}
+
+// MakeHandshakePacketWithNoise builds a handshake packet whose payload is the
+// standard [enc][caps] prefix followed by a piggybacked noise KK handshake
+// message. Used only when CapPerFrameNoise is negotiated; a nil/empty noiseMsg
+// yields the same 3-byte payload as MakeHandshakePacket.
+func MakeHandshakePacketWithNoise(id RouteID, supportEncryption bool, capabilities uint16, noiseMsg []byte) Packet {
+	payload := make([]byte, 3+len(noiseMsg))
+	if supportEncryption {
+		payload[0] = 1
+	}
+	binary.LittleEndian.PutUint16(payload[1:3], capabilities)
+	copy(payload[3:], noiseMsg)
+	return MakeHandshakePacketRaw(id, payload)
+}
+
+// HandshakeNoisePayload returns the piggybacked noise handshake message from an
+// extended handshake payload (bytes after the 3-byte enc+caps prefix), or nil.
+func (p Packet) HandshakeNoisePayload() []byte {
+	payload := p.Payload()
+	if len(payload) > 3 {
+		return payload[3:]
+	}
+	return nil
 }
 
 // MakeErrorPacket constructs a new ErrorPacket.
@@ -384,6 +625,22 @@ func MakeErrorPacket(id RouteID, errPayload []byte) (Packet, error) {
 // packets stop being stored for retransmission, and a later loss wedges the mux
 // stream permanently (the "carries-then-stalls" failure).
 func MakeSACKPacket(id RouteID, lastContiguousSeq uint32, words []uint64) Packet {
+	return makeSACKPacket(id, lastContiguousSeq, words, 0, false)
+}
+
+// MakeSACKPacketWithDSACK is MakeSACKPacket plus a trailing DSACK (duplicate-SACK)
+// field: dsackSeq is a sequence the receiver got AGAIN (a duplicate). On the mux's
+// reliable, ordered legs a duplicate is almost always the sender's own spurious
+// retransmit, so this tells the sender to WIDEN its RACK reorder window — it
+// retransmitted too eagerly (RFC 8985 §7.2 reorder-window adaptation). The field
+// is appended AFTER the received bitmap as [flag:1=0x01][dsackSeq:4 BE]; a peer
+// that predates it reads exactly word_count words (SACKWords) and ignores the
+// trailing bytes, so the packet stays backward compatible with no capability bit.
+func MakeSACKPacketWithDSACK(id RouteID, lastContiguousSeq uint32, words []uint64, dsackSeq uint32) Packet {
+	return makeSACKPacket(id, lastContiguousSeq, words, dsackSeq, true)
+}
+
+func makeSACKPacket(id RouteID, lastContiguousSeq uint32, words []uint64, dsackSeq uint32, dsack bool) Packet {
 	if len(words) > SACKMaxWords {
 		words = words[:SACKMaxWords]
 	}
@@ -393,6 +650,9 @@ func MakeSACKPacket(id RouteID, lastContiguousSeq uint32, words []uint64) Packet
 		words = words[:len(words)-1]
 	}
 	payloadSize := SACKMinPayloadSize + len(words)*8
+	if dsack {
+		payloadSize += SACKDSACKFieldSize
+	}
 	packet := make([]byte, PacketHeaderSize+payloadSize)
 
 	packet[PacketTypeOffset] = byte(SACKPacket)
@@ -402,6 +662,11 @@ func MakeSACKPacket(id RouteID, lastContiguousSeq uint32, words []uint64) Packet
 	packet[PacketPayloadOffset+4] = byte(len(words)) //nolint:gosec // len(words) <= SACKMaxWords (32), capped above
 	for w, word := range words {
 		binary.BigEndian.PutUint64(packet[PacketPayloadOffset+5+w*8:], word)
+	}
+	if dsack {
+		off := PacketPayloadOffset + 5 + len(words)*8
+		packet[off] = sackDSACKFlag
+		binary.BigEndian.PutUint32(packet[off+1:], dsackSeq)
 	}
 
 	return packet
@@ -430,6 +695,28 @@ func (p Packet) SACKWords() []uint64 {
 		words[w] = binary.BigEndian.Uint64(payload[5+w*8:])
 	}
 	return words
+}
+
+// SACKDSACK extracts the optional trailing DSACK (duplicate-SACK) sequence from a
+// SACK packet: the seq the receiver reported getting twice (see
+// MakeSACKPacketWithDSACK). Returns (seq, true) when present, (0, false) when the
+// SACK carries no DSACK field (the common case) or is truncated. The offset is
+// computed from the word_count byte, so it lands exactly past the bitmap the same
+// way SACKWords reads it.
+func (p Packet) SACKDSACK() (uint32, bool) {
+	payload := p.Payload()
+	if len(payload) < SACKMinPayloadSize {
+		return 0, false
+	}
+	n := int(payload[4])
+	if n > SACKMaxWords {
+		return 0, false
+	}
+	off := SACKMinPayloadSize + n*8
+	if len(payload) < off+SACKDSACKFieldSize || payload[off] != sackDSACKFlag {
+		return 0, false
+	}
+	return binary.BigEndian.Uint32(payload[off+1:]), true
 }
 
 // TransportPingPayloadSize is the size of a transport ping/pong payload (8 bytes for unix nano timestamp).

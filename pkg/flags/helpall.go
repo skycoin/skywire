@@ -131,17 +131,22 @@ func findChild(c *cobra.Command, name string) *cobra.Command {
 
 // PrintHelpAll writes root.Help() followed by each subcommand's Help().
 // With recursive=true, every descendant is included.
+//
+// Plain: this produces text to keep rather than to look at, and a frame of
+// help-rain per command in the tree is not that. See withPlainHelp.
 func PrintHelpAll(root *cobra.Command, recursive bool) {
-	printCmdHelp(root)
-	for _, c := range root.Commands() {
-		if !c.IsAvailableCommand() {
-			continue
+	withPlainHelp(func() {
+		printCmdHelp(root)
+		for _, c := range root.Commands() {
+			if !c.IsAvailableCommand() {
+				continue
+			}
+			printCmdHelp(c)
+			if recursive {
+				printDescendantsHelp(c)
+			}
 		}
-		printCmdHelp(c)
-		if recursive {
-			printDescendantsHelp(c)
-		}
-	}
+	})
 }
 
 func printDescendantsHelp(c *cobra.Command) {
@@ -198,9 +203,13 @@ func printTreeChildren(c *cobra.Command, prefix string) {
 // direct children = H2, etc.), capped at H6 to stay within CommonMark.
 // The help text is wrapped in fenced code blocks.
 func PrintCommandDocs(root *cobra.Command) {
-	fmt.Printf("# %s\n\n", root.CommandPath())
-	printCmdDoc(root, 1)
-	walkCmdDocs(root, 2)
+	// Plain: this is markdown for a file. Escape sequences in a fenced code
+	// block are not decoration, they are litter. See withPlainHelp.
+	withPlainHelp(func() {
+		fmt.Printf("# %s\n\n", root.CommandPath())
+		printCmdDoc(root, 1)
+		walkCmdDocs(root, 2)
+	})
 }
 
 func walkCmdDocs(c *cobra.Command, depth int) {

@@ -108,24 +108,79 @@ type muxRouteGroupInfo struct {
 		DstPort int    `json:"dst_port"`
 		SrcPort int    `json:"src_port"`
 	} `json:"desc"`
-	MuxEnabled  bool         `json:"mux_enabled"`
-	SACKEnabled bool         `json:"sack_enabled"`
-	Legs        []muxLegInfo `json:"legs"`
+	MuxEnabled    bool `json:"mux_enabled"`
+	SACKEnabled   bool `json:"sack_enabled"`
+	PerFrameNoise bool `json:"per_frame_noise"`
+	// Directional/Flipped describe the unidirectional-mux state (CapUniDir): each
+	// direction rides a disjoint leg CLASS, and Flipped tells which class carries
+	// which direction. Absent before now, so "is this group directional" was
+	// invisible from the CLI.
+	Directional bool `json:"directional,omitempty"`
+	Flipped     bool `json:"flipped,omitempty"`
+	// FlipPinned is the operator's manual direction pin: "auto" (flip controller
+	// in charge), "default" or "flipped" (mapping held by 'proxy mux direction',
+	// controller dormant). Empty on a non-directional mux.
+	FlipPinned      string       `json:"flip_pinned,omitempty"`
+	Distribution    string       `json:"distribution,omitempty"`
+	ReorderPending  int          `json:"reorder_pending,omitempty"`
+	ReorderGapAgeMS float64      `json:"reorder_gap_age_ms,omitempty"`
+	WriteSeq        uint32       `json:"write_seq,omitempty"`
+	FECEnabled      bool         `json:"fec_enabled,omitempty"`
+	FECReconstructs uint64       `json:"fec_reconstructs,omitempty"`
+	Legs            []muxLegInfo `json:"legs"`
 }
 
 type muxLegInfo struct {
-	Index       int     `json:"index"`
-	TransportID string  `json:"transport_id"`
-	TpType      string  `json:"tp_type"`
-	RemotePK    string  `json:"remote_pk"`
-	LatencyMS   float64 `json:"latency_ms,omitempty"`
-	SentBytes   uint64  `json:"sent_bytes"`
-	SentPackets uint64  `json:"sent_packets"`
-	RecvBytes   uint64  `json:"recv_bytes"`
-	RecvPackets uint64  `json:"recv_packets"`
-	Retransmits uint64  `json:"retransmits"`
-	Alive       bool    `json:"alive"`
-	Standby     bool    `json:"standby"`
+	Index          int     `json:"index"`
+	TransportID    string  `json:"transport_id"`
+	TpType         string  `json:"tp_type"`
+	RemotePK       string  `json:"remote_pk"`
+	LatencyMS      float64 `json:"latency_ms,omitempty"`
+	RouteLatencyMS float64 `json:"route_latency_ms,omitempty"`
+	// Direct is true for a 1-hop leg straight to the far endpoint, false for a
+	// relayed (multihop) leg. The router computes it, but the CLI mirror struct
+	// dropped it — so it read as null in `proxy mux-info --json` even though the
+	// unidirectional split keys on exactly this.
+	Direct      bool   `json:"direct"`
+	SentBytes   uint64 `json:"sent_bytes"`
+	SentPackets uint64 `json:"sent_packets"`
+	RecvBytes   uint64 `json:"recv_bytes"`
+	RecvPackets uint64 `json:"recv_packets"`
+	// PayloadBytes is the unique in-order payload this leg delivered (retransmits
+	// excluded), so per-leg values sum to the transfer size — the clean signal for
+	// which legs carried a direction's data.
+	PayloadBytes uint64 `json:"payload_bytes"`
+	// DupBytes / RepairBytes decompose RecvBytes further: inbound duplicates
+	// (the peer's spurious retransmits, concentrated on the fastest leg) and
+	// FEC repair frames (deliberate overhead).
+	DupBytes       uint64  `json:"dup_bytes"`
+	RepairBytes    uint64  `json:"repair_bytes"`
+	Retransmits    uint64  `json:"retransmits"`
+	GoodputBps     float64 `json:"goodput_bps,omitempty"`
+	GoodputUpBps   float64 `json:"goodput_up_bps,omitempty"`
+	GoodputDownBps float64 `json:"goodput_down_bps,omitempty"`
+	Alive          bool    `json:"alive"`
+	Standby        bool    `json:"standby"`
+	// Hops is the leg's full forward route (every hop to the destination,
+	// full PKs, per-hop transport type + latency) — the visor has sent it
+	// since the per-leg route telemetry landed, but this mirror struct
+	// lacked the field, so BOTH output paths (which round-trip the RPC
+	// response through this struct — see render) silently dropped it:
+	// `--json`/`--jq` showed every leg with an empty hop list while
+	// `proxy tree` (whose own treeLegInfo mirror carries the field)
+	// rendered the full chains from the very same RPC.
+	Hops []muxHopInfo `json:"hops,omitempty"`
+}
+
+// muxHopInfo is one hop of a leg's forward route — the CLI-side mirror of
+// visor.MuxHopInfo (json tags are the stable contract). From/To are FULL
+// public keys, never truncated.
+type muxHopInfo struct {
+	TpID      string  `json:"tp_id"`
+	From      string  `json:"from"`
+	To        string  `json:"to"`
+	TpType    string  `json:"tp_type"`
+	LatencyMS float64 `json:"latency_ms,omitempty"`
 }
 
 // muxRateTracker remembers the previous poll's per-leg byte counters so
@@ -191,11 +246,27 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 	next := make(map[string]muxLegBytes)
 
 	for ri, rg := range rgs {
-		fmt.Printf("rg[%d] %s:%d → %s:%d  mux=%v sack=%v  legs=%d\n",
+		fmt.Printf("rg[%d] %s:%d → %s:%d  mux=%v sack=%v perframe=%v  legs=%d\n",
 			ri,
 			shortPK(rg.Desc.SrcPK), rg.Desc.SrcPort,
 			shortPK(rg.Desc.DstPK), rg.Desc.DstPort,
-			rg.MuxEnabled, rg.SACKEnabled, len(rg.Legs))
+			rg.MuxEnabled, rg.SACKEnabled, rg.PerFrameNoise, len(rg.Legs))
+		if rg.MuxEnabled {
+			// dist + reorder frontier: a rising pending with a growing gap age is
+			// the head-of-line-blocking stall signal for a black-holing leg.
+			gap := "0"
+			if rg.ReorderGapAgeMS > 0 {
+				gap = fmt.Sprintf("%.0fms", rg.ReorderGapAgeMS)
+			}
+			fmt.Printf("       dist=%s  reorder_pending=%d  gap_age=%s  write_seq=%d\n",
+				rg.Distribution, rg.ReorderPending, gap, rg.WriteSeq)
+			// Directional groups: which class carries which direction, and whether
+			// an operator pin ('proxy mux direction') holds the mapping.
+			if rg.Directional {
+				fmt.Printf("       directional=true  flipped=%v  flip_pinned=%s\n",
+					rg.Flipped, rg.FlipPinned)
+			}
+		}
 
 		// Sort legs by index so the row order is stable across snapshots.
 		sort.SliceStable(rg.Legs, func(i, j int) bool { return rg.Legs[i].Index < rg.Legs[j].Index })

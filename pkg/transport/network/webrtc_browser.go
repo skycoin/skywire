@@ -85,15 +85,41 @@ func iceServersJS(iceURLs []string) js.Value {
 // proxy forwards to a real one on the page main thread. Falls back to a direct
 // RTCPeerConnection when on the main thread (the in-page boot fallback) or under a
 // harness that exposes RTCPeerConnection to the worker.
-func newPeerConnection(iceServers js.Value) js.Value {
+// Errors (not panics) when neither is available — a headless js runtime
+// (node) has no RTCPeerConnection at all, and a dial must fail cleanly so
+// the transport layer falls back to other network types.
+func newPeerConnection(iceServers js.Value) (js.Value, error) {
 	if b := js.Global().Get("__skywireRTC"); b.Truthy() {
-		return b.Call("newPC", iceServers)
+		return b.Call("newPC", iceServers), nil
+	}
+	rtcPC := js.Global().Get("RTCPeerConnection")
+	if !rtcPC.Truthy() {
+		return js.Value{}, errors.New("webrtc: RTCPeerConnection unavailable in this runtime")
 	}
 	cfg := js.Global().Get("Object").New()
 	if iceServers.Truthy() {
 		cfg.Set("iceServers", iceServers)
 	}
-	return js.Global().Get("RTCPeerConnection").New(cfg)
+	// syscall/js panics when a constructor throws — notably Chrome's hard cap
+	// on concurrent RTCPeerConnections ("Cannot create so many
+	// PeerConnections"), which hours of leaked failed attempts eventually
+	// hit. A dial/accept must FAIL, not take the whole Go runtime down with
+	// it (observed live: the desk visor died at ~5h uptime with exactly that
+	// panic, killing every listener in the instance).
+	var pc js.Value
+	err := func() (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("webrtc: new RTCPeerConnection: %v", r)
+			}
+		}()
+		pc = rtcPC.New(cfg)
+		return nil
+	}()
+	if err != nil {
+		return js.Value{}, err
+	}
+	return pc, nil
 }
 
 // wireLocalCandidates forwards locally-gathered ICE candidates to the peer over
@@ -174,9 +200,21 @@ func pumpRemoteSignals(ctx context.Context, pc js.Value, sc *signalConn, onOffer
 // return once the DataChannel is open.
 func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string) (net.Conn, error) {
 	sc := &signalConn{rwc: signal}
-	pc := newPeerConnection(iceServersJS(iceURLs))
+	pc, err := newPeerConnection(iceServersJS(iceURLs))
+	if err != nil {
+		return nil, err
+	}
 	dc := pc.Call("createDataChannel", "skywire", map[string]interface{}{"ordered": true})
 	conn := newWebRTCConn(dc, pc, signal)
+	// Every failure below must release the peer connection: the page has a
+	// hard budget of concurrent RTCPeerConnections, and leaked failed dials
+	// spent it all over hours until construction itself started throwing.
+	established := false
+	defer func() {
+		if !established {
+			conn.Close() //nolint:errcheck,gosec // closes dc + pc + signal
+		}
+	}()
 
 	wireLocalCandidates(pc, sc)
 	go pumpRemoteSignals(ctx, pc, sc, nil)
@@ -194,6 +232,7 @@ func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string
 	if err := conn.waitOpen(ctx); err != nil {
 		return nil, err
 	}
+	established = true
 	return conn, nil
 }
 
@@ -201,7 +240,20 @@ func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string
 // it, and return the DataChannel (delivered via pc.ondatachannel) once open.
 func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string) (net.Conn, error) {
 	sc := &signalConn{rwc: signal}
-	pc := newPeerConnection(iceServersJS(iceURLs))
+	pc, err := newPeerConnection(iceServersJS(iceURLs))
+	if err != nil {
+		return nil, err
+	}
+	// Same close-on-failure discipline as the dial side: an accept that never
+	// completes (offer never arrives, 30s ctx expiry, handshake error) must
+	// not leak its peer connection — these were the bulk of the page-budget
+	// bleed, one per failed inbound signaling attempt.
+	established := false
+	defer func() {
+		if !established {
+			pc.Call("close")
+		}
+	}()
 	dcCh := make(chan js.Value, 1)
 	onDC := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
 		select {
@@ -232,8 +284,10 @@ func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []stri
 	case dc := <-dcCh:
 		conn := newWebRTCConn(dc, pc, signal)
 		if err := conn.waitOpen(ctx); err != nil {
+			conn.Close() //nolint:errcheck,gosec // closes pc too; the defer's second close is a no-op
 			return nil, err
 		}
+		established = true
 		return conn, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()

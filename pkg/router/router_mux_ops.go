@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -83,7 +84,7 @@ func (r *router) appendRouteAsymmetric(nrg *NoiseRouteGroup, rules routing.EdgeR
 		lastTp := rg.tps[lastIdx]
 		lastRule := rg.fwd[lastIdx]
 		rg.mu.Unlock()
-		packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, routing.CapMux|routing.CapSACK)
+		packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, routing.CapMux|routing.CapSACK|routing.CapHOLRetx)
 		if err := rg.writePacket(context.Background(), lastTp, packet, lastRule.KeyRouteID()); err != nil {
 			r.logger.WithError(err).Warn("Failed to send handshake on additional mux transport")
 		}
@@ -116,6 +117,19 @@ func (r *router) drainPendingToGroup(nrg *NoiseRouteGroup, desc routing.RouteDes
 	for _, pp := range r.pending.take(desc) {
 		if err := nrg.handlePacket(pp.pkt); err != nil {
 			r.logger.WithError(err).Debug("Failed to re-dispatch parked packet after mux-leg append")
+		}
+	}
+}
+
+// drainPendingLegs appends every aux mux leg buffered for desc while its route
+// group was still initializing (rgsRaw), through the guarded append path. Called
+// by saveRouteGroupRules right after the group registers into rgsNs (#80). Each
+// append carries the DMSG-refusal + duplicate-transport-ID guards, sends the
+// per-leg handshake, and drains any transport frames parked for the new leg.
+func (r *router) drainPendingLegs(nrg *NoiseRouteGroup, desc routing.RouteDescriptor) {
+	for _, pl := range r.pendingLegs.take(desc) {
+		if err := r.appendRouteToGroup(nrg, pl.rules); err != nil {
+			r.logger.WithError(err).Debugf("Failed to append buffered aux mux leg for %s", &desc)
 		}
 	}
 }
@@ -166,7 +180,7 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	lastRule := rg.fwd[lastIdx]
 	rg.mu.Unlock()
 
-	packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, routing.CapMux|routing.CapSACK)
+	packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, routing.CapMux|routing.CapSACK|routing.CapHOLRetx)
 	if err := rg.writePacket(context.Background(), lastTp, packet, lastRule.KeyRouteID()); err != nil {
 		r.logger.WithError(err).Warn("Failed to send handshake on additional mux transport")
 	}
@@ -239,6 +253,42 @@ func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []rout
 	}
 	nrg.rg.mu.Unlock()
 
+	// Hard mux invariants, enforced at the commit boundary so they hold for
+	// every caller (GrowMuxRoute's planner and external callers that supply
+	// explicit hops alike): (b) neither the forward nor the reverse path may
+	// loop through the same visor twice, and (a) the new leg's intermediates
+	// must be fully disjoint from those already used by the group's legs. This
+	// is the one chokepoint that sees the full hop chain — appendRouteToGroup
+	// only knows the next transport ID — so it is where the whole-path checks
+	// belong.
+	used := intermediatesOfRouteGroup(nrg, lPK, rPK)
+	if !validMuxLeg(fwd, rev, lPK, rPK, used, used) {
+		return errors.New("refusing mux leg: intra-route loop or intermediate overlap with an existing leg (mux legs must be fully disjoint and loop-free)")
+	}
+
+	// Reject a leg whose intermediate is a same-LAN peer: routing through a
+	// co-located visor (reached over the LAN, or by NAT-hairpin off our own
+	// public IP) adds a hop with no path diversity and in practice black-holes
+	// bulk data — the deceptively-low-latency LAN short-circuit that poisons the
+	// mux (the fast leg the selector then prefers, stalling the whole group). The
+	// dial path already excludes these via sameLANExcludedPKs; `route calc` does
+	// NOT, so an explicit leg from `mux set` can smuggle one in. Enforce it here,
+	// the one chokepoint every explicit-hops caller passes through.
+	if lan := r.sameLANExcludedPKs(); len(lan) > 0 {
+		lanSet := make(map[cipher.PubKey]struct{}, len(lan))
+		for _, pk := range lan {
+			lanSet[pk] = struct{}{}
+		}
+		for _, h := range fwd {
+			if h.To == rPK {
+				break // reached the destination; the remaining check is moot
+			}
+			if _, bad := lanSet[h.To]; bad {
+				return fmt.Errorf("refusing mux leg: intermediate %s is a same-LAN peer (no path diversity; black-holes bulk data)", h.To)
+			}
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -259,6 +309,10 @@ func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []rout
 	if err := r.appendRouteToGroup(nrg, rules); err != nil {
 		return fmt.Errorf("append route failed: %w", err)
 	}
+
+	// Record this leg's full forward route so the per-leg mux view can show
+	// its whole path (all hops, full PKs, per-hop transport type).
+	nrg.rg.recordLegHops(fwd)
 
 	r.logger.Infof("Added mux route via %d-hop path (first tp=%s) to route group %s", len(fwd), tpID, desc.String())
 	return nil
@@ -365,10 +419,58 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 			continue
 		}
 
+		// Hard mux invariants (post-fetch gate): the finder honors
+		// ExcludeIntermediatePKs but its local-calc fallback / a finder miss can
+		// still return a leg that overlaps an existing leg's intermediates or
+		// loops through a visor twice. Reject it, claim its intermediates so the
+		// re-request diverges, and retry. excludePKs is the running union of the
+		// live legs' intermediates plus every prior iteration's, for both
+		// directions.
+		if !validMuxLeg(fwd, rev, lPK, rPK, excludePKs, excludePKs) {
+			excludePKs = append(excludePKs, intermediatesOfHops(fwd, lPK, rPK)...)
+			excludePKs = append(excludePKs, intermediatesOfHops(rev, rPK, lPK)...)
+			consecutiveFailures++
+			log.Debugf("GrowMuxRoute: candidate for leg %d/%d rejected — intra-route loop or intermediate overlap; re-requesting with strengthened excludes",
+				current+added+1, target)
+			if consecutiveFailures >= maxConsecutiveFailures {
+				break
+			}
+			continue
+		}
+
 		// Claim this path's intermediates regardless of add outcome, so
 		// the next iteration diverges from it.
 		excludePKs = append(excludePKs, intermediatesOfHops(fwd, lPK, rPK)...)
 		excludePKs = append(excludePKs, intermediatesOfHops(rev, rPK, lPK)...)
+
+		// The route-finder honors ExcludeIntermediatePKs but NOT
+		// ExcludeTransportIDs, so with a 1-hop-capable min_hops it can hand back a
+		// leg whose FIRST hop reuses a transport already in the group (e.g. the
+		// direct transport that is already the primary leg). Dialing it would burn
+		// a setup-node round-trip only for appendRouteAsymmetric to reject it
+		// locally ("already in the group") — the churn that hammers the setup node
+		// and oscillates the leg set on every rotation tick. Drop such a plan HERE,
+		// before the dial (same discipline as the initial batch in
+		// router_dial.go's establishMuxRoutes). Its intermediates are already
+		// claimed above, so the next iteration diverges.
+		if len(fwd) > 0 {
+			dup := false
+			for _, ex := range excludeIDs {
+				if fwd[0].TpID == ex {
+					dup = true
+					break
+				}
+			}
+			if dup {
+				consecutiveFailures++
+				log.Debugf("GrowMuxRoute: planned leg %d/%d reuses transport %s already in the group (finder ignores ExcludeTransportIDs); skipping before dial",
+					current+added+1, target, fwd[0].TpID)
+				if consecutiveFailures >= maxConsecutiveFailures {
+					break
+				}
+				continue
+			}
+		}
 
 		if err := r.AddMuxRouteByHops(desc, fwd, rev); err != nil {
 			consecutiveFailures++
@@ -418,12 +520,42 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	if idx < 0 {
 		return fmt.Errorf("transport %s not found in route group", tpID)
 	}
-	// The primary leg (index 0) is privileged throughout the route group:
-	// ping/pong/SACK and latency attribution hardcode tps[0], and the mux
-	// selector treats leg 0 as always-ready. Removing it silently breaks the
-	// group, so refuse it (the last-leg guard above does not cover this).
-	if idx == 0 {
-		return errors.New("cannot remove the primary leg (index 0) of a route group")
+	// Removing the primary leg (index 0) is ALLOWED and re-homes the primary.
+	// ping/pong/SACK and latency attribution read rg.tps[0] LIVE on each call
+	// (they hold no cached leg reference), and the mux selector is rebuilt
+	// below, so the survivor compacted into index 0 transparently takes over —
+	// the exact re-home pruneDeadTransports (index-0 death) and
+	// pruneLegByConsumeRule (remote leg retire) already perform in production.
+	// The last-leg guard above is the only real floor. Allowing this is what
+	// makes full manual route control work: exact route pinning, live
+	// direct<->multihop route switching, and single-leg pinning — the leg-set
+	// becomes exactly what the operator asks for (`proxy start --route`,
+	// `proxy mux set --prune`), with no un-prunable auto primary left behind.
+
+	// Retire this leg on the FAR endpoint before tearing down local state, so the
+	// exit stops striping data onto it. Unlike the adaptive drop (dropLegsByIndex
+	// closes the transport, which the peer's liveness eventually notices), a manual
+	// removal leaves the transport UP — so without an explicit signal the far side
+	// keeps SENDING on a leg the receiver has dropped: the send-side desync that
+	// strands the whole downlink (measured: a mux group's agg_recv pinned at ~0
+	// even after the bad leg was replaced by a healthy one, because the exit was
+	// still striping onto the dropped leg). MakeClosePacket with CloseLegRetired
+	// follows this leg's own forward path; the far endpoint's router_packet handler
+	// calls pruneLegByConsumeRule to reclaim its matching consume rule IMMEDIATELY,
+	// with no keepalive/liveness wait. Fire-and-forget in a goroutine with a bounded
+	// context so the network write never blocks under rg.mu; it reads only captured
+	// values, which stay valid after the slices below are compacted.
+	if idx < len(rg.fwd) && rg.fwd[idx] != nil && rg.tps[idx] != nil {
+		retireTp := rg.tps[idx]
+		retireRule := rg.fwd[idx]
+		retire := routing.MakeClosePacket(retireRule.NextRouteID(), routing.CloseLegRetired)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
+			defer cancel()
+			if err := rg.writePacket(ctx, retireTp, retire, retireRule.KeyRouteID()); err != nil {
+				rg.logger.WithError(err).Debugf("leg-retire signal to remote failed for tp %s", tpID)
+			}
+		}()
 	}
 
 	// Collect rule IDs to delete

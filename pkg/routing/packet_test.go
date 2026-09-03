@@ -113,6 +113,25 @@ func TestPacketTypeStringDatagram(t *testing.T) {
 	assert.Equal(t, "Datagram", DatagramPacket.String())
 }
 
+func TestMakeLegStatePacket(t *testing.T) {
+	// Standby=true encodes a 1 byte; the type + route ID round-trip.
+	sb := MakeLegStatePacket(7, true)
+	assert.Equal(t, LegStatePacket, sb.Type())
+	assert.Equal(t, "LegState", sb.Type().String())
+	assert.Equal(t, RouteID(7), sb.RouteID())
+	assert.Equal(t, uint16(LegStatePayloadSize), sb.Size())
+	assert.True(t, sb.LegStateStandby())
+
+	// Active=false encodes a 0 byte.
+	act := MakeLegStatePacket(7, false)
+	assert.False(t, act.LegStateStandby())
+
+	// A truncated/empty payload reads as active (the safe default — never parks a
+	// leg the sender still wants).
+	var empty Packet = []byte{byte(LegStatePacket), 0, 0, 0, 7, 0, 0}
+	assert.False(t, empty.LegStateStandby())
+}
+
 func TestMakePingPacket(t *testing.T) {
 	staticTime, _ := time.Parse(time.RFC3339, "2012-11-01T22:08:41+00:00") //nolint:errcheck
 	timestamp := staticTime.UTC().UnixNano() / int64(time.Millisecond)
@@ -147,4 +166,57 @@ func TestMakeErrorPacket(t *testing.T) {
 	assert.Equal(t, uint16(3), packet.Size())
 	assert.Equal(t, RouteID(2), packet.RouteID())
 	assert.Equal(t, []byte("foo"), packet.Payload())
+}
+
+func TestMakeRepairPacketRoundTrip(t *testing.T) {
+	id := RouteID(0xDEADBEEF)
+	blockID := uint32(12345)
+	idx := uint8(2)
+	symLen := 4098
+	symbol := make([]byte, symLen)
+	for i := range symbol {
+		symbol[i] = byte((i * 31) & 0xff) // deliberate wrap: just a repeating fill pattern
+	}
+
+	p, err := MakeRepairPacket(id, blockID, idx, symLen, symbol)
+	if err != nil {
+		t.Fatalf("MakeRepairPacket: %v", err)
+	}
+	if p.Type() != RepairPacket {
+		t.Fatalf("type = %v want RepairPacket", p.Type())
+	}
+	if p.RouteID() != id {
+		t.Fatalf("routeID = %v want %v", p.RouteID(), id)
+	}
+	if p.RepairBlockID() != blockID {
+		t.Fatalf("blockID = %d want %d", p.RepairBlockID(), blockID)
+	}
+	if p.RepairIndex() != idx {
+		t.Fatalf("idx = %d want %d", p.RepairIndex(), idx)
+	}
+	if p.RepairSymLen() != symLen {
+		t.Fatalf("symLen = %d want %d", p.RepairSymLen(), symLen)
+	}
+	require.Equal(t, symbol, p.RepairSymbol())
+}
+
+// TestMakeDirectionPacket round-trips the manual direction pin: type, route ID
+// and mode byte survive Make → accessors, and a malformed (empty-payload)
+// packet reads as the safe DirectionAuto.
+func TestMakeDirectionPacket(t *testing.T) {
+	for _, mode := range []byte{DirectionAuto, DirectionPinDefault, DirectionPinFlipped} {
+		p := MakeDirectionPacket(7, mode)
+		assert.Equal(t, DirectionPacket, p.Type())
+		assert.Equal(t, RouteID(7), p.RouteID())
+		assert.Equal(t, uint16(DirectionPayloadSize), p.Size())
+		assert.Equal(t, mode, p.DirectionMode())
+	}
+	// Exact wire shape for pin-flipped: type after LegStatePacket, 1-byte payload.
+	p := MakeDirectionPacket(7, DirectionPinFlipped)
+	expected := []byte{byte(DirectionPacket), 0x0, 0x0, 0x0, 0x7, 0x0, 0x1, 0x2}
+	assert.Equal(t, expected, []byte(p))
+
+	// Truncated payload → DirectionAuto (never forces an unrequested mapping).
+	trunc := Packet(expected[:PacketHeaderSize])
+	assert.Equal(t, DirectionAuto, trunc.DirectionMode())
 }

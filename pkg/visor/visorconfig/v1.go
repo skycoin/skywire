@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	dmsgspec "github.com/skycoin/skywire/pkg/dmsgc/spec"
+	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
 	tspec "github.com/skycoin/skywire/pkg/transport/spec"
 )
@@ -255,6 +255,24 @@ type Stats struct {
 	// Disabled, when true, skips the entire telemetry store and
 	// associated /stats/* endpoints + CXO publisher.
 	Disabled bool `json:"disabled,omitempty"`
+	// DedicatedTPListFeed, when true, publishes the transport-list
+	// discovery snapshot on its OWN CXO node/port
+	// (skyenv.DmsgVisorTPListCXOPort) instead of on the telemetry feed.
+	//
+	// Default (false) is the CONSOLIDATED single-feed model: the tp-list
+	// leaf rides the telemetry Root as a top-level leaf, so TPD holds ONE
+	// CXO connection per visor instead of two. TPD's aggregator extracts
+	// the tp-list via its targeted discovery-leaf fetch, which lands the
+	// small leaf reliably now that the compact sharded telemetry keeps the
+	// whole Root small (≈16 shard leaves + 1 tp-list leaf) — the condition
+	// that was missing when the earlier consolidation (#4184) had to be
+	// reverted (#4189) over a bulky per-transport-leaf Root. Halving the
+	// visor↔TPD connections cuts TPD's per-connection goroutines and the
+	// per-session dmsg handshake load on the dmsg servers.
+	//
+	// Set true only as a transitional escape hatch — e.g. if a busy hub's
+	// tp-list is ever observed to under-fill on the combined feed.
+	DedicatedTPListFeed bool `json:"dedicated_tplist_feed,omitempty"`
 }
 
 // LogServer configures the dmsghttp log server's optional localhost endpoint.
@@ -514,11 +532,16 @@ type SkymailBridgeConfig struct {
 
 // Transport defines a transport config.
 type Transport struct {
-	Discovery             string          `json:"discovery"`
-	DiscoveryDmsg         string          `json:"discovery_dmsg,omitempty"` // DMSG-HTTP URL for transport discovery (fallback pair with discovery)
-	AddressResolver       string          `json:"address_resolver"`
-	AddressResolverDmsg   string          `json:"address_resolver_dmsg,omitempty"` // DMSG-HTTP URL for address resolver
-	PublicAutoconnect     bool            `json:"public_autoconnect"`
+	Discovery           string `json:"discovery"`
+	DiscoveryDmsg       string `json:"discovery_dmsg,omitempty"` // DMSG-HTTP URL for transport discovery (fallback pair with discovery)
+	AddressResolver     string `json:"address_resolver"`
+	AddressResolverDmsg string `json:"address_resolver_dmsg,omitempty"` // DMSG-HTTP URL for address resolver
+	PublicAutoconnect   bool   `json:"public_autoconnect"`
+	// HypervisorAutoconnect gates the background dialing of a direct (stcpr/sudph)
+	// transport to each configured hypervisor. A nil pointer means "on" (default),
+	// so configs written before this field existed keep the prior always-on
+	// behavior; set it to false to keep the hypervisor link on the dmsg relay only.
+	HypervisorAutoconnect *bool           `json:"hypervisor_autoconnect,omitempty"`
 	TransportSetupPKs     []cipher.PubKey `json:"transport_setup"`
 	UserTransportSetupPKs []cipher.PubKey `json:"user_transport_setup,omitempty"` // user-added keys, preserved across config refresh
 	TPSetupSK             *cipher.SecKey  `json:"tps_sk,omitempty"`
@@ -662,6 +685,17 @@ type Routing struct {
 	// via PUT /api/visors/{pk}/router-settings.
 	TransportPreference []string `json:"transport_preference,omitempty"`
 
+	// RouteExcludeTransportTypes hard-EXCLUDES routes that traverse any of these
+	// transport types, rather than merely deprioritizing them like
+	// TransportPreference does. A route (in either direction) is dropped from the
+	// candidate set if ANY of its hops rides an excluded type — so an excluded type
+	// never enters the mux leg pool. Intended for types whose flakiness poisons the
+	// mux (e.g. "webrtc": a stalled webrtc leg wedges the no-skip reorder frontier
+	// and truncates downloads). Empty by default (nothing excluded), so it stays
+	// opt-in — a visor that NEEDS a type (e.g. webrtc for a wasm/browser peer) simply
+	// leaves it off its own list. Values use the same names as TransportPreference.
+	RouteExcludeTransportTypes []string `json:"route_exclude_transport_types,omitempty"`
+
 	// EnableRSNOracleRoutes opts INTO the RSN-oracle 2-hop route path: for a
 	// single-intermediate route S->I->D the source computes the route LOCALLY
 	// from its OWN transports intersected with the destination's OWN transports
@@ -705,6 +739,15 @@ type Routing struct {
 	// WASM ABI + trade-offs, and `skywire cli route policy
 	// test/bench` for iteration tools.
 	PolicyPerDial string `json:"policy_per_dial,omitempty"`
+
+	// PolicyOnControlPorts opts the routing policy (PolicyPerDial / per-app)
+	// BACK IN for control-plane destination ports (pty 22, dmsgctrl 7, setup
+	// 36, hypervisor RPC 46, transport-setup 47/48, …). Default false: those
+	// small noise-XK control channels bypass the policy and take a plain base
+	// route, because a bandwidth-spreading policy (e.g. the adaptive default)
+	// destabilizes their handshakes — the pty 32-leg-mux footgun. Set true
+	// only with a policy purpose-built for control traffic.
+	PolicyOnControlPorts bool `json:"policy_on_control_ports,omitempty"`
 }
 
 // UptimeTracker configures uptime tracker.

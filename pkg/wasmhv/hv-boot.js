@@ -206,6 +206,38 @@
     var d = document.getElementById('skywire-connecting-notice');
     if (d && d.parentNode) d.parentNode.removeChild(d);
   }
+
+  // --- "visor resumed from background" status (non-blocking) ---
+  //
+  // Shown when the worker reports (via {t:'proxy-resume', on:true}) that a wake
+  // found its keepalive heartbeat stale — i.e. Chromium had FROZEN the background
+  // SharedWorker, suspending its timers, so the skysocks-lite routes went silently
+  // dead during the idle period. A small corner toast (same idiom as the
+  // connecting notice) tells the operator the visor was suspended, not broken, and
+  // is re-establishing the proxy. Cleared by {t:'proxy-resume', on:false} once an
+  // active exit is warm again, or by a safety timeout so a stalled recovery can't
+  // leave the toast up forever.
+  var resumeNoticeTimer = null;
+  function showResumeNotice() {
+    function add() {
+      if (document.getElementById('skywire-resume-notice')) return;
+      var d = document.createElement('div');
+      d.id = 'skywire-resume-notice';
+      d.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:2147483646;background:rgba(31,25,15,.94);color:#f0d9b5;' +
+        'font:12px/1.5 system-ui,sans-serif;padding:6px 12px;border-radius:6px;border:1px solid #6b5324;box-shadow:0 1px 4px rgba(0,0,0,.4)';
+      d.textContent = 'Visor resumed from background — re-establishing proxy…';
+      document.body.appendChild(d);
+    }
+    if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
+    try { clearTimeout(resumeNoticeTimer); } catch (e) {}
+    resumeNoticeTimer = setTimeout(hideResumeNotice, 120000); // safety: never linger past 2 min
+  }
+  function hideResumeNotice() {
+    try { clearTimeout(resumeNoticeTimer); } catch (e) {}
+    resumeNoticeTimer = null;
+    var d = document.getElementById('skywire-resume-notice');
+    if (d && d.parentNode) d.parentNode.removeChild(d);
+  }
   function becomeLeader(name) {
     if (!(navigator.locks && navigator.locks.request)) {
       try { console.log('[hv-boot] Web Locks unsupported; single-instance guard disabled'); } catch (e) {}
@@ -270,6 +302,39 @@
       // the shared visor's first boot. Removed the instant the worker reports up.
       showConnectingNotice();
 
+      // --- WEDGED-connection recovery (distinct from a slow boot) ---
+      // A SharedWorker can be ALIVE yet never deliver 'up' to THIS port: its visor
+      // boot silently stalled (bootedPK stays null, so only 'hello' is ever sent), or
+      // it reports booted but the 'up' for this port was lost. The tab then sits on
+      // "Connecting…" forever — the stuck state that only closing+reopening the tab
+      // clears. A slow-but-progressing FIRST boot must still be waited out, so we do
+      // NOT reject into the dedicated-worker fallback (that would spawn a colliding
+      // visor); instead we self-heal by RELOADING (a fresh port re-handshakes and, if
+      // the worker is really booted, immediately gets 'up'). Guard against a reload
+      // loop; if a few reloads don't clear it, stop and tell the operator to reopen.
+      var helloBootedTimer = null;
+      var RELOAD_KEY = 'skywire-sw-connect-reloads';
+      function recoverStuckConnect(why) {
+        if (settled) return;
+        var n = 0;
+        try { n = parseInt(sessionStorage.getItem(RELOAD_KEY) || '0', 10) || 0; } catch (e) {}
+        if (n >= 3) {
+          settled = true;
+          try { console.error('[hv-boot] shared visor stuck (' + why + ') after ' + n + ' reloads — reopen this tab'); } catch (e) {}
+          try {
+            var d = document.getElementById('skywire-connecting-notice');
+            if (d) { d.textContent = 'The shared Skywire visor is stuck — close this tab and open a new one.'; }
+          } catch (e) {}
+          return;
+        }
+        try { sessionStorage.setItem(RELOAD_KEY, String(n + 1)); } catch (e) {}
+        try { console.warn('[hv-boot] shared visor connect stuck (' + why + '); reload attempt ' + (n + 1)); } catch (e) {}
+        setTimeout(function () { try { location.reload(); } catch (e) {} }, 150);
+      }
+      // Blanket net: far beyond any real cold boot, so it only fires on a genuine
+      // stall (bootedPK never set), never on a slow-but-progressing boot.
+      var bootStallTimer = setTimeout(function () { recoverStuckConnect('no up/fatal within 90s'); }, 90000);
+
       function makeProxy(methods) {
         var proxy = {};
         methods.forEach(function (fn) {
@@ -293,6 +358,14 @@
             // The worker is alive and this port is connected; the visor itself
             // may still be booting. Keep waiting patiently for 'up' — there is
             // deliberately no timeout and no fallback on a live connection.
+            // BUT: if the worker reports it is ALREADY booted, worker.js sends 'up'
+            // to this port immediately after 'hello'. Not getting it within a few
+            // seconds means the handshake to THIS port wedged (the exact "stuck on
+            // Connecting…" state, seen after repeated reloads) — recover fast instead
+            // of waiting out the 90s blanket net.
+            if (m.booted && !helloBootedTimer && !settled) {
+              helloBootedTimer = setTimeout(function () { recoverStuckConnect('hello booted but no up in 8s'); }, 8000);
+            }
             break;
           case 'ping':
             // Liveness. The worker cannot see a tab go away (a MessagePort
@@ -311,8 +384,16 @@
             // browse.js's per-window pane and the mesh browser's live interstitial.
             try { if (typeof self.__skywireProxyLog === 'function') { self.__skywireProxyLog(m.winId, m.line); } } catch (e) {}
             break;
+          case 'proxy-resume':
+            // The worker was frozen in the background and, on wake, found its
+            // skysocks-lite heartbeat stale — show/clear the "resuming" toast.
+            try { if (m.on) { showResumeNotice(); } else { hideResumeNotice(); } } catch (e) {}
+            break;
           case 'up':
             settled = true;
+            if (bootStallTimer) { clearTimeout(bootStallTimer); bootStallTimer = null; }
+            if (helloBootedTimer) { clearTimeout(helloBootedTimer); helloBootedTimer = null; }
+            try { sessionStorage.removeItem(RELOAD_KEY); } catch (e) {} // a clean boot resets the reload guard
             hideConnectingNotice();
             // The worker has already booted the shared visor; install the proxy and
             // resolve with the booted PK (do NOT call boot() again — that's the
@@ -369,6 +450,18 @@
       // unloading so it can re-elect the agent / drop the port promptly.
       function reportVis() {
         try { port.postMessage({ t: 'vis', state: (document.visibilityState || 'visible') }); } catch (e) {}
+        // Becoming visible means the SharedWorker just unfroze (Chromium freezes a
+        // background SharedWorker + suspends its timers, so the skysocks-lite
+        // keepalive/pool-warm loops stopped and the active + standby routes went
+        // silently dead during the idle period). Nudge the worker to run a liveness
+        // sweep + re-warm NOW so recovery happens in the background instead of as a
+        // user-visible cold start on the next fetch.
+        try {
+          if ((document.visibilityState || 'visible') === 'visible' &&
+              self.skywireVisor && self.skywireVisor.proxyWake) {
+            self.skywireVisor.proxyWake();
+          }
+        } catch (e) {}
       }
       try {
         document.addEventListener('visibilitychange', reportVis);
@@ -430,6 +523,11 @@
             // the console/log channel). Hand it to the page's proxy-log sink —
             // browse.js's per-window pane and the mesh browser's live interstitial.
             try { if (typeof self.__skywireProxyLog === 'function') { self.__skywireProxyLog(m.winId, m.line); } } catch (e) {}
+            break;
+          case 'proxy-resume':
+            // The worker was frozen in the background and, on wake, found its
+            // skysocks-lite heartbeat stale — show/clear the "resuming" toast.
+            try { if (m.on) { showResumeNotice(); } else { hideResumeNotice(); } } catch (e) {}
             break;
           case 'up':
             clearTimeout(upTimer);
@@ -642,14 +740,44 @@
     // here: bootInSharedWorker waits it out, so multiple tabs always share the one
     // shared visor rather than each spawning a competing dedicated-worker visor.
     await becomeLeader('skywire-wasm-visor');
-    try {
-      pk = await bootInWorker(sk);
-      try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (per-tab Web Worker; UI off the runtime thread; /api → in-wasm core)'); } catch (e) {}
-    } catch (e) {
-      try { console.warn('[hv-boot] worker boot unavailable (' + ((e && e.message) || e) + '); falling back to in-page runtime'); } catch (e2) {}
-      pk = await bootInPage(sk);
-      try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (in-page runtime; edge + hypervisor; /api → in-wasm core)'); } catch (e2) {}
+    // Prefer the off-main-thread dedicated worker, and RETRY it on a transient
+    // boot failure rather than dropping to bootInPage. bootInPage runs the Go/wasm
+    // runtime on the PAGE MAIN THREAD, whose non-yielding scheduler freezes the
+    // whole UI (observed: "page unresponsive" — a transient worker hiccup, e.g.
+    // right after a SharedWorker teardown, was stranding the visor inline). worker.js
+    // is same-origin (served by the page that just loaded), so a transient failure
+    // almost always clears on retry. The in-page path is a LAST RESORT reserved for
+    // environments with no Web Worker support at all — never a landing spot for a
+    // recoverable error while Workers exist.
+    if (typeof Worker !== 'undefined') {
+      var workerErr = null;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        try {
+          pk = await bootInWorker(sk);
+          workerErr = null;
+          break;
+        } catch (e) {
+          workerErr = e;
+          try { console.warn('[hv-boot] dedicated-worker boot attempt ' + (attempt + 1) + '/3 failed (' + ((e && e.message) || e) + ')' + (attempt < 2 ? '; retrying' : '')); } catch (e2) {}
+          if (attempt < 2) { await new Promise(function (r) { setTimeout(r, 500 * (attempt + 1)); }); }
+        }
+      }
+      if (!workerErr) {
+        try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (per-tab Web Worker; UI off the runtime thread; /api → in-wasm core)'); } catch (e) {}
+        return pk;
+      }
+      // Every retry failed while Workers ARE supported: keep the UI responsive and
+      // let the caller (auto-reload / a manual refresh) try again, rather than
+      // freezing the page with an inline runtime. Surface a clear error.
+      try { console.error('[hv-boot] dedicated-worker boot failed after 3 attempts (' + ((workerErr && workerErr.message) || workerErr) + '); NOT falling back to the in-page runtime while Web Workers are supported (it would freeze the UI). Reload to retry.'); } catch (e2) {}
+      throw workerErr;
     }
+    // Only reached where Web Workers are genuinely unavailable (exotic embedding):
+    // run the runtime in-page as the original best-effort path, at the cost of the
+    // main-thread-freeze risk.
+    try { console.warn('[hv-boot] Web Workers unavailable; falling back to in-page runtime (UI may freeze under load)'); } catch (e2) {}
+    pk = await bootInPage(sk);
+    try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (in-page runtime; edge + hypervisor; /api → in-wasm core)'); } catch (e2) {}
     return pk;
   })();
 

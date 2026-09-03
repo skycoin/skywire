@@ -18,6 +18,7 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -121,13 +122,32 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 	return results, nil
 }
 
+// healthProbeTimeout bounds a single /health probe. ServiceHealth fans every
+// probe out in parallel and wg.Wait()s on them, so an unresponsive endpoint
+// (notably a dmsg server whose /health does not answer over the discovery-routed
+// path) would otherwise stall the WHOLE call — and every caller of it — for the
+// underlying dmsg-HTTP client's full timeout (~10s). That in turn made the
+// curated `visor state` snapshot (which folds ServiceHealth in) take ~10s and
+// time out under load, misreported downstream as empty/zero. A per-probe bound
+// caps the blast radius: a dead endpoint costs at most this long, not the whole
+// client timeout, while healthy services (normally ~300ms) are unaffected.
+const healthProbeTimeout = 4 * time.Second
+
 // doHealthProbe performs a single GET {baseURL}/health and populates a ServiceHealthEntry.
 func doHealthProbe(client *http.Client, name, baseURL, transport string) ServiceHealthEntry { //nolint:unparam
 	entry := ServiceHealthEntry{Name: name, URL: baseURL, Transport: transport}
 
 	reqURL := strings.TrimSuffix(baseURL, "/") + "/health"
+	ctx, cancel := context.WithTimeout(context.Background(), healthProbeTimeout)
+	defer cancel()
 	start := time.Now()
-	resp, err := client.Get(reqURL) //nolint:gosec
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		entry.Status = "DOWN"
+		entry.Error = err.Error()
+		return entry
+	}
+	resp, err := client.Do(req) //nolint:gosec
 	entry.LatencyMs = time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -358,7 +378,27 @@ func (v *Visor) servicesFromCXO(serviceType, version, country string) ([]service
 
 	prefix := "services/" + serviceType + "/"
 	var services []servicedisc.Service
+	keep := func(svc servicedisc.Service) {
+		if version != "" && svc.Version != version {
+			return
+		}
+		if country != "" {
+			if svc.Geo == nil || svc.Geo.Country != country {
+				return
+			}
+		}
+		services = append(services, svc)
+	}
 	mgr.Walk(FeedSDServices, prefix, func(path string, body []byte) bool {
+		// Batched per-type leaf: services/<type>/all (a version-framed,
+		// gzipped JSON []Service).
+		if strings.HasSuffix(path, "/all") {
+			for _, svc := range decodeServicesBatch(body) {
+				keep(svc)
+			}
+			return true
+		}
+		// Legacy per-service leaf: services/<type>/<pk>/entry.
 		if !strings.HasSuffix(path, "/entry") {
 			return true
 		}
@@ -366,21 +406,35 @@ func (v *Visor) servicesFromCXO(serviceType, version, country string) ([]service
 		if err := json.Unmarshal(body, &svc); err != nil {
 			return true
 		}
-		if version != "" && svc.Version != version {
-			return true
-		}
-		if country != "" {
-			if svc.Geo == nil || svc.Geo.Country != country {
-				return true
-			}
-		}
-		services = append(services, svc)
+		keep(svc)
 		return true
 	})
 	if len(services) == 0 {
 		return nil, false
 	}
 	return services, true
+}
+
+// servicesBatchVersion is the wire-format version byte of the batched
+// per-type SD services leaf (must match the SD publisher's
+// servicesBatchVersion). A leaf with any other version is skipped so a
+// future format bump degrades to the HTTP fallback rather than
+// misparsing.
+const servicesBatchVersion = 1
+
+// decodeServicesBatch decodes a batched per-type leaf body into its
+// services. Returns nil on any framing/version/JSON error so a bad leaf
+// is skipped, not misparsed.
+func decodeServicesBatch(body []byte) []servicedisc.Service {
+	version, payload, ok := cxoutils.UnframeGzip(body)
+	if !ok || version != servicesBatchVersion {
+		return nil
+	}
+	var svcs []servicedisc.Service
+	if err := json.Unmarshal(payload, &svcs); err != nil {
+		return nil
+	}
+	return svcs
 }
 
 // VPNServers gets available public VPN servers — CXO snapshot first,

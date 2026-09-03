@@ -312,6 +312,51 @@ func TestRouteMuxRemoveLegsPromotesPrimary(t *testing.T) {
 	require.True(t, m.ready[1], "former leg 2 keeps its ready bit")
 }
 
+// TestRemoveMuxRouteByTransportRemovesPrimary proves the router-level guard
+// against removing the primary leg (index 0) is gone: removing the tps[0]
+// transport re-homes the primary onto a surviving leg — the ping/SACK/latency
+// probes read rg.tps[0] LIVE, so the promoted leg transparently takes over, the
+// same way pruneDeadTransports/pruneLegByConsumeRule already re-home index 0.
+// This is the primitive that lets exact route pinning, live direct<->multihop
+// route switching and single-leg pinning reach the operator's exact leg-set
+// with no un-prunable auto primary left behind.
+func TestRemoveMuxRouteByTransportRemovesPrimary(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 3)
+	r := &router{
+		logger: logging.MustGetLogger("remove_primary_test"),
+		rt:     rg.rt,
+		rgsNs:  make(map[routing.RouteDescriptor]*NoiseRouteGroup),
+	}
+	r.rgsNs[rg.desc] = &NoiseRouteGroup{rg: rg, Conn: rg}
+
+	primaryID := mts[0].Entry.ID
+	secondID := mts[1].Entry.ID
+
+	require.NoError(t, r.RemoveMuxRouteByTransport(rg.desc, primaryID),
+		"removing the primary leg (index 0) must be allowed and re-home")
+
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	require.Len(t, rg.tps, 2, "exactly one leg removed")
+	require.Equal(t, secondID, rg.tps[0].Entry.ID,
+		"former leg 1 must be promoted to primary at index 0")
+}
+
+// TestRemoveMuxRouteByTransportKeepsLastLeg confirms the last-leg floor still
+// holds after relaxing the primary guard: the sole remaining leg is never removed.
+func TestRemoveMuxRouteByTransportKeepsLastLeg(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 1)
+	r := &router{
+		logger: logging.MustGetLogger("keep_last_test"),
+		rt:     rg.rt,
+		rgsNs:  make(map[routing.RouteDescriptor]*NoiseRouteGroup),
+	}
+	r.rgsNs[rg.desc] = &NoiseRouteGroup{rg: rg, Conn: rg}
+
+	require.Error(t, r.RemoveMuxRouteByTransport(rg.desc, mts[0].Entry.ID),
+		"removing the only remaining leg must still be refused")
+}
+
 // TestRouteMuxRemoveLegsEmpty is the no-op guard.
 func TestRouteMuxRemoveLegsEmpty(t *testing.T) {
 	m := &routeMux{}
@@ -390,4 +435,57 @@ func TestLegLivenessKeepsEchoingLeg(t *testing.T) {
 	}
 	require.True(t, found, "a leg that keeps echoing must survive")
 	require.GreaterOrEqual(t, len(rg.tps), 1)
+}
+
+// TestMuxStatsReportsFullMultihopLegChain verifies that a mux leg whose full
+// forward route was recorded (SetForwardHops for the primary, recordLegHops for
+// aux legs — the two paths the dial-side establishment sites feed) reports EVERY
+// hop in MuxStats().Legs[i].Hops, ending at the true destination — not just the
+// leg's first-hop transport remote (the first INTERMEDIATE, which the pre-fix
+// tp.Remote() fallback mislabeled as the exit). It also asserts an unrecorded
+// leg surfaces no hops, so the fix (recording at every establishment site) is
+// what turns a single mislabeled node into the full chain.
+func TestMuxStatsReportsFullMultihopLegChain(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 3)
+	src := rg.desc.SrcPK()
+	dst := rg.desc.DstPK()
+
+	// Leg 0 (primary): a 2-hop forward path src -> mid0 -> dst, recorded the
+	// way finishDial does via SetForwardHops. Its first-hop TpID must be the
+	// leg's transport ID so MuxStats' legHopsFor lookup resolves it.
+	mid0, _ := cipher.GenerateKeyPair()
+	rg.SetForwardHops([]routing.Hop{
+		{TpID: mts[0].Entry.ID, From: src, To: mid0},
+		{TpID: uuid.New(), From: mid0, To: dst},
+	})
+
+	// Leg 1 (aux): a 2-hop forward path src -> mid1 -> dst, recorded the way the
+	// establishMuxRoutes / rotation add-leg sites now do via recordLegHops.
+	mid1, _ := cipher.GenerateKeyPair()
+	rg.recordLegHops([]routing.Hop{
+		{TpID: mts[1].Entry.ID, From: src, To: mid1},
+		{TpID: uuid.New(), From: mid1, To: dst},
+	})
+
+	// Leg 2: deliberately NOT recorded — models the pre-fix gap.
+
+	info := rg.MuxStats()
+	require.True(t, info.MuxEnabled)
+	require.Len(t, info.Legs, 3)
+
+	// Both recorded multihop legs report their WHOLE chain, ending at the real
+	// destination (not the first intermediate).
+	for _, li := range []int{0, 1} {
+		hops := info.Legs[li].Hops
+		require.Len(t, hops, 2, "leg %d must report every hop, not a single node", li)
+		require.Equal(t, src.String(), hops[0].From, "leg %d's first hop starts at this visor", li)
+		require.Equal(t, dst.String(), hops[len(hops)-1].To,
+			"leg %d's last hop must end at the true destination, not the first intermediate", li)
+	}
+	require.Equal(t, mid0.String(), info.Legs[0].Hops[0].To, "primary leg's first hop lands on its intermediate")
+	require.Equal(t, mid1.String(), info.Legs[1].Hops[0].To, "aux leg's first hop lands on its intermediate")
+
+	// The unrecorded leg surfaces no hop chain (the pre-fix behavior for EVERY
+	// aux leg): MuxStats has nothing but the first-hop transport to show.
+	require.Empty(t, info.Legs[2].Hops, "an unrecorded leg reports no hop chain")
 }

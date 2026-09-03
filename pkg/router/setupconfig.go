@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dmsgc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 )
 
 // Various timeouts for setup node.

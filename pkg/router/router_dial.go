@@ -8,8 +8,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -62,7 +65,12 @@ func (r *router) DialRoutes(
 	// opts.MinHops before route setup, and can refuse the dial
 	// entirely via Fallback="drop". A nil hook short-circuits
 	// the entire block so policy-free deployments pay zero cost.
-	if r.conf.DialHook != nil {
+	// dialPolicyHook also returns nil for a --direct dial, which is
+	// policy-free by definition (see its doc).
+	if opts != nil && opts.EnsureDirectTransport {
+		log.Debug("--direct dial: bypassing routing policy (policy-free 1-hop direct leg)")
+	}
+	if hook := r.dialPolicyHook(opts, rPort); hook != nil {
 		if opts == nil {
 			opts = &DialOptions{}
 		}
@@ -77,7 +85,7 @@ func (r *router) DialRoutes(
 			RPort:        rPort,
 			CLIOverrides: buildCLIOverrides(opts),
 		}
-		if adj, hookErr := r.conf.DialHook.BeforeDial(ctx, info); hookErr != nil {
+		if adj, hookErr := hook.BeforeDial(ctx, info); hookErr != nil {
 			// Failure to evaluate the policy is non-fatal — the
 			// hook's own failure-mode wiring decides whether to
 			// return a "drop" adjustment or fall back to defaults.
@@ -102,6 +110,28 @@ func (r *router) DialRoutes(
 
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
+
+	// Multi-tunnel bandwidth aggregation (docs/mux_aggregation_rfc.md step 3).
+	// When the caller opts in (skysocks-client's extra tunnels), diverge this
+	// tunnel from the ones already established to the SAME exit: exclude the
+	// first-hop transports + intermediates that this visor's live route groups
+	// to (rPK, rPort) already occupy, so the new tunnel leaves over a different
+	// first-hop transport and the two tunnels' throughputs SUM. Bounded to
+	// tunnel 2..N — the exclusions are added ONLY when a sibling route group to
+	// this dst already exists (count > 0), so a first/lone dial is untouched.
+	// Additive to any excludes the caller already set (e.g. the mux's own);
+	// the route-finder / local calc treat these as soft preferences and fall
+	// back to a shared path when no disjoint transport is free.
+	if opts.DiversifyTransports {
+		if exIDs, exPKs, count := r.siblingRouteGroupExclusions(lPK, rPK, rPort); count > 0 {
+			opts.ExcludeTransportIDs = append(opts.ExcludeTransportIDs, exIDs...)
+			opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, exPKs...)
+			log.WithField("sibling_tunnels", count).
+				WithField("exclude_tps", len(exIDs)).
+				WithField("exclude_intermediates", len(exPKs)).
+				Debug("Diversifying multi-tunnel dial over disjoint first-hop transports.")
+		}
+	}
 
 	// check if transport exist, then skip minhop value and consider it equal 0.
 	// Per-call opts.MinHops > 1 suppresses this downgrade: the caller has
@@ -129,18 +159,17 @@ func (r *router) DialRoutes(
 	// direct transport is already known to TPD). After this, isTpdExist(rPK) is
 	// true → baseMinHops downgrades to 1, and UseExistingTpOnly (set alongside
 	// EnsureDirectTransport) bypasses the route-finder → a 1-hop direct dial.
-	// Creation order follows the configured transport preference
-	// (routing.transport_preference), same as the order the route/transport
-	// SELECTION paths use — one knob decides "which type first" everywhere.
-	// Unset preference = the built-in default = stcpr, sudph, dmsg, exactly
-	// as this list was hardcoded.
+	// Creation order is the host-aware direct-type preference
+	// (EnsureBestTransport): every direct type this visor can actually create,
+	// in the configured preference order, with the DMSG relay as the loud last
+	// resort. The previous hardcoded stcpr→sudph→dmsg list never tried the
+	// browser carriers at all — on a wasm visor (no raw TCP/UDP clients) both
+	// direct attempts failed instantly and --direct minted a dmsg RELAY
+	// transport when a webrtc/ws/wt one was there for the making.
 	if opts != nil && opts.EnsureDirectTransport && !r.isTpdExist(rPK) {
-		for _, nt := range tptypes.PreferredOrder(tptypes.STCPR, tptypes.SUDPH, tptypes.DMSG) {
-			if _, sErr := r.tm.SaveTransport(ctx, rPK, nt, transport.LabelAutomatic); sErr == nil {
-				log.WithField("tp_type", nt).WithField("remote", rPK).
-					Debug("--direct: created direct transport on demand")
-				break
-			}
+		if err := r.tm.EnsureBestTransport(ctx, rPK); err != nil {
+			log.WithError(err).WithField("remote", rPK).
+				Debug("--direct: could not create a direct transport on demand")
 		}
 	}
 	// The downgrade applies only when NOTHING asks for more than one hop —
@@ -325,7 +354,7 @@ func (r *router) DialRoutes(
 				}
 				nrg, rules, winIdx, rerr := r.raceCandidateSetup(ctx, log, candidates, dial, handshake, onLoser)
 				if rerr == nil {
-					return r.finishDial(ctx, log, nrg, rules, candidates[winIdx].Forward, forwardDesc, opts, rPK, lPort, rPort), nil
+					return r.finishDial(log, nrg, rules, candidates[winIdx].Forward, forwardDesc, opts, rPK, lPort, rPort), nil
 				}
 				if ctx.Err() != nil {
 					return nil, ctx.Err()
@@ -569,7 +598,7 @@ func (r *router) DialRoutes(
 
 		// The route group is up: this is the working base. Wire mux
 		// growth / self-heal / hooks on top and return.
-		return r.finishDial(ctx, log, nrg, rules, forwardPath, forwardDesc, opts, rPK, lPort, rPort), nil
+		return r.finishDial(log, nrg, rules, forwardPath, forwardDesc, opts, rPK, lPort, rPort), nil
 	}
 
 	// Should never reach here, but handle it gracefully
@@ -584,7 +613,6 @@ func (r *router) DialRoutes(
 // self-heal hooks. Shared by the sequential setup path and the parallel race
 // winner so both converge to identical post-setup behavior.
 func (r *router) finishDial(
-	ctx context.Context,
 	log *logging.Logger,
 	nrg *NoiseRouteGroup,
 	rules routing.EdgeRules,
@@ -601,24 +629,15 @@ func (r *router) finishDial(
 
 	log.Debugf("Created new routes to %s on port %d", rPK, lPort)
 
-	// Establish additional mux routes if requested
-	r.establishMuxRoutes(ctx, nrg, opts, forwardDesc, rules.Forward.NextTransportID())
-
-	// Apply per-dial distribution policy (from a routing-
-	// policy script via DialAdjustment.Distribution, or a
-	// CLI caller populating DialOptions.Distribution
-	// directly). No-op when Mode is DistributionUnset.
-	// Must run AFTER establishMuxRoutes so the selector's
-	// rebuild sees every leg, not just the primary.
-	nrg.rg.applyDistribution(opts.Distribution)
-
 	// Wire the post-setup leg-change hook (RFC #2882 phase 6).
 	// The dial-side DialHook may also implement LegChangeHook;
 	// when it does, the route group fires on_leg_change
 	// callbacks whenever its leg set mutates after this point
 	// (additional aux legs from appendRouteToGroup, or
-	// transport-close pruning).
-	if lch, ok := r.conf.DialHook.(LegChangeHook); ok && lch != nil {
+	// transport-close pruning). This just installs a callback; wire
+	// it before spawning the async leg establishment so legs that
+	// come up in the background already fire the hook.
+	if lch, ok := r.effectiveDialHook(rPort).(LegChangeHook); ok && lch != nil {
 		nrg.rg.SetLegChangeHook(lch, DialInfo{
 			AppName: opts.AppName,
 			PeerPK:  rPK,
@@ -642,10 +661,40 @@ func (r *router) finishDial(
 			muxTarget = eff
 		}
 	}
+	// A same-LAN destination is best reached over its single direct transport
+	// (ms-latency). Growing a warm-standby mux to it forces the aux legs through
+	// REMOTE 2-hop intermediates (same-LAN peers are excluded as intermediates),
+	// adding latency + rotation churn for zero path diversity — the failure that
+	// muxed a 3ms LAN forward across a 11.5s multi-hop leg. f77b928c fixed only
+	// the direct-dial hook; this stops the warm-standby GROWTH too. Keep it direct.
+	if muxTarget > 1 && r.isSameLANDest(forwardDesc.DstPK()) {
+		r.logger.WithField("dst", forwardDesc.DstPK().String()).
+			Debug("same-LAN destination: forcing direct (no warm-standby mux)")
+		muxTarget = 1
+	}
+	// A control-plane destination port (dmsgpty, RPC, setup-node, hypervisor,
+	// transport-setup, CXO telemetry, …) carries small request/response control
+	// traffic, never bulk data — so the bandwidth-spreading warm-standby mux is
+	// pure cost: it grows a large pool of multi-hop aux legs whose setup-node
+	// dials churn (context deadline exceeded), and a multi-round-trip control
+	// handshake (e.g. dmsgpty noise-XK) times out over the churning legs while a
+	// single 1-hop request would have completed. Observed live as a 32-leg mux on
+	// the pty port (22) that never carried a byte. Keep control channels direct;
+	// this is the port-keyed complement to the --direct / same-LAN no-mux gates.
+	if muxTarget > 1 && isControlPlanePort(rPort) {
+		r.logger.WithField("dst", forwardDesc.DstPK().String()).
+			WithField("port", rPort).
+			Debug("control-plane destination port: forcing direct (no warm-standby mux)")
+		muxTarget = 1
+	}
 	if muxTarget > 1 {
+		// Capture everything the async establishment needs into locals so the
+		// goroutine never races the dial return: a COPY of opts, the route
+		// descriptor, the route group, and the primary transport id.
 		optsCopy := *opts
 		fwdDescCopy := forwardDesc
 		nrgCapture := nrg
+		primaryTpID := rules.Forward.NextTransportID()
 		applyAdd := func(excludeHops []string) {
 			addCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -663,21 +712,68 @@ func (r *router) finishDial(
 		// Self-healing: any leg death triggers a background replacement
 		// dial to restore the requested degree, while surviving legs
 		// carry the traffic. General to every mux dial, not just ones
-		// with a rotation policy.
+		// with a rotation policy. This only installs the callback (no
+		// dialing) — wire it before the async establishment below so the
+		// machinery is ready as legs appear.
 		nrg.rg.SetSelfHeal(applyAdd, muxTarget)
 
-		// Top up an initial shortfall: establishMuxRoutes sets up aux
-		// legs best-effort, so a flaky intermediate can leave the group
-		// below the requested degree at dial time. Heal it now in the
-		// background (same mechanism as runtime leg death) — the dial
-		// still returns immediately on the legs that did establish.
-		nrg.rg.maybeSelfHeal()
-
 		// Periodic rotation (policy on_tick) reuses the same callback.
-		if rh, ok := r.conf.DialHook.(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
+		// Like SetSelfHeal, this only installs a callback / starts the
+		// rotation ticker — no dialing — so it stays synchronous.
+		if rh, ok := r.effectiveDialHook(rPort).(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
 			interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
-			nrg.rg.SetRotation(rh, applyAdd, interval)
+			// Forward-only add-leg callback: the adaptive preset's AddForwardLeg
+			// (upload-saturation widen) dials an aux leg addFwd=true/addRev=false
+			// so the extra upstream send capacity does not enlarge the
+			// reverse/download set. Distinct from applyAdd (full-duplex) so the
+			// two directions size independently.
+			applyAddForward := func(excludeHops []string) {
+				addCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				excludePKs := make([]cipher.PubKey, 0, len(excludeHops))
+				for _, h := range excludeHops {
+					var pk cipher.PubKey
+					if err := pk.Set(h); err == nil {
+						excludePKs = append(excludePKs, pk)
+					}
+				}
+				if err := r.addOneAuxSendLeg(addCtx, nrgCapture, &optsCopy, fwdDescCopy, excludePKs); err != nil {
+					r.logger.WithError(err).Debug("Mux forward add-leg failed; route group keeps current leg set")
+				}
+			}
+			nrg.rg.SetRotation(rh, applyAdd, applyAddForward, interval)
 		}
+
+		// SLOW part: establishing the foreground mux legs plans each aux
+		// leg through the route-finder, which can block for tens of seconds
+		// when the RF times out. Run it in the background so Dial returns as
+		// soon as the primary route + route group are up — the app serves on
+		// the primary immediately and the mux legs fill in behind it. Use a
+		// fresh background context: the dial's ctx may be canceled once Dial
+		// returns, which would abort the establishment mid-flight.
+		go func() {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+
+			r.establishMuxRoutes(bgCtx, nrgCapture, &optsCopy, fwdDescCopy, primaryTpID)
+
+			// Apply per-dial distribution policy AFTER establishMuxRoutes so
+			// the selector's rebuild sees every leg, not just the primary.
+			// (appendForwardLeg also rebuilds weights on each add, so weights
+			// refresh as legs come up regardless; this preserves the ordering
+			// to be safe.) No-op when Distribution.Mode is DistributionUnset.
+			nrgCapture.rg.applyDistribution(optsCopy.Distribution)
+
+			// Top up an initial shortfall: establishMuxRoutes sets up aux
+			// legs best-effort, so a flaky intermediate can leave the group
+			// below the requested degree. Heal it now (same mechanism as
+			// runtime leg death). Runs after the callbacks were wired above.
+			nrgCapture.rg.maybeSelfHeal()
+		}()
+	} else {
+		// No mux: establishMuxRoutes would be a no-op (maxCount <= 1), so
+		// just apply the per-dial distribution policy synchronously.
+		nrg.rg.applyDistribution(opts.Distribution)
 	}
 
 	// NOTE: no MinHops restore needed — baseMinHops is a local var now,
@@ -800,7 +896,7 @@ func (r *router) PingRoute(
 	// too. Same shape as DialRoutes' hook block, minus the
 	// post-mux applyDistribution call — setupPingRoute handles
 	// distribution + leg-change hook wiring downstream.
-	if r.conf.DialHook != nil {
+	if hook := r.effectiveDialHook(rPort); hook != nil {
 		appName := ""
 		if opts != nil {
 			appName = opts.AppName
@@ -812,7 +908,7 @@ func (r *router) PingRoute(
 			RPort:        rPort,
 			CLIOverrides: buildCLIOverrides(opts),
 		}
-		if adj, hookErr := r.conf.DialHook.BeforeDial(ctx, info); hookErr != nil {
+		if adj, hookErr := hook.BeforeDial(ctx, info); hookErr != nil {
 			log.WithError(hookErr).Debug("policy hook errored on PingRoute; proceeding without adjustment")
 		} else if err := applyAdjustment(opts, adj); err != nil {
 			log.WithField("policy_decision", "drop").Info("PingRoute refused by routing policy.")
@@ -984,7 +1080,15 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 	// this way and falls through). On any miss (no oracle, no shared
 	// intermediate, delivery error) it falls through to the existing behavior —
 	// zero change when disabled.
-	if r.conf != nil && (r.conf.EnableRSNOracleRoutes || opts.UseRSNOracle2Hop) && src != dst {
+	// A direct dial (--direct: EnsureDirectTransport, or UseExistingTpOnly) means
+	// "use the 1-hop direct transport, don't route around it". The RSN-oracle is
+	// a SEPARATE 2-hop path from the route-finder that --direct already bypasses,
+	// so without this guard an enabled oracle still overrode a --direct control
+	// forward with a 2-hop route (observed: a same-LAN :4443 forward routed
+	// US->AU->US at 2.3s instead of over its 3ms direct transport). Skip the
+	// oracle for a direct dial.
+	directDial := opts != nil && (opts.EnsureDirectTransport || opts.UseExistingTpOnly)
+	if r.conf != nil && (r.conf.EnableRSNOracleRoutes || opts.UseRSNOracle2Hop) && src != dst && !directDial {
 		hi := baseMinHops
 		if e := opts.EffectiveMinHops(true); uint16(e) > hi { //nolint:gosec
 			hi = uint16(e) //nolint:gosec
@@ -1142,7 +1246,7 @@ fetchRoutesAgain:
 	// finder service doesn't sort by latency at query time today; the
 	// visor has the same TPD latency data available in-memory (own
 	// transports via tm.GetLatencyStats) + via TPD entries (already
-	// aggregated by pkg/transport-discovery/cxoaggregator from the
+	// aggregated by pkg/deployment/tpd/cxoaggregator from the
 	// CXO telemetry feed). Building the lookup here puts the ranking
 	// in the dial hot path with no extra round-trip cost — local-
 	// transport latency is a constant-time map read; non-local hops
@@ -1173,6 +1277,56 @@ fetchRoutesAgain:
 	if filtered := rejectDMSGMultihop(paths[backward], typeFor); len(filtered) != len(paths[backward]) {
 		log.Debugf("rejected %d DMSG-multihop reverse candidate(s)", len(paths[backward])-len(filtered))
 		paths[backward] = filtered
+	}
+
+	// Operator-configured hard exclusion (routing.route_exclude_transport_types):
+	// drop any candidate route that traverses an excluded transport type, so it
+	// never enters the mux leg pool. Unlike transportTypeCostMs (deprioritize), this
+	// removes the route entirely — the fix for flaky types (e.g. webrtc) that wedge
+	// the reorder frontier. Opt-in and empty by default.
+	if len(r.conf.ExcludeTransportTypes) > 0 {
+		if filtered := rejectExcludedTypes(paths[forward], typeFor, r.conf.ExcludeTransportTypes); len(filtered) != len(paths[forward]) {
+			log.Debugf("excluded %d forward candidate(s) by transport type %v", len(paths[forward])-len(filtered), r.conf.ExcludeTransportTypes)
+			paths[forward] = filtered
+		}
+		if filtered := rejectExcludedTypes(paths[backward], typeFor, r.conf.ExcludeTransportTypes); len(filtered) != len(paths[backward]) {
+			log.Debugf("excluded %d reverse candidate(s) by transport type %v", len(paths[backward])-len(filtered), r.conf.ExcludeTransportTypes)
+			paths[backward] = filtered
+		}
+	}
+
+	// Multi-tunnel diversify (opts.DiversifyTransports): steer this extra
+	// tunnel's FIRST HOP off the transports its sibling tunnels to the same
+	// exit already occupy (opts.ExcludeTransportIDs, seeded by
+	// siblingRouteGroupExclusions). The route-finder ranks by latency and does
+	// NOT honor ExcludeTransportIDs, so without this every tunnel is handed the
+	// same preferred (usually the sole direct) first hop and they contend on one
+	// link instead of aggregating — the disjointness the RFC promises collapses.
+	// A direct (0-intermediate) sibling contributes NO ExcludeIntermediatePKs, so
+	// the intermediate-based pickDisjointPath below cannot break the tie on its
+	// own; the first-hop transport-ID is the only distinguishing signal.
+	//
+	// Preference, not a hard cut: restrict the forward candidates to those whose
+	// first-hop transport is not already claimed; if the finder offers none, try
+	// the local BFS (which can build a disjoint multi-hop path, and skips the
+	// excluded direct transport) before conceding. Only when nothing disjoint
+	// exists anywhere do we keep a shared first hop — a shared tunnel still beats
+	// no tunnel, just with limited aggregation, which we log.
+	if opts.DiversifyTransports && len(opts.ExcludeTransportIDs) > 0 {
+		if disjoint := filterDisjointFirstHop(paths[forward], opts.ExcludeTransportIDs); len(disjoint) > 0 {
+			if len(disjoint) != len(paths[forward]) {
+				log.Debugf("diversify: %d/%d forward candidate(s) leave over a disjoint first-hop transport; preferring those",
+					len(disjoint), len(paths[forward]))
+			}
+			paths[forward] = disjoint
+		} else {
+			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
+			if localErr == nil && len(localFwd) > 0 && !firstHopTransportExcluded(localFwd, opts.ExcludeTransportIDs) {
+				log.Debug("diversify: no disjoint first-hop from route finder; using local-calc disjoint path")
+				return localFwd, localRev, nil
+			}
+			log.Warnf("diversify: no disjoint first-hop transport to %s is free; extra tunnel shares an existing first hop (aggregation limited)", dst)
+		}
 	}
 
 	// Routing-policy candidate selection. When the configured
@@ -1349,6 +1503,51 @@ func pickBestDirection(paths [][]routing.Hop, excludeSet map[cipher.PubKey]struc
 		return nil, false
 	}
 	return paths[bestIdx], true
+}
+
+// filterDisjointFirstHop returns the candidate paths whose FIRST hop leaves
+// over a transport NOT in excludeTpIDs. It is the route-finder-path counterpart
+// to the local-calc's direct-transport exclusion (calculateLocalRoutes skips an
+// excluded direct tp): the finder ranks purely by latency and ignores
+// ExcludeTransportIDs, so this is what actually keeps a multi-tunnel diversify
+// dial off a first-hop transport a sibling tunnel already holds. Returns the
+// input unchanged when there is nothing to exclude; may return an EMPTY slice
+// when every candidate shares an excluded first hop — the caller decides whether
+// to fall back (local calc / shared path) rather than failing here.
+func filterDisjointFirstHop(cands [][]routing.Hop, excludeTpIDs []uuid.UUID) [][]routing.Hop {
+	if len(cands) == 0 || len(excludeTpIDs) == 0 {
+		return cands
+	}
+	excl := make(map[uuid.UUID]struct{}, len(excludeTpIDs))
+	for _, id := range excludeTpIDs {
+		excl[id] = struct{}{}
+	}
+	out := make([][]routing.Hop, 0, len(cands))
+	for _, hops := range cands {
+		if len(hops) == 0 {
+			continue
+		}
+		if _, bad := excl[hops[0].TpID]; bad {
+			continue
+		}
+		out = append(out, hops)
+	}
+	return out
+}
+
+// firstHopTransportExcluded reports whether the path's first hop leaves over one
+// of excludeTpIDs. Used to confirm a local-calc fallback route is genuinely
+// disjoint before returning it for a diversify dial.
+func firstHopTransportExcluded(hops []routing.Hop, excludeTpIDs []uuid.UUID) bool {
+	if len(hops) == 0 {
+		return false
+	}
+	for _, id := range excludeTpIDs {
+		if hops[0].TpID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // transportTypeCostMs is a per-hop, latency-equivalent penalty that biases
@@ -1532,7 +1731,7 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 	// so the same data costs one round-trip per TTL instead of one
 	// per hop per dial.
 	if len(misses) > 0 && r.tm != nil && r.tm.Conf != nil && r.tm.Conf.DiscoveryClient != nil && r.tpdCache != nil {
-		snap, err := r.tpdCache.snapshot(ctx, r.tm.Conf.DiscoveryClient.GetAllTransports)
+		snap, err := r.tpdCache.snapshot(ctx, r.tm.Conf.DiscoveryClient.GetAllTransports, versionProbe(r.tm.Conf.DiscoveryClient))
 		if err != nil {
 			// snap is non-nil when a prior snapshot was served stale;
 			// only a cold-cache failure yields nil. Either way, log
@@ -1570,6 +1769,40 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 //
 // Returns the input slice unchanged when nothing was filtered, to
 // avoid an allocation in the common case.
+// rejectExcludedTypes drops any candidate route (single- OR multi-hop) that
+// traverses a transport type in exclude (case-insensitive). Unlike rejectDMSGMultihop
+// (which spares a direct hop of the type), this removes the type ENTIRELY — the
+// operator asked for it not to be used at all — so even a 1-hop leg of that type is
+// dropped. Empty exclude / nil typeFor is a no-op returning paths unchanged.
+func rejectExcludedTypes(paths [][]routing.Hop, typeFor func(uuid.UUID) string, exclude []string) [][]routing.Hop {
+	if len(paths) == 0 || typeFor == nil || len(exclude) == 0 {
+		return paths
+	}
+	excl := make(map[string]struct{}, len(exclude))
+	for _, e := range exclude {
+		if t := strings.ToLower(strings.TrimSpace(e)); t != "" {
+			excl[t] = struct{}{}
+		}
+	}
+	if len(excl) == 0 {
+		return paths
+	}
+	out := make([][]routing.Hop, 0, len(paths))
+	for _, p := range paths {
+		drop := false
+		for _, h := range p {
+			if _, bad := excl[strings.ToLower(typeFor(h.TpID))]; bad {
+				drop = true
+				break
+			}
+		}
+		if !drop {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func rejectDMSGMultihop(paths [][]routing.Hop, typeFor func(uuid.UUID) string) [][]routing.Hop {
 	if len(paths) == 0 || typeFor == nil {
 		return paths
@@ -1794,9 +2027,24 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// replaces N individual GetTransportsByEdge calls with one bulk
 	// fetch AND amortizes that fetch across dials so repeated local
 	// route calculations don't re-pull the whole dataset each time.
-	var allEntries []*transport.Entry
+	// The by-edge and per-TpID metric lookups are derived ONCE per TPD
+	// snapshot (see tpdSnapshot.deriveTransportLookups) rather than rebuilt
+	// from the whole ~16k-entry set on every call. On a NAT'd visor with no
+	// direct transport to dst the early-return above is skipped, so a browse
+	// dial retry loop used to pay four full-dataset map builds + a per-edge
+	// sort per call — enough to peg the single js/wasm thread in GC. When
+	// there is no cache (tpdCache == nil, tests / bare router) we derive the
+	// same lookups locally from a direct fetch.
+	var (
+		allEntries       []*transport.Entry
+		transportsByEdge map[cipher.PubKey][]*transport.Entry
+		tpLatencyMs      map[uuid.UUID]float64
+		tpTypeOf         map[uuid.UUID]string
+		tpThroughput     map[uuid.UUID]float64
+		snapVersion      time.Time // TPD-snapshot generation, for the local-route memo (zero on the no-cache path)
+	)
 	if r.tpdCache != nil {
-		snap, serr := r.tpdCache.snapshot(ctx, dc.GetAllTransports)
+		snap, serr := r.tpdCache.snapshot(ctx, dc.GetAllTransports, versionProbe(dc))
 		if snap == nil {
 			// Cold-cache failure only — a stale snapshot would be
 			// returned non-nil. Nothing to compute routes from.
@@ -1804,36 +2052,18 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 			return nil, nil, fmt.Errorf("failed to fetch transport discovery data: %w", serr)
 		}
 		allEntries = snap.entries
+		transportsByEdge = snap.byEdge
+		tpLatencyMs = snap.latencyByID
+		tpTypeOf = snap.typeByID
+		tpThroughput = snap.throughputByID
+		snapVersion = snap.version
 	} else {
 		allEntries, err = dc.GetAllTransports(ctx)
 		if err != nil {
 			log.WithError(err).Warn("Failed to fetch all transports for route calculation")
 			return nil, nil, fmt.Errorf("failed to fetch transport discovery data: %w", err)
 		}
-	}
-
-	// Build lookup map: pubkey -> transports involving that pubkey.
-	// Exclude "setup" labeled transports (RSN control-plane only).
-	transportsByEdge := make(map[cipher.PubKey][]*transport.Entry)
-	for _, entry := range allEntries {
-		if entry == nil {
-			continue
-		}
-		if entry.Label == transport.LabelSetup {
-			continue
-		}
-		for _, edge := range entry.Edges {
-			transportsByEdge[edge] = append(transportsByEdge[edge], entry)
-		}
-	}
-	// Sort each edge's transport list by type preference so iteration tries
-	// direct types before DMSG when picking an intermediate-to-dst hop.
-	for edge := range transportsByEdge {
-		entries := transportsByEdge[edge]
-		sort.SliceStable(entries, func(i, j int) bool {
-			return tptypes.TypePreference(entries[i].Type) <
-				tptypes.TypePreference(entries[j].Type)
-		})
+		transportsByEdge, tpLatencyMs, tpTypeOf, tpThroughput = deriveTransportLookups(allEntries)
 	}
 	log.Debugf("Built transport cache with %d entries covering %d visors", len(allEntries), len(transportsByEdge))
 
@@ -1918,6 +2148,32 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		maxHops = 7
 	}
 
+	// Local-route memo: the multi-hop BFS below is a pure function of (src, dst,
+	// minHops, maxHops, the TPD snapshot, the local first-hop set), so cache it —
+	// skysocks-lite's warm/keepalive sweep and the routing UI re-request the same
+	// route far faster than the graph changes, and re-running the whole BFS pegs the
+	// single js/wasm thread. Only the plain case (no DisjointMux intermediate
+	// exclusions) is memoized; the mux path varies the exclusions per leg on purpose
+	// and must always recompute.
+	var (
+		memoKey     localRouteKey
+		memoEnabled = len(excludeIntermediates) == 0 && r.localRoutes != nil && !snapVersion.IsZero()
+		localSig    uint64
+	)
+	if memoEnabled {
+		h := fnv.New64a()
+		for i := range localTps {
+			id := localTps[i].id
+			_, _ = h.Write(id[:])
+		}
+		localSig = h.Sum64()
+		memoKey = localRouteKey{src: src, dst: dst, min: minHops, max: maxHops}
+		if fwd, rev, ok := r.localRoutes.get(snapVersion, localSig, memoKey); ok {
+			log.Debugf("Local-route memo hit %s→%s (min=%d max=%d)", src, dst, minHops, maxHops)
+			return fwd, rev, nil
+		}
+	}
+
 	type bfsNode struct {
 		pk   cipher.PubKey
 		path []routing.Hop
@@ -1953,7 +2209,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		})
 	}
 	sort.SliceStable(seed, func(i, j int) bool {
-		return seed[i].pk.String() < seed[j].pk.String()
+		return pkLess(seed[i].pk, seed[j].pk)
 	})
 
 	// pkInPath returns true if pk already appears as a From or To in
@@ -1981,32 +2237,12 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// once and the BFS stays linear in graph size.
 	expandedAtDepth := make(map[cipher.PubKey]map[int]bool)
 
-	// Per-TpID latency lookup over the entries we just fetched —
-	// hydrated by the CXO telemetry aggregator on TPD's side. Used to
+	// Per-TpID latency / type / throughput lookups (hydrated by the CXO
+	// telemetry aggregator on TPD's side) come prebuilt from the snapshot
+	// alongside transportsByEdge — see the derive comment above. Used to
 	// rank multiple same-level dst-hits below.
-	tpLatencyMs := make(map[uuid.UUID]float64)
-	for _, entry := range allEntries {
-		if entry == nil {
-			continue
-		}
-		if entry.Latency > 0 {
-			tpLatencyMs[entry.ID] = entry.Latency
-		}
-	}
 	localLatencyFor := func(id uuid.UUID) float64 { return tpLatencyMs[id] }
-	tpTypeOf := make(map[uuid.UUID]string)
-	for _, entry := range allEntries {
-		if entry != nil {
-			tpTypeOf[entry.ID] = string(entry.Type)
-		}
-	}
 	localTypeFor := func(id uuid.UUID) string { return tpTypeOf[id] }
-	tpThroughput := make(map[uuid.UUID]float64)
-	for _, entry := range allEntries {
-		if entry != nil && entry.ThroughputBps > 0 {
-			tpThroughput[entry.ID] = entry.ThroughputBps
-		}
-	}
 	localThroughputFor := func(id uuid.UUID) float64 { return tpThroughput[id] }
 
 	queue := seed
@@ -2079,7 +2315,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 				children = append(children, bfsNode{pk: nextPK, path: newPath})
 			}
 			sort.SliceStable(children, func(i, j int) bool {
-				return children[i].pk.String() < children[j].pk.String()
+				return pkLess(children[i].pk, children[j].pk)
 			})
 			nextQueue = append(nextQueue, children...)
 		}
@@ -2099,12 +2335,81 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 			}
 			log.Debugf("Local BFS found %d-hop route via %v (best of %d same-level candidates, score=%.1fms)",
 				level, hopPath(best), len(dstCandidates), bestScore)
-			return best, reverseHops(best), nil
+			rev := reverseHops(best)
+			if memoEnabled {
+				r.localRoutes.put(snapVersion, localSig, memoKey, best, rev)
+			}
+			return best, rev, nil
 		}
 		queue = nextQueue
 	}
 
 	return nil, nil, fmt.Errorf("local BFS found no path to %s with min_hops=%d max_hops=%d", dst, minHops, maxHops)
+}
+
+// localRouteMemo caches calculateLocalRoutes' multi-hop BFS result. That BFS over
+// the (up to ~16k-edge) TPD graph is the single most expensive thing the wasm
+// visor's route-setup does, and it re-runs on EVERY dial/route-setup — skysocks-
+// lite's warm/keepalive sweep and the routing UI re-request the same (src,dst) far
+// faster than the graph changes, so the same BFS is recomputed over and over. On
+// the single js/wasm thread that pegs mallocgc/GC and starves the very route-setup
+// handshake it feeds (which then times out at ~28s, forcing exclusions that drive
+// yet more local calc — a feedback loop). The BFS result is a pure function of
+// (src, dst, min/max hops, the TPD snapshot, the local first-hop set), so it is
+// safe to memoize on all of those. Single-generation: the whole map resets when
+// the TPD snapshot version OR the local-transport signature changes, so a stale
+// route is never served and the map stays bounded to one graph's worth of entries.
+// Only the plain (no intermediate-exclusion) case is cached — the mux path varies
+// ExcludeIntermediatePKs per leg on purpose and must always recompute.
+type localRouteMemo struct {
+	mu       sync.Mutex
+	version  time.Time
+	localSig uint64
+	m        map[localRouteKey]localRoutePair
+}
+
+type localRouteKey struct {
+	src, dst cipher.PubKey
+	min, max int
+}
+
+type localRoutePair struct{ fwd, rev []routing.Hop }
+
+func newLocalRouteMemo() *localRouteMemo { return &localRouteMemo{} }
+
+// get returns cached (fwd, rev) copies for k when the memo's generation matches
+// the current snapshot version + local signature; a mismatch or miss returns ok
+// false so the caller recomputes (and put resets the generation).
+func (c *localRouteMemo) get(version time.Time, sig uint64, k localRouteKey) (fwd, rev []routing.Hop, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil || !c.version.Equal(version) || c.localSig != sig {
+		return nil, nil, false
+	}
+	p, hit := c.m[k]
+	if !hit {
+		return nil, nil, false
+	}
+	return append([]routing.Hop(nil), p.fwd...), append([]routing.Hop(nil), p.rev...), true
+}
+
+// put stores (fwd, rev) copies for k, resetting the whole generation first when the
+// snapshot version or local signature moved (keeps the map fresh and bounded).
+func (c *localRouteMemo) put(version time.Time, sig uint64, k localRouteKey, fwd, rev []routing.Hop) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil || !c.version.Equal(version) || c.localSig != sig {
+		c.version = version
+		c.localSig = sig
+		c.m = make(map[localRouteKey]localRoutePair)
+	}
+	c.m[k] = localRoutePair{
+		fwd: append([]routing.Hop(nil), fwd...),
+		rev: append([]routing.Hop(nil), rev...),
+	}
 }
 
 // reverseHops builds the reverse path of a forward route by walking
@@ -2148,6 +2453,17 @@ func hopPath(path []routing.Hop) string {
 // stale-entry leaks. The most useful case is fwd=1 + rev=N for
 // download-heavy workloads (1 forward upstream + N reverse legs that
 // aggregate the bulk payload).
+// initialForegroundMux bounds how many mux legs establishMuxRoutes sets up
+// SYNCHRONOUSLY at dial time. The standby pool is uncapped (adaptStandbyMax=512),
+// but dialing hundreds of legs at connect would storm the setup node and stall
+// the connection before it serves; so the foreground dial builds a lean mux (a
+// few active + a small warm reserve) and returns, and the background self-heal
+// fills the rest of the disjoint pool one leg at a time (see SetSelfHeal /
+// maybeSelfHeal). Chosen well above the adaptive active cap (adaptCap=8) so a
+// download can grow onto warm legs immediately, but small enough that the
+// initial dial is a handful of parallel setups, not a storm.
+const initialForegroundMux = 16
+
 func (r *router) establishMuxRoutes(
 	ctx context.Context,
 	nrg *NoiseRouteGroup,
@@ -2169,6 +2485,17 @@ func (r *router) establishMuxRoutes(
 	maxCount := fwdCount
 	if revCount > maxCount {
 		maxCount = revCount
+	}
+	// Cap the FOREGROUND initial dial. With the standby pool uncapped
+	// (adaptStandbyMax=512 → Mux ~513), planning+dialing every leg here — at
+	// connect time, Phase-2 in parallel — would be a setup-node dial storm that
+	// stalls the connection before it serves a byte. Instead set up a lean mux
+	// now (a few active + a small warm reserve) so the dial returns fast, and let
+	// the BACKGROUND self-heal (SetSelfHeal target = full Mux) fill the rest of
+	// the disjoint pool one leg at a time. The reverse/forward split is preserved
+	// below; this only bounds how many legs are attempted synchronously.
+	if maxCount > initialForegroundMux {
+		maxCount = initialForegroundMux
 	}
 	if maxCount <= 1 || nrg.rg.mux == nil {
 		return
@@ -2240,7 +2567,14 @@ func (r *router) establishMuxRoutes(
 	// Cap on consecutive planning failures. A fully-broken
 	// route-finder + local-calc combo would otherwise pin us for
 	// ~3s × (maxCount-1) iterations on the way to giving up.
-	const maxConsecutiveMuxFailures = 2
+	// Raised from 2: when the oracle sources a big disjoint set (a busy exit
+	// exposes dozens of intermediates), the destination-transport query is
+	// occasionally flaky (a cold dmsg session → transient error) — 2 consecutive
+	// misses stopped the pool at ~3 legs even though many more routes existed.
+	// A higher bound rides through those transient misses to fill the standby
+	// pool, while still bounding a genuinely-exhausted set (planning is
+	// background/best-effort, never blocks the primary).
+	const maxConsecutiveMuxFailures = 5
 
 	// Phase 1 (sequential): plan each aux route. Excludes
 	// propagate iteration-to-iteration so successive aux routes
@@ -2310,6 +2644,22 @@ func (r *router) establishMuxRoutes(
 			muxFwd, muxRev = lcFwd, lcRev
 		}
 		consecutiveFailures = 0
+
+		// Hard mux invariants (post-fetch gate). Even though excludePKs is fed
+		// to the finder as ExcludeIntermediatePKs, the local-calc fallback and
+		// finder misses can still return a leg that overlaps an existing leg's
+		// intermediates or loops through a visor twice. Reject such a candidate
+		// HERE — before the setup-node dial — and claim its intermediates so the
+		// next slot diverges from it. excludePKs is the running union of every
+		// prior leg's intermediates (both directions), so it serves as the used
+		// set for the forward and reverse checks alike.
+		if !validMuxLeg(muxFwd, muxRev, lPK, rPK, excludePKs, excludePKs) {
+			log.Debugf("Mux route %d/%d: candidate rejected — intra-route loop or intermediate overlap with an existing leg; skipping",
+				i+1, maxCount)
+			excludePKs = append(excludePKs, intermediatesOfHops(muxFwd, lPK, rPK)...)
+			excludePKs = append(excludePKs, intermediatesOfHops(muxRev, rPK, lPK)...)
+			continue
+		}
 
 		// The route-finder fallback ignores ExcludeTransportIDs, so it can hand
 		// back a leg whose first hop reuses a transport already used by the
@@ -2394,6 +2744,17 @@ func (r *router) establishMuxRoutes(
 					p.slot, maxCount, p.addFwd, p.addRev, err)
 				return
 			}
+			// Record this leg's full forward route so the per-leg mux view shows
+			// its whole path (all hops, full PKs, per-hop transport type) instead
+			// of falling back to the first-hop transport's remote — which for a
+			// multihop leg is the first INTERMEDIATE, mislabeled as the exit. Only
+			// when the forward leg was actually appended (addFwd); a reverse-only
+			// slot installs no forward transport to key the hops on. The forward
+			// path's first-hop TpID matches muxRules.Forward.NextTransportID (the
+			// transport appendRouteAsymmetric registered), so legHopsFor finds it.
+			if p.addFwd {
+				nrg.rg.recordLegHops(p.req.Forward)
+			}
 			log.Infof("Mux route %d/%d established (fwd=%v rev=%v) via tp %s",
 				p.slot, maxCount, p.addFwd, p.addRev, muxRules.Forward.NextTransportID())
 		}(p)
@@ -2419,6 +2780,29 @@ func (r *router) establishMuxRoutes(
 // leg set); the rotation goroutine logs and waits for the next
 // tick.
 func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *DialOptions, forwardDesc routing.RouteDescriptor, extraExcludePKs []cipher.PubKey) error {
+	return r.addOneAuxLeg(ctx, nrg, opts, forwardDesc, extraExcludePKs, true)
+}
+
+// addOneAuxSendLeg dials one additional FORWARD-ONLY aux leg
+// (appendRouteAsymmetric addFwd=true / addRev=false) and appends it to nrg.
+// Used by the rotation hook for a RotationAction.AddForwardLeg — the adaptive
+// preset's upload-saturation widen. It adds upstream send capacity WITHOUT a
+// paired reverse rule, so it does not enlarge the reverse/download set.
+//
+// Caveat (see the full-duplex note in addOneAuxLeg): a leg with no local
+// reverse (consume) rule black-holes any DOWNLOAD the far end spreads onto it.
+// That is acceptable here precisely because this leg is grown for an
+// upload-dominant flow (little reverse traffic) and the leg-dataprogress /
+// leg-liveness prunes evict it if the far end mis-spreads bulk download onto
+// it. It is the "forward actuation can't fully mirror reverse" corner: the warm
+// standby pool is full-duplex, so a forward-only widen must be a fresh leg.
+func (r *router) addOneAuxSendLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *DialOptions, forwardDesc routing.RouteDescriptor, extraExcludePKs []cipher.PubKey) error {
+	return r.addOneAuxLeg(ctx, nrg, opts, forwardDesc, extraExcludePKs, false)
+}
+
+// addOneAuxLeg is the shared implementation behind addOneAuxForwardLeg
+// (addRev=true, full-duplex) and addOneAuxSendLeg (addRev=false, forward-only).
+func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *DialOptions, forwardDesc routing.RouteDescriptor, extraExcludePKs []cipher.PubKey, addRev bool) error {
 	if nrg == nil || nrg.rg == nil {
 		return fmt.Errorf("route group nil")
 	}
@@ -2468,20 +2852,74 @@ func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, 
 		ExcludeDMSG:            true,
 	}
 
-	// Plan the replacement/added leg over the GLOBAL TPD graph via the
-	// route-finder first (same rationale as establishMuxRoutes): local calc is
-	// restricted to this visor's live transports (webrtc on a NAT'd client), so
-	// a self-healed/rotated leg re-collapses to a slow webrtc first hop unless
-	// we let the RF reach fast disjoint stcpr intermediates over the full graph.
-	// The disjoint excludes + transport-type-aware ranking keep it disjoint and
-	// off webrtc; local calc is the fallback for a disjoint deep-hop the RF misses.
-	muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
-	if err != nil {
-		lcFwd, lcRev, lcErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
-		if lcErr != nil {
-			return fmt.Errorf("rotation add-leg: no route found (route-finder=%v, local-calc=%v)", err, lcErr)
+	// SHARED WARM-ROUTE POOL (phase 1): before the route-finder round-trip, try
+	// the visor-level plan cache. Every mux-enabled group's self-heal/rotation
+	// dials an aux leg through here, so N tunnels aggregating to the same exit
+	// would otherwise each re-run the same route-finder + disjointness work per
+	// leg per tick — the "planning storm". A cached plan is a group-independent
+	// path (no route IDs); it is fed into the SAME setup-node Dial + validMuxLeg
+	// gate below, so a stale plan is rejected exactly like a fresh bad one and a
+	// miss falls through to fetchBestRoutes — the cache can only save work, never
+	// change the leg that gets built. See docs/design/shared-warm-route-pool.md.
+	keyMinHops := r.conf.MinHops
+	if e := muxOpts.EffectiveMinHops(true); e > 0 {
+		keyMinHops = uint16(e) //nolint:gosec
+	}
+	var muxFwd, muxRev []routing.Hop
+	if cf, cr, ok := r.warmRoutes.bestPlan(rPK, keyMinHops, excludeIDs, excludePKs); ok {
+		muxFwd, muxRev = cf, cr
+		log.WithField("first_tp", func() string {
+			if len(cf) > 0 {
+				return cf[0].TpID.String()
+			}
+			return ""
+		}()).Debug("Mux add-leg: served disjoint plan from shared warm-route pool (skipped route-finder)")
+	} else {
+		// Plan the replacement/added leg over the GLOBAL TPD graph via the
+		// route-finder first (same rationale as establishMuxRoutes): local calc is
+		// restricted to this visor's live transports (webrtc on a NAT'd client), so
+		// a self-healed/rotated leg re-collapses to a slow webrtc first hop unless
+		// we let the RF reach fast disjoint stcpr intermediates over the full graph.
+		// The disjoint excludes + transport-type-aware ranking keep it disjoint and
+		// off webrtc; local calc is the fallback for a disjoint deep-hop the RF misses.
+		fFwd, fRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
+		if err != nil {
+			lcFwd, lcRev, lcErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
+			if lcErr != nil {
+				return fmt.Errorf("rotation add-leg: no route found (route-finder=%v, local-calc=%v)", err, lcErr)
+			}
+			fFwd, fRev = lcFwd, lcRev
 		}
-		muxFwd, muxRev = lcFwd, lcRev
+		muxFwd, muxRev = fFwd, fRev
+		// Populate the shared pool so the NEXT group/leg to this exit reuses this
+		// freshly-discovered disjoint plan instead of re-querying the finder.
+		r.warmRoutes.put(rPK, keyMinHops, muxFwd, muxRev)
+	}
+
+	// Hard mux invariants (post-fetch gate): the planned leg must be loop-free
+	// and its intermediates disjoint from every existing leg. excludePKs holds
+	// the group's intermediates plus the caller's exclude hints, so it is the
+	// used set for both directions. A violating candidate is skipped (the
+	// rotation goroutine keeps the current leg set and retries next tick).
+	if !validMuxLeg(muxFwd, muxRev, lPK, rPK, excludePKs, excludePKs) {
+		return errors.New("rotation add-leg: planned leg violates mux invariants (intra-route loop or intermediate overlap with an existing leg)")
+	}
+
+	// The route-finder honors ExcludeIntermediatePKs but NOT ExcludeTransportIDs,
+	// so with a 1-hop-capable min_hops it keeps returning a leg whose first hop is
+	// the direct transport that is already the primary leg (excludeIDs holds every
+	// live leg's transport). Dialing it burns a setup-node round-trip every
+	// rotation tick only for appendRouteAsymmetric to reject it locally
+	// ("already in the group") — the dominant warm-standby churn (observed 65 such
+	// dials in a 3-minute window, all for the same transport). Drop the plan HERE,
+	// before the setup-node dial, exactly as establishMuxRoutes/GrowMuxRoute
+	// already do on their planning paths.
+	if len(muxFwd) > 0 {
+		for _, ex := range excludeIDs {
+			if muxFwd[0].TpID == ex {
+				return fmt.Errorf("rotation add-leg: planned leg reuses transport %s already in the group (finder ignores ExcludeTransportIDs); skipping before dial", muxFwd[0].TpID)
+			}
+		}
 	}
 
 	muxKeepAlive := DefaultRouteKeepAlive
@@ -2498,20 +2936,26 @@ func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, 
 	if err != nil {
 		return fmt.Errorf("rotation add-leg: setup-node dial: %w", err)
 	}
-	// Append the replacement leg FULL-DUPLEX (forward + reverse). Forward-only
-	// deletes the initiator's consume (reverse) rule for this leg — but the
-	// setup-node dial already installed that rule on the far end, which marks the
-	// leg ready on our forward handshake and then spreads its bulk (download)
-	// stream onto it. With the initiator's consume rule gone those packets are
-	// dropped (errRouteDescNotExist), so the leg black-holes (recv=0) and, because
-	// the reorder buffer is lossless, the missing sequences head-of-line-stall the
-	// primary leg too — a net 0-byte transfer. aliveLegCount counts forward legs,
-	// so a send-only leg still satisfies the degree target while being a download
-	// blackhole. Keeping the reverse rule lets the aggregated download land here.
-	if err := r.appendRouteAsymmetric(nrg, muxRules, true, true); err != nil {
+	// Append the leg. Full-duplex (addRev=true, the default rotation/self-heal
+	// path): forward-only would delete the initiator's consume (reverse) rule for
+	// this leg — but the setup-node dial already installed that rule on the far
+	// end, which marks the leg ready on our forward handshake and then spreads its
+	// bulk (download) stream onto it. With the initiator's consume rule gone those
+	// packets are dropped (errRouteDescNotExist), so the leg black-holes (recv=0)
+	// and, because the reorder buffer is lossless, the missing sequences
+	// head-of-line-stall the primary leg too — a net 0-byte transfer. So the
+	// full-duplex path keeps the reverse rule. addRev=false is used ONLY by the
+	// adaptive preset's forward-only (AddForwardLeg) upload widen, where the flow
+	// is upload-dominant so little download lands here, and the data-progress /
+	// liveness prunes evict the leg if the far end mis-spreads download onto it.
+	if err := r.appendRouteAsymmetric(nrg, muxRules, true, addRev); err != nil {
 		return fmt.Errorf("rotation add-leg: append: %w", err)
 	}
-	log.Infof("Rotation aux leg established via tp %s", muxRules.Forward.NextTransportID())
+	// Record this leg's full forward route (addFwd is always true here) so the
+	// per-leg mux view shows its whole path instead of the first-hop transport's
+	// remote — which for a multihop leg is the first intermediate, not the exit.
+	nrg.rg.recordLegHops(muxFwd)
+	log.Infof("Rotation aux leg established (addRev=%v) via tp %s", addRev, muxRules.Forward.NextTransportID())
 	return nil
 }
 
@@ -2567,6 +3011,53 @@ func intermediatesOfRouteGroup(nrg *NoiseRouteGroup, src, dst cipher.PubKey) []c
 		}
 	}
 	return out
+}
+
+// siblingRouteGroupExclusions scans this visor's live route groups for
+// ones that already terminate at the same destination (rPK:rPort) as an
+// about-to-be-dialed tunnel, and returns the first-hop transport IDs and
+// intermediate PKs they occupy. Feeding these into a new dial's
+// ExcludeTransportIDs / ExcludeIntermediatePKs makes the new tunnel leave
+// the source over a DIFFERENT first-hop transport / disjoint intermediate —
+// so N tunnels to one exit aggregate bandwidth instead of splitting a single
+// link (docs/mux_aggregation_rfc.md step 3).
+//
+// rgsNs is keyed by the RECEIVE-side descriptor (Src = remote peer, Dst =
+// this visor), so a sibling group to (rPK, rPort) matches on SrcPK()==rPK &&
+// SrcPort()==rPort; the differing DstPort() is each tunnel's own ephemeral
+// local port. count is the number of matching sibling groups — 0 means this
+// is the first tunnel to that dst and the caller must add NO exclusions
+// (byte-identical to a normal single dial).
+//
+// Locking: the matching *NoiseRouteGroup values are snapshotted under r.mx,
+// then their transports are read WITHOUT r.mx held (each via the group's own
+// rg.mu), so we never hold r.mx while taking a route-group lock.
+func (r *router) siblingRouteGroupExclusions(lPK, rPK cipher.PubKey, rPort routing.Port) (ids []uuid.UUID, pks []cipher.PubKey, count int) {
+	r.mx.Lock()
+	var siblings []*NoiseRouteGroup
+	for desc, nrg := range r.rgsNs {
+		if nrg == nil {
+			continue
+		}
+		if desc.SrcPK() == rPK && desc.SrcPort() == rPort {
+			siblings = append(siblings, nrg)
+		}
+	}
+	r.mx.Unlock()
+
+	count = len(siblings)
+	for _, nrg := range siblings {
+		nrg.rg.mu.Lock()
+		for _, tp := range nrg.rg.tps {
+			if tp == nil {
+				continue
+			}
+			ids = append(ids, tp.Entry.ID)
+		}
+		nrg.rg.mu.Unlock()
+		pks = append(pks, intermediatesOfRouteGroup(nrg, lPK, rPK)...)
+	}
+	return ids, pks, count
 }
 
 // extractFailedIntermediatePK walks an error chain looking for a
@@ -2642,6 +3133,100 @@ func (r *router) sameLANExcludedPKs() []cipher.PubKey {
 	return r.tm.SameLANPeers(self)
 }
 
+// controlPlanePorts is the set of reserved skywire service ports that carry
+// small control / telemetry traffic (never bulk data). A route group whose
+// destination lands on one of these must not grow a bandwidth-spreading
+// warm-standby mux (see the gate in dialRoutesFwd). Mirrors the reserved
+// service ports in pkg/skyenv; app data ports (skysocks 3, skysocks-client 13,
+// vpn 43/44, the port-59 forward pool, skychat 1, dynamic ports) are absent so
+// they keep their mux.
+var controlPlanePorts = map[uint16]struct{}{
+	skyenv.DmsgCtrlPort:                  {}, // 7
+	skyenv.DmsgPingPort:                  {}, // 8
+	skyenv.DmsgPtyPort:                   {}, // 22 — the observed 32-leg-mux victim
+	skyenv.DmsgSetupPort:                 {}, // 36
+	skyenv.DmsgHypervisorPort:            {}, // 46
+	skyenv.DmsgTransportSetupPort:        {}, // 47
+	skyenv.DmsgTransportSetupServicePort: {}, // 48
+	skyenv.DmsgGRPCPort:                  {}, // 49
+	skyenv.DmsgVisorRPCPort:              {}, // 65
+	skyenv.DmsgTransportQueryPort:        {}, // 68
+	skyenv.DmsgDHTPort:                   {}, // 100
+	skyenv.DmsgAwaitSetupPort:            {}, // 136
+}
+
+// isControlPlanePort reports whether p is a reserved control/telemetry service
+// port (not bulk data) — such route groups stay single-route (no warm-standby
+// mux). See controlPlanePorts.
+func isControlPlanePort(p routing.Port) bool {
+	_, ok := controlPlanePorts[uint16(p)]
+	return ok
+}
+
+// effectiveDialHook returns the routing-policy DialHook to apply for a dial to
+// rPort, or nil when rPort is a control-plane port. Control/telemetry channels
+// (pty, dmsgctrl, setup, hypervisor RPC, transport-setup, …) must never run the
+// operator's routing policy at all: its per-dial evaluation, warm-standby
+// reserve, and reshape/rotation churn destabilize their small noise-XK
+// handshakes — the pty (port 22) 32-leg mux that "never carried a byte" and the
+// ~seconds-of-reshape that time out a request a single 1-hop route would have
+// completed. These channels always take a plain base route. This is the
+// policy-application complement to the muxTarget>1 no-mux gate in dialRoutesFwd:
+// that keeps an already-policied route from GROWING a mux; this keeps the policy
+// from evaluating/managing (BeforeDial/LegChange/Rotation) the route in the
+// first place, regardless of which policy (adaptive or a custom preset) is set.
+//
+// The control-plane exemption is the DEFAULT but not mandatory: setting
+// Config.PolicyOnControlPorts opts the policy back in for these ports too, for
+// an operator who deliberately wants a policy tuned for control traffic.
+func (r *router) effectiveDialHook(rPort routing.Port) DialHook {
+	if r.conf.DialHook == nil {
+		return nil
+	}
+	if isControlPlanePort(rPort) && !r.conf.PolicyOnControlPorts {
+		return nil
+	}
+	return r.conf.DialHook
+}
+
+// dialPolicyHook returns the routing-policy hook that should adjust THIS dial, or
+// nil to skip policy entirely. It layers a --direct exemption over
+// effectiveDialHook: a dial with EnsureDirectTransport asked for a single,
+// stable, 1-hop direct leg (no route-finder, no setup node, no adaptive mux), so
+// it is policy-free by definition. Without this, effectiveDialHook still returns
+// the GLOBAL default hook even after the per-app policy override was cleared, and
+// that hook re-imposes the adaptive mux (e.g. policy_mux=513) — sending the router
+// off to chase RSN-oracle / route-finder aux legs alongside the direct primary,
+// which is exactly what --direct exists to avoid.
+func (r *router) dialPolicyHook(opts *DialOptions, rPort routing.Port) DialHook {
+	if opts != nil && opts.EnsureDirectTransport {
+		return nil
+	}
+	return r.effectiveDialHook(rPort)
+}
+
+// isSameLANDest reports whether dst is a peer on this visor's own local network
+// (private-endpoint or NAT-hairpin, per transport.Manager.SameLANPeers). Unlike
+// sameLANExcludedPKs (the INTERMEDIATE exclusion, gated on ExcludeSameLANHops),
+// this is used for the DESTINATION mux decision and applies regardless of that
+// config: a box on our LAN is always best reached over its single direct
+// transport, never a warm-standby mux through remote intermediates.
+func (r *router) isSameLANDest(dst cipher.PubKey) bool {
+	if r.tm == nil {
+		return false
+	}
+	var self net.IP
+	if r.conf != nil && r.conf.SelfPublicIP != nil {
+		self = r.conf.SelfPublicIP()
+	}
+	for _, pk := range r.tm.SameLANPeers(self) {
+		if pk == dst {
+			return true
+		}
+	}
+	return false
+}
+
 // appendUniquePKs appends every pk in add that is not already in base,
 // preserving order. Nil-safe on both arguments.
 func appendUniquePKs(base, add []cipher.PubKey) []cipher.PubKey {
@@ -2682,4 +3267,90 @@ func intermediatePKsOfPath(hops []routing.Hop, src, dst cipher.PubKey) []cipher.
 		out = append(out, pk)
 	}
 	return out
+}
+
+// routeIntermediates returns the de-duplicated set of intermediate-visor PKs
+// of a hop sequence: every visor appearing as a hop endpoint (From or To)
+// other than this visor (src) and the destination (dst). For a direct 1-hop
+// route src->dst it returns nil (no intermediates). Unlike
+// intermediatePKsOfPath it inspects BOTH edges of every hop, so an
+// intermediate that a malformed candidate lists only as a From (never a To)
+// is still reported — the disjointness guarantee must not depend on the
+// route being well-formed.
+func routeIntermediates(fwd []routing.Hop, src, dst cipher.PubKey) []cipher.PubKey {
+	seen := make(map[cipher.PubKey]struct{}, 2*len(fwd))
+	var out []cipher.PubKey
+	add := func(pk cipher.PubKey) {
+		if pk == src || pk == dst || pk == (cipher.PubKey{}) {
+			return
+		}
+		if _, ok := seen[pk]; ok {
+			return
+		}
+		seen[pk] = struct{}{}
+		out = append(out, pk)
+	}
+	for _, h := range fwd {
+		add(h.From)
+		add(h.To)
+	}
+	return out
+}
+
+// hasLoop reports whether a forward hop chain passes through the same visor
+// more than once (an intra-route loop). The visor visit order is the first
+// hop's From followed by every hop's To; a repeat anywhere in that sequence
+// is a loop. A route that loops through a visor twice can send traffic in a
+// circle with no way for the endpoints to detect it.
+func hasLoop(fwd []routing.Hop) bool {
+	if len(fwd) == 0 {
+		return false
+	}
+	seen := make(map[cipher.PubKey]struct{}, len(fwd)+1)
+	seen[fwd[0].From] = struct{}{}
+	for _, h := range fwd {
+		if _, ok := seen[h.To]; ok {
+			return true
+		}
+		seen[h.To] = struct{}{}
+	}
+	return false
+}
+
+// disjointFrom reports whether cand shares no PK with used (the set
+// intersection is empty). An empty cand — a direct, zero-intermediate leg —
+// is trivially disjoint and always accepted.
+func disjointFrom(cand, used []cipher.PubKey) bool {
+	if len(cand) == 0 || len(used) == 0 {
+		return true
+	}
+	set := make(map[cipher.PubKey]struct{}, len(used))
+	for _, pk := range used {
+		set[pk] = struct{}{}
+	}
+	for _, pk := range cand {
+		if _, ok := set[pk]; ok {
+			return false
+		}
+	}
+	return true
+}
+
+// validMuxLeg reports whether a candidate leg satisfies the two hard mux
+// invariants given the intermediates already claimed by the group's other
+// legs (usedFwd for the forward direction, usedRev for the reverse): the
+// forward and reverse paths must each be loop-free, and each direction's
+// intermediates must be fully disjoint from the corresponding used set. It
+// is the post-fetch gate applied to every candidate before it is committed
+// as a leg — the route-finder honors ExcludeIntermediatePKs but its
+// local-calc fallback and finder misses can still return an overlapping or
+// looping path.
+func validMuxLeg(fwd, rev []routing.Hop, src, dst cipher.PubKey, usedFwd, usedRev []cipher.PubKey) bool {
+	if hasLoop(fwd) || hasLoop(rev) {
+		return false
+	}
+	if !disjointFrom(routeIntermediates(fwd, src, dst), usedFwd) {
+		return false
+	}
+	return disjointFrom(routeIntermediates(rev, dst, src), usedRev)
 }

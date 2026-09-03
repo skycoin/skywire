@@ -33,7 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	dmsgspec "github.com/skycoin/skywire/pkg/dmsgc/spec"
+	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/dmsgweb"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxystatus"
@@ -211,6 +211,38 @@ func (e *EmbeddedDmsgWeb) Upstream() string {
 	return e.cfg.UpstreamSOCKS
 }
 
+// ListenAddr returns the SOCKS5 listener the resolver binds, resolved the same
+// way serve() does (loopback default, default port). Read by the status page so
+// it names the listener the browser actually reached it through.
+func (e *EmbeddedDmsgWeb) ListenAddr() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return resolverListenAddr(e.cfg.ProxyAddr, uintOrDefault(e.cfg.ProxyPort, defaultDmsgWebProxyPort))
+}
+
+// Suffix returns the domain suffix the resolver answers for (".dmsg").
+func (e *EmbeddedDmsgWeb) Suffix() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return stringOrDefault(e.cfg.DomainSuffix, dmsgweb.DefaultDomainSuffix)
+}
+
+// Aliases returns the name→PK bindings the resolver resolves by name — the
+// canonical service aliases plus this visor's own alias on top, exactly the
+// merge serve() hands to the runtime. The returned map is a copy.
+func (e *EmbeddedDmsgWeb) Aliases() map[string]cipher.PubKey {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := make(map[string]cipher.PubKey, len(e.serviceAliases)+1)
+	for label, pk := range e.serviceAliases {
+		out[label] = pk
+	}
+	for label, pk := range resolverAliasMap(e.cfg.Alias, e.localPK) {
+		out[label] = pk
+	}
+	return out
+}
+
 func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 	cfg := dmsgweb.Config{
 		DomainSuffix:  stringOrDefault(e.cfg.DomainSuffix, dmsgweb.DefaultDomainSuffix),
@@ -252,8 +284,10 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 	// Direct-client path for non-discovery dmsg servers.
 	cfg.DirectClient = e.directClient
 	cfg.DirectServerPKs = e.directServerPKs
-	// Reserved in-process status hosts (http://status.dmsg/ etc.).
+	// Reserved in-process status host owned by this layer: only status.dmsg is
+	// answered here; status.skynet / status.skysocks fall through up the chain.
 	cfg.StatusProvider = e.statusProvider
+	cfg.StatusSurface = proxystatus.SurfaceDmsg
 
 	// Optional TLS MITM. CA load failure is non-fatal — the
 	// resolver continues without MITM and logs the reason.

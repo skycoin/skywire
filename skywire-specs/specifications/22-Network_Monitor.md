@@ -16,8 +16,8 @@ The Network Monitor:
 The code should be in the `skycoin/skywire-services` repository:
 
 - `/cmd/network-monitor/network-monitor.go` is the main executable for the *Network Monitor*.
-- `/pkg/network-monitor/api/` contains the RESTFUL API definitions.
-- `/pkg/network-monitor/store/` contains the monitoring data storage.
+- `/pkg/deployment/monitor/api/` contains the RESTFUL API definitions.
+- `/pkg/deployment/monitor/store/` contains the monitoring data storage.
 
 ## Authentication
 

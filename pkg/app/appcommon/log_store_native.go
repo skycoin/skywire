@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/bbolt"
+	bboltErrors "github.com/0magnet/bbolt/errors"
 	log "github.com/sirupsen/logrus"
-	"go.etcd.io/bbolt"
-	bboltErrors "go.etcd.io/bbolt/errors"
 
 	"github.com/skycoin/skywire/pkg/util/bbolthealth"
 )
@@ -174,6 +174,9 @@ func (l *bBoltLogStore) Fire(entry *log.Entry) error {
 	defer l.mx.Unlock()
 
 	p, err := entry.String()
+	if err != nil {
+		return err
+	}
 	var substitution = ""
 	str := re.ReplaceAllString(p, substitution)
 
