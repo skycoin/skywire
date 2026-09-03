@@ -78,6 +78,19 @@ func TestSOCKS5StatusScoping(t *testing.T) {
 	if !contains(dmsgBody, "upstream-sink") || contains(dmsgBody, "per-leg mux") {
 		t.Fatalf("status.dmsg should have fallen through to upstream: %q", truncate(dmsgBody))
 	}
+
+	// Chain composition: this layer sits between dmsgweb and skysocks, so the
+	// skysocks status host must pass straight through to the layer that owns it.
+	skysocksBody := getBody(t, httpc, "http://status.skysocks/")
+	if !contains(skysocksBody, "upstream-sink") || contains(skysocksBody, "per-leg mux") {
+		t.Fatalf("status.skysocks should have fallen through to upstream: %q", truncate(skysocksBody))
+	}
+
+	// An ordinary host is untouched by the status interception.
+	plainBody := getBody(t, httpc, "http://example.com/")
+	if !contains(plainBody, "upstream-sink") || contains(plainBody, "per-leg mux") {
+		t.Fatalf("a non-status host should forward upstream untouched: %q", truncate(plainBody))
+	}
 }
 
 func getBody(t *testing.T, httpc *http.Client, url string) string {

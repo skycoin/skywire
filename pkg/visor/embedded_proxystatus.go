@@ -20,13 +20,19 @@ package visor
 
 import (
 	"fmt"
+	"net"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsgweb"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 )
 
 // statusLogLookback bounds how far back the status page's log tail reaches. The
@@ -109,20 +115,42 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 	// Logs: prefer the richer scoped log captured in the ring (app stdout +
 	// tagged lifecycle). Fall back to the app's bbolt log store when the ring
 	// has nothing yet, so an idle-but-previously-run surface still shows a tail.
+	// The procM guard matters: LogsSince dereferences the proc manager, and a
+	// status page must still render on a half-initialized visor (the exact case
+	// an operator hits one) rather than panicking on the request path.
 	if len(ringLogs) > 0 {
 		snap.Logs = tailRecordLines(ringLogs, statusMaxLogLines)
-	} else if logs, err := p.v.LogsSince(time.Now().Add(-statusLogLookback), app); err == nil {
-		snap.Logs = logs
-	} else {
-		snap.Note = appendNote(snap.Note, "logs unavailable: "+err.Error())
+	} else if p.v.procM != nil {
+		if logs, err := p.v.LogsSince(time.Now().Add(-statusLogLookback), app); err == nil {
+			snap.Logs = logs
+		} else {
+			snap.Note = appendNote(snap.Note, "logs unavailable: "+err.Error())
+		}
+	}
+
+	// Layer sections: for the two RESOLVING proxies the page's substance is the
+	// layer itself (liveness, chain, sessions, names, forwards), not a route
+	// group — they own no mux legs, and the renderer degrades to a layer-specific
+	// note rather than an empty leg table. Filled from what each layer already
+	// tracks; nothing is fabricated for a layer that does not know it.
+	switch surface {
+	case proxystatus.SurfaceDmsg:
+		p.fillDmsgLayer(&snap)
+	case proxystatus.SurfaceSkynet:
+		p.fillSkynetLayer(&snap)
+	case proxystatus.SurfaceSkysocks:
+		// The skysocks tunnel's state is Legs/Streams/RangeSplit — no layer section.
 	}
 
 	// Mux legs (best-effort): the surface may have no active route group. Each
 	// route group is one --tunnels STREAM; its Legs are the PACKET-level mux. Model
 	// every tunnel (not just the first) so the status tree can nest tunnel → legs;
 	// mirror the first tunnel's legs into snap.Legs for back-compat.
-	self := p.v.conf.PK
-	snap.SelfPK = self.String()
+	var self cipher.PubKey
+	if p.v.conf != nil && p.v.conf.Common != nil {
+		self = p.v.conf.PK
+		snap.SelfPK = self.String()
+	}
 	if infos, err := p.v.RouteGroupMuxInfo(app); err == nil {
 		for ti, info := range infos {
 			// The exit is the descriptor end that is NOT this visor. A client route
@@ -155,6 +183,231 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 	// yet collected into a per-surface buffer; the renderer shows an empty
 	// section. This is the extension point that pairs with route control.
 	return snap, nil
+}
+
+// resolverListenAddr renders a resolving proxy's SOCKS5 listener the way its
+// runtime binds it: an empty ProxyAddr means loopback, and a zero port means the
+// SOCKS5 front-end is disabled (rendered as empty, never as ":0").
+func resolverListenAddr(addr string, port uint) string {
+	if port == 0 {
+		return ""
+	}
+	if strings.TrimSpace(addr) == "" {
+		addr = "127.0.0.1"
+	}
+	return fmt.Sprintf("%s:%d", addr, port)
+}
+
+// chainTargetState labels what the visor KNOWS sits behind a downstream SOCKS5
+// address, so the status page can say "skysocks-client · running" instead of
+// implying it probed the address. Returns "" when the address belongs to
+// something this visor cannot vouch for — the page then shows the bare address.
+//
+// WHY no dial probe: the page renders on the request path of the very proxy the
+// browser is talking through, and the js/wasm visor's chain rides a vnet where a
+// raw TCP dial is meaningless. A claim derived from process state is honest in
+// both builds; a half-second dial is neither cheap nor portable.
+func (p *visorStatusProvider) chainTargetState(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return ""
+	}
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return ""
+	}
+	if rt := p.v.embeddedSkynetWeb; rt != nil {
+		if _, p2, e := net.SplitHostPort(rt.ListenAddr()); e == nil && p2 == port {
+			return "skynet_web resolving proxy · " + runLabel(rt.IsRunning())
+		}
+	}
+	if rt := p.v.embeddedDmsgWeb; rt != nil {
+		if _, p2, e := net.SplitHostPort(rt.ListenAddr()); e == nil && p2 == port {
+			return "dmsg_web resolving proxy · " + runLabel(rt.IsRunning())
+		}
+	}
+	// skysocks-client binds SkysocksClientAddr (":1080"), so its port alone
+	// identifies it; the client is a managed app, so procM knows its liveness.
+	if _, p2, e := net.SplitHostPort("0.0.0.0" + skyenv.SkysocksClientAddr); e == nil && p2 == port {
+		running := false
+		if p.v.procM != nil {
+			proc, ok := p.v.procM.ProcByName(skyenv.SkysocksClientName)
+			running = ok && proc != nil
+		}
+		return "skysocks-client · " + runLabel(running)
+	}
+	return ""
+}
+
+// listForwardedPortsSafe is ListForwardedPorts with the registry-not-yet-built
+// case folded in: a half-initialized visor reports "no forwards" instead of
+// panicking on the status page's request path.
+func (v *Visor) listForwardedPortsSafe() ([]ForwardedPort, error) {
+	if v.forwardedPorts == nil {
+		return nil, nil
+	}
+	return v.ListForwardedPorts()
+}
+
+func runLabel(running bool) string {
+	if running {
+		return "running"
+	}
+	return "stopped"
+}
+
+// layerFromStats projects a resolving proxy's own Stats counters into the shared
+// proxystatus.Layer shape. Both resolvers keep structurally identical Stats, so
+// the two callers differ only in the fields they add around this.
+func layerFromStats(listen, suffix, upstream string, started time.Time, uptimeSec int64,
+	total, ok, failed uint64, active int64, lastReq *time.Time, lastErr string) *proxystatus.Layer {
+	l := &proxystatus.Layer{
+		Listen:        listen,
+		Suffix:        suffix,
+		Upstream:      upstream,
+		UptimeSec:     uptimeSec,
+		Requests:      total,
+		Successful:    ok,
+		Failed:        failed,
+		Active:        active,
+		LastRequestAt: lastReq,
+		LastError:     lastErr,
+	}
+	if !started.IsZero() {
+		t := started
+		l.StartedAt = &t
+	}
+	return l
+}
+
+// aliasList renders a resolver's name→PK map as a stable, name-sorted list of
+// full (never truncated) keys.
+func aliasList(m map[string]cipher.PubKey) []proxystatus.Alias {
+	if len(m) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]proxystatus.Alias, 0, len(names))
+	for _, name := range names {
+		out = append(out, proxystatus.Alias{Name: name, PK: m[name].String()})
+	}
+	return out
+}
+
+// fillDmsgLayer populates the dmsg resolving proxy's sections: its layer summary
+// (uptime + request counters from the runtime's own Stats, listener, suffix,
+// downstream chain), the dmsg client's established server sessions, and the
+// name-resolution state. Every value comes from something the layer already
+// keeps — no lookup history is invented, because neither resolver caches one.
+func (p *visorStatusProvider) fillDmsgLayer(snap *proxystatus.Snapshot) {
+	rt := p.v.embeddedDmsgWeb
+	if rt != nil {
+		snap.Running = rt.IsRunning()
+		st := rt.Stats()
+		upstream := rt.Upstream()
+		snap.Layer = layerFromStats(rt.ListenAddr(), rt.Suffix(), upstream,
+			st.StartedAt, st.UptimeSec, st.TotalRequests, st.Successful, st.Failed,
+			st.Active, st.LastRequestAt, st.LastError)
+		snap.Layer.UpstreamState = p.chainTargetState(upstream)
+		snap.Names = &proxystatus.Names{
+			Kind:    "dmsg discovery (public key destinations) + configured aliases",
+			Suffix:  rt.Suffix(),
+			Aliases: aliasList(rt.Aliases()),
+		}
+	} else {
+		// The runtime is not constructed (resolver disabled): still render a layer
+		// section so the page says "stopped" rather than showing nothing at all.
+		snap.Layer = &proxystatus.Layer{Suffix: dmsgweb.DefaultDomainSuffix}
+		snap.Note = appendNote(snap.Note, "dmsg resolving proxy is not enabled on this visor")
+	}
+
+	// dmsg sessions are the dmsg layer's real transport state: without one, no
+	// .dmsg name can resolve. Read from the visor's dmsg client directly.
+	if p.v.dmsgC == nil {
+		return
+	}
+	for _, ses := range p.v.dmsgC.AllSessions() {
+		s := proxystatus.DmsgSession{
+			ServerPK: ses.RemotePK().String(),
+			Protocol: ses.Protocol(),
+			Streams:  ses.NumStreams(),
+		}
+		if a := ses.RemoteTCPAddr(); a != nil {
+			s.Addr = a.String()
+		}
+		if d := ses.LastPing(); d > 0 {
+			s.PingMS = float64(d) / float64(time.Millisecond)
+		}
+		snap.Sessions = append(snap.Sessions, s)
+	}
+	sort.Slice(snap.Sessions, func(i, j int) bool { return snap.Sessions[i].ServerPK < snap.Sessions[j].ServerPK })
+}
+
+// fillSkynetLayer populates the skynet resolving proxy's sections: its layer
+// summary and upstream chain (the skysocks-client it hands clearnet traffic to),
+// the ports this visor forwards over skynet, and the raw forwarded conns open
+// through the skynet plane right now.
+func (p *visorStatusProvider) fillSkynetLayer(snap *proxystatus.Snapshot) {
+	rt := p.v.embeddedSkynetWeb
+	if rt != nil {
+		snap.Running = rt.IsRunning()
+		st := rt.Stats()
+		upstream := rt.Upstream()
+		snap.Layer = layerFromStats(rt.ListenAddr(), rt.Suffix(), upstream,
+			st.StartedAt, st.UptimeSec, st.TotalRequests, st.Successful, st.Failed,
+			st.Active, st.LastRequestAt, st.LastError)
+		snap.Layer.UpstreamState = p.chainTargetState(upstream)
+		snap.Names = &proxystatus.Names{
+			Kind:    "skynet route plane (public key destinations) + configured aliases",
+			Suffix:  rt.Suffix(),
+			Aliases: aliasList(rt.Aliases()),
+		}
+	} else {
+		snap.Layer = &proxystatus.Layer{Suffix: skynetweb.DefaultDomainSuffix}
+		snap.Note = appendNote(snap.Note, "skynet resolving proxy is not enabled on this visor")
+	}
+
+	// Forwarded ports: what this visor exposes to the mesh over skynet. Only the
+	// skynet-plane entries belong on the skynet page.
+	if fps, err := p.v.listForwardedPortsSafe(); err == nil {
+		for _, f := range fps {
+			if !f.Skynet {
+				continue
+			}
+			snap.Forwards = append(snap.Forwards, proxystatus.Forward{
+				Port:      f.Port,
+				LocalPort: f.LocalPort,
+				Label:     f.Label,
+				Skynet:    f.Skynet,
+				DMSG:      f.DMSG,
+				UDP:       f.UDP,
+			})
+		}
+		sort.Slice(snap.Forwards, func(i, j int) bool { return snap.Forwards[i].Port < snap.Forwards[j].Port })
+	} else {
+		snap.Note = appendNote(snap.Note, "forwarded ports unavailable: "+err.Error())
+	}
+
+	// Active raw forwarded conns through the skynet plane, with their metered
+	// port pairs — the conn-level view standing in for route-group legs.
+	if conns, err := p.v.ListRawTCP(); err == nil {
+		for id, c := range conns {
+			if c == nil || !strings.EqualFold(c.Network, "skynet") {
+				continue
+			}
+			snap.Conns = append(snap.Conns, proxystatus.Conn{
+				ID:         id.String(),
+				Network:    c.Network,
+				LocalPort:  c.LocalPort,
+				RemotePort: c.RemotePort,
+			})
+		}
+		sort.Slice(snap.Conns, func(i, j int) bool { return snap.Conns[i].ID < snap.Conns[j].ID })
+	}
 }
 
 func appendNote(existing, add string) string {

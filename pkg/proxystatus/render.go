@@ -281,10 +281,205 @@ func writeLiveRegion(b *strings.Builder, snap Snapshot) {
 		fmt.Fprintf(b, `<p class="note">%s</p>`, html.EscapeString(snap.Note))
 	}
 
+	// Layer-appropriate sections first: for the two RESOLVING proxies these carry
+	// the page's substance (liveness, chain, sessions, names, forwards) while the
+	// route-group tree below is legitimately empty. Each is a no-op when its
+	// section of the Snapshot is unset, so the skysocks page is unchanged.
+	writeLayerSection(b, snap)
+	writeSessionsSection(b, snap)
+	writeNamesSection(b, snap)
+	writeForwardsSection(b, snap)
+	writeConnsSection(b, snap)
+
 	writeStreamsSection(b, snap)
 	writeRangeSplitSection(b, snap)
 	writeMuxSection(b, snap)
 	writeLogSection(b, snap)
+}
+
+// writeLayerSection renders the resolving-proxy layer summary: a liveness pill,
+// uptime, the listener/suffix it answers for, the downstream chain target and the
+// request counters the layer's own Stats already track. Omitted entirely for a
+// surface with no Layer (skysocks), so the existing page is untouched.
+func writeLayerSection(b *strings.Builder, snap Snapshot) {
+	l := snap.Layer
+	if l == nil {
+		return
+	}
+	b.WriteString(`<section><h2>proxy layer</h2>`)
+	state, cls := "stopped", "pill-down"
+	if snap.Running {
+		state, cls = "running", "pill-up"
+	}
+	fmt.Fprintf(b, `<p class="layer"><span class="pill %s">%s</span>`, cls, state)
+	if l.UptimeSec > 0 {
+		fmt.Fprintf(b, ` <span class="lmeta">up %s</span>`, html.EscapeString(compactDuration(l.UptimeSec)))
+	}
+	if l.Listen != "" {
+		fmt.Fprintf(b, ` <span class="lmeta">listening <code>%s</code></span>`, html.EscapeString(l.Listen))
+	}
+	if l.Suffix != "" {
+		fmt.Fprintf(b, ` <span class="lmeta">resolves <code>%s</code></span>`, html.EscapeString(l.Suffix))
+	}
+	b.WriteString(`</p>`)
+
+	// The chain line. UpstreamState is only ever set when the visor could vouch
+	// for what sits behind the address; otherwise the address stands alone rather
+	// than implying a reachability check that never happened.
+	if l.Upstream != "" {
+		fmt.Fprintf(b, `<p class="layer"><b>chains to</b> <code>%s</code>`, html.EscapeString(l.Upstream))
+		if l.UpstreamState != "" {
+			fmt.Fprintf(b, ` <span class="lmeta">%s</span>`, html.EscapeString(l.UpstreamState))
+		}
+		b.WriteString(`</p>`)
+	} else {
+		b.WriteString(`<p class="layer"><b>chains to</b> <span class="lmeta">nothing — ` +
+			`non-matching requests are refused here</span></p>`)
+	}
+
+	b.WriteString(`<table class="strm"><thead><tr>` +
+		`<th class="num">requests</th><th class="num">ok</th><th class="num">failed</th>` +
+		`<th class="num">in flight</th><th>last request</th></tr></thead><tbody><tr>`)
+	fmt.Fprintf(b, `<td class="num">%d</td><td class="num ok">%d</td><td class="num warn">%d</td>`+
+		`<td class="num">%d</td><td>%s</td></tr></tbody></table>`,
+		l.Requests, l.Successful, l.Failed, l.Active, html.EscapeString(agoOrDash(l.LastRequestAt)))
+	if l.LastError != "" {
+		fmt.Fprintf(b, `<p class="note">last error: %s</p>`, html.EscapeString(l.LastError))
+	}
+	b.WriteString(`</section>`)
+}
+
+// writeSessionsSection renders the dmsg client's established server sessions —
+// the dmsg surface's real "am I connected" answer. Server PKs are full and
+// click-to-copy. Omitted when the surface tracks no dmsg sessions.
+func writeSessionsSection(b *strings.Builder, snap Snapshot) {
+	// Rendered (including its "none connected" state, which is the interesting
+	// case) only for the dmsg surface with a populated layer — no other surface
+	// relays over dmsg sessions.
+	if snap.Surface != SurfaceDmsg || snap.Layer == nil {
+		return
+	}
+	fmt.Fprintf(b, `<section><h2>dmsg sessions <small>%d connected</small></h2>`, len(snap.Sessions))
+	if len(snap.Sessions) == 0 {
+		b.WriteString(`<p class="empty">No dmsg session established. A <code>.dmsg</code> lookup ` +
+			`cannot resolve until the client holds at least one session to a dmsg server.</p></section>`)
+		return
+	}
+	b.WriteString(`<table class="strm"><thead><tr><th>dmsg server</th><th>carrier</th><th>addr</th>` +
+		`<th class="num">streams</th><th class="num">rtt</th></tr></thead><tbody>`)
+	for _, s := range snap.Sessions {
+		fmt.Fprintf(b, `<tr><td>%s</td><td>%s</td><td>%s</td><td class="num">%d</td><td class="num rtt">%s</td></tr>`,
+			copyablePK(s.ServerPK), html.EscapeString(orDash(s.Protocol)), html.EscapeString(orDash(s.Addr)),
+			s.Streams, html.EscapeString(routeRTTCompact(s.PingMS)))
+	}
+	b.WriteString(`</tbody></table></section>`)
+}
+
+// writeNamesSection renders the layer's name resolution: which resolver answers
+// and the aliases it was configured with. Deliberately does NOT claim a lookup
+// history — neither resolving proxy caches lookups, so there is none to show.
+func writeNamesSection(b *strings.Builder, snap Snapshot) {
+	n := snap.Names
+	if n == nil {
+		return
+	}
+	b.WriteString(`<section><h2>name resolution</h2>`)
+	fmt.Fprintf(b, `<p class="layer"><b>%s</b>`, html.EscapeString(orDash(n.Kind)))
+	if n.Suffix != "" {
+		fmt.Fprintf(b, ` <span class="lmeta">for <code>&lt;name&gt;%s</code></span>`, html.EscapeString(n.Suffix))
+	}
+	b.WriteString(`</p>`)
+	if len(n.Aliases) == 0 {
+		b.WriteString(`<p class="empty">No name aliases configured; every lookup must spell the ` +
+			`destination public key in full.</p></section>`)
+		return
+	}
+	b.WriteString(`<table class="strm"><thead><tr><th>name</th><th>public key</th></tr></thead><tbody>`)
+	for _, a := range n.Aliases {
+		fmt.Fprintf(b, `<tr><td><code>%s%s</code></td><td>%s</td></tr>`,
+			html.EscapeString(a.Name), html.EscapeString(n.Suffix), copyablePK(a.PK))
+	}
+	b.WriteString(`</tbody></table>`)
+	b.WriteString(`<p class="hint">Lookups are resolved per request; neither resolving proxy keeps a ` +
+		`lookup cache, so there is no recent-lookup history to show.</p></section>`)
+}
+
+// writeForwardsSection renders what this visor exposes to the mesh through the
+// surface's forwarding plane. Omitted when the surface has none.
+func writeForwardsSection(b *strings.Builder, snap Snapshot) {
+	if snap.Surface != SurfaceSkynet || snap.Layer == nil {
+		return
+	}
+	fmt.Fprintf(b, `<section><h2>forwarded ports <small>%d</small></h2>`, len(snap.Forwards))
+	if len(snap.Forwards) == 0 {
+		b.WriteString(`<p class="empty">No port is forwarded over skynet from this visor.</p></section>`)
+		return
+	}
+	b.WriteString(`<table class="strm"><thead><tr><th class="num">mesh port</th><th class="num">local port</th>` +
+		`<th>label</th><th>planes</th></tr></thead><tbody>`)
+	for _, f := range snap.Forwards {
+		local := f.LocalPort
+		if local == 0 {
+			local = f.Port // the registry defaults local to the mesh port
+		}
+		var planes []string
+		if f.Skynet {
+			planes = append(planes, "skynet")
+		}
+		if f.DMSG {
+			planes = append(planes, "dmsg")
+		}
+		if f.UDP {
+			planes = append(planes, "udp")
+		}
+		fmt.Fprintf(b, `<tr><td class="num">%d</td><td class="num">%d</td><td>%s</td><td>%s</td></tr>`,
+			f.Port, local, html.EscapeString(orDash(f.Label)), html.EscapeString(orDash(strings.Join(planes, " · "))))
+	}
+	b.WriteString(`</tbody></table></section>`)
+}
+
+// writeConnsSection renders the surface's active raw forwarded connections.
+// Omitted when none are open, so an idle page stays short.
+func writeConnsSection(b *strings.Builder, snap Snapshot) {
+	if len(snap.Conns) == 0 {
+		return
+	}
+	fmt.Fprintf(b, `<section><h2>active forwarded conns <small>%d</small></h2>`, len(snap.Conns))
+	b.WriteString(`<table class="strm"><thead><tr><th>id</th><th>network</th>` +
+		`<th class="num">local port</th><th class="num">remote port</th></tr></thead><tbody>`)
+	for _, c := range snap.Conns {
+		fmt.Fprintf(b, `<tr><td>%s</td><td>%s</td><td class="num">%d</td><td class="num">%d</td></tr>`,
+			copyableID(c.ID, "conn id"), html.EscapeString(orDash(c.Network)), c.LocalPort, c.RemotePort)
+	}
+	b.WriteString(`</tbody></table></section>`)
+}
+
+// compactDuration renders an uptime in seconds as a short human string
+// (45s / 12m / 3h14m / 2d5h) — the same terse shape compactAge uses for ms.
+func compactDuration(sec int64) string {
+	if sec < 60 {
+		return fmt.Sprintf("%ds", sec)
+	}
+	if sec < 3600 {
+		return fmt.Sprintf("%dm%ds", sec/60, sec%60)
+	}
+	if sec < 86400 {
+		return fmt.Sprintf("%dh%dm", sec/3600, (sec%3600)/60)
+	}
+	return fmt.Sprintf("%dd%dh", sec/86400, (sec%86400)/3600)
+}
+
+// agoOrDash renders "<compact> ago" for a set timestamp, "-" for nil — so a
+// layer that has never served a request says so instead of showing a zero time.
+func agoOrDash(t *time.Time) string {
+	if t == nil || t.IsZero() {
+		return "-"
+	}
+	d := time.Since(*t)
+	if d < 0 {
+		d = 0
+	}
+	return compactDuration(int64(d.Seconds())) + " ago"
 }
 
 // writeRangeSplitSection renders the transparent HTTP range-split summary when
@@ -321,6 +516,16 @@ func writeRangeSplitSection(b *strings.Builder, snap Snapshot) {
 // no-JS analog of the `cli proxy mux plot` panel.
 func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	if len(snap.Legs) == 0 {
+		// The dmsg surface has no route groups AT ALL — it relays over dmsg
+		// sessions, not the route plane — so saying "no active route group" there
+		// would read as a fault. Name the reason instead of faking legs.
+		if snap.Surface == SurfaceDmsg {
+			b.WriteString(`<section><h2>route group · per-leg mux</h2>`)
+			b.WriteString(`<p class="empty">The dmsg resolving proxy relays over dmsg <b>sessions</b>, ` +
+				`not the route plane, so it has no route group or mux legs. See the dmsg sessions ` +
+				`above.</p></section>`)
+			return
+		}
 		b.WriteString(`<section><h2>route group · per-leg mux</h2>`)
 		b.WriteString(`<p class="empty">No active route group for this surface right now. ` +
 			`A leg appears here once a route to a destination is warm.</p></section>`)
@@ -1067,6 +1272,18 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}` +
 	`h2{font-size:.95rem;margin:1.6rem 0 .5rem;color:#e7e9ff;font-weight:600}h2 small{color:var(--muted);font-weight:400;font-size:11px;margin-left:.4rem}` +
 	`.note{color:var(--standby)}.empty,.hint{color:var(--muted);font-size:12px}` +
+	// Pills: the small state badges used by the layer summary and the range-split
+	// line (which used .pill/.rs-* before any rule defined them). Colors come from
+	// the same tokens as everything else, so both schemes stay legible.
+	`.pill{display:inline-block;padding:.05rem .45rem;border-radius:999px;font-size:10.5px;` +
+	`text-transform:uppercase;letter-spacing:.4px;border:1px solid var(--line);color:var(--muted)}` +
+	`.pill-up,.rs-active{color:var(--ok);border-color:var(--ok)}` +
+	`.pill-down{color:var(--warn);border-color:var(--warn)}` +
+	`.rs-idle{color:var(--muted)}` +
+	`.rsplit,.layer{margin:.35rem 0;font-size:12.5px}` +
+	`.rsagg,.lmeta{color:var(--muted);font-size:11.5px;margin-left:.5rem}` +
+	`.layer code{font-family:'Mononoki',ui-monospace,SFMono-Regular,monospace;font-size:11.5px;color:var(--fg)}` +
+	`td.ok{color:var(--ok)}td.warn{color:var(--warn)}` +
 	`.bar{display:block;height:.6rem;border-radius:3px;background:var(--accent);min-width:2px}` +
 	`.bar.ok{background:var(--ok)}.bar.standby{background:var(--standby)}.bar.warn{background:var(--warn)}` +
 	`.bar.recv{background:var(--recv,#3b9)}` +
