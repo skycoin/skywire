@@ -29,7 +29,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.0'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -53,7 +53,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.1
+          version: latest
 
       - name: Install Dependencies
         shell: bash
@@ -83,7 +83,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.0'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -111,7 +111,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.0'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -132,7 +132,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.1
+          version: latest
 
       # golangci-lint already ran via the action above; don't re-run it inside the
       # test step, where its exit code would abort before `go test` and hide any
@@ -155,7 +155,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.0'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -177,7 +177,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.1
+          version: latest
 
       - name: Install Requirements
         shell: pwsh
@@ -205,7 +205,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.0'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -233,7 +233,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.0'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -282,7 +282,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.0'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -304,7 +304,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.27.0'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
@@ -326,13 +326,13 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.0'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: 'lts/*'
 
       - name: Headless wasm-visor smoke (boot → dmsg(ws) → /api)
         run: ./scripts/wasm-headless/run.sh
@@ -354,13 +354,13 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.0'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 
       - uses: acifani/setup-tinygo@v3
         with:
-          tinygo-version: '0.41.1'
+          tinygo-version: '0.42.0'
 
       - name: Compile-check TinyGo wasm binaries
         run: make build-wasm-tinygo
@@ -393,7 +393,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: 'lts/*'
           cache: npm
           cache-dependency-path: static/skywire-manager-src/package-lock.json
 
@@ -448,7 +448,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.27.0'
+          go-version: 'stable'
           cache: true
           cache-dependency-path: go.sum
 

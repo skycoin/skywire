@@ -117,17 +117,56 @@
 			queueMicrotask(() => { try { fn(copy); } catch (e) { /* sink gone */ } });
 		};
 		if (hooks && hooks.stdout) stdio.stdout = deferred(hooks.stdout);
-		if (hooks && hooks.stderr) stdio.stderr = deferred(hooks.stderr);
+		// stderrTail: a small ring of the command's last stderr bytes, kept
+		// REGARDLESS of hooks — when a long-running instance (the desk's
+		// foreground visor) dies, its panic went only to an xterm nobody was
+		// scrolled to. The tail is mirrored to the console below so a crash
+		// is diagnosable from DevTools / a CDP probe.
+		let stderrTail = '';
+		const tailDec = new TextDecoder();
+		const keepTail = (buf) => {
+			try {
+				stderrTail = (stderrTail + tailDec.decode(buf, { stream: true })).slice(-4096);
+			} catch (e) { /* ignore */ }
+		};
+		{
+			const userErr = (hooks && hooks.stderr) || null;
+			const fallbackErr = prev.stderr; // no hook → keep the page's default sink
+			stdio.stderr = deferred((buf) => {
+				keepTail(buf);
+				if (userErr) { userErr(buf); } else if (fallbackErr) { try { fallbackErr(buf); } catch (e) { /* sink gone */ } }
+			});
+		}
 		if (hooks && hooks.stdin) stdio.stdin = hooks.stdin;
+		let runErr = null;
 		try {
 			const inst = await WebAssembly.instantiate(mod, go.importObject);
 			await go.run(inst);
+		} catch (e) {
+			runErr = e;
+			throw e;
 		} finally {
 			stdio.stdout = prev.stdout; stdio.stderr = prev.stderr; stdio.stdin = prev.stdin;
 			try {
 				const reg = globalThis.__skywireSignals;
 				if (reg && reg[iid]) delete reg[iid]; // never call into an exited instance
 			} catch (e) { /* ignore */ }
+			// Release this instance's vnet claims: a dead program cannot
+			// unlisten its ports, and zombie entries fake liveness (and hold
+			// the port against a rebind) forever.
+			try {
+				if (globalThis.vnet && globalThis.vnet.releaseOwner) {
+					const n = globalThis.vnet.releaseOwner(iid);
+					if (n > 0) console.warn('[skywire-exec ' + iid + '] released ' + n + ' vnet claim(s) on exit');
+				}
+			} catch (e) { /* ignore */ }
+			// Mirror abnormal endings to the console with the stderr tail.
+			if (runErr || code !== 0) {
+				try {
+					console.error('[skywire-exec ' + iid + '] ' + (runErr ? 'crashed: ' + (runErr.message || runErr) : 'exited code ' + code)
+						+ (stderrTail ? '\n--- last stderr ---\n' + stderrTail : ''));
+				} catch (e) { /* ignore */ }
+			}
 		}
 		return code;
 	}

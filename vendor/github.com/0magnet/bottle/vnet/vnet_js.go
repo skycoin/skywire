@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +25,14 @@ import (
 )
 
 func vnetJS() js.Value { return js.Global().Get("vnet") }
+
+// instanceOwner tags this wasm instance's vnet claims (listeners + dialed
+// conns) so the page can release them all when the program exits — a dead
+// instance cannot unlisten itself, and zombie port entries otherwise fake
+// liveness forever. The exec harness sets SKYWIRE_EXEC_ID per instance and
+// calls vnet.releaseOwner(id) when run() settles; an empty id (a page with a
+// single instance and no harness) just means no tagging, as before.
+var instanceOwner = os.Getenv("SKYWIRE_EXEC_ID")
 
 // loopbackPort extracts the port when address is loopback ("", "localhost",
 // "127.0.0.1", "::1" hosts); ok=false means "not ours — use net".
@@ -61,7 +70,7 @@ func Listen(network, address string) (net.Listener, error) {
 		}
 		return nil
 	})
-	if !v.Call("listen", port, l.onConn).Bool() {
+	if !v.Call("listen", port, l.onConn, instanceOwner).Bool() {
 		l.onConn.Release()
 		return nil, fmt.Errorf("vnet: listen tcp 127.0.0.1:%d: address already in use", port)
 	}
@@ -76,7 +85,7 @@ func DialTimeout(network, address string, timeout time.Duration) (net.Conn, erro
 	if !v.Truthy() || !ok || !strings.HasPrefix(network, "tcp") {
 		return net.DialTimeout(network, address, timeout)
 	}
-	id := v.Call("dial", port).Int()
+	id := v.Call("dial", port, instanceOwner).Int()
 	if id < 0 {
 		return nil, fmt.Errorf("vnet: dial tcp 127.0.0.1:%d: connection refused", port)
 	}
