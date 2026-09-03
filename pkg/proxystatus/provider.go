@@ -29,6 +29,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // Surface identifies which proxy a status page describes. The string value is
@@ -61,8 +62,8 @@ type Leg struct {
 	LatencyMS      float64
 	RouteLatencyMS float64
 	Direct         bool
-	SentBytes uint64
-	RecvBytes uint64
+	SentBytes      uint64
+	RecvBytes      uint64
 	// DupBytes is inbound DUPLICATE data (seqs already delivered/buffered when
 	// they arrived on this leg) — the peer's spurious retransmits, which ride
 	// the fastest leg and otherwise read as payload; RepairBytes is inbound FEC
@@ -135,7 +136,102 @@ type Snapshot struct {
 	// non-skysocks surface, or a skysocks client with the feature disabled). It
 	// makes "is range-split firing" a readable field rather than a log line.
 	RangeSplit *RangeSplit `json:"range_split,omitempty"`
-	Note       string      // optional human note (e.g. why a section is empty)
+	// Layer is the RESOLVING-PROXY layer summary — liveness/uptime, the listener
+	// and domain suffix it answers for, its request counters and the downstream
+	// SOCKS5 it chains to. Populated for the dmsg_web / skynet_web surfaces, whose
+	// interesting state is the layer itself rather than a route group; nil for a
+	// surface with no such layer (skysocks, whose tunnel state is Legs/Streams).
+	Layer *Layer `json:"layer,omitempty"`
+	// Sessions is the dmsg client's established sessions to dmsg servers — the
+	// dmsg surface's answer to "what am I actually connected through". Empty for
+	// every other surface (they do not relay over dmsg sessions).
+	Sessions []DmsgSession `json:"sessions,omitempty"`
+	// Names is the layer's name-resolution state: which resolver answers a
+	// <name><suffix> lookup and the aliases actually configured on it. There is no
+	// lookup CACHE in either resolving proxy today, so no "recent lookups" list is
+	// invented here — only the resolution machinery that exists is surfaced.
+	Names *Names `json:"names,omitempty"`
+	// Forwards is what this visor exposes to the mesh through the surface's
+	// forwarding plane (skynet surface: the registered forwarded ports). Empty
+	// when nothing is forwarded, or for a surface with no forwarding plane.
+	Forwards []Forward `json:"forwards,omitempty"`
+	// Conns is the surface's active raw forwarded connections with their metered
+	// port pairs — the conn-level view for layers that have no route-group Legs.
+	Conns []Conn `json:"conns,omitempty"`
+	Note  string // optional human note (e.g. why a section is empty)
+}
+
+// Layer is the live state of one resolving-proxy layer (dmsg_web on :4445,
+// skynet_web on :4446). Every field is read from what the layer itself already
+// tracks — its Stats counters (uptime, requests, last error) and its config
+// (listener, suffix, upstream) — so nothing here is estimated.
+type Layer struct {
+	Listen string `json:"listen,omitempty"` // SOCKS5 listener the layer binds, e.g. "127.0.0.1:4445"
+	Suffix string `json:"suffix,omitempty"` // domain suffix it resolves, e.g. ".dmsg"
+	// Upstream is the DOWNSTREAM chain target: the SOCKS5 a non-matching CONNECT
+	// is forwarded to (dmsg_web → skynet_web → skysocks-client). Empty when the
+	// layer terminates the chain.
+	Upstream string `json:"upstream,omitempty"`
+	// UpstreamState is an honest, non-probing label for the chain target's
+	// liveness — derived from what the visor already knows about the process or
+	// runtime behind that address (e.g. "skynet_web running"). Empty when the
+	// address belongs to something the visor cannot vouch for; the page then shows
+	// the address alone rather than claiming reachability it did not verify.
+	UpstreamState string     `json:"upstream_state,omitempty"`
+	StartedAt     *time.Time `json:"started_at,omitempty"`
+	UptimeSec     int64      `json:"uptime_sec,omitempty"`
+	Requests      uint64     `json:"requests"`
+	Successful    uint64     `json:"successful"`
+	Failed        uint64     `json:"failed"`
+	Active        int64      `json:"active"` // requests in flight right now
+	LastRequestAt *time.Time `json:"last_request_at,omitempty"`
+	LastError     string     `json:"last_error,omitempty"`
+}
+
+// DmsgSession is one established dmsg client session to a dmsg server. PKs are
+// FULL, never truncated. Streams is the session's live stream count; PingMS is
+// the last measured session RTT (0 when never pinged).
+type DmsgSession struct {
+	ServerPK string  `json:"server_pk"`
+	Protocol string  `json:"protocol,omitempty"` // carrier label (tcp / quic / ws / wt)
+	Addr     string  `json:"addr,omitempty"`     // the carrier address the session rides
+	Streams  int     `json:"streams"`
+	PingMS   float64 `json:"ping_ms,omitempty"`
+}
+
+// Names describes a layer's name resolution. Kind names the resolver in use;
+// Aliases are the name→PK bindings the layer was configured with (service
+// aliases, the visor's own alias, dmsg-server aliases) — the only resolution
+// state that is actually stored.
+type Names struct {
+	Kind    string  `json:"kind,omitempty"`
+	Suffix  string  `json:"suffix,omitempty"`
+	Aliases []Alias `json:"aliases,omitempty"`
+}
+
+// Alias is one configured name→PK binding, e.g. "tpd" → the TPD's public key.
+type Alias struct {
+	Name string `json:"name"`
+	PK   string `json:"pk"`
+}
+
+// Forward is one port this visor exposes to the mesh. Port is the mesh-side
+// port; LocalPort is the loopback port it forwards to.
+type Forward struct {
+	Port      int    `json:"port"`
+	LocalPort int    `json:"local_port,omitempty"`
+	Label     string `json:"label,omitempty"`
+	Skynet    bool   `json:"skynet,omitempty"`
+	DMSG      bool   `json:"dmsg,omitempty"`
+	UDP       bool   `json:"udp,omitempty"`
+}
+
+// Conn is one active raw forwarded connection through the surface.
+type Conn struct {
+	ID         string `json:"id"`
+	Network    string `json:"network,omitempty"`
+	LocalPort  int    `json:"local_port,omitempty"`
+	RemotePort int    `json:"remote_port,omitempty"`
 }
 
 // RangeSplit is the live range-split summary for the skysocks surface. It is

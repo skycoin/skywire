@@ -81,6 +81,18 @@ func TestSOCKS5StatusScoping(t *testing.T) {
 	skynetBody := getBody(t, httpc, "http://status.skynet/")
 	require.Contains(t, skynetBody, "upstream-sink", "status.skynet should fall through to the upstream")
 	require.NotContains(t, skynetBody, "per-leg mux", "status.skynet must not be served in-process by the dmsg layer")
+
+	// Chain composition: in the real browser chain (dmsgweb :4445 → skynetweb
+	// :4446 → skysocks :1080) the SKYSOCKS status host must traverse this layer
+	// untouched so the skysocks-client can serve it, exactly as it does today.
+	skysocksBody := getBody(t, httpc, "http://status.skysocks/")
+	require.Contains(t, skysocksBody, "upstream-sink", "status.skysocks must reach the skysocks layer through the chain")
+	require.NotContains(t, skysocksBody, "per-leg mux", "status.skysocks must not be served in-process by the dmsg layer")
+
+	// An ordinary host is unaffected by the status interception entirely.
+	plainBody := getBody(t, httpc, "http://example.com/")
+	require.Contains(t, plainBody, "upstream-sink", "a non-status host must forward upstream untouched")
+	require.NotContains(t, plainBody, "per-leg mux", "a non-status host must never get a status page")
 }
 
 func getBody(t *testing.T, httpc *http.Client, url string) string {
