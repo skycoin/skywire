@@ -36,11 +36,20 @@ var vnetJS []byte
 //go:embed vnet-sw.js
 var vnetSWJS []byte
 
+//go:embed proc.js
+var procJS []byte
+
 // JSFS returns jsfs.js — the globalThis.fs / globalThis.process filesystem.
 func JSFS() []byte { return jsfs }
 
 // VNetJS returns vnet.js — the globalThis.vnet virtual loopback network.
 func VNetJS() []byte { return vnetJS }
+
+// ProcJS returns proc.js — the globalThis.proc process layer: spawn another
+// wasm module from jsfs as a child that shares the page's fs and vnet, with
+// per-process stdio and an exit promise. Load it after jsfs.js and
+// wasm_exec.js. See the proc subpackage for the Go adapter.
+func ProcJS() []byte { return procJS }
 
 // VNetSWJS returns vnet-sw.js — the service worker that turns virtual
 // loopback ports into real same-origin URLs (/vnet/<port>/…), so iframes can

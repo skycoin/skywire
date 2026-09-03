@@ -1374,6 +1374,64 @@
       onNavState: function (canBack, canFwd) { $("sb-back").disabled = !canBack; $("sb-fwd").disabled = !canFwd; }
     });
     win.browser = browser;
+    // ---- direct mode ----------------------------------------------------
+    // The transcoder exists for networks the browser cannot speak — dmsg,
+    // skysocks exits, the vnet port table. The hosting page's OWN origin
+    // (and any origin the host allowlists via opts.directOrigins) needs none
+    // of that: iframe.src IS the faithful engine there — a real browsing
+    // context with real storage, running the site's own scripts and wasm —
+    // so the pane steps aside and lets the browser be a browser. Navigating
+    // anywhere else hands the frame back to the engine.
+    var direct = null; // current direct-mode URL, or null when the engine owns the frame
+    var frameEl = $("sb-frame");
+    var paneSandbox = frameEl.getAttribute && frameEl.getAttribute("sandbox");
+    function directNav(url) {
+      direct = url;
+      try { frameEl.removeAttribute("sandbox"); } catch (e) {}
+      try { frameEl.removeAttribute("srcdoc"); } catch (e) {}
+      frameEl.src = url;
+      $("sb-addr").value = url;
+      try { paneCB.title(url.replace(/^https?:\/\//, "").slice(0, 18)); } catch (e) {}
+      // The frame's own history is live in this mode; the buttons always work.
+      $("sb-back").disabled = false; $("sb-fwd").disabled = false;
+    }
+    function directLeave() {
+      if (direct == null) return;
+      direct = null;
+      try { frameEl.src = "about:blank"; } catch (e) {}
+      try { if (paneSandbox != null) frameEl.setAttribute("sandbox", paneSandbox); } catch (e) {}
+    }
+    frameEl.addEventListener("load", function () {
+      if (direct == null) return;
+      // A same-origin frame exposes its location; keep the bar honest as the
+      // user clicks around inside the real page.
+      try {
+        var loc = frameEl.contentWindow.location;
+        if (loc && loc.href && loc.href !== "about:blank") {
+          direct = loc.href;
+          $("sb-addr").value = loc.href;
+          try { paneCB.title((loc.host + loc.pathname).replace(/\/$/, "").slice(0, 18)); } catch (e) {}
+          try { paneCB.icon(loc.origin + "/favicon.ico"); } catch (e) {}
+        }
+      } catch (e) { /* frame redirected cross-origin: leave the bar as typed */ }
+    });
+    // directOriginOf answers: should this address load as a real page? It
+    // matches the typed address against opts.directOrigins under both schemes
+    // (a bare host tries https first, the way the clearnet path does).
+    function directOriginOf(v) {
+      var list = opts.directOrigins || [];
+      if (!list.length) return null;
+      var hadScheme = /^https?:\/\//i.test(v);
+      var schemes = hadScheme ? [""] : ["https://", "http://"];
+      for (var i = 0; i < schemes.length; i++) {
+        try {
+          var u = new URL(schemes[i] + v);
+          if (list.indexOf(u.origin) >= 0) return u.href;
+        } catch (e) {}
+      }
+      return null;
+    }
+    win.direct = directNav;
     // Register this window's log sink so the wasm visor's skysocks-lite path can
     // push its own connect/route-setup lines (keyed by winId) into THIS window's
     // pane — see emitProxyLog / __skywireProxyLog in cmd/wasm-visor/skysocks_js.go.
@@ -1392,6 +1450,9 @@
     function go() {
       var v = ($("sb-addr").value || "").trim();
       if (!v) return;
+      var du = directOriginOf(v);
+      if (du) { directNav(du); return; }
+      directLeave();
       // dmsg:// and skynet:// are explicit dmsg-site schemes. `new URL` treats them
       // as opaque (and prepending http:// mangles them — "http://dmsg://<pk>" parses
       // to host "dmsg"), so peel the scheme off and browse the rest over dmsg
@@ -1422,11 +1483,20 @@
       }
     }
     $("sb-go").onclick = go;
-    $("sb-back").onclick = function () { browser.back(); };
-    $("sb-fwd").onclick = function () { browser.forward(); };
+    $("sb-back").onclick = function () {
+      if (direct != null) { try { frameEl.contentWindow.history.back(); } catch (e) {} return; }
+      browser.back();
+    };
+    $("sb-fwd").onclick = function () {
+      if (direct != null) { try { frameEl.contentWindow.history.forward(); } catch (e) {} return; }
+      browser.forward();
+    };
     // ⟳ reloads the current page; while a load is in flight it becomes ✕ (cancel).
-    $("sb-reload").onclick = function () { if (loading) browser.cancel(); else browser.reload(); };
-    $("sb-home").onclick = function () { browser.browseTo("home.dmsg", "/"); };
+    $("sb-reload").onclick = function () {
+      if (direct != null) { try { frameEl.contentWindow.location.reload(); } catch (e) { frameEl.src = direct; } return; }
+      if (loading) browser.cancel(); else browser.reload();
+    };
+    $("sb-home").onclick = function () { directLeave(); browser.browseTo("home.dmsg", "/"); };
     $("sb-info-t").onclick = function () { var h = $("sb-info-panel"); h.style.display = h.style.display === "none" ? "flex" : "none"; };
     $("sb-info-x").onclick = function () { $("sb-info-panel").style.display = "none"; };
     $("sb-addr").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
@@ -1638,6 +1708,9 @@
     var win = { wb: wb, el: outer };
     var first = addTab();
     win.browser = first.pane.browser;
+    // The first tab's whole pane, for hosts that steer it somewhere other
+    // than home.dmsg — a desk opening its own origin in direct mode, say.
+    win.pane = first.pane;
     // landHome lands the FIRST tab once (the classic single-tab behavior).
     win.landHome = function () { first.pane.landHome(); };
     // openTab opens a NEW tab and (optionally) navigates it: openTab(host,
@@ -3484,7 +3557,7 @@
     };
   }
 
-  globalThis.SkywireBrowse = { createBrowser: createBrowser, mountPanel: mountPanel };
+  globalThis.SkywireBrowse = { createBrowser: createBrowser, mountPanel: mountPanel, createWindow: createWindow };
 })();
 
 // voice-audio.js — main-thread WebAudio proxy for the wasm-visor's 1:1 voice.

@@ -36,7 +36,7 @@ require (
 	github.com/pterm/pterm v0.12.83
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.10.2
-	github.com/skycoin/skycoin v0.28.6-0.20260824231751-0e9537395f4a
+	github.com/skycoin/skycoin v0.28.6-0.20260903193022-c0d3f2be8628
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -45,7 +45,7 @@ require (
 	github.com/tidwall/pretty v1.2.1
 	github.com/toqueteos/webbrowser v1.2.1
 	github.com/xtaci/kcp-go v5.4.20+incompatible
-	github.com/yuin/goldmark v1.8.5
+	github.com/yuin/goldmark v1.8.6
 	go.etcd.io/bbolt v1.5.0 // indirect
 	golang.org/x/net v0.58.0
 	golang.org/x/sync v0.22.0
@@ -55,21 +55,21 @@ require (
 	gopkg.in/telebot.v3 v3.3.8
 	gorm.io/driver/postgres v1.6.2
 	gorm.io/gorm v1.31.2
-	modernc.org/sqlite v1.57.0 // indirect
+	modernc.org/sqlite v1.58.0 // indirect
 )
 
 require (
 	github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898
-	github.com/0magnet/bottle v0.0.0-20260903023316-9a05280e70d4
+	github.com/0magnet/bottle v0.0.0-20260903173145-a10f4be2e141
 	github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260901202627-53911da3ad77
 	github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
-	github.com/0magnet/netscrape v0.0.0-20260903022326-6cc0e9b4fe5a
-	github.com/0magnet/plot-go v0.0.0-20260828164145-80dfd0918408
+	github.com/0magnet/netscrape v0.0.0-20260903034044-052ad8e1f876
+	github.com/0magnet/plot-go v0.0.0-20260903022354-39cc12099e67
 	github.com/0magnet/realorigin v0.2.0
 	github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26
-	github.com/0magnet/termanim v0.0.0-20260902091415-3987061b0ec7
-	github.com/0magnet/winbox-go v0.0.0-20260902000349-e769f33dd0fa
+	github.com/0magnet/termanim v0.0.0-20260903022407-3c9a5cc9ee76
+	github.com/0magnet/winbox-go v0.0.0-20260903022448-a6277067b114
 	github.com/0magnet/yamux v0.1.3-0.20260901201804-38cdbd63617a
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0
@@ -88,7 +88,7 @@ require (
 	github.com/google/renameio v1.0.1
 	github.com/guptarohit/asciigraph v0.10.0
 	github.com/hanwen/go-fuse/v2 v2.11.0
-	github.com/insomniacslk/dhcp v0.0.0-20260728151720-c308df0fdcef
+	github.com/insomniacslk/dhcp v0.0.0-20260901064844-234b97448fae
 	github.com/itchyny/gojq v0.12.19
 	github.com/jfreymuth/pulse v0.1.3
 	github.com/kr/pretty v0.3.1
@@ -102,14 +102,14 @@ require (
 	github.com/pion/webrtc/v4 v4.2.19
 	github.com/pkg/sftp v1.13.11
 	github.com/prometheus/client_golang v1.24.1
-	github.com/quic-go/webtransport-go v0.12.0
+	github.com/quic-go/webtransport-go v0.13.0
 	github.com/rivo/tview v0.42.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/thesyncim/gopus v0.1.1
 	github.com/vishvananda/netlink v1.3.1
 	github.com/xxxserxxx/lingo/v2 v2.0.1
-	go.starlark.net v0.0.0-20260708150628-5395d018f003
+	go.starlark.net v0.0.0-20260828210309-6dd8f160a37f
 	golang.org/x/time v0.15.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
@@ -128,6 +128,7 @@ require (
 	github.com/0magnet/u-root v0.16.1-0.20260810212217-0890fe5099f9 // indirect
 	github.com/gdamore/tcell/v3 v3.4.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/pion/stun/v4 v4.0.0 // indirect
 	golang.org/x/mod v0.40.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
 )
@@ -162,11 +163,11 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.29 // indirect
-	github.com/pion/dtls/v3 v3.1.6 // indirect
+	github.com/pion/dtls/v3 v3.1.8 // indirect
 	github.com/pion/ice/v4 v4.4.1 // indirect
 	github.com/pion/interceptor v0.1.47 // indirect
 	github.com/pion/logging v0.2.4 // indirect
-	github.com/pion/mdns/v2 v2.1.0 // indirect
+	github.com/pion/mdns/v2 v2.2.0 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/rtcp v1.2.17 // indirect
 	github.com/pion/sctp v1.11.1 // indirect
@@ -174,9 +175,9 @@ require (
 	github.com/pion/srtp/v3 v3.0.13 // indirect
 	github.com/pion/stun/v3 v3.1.7 // indirect
 	github.com/pion/transport/v4 v4.1.0 // indirect
-	github.com/pion/turn/v5 v5.0.13 // indirect
-	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.70.1 // indirect
+	github.com/pion/turn/v5 v5.1.0 // indirect
+	github.com/prometheus/client_model v0.6.3 // indirect
+	github.com/prometheus/common v0.71.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
@@ -189,7 +190,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
-	modernc.org/libc v1.75.6 // indirect
+	modernc.org/libc v1.75.7 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
@@ -264,7 +265,7 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20260802145828-341c2f0c90b5 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
-	github.com/mattn/go-runewidth v0.0.28 // indirect
+	github.com/mattn/go-runewidth v0.0.29 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -278,7 +279,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.61.0
+	github.com/quic-go/quic-go v0.62.0
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
@@ -312,16 +313,16 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/arch v0.30.0 // indirect
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260831171406-18b4a7587f8a // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
-	mvdan.cc/sh/v3 v3.13.1 // indirect
+	mvdan.cc/sh/v3 v3.14.0 // indirect
 )
 
 // IT IS FORBIDDEN TO USE REPLACE DIRECTIVES

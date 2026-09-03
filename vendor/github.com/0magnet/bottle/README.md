@@ -17,6 +17,14 @@ two page-global primitives:
   `127.0.0.1:<port>` in one instance is dialed from another — or from page
   JS via `vnet.httpFetch(port, method, path, body)`.
 
+- **`proc.js`** — a process layer: `proc.spawn({argv, env, cwd, stdio})`
+  instantiates another wasm module from jsfs as a child that shares the
+  page's fs and vnet, with per-process stdio and an exit promise. A tab has
+  no fork/exec, but instantiating a wasm module IS spawning a process — this
+  makes that a primitive, the third leg under a Unix-shaped orchestrator
+  (a shell, and eventually `go build`). The **`proc`** subpackage is its Go
+  adapter (`proc.Command(...).Run()`, os/exec-shaped).
+
 The **`vnet`** Go subpackage is the adapter: `vnet.Listen` /
 `vnet.DialTimeout` are exactly `net.Listen` / `net.DialTimeout` on native
 builds, and route loopback addresses through the page table under `js/wasm` —
@@ -61,3 +69,15 @@ whole skywire binary runs in the docs-site terminal: `skywire autoconfig` in
 one terminal starts a visor in the foreground, `skywire cli` in a second
 terminal dials its RPC over vnet, and a nested browser fetches the
 hypervisor UI from `http://127.0.0.1:8001` — all inside one tab.
+
+## Used by
+
+- [m2](https://github.com/0magnet/m2) — the store's own web server runs in
+  the tab (`serve` in the /desk terminal), listening on the vnet loopback;
+  the netscrape browser's second tab reads it back.
+- [shipwright](https://github.com/0magnet/shipwright) — the Go toolchain
+  compiling, linking and running programs against jsfs, three instances on
+  one in-memory disk.
+- [websh](https://github.com/0magnet/websh) and
+  [tuiwasm](https://github.com/0magnet/tuiwasm) load the layer on their
+  pages, so every wasm instance there shares one filesystem and localhost.

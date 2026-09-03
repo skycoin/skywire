@@ -164,6 +164,82 @@
 		return e;
 	}
 
+	// ---- pipes -------------------------------------------------------------
+	// os.Pipe / os/exec need pipes, which a wasm tab has no OS analogue for.
+	// A pipe is a shared byte queue with a read end and a write end fd. Both
+	// ends live here in JS so a writer in one wasm instance and a reader in
+	// another meet in the page — never re-entering each other's Go runtime.
+	// A read on an empty pipe defers its callback until a write or a close
+	// arrives, so syscall.Read blocks through the same callback mechanism the
+	// filesystem calls already use.
+	const pipeEnds = new Map(); // fd -> {pipe, write}
+	function makePipe() {
+		const p = { chunks: [], wRefs: 1, rRefs: 1, readers: [] };
+		const r = nextFd++;
+		const w = nextFd++;
+		pipeEnds.set(r, { pipe: p, write: false });
+		pipeEnds.set(w, { pipe: p, write: true });
+		return [r, w];
+	}
+	// Retain another reference to fd's pipe end, so a later close of the caller's
+	// fd does not tear the pipe down while the retainer still holds it. Used by
+	// StartProcess: os/exec closes the parent's copy of a child's stdio fd right
+	// after spawn, but the child still needs it (as a Unix child would hold its
+	// own dup). Returns the same fd for convenience.
+	function pipeRetain(fd) {
+		const e = pipeEnds.get(fd);
+		if (e) { if (e.write) e.pipe.wRefs++; else e.pipe.rRefs++; }
+		return fd;
+	}
+	function pipeDeliver(p) {
+		// Fulfill as many waiting readers as the queued bytes (and EOF) allow.
+		while (p.readers.length) {
+			const total = p.chunks.reduce((n, c) => n + c.length, 0);
+			if (total === 0) {
+				if (p.wRefs <= 0) {
+					const w = p.readers.shift();
+					queueMicrotask(() => w.cb(null, 0)); // EOF
+					continue;
+				}
+				break; // nothing to give, writer still open: keep waiting
+			}
+			const w = p.readers.shift();
+			let need = w.length, got = 0;
+			while (need > 0 && p.chunks.length) {
+				const c = p.chunks[0];
+				const take = Math.min(need, c.length);
+				w.buf.set(c.subarray(0, take), w.offset + got);
+				got += take; need -= take;
+				if (take === c.length) p.chunks.shift();
+				else p.chunks[0] = c.subarray(take);
+			}
+			queueMicrotask(() => w.cb(null, got));
+		}
+	}
+	function pipeReadInto(fd, buf, offset, length, cb) {
+		const e = pipeEnds.get(fd);
+		if (!e || e.write) { queueMicrotask(() => cb(mkerr('EBADF', 'pipe read fd ' + fd))); return; }
+		e.pipe.readers.push({ buf, offset, length, cb });
+		pipeDeliver(e.pipe);
+	}
+	function pipeWriteFrom(fd, sub) {
+		const e = pipeEnds.get(fd);
+		if (!e || !e.write) throw mkerr('EBADF', 'pipe write fd ' + fd);
+		if (e.pipe.rRefs <= 0) throw mkerr('EPIPE', 'pipe read end closed');
+		e.pipe.chunks.push(sub.slice()); // copy: caller may reuse the buffer
+		pipeDeliver(e.pipe);
+		return sub.length;
+	}
+	function pipeClose(fd) {
+		const e = pipeEnds.get(fd);
+		if (!e) return false;
+		if (e.write) e.pipe.wRefs--; else e.pipe.rRefs--;
+		pipeEnds.delete(fd);
+		pipeDeliver(e.pipe); // a now-zero writer count lets readers see EOF
+		return true;
+	}
+	function isPipe(fd) { return pipeEnds.has(fd); }
+
 	// ---- constants (node names; values mirror Linux) -----------------------
 	const constants = {
 		O_RDONLY: 0, O_WRONLY: 1, O_RDWR: 2,
@@ -193,9 +269,15 @@
 	const fsImpl = {
 		constants,
 
+		pipe() { return makePipe(); },     // [readFd, writeFd] — used by syscall.Pipe
+		pipeRetain(fd) { return pipeRetain(fd); },
+		pipeRelease(fd) { return pipeClose(fd); }, // synchronous close of a pipe fd
+		isPipe(fd) { return isPipe(fd); },
+
 		writeSync(fd, buf) {
 			if (fd === 1) { stdio.stdout(buf); return buf.length; }
 			if (fd === 2) { stdio.stderr(buf); return buf.length; }
+			if (isPipe(fd)) return pipeWriteFrom(fd, buf);
 			const e = fdEntry(fd);
 			return writeAt(e, buf, null);
 		},
@@ -208,6 +290,7 @@
 					const n = fsImpl.writeSync(fd, sub);
 					queueMicrotask(() => cb(null, n)); return;
 				}
+				if (isPipe(fd)) { const n = pipeWriteFrom(fd, sub); queueMicrotask(() => cb(null, n)); return; }
 				const e = fdEntry(fd);
 				const n = writeAt(e, sub, position === undefined ? null : position);
 				queueMicrotask(() => cb(null, n));
@@ -223,6 +306,7 @@
 					buf.set(chunk.subarray(0, n), offset);
 					queueMicrotask(() => cb(null, n)); return;
 				}
+				if (isPipe(fd)) { pipeReadInto(fd, buf, offset, length, cb); return; }
 				const e = fdEntry(fd);
 				if (e.node.dev) { queueMicrotask(() => cb(null, 0)); return; } // /dev/null
 				if (e.node.data === null) throw mkerr('EISDIR', 'read dir');
@@ -259,7 +343,7 @@
 			return fd;
 		}),
 
-		close: wrap((fd) => { fdEntry(fd); fds.delete(fd); return undefined; }),
+		close: wrap((fd) => { if (pipeClose(fd)) return undefined; fdEntry(fd); fds.delete(fd); return undefined; }),
 
 		stat: wrap((path) => { const r = resolve(path, true); if (!r.node) throw mkerr('ENOENT', path); return statOf(r.node); }),
 		lstat: wrap((path) => { const r = resolve(path, false); if (!r.node) throw mkerr('ENOENT', path); return statOf(r.node); }),
@@ -570,6 +654,8 @@
 		writeFile: writeFileSeed,
 		readFile(path) { const r = resolve(path, true); if (!r.node || r.node.data === null) return null; return r.node.data; },
 		setCwd(d) { processImpl.chdir(d); },
+		pipe() { return makePipe(); },        // [readFd, writeFd]
+		isPipe(fd) { return isPipe(fd); },
 		getCwd() { return cwd; },
 		persist,         // IndexedDB snapshots: enable(db) → Promise<{restored}>
 	};
