@@ -268,8 +268,12 @@ func TestRenderEscapes(t *testing.T) {
 	}
 }
 
+// TestRenderEmptyMux covers the generic empty-route-group note, on a surface
+// that CAN hold a route group and simply has none right now. The dmsg surface
+// owns no route plane at all and gets its own wording — see
+// TestRenderDmsgEmptyLegsDegrades.
 func TestRenderEmptyMux(t *testing.T) {
-	snap := Snapshot{Surface: SurfaceDmsg, App: "dmsgweb"}
+	snap := Snapshot{Surface: SurfaceSkynet, App: "skynetweb"}
 	page := string(Render(snap))
 	if !strings.Contains(page, "No active route group") {
 		t.Error("empty-mux note missing")
