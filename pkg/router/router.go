@@ -573,6 +573,13 @@ type Router interface {
 	GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int) (int, error)
 	RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error
 
+	// SetMuxDirectionForApp applies a manual unidirectional direction pin
+	// (routing.DirectionAuto / DirectionPinDefault / DirectionPinFlipped) to
+	// EVERY active directional route group tagged with the named app (a proxy
+	// session can hold several concurrent rg's). Returns how many groups the
+	// pin was applied to; errors when the app has no active directional group.
+	SetMuxDirectionForApp(appName string, mode byte) (int, error)
+
 	// RouteGroupHops returns the stored forward route hops for the route group
 	// matching the given descriptor (or its inversion). Returns nil if no
 	// matching route group is found.
