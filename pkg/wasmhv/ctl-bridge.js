@@ -68,5 +68,63 @@
   }
   dialRPCBridge();
 
+  // Desk pages run the visor as a skywireExec instance (a terminal running
+  // `skywire autoconfig`), so its stderr only reaches an xterm — mirror the
+  // FOREGROUND visor instance's 16KB stderr ring (skywire-exec.js keeps it in
+  // globalThis.__skywireExecTails) to /ctl/log so a plain curl tells the whole
+  // story: started, log lines, crash/stop. Pages that never exec simply never
+  // grow the registry, so this stays a no-op on the standalone HV page.
+  var visIID = null;   // instance currently (or last) mirrored
+  var visTail = '';    // the ring as last posted, for incremental diffs
+  var visEnded = false; // exitInfo already reported for visIID
+  function visorInstance(reg) {
+    var found = null;
+    Object.keys(reg).forEach(function (k) {
+      // A visor runs as `skywire autoconfig` (the desk autostart) or
+      // `skywire visor …` — argv[0] exactly, so `cli visor info` doesn't match.
+      var a0 = (reg[k].argv || [])[0];
+      if (a0 === 'autoconfig' || a0 === 'visor') { found = k; } // last wins: the newest (re)start
+    });
+    return found;
+  }
+  // The tail is a SLIDING 16KB ring: normally the previous snapshot is a
+  // prefix of the new one; after truncation only a suffix of it survives at
+  // the new ring's head. Returns the unposted bytes, or null when no overlap
+  // remains (the ring outran the poll — caller re-syncs with the full ring).
+  function ringDelta(prev, cur) {
+    if (!prev) { return cur; }
+    for (var n = prev.length; n > 0; n >>= 1) {
+      var i = cur.indexOf(prev.slice(-n));
+      if (i >= 0) { return cur.slice(i + n); }
+    }
+    return null;
+  }
+  function pumpVisorLog() {
+    try {
+      var reg = globalThis.__skywireExecTails || {};
+      var iid = visorInstance(reg);
+      if (iid !== null && iid !== visIID) {
+        visIID = iid; visTail = ''; visEnded = false;
+        post('/ctl/log?tab=' + tabId, '[desk] visor started (' + iid + ': skywire ' + (reg[iid].argv || []).join(' ') + ')');
+      }
+      if (visIID === null || !reg[visIID]) { return; }
+      var ent = reg[visIID];
+      var cur = ent();
+      if (cur !== visTail) {
+        var add = ringDelta(visTail, cur);
+        if (add === null) { add = '[desk] (stderr ring outran the mirror — resynced)\n' + cur; }
+        visTail = cur;
+        if (add) { post('/ctl/log?tab=' + tabId, add.replace(/\n$/, '')); }
+      }
+      if (ent.exitInfo && !visEnded) {
+        visEnded = true;
+        post('/ctl/log?tab=' + tabId, ent.exitInfo.crashed
+          ? '[desk] visor CRASHED (code ' + ent.exitInfo.code + ')\n--- last stderr tail ---\n' + cur
+          : '[desk] visor stopped (exit code ' + ent.exitInfo.code + ')');
+      }
+    } catch (e) { /* the log mirror must never break the page */ }
+  }
+  setInterval(pumpVisorLog, 1500);
+
   post('/ctl/log?tab=' + tabId, 'ctl-bridge ready ' + tabId);
 })();
