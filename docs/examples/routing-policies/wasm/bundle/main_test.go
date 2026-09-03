@@ -4,7 +4,7 @@ import "testing"
 
 // These tests prove each conditional preset HONORS ITS CONSTRAINT — a
 // deterministic property of the decide output over synthetic candidates, so it
-// needs no live mesh. Run natively: `go test .` in this dir (its own module).
+// needs no live mesh. Run natively: `go test .` in this dir.
 
 func ctxWith(overrides map[string]string) routingContextWire {
 	return routingContextWire{App: "skysocks-client", CLIOverrides: overrides}

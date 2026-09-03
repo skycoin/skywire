@@ -37,9 +37,13 @@
 	globalThis.vnet = {
 		// listen claims a port; onconn(connId) fires per inbound dial (the
 		// accepter is side 'b' of that conn). Returns false if taken.
-		listen(port, onconn) {
+		// owner (optional) tags the claim with the OWNING INSTANCE (the Go
+		// adapter passes its SKYWIRE_EXEC_ID) so releaseOwner can clear a
+		// dead program's claims — a wasm instance that exits cannot unlisten
+		// itself, and zombie entries otherwise fake liveness forever.
+		listen(port, onconn, owner) {
 			if (ports.has(port)) return false;
-			ports.set(port, { onconn });
+			ports.set(port, { onconn, owner: owner || '' });
 			return true;
 		},
 
@@ -48,14 +52,35 @@
 		listening(port) { return ports.has(port); },
 
 		// dial connects to a listening port; returns the conn id (dialer is
-		// side 'a') or -1 (connection refused).
-		dial(port) {
+		// side 'a') or -1 (connection refused). owner (optional) tags the
+		// dialer side for releaseOwner; the accepter side inherits the
+		// listener's owner.
+		dial(port, owner) {
 			const l = ports.get(port);
 			if (!l) return -1;
 			const id = nextID++;
-			conns.set(id, { q: { a: [], b: [] }, wake: { a: null, b: null }, closed: { a: false, b: false } });
+			conns.set(id, { q: { a: [], b: [] }, wake: { a: null, b: null }, closed: { a: false, b: false }, aOwner: owner || '', bOwner: l.owner || '' });
 			queueMicrotask(() => l.onconn(id));
 			return id;
+		},
+
+		// releaseOwner clears every claim a dead instance left behind: its
+		// listeners are unbound (the port becomes claimable again — or falls
+		// through to the host loopback in the nested browser) and both sides
+		// of its conns are closed so peers read EOF instead of blocking on a
+		// program that will never write. Called by the exec harness when a
+		// wasm instance's run() settles.
+		releaseOwner(owner) {
+			if (!owner) return 0;
+			let n = 0;
+			for (const [port, l] of Array.from(ports.entries())) {
+				if (l.owner === owner) { ports.delete(port); n++; }
+			}
+			for (const [id, c] of Array.from(conns.entries())) {
+				if (c.aOwner === owner && !c.closed.a) { this.close(id, 'a'); n++; }
+				if (c.bOwner === owner && !c.closed.b) { this.close(id, 'b'); n++; }
+			}
+			return n;
 		},
 
 		// send appends bytes for the peer. Returns false when the peer end is
