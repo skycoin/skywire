@@ -850,7 +850,7 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 	var packet routing.Packet
 	var err error
 	if rg.mux != nil {
-		packet, _, err = rg.mux.wrapPayload(rule.NextRouteID(), data)
+		packet, _, err = rg.mux.wrapPayload(rule.NextRouteID(), data, leg)
 	} else {
 		packet, err = routing.MakeDataPacket(rule.NextRouteID(), data)
 	}
@@ -1759,7 +1759,13 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 	// compaction. If no active leg is available the flush is a safe no-op — leg 0
 	// is never standby, so demoting an aux always leaves a resend target.
 	if demoted && rg.mux != nil {
-		if seqs := rg.mux.heldRetxSeqs(); len(seqs) > 0 {
+		// Narrowed to the DEMOTED legs' in-flight sequences (plus any with
+		// unknown attribution): only those are stranded by the demote; the rest
+		// still ride active legs and heal through the normal SACK path. The
+		// whole-window flush this replaces duplicated the entire in-flight
+		// window (measured 33.8MB of dupes against 14.7MB payload on one leg
+		// of a 20MB transfer) on every demote event.
+		if seqs := rg.mux.heldRetxSeqsOnLegs(action.DemoteToStandby); len(seqs) > 0 {
 			if err := rg.resendSeqs(seqs); err != nil {
 				rg.logger.WithError(err).Debug("demote retx flush: no active leg to resend on")
 			}
@@ -4093,6 +4099,9 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 			// retx selector picks fresh, mirroring the data path).
 			rg.mux.recordSent(leg, uint64(retxPacket.Size()))
 			rg.mux.recordRetransmit(leg) // separate loss signal for leg health
+			// Re-tag the sequence's last-send leg so a later demote flush
+			// attributes it to where it now rides, not where it started.
+			rg.mux.retxSetLeg(seq, leg)
 			// A frame just went out (incl. a TLP probe) — restart the TLP idle
 			// timer so the next probe waits a fresh PTO rather than back-to-back.
 			atomic.StoreInt64(&rg.mux.lastSendNano, time.Now().UnixNano())

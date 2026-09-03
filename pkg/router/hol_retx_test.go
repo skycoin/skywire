@@ -230,8 +230,8 @@ func TestProactiveRetxSeqs(t *testing.T) {
 
 	t.Run("capability off -> nil fallback", func(t *testing.T) {
 		m := newMux(false)
-		m.retxBuf.Store(101, []byte("a"))
-		m.retxBuf.Store(102, []byte("b"))
+		m.retxBuf.Store(101, []byte("a"), 0)
+		m.retxBuf.Store(102, []byte("b"), 0)
 		if got := m.proactiveRetxSeqs(last, words, 20, now); got != nil {
 			t.Errorf("HoL disabled must return nil, got %v", got)
 		}
@@ -239,9 +239,9 @@ func TestProactiveRetxSeqs(t *testing.T) {
 
 	t.Run("returns held frontier seqs", func(t *testing.T) {
 		m := newMux(true)
-		m.retxBuf.Store(101, []byte("a"))
-		m.retxBuf.Store(102, []byte("b"))
-		m.retxBuf.Store(103, []byte("c"))
+		m.retxBuf.Store(101, []byte("a"), 0)
+		m.retxBuf.Store(102, []byte("b"), 0)
+		m.retxBuf.Store(103, []byte("c"), 0)
 		got := m.proactiveRetxSeqs(last, words, 20, now)
 		if !equalSeqs(got, []uint32{101, 102, 103}) {
 			t.Errorf("got %v, want [101 102 103]", got)
@@ -251,8 +251,8 @@ func TestProactiveRetxSeqs(t *testing.T) {
 	t.Run("skips seqs not in retx buffer", func(t *testing.T) {
 		m := newMux(true)
 		// 102 already acked/purged -> not retransmitted; 101,103 held.
-		m.retxBuf.Store(101, []byte("a"))
-		m.retxBuf.Store(103, []byte("c"))
+		m.retxBuf.Store(101, []byte("a"), 0)
+		m.retxBuf.Store(103, []byte("c"), 0)
 		got := m.proactiveRetxSeqs(last, words, 20, now)
 		if !equalSeqs(got, []uint32{101, 103}) {
 			t.Errorf("got %v, want [101 103]", got)
@@ -261,9 +261,9 @@ func TestProactiveRetxSeqs(t *testing.T) {
 
 	t.Run("per-seq rate limit within interval", func(t *testing.T) {
 		m := newMux(true)
-		m.retxBuf.Store(101, []byte("a"))
-		m.retxBuf.Store(102, []byte("b"))
-		m.retxBuf.Store(103, []byte("c"))
+		m.retxBuf.Store(101, []byte("a"), 0)
+		m.retxBuf.Store(102, []byte("b"), 0)
+		m.retxBuf.Store(103, []byte("c"), 0)
 		// fastestMs=20 -> interval 20ms.
 		first := m.proactiveRetxSeqs(last, words, 20, now)
 		if !equalSeqs(first, []uint32{101, 102, 103}) {
@@ -282,7 +282,7 @@ func TestProactiveRetxSeqs(t *testing.T) {
 
 	t.Run("young seq not nudged (age gate)", func(t *testing.T) {
 		m := newMux(true)
-		m.retxBuf.Store(101, []byte("a"))
+		m.retxBuf.Store(101, []byte("a"), 0)
 		// Probed immediately after send (age ≈ 0 < one fast-leg RTT): the seq
 		// cannot have been acked yet on ANY leg, so a nudge would be spurious
 		// by construction — this is the ungated behavior that duplicated ~12%
@@ -298,7 +298,7 @@ func TestProactiveRetxSeqs(t *testing.T) {
 
 	t.Run("empty bitmap -> nil (no stall)", func(t *testing.T) {
 		m := newMux(true)
-		m.retxBuf.Store(101, []byte("a"))
+		m.retxBuf.Store(101, []byte("a"), 0)
 		if got := m.proactiveRetxSeqs(last, nil, 20, now); got != nil {
 			t.Errorf("empty SACK bitmap must return nil, got %v", got)
 		}
