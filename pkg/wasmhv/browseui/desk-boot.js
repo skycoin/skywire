@@ -57,11 +57,29 @@
 	// tab covers the page) must not masquerade as an operator stop, or every
 	// later load skips the autostart forever.
 	var visorSawUp = false;
+	// visorCrashed: whether the visor's exec instance ended ABNORMALLY (panic
+	// or nonzero exit). A crash is not an operator stop — recording it as one
+	// suppressed the autostart on every later load, so an overnight panic
+	// left the desk permanently idle (observed live). Only a clean exit
+	// (code 0, no crash) counts as "the operator stopped it".
+	function visorCrashed() {
+		try {
+			var reg = globalThis.__skywireExecTails || {};
+			var crashed = false;
+			Object.keys(reg).forEach(function (k) {
+				var a = (reg[k].argv || []).join(' ');
+				var xi = reg[k].exitInfo;
+				if (/autoconfig/.test(a) && xi && (xi.crashed || xi.code !== 0)) { crashed = true; }
+			});
+			return crashed;
+		} catch (e) { return false; }
+	}
 	function saveSession() {
 		try {
 			var up = !!(globalThis.vnet && globalThis.vnet.listening(3435));
 			if (up) { visorSawUp = true; }
 			if (!up && !visorSawUp) { return; } // still booting (or never started) — keep the previous verdict
+			if (!up && visorCrashed()) { up = true; } // crashed ≠ stopped: restart on the next load
 			localStorage.setItem(SESSION_KEY, JSON.stringify({
 				visorRunning: up,
 				at: Date.now(),
