@@ -286,12 +286,33 @@ func TestFECMuxEndToEndThroughput(t *testing.T) {
 	// the expected shape; a REAL regression (FEC inert) fails every round.
 	var noFEC, withFEC, singleT time.Duration
 	var noLegs, fecLegs []int64
+	shapeOK := false
 	for attempt := 0; attempt < 3; attempt++ {
 		noFEC, noLegs = best(false, hetero)
 		withFEC, fecLegs = best(true, hetero)
 		singleT, _ = best(false, single)
 		if withFEC < noFEC && withFEC <= singleT*3 {
+			shapeOK = true
 			break
+		}
+	}
+	// The comparison is only meaningful while the simulated leg LATENCIES
+	// (1/15ms) dominate the wall clock. A compute-starved CI runner puts the
+	// CPU cost of the pipeline — FEC's parity math above all — far above
+	// those latencies and can even INVERT the relationship (observed: FEC
+	// 215ms vs no-FEC 183ms against a ~30ms local FEC norm); failing there
+	// asserts nothing about FEC. Discriminate starvation from a REAL FEC
+	// regression with a calibration no assertion depends on: the FEC path
+	// over four homogeneous FAST legs is pure pipeline+parity cost (~2x the
+	// slow leg locally) and is NOT inflated by FEC failing to do its job —
+	// only by the machine. If that calibration blows past 8x the slow leg,
+	// skip with the numbers; otherwise the strict assertions below stand.
+	if !shapeOK {
+		fecFast, _ := best(true, []time.Duration{fastLat, fastLat, fastLat, fastLat})
+		if fecFast > 8*slowLat {
+			t.Skipf("environment cannot express the latency-dominated regime "+
+				"(FEC-over-fast-legs calibration %v vs simulated slow leg %v; nofec=%v fec=%v single=%v) — skipping comparative assertions",
+				fecFast, slowLat, noFEC, withFEC, singleT)
 		}
 	}
 
