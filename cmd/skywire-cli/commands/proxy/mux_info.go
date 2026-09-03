@@ -157,6 +157,26 @@ type muxLegInfo struct {
 	GoodputDownBps float64 `json:"goodput_down_bps,omitempty"`
 	Alive          bool    `json:"alive"`
 	Standby        bool    `json:"standby"`
+	// Hops is the leg's full forward route (every hop to the destination,
+	// full PKs, per-hop transport type + latency) — the visor has sent it
+	// since the per-leg route telemetry landed, but this mirror struct
+	// lacked the field, so BOTH output paths (which round-trip the RPC
+	// response through this struct — see render) silently dropped it:
+	// `--json`/`--jq` showed every leg with an empty hop list while
+	// `proxy tree` (whose own treeLegInfo mirror carries the field)
+	// rendered the full chains from the very same RPC.
+	Hops []muxHopInfo `json:"hops,omitempty"`
+}
+
+// muxHopInfo is one hop of a leg's forward route — the CLI-side mirror of
+// visor.MuxHopInfo (json tags are the stable contract). From/To are FULL
+// public keys, never truncated.
+type muxHopInfo struct {
+	TpID      string  `json:"tp_id"`
+	From      string  `json:"from"`
+	To        string  `json:"to"`
+	TpType    string  `json:"tp_type"`
+	LatencyMS float64 `json:"latency_ms,omitempty"`
 }
 
 // muxRateTracker remembers the previous poll's per-leg byte counters so
