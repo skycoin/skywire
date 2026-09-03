@@ -269,6 +269,8 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 	c.rsActive.Add(1)
 	c.streamRemainingChunks(btls, total, func(start, end int64) ([]byte, error) {
 		return c.fetchChunkTLSRetry(req, host, validator, start, end)
+	}, func(w net.Conn, start int64) (int64, error) {
+		return c.streamTailTLSOnce(w, req, host, validator, start, total)
 	})
 	c.rsActive.Add(-1)
 	btls.Close() //nolint:errcheck,gosec
@@ -326,6 +328,44 @@ func (c *Client) fetchChunkTLS(req *http.Request, host, validator string, start,
 		return nil, err
 	}
 	return buf, nil
+}
+
+// streamTailTLSOnce makes ONE attempt to stream [start, total) to w over a
+// fresh TLS-to-origin stream — the HTTPS analog of streamTailOnce, used by the
+// sequential rescue when a parallel chunk exhausts its retries. The body is
+// copied straight through under a progress-refreshed idle timeout; returns the
+// bytes written so the caller resumes from start+written.
+func (c *Client) streamTailTLSOnce(w net.Conn, req *http.Request, host, validator string, start, total int64) (int64, error) {
+	sess := c.pickSession()
+	if sess == nil {
+		return 0, errAllTunnelsDown
+	}
+	st, err := sess.Open()
+	if err != nil {
+		return 0, err
+	}
+	defer st.Close() //nolint:errcheck,gosec
+
+	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
+	if err := c.exitConnect(st, host, 443); err != nil {
+		return 0, err
+	}
+	tconn := tls.Client(st, c.originTLSConfig(host))
+	if err := tconn.Handshake(); err != nil {
+		return 0, err
+	}
+	if _, err := tconn.Write(buildRangedGet(req, host, validator, start, total-1)); err != nil {
+		return 0, err
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(tconn), req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusPartialContent {
+		return 0, fmt.Errorf("tail %d-%d: status %d (validator changed?)", start, total-1, resp.StatusCode)
+	}
+	return copyWithIdleTimeout(w, resp.Body, st, total-start, rsRescueIdleTimeout)
 }
 
 // closeBoth closes two conns, ignoring errors.
