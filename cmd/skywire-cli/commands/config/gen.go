@@ -2217,6 +2217,20 @@ func configureApps(log *logging.Logger) {
 		for i, app := range conf.Launcher.Apps {
 			if app.Name == "skysocks-client" {
 				conf.Launcher.Apps[i].AutoStart = true
+				// An autostarted proxy client is meant to stay connected:
+				// reconnect in-process (serving the status page during the gap)
+				// instead of exiting on total collapse and paying a full proc
+				// restart + re-dial per RestartOnFailure cycle.
+				hasReconnect := false
+				for _, a := range conf.Launcher.Apps[i].Args {
+					if a == "--reconnect" {
+						hasReconnect = true
+						break
+					}
+				}
+				if !hasReconnect {
+					conf.Launcher.Apps[i].Args = append(conf.Launcher.Apps[i].Args, "--reconnect")
+				}
 			}
 		}
 	}
