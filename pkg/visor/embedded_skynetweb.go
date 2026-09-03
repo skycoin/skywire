@@ -181,6 +181,29 @@ func (e *EmbeddedSkynetWeb) Upstream() string {
 	return e.cfg.UpstreamSOCKS
 }
 
+// ListenAddr returns the SOCKS5 listener the resolver binds, resolved the same
+// way serve() does (loopback default, default port).
+func (e *EmbeddedSkynetWeb) ListenAddr() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return resolverListenAddr(e.cfg.ProxyAddr, uintOrDefault(e.cfg.ProxyPort, defaultSkynetWebProxyPort))
+}
+
+// Suffix returns the domain suffix the resolver answers for (".skynet").
+func (e *EmbeddedSkynetWeb) Suffix() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return stringOrDefault(e.cfg.DomainSuffix, skynetweb.DefaultDomainSuffix)
+}
+
+// Aliases returns the name→PK bindings the resolver resolves by name — this
+// visor's own alias. The returned map is a copy.
+func (e *EmbeddedSkynetWeb) Aliases() map[string]cipher.PubKey {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return resolverAliasMap(e.cfg.Alias, e.localPK)
+}
+
 func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 	cfg := skynetweb.Config{
 		DomainSuffix:  stringOrDefault(e.cfg.DomainSuffix, skynetweb.DefaultDomainSuffix),
