@@ -273,33 +273,8 @@ func (ce *Client) SessionCarriers() []SessionCarrier {
 // No-op when no carrier preference is set (empty Carriers = native default,
 // already optimal). Safe to call on a timer or on demand. Returns the number of
 // sessions re-dialed onto a MORE-preferred carrier this call.
-// probeCarrierErr does a throwaway direct dial of ONE carrier purely to capture
-// its failure reason (dialSession swallows per-carrier errors when it falls back
-// to a working carrier). The session, if it establishes, is never registered —
-// it is closed immediately. Returns "" for carriers with no native dialer.
-func (ce *Client) probeCarrierErr(entry *disc.Entry, carrier string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), carrierConvergeDialTimeout)
-	defer cancel()
-	var (
-		s   ClientSession
-		err error
-	)
-	switch carrier {
-	case CarrierWT:
-		s, err = ce.dialSessionWT(ctx, entry)
-	case CarrierWS:
-		s, err = ce.dialSessionWS(ctx, entry)
-	case CarrierQUIC:
-		s, err = ce.dialSessionQUIC(ctx, entry)
-	default:
-		return ""
-	}
-	if err != nil {
-		return err.Error()
-	}
-	_ = s.Close() //nolint:errcheck // throwaway probe session, never registered
-	return "dial succeeded on retry (transient failure)"
-}
+// (probeCarrierErr is gone: converge now dials the wanted carrier directly
+// via dialSessionOn, so the dial error itself carries the failure reason.)
 
 func (ce *Client) ConvergeCarriers() int {
 	carriers := ce.effectiveCarriers()
@@ -344,28 +319,21 @@ func (ce *Client) ConvergeCarriers() int {
 		if wantRank < 0 || curRank < 0 || wantRank >= curRank {
 			continue
 		}
+		// Dial the WANTED carrier only (dialSessionOn — no fallback). Using
+		// the fallback-capable dialSession here was a session-churn machine:
+		// newest-session-wins registers the dial result BEFORE this code can
+		// judge it, so a WT attempt that fell back to wss REPLACED (and
+		// closed) the healthy wss session with its own twin — every converge
+		// tick, for every server whose preferred carrier was unreachable.
+		// Live symptom: constant "Session stopped … session shutdown" +
+		// re-dials, session counts ballooning past sessions_count, and
+		// transports starving as their signaling sessions flapped.
 		dctx, dcancel := context.WithTimeout(context.Background(), carrierConvergeDialTimeout)
-		ns, derr := ce.dialSession(dctx, entry)
+		_, derr := ce.dialSessionOn(dctx, entry, want)
 		dcancel()
 		if derr != nil {
-			ce.log.WithError(derr).WithField("remote_pk", s.pk).Debug("carrier converge: re-dial failed; backing off")
-			ce.noteCarrierFailure(s.pk, fmt.Sprintf("re-dial to %s failed: %v", want, derr))
-			continue
-		}
-		if ns.carrier != want {
-			// Landed on a less-preferred carrier (preferred endpoint unreachable
-			// → dialSession fell back). Keep the working session, back off.
-			// dialSession swallows the per-carrier error on fallback, so do one
-			// throwaway direct dial of the wanted carrier to capture WHY it
-			// failed — this is the visor-side reproduction of the reachability
-			// the standalone `svc health --carriers` probe measures.
-			note := fmt.Sprintf("wanted %s but dial landed on %s", want, ns.carrier)
-			if detail := ce.probeCarrierErr(entry, want); detail != "" {
-				note += "; " + want + " err: " + detail
-			}
-			ce.log.WithField("remote_pk", s.pk).WithField("want", want).WithField("got", ns.carrier).
-				Debug("carrier converge: dial landed on a less-preferred carrier; backing off")
-			ce.noteCarrierFailure(s.pk, note)
+			ce.log.WithError(derr).WithField("remote_pk", s.pk).Debug("carrier converge: preferred-carrier dial failed; backing off")
+			ce.noteCarrierFailure(s.pk, fmt.Sprintf("%s dial failed: %v", want, derr))
 			continue
 		}
 		ce.log.WithField("remote_pk", s.pk).WithField("from", s.carrier).WithField("to", want).
@@ -630,6 +598,53 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		}
 	}
 
+	return ce.finishDialedSession(ctx, dSes, network, dialAddr, entry)
+}
+
+// dialSessionOn dials entry over EXACTLY the given carrier — no fallback —
+// and registers the session (newest-session-wins) only on success. The
+// carrier-converge path needs this: dialSession's fallbacks would replace a
+// healthy session with a same-carrier twin (newest-wins closes the original)
+// whenever the preferred carrier was unreachable, churning every session the
+// converge ticker touched.
+func (ce *Client) dialSessionOn(ctx context.Context, entry *disc.Entry, carrier string) (ClientSession, error) {
+	var (
+		dSes     ClientSession
+		err      error
+		dialAddr string
+	)
+	switch carrier {
+	case CarrierWT:
+		dialAddr = entry.Server.AddressWT
+	case CarrierWS:
+		dialAddr = entry.Server.AddressWS
+	case CarrierQUIC:
+		dialAddr = entry.Server.AddressUDP
+	default:
+		return ClientSession{}, fmt.Errorf("dmsg: carrier %q not directly dialable", carrier)
+	}
+	if err = ce.conf.Callbacks.OnSessionDial(carrier, dialAddr); err != nil {
+		return ClientSession{}, fmt.Errorf("session dial is rejected by callback: %w", err)
+	}
+	switch carrier {
+	case CarrierWT:
+		dSes, err = ce.dialSessionWT(ctx, entry)
+	case CarrierWS:
+		dSes, err = ce.dialSessionWS(ctx, entry)
+	case CarrierQUIC:
+		dSes, err = ce.dialSessionQUIC(ctx, entry)
+	}
+	if err != nil {
+		ce.conf.Callbacks.OnSessionDisconnect(carrier, dialAddr, err)
+		return ClientSession{}, err
+	}
+	return ce.finishDialedSession(ctx, dSes, carrier, dialAddr, entry)
+}
+
+// finishDialedSession is dialSession's registration tail, shared with
+// dialSessionOn: stamp the carrier fields, install newest-session-wins under
+// sessionsMx, and start the serve goroutine.
+func (ce *Client) finishDialedSession(ctx context.Context, dSes ClientSession, network, dialAddr string, entry *disc.Entry) (ClientSession, error) {
 	// Atomically: refuse-if-closed, replace-stale, store, and wg.Add(1)
 	// under sessionsMx — pairs with Close which sets ce.closed under the
 	// same lock before wg.Wait. The Add must happen-before any subsequent
