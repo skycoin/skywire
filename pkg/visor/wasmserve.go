@@ -298,7 +298,18 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		// nested browser opens it maximized on top. A visor the operator
 		// stopped stays stopped across reloads (desk-boot's session).
 		serveBytes("/desk-boot.js", "text/javascript", wasmhv.DeskBootJS())
-		serveBytes("/desk", "text/html; charset=utf-8", []byte(deskPageHTML))
+		deskHTML := []byte(deskPageHTML)
+		if cfg.Harness {
+			// Same rule as injectWasmBoot on the standalone page: --harness
+			// injects ctl-bridge.js (its presence IS the harness signal). On
+			// the desk it registers the tab and mirrors the foreground visor
+			// instance's stderr ring to /ctl/log, so `curl /ctl/log?tab=<id>`
+			// reads the in-terminal visor's log.
+			deskHTML = bytes.Replace(deskHTML,
+				[]byte(`<script src="/desk-boot.js"></script>`),
+				[]byte("<script src=\"/ctl-bridge.js\"></script>\n<script src=\"/desk-boot.js\"></script>"), 1)
+		}
+		serveBytes("/desk", "text/html; charset=utf-8", deskHTML)
 	}
 	serveBytes("/winbox.wasm", "application/wasm", wasmhv.WinBoxWasm())
 	serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
