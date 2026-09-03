@@ -186,6 +186,13 @@
 					if (n > 0) console.warn('[skywire-exec ' + iid + '] released ' + n + ' vnet claim(s) on exit');
 				}
 			} catch (e) { /* ignore */ }
+			// Record how this instance ended, for consumers that must tell a
+			// CRASH from a deliberate stop (the desk session: a crashed visor
+			// restarts on the next load; only a clean exit stays stopped).
+			try {
+				const reg2 = globalThis.__skywireExecTails;
+				if (reg2 && reg2[iid]) reg2[iid].exitInfo = { code: code, crashed: !!runErr };
+			} catch (e) { /* ignore */ }
 			// Mirror abnormal endings to the console with the stderr tail.
 			if (runErr || code !== 0) {
 				try {
