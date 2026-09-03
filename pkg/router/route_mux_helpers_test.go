@@ -9,6 +9,8 @@
 package router
 
 import (
+	"github.com/google/uuid"
+
 	"testing"
 	"time"
 
@@ -118,11 +120,11 @@ func TestMuxSACKPathEnabled(t *testing.T) {
 
 	routeID := routing.RouteID(7)
 	// wrapPayload stores the payload in the retx buffer for later SACK recovery.
-	pkt0, seq0, err := m.wrapPayload(routeID, []byte("hello"), 0)
+	pkt0, seq0, err := m.wrapPayload(routeID, []byte("hello"), uuid.Nil)
 	require.NoError(t, err)
 	require.NotNil(t, pkt0)
 	require.EqualValues(t, 0, seq0)
-	pkt1, seq1, err := m.wrapPayload(routeID, []byte("world"), 0)
+	pkt1, seq1, err := m.wrapPayload(routeID, []byte("world"), uuid.Nil)
 	require.NoError(t, err)
 	require.NotNil(t, pkt1)
 	require.EqualValues(t, 1, seq1)
@@ -150,7 +152,7 @@ func TestMuxSACKPathEnabled(t *testing.T) {
 func TestMuxSACKPathDisabled(t *testing.T) {
 	m := newBareMux(false)
 
-	_, _, err := m.wrapPayload(routing.RouteID(1), []byte("x"), 0)
+	_, _, err := m.wrapPayload(routing.RouteID(1), []byte("x"), uuid.Nil)
 	require.NoError(t, err)
 	// retxBuf still exists but Store is skipped when sackEnabled is false.
 	require.Empty(t, m.heldRetxSeqs())
