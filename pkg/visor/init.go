@@ -210,7 +210,15 @@ func registerModules(logger *logging.MasterLogger) {
 	// (needed for the skynet transport). Without the rt dep the skynet round-
 	// tripper would be built before v.router exists.
 	meshProxy = maker("mesh_proxy", initMeshProxy, &rt)
-	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
+	// launch also waits on the embedded resolving proxies: initLauncher builds
+	// the app list from v.embeddedDmsgWeb / v.embeddedSkynetWeb, and without
+	// these deps whether the "dmsgweb"/"skynetweb" app rows exist (and thus
+	// whether Enable=true autostarts them) is a RACE against their inits.
+	// Observed live: dmsgweb (dep dmsgC, early) reliably won its race while
+	// skynetweb (dep rt — the same module launch waits on, so they start
+	// concurrently) reliably lost: skynet_web.enable=true bound nothing and
+	// `app ls` had no skynetweb row.
+	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt, &embDmsgWeb, &embSkynetWeb)
 	// cli depends on tr so v.tpM is set when initCLI wires up the
 	// shared VStreamMux for transport-RPC (registered as the manager's
 	// VisorRPCPacket handler). Without this dep, initCLI could run
