@@ -172,6 +172,13 @@ type retxEntry struct {
 	seq    uint32
 	data   []byte
 	sentAt time.Time
+	// leg is the mux leg index this sequence was LAST sent on (-1 = unknown).
+	// Recorded at Store time and re-tagged on every retransmit, so the
+	// demote-time flush can resend only the sequences actually stranded on the
+	// demoted leg(s) instead of the whole in-flight window (measured live:
+	// a whole-window flush duplicated 33.8MB against 14.7MB of payload on one
+	// leg of a 20MB transfer).
+	leg int
 	// lastTxAt is when this sequence was last handed out for retransmission
 	// (zero until the first retx). retxCount is how many times it has been.
 	// Together they gate re-retransmission: without them every SACK arriving
@@ -218,7 +225,7 @@ func newRetxBuffer(capacity int) *retxBuffer {
 // received sequence above the gap each SACK, so under normal operation the
 // buffer holds only genuine holes plus in-flight sequences and never reaches
 // capacity — this eviction path is a backstop, not the steady state.
-func (rb *retxBuffer) Store(seq uint32, data []byte) bool {
+func (rb *retxBuffer) Store(seq uint32, data []byte, leg int) bool {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
@@ -241,8 +248,36 @@ func (rb *retxBuffer) Store(seq uint32, data []byte) bool {
 		seq:    seq,
 		data:   cp,
 		sentAt: time.Now(),
+		leg:    leg,
 	}
 	return true
+}
+
+// SetLeg re-tags seq's last-send leg (a retransmit moved it). No-op for a seq
+// no longer held.
+func (rb *retxBuffer) SetLeg(seq uint32, leg int) {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	if e, ok := rb.entries[seq]; ok {
+		e.leg = leg
+	}
+}
+
+// HeldSeqsOnLegs returns the held sequences whose last send rode one of the
+// given legs, sorted ascending. Entries with an unknown leg (-1) are included
+// conservatively — better a redundant resend than a stranded gap. Used by the
+// demote-time flush to rescue only what the demoted leg(s) actually strand.
+func (rb *retxBuffer) HeldSeqsOnLegs(legs map[int]bool) []uint32 {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	seqs := make([]uint32, 0, len(rb.entries))
+	for seq, e := range rb.entries {
+		if e.leg < 0 || legs[e.leg] {
+			seqs = append(seqs, seq)
+		}
+	}
+	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
+	return seqs
 }
 
 // ProcessSACK processes a received SACK (last contiguous seq + full-window
