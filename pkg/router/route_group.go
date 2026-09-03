@@ -858,7 +858,13 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 	var packet routing.Packet
 	var err error
 	if rg.mux != nil {
-		packet, _, err = rg.mux.wrapPayload(rule.NextRouteID(), data, leg)
+		// Tag the retx entry with the transport's stable UUID (leg indices
+		// shift on slice compaction, so an index tag goes stale mid-session).
+		tpID := uuid.Nil
+		if tp != nil {
+			tpID = tp.Entry.ID
+		}
+		packet, _, err = rg.mux.wrapPayload(rule.NextRouteID(), data, tpID)
 	} else {
 		packet, err = routing.MakeDataPacket(rule.NextRouteID(), data)
 	}
@@ -1773,7 +1779,18 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 		// whole-window flush this replaces duplicated the entire in-flight
 		// window (measured 33.8MB of dupes against 14.7MB payload on one leg
 		// of a 20MB transfer) on every demote event.
-		if seqs := rg.mux.heldRetxSeqsOnLegs(action.DemoteToStandby); len(seqs) > 0 {
+		// Map the demoted leg INDICES to their transports' stable UUIDs under
+		// rg.mu before consulting the buffer — the retx tags are transport
+		// identities, immune to the index shifts a slice compaction causes.
+		rg.mu.Lock()
+		demotedTps := make([]uuid.UUID, 0, len(action.DemoteToStandby))
+		for _, idx := range action.DemoteToStandby {
+			if idx >= 0 && idx < len(rg.tps) && rg.tps[idx] != nil {
+				demotedTps = append(demotedTps, rg.tps[idx].Entry.ID)
+			}
+		}
+		rg.mu.Unlock()
+		if seqs := rg.mux.heldRetxSeqsOnTps(demotedTps); len(seqs) > 0 {
 			if err := rg.resendSeqs(seqs); err != nil {
 				rg.logger.WithError(err).Debug("demote retx flush: no active leg to resend on")
 			}
@@ -4172,9 +4189,11 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 			// retx selector picks fresh, mirroring the data path).
 			rg.mux.recordSent(leg, uint64(retxPacket.Size()))
 			rg.mux.recordRetransmit(leg) // separate loss signal for leg health
-			// Re-tag the sequence's last-send leg so a later demote flush
-			// attributes it to where it now rides, not where it started.
-			rg.mux.retxSetLeg(seq, leg)
+			// Re-tag the sequence's last-send transport so a later demote
+			// flush attributes it to where it now rides, not where it started.
+			if tp != nil {
+				rg.mux.retxSetTp(seq, tp.Entry.ID)
+			}
 			// A frame just went out (incl. a TLP probe) — restart the TLP idle
 			// timer so the next probe waits a fresh PTO rather than back-to-back.
 			atomic.StoreInt64(&rg.mux.lastSendNano, time.Now().UnixNano())
