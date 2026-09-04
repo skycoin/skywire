@@ -2,18 +2,22 @@
 
 // Package vpn pkg/vpn/os_client_js.go c2-app-vpn
 //
-// js/wasm stand-ins: a browser has no TUN device, no routing table, and no
-// privileges to acquire. These exist so the vpn-client package — and every
-// command that shows its help — compiles in the wasm build of the full
-// skywire binary; starting a VPN client there fails cleanly at the TUN step.
+// js/wasm client environment: no OS routing table, no privileges — but a
+// REAL data plane, because the "TUN" here is a gVisor userspace netstack
+// (tun_device_js.go). SetupTUN configures that stack with the server-assigned
+// tunnel address, and the routing-table mutations the native client performs
+// are inherently satisfied (the netstack's only route IS the tunnel), so they
+// are successful no-ops rather than errors. The server side stays impossible
+// in a browser (no clearnet egress to offer).
 package vpn
 
 import (
 	"errors"
+	"fmt"
 	"net"
 )
 
-var errNoTUNOnJS = errors.New("vpn: no TUN device on js/wasm — the VPN client cannot run in a browser")
+var errNoTUNOnJS = errors.New("vpn: no TUN device on js/wasm — the VPN server cannot run in a browser")
 
 // DefaultNetworkGateway has no routing table to read; the unspecified
 // address keeps NewClient constructible (mirrors the Android build).
@@ -30,19 +34,24 @@ func releaseClientSysPrivileges(_ int) error {
 	return nil
 }
 
-// SetupTUN always fails: nothing can provide a TUN in a browser.
-func (c *Client) SetupTUN(_, _, _ string, _ int) error {
-	return errNoTUNOnJS
+// SetupTUN configures the netstack "device" with the server-assigned tunnel
+// address — the js analogue of `ip addr add` + the default route.
+func (c *Client) SetupTUN(_, ipCIDR, _ string, _ int) error {
+	t, ok := c.tun.(*netstackTUN)
+	if !ok {
+		return fmt.Errorf("vpn: SetupTUN on js expects the netstack device, have %T", c.tun)
+	}
+	return t.configure(ipCIDR)
 }
 
-// ChangeRoute is unreachable without a TUN.
-func (c *Client) ChangeRoute(_, _ string) error { return errNoTUNOnJS }
+// ChangeRoute is a successful no-op: the netstack's only route is the tunnel.
+func (c *Client) ChangeRoute(_, _ string) error { return nil }
 
-// AddRoute is unreachable without a TUN.
-func (c *Client) AddRoute(_, _ string) error { return errNoTUNOnJS }
+// AddRoute is a successful no-op: the netstack's only route is the tunnel.
+func (c *Client) AddRoute(_, _ string) error { return nil }
 
-// DeleteRoute is unreachable without a TUN.
-func (c *Client) DeleteRoute(_, _ string) error { return errNoTUNOnJS }
+// DeleteRoute is a successful no-op: there is no system routing table to clean.
+func (c *Client) DeleteRoute(_, _ string) error { return nil }
 
 // RevertDNS is a no-op: no resolver was ever changed.
 func (c *Client) RevertDNS() {}
