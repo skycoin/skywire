@@ -377,7 +377,7 @@ func equalSeqs(a, b []uint32) bool {
 		return false
 	}
 	for i := range a {
-		if a[i] != b[i] {
+		if a[i] != b[i] { //nolint:gosec // i < len(a) == len(b), checked above
 			return false
 		}
 	}

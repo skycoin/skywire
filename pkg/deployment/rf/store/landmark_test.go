@@ -13,9 +13,9 @@ import (
 func pkOf(i int) cipher.PubKey {
 	var pk cipher.PubKey
 	pk[0] = 0x02
-	pk[1] = byte(i)
-	pk[2] = byte(i >> 8)
-	pk[3] = byte(i >> 16)
+	pk[1] = byte(i)       //nolint:gosec // deterministic test fixture; truncation is the point
+	pk[2] = byte(i >> 8)  //nolint:gosec // deterministic test fixture; truncation is the point
+	pk[3] = byte(i >> 16) //nolint:gosec // deterministic test fixture; truncation is the point
 	return pk
 }
 
@@ -90,19 +90,20 @@ func validateRoute(t *testing.T, g *Graph, r routing.Route, src, dst cipher.PubK
 // bfs/landmark route fetch through computeRouteWeighted (skips the memo, so the
 // flag toggle takes effect on each call; the lazily-built tables are
 // flag-independent). setLandmark flips the package gate around the call.
-func routesVia(t *testing.T, g *Graph, on bool, src, dst cipher.PubKey, maxLen, number int) ([]routing.Route, error) {
+// maxLen/number are fixed at the 8/3 every test here uses.
+func routesVia(t *testing.T, g *Graph, on bool, src, dst cipher.PubKey) ([]routing.Route, error) {
 	t.Helper()
 	prev := landmarkRoutingEnabled
 	landmarkRoutingEnabled = on
 	defer func() { landmarkRoutingEnabled = prev }()
-	return g.computeRouteWeighted(context.Background(), src, dst, 0, maxLen, number, true)
+	return g.computeRouteWeighted(context.Background(), src, dst, 0, 8, 3, true)
 }
 
 // TestLandmarkComposeValidAndShadowsBFS: every landmark route is valid, and
 // wherever the exhaustive BFS finds a route the landmark path also finds one.
 func TestLandmarkComposeValidAndShadowsBFS(t *testing.T) {
 	g, hubPK, leafPK := buildHubGraph(t, 8, 60, 3)
-	const maxLen, number = 8, 3
+	const maxLen = 8
 
 	pairs := [][2]cipher.PubKey{
 		{leafPK[0], leafPK[30]},
@@ -113,8 +114,8 @@ func TestLandmarkComposeValidAndShadowsBFS(t *testing.T) {
 	}
 	for _, p := range pairs {
 		src, dst := p[0], p[1]
-		bfsRoutes, bfsErr := routesVia(t, g, false, src, dst, maxLen, number)
-		lmRoutes, lmErr := routesVia(t, g, true, src, dst, maxLen, number)
+		bfsRoutes, bfsErr := routesVia(t, g, false, src, dst)
+		lmRoutes, lmErr := routesVia(t, g, true, src, dst)
 
 		if bfsErr == nil && len(bfsRoutes) > 0 {
 			if lmErr != nil || len(lmRoutes) == 0 {
@@ -131,7 +132,7 @@ func TestLandmarkComposeValidAndShadowsBFS(t *testing.T) {
 // in intermediates — distinct-hub composition gives the mux disjoint legs.
 func TestLandmarkDisjointLegs(t *testing.T) {
 	g, _, leafPK := buildHubGraph(t, 8, 60, 3)
-	routes, err := routesVia(t, g, true, leafPK[3], leafPK[40], 8, 3)
+	routes, err := routesVia(t, g, true, leafPK[3], leafPK[40])
 	if err != nil || len(routes) < 2 {
 		t.Skipf("need >=2 routes (got %d, err=%v)", len(routes), err)
 	}
@@ -161,11 +162,11 @@ func TestLandmarkDisjointLegs(t *testing.T) {
 func TestLandmarkClosePairParity(t *testing.T) {
 	g, hubPK, leafPK := buildHubGraph(t, 8, 60, 3)
 	src, dst := leafPK[0], hubPK[0] // leaf 0 attaches to hub 0 directly
-	bfs, err := routesVia(t, g, false, src, dst, 8, 3)
+	bfs, err := routesVia(t, g, false, src, dst)
 	if err != nil || len(bfs) == 0 {
 		t.Fatalf("BFS: %v", err)
 	}
-	lm, err := routesVia(t, g, true, src, dst, 8, 3)
+	lm, err := routesVia(t, g, true, src, dst)
 	if err != nil || len(lm) == 0 {
 		t.Fatalf("landmark: %v", err)
 	}
@@ -179,22 +180,22 @@ func TestLandmarkClosePairParity(t *testing.T) {
 // shallow-BFS-fast-fail + hub composition. Tables are pre-built (amortized once
 // per graph in production) so the benchmark measures the SERVE cost.
 func BenchmarkRouteFarPair_FullBFS(b *testing.B) {
-	g, src, dst := buildDenseGraph(b, 6, 6)
+	g, src, dst := buildDenseGraph(b, 6)
 	landmarkRoutingEnabled = false
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = g.computeRouteWeighted(context.Background(), src, dst, 0, 8, 3, true)
+		_, _ = g.computeRouteWeighted(context.Background(), src, dst, 0, 8, 3, true) //nolint:errcheck // bench loop measures serve cost only
 	}
 }
 
 func BenchmarkRouteFarPair_Landmark(b *testing.B) {
-	g, src, dst := buildDenseGraph(b, 6, 6)
+	g, src, dst := buildDenseGraph(b, 6)
 	landmarkRoutingEnabled = true
 	g.ensureLandmarks() // amortized once per graph; measure serve only
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = g.computeRouteWeighted(context.Background(), src, dst, 0, 8, 3, true)
+		_, _ = g.computeRouteWeighted(context.Background(), src, dst, 0, 8, 3, true) //nolint:errcheck // bench loop measures serve cost only
 	}
 }
