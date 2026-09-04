@@ -5,8 +5,10 @@ Windows over panes, in WebAssembly. A small desktop shell for the browser:
 [websh](https://github.com/0magnet/websh) supplies a shell, and a pane is
 anything that renders into a DOM element.
 
-**[Live demo](https://0magnet.github.io/desk/)** · TinyGo build ·
-[standard Go build](https://0magnet.github.io/desk/go/)
+**[Live demo](https://0magnet.github.io/desk/)** (TinyGo build) ·
+**[standard Go build](https://0magnet.github.io/desk/go/)**
+
+![desk in the browser](docs/desk-demo.png "a command in the shell opening a viewer window, both stacked in the taskbar")
 
 ```
 desk:~$ echo hello > note.txt && view note.txt    a command opens a window

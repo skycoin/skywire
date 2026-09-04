@@ -10,11 +10,6 @@
                background: #10131a; color: #d3d7cf; }
   body { display: flex; flex-direction: column;
          font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
-  header { flex: 0 0 auto; padding: 7px 12px; background: #171b24;
-           border-bottom: 1px solid #262b34; line-height: 1.6; }
-  header a { color: #729fcf; }
-  header b { color: #ad7fa8; }
-  header code { color: #8ae234; }
   /* Windows are positioned against this element, so it has to be the one that
      fills what is left rather than the body. */
   #desktop { flex: 1 1 auto; min-height: 0; position: relative;
@@ -25,14 +20,6 @@
 </style>
 </head>
 <body>
-<header>
-  <b>desk</b> — windows over panes ·
-  <a href="https://github.com/0magnet/desk">desk</a> =
-  <a href="https://github.com/0magnet/winbox-go">winbox-go</a> +
-  <a href="https://github.com/0magnet/websh">websh</a>
-  &nbsp;·&nbsp; try <code>echo hi &gt; note.txt &amp;&amp; view note.txt</code>
-  &nbsp;·&nbsp; standard Go build — <a href="../">TinyGo build</a>
-</header>
 <div id="desktop"><div id="boot">loading…</div></div>
 <script src="wasm_exec.js"></script>
 <script>

@@ -76,6 +76,10 @@ github.com/0magnet/cosmos-go v0.0.0-20260903205521-b833a4163dfd h1:3zl4nVNKDb+qG
 github.com/0magnet/cosmos-go v0.0.0-20260903205521-b833a4163dfd/go.mod h1:dp0q1zfKQmTaohUrPEPZbPExxBWLu9DyeaFxKUBnw6Y=
 github.com/0magnet/desk v0.0.0-20260904153426-e1ccc4f22bc6 h1:6EcuaKK/1OHm5mwUSP6cUVNihXiAlLlDKr2G/O1X0w8=
 github.com/0magnet/desk v0.0.0-20260904153426-e1ccc4f22bc6/go.mod h1:+cZlrl5Xi6wnQB9M7EgUOu/8oWs2Y9zIQ8FO0YjG6Wg=
+github.com/0magnet/desk v0.0.0-20260904185513-88675d048d28 h1:IpNH8cFtaga2VzdNAH2BkqNLUwV2rUHZNU+TvAp+B1M=
+github.com/0magnet/desk v0.0.0-20260904185513-88675d048d28/go.mod h1:+cZlrl5Xi6wnQB9M7EgUOu/8oWs2Y9zIQ8FO0YjG6Wg=
+github.com/0magnet/desk v0.0.0-20260904190029-7fd5c5344d76 h1:AzBYlJwONhrDmKUKFw9/dk3WeF10RZuOFysBwuEiKkM=
+github.com/0magnet/desk v0.0.0-20260904190029-7fd5c5344d76/go.mod h1:+cZlrl5Xi6wnQB9M7EgUOu/8oWs2Y9zIQ8FO0YjG6Wg=
 github.com/0magnet/desk/panes v0.0.0-20260904153426-e1ccc4f22bc6 h1:mTjsP4+o+5aX0yq1j55eSSNg6jIm9fkrAzC2e4Du3XY=
 github.com/0magnet/desk/panes v0.0.0-20260904153426-e1ccc4f22bc6/go.mod h1:z/ML2hEd//x/SznagiS5+g3NskrU49QYO2zpkO3Y3p8=
 github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586 h1:EnmIJdocImh8OEO56Xm4khW0uIJBTWC5WOgFNkhmc9Q=
