@@ -27,11 +27,15 @@ func main() {
 		fmt.Fprintln(os.Stderr, "dial:", err)
 		os.Exit(1)
 	}
-	defer c.Close(websocket.StatusNormalClosure, "")
-	b, _ := json.Marshal(map[string]interface{}{
+	defer c.Close(websocket.StatusNormalClosure, "") //nolint:errcheck
+	b, err := json.Marshal(map[string]interface{}{
 		"id": 1, "method": "Runtime.evaluate",
 		"params": map[string]interface{}{"expression": os.Args[2], "returnByValue": true, "awaitPromise": true},
 	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "marshal:", err)
+		os.Exit(1)
+	}
 	if err := c.Write(ctx, websocket.MessageText, b); err != nil {
 		fmt.Fprintln(os.Stderr, "write:", err)
 		os.Exit(1)

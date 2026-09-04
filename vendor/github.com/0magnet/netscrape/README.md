@@ -1,57 +1,70 @@
 # netscrape
 
-A browser inside the browser — the skywire virtual-browser engine and the
-mini-desktop it lives in.
+A web browser written in Go/wasm.
 
-Your browser speaks DNS, IP and TLS. The networks netscrape browses don't:
-[skywire](https://github.com/skycoin/skywire) sites are addressed by public
-key and fetched over dmsg or skynet routes, clearnet pages tunnel through a
-skysocks exit, and a wasm visor running *in the same tab* serves its own
-hypervisor UI on a virtual loopback no real socket ever touches. netscrape
-renders all of them anyway.
+The chrome — a tab strip, an address bar, back/forward/reload, history — is DOM
+built from Go with `syscall/js`. Each tab is a sandboxed `<iframe>`. A page is
+fetched over a **host-supplied transport**, transcoded (rendered into a
+sandboxed `srcdoc` with its stylesheets inlined as `<style>` and its images as
+`data:` URIs, via a parent/sandbox relay), and its links and form submits are
+relayed back to the chrome. The browser is Go; only the rendering (the iframe)
+and the network (the transport) are delegated.
 
-## Channels
-
-An address typed into its bar dispatches by shape:
-
-| address | channel |
-|---|---|
-| `http://<pk>.dmsg/…`, `dmsg://…`, `skynet://…` | fetched over the mesh by public key |
-| `https://example.com` | tunneled through a skysocks exit (policy: block / direct / pinned exit) |
-| `http://127.0.0.1:<port>` | the tab's virtual loopback ([bottle](https://github.com/0magnet/bottle) vnet) — an in-page listener shadows the port, an unclaimed one falls through to the real host loopback |
-| real-origin mode | hands the load to an isolated origin whose network layer is a service worker ([realorigin](https://github.com/0magnet/realorigin)) |
-
-Without real-origin mode, pages render through the transcoder: the document
-is fetched over the channel, same-site subresources are inlined (stylesheets
-as `<style>`, the rest as `data:` URIs), link clicks and the page's own
-`fetch` are relayed back through the same channel, and the result lives in a
-sandboxed iframe.
-
-## Desktop
-
-The engine ships the mini-desktop that hosts it: a panel, and windows —
-browser, terminals, log, CLI — built on the `WinBox` constructor from
-[winbox-go](https://github.com/0magnet/winbox-go).
+That transport is the seam. The same browser renders a plain clearnet page, or
+a [skywire](https://github.com/skycoin/skywire) site addressed by public key
+over the dmsg mesh — the host decides, by what it plugs into the fetch.
 
 ## Use
 
-The engine is dependency-injected. A hosting page supplies the fetchers (or
-provides `globalThis.skywireVisor`):
+The browser is a **library**. There are two ways to host it.
+
+### As a library — compiled into your own wasm (no separate runtime)
+
+A host that already ships a Go/wasm binary (skywire's visor page) imports
+netscrape and calls `Open` once. The browser compiles into that binary and
+shares its Go runtime — there is no second wasm module and no duplicated ~2 MB
+runtime. Set the transport on `globalThis.__netscrapeFetch` first.
 
 ```go
+//go:build js && wasm
 import "github.com/0magnet/netscrape"
 
-serveJS(w, netscrape.BrowseJS())
+netscrape.Open(mountElement) // returns immediately; handlers keep it alive
+```
+
+### As a standalone module — served or exec'd as its own wasm
+
+A host that would rather serve the browser as a separate fetch (or a shell that
+`run`s it) uses the `dist` subpackage, which carries the pre-built blob + loader:
+
+```go
+import "github.com/0magnet/netscrape/dist"
+
+serveBytes("/netscrape.wasm", "application/wasm", dist.BrowserWasm())
+serveJS(dist.LoaderJS()) // defines globalThis.Netscrape.open
 ```
 
 ```js
-var browser = createBrowser({
-  frame: iframe,
-  fetchDmsg: (pk, method, path, body) => ...,      // → {status, body, headers}
-  fetchClearnet: (exit, method, url, body) => ..., // → same shape
+Netscrape.open(document.getElementById("browser"), {
+  wasmURL:       "/netscrape.wasm",
+  fetchDmsg:     (pk, method, path, body) => ...,   // → {status, body, headers}
+  fetchClearnet: (url, method, body)      => ...,   // → same shape
+  // or fetch: (url) => Response   to replace the whole transport
 });
-browser.browseTo("home.dmsg", "/");
 ```
 
-Grown in [skycoin/skywire](https://github.com/skycoin/skywire), where it is
-the browser of both the wasm-visor page and the native hypervisor dashboard.
+Either way, mesh hosts (`*.dmsg`, `*.skysocks`, a 66-hex public key) route through
+`fetchDmsg`; everything else through `fetchClearnet`; absent either, a plain
+same-origin `fetch`. The browser reads `globalThis.__netscrapeMount` for its
+element and `globalThis.__netscrapeFetch(url)` for every request.
+
+`./build.sh` rebuilds `dist/browser.wasm.gz` (embedded by `dist`) from
+`cmd/browser`.
+
+## The JavaScript engine
+
+netscrape was a 3.6k-line JavaScript engine (`browse.js`) — a mesh browser with
+its own transcoder, a `SkywireBrowse` panel, address-bar channel dispatch, and
+window management, grown inside skywire. That version lives on the
+[`js` branch](https://github.com/0magnet/netscrape/tree/js). `main` is the Go
+rewrite; consumers move over as it reaches parity.

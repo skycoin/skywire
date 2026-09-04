@@ -29,7 +29,6 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/skynetca"
@@ -263,13 +262,20 @@ func (c *Client) streamRemainingChunks(conn net.Conn, total int64, fetch func(st
 	}
 
 	sem := make(chan struct{}, c.rs.concurrency)
-	var wg sync.WaitGroup
+	// stop halts the producer when the consumer loop returns early (rescue or
+	// write error) — otherwise it would block on sem forever once nobody drains
+	// slots. Closed on every exit path; in-flight fetches finish and exit on
+	// their own (their chunk results are simply never read).
+	stop := make(chan struct{})
+	defer close(stop)
 	go func() {
 		for _, ch := range chunks {
-			sem <- struct{}{} // gate: at most `concurrency` chunks outstanding
-			wg.Add(1)
+			select {
+			case sem <- struct{}{}: // gate: at most `concurrency` chunks outstanding
+			case <-stop:
+				return
+			}
 			go func(ch *chunk) {
-				defer wg.Done()
 				ch.buf, ch.err = fetch(ch.start, ch.end)
 				close(ch.done)
 			}(ch)
@@ -293,8 +299,6 @@ func (c *Client) streamRemainingChunks(conn net.Conn, total int64, fetch func(st
 		ch.buf = nil
 		<-sem // release one slot
 	}
-	// Drain any still-running fetches so their slots free and goroutines exit.
-	go func() { wg.Wait() }()
 }
 
 // rsRescueAttempts is how many consecutive ZERO-PROGRESS rescue attempts end the

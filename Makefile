@@ -468,7 +468,6 @@ tinygo-wasm-visor: ## Build the FULL browser WASM visor (dmsg+transport+router+a
 	$(TINYGO) build -target wasm -no-debug -opt=z -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/wasm_exec.js
 	gzip -dc ./vendor/github.com/0magnet/winbox-go/dist/winbox.wasm.gz > ./build/wasm-visor/winbox.wasm
-	cp ./vendor/github.com/0magnet/netscrape/browse.js ./build/wasm-visor/
 	cp ./pkg/wasmhv/hv-boot.js ./build/wasm-visor/
 	cp ./pkg/wasmhv/worker.js ./build/wasm-visor/
 	@echo "built ./build/wasm-visor (TinyGo fork) — embed it with 'make embed-wasm-visor-tinygo', then serve the real UI: './skywire cli hv serve --variant tinygo'"
@@ -486,7 +485,6 @@ wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into b
 	GOOS=js GOARCH=wasm go build -buildvcs=true -ldflags="-s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
 	gzip -dc ./vendor/github.com/0magnet/winbox-go/dist/winbox.wasm.gz > ./build/wasm-visor-go/winbox.wasm
-	cp ./vendor/github.com/0magnet/netscrape/browse.js ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/hv-boot.js ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/worker.js ./build/wasm-visor-go/
 	@echo "built ./build/wasm-visor-go (standard Go js/wasm) — serve dev: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor-go'"

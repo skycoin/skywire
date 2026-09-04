@@ -1,10 +1,11 @@
 // Package browseui pkg/wasmhv/browseui/embed.go c3-vis-wasm
 // Assembles the mini-desktop bundle from its promoted homes — the OS layer
-// (github.com/0magnet/bottle: jsfs + vnet), the window manager
-// (github.com/0magnet/winbox-go/dist: module + loader glue), and the browser
-// engine (github.com/0magnet/netscrape: browse.js) — plus the two pieces that
-// stay skywire-specific: seed-skywire.js (the package-install filesystem
-// layout) and skywire-exec.js (per-command execution of the skywire CLI wasm).
+// (github.com/0magnet/bottle: jsfs + vnet) and the window manager
+// (github.com/0magnet/winbox-go/dist: module + loader glue) — plus the
+// skywire-specific pieces: seed-skywire.js (the package-install filesystem
+// layout), skywire-exec.js (per-command execution of the skywire CLI wasm),
+// and gobrowser-loader.js (the launcher for the netscrape Go browser, which is
+// compiled into the wasm-visor binary as globalThis.skywireBrowser).
 // A dependency-free-in-skywire leaf package, so BOTH the wasm-visor
 // (pkg/wasmhv) and the native hypervisor UI (pkg/visor) can use it without an
 // import cycle (pkg/wasmhv's gob-mirror test imports pkg/visor).
@@ -19,7 +20,6 @@ import (
 	_ "embed"
 
 	"github.com/0magnet/bottle"
-	"github.com/0magnet/netscrape"
 	winboxdist "github.com/0magnet/winbox-go/dist"
 )
 
@@ -37,16 +37,13 @@ var seedSkywireJS []byte
 var skywireExecJS []byte
 
 // goBrowserLoaderJS defines globalThis.SkywireGoBrowser.open() — the launcher
-// for the experimental Go/wasm browser (github.com/0magnet/shipyard cmd/browser).
-// Concatenated into the bundle so the launcher is present on every desk page;
-// the module itself is a separate fetch, served at /gobrowser.wasm from
-// GoBrowserWasm() below.
+// for the netscrape Go/wasm browser (github.com/0magnet/netscrape). The browser
+// is NOT a separate module any more: it is compiled into the wasm-visor binary
+// and exposed as globalThis.skywireBrowser.open (cmd/wasm-visor/browser_js.go),
+// so this launcher just opens a window and calls that — no second Go runtime.
 //
 //go:embed gobrowser-loader.js
 var goBrowserLoaderJS []byte
-
-//go:embed gobrowser.wasm.gz
-var goBrowserWasmGz []byte
 
 // deskBootJS is the shared desk boot (skywireDeskBoot(opts)) behind both
 // desk-first pages: the docs playground and the converged visor page. Served
@@ -77,7 +74,6 @@ var BrowseJS = func() []byte {
 		bottle.VNetJS(),
 		winboxdist.ExecJS(),
 		winboxdist.LoaderJS(),
-		netscrape.BrowseJS(),
 		skywireExecJS,
 		goBrowserLoaderJS,
 	}
@@ -107,32 +103,6 @@ func VNetSWJS() []byte { return bottle.VNetSWJS() }
 // page (the single-file generator base64s exactly these bytes) rather than
 // serving it.
 func WinBoxWasmGz() []byte { return winboxdist.WasmGz() }
-
-// GoBrowserWasmGz is the compressed experimental Go browser module.
-func GoBrowserWasmGz() []byte { return goBrowserWasmGz }
-
-var (
-	goBrowserOnce sync.Once
-	goBrowserWasm []byte
-)
-
-// GoBrowserWasm is the experimental Go browser module as served at
-// /gobrowser.wasm. Inflated once on first use and kept.
-func GoBrowserWasm() []byte {
-	goBrowserOnce.Do(func() {
-		zr, err := gzip.NewReader(bytes.NewReader(goBrowserWasmGz))
-		if err != nil {
-			return
-		}
-		defer zr.Close() //nolint:errcheck
-		b, err := io.ReadAll(zr)
-		if err != nil {
-			return
-		}
-		goBrowserWasm = b
-	})
-	return goBrowserWasm
-}
 
 var (
 	winBoxOnce sync.Once
