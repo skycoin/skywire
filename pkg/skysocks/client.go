@@ -43,6 +43,20 @@ import (
 // speeds uploads.
 const muxStreamWindowBytes = 16 * 1024 * 1024
 
+// muxConnWriteTimeout replaces yamux's 10s ConnectionWriteTimeout "safety
+// valve" on both the client and server sessions. The valve exists to bound a
+// write into a silently dead conn — but on a skysocks tunnel liveness is
+// already owned by the client's keepalive loop (sessionHardDeadWindow, 45s of
+// total silence), and a genuinely dead session unblocks pending writes with
+// ErrSessionShutdown the moment it is retired. At 10s the valve fired on
+// HEALTHY sessions: a saturated upload backs the session send queue up behind
+// the mesh's actual drain rate, a stream Write blocks past 10s, and the
+// splice tears the connection down — measured live as a reproducible RST ~20s
+// into every bulk upload (and the server side does the same to saturated
+// downloads). Sized above sessionHardDeadWindow so the keepalive verdict,
+// not the valve, decides death.
+const muxConnWriteTimeout = 60 * time.Second
+
 // Client implement multiplexing proxy client using yamux.
 //
 // The client holds N independent yamux sessions ("tunnels"), each over its own
@@ -197,6 +211,7 @@ func newYamuxSession(conn net.Conn) (*yamux.Session, *atomic.Int64, error) {
 	sessionCfg := yamux.DefaultConfig()
 	sessionCfg.EnableKeepAlive = false
 	sessionCfg.MaxStreamWindowSize = muxStreamWindowBytes
+	sessionCfg.ConnectionWriteTimeout = muxConnWriteTimeout
 	session, err := yamux.Client(&recvStampConn{Conn: conn, stamp: stamp}, sessionCfg)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating client: yamux: %w", err)
