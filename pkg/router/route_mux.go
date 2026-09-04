@@ -165,6 +165,15 @@ type routeMux struct {
 	tlpProbeCount   int32
 	rackFactorMilli int64
 	lastAckedContig uint32 // atomic: highest SACK lastContiguous seen (ack-progress edge for TLP reset)
+	// ackDelayMilli is an EWMA (×1000) of the measured send→ack delay of
+	// never-retransmitted frames (fed by retxBuf.onAckDelay). Under load it is
+	// the queue, not the wire, that dominates feedback delay: a saturated leg
+	// holds seconds of in-flight data while the transport's idle-ping RTT still
+	// reads ~25ms, and a RACK threshold built only on the latter declares every
+	// queued frame lost (measured: 899 spurious retransmits on a ~1250-frame
+	// upload). rackThreshold takes the max of both signals. Atomic; 0 = no
+	// sample yet.
+	ackDelayMilli int64
 
 	// lastSACKNano rate-limits receiver-side SACK feedback. Cross-leg
 	// reordering from latency skew makes nearly every packet arrive
@@ -367,6 +376,10 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 		// widens it and clean acks decay it back (see rack_tlp.go).
 		rackFactorMilli: int64(rackReorderFactor * 1000),
 	}
+	// Feed measured send→ack delays into the RACK basis (see ackDelayMs /
+	// rackThreshold): under load the queue, not the wire, dominates feedback
+	// delay, and only this sample sees it.
+	m.retxBuf.onAckDelay = m.recordAckDelay
 	// Default every mux to ECF (Earliest Completion First). It only spills a
 	// frame onto a slower leg once the fastest leg is saturated (a full BDP in
 	// flight), so it never over-assigns a slow leg and stalls the no-skip reorder
@@ -1246,6 +1259,13 @@ func (m *routeMux) rackThreshold() time.Duration {
 	if maxRtt <= 0 {
 		return rackDefaultNoRTT
 	}
+	// The reordering/feedback window is the LARGER of the idle-ping RTT and the
+	// measured send→ack delay (ackDelayMs): a saturated leg's queue delays acks
+	// by seconds while its ping RTT stays at wire level, and presuming loss
+	// inside the real feedback delay is spurious by construction.
+	if ad := m.ackDelayMs(); ad > maxRtt {
+		maxRtt = ad
+	}
 	th := time.Duration(maxRtt*m.rackFactor()) * time.Millisecond
 	if th < rackFloor {
 		th = rackFloor
@@ -1267,6 +1287,33 @@ func (m *routeMux) rackThreshold() time.Duration {
 		th = ceil
 	}
 	return th
+}
+
+// recordAckDelay folds one measured send→ack delay sample into the ackDelay
+// EWMA. Asymmetric on purpose: a sample ABOVE the running value takes it over
+// half-way (α=0.5) so the threshold tracks a queue building in a few SACKs
+// (each spurious retransmit before it catches up is pure waste), while a
+// sample below decays it gently (α=0.125) so one lucky fast ack doesn't
+// re-arm eager retransmission while the queue is still draining.
+func (m *routeMux) recordAckDelay(d time.Duration) {
+	ms := float64(d) / float64(time.Millisecond)
+	for {
+		cur := atomic.LoadInt64(&m.ackDelayMilli)
+		curMs := float64(cur) / 1000
+		alpha := 0.125
+		if ms > curMs {
+			alpha = 0.5
+		}
+		next := int64((curMs + alpha*(ms-curMs)) * 1000)
+		if atomic.CompareAndSwapInt64(&m.ackDelayMilli, cur, next) {
+			return
+		}
+	}
+}
+
+// ackDelayMs returns the EWMA send→ack delay in milliseconds (0 = no sample).
+func (m *routeMux) ackDelayMs() float64 {
+	return float64(atomic.LoadInt64(&m.ackDelayMilli)) / 1000
 }
 
 // maxActiveLegRTTms returns the slowest active (non-standby) leg's EWMA RTT in

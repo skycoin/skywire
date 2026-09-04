@@ -76,10 +76,11 @@ func rsFakeExit(t *testing.T, conn net.Conn, backendAddr string) {
 	}
 }
 
-// socks5Get drives a SOCKS5 CONNECT to host:80 + a plain GET through proxyAddr and
+// socks5Get drives a SOCKS5 CONNECT to example.com:80 + a plain GET through proxyAddr and
 // returns the parsed response with its body fully read.
-func socks5Get(t *testing.T, proxyAddr, host, path string) *http.Response {
+func socks5Get(t *testing.T, proxyAddr, path string) *http.Response {
 	t.Helper()
+	const host = "example.com"
 	c, err := net.Dial("tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("dial proxy: %v", err)
@@ -174,7 +175,7 @@ func TestRangeSplitByteIdentity(t *testing.T) {
 	// 1 MiB chunks over 20 MiB → 20 chunks across 4 concurrent streams.
 	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 4, 1<<20)
 
-	resp := socks5Get(t, proxy, "example.com", "/blob.bin")
+	resp := socks5Get(t, proxy, "/blob.bin")
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -208,7 +209,7 @@ func TestRangeSplitNonRangeServer(t *testing.T) {
 	defer backend.Close()
 
 	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 4, 1<<20)
-	resp := socks5Get(t, proxy, "example.com", "/nr.bin")
+	resp := socks5Get(t, proxy, "/nr.bin")
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -233,7 +234,7 @@ func TestRangeSplitSmallFile(t *testing.T) {
 	defer backend.Close()
 
 	proxy := newRSTestClient(t, backend.Listener.Addr().String(), 4, 1<<20)
-	resp := socks5Get(t, proxy, "example.com", "/s.bin")
+	resp := socks5Get(t, proxy, "/s.bin")
 	defer resp.Body.Close() //nolint:errcheck
 	got, err := io.ReadAll(resp.Body)
 	if err != nil {

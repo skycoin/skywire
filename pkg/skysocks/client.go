@@ -43,6 +43,20 @@ import (
 // speeds uploads.
 const muxStreamWindowBytes = 16 * 1024 * 1024
 
+// muxConnWriteTimeout replaces yamux's 10s ConnectionWriteTimeout "safety
+// valve" on both the client and server sessions. The valve exists to bound a
+// write into a silently dead conn — but on a skysocks tunnel liveness is
+// already owned by the client's keepalive loop (sessionHardDeadWindow, 45s of
+// total silence), and a genuinely dead session unblocks pending writes with
+// ErrSessionShutdown the moment it is retired. At 10s the valve fired on
+// HEALTHY sessions: a saturated upload backs the session send queue up behind
+// the mesh's actual drain rate, a stream Write blocks past 10s, and the
+// splice tears the connection down — measured live as a reproducible RST ~20s
+// into every bulk upload (and the server side does the same to saturated
+// downloads). Sized above sessionHardDeadWindow so the keepalive verdict,
+// not the valve, decides death.
+const muxConnWriteTimeout = 60 * time.Second
+
 // Client implement multiplexing proxy client using yamux.
 //
 // The client holds N independent yamux sessions ("tunnels"), each over its own
@@ -71,8 +85,8 @@ type Client struct {
 	// Guarded by sessionsMu; entries are deleted where lastPong's are.
 	recvStamp map[*yamux.Session]*atomic.Int64
 	listener  net.Listener
-	once       sync.Once
-	closeC     chan struct{}
+	once      sync.Once
+	closeC    chan struct{}
 
 	// streams tracks the currently open tunneled streams so the status page can
 	// expand the "N open stream(s)" count into per-stream rows (id + CONNECT
@@ -172,9 +186,16 @@ func (c *countingConn) Write(p []byte) (int, error) {
 var errAllTunnelsDown = errors.New("all tunnels to the exit are down")
 
 // recvStampConn wraps a net.Conn to record the wall time of every successful
-// read. The keepalive loop reads the stamp as proof the remote is still
-// sending, so a tunnel mid-download is never retired just because its pong is
-// queued behind the download's own frames (both ride the same conn).
+// read AND write. The keepalive loop reads the stamp as proof the tunnel is
+// still moving bytes, so it is never retired mid-transfer just because its
+// ping/pong is queued behind the transfer's own frames (all ride the same
+// conn). Reads cover a download (the remote is sending); writes cover an
+// UPLOAD — there the tunnel receives nothing and the ping cannot get through
+// the saturated send queue, so send progress is the only liveness evidence
+// (measured live: a healthy 20MB upload retired at the hard-dead window ~112s
+// in). A write that merely lands in a dead conn's buffers stamps briefly, but
+// those buffers fill within seconds under load and the stamps stop — the
+// hard-dead window still ages out a genuinely dead tunnel.
 type recvStampConn struct {
 	net.Conn
 	stamp *atomic.Int64
@@ -182,6 +203,14 @@ type recvStampConn struct {
 
 func (c *recvStampConn) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
+	if n > 0 {
+		c.stamp.Store(time.Now().UnixNano())
+	}
+	return n, err
+}
+
+func (c *recvStampConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
 	if n > 0 {
 		c.stamp.Store(time.Now().UnixNano())
 	}
@@ -197,6 +226,7 @@ func newYamuxSession(conn net.Conn) (*yamux.Session, *atomic.Int64, error) {
 	sessionCfg := yamux.DefaultConfig()
 	sessionCfg.EnableKeepAlive = false
 	sessionCfg.MaxStreamWindowSize = muxStreamWindowBytes
+	sessionCfg.ConnectionWriteTimeout = muxConnWriteTimeout
 	session, err := yamux.Client(&recvStampConn{Conn: conn, stamp: stamp}, sessionCfg)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating client: yamux: %w", err)
@@ -784,7 +814,7 @@ func (c *Client) sessionKeepAliveLoop() {
 				}
 				if now.Sub(lastAlive) >= sessionHardDeadWindow {
 					if c.appCl != nil {
-						c.appCl.Log().Warnf("No pong and no inbound bytes for %v (> hard-dead window); tunnel gone, retiring it", now.Sub(lastAlive).Truncate(time.Second))
+						c.appCl.Log().Warnf("No pong and no traffic either way for %v (> hard-dead window); tunnel gone, retiring it", now.Sub(lastAlive).Truncate(time.Second))
 					}
 					_ = s.Close() //nolint:errcheck
 					delete(lastPong, s)

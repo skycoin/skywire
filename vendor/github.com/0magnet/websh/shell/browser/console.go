@@ -17,12 +17,16 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall/js"
 	"time"
 
 	"github.com/0magnet/sh/v3/interp"
 	"github.com/0magnet/websh/shell"
 )
+
+// captureBusy breaks console-capture recursion; see the wrapper below.
+var captureBusy atomic.Bool
 
 // logEntry is one captured console line.
 type logEntry struct {
@@ -90,6 +94,11 @@ func joinArgs(args []js.Value) string {
 // installConsoleCapture wraps console.* and the window error events once.
 func installConsoleCapture() {
 	installOnce.Do(func() {
+		// Escape hatch while debugging pages that die inside console writes:
+		// with __webshNoCapture set, the console is left untouched.
+		if js.Global().Get("__webshNoCapture").Truthy() {
+			return
+		}
 		console := js.Global().Get("console")
 		if !console.Truthy() {
 			return
@@ -118,6 +127,23 @@ func installConsoleCapture() {
 			lvl := level
 			orig := console.Get(lvl)
 			fn := js.FuncOf(func(_ js.Value, args []js.Value) any {
+				// Reentrancy guard. A console line written while this
+				// wrapper is already on the stack — Go code (even the
+				// runtime) printing to stderr from inside the capture path,
+				// with the host page's own console wrappers in the chain —
+				// would otherwise recurse until the stack dies. Pass such
+				// lines straight through to the original console instead.
+				if !captureBusy.CompareAndSwap(false, true) {
+					if orig.Type() == js.TypeFunction {
+						ifaces := make([]any, len(args))
+						for i, a := range args {
+							ifaces[i] = a
+						}
+						orig.Invoke(ifaces...)
+					}
+					return nil
+				}
+				defer captureBusy.Store(false)
 				appendLog(logEntry{at: time.Now(), level: lvl, text: joinArgs(args)})
 				if orig.Type() == js.TypeFunction {
 					ifaces := make([]any, len(args))

@@ -346,7 +346,7 @@ func (g *Graph) pooledBFS(ctx context.Context, src, dst cipher.PubKey, minLen, m
 		latency float64
 	}
 	pool := make([]scored, 0, poolCap)
-	_ = g.StreamRoutesWithCap(ctx, src, dst, minLen, maxLen, queueCap, func(r routing.Route) bool {
+	_ = g.StreamRoutesWithCap(ctx, src, dst, minLen, maxLen, queueCap, func(r routing.Route) bool { //nolint:errcheck // best-effort fill; a short pool just yields fewer candidates
 		pool = append(pool, scored{route: r, latency: g.routeLatency(r)})
 		return len(pool) < poolCap
 	})

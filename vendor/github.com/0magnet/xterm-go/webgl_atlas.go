@@ -21,7 +21,15 @@ import (
 const atlasDebug = false
 
 const (
-	atlasPageSize         = 2048
+	// atlasPageSize is where a page starts. A terminal showing text needs a
+	// fraction of it, so it is not worth allocating more up front; a page
+	// that keeps overflowing grows itself, up to atlasPageSizeMax.
+	atlasPageSize    = 2048
+	atlasPageSizeMax = 4096
+	// atlasGrowAfter is how many overflows in a row justify a bigger page.
+	// One is ordinary -- the screen changed. Repeated ones mean the working
+	// set does not fit, and every one of them costs a full re-render.
+	atlasGrowAfter        = 2
 	tmpCanvasGlyphPadding = 2
 	dimOpacity            = 0.5
 	// The amount of pixel padding allowed in each row before a new row
@@ -42,6 +50,10 @@ type atlasConfig struct {
 	// mirrorGlyph reports whether a glyph is drawn flipped left-to-right.
 	// See Options.MirrorGlyph.
 	mirrorGlyph func(string) bool
+	// pageSize seeds the atlas page. A rebuilt atlas keeps whatever size
+	// the last one had grown to: the font or the palette changing says
+	// nothing about how many distinct glyphs the content needs.
+	pageSize int
 }
 
 type rasterizedGlyph struct {
@@ -68,6 +80,11 @@ type atlasRow struct {
 
 type textureAtlas struct {
 	cfg atlasConfig
+
+	// pageSize is the current page dimension, grown on repeated overflow.
+	pageSize int
+	// overflows counts consecutive fills since the last growth.
+	overflows int
 
 	canvas js.Value // the atlas page
 	ctx    js.Value
@@ -99,10 +116,17 @@ func newTextureAtlas(cfg atlasConfig) *textureAtlas {
 		cfg:      cfg,
 		cache:    map[glyphKey]*rasterizedGlyph{},
 		workAttr: vt.NewAttributeData(),
+		pageSize: cfg.pageSize,
+	}
+	if a.pageSize < atlasPageSize {
+		a.pageSize = atlasPageSize
+	}
+	if a.pageSize > atlasPageSizeMax {
+		a.pageSize = atlasPageSizeMax
 	}
 	a.canvas = document.Call("createElement", "canvas")
-	a.canvas.Set("width", atlasPageSize)
-	a.canvas.Set("height", atlasPageSize)
+	a.canvas.Set("width", a.pageSize)
+	a.canvas.Set("height", a.pageSize)
 	a.ctx = a.canvas.Call("getContext", "2d", map[string]any{"alpha": true})
 
 	a.tmpCanvas = document.Call("createElement", "canvas")
@@ -125,11 +149,42 @@ func (a *textureAtlas) beginFrame() bool {
 	return r
 }
 
+// growPage doubles the atlas page once a run of overflows shows the working
+// set does not fit. Each overflow throws the whole cache away and forces
+// every cell on screen to be rasterised again, so a workload that keeps
+// filling the page pays that repeatedly — a full-screen truecolor image
+// drawn in half-blocks hands the cache a distinct glyph per color pair and
+// can turn over the entire page every frame.
+//
+// Growing is deliberately reluctant: a page starts small because ordinary
+// terminal text needs a fraction of it, and one overflow only means the
+// screen changed. Resizing the canvas clears it, and the renderer re-uploads
+// the texture from the canvas itself, so it picks the new size up on the
+// next version bump with nothing else to tell.
+func (a *textureAtlas) growPage() {
+	a.overflows++
+	if a.overflows < atlasGrowAfter || a.pageSize >= atlasPageSizeMax {
+		return
+	}
+	a.pageSize *= 2
+	a.overflows = 0
+	a.canvas.Set("width", a.pageSize)
+	a.canvas.Set("height", a.pageSize)
+	// Setting either dimension resets the canvas, so everything placed on
+	// the old page is gone. Do the whole reset here rather than leaving it
+	// to clearTexture: that returns early when the rows are already empty,
+	// which is exactly the state this leaves behind, and the version bump
+	// is what tells the renderer to re-upload at the new size.
+	a.currentRow = atlasRow{}
+	a.fixedRows = nil
+	a.cache = map[glyphKey]*rasterizedGlyph{}
+	a.version++
+}
 func (a *textureAtlas) clearTexture() {
 	if a.currentRow.x == 0 && a.currentRow.y == 0 && len(a.fixedRows) == 0 {
 		return
 	}
-	a.ctx.Call("clearRect", 0, 0, atlasPageSize, atlasPageSize)
+	a.ctx.Call("clearRect", 0, 0, a.pageSize, a.pageSize)
 	a.currentRow = atlasRow{}
 	a.fixedRows = nil
 	a.cache = map[glyphKey]*rasterizedGlyph{}
@@ -234,8 +289,8 @@ func (a *textureAtlas) drawToCache(chars string, code uint32, bg, fg, ext uint32
 		charCount = 2
 	}
 	allowedWidth := cfg.deviceCellWidth*charCount + tmpCanvasGlyphPadding*2
-	if allowedWidth > atlasPageSize {
-		allowedWidth = atlasPageSize
+	if allowedWidth > a.pageSize {
+		allowedWidth = a.pageSize
 	}
 	if a.tmpCanvas.Get("width").Int() < allowedWidth {
 		a.tmpCanvas.Set("width", allowedWidth)
@@ -529,13 +584,16 @@ func (a *textureAtlas) drawToCache(chars string, code uint32, bg, fg, ext uint32
 	g := a.findGlyphBoundingBox(pix, tmpW, allowedWidth, restrictedPowerlineGlyph, customGlyph, padding)
 
 	// find a row in the (single) page
-	if int(g.sizeX) > atlasPageSize {
-		g.sizeX = atlasPageSize
+	if int(g.sizeX) > a.pageSize {
+		g.sizeX = float64(a.pageSize)
 	}
 	row := a.findRow(int(g.sizeX), int(g.sizeY))
 	if row == nil {
 		// atlas full: clear everything and start over; the caller's
-		// cache entry is still recorded, so re-add after clearing
+		// cache entry is still recorded, so re-add after clearing.
+		// Every clear also re-renders the whole screen, so a page that
+		// keeps filling is grown first -- see growPage.
+		a.growPage()
 		a.clearTexture()
 		a.requestClearModel = true
 		row = a.findRow(int(g.sizeX), int(g.sizeY))
@@ -546,10 +604,11 @@ func (a *textureAtlas) drawToCache(chars string, code uint32, bg, fg, ext uint32
 
 	g.texPosX = float64(row.x)
 	g.texPosY = float64(row.y)
-	g.texClipX = float64(row.x) / atlasPageSize
-	g.texClipY = float64(row.y) / atlasPageSize
-	g.sizeClipX = g.sizeX / atlasPageSize
-	g.sizeClipY = g.sizeY / atlasPageSize
+	page := float64(a.pageSize)
+	g.texClipX = float64(row.x) / page
+	g.texClipY = float64(row.y) / page
+	g.sizeClipX = g.sizeX / page
+	g.sizeClipY = g.sizeY / page
 
 	if atlasDebug {
 		entry := map[string]any{
@@ -584,21 +643,21 @@ func (a *textureAtlas) drawToCache(chars string, code uint32, bg, fg, ext uint32
 func (a *textureAtlas) findRow(w, h int) *atlasRow {
 	// try fixed rows first (filling in short-glyph rows)
 	for _, r := range a.fixedRows {
-		if h <= r.height && r.height <= h+rowPixelThreshold && r.x+w <= atlasPageSize {
+		if h <= r.height && r.height <= h+rowPixelThreshold && r.x+w <= a.pageSize {
 			return r
 		}
 	}
 	// use the current row if the height fits reasonably
 	row := &a.currentRow
 	if row.height == 0 || (h <= row.height+rowPixelThreshold && row.height <= h+rowPixelThreshold) || row.height >= h {
-		if row.x+w <= atlasPageSize {
-			if row.y+maxIntv(row.height, h) <= atlasPageSize {
+		if row.x+w <= a.pageSize {
+			if row.y+maxIntv(row.height, h) <= a.pageSize {
 				return row
 			}
 			return nil
 		}
 		// wrap to the next row
-		if row.y+row.height+h <= atlasPageSize {
+		if row.y+row.height+h <= a.pageSize {
 			a.fixedRows = append(a.fixedRows, &atlasRow{x: row.x, y: row.y, height: row.height})
 			row.x = 0
 			row.y += row.height
@@ -608,7 +667,7 @@ func (a *textureAtlas) findRow(w, h int) *atlasRow {
 		return nil
 	}
 	// height mismatch: fix the current row and open a new one
-	if row.y+row.height+h <= atlasPageSize {
+	if row.y+row.height+h <= a.pageSize {
 		a.fixedRows = append(a.fixedRows, &atlasRow{x: row.x, y: row.y, height: row.height})
 		row.x = 0
 		row.y += row.height

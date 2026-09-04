@@ -209,6 +209,16 @@ type retxBuffer struct {
 	mu       sync.Mutex
 	entries  map[uint32]*retxEntry
 	capacity int
+
+	// onAckDelay, when set, receives one send→ack delay sample per ProcessSACK
+	// call: the LARGEST delay among the entries this SACK acknowledged that were
+	// never retransmitted (Karn's rule — a retransmitted entry's delay is
+	// ambiguous). This is the ground truth the RACK threshold needs under load:
+	// the transport's idle-ping RTT says ~25ms while a saturated leg's real
+	// feedback delay is seconds of queue, and a threshold built on the former
+	// declares every queued frame lost (measured live: 899 retransmits across a
+	// ~1250-frame upload). Called with rb.mu held — keep it lock-free/cheap.
+	onAckDelay func(time.Duration)
 }
 
 func newRetxBuffer(capacity int) *retxBuffer {
@@ -305,9 +315,23 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
+	// Ack-delay sampling (see onAckDelay): the largest send→ack delay among the
+	// never-retransmitted entries this SACK purges.
+	var ackDelayMax time.Duration
+	sampleNow := time.Now()
+	sample := func(e *retxEntry) {
+		if e.retxCount != 0 {
+			return
+		}
+		if d := sampleNow.Sub(e.sentAt); d > ackDelayMax {
+			ackDelayMax = d
+		}
+	}
+
 	// Purge all entries up to and including lastContiguous.
-	for seq := range rb.entries {
+	for seq, e := range rb.entries {
 		if seq <= lastContiguous {
+			sample(e)
 			delete(rb.entries, seq)
 		}
 	}
@@ -333,7 +357,10 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 		for i := uint32(0); i < 64; i++ {
 			checkSeq := base + i
 			if word&(1<<i) != 0 {
-				delete(rb.entries, checkSeq)
+				if e, ok := rb.entries[checkSeq]; ok {
+					sample(e)
+					delete(rb.entries, checkSeq)
+				}
 			} else if e, ok := rb.entries[checkSeq]; ok {
 				ref := e.sentAt
 				if e.lastTxAt.After(ref) {
@@ -352,6 +379,10 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 				}
 			}
 		}
+	}
+
+	if ackDelayMax > 0 && rb.onAckDelay != nil {
+		rb.onAckDelay(ackDelayMax)
 	}
 
 	return retransmit
@@ -402,6 +433,23 @@ func (rb *retxBuffer) SentAt(seq uint32) (time.Time, bool) {
 		return entry.sentAt, true
 	}
 	return time.Time{}, false
+}
+
+// SentInfo returns when seq was originally sent AND which transport it last
+// rode (uuid.Nil = unknown), with ok=false for a seq no longer held. The
+// proactive HoL path needs the transport identity to judge overdueness against
+// the RTT of the leg the seq is actually in flight on: judged against the
+// FASTEST leg's RTT instead, every frame striped onto a slower leg looks
+// "stalled" one fast-RTT in and gets a spurious duplicate (measured live:
+// 30MB of duplicates against 11MB of payload on the slow leg of a 2-leg mux).
+func (rb *retxBuffer) SentInfo(seq uint32) (time.Time, uuid.UUID, bool) {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+
+	if entry, ok := rb.entries[seq]; ok {
+		return entry.sentAt, entry.tpID, true
+	}
+	return time.Time{}, uuid.Nil, false
 }
 
 // Len returns current buffer occupancy.

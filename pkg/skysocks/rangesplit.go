@@ -140,7 +140,7 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	// 3. chunk0 doubles as the range probe: original request + Range: bytes=0-(N-1).
 	//    Only a Range request header is added; a non-range origin ignores it and
 	//    returns its normal 200, so that fallback stays byte-identical.
-	if _, err := stream.Write(injectRange(reqHead, 0, c.rs.chunkSize-1)); err != nil {
+	if _, err := stream.Write(injectRange(reqHead, c.rs.chunkSize-1)); err != nil {
 		conn.Close()   //nolint:errcheck,gosec
 		stream.Close() //nolint:errcheck,gosec
 		return host, nil, true
@@ -413,6 +413,13 @@ func (c *Client) streamTailOnce(w net.Conn, req *http.Request, host, validator s
 // bytes written (the caller's resume offset).
 func copyWithIdleTimeout(dst io.Writer, body io.Reader, under net.Conn, limit int64, idle time.Duration) (int64, error) {
 	var written int64
+	// zeroReads guards the io.Reader contract's discouraged-but-legal (0, nil)
+	// return: a reader stuck returning it would otherwise turn this loop into a
+	// core-pegging spin (no bytes, no error, no block). A handful in a row is
+	// tolerated; a streak means the reader is broken — fail the attempt and let
+	// the caller's resume/retry logic decide.
+	zeroReads := 0
+	const maxZeroReads = 64
 	buf := make([]byte, 32<<10)
 	for written < limit {
 		_ = under.SetReadDeadline(time.Now().Add(idle)) //nolint:errcheck
@@ -422,10 +429,15 @@ func copyWithIdleTimeout(dst io.Writer, body io.Reader, under net.Conn, limit in
 		}
 		n, err := body.Read(buf[:room])
 		if n > 0 {
+			zeroReads = 0
 			if _, werr := dst.Write(buf[:n]); werr != nil {
 				return written, werr
 			}
 			written += int64(n)
+		} else if err == nil {
+			if zeroReads++; zeroReads >= maxZeroReads {
+				return written, fmt.Errorf("reader stuck: %d consecutive zero-byte reads with no error", zeroReads)
+			}
 		}
 		if err != nil {
 			if err == io.EOF && written >= limit {
@@ -654,13 +666,14 @@ func splittableRequest(req *http.Request) bool {
 	return true
 }
 
-// injectRange inserts a single Range header before the blank line of an HTTP head.
-func injectRange(head []byte, start, end int64) []byte {
+// injectRange inserts a single Range header (bytes=0-end, the probe for the
+// first chunk) before the blank line of an HTTP head.
+func injectRange(head []byte, end int64) []byte {
 	if !bytes.HasSuffix(head, []byte("\r\n\r\n")) {
 		return head
 	}
 	prefix := head[:len(head)-2] // drop the terminating blank line's CRLF
-	line := fmt.Sprintf("Range: bytes=%d-%d\r\n\r\n", start, end)
+	line := fmt.Sprintf("Range: bytes=0-%d\r\n\r\n", end)
 	out := make([]byte, 0, len(prefix)+len(line))
 	out = append(out, prefix...)
 	out = append(out, line...)

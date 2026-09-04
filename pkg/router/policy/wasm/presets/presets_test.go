@@ -426,16 +426,6 @@ func TestAdaptiveParksToSingleActiveLeg(t *testing.T) {
 	}
 }
 
-// legsActiveIsLeg0 reports whether the only non-standby (active) leg is leg 0.
-func legsActiveIsLeg0(legs []policy.LegInfo) bool {
-	for _, l := range legs {
-		if !l.Standby && l.Index != 0 {
-			return false
-		}
-	}
-	return true
-}
-
 // TestLatencyAdaptiveTrimsReserveToStandby drives latency-adaptive with all 5
 // provisioned legs active (no outlier) and asserts it PARKS the oldest as a warm
 // standby to reach the 4-wide active target — evict-by-demote, never a teardown.
