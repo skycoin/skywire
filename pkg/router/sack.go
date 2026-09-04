@@ -404,6 +404,23 @@ func (rb *retxBuffer) SentAt(seq uint32) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// SentInfo returns when seq was originally sent AND which transport it last
+// rode (uuid.Nil = unknown), with ok=false for a seq no longer held. The
+// proactive HoL path needs the transport identity to judge overdueness against
+// the RTT of the leg the seq is actually in flight on: judged against the
+// FASTEST leg's RTT instead, every frame striped onto a slower leg looks
+// "stalled" one fast-RTT in and gets a spurious duplicate (measured live:
+// 30MB of duplicates against 11MB of payload on the slow leg of a 2-leg mux).
+func (rb *retxBuffer) SentInfo(seq uint32) (time.Time, uuid.UUID, bool) {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+
+	if entry, ok := rb.entries[seq]; ok {
+		return entry.sentAt, entry.tpID, true
+	}
+	return time.Time{}, uuid.Nil, false
+}
+
 // Len returns current buffer occupancy.
 func (rb *retxBuffer) Len() int {
 	rb.mu.Lock()
