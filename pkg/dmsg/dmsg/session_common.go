@@ -103,18 +103,58 @@ func (sc *SessionCommon) GetConn() net.Conn {
 	return sc.netConn
 }
 
-// GetDecNonce returns value of DecNonce of underlying `*noise.Noise`.
+// GetDecNonce returns value of DecNonce of underlying `*noise.Noise`, or 0
+// when there is no noise state to read (see NonceValues).
 func (sc *SessionCommon) GetDecNonce() uint64 {
+	if sc == nil {
+		return 0
+	}
 	sc.rMx.Lock()
 	defer sc.rMx.Unlock()
+	if sc.ns == nil {
+		return 0
+	}
 	return sc.ns.GetDecNonce()
 }
 
-// GetEncNonce returns value of EncNonce of underlying `*noise.Noise`.
+// GetEncNonce returns value of EncNonce of underlying `*noise.Noise`, or 0
+// when there is no noise state to read (see NonceValues).
 func (sc *SessionCommon) GetEncNonce() uint64 {
+	if sc == nil {
+		return 0
+	}
 	sc.wMx.Lock()
 	defer sc.wMx.Unlock()
+	if sc.ns == nil {
+		return 0
+	}
 	return sc.ns.GetEncNonce()
+}
+
+// NonceValues returns the session's decryption and encryption nonces together,
+// and whether they could be read at all.
+//
+// `ns` is only assigned once a handshake completes, so a session can be
+// reachable through the entity's session map — GetSessions returns a snapshot —
+// while having no noise state yet, or after being torn down. Callers that
+// merely observe sessions (the server's throughput metrics) must be able to
+// tell "no reading available" apart from "the nonce is 0": treating the second
+// as the first made a counter appear to run backwards, which the throughput
+// calculation reads as a uint64 overflow and turns into an enormous bogus
+// delta. Reading them separately would also let a session be torn down between
+// the two calls; this takes both under their locks in one go.
+func (sc *SessionCommon) NonceValues() (dec, enc uint64, ok bool) {
+	if sc == nil {
+		return 0, 0, false
+	}
+	sc.rMx.Lock()
+	sc.wMx.Lock()
+	defer sc.wMx.Unlock()
+	defer sc.rMx.Unlock()
+	if sc.ns == nil {
+		return 0, 0, false
+	}
+	return sc.ns.GetDecNonce(), sc.ns.GetEncNonce(), true
 }
 
 func (sc *SessionCommon) initClient(entity *EntityCommon, conn net.Conn, rPK cipher.PubKey) error {
