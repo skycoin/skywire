@@ -4,29 +4,35 @@
 // weighted graph over visor public keys where an edge weight is the
 // measured round-trip time between the two visors.
 //
-// Source is TPD's metrics CXO feed (metrics/days/<n>), NOT the HTTP
-// /metrics endpoint. The publisher writes []TransportMetric there every
-// 60s and content-addressing means a subscriber pays the delta rather
-// than the whole dataset — 85k transport rows is ~31MB over HTTP, and
-// re-fetching that to move a few edges is what the feed exists to avoid.
-// There is deliberately no HTTP fallback: a view that silently starts
-// polling a rate-limited endpoint when the feed is cold is worse than a
-// view that says the feed is cold.
+// Source is TPD's metrics CXO feed (metrics/day/<YYYY-MM-DD>), NOT the
+// HTTP /metrics endpoint. The publisher writes []TransportMetric there
+// every 60s and content-addressing means a subscriber pays the delta
+// rather than the whole dataset — 85k transport rows is ~31MB over HTTP,
+// and re-fetching that to move a few edges is what the feed exists to
+// avoid. There is deliberately no HTTP fallback: a view that silently
+// starts polling a rate-limited endpoint when the feed is cold is worse
+// than a view that says the feed is cold.
+//
+// Only the CURRENT day's leaf is read. Latency is transport-level
+// current state, so that is the only leaf carrying it — and it is also
+// the most representative of the network as it is now, which is what a
+// positional embedding wants. Reading the whole 30-day window would
+// decode ~30 multi-megabyte bodies to find latency in one of them.
 package tpviz
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"sort"
 
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
+	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 )
 
-// latencyMetricsDays is the day window read from the feed. The publisher
-// writes 1, 7 and 30; the shortest is the most representative of the
-// network as it is now, which is what a positional embedding wants.
-const latencyMetricsDays = 1
+// legacyLatencyPrefix is the one-leaf-per-window path a TPD that
+// predates the day leaves publishes. Read only when no day leaf is
+// present, so a visor that updated before TPD did keeps a graph.
+const legacyLatencyPrefix = "metrics/days/1"
 
 // cxoTransportMetric is the decoding shape of store.TransportMetric,
 // narrowed to the fields this view needs. Declared locally rather than
@@ -89,13 +95,17 @@ func (s *Server) tryCXOLatency() (*LatencyGraph, bool) {
 	}
 	best := make(map[[2]string]*agg)
 
-	prefix := fmt.Sprintf("metrics/days/%d", latencyMetricsDays)
+	prefix := legacyLatencyPrefix
+	if date, found := s.newestMetricsDay(mgr); found {
+		prefix = tpdstore.MetricsDayPath(date)
+	}
 	ok := mgr.Walk(CXOFeedTPDMetrics, prefix, func(_ string, body []byte) bool {
 		var metrics []cxoTransportMetric
 		// The publisher gzips; Gunzip passes a raw body through unchanged. A
-		// long window arrives as several "<prefix>/part/<NNNN>" leaves, which
-		// this prefix Walk already visits — taking the minimum per visor pair
-		// is the same answer whether the records came in one body or several.
+		// leaf too big for one CXO object arrives as several
+		// "<prefix>/part/<NNNN>" leaves, which this prefix Walk already visits
+		// — taking the minimum per visor pair is the same answer whether the
+		// records came in one body or several.
 		if err := json.Unmarshal(cxoutils.Gunzip(body), &metrics); err != nil {
 			return true
 		}
@@ -134,7 +144,7 @@ func (s *Server) tryCXOLatency() (*LatencyGraph, bool) {
 		return nil, false
 	}
 
-	g := &LatencyGraph{Days: latencyMetricsDays, Edges: make([]LatencyEdge, 0, len(best))}
+	g := &LatencyGraph{Days: 1, Edges: make([]LatencyEdge, 0, len(best))}
 	seen := make(map[string]struct{})
 	for k, v := range best {
 		g.Edges = append(g.Edges, LatencyEdge{A: k[0], B: k[1], MS: v.ms, N: v.n, Type: v.tType})
@@ -155,6 +165,21 @@ func (s *Server) tryCXOLatency() (*LatencyGraph, bool) {
 	}
 	sort.Strings(g.Visors)
 	return g, true
+}
+
+// newestMetricsDay returns the most recent date TPD has a day leaf
+// for. The Walk inspects paths only — it never touches a body — so
+// finding the newest of 30 days costs a map scan, not 30 gunzips.
+func (s *Server) newestMetricsDay(mgr CXOSubMgr) (string, bool) {
+	var newest string
+	mgr.Walk(CXOFeedTPDMetrics, tpdstore.MetricsDayPrefix, func(p string, _ []byte) bool {
+		// The date format sorts lexically into chronological order.
+		if date, ok := tpdstore.MetricsDayDate(p); ok && date > newest {
+			newest = date
+		}
+		return true
+	})
+	return newest, newest != ""
 }
 
 // handleLatency serves the latency graph for the latency-space view.
