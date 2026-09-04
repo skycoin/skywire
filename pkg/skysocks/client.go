@@ -87,6 +87,10 @@ type Client struct {
 	listener  net.Listener
 	once      sync.Once
 	closeC    chan struct{}
+	// keepAliveDone is closed when sessionKeepAliveLoop returns, so a test can
+	// join the loop (it reads the package-level probe tunables) before
+	// restoring them.
+	keepAliveDone chan struct{}
 
 	// streams tracks the currently open tunneled streams so the status page can
 	// expand the "N open stream(s)" count into per-stream rows (id + CONNECT
@@ -239,9 +243,10 @@ func newYamuxSession(conn net.Conn) (*yamux.Session, *atomic.Int64, error) {
 // AddTunnel (or NewMultiClient) to stripe browser connections across N tunnels.
 func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 	c := &Client{
-		appCl:   appCl,
-		closeC:  make(chan struct{}),
-		streams: make(map[uint32]streamMeta),
+		appCl:         appCl,
+		closeC:        make(chan struct{}),
+		keepAliveDone: make(chan struct{}),
+		streams:       make(map[uint32]streamMeta),
 		// One tunnel is the default target: with N==1 the sole tunnel's death is
 		// total collapse (handled by the app's --reconnect), so N==1 never
 		// re-dials — byte-identical to the pre-aggregation build. NewMultiClient
@@ -258,7 +263,10 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 	c.sessions = []*yamux.Session{session}
 	c.recvStamp = map[*yamux.Session]*atomic.Int64{session: stamp}
 
-	go c.sessionKeepAliveLoop()
+	go func() {
+		defer close(c.keepAliveDone)
+		c.sessionKeepAliveLoop()
+	}()
 
 	return c, nil
 }

@@ -203,7 +203,8 @@ func main() {
 	switch wasmRole() {
 	case "shell":
 		installShell()
-		fmt.Println("wasm-visor: shell role — call skywireShell.open(el)")
+		installBrowser()
+		fmt.Println("wasm-visor: shell role — call skywireShell.open(el) / skywireBrowser.open(el)")
 		keepAlive()
 	case "netview":
 		installNetView()
@@ -303,9 +304,10 @@ func main() {
 		"skychatGroupReplay":    js.FuncOf(jsGroupReplay),
 	}))
 	// The in-page host fallback has a DOM, so this instance can serve the
-	// terminal too and the tab needs no second instance.
+	// terminal AND the browser too, and the tab needs no second instance.
 	if hasDOM() {
 		installShell()
+		installBrowser()
 	}
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	// keepAlive, not select{}: a bare select parks main with NO pending Go

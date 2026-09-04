@@ -37,14 +37,6 @@ func WinBoxWasm() []byte { return browseui.WinBoxWasm() }
 // generator to inline.
 func WinBoxWasmGz() []byte { return browseui.WinBoxWasmGz() }
 
-// GoBrowserWasm is the experimental Go/wasm browser served at /gobrowser.wasm,
-// launched by globalThis.SkywireGoBrowser.open(). Re-exported from the browseui
-// leaf like WinBoxWasm.
-func GoBrowserWasm() []byte { return browseui.GoBrowserWasm() }
-
-// GoBrowserWasmGz is the same module compressed, for the single-file generator.
-func GoBrowserWasmGz() []byte { return browseui.GoBrowserWasmGz() }
-
 // DeskBootJS is the shared desk boot (skywireDeskBoot) behind the desk-first
 // pages — the docs playground and `hv serve`'s /desk. Re-exported from the
 // browseui leaf like BrowseJS.

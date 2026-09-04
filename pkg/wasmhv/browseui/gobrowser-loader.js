@@ -1,17 +1,19 @@
-// gobrowser-loader.js — opens the Go/wasm browser (github.com/0magnet/shipyard
-// cmd/browser) in a winbox window, wired to the visor's transports. This is an
-// EXPERIMENTAL alternative to netscrape's browse.js: the browser's chrome, page
-// transcoding (sandboxed srcdoc, inlined stylesheets/images) and navigation are
-// Go/syscall/js; only the network is delegated here, through the same
-// skywireVisor.fetchDmsg / fetchClearnet the JS engine uses.
+// gobrowser-loader.js — opens the netscrape Go/wasm browser
+// (github.com/0magnet/netscrape) in a winbox window, wired to the visor's
+// transports.
+//
+// The browser is NO LONGER a separate wasm module. It is compiled into the
+// wasm-visor binary and exposed as globalThis.skywireBrowser.open(el) by that
+// binary's DOM-side instance (the same one that carries the terminal —
+// cmd/wasm-visor/browser_js.go). So this launcher does not fetch or instantiate
+// anything: it opens a window and calls skywireBrowser.open, and the browser
+// runs in the already-loaded instance's Go runtime. The browser's chrome, page
+// transcoding and navigation are Go/syscall/js; only the network is delegated
+// here, through the same skywireVisor.fetchDmsg / fetchClearnet the rest of the
+// UI uses.
 //
 // Usage from the visor page (or its console): SkywireGoBrowser.open().
-// It reads globalThis.WinBox (window manager), globalThis.Go (the wasm_exec
-// runtime) and globalThis.skywireVisor (transports) at call time, so it is safe
-// to define at bundle load before those exist.
 (function () {
-	var WASM_URL = "/gobrowser.wasm";
-
 	function meshHost(h) {
 		return /\.(dmsg|skysocks|skynet)$/i.test(h) || /^[0-9a-f]{66}$/i.test(h);
 	}
@@ -26,9 +28,9 @@
 		return new Response((r && r.body) || new Uint8Array(0), { status: (r && r.status) || 200, headers: h });
 	}
 
-	// The transport the Go browser calls (globalThis.__shipyardBrowserFetch):
-	// mesh hosts go over dmsg, everything else over clearnet, with a plain
-	// same-origin fetch as the last resort.
+	// The transport the Go browser calls (globalThis.__netscrapeFetch): mesh
+	// hosts go over dmsg, everything else over clearnet, with a plain same-origin
+	// fetch as the last resort.
 	function transport(url) {
 		var sv = globalThis.skywireVisor || {};
 		var u;
@@ -38,34 +40,27 @@
 			return Promise.resolve(sv.fetchDmsg(u.hostname, "GET", path, null)).then(respond);
 		}
 		if (sv.fetchClearnet) {
-			// Signature is fetchClearnet(exitPK, method, url[, body]) — empty
-			// exitPK = let the visor pick an exit. Passing the url first sent
-			// the visor a null url ("bad url: parse \"<null>\"").
+			// The visor API is fetchClearnet(exitPK, method, url[, body]) — empty
+			// exitPK lets the visor pick an exit. (url must not be passed first.)
 			return Promise.resolve(sv.fetchClearnet("", "GET", url, null)).then(respond);
 		}
 		return fetch(url);
 	}
 
-	// ensureGo loads Go's wasm_exec.js into the PAGE realm on demand. On the
-	// standalone visor page the visor's copy lives in the SharedWorker realm,
-	// so globalThis.Go never exists here until something loads it — without
-	// this, open() could only ever work on pages that load wasm_exec for
-	// other reasons (the desk's terminal).
-	var goLoader = null;
-	function ensureGo() {
-		if (typeof globalThis.Go === "function") return Promise.resolve();
-		if (!goLoader) {
-			goLoader = new Promise(function (res, rej) {
-				var s = document.createElement("script");
-				s.src = "/wasm_exec.js?variant=go";
-				s.onload = function () {
-					if (typeof globalThis.Go === "function") { res(); } else { rej(new Error("wasm_exec.js loaded but defines no Go class")); }
-				};
-				s.onerror = function () { rej(new Error("failed to load /wasm_exec.js?variant=go")); };
-				document.head.appendChild(s);
-			}).catch(function (e) { goLoader = null; throw e; });
-		}
-		return goLoader;
+	// ensureBrowser resolves once globalThis.skywireBrowser.open exists. The desk
+	// loads the wasm-visor binary's DOM-side instance (which installs it); on a
+	// page where that instance has not booted yet, wait briefly for it rather
+	// than failing the click.
+	function ensureBrowser() {
+		return new Promise(function (res, rej) {
+			var tries = 0;
+			(function poll() {
+				var b = globalThis.skywireBrowser;
+				if (b && typeof b.open === "function") { res(b); return; }
+				if (++tries > 100) { rej(new Error("skywireBrowser not available — the desk wasm-visor instance is not loaded")); return; }
+				setTimeout(poll, 100);
+			})();
+		});
 	}
 
 	globalThis.SkywireGoBrowser = {
@@ -75,21 +70,14 @@
 				console.error("SkywireGoBrowser: window manager not ready");
 				return null;
 			}
-			globalThis.__shipyardBrowserFetch = transport;
-			var wb = new globalThis.WinBox({ title: title || "Go Browser (beta)", width: "72%", height: "72%" });
+			var wb = new globalThis.WinBox({ title: title || "Browser (beta)", width: "72%", height: "72%" });
 			var mount = document.createElement("div");
 			mount.style.cssText = "position:absolute;inset:0";
 			wb.body.appendChild(mount);
-			globalThis.__shipyardMount = mount;
-			Promise.all([ensureGo(), fetch(WASM_URL).then(function (r) {
-				if (!r.ok) throw new Error("fetch " + WASM_URL + ": HTTP " + r.status);
-				return r.arrayBuffer();
-			})])
-				.then(function (both) {
-					var go = new globalThis.Go();
-					return WebAssembly.instantiate(both[1], go.importObject).then(function (res) { go.run(res.instance); });
-				})
-				.catch(function (e) { mount.textContent = "Go browser failed to load: " + e; });
+			globalThis.__netscrapeFetch = transport;
+			ensureBrowser()
+				.then(function (b) { b.open(mount); })
+				.catch(function (e) { mount.textContent = "Browser failed to open: " + e; });
 			return wb;
 		},
 	};
