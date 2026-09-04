@@ -225,6 +225,10 @@ func (m *routeMux) proactiveRetxSeqs(lastContiguous uint32, words []uint64, fast
 	}
 	interval := holPerSeqInterval(fastestRTTms)
 	fallbackTh := holGapThreshold(fastestRTTms)
+	// Measured send→ack delay floors every gate: when our own sending is
+	// saturated the queue delays acks by seconds, and a frontier hole younger
+	// than that is queued, not lost — nudging it duplicates the queue.
+	ackTh := time.Duration(m.ackDelayMs()) * time.Millisecond
 	var due []uint32
 	for _, seq := range cand {
 		// Only retransmit seqs we still hold: a seq already purged from the retx
@@ -249,6 +253,9 @@ func (m *routeMux) proactiveRetxSeqs(lastContiguous uint32, words []uint64, fast
 		gapTh := fallbackTh
 		if rtt, ok := legRTTms[tpID]; ok && rtt > 0 {
 			gapTh = holGapThreshold(rtt * rackReorderFactor)
+		}
+		if ackTh > gapTh {
+			gapTh = ackTh
 		}
 		if now.Sub(sentAt) < gapTh {
 			continue

@@ -296,3 +296,59 @@ func TestRackThreshold(t *testing.T) {
 		t.Fatalf("fast-path threshold = %v, want floor %v", got, rackFloor)
 	}
 }
+
+// TestRackThresholdTracksAckDelay pins the bufferbloat guard: when the measured
+// send→ack delay (the queue) dwarfs the idle-ping RTT, the threshold must be
+// built on the ack delay — a saturated leg holds seconds of in-flight data
+// while its ping RTT reads wire-level, and a threshold under the real feedback
+// delay declares every queued frame lost (measured live: 899 spurious
+// retransmits across a ~1250-frame upload).
+func TestRackThresholdTracksAckDelay(t *testing.T) {
+	log := logging.NewMasterLogger().PackageLogger("rack-ackdelay-test")
+	m := newRouteMux(log, true)
+	m.growLegs(2)
+	m.legMu.Lock()
+	m.legs[0].ecfRttMs = 25
+	m.legs[1].ecfRttMs = 60
+	m.legMu.Unlock()
+
+	base := m.rackThreshold()
+
+	// One sample far above the running EWMA rises fast (α=0.5): 4s of queue.
+	m.recordAckDelay(4 * time.Second)
+	widened := m.rackThreshold()
+	if widened <= base {
+		t.Fatalf("threshold after 4s ack-delay sample = %v, want > base %v", widened, base)
+	}
+	// One sample took it half-way (EWMA 2s) → threshold ≥ 2s, above rackCeil —
+	// the ceil must floor at the measured feedback delay, mirroring the RTT rule.
+	if widened < 2*time.Second {
+		t.Fatalf("threshold %v did not track the ack-delay EWMA (want ≥ 2s)", widened)
+	}
+
+	// Fast samples decay it gently (α=0.125), never below the idle-RTT basis.
+	for i := 0; i < 100; i++ {
+		m.recordAckDelay(20 * time.Millisecond)
+	}
+	relaxed := m.rackThreshold()
+	if relaxed >= widened {
+		t.Fatalf("threshold must decay after fast acks: %v -> %v", widened, relaxed)
+	}
+	want := time.Duration(60*rackReorderFactor) * time.Millisecond
+	if relaxed != want {
+		t.Fatalf("decayed threshold = %v, want idle-RTT basis %v", relaxed, want)
+	}
+
+	// The HoL gate honors the same floor: with the EWMA re-inflated, a young
+	// frontier hole must not be nudged even when far older than its leg's RTT.
+	m.recordAckDelay(10 * time.Second)
+	m.holRetxEnabled = true
+	slowTp := uuid.New()
+	m.retxBuf.Store(101, []byte("a"), slowTp)
+	legRTT := map[uuid.UUID]float64{slowTp: 25}
+	sentAt, _, _ := m.retxBuf.SentInfo(101)
+	words := []uint64{bits(3)}
+	if got := m.proactiveRetxSeqs(100, words, 25, legRTT, sentAt.Add(2*time.Second)); got != nil {
+		t.Fatalf("HoL nudge inside the measured ack delay must be suppressed, got %v", got)
+	}
+}
