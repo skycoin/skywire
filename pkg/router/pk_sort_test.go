@@ -15,7 +15,7 @@ import (
 func randPubKeysSeeded(rng *rand.Rand, n int) []cipher.PubKey {
 	pks := make([]cipher.PubKey, n)
 	for i := range pks {
-		rng.Read(pks[i][:])
+		rng.Read(pks[i][:]) //nolint:gosec // math/rand is fine for a reproducible fixture and never errors
 	}
 	return pks
 }

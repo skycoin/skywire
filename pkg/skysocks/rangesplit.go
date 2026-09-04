@@ -140,7 +140,7 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	// 3. chunk0 doubles as the range probe: original request + Range: bytes=0-(N-1).
 	//    Only a Range request header is added; a non-range origin ignores it and
 	//    returns its normal 200, so that fallback stays byte-identical.
-	if _, err := stream.Write(injectRange(reqHead, 0, c.rs.chunkSize-1)); err != nil {
+	if _, err := stream.Write(injectRange(reqHead, c.rs.chunkSize-1)); err != nil {
 		conn.Close()   //nolint:errcheck,gosec
 		stream.Close() //nolint:errcheck,gosec
 		return host, nil, true
@@ -666,13 +666,14 @@ func splittableRequest(req *http.Request) bool {
 	return true
 }
 
-// injectRange inserts a single Range header before the blank line of an HTTP head.
-func injectRange(head []byte, start, end int64) []byte {
+// injectRange inserts a single Range header (bytes=0-end, the probe for the
+// first chunk) before the blank line of an HTTP head.
+func injectRange(head []byte, end int64) []byte {
 	if !bytes.HasSuffix(head, []byte("\r\n\r\n")) {
 		return head
 	}
 	prefix := head[:len(head)-2] // drop the terminating blank line's CRLF
-	line := fmt.Sprintf("Range: bytes=%d-%d\r\n\r\n", start, end)
+	line := fmt.Sprintf("Range: bytes=0-%d\r\n\r\n", end)
 	out := make([]byte, 0, len(prefix)+len(line))
 	out = append(out, prefix...)
 	out = append(out, line...)

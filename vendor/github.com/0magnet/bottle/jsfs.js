@@ -233,8 +233,17 @@
 	function pipeClose(fd) {
 		const e = pipeEnds.get(fd);
 		if (!e) return false;
-		if (e.write) e.pipe.wRefs--; else e.pipe.rRefs--;
-		pipeEnds.delete(fd);
+		// The SAME fd number can hold more than one reference — the creator's,
+		// plus one retained for a spawned child (see pipeRetain). Decrement,
+		// and only drop the fd entry once the last reference is gone, so a
+		// later close of the retained reference can still find it. Deleting on
+		// the first close would strand the retained reference and the reader
+		// would never see EOF.
+		if (e.write) {
+			if (--e.pipe.wRefs <= 0) pipeEnds.delete(fd);
+		} else {
+			if (--e.pipe.rRefs <= 0) pipeEnds.delete(fd);
+		}
 		pipeDeliver(e.pipe); // a now-zero writer count lets readers see EOF
 		return true;
 	}

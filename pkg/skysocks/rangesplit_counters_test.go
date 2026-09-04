@@ -79,7 +79,7 @@ func TestRangeSplitCountersFire(t *testing.T) {
 		t.Fatalf("pre-request snapshot = %+v, want enabled with zero splits", rs)
 	}
 
-	resp := socks5Get(t, proxy, "example.com", "/blob.bin")
+	resp := socks5Get(t, proxy, "/blob.bin")
 	defer resp.Body.Close() //nolint:errcheck
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		t.Fatalf("drain body: %v", err)

@@ -89,7 +89,7 @@ func BenchmarkBWParse_Old(b *testing.B) {
 		for i := 0; i < benchEntries; i++ {
 			for _, v := range vals {
 				var x uint64
-				_, _ = fmt.Sscanf(v, "%d", &x)
+				_, _ = fmt.Sscanf(v, "%d", &x) //nolint:errcheck // bench measures the old parse path cost
 				sink += x
 			}
 		}

@@ -148,7 +148,7 @@ func watchState(cmd *cobra.Command, fetch func() (*visor.StateSnapshot, error)) 
 }
 
 // streamTicks emits immediately, then calls emit every interval until ctx is
-// cancelled (Ctrl-C). Extracted so the tick loop is unit-testable without a live
+// canceled (Ctrl-C). Extracted so the tick loop is unit-testable without a live
 // RPC or a real signal.
 func streamTicks(ctx context.Context, interval time.Duration, emit func()) {
 	emit()

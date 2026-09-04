@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"runtime"
 
-	"github.com/bitfield/script"
 	cc "github.com/0magnet/coloredcobra"
+	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 )
 

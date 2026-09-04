@@ -85,8 +85,8 @@ type Client struct {
 	// Guarded by sessionsMu; entries are deleted where lastPong's are.
 	recvStamp map[*yamux.Session]*atomic.Int64
 	listener  net.Listener
-	once       sync.Once
-	closeC     chan struct{}
+	once      sync.Once
+	closeC    chan struct{}
 
 	// streams tracks the currently open tunneled streams so the status page can
 	// expand the "N open stream(s)" count into per-stream rows (id + CONNECT

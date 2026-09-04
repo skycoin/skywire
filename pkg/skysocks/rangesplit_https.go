@@ -203,7 +203,7 @@ func (c *Client) serveHTTPSRangeSplit(conn, stream net.Conn, target string) {
 func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, reqHead []byte, host string) {
 	// Probe: original request + Range: bytes=0-(chunk-1). A non-range origin ignores
 	// it and returns its normal 200, kept byte-identical by the relay path below.
-	if _, err := otls.Write(injectRange(reqHead, 0, c.rs.chunkSize-1)); err != nil {
+	if _, err := otls.Write(injectRange(reqHead, c.rs.chunkSize-1)); err != nil {
 		closeBoth(btls, otls)
 		return
 	}

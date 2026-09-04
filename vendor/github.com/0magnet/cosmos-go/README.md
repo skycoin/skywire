@@ -144,3 +144,38 @@ The initial release of cosmos-go (tag `v1-port`) was a port of @cosmograph/cosmo
 MIT, same as the ported cosmos.gl 2.6.3 source (see LICENCE).
 
 cosmos-go is derived from [cosmos.gl](https://github.com/cosmograph-org/cosmos) — © Contributors to the cosmos.gl project, created by the [Cosmograph](https://cosmograph.app) team.
+## Dependency Graph
+
+Made with [goda](https://github.com/loov/goda):
+
+```
+# GOOS=js: the import edges of a wasm program live in js/wasm-tagged
+# files and are invisible to a host-context run
+GOOS=js GOARCH=wasm go run github.com/loov/goda@latest graph github.com/0magnet/cosmos-go/... | dot -Tsvg -o docs/cosmos-go-goda-graph.svg
+```
+
+![Dependency Graph](docs/cosmos-go-goda-graph.svg "github.com/0magnet/cosmos-go Dependency Graph")
+
+## Lines of Code
+
+Made with [gocloc](https://github.com/hhatto/gocloc) (excludes `vendor/`, `node_modules/`, `.git/`):
+
+```
+gocloc --not-match-d='(vendor|node_modules|\.git)' .
+```
+
+```
+-------------------------------------------------------------------------------
+Language                     files          blank        comment           code
+-------------------------------------------------------------------------------
+Go                              21            888            533           6271
+JavaScript                       2            117             82            935
+HTML                             3              5              0            132
+Markdown                         1             42              0            104
+YAML                             1              0              9             69
+JSON                             3              0              0             29
+Bourne Shell                     1              2              3             12
+-------------------------------------------------------------------------------
+TOTAL                           32           1054            627           7552
+-------------------------------------------------------------------------------
+```

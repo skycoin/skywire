@@ -1587,6 +1587,17 @@ func quadtreeFrag(startLevel, maxLevels int) string {
 		}
 		iEnding := strings.Join(iParts, "+")
 		jEnding := strings.Join(jParts, "+")
+		// With no parts there is no offset to add, and the template still has a
+		// "+" before this. Joining nothing left "... + ;", which does not
+		// compile — so a start level of zero produced a shader the driver
+		// rejected and the repulsion force failed to build. Adding zero is what
+		// adding no offset means.
+		if iEnding == "" {
+			iEnding = "0.0"
+		}
+		if jEnding == "" {
+			jEnding = "0.0"
+		}
 
 		return fmt.Sprintf(`
       for (float ij%[1]d = 0.0; ij%[1]d < 4.0; ij%[1]d += 1.0) {
@@ -1661,5 +1672,20 @@ void main() {
 
   gl_FragColor = vec4(velocity, 0.0, 0.0);
 }
-`, maxLevels, widths.String(), delta, delta, quad(delta))
+`, maxLevels, widths.String(), delta, delta, quadBody(quad, delta, maxLevels))
+}
+
+// quadBody is the traversal the shader runs.
+//
+// delta is maxLevels minus the start level, so the number of levels actually
+// walked is the start level itself. At zero there are none, and quad would
+// return the accumulate step on its own — outside the level block that
+// declares the variables it reads. That is not a shader the driver will
+// compile, so a repulsion configured with zero quadtree levels stopped the
+// graph from starting rather than contributing nothing to it.
+func quadBody(quad func(int) string, delta, maxLevels int) string {
+	if delta >= maxLevels {
+		return ""
+	}
+	return quad(delta)
 }

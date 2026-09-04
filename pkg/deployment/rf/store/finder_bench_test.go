@@ -8,11 +8,12 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-// buildDenseGraph makes a layered mesh: `layers` layers of `width` nodes each,
+// buildDenseGraph makes a layered mesh: `layers` layers of 6 nodes each,
 // every node in layer i fully connected to every node in layer i+1 — a dense
 // multi-path graph that reproduces the BFS branching blow-up.
-func buildDenseGraph(tb testing.TB, layers, width int) (*Graph, cipher.PubKey, cipher.PubKey) {
+func buildDenseGraph(tb testing.TB, layers int) (*Graph, cipher.PubKey, cipher.PubKey) {
 	tb.Helper()
+	const width = 6
 	m := newMockStore()
 	pk := make([][]cipher.PubKey, layers)
 	for l := 0; l < layers; l++ {
@@ -39,7 +40,7 @@ func buildDenseGraph(tb testing.TB, layers, width int) (*Graph, cipher.PubKey, c
 }
 
 func BenchmarkStreamRoutesDense(b *testing.B) {
-	g, src, dst := buildDenseGraph(b, 5, 6) // 5 layers × 6 wide → many 4-hop paths
+	g, src, dst := buildDenseGraph(b, 5) // 5 layers × 6 wide → many 4-hop paths
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -56,7 +57,7 @@ func BenchmarkStreamRoutesDense(b *testing.B) {
 // BenchmarkGetRouteWeightedUncached is the raw per-request search cost — what
 // the route-finder paid on EVERY repeated request before the per-graph memo.
 func BenchmarkGetRouteWeightedUncached(b *testing.B) {
-	g, src, dst := buildDenseGraph(b, 5, 6)
+	g, src, dst := buildDenseGraph(b, 5)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -70,7 +71,7 @@ func BenchmarkGetRouteWeightedUncached(b *testing.B) {
 // (src,dst,params) requested repeatedly against one graph. Every request after
 // the first is a memo hit — the search runs once per graph, not per request.
 func BenchmarkGetRouteWeightedCached(b *testing.B) {
-	g, src, dst := buildDenseGraph(b, 5, 6)
+	g, src, dst := buildDenseGraph(b, 5)
 	if _, err := g.GetRouteWeighted(context.Background(), src, dst, 0, 6, 5, true); err != nil {
 		b.Fatal(err)
 	}
