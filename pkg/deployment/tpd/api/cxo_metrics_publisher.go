@@ -158,6 +158,16 @@ func (m *MetricsCXOPublisher) loop(ctx context.Context) {
 	wg.Wait()
 }
 
+// maxPublishBody bounds a single published body. CXO refuses an object over
+// skyobject.Config.MaxObjectSize (16 MB by default) — and refuses it at Put
+// time, so an oversized window does not merely lose that window: the feed never
+// gets a Root at all, and every subscriber sits in "timeout waiting for Root"
+// forever. That is what was happening in production: the whole tpd-metrics feed
+// was dead, silently, because one window did not fit.
+//
+// The margin below 16 MB covers the encoding overhead CXO adds around the JSON.
+const maxPublishBody = 12 * 1024 * 1024
+
 func (m *MetricsCXOPublisher) publishWindow(ctx context.Context, days int) {
 	query := store.MetricsQuery{
 		Days:      days,
@@ -168,11 +178,35 @@ func (m *MetricsCXOPublisher) publishWindow(ctx context.Context, days int) {
 	}
 	metrics, err := m.api.store.GetAllTransportMetrics(ctx, query)
 	if err != nil {
-		m.log.WithError(err).WithField("days", days).Debug("metrics fetch failed; will retry next tick")
+		// WARN, not DEBUG. A window that fails every tick makes the whole feed
+		// unusable, and at DEBUG that is invisible on a production deployment —
+		// which is exactly how this went unnoticed.
+		m.log.WithError(err).WithField("days", days).Warn("metrics fetch failed; will retry next tick")
 		m.recordError(err)
 		return
 	}
 	body, err := json.Marshal(metrics)
+	// Oversized body: re-fetch without the per-day per-edge bandwidth, which is
+	// the bulk of a long window, and publish the smaller shape rather than
+	// nothing. Subscribers that only read type/live/edges/latency (the
+	// visualizer's latency view) are then served; anything wanting bandwidth
+	// still has the HTTP endpoint. Partial data beats a feed with no Root.
+	if err == nil && len(body) > maxPublishBody {
+		m.log.WithField("days", days).WithField("bytes", len(body)).
+			Warn("metrics body exceeds the CXO object limit; republishing this window without per-edge bandwidth")
+		query.Bandwidth = false
+		if reduced, rerr := m.api.store.GetAllTransportMetrics(ctx, query); rerr == nil {
+			if rbody, merr := json.Marshal(reduced); merr == nil {
+				body, err = rbody, nil
+			}
+		}
+		if len(body) > maxPublishBody {
+			m.log.WithField("days", days).WithField("bytes", len(body)).
+				Error("metrics body still exceeds the CXO object limit without bandwidth; skipping this window")
+			m.recordError(fmt.Errorf("metrics/days/%d: body %d bytes exceeds max %d", days, len(body), maxPublishBody))
+			return
+		}
+	}
 	if err != nil {
 		m.log.WithError(err).WithField("days", days).Warn("metrics marshal failed")
 		m.recordError(err)
