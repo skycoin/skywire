@@ -105,6 +105,28 @@ func btn(label, style string) js.Value {
 	return b
 }
 
+// labelFor is a tab's name: the host, which is the part a person recognises.
+// A generated page has no host worth showing, so it gets a plain word instead.
+func labelFor(url string) string {
+	switch {
+	case strings.HasPrefix(url, "data:"):
+		return "new tab"
+	case strings.HasPrefix(url, "about:"), strings.HasPrefix(url, "blob:"):
+		return url
+	}
+	s := url
+	if i := strings.Index(s, "://"); i >= 0 {
+		s = s[i+3:]
+	}
+	if i := strings.IndexAny(s, "/?#"); i >= 0 {
+		s = s[:i]
+	}
+	if s == "" {
+		return "tab"
+	}
+	return s
+}
+
 // DirectLoader lets a host claim a URL for NATIVE rendering: return the src to
 // put on the tab's iframe and ok, and the page loads as an ordinary document
 // instead of being fetched and transcoded into a sandboxed srcdoc. It exists
@@ -124,6 +146,12 @@ var DirectLoader func(url string) (src string, ok bool)
 // for native rendering. A scheme-less address is normalised to http:// so the
 // transport always gets a URL.
 func load(t *tab, url string) {
+	// Name the tab after where it is. "tab 3" tells a person nothing once
+	// three of them are open; the host is what they recognise, and it fits in
+	// a strip where a whole URL never would.
+	if t != nil && t.lbl.Truthy() {
+		t.lbl.Set("textContent", labelFor(url))
+	}
 	if strings.HasPrefix(url, "data:") || strings.HasPrefix(url, "about:") || strings.HasPrefix(url, "blob:") {
 		t.frame.Call("removeAttribute", "srcdoc")
 		t.frame.Set("src", url)
