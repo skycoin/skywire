@@ -70,7 +70,7 @@ func TestWriteNDJSON_JQ(t *testing.T) {
 }
 
 // TestStreamTicks: emits immediately, keeps ticking, and stops promptly when the
-// context is cancelled (the Ctrl-C path).
+// context is canceled (the Ctrl-C path).
 func TestStreamTicks(t *testing.T) {
 	var n atomic.Int64
 	ctx, cancel := context.WithCancel(context.Background())

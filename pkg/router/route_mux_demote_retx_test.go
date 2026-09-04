@@ -56,8 +56,9 @@ func (t *capturingTransport) dataSeqs() []uint32 {
 // createCapturingMuxRouteGroup mirrors createMuxRouteGroup but enables SACK/retx
 // (so wrapPayload populates the retx buffer) and uses capturing transports so
 // the test can observe retransmitted packets per leg.
-func createCapturingMuxRouteGroup(t *testing.T, nTransports int) (*RouteGroup, []*capturingTransport) {
+func createCapturingMuxRouteGroup(t *testing.T) (*RouteGroup, []*capturingTransport) {
 	t.Helper()
+	const nTransports = 2
 
 	l := logging.NewMasterLogger()
 	rt := routing.NewTable(l.PackageLogger("rgt-demote"))
@@ -129,7 +130,7 @@ func (h demoteHook) OnTick(_ DialInfo, _ []LegInfo) RotationAction {
 // on one leg of a 20MB transfer). The activeSeqs sent on leg 0 below prove the
 // narrowing: they are held, but must NOT be flushed when leg 1 demotes.
 func TestMuxDemoteFlushesInFlightSeqs(t *testing.T) {
-	rg, conns := createCapturingMuxRouteGroup(t, 2)
+	rg, conns := createCapturingMuxRouteGroup(t)
 
 	// Tags are TRANSPORT UUIDs (stable across slice compaction), never leg
 	// indices — an index tag went stale the moment pruneDeadTransports
@@ -198,7 +199,7 @@ func TestMuxDemoteFlushesInFlightSeqs(t *testing.T) {
 // leg to resend on must be a safe no-op, not a panic or a wedge. (In practice
 // leg 0 is never standby, so this is a defensive guard.)
 func TestMuxDemoteFlushNoActiveLegIsSafe(t *testing.T) {
-	rg, conns := createCapturingMuxRouteGroup(t, 2)
+	rg, conns := createCapturingMuxRouteGroup(t)
 
 	for i := 0; i < 8; i++ {
 		if _, _, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i)}, uuid.Nil); err != nil {

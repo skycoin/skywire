@@ -384,9 +384,9 @@ func (r *glyphRenderer) updateCell(x, y int, code uint32, bg, fg, ext uint32, ch
 		array[i+2] = float32((glyph.sizeX - clipped) / cw)
 		array[i+3] = float32(glyph.sizeY / ch)
 		array[i+4] = 0 // texpage
-		array[i+5] = float32(glyph.texClipX + clipped/atlasPageSize)
+		array[i+5] = float32(glyph.texClipX + clipped/float64(r.atlas.pageSize))
 		array[i+6] = float32(glyph.texClipY)
-		array[i+7] = float32(glyph.sizeClipX - clipped/atlasPageSize)
+		array[i+7] = float32(glyph.sizeClipX - clipped/float64(r.atlas.pageSize))
 		array[i+8] = float32(glyph.sizeClipY)
 	} else {
 		array[i] = float32(-glyph.offsetX + float64(r.dims.deviceCharLeft))
@@ -830,6 +830,41 @@ func (r *webglRenderer) rebuildGPUState() {
 	r.renderRows(0, r.term.Core.Rows()-1)
 }
 
+// snapPx clears the floating-point error out of a device-pixel measurement
+// before it is rounded to a whole pixel.
+//
+// devicePixelRatio is a float32 round-trip of the zoom level, so it is not
+// the number it prints as: at 80% zoom the browser reports
+// 0.800000011920929, whose relative error is 2^-26. A cell height that
+// lands exactly on a device-pixel boundary therefore computes as that
+// boundary plus a few parts in ten million — 21.25 * dpr is
+// 17.00000025331974, not 17 — and jsCeil turns it into 18.
+//
+// One extra device pixel per cell is ~6% at this size, so the canvas comes
+// out taller than the element Fit() sized the grid against and the last
+// rows land outside the viewport: the terminal draws a footer nobody can
+// see. Truncation has the mirror failure, dropping a whole pixel from a
+// value that fell a hair short.
+//
+// The tolerance is relative because the error scales with the measurement,
+// and 1e-6 sits far above the 1.5e-8 that dpr contributes while staying far
+// below any sub-pixel difference a caller could mean.
+func snapPx(v float64) float64 {
+	r := jsRound(v)
+	d := v - r
+	if d < 0 {
+		d = -d
+	}
+	scale := v
+	if scale < 1 {
+		scale = 1
+	}
+	if d < 1e-6*scale {
+		return r
+	}
+	return v
+}
+
 func (r *webglRenderer) updateDimensions() {
 	term := r.term
 	dpr := window.Get("devicePixelRatio").Float()
@@ -837,8 +872,8 @@ func (r *webglRenderer) updateDimensions() {
 		dpr = 1
 	}
 	d := &r.dims
-	d.deviceCharWidth = int(term.cellW * dpr)
-	d.deviceCharHeight = int(jsCeil(term.cellH / maxF(term.Core.Options.LineHeight, 1) * dpr))
+	d.deviceCharWidth = int(snapPx(term.cellW * dpr))
+	d.deviceCharHeight = int(jsCeil(snapPx(term.cellH / maxF(term.Core.Options.LineHeight, 1) * dpr)))
 	d.deviceCellHeight = int(float64(d.deviceCharHeight) * maxF(term.Core.Options.LineHeight, 1))
 	d.deviceCharTop = 0
 	if term.Core.Options.LineHeight != 1 {
@@ -877,6 +912,7 @@ func (r *webglRenderer) refreshCharAtlas() {
 		mirrorGlyph:      r.term.Core.Options.MirrorGlyph,
 	}
 	if r.atlas != nil {
+		cfg.pageSize = r.atlas.pageSize
 		r.atlas.dispose()
 	}
 	r.atlas = newTextureAtlas(cfg)

@@ -61,7 +61,7 @@ func TestStreamRemainingChunks_RescueCompletesDownload(t *testing.T) {
 	pattern := func(start, end int64) []byte {
 		out := make([]byte, end-start+1)
 		for i := range out {
-			out[i] = byte((start + int64(i)) % 251)
+			out[i] = byte((start + int64(i)) % 251) //nolint:gosec // %251 bounds the value
 		}
 		return out
 	}
@@ -79,7 +79,7 @@ func TestStreamRemainingChunks_RescueCompletesDownload(t *testing.T) {
 		attempt++
 		if attempt == 1 {
 			p := pattern(start, start+4)
-			n, _ := w.Write(p)
+			n, _ := w.Write(p) //nolint:errcheck // the partial write IS the scenario
 			return int64(n), errors.New("stream died mid-tail")
 		}
 		p := pattern(start, total-1)
@@ -146,7 +146,7 @@ func TestStreamRemainingChunks_RescueGivesUpWithoutProgress(t *testing.T) {
 		return nil, errors.New("all chunks fail")
 	}
 	calls := 0
-	rescue := func(w net.Conn, start int64) (int64, error) {
+	rescue := func(_ net.Conn, _ int64) (int64, error) {
 		calls++
 		return 0, errors.New("still dead")
 	}

@@ -142,6 +142,21 @@
 			} finally {
 				active = prev;
 				jsfs.setCwd(prevCwd);
+				// Cancel any timer callbacks the child's Go runtime still had
+				// pending. Stock wasm_exec never clears _scheduledTimeouts on
+				// exit, and its setTimeout handler spins
+				//   while (this._scheduledTimeouts.has(id)) this._resume()
+				// — which, once the program has exited, loops forever calling a
+				// _resume that returns immediately (see the guard above),
+				// pegging the thread and hanging the page. A short-lived child
+				// (compile -V=full) rarely has one pending; a real compile
+				// does, which is why it hung and version queries did not.
+				if (go._scheduledTimeouts) {
+					for (const h of go._scheduledTimeouts.values()) {
+						try { clearTimeout(h); } catch (e) {}
+					}
+					go._scheduledTimeouts.clear();
+				}
 			}
 			return exitCode;
 		})();

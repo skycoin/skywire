@@ -46,11 +46,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "dial:", err)
 		os.Exit(1)
 	}
-	c.SetReadLimit(256 << 20) // profiles of a busy tab run tens of MB
-	defer c.Close(websocket.StatusNormalClosure, "")
+	c.SetReadLimit(256 << 20)                        // profiles of a busy tab run tens of MB
+	defer c.Close(websocket.StatusNormalClosure, "") //nolint:errcheck // best-effort CDP goodbye
 
 	send := func(id int, method string, params map[string]interface{}) {
-		b, _ := json.Marshal(map[string]interface{}{"id": id, "method": method, "params": params})
+		b, _ := json.Marshal(map[string]interface{}{"id": id, "method": method, "params": params}) //nolint:errcheck // static envelope cannot fail to marshal
 		if err := c.Write(ctx, websocket.MessageText, b); err != nil {
 			fmt.Fprintln(os.Stderr, "write:", err)
 			os.Exit(1)

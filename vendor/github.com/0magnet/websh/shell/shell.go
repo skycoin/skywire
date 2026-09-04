@@ -35,8 +35,10 @@ type Shell struct {
 }
 
 // New creates a shell over the given filesystem (nil = fresh in-memory
-// fs seeded with a small home directory).
-func New(vfs afero.Fs, stdin io.Reader, stdout, stderr io.Writer) (*Shell, error) {
+// fs seeded with a small home directory). extraEnv, "NAME=value" strings,
+// overrides or adds to the default environment — an embedder uses it to put a
+// toolchain on the PATH, say, or to hand a program its configuration.
+func New(vfs afero.Fs, stdin io.Reader, stdout, stderr io.Writer, extraEnv ...string) (*Shell, error) {
 	if vfs == nil {
 		vfs = afero.NewMemMapFs()
 		if err := Seed(vfs); err != nil {
@@ -48,17 +50,18 @@ func New(vfs afero.Fs, stdin io.Reader, stdout, stderr io.Writer) (*Shell, error
 		parser: syntax.NewParser(),
 	}
 
+	env := append([]string{
+		"HOME=/home/user",
+		"USER=user",
+		"HOSTNAME=websh",
+		"PATH=/bin",
+		"SHELL=/bin/websh",
+		"TERM=xterm-256color",
+		"PS1=$ ",
+	}, extraEnv...)
 	runner, err := interp.New(
 		interp.StdIO(stdin, stdout, stderr),
-		interp.Env(expand.ListEnviron(
-			"HOME=/home/user",
-			"USER=user",
-			"HOSTNAME=websh",
-			"PATH=/bin",
-			"SHELL=/bin/websh",
-			"TERM=xterm-256color",
-			"PS1=$ ",
-		)),
+		interp.Env(expand.ListEnviron(env...)),
 		interp.CallHandler(s.callHandler),
 		interp.ExecHandlers(s.execHandler),
 		interp.OpenHandler(s.openHandler),
@@ -243,6 +246,19 @@ func (s *Shell) execHandler(next interp.ExecHandlerFunc) interp.ExecHandlerFunc 
 				if code < 0 || code > 255 {
 					code = 1
 				}
+				return interp.ExitStatus(code)
+			}
+			return nil
+		}
+		// Not a built-in applet: try to exec it as a program on the
+		// filesystem. On js/wasm this spawns a wasm binary as a child process
+		// via bottle's proc layer (see exec_js.go); elsewhere it is a no-op and
+		// falls through to "command not found".
+		if code, handled := s.execExternal(ctx, args); handled {
+			if code < 0 || code > 255 {
+				code = 1
+			}
+			if code != 0 {
 				return interp.ExitStatus(code)
 			}
 			return nil

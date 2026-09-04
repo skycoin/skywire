@@ -239,7 +239,7 @@ func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
 		}
 		// Random order, a handful of candidates per cycle: a dead exit
 		// shouldn't pin the loop, and the whole list shouldn't be dialed.
-		idx := mathrand.Perm(len(svcs))
+		idx := mathrand.Perm(len(svcs)) //nolint:gosec // exit-candidate shuffle, not cryptographic
 		tries := len(idx)
 		if tries > 4 {
 			tries = 4

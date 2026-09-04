@@ -20,7 +20,7 @@ func main() {
 		os.Exit(2)
 	}
 	out := os.Args[1]
-	if err := os.MkdirAll(out, 0o750); err != nil {
+	if err := os.MkdirAll(out, 0o750); err != nil { //nolint:gosec // outdir is the operator-supplied argument of a dev/build script
 		fmt.Fprintln(os.Stderr, "stage-playground:", err)
 		os.Exit(1)
 	}

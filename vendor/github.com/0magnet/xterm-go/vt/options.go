@@ -63,7 +63,7 @@ type Options struct {
 	// unaffected, and a terminal that cannot do this shows the glyph unflipped
 	// rather than showing nothing.
 	//
-	// Only the WebGL renderer honours it. The DOM renderer draws real text and
+	// Only the WebGL renderer honors it. The DOM renderer draws real text and
 	// has no rasterisation step to hook.
 	MirrorGlyph func(string) bool
 	// LetterSpacing in px. Default: 0.

@@ -68,7 +68,7 @@ type routingContextWire struct {
 // cli_overrides actually retune a preset:* (wasm) visor. Zero = unset
 // (leave the compiled defaults), keeping this ABI-compatible with an
 // older host.
-type decideInputWire struct {
+type decideInputWire struct { //nolint:unused // used by abi_tinygo.go (tinygo build tag); lint runs without it
 	Ctx             routingContextWire `json:"ctx"`
 	Candidates      []candidateWire    `json:"candidates"`
 	Preset          string             `json:"preset"`
@@ -77,7 +77,7 @@ type decideInputWire struct {
 	AdaptStandbyMax int                `json:"adapt_standby_max,omitempty"`
 }
 
-type legInfoWire struct {
+type legInfoWire struct { //nolint:unused // used by abi_tinygo.go (tinygo build tag); lint runs without it
 	Index       int      `json:"index"`
 	Kind        string   `json:"kind"`
 	TransportID string   `json:"transport_id"`
@@ -92,7 +92,7 @@ type legInfoWire struct {
 	Hops        []string `json:"hops,omitempty"`
 }
 
-type tickInputWire struct {
+type tickInputWire struct { //nolint:unused // used by abi_tinygo.go (tinygo build tag); lint runs without it
 	Ctx             routingContextWire `json:"ctx"`
 	Legs            []legInfoWire      `json:"legs"`
 	Preset          string             `json:"preset"`
@@ -115,7 +115,7 @@ type routeSpecWire struct {
 	RotationIntervalSeconds int            `json:"rotation_interval_seconds,omitempty"`
 }
 
-type rotationActionWire struct {
+type rotationActionWire struct { //nolint:unused // used by abi_tinygo.go (tinygo build tag); lint runs without it
 	DropLegs           []int    `json:"drop_legs,omitempty"`
 	AddLeg             bool     `json:"add_leg,omitempty"`
 	ExcludeHops        []string `json:"exclude_hops,omitempty"`
@@ -164,7 +164,7 @@ func candToPreset(c candidateWire) preset.Candidate {
 	}
 }
 
-func legsToPreset(ls []legInfoWire) []preset.LegInfo {
+func legsToPreset(ls []legInfoWire) []preset.LegInfo { //nolint:unused // used by abi_tinygo.go (tinygo build tag); lint runs without it
 	if ls == nil {
 		return nil
 	}
@@ -220,7 +220,7 @@ func candToWire(c preset.Candidate) candidateWire {
 	}
 }
 
-func actionToWire(a preset.RotationAction) rotationActionWire {
+func actionToWire(a preset.RotationAction) rotationActionWire { //nolint:unused // used by abi_tinygo.go (tinygo build tag); lint runs without it
 	return rotationActionWire{
 		DropLegs:           a.DropLegs,
 		AddLeg:             a.AddLeg,
@@ -274,4 +274,3 @@ func toLower(s string) string {
 
 // main is required by the WASI target but isn't called by the host at
 // decide-time. It runs once at module instantiation.
-
