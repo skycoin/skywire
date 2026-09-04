@@ -293,3 +293,78 @@ func TestKeepAlive_DataFlowSurvivesPongStarvation(t *testing.T) {
 	}
 	t.Fatal("fully-silent tunnel was never retired after data stopped")
 }
+
+// TestKeepAlive_UploadSurvivesPongStarvation is the mirror regression test for
+// the upload direction: a peer that DRAINS everything the client sends but
+// sends nothing back (no pong — the client's ping is queued behind the
+// upload's own frames; no data — an upload has no inbound traffic) must
+// survive the hard-dead window, because send progress is liveness evidence in
+// its own right. Measured live before the fix: a healthy 20MB upload retired
+// at ~112s. Once the upload stops (and the peer stays silent), the tunnel must
+// still retire.
+func TestKeepAlive_UploadSurvivesPongStarvation(t *testing.T) {
+	oldInterval, oldWindow := livenessProbeInterval, sessionHardDeadWindow
+	livenessProbeInterval = 15 * time.Millisecond
+	sessionHardDeadWindow = 90 * time.Millisecond
+	t.Cleanup(func() { livenessProbeInterval, sessionHardDeadWindow = oldInterval, oldWindow })
+
+	p1, p2 := net.Pipe()
+	c, err := NewClient(p1, nil)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	t.Cleanup(func() {
+		c.Close() //nolint:errcheck,gosec
+	})
+
+	// The peer: drain and discard everything the client writes, send nothing.
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := p2.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	// The upload: a stream writing a chunk every ~10ms. OpenStream's SYN needs
+	// no reply, and every accepted Write stamps the conn as alive.
+	sess := c.snapshotSessions()[0]
+	stream, err := sess.OpenStream()
+	if err != nil {
+		t.Fatalf("OpenStream: %v", err)
+	}
+	stopSend := make(chan struct{})
+	go func() {
+		chunk := make([]byte, 1024)
+		tick := time.NewTicker(10 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-stopSend:
+				return
+			case <-tick.C:
+				if _, err := stream.Write(chunk); err != nil {
+					return
+				}
+			}
+		}
+	}()
+
+	// Phase 1: upload flowing, nothing inbound — must survive several windows.
+	time.Sleep(4 * sessionHardDeadWindow)
+	if clientClosed(c) {
+		t.Fatal("tunnel with flowing outbound data was retired despite pong starvation")
+	}
+
+	// Phase 2: upload stops, peer stays silent — must now retire.
+	close(stopSend)
+	deadline := time.Now().Add(8 * sessionHardDeadWindow)
+	for time.Now().Before(deadline) {
+		if clientClosed(c) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("fully-silent tunnel was never retired after the upload stopped")
+}
