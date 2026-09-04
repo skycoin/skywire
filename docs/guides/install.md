@@ -3,6 +3,9 @@
 Skywire can be installed by package, downloaded as a release binary, or
 compiled from source via `go install` / `go run`.
 
+For a tailored one-liner (platform, mirror, auto-update mechanism,
+config flags), use the [install command generator](install-generator.md).
+
 ## `go install` or `go run` Skywire (go1.26+)
 
 Skywire commands can be executed via `go run`:

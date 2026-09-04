@@ -12,6 +12,7 @@ cobra subcommand tree.
 ## Setup
 
 - [install.md](install.md) — install via `go install` / `go run`, Linux packages, Docker, NixOS, release binaries
+- [install-generator.md](install-generator.md) — compose a copy-paste install command (platform, mirror, auto-update, config flags, optional in-browser keygen)
 - [permissions.md](permissions.md) — VPN client CAP_NET_ADMIN, VPN server iptables/sysctl, file system + survey
 - [configuration.md](configuration.md) — `config gen` flags, hypervisor web UI, hypervisor TUI, remote hypervisors, network visualization UI
 - [visor.md](visor.md) — running `skywire visor`, process control / while-loop pattern, transport setup, runtime files
