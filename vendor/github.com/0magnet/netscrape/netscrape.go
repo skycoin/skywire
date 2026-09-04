@@ -1,28 +1,18 @@
-// Package netscrape is the skywire virtual-browser engine: browse.js, a
-// page-side browser that renders sites fetched over channels the host
-// browser cannot speak — dmsg/skynet by public key, clearnet through a
-// skysocks exit, a page-internal virtual loopback (github.com/0magnet/bottle
-// vnet), or a real isolated origin (github.com/0magnet/realorigin) — plus
-// the mini-desktop (panel, windows, terminals) it lives in, built on the
-// WinBox constructor from github.com/0magnet/winbox-go.
+// Package netscrape is a web browser written in Go/wasm. Its chrome — a tab
+// strip, address bar, back/forward/reload — is DOM built with syscall/js; each
+// tab is a sandboxed <iframe>. A page is fetched over a host-supplied transport
+// (clearnet, or skywire's dmsg mesh), rendered into a sandboxed srcdoc with its
+// stylesheets and images inlined, and its navigation relayed back to the chrome.
+// The browser is Go; only the rendering (the iframe) and the network (the
+// transport) are delegated.
 //
-// The engine is dependency-injected: a hosting page supplies
+// The browser is a LIBRARY: a host compiles it into its own Go/wasm binary and
+// calls netscrape.Open(element) once (see browser.go, built for js/wasm), so it
+// shares that binary's Go runtime — no separate module, no second runtime. The
+// standalone binary (cmd/browser) is a thin wrapper for hosts that would rather
+// serve or exec it as its own wasm; its pre-built blob and loader live in the
+// dist subpackage.
 //
-//	fetchDmsg(pkHost, method, path, body)      → {status, body, headers}
-//	fetchClearnet(exit, method, url, body, …)  → same shape
-//
-// (or lets it default to the globalThis.skywireVisor implementations), and
-// browse.js does the rest: transcoding into sandboxed iframes with inlined
-// subresources, address-bar channel dispatch, history, favicons, a clearnet
-// upstream-proxy policy, and window management.
+// The previous JavaScript engine (browse.js, the SkywireBrowse panel) lives on
+// the `js` branch.
 package netscrape
-
-import (
-	_ "embed"
-)
-
-//go:embed browse.js
-var browseJS []byte
-
-// BrowseJS returns browse.js, the full engine as one script asset.
-func BrowseJS() []byte { return browseJS }

@@ -101,10 +101,10 @@ func TestGenerateStandalone_VisorMode(t *testing.T) {
 	// The TinyGo getRandomData shim must be present so the wasm instantiates.
 	require.Contains(t, s, `runtime.getRandomData`)
 	require.Contains(t, s, "DecompressionStream")
-	// Visor mode ships the browse/host overlay: the browse.js engine + the
-	// launcher that mounts the panel.
-	require.Contains(t, s, "globalThis.SkywireBrowse", "browse.js engine must be injected in visor mode")
-	require.Contains(t, s, "SkywireBrowse.mountPanel", "the overlay launcher must be injected in visor mode")
+	// Visor mode ships the desk bundle (which defines the netscrape browser
+	// launcher, SkywireGoBrowser.open) + the floating button that opens it.
+	require.Contains(t, s, "globalThis.SkywireGoBrowser", "the Go browser launcher must be injected in visor mode")
+	require.Contains(t, s, "SkywireGoBrowser.open", "the browse launch button must be injected in visor mode")
 }
 
 // TestGenerateStandalone_NoShimForGoTarget confirms the non-visor (Go wasm) path
