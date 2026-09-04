@@ -24,9 +24,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -58,7 +60,20 @@ var (
 	vpnServer cipher.PubKey
 	vpnState  = "stopped" // stopped | connecting | running | error: ...
 	vpnSince  time.Time
+	// vpnEgress: when true AND the tunnel is running, the page's default
+	// clearnet path (fetchClearnet with no pinned exit) rides the VPN instead
+	// of the skysocks proxy chain — the "wrap everything" mode. Set via
+	// vpnStart's options ({egress:true}); cleared on stop.
+	vpnEgress bool
 )
+
+// vpnEgressActive reports whether default clearnet traffic should ride the
+// tunnel right now (mode on AND session running).
+func vpnEgressActive() bool {
+	vpnMu.Lock()
+	defer vpnMu.Unlock()
+	return vpnEgress && vpnCl != nil && vpnState == "running"
+}
 
 func vpnSetState(s string) {
 	vpnMu.Lock()
@@ -194,6 +209,13 @@ func jsVPNStart(_ js.Value, args []js.Value) interface{} {
 	if len(args) > 0 && args[0].Type() == js.TypeString {
 		pkHex = args[0].String()
 	}
+	// Options object (2nd arg): {egress:true} turns on default-egress mode —
+	// the page's un-pinned fetchClearnet traffic rides the tunnel while it
+	// runs (see vpnEgressActive / jsFetchClearnet).
+	egress := false
+	if len(args) > 1 && args[1].Type() == js.TypeObject {
+		egress = args[1].Get("egress").Truthy()
+	}
 	return promise(func() (interface{}, error) {
 		if rtr == nil {
 			return nil, errors.New("not booted; call boot() first")
@@ -233,6 +255,9 @@ func jsVPNStart(_ js.Value, args []js.Value) interface{} {
 				vpnSetState(fmt.Sprintf("server %s failed (%v) — trying next", pk.Hex(), err))
 				continue
 			}
+			vpnMu.Lock()
+			vpnEgress = egress
+			vpnMu.Unlock()
 			return "connected " + pk.Hex(), nil
 		}
 		vpnSetState("error: all candidates failed: " + lastErr.Error())
@@ -246,6 +271,7 @@ func jsVPNStop(_ js.Value, _ []js.Value) interface{} {
 		vpnMu.Lock()
 		cl, conn := vpnCl, vpnConn
 		vpnCl, vpnConn = nil, nil
+		vpnEgress = false
 		vpnMu.Unlock()
 		if cl == nil {
 			return "already stopped", nil
@@ -266,6 +292,7 @@ func jsVPNStatus(_ js.Value, _ []js.Value) interface{} {
 	st := map[string]interface{}{
 		"running": vpnCl != nil && vpnState == "running",
 		"status":  vpnState,
+		"egress":  vpnEgress,
 	}
 	if vpnCl != nil {
 		st["server"] = vpnServer.Hex()
@@ -343,6 +370,36 @@ func vpnResolve(resolveCtx context.Context, cl *vpn.Client, host string) (string
 	return "", fmt.Errorf("no A record for %s", host)
 }
 
+// vpnHTTPDo performs one HTTP request whose TCP (and DNS) ride the tunnel.
+// Shared by vpnFetch and the default-egress hook in fetchClearnet.
+func vpnHTTPDo(method, rawURL string, body []byte, headers map[string]string) (int, []byte, http.Header, error) {
+	httpCl := &http.Client{
+		Transport: &http.Transport{DialContext: vpnDial, DisableKeepAlives: true},
+		Timeout:   120 * time.Second,
+	}
+	var rd io.Reader
+	if len(body) > 0 {
+		rd = bytes.NewReader(body)
+	}
+	req, err := http.NewRequest(method, rawURL, rd) //nolint:noctx // client carries the timeout
+	if err != nil {
+		return 0, nil, nil, err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := httpCl.Do(req)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+	if err != nil {
+		return 0, nil, nil, err
+	}
+	return resp.StatusCode, b, resp.Header, nil
+}
+
 // jsVPNFetch(url) does a plain-HTTP GET through the tunnel. Validation
 // surface: proves TCP + DNS ride the VPN end to end.
 func jsVPNFetch(_ js.Value, args []js.Value) interface{} {
@@ -351,29 +408,18 @@ func jsVPNFetch(_ js.Value, args []js.Value) interface{} {
 	}
 	rawURL := args[0].String()
 	return promise(func() (interface{}, error) {
-		httpCl := &http.Client{
-			Transport: &http.Transport{DialContext: vpnDial, DisableKeepAlives: true},
-			Timeout:   45 * time.Second,
-		}
-		resp, err := httpCl.Get(rawURL) //nolint:noctx // promise-scoped; client carries the timeout
+		status, b, hdr, err := vpnHTTPDo("GET", rawURL, nil, nil)
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close() //nolint:errcheck
 		const bodyCap = 64 * 1024
-		body := make([]byte, 0, 4096)
-		buf := make([]byte, 4096)
-		for len(body) < bodyCap {
-			n, rerr := resp.Body.Read(buf)
-			body = append(body, buf[:n]...)
-			if rerr != nil {
-				break
-			}
+		if len(b) > bodyCap {
+			b = b[:bodyCap]
 		}
 		return js.ValueOf(map[string]interface{}{
-			"status":      resp.StatusCode,
-			"contentType": resp.Header.Get("Content-Type"),
-			"body":        string(body),
+			"status":      status,
+			"contentType": hdr.Get("Content-Type"),
+			"body":        string(b),
 		}), nil
 	})
 }
