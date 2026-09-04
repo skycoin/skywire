@@ -165,6 +165,18 @@ type Client struct {
 	entryCache   map[cipher.PubKey]entryCacheEntry
 	entryCacheMx sync.RWMutex
 
+	// dialFail backs off repeated DialStream failures per DESTINATION. When a
+	// destination is persistently unreachable (its delegated server refuses —
+	// dmsg error 202), every periodic caller (discovery updates, trackers)
+	// otherwise re-pays the full dial ladder each tick — up to 16 existing-
+	// session stream attempts plus 2 brand-new noise handshakes — which pegged
+	// a browser core at ~92% (measured: ~12.6 goroutines/s created for 44
+	// minutes straight in a wasm visor whose dmsgd path had wedged). Within
+	// the backoff window DialStream fast-fails with the recorded error; any
+	// success clears the state. Lazily initialized.
+	dialFail   map[cipher.PubKey]*dialFailState
+	dialFailMx sync.Mutex
+
 	// carrierFailAt records, per dmsg-server PK, the time of the last carrier
 	// convergence re-dial that landed on a less-preferred carrier or failed
 	// (see ConvergeCarriers). A server whose preferred endpoint is unreachable
@@ -916,6 +928,58 @@ func hasPK(pks []cipher.PubKey, pk cipher.PubKey) bool {
 		}
 	}
 	return false
+}
+
+// Per-destination dial-failure backoff bounds (see Client.dialFail).
+const (
+	dialFailBackoffMin = 2 * time.Second
+	dialFailBackoffMax = 60 * time.Second
+)
+
+// dialFailState is one destination's failure-backoff record.
+type dialFailState struct {
+	until   time.Time     // fast-fail DialStream calls before this instant
+	backoff time.Duration // next window length (doubles per failure, capped)
+	lastErr error         // the error fast-failed calls return
+}
+
+// dialFailCheck reports whether dst is inside its failure-backoff window, and
+// the error to fast-fail with.
+func (ce *Client) dialFailCheck(dst cipher.PubKey) (error, bool) {
+	ce.dialFailMx.Lock()
+	defer ce.dialFailMx.Unlock()
+	st, ok := ce.dialFail[dst]
+	if !ok || time.Now().After(st.until) {
+		return nil, false
+	}
+	return st.lastErr, true
+}
+
+// dialFailRecord notes a full DialStream failure for dst, doubling its
+// backoff window up to the cap.
+func (ce *Client) dialFailRecord(dst cipher.PubKey, err error) {
+	ce.dialFailMx.Lock()
+	defer ce.dialFailMx.Unlock()
+	if ce.dialFail == nil {
+		ce.dialFail = make(map[cipher.PubKey]*dialFailState)
+	}
+	st, ok := ce.dialFail[dst]
+	if !ok {
+		st = &dialFailState{backoff: dialFailBackoffMin}
+		ce.dialFail[dst] = st
+	}
+	st.until = time.Now().Add(st.backoff)
+	st.lastErr = err
+	if st.backoff *= 2; st.backoff > dialFailBackoffMax {
+		st.backoff = dialFailBackoffMax
+	}
+}
+
+// dialFailClear wipes dst's failure state on a successful dial.
+func (ce *Client) dialFailClear(dst cipher.PubKey) {
+	ce.dialFailMx.Lock()
+	delete(ce.dialFail, dst)
+	ce.dialFailMx.Unlock()
 }
 
 // getCachedRoute returns the server PK that last successfully reached the given destination.
