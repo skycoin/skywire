@@ -160,8 +160,12 @@
   // which must match toolchains. Empty = the server default.
   var __variant = '';
   try { __variant = (new URLSearchParams(self.location.search)).get('variant') || ''; } catch (e) {}
-  var __vqs = __variant ? ('?variant=' + encodeURIComponent(__variant)) : '';
-  importScripts('wasm_exec.js' + __vqs);
+  // Variant in the PATH, not a query: a query cannot select bytes on a static
+  // host, and the blob and its toolchain-matched wasm_exec.js must never be
+  // mixed. The worker still learns its variant from its OWN url query, which
+  // hv-boot sets so each variant gets a distinct SharedWorker identity.
+  var __vpath = function (name) { return __variant ? ('wasm/' + encodeURIComponent(__variant) + '/' + name) : name; };
+  importScripts(__vpath('wasm_exec.js'));
   var go = new Go();
   // TinyGo's wasm_exec.js omits the gojs getRandomData import the crypto-using Go
   // runtime needs to seed itself; inject it only when absent (mirrors hv-boot.js).
@@ -450,7 +454,7 @@
     registerPort(selfPort);
   }
 
-  fetch('wasm-visor.wasm' + __vqs).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
+  fetch(__vpath('wasm-visor.wasm')).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
     return WebAssembly.instantiate(buf, go.importObject);
   }).then(function (res) {
     go.run(res.instance); // installs self.skywireVisor, then parks on select{}

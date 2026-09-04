@@ -259,6 +259,42 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		}
 		_, _ = w.Write(wasmbin.WasmExecJSVariant(pickVariant(r))) //nolint:errcheck
 	})
+	// Per-variant PATHS alongside the ?variant= query form above. A query string
+	// cannot select bytes on a static host (GitHub Pages and friends serve one
+	// body per path), so publishing this surface as files requires the variant to
+	// live in the URL path. The blob and its wasm_exec.js loader are
+	// toolchain-specific and must never be mixed (see wasmbin/embed.go), so both
+	// are served under the same /wasm/<variant>/ prefix and travel as a pair.
+	// The query form stays for already-cached clients.
+	for _, v := range wasmbin.Available() {
+		v := v
+		tag := `"` + wasmVer + "-" + string(v) + `"`
+		mux.HandleFunc("/wasm/"+string(v)+"/wasm-visor.wasm", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/wasm")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("ETag", tag)
+			if r.Header.Get("If-None-Match") == tag {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			b, err := wasmbin.GetVariant(v)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			_, _ = w.Write(b) //nolint:errcheck
+		})
+		mux.HandleFunc("/wasm/"+string(v)+"/wasm_exec.js", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/javascript")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("ETag", tag)
+			if r.Header.Get("If-None-Match") == tag {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			_, _ = w.Write(wasmbin.WasmExecJSVariant(v)) //nolint:errcheck
+		})
+	}
 	mux.HandleFunc("/wasm-variants.json", func(w http.ResponseWriter, _ *http.Request) {
 		avail := wasmbin.Available()
 		names := make([]string, len(avail))
