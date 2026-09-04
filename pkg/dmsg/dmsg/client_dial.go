@@ -32,6 +32,14 @@ func (ce *Client) Dial(ctx context.Context, addr Addr) (net.Conn, error) {
 
 // DialStream dials to a remote client entity with the given address.
 func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
+	// Fast-fail inside a destination's failure-backoff window (see
+	// Client.dialFail): a persistently unreachable destination otherwise costs
+	// every periodic caller the full dial ladder — stream attempts across all
+	// existing sessions plus new-session noise handshakes — every tick.
+	if failErr, backing := ce.dialFailCheck(addr.PK); backing {
+		return nil, failErr
+	}
+
 	entry, discErr := ce.getClientEntryCached(ctx, addr.PK)
 	if discErr != nil {
 		// Discovery lookup failed. For direct clients or when the destination
@@ -49,8 +57,12 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 			defer fallbackCancel()
 			stream, err := ce.dialViaConnectedServers(fallbackCtx, addr)
 			if err == nil {
+				ce.dialFailClear(addr.PK)
 				return stream, nil
 			}
+		}
+		if ctx.Err() == nil {
+			ce.dialFailRecord(addr.PK, discErr)
 		}
 		return nil, discErr
 	}
@@ -64,6 +76,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 					Debug("DialStream failed via cached route, evicting")
 				ce.evictCachedRoute(addr.PK)
 			} else {
+				ce.dialFailClear(addr.PK)
 				return stream, nil
 			}
 		} else {
@@ -109,6 +122,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// mode of TestMultiServerStreams).
 	delegatedSessions := ce.sortedDelegatedSessions(entry.Client.DelegatedServers)
 	if stream, ok := ce.sequentialPhaseDial(ctx, addr, delegatedSessions, maxPerExistingPhase); ok {
+		ce.dialFailClear(addr.PK)
 		return stream, nil
 	}
 
@@ -118,6 +132,7 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// Skips negative-cached pairs.
 	meshSessions := ce.sortedMeshSessions(entry.Client.DelegatedServers)
 	if stream, ok := ce.sequentialPhaseDial(ctx, addr, meshSessions, maxPerExistingPhase); ok {
+		ce.dialFailClear(addr.PK)
 		return stream, nil
 	}
 
@@ -137,9 +152,16 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 			continue
 		}
 		ce.setCachedRoute(addr.PK, srvPK)
+		ce.dialFailClear(addr.PK)
 		return stream, nil
 	}
 
+	// The whole ladder failed. Skip recording when the CALLER's context ran
+	// out (its short deadline says nothing about the destination — recording
+	// it would fast-fail other callers with healthy budgets).
+	if ctx.Err() == nil {
+		ce.dialFailRecord(addr.PK, ErrCannotConnectToDelegated)
+	}
 	return nil, ErrCannotConnectToDelegated
 }
 
