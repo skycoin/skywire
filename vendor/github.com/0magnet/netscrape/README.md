@@ -2,6 +2,16 @@
 
 A web browser written in Go/wasm.
 
+**[Live demo](https://0magnet.github.io/netscrape/)** — the browser, browsing a small site served beside it: stylesheet inlined, image relayed back as a `data:` URI, links and a GET form posted to the Go chrome.
+
+![netscrape in the browser](docs/netscrape-demo.png "the Go chrome — tab strip, address bar, history — rendering a sample page with its stylesheet and image transcoded in")
+
+A static page can only fetch its own origin, so the demo reaches the sample
+site and says so for anything else. That limit is the transport's, not the
+browser's: the same seam dials the dmsg mesh in skywire's wasm visor, and in
+[shipyard](https://0magnet.github.io/shipyard/) it reaches a Go server running
+in the same tab over a virtual loopback.
+
 The chrome — a tab strip, an address bar, back/forward/reload, history — is DOM
 built from Go with `syscall/js`. Each tab is a sandboxed `<iframe>`. A page is
 fetched over a **host-supplied transport**, transcoded (rendered into a
@@ -68,3 +78,36 @@ its own transcoder, a `SkywireBrowse` panel, address-bar channel dispatch, and
 window management, grown inside skywire. That version lives on the
 [`js` branch](https://github.com/0magnet/netscrape/tree/js). `main` is the Go
 rewrite; consumers move over as it reaches parity.
+
+## Dependency Graph
+
+Made with [goda](https://github.com/loov/goda):
+
+```
+# GOOS=js: the import edges of a wasm program live in js/wasm-tagged
+# files and are invisible to a host-context run
+GOOS=js GOARCH=wasm go run github.com/loov/goda@latest graph github.com/0magnet/netscrape/... | dot -Tsvg -o docs/netscrape-goda-graph.svg
+```
+
+![Dependency Graph](docs/netscrape-goda-graph.svg "github.com/0magnet/netscrape Dependency Graph")
+
+## Lines of Code
+
+Made with [gocloc](https://github.com/hhatto/gocloc) (excludes `vendor/`, `node_modules/`, `.git/`):
+
+```
+gocloc --not-match-d='(vendor|node_modules|\.git)' .
+```
+
+```
+-------------------------------------------------------------------------------
+Language                     files          blank        comment           code
+-------------------------------------------------------------------------------
+Go                               4             43             99            376
+Markdown                         1             18              0             52
+JavaScript                       1              0             14             42
+Bourne Shell                     1              0              4              6
+-------------------------------------------------------------------------------
+TOTAL                            7             61            117            476
+-------------------------------------------------------------------------------
+```

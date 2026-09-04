@@ -13,6 +13,17 @@ const startPage = "data:text/html,<body style='font-family:sans-serif;padding:2e
 	"<h1>A browser, in Go</h1><p>The chrome is syscall/js. Each tab is an iframe. " +
 	"Use + for a new tab, or type a URL above.</p></body>"
 
+// home is the page a new tab opens. A host that has something of its own to
+// show — a demo site served beside the browser, a mesh index — sets
+// globalThis.__netscrapeStart to its URL; everyone else gets the built-in
+// page, which is what this did before there was a way to say otherwise.
+func home() string {
+	if v := js.Global().Get("__netscrapeStart"); v.Type() == js.TypeString && v.String() != "" {
+		return v.String()
+	}
+	return startPage
+}
+
 // navShim runs inside the sandboxed page. A sandboxed srcdoc has an opaque
 // origin and can't navigate itself across sites, so it relays intent to the
 // parent (this Go browser) via postMessage: link clicks and form GETs become a
@@ -94,11 +105,24 @@ func btn(label, style string) js.Value {
 	return b
 }
 
+// DirectLoader lets a host claim a URL for NATIVE rendering: return the src to
+// put on the tab's iframe and ok, and the page loads as an ordinary document
+// instead of being fetched and transcoded into a sandboxed srcdoc. It exists
+// for pages the host can already serve on its own origin — skywire's
+// /vnet/<port>/ service-worker URLs are the driving case, where transcoding an
+// app the browser could render natively would only degrade it. Everything not
+// claimed keeps going through the transport.
+//
+// A claimed page is same-origin and UNSANDBOXED, so only claim URLs the host
+// itself serves.
+var DirectLoader func(url string) (src string, ok bool)
+
 // load renders a URL into a tab's iframe. A data:/about:/blob: URL goes straight
 // to the iframe; anything else — an http(s) page, or a bare host like
 // example.com or home.dmsg — goes through the transport (fetchPage), which lets
-// the host's fetchVia decide clearnet vs mesh. A scheme-less address is
-// normalised to http:// so the transport always gets a URL.
+// the host's fetchVia decide clearnet vs mesh, unless DirectLoader claims it
+// for native rendering. A scheme-less address is normalised to http:// so the
+// transport always gets a URL.
 func load(t *tab, url string) {
 	if strings.HasPrefix(url, "data:") || strings.HasPrefix(url, "about:") || strings.HasPrefix(url, "blob:") {
 		t.frame.Call("removeAttribute", "srcdoc")
@@ -106,6 +130,19 @@ func load(t *tab, url string) {
 	} else {
 		if !strings.Contains(url, "://") {
 			url = "http://" + url
+		}
+		if DirectLoader != nil {
+			if src, ok := DirectLoader(url); ok {
+				// Drop the transcoder's sandbox: a natively rendered page is
+				// the host's own, and Angular-style apps need same-origin.
+				t.frame.Call("removeAttribute", "srcdoc")
+				t.frame.Call("removeAttribute", "sandbox")
+				t.frame.Set("src", src)
+				if active >= 0 && tabs[active] == t {
+					addr.Set("value", url)
+				}
+				return
+			}
 		}
 		fetchPage(t, url)
 	}
@@ -302,12 +339,26 @@ func Open(root js.Value) {
 		return
 	}
 	doc = js.Global().Get("document")
-	root.Get("style").Set("cssText", "position:absolute;inset:0;display:flex;flex-direction:column;background:#15131c")
+	// Style the host WITHOUT clobbering its geometry. Overwriting cssText here
+	// destroyed the positioning a window manager had already given the element:
+	// mounted into a desk window's body, the browser covered the whole frame,
+	// so the tab strip sat under the title bar and the window's drag handler
+	// swallowed every click meant for a tab. Supply a position only when the
+	// host genuinely has none.
+	st := root.Get("style")
+	if pos := js.Global().Call("getComputedStyle", root).Get("position").String(); pos == "" || pos == "static" {
+		st.Set("position", "absolute")
+		st.Set("inset", "0")
+	}
+	st.Set("display", "flex")
+	st.Set("flexDirection", "column")
+	st.Set("background", "#15131c")
+	st.Set("overflow", "hidden")
 
 	strip = mk("div")
 	strip.Get("style").Set("cssText", "display:flex;gap:2px;align-items:flex-end;background:#100d18;border-bottom:1px solid #2a2342;padding:3px 3px 0;min-height:24px")
 	plus := btn("+", "padding:.2em .55em;border-radius:5px 5px 0 0")
-	onClick(plus, func() { addTab(startPage) })
+	onClick(plus, func() { addTab(home()) })
 	strip.Call("appendChild", plus)
 
 	bar := mk("div")
@@ -374,7 +425,7 @@ func Open(root js.Value) {
 		return nil
 	}))
 
-	addTab(startPage)
+	addTab(home())
 }
 
 // Navigate loads url in the ACTIVE tab, recording it in that tab's history —
