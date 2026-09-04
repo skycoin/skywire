@@ -2,7 +2,10 @@
 
 [← skywire cli dmsg diag](../README.md)
 
-Force close and reconnect all DMSG sessions
+Force-close every active dmsg session on the visor's main client.
+The reconnect loop re-dials to the configured sessions_count target
+within ~15s. Disruptive: in-flight dmsg streams (routes, proxied
+apps) are torn down — use it to unwedge a stuck client, not routinely.
 
 ## Usage
 
@@ -10,12 +13,21 @@ Force close and reconnect all DMSG sessions
 skywire cli dmsg diag reconnect
 ```
 
+## Flags
+
+```
+      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+```
+
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

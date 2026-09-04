@@ -3,7 +3,8 @@
 Skywire visors host **apps** — programs that ride the encrypted Skywire
 network instead of the open internet. Each app is addressed by the hosting
 visor's public key (not an IP), runs over whatever transport the router
-selected (STCPR, SUDPH, or DMSG), and is gated by the visor's whitelist
+selected (STCPR, SUDPH, DMSG, QUIC, WebSocket, WebTransport, or WebRTC),
+and is gated by the visor's whitelist
 where access control applies.
 
 Most apps come in a **server**/**client** pair: one visor hosts the service,

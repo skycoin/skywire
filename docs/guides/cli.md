@@ -108,6 +108,9 @@ For browser access to the same address space, use the
 - `skywire cli util serve <dir>` — static HTTP file server on a random
   localhost port; pair with `skywire cli serve add` to expose it over
   the mesh.
+- `skywire cli util edit <file>` — embedded terminal text editor with
+  syntax highlighting (Ctrl+S save, Ctrl+Q quit); useful where no
+  editor is installed, e.g. inside a pty session or the playground.
 - `skywire cli visor pk dnslabel` — convert a public key between its
   66-char hex form and the 53-char base32 DNS label used in
   TLS-fronted `wss://` hostnames.

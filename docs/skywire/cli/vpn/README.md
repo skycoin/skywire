@@ -2,7 +2,17 @@
 
 [← skywire cli](../README.md)
 
-VPN client
+Control the VPN client over the Skywire network.
+
+Discover VPN servers, start/stop a full-tunnel vpn-client against a server
+PK, check status, and open the VPN web UI.
+
+  list     discover VPN servers from service discovery
+  start    start the tunnel against a server PK (--pk / positional)
+  stop     stop the vpn client
+  status   show vpn client status
+  server   control the local vpn-server app (Linux only)
+  ui/url   open or print the VPN web-UI URL
 
 ## Usage
 
@@ -30,8 +40,11 @@ skywire cli vpn
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

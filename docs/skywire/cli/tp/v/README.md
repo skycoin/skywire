@@ -18,8 +18,8 @@ skywire cli tp v
 
 ```
   -m, --cfa int            update cache files if older than n minutes (default 5)
-      --cfs string         SD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//visorsd.json")
-      --cfu string         UT cache file location. (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//ut.json")
+      --cfs string         SD cache file location (default "/tmp/visorsd.json")
+      --cfu string         UT cache file location. (default "/tmp/ut.json")
       --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
   -c, --country string     filter by country code
       --json               print output in json
@@ -32,6 +32,7 @@ skywire cli tp v
   -a, --sdurl string       service discovery url (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
       --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -s, --stats              return only a count of the results
+      --tpdurl string      transport-discovery url (alias of --uturl) (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -w, --uturl string       uptime tracker url (TPD integrated) (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -e, --version string     filter by version
 ```
@@ -40,7 +41,10 @@ skywire cli tp v
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

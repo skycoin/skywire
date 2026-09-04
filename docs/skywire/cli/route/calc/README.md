@@ -19,18 +19,21 @@ skywire cli route calc [<src-pk>] <dst-pk>
 
 ```
       --by-latency         rank routes by cumulative transport latency (lowest first); skips the streaming gRPC path since the full set has to be in hand to sort
+      --capacity           instead of listing routes, report how many disjoint SINGLE-INTERMEDIATE routes CAN exist to the destination — the warm-standby mux pool ceiling. Uses only this visor's + the destination's own transports (setup-node/attached-visor RPC) intersected by peer PK; TPD-free and zero Route-Finder load
       --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
   -c, --count int          max routes to return (0 = all matching) (default 1)
       --disable            disable local route calculation in visor
       --enable             enable local route calculation in visor
   -x, --max uint16         maximum hops (default 5)
+      --max-hops uint16    maximum hops (alias for --max) (default 5)
   -n, --min uint16         minimum hops (0 = use visor's routing.min_hops, fallback 1)
+      --min-hops uint16    minimum hops (alias for --min)
       --no-cxo             skip CXO subscriber-cache step
       --no-dmsg            skip direct DMSG HTTP step
       --no-rpc             skip visor RPC (DmsgHTTP) step
       --queue-cap int      BFS queue cap (0 = server/local default ~200K, negative = unbounded)
       --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --source string      transport graph source: tpd (HTTP), dht (visor's local DHT store), auto (DHT then TPD) (default "tpd")
+      --source string      transport graph source: tpd (HTTP) | tps (AUTHORITATIVE: src+dst own transports via the setup node, same path as tp --remote; TPD-independent, single-intermediate). dht|auto are accepted for compatibility and also read from TPD, since the DHT store was removed; dht and tps force the non-streaming local-compute path (default "tpd")
   -t, --timeout duration   request timeout (default 30s)
   -a, --tpd string         transport discovery URL (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
 ```
@@ -39,8 +42,11 @@ skywire cli route calc [<src-pk>] <dst-pk>
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

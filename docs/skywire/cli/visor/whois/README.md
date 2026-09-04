@@ -2,10 +2,9 @@
 
 [← skywire cli visor](../README.md)
 
-Single-PK rollup over transport-discovery, uptime-tracker, and
-service-discovery. Useful for triaging a peer from a log line, a
-chat message, or a transport-id without manually hitting three
-services.
+Single-PK rollup over transport-discovery and service-discovery.
+Useful for triaging a peer from a log line, a chat message, or a
+transport-id without manually hitting two services.
 
 Examples:
   skywire cli visor whois <pk>             # human-readable table
@@ -26,7 +25,6 @@ skywire cli visor whois <pk>
 ```
   -t, --timeout duration   per-service request timeout (default 5s)
       --tpd string         transport-discovery URL (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
-      --ut string          TPD-integrated uptime-tracker URL (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
       --sd string          service-discovery URL (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
 ```
 
@@ -34,8 +32,11 @@ skywire cli visor whois <pk>
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

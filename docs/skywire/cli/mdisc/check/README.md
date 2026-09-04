@@ -28,15 +28,21 @@ skywire cli mdisc check
 
 ```
       --timeout duration   per-server probe timeout (default 15s)
-      --url string         specify alternative DMSG discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
       --warn-only          always exit 0 (report problems without failing)
 ```
 
 ## Global Flags
 
 ```
+      --cdd string        DMSG cache dir ("" to disable) (default "/tmp/022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+  -m, --cfa int           update cache file if older than n minutes (default 5)
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --testenv           use test deployment
+      --tui               browse commands and help interactively
+      --url string        specify alternative DMSG discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

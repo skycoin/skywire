@@ -25,7 +25,7 @@ skywire cli ut mdisc graph
 ```
   -a, --all                  include every day the server returned (default when --days/--since/--until not set)
   -m, --cache-age int        re-fetch if cache is older than N minutes (0 disables) (default 5)
-      --cache-dir string     cache directory ("" disables cache) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+      --cache-dir string     cache directory ("" disables cache) (default "/tmp/022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
       --config string        path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
   -d, --days int             number of most-recent days to include (0 = all available; ignored with --hours)
       --hours int            rolling-window mode: show last N hours ending at now
@@ -53,6 +53,9 @@ skywire cli ut mdisc graph
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

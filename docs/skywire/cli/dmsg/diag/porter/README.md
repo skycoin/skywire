@@ -2,7 +2,10 @@
 
 [← skywire cli dmsg diag](../README.md)
 
-Show ephemeral port reservation counts
+Show how many ephemeral dmsg ports are currently reserved on the
+main (and, when present, embedded RSN) dmsg clients, out of the 16384
+ephemeral-port ceiling. A count climbing toward the ceiling points at
+port-space exhaustion; 'dmsg diag porter-reset' recovers it.
 
 ## Usage
 
@@ -10,12 +13,21 @@ Show ephemeral port reservation counts
 skywire cli dmsg diag porter
 ```
 
+## Flags
+
+```
+      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+```
+
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

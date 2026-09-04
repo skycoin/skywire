@@ -2,7 +2,10 @@
 
 [← skywire cli reward](../README.md)
 
-display the mainnet rules
+Display the mainnet reward eligibility rules (embedded at build time).
+
+By default the markdown is rendered for the terminal. Use --raw to print
+the original markdown source, or --html to render it as an HTML fragment.
 
 ## Usage
 
@@ -21,8 +24,11 @@ skywire cli reward rules
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

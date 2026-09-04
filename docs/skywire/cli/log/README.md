@@ -18,9 +18,9 @@ skywire cli log
 - [info](info/README.md) — Fetch a single visor's /node-info survey
 - [pprof](pprof/README.md) — Fetch a runtime pprof profile from a remote visor
 - [reward](reward/README.md) — Fetch /reward.txt from a remote visor
-- [st](st/README.md) — survey tree
+- [st](st/README.md) — Render collected surveys as a color tree
 - [stats](stats/README.md) — Fetch /stats[/path] from a remote visor
-- [tp](tp/README.md) — display collected transport bandwidth logging
+- [tp](tp/README.md) — Display collected transport-bandwidth logs
 - [uptime](uptime/README.md) — Fetch /uptime[/path] from a remote visor
 
 ## Flags
@@ -58,8 +58,11 @@ skywire cli log
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

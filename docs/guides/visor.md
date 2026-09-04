@@ -115,7 +115,7 @@ skywire cli tp add -t <transport-type> <public-key>
 
 View established transports:
 ```
-skywire cli tp ls
+skywire cli tp
 ```
 
 Remove a transport:

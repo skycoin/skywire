@@ -2,10 +2,16 @@
 
 [← skywire cli](../README.md)
 
-Query DMSG Discovery
-	list entries in dmsg discovery
+Query DMSG Discovery.
 
-Use --testenv or SKYWIRETEST=1 to use test deployment services.
+The bare command lists the dmsg clients registered in discovery (add
+--stats for just a count). Subcommands:
+  entry <pk>   fetch one registered entry (client or server)
+  servers      list dmsg servers by load (connected~ / avail-sess)
+  check        probe every server's advertised wss front (DNS/TLS/426)
+
+--url points at an alternative discovery; --testenv (or SKYWIRETEST=1)
+selects the test deployment. Both apply to every subcommand.
 
 ## Usage
 
@@ -16,13 +22,13 @@ skywire cli mdisc
 ## Subcommands
 
 - [check](check/README.md) — Probe every dmsg server's advertised wss front (DNS, TLS cert, 426)
-- [entry](entry/README.md) — Fetch an entry
+- [entry](entry/README.md) — Fetch one dmsg-discovery entry (client or server)
 - [servers](servers/README.md) — List dmsg servers with connected-client + available-session counts
 
 ## Flags
 
 ```
-      --cdd string   DMSG cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+      --cdd string   DMSG cache dir ("" to disable) (default "/tmp/022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
   -m, --cfa int      update cache file if older than n minutes (default 5)
   -s, --stats        count the number of results
       --testenv      use test deployment
@@ -33,8 +39,11 @@ skywire cli mdisc
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

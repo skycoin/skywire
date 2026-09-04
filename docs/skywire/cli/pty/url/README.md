@@ -14,7 +14,7 @@ skywire cli pty url
 
 ```
   -i, --input string   read from specified config file
-  -p, --pkg            read from /Library/Application Support/Skywire/skywire-config.json
+  -p, --pkg            read from /opt/skywire/skywire.json
   -v, --visor string   public key of visor to connect to
 ```
 
@@ -22,8 +22,11 @@ skywire cli pty url
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

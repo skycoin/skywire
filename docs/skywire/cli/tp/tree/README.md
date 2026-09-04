@@ -25,8 +25,8 @@ skywire cli tp tree
   -p, --pretty             print pretty json data
   -o, --noton              do not filter by online status in UT
   -g, --good               do not display transports for offline visors
-      --cft string         TPD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//tpd.json")
-      --cfu string         UT cache file location. (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//ut.json")
+      --cft string         TPD cache file location (default "/tmp/tpd.json")
+      --cfu string         UT cache file location. (default "/tmp/ut.json")
   -m, --cfa int            update cache files if older than n minutes (default 5)
   -P, --pad int            padding between tree and tpid (default 15)
   -s, --stats              return only statistics
@@ -45,8 +45,11 @@ skywire cli tp tree
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

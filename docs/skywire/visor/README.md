@@ -24,7 +24,7 @@ skywire visor
       --dmsg-server string             use specified dmsg server public key
       --dmsg-server-max-attempts int   max failed connect attempts before shutdown (only with --dmsg-server) (default 5)
   -u, --user                           use config at: $HOME/skywire-config.json
-  -p, --pkg                            p̶a̶c̶k̶a̶g̶e̶ ̶c̶o̶n̶f̶i̶g̶ does not exist
+  -p, --pkg                            p̶a̶c̶k̶a̶g̶e̶ ̶c̶o̶n̶f̶i̶g̶ requires root permissions
       --systray                        run the visor WITH the systray in one process (coupled; needs a desktop session)
       --systray-only                   run ONLY the systray, controlling a separately-running visor over RPC
       --rpc string                     visor RPC address the --systray-only tray connects to (default "localhost:3435")
@@ -46,7 +46,11 @@ skywire visor
 ## Global Flags
 
 ```
-  -h, --help   show help menu
+  -h, --help        show help menu
+      --jq string   filter JSON output through a jq/gojq expression (implies --json)
+      --json        print output as JSON
+      --shape       print the output schema skeleton (zero values, all fields) instead of data
+      --tui         browse commands and help interactively
 ```
 
 ---

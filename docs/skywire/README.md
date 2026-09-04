@@ -5,7 +5,7 @@
 └─┐├┴┐└┬┘││││├┬┘├┤ 
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
 <version>
-built with go1.26.4
+built with go1.27.1 on <build-date>
 ```
 
 ## Usage
@@ -20,16 +20,21 @@ skywire
 - [cli](cli/README.md) — Command Line Interface for skywire
 - [cxo](cxo/README.md) — CXO object distribution system
 - [dmsg](dmsg/README.md) — DMSG services & utilities
+- [skycoin](skycoin/README.md) — skycoin daemon & cli
 - [svc](svc/README.md) — Skywire services
 - [visor](visor/README.md) — Skywire Visor
 
 ## Flags
 
 ```
-      --all    show all subcommands (including hidden)
-  -b, --bv     print runtime/debug.BuildInfo.Main.Version
-  -h, --help   show help menu
-  -d, --info   print runtime/debug.BuildInfo
+      --all         show all subcommands (including hidden)
+  -b, --bv          print runtime/debug.BuildInfo.Main.Version
+  -h, --help        show help menu
+  -d, --info        print runtime/debug.BuildInfo
+      --jq string   filter JSON output through a jq/gojq expression (implies --json)
+      --json        print output as JSON
+      --shape       print the output schema skeleton (zero values, all fields) instead of data
+      --tui         browse commands and help interactively
 ```
 
 ---

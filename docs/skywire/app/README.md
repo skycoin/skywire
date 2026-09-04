@@ -28,7 +28,11 @@ skywire app
 ## Global Flags
 
 ```
-  -h, --help   show help menu
+  -h, --help        show help menu
+      --jq string   filter JSON output through a jq/gojq expression (implies --json)
+      --json        print output as JSON
+      --shape       print the output schema skeleton (zero values, all fields) instead of data
+      --tui         browse commands and help interactively
 ```
 
 ---

@@ -11,11 +11,11 @@ For Docker Compose deployment, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md).
 The following repositories are used for skywire:
 
 * [skywire](https://github.com/skycoin/skywire)
-* [dmsg](https://github.com/skycoin/dmsg)
 * [skycoin](https://github.com/skycoin/skycoin) - _Note: skycoin is not a critical dependency and is only used with the reward system_
 
 The following repositories have been integrated with the skywire source code and are no longer maintained as separate repositories / source code:
 
+* ~[dmsg](https://github.com/skycoin/dmsg)~ (now `pkg/dmsg`)
 * ~[skywire-utilities](https://github.com/skycoin/skywire-utilities)~
 * ~[skywire-services](https://github.com/skycoin/skywire-services)~
 * ~[skycoin-service-discovery](https://github.com/skycoin/skycoin-service-discovery)~
@@ -28,18 +28,19 @@ $ go run .
 └─┐├┴┐└┬┘││││├┬┘├┤
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
 (devel)
-built with go1.25.6 X:nodwarf5
+built with go1.27.1
 
 Usage:
   skywire
 
 Available Commands:
-  visor     Skywire Visor
-  cli       Command Line Interface for skywire
-  svc       Skywire services
-  dmsg      DMSG services & utilities
   app       skywire native applications
+  cli       Command Line Interface for skywire
+  cxo       CXO object distribution system
+  dmsg      DMSG services & utilities
   skycoin   skycoin daemon & cli
+  svc       Skywire services
+  visor     Skywire Visor
 
 Flags:
   -b, --bv        print runtime/debug.BuildInfo.Main.Version
@@ -59,19 +60,20 @@ Usage:
   skywire svc
 
 Available Commands:
+  ar        Address Resolver Server for skywire
+  conf      print services-config.json file
+  confbs    Config Bootstrap Server for skywire
+  ip        GeoIP service for skywire
+  nm        Network monitor for skywire VPN and Visor.
+  rf        Route Finder Server for skywire
+  run       Run multiple deployment services in one process
+  sd        Service discovery server
+  se        skywire environment generator
+  sn        Route Setup Node for skywire
+  stun      STUN server for skywire
   tpd       Transport Discovery Server for skywire
   tps       Transport setup server for skywire
-  ar        Address Resolver Server for skywire
-  rf        Route Finder Server for skywire
-  confbs    Config Bootstrap Server for skywire
-  conf      print services-config.json file
-  se        skywire environment generator
   ut        Uptime Tracker Server for skywire
-  sd        Service discovery server
-  sn        Route Setup Node for skywire
-  nm        Network monitor for skywire VPN and Visor.
-  ip        GeoIP service for skywire
-  stun      STUN server for skywire
 ```
 
 ```

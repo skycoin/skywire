@@ -21,6 +21,20 @@ The local CLI exit code mirrors the remote command's exit code (0 on
 success, the remote's exit code on non-zero exit, 124 on timeout, 1 on
 RPC-layer failure). stdout flows to local stdout, stderr to local stderr.
 
+Transport (--transport, default auto):
+  auto    the visor's MultiDialer chain (skynet first, dmsg fallback).
+  dmsg    force via-visor dmsg.
+  skynet  force via-visor skynet.
+  tcp     direct noise-TCP; needs a host:port target (--via or a
+          tcp://<pk>@host:port positional).
+--standalone is not supported here (no standalone-dmsg exec path yet).
+
+Target grammar — in addition to the bare <pk>:
+  dmsg://<pk>              select dmsg    (== --transport dmsg)
+  skynet://<pk>            select skynet  (== --transport skynet)
+  tcp://<pk>@host:port     select direct-TCP (command follows the target)
+A target scheme that disagrees with an explicit --transport errors.
+
 ## Usage
 
 ```
@@ -35,16 +49,22 @@ skywire cli pty exec <pk> <command> [args...]
       --rpc string         RPC server address (default "localhost:3435")
       --scheme string      pin transport: "dmsg" (force dmsg only), "skynet" (force skynet only), or empty (default MultiDialer chain: skynet first, dmsg fallback)
   -s, --sk cipher.SecKey   local secret key for the --via direct-TCP path's noise handshake (random if unset; pin for stable whitelist authorization) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --standalone         (not supported for pty exec yet — accepted for vocabulary parity; errors if set)
   -t, --timeout string     max command duration (e.g. 30s, 2m); host-side cap is 5m (default "30s")
+      --transport string   transport: auto (MultiDialer: skynet first, dmsg fallback) | dmsg | skynet (all via-visor) | tcp (direct-TCP, needs a host:port target) (default "auto")
       --via string         bypass local visor + dial remote dmsgpty-host's direct-TCP listener: tcp://<pk>@<host>:<port>
-      --via-visor          borrow local visor's secret key from /Library/Application Support/Skywire/skywire-config.json for the --via noise handshake (--sk wins if set)
+      --via-visor          borrow local visor's secret key from /opt/skywire/skywire.json for the --via noise handshake (--sk wins if set)
+      --visor-key          borrow the local visor's SK from /opt/skywire/skywire.json for the tcp noise handshake (default false: opt-in; --sk wins)
 ```
 
 ## Global Flags
 
 ```
-  -h, --help   show help menu
-      --json   print output as JSON
+  -h, --help        show help menu
+      --jq string   filter JSON output through a jq/gojq expression (implies --json)
+      --json        print output as JSON
+      --shape       print the output schema skeleton (zero values, all fields) instead of data
+      --tui         browse commands and help interactively
 ```
 
 ---

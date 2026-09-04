@@ -2,7 +2,14 @@
 
 [← skywire cli](../README.md)
 
-print the system survey
+Print this machine's system survey as JSON — the same document a visor
+publishes for reward-eligibility and diagnostics: hardware/OS facts, the
+skywire version, the configured deployment service URLs, the reward address,
+and (with --config) the visor public key.
+
+With --config / --pkg / --user the survey is enriched from a visor config
+(public key + service URLs). --dmsg-disc looks the machine's public IP up via
+the given dmsg discovery. Output honors --json / --jq like every other command.
 
 ## Usage
 
@@ -15,15 +22,19 @@ skywire cli survey
 ```
   -c, --config string      optional config file to use (i.e.: skywire-config.json)
   -D, --dmsg-disc string   value of dmsg discovery
-  -u, --user               use config at: /Users/mohammed/skywire-config.json
+  -p, --pkg                use package config /opt/skywire/skywire.json
+  -u, --user               use config at: <home>/skywire-config.json
 ```
 
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

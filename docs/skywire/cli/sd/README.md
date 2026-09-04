@@ -2,13 +2,17 @@
 
 [← skywire cli](../README.md)
 
-Display combined service discovery and transport statistics
+Display combined service discovery and transport statistics.
 
 Combines data from:
-- Service Discovery: dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/api/services
-- Transport Discovery: dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/all-transports
+- Service Discovery: dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/api/services (proxy / vpn / visor entries)
+- Transport Discovery: dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/all-transports (transport counts by type)
+- Uptime Tracker: online/offline status (color-coded rows)
 
-Shows public keys with their services and transport counts by type.
+Shows public keys with their advertised services and transport counts by
+type (stcpr/sudph/dmsg/stcp). Filter with --country, --version, --min
+(minimum transport count); --noton keeps offline/not-in-UT visors. --json
+emits the combined rows as machine-readable output.
 
 Use --testenv or SKYWIRETEST=1 to use test deployment services.
 
@@ -21,9 +25,9 @@ skywire cli sd
 ## Flags
 
 ```
-      --cds string         SD cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
-      --cdt string         TPD cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
-      --cdu string         UT cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+      --cds string         SD cache dir ("" to disable) (default "/tmp/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --cdt string         TPD cache dir ("" to disable) (default "/tmp/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+      --cdu string         UT cache dir ("" to disable) (default "/tmp/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -m, --cfa int            update cache files if older than n minutes (default 5)
       --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
   -c, --country string     filter by country code
@@ -46,7 +50,10 @@ skywire cli sd
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

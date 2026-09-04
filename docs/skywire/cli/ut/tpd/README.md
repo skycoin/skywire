@@ -7,8 +7,10 @@ Query the Transport-Discovery integrated uptime endpoint.
 dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/uptimes
 
 Same response shape as sd / mdisc / ut — v1 (pk+on), v2 (+ daily %),
-v3 (+ per-5-minute timeline bitmap). Default is v2; pass -T / --timeline
-to request v3 and render the bitmap as 24 hourly blocks.
+v3 (+ per-5-minute timeline bitmap). Default is v3 (the version the
+deployment mirrors over CXO, so it hits the cache instead of live dmsg);
+pass --v v1|v2 for the older shapes, or use the graph subcommand to
+render the v3 bitmap as 24 hourly blocks.
 
 Populated by visor heartbeats + transport registrations; the same
 data feeds into the rewards pipeline.
@@ -28,7 +30,7 @@ skywire cli ut tpd
 ```
   -a, --all                  include every day the server returned
   -m, --cache-age int        re-fetch if cache is older than N minutes (0 disables) (default 5)
-      --cache-dir string     cache directory ("" disables cache) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+      --cache-dir string     cache directory ("" disables cache) (default "/tmp/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
       --config string        path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
   -d, --days int             number of most-recent days to include (0 = latest day only)
       --json                 emit raw JSON
@@ -46,7 +48,7 @@ skywire cli ut tpd
       --timeout duration     HTTP timeout (default 30s)
       --until string         include days on or before this date (YYYY-MM-DD)
       --url string           discovery base URL (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
-  -v, --v string             response version (v1|v2) (default "v2")
+  -v, --v string             response version (v1|v2|v3) (default "v3")
       --version string       filter visors by exact version
       --visors strings       server-side filter: only return these PKs (comma-separated)
 ```
@@ -55,6 +57,9 @@ skywire cli ut tpd
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

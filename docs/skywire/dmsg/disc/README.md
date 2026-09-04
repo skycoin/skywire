@@ -29,9 +29,9 @@ Response Examples:
 GET /health
 {
       "build_info": {
-        "commit": "abc1234",
-        "date": "2024-01-15T10:30:00Z",
-        "version": "v1.3.29"
+        "commit": "<commit>",
+        "date": "<build-date>",
+        "version": "<version>"
       },
       "dmsg_address": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7:80",
       "dmsg_servers": [
@@ -63,8 +63,11 @@ GET /dmsg-discovery/entry/{pk} (server entry)
       "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
       "server": {
         "address": "172.105.179.5:30085",
+        "address_udp": "172.105.179.5:30085",
+        "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.theskywirenetwork.net/dmsg",
         "availableSessions": 0
-      }
+      },
+      "protocol": "quic"
     }
 
 POST /dmsg-discovery/entry/ (new entry)
@@ -106,8 +109,11 @@ GET /dmsg-discovery/entries (all client and server entries)
         "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
           "address": "172.105.179.5:30085",
+          "address_udp": "172.105.179.5:30085",
+          "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.theskywirenetwork.net/dmsg",
           "availableSessions": 0
-        }
+        },
+        "protocol": "quic"
       },
       {
         "version": "",
@@ -116,9 +122,11 @@ GET /dmsg-discovery/entries (all client and server entries)
         "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
           "address": "139.162.160.227:30086",
+          "address_udp": "139.162.160.227:30086",
           "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg",
           "availableSessions": 0
-        }
+        },
+        "protocol": "quic"
       }
     ]
 
@@ -147,8 +155,11 @@ GET /dmsg-discovery/available_servers (servers with available_streams > 0)
         "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
           "address": "172.105.179.5:30085",
+          "address_udp": "172.105.179.5:30085",
+          "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.theskywirenetwork.net/dmsg",
           "availableSessions": 0
-        }
+        },
+        "protocol": "quic"
       },
       {
         "version": "",
@@ -157,9 +168,11 @@ GET /dmsg-discovery/available_servers (servers with available_streams > 0)
         "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
           "address": "139.162.160.227:30086",
+          "address_udp": "139.162.160.227:30086",
           "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg",
           "availableSessions": 0
-        }
+        },
+        "protocol": "quic"
       }
     ]
 
@@ -172,8 +185,11 @@ GET /dmsg-discovery/all_servers (all server entries)
         "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
           "address": "172.105.179.5:30085",
+          "address_udp": "172.105.179.5:30085",
+          "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.theskywirenetwork.net/dmsg",
           "availableSessions": 0
-        }
+        },
+        "protocol": "quic"
       },
       {
         "version": "",
@@ -182,9 +198,11 @@ GET /dmsg-discovery/all_servers (all server entries)
         "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
           "address": "139.162.160.227:30086",
+          "address_udp": "139.162.160.227:30086",
           "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg",
           "availableSessions": 0
-        }
+        },
+        "protocol": "quic"
       }
     ]
 
@@ -251,6 +269,10 @@ skywire dmsg disc
 
 ```
   -h, --help        show help menu
+      --jq string   filter JSON output through a jq/gojq expression (implies --json)
+      --json        print output as JSON
+      --shape       print the output schema skeleton (zero values, all fields) instead of data
+      --tui         browse commands and help interactively
       --with-kill   force exit after 3 interrupt signals (default true)
 ```
 

@@ -2,11 +2,12 @@
 
 [← skywire cli tp](../README.md)
 
-Add transport(s)
-		Accepts one or more remote public keys as arguments.
-		If the transport type is unspecified,
-		the visor will attempt to establish a transport
-		in the following order: stcpr, sudph, dmsg
+Add transport(s) from the LOCAL visor to one or more remote public keys.
+		Public keys are given positionally (tp add <pk> [pk]...); a single key
+		may instead be given with -r/--rpk. If the transport type is
+		unspecified, the visor tries each type in preference order, with the
+		dmsg relay last-resort. Use --remote <visor-pk> to instead request the
+		transport on a REMOTE visor via the Transport Setup Node (TPS).
 
 ## Usage
 
@@ -22,7 +23,7 @@ skywire cli tp add <public-key> [public-key]...
 ## Flags
 
 ```
-  -r, --rpk string             remote public key.
+  -r, --rpk string             remote public key (alternative to the positional argument)
   -t, --type string            type of transport to add.
   -o, --timeout duration       if specified, sets an operation timeout
   -n, --retries int            number of times to retry per transport type (default 1)
@@ -44,7 +45,10 @@ skywire cli tp add <public-key> [public-key]...
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

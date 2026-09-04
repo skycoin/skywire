@@ -2,7 +2,20 @@
 
 [← skywire cli](../README.md)
 
-Hypervisor UI tools
+Tools for building, serving, driving and bridging the hypervisor UI and the
+standalone wasm-visor.
+
+Build & serve:
+  gen      generate a self-contained standalone hypervisor.html (opens from file://)
+  serve    serve the keyless standalone wasm-visor over HTTP (reverse-proxy with Caddy)
+
+Desktop bridge:
+  notify   show a remote visor's app notifications on THIS machine (SSE bridge)
+
+Browser automation (CDP — needs --remote-debugging-port=9222):
+  probe    watch one page load and stream console, exceptions and crashes
+  shell    drive the visor shell in a browser tab and capture the result
+  eval     evaluate JavaScript on a specific CDP target by webSocketDebuggerUrl
 
 ## Usage
 
@@ -12,16 +25,22 @@ skywire cli hv
 
 ## Subcommands
 
+- [eval](eval/README.md) — Evaluate JavaScript on a specific CDP target
 - [gen](gen/README.md) — Generate a self-contained standalone hypervisor.html
 - [notify](notify/README.md) — Show a visor's app notifications on this machine
+- [probe](probe/README.md) — Watch a page load over CDP and stream console, exceptions and crashes
 - [serve](serve/README.md) — Serve the standalone wasm-visor over HTTP (keyless; reverse-proxy with Caddy)
+- [shell](shell/README.md) — Drive the visor shell in a browser over CDP
 
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

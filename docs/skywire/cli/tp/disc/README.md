@@ -2,7 +2,22 @@
 
 [← skywire cli tp](../README.md)
 
-Discover remote transport(s) by ID or public key
+Discover remote transport(s) by ID or public key.
+
+    --stats/-s              network-wide transport summary (total, by type, unique visors)
+    --stats --pk <pk>       the same summary computed over ONE visor's transports
+    --stats -p              (bare -p) same, for the LOCAL visor's pk
+    --type/-t <type>        list the public keys involved in transports of a type
+    --type <type> --pk <pk> that visor's peers on the given transport type
+
+Examples:
+  skywire cli tp disc --id <transport-id>
+  skywire cli tp disc --pk <public-key>
+  skywire cli tp disc -s
+  skywire cli tp disc -sp <public-key>
+  skywire cli tp disc -sp
+  skywire cli tp disc --type webrtc
+  skywire cli tp disc --type stcpr --pk <public-key>
 
 ## Usage
 
@@ -13,23 +28,28 @@ skywire cli tp disc
 ## Flags
 
 ```
-  -i, --id string          obtain transport of given ID
-  -p, --pk string          obtain transports by public key
-      --tpdurl string      transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
-      --http               skip the structured visor RPC and query transport discovery via the fetch chain (CXO→DmsgHTTP→DMSG)
-      --no-cxo             skip CXO subscriber-cache step
-      --no-rpc             skip visor RPC (DmsgHTTP) step
-      --no-dmsg            skip direct DMSG HTTP step
-      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
+  -i, --id string             obtain transport of given ID
+  -p, --pk string[="local"]   obtain transports by public key (bare -p = the local visor pk)
+  -s, --stats                 transport summary (count by type, total); network-wide, or for one visor with --pk
+  -t, --type string           list the public keys involved in transports of the given type (e.g. stcpr, sudph, dmsg)
+      --tpdurl string         transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+      --http                  skip the structured visor RPC and query transport discovery via the fetch chain (CXO→DmsgHTTP→DMSG)
+      --no-cxo                skip CXO subscriber-cache step
+      --no-rpc                skip visor RPC (DmsgHTTP) step
+      --no-dmsg               skip direct DMSG HTTP step
+      --sk cipher.SecKey      secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --config string         path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
 ```
 
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

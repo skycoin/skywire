@@ -31,6 +31,7 @@ skywire cli reward lookup [pubkey...]
 ```
   -n, --days int        days to look back (1-90) (default 7)
   -f, --file string     file of public keys, one per line
+  -s, --loglvl string   [ debug | info | warn | error | fatal | panic | trace ] (default "error")
       --rewarded-only   only show days with a nonzero reward
   -S, --server string   reward system dmsg address (dmsg://<pk>:<port>) (default "dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80")
 ```
@@ -39,8 +40,11 @@ skywire cli reward lookup [pubkey...]
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

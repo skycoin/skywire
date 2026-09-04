@@ -2,7 +2,12 @@
 
 [← skywire cli dmsg](../README.md)
 
-Inspect and manage the visor's DMSG subsystem at runtime.
+Inspect and manage this visor's DMSG subsystem at runtime.
+
+Reads/acts on the live visor over --rpc. porter / porter-diag are
+read-only; porter-reset and reconnect are corrective actions that
+disrupt in-flight dmsg streams — use them to recover a wedged client,
+not routinely.
 
 ## Usage
 
@@ -21,8 +26,11 @@ skywire cli dmsg diag
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

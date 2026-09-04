@@ -26,6 +26,16 @@ docs_dir: docs
 theme:
   name: material
   features:
+    # Instant loading turns the site into a persistent shell: internal
+    # doc links are intercepted and the page content swapped via fetch +
+    # history.pushState (real URLs, working back/forward). This is what
+    # lets the playground drawer (javascripts/playground-drawer.js) keep
+    # its wasm terminal, visor, and nested browser alive while the
+    # reader navigates between pages. Direct hits on any URL still
+    # render that page standalone; without JS the site degrades to
+    # plain static pages.
+    - navigation.instant
+    - navigation.instant.progress
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.sections
@@ -100,6 +110,15 @@ nav:
 plugins:
   - search
   - awesome-pages
+
+# The playground drawer: a persistent bottom panel on every docs page
+# hosting the playground (the whole skywire binary compiled to wasm
+# behind a terminal + nested browser) in an iframe. The iframe is
+# created lazily on first open and survives doc navigation (see
+# navigation.instant above), so a visor booted in the terminal keeps
+# running while you read.
+extra_javascript:
+  - javascripts/playground-drawer.js
 
 markdown_extensions:
   - admonition

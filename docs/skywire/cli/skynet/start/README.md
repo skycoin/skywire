@@ -13,29 +13,34 @@ skywire cli skynet start [pk]
 ## Flags
 
 ```
-      --direct                 force a direct-transport-only route: create the transport to the server on demand, dial 1-hop over it, bypass the route-finder; self-heals if the transport drops (e.g. server restart). For reliable control-plane forwards like the rsn-pprof resolving-proxy bridge.
-      --external               force external launcher
-      --forward-min-hops int   per-direction forward MinHops override (>=2 forces multi-hop on forward only)
-      --forward-mux int        per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)
-      --internal               force internal launcher
-  -l, --local int              local port to listen on
-      --min-hops int           force routes through at least this many intermediates (>=2 rejects direct paths)
-  -n, --name string            custom name for this client instance (default: skynet-client-<local-port>)
-  -k, --pk string              remote server public key
-      --port uint16            routing port for communication between app and visor
-  -r, --remote int             remote port to forward
-      --reverse-min-hops int   per-direction reverse MinHops override (>=2 forces multi-hop on reverse only; combine with low/0 --min-hops for direct-upstream + multi-hop-downstream)
-      --reverse-mux int        per-direction reverse MuxRoutes override (download-heavy: --forward-mux 1 --reverse-mux N)
-      --routes int             number of parallel skynet mux routes (0 or 1 = single route)
+      --direct                                        force a direct-transport-only route: create the transport to the server on demand, dial 1-hop over it, bypass the route-finder; self-heals if the transport drops (e.g. server restart). For reliable control-plane forwards like the rsn-pprof resolving-proxy bridge.
+      --external                                      force external launcher
+      --forward-min-hops int                          per-direction forward MinHops override (>=2 forces multi-hop on forward only)
+      --forward-mux int                               per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)
+      --internal                                      force internal launcher
+  -l, --local int                                     local port to listen on
+      --min-hops int                                  force routes through at least this many intermediates (>=2 rejects direct paths)
+      --mux int                                       alias for --routes (parallel route count)
+  -n, --name string                                   custom name for this client instance (default: skynet-client-<local-port>)
+  -k, --pk string                                     remote server public key
+      --port uint16                                   routing port for communication between app and visor
+  -r, --remote int                                    remote port to forward
+      --reverse-min-hops int                          per-direction reverse MinHops override (>=2 forces multi-hop on reverse only; combine with low/0 --min-hops for direct-upstream + multi-hop-downstream)
+      --reverse-mux int                               per-direction reverse MuxRoutes override (download-heavy: --forward-mux 1 --reverse-mux N)
+      --routes int                                    number of parallel skynet mux routes (0 or 1 = single route)
+      --routing-policy proxy start --routing-policy   per-app routing policy for this skynet forward's mesh route: @/path/to/policy.wasm, preset:<name>, or "none" to clear (parity with proxy start --routing-policy)
 ```
 
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

@@ -17,6 +17,12 @@ captures the whole machine at the IP layer.
     needs `CAP_NET_ADMIN` (run via sudo, or grant the capability). See
     [guides/permissions.md](../guides/permissions.md).
 
+!!! note "In the browser"
+
+    The browser-based wasm visor also carries a VPN client: instead of a TUN
+    device it runs a userspace (gVisor) network stack inside the tab, so it
+    needs no privileges — it tunnels the tab's fetches, not the host machine.
+
 ## Quick start
 
 ```bash

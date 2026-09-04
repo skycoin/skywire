@@ -23,8 +23,8 @@ skywire cli proxy test
 
 ```
   -b, --batch int        number of proxies to test (1=sequential/stable, >1=parallel/experimental) (default 1)
-      --cds string       SD cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
-      --cdu string       UT cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+      --cds string       SD cache dir ("" to disable) (default "/tmp/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --cdu string       UT cache dir ("" to disable) (default "/tmp/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -m, --cfa int          update cache files if older than n minutes (default 5)
   -c, --connect          connect only mode: add transports without HTTP testing
   -k, --country string   filter proxies by country code
@@ -47,8 +47,11 @@ skywire cli proxy test
 
 ```
   -h, --help         show help menu
+      --jq string    filter JSON output through a jq/gojq expression (implies --json)
       --json         print output as JSON
       --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape        print the output schema skeleton (zero values, all fields) instead of data
+      --tui          browse commands and help interactively
 ```
 
 ---

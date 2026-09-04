@@ -2,7 +2,12 @@
 
 [← skywire cli log](../README.md)
 
-display collected transport bandwidth logging
+Collate and display the per-transport bandwidth CSVs collected by `cli log`.
+
+Reads the daily *.csv files under --dir, sorts and de-duplicates the rows, and
+color-codes them: blue = unchanged counters between samples, yellow = changed,
+red = a zero reading. Registered only when /bin/bash is present (the collation
+is a bundled bash+awk script).
 
 ## Usage
 
@@ -20,8 +25,11 @@ skywire cli log tp
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

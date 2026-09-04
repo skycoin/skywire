@@ -2,26 +2,31 @@
 
 [← skywire cli mdisc](../README.md)
 
-Fetch an entry
+Fetch and print the dmsg-discovery entry for a single public key.
+
+Works for both client and server entries: a client entry shows its
+delegated servers; a server entry shows its address and capacity.
+Resolves over RPC -> dmsg -> HTTP, so a dmsg:// --url works too.
 
 ## Usage
 
 ```
-skywire cli mdisc entry <visor-public-key>
-```
-
-## Flags
-
-```
-      --url string   specify alternative DMSG discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+skywire cli mdisc entry <public-key>
 ```
 
 ## Global Flags
 
 ```
+      --cdd string        DMSG cache dir ("" to disable) (default "/tmp/022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+  -m, --cfa int           update cache file if older than n minutes (default 5)
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --testenv           use test deployment
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
+      --url string        specify alternative DMSG discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

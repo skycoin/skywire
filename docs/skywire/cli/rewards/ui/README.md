@@ -22,6 +22,8 @@ skywire cli rewards ui
 ## Flags
 
 ```
+      --bind string                 listen address host:port to serve on
+                                    (empty host = all interfaces; 127.0.0.1:80 = localhost only) (default ":80")
       --canonical string            canonical domain for SEO (e.g. https://theskywirenetwork.net) (default "https://theskywirenetwork.net")
   -D, --dmsg-disc string            dmsg discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
   -d, --dport uint16                dmsg port to serve (default 80)
@@ -32,7 +34,7 @@ skywire cli rewards ui
                                     --disable-default-peers --disable-csrf --host-whitelist=fiber.skywire.dev)
       --login-node string           login chain node: empty=disabled, 'auto'=auto-setup on localhost:6421,
                                     or URL of external node (e.g. http://localhost:6421)
-  -p, --port uint                   port to serve (default 80)
+  -p, --port uint                   port to serve (deprecated: use --bind) (default 80)
   -s, --sk cipher.SecKey            a random key is generated if unspecified
                                      (default 0000000000000000000000000000000000000000000000000000000000000000)
       --skycoin-node string         Skycoin mainnet node URL for reward transaction broadcasts (default "http://127.0.0.1:6420")
@@ -40,7 +42,7 @@ skywire cli rewards ui
                                     (empty = accept any parseable version; the getlogs.sh prune over log_backups
                                     remains the authoritative floor). Set to the current reward floor to give
                                     visors an accurate eligible/ineligible signal for the hypervisor UI.
-  -W, --wd string                   location of dir containing 'log_collection' & reward 'hist' dirs (default "/Users/mohammed/Projects/Skycoin/mohammed/skywire")
+  -W, --wd string                   location of dir containing 'log_collection' & reward 'hist' dirs (default "<working-dir>")
   -w, --wl string                   add whitelist keys, comma separated to permit POST of reward transaction to be broadcast
 ```
 
@@ -48,8 +50,11 @@ skywire cli rewards ui
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
