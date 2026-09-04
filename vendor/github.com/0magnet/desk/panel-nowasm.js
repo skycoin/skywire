@@ -1,4 +1,4 @@
-// pkg/wasmhv/browseui/desk-panel.js — the desk chrome, engine-free.
+// panel-nowasm.js — the desk chrome as a plain-JS asset, for no-wasm pages.
 //
 // The persistent taskbar + window registry the desk surfaces share, in plain
 // JS with no wasm dependency. It replaced the retired browse.js panel
