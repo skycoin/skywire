@@ -57,8 +57,12 @@ codebase evolved; this is the reference for "what we mean when we say X."
   inside a browser tab (no install, no server). → `cmd/wasm-visor`
 - **standalone wasm-visor** — the keyless PWA served by `skywire cli hv serve`;
   each visitor's browser mints its own ephemeral key.
-- **☰ menu** — the browse.js taskbar app menu present on both the native and
+- **☰ menu** — the desk-bundle taskbar app menu present on both the native and
   wasm hypervisor UIs; where features (browser, terminal, wallet, about…) open.
+  → `pkg/wasmhv/browseui`
+- **Go browser** — the mesh browser compiled into the wasm-visor binary
+  (`globalThis.skywireBrowser`, netscrape); replaced the retired JavaScript
+  browse engine (browse.js / SkywireBrowse). → `cmd/wasm-visor`
 
 ## Apps & wallet
 
