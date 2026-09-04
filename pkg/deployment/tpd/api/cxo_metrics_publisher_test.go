@@ -166,3 +166,38 @@ func TestMetricsPartPathSortsNumerically(t *testing.T) {
 		t.Error("part paths do not sit under the window path")
 	}
 }
+
+// The split is sized against the compressed total, because partTargetBody
+// budgets the gzipped part. Sizing it from the raw size instead over-splits by
+// the compression ratio, which costs a filling subscriber a round trip per
+// surplus leaf.
+func TestGzipPartsDoesNotOverSplit(t *testing.T) {
+	metrics := metricsFixture(4000, 30)
+	const max = 64 * 1024
+
+	parts, err := gzipParts(metrics, max)
+	if err != nil {
+		t.Fatalf("gzipParts: %v", err)
+	}
+	if len(parts) < 2 {
+		t.Fatalf("got %d parts, want a split", len(parts))
+	}
+
+	// The floor: how many parts the compressed payload actually requires.
+	whole, err := json.Marshal(metrics)
+	if err != nil {
+		t.Fatal(err)
+	}
+	need := len(cxoutils.Gzip(whole))/max + 1
+
+	// Some slack for per-part framing and uneven compression, but nowhere
+	// near the ~4x the raw-size bug produced.
+	if limit := need * 2; len(parts) > limit {
+		t.Errorf("split into %d parts; a compressed payload needing ~%d should not exceed %d", len(parts), need, limit)
+	}
+
+	// Over-splitting must not be "fixed" by dropping records.
+	if got := decodeParts(t, parts); len(got) != len(metrics) {
+		t.Errorf("round-trip returned %d records, want %d", len(got), len(metrics))
+	}
+}
