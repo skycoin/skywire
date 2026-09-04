@@ -241,31 +241,17 @@ func buildRouter() *gin.Engine {
 		tpvizServer := tpviz.NewServer(tpvizCfg)
 		tpvizServer.Start() // Initialize cache and start auto-refresh
 
-		// Source deployment discovery (TPD/SD/DMSG) over dmsg instead of the
-		// now-dead clearnet HTTP frontends: start an embedded dmsg client
-		// (seeded from the deployment's dmsg servers, discovery over dmsg) and
-		// hand tp-viz an HTTP-over-dmsg client. Background + best-effort so the
-		// UI starts immediately; until dmsg connects, tp-viz gates the clearnet
-		// fetches (no 404 spam). Standalone only — when hosted by a visor the
-		// visor's CXO feeds tp-viz instead.
-		if !disableTpVizAPI {
-			go func() {
-				dlog := logging.MustGetLogger("tpviz-dmsg")
-				pk, sk := cipher.GenerateKeyPair()
-				dmsgC, _, err := dmsgclient.StartDmsgEmbedded(context.Background(), dlog, pk, sk, false)
-				if err != nil {
-					dlog.WithError(err).Warn("tp-viz: dmsg client for discovery failed to start; network-viz tabs disabled")
-					return
-				}
-				tpvizServer.SetDmsgHTTPClient(&http.Client{Transport: dmsghttp.MakeHTTPTransport(context.Background(), dmsgC)})
-				// Prefer the intermittent CXO subscriber over the same dmsg client:
-				// tp-viz sources TPD/SD/DMSG-D data (transports, uptime, services,
-				// dmsg-clients) from the deployment CXO feeds and only falls back to
-				// the HTTP-over-dmsg client above on a cache miss.
-				tpvizServer.SetCXOSubMgrFromDmsg(dmsgC)
-				dlog.Info("tp-viz: deployment discovery now sourced over dmsg (CXO-first)")
-			}()
-		}
+		// tp-viz sources deployment discovery (TPD/SD/DMSG) over dmsg, the
+		// clearnet HTTP frontends being gone. It does NOT get a dmsg client of
+		// its own: this process already runs one under its CONFIGURED key
+		// (serveStandalone), and a second client is a second identity in the
+		// discovery for no gain — the old code minted a throwaway keypair here,
+		// shadowing the very `pk, sk` this function derives from the configured
+		// secret key a few lines up. serveStandalone hands the real client over
+		// once it exists; until then tp-viz gates its fetches (no 404 spam).
+		// Hosted by a visor, disableTpVizAPI is set and the visor's CXO feeds
+		// tp-viz instead.
+		tpvizSrv = tpvizServer
 
 		// Delegate /api/* to tpviz server (uses file caching to avoid rate limits)
 		// When hosted by the visor, /api/* routes are disabled to prevent
@@ -1826,6 +1812,17 @@ func serveStandalone(r1 *gin.Engine, bindAddr string) {
 	statsDmsgHTTPClient = &http.Client{
 		Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgClient),
 		Timeout:   45 * time.Second,
+	}
+
+	// tp-viz reads the deployment over THIS client rather than one of its own.
+	// It is the same process and the same identity; a second dmsg client would
+	// mean a second entry in the discovery to read services this one already
+	// reaches. CXO-first: tp-viz sources TPD/SD/DMSG-D data from the deployment
+	// feeds and falls back to the HTTP-over-dmsg client only on a cache miss.
+	if !disableTpVizAPI && tpvizSrv != nil {
+		tpvizSrv.SetDmsgHTTPClient(&http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgClient)})
+		tpvizSrv.SetCXOSubMgrFromDmsg(dmsgClient)
+		log.Info("tp-viz: deployment discovery sourced over the reward server's own dmsg client (CXO-first)")
 	}
 
 	lis, err := dmsgClient.Listen(dmsgPort) //nolint: gosec
