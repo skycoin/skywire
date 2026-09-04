@@ -38,12 +38,8 @@ import (
 	"github.com/0magnet/realorigin"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/tpviz"
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 	"github.com/skycoin/skywire/pkg/wasmhv/ctlbridge"
@@ -476,38 +472,24 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		})
 	}
 
-	// Transport-graph visualizer (pkg/tpviz): mirror the native HV wiring so
-	// the wasm visor's network-visualizer tab renders the real graph. An
-	// ephemeral dmsg client sources the dmsg-only deployment discovery.
-	tpvSrv := tpviz.NewServer(tpviz.DefaultConfig())
-	go tpvSrv.Start()
-	go func() {
-		dlog := logging.MustGetLogger("wasm-serve-tpviz")
-		pk, sk := cipher.GenerateKeyPair()
-		dmsgC, _, dErr := dmsgclient.StartDmsgEmbedded(ctx, dlog, pk, sk, false)
-		if dErr != nil {
-			dlog.WithError(dErr).Warn("tpviz dmsg client failed to start; network-graph data unavailable")
-			return
-		}
-		tpvSrv.SetDmsgHTTPClient(&http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)})
-		tpvSrv.SetCXOSubMgrFromDmsg(dmsgC)
-		dlog.Info("tpviz deployment discovery sourced over dmsg")
-	}()
-	tpvH := tpvSrv.Handler()
-	mux.Handle("/tp-viz/", http.StripPrefix("/tp-viz", tpvH))
-	mux.Handle("/tp-viz", http.StripPrefix("/tp-viz", tpvH))
-	// The tp-viz bundle fetches these with ABSOLUTE /api/* paths (they bypass the
-	// Angular SkywireHttpBackend), plus opens the /ws/local-visor socket. Mirror
-	// the full native-HV set; omitting /api/health + /api/tps/status left the
-	// visualizer 404ing on every poll (and the WS failing).
-	for _, p := range []string{
-		"/api/transports", "/api/services", "/api/uptimes", "/api/local-visor",
-		"/api/ip-groups", "/api/dmsg/servers", "/api/health", "/api/tps/status",
-		"/api/tps/add-transport", "/api/tps/remove-transport", "/api/tps/refresh-transports",
-		"/api/local/add-transport", "/api/local/remove-transport", "/ws/local-visor",
-	} {
-		mux.Handle(p, tpvH)
-	}
+	// NOTHING mesh-facing is mounted here, and that is deliberate: this process
+	// serves a page, and the visor that page talks about runs IN THE TAB with
+	// its own dmsg client. This server holds no visor and no dmsg identity —
+	// see WasmServeConfig, which is addresses, TLS and asset paths.
+	//
+	// It used to. tpviz was mounted so the Angular bundle's network-visualizer
+	// tab, which fetches ABSOLUTE same-origin /api/… paths, would not 404, and
+	// since there was no visor to source it from, a dmsg client was minted from
+	// a throwaway keypair — registering a fresh identity in the PRODUCTION
+	// discovery on every restart and abandoning it on exit, to read three
+	// deployment services it never needed to be reachable from. /api/local-visor
+	// answered "connected": false, because there is no local visor here to
+	// describe. Removed in #4500.
+	//
+	// If the visualizer is to work on this page, the in-tab visor must serve it
+	// over vnet; that needs the tpviz bundle's API base made consistent first
+	// (half its call sites hardcode the absolute path). Do not re-add a mesh
+	// client to this server to paper over that.
 
 	// The Angular client-error reporter POSTs console errors here via
 	// navigator.sendBeacon (a RAW request that bypasses the SkywireHttpBackend
