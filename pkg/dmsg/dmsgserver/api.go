@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -29,6 +30,7 @@ type ServerAPI struct {
 	metrics         metrics.Metrics
 	startedAt       time.Time
 	dmsgServer      *dmsg.Server
+	svcLog          *logging.Logger
 	sMu             sync.Mutex
 	minuteDecValues map[*dmsg.SessionCommon]uint64
 	minuteEncValues map[*dmsg.SessionCommon]uint64
@@ -42,6 +44,7 @@ func NewServerAPI(r *chi.Mux, log *logging.Logger, m metrics.Metrics) *ServerAPI
 	api := &ServerAPI{
 		metrics:         m,
 		startedAt:       time.Now(),
+		svcLog:          log,
 		minuteDecValues: make(map[*dmsg.SessionCommon]uint64),
 		minuteEncValues: make(map[*dmsg.SessionCommon]uint64),
 		secondDecValues: make(map[*dmsg.SessionCommon]uint64),
@@ -61,19 +64,40 @@ func (a *ServerAPI) RunBackgroundTasks(ctx context.Context) {
 	defer ticker.Stop()
 	//defer tickerEverySecond.Stop()
 	defer tickerEveryMinute.Stop()
-	a.updateInternalState()
+	a.safely("updateInternalState", a.updateInternalState)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			a.updateInternalState()
+			a.safely("updateInternalState", a.updateInternalState)
 		case <-tickerEveryMinute.C:
-			a.updateAverageNumberOfPacketsPerMinute()
+			a.safely("updateAverageNumberOfPacketsPerMinute", a.updateAverageNumberOfPacketsPerMinute)
 			/*case <-tickerEverySecond.C:
 			a.updateAverageNumberOfPacketsPerSecond()*/
 		}
 	}
+}
+
+// safely runs a periodic task so that a panic inside it cannot take the server
+// down with it. These tasks exist to publish metrics; nothing served depends on
+// them, and a server that stops reporting throughput is enormously preferable
+// to one that dies.
+//
+// This is not hypothetical. A nil noise state reached through the session
+// snapshot panicked in the throughput calculation, and because the panic
+// happened on this goroutine there was nothing to recover it: the process
+// exited, systemd restarted it, every session on the server dropped, and it
+// happened again a minute later. One production server logged 3317 restarts —
+// roughly one every 80 seconds — with the same stack each time.
+func (a *ServerAPI) safely(name string, fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			a.svcLog.Errorf("periodic task %s panicked (recovered, task skipped this tick): %v\n%s",
+				name, r, debug.Stack())
+		}
+	}()
+	fn()
 }
 
 // SetDmsgServer saves srv in the ServerAPI
@@ -261,8 +285,14 @@ func calculateThroughput(
 	newDecValues := make(map[*dmsg.SessionCommon]uint64)
 	newEncValues := make(map[*dmsg.SessionCommon]uint64)
 	for _, session := range sessions {
-		currentDecValue := session.GetDecNonce()
-		currentEncValue := session.GetEncNonce()
+		// A session in the map may have no noise state — it is a snapshot, and
+		// a session can be mid-handshake or already torn down. Skip it rather
+		// than recording a zero, which the delta arithmetic below would read as
+		// a uint64 overflow and turn into an enormous bogus throughput figure.
+		currentDecValue, currentEncValue, ok := session.NonceValues()
+		if !ok {
+			continue
+		}
 
 		newDecValues[session] = currentDecValue
 		newEncValues[session] = currentEncValue
