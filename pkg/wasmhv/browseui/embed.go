@@ -45,6 +45,15 @@ var skywireExecJS []byte
 //go:embed gobrowser-loader.js
 var goBrowserLoaderJS []byte
 
+// deskPanelJS defines globalThis.skywireDeskPanel — the engine-free desk
+// chrome (persistent taskbar, ☰ launcher, per-window taskbar buttons). It
+// replaced the retired browse.js panel: the browsing engine lives in the
+// wasm-visor binary now, but the chrome must exist even on pages that load no
+// wasm at all (the native hypervisor's desk).
+//
+//go:embed desk-panel.js
+var deskPanelJS []byte
+
 // deskBootJS is the shared desk boot (skywireDeskBoot(opts)) behind both
 // desk-first pages: the docs playground and the converged visor page. Served
 // as its own asset (not part of the bundle) because it runs page-level
@@ -74,6 +83,7 @@ var BrowseJS = func() []byte {
 		bottle.VNetJS(),
 		winboxdist.ExecJS(),
 		winboxdist.LoaderJS(),
+		deskPanelJS,
 		skywireExecJS,
 		goBrowserLoaderJS,
 	}
