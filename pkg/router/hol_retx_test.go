@@ -234,7 +234,7 @@ func TestProactiveRetxSeqs(t *testing.T) {
 		m := newMux(false)
 		m.retxBuf.Store(101, []byte("a"), uuid.Nil)
 		m.retxBuf.Store(102, []byte("b"), uuid.Nil)
-		if got := m.proactiveRetxSeqs(last, words, 20, now); got != nil {
+		if got := m.proactiveRetxSeqs(last, words, 20, nil, now); got != nil {
 			t.Errorf("HoL disabled must return nil, got %v", got)
 		}
 	})
@@ -244,7 +244,7 @@ func TestProactiveRetxSeqs(t *testing.T) {
 		m.retxBuf.Store(101, []byte("a"), uuid.Nil)
 		m.retxBuf.Store(102, []byte("b"), uuid.Nil)
 		m.retxBuf.Store(103, []byte("c"), uuid.Nil)
-		got := m.proactiveRetxSeqs(last, words, 20, now)
+		got := m.proactiveRetxSeqs(last, words, 20, nil, now)
 		if !equalSeqs(got, []uint32{101, 102, 103}) {
 			t.Errorf("got %v, want [101 102 103]", got)
 		}
@@ -255,7 +255,7 @@ func TestProactiveRetxSeqs(t *testing.T) {
 		// 102 already acked/purged -> not retransmitted; 101,103 held.
 		m.retxBuf.Store(101, []byte("a"), uuid.Nil)
 		m.retxBuf.Store(103, []byte("c"), uuid.Nil)
-		got := m.proactiveRetxSeqs(last, words, 20, now)
+		got := m.proactiveRetxSeqs(last, words, 20, nil, now)
 		if !equalSeqs(got, []uint32{101, 103}) {
 			t.Errorf("got %v, want [101 103]", got)
 		}
@@ -267,16 +267,16 @@ func TestProactiveRetxSeqs(t *testing.T) {
 		m.retxBuf.Store(102, []byte("b"), uuid.Nil)
 		m.retxBuf.Store(103, []byte("c"), uuid.Nil)
 		// fastestMs=20 -> interval 20ms.
-		first := m.proactiveRetxSeqs(last, words, 20, now)
+		first := m.proactiveRetxSeqs(last, words, 20, nil, now)
 		if !equalSeqs(first, []uint32{101, 102, 103}) {
 			t.Fatalf("first nudge got %v, want [101 102 103]", first)
 		}
 		// Immediately again: all inside interval -> nothing due.
-		if again := m.proactiveRetxSeqs(last, words, 20, now.Add(5*time.Millisecond)); again != nil {
+		if again := m.proactiveRetxSeqs(last, words, 20, nil, now.Add(5*time.Millisecond)); again != nil {
 			t.Errorf("re-nudge inside interval must be nil, got %v", again)
 		}
 		// Past the interval -> due again.
-		later := m.proactiveRetxSeqs(last, words, 20, now.Add(25*time.Millisecond))
+		later := m.proactiveRetxSeqs(last, words, 20, nil, now.Add(25*time.Millisecond))
 		if !equalSeqs(later, []uint32{101, 102, 103}) {
 			t.Errorf("re-nudge past interval got %v, want [101 102 103]", later)
 		}
@@ -289,11 +289,11 @@ func TestProactiveRetxSeqs(t *testing.T) {
 		// cannot have been acked yet on ANY leg, so a nudge would be spurious
 		// by construction — this is the ungated behavior that duplicated ~12%
 		// of a striped transfer onto the fast leg. Must be nil.
-		if got := m.proactiveRetxSeqs(last, words, 20, time.Now()); got != nil {
+		if got := m.proactiveRetxSeqs(last, words, 20, nil, time.Now()); got != nil {
 			t.Errorf("seq younger than the gap threshold must not be nudged, got %v", got)
 		}
 		// Same seq once genuinely overdue: nudged.
-		if got := m.proactiveRetxSeqs(last, words, 20, time.Now().Add(time.Second)); !equalSeqs(got, []uint32{101}) {
+		if got := m.proactiveRetxSeqs(last, words, 20, nil, time.Now().Add(time.Second)); !equalSeqs(got, []uint32{101}) {
 			t.Errorf("aged seq must be nudged, got %v, want [101]", got)
 		}
 	})
@@ -301,8 +301,40 @@ func TestProactiveRetxSeqs(t *testing.T) {
 	t.Run("empty bitmap -> nil (no stall)", func(t *testing.T) {
 		m := newMux(true)
 		m.retxBuf.Store(101, []byte("a"), uuid.Nil)
-		if got := m.proactiveRetxSeqs(last, nil, 20, now); got != nil {
+		if got := m.proactiveRetxSeqs(last, nil, 20, nil, now); got != nil {
 			t.Errorf("empty SACK bitmap must return nil, got %v", got)
+		}
+	})
+
+	t.Run("slow-leg seq judged by its own leg's RTT", func(t *testing.T) {
+		// The live 60ms/300ms failure mode: a seq striped onto the 300ms leg is
+		// in ordinary flight at 100ms of age. Judged by the fastest leg's RTT
+		// (60ms) it looked stalled and was duplicated onto the fast leg for
+		// every slow-leg frame (measured 30MB dup vs 11MB payload); judged by
+		// its OWN leg's RTT × the RACK margin (375ms) it is left alone, and
+		// only a genuinely overdue seq (age 500ms) is nudged.
+		m := newMux(true)
+		slowTp := uuid.New()
+		m.retxBuf.Store(101, []byte("a"), slowTp)
+		legRTT := map[uuid.UUID]float64{slowTp: 300}
+		sentAt, _, _ := m.retxBuf.SentInfo(101)
+		if got := m.proactiveRetxSeqs(last, words, 60, legRTT, sentAt.Add(100*time.Millisecond)); got != nil {
+			t.Errorf("seq inside its own leg's RTT must not be nudged, got %v", got)
+		}
+		if got := m.proactiveRetxSeqs(last, words, 60, legRTT, sentAt.Add(500*time.Millisecond)); !equalSeqs(got, []uint32{101}) {
+			t.Errorf("seq overdue on its own leg must be nudged, got %v, want [101]", got)
+		}
+	})
+
+	t.Run("unknown-leg seq falls back to fastest-leg gate", func(t *testing.T) {
+		m := newMux(true)
+		m.retxBuf.Store(101, []byte("a"), uuid.Nil) // send leg unknown
+		legRTT := map[uuid.UUID]float64{uuid.New(): 300}
+		sentAt, _, _ := m.retxBuf.SentInfo(101)
+		// Past the fastest-leg threshold (60ms) but well under the slow leg's:
+		// with no send-leg tag the conservative fastest-leg gate applies.
+		if got := m.proactiveRetxSeqs(last, words, 60, legRTT, sentAt.Add(100*time.Millisecond)); !equalSeqs(got, []uint32{101}) {
+			t.Errorf("untagged seq past the fallback gate must be nudged, got %v, want [101]", got)
 		}
 	})
 }

@@ -98,17 +98,29 @@ func main() {
 	}
 	nodes := prof.Profile.Nodes
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i].HitCount > nodes[j].HitCount })
-	total := 0
+	// V8 meta-nodes ((idle), (program), (garbage collector), (root)) are not
+	// script execution — counting them as "busy" turns an idle tab into a
+	// false spin alarm, so utilization is computed from real frames only.
+	meta := map[string]bool{"(idle)": true, "(program)": true, "(garbage collector)": true, "(root)": true}
+	total, busy := 0, 0
 	for _, n := range nodes {
 		total += n.HitCount
+		if !meta[n.Frame.FunctionName] {
+			busy += n.HitCount
+		}
 	}
 	wallMs := float64(prof.Profile.EndTime-prof.Profile.StartTime) / 1000
-	fmt.Printf("samples=%d wall=%.0fms (≈%.0f%% of one core busy)\n", total, wallMs,
-		100*float64(total)/(wallMs)) // 1 sample/ms ⇒ samples/ms ≈ core utilization
-	for i, n := range nodes {
-		if i >= 20 || n.HitCount == 0 {
+	fmt.Printf("samples=%d wall=%.0fms (≈%.0f%% of one core busy)\n", busy, wallMs,
+		100*float64(busy)/(wallMs)) // 1 sample/ms ⇒ samples/ms ≈ core utilization
+	shown := 0
+	for _, n := range nodes {
+		if shown >= 20 || n.HitCount == 0 {
 			break
 		}
+		if meta[n.Frame.FunctionName] {
+			continue
+		}
+		shown++
 		name := n.Frame.FunctionName
 		if name == "" {
 			name = "(anonymous)"
