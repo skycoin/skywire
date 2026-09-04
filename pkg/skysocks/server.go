@@ -123,6 +123,10 @@ func (s *Server) Serve(l net.Listener) error {
 		sessionCfg := yamux.DefaultConfig()
 		sessionCfg.EnableKeepAlive = false
 		sessionCfg.MaxStreamWindowSize = muxStreamWindowBytes
+		// Same raised write valve as the client session (see muxConnWriteTimeout):
+		// at yamux's 10s default the server reset saturated DOWNLOADS the same way
+		// the client reset saturated uploads.
+		sessionCfg.ConnectionWriteTimeout = muxConnWriteTimeout
 		session, err := yamux.Server(conn, sessionCfg)
 		if err != nil {
 			return fmt.Errorf("yamux server failure: %w", err)
