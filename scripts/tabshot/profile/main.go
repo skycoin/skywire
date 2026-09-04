@@ -114,7 +114,7 @@ func main() {
 		100*float64(busy)/(wallMs)) // 1 sample/ms ⇒ samples/ms ≈ core utilization
 	shown := 0
 	for _, n := range nodes {
-		if shown >= 20 || n.HitCount == 0 {
+		if shown >= 70 || n.HitCount == 0 {
 			break
 		}
 		if meta[n.Frame.FunctionName] {

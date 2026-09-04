@@ -9,6 +9,7 @@ package cmdutil
 
 import (
 	"os"
+	"runtime"
 	"syscall/js"
 )
 
@@ -38,5 +39,26 @@ func notifyPlatformInterrupt(ch chan<- os.Signal) {
 		default:
 		}
 		return nil
+	}))
+
+	// SIGQUIT parity: globalThis.__skywireDump[SKYWIRE_EXEC_ID]() returns the
+	// full goroutine dump as a string — the diagnostic a native process gives
+	// on SIGQUIT, which the browser otherwise has no way to ask for. A wedged
+	// or CPU-spinning instance (a scheduler pegged by a zero-delay timer loop
+	// shows only runtime frames in a CDP CPU profile) names the looping
+	// goroutine here, from DevTools or the serve harness's js-eval bridge.
+	dumps := g.Get("__skywireDump")
+	if !dumps.Truthy() {
+		dumps = g.Get("Object").New()
+		g.Set("__skywireDump", dumps)
+	}
+	dumps.Set(id, js.FuncOf(func(js.Value, []js.Value) any {
+		buf := make([]byte, 1<<22)
+		n := runtime.Stack(buf, true)
+		for n == len(buf) && len(buf) < 1<<26 {
+			buf = make([]byte, len(buf)*2)
+			n = runtime.Stack(buf, true)
+		}
+		return string(buf[:n])
 	}))
 }
