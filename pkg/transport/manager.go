@@ -702,10 +702,17 @@ func (tm *Manager) SetPTpsCache(pTps []PersistentTransports) {
 // SetCascadeHandler sets the handler for cascade protocol packets (route ID 0).
 // Called by the router to register its cascade handler.
 func (tm *Manager) SetCascadeHandler(h func(p routing.Packet, mt *ManagedTransport)) {
+	// Lock-ordering rule (all Set*Handler funcs): NEVER hold the handler
+	// mutex while taking tm.mx. acceptTransport does the reverse — it holds
+	// tm.mx (write) while reading the handlers under handlerMu.RLock — so a
+	// setter that held handlerMu across tm.mx.RLock deadlocked the whole
+	// manager the moment an inbound transport was being accepted while an
+	// init module installed its handler (AB-BA; live-caught: the visor's
+	// entire transport layer, RPC and hypervisor UI wedged from boot).
 	tm.cascadeHandlerMu.Lock()
-	defer tm.cascadeHandlerMu.Unlock()
 	tm.cascadeHandler = h
-	// Propagate to existing transports.
+	tm.cascadeHandlerMu.Unlock()
+	// Propagate to existing transports (local h, no handlerMu held).
 	tm.mx.RLock()
 	for _, mt := range tm.tps {
 		mt.cascadeHandler = h
@@ -722,8 +729,8 @@ func (tm *Manager) ShouldRegisterAR() bool {
 // SetDHTHandler sets the handler for DHT protocol packets (route ID 0).
 func (tm *Manager) SetDHTHandler(h func(p routing.Packet, mt *ManagedTransport)) {
 	tm.dhtHandlerMu.Lock()
-	defer tm.dhtHandlerMu.Unlock()
 	tm.dhtHandler = h
+	tm.dhtHandlerMu.Unlock() // see SetCascadeHandler: never hold handlerMu across tm.mx
 	tm.mx.RLock()
 	for _, mt := range tm.tps {
 		mt.dhtHandler = h
@@ -734,8 +741,8 @@ func (tm *Manager) SetDHTHandler(h func(p routing.Packet, mt *ManagedTransport))
 // SetVisorRPCHandler sets the handler for visor RPC packets (route ID 0).
 func (tm *Manager) SetVisorRPCHandler(h func(p routing.Packet, mt *ManagedTransport)) {
 	tm.visorRPCHandlerMu.Lock()
-	defer tm.visorRPCHandlerMu.Unlock()
 	tm.visorRPCHandler = h
+	tm.visorRPCHandlerMu.Unlock() // see SetCascadeHandler: never hold handlerMu across tm.mx
 	tm.mx.RLock()
 	for _, mt := range tm.tps {
 		mt.visorRPCHandler = h
@@ -746,8 +753,8 @@ func (tm *Manager) SetVisorRPCHandler(h func(p routing.Packet, mt *ManagedTransp
 // SetSkynetForwardHandler sets the handler for skynet forward packets (route ID 0).
 func (tm *Manager) SetSkynetForwardHandler(h func(p routing.Packet, mt *ManagedTransport)) {
 	tm.skynetFwdHandlerMu.Lock()
-	defer tm.skynetFwdHandlerMu.Unlock()
 	tm.skynetFwdHandler = h
+	tm.skynetFwdHandlerMu.Unlock() // see SetCascadeHandler: never hold handlerMu across tm.mx
 	tm.mx.RLock()
 	for _, mt := range tm.tps {
 		mt.skynetFwdHandler = h
@@ -760,8 +767,8 @@ func (tm *Manager) SetSkynetForwardHandler(h func(p routing.Packet, mt *ManagedT
 // streams to the per-app server-side accept loop without route setup.
 func (tm *Manager) SetAppDirectHandler(h func(p routing.Packet, mt *ManagedTransport)) {
 	tm.appDirectHandlerMu.Lock()
-	defer tm.appDirectHandlerMu.Unlock()
 	tm.appDirectHandler = h
+	tm.appDirectHandlerMu.Unlock() // see SetCascadeHandler: never hold handlerMu across tm.mx
 	tm.mx.RLock()
 	for _, mt := range tm.tps {
 		mt.appDirectHandler = h
@@ -772,8 +779,8 @@ func (tm *Manager) SetAppDirectHandler(h func(p routing.Packet, mt *ManagedTrans
 // SetSetupRPCHandler sets the handler for RSN RPC relay packets (route ID 0).
 func (tm *Manager) SetSetupRPCHandler(h func(p routing.Packet, mt *ManagedTransport)) {
 	tm.setupRPCHandlerMu.Lock()
-	defer tm.setupRPCHandlerMu.Unlock()
 	tm.setupRPCHandler = h
+	tm.setupRPCHandlerMu.Unlock() // see SetCascadeHandler: never hold handlerMu across tm.mx
 	tm.mx.RLock()
 	for _, mt := range tm.tps {
 		mt.setupRPCHandler = h
