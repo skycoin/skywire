@@ -253,6 +253,11 @@ func main() {
 		"dialRoute":          js.FuncOf(jsDialRoute),
 		"checkRegistered":    js.FuncOf(jsCheckRegistered),
 		"fetchClearnet":      js.FuncOf(jsFetchClearnet),
+		// True VPN client (gVisor netstack tunnel) — see vpninstance_js.go.
+		"vpnStart":  js.FuncOf(jsVPNStart),
+		"vpnStop":   js.FuncOf(jsVPNStop),
+		"vpnStatus": js.FuncOf(jsVPNStatus),
+		"vpnFetch":  js.FuncOf(jsVPNFetch),
 		"btcFetch":           js.FuncOf(jsBtcFetch),
 		"proxyVerbose":       js.FuncOf(jsProxyVerbose),
 		"closeWindow":        js.FuncOf(jsCloseWindow),
