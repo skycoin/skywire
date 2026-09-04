@@ -58,7 +58,7 @@ github.com/0magnet/gotop/v4/widgets
 # github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
 ## explicit; go 1.24.0
 github.com/0magnet/metrics
-# github.com/0magnet/netscrape v0.0.0-20260904190635-96173244fabf
+# github.com/0magnet/netscrape v0.0.0-20260904193824-1b1603747c93
 ## explicit; go 1.24
 github.com/0magnet/netscrape
 # github.com/0magnet/plot-go v0.0.0-20260903194102-268453e774b6

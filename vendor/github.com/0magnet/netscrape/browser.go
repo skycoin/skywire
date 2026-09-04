@@ -4,7 +4,6 @@ package netscrape
 
 import (
 	"encoding/base64"
-	"strconv"
 	"strings"
 	"syscall/js"
 )
@@ -71,15 +70,20 @@ var (
 	strip  js.Value // tab strip
 	views  js.Value // stacked iframe area
 	addr   js.Value // shared address bar
+	back   js.Value // history buttons, greyed when there is nowhere to go
+	fwd    js.Value
+	reload js.Value
 	tabs   []*tab
 	active = -1
 	nextID int
 )
 
 type tab struct {
-	btn, lbl, frame js.Value
-	hist            []string
-	pos             int
+	btn, lbl, ico, frame js.Value
+	hist                 []string
+	pos                  int
+	title                string // the page's own <title>, when it has one
+	loading              bool
 }
 
 func mk(tag string) js.Value { return doc.Call("createElement", tag) }
@@ -165,7 +169,12 @@ func load(t *tab, url string) {
 				// the host's own, and Angular-style apps need same-origin.
 				t.frame.Call("removeAttribute", "srcdoc")
 				t.frame.Call("removeAttribute", "sandbox")
+				setLoading(t, true)
 				t.frame.Set("src", src)
+				// A natively rendered page is same-origin, so its title and
+				// icon can simply be read once it has loaded — no transcoding
+				// pass to pick them out of.
+				watchDirect(t, url)
 				if active >= 0 && tabs[active] == t {
 					addr.Set("value", url)
 				}
@@ -186,9 +195,15 @@ func load(t *tab, url string) {
 // images, and the shims that relay the sandboxed page's navigation and fetches
 // back through the transport — layers on top of this seam.
 func fetchPage(t *tab, url string) {
+	setLoading(t, true)
 	fail := func(msg string) {
+		setLoading(t, false)
+		setTitle(t, "", url)
 		t.frame.Call("removeAttribute", "src")
-		t.frame.Set("srcdoc", "<body style='font:14px sans-serif;padding:2em;color:#a33'>"+msg+"</body>")
+		t.frame.Set("srcdoc", "<body style=\"font:14px system-ui,sans-serif;padding:3em 2em;color:#cdd2da;background:#15131c\">"+
+			"<div style=\"max-width:32em;margin:auto\"><div style=\"font-size:2em;margin-bottom:.4em\">This page did not load</div>"+
+			"<div style=\"opacity:.8;line-height:1.5\">"+htmlEscape(msg)+"</div>"+
+			"<div style=\"opacity:.5;margin-top:1.2em;font:12px monospace;word-break:break-all\">"+htmlEscape(url)+"</div></div></body>")
 	}
 	var onResp, onText, onErr js.Func
 	onErr = js.FuncOf(func(_ js.Value, a []js.Value) any {
@@ -207,6 +222,10 @@ func fetchPage(t *tab, url string) {
 		t.frame.Call("removeAttribute", "src")
 		t.frame.Call("setAttribute", "sandbox", "allow-scripts") // sandboxed: no allow-same-origin
 		t.frame.Set("srcdoc", "<base href=\""+url+"\">"+navShim+html)
+		// The page has arrived, so the tab can finally say what it is holding.
+		setTitle(t, pageTitle(html), url)
+		setLoading(t, false)
+		setFavicon(t, faviconURL(html, url))
 		onResp.Release()
 		onText.Release()
 		onErr.Release()
@@ -226,6 +245,9 @@ func navigate(t *tab, url string) {
 }
 
 func activate(i int) {
+	if i < 0 || i >= len(tabs) {
+		return
+	}
 	active = i
 	for j, t := range tabs {
 		on := j == i
@@ -238,6 +260,247 @@ func activate(i int) {
 		}
 	}
 	addr.Set("value", tabs[i].hist[tabs[i].pos])
+	syncNav()
+}
+
+// syncNav greys the history buttons when there is nowhere to go, so they say
+// whether they will do anything before they are pressed.
+func syncNav() {
+	t := cur()
+	set := func(el js.Value, on bool) {
+		if !el.Truthy() {
+			return
+		}
+		el.Set("disabled", !on)
+		if on {
+			el.Get("style").Set("opacity", "1")
+			el.Get("style").Set("cursor", "pointer")
+		} else {
+			el.Get("style").Set("opacity", ".35")
+			el.Get("style").Set("cursor", "default")
+		}
+	}
+	set(back, t != nil && t.pos > 0)
+	set(fwd, t != nil && t.pos < len(t.hist)-1)
+}
+
+// cur is the tab in front, or nil when the browser has not opened one yet.
+func cur() *tab {
+	if active >= 0 && active < len(tabs) {
+		return tabs[active]
+	}
+	return nil
+}
+
+// setLoading marks a tab busy. The favicon slot carries the indicator, which is
+// where a browser shows it and costs the tab no extra width.
+func setLoading(t *tab, on bool) {
+	if t == nil {
+		return
+	}
+	t.loading = on
+	if on {
+		t.ico.Get("style").Set("visibility", "hidden")
+		t.btn.Get("style").Set("opacity", ".7")
+	} else {
+		t.btn.Get("style").Set("opacity", "1")
+	}
+	if t == cur() && reload.Truthy() {
+		if on {
+			reload.Set("textContent", "×")
+			reload.Set("title", "stop")
+		} else {
+			reload.Set("textContent", "⟳")
+			reload.Set("title", "reload")
+		}
+	}
+}
+
+// setTitle names a tab after the page. A page's own <title> is what a person
+// recognises; the host is the fallback for a page that has none.
+func setTitle(t *tab, title, url string) {
+	title = strings.TrimSpace(title)
+	if len(title) > 120 {
+		title = title[:120]
+	}
+	t.title = title
+	if title == "" {
+		title = labelFor(url)
+	}
+	if t.lbl.Truthy() {
+		t.lbl.Set("textContent", title)
+		t.btn.Set("title", title+"\n"+url)
+	}
+}
+
+// setFavicon points the tab's icon at iconURL, fetched through the transport
+// and inlined as a data: URI — the icon usually lives on the page's own origin,
+// which the chrome cannot reach directly any more than the page could.
+func setFavicon(t *tab, iconURL string) {
+	if iconURL == "" || !t.ico.Truthy() {
+		return
+	}
+	g := js.Global()
+	var onResp, onBuf, onErr js.Func
+	ct := "image/x-icon"
+	done := func() { onResp.Release(); onBuf.Release(); onErr.Release() }
+	onErr = js.FuncOf(func(_ js.Value, _ []js.Value) any { done(); return nil })
+	onBuf = js.FuncOf(func(_ js.Value, a []js.Value) any {
+		u8 := g.Get("Uint8Array").New(a[0])
+		b := make([]byte, u8.Get("length").Int())
+		js.CopyBytesToGo(b, u8)
+		// An empty or error body is not an icon; leave the slot blank rather
+		// than showing a broken image.
+		if len(b) > 0 {
+			t.ico.Set("src", "data:"+ct+";base64,"+base64.StdEncoding.EncodeToString(b))
+			t.ico.Get("style").Set("visibility", "visible")
+		}
+		done()
+		return nil
+	})
+	onResp = js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if a[0].Get("status").Truthy() && a[0].Get("status").Int() >= 400 {
+			done()
+			return g.Get("Promise").Call("reject")
+		}
+		if h := a[0].Get("headers").Call("get", "content-type"); h.Truthy() {
+			ct = h.String()
+		}
+		return a[0].Call("arrayBuffer")
+	})
+	fetchVia(iconURL).Call("then", onResp).Call("then", onBuf).Call("catch", onErr)
+}
+
+// watchDirect reads a natively rendered page's title and icon once it has
+// loaded. It is same-origin by construction (DirectLoader only claims URLs the
+// host serves), so the document is simply readable — but a single-page app
+// paints its real title a beat after load, so the title is re-read once more
+// shortly after. Any access can still throw if the host redirected the frame
+// somewhere cross-origin; that just means no title, not a broken tab.
+func watchDirect(t *tab, url string) {
+	read := func() {
+		defer func() { _ = recover() }()
+		d := t.frame.Get("contentDocument")
+		if !d.Truthy() {
+			return
+		}
+		if title := d.Get("title"); title.Truthy() {
+			setTitle(t, title.String(), url)
+		}
+		if link := d.Call("querySelector", `link[rel~="icon"]`); link.Truthy() {
+			if href := link.Get("href"); href.Truthy() {
+				setFavicon(t, href.String())
+				return
+			}
+		}
+		setFavicon(t, absURL("/favicon.ico", url))
+	}
+	var onLoad js.Func
+	onLoad = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		setLoading(t, false)
+		read()
+		// The second read catches an SPA that titles itself after routing.
+		var later js.Func
+		later = js.FuncOf(func(_ js.Value, _ []js.Value) any {
+			read()
+			later.Release()
+			return nil
+		})
+		js.Global().Call("setTimeout", later, 1200)
+		t.frame.Call("removeEventListener", "load", onLoad)
+		onLoad.Release()
+		return nil
+	})
+	t.frame.Call("addEventListener", "load", onLoad)
+}
+
+// pageTitle pulls <title> out of fetched HTML.
+func pageTitle(html string) string {
+	l := strings.ToLower(html)
+	i := strings.Index(l, "<title")
+	if i < 0 {
+		return ""
+	}
+	j := strings.Index(l[i:], ">")
+	if j < 0 {
+		return ""
+	}
+	i += j + 1
+	k := strings.Index(l[i:], "</title>")
+	if k < 0 {
+		return ""
+	}
+	return htmlUnescape(html[i : i+k])
+}
+
+// htmlEscape makes text safe to drop into the error page's markup.
+func htmlEscape(s string) string {
+	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
+}
+
+// htmlUnescape handles the handful of entities a title realistically carries.
+func htmlUnescape(s string) string {
+	r := strings.NewReplacer("&amp;", "&", "&lt;", "<", "&gt;", ">", "&quot;", `"`, "&#39;", "'", "&apos;", "'", "&nbsp;", " ")
+	return r.Replace(s)
+}
+
+// faviconURL finds the icon a page declares, falling back to /favicon.ico at
+// the site root the way browsers do. Returns an absolute URL.
+func faviconURL(html, pageURL string) string {
+	l := strings.ToLower(html)
+	for pos := 0; ; {
+		i := strings.Index(l[pos:], "<link")
+		if i < 0 {
+			break
+		}
+		i += pos
+		j := strings.Index(l[i:], ">")
+		if j < 0 {
+			break
+		}
+		tag := l[i : i+j]
+		if strings.Contains(tag, "rel=") && strings.Contains(tag, "icon") {
+			if href := attrValue(html[i:i+j], "href"); href != "" {
+				return absURL(href, pageURL)
+			}
+		}
+		pos = i + j
+	}
+	return absURL("/favicon.ico", pageURL)
+}
+
+// attrValue reads a quoted attribute out of a tag.
+func attrValue(tag, name string) string {
+	l := strings.ToLower(tag)
+	i := strings.Index(l, name+"=")
+	if i < 0 {
+		return ""
+	}
+	rest := tag[i+len(name)+1:]
+	if rest == "" {
+		return ""
+	}
+	q := rest[0]
+	if q != '"' && q != '\'' {
+		if k := strings.IndexAny(rest, " \t\r\n"); k >= 0 {
+			return rest[:k]
+		}
+		return rest
+	}
+	if k := strings.IndexByte(rest[1:], q); k >= 0 {
+		return rest[1 : 1+k]
+	}
+	return ""
+}
+
+// absURL resolves ref against base using the engine's own URL parser.
+func absURL(ref, base string) string {
+	u := js.Global().Get("URL")
+	if !u.Truthy() {
+		return ref
+	}
+	defer func() { _ = recover() }() // a malformed base throws; no icon is fine
+	return u.New(ref, base).Get("href").String()
 }
 
 func onClick(el js.Value, fn func()) {
@@ -250,16 +513,36 @@ func onClick(el js.Value, fn func()) {
 	}))
 }
 
+// indexOf finds a tab's CURRENT position. Handlers close over the tab itself
+// rather than the index it happened to have when it was created: indices shift
+// every time a tab closes, and the old fix for that — cloning the button to
+// drop its listeners — silently detached the label and icon nodes the tab still
+// held references to, so a tab could never update its own title again.
+func indexOf(t *tab) int {
+	for i, x := range tabs {
+		if x == t {
+			return i
+		}
+	}
+	return -1
+}
+
 func addTab(url string) {
 	nextID++
 	t := &tab{}
 	t.btn = mk("div")
 	t.btn.Get("style").Set("cssText", "display:flex;align-items:center;gap:.4em;max-width:12em;padding:.25em .6em;cursor:pointer;font:11px monospace;color:#cdd2da;border:1px solid #2a2342;border-bottom:0;border-radius:5px 5px 0 0;white-space:nowrap")
+	// The favicon sits where every browser puts it, and holds its space from
+	// the start so a tab does not jump sideways when the icon arrives.
+	t.ico = mk("img")
+	t.ico.Get("style").Set("cssText", "width:12px;height:12px;flex:0 0 12px;object-fit:contain;visibility:hidden")
 	t.lbl = mk("span")
-	t.lbl.Set("textContent", "tab "+strconv.Itoa(nextID))
+	t.lbl.Set("textContent", "new tab")
+	t.lbl.Get("style").Set("cssText", "overflow:hidden;text-overflow:ellipsis;white-space:nowrap")
 	x := mk("span")
 	x.Set("textContent", "×")
-	x.Get("style").Set("cssText", "opacity:.6")
+	x.Get("style").Set("cssText", "opacity:.6;flex:0 0 auto")
+	t.btn.Call("appendChild", t.ico)
 	t.btn.Call("appendChild", t.lbl)
 	t.btn.Call("appendChild", x)
 
@@ -269,43 +552,36 @@ func addTab(url string) {
 		t.frame.Set("id", "browser-frame") // the first tab's frame, for harnesses
 	}
 
-	idx := len(tabs)
-	onClick(t.btn, func() { activate(idx) })
-	onClick(x, func() { closeTab(idx) })
+	onClick(t.btn, func() { activate(indexOf(t)) })
+	onClick(x, func() { closeTab(indexOf(t)) })
+	// Middle-click closes a tab, as everywhere else.
+	t.btn.Call("addEventListener", "auxclick", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) > 0 && a[0].Get("button").Int() == 1 {
+			a[0].Call("preventDefault")
+			closeTab(indexOf(t))
+		}
+		return nil
+	}))
 
 	strip.Call("insertBefore", t.btn, strip.Get("lastChild")) // before the + button
 	views.Call("appendChild", t.frame)
 	tabs = append(tabs, t)
 	navigate(t, url)
-	activate(idx)
+	activate(indexOf(t))
 }
 
 func closeTab(i int) {
-	if len(tabs) <= 1 {
+	if i < 0 || i >= len(tabs) || len(tabs) <= 1 {
 		return // keep at least one tab
 	}
 	t := tabs[i]
 	t.btn.Call("remove")
 	t.frame.Call("remove")
 	tabs = append(tabs[:i], tabs[i+1:]...)
-	// rebind indices by reactivating the neighbour
 	if active >= len(tabs) {
 		active = len(tabs) - 1
 	}
-	rebindClicks()
 	activate(active)
-}
-
-// rebindClicks re-points each tab button at its current index after a removal.
-func rebindClicks() {
-	for i, t := range tabs {
-		idx := i
-		nb := t.btn.Call("cloneNode", true) // drop old listeners
-		t.btn.Get("parentNode").Call("replaceChild", nb, t.btn)
-		t.btn = nb
-		onClick(t.btn, func() { activate(idx) })
-		onClick(t.btn.Get("lastChild"), func() { closeTab(idx) })
-	}
 }
 
 // relayResource fetches a resource through the /fetch proxy on the sandbox's
@@ -391,9 +667,20 @@ func Open(root js.Value) {
 
 	bar := mk("div")
 	bar.Get("style").Set("cssText", "display:flex;gap:4px;padding:4px;background:#100d18;border-bottom:1px solid #2a2342")
-	back, fwd, reload := btn("◀", "padding:2px 8px"), btn("▶", "padding:2px 8px"), btn("⟳", "padding:2px 8px")
+	back, fwd, reload = btn("◀", "padding:2px 8px"), btn("▶", "padding:2px 8px"), btn("⟳", "padding:2px 8px")
+	back.Set("title", "back")
+	fwd.Set("title", "forward")
+	reload.Set("title", "reload")
 	addr = mk("input")
+	addr.Set("spellcheck", false)
+	addr.Set("placeholder", "search or enter address")
 	addr.Get("style").Set("cssText", "flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:2px 8px;font:13px monospace")
+	// Clicking the address bar selects the whole URL, so typing replaces it
+	// rather than landing in the middle of what is already there.
+	addr.Call("addEventListener", "focus", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		addr.Call("select")
+		return nil
+	}))
 	goBtn := btn("Go", "padding:2px 8px")
 	for _, el := range []js.Value{back, fwd, reload, addr, goBtn} {
 		bar.Call("appendChild", el)
@@ -406,29 +693,88 @@ func Open(root js.Value) {
 	root.Call("appendChild", bar)
 	root.Call("appendChild", views)
 
-	cur := func() *tab {
-		if active >= 0 {
-			return tabs[active]
+	onClick(goBtn, func() {
+		if t := cur(); t != nil {
+			navigate(t, addr.Get("value").String())
 		}
-		return nil
-	}
-	onClick(goBtn, func() { navigate(cur(), addr.Get("value").String()) })
-	onClick(reload, func() { t := cur(); load(t, t.hist[t.pos]) })
+	})
+	onClick(reload, func() {
+		if t := cur(); t != nil {
+			load(t, t.hist[t.pos])
+		}
+	})
 	onClick(back, func() {
-		if t := cur(); t.pos > 0 {
+		if t := cur(); t != nil && t.pos > 0 {
 			t.pos--
 			load(t, t.hist[t.pos])
+			syncNav()
 		}
 	})
 	onClick(fwd, func() {
-		if t := cur(); t.pos < len(t.hist)-1 {
+		if t := cur(); t != nil && t.pos < len(t.hist)-1 {
 			t.pos++
 			load(t, t.hist[t.pos])
+			syncNav()
 		}
 	})
 	addr.Call("addEventListener", "keydown", js.FuncOf(func(_ js.Value, a []js.Value) any {
-		if len(a) > 0 && a[0].Get("key").String() == "Enter" {
-			navigate(cur(), addr.Get("value").String())
+		if len(a) == 0 {
+			return nil
+		}
+		switch a[0].Get("key").String() {
+		case "Enter":
+			if t := cur(); t != nil {
+				navigate(t, addr.Get("value").String())
+				addr.Call("blur")
+			}
+		case "Escape":
+			// Put back what the tab is actually showing, as browsers do.
+			if t := cur(); t != nil {
+				addr.Set("value", t.hist[t.pos])
+			}
+			addr.Call("blur")
+		}
+		return nil
+	}))
+
+	// The keyboard shortcuts a browser is expected to answer to. Bound on the
+	// browser's own root, not the document: several of these may be running on
+	// one page (a desk can open more than one), and each should only respond to
+	// keys pressed inside itself.
+	root.Set("tabIndex", -1)
+	root.Call("addEventListener", "keydown", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) == 0 {
+			return nil
+		}
+		e := a[0]
+		ctrl := e.Get("ctrlKey").Bool() || e.Get("metaKey").Bool()
+		key := strings.ToLower(e.Get("key").String())
+		stop := func() { e.Call("preventDefault"); e.Call("stopPropagation") }
+		switch {
+		case ctrl && key == "t":
+			stop()
+			addTab(home())
+		case ctrl && key == "w":
+			stop()
+			closeTab(active)
+		case ctrl && key == "l":
+			stop()
+			addr.Call("focus")
+		case ctrl && key == "r", key == "f5":
+			stop()
+			if t := cur(); t != nil {
+				load(t, t.hist[t.pos])
+			}
+		case ctrl && key == "tab":
+			stop()
+			if n := len(tabs); n > 1 {
+				activate((active + 1) % n)
+			}
+		case key == "escape":
+			if t := cur(); t != nil && t.loading {
+				stop()
+				setLoading(t, false)
+			}
 		}
 		return nil
 	}))
