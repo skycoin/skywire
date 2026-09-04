@@ -113,6 +113,12 @@
   var VARIANT_KEY = 'skywire-visor-variant';
   function loadVariant() { try { return localStorage.getItem(VARIANT_KEY) || ''; } catch (e) { return ''; } }
   function variantQS() { var v = loadVariant(); return v ? ('?variant=' + encodeURIComponent(v)) : ''; }
+  // variantPath puts the variant in the URL PATH instead of a query. A query
+  // string cannot select bytes on a static host, so publishing this surface as
+  // plain files needs the wasm blob and its toolchain-matched wasm_exec.js —
+  // which must never be mixed — addressable by path. The bare name is the
+  // default variant, which every host serves.
+  function variantPath(name) { var v = loadVariant(); return v ? ('wasm/' + encodeURIComponent(v) + '/' + name) : name; }
   function variantSuffix() { var v = loadVariant(); return v ? ('-' + v) : ''; }
   function newSKHex() {
     var b = crypto.getRandomValues(new Uint8Array(32));
@@ -704,14 +710,14 @@
   // are unavailable or worker.js can't be loaded (e.g. exotic embeddings). Keeps the
   // page working, at the cost of the main-thread-freeze risk the worker path avoids.
   async function bootInPage(sk) {
-    await loadScript('wasm_exec.js' + variantQS());
+    await loadScript(variantPath('wasm_exec.js'));
     var go = new Go();
     if (go.importObject.gojs && !go.importObject.gojs['runtime.getRandomData']) {
       go.importObject.gojs['runtime.getRandomData'] = function (ptr, len) {
         crypto.getRandomValues(new Uint8Array(go._inst.exports.memory.buffer, ptr >>> 0, len >>> 0));
       };
     }
-    var buf = await fetch('wasm-visor.wasm' + variantQS()).then(function (r) { return r.arrayBuffer(); });
+    var buf = await fetch(variantPath('wasm-visor.wasm')).then(function (r) { return r.arrayBuffer(); });
     var res = await WebAssembly.instantiate(buf, go.importObject);
     go.run(res.instance); // installs globalThis.skywireVisor
     while (!self.skywireVisor || !self.skywireVisor.boot) {

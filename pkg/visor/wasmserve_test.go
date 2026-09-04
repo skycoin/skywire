@@ -6,6 +6,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/wasmhv/wasmbin"
 )
 
 func TestIsMeshBrowseHost(t *testing.T) {
@@ -162,4 +166,36 @@ func TestWasmPasswordGate(t *testing.T) {
 			t.Error("secure=true did not set the Secure cookie attribute")
 		}
 	})
+}
+
+// TestVariantPathsServeEachToolchainPair pins the per-variant PATH surface.
+// A query string cannot select bytes on a static host, so publishing this
+// surface as plain files needs the variant in the URL path. The wasm blob and
+// its wasm_exec.js loader are toolchain-specific and must never be mixed (see
+// wasmbin/embed.go), so both live under the same /wasm/<variant>/ prefix.
+func TestVariantPathsServeEachToolchainPair(t *testing.T) {
+	avail := wasmbin.Available()
+	if len(avail) == 0 {
+		t.Skip("no wasm variants embedded in this build")
+	}
+	for _, v := range avail {
+		blob, err := wasmbin.GetVariant(v)
+		require.NoError(t, err, "variant %s", v)
+		require.NotEmpty(t, blob, "variant %s blob", v)
+		require.NotEmpty(t, wasmbin.WasmExecJSVariant(v), "variant %s loader", v)
+	}
+
+	// Distinct variants must not share bytes — that is the whole point of
+	// addressing them separately.
+	if len(avail) > 1 {
+		a, err := wasmbin.GetVariant(avail[0])
+		require.NoError(t, err)
+		b, err := wasmbin.GetVariant(avail[1])
+		require.NoError(t, err)
+		require.NotEqual(t, len(a), len(b), "variants %s and %s should differ", avail[0], avail[1])
+		require.NotEqual(t,
+			string(wasmbin.WasmExecJSVariant(avail[0])),
+			string(wasmbin.WasmExecJSVariant(avail[1])),
+			"each toolchain ships its own wasm_exec.js loader")
+	}
 }
