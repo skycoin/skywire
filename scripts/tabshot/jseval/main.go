@@ -20,7 +20,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: jseval <webSocketDebuggerUrl> <expr>")
 		os.Exit(2)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	c, _, err := websocket.Dial(ctx, os.Args[1], &websocket.DialOptions{})
 	if err != nil {

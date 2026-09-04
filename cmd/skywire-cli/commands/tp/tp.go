@@ -15,9 +15,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	pterm "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/pterm"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	pterm "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/pterm"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil/livetui"
