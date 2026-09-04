@@ -13,7 +13,7 @@
 package main
 
 import (
-	"errors"
+	"strings"
 	"syscall/js"
 
 	"github.com/0magnet/desk"
@@ -74,31 +74,24 @@ func installDesk() {
 			return files.New(sharedShellFS(), dir), nil
 		},
 	})
-	desk.Register(desk.App{
-		Name: "dashboard", Title: "dashboard",
-		Help:      "the hypervisor UI",
-		Maximized: true,
-		Open: func(args []string) (desk.Pane, error) {
-			u := ""
-			if len(args) > 0 {
-				u = args[0]
-			}
-			if u == "" {
-				u = js.Global().Get("__DESK_DASHBOARD_URL__").String()
-			}
-			if u == "" || u == "<undefined>" || u == "undefined" {
-				return nil, errors.New("no dashboard URL on this page")
-			}
-			return funcPane{mount: func(el js.Value) error {
-				doc := js.Global().Get("document")
-				fr := doc.Call("createElement", "iframe")
-				fr.Set("src", u)
-				fr.Get("style").Set("cssText", "border:0;width:100%;height:100%;background:#fff")
-				el.Call("appendChild", fr)
-				return nil
-			}}, nil
-		},
-	})
+	// The hypervisor UI is a browser TAB, not a window of its own — the desk
+	// puts surfaces in tabs wherever the pane already has them, and the
+	// dashboard is just a page. DirectLoader is what makes that tab render
+	// NATIVELY: without it netscrape would transcode the Angular app into a
+	// sandboxed srcdoc, which strips the same-origin it needs. Claim only
+	// same-origin /vnet/ URLs — those are served by this page's own service
+	// worker out of the visor's virtual loopback, so they are ours to render.
+	netscrape.DirectLoader = func(u string) (string, bool) {
+		loc := js.Global().Get("location")
+		if !loc.Truthy() {
+			return "", false
+		}
+		origin := loc.Get("origin").String()
+		if origin == "" || !strings.HasPrefix(u, origin+"/vnet/") {
+			return "", false
+		}
+		return u, true
+	}
 
 	desk.NewPanel()
 	js.Global().Set("__skywireDesk", js.ValueOf(map[string]interface{}{
