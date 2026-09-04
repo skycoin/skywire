@@ -37,6 +37,8 @@ skywire cli route trace <pk>
 ```
   -n, --min uint16         minimum hops requested from route finder (default 1)
   -x, --max uint16         maximum hops requested from route finder (default 5)
+      --min-hops uint16    minimum hops (alias for --min) (default 1)
+      --max-hops uint16    maximum hops (alias for --max) (default 5)
   -t, --timeout duration   route-finder request timeout (default 10s)
   -a, --rf string          route finder URL (default "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80")
   -c, --count int          ping samples per hop (best-of returned as the per-hop RTT) (default 3)
@@ -52,8 +54,11 @@ skywire cli route trace <pk>
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

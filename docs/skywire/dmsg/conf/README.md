@@ -13,6 +13,7 @@ skywire dmsg conf
 ## Subcommands
 
 - [gen-keys](gen-keys/README.md) — Generate a new dmsg keypair
+- [probe](probe/README.md) — Probe every advertised carrier of every dmsg server with a real session
 - [pull](pull/README.md) — Update services-config.json dmsg_servers from the discovery, over dmsg
 - [verify-keys](verify-keys/README.md) — Derive and print the public key from a secret key
 
@@ -20,6 +21,10 @@ skywire dmsg conf
 
 ```
   -h, --help        show help menu
+      --jq string   filter JSON output through a jq/gojq expression (implies --json)
+      --json        print output as JSON
+      --shape       print the output schema skeleton (zero values, all fields) instead of data
+      --tui         browse commands and help interactively
       --with-kill   force exit after 3 interrupt signals (default true)
 ```
 

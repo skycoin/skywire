@@ -7,10 +7,14 @@ Ping commands for testing visor connectivity.
 When called with a public key argument, pings that visor directly.
 
 Available subcommands:
-  ping <pk>     - Ping a specific visor
-  ping test     - Test connectivity to public visors
-  ping tree     - Ping visors via transport routes (scrollable TUI)
-  ping stop-all - Stop all active ping connections
+  ping <pk>       - Ping a specific visor (route or --dmsg)
+  ping test       - Test connectivity to public visors
+  ping bandwidth  - Sustained throughput test to a visor
+  ping mux-bw     - Multiplexed-route bandwidth + queueing-delay probe
+  ping mux-bw-tui - Interactive TUI for the mux bandwidth probe
+  ping tree       - Ping-tree over the route graph (scrollable TUI)
+  ping tree-stream- Ping-tree as streamed rows / NDJSON
+  ping stop-all   - Stop all active ping connections
 
 ## Usage
 
@@ -23,6 +27,7 @@ skywire cli visor ping [pk]
 - [bandwidth](bandwidth/README.md) — Test bandwidth to a visor
 - [mux-bw](mux-bw/README.md) — Multiplexed-route bandwidth + queueing-delay probe (human output by default; --json for NDJSON)
 - [mux-bw-tui](mux-bw-tui/README.md) — Interactive Bubble Tea TUI for the multiplexed-route bandwidth probe
+- [policy-bw](policy-bw/README.md) — Policy-driven multiplexed-route bandwidth rig — proves a routing-policy preset is adaptive over a live mux
 - [stop-all](stop-all/README.md) — Stop all active ping connections
 - [test](test/README.md) — Test the visor with public visors on network
 - [tree](tree/README.md) — Interactive Bubble Tea TUI for the ping-tree (server-side BFS over the skywire route graph)
@@ -35,6 +40,7 @@ skywire cli visor ping [pk]
       --create-tp                Create a direct transport to the target if none exists
       --dmsg                     Ping over dmsg connection instead of skywire route
       --local-route              Calculate routes locally using cached TPD data instead of querying route finder
+      --route route find         Pin an explicit route, skipping route calculation. Accepts route find/`route calc` JSON ({"forward":[...],"reverse":[...]}) inline or as @<file>; reverse is mirrored from forward if omitted. Forces the same intermediates across a cascade-vs-legacy A/B.
       --setup-timeout duration   Timeout for route setup phase (default 30s)
       --show-route               Show the route hops used for the ping
   -s, --size int                 Size of packet, in KB, default is 2KB (default 2)
@@ -48,8 +54,11 @@ skywire cli visor ping [pk]
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

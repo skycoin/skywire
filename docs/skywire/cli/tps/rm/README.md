@@ -2,28 +2,34 @@
 
 [← skywire cli tps](../README.md)
 
-Request the target visor to remove a transport by ID.
+Request the target visor to remove a transport by ID via TPS.
+
+The transport ID may be passed positionally (tps rm -t <pk> <id>) or with
+-i/--id. Equivalent to `tp rm --remote <pk> -i <id>`.
 
 ## Usage
 
 ```
-skywire cli tps rm
+skywire cli tps rm [id]
 ```
 
 ## Flags
 
 ```
   -t, --target string   target visor public key
-  -i, --id string       transport ID to remove
+  -i, --id string       transport ID to remove (may also be given positionally: tps rm -t <pk> <id>)
 ```
 
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

@@ -148,7 +148,7 @@ nc -zv <host-public-ip> 2022
 
 ## See also
 
-- [`skywire dmsg pty host`](../skywire/dmsg/pty/host/README.md) —
-  auto-generated flag reference
+- `skywire dmsg pty host --help` — full flag reference (the command
+  is hidden from the generated command reference)
 - [Standalone skychat](standalone-skychat.md) — analogous
   detached-from-visor pattern for the chat-app

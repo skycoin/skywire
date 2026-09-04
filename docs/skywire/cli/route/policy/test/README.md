@@ -25,17 +25,21 @@ skywire cli route policy test
 ## Flags
 
 ```
-  -d, --dial string     synthetic dial context as JSON — see the docs for the schema (default "{}")
-  -s, --script string   path to the skylark policy file (.star)
+  -d, --dial string                synthetic dial context as JSON — see the docs for the schema (default "{}")
+  -p, --preset route policy list   built-in preset name (Starlark or [wasm]) to test instead of a --script file (see route policy list)
+  -s, --script string              path to the skylark policy file (.star)
 ```
 
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

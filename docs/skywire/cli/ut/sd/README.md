@@ -24,7 +24,7 @@ skywire cli ut sd
 ```
   -a, --all                  include every day the server returned
   -m, --cache-age int        re-fetch if cache is older than N minutes (0 disables) (default 5)
-      --cache-dir string     cache directory ("" disables cache) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --cache-dir string     cache directory ("" disables cache) (default "/tmp/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
       --config string        path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
   -d, --days int             number of most-recent days to include (0 = latest day only)
       --json                 emit raw JSON
@@ -42,7 +42,7 @@ skywire cli ut sd
       --timeout duration     HTTP timeout (default 30s)
       --until string         include days on or before this date (YYYY-MM-DD)
       --url string           discovery base URL (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
-  -v, --v string             response version (v1|v2) (default "v2")
+  -v, --v string             response version (v1|v2|v3) (default "v3")
       --version string       filter visors by exact version
       --visors strings       server-side filter: only return these PKs (comma-separated)
 ```
@@ -51,6 +51,9 @@ skywire cli ut sd
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

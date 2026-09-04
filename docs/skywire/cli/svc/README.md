@@ -2,7 +2,17 @@
 
 [← skywire cli](../README.md)
 
-Query skywire deployment services (health, stats)
+Query the skywire DEPLOYMENT services over the mesh (read-only).
+
+  health  /health of every deployment service (fast first look; also lists PKs)
+  tpd     Transport Discovery read endpoints (stats, versions, bandwidth, ...)
+  dmsgd   DMSG Discovery read endpoints (servers, clients)
+  ar      Address Resolver (/transports; 'ar check <pk>' for registration)
+  nm      network-monitor liveness (stand-in: probes TPD /health)
+
+Deployment services are DMSG-only. Subcommands fetch via the local visor's
+RPC by default and fall back to a CLI-owned client; pass --direct to force
+the direct path. Output honors --json.
 
 ## Usage
 
@@ -15,15 +25,32 @@ skywire cli svc
 - [ar](ar/README.md) — Address Resolver endpoints
 - [dmsgd](dmsgd/README.md) — DMSG Discovery endpoints
 - [health](health/README.md) — Check health of the skywire deployment services
-- [nm](nm/README.md) — Network Monitor status
+- [nm](nm/README.md) — Network Monitor status (currently probes TPD /health — no NM endpoint deployed)
 - [tpd](tpd/README.md) — Transport Discovery endpoints
+
+## Flags
+
+```
+      --arurl string       override the address-resolver base URL (used by ar)
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
+      --dmsgdurl string    override the dmsg-discovery base URL (used by dmsgd)
+      --no-cxo             skip CXO subscriber-cache step
+      --no-dmsg            skip direct DMSG HTTP step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --testenv            use the test deployment services (or set SKYWIRETEST=1)
+      --tpdurl string      override the transport-discovery base URL (used by tpd / nm)
+```
 
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

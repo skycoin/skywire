@@ -2,7 +2,18 @@
 
 [← skywire cli config](../README.md)
 
-Update a config file
+Update an existing skywire config file in place.
+
+The target file must already exist; use 'config gen' to create one. Select the
+target with -i/--input (read from) and -o/--output (write to); when only one is
+given it is used for both. -p/--pkg targets the package config and -u/--user the
+$HOME config. With no flags the running visor's app/service config subcommands
+(hv, sc, ss, vpnc, vpns) rewrite launcher app args; 'svc' refreshes the local
+services-config.json from the bootstrap service.
+
+Top-level flags update service endpoints (-a/--endpoints), the log level
+(--log-level), public autoconnect (--public-autoconn true|false) and the routing
+min-hops (--set-minhop). Passing -b/--url a value implies --endpoints.
 
 ## Usage
 
@@ -37,8 +48,11 @@ skywire cli config update
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

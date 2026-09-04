@@ -14,7 +14,9 @@ codebase evolved; this is the reference for "what we mean when we say X."
   every visor speaks. Noise-encrypted streams relayed by dmsg *servers*; the
   substrate everything else rides on. → `pkg/dmsg`
 - **transport** — a link between two visors. Types: `dmsg`, `stcpr`, `sudph`,
-  `ws`, `wt` (WebTransport), `webrtc`. → `pkg/transport`
+  `stcp`, `squicr` (QUIC), `swsr` (WebSocket), `swtr` (WebTransport),
+  `webrtc`; legacy aliases `quic`/`squic`, `ws`, `wt` are still accepted.
+  → `pkg/transport/types`
 - **route / route group** — a (possibly multi-hop) forwarding path set up over
   transports; a route group bundles the forward + reverse legs.
 - **appnet** — the app-networking layer: apps don't dial the network directly,

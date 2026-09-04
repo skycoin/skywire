@@ -2,7 +2,14 @@
 
 [← skywire cli svc](../README.md)
 
-Query DMSG Discovery service endpoints
+Query DMSG Discovery read endpoints over the mesh.
+
+  all-servers     every registered dmsg server entry
+  server-clients  clients grouped by the server they session with
+  clients --pk    clients currently sessioned with one dmsg server
+
+Fetches via the local visor's RPC by default; --direct uses a CLI-owned
+client. Output honors --json.
 
 ## Usage
 
@@ -26,10 +33,22 @@ skywire cli svc dmsgd
 ## Global Flags
 
 ```
-  -h, --help              show help menu
-      --json              print output as JSON
-      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
-      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
+      --arurl string       override the address-resolver base URL (used by ar)
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
+      --dmsgdurl string    override the dmsg-discovery base URL (used by dmsgd)
+  -h, --help               show help menu
+      --jq string          filter JSON output through a jq/gojq expression (implies --json)
+      --json               print output as JSON
+      --no-cxo             skip CXO subscriber-cache step
+      --no-dmsg            skip direct DMSG HTTP step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+      --shape              print the output schema skeleton (zero values, all fields) instead of data
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --testenv            use the test deployment services (or set SKYWIRETEST=1)
+      --timeout int        RPC timeout in seconds (0 = unlimited) (default 30)
+      --tpdurl string      override the transport-discovery base URL (used by tpd / nm)
+      --tui                browse commands and help interactively
+      --via dmsg://<pk>    remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

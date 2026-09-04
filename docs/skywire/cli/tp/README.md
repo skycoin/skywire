@@ -2,17 +2,22 @@
 
 [← skywire cli](../README.md)
 
-Display and manage transports of the local visor
+Display and manage transports of the LOCAL visor.
 
-	Transports are bidirectional communication protocols
-	used between two Skywire Visors (or Transport Edges)
+	Transports are bidirectional communication protocols used between two
+	Skywire Visors (or Transport Edges). Each Transport is a unique 16-byte
+	UUID (the Transport ID) with a Transport Type identifying its
+	implementation. Types: stcp stcpr sudph dmsg squic webrtc ws wt
 
-	Each Transport is represented as a unique 16 byte (128 bit)
-	UUID value called the Transport ID
-	and has a Transport Type that identifies
-	a specific implementation of the Transport.
+	This command has three distinct transport views:
+	  tp                      LOCAL visor's live transports (this command)
+	  tp --remote <pk>        a REMOTE visor's live transports, via the
+	                          Transport Setup Node (see also 'tps list')
+	  tp all / tp tpd-stats   the whole-network view registered in the
+	                          Transport Discovery (TPD)
 
-	Types: stcp stcpr sudph dmsg
+	--more/-m enriches rows with version/country/service info (extra fetches).
+	--live/-L is an interactive TUI and requires a TTY.
 
 ## Usage
 
@@ -23,12 +28,13 @@ skywire cli tp
 ## Subcommands
 
 - [add](add/README.md) — Add transport(s) to one or more remote public keys
-- [all](all/README.md) — List all transports on the network
+- [all](all/README.md) — Dump every transport registered network-wide (Transport Discovery)
 - [auto](auto/README.md) — Control public autoconnect
 - [disc](disc/README.md) — Discover remote transport(s)
 - [id](id/README.md) — Compute the deterministic transport ID for a given PK pair and type
 - [metrics](metrics/README.md) — Transport discovery bandwidth metrics
 - [net-stats](net-stats/README.md) — Network-wide transport statistics
+- [public](public/README.md) — Get or set whether the visor is public
 - [rm](rm/README.md) — Remove transport(s) by id
 - [route-addr](route-addr/README.md) — Build a source-routed resolver address (<tpid>...<dest>.skynet) for a PK path
 - [tpd-health](tpd-health/README.md) — Transport discovery health and version info
@@ -47,10 +53,10 @@ skywire cli tp
   -m, --more              show more info
   -b, --bw int            show bandwidth usage for last N days (0 = disabled)
       --inactive          show bandwidth for inactive transports (requires --bw)
-      --cfu string        UT cache file location. (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//ut.json")
-      --cfsp string       SD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//proxysd.json")
-      --cfsv string       SD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//vpnsd.json")
-      --cfsvisor string   SD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//visorsd.json")
+      --cfu string        UT cache file location. (default "/tmp/ut.json")
+      --cfsp string       SD cache file location (default "/tmp/proxysd.json")
+      --cfsv string       SD cache file location (default "/tmp/vpnsd.json")
+      --cfsvisor string   SD cache file location (default "/tmp/visorsd.json")
   -c, --cfa int           use cached service-discovery/UT data if younger than N minutes (default 5)
   -a, --sdurl string      service discovery url (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
   -w, --uturl string      uptime tracker url (TPD integrated) (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
@@ -66,8 +72,11 @@ skywire cli tp
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

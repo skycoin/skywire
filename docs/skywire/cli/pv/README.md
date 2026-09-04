@@ -23,9 +23,9 @@ skywire cli pv
 
 ```
   -y, --bytype             break the transport count down by type (implies -t): total + per-type columns
-      --cds string         SD cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
-      --cdt string         TPD cache dir, shared by transports + uptime ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
-  -m, --cfa watch          refetch cached data older than n minutes (0 = always fetch fresh, e.g. for watch) (default 5)
+      --cds string         SD cache dir ("" to disable) (default "/tmp/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --cdt string         TPD cache dir, shared by transports + uptime ("" to disable) (default "/tmp/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+  -m, --cfa int            refetch cached data older than n minutes (0 = always fetch fresh, e.g. for 'watch') (default 5)
       --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
   -c, --country string     filter by country code
   -n, --min int            minimum transport count (requires -t)
@@ -48,8 +48,11 @@ skywire cli pv
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

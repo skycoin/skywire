@@ -218,7 +218,7 @@ This division is the whole design, and getting it wrong is the main way apps mis
 | | Sink | Wins when |
 |---|---|---|
 | a | An attached UI holding a capability lease | that UI will surface it itself |
-| b | A subscribed host app (`skywire-cli hv notify`) | one is connected |
+| b | A subscribed host app (`skywire cli hv notify`) | one is connected |
 | c | The host OS notification centre (`pkg/osnotify`) | there is a desktop session |
 | d | Dropped | headless — the normal case for most of the fleet |
 
@@ -274,10 +274,10 @@ Equally, check the *trigger* is real. An `if err != nil` guard is worthless if t
 Notifications are invisible on a headless box and in CI, so don't test through the OS. Two options:
 
 - **Unit-test the decision, not the delivery.** The interesting logic is your "should I notify?" gate — a pure function is trivial to pin exhaustively.
-- **Watch the stream.** `skywire-cli hv notify --print` subscribes to the visor and prints every event, which works headlessly and in containers:
+- **Watch the stream.** `skywire cli hv notify --print` subscribes to the visor and prints every event, which works headlessly and in containers:
 
 ```
-$ skywire-cli hv notify --print
+$ skywire cli hv notify --print
 20:17:49  [skychat] 024ec474…58c7 — hello there
 ```
 

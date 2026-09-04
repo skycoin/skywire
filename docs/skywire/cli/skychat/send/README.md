@@ -42,7 +42,7 @@ skywire cli skychat send
   -c, --config string   skywire.json path — only sk field read, for --via tcp identity
   -m, --msg string      message to send (required)
   -n, --net string      network type: skynet or dmsg (default "skynet")
-  -r, --retries int     extra retry attempts on HTTP/transport failure (default 1). 0 disables retry. Each retry waits 200ms × attempt before retrying. Ack timeouts (peer-side failures with --wait) are NOT retried. (default 1)
+  -r, --retries int     extra retry attempts on HTTP/transport failure. 0 disables retry. Each retry waits 200ms × attempt before retrying. Ack timeouts (peer-side failures with --wait) are NOT retried. (default 1)
       --sk string       identity SK for --via tcp (hex). Overrides env + config.
   -t, --to string       recipient public key (optional when --via tcp://<pk>@host:port is set — the PK in --via is used)
       --verbose         surface per-layer detail to stderr: POST request URL+payload, HTTP response status+headers, ack timing, /status counter deltas (outbound_msg_count / fail / retry / fallback). Use to debug send failures.
@@ -55,8 +55,11 @@ skywire cli skychat send
 ```
       --addr string   skychat HTTP address (default "127.0.0.1:8001")
   -h, --help          show help menu
+      --jq string     filter JSON output through a jq/gojq expression (implies --json)
       --json          print output as JSON
+      --shape         print the output schema skeleton (zero values, all fields) instead of data
       --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui           browse commands and help interactively
 ```
 
 ---

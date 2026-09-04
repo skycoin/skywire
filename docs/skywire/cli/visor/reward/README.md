@@ -15,7 +15,6 @@ skywire cli visor reward
 ```
   -a, --all         show rewards for all visors connected to the hypervisor
   -d, --days int    number of days of history (default 7)
-  -j, --json        output as JSON
   -k, --pk string   visor public key (default: local visor)
 ```
 
@@ -23,8 +22,12 @@ skywire cli visor reward
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
+      --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

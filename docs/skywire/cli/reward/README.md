@@ -2,8 +2,74 @@
 
 [← skywire cli](../README.md)
 
-skycoin reward address set to:
-    2GgFvqoyk9RjwVzj8tqfcXVXB4orBwoc9qv
+```
+reward address setting
+
+	This is the node-operator command: it manages THIS visor's reward
+	address and looks up reward history. It is distinct from the plural
+	'skywire cli rewards' command, which is the reward-system operator
+	toolchain (calculate/distribute rewards, collect data, serve the UI).
+
+	Subcommands:
+	  reward            set / read this visor's skycoin reward address
+	  reward lookup     query the reward server for a PK's payout history
+	  reward rules      display the mainnet reward eligibility rules
+
+	Sets the skycoin reward address or xpub key for the visor.
+	Accepts either a skycoin address or a BIP44 account-level xpub key.
+	The address is written to the root of the default 'local' directory
+	specified in the visor's config.
+
+	This file is parsed by the visor at runtime, and the reward address
+	is included in the survey which is served via dmsghttp along with
+	transport logs and the system hardware survey for automating reward
+	distribution.
+
+	By setting a reward address, you consent to collection of the survey
+	from the visors where the reward address is set.
+	The survey is ONLY for verification of reward eligibility. We respect
+	your privacy.
+
+	XPUB KEY SETUP (BIP44 wallets)
+
+	When using an xpub key, you must provide the account-level xpub
+	(BIP44 path: m/44'/coin'/account'). This is NOT the same as the
+	external chain xpub shown in the Skycoin web wallet GUI.
+
+	The Skycoin web wallet displays the external chain xpub (path 0/0,
+	depth 4). The reward and login systems require the account-level
+	xpub (path 0, depth 3) which is the parent of both the external
+	and change chains.
+
+	To export the correct xpub from a bip44 wallet using the CLI:
+
+	  1. Start a skycoin node with seed API enabled:
+	     skywire skycoin daemon --enable-api-sets="INSECURE_WALLET_SEED"
+
+	  2. Export the account-level xpub (path 0):
+	     skywire skycoin cli walletKeyExport WALLET_FILE -k xpub --path=0
+
+	     The default --path=0/0 gives the external chain xpub (WRONG).
+	     You must use --path=0 for the account-level xpub (CORRECT).
+
+	  3. Set the reward address:
+	     skywire reward ACCOUNT_XPUB
+
+	BIP44 key hierarchy:
+
+	  m/44'/coin'/0'            <-- account xpub (depth 3) USE THIS
+	    ├── 0/                  <-- external chain (depth 4, receiving)
+	    │   ├── 0  address 1
+	    │   ├── 1  address 2
+	    │   └── ...
+	    └── 1/                  <-- change chain (depth 4, login)
+	        ├── 0  login address
+	        └── ...
+
+	The login system derives verification addresses from the change
+	chain (m/44'/coin'/0'/1/i) so they do not collide with receiving
+	addresses on the external chain.
+```
 
 ## Usage
 
@@ -14,17 +80,16 @@ skywire cli reward <address | xpub> || [flags]
 ## Subcommands
 
 - [lookup](lookup/README.md) — Look up reward history for public keys (over dmsg)
-- [rules](rules/README.md) — display the mainnet rules
+- [rules](rules/README.md) — display the mainnet reward eligibility rules
 
 ## Flags
 
 ```
   -a, --address string   reward address
-                         default: 2GgFvqoyk9RjwVzj8tqfcXVXB4orBwoc9qv
-  -o, --out string       write reward address to: /Library/Application Support/Skywire/local/reward.txt
+                         default: 2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
+  -o, --out string       write reward address to: /opt/skywire/local/reward.txt
   -r, --read             print the skycoin reward address & exit
-                         2GgFvqoyk9RjwVzj8tqfcXVXB4orBwoc9qv
-  -d, --delete           delete reward addresss file - opt out of rewards
+  -d, --delete           delete reward address file - opt out of rewards
       --pks string       comma-separated visor PKs (via hypervisor) to set reward address on
       --all-visors       apply reward address to every visor connected to this hypervisor (requires running hypervisor)
       --all              show all flags
@@ -34,8 +99,11 @@ skywire cli reward <address | xpub> || [flags]
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

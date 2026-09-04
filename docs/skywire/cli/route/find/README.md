@@ -2,8 +2,19 @@
 
 [← skywire cli route](../README.md)
 
-Query the Route Finder
-Assumes the local visor public key as an argument if only one argument is given
+Query the Route Finder service for the route (hop path) between two visors.
+
+This is a live query against the route-finder graph; it neither reads nor
+installs local routing rules. Compare the sibling commands:
+
+  route find    query the route-finder for a path to a destination (REMOTE)
+  route         list the routing rules currently installed here (LOCAL)
+  route calc    compute a path locally from transport-discovery data (no RF)
+
+A route is an ordered chain of hops; each hop traverses one transport
+between two visors (a transport is a single peer-to-peer link, a route is
+the whole chain). If only one public key is given, the local visor's key
+is assumed as the source.
 
 ## Usage
 
@@ -17,15 +28,21 @@ skywire cli route find <public-key> | <public-key-visor-1> <public-key-visor-2>
   -n, --min uint16         minimum hops (default 1)
   -x, --max uint16         maximum hops (default 1000)
   -t, --timeout duration   request timeout (default 10s)
-  -a, --addr string        route finder service address (default "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80")
+  -a, --rf string          route finder service address (default "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80")
+      --addr string        route finder service address (deprecated alias for --rf) (default "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80")
+      --min-hops uint16    minimum hops (alias for --min) (default 1)
+      --max-hops uint16    maximum hops (alias for --max) (default 1000)
 ```
 
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

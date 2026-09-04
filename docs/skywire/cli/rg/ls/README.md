@@ -15,7 +15,6 @@ skywire cli rg ls
 ```
       --filter string   role filter: all | initiator | responder (default "all")
       --hops            also print the full forward hop path for each route group
-      --json            output as JSON
   -L, --live            live-refresh mode (bubbletea TUI, 1s tick); shows route groups + bandwidth updating in place
 ```
 
@@ -23,8 +22,12 @@ skywire cli rg ls
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
+      --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

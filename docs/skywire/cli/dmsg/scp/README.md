@@ -26,6 +26,17 @@ Transport selection (--transport):
   - skynet  routes the transfer over the skywire router via the
             visor's VisorSCP RPC. Requires a local visor with
             appnet TypeSkynet registered.
+  - tcp     not supported yet (there is no dmsgscp TCP host); asking
+            for it errors rather than silently falling back.
+
+--standalone forces the standalone-dmsg client path (same as
+--transport dmsg, but explicit) even when a local visor is reachable.
+
+Target grammar — the PK-bearing arg may also carry a scheme, which
+selects the transport (and must agree with an explicit --transport):
+  skywire cli dmsg scp ./f skynet://<pk>:remote.bin   (upload over skynet)
+  skywire cli dmsg scp dmsg://<pk>:remote.bin ./f     (download over dmsg)
+A bare <pk>:path keeps using --transport.
 
 Identity: --sk gives the standalone dmsg client a stable PK so the
 host's whitelist can authorize it. Without --sk you get a fresh
@@ -44,8 +55,10 @@ skywire cli dmsg scp <src> <dst>
 ```
   -s, --sk cipher.SecKey   secret key for the standalone dmsg client (random if unset) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -p, --port uint16        remote dmsg port for the dmsgscp host (default 23)
-  -t, --timeout duration   transfer timeout (includes dial + payload) (default 5m0s)
-      --transport string   transport: auto (try visor first, fallback dmsg) | dmsg | skynet (default "auto")
+  -t, --timeout duration   no-progress (idle) timeout: the transfer aborts only after this long with ZERO bytes moving — a progressing transfer of any size never times out (the payload is not capped by total duration) (default 1m0s)
+      --transport string   transport: auto (try visor first, fallback dmsg) | dmsg | skynet | tcp (not supported yet) (default "auto")
+      --standalone         force the standalone-dmsg client path (skip the visor RPC); needs --sk for a stable identity
+      --visor-key          via-visor transports run under the visor's own identity; standalone uses --sk (see help) (default true)
       --rpc string         local visor RPC server address (env: SKYWIRE_RPC). Used for skynet / auto transports. (default "localhost:3435")
   -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ] (default "fatal")
 ```
@@ -54,7 +67,10 @@ skywire cli dmsg scp <src> <dst>
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

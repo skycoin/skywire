@@ -32,12 +32,13 @@ skywire cli visor
 - [resume](resume/README.md) — Resume a suspended visor
 - [reward](reward/README.md) — Show reward history for a visor
 - [start](start/README.md) — Start visor
+- [state](state/README.md) — Curated snapshot of the visor's live internal runtime state
 - [suspend](suspend/README.md) — Suspend visor (tear down networking, keep local RPC)
 - [suspended](suspended/README.md) — Report whether the visor is suspended
 - [uptime](uptime/README.md) — Visor session history (version-tagged, with restart-loop / down-window detection)
 - [user](user/README.md) — Show the user the visor process is running as
 - [ver](ver/README.md) — Version and build info
-- [whois](whois/README.md) — Combined TPD + UT + SD rollup for a single visor PK
+- [whois](whois/README.md) — Combined TPD + SD rollup for a single visor PK
 
 ## Flags
 
@@ -49,8 +50,11 @@ skywire cli visor
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

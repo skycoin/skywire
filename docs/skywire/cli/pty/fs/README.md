@@ -13,7 +13,7 @@ Same trust model as 'skywire cli pty shell':
   authorized keys -> dmsgpty whitelist on the server side
   client auth     -> client PK alone, derived from the local visor's
                      SK by default (override with --sk or
-                     --no-visor-key)
+                     --visor-key=false)
 
 Linux-only — FUSE is required, and the host process must be allowed
 to mount via FUSE (typically by group membership or a passwordless
@@ -34,23 +34,28 @@ skywire cli pty fs
 
 ## Subcommands
 
-- [mount](mount/README.md) — Mount a peer visor's filesystem (Linux only)
-- [umount](umount/README.md) — Unmount a previously-mounted pty fs (Linux only)
+- [mount](mount/README.md) — Mount a peer visor's filesystem over the sftp subsystem
+- [umount](umount/README.md) — Unmount a previously-mounted pty fs (calls fusermount -u)
 
 ## Flags
 
 ```
-      --no-visor-key       don't borrow the local visor's SK from /Library/Application Support/Skywire/skywire-config.json — use --sk or a random one instead
+      --no-visor-key       don't borrow the local visor's SK from /opt/skywire/skywire.json — use --sk or a random one instead
   -p, --port string        default port when the destination omits one (e.g. '<pk>@host' resolves to <pk>@host:<port>) (default "2022")
   -s, --sk cipher.SecKey   local client SK for the noise handshake (random if unset; pin for stable whitelist authorization) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --transport string   transport: auto|dmsg (via-visor) | tcp (direct, needs a <pk>@host:port target); skynet is not wired, --standalone forces standalone-dmsg (default "auto")
+      --visor-key          borrow the local visor's SK from /opt/skywire/skywire.json for the tcp noise handshake (default true; --sk wins) (default true)
 ```
 
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

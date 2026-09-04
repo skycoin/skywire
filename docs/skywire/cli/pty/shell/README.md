@@ -15,7 +15,7 @@ Compared to OpenSSH:
   authorized_keys       ↔ dmsgpty whitelist on the server side
   password / pubkey     ↔ client PK alone, derived from the local
                           visor's SK by default (override with --sk
-                          or --no-visor-key)
+                          or --visor-key=false)
   TCP :22 default       ↔ TCP :2022 default (--port to override)
   ssh -t / ssh <cmd>    ↔ no positional command → interactive pty
                           positional command after '--' → exec mode
@@ -29,6 +29,13 @@ Examples:
 
   # Use a pinned client SK instead of the visor's
   skywire cli pty shell 0323...@1.2.3.4:2022 --sk <hex> -- whoami
+
+Transport: this command is direct-TCP only. --transport auto and
+--transport tcp both select that single path; --transport dmsg /
+skynet error with a pointer to 'cli pty exec', which has the via-visor
+paths. A tcp://<pk>@host:port destination is accepted (the scheme is
+optional); dmsg:// / skynet:// destinations are rejected here.
+--standalone is not supported (errors if set).
 
 The underlying transport is identical to 'cli dmsg pty exec/start
 --via tcp://<pk>@<host>:<port>'; this command is the discoverable
@@ -44,18 +51,24 @@ skywire cli pty shell <pk>@<host>[:<port>] [-- <command> [args...]]
 
 ```
   -s, --sk cipher.SecKey   local client SK for the noise handshake (random if unset; pin for stable whitelist authorization) (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --no-visor-key       don't borrow the local visor's SK from /Library/Application Support/Skywire/skywire-config.json — use --sk or a random one instead
+      --no-visor-key       don't borrow the local visor's SK from /opt/skywire/skywire.json — use --sk or a random one instead
   -e, --env stringArray    extra env var KEY=VALUE; repeatable; exec mode only
   -t, --timeout string     max command duration in exec mode (e.g. 30s, 2m); host-side cap is 5m (default "30s")
       --no-pty             force exec mode even when no command is given (rarely useful — defaults to interactive when no command, exec when command is present, matching ssh's behavior)
   -p, --port string        default port when the destination omits one (e.g. 'ssh <pk>@host' resolves to <pk>@host:<port>) (default "2022")
+      --transport string   transport: auto|tcp (pty shell is direct-TCP only; dmsg|skynet error — use 'cli pty exec' for those) (default "auto")
+      --standalone         (not supported for pty shell — accepted for vocabulary parity; errors if set)
+      --visor-key          borrow the local visor's SK from /opt/skywire/skywire.json for the noise handshake (default true; --sk wins) (default true)
 ```
 
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

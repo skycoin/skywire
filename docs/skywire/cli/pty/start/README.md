@@ -16,16 +16,22 @@ skywire cli pty start <pk>
   -p, --port string        port of remote visor dmsgpty (default "22")
       --rpc string         RPC server address (default "localhost:3435")
   -s, --sk cipher.SecKey   local secret key for the --via direct-TCP path's noise handshake (random if unset; pin for stable whitelist authorization) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --standalone         (not supported for pty start yet — accepted for vocabulary parity; errors if set)
+      --transport string   transport: auto (local dmsgpty-host proxy) | dmsg (same path) | tcp (direct-TCP, needs a host:port target); skynet is exec-only (default "auto")
       --via string         bypass local visor + dial remote dmsgpty-host's direct-TCP listener: tcp://<pk>@<host>:<port>
-      --via-visor          borrow local visor's secret key from /Library/Application Support/Skywire/skywire-config.json for the --via noise handshake (--sk wins if set)
+      --via-visor          borrow local visor's secret key from /opt/skywire/skywire.json for the --via noise handshake (--sk wins if set)
+      --visor-key          borrow the local visor's SK from /opt/skywire/skywire.json for the tcp noise handshake (default false: opt-in; --sk wins)
 ```
 
 ## Global Flags
 
 ```
   -h, --help          show help menu
+      --jq string     filter JSON output through a jq/gojq expression (implies --json)
       --json          print output as JSON
+      --shape         print the output schema skeleton (zero values, all fields) instead of data
       --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui           browse commands and help interactively
 ```
 
 ---

@@ -2,7 +2,12 @@
 
 [← skywire cli tp](../README.md)
 
-Display all transports registered in the network via the transport discovery HTTP API.
+Dump every transport registered network-wide, as seen by the Transport
+Discovery (TPD) — NOT just the local visor's transports. This is the whole-
+network view; for the local visor's live transports use `tp`, and for a
+remote visor's live transports use `tp --remote <pk>` / `tps list`.
+
+Fetched over the CXO->DmsgHTTP->DMSG chain (honors --no-cxo/--no-rpc/--no-dmsg).
 
 ## Usage
 
@@ -10,12 +15,26 @@ Display all transports registered in the network via the transport discovery HTT
 skywire cli tp all
 ```
 
+## Flags
+
+```
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
+      --no-cxo             skip CXO subscriber-cache step
+      --no-dmsg            skip direct DMSG HTTP step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --tpdurl string      transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+```
+
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

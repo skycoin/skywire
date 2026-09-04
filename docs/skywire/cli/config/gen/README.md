@@ -4,10 +4,10 @@
 
 Generate a config file
 
-	Custom deployment config (services-config.json) may be specified with:
-	SKYDEPLOY=/path/to/services-config.json skywire cli config gen
-	This overrides the embedded deployment defaults for all service URLs,
-	DMSG servers, and DMSG endpoints. Use with --nofetch to skip HTTP fetch.
+	Config defaults file may also be specified with:
+	SKYENV=/path/to/skywire.conf skywire-cli config gen
+	print the SKYENV file template with:
+	skywire-cli config gen -q
 
 ## Usage
 
@@ -52,6 +52,7 @@ skywire cli config gen
       --routesetup string                    add route setup node PKs
       --tpsetup string                       add transport setup node PKs
       --cascade                              opt into source-driven cascade route setup (default: legacy setup-node path)
+      --policy string                        per-dial routing policy: preset:<name> (e.g. preset:adaptive), @/path/policy.star, @/path/policy.wasm, inline Starlark, or empty for built-in defaults
       --sn                                   generate config for route setup node
       --dmsgdisc                             generate config for dmsg-discovery service
       --dmsgsrv                              generate config for dmsg-server service
@@ -90,7 +91,7 @@ skywire cli config gen
       --addvpn string                        set vpn server public key for vpn client
       --vpnwl string                         vpn server whitelist (comma separated; empty allows all)
       --secure string                        change secure mode status of vpn server
-      --netifc string                        VPN Server network interface (detected: anpi1, anpi0, en3, en4, en1, en2, bridge0, ap1, en0, awdl0, llw0, utun0, utun1, utun2, utun3, utun4)
+      --netifc string                        VPN Server network interface (detected: eno1)
       --proxyclientpk string                 set server public key for proxy client
       --startproxyclient                     autostart proxy client
       --serveproxy                           autostart proxy server (default true)
@@ -102,6 +103,10 @@ skywire cli config gen
       --skynetweb-upstream string            upstream SOCKS5 for non .skynet traffic
       --dmsgweb-addr string                  host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
       --skynetweb-addr string                host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
+      --no-browse-origin                     do not serve the loopback real-origin browse proxy / HTTPS proxy-status pages (status-<surface>.<suffix>)
+      --browse-suffix string                 browse-origin domain suffix (leading dot) for the loopback browse proxy + HTTPS proxy-status pages. Empty = deployment default (".haltingstate.net")
+      --browse-tls-cert string               PEM cert for the browse-origin listener — a real wildcard cert for *.<browse-suffix> so status-<surface>.<suffix> loads over warning-free HTTPS. Requires --browse-tls-key; empty = plain HTTP on loopback
+      --browse-tls-key string                PEM key paired with --browse-tls-cert
       --servechat                            autostart skychat (default true)
       --chataddr string                      skychat local address (default "127.0.0.1:8001")
       --servechatpair                        skychat pair RPC channel (required for group chat) (default true)
@@ -119,9 +124,9 @@ skywire cli config gen
       --skycoinwebwallet string              skycoin web wallet dir override
       --skycoinwebuser string                skycoin web UID (empty inherits visor UID)
       --rewardaddr string                    skycoin reward address or xpub key
-  -k, --os string                            (linux / mac / win) paths (default "mac")
-  -p, --pkg                                  use mac installation path: /Library/Application Support/Skywire
-  -u, --user                                 use paths for user space: /Users/mohammed
+  -k, --os string                            (linux / mac / win) paths (default "linux")
+  -p, --pkg                                  use path for package: /opt/skywire
+  -u, --user                                 use paths for user space: <home>
       --loglvl string                        level of logging in config (default "info")
   -s, --sk cipher.SecKey                     a random key is generated if unspecified
                                               (default 0000000000000000000000000000000000000000000000000000000000000000)
@@ -142,7 +147,10 @@ skywire cli config gen
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

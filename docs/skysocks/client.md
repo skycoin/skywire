@@ -87,17 +87,18 @@ network conditions change.
 - Force legs through intermediates (e.g. for bandwidth-spreading): add
   `--min-hops 2`.
 
-Manage the legs of a **running** session with the `mux-*` subcommands:
+Manage the legs of a **running** session with the `proxy mux` subcommands
+(the old flat `mux-*` spellings still work as deprecated aliases):
 
 | Command | Effect |
 |---|---|
-| `proxy mux-info [--watch]` | per-leg traffic / latency (live with `--watch`) |
-| `proxy mux-auto <preset>` | adaptive control loop (see below) |
-| `proxy mux-set <n>` | reconcile to a target leg count |
-| `proxy mux-add` / `mux-rm` | add / remove one leg |
-| `proxy mux-mode auto\|equal` | change weighting at runtime |
+| `proxy mux info [--watch]` | per-leg traffic / latency (live with `--watch`) |
+| `proxy mux auto <preset>` | adaptive control loop (see below) |
+| `proxy mux set <n>` | reconcile to a target leg count |
+| `proxy mux add` / `mux rm` | add / remove one leg |
+| `proxy mux mode auto\|equal` | change weighting at runtime |
 
-`proxy mux-auto` runs an adaptive **prune-and-grow** loop toward a preset, both
+`proxy mux auto` runs an adaptive **prune-and-grow** loop toward a preset, both
 shedding slow legs and re-growing fresh disjoint ones (honoring `--min-hops`)
 when live legs drop — failover in both directions:
 
@@ -105,7 +106,7 @@ when live legs drop — failover in both directions:
 - `balanced` — primary + 3 lowest-latency legs
 - `resilient` — up to 8 lowest-latency legs (max redundancy)
 
-Pair it with `proxy mux-info --watch` in another terminal to see the effect.
+Pair it with `proxy mux info --watch` in another terminal to see the effect.
 
 ## Reconnect behavior
 
@@ -149,8 +150,8 @@ sends everything else out through the skysocks exit.
   `proxy test` (or `proxy test --connect` to force transports). A server with no
   transport and no route won't connect.
 - **Works then drops** — that's what `--reconnect` covers; check `proxy status`
-  and `proxy mux-info` for leg health, and `--verbose` to watch the session live.
-- **Slow** — add legs (`--mux 2+`) and/or `proxy mux-auto balanced`.
+  and `proxy mux info` for leg health, and `--verbose` to watch the session live.
+- **Slow** — add legs (`--mux 2+`) and/or `proxy mux auto balanced`.
 
 ## See also
 

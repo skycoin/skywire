@@ -30,7 +30,7 @@ skywire dmsg curl
   -r, --replace            replace existing file with new downloaded
   -t, --try int            download attempts (0 unlimits) (default 1)
   -w, --wait int           time to wait between requests
-  -a, --agent AGENT        identify as AGENT (default "dmsgcurl/unknown")
+  -a, --agent AGENT        identify as AGENT (default "dmsgcurl/v1.3.94-0.-<commit>")
   -s, --sk cipher.SecKey   a random key is generated if unspecified (default 0000000000000000000000000000000000000000000000000000000000000000)
 ```
 
@@ -38,6 +38,10 @@ skywire dmsg curl
 
 ```
   -h, --help        show help menu
+      --jq string   filter JSON output through a jq/gojq expression (implies --json)
+      --json        print output as JSON
+      --shape       print the output schema skeleton (zero values, all fields) instead of data
+      --tui         browse commands and help interactively
       --with-kill   force exit after 3 interrupt signals (default true)
 ```
 

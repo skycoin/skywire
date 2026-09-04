@@ -23,9 +23,12 @@ skywire cli config update vpnc
 ```
   -h, --help              show help menu
   -i, --input string      path of input config file.
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
   -o, --output string     config file to output
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
   -u, --user              update config at: $HOME/skywire-config.json
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```

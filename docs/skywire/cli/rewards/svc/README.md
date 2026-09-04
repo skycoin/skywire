@@ -2,7 +2,14 @@
 
 [← skywire cli rewards](../README.md)
 
-verify services in survey
+Verify that the service configuration reported in a collected survey
+(node-info.json under --lpath/<pk>/) matches the prod deployment's
+services-config.json — i.e. the visor is pointed at the correct
+dmsg-discovery / transport-discovery / route-finder / etc.
+
+Requires a survey for the given --pk to already be present under --lpath
+(collect with 'skywire cli log'). stun_servers are omitted from the
+comparison. Detects both http and dmsghttp service configs.
 
 ## Usage
 
@@ -22,8 +29,11 @@ skywire cli rewards svc
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

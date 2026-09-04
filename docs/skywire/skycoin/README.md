@@ -6,8 +6,8 @@
 ┌─┐┬┌─┬ ┬┌─┐┌─┐┬┌┐┌
 └─┐├┴┐└┬┘│  │ │││││
 └─┘┴ ┴ ┴ └─┘└─┘┴┘└┘
-<version>
-built with go1.26.4-X:nodwarf5
+v0.28.6-0.20260903193022-c0d3f2be8628
+built with go1.27.1
 ```
 
 ## Usage
@@ -34,7 +34,11 @@ skywire skycoin
 ## Global Flags
 
 ```
-  -h, --help   show help menu
+  -h, --help        show help menu
+      --jq string   filter JSON output through a jq/gojq expression (implies --json)
+      --json        print output as JSON
+      --shape       print the output schema skeleton (zero values, all fields) instead of data
+      --tui         browse commands and help interactively
 ```
 
 ---

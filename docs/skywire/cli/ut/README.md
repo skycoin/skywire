@@ -2,16 +2,23 @@
 
 [← skywire cli](../README.md)
 
-query the TPD-integrated uptime tracker
+Query the TPD-integrated uptime tracker.
 
-dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/uptimes?v=v3
+  dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/uptimes?v=v3
 
-Check local visor daily uptime percent with:
+Bare 'ut' reports per-day uptime percentages from the transport-discovery
+integrated endpoint. The same uptime data is published by every discovery;
+subcommands query the other sources with an identical output/flag shape:
 
-$ skywire-cli ut -n0 -k $(skywire-cli visor pk)
+  ut sd     service-discovery integrated /uptimes
+  ut mdisc  dmsg-discovery integrated /uptimes (most accurate 'reachable via dmsg')
+  ut tpd    transport-discovery integrated /uptimes (feeds the rewards pipeline)
 
-Set cache dir to "" to avoid using cache files
+Check the local visor's daily uptime percent with:
 
+  $ skywire cli ut -n0 -k $(skywire cli visor pk)
+
+Set the cache dir to "" to avoid using cache files.
 Use --testenv or SKYWIRETEST=1 to use test deployment services.
 
 ## Usage
@@ -30,9 +37,9 @@ skywire cli ut
 
 ```
       --cdt string           TPD cache dir ("" to disable)
-                              (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+                              (default "/tmp/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
       --cdu string           UT cache dir ("" to disable)
-                              (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+                              (default "/tmp/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -m, --cfa int              update cache files if older than n minutes
                               (default 5)
       --config string        path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
@@ -50,11 +57,12 @@ skywire cli ut
       --rpc string           RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
       --sk cipher.SecKey     secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -s, --stats                count the number of results
-  -t, --stats2               count of versions
+  -t, --stats2               with --on: tally online visors by version instead of listing PKs
       --testenv              use test deployment
       --tpdurl string        transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -u, --url string           specify alternative (TPD-integrated) uptime tracker url
                               (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+      --uturl string         (alias for --url) TPD-integrated uptime tracker url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -v, --version string       filter visors by exact version
 ```
 
@@ -62,8 +70,11 @@ skywire cli ut
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
