@@ -682,7 +682,13 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error) {
 	unavailableIPs, err := netutil.LocalNetworkInterfaceIPs()
 	if err != nil {
-		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
+		if c.appCl != nil {
+			return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
+		}
+		// Embedded client (NewClientEmbedded — the browser): there are no host
+		// NICs to protect from the server's address allocation, and js has no
+		// interface enumeration to consult. An empty set is the truth.
+		unavailableIPs = nil
 	}
 
 	unavailableIPs = append(unavailableIPs, c.defaultGateway)
