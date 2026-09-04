@@ -109,7 +109,18 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			return
 		case "/desk":
 			// The old separate desk path — gone; the desk IS the root now.
-			http.Redirect(w, r, "/", http.StatusMovedPermanently)
+			//
+			// The Location is written by hand, and is RELATIVE. Reached
+			// through the vnet service worker this page lives under a
+			// /vnet/<port>/ prefix that the server never sees, so an absolute
+			// "/" escapes the prefix and lands on the OUTER server's root — a
+			// different visor entirely. "./" is resolved by the BROWSER
+			// against the URL it actually asked for, which keeps the prefix.
+			// http.Redirect cannot be used here: it resolves a relative
+			// target against the request path server-side, turning it back
+			// into the absolute "/" this is avoiding.
+			w.Header().Set("Location", "./")
+			w.WriteHeader(http.StatusMovedPermanently)
 			return
 		case "/dashboard", "/dashboard/":
 			// The Angular dashboard's index, served injected exactly as the old

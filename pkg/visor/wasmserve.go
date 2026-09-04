@@ -322,8 +322,14 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// The desk IS the root here too, matching the visor-attached hypervisor
 	// (#4491). The old separate path redirects rather than serving a second
 	// copy, so a bookmark or a docs link still lands somewhere sensible.
-	mux.HandleFunc("/desk", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/", http.StatusMovedPermanently)
+	mux.HandleFunc("/desk", func(w http.ResponseWriter, _ *http.Request) {
+		// A hand-written RELATIVE Location. Reached through the vnet service
+		// worker this page lives under a /vnet/<port>/ prefix the server never
+		// sees, so an absolute "/" escapes it and lands on the OUTER server's
+		// root — a different visor entirely. http.Redirect cannot do this: it
+		// resolves a relative target server-side, back into the absolute "/".
+		w.Header().Set("Location", "./")
+		w.WriteHeader(http.StatusMovedPermanently)
 	})
 	// The Angular dashboard keeps its own path, for a link that wants the
 	// dashboard specifically rather than the shell around it.

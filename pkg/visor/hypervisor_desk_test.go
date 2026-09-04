@@ -86,8 +86,11 @@ func TestNativeDeskServing(t *testing.T) {
 		if w.Code != http.StatusMovedPermanently {
 			t.Fatalf("status=%d, want 301", w.Code)
 		}
-		if loc := w.Header().Get("Location"); loc != "/" {
-			t.Errorf("Location=%q, want /", loc)
+		// RELATIVE on purpose: served under a /vnet/<port>/ prefix an absolute
+		// "/" escapes to the outer server's root, a different visor. See the
+		// handler.
+		if loc := w.Header().Get("Location"); loc != "./" {
+			t.Errorf("Location=%q, want ./ (relative, so the vnet prefix survives)", loc)
 		}
 	})
 
