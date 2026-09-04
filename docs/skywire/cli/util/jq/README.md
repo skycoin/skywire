@@ -2,7 +2,16 @@
 
 [← skywire cli util](../README.md)
 
-Process JSON using jq filter syntax (powered by gojq)
+Process JSON using jq filter syntax (powered by gojq).
+
+Reads JSON from stdin (or the given files) and applies the filter, the same way
+the standard jq(1) does. Canonically invoked as `skywire cli util jq`.
+
+  echo '{"a":1,"b":2}' | skywire cli util jq '.a'
+  skywire cli util jq -r '.items[].name' data.json
+
+To filter the output of another skywire command, use the built-in --jq global
+flag instead of piping through this:  skywire cli pv --stats --jq '.count'.
 
 ## Usage
 
@@ -23,8 +32,11 @@ skywire cli util jq <filter> [file...]
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

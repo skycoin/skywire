@@ -49,7 +49,6 @@ skywire cli visor ping mux-bw <pk>
 ```
   -d, --duration duration          how long to pump bytes (excludes route-setup time) (default 30s)
       --idle-baseline duration     run an idle RTT-probe phase of this duration BEFORE the bulk pump; the summary then prints queueing delay = loaded_pXX - idle_pXX (implies --probe-rtt)
-      --json                       emit NDJSON on stdout (default: human-readable rows + summary)
       --local-route                use locally-cached TPD data for route calculation (faster setup; may be stale)
       --min-hops int               route-finder min hops constraint (>=2 excludes the direct transport)
   -O, --output string              append NDJSON of every event to FILE (independent of stdout mode)
@@ -66,8 +65,12 @@ skywire cli visor ping mux-bw <pk>
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
+      --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

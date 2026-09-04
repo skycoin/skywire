@@ -15,17 +15,20 @@ skywire cli rewards systemd
 
 ```
   -o, --out string      path to output systemd services (default "/etc/systemd/system")
-  -p, --path string     reward system data dir path (default "/Users/mohammed/Projects/Skycoin/mohammed/skywire")
+  -p, --path string     reward system data dir path (default "<working-dir>")
   -s, --skyenv string   env config file path (default "fr.conf")
-  -u, --user string     user to set - should have write permission on path (default "mohammed")
+  -u, --user string     user to set - should have write permission on path (default "<user>")
 ```
 
 ## Global Flags
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

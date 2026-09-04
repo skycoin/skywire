@@ -20,7 +20,7 @@ skywire cli dmsg curl <dmsg-url>
 ## Flags
 
 ```
-      --rpc string             RPC server address (default "localhost:3435")
+      --rpc string             RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
   -l, --loglvl string          [ debug | warn | error | fatal | panic | trace | info ] (default "fatal")
   -s, --sk cipher.SecKey       use a custom secret key (starts new dmsg client instead of using visor's) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -d, --data string            HTTP POST data
@@ -28,7 +28,7 @@ skywire cli dmsg curl <dmsg-url>
   -r, --replace                replace existing output file
   -t, --try int                download attempts (0 unlimits) (default 1)
   -w, --wait int               time to wait between attempts (seconds)
-  -a, --agent string           HTTP user agent (default "skywire-cli/unknown")
+  -a, --agent string           HTTP user agent (default "skywire-cli/v1.3.94-0.-<commit>")
   -v, --verbose                stream visor's dmsg-layer logs to stderr while the request is in flight
       --verbose-level string   minimum log level when --verbose is set: trace|debug|info|warn|error (default "debug")
       --wt                     standalone (--sk): dial the dmsg-server session over WebTransport (HTTP/3) with no TCP/QUIC fallback
@@ -39,8 +39,11 @@ skywire cli dmsg curl <dmsg-url>
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

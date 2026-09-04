@@ -2,7 +2,19 @@
 
 [← skywire cli](../README.md)
 
-Skysocks client
+Control the skysocks SOCKS5 proxy client over the Skywire network.
+
+Discover and test public proxy servers, start/stop a local client that
+exposes a SOCKS5 listener (default 127.0.0.1:1080), and inspect or reshape
+the multiplexed route group behind an active session.
+
+  list     discover proxy servers from service discovery
+  test     probe reachability of proxy servers
+  start    start the client against a server PK (--pk / positional)
+  stop     stop the client (--name / --all)
+  status   show client status + active route legs
+  mux      per-leg telemetry + route-group operations (info/plot/set/...)
+  server   control the local skysocks (SOCKS5) server app
 
 ## Usage
 
@@ -13,17 +25,16 @@ skywire cli proxy
 ## Subcommands
 
 - [list](list/README.md) — List servers
-- [mux-add](mux-add/README.md) — Add a leg to an active proxy session's mux'd rg from a piped route
-- [mux-auto](mux-auto/README.md) — Adapt a proxy session's mux legs to a preset off live latency
-- [mux-info](mux-info/README.md) — Show per-mux-leg traffic for an active proxy session
-- [mux-mode](mux-mode/README.md) — Change mux scheduler weighting at runtime
-- [mux-rm](mux-rm/README.md) — Remove a leg from an active proxy session's mux'd route group
-- [mux-set](mux-set/README.md) — Reconcile an active proxy session's mux legs to a target set
+- [loadtest](loadtest/README.md) — Controlled steady-load rig for routing-policy tests (serve a sink + record exact goodput/gaps)
+- [log](log/README.md) — Stream a running proxy client's route/transport events + log
+- [mux](mux/README.md) — Mux'd route-group operations for an active proxy session
 - [server](server/README.md) — Skysocks server (SOCKS5 proxy server)
 - [start](start/README.md) — Start the proxy client
 - [status](status/README.md) — Proxy client status
 - [stop](stop/README.md) — Stop the proxy client
+- [switch](switch/README.md) — Switch a proxy session onto a different route in flight, without dropping the app
 - [test](test/README.md) — Test proxy servers from service discovery
+- [tree](tree/README.md) — Render a running proxy's route group as a bilateral route tree
 
 ## Flags
 
@@ -35,8 +46,11 @@ skywire cli proxy
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

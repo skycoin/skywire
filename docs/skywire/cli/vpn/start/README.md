@@ -15,7 +15,7 @@ skywire cli vpn start [pk]
 ```
       --existing-tp             only use existing transports, don't create new ones
       --external                force external launcher
-      --geoip string            server public key (default "http://ip.skycoin.com")
+      --geoip string            geoip service URL queried through the tunnel to confirm the VPN changed the exit IP (default "http://ip.skycoin.com")
       --internal                force internal launcher
       --local-route             calculate routes locally instead of using route finder
   -k, --pk string               server public key
@@ -29,8 +29,11 @@ skywire cli vpn start [pk]
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
