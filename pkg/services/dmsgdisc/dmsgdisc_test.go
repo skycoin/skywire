@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/disc/metrics"
 	"github.com/skycoin/skywire/pkg/dmsg/discovery/api"
 	"github.com/skycoin/skywire/pkg/dmsg/discovery/store"
+	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -215,4 +216,27 @@ func TestRun_StoreOpenFails(t *testing.T) {
 	err := svc.Run(canceledCtx())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "open store")
+}
+
+// TestOfficialServerPKsDefaultsToSeedList pins the rule that the official-server
+// allowlist falls back to the embedded deployment seed list. Maintaining the two
+// by hand let them drift: production listed 7 of the 9 seeded servers plus 2 PKs
+// for servers that no longer exist, so two live deployment servers were labelled
+// "community" and skipped by clients running connected_servers_type=official.
+func TestOfficialServerPKsDefaultsToSeedList(t *testing.T) {
+	seeded := officialServerPKs(nil)
+	require.NotEmpty(t, seeded, "embedded deployment config should seed the allowlist")
+	require.Len(t, seeded, len(dmsg.Prod.DmsgServers))
+
+	for i := range dmsg.Prod.DmsgServers {
+		require.Contains(t, seeded, dmsg.Prod.DmsgServers[i].Static.Hex())
+	}
+}
+
+// TestOfficialServerPKsExplicitWins keeps the operator override intact: an
+// explicitly configured list replaces the seed default rather than merging with
+// it, so a deployment can still narrow or redirect the allowlist.
+func TestOfficialServerPKsExplicitWins(t *testing.T) {
+	explicit := []string{"abc", "def"}
+	require.Equal(t, explicit, officialServerPKs(explicit))
 }
