@@ -172,12 +172,19 @@
 			// so no visor runs except the one started IN a terminal.
 			return gunzipFetch(opts.deskWasmURL || 'wasm-visor.wasm.gz');
 		}).then(function (buf) {
+			// The dashboard desk app (registered by the desk host below) reads
+			// its URL from this global — set before the module runs so the ☰
+			// entry works from its first open. /dashboard, NOT the root: the
+			// visor's own hypervisor serves the DESK at "/" now, so pointing a
+			// desk window at the root would nest a desk inside a desk. embed=1
+			// rides in the hash so the iframe's launcher hides its taskbar.
+			globalThis.__DESK_DASHBOARD_URL__ = '/vnet/' + hvPort + '/dashboard#/?embed=1';
 			var go = new Go();
 			return WebAssembly.instantiate(buf, go.importObject).then(function (r) {
 				go.run(r.instance).catch(function (e) { console.error('desk host:', e); });
 				return Promise.all([
 					waitFor(function () { return globalThis.skywireShell; }, 'the shell'),
-					waitFor(function () { return globalThis.skywireDeskPanel; }, 'the desk panel'),
+					waitFor(function () { return globalThis.__skywireDesk; }, 'the desk panel'),
 					waitFor(function () { return typeof globalThis.WinBox === 'function'; }, 'the window manager'),
 				]);
 			});
@@ -208,6 +215,20 @@
 			// browser window opens so the loader's page-core default never
 			// takes hold (gobrowser-loader only fills __netscrapeFetch when
 			// nothing did).
+			// The visor's OWN loopback — where its apps listen (hypervisor,
+			// resolver, proxy, status pages). In this tab that is the page's
+			// vnet port table, so `vnet:<port>` (canonical) and `<port>.vnet`
+			// name it; 127.0.0.1 / localhost keep resolving here too, as the
+			// retired JS engine had them. Returns 0 for anything else.
+			function vnetPort(u) {
+				var h = String(u.hostname || '').toLowerCase();
+				var m = /^(\d+)\.vnet$/.exec(h);
+				if (m) return parseInt(m[1], 10) || 0;
+				if (h === 'vnet' || h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '[::1]') {
+					return u.port ? (parseInt(u.port, 10) || 0) : 80;
+				}
+				return 0;
+			}
 			globalThis.__netscrapeFetch = function (url) {
 				var u;
 				try { u = new URL(url, 'http://x/'); } catch (e) { return fetch(url); }
@@ -217,6 +238,20 @@
 					var h = new Headers();
 					if (r && r.headers) { try { for (var k in r.headers) h.set(k, r.headers[k]); } catch (e) { /* ignore */ } }
 					return new Response((r && r.body) || new Uint8Array(0), { status: (r && r.status) || 200, headers: h });
+				}
+				// Loopback first, and it NEVER falls through: a loopback address
+				// that reached the clearnet branch would be dialed by the exit,
+				// against the exit's own localhost — wrong, and a surprise. When
+				// nothing listens on the vnet port, say so.
+				var lp = vnetPort(u);
+				if (lp) {
+					if (globalThis.vnet && globalThis.vnet.listening(lp)) {
+						return Promise.resolve(globalThis.vnet.httpFetch(lp, 'GET', path, null, {})).then(respond);
+					}
+					return Promise.resolve(new Response(
+						'<body style="font:14px sans-serif;padding:2em;color:#a33">nothing is listening on vnet port ' + lp +
+						' — this tab\'s visor has no such app running. (Loopback addresses resolve to this page\'s vnet, never to a remote exit.)</body>',
+						{ status: 502, headers: new Headers({ 'content-type': 'text/html' }) }));
 				}
 				if (mesh && viaResolver()) {
 					return Promise.resolve(globalThis.vnet.socksHttpFetch(RESOLVER_PORT, resolverHost(u.hostname) + ':80', 'GET', path, null, {})).then(respond);
@@ -229,12 +264,12 @@
 				}
 				return fetch(url);
 			};
-			// The engine-free desk chrome (taskbar + ☰). The dashboard entry
-			// points at the running visor's hypervisor UI over the vnet service
-			// worker's real /vnet/<port>/ URLs when available.
-			var panel = globalThis.skywireDeskPanel.mount(document, {
-				dashboardURL: '/vnet/' + hvPort + '/',
-			});
+			// The desk chrome comes from the library (0magnet/desk), mounted by
+			// the desk host module itself (installDesk); its façade carries the
+			// openConsole/openWindow contract this boot drives. The dashboard ☰
+			// entry reads __DESK_DASHBOARD_URL__ (set above) — the running
+			// visor's hypervisor UI over the vnet service worker.
+			var panel = globalThis.__skywireDesk;
 			// selfPK cache: poll the visor's /api/about once its HV listens;
 			// re-check occasionally in case the operator restarts the visor
 			// under a different identity.
@@ -250,7 +285,6 @@
 				}
 				setTimeout(pollPK, deskSelfPK ? 60000 : 3000);
 			})();
-			globalThis.__skywireDesk = panel;
 
 			// Session: remember across reloads whether a visor was RUNNING when
 			// the page went away — a visor the operator stopped stays stopped.
@@ -297,16 +331,21 @@
 						// route this first load through the transcoder.
 						swReady.then(function () {
 							try {
-								var win = panel.openWindow(true); // skipLanding
-								win.browser.browseTo('127.0.0.1:' + hvPort, '/');
-								// Default background tabs (browser-style): the
-								// deployment landing page and the proxy status
-								// page ride along behind the hypervisor UI.
-								if (win.openTab) {
-									try { win.openTab('home.dmsg', '/', 'http', true); } catch (e2) {}
+								// The dashboard is its OWN window, an iframe on the
+								// service worker's real /vnet/<port>/ URLs — the
+								// Angular UI rendering natively, never through the
+								// browser's transcoder. Same shape as the native
+								// desk, where the dashboard is likewise its own
+								// window over the host visor's UI.
+								panel.launch('dashboard');
+								// The browser window carries the MESH tabs. It opens
+								// ON the deployment landing page rather than
+								// netscrape's built-in card, with the proxy status
+								// page behind it.
+								var win = panel.openWindow(true, 'http://home.dmsg/');
+								if (win && win.openTab) {
 									try { win.openTab('status.skysocks', '/', 'http', true); } catch (e2) {}
 								}
-								if (win.wb && win.wb.maximize) win.wb.maximize(true);
 								// One-shot subresources (the Material icon font above
 								// all) are a load-lottery on first paint: the tab opens
 								// the moment the port listens, dozens of asset fetches

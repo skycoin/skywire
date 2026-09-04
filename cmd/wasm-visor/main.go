@@ -204,6 +204,7 @@ func main() {
 	case "shell":
 		installShell()
 		installBrowser()
+		installDesk()
 		fmt.Println("wasm-visor: shell role — call skywireShell.open(el) / skywireBrowser.open(el)")
 		keepAlive()
 	case "netview":
@@ -245,20 +246,20 @@ func main() {
 		"fetchDmsg":     js.FuncOf(jsFetchDmsg),
 		// The resolver's alias table, for a shell running in the tab's
 		// second wasm instance — see shellmesh_js.go.
-		"meshAliases":        js.FuncOf(jsMeshAliases),
-		"serveContent":       js.FuncOf(jsServeContent),
-		"hostedContent":      js.FuncOf(jsHostedContent),
-		"unserveContent":     js.FuncOf(jsUnserveContent),
-		"setContentEnabled":  js.FuncOf(jsSetContentEnabled),
-		"serveRPC":           js.FuncOf(jsServeRPC),
-		"dialRoute":          js.FuncOf(jsDialRoute),
-		"checkRegistered":    js.FuncOf(jsCheckRegistered),
-		"fetchClearnet":      js.FuncOf(jsFetchClearnet),
+		"meshAliases":       js.FuncOf(jsMeshAliases),
+		"serveContent":      js.FuncOf(jsServeContent),
+		"hostedContent":     js.FuncOf(jsHostedContent),
+		"unserveContent":    js.FuncOf(jsUnserveContent),
+		"setContentEnabled": js.FuncOf(jsSetContentEnabled),
+		"serveRPC":          js.FuncOf(jsServeRPC),
+		"dialRoute":         js.FuncOf(jsDialRoute),
+		"checkRegistered":   js.FuncOf(jsCheckRegistered),
+		"fetchClearnet":     js.FuncOf(jsFetchClearnet),
 		// True VPN client (gVisor netstack tunnel) — see vpninstance_js.go.
-		"vpnStart":  js.FuncOf(jsVPNStart),
-		"vpnStop":   js.FuncOf(jsVPNStop),
-		"vpnStatus": js.FuncOf(jsVPNStatus),
-		"vpnFetch":  js.FuncOf(jsVPNFetch),
+		"vpnStart":           js.FuncOf(jsVPNStart),
+		"vpnStop":            js.FuncOf(jsVPNStop),
+		"vpnStatus":          js.FuncOf(jsVPNStatus),
+		"vpnFetch":           js.FuncOf(jsVPNFetch),
 		"btcFetch":           js.FuncOf(jsBtcFetch),
 		"proxyVerbose":       js.FuncOf(jsProxyVerbose),
 		"closeWindow":        js.FuncOf(jsCloseWindow),
@@ -305,9 +306,12 @@ func main() {
 	}))
 	// The in-page host fallback has a DOM, so this instance can serve the
 	// terminal AND the browser too, and the tab needs no second instance.
+	// The desk goes with them: this is the path the desk page takes, and
+	// desk-boot waits on the panel this publishes.
 	if hasDOM() {
 		installShell()
 		installBrowser()
+		installDesk()
 	}
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	// keepAlive, not select{}: a bare select parks main with NO pending Go

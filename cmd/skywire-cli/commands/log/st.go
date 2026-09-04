@@ -10,8 +10,9 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
-	pterm "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/pterm"
 	"github.com/spf13/cobra"
+
+	pterm "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/pterm"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )

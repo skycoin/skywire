@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='2' width='10' height='8' rx='1' fill='none' stroke='%238fc6f0' stroke-width='1.4'/%3E%3Crect x='5' y='6' width='10' height='8' rx='1' fill='none' stroke='%23e8825f' stroke-width='1.4'/%3E%3C/svg%3E">
+<title>desk — windows over panes, in WebAssembly</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden;
+               background: #10131a; color: #d3d7cf; }
+  body { display: flex; flex-direction: column;
+         font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  header { flex: 0 0 auto; padding: 7px 12px; background: #171b24;
+           border-bottom: 1px solid #262b34; line-height: 1.6; }
+  header a { color: #729fcf; }
+  header b { color: #ad7fa8; }
+  header code { color: #8ae234; }
+  /* Windows are positioned against this element, so it has to be the one that
+     fills what is left rather than the body. */
+  #desktop { flex: 1 1 auto; min-height: 0; position: relative;
+             background:
+               radial-gradient(circle at 20% 15%, #1b2130 0%, #10131a 55%),
+               #10131a; }
+  #boot { padding: 14px; color: #6b7280; }
+</style>
+</head>
+<body>
+<header>
+  <b>desk</b> — windows over panes ·
+  <a href="https://github.com/0magnet/desk">desk</a> =
+  <a href="https://github.com/0magnet/winbox-go">winbox-go</a> +
+  <a href="https://github.com/0magnet/websh">websh</a>
+  &nbsp;·&nbsp; try <code>echo hi &gt; note.txt &amp;&amp; view note.txt</code>
+  &nbsp;·&nbsp; standard Go build — <a href="../">TinyGo build</a>
+</header>
+<div id="desktop"><div id="boot">loading…</div></div>
+<script src="wasm_exec.js"></script>
+<script>
+  const go = new Go();
+  const boot = document.getElementById("boot");
+  WebAssembly.instantiateStreaming(fetch("desk.wasm"), go.importObject)
+    .then((r) => { boot.remove(); return go.run(r.instance); })
+    .catch((e) => { boot.textContent = "failed to load: " + e; });
+</script>
+</body>
+</html>
