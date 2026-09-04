@@ -40,7 +40,7 @@ skywire cli ut sd graph
       --shuffle              render rows in random order (test: do visual banding patterns travel with the rows or with PK-sort?)
       --shuffle-seed int     seed for --shuffle; 0 = time-based (different every run)
       --since string         include days on or after this date (YYYY-MM-DD)
-      --sk cipher.SecKey     secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --sk cipher.SecKey     secret key for the CLI-owned dmsg client (defaults to the CLI's own persistent key; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
       --timeout duration     HTTP timeout (default 30s)
       --until string         include days on or before this date (YYYY-MM-DD)
       --url string           discovery base URL (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")

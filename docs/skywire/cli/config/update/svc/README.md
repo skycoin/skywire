@@ -18,7 +18,7 @@ skywire cli config update svc
       --no-cxo             skip CXO subscriber-cache step
       --no-rpc             skip visor RPC (DmsgHTTP) step
       --no-dmsg            skip direct DMSG HTTP step
-      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (defaults to the CLI's own persistent key; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
       --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
 ```
 

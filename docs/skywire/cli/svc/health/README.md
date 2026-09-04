@@ -47,7 +47,7 @@ skywire cli svc health
       --no-dmsg            skip direct DMSG HTTP step
       --no-rpc             skip visor RPC (DmsgHTTP) step
       --shape              print the output schema skeleton (zero values, all fields) instead of data
-      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (defaults to the CLI's own persistent key; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
       --testenv            use the test deployment services (or set SKYWIRETEST=1)
       --timeout int        RPC timeout in seconds (0 = unlimited) (default 30)
       --tpdurl string      override the transport-discovery base URL (used by tpd / nm)

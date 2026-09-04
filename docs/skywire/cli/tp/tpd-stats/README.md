@@ -25,7 +25,7 @@ skywire cli tp tpd-stats
       --no-dmsg            skip direct DMSG HTTP step
       --no-rpc             skip visor RPC (DmsgHTTP) step
       --rpc string         RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (defaults to the CLI's own persistent key; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -n, --top int            show top N visors by transport count (0 = all)
   -t, --type string        filter by transport type (e.g. stcpr, sudph)
 ```

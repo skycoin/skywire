@@ -32,7 +32,7 @@ skywire cli route calc [<src-pk>] <dst-pk>
       --no-dmsg            skip direct DMSG HTTP step
       --no-rpc             skip visor RPC (DmsgHTTP) step
       --queue-cap int      BFS queue cap (0 = server/local default ~200K, negative = unbounded)
-      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (defaults to the CLI's own persistent key; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
       --source string      transport graph source: tpd (HTTP) | tps (AUTHORITATIVE: src+dst own transports via the setup node, same path as tp --remote; TPD-independent, single-intermediate). dht|auto are accepted for compatibility and also read from TPD, since the DHT store was removed; dht and tps force the non-streaming local-compute path (default "tpd")
   -t, --timeout duration   request timeout (default 30s)
   -a, --tpd string         transport discovery URL (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")

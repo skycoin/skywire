@@ -400,15 +400,16 @@ type FetchConfig struct {
 //	             step runs (--no-rpc or RPC unavailable). Visible in shell
 //	             history — prefer --config for production use.
 //	--config     path to a JSON file supplying {"sk":..., "dmsg":{...}}. SK
-//	             precedence: --sk > --config > $DMSG_SK > $DMSGCURL_SK > random
-//	             ephemeral. Dmsg.Servers from the config seeds the direct
-//	             client; absent, the embedded deployment server set is used.
+//	             precedence: --sk > --config > $DMSG_SK > $DMSGCURL_SK > the
+//	             CLI's persistent key at <home>/.skywire/cli.key. Dmsg.Servers
+//	             from the config seeds the direct client; absent, the embedded
+//	             deployment server set is used.
 func RegisterFetchFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&NoCXO, "no-cxo", false, "skip CXO subscriber-cache step")
 	cmd.Flags().BoolVar(&NoRPC, "no-rpc", false, "skip visor RPC (DmsgHTTP) step")
 	cmd.Flags().BoolVar(&NoDmsg, "no-dmsg", false, "skip direct DMSG HTTP step")
 	cmd.Flags().Var(&FetchSK, "sk",
-		"secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak)")
+		"secret key for the CLI-owned dmsg client (defaults to the CLI's own persistent key; prefer --config to avoid shell-history leak)")
 	cmd.Flags().StringVar(&FetchConfigPath, "config", "",
 		"path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)")
 }
@@ -420,7 +421,15 @@ func RegisterFetchFlags(cmd *cobra.Command) {
 //  2. --config path: parsed as FetchConfig; SK and Dmsg.Servers taken from it
 //  3. $DMSG_SK environment variable (same convention as `dmsg curl`/`dmsg cat`)
 //  4. $DMSGCURL_SK environment variable (same convention as log-fetch helpers)
-//  5. ephemeral random key (cipher.GenerateKeyPair)
+//  5. the CLI's own persistent identity, <home>/.skywire/cli.key, created on
+//     first use (cliutil.CLIIdentity)
+//  6. an ephemeral random key — reached only when 5 cannot be read or written
+//
+// Step 5 is what keeps a polled command from being an identity generator:
+// every `--no-rpc` fetch used to mint a fresh keypair and hand it to a direct
+// client on every production dmsg server, so a 60s sampler was 1440 one-shot
+// identities a day (#4512). One key per user, reused, costs the network the
+// same as one invocation.
 //
 // servers comes from --config when set, else from dmsg.Prod.DmsgServers.
 // Returns (pk, sk, servers, label) — label describes the resolution path
@@ -483,6 +492,15 @@ func resolveFetchIdentity(flags *pflag.FlagSet) (cipher.PubKey, cipher.SecKey, [
 			}
 		}
 	}
+
+	// The CLI's own persistent identity. Created on first use and reused by
+	// every later invocation, so repeated fetches present ONE key to the dmsg
+	// servers instead of one per run.
+	cliPK, cliSK, keyPath, err := internal.CLIIdentity()
+	if err == nil {
+		return cliPK, cliSK, servers, "cli keyfile " + keyPath
+	}
+	logger.Warnf("CLI dmsg identity unavailable (%v); falling back to a single-use key", err)
 
 	pk, sk := cipher.GenerateKeyPair()
 	return pk, sk, servers, label
@@ -678,11 +696,22 @@ func splitOn(s string, sep byte) []string {
 	return out
 }
 
-// fetchViaDmsgDirect creates ephemeral DMSG direct clients — one per DMSG server —
-// and uses a FallbackRoundTripper to try each until one reaches the target service.
-// This matches the pattern used by `skywire dmsg curl -B`: services connect to DMSG
-// servers directly (not via discovery), so we must connect to each server to find them.
+// directFetchMu serializes the direct-DMSG step within one process. The
+// identity is now stable (resolveFetchIdentity step 5), and a dmsg server
+// keeps ONE session per public key — so two overlapping direct fetches would
+// hand the same key to the same servers twice and evict each other. Each
+// fetch's clients are closed before the next one's are opened.
+var directFetchMu sync.Mutex
+
+// fetchViaDmsgDirect creates DMSG direct clients under the CLI's own identity —
+// one per DMSG server — and uses a FallbackRoundTripper to try each until one
+// reaches the target service. This matches the pattern used by
+// `skywire dmsg curl -B`: services connect to DMSG servers directly (not via
+// discovery), so we must connect to each server to find them.
 func fetchViaDmsgDirect(flags *pflag.FlagSet, dmsgURL string) ([]byte, error) {
+	directFetchMu.Lock()
+	defer directFetchMu.Unlock() // runs last: after the deferred closeFn calls below
+
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 

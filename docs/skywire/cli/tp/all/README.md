@@ -22,7 +22,7 @@ skywire cli tp all
       --no-cxo             skip CXO subscriber-cache step
       --no-dmsg            skip direct DMSG HTTP step
       --no-rpc             skip visor RPC (DmsgHTTP) step
-      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (defaults to the CLI's own persistent key; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
       --tpdurl string      transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
 ```
 

@@ -37,7 +37,7 @@ skywire cli ut mdisc
   -o, --on                   only include online visors
   -k, --pk string            only show PKs matching this substring
       --since string         include days on or after this date (YYYY-MM-DD)
-      --sk cipher.SecKey     secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --sk cipher.SecKey     secret key for the CLI-owned dmsg client (defaults to the CLI's own persistent key; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -s, --stats                print count of matching visors only
       --timeout duration     HTTP timeout (default 30s)
       --until string         include days on or before this date (YYYY-MM-DD)

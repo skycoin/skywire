@@ -55,7 +55,7 @@ skywire cli ut
   -o, --on                   list currently online visors
   -k, --pk string            check uptime for the specified key
       --rpc string           RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-      --sk cipher.SecKey     secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --sk cipher.SecKey     secret key for the CLI-owned dmsg client (defaults to the CLI's own persistent key; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -s, --stats                count the number of results
   -t, --stats2               with --on: tally online visors by version instead of listing PKs
       --testenv              use test deployment
