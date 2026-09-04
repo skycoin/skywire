@@ -17,22 +17,25 @@ its help text — any command can be run straight from it:
 
 ![skywire --tui — interactive command browser](img/skywire-tui.gif)
 
-To try it right now without installing anything, open the
-**[Playground](playground/)** — the same binary compiled to
-WebAssembly, running in a browser terminal.
+The **[terminal](playground/)** that greets you on the front page of
+this site is the same binary compiled to WebAssembly, already running
+`skywire --help` in your browser — nothing to install. Minimize it to
+read this page; the **`>_ terminal`** pill (bottom right) surfaces it
+again, and it keeps running while you browse the docs.
 
 ## Where to start
 
 <div class="grid cards" markdown>
 
-- :material-play-circle: **[Playground](playground/)**
+- :material-console-line: **[Terminal](playground/)**
 
     Try skywire without installing anything: the whole binary compiled
-    to WebAssembly behind a browser terminal. Run `skywire autoconfig`
-    in it to boot a real visor in the tab, then open its hypervisor UI
-    at `http://127.0.0.1:8001` in the nested browser. The
-    **`>_ playground`** button (bottom right of every page) opens it in
-    a drawer that keeps running while you read the docs.
+    to WebAssembly behind a browser terminal — the one that greets you
+    on this page. Run `skywire autoconfig` in it to boot a real visor
+    in the tab, then open its hypervisor UI at `http://127.0.0.1:8001`
+    in the nested browser. Anything you start keeps running while you
+    read the docs — the **`>_ terminal`** pill brings it back from any
+    page.
 
 - :material-rocket-launch: **[Guides](guides/)**
 
