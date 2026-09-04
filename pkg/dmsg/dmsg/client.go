@@ -190,6 +190,19 @@ type Client struct {
 	carrierLastErr map[cipher.PubKey]string
 	carrierFailMx  sync.Mutex
 
+	// lostSession records dmsg-server PKs whose session just dropped, with the
+	// number of re-dial attempts spent on each. When the Serve loop wakes on
+	// errCh it re-dials the server it just lost BEFORE advancing to an arbitrary
+	// next candidate. Reconnecting to the same server leaves
+	// Client.DelegatedServers unchanged, so updateClientEntry's SamePubKeys
+	// check short-circuits and no discovery write happens; moving to a different
+	// server forces a PutEntry. At fleet scale that difference is the bulk of
+	// the discovery's entry-update load (#4086). Bounded by
+	// lostSessionMaxRetries so a genuinely dead server is abandoned rather than
+	// retried forever. Lazily initialized.
+	lostSession   map[cipher.PubKey]int
+	lostSessionMx sync.Mutex
+
 	// carrier convergence controls: convMx guards a runtime override of the
 	// ordered carrier preference (nil = Config.Carriers) and a live-only
 	// discovery client used to read a server's CURRENT WT/QUIC endpoints
@@ -594,6 +607,14 @@ func (ce *Client) Serve(ctx context.Context) {
 					ce.log.WithError(err).Debug("Session stopped.")
 					if isClosed(ce.done) {
 						return
+					}
+					// Prefer re-dialing the server we just lost. Reconnecting to
+					// the SAME server leaves Client.DelegatedServers unchanged, so
+					// no discovery entry update is triggered; advancing to the next
+					// candidate changes the set and forces a PutEntry (#4086). Fall
+					// through to the next candidate only when the re-dial fails.
+					if ce.redialLostSession(cancellabelCtx) {
+						continue
 					}
 				}
 			}
@@ -1057,6 +1078,78 @@ func (ce *Client) SetDHTLookup(fn func(pk cipher.PubKey) (*disc.Entry, error)) {
 // entry would mean someone passed a non-server PK as srvPK, which is
 // a programming error in the caller and we want to surface it the
 // same way the bare disc lookup did.
+
+// lostSessionMaxRetries bounds how many times the Serve loop re-dials a server
+// whose session dropped before giving up and taking the next candidate. Two
+// attempts covers a server restart or a transient carrier hiccup without
+// pinning the client to a host that is genuinely gone.
+const lostSessionMaxRetries = 2
+
+// noteLostSession marks a dmsg server as recently dropped so the Serve loop
+// prefers re-dialing it over moving to a different server.
+func (ce *Client) noteLostSession(pk cipher.PubKey) {
+	ce.lostSessionMx.Lock()
+	defer ce.lostSessionMx.Unlock()
+	if ce.lostSession == nil {
+		ce.lostSession = make(map[cipher.PubKey]int)
+	}
+	if _, ok := ce.lostSession[pk]; !ok {
+		ce.lostSession[pk] = 0
+	}
+}
+
+// takeLostSession pops one recently-dropped server PK that still has re-dial
+// budget, charging it an attempt. Entries past their budget are discarded.
+func (ce *Client) takeLostSession() (cipher.PubKey, bool) {
+	ce.lostSessionMx.Lock()
+	defer ce.lostSessionMx.Unlock()
+	for pk, attempts := range ce.lostSession {
+		if attempts >= lostSessionMaxRetries {
+			delete(ce.lostSession, pk)
+			continue
+		}
+		ce.lostSession[pk] = attempts + 1
+		return pk, true
+	}
+	return cipher.PubKey{}, false
+}
+
+func (ce *Client) clearLostSession(pk cipher.PubKey) {
+	ce.lostSessionMx.Lock()
+	defer ce.lostSessionMx.Unlock()
+	delete(ce.lostSession, pk)
+}
+
+// redialLostSession re-establishes a session with a server whose session
+// recently dropped, and reports whether one was restored. A restored session
+// keeps the client's delegated-server set identical, which is what avoids the
+// discovery entry update (#4086).
+func (ce *Client) redialLostSession(ctx context.Context) bool {
+	pk, ok := ce.takeLostSession()
+	if !ok {
+		return false
+	}
+	if _, held := ce.session(pk); held {
+		ce.clearLostSession(pk)
+		return true
+	}
+	entry, err := ce.resolveServerEntry(ctx, pk)
+	if err != nil || entry == nil || entry.Server == nil {
+		ce.log.WithField("remote_pk", pk).WithError(err).
+			Debug("Dropped server no longer resolvable; taking next candidate.")
+		return false
+	}
+	if err := ce.EnsureSession(ctx, entry); err != nil {
+		ce.log.WithField("remote_pk", pk).WithError(err).
+			Debug("Re-dial of dropped server failed; taking next candidate.")
+		return false
+	}
+	ce.clearLostSession(pk)
+	ce.log.WithField("remote_pk", pk).
+		Debug("Re-established session with the server that dropped; delegated servers unchanged.")
+	return true
+}
+
 func (ce *Client) resolveServerEntry(ctx context.Context, srvPK cipher.PubKey) (*disc.Entry, error) {
 	if entry, ok := ce.getCachedEntry(srvPK); ok && entry != nil && entry.Server != nil {
 		return entry, nil
