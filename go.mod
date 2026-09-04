@@ -61,7 +61,7 @@ require (
 require (
 	github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898
 	github.com/0magnet/bottle v0.0.0-20260903190614-8e8230c230ca
-	github.com/0magnet/desk v0.0.0-20260904153426-e1ccc4f22bc6
+	github.com/0magnet/desk v0.0.0-20260904190029-7fd5c5344d76
 	github.com/0magnet/desk/panes v0.0.0-20260904153426-e1ccc4f22bc6
 	github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260901202627-53911da3ad77

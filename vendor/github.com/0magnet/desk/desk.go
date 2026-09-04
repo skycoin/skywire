@@ -249,18 +249,20 @@ func LaunchOpts(name string, opt Options, args ...string) (*winbox.WinBox, error
 	win := winbox.New(o)
 
 	// Mount after creation: the body exists and has been sized by now, which
-	// a pane that measures itself in pixels depends on.
-	if err := pane.Mount(win.Body); err != nil {
+	// a pane that measures itself in pixels depends on. Every window gets a
+	// tab set even for its first pane — see tabs_js.go for why one cannot be
+	// retrofitted later.
+	ts := newTabset(win)
+	if err := ts.add(pane, title); err != nil {
+		dropTabset(win)
 		win.Close(true)
 		pane.Close()
 		return nil, err
 	}
 
-	if r, ok := pane.(Resizer); ok {
-		win.OnResize = func(_ *winbox.WinBox, width, height float64) {
-			r.Resize(width, height)
-		}
-	}
+	// The front pane is told the size of the views box, not the window: with a
+	// tab strip showing, the two differ by its height.
+	win.OnResize = func(_ *winbox.WinBox, _, _ float64) { ts.resize() }
 
 	// Tracked whether or not the WebGL compositor is running: what it can draw
 	// depends on the windows it cannot, and a window that existed before
@@ -273,6 +275,10 @@ func LaunchOpts(name string, opt Options, args ...string) (*winbox.WinBox, error
 			return true
 		}
 		untrackWindow(lw)
+		// Close every pane the window still holds, not just the front one: a
+		// terminal in a background tab owns a session, and closing the window
+		// is the person saying they are done with all of it.
+		dropTabset(wb)
 		return false
 	}
 
