@@ -209,6 +209,16 @@ type retxBuffer struct {
 	mu       sync.Mutex
 	entries  map[uint32]*retxEntry
 	capacity int
+
+	// onAckDelay, when set, receives one send→ack delay sample per ProcessSACK
+	// call: the LARGEST delay among the entries this SACK acknowledged that were
+	// never retransmitted (Karn's rule — a retransmitted entry's delay is
+	// ambiguous). This is the ground truth the RACK threshold needs under load:
+	// the transport's idle-ping RTT says ~25ms while a saturated leg's real
+	// feedback delay is seconds of queue, and a threshold built on the former
+	// declares every queued frame lost (measured live: 899 retransmits across a
+	// ~1250-frame upload). Called with rb.mu held — keep it lock-free/cheap.
+	onAckDelay func(time.Duration)
 }
 
 func newRetxBuffer(capacity int) *retxBuffer {
@@ -305,9 +315,23 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
+	// Ack-delay sampling (see onAckDelay): the largest send→ack delay among the
+	// never-retransmitted entries this SACK purges.
+	var ackDelayMax time.Duration
+	sampleNow := time.Now()
+	sample := func(e *retxEntry) {
+		if e.retxCount != 0 {
+			return
+		}
+		if d := sampleNow.Sub(e.sentAt); d > ackDelayMax {
+			ackDelayMax = d
+		}
+	}
+
 	// Purge all entries up to and including lastContiguous.
-	for seq := range rb.entries {
+	for seq, e := range rb.entries {
 		if seq <= lastContiguous {
+			sample(e)
 			delete(rb.entries, seq)
 		}
 	}
@@ -333,7 +357,10 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 		for i := uint32(0); i < 64; i++ {
 			checkSeq := base + i
 			if word&(1<<i) != 0 {
-				delete(rb.entries, checkSeq)
+				if e, ok := rb.entries[checkSeq]; ok {
+					sample(e)
+					delete(rb.entries, checkSeq)
+				}
 			} else if e, ok := rb.entries[checkSeq]; ok {
 				ref := e.sentAt
 				if e.lastTxAt.After(ref) {
@@ -352,6 +379,10 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 				}
 			}
 		}
+	}
+
+	if ackDelayMax > 0 && rb.onAckDelay != nil {
+		rb.onAckDelay(ackDelayMax)
 	}
 
 	return retransmit
