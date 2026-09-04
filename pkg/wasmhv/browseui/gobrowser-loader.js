@@ -74,7 +74,10 @@
 			var mount = document.createElement("div");
 			mount.style.cssText = "position:absolute;inset:0";
 			wb.body.appendChild(mount);
-			globalThis.__netscrapeFetch = transport;
+			// A page may install its own transport first (the desk routes mesh
+			// fetches through the running visor's resolver on the virtual
+			// loopback); only fill the default when nothing did.
+			if (!globalThis.__netscrapeFetch) globalThis.__netscrapeFetch = transport;
 			ensureBrowser()
 				.then(function (b) { b.open(mount); })
 				.catch(function (e) { mount.textContent = "Browser failed to open: " + e; });
