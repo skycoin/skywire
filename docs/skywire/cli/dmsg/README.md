@@ -2,7 +2,31 @@
 
 [← skywire cli](../README.md)
 
-Commands that use DMSG for communication
+Dmsg utilities.
+
+These commands fall into three families:
+
+  this-visor dmsg client (needs a running visor on --rpc)
+    sessions      list the dmsg servers each visor dmsg client is on
+    converge      re-dial sessions onto their preferred carrier
+    connect-all   open a session to every known server (one-shot)
+    set-sessions  persist dmsg.sessions_count + connect-all
+    port-hits     inbound hits to ports with no listener
+    diag          runtime diagnostics (porter / reconnect)
+
+  standalone dmsg tools (bootstrap their own dmsg client; work with
+  no local visor — pass --sk for a stable identity)
+    curl          fetch data over dmsg (HTTP-over-dmsg)
+    cat           splice stdio with a peer over dmsg or skynet
+    scp           copy a file to/from a remote visor's dmsgscp host
+    iperf         bulk throughput / RTT measurement over a stream
+    chat          interactive 1:1 chat over dmsg
+    probe         test a remote port's reachability
+    sub           standalone UDP-over-dmsg bridge
+    smb           standalone SMTP-over-dmsg bridge
+
+Query the dmsg discovery itself with 'skywire cli mdisc'. Remote
+visor terminals live under 'skywire cli pty' (formerly 'dmsg pty').
 
 ## Usage
 
@@ -15,6 +39,7 @@ skywire cli dmsg
 - [cat](cat/README.md) — Splice stdio with a remote peer over dmsg or skynet
 - [chat](chat/README.md) — Interactive chat over dmsg (standalone, no visor required)
 - [connect-all](connect-all/README.md) — Open a dmsg session to every known server
+- [converge](converge/README.md) — Converge each dmsg-server session onto its most-preferred carrier
 - [curl](curl/README.md) — Fetch data over dmsg
 - [diag](diag/README.md) — DMSG runtime diagnostics
 - [iperf](iperf/README.md) — Bulk throughput measurement over a dmsg stream
@@ -30,8 +55,11 @@ skywire cli dmsg
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

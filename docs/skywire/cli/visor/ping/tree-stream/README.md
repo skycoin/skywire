@@ -60,7 +60,6 @@ skywire cli visor ping tree-stream
       --dmsg-precheck            probe DMSG reachability before each route ping; discards unreachable visors early
       --dry-run                  discovery only; no PingResult events fire (every entry marked latency_source=skipped)
       --hops int                 ping ONLY entries at exactly N hops; other levels are discovered but not pinged
-      --json                     emit NDJSON on stdout (default: human-readable rows + per-hop summary)
   -l, --max-level int            maximum BFS depth (0 = unlimited until expansion exhausts)
   -g, --online                   only ping visors marked online in the uptime tracker
   -O, --output string            append NDJSON of every event to FILE (independent of stdout mode)
@@ -78,7 +77,11 @@ skywire cli visor ping tree-stream
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
+      --json              print output as JSON
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

@@ -2,7 +2,22 @@
 
 [← skywire cli](../README.md)
 
-View and set routing rules
+View and set the routing rules installed on the LOCAL visor.
+
+Run without a subcommand (or `route ls`) to list the routing rules
+currently installed here. A route is a chain of rules (forward /
+intermediary-forward / consume) that together carry traffic along a path
+of transports; each forward rule references the next transport and route
+ID in the chain. A rule is local state on THIS visor — distinct from a
+transport (a single link to one peer) and from the route-finder (which
+computes paths but installs nothing).
+
+  route            list installed routing rules (local, this visor)
+  route ls         alias for the bare listing above
+  route find       query the route-finder for a path (remote query)
+  route calc       compute a path locally from transport-discovery data
+  route groups     list active route groups (also: `skywire cli rg ls`)
+  route add / rm   install / remove individual rules
 
 ## Usage
 
@@ -14,13 +29,15 @@ skywire cli route
 
 - [add](add/README.md) — Add routing rule
 - [calc](calc/README.md) — Calculate routes locally or control visor's local route calculation
-- [find](find/README.md) — Query the Route Finder
+- [find](find/README.md) — Query the Route Finder for a hop path between two visors
 - [groups](groups/README.md) — List active route groups
+- [ls](ls/README.md) — List this visor's installed routing rules (alias for bare `route`)
 - [minhops](minhops/README.md) — Set minimum hops for route calculation at runtime
 - [policy](policy/README.md) — skylark routing-policy tooling (RFC #2882)
 - [rm](rm/README.md) — Remove routing rule
 - [rsn-remote-stats](rsn-remote-stats/README.md) — Query a standalone Route Setup Node's statistics
 - [rsn-stats](rsn-stats/README.md) — Show embedded Route Setup Node request statistics
+- [table-stats](table-stats/README.md) — Show routing-table observability counters (rule count, route-ID high-water, per-type)
 - [trace](trace/README.md) — Per-hop latency printout for the route to a destination visor
 
 ## Flags
@@ -36,8 +53,11 @@ skywire cli route
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

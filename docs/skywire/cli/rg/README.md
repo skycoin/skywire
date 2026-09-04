@@ -4,6 +4,13 @@
 
 View active route groups, their associated apps, and live traffic stats.
 
+A route group is the set of installed routing rules that carry one app
+connection (initiator + responder legs, plus any multiplexed transports).
+This is the app-centric, bandwidth-annotated view; `skywire cli route groups`
+shows the same groups at the rule level, and bare `skywire cli route`
+lists the individual rules. None of these query the route-finder — for a
+remote path lookup use `skywire cli route find`.
+
 ## Usage
 
 ```
@@ -24,8 +31,11 @@ skywire cli rg
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

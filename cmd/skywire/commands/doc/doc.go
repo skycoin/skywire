@@ -34,6 +34,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -569,6 +570,29 @@ func initBuildInfoReplacements() {
 	// renderers use independently of the full hash.
 	if len(bi.Commit) > 12 {
 		add(bi.Commit[:12], "<commit>")
+	}
+	// A dev-tree build carries a "+dirty" suffix in version-derived
+	// strings (e.g. HTTP user-agent flag defaults). After the commit
+	// replacements above it survives as "<commit>+dirty"; collapse it
+	// so the published default doesn't depend on the generator's tree
+	// state. No-op on a clean build.
+	buildInfoReplacements = append(buildInfoReplacements, [2]string{"<commit>+dirty", "<commit>"})
+	// Host-identity scrubbing: several flag defaults are computed from
+	// the generating machine's environment (os.Getwd for reward/login
+	// data dirs, os.UserHomeDir for user-space paths, the OS username
+	// for `rewards systemd --user`). Replace them with stable
+	// placeholders so the generated pages don't leak — and don't churn
+	// with — whoever ran `make doc-gen` last. Longer needles first so
+	// the home-dir path (which contains the username) is consumed
+	// before the bare username.
+	if wd, err := os.Getwd(); err == nil && len(wd) > 1 {
+		add(wd, "<working-dir>")
+	}
+	if home, err := os.UserHomeDir(); err == nil && len(home) > 1 {
+		add(home, "<home>")
+	}
+	if u, err := user.Current(); err == nil && len(u.Username) > 3 {
+		add(u.Username, "<user>")
 	}
 }
 

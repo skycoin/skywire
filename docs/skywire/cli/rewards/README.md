@@ -2,10 +2,21 @@
 
 [← skywire cli](../README.md)
 
-Collect surveys:  skywire-cli log
-Fetch uptimes:    skywire-cli ut > ut.txt
+This plural 'rewards' command is the reward-system OPERATOR toolchain that
+runs the daily reward distribution: collect surveys/transports/bandwidth,
+fetch uptimes, calculate per-visor shares, and serve the metrics UI.
 
-Process rewards:  skywire-cli rewards --process
+Node operators who only want to set their own reward address or check their
+payout history want the singular command instead: 'skywire cli reward'.
+
+Typical manual pipeline:
+  Collect surveys:  skywire-cli log
+  Fetch uptimes:    skywire-cli ut > ut.txt
+  Process rewards:  skywire-cli rewards --process
+
+The 'rewards run' subcommand performs the whole hourly cycle in-process
+(the systemd unit calls it); the bare 'rewards' command calculates a single
+day from data already on disk.
 
 Architectures:
 [amd64 arm64 386 arm ppc64 riscv64 wasm loong64 mips mips64 mips64le mipsle ppc64le s390x null all]
@@ -23,7 +34,7 @@ skywire cli rewards
 - [loginchain](loginchain/README.md) — start the login chain nodes (block publisher + peer)
 - [run](run/README.md) — run the full hourly reward cycle in-process (no bash)
 - [script](script/README.md) — print reward system scripts
-- [svc](svc/README.md) — verify services in survey
+- [svc](svc/README.md) — verify a visor's service config against the deployment
 - [systemd](systemd/README.md) — set up systemd services for reward system
 - [tp-collect](tp-collect/README.md) — collect transport data and track visors with sufficient transports
 - [ui](ui/README.md) — reward system UI server
@@ -32,7 +43,7 @@ skywire cli rewards
 
 ```
   -s, --loglvl string      [ debug | warn | error | fatal | panic | trace ] (default "info")
-  -d, --date string        date for which to calculate reward (default "2026-08-10")
+  -d, --date string        date for which to calculate reward (default "2026-09-03")
   -k, --pk string          check reward for pubkey
   -n, --noarch strings     disallowed architectures, comma separated (default [null,wasm])
   -w, --a1 strings         pool 1 allowed arch, comma separated (default [arm64,arm,ppc64,riscv64,loong64,mips,mips64,mips64le,mipsle,ppc64le,s390x])
@@ -58,8 +69,11 @@ skywire cli rewards
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

@@ -12,6 +12,28 @@ Nodes may be reached over a skywire mesh: pass --socks5-proxy (or set
 HTTP(S)_PROXY) to a resolving SOCKS5 proxy and use a mesh --node-url, e.g.
   --socks5-proxy socks5://127.0.0.1:4443 --node-url http://<name>.<pk>.dmsg
 The proxy does remote DNS, so the .dmsg/.skynet hostname resolves through it.
+Reaching nodes over the skywire mesh
+------------------------------------
+Enable the visor's embedded resolving proxy (config-gen --dmsgweb, listens on
+127.0.0.1:4445; --skynetweb adds .skynet on :4446 and auto-chains) and point
+the wallet at it, then use a mesh node URL instead of a clearnet one:
+
+    HTTP_PROXY=socks5://127.0.0.1:4445 HTTPS_PROXY=socks5://127.0.0.1:4445 \
+      skywire skycoin web --node-url http://sky.theskywirenetwork.net.<visor-pk>.dmsg
+
+or equivalently pass --socks5-proxy socks5://127.0.0.1:4445. The proxy resolves
+.dmsg / .skynet hostnames remotely, so no clearnet DNS or exit is used.
+
+Nodes advertised over the mesh are discoverable as type=coin services in the
+service discovery; the wasm-visor wallet auto-addresses them as <pk>:<port>.
+Public thin-client nodes:
+
+    sky.theskywirenetwork.net.<visor-pk>.dmsg   skycoin (over the mesh)
+    https://sky.theskywirenetwork.net           skycoin (clearnet mirror)
+    https://node.skycoin.com                    skycoin (upstream clearnet)
+
+Node URLs are also runtime-reconfigurable from the wallet UI (Settings -> Nodes).
+config-gen sets the default node list via SKYCOINWEBNODES.
 ```
 
 ## Usage
@@ -39,7 +61,11 @@ skywire app skycoin web
 ## Global Flags
 
 ```
-  -h, --help   show help menu
+  -h, --help        show help menu
+      --jq string   filter JSON output through a jq/gojq expression (implies --json)
+      --json        print output as JSON
+      --shape       print the output schema skeleton (zero values, all fields) instead of data
+      --tui         browse commands and help interactively
 ```
 
 ---

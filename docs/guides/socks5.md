@@ -8,9 +8,12 @@ The main difference between the VPN and the SOCKS5 proxy is that the
 proxy is configured _per application_ while the VPN wraps the
 connections for the whole machine.
 
-The socks client usage (from `skywire cli`) is similar to the VPN, though
-the `skywire cli` subcommands and flags do not currently match from the
-one application to the other. This will be rectified.
+The socks client usage (from `skywire cli`) mirrors the VPN client:
+both share the `list` / `start --pk` / `status` / `stop` shape. The
+proxy additionally has `test` (latency-ranked server probing),
+`loadtest`, and the `mux` subcommands for multiplexed routes — see the
+[SOCKS5 client page](../skysocks/client.md) and
+[multipath.md](multipath.md).
 
 To use the SOCKS5 proxy client via `skywire cli`:
 ```

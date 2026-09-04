@@ -2,21 +2,23 @@
 
 [← skywire cli tp](../README.md)
 
-Remove transport(s) by id
+Remove transport(s) by id — from the LOCAL visor by default.
 
-    Use --remote with --tp to remove transports on a remote visor via the embedded TPS
+    The transport ID may be passed positionally (tp rm <id>) or with -i/--id.
+    Use --remote <visor-pk> with -i/--id to remove transports on a REMOTE
+    visor via the embedded Transport Setup Node (TPS); see also `tps rm`.
 
 ## Usage
 
 ```
-skywire cli tp rm
+skywire cli tp rm [id]
 ```
 
 ## Flags
 
 ```
   -a, --all              remove all transports
-  -i, --id string        remove transport of given ID
+  -i, --id string        transport ID to remove (may also be given positionally: tp rm <id>)
       --remote strings   remove transport on remote visor(s) via embedded TPS (comma-separated PKs)
       --tp strings       transport ID(s) to remove on remote visor (comma-separated, use with --remote)
       --rpc string       RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
@@ -26,8 +28,11 @@ skywire cli tp rm
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

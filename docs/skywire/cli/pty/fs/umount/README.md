@@ -2,7 +2,7 @@
 
 [← skywire cli pty fs](../README.md)
 
-Unmount a previously-mounted pty fs (Linux only)
+Unmount a previously-mounted pty fs (calls fusermount -u)
 
 ## Usage
 
@@ -14,12 +14,17 @@ skywire cli pty fs umount <mountpoint>
 
 ```
   -h, --help               show help menu
+      --jq string          filter JSON output through a jq/gojq expression (implies --json)
       --json               print output as JSON
-      --no-visor-key       don't borrow the local visor's SK from /Library/Application Support/Skywire/skywire-config.json — use --sk or a random one instead
+      --no-visor-key       don't borrow the local visor's SK from /opt/skywire/skywire.json — use --sk or a random one instead
   -p, --port string        default port when the destination omits one (e.g. '<pk>@host' resolves to <pk>@host:<port>) (default "2022")
+      --shape              print the output schema skeleton (zero values, all fields) instead of data
   -s, --sk cipher.SecKey   local client SK for the noise handshake (random if unset; pin for stable whitelist authorization) (default 0000000000000000000000000000000000000000000000000000000000000000)
       --timeout int        RPC timeout in seconds (0 = unlimited) (default 30)
+      --transport string   transport: auto|dmsg (via-visor) | tcp (direct, needs a <pk>@host:port target); skynet is not wired, --standalone forces standalone-dmsg (default "auto")
+      --tui                browse commands and help interactively
       --via dmsg://<pk>    remote visor target — dmsg://<pk> or `skynet://<pk>`
+      --visor-key          borrow the local visor's SK from /opt/skywire/skywire.json for the tcp noise handshake (default true; --sk wins) (default true)
 ```
 
 ---

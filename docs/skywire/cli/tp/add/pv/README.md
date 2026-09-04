@@ -18,10 +18,10 @@ skywire cli tp add pv
 
 ```
   -m, --cfa int            update cache files if older than n minutes (default 5)
-      --cfdd string        Dmsg Discovery cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//dmsgd.json")
-      --cfs string         SD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//visorsd.json")
-      --cft string         TPD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//tpd.json")
-      --cfu string         UT cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//ut.json")
+      --cfdd string        Dmsg Discovery cache file location (default "/tmp/dmsgd.json")
+      --cfs string         SD cache file location (default "/tmp/visorsd.json")
+      --cft string         TPD cache file location (default "/tmp/tpd.json")
+      --cfu string         UT cache file location (default "/tmp/ut.json")
       --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
   -n, --count int          number of public visors to add transports to (default 5)
       --dmsg string        dmsg discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
@@ -46,7 +46,10 @@ skywire cli tp add pv
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

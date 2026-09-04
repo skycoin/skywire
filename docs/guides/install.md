@@ -12,20 +12,26 @@ $ go run github.com/skycoin/skywire@develop
 ┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 └─┐├┴┐└┬┘││││├┬┘├┤
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
-v1.3.67
-built with go1.26.3
+v1.3.94
+built with go1.27.1
 
 Available Commands:
-  visor     Skywire Visor
-  cli       Command Line Interface for skywire
-  svc       Skywire services
-  dmsg      DMSG services & utilities
   app       skywire native applications
+  cli       Command Line Interface for skywire
+  cxo       CXO object distribution system
+  dmsg      DMSG services & utilities
+  skycoin   skycoin daemon & cli
+  svc       Skywire services
+  visor     Skywire Visor
 
 Flags:
-  -b, --bv        print runtime/debug.BuildInfo.Main.Version
-  -d, --info      print runtime/debug.BuildInfo
-  -v, --version   version for skywire
+  -b, --bv          print runtime/debug.BuildInfo.Main.Version
+  -d, --info        print runtime/debug.BuildInfo
+      --jq string   filter JSON output through a jq/gojq expression (implies --json)
+      --json        print output as JSON
+      --shape       print the output schema skeleton (zero values, all fields) instead of data
+      --tui         browse commands and help interactively
+  -v, --version     version for skywire
 ```
 
 The skywire visor can now (as of v1.3.32) run directly with `go run` when using the default in-process visor native applications configuration

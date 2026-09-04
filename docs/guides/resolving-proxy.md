@@ -155,6 +155,16 @@ through the proxy*. The service links point at each service's `/health` endpoint
 visor's real landing page at `/`. `home` is a reserved label (it shadows any
 same-named configured alias).
 
+### Status pages (`status.dmsg`, `status.skynet`)
+
+Each resolver serves a local status page in-process — no dial-out:
+`http://status.dmsg/` (from dmsgweb) and `http://status.skynet/` (from
+skynetweb) show the proxy's logs and live per-leg mux view. The skysocks
+client serves the analogous `http://status.skysocks/` on its own SOCKS5
+listener (`:1080`). Like `home.dmsg`, these exist only as seen through
+the proxy. Details: [proxy status pages &
+interstitial](../proxy-status-and-interstitial.md).
+
 ## From `curl`
 
 Use `socks5h://` (the `h` makes the **proxy** resolve the hostname — required for

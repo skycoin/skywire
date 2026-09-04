@@ -2,7 +2,14 @@
 
 [← skywire cli rewards](../README.md)
 
-reward notification telegram bot
+Reward notification telegram bot.
+
+Watches the reward transaction file (--watch) and posts the per-day stats
+for each newly-broadcast reward transaction to a telegram chat.
+
+Requires two environment variables:
+  TG_BOT_TOKEN   telegram bot API token
+  TG_CHAT_ID     numeric telegram chat ID to post into
 
 ## Usage
 
@@ -20,8 +27,11 @@ skywire cli rewards bot
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

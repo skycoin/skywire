@@ -2,7 +2,12 @@
 
 [← skywire cli log](../README.md)
 
-survey tree
+Render the surveys collected by `cli log` as a color-coded tree.
+
+Walks the collection directory (--lcdir) and prints, per visor: health.json
+(green if fetched within the hour, else red), node-info.json (with the reported
+skywire_version), and any transport-bandwidth CSVs. With --ut it also shows each
+visor's current online status + last-two-days uptime, read from /tmp/ut.json.
 
 ## Usage
 
@@ -23,8 +28,11 @@ skywire cli log st
 
 ```
   -h, --help              show help menu
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --tui               browse commands and help interactively
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

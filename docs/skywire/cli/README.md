@@ -21,8 +21,8 @@ skywire cli
 - [got](got/README.md) — HTTP client with concurrent downloads (also speaks skynet:// and dmsg://)
 - [gotop](gotop/README.md) — Terminal based graphical activity monitor
 - [halt](halt/README.md) — Stop a running visor (alias for `cli visor halt`)
-- [hv](hv/README.md) — Hypervisor UI tools
-- [log](log/README.md) — survey & transport log collection
+- [hv](hv/README.md) — Hypervisor / wasm-visor tools
+- [log](log/README.md) — Survey & transport-log collection
 - [mail](mail/README.md) — Embedded SMTP→skywire bridge (skymail-bridge)
 - [mdisc](mdisc/README.md) — Query DMSG Discovery
 - [pk](pk/README.md) — Public key of the visor (alias for `cli visor pk`)
@@ -30,17 +30,17 @@ skywire cli
 - [pty](pty/README.md) — Remote shell & filesystem over the skywire pty subsystem (key-addressed, noise-XK)
 - [pv](pv/README.md) — Public Visors
 - [resolver](resolver/README.md) — Embedded .dmsg / .skynet resolving SOCKS5 proxies
-- [reward](reward/README.md) — skycoin reward address or xpub key
-- [rewards](rewards/README.md) — calculate rewards from uptime data & collected surveys
+- [reward](reward/README.md) — set or read this visor's skycoin reward address
+- [rewards](rewards/README.md) — reward-system operator toolchain (calculate & distribute rewards)
 - [rg](rg/README.md) — Route group management
-- [route](route/README.md) — View and set rules
+- [route](route/README.md) — View and set this visor's local routing rules
 - [sd](sd/README.md) — Service discovery network statistics
 - [serve](serve/README.md) — Expose localhost ports over .skynet / .dmsg
 - [skychat](skychat/README.md) — Skychat messaging
 - [skycoin](skycoin/README.md) — Manage skycoin-daemon / skycoin-web instances on the visor
 - [skynet](skynet/README.md) — Skynet port forwarding
 - [status](status/README.md) — Summary of visor info (alias for `cli visor info`)
-- [survey](survey/README.md) — system survey
+- [survey](survey/README.md) — Print the local system survey
 - [svc](svc/README.md) — Query skywire deployment services
 - [tp](tp/README.md) — View and manage transports
 - [tps](tps/README.md) — Control embedded Transport Setup Node
@@ -54,7 +54,9 @@ skywire cli
 
 ```
       --all               show all flags and subcommands (including hidden)
+      --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
+      --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
@@ -63,6 +65,7 @@ skywire cli
 
 ```
   -h, --help   show help menu
+      --tui    browse commands and help interactively
 ```
 
 ---
