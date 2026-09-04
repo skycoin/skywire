@@ -10,14 +10,14 @@ import (
 
 func TestInjectRange(t *testing.T) {
 	head := []byte("GET /f HTTP/1.1\r\nHost: h\r\nUser-Agent: x\r\n\r\n")
-	got := injectRange(head, 0, 4095)
+	got := injectRange(head, 4095)
 	want := "GET /f HTTP/1.1\r\nHost: h\r\nUser-Agent: x\r\nRange: bytes=0-4095\r\n\r\n"
 	if string(got) != want {
 		t.Fatalf("injectRange:\n got %q\nwant %q", got, want)
 	}
 	// A head without the CRLFCRLF terminator is returned untouched.
 	bad := []byte("GET /f HTTP/1.1\r\nHost: h\r\n")
-	if string(injectRange(bad, 0, 1)) != string(bad) {
+	if string(injectRange(bad, 1)) != string(bad) {
 		t.Fatal("injectRange should no-op on a head without terminator")
 	}
 }

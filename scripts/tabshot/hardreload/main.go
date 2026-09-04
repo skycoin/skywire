@@ -26,11 +26,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "dial:", err)
 		os.Exit(1)
 	}
-	defer c.Close(websocket.StatusNormalClosure, "")
+	defer c.Close(websocket.StatusNormalClosure, "") //nolint:errcheck // best-effort CDP goodbye
 	send := func(id int, method string, params interface{}) {
-		p, _ := json.Marshal(params)
-		b, _ := json.Marshal(map[string]interface{}{"id": id, "method": method, "params": json.RawMessage(p)})
-		_ = c.Write(ctx, websocket.MessageText, b) //nolint:errcheck
+		p, _ := json.Marshal(params)                                                                           //nolint:errcheck // static params cannot fail to marshal
+		b, _ := json.Marshal(map[string]interface{}{"id": id, "method": method, "params": json.RawMessage(p)}) //nolint:errcheck // static envelope cannot fail to marshal
+		_ = c.Write(ctx, websocket.MessageText, b)                                                             //nolint:errcheck
 	}
 	send(1, "Page.enable", map[string]interface{}{})
 	send(2, "Page.reload", map[string]interface{}{"ignoreCache": true})

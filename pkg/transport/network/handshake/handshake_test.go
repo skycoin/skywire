@@ -36,8 +36,8 @@ const (
 func bufferedPipe() (net.Conn, net.Conn) {
 	x, p1 := net.Pipe()
 	y, p2 := net.Pipe()
-	go func() { _, _ = io.Copy(p2, p1) }()
-	go func() { _, _ = io.Copy(p1, p2) }()
+	go func() { _, _ = io.Copy(p2, p1) }() //nolint:errcheck // pump until pipe close
+	go func() { _, _ = io.Copy(p1, p2) }() //nolint:errcheck // pump until pipe close
 	return x, y
 }
 

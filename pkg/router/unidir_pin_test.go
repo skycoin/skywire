@@ -102,7 +102,7 @@ func TestDirectionPinReleaseResumesController(t *testing.T) {
 // peer's pin (so its controller doesn't fight the sender's) and that mode auto
 // releases it. A non-directional group ignores the packet.
 func TestHandleDirectionPacketAppliesAndReleases(t *testing.T) {
-	rg, _ := createCapturingMuxRouteGroup(t, 2)
+	rg, _ := createCapturingMuxRouteGroup(t)
 	rg.mux.setDirectional(true, rg.desc.DstPK(), rg.desc.SrcPK())
 
 	if err := rg.handleDirectionPacket(routing.MakeDirectionPacket(2, routing.DirectionPinFlipped)); err != nil {
@@ -123,7 +123,7 @@ func TestHandleDirectionPacketAppliesAndReleases(t *testing.T) {
 	}
 
 	// Non-directional group: the packet is ignored (no CapUniDir mapping to pin).
-	rgSym, _ := createCapturingMuxRouteGroup(t, 2)
+	rgSym, _ := createCapturingMuxRouteGroup(t)
 	if err := rgSym.handleDirectionPacket(routing.MakeDirectionPacket(2, routing.DirectionPinFlipped)); err != nil {
 		t.Fatalf("handleDirectionPacket on symmetric rg: %v", err)
 	}
@@ -138,13 +138,13 @@ func TestHandleDirectionPacketAppliesAndReleases(t *testing.T) {
 // leg (leg 0 — the one leg that is never standby).
 func TestSetDirectionPinWireAndGating(t *testing.T) {
 	// Non-directional: refused.
-	rgSym, _ := createCapturingMuxRouteGroup(t, 2)
+	rgSym, _ := createCapturingMuxRouteGroup(t)
 	if err := rgSym.SetDirectionPin(routing.DirectionPinFlipped); err == nil {
 		t.Fatal("SetDirectionPin must error on a non-directional group")
 	}
 
 	// Directional: invalid mode refused; valid pin applied + signaled on leg 0.
-	rg, conns := createCapturingMuxRouteGroup(t, 2)
+	rg, conns := createCapturingMuxRouteGroup(t)
 	rg.mux.setDirectional(true, rg.desc.DstPK(), rg.desc.SrcPK())
 	if err := rg.SetDirectionPin(3); err == nil {
 		t.Fatal("SetDirectionPin must reject an unknown mode byte")

@@ -632,7 +632,7 @@ func (s *redisStore) GetTransportMetricsByVisors(ctx context.Context, pks []ciph
 // input. It replaces fmt.Sscanf in the hot per-(entry×day) loop, which
 // allocated a reflect-based scan state on every call.
 func parseBWUint(s string) uint64 {
-	v, _ := strconv.ParseUint(s, 10, 64)
+	v, _ := strconv.ParseUint(s, 10, 64) //nolint:errcheck // malformed counter reads as 0 by design (see doc comment)
 	return v
 }
 
