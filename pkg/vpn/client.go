@@ -691,7 +691,12 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 		unavailableIPs = nil
 	}
 
-	unavailableIPs = append(unavailableIPs, c.defaultGateway)
+	// Only a real gateway address belongs in the reserve list: the embedded
+	// client (browser) has none, and a nil/unspecified IP in the hello makes
+	// the server's ipGen.Reserve fail the whole handshake as malformed.
+	if gw := c.defaultGateway; len(gw) > 0 && !gw.IsUnspecified() {
+		unavailableIPs = append(unavailableIPs, gw)
+	}
 
 	cHello := ClientHello{
 		UnavailablePrivateIPs: unavailableIPs,
