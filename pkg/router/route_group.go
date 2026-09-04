@@ -358,6 +358,10 @@ type RouteGroup struct {
 	soleBHTicks          int
 	reorderWedgeTicks    int
 	reorderWedgeLoggedAt time.Duration
+
+	// delayedAckArmed guards the one-shot delayed-ack timer (see
+	// scheduleDelayedAck): 1 while a timer is outstanding. Atomic.
+	delayedAckArmed int32
 	legMissed            map[uuid.UUID]int
 	inflightPings        map[int64]uuid.UUID
 	// legE2ELatency is the EWMA-smoothed END-TO-END round-trip latency per leg,
@@ -3811,6 +3815,19 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 		// out-of-order packet — thousands per second under load.
 		if gapDetected && rg.mux.shouldSendSACK() {
 			go rg.sendSACK() //nolint:errcheck
+		} else if len(delivered) > 0 {
+			// Delayed ack for CLEAN in-order delivery (RFC 1122 spirit). Without
+			// it, gap-free traffic is acknowledged only by the periodic SACK
+			// service (KeepAliveInterval/2 ≈ 15s), so on a trickle — keepalives,
+			// status polls — every frame sat unacked long past the sender's
+			// TLP/RACK horizons and was re-sent up to its backoff cap: measured
+			// ~2,500 spurious retransmits (plus their dup/repair echoes) on ONE
+			// IDLE route overnight, and Karn's rule then starves the ack-delay
+			// EWMA of samples so the sender can never learn better. One SACK
+			// ~100ms after in-order data (coalescing anything else that arrives
+			// meanwhile) purges the sender's buffer at ~RTT, keeps TLP quiet,
+			// and feeds the RACK basis honest samples.
+			rg.scheduleDelayedAck()
 		}
 
 		// Proactive HoL nudge (CapHOLRetx). When the reorder frontier has stayed
@@ -4219,6 +4236,31 @@ func (rg *RouteGroup) unidirFlipServiceFn(_ time.Duration) {
 			rg.logger.Info("unidir-flip: reverted — download is the heavy direction again, back on the mux (upload on the direct leg)")
 		}
 	}
+}
+
+// delayedAckDelay is how long after clean in-order delivery the one-shot
+// delayed ack fires (see the scheduleDelayedAck call site). Long enough to
+// coalesce a burst into one SACK, short against every sender timer it must
+// beat (TLP's PTO, the RACK threshold).
+const delayedAckDelay = 100 * time.Millisecond
+
+// scheduleDelayedAck arms the one-shot delayed-ack timer; a no-op while one
+// is already outstanding, so bulk in-order traffic costs at most one extra
+// SACK per delayedAckDelay. The fire path re-checks the shared SACK rate
+// limit, so a gap-SACK that went out meanwhile suppresses it.
+func (rg *RouteGroup) scheduleDelayedAck() {
+	if !atomic.CompareAndSwapInt32(&rg.delayedAckArmed, 0, 1) {
+		return
+	}
+	time.AfterFunc(delayedAckDelay, func() {
+		atomic.StoreInt32(&rg.delayedAckArmed, 0)
+		if rg.isClosed() {
+			return
+		}
+		if rg.mux != nil && rg.mux.shouldSendSACK() {
+			_ = rg.sendSACK() //nolint:errcheck
+		}
+	})
 }
 
 // sackServiceFn is the periodic SACK sender, run as a service loop.
