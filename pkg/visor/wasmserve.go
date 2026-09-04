@@ -316,6 +316,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		serveBytes("/desk", "text/html; charset=utf-8", deskHTML)
 	}
 	serveBytes("/winbox.wasm", "application/wasm", wasmhv.WinBoxWasm())
+	serveBytes("/gobrowser.wasm", "application/wasm", wasmhv.GoBrowserWasm())
 	serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
 	serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)
