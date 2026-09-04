@@ -281,6 +281,10 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// page's virtual loopback, so the nested browser renders in-page servers
 	// (the hypervisor UI SPA) natively. Must live beside the pages (scope cap).
 	serveBytes("/vnet-sw.js", "text/javascript", wasmhv.VNetSWJS())
+	// deskPage is the desk shell, served AT THE ROOT below when there is one.
+	// Declared out here because the root handler is built further down and the
+	// desk is only assembled when a CLI module was given to run in it.
+	var deskPage []byte
 	// The full skywire CLI module for the terminal's `skywire` command —
 	// served from disk (too large to embed), gzip left to the transport.
 	// Absent path = 404, and the shell simply doesn't register the command.
@@ -313,8 +317,23 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 				[]byte(`<script src="/desk-boot.js"></script>`),
 				[]byte("<script src=\"/ctl-bridge.js\"></script>\n<script src=\"/desk-boot.js\"></script>"), 1)
 		}
-		serveBytes("/desk", "text/html; charset=utf-8", deskHTML)
+		deskPage = deskHTML
 	}
+	// The desk IS the root here too, matching the visor-attached hypervisor
+	// (#4491). The old separate path redirects rather than serving a second
+	// copy, so a bookmark or a docs link still lands somewhere sensible.
+	mux.HandleFunc("/desk", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/", http.StatusMovedPermanently)
+	})
+	// The Angular dashboard keeps its own path, for a link that wants the
+	// dashboard specifically rather than the shell around it.
+	dashboard := func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		_, _ = w.Write(index) //nolint:errcheck
+	}
+	mux.HandleFunc("/dashboard", dashboard)
+	mux.HandleFunc("/dashboard/", dashboard)
 	serveBytes("/winbox.wasm", "application/wasm", wasmhv.WinBoxWasm())
 	serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
@@ -498,6 +517,16 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache")
+			// EMBEDDED: the dashboard, never the desk. A desk inside a desk
+			// window is not what an embedder wanted, and the root is the only
+			// path that survives being framed — a page served under a
+			// /vnet/<port>/ prefix has its <base href> rewritten to that
+			// prefix, so a deeper path is normalised back to here anyway.
+			framed := r.Header.Get("Sec-Fetch-Dest") == "iframe" || r.URL.Query().Get("embed") == "1"
+			if deskPage != nil && !framed {
+				_, _ = w.Write(deskPage) //nolint:errcheck
+				return
+			}
 			_, _ = w.Write(index) //nolint:errcheck
 			return
 		}
