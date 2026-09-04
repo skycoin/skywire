@@ -4107,8 +4107,9 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 	if rg.mux.holRetxEnabled {
 		rg.mu.Lock()
 		fastMs := rg.mux.fastestLegLatency(rg.tps)
+		legRTT := rg.mux.legLatencyByTp(rg.tps)
 		rg.mu.Unlock()
-		if due := rg.mux.proactiveRetxSeqs(lastContig, words, fastMs, time.Now()); len(due) > 0 {
+		if due := rg.mux.proactiveRetxSeqs(lastContig, words, fastMs, legRTT, time.Now()); len(due) > 0 {
 			retxSeqs = mergeSeqs(retxSeqs, due)
 		}
 	}

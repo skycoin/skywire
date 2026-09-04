@@ -20,6 +20,9 @@
 //   hvWindow        once the visor's hypervisor UI listens on the virtual
 //                   loopback, open a browser window on it, maximized on top
 //   hvPort          hypervisor UI port on the virtual loopback (8001)
+//   native          the page is served by a NATIVE hypervisor — see below
+//   dashboardURL    native mode: the same-origin dashboard URL for the
+//                   dashboard window ('/#/?embed=1')
 //   onStatus(msg)   boot progress for the page's overlay
 (function () {
 	'use strict';
@@ -91,6 +94,54 @@
 		opts = opts || {};
 		var status = opts.onStatus || function () {};
 		var hvPort = opts.hvPort || 8001;
+
+		// Native mode: the page is served by a NATIVE hypervisor, whose visor
+		// is the host process — the desk is a shell OVER that visor, never a
+		// second one, so nothing wasm-shaped boots here (no jsfs snapshot, no
+		// desk-host module, no vnet, no skywireExec). The server injects
+		// skywire-browse-launcher.js beside this file; that launcher mounts
+		// the panel with its /api-backed providers (the same ones the Angular
+		// dashboard gets) and publishes it as __skywireDesk. All that is left
+		// to do is open the dashboard window: the SAME-ORIGIN Angular UI in an
+		// iframe (embed=1 rides in the hash so the iframe's own injected
+		// launcher hides its taskbar — a desk never nests inside a desk
+		// window, the same guard the ☰ chat/log windows use).
+		if (opts.native) {
+			status('starting the desk…');
+			return Promise.all([
+				waitFor(function () { return globalThis.__skywireDesk; }, 'the desk panel'),
+				waitFor(function () { return typeof globalThis.WinBox === 'function'; }, 'the window manager'),
+			]).then(function (r) {
+				var panel = r[0];
+				try {
+					// Join the panel's own stacking context (its windows root)
+					// so focus raises the dashboard above/below sibling windows
+					// like any other desk window; keep clear of the taskbar on
+					// whichever edge it is docked (applyDock pins top OR bottom
+					// to "0", persisted across reloads).
+					var root = document.getElementById('skywire-skynet-root') || undefined;
+					var bar = document.getElementById('skywire-skynet-taskbar');
+					var barH = bar ? (bar.offsetHeight || 36) : 0;
+					// applyDock writes bottom:"0" for a bottom dock (read back as
+					// "0px" by most engines) and "auto" for a top dock.
+					var bd = bar ? bar.style.bottom : 'auto';
+					var topDocked = !(bd === '0' || bd === '0px');
+					var wb = new WinBox({
+						title: 'dashboard',
+						url: opts.dashboardURL || '/#/?embed=1',
+						root: root,
+						top: topDocked ? barH : 0,
+						bottom: topDocked ? 0 : barH,
+						// The panel's window chrome (dark header + pointer
+						// events); no-full keeps "maximize" in-tab.
+						'class': ['skywire-wb', 'no-full'],
+						x: 'center', y: 'center', width: '85%', height: '85%',
+					});
+					if (wb.maximize) wb.maximize(true);
+				} catch (e) { console.error('dashboard window:', e); }
+				return { panel: panel, startedVisor: false };
+			});
+		}
 
 		skywireExec.wasmURL = opts.wasmURL || 'skywire.wasm.gz';
 		skywireExec.wasmExecURL = opts.wasmExecURL || 'wasm_exec.js';
@@ -258,6 +309,25 @@
 									try { win.openTab('status.skysocks', '/', 'http', true); } catch (e2) {}
 								}
 								if (win.wb && win.wb.maximize) win.wb.maximize(true);
+								// One-shot subresources (the Material icon font above
+								// all) are a load-lottery on first paint: the tab opens
+								// the moment the port listens, dozens of asset fetches
+								// land on the still-busy visor, and whichever ones time
+								// out are never retried — APIs re-poll, fonts don't, so
+								// the dashboard renders icon NAMES as text. Self-heal
+								// once: if the icon font hasn't arrived after the page
+								// has had time to settle, reload the frame — by then the
+								// visor is warm and the same fetches complete (verified
+								// live: a manual frame reload cured it every time).
+								setTimeout(function () {
+									try {
+										var fr = document.querySelector('iframe[src^="/vnet/' + hvPort + '"]');
+										if (!fr || !fr.contentWindow || !fr.contentWindow.document.fonts) return;
+										if (!fr.contentWindow.document.fonts.check('24px "Material Icons"')) {
+											fr.contentWindow.location.reload();
+										}
+									} catch (e3) { /* cross-origin or torn-down frame — leave it */ }
+								}, 25000);
 							} catch (e) { console.error('hv window:', e); }
 						});
 						return;
