@@ -48,9 +48,15 @@
     '#skw-pg-bar a:hover,#skw-pg-bar button:hover{color:#fff}',
     '#skw-pg-frame{flex:1;border:0;width:100%;background:#0e0c14}'
   ].join('');
+  // The style element must NOT live in <head>: Material's instant loading
+  // rewrites head content on navigation, which dropped these rules and left
+  // the (surviving, body-appended) panel in static flow at the bottom of the
+  // document — live-verified: position:fixed reverted to static after one
+  // in-docs navigation. Appended to <body> alongside the panel instead, so
+  // the styles persist exactly as long as the elements they style.
   var style = document.createElement('style');
   style.textContent = css;
-  document.head.appendChild(style);
+  document.body.appendChild(style);
 
   var panel = document.createElement('div');
   panel.id = 'skw-pg-panel';
