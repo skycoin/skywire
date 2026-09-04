@@ -682,10 +682,21 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error) {
 	unavailableIPs, err := netutil.LocalNetworkInterfaceIPs()
 	if err != nil {
-		return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
+		if c.appCl != nil {
+			return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
+		}
+		// Embedded client (NewClientEmbedded — the browser): there are no host
+		// NICs to protect from the server's address allocation, and js has no
+		// interface enumeration to consult. An empty set is the truth.
+		unavailableIPs = nil
 	}
 
-	unavailableIPs = append(unavailableIPs, c.defaultGateway)
+	// Only a real gateway address belongs in the reserve list: the embedded
+	// client (browser) has none, and a nil/unspecified IP in the hello makes
+	// the server's ipGen.Reserve fail the whole handshake as malformed.
+	if gw := c.defaultGateway; len(gw) > 0 && !gw.IsUnspecified() {
+		unavailableIPs = append(unavailableIPs, gw)
+	}
 
 	cHello := ClientHello{
 		UnavailablePrivateIPs: unavailableIPs,
@@ -752,18 +763,27 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 }
 
 func (c *Client) setAppStatus(status appserver.AppDetailedStatus) {
+	if c.appCl == nil {
+		return // embedded client (NewClientEmbedded): no app RPC to report to
+	}
 	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }
 
 func (c *Client) setConnectionDuration() {
+	if c.appCl == nil {
+		return
+	}
 	if err := c.appCl.SetConnectionDuration(atomic.LoadInt64(&c.connectedDuration)); err != nil {
 		print(fmt.Sprintf("Failed to set connection duration: %v\n", err))
 	}
 }
 
 func (c *Client) setAppError(appErr error) {
+	if c.appCl == nil {
+		return
+	}
 	if err := c.appCl.SetError(appErr.Error()); err != nil {
 		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
 	}
