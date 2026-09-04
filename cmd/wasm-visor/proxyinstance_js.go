@@ -571,11 +571,20 @@ func rotateAwayFromExit(pk cipher.PubKey) {
 // / duplicates excluded). No math/rand import (TinyGo-friendly) — a time-derived
 // start offset spreads the choice across the list and across tabs.
 func pickRandomProxyExits(ctx context.Context, sdPK cipher.PubKey, n int, avoid cipher.PubKey) []cipher.PubKey {
+	return pickServiceProviders(ctx, sdPK, "proxy", n, avoid, proxyExitCooled)
+}
+
+// pickServiceProviders is the shared SD candidate selection for any service
+// type ("proxy", "vpn"): fetch the list over dmsg, skip self / the avoided /
+// cooled-down / duplicate PKs, and put DIRECT transport peers first (a
+// provider that is already a peer forms a 1-hop route near-instantly — the
+// dominant cost on the single wasm thread is multi-hop route setup).
+func pickServiceProviders(ctx context.Context, sdPK cipher.PubKey, serviceType string, n int, avoid cipher.PubKey, cooled func(cipher.PubKey) bool) []cipher.PubKey {
 	if dmsgC == nil || n <= 0 {
 		return nil
 	}
 	fctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	status, _, body, err := dmsgclient.FetchOverDmsg(fctx, dmsgC, "GET", sdPK.Hex(), "/api/services?type=proxy", nil, nil)
+	status, _, body, err := dmsgclient.FetchOverDmsg(fctx, dmsgC, "GET", sdPK.Hex(), "/api/services?type="+serviceType, nil, nil)
 	cancel()
 	if err != nil || status != 200 {
 		return nil
@@ -608,8 +617,8 @@ func pickRandomProxyExits(ctx context.Context, sdPK cipher.PubKey, n int, avoid 
 	var near, far []cipher.PubKey
 	for i := 0; i < len(services); i++ {
 		pk := services[(off+i)%len(services)].Addr.PubKey()
-		if pk.Null() || pk == selfPK || pk == avoid || proxyExitCooled(pk) || seen[pk] {
-			continue // skip self, the just-failed exit, cooled-down exits, and dups
+		if pk.Null() || pk == selfPK || pk == avoid || (cooled != nil && cooled(pk)) || seen[pk] {
+			continue // skip self, the just-failed provider, cooled-down ones, and dups
 		}
 		seen[pk] = true
 		if peers[pk] {

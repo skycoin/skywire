@@ -14,7 +14,7 @@
 //
 // JS surface:
 //
-//	skywireVisor.vpnStart("<server-pk>")                 → Promise<"connected">
+//	skywireVisor.vpnStart(["<server-pk>"])               → Promise<"connected <pk>"> (no arg = auto-select from SD)
 //	skywireVisor.vpnStop()                               → Promise<"stopped">
 //	skywireVisor.vpnStatus()                             → {running, server, status, sinceSec}
 //	skywireVisor.vpnFetch("http://host/path")            → Promise<{status, contentType, body}>
@@ -42,6 +42,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorcore"
 	"github.com/skycoin/skywire/pkg/vpn"
 )
 
@@ -66,18 +67,134 @@ func vpnSetState(s string) {
 	emitProxyLog("vpn", "[vpn-client] "+s)
 }
 
-// jsVPNStart(serverPKHex) dials the vpn-server route group, runs the VPN
-// handshake, and resolves once the netstack tunnel is up.
-func jsVPNStart(_ js.Value, args []js.Value) interface{} {
-	if len(args) < 1 {
-		return promise(func() (interface{}, error) { return nil, errors.New("vpnStart(serverPK)") })
-	}
-	pkHex := args[0].String()
-	return promise(func() (interface{}, error) {
-		var pk cipher.PubKey
-		if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
-			return nil, fmt.Errorf("bad server pk: %w", err)
+// vpnCool tracks servers that failed dial or handshake so auto-selection
+// skips them for a while — the VPN analogue of the proxy pool's exit
+// cooldown. 10 minutes: long enough to rotate the pool, short enough that a
+// transiently unreachable server comes back.
+const vpnCooldown = 10 * time.Minute
+
+var (
+	vpnCoolMu sync.Mutex
+	vpnCool   = map[cipher.PubKey]time.Time{}
+)
+
+func vpnServerCooled(pk cipher.PubKey) bool {
+	vpnCoolMu.Lock()
+	defer vpnCoolMu.Unlock()
+	return time.Now().Before(vpnCool[pk])
+}
+
+func vpnCoolServer(pk cipher.PubKey) {
+	vpnCoolMu.Lock()
+	vpnCool[pk] = time.Now().Add(vpnCooldown)
+	vpnCoolMu.Unlock()
+}
+
+// vpnDialServer dials the server's route group with the proxy chain's retry
+// discipline: up to attempts full tries (the first dial after a cold boot
+// routinely times out while transports are still forming — the retry lands),
+// and the "already being initialized" rejection is treated as the transient
+// it is (a concurrent dial on the same route-group descriptor) rather than a
+// failure.
+func vpnDialServer(pk cipher.PubKey, attempts int) (net.Conn, error) {
+	var lastErr error
+	for a := 0; a < attempts; a++ {
+		dctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+		conn, err := rtr.DialRoutes(dctx, pk, 0, routing.Port(skyenv.VPNServerPort), router.DefaultDialOptions())
+		for r := 0; err != nil && strings.Contains(err.Error(), "already being initialized") && r < 4; r++ {
+			select {
+			case <-time.After(600 * time.Millisecond):
+			case <-dctx.Done():
+			}
+			conn, err = rtr.DialRoutes(dctx, pk, 0, routing.Port(skyenv.VPNServerPort), router.DefaultDialOptions())
 		}
+		cancel()
+		if err == nil {
+			return conn, nil
+		}
+		lastErr = err
+		vpnSetState(fmt.Sprintf("connecting: dial attempt %d/%d to %s failed: %v", a+1, attempts, pk.Hex(), err))
+	}
+	return nil, lastErr
+}
+
+// vpnTryServer runs one full connection attempt against pk: dial (with the
+// retry discipline), handshake, netstack up. On success the session is
+// installed as THE vpn instance and its serve goroutine runs until stop or
+// failure.
+func vpnTryServer(pk cipher.PubKey) error {
+	vpnSetState("connecting to " + pk.Hex() + "…")
+	conn, err := vpnDialServer(pk, 2)
+	if err != nil {
+		return fmt.Errorf("route dial to vpn-server: %w", err)
+	}
+
+	cl := vpn.NewClientEmbedded(vpn.ClientConfig{ServerPK: pk})
+	vpnMu.Lock()
+	vpnCl, vpnConn, vpnServer, vpnSince = cl, conn, pk, time.Now()
+	vpnMu.Unlock()
+
+	go func() {
+		err := cl.ServeConn(conn)
+		vpnMu.Lock()
+		stillOurs := vpnCl == cl
+		vpnMu.Unlock()
+		if !stillOurs {
+			return // superseded by stop/restart
+		}
+		if err != nil {
+			vpnSetState("error: session: " + err.Error())
+		} else {
+			vpnSetState("stopped")
+		}
+		vpnMu.Lock()
+		if vpnCl == cl {
+			vpnCl, vpnConn = nil, nil
+		}
+		vpnMu.Unlock()
+	}()
+
+	// Resolve once the handshake finished and the netstack is configured —
+	// TunReady flips after the server assigns the tunnel address.
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if cl.TunReady() {
+			vpnSetState("running")
+			return nil
+		}
+		vpnMu.Lock()
+		gone := vpnCl != cl
+		st := vpnState
+		vpnMu.Unlock()
+		if gone || strings.HasPrefix(st, "error:") {
+			return errors.New(st)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	// Handshake never completed: tear this attempt down so the next
+	// candidate starts clean.
+	cl.Close()
+	_ = conn.Close() //nolint:errcheck
+	vpnMu.Lock()
+	if vpnCl == cl {
+		vpnCl, vpnConn = nil, nil
+	}
+	vpnMu.Unlock()
+	return errors.New("vpn handshake timed out (30s)")
+}
+
+// jsVPNStart([serverPKHex]) connects the tunnel. With a PK it targets that
+// server; with no arguments it auto-selects from service discovery
+// (type=vpn) exactly like the proxy pool picks exits — direct-peer servers
+// first, failed ones cooled — and tries candidates until one completes the
+// handshake. The completed handshake + netstack-up IS the honest probe: a
+// zombie vpn-server cannot fake the address assignment.
+func jsVPNStart(_ js.Value, args []js.Value) interface{} {
+	pkHex := ""
+	if len(args) > 0 && args[0].Type() == js.TypeString {
+		pkHex = args[0].String()
+	}
+	return promise(func() (interface{}, error) {
 		if rtr == nil {
 			return nil, errors.New("not booted; call boot() first")
 		}
@@ -88,58 +205,38 @@ func jsVPNStart(_ js.Value, args []js.Value) interface{} {
 		}
 		vpnMu.Unlock()
 
-		vpnSetState("connecting")
-		dctx, cancel := context.WithTimeout(ctx, 45*time.Second)
-		defer cancel()
-		conn, err := rtr.DialRoutes(dctx, pk, 0, routing.Port(skyenv.VPNServerPort), router.DefaultDialOptions())
-		if err != nil {
-			vpnSetState("error: dial: " + err.Error())
-			return nil, fmt.Errorf("route dial to vpn-server: %w", err)
-		}
-
-		cl := vpn.NewClientEmbedded(vpn.ClientConfig{ServerPK: pk})
-		vpnMu.Lock()
-		vpnCl, vpnConn, vpnServer, vpnSince = cl, conn, pk, time.Now()
-		vpnMu.Unlock()
-
-		go func() {
-			err := cl.ServeConn(conn)
-			vpnMu.Lock()
-			stillOurs := vpnCl == cl
-			vpnMu.Unlock()
-			if !stillOurs {
-				return // superseded by stop/restart
+		var candidates []cipher.PubKey
+		if pkHex != "" {
+			var pk cipher.PubKey
+			if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
+				return nil, fmt.Errorf("bad server pk: %w", err)
 			}
+			candidates = []cipher.PubKey{pk}
+		} else {
+			sdPK, err := dmsgURLPK(visorcore.ResolveServices(nil).ServiceDiscoveryDmsg)
 			if err != nil {
-				vpnSetState("error: session: " + err.Error())
-			} else {
-				vpnSetState("stopped")
+				return nil, fmt.Errorf("no service discovery configured: %w", err)
 			}
-			vpnMu.Lock()
-			if vpnCl == cl {
-				vpnCl, vpnConn = nil, nil
+			vpnSetState("selecting a vpn-server from service discovery…")
+			candidates = pickServiceProviders(ctx, sdPK, "vpn", 4, cipher.PubKey{}, vpnServerCooled)
+			if len(candidates) == 0 {
+				vpnSetState("error: no vpn servers available from service discovery")
+				return nil, errors.New("no vpn servers available from service discovery")
 			}
-			vpnMu.Unlock()
-		}()
-
-		// Resolve once the handshake finished and the netstack is configured —
-		// TunReady flips after the server assigns the tunnel address.
-		deadline := time.Now().Add(30 * time.Second)
-		for time.Now().Before(deadline) {
-			if cl.TunReady() {
-				vpnSetState("running")
-				return "connected", nil
-			}
-			vpnMu.Lock()
-			gone := vpnCl != cl
-			st := vpnState
-			vpnMu.Unlock()
-			if gone || strings.HasPrefix(st, "error:") {
-				return nil, errors.New(st)
-			}
-			time.Sleep(200 * time.Millisecond)
 		}
-		return nil, errors.New("vpn handshake timed out (30s)")
+
+		var lastErr error
+		for _, pk := range candidates {
+			if err := vpnTryServer(pk); err != nil {
+				lastErr = err
+				vpnCoolServer(pk)
+				vpnSetState(fmt.Sprintf("server %s failed (%v) — trying next", pk.Hex(), err))
+				continue
+			}
+			return "connected " + pk.Hex(), nil
+		}
+		vpnSetState("error: all candidates failed: " + lastErr.Error())
+		return nil, fmt.Errorf("all %d vpn-server candidate(s) failed, last: %w", len(candidates), lastErr)
 	})
 }
 
