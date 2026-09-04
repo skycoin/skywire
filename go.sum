@@ -86,6 +86,8 @@ github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b h1:l/c7X12CNncX
 github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b/go.mod h1:SwLy2vvXGWJQxefDI4DncGdXJWIob5IGczxeFMtUIj8=
 github.com/0magnet/netscrape v0.0.0-20260904153405-6004fca16433 h1:SF7Gvlb8dw+KSZDoMK1V0p8APf2t9P90+ijAesAsRZ0=
 github.com/0magnet/netscrape v0.0.0-20260904153405-6004fca16433/go.mod h1:8KUKD6yyp1VhFqWG8MYA+xM9CD+6cdjoNoXrhP/QMOM=
+github.com/0magnet/netscrape v0.0.0-20260904183604-cf46751f7969 h1:oQMJT905NpAWNHa7ur/Ky6OY4T31bHFwqWX1kDmV6NI=
+github.com/0magnet/netscrape v0.0.0-20260904183604-cf46751f7969/go.mod h1:8KUKD6yyp1VhFqWG8MYA+xM9CD+6cdjoNoXrhP/QMOM=
 github.com/0magnet/plot-go v0.0.0-20260903194102-268453e774b6 h1:OamIbxneZwMYkmxy1mMd5Cys783e2ZFV6W7s81ohbDc=
 github.com/0magnet/plot-go v0.0.0-20260903194102-268453e774b6/go.mod h1:feFjgv6ByEzXixeUOB4gYwq9G8iv35aQJiYc/8ZHDWg=
 github.com/0magnet/realorigin v0.2.1 h1:4WOnPmPaKuOkt/g+UTJlHdGhsnsarplEMqdlqf0Cs0M=

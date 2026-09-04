@@ -172,13 +172,21 @@
 			// so no visor runs except the one started IN a terminal.
 			return gunzipFetch(opts.deskWasmURL || 'wasm-visor.wasm.gz');
 		}).then(function (buf) {
-			// The dashboard desk app (registered by the desk host below) reads
-			// its URL from this global — set before the module runs so the ☰
-			// entry works from its first open. /dashboard, NOT the root: the
-			// visor's own hypervisor serves the DESK at "/" now, so pointing a
-			// desk window at the root would nest a desk inside a desk. embed=1
-			// rides in the hash so the iframe's launcher hides its taskbar.
-			globalThis.__DESK_DASHBOARD_URL__ = '/vnet/' + hvPort + '/dashboard#/?embed=1';
+			// Where the hypervisor UI lives, as an ABSOLUTE same-origin URL —
+			// the browser normalises a scheme-less address to http://, so a
+			// bare path would not survive being opened as a tab, and the
+			// DirectLoader that renders it natively matches on origin.
+			//
+			// The vnet ROOT with ?embed=1, not "/dashboard": the service worker
+			// rewrites a framed page's <base href> to the "/vnet/<port>/"
+			// prefix, so any deeper path is normalised away before the document
+			// finishes loading — a "/dashboard" URL lands back on the root and
+			// renders the desk inside the desk. At the root the hypervisor
+			// serves the dashboard instead whenever the request is framed, and
+			// embed=1 also rides in the hash so the injected launcher inside
+			// knows not to grow a taskbar of its own.
+			globalThis.__DESK_DASHBOARD_URL__ = globalThis.location.origin +
+				'/vnet/' + hvPort + '/?embed=1#/?embed=1';
 			var go = new Go();
 			return WebAssembly.instantiate(buf, go.importObject).then(function (r) {
 				go.run(r.instance).catch(function (e) { console.error('desk host:', e); });
@@ -331,19 +339,17 @@
 						// route this first load through the transcoder.
 						swReady.then(function () {
 							try {
-								// The dashboard is its OWN window, an iframe on the
-								// service worker's real /vnet/<port>/ URLs — the
-								// Angular UI rendering natively, never through the
-								// browser's transcoder. Same shape as the native
-								// desk, where the dashboard is likewise its own
-								// window over the host visor's UI.
-								panel.launch('dashboard');
-								// The browser window carries the MESH tabs. It opens
-								// ON the deployment landing page rather than
-								// netscrape's built-in card, with the proxy status
-								// page behind it.
-								var win = panel.openWindow(true, 'http://home.dmsg/');
+								// ONE browser window, everything in TABS: the
+								// hypervisor UI first, then the deployment landing
+								// page and the proxy status page behind it. The
+								// dashboard tab renders NATIVELY — desk_js.go gives
+								// netscrape a DirectLoader that claims same-origin
+								// /vnet/ URLs, so the Angular app loads as an
+								// ordinary document instead of being transcoded
+								// into a sandbox that would strip its same-origin.
+								var win = panel.openWindow(true, globalThis.__DESK_DASHBOARD_URL__);
 								if (win && win.openTab) {
+									try { win.openTab('home.dmsg', '/', 'http', true); } catch (e2) {}
 									try { win.openTab('status.skysocks', '/', 'http', true); } catch (e2) {}
 								}
 								// One-shot subresources (the Material icon font above
