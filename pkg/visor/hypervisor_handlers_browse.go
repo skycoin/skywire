@@ -88,8 +88,22 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			serveJS(w, browseui.DeskBootJS())
 			return
 		case "/", "/index.html":
+			// EMBEDDED: serve the dashboard itself, not the desk. A desk inside
+			// a desk window is never what the embedder wanted, and the root is
+			// the only path that survives being framed — a page served under a
+			// /vnet/<port>/ prefix gets its <base href> rewritten to that
+			// prefix, so any deeper path (".../dashboard/") is normalised away
+			// before the document even finishes loading, landing back here.
+			//
+			// Sec-Fetch-Dest is the reliable signal and survives a frame
+			// reload; ?embed=1 is the explicit override for callers that set
+			// it (and for engines that omit the header).
+			if r.Header.Get("Sec-Fetch-Dest") == "iframe" || r.URL.Query().Get("embed") == "1" {
+				hv.serveInjectedIndex(w, r, fileServer)
+				return
+			}
 			// The DESK is the hypervisor UI (operator decision 2026-09-04): the
-			// shell greets at the root with the Angular dashboard as a window
+			// shell greets at the root with the Angular dashboard as a tab
 			// inside it, matching the wasm visor's desk surface.
 			hv.serveNativeDesk(w)
 			return
@@ -97,11 +111,17 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			// The old separate desk path — gone; the desk IS the root now.
 			http.Redirect(w, r, "/", http.StatusMovedPermanently)
 			return
-		case "/dashboard":
+		case "/dashboard", "/dashboard/":
 			// The Angular dashboard's index, served injected exactly as the old
 			// root was. The SPA is hash-routed, so this one path carries every
-			// dashboard view — as the desk's dashboard window (embed=1 in the
+			// dashboard view — as the desk's dashboard tab (embed=1 in the
 			// hash hides the taskbar in the iframe) or standalone.
+			//
+			// The trailing-slash spelling is the one to embed. The SPA rewrites
+			// its own URL relative to the current DIRECTORY, so from
+			// ".../dashboard" a route change resolves to ".../" — which is the
+			// desk, giving a desk nested inside a desk window. From
+			// ".../dashboard/" it stays put.
 			hv.serveInjectedIndex(w, r, fileServer)
 			return
 		}
