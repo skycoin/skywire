@@ -726,6 +726,9 @@ func (ce *Client) finishDialedSession(ctx context.Context, dSes ClientSession, n
 			// replaced this session in the map (newest-session-wins);
 			// deleting by PK alone would evict that live successor.
 			ce.delSession(ctx, dSes.RemotePK(), dSes.SessionCommon)
+			// Remember which server we just lost so the Serve loop re-dials
+			// THIS server before moving to a different one (#4086).
+			ce.noteLostSession(dSes.RemotePK())
 		}
 
 		// Trigger disconnect callback.
