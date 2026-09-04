@@ -187,12 +187,6 @@ func (m *MetricsCXOPublisher) loop(ctx context.Context) {
 // MaxObjectSize covers the encoding overhead CXO adds around the payload.
 const maxPublishBody = 12 * 1024 * 1024
 
-// partTargetBody is what a split aims each part at. Sizing the split from the
-// measured compressed size and then aiming well under the hard cap means a part
-// whose records happen to compress worse than the window average still lands
-// inside it, so the verify-and-halve pass below rarely has to run.
-const partTargetBody = 8 * 1024 * 1024
-
 func (m *MetricsCXOPublisher) publishWindow(ctx context.Context, days int) {
 	query := store.MetricsQuery{
 		Days:      days,
@@ -270,12 +264,24 @@ func gzipParts(metrics []store.TransportMetric, max int) ([][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if gz := cxoutils.Gzip(whole); len(gz) <= max {
+	gz := cxoutils.Gzip(whole)
+	if len(gz) <= max {
 		return [][]byte{gz}, nil
 	}
 
+	// Size the split from the COMPRESSED total against a target derived from
+	// max, since gzipped bytes are what CXO stores and what the cap applies
+	// to. Dividing the raw size by a fixed byte budget instead over-splits by
+	// the compression ratio: on production data that turned a 7-day window
+	// into 15 parts where four would fit, and every surplus leaf is another
+	// round trip for a subscriber filling the tree. Aiming below max leaves
+	// room for a part that compresses worse than the window average.
+	target := max * 3 / 4
+	if target < 1 {
+		target = 1 // a pathologically small cap must not divide by zero
+	}
 	var out [][]byte
-	n := len(whole)/partTargetBody + 1
+	n := len(gz)/target + 1
 	for _, part := range splitEvenly(metrics, n) {
 		if err := appendGzipped(&out, part, max); err != nil {
 			return nil, err
