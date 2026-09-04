@@ -21,8 +21,8 @@ func TestDialFailBackoff(t *testing.T) {
 	errBoom := errors.New("boom")
 
 	// Clean destination: no backoff.
-	if _, backing := ce.dialFailCheck(dst); backing {
-		t.Fatal("fresh destination must not be backing off")
+	if err, backing := ce.dialFailCheck(dst); backing {
+		t.Fatalf("fresh destination must not be backing off (err=%v)", err)
 	}
 
 	// First failure opens a window carrying the error.
@@ -41,22 +41,22 @@ func TestDialFailBackoff(t *testing.T) {
 
 	// An expired window stops fast-failing (the next real attempt goes through).
 	ce.dialFail[dst].until = time.Now().Add(-time.Millisecond)
-	if _, backing := ce.dialFailCheck(dst); backing {
-		t.Fatal("expired window must not fast-fail")
+	if err, backing := ce.dialFailCheck(dst); backing {
+		t.Fatalf("expired window must not fast-fail (err=%v)", err)
 	}
 
 	// Success wipes the state entirely, including the grown backoff.
 	ce.dialFailRecord(dst, errBoom)
 	ce.dialFailClear(dst)
-	if _, backing := ce.dialFailCheck(dst); backing {
-		t.Fatal("cleared destination must not be backing off")
+	if err, backing := ce.dialFailCheck(dst); backing {
+		t.Fatalf("cleared destination must not be backing off (err=%v)", err)
 	}
 	require.NotContains(t, ce.dialFail, dst)
 
 	// Another destination is unaffected throughout.
 	other := mkPK(t)
 	ce.dialFailRecord(dst, errBoom)
-	if _, backing := ce.dialFailCheck(other); backing {
-		t.Fatal("backoff must be per-destination")
+	if err, backing := ce.dialFailCheck(other); backing {
+		t.Fatalf("backoff must be per-destination (err=%v)", err)
 	}
 }

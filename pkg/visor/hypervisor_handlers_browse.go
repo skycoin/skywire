@@ -78,13 +78,6 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			w.Header().Set("Cache-Control", "no-cache")
 			_, _ = w.Write(browseui.WinBoxWasm()) //nolint:errcheck
 			return
-		case "/gobrowser.wasm":
-			// The experimental Go/wasm browser, launched by
-			// globalThis.SkywireGoBrowser.open() from gobrowser-loader.js.
-			w.Header().Set("Content-Type", "application/wasm")
-			w.Header().Set("Cache-Control", "no-cache")
-			_, _ = w.Write(browseui.GoBrowserWasm()) //nolint:errcheck
-			return
 		case "/skywire-browse-launcher.js":
 			serveJS(w, []byte(nativeBrowseLauncherJS))
 			return

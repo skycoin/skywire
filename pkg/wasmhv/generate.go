@@ -184,10 +184,10 @@ func GenerateStandalone(uiFS fs.FS, wasmExecJS, wasm, overrideJS []byte, cfg Sta
 		"<script>" + wasmJS + "</script>\n" +
 		"<script>" + jsSafe(overrideJS) + "</script>\n"
 
-	// VISOR mode only: ship the dmsg virtual-browser overlay (browse.js engine +
-	// a launcher that mounts a toggleable browse/host panel once skywireVisor is
-	// up). This gives the standalone wasm-visor a real surface to browse skynet/
-	// dmsg sites and self-host content over dmsg — no devtools, no extra page.
+	// VISOR mode only: ship the desk bundle (OS layer + window manager + the
+	// netscrape browser launcher) plus a floating button that opens the Go
+	// browser once skywireVisor is up. This gives the standalone wasm-visor a
+	// surface to browse skynet/dmsg sites — no devtools, no extra page.
 	if cfg.Visor {
 		// No server to fetch /winbox.wasm from, so the window-manager module
 		// travels inside the page: still gzipped, base64'd, and inflated by
@@ -304,27 +304,26 @@ func wasmBootstrap(wasm []byte, tinygo bool) (string, error) {
 })();`, nil
 }
 
-// BrowseLauncherJS waits for the wasm-visor + browse.js to be ready, mounts the
-// browse/host overlay panel (SkywireBrowse.mountPanel), and adds a floating
-// "skynet" button to toggle it. Visor-mode only (it uses skywireVisor.fetchDmsg /
-// serveContent, which exist only in the wasm-visor build). Exported so the
-// file-serving `+"`hv serve`"+` path can inject the same overlay as the single-file
-// generator.
+// BrowseLauncherJS waits for the wasm-visor + window manager to be ready and
+// adds a floating button that opens the netscrape Go/wasm browser
+// (SkywireGoBrowser.open, from gobrowser-loader.js in the bundle). Visor-mode
+// only (the browser's transport uses skywireVisor.fetchDmsg / fetchClearnet,
+// which exist only in the wasm-visor build). Exported so the file-serving
+// `+"`hv serve`"+` path injects the same launcher as the single-file generator.
+//
+// This REPLACES the retired browse.js overlay (SkywireBrowse.mountPanel): the
+// persistent taskbar, per-window panes, self-host panel, deep-linking and
+// real-origin isolated browsing were features of that JS engine, not of the Go
+// browser, and are not provided here.
 const BrowseLauncherJS = `(function(){
   if(!(window.__SKYWIRE_HV__||{}).visor) return;
   function ready(){
-    if(!self.skywireVisor||!self.skywireVisor.fetchDmsg||!self.SkywireBrowse||!document.body||typeof self.WinBox!=="function"){ return setTimeout(ready,200); }
-    var p=self.SkywireBrowse.mountPanel(document,{
-      fetchDmsg:function(){ return self.skywireVisor.fetchDmsg.apply(null,arguments); },
-      serveContent:function(m){ return self.skywireVisor.serveContent(m); },
-      selfPK:function(){ try{ return self.skywireVisor.status().pk; }catch(e){ return ""; } },
-      // api drives the visor cli REPL: a function call straight into the in-wasm
-      // core's RPC (no shell, no network) — works in standalone PWA mode.
-      api:function(m,path,body){ return self.skywireVisor.hvApi(m,path,body).then(function(r){ return {status:r.status, body:new TextDecoder().decode(r.body)}; }); }
-    });
-    // The panel is always on (mountPanel renders the persistent taskbar itself);
-    // no floating launch button — apps open from the ☰ menu.
-    void p;
+    if(!self.skywireVisor||!self.skywireVisor.fetchDmsg||!document.body||typeof self.WinBox!=="function"||!(self.SkywireGoBrowser&&self.SkywireGoBrowser.open)){ return setTimeout(ready,200); }
+    var b=document.createElement("button");
+    b.textContent="🌐 browse";
+    b.style.cssText="position:fixed;right:14px;bottom:14px;z-index:2147483000;background:#2a2342;color:#cdd2da;border:1px solid #3a3352;border-radius:6px;padding:6px 12px;cursor:pointer;font:13px sans-serif";
+    b.addEventListener("click",function(){ self.SkywireGoBrowser.open("Browser"); });
+    document.body.appendChild(b);
   }
   ready();
 })();`
