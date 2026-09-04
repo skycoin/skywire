@@ -752,18 +752,27 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 }
 
 func (c *Client) setAppStatus(status appserver.AppDetailedStatus) {
+	if c.appCl == nil {
+		return // embedded client (NewClientEmbedded): no app RPC to report to
+	}
 	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
 		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
 	}
 }
 
 func (c *Client) setConnectionDuration() {
+	if c.appCl == nil {
+		return
+	}
 	if err := c.appCl.SetConnectionDuration(atomic.LoadInt64(&c.connectedDuration)); err != nil {
 		print(fmt.Sprintf("Failed to set connection duration: %v\n", err))
 	}
 }
 
 func (c *Client) setAppError(appErr error) {
+	if c.appCl == nil {
+		return
+	}
 	if err := c.appCl.SetError(appErr.Error()); err != nil {
 		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
 	}
