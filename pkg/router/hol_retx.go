@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -184,6 +186,24 @@ func (m *routeMux) fastestLegLatency(tps []*transport.ManagedTransport) float64 
 	return best
 }
 
+// legLatencyByTp returns each live leg's measured RTT (ms) keyed by transport
+// UUID (unmeasured/zero RTTs omitted). Standby legs are included: a seq sent
+// on a since-demoted leg is still in flight on THAT leg's latency, and judging
+// it against anything else declares it stalled while it is merely slow. Caller
+// holds rg.mu (reads the tps slice).
+func (m *routeMux) legLatencyByTp(tps []*transport.ManagedTransport) map[uuid.UUID]float64 {
+	out := make(map[uuid.UUID]float64, len(tps))
+	for _, tp := range tps {
+		if tp == nil || tp.IsClosed() {
+			continue
+		}
+		if lat := tp.GetLatency(); lat > 0 {
+			out[tp.Entry.ID] = lat
+		}
+	}
+	return out
+}
+
 // proactiveRetxSeqs is the sender-side decision for a received SACK: which
 // frontier seqs to retransmit NOW on the fastest leg, bypassing retxMinAge.
 // Returns nil (a clean no-op fallback) when HoL retx was not negotiated, so a
@@ -191,9 +211,10 @@ func (m *routeMux) fastestLegLatency(tps []*transport.ManagedTransport) float64 
 // takes the head-of-line run from the SACK (frontierMissingSeqs), keeps only the
 // seqs we still hold in the retx buffer, and per-seq rate-limits them to one
 // nudge per fast-leg RTT (holRetxTracker.Due). fastestRTTms is the fastest live
-// leg's measured RTT, used for the per-seq interval. It also purges the tracker
-// below lastContiguous so it can't grow without bound.
-func (m *routeMux) proactiveRetxSeqs(lastContiguous uint32, words []uint64, fastestRTTms float64, now time.Time) []uint32 {
+// leg's measured RTT, used for the per-seq interval; legRTTms maps each live
+// leg's transport UUID to its RTT for the per-seq overdueness gate. It also
+// purges the tracker below lastContiguous so it can't grow without bound.
+func (m *routeMux) proactiveRetxSeqs(lastContiguous uint32, words []uint64, fastestRTTms float64, legRTTms map[uuid.UUID]float64, now time.Time) []uint32 {
 	if !m.holRetxEnabled || m.retxBuf == nil || m.holRetx == nil {
 		return nil
 	}
@@ -203,23 +224,32 @@ func (m *routeMux) proactiveRetxSeqs(lastContiguous uint32, words []uint64, fast
 		return nil
 	}
 	interval := holPerSeqInterval(fastestRTTms)
-	gapTh := holGapThreshold(fastestRTTms)
+	fallbackTh := holGapThreshold(fastestRTTms)
 	var due []uint32
 	for _, seq := range cand {
 		// Only retransmit seqs we still hold: a seq already purged from the retx
 		// buffer was acknowledged, so it is not the one blocking the frontier.
-		sentAt, held := m.retxBuf.SentAt(seq)
+		sentAt, tpID, held := m.retxBuf.SentInfo(seq)
 		if !held {
 			continue
 		}
-		// Age gate (holGapThreshold): a seq younger than ~one fast-leg RTT
-		// cannot have been acked yet no matter which leg it rode, so a nudge is
-		// spurious by construction — SACKs arrive every few ms and, ungated,
-		// the first SACK naming a seq striped onto a slower leg retransmitted
-		// it at ~25ms of age, then every fast-RTT until the original landed
-		// (measured ~12% duplicate bytes concentrated on the fast leg). Gating
-		// the FIRST nudge on age preserves the design's intent: a genuine stall
-		// is still healed in about one fast round-trip.
+		// Age gate: a seq is overdue only relative to the leg it is actually in
+		// flight on — one own-leg RTT × the RACK reorder margin. Judged against
+		// the FASTEST leg's RTT instead (the original design), every frame
+		// striped onto a slower leg looked "stalled" one fast-RTT into its
+		// perfectly ordinary flight and was retransmitted on the fast leg; its
+		// original then landed as a duplicate (measured live on a 60ms/300ms
+		// pair: 30MB of duplicates against 11MB of payload on the slow leg —
+		// the fast leg carrying the slow leg's whole stripe twice negated the
+		// aggregation). The fastest-leg threshold remains only as the fallback
+		// for a seq whose send leg is unknown or unmeasured. A genuinely lost
+		// or wedged seq still heals in ~1.25× its own leg's RTT, on the fastest
+		// leg, well ahead of the reactive slowest-leg RACK threshold for all
+		// but the slowest leg's own frames.
+		gapTh := fallbackTh
+		if rtt, ok := legRTTms[tpID]; ok && rtt > 0 {
+			gapTh = holGapThreshold(rtt * rackReorderFactor)
+		}
 		if now.Sub(sentAt) < gapTh {
 			continue
 		}
