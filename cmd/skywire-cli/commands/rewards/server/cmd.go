@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/tpviz"
 )
 
 var err error
@@ -45,6 +46,11 @@ var (
 	// could conflict with the visor's hypervisor API when the reward
 	// system is hosted by the visor.
 	disableTpVizAPI bool
+
+	// tpvizSrv is the tp-viz server built by buildRouter, kept here so
+	// serveStandalone can hand it the ONE dmsg client this process owns once
+	// that client exists. buildRouter runs first and has no client to give.
+	tpvizSrv *tpviz.Server
 )
 
 var skyenvfile = os.Getenv("SKYENV")
