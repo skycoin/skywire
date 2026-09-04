@@ -333,6 +333,25 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 		if _, err := url.ParseRequestURI(rawURL); err != nil {
 			return nil, fmt.Errorf("bad url: %w", err)
 		}
+		// Default-egress VPN mode (vpnStart({egress:true})): un-pinned clearnet
+		// traffic rides the tunnel while it runs. A pinned exit or an explicit
+		// local-SOCKS address keeps its meaning — only the DEFAULT path is
+		// wrapped, and a VPN failure falls back to the proxy chain below so
+		// the page never hangs on a dead tunnel.
+		if serverPKHex == "" && vpnEgressActive() {
+			t0 := time.Now()
+			emitProxyLogHook(winID, fmt.Sprintf("[proxy %s] %s %s via VPN tunnel…", winID, method, rawURL))
+			status, b, hdr, err := vpnHTTPDo(method, rawURL, body, extraHeaders)
+			if err == nil {
+				resultLine := fmt.Sprintf("[proxy %s] %s %s via VPN → %d (%dB, %dms)", winID, method, rawURL, status, len(b), time.Since(t0).Milliseconds())
+				if proxyVerbose {
+					vlog(resultLine)
+				}
+				emitProxyLogHook(winID, resultLine)
+				return shapeFetchResult(status, b, hdr), nil
+			}
+			emitProxyLog(winID, fmt.Sprintf("[proxy %s] %s %s via VPN FAILED (%dms): %v — falling back to proxy chain", winID, method, rawURL, time.Since(t0).Milliseconds(), err))
+		}
 		// Firefox-parity proxy setting: an ADDRESS-shaped "exit"
 		// (socks5h://127.0.0.1:1080, or bare host:port) means "speak SOCKS5 to
 		// that local listener over the page's virtual loopback" instead of
