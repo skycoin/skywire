@@ -87,10 +87,21 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			// serving contexts share.
 			serveJS(w, browseui.DeskBootJS())
 			return
-		case "/desk":
+		case "/", "/index.html":
+			// The DESK is the hypervisor UI (operator decision 2026-09-04): the
+			// shell greets at the root with the Angular dashboard as a window
+			// inside it, matching the wasm visor's desk surface.
 			hv.serveNativeDesk(w)
 			return
-		case "/", "/index.html":
+		case "/desk":
+			// The old separate desk path — gone; the desk IS the root now.
+			http.Redirect(w, r, "/", http.StatusMovedPermanently)
+			return
+		case "/dashboard":
+			// The Angular dashboard's index, served injected exactly as the old
+			// root was. The SPA is hash-routed, so this one path carries every
+			// dashboard view — as the desk's dashboard window (embed=1 in the
+			// hash hides the taskbar in the iframe) or standalone.
 			hv.serveInjectedIndex(w, r, fileServer)
 			return
 		}
@@ -213,7 +224,7 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 // same chrome-less guard the ☰ chat/log windows rely on.
 const nativeDeskBootOpts = `{
   native: true,
-  dashboardURL: '/#/?embed=1',
+  dashboardURL: '/dashboard#/?embed=1',
 }`
 
 // uiVersionHash fingerprints the served UI bundle (short sha256 of index.html,
@@ -258,64 +269,31 @@ const uiAutoReloadJS = `(function(){
   }, 30000);
 })();`
 
-// nativeBrowseLauncherJS is the native HV-UI launcher: it gives browse.js the
-// fetchDmsg / fetchClearnet / selfPK providers backed by /api/browse/* (the wasm
-// page uses skywireVisor.* instead), mounts the panel, and adds the floating
-// "skynet" button. Authenticated via the dashboard session cookie.
+// nativeBrowseLauncherJS is the native HV-UI launcher: it mounts the
+// engine-free desk panel (browseui/desk-panel.js, part of /browse.js) and
+// publishes it as __skywireDesk — the handle desk-boot's native branch waits
+// on before opening the dashboard window. It refuses to mount inside an
+// embedded frame (embed=1 in the hash/query): the dashboard window is an
+// iframe of /dashboard and must not grow its own taskbar. The retired
+// browse.js engine's providers are gone with it; the native desk's terminal
+// remains the dashboard's Terminal tab (dmsgpty) until the shared shell
+// integration lands.
 const nativeBrowseLauncherJS = `(function () {
+  if (/[#?&]embed=1/.test(location.hash + location.search)) { return; }
   function ready() {
-    if (!self.SkywireBrowse || !self.SkywireBrowse.mountPanel || !document.body || typeof self.WinBox !== "function") { return setTimeout(ready, 200); }
-    var localPK = window.__SKYWIRE_LOCAL_PK__ || "";
-    function b64e(s) { try { return btoa(unescape(encodeURIComponent(s))); } catch (e) { return btoa(s); } }
-    function adapt(j) {
-      var bytes = j && j.body ? Uint8Array.from(atob(j.body), function (c) { return c.charCodeAt(0); }) : new Uint8Array(0);
-      return { status: (j && j.status_code) || 0, body: bytes, headers: (j && j.header) || {} };
-    }
-    function apiPost(path, obj) {
-      return fetch(path, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) { throw new Error((j && j.error) || ("HTTP " + r.status)); } return j; }); });
-    }
-    function fetchDmsg(host, method, path, body) {
-      // host is the resolving-proxy form (pk, pk:port, pk.dmsg, home.dmsg, an
-      // alias.dmsg, …); the visor resolves it the same way its SOCKS5 proxy does.
-      return apiPost("/api/browse/fetch", { host: String(host || ""), method: method || "GET", path: path || "/", body: body != null ? b64e(String(body)) : null, scheme: "auto" }).then(adapt);
-    }
-    function fetchClearnet(exitPK, method, url, body) {
-      return apiPost("/api/browse/clearnet", { exit_pk: exitPK, method: method || "GET", url: url, body: body != null ? b64e(String(body)) : null }).then(adapt);
-    }
-    // directViaBackend: when the browse upstream-proxy is set to this visor's own
-    // PK, the native visor egresses clearnet directly (http.Get) and we inline the
-    // result — so it isn't blocked by the target site's X-Frame-Options the way a
-    // browser-direct iframe load is. (A pure wasm tab leaves this unset and uses a
-    // direct iframe load, since it can't read cross-origin server-side.)
-    // api drives the visor cli REPL window: arbitrary /api calls (cookie-authed)
-    // so the operator can interrogate the running visor from the UI without a shell.
-    function api(method, path, body) {
-      var p2 = path.charAt(0) === "/" ? path : "/" + path;
-      return fetch(p2, { method: method, credentials: "same-origin", headers: body != null ? { "Content-Type": "application/json" } : {}, body: body != null ? body : undefined })
-        .then(function (r) { return r.text().then(function (t) { return { status: r.status, body: t }; }); });
-    }
-    // ptyURL points the terminal window at this visor's dmsgpty endpoint
-    // (/pty/<pk>, the same one the dashboard's Terminal tab iframes). The wasm
-    // visor leaves this unset — it has no host shell — so the term button is
-    // native-only.
-    var ptyURL = localPK ? ("/pty/" + localPK) : "";
-    var p = self.SkywireBrowse.mountPanel(document, { fetchDmsg: fetchDmsg, fetchClearnet: fetchClearnet, selfPK: function () { return localPK; }, directViaBackend: true, api: api, ptyURL: ptyURL });
+    if (!self.skywireDeskPanel || !document.body || typeof self.WinBox !== "function") { return setTimeout(ready, 200); }
+    // On the dashboard page itself, no dashboard menu entry (it IS the
+    // dashboard); on the desk root, the entry opens /dashboard in a window.
+    var dashURL = location.pathname === "/dashboard" ? "" : "/dashboard#/?embed=1";
+    var p = self.skywireDeskPanel.mount(document, { dashboardURL: dashURL });
     // Stream the NATIVE visor's server-side log (/api/log SSE) into the log
-    // window's buffer. The wasm visor logs to the browser console (captured
-    // directly); the native visor's log lives server-side, so without this the
-    // native log window would show only browser-side entries.
+    // window's buffer, when a log consumer exists on the page.
     try {
       var es = new EventSource("/api/log");
       es.onmessage = function (ev) {
         try { var j = JSON.parse(ev.data); if (self.skywireLog) { self.skywireLog.emit(j.level || "log", [j.msg]); } } catch (e) {}
       };
     } catch (e) {}
-    // The panel is always on (mountPanel renders the persistent taskbar itself),
-    // so there's no floating launch button — apps open from the ☰ menu.
-    // Publish the handle under the same global the wasm desk-boot uses, so the
-    // native /desk page (desk-boot's native branch) can wait on the mounted
-    // panel instead of double-mounting one.
     self.__skywireDesk = p;
   }
   ready();

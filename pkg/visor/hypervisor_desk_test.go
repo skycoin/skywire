@@ -45,8 +45,8 @@ func TestNativeDeskServing(t *testing.T) {
 		return w
 	}
 
-	t.Run("GET /desk serves the desk shell in native mode", func(t *testing.T) {
-		w := get("/desk")
+	t.Run("GET / serves the desk shell in native mode (the desk IS the UI)", func(t *testing.T) {
+		w := get("/")
 		if w.Code != http.StatusOK {
 			t.Fatalf("status=%d, want 200", w.Code)
 		}
@@ -59,18 +59,18 @@ func TestNativeDeskServing(t *testing.T) {
 		if !strings.Contains(body, "native: true") {
 			t.Error("page lacks the native-mode marker (native: true)")
 		}
-		if !strings.Contains(body, "dashboardURL: '/#/?embed=1'") {
+		if !strings.Contains(body, "dashboardURL: '/dashboard#/?embed=1'") {
 			t.Error("page lacks the same-origin dashboard window URL")
 		}
 		// The shell is assembled from the SAME assets the dashboard injection
-		// uses (launcher providers) plus the shared desk boot.
+		// uses plus the shared desk boot.
 		for _, want := range []string{`src="/browse.js"`, `src="/skywire-browse-launcher.js"`, `src="/desk-boot.js"`, "skywireDeskBoot("} {
 			if !strings.Contains(body, want) {
 				t.Errorf("page lacks %s", want)
 			}
 		}
 		if !strings.Contains(body, pk.Hex()) {
-			t.Error("page lacks the injected local PK (launcher providers need it)")
+			t.Error("page lacks the injected local PK")
 		}
 		// The ONE-VISOR rule, as served bytes: the native desk page must not
 		// even reference the wasm-visor module or its loader.
@@ -81,17 +81,27 @@ func TestNativeDeskServing(t *testing.T) {
 		}
 	})
 
-	t.Run("Angular root still serves, with the launcher injection intact", func(t *testing.T) {
-		w := get("/")
+	t.Run("the old /desk path redirects to the root", func(t *testing.T) {
+		w := get("/desk")
+		if w.Code != http.StatusMovedPermanently {
+			t.Fatalf("status=%d, want 301", w.Code)
+		}
+		if loc := w.Header().Get("Location"); loc != "/" {
+			t.Errorf("Location=%q, want /", loc)
+		}
+	})
+
+	t.Run("Angular serves at /dashboard, with the launcher injection intact", func(t *testing.T) {
+		w := get("/dashboard")
 		if w.Code != http.StatusOK {
 			t.Fatalf("status=%d, want 200", w.Code)
 		}
 		body := w.Body.String()
 		if !strings.Contains(body, "ANGULAR") {
-			t.Error("Angular index no longer served at /")
+			t.Error("Angular index not served at /dashboard")
 		}
 		if !strings.Contains(body, `src="browse.js"`) || !strings.Contains(body, "__SKYWIRE_LOCAL_PK__") {
-			t.Error("index injection (browse launcher) missing — /desk must not disturb it")
+			t.Error("index injection (desk launcher) missing on the dashboard page")
 		}
 	})
 
