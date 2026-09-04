@@ -140,7 +140,7 @@ func (s *service) Run(ctx context.Context) error {
 		api.WhitelistPKs.Set(k)
 	}
 
-	a.OfficialServers = officialServersMap(cfg.OfficialServers)
+	a.OfficialServers = officialServersMap(officialServerPKs(cfg.OfficialServers))
 
 	resolvedMode, err := svcmode.ResolveMode(cfg.Mode, !sk.Null())
 	if err != nil {
@@ -330,6 +330,30 @@ func openStore(ctx context.Context, cfg *Config, log *logging.Logger) (store.Sto
 		dbConf.URL = store.DefaultURL
 	}
 	return store.NewStore(ctx, "redis", dbConf, log)
+}
+
+// officialServerPKs resolves the official-server allowlist. An explicitly
+// configured list (--official-servers, or official_servers in the config file)
+// wins outright; with none set the canonical deployment seed list is used, so a
+// server shipped in services-config.json is official by construction.
+//
+// Before this, the allowlist was maintained by hand alongside the seed list and
+// the two drifted: production had 7 of the 9 seeded servers listed plus 2 PKs
+// for servers that no longer exist, so two live deployment servers were served
+// to clients as "community" and were skipped by anyone running
+// connected_servers_type=official.
+func officialServerPKs(configured []string) []string {
+	if len(configured) > 0 {
+		return configured
+	}
+	pks := make([]string, 0, len(dmsg.Prod.DmsgServers))
+	for i := range dmsg.Prod.DmsgServers {
+		if dmsg.Prod.DmsgServers[i].Static.Null() {
+			continue
+		}
+		pks = append(pks, dmsg.Prod.DmsgServers[i].Static.Hex())
+	}
+	return pks
 }
 
 func officialServersMap(list []string) map[string]bool {
