@@ -186,9 +186,16 @@ func (c *countingConn) Write(p []byte) (int, error) {
 var errAllTunnelsDown = errors.New("all tunnels to the exit are down")
 
 // recvStampConn wraps a net.Conn to record the wall time of every successful
-// read. The keepalive loop reads the stamp as proof the remote is still
-// sending, so a tunnel mid-download is never retired just because its pong is
-// queued behind the download's own frames (both ride the same conn).
+// read AND write. The keepalive loop reads the stamp as proof the tunnel is
+// still moving bytes, so it is never retired mid-transfer just because its
+// ping/pong is queued behind the transfer's own frames (all ride the same
+// conn). Reads cover a download (the remote is sending); writes cover an
+// UPLOAD — there the tunnel receives nothing and the ping cannot get through
+// the saturated send queue, so send progress is the only liveness evidence
+// (measured live: a healthy 20MB upload retired at the hard-dead window ~112s
+// in). A write that merely lands in a dead conn's buffers stamps briefly, but
+// those buffers fill within seconds under load and the stamps stop — the
+// hard-dead window still ages out a genuinely dead tunnel.
 type recvStampConn struct {
 	net.Conn
 	stamp *atomic.Int64
@@ -196,6 +203,14 @@ type recvStampConn struct {
 
 func (c *recvStampConn) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
+	if n > 0 {
+		c.stamp.Store(time.Now().UnixNano())
+	}
+	return n, err
+}
+
+func (c *recvStampConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
 	if n > 0 {
 		c.stamp.Store(time.Now().UnixNano())
 	}
@@ -799,7 +814,7 @@ func (c *Client) sessionKeepAliveLoop() {
 				}
 				if now.Sub(lastAlive) >= sessionHardDeadWindow {
 					if c.appCl != nil {
-						c.appCl.Log().Warnf("No pong and no inbound bytes for %v (> hard-dead window); tunnel gone, retiring it", now.Sub(lastAlive).Truncate(time.Second))
+						c.appCl.Log().Warnf("No pong and no traffic either way for %v (> hard-dead window); tunnel gone, retiring it", now.Sub(lastAlive).Truncate(time.Second))
 					}
 					_ = s.Close() //nolint:errcheck
 					delete(lastPong, s)
