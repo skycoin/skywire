@@ -135,12 +135,21 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 
 	switch conf.AppName {
 	case skyenv.VPNServerName:
+		if !canAdvertiseExit {
+			return &emptyUpdater{}, false
+		}
 		return newServiceUpdater(
 			log,
 			servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN), f.httpClient(), f.ClientPublicIP),
 			f.HeartbeatInterval,
 		), true
 	case skyenv.SkysocksName:
+		// An exit registration promises clearnet egress; a build that cannot
+		// deliver it (js/wasm — see canAdvertiseExit) must stay out of the
+		// pool rather than hand the fleet a zombie exit.
+		if !canAdvertiseExit {
+			return &emptyUpdater{}, false
+		}
 		return newServiceUpdater(
 			log,
 			servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeSkysocks), f.httpClient(), f.ClientPublicIP),
