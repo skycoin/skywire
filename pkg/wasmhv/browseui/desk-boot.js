@@ -177,7 +177,7 @@
 				go.run(r.instance).catch(function (e) { console.error('desk host:', e); });
 				return Promise.all([
 					waitFor(function () { return globalThis.skywireShell; }, 'the shell'),
-					waitFor(function () { return globalThis.SkywireBrowse; }, 'browse.js'),
+					waitFor(function () { return globalThis.skywireDeskPanel; }, 'the desk panel'),
 					waitFor(function () { return typeof globalThis.WinBox === 'function'; }, 'the window manager'),
 				]);
 			});
@@ -201,41 +201,39 @@
 				if (/^[0-9a-f]{66}$/i.test(h)) return h + '.dmsg';
 				return h;
 			}
-			var panel = globalThis.SkywireBrowse.mountPanel(document, {
-				noTour: true, // the tour narrates the classic visor page
-				fetchDmsg: function (pkHost, method, path, body) {
-					if (viaResolver()) {
-						return globalThis.vnet.socksHttpFetch(RESOLVER_PORT, resolverHost(pkHost) + ':80', method, path, body, {});
-					}
-					return sv.fetchDmsg.apply(null, arguments);
-				},
-				dmsgStatus: function () {
-					// The visor's resolver listening IS mesh readiness for this
-					// page (dmsgweb waits on dmsg internally); without it fall
-					// back to the in-page core's own status.
-					if (viaResolver()) { return { dmsg_connected: true }; }
-					try { return sv.status() || {}; } catch (e) { return {}; }
-				},
-				serveContent: function (m) { return sv.serveContent(m); },
-				selfPK: function () {
-					// Sync by contract; served from a cache the poller below
-					// fills from THE visor's /api/about the moment its
-					// hypervisor listens. The in-page core's status() is only
-					// a fallback for a page that booted it.
-					if (deskSelfPK) return deskSelfPK;
-					try { return sv.status().pk || ''; } catch (e) { return ''; }
-				},
-				api: function (m, path, body) {
-					// The one visor's hypervisor API on the virtual loopback.
-					if (globalThis.vnet && globalThis.vnet.listening(hvPort)) {
-						return globalThis.vnet.httpFetch(hvPort, m, path, body, {}).then(function (r) {
-							return { status: r.status, body: new TextDecoder().decode(r.body) };
-						});
-					}
-					return sv.hvApi(m, path, body).then(function (r) {
-						return { status: r.status, body: new TextDecoder().decode(r.body) };
-					});
-				},
+			// The desk's browser transport: mesh fetches go through the RUNNING
+			// visor's resolver on the virtual loopback (the terminal instance —
+			// this page's own core never boots), falling back to the in-page
+			// core's providers for a page that booted it. Installed BEFORE any
+			// browser window opens so the loader's page-core default never
+			// takes hold (gobrowser-loader only fills __netscrapeFetch when
+			// nothing did).
+			globalThis.__netscrapeFetch = function (url) {
+				var u;
+				try { u = new URL(url, 'http://x/'); } catch (e) { return fetch(url); }
+				var mesh = /\.(dmsg|skysocks|skynet)$/i.test(u.hostname) || /^[0-9a-f]{66}$/i.test(u.hostname);
+				var path = (u.pathname || '/') + (u.search || '');
+				function respond(r) {
+					var h = new Headers();
+					if (r && r.headers) { try { for (var k in r.headers) h.set(k, r.headers[k]); } catch (e) { /* ignore */ } }
+					return new Response((r && r.body) || new Uint8Array(0), { status: (r && r.status) || 200, headers: h });
+				}
+				if (mesh && viaResolver()) {
+					return Promise.resolve(globalThis.vnet.socksHttpFetch(RESOLVER_PORT, resolverHost(u.hostname) + ':80', 'GET', path, null, {})).then(respond);
+				}
+				if (mesh && sv.fetchDmsg) {
+					return Promise.resolve(sv.fetchDmsg(u.hostname, 'GET', path, null)).then(respond);
+				}
+				if (sv.fetchClearnet) {
+					return Promise.resolve(sv.fetchClearnet('', 'GET', url, null)).then(respond);
+				}
+				return fetch(url);
+			};
+			// The engine-free desk chrome (taskbar + ☰). The dashboard entry
+			// points at the running visor's hypervisor UI over the vnet service
+			// worker's real /vnet/<port>/ URLs when available.
+			var panel = globalThis.skywireDeskPanel.mount(document, {
+				dashboardURL: '/vnet/' + hvPort + '/',
 			});
 			// selfPK cache: poll the visor's /api/about once its HV listens;
 			// re-check occasionally in case the operator restarts the visor
