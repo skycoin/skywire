@@ -376,3 +376,32 @@ func Open(root js.Value) {
 
 	addTab(startPage)
 }
+
+// Navigate loads url in the ACTIVE tab, recording it in that tab's history —
+// exactly what typing it in the address bar and pressing Go does. A no-op
+// before Open has mounted the browser or when no tab exists.
+//
+// It exists for hosts that drive the browser programmatically: a desk that
+// opens a browser window already pointed at a page (the skywire desk points
+// one at the hypervisor UI on its virtual loopback) needs an entry point that
+// is not a click.
+func Navigate(url string) {
+	if doc.IsUndefined() || active < 0 || active >= len(tabs) {
+		return
+	}
+	navigate(tabs[active], url)
+}
+
+// NewTab opens url in a new tab. With background true the current tab keeps
+// focus — the browser-style "open in background tab" a host uses to preload
+// secondary pages behind the one the user is looking at. A no-op before Open.
+func NewTab(url string, background bool) {
+	if doc.IsUndefined() {
+		return
+	}
+	prev := active
+	addTab(url)
+	if background && prev >= 0 && prev < len(tabs) {
+		activate(prev)
+	}
+}

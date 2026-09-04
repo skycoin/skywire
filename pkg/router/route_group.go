@@ -362,8 +362,8 @@ type RouteGroup struct {
 	// delayedAckArmed guards the one-shot delayed-ack timer (see
 	// scheduleDelayedAck): 1 while a timer is outstanding. Atomic.
 	delayedAckArmed int32
-	legMissed            map[uuid.UUID]int
-	inflightPings        map[int64]uuid.UUID
+	legMissed       map[uuid.UUID]int
+	inflightPings   map[int64]uuid.UUID
 	// legE2ELatency is the EWMA-smoothed END-TO-END round-trip latency per leg,
 	// keyed by transport ID (survives index shifts), folded from the
 	// leg-liveness pong. This is the leg's TRUE route latency (all hops), unlike

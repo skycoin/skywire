@@ -58,11 +58,11 @@ const (
 	// errAllTunnelsDown); self-heal re-dials within a few seconds, so waiting out
 	// that window recovers the chunk instead of truncating the whole download (the
 	// old 3 instant retries failed in microseconds and killed it).
-	rsChunkRetryBudget     = 15 * time.Second
+	rsChunkRetryBudget = 15 * time.Second
 	// rsChunkIdleTimeout is the per-read rolling deadline for a chunk BODY: a
 	// read that makes no progress for this long fails the attempt. Idle-based,
 	// not total — a slow chunk may take minutes and still complete.
-	rsChunkIdleTimeout = 15 * time.Second
+	rsChunkIdleTimeout     = 15 * time.Second
 	rsChunkRetryBackoff    = 100 * time.Millisecond
 	rsChunkRetryBackoffMax = 2 * time.Second
 	rsHeadLimit            = 64 << 10
