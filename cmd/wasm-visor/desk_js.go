@@ -19,6 +19,15 @@ import (
 	"github.com/0magnet/desk"
 	"github.com/0magnet/desk/panes/files"
 	"github.com/0magnet/netscrape"
+	winbox "github.com/0magnet/winbox-go"
+)
+
+// The desk's terminal window and the title of whatever tab is in front of it.
+// The first console opens the window; the rest join it as tabs, so shells
+// accumulate as tabs rather than as frames scattered over the desk.
+var (
+	termWin   *winbox.WinBox
+	termFront string
 )
 
 // funcPane adapts a mount function to desk.Pane for surfaces that own their
@@ -110,8 +119,11 @@ func installDesk() {
 			}
 			return nil
 		}),
-		// openConsole({title, initCmd, bg}): a terminal window, optionally
-		// running a first command; bg opens it minimized behind the rest.
+		// openConsole({title, initCmd, bg}): a terminal, optionally running a
+		// first command. The FIRST call opens the terminal window; every one
+		// after joins it as a tab, so a desk with three shells has one window
+		// and three tabs rather than three frames. bg leaves the new tab
+		// behind whatever was already in front.
 		"openConsole": js.FuncOf(func(_ js.Value, a []js.Value) any {
 			title, initCmd, bg := "terminal", "", false
 			if len(a) > 0 && a[0].Type() == js.TypeObject {
@@ -123,10 +135,27 @@ func installDesk() {
 				}
 				bg = a[0].Get("bg").Truthy()
 			}
+			if termWin != nil {
+				front := termFront
+				if err := desk.AddTabOpts(termWin, "terminal", desk.Options{Title: title}, initCmd); err == nil {
+					if bg && front != "" {
+						// Put the previously-front tab back; the new one is
+						// open, just not on top.
+						desk.ShowTab(termWin, front)
+					} else {
+						termFront = title
+					}
+					return nil
+				}
+				// The window is gone (closed): open a fresh one below rather
+				// than reporting an error for a terminal nobody can see.
+				termWin = nil
+			}
 			w, err := desk.LaunchOpts("terminal", desk.Options{Title: title}, initCmd)
 			if err != nil {
 				return err.Error()
 			}
+			termWin, termFront = w, title
 			if bg && w != nil {
 				w.Minimize()
 			}
