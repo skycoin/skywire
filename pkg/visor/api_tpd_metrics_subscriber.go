@@ -14,9 +14,13 @@
 package visor
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 )
 
 // ErrTPDMetricsNotReady is returned by FetchTransportMetricsCXO when
@@ -43,9 +47,88 @@ func (v *Visor) FetchTransportMetricsCXO(days int) ([]byte, time.Time, error) {
 	defer mgr.ReleaseFor(TabMetrics)
 
 	path := fmt.Sprintf("metrics/days/%d", days)
-	body, ts, ok := mgr.Get(FeedTPDMetrics, path)
-	if !ok || len(body) == 0 {
+	if body, ts, ok := mgr.Get(FeedTPDMetrics, path); ok && len(body) > 0 {
+		// Gunzip passes a raw body through unchanged, so this reads both the
+		// gzipped bodies the publisher writes now and any uncompressed ones
+		// still cached from an older TPD.
+		return cxoutils.Gunzip(body), ts, nil
+	}
+
+	// A window too large for one CXO object is published as
+	// "metrics/days/<n>/part/<NNNN>" leaves. Stitch them back into the single
+	// JSON array every caller of this function expects.
+	return v.joinTransportMetricParts(path)
+}
+
+// joinTransportMetricParts concatenates the part leaves under base into one
+// JSON array. Parts are spliced as bytes rather than decoded and re-encoded:
+// these windows run to tens of megabytes, and the caller only forwards the
+// array on.
+func (v *Visor) joinTransportMetricParts(base string) ([]byte, time.Time, error) {
+	mgr := v.CXOSubMgr()
+	if mgr == nil {
 		return nil, time.Time{}, ErrTPDMetricsNotReady
 	}
-	return body, ts, nil
+
+	type part struct {
+		path string
+		body []byte
+	}
+	var parts []part
+	var newest time.Time
+
+	mgr.Walk(FeedTPDMetrics, base+"/part/", func(p string, body []byte) bool {
+		if len(body) == 0 {
+			return true
+		}
+		// Walk lends the snapshot's bytes; Gunzip of a raw body returns that
+		// same slice, so copy before the callback returns.
+		decoded := cxoutils.Gunzip(body)
+		parts = append(parts, part{path: p, body: append([]byte(nil), decoded...)})
+		if ts, ok := mgr.SyncedAt(FeedTPDMetrics, p); ok && ts.After(newest) {
+			newest = ts
+		}
+		return true
+	})
+	if len(parts) == 0 {
+		return nil, time.Time{}, ErrTPDMetricsNotReady
+	}
+	// Walk iterates a map, so order is arbitrary; the zero-padded part index
+	// makes a lexical sort the publication order.
+	sort.Slice(parts, func(i, j int) bool { return parts[i].path < parts[j].path })
+
+	bodies := make([][]byte, len(parts))
+	for i, p := range parts {
+		bodies[i] = p.body
+	}
+	joined, err := spliceJSONArrays(bodies)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("%w: %v", ErrTPDMetricsNotReady, err)
+	}
+	return joined, newest, nil
+}
+
+// spliceJSONArrays concatenates JSON arrays into one array at the byte level.
+// Splicing a body that is not an array would produce silently malformed JSON,
+// so that is an error rather than something the caller discovers downstream.
+func spliceJSONArrays(bodies [][]byte) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	first := true
+	for i, body := range bodies {
+		inner := bytes.TrimSpace(body)
+		if len(inner) < 2 || inner[0] != '[' || inner[len(inner)-1] != ']' {
+			return nil, fmt.Errorf("part %d is not a JSON array", i)
+		}
+		if inner = bytes.TrimSpace(inner[1 : len(inner)-1]); len(inner) == 0 {
+			continue
+		}
+		if !first {
+			buf.WriteByte(',')
+		}
+		buf.Write(inner)
+		first = false
+	}
+	buf.WriteByte(']')
+	return buf.Bytes(), nil
 }

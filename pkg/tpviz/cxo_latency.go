@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 )
 
 // latencyMetricsDays is the day window read from the feed. The publisher
@@ -90,7 +92,11 @@ func (s *Server) tryCXOLatency() (*LatencyGraph, bool) {
 	prefix := fmt.Sprintf("metrics/days/%d", latencyMetricsDays)
 	ok := mgr.Walk(CXOFeedTPDMetrics, prefix, func(_ string, body []byte) bool {
 		var metrics []cxoTransportMetric
-		if err := json.Unmarshal(body, &metrics); err != nil {
+		// The publisher gzips; Gunzip passes a raw body through unchanged. A
+		// long window arrives as several "<prefix>/part/<NNNN>" leaves, which
+		// this prefix Walk already visits — taking the minimum per visor pair
+		// is the same answer whether the records came in one body or several.
+		if err := json.Unmarshal(cxoutils.Gunzip(body), &metrics); err != nil {
 			return true
 		}
 		for i := range metrics {
