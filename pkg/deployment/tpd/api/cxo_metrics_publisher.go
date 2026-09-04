@@ -3,16 +3,34 @@
 // CXO publisher for the network-wide transport-metrics aggregate.
 // On a fixed cadence (default 60s) the publisher recomputes the
 // metrics for a small set of day windows (1, 7, 30) and writes the
-// JSON-encoded []store.TransportMetric to a TreeStore path
+// gzipped JSON-encoded []store.TransportMetric to a TreeStore path
 //
 //	metrics/days/<n>
 //
 // Subscribers (the hvui's Transports tab via the visor's CXO
-// subscriber) watch the feed instead of HTTP-polling /metrics. CXO's
-// content-addressing means the publisher only re-encodes subtrees
-// that actually changed, so unchanged transport rows produce a
-// stable Root and the wire footprint is the delta, not the full
-// dataset.
+// subscriber) watch the feed instead of HTTP-polling /metrics.
+//
+// Two properties of CXO shape how the body is written:
+//
+//   - CXO stores and propagates object bytes verbatim — it does not
+//     compress. Bodies are gzipped here, as every sibling TPD
+//     publisher already does (see cxo_uptime_publisher.go and
+//     cxo_all_transports_publisher.go). Readers use cxoutils.Gunzip,
+//     which passes a raw body through unchanged.
+//
+//   - An object over skyobject MaxObjectSize (16 MB) is refused at
+//     Put time, and refusing one window kills the whole feed: no
+//     Root is ever published and every subscriber sits in "timeout
+//     waiting for Root" forever. Measured on production, even the
+//     1-day window is 16.02 MB of JSON — every window was over.
+//     Gzip (~4x on this data) carries the short windows; long
+//     windows are additionally split across
+//
+//     metrics/days/<n>/part/<NNNN>
+//
+//     leaves so no data is dropped. Readers stitch the parts back
+//     into one array; the prefix Walk that pkg/tpviz already used
+//     picks them up unchanged.
 package api
 
 import (
@@ -25,6 +43,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -74,6 +93,10 @@ type MetricsCXOPublisher struct {
 
 	mu        sync.Mutex
 	lastError error
+	// lastParts records how many part leaves each day window was last
+	// published as (0 = a single leaf), so the next cycle knows which
+	// leaves to retire.
+	lastParts map[int]int
 }
 
 // StartMetricsCXOPublisher constructs a publisher backed by the
@@ -102,11 +125,12 @@ func StartMetricsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 
 	pubCtx, cancel := context.WithCancel(ctx)
 	mp := &MetricsCXOPublisher{
-		api:    api,
-		pub:    pub,
-		log:    log,
-		cancel: cancel,
-		done:   make(chan struct{}),
+		api:       api,
+		pub:       pub,
+		log:       log,
+		cancel:    cancel,
+		done:      make(chan struct{}),
+		lastParts: make(map[int]int),
 	}
 	if logger != nil {
 		logger.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgTPDMetricsCXOPort).
@@ -158,15 +182,16 @@ func (m *MetricsCXOPublisher) loop(ctx context.Context) {
 	wg.Wait()
 }
 
-// maxPublishBody bounds a single published body. CXO refuses an object over
-// skyobject.Config.MaxObjectSize (16 MB by default) — and refuses it at Put
-// time, so an oversized window does not merely lose that window: the feed never
-// gets a Root at all, and every subscriber sits in "timeout waiting for Root"
-// forever. That is what was happening in production: the whole tpd-metrics feed
-// was dead, silently, because one window did not fit.
-//
-// The margin below 16 MB covers the encoding overhead CXO adds around the JSON.
+// maxPublishBody bounds a single published body, measured on the GZIPPED bytes
+// since those are what CXO stores. The margin below skyobject's 16 MB
+// MaxObjectSize covers the encoding overhead CXO adds around the payload.
 const maxPublishBody = 12 * 1024 * 1024
+
+// partTargetBody is what a split aims each part at. Sizing the split from the
+// measured compressed size and then aiming well under the hard cap means a part
+// whose records happen to compress worse than the window average still lands
+// inside it, so the verify-and-halve pass below rarely has to run.
+const partTargetBody = 8 * 1024 * 1024
 
 func (m *MetricsCXOPublisher) publishWindow(ctx context.Context, days int) {
 	query := store.MetricsQuery{
@@ -185,39 +210,122 @@ func (m *MetricsCXOPublisher) publishWindow(ctx context.Context, days int) {
 		m.recordError(err)
 		return
 	}
-	body, err := json.Marshal(metrics)
-	// Oversized body: re-fetch without the per-day per-edge bandwidth, which is
-	// the bulk of a long window, and publish the smaller shape rather than
-	// nothing. Subscribers that only read type/live/edges/latency (the
-	// visualizer's latency view) are then served; anything wanting bandwidth
-	// still has the HTTP endpoint. Partial data beats a feed with no Root.
-	if err == nil && len(body) > maxPublishBody {
-		m.log.WithField("days", days).WithField("bytes", len(body)).
-			Warn("metrics body exceeds the CXO object limit; republishing this window without per-edge bandwidth")
-		query.Bandwidth = false
-		if reduced, rerr := m.api.store.GetAllTransportMetrics(ctx, query); rerr == nil {
-			if rbody, merr := json.Marshal(reduced); merr == nil {
-				body, err = rbody, nil
-			}
-		}
-		if len(body) > maxPublishBody {
-			m.log.WithField("days", days).WithField("bytes", len(body)).
-				Error("metrics body still exceeds the CXO object limit without bandwidth; skipping this window")
-			m.recordError(fmt.Errorf("metrics/days/%d: body %d bytes exceeds max %d", days, len(body), maxPublishBody))
-			return
-		}
-	}
+
+	bodies, err := gzipParts(metrics, maxPublishBody)
 	if err != nil {
 		m.log.WithError(err).WithField("days", days).Warn("metrics marshal failed")
 		m.recordError(err)
 		return
 	}
-	path := metricsPath(days)
-	if err := m.pub.Put(path, body); err != nil {
-		m.log.WithError(err).WithField("path", path).Warn("publisher Put failed")
+
+	base := metricsPath(days)
+	m.mu.Lock()
+	prevParts := m.lastParts[days]
+	m.mu.Unlock()
+
+	// Deletes are emitted before puts: PutBatch applies ops in order, and a
+	// path cannot be a leaf and a sub-tree at once. Switching a window between
+	// the two forms therefore has to retire the old form first or the put
+	// fails with ErrPathConflict.
+	var deletes, puts []treestore.PutOp
+	staleFrom := len(bodies)
+	if len(bodies) == 1 {
+		puts = append(puts, treestore.PutOp{Path: base, Value: bodies[0]})
+		staleFrom = 0 // every part path from a previous split is now stale
+	} else {
+		deletes = append(deletes, treestore.PutOp{Path: base})
+		for i, b := range bodies {
+			puts = append(puts, treestore.PutOp{Path: metricsPartPath(days, i), Value: b})
+		}
+	}
+	// A shrinking network splits into fewer parts than last time. Without this
+	// the leftover high-index leaves stay in the tree and a prefix Walk keeps
+	// serving records that no longer exist.
+	for i := staleFrom; i < prevParts; i++ {
+		deletes = append(deletes, treestore.PutOp{Path: metricsPartPath(days, i)})
+	}
+
+	if err := m.pub.PutBatch(append(deletes, puts...)); err != nil {
+		m.log.WithError(err).WithField("path", base).Warn("publisher PutBatch failed")
 		m.recordError(err)
 		return
 	}
+
+	nowParts := 0
+	if len(bodies) > 1 {
+		nowParts = len(bodies)
+		m.log.WithField("days", days).WithField("parts", nowParts).
+			Debug("metrics window exceeded the CXO object limit; published as parts")
+	}
+	m.mu.Lock()
+	m.lastParts[days] = nowParts
+	m.mu.Unlock()
+}
+
+// gzipParts encodes metrics as one or more gzipped JSON arrays, each at most
+// max bytes. One part is the normal case; a window only splits when even
+// compressed it will not fit in a single CXO object.
+func gzipParts(metrics []store.TransportMetric, max int) ([][]byte, error) {
+	whole, err := json.Marshal(metrics)
+	if err != nil {
+		return nil, err
+	}
+	if gz := cxoutils.Gzip(whole); len(gz) <= max {
+		return [][]byte{gz}, nil
+	}
+
+	var out [][]byte
+	n := len(whole)/partTargetBody + 1
+	for _, part := range splitEvenly(metrics, n) {
+		if err := appendGzipped(&out, part, max); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// appendGzipped gzips part, halving it until every piece fits in max. A single
+// record that will not fit on its own is appended anyway rather than silently
+// dropped — the Put then fails loudly, which is the honest outcome.
+func appendGzipped(out *[][]byte, part []store.TransportMetric, max int) error {
+	if len(part) == 0 {
+		return nil
+	}
+	body, err := json.Marshal(part)
+	if err != nil {
+		return err
+	}
+	if gz := cxoutils.Gzip(body); len(gz) <= max || len(part) == 1 {
+		*out = append(*out, gz)
+		return nil
+	}
+	mid := len(part) / 2
+	if err := appendGzipped(out, part[:mid], max); err != nil {
+		return err
+	}
+	return appendGzipped(out, part[mid:], max)
+}
+
+func splitEvenly(metrics []store.TransportMetric, n int) [][]store.TransportMetric {
+	if len(metrics) == 0 {
+		return nil
+	}
+	if n < 1 {
+		n = 1
+	}
+	if n > len(metrics) {
+		n = len(metrics)
+	}
+	size := (len(metrics) + n - 1) / n
+	out := make([][]store.TransportMetric, 0, n)
+	for i := 0; i < len(metrics); i += size {
+		end := i + size
+		if end > len(metrics) {
+			end = len(metrics)
+		}
+		out = append(out, metrics[i:end])
+	}
+	return out
 }
 
 func (m *MetricsCXOPublisher) recordError(err error) {
@@ -242,4 +350,12 @@ func MetricsPath(days int) string { return metricsPath(days) }
 
 func metricsPath(days int) string {
 	return fmt.Sprintf("metrics/days/%d", days)
+}
+
+// MetricsPartPath returns the path of one part of a split window. Zero-padded
+// so a reader that sorts the paths lexically gets them in publication order.
+func MetricsPartPath(days, part int) string { return metricsPartPath(days, part) }
+
+func metricsPartPath(days, part int) string {
+	return fmt.Sprintf("%s/part/%04d", metricsPath(days), part)
 }
