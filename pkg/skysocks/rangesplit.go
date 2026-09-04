@@ -59,6 +59,10 @@ const (
 	// that window recovers the chunk instead of truncating the whole download (the
 	// old 3 instant retries failed in microseconds and killed it).
 	rsChunkRetryBudget     = 15 * time.Second
+	// rsChunkIdleTimeout is the per-read rolling deadline for a chunk BODY: a
+	// read that makes no progress for this long fails the attempt. Idle-based,
+	// not total — a slow chunk may take minutes and still complete.
+	rsChunkIdleTimeout = 15 * time.Second
 	rsChunkRetryBackoff    = 100 * time.Millisecond
 	rsChunkRetryBackoffMax = 2 * time.Second
 	rsHeadLimit            = 64 << 10
@@ -482,9 +486,26 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	if resp.StatusCode != http.StatusPartialContent {
 		return nil, fmt.Errorf("chunk %d-%d: status %d (validator changed?)", start, end, resp.StatusCode)
 	}
+	// Body read under a ROLLING deadline: the single rsProbeTimeout set above
+	// (right for failing a dead stream's handshake fast) also covered the whole
+	// multi-MB body, making completion mathematically impossible below
+	// ~chunkSize/rsProbeTimeout per stream — every chunk read a few MB, timed
+	// out, was discarded and refetched, and the sequential rescue ended up
+	// carrying the file (measured live: 48.5MB received for a 20MB download,
+	// 2.4x waste). Rolling the deadline forward on every read means only a
+	// genuinely STALLED stream fails; a slow-but-moving one completes.
 	buf := make([]byte, end-start+1)
-	if _, err := io.ReadFull(resp.Body, buf); err != nil {
-		return nil, err
+	got := 0
+	for got < len(buf) {
+		_ = st.SetReadDeadline(time.Now().Add(rsChunkIdleTimeout)) //nolint:errcheck
+		n, rerr := resp.Body.Read(buf[got:])
+		got += n
+		if rerr != nil {
+			if got == len(buf) && rerr == io.EOF {
+				break
+			}
+			return nil, rerr
+		}
 	}
 	return buf, nil
 }
