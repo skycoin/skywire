@@ -108,6 +108,17 @@ const (
 	// subscribe to one TPD feed without dragging in the others.
 	DmsgTPDAllTransportsCXOPort uint16 = 55
 
+	// DmsgTPDStatsCXOPort is the DMSG port the TPD's CXO network-aggregate
+	// stats publisher listens on. It carries the sub-kilobyte reductions the
+	// bulk feeds are otherwise downloaded to compute — the /all-transports/stats
+	// by-type counts and the /version fleet histogram — so a chart costs a few
+	// hundred bytes every few seconds instead of megabytes every few minutes.
+	// Distinct port from DmsgTPDAllTransportsCXOPort so a dashboard can hold
+	// the tiny feed continuously without dragging in the 8 MB snapshot.
+	// Numbered 73 (the 50–55 CXO block and 56–72 are all taken); the value
+	// only needs to be collision-free, which ports_test guards.
+	DmsgTPDStatsCXOPort uint16 = 73
+
 	// DmsgDMSGDRegistrationCXOPort is the dmsg port the dmsg-discovery's CXO
 	// client-entry REGISTRATION aggregator binds (and each visor's entry
 	// publisher binds for the reverse subscribe). A visor publishes its own
