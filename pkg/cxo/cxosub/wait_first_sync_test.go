@@ -7,15 +7,18 @@ import (
 	"time"
 )
 
-// newFeedForTest registers a feed in the manager's map so the sync-state
-// accessors have something to read, without standing up a live subscription.
-func newFeedForTest(m *Manager, fk Feed) *managedFeed {
+// newFeedForTest registers FeedTPDMetrics in the manager's map so the
+// sync-state accessors have something to read, without standing up a live
+// subscription. Which feed it is does not matter to these tests — they
+// exercise the wait, not the routing — so the constant stays here rather
+// than at four identical call sites.
+func newFeedForTest(m *Manager) *managedFeed {
 	f := &managedFeed{}
 	m.mu.Lock()
 	if m.feeds == nil {
 		m.feeds = map[Feed]*managedFeed{}
 	}
-	m.feeds[fk] = f
+	m.feeds[FeedTPDMetrics] = f
 	m.mu.Unlock()
 	return f
 }
@@ -30,7 +33,7 @@ func markSynced(f *managedFeed) {
 // a caller anything on the hot path.
 func TestWaitForFirstSyncReturnsImmediatelyWhenAlreadySynced(t *testing.T) {
 	m := NewManager(Deps{}, 0)
-	f := newFeedForTest(m, FeedTPDMetrics)
+	f := newFeedForTest(m)
 	markSynced(f)
 
 	start := time.Now()
@@ -48,7 +51,7 @@ func TestWaitForFirstSyncReturnsImmediatelyWhenAlreadySynced(t *testing.T) {
 // subscriber mid-fill — so the feed never became readable through that path.
 func TestWaitForFirstSyncPicksUpASyncThatLands(t *testing.T) {
 	m := NewManager(Deps{}, 0)
-	f := newFeedForTest(m, FeedTPDMetrics)
+	f := newFeedForTest(m)
 
 	go func() {
 		time.Sleep(600 * time.Millisecond)
@@ -64,7 +67,7 @@ func TestWaitForFirstSyncPicksUpASyncThatLands(t *testing.T) {
 // blocking forever — the caller still has an HTTP fallback to reach for.
 func TestWaitForFirstSyncGivesUpAtTimeout(t *testing.T) {
 	m := NewManager(Deps{}, 0)
-	newFeedForTest(m, FeedTPDMetrics)
+	newFeedForTest(m)
 
 	start := time.Now()
 	if m.WaitForFirstSync(context.Background(), FeedTPDMetrics, 700*time.Millisecond) {
@@ -75,10 +78,10 @@ func TestWaitForFirstSyncGivesUpAtTimeout(t *testing.T) {
 	}
 }
 
-// Cancelling the caller's context must abandon the wait promptly.
+// Canceling the caller's context must abandon the wait promptly.
 func TestWaitForFirstSyncHonorsContextCancellation(t *testing.T) {
 	m := NewManager(Deps{}, 0)
-	newFeedForTest(m, FeedTPDMetrics)
+	newFeedForTest(m)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
