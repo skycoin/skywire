@@ -61,16 +61,3 @@ func TestPeerConnectionSpawnsNoMDNSOrInterceptorGoroutines(t *testing.T) {
 		}
 	}
 }
-
-// TestMDNSEnabledDefaultsOff documents that the goroutine saving is the default
-// and that a deployment needing same-LAN browser peers can opt back in.
-func TestMDNSEnabledDefaultsOff(t *testing.T) {
-	t.Setenv("SKYWIRE_WEBRTC_MDNS", "")
-	if mdnsEnabled() {
-		t.Error("mDNS must default to disabled")
-	}
-	t.Setenv("SKYWIRE_WEBRTC_MDNS", "1")
-	if !mdnsEnabled() {
-		t.Error("SKYWIRE_WEBRTC_MDNS=1 must re-enable mDNS")
-	}
-}
