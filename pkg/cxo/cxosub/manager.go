@@ -717,6 +717,51 @@ func (m *Manager) LastSync(feed Feed) time.Time {
 	return f.lastSyncAt
 }
 
+// WaitForFirstSync blocks until the feed has completed at least one sync
+// cycle, or until timeout elapses or ctx is canceled. Reports whether a
+// sync completed.
+//
+// A caller that has just AcquireFor'd a feed and found its cache empty
+// cannot tell "this feed is empty" from "the first fill is still in
+// flight". Returning the miss immediately makes the two look identical
+// and, worse, releases the reference — so the grace-period teardown
+// closes the subscriber mid-fill and the next call starts over from
+// nothing. A feed whose first sync takes longer than one caller's
+// patience then never becomes readable through that path at all, no
+// matter how many times it is retried. That is what made the tpd-metrics
+// feed (tens of megabytes across many leaves) look permanently dead to
+// `cli visor cxo fetch` while it was in fact publishing correctly and
+// syncing fine for a consumer that held the reference open.
+//
+// The caller must keep its AcquireFor reference held across this call;
+// otherwise the cycle it is waiting on is exactly the one being torn
+// down.
+func (m *Manager) WaitForFirstSync(ctx context.Context, feed Feed, timeout time.Duration) bool {
+	if m == nil {
+		return false
+	}
+	if !m.LastSync(feed).IsZero() {
+		return true
+	}
+	deadline := time.Now().Add(timeout)
+	// Poll rather than plumb a condition variable through the feed state:
+	// this runs once on a cold cache, not on the hot path.
+	const pollEvery = 250 * time.Millisecond
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(pollEvery):
+		}
+		if !m.LastSync(feed).IsZero() {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+	}
+}
+
 // Pin keeps a feed's sync cycle running continuously by taking one
 // permanent reference: the refcount never falls to zero, so the
 // grace-period teardown never fires. Use it for a feed a core subsystem
