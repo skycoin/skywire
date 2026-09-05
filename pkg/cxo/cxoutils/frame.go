@@ -24,12 +24,13 @@ package cxoutils
 
 // FrameGzip wraps payload as [version byte][gzip(payload)]. Callers pick
 // a per-feed version const; readers compare it in UnframeGzip and branch.
+// Built by appending onto the one-byte version slice rather than by
+// pre-sizing with make(0, 1+len(gz)): the payload is an untrusted leaf body,
+// so `1 + len(gz)` is a size computation over an attacker-influenced length,
+// which CodeQL flags as go/allocation-size-overflow. append reaches the same
+// single allocation without the arithmetic.
 func FrameGzip(version byte, payload []byte) []byte {
-	gz := Gzip(payload)
-	out := make([]byte, 0, 1+len(gz))
-	out = append(out, version)
-	out = append(out, gz...)
-	return out
+	return append([]byte{version}, Gzip(payload)...)
 }
 
 // UnframeGzip splits a FrameGzip blob into its version byte and the
