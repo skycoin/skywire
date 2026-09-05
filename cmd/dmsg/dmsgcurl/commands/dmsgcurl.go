@@ -42,6 +42,7 @@ var (
 	dmsgcurlOutput string
 	replace        bool
 	proxyAddr      string
+	anyServer      bool
 	dialer         = proxy.Direct //nolint unused
 	err            error
 )
@@ -56,6 +57,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&replace, "replace", "r", false, "replace existing file with new downloaded")
 	RootCmd.Flags().IntVarP(&dmsgcurlTries, "try", "t", 1, "download attempts (0 unlimits)")
 	RootCmd.Flags().IntVarP(&dmsgcurlWait, "wait", "w", 0, "time to wait between requests")
+	RootCmd.Flags().BoolVar(&anyServer, "any-server", false, "if the destination is in no discovery and was never seeded, try reaching it through every dmsg server (opens a session to each; off by default)")
 	RootCmd.Flags().StringVarP(&dmsgcurlAgent, "agent", "a", "dmsgcurl/"+buildinfo.Version(), "identify as `AGENT`")
 	if os.Getenv("DMSGCURL_SK") != "" {
 		sk.Set(os.Getenv("DMSGCURL_SK")) //nolint
@@ -141,6 +143,14 @@ var RootCmd = &cobra.Command{
 				Transport: transport,
 			}
 			ctx = context.WithValue(ctx, "socks5_proxy", proxyAddr) //nolint
+		}
+
+		// Opt into the all-servers sweep for this invocation only. The normal dial
+		// ladder reaches a destination that is in the discovery, was seeded, or sits
+		// on a server we already hold a session to; --any-server covers the
+		// remaining case by establishing a session to every server in turn.
+		if anyServer {
+			ctx = dmsg.WithServerSweep(ctx)
 		}
 
 		cErr = handleRequest(ctx, pk, sk, httpClient, parsedURL, dmsgcurlData)
