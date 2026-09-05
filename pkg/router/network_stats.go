@@ -2,6 +2,7 @@
 package router
 
 import (
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -69,14 +70,44 @@ func (s *networkStats) AddBandwidthReceived(amount uint64) {
 }
 
 func (s *networkStats) RemoteThroughput() int64 {
+	return s.remoteThroughputAt(time.Now().UTC())
+}
+
+// remoteThroughputAt is RemoteThroughput with the sampling instant injected, so
+// the zero-width and backwards-clock windows can be tested deterministically
+// instead of racing the real clock.
+func (s *networkStats) remoteThroughputAt(now time.Time) int64 {
+
 	s.bandwidthReceivedRecStartMu.Lock()
-	timePassed := time.Now().UTC().Sub(s.bandwidthReceivedRecStart)
-	s.bandwidthReceivedRecStart = time.Now().UTC()
+	timePassed := now.Sub(s.bandwidthReceivedRecStart)
+	// Only open a new sampling window when this one had measurable width. Two
+	// calls inside a single clock tick — routine on Windows, whose timer
+	// granularity is coarse — would otherwise both divide by zero AND discard
+	// the bytes counted so far. Leaving the start time and the accumulator
+	// alone lets the next call measure the wider window instead.
+	if timePassed > 0 {
+		s.bandwidthReceivedRecStart = now
+	}
 	s.bandwidthReceivedRecStartMu.Unlock()
 
-	bandwidth := atomic.SwapUint64(&s.bandwidthReceived, 0)
+	if timePassed <= 0 {
+		return 0
+	}
 
+	bandwidth := atomic.SwapUint64(&s.bandwidthReceived, 0)
 	throughput := float64(bandwidth) / timePassed.Seconds()
+
+	// Go leaves float64->int64 UNDEFINED for NaN and for values outside int64's
+	// range; on amd64 it yields math.MinInt64. A zero-width window therefore used
+	// to report a large NEGATIVE throughput, and this value does not stay local:
+	// it is written into the ping packet sent to the peer (MakePingPacket), so
+	// the garbage propagated into the remote's view of the leg.
+	if math.IsNaN(throughput) || throughput <= 0 {
+		return 0
+	}
+	if throughput >= math.MaxInt64 {
+		return math.MaxInt64
+	}
 
 	return int64(throughput)
 }
