@@ -8,9 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/0magnet/got"
 	"github.com/spf13/cobra"
-
-	"github.com/skycoin/skywire/pkg/got"
 )
 
 var (
