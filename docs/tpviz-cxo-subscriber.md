@@ -24,6 +24,7 @@ PR #3388 patched it via HTTP-over-dmsg; this doc is the proper CXO version.
   | `FeedSDServices` | SD | `DmsgSDServicesCXOPort` (53) | `services/` | services entries |
   | `FeedDMSGDClientsByServer` | DMSG-D | `DmsgDMSGDClientsByServerCXOPort` | `clients-by-server/` | client entries |
   | `FeedTPDAllTransports` | TPD | `DmsgTPDAllTransportsCXOPort` | `transports/all/` | all-transports snapshot |
+  | `FeedTPDStats` | TPD | `DmsgTPDStatsCXOPort` (73) | `stats/` | network aggregates (`stats/network`, `stats/versions`) |
 - `pkg/visor/cxo_subscription_manager.go` (800 lines) implements the intermittent
   subscriber: `syncOnce` (subscribe/snapshot/unsubscribe), `AcquireForTab` /
   `ReleaseForTab` grace batching, `Get`/`Walk`, `feedSpec` (feed → pk/port/prefix
