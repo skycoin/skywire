@@ -56,12 +56,25 @@ func init() {
 		"hostname": {"print the hostname", runHostname},
 		"help":     {"list available commands", runHelp},
 	}
+
+	// callHandler renames help to websh-help so that interp's own `help`
+	// builtin — which it recognizes and does not implement — does not swallow
+	// it first. The rename has to resolve to something on the way back out,
+	// or the command it was protecting is the one command that never runs.
+	// It is not in AppletNames: `help` is what a person types, and listing
+	// both would be listing the workaround.
+	applets["websh-help"] = applets["help"]
 }
 
 // AppletNames returns the registered applet names, sorted.
 func AppletNames() []string {
 	names := make([]string, 0, len(applets))
 	for name := range applets {
+		// websh-help is the alias callHandler renames help to, not a command
+		// anybody types. Listing it would be listing the workaround.
+		if name == "websh-help" {
+			continue
+		}
 		names = append(names, name)
 	}
 	sort.Strings(names)

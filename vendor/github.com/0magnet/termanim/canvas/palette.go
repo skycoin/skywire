@@ -2,14 +2,14 @@ package canvas
 
 import "github.com/gdamore/tcell/v3"
 
-// Palette is a 256-entry colour ramp indexed by intensity.
+// Palette is a 256-entry color ramp indexed by intensity.
 //
-// Ramps are built once and looked up per pixel. Computing a colour per pixel
+// Ramps are built once and looked up per pixel. Computing a color per pixel
 // per frame would be a needless multiply on every one of tens of thousands of
 // pixels, thirty times a second.
 type Palette [256]tcell.Color
 
-// Stop is one control point in a ramp: a position from 0 to 1 and the colour
+// Stop is one control point in a ramp: a position from 0 to 1 and the color
 // the ramp passes through there.
 type Stop struct {
 	At      float64
