@@ -88,6 +88,8 @@ func gatherStatsTUI() statsTUIData {
 		d.Liveness = livenessToTUIDays(series)
 	}
 
+	d.Dmsg = gatherDmsgStats()
+
 	return d
 }
 
