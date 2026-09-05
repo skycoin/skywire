@@ -277,6 +277,15 @@ type Visor struct {
 	// initStats fell back to the combined telemetry feed.
 	tplistCXOPub *treestore.Publisher
 
+	// regCXOPub is the registration-over-CXO publisher (this visor's own
+	// signed discovery entry, on DmsgDMSGDRegistrationCXOPort) — retained so
+	// CXOFeedStates can surface its allowlist and, critically, its DENIED
+	// subscribers. Without that, a dmsg-discovery whose subscribe is refused
+	// is invisible: the visor logs nothing, dmsgd logs only the generic
+	// "subscribe rejected", and registration silently stays on the HTTP PUT
+	// path this feed exists to replace. Guarded by cxoUserFeedsMu.
+	regCXOPub *treestore.Publisher
+
 	// gatedCXOFeeds registers the visor's service-consumed CXO publishers
 	// (stats, tp-list, registration) together with the consuming service's
 	// PK so their subscriber allowlists can be recomputed and re-applied
