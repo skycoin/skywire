@@ -263,7 +263,13 @@ func RenderStatsANSI(d statsTUIData) string {
 	// #4533), so it must not be presented as the uptime figure rewards use.
 	if d.LivenessErr != "" {
 		b.WriteString(tuiMissing("VISORS ONLINE", d.LivenessErr) + "\n")
-	} else if len(d.Liveness) > 0 {
+	} else if len(d.Liveness) == 0 {
+		// Neither data nor an error means nothing even attempted to fetch it.
+		// Rendering nothing at all is the one outcome this design must not
+		// produce: an absent section is indistinguishable from a section that
+		// was never meant to be there. Say so instead.
+		b.WriteString(tuiMissing("VISORS ONLINE", "no data returned") + "\n")
+	} else {
 		var series []float64
 		var labels []string
 		samples := 0
