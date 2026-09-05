@@ -18,6 +18,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
+	"github.com/0magnet/calvin"
 	skydexclient "github.com/skycoin/skycoin/cmd/skydex-client/commands"
 	skymarket "github.com/skycoin/skycoin/src/skydex/market"
 	"github.com/spf13/cobra"
@@ -28,7 +29,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"

@@ -9,6 +9,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
+	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
 
 	ar "github.com/skycoin/skywire/cmd/svc/address-resolver/commands"
@@ -26,7 +27,6 @@ import (
 	tps "github.com/skycoin/skywire/cmd/svc/transport-setup/commands"
 	ut "github.com/skycoin/skywire/cmd/svc/uptime-tracker/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 	_ "github.com/skycoin/skywire/pkg/services/ar"
 	_ "github.com/skycoin/skywire/pkg/services/dmsgdisc"
 	_ "github.com/skycoin/skywire/pkg/services/dmsgsrv"

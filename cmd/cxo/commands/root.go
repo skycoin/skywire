@@ -5,9 +5,8 @@ import (
 	"log"
 	"os"
 
+	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
-
-	"github.com/skycoin/skywire/pkg/calvin"
 )
 
 // RootCmd is the root cobra command for cxo

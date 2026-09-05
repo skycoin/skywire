@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
