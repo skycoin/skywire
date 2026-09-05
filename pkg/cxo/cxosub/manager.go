@@ -76,9 +76,9 @@ const (
 	// HTTP-polling /all-transports.
 	FeedTPDAllTransports
 	// FeedTPDStats is TPD's network-aggregate stats publisher
-	// (stats/network, stats/versions). Sub-kilobyte reductions
-	// republished every few seconds — the feed a chart reads instead
-	// of downloading a bulk snapshot to reduce it locally.
+	// (stats/network, stats/versions, stats/daily). Small reductions
+	// republished on a timer — the feed a chart reads instead of
+	// downloading a bulk snapshot to reduce it locally.
 	FeedTPDStats
 )
 
@@ -152,6 +152,14 @@ const (
 	// tab so holding it does not drag in the ~8 MB all-transports
 	// snapshot TabCLITransports carries.
 	TabNetworkStats
+	// TabTransportMetrics is the consumer of TPD's per-transport
+	// metrics feed ALONE — the reward server's statistics pages, which
+	// reduce the per-day records locally (per-visor bandwidth summed by
+	// edge PK, the min()-verified network total) instead of asking TPD
+	// for a pre-reduced body over HTTP. Its own tab because TabMetrics
+	// also carries FeedTPDUptime, and a consumer that never reads an
+	// uptime leaf should not hold that subscription open.
+	TabTransportMetrics
 )
 
 // tabFeedDeps maps each tab to the set of feeds it depends on.
@@ -167,6 +175,7 @@ var tabFeedDeps = map[Tab][]Feed{
 	TabRoutingPolicy:     {FeedSDServices},
 	TabDmsgEntryLookup:   {FeedDMSGDClientsByServer},
 	TabNetworkStats:      {FeedTPDStats},
+	TabTransportMetrics:  {FeedTPDMetrics},
 }
 
 // Deps are the host-injected dependencies the manager needs. They

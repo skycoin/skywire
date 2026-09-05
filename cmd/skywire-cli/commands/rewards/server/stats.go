@@ -18,10 +18,11 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
-	"github.com/oschwald/geoip2-golang/v2"
+	geoip2 "github.com/oschwald/geoip2-golang/v2"
 
 	geoipcmd "github.com/skycoin/skywire/cmd/svc/geoip/commands"
 	"github.com/skycoin/skywire/deployment"
+	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 )
 
 var (
@@ -1180,8 +1181,29 @@ func statsHTTPGet(url string) (*http.Response, error) {
 	return http.Get(url) //nolint:noctx,gosec
 }
 
-func fetchTPDBandwidthMetrics(days int) ([]tpdTransportMetric, error) {
+// fetchTPDBandwidthMetrics returns the per-transport daily bandwidth records
+// for the last `days` days, plus a line naming where they came from.
+//
+// CXO first. This is the largest body the statistics pages read — tens of
+// megabytes of per-transport rows over HTTP, on a route that dies with EOF
+// whenever the reward server's dmsg client is between sessions (#4538) — and
+// it is exactly what TPD's metrics feed already publishes as one leaf per
+// calendar day. The local window is assembled from the N newest leaves.
+func fetchTPDBandwidthMetrics(days int) ([]tpdstore.TransportMetric, statsSource, error) {
+	metrics, src, cxoErr := cxoTransportMetrics(days)
+	if cxoErr == nil {
+		return metrics, src, nil
+	}
 	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
+	metrics, err := fetchTPDBandwidthMetricsHTTP(tpdURL, days)
+	if err != nil {
+		return nil, statsSource{}, err
+	}
+	return metrics, httpStatsSource(fmt.Sprintf("/metrics?days=%d", days), cxoErr.Error()), nil
+}
+
+// fetchTPDBandwidthMetricsHTTP is the pre-CXO path, kept as the fallback.
+func fetchTPDBandwidthMetricsHTTP(tpdURL string, days int) ([]tpdstore.TransportMetric, error) {
 	url := fmt.Sprintf("%s/metrics?days=%d&bandwidth=true&latency=false", tpdURL, days)
 
 	resp, err := statsHTTPGet(url)
@@ -1199,7 +1221,9 @@ func fetchTPDBandwidthMetrics(days int) ([]tpdTransportMetric, error) {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	var metrics []tpdTransportMetric
+	// Parsing is the validity test — never the body's length. Large reads
+	// through dmsg have repeatedly arrived truncated under a 200.
+	var metrics []tpdstore.TransportMetric
 	if err := json.Unmarshal(body, &metrics); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
@@ -1207,27 +1231,8 @@ func fetchTPDBandwidthMetrics(days int) ([]tpdTransportMetric, error) {
 	return metrics, nil
 }
 
-// tpdTransportMetric represents a transport metric from TPD /metrics endpoint
-type tpdTransportMetric struct {
-	ID    string   `json:"id"`
-	Type  string   `json:"type"`
-	Live  bool     `json:"live"`
-	Edges []string `json:"edges,omitempty"`
-	Daily []struct {
-		Date string `json:"date"`
-		A    *struct {
-			Sent uint64 `json:"sent"`
-			Recv uint64 `json:"recv"`
-		} `json:"a,omitempty"`
-		B *struct {
-			Sent uint64 `json:"sent"`
-			Recv uint64 `json:"recv"`
-		} `json:"b,omitempty"`
-	} `json:"daily"`
-}
-
 // renderTPDBandwidthTable renders TPD transport metrics as an HTML table
-func renderTPDBandwidthTable(metrics []tpdTransportMetric) string {
+func renderTPDBandwidthTable(metrics []tpdstore.TransportMetric, src statsSource) string {
 	if len(metrics) == 0 {
 		return "<p>No transport metrics available from TPD</p>"
 	}
@@ -1247,6 +1252,9 @@ func renderTPDBandwidthTable(metrics []tpdTransportMetric) string {
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("<p>Showing %d transports with bandwidth data over %d days</p>\n", len(metrics), len(dates)))
+	if line := src.String(); line != "" {
+		sb.WriteString(fmt.Sprintf("<p style='color:#888;font-size:11px;'>%s</p>\n", html.EscapeString(line)))
+	}
 	sb.WriteString("<table style='border-collapse: collapse; font-size: 10px;'>\n")
 	sb.WriteString("<thead><tr style='border-bottom: 1px solid #555;'>")
 	sb.WriteString("<th style='padding: 4px 8px; text-align: left;'>Transport</th>")
@@ -1324,6 +1332,11 @@ type tpdNetworkSummary struct {
 	// BandwidthErr carries why the bandwidth fetch failed, so the page can say
 	// so instead of quietly showing a zero.
 	BandwidthErr string `json:"bandwidth_err,omitempty"`
+	// CountsSrc and BandwidthSrc name where each figure came from — a CXO
+	// snapshot with its own age and completeness verdict, or a live HTTP
+	// fetch. Printed on the page: the two are not interchangeable claims.
+	CountsSrc    string `json:"counts_src,omitempty"`
+	BandwidthSrc string `json:"bandwidth_src,omitempty"`
 }
 
 const tpdSummaryCacheFile = "tpd_summary.json"
@@ -1382,9 +1395,29 @@ func getTPDNetworkSummary() (*tpdNetworkSummary, error) {
 	return summary, nil
 }
 
-// fillTPDCounts populates the transport/visor counts from TPD's small
-// aggregate endpoint.
+// fillTPDCounts populates the transport/visor counts, preferring TPD's CXO
+// stats/network leaf and falling back to the /all-transports/stats endpoint
+// it mirrors. The leaf carries the same three numbers plus a completeness
+// verdict, which the HTTP body does not: TPD's transport aggregate is
+// readable while it refills after a restart (#4513), and only the feed says
+// when it is.
 func fillTPDCounts(tpdURL string, summary *tpdNetworkSummary) error {
+	stats, src, cxoErr := cxoNetworkStats()
+	if cxoErr == nil {
+		summary.TotalTransports = stats.Total
+		summary.UniqueVisors = stats.UniqueVisors
+		for k, v := range stats.ByType {
+			summary.ByType[k] = v
+		}
+		summary.CountsSrc = src.String()
+		return nil
+	}
+	summary.CountsSrc = httpStatsSource("/all-transports/stats", cxoErr.Error()).String()
+	return fillTPDCountsHTTP(tpdURL, summary)
+}
+
+// fillTPDCountsHTTP is the pre-CXO path, kept as the fallback.
+func fillTPDCountsHTTP(tpdURL string, summary *tpdNetworkSummary) error {
 	resp, err := statsHTTPGet(tpdURL + "/all-transports/stats")
 	if err != nil {
 		return fmt.Errorf("TPD request failed: %w", err)
@@ -1415,58 +1448,39 @@ func fillTPDCounts(tpdURL string, summary *tpdNetworkSummary) error {
 
 // fillTPDBandwidth adds the verified-bandwidth total. Separate from the counts
 // so a failure here costs only that one line of the summary.
+//
+// The records now come from TPD's CXO metrics feed when it has them —
+// specifically the CURRENT day's leaf, which is what a 1-day window is. What
+// does NOT change is the arithmetic: this figure is the min()-verified one
+// that mirrors the reward calculation, and TPD's own cumulative aggregate
+// (stats/daily, /metric) is a DIFFERENT number. Moving the read must not
+// become swapping the number, so both paths decode into the same record type
+// and hand it to the same accumulator below.
 func fillTPDBandwidth(tpdURL string, summary *tpdNetworkSummary) error {
-	url := fmt.Sprintf("%s/metrics?days=1&bandwidth=true&latency=false&edges=false", tpdURL)
-
-	resp, err := statsHTTPGet(url)
-	if err != nil {
-		return fmt.Errorf("TPD request failed: %w", err)
+	metrics, src, cxoErr := cxoTransportMetrics(1)
+	if cxoErr == nil {
+		summary.TotalBandwidth = 0
+		accumulateVerifiedBandwidth(metrics, summary)
+		summary.BandwidthOK = true
+		summary.BandwidthSrc = src.String()
+		return nil
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	summary.BandwidthSrc = httpStatsSource("/metrics?days=1", cxoErr.Error()).String()
+	return fillTPDBandwidthHTTP(tpdURL, summary)
+}
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("TPD returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read TPD response: %w", err)
-	}
-
-	var metrics []struct {
-		ID      string   `json:"id"`
-		Type    string   `json:"type"`
-		Live    bool     `json:"live"`
-		Edges   []string `json:"edges,omitempty"`
-		Latency *struct {
-			Avg int64 `json:"avg"`
-		} `json:"latency,omitempty"`
-		Daily []struct {
-			A *struct {
-				Sent uint64 `json:"sent"`
-				Recv uint64 `json:"recv"`
-			} `json:"a,omitempty"`
-			B *struct {
-				Sent uint64 `json:"sent"`
-				Recv uint64 `json:"recv"`
-			} `json:"b,omitempty"`
-		} `json:"daily"`
-	}
-	if err := json.Unmarshal(body, &metrics); err != nil {
-		return fmt.Errorf("failed to parse TPD metrics: %w", err)
-	}
-
-	for _, m := range metrics {
-		for _, daily := range m.Daily {
-			// Mirror the canonical three-branch trust model used by the reward
-			// bw-collect (cmd/.../rewards/transports.go) and `cli tp metrics`
-			// (verifiedBandwidth): an edge whose record is present but
-			// {sent:0,recv:0} has "not reported yet", NOT "verified zero". Key
-			// on reported-data, not record presence — otherwise a present
-			// {0,0} edge takes the min() branch and zeroes the counterparty's
-			// real bandwidth (e.g. min(0, 986MB)=0), which is exactly why
-			// single-edge-reporting transports showed 0 verified bandwidth here
-			// while the actual reward calc credited them.
+// accumulateVerifiedBandwidth applies the canonical three-branch trust model
+// used by the reward bw-collect (cmd/.../rewards/transports.go) and
+// `cli tp metrics` (verifiedBandwidth): an edge whose record is present but
+// {sent:0,recv:0} has "not reported yet", NOT "verified zero". It keys on
+// reported-data, not record presence — otherwise a present {0,0} edge takes
+// the min() branch and zeroes the counterparty's real bandwidth (e.g.
+// min(0, 986MB)=0), which is exactly why single-edge-reporting transports
+// once showed 0 verified bandwidth here while the reward calculation credited
+// them.
+func accumulateVerifiedBandwidth(metrics []tpdstore.TransportMetric, summary *tpdNetworkSummary) {
+	for i := range metrics {
+		for _, daily := range metrics[i].Daily {
 			aReported := daily.A != nil && (daily.A.Sent > 0 || daily.A.Recv > 0)
 			bReported := daily.B != nil && (daily.B.Sent > 0 || daily.B.Recv > 0)
 			switch {
@@ -1487,7 +1501,39 @@ func fillTPDBandwidth(tpdURL string, summary *tpdNetworkSummary) error {
 			}
 		}
 	}
+}
 
+// fillTPDBandwidthHTTP is the pre-CXO path, kept as the fallback. It decodes
+// into the same record type the feed publishes so the accumulator above is
+// literally the same code on both paths.
+func fillTPDBandwidthHTTP(tpdURL string, summary *tpdNetworkSummary) error {
+	url := fmt.Sprintf("%s/metrics?days=1&bandwidth=true&latency=false&edges=false", tpdURL)
+
+	resp, err := statsHTTPGet(url)
+	if err != nil {
+		return fmt.Errorf("TPD request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("TPD returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read TPD response: %w", err)
+	}
+
+	// Decoding is the validity test: a body that arrives truncated under a 200
+	// — which large reads through dmsg have repeatedly done — fails to parse
+	// and is reported, never partially believed.
+	var metrics []tpdstore.TransportMetric
+	if err := json.Unmarshal(body, &metrics); err != nil {
+		return fmt.Errorf("failed to parse TPD metrics: %w", err)
+	}
+
+	summary.TotalBandwidth = 0
+	accumulateVerifiedBandwidth(metrics, summary)
 	summary.BandwidthOK = true
 	return nil
 }
@@ -1521,6 +1567,19 @@ func renderTPDNetworkSummaryHTML() string {
 	}
 
 	l += "</pre>"
+	// Name the transport each figure arrived over. A CXO snapshot carries an
+	// age and a completeness verdict that a live HTTP fetch does not, and the
+	// two must not read as one measurement.
+	for _, line := range []struct{ label, src string }{
+		{"counts", summary.CountsSrc},
+		{"bandwidth", summary.BandwidthSrc},
+	} {
+		if line.src == "" {
+			continue
+		}
+		l += fmt.Sprintf("<p style='color: #888; font-size: 0.8em;'>%s — %s</p>",
+			line.label, html.EscapeString(line.src))
+	}
 	l += fmt.Sprintf("<p style='color: #888; font-size: 0.8em;'>Last updated: %s</p>", summary.LastUpdated)
 	return l
 }
