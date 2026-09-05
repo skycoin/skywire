@@ -143,6 +143,12 @@ func gatherStatsTUI() statsTUIData {
 	d.Dmsg = gatherDmsgStats()
 	d.Coverage = gatherServiceCoverage()
 
+	// The route-setup control plane, read from each configured route setup
+	// node's own /stats over dmsg. That endpoint is not survey-gated — only
+	// /debug/* on the same listener is — so the reward server's existing dmsg
+	// identity reaches it without being whitelisted.
+	d.SetupNodes = gatherSetupNodeStats()
+
 	// Transports per visor, judged against the aggregate read above.
 	d.PerVisor = gatherTransportsPerVisor(tpdURL, verdict)
 

@@ -36,6 +36,7 @@ func TestRenderStatsANSIEmitsColor(t *testing.T) {
 	for _, want := range []string{
 		"NETWORK", "BANDWIDTH", "LATENCY", "VISORS ONLINE", "TRANSPORTS BY TYPE",
 		"VERSION ADOPTION", "TRANSPORTS PER VISOR", "ARCHITECTURE", "UPTIME TIMELINE",
+		"ROUTE SETUP NODES",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("panel %q missing", want)
@@ -49,7 +50,7 @@ func TestRenderStatsANSIEmitsColor(t *testing.T) {
 // "nothing even attempted to fetch it" case.
 func TestRenderStatsANSINamesTheNewPanelsWhenUnpopulated(t *testing.T) {
 	out := RenderStatsANSI(sampleTUIData())
-	for _, title := range []string{"TRANSPORTS PER VISOR", "ARCHITECTURE", "UPTIME TIMELINE"} {
+	for _, title := range []string{"TRANSPORTS PER VISOR", "ARCHITECTURE", "UPTIME TIMELINE", "ROUTE SETUP NODES"} {
 		i := strings.Index(out, title)
 		if i < 0 {
 			t.Fatalf("panel %q vanished instead of reporting itself absent", title)
@@ -126,6 +127,29 @@ func TestTUIXAxisPlacesLabels(t *testing.T) {
 	}
 	if got := tuiXAxis(nil, 60, 8); got != "" {
 		t.Errorf("expected empty axis for no labels, got %q", got)
+	}
+}
+
+// A token wider than the panel has no space to break at. Wrapping must split
+// it rather than let it run past the rule — and must not drop the overflow,
+// because the token that does this in practice is a dmsg URL carrying a whole
+// public key.
+func TestTUIWrapBreaksATokenWiderThanThePanel(t *testing.T) {
+	pk := "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
+	out := tuiWrap(`      Get "dmsg://` + pk + `:80/stats": EOF`)
+	var joined string
+	for _, line := range strings.Split(out, "\n") {
+		plain := stripANSI(line)
+		if len([]rune(plain)) > tuiWidth {
+			t.Errorf("line runs to %d columns: %q", len([]rune(plain)), plain)
+		}
+		joined += strings.TrimSpace(plain)
+	}
+	if !strings.Contains(joined, pk) {
+		t.Error("the public key did not survive the wrap intact")
+	}
+	if !strings.Contains(joined, "EOF") {
+		t.Error("text after the over-long token was dropped")
 	}
 }
 
