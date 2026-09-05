@@ -3,7 +3,7 @@ module github.com/skycoin/skywire
 go 1.26.4
 
 require (
-	fyne.io/systray v1.12.2
+	fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/MichaelMure/go-term-markdown v0.1.4
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
@@ -19,7 +19,7 @@ require (
 	github.com/go-chi/cors v1.2.2
 	github.com/go-chi/httprate v0.16.0
 	github.com/go-echarts/go-echarts/v2 v2.7.2
-	github.com/go-playground/validator/v10 v10.30.3
+	github.com/go-playground/validator/v10 v10.30.4
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/google/uuid v1.6.0
@@ -60,8 +60,10 @@ require (
 
 require (
 	github.com/0magnet/ansifilter-go v0.0.0-20260905162419-b1d8cfff2baf
+	github.com/0magnet/audioprism-go v0.0.0-20260905171937-900f18a2f23d
 	github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898
 	github.com/0magnet/bottle v0.0.0-20260905154223-835049919520
+	github.com/0magnet/calvin v0.0.0-20260905171945-6d046e156c9b
 	github.com/0magnet/desk v0.0.0-20260905010738-0c9209d8b7b7
 	github.com/0magnet/desk/panes v0.0.0-20260905010738-0c9209d8b7b7
 	github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
@@ -72,6 +74,7 @@ require (
 	github.com/0magnet/netscrape v0.0.0-20260905162442-12f1adb8e1ec
 	github.com/0magnet/plot-go v0.0.0-20260905162445-5d8713570108
 	github.com/0magnet/realorigin v0.2.1
+	github.com/0magnet/router7 v0.0.0-20260905235418-912c8472bae0
 	github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26
 	github.com/0magnet/termanim v0.0.0-20260905010830-f8788bcdc347
 	github.com/0magnet/winbox-go v0.0.0-20260905000411-6eefa77dea85
@@ -88,17 +91,14 @@ require (
 	github.com/gdamore/tcell/v2 v2.13.10
 	github.com/gen2brain/malgo v0.11.26
 	github.com/gizak/termui/v3 v3.1.0
-	github.com/google/gopacket v1.1.19
 	github.com/google/nftables v0.3.0
 	github.com/google/renameio v1.0.1
 	github.com/guptarohit/asciigraph v0.10.0
 	github.com/hanwen/go-fuse/v2 v2.11.0
-	github.com/insomniacslk/dhcp v0.0.0-20260901064844-234b97448fae
 	github.com/itchyny/gojq v0.12.19
 	github.com/jfreymuth/pulse v0.1.3
 	github.com/kr/pretty v0.3.1
 	github.com/krolaw/dhcp4 v0.0.0-20190909130307-a50d88189771
-	github.com/mdlayher/packet v1.1.2
 	github.com/miekg/dns v1.1.73
 	github.com/peterh/liner v1.2.2
 	github.com/pgavlin/femto v0.0.0-20201224065653-0c9d20f9cac4
@@ -106,7 +106,6 @@ require (
 	github.com/pion/rtp v1.10.5
 	github.com/pion/webrtc/v4 v4.2.19
 	github.com/pkg/sftp v1.13.11
-	github.com/prometheus/client_golang v1.24.1
 	github.com/quic-go/webtransport-go v0.13.0
 	github.com/rivo/tview v0.42.0
 	github.com/soheilhy/cmux v0.1.5
@@ -131,11 +130,16 @@ require (
 )
 
 require (
+	github.com/0magnet/go-dsp v0.0.0-20260904172328-4474a45054c8 // indirect
 	github.com/0magnet/u-root v0.16.1-0.20260814161052-156e0b67262b // indirect
 	github.com/gdamore/tcell/v3 v3.4.2 // indirect
 	github.com/google/btree v1.1.2 // indirect
+	github.com/google/gopacket v1.1.19 // indirect
+	github.com/insomniacslk/dhcp v0.0.0-20260901064844-234b97448fae // indirect
+	github.com/mdlayher/packet v1.1.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pion/stun/v4 v4.0.0 // indirect
+	github.com/prometheus/client_golang v1.24.1 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/mod v0.40.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
@@ -189,11 +193,10 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
-	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/wlynxg/anet v0.0.5
 	github.com/zyedidia/micro v1.4.1 // indirect
-	go.mongodb.org/mongo-driver/v2 v2.8.2 // indirect
+	go.mongodb.org/mongo-driver/v2 v2.9.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
@@ -240,7 +243,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
-	github.com/gin-contrib/sse v1.1.1 // indirect
+	github.com/gin-contrib/sse v1.1.2 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect

@@ -9,7 +9,7 @@ atomicgo.dev/keyboard/keys
 # atomicgo.dev/schedule v0.1.0
 ## explicit; go 1.18
 atomicgo.dev/schedule
-# fyne.io/systray v1.12.2
+# fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4
 ## explicit; go 1.19
 fyne.io/systray
 fyne.io/systray/internal/generated/menu
@@ -22,6 +22,9 @@ github.com/0magnet/afero/mem
 # github.com/0magnet/ansifilter-go v0.0.0-20260905162419-b1d8cfff2baf
 ## explicit; go 1.24
 github.com/0magnet/ansifilter-go/ansifilter
+# github.com/0magnet/audioprism-go v0.0.0-20260905171937-900f18a2f23d
+## explicit; go 1.26.2
+github.com/0magnet/audioprism-go/pkg/spectrogram
 # github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898
 ## explicit; go 1.25.0
 github.com/0magnet/bbolt
@@ -32,6 +35,9 @@ github.com/0magnet/bbolt/internal/freelist
 ## explicit; go 1.24
 github.com/0magnet/bottle
 github.com/0magnet/bottle/vnet
+# github.com/0magnet/calvin v0.0.0-20260905171945-6d046e156c9b
+## explicit; go 1.25.0
+github.com/0magnet/calvin
 # github.com/0magnet/coloredcobra v1.0.3-0.20260902084726-57ccbecfc077
 ## explicit; go 1.25.0
 github.com/0magnet/coloredcobra
@@ -45,6 +51,11 @@ github.com/0magnet/desk/dom
 # github.com/0magnet/desk/panes v0.0.0-20260905010738-0c9209d8b7b7
 ## explicit; go 1.26
 github.com/0magnet/desk/panes/files
+# github.com/0magnet/go-dsp v0.0.0-20260904172328-4474a45054c8
+## explicit; go 1.23.0
+github.com/0magnet/go-dsp/dsputils
+github.com/0magnet/go-dsp/fft
+github.com/0magnet/go-dsp/window
 # github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
 ## explicit; go 1.15
 github.com/0magnet/golang-ipc
@@ -76,6 +87,11 @@ github.com/0magnet/plot-go
 # github.com/0magnet/realorigin v0.2.1
 ## explicit; go 1.25
 github.com/0magnet/realorigin
+# github.com/0magnet/router7 v0.0.0-20260905235418-912c8472bae0
+## explicit; go 1.26
+github.com/0magnet/router7/pkg/dhcp4d
+github.com/0magnet/router7/pkg/dns
+github.com/0magnet/router7/pkg/teelogger
 # github.com/0magnet/sh/v3 v3.13.2-0.20260818190530-13d0024da85c
 ## explicit; go 1.25.0
 github.com/0magnet/sh/v3/expand
@@ -484,7 +500,7 @@ github.com/gen2brain/dlgs
 # github.com/gen2brain/malgo v0.11.26
 ## explicit; go 1.21
 github.com/gen2brain/malgo
-# github.com/gin-contrib/sse v1.1.1
+# github.com/gin-contrib/sse v1.1.2
 ## explicit; go 1.23
 github.com/gin-contrib/sse
 # github.com/gin-gonic/gin v1.12.0
@@ -538,7 +554,7 @@ github.com/go-playground/locales/currency
 # github.com/go-playground/universal-translator v0.18.1
 ## explicit; go 1.18
 github.com/go-playground/universal-translator
-# github.com/go-playground/validator/v10 v10.30.3
+# github.com/go-playground/validator/v10 v10.30.4
 ## explicit; go 1.25.0
 github.com/go-playground/validator/v10
 # github.com/go-redis/redis v6.15.9+incompatible
@@ -658,12 +674,6 @@ github.com/hashicorp/go-version
 github.com/inconshreveable/mousetrap
 # github.com/insomniacslk/dhcp v0.0.0-20260901064844-234b97448fae
 ## explicit; go 1.25.0
-github.com/insomniacslk/dhcp/dhcpv4
-github.com/insomniacslk/dhcp/dhcpv6
-github.com/insomniacslk/dhcp/dhcpv6/client6
-github.com/insomniacslk/dhcp/iana
-github.com/insomniacslk/dhcp/interfaces
-github.com/insomniacslk/dhcp/rfc1035label
 # github.com/itchyny/gojq v0.12.19
 ## explicit; go 1.24.0
 github.com/itchyny/gojq
@@ -893,11 +903,6 @@ github.com/pgavlin/femto
 github.com/pgavlin/femto/runtime
 # github.com/pierrec/lz4/v4 v4.1.29
 ## explicit; go 1.17
-github.com/pierrec/lz4/v4
-github.com/pierrec/lz4/v4/internal/lz4block
-github.com/pierrec/lz4/v4/internal/lz4errors
-github.com/pierrec/lz4/v4/internal/lz4stream
-github.com/pierrec/lz4/v4/internal/xxh32
 # github.com/pion/datachannel v1.6.2
 ## explicit; go 1.24.0
 github.com/pion/datachannel
@@ -1352,10 +1357,6 @@ github.com/twitchyliquid64/golang-asm/objabi
 github.com/twitchyliquid64/golang-asm/src
 github.com/twitchyliquid64/golang-asm/sys
 github.com/twitchyliquid64/golang-asm/unsafeheader
-# github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701
-## explicit; go 1.21
-github.com/u-root/uio/rand
-github.com/u-root/uio/uio
 # github.com/ugorji/go/codec v1.3.2
 ## explicit; go 1.21
 github.com/ugorji/go/codec
@@ -1415,8 +1416,8 @@ go.etcd.io/bbolt
 go.etcd.io/bbolt/errors
 go.etcd.io/bbolt/internal/common
 go.etcd.io/bbolt/internal/freelist
-# go.mongodb.org/mongo-driver/v2 v2.8.2
-## explicit; go 1.19
+# go.mongodb.org/mongo-driver/v2 v2.9.0
+## explicit; go 1.25.0
 go.mongodb.org/mongo-driver/v2/bson
 go.mongodb.org/mongo-driver/v2/internal/binaryutil
 go.mongodb.org/mongo-driver/v2/internal/bsoncoreutil

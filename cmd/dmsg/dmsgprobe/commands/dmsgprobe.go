@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"

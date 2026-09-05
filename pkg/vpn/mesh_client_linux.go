@@ -10,12 +10,12 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/0magnet/router7/pkg/dns"
 	miekgdns "github.com/miekg/dns"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
-	"github.com/skycoin/skywire/pkg/vpnrouter/router7/dns"
 )
 
 // meshClientGateway is the vpn-client's local mesh gateway: it lets the host

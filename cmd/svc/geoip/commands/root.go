@@ -17,12 +17,12 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
+	"github.com/0magnet/calvin"
 	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 )

@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/calvin"
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/tpviz"

@@ -25,10 +25,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0magnet/router7/pkg/dns"
 	miekgdns "github.com/miekg/dns"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/vpnrouter/router7/dns"
 )
 
 func run(t *testing.T, name string, args ...string) {

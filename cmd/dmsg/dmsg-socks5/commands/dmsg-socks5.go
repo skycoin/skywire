@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/calvin"
 	socks5 "github.com/armon/go-socks5"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"

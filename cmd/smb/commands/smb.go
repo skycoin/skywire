@@ -19,11 +19,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"

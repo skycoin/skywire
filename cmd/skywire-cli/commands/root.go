@@ -9,6 +9,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
+	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
 
 	clicompletion "github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
@@ -44,7 +45,6 @@ import (
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/flags"
 )

@@ -41,6 +41,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/0magnet/calvin"
 	explorer "github.com/skycoin/skycoin/cmd/explorer/commands"
 	newcoin "github.com/skycoin/skycoin/cmd/newcoin/commands"
 	skycoincli "github.com/skycoin/skycoin/cmd/skycoin-cli/commands"
@@ -49,7 +50,6 @@ import (
 	"github.com/skycoin/skycoin/src/fiber"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 )
 
 var (

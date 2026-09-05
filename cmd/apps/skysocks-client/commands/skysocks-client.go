@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/0magnet/calvin"
 	ipc "github.com/0magnet/golang-ipc"
 	"github.com/elazarl/goproxy"
 	"github.com/sirupsen/logrus"
@@ -28,7 +29,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
