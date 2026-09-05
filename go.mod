@@ -128,6 +128,8 @@ require (
 )
 
 require (
+	github.com/0magnet/ansifilter-go v0.0.0-20260905001111-574a256fd2bd // indirect
+	github.com/0magnet/lolcat-go v0.0.0-20260905001114-f97d678ce219 // indirect
 	github.com/0magnet/u-root v0.16.1-0.20260814161052-156e0b67262b // indirect
 	github.com/gdamore/tcell/v3 v3.4.2 // indirect
 	github.com/google/btree v1.1.2 // indirect
