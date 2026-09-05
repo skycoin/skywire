@@ -71,12 +71,18 @@ func gatherServiceCoverage() coverageStats {
 
 	// Only the dmsg-addressed services: a clearnet service has no dmsg
 	// sessions to account for.
+	//
+	// The uptime tracker is NOT listed: it is TPD-integrated (CXO-backed v3), so
+	// there is no standalone tracker to probe. deployment.Prod.UptimeTrackerDmsg
+	// still names the retired standalone service, and probing it reported
+	// "unreachable ... entry is not found in discovery" on every page load — an
+	// alarming red row for a service that is not supposed to exist. Uptime
+	// reachability is covered by the transport-discovery entry above.
 	for _, s := range []struct{ name, url string }{
 		{"transport-discovery", deployment.Prod.TransportDiscoveryDmsg},
 		{"service-discovery", deployment.Prod.ServiceDiscoveryDmsg},
 		{"address-resolver", deployment.Prod.AddressResolverDmsg},
 		{"route-finder", deployment.Prod.RouteFinderDmsg},
-		{"uptime-tracker", deployment.Prod.UptimeTrackerDmsg},
 		{"dmsg-discovery", deployment.Prod.DmsgDiscoveryDmsg},
 	} {
 		if s.url == "" {
