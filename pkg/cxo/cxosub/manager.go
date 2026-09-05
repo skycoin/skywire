@@ -229,8 +229,9 @@ const TabCloseGrace = 10 * time.Second
 const FirstSyncTimeout = 10 * time.Second
 
 // largeFeedFirstSyncTimeout is the first-Root wait for the big feeds.
-// all-transports (~8MB network-wide snapshot) and sd-services (the full
-// service-discovery listing, ~1000 servers) are large, deep trees that
+// all-transports (~8MB network-wide snapshot), sd-services (the full
+// service-discovery listing, ~1000 servers) and tpd-metrics (the
+// network-wide per-transport aggregate) are large, deep trees that
 // routinely need well over FirstSyncTimeout to deliver their first Root
 // over dmsg — a 10s bound left them never syncing over CXO (sd-services
 // timed out at 10s → empty proxy/vpn pickers). These feeds get the room
@@ -243,7 +244,7 @@ const largeFeedFirstSyncTimeout = 45 * time.Second
 // fast feeds.
 func FeedFirstSyncTimeout(f Feed) time.Duration {
 	switch f {
-	case FeedTPDAllTransports, FeedSDServices:
+	case FeedTPDAllTransports, FeedSDServices, FeedTPDMetrics:
 		return largeFeedFirstSyncTimeout
 	}
 	return FirstSyncTimeout
