@@ -1,5 +1,3 @@
-// Package got pkg/got/chunk.go c0-com-util
-// Based on github.com/melbahja/got, adapted and improved for skywire.
 package got
 
 import (
@@ -20,6 +18,8 @@ func (dst *OffsetWriter) Write(b []byte) (n int, err error) {
 }
 
 // Chunk represents a byte range for partial content download.
+// Chunk and OffsetWriter are the byte-range primitives inherited
+// from melbahja/got.
 type Chunk struct {
 	Start, End uint64
 	Done       bool
