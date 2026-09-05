@@ -628,9 +628,9 @@ func TestRegisterDeregisterFromCXO(t *testing.T) {
 }
 
 func TestCXOPathHelpers(t *testing.T) {
-	require.Equal(t, MetricsPath(7), metricsPath(7))
+	require.Equal(t, "metrics/day/2026-09-04", store.MetricsDayPath("2026-09-04"))
 	require.Equal(t, "uptimes/days/7", UptimePath(7))
-	require.NotEmpty(t, MetricsPath(30))
+	require.Equal(t, "metrics/day/2026-09-04/part/0003", store.MetricsDayPartPath("2026-09-04", 3))
 }
 
 func TestTrimSummariesToDays(t *testing.T) {
@@ -677,9 +677,11 @@ func TestCXOPublisherErrorTracking(t *testing.T) {
 
 type fakeDHTMirror struct{ mirrored, deleted int }
 
-func (m *fakeDHTMirror) Mirror(cipher.PubKey, interface{}, uint64)       { m.mirrored++ }
+func (m *fakeDHTMirror) Mirror(cipher.PubKey, interface{}, uint64) { m.mirrored++ }
+
 func (m *fakeDHTMirror) MirrorMany([]cipher.PubKey, interface{}, uint64) { m.mirrored++ }
-func (m *fakeDHTMirror) Delete(cipher.PubKey)                            { m.deleted++ }
+
+func (m *fakeDHTMirror) Delete(cipher.PubKey) { m.deleted++ }
 
 func TestDHTMirror(t *testing.T) {
 	api := newTestAPI(t)

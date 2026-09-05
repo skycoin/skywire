@@ -1,42 +1,55 @@
 // Package api pkg/deployment/tpd/api/cxo_metrics_publisher.go c4-net-discovery
 //
 // CXO publisher for the network-wide transport-metrics aggregate.
-// On a fixed cadence (default 60s) the publisher recomputes the
-// metrics for a small set of day windows (1, 7, 30) and writes the
-// gzipped JSON-encoded []store.TransportMetric to a TreeStore path
+// The publisher writes ONE GZIPPED JSON LEAF PER CALENDAR DAY
 //
-//	metrics/days/<n>
+//	metrics/day/<YYYY-MM-DD>
 //
-// Subscribers (the hvui's Transports tab via the visor's CXO
-// subscriber) watch the feed instead of HTTP-polling /metrics.
+// and a day window (1, 7, 30) is assembled reader-side from the N
+// newest leaves. See pkg/deployment/tpd/store/cxo_metrics_layout.go
+// for the pivot/merge pair and for why Live and Latency live only in
+// the newest day's leaf.
 //
-// Two properties of CXO shape how the body is written:
+// This replaced three OVERLAPPING window leaves (metrics/days/1, /7,
+// /30) recomputed on separate tickers. Two things were wrong with
+// that:
+//
+//   - Content-addressing bought nothing. One leaf per window meant a
+//     single changed byte made the whole multi-megabyte object new,
+//     so the 30-day window went back over the wire in full every 30
+//     minutes even though 29 of its 30 days could not have changed.
+//     Per-day leaves make a settled day hash identically forever, so
+//     only the current day actually moves.
+//
+//   - The recompute was redundant. Every 30 minutes the old scheme
+//     asked the store for 30×1 + 6×7 + 1×30 = 102 transport-days;
+//     this one asks for 30×1 + 1×30 = 60, because the short windows
+//     are no longer separate queries at all.
+//
+// Two properties of CXO still shape how a body is written:
 //
 //   - CXO stores and propagates object bytes verbatim — it does not
 //     compress. Bodies are gzipped here, as every sibling TPD
-//     publisher already does (see cxo_uptime_publisher.go and
-//     cxo_all_transports_publisher.go). Readers use cxoutils.Gunzip,
-//     which passes a raw body through unchanged.
+//     publisher already does. Readers use cxoutils.Gunzip, which
+//     passes a raw body through unchanged.
 //
 //   - An object over skyobject MaxObjectSize (16 MB) is refused at
-//     Put time, and refusing one window kills the whole feed: no
-//     Root is ever published and every subscriber sits in "timeout
-//     waiting for Root" forever. Measured on production, even the
-//     1-day window is 16.02 MB of JSON — every window was over.
-//     Gzip (~4x on this data) carries the short windows; long
-//     windows are additionally split across
+//     Put time, and one refused Put kills the whole feed: no Root is
+//     ever published and every subscriber sits in "timeout waiting
+//     for Root" forever. A single production day is ~16 MB of JSON
+//     that gzips to ~4 MB, so a day fits comfortably — but the
+//     part-splitting safety net is kept, at
 //
-//     metrics/days/<n>/part/<NNNN>
+//     metrics/day/<YYYY-MM-DD>/part/<NNNN>
 //
-//     leaves so no data is dropped. Readers stitch the parts back
-//     into one array; the prefix Walk that pkg/tpviz already used
-//     picks them up unchanged.
+//     because "it fits today" is not a guarantee about a larger
+//     network tomorrow.
 package api
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -51,38 +64,37 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
-// metricsPublishWindow defines a CXO-published day-window and the
-// cadence at which its body is recomputed. Heavy windows (7d, 30d)
-// aggregate over long periods and barely change minute-to-minute, so
-// they recompute less often than the 1d window — the previous
-// uniform 60s tick across all three windows drove TPD into a GC
-// storm (~70% of CPU in gcBgMarkWorker under prod load, since
-// buildTransportMetrics walks all transports × days × per-edge
-// fields each call). Staggering the heavy windows keeps subscribers
-// fed without paying the full cost every minute.
-type metricsPublishWindow struct {
-	days     int
-	interval time.Duration
-}
+const (
+	// metricsWindowDays is how much history the feed carries. It is
+	// the longest window the hvui's day selector offers, and it sits
+	// inside the 35-day TTL on the bw:daily:* keys the store reads.
+	metricsWindowDays = 30
 
-// metricsPublishWindows is the set of day windows the publisher
-// refreshes, each on its own ticker. The hvui picks one of these via
-// the day selector; everything else falls through to the HTTP path.
-// Cadence picks: 60s for the 1d window matches a typical hvui-open
-// freshness expectation; 5m for the 7d window and 30m for the 30d
-// window are short enough that an opening hvui sees recent data
-// (well inside human-noticeable freshness on a long aggregate) and
-// long enough that the buildTransportMetrics cost amortizes.
-var metricsPublishWindows = []metricsPublishWindow{
-	{days: 1, interval: 60 * time.Second},
-	{days: 7, interval: 5 * time.Minute},
-	{days: 30, interval: 30 * time.Minute},
-}
+	// metricsTick is the cadence of the current day's leaf. It matches
+	// the 60s the old 1-day window ran at, which is the freshness an
+	// open hvui expects.
+	metricsTick = 60 * time.Second
 
-// MetricsCXOPublisher periodically computes the /metrics aggregate
-// for a fixed set of day windows and publishes each result as a
-// JSON leaf at "metrics/days/<n>". The struct is owned by the API;
-// Close shuts the publisher and stops the ticker.
+	// metricsFullEvery is how many ticks pass between full-window
+	// republishes. A settled day does not change, but three things
+	// still move it: bandwidth for yesterday keeps arriving for a
+	// while after UTC midnight, the store's expired-transport
+	// recovery adds records for past days, and days fall out of the
+	// window and must be retired. Republishing all 30 leaves every 30
+	// minutes covers all three at the cost of ONE 30-day store query
+	// — and the 29 settled leaves re-encode to the bytes they already
+	// had, so CXO ships nothing for them.
+	metricsFullEvery = 30
+
+	// legacyMetricsPrefix is the sub-tree the pre-day-leaf publisher
+	// wrote (metrics/days/<n>). Pruned once at startup so a feed
+	// backed by a persistent DB cannot serve a stale window forever.
+	legacyMetricsPrefix = "metrics/days"
+)
+
+// MetricsCXOPublisher periodically recomputes the /metrics aggregate
+// and publishes it as one leaf per calendar day. The struct is owned
+// by the API; Close shuts the publisher and stops the ticker.
 type MetricsCXOPublisher struct {
 	api *API
 	pub *treestore.Publisher
@@ -91,12 +103,19 @@ type MetricsCXOPublisher struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 
+	// parts records, per published date, how many part leaves that day
+	// was last written as (0 = a single leaf). The next cycle needs it
+	// to retire leaves that are no longer produced. Only the publish
+	// loop touches it.
+	parts map[string]int
+	// curDate is the date the last cycle treated as "today", so a UTC
+	// midnight rollover can force a full republish instead of leaving
+	// yesterday's leaf carrying stale Live/Latency for up to 30
+	// minutes.
+	curDate string
+
 	mu        sync.Mutex
 	lastError error
-	// lastParts records how many part leaves each day window was last
-	// published as (0 = a single leaf), so the next cycle knows which
-	// leaves to retire.
-	lastParts map[int]int
 }
 
 // StartMetricsCXOPublisher constructs a publisher backed by the
@@ -125,12 +144,12 @@ func StartMetricsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 
 	pubCtx, cancel := context.WithCancel(ctx)
 	mp := &MetricsCXOPublisher{
-		api:       api,
-		pub:       pub,
-		log:       log,
-		cancel:    cancel,
-		done:      make(chan struct{}),
-		lastParts: make(map[int]int),
+		api:    api,
+		pub:    pub,
+		log:    log,
+		cancel: cancel,
+		done:   make(chan struct{}),
+		parts:  make(map[string]int),
 	}
 	if logger != nil {
 		logger.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgTPDMetricsCXOPort).
@@ -154,32 +173,31 @@ func (m *MetricsCXOPublisher) Close() error {
 	return m.pub.Close()
 }
 
+// loop drives both cadences from ONE goroutine. The three windows
+// used to each have their own ticker; a single loop means the
+// per-date bookkeeping below needs no lock and the full and current
+// publishes can never interleave.
 func (m *MetricsCXOPublisher) loop(ctx context.Context) {
 	defer close(m.done)
 
-	var wg sync.WaitGroup
-	for _, w := range metricsPublishWindows {
-		wg.Add(1)
-		go func(w metricsPublishWindow) {
-			defer wg.Done()
-			// Publish once immediately so a subscriber that connects
-			// shortly after TPD starts gets a snapshot without waiting
-			// a full tick.
-			m.publishWindow(ctx, w.days)
-
-			t := time.NewTicker(w.interval)
-			defer t.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-t.C:
-					m.publishWindow(ctx, w.days)
-				}
-			}
-		}(w)
+	if err := m.pub.PrunePrefix(legacyMetricsPrefix); err != nil {
+		m.log.WithError(err).Debug("could not prune the legacy metrics/days sub-tree")
 	}
-	wg.Wait()
+
+	// Publish the whole window once immediately so a subscriber that
+	// connects shortly after TPD starts gets history without waiting.
+	m.publish(ctx, true)
+
+	t := time.NewTicker(metricsTick)
+	defer t.Stop()
+	for n := 1; ; n++ {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			m.publish(ctx, n%metricsFullEvery == 0)
+		}
+	}
 }
 
 // maxPublishBody bounds a single published body, measured on the GZIPPED bytes
@@ -187,17 +205,35 @@ func (m *MetricsCXOPublisher) loop(ctx context.Context) {
 // MaxObjectSize covers the encoding overhead CXO adds around the payload.
 const maxPublishBody = 12 * 1024 * 1024
 
-func (m *MetricsCXOPublisher) publishWindow(ctx context.Context, days int) {
-	query := store.MetricsQuery{
+// publish recomputes and writes the day leaves. full=false refreshes
+// only the current day, which is the only leaf that can move
+// minute-to-minute; full=true recomputes the whole window, rewrites
+// every day leaf (settled ones re-encode to their existing bytes and
+// cost nothing on the wire) and retires the days that dropped out.
+func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
+	now := time.Now().UTC()
+	today := now.Format(store.MetricsDateFormat)
+	if today != m.curDate {
+		// A UTC rollover means yesterday's leaf still carries the Live
+		// and Latency fields only the current day is supposed to hold.
+		// Rewrite the window rather than leaving that until the next
+		// scheduled full cycle.
+		full = true
+	}
+
+	days := 1
+	if full {
+		days = metricsWindowDays
+	}
+	metrics, err := m.api.store.GetAllTransportMetrics(ctx, store.MetricsQuery{
 		Days:      days,
 		Live:      "all",
 		Edges:     true,
 		Bandwidth: true,
 		Latency:   true,
-	}
-	metrics, err := m.api.store.GetAllTransportMetrics(ctx, query)
+	})
 	if err != nil {
-		// WARN, not DEBUG. A window that fails every tick makes the whole feed
+		// WARN, not DEBUG. A cycle that fails every tick makes the whole feed
 		// unusable, and at DEBUG that is invisible on a production deployment —
 		// which is exactly how this went unnoticed.
 		m.log.WithError(err).WithField("days", days).Warn("metrics fetch failed; will retry next tick")
@@ -205,61 +241,115 @@ func (m *MetricsCXOPublisher) publishWindow(ctx context.Context, days int) {
 		return
 	}
 
-	bodies, err := gzipParts(metrics, maxPublishBody)
-	if err != nil {
-		m.log.WithError(err).WithField("days", days).Warn("metrics marshal failed")
-		m.recordError(err)
-		return
-	}
+	dates := store.MetricsWindowDates(now, days)
+	byDate := store.PivotDailyMetrics(metrics, dates)
 
-	base := metricsPath(days)
-	m.mu.Lock()
-	prevParts := m.lastParts[days]
-	m.mu.Unlock()
-
-	// Deletes are emitted before puts: PutBatch applies ops in order, and a
-	// path cannot be a leaf and a sub-tree at once. Switching a window between
-	// the two forms therefore has to retire the old form first or the put
-	// fails with ErrPathConflict.
-	var deletes, puts []treestore.PutOp
-	staleFrom := len(bodies)
-	if len(bodies) == 1 {
-		puts = append(puts, treestore.PutOp{Path: base, Value: bodies[0]})
-		staleFrom = 0 // every part path from a previous split is now stale
-	} else {
-		deletes = append(deletes, treestore.PutOp{Path: base})
-		for i, b := range bodies {
-			puts = append(puts, treestore.PutOp{Path: metricsPartPath(days, i), Value: b})
+	bodies := make(map[string][][]byte, len(dates))
+	for _, date := range dates {
+		parts, gerr := gzipParts(byDate[date], maxPublishBody)
+		if gerr != nil {
+			m.log.WithError(gerr).WithField("date", date).Warn("metrics marshal failed")
+			m.recordError(gerr)
+			return
 		}
-	}
-	// A shrinking network splits into fewer parts than last time. Without this
-	// the leftover high-index leaves stay in the tree and a prefix Walk keeps
-	// serving records that no longer exist.
-	for i := staleFrom; i < prevParts; i++ {
-		deletes = append(deletes, treestore.PutOp{Path: metricsPartPath(days, i)})
+		bodies[date] = parts
 	}
 
-	if err := m.pub.PutBatch(append(deletes, puts...)); err != nil {
-		m.log.WithError(err).WithField("path", base).Warn("publisher PutBatch failed")
+	ops, next := planDayOps(bodies, dates, m.parts, full)
+	if err := m.pub.PutBatch(ops); err != nil {
+		m.log.WithError(err).Warn("publisher PutBatch failed")
 		m.recordError(err)
 		return
 	}
-
-	nowParts := 0
-	if len(bodies) > 1 {
-		nowParts = len(bodies)
-		m.log.WithField("days", days).WithField("parts", nowParts).
-			Debug("metrics window exceeded the CXO object limit; published as parts")
-	}
-	m.mu.Lock()
-	m.lastParts[days] = nowParts
-	m.mu.Unlock()
+	m.parts, m.curDate = next, today
 }
 
-// gzipParts encodes metrics as one or more gzipped JSON arrays, each at most
-// max bytes. One part is the normal case; a window only splits when even
+// planDayOps turns one cycle's gzipped bodies into the PutBatch that
+// realizes them, and returns the per-date part counts the next cycle
+// should compare against.
+//
+// Deletes are emitted before puts because PutBatch applies ops IN
+// ORDER and a path cannot be a leaf and a sub-tree at once: a day
+// that switches between the single-leaf and the split form has to
+// retire the old form first or the put fails with ErrPathConflict.
+//
+// prune=true additionally retires day leaves that have fallen out of
+// the window. Without it a rolling window grows a leaf a day forever,
+// and a prefix Walk keeps serving days the store no longer has data
+// for.
+func planDayOps(bodies map[string][][]byte, dates []string, prev map[string]int, prune bool) (ops []treestore.PutOp, next map[string]int) {
+	next = make(map[string]int, len(prev)+len(dates))
+	for d, n := range prev {
+		next[d] = n
+	}
+
+	inWindow := make(map[string]bool, len(dates))
+	var deletes, puts []treestore.PutOp
+	for _, date := range dates {
+		inWindow[date] = true
+		bs := bodies[date]
+		if len(bs) == 0 {
+			continue
+		}
+		base := store.MetricsDayPath(date)
+		staleFrom := len(bs)
+		if len(bs) == 1 {
+			puts = append(puts, treestore.PutOp{Path: base, Value: bs[0]})
+			staleFrom = 0 // every part path from a previous split is now stale
+		} else {
+			deletes = append(deletes, treestore.PutOp{Path: base})
+			for i, b := range bs {
+				puts = append(puts, treestore.PutOp{Path: store.MetricsDayPartPath(date, i), Value: b})
+			}
+		}
+		// A day that splits into fewer parts than last time leaves the
+		// leftover high-index leaves behind; a reader stitching by
+		// prefix would then serve records that no longer exist.
+		for i := staleFrom; i < prev[date]; i++ {
+			deletes = append(deletes, treestore.PutOp{Path: store.MetricsDayPartPath(date, i)})
+		}
+		if len(bs) > 1 {
+			next[date] = len(bs)
+		} else {
+			next[date] = 0
+		}
+	}
+
+	if prune {
+		for date, n := range next {
+			if inWindow[date] {
+				continue
+			}
+			if n == 0 {
+				deletes = append(deletes, treestore.PutOp{Path: store.MetricsDayPath(date)})
+			}
+			for i := 0; i < n; i++ {
+				deletes = append(deletes, treestore.PutOp{Path: store.MetricsDayPartPath(date, i)})
+			}
+			delete(next, date)
+		}
+		// Retiring days must be deterministic too: a map iteration
+		// order in the batch would make the same cycle emit different
+		// op sequences on different runs, which is untestable.
+		sortOpsByPath(deletes)
+	}
+
+	return append(deletes, puts...), next
+}
+
+func sortOpsByPath(ops []treestore.PutOp) {
+	sort.Slice(ops, func(i, j int) bool { return ops[i].Path < ops[j].Path })
+}
+
+// gzipParts encodes one day's records as one or more gzipped JSON arrays, each
+// at most max bytes. One part is the normal case; a day only splits when even
 // compressed it will not fit in a single CXO object.
 func gzipParts(metrics []store.TransportMetric, max int) ([][]byte, error) {
+	if metrics == nil {
+		// json.Marshal of a nil slice is "null", which is not the empty
+		// array a reader unmarshals into []TransportMetric.
+		metrics = []store.TransportMetric{}
+	}
 	whole, err := json.Marshal(metrics)
 	if err != nil {
 		return nil, err
@@ -341,27 +431,10 @@ func (m *MetricsCXOPublisher) recordError(err error) {
 }
 
 // LastError returns the most recent error encountered by the publish
-// loop, or nil if the last tick succeeded for every window. Exposed
-// for /health-style introspection if a future caller wants it.
+// loop, or nil if the last tick succeeded. Exposed for /health-style
+// introspection if a future caller wants it.
 func (m *MetricsCXOPublisher) LastError() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.lastError
-}
-
-// MetricsPath returns the TreeStore path the publisher writes to for
-// a given day window. Exported so visor-side subscribers don't have
-// to duplicate the format string.
-func MetricsPath(days int) string { return metricsPath(days) }
-
-func metricsPath(days int) string {
-	return fmt.Sprintf("metrics/days/%d", days)
-}
-
-// MetricsPartPath returns the path of one part of a split window. Zero-padded
-// so a reader that sorts the paths lexically gets them in publication order.
-func MetricsPartPath(days, part int) string { return metricsPartPath(days, part) }
-
-func metricsPartPath(days, part int) string {
-	return fmt.Sprintf("%s/part/%04d", metricsPath(days), part)
 }
