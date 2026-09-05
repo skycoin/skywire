@@ -1,0 +1,1798 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Skywire — peer-to-peer encrypted networking">
+      
+      
+      
+        <link rel="canonical" href="https://skycoin.github.io/skywire/design/wasm-visor-sharedworker/">
+      
+      
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.50">
+    
+    
+      
+        <title>One wasm-visor per origin — SharedWorker-hosted visor - Skywire</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.a40c8224.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#one-wasm-visor-per-origin-sharedworker-hosted-visor" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Skywire" class="md-header__button md-logo" aria-label="Skywire" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Skywire
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              One wasm-visor per origin — SharedWorker-hosted visor
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/skycoin/skywire" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    skycoin/skywire
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://skycoin.github.io/skywire/playground/" class="md-tabs__link">
+        
+  
+    
+  
+  Terminal
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../guides/" class="md-tabs__link">
+        
+  
+    
+  
+  Guides
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../skywire/" class="md-tabs__link">
+        
+  
+    
+  
+  Command Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../apps-overview/" class="md-tabs__link">
+          
+  
+    
+  
+  Apps
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../packaging/" class="md-tabs__link">
+          
+  
+    
+  
+  Packaging & Updates
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../specs/" class="md-tabs__link">
+        
+  
+    
+  
+  Specs
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../graph/" class="md-tabs__link">
+        
+  
+    
+  
+  Code Graph
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../glossary/" class="md-tabs__link">
+        
+  
+    
+  
+  Glossary
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../rewards/" class="md-tabs__link">
+        
+  
+    
+  
+  Rewards
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://blog.theskywirenetwork.net" class="md-tabs__link">
+        
+  
+    
+  
+  Blog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Skywire" class="md-nav__button md-logo" aria-label="Skywire" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Skywire
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/skycoin/skywire" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    skycoin/skywire
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://skycoin.github.io/skywire/playground/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Terminal
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guides
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skywire/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Apps
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Apps
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps-overview/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../pty/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    PTY
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
+            <span class="md-nav__icon md-icon"></span>
+            PTY
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pty/skywire-pty/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Mode 1 — the visor-hosted pty (skywire cli pty)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pty/standalone-pty/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Modes 2 &amp; 3 — the standalone pty (skywire app pty)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../skychat/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Skychat
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            Skychat
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skychat/skychat-visor/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Visor-hosted skychat (skywire cli skychat)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skychat/standalone-skychat/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Standalone skychat — TCP-direct &amp; CXO
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../skynet/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    SkyNet
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_4">
+            <span class="md-nav__icon md-icon"></span>
+            SkyNet
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skynet/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SkyNet client
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../skysocks/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    SOCKS5 Proxy
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_5">
+            <span class="md-nav__icon md-icon"></span>
+            SOCKS5 Proxy
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skysocks/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SOCKS5 proxy — client (skysocks-client)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../vpn/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    VPN
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            VPN
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../vpn/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    VPN client (vpn-client)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../vpn/router/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    VPN router (vpn-router)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../packaging/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Packaging & Updates
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Packaging & Updates
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../packaging/auto-update/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Auto-Update
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../packaging/aur-packages/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AUR Packages
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../specs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Specs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graph/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Code Graph
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../glossary/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Glossary
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../rewards/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Rewards
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://blog.theskywirenetwork.net" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Blog
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#goal" class="md-nav__link">
+    <span class="md-ellipsis">
+      Goal
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mechanism-sharedworker" class="md-nav__link">
+    <span class="md-ellipsis">
+      Mechanism: SharedWorker
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#feasibility-checked" class="md-nav__link">
+    <span class="md-ellipsis">
+      Feasibility (checked)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bridge-protocol-tab-worker-over-messageport" class="md-nav__link">
+    <span class="md-ellipsis">
+      Bridge protocol (tab ↔ worker over MessagePort)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#webrtc-in-worker-mode-tab-hosted-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      WebRTC in worker mode — tab-hosted agent
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="WebRTC in worker mode — tab-hosted agent">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#exactly-one-agent-tabs-never-make-their-own-webrtc-transports" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exactly one agent — tabs never make their own WebRTC transports
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#agent-tab-churn" class="md-nav__link">
+    <span class="md-ellipsis">
+      Agent-tab churn
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      Lifecycle
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phased-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phased plan
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      Status
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fallback-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fallback status
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/skycoin/skywire/edit/develop/docs/design/wasm-visor-sharedworker.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="one-wasm-visor-per-origin-sharedworker-hosted-visor">One wasm-visor per origin — SharedWorker-hosted visor<a class="headerlink" href="#one-wasm-visor-per-origin-sharedworker-hosted-visor" title="Permalink">&para;</a></h1>
+<h2 id="goal">Goal<a class="headerlink" href="#goal" title="Permalink">&para;</a></h2>
+<p>A single wasm-visor that runs <strong>as long as any tab of the origin is open</strong>, not
+one-per-tab. Concretely:</p>
+<ul>
+<li>Open a tab → the visor boots (once).</li>
+<li>Open more tabs of the same origin → they <strong>share</strong> the running visor. No second
+  boot, no dmsg re-register, no "already running in another tab" notice.</li>
+<li>Close a tab → the visor <strong>keeps running</strong> as long as any other tab is open.</li>
+<li>Close the <strong>last</strong> tab → the visor stops.</li>
+</ul>
+<p>This replaces the current model (one visor per tab + a Web Locks single-instance
+guard that reload-hands-off the identity between tabs, paying a full ~10–20s
+re-boot each time). The guard prevents two clients colliding, but it does <strong>not</strong>
+preserve the running visor — which is the actual requirement.</p>
+<h2 id="mechanism-sharedworker">Mechanism: SharedWorker<a class="headerlink" href="#mechanism-sharedworker" title="Permalink">&para;</a></h2>
+<p>A <code>SharedWorker</code> is exactly this lifecycle primitive: one instance shared by all
+same-origin documents, alive while <strong>any</strong> connected document is open, terminated
+when the last disconnects. Tabs attach via <code>MessagePort</code>.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>  ┌── tab A ──┐   ┌── tab B ──┐   ┌── tab C ──┐     (HV UI / browse.js — thin views)
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  │  hvApi →  │   │  hvApi →  │   │  hvApi →  │
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  └────┬──────┘   └────┬──────┘   └────┬──────┘
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>       │ MessagePort   │               │
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>       └───────────────┴───────────────┘
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>                       │
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>             ┌─────────▼──────────┐
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>             │   SharedWorker     │   ONE wasm-visor: dmsg client + router +
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>             │   wasm-visor core  │   autoconnect + in-wasm hvApi. Lives while
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>             └────────────────────┘   any tab is connected.
+</span></code></pre></div>
+<p>No leader election, no takeover, no re-boot on switch/close. Switching tabs is
+instant (the UI just talks to the already-running worker).</p>
+<h2 id="feasibility-checked">Feasibility (checked)<a class="headerlink" href="#feasibility-checked" title="Permalink">&para;</a></h2>
+<ul>
+<li><strong>Go visor core is worker-safe.</strong> <code>cmd/wasm-visor/*.go</code> touches no <code>document</code>,
+  <code>window</code>, or <code>localStorage</code> — those are all in <code>hv-boot.js</code>/<code>override.js</code>. The
+  core is network + compute (<code>syscall/js</code> for WS/WT/fetch), which works in a
+  worker.</li>
+<li><strong>WebSocket</strong>: available in workers. dmsg-over-WS works.</li>
+<li><strong>WebTransport in a SharedWorker</strong>: Chromium exposes WebTransport in workers
+  (verify on target Brave/Chrome versions). If a given engine lacks it, WS-only
+  still works.</li>
+<li><strong>WebRTC — kept, via a tab-hosted agent (NOT dropped).</strong> <code>RTCPeerConnection</code>
+  is unavailable in any worker, but WebRTC is the one carrier that reaches a
+  peer through NAT without port-forwarding, so it must survive this move. The
+  solution: the <strong>worker orchestrates, a tab executes</strong>. See the dedicated
+  section below.</li>
+<li><strong>Identity/key</strong>: the worker has no <code>localStorage</code>. A connecting tab passes the
+  key (from its <code>localStorage</code>, as today) to the worker on first connect; the
+  worker boots once with it. (Or move the key to IndexedDB, which workers can
+  read — but tab-passes-key is simpler and keeps the key handling in one place.)</li>
+</ul>
+<h2 id="bridge-protocol-tab-worker-over-messageport">Bridge protocol (tab ↔ worker over MessagePort)<a class="headerlink" href="#bridge-protocol-tab-worker-over-messageport" title="Permalink">&para;</a></h2>
+<p>Two message kinds:</p>
+<ol>
+<li><strong>Request/response</strong> — the tab's <code>hvApi(method, path, body)</code> becomes
+   <code>port.postMessage({t:'req', id, method, path, body})</code>; the worker runs the
+   in-wasm hvApi and replies <code>{t:'res', id, status, body, headers}</code>. A per-id
+   promise map on the tab side resolves it. Same shape <code>SkywireHttpBackend</code>
+   already uses — just a different transport.</li>
+<li><strong>Event stream</strong> — callback-style APIs (skychat messages, telemetry, proxy
+   verbose logs, the runtime-log ring) are pushed <code>{t:'ev', topic, data}</code>; tabs
+   subscribe by topic. Replaces the current in-page <code>js.FuncOf</code> callbacks.</li>
+</ol>
+<p><code>globalThis.skywireVisor.*</code> in a tab becomes a thin shim that forwards to the
+port (so <code>browse.js</code> and the Angular <code>SkywireHttpBackend</code> need only a new
+"worker" routing mode; their call sites are unchanged).</p>
+<h2 id="webrtc-in-worker-mode-tab-hosted-agent">WebRTC in worker mode — tab-hosted agent<a class="headerlink" href="#webrtc-in-worker-mode-tab-hosted-agent" title="Permalink">&para;</a></h2>
+<p>WebRTC is essential (the only NAT-piercing carrier), so it can't be dropped when
+the core moves into the worker. The worker can't call <code>RTCPeerConnection</code>, but a
+<strong>tab</strong> can — so we split the WebRTC carrier into an <em>orchestrator</em> (worker) and
+an <em>executor</em> (tab):</p>
+<ul>
+<li>The worker keeps everything that doesn't need <code>RTCPeerConnection</code>: the transport
+  manager, the <strong>signaling</strong> (WebRTC offer/answer/ICE are exchanged over dmsg,
+  which the worker has), and the decision of when to open/accept a WebRTC
+  transport.</li>
+<li>One connected tab is the <strong>WebRTC agent</strong>. The worker drives it over the
+  MessagePort with a small command set — <code>createPC</code>, <code>setRemote</code>, <code>addICE</code>,
+  <code>createDataChannel</code>, <code>send(bytes)</code>, <code>close</code> — and the tab streams results back:
+  local SDP, local ICE candidates, <code>datachannel.onopen</code>, and <strong>inbound data</strong>.</li>
+<li><strong>Data path</strong>: once the <code>RTCDataChannel</code> is open in the tab, transport bytes
+  relay tab ↔ worker over the port as transferable <code>ArrayBuffer</code>s (zero-copy, so
+  the extra hop is cheap; tab↔SharedWorker is same-process). The worker's
+  transport/dmsg logic sees a normal byte stream; it just physically flows
+  through the agent tab.</li>
+</ul>
+<p>So the topology for a WebRTC transport is:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>  remote peer  ⇄  RTCDataChannel (in the AGENT TAB)  ⇄  MessagePort  ⇄  worker (transport logic)
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>                        ▲ signaling (SDP/ICE) exchanged over dmsg by the worker ▲
+</span></code></pre></div>
+<h3 id="exactly-one-agent-tabs-never-make-their-own-webrtc-transports">Exactly one agent — tabs never make their own WebRTC transports<a class="headerlink" href="#exactly-one-agent-tabs-never-make-their-own-webrtc-transports" title="Permalink">&para;</a></h3>
+<p>The worry "what if two tabs both make WebRTC transports?" can't happen here,
+because <strong>tabs don't make transports at all — the worker does.</strong> There is one
+visor (in the worker) with one transport manager; it delegates execution to
+<strong>exactly one</strong> agent tab at a time (the worker holds a single <code>agentPort</code>; only
+that port receives WebRTC commands). So:</p>
+<ul>
+<li>There is never more than one <code>RTCPeerConnection</code> host. No two tabs race to open
+  the same transport; a second/third tab is a pure UI view and hosts nothing.</li>
+<li><strong>Display is unified, not per-tab.</strong> All tabs render the <em>same</em> worker visor's
+  state, so the WebRTC transports show identically everywhere — they belong to
+  the one visor, not to whichever tab happens to be the agent. The agent role is
+  an invisible internal detail; the user never sees or picks it. (This is simpler
+  than today's per-tab model, where each tab is a separate visor with its own
+  transports.)</li>
+<li>If we ever <em>did</em> want per-tab WebRTC (we don't), it would need one visor
+  identity per tab — which is exactly the collision the shared-visor model
+  removes. So "one agent tab makes the WebRTC transports" isn't a limitation to
+  work around; it's the correct shape.</li>
+</ul>
+<p><strong>Prefer a visible tab as the agent.</strong> Browsers throttle background tabs, which
+could slow the agent's relay. So the worker prefers a <strong>foreground/visible</strong> tab
+as agent (tabs report <code>document.visibilityState</code> over the port) and re-elects to
+a visible one when the current agent is hidden. If every tab is backgrounded, the
+agent keeps running (data channels are throttled far less than timers), just
+possibly slower — acceptable, and it recovers the moment a tab is focused.</p>
+<h3 id="agent-tab-churn">Agent-tab churn<a class="headerlink" href="#agent-tab-churn" title="Permalink">&para;</a></h3>
+<p>If the agent tab closes, its
+<code>RTCPeerConnection</code>s die. The worker detects the agent port dropping, <strong>re-elects
+another open tab</strong> as agent, and the WebRTC transports re-establish through it
+(autoconnect re-dials). Crucially, only the <em>WebRTC transports</em> blip — the dmsg
+session, routes, and the whole visor state live in the worker and are untouched.
+So closing any tab (even the agent) never re-boots the visor; at worst a couple
+of P2P transports reconnect, which the mesh already self-heals. If NO tab is open,
+the worker is gone anyway (that's the intended "last tab closed → stop").</p>
+<p>Implementation: <code>autoconnect_js.go</code> / the WebRTC client currently call
+<code>RTCPeerConnection</code> directly via <code>syscall/js</code>. In worker mode they instead call a
+JS shim (<code>webrtcAgent.*</code>) that, in the worker, forwards each op to the agent tab
+over the port and awaits the reply. The tab side is a compact agent script that
+owns the real <code>RTCPeerConnection</code>s. (Same split works for inbound WebRTC —
+<code>peerserve_js.go</code> — the agent tab hosts the answering PC.)</p>
+<h2 id="lifecycle">Lifecycle<a class="headerlink" href="#lifecycle" title="Permalink">&para;</a></h2>
+<ul>
+<li><code>worker.onconnect</code> → push the port into the client set; if this is the first
+  client, boot the visor (using the key the tab supplied).</li>
+<li>Tab close → its port <code>messageerror</code>/<code>close</code>; drop it from the set. The worker
+  keeps running while the set is non-empty.</li>
+<li>Last port gone → the SharedWorker is terminated by the browser → visor stops.
+  (Optionally: a short grace timer so a full-page reload — which briefly drops to
+  zero tabs — doesn't tear the visor down mid-refresh.)</li>
+<li>The Web Locks singleton guard + the "another tab" notice + the takeover button
+  are <strong>removed</strong> — they're obsolete once there's one shared visor.</li>
+</ul>
+<h2 id="phased-plan">Phased plan<a class="headerlink" href="#phased-plan" title="Permalink">&para;</a></h2>
+<ol>
+<li><strong>Spike</strong> ✅ — SharedWorker loads <code>wasm_exec.js</code> + the visor <code>.wasm</code>, boots the
+   core, a tab gets <code>/api</code> over the port; dmsg over WS. The wasm boots cleanly in a
+   SharedWorker on Chrome 149.</li>
+<li><strong>Multi-tab fan-out</strong> ✅ — per-tab ports; open/close tabs without re-boot; the
+   visor survives closing the first tab.</li>
+<li><strong>UI routing</strong> ✅ — the <code>skywireVisor</code> proxy over the port is unchanged in shape,
+   so <code>browse.js</code> and the Angular <code>SkywireHttpBackend</code> route through it unedited.</li>
+<li><strong>WebRTC tab-agent</strong> ✅ (bridge live-validated) — the worker orchestrates
+   (transport manager + dmsg signaling), a single elected agent tab executes the
+   <code>RTCPeerConnection</code>; agent re-election on tab close with proper transport
+   teardown so autoconnect re-dials. Full two-visor DataChannel transport not yet
+   exercised end-to-end (infra: needs a manual dial to a webrtc-listening peer).</li>
+<li><strong>Singleton guard</strong> ✅ (bypassed, retained as fallback) — the Web Locks guard is
+   skipped on the SharedWorker path and the reload "take over" button dropped; the
+   guard remains only as the dedicated-Worker fallback's collision protection, so
+   it is not deleted outright.</li>
+</ol>
+<h2 id="status">Status<a class="headerlink" href="#status" title="Permalink">&para;</a></h2>
+<p><strong>Implemented (phases 1–3) and validated live.</strong> <code>pkg/wasmhv/worker.js</code> is now a
+SharedWorker that boots the visor once and fans <code>/api</code> out to every connected tab's
+MessagePort; <code>pkg/wasmhv/hv-boot.js</code> prefers it (<code>bootInSharedWorker</code>) and only
+falls back to the per-tab dedicated Worker + Web Locks guard where SharedWorker is
+unavailable. Both hosts speak one worker-owned-boot protocol (<code>{t:'init'}</code> →
+<code>{t:'up', pk}</code>), so the dedicated fallback no longer double-boots either. The
+<code>globalThis.skywireVisor</code> proxy is unchanged in shape, so <code>browse.js</code> and the
+Angular <code>SkywireHttpBackend</code> route through it without edits (phase 3 came for free).</p>
+<p>Validated on Chrome 149 against the local <code>hv serve</code> (<code>:8444</code>):</p>
+<ul>
+<li>First tab boots the visor once (<code>status().pk</code> returns the booted key).</li>
+<li>A second tab attaches to the <strong>same</strong> visor in ~2s — same PK, no re-boot, no
+  "already running in another tab" notice.</li>
+<li>Closing the first tab keeps the visor alive for the second (same PK) — the
+  running dmsg client/router/identity survive tab churn.</li>
+</ul>
+<p><strong>WebRTC (phase 4) — implemented and bridge validated live.</strong> The worker
+delegates STUN + all <code>RTCPeerConnection</code> ops to exactly one elected agent tab, so
+WebRTC (the only NAT-piercing carrier) is <em>preserved</em>, not dropped. Two
+correctness fixes landed beyond the initial wiring:</p>
+<ul>
+<li><strong>Agent-handoff teardown.</strong> When the agent tab closes, its <code>RTCPeerConnection</code>s
+  die but the Go carrier still holds the proxy objects. <code>resetRTCForNewAgent</code> now
+  fires <code>onclose</code> on every proxy <code>DataChannel</code> (→ <code>webrtc_browser.go</code> <code>dcConn.onClose</code>)
+  before dropping them, so the carrier tears the transport down and autoconnect
+  re-dials through the new agent (the peer re-offers over dmsg, yielding a fresh
+  <code>pcId</code> the new agent hosts cleanly). Without this the carrier would think dead
+  transports were still alive.</li>
+<li><strong>No visibility thrash.</strong> The agent role is <em>not</em> handed off merely because
+  visibility changed — a handoff tears down all live WebRTC transports (they can't
+  migrate between tabs), so doing it on every tab switch would thrash. The agent
+  keeps its role until it actually closes; visibility is only a preference when a
+  fresh agent must be elected. A backgrounded agent tab is throttled far less for
+  data channels than for timers (acceptable).</li>
+</ul>
+<p>Bridge validated live (Chrome 149, cold boot, <code>RTCPeerConnection</code> wrapped on the
+agent tab): exactly <strong>one</strong> <code>RTCPeerConnection</code> is constructed on the agent tab
+with the deployment STUN ICE config, and the visor <em>in the worker</em> logs
+<code>self public IP (via STUN): &lt;ip&gt;</code> — proving the full worker→agentPort→tab→real
+<code>RTCPeerConnection</code>→worker round-trip. The WebRTC offerer/answerer use the
+identical <code>newPeerConnection</code> → <code>__skywireRTC.newPC</code> → agent delegation. A full
+two-visor WebRTC DataChannel transport is not yet exercised end-to-end: WebRTC is
+not autoconnected (browser visors autoconnect WS/WT only), so it needs a manual
+<code>dialTransport(pk, "webrtc")</code> to a peer running the webrtc signaling listener —
+infra to arrange, not a code gap.</p>
+<p><strong>Phase 5 — not necessary as originally scoped.</strong> The Web Locks singleton guard is
+already <strong>bypassed on the SharedWorker path</strong> (multiple tabs share one visor with
+no notice), and the disliked reload-based "take over" button was dropped. The
+guard is <em>retained only</em> as the dedicated-Worker fallback's protection (where
+SharedWorker is unavailable, it still prevents two tabs colliding on one identity).
+Fully deleting it would remove that fallback protection for no benefit, so it
+stays fallback-only rather than being removed outright.</p>
+<h2 id="fallback-status">Fallback status<a class="headerlink" href="#fallback-status" title="Permalink">&para;</a></h2>
+<p>Where <code>SharedWorker</code> is unavailable, <code>hv-boot.js</code> falls back to the dedicated
+Worker (UI still off-thread) guarded by Web Locks with the simple auto-handoff
+notice, and finally to the in-page runtime if Workers are unavailable at all.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/skycoin/skywire" target="_blank" rel="noopener" title="skycoin/skywire on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://t.me/skywire" target="_blank" rel="noopener" title="Skywire on Telegram" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M248 8C111.033 8 0 119.033 0 256s111.033 248 248 248 248-111.033 248-248S384.967 8 248 8m114.952 168.66c-3.732 39.215-19.881 134.378-28.1 178.3-3.476 18.584-10.322 24.816-16.948 25.425-14.4 1.326-25.338-9.517-39.287-18.661-21.827-14.308-34.158-23.215-55.346-37.177-24.485-16.135-8.612-25 5.342-39.5 3.652-3.793 67.107-61.51 68.335-66.746.153-.655.3-3.1-1.154-4.384s-3.59-.849-5.135-.5q-3.283.746-104.608 69.142-14.845 10.194-26.894 9.934c-8.855-.191-25.888-5.006-38.551-9.123-15.531-5.048-27.875-7.717-26.8-16.291q.84-6.7 18.45-13.7 108.446-47.248 144.628-62.3c68.872-28.647 83.183-33.623 92.511-33.789 2.052-.034 6.639.474 9.61 2.885a10.45 10.45 0 0 1 3.53 6.716 43.8 43.8 0 0 1 .417 9.769"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://blog.theskywirenetwork.net" target="_blank" rel="noopener" title="Skycoin blog" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M0 64c0-17.7 14.3-32 32-32 229.8 0 416 186.2 416 416 0 17.7-14.3 32-32 32s-32-14.3-32-32C384 253.6 226.4 96 32 96 14.3 96 0 81.7 0 64m0 352a64 64 0 1 1 128 0 64 64 0 1 1-128 0m32-256c159.1 0 288 128.9 288 288 0 17.7-14.3 32-32 32s-32-14.3-32-32c0-123.7-100.3-224-224-224-17.7 0-32-14.3-32-32s14.3-32 32-32"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "navigation.tracking", "navigation.indexes", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.action.edit", "toc.follow"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.60a45f97.min.js"></script>
+      
+        <script src="../../javascripts/desk-shell.js"></script>
+      
+    
+  </body>
+</html>

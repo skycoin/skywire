@@ -1,0 +1,1858 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Skywire — peer-to-peer encrypted networking">
+      
+      
+      
+        <link rel="canonical" href="https://skycoin.github.io/skywire/rewards/mainnet_rules/">
+      
+      
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.50">
+    
+    
+      
+        <title>Mainnet rules - Skywire</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.a40c8224.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#skywire-reward-eligibility-rules" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Skywire" class="md-header__button md-logo" aria-label="Skywire" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Skywire
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Mainnet rules
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/skycoin/skywire" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    skycoin/skywire
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://skycoin.github.io/skywire/playground/" class="md-tabs__link">
+        
+  
+    
+  
+  Terminal
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../guides/" class="md-tabs__link">
+        
+  
+    
+  
+  Guides
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../skywire/" class="md-tabs__link">
+        
+  
+    
+  
+  Command Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../apps-overview/" class="md-tabs__link">
+          
+  
+    
+  
+  Apps
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../packaging/" class="md-tabs__link">
+          
+  
+    
+  
+  Packaging & Updates
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../specs/" class="md-tabs__link">
+        
+  
+    
+  
+  Specs
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../graph/" class="md-tabs__link">
+        
+  
+    
+  
+  Code Graph
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../glossary/" class="md-tabs__link">
+        
+  
+    
+  
+  Glossary
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../" class="md-tabs__link">
+        
+  
+    
+  
+  Rewards
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://blog.theskywirenetwork.net" class="md-tabs__link">
+        
+  
+    
+  
+  Blog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Skywire" class="md-nav__button md-logo" aria-label="Skywire" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Skywire
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/skycoin/skywire" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    skycoin/skywire
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://skycoin.github.io/skywire/playground/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Terminal
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guides
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skywire/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Apps
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Apps
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../apps-overview/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../pty/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    PTY
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
+            <span class="md-nav__icon md-icon"></span>
+            PTY
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pty/skywire-pty/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Mode 1 — the visor-hosted pty (skywire cli pty)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pty/standalone-pty/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Modes 2 &amp; 3 — the standalone pty (skywire app pty)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../skychat/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Skychat
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            Skychat
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skychat/skychat-visor/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Visor-hosted skychat (skywire cli skychat)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skychat/standalone-skychat/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Standalone skychat — TCP-direct &amp; CXO
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../skynet/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    SkyNet
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_4">
+            <span class="md-nav__icon md-icon"></span>
+            SkyNet
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skynet/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SkyNet client
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../skysocks/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    SOCKS5 Proxy
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_5">
+            <span class="md-nav__icon md-icon"></span>
+            SOCKS5 Proxy
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skysocks/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SOCKS5 proxy — client (skysocks-client)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../vpn/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    VPN
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            VPN
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../vpn/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    VPN client (vpn-client)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../vpn/router/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    VPN router (vpn-router)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../packaging/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Packaging & Updates
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Packaging & Updates
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../packaging/auto-update/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Auto-Update
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../packaging/aur-packages/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AUR Packages
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../specs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Specs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graph/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Code Graph
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../glossary/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Glossary
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Rewards
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://blog.theskywirenetwork.net" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Blog
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#introduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      Introduction
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/skycoin/skywire/edit/develop/docs/rewards/mainnet_rules.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<p><img alt="skywire logo" src="https://user-images.githubusercontent.com/26845312/32426764-3495e3d8-c282-11e7-8fe8-8e60e90cb906.png" /></p>
+<h1 id="skywire-reward-eligibility-rules">Skywire Reward Eligibility Rules<a class="headerlink" href="#skywire-reward-eligibility-rules" title="Permalink">&para;</a></h1>
+<p><strong>We have transitioned to a new system with daily reward distribution</strong></p>
+<ul>
+<li>The rules in this article may change at any time, depending on if there are problems</li>
+<li>We will attempt to address any issues reported via <a href="https://t.me/skywire">@skywire</a> Telegram channel</li>
+<li>Reward corrections are not possible after the rewards for a day have been distributed.</li>
+</ul>
+<p>The required minimum Skywire version will be incremented periodically.</p>
+<h2 id="introduction">Introduction<a class="headerlink" href="#introduction" title="Permalink">&para;</a></h2>
+<div align="center"><em> Updates to this article will be followed by a notification via the <a href="https://t.me/SkywirePSA">official Skywire PSA channel</a> on Telegram.</em>
+</div>
+<p><br></p>
+<p>All information about rewards will be published here. Please ask for clarification in the <a href="https://t.me/skywire">@skywire</a> Telegram channel if some things appear to not be covered.</p>
+<p>Please join <a href="https://t.me/SkywirePSA">@SkywirePSA</a> for public service announcements (PSA) regarding the skywire network, update notices, changes to this article, etc.</p>
+<p>Reward distribution notifications are on telegram <a href="https://t.me/skywire_reward">@skywire_reward</a>.</p>
+<p>Information about reward distribution as well as other metrics for the skywire network can be found at <a href="https://theskywirenetwork.net">theskywirenetwork.net</a></p>
+<h1 id="reward-pools">Reward Pools<a class="headerlink" href="#reward-pools" title="Permalink">&para;</a></h1>
+<p>816000 Skycoin are distributed annually to those visors which meet the minimum uptime and the other requirements listed below, in two equally sized reward pools.</p>
+<p>A total of up to ~1117.808 Skycoin <strong>per pool</strong> are distributed daily in non leap-years.</p>
+<p>A total of up to ~1114.754  Skycoin <strong>per pool</strong> are distributed daily in leap-years.</p>
+<h2 id="pool-1-presence">Pool 1: Presence<a class="headerlink" href="#pool-1-presence" title="Permalink">&para;</a></h2>
+<p>The presence pool reward for a day is evenly divided among all eligible visors on the basis of having met uptime and other requirements for the previous day, with IP and MAC address deduplication applied. All architectures are eligible for the presence pool.</p>
+<p>Regional saturation scaling is applied to the presence pool to promote geographic diversity. See <a href="#Regional-Saturation-Scaling">Regional Saturation Scaling</a> for details.</p>
+<h2 id="pool-2-bandwidth">Pool 2: Bandwidth<a class="headerlink" href="#pool-2-bandwidth" title="Permalink">&para;</a></h2>
+<p>The bandwidth pool reward for a day is distributed based on the amount of transport bandwidth each visor <strong>sent</strong> during the previous day — sender-pays. A visor accrues bandwidth credit for the bytes it transmitted on each transport, with its per-edge sent counter capped by the counterparty's reported recv so a one-sided inflation cannot pump credit. Only visors whose sender-side total exceeds a minimum threshold are eligible for the bandwidth pool.</p>
+<p>The pool is divided using a <strong>per-IP</strong> scaling of sent bytes. Each IP's total sent bandwidth is first aggregated across all visors at that IP; the IP then contributes <code>ip_total ^ exponent</code> to the network weight; each visor at the IP receives a slice of that contribution proportional to its share of the IP's bytes:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ip_total        = sum(sent_bytes_of_each_visor_at_ip)
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>visor_weight    = (visor.sent_bytes / ip_total) * (ip_total ^ bandwidth_exponent)
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>                = visor.sent_bytes * (ip_total ^ (bandwidth_exponent - 1))
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>visor_share     = visor_weight / sum(all visor_weights)
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>visor_reward    = visor_share * pool_2_budget
+</span></code></pre></div>
+<p>With the default exponent of <code>0.5</code>, a 100× bandwidth lead by one IP over another produces only a ~10× share advantage — preventing any single high-throughput IP from dominating the pool while still rewarding heavier senders more than lighter ones. Setting the exponent to <code>1.0</code> reverts to strict bytes-proportional distribution; <code>0</code> gives every contributing IP equal total weight (divided proportionally among its senders).</p>
+<p><strong>Why per-IP?</strong> Splitting one visor's traffic across many PKs at the same IP — or pointing those PKs at different skycoin addresses — does not change the IP's <code>ip_total</code>, so it does not change the IP's contribution to the pool. PK / address multiplication at a single IP is therefore neutral; the only way to earn more pool 2 is to actually send more bandwidth, or to send from more distinct IPs.</p>
+<p>Each transport edge is evaluated independently: a visor earns bandwidth credit for what it sent regardless of whether the counterparty is also reward-eligible. Credit only flows to the sender, so an ineligible peer was never going to receive a share — its eligibility is not checked.</p>
+<p>Visors which do not meet the minimum bandwidth threshold will still receive rewards from the presence pool, but will not receive any share of the bandwidth pool. In practice the effective floor is also bounded by Skycoin's 6-decimal precision: any visor whose share of the day's bandwidth pool would round to less than <code>0.000001</code> SKY receives nothing for the day, even if its sent bytes cleared the configured minimum threshold.</p>
+<p>The bandwidth considered for this pool excludes same-LAN transports (where both edges share the same external IP address).</p>
+<h2 id="rules-requirements">Rules &amp; Requirements<a class="headerlink" href="#rules-requirements" title="Permalink">&para;</a></h2>
+<p>To receive Skycoin rewards for running skywire, the following requirements must be met:</p>
+<ul>
+<li>
+<p><a href="#Version">1)</a> <strong>Minimum skywire <a href="#Version">version</a></strong> — see the <a href="#Version">Version</a> section for the schedule of version requirement updates (currently v1.3.59 as of 06-10-2026)</p>
+</li>
+<li>
+<p><a href="#Uptime">2)</a> <strong>75% <a href="#Uptime">uptime</a> per day</strong> minimum is required to be eligible to receive rewards</p>
+</li>
+<li>
+<p><a href="#Deployment">3)</a> Visors must be running on <strong><a href="#Deployment">the skywire production deployment</a></strong> with a config that is updated on every version. No default keys or addresses of this configuration may be removed - but you can add keys where applicable.</p>
+</li>
+<li>
+<p><a href="#Per-Machine-Limit">4)</a> <strong>Only 1 (one) visor per machine</strong> - virtual machines are ineligible</p>
+</li>
+<li>
+<p><a href="#Per-IP-Limit">5)</a> <strong>Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)</strong> - with 8 shares divided between all visors at that ip address which achieved the minimum uptime. <em>(Temporary exception: for the month of June 2026 only, the per-IP cap is raised to 12 shares — see <a href="#Per-IP-Limit">Per IP Limit</a> for the rationale; the cap auto-reverts to 8 on 2026-07-01.)</em></p>
+</li>
+<li>
+<p><a href="#Skycoin-Address">6)</a> <strong>A valid <a href="#Skycoin-Address">skycoin address</a></strong> must be set for the visor</p>
+</li>
+<li>
+<p><a href="#Connection-To-DMSG-Network">7)</a> The visor must be <strong><a href="#Connection-To-DMSG-Network">connected to the DMSG network</a></strong></p>
+</li>
+<li>
+<p><a href="#Transportable">8)</a> <strong><a href="#Transportable">Transports</a> can be established to the visor</strong></p>
+</li>
+<li>
+<p><a href="#Transports">9)</a> <strong>The visor has at least 2 <a href="#Transports">Transports</a></strong> observed at some point during the same period as uptime (checked hourly)</p>
+</li>
+<li>
+<p><a href="#Transport-Setup-Node">10)</a> <strong>The visor responds to <a href="#Transport-Setup-Node">Transport Setup-Node requests</a></strong></p>
+</li>
+<li>
+<p><a href="#Routability-Ping-Latency-Metric">11)</a> <strong>The visor can have routes established to it &amp; responds to <a href="#Ping-Latency-Metric">pings</a> over routes</strong></p>
+</li>
+<li>
+<p><a href="#Transport-Bandwidth-and-Metrics">12)</a> <strong>The visor reports <a href="#Transport-Bandwidth-and-Metrics">transport bandwidth</a> to the transport discovery</strong> on transport re-registration - the basis for bandwidth-based rewards</p>
+</li>
+<li>
+<p><a href="#Survey">13)</a> <strong>The visor produces a <a href="#Survey">survey</a></strong> when queried over dmsg by any keys in the survey_whitelist array by default</p>
+</li>
+</ul>
+<h3 id="deployment-changes-and-the-dmsghttp-config">Deployment Changes and the dmsghttp-config<a class="headerlink" href="#deployment-changes-and-the-dmsghttp-config" title="Permalink">&para;</a></h3>
+<p>The dmsghttp-config is the default — and currently the only supported — visor config. It is generated automatically via:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>skywire cli config gen -b --bestproto
+</span></code></pre></div></p>
+<p>In order to bootstrap the visor's connection to the dmsg network (via TCP connection to an individual dmsg server), the <a href="/dmsghttp-config.json">dmsghttp-config.json</a> is provided with the skywire binary release. All production deployment services are then reached by the visor over the dmsg network.</p>
+<p>In the instance that the skywire production deployment changes — specifically the dmsg servers:
+* it will be necessary to update to the next version or package release which ships an updated dmsghttp-config.json,</p>
+<p>OR</p>
+<ul>
+<li>it will be necessary to manually update the <a href="/dmsghttp-config.json">dmsghttp-config.json</a> provided by your skywire installation.</li>
+</ul>
+<p>Currently, <strong>there is no mechanism for updating the dmsghttp-config.json which does not require an http request</strong> — a request which may be blocked depending on region.</p>
+<p>If the visor cannot reach any of the dmsg servers listed in its dmsghttp-config.json, it will not connect to the dmsg network. The reward system will then be unable to collect the visor's survey, and the visor will not accumulate uptime — both prerequisites for reward eligibility.</p>
+<p>As a consequence: visors in regions where http requests are blocked (e.g. China) may need the <strong>latest release of the package</strong> rather than only the latest binary, unless the dmsghttp-config.json is updated manually within the installation.</p>
+<h2 id="verifying-requirements-eligibility">Verifying Requirements &amp; Eligibility<a class="headerlink" href="#verifying-requirements-eligibility" title="Permalink">&para;</a></h2>
+<h3 id="1-version">1) Version<a class="headerlink" href="#1-version" title="Permalink">&para;</a></h3>
+<p>View the version of skywire you are running with:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>skywire cli -v
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>skywire visor -v
+</span></code></pre></div></p>
+<p>NOTE: the uptime tracker and other services consider the visor's config version - not the actual binary version.</p>
+<p>It is expected that the visor's config is re-generated on every update in order to include any config changes which may have been introduced</p>
+<p>The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:</p>
+<p><strong>Reward eligibility after 02-01-2026 requires Skywire v1.3.33</strong></p>
+<p>Requirement established 01-04-2026</p>
+<p>Rewards Cutoff date for updating 02-01-2026</p>
+<p><strong>Reward eligibility after 02-25-2026 requires Skywire v1.3.34</strong></p>
+<p>Requirement established 02-10-2026</p>
+<p>Rewards Cutoff date for updating 02-25-2026</p>
+<p><strong>Reward eligibility after 03-20-2026 requires Skywire v1.3.36</strong></p>
+<p>Requirement established 03-06-2026</p>
+<p>Rewards Cutoff date for updating 03-20-2026</p>
+<p><strong>Reward eligibility after 04-18-2026 requires Skywire v1.3.40</strong></p>
+<p>Requirement established 04-04-2026</p>
+<p>Rewards Cutoff date for updating 04-18-2026</p>
+<p><strong>Reward eligibility after 04-19-2026 requires Skywire v1.3.41</strong></p>
+<p>Requirement established 04-05-2026</p>
+<p>Rewards Cutoff date for updating 04-19-2026</p>
+<p><strong>Reward eligibility after 04-23-2026 requires Skywire v1.3.42</strong></p>
+<p>Requirement established 04-09-2026</p>
+<p>Rewards Cutoff date for updating 04-23-2026</p>
+<p><strong>Reward eligibility after 04-23-2026 requires Skywire v1.3.43</strong></p>
+<p>Requirement established 04-09-2026</p>
+<p>Rewards Cutoff date for updating 04-23-2026</p>
+<p><strong>Reward eligibility after 05-09-2026 requires Skywire v1.3.47</strong></p>
+<p>Requirement established 04-25-2026</p>
+<p>Rewards Cutoff date for updating 05-09-2026</p>
+<p><strong>Reward eligibility after 05-22-2026 requires Skywire v1.3.50</strong></p>
+<p>Requirement established 05-08-2026</p>
+<p>Rewards Cutoff date for updating 05-22-2026</p>
+<p><strong>Reward eligibility after 06-10-2026 requires Skywire v1.3.59</strong></p>
+<p>Requirement established 05-27-2026</p>
+<p>Rewards Cutoff date for updating 06-10-2026</p>
+<h3 id="uptime">Uptime<a class="headerlink" href="#uptime" title="Permalink">&para;</a></h3>
+<p>Each visor heartbeats every 5 minutes; the heartbeats (and transport registrations) populate the same underlying uptime data that feeds the rewards pipeline.</p>
+<p>The rewards system reads from the <strong>transport-discovery integrated uptime tracker</strong>. The same data shape is served by three deployment services:</p>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>Host</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Transport-discovery (used by rewards)</td>
+<td><code>tpd.skywire.skycoin.com</code></td>
+</tr>
+<tr>
+<td>DMSG-discovery</td>
+<td><code>dmsgd.skywire.skycoin.com</code></td>
+</tr>
+<tr>
+<td>Service-discovery</td>
+<td><code>sd.skycoin.com</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Querying these endpoints directly over plain HTTP is discouraged and will be deprecated.</strong> Use the <code>skywire cli ut</code> subcommands, which fetch over the deployment's DMSG path and cache the response locally:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>skywire-cli ut tpd     # transport-discovery (rewards source)
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>skywire-cli ut mdisc   # dmsg-discovery
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>skywire-cli ut sd      # service-discovery
+</span></code></pre></div>
+<p>Check uptime for a specific visor (any subcommand works the same way):</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>skywire cli ut tpd -k &lt;public-key&gt;
+</span></code></pre></div>
+<p>For your locally-running visor:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>skywire cli ut tpd -k $(skywire cli visor pk)
+</span></code></pre></div>
+<p>The default response is v2 (<code>{ pk, on, version, daily: {YYYY-MM-DD: "pct"} }</code>). Pass <code>-T</code> / <code>--timeline</code> for v3, which adds a per-5-minute bitmap rendered as 24 hourly blocks.</p>
+<p>Additional useful flags (run <code>skywire cli ut tpd --help</code> for the full list):</p>
+<ul>
+<li><code>-n / --min-daily N</code> — only visors whose worst daily uptime is ≥ N percent</li>
+<li><code>--min-version vX.Y.Z</code> — only visors at that version or newer</li>
+<li><code>-d / --days N</code> — include the N most-recent days (default: latest only)</li>
+<li><code>--date YYYY-MM-DD</code> — only include data for a specific day</li>
+<li><code>-l / --list-versions</code> — show the PK→version distribution</li>
+</ul>
+<p>Example v2 output for two visors:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>[
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>  {
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    "pk": "02001319d25a66609b64cc389bd0dcee6d5b4ab93bd139186c47d1d6cbe955e7e1",
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    "on": false,
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    "version": "v1.3.30",
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    "daily": {
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>      "2025-01-03": "86.11",
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>      "2025-01-05": "88.89",
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>      "2025-01-06": "100.00",
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>      "2025-01-07": "100.00",
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>      "2025-01-08": "87.15"
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    }
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>  },
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>  {
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>    "pk": "02006214d489aee383dc14dea22d1c308a547520f545b914c1e476a7a87064e77b",
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>    "on": true,
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>    "version": "v1.3.30",
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>    "daily": {
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>      "2025-01-03": "100.00",
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>      "2025-01-04": "100.00",
+</span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>      "2025-01-05": "100.00",
+</span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>      "2025-01-06": "100.00",
+</span><span id="__span-6-23"><a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>      "2025-01-07": "95.14",
+</span><span id="__span-6-24"><a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>      "2025-01-08": "99.65",
+</span><span id="__span-6-25"><a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a>      "2025-01-09": "71.18"
+</span><span id="__span-6-26"><a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a>    }
+</span><span id="__span-6-27"><a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a>  }
+</span><span id="__span-6-28"><a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a>]
+</span></code></pre></div>
+<h3 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permalink">&para;</a></h3>
+<p>All computer hardware and architectures are eligible for both reward pools.</p>
+<h3 id="deployment">Deployment<a class="headerlink" href="#deployment" title="Permalink">&para;</a></h3>
+<p>The deployment your visor is running on can be verified by comparing the services configured in the visor's .json config against <a href="https://conf.skywire.skycoin.com">conf.skywire.skycoin.com</a></p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>cat /opt/skywire/skywire.json
+</span></code></pre></div>
+<p>The service configuration will be automatically updated any time a config is generated or regenerated.</p>
+<p>Compare the dmsghttp-config of your current installation with the dmsghttp-config on the develop branch of <a href="https://github.com/skycoin/skywire">github.com/skycoin/skywire</a> — the dmsghttp-config is the default config and is used by every visor on the production deployment.</p>
+<p>The same data in a different format should be displayed in the <a href="https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers">dmsg-discovery all_servers</a> page. Ensure that the dmsghttp-config.json in your installation has the same ip addresses and ports for the dmsg server keys.</p>
+<p>The data from the dmsg discovery should be considered authoritative or current.</p>
+<h3 id="per-machine-limit">Per Machine Limit<a class="headerlink" href="#per-machine-limit" title="Permalink">&para;</a></h3>
+<p>Virtual machines are not eligible for rewards, as there is no way to limit the number of instances of skywire running on the same machine if they are running in virtual machines.</p>
+<p>The visor is determined to be running on a virtual machine if a <code>hypervisor</code> is listed in it's survey such as <code>kvm</code>, <code>xenhvm</code>, or <code>hyperv</code> - (not to be confused with a skywire hypervisor)</p>
+<p>Multiple instances of skywire which are otherwise determined to be running on the same machine (via their mac address) will have one reward share divided between all the skycoin reward addresses which are set for those visors.</p>
+<h3 id="per-ip-limit">Per IP Limit<a class="headerlink" href="#per-ip-limit" title="Permalink">&para;</a></h3>
+<p>A maximum of 8 reward shares per ip address is divided between all visors which made uptime at a given ip address.</p>
+<p>For example, if 9 visors at a given ip address meet the minimum uptime requirement, the reward share for each visor will be 8/9ths of a share (~0.8888) which sum to a total of ~7.99999 shares.</p>
+<p><strong>Temporary exception — June 2026 only</strong>: the per-IP cap is raised from 8 to <strong>12</strong> shares for calc dates within June 2026 (UTC). Rationale: a specific operator was unable to relocate excess visors off a single IP address because OS-level update infrastructure was blocked by ongoing bandwidth-pool issues this month, and several boards in their official miner died reducing the visor count to 11+1 at one location. The cap reverts automatically to 8 on 2026-07-01 with no further action required.</p>
+<h3 id="regional-saturation-scaling">Regional Saturation Scaling<a class="headerlink" href="#regional-saturation-scaling" title="Permalink">&para;</a></h3>
+<p>To incentivize geographic diversity of the skywire network, a regional saturation scaling factor is applied to each visor's presence share. The factor is a per-visor multiplier (not a country-pot allocation) and depends only on the number of unique IP addresses in the visor's country.</p>
+<p>For each qualifying visor:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>visor.share *= unique_ips_in_country ^ (exponent - 1)
+</span></code></pre></div>
+<p>The default exponent is 0.5, so each visor's per-country scale is <code>1/sqrt(unique_ips_in_country)</code>. After scaling, all per-visor shares are renormalized to the daily presence pool.</p>
+<p>This means:
+- A country's <strong>total</strong> reward grows linearly with the number of qualifying visors (subject to the per-IP cap), so adding visors 2..cap at an existing IP does not dilute the rewards of existing visors at that IP
+- The <strong>per-visor</strong> reward in a country shrinks as that country accumulates more unique IPs — single-IP countries see the highest per-visor reward, providing a growth incentive in under-represented regions
+- No country is excluded from rewards — all eligible visors receive rewards regardless of location</p>
+<p><strong>Example:</strong> If Country A has 100 unique IPs and Country B has 1 unique IP, at the default exponent 0.5:
+- Country A's per-visor scale: <code>100^(0.5-1) = 100^(-0.5) = 0.1</code>
+- Country B's per-visor scale: <code>1^(0.5-1) = 1.0</code>
+- Country B's single visor is worth approximately 10× more (per-visor) than each visor in Country A</p>
+<p>The geographic location of each visor is determined by GeoIP lookup of the visor's IP address using the embedded MaxMind GeoLite2-City database at the country level.</p>
+<p>The exponent can be adjusted via the <code>--sat-exp</code> flag (default 0.5):
+- <code>1.0</code> disables regional saturation scaling entirely (all visors have the same per-country scale of 1)
+- <code>0.5</code> (default) gives <code>1/sqrt(N)</code> scaling — balances the diversity incentive against runaway per-visor extremes
+- Lower exponents (e.g. 0.4) strengthen the discount on dense-IP countries; higher exponents (e.g. 0.7) soften it</p>
+<h3 id="skycoin-address">Skycoin Address<a class="headerlink" href="#skycoin-address" title="Permalink">&para;</a></h3>
+<p>The skycoin address to be rewarded can be set from the cli:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>skywire cli reward &lt;skycoin-address&gt;
+</span></code></pre></div>
+<p><img alt="image" src="https://user-images.githubusercontent.com/36607567/213941582-f57213b8-2acd-4c9a-a2c0-9089a8c2604e.png" /></p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>$ skywire cli reward --help
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    reward address setting
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    Sets the skycoin reward address for the visor.
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    The config is written to the root of the default local directory
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>    this config is served via dmsghttp along with transport logs
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>    and the system hardware survey for automating reward distribution
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>Flags:
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>      --all   show all flags
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>$ skywire cli reward 2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>Reward address:
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>  2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>$ skywire cli reward --help
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    skycoin reward address set to:
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>Flags:
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>      --all   show all flags
+</span></code></pre></div>
+<p>or via the hypervisor UI.</p>
+<p><img alt="image" src="https://user-images.githubusercontent.com/36607567/213941478-34c81493-9c3c-40c2-ac22-e33e3683a16f.png" /></p>
+<p>the example above shows the genesis address for the skycoin blockchain. <strong>Please do not use the genesis address.</strong></p>
+<p>It is <strong>highly recommended</strong> to set the reward address in the file '/etc/skywire.conf' by adding this line to the file:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>echo "REWARDSKYADDR=('2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6')" | sudo tee -a /etc/skywire.conf
+</span></code></pre></div>
+<p><strong>PLEASE DO NOT USE THE GENESIS ADDRESS!</strong></p>
+<p>Add your skycoin address there and run:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>skywire-autoconfig
+</span></code></pre></div></p>
+<p>on linux (assumes you have installed the package)</p>
+<p>If this file does not exist for you, it can be created with
+<div class="language-text highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>skywire cli config gen -q | sudo tee /etc/skywire.conf
+</span></code></pre></div></p>
+<p><strong>If you do this, YOU MUST UNCOMMENT THE FOLLOWING LINES OF THE FILE:</strong>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>PKGENV=true
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>BESTPROTO=TRUE
+</span></code></pre></div></p>
+<p>you can open the file in an editor to make that change, for instance nano</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>sudo nano /etc/skywire.conf
+</span></code></pre></div>
+<h3 id="connection-to-dmsg-network">Connection To DMSG Network<a class="headerlink" href="#connection-to-dmsg-network" title="Permalink">&para;</a></h3>
+<p>For any given visor, the system hardware survey and transport setup-node survey are collected <strong>hourly</strong> by the reward system over dmsg.</p>
+<p>This can be verified by examining the visor's logging:</p>
+<p><img alt="image" src="https://github.com/skycoin/skywire/assets/36607567/eb66bca1-fc9e-4c80-a38a-e00a73f675d0" /></p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>[DMSGHTTP] 2024/10/09 - 22:31:45 | 200 |        47.2µs |                 | 03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3:51405 | GET      /health
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>[DMSGHTTP] 2024/10/09 - 22:31:46 | 200 |     193.325µs |                 | 03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3:51457 | GET      /node-info
+</span></code></pre></div>
+<p>Bandwidth data is reported separately by each visor to the transport discovery on transport re-registration — it is no longer collected from the visor over dmsg as a per-day CSV. See <a href="#Transport-Bandwidth-and-Metrics">Transport Bandwidth and Metrics</a>.</p>
+<p>The collected surveys should be visible in the survey index here:</p>
+<p><a href="https://theskywirenetwork.net/log-collection/tree">theskywirenetwork.net/log-collection/tree</a></p>
+<p>An example of one such entry:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>├─┬025e3e4e324a3ac2771e32b798ca3d8859e585ac36938b15a31d20982de6aa31fc
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>│ ├──health.json     Age: 13m5s {"build_info":{"version":"v1.3.21","commit":"5131943","date":"2024-04-13T15:03:26Z"},"started_at":"2024-05-07T08:52:09.895919222Z"}
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>│ ├──node-info.json          "v1.3.21"
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>│ └──tp.json         Age: 6m56s []
+</span></code></pre></div></p>
+<p>Note: the system survey (node-info.json) will only exist if the reward address is set.</p>
+<p>If your visor is not generating such logging or errors are indicated, please reach out to us on telegram <a href="https://t.me/skywire">@skywire</a> for assistance</p>
+<h3 id="transportable">Transportable<a class="headerlink" href="#transportable" title="Permalink">&para;</a></h3>
+<p>It is not required that a visor run any service, such as a vpn or socks5 proxy server, which permits direct access to the internet from your ip address.
+However, it is required that the visor is able to act as a hop along a route.
+A module is active at runtime which checks that transports may be established to that visor - the visor creates a dmsg transport to itself every few minutes to ensure transportability.
+If it's not possible to create a dmsg transport to the same visor after three attempts,the visor will shut down automatically.
+<strong>It is expected that the visor will be restarted by a process control mechanism if the visor shuts down for any reason.</strong>
+In the officially supported linux packages, systemd will restart the visor if it stops; regardless of the exit status of the process.</p>
+<h3 id="transports">Transports<a class="headerlink" href="#transports" title="Permalink">&para;</a></h3>
+<p>To be useful for routing traffic, a visor must have a minimum of 2 transports, observed at some point during which the uptime is being considered.</p>
+<p>Note that this requirement depends on at least 2 public visors being online on the network at all times, and that your visor is running with public autoconnect logic enabled (which is the default).</p>
+<p>in the instance that the visor does not have transports, it is recommended to manually create transports to the two public visors with the most transports, which can be observed with:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>skywire cli pv -t
+</span></code></pre></div>
+<h3 id="transport-setup-node">Transport Setup Node<a class="headerlink" href="#transport-setup-node" title="Permalink">&para;</a></h3>
+<p>The visor must respond to transport setup-node requests. The transport setup-nodes configured for the visor are included in the survey and verified as an eligibility requirement for rewards.</p>
+<p>Routes are established through the network via setup-nodes. When a setup-node contacts your visor to establish a route, the visor must accept and process the request. Visors which do not have the correct setup-nodes configured, or which are unable to respond to setup-node requests, are not eligible for rewards.</p>
+<h3 id="routability-and-ping-latency">Routability and Ping Latency<a class="headerlink" href="#routability-and-ping-latency" title="Permalink">&para;</a></h3>
+<p>The visor must be route-able over existing transports and respond to pings. There is no minimum latency requirement, as the measurement is relative to where it is being measured from.</p>
+<p>Transport latency is measured automatically when transports are established. If the initial measurement fails (e.g., due to a busy remote visor), the visor will retry with exponential backoff until a measurement succeeds or the transport is closed. Latency data is reported to the transport discovery service on transport re-registration.</p>
+<h3 id="transport-bandwidth-and-metrics">Transport Bandwidth and Metrics<a class="headerlink" href="#transport-bandwidth-and-metrics" title="Permalink">&para;</a></h3>
+<p>Transport bandwidth and latency metrics are collected by the transport discovery service. Each visor maintains per-transport bandwidth counters in a local bbolt-backed stats store and reports them when transports are re-registered with the transport discovery. (The on-disk <code>YYYY-MM-DD.csv</code> per-day log store the visor used to keep — and the reward system used to fetch over dmsg — has been retired; historical data is served from the same bbolt store via the visor's RPC.) These metrics can be viewed with:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>skywire cli tp metrics
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>skywire cli tp metrics -t
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>skywire cli tp metrics --tree
+</span></code></pre></div>
+<p>The bandwidth data from the transport discovery is used for the bandwidth pool reward distribution under a sender-pays model: each visor is credited only for the bytes it sent on each transport, and each side's sent counter is capped by the counterparty's reported recv (verified bandwidth). This sender-side cap prevents any single visor from unilaterally inflating its own bandwidth figures.</p>
+<h3 id="survey">Survey<a class="headerlink" href="#survey" title="Permalink">&para;</a></h3>
+<p>On setting the skycoin reward address, the visor will generate and serve a system survey over dmsg.</p>
+<p>Only keys which are whitelisted in the survey_whitelist array of the visor's config will have access to collect the survey.</p>
+<p>To print the survey (approximately) as it would be served, one can use:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>skywire cli survey -p
+</span></code></pre></div></p>
+<p><strong>The purpose of the survey is strictly for checking <a href="#rules--requirements">eligibility requirements</a> numbers 3 through 7.</strong></p>
+<p><strong>Setting a skycoin address is considered as consent for collecting the survey ; the survey is not generated unless you set a skycoin address</strong></p>
+<p>We respect your privacy.</p>
+<h3 id="verifying-other-requirements">Verifying Other Requirements<a class="headerlink" href="#verifying-other-requirements" title="Permalink">&para;</a></h3>
+<p>If the visor is not able to meet the <a href="#rules--requirements">eligibility requirements</a> numbers 8 through 13, that is usually not the fault of the user
+nor is it something the user is expected to troubleshoot on their own at this time. Please ask for assistance on telegram <a href="https://t.me/skywire">@skywire</a></p>
+<h2 id="reward-system-overview">Reward System Overview<a class="headerlink" href="#reward-system-overview" title="Permalink">&para;</a></h2>
+<p>The skycoin reward address may be set for each visor.</p>
+<p>The skycoin reward address is in a text file contained in the "local" folder (local_path in the skywire config file) i.e <code>local/reward.txt</code>.</p>
+<p>The skycoin reward address is also included with the <a href="https://github.com/skycoin/skywire/tree/develop/cmd/skywire/README.md#survey">system hardware survey</a> and served via dmsghttp.</p>
+<p>The system survey ('local/node-info.json') is fetched hourly by the reward system via
+<div class="language-text highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>skywire cli log
+</span></code></pre></div></p>
+<p>The index of the collected files may be viewed at <a href="https://theskywirenetwork.net/log-collection/tree">theskywirenetwork.net/log-collection/tree</a></p>
+<p>Once collected from the nodes, the surveys for those visors which met uptime are checked to verify hardware and other requirements, etc.</p>
+<p>The system survey is only made available to those keys which are whitelisted for survey collection, but is additionally available to any <code>hypervisor</code> or <code>dmsgpty_whitelist</code> keys set in the config for a given visor.</p>
+<p><strong>Setting a skycoin address is considered as consent for collecting the survey.</strong></p>
+<p>The public keys which require to be whitelisted in order to collect the surveys, for the purpose of reward eligibility verification, should populate in the visor's config automatically when the config is generated.</p>
+<h2 id="reward-system-funding-distributions">Reward System Funding &amp; Distributions<a class="headerlink" href="#reward-system-funding-distributions" title="Permalink">&para;</a></h2>
+<p>The reward system is funded on a monthly basis. <strong>Sometimes there are unexpected or unavoidable delays in the funding.</strong> In these instances, rewards will be distributed based on the data generated when the system is funded.
+In some instances, it's necessary to discard previous reward data and do multiple distributions to handle backlog of reward system funds.</p>
+<p><strong>We do our best to ensure fair reward distribution</strong> - but the system itself is not infinitely flexible.
+If there is no good way to rectify historical or undistributed rewards backlog, it will be distributed going forward as multiple distributions on the same day to those current active participants in the network.</p>
+<h2 id="deployment-outages">Deployment Outages<a class="headerlink" href="#deployment-outages" title="Permalink">&para;</a></h2>
+<p>While we do our best to maintain the skywire production deployment, there have been instances of issues or outages in the past. We attempt to correct these outages as soon as possible and avoid recurrent disruptions.</p>
+<p>The policy for handling rewards in the instance of a deployment outage is to repeat the distribution for the last day where uptime was unaffected by the outage; for the duration of the outage.</p>
+<h2 id="hardware">Hardware<a class="headerlink" href="#hardware" title="Permalink">&para;</a></h2>
+<p>Skywire rewards are open to all computer hardware and architectures.</p>
+<p>If there is not a release for your desired architecture, we can attempt to add it, on request.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/skycoin/skywire" target="_blank" rel="noopener" title="skycoin/skywire on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://t.me/skywire" target="_blank" rel="noopener" title="Skywire on Telegram" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M248 8C111.033 8 0 119.033 0 256s111.033 248 248 248 248-111.033 248-248S384.967 8 248 8m114.952 168.66c-3.732 39.215-19.881 134.378-28.1 178.3-3.476 18.584-10.322 24.816-16.948 25.425-14.4 1.326-25.338-9.517-39.287-18.661-21.827-14.308-34.158-23.215-55.346-37.177-24.485-16.135-8.612-25 5.342-39.5 3.652-3.793 67.107-61.51 68.335-66.746.153-.655.3-3.1-1.154-4.384s-3.59-.849-5.135-.5q-3.283.746-104.608 69.142-14.845 10.194-26.894 9.934c-8.855-.191-25.888-5.006-38.551-9.123-15.531-5.048-27.875-7.717-26.8-16.291q.84-6.7 18.45-13.7 108.446-47.248 144.628-62.3c68.872-28.647 83.183-33.623 92.511-33.789 2.052-.034 6.639.474 9.61 2.885a10.45 10.45 0 0 1 3.53 6.716 43.8 43.8 0 0 1 .417 9.769"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://blog.theskywirenetwork.net" target="_blank" rel="noopener" title="Skycoin blog" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M0 64c0-17.7 14.3-32 32-32 229.8 0 416 186.2 416 416 0 17.7-14.3 32-32 32s-32-14.3-32-32C384 253.6 226.4 96 32 96 14.3 96 0 81.7 0 64m0 352a64 64 0 1 1 128 0 64 64 0 1 1-128 0m32-256c159.1 0 288 128.9 288 288 0 17.7-14.3 32-32 32s-32-14.3-32-32c0-123.7-100.3-224-224-224-17.7 0-32-14.3-32-32s14.3-32 32-32"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "navigation.tracking", "navigation.indexes", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.action.edit", "toc.follow"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.60a45f97.min.js"></script>
+      
+        <script src="../../javascripts/desk-shell.js"></script>
+      
+    
+  </body>
+</html>
