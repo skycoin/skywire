@@ -30,6 +30,16 @@
 (function () {
   'use strict';
 
+  // FRAMED: do nothing. The desk opens the docs in a netscrape tab, and
+  // desk_js.go's DirectLoader claims same-origin URLs so that tab renders the
+  // real page — scripts and all, this one included. Without this guard the
+  // docs would mount a desk inside the desk's own browser, which would open
+  // the docs, without end. Reading the docs framed is the point; running a
+  // second shell inside them is not.
+  try {
+    if (window.top !== window.self) { return; }
+  } catch (e) { return; } // cross-origin top — framed by someone else
+
   if (window.__skwDeskShell) { window.__skwDeskShell.onNavigate(); return; }
 
   // Site root from this script's own URL (".../javascripts/desk-shell.js"),
