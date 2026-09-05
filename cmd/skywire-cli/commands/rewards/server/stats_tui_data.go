@@ -7,6 +7,13 @@
 // That matters here more than usual, because the previous version reduced a
 // 24 MB per-transport body to produce three numbers and, when that fetch died
 // with EOF, the whole summary rendered as an error string.
+//
+// Each source is read from TPD's CXO feeds first and over HTTP-over-dmsg only
+// on a miss — see statscxo.go for why that is a fix and not a refactor. The
+// panel records WHICH of the two answered, alongside the failures, because a
+// snapshot minutes old and a fetch made just now are different claims about
+// the network and a panel that printed them identically would be lying by
+// omission in the same way a rendered zero is.
 package clirewardsserver
 
 import (
@@ -17,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/skycoin/skywire/deployment"
+	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
 )
 
 // gatherStatsTUI collects everything the panel draws. It never returns an
@@ -26,52 +34,74 @@ func gatherStatsTUI() statsTUIData {
 	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
 
 	// Counts — 138 bytes. The cheap aggregate, not a reduction of the bulk
-	// bodies.
-	var stats struct {
-		TotalTransports int            `json:"total_transports"`
-		ByType          map[string]int `json:"by_type"`
-		UniqueVisors    int            `json:"unique_visors"`
-	}
-	if err := statsGetJSON(tpdURL+"/all-transports/stats", &stats); err != nil {
-		d.CountsErr = err.Error()
+	// bodies. The CXO leaf additionally carries a completeness verdict the
+	// HTTP body has no field for: TPD's transport aggregate is readable
+	// while it refills after a restart (#4513), and only the feed says so.
+	if stats, src, err := cxoNetworkStats(); err == nil {
+		d.Transports, d.ByType, d.UniqueVisors = stats.Total, stats.ByType, stats.UniqueVisors
+		d.CountsSrc = src.String()
 	} else {
-		d.Transports, d.ByType, d.UniqueVisors = stats.TotalTransports, stats.ByType, stats.UniqueVisors
+		d.CountsSrc = httpStatsSource("/all-transports/stats", err.Error()).String()
+		var stats struct {
+			TotalTransports int            `json:"total_transports"`
+			ByType          map[string]int `json:"by_type"`
+			UniqueVisors    int            `json:"unique_visors"`
+		}
+		if hErr := statsGetJSON(tpdURL+"/all-transports/stats", &stats); hErr != nil {
+			d.CountsErr = hErr.Error()
+		} else {
+			d.Transports, d.ByType, d.UniqueVisors = stats.TotalTransports, stats.ByType, stats.UniqueVisors
+		}
 	}
 
 	// Daily bandwidth and latency — 2.7 KB for the whole series, against the
 	// tens of megabytes the per-transport route costs for the same shape.
-	var metric struct {
-		Daily []struct {
-			Date      string  `json:"date"`
-			Bandwidth uint64  `json:"bandwidth"`
-			Latency   float64 `json:"latency"`
-			ByType    map[string]struct {
-				Bandwidth uint64 `json:"bandwidth"`
-			} `json:"by_type"`
-		} `json:"daily"`
-	}
-	if err := statsGetJSON(fmt.Sprintf("%s/metric?days=30", tpdURL), &metric); err != nil {
-		d.DailyErr = err.Error()
+	// This 2.7 KB body is one of the fetches observed failing with EOF on the
+	// live site, which is what stats/daily was added for.
+	if daily, src, err := cxoDailyStats(); err == nil {
+		d.Daily = tuiDaysFromCXO(daily)
+		d.DailySrc = src.String()
 	} else {
-		// TPD returns newest-first; a time axis has to run oldest to newest or
-		// every chart reads backwards.
-		for i := len(metric.Daily) - 1; i >= 0; i-- {
-			m := metric.Daily[i]
-			day := statsTUIDay{Date: m.Date, Bandwidth: m.Bandwidth, Latency: m.Latency,
-				ByType: make(map[string]uint64, len(m.ByType))}
-			for t, v := range m.ByType {
-				day.ByType[t] = v.Bandwidth
+		d.DailySrc = httpStatsSource("/metric?days=30", err.Error()).String()
+		var metric struct {
+			Daily []struct {
+				Date      string  `json:"date"`
+				Bandwidth uint64  `json:"bandwidth"`
+				Latency   float64 `json:"latency"`
+				ByType    map[string]struct {
+					Bandwidth uint64 `json:"bandwidth"`
+				} `json:"by_type"`
+			} `json:"daily"`
+		}
+		if hErr := statsGetJSON(fmt.Sprintf("%s/metric?days=30", tpdURL), &metric); hErr != nil {
+			d.DailyErr = hErr.Error()
+		} else {
+			// TPD returns newest-first; a time axis has to run oldest to newest
+			// or every chart reads backwards.
+			for i := len(metric.Daily) - 1; i >= 0; i-- {
+				m := metric.Daily[i]
+				day := statsTUIDay{Date: m.Date, Bandwidth: m.Bandwidth, Latency: m.Latency,
+					ByType: make(map[string]uint64, len(m.ByType))}
+				for t, v := range m.ByType {
+					day.ByType[t] = v.Bandwidth
+				}
+				d.Daily = append(d.Daily, day)
 			}
-			d.Daily = append(d.Daily, day)
 		}
 	}
 
 	// Fleet version histogram — 300 bytes.
-	versions := map[string]int{}
-	if err := statsGetJSON(tpdURL+"/version", &versions); err != nil {
-		d.VersionsErr = err.Error()
+	if versions, src, err := cxoVersionStats(); err == nil {
+		d.Versions = versions.Versions
+		d.VersionsSrc = src.String()
 	} else {
-		d.Versions = versions
+		d.VersionsSrc = httpStatsSource("/version", err.Error()).String()
+		versions := map[string]int{}
+		if hErr := statsGetJSON(tpdURL+"/version", &versions); hErr != nil {
+			d.VersionsErr = hErr.Error()
+		} else {
+			d.Versions = versions
+		}
 	}
 
 	// Visors online, summed from the uptime tracker's per-5-minute timelines.
@@ -92,6 +122,31 @@ func gatherStatsTUI() statsTUIData {
 	d.Coverage = gatherServiceCoverage()
 
 	return d
+}
+
+// tuiDaysFromCXO converts the published stats/daily body into the panel's
+// per-day rows, OLDEST FIRST. The feed publishes newest-first, as the /metric
+// endpoint does, and a time axis has to run oldest to newest or every chart
+// reads backwards.
+func tuiDaysFromCXO(d *tpdapi.DailyStats) []statsTUIDay {
+	out := make([]statsTUIDay, 0, len(d.Daily))
+	for i := len(d.Daily) - 1; i >= 0; i-- {
+		m := d.Daily[i]
+		day := statsTUIDay{
+			Date:      m.Date,
+			Bandwidth: m.Bandwidth,
+			Latency:   m.Latency,
+			ByType:    make(map[string]uint64, len(m.ByType)),
+		}
+		for t, v := range m.ByType {
+			if v == nil {
+				continue
+			}
+			day.ByType[t] = v.Bandwidth
+		}
+		out = append(out, day)
+	}
+	return out
 }
 
 // livenessToTUIDays regroups the flat slot series into per-day runs, which is

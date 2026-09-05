@@ -121,9 +121,10 @@ func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 		return &FetchCXOResult{Hit: true, Body: body, LastRootAt: time.Now()}, nil
 
 	case "tpd-stats":
-		// Path is "network" or "versions". Bodies are sub-kilobyte and
-		// republished every ~12s, so LastRootAt is a real freshness
-		// signal here rather than the wall clock the bulk feeds report.
+		// Path is "network", "versions" or "daily". The bodies are small
+		// and republished on a timer (~12s for the first two, ~5m for
+		// daily), so LastRootAt is a real freshness signal here rather
+		// than the wall clock the bulk feeds report.
 		if _, ok := statsPathForKind(args.Path); !ok {
 			return &FetchCXOResult{Reason: "invalid path for tpd-stats: " + args.Path}, nil
 		}

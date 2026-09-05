@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/deployment"
+	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
 )
 
 // TPD's daily aggregate: the cheap time series behind the /stats charts.
@@ -25,6 +26,13 @@ import (
 // reduction the charts actually want at /metric?days=N: the whole 30-day series
 // with a per-transport-type breakdown, in under three kilobytes, carrying
 // LATENCY as well as bandwidth.
+//
+// Three kilobytes turned out not to be small enough. That fetch fails with EOF
+// too, because the failure is not about size: the reward server's dmsg client
+// periodically loses its sessions and every request in that window dies
+// (skycoin/skywire#4538). So the same reduction is now published on TPD's CXO
+// stats feed as stats/daily and read from a local snapshot; the HTTP endpoint
+// stays behind it as the fallback, and the page says which one answered.
 
 // tpdDailyByType is one transport type's contribution on one day.
 type tpdDailyByType struct {
@@ -40,7 +48,7 @@ type tpdDailyPoint struct {
 	ByType    map[string]tpdDailyByType `json:"by_type"`
 }
 
-// tpdDailyAggregate is the parsed /metric?days=N response plus the fetch
+// tpdDailyAggregate is the parsed daily aggregate plus the fetch
 // outcome. OK/Err follow the BandwidthOK/BandwidthErr convention in
 // tpdNetworkSummary: a failed fetch must never render as a zero, because a
 // "0 B" on a bandwidth page reads as a measurement rather than as a gap.
@@ -52,6 +60,11 @@ type tpdDailyAggregate struct {
 		ByType    map[string]tpdDailyByType `json:"by_type"`
 	} `json:"cumulative"`
 	Fetched string `json:"fetched"`
+	// Source names where these numbers came from — the CXO stats/daily
+	// leaf or the HTTP /metric endpoint — and is rendered on the page.
+	// A snapshot minutes old and a fetch made just now are different
+	// claims about the network and must not print identically.
+	Source string `json:"source,omitempty"`
 }
 
 const (
@@ -62,14 +75,30 @@ const (
 	tpdDailyDays = 30
 )
 
-// fetchTPDDailyAggregate GETs TPD's daily aggregate, cached on disk for
-// tpdSummaryCacheMaxAge the same way getTPDNetworkSummary caches its summary.
+// fetchTPDDailyAggregate returns TPD's daily aggregate — CXO first, then
+// the disk cache, then HTTP.
+//
+// The CXO leaf is checked BEFORE the disk cache because it is already a
+// local snapshot: reading it costs a map lookup and a gunzip, so there
+// is nothing for a five-minute page cache to save, and serving a cached
+// body over a live one would only make the page staler than it needs to
+// be. The disk cache stays in front of the HTTP path, which is what it
+// was always damping.
 func fetchTPDDailyAggregate() (*tpdDailyAggregate, error) {
+	daily, src, cxoErr := cxoDailyStats()
+	if cxoErr == nil {
+		agg := dailyAggregateFromCXO(daily)
+		agg.Source = src.String()
+		return agg, nil
+	}
+
 	cachePath := filepath.Join(tempStatsPath, tpdDailyCacheFile)
 	if info, err := os.Stat(cachePath); err == nil && time.Since(info.ModTime()) <= tpdSummaryCacheMaxAge {
 		if data, rErr := os.ReadFile(cachePath); rErr == nil { //nolint:gosec
 			var agg tpdDailyAggregate
 			if json.Unmarshal(data, &agg) == nil && len(agg.Daily) > 0 {
+				// Say that this is the page cache, not a fetch.
+				agg.Source = cachedSourceLabel(statsAgeString(time.Since(info.ModTime())), agg.Source)
 				return &agg, nil
 			}
 		}
@@ -101,6 +130,7 @@ func fetchTPDDailyAggregate() (*tpdDailyAggregate, error) {
 	// TPD returns newest-first; charts read left-to-right oldest-first.
 	sort.Slice(agg.Daily, func(i, j int) bool { return agg.Daily[i].Date < agg.Daily[j].Date })
 	agg.Fetched = time.Now().UTC().Format(time.RFC3339)
+	agg.Source = httpStatsSource("/metric", cxoErr.Error()).String()
 
 	if data, mErr := json.Marshal(&agg); mErr == nil {
 		os.WriteFile(cachePath, data, 0600) //nolint:errcheck,gosec
@@ -108,14 +138,67 @@ func fetchTPDDailyAggregate() (*tpdDailyAggregate, error) {
 	return &agg, nil
 }
 
+// dailyAggregateFromCXO converts the published stats/daily body into the
+// shape the charts already draw. The conversion is a rename, not a
+// recomputation: the publisher writes store.NetworkMetricResponse
+// verbatim, so these are the same numbers GET /metric returns.
+func dailyAggregateFromCXO(d *tpdapi.DailyStats) *tpdDailyAggregate {
+	agg := &tpdDailyAggregate{
+		Daily:   make([]tpdDailyPoint, 0, len(d.Daily)),
+		Fetched: d.ObservedAt.UTC().Format(time.RFC3339),
+	}
+	for _, day := range d.Daily {
+		p := tpdDailyPoint{
+			Date:      day.Date,
+			Bandwidth: day.Bandwidth,
+			Latency:   day.Latency,
+			ByType:    make(map[string]tpdDailyByType, len(day.ByType)),
+		}
+		for t, v := range day.ByType {
+			if v == nil {
+				continue
+			}
+			p.ByType[t] = tpdDailyByType{Bandwidth: v.Bandwidth, Latency: v.Latency}
+		}
+		agg.Daily = append(agg.Daily, p)
+	}
+	// The feed publishes newest-first, as the endpoint does; charts read
+	// left-to-right oldest-first.
+	sort.Slice(agg.Daily, func(i, j int) bool { return agg.Daily[i].Date < agg.Daily[j].Date })
+
+	if d.Cumulative != nil {
+		agg.Cumulative.Bandwidth = d.Cumulative.Bandwidth
+		agg.Cumulative.ByType = make(map[string]tpdDailyByType, len(d.Cumulative.ByType))
+		for t, v := range d.Cumulative.ByType {
+			if v == nil {
+				continue
+			}
+			agg.Cumulative.ByType[t] = tpdDailyByType{Bandwidth: v.Bandwidth, Latency: v.Latency}
+		}
+	}
+	return agg
+}
+
 // tpdAggregateCaveat is the provenance note the bandwidth and latency charts
 // must carry. These are TPD's own cumulative aggregates, not the min()-verified
 // figures the reward calculation uses (see the three-branch trust model in
 // fillTPDBandwidth). Correct as a trend; not a reward-verified number.
-const tpdAggregateCaveat = "Source: Transport Discovery's own daily aggregate (<code>/metric</code>). " +
+const tpdAggregateCaveat = "Transport Discovery's own daily aggregate. " +
 	"These are TPD's reported totals, <b>not</b> the min()-verified per-edge figures used by the " +
 	"reward calculation — a transport whose two edges disagree is counted here as reported. " +
 	"Correct as a trend; do not read these as reward-verified bandwidth."
+
+// aggregateProvenance renders the caveat plus which transport actually
+// delivered these numbers. Whether the page is showing a CXO snapshot
+// or a live HTTP fetch is not a footnote: they carry different
+// freshness and the CXO body carries its own completeness verdict.
+func aggregateProvenance(agg *tpdDailyAggregate) string {
+	out := fmt.Sprintf("<p style='color:#888;font-size:11px;'>%s</p>", tpdAggregateCaveat)
+	if agg != nil && agg.Source != "" {
+		out += fmt.Sprintf("<p style='color:#888;font-size:11px;'>%s</p>", html.EscapeString(agg.Source))
+	}
+	return out
+}
 
 // transportTypeSeries builds one chart series per transport type, ordered by
 // total contribution so the legend and the band order are stable between
@@ -184,7 +267,7 @@ func renderBandwidthTimeSeries(agg *tpdDailyAggregate, err error) string {
 		FormatY:    func(v float64) string { return formatBytesChart(uint64(v)) },
 	}
 	out := renderStackedAreaSVG(opts, series)
-	out += fmt.Sprintf("<p style='color:#888;font-size:11px;'>%s</p>", tpdAggregateCaveat)
+	out += aggregateProvenance(agg)
 	out += renderDailyTable(daily, "Bandwidth", func(d tpdDailyPoint) string {
 		return formatBytesChart(d.Bandwidth)
 	})
@@ -231,7 +314,7 @@ func renderLatencyTimeSeries(agg *tpdDailyAggregate, err error) string {
 		FormatY:    func(v float64) string { return fmt.Sprintf("%.0f ms", v) },
 	}
 	out := renderLineSVG(opts, series, hover)
-	out += fmt.Sprintf("<p style='color:#888;font-size:11px;'>%s</p>", tpdAggregateCaveat)
+	out += aggregateProvenance(agg)
 	out += renderDailyTable(daily, "Avg latency", func(d tpdDailyPoint) string {
 		return fmt.Sprintf("%.1f ms", d.Latency)
 	})

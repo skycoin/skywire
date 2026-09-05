@@ -61,6 +61,7 @@ const (
 	TabRoutingPolicy     = cxosub.TabRoutingPolicy
 	TabDmsgEntryLookup   = cxosub.TabDmsgEntryLookup
 	TabNetworkStats      = cxosub.TabNetworkStats
+	TabTransportMetrics  = cxosub.TabTransportMetrics
 )
 
 // feedFirstSyncTimeout forwards to cxosub so the RPC fetch/refresh default

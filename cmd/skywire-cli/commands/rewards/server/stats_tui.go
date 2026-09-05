@@ -48,17 +48,25 @@ const tuiWidth = 78
 // page must render whatever was fetched successfully and say plainly what was
 // not, rather than failing whole. Each Err field carries why its section is
 // missing.
+// CountsSrc, DailySrc and VersionsSrc name which transport answered for
+// each section — a CXO snapshot with an age and a completeness verdict, or
+// a live HTTP-over-dmsg fetch. Rendered as a footer line on the panel. The
+// rule is the one that governs the Err fields: a figure whose provenance is
+// unstated is presented as more certain than it is.
 type statsTUIData struct {
 	Transports   int
 	UniqueVisors int
 	ByType       map[string]int
 	CountsErr    string
+	CountsSrc    string
 
 	// Daily is oldest-first. Callers reverse TPD's newest-first order.
 	Daily       []statsTUIDay
 	DailyErr    string
+	DailySrc    string
 	Versions    map[string]int
 	VersionsErr string
+	VersionsSrc string
 
 	// Liveness is visors-reporting-online per 5-minute slot, oldest-first,
 	// with the label of the day each run of slots belongs to.
@@ -173,6 +181,16 @@ func tuiMissing(title, why string) string {
 		tuiClose(width)
 }
 
+// tuiSource renders the provenance footer of a panel. Empty when nothing
+// recorded a source, so an older caller that does not set one is unchanged
+// rather than printing a blank line.
+func tuiSource(src string) string {
+	if src == "" {
+		return ""
+	}
+	return fmt.Sprintf("  %s%s%s\n", aDim, src, aReset)
+}
+
 // tuiPlot draws one labeled series panel.
 func tuiPlot(title string, series []float64, labels []string, height int, precision uint, color asciigraph.AnsiColor, width int, footer string) string {
 	if len(series) < 2 {
@@ -239,6 +257,7 @@ func RenderStatsANSI(d statsTUIData) string {
 			b.WriteString(fmt.Sprintf("  %son newest%s  %s%s%s  %s%d of %d (%.1f%%)%s\n",
 				aDim, aReset, aBold, newest, aReset, col, newestN, total, pct, aReset))
 		}
+		b.WriteString(tuiSource(d.CountsSrc))
 		b.WriteString(tuiClose(width))
 		b.WriteString("\n")
 	}
@@ -255,8 +274,8 @@ func RenderStatsANSI(d statsTUIData) string {
 			lat = append(lat, day.Latency)
 			labels = append(labels, tuiShortDate(day.Date))
 		}
-		b.WriteString(tuiPlot("BANDWIDTH — GB/day", bw, labels, 9, 1, asciigraph.Green, width, ""))
-		b.WriteString(tuiPlot("LATENCY — ms/day", lat, labels, 7, 0, asciigraph.Yellow, width, ""))
+		b.WriteString(tuiPlot("BANDWIDTH — GB/day", bw, labels, 9, 1, asciigraph.Green, width, d.DailySrc))
+		b.WriteString(tuiPlot("LATENCY — ms/day", lat, labels, 7, 0, asciigraph.Yellow, width, d.DailySrc))
 	}
 
 	// ---- visors online -----------------------------------------------------
@@ -369,6 +388,7 @@ func RenderStatsANSI(d statsTUIData) string {
 		if len(vs) > shown {
 			b.WriteString(fmt.Sprintf("  %s… %d further builds%s\n", aDim, len(vs)-shown, aReset))
 		}
+		b.WriteString(tuiSource(d.VersionsSrc))
 		b.WriteString(tuiClose(width))
 	}
 
