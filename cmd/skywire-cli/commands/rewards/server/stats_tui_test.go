@@ -117,3 +117,39 @@ func TestGatherStatsTUILive(t *testing.T) {
 		t.Fatal("rendered nothing from live data")
 	}
 }
+
+// A section with neither data nor an error must still be named. This shipped
+// broken once: the Liveness field existed and the renderer drew it, but
+// gatherStatsTUI never populated it, so the panel vanished silently — the one
+// failure mode the whole design exists to prevent.
+func TestRenderStatsANSINeverSilentlyOmitsAPanel(t *testing.T) {
+	d := sampleTUIData()
+	d.Liveness = nil // no data, and crucially no error either
+	out := RenderStatsANSI(d)
+	if !strings.Contains(out, "VISORS ONLINE") {
+		t.Fatal("the panel disappeared entirely instead of reporting itself absent")
+	}
+	if !strings.Contains(out, "unavailable") {
+		t.Error("an unpopulated panel was drawn without saying it had no data")
+	}
+}
+
+// The flat slot series regroups into per-day runs for the x-axis labels.
+func TestLivenessToTUIDaysGroupsByDate(t *testing.T) {
+	got := livenessToTUIDays(&livenessSeries{
+		Counts: []int{1, 2, 3, 4, 5},
+		Dates:  []string{"2026-09-04", "2026-09-04", "2026-09-05", "2026-09-05", "2026-09-05"},
+	})
+	if len(got) != 2 {
+		t.Fatalf("got %d days, want 2", len(got))
+	}
+	if got[0].Date != "2026-09-04" || len(got[0].Slots) != 2 {
+		t.Errorf("day 0 = %+v", got[0])
+	}
+	if got[1].Date != "2026-09-05" || len(got[1].Slots) != 3 {
+		t.Errorf("day 1 = %+v", got[1])
+	}
+	if livenessToTUIDays(nil) != nil {
+		t.Error("nil series should produce no days")
+	}
+}
