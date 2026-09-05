@@ -26,7 +26,6 @@ import (
 	"bytes"
 	"fmt"
 	"io/fs"
-	"net"
 	"net/http"
 	"sort"
 	"strings"
@@ -35,6 +34,8 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 	ghtml "github.com/yuin/goldmark/renderer/html"
+
+	"github.com/0magnet/bottle/vnet"
 
 	skydocs "github.com/skycoin/skywire/docs"
 )
@@ -67,7 +68,11 @@ natively, with no visor and no transport needed.
 	SilenceUsage:          true,
 	DisableFlagsInUseLine: true,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		ln, err := net.Listen("tcp", serveAddr)
+		// bottle/vnet, not net: a real socket natively, the page port table under
+		// js. Binding with net directly would serve fine on a workstation and
+		// bind nothing reachable in the browser — where the desk needs to open
+		// this at /vnet/<port>/, which is the case the command exists for.
+		ln, err := vnet.Listen("tcp", serveAddr)
 		if err != nil {
 			return fmt.Errorf("doc serve: listen %s: %w", serveAddr, err)
 		}

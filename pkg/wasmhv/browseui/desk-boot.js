@@ -20,6 +20,10 @@
 //   hvWindow        once the visor's hypervisor UI listens on the virtual
 //                   loopback, open a browser window on it, maximized on top
 //   hvPort          hypervisor UI port on the virtual loopback (8001)
+//   docsPort        port for `skywire doc serve` on the virtual loopback
+//                   (8002). The desk starts it and opens it as a browser tab,
+//                   so the CLI reference and the prose are readable BESIDE a
+//                   terminal you can run the documented commands in. 0 = off.
 //   native          the page is served by a NATIVE hypervisor — see below
 //   dashboardURL    native mode: the same-origin dashboard URL for the
 //                   dashboard window ('/#/?embed=1')
@@ -94,6 +98,14 @@
 		opts = opts || {};
 		var status = opts.onStatus || function () {};
 		var hvPort = opts.hvPort || 8001;
+		// 0 disables. Native mode leaves it off: a native hypervisor serves its
+		// own docs and has no vnet to bind.
+		var docsPort = opts.docsPort === 0 ? 0 : (opts.docsPort || 8002);
+		// The one browser window, whichever surface opens it first. The docs do
+		// not wait on the hypervisor: with no visor started — the docs-site case —
+		// nothing ever listens on hvPort, and a docs tab gated on that would
+		// never appear.
+		var deskWin = null;
 
 		// Native mode: the page is served by a NATIVE hypervisor, whose visor
 		// is the host process — the desk is a shell OVER that visor, never a
@@ -296,6 +308,18 @@
 
 			// Session: remember across reloads whether a visor was RUNNING when
 			// the page went away — a visor the operator stopped stays stopped.
+			// Start the docs server. It is a plain HTTP server over the embedded
+			// prose and the live cobra tree — no visor needed, nothing to wait
+			// for — so it is launched unconditionally and the tab that shows it
+			// opens with the rest once its port answers. Failure is silent by
+			// design: no docs tab is a smaller loss than a desk that will not boot.
+			if (docsPort && globalThis.skywireExec) {
+				try {
+					skywireExec(['doc', 'serve', '--addr', '127.0.0.1:' + docsPort], {})
+						.catch(function (e) { console.warn('doc serve:', e); });
+				} catch (e) { console.warn('doc serve:', e); }
+			}
+
 			var session = loadSession();
 			if (opts.autostartVisor) {
 				addEventListener('pagehide', saveSession);
@@ -347,7 +371,17 @@
 								// /vnet/ URLs, so the Angular app loads as an
 								// ordinary document instead of being transcoded
 								// into a sandbox that would strip its same-origin.
-								var win = panel.openWindow(true, globalThis.__DESK_DASHBOARD_URL__);
+								// Share the window if the docs got here first — doc serve
+								// binds in seconds and the hypervisor takes a while, so
+								// that is the ordinary order, and opening a second window
+								// unconditionally is how this produced two (measured).
+								var win = deskWin;
+								if (win && win.openTab) {
+									try { win.openTab('vnet:' + hvPort, '/?embed=1#/?embed=1', 'http', false); } catch (e2) {}
+								} else {
+									win = panel.openWindow(true, globalThis.__DESK_DASHBOARD_URL__);
+									deskWin = win;
+								}
 								if (win && win.openTab) {
 									try { win.openTab('home.dmsg', '/', 'http', true); } catch (e2) {}
 									try { win.openTab('status.skysocks', '/', 'http', true); } catch (e2) {}
@@ -379,6 +413,40 @@
 					setTimeout(function () { waitHV(n + 1); }, 500);
 				})(0);
 			}
+			// The docs tab, on its own schedule. `skywire doc serve` needs no
+			// visor and no dmsg — it renders the live cobra tree and the
+			// embedded prose — so it binds in seconds, usually well before any
+			// hypervisor UI. Gating it on hvPort would mean no docs tab at all
+			// wherever no visor is started, which is exactly the docs-site case
+			// this exists for. Shares the browser window when one exists and
+			// opens its own otherwise; whichever surface is ready first makes it.
+			if (docsPort) {
+				(function waitDocs(n) {
+					if (globalThis.vnet && globalThis.vnet.listening(docsPort)) {
+						swReady.then(function () {
+							try {
+								// vnet:<port> — the canonical spelling, and what the
+								// address bar shows. desk_js.go's DirectLoader claims it
+								// and hands netscrape the service-worker URL that serves
+								// it, so the tab renders natively without the plumbing
+								// leaking into the UI.
+								var docsURL = 'http://vnet:' + docsPort + '/';
+								if (deskWin && deskWin.openTab) {
+									// bg: the hypervisor window is already front when we
+									// are sharing it.
+									deskWin.openTab('vnet:' + docsPort, '/', 'http', true);
+									return;
+								}
+								deskWin = panel.openWindow(true, docsURL);
+							} catch (e) { console.warn('docs window:', e); }
+						});
+						return;
+					}
+					if (n > 120) return; // ~60s — doc serve never bound its port
+					setTimeout(function () { waitDocs(n + 1); }, 500);
+				})(0);
+			}
+
 			return { panel: panel, startedVisor: startedVisor };
 		});
 	};

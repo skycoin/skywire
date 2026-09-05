@@ -89,27 +89,41 @@ func installDesk() {
 	// NATIVELY: without it netscrape would transcode the page into a sandboxed
 	// srcdoc, which strips the same-origin an Angular-style app needs.
 	//
-	// Claim same-origin /vnet/ URLs ONLY — those are served by this page's own
-	// service worker out of the visor's virtual loopback, so they are ours to
-	// render. Two surfaces arrive that way: the hypervisor UI, and the docs,
-	// which `skywire doc serve` binds on the loopback so a reader browses them
-	// inside the visor with a terminal beside them.
+	// Claim the visor's own loopback, however it is spelled, and hand back the
+	// service-worker URL that actually serves it. DirectLoader returns a src
+	// SEPARATE from the url: netscrape puts src on the iframe and leaves the
+	// url in the address bar, so a tab can be addressed canonically as
+	// "vnet:8002" while rendering natively out of "<origin>/vnet/8002/".
 	//
-	// This deliberately does NOT claim the whole origin. It briefly did, to let
-	// the docs be read from the site hosting the desk — but serving them from
-	// the binary is better in every way (no transport, no visor required, works
-	// wherever the binary runs, and the CLI reference cannot drift), and a
-	// claimed page is UNSANDBOXED. The narrower rule is the one to keep.
+	// Without the translation a caller has to navigate to the raw service-worker
+	// path to get native rendering, which puts the plumbing in the address bar
+	// (the hypervisor tab read "http://host:port/vnet/8001/?embed=1#/?embed=1")
+	// and makes the canonical spellings second-class — they resolve, but only
+	// through the transport, which transcodes into a sandbox and strips scripts.
+	//
+	// Spellings, per desk-boot's vnetPort(): vnet:<port> (canonical),
+	// <port>.vnet, and localhost/127.0.0.1:<port>. Same-origin /vnet/<port>/
+	// passes through unchanged — it is already the served form.
+	//
+	// Deliberately NOT the whole origin: a claimed page is UNSANDBOXED, and the
+	// docs come from the binary now (skywire doc serve), not from whatever site
+	// happens to host the desk.
 	netscrape.DirectLoader = func(u string) (string, bool) {
 		loc := js.Global().Get("location")
 		if !loc.Truthy() {
 			return "", false
 		}
 		origin := loc.Get("origin").String()
-		if origin == "" || !strings.HasPrefix(u, origin+"/vnet/") {
+		if origin == "" {
 			return "", false
 		}
-		return u, true
+		if strings.HasPrefix(u, origin+"/vnet/") {
+			return u, true // already the served form
+		}
+		if port, path := vnetTarget(u); port != "" {
+			return origin + "/vnet/" + port + path, true
+		}
+		return "", false
 	}
 
 	desk.NewPanel()
