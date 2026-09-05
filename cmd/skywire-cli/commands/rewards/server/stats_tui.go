@@ -76,6 +76,14 @@ type statsTUIData struct {
 	// Coverage is each service measured against the registered dmsg server set.
 	Coverage    coverageStats
 	LivenessErr string
+
+	// PerVisor is the transports-per-visor distribution, which carries its
+	// own refusal-to-draw verdict rather than an Err field alone.
+	PerVisor tpPerVisorStats
+	// UptimeGraph is the per-visor shaded timeline `ut tpd graph` renders.
+	UptimeGraph uptimeGraphStats
+	// Arch is the surveyed architecture breakdown.
+	Arch archStats
 }
 
 type statsTUIDay struct {
@@ -184,11 +192,52 @@ func tuiMissing(title, why string) string {
 // tuiSource renders the provenance footer of a panel. Empty when nothing
 // recorded a source, so an older caller that does not set one is unchanged
 // rather than printing a blank line.
+//
+// Wrapped: a source line carries a transport, a path, a snapshot age and
+// often a completeness caveat, which comfortably exceeds the panel width.
+// An unwrapped one runs past the rule and the caveat is the part that
+// falls off the edge.
 func tuiSource(src string) string {
 	if src == "" {
 		return ""
 	}
-	return fmt.Sprintf("  %s%s%s\n", aDim, src, aReset)
+	return tuiWrap("  " + src)
+}
+
+// tuiWrap word-wraps a paragraph into the panel width, preserving the
+// leading indent on every line. The panels' explanatory lines are
+// sentences, not labels, and a sentence that runs past the rule is
+// unreadable in the 80-column target.
+func tuiWrap(s string) string {
+	indent := ""
+	for _, r := range s {
+		if r != ' ' {
+			break
+		}
+		indent += " "
+	}
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return ""
+	}
+	var out strings.Builder
+	line := indent
+	for _, w := range words {
+		if len([]rune(line))+1+len([]rune(w)) > tuiWidth && strings.TrimSpace(line) != "" {
+			out.WriteString(aDim + line + aReset + "\n")
+			line = indent + w
+			continue
+		}
+		if strings.TrimSpace(line) == "" {
+			line += w
+		} else {
+			line += " " + w
+		}
+	}
+	if strings.TrimSpace(line) != "" {
+		out.WriteString(aDim + line + aReset + "\n")
+	}
+	return out.String()
 }
 
 // tuiPlot draws one labeled series panel.
@@ -338,6 +387,18 @@ func RenderStatsANSI(d statsTUIData) string {
 		b.WriteString("\n")
 	}
 
+	// ---- transports per visor ----------------------------------------------
+	//
+	// The distribution the headline average hides. Gated: TPD's index
+	// oscillates (#4513) and a histogram of a refilling sample draws an
+	// artifact as a finding — see stats_tui_pervisor.go.
+	b.WriteString(renderTPPerVisorPanelANSI(d.PerVisor))
+
+	// ---- architecture ------------------------------------------------------
+	//
+	// From the operator surveys, not TPD, which carries no arch field.
+	b.WriteString(renderArchPanelANSI(d.Arch))
+
 	// ---- dmsg substrate ----------------------------------------------------
 	//
 	// The layer everything else runs over, and previously shown nowhere on the
@@ -390,7 +451,16 @@ func RenderStatsANSI(d statsTUIData) string {
 		}
 		b.WriteString(tuiSource(d.VersionsSrc))
 		b.WriteString(tuiClose(width))
+		b.WriteString("\n")
 	}
+
+	// ---- per-visor uptime timeline -----------------------------------------
+	//
+	// Last, because it is one row per visor and everything above it is a
+	// fixed-height summary. The VISORS ONLINE plot says how many were up;
+	// this says which, which is the difference between a steady fleet and
+	// a churning one holding the same count.
+	b.WriteString(renderUptimeGraphPanelANSI(d.UptimeGraph))
 
 	return b.String()
 }

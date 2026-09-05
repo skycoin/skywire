@@ -9,8 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/bitfield/script"
 )
 
 // Visors online over time, at five-minute resolution.
@@ -60,6 +58,13 @@ type utGraphVisor struct {
 }
 
 // fetchLivenessSeries pulls the tracker's timelines and sums them by slot.
+//
+// This used to run `skywire cli ut tpd graph --json` as a subprocess. It
+// now reads the shared in-process fetch (stats_tui_uptime.go), which calls
+// the same CXO → visor-RPC → dmsg chain the command's own Run calls — so
+// the ~2 MB dump is pulled once and both this plot and the per-visor
+// timeline panel are drawn from the identical bytes. A subprocess could
+// not offer that, and two subprocesses would have pulled it twice.
 func fetchLivenessSeries() (*livenessSeries, error) {
 	livenessCache.Lock()
 	defer livenessCache.Unlock()
@@ -70,12 +75,16 @@ func fetchLivenessSeries() (*livenessSeries, error) {
 		return nil, livenessCache.err
 	}
 
-	out, err := script.Exec(`skywire cli ut tpd graph --json`).String()
+	entries, _, err := fetchUptimeEntries()
 	if err != nil {
 		livenessCache.at, livenessCache.err = time.Now(), fmt.Errorf("uptime tracker query failed: %w", err)
 		return nil, livenessCache.err
 	}
-	series, err := parseLivenessSeries([]byte(out))
+	visors := make([]utGraphVisor, 0, len(entries))
+	for _, e := range entries {
+		visors = append(visors, utGraphVisor{PK: e.PK.Hex(), Timeline: e.Timeline})
+	}
+	series, err := sumLivenessTimelines(visors)
 	livenessCache.at = time.Now()
 	if err != nil {
 		livenessCache.err = err
@@ -85,13 +94,20 @@ func fetchLivenessSeries() (*livenessSeries, error) {
 	return series, nil
 }
 
-// parseLivenessSeries sums the per-visor timelines into one series.
+// parseLivenessSeries sums the per-visor timelines of a raw graph body.
+// Kept as the JSON entry point so the trimming rules stay testable against
+// a recorded response.
 func parseLivenessSeries(raw []byte) (*livenessSeries, error) {
 	var visors []utGraphVisor
 	if err := json.Unmarshal(raw, &visors); err != nil {
 		return nil, fmt.Errorf("failed to parse uptime tracker graph: %w", err)
 	}
+	return sumLivenessTimelines(visors)
+}
 
+// sumLivenessTimelines is the summing and trimming, over already-decoded
+// timelines.
+func sumLivenessTimelines(visors []utGraphVisor) (*livenessSeries, error) {
 	// Collect the dates present, sorted, so the series reads left to right.
 	dateSet := make(map[string]struct{})
 	counted := 0
