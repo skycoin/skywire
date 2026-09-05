@@ -37,20 +37,42 @@ func gatherStatsTUI() statsTUIData {
 	// bodies. The CXO leaf additionally carries a completeness verdict the
 	// HTTP body has no field for: TPD's transport aggregate is readable
 	// while it refills after a restart (#4513), and only the feed says so.
+	//
+	// The verdict is kept, not just the counts: the transports-per-visor
+	// histogram refuses to draw a sample the aggregate does not vouch for,
+	// so it needs the completeness stamp and the store's own partial-read
+	// flag (#4542), not merely the numbers.
+	var verdict tpSampleVerdict
 	if stats, src, err := cxoNetworkStats(); err == nil {
 		d.Transports, d.ByType, d.UniqueVisors = stats.Total, stats.ByType, stats.UniqueVisors
 		d.CountsSrc = src.String()
+		verdict = tpSampleVerdict{
+			Total: stats.Total, Complete: stats.Complete, Confidence: stats.Confidence,
+			Partial: stats.Partial, MissingBatches: stats.MissingBatches, Known: true,
+		}
 	} else {
 		d.CountsSrc = httpStatsSource("/all-transports/stats", err.Error()).String()
+		// The HTTP body is store.TransportSummary marshaled directly, so it
+		// carries partial/missing_batches but has no field for the feed's
+		// completeness stamp. An unstamped body is treated as complete —
+		// the store's own flag is the only verdict it can offer, and
+		// refusing every HTTP-sourced sample would gate the panel off
+		// permanently whenever CXO is cold.
 		var stats struct {
 			TotalTransports int            `json:"total_transports"`
 			ByType          map[string]int `json:"by_type"`
 			UniqueVisors    int            `json:"unique_visors"`
+			Partial         bool           `json:"partial"`
+			MissingBatches  int            `json:"missing_batches"`
 		}
 		if hErr := statsGetJSON(tpdURL+"/all-transports/stats", &stats); hErr != nil {
 			d.CountsErr = hErr.Error()
 		} else {
 			d.Transports, d.ByType, d.UniqueVisors = stats.TotalTransports, stats.ByType, stats.UniqueVisors
+			verdict = tpSampleVerdict{
+				Total: stats.TotalTransports, Complete: true, Confidence: "unstamped",
+				Partial: stats.Partial, MissingBatches: stats.MissingBatches, Known: true,
+			}
 		}
 	}
 
@@ -120,6 +142,16 @@ func gatherStatsTUI() statsTUIData {
 
 	d.Dmsg = gatherDmsgStats()
 	d.Coverage = gatherServiceCoverage()
+
+	// Transports per visor, judged against the aggregate read above.
+	d.PerVisor = gatherTransportsPerVisor(tpdURL, verdict)
+
+	// The per-visor uptime bars `ut tpd graph` draws, from the same dump
+	// the liveness plot sums — pulled once, in-process, for both.
+	d.UptimeGraph = gatherUptimeGraph()
+
+	// Architecture, from the operator surveys. TPD has no arch field.
+	d.Arch = gatherArchStats()
 
 	return d
 }

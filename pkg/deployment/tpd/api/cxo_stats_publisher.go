@@ -165,6 +165,18 @@ type NetworkStats struct {
 	ByType       map[string]int `json:"by_type"`
 	UniqueVisors int            `json:"unique_visors"`
 
+	// Partial and MissingBatches are the store's own verdict on the read
+	// that produced these counts (see store.TransportSummary): a batched
+	// MGET over the transport index whose batches did not all come back.
+	// GET /all-transports/stats has carried them since #4542 and this
+	// body dropped them, which left a subscriber holding a sample the
+	// store already KNEW was an undercount while the only signal on the
+	// feed was the trailing-peak heuristic below — an independent
+	// estimate that can read "settled" over exactly that body. The two
+	// are different claims and both belong here.
+	Partial        bool `json:"partial,omitempty"`
+	MissingBatches int  `json:"missing_batches,omitempty"`
+
 	ObservedAt time.Time `json:"observed_at"`
 	Complete   bool      `json:"complete"`
 	Confidence string    `json:"confidence"`
@@ -359,17 +371,26 @@ func (s *StatsCXOPublisher) publishNetwork(ctx context.Context, now time.Time) {
 	}
 	verdict := s.transports.observe(now, summary.Total)
 	s.lastTransportVerdict = verdict
+	// A partial store read is a KNOWN undercount, so it counts against
+	// completeness — both in the published stamp and for the holdover
+	// rule. The trailing-peak heuristic is an independent estimate and
+	// can well read "settled" over a body the store already told us was
+	// short; publishing complete:true over partial:true would be a
+	// contradiction a consumer has no way to resolve.
+	complete := verdict.complete && !summary.Partial
 	body := NetworkStats{
 		Total:                 summary.Total,
 		ByType:                summary.ByType,
 		UniqueVisors:          summary.UniqueVisors,
+		Partial:               summary.Partial,
+		MissingBatches:        summary.MissingBatches,
 		ObservedAt:            now,
-		Complete:              verdict.complete,
+		Complete:              complete,
 		Confidence:            verdict.confidence,
 		TrailingPeak:          verdict.peak,
 		TrailingWindowSeconds: int(statsTrailingWindow / time.Second),
 	}
-	s.put(StatsPathNetwork, body, verdict.complete, now)
+	s.put(StatsPathNetwork, body, complete, now)
 }
 
 // networkSummary mirrors getAllTransportsStats' source selection: warm
