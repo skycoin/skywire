@@ -59,19 +59,21 @@ require (
 )
 
 require (
+	github.com/0magnet/ansifilter-go v0.0.0-20260905162419-b1d8cfff2baf
 	github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898
-	github.com/0magnet/bottle v0.0.0-20260903190614-8e8230c230ca
-	github.com/0magnet/desk v0.0.0-20260904190029-7fd5c5344d76
-	github.com/0magnet/desk/panes v0.0.0-20260904153426-e1ccc4f22bc6
+	github.com/0magnet/bottle v0.0.0-20260905154223-835049919520
+	github.com/0magnet/desk v0.0.0-20260905010738-0c9209d8b7b7
+	github.com/0magnet/desk/panes v0.0.0-20260905010738-0c9209d8b7b7
 	github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260901202627-53911da3ad77
+	github.com/0magnet/lolcat-go v0.0.0-20260905001114-f97d678ce219
 	github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
-	github.com/0magnet/netscrape v0.0.0-20260904193824-1b1603747c93
-	github.com/0magnet/plot-go v0.0.0-20260903194102-268453e774b6
+	github.com/0magnet/netscrape v0.0.0-20260905162442-12f1adb8e1ec
+	github.com/0magnet/plot-go v0.0.0-20260905162445-5d8713570108
 	github.com/0magnet/realorigin v0.2.1
 	github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26
-	github.com/0magnet/termanim v0.0.0-20260903194101-9c4d352424cf
-	github.com/0magnet/winbox-go v0.0.0-20260903205523-d2960fe5bbd0
+	github.com/0magnet/termanim v0.0.0-20260905010830-f8788bcdc347
+	github.com/0magnet/winbox-go v0.0.0-20260905000411-6eefa77dea85
 	github.com/0magnet/yamux v0.1.3-0.20260901201804-38cdbd63617a
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0
@@ -120,16 +122,14 @@ require (
 
 require (
 	github.com/0magnet/afero v1.15.1-0.20260816202415-9f9d46a34dcd
-	github.com/0magnet/cosmos-go v0.0.0-20260903205521-b833a4163dfd
+	github.com/0magnet/cosmos-go v0.0.0-20260905162431-a5584b3ff959
 	github.com/0magnet/sh/v3 v3.13.2-0.20260818190530-13d0024da85c
-	github.com/0magnet/websh v0.0.0-20260903221227-ea9b334dfdf7
-	github.com/0magnet/xterm-go v0.0.0-20260903022452-f823b747bcfe
+	github.com/0magnet/websh v0.0.0-20260905000412-75d7fd084e60
+	github.com/0magnet/xterm-go v0.0.0-20260904164423-3896621e5b7c
 	github.com/benhoyt/goawk v1.31.0 // indirect
 )
 
 require (
-	github.com/0magnet/ansifilter-go v0.0.0-20260905001111-574a256fd2bd // indirect
-	github.com/0magnet/lolcat-go v0.0.0-20260905001114-f97d678ce219 // indirect
 	github.com/0magnet/u-root v0.16.1-0.20260814161052-156e0b67262b // indirect
 	github.com/gdamore/tcell/v3 v3.4.2 // indirect
 	github.com/google/btree v1.1.2 // indirect
@@ -170,8 +170,8 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.29 // indirect
 	github.com/pion/dtls/v3 v3.1.8 // indirect
-	github.com/pion/ice/v4 v4.4.1 // indirect
-	github.com/pion/interceptor v0.1.47 // indirect
+	github.com/pion/ice/v4 v4.4.1
+	github.com/pion/interceptor v0.1.47
 	github.com/pion/logging v0.2.4 // indirect
 	github.com/pion/mdns/v2 v2.2.0 // indirect
 	github.com/pion/randutil v0.1.0 // indirect

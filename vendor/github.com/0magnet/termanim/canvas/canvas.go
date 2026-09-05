@@ -4,8 +4,8 @@
 //
 // A terminal cell is about twice as tall as it is wide, which makes a naive
 // one-pixel-per-cell animation look squat and coarse. Drawing every cell as an
-// upper half block instead — foreground colouring the top half, background the
-// bottom — gives two independently coloured pixels per cell, roughly square,
+// upper half block instead — foreground coloring the top half, background the
+// bottom — gives two independently colored pixels per cell, roughly square,
 // at no cost. Everything here is built on that.
 package canvas
 
@@ -19,13 +19,22 @@ import (
 // on any UTF-8 terminal, and each carries a separate foreground and background,
 // which is what makes one cell into two pixels.
 //
-// Which one is used depends on where the colour is: a cell with both pixels lit
+// Which one is used depends on where the color is: a cell with both pixels lit
 // is an upper block over a background, and one with a single pixel lit is
-// whichever block puts the colour on the lit half and leaves the other to the
+// whichever block puts the color on the lit half and leaves the other to the
 // terminal. See flush.
 const (
 	upperHalf = '▀'
 	lowerHalf = '▄'
+)
+
+// UpperHalf and LowerHalf are those two glyphs, exported for a consumer that
+// has to draw a surface somewhere other than a screen — matrix/backdrop
+// composites one into a string of its own and has to make the same choice
+// between them that flush does.
+const (
+	UpperHalf = upperHalf
+	LowerHalf = lowerHalf
 )
 
 // The same two glyphs as strings, because that is what the screen is given.
@@ -44,7 +53,7 @@ const (
 	blankStr     = " "
 )
 
-// Surface is a grid of coloured pixels, w wide and h tall, where h is twice
+// Surface is a grid of colored pixels, w wide and h tall, where h is twice
 // the terminal's row count. Animations draw into it and never touch the screen
 // directly.
 type Surface struct {
@@ -63,7 +72,7 @@ func NewSurface(w, h int) *Surface {
 func (s *Surface) Size() (w, h int) { return s.w, s.h }
 
 // Clear resets every pixel to the terminal's own background, so an animation
-// that does not cover the screen sits on whatever colour the user has rather
+// that does not cover the screen sits on whatever color the user has rather
 // than on a black rectangle.
 func (s *Surface) Clear() {
 	for i := range s.px {
@@ -71,7 +80,7 @@ func (s *Surface) Clear() {
 	}
 }
 
-// Set colours one pixel. Coordinates outside the surface are dropped, so
+// Set colors one pixel. Coordinates outside the surface are dropped, so
 // animations can be written without clamping at every call site.
 func (s *Surface) Set(x, y int, c tcell.Color) {
 	if x < 0 || y < 0 || x >= s.w || y >= s.h {
@@ -80,7 +89,7 @@ func (s *Surface) Set(x, y int, c tcell.Color) {
 	s.px[y*s.w+x] = c
 }
 
-// At returns the colour of one pixel, or ColorDefault if out of bounds.
+// At returns the color of one pixel, or ColorDefault if out of bounds.
 func (s *Surface) At(x, y int) tcell.Color {
 	if x < 0 || y < 0 || x >= s.w || y >= s.h {
 		return tcell.ColorDefault
@@ -88,7 +97,7 @@ func (s *Surface) At(x, y int) tcell.Color {
 	return s.px[y*s.w+x]
 }
 
-// Fill colours every pixel.
+// Fill colors every pixel.
 func (s *Surface) Fill(c tcell.Color) {
 	for i := range s.px {
 		s.px[i] = c
@@ -115,7 +124,7 @@ func (s *Surface) flush(screen tcell.Screen) {
 				// way up and the empty half becomes the background.
 				//
 				// Drawing it as an upper block with a default foreground does
-				// not do that: a default foreground is a colour — whatever the
+				// not do that: a default foreground is a color — whatever the
 				// terminal writes text in — so the empty half came out solid
 				// white. That is the bar that danced along the top of the fire
 				// and the fringe on everything else that does not fill the
@@ -126,7 +135,7 @@ func (s *Surface) flush(screen tcell.Screen) {
 
 			case b == tcell.ColorDefault:
 				// The mirror of the case above: an upper block and no
-				// background, rather than a background of the default colour.
+				// background, rather than a background of the default color.
 				screen.Put(x, cy, upperHalfStr, //nolint:errcheck
 					tcell.StyleDefault.Foreground(t))
 
@@ -266,7 +275,7 @@ func run(screen tcell.Screen, opt Options, resize func(cols, rows int), frame fu
 	resize(cols, rows)
 
 	// An animation has no text entry, so a cursor parked in it is only ever a
-	// blinking artefact sitting on top of the picture. It belongs here rather
+	// blinking artifact sitting on top of the picture. It belongs here rather
 	// than in each host: tcell leaves the cursor wherever it was, so every
 	// caller that forgot would show one, and the terminal running these is
 	// often not the caller's own — a pane, a window in a page, a texture in a
@@ -275,7 +284,7 @@ func run(screen tcell.Screen, opt Options, resize func(cols, rows int), frame fu
 	screen.HideCursor()
 
 	// Events come over a channel so the frame loop never blocks waiting for one.
-	// tcell closes it when the screen is finalised, which is how a closed pane
+	// tcell closes it when the screen is finalized, which is how a closed pane
 	// ends this goroutine instead of leaving it spinning forever.
 	events := screen.EventQ()
 

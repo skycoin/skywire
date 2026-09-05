@@ -27,10 +27,10 @@
 // template keeps every one of cobra's own layout rules, so the help still says
 // what it said.
 //
-// Text that is already coloured — coloredcobra, lipgloss, anything that has
-// been through a styler — keeps its own colours: the escapes in it are carried
+// Text that is already colored — coloredcobra, lipgloss, anything that has
+// been through a styler — keeps its own colors: the escapes in it are carried
 // through to the output and are not counted as printable width. That matters
-// more than it sounds. A program that colours its help is exactly the sort of
+// more than it sounds. A program that colors its help is exactly the sort of
 // program that would want rain behind it, and measuring an escape sequence as
 // twenty columns of text puts the whole layout out.
 package backdrop
@@ -42,7 +42,6 @@ import (
 
 	"github.com/gdamore/tcell/v3"
 
-	"github.com/0magnet/termanim/canvas"
 	"github.com/0magnet/termanim/matrix"
 )
 
@@ -81,7 +80,7 @@ type Options struct {
 	// TextColor is what the text is drawn in. The zero value, ColorDefault,
 	// means a bright green-white that reads against the rain.
 	//
-	// It is ignored for text that brought its own colours. There is no sense
+	// It is ignored for text that brought its own colors. There is no sense
 	// in overriding a styler and then being asked where the styling went.
 	TextColor tcell.Color
 
@@ -89,8 +88,8 @@ type Options struct {
 	//
 	// By default a pipe or a redirect gets the text back with no rain and
 	// nothing added, because `--help | less` and a --help pasted into a bug
-	// report both want plain text and neither wants two hundred colour
-	// changes a line. NO_COLOR and TERM=dumb are honoured the same way.
+	// report both want plain text and neither wants two hundred color
+	// changes a line. NO_COLOR and TERM=dumb are honored the same way.
 	Force bool
 
 	// Words makes the rain spell words instead of glyphs: each stream carries
@@ -130,6 +129,17 @@ type Options struct {
 	// A cell of clear is kept either side of any text, whichever rule is in
 	// force, so the rain never abuts a word.
 	GapMin int
+
+	// Warm is the seconds of animation to run before a frame is taken, for a
+	// backdrop that is not the rain. Zero means one second; negative asks for
+	// the opening frame, which zero cannot say because zero is the zero value.
+	//
+	// These animations open on an empty screen — a fire has no flame yet, a
+	// starfield no stars — and fill over the first second or two. A backdrop
+	// wants the picture the animation settles into and not the one it starts
+	// from. It is the same problem Steps solves for the rain, in the units a
+	// pixel animation is driven in.
+	Warm float64
 
 	// Off returns the text unchanged, whatever else is set.
 	//
@@ -179,7 +189,27 @@ func Render(text string, o Options) string {
 	m.Resize(l.cols, l.rows)
 	m.Advance(steps)
 
-	return paint(m, l, o)
+	f := NewFrame(l.cols, l.rows)
+	f.FromMatrix(m, l.dim)
+	return paint(f, l, o)
+}
+
+// RenderFrame is Render over a backdrop the caller built rather than over the
+// rain.
+//
+// The text still settles the size of the sheet — how many rows there are is a
+// question about the text and the padding, not about what is behind it — so a
+// frame smaller than the sheet leaves the rest of it unlit and a larger one
+// has its remainder ignored. RenderAnim sizes one correctly for a pixel
+// animation; this is for a caller filling a Frame itself.
+func RenderFrame(text string, f *Frame, o Options) string {
+	if o.Off {
+		return text
+	}
+	if !o.Force && !colorOK() {
+		return text
+	}
+	return paint(f, layout(text, o), o)
 }
 
 // sheet is one text block measured out against a grid: what it is made of, how
@@ -265,18 +295,14 @@ func layout(text string, o Options) sheet {
 	return s
 }
 
-// paint composites the text over whatever frame the rain is currently on.
-func paint(m *matrix.Matrix, s sheet, _ Options) string {
+// paint composites the text over one frame of whatever is behind it.
+//
+// It works in Cell and not in the rain's own cell type, which is what lets a
+// pixel animation reach it as readily as the rain does. See Frame.
+func paint(f *Frame, s sheet, _ Options) string {
 	lines, raw, cols, rows := s.lines, s.raw, s.cols, s.rows
-	pad, indent, dim := s.pad, s.indent, s.dim
+	pad, indent := s.pad, s.indent
 	styled, textStyle := s.styled, s.textStyle
-
-	grid := make([]matrix.Cell, cols*rows)
-	lit := make([]bool, cols*rows)
-	m.Cells(func(x, y int, c matrix.Cell) {
-		grid[y*cols+x] = c
-		lit[y*cols+x] = true
-	})
 
 	var b strings.Builder
 	b.Grow(rows * cols * 4)
@@ -309,7 +335,7 @@ func paint(m *matrix.Matrix, s sheet, _ Options) string {
 				if printable(line, x-indent) {
 					last = x
 				}
-			} else if lit[y*cols+x] {
+			} else if _, ok := f.At(x, y); ok {
 				last = x
 			}
 		}
@@ -323,14 +349,14 @@ func paint(m *matrix.Matrix, s sheet, _ Options) string {
 				if !printable(line, i) {
 					// A blank inside the text keeps whatever style is in
 					// effect rather than resetting to default. Resetting
-					// breaks a coloured run at its first space: the styler
-					// coloured "-h, --help" once, at the dash, and everything
-					// after the space would come out uncoloured.
+					// breaks a colored run at its first space: the styler
+					// colored "-h, --help" once, at the dash, and everything
+					// after the space would come out uncolored.
 					//
 					// And a blank CARRIES any escapes attached to it: stylers
 					// open their span on the space BEFORE a word (coloredcobra
 					// emits " \x1b[94;1m -b," — the escape lands on the inner
-					// space), and dropping those uncoloured every flag name
+					// space), and dropping those uncolored every flag name
 					// the help had.
 					if i >= 0 && i < len(line) && line[i].pre != "" {
 						b.WriteString(line[i].pre)
@@ -352,7 +378,7 @@ func paint(m *matrix.Matrix, s sheet, _ Options) string {
 					b.WriteString(g.pre)
 					prev = unknown
 				case prev != "" && prev != unknown:
-					// First glyph of a span with a rain colour still in
+					// First glyph of a span with a rain color still in
 					// effect. Without this the words come out green.
 					b.WriteString(reset)
 					prev = ""
@@ -361,7 +387,8 @@ func paint(m *matrix.Matrix, s sheet, _ Options) string {
 				continue
 			}
 
-			if !lit[y*cols+x] {
+			c, ok := f.At(x, y)
+			if !ok {
 				if prev != "" {
 					b.WriteString(reset)
 					prev = ""
@@ -369,12 +396,7 @@ func paint(m *matrix.Matrix, s sheet, _ Options) string {
 				b.WriteByte(' ')
 				continue
 			}
-			c := grid[y*cols+x]
-			n := c.Intensity
-			if dim != 256 {
-				n = n * dim / 256
-			}
-			st := sgr(canvas.Matrix[n], c.Hot)
+			st := cellStyle(c)
 			if st != prev {
 				b.WriteString(st)
 				prev = st
@@ -572,4 +594,49 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(buf[i:])
+}
+
+// cellStyle builds the style for one backdrop cell.
+//
+// It is sgr with a background, and for a cell that has no background it emits
+// exactly what sgr emits. That is every cell of the rain, which is why the
+// rain's output did not change when the compositor stopped knowing what the
+// rain was.
+//
+// ColorDefault is left out rather than resolved. A default foreground is a
+// color — whatever the terminal writes text in — and a default background is
+// the terminal's own; naming either explicitly is what turns the empty half of
+// a half block into a solid bar.
+func cellStyle(c Cell) string {
+	if c.Fg == tcell.ColorDefault && c.Bg == tcell.ColorDefault {
+		return reset
+	}
+	var s strings.Builder
+	s.Grow(40)
+	s.WriteString("\x1b[0;")
+	if c.Bold {
+		s.WriteString("1;")
+	}
+	if c.Fg != tcell.ColorDefault {
+		s.WriteString("38;2;")
+		writeRGB(&s, c.Fg)
+		if c.Bg != tcell.ColorDefault {
+			s.WriteByte(';')
+		}
+	}
+	if c.Bg != tcell.ColorDefault {
+		s.WriteString("48;2;")
+		writeRGB(&s, c.Bg)
+	}
+	s.WriteByte('m')
+	return s.String()
+}
+
+func writeRGB(s *strings.Builder, c tcell.Color) {
+	r, g, b := c.RGB()
+	s.WriteString(itoa(int(r)))
+	s.WriteByte(';')
+	s.WriteString(itoa(int(g)))
+	s.WriteByte(';')
+	s.WriteString(itoa(int(b)))
 }

@@ -9,6 +9,8 @@ The Go port drives the shaders through `syscall/js` with a raw-WebGL command lay
 
 [🎮 Live demo](https://0magnet.github.io/cosmos-go/) (compiled with TinyGo)
 
+![cosmos-go in the browser](docs/cosmos-go-demo.png "the force simulation running on the GPU, points and links drawn from shaders")
+
 Ported feature set: GPU force simulation (many-body repulsion in two variants, springs, gravity, centering, mouse repulsion, **clustering forces**), pan/zoom, **point dragging**, **pinned points**, **9 point shapes**, **image atlas point sprites**, hover ring, focus ring, GPU picking for points **and links**, link arrows, curved links, rectangle **and polygon** selection with greyout, position tracking, viewport sampling, fit-view animations, and deterministic layouts via random seed.
 
 ### Quick Start

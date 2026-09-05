@@ -8,6 +8,9 @@
 //	          the entire os package through this contract, so every wasm
 //	          instance on the page shares one POSIX-ish root: one program
 //	          writes /etc files, another reads them back.
+//	fsbridge.js — the same filesystem, reachable from a Worker: a child blocks
+//	          in Atomics.wait while the page answers, which is the synchronous
+//	          syscall contract Go's runtime requires. See proc.spawnWorker.
 //	vnet.js — a virtual loopback network: a page-global port table with
 //	          in-memory byte pipes, so an instance that LISTENS on
 //	          127.0.0.1:<port> can be DIALED from another instance — or from
@@ -39,6 +42,9 @@ var vnetSWJS []byte
 //go:embed proc.js
 var procJS []byte
 
+//go:embed fsbridge.js
+var fsbridgeJS []byte
+
 // JSFS returns jsfs.js — the globalThis.fs / globalThis.process filesystem.
 func JSFS() []byte { return jsfs }
 
@@ -50,6 +56,15 @@ func VNetJS() []byte { return vnetJS }
 // per-process stdio and an exit promise. Load it after jsfs.js and
 // wasm_exec.js. See the proc subpackage for the Go adapter.
 func ProcJS() []byte { return procJS }
+
+// FSBridgeJS returns fsbridge.js — a blocking, synchronous view of the page's
+// jsfs for code running in a Worker. proc.spawnWorker uses it to run a child
+// off the main thread on the parent's filesystem, so a long build no longer
+// freezes the tab. Serve it beside proc.js; the worker loads it by URL.
+//
+// Requires cross-origin isolation (COOP/COEP) for SharedArrayBuffer. Without
+// it spawnWorker refuses and callers fall back to proc.spawn.
+func FSBridgeJS() []byte { return fsbridgeJS }
 
 // VNetSWJS returns vnet-sw.js — the service worker that turns virtual
 // loopback ports into real same-origin URLs (/vnet/<port>/…), so iframes can
