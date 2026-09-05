@@ -114,6 +114,12 @@ func sessionOwner(winID string) string {
 // pool is topped up in the background. This is what makes the wallet / iframe
 // browser "just work" AND survive a dead first pick.
 const (
+	// proxyBootstrapRetryMin/Max bound the auto-select retry. The loop runs until
+	// the pool fills, so without a ceiling-bounded backoff a mesh that cannot yet
+	// satisfy it is dialed forever at a fixed cadence.
+	proxyBootstrapRetryMin = 2 * time.Second
+	proxyBootstrapRetryMax = 60 * time.Second
+
 	proxyRaceN = 4 // candidates probed concurrently each round. The wasm visor
 	//                runs on ONE JS thread, and every probe drives a CPU-heavy
 	//                route setup (noise + ML-KEM PQ handshake); racing 8 at once
@@ -335,11 +341,15 @@ func startDefaultProxyAuto(ctx context.Context, sdPK cipher.PubKey) {
 	}()
 
 	settle := time.Now().Add(8 * time.Second)
+	// Back off between failed rounds. Each round costs the mesh proxyRaceN route
+	// setups, and this loop only exits on success — so a fixed 2s retry against a
+	// mesh that cannot yet satisfy it is an unbounded dial storm, not a retry.
+	delay := proxyBootstrapRetryMin
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(2 * time.Second):
+		case <-time.After(delay):
 		}
 		// Stop if the operator pinned an exit (Auto off), or the pool already
 		// has a live active exit.
@@ -365,7 +375,10 @@ func startDefaultProxyAuto(ctx context.Context, sdPK cipher.PubKey) {
 		if selectProxyPool(ctx, sdPK, cipher.PubKey{}) {
 			return
 		}
-		// SD empty / nothing routable yet — retry.
+		// SD empty / nothing routable yet — retry, slower each time.
+		if delay *= 2; delay > proxyBootstrapRetryMax {
+			delay = proxyBootstrapRetryMax
+		}
 	}
 }
 
@@ -396,6 +409,13 @@ func selectProxyPool(ctx context.Context, sdPK cipher.PubKey, avoid cipher.PubKe
 	for i := 0; i < len(cands); i++ {
 		r := <-resc
 		if !r.ok {
+			// Cool the exit down, exactly as the failover path does. Without this a
+			// failed probe leaves the exit eligible, so the bootstrap loop re-picks
+			// the same few exits every round and re-dials them forever — measured on
+			// a production setup node as 244/84/62 route-setup requests to three
+			// destinations from ONE browser visor. pickRandomProxyExits skips cooled
+			// exits, so this is what lets the next round diverge.
+			cooldownProxyExit(r.pk)
 			continue
 		}
 		if !installed {
