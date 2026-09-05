@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -381,7 +382,12 @@ func (s *redisStore) GetNumberOfTransports(ctx context.Context) (map[types.Type]
 		}
 		vals, err := s.client.MGet(ctx, keys[i:end]...).Result()
 		if err != nil {
-			continue
+			// Unlike GetTransportSummary there is nowhere in a bare
+			// map[Type]int to record that the answer is short, and a count
+			// that silently omits up to mgetBatch transports is worse than no
+			// count: it is indistinguishable from the network shrinking.
+			// Fail loudly instead.
+			return nil, fmt.Errorf("transport count is incomplete: batch %d-%d failed: %w", i, end, err)
 		}
 		for j, val := range vals {
 			raw, ok := val.(string)
@@ -424,6 +430,14 @@ func (s *redisStore) GetTransportSummary(ctx context.Context, selfTransports boo
 		}
 		vals, err := s.client.MGet(ctx, keys[i:end]...).Result()
 		if err != nil {
+			// A failed batch removes up to mgetBatch transports from the
+			// answer. Skipping it silently returns a plausible number that
+			// undercounts by an unknown amount, which reads downstream as the
+			// network having shrunk. Record it so the caller can tell the
+			// difference; the partial result is still worth returning, since
+			// some data with a warning beats none.
+			summary.Partial = true
+			summary.MissingBatches++
 			continue
 		}
 		for j, val := range vals {
