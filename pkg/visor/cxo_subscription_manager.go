@@ -128,7 +128,10 @@ func (v *Visor) cxoFeedSpec(fk cxosub.Feed) (cipher.PubKey, uint16, string, erro
 		if !ok {
 			return cipher.PubKey{}, 0, "", errors.New("no TPD CXO peer (transport.discovery_dmsg unset)")
 		}
-		return pk, skyenv.DmsgTPDMetricsCXOPort, "metrics/days/", nil
+		// "metrics/" covers both the per-day leaves TPD publishes now
+		// and the legacy per-window ones a not-yet-updated TPD still
+		// writes. Must stay in step with cxosub.FeedRoute.
+		return pk, skyenv.DmsgTPDMetricsCXOPort, "metrics/", nil
 	case FeedTPDUptime:
 		pk, ok := tpdCXOPeer(v)
 		if !ok {

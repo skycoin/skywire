@@ -4,9 +4,11 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
+	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 )
 
@@ -50,7 +52,7 @@ func decodeParts(t *testing.T, parts [][]byte) []store.TransportMetric {
 	return all
 }
 
-// A window that fits is published as one leaf, and it is gzipped — CXO stores
+// A day leaf that fits is published as one body, and it is gzipped — CXO stores
 // bytes verbatim, so an uncompressed body is what pushed this feed over the
 // object limit in the first place.
 func TestGzipPartsSingleLeafIsCompressed(t *testing.T) {
@@ -60,7 +62,7 @@ func TestGzipPartsSingleLeafIsCompressed(t *testing.T) {
 		t.Fatalf("gzipParts: %v", err)
 	}
 	if len(parts) != 1 {
-		t.Fatalf("got %d parts, want 1 for a small window", len(parts))
+		t.Fatalf("got %d parts, want 1 for a small day", len(parts))
 	}
 	if len(parts[0]) < 2 || parts[0][0] != 0x1f || parts[0][1] != 0x8b {
 		t.Error("the published body is not gzipped")
@@ -78,8 +80,29 @@ func TestGzipPartsSingleLeafIsCompressed(t *testing.T) {
 	}
 }
 
+// A day with no data must publish the empty ARRAY. json.Marshal of a nil slice
+// is "null", which does not unmarshal into []TransportMetric the way the
+// reader's merge expects.
+func TestGzipPartsEmptyDayIsAnEmptyArray(t *testing.T) {
+	for name, in := range map[string][]store.TransportMetric{
+		"nil":   nil,
+		"empty": {},
+	} {
+		parts, err := gzipParts(in, maxPublishBody)
+		if err != nil {
+			t.Fatalf("%s: gzipParts: %v", name, err)
+		}
+		if len(parts) != 1 {
+			t.Fatalf("%s: got %d parts, want 1", name, len(parts))
+		}
+		if got := string(cxoutils.Gunzip(parts[0])); got != "[]" {
+			t.Errorf("%s: published %q, want %q", name, got, "[]")
+		}
+	}
+}
+
 // The point of the split: every part fits, and NO record is dropped. The
-// previous behavior re-fetched the window without per-edge bandwidth and
+// pre-#4509 behavior re-fetched the window without per-edge bandwidth and
 // published that instead, which silently lost data.
 func TestGzipPartsSplitsWithoutLosingRecords(t *testing.T) {
 	metrics := metricsFixture(4000, 30)
@@ -150,27 +173,53 @@ func TestSplitEvenlyCoversEveryRecordOnce(t *testing.T) {
 	}
 }
 
-// Part paths must sort lexically into publication order, because the reader
-// recovers ordering from a sort of the paths a map-ordered Walk hands it.
-func TestMetricsPartPathSortsNumerically(t *testing.T) {
-	if a, b := metricsPartPath(30, 9), metricsPartPath(30, 10); !(a < b) {
-		t.Errorf("%q should sort before %q", a, b)
+// opPaths flattens a batch for assertions; deletes are marked so the ordering
+// checks below can read.
+func opPaths(ops []treestore.PutOp) []string {
+	out := make([]string, 0, len(ops))
+	for _, op := range ops {
+		if op.Value == nil {
+			out = append(out, "-"+op.Path)
+			continue
+		}
+		out = append(out, "+"+op.Path)
 	}
-	if got, want := metricsPartPath(7, 3), "metrics/days/7/part/0003"; got != want {
-		t.Errorf("metricsPartPath(7,3) = %q, want %q", got, want)
+	return out
+}
+
+func body(n int) [][]byte {
+	out := make([][]byte, n)
+	for i := range out {
+		out[i] = []byte{byte(i)}
 	}
-	// The part paths must live under the window path so the subscriber's
-	// "metrics/days/" prefix keeps covering them.
-	if base := metricsPath(30); len(metricsPartPath(30, 0)) <= len(base) ||
-		metricsPartPath(30, 0)[:len(base)] != base {
-		t.Error("part paths do not sit under the window path")
+	return out
+}
+
+// The steady state: one put per day in the window, nothing else.
+func TestPlanDayOpsSteadyState(t *testing.T) {
+	dates := []string{"2026-09-04", "2026-09-03", "2026-09-02"}
+	bodies := map[string][][]byte{dates[0]: body(1), dates[1]: body(1), dates[2]: body(1)}
+
+	ops, next := planDayOps(bodies, dates, map[string]int{}, true)
+	want := []string{
+		"+metrics/day/2026-09-04",
+		"+metrics/day/2026-09-03",
+		"+metrics/day/2026-09-02",
+	}
+	if got := opPaths(ops); !equalStrings(got, want) {
+		t.Errorf("ops = %v, want %v", got, want)
+	}
+	for _, d := range dates {
+		if next[d] != 0 {
+			t.Errorf("%s recorded %d parts, want 0 (single leaf)", d, next[d])
+		}
 	}
 }
 
-// The split is sized against the compressed total, because partTargetBody
-// budgets the gzipped part. Sizing it from the raw size instead over-splits by
-// the compression ratio, which costs a filling subscriber a round trip per
-// surplus leaf.
+// The split is sized against the compressed total, because the per-part
+// target and the cap both budget the gzipped part. Sizing it from the raw size
+// instead over-splits by the compression ratio, which costs a filling
+// subscriber a round trip per surplus leaf.
 func TestGzipPartsDoesNotOverSplit(t *testing.T) {
 	metrics := metricsFixture(4000, 30)
 	const max = 64 * 1024
@@ -200,4 +249,100 @@ func TestGzipPartsDoesNotOverSplit(t *testing.T) {
 	if got := decodeParts(t, parts); len(got) != len(metrics) {
 		t.Errorf("round-trip returned %d records, want %d", len(got), len(metrics))
 	}
+}
+
+// A day that only refreshes "today" must leave every other day's leaf alone —
+// that is the whole point of the layout, and the bookkeeping for those days has
+// to survive the cycle so the next full one can still retire them.
+func TestPlanDayOpsCurrentDayOnlyTouchesToday(t *testing.T) {
+	prev := map[string]int{"2026-09-04": 0, "2026-09-03": 0, "2026-08-20": 3}
+	ops, next := planDayOps(map[string][][]byte{"2026-09-04": body(1)}, []string{"2026-09-04"}, prev, false)
+
+	if got, want := opPaths(ops), []string{"+metrics/day/2026-09-04"}; !equalStrings(got, want) {
+		t.Errorf("ops = %v, want %v", got, want)
+	}
+	if len(next) != len(prev) {
+		t.Errorf("next tracks %d days, want %d — a non-full cycle must not forget days", len(next), len(prev))
+	}
+	if next["2026-08-20"] != 3 {
+		t.Errorf("part count for an untouched day became %d, want 3", next["2026-08-20"])
+	}
+}
+
+// A rolling window has to retire the days that fall out of it, leaf AND parts,
+// or the tree grows by a day forever and a prefix Walk keeps serving them.
+func TestPlanDayOpsRetiresDaysOutOfWindow(t *testing.T) {
+	prev := map[string]int{"2026-09-04": 0, "2026-09-03": 0, "2026-08-05": 0, "2026-08-04": 2}
+	dates := []string{"2026-09-04", "2026-09-03"}
+	bodies := map[string][][]byte{dates[0]: body(1), dates[1]: body(1)}
+
+	ops, next := planDayOps(bodies, dates, prev, true)
+	want := []string{
+		"-metrics/day/2026-08-04/part/0000",
+		"-metrics/day/2026-08-04/part/0001",
+		"-metrics/day/2026-08-05",
+		"+metrics/day/2026-09-04",
+		"+metrics/day/2026-09-03",
+	}
+	if got := opPaths(ops); !equalStrings(got, want) {
+		t.Errorf("ops = %v, want %v", got, want)
+	}
+	if _, still := next["2026-08-05"]; still {
+		t.Error("a retired day is still tracked")
+	}
+	if _, still := next["2026-08-04"]; still {
+		t.Error("a retired split day is still tracked")
+	}
+}
+
+// A path cannot be a leaf and a sub-tree at once, and PutBatch applies ops in
+// order — so a day changing form has to retire the old form FIRST.
+func TestPlanDayOpsDeletesBeforePutsWhenFormChanges(t *testing.T) {
+	// Single leaf -> split.
+	ops, next := planDayOps(map[string][][]byte{"2026-09-04": body(2)}, []string{"2026-09-04"}, map[string]int{"2026-09-04": 0}, false)
+	want := []string{
+		"-metrics/day/2026-09-04",
+		"+metrics/day/2026-09-04/part/0000",
+		"+metrics/day/2026-09-04/part/0001",
+	}
+	if got := opPaths(ops); !equalStrings(got, want) {
+		t.Errorf("leaf->split ops = %v, want %v", got, want)
+	}
+	if next["2026-09-04"] != 2 {
+		t.Errorf("recorded %d parts, want 2", next["2026-09-04"])
+	}
+
+	// Split -> single leaf: every old part must go before the leaf lands.
+	ops, next = planDayOps(map[string][][]byte{"2026-09-04": body(1)}, []string{"2026-09-04"}, map[string]int{"2026-09-04": 3}, false)
+	want = []string{
+		"-metrics/day/2026-09-04/part/0000",
+		"-metrics/day/2026-09-04/part/0001",
+		"-metrics/day/2026-09-04/part/0002",
+		"+metrics/day/2026-09-04",
+	}
+	if got := opPaths(ops); !equalStrings(got, want) {
+		t.Errorf("split->leaf ops = %v, want %v", got, want)
+	}
+	if next["2026-09-04"] != 0 {
+		t.Errorf("recorded %d parts, want 0", next["2026-09-04"])
+	}
+
+	// Shrinking split: the leftover high-index parts must be retired.
+	ops, _ = planDayOps(map[string][][]byte{"2026-09-04": body(2)}, []string{"2026-09-04"}, map[string]int{"2026-09-04": 4}, false)
+	want = []string{
+		"-metrics/day/2026-09-04",
+		"-metrics/day/2026-09-04/part/0002",
+		"-metrics/day/2026-09-04/part/0003",
+		"+metrics/day/2026-09-04/part/0000",
+		"+metrics/day/2026-09-04/part/0001",
+	}
+	if got := opPaths(ops); !equalStrings(got, want) {
+		t.Errorf("shrinking-split ops = %v, want %v", got, want)
+	}
+}
+
+// equalStrings compares op sequences; joining is enough here and keeps the
+// comparison free of index arithmetic.
+func equalStrings(a, b []string) bool {
+	return strings.Join(a, "\n") == strings.Join(b, "\n")
 }

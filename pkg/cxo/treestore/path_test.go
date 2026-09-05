@@ -63,6 +63,14 @@ func TestHasPrefix(t *testing.T) {
 		// days/, services/, clients-by-server/, transports/all/) walking
 		// empty even when the publisher had Put leaves.
 		{"metrics/days/1", "metrics/days/", true},
+		// The tpd-metrics subscription prefix is "metrics/" precisely so
+		// it covers BOTH the per-day leaves and the legacy per-window
+		// ones. A narrower prefix would match only one layout, and the
+		// other would silently walk empty.
+		{"metrics/day/2026-09-04", "metrics/", true},
+		{"metrics/day/2026-09-04/part/0003", "metrics/", true},
+		{"metrics/days/7", "metrics/", true},
+		{"metrics/day/2026-09-04", "metrics/days/", false},
 		{"transports/all/with-self", "transports/all/", true},
 		{"services/proxy/abc/entry", "services/", true},
 		{"tiers/dmsg/2026-04-27", "tiers/", true},

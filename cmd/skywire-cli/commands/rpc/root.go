@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/0magnet/bottle/vnet"
-
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -534,13 +533,14 @@ func DmsgURLForHTTP(httpURL string) string {
 // deprecated; mirroring it over CXO would just be sunk effort.
 func cxoFeedForURL(rawURL string) (feed, path string, ok bool) {
 	// TPD /metrics → "tpd-metrics" feed, "metrics/days/<n>" path.
-	// Only the windows the publisher actually writes are CXO-eligible
-	// — see uptimePublishDays / metricsPublishDays in TPD. Anything
-	// else falls through to the network chain.
+	// The path stays the request form the visor's FetchCXO parses; the
+	// feed itself is one leaf per calendar day, so ANY window up to the
+	// published history is now CXO-eligible rather than only the three
+	// the old publisher happened to write.
 	if isUnderBase(rawURL, deployment.Prod.TransportDiscovery, "/metrics") ||
 		isUnderBase(rawURL, deployment.Prod.TransportDiscoveryDmsg, "/metrics") {
 		days := queryParamInt(rawURL, "days", -1)
-		if days == 1 || days == 7 || days == 30 {
+		if days >= 1 && days <= 30 {
 			return "tpd-metrics", fmt.Sprintf("metrics/days/%d", days), true
 		}
 		return "", "", false

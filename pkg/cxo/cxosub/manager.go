@@ -55,8 +55,9 @@ import (
 type Feed int
 
 const (
-	// FeedTPDMetrics is TPD's metrics-aggregate publisher
-	// (metrics/days/<n>).
+	// FeedTPDMetrics is TPD's metrics-aggregate publisher (one leaf
+	// per calendar day at metrics/day/<YYYY-MM-DD>; older publishers
+	// used one leaf per day-window at metrics/days/<n>).
 	FeedTPDMetrics Feed = iota
 	// FeedTPDUptime is TPD's uptime-aggregate publisher
 	// (uptimes/days/<n>).
@@ -84,7 +85,12 @@ const (
 func FeedRoute(f Feed) (port uint16, prefix string, ok bool) {
 	switch f {
 	case FeedTPDMetrics:
-		return skyenv.DmsgTPDMetricsCXOPort, "metrics/days/", true
+		// "metrics/" rather than "metrics/day/": the prefix has to
+		// cover BOTH the per-day leaves and the legacy per-window ones,
+		// since a subscriber can outrun the TPD it reads (and the
+		// reverse). hasPathPrefix is segment-aware, so a narrower
+		// prefix would silently match nothing on the other layout.
+		return skyenv.DmsgTPDMetricsCXOPort, "metrics/", true
 	case FeedTPDUptime:
 		return skyenv.DmsgTPDUptimeCXOPort, "uptimes/days/", true
 	case FeedSDServices:
