@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -82,14 +81,10 @@ func newWebRTCAPI() *webrtc.API {
 	// TRADE-OFF: Disabled also DISCARDS remote mDNS candidates. Browsers obfuscate
 	// private host IPs as ".local", so a browser (wasm) visor on the SAME LAN as a
 	// native visor loses that direct path and must fall back to a STUN-derived
-	// srflx candidate — and iceURLs may be empty, in which case such a pair has no
-	// candidate left at all. Loopback is unaffected (browsers do not obfuscate
-	// 127.0.0.1), so the local dev loop keeps working. Set SKYWIRE_WEBRTC_MDNS=1
-	// to restore pion's QueryOnly default if a deployment needs same-LAN browser
-	// peers without STUN.
-	if !mdnsEnabled() {
-		se.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
-	}
+	// srflx candidate. Loopback is unaffected (browsers do not obfuscate
+	// 127.0.0.1), so the local dev loop and the usual WAN case are untouched; the
+	// narrow same-LAN-browser case is not worth 38% of the process.
+	se.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
 	// Empty MediaEngine: skywire uses WebRTC for DATA CHANNELS ONLY, never audio/
 	// video, so registering no codecs keeps the negotiated SDP media-free.
 	//
@@ -513,15 +508,3 @@ type dcTimeout struct{}
 func (dcTimeout) Error() string   { return "webrtc: i/o timeout" }
 func (dcTimeout) Timeout() bool   { return true }
 func (dcTimeout) Temporary() bool { return true }
-
-// mdnsEnabled reports whether pion's mDNS ICE machinery should be left on.
-// Default off — see newWebRTCAPI for the goroutine cost and the same-LAN
-// browser-peer trade-off that SKYWIRE_WEBRTC_MDNS=1 buys back.
-func mdnsEnabled() bool {
-	switch os.Getenv("SKYWIRE_WEBRTC_MDNS") {
-	case "1", "true", "TRUE", "yes":
-		return true
-	default:
-		return false
-	}
-}
