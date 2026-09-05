@@ -213,7 +213,8 @@ func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string
 			errCh <- derr
 			return
 		}
-		connCh <- newDCConn(raw, pc, signal)
+		releaseSignaling(signal)
+		connCh <- newDCConn(raw, pc, nil)
 	})
 
 	wireLocalCandidates(pc, sc)
@@ -253,7 +254,8 @@ func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []stri
 				errCh <- derr
 				return
 			}
-			connCh <- newDCConn(raw, pc, signal)
+			releaseSignaling(signal)
+			connCh <- newDCConn(raw, pc, nil)
 		})
 	})
 
@@ -508,3 +510,24 @@ type dcTimeout struct{}
 func (dcTimeout) Error() string   { return "webrtc: i/o timeout" }
 func (dcTimeout) Timeout() bool   { return true }
 func (dcTimeout) Temporary() bool { return true }
+
+// releaseSignaling closes the dmsg signaling stream now that the DataChannel is
+// open, rather than holding it for the transport's whole lifetime.
+//
+// Signaling exists only to carry the SDP offer/answer and trickle ICE
+// candidates. Once the DataChannel opens, ICE has selected a candidate pair and
+// the SCTP association is up, and nothing reads the stream any more: its reader,
+// pumpRemoteSignals, is bound to the DIAL context and has already returned.
+// Measured on a host visor: 4 pumpRemoteSignals goroutines against 35 webrtc
+// transports — 31 streams open, unread, each holding a reserved dmsg port, a
+// third of that visor's total.
+//
+// Safe against a peer that still writes candidates: the sender ignores write
+// errors (wireLocalCandidates) and its own pumpRemoteSignals simply returns on a
+// read error. Nothing that worked before stops working — an ICE restart was
+// already impossible, because the reader was gone.
+func releaseSignaling(signal io.Closer) {
+	if signal != nil {
+		signal.Close() //nolint:errcheck,gosec
+	}
+}
