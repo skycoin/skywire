@@ -174,6 +174,23 @@ type TransportSummary struct {
 	Total        int            `json:"total_transports"`
 	ByType       map[string]int `json:"by_type"`
 	UniqueVisors int            `json:"unique_visors"`
+
+	// Partial reports that at least one batch of the underlying read failed,
+	// so Total and ByType undercount by an unknown amount.
+	//
+	// This exists because the counts are assembled from batched MGETs over the
+	// transport index, and a failed batch used to be skipped with a bare
+	// `continue` — silently removing up to mgetBatch transports from the
+	// answer while still returning a plausible-looking number. A consumer had
+	// no way to tell "there are N transports" from "N is what I managed to
+	// read", which is indistinguishable from the network shrinking.
+	//
+	// Callers that publish or chart these numbers must treat Partial as
+	// "do not trust this sample" rather than as data.
+	Partial bool `json:"partial,omitempty"`
+	// MissingBatches counts the failed batches, for logging and for judging
+	// how far off Total might be.
+	MissingBatches int `json:"missing_batches,omitempty"`
 }
 
 // Store stores Transport metadata and generated nonce values.
