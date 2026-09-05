@@ -25,6 +25,7 @@ package doc
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"io/fs"
 	"net/http"
 	"sort"
@@ -130,7 +131,7 @@ func docHandler(root *cobra.Command) http.Handler {
 // 102 files fit on a page, and a reader looking for one knows its name.
 func proseIndex() []byte {
 	var names []string
-	_ = fs.WalkDir(skydocs.Prose(), ".", func(p string, d fs.DirEntry, err error) error {
+	walkErr := fs.WalkDir(skydocs.Prose(), ".", func(p string, d fs.DirEntry, err error) error {
 		if err == nil && !d.IsDir() && strings.HasSuffix(p, ".md") {
 			names = append(names, p)
 		}
@@ -143,6 +144,12 @@ func proseIndex() []byte {
 		fmt.Fprintf(&b, "<li><a href=%q>%s</a></li>", "/prose/"+n, n)
 	}
 	b.WriteString("</ul>")
+	// The walk cannot fail over an embedded FS, but a truncated index that
+	// says nothing is the one outcome worth ruling out: a reader would take
+	// a short list for the whole of the prose.
+	if walkErr != nil {
+		fmt.Fprintf(&b, "<p>index incomplete: %s</p>", html.EscapeString(walkErr.Error()))
+	}
 	return []byte(b.String())
 }
 
@@ -160,12 +167,10 @@ func mdToHTML(src []byte) []byte {
 	return buf.Bytes()
 }
 
-// writeHTML wraps rendered markdown in a minimal document. No external assets:
-// this is served on a loopback with no transport behind it, so a stylesheet
-// from a CDN would simply never arrive.
-func writeHTML(w http.ResponseWriter, title string, body []byte) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!doctype html><meta charset=utf-8>
+// docPage is the whole document, hoisted to a constant so the Fprintf that
+// emits it is one line — a raw string spanning ten lines leaves nowhere to
+// put the directive that says why its error is dropped.
+const docPage = `<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>%s</title><style>
 body{max-width:46em;margin:2em auto;padding:0 1em;font:15px/1.6 system-ui,sans-serif;color:#cdd2da;background:#15131c}
@@ -175,5 +180,15 @@ pre code{background:none;padding:0}
 table{border-collapse:collapse}td,th{border:1px solid #3a3350;padding:.3em .6em}
 nav{margin-bottom:2em;font-size:13px}
 </style><nav><a href="/">command reference</a> · <a href="/prose/">prose</a></nav>
-%s`, title, body)
+%s`
+
+// writeHTML wraps rendered markdown in a minimal document. No external assets:
+// this is served on a loopback with no transport behind it, so a stylesheet
+// from a CDN would simply never arrive.
+func writeHTML(w http.ResponseWriter, title string, body []byte) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// A dropped error, deliberately: a write failure here is the client
+	// hanging up mid-page. There is no second channel to report it on and
+	// nothing to retry.
+	fmt.Fprintf(w, docPage, title, body) //nolint:errcheck,gosec
 }

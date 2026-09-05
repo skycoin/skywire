@@ -35,12 +35,16 @@ func TestProseCoversEveryTree(t *testing.T) {
 		}
 		// A tree counts as prose once it holds any markdown.
 		var hasMD bool
-		_ = fs.WalkDir(os.DirFS(e.Name()), ".", func(p string, d fs.DirEntry, err error) error {
+		if err := fs.WalkDir(os.DirFS(e.Name()), ".", func(p string, d fs.DirEntry, err error) error {
 			if err == nil && !d.IsDir() && strings.HasSuffix(p, ".md") {
 				hasMD = true
 			}
 			return nil
-		})
+		}); err != nil {
+			// A directory this test cannot walk is one it cannot vouch for,
+			// which is the opposite of the assertion below passing.
+			t.Fatalf("walk docs/%s/: %v", e.Name(), err)
+		}
 		if !hasMD {
 			continue
 		}
@@ -69,7 +73,7 @@ func TestProseExcludesGenerated(t *testing.T) {
 func TestProseCarriesNoBuildOutput(t *testing.T) {
 	banned := map[string]bool{".wasm": true, ".gz": true, ".png": true, ".gif": true, ".jpg": true, ".svg": true, ".zip": true}
 	var total int64
-	_ = fs.WalkDir(proseFS, ".", func(p string, d fs.DirEntry, err error) error {
+	if err := fs.WalkDir(proseFS, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
@@ -81,7 +85,11 @@ func TestProseCarriesNoBuildOutput(t *testing.T) {
 			t.Errorf("%s embedded — build output does not belong in the docs embed", p)
 		}
 		return nil
-	})
+	}); err != nil {
+		// An unwalkable embed is an unmeasured embed; the size budget below
+		// would otherwise pass on a total of zero.
+		t.Fatalf("walk the prose embed: %v", err)
+	}
 	// The prose is ~762 KB today. Generous enough for ordinary writing, tight
 	// enough that a tree of binaries trips it.
 	if total > 2<<20 {
