@@ -88,10 +88,16 @@ type Config struct {
 
 // dmsgEntryVersion returns the build version to advertise in the dmsg server's
 // discovery entry, or "" when the binary carries no meaningful version (dev
-// builds) so the entity keeps the "0.0.1" default. Uses runtime/debug build
-// info via buildinfo — the same source the /health endpoint reports.
+// builds) so the entity keeps the "0.0.1" default.
+//
+// buildinfo.Get() rather than buildinfo.Version(): Get appends the commit, so
+// the entry carries the same "v1.3.94-0-659adf35d256" string /health reports
+// and every visor shows. Version() alone stops at the release tag, which made
+// all nine production servers advertise an identical "v1.3.94-0" and left no
+// way to tell from discovery which commit any of them was running — so after a
+// dmsg-server fix ships there is no way to see which servers picked it up.
 func dmsgEntryVersion() string {
-	if v := buildinfo.Version(); v != "" && v != "unknown" {
+	if v := buildinfo.Get().Version; v != "" && v != "unknown" {
 		return v
 	}
 	return ""
