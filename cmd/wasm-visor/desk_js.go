@@ -86,17 +86,36 @@ func installDesk() {
 	// The hypervisor UI is a browser TAB, not a window of its own — the desk
 	// puts surfaces in tabs wherever the pane already has them, and the
 	// dashboard is just a page. DirectLoader is what makes that tab render
-	// NATIVELY: without it netscrape would transcode the Angular app into a
-	// sandboxed srcdoc, which strips the same-origin it needs. Claim only
-	// same-origin /vnet/ URLs — those are served by this page's own service
-	// worker out of the visor's virtual loopback, so they are ours to render.
+	// NATIVELY: without it netscrape would transcode the page into a sandboxed
+	// srcdoc, which strips the same-origin an Angular-style app needs.
+	//
+	// Claim the whole ORIGIN, not just /vnet/. Two pages want this and both are
+	// ours by definition — the origin is what this page is served from:
+	//
+	//   /vnet/<port>/…  the visor's virtual loopback, via our service worker
+	//   everything else  the site hosting the desk — on the docs deployment that
+	//                    is MkDocs, which the desk opens in a tab so the reader
+	//                    browses the docs inside the visor rather than beside it
+	//
+	// This also removes the transport from the path: a same-origin page loads as
+	// an ordinary document, so the docs render with no visor running. Going
+	// through fetchPage would strand them — __netscrapeFetch exists but has
+	// nothing behind it until someone starts a visor (measured live).
+	//
+	// A claimed page is UNSANDBOXED, so this must stay same-origin-only.
 	netscrape.DirectLoader = func(u string) (string, bool) {
 		loc := js.Global().Get("location")
 		if !loc.Truthy() {
 			return "", false
 		}
 		origin := loc.Get("origin").String()
-		if origin == "" || !strings.HasPrefix(u, origin+"/vnet/") {
+		if origin == "" {
+			return "", false
+		}
+		// Exact origin, or origin followed by a path separator — never a
+		// prefix match that a sibling origin could satisfy
+		// ("https://evil.com" must not match "https://evil.com.attacker.net").
+		if u != origin && !strings.HasPrefix(u, origin+"/") {
 			return "", false
 		}
 		return u, true
