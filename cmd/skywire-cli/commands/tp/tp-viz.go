@@ -12,6 +12,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -167,12 +168,20 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 		// Without it /api/transports etc. fail with "dmsg URL requested but no dmsg
 		// HTTP client set" — standalone `tp viz` was unusable against the current
 		// dmsg-only deployment (only --visor and the reward server wired dmsg).
-		// Ephemeral keypair; best-effort and async, so the UI serves immediately and
-		// the graph populates once dmsg connects.
+		// Best-effort and async, so the UI serves immediately and the graph
+		// populates once dmsg connects.
+		//
+		// The keypair is per-run, so the client must NOT publish an entry to the
+		// dmsg-discovery: a long-running server that registers a fresh identity on
+		// every restart leaves abandoned entries behind, which is the litter #4501
+		// removed from `hv serve`. This process is a pure consumer — nothing dials
+		// it — and every PK it will ever reach is a deployment service known here,
+		// so seeding those directly and skipping the registering fallback gives it
+		// what it needs without an entry.
 		go func() {
 			dlog := logging.MustGetLogger("tpviz-dmsg")
 			pk, sk := cipher.GenerateKeyPair()
-			dmsgC, _, err := dmsgclient.StartDmsgEmbedded(cmd.Context(), dlog, pk, sk, false)
+			dmsgC, _, err := dmsgclient.StartDmsgEmbeddedForServices(cmd.Context(), dlog, pk, sk, false, vizServicePKs(cfg)...)
 			if err != nil {
 				dlog.WithError(err).Warn("dmsg client for deployment discovery failed to start; network-graph data unavailable")
 				return
@@ -187,4 +196,35 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 			os.Exit(1)
 		}
 	},
+}
+
+// vizServicePKs returns the deployment-service public keys the standalone
+// server will dial, taken from the dmsg:// URLs already resolved into cfg.
+//
+// These are seeded directly into the dmsg client so it can reach them without
+// the registering fallback discovery — which would publish an entry for a
+// process nothing ever dials. Entries that are not dmsg:// (or are empty) are
+// skipped: they are reached over clearnet HTTP and need no seed.
+func vizServicePKs(cfg tpviz.Config) []cipher.PubKey {
+	var out []cipher.PubKey
+	seen := make(map[cipher.PubKey]struct{})
+	for _, raw := range []string{cfg.TPDURLDmsg, cfg.SDURLDmsg, cfg.DMSGURLDmsg} {
+		if raw == "" {
+			continue
+		}
+		hex := dmsg.ExtractPKFromDmsgAddr(raw)
+		if hex == "" {
+			continue
+		}
+		var pk cipher.PubKey
+		if err := pk.UnmarshalText([]byte(hex)); err != nil || pk.Null() {
+			continue
+		}
+		if _, dup := seen[pk]; dup {
+			continue
+		}
+		seen[pk] = struct{}{}
+		out = append(out, pk)
+	}
+	return out
 }

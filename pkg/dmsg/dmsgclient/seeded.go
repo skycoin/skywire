@@ -184,3 +184,33 @@ func StartDmsgEmbedded(ctx context.Context, log *logging.Logger, pk cipher.PubKe
 	}
 	return StartDmsgSeeded(ctx, log, pk, sk, seeds, deployment.Prod.DmsgDiscoveryDmsg, preferWS)
 }
+
+// StartDmsgEmbeddedForServices starts an embedded-seed dmsg client that talks
+// ONLY to the named services and never publishes an entry to the
+// dmsg-discovery.
+//
+// StartDmsgEmbedded seeds no service PKs, so it depends on the registering
+// fallback discovery to resolve anything — and that fallback publishes our own
+// entry as a side effect of being installed. For a read-only consumer that
+// already knows every PK it will ever dial, that entry is pure litter: the
+// process is never dialed by anyone, and a fresh key per run leaves an
+// abandoned registration behind (the pattern removed from `hv serve` in #4501).
+//
+// Passing the service PKs seeds them directly, and passing an empty discovery
+// address skips the upgrade entirely, leaving the client in the seed-only mode
+// StartDmsgSeeded already degrades to on upgrade failure: dialable, but unable
+// to resolve peers it was not told about. That is the correct trade for a
+// consumer with a fixed set of destinations, and the wrong one for anything
+// that needs to reach arbitrary peers — those should keep using
+// StartDmsgEmbedded.
+func StartDmsgEmbeddedForServices(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, preferWS bool, servicePKs ...cipher.PubKey) (*dmsg.Client, func(), error) {
+	servers := dmsg.Prod.DmsgServers
+	if len(servers) == 0 {
+		return nil, nil, errors.New("dmsg: no embedded dmsg servers in deployment config")
+	}
+	seeds := make([]*disc.Entry, len(servers))
+	for i := range servers {
+		seeds[i] = &servers[i]
+	}
+	return StartDmsgSeeded(ctx, log, pk, sk, seeds, "", preferWS, servicePKs...)
+}
