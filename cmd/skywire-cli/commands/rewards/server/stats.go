@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bitfield/script"
@@ -472,6 +473,30 @@ type UptimeVisor struct {
 	Daily   map[string]string `json:"daily"`
 }
 
+// histCache memoizes ParseHistoricUptimeData. The parse globs every
+// hist/*_ut.json, then reads and unmarshals all of them — hundreds of files,
+// on EVERY request to /stats and /stats/version-history. The key is the newest
+// file's modification time plus the file count, so a new daily drop (or a
+// rewritten one) invalidates it immediately; it is not a timed cache and never
+// serves data older than the directory.
+var histCache struct {
+	sync.Mutex
+	key     string
+	minUp   float64
+	entries []VersionHistoryEntry
+}
+
+// histCacheKey summarizes the directory cheaply: newest mtime + file count.
+func histCacheKey(files []string) string {
+	var newest time.Time
+	for _, f := range files {
+		if info, err := os.Stat(f); err == nil && info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+	}
+	return fmt.Sprintf("%d|%d", len(files), newest.UnixNano())
+}
+
 // ParseHistoricUptimeData reads all _ut.json files and returns version counts per day
 // Only counts visors that had >= minUptime% uptime on each specific day
 func ParseHistoricUptimeData(histDir string, minUptime float64) ([]VersionHistoryEntry, error) {
@@ -479,6 +504,15 @@ func ParseHistoricUptimeData(histDir string, minUptime float64) ([]VersionHistor
 	if err != nil {
 		return nil, err
 	}
+
+	key := histCacheKey(files)
+	histCache.Lock()
+	if histCache.entries != nil && histCache.key == key && histCache.minUp == minUptime {
+		cached := histCache.entries
+		histCache.Unlock()
+		return cached, nil
+	}
+	histCache.Unlock()
 
 	// Sort files by date (newest first) so we use most recent data for each visor+date
 	sort.Slice(files, func(i, j int) bool {
@@ -557,6 +591,10 @@ func ParseHistoricUptimeData(histDir string, minUptime float64) ([]VersionHistor
 		})
 	}
 
+	histCache.Lock()
+	histCache.key, histCache.minUp, histCache.entries = key, minUptime, history
+	histCache.Unlock()
+
 	return history, nil
 }
 
@@ -572,28 +610,6 @@ func normalizeVersion(v string) string {
 	v = strings.ReplaceAll(v, "-dirty", "")
 	v = strings.TrimSpace(v)
 	return v
-}
-
-// getAllVersions extracts all unique versions from history, sorted by first appearance
-func getAllVersions(history []VersionHistoryEntry) []string {
-	versionSet := make(map[string]int) // version -> first seen index
-	for i, entry := range history {
-		for version := range entry.Versions {
-			if _, exists := versionSet[version]; !exists {
-				versionSet[version] = i
-			}
-		}
-	}
-
-	// Sort versions by semantic version (newest first for legend)
-	var versions []string
-	for v := range versionSet {
-		versions = append(versions, v)
-	}
-	sort.Slice(versions, func(i, j int) bool {
-		return compareVersions(versions[i], versions[j]) > 0
-	})
-	return versions
 }
 
 // compareVersions compares two version strings (simple semver comparison)
@@ -624,148 +640,122 @@ func compareVersions(a, b string) int {
 	return len(partsA) - len(partsB)
 }
 
-// GenerateVersionHistoryChartHTML creates a CSS-based stacked area chart
+// versionChartBands caps how many versions get their own band. The network has
+// carried 140+ distinct version strings; drawing every one gives an unreadable
+// chart and a path per version. The rest are summed into "other versions",
+// which is honest — the total still adds up to the day's visor count.
+const versionChartBands = 12
+
+// GenerateVersionHistoryChartHTML renders version adoption over time as an
+// inline SVG stacked area.
+//
+// This previously emitted one absolutely-positioned 1-pixel <div> per plotted
+// pixel — 14,417 elements and 2.1 MB of HTML for two years of history, which
+// took eight seconds to serve. The same data is now a handful of <path>
+// elements. Hover detail is a <title> per band rather than per pixel.
 func GenerateVersionHistoryChartHTML(history []VersionHistoryEntry, chartWidth, chartHeight int) string {
 	if len(history) == 0 {
 		return "<p>No historic data available</p>"
 	}
+	if chartWidth <= 0 {
+		chartWidth = 900
+	}
+	if chartHeight <= 0 {
+		chartHeight = 300
+	}
 
-	versions := getAllVersions(history)
-	if len(versions) == 0 {
+	// Rank versions by their PEAK SHARE of the network on any single day, then
+	// order the chosen bands oldest-first so the stack reads as an adoption
+	// curve. Ranking by total visor-days instead looks reasonable and is not:
+	// it weights by how long a version survived, so the 2024 releases with two
+	// years of accumulated days crowd out every version running today, and the
+	// whole current network collapses into the "other" band. Peak share scores
+	// a wave by how much of the network it actually held, whenever it held it.
+	share := make(map[string]float64)
+	for _, entry := range history {
+		if entry.Total == 0 {
+			continue
+		}
+		for v, c := range entry.Versions {
+			if s := float64(c) / float64(entry.Total); s > share[v] {
+				share[v] = s
+			}
+		}
+	}
+	if len(share) == 0 {
 		return "<p>No version data available</p>"
 	}
+	ranked := sortedMapKeys(share)
 
-	// Find max total for scaling
-	maxTotal := 0
-	for _, entry := range history {
-		if entry.Total > maxTotal {
-			maxTotal = entry.Total
+	top := ranked
+	var rest []string
+	if len(ranked) > versionChartBands {
+		top, rest = ranked[:versionChartBands], ranked[versionChartBands:]
+	}
+	sort.Slice(top, func(i, j int) bool { return compareVersions(top[i], top[j]) < 0 })
+
+	var series []chartSeries
+	if len(rest) > 0 {
+		vals := make([]float64, len(history))
+		restTotal := 0
+		for i, entry := range history {
+			sum := 0
+			for _, v := range rest {
+				sum += entry.Versions[v]
+			}
+			vals[i] = float64(sum)
+			restTotal += sum
 		}
+		series = append(series, chartSeries{
+			Name:  fmt.Sprintf("%d older/other versions", len(rest)),
+			Color: "#555555",
+			Vals:  vals,
+			Note:  fmt.Sprintf("%d visor-days combined", restTotal),
+		})
 	}
-	if maxTotal == 0 {
-		return "<p>No data points</p>"
-	}
-
-	// Assign colors to versions
-	versionColors := make(map[string]string)
-	for i, v := range versions {
-		versionColors[v] = pieChartColors[i%len(pieChartColors)]
-	}
-
-	var sb strings.Builder
-
-	// Container with responsive styles
-	sb.WriteString("<div style='margin: 20px 0; max-width: 100%; overflow-x: auto;'>\n")
-	sb.WriteString("<h3>Version Distribution Over Time (≥75% daily uptime)</h3>\n")
-
-	// Chart container with axes
-	sb.WriteString("<div style='display: flex; align-items: flex-end; gap: 5px; min-width: fit-content;'>\n")
-
-	// Y-axis labels
-	fmt.Fprintf(&sb, "<div style='display: flex; flex-direction: column; justify-content: space-between; height: %dpx; font-size: 11px; color: #888; text-align: right; padding-right: 5px; flex-shrink: 0;'>\n", chartHeight)
-	fmt.Fprintf(&sb, "<span>%d</span>\n", maxTotal)
-	fmt.Fprintf(&sb, "<span>%d</span>\n", maxTotal*3/4)
-	fmt.Fprintf(&sb, "<span>%d</span>\n", maxTotal/2)
-	fmt.Fprintf(&sb, "<span>%d</span>\n", maxTotal/4)
-	sb.WriteString("<span>0</span>\n")
-	sb.WriteString("</div>\n")
-
-	// Chart area - use min-width so it can scroll on mobile
-	fmt.Fprintf(&sb, "<div style='position: relative; min-width: %dpx; height: %dpx; border-left: 1px solid #444; border-bottom: 1px solid #444; background: #1a1a1a; flex-shrink: 0;'>\n", chartWidth, chartHeight) //nolint:errcheck,gosec
-
-	// Grid lines
-	for i := 1; i <= 4; i++ {
-		y := chartHeight - (chartHeight * i / 4)
-		fmt.Fprintf(&sb, "<div style='position: absolute; left: 0; right: 0; top: %dpx; border-top: 1px dashed #333;'></div>\n", y) //nolint:errcheck,gosec
+	for i, v := range top {
+		vals := make([]float64, len(history))
+		peak := 0
+		for di, entry := range history {
+			c := entry.Versions[v]
+			vals[di] = float64(c)
+			if c > peak {
+				peak = c
+			}
+		}
+		series = append(series, chartSeries{
+			Name:  v,
+			Color: chartColors[i%len(chartColors)],
+			Vals:  vals,
+			Note:  fmt.Sprintf("peak %d visors", peak),
+		})
 	}
 
-	// Calculate bar width
-	barWidth := chartWidth / len(history)
-	if barWidth < 2 {
-		barWidth = 2
-	}
-
-	// Draw stacked bars for each day
+	dates := make([]string, len(history))
 	for i, entry := range history {
-		x := i * barWidth
-		currentY := 0
-
-		// Draw each version's segment (stacked)
-		for _, version := range versions {
-			count := entry.Versions[version]
-			if count == 0 {
-				continue
-			}
-
-			segmentHeight := count * chartHeight / maxTotal
-			if segmentHeight < 1 {
-				segmentHeight = 1
-			}
-
-			color := versionColors[version]
-			bottom := currentY
-			currentY += segmentHeight
-
-			fmt.Fprintf(&sb, "<div style='position: absolute; left: %dpx; bottom: %dpx; width: %dpx; height: %dpx; background: %s;' title='%s: %s (%d)'></div>\n", //nolint:errcheck,gosec
-				x, bottom, barWidth-1, segmentHeight, color, entry.Date, version, count)
-		}
+		dates[i] = entry.Date
 	}
 
-	sb.WriteString("</div>\n") // chart area
-	sb.WriteString("</div>\n") // flex container
-
-	// X-axis labels (show every Nth date to avoid crowding)
-	labelInterval := len(history) / 10
-	if labelInterval < 1 {
-		labelInterval = 1
+	opts := chartOpts{
+		Width: chartWidth, Height: chartHeight,
+		Labels:     shortDates(dates),
+		Title:      fmt.Sprintf("Version Distribution Over Time (≥75%% daily uptime, %d days)", len(history)),
+		YAxisLabel: "visors per version, stacked",
+		FormatY:    func(v float64) string { return strconv.FormatFloat(v, 'f', 0, 64) },
+		MaxXLabels: 10,
 	}
+	out := renderStackedAreaSVG(opts, series)
 
-	fmt.Fprintf(&sb, "<div style='position: relative; margin-left: 40px; height: 20px; min-width: %dpx; font-size: 10px; color: #888;'>\n", chartWidth) //nolint:errcheck,gosec
-	lastLabelIdx := -1
-	prevYear := ""
-	for i, entry := range history {
-		isRegular := i%labelInterval == 0
-		isLast := i == len(history)-1
-
-		if !isRegular && !isLast {
-			continue
-		}
-
-		// Skip last label if it would overlap the previous label
-		if isLast && lastLabelIdx >= 0 && (i-lastLabelIdx) < labelInterval/2 {
-			continue
-		}
-
-		dateParts := strings.Split(entry.Date, "-")
-		label := entry.Date
-		if len(dateParts) == 3 {
-			year := dateParts[0]
-			// Show year on first label and when year changes
-			if prevYear == "" || year != prevYear {
-				label = dateParts[0] + "-" + dateParts[1] + "-" + dateParts[2]
-				prevYear = year
-			} else {
-				label = dateParts[1] + "-" + dateParts[2]
-			}
-		}
-
-		x := i * barWidth
-		fmt.Fprintf(&sb, "<span style='position: absolute; left: %dpx;'>%s</span>\n", x, label) //nolint:errcheck,gosec
-		lastLabelIdx = i
+	// The most recent days as text — the readable form of the right edge.
+	latest := history[len(history)-1]
+	out += fmt.Sprintf("<p>Latest: <b>%s</b> — %d visors at ≥75%% uptime.</p>",
+		html.EscapeString(latest.Date), latest.Total)
+	out += "<details style='margin:8px 0;'><summary style='cursor:pointer;color:#3399FF;'>latest day, all versions</summary><pre>"
+	for _, v := range sortedMapKeys(latest.Versions) {
+		out += fmt.Sprintf("%-28s %d\n", html.EscapeString(v), latest.Versions[v])
 	}
-	sb.WriteString("</div>\n")
-
-	// Legend - responsive wrapping
-	sb.WriteString("<div style='margin-top: 15px; display: flex; flex-wrap: wrap; gap: 8px 15px; font-size: 12px;'>\n")
-	for _, version := range versions {
-		color := versionColors[version]
-		fmt.Fprintf(&sb, "<span style='display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;'><span style='display: inline-block; width: 12px; height: 12px; background: %s; flex-shrink: 0;'></span>%s</span>\n", color, html.EscapeString(version)) //nolint:errcheck,gosec
-	}
-	sb.WriteString("</div>\n")
-
-	sb.WriteString("</div>\n") // container
-
-	return sb.String()
+	out += "</pre></details>"
+	return out
 }
 
 // GeneratePieChartHTML generates a CSS-based pie chart with legend
@@ -1337,6 +1327,7 @@ type tpdNetworkSummary struct {
 }
 
 const tpdSummaryCacheFile = "tpd_summary.json"
+
 const tpdSummaryCacheMaxAge = 5 * time.Minute
 
 // getTPDNetworkSummary returns cached TPD network summary, fetching fresh data
@@ -1531,206 +1522,6 @@ func renderTPDNetworkSummaryHTML() string {
 
 	l += "</pre>"
 	l += fmt.Sprintf("<p style='color: #888; font-size: 0.8em;'>Last updated: %s</p>", summary.LastUpdated)
-	return l
-}
-
-// renderTPDBandwidthHistoryChart generates a bar chart of daily total bandwidth from TPD metrics.
-func renderTPDBandwidthHistoryChart(metrics []tpdTransportMetric) string {
-	// Aggregate bandwidth by date
-	dailyTotals := make(map[string]uint64)
-	for _, m := range metrics {
-		for _, d := range m.Daily {
-			var bw uint64
-			if d.A != nil {
-				bw += d.A.Sent + d.A.Recv
-			}
-			if d.B != nil {
-				bw += d.B.Sent + d.B.Recv
-			}
-			dailyTotals[d.Date] += bw
-		}
-	}
-
-	if len(dailyTotals) == 0 {
-		return "<p>No bandwidth data available.</p>"
-	}
-
-	// Sort dates
-	var dates []string
-	for d := range dailyTotals {
-		dates = append(dates, d)
-	}
-	sort.Strings(dates)
-
-	// Build Chart.js bar chart
-	var labels, data []string
-	for _, d := range dates {
-		parts := strings.Split(d, "-")
-		label := d
-		if len(parts) == 3 {
-			label = parts[1] + "-" + parts[2]
-		}
-		labels = append(labels, fmt.Sprintf("'%s'", label))
-		data = append(data, fmt.Sprintf("%d", dailyTotals[d]))
-	}
-
-	l := "<canvas id='bw-history-chart' width='800' height='300'></canvas>\n"
-	l += "<script src='https://cdn.jsdelivr.net/npm/chart.js'></script>\n"
-	l += "<script>\n"
-	l += "new Chart(document.getElementById('bw-history-chart'), {\n"
-	l += "  type: 'bar',\n"
-	l += "  data: {\n"
-	l += "    labels: [" + strings.Join(labels, ",") + "],\n"
-	l += "    datasets: [{\n"
-	l += "      label: 'Total Bandwidth (bytes)',\n"
-	l += "      data: [" + strings.Join(data, ",") + "],\n"
-	l += "      backgroundColor: '#36A2EB'\n"
-	l += "    }]\n"
-	l += "  },\n"
-	l += "  options: {\n"
-	l += "    responsive: true,\n"
-	l += "    plugins: { legend: { labels: { color: 'white' } } },\n"
-	l += "    scales: {\n"
-	l += "      x: { ticks: { color: 'white' }, grid: { color: '#333' } },\n"
-	l += "      y: { ticks: { color: 'white', callback: function(v) { if(v>=1073741824) return (v/1073741824).toFixed(1)+'GB'; if(v>=1048576) return (v/1048576).toFixed(1)+'MB'; if(v>=1024) return (v/1024).toFixed(1)+'KB'; return v+'B'; } }, grid: { color: '#333' } }\n"
-	l += "    }\n"
-	l += "  }\n"
-	l += "});\n"
-	l += "</script>\n"
-
-	// Summary table
-	l += "<table style='border-collapse:collapse;margin-top:10px;'>"
-	l += "<tr><th style='border:1px solid #444;padding:4px 8px;'>Date</th><th style='border:1px solid #444;padding:4px 8px;'>Bandwidth</th></tr>"
-	for _, d := range dates {
-		parts := strings.Split(d, "-")
-		label := d
-		if len(parts) == 3 {
-			label = parts[1] + "-" + parts[2]
-		}
-		l += fmt.Sprintf("<tr><td style='border:1px solid #444;padding:4px 8px;'>%s</td><td style='border:1px solid #444;padding:4px 8px;'>%s</td></tr>", label, formatBytesChart(dailyTotals[d]))
-	}
-	l += "</table>"
-
-	return l
-}
-
-// renderTPDVisorBandwidthChart generates a stacked bar chart of per-visor bandwidth from TPD metrics.
-func renderTPDVisorBandwidthChart(metrics []tpdTransportMetric) string {
-	// Aggregate bandwidth per visor (by edge PKs) per date
-	type visorBW struct {
-		pk      string
-		daily   map[string]uint64
-		totalBW uint64
-	}
-
-	visorMap := make(map[string]*visorBW)
-	for _, m := range metrics {
-		for _, edge := range m.Edges {
-			if _, ok := visorMap[edge]; !ok {
-				visorMap[edge] = &visorBW{pk: edge, daily: make(map[string]uint64)}
-			}
-		}
-		for _, d := range m.Daily {
-			var bw uint64
-			if d.A != nil {
-				bw += d.A.Sent + d.A.Recv
-			}
-			if d.B != nil {
-				bw += d.B.Sent + d.B.Recv
-			}
-			// Attribute to both edges
-			for _, edge := range m.Edges {
-				if v, ok := visorMap[edge]; ok {
-					v.daily[d.Date] += bw
-					v.totalBW += bw
-				}
-			}
-		}
-	}
-
-	if len(visorMap) == 0 {
-		return "<p>No per-visor bandwidth data available.</p>"
-	}
-
-	// Sort visors by total bandwidth, take top 20
-	var allVisors []*visorBW
-	for _, v := range visorMap {
-		allVisors = append(allVisors, v)
-	}
-	sort.Slice(allVisors, func(i, j int) bool {
-		return allVisors[i].totalBW > allVisors[j].totalBW
-	})
-
-	maxVisors := 20
-	if len(allVisors) < maxVisors {
-		maxVisors = len(allVisors)
-	}
-	topVisors := allVisors[:maxVisors]
-
-	// Collect all dates
-	dateSet := make(map[string]struct{})
-	for _, v := range topVisors {
-		for d := range v.daily {
-			dateSet[d] = struct{}{}
-		}
-	}
-	var dates []string
-	for d := range dateSet {
-		dates = append(dates, d)
-	}
-	sort.Strings(dates)
-
-	// Build labels
-	var labels []string
-	for _, d := range dates {
-		parts := strings.Split(d, "-")
-		label := d
-		if len(parts) == 3 {
-			label = parts[1] + "-" + parts[2]
-		}
-		labels = append(labels, fmt.Sprintf("'%s'", label))
-	}
-
-	// Colors for datasets
-	colors := []string{
-		"#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF",
-		"#FF9F40", "#C9CBCF", "#7BC8A4", "#E7E9ED", "#FF6B6B",
-		"#4ECDC4", "#45B7D1", "#96CEB4", "#FFEEAD", "#D4A5A5",
-		"#9B59B6", "#3498DB", "#E74C3C", "#2ECC71", "#F39C12",
-	}
-
-	// Build datasets
-	var datasets []string
-	for i, v := range topVisors {
-		var data []string
-		for _, d := range dates {
-			data = append(data, fmt.Sprintf("%d", v.daily[d]))
-		}
-		color := colors[i%len(colors)]
-		datasets = append(datasets, fmt.Sprintf("{ label: '%s', data: [%s], backgroundColor: '%s' }",
-			v.pk, strings.Join(data, ","), color))
-	}
-
-	l := "<canvas id='visor-bw-chart' width='800' height='400'></canvas>\n"
-	l += "<script src='https://cdn.jsdelivr.net/npm/chart.js'></script>\n"
-	l += "<script>\n"
-	l += "new Chart(document.getElementById('visor-bw-chart'), {\n"
-	l += "  type: 'bar',\n"
-	l += "  data: {\n"
-	l += "    labels: [" + strings.Join(labels, ",") + "],\n"
-	l += "    datasets: [" + strings.Join(datasets, ",\n") + "]\n"
-	l += "  },\n"
-	l += "  options: {\n"
-	l += "    responsive: true,\n"
-	l += "    scales: {\n"
-	l += "      x: { stacked: true, ticks: { color: 'white' }, grid: { color: '#333' } },\n"
-	l += "      y: { stacked: true, ticks: { color: 'white', callback: function(v) { if(v>=1073741824) return (v/1073741824).toFixed(1)+'GB'; if(v>=1048576) return (v/1048576).toFixed(1)+'MB'; if(v>=1024) return (v/1024).toFixed(1)+'KB'; return v+'B'; } }, grid: { color: '#333' } }\n"
-	l += "    },\n"
-	l += "    plugins: { legend: { labels: { color: 'white', font: { size: 10 } } } }\n"
-	l += "  }\n"
-	l += "});\n"
-	l += "</script>\n"
-
 	return l
 }
 
