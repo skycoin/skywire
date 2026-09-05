@@ -181,7 +181,7 @@ type EntityCommon struct {
 	// "not old + 1" (#4086). Each rejected POST costs a full Noise handshake on
 	// the discovery.
 	//
-	// Deliberately a channel, not a Mutex: acquisition must honour the caller's
+	// Deliberately a channel, not a Mutex: acquisition must honor the caller's
 	// context. A plain mutex here is what wedged services in #3157/#3168 — a
 	// stuck PUT held it while every other caller blocked forever, their own
 	// per-attempt timeouts useless because mutex acquisition ignores context.
@@ -905,7 +905,7 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 	// Serialize this entity's read-modify-write against the discovery: the GET
 	// in updateClientEntryOnEndpoint and its PUT must not interleave with another
 	// publisher's, or one of them posts a stale sequence and is rejected 422
-	// (#4086). Acquisition honours ctx and done, so a stuck holder cannot wedge
+	// (#4086). Acquisition honors ctx and done, so a stuck holder cannot wedge
 	// its callers the way the plain mutex did in #3157/#3168; a caller that times
 	// out simply retries on the next tick. Nil-checked because a zero-value
 	// EntityCommon (tests) never ran init.
