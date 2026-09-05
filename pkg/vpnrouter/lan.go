@@ -16,14 +16,14 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/0magnet/router7/pkg/dhcp4d"
+	"github.com/0magnet/router7/pkg/dns"
 	"github.com/google/renameio"
 	krolaw "github.com/krolaw/dhcp4"
 	"github.com/krolaw/dhcp4/conn"
 	miekgdns "github.com/miekg/dns"
 
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
-	"github.com/skycoin/skywire/pkg/vpnrouter/router7/dhcp4d"
-	"github.com/skycoin/skywire/pkg/vpnrouter/router7/dns"
 )
 
 // StartLAN serves DHCPv4 (:67) and DNS (:53) on ifaceName — the vpn-router's

@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/calvin"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"

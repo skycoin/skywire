@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
 
 	df "github.com/skycoin/skywire/cmd/dmsg/conf/commands"
@@ -24,7 +25,6 @@ import (
 	dpu "github.com/skycoin/skywire/cmd/dmsg/pty-ui/commands"
 	dsp "github.com/skycoin/skywire/cmd/dmsg/self-ping/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 )
 
