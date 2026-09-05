@@ -1,8 +1,10 @@
 // Package visor pkg/visor/init_registration_cxo.go c3-vis-core
 //
-// Registration-over-CXO publisher. When the visor opts in
-// (Dmsg.RegistrationCXO), it publishes its own signed discovery entry as
-// a CXO feed on DmsgDMSGDRegistrationCXOPort and announces to the
+// Registration-over-CXO publisher. Runs whenever a dmsg-discovery PK
+// resolves (there is no opt-in flag — earlier comments referenced a
+// Dmsg.RegistrationCXO field that was never added). It publishes this
+// visor's own signed discovery entry as a CXO feed on
+// DmsgDMSGDRegistrationCXOPort and announces to the
 // deployment's dmsg-discovery, which subscribes back and ingests the
 // entry. This moves client-entry registration off the timer-driven HTTP
 // PUT — each a fresh dmsg stream with a full Noise + post-quantum
@@ -85,6 +87,9 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 	// re-applied when the peer whitelist changes at runtime. The initial
 	// allowlist is already set at construction via PubConfig above.
 	v.registerGatedCXOFeed(pub, dmsgdPK, true)
+	// Surface this feed's gating in `visor state`: a refused dmsg-discovery
+	// subscribe is otherwise invisible from both ends.
+	v.setRegCXOPub(pub)
 
 	// Mirror every successful primary-discovery registration onto the feed.
 	// The hook runs on the dmsg entry-update goroutine and must not block;
