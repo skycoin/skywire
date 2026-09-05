@@ -211,14 +211,14 @@ func (ce *Client) getClientEntryCached(ctx context.Context, clientPK cipher.PubK
 		ce.LookupCacheHits.Add(1)
 		return entry, nil
 	}
-	// Try DHT before HTTP discovery — avoids network round-trip for
-	// PKs that have published their DMSG entry to the DHT.
-	if ce.DHTLookup != nil {
-		if entry, err := ce.DHTLookup(clientPK); err == nil && entry != nil && entry.Client != nil {
-			ce.LookupDHTHits.Add(1)
-			ce.setCachedEntry(clientPK, entry)
-			return entry, nil
-		}
+	// Injected resolvers first: they answer from local state, so they cost no
+	// network round-trip at all. See EntryResolver.
+	if entry, name, ok := ce.resolveViaResolvers(ctx, clientPK); ok {
+		ce.LookupResolverHits.Add(1)
+		ce.log.WithField("resolver", name).WithField("remote_pk", clientPK.Hex()).
+			Debug("Resolved client entry locally; skipping the discovery lookup")
+		ce.setCachedEntry(clientPK, entry)
+		return entry, nil
 	}
 	entry, err := getClientEntry(ctx, ce.dc, clientPK)
 	if err != nil {
@@ -720,4 +720,72 @@ func (ce *Client) sweepNewSessions(ctx context.Context, addr Addr) (*Stream, err
 	}
 	return nil, fmt.Errorf("sweep: destination unreachable via %d newly dialed server(s): %w",
 		tried, ErrCannotConnectToDelegated)
+}
+
+// EntryResolver answers "which servers bridge to this public key" without a
+// discovery round-trip.
+//
+// This is the dependency-inversion seam that lets a resolver live OUTSIDE
+// pkg/dmsg. A CXO-backed resolver is the motivating case: pkg/cxo imports
+// pkg/dmsg/dmsg, so the dmsg client can never import CXO — but the visor
+// imports both and can inject one. The discovery already publishes its whole
+// clients-by-server mapping over CXO (FeedDMSGDClientsByServer), so a
+// subscriber holds every entry locally and needs no per-dial lookup at all.
+//
+// A resolver MUST be fast and local. It is consulted on the dial path ahead of
+// the discovery, and resolverTimeout bounds it precisely so that a resolver
+// which is cold, syncing, or wedged degrades to a discovery lookup instead of
+// stalling the dial. Answering "I don't know" quickly is always better than
+// answering slowly.
+//
+// Whether to install one is a per-deployment judgment, not a default: the cost
+// is a resident copy of the mapping (~930 client entries on the production
+// deployment today, growing with the network) and the benefit scales with how
+// many distinct peers this client dials. Right for a setup node, a route
+// finder or a hypervisor; wrong for a microcontroller, a browser tab, or a
+// short-lived CLI invocation that dials one known peer.
+type EntryResolver interface {
+	// Name identifies the resolver in logs and metrics.
+	Name() string
+	// Entry returns the peer's entry. Any error means "I cannot answer",
+	// and resolution falls through to the next resolver.
+	Entry(ctx context.Context, pk cipher.PubKey) (*disc.Entry, error)
+}
+
+// resolverTimeout bounds a single resolver call. Resolvers are meant to answer
+// from memory, so this is a guard against a wedged implementation rather than a
+// budget anything should need.
+const resolverTimeout = 500 * time.Millisecond
+
+// AddEntryResolver installs a resolver, consulted before the discovery in the
+// order added.
+//
+// Call it during setup, before the client starts dialing: the resolver list is
+// read without a lock on the dial path, which is safe for an append-only list
+// that is fully built before serving and would not be safe for mutation
+// afterwards.
+func (ce *Client) AddEntryResolver(r EntryResolver) {
+	if r == nil {
+		return
+	}
+	ce.entryResolvers = append(ce.entryResolvers, r)
+}
+
+// resolveViaResolvers consults the installed resolvers in order, returning the
+// first entry that actually carries client data. A resolver that errors, times
+// out, or returns a server-only entry is skipped.
+func (ce *Client) resolveViaResolvers(ctx context.Context, pk cipher.PubKey) (*disc.Entry, string, bool) {
+	for _, r := range ce.entryResolvers {
+		if ctx.Err() != nil {
+			return nil, "", false
+		}
+		rctx, cancel := context.WithTimeout(ctx, resolverTimeout)
+		entry, err := r.Entry(rctx, pk)
+		cancel()
+		if err != nil || entry == nil || entry.Client == nil {
+			continue
+		}
+		return entry, r.Name(), true
+	}
+	return nil, "", false
 }
