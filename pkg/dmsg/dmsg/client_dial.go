@@ -3,6 +3,7 @@ package dmsg
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net"
 	"sort"
@@ -64,6 +65,14 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 			defer fallbackCancel()
 			stream, err := ce.dialViaConnectedServers(fallbackCtx, addr)
 			if err == nil {
+				ce.dialFailClear(addr.PK)
+				return stream, nil
+			}
+		}
+		// Opt-in last resort: the destination is in no discovery and was never
+		// seeded, so nothing named a server for it. Sweep every server.
+		if serverSweepEnabled(ctx) {
+			if stream, sErr := ce.sweepNewSessions(ctx, addr); sErr == nil {
 				ce.dialFailClear(addr.PK)
 				return stream, nil
 			}
@@ -161,6 +170,15 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		ce.setCachedRoute(addr.PK, srvPK)
 		ce.dialFailClear(addr.PK)
 		return stream, nil
+	}
+
+	// Opt-in last resort: the entry named servers but none of them worked — a
+	// stale entry listing servers the destination has since left. Sweep the rest.
+	if serverSweepEnabled(ctx) {
+		if stream, sErr := ce.sweepNewSessions(ctx, addr); sErr == nil {
+			ce.dialFailClear(addr.PK)
+			return stream, nil
+		}
 	}
 
 	// The whole ladder failed. Skip recording when the CALLER's context ran
@@ -614,4 +632,92 @@ func (ce *Client) ConnectionsSummary() ConnectionsSummary {
 	}
 
 	return out
+}
+
+// serverSweepKey is the context key that opts a single dial into the
+// all-servers sweep. Typed (not a bare string) so it cannot collide and so the
+// only way to set it is WithServerSweep.
+type serverSweepKey struct{}
+
+// WithServerSweep opts the dials made with the returned context into a
+// last-resort sweep: after the normal ladder fails, establish NEW sessions to
+// every server in the deployment and try the destination through each.
+//
+// This is deliberately OPT-IN and must stay that way. The automatic fallback
+// (dialViaConnectedServers) only reuses sessions this client already holds, so
+// it costs a yamux stream per server and nothing more. A sweep costs a full
+// Noise handshake per server. Firing that automatically on every failed
+// resolution would turn one typo'd or dead public key into a handshake storm
+// against the whole server fleet — and would defeat the dial-failure backoff
+// (Client.dialFail), which exists precisely because repeated failed dials are
+// expensive.
+//
+// It is for an operator dialing a key they know about out of band: a client
+// that is in no discovery, was never seeded, and sits on a server this client
+// holds no session to. That is the one case the normal ladder cannot reach.
+func WithServerSweep(ctx context.Context) context.Context {
+	return context.WithValue(ctx, serverSweepKey{}, true)
+}
+
+// serverSweepEnabled reports whether ctx opted into the sweep.
+func serverSweepEnabled(ctx context.Context) bool {
+	v, _ := ctx.Value(serverSweepKey{}).(bool)
+	return v
+}
+
+// maxSweepNewSessions bounds the sweep's new-session handshakes. The deployment
+// runs ~9 servers, so this is headroom rather than a real limit; it exists so a
+// misconfigured discovery returning thousands of entries cannot hang the dial.
+// The caller's context governs in practice.
+const maxSweepNewSessions = 32
+
+// sweepNewSessions is the opt-in last resort: enumerate every server in the
+// discovery and try the destination through each one we are not already
+// connected to.
+//
+// Servers we DO hold a session to are skipped: the caller has already tried
+// them, either through the delegated/mesh phases or through
+// dialViaConnectedServers, and retrying them here would only add latency to a
+// dial that is already failing.
+func (ce *Client) sweepNewSessions(ctx context.Context, addr Addr) (*Stream, error) {
+	entries, err := ce.discoverServers(ctx, true)
+	if err != nil {
+		return nil, fmt.Errorf("sweep: enumerate servers: %w", err)
+	}
+
+	tried := 0
+	for _, entry := range entries {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if entry == nil || entry.Server == nil {
+			continue
+		}
+		if _, ok := ce.session(entry.Static); ok {
+			continue // already tried via an existing session
+		}
+		if tried >= maxSweepNewSessions {
+			break
+		}
+		tried++
+
+		dSes, err := ce.EnsureAndObtainSession(ctx, entry.Static)
+		if err != nil {
+			ce.log.WithError(err).WithField("server", entry.Static.Hex()).
+				Debug("sweep: could not establish session")
+			continue
+		}
+		stream, err := dSes.DialStream(ctx, addr)
+		if err != nil {
+			ce.log.WithError(err).WithField("server", entry.Static.Hex()).
+				Debug("sweep: destination not reachable via this server")
+			continue
+		}
+		ce.log.WithField("server", entry.Static.Hex()).WithField("remote_pk", addr.PK.Hex()).
+			Debug("sweep: reached destination via a newly established session")
+		ce.setCachedRoute(addr.PK, entry.Static)
+		return stream, nil
+	}
+	return nil, fmt.Errorf("sweep: destination unreachable via %d newly dialed server(s): %w",
+		tried, ErrCannotConnectToDelegated)
 }
