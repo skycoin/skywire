@@ -168,12 +168,18 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 	return direct.StartDmsgWithSetup(ctx, log, pk, sk, dClient, conf, beforeServe)
 }
 
+// Optional servicePKs are seeded as delegated entries, exactly as
+// StartDmsgEmbeddedForServices does, but WITHOUT giving up the discovery
+// upgrade — so the caller still publishes its own entry and stays dialable.
+// Deployment services publish no dmsg-discovery entry of their own by design,
+// so a caller that dials them must seed them or every request pays a lookup
+// that answers "entry is not found in discovery".
 // StartDmsgEmbedded starts a dmsg client seeded from the embedded production
 // dmsg-server set (dmsg.Prod.DmsgServers) and with discovery over dmsg
 // (deployment.Prod.DmsgDiscoveryDmsg) — a self-contained, clearnet-free dmsg
 // bootstrap for native standalone tools (e.g. the reward UI) on a dmsg-only
 // deployment, where the clearnet HTTP discovery is gone. preferWS=false uses TCP.
-func StartDmsgEmbedded(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, preferWS bool) (*dmsg.Client, func(), error) {
+func StartDmsgEmbedded(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, preferWS bool, servicePKs ...cipher.PubKey) (*dmsg.Client, func(), error) {
 	servers := dmsg.Prod.DmsgServers
 	if len(servers) == 0 {
 		return nil, nil, errors.New("dmsg: no embedded dmsg servers in deployment config")
@@ -182,7 +188,7 @@ func StartDmsgEmbedded(ctx context.Context, log *logging.Logger, pk cipher.PubKe
 	for i := range servers {
 		seeds[i] = &servers[i]
 	}
-	return StartDmsgSeeded(ctx, log, pk, sk, seeds, deployment.Prod.DmsgDiscoveryDmsg, preferWS)
+	return StartDmsgSeeded(ctx, log, pk, sk, seeds, deployment.Prod.DmsgDiscoveryDmsg, preferWS, servicePKs...)
 }
 
 // StartDmsgEmbeddedForServices starts an embedded-seed dmsg client that talks

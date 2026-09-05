@@ -22,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/robert-nix/ansihtml"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -1836,7 +1837,12 @@ func serveStandalone(r1 *gin.Engine, bindAddr string) {
 	// the clearnet dmsg-discovery HTTP frontend is gone (404). StartDmsgEmbedded
 	// seeds from the embedded dmsg-server set and registers/resolves over dmsg,
 	// so this reward-over-dmsg listener becomes reachable by PK.
-	dmsgClient, stopDmsg, err := dmsgclient.StartDmsgEmbedded(ctx, log, pk, sk, false)
+	// Seed the deployment-service PKs. They publish no dmsg-discovery entry of
+	// their own (deliberate — it avoids a lookup round-trip per caller), so
+	// without seeding, every stats fetch to TPD failed with "dmsg error 100 -
+	// entry is not found in discovery" and the panels that had no CXO feed to
+	// fall back on rendered "unavailable" in production.
+	dmsgClient, stopDmsg, err := dmsgclient.StartDmsgEmbedded(ctx, log, pk, sk, false, rewardServicePKs()...)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to start DMSG client")
 	}
@@ -2037,3 +2043,36 @@ _nextskywireclilogrun() {
 	fi
 }
 `
+
+// rewardServicePKs are the deployment services the stats handlers dial over
+// dmsg. Seeding them keeps StartDmsgEmbedded's discovery upgrade (so the
+// reward-over-dmsg listener still publishes its own entry and stays dialable by
+// any visor) while removing the per-request discovery lookup for services that
+// never publish an entry.
+func rewardServicePKs() []cipher.PubKey {
+	var out []cipher.PubKey
+	seen := map[cipher.PubKey]bool{}
+	add := func(addr string) {
+		if addr == "" {
+			return
+		}
+		var pk cipher.PubKey
+		if err := pk.Set(pkFromDmsgAddr(addr)); err != nil || pk.Null() || seen[pk] {
+			return
+		}
+		seen[pk] = true
+		out = append(out, pk)
+	}
+	add(deployment.Prod.TransportDiscoveryDmsg)
+	add(deployment.Prod.ServiceDiscoveryDmsg)
+	add(deployment.Prod.AddressResolverDmsg)
+	add(deployment.Prod.RouteFinderDmsg)
+	add(deployment.Prod.DmsgDiscoveryDmsg)
+	for _, pk := range deployment.Prod.RouteSetupNodes {
+		if !pk.Null() && !seen[pk] {
+			seen[pk] = true
+			out = append(out, pk)
+		}
+	}
+	return out
+}
