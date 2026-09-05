@@ -1319,13 +1319,21 @@ func renderTPDBandwidthTable(metrics []tpdTransportMetric) string {
 // tpdNetworkSummary holds cached network-wide TPD metrics summary.
 type tpdNetworkSummary struct {
 	TotalTransports int            `json:"total_transports"`
-	LiveTransports  int            `json:"live_transports"`
 	ByType          map[string]int `json:"by_type"`
 	TotalBandwidth  uint64         `json:"total_bandwidth"`
-	AvgLatencyMs    float64        `json:"avg_latency_ms"`
-	LatencyCount    int            `json:"latency_count"`
 	UniqueVisors    int            `json:"unique_visors"`
 	LastUpdated     string         `json:"last_updated"`
+	// live/latency counts are gone with the per-transport reduction they came
+	// from: /all-transports/stats reports no live-vs-total split, and the
+	// aggregate carries no latency. Reporting either as a zero would have been
+	// worse than not reporting it.
+	// BandwidthOK distinguishes "verified total is zero" from "the bandwidth
+	// fetch did not succeed". Without it a failed fetch renders as 0 B, which
+	// reads as a real measurement.
+	BandwidthOK bool `json:"bandwidth_ok"`
+	// BandwidthErr carries why the bandwidth fetch failed, so the page can say
+	// so instead of quietly showing a zero.
+	BandwidthErr string `json:"bandwidth_err,omitempty"`
 }
 
 const tpdSummaryCacheFile = "tpd_summary.json"
@@ -1348,23 +1356,90 @@ func getTPDNetworkSummary() (*tpdNetworkSummary, error) {
 		}
 	}
 
-	// Cache is stale or missing — fetch fresh data
+	// Cache is stale or missing — fetch fresh data.
+	//
+	// The counts come from TPD's own aggregate rather than by reducing the
+	// per-transport bodies. /metrics?days=1&bandwidth=true&latency=true&edges=true
+	// is 24 MB over dmsg and was failing outright with EOF, which took the whole
+	// summary down — the page rendered nothing but the error. /all-transports/stats
+	// is 138 bytes and carries exactly the three numbers the counts need.
 	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
-	url := fmt.Sprintf("%s/metrics?days=1&bandwidth=true&latency=true&edges=true", tpdURL)
+
+	summary := &tpdNetworkSummary{
+		ByType:      make(map[string]int),
+		LastUpdated: time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := fillTPDCounts(tpdURL, summary); err != nil {
+		return nil, err
+	}
+
+	// Bandwidth is fetched separately and is BEST EFFORT: it needs the
+	// per-transport daily records, because the figure reported here is the
+	// min()-verified one that mirrors the reward calculation (see the trust
+	// model below), not TPD's own cumulative aggregate. Dropping edges and
+	// latency from that query removes roughly a third of the body. If it still
+	// fails, the counts above are already good and the summary says bandwidth
+	// is unavailable instead of reporting a zero that looks like real data.
+	if err := fillTPDBandwidth(tpdURL, summary); err != nil {
+		summary.BandwidthErr = err.Error()
+	}
+
+	// Write to cache
+	if cacheData, err := json.MarshalIndent(summary, "", "  "); err == nil {
+		os.WriteFile(cachePath, cacheData, 0600) //nolint:errcheck,gosec
+	}
+	return summary, nil
+}
+
+// fillTPDCounts populates the transport/visor counts from TPD's small
+// aggregate endpoint.
+func fillTPDCounts(tpdURL string, summary *tpdNetworkSummary) error {
+	resp, err := statsHTTPGet(tpdURL + "/all-transports/stats")
+	if err != nil {
+		return fmt.Errorf("TPD request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("TPD returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read TPD response: %w", err)
+	}
+	var stats struct {
+		TotalTransports int            `json:"total_transports"`
+		ByType          map[string]int `json:"by_type"`
+		UniqueVisors    int            `json:"unique_visors"`
+	}
+	if err := json.Unmarshal(body, &stats); err != nil {
+		return fmt.Errorf("failed to parse TPD stats: %w", err)
+	}
+	summary.TotalTransports = stats.TotalTransports
+	summary.UniqueVisors = stats.UniqueVisors
+	for k, v := range stats.ByType {
+		summary.ByType[k] = v
+	}
+	return nil
+}
+
+// fillTPDBandwidth adds the verified-bandwidth total. Separate from the counts
+// so a failure here costs only that one line of the summary.
+func fillTPDBandwidth(tpdURL string, summary *tpdNetworkSummary) error {
+	url := fmt.Sprintf("%s/metrics?days=1&bandwidth=true&latency=false&edges=false", tpdURL)
 
 	resp, err := statsHTTPGet(url)
 	if err != nil {
-		return nil, fmt.Errorf("TPD request failed: %w", err)
+		return fmt.Errorf("TPD request failed: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("TPD returned status %d", resp.StatusCode)
+		return fmt.Errorf("TPD returned status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read TPD response: %w", err)
+		return fmt.Errorf("failed to read TPD response: %w", err)
 	}
 
 	var metrics []struct {
@@ -1387,31 +1462,10 @@ func getTPDNetworkSummary() (*tpdNetworkSummary, error) {
 		} `json:"daily"`
 	}
 	if err := json.Unmarshal(body, &metrics); err != nil {
-		return nil, fmt.Errorf("failed to parse TPD metrics: %w", err)
+		return fmt.Errorf("failed to parse TPD metrics: %w", err)
 	}
-
-	// Compute summary
-	summary := &tpdNetworkSummary{
-		TotalTransports: len(metrics),
-		ByType:          make(map[string]int),
-		LastUpdated:     time.Now().UTC().Format(time.RFC3339),
-	}
-
-	visors := make(map[string]bool)
-	var latencySum float64
 
 	for _, m := range metrics {
-		summary.ByType[m.Type]++
-		if m.Live {
-			summary.LiveTransports++
-		}
-		for _, edge := range m.Edges {
-			visors[edge] = true
-		}
-		if m.Latency != nil && m.Latency.Avg > 0 {
-			latencySum += float64(m.Latency.Avg) / 1000.0 // microseconds to ms
-			summary.LatencyCount++
-		}
 		for _, daily := range m.Daily {
 			// Mirror the canonical three-branch trust model used by the reward
 			// bw-collect (cmd/.../rewards/transports.go) and `cli tp metrics`
@@ -1443,18 +1497,8 @@ func getTPDNetworkSummary() (*tpdNetworkSummary, error) {
 		}
 	}
 
-	summary.UniqueVisors = len(visors)
-	if summary.LatencyCount > 0 {
-		summary.AvgLatencyMs = latencySum / float64(summary.LatencyCount)
-	}
-
-	// Write to cache
-	cacheData, err := json.MarshalIndent(summary, "", "  ")
-	if err == nil {
-		os.WriteFile(cachePath, cacheData, 0600) //nolint:errcheck,gosec
-	}
-
-	return summary, nil
+	summary.BandwidthOK = true
+	return nil
 }
 
 // renderTPDNetworkSummaryHTML renders the TPD network summary as HTML.
@@ -1466,23 +1510,23 @@ func renderTPDNetworkSummaryHTML() string {
 
 	l := fmt.Sprintf("<h2>Transport Discovery Network Summary (%s)</h2>", time.Now().UTC().Format("2006-01-02"))
 	l += "<pre>"
-	l += fmt.Sprintf("Total Transports:  %d (%d live)\n", summary.TotalTransports, summary.LiveTransports)
+	l += fmt.Sprintf("Total Transports:  %d\n", summary.TotalTransports)
 	l += fmt.Sprintf("Unique Visors:     %d\n", summary.UniqueVisors)
 
-	// Transport counts by type
+	// Transport counts by type, ordered biggest first. Ranging the map
+	// directly reshuffled this list on every render, so the same data looked
+	// like it had changed between refreshes.
 	l += "Transports by Type:\n"
-	for tpType, count := range summary.ByType {
-		l += fmt.Sprintf("  %-8s %d\n", tpType, count)
+	for _, tpType := range sortedTransportTypes(summary.ByType) {
+		l += fmt.Sprintf("  %-8s %d\n", tpType, summary.ByType[tpType])
 	}
 
-	// Bandwidth
-	l += fmt.Sprintf("Network Bandwidth: %s (verified, 1 day)\n", formatBytesChart(summary.TotalBandwidth))
-
-	// Latency
-	if summary.LatencyCount > 0 {
-		l += fmt.Sprintf("Avg Latency:       %.1fms (across %d transports with data)\n", summary.AvgLatencyMs, summary.LatencyCount)
+	// Bandwidth — best effort, and said plainly when it is missing rather than
+	// rendered as a zero that reads like a measurement.
+	if summary.BandwidthOK {
+		l += fmt.Sprintf("Network Bandwidth: %s (verified, 1 day)\n", formatBytesChart(summary.TotalBandwidth))
 	} else {
-		l += "Avg Latency:       no data\n"
+		l += "Network Bandwidth: unavailable\n"
 	}
 
 	l += "</pre>"
@@ -1688,4 +1732,21 @@ func renderTPDVisorBandwidthChart(metrics []tpdTransportMetric) string {
 	l += "</script>\n"
 
 	return l
+}
+
+// sortedTransportTypes orders transport types biggest first, ties broken by
+// name. Ranging the map directly reshuffled the list on every render, so
+// unchanged data appeared to move between page refreshes.
+func sortedTransportTypes(byType map[string]int) []string {
+	types := make([]string, 0, len(byType))
+	for tpType := range byType {
+		types = append(types, tpType)
+	}
+	sort.Slice(types, func(i, j int) bool {
+		if byType[types[i]] != byType[types[j]] {
+			return byType[types[i]] > byType[types[j]]
+		}
+		return types[i] < types[j]
+	})
+	return types
 }
