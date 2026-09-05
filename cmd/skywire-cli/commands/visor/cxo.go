@@ -220,12 +220,17 @@ Paths per feed:
   tpd-uptime              uptimes/days/<N>          e.g. uptimes/days/30
   sd-services             type/<typeName>           e.g. type/proxy
   tpd-all-transports      with-self | without-self
-  tpd-stats               network | versions        the sub-kilobyte
-                          network aggregates (transports by type, unique
-                          visors, fleet version histogram), republished
-                          every ~12s and stamped with a completeness
-                          verdict — see the "complete"/"confidence"
-                          fields before charting an absolute count
+  tpd-stats               network | versions | daily
+                          the small network aggregates: transports by
+                          type and unique visors (network), the fleet
+                          version histogram (versions), and the daily
+                          bandwidth/latency series the /metric endpoint
+                          serves (daily). network and versions
+                          republish every ~12s; daily is a 30-day store
+                          query and republishes every ~5m. All three are
+                          stamped with a completeness verdict — see the
+                          "complete"/"confidence" fields before charting
+                          an absolute count
   (dmsgd-clients-by-server has no FetchCXO case — Walk it via your own RPC if needed)`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {

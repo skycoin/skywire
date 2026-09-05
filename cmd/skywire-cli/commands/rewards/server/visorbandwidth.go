@@ -14,24 +14,41 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/deployment"
+	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 )
 
 // Per-visor bandwidth history.
 //
 // The network-wide daily aggregate (/metric) carries no per-visor breakdown, so
-// this page cannot be served from it. The heavy /metrics?days=N per-transport
-// body it used to use dies with EOF over dmsg. What works is TPD's
-// /metric/visor/{pks} — the same daily reduction, per visor, for a caller-named
-// set of public keys: 32 KB and ~1.5 s for twenty visors over thirty days.
+// this page cannot be served from it.
 //
-// The catch, and the reason this page's heading changed: TPD publishes no
-// bandwidth-ranked visor index. Ranking the whole network by bandwidth would
-// mean asking /metric/visor for all ~900 visors, which is neither cheap nor
-// quick. The cheap index that DOES exist is /all-transports/per-key-stats
-// (~100 KB, under a second) — transport COUNTS per visor. So the page now
-// selects the most-connected visors by transport count and reports their real
-// measured bandwidth, and says so on the page rather than implying these are
-// the network's top bandwidth carriers.
+// The bandwidth series now comes from the CXO per-transport metrics feed and
+// there is NO per-visor request at all. TPD's day leaves carry each
+// transport's `edges` and its per-day, per-edge sent/recv, and the store
+// increments the per-visor daily rollup from exactly those same deltas — the
+// reporter writes its own bytes into both places — so summing edge A's bytes
+// under Edges[0] and edge B's under Edges[1] reproduces what
+// /metric/visor/{pks} returns, computed locally.
+//
+// That deletes a request rather than shrinking one. The URL it replaces was
+// ~1,400 characters (twenty 66-character public keys, comma-separated) and was
+// failing with EOF over dmsg — not for its size, but because the reward
+// server's dmsg client periodically loses its sessions and every request in
+// that window dies (skycoin/skywire#4538). A subscriber reads a snapshot it
+// already holds and has no equivalent failure.
+//
+// One number does still come over HTTP: the RANKING. TPD publishes no
+// bandwidth-ranked visor index, and ranking the whole network by bandwidth
+// would have meant a per-visor query per registered key. The cheap index that
+// exists is /all-transports/per-key-stats (~100 KB) — transport COUNTS per
+// visor — and it has no CXO feed: it is two orders of magnitude larger than
+// the stats feed's other bodies and was deliberately left off that feed
+// (see cxo_stats_publisher.go). So the page selects the most-connected visors
+// by transport count and reports their real measured bandwidth, saying so
+// rather than implying these are the network's top bandwidth carriers. When
+// that one fetch fails, the ranking degrades to a count derived from the CXO
+// leaf's edges — a near-equivalent, labeled as such — so the page still
+// renders instead of collapsing to a single error line.
 
 const (
 	visorBWCacheFile = "tpd_visor_bw.json"
@@ -76,6 +93,12 @@ type visorBandwidthData struct {
 	BandwidthOK bool           `json:"bandwidth_ok"`
 	BandwidthE  string         `json:"bandwidth_err,omitempty"`
 	LastUpdated string         `json:"last_updated"`
+	// BandwidthSrc and RankSrc name where each half of the page came from.
+	// The two halves can legitimately disagree in freshness — a CXO
+	// snapshot minutes old alongside an HTTP fetch made just now — and the
+	// page must not present them as one measurement taken at one time.
+	BandwidthSrc string `json:"bandwidth_src,omitempty"`
+	RankSrc      string `json:"rank_src,omitempty"`
 }
 
 // fetchVisorBandwidth builds the per-visor series, cached on disk.
@@ -85,6 +108,12 @@ func fetchVisorBandwidth() (*visorBandwidthData, error) {
 		if data, rErr := os.ReadFile(cachePath); rErr == nil { //nolint:gosec
 			var d visorBandwidthData
 			if json.Unmarshal(data, &d) == nil && len(d.Visors) > 0 {
+				// The stored sources describe how the body was ORIGINALLY
+				// obtained; say the page is serving them from cache rather
+				// than letting them read as current.
+				age := statsAgeString(time.Since(info.ModTime()))
+				d.RankSrc = cachedSourceLabel(age, d.RankSrc)
+				d.BandwidthSrc = cachedSourceLabel(age, d.BandwidthSrc)
 				return &d, nil
 			}
 		}
@@ -92,12 +121,13 @@ func fetchVisorBandwidth() (*visorBandwidthData, error) {
 
 	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
 
-	counts, err := fetchPerKeyTransportCounts(tpdURL)
+	// One CXO read serves both halves of this page: the bandwidth series,
+	// and — only if the per-key index fetch fails — the ranking too.
+	metrics, metricsSrc, metricsErr := cxoTransportMetrics(tpdDailyDays)
+
+	counts, rankSrc, err := visorTransportCounts(tpdURL, metrics)
 	if err != nil {
 		return nil, err
-	}
-	if len(counts) == 0 {
-		return nil, fmt.Errorf("TPD per-key stats carried no visors")
 	}
 
 	ranked := sortedMapKeys(counts)
@@ -108,19 +138,158 @@ func fetchVisorBandwidth() (*visorBandwidthData, error) {
 	out := &visorBandwidthData{
 		TotalVisors: len(counts),
 		LastUpdated: time.Now().UTC().Format(time.RFC3339),
+		RankSrc:     rankSrc.String(),
 	}
 	for _, pk := range ranked {
 		out.Visors = append(out.Visors, visorBWEntry{PK: pk, Transports: counts[pk]})
 	}
 
-	if bwErr := fillVisorBandwidth(tpdURL, out); bwErr != nil {
-		out.BandwidthE = bwErr.Error()
+	cxoMiss := "not attempted"
+	if metricsErr != nil {
+		cxoMiss = metricsErr.Error()
+	} else if bwErr := fillVisorBandwidthFromMetrics(out, metrics); bwErr != nil {
+		cxoMiss = bwErr.Error()
+	} else {
+		out.BandwidthSrc = metricsSrc.String()
+	}
+	// Fall back to the per-visor HTTP query only when the local derivation
+	// produced nothing. It is the request this page exists to stop making,
+	// so it is the last resort rather than the first.
+	if !out.BandwidthOK {
+		if bwErr := fillVisorBandwidth(tpdURL, out); bwErr != nil {
+			out.BandwidthE = bwErr.Error()
+		} else {
+			out.BandwidthSrc = httpStatsSource("/metric/visor/{pks}", cxoMiss).String()
+		}
 	}
 
 	if data, mErr := json.Marshal(out); mErr == nil {
 		os.WriteFile(cachePath, data, 0600) //nolint:errcheck,gosec
 	}
 	return out, nil
+}
+
+// visorTransportCounts returns the per-visor transport counts the ranking
+// is built on.
+//
+// HTTP is tried FIRST here, against the CXO-first rule everywhere else in
+// this file, and deliberately: /all-transports/per-key-stats counts
+// REGISTERED transports and no CXO feed carries that number. The
+// derivation below counts transports that appear in the metrics window,
+// which is a near-equivalent but not the same set — a transport with no
+// metrics row is missing from it. Using it as the primary would silently
+// change what the column means; using it as a fallback keeps the page
+// rendering when the index fetch dies, with the substitution labeled.
+func visorTransportCounts(tpdURL string, metrics []tpdstore.TransportMetric) (map[string]int, statsSource, error) {
+	counts, err := fetchPerKeyTransportCounts(tpdURL)
+	if err == nil && len(counts) > 0 {
+		return counts, statsSource{Via: "HTTP over dmsg", Path: "/all-transports/per-key-stats"}, nil
+	}
+	why := "carried no visors"
+	if err != nil {
+		why = err.Error()
+	}
+	if len(metrics) == 0 {
+		return nil, statsSource{}, fmt.Errorf("TPD per-key stats unavailable (%s) and the CXO metrics feed is cold", why)
+	}
+	derived := make(map[string]int)
+	for i := range metrics {
+		for _, edge := range metrics[i].Edges {
+			derived[edge]++
+		}
+	}
+	if len(derived) == 0 {
+		return nil, statsSource{}, fmt.Errorf("TPD per-key stats unavailable (%s) and the CXO metrics feed named no edges", why)
+	}
+	return derived, statsSource{
+		Via:  "CXO",
+		Path: tpdstore.MetricsDayPrefix + "* (edges)",
+		Note: "per-key index unavailable (" + why + "); counts are transports SEEN IN THE METRICS WINDOW, not registered transports",
+	}, nil
+}
+
+// fillVisorBandwidthFromMetrics sums the selected visors' daily bandwidth out
+// of the per-transport records, with no request of any kind.
+//
+// Edge A is Edges[0] and edge B is Edges[1] — the store keys the per-day hash
+// by reporter public key and reads it back in that order — and each reporter's
+// deltas are written to the per-transport hash and to its own per-visor daily
+// rollup in the same pipeline. So this sum and GET /metric/visor/{pks} are the
+// same arithmetic over the same bytes.
+//
+// The one divergence is pre-per-edge data. A day whose hash holds only the
+// combined `bandwidth` field is read back as an even A/B split, whereas the
+// per-visor rollup recorded the reporter's real sent/recv; on those rows this
+// derivation attributes half to each edge. Such rows expire at 35 days and the
+// window here is 30.
+func fillVisorBandwidthFromMetrics(out *visorBandwidthData, metrics []tpdstore.TransportMetric) error {
+	selected := make(map[string]struct{}, len(out.Visors))
+	for _, v := range out.Visors {
+		selected[v.PK] = struct{}{}
+	}
+
+	// pk -> date -> bytes, for the selected visors only.
+	byPK := make(map[string]map[string]uint64, len(selected))
+	add := func(pk, date string, n uint64) {
+		if n == 0 {
+			return
+		}
+		if _, want := selected[pk]; !want {
+			return
+		}
+		days, ok := byPK[pk]
+		if !ok {
+			days = make(map[string]uint64)
+			byPK[pk] = days
+		}
+		days[date] += n
+	}
+	for i := range metrics {
+		m := &metrics[i]
+		if len(m.Edges) != 2 {
+			continue
+		}
+		for _, d := range m.Daily {
+			if d.A != nil {
+				add(m.Edges[0], d.Date, d.A.Sent+d.A.Recv)
+			}
+			if d.B != nil {
+				add(m.Edges[1], d.Date, d.B.Sent+d.B.Recv)
+			}
+		}
+	}
+
+	// Report the days that actually carry a measurement, never a window
+	// padded out to the requested length: a zero on a day TPD has no record
+	// for asserts the network moved nothing, which is a different claim.
+	reported := make(map[string]struct{})
+	for _, days := range byPK {
+		for date := range days {
+			reported[date] = struct{}{}
+		}
+	}
+	if len(reported) == 0 {
+		return fmt.Errorf("the CXO metrics window carries no bandwidth for the selected visors")
+	}
+	dates := make([]string, 0, len(reported))
+	for d := range reported {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+	out.Dates = dates
+
+	for i := range out.Visors {
+		days := byPK[out.Visors[i].PK]
+		out.Visors[i].Daily = nil
+		out.Visors[i].Total = 0
+		out.Visors[i].Reported = len(days) > 0
+		for _, d := range dates {
+			out.Visors[i].Daily = append(out.Visors[i].Daily, visorBWPoint{Date: d, Total: days[d]})
+			out.Visors[i].Total += days[d]
+		}
+	}
+	out.BandwidthOK = true
+	return nil
 }
 
 // fetchPerKeyTransportCounts reads the cheap per-visor transport index.
@@ -249,6 +418,7 @@ func renderVisorBandwidthBody(data *visorBandwidthData) string {
 		"The selection here is therefore by <b>transport count</b> — these are the best-connected visors, " +
 		"not necessarily the highest-bandwidth ones. Bandwidth figures are TPD's own reported totals, " +
 		"not the min()-verified figures used by the reward calculation.</p>")
+	sb.WriteString(renderVisorBandwidthSources(data))
 
 	if !data.BandwidthOK {
 		fmt.Fprintf(&sb, "<p style='color:#FF6384;'>Bandwidth series unavailable: %s — the transport-count ranking below is still current.</p>",
@@ -311,6 +481,24 @@ func renderVisorBandwidthBody(data *visorBandwidthData) string {
 	}
 	sb.WriteString(renderVisorRankTable(&visorBandwidthData{Visors: visors, TotalVisors: data.TotalVisors}, true))
 	fmt.Fprintf(&sb, "<p style='color:#888;font-size:0.8em;'>Last updated: %s</p>", html.EscapeString(data.LastUpdated))
+	return sb.String()
+}
+
+// renderVisorBandwidthSources prints where each half of the page came from.
+// Two figures fetched over different transports at different times are two
+// measurements, and the page says so rather than letting the layout imply one.
+func renderVisorBandwidthSources(data *visorBandwidthData) string {
+	var sb strings.Builder
+	for _, line := range []struct{ label, src string }{
+		{"ranking", data.RankSrc},
+		{"bandwidth", data.BandwidthSrc},
+	} {
+		if line.src == "" {
+			continue
+		}
+		fmt.Fprintf(&sb, "<p style='color:#888;font-size:11px;'>%s — %s</p>",
+			line.label, html.EscapeString(line.src))
+	}
 	return sb.String()
 }
 

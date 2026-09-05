@@ -31,11 +31,12 @@ func newTestStatsPublisher(t *testing.T, api *API, started time.Time) (*StatsCXO
 	t.Helper()
 	var puts []capturedPut
 	sp := &StatsCXOPublisher{
-		api:        api,
-		log:        logging.MustGetLogger("tpd-cxo-stats-pub-test"),
-		transports: newCompletenessTracker(started),
-		visors:     newCompletenessTracker(started),
-		heldSince:  make(map[string]time.Time),
+		api:                  api,
+		log:                  logging.MustGetLogger("tpd-cxo-stats-pub-test"),
+		transports:           newCompletenessTracker(started),
+		visors:               newCompletenessTracker(started),
+		heldSince:            make(map[string]time.Time),
+		lastTransportVerdict: completenessVerdict{confidence: ConfidenceWarmup},
 	}
 	sp.putFn = func(path string, body []byte) error {
 		puts = append(puts, capturedPut{path: path, body: append([]byte(nil), body...)})

@@ -597,6 +597,23 @@ func cxoFeedForURL(rawURL string) (feed, path string, ok bool) {
 		return "tpd-stats", "network", true
 	}
 
+	// TPD /metric (SINGULAR — the daily aggregate) → "tpd-stats" feed,
+	// "daily" path. Distinct from /metrics above: isUnderBase matches
+	// base+suffix exactly, so "/metrics?days=30" does not match the
+	// "/metric" target.
+	//
+	// The publisher writes ONE window (statsDailyDays, currently 30). A
+	// caller asking for a shorter window would be handed more days than
+	// it asked for, so anything but the published window falls through
+	// to HTTP rather than being answered with a wider series.
+	if isUnderBase(rawURL, deployment.Prod.TransportDiscovery, "/metric") ||
+		isUnderBase(rawURL, deployment.Prod.TransportDiscoveryDmsg, "/metric") {
+		if days := queryParamInt(rawURL, "days", 30); days == 30 {
+			return "tpd-stats", "daily", true
+		}
+		return "", "", false
+	}
+
 	// TPD /version → "tpd-stats" feed, "versions" path. Same rule for
 	// the ?on= online filter: the publisher writes the unfiltered
 	// histogram, which is what the endpoint serves by default.

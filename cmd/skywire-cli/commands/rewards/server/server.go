@@ -501,14 +501,14 @@ func buildRouter() *gin.Engine {
 				l += "<p style='color:#FFCE56'>Yellow = Transport bandwidth inconsistent</p>"
 				l += "<p style='color:#FF6384'>Red = Error: sent or received is zero</p>"
 
-				tpdData, err := fetchTPDBandwidthMetrics(7)
+				tpdData, tpdSrc, err := fetchTPDBandwidthMetrics(7)
 				if err != nil {
 					l += fmt.Sprintf("<p style='color:red'>Error fetching TPD data: %v</p>", err)
 					// Fallback to shell-out
 					tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint:errcheck,gosec
 					l += fmt.Sprintf("%s\n", ansihtml.ConvertToHTML([]byte(tp)))
 				} else {
-					l += renderTPDBandwidthTable(tpdData)
+					l += renderTPDBandwidthTable(tpdData, tpdSrc)
 				}
 				l += htmltoplink
 				l += htmlend
@@ -1849,6 +1849,16 @@ func serveStandalone(r1 *gin.Engine, bindAddr string) {
 		Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgClient),
 		Timeout:   45 * time.Second,
 	}
+
+	// The statistics pages read TPD over CXO first and fall back to the
+	// dmsg-HTTP client above. Same client, same identity — a second dmsg
+	// client would mean a second discovery entry to read services this
+	// one already reaches (#4501/#4502). CXO is not an optimization
+	// here: an HTTP fetch fails outright whenever this client is between
+	// sessions (#4538), while a subscriber reads a snapshot it already
+	// holds.
+	setStatsCXOSubMgrFromDmsg(dmsgClient)
+	log.Info("stats pages: TPD aggregates sourced over CXO (HTTP-over-dmsg kept as fallback)")
 
 	// tp-viz reads the deployment over THIS client rather than one of its own.
 	// It is the same process and the same identity; a second dmsg client would
