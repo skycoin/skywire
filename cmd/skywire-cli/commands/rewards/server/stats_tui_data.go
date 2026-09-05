@@ -89,6 +89,7 @@ func gatherStatsTUI() statsTUIData {
 	}
 
 	d.Dmsg = gatherDmsgStats()
+	d.Coverage = gatherServiceCoverage()
 
 	return d
 }

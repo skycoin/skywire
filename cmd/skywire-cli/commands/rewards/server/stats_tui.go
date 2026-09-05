@@ -64,7 +64,9 @@ type statsTUIData struct {
 	// with the label of the day each run of slots belongs to.
 	Liveness []statsTUILivenessDay
 	// Dmsg is the substrate layer: server capacity and client registrations.
-	Dmsg        dmsgStats
+	Dmsg dmsgStats
+	// Coverage is each service measured against the registered dmsg server set.
+	Coverage    coverageStats
 	LivenessErr string
 }
 
@@ -323,6 +325,13 @@ func RenderStatsANSI(d statsTUIData) string {
 	// site. A dmsg server sitting at capacity is invisible in every transport
 	// and uptime view while it quietly pushes clients elsewhere.
 	b.WriteString(renderDmsgPanelANSI(d.Dmsg))
+
+	// ---- service reachability ----------------------------------------------
+	//
+	// Services deliberately publish no discovery entry, so a service connected
+	// to only some dmsg servers is invisible: reachable for clients on those
+	// servers, silently unresolvable for the rest, with no error anywhere.
+	b.WriteString(renderCoveragePanelANSI(d.Coverage))
 
 	// ---- version adoption --------------------------------------------------
 	if d.VersionsErr != "" {
