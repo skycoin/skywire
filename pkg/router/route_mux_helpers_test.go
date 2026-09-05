@@ -70,9 +70,17 @@ func TestMuxRecordCountersAndSnapshot(t *testing.T) {
 	assert.EqualValues(t, 0, snap[1].Retransmits)
 }
 
-// TestMuxGapAge proves gapAge is 0 on a contiguous stream and non-zero once an
-// out-of-order deliverData opens a frontier gap, then closes back to 0 when the
-// gap is filled.
+// TestMuxGapAge proves a frontier gap opens on an out-of-order deliverData and
+// closes once it is filled.
+//
+// It asserts the gap is OPEN via reorderPending rather than via a positive
+// gapAge. gapAge is time.Since(gapSince) with gapSince set microseconds earlier
+// in the same call, so requiring it to exceed zero requires the clock to tick
+// between two adjacent statements — true on Linux, routinely false on Windows,
+// whose timer granularity is coarse ("0s is not greater than 0s"). Nothing in
+// production wants a positive age here: every caller compares gapAge against a
+// threshold (legDataStallGapAge, holGapThreshold), where a brand-new gap reading
+// 0 is correct and must not trip a stall.
 func TestMuxGapAge(t *testing.T) {
 	m := newBareMux(true)
 
@@ -82,13 +90,15 @@ func TestMuxGapAge(t *testing.T) {
 	delivered, gap := m.deliverData(-1, 2, []byte("c"))
 	require.Empty(t, delivered, "out-of-order packet is held, not delivered")
 	require.True(t, gap, "SACK tracker reports the gap")
-	require.Greater(t, m.gapAge(), time.Duration(0), "an open gap has a non-zero age")
+	require.Positive(t, m.reorderPending(), "the out-of-order packet is buffered, so a gap is open")
+	require.GreaterOrEqual(t, m.gapAge(), time.Duration(0), "an open gap has a measurable, non-negative age")
 
 	// Fill the gap: seq 0 then seq 1 drains 0,1,2 in order and closes the gap.
 	d0, _ := m.deliverData(-1, 0, []byte("a"))
 	require.Equal(t, [][]byte{[]byte("a")}, d0)
 	d1, _ := m.deliverData(-1, 1, []byte("b"))
 	require.Equal(t, [][]byte{[]byte("b"), []byte("c")}, d1)
+	require.Zero(t, m.reorderPending(), "nothing is buffered once contiguous again")
 	require.Zero(t, m.gapAge(), "gap closed once contiguous again")
 }
 
