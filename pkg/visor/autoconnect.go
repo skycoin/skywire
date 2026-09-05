@@ -247,7 +247,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// Phase 4:  WebRTC LAST-RESORT fallback to peers no direct carrier reached
 
 			const maxPublicVisors = 5 // Connect to up to 5 public visors
-			const maxSUDPH = 30       // Max SUDPH transports to other visors
 			const maxWEBRTC = 20      // Max WebRTC transports to other (webrtc-capable) visors
 
 			// Count existing automatic transports by type and remote PK
@@ -293,7 +292,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			if localSupportsSUDPH {
 				a.log.Debug("Phase 1: Connecting to public visors via SUDPH")
 				phase1, err := a.conn.ConnectToVisors(ctx, v.conf.PK, absent1, tptypes.SUDPH,
-					existingByPK, sudphCapable, maxPublicVisors, 0, true)
+					existingByPK, sudphCapable, 0, 0, true)
 				if err != nil {
 					return err
 				}
@@ -311,11 +310,15 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				}
 			}
 
-			// Phase 2: STCPR to the same public visors
+			// Phase 2: STCPR to ALL public visors — not just the ones phase 1 reached.
+			// STCPR was previously gated behind phase 1's SUDPH selection and its
+			// 5-visor budget, so a visor only ever tried stcpr against <=5 randomly
+			// shuffled public visors and fell through to the phase-4 WebRTC
+			// last-resort for every other one — even though stcpr worked fine to them.
 			if localSupportsSTCPR {
 				a.log.Debug("Phase 2: Connecting to public visors via STCPR")
-				phase2, err := a.conn.ConnectToVisors(ctx, v.conf.PK, connectedPublicVisors, tptypes.STCPR,
-					existingByPK, nil, maxPublicVisors, 0, false)
+				phase2, err := a.conn.ConnectToVisors(ctx, v.conf.PK, absent1, tptypes.STCPR,
+					existingByPK, nil, 0, 0, false)
 				if err != nil {
 					return err
 				}
@@ -338,10 +341,10 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			}
 
 			// Phase 3: SUDPH to other connected visors (non-public visors only)
-			if localSupportsSUDPH && !visorIsPublic && countSUDPH < maxSUDPH && len(absent2) > 0 {
+			if localSupportsSUDPH && !visorIsPublic && len(absent2) > 0 {
 				a.log.Debug("Phase 3: Connecting to other visors via SUDPH")
 				phase3, err := a.conn.ConnectToVisors(ctx, v.conf.PK, absent2, tptypes.SUDPH,
-					existingByPK, sudphCapable, maxSUDPH, countSUDPH, false)
+					existingByPK, sudphCapable, 0, countSUDPH, false)
 				if err != nil {
 					return err
 				}
