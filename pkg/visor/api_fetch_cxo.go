@@ -120,6 +120,22 @@ func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 		}
 		return &FetchCXOResult{Hit: true, Body: body, LastRootAt: time.Now()}, nil
 
+	case "tpd-stats":
+		// Path is "network" or "versions". Bodies are sub-kilobyte and
+		// republished every ~12s, so LastRootAt is a real freshness
+		// signal here rather than the wall clock the bulk feeds report.
+		if _, ok := statsPathForKind(args.Path); !ok {
+			return &FetchCXOResult{Reason: "invalid path for tpd-stats: " + args.Path}, nil
+		}
+		body, ts, err := v.FetchTPDStatsCXO(args.Path)
+		if err != nil {
+			if errors.Is(err, ErrTPDStatsNotReady) {
+				return &FetchCXOResult{Reason: "tpd-stats: cache miss"}, nil
+			}
+			return &FetchCXOResult{Reason: "tpd-stats: " + err.Error()}, nil
+		}
+		return &FetchCXOResult{Hit: true, Body: body, LastRootAt: ts}, nil
+
 	default:
 		return &FetchCXOResult{Reason: "unknown feed: " + args.Feed}, nil
 	}
@@ -154,7 +170,7 @@ func (v *Visor) CXORefreshFeed(args CXORefreshArgs) (*FeedStatus, error) {
 	}
 	feed, ok := CXOFeedFromString(args.Feed)
 	if !ok {
-		return nil, fmt.Errorf("unknown feed %q (valid: tpd-metrics, tpd-uptime, sd-services, dmsgd-clients-by-server, tpd-all-transports)", args.Feed)
+		return nil, fmt.Errorf("unknown feed %q (valid: tpd-metrics, tpd-uptime, sd-services, dmsgd-clients-by-server, tpd-all-transports, tpd-stats)", args.Feed)
 	}
 	timeout := args.Timeout
 	if timeout <= 0 {

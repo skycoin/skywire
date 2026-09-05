@@ -13,7 +13,7 @@ work" check. Useful right after deploy: if 'cxo refresh sd-services'
 shows paths>0 then any subsequent 'tp -m' will serve from the snapshot.
 
 Feed names: tpd-metrics, tpd-uptime, sd-services,
-dmsgd-clients-by-server, tpd-all-transports.
+dmsgd-clients-by-server, tpd-all-transports, tpd-stats.
 
 ## Usage
 

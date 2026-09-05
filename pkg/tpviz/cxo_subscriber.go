@@ -40,6 +40,7 @@ const (
 	CXOFeedSDServices           = 2 // services/<type>/all (batched; legacy .../<pk>/entry)
 	CXOFeedDMSGDClientsByServer = 3 // clients-by-server/<server> (batched; legacy .../<client>/entry)
 	CXOFeedTPDAllTransports     = 4 // transports/all/{with-self,without-self}
+	CXOFeedTPDStats             = 5 // stats/{network,versions} — network aggregates
 )
 
 // CXOSubMgr is the minimal slice of pkg/visor.CXOSubscriptionManager

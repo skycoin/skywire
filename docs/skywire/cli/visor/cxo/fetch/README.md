@@ -10,9 +10,17 @@ broken" from the higher-level command.
 
 Paths per feed:
   tpd-metrics             metrics/days/<N>          e.g. metrics/days/7
+                          (any N up to the published history; the feed
+                           itself is one leaf per day, assembled locally)
   tpd-uptime              uptimes/days/<N>          e.g. uptimes/days/30
   sd-services             type/<typeName>           e.g. type/proxy
   tpd-all-transports      with-self | without-self
+  tpd-stats               network | versions        the sub-kilobyte
+                          network aggregates (transports by type, unique
+                          visors, fleet version histogram), republished
+                          every ~12s and stamped with a completeness
+                          verdict — see the "complete"/"confidence"
+                          fields before charting an absolute count
   (dmsgd-clients-by-server has no FetchCXO case — Walk it via your own RPC if needed)
 
 ## Usage

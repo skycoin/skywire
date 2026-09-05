@@ -582,6 +582,32 @@ func cxoFeedForURL(rawURL string) (feed, path string, ok bool) {
 		return "", "", false
 	}
 
+	// TPD /all-transports/stats → "tpd-stats" feed, "network" path.
+	// isUnderBase matches base+suffix exactly, so this is a distinct
+	// endpoint from /all-transports below and the order of the two
+	// blocks does not matter. The publisher writes only the default
+	// (self-transports included) variant, so an explicit
+	// ?selfTransports= falls through to the HTTP chain rather than
+	// being answered with a body that counted a different set.
+	if isUnderBase(rawURL, deployment.Prod.TransportDiscovery, "/all-transports/stats") ||
+		isUnderBase(rawURL, deployment.Prod.TransportDiscoveryDmsg, "/all-transports/stats") {
+		if queryParam(rawURL, "selfTransports") != "" {
+			return "", "", false
+		}
+		return "tpd-stats", "network", true
+	}
+
+	// TPD /version → "tpd-stats" feed, "versions" path. Same rule for
+	// the ?on= online filter: the publisher writes the unfiltered
+	// histogram, which is what the endpoint serves by default.
+	if isUnderBase(rawURL, deployment.Prod.TransportDiscovery, "/version") ||
+		isUnderBase(rawURL, deployment.Prod.TransportDiscoveryDmsg, "/version") {
+		if on := queryParam(rawURL, "on"); on != "" && on != "all" && on != "none" {
+			return "", "", false
+		}
+		return "tpd-stats", "versions", true
+	}
+
 	// TPD /all-transports → "tpd-all-transports" feed. The publisher
 	// emits two variants (with-self / without-self) on a 60s
 	// cadence; the CLI's `pv -t`, `tp tree`, and `tp viz` callers

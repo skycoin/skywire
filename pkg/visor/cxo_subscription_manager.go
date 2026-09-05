@@ -47,6 +47,7 @@ const (
 	FeedSDServices           = cxosub.FeedSDServices
 	FeedDMSGDClientsByServer = cxosub.FeedDMSGDClientsByServer
 	FeedTPDAllTransports     = cxosub.FeedTPDAllTransports
+	FeedTPDStats             = cxosub.FeedTPDStats
 )
 
 // Re-exported tab constants.
@@ -59,6 +60,7 @@ const (
 	TabCLITransports     = cxosub.TabCLITransports
 	TabRoutingPolicy     = cxosub.TabRoutingPolicy
 	TabDmsgEntryLookup   = cxosub.TabDmsgEntryLookup
+	TabNetworkStats      = cxosub.TabNetworkStats
 )
 
 // feedFirstSyncTimeout forwards to cxosub so the RPC fetch/refresh default
@@ -156,6 +158,12 @@ func (v *Visor) cxoFeedSpec(fk cxosub.Feed) (cipher.PubKey, uint16, string, erro
 			return cipher.PubKey{}, 0, "", errors.New("no TPD CXO peer (transport.discovery_dmsg unset)")
 		}
 		return pk, skyenv.DmsgTPDAllTransportsCXOPort, "transports/all/", nil
+	case FeedTPDStats:
+		pk, ok := tpdCXOPeer(v)
+		if !ok {
+			return cipher.PubKey{}, 0, "", errors.New("no TPD CXO peer (transport.discovery_dmsg unset)")
+		}
+		return pk, skyenv.DmsgTPDStatsCXOPort, "stats/", nil
 	}
 	return cipher.PubKey{}, 0, "", fmt.Errorf("unknown feed: %d", fk)
 }

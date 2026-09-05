@@ -58,7 +58,7 @@ func (s *Server) SetCXOSubMgrFromDmsg(dmsgC *dmsg.Client) {
 		}
 		var pk cipher.PubKey
 		switch f {
-		case cxosub.FeedTPDMetrics, cxosub.FeedTPDUptime, cxosub.FeedTPDAllTransports:
+		case cxosub.FeedTPDMetrics, cxosub.FeedTPDUptime, cxosub.FeedTPDAllTransports, cxosub.FeedTPDStats:
 			pk = tpd
 		case cxosub.FeedSDServices:
 			pk = sd
@@ -84,7 +84,9 @@ func (s *Server) SetCXOSubMgrFromDmsg(dmsgC *dmsg.Client) {
 type standaloneCXOAdapter struct{ m *cxosub.Manager }
 
 func (a *standaloneCXOAdapter) AcquireForTab(tab int) { a.m.AcquireFor(cxosub.Tab(tab)) }
+
 func (a *standaloneCXOAdapter) ReleaseForTab(tab int) { a.m.ReleaseFor(cxosub.Tab(tab)) }
+
 func (a *standaloneCXOAdapter) Walk(feed int, prefix string, fn func(path string, body []byte) bool) bool {
 	return a.m.Walk(cxosub.Feed(feed), prefix, fn)
 }
