@@ -46,7 +46,14 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		// doesn't register in discovery, try all connected servers as forwarders.
 		// Only attempt if context has enough remaining time to avoid races.
 		if ctx.Err() == nil && ce.hasEnoughTimeForFallback(ctx) {
-			ce.log.WithError(discErr).Debug("Discovery lookup failed, trying connected servers")
+			// Name the destination. Without it this line says only that "a lookup
+			// failed", which is undiagnosable in aggregate: the deployment services
+			// are not registered as client entries — they are reached through seeded
+			// delegated-server entries — so every dial to one logs this and then
+			// succeeds via the fallback. Telling those apart from a genuinely
+			// unreachable peer requires knowing which PK was being dialed.
+			ce.log.WithError(discErr).WithField("remote_pk", addr.PK.Hex()).
+				Debug("Discovery lookup failed, trying connected servers")
 			// Use a separate context with enough budget for multiple servers.
 			// Each server attempt takes up to HandshakeTimeout (5s), so budget
 			// for all connected sessions (typically 6) plus a small margin.
