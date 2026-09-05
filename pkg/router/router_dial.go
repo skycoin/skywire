@@ -1105,6 +1105,32 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 		}
 	}
 
+	// A --direct dial over an EXISTING direct transport does not need the route
+	// finder: the route it would return is the transport this visor is already
+	// holding. Three comments (here at the baseMinHops downgrade, on
+	// EnsureDirectTransport in router.go, and at the app-server flag site) have
+	// long claimed UseExistingTpOnly "bypasses the route-finder", but nothing
+	// implemented it — useExistingOnly only skipped the transport-CREATION hooks,
+	// so every --direct dial still paid an RF round-trip to be told about its own
+	// transport (#4552).
+	//
+	// Guarded on baseMinHops == 1, which the caller sets only when a transport to
+	// dst is already known AND nothing (per-dial or visor-global min_hops) asked
+	// for more than one hop — so an operator running min_hops=3 is never silently
+	// handed a 1-hop route here.
+	//
+	// If no live transport is found we fall through to the route finder rather
+	// than failing: --direct means "prefer the direct leg", and EnsureDirectTransport
+	// may still be creating one.
+	if directDial && baseMinHops == 1 {
+		if hop, ok := r.directHop(src, dst); ok {
+			fwd := []routing.Hop{hop}
+			log.WithField("transport", hop.TpID).
+				Debug("--direct: 1-hop route over the existing transport; skipping the route finder")
+			return fwd, reverseHops(fwd), nil
+		}
+	}
+
 	retries := opts.Retries
 
 	log.Debugf("Requesting new routes from %s to %s", src, dst)
@@ -3353,4 +3379,33 @@ func validMuxLeg(fwd, rev []routing.Hop, src, dst cipher.PubKey, usedFwd, usedRe
 		return false
 	}
 	return disjointFrom(routeIntermediates(rev, dst, src), usedRev)
+}
+
+// directHop returns a 1-hop route over a live transport to dst, if this visor
+// already holds one.
+//
+// Setup transports are excluded: they carry route-setup traffic, not app data.
+// Closed transports are skipped so a dead leg is never turned into a route —
+// falling through to the route finder is the right answer there, not dialing
+// over something known to be down.
+func (r *router) directHop(src, dst cipher.PubKey) (routing.Hop, bool) {
+	if r.tm == nil {
+		return routing.Hop{}, false
+	}
+	var (
+		found routing.Hop
+		ok    bool
+	)
+	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if tp == nil || tp.IsClosed() || tp.Entry.Label == transport.LabelSetup {
+			return true
+		}
+		if tp.Entry.RemoteEdge(src) != dst {
+			return true
+		}
+		found = routing.Hop{TpID: tp.Entry.ID, From: src, To: dst}
+		ok = true
+		return false
+	})
+	return found, ok
 }
