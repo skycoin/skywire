@@ -82,7 +82,9 @@ func (c *Connector) ConnectToVisors(
 		}
 
 		mu.Lock()
-		reached := currentCount+result.Count >= maxCount
+		// maxCount <= 0 means unlimited: the direct carriers (stcpr, sudph) are no
+		// longer budget-limited, so a phase can enumerate every target.
+		reached := maxCount > 0 && currentCount+result.Count >= maxCount
 		mu.Unlock()
 		if reached {
 			break
