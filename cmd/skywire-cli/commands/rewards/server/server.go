@@ -559,6 +559,8 @@ func buildRouter() *gin.Engine {
 			l += navlinks
 			l += "<h1>Skywire Network Statistics</h1>"
 
+			l += "<p><a href='/stats/charts'>Network time series (bandwidth, latency, version adoption, visors online)</a></p>"
+
 			// Transport Discovery Network Summary (on-demand cached)
 			l += renderTPDNetworkSummaryHTML()
 
@@ -686,6 +688,48 @@ func buildRouter() *gin.Engine {
 			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
 		})
 
+		// Network time series — every chart on one page. The /stats page keeps
+		// its own presentation; this is the SVG view of the same network.
+		r1.GET("/stats/charts", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+			c.Writer.WriteHeader(http.StatusOK)
+
+			l := chunkedPageHead("Network Time Series", "Skywire Network bandwidth, latency, version adoption and liveness over time", "/stats/charts")
+			l += "<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }</style>"
+			l += "</head>"
+			l += "<body style='background-color:black;color:white;font-family:monospace;'>"
+			l += "<a id='top'></a>"
+			l += navlinks
+			l += "<h1>Skywire Network Over Time</h1>"
+			l += "<p>Every series the deployment publishes, drawn as inline SVG — no external scripts. " +
+				"A one-day snapshot says nothing about direction; these say where the network is going. " +
+				"<a href='/stats'>Network statistics</a> has the current-day detail.</p>"
+
+			// One TPD fetch (/metric, under 3 KB, disk-cached) feeds both the
+			// bandwidth and the latency chart, so the second costs nothing.
+			agg, aggErr := fetchTPDDailyAggregate()
+			l += renderBandwidthTimeSeries(agg, aggErr)
+			l += renderLatencyTimeSeries(agg, aggErr)
+
+			l += renderLivenessChart(fetchLivenessSeries())
+
+			l += "<h2><a href='/stats/version-history'>Version Adoption</a></h2>"
+			if history, hErr := ParseHistoricUptimeData(filepath.Join(wd, "hist"), 75.0); hErr != nil {
+				l += fmt.Sprintf("<p style='color:#FF6384;'>Version history unavailable: %v</p>", hErr)
+			} else if len(history) == 0 {
+				l += "<p style='color:#888;'>No historic uptime data on disk yet.</p>"
+			} else {
+				l += GenerateVersionHistoryChartHTML(history, 900, 320)
+			}
+
+			l += "<p><a href='/stats/visor-bandwidth'>Per-visor bandwidth</a></p>"
+			l += "<br>" + htmltoplink
+			l += "</body></html>"
+
+			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+		})
+
 		// Version history chart route
 		r1.GET("/stats/version-history", func(c *gin.Context) {
 			c.Writer.Header().Set("Server", "")
@@ -700,24 +744,16 @@ func buildRouter() *gin.Engine {
 			l += navlinks
 			l += "<h1>Version Distribution History</h1>"
 			l += "<p>Shows the count of visors per version that achieved ≥75% uptime on each day.</p>"
+			l += "<p><a href='/stats/charts'>This chart also appears on the network time series page</a>, alongside bandwidth, latency and visors online.</p>"
 
 			histDir := filepath.Join(wd, "hist")
 			history, err := ParseHistoricUptimeData(histDir, 75.0)
 			if err != nil {
-				l += fmt.Sprintf("<p>Error loading historic data: %v</p>", err)
+				l += fmt.Sprintf("<p style='color:#FF6384;'>Error loading historic data: %v</p>", err)
 			} else if len(history) == 0 {
 				l += "<p>No historic data available</p>"
 			} else {
-				// Generate chart (responsive width)
-				chartWidth := 800
-				chartHeight := 300
-				l += GenerateVersionHistoryChartHTML(history, chartWidth, chartHeight)
-
-				// Show latest data summary
-				if len(history) > 0 {
-					latest := history[len(history)-1]
-					l += fmt.Sprintf("<h3>Latest: %s (Total: %d visors ≥75%% uptime)</h3>", latest.Date, latest.Total)
-				}
+				l += GenerateVersionHistoryChartHTML(history, 900, 320)
 			}
 
 			l += "<br>" + htmltoplink
@@ -739,16 +775,14 @@ func buildRouter() *gin.Engine {
 			l += "<a id='top'></a>"
 			l += navlinks
 			l += "<h1>Network Bandwidth History</h1>"
-			l += "<p>Shows daily total bandwidth across all transports (from Transport Discovery).</p>"
+			l += "<p>Daily total bandwidth across all transports, broken down by transport type.</p>"
+			l += "<p><a href='/stats/charts'>These series also appear on the network time series page.</a></p>"
 
-			tpdMetrics, err := fetchTPDBandwidthMetrics(7)
-			if err != nil {
-				l += fmt.Sprintf("<p>Error fetching TPD bandwidth data: %v</p>", err)
-			} else if len(tpdMetrics) == 0 {
-				l += "<p>No bandwidth data available from Transport Discovery.</p>"
-			} else {
-				l += renderTPDBandwidthHistoryChart(tpdMetrics)
-			}
+			// One fetch, two charts: the daily aggregate carries latency as
+			// well as bandwidth, and latency was previously shown nowhere.
+			agg, aggErr := fetchTPDDailyAggregate()
+			l += renderBandwidthTimeSeries(agg, aggErr)
+			l += renderLatencyTimeSeries(agg, aggErr)
 
 			l += "<br>" + htmltoplink
 			l += "</body></html>"
@@ -769,16 +803,7 @@ func buildRouter() *gin.Engine {
 			l += "<a id='top'></a>"
 			l += navlinks
 			l += "<h1>Per-Visor Bandwidth History</h1>"
-			l += "<p>Shows daily bandwidth per visor from Transport Discovery. Top 20 visors by total bandwidth shown individually.</p>"
-
-			tpdMetrics, err := fetchTPDBandwidthMetrics(7)
-			if err != nil {
-				l += fmt.Sprintf("<p>Error fetching TPD bandwidth data: %v</p>", err)
-			} else if len(tpdMetrics) == 0 {
-				l += "<p>No bandwidth data available from Transport Discovery.</p>"
-			} else {
-				l += renderTPDVisorBandwidthChart(tpdMetrics)
-			}
+			l += renderVisorBandwidthHTML()
 
 			l += "<br>" + htmltoplink
 			l += "</body></html>"
