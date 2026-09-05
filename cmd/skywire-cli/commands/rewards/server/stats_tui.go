@@ -74,7 +74,11 @@ type statsTUIData struct {
 	// Dmsg is the substrate layer: server capacity and client registrations.
 	Dmsg dmsgStats
 	// Coverage is each service measured against the registered dmsg server set.
-	Coverage    coverageStats
+	Coverage coverageStats
+	// SetupNodes is the route-setup control plane: one snapshot per configured
+	// route setup node, with an unreachable node carrying its error rather
+	// than being dropped from the list.
+	SetupNodes  snStats
 	LivenessErr string
 
 	// PerVisor is the transports-per-visor distribution, which carries its
@@ -222,7 +226,28 @@ func tuiWrap(s string) string {
 	}
 	var out strings.Builder
 	line := indent
+	room := tuiWidth - len([]rune(indent))
+	if room < 8 {
+		room = 8
+	}
 	for _, w := range words {
+		// A token wider than the panel — a dmsg URL carrying a whole 66-rune
+		// public key is the usual one — has no space to break at, so word
+		// wrapping alone leaves it running past the rule. Break it across
+		// lines instead of dropping the overflow: the key stays complete,
+		// which truncating it would not.
+		for len([]rune(w)) > room {
+			if strings.TrimSpace(line) != "" {
+				out.WriteString(aDim + line + aReset + "\n")
+				line = indent
+			}
+			r := []rune(w)
+			out.WriteString(aDim + indent + string(r[:room]) + aReset + "\n")
+			w = string(r[room:])
+		}
+		if w == "" {
+			continue
+		}
 		if len([]rune(line))+1+len([]rune(w)) > tuiWidth && strings.TrimSpace(line) != "" {
 			out.WriteString(aDim + line + aReset + "\n")
 			line = indent + w
@@ -259,8 +284,11 @@ func tuiPlot(title string, series []float64, labels []string, height int, precis
 		b.WriteString("  " + ln + "\n")
 	}
 	b.WriteString(tuiXAxis(labels, width-14, 8))
+	// Wrapped for the same reason tuiSource is: a footer carries a provenance
+	// line or a full public key, either of which exceeds the panel width, and
+	// an unwrapped one runs past the rule with the tail falling off the edge.
 	if footer != "" {
-		b.WriteString("  " + aDim + footer + aReset + "\n")
+		b.WriteString(tuiWrap("  " + footer))
 	}
 	b.WriteString(tuiClose(width))
 	b.WriteString("\n")
@@ -412,6 +440,14 @@ func RenderStatsANSI(d statsTUIData) string {
 	// to only some dmsg servers is invisible: reachable for clients on those
 	// servers, silently unresolvable for the rest, with no error anywhere.
 	b.WriteString(renderCoveragePanelANSI(d.Coverage))
+
+	// ---- route setup nodes -------------------------------------------------
+	//
+	// Every route in the network is negotiated by one of these, and nothing on
+	// the site showed them. A setup node refusing setups leaves no mark on any
+	// transport or uptime chart: the transports stay registered and the visors
+	// stay online while routing across them quietly stops working.
+	b.WriteString(renderSetupNodePanelANSI(d.SetupNodes))
 
 	// ---- version adoption --------------------------------------------------
 	if d.VersionsErr != "" {
