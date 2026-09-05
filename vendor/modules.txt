@@ -19,6 +19,9 @@ fyne.io/systray/internal/generated/notifier
 github.com/0magnet/afero
 github.com/0magnet/afero/internal/common
 github.com/0magnet/afero/mem
+# github.com/0magnet/ansifilter-go v0.0.0-20260905001111-574a256fd2bd
+## explicit; go 1.24
+github.com/0magnet/ansifilter-go/ansifilter
 # github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898
 ## explicit; go 1.25.0
 github.com/0magnet/bbolt
@@ -55,6 +58,9 @@ github.com/0magnet/gotop/v4/termui
 github.com/0magnet/gotop/v4/termui/drawille-go
 github.com/0magnet/gotop/v4/utils
 github.com/0magnet/gotop/v4/widgets
+# github.com/0magnet/lolcat-go v0.0.0-20260905001114-f97d678ce219
+## explicit; go 1.25.0
+github.com/0magnet/lolcat-go/lol
 # github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
 ## explicit; go 1.24.0
 github.com/0magnet/metrics

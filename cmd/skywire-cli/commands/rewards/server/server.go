@@ -561,7 +561,18 @@ func buildRouter() *gin.Engine {
 
 			l += "<p><a href='/stats/charts'>Network time series (bandwidth, latency, version adoption, visors online)</a></p>"
 
-			// Transport Discovery Network Summary (on-demand cached)
+			// The terminal-rendered panel: counts, bandwidth and latency over
+			// time, and version adoption, drawn as ANSI and exported to HTML by
+			// ansifilter. Same renderer a TUI build would print directly. This
+			// is the default view; /stats/charts is the SVG rendering of the
+			// same material for anyone who wants hover detail.
+			l += RenderStatsHTMLFragment(gatherStatsTUI())
+
+			// The existing summary stays beneath it. Its bandwidth figure is the
+			// min()-verified one mirroring the reward calculation, which the
+			// panel above does NOT show — the panel charts TPD's own cumulative
+			// aggregate, which is the right thing for a trend and the wrong
+			// thing to quote at someone asking what they earned.
 			l += renderTPDNetworkSummaryHTML()
 
 			// Uptime Tracker Version Stats
