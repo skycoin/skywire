@@ -57,3 +57,24 @@ func feedHasStopTimer(m *Manager, fk Feed) bool {
 	f, ok := m.feeds[fk]
 	return ok && f != nil && f.stopTimer != nil
 }
+
+// Every feed that carries a large, deep tree must get the longer first-Root
+// wait. tpd-metrics is the network-wide per-transport aggregate — by far the
+// largest feed published — and it was left on the 10s default, so its first
+// sync timed out before the tree could arrive and the feed never populated.
+// That is the same failure the sd-services timeout was widened to fix.
+func TestLargeFeedsGetTheLongerFirstSyncTimeout(t *testing.T) {
+	for _, f := range []Feed{FeedTPDAllTransports, FeedSDServices, FeedTPDMetrics} {
+		if got := FeedFirstSyncTimeout(f); got != largeFeedFirstSyncTimeout {
+			t.Errorf("FeedFirstSyncTimeout(%v) = %s, want %s — a large feed on the short bound never finishes its first sync",
+				f, got, largeFeedFirstSyncTimeout)
+		}
+	}
+	// The small feeds keep the tighter bound so a UI Acquire on a dead
+	// publisher still reports its cache miss promptly.
+	for _, f := range []Feed{FeedTPDUptime, FeedDMSGDClientsByServer} {
+		if got := FeedFirstSyncTimeout(f); got != FirstSyncTimeout {
+			t.Errorf("FeedFirstSyncTimeout(%v) = %s, want the %s default", f, got, FirstSyncTimeout)
+		}
+	}
+}
