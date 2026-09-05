@@ -272,8 +272,8 @@ func registerModules(logger *logging.MasterLogger) {
 	// dmsg + health-gated type=coin SD registration. Depends on dmsgC (forward
 	// + SD dmsg client) and skyFwd (dmsg forwarder). See init_coinnode.go.
 	coinNodesMod = maker("coin_nodes", initCoinNodes, &dmsgC, &skyFwd)
-	// Registration-over-CXO publisher: when opted in (Dmsg.RegistrationCXO),
-	// mirror this visor's signed discovery entry onto a CXO feed that
+	// Registration-over-CXO publisher: runs whenever a dmsg-discovery PK
+	// resolves (no opt-in flag exists, despite older comments). Mirrors this visor's signed discovery entry onto a CXO feed that
 	// dmsg-discovery aggregates, off the timer-driven HTTP re-PUT. Depends on
 	// dmsgC (the entry it publishes + the feed's transport). See
 	// init_registration_cxo.go.
