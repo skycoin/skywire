@@ -69,7 +69,7 @@ func testDailyResponse() *store.NetworkMetricResponse {
 }
 
 // TestDailyStatsIsTheMetricEndpointBody pins the published body to the
-// GET /metric response shape: unmarshalling the leaf into
+// GET /metric response shape: unmarshaling the leaf into
 // store.NetworkMetricResponse must reproduce the store's answer
 // field-for-field.
 func TestDailyStatsIsTheMetricEndpointBody(t *testing.T) {
