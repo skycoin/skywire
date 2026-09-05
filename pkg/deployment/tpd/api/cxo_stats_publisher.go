@@ -5,15 +5,27 @@
 //
 //	stats/network   the GET /all-transports/stats shape (138 B live)
 //	stats/versions  the GET /version fleet histogram (300 B live)
+//	stats/daily     the GET /metric daily aggregate (~2.7 KB live)
 //
 // Why a separate feed rather than another path on an existing one: size
 // is cadence. The metrics and all-transports feeds are staggered to
-// minutes because recomputing them is expensive; these two bodies are a
-// few hundred bytes and cost a map walk over caches the HTTP handlers
-// already read, so they republish every statsPublishInterval. A chart
-// that wants "transports on the network, every 15 seconds" costs ~400 B
-// per sample here instead of the 2.4 MB all-transports snapshot or the
-// 16.8 MB metrics window it would otherwise reduce locally.
+// minutes because recomputing them is expensive; the first two bodies
+// are a few hundred bytes and cost a map walk over caches the HTTP
+// handlers already read, so they republish every statsPublishInterval.
+// A chart that wants "transports on the network, every 15 seconds"
+// costs ~400 B per sample here instead of the 2.4 MB all-transports
+// snapshot or the 16.8 MB metrics window it would otherwise reduce
+// locally.
+//
+// stats/daily is the exception on cadence and the reason
+// statsDailyInterval exists. Its BODY is small — the whole 30-day
+// series with a per-type breakdown in under three kilobytes — but
+// producing it is a 30-day store query, not a map walk, so it runs on
+// its own slow timer inside the same loop rather than on the 12 s tick.
+// It is here rather than on the metrics feed because a consumer that
+// wants the reduction must not be made to subscribe to the ~120 MB of
+// per-transport day leaves the reduction was computed from; that is the
+// entire point of this feed.
 //
 // The per-key rollup (GET /all-transports/per-key-stats, ~38 KB gzipped)
 // is deliberately NOT here. It is two orders of magnitude larger than
@@ -69,6 +81,10 @@ const (
 	// StatsPathVersions carries the fleet version histogram (the
 	// GET /version shape plus a completeness stamp).
 	StatsPathVersions = "stats/versions"
+	// StatsPathDaily carries the network-wide daily aggregate (the
+	// GET /metric shape plus a completeness stamp) — per-day
+	// bandwidth, latency and by-type breakdown over statsDailyDays.
+	StatsPathDaily = "stats/daily"
 )
 
 // statsPublishInterval is the recompute cadence. Both bodies are read
@@ -78,6 +94,23 @@ const (
 // resolution. 12s keeps a chart live without making the tick a
 // meaningful fraction of TPD's cache-refresh period.
 const statsPublishInterval = 12 * time.Second
+
+const (
+	// statsDailyDays is the window stats/daily carries. It matches the
+	// window the metrics feed publishes day leaves for, so the two
+	// describe the same span of history.
+	statsDailyDays = 30
+
+	// statsDailyInterval is how often the daily aggregate is
+	// recomputed. Deliberately far slower than statsPublishInterval:
+	// unlike the other two paths this one is a 30-day store query
+	// (GetNetworkMetrics pipelines one HGetAll per transport per day),
+	// so the cost is the recompute, not the ~2.7 KB body. The figures
+	// are calendar-day totals — they move slowly enough that five
+	// minutes is indistinguishable from twelve seconds to any consumer,
+	// and every consumer of this path already caches on top of it.
+	statsDailyInterval = 5 * time.Minute
+)
 
 // Completeness-judgment tunables. See completenessTracker.
 const (
@@ -159,9 +192,38 @@ type VersionStats struct {
 	TrailingWindowSeconds int `json:"trailing_window_seconds"`
 }
 
-// StatsCXOPublisher publishes the two network-aggregate bodies on a
-// short cadence, gating each against its own completeness tracker.
-// Closed by Close.
+// DailyStats is the body published at StatsPathDaily. The first two
+// fields are store.NetworkMetricResponse verbatim — a consumer that
+// unmarshals this into store.NetworkMetricResponse gets exactly what
+// GET /metric returns, newest day first — and the rest is the
+// completeness stamp.
+//
+// The stamp is the TRANSPORT-SET verdict, not one computed from the
+// bandwidth figures. These are sums over the same registry
+// stats/network counts, so "the registry is still refilling" is
+// precisely the thing that makes a day's total a lower bound; judging
+// the sums themselves against a trailing peak would instead flag every
+// ordinary quiet day as partial.
+type DailyStats struct {
+	Daily      []store.DailyAggregate     `json:"daily"`
+	Cumulative *store.CumulativeAggregate `json:"cumulative"`
+
+	// Days is the window requested from the store. TPD returns only the
+	// history it holds, so len(Daily) may be shorter.
+	Days int `json:"days"`
+
+	ObservedAt time.Time `json:"observed_at"`
+	Complete   bool      `json:"complete"`
+	Confidence string    `json:"confidence"`
+	// TrailingPeak is the transport-count peak the sample was judged
+	// against — the same field stats/network publishes, repeated here
+	// so this body stands on its own.
+	TrailingPeak          int `json:"trailing_peak_transports"`
+	TrailingWindowSeconds int `json:"trailing_window_seconds"`
+}
+
+// StatsCXOPublisher publishes the network-aggregate bodies, gating each
+// against a completeness tracker. Closed by Close.
 type StatsCXOPublisher struct {
 	api *API
 	pub *treestore.Publisher
@@ -175,6 +237,16 @@ type StatsCXOPublisher struct {
 	transports completenessTracker
 	visors     completenessTracker
 	heldSince  map[string]time.Time
+
+	// lastTransportVerdict is the most recent transport-set judgment,
+	// reused to stamp stats/daily (which is a reduction of that same
+	// set) without observing a second, unrelated series.
+	lastTransportVerdict completenessVerdict
+	// lastDailyAt is when the slow stats/daily recompute was last
+	// ATTEMPTED — set on attempt rather than on success so a store
+	// error backs off to statsDailyInterval instead of retrying the
+	// 30-day query on every 12 s tick.
+	lastDailyAt time.Time
 
 	// putFn writes one already-gzipped leaf. Always s.pub.Put in
 	// production; a seam so the publish path (gzip, holdover, the set
@@ -217,6 +289,10 @@ func StartStatsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, s
 		transports: newCompletenessTracker(time.Now()),
 		visors:     newCompletenessTracker(time.Now()),
 		heldSince:  make(map[string]time.Time),
+		// Until publishNetwork has observed anything, the honest verdict
+		// for a body stamped from the transport set is "warmup", not the
+		// zero value's empty confidence string.
+		lastTransportVerdict: completenessVerdict{confidence: ConfidenceWarmup},
 	}
 	sp.putFn = pub.Put
 	if logger != nil {
@@ -260,10 +336,16 @@ func (s *StatsCXOPublisher) loop(ctx context.Context) {
 	}
 }
 
+// publishOnce writes one round. publishNetwork runs first because it
+// sets the transport-set verdict publishDaily stamps its body with.
 func (s *StatsCXOPublisher) publishOnce(ctx context.Context) {
 	now := time.Now().UTC()
 	s.publishNetwork(ctx, now)
 	s.publishVersions(now)
+	if s.lastDailyAt.IsZero() || now.Sub(s.lastDailyAt) >= statsDailyInterval {
+		s.lastDailyAt = now
+		s.publishDaily(ctx, now)
+	}
 }
 
 // publishNetwork writes StatsPathNetwork. It reads the same warm cache
@@ -276,6 +358,7 @@ func (s *StatsCXOPublisher) publishNetwork(ctx context.Context, now time.Time) {
 		return
 	}
 	verdict := s.transports.observe(now, summary.Total)
+	s.lastTransportVerdict = verdict
 	body := NetworkStats{
 		Total:                 summary.Total,
 		ByType:                summary.ByType,
@@ -338,6 +421,47 @@ func (s *StatsCXOPublisher) publishVersions(now time.Time) {
 		TrailingWindowSeconds: int(statsTrailingWindow / time.Second),
 	}
 	s.put(StatsPathVersions, body, verdict.complete, now)
+}
+
+// publishDaily writes StatsPathDaily from the same store call
+// GET /metric serves, so the published series and the HTTP series are
+// one number computed once, not two that can disagree.
+//
+// This is the read the charts on the reward server's /stats pages need
+// and the one that had no feed: over HTTP it is a 2.7 KB body that
+// still fails outright whenever the requesting dmsg client loses its
+// sessions (skycoin/skywire#4538), because an HTTP fetch is
+// all-or-nothing at request time while a subscriber reads a snapshot it
+// already holds.
+func (s *StatsCXOPublisher) publishDaily(ctx context.Context, now time.Time) {
+	resp, err := s.api.store.GetNetworkMetrics(ctx, store.MetricsQuery{
+		Days:      statsDailyDays,
+		Live:      "all",
+		Bandwidth: true,
+		Latency:   true,
+	})
+	if err != nil {
+		s.log.WithError(err).Debug("daily aggregate query failed; will retry next cycle")
+		s.recordError(err)
+		return
+	}
+	// An empty series is not news, it is a store that has not answered.
+	// Publishing it would overwrite a good body with nothing.
+	if resp == nil || len(resp.Daily) == 0 {
+		return
+	}
+	verdict := s.lastTransportVerdict
+	body := DailyStats{
+		Daily:                 resp.Daily,
+		Cumulative:            resp.Cumulative,
+		Days:                  statsDailyDays,
+		ObservedAt:            now,
+		Complete:              verdict.complete,
+		Confidence:            verdict.confidence,
+		TrailingPeak:          verdict.peak,
+		TrailingWindowSeconds: int(statsTrailingWindow / time.Second),
+	}
+	s.put(StatsPathDaily, body, verdict.complete, now)
 }
 
 // put gzips and writes one body, applying the incomplete-sample

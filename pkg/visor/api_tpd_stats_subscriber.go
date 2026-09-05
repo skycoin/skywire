@@ -2,10 +2,11 @@
 //
 // Reader-side helper for TPD's network-aggregate stats feed. The
 // publisher lives in pkg/deployment/tpd/api/cxo_stats_publisher.go and
-// writes two gzipped sub-kilobyte leaves:
+// writes three gzipped leaves:
 //
 //	stats/network   the GET /all-transports/stats shape
 //	stats/versions  the GET /version fleet histogram
+//	stats/daily     the GET /metric daily aggregate (~2.7 KB)
 //
 // Both carry a completeness stamp (observed_at / complete / confidence
 // / trailing peak) that the reader passes through untouched — deciding
@@ -32,12 +33,16 @@ import (
 // Callers treat it as a cache miss and fall through to HTTP.
 var ErrTPDStatsNotReady = errors.New("tpd stats: cxo cache miss")
 
-// StatsKindNetwork and StatsKindVersions are the short path names the
-// RPC/CLI layer uses, mirroring tpd-all-transports' with-self /
-// without-self.
+// StatsKindNetwork, StatsKindVersions and StatsKindDaily are the short
+// path names the RPC/CLI layer uses, mirroring tpd-all-transports'
+// with-self / without-self.
 const (
 	StatsKindNetwork  = "network"
 	StatsKindVersions = "versions"
+	// StatsKindDaily is the GET /metric daily aggregate — per-day
+	// bandwidth, latency and by-type breakdown over the published
+	// window, newest day first.
+	StatsKindDaily = "daily"
 )
 
 // statsPathForKind maps a short kind to the publisher's TreeStore path.
@@ -49,6 +54,8 @@ func statsPathForKind(kind string) (string, bool) {
 		return tpdapi.StatsPathNetwork, true
 	case StatsKindVersions:
 		return tpdapi.StatsPathVersions, true
+	case StatsKindDaily:
+		return tpdapi.StatsPathDaily, true
 	}
 	return "", false
 }
