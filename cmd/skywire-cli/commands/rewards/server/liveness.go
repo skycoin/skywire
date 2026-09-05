@@ -145,6 +145,30 @@ func parseLivenessSeries(raw []byte) (*livenessSeries, error) {
 	if end == 0 {
 		return nil, fmt.Errorf("uptime tracker timelines recorded no online slots")
 	}
+
+	// Trimming zeroes is not enough: the LAST recorded slot is normally still
+	// being written, so it holds a partial count and plots as a cliff. Observed
+	// live within minutes of each other, the final slot read 808 in one sample
+	// and 114 in another while the preceding hour sat steady near 880 — the
+	// network did not move, the bucket was simply incomplete.
+	//
+	// Drop trailing slots that are far below the recent norm, bounded so a
+	// genuine sustained drop is never eaten: at most maxPartialTrim slots
+	// (30 minutes) and only while a slot is under half the median of the hour
+	// before it. A real outage lasting longer than that still charts.
+	const (
+		maxPartialTrim  = 6  // 30 minutes at 5-minute resolution
+		medianWindow    = 12 // one hour
+		partialFraction = 0.5
+	)
+	for dropped := 0; dropped < maxPartialTrim && end > medianWindow+1; dropped++ {
+		lo := end - 1 - medianWindow
+		ref := medianOf(counts[lo : end-1])
+		if ref <= 0 || float64(counts[end-1]) >= partialFraction*float64(ref) {
+			break
+		}
+		end--
+	}
 	counts = counts[:end]
 
 	slotDates := make([]string, len(counts))
@@ -222,4 +246,16 @@ func shortSlotLabel(date string, i int) string {
 		return parts[1] + "-" + parts[2]
 	}
 	return date
+}
+
+// medianOf returns the median of a slice without disturbing the caller's
+// ordering — the series is time-ordered and must stay that way.
+func medianOf(xs []int) int {
+	if len(xs) == 0 {
+		return 0
+	}
+	c := make([]int, len(xs))
+	copy(c, xs)
+	sort.Ints(c)
+	return c[len(c)/2]
 }
