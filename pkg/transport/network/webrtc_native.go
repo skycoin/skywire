@@ -14,11 +14,14 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/pion/datachannel"
+	"github.com/pion/ice/v4"
+	"github.com/pion/interceptor"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -64,15 +67,47 @@ func newWebRTCAPI() *webrtc.API {
 	// Raise the SCTP receive window off its 1 MiB default so a high-BDP mesh path
 	// isn't flow-control throttled/stalled — see sctpReceiveBufferBytes.
 	se.SetSCTPMaxReceiveBufferSize(sctpReceiveBufferBytes)
+	// mDNS is the single largest per-PeerConnection cost. pion/ice creates an
+	// mDNS Conn whenever the mode is anything but Disabled, and an unset mode
+	// defaults to QueryOnly (ice/agent.go setupMDNSConfig), so we were paying for
+	// it without ever asking: ~14 goroutines per PeerConnection (readLoop, v4/v6
+	// packet conns, sweepLoop, start.funcN). Measured on a host visor with 460
+	// live PeerConnections: 6,960 goroutines, 38% of the entire process.
+	//
+	// Skywire peers are addressed by public key and exchange ICE candidates over
+	// a dmsg signaling stream, so we never need to resolve a peer's ".local"
+	// name. Disabling also makes our own host candidates plain IPs, which is what
+	// a visor with a routable address wants anyway.
+	//
+	// TRADE-OFF: Disabled also DISCARDS remote mDNS candidates. Browsers obfuscate
+	// private host IPs as ".local", so a browser (wasm) visor on the SAME LAN as a
+	// native visor loses that direct path and must fall back to a STUN-derived
+	// srflx candidate — and iceURLs may be empty, in which case such a pair has no
+	// candidate left at all. Loopback is unaffected (browsers do not obfuscate
+	// 127.0.0.1), so the local dev loop keeps working. Set SKYWIRE_WEBRTC_MDNS=1
+	// to restore pion's QueryOnly default if a deployment needs same-LAN browser
+	// peers without STUN.
+	if !mdnsEnabled() {
+		se.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
+	}
 	// Empty MediaEngine: skywire uses WebRTC for DATA CHANNELS ONLY, never audio/
-	// video. With the default MediaEngine pion registers audio/video codecs and
-	// starts SRTP/SRTCP + RTP/RTCP media-processor goroutines per PeerConnection
-	// (observed on public exits: ~4-5 parked media goroutines each — hundreds on a
-	// busy node, e.g. a Raspberry Pi exit at 1000+ goroutines, wasting CPU the
-	// route-setup handshake then competes for). Data channels (SCTP over the
-	// application m-line) need no media codecs, so a MediaEngine with none
-	// suppresses all that machinery.
-	return webrtc.NewAPI(webrtc.WithSettingEngine(se), webrtc.WithMediaEngine(&webrtc.MediaEngine{}))
+	// video, so registering no codecs keeps the negotiated SDP media-free.
+	//
+	// This alone does NOT stop pion's media goroutines, which is what the earlier
+	// version of this comment claimed. NewAPI only skips the DEFAULT interceptors
+	// when an interceptor registry is supplied — with just WithMediaEngine it
+	// still calls RegisterDefaultInterceptorsWithOptions (webrtc/api.go), so every
+	// PeerConnection kept spawning twcc + sender/receiver report loops: 1,856
+	// goroutines (10%) on the same host. An empty registry removes them.
+	//
+	// The SRTP/SRTCP sessions (another ~10%) are NOT reachable from here: pion
+	// calls startSRTP() unconditionally once DTLS connects (dtlstransport.go), so
+	// suppressing those needs an upstream change, not a local one.
+	return webrtc.NewAPI(
+		webrtc.WithSettingEngine(se),
+		webrtc.WithMediaEngine(&webrtc.MediaEngine{}),
+		webrtc.WithInterceptorRegistry(&interceptor.Registry{}),
+	)
 }
 
 func webrtcConfig(iceURLs []string) webrtc.Configuration {
@@ -478,3 +513,15 @@ type dcTimeout struct{}
 func (dcTimeout) Error() string   { return "webrtc: i/o timeout" }
 func (dcTimeout) Timeout() bool   { return true }
 func (dcTimeout) Temporary() bool { return true }
+
+// mdnsEnabled reports whether pion's mDNS ICE machinery should be left on.
+// Default off — see newWebRTCAPI for the goroutine cost and the same-LAN
+// browser-peer trade-off that SKYWIRE_WEBRTC_MDNS=1 buys back.
+func mdnsEnabled() bool {
+	switch os.Getenv("SKYWIRE_WEBRTC_MDNS") {
+	case "1", "true", "TRUE", "yes":
+		return true
+	default:
+		return false
+	}
+}
