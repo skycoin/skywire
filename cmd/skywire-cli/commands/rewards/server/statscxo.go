@@ -107,7 +107,7 @@ func setStatsCXOSubMgrFromDmsg(dmsgC *dmsg.Client) {
 			return cipher.PubKey{}, 0, "", fmt.Errorf("unknown feed %d", f)
 		}
 		switch f {
-		case cxosub.FeedTPDStats, cxosub.FeedTPDMetrics:
+		case cxosub.FeedTPDStats, cxosub.FeedTPDMetrics, cxosub.FeedTPDUptime:
 			if (tpd == cipher.PubKey{}) {
 				return cipher.PubKey{}, 0, "", fmt.Errorf("no TPD publisher PK (dmsg service URL unset)")
 			}
@@ -133,6 +133,12 @@ func setStatsCXOSubMgrFromDmsg(dmsgC *dmsg.Client) {
 	// every read should be a memory hit.
 	mgr.Pin(cxosub.FeedTPDStats)
 	mgr.Pin(cxosub.FeedTPDMetrics)
+	// The uptime feed too: the visors-online plot and the per-visor
+	// timeline panel both read the tracker's v3 dump, which was being
+	// pulled by running `skywire cli ut tpd graph --json` as a subprocess
+	// every ten minutes. Pinning it makes that a memory read of a feed
+	// this process already keeps warm.
+	mgr.Pin(cxosub.FeedTPDUptime)
 
 	statsCXO.Lock()
 	statsCXO.mgr = mgr
@@ -256,22 +262,29 @@ func completenessNote(complete bool, confidence string) string {
 // page is refreshed. Hence WaitForFirstSync while the reference is
 // still held (see #4525).
 func statsCXOLeaf(path string) ([]byte, time.Time, error) {
+	return statsCXOFeedLeaf(cxosub.FeedTPDStats, cxosub.TabNetworkStats, path)
+}
+
+// statsCXOFeedLeaf is statsCXOLeaf over an arbitrary feed. The uptime
+// feed is read the same way and by the same rules; only the feed and the
+// acquiring tab differ.
+func statsCXOFeedLeaf(feed cxosub.Feed, tab cxosub.Tab, path string) ([]byte, time.Time, error) {
 	mgr := statsCXOMgr()
 	if mgr == nil {
 		return nil, time.Time{}, fmt.Errorf("CXO not wired")
 	}
-	mgr.AcquireFor(cxosub.TabNetworkStats)
-	defer mgr.ReleaseFor(cxosub.TabNetworkStats)
+	mgr.AcquireFor(tab)
+	defer mgr.ReleaseFor(tab)
 
-	if body, ts, ok := statsCXOGet(mgr, cxosub.FeedTPDStats, path); ok {
+	if body, ts, ok := statsCXOGet(mgr, feed, path); ok {
 		return body, ts, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), cxosub.FeedFirstSyncTimeout(cxosub.FeedTPDStats))
+	ctx, cancel := context.WithTimeout(context.Background(), cxosub.FeedFirstSyncTimeout(feed))
 	defer cancel()
-	if !mgr.WaitForFirstSync(ctx, cxosub.FeedTPDStats, cxosub.FeedFirstSyncTimeout(cxosub.FeedTPDStats)) {
+	if !mgr.WaitForFirstSync(ctx, feed, cxosub.FeedFirstSyncTimeout(feed)) {
 		return nil, time.Time{}, fmt.Errorf("feed not synced")
 	}
-	if body, ts, ok := statsCXOGet(mgr, cxosub.FeedTPDStats, path); ok {
+	if body, ts, ok := statsCXOGet(mgr, feed, path); ok {
 		return body, ts, nil
 	}
 	return nil, time.Time{}, fmt.Errorf("no %s leaf on the feed", path)

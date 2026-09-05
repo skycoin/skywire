@@ -543,7 +543,7 @@ func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose, p
 			continue
 		}
 		for _, d := range days {
-			blocks := bitmapToBlocks(e.Timeline[d])
+			blocks := uptimestats.BitmapToBlocks(e.Timeline[d])
 			pct := "-"
 			if v, ok := e.Daily[d]; ok {
 				pct = v + "%"
@@ -591,7 +591,7 @@ func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, 
 				bar.WriteString(strings.Repeat(" ", 24))
 				continue
 			}
-			bar.WriteString(bitmapToBlocks(bmp))
+			bar.WriteString(uptimestats.BitmapToBlocks(bmp))
 		}
 		bars[i] = bar.String()
 	}
@@ -666,29 +666,15 @@ func printRollingTimelines(entries []uptimestats.VisorSummary, hoursBack int, ve
 	}
 
 	for _, e := range sorted {
-		var bar strings.Builder
-		bar.Grow(hoursBack)
-		for i := hoursBack - 1; i >= 0; i-- {
-			hourStart := now.Add(-time.Duration(i+1) * time.Hour)
-			hourEnd := now.Add(-time.Duration(i) * time.Hour)
-			count := countOnlineSlots(e.Timeline, hourStart, hourEnd)
-			bar.WriteString(shadeForCount(count))
-		}
-		fmt.Printf("%s %s\n", e.PK.Hex(), bar.String())
+		fmt.Printf("%s %s\n", e.PK.Hex(), uptimestats.RollingBar(e.Timeline, now, hoursBack))
 
 		if verbose {
 			// Per-window aggregate underneath the bar when verbose.
-			total, online := 0, 0
+			total := 0
 			for t := start; t.Before(now); t = t.Add(5 * time.Minute) {
 				total++
-				day := t.UTC().Format("2006-01-02")
-				if bmp, ok := e.Timeline[day]; ok {
-					slot := t.Hour()*12 + t.Minute()/5
-					if slot < len(bmp) && bmp[slot] == '.' {
-						online++
-					}
-				}
 			}
+			online := uptimestats.CountOnlineSlots(e.Timeline, start, now)
 			pct := 0.0
 			if total > 0 {
 				pct = 100 * float64(online) / float64(total)
@@ -752,69 +738,10 @@ func rollingLabels(hoursBack int) string {
 	return strings.TrimRight(string(buf), " ")
 }
 
-// countOnlineSlots returns how many 5-minute slots between [from, to)
-// are marked online across per-day bitmaps.
-func countOnlineSlots(timelines map[string]string, from, to time.Time) int {
-	n := 0
-	for t := from; t.Before(to); t = t.Add(5 * time.Minute) {
-		day := t.UTC().Format("2006-01-02")
-		bmp, ok := timelines[day]
-		if !ok {
-			continue
-		}
-		slot := t.Hour()*12 + t.Minute()/5
-		if slot >= 0 && slot < len(bmp) && bmp[slot] == '.' {
-			n++
-		}
-	}
-	return n
-}
-
-func shadeForCount(count int) string {
-	switch {
-	case count == 0:
-		return " "
-	case count <= 3:
-		return "░"
-	case count <= 6:
-		return "▒"
-	case count <= 9:
-		return "▓"
-	default:
-		return "█"
-	}
-}
-
-// bitmapToBlocks turns a 288-char timeline string (".  "/" ") into
-// 24 hourly blocks with 5 density levels.
-func bitmapToBlocks(bitmap string) string {
-	const hours = 24
-	const slotsPerHour = 12
-	const totalSlots = hours * slotsPerHour
-	counts := make([]int, hours)
-	if len(bitmap) == 0 {
-		return strings.Repeat(" ", hours)
-	}
-	step := len(bitmap)
-	if step > totalSlots {
-		step = totalSlots
-	}
-	for i := 0; i < step; i++ {
-		if bitmap[i] == '.' {
-			hr := i * hours / step
-			if hr >= hours {
-				hr = hours - 1
-			}
-			counts[hr]++
-		}
-	}
-	var b strings.Builder
-	b.Grow(hours)
-	for _, c := range counts {
-		b.WriteString(shadeForCount(c))
-	}
-	return b.String()
-}
+// The glyph mapping and the bar builders now live in pkg/uptimestats
+// (timeline.go). They are pure functions of the timeline map and had a
+// second consumer copy-pasting them; a third — the reward server's
+// statistics panel — is what moved them beside the type they read.
 
 func fatal(c *cobra.Command, err error) {
 	fmt.Fprintf(c.ErrOrStderr(), "error: %v\n", err) //nolint:errcheck,gosec
