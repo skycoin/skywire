@@ -7,6 +7,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
+	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
 
 	pty "github.com/skycoin/skywire/cmd/apps/pty/commands"
@@ -29,7 +30,6 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire/tui"
 	services "github.com/skycoin/skywire/cmd/svc/skywire-services/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/flags"
 	"github.com/skycoin/skywire/pkg/visor"
