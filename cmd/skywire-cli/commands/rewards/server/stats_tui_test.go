@@ -33,9 +33,35 @@ func TestRenderStatsANSIEmitsColor(t *testing.T) {
 	if !strings.Contains(out, "\x1b[") {
 		t.Fatal("no ANSI escape sequences in the rendering")
 	}
-	for _, want := range []string{"NETWORK", "BANDWIDTH", "LATENCY", "VISORS ONLINE", "TRANSPORTS BY TYPE", "VERSION ADOPTION"} {
+	for _, want := range []string{
+		"NETWORK", "BANDWIDTH", "LATENCY", "VISORS ONLINE", "TRANSPORTS BY TYPE",
+		"VERSION ADOPTION", "TRANSPORTS PER VISOR", "ARCHITECTURE", "UPTIME TIMELINE",
+	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("panel %q missing", want)
+		}
+	}
+}
+
+// The three panels added alongside the originals obey the same rule as the
+// originals: with nothing gathered they name themselves absent rather than
+// vanishing. sampleTUIData leaves all three zero, which is exactly the
+// "nothing even attempted to fetch it" case.
+func TestRenderStatsANSINamesTheNewPanelsWhenUnpopulated(t *testing.T) {
+	out := RenderStatsANSI(sampleTUIData())
+	for _, title := range []string{"TRANSPORTS PER VISOR", "ARCHITECTURE", "UPTIME TIMELINE"} {
+		i := strings.Index(out, title)
+		if i < 0 {
+			t.Fatalf("panel %q vanished instead of reporting itself absent", title)
+		}
+		// The rule that follows the title is 78 box-drawing runes at three
+		// bytes each, so the window has to be generous in bytes.
+		end := i + 600
+		if end > len(out) {
+			end = len(out)
+		}
+		if !strings.Contains(out[i:end], "unavailable") {
+			t.Errorf("panel %q rendered without data and without saying so", title)
 		}
 	}
 }

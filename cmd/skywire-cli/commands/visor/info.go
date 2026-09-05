@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil/livetui"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/uptimestats"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -697,24 +698,11 @@ func localUptime24h(rpc visor.API) (map[string]string, map[string]float64, bool)
 	return bars, pcts, true
 }
 
-// shadeForCount maps an online-slot count (0–12) per hour to one of
-// five density characters. Same thresholds + glyphs as
-// cliuptime.shadeForCount so the visor-info bar reads identically
-// next to a `cli ut tpd graph` output.
-func shadeForCount(count int) string {
-	switch {
-	case count == 0:
-		return " "
-	case count <= 3:
-		return "░"
-	case count <= 6:
-		return "▒"
-	case count <= 9:
-		return "▓"
-	default:
-		return "█"
-	}
-}
+// shadeForCount maps an online-slot count (0–12) per hour to one of five
+// density characters. Delegates to uptimestats.ShadeForCount so the
+// visor-info bar reads identically next to `cli ut tpd graph` output —
+// this used to be a verbatim copy, which is the drift the hoist removed.
+func shadeForCount(count int) string { return uptimestats.ShadeForCount(count) }
 
 // formatARAddr renders one AR self-registration entry.
 //
