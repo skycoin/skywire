@@ -363,15 +363,6 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		w.Header().Set("Location", "./")
 		w.WriteHeader(http.StatusMovedPermanently)
 	})
-	// The Angular dashboard keeps its own path, for a link that wants the
-	// dashboard specifically rather than the shell around it.
-	dashboard := func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache")
-		_, _ = w.Write(index) //nolint:errcheck
-	}
-	mux.HandleFunc("/dashboard", dashboard)
-	mux.HandleFunc("/dashboard/", dashboard)
 	serveBytes("/winbox.wasm", "application/wasm", wasmhv.WinBoxWasm())
 	serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
