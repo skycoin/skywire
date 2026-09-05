@@ -226,18 +226,16 @@ type Client struct {
 	carriersOverride []string
 	liveDisc         disc.APIClient
 
-	// DHTLookup, when set, is called by DialStream before the HTTP
-	// discovery lookup. If it returns a valid entry, the HTTP discovery
-	// is skipped entirely. This lets the visor resolve DMSG client
-	// entries from the local DHT store (instant, no network) for PKs
-	// that have published their entries to the DHT.
-	DHTLookup func(pk cipher.PubKey) (*disc.Entry, error)
+	// entryResolvers are consulted before the discovery, in the order added by
+	// AddEntryResolver. See EntryResolver for what belongs here and why it is a
+	// per-deployment choice rather than a default.
+	entryResolvers []EntryResolver
 
 	// Lookup counters for diagnostics.
-	LookupCacheHits  atomic.Int64 // resolved from entry cache
-	LookupDHTHits    atomic.Int64 // resolved from DHT (DHTLookup callback)
-	LookupHTTPHits   atomic.Int64 // resolved from HTTP discovery
-	LookupHTTPMisses atomic.Int64 // HTTP discovery returned not found
+	LookupCacheHits    atomic.Int64 // resolved from entry cache
+	LookupResolverHits atomic.Int64 // resolved from an injected EntryResolver
+	LookupHTTPHits     atomic.Int64 // resolved from HTTP discovery
+	LookupHTTPMisses   atomic.Int64 // HTTP discovery returned not found
 
 	// pinnedFailures counts consecutive failed Serve-loop passes
 	// while in pinned mode (--dmsg-server / ctx.Value("dmsgServer")
@@ -1071,13 +1069,6 @@ func (ce *Client) setCachedEntry(pk cipher.PubKey, entry *disc.Entry) {
 		return
 	}
 	ce.entryCache[pk] = entryCacheEntry{entry: entry, fetchedAt: time.Now()}
-}
-
-// SetDHTLookup sets a callback for DHT-based client entry resolution.
-// DialStream calls this before the HTTP discovery, avoiding network
-// round-trips for PKs that have published to the DHT.
-func (ce *Client) SetDHTLookup(fn func(pk cipher.PubKey) (*disc.Entry, error)) {
-	ce.DHTLookup = fn
 }
 
 // resolveServerEntry returns the discovery entry for the given dmsg
