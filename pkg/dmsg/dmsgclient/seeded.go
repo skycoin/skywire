@@ -85,6 +85,13 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 	dClient := direct.NewClient(entries, log)
 
 	conf := dmsg.DefaultConfig()
+	// A seed-only client (no discovery address) has nowhere to publish. Say so
+	// rather than leaving the registration loop to call direct.NewClient's
+	// PutEntry, which returns nil without publishing — the client would run the
+	// loop forever and report success while being unresolvable by lookup.
+	// Registration and resolution are independent: this client still resolves
+	// its seeded peers and is still dialable by anyone who knows its servers.
+	conf.NoRegister = discDmsgAddr == ""
 	if preferWS {
 		// Browser (wasm): prefer WebTransport, fall back to WebSocket. The seed
 		// entry carries only AddressWS (a wss:// bootstrap endpoint) — there's no
