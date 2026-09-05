@@ -341,6 +341,15 @@ func (s *service) startCXO(
 			pub.Close() //nolint:errcheck,gosec
 		}()
 	}
+
+	if pub, perr := api.StartStatsCXOPublisher(ctx, tpdAPI, h.DmsgClient, sk, logger); perr != nil {
+		logger.WithError(perr).Error("Failed to start CXO stats publisher, continuing without it")
+	} else {
+		go func() {
+			<-ctx.Done()
+			pub.Close() //nolint:errcheck,gosec
+		}()
+	}
 }
 
 // aggregatorSink composes the cxoaggregator.Sink contract from the

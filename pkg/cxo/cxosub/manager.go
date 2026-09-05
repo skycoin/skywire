@@ -75,6 +75,11 @@ const (
 	// `pv -t`, `tp tree`, `tp viz` commands as a CXO alternative to
 	// HTTP-polling /all-transports.
 	FeedTPDAllTransports
+	// FeedTPDStats is TPD's network-aggregate stats publisher
+	// (stats/network, stats/versions). Sub-kilobyte reductions
+	// republished every few seconds — the feed a chart reads instead
+	// of downloading a bulk snapshot to reduce it locally.
+	FeedTPDStats
 )
 
 // FeedRoute returns the fixed dmsg CXO port and TreeStore path prefix a feed's
@@ -99,6 +104,8 @@ func FeedRoute(f Feed) (port uint16, prefix string, ok bool) {
 		return skyenv.DmsgDMSGDClientsByServerCXOPort, "clients-by-server/", true
 	case FeedTPDAllTransports:
 		return skyenv.DmsgTPDAllTransportsCXOPort, "transports/all/", true
+	case FeedTPDStats:
+		return skyenv.DmsgTPDStatsCXOPort, "stats/", true
 	}
 	return 0, "", false
 }
@@ -139,6 +146,12 @@ const (
 	// lookups resolve from CXO instead of a fresh HTTP-over-dmsg
 	// Noise handshake. HTTP stays the fallback on a snapshot miss.
 	TabDmsgEntryLookup
+	// TabNetworkStats is the consumer of TPD's network-aggregate
+	// stats feed (`cli tp net-stats`, `cli visor cxo fetch tpd-stats
+	// …`, dashboards charting the by-type counts over time). Its own
+	// tab so holding it does not drag in the ~8 MB all-transports
+	// snapshot TabCLITransports carries.
+	TabNetworkStats
 )
 
 // tabFeedDeps maps each tab to the set of feeds it depends on.
@@ -153,6 +166,7 @@ var tabFeedDeps = map[Tab][]Feed{
 	TabCLITransports:     {FeedTPDAllTransports},
 	TabRoutingPolicy:     {FeedSDServices},
 	TabDmsgEntryLookup:   {FeedDMSGDClientsByServer},
+	TabNetworkStats:      {FeedTPDStats},
 }
 
 // Deps are the host-injected dependencies the manager needs. They
@@ -657,6 +671,8 @@ func FeedString(feed Feed) string {
 		return "dmsgd-clients-by-server"
 	case FeedTPDAllTransports:
 		return "tpd-all-transports"
+	case FeedTPDStats:
+		return "tpd-stats"
 	}
 	return fmt.Sprintf("feed#%d", feed)
 }
@@ -675,6 +691,8 @@ func FeedFromString(name string) (Feed, bool) {
 		return FeedDMSGDClientsByServer, true
 	case "tpd-all-transports":
 		return FeedTPDAllTransports, true
+	case "tpd-stats":
+		return FeedTPDStats, true
 	}
 	return 0, false
 }
