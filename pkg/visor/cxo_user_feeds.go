@@ -220,6 +220,14 @@ func (v *Visor) setSystemCXOPub(pub *treestore.Publisher) {
 	v.cxoUserFeedsMu.Unlock()
 }
 
+// setRegCXOPub retains the registration-over-CXO publisher so its gating
+// (allowlist + denied subscribers) shows up in `skywire cli visor state`.
+func (v *Visor) setRegCXOPub(pub *treestore.Publisher) {
+	v.cxoUserFeedsMu.Lock()
+	v.regCXOPub = pub
+	v.cxoUserFeedsMu.Unlock()
+}
+
 // setTPListCXOPub retains the dedicated tp-list discovery feed publisher
 // so CXOFeedStates can read its live PublishState. Called once by
 // initStats; pub is nil when the dedicated publisher didn't start (the
@@ -331,6 +339,7 @@ func (v *Visor) CXOFeedStates() []CXOFeedState {
 	v.cxoUserFeedsMu.Lock()
 	sysPub := v.systemCXOPub
 	tplistPub := v.tplistCXOPub
+	regPub := v.regCXOPub
 	users := make([]*cxoUserFeed, 0, len(v.cxoUserFeeds))
 	for _, fd := range v.cxoUserFeeds {
 		users = append(users, fd)
@@ -362,6 +371,18 @@ func (v *Visor) CXOFeedStates() []CXOFeedState {
 			Name:         tplistCXOFeedName,
 			Port:         skyenv.DmsgVisorTPListCXOPort,
 			PublishState: tplistPub.PublishState(),
+			Allowlist:    allow,
+			Denied:       denied,
+		})
+	}
+	// The registration-over-CXO feed. Surfacing its denied list is the
+	// only way to see a dmsg-discovery whose subscribe is being refused.
+	if regPub != nil {
+		allow, denied := feedGating(regPub)
+		out = append(out, CXOFeedState{
+			Name:         "registration",
+			Port:         skyenv.DmsgDMSGDRegistrationCXOPort,
+			PublishState: regPub.PublishState(),
 			Allowlist:    allow,
 			Denied:       denied,
 		})
