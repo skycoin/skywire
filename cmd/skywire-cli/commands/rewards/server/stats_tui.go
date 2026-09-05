@@ -62,7 +62,9 @@ type statsTUIData struct {
 
 	// Liveness is visors-reporting-online per 5-minute slot, oldest-first,
 	// with the label of the day each run of slots belongs to.
-	Liveness    []statsTUILivenessDay
+	Liveness []statsTUILivenessDay
+	// Dmsg is the substrate layer: server capacity and client registrations.
+	Dmsg        dmsgStats
 	LivenessErr string
 }
 
@@ -314,6 +316,13 @@ func RenderStatsANSI(d statsTUIData) string {
 		b.WriteString(tuiClose(width))
 		b.WriteString("\n")
 	}
+
+	// ---- dmsg substrate ----------------------------------------------------
+	//
+	// The layer everything else runs over, and previously shown nowhere on the
+	// site. A dmsg server sitting at capacity is invisible in every transport
+	// and uptime view while it quietly pushes clients elsewhere.
+	b.WriteString(renderDmsgPanelANSI(d.Dmsg))
 
 	// ---- version adoption --------------------------------------------------
 	if d.VersionsErr != "" {
