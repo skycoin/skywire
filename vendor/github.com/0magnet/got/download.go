@@ -1,4 +1,3 @@
-// Package got pkg/got/download.go c0-com-util
 package got
 
 import (
