@@ -175,13 +175,26 @@ func sdCXOPeer(v *Visor) (cipher.PubKey, bool) {
 	return parseDmsgPeer(v.conf.Launcher.ServiceDiscDmsg)
 }
 
-// dmsgdCXOPeer extracts the DMSG-D publisher PK from the visor's
-// dmsg.discovery_dmsg URL.
+// dmsgdCXOPeer extracts the DMSG-D publisher PK from the visor's dmsg
+// discovery configuration.
+//
+// Both discovery_dmsg AND discovery are tried, in that order, mirroring
+// tpdCXOPeer. On a dmsg-only deployment the PK lives in `discovery` (already
+// `dmsg://<pk>:80`) and discovery_dmsg is simply unset — reading only the
+// latter meant the feed spec always failed with "no DMSG-D CXO peer", so
+// enabling dmsg.lookup_cxo silently did nothing and every lookup fell back to
+// HTTP. parseDmsgPeer rejects a non-dmsg scheme, so a clearnet `discovery` is
+// still correctly ignored.
 func dmsgdCXOPeer(v *Visor) (cipher.PubKey, bool) {
 	if v.conf.Dmsg == nil {
 		return cipher.PubKey{}, false
 	}
-	return parseDmsgPeer(v.conf.Dmsg.DiscoveryDmsg)
+	for _, raw := range []string{v.conf.Dmsg.DiscoveryDmsg, v.conf.Dmsg.Discovery} {
+		if pk, ok := parseDmsgPeer(raw); ok {
+			return pk, true
+		}
+	}
+	return cipher.PubKey{}, false
 }
 
 func parseDmsgPeer(raw string) (cipher.PubKey, bool) {
