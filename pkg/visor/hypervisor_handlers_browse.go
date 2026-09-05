@@ -122,19 +122,6 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			w.Header().Set("Location", "./")
 			w.WriteHeader(http.StatusMovedPermanently)
 			return
-		case "/dashboard", "/dashboard/":
-			// The Angular dashboard's index, served injected exactly as the old
-			// root was. The SPA is hash-routed, so this one path carries every
-			// dashboard view — as the desk's dashboard tab (embed=1 in the
-			// hash hides the taskbar in the iframe) or standalone.
-			//
-			// The trailing-slash spelling is the one to embed. The SPA rewrites
-			// its own URL relative to the current DIRECTORY, so from
-			// ".../dashboard" a route change resolves to ".../" — which is the
-			// desk, giving a desk nested inside a desk window. From
-			// ".../dashboard/" it stays put.
-			hv.serveInjectedIndex(w, r, fileServer)
-			return
 		}
 		fileServer.ServeHTTP(w, r)
 	})
@@ -255,7 +242,7 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 // same chrome-less guard the ☰ chat/log windows rely on.
 const nativeDeskBootOpts = `{
   native: true,
-  dashboardURL: '/dashboard#/?embed=1',
+  dashboardURL: './?embed=1#/?embed=1',
 }`
 
 // uiVersionHash fingerprints the served UI bundle (short sha256 of index.html,
@@ -305,7 +292,7 @@ const uiAutoReloadJS = `(function(){
 // publishes it as __skywireDesk — the handle desk-boot's native branch waits
 // on before opening the dashboard window. It refuses to mount inside an
 // embedded frame (embed=1 in the hash/query): the dashboard window is an
-// iframe of /dashboard and must not grow its own taskbar. The retired
+// iframe of the framed root and must not grow its own taskbar. The retired
 // browse.js engine's providers are gone with it; the native desk's terminal
 // remains the dashboard's Terminal tab (dmsgpty) until the shared shell
 // integration lands.
@@ -313,9 +300,17 @@ const nativeBrowseLauncherJS = `(function () {
   if (/[#?&]embed=1/.test(location.hash + location.search)) { return; }
   function ready() {
     if (!self.skywireDeskPanel || !document.body || typeof self.WinBox !== "function") { return setTimeout(ready, 200); }
-    // On the dashboard page itself, no dashboard menu entry (it IS the
-    // dashboard); on the desk root, the entry opens /dashboard in a window.
-    var dashURL = location.pathname === "/dashboard" ? "" : "/dashboard#/?embed=1";
+    // RELATIVE: reached through the vnet service worker this page lives under
+    // a "/vnet/<port>/" prefix the server never sees, so an absolute URL
+    // escapes it onto the outer server's root — a different visor entirely
+    // (the same trap #4499 fixed for /desk). "./" is resolved by the browser
+    // against the URL it actually asked for, which keeps the prefix.
+    //
+    // The root, not a /dashboard path: the hypervisor serves the dashboard at
+    // the root whenever the request is framed, and the SW normalises deeper
+    // paths away anyway. The launcher already returns early on an embed=1
+    // page, so this only ever runs on the desk root.
+    var dashURL = "./?embed=1#/?embed=1";
     var p = self.skywireDeskPanel.mount(document, { dashboardURL: dashURL });
     // Stream the NATIVE visor's server-side log (/api/log SSE) into the log
     // window's buffer, when a log consumer exists on the page.

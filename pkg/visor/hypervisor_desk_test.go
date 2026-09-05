@@ -59,8 +59,14 @@ func TestNativeDeskServing(t *testing.T) {
 		if !strings.Contains(body, "native: true") {
 			t.Error("page lacks the native-mode marker (native: true)")
 		}
-		if !strings.Contains(body, "dashboardURL: '/dashboard#/?embed=1'") {
-			t.Error("page lacks the same-origin dashboard window URL")
+		// RELATIVE and rooted: an absolute URL escapes the /vnet/<port>/ prefix
+		// onto the outer server's root (the trap #4499 fixed for /desk), and the
+		// dashboard lives at the framed root now, not a /dashboard path.
+		if !strings.Contains(body, "dashboardURL: './?embed=1#/?embed=1'") {
+			t.Error("page lacks the relative framed-root dashboard window URL")
+		}
+		if strings.Contains(body, "dashboardURL: '/") {
+			t.Error("dashboardURL is absolute — it would escape the vnet prefix")
 		}
 		// The shell is assembled from the SAME assets the dashboard injection
 		// uses plus the shared desk boot.
@@ -94,17 +100,41 @@ func TestNativeDeskServing(t *testing.T) {
 		}
 	})
 
-	t.Run("Angular serves at /dashboard, with the launcher injection intact", func(t *testing.T) {
-		w := get("/dashboard")
-		if w.Code != http.StatusOK {
-			t.Fatalf("status=%d, want 200", w.Code)
+	t.Run("Angular serves at the FRAMED root, with the launcher injection intact", func(t *testing.T) {
+		// The dashboard has no path of its own. Under the vnet service worker a
+		// framed page gets its <base href> rewritten to the /vnet/<port>/ prefix,
+		// so any deeper path is normalised back to the root before the document
+		// finishes loading — which is why desk-boot.js stopped pointing at
+		// /dashboard. The root serves the dashboard whenever the request is framed.
+		for _, framed := range []func() *httptest.ResponseRecorder{
+			func() *httptest.ResponseRecorder { return get("/?embed=1") },
+			func() *httptest.ResponseRecorder {
+				w := httptest.NewRecorder()
+				r := httptest.NewRequest(http.MethodGet, "/", nil)
+				r.Header.Set("Sec-Fetch-Dest", "iframe")
+				h.ServeHTTP(w, r)
+				return w
+			},
+		} {
+			w := framed()
+			if w.Code != http.StatusOK {
+				t.Fatalf("status=%d, want 200", w.Code)
+			}
+			body := w.Body.String()
+			if !strings.Contains(body, "ANGULAR") {
+				t.Error("Angular index not served at the framed root")
+			}
+			if !strings.Contains(body, `src="browse.js"`) || !strings.Contains(body, "__SKYWIRE_LOCAL_PK__") {
+				t.Error("index injection (desk launcher) missing on the framed root")
+			}
 		}
-		body := w.Body.String()
-		if !strings.Contains(body, "ANGULAR") {
-			t.Error("Angular index not served at /dashboard")
-		}
-		if !strings.Contains(body, `src="browse.js"`) || !strings.Contains(body, "__SKYWIRE_LOCAL_PK__") {
-			t.Error("index injection (desk launcher) missing on the dashboard page")
+	})
+
+	t.Run("the retired /dashboard path is gone", func(t *testing.T) {
+		for _, p := range []string{"/dashboard", "/dashboard/"} {
+			if w := get(p); w.Code != http.StatusNotFound {
+				t.Errorf("GET %s → %d, want 404 (the dashboard is the framed root now)", p, w.Code)
+			}
 		}
 	})
 
