@@ -35,7 +35,7 @@ const (
 // Feed identifiers used in calls to CXOSubMgr.Walk. Values match
 // pkg/visor.CXOFeed / cxosub.Feed; the adapters pass them through.
 const (
-	CXOFeedTPDMetrics           = 0 // metrics/days/<n>
+	CXOFeedTPDMetrics           = 0 // metrics/day/<YYYY-MM-DD> (legacy: metrics/days/<n>)
 	CXOFeedTPDUptime            = 1 // uptimes/days/<n> — []VisorSummary
 	CXOFeedSDServices           = 2 // services/<type>/all (batched; legacy .../<pk>/entry)
 	CXOFeedDMSGDClientsByServer = 3 // clients-by-server/<server> (batched; legacy .../<client>/entry)
