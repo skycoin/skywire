@@ -28,12 +28,14 @@ package visor
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cxo/cxosub"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 )
@@ -64,6 +66,24 @@ func (v *Visor) FetchTransportMetricsCXO(days int) ([]byte, time.Time, error) {
 	mgr.AcquireFor(TabMetrics)
 	defer mgr.ReleaseFor(TabMetrics)
 
+	body, ts, err := readTransportMetricsCXO(mgr, days)
+	if err == nil {
+		return body, ts, nil
+	}
+
+	// Cold cache: the first fill may still be in flight. Returning the miss
+	// here would also release the reference, and the grace-period teardown
+	// then closes the subscriber mid-fill — so a feed whose first sync takes
+	// longer than one call never becomes readable, however often it is
+	// retried. This feed is tens of megabytes across many leaves and takes
+	// tens of seconds to fill; measured on production it delivers 7.1 MB
+	// (20,493 records) once the reference is simply held open.
+	//
+	// The AcquireFor above stays held across the wait, which is what keeps
+	// the cycle alive long enough to finish.
+	if !mgr.WaitForFirstSync(context.Background(), FeedTPDMetrics, cxosub.FeedFirstSyncTimeout(FeedTPDMetrics)) {
+		return nil, time.Time{}, err
+	}
 	return readTransportMetricsCXO(mgr, days)
 }
 
