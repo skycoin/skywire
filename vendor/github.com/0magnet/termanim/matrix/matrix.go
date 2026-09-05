@@ -19,7 +19,7 @@
 //
 //   - THE HIGHLIGHTED GLYPHS STAMMER. Every so often all of them hesitate at
 //     the same moment, so the streams carrying them drop a row behind the ones
-//     that did not. It is the least obvious behaviour in the original and the
+//     that did not. It is the least obvious behavior in the original and the
 //     reason the white heads do not stay in formation.
 //
 //   - The alphabet is half-width katakana and numerals plus exactly one letter
@@ -141,7 +141,7 @@ type Matrix struct {
 	ChangeEvery int
 
 	// StammerEvery is roughly how many steps pass between stammers, which is
-	// the oddest behaviour in the original: every so often every highlighted
+	// the oddest behavior in the original: every so often every highlighted
 	// glyph hesitates at the same moment, and the streams carrying them drop a
 	// row behind the ones that did not. Zero disables it.
 	StammerEvery int

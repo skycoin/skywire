@@ -109,7 +109,7 @@ func btn(label, style string) js.Value {
 	return b
 }
 
-// labelFor is a tab's name: the host, which is the part a person recognises.
+// labelFor is a tab's name: the host, which is the part a person recognizes.
 // A generated page has no host worth showing, so it gets a plain word instead.
 func labelFor(url string) string {
 	switch {
@@ -147,11 +147,11 @@ var DirectLoader func(url string) (src string, ok bool)
 // to the iframe; anything else — an http(s) page, or a bare host like
 // example.com or home.dmsg — goes through the transport (fetchPage), which lets
 // the host's fetchVia decide clearnet vs mesh, unless DirectLoader claims it
-// for native rendering. A scheme-less address is normalised to http:// so the
+// for native rendering. A scheme-less address is normalized to http:// so the
 // transport always gets a URL.
 func load(t *tab, url string) {
 	// Name the tab after where it is. "tab 3" tells a person nothing once
-	// three of them are open; the host is what they recognise, and it fits in
+	// three of them are open; the host is what they recognize, and it fits in
 	// a strip where a whole URL never would.
 	if t != nil && t.lbl.Truthy() {
 		t.lbl.Set("textContent", labelFor(url))
@@ -317,7 +317,7 @@ func setLoading(t *tab, on bool) {
 }
 
 // setTitle names a tab after the page. A page's own <title> is what a person
-// recognises; the host is the fallback for a page that has none.
+// recognizes; the host is the fallback for a page that has none.
 func setTitle(t *tab, title, url string) {
 	title = strings.TrimSpace(title)
 	if len(title) > 120 {
@@ -360,7 +360,11 @@ func setFavicon(t *tab, iconURL string) {
 	})
 	onResp = js.FuncOf(func(_ js.Value, a []js.Value) any {
 		if a[0].Get("status").Truthy() && a[0].Get("status").Int() >= 400 {
-			done()
+			// Reject and let onErr do the releasing. Calling done() here first
+			// freed onErr and then handed the rejection straight to it, so the
+			// catch invoked a js.Func that no longer existed — Go reports that
+			// as "call to released function". A site without a favicon takes
+			// this path on every page load, which is most of them.
 			return g.Get("Promise").Call("reject")
 		}
 		if h := a[0].Get("headers").Call("get", "content-type"); h.Truthy() {

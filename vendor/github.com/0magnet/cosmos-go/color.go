@@ -205,7 +205,7 @@ func mod(v, m float64) float64 {
 	return r
 }
 
-// browserColorCtx is a 1x1 canvas context kept for color normalisation; the
+// browserColorCtx is a 1x1 canvas context kept for color normalization; the
 // browser rewrites any CSS color assigned to fillStyle into #rrggbb or
 // rgba(...), which the parsers above already understand.
 var browserColorCtx js.Value

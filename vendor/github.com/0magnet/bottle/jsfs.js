@@ -103,7 +103,9 @@
 
 	function statOf(node) {
 		const isFile = node.data !== null;
-		const size = isFile ? node.data.length : (node.target !== null ? node.target.length : 64);
+		// A lazy file reports its real size before its bytes are fetched, so a
+		// caller that stats-then-reads (os.ReadFile) asks for the whole file.
+		const size = isFile ? (node.lazy ? node.lazy.size : node.data.length) : (node.target !== null ? node.target.length : 64);
 		return {
 			dev: 1, ino: node.ino, mode: node.mode, nlink: node.nlink,
 			uid: node.uid, gid: node.gid, rdev: 0, size,
@@ -135,6 +137,32 @@
 		dir.entries.set(norm.slice(norm.lastIndexOf('/') + 1), f);
 		return f;
 	}
+	// writeLazy seeds a file whose bytes are fetched from url on first read. The
+	// tree, names and sizes are present up front (cheap); content arrives only
+	// when something opens the file — so a caller seeds a whole source tree and
+	// pays network only for the files a build actually touches. Called after a
+	// mutation hook is installed, a lazy read's populate marks the fs dirty, so
+	// the fetched bytes persist like any write.
+	let lazyDirtyHook = null;
+	function writeLazy(path, size, url) {
+		const norm = normalize(path);
+		const dir = mkdirp(norm.slice(0, norm.lastIndexOf('/')) || '/');
+		const f = mknode(S_IFREG, 0o644);
+		f.data = new Uint8Array(0);
+		f.lazy = { size: size, url: url };
+		dir.entries.set(norm.slice(norm.lastIndexOf('/') + 1), f);
+		return f;
+	}
+	// readData serves a read from a file's resident bytes (the non-lazy path,
+	// and what a lazy read runs once its bytes have landed).
+	function readData(e, buf, offset, length, position, cb) {
+		const pos = (position === null || position === undefined) ? e.pos : position;
+		const avail = e.node.data.length - pos;
+		const n = Math.max(0, Math.min(length, avail));
+		if (n > 0) buf.set(e.node.data.subarray(pos, pos + n), offset);
+		if (position === null || position === undefined) e.pos += n;
+		queueMicrotask(() => cb(null, n));
+	}
 
 	['/bin', '/dev', '/etc', '/home/user', '/opt', '/proc', '/root', '/run', '/sys',
 		'/usr/bin', '/var/log',
@@ -165,7 +193,7 @@
 	}
 
 	// ---- pipes -------------------------------------------------------------
-	// os.Pipe / os/exec need pipes, which a wasm tab has no OS analogue for.
+	// os.Pipe / os/exec need pipes, which a wasm tab has no OS analog for.
 	// A pipe is a shared byte queue with a read end and a write end fd. Both
 	// ends live here in JS so a writer in one wasm instance and a reader in
 	// another meet in the page — never re-entering each other's Go runtime.
@@ -319,12 +347,23 @@
 				const e = fdEntry(fd);
 				if (e.node.dev) { queueMicrotask(() => cb(null, 0)); return; } // /dev/null
 				if (e.node.data === null) throw mkerr('EISDIR', 'read dir');
-				const pos = (position === null || position === undefined) ? e.pos : position;
-				const avail = e.node.data.length - pos;
-				const n = Math.max(0, Math.min(length, avail));
-				if (n > 0) buf.set(e.node.data.subarray(pos, pos + n), offset);
-				if (position === null || position === undefined) e.pos += n;
-				queueMicrotask(() => cb(null, n));
+				// A lazy file's bytes arrive on first read: fetch, populate, mark
+				// dirty so they persist, then serve this read and every later one
+				// from the now-resident data.
+				if (e.node.lazy) {
+					const lz = e.node.lazy;
+					fetch(lz.url).then((r) => {
+						if (!r.ok) throw new Error('lazy fetch ' + lz.url + ': ' + r.status);
+						return r.arrayBuffer();
+					}).then((ab) => {
+						e.node.data = new Uint8Array(ab);
+						e.node.lazy = null;
+						if (lazyDirtyHook) { try { lazyDirtyHook(); } catch (e2) { /* best-effort */ } }
+						readData(e, buf, offset, length, position, cb);
+					}).catch((err) => queueMicrotask(() => cb(err)));
+					return;
+				}
+				readData(e, buf, offset, length, position, cb);
 			} catch (err) { queueMicrotask(() => cb(err)); }
 		},
 
@@ -348,7 +387,9 @@
 				if ((flags & constants.O_TRUNC) && node.data !== null) { node.data = new Uint8Array(0); node.mtimeMs = now(); }
 			}
 			const fd = nextFd++;
-			fds.set(fd, { node, pos: (flags & constants.O_APPEND) && node.data ? node.data.length : 0, flags });
+			// path is kept so persistence can tell whether a WRITE to this fd could
+			// change what a snapshot contains; see hookMutators.
+			fds.set(fd, { node, pos: (flags & constants.O_APPEND) && node.data ? node.data.length : 0, flags, path: normalize(path) });
 			return fd;
 		}),
 
@@ -597,9 +638,44 @@
 			timer = setTimeout(() => { timer = null; save(); }, wait);
 		}
 
+		// Which argument of each mutator names the path a snapshot would record.
+		// rename and link touch both ends, so either end being included is enough
+		// to dirty the tree; symlink's first argument is the link target, which is
+		// content rather than a location.
+		const PATH_ARGS = {
+			open: [0], mkdir: [0], rmdir: [0], unlink: [0], truncate: [0],
+			chmod: [0], chown: [0], lchown: [0], utimes: [0],
+			rename: [0, 1], link: [0, 1], symlink: [1],
+		};
+		const FD_ARGS = { ftruncate: [0], fchmod: [0], fchown: [0] };
+
+		function pathOfFd(fd) { const e = fds.get(fd); return e ? e.path : null; }
+
+		function isExcluded(p) {
+			if (!p || !excludeFn) return false;
+			try { return !!excludeFn(p); } catch (e) { return false; }
+		}
+
+		// snapshotUnaffected is true only when EVERY path a call touches is
+		// excluded. Anything unknown — a pipe fd, an unresolvable path, an
+		// exclude that throws — falls through to scheduling a snapshot, so the
+		// failure mode is a wasted copy rather than a lost write.
+		function snapshotUnaffected(paths) {
+			if (!paths || !paths.length) return false;
+			for (const p of paths) if (!isExcluded(p)) return false;
+			return true;
+		}
+
 		// Wrap the mutating syscalls once, at enable() time. write/writeSync
 		// only count for real files (fd > 2) — stdout/stderr traffic must not
 		// trigger snapshots.
+		//
+		// A write to an excluded path must not schedule one either. Excluding a
+		// path already keeps it OUT of the snapshot, so a write there cannot
+		// change what a snapshot contains — but without this check the exclude
+		// list only shrinks each snapshot, never reduces how many are taken, and
+		// a build writing thousands of cache files still queues a full-tree copy
+		// every couple of seconds.
 		function hookMutators() {
 			const names = ['open', 'mkdir', 'rmdir', 'rename', 'unlink', 'truncate',
 				'ftruncate', 'chmod', 'fchmod', 'chown', 'fchown', 'lchown', 'utimes',
@@ -607,12 +683,25 @@
 			for (const n of names) {
 				const orig = fsImpl[n];
 				if (typeof orig !== 'function') continue;
-				fsImpl[n] = function (...args) { markDirty(); return orig.apply(this, args); };
+				const pa = PATH_ARGS[n], fa = FD_ARGS[n];
+				fsImpl[n] = function (...args) {
+					let paths = null;
+					if (pa) paths = pa.map((i) => normalize(args[i]));
+					else if (fa) paths = fa.map((i) => pathOfFd(args[i]));
+					if (!snapshotUnaffected(paths)) markDirty();
+					return orig.apply(this, args);
+				};
 			}
 			const w = fsImpl.write;
-			fsImpl.write = function (fd, ...rest) { if (fd > 2) markDirty(); return w.call(this, fd, ...rest); };
+			fsImpl.write = function (fd, ...rest) {
+				if (fd > 2 && !isExcluded(pathOfFd(fd))) markDirty();
+				return w.call(this, fd, ...rest);
+			};
 			const ws = fsImpl.writeSync;
-			fsImpl.writeSync = function (fd, ...rest) { if (fd > 2) markDirty(); return ws.call(this, fd, ...rest); };
+			fsImpl.writeSync = function (fd, ...rest) {
+				if (fd > 2 && !isExcluded(pathOfFd(fd))) markDirty();
+				return ws.call(this, fd, ...rest);
+			};
 		}
 
 		return {
@@ -630,6 +719,7 @@
 						restored = true;
 					}
 					hookMutators();
+					lazyDirtyHook = markDirty; // a lazy read's populate persists
 					enabled = true;
 					if (typeof addEventListener === 'function') {
 						addEventListener('pagehide', () => { try { save(); } catch (e) { /* best-effort */ } });
@@ -661,6 +751,7 @@
 		stdio,           // swap .stdout/.stderr/.stdin to capture a command
 		mkdirp,          // host-side seeding helpers
 		writeFile: writeFileSeed,
+		writeLazy,       // seed a file fetched from a url on first read
 		readFile(path) { const r = resolve(path, true); if (!r.node || r.node.data === null) return null; return r.node.data; },
 		setCwd(d) { processImpl.chdir(d); },
 		pipe() { return makePipe(); },        // [readFd, writeFd]

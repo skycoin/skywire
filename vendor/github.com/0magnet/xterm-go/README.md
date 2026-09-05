@@ -4,6 +4,8 @@ A Go port of [xterm.js](https://github.com/xtermjs/xterm.js) 6.0.0 — a termina
 
 **[Live demo](https://0magnet.github.io/xterm-go/)** — a wasm terminal with an in-browser echo shell.
 
+![xterm-go in the browser](docs/xterm-go-demo.png "the ported terminal drawing a truecolor box through the WebGL renderer")
+
 xterm.js is the front-end terminal component used by VS Code, Hyper and Theia — and by [skywire](https://github.com/skycoin/skywire)'s web pty. This port reimplements it as a Go library so Go/wasm applications can embed a full terminal without JavaScript dependencies.
 
 ## Features
