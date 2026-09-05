@@ -65,6 +65,7 @@ require (
 	github.com/0magnet/desk v0.0.0-20260905010738-0c9209d8b7b7
 	github.com/0magnet/desk/panes v0.0.0-20260905010738-0c9209d8b7b7
 	github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
+	github.com/0magnet/got v0.0.0-20260905231830-8b4c51f6f6f8
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260901202627-53911da3ad77
 	github.com/0magnet/lolcat-go v0.0.0-20260905001114-f97d678ce219
 	github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b

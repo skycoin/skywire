@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/0magnet/got"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/got"
 )
 
 // ---- isSkywireURL ----------------------------------------------------------
