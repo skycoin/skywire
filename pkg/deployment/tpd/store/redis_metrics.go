@@ -68,10 +68,10 @@ func transportDailyBandwidth(result map[string]string) uint64 {
 // (stcpr, sudph). A visor is considered online when it has 2+ p2p transports,
 // indicating genuine peer-to-peer network participation (not just dmsg
 // infrastructure connectivity).
-func (s *redisStore) getP2PTransportCounts(ctx context.Context) map[string]int {
+func (s *redisStore) getP2PTransportCounts(ctx context.Context) (map[string]int, error) {
 	keys, ids, err := s.allTransportKeysFromIndex(ctx)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	counts := make(map[string]int)
@@ -85,7 +85,13 @@ func (s *redisStore) getP2PTransportCounts(ctx context.Context) map[string]int {
 		}
 		vals, err := s.client.MGet(ctx, keys[i:end]...).Result()
 		if err != nil {
-			continue
+			// These counts decide online status — GetAllVisorSummaries does
+			// `online := p2pCounts[pk] >= minP2PTransportsOnline` — and uptime
+			// feeds the reward threshold. A batch skipped silently removes up
+			// to mgetBatch transports, pushing visors below the bar and
+			// marking them offline when they are not. Refuse to answer rather
+			// than answer wrongly.
+			return nil, fmt.Errorf("p2p transport counts are incomplete: batch %d-%d failed: %w", i, end, err)
 		}
 		for j, val := range vals {
 			raw, ok := val.(string)
@@ -108,7 +114,7 @@ func (s *redisStore) getP2PTransportCounts(ctx context.Context) map[string]int {
 	}
 	s.maybeReapStaleTransports(stale)
 
-	return counts
+	return counts, nil
 }
 
 func (s *redisStore) getBandwidthFromHash(ctx context.Context, key, transportID, period, periodKey string) (BandwidthAggregation, error) {

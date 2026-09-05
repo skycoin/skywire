@@ -48,7 +48,16 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool, timeline
 	}
 
 	// Count p2p transports per visor for online determination.
-	p2pCounts := s.getP2PTransportCounts(ctx)
+	//
+	// An incomplete count here marks live visors offline: online is
+	// `p2pCounts[pk] >= minP2PTransportsOnline`, so transports missing from a
+	// short read push visors under the bar. Uptime feeds the reward
+	// threshold, so a wrong answer is worse than none — fail rather than
+	// publish a summary built on a partial count.
+	p2pCounts, err := s.getP2PTransportCounts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("visor summaries: %w", err)
+	}
 
 	// Merge heartbeat visors and visors with p2p transports.
 	allVisors := make(map[string]struct{})
