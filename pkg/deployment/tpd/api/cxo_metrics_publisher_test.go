@@ -79,7 +79,7 @@ func TestGzipPartsSingleLeafIsCompressed(t *testing.T) {
 }
 
 // The point of the split: every part fits, and NO record is dropped. The
-// previous behaviour re-fetched the window without per-edge bandwidth and
+// previous behavior re-fetched the window without per-edge bandwidth and
 // published that instead, which silently lost data.
 func TestGzipPartsSplitsWithoutLosingRecords(t *testing.T) {
 	metrics := metricsFixture(4000, 30)
