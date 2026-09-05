@@ -67,8 +67,21 @@ func (sc *ClientCallbacks) ensure() {
 
 // Config configures a dmsg client entity.
 type Config struct {
-	MinSessions          int
-	UpdateInterval       time.Duration // Duration between discovery entry updates.
+	MinSessions    int
+	UpdateInterval time.Duration // Duration between discovery entry updates.
+
+	// NoRegister disables publishing this client's own discovery entry.
+	//
+	// Registration and resolution are independent axes. Not registering does
+	// NOT make a client undialable — anyone who knows (or is seeded with) the
+	// servers it sits on can still reach it; it is only unresolvable by lookup.
+	// Set it for a read-only consumer with a fixed set of destinations, or for a
+	// deployment running without a discovery at all.
+	//
+	// The alternative it replaces was handing the client a discovery whose
+	// writes silently succeed without publishing (direct.NewClient), which left
+	// the client believing it had registered.
+	NoRegister           bool
 	Callbacks            *ClientCallbacks
 	ClientType           string
 	ConnectedServersType string
@@ -298,6 +311,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 
 	// Init common fields.
 	c.EntityCommon.init(pk, sk, dc, log, conf.UpdateInterval)
+	c.EntityCommon.noRegister = conf.NoRegister
 
 	// Init callback: on set session.
 	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
