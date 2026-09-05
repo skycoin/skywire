@@ -74,7 +74,41 @@ func gatherStatsTUI() statsTUIData {
 		d.Versions = versions
 	}
 
+	// Visors online, summed from the uptime tracker's per-5-minute timelines.
+	// Shares the cache the SVG chart uses, so the ~2 MB tracker dump is pulled
+	// once for both renderings rather than twice.
+	//
+	// This was missing when the panel first shipped: the field existed and the
+	// renderer drew it, but nothing populated it, so the section vanished with
+	// no error — the one failure mode the design is supposed to make
+	// impossible. An unattempted source is now an explicit one.
+	if series, err := fetchLivenessSeries(); err != nil {
+		d.LivenessErr = err.Error()
+	} else {
+		d.Liveness = livenessToTUIDays(series)
+	}
+
 	return d
+}
+
+// livenessToTUIDays regroups the flat slot series into per-day runs, which is
+// the shape the panel's x-axis labels are built from.
+func livenessToTUIDays(s *livenessSeries) []statsTUILivenessDay {
+	if s == nil || len(s.Counts) == 0 {
+		return nil
+	}
+	var out []statsTUILivenessDay
+	for i, c := range s.Counts {
+		date := ""
+		if i < len(s.Dates) {
+			date = s.Dates[i]
+		}
+		if len(out) == 0 || out[len(out)-1].Date != date {
+			out = append(out, statsTUILivenessDay{Date: date})
+		}
+		out[len(out)-1].Slots = append(out[len(out)-1].Slots, c)
+	}
+	return out
 }
 
 // statsGetJSON fetches and decodes one JSON body. Decoding is the validity
