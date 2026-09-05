@@ -4,6 +4,19 @@ A Go port of [annacrombie/plot](https://github.com/annacrombie/plot) — line
 graphs on the command line — built on
 [asciigraph](https://github.com/guptarohit/asciigraph) for the drawing.
 
+**[Live demo](https://0magnet.github.io/plot-go/)** — two counters the tab actually has, followed and redrawn in a terminal. The pipeline comes from the query: [`?p=roc:5`](https://0magnet.github.io/plot-go/?p=roc:5), [`?p=avg:5|roc:5`](https://0magnet.github.io/plot-go/?p=avg:5%7Croc:5), [`?p=cma`](https://0magnet.github.io/plot-go/?p=cma).
+
+![plot-go in the browser](docs/plot-go-demo.png "frame interval and event-loop lag, smoothed and plotted live into an xterm-go terminal")
+
+There is no `/sys` in a browser, so the demo follows what a tab does have:
+the gap between animation frames, and how late a zero-millisecond timeout
+runs. Both climb when the event loop is busy, which is the same reason
+`plotnet` watches `rx_packets` and `tx_packets`. It draws into
+[xterm-go](https://github.com/0magnet/xterm-go) — the terminal
+[websh](https://github.com/0magnet/websh) runs on — because asciigraph's
+output *is* a terminal frame: the colors are SGR escapes and the redraw is a
+cursor-home and a clear.
+
 ```
 $ seq 0 30 | awk '{print $1*$1*3 + 1000}' | plot-go -d 4
  3700.00 ┤                          ╭───
@@ -188,7 +201,7 @@ rather than being quietly given something else.
 The tick spacing lands exactly every N columns when N divides the width, and as
 near as the columns allow when it does not.
 
-## Licence
+## License
 
 MIT, as the original is. See [LICENSE](LICENSE).
 

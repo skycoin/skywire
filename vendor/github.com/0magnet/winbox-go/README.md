@@ -16,6 +16,8 @@ If you find the underlying window manager useful, consider [supporting the origi
 
 <a href="https://0magnet.github.io/winbox-go/">https://0magnet.github.io/winbox-go/</a> (compiled with TinyGo)
 
+![winbox-go in the browser](docs/winbox-go-demo.png "windows with drag, resize, minimize and the split-screen taskbar, drawn from Go")
+
 <a name="started"></a>
 ## Getting Started
 
@@ -787,7 +789,7 @@ WinBox provides built-in control classes you can pass when creating a window ins
 
 > Without the header the user isn't able to move the window frame. It may be useful for creating fixed popups.
 
-Pass in classnames when creating the window to apply behaviour:
+Pass in classnames when creating the window to apply behavior:
 ```go
 winbox.New(&winbox.Options{
     Class: []string{"no-min", "no-max", "no-full", "no-resize", "no-move"},
@@ -1032,7 +1034,7 @@ The option keys, methods, instance properties and callbacks are the ones
 WinBox.js documents, with the loose argument forms it accepts: `width: 250`,
 `"250"`, `"250px"` and `"40%"` all work, `class` takes a string or an array,
 `minimize(false)` restores, `close()` returns `true` only when an `onclose`
-handler cancelled it, and callbacks are invoked with `this` bound to the
+handler canceled it, and callbacks are invoked with `this` bound to the
 instance and may be reassigned at any time. The root element is exposed as
 `g`, `window` **and** `dom`, so code that identifies a window by matching a DOM
 node against any one of those aliases finds it.
@@ -1116,7 +1118,7 @@ Dock several windows and each claims space inside what the earlier ones left, so
 a left dock and a bottom dock meet at a corner rather than overlapping it.
 Hiding, minimizing or closing a dock returns its strip to everyone else, and
 docks follow the viewport when the page is resized. (A *maximized* window does
-not follow a resize — that is WinBox.js's behaviour and it is kept — except
+not follow a resize — that is WinBox.js's behavior and it is kept — except
 where docks are involved, since a stale maximized window and a dock would
 otherwise overlap.)
 

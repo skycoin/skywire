@@ -2,7 +2,7 @@
 //
 // jsfs fakes the filesystem and vnet fakes the network; a Unix-shaped
 // orchestrator — a shell, `go build`, make — also needs fork/exec. A tab has
-// an exact analogue: instantiating another wasm module IS spawning a process.
+// an exact analog: instantiating another wasm module IS spawning a process.
 // proc makes that a primitive.
 //
 //   globalThis.proc.spawn({argv, env, cwd, stdout, stderr, stdin})
@@ -184,5 +184,168 @@
 		};
 	}
 
-	globalThis.proc = { installed: true, spawn, pipeSink, pipeSource };
+	// ---- off-thread children ----------------------------------------------
+	//
+	// spawn() above runs a child on the page's one JS thread, which is what makes
+	// its stdio and cwd juggling correct — and what makes a long compile freeze
+	// the tab for the length of the build. spawnWorker runs the same child in a
+	// Worker instead. The child keeps the parent's filesystem: fsbridge hands it
+	// a blocking, synchronous view of the page's jsfs, which is exactly the
+	// contract Go's syscall layer expects, so `go build` in a worker still sees
+	// the files the shell wrote a moment ago on the main thread.
+	//
+	// Two things do NOT cross the bridge:
+	//   - stdout/stderr, which post back as messages and are handed to this
+	//     process's sinks on the page. Routing them through the filesystem would
+	//     land them in the OWNER's active stdio, which belongs to whatever the
+	//     main thread happens to be running.
+	//   - stdin, which reads EOF, matching pipeSource: the toolchain's children
+	//     do not read stdin, and a blocking stdin would need a second channel.
+	//
+	// The compiled module is posted rather than the program bytes: a
+	// WebAssembly.Module is structured-cloneable, so the page's compile cache is
+	// reused and a spawn costs an instantiate rather than a recompile.
+
+	// Asset URLs default to the directory proc.js itself was loaded from, so a
+	// page that serves bottle's files together needs no configuration.
+	const BASE = (typeof document !== 'undefined' && document.currentScript && document.currentScript.src)
+		? document.currentScript.src.replace(/[^/]*$/, '')
+		: (globalThis.location ? globalThis.location.origin + '/' : '/');
+	const assets = { fsbridge: BASE + 'fsbridge.js', wasmExec: BASE + 'wasm_exec.js' };
+
+	const WORKER_SRC = `
+self.onmessage = async (ev) => {
+  const m = ev.data;
+  try {
+    importScripts(m.assets.fsbridge, m.assets.wasmExec);
+    fsbridge.install(m.sab, { cwd: m.cwd });
+
+    // stdout/stderr go home as messages, not through the filesystem. The buffer
+    // is copied first: it is a view onto the wasm instance's memory, and
+    // posting a view clones the WHOLE memory behind it.
+    const bridged = globalThis.fs;
+    const rawWriteSync = bridged.writeSync.bind(bridged);
+    const rawWrite = bridged.write.bind(bridged);
+    const rawRead = bridged.read.bind(bridged);
+    const say = (fd, b) => postMessage(fd === 1 ? { out: b.slice() } : { err: b.slice() });
+
+    bridged.writeSync = (fd, buf) => {
+      if (fd === 1 || fd === 2) { say(fd, buf); return buf.length; }
+      return rawWriteSync(fd, buf);
+    };
+    bridged.write = (fd, buf, offset, length, position, cb) => {
+      if (fd === 1 || fd === 2) {
+        say(fd, buf.subarray(offset, offset + length));
+        queueMicrotask(() => cb(null, length));
+        return;
+      }
+      return rawWrite(fd, buf, offset, length, position, cb);
+    };
+    bridged.read = (fd, buf, offset, length, position, cb) => {
+      if (fd === 0) { queueMicrotask(() => cb(null, 0)); return; }  // stdin: EOF
+      return rawRead(fd, buf, offset, length, position, cb);
+    };
+
+    const go = new Go();
+    go.argv = m.argv.slice();
+    go.env = Object.assign({}, m.env);
+    let code = 0;
+    go.exit = (c) => { code = c; };
+
+    // Same late-resume guard as the main-thread path: a timer callback can fire
+    // after the program exits, and stock wasm_exec throws "already exited".
+    const rawResume = go._resume.bind(go);
+    go._resume = function () { if (go.exited) return; return rawResume(); };
+
+    const inst = await WebAssembly.instantiate(m.mod, go.importObject);
+    await go.run(inst);
+
+    if (go._scheduledTimeouts) {
+      for (const h of go._scheduledTimeouts.values()) { try { clearTimeout(h); } catch (e) {} }
+      go._scheduledTimeouts.clear();
+    }
+    postMessage({ exit: code });
+  } catch (e) {
+    postMessage({ err: new TextEncoder().encode('proc: ' + ((e && e.stack) || e) + '\\n') });
+    postMessage({ exit: 1 });
+  }
+};
+`;
+
+	let workerURL = null;
+	function workerBlobURL() {
+		if (!workerURL) workerURL = URL.createObjectURL(new Blob([WORKER_SRC], { type: 'text/javascript' }));
+		return workerURL;
+	}
+
+	// spawnWorker mirrors spawn's contract — {pid, exited} — so a caller swaps
+	// one for the other without knowing which thread the child landed on.
+	function spawnWorker(opts) {
+		installDelegator();
+		opts = opts || {};
+		const argv = opts.argv || [];
+		if (!argv.length) throw new Error('proc.spawnWorker: empty argv');
+		if (typeof SharedArrayBuffer === 'undefined' || !globalThis.crossOriginIsolated) {
+			throw new Error('proc.spawnWorker: needs cross-origin isolation (COOP/COEP) for SharedArrayBuffer');
+		}
+		if (!globalThis.fsbridge) throw new Error('proc.spawnWorker: fsbridge.js not loaded');
+
+		const cwd = opts.cwd || jsfs.getCwd();
+		const env = opts.env || {};
+		const prog = readProgram(argv[0], cwd, env);
+		const pid = nextPID++;
+		const myStdio = {
+			stdout: opts.stdout || pageDefaults.stdout,
+			stderr: opts.stderr || pageDefaults.stderr,
+		};
+		if (!prog) {
+			myStdio.stderr(new TextEncoder().encode(argv[0] + ': not found\n'));
+			return { pid, exited: Promise.resolve(127) };
+		}
+
+		const sab = new SharedArrayBuffer(opts.sabBytes || (1 << 20));
+		const stopServing = globalThis.fsbridge.serve(sab);
+		const w = new Worker(workerBlobURL());
+		let settled = false;
+
+		const exited = new Promise((resolve) => {
+			const finish = (code) => {
+				if (settled) return;
+				settled = true;
+				stopServing();
+				w.terminate();
+				resolve(code);
+			};
+			w.onmessage = (ev) => {
+				const m = ev.data;
+				if (m.out) { myStdio.stdout(m.out); return; }
+				if (m.err) { myStdio.stderr(m.err); return; }
+				if (m.exit !== undefined) finish(m.exit);
+			};
+			w.onerror = (e) => {
+				myStdio.stderr(new TextEncoder().encode('proc: worker: ' + (e.message || e) + '\n'));
+				finish(1);
+			};
+		});
+
+		// Compile once per program and reuse the page's cache; a Module clones
+		// across to the worker, so a spawn costs an instantiate, not a compile.
+		(async () => {
+			try {
+				let mod = moduleCache.get(prog.path);
+				if (!mod) {
+					mod = await WebAssembly.compile(prog.bytes);
+					moduleCache.set(prog.path, mod);
+				}
+				w.postMessage({ sab, mod, argv: argv.slice(), env, cwd, assets });
+			} catch (e) {
+				myStdio.stderr(new TextEncoder().encode('proc: ' + ((e && e.message) || e) + '\n'));
+				w.dispatchEvent(new ErrorEvent('error', { message: String((e && e.message) || e) }));
+			}
+		})();
+
+		return { pid, exited };
+	}
+
+	globalThis.proc = { installed: true, spawn, spawnWorker, pipeSink, pipeSource, assets };
 })();
