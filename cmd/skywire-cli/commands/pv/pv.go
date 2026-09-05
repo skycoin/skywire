@@ -35,6 +35,7 @@ var (
 	version        string
 	isStats        bool
 	showTransports bool
+	showVersion    bool
 	showByType     bool
 	minTransports  int
 	testEnv        bool
@@ -120,6 +121,7 @@ func init() {
 	RootCmd.Flags().StringVarP(&version, "version", "v", "", "filter by version")
 	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
 	RootCmd.Flags().BoolVarP(&showTransports, "transports", "t", false, "show transport count per visor")
+	RootCmd.Flags().BoolVarP(&showVersion, "showversion", "V", false, "show version per visor (implies -t; from the TPD-integrated uptime data pv already fetches)")
 	RootCmd.Flags().BoolVarP(&showByType, "bytype", "y", false, "break the transport count down by type (implies -t): total + per-type columns")
 	RootCmd.Flags().IntVarP(&minTransports, "min", "n", 0, "minimum transport count (requires -t)")
 	RootCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
@@ -145,6 +147,11 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		if showByType {
 			showTransports = true
 		}
+		// --showversion needs the per-PK result rows that the transport path
+		// builds; the version itself costs no extra request (see verByPK).
+		if showVersion {
+			showTransports = true
+		}
 		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
 		if testEnv && !isTestEnv() {
 			// --testenv was specified at runtime (not via SKYWIRETEST env)
@@ -167,6 +174,8 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		// from the transport-discovery base: the uptime tracker is
 		// TPD-integrated (CXO-backed v3), so there is no separate uptime
 		// endpoint or cache — never the deprecated standalone tracker.
+		// pk -> version, filled from the uptime rows pv already fetches.
+		verByPK := map[string]string{}
 		sdFullURL := sdURL + "/api/services?type=" + serviceType
 		// pv only filters by the online flag, so request the 1-day uptime
 		// window (still carries .on) instead of the 30-day daily bitmap.
@@ -253,6 +262,18 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 
 			// Get PKs for transport counting
 			pks, _ = script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Slice() //nolint:errcheck
+
+			if showVersion {
+				// The TPD-integrated uptime rows carry the version, and pv already
+				// fetched them for the online filter, so this column costs no
+				// extra request.
+				verLines, _ := script.Echo(joinedJSON).JQ(`.ut[] | "\(.pk) \(.version // "")"`).Replace(`"`, "").Slice() //nolint:errcheck
+				for _, l := range verLines {
+					if f := strings.Fields(l); len(f) == 2 {
+						verByPK[f[0]] = f[1]
+					}
+				}
+			}
 		}
 
 		// Show transports mode - fetch TPD and count transports per visor
@@ -315,6 +336,9 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 			order := types.PreferenceOrder()
 			for _, r := range results {
 				line := fmt.Sprintf("%s total=%d", r.pk, r.count)
+				if showVersion {
+					line += " version=" + versionOrDash(verByPK[r.pk])
+				}
 				for _, t := range order {
 					line += fmt.Sprintf(" %s=%d", t, tpByType[r.pk][t])
 				}
@@ -324,7 +348,21 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		}
 
 		for _, r := range results {
+			if showVersion {
+				fmt.Printf("%s %d %s\n", r.pk, r.count, versionOrDash(verByPK[r.pk]))
+				continue
+			}
 			fmt.Printf("%s %d\n", r.pk, r.count)
 		}
 	},
+}
+
+// versionOrDash renders a missing version as "-" so the column stays aligned
+// and a gap is visibly a gap: TPD has no uptime row for a visor it has not
+// heard from, which is not the same as that visor reporting no version.
+func versionOrDash(v string) string {
+	if v == "" {
+		return "-"
+	}
+	return v
 }
