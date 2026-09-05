@@ -221,7 +221,7 @@ func TestRun_StoreOpenFails(t *testing.T) {
 // TestOfficialServerPKsDefaultsToSeedList pins the rule that the official-server
 // allowlist falls back to the embedded deployment seed list. Maintaining the two
 // by hand let them drift: production listed 7 of the 9 seeded servers plus 2 PKs
-// for servers that no longer exist, so two live deployment servers were labelled
+// for servers that no longer exist, so two live deployment servers were labeled
 // "community" and skipped by clients running connected_servers_type=official.
 func TestOfficialServerPKsDefaultsToSeedList(t *testing.T) {
 	seeded := officialServerPKs(nil)
