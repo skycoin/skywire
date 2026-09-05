@@ -1,8 +1,9 @@
 // Package docs docs/embed.go c1-cli-doc
 // The prose half of `skywire doc serve`, embedded from where it lives.
 //
-// go:embed cannot reach outside its own package directory, so the embed
-// declaration sits in docs/ rather than beside the command that serves it.
+// The `go:embed` directive cannot reach outside its own package directory, so
+// the embed declaration sits in docs/ rather than beside the command that
+// serves it.
 // Nothing else belongs in this package.
 //
 // The CLI reference is NOT here and never will be: `skywire doc` walks the
