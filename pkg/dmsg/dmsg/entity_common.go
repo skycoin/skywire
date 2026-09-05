@@ -58,6 +58,16 @@ type EntityCommon struct {
 
 	updateInterval time.Duration // Minimum duration between discovery entry updates.
 
+	// noRegister disables publishing this entity's own discovery entry.
+	//
+	// Resolution and registration are INDEPENDENT: a client that does not
+	// register can still resolve peers (from seeded entries or a discovery
+	// lookup) and can still be dialed by anyone who knows which servers it is
+	// on. It is only unresolvable BY LOOKUP. Set it for a read-only consumer
+	// with a fixed set of destinations, or for a deployment with no discovery
+	// at all; leave it clear for anything that must be findable by public key.
+	noRegister bool
+
 	// serverVersion, when non-empty, overrides the disc.Entry.Version a dmsg
 	// SERVER advertises (default "0.0.1") with its real build version. Set once
 	// from ServerConfig.Version in NewServer; read-only afterward. Empty for
@@ -848,6 +858,12 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 	if isClosed(done) {
 		return nil
 	}
+	// Gated here rather than only in updateClientEntryLoop so EVERY publish path
+	// is covered — the first-session callback publishes directly to get an entry
+	// in place before Ready fires, and the nudge path calls in too.
+	if c.noRegister {
+		return nil
+	}
 
 	endpoints := c.snapshotDiscoveries()
 	if len(endpoints) == 0 {
@@ -1097,6 +1113,18 @@ func entryFailureBackoff(consecutiveFailures int) time.Duration {
 }
 
 func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan struct{}, clientType string) {
+	// A client configured not to register never runs this loop.
+	//
+	// Before this existed, "do not register" could only be expressed by handing
+	// the client a discovery whose writes are silent no-op successes —
+	// direct.NewClient's PutEntry returns nil without publishing anything. The
+	// loop then ran forever, reported success, and the client believed it had
+	// advertised itself while being unresolvable by lookup. Making it explicit
+	// means the caller says what it wants and the log says what happened.
+	if c.noRegister {
+		c.log.Debug("Discovery registration disabled; not publishing a client entry.")
+		return
+	}
 	t := time.NewTimer(c.updateInterval)
 	defer t.Stop()
 
