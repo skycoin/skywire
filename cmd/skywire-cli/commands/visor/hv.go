@@ -151,7 +151,7 @@ func HypervisorPort(cmdFlags *pflag.FlagSet) string {
 var hvUIEnableCmd = &cobra.Command{
 	Use:   "enable",
 	Short: "Start the hypervisor web UI (leaves DMSG-RPC + hv ls running)",
-	Long:  "Start ONLY the hypervisor web UI. The DMSG-RPC listener, managed-visor tracking, and `hv ls` are unaffected. Requires the hypervisor to be enabled.\nUse -w to also persist the change to the config file.",
+	Long:  "Start ONLY the hypervisor web UI. The DMSG-RPC listener, managed-visor tracking, and `hv ls` are unaffected. Requires the hypervisor to be enabled.\nUse -w to also write hypervisor.ui_disable to skywire-config.json, so it survives a restart. That json is a derived artifact: a later `skywire autoconfig` run (which a package install or update performs) rebuilds it from /etc/skywire.conf and resets the change. There is no skywire.conf field for ui_disable, so on an autoconfig-managed host this setting cannot currently be made durable.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -161,7 +161,7 @@ var hvUIEnableCmd = &cobra.Command{
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if hvPersist {
-			internal.PrintOutput(cmd.Flags(), "Hypervisor web UI enabled (persisted to config)\n", "Hypervisor web UI enabled (persisted to config)\n")
+			internal.PrintOutput(cmd.Flags(), "Hypervisor web UI enabled (written to config)\n", "Hypervisor web UI enabled (written to config)\n")
 		} else {
 			internal.PrintOutput(cmd.Flags(), "Hypervisor web UI enabled\n", "Hypervisor web UI enabled\n")
 		}
@@ -171,7 +171,7 @@ var hvUIEnableCmd = &cobra.Command{
 var hvUIDisableCmd = &cobra.Command{
 	Use:   "disable",
 	Short: "Stop the hypervisor web UI (keeps DMSG-RPC + hv ls running)",
-	Long:  "Stop ONLY the hypervisor web UI (the HTTP server). The DMSG-RPC listener, managed-visor tracking, and `hv ls` over the visor RPC keep working — useful to shrink the public attack surface while retaining CLI access to connected visors.\nUse -w to also persist the change to the config file.",
+	Long:  "Stop ONLY the hypervisor web UI (the HTTP server). The DMSG-RPC listener, managed-visor tracking, and `hv ls` over the visor RPC keep working — useful to shrink the public attack surface while retaining CLI access to connected visors.\nUse -w to also write hypervisor.ui_disable to skywire-config.json, so it survives a restart. That json is a derived artifact: a later `skywire autoconfig` run (which a package install or update performs) rebuilds it from /etc/skywire.conf and resets the change. There is no skywire.conf field for ui_disable, so on an autoconfig-managed host this setting cannot currently be made durable.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -181,7 +181,7 @@ var hvUIDisableCmd = &cobra.Command{
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if hvPersist {
-			internal.PrintOutput(cmd.Flags(), "Hypervisor web UI disabled (persisted to config)\n", "Hypervisor web UI disabled (persisted to config)\n")
+			internal.PrintOutput(cmd.Flags(), "Hypervisor web UI disabled (written to config)\n", "Hypervisor web UI disabled (written to config)\n")
 		} else {
 			internal.PrintOutput(cmd.Flags(), "Hypervisor web UI disabled\n", "Hypervisor web UI disabled\n")
 		}
@@ -191,7 +191,7 @@ var hvUIDisableCmd = &cobra.Command{
 var hvEnableCmd = &cobra.Command{
 	Use:   "enable",
 	Short: "Enable the hypervisor (DMSG-RPC + tracking + web UI) at runtime",
-	Long:  "Enable the hypervisor — DMSG-RPC listener, managed-visor tracking, and the web UI (unless ui_disable is set). Use `hv ui enable/disable` to toggle just the web UI.\nUse -w to also persist the change to the config file.",
+	Long:  "Enable the hypervisor — DMSG-RPC listener, managed-visor tracking, and the web UI (unless ui_disable is set). Use `hv ui enable/disable` to toggle just the web UI.\nUse -w to also write the change to skywire-config.json, so it survives a restart. That json is a derived artifact: a later `skywire autoconfig` run (which a package install or update performs) rebuilds it from /etc/skywire.conf and resets the change. Set ISHYPERVISOR there to make it durable.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -201,7 +201,7 @@ var hvEnableCmd = &cobra.Command{
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if hvPersist {
-			internal.PrintOutput(cmd.Flags(), "Hypervisor enabled (persisted to config)\n", "Hypervisor enabled (persisted to config)\n")
+			internal.PrintOutput(cmd.Flags(), "Hypervisor enabled (written to config)\n", "Hypervisor enabled (written to config)\n")
 		} else {
 			internal.PrintOutput(cmd.Flags(), "Hypervisor enabled\n", "Hypervisor enabled\n")
 		}
@@ -211,7 +211,7 @@ var hvEnableCmd = &cobra.Command{
 var hvDisableCmd = &cobra.Command{
 	Use:   "disable",
 	Short: "Disable the hypervisor entirely (DMSG-RPC + tracking + web UI) at runtime",
-	Long:  "Disable the whole hypervisor — stops the DMSG-RPC listener, disconnects managed visors, and stops the web UI (so `hv ls` no longer works). To stop ONLY the web UI while keeping CLI access, use `hv ui disable`.\nUse -w to also persist the change to the config file.",
+	Long:  "Disable the whole hypervisor — stops the DMSG-RPC listener, disconnects managed visors, and stops the web UI (so `hv ls` no longer works). To stop ONLY the web UI while keeping CLI access, use `hv ui disable`.\nUse -w to also write the change to skywire-config.json, so it survives a restart. That json is a derived artifact: a later `skywire autoconfig` run (which a package install or update performs) rebuilds it from /etc/skywire.conf and resets the change. Set ISHYPERVISOR there to make it durable.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -221,7 +221,7 @@ var hvDisableCmd = &cobra.Command{
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 		if hvPersist {
-			internal.PrintOutput(cmd.Flags(), "Hypervisor disabled (persisted to config)\n", "Hypervisor disabled (persisted to config)\n")
+			internal.PrintOutput(cmd.Flags(), "Hypervisor disabled (written to config)\n", "Hypervisor disabled (written to config)\n")
 		} else {
 			internal.PrintOutput(cmd.Flags(), "Hypervisor disabled\n", "Hypervisor disabled\n")
 		}
@@ -246,13 +246,22 @@ var hvStatusCmd = &cobra.Command{
 
 var hvAddCmd = &cobra.Command{
 	Use:   "add <public-key>",
-	Short: "Connect to a remote hypervisor at runtime (persisted)",
+	Short: "Connect to a remote hypervisor at runtime (survives restart, not config regen)",
 	Long: `Add a remote hypervisor connection at runtime without editing
 the config file by hand. The visor connects to the hypervisor
-immediately via DMSG AND persists the PK to the config's
-hypervisors list, so the connection survives a restart. (On a
-non-file-backed config — wasm tab / STDIN — the connection is made
-but cannot be persisted.)
+immediately via DMSG AND writes the PK to the config's hypervisors
+list, so the connection survives a restart. (On a non-file-backed
+config — wasm tab / STDIN — the connection is made but nothing is
+written.)
+
+It does NOT survive a config regen. skywire-config.json is a derived
+artifact: on a packaged install every 'skywire autoconfig' run — which
+a package install or update performs — rebuilds it from
+/etc/skywire.conf, and a PK that is only in the json is dropped. To
+make a hypervisor durable, add it to HYPERVISORPKS in
+/etc/skywire.conf and re-run autoconfig. A source-run visor that has
+no skywire.conf and never runs autoconfig keeps the runtime-added PK
+indefinitely.
 
 The outbound connection (hv ls / hv tui / web UI on the hypervisor)
 works right away. The INBOUND access the PK grants — driving this
@@ -279,12 +288,17 @@ See docs/guides/remote-visor-cli.md.`,
 
 var hvRmCmd = &cobra.Command{
 	Use:   "rm [public-key]",
-	Short: "Disconnect from a remote hypervisor at runtime (persisted)",
+	Short: "Disconnect from a remote hypervisor at runtime (survives restart, not config regen)",
 	Long: `Tear down a hypervisor connection at runtime AND remove its PK
 from the config's hypervisors list, so it stays removed across a
 restart. Works for both runtime-added (hv add) and config-loaded
 hypervisors. (On a non-file-backed config — wasm tab / STDIN — the
-disconnect happens but cannot be persisted.)
+disconnect happens but nothing is written.)
+
+The removal does NOT survive a config regen. If the PK is listed in
+HYPERVISORPKS in /etc/skywire.conf, the next 'skywire autoconfig' run
+— which a package install or update performs — writes it back. Remove
+it from HYPERVISORPKS to make the removal durable.
 
 Pass --all to disconnect every hypervisor and clear the configured
 list in one call. Without --all, exactly one <public-key> argument

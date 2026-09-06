@@ -6,7 +6,12 @@ Tear down a hypervisor connection at runtime AND remove its PK
 from the config's hypervisors list, so it stays removed across a
 restart. Works for both runtime-added (hv add) and config-loaded
 hypervisors. (On a non-file-backed config — wasm tab / STDIN — the
-disconnect happens but cannot be persisted.)
+disconnect happens but nothing is written.)
+
+The removal does NOT survive a config regen. If the PK is listed in
+HYPERVISORPKS in /etc/skywire.conf, the next 'skywire autoconfig' run
+— which a package install or update performs — writes it back. Remove
+it from HYPERVISORPKS to make the removal durable.
 
 Pass --all to disconnect every hypervisor and clear the configured
 list in one call. Without --all, exactly one <public-key> argument

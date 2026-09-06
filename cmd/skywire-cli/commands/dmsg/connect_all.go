@@ -22,7 +22,7 @@ func init() {
 
 	setSessionsCmd.Flags().SortFlags = false
 	setSessionsCmd.Flags().IntVarP(&setSessionsCount, "count", "n", 0,
-		"sessions_count to persist; 0 = connect to all available servers")
+		"sessions_count to write to the config; 0 = connect to all available servers")
 	setSessionsCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr,
 		"RPC server address (env: SKYWIRE_RPC)")
 	setSessionsCmd.Flags().Bool(internal.JSONString, false, "print output in json")
@@ -61,12 +61,16 @@ waiting on phase-3 new-session dials during route setup.`,
 
 var setSessionsCmd = &cobra.Command{
 	Use:   "set-sessions",
-	Short: "Persist dmsg.sessions_count and connect-all immediately",
+	Short: "Write dmsg.sessions_count to config and connect-all immediately",
 	Long: `Updates the dmsg.sessions_count at runtime and in the config file.
 
-The live DMSG client's MinSessions is updated immediately, the config
-file is persisted (survives restart), and a connect-all is triggered
-to reach the new target right away.
+The live DMSG client's MinSessions is updated immediately,
+skywire-config.json is written (survives restart), and a connect-all
+is triggered to reach the new target right away.
+
+It does not survive a config regen: 'skywire autoconfig' rebuilds the
+json from /etc/skywire.conf. Set MINDMSGSESS there to make the value
+durable on an autoconfig-managed host.
 
 A value of 0 means "connect to all available servers and keep
 reconnecting to any that drop" — recommended for RSN / TPS visors.`,
@@ -89,7 +93,7 @@ reconnecting to any that drop" — recommended for RSN / TPS visors.`,
 		}
 		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 		if !isJSON {
-			fmt.Printf("Updated dmsg.sessions_count = %d (runtime + persisted)\n\n", setSessionsCount)
+			fmt.Printf("Updated dmsg.sessions_count = %d (runtime + written to config)\n\n", setSessionsCount)
 		}
 		printConnectAllResult(cmd, result)
 	},

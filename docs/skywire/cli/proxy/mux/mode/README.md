@@ -37,8 +37,12 @@ Set the mux transport-selection mode for the visor.
              Unlike ECF it does not decline a slow leg once it is active.
 
 Affects every active and future mux'd route group on this visor
-IMMEDIATELY (the router re-applies the mode to live route groups). The
-setting persists to skywire-config.json so it survives restart.
+IMMEDIATELY (the router re-applies the mode to live route groups).
+
+Runtime-only: the mode is held in the router, never written to
+skywire-config.json, and is lost on restart. There is no skywire.conf
+field for it — re-apply after a restart, or pin the behavior through
+POLICYPERDIAL.
 
 Example:
   skywire cli proxy mux mode ecf        # predictive earliest-completion-first

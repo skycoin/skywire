@@ -4,9 +4,13 @@
 
 Updates the dmsg.sessions_count at runtime and in the config file.
 
-The live DMSG client's MinSessions is updated immediately, the config
-file is persisted (survives restart), and a connect-all is triggered
-to reach the new target right away.
+The live DMSG client's MinSessions is updated immediately,
+skywire-config.json is written (survives restart), and a connect-all
+is triggered to reach the new target right away.
+
+It does not survive a config regen: 'skywire autoconfig' rebuilds the
+json from /etc/skywire.conf. Set MINDMSGSESS there to make the value
+durable on an autoconfig-managed host.
 
 A value of 0 means "connect to all available servers and keep
 reconnecting to any that drop" — recommended for RSN / TPS visors.
@@ -20,7 +24,7 @@ skywire cli dmsg set-sessions
 ## Flags
 
 ```
-  -n, --count int    sessions_count to persist; 0 = connect to all available servers
+  -n, --count int    sessions_count to write to the config; 0 = connect to all available servers
       --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
       --json         print output in json
 ```
