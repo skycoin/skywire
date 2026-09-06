@@ -73,8 +73,15 @@ func TestDownload(t *testing.T) {
 			defer cancel()
 			httpC := newHTTPClient(t, dc)
 
+			// The in-process dmsg env races session setup when the runner is
+			// contended: attempts fail with "extra bytes received during session
+			// handshake" (dmsg error 203), "session shutdown" or a broken pipe, and
+			// a flat 5 x 100ms budget exhausts before the env settles. Back off
+			// instead, so the retry actually outlasts a slow start rather than
+			// hammering the same window.
 			var err error
-			for attempt := 0; attempt < 5; attempt++ {
+			backoff := 100 * time.Millisecond
+			for attempt := 0; attempt < 8; attempt++ {
 				if _, err = dsts[i].Seek(0, io.SeekStart); err != nil {
 					break
 				}
@@ -84,8 +91,11 @@ func TestDownload(t *testing.T) {
 				if err = Download(ctx, log, httpC, dsts[i], hsAddr, fileSize); err == nil {
 					break
 				}
-				log.WithError(err).Warnf("download attempt %d failed, retrying", attempt)
-				time.Sleep(100 * time.Millisecond)
+				log.WithError(err).Warnf("download attempt %d failed, retrying in %s", attempt, backoff)
+				time.Sleep(backoff)
+				if backoff < 2*time.Second {
+					backoff *= 2
+				}
 			}
 
 			errs[i] <- err
