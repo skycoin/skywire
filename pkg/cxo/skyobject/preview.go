@@ -48,11 +48,17 @@ func (p *Preview) Get(key cipher.SHA256) (val []byte, err error) {
 		return // alrady received
 	}
 
-	if val, err = p.Pack.Get(key); err != nil && err != data.ErrNotFound {
+	// A local hit is authoritative — return it. Without the err == nil arm this
+	// fell through to the remote getter on SUCCESS as well as on not-found,
+	// discarding the local value and paying a network round-trip for an object
+	// already held. The map check above returns on hit; this now matches it.
+	if val, err = p.Pack.Get(key); err == nil {
+		return // local hit
+	} else if err != data.ErrNotFound {
 		return // db failure
 	}
 
-	// not found
+	// not found locally — ask the peer
 
 	if val, err = p.g.Get(key); err == nil {
 		p.m[key] = val // save in the map
