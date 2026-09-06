@@ -40,7 +40,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/osnotify"
+	"github.com/0magnet/osnotify"
 )
 
 // osNotify enables host-OS desktop notifications (the --os-notify flag). On by

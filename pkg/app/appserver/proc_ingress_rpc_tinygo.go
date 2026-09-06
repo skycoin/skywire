@@ -6,8 +6,9 @@ package appserver
 import (
 	"encoding/gob"
 
+	rpc "github.com/0magnet/gobrpc"
+
 	"github.com/skycoin/skywire/pkg/app/appnet"
-	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/routing"
 )

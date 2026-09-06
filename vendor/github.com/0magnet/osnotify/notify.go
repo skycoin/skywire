@@ -2,7 +2,7 @@
 // notification center from a background (headless-capable) process.
 //
 // It is a small, dependency-free, cross-platform helper meant to be shared by
-// skywire apps that want to surface an event to a user at their desktop —
+// programs that want to surface an event to a user at their desktop —
 // skychat (a new message), and later vpn-client (a connection change), skydex
 // (an order filled), etc. Each app just calls:
 //
@@ -13,7 +13,7 @@
 //   - No new dependencies. Each platform shells out to a tool already present
 //     on that OS (macOS osascript, Linux notify-send, Windows PowerShell toast).
 //   - Graceful no-op. On a headless server / router / daemon with no desktop
-//     session — the common skywire deployment — there is nowhere to post a
+//     session — a headless server, for instance — there is nowhere to post a
 //     notification, so Notify returns ErrUnavailable and does nothing. Callers
 //     treat that as "couldn't notify", never an error worth surfacing.
 //   - Injection-safe. The Body/Title are frequently UNTRUSTED (a chat message
@@ -25,7 +25,9 @@ package osnotify
 
 import (
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"unicode"
@@ -39,7 +41,7 @@ var ErrUnavailable = errors.New("osnotify: no desktop notification backend avail
 
 // Notification is a single desktop notification.
 type Notification struct {
-	// Title is the bold heading. Empty is replaced with "Skywire".
+	// Title is the bold heading. Empty is replaced with DefaultAppName().
 	Title string
 	// Body is the message text. May be untrusted (e.g. a peer's chat message).
 	Body string
@@ -94,7 +96,7 @@ func Notify(n Notification) error {
 	n.Title = sanitize(n.Title)
 	n.Body = sanitize(n.Body)
 	if n.Title == "" {
-		n.Title = "Skywire"
+		n.Title = DefaultAppName()
 	}
 	return send(n)
 }
@@ -128,4 +130,17 @@ func sanitize(s string) string {
 		return string(r[:maxField]) + "…"
 	}
 	return out
+}
+
+// DefaultAppName is the label used when a Notification leaves AppName (or
+// Title) empty. It is the running program's own name, which is what a
+// notification center expects to display, so nothing has to be configured.
+func DefaultAppName() string {
+	if len(os.Args) == 0 {
+		return "notification"
+	}
+	if n := filepath.Base(os.Args[0]); n != "" && n != "." && n != string(filepath.Separator) {
+		return n
+	}
+	return "notification"
 }

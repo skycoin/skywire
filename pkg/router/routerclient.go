@@ -10,10 +10,10 @@ import (
 	"io"
 	"time"
 
+	rpc "github.com/0magnet/gobrpc"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
