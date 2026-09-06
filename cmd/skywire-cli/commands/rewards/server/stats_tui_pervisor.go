@@ -29,13 +29,34 @@
 //     (#4526), the trailing-peak verdict on whether the total looks
 //     settled or is refilling.
 //   - self-consistency: every transport contributes exactly two edges, so
-//     the per-key index must sum to twice the aggregate's total. When it
-//     does not, the two views were read from different states of the same
-//     index — which is the oscillation itself, caught in the act.
+//     the per-key index must sum to twice the aggregate's total.
 //
 // Any of the three failing replaces the histogram with a named absence
 // carrying the reason, the same convention tuiMissing uses for a fetch
 // that died.
+//
+// WHAT THE THIRD CHECK IS ALLOWED TO COMPARE. It first ran the per-key sum
+// against the aggregate carried on the CXO stats feed, and fired constantly
+// — 13,298 edges against 10,892 transports, 39% apart, with the per-key
+// index blamed for losing them. It was not. Both endpoints are reductions of
+// ONE cached slice in TPD, and read off one snapshot they agree to the byte:
+// paired fetches measured 17,982/8,991, 17,754/8,877 and 21,644/10,822,
+// exactly 2:1 every time, over dmsg and on the host alike. What differed was
+// WHEN. The feed's aggregate is deliberately biased late and high — the
+// publisher holds the last complete sample for up to five minutes rather
+// than republish one that looks like a refill — while the per-key body is
+// fetched live, and the network total moves 2.4x inside forty seconds
+// (measured again for skywire#4513). Comparing those two is comparing two
+// moments, and the difference between two moments is not evidence about
+// either.
+//
+// So the check now runs against the transport total of the snapshot the
+// per-key body was ITSELF reduced from, which TPD stamps on that same
+// response. That comparison has no time in it: one snapshot disagreeing
+// with itself is a real defect and nothing else. When the header is absent
+// the check does not run, because an unverifiable comparison is worth less
+// than none — the first two checks still stand, and a false accusation
+// against the index is the failure this panel was built to avoid.
 package clirewardsserver
 
 import (
@@ -86,6 +107,11 @@ type tpSampleVerdict struct {
 	// Known is false when neither source produced an aggregate to judge
 	// against — an unjudged sample is not a passing sample.
 	Known bool
+	// SnapshotTotal is the transport total of the snapshot the PER-KEY body
+	// was itself reduced from, as TPD stamps it on that response. Zero when
+	// the header is absent. This — not Total — is what the two-edges check
+	// runs against; see tpSampleGate.
+	SnapshotTotal int
 }
 
 // tpPerVisorBuckets is the bucketing. Small counts get their own column
@@ -101,11 +127,13 @@ var tpPerVisorBuckets = []tpPerVisorBucket{
 	{Label: "10+", Lo: 10, Hi: -1},
 }
 
-// tpEdgeSkewTolerance is how far the per-key index may sum from twice the
-// aggregate total before the two are treated as different samples. Not
-// zero: the aggregate and the index are separate reads and a transport
-// registered between them moves the sum legitimately. One percent is far
-// below the swing #4513 produces and far above ordinary churn.
+// tpEdgeSkewTolerance is how far the per-key sum may sit from twice its own
+// snapshot's total before the sample is refused. Against the SNAPSHOT total
+// the exact answer is zero — one slice counted two ways — so this is slack
+// for a TPD that stamps the header from a different code path than the one
+// that built the body, not for churn. Kept at one percent rather than
+// tightened to zero so the check reports a systematic loss and not a
+// rounding argument.
 const tpEdgeSkewTolerance = 0.01
 
 // gatherTransportsPerVisor builds the histogram from the per-visor
@@ -115,7 +143,7 @@ const tpEdgeSkewTolerance = 0.01
 func gatherTransportsPerVisor(tpdURL string, v tpSampleVerdict) tpPerVisorStats {
 	var s tpPerVisorStats
 
-	counts, err := fetchPerKeyTransportCounts(tpdURL)
+	counts, snapTotal, err := fetchPerKeyTransportCountsSnapshot(tpdURL)
 	if err != nil {
 		s.Err = err.Error()
 		return s
@@ -130,6 +158,7 @@ func gatherTransportsPerVisor(tpdURL string, v tpSampleVerdict) tpPerVisorStats 
 	}
 	s.Src = "source: HTTP over dmsg /all-transports/per-key-stats" +
 		" — no CXO feed carries the per-key index"
+	v.SnapshotTotal = snapTotal
 	s.Gated, s.GateWhy = tpSampleGate(s.Edges, v)
 	return s
 }
@@ -189,17 +218,17 @@ func tpSampleGate(edges int, v tpSampleVerdict) (bool, string) {
 			"the index is readable while it refills and a histogram of a refilling index draws "+
 			"visors holding fewer transports than they hold (skywire#4513)", conf)
 	}
-	if v.Total > 0 {
-		want := 2 * v.Total
+	if v.SnapshotTotal > 0 {
+		want := 2 * v.SnapshotTotal
 		skew := float64(edges-want) / float64(want)
 		if skew < 0 {
 			skew = -skew
 		}
 		if skew > tpEdgeSkewTolerance {
-			return true, fmt.Sprintf("the per-key index sums to %d edges against %d transports "+
-				"(%d edges expected, %.1f%% apart) — the two views were read from different "+
-				"states of the same index, which is the oscillation itself (skywire#4513)",
-				edges, v.Total, want, 100*skew)
+			return true, fmt.Sprintf("the per-key index sums to %d edges against the %d transports "+
+				"of the SAME snapshot (%d edges expected, %.1f%% apart) — one snapshot cannot "+
+				"disagree with itself, so the index is losing edges (skywire#4513)",
+				edges, v.SnapshotTotal, want, 100*skew)
 		}
 	}
 	return false, ""
