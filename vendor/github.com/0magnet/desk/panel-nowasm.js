@@ -32,6 +32,16 @@
 			root = doc.createElement('div');
 			root.id = 'skywire-skynet-root';
 			root.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:50';
+			// The root spans the viewport and is pointer-events:none so clicks fall
+			// through to the page wherever no window covers it. Anything mounted in
+			// it must opt back in or it renders and updates but cannot be clicked --
+			// the taskbar and menu set auto inline, windows had nothing, so every
+			// WinBox was inert. A rule rather than a per-instance assignment: it
+			// covers windows opened later and does not depend on the WinBox API
+			// exposing its root element.
+			var peStyle = doc.createElement('style');
+			peStyle.textContent = '#skywire-skynet-root .winbox{pointer-events:auto}';
+			root.appendChild(peStyle);
 			doc.body.appendChild(root);
 		}
 		var bar = doc.getElementById('skywire-skynet-taskbar');
