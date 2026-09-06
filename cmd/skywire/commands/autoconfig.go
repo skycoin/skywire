@@ -563,6 +563,18 @@ func generateConfig(r resolvedConfig, hvArg string) error {
 	// and gen writes to a cwd-relative path instead of the absolute
 	// /opt/skywire/skywire.json (PKGENV) or ~/skywire-config.json
 	// (USRENV) that autoconfig already stat-checks downstream.
+	// -x (retainhv): carry the EXISTING config's hypervisors and dmsgpty
+	// whitelist into the regenerated one. autoconfig runs on every update, and
+	// without this the regen replaces the hypervisor list with whatever -j
+	// carries — so an operator who attached a second hypervisor at runtime
+	// (cli visor hv add, which persists) silently loses it on the next release,
+	// and the pty whitelist with it. Observed live: a fleet update mid-rollout
+	// wiped freshly-added hypervisors from every visor that restarted, while
+	// the ones that had not yet updated kept theirs. -j still supplies the
+	// configured hypervisor; -x only ADDS the ones already on disk.
+	args = append(args, "-x")
+	printableArgs = append(printableArgs, "-x")
+
 	switch {
 	case r.usrEnv:
 		args = append(args, "-u")
