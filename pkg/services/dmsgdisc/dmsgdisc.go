@@ -293,7 +293,7 @@ func (s *service) runDMSG(
 	// gate. Needs the dmsg client; the API is the Sink (IngestEntryFromCXO).
 	// Best-effort — HTTP registration is unaffected if it fails to start.
 	if dmsgDC != nil {
-		agg, aerr := regcxo.New(dmsgDC, a, regcxo.Config{Logger: log, SecKey: sk})
+		agg, aerr := regcxo.New(dmsgDC, sk, a, regcxo.Config{Logger: log})
 		if aerr != nil {
 			log.WithError(aerr).Error("Failed to start registration-over-CXO aggregator, continuing without it")
 		} else {
