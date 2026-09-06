@@ -10,6 +10,7 @@ package treestore
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -64,6 +65,29 @@ func (c *churnSub) snapshot() (int, int, int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.present), c.events, c.roots
+}
+
+// diff compares the subscriber's live set against the publisher's expected one,
+// returning what the subscriber is missing and what it is holding that it should
+// not be. A convergence failure is otherwise just a count: this says WHICH paths
+// are wrong, which is what separates "the newest write has not landed yet" (tail
+// lag) from "an old delete was dropped" (the lost-delete hazard).
+func (c *churnSub) diff(want map[string]struct{}) (missing, extra []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for p := range want {
+		if _, ok := c.present[p]; !ok {
+			missing = append(missing, p)
+		}
+	}
+	for p := range c.present {
+		if _, ok := want[p]; !ok {
+			extra = append(extra, p)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(extra)
+	return missing, extra
 }
 
 // waitConverge blocks until the subscriber's present-set size equals want (or
@@ -189,6 +213,11 @@ func TestCXOChurn_Sustained(t *testing.T) {
 			const (
 				churnDur   = 4 * time.Second
 				liveTarget = 40
+				// convergeBudget is the lag figure this test reports. convergeGrace is
+				// the extra time allowed before calling a miss a dropped update rather
+				// than a slow runner — see the tail assertion below.
+				convergeBudget = 10 * time.Second
+				convergeGrace  = 20 * time.Second
 			)
 			for i := 0; i < liveTarget; i++ {
 				require.NoError(t, pub.Put(fmt.Sprintf("tp/%05d", i), []byte("seed")))
@@ -217,11 +246,45 @@ func TestCXOChurn_Sustained(t *testing.T) {
 			// after the flap stops.
 			require.NoError(t, pub.Flush())
 
-			tailLag, ok := cs.waitConverge(liveTarget, 10*time.Second)
+			// The live set after churn is the last liveTarget paths written:
+			// every iteration added one and deleted one, so [oldest, next) is
+			// exactly what the publisher should be holding.
+			wantLive := make(map[string]struct{}, liveTarget)
+			for i := oldest; i < next; i++ {
+				wantLive[fmt.Sprintf("tp/%05d", i)] = struct{}{}
+			}
+
+			tailLag, ok := cs.waitConverge(liveTarget, convergeBudget)
+			// Missing the budget is ambiguous on a loaded runner, and the two
+			// readings call for opposite responses: the subscriber may still be
+			// draining (CI noise), or an update may be gone for good (the
+			// lost-delete hazard this test exists to catch). Failing on the
+			// budget alone conflates them — it fails the build for slowness and
+			// reports a dropped update as "too slow". So keep watching, and let
+			// what happens next decide which it was.
+			var graceLag time.Duration
+			graceOK := false
+			if !ok {
+				graceLag, graceOK = cs.waitConverge(liveTarget, convergeGrace)
+			}
+
 			present, events, roots := cs.snapshot()
-			t.Logf("churn rate=%d/s: %d ops in %s; post-churn+flush converge=%v in %s; final present=%d (want %d) events=%d roots=%d",
-				mutPerSec, ops, churnDur, ok, tailLag.Round(time.Millisecond), present, liveTarget, events, roots)
-			require.True(t, ok, "subscriber must converge to the final live set after churn stops (rate=%d/s)", mutPerSec)
+			t.Logf("churn rate=%d/s: %d ops in %s (%.0f/s achieved of %d/s asked); post-churn+flush converge=%v in %s; final present=%d (want %d) events=%d roots=%d",
+				mutPerSec, ops, churnDur, float64(ops)/churnDur.Seconds(), 2*mutPerSec,
+				ok, tailLag.Round(time.Millisecond), present, liveTarget, events, roots)
+
+			if !ok && graceOK {
+				// Slow, not inconsistent. Worth seeing in the log, not worth
+				// failing a build over — this test's header says it is not a
+				// timing gate.
+				t.Logf("rate=%d/s: converged only after %s of extra grace (%.0f/s achieved); treating as a slow runner, not an inconsistency",
+					mutPerSec, graceLag.Round(time.Millisecond), float64(ops)/churnDur.Seconds())
+			}
+			if !ok && !graceOK {
+				missing, extra := cs.diff(wantLive)
+				t.Fatalf("rate=%d/s: subscriber never reached the publisher's final live set, even after %s + %s of grace — this is a DROPPED UPDATE, not slowness.\n  present=%d want=%d events=%d roots=%d\n  missing (publisher has, subscriber lacks): %v\n  extra (subscriber has, publisher deleted): %v",
+					mutPerSec, convergeBudget, convergeGrace, present, liveTarget, events, roots, missing, extra)
+			}
 			require.Equal(t, liveTarget, present, "no stale/lost entries after convergence (rate=%d/s)", mutPerSec)
 		})
 	}

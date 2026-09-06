@@ -87,10 +87,25 @@ type Client struct {
 	listener  net.Listener
 	once      sync.Once
 	closeC    chan struct{}
-	// keepAliveDone is closed when sessionKeepAliveLoop returns, so a test can
-	// join the loop (it reads the package-level probe tunables) before
-	// restoring them.
+	// keepAliveDone is closed when sessionKeepAliveLoop returns, so a caller can
+	// join the loop before tearing down what it depends on.
 	keepAliveDone chan struct{}
+
+	// probeInterval and hardDeadWindow are this client's copies of the
+	// package-level liveness tunables (see livenessProbeInterval and
+	// sessionHardDeadWindow), snapshotted by NewClient BEFORE the keepalive
+	// goroutine starts and never written afterwards. The loop reads only these.
+	//
+	// They are per-client rather than global because the loop outlives the call
+	// that created it: NewClient spawns the goroutine, and a caller that closes
+	// the client without joining keepAliveDone leaves it running a while longer.
+	// In tests that meant one test's leaked loop was still reading the globals
+	// while the next test's harness shrank them — a genuine data race, and one
+	// that care inside any single test could not fix, because the racing ends
+	// belong to different tests. Copying per client removes the sharing rather
+	// than synchronizing it.
+	probeInterval  time.Duration
+	hardDeadWindow time.Duration
 
 	// streams tracks the currently open tunneled streams so the status page can
 	// expand the "N open stream(s)" count into per-stream rows (id + CONNECT
@@ -254,6 +269,10 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 		// SetTunnelTarget so a re-dial can refill even after a short initial dial.
 		target: 1,
 		rs:     defaultRangeSplitConfig(),
+		// Snapshotted before the keepalive goroutine below starts, so the loop
+		// never reads the package-level vars.
+		probeInterval:  livenessProbeInterval,
+		hardDeadWindow: sessionHardDeadWindow,
 	}
 
 	session, stamp, err := newYamuxSession(conn)
@@ -715,8 +734,10 @@ func (c *Client) ListenAndServe(addr string) error {
 // seen for sessionHardDeadWindow, which tolerates a merely-slow or
 // transiently reorder-wedged route (a false close costs a reconnect cycle).
 //
-// livenessProbeInterval is how often the keepalive loop probes each tunnel. A
-// var so tests can drive the loop fast.
+// livenessProbeInterval is the DEFAULT for how often the keepalive loop probes
+// each tunnel. NewClient snapshots it into Client.probeInterval; the loop reads
+// only that field. A var so tests can set it before constructing a client to
+// drive that client's loop fast.
 var livenessProbeInterval = 15 * time.Second
 
 // sessionHardDeadWindow is how long a tunnel may go WITHOUT any pong before the
@@ -734,7 +755,9 @@ var livenessProbeInterval = 15 * time.Second
 // been seen for this window, which distinguishes a wedged-but-live tunnel
 // (pongs arrive late, or the download's own bytes keep arriving while the pong
 // sits behind them) from a genuinely silent/black-holed one (never sends
-// again). A var so tests can shrink it. Kept comfortably above the worst
+// again). This is the DEFAULT: NewClient snapshots it into
+// Client.hardDeadWindow and the loop reads only that field. A var so tests can
+// shrink it before constructing a client. Kept comfortably above the worst
 // realistic wedge duration.
 var sessionHardDeadWindow = 45 * time.Second
 
@@ -758,7 +781,7 @@ var sessionHardDeadWindow = 45 * time.Second
 // re-dials a fresh DISJOINT replacement via maybeRedial (docs/mux_aggregation_rfc.md
 // steps 3-4).
 func (c *Client) sessionKeepAliveLoop() {
-	ticker := time.NewTicker(livenessProbeInterval)
+	ticker := time.NewTicker(c.probeInterval)
 	defer ticker.Stop()
 
 	type probeResult struct {
@@ -820,7 +843,7 @@ func (c *Client) sessionKeepAliveLoop() {
 				if rt := c.lastRecvTime(s); rt.After(lastAlive) {
 					lastAlive = rt
 				}
-				if now.Sub(lastAlive) >= sessionHardDeadWindow {
+				if now.Sub(lastAlive) >= c.hardDeadWindow {
 					if c.appCl != nil {
 						c.appCl.Log().Warnf("No pong and no traffic either way for %v (> hard-dead window); tunnel gone, retiring it", now.Sub(lastAlive).Truncate(time.Second))
 					}
