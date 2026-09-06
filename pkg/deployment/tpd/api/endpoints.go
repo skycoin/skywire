@@ -397,7 +397,8 @@ func (api *API) getAllTransportsStats(w http.ResponseWriter, r *http.Request) {
 	// the store via GetTransportSummary — a single index+MGET pass that
 	// never materializes []*transport.Entry.
 	var summary *store.TransportSummary
-	if entries := api.getTransportsFromCache(selfTransports); entries != nil {
+	if entries, at := api.transportsSnapshot(selfTransports); entries != nil {
+		setSnapshotHeaders(w, at, len(entries))
 		summary = &store.TransportSummary{ByType: make(map[string]int)}
 		uniqueVisors := make(map[cipher.PubKey]struct{})
 		for _, entry := range entries {
@@ -432,7 +433,7 @@ func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Reque
 		selfTransports = false
 	}
 
-	entries := api.getTransportsFromCache(selfTransports)
+	entries, at := api.transportsSnapshot(selfTransports)
 	if entries == nil {
 		var err error
 		entries, err = api.store.GetAllTransports(r.Context(), selfTransports)
@@ -445,6 +446,10 @@ func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Reque
 		api.writeError(w, r, store.ErrTransportNotFound)
 		return
 	}
+	// Same snapshot as /all-transports/stats when both are served warm, which
+	// is what makes "the per-key sum is twice the aggregate total" a checkable
+	// invariant rather than a race. See transportsSnapshot.
+	setSnapshotHeaders(w, at, len(entries))
 
 	// Build per-key statistics: map[pkHex]map[typeOrTotal]count
 	// Format: {"pk1": {"total": 15, "stcpr": 1, "sudph": 14}, ...}

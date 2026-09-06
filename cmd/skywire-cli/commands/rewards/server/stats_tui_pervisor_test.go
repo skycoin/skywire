@@ -19,7 +19,8 @@ func evenCounts(visors, n int) map[string]int {
 
 // vouched returns a verdict that passes every gate for the given index.
 func vouched(edges int) tpSampleVerdict {
-	return tpSampleVerdict{Total: edges / 2, Complete: true, Confidence: "settled", Known: true}
+	return tpSampleVerdict{Total: edges / 2, SnapshotTotal: edges / 2,
+		Complete: true, Confidence: "settled", Known: true}
 }
 
 // The bars are visors per bucket. Getting this wrong — counting transports
@@ -92,17 +93,18 @@ func TestPerVisorPanelWithholdsARefillingSample(t *testing.T) {
 	}
 }
 
-// Self-consistency: every transport contributes exactly two edges. When
-// the per-key index and the aggregate disagree, the two were read from
-// different states of the same index — the oscillation, caught in the act.
-func TestPerVisorPanelWithholdsWhenEdgesDisagreeWithTheAggregate(t *testing.T) {
+// Self-consistency: every transport contributes exactly two edges, so a
+// per-key body must sum to twice the total of the snapshot it was reduced
+// from. Disagreeing with its OWN snapshot means edges are genuinely lost.
+func TestPerVisorPanelWithholdsWhenEdgesDisagreeWithTheirOwnSnapshot(t *testing.T) {
 	s := bucketTransportCounts(evenCounts(1000, 4)) // 4,000 edges
-	// The aggregate claims 3,000 transports = 6,000 edges. A third apart.
+	// The snapshot that produced this body held 3,000 transports = 6,000
+	// edges. A third of them are missing from the body itself.
 	s.Gated, s.GateWhy = tpSampleGate(s.Edges, tpSampleVerdict{
-		Total: 3000, Complete: true, Confidence: "settled", Known: true,
+		Total: 3000, SnapshotTotal: 3000, Complete: true, Confidence: "settled", Known: true,
 	})
 	if !s.Gated {
-		t.Fatal("an index disagreeing with the aggregate by a third was drawn as data")
+		t.Fatal("a body disagreeing with its own snapshot by a third was drawn as data")
 	}
 	if !strings.Contains(s.GateWhy, "#4513") {
 		t.Error("the skew reason does not cite the oscillation issue")
@@ -113,6 +115,40 @@ func TestPerVisorPanelWithholdsWhenEdgesDisagreeWithTheAggregate(t *testing.T) {
 	s2.Gated, s2.GateWhy = tpSampleGate(s2.Edges, vouched(s2.Edges))
 	if s2.Gated {
 		t.Fatalf("a self-consistent sample was refused: %s", s2.GateWhy)
+	}
+}
+
+// The regression this check was rewritten for. TPD's network total moves by
+// tens of percent in under a minute, and the feed's aggregate is
+// deliberately held at the trailing peak for up to five minutes, so the
+// per-key body and that aggregate routinely describe different moments.
+// Paired live fetches were exactly 2:1 every time (17,982/8,991,
+// 17,754/8,877, 21,644/10,822) while the total itself swung 8,089–10,825
+// across four minutes — so a body that agrees with its own snapshot must
+// draw, however far the feed's number has since moved.
+func TestPerVisorPanelDrawsWhenOnlyTheFeedsAggregateHasMovedOn(t *testing.T) {
+	s := bucketTransportCounts(evenCounts(1000, 4)) // 4,000 edges
+	gated, why := tpSampleGate(s.Edges, tpSampleVerdict{
+		// The body's own snapshot held 2,000 transports and accounts for
+		// every one of its edges. The feed, held at an older peak, says
+		// 3,000 — 33% away, the shape of the false accusation.
+		Total: 3000, SnapshotTotal: 2000,
+		Complete: true, Confidence: "settled", Known: true,
+	})
+	if gated {
+		t.Fatalf("a self-consistent body was refused because the feed had moved on: %s", why)
+	}
+}
+
+// An unstamped response cannot be checked for self-consistency, and a
+// comparison against some other moment is worth less than none: it produces
+// a confident accusation against an index that is not at fault.
+func TestPerVisorPanelDoesNotAccuseAnUnstampedBody(t *testing.T) {
+	gated, why := tpSampleGate(4000, tpSampleVerdict{
+		Total: 3000, SnapshotTotal: 0, Complete: true, Confidence: "settled", Known: true,
+	})
+	if gated {
+		t.Fatalf("an unstamped body was refused on a cross-moment comparison: %s", why)
 	}
 }
 
@@ -168,8 +204,11 @@ func TestPerVisorPanelNamesFailures(t *testing.T) {
 func TestGateReasonsAreWrappedToThePanel(t *testing.T) {
 	s := bucketTransportCounts(evenCounts(10, 1))
 	s.Gated, s.GateWhy = tpSampleGate(s.Edges, tpSampleVerdict{
-		Total: 500, Complete: true, Confidence: "settled", Known: true,
+		Total: 500, SnapshotTotal: 500, Complete: true, Confidence: "settled", Known: true,
 	})
+	if !s.Gated {
+		t.Fatal("the longest gate reason was not produced, so nothing was wrapped")
+	}
 	for _, line := range strings.Split(renderTPPerVisorPanelANSI(s), "\n") {
 		// Columns, not bytes: the rules are box-drawing runes.
 		plain := []rune(stripANSI(line))

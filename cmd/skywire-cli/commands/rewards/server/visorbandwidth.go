@@ -10,10 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/deployment"
+	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
 	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 )
 
@@ -294,29 +296,50 @@ func fillVisorBandwidthFromMetrics(out *visorBandwidthData, metrics []tpdstore.T
 
 // fetchPerKeyTransportCounts reads the cheap per-visor transport index.
 func fetchPerKeyTransportCounts(tpdURL string) (map[string]int, error) {
+	counts, _, err := fetchPerKeyTransportCountsSnapshot(tpdURL)
+	return counts, err
+}
+
+// fetchPerKeyTransportCountsSnapshot additionally returns the transport total
+// of the SNAPSHOT this body was reduced from, as TPD stamps it on the
+// response, or zero when the header is absent (an older TPD, or a body counted
+// straight out of the store on a cold cache).
+//
+// That total is the only aggregate the per-key sum can honestly be checked
+// against. TPD's network total moves fast — skycoin/skywire#4513, measured
+// again at 2.4x inside forty seconds — so the aggregate from any OTHER moment
+// disagrees with this body by whatever the network did in between, which is a
+// statement about the two fetch times and not about the index.
+func fetchPerKeyTransportCountsSnapshot(tpdURL string) (map[string]int, int, error) {
 	resp, err := statsHTTPGet(tpdURL + "/all-transports/per-key-stats")
 	if err != nil {
-		return nil, fmt.Errorf("TPD per-key request failed: %w", err)
+		return nil, 0, fmt.Errorf("TPD per-key request failed: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("TPD returned status %d for per-key stats", resp.StatusCode)
+		return nil, 0, fmt.Errorf("TPD returned status %d for per-key stats", resp.StatusCode)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read TPD per-key stats: %w", err)
+		return nil, 0, fmt.Errorf("failed to read TPD per-key stats: %w", err)
 	}
 	// An OBJECT keyed by public key, not an array — each value is that visor's
 	// transport counts, with "total" alongside the per-type entries.
 	var raw map[string]map[string]int
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("failed to parse TPD per-key stats: %w", err)
+		return nil, 0, fmt.Errorf("failed to parse TPD per-key stats: %w", err)
 	}
 	counts := make(map[string]int, len(raw))
 	for pk, byType := range raw {
 		counts[pk] = byType["total"]
 	}
-	return counts, nil
+	// An absent or unparseable stamp is zero, which the gate reads as "this
+	// body cannot be checked against itself" — the same as an older TPD.
+	snapTotal, sErr := strconv.Atoi(resp.Header.Get(tpdapi.SnapshotTransportsHeader))
+	if sErr != nil {
+		snapTotal = 0
+	}
+	return counts, snapTotal, nil
 }
 
 // fillVisorBandwidth asks TPD for the daily series of the selected visors in
