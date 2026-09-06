@@ -59,6 +59,18 @@ type Config struct {
 	Logger            *logging.Logger
 	InMemoryDB        bool
 	DataDir           string
+
+	// SecKey binds the aggregator's CXO node identity to dmsg-discovery's
+	// service key, so its handshake PK is the PK gated visors allowlist.
+	//
+	// A zero SecKey makes node.NewNode mint a RANDOM keypair, and every
+	// gated visor then refuses the subscribe: the visor allowlists the
+	// configured dmsg-discovery PK and sees an unknown one. That is not
+	// hypothetical — it is why no visor was registering over CXO (#4569),
+	// observed live as denied PK 0341b5a7... against allowed 022e607e...
+	// The identical fix was already applied to the TPD aggregator; see
+	// cxoaggregator.Config.SecKey.
+	SecKey cipher.SecKey
 }
 
 // orphanGraceTicks is how many consecutive cleanup ticks a feed must
@@ -108,6 +120,11 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	}
 
 	cfg := node.NewConfig()
+	// Bind the node identity to dmsg-discovery's service key — see
+	// Config.SecKey for why a zero key silently breaks every subscribe.
+	if conf.SecKey != (cipher.SecKey{}) {
+		cfg.SecKey = skycipher.SecKey(conf.SecKey)
+	}
 	cfg.MaxFillingTime = conf.MaxFillingTime
 	cfg.Config = skyobject.NewConfig()
 	cfg.Config.InMemoryDB = conf.InMemoryDB || conf.DataDir == ""
