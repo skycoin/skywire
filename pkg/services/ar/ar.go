@@ -209,7 +209,7 @@ func (s *service) Run(ctx context.Context) error {
 	// service SecKey so gated visors accept its subscribe (see #4168).
 	// Best-effort — HTTP/UDP registration is unaffected if it fails to start.
 	if h.DmsgClient != nil {
-		agg, aerr := regcxo.New(h.DmsgClient, arAPI, regcxo.Config{SecKey: sk, Logger: logger})
+		agg, aerr := regcxo.New(h.DmsgClient, sk, arAPI, regcxo.Config{Logger: logger})
 		if aerr != nil {
 			logger.WithError(aerr).Error("Failed to start AR-bind-over-CXO aggregator, continuing without it")
 		} else {
