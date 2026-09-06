@@ -12,7 +12,11 @@ import (
 )
 
 // AddHypervisor adds a remote hypervisor PK and connects to it at runtime.
-// The connection is not persisted — use SKYENV HYPERVISORPKS for persistence.
+// The PK is written to the config's hypervisors list (see persistHypervisors),
+// so the connection survives a restart — but skywire-config.json is a derived
+// artifact: the next `skywire autoconfig` run rebuilds it from
+// /etc/skywire.conf and drops a PK that is only in the json. Set HYPERVISORPKS
+// in skywire.conf for a hypervisor that must survive a package update.
 func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 	if v.dmsgC == nil {
 		return fmt.Errorf("DMSG client not running")
