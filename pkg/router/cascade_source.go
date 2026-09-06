@@ -26,9 +26,9 @@ import (
 	"fmt"
 	"strings"
 
+	rpc "github.com/0magnet/gobrpc"
 	"github.com/sirupsen/logrus"
 
-	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 

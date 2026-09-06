@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/bitree"
+	"github.com/0magnet/bitree"
 )
 
 // TestRouteTreeTwoLevel: with MORE THAN ONE stream the tree exposes both

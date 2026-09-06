@@ -1,4 +1,3 @@
-// Package physics pkg/visnetwork/physics/engine.go c4-app-rewards
 package physics
 
 import (

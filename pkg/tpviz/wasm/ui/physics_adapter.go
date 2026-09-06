@@ -4,7 +4,7 @@
 package ui
 
 import (
-	"github.com/skycoin/skywire/pkg/visnetwork/physics"
+	"github.com/0magnet/visnetwork-go/physics"
 )
 
 // PhysicsAdapter bridges the tpviz graph with the vis-network physics engine

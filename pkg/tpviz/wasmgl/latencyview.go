@@ -24,7 +24,7 @@ import (
 	"math"
 	"syscall/js"
 
-	"github.com/skycoin/skywire/pkg/tpviz/latency"
+	latency "github.com/0magnet/spheregraph"
 )
 
 // latencyState is the computed view, kept so a camera rotation can

@@ -31,6 +31,9 @@ github.com/0magnet/bbolt
 github.com/0magnet/bbolt/errors
 github.com/0magnet/bbolt/internal/common
 github.com/0magnet/bbolt/internal/freelist
+# github.com/0magnet/bitree v0.0.0-20260906024001-ee60eac20a9d
+## explicit; go 1.25.0
+github.com/0magnet/bitree
 # github.com/0magnet/bottle v0.0.0-20260905154223-835049919520
 ## explicit; go 1.24
 github.com/0magnet/bottle
@@ -56,6 +59,10 @@ github.com/0magnet/desk/panes/files
 github.com/0magnet/go-dsp/dsputils
 github.com/0magnet/go-dsp/fft
 github.com/0magnet/go-dsp/window
+# github.com/0magnet/gobrpc v0.0.0-20260906024008-cd93b2d1ef48
+## explicit; go 1.25.0
+github.com/0magnet/gobrpc
+github.com/0magnet/gobrpc/gobimpl
 # github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
 ## explicit; go 1.15
 github.com/0magnet/golang-ipc
@@ -81,6 +88,9 @@ github.com/0magnet/metrics
 # github.com/0magnet/netscrape v0.0.0-20260905162442-12f1adb8e1ec
 ## explicit; go 1.24
 github.com/0magnet/netscrape
+# github.com/0magnet/osnotify v0.0.0-20260906024004-bc6cf49aaa38
+## explicit; go 1.25.0
+github.com/0magnet/osnotify
 # github.com/0magnet/plot-go v0.0.0-20260905162445-5d8713570108
 ## explicit; go 1.25
 github.com/0magnet/plot-go
@@ -100,6 +110,9 @@ github.com/0magnet/sh/v3/internal
 github.com/0magnet/sh/v3/interp
 github.com/0magnet/sh/v3/pattern
 github.com/0magnet/sh/v3/syntax
+# github.com/0magnet/spheregraph v0.0.0-20260906024012-5fe6464ab82e
+## explicit; go 1.25.0
+github.com/0magnet/spheregraph
 # github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26
 ## explicit; go 1.22
 github.com/0magnet/sysinfo
@@ -113,6 +126,9 @@ github.com/0magnet/termanim/matrix/backdrop/cobrarain
 # github.com/0magnet/u-root v0.16.1-0.20260814161052-156e0b67262b
 ## explicit; go 1.25.7
 github.com/0magnet/u-root/pkg/ls
+# github.com/0magnet/visnetwork-go v0.0.0-20260906024016-e9b9615f6f97
+## explicit; go 1.25.0
+github.com/0magnet/visnetwork-go/physics
 # github.com/0magnet/websh v0.0.0-20260905000412-75d7fd084e60
 ## explicit; go 1.25.7
 github.com/0magnet/websh/shell

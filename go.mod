@@ -62,21 +62,26 @@ require (
 	github.com/0magnet/ansifilter-go v0.0.0-20260905162419-b1d8cfff2baf
 	github.com/0magnet/audioprism-go v0.0.0-20260905171937-900f18a2f23d
 	github.com/0magnet/bbolt v1.5.1-0.20260901223329-c4feec896898
+	github.com/0magnet/bitree v0.0.0-20260906024001-ee60eac20a9d
 	github.com/0magnet/bottle v0.0.0-20260905154223-835049919520
 	github.com/0magnet/calvin v0.0.0-20260905171945-6d046e156c9b
 	github.com/0magnet/desk v0.0.0-20260905010738-0c9209d8b7b7
 	github.com/0magnet/desk/panes v0.0.0-20260905010738-0c9209d8b7b7
+	github.com/0magnet/gobrpc v0.0.0-20260906024008-cd93b2d1ef48
 	github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586
 	github.com/0magnet/got v0.0.0-20260905231830-8b4c51f6f6f8
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260901202627-53911da3ad77
 	github.com/0magnet/lolcat-go v0.0.0-20260905001114-f97d678ce219
 	github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
 	github.com/0magnet/netscrape v0.0.0-20260905162442-12f1adb8e1ec
+	github.com/0magnet/osnotify v0.0.0-20260906024004-bc6cf49aaa38
 	github.com/0magnet/plot-go v0.0.0-20260905162445-5d8713570108
 	github.com/0magnet/realorigin v0.2.1
 	github.com/0magnet/router7 v0.0.0-20260905235418-912c8472bae0
+	github.com/0magnet/spheregraph v0.0.0-20260906024012-5fe6464ab82e
 	github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26
 	github.com/0magnet/termanim v0.0.0-20260905010830-f8788bcdc347
+	github.com/0magnet/visnetwork-go v0.0.0-20260906024016-e9b9615f6f97
 	github.com/0magnet/winbox-go v0.0.0-20260905000411-6eefa77dea85
 	github.com/0magnet/yamux v0.1.3-0.20260901201804-38cdbd63617a
 	github.com/DATA-DOG/go-sqlmock v1.5.2
