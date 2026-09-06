@@ -363,8 +363,15 @@ func (c *Core) reconcile() {
 				Debug(c.tag + ": Subscribe failed; will retry next reconcile")
 			continue
 		}
+		// Info, not Debug: this is the state change that answers "is
+		// registration-over-CXO actually working for this service", it fires once
+		// per visor feed (alreadySubscribed guards the retry), and the services
+		// that run it are NOT started with --loglvl debug. At Debug the answer was
+		// unobtainable in production -- AR carried 464 live CXO connections while
+		// its log showed no aggregator activity at all, which reads identically to
+		// the feature being switched off.
 		c.log.WithField("visor", cipher.PubKey(peerPK)).
-			Debug(c.tag + ": subscribed to visor feed")
+			Info(c.tag + ": subscribed to visor feed")
 	}
 }
 
