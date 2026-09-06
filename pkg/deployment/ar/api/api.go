@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -86,6 +87,44 @@ type API struct {
 	// owns its own DHT target.
 	dhtMirrorStcpr dhtMirror
 	dhtMirrorSudph dhtMirror
+
+	// bindPub is the CXO bindings publisher, installed after the dmsg client
+	// exists (see pkg/services/ar). Held atomically because the store writes
+	// that notify it run on HTTP, UDP and CXO-ingest goroutines while the
+	// service is already serving.
+	bindPub atomic.Pointer[BindingsCXOPublisher]
+}
+
+// SetBindingsCXOPublisher installs (or clears, with nil) the publisher that
+// mirrors this AR's bindings onto its CXO feed. Safe to call while serving.
+func (a *API) SetBindingsCXOPublisher(p *BindingsCXOPublisher) {
+	a.bindPub.Store(p)
+}
+
+// bindNotifyStore decorates the address store so that every successful write
+// marks the affected (peer, transport type) dirty for the CXO bindings feed.
+// A decorator rather than a call at each Bind / DelBind site: the eight sites
+// are spread across the HTTP handlers, the SUDPH UDP loop and the CXO bind
+// ingest, and a future ninth would silently miss the feed.
+type bindNotifyStore struct {
+	store.Store
+	api *API
+}
+
+func (s *bindNotifyStore) Bind(ctx context.Context, netType types.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
+	err := s.Store.Bind(ctx, netType, pk, visorData)
+	if err == nil {
+		s.api.bindPub.Load().MarkDirty(netType, pk)
+	}
+	return err
+}
+
+func (s *bindNotifyStore) DelBind(ctx context.Context, netType types.Type, pk cipher.PubKey) error {
+	err := s.Store.DelBind(ctx, netType, pk)
+	if err == nil {
+		s.api.bindPub.Load().MarkDirty(netType, pk)
+	}
+	return err
 }
 
 // dhtMirror is the subset of dht.RedisMirror used by AR. Anything that
@@ -203,7 +242,6 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	enableMetrics bool, m armetrics.Metrics, dmsgAddr, publicUDPAddr string) *API {
 	api := &API{
 		log:                         log,
-		store:                       s,
 		metrics:                     m,
 		reqsInFlightCountMiddleware: metricsutil.NewRequestsInFlightCountMiddleware(),
 		udpConns:                    make(map[cipher.PubKey]net.Conn),
@@ -213,6 +251,12 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 		DmsgServers:                 []string{},
 		publicUDPAddr:               publicUDPAddr,
 	}
+	// Every store write goes through the notifier so the CXO bindings feed
+	// (pkg/deployment/ar/api/cxo_publisher.go) learns about it from ONE place
+	// rather than from each of the eight Bind / DelBind call sites — the HTTP
+	// handlers, the SUDPH UDP loop and the CXO bind ingest. The notifier is
+	// inert until SetBindingsCXOPublisher installs a publisher.
+	api.store = &bindNotifyStore{Store: s, api: api}
 
 	r := chi.NewRouter()
 
