@@ -430,7 +430,18 @@ func (h *Host) authorize(log logrus.FieldLogger, rPK cipher.PubKey) bool {
 }
 
 // log returns the logrus.FieldLogger that should be used for all log outputs.
+//
+// The direct-TCP host (`cli pty host`, and the sshd command backing it) is
+// constructed as NewHost(nil, wl): it serves the dmsgpty protocol over a
+// plain TCP listener and never joins the overlay, so there is no dmsg client
+// to borrow a logger from. Every other dmsgC read on that path already guards
+// for nil; this one did not, and handlePty's teardown goroutine is the first
+// caller once a connection closes — so the host panicked after serving
+// exactly one session.
 func (h *Host) log() logrus.FieldLogger {
+	if h == nil || h.dmsgC == nil {
+		return logging.MustGetLogger("dmsgpty_host")
+	}
 	return h.dmsgC.Logger().WithField("dmsgpty", "host")
 }
 
