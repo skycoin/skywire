@@ -134,19 +134,25 @@ func (c *Cat) sleep(d time.Duration) {
 // The offset restarts from Opts.OS, so calling Cat twice paints both streams
 // with the same colors — that is what lolcat does with several file
 // arguments.
-func (c *Cat) Cat(r io.Reader) error {
+func (c *Cat) Cat(r io.Reader) (err error) {
 	w := bufio.NewWriter(c.Out)
 	c.os = c.Opts.OS
 	c.haveOldOS = false
 
 	if c.Opts.Animate {
-		w.WriteString("\x1b[?25l") // hide the cursor
+		w.WriteString("\x1b[?25l") //nolint:errcheck,gosec // hide the cursor
 	}
+	// bufio.Writer keeps the first write error and hands it back at Flush, so
+	// the writes through this file go unchecked on purpose: this is where they
+	// are accounted for. A failed flush means output was lost, so it becomes
+	// the returned error unless one is already on its way out.
 	defer func() {
 		if c.TTY {
-			w.WriteString("\x1b[m\x1b[?25h\x1b[?1;5;2004l")
+			w.WriteString("\x1b[m\x1b[?25h\x1b[?1;5;2004l") //nolint:errcheck,gosec
 		}
-		w.Flush()
+		if ferr := w.Flush(); ferr != nil && err == nil {
+			err = ferr
+		}
 	}()
 
 	chunk := make([]byte, 4096)
@@ -208,7 +214,7 @@ func lines(s string) []string {
 func (c *Cat) Println(line string) {
 	w := bufio.NewWriter(c.Out)
 	c.println(w, line)
-	w.Flush()
+	w.Flush() //nolint:errcheck,gosec
 }
 
 func (c *Cat) println(w *bufio.Writer, str string) {
@@ -224,9 +230,9 @@ func (c *Cat) println(w *bufio.Writer, str string) {
 		c.printlnPlain(w, str, chomped)
 	}
 	if chomped {
-		w.WriteByte('\n')
+		w.WriteByte('\n') //nolint:errcheck,gosec
 	}
-	w.Flush()
+	w.Flush() //nolint:errcheck,gosec
 }
 
 func (c *Cat) printlnPlain(w *bufio.Writer, str string, chomped bool) {
@@ -235,13 +241,13 @@ func (c *Cat) printlnPlain(w *bufio.Writer, str string, chomped bool) {
 
 	for i, ec := range chars {
 		r, g, b := Rainbow(c.Opts.Freq, c.os+float64(i)/c.Opts.Spread)
-		w.WriteString(ec.esc)
-		w.WriteString(ColorSeq(r, g, b, mode, c.Opts.Invert))
-		w.WriteString(ec.ch)
+		w.WriteString(ec.esc)                                 //nolint:errcheck,gosec
+		w.WriteString(ColorSeq(r, g, b, mode, c.Opts.Invert)) //nolint:errcheck,gosec
+		w.WriteString(ec.ch)                                  //nolint:errcheck,gosec
 		if c.Opts.Invert {
-			w.WriteString("\x1b[49m")
+			w.WriteString("\x1b[49m") //nolint:errcheck,gosec
 		} else {
-			w.WriteString("\x1b[39m")
+			w.WriteString("\x1b[39m") //nolint:errcheck,gosec
 		}
 	}
 
@@ -263,14 +269,14 @@ func (c *Cat) printlnAni(w *bufio.Writer, str string, chomped bool) {
 	if str == "" {
 		return
 	}
-	w.WriteString("\x1b7") // save the cursor, then redraw over the line
+	w.WriteString("\x1b7") //nolint:errcheck,gosec // save the cursor, then redraw over the line
 	realOS := c.os
 	for i := 1; i <= c.Opts.Duration; i++ {
-		w.WriteString("\x1b8")
+		w.WriteString("\x1b8") //nolint:errcheck,gosec
 		c.os += c.Opts.Spread
 		c.printlnPlain(w, str, chomped)
 		str = eraseSeq.ReplaceAllString(str, "")
-		w.Flush()
+		w.Flush() //nolint:errcheck,gosec
 		c.sleep(time.Duration(float64(time.Second) / c.Opts.Speed))
 	}
 	c.os = realOS
@@ -283,6 +289,6 @@ func String(s string, opts Options) string {
 	var b strings.Builder
 	c := &Cat{Opts: opts, Out: &b}
 	c.SetMode("")
-	_ = c.Cat(strings.NewReader(s))
+	_ = c.Cat(strings.NewReader(s)) //nolint:errcheck
 	return b.String()
 }

@@ -191,7 +191,7 @@ func (h *htmlGenerator) printDynamicStyleFile(outPath string) error {
 		s += dynStyleBody(sInfo, "color", true)
 		s += "}\n"
 	}
-	return os.WriteFile(outPath, []byte(s), 0o644)
+	return os.WriteFile(outPath, []byte(s), 0o644) //nolint:gosec
 }
 
 // dynStyleBody renders one derived stylesheet rule body.
