@@ -143,5 +143,5 @@ func (s *svgGenerator) printDynamicStyleFile(outPath string) error {
 		out += dynStyleBody(sInfo, "fill", false)
 		out += "}\n"
 	}
-	return os.WriteFile(outPath, []byte(out), 0o644)
+	return os.WriteFile(outPath, []byte(out), 0o644) //nolint:gosec
 }

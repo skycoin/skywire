@@ -79,8 +79,10 @@ func (s *Shell) execExternal(ctx context.Context, args []string) (int, bool) {
 	// JS-created pipe fds (they aren't in its fd table), so read jsfs directly.
 	fsjs.Call("pipeRelease", wo)
 	fsjs.Call("pipeRelease", we)
-	hc.Stdout.Write(readPipe(fsjs, ro))
-	hc.Stderr.Write(readPipe(fsjs, re))
+	// Ignoring these two: they are the shell's own stdio, so if it cannot
+	// accept output there is nowhere left to report the failure to.
+	hc.Stdout.Write(readPipe(fsjs, ro)) //nolint:errcheck,gosec
+	hc.Stderr.Write(readPipe(fsjs, re)) //nolint:errcheck,gosec
 	fsjs.Call("pipeRelease", ro)
 	fsjs.Call("pipeRelease", re)
 	return code, true

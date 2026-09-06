@@ -19,7 +19,7 @@ fyne.io/systray/internal/generated/notifier
 github.com/0magnet/afero
 github.com/0magnet/afero/internal/common
 github.com/0magnet/afero/mem
-# github.com/0magnet/ansifilter-go v0.0.0-20260905162419-b1d8cfff2baf
+# github.com/0magnet/ansifilter-go v0.0.0-20260905171935-58ab6d55d8ff
 ## explicit; go 1.24
 github.com/0magnet/ansifilter-go/ansifilter
 # github.com/0magnet/audioprism-go v0.0.0-20260905171937-900f18a2f23d
@@ -31,35 +31,35 @@ github.com/0magnet/bbolt
 github.com/0magnet/bbolt/errors
 github.com/0magnet/bbolt/internal/common
 github.com/0magnet/bbolt/internal/freelist
-# github.com/0magnet/bitree v0.0.0-20260906024001-ee60eac20a9d
+# github.com/0magnet/bitree v0.0.0-20260906144807-e66de0b4c738
 ## explicit; go 1.25.0
 github.com/0magnet/bitree
-# github.com/0magnet/bottle v0.0.0-20260905154223-835049919520
+# github.com/0magnet/bottle v0.0.0-20260905171941-511eee6d693f
 ## explicit; go 1.24
 github.com/0magnet/bottle
 github.com/0magnet/bottle/vnet
 # github.com/0magnet/calvin v0.0.0-20260905171945-6d046e156c9b
 ## explicit; go 1.25.0
 github.com/0magnet/calvin
-# github.com/0magnet/coloredcobra v1.0.3-0.20260902084726-57ccbecfc077
+# github.com/0magnet/coloredcobra v1.0.3
 ## explicit; go 1.25.0
 github.com/0magnet/coloredcobra
-# github.com/0magnet/cosmos-go v0.0.0-20260905162431-a5584b3ff959
+# github.com/0magnet/cosmos-go v0.0.0-20260905171954-59b7579e9e65
 ## explicit; go 1.24
 github.com/0magnet/cosmos-go
 # github.com/0magnet/desk v0.0.0-20260906155330-9925d12693bb
 ## explicit; go 1.26
 github.com/0magnet/desk
 github.com/0magnet/desk/dom
-# github.com/0magnet/desk/panes v0.0.0-20260905010738-0c9209d8b7b7
+# github.com/0magnet/desk/panes v0.0.0-20260906155330-9925d12693bb
 ## explicit; go 1.26
 github.com/0magnet/desk/panes/files
-# github.com/0magnet/go-dsp v0.0.0-20260904172328-4474a45054c8
+# github.com/0magnet/go-dsp v0.0.0-20260905172003-9e5bb50ba887
 ## explicit; go 1.23.0
 github.com/0magnet/go-dsp/dsputils
 github.com/0magnet/go-dsp/fft
 github.com/0magnet/go-dsp/window
-# github.com/0magnet/gobrpc v0.0.0-20260906024008-cd93b2d1ef48
+# github.com/0magnet/gobrpc v0.0.0-20260906144809-5215ec59d553
 ## explicit; go 1.25.0
 github.com/0magnet/gobrpc
 github.com/0magnet/gobrpc/gobimpl
@@ -79,19 +79,19 @@ github.com/0magnet/gotop/v4/termui
 github.com/0magnet/gotop/v4/termui/drawille-go
 github.com/0magnet/gotop/v4/utils
 github.com/0magnet/gotop/v4/widgets
-# github.com/0magnet/lolcat-go v0.0.0-20260905001114-f97d678ce219
+# github.com/0magnet/lolcat-go v0.0.0-20260905172013-2cf578f3fc7d
 ## explicit; go 1.25.0
 github.com/0magnet/lolcat-go/lol
 # github.com/0magnet/metrics v1.44.1-0.20260901202122-8656b26f968b
 ## explicit; go 1.24.0
 github.com/0magnet/metrics
-# github.com/0magnet/netscrape v0.0.0-20260905162442-12f1adb8e1ec
+# github.com/0magnet/netscrape v0.0.0-20260905172017-73f582cee847
 ## explicit; go 1.24
 github.com/0magnet/netscrape
-# github.com/0magnet/osnotify v0.0.0-20260906024004-bc6cf49aaa38
+# github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d
 ## explicit; go 1.25.0
 github.com/0magnet/osnotify
-# github.com/0magnet/plot-go v0.0.0-20260905162445-5d8713570108
+# github.com/0magnet/plot-go v0.0.0-20260905172024-ecf034c1c9d8
 ## explicit; go 1.25
 github.com/0magnet/plot-go
 # github.com/0magnet/realorigin v0.2.1
@@ -110,14 +110,14 @@ github.com/0magnet/sh/v3/internal
 github.com/0magnet/sh/v3/interp
 github.com/0magnet/sh/v3/pattern
 github.com/0magnet/sh/v3/syntax
-# github.com/0magnet/spheregraph v0.0.0-20260906024012-5fe6464ab82e
+# github.com/0magnet/spheregraph v0.0.0-20260906144810-35af719bf2f1
 ## explicit; go 1.25.0
 github.com/0magnet/spheregraph
 # github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26
 ## explicit; go 1.22
 github.com/0magnet/sysinfo
 github.com/0magnet/sysinfo/cpuid
-# github.com/0magnet/termanim v0.0.0-20260905010830-f8788bcdc347
+# github.com/0magnet/termanim v0.0.0-20260905171704-496bb97da414
 ## explicit; go 1.25.0
 github.com/0magnet/termanim/canvas
 github.com/0magnet/termanim/matrix
@@ -126,18 +126,18 @@ github.com/0magnet/termanim/matrix/backdrop/cobrarain
 # github.com/0magnet/u-root v0.16.1-0.20260814161052-156e0b67262b
 ## explicit; go 1.25.7
 github.com/0magnet/u-root/pkg/ls
-# github.com/0magnet/visnetwork-go v0.0.0-20260906024016-e9b9615f6f97
+# github.com/0magnet/visnetwork-go v0.0.0-20260906025559-6b0de1648ee9
 ## explicit; go 1.25.0
 github.com/0magnet/visnetwork-go/physics
-# github.com/0magnet/websh v0.0.0-20260905000412-75d7fd084e60
+# github.com/0magnet/websh v0.0.0-20260906001908-5f8df8dbc4c5
 ## explicit; go 1.25.7
 github.com/0magnet/websh/shell
 github.com/0magnet/websh/shell/browser
-# github.com/0magnet/winbox-go v0.0.0-20260905000411-6eefa77dea85
+# github.com/0magnet/winbox-go v0.0.0-20260905172045-cfee586c8360
 ## explicit; go 1.24
 github.com/0magnet/winbox-go
 github.com/0magnet/winbox-go/dist
-# github.com/0magnet/xterm-go v0.0.0-20260904164423-3896621e5b7c
+# github.com/0magnet/xterm-go v0.0.0-20260905172047-f0008e1479ee
 ## explicit; go 1.24
 github.com/0magnet/xterm-go
 github.com/0magnet/xterm-go/vt
