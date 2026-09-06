@@ -138,18 +138,51 @@ nothing about MIME types.
 The desk is a desktop environment that could touch nothing: its shell is websh,
 a Bash interpreter compiled to wasm, and its filesystem is an in-memory afero
 kept in IndexedDB. All of it works and none of it is yours. Two flags change
-that, and both are off:
+that, and both are off. A third, `--reconnect`, changes how long a host shell
+lives:
 
 ```
-(cd panes && go run ./cmd/desk-serve --shell)          # a real pty in a window
-(cd panes && go run ./cmd/desk-serve --fs)             # real files
-(cd panes && go run ./cmd/desk-serve --fs --fs-root ~) # ...confined to a subtree
+(cd panes && go run ./cmd/desk-serve --shell)             # a real pty in a window
+(cd panes && go run ./cmd/desk-serve --shell --reconnect) # ...that outlives its window
+(cd panes && go run ./cmd/desk-serve --fs)                # real files
+(cd panes && go run ./cmd/desk-serve --fs --fs-root ~)    # ...confined to a subtree
 ```
 
 `--shell` adds the **host shell** app: xterm-go in a window, attached over a
 WebSocket to a pty running your `$SHELL`. It resizes with the window, because a
 resize becomes a `TIOCSWINSZ` and so a `SIGWINCH`, which is what makes a
 full-screen program redraw.
+
+`--reconnect` lets a **named** host shell outlive its window. Open it as `host
+build` rather than `host`, and closing the window leaves the shell running —
+reopening it under the same name re-attaches, replays the last 256 KiB of
+output, and resizes the pty to whatever the new window is. Nothing is polled:
+the session owns its own read loop for its whole life, which is what keeps a
+background build from blocking in `write(2)` against a pty nobody is draining.
+A second window on the same name **takes over** rather than being refused,
+which is `tmux attach -d` and is right because the usual cause of a stale
+attachment is a socket that died without saying so. Detached shells are reaped
+after an hour of nobody attaching (`--reconnect-idle`, negative to never), and
+stopping the server kills them all — including one that trapped `SIGHUP`.
+
+A shell with no window on it is invisible, so the server says what it has, on
+the terminal it was started in and nowhere else. Every session that starts, is
+left running or ends prints a line there, and `kill -USR1 <pid>` prints the
+whole listing — name, pid, attached or not, how long it has been that way, when
+it will be reaped, how much replay it is holding:
+
+```
+desk: 2 host shell(s), 1 of them detached:
+desk: NAME      PID      STATE     FOR  REAPED IN  BUFFER
+desk: build     3099788  detached  13s  59m47s     163 B
+desk: watching  3100073  attached  3s   -          172 B
+```
+
+The pid is what makes `ps` and `kill` the rest of the interface: killing a
+shell closes its pty, and the session notices and unregisters itself. Note that
+an interactive shell ignores a plain `SIGTERM`, so it is `kill -HUP` or
+`kill -9`. There is no *endpoint* that lists sessions and deliberately never
+will be — see below.
 
 `--fs` is the one that does more than it looks like. websh's shell and the file
 manager both work against `afero.Fs`, an **interface**, and websh takes any
@@ -211,7 +244,18 @@ machine, and any page you visit may try to reach localhost. So:
   the page by default, or printed to the terminal instead with `--auth`;
 - `--fs-root` confines paths for real: they are resolved through
   `EvalSymlinks` on the longest **existing** prefix, so a symlink planted inside
-  the root cannot be followed out of it.
+  the root cannot be followed out of it;
+- `--reconnect` is off, and it is the one flag here that takes a revocation
+  away: without it, closing the window ends the shell. With it, a session is
+  addressed by `HMAC(per-run secret, len(token) ‖ token ‖ name)` — so the name
+  a client picks need not be unguessable, and a session created under one token
+  is not merely refused under another but unaddressable. A name that resolves
+  to nothing starts a session rather than reporting one, so the endpoint is not
+  an oracle for what exists; the number of live shells is capped; and stopping
+  the server still kills every one of them. What exists *is* reported to the
+  process's own stdout, on `SIGUSR1` — a channel a page cannot address and that
+  only whoever started the server can use, which is the whole difference
+  between telling the operator and answering the wire.
 
 The Origin check is the load-bearing one and the token is honestly the weaker
 guard: a browser sets `Origin` itself and script cannot forge it, whereas a
