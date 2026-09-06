@@ -286,6 +286,20 @@ type Visor struct {
 	// path this feed exists to replace. Guarded by cxoUserFeedsMu.
 	regCXOPub *treestore.Publisher
 
+	// sdRegCXOPub is the SD-registration-over-CXO publisher (this visor's
+	// live service-discovery entry set, on DmsgVisorSDRegCXOPort) — retained
+	// for the same reason as regCXOPub: without its allowlist and DENIED
+	// subscribers in `visor state`, a service-discovery whose subscribe is
+	// refused is invisible from both ends. Guarded by cxoUserFeedsMu.
+	sdRegCXOPub *treestore.Publisher
+
+	// sdEntryMirror holds the visor's live service-discovery entry set and
+	// mirrors it onto the SD-registration CXO feed. Constructed in NewVisor
+	// (never nil) and handed to every servicedisc client the visor builds,
+	// so entries accumulate regardless of whether the CXO feed ever starts.
+	// See init_sd_reg_cxo.go.
+	sdEntryMirror *sdEntryMirror
+
 	// gatedCXOFeeds registers the visor's service-consumed CXO publishers
 	// (stats, tp-list, registration) together with the consuming service's
 	// PK so their subscriber allowlists can be recomputed and re-applied
@@ -755,6 +769,10 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broad
 		dmsgLatency: dmsgLatencyState{
 			servers: make(map[cipher.PubKey]time.Duration),
 		},
+		// Always present so any servicedisc client built during init can be
+		// handed it, whatever order the modules run in; it stays inert until
+		// initSDRegCXO attaches a publisher.
+		sdEntryMirror: newSDEntryMirror(),
 	}
 	v.isServicesHealthy.init()
 	v.isUptimeTrackerHealthy.init()

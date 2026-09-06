@@ -169,10 +169,26 @@ func (v *Visor) cxoFeedSpec(fk cxosub.Feed) (cipher.PubKey, uint16, string, erro
 	return cipher.PubKey{}, 0, "", fmt.Errorf("unknown feed: %d", fk)
 }
 
-// sdCXOPeer extracts the SD publisher PK from the visor's
-// launcher.service_discovery_dmsg URL.
+// sdCXOPeer extracts the SD publisher PK from the visor's launcher
+// service-discovery configuration.
+//
+// Both service_discovery_dmsg AND service_discovery are tried, in that order,
+// mirroring tpdCXOPeer and initDiscovery's own URL selection. On a dmsg-only
+// deployment the PK lives in `service_discovery` (already `dmsg://<pk>:80`)
+// and service_discovery_dmsg is simply unset — reading only the latter is the
+// same bug that made dmsgdCXOPeer silently never resolve (#4566).
+// parseDmsgPeer rejects a non-dmsg scheme, so a clearnet `service_discovery`
+// is still correctly ignored.
 func sdCXOPeer(v *Visor) (cipher.PubKey, bool) {
-	return parseDmsgPeer(v.conf.Launcher.ServiceDiscDmsg)
+	if v.conf.Launcher == nil {
+		return cipher.PubKey{}, false
+	}
+	for _, raw := range []string{v.conf.Launcher.ServiceDiscDmsg, v.conf.Launcher.ServiceDisc} {
+		if pk, ok := parseDmsgPeer(raw); ok {
+			return pk, true
+		}
+	}
+	return cipher.PubKey{}, false
 }
 
 // dmsgdCXOPeer extracts the DMSG-D publisher PK from the visor's dmsg
