@@ -3,7 +3,7 @@
 [← skywire cli visor hv ui](../README.md)
 
 Stop ONLY the hypervisor web UI (the HTTP server). The DMSG-RPC listener, managed-visor tracking, and `hv ls` over the visor RPC keep working — useful to shrink the public attack surface while retaining CLI access to connected visors.
-Use -w to also persist the change to the config file.
+Use -w to also write hypervisor.ui_disable to skywire-config.json, so it survives a restart. That json is a derived artifact: a later `skywire autoconfig` run (which a package install or update performs) rebuilds it from /etc/skywire.conf and resets the change. There is no skywire.conf field for ui_disable, so on an autoconfig-managed host this setting cannot currently be made durable.
 
 ## Usage
 

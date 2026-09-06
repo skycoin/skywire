@@ -3,7 +3,7 @@
 [← skywire cli visor hv](../README.md)
 
 Disable the whole hypervisor — stops the DMSG-RPC listener, disconnects managed visors, and stops the web UI (so `hv ls` no longer works). To stop ONLY the web UI while keeping CLI access, use `hv ui disable`.
-Use -w to also persist the change to the config file.
+Use -w to also write the change to skywire-config.json, so it survives a restart. That json is a derived artifact: a later `skywire autoconfig` run (which a package install or update performs) rebuilds it from /etc/skywire.conf and resets the change. Set ISHYPERVISOR there to make it durable.
 
 ## Usage
 
