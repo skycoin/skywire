@@ -271,8 +271,7 @@ func (s *service) startCXO(
 	logger *logging.Logger,
 ) {
 	sink := &aggregatorSink{Store: st, api: tpdAPI}
-	agg, err := cxoaggregator.New(h.DmsgClient, sink, cxoaggregator.Config{
-		SecKey: sk,
+	agg, err := cxoaggregator.New(h.DmsgClient, sk, sink, cxoaggregator.Config{
 		Logger: logging.MustGetLogger("tpd-cxo-aggregator"),
 	})
 	if err != nil {
@@ -298,8 +297,7 @@ func (s *service) startCXO(
 	// A visor that publishes only the legacy combined feed (older binary)
 	// simply never dials this port — the port-50 aggregator above still
 	// reconciles its tp-list from the combined feed (back-compat fallback).
-	tplAgg, err := cxoaggregator.New(h.DmsgClient, sink, cxoaggregator.Config{
-		SecKey:   sk,
+	tplAgg, err := cxoaggregator.New(h.DmsgClient, sk, sink, cxoaggregator.Config{
 		DmsgPort: skyenv.DmsgVisorTPListCXOPort,
 		Logger:   logging.MustGetLogger("tpd-cxo-tplist-aggregator"),
 	})

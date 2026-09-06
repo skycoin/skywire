@@ -50,7 +50,6 @@ func TestTwoAggregatorsShareOneClientSecondAccepts(t *testing.T) {
 	tpdPK, tpdSK := cipher.GenerateKeyPair()
 	visorPK, visorSK := cipher.GenerateKeyPair()
 	remotePK, _ := cipher.GenerateKeyPair() // the transport's remote edge
-	_ = tpdSK
 
 	tpdClient, err := env.NewClientWithKeys(tpdPK, tpdSK, &dmsg.Config{MinSessions: 1})
 	require.NoError(t, err, "tpd dmsg client")
@@ -64,23 +63,26 @@ func TestTwoAggregatorsShareOneClientSecondAccepts(t *testing.T) {
 
 	// FIRST aggregator: the port-50 telemetry feed. Grabs the node's default
 	// TCP(:8870)/RPC(:8871) listeners in the pre-fix code.
-	agg, err := New(tpdClient, sink, Config{
+	agg, err := New(tpdClient, tpdSK, sink, Config{
 		DmsgPort: cxotransport.DefaultCXOPort,
 		Logger:   logging.MustGetLogger("tpd-cxo-aggregator"),
 	})
 	require.NoError(t, err, "first aggregator (port %d)", cxotransport.DefaultCXOPort)
+	require.Equal(t, tpdPK, agg.FeedPK(),
+		"the aggregator must present TPD's configured PK — the one gated visors allowlist")
 	t.Cleanup(func() { _ = agg.Close() }) //nolint:errcheck
 	agg.Run(ctx)
 
 	// SECOND aggregator: the dedicated tp-list feed on its own port. This is
 	// the call that returned "address already in use" before the fix, because
 	// its node.NewNode tried to bind :8870 again.
-	tplAgg, err := New(tpdClient, sink, Config{
+	tplAgg, err := New(tpdClient, tpdSK, sink, Config{
 		DmsgPort: skyenv.DmsgVisorTPListCXOPort,
 		Logger:   logging.MustGetLogger("tpd-cxo-tplist-aggregator"),
 	})
 	require.NoError(t, err, "second aggregator (port %d) must construct on the shared client",
 		skyenv.DmsgVisorTPListCXOPort)
+	require.Equal(t, tpdPK, tplAgg.FeedPK(), "both aggregators present TPD's PK")
 	t.Cleanup(func() { _ = tplAgg.Close() }) //nolint:errcheck
 	tplAgg.Run(ctx)
 

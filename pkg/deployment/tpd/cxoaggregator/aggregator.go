@@ -28,6 +28,14 @@
 // One CXO Node serves all subscriptions; visors with many feeds (or
 // future TPD-side re-publishing) share storage and goroutines
 // instead of paying a per-visor node cost.
+//
+// The node itself, the service-identity binding, the connect-driven
+// reconcile/subscribe loop, the grace-gated orphan-feed reclaim and the
+// cleanup sweep live in pkg/cxo/cxoaggregate, shared with the
+// dmsg-discovery and AR aggregators. Everything below is TPD-specific:
+// the targeted discovery-leaf fetch, the dial-back that keeps a fill
+// source alive, the partial-fill transport-list recovery, and the whole
+// leaf-path dispatch table.
 package cxoaggregator
 
 import (
@@ -45,6 +53,7 @@ import (
 	skycipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoaggregate"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	cxotransport "github.com/skycoin/skywire/pkg/cxo/node/transport"
@@ -186,6 +195,12 @@ type tombstoneLeaf struct {
 }
 
 // Config configures the Aggregator.
+//
+// TPD's service SecKey is deliberately NOT here — it is a required
+// argument to New. As an optional field it was left unset on the sibling
+// dmsg-discovery aggregator, node.NewNode minted a random keypair, and
+// every gated visor refused the subscribe (#4569); TPD's own variant of
+// that was #4168.
 type Config struct {
 	// ReconcileInterval is how often the aggregator re-scans the
 	// CXO node's connection list and ensures each is subscribed to
@@ -223,18 +238,6 @@ type Config struct {
 	MaxTotalFillTime time.Duration
 	// Logger overrides the default tagged logger.
 	Logger *logging.Logger
-	// SecKey binds the aggregator's CXO node identity to TPD's service
-	// secret key so the node's handshake-advertised PK is TPD's KNOWN PK.
-	// This matters because the visor's telemetry / tp-list feeds gate their
-	// subscriber allowlist on the CXO node's PeerID (see pkg/cxo/treestore
-	// allowlist + pkg/visor feed gating): visors allow the TPD PK they hold
-	// in transport.discovery_dmsg. Left zero, node.NewNode generates a
-	// RANDOM keypair, so the aggregator dials every gated visor as an
-	// unknown PK and its subscribe is rejected — TPD then never fills that
-	// visor's transports (the persistent visor↔TPD transport-count gap on
-	// any visor running feed gating). The publisher path (treestore.
-	// NewWithDMSG) binds the same way for the same reason.
-	SecKey cipher.SecKey
 	// InMemoryDB / DataDir control the aggregator's CXO storage.
 	// Default is in-memory (subscribed object cache only — TPD's
 	// authoritative store is redis, the CXO cache exists just to
@@ -257,27 +260,18 @@ type Config struct {
 // happens per-conn during reconcile, and OnRootFilled walks the
 // TreeStore tree to feed BandwidthSink.
 type Aggregator struct {
+	// core is the shared lifecycle: the CXO node (bound to TPD's service
+	// identity), the reconcile/subscribe loop, orphan-feed reclaim and
+	// cleanup. See pkg/cxo/cxoaggregate.
+	core *cxoaggregate.Core
+	// cxoNode is core.Node(), cached because the TPD-specific paths below
+	// touch it constantly (and so the leaf-dispatch tests can drive an
+	// Aggregator against a bare in-memory node without a dmsg client).
 	cxoNode *node.Node
 	sink    Sink
-	conf    Config
 	log     *logging.Logger
 
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	done   chan struct{}
-
-	// nudge triggers an immediate reconcile out of band from the
-	// ReconcileInterval ticker. Buffered(1) so bursts of connects
-	// coalesce into a single pending reconcile (which is idempotent
-	// and walks the full conn set anyway).
-	nudge chan struct{}
-
-	// orphanStrikes counts consecutive cleanup ticks a shared feed has
-	// had no connected conn. A feed is reclaimed (un-shared + all its
-	// Roots deleted) once it reaches orphanGraceTicks, so a visor that
-	// briefly drops and redials within the grace window keeps its feed.
-	// Only touched from cleanup() (single goroutine), so no lock.
-	orphanStrikes map[skycipher.PubKey]int
+	mu sync.Mutex
 
 	// dialing guards in-flight dial-backs so the heartbeat cadence can't
 	// storm ConnectPK for the same visor. Keyed by feed PK. Guarded by mu.
@@ -335,20 +329,20 @@ const targetedFetchTimeout = 30 * time.Second
 
 // errTargetedFetchBudget is returned by boundedGetter once the object
 // count or wall-clock budget for a targeted fetch is exhausted. It
-// unwinds the treestore walk cleanly (childByName treats an unreadable
+// unwinds the treestore walk cleanly (cxoaggregate.ChildByName treats an unreadable
 // child as absent) rather than hanging.
 var errTargetedFetchBudget = errors.New("cxoaggregator: targeted discovery fetch budget exceeded")
 
-// orphanGraceTicks is how many consecutive cleanup ticks a feed must
-// have zero connected conns before it's reclaimed. At the 2-minute
-// default CleanupInterval this is a ~4-minute grace, long enough to
-// ride out a visor's dmsg reconnect without churning a stable feed.
-const orphanGraceTicks = 2
-
-// New constructs an Aggregator. Sets up a CXO Node, enables DMSG so
-// remote visors can dial in, and wires OnRootFilled to walk
-// TreeStore Roots and dispatch to sink.
-func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
+// New constructs an Aggregator on top of the shared cxoaggregate core,
+// and wires the TPD-specific Root-lifecycle handling: the targeted
+// discovery-leaf fetch and dial-back on receive, the TreeStore walk on
+// fill, and the partial-fill transport-list recovery on break.
+//
+// sk is TPD's service secret key. It binds the CXO node identity so the
+// aggregator's handshake PK is the TPD PK gated visors allowlist (they
+// hold it in transport.discovery_dmsg); without it every gated visor
+// rejects the subscribe and TPD never fills that visor's transports.
+func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggregator, error) {
 	if conf.ReconcileInterval <= 0 {
 		conf.ReconcileInterval = 30 * time.Second
 	}
@@ -364,294 +358,133 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	if conf.Logger == nil {
 		conf.Logger = logging.MustGetLogger("tpd-cxo-aggregator")
 	}
-
-	cfg := node.NewConfig()
-	// Bind the node identity to TPD's service key (when provided) so its
-	// handshake PK is TPD's known PK, matching what gated visors allowlist.
-	// Zero SecKey => node.NewNode mints a random keypair => gated visors
-	// reject the aggregator's subscribe. See Config.SecKey.
-	if conf.SecKey != (cipher.SecKey{}) {
-		cfg.SecKey = skycipher.SecKey(conf.SecKey)
-	}
-	// We're DMSG-only — disable the CXO node's default TCP/UDP/RPC
-	// listeners. node.NewConfig defaults TCP.Listen to ":8870" and RPC to
-	// ":8871", and those hardcoded ports mean two Nodes in the same process
-	// collide on bind: NewNode's TCP/RPC Listen returns "address already in
-	// use" and the whole aggregator fails to construct. TPD runs TWO
-	// aggregators in one process (the port-50 telemetry feed and the port-69
-	// tp-list feed), so the SECOND New silently failed here — its node never
-	// came up, so it never dmsg-Listened on its DMSG port and never accepted
-	// the visors' tp-list announces (the persistent visor↔TPD transport-count
-	// gap). None of these listeners are reachable over DMSG anyway; the
-	// publisher path (treestore.NewWithDMSG) already zeroes them for the same
-	// reason.
-	cfg.TCP.Listen = ""
-	cfg.UDP.Listen = ""
-	cfg.RPC = ""
-	// Override the 10m node default: cap hung fills from flapping peers so
-	// their "wanted" objects are released in seconds, not minutes. See the
-	// Config.MaxFillingTime doc for why this is the aggregator's residual
-	// memory leak.
-	cfg.MaxFillingTime = conf.MaxFillingTime
-	cfg.MaxTotalFillTime = conf.MaxTotalFillTime
-	cfg.Config = skyobject.NewConfig()
-	cfg.Config.InMemoryDB = conf.InMemoryDB || conf.DataDir == ""
-	if conf.DataDir != "" {
-		cfg.Config.DataDir = conf.DataDir
-	}
-
-	// Wire the cxo node's internal logger so its FillPin / MsgReceivePin
-	// / connection-handshake debug output goes to stderr (where docker
-	// logs reads it). Without this, cxo's "[fill] ..." and "[%s]
-	// handleSub %s" lines are silent regardless of tpd's --loglvl, and
-	// a fill failure / handshake mismatch is invisible. Debug is gated
-	// on the global logger level so prod runs at INFO get nothing extra.
-	cfg.Logger.Output = os.Stderr
-	cfg.Logger.Prefix = "[tpd-cxo-aggregator:node] "
-	if lvl := logging.GetLevel(); lvl == logrus.DebugLevel || lvl == logrus.TraceLevel {
-		cfg.Logger.Debug = true
-		// Filter to the pins that diagnose Subscribe → Root delivery →
-		// fill chains. ConnPin is loud-on-startup but only one-shot;
-		// MsgPin would be too chatty (every Root + every chunk request),
-		// so include only MsgReceivePin which captures the publisher
-		// side of subscribe/root receipt.
-		cfg.Logger.Pins = node.FillPin | node.ConnPin | node.MsgReceivePin
-	}
-
-	cxoNode, err := node.NewNode(cfg)
-	if err != nil {
-		return nil, err
-	}
 	dmsgPort := conf.DmsgPort
 	if dmsgPort == 0 {
 		dmsgPort = cxotransport.DefaultCXOPort
 	}
-	factory := cxotransport.NewDMSGFactory(dmsgC, dmsgPort)
-	if err := cxoNode.EnableDMSG(factory); err != nil {
-		_ = cxoNode.Close() //nolint:errcheck
-		return nil, err
-	}
 
 	a := &Aggregator{
-		cxoNode:       cxoNode,
-		sink:          sink,
-		conf:          conf,
-		log:           conf.Logger,
-		done:          make(chan struct{}),
-		nudge:         make(chan struct{}, 1),
-		orphanStrikes: make(map[skycipher.PubKey]int),
-		fetching:      make(map[skycipher.PubKey]struct{}),
-		lastList:      make(map[skycipher.PubKey]cachedList),
+		sink:     sink,
+		log:      conf.Logger,
+		fetching: make(map[skycipher.PubKey]struct{}),
+		lastList: make(map[skycipher.PubKey]cachedList),
 	}
-	// Subscribe to a visor's feed the moment it dials in, rather than
-	// waiting up to ReconcileInterval (30s) for the next poll. A fresh
-	// visor (notably a browser wasm-visor) that AnnounceTo's the TPD and
-	// then registers a transport is otherwise invisible to the shared
-	// redis edge-index — and thus to the route-finder — for up to a full
-	// reconcile period, so `route find <fresh-visor> <exit>` 404s
-	// ("transport not found") until the poll catches up. The conn's
-	// handshake completes (peerID set) before OnConnect fires, so the
-	// nudged reconcile can subscribe immediately; it stays idempotent via
-	// alreadySubscribed, and the periodic ticker remains the safety net.
-	cxoNode.Config().OnConnect = func(_ *node.Conn) error {
-		select {
-		case a.nudge <- struct{}{}:
-		default:
-		}
-		return nil
+
+	core, err := cxoaggregate.New(dmsgC, sk, dmsgPort, cxoaggregate.Options{
+		ReconcileInterval: conf.ReconcileInterval,
+		CleanupInterval:   conf.CleanupInterval,
+		// Override the 10m node default: cap hung fills from flapping
+		// peers so their "wanted" objects are released in seconds, not
+		// minutes. See the Config.MaxFillingTime doc for why this is the
+		// aggregator's residual memory leak.
+		MaxFillingTime:   conf.MaxFillingTime,
+		MaxTotalFillTime: conf.MaxTotalFillTime,
+		Logger:           conf.Logger,
+		LogTag:           "CXO aggregator",
+		InMemoryDB:       conf.InMemoryDB,
+		DataDir:          conf.DataDir,
+		NodeConfig: func(cfg *node.Config) {
+			// Wire the cxo node's internal logger so its FillPin /
+			// MsgReceivePin / connection-handshake debug output goes to
+			// stderr (where docker logs reads it). Without this, cxo's
+			// "[fill] ..." and "[%s] handleSub %s" lines are silent
+			// regardless of tpd's --loglvl, and a fill failure / handshake
+			// mismatch is invisible. Debug is gated on the global logger
+			// level so prod runs at INFO get nothing extra.
+			cfg.Logger.Output = os.Stderr
+			cfg.Logger.Prefix = "[tpd-cxo-aggregator:node] "
+			if lvl := logging.GetLevel(); lvl == logrus.DebugLevel || lvl == logrus.TraceLevel {
+				cfg.Logger.Debug = true
+				// Filter to the pins that diagnose Subscribe → Root
+				// delivery → fill chains. ConnPin is loud-on-startup but
+				// only one-shot; MsgPin would be too chatty (every Root +
+				// every chunk request), so include only MsgReceivePin
+				// which captures the publisher side of subscribe/root
+				// receipt.
+				cfg.Logger.Pins = node.FillPin | node.ConnPin | node.MsgReceivePin
+			}
+		},
+		// The three Root-lifecycle callbacks together make the CXO
+		// replication chain observable from tpd's logs:
+		//
+		//   - OnRootReceived: a Root payload arrived from the visor's
+		//     publisher. Logged at Debug. Lets us tell "Subscribe but no
+		//     data" (no OnRootReceived ever) from "data arrives but can't
+		//     be processed" (OnRootReceived fires but OnRootFilled
+		//     doesn't).
+		//   - OnRootFilled: the Root and ALL its referenced objects have
+		//     been replicated successfully — the aggregator can now walk
+		//     the tree. This is the main dispatch trigger.
+		//   - OnFillingBreaks: replication of a Root's referenced objects
+		//     failed (timeout, peer drop, missing object). Logged at Warn
+		//     so it surfaces at the default log level — without this, fill
+		//     failures are silent.
+		OnRootReceived: func(c *node.Conn, r *registry.Root) error {
+			a.log.WithField("visor", cipher.PubKey(r.Pub)).WithField("seq", r.Nonce).
+				Debug("CXO aggregator: root received")
+			// The inbound conn the visor AnnounceTo'd us on closes moments
+			// after delivering this Root, so the immediate fill of its
+			// referenced objects hits "no connections to fill from".
+			// Establish a TPD-OWNED outbound conn to the visor — we hold
+			// it, so subsequent Roots (the publisher re-announces on a
+			// heartbeat) have a stable source to fill from.
+			a.ensureConn(r.Pub)
+			// Discovery decoupled from the whole-Root telemetry fill: pull
+			// JUST the small tp-list leaf path off this Root now, over the
+			// delivering conn, independent of the 90s MaxFillingTime fill
+			// of the bulky per-transport telemetry subtree (which for a
+			// busy visor never completes in the conn's window — the
+			// discovery gap). The full list lands from a handful of
+			// objects, so it survives the same short conn that a
+			// whole-tree fill can't. Detached so its blocking per-object
+			// requests can't stall the CXO node's per-head event loop
+			// (this callback runs on it).
+			a.reconcileTargeted(c, r)
+			return nil
+		},
+		OnRootFilled: func(r *registry.Root) {
+			a.log.WithField("visor", cipher.PubKey(r.Pub)).WithField("seq", r.Nonce).
+				Debug("CXO aggregator: root filled")
+			a.handleRootFilled(r)
+		},
+		OnFillingBreaks: func(r *registry.Root, reason error) {
+			a.log.WithError(reason).WithField("visor", cipher.PubKey(r.Pub)).WithField("seq", r.Nonce).
+				Warn("CXO aggregator: root filling broke")
+			// Discovery-critical recovery: a broken full-tree fill still
+			// usually left transports/list in the store (see
+			// recoverTransportListOnBreak).
+			a.recoverTransportListOnBreak(r)
+		},
+		// Drop the reporter's cached transport-list snapshot when its feed
+		// is reclaimed: the feed is gone (its Roots deleted), so there's
+		// nothing to re-apply and the entry would otherwise pin memory as
+		// visor PKs churn.
+		OnFeedReclaimed: func(feed skycipher.PubKey) {
+			a.mu.Lock()
+			delete(a.lastList, feed)
+			a.mu.Unlock()
+		},
+	})
+	if err != nil {
+		return nil, err
 	}
-	// Wire all three Root-lifecycle callbacks. Together they make the
-	// CXO replication chain observable from tpd's logs:
-	//
-	//   - OnRootReceived: a Root payload arrived from the visor's
-	//     publisher. Logged at Debug. Lets us tell "Subscribe but no
-	//     data" (no OnRootReceived ever) from "data arrives but
-	//     can't be processed" (OnRootReceived fires but OnRootFilled
-	//     doesn't).
-	//   - OnRootFilled: the Root and ALL its referenced objects have
-	//     been replicated successfully — the aggregator can now walk
-	//     the tree. This is the existing dispatch trigger.
-	//   - OnFillingBreaks: replication of a Root's referenced objects
-	//     failed (timeout, peer drop, missing object). Logged at Warn
-	//     so it surfaces at the default log level — without this,
-	//     fill failures are silent.
-	cxoNode.Config().OnRootReceived = func(c *node.Conn, r *registry.Root) error {
-		a.log.WithField("visor", cipher.PubKey(r.Pub)).WithField("seq", r.Nonce).
-			Debug("CXO aggregator: root received")
-		// The inbound conn the visor AnnounceTo'd us on closes moments after
-		// delivering this Root, so the immediate fill of its referenced objects
-		// hits "no connections to fill from". Establish a TPD-OWNED outbound
-		// conn to the visor — we hold it, so subsequent Roots (the publisher
-		// re-announces on a heartbeat) have a stable source to fill from.
-		a.ensureConn(r.Pub)
-		// Discovery decoupled from the whole-Root telemetry fill: pull JUST
-		// the small tp-list leaf path off this Root now, over the delivering
-		// conn, independent of the 90s MaxFillingTime fill of the bulky
-		// per-transport telemetry subtree (which for a busy visor never
-		// completes in the conn's window — the discovery gap). The full list
-		// lands from a handful of objects, so it survives the same short conn
-		// that a whole-tree fill can't. Detached so its blocking per-object
-		// requests can't stall the CXO node's per-head event loop (this
-		// callback runs on it).
-		a.reconcileTargeted(c, r)
-		return nil
-	}
-	cxoNode.Config().OnRootFilled = func(_ *node.Node, r *registry.Root) {
-		a.log.WithField("visor", cipher.PubKey(r.Pub)).WithField("seq", r.Nonce).
-			Debug("CXO aggregator: root filled")
-		a.handleRootFilled(r)
-	}
-	cxoNode.Config().OnFillingBreaks = func(_ *node.Node, r *registry.Root, reason error) {
-		a.log.WithError(reason).WithField("visor", cipher.PubKey(r.Pub)).WithField("seq", r.Nonce).
-			Warn("CXO aggregator: root filling broke")
-		// Discovery-critical recovery: a broken full-tree fill still usually
-		// left transports/list in the store (see recoverTransportListOnBreak).
-		a.recoverTransportListOnBreak(r)
-	}
+	a.core = core
+	a.cxoNode = core.Node()
 	return a, nil
 }
 
-// Run starts the reconcile loop. Returns immediately; the loop
-// continues until ctx is canceled or Close is called. Idempotent.
-func (a *Aggregator) Run(ctx context.Context) {
-	a.mu.Lock()
-	if a.cancel != nil {
-		a.mu.Unlock()
-		return
-	}
-	loopCtx, cancel := context.WithCancel(ctx)
-	a.cancel = cancel
-	a.mu.Unlock()
+// Run starts the reconcile + cleanup loops. Returns immediately; they
+// run until ctx is canceled or Close is called. Idempotent.
+func (a *Aggregator) Run(ctx context.Context) { a.core.Run(ctx) }
 
-	go a.loop(loopCtx)
-}
-
-// Close stops the loop and tears down the CXO node. Idempotent.
-func (a *Aggregator) Close() error {
-	a.mu.Lock()
-	cancel := a.cancel
-	a.cancel = nil
-	a.mu.Unlock()
-	if cancel != nil {
-		cancel()
-		<-a.done
-	}
-	return a.cxoNode.Close()
-}
+// Close stops the loops and tears down the CXO node. Idempotent.
+func (a *Aggregator) Close() error { return a.core.Close() }
 
 // FeedPK returns the aggregator's own PK — the value visors should
-// dial via dmsgT.ConnectPK to put a conn on this aggregator. In
-// practice this is the TPD deployment's PK and visors get it from
-// Transport.DiscoveryDmsg, but exposing it here makes wiring tests
-// straightforward.
-func (a *Aggregator) FeedPK() cipher.PubKey {
-	return cipher.PubKey(a.cxoNode.ID())
-}
-
-func (a *Aggregator) loop(ctx context.Context) {
-	defer close(a.done)
-	t := time.NewTicker(a.conf.ReconcileInterval)
-	defer t.Stop()
-	ct := time.NewTicker(a.conf.CleanupInterval)
-	defer ct.Stop()
-
-	a.reconcile()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			a.reconcile()
-		case <-ct.C:
-			a.cleanup()
-		case <-a.nudge:
-			// A visor just connected (OnConnect). Subscribe now instead
-			// of waiting for the next tick. reconcile() is idempotent.
-			a.reconcile()
-		}
-	}
-}
-
-// cleanup prunes superseded Roots (keeping only the latest per feed)
-// and sweeps the now-ownerless objects from the aggregator's CXO
-// store. TPD's authoritative store is redis and each Root is
-// dispatched on fill, so only the newest Root per feed is needed;
-// without this the in-memory store grows without bound as every
-// visor republishes on each transport change. Same primitives the
-// treestore Publisher's runCleanup uses (keepLast=1) — the
-// aggregator's receive-side node just never had a cleanup loop.
-func (a *Aggregator) cleanup() {
-	c := a.cxoNode.Container()
-	if err := cxoutils.RemoveRootObjects(c, 1); err != nil {
-		a.log.WithError(err).Debug("CXO aggregator: RemoveRootObjects failed; will retry next tick")
-		return
-	}
-	a.reclaimOrphanFeeds(c)
-	if err := cxoutils.RemoveObjects(c); err != nil {
-		a.log.WithError(err).Debug("CXO aggregator: RemoveObjects failed; will retry next tick")
-	}
-}
-
-// reclaimOrphanFeeds un-shares and hard-deletes feeds that no longer
-// have a connected conn. RemoveRootObjects(c, 1) keeps the LAST Root of
-// every feed forever, so without this a feed whose visor has gone away
-// (notably an ephemeral wasm/browser visor with a one-shot PK) pins its
-// final Root tree — and every object it references at rc>0 — in the
-// in-memory CXDS permanently. Over time the store grows without bound as
-// visor PKs churn (the +105 MB/12min inuse + 1576-goroutine growth seen
-// in production heap deltas). DontShare unsubscribes the conns and
-// removes the feed from the node's share set; DelFeed deletes all its
-// Roots and decrements the referenced objects to rc==0 so the following
-// RemoveObjects sweep can finally reclaim them.
-//
-// Reclamation is grace-gated (orphanGraceTicks) so a visor that drops
-// and redials within a few cleanup ticks keeps its feed rather than
-// paying a full re-replication.
-func (a *Aggregator) reclaimOrphanFeeds(c *skyobject.Container) {
-	connected := make(map[skycipher.PubKey]struct{})
-	for _, conn := range a.cxoNode.Connections() {
-		if pk := conn.PeerID(); pk != (skycipher.PubKey{}) {
-			connected[pk] = struct{}{}
-		}
-	}
-
-	self := a.cxoNode.ID()
-	for _, feed := range c.Feeds() {
-		if feed == self {
-			// The node's own identity feed — never reclaim it.
-			delete(a.orphanStrikes, feed)
-			continue
-		}
-		if _, ok := connected[feed]; ok {
-			// Live feed — clear any accumulated strikes.
-			delete(a.orphanStrikes, feed)
-			continue
-		}
-		a.orphanStrikes[feed]++
-		if a.orphanStrikes[feed] < orphanGraceTicks {
-			continue
-		}
-		delete(a.orphanStrikes, feed)
-		if err := a.cxoNode.DontShare(feed); err != nil {
-			a.log.WithError(err).WithField("visor", cipher.PubKey(feed)).
-				Debug("CXO aggregator: DontShare orphan feed failed; will retry next tick")
-			continue
-		}
-		if err := c.DelFeed(feed); err != nil {
-			a.log.WithError(err).WithField("visor", cipher.PubKey(feed)).
-				Debug("CXO aggregator: DelFeed orphan feed failed; will retry next tick")
-			continue
-		}
-		// Drop the reporter's cached transport-list snapshot: the feed is
-		// gone (its Roots deleted), so there's nothing to re-apply and the
-		// entry would otherwise pin memory as visor PKs churn.
-		a.mu.Lock()
-		delete(a.lastList, feed)
-		a.mu.Unlock()
-		a.log.WithField("visor", cipher.PubKey(feed)).
-			Debug("CXO aggregator: reclaimed orphan feed (no connected conn)")
-	}
-}
+// dial via dmsgT.ConnectPK to put a conn on this aggregator. By
+// construction it is the TPD service PK derived from the SecKey given to
+// New, which is what visors hold in Transport.DiscoveryDmsg.
+func (a *Aggregator) FeedPK() cipher.PubKey { return a.core.FeedPK() }
 
 // ensureConn keeps a TPD-initiated, persistent CXO connection to a visor whose
 // feed we aggregate. The aggregator otherwise ONLY accepts inbound conns (the
@@ -694,47 +527,9 @@ func (a *Aggregator) ensureConn(feedPK skycipher.PubKey) {
 			return
 		}
 		// Warm conn established/confirmed — nudge a reconcile so we subscribe
-		// on it promptly (idempotent via alreadySubscribed).
-		select {
-		case a.nudge <- struct{}{}:
-		default:
-		}
+		// on it promptly (the core's reconcile is idempotent).
+		a.core.Nudge()
 	}()
-}
-
-// reconcile walks the current CXO conn set and subscribes to every
-// remote PK's feed that isn't already subscribed on its conn. Any
-// conn that has dropped since the last reconcile simply isn't in
-// the list anymore — no explicit cleanup needed.
-func (a *Aggregator) reconcile() {
-	for _, conn := range a.cxoNode.Connections() {
-		peerPK := conn.PeerID()
-		if peerPK == (skycipher.PubKey{}) {
-			// Conn handshake hasn't completed; skip until next tick.
-			continue
-		}
-		if alreadySubscribed(conn, peerPK) {
-			continue
-		}
-		if err := conn.Subscribe(peerPK); err != nil {
-			a.log.WithError(err).WithField("visor", cipher.PubKey(peerPK)).
-				Debug("CXO aggregator: Subscribe failed; will retry next reconcile")
-			continue
-		}
-		a.log.WithField("visor", cipher.PubKey(peerPK)).Debug("CXO aggregator: subscribed to visor feed")
-	}
-}
-
-// alreadySubscribed reports whether conn is already subscribed to
-// the given feed. Used to make reconcile idempotent — repeat ticks
-// don't keep stacking subscriptions.
-func alreadySubscribed(conn *node.Conn, feed skycipher.PubKey) bool {
-	for _, f := range conn.Feeds() {
-		if f == feed {
-			return true
-		}
-	}
-	return false
 }
 
 // handleRootFilled is the OnRootFilled callback — invoked when CXO
@@ -782,11 +577,11 @@ func (a *Aggregator) handleRootFilled(r *registry.Root) {
 // simply yields false (treat as legacy), which is safe because a visor
 // that truly publishes shards will have them inline in the small Root.
 func rootHasTelemetryShards(pack registry.Pack, rootNode *treestore.TreeNode) bool {
-	_, tsub, found := childByName(pack, rootNode, "transports")
+	_, tsub, found := cxoaggregate.ChildByName(pack, rootNode, "transports")
 	if !found || tsub == nil {
 		return false
 	}
-	_, tel, ok := childByName(pack, tsub, "telemetry")
+	_, tel, ok := cxoaggregate.ChildByName(pack, tsub, "telemetry")
 	return ok && tel != nil
 }
 
@@ -988,7 +783,7 @@ func (a *Aggregator) applyReconcile(entries []*transport.Entry, reporter cipher.
 // with a hostile or oversized top-level index can't drive unbounded
 // per-object requests to a peer or pin the fetch goroutine. Once either bound
 // is exceeded every subsequent Get returns errTargetedFetchBudget, which
-// unwinds the treestore walk cleanly (childByName treats an unreadable child
+// unwinds the treestore walk cleanly (cxoaggregate.ChildByName treats an unreadable child
 // as absent) rather than hanging.
 type boundedGetter struct {
 	inner    skyobject.Getter
@@ -1020,48 +815,15 @@ func (b *boundedGetter) Get(key skycipher.SHA256) (val []byte, err error) {
 // first and the legacy nested "transports"/"list" second. Returns the inline
 // leaf bytes and the dispatch path to hand to dispatchLeaf.
 func findDiscoveryLeaf(pack registry.Pack, rootNode *treestore.TreeNode) (leaf []byte, path string, ok bool) {
-	if l, _, found := childByName(pack, rootNode, tpdListLeafName); found && l != nil {
+	if l, _, found := cxoaggregate.ChildByName(pack, rootNode, tpdListLeafName); found && l != nil {
 		return l, tpdListLeafName, true
 	}
-	if _, tsub, found := childByName(pack, rootNode, "transports"); found && tsub != nil {
-		if l, _, found := childByName(pack, tsub, "list"); found && l != nil {
+	if _, tsub, found := cxoaggregate.ChildByName(pack, rootNode, "transports"); found && tsub != nil {
+		if l, _, found := cxoaggregate.ChildByName(pack, tsub, "list"); found && l != nil {
 			return l, "transports/list", true
 		}
 	}
 	return nil, "", false
-}
-
-// childByName returns the inline leaf bytes or the sub-node of n's child
-// with the given name. It tolerates objects a partial fill never fetched:
-// an unreadable child (its object absent from the store) simply yields
-// ok=false rather than erroring the whole walk. Exactly one of leaf/sub
-// is non-nil on ok=true.
-func childByName(pack registry.Pack, n *treestore.TreeNode, name string) (leaf []byte, sub *treestore.TreeNode, ok bool) {
-	count, err := n.Children.Len(pack)
-	if err != nil {
-		return nil, nil, false
-	}
-	for i := 0; i < count; i++ {
-		var entry treestore.TreeEntry
-		if _, err := n.Children.ValueByIndex(pack, i, &entry); err != nil {
-			continue // this child's index object wasn't fetched; skip it
-		}
-		if entry.Name != name {
-			continue
-		}
-		if len(entry.Leaf) > 0 {
-			return entry.Leaf, nil, true
-		}
-		if entry.Sub.Hash != (skycipher.SHA256{}) {
-			var s treestore.TreeNode
-			if err := entry.Sub.Value(pack, &s); err != nil {
-				return nil, nil, false // sub-node object not fetched
-			}
-			return nil, &s, true
-		}
-		return nil, nil, false
-	}
-	return nil, nil, false
 }
 
 // walkAndDispatch recursively descends a TreeStore tree and routes
