@@ -3,7 +3,7 @@
 [← skywire cli visor hv](../README.md)
 
 Enable the hypervisor — DMSG-RPC listener, managed-visor tracking, and the web UI (unless ui_disable is set). Use `hv ui enable/disable` to toggle just the web UI.
-Use -w to also persist the change to the config file.
+Use -w to also write the change to skywire-config.json, so it survives a restart. That json is a derived artifact: a later `skywire autoconfig` run (which a package install or update performs) rebuilds it from /etc/skywire.conf and resets the change. Set ISHYPERVISOR there to make it durable.
 
 ## Usage
 

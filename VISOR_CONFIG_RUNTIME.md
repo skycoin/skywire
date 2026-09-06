@@ -9,17 +9,38 @@ For config file changes (config gen, config update, SKYENV), see
 
 ## Important Notes
 
-### Config Persistence
+### Config Persistence — three different lifetimes
 
-**Runtime changes are not written to the config file.** They affect
-the running visor only and are lost on restart. To make changes
-permanent, set the corresponding SKYENV variable in
-`/etc/skywire.conf` and regenerate the config. See
-[VISOR_CONFIG_GEN.md](VISOR_CONFIG_GEN.md#skyenv-config-file).
+`/etc/skywire.conf` is the source of truth. `skywire-config.json` is a
+derived artifact: `skywire autoconfig` regenerates it from
+`skywire.conf`, and a package install or update runs autoconfig. A
+runtime change therefore has one of three lifetimes, and the tables
+below do not yet distinguish them:
+
+1. **Runtime-only** — held in the running subsystem, never written to
+   the json, gone on restart. Example: `proxy mux mode`.
+2. **Written to the json** — survives a restart, but a config regen
+   rebuilds the json and discards it. Example: `visor hv add`.
+3. **Declared in `skywire.conf`** — the only lifetime that survives a
+   package update. Set the SKYENV variable and re-run autoconfig. See
+   [VISOR_CONFIG_GEN.md](VISOR_CONFIG_GEN.md#skyenv-config-file).
+
+Lifetime 2 is the one that surprises operators: the change looks
+durable, and stays durable until the next update. If a setting must
+outlive an update, put it in `skywire.conf`.
+
+A regen is not purely destructive — `config gen -r` deliberately
+carries some state forward from the old json: the secret key, launcher
+apps (`auto_start`, `args`, `launcher_mode`, `restart_policy`, plus
+operator-added apps), `dmsg.protocol`, `dmsg.carriers`,
+`routing.min_hops` when `MINHOPS` is unset, and
+`routing.enable_cascade_route_setup`. `hypervisors` is preserved only
+with `config gen -r -x`, which autoconfig does not pass.
 
 **Package install/update runs `skywire autoconfig`** which
 regenerates the config file. Any customization that isn't in the
-SKYENV file will be overwritten. To disable:
+SKYENV file, and isn't in the carried-forward list above, will be
+overwritten. To disable:
 ```bash
 echo "NOAUTOCONFIG=true" >> /etc/skywire.conf
 ```
@@ -116,11 +137,15 @@ Config gen: [`VPNSERVER`](VISOR_CONFIG_GEN.md#apps), [`PROXYSERVER`](VISOR_CONFI
 | `hypervisor.enable` | `skywire cli visor hv enable\|disable` |
 | `hypervisors` (add remote HV) | `skywire cli visor hv add <pk>` |
 
-`hv add` connects out to the hypervisor immediately and persists the
-PK — but the *inbound* access the PK grants (the `skywire cli --via
-dmsg://<pk>` bridge) starts on the next restart, when the dmsg RPC
-listeners and the peer whitelist are rebuilt from config. See
+`hv add` connects out to the hypervisor immediately and writes the PK
+to the json — but the *inbound* access the PK grants (the `skywire cli
+--via dmsg://<pk>` bridge) starts on the next restart, when the dmsg
+RPC listeners and the peer whitelist are rebuilt from config. See
 [docs/guides/remote-visor-cli.md](docs/guides/remote-visor-cli.md).
+
+Lifetime 2 (above): a runtime-added hypervisor is dropped by the next
+`skywire autoconfig` run. Put the PK in `HYPERVISORPKS` in
+`/etc/skywire.conf` for a hypervisor that must survive an update.
 
 Config gen: [`ISHYPERVISOR`](VISOR_CONFIG_GEN.md#hypervisor), [`HYPERVISORPKS`](VISOR_CONFIG_GEN.md#remote-access)
 

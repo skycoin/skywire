@@ -462,11 +462,14 @@ func (v *Visor) RuntimeStats() (*RuntimeStatsInfo, error) {
 	}, nil
 }
 
-// SetRewardAddress implements API.
+// SetRewardAddress implements API. The durable store is <local_path>/reward.txt,
+// not skywire-config.json — the in-memory conf field below is never flushed, and
+// reward.txt sits outside the generated json, so the address survives both a
+// restart and a config regen. REWARDSKYADDR in skywire.conf sets it at gen time.
 func (v *Visor) SetRewardAddress(p string) (string, error) {
-	// Write to config
+	// In-memory only, so the running visor reports the new address; not flushed.
 	v.conf.RewardAddress = p
-	// Also write to reward file for backward compatibility
+	// The durable write: reward.txt is what survey/reward reporting reads.
 	path := v.conf.LocalPath + "/" + skyenv.RewardFile
 	err := os.WriteFile(path, []byte(p), 0600)
 	if err != nil {

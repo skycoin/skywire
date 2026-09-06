@@ -35,15 +35,18 @@ type RouterSettings struct {
 	//   []             — revert to the built-in default;
 	//   non-empty      — that order, most-preferred first (unlisted types
 	//                    sort after it).
-	// Persisted to routing.transport_preference, so it survives a restart.
+	// Written to routing.transport_preference, so it survives a restart —
+	// but not a config regen (no skywire.conf field).
 	TransportPreference []string `json:"transport_preference,omitempty"`
 }
 
 // GetRouterSettings returns the current runtime values of the four
-// router knobs. MinHops and MuxRoutes are persisted to Routing.* and
+// router knobs. MinHops and MuxRoutes are written to Routing.* and
 // seeded back into the router at boot, so they survive a restart;
 // ForceLocalRoutes / ExistingTPOnly are runtime-only, mirroring the
-// CLI's behavior.
+// CLI's behavior. Surviving a restart is not the same as surviving a
+// config regen — of these, only MinHops has a skywire.conf field
+// (MINHOPS) and is preserved by `config gen -r`.
 func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 	if v.router == nil {
 		return RouterSettings{}, errors.New("router not available")
@@ -96,7 +99,9 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 }
 
 // SetTransportPreference installs the transport-type priority order and
-// persists it to routing.transport_preference. An empty slice reverts to
+// writes it to routing.transport_preference, so it survives a restart — but
+// not a config regen: `skywire autoconfig` rebuilds the json from
+// /etc/skywire.conf, which has no field for it. An empty slice reverts to
 // the built-in default. Every name must be a known transport type — a
 // silently-dropped typo would leave the caller believing a preference is
 // in force that isn't.
@@ -139,7 +144,11 @@ func (v *Visor) SetForceLocalRoutes(enabled bool) error {
 
 // SetMuxRoutes implements API.
 // Sets the number of parallel mux routes for new connections at runtime.
-// Also persists to the visor config file.
+// Also writes routing.mux_routes to skywire-config.json, so it survives a
+// restart — but not a config regen: `skywire autoconfig` rebuilds the json
+// from /etc/skywire.conf, and the MUXROUTES line in the generated
+// skywire.conf template is not read by `config gen`, so there is currently
+// no durable skywire.conf field for this.
 func (v *Visor) SetMuxRoutes(n int) error {
 	if v.router == nil {
 		return errors.New("router not available")
@@ -162,6 +171,8 @@ func (v *Visor) SetMuxRoutes(n int) error {
 
 // SetMuxMode implements API.
 // Sets the weight distribution mode for mux transport selection.
+// Runtime-only: held in the router, never written to the config, lost on
+// restart. There is no skywire.conf field for it.
 func (v *Visor) SetMuxMode(mode string) error {
 	if v.router == nil {
 		return errors.New("router not available")
@@ -448,13 +459,16 @@ func (v *Visor) GetTransportLogs(days int) ([]TransportLogEntry, error) {
 	return out, nil
 }
 
-// SetPersistentTransports sets min_hops routing config of visor
+// SetPersistentTransports replaces the visor's persistent_transports list —
+// in the transport manager's cache and in skywire-config.json, so it survives
+// a restart. Not a config regen: `skywire autoconfig` rebuilds the json from
+// /etc/skywire.conf, which has no field for persistent_transports.
 func (v *Visor) SetPersistentTransports(pTps []transport.PersistentTransports) error {
 	v.tpM.SetPTpsCache(pTps)
 	return v.conf.UpdatePersistentTransports(pTps)
 }
 
-// GetPersistentTransports gets min_hops routing config of visor
+// GetPersistentTransports returns the visor's configured persistent_transports.
 func (v *Visor) GetPersistentTransports() ([]transport.PersistentTransports, error) {
 	return v.conf.GetPersistentTransports()
 }

@@ -73,9 +73,11 @@ OR:
 ```
 skywire cli config gen --hvpks <public-key>
 ```
-OR, on a running visor (connects out immediately and persists the PK —
-but the *inbound* CLI-bridge access the PK grants starts on the visor's
-next restart, when the RPC listeners and whitelist are rebuilt):
+OR, on a running visor (connects out immediately and writes the PK to
+skywire-config.json — but the *inbound* CLI-bridge access the PK grants
+starts on the visor's next restart, when the RPC listeners and
+whitelist are rebuilt, and the PK is dropped by the next `skywire
+autoconfig` run unless it is also in `HYPERVISORPKS`):
 ```
 skywire cli visor hv add <public-key>
 ```

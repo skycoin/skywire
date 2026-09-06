@@ -614,8 +614,10 @@ func (v *Visor) DmsgConnectAll() (*DmsgConnectAllResult, error) {
 	return out, nil
 }
 
-// SetDmsgSessionsCount updates the visor's persisted dmsg.sessions_count
-// setting (written to the config file so it survives restart) and
+// SetDmsgSessionsCount updates the visor's dmsg.sessions_count setting
+// (written to skywire-config.json so it survives restart — but not a config
+// regen, which rebuilds the json from /etc/skywire.conf; set MINDMSGSESS
+// there to make it durable on an autoconfig-managed host) and
 // immediately attempts to maximize current session count if the new value
 // is higher or zero (zero = connect to all available servers).
 //

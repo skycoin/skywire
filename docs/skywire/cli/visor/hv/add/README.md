@@ -4,10 +4,19 @@
 
 Add a remote hypervisor connection at runtime without editing
 the config file by hand. The visor connects to the hypervisor
-immediately via DMSG AND persists the PK to the config's
-hypervisors list, so the connection survives a restart. (On a
-non-file-backed config — wasm tab / STDIN — the connection is made
-but cannot be persisted.)
+immediately via DMSG AND writes the PK to the config's hypervisors
+list, so the connection survives a restart. (On a non-file-backed
+config — wasm tab / STDIN — the connection is made but nothing is
+written.)
+
+It does NOT survive a config regen. skywire-config.json is a derived
+artifact: on a packaged install every 'skywire autoconfig' run — which
+a package install or update performs — rebuilds it from
+/etc/skywire.conf, and a PK that is only in the json is dropped. To
+make a hypervisor durable, add it to HYPERVISORPKS in
+/etc/skywire.conf and re-run autoconfig. A source-run visor that has
+no skywire.conf and never runs autoconfig keeps the runtime-added PK
+indefinitely.
 
 The outbound connection (hv ls / hv tui / web UI on the hypervisor)
 works right away. The INBOUND access the PK grants — driving this

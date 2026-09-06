@@ -41,8 +41,12 @@ Two consequences worth knowing before you troubleshoot:
   be managed is unreachable by construction.
 - **The whitelist and listeners are built at boot.** `skywire cli
   visor hv add <pk>` connects out to the new hypervisor immediately
-  and persists the PK, but *inbound* access for that PK (the `--via`
-  path below) starts on the target's next restart.
+  and writes the PK to the json, but *inbound* access for that PK (the
+  `--via` path below) starts on the target's next restart.
+- **A runtime-added PK does not survive a package update.** The json
+  is regenerated from `/etc/skywire.conf` by `skywire autoconfig`, so
+  a PK added only with `hv add` is dropped. Put it in `HYPERVISORPKS`
+  to make the grant durable.
 
 Trust is transitive upward: when a visor connects to its hypervisor,
 the hypervisor pushes its *own* hypervisors into the visor's live
