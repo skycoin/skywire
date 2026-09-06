@@ -221,6 +221,25 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}
 
+	// CXO bindings publisher: the READ side, keyed by peer public key, so a
+	// caller can look one peer's addresses up over an already-open CXO
+	// connection with Preview instead of an authenticated HTTP round-trip —
+	// and without subscribing to (and holding) the whole set. Additive: GET
+	// /resolve is unchanged and stays authoritative, and the feed is inert
+	// until something reads it. Best-effort, like the aggregator above.
+	if h.DmsgClient != nil {
+		bindPub, berr := api.StartBindingsCXOPublisher(h.DmsgClient, sk, transportStore, logger)
+		if berr != nil {
+			logger.WithError(berr).Error("Failed to start CXO bindings publisher, continuing without it")
+		} else {
+			arAPI.SetBindingsCXOPublisher(bindPub)
+			defer func() {
+				arAPI.SetBindingsCXOPublisher(nil)
+				_ = bindPub.Close() //nolint:errcheck
+			}()
+		}
+	}
+
 	defer arAPI.Close()
 	select {
 	case <-runCtx.Done():

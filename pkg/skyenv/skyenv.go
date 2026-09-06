@@ -119,6 +119,17 @@ const (
 	// only needs to be collision-free, which ports_test guards.
 	DmsgTPDStatsCXOPort uint16 = 73
 
+	// DmsgARBindingsCXOPort is the dmsg port the Address Resolver's CXO
+	// BINDINGS publisher listens on — the read side of the AR, keyed by peer
+	// public key (see pkg/deployment/ar/arfeed). Distinct from
+	// DmsgVisorARBindCXOPort (71), which is the opposite direction: there the
+	// AR aggregates each visor's own bind feed, here the AR publishes the
+	// merged result for anyone to look a peer up in. Two ports rather than one
+	// node serving both so the read feed cannot disturb the bind ingest.
+	// Numbered 74 (50-55 and 56-73 are all taken); the value only needs to be
+	// collision-free, which ports_test guards.
+	DmsgARBindingsCXOPort uint16 = 74
+
 	// DmsgDMSGDRegistrationCXOPort is the dmsg port the dmsg-discovery's CXO
 	// client-entry REGISTRATION aggregator binds (and each visor's entry
 	// publisher binds for the reverse subscribe). A visor publishes its own
