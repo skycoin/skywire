@@ -1,0 +1,2056 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Skywire — peer-to-peer encrypted networking">
+      
+      
+      
+        <link rel="canonical" href="https://skycoin.github.io/skywire/specs/specifications/05-Messaging_System/">
+      
+      
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.50">
+    
+    
+      
+        <title>Messaging System - Skywire</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.a40c8224.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#messaging-system" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Skywire" class="md-header__button md-logo" aria-label="Skywire" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Skywire
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Messaging System
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/skycoin/skywire" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    skycoin/skywire
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://skycoin.github.io/skywire/playground/" class="md-tabs__link">
+        
+  
+    
+  
+  Terminal
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../guides/" class="md-tabs__link">
+        
+  
+    
+  
+  Guides
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../skywire/" class="md-tabs__link">
+        
+  
+    
+  
+  Command Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../apps-overview/" class="md-tabs__link">
+          
+  
+    
+  
+  Apps
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../packaging/" class="md-tabs__link">
+          
+  
+    
+  
+  Packaging & Updates
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../" class="md-tabs__link">
+        
+  
+    
+  
+  Specs
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../graph/" class="md-tabs__link">
+        
+  
+    
+  
+  Code Graph
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../glossary/" class="md-tabs__link">
+        
+  
+    
+  
+  Glossary
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../rewards/" class="md-tabs__link">
+        
+  
+    
+  
+  Rewards
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://blog.theskywirenetwork.net" class="md-tabs__link">
+        
+  
+    
+  
+  Blog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Skywire" class="md-nav__button md-logo" aria-label="Skywire" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Skywire
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/skycoin/skywire" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    skycoin/skywire
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://skycoin.github.io/skywire/playground/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Terminal
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guides
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../skywire/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Apps
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Apps
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../apps-overview/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../pty/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    PTY
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
+            <span class="md-nav__icon md-icon"></span>
+            PTY
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../pty/skywire-pty/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Mode 1 — the visor-hosted pty (skywire cli pty)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../pty/standalone-pty/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Modes 2 &amp; 3 — the standalone pty (skywire app pty)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../skychat/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Skychat
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            Skychat
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../skychat/skychat-visor/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Visor-hosted skychat (skywire cli skychat)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../skychat/standalone-skychat/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Standalone skychat — TCP-direct &amp; CXO
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../skynet/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    SkyNet
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_4">
+            <span class="md-nav__icon md-icon"></span>
+            SkyNet
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../skynet/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SkyNet client
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../skysocks/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    SOCKS5 Proxy
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_5">
+            <span class="md-nav__icon md-icon"></span>
+            SOCKS5 Proxy
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../skysocks/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SOCKS5 proxy — client (skysocks-client)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../vpn/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    VPN
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            VPN
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../vpn/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    VPN client (vpn-client)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../vpn/router/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    VPN router (vpn-router)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../packaging/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Packaging & Updates
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Packaging & Updates
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../packaging/auto-update/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Auto-Update
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../packaging/aur-packages/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AUR Packages
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Specs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../graph/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Code Graph
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../glossary/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Glossary
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../rewards/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Rewards
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://blog.theskywirenetwork.net" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Blog
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#messaging-system-modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      Messaging System Modules
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#messaging-procedures" class="md-nav__link">
+    <span class="md-ellipsis">
+      Messaging Procedures
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#messaging-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      Messaging Discovery
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Messaging Discovery">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#instance-entry" class="md-nav__link">
+    <span class="md-ellipsis">
+      Instance Entry
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#store-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      Store Interface
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      Endpoints
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Endpoints">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-entry" class="md-nav__link">
+    <span class="md-ellipsis">
+      GET Entry
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-entry" class="md-nav__link">
+    <span class="md-ellipsis">
+      POST Entry
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-available-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      GET Available Servers
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#messaging-discovery-client-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      Messaging Discovery Client Library
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#messaging-link" class="md-nav__link">
+    <span class="md-ellipsis">
+      Messaging Link
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Messaging Link">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#link-handshake-frames" class="md-nav__link">
+    <span class="md-ellipsis">
+      Link Handshake Frames
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#messaging-frames" class="md-nav__link">
+    <span class="md-ellipsis">
+      Messaging Frames
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#noise-implementation-in-channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      Noise Implementation in Channels
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuring-an-instance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuring an Instance
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#instance-interaction-with-messaging-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      Instance Interaction with Messaging Discovery
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#channel-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Channel Management
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#opening-a-channel" class="md-nav__link">
+    <span class="md-ellipsis">
+      Opening a Channel
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#closing-a-channel" class="md-nav__link">
+    <span class="md-ellipsis">
+      Closing a Channel
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#handling-disconnections" class="md-nav__link">
+    <span class="md-ellipsis">
+      Handling Disconnections
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/skycoin/skywire/edit/develop/docs/specs/specifications/05-Messaging_System.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="messaging-system">Messaging System<a class="headerlink" href="#messaging-system" title="Permalink">&para;</a></h1>
+<p>The messaging system is an initial implementation of the <code>Transport</code> and associated interfaces. To work, the messaging system requires an active internet connection and is designed to be horizontally scalable.</p>
+<p>Three services make up the messaging system: <em>Messaging Client</em> (or <em>Client Instance</em>), <em>Messaging Server</em> (or <em>Service Instance</em>) and <em>Messaging Discovery</em>.</p>
+<p><em>Messaging Clients</em> and <em>Messaging Servers</em> are represented by public/private key pairs. <em>Messaging Clients</em> deliver data to one another via <em>Messaging Servers</em> which act as relays.</p>
+<p>The <em>Messaging Discovery</em> is responsible for allowing <em>Messaging Clients</em> to find other advertised <em>Messaging Clients</em> via their public keys. It is also responsible for finding appropriate <em>Messaging Servers</em> that either "advertise" them, or "advertise" other <em>Messaging Clients</em>.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>           [D]
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>     S(1)        S(2)
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>   //   \\      //   \\
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>  //     \\    //     \\
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a> C(A)    C(B) C(C)    C(D)
+</span></code></pre></div>
+<p>Legend:
+- <code>[D]</code> - Discovery Service
+- <code>S(X)</code> - Messaging Server (Server Instance)
+- <code>C(X)</code> - Messaging Client (Client Instance)</p>
+<h2 id="messaging-system-modules">Messaging System Modules<a class="headerlink" href="#messaging-system-modules" title="Permalink">&para;</a></h2>
+<p>There are two modules of the messaging system.</p>
+<ul>
+<li><code>messaging-discovery</code> contains the implementation of the <em>Messaging Discovery</em>.</li>
+<li><code>messaging</code> contains the implementation of either a <em>Client Instance</em> or a <em>Server Instance</em> of a <em>Messaging Client</em> or <em>Messaging Server</em>.</li>
+</ul>
+<h2 id="messaging-procedures">Messaging Procedures<a class="headerlink" href="#messaging-procedures" title="Permalink">&para;</a></h2>
+<p>This is a summary of the procedures that the <em>Messaging System</em> is to handle.</p>
+<p><strong>Advertising a client:</strong></p>
+<p>To be discoverable by other clients, a client needs to advertise itself.</p>
+<ol>
+<li>Client queries the Discovery to find available Servers.</li>
+<li>Client connects to some (or all) of the suggested Servers.</li>
+<li>Client updates it's own record in Discovery to include it's delegated Servers.</li>
+</ol>
+<p><strong>Client creates a channel to another client:</strong></p>
+<p>In order for two clients to communicate, both clients need to be connected to the same messaging server, and create a channel to each other via the server.</p>
+<ol>
+<li>Client queries discovery of the remote client's connected servers. The client will connect to one of these servers if it originally has no shared servers with the remote.</li>
+<li>The client sends a <code>OpenChannel</code> frame to the remote client via the shared server.</li>
+<li>If the remote client accepts, a <code>ChannelOpened</code> frame is sent back to the initiating client (also via the shared server). A channel is represented via two <em>Channel IDs</em> (between the initiating client and the server, and between the responding client and the server). The associated between the two channel IDs is defined within the server.</li>
+<li>Once a channel is created, clients can communicate via one another via the channel.</li>
+</ol>
+<h2 id="messaging-discovery">Messaging Discovery<a class="headerlink" href="#messaging-discovery" title="Permalink">&para;</a></h2>
+<p>The <em>Messaging Discovery</em> acts like a DNS for messaging instances (<em>Messaging Clients</em> or <em>Messaging Servers</em>).</p>
+<h3 id="instance-entry">Instance Entry<a class="headerlink" href="#instance-entry" title="Permalink">&para;</a></h3>
+<p>An entry within the <em>Messaging Discovery</em> can either represent a <em>Messaging Server</em> or a <em>Messaging Client</em>. The <em>Messaging Discovery</em> is a key-value store, in which entries (of either server or client) use their public keys as their "key".</p>
+<p>The following is the representation of an Entry in Golang.</p>
+<div class="language-golang highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1">// Entry represents an Instance's entry in the Discovery database.</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kd">type</span><span class="w"> </span><span class="nx">Entry</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="c1">// The data structure's version.</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="nx">Version</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:"version"`</span><span class="w"> </span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="c1">// A Entry of a given public key may need to iterate. This is the iteration sequence.</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="nx">Sequence</span><span class="w"> </span><span class="kt">uint64</span><span class="w"> </span><span class="s">`json:"sequence"`</span><span class="w"> </span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="c1">// Timestamp of the current iteration.</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="nx">Timestamp</span><span class="w"> </span><span class="kt">int64</span><span class="w"> </span><span class="s">`json:"timestamp"`</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="c1">// Public key that represents the Instance.</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">    </span><span class="nx">Static</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:"static"`</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">    </span><span class="c1">// Contains the node's required client meta if it's to be advertised as a Messaging Client.</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">    </span><span class="nx">Client</span><span class="w"> </span><span class="o">*</span><span class="nx">Client</span><span class="w"> </span><span class="s">`json:"client,omitempty"`</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">    </span><span class="c1">// Contains the node's required server meta if it's to be advertised as a Messaging Server.</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">    </span><span class="nx">Server</span><span class="w"> </span><span class="o">*</span><span class="nx">Server</span><span class="w"> </span><span class="s">`json:"server,omitempty"`</span>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">    </span><span class="c1">// Signature for proving authenticity of of the Entry.</span>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">    </span><span class="nx">Signature</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:"signature,omitempty"`</span>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="p">}</span>
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="c1">// Client contains the node's required client meta, if it is to be advertised as a Messaging Client.</span>
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="kd">type</span><span class="w"> </span><span class="nx">Client</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">    </span><span class="c1">// DelegatedServers contains a list of delegated servers represented by their public keys.</span>
+</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="w">    </span><span class="nx">DelegatedServers</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span><span class="w"> </span><span class="s">`json:"delegated_servers"`</span>
+</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="p">}</span>
+</span><span id="__span-1-30"><a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>
+</span><span id="__span-1-31"><a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a><span class="c1">// Server contains the node's required server meta, if it is to be advertised as a Messaging Server.</span>
+</span><span id="__span-1-32"><a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a><span class="kd">type</span><span class="w"> </span><span class="nx">Server</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-1-33"><a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a><span class="w">    </span><span class="c1">// IPv4 or IPv6 public address of the Messaging Server.</span>
+</span><span id="__span-1-34"><a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a><span class="w">    </span><span class="nx">Address</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:"address"`</span>
+</span><span id="__span-1-35"><a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>
+</span><span id="__span-1-36"><a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a><span class="w">    </span><span class="c1">// Port in which the Messaging Server is listening for connections.</span>
+</span><span id="__span-1-37"><a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a><span class="w">    </span><span class="nx">Port</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="s">`json:"port"`</span>
+</span><span id="__span-1-38"><a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>
+</span><span id="__span-1-39"><a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a><span class="w">    </span><span class="c1">// Number of connections still available.</span>
+</span><span id="__span-1-40"><a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a><span class="w">    </span><span class="nx">AvailableConnections</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="s">`json:"available_connections"`</span>
+</span><span id="__span-1-41"><a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Definition rules:</strong></p>
+<ul>
+<li>A record <strong>MUST</strong> have either a "Server" field, a "Client" field, or both "Server" and "Client" fields. In other words, a Messaging Node can be a Messaging Server Node, a Messaging Client Node, or both a Messaging Server Node and a Messaging Client Node.</li>
+</ul>
+<p><strong>Iteration rules:</strong></p>
+<ul>
+<li>The first entry submitted of a given static public key, needs to have a "Sequence" value of <code>0</code>. Any future entries (of the same static public key) need to have a "Sequence" value of <code>{previous_sequence} + 1</code>.</li>
+<li>The "Timestamp" field of an entry, must be of a higher value than the "Timestamp" value of the previous entry.</li>
+</ul>
+<p><strong>Signature Rules:</strong></p>
+<p>The "Signature" field authenticates the entry. This is the process of generating a signature of the entry:
+1. Obtain a JSON representation of the Entry, in which:
+    1. There is no whitespace (no <code></code> or <code>\n</code> characters).
+    2. The <code>"signature"</code> field is non-existent.
+2. Hash this JSON representation, ensuring the above rules.
+3. Create a Signature of the hash using the node's static secret key.</p>
+<p>The process of verifying an entry's signature will be similar.</p>
+<h3 id="store-interface">Store Interface<a class="headerlink" href="#store-interface" title="Permalink">&para;</a></h3>
+<p>The underlying database of the <em>Messaging Discovery</em> is a key-value store. The <code>Store</code> interface allows many databases to be used with the <em>Messaging Discovery</em>. </p>
+<div class="language-golang highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kd">type</span><span class="w"> </span><span class="nx">Store</span><span class="w"> </span><span class="kd">interface</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="c1">// Entry obtains a single messaging instance entry.</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="c1">// 'static' is a hex representation of the public key identifying the messaging instance.</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nx">Entry</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span><span class="w"> </span><span class="nx">static</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="nx">Entry</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="c1">// SetEntry set's an entry.</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="c1">// This is unsafe and does not check signature.</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="nx">SetEntry</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span><span class="w"> </span><span class="nx">entry</span><span class="w"> </span><span class="o">*</span><span class="nx">Entry</span><span class="p">)</span><span class="w"> </span><span class="kt">error</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">    </span><span class="c1">// AvailableServers discovers available messaging servers.</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="c1">// Obtains at most 'maxCount' amount of available servers obtained randomly.  </span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">    </span><span class="nx">AvailableServers</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span><span class="w"> </span><span class="nx">maxCount</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">([]</span><span class="o">*</span><span class="nx">Entry</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="p">}</span>
+</span></code></pre></div>
+<h3 id="endpoints">Endpoints<a class="headerlink" href="#endpoints" title="Permalink">&para;</a></h3>
+<p>Only 3 endpoints need to be defined; Get Entry, Post Entry, and Get Available Servers.</p>
+<h4 id="get-entry">GET Entry<a class="headerlink" href="#get-entry" title="Permalink">&para;</a></h4>
+<p>Obtains a messaging node's entry.</p>
+<blockquote>
+<p><code>GET {domain}/discovery/entries/{public_key}</code></p>
+</blockquote>
+<p><strong>REQUEST</strong></p>
+<p>Header:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Accept: application/json
+</span></code></pre></div></p>
+<p><strong>RESPONSE</strong></p>
+<p>Possible Status Codes:
+- Success (200) - Successfully updated record.
+    - Header:
+        <div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Content-Type: application/json
+</span></code></pre></div>
+    - Body:
+        &gt; JSON-encoded entry.
+- Not Found (404) - Entry of public key is not found.
+- Unauthorized (401) - invalid signature.
+- Internal Server Error (500) - something unexpected happened.</p>
+<h4 id="post-entry">POST Entry<a class="headerlink" href="#post-entry" title="Permalink">&para;</a></h4>
+<p>Posts an entry and replaces the current entry if valid.</p>
+<blockquote>
+<p><code>POST {domain}/discovery/entries</code></p>
+</blockquote>
+<p><strong>REQUEST</strong></p>
+<p>Header:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Content-Type: application/json
+</span></code></pre></div>
+Body:</p>
+<blockquote>
+<p>JSON-encoded, signed Entry.</p>
+</blockquote>
+<p><strong>RESPONSE</strong></p>
+<p>Possible Response Codes:
+- Success (200) - Successfully registered record.
+- Unauthorized (401) - invalid signature.
+- Internal Server Error (500) - something unexpected happened.</p>
+<h4 id="get-available-servers">GET Available Servers<a class="headerlink" href="#get-available-servers" title="Permalink">&para;</a></h4>
+<p>Obtains a subset of available server entries.</p>
+<blockquote>
+<p><code>GET {domain}/discovery/available_servers</code></p>
+</blockquote>
+<p><strong>REQUEST</strong></p>
+<p>Header:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Accept: application/json
+</span></code></pre></div></p>
+<p><strong>RESPONSE</strong></p>
+<p>Possible Status Codes:
+- Success (200) - Got results.
+    - Header:
+        <div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Content-Type: application/json
+</span></code></pre></div>
+    - Body:
+        &gt; JSON-encoded <code>[]Entry</code>.
+- Not Found (404) - No results.
+- Forbidden (403) - When access is forbidden.
+- Internal Server Error (500) - Something unexpected happened.</p>
+<h3 id="messaging-discovery-client-library">Messaging Discovery Client Library<a class="headerlink" href="#messaging-discovery-client-library" title="Permalink">&para;</a></h3>
+<p>The module is named <code>client</code>. It contains a <code>HTTPClient</code> structure, that defines how the client will interact with the <em>Messaging Discovery</em> API. </p>
+<p>A new <code>HTTPClient</code> object can be instantiated using the public function <code>New(address string)</code>.</p>
+<p>It exposes the following public methods:</p>
+<div class="language-go highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1">// Entry retrieves an entry associated to the given public key from the discovery server.</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="nx">HTTPClient</span><span class="p">)</span><span class="w"> </span><span class="nx">Entry</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span><span class="w"> </span><span class="nx">static</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="nx">Entry</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="c1">// definition ...</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="p">}</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="c1">// SetEntry tries to set the given entry on the discovery server. It must be signed.</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1">// If the entry is modifying a previous one, must be signed by the same private key.</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="nx">HTTPClient</span><span class="p">)</span><span class="w"> </span><span class="nx">SetEntry</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span><span class="w"> </span><span class="nx">entry</span><span class="w"> </span><span class="o">*</span><span class="nx">Entry</span><span class="p">)</span><span class="w"> </span><span class="kt">error</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">    </span><span class="c1">// definition ...</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="p">}</span>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="c1">// AvailableServers gets a list of server entries from the skywire discovery server.</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="c1">// The amount is determined by the discovery server.</span>
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="o">*</span><span class="nx">HTTPClient</span><span class="p">)</span><span class="w"> </span><span class="nx">AvailableServers</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">)</span><span class="w"> </span><span class="p">([]</span><span class="o">*</span><span class="nx">Entry</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="w">    </span><span class="c1">// definition ...</span>
+</span><span id="__span-8-16"><a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>The module also provides public functions to instantiate valid <code>Entry</code> objects.</p>
+<h2 id="messaging-link">Messaging Link<a class="headerlink" href="#messaging-link" title="Permalink">&para;</a></h2>
+<p>The <code>link</code> provides two <em>Messaging Instances</em> a means to establish a connection with one another, and also handle a pool of connections.</p>
+<p>Using the <em>Messaging Discovery</em>, a <em>Messaging Instance</em> can discover other instances via only their public key. However, a <em>Link</em> requires both a public key and an address:port.</p>
+<p>Data sent via a <em>Link</em> is encapsulated in <em>Frames</em>. A <em>Link</em> is implemented using a TCP connection.</p>
+<h3 id="link-handshake-frames">Link Handshake Frames<a class="headerlink" href="#link-handshake-frames" title="Permalink">&para;</a></h3>
+<p>When setting up a <em>Link</em> between two instances, the instance that initiates is called the <em>Initiator</em> and the instance that responds is called the <em>Responder</em>. Each instance is represented by a public key.</p>
+<p>To set up a <em>Link</em>, the <em>Initiator</em> first dials a TCP connection to the listening <em>Responder</em>. Once the TCP connection is established, the <em>Responder</em> sends the first <em>Frame</em>. It is expected that the <em>Initiator</em> knows the public key of the <em>Responder</em></p>
+<p>Given a situation where instances 'A' and 'B' are to establish a link with one another (where 'A' is the initiator), the following <em>Frames</em> are delivered to perform a handshake.</p>
+<p>Link Handshake Frames are to be in JSON format.</p>
+<p><strong>Link Handshake Frame 1 (A -&gt; B):</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">{</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">    </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0.1"</span><span class="p">,</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="nt">"initiator"</span><span class="p">:</span><span class="w"> </span><span class="s2">"036b630436972743d4b3f5bb39cd451da29d222b5d30893684a40f34a66c692157"</span><span class="p">,</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="nt">"responder"</span><span class="p">:</span><span class="w"> </span><span class="s2">"02e18998f0174631710e47052927e13bddc712ca0c11289e0150fbf57570e31151"</span><span class="p">,</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="nt">"nonce"</span><span class="p">:</span><span class="w"> </span><span class="s2">"853ea8454d11bd3b59cb31f8572a3779"</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>The initiator is responsible for sending the first frame.
+- <code>"version"</code> specifies the version of messaging protocol that the initiator is using (<code>"0.1"</code> for now).
+- <code>"initiator"</code> should contain the hex representation of the public key of the initiator (the instance that is sending the first handshake frame).
+- <code>"responder"</code> should contain the hex representation of the public key of the expected responder (the responder should disconnect TCP if this is not their public key).
+- <code>"nonce"</code> is the hex-string representation of a 16-byte nonce that the responder should sign (alongside the initiator's public key) to check authenticity of the responder and whether the responder.</p>
+<p><strong>Link Handshake Frame 2 (B -&gt; A):</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="p">{</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">    </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0.1"</span><span class="p">,</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nt">"initiator"</span><span class="p">:</span><span class="w"> </span><span class="s2">"036b630436972743d4b3f5bb39cd451da29d222b5d30893684a40f34a66c692157"</span><span class="p">,</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="nt">"responder"</span><span class="p">:</span><span class="w"> </span><span class="s2">"02e18998f0174631710e47052927e13bddc712ca0c11289e0150fbf57570e31151"</span><span class="p">,</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">    </span><span class="nt">"nonce"</span><span class="p">:</span><span class="w"> </span><span class="s2">"853ea8454d11bd3b59cb31f8572a3779"</span><span class="p">,</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">    </span><span class="nt">"sig1"</span><span class="p">:</span><span class="w"> </span><span class="s2">"df8a978f0ea681e218cfd8127692dbe4190441567181b9057ab15da34b08ff610d9060e5195419e1744bb57d50373c1dd444b5c2753a80dba32b292fa306e9df01"</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>This frame allows the responder agree with the initiator and prove it's ownership of it's claimed public key.</p>
+<p>The <code>"sig1"</code> field contains a hex representation of the result of signing the concatenation of the version, initiator, responder and nonce fields. Note that before concatenation, hex representations should be decoded and the concatenation result needs to be hashed before being signed. <code>"sig1"</code> should be signed by the responder.</p>
+<p><strong>Link Handshake Frame 3 (A -&gt; B):</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="p">{</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">    </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0.1"</span><span class="p">,</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span><span class="nt">"initiator"</span><span class="p">:</span><span class="w"> </span><span class="s2">"036b630436972743d4b3f5bb39cd451da29d222b5d30893684a40f34a66c692157"</span><span class="p">,</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">    </span><span class="nt">"responder"</span><span class="p">:</span><span class="w"> </span><span class="s2">"02e18998f0174631710e47052927e13bddc712ca0c11289e0150fbf57570e31151"</span><span class="p">,</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">    </span><span class="nt">"nonce"</span><span class="p">:</span><span class="w"> </span><span class="s2">"853ea8454d11bd3b59cb31f8572a3779"</span><span class="p">,</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">    </span><span class="nt">"sig1"</span><span class="p">:</span><span class="w"> </span><span class="s2">"df8a978f0ea681e218cfd8127692dbe4190441567181b9057ab15da34b08ff610d9060e5195419e1744bb57d50373c1dd444b5c2753a80dba32b292fa306e9df01"</span><span class="p">,</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">    </span><span class="nt">"sig2"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fc17928d5a3f7691434282fb3108d1603889f996e8e45adc2e35362e08009b8611abb9f45e511b9931f0f04b37ff1057fd69554befe534ad28c77ff0c44121ab00"</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>This frame allows the initiator to inform the responder that <code>"sig1"</code> is accepted, and to prove the initiator's ownership of it's public key.</p>
+<p><code>"sig2"</code> is the signature result of the concatenation of the version, initiator, responder, nonce and sig1 fields. Concatenation rules are the same as that of <code>"sig1"</code>.</p>
+<p><strong>Link Handshake Frame 4 (B -&gt; A):</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="p">{</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">    </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0.1"</span><span class="p">,</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">    </span><span class="nt">"initiator"</span><span class="p">:</span><span class="w"> </span><span class="s2">"036b630436972743d4b3f5bb39cd451da29d222b5d30893684a40f34a66c692157"</span><span class="p">,</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">    </span><span class="nt">"responder"</span><span class="p">:</span><span class="w"> </span><span class="s2">"02e18998f0174631710e47052927e13bddc712ca0c11289e0150fbf57570e31151"</span><span class="p">,</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">    </span><span class="nt">"nonce"</span><span class="p">:</span><span class="w"> </span><span class="s2">"853ea8454d11bd3b59cb31f8572a3779"</span><span class="p">,</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">    </span><span class="nt">"sig1"</span><span class="p">:</span><span class="w"> </span><span class="s2">"df8a978f0ea681e218cfd8127692dbe4190441567181b9057ab15da34b08ff610d9060e5195419e1744bb57d50373c1dd444b5c2753a80dba32b292fa306e9df01"</span><span class="p">,</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">    </span><span class="nt">"sig2"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fc17928d5a3f7691434282fb3108d1603889f996e8e45adc2e35362e08009b8611abb9f45e511b9931f0f04b37ff1057fd69554befe534ad28c77ff0c44121ab00"</span><span class="p">,</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">    </span><span class="nt">"accepted"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>Sent by the responder, this frame concludes the handshake if the value of <code>"accepted"</code> is <code>true</code>.</p>
+<h3 id="messaging-frames">Messaging Frames<a class="headerlink" href="#messaging-frames" title="Permalink">&para;</a></h3>
+<p>After the handshake phase, frames have a reoccurring format. These are the <em>Messaging Frames</em> of the messaging system.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>| FrameType | PayloadSize | Payload |
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>| 1 byte    | 2 bytes     | ~ bytes |
+</span></code></pre></div>
+<ul>
+<li>The <code>Type</code> specifies the frame type. Different frame types are used for opening and closing channels as well as sending packets via the channels.</li>
+<li><code>PayloadSize</code> contains an encoded <code>uint16</code> value that represents the Payload's length (the max size is 65535).</li>
+<li><code>Payload</code> has a length determined by <code>PayloadSize</code>.</li>
+</ul>
+<p>The following is a summary of the frame types.</p>
+<table>
+<thead>
+<tr>
+<th>FrameTypeValue</th>
+<th>FrameTypeName</th>
+<th>FrameBody</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0x0</code></td>
+<td><code>OpenChannel</code></td>
+<td>ChannelID + RemoteStatic + NoiseMessage1</td>
+</tr>
+<tr>
+<td><code>0x1</code></td>
+<td><code>ChannelOpened</code></td>
+<td>ChannelID + NoiseMessage2</td>
+</tr>
+<tr>
+<td><code>0x2</code></td>
+<td><code>CloseChannel</code></td>
+<td>ChannelID</td>
+</tr>
+<tr>
+<td><code>0x3</code></td>
+<td><code>ChannelClosed</code></td>
+<td>ChannelID</td>
+</tr>
+<tr>
+<td><code>0x4</code></td>
+<td><code>Send</code></td>
+<td>ChannelID + CipherText</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>FrameBody</code> has the following sub-fields. A <code>FrameBody</code> with multiple sub-fields have the sub-fields concatenated.</p>
+<ul>
+<li>The <code>ChannelID</code> sub-field is represented by a single byte. This restricts a <em>Client Instance</em> to have at most 256 channels via a single <em>Server Instance</em>.</li>
+<li>The <code>RemoteStatic</code> sub-field is represented by 33 bytes. It contains a public key of a remote <em>Client Instance</em>.</li>
+<li><code>NoiseMessage1</code> and <code>NoiseMessage2</code> are both represented by 49 bytes. It contains the noise handshake messages for establishing symmetric encryption between the two client instances of the channel. The noise handshake pattern used is KK.</li>
+<li>The <code>CipherText</code> sub-field is the only sub-field with a modular length. It contains size of the encrypted payload followed by payload that is to be delivered.</li>
+</ul>
+<h3 id="noise-implementation-in-channels">Noise Implementation in Channels<a class="headerlink" href="#noise-implementation-in-channels" title="Permalink">&para;</a></h3>
+<p>As stated above, a channel is established using the <code>OpenChannel</code> and <code>ChannelOpened</code> frames. Then, after a channel is established, the two <em>Client Instances</em> of the channel can communicate with each over via <code>Send</code> frames (which includes a <code>CipherText</code> component).</p>
+<p>The protocol used to establish the symmetric encryption of the <code>CipherText</code> is the <a href="http://noiseprotocol.org/">Noise Protocol</a>.</p>
+<p>The curve used will be <code>secp256k1</code> for the key pair, and <code>chacha20poly1305</code> will be used for the symmetric encryption itself.</p>
+<p>Note that, the noise protocol requires the public key length and the ECDH result length (shared secret) to be equal. Because for <code>secp256k1</code>, public keys have a length of 33, and the ECDH result has a length of 32, so an empty byte (<code>0x0</code>) should be appended to all generated ECDH results. Hence, the <code>DHLEN</code> constant for the noise protocol should be 33.</p>
+<p>After the handshake, the CipherState object will be used by the <em>Client Instances</em> to encrypt and decrypt the <code>CipherText</code> contained within the <code>Send</code> frame.</p>
+<p><strong>Handshake pattern:</strong></p>
+<p>Only the <code>KK</code> <a href="http://noiseprotocol.org/noise.html#interactive-handshake-patterns-fundamental">interactive handshake pattern (fundamental)</a> will be supported.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>-&gt; s
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>&lt;- s
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>...
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>-&gt; e, es, ss
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>&lt;- e, ee, se
+</span></code></pre></div>
+<p>The <code>-&gt; e, es, ss</code> message is the <code>NoiseMessage1</code> of a <code>OpenChannel</code> frame, while the <code>&lt;- e, ee, se</code> message is the <code>NoiseMessage2</code> of a <code>ChannelOpened</code> frame.</p>
+<h3 id="configuring-an-instance">Configuring an Instance<a class="headerlink" href="#configuring-an-instance" title="Permalink">&para;</a></h3>
+<p>When creating an <em>Instance</em>, the following options should be available via the following structure.</p>
+<div class="language-golang highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1">// Config configures an instance.</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="kd">type</span><span class="w"> </span><span class="nx">Config</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="c1">// Public determines whether the instance is to advertise itself to the messaging discovery servers.</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">    </span><span class="nx">Public</span><span class="w"> </span><span class="kt">bool</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="c1">// DiscoveryAddresses contains the messaging discovery services to be used (in order of preference).</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">    </span><span class="nx">DiscoveryAddresses</span><span class="w"> </span><span class="p">[]</span><span class="kt">string</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>The above structure is to be an input when creating a <em>Server Instance</em> or a <em>Client Instance</em>.</p>
+<h3 id="instance-interaction-with-messaging-discovery">Instance Interaction with Messaging Discovery<a class="headerlink" href="#instance-interaction-with-messaging-discovery" title="Permalink">&para;</a></h3>
+<p>On startup <code>Server</code> that is supposed to be publicly available should register itself in messaging discovery. To do so it first has to fetch current version of an <code>Entry</code>, if entry doesn't exist it should create one. If entry exists it may update it if necessary.</p>
+<p>On startup <code>Client</code> may connect to necessary amount of servers by fetching list of available servers from the discovery. Once initial connections are established <code>Client</code> should update discovery entry to advertise it's relays.</p>
+<h3 id="channel-management">Channel Management<a class="headerlink" href="#channel-management" title="Permalink">&para;</a></h3>
+<p>The following is a proposal of how a Channel can be represented in code.</p>
+<div class="language-golang highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1">// Channel represents a channel that implements Transport. It can be from the perspective of a Server or Client Instance.</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="kd">type</span><span class="w"> </span><span class="nx">Channel</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">    </span><span class="c1">// ChannelID represents the ID that is associated of the adjacent link.</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">    </span><span class="nx">ChannelID</span><span class="w"> </span><span class="kt">uint8</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="w">    </span><span class="c1">// Destination is the public key of the instance that is the final destination.</span>
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">    </span><span class="c1">// This should always contain the public key of a client instance (as a server cannot be the final destination).</span>
+</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">    </span><span class="nx">Destination</span><span class="w"> </span><span class="nx">cipher</span><span class="p">.</span><span class="nx">PubKey</span>
+</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>
+</span><span id="__span-16-10"><a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="w">    </span><span class="c1">// Link contains the adjacent link of the channel.</span>
+</span><span id="__span-16-11"><a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a><span class="w">    </span><span class="nx">Link</span><span class="w"> </span><span class="o">*</span><span class="nx">link</span><span class="p">.</span><span class="nx">Link</span>
+</span><span id="__span-16-12"><a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>Both the client and server instances needs to manage channels. Channels are associated with a channel ID and also the public key(s) of the remote instances that the channel interacts with. Channels are hence identified by <em>Link</em> + <em>Channel ID</em>.</p>
+<p>From the perspective of a <em>Client Instance</em>, the assignment of <em>Channel IDs</em> are unique to a given link with a <em>Server Instance</em>. For example, let's say client 'A' is connected with server 'B' and server 'C', hence we have links 'AB' and 'AC'. We can have 'AB' and 'AC' share the same Channel ID, but because the channel itself is associated with a different link, they are considered different channels.</p>
+<p>From the perspective of a <em>Server Instance</em>, the assignment of <em>Channel IDs</em> are unique to a given link with a <em>Client Instance</em>.</p>
+<h3 id="opening-a-channel">Opening a Channel<a class="headerlink" href="#opening-a-channel" title="Permalink">&para;</a></h3>
+<p>A channel in it's entirety handles the communication between two client instances via a server instance (which acts as a relay). Within the link between a single client instance and the server instance, a channel is represented using a <em>Channel ID</em>. The <em>Channel ID</em> of the two <em>links</em> of the same "channel" can be different, and the <em>Server Instance</em> is responsible for recording this association of the <em>Channel IDs</em> (coupled with the client instance's public key).</p>
+<p>When a <em>Client Instance</em> wishes to communicate with another <em>Client Instance</em>, it is responsible for initiating the creation of a channel. To do so, t sends a <code>OpenChannel</code> frame to the <em>Server Instance</em> in which:</p>
+<ul>
+<li><code>ChannelID</code> contains a ChannelID that the client wishes to associate with the channel.</li>
+<li><code>RemoteStatic</code> contains the public key of the remote <em>Client Instance</em> that the local client wishes to communicate via this channel.</li>
+<li><code>NoiseMessage1</code> is the first noise handshake message (the handshake pattern used is KK).</li>
+</ul>
+<p>If the <em>Server Instance</em> wishes to reject the request to open channel, it can send a <code>ChannelClosed</code> frame back to the initiating client with the <code>ChannelID</code> sub-field containing the value of the channel ID suggested by the initiating client.</p>
+<p>If the <em>Server Instance</em> wishes to go forward with opening of a channel, it sends a <code>OpenChannel</code> frame to the second <em>Client Instance</em>, in which <code>ChannelID</code> is an ID that's unique between the server and the second client and public key of the first client.</p>
+<p>If the second <em>Client Instance</em> wishes to reject the request, it can send a <code>ChannelClosed</code> frame back to the server, and the server can subsequently send a <code>ChannelClosed</code> frame to the initiating client (the <code>ChannelID</code> sub-fields of these <code>ChannelClosed</code> frames should be the unique channel IDs of the associated links).</p>
+<p>If the second <em>Client Instance</em> accepts the request, it sends a <code>ChannelOpened</code> back to the <em>Server Instance</em> (with the <code>NoiseMessage2</code>). Subsequently, the <em>Server Instance</em> sends a <code>ChannelOpened</code> back to the initiating client (the <code>ChannelID</code> sub-fields of these <code>ChannelOpened</code> frames should be the unique channel IDs of the associated links).</p>
+<h3 id="closing-a-channel">Closing a Channel<a class="headerlink" href="#closing-a-channel" title="Permalink">&para;</a></h3>
+<p>A <em>Client Instance</em> can safely close any of it's channels by sending a <code>CloseChannel</code> (with the associated <code>ChannelID</code>) to the <em>Server Instance</em>.</p>
+<p>After a <em>Client Instance</em> sends a <code>CloseChannel</code>, no more frames are to be sent by that instance. However, the remote instance can still send frames until it receives the <code>CloseChannel</code> to it. The "close-responding" client then sends a <code>ChannelClosed</code> instance back to the "close-initiating" client. Once the <code>ChannelClosed</code> channel is sent by the "close-responding" client, it will no longer send or receive frames. Once the "close-initiator" receives the <code>ChannelClosed</code> frame. it will no longer receive frames.</p>
+<p>In summary,</p>
+<ul>
+<li>When a client instance sends a <code>CloseChannel</code> frame, the channel is "partially-closed" and the client instance will only receive and not send via the channel. If a <code>ChannelClosed</code> frame is not received after a given timeout, the channel sends a <code>ChannelClosed</code> itself and the channel is "fully-closed".</li>
+<li>When a client instance receives a <code>CloseChannel</code> frame, it delivers a <code>ChannelClosed</code> frame and the channel is "fully-closed" and the client will no longer receive or send via the channel.</li>
+<li>When a client instance receives a <code>ChannelClosed</code> frame, the channel is "fully-closed".</li>
+</ul>
+<h3 id="handling-disconnections">Handling Disconnections<a class="headerlink" href="#handling-disconnections" title="Permalink">&para;</a></h3>
+<p>In any given situation, there may be a possibility that the <em>Server Instance</em> unexpectedly disconnects with a <em>Client Instance</em>, or that a <em>Client Instance</em> unexpectedly disconnects with a <em>Server Instance</em>. This should directly affect the channels associated with the <em>Link</em> in question.</p>
+<p>When a <em>Client Instance</em> detects that a <em>Server Instance</em> has disconnected from it. All associated channels with that <em>Server Instance</em> should be closed. When a channel closes, the associated <em>Transport</em> should also be closed.</p>
+<p>When a <em>Server Instance</em> detects a disconnection from a <em>Client Instance</em>, it should send a <code>ChannelClosed</code> frame to all the other <em>Client Instances</em> that shares a channel with the disconnected client. After so, the <em>Server Instance</em> should dissociate all relations with the closed channels.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/skycoin/skywire" target="_blank" rel="noopener" title="skycoin/skywire on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://t.me/skywire" target="_blank" rel="noopener" title="Skywire on Telegram" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M248 8C111.033 8 0 119.033 0 256s111.033 248 248 248 248-111.033 248-248S384.967 8 248 8m114.952 168.66c-3.732 39.215-19.881 134.378-28.1 178.3-3.476 18.584-10.322 24.816-16.948 25.425-14.4 1.326-25.338-9.517-39.287-18.661-21.827-14.308-34.158-23.215-55.346-37.177-24.485-16.135-8.612-25 5.342-39.5 3.652-3.793 67.107-61.51 68.335-66.746.153-.655.3-3.1-1.154-4.384s-3.59-.849-5.135-.5q-3.283.746-104.608 69.142-14.845 10.194-26.894 9.934c-8.855-.191-25.888-5.006-38.551-9.123-15.531-5.048-27.875-7.717-26.8-16.291q.84-6.7 18.45-13.7 108.446-47.248 144.628-62.3c68.872-28.647 83.183-33.623 92.511-33.789 2.052-.034 6.639.474 9.61 2.885a10.45 10.45 0 0 1 3.53 6.716 43.8 43.8 0 0 1 .417 9.769"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://blog.theskywirenetwork.net" target="_blank" rel="noopener" title="Skycoin blog" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M0 64c0-17.7 14.3-32 32-32 229.8 0 416 186.2 416 416 0 17.7-14.3 32-32 32s-32-14.3-32-32C384 253.6 226.4 96 32 96 14.3 96 0 81.7 0 64m0 352a64 64 0 1 1 128 0 64 64 0 1 1-128 0m32-256c159.1 0 288 128.9 288 288 0 17.7-14.3 32-32 32s-32-14.3-32-32c0-123.7-100.3-224-224-224-17.7 0-32-14.3-32-32s14.3-32 32-32"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "navigation.tracking", "navigation.indexes", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.action.edit", "toc.follow"], "search": "../../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.60a45f97.min.js"></script>
+      
+        <script src="../../../javascripts/desk-shell.js"></script>
+      
+    
+  </body>
+</html>
