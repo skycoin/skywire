@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io"
 
+	rpc "github.com/0magnet/gobrpc"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
-	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 

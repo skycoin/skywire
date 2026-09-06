@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	rpc "github.com/0magnet/gobrpc"
 	"github.com/orandin/lumberjackrus"
 	"github.com/sirupsen/logrus"
 
@@ -21,7 +22,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
-	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )

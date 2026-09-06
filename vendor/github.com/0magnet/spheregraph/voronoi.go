@@ -1,4 +1,4 @@
-// Package latency pkg/tpviz/latency/voronoi.go c4-vis-latency
+// Spherical Voronoi and Delaunay over the embedded points.
 //
 // Spherical Voronoi over the embedded points.
 //
@@ -11,14 +11,14 @@
 // This is not the same shape as the group-boundary overlay's circles.
 // Cells tessellate: they share edges, cover the whole sphere, and every
 // point of the sphere belongs to exactly one of them.
-package latency
+package spheregraph
 
 import (
 	"math"
 	"sort"
 )
 
-// Cell is one visor's territory: a closed spherical polygon whose
+// Cell is one site's territory: a closed spherical polygon whose
 // vertices are unit vectors, in order around the site.
 type Cell struct {
 	Site    int
@@ -31,9 +31,9 @@ type Triangle struct{ A, B, C int }
 
 // Voronoi returns one cell per point.
 //
-// Coincident sites are merged before the hull is built. Two visors with
+// Coincident sites are merged before the hull is built. Two sites with
 // the same latency profile embed to the same place, which happens for
-// real (two visors on one machine see the same peers at the same RTT),
+// real (two sites on one machine see the same peers at the same RTT),
 // and a duplicated site makes the hull non-manifold: the visibility
 // predicate cannot be consistent about a zero-area face, so the face
 // list grows without bound. Merged sites share the representative cell,
@@ -291,12 +291,12 @@ func cross(a, b Vec3) Vec3 {
 // SeparateCoincident returns render positions in which no two points
 // share a location.
 //
-// The embedding legitimately places two visors at the same point when
+// The embedding legitimately places two sites at the same point when
 // their latency profiles are identical, which happens whenever one
-// machine runs several visors: they see the same peers at the same RTT,
+// machine runs several sites: they see the same peers at the same RTT,
 // so latency space cannot tell them apart. That is the right answer for
 // the Voronoi, where a shared position means a shared territory, but the
-// wrong one for drawing: cosmos-go would render four visors as one pixel
+// wrong one for drawing: a GPU renderer would render four sites as one pixel
 // and three of them would have no hover, no click and no way to know
 // they exist.
 //

@@ -35,10 +35,10 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/0magnet/osnotify"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
-	"github.com/skycoin/skywire/pkg/osnotify"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
