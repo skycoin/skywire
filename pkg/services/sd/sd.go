@@ -17,12 +17,14 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/sd/api"
 	sdmetrics "github.com/skycoin/skywire/pkg/deployment/sd/metrics"
+	"github.com/skycoin/skywire/pkg/deployment/sd/regcxo"
 	"github.com/skycoin/skywire/pkg/deployment/sd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/services"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/svcmode"
 )
 
@@ -185,6 +187,26 @@ func (s *service) Run(ctx context.Context) error {
 
 	if h.DmsgClient != nil {
 		s.startServicesCXO(runCtx, h.DmsgClient, sdAPI, sk, log)
+
+		// SD-registration-over-CXO aggregator: always-on fan-in path where
+		// visors publish their live service-entry set as a CXO feed instead
+		// of re-POSTing it over a fresh dmsg stream (each a full Noise
+		// handshake) every 90s. Inert until visors subscribe (just a
+		// listener), purely additive to the authoritative HTTP register, so
+		// it needs no gate. The API is the Sink (IngestServiceFromCXO). The
+		// node identity is bound to the SD's service SecKey so gated visors
+		// accept its subscribe (see #4168). Best-effort — HTTP registration
+		// is unaffected if it fails to start.
+		agg, aerr := regcxo.New(h.DmsgClient, sk, sdAPI, regcxo.Config{Logger: log})
+		if aerr != nil {
+			log.WithError(aerr).Error("Failed to start SD-registration-over-CXO aggregator, continuing without it")
+		} else {
+			agg.Run(runCtx)
+			defer func() { _ = agg.Close() }() //nolint:errcheck
+			log.WithField("feed_pk", agg.FeedPK()).
+				WithField("port", skyenv.DmsgVisorSDRegCXOPort).
+				Info("SD-registration-over-CXO aggregator running")
+		}
 	}
 
 	select {
