@@ -61,6 +61,6 @@ func OnFunc(cmd *cobra.Command, opts func(*cobra.Command) backdrop.Options) {
 		c.SetOut(&buf)
 		def(c, args)
 		c.SetOut(out)
-		fmt.Fprint(out, backdrop.Render(buf.String(), o))
+		fmt.Fprint(out, backdrop.Render(buf.String(), o)) //nolint:errcheck,gosec
 	})
 }

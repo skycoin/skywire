@@ -130,7 +130,9 @@ func (g *Generator) parseXBinFile() {
 		if flags&0x10 != 0 {
 			numchars = 512
 		}
-		_, _ = g.in.Discard(fontSize * numchars)
+		// A short discard means the file is truncated, which the read that
+		// follows reports; there is nothing extra to learn from it here.
+		_, _ = g.in.Discard(fontSize * numchars) //nolint:errcheck
 	}
 
 	if flags&4 == 4 {
