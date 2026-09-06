@@ -39,6 +39,15 @@ func (f *Factory) geoFunc() func() *geo.LocationData {
 	return fn
 }
 
+// entrySink recovers the servicedisc.EntrySink stored in the `any`-typed
+// Factory.EntrySink (nil if unset). Every client this factory builds gets it,
+// so the visor's SD-registration-over-CXO feed carries the live set of entries
+// across all of its apps, not just one.
+func (f *Factory) entrySink() servicedisc.EntrySink {
+	s, _ := f.EntrySink.(servicedisc.EntrySink)
+	return s
+}
+
 // VisorUpdater obtains a visor updater.
 func (f *Factory) VisorUpdater(port uint16) Updater {
 	// Always return empty updater if keys are not set.
@@ -55,6 +64,7 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 		DisplayNodeIP: f.DisplayNodeIP,
 		Geo:           f.geoData(),
 		GeoFunc:       f.geoFunc(),
+		Sink:          f.entrySink(),
 	}
 
 	return newServiceUpdater(
@@ -87,6 +97,7 @@ func (f *Factory) PublicVisorUpdater(
 		DisplayNodeIP: f.DisplayNodeIP,
 		Geo:           f.geoData(),
 		GeoFunc:       f.geoFunc(),
+		Sink:          f.entrySink(),
 	}
 
 	inner := newServiceUpdater(
@@ -130,6 +141,7 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 			DiscAddr: f.ServiceDisc,
 			Geo:      f.geoData(),
 			GeoFunc:  f.geoFunc(),
+			Sink:     f.entrySink(),
 		}
 	}
 

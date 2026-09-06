@@ -56,6 +56,24 @@ type Config struct {
 	// permanently registered with no country whenever it lost that race. With
 	// GeoFunc, the next heartbeat after the lookup completes carries the country.
 	GeoFunc func() *geo.LocationData
+	// Sink, when non-nil, is handed a copy of every entry this client
+	// successfully registers, and of every entry it deregisters. It is how
+	// the visor's SD-registration-over-CXO publisher learns its own live
+	// service set VERBATIM — the exact Service the SD accepted and echoed
+	// back, not a reconstruction. Purely additive: the HTTP register/delete
+	// calls are unchanged and remain authoritative.
+	Sink EntrySink
+}
+
+// EntrySink receives copies of the entries an HTTPClient registers and
+// deregisters. Implementations MUST NOT block: they run inline on the
+// caller's registration goroutine (the 90s heartbeat loop, or an app
+// start/stop).
+type EntrySink interface {
+	// PutEntry records a service entry as live.
+	PutEntry(entry Service)
+	// DelEntry records a service entry as gone.
+	DelEntry(entry Service)
 }
 
 // HTTPClient is responsible for interacting with the service-discovery
@@ -205,12 +223,29 @@ func (c *HTTPClient) SetCoinInfo(info *CoinInfo) {
 // if there are no ip addresses in the entry it also tries to fetch those
 // from local config
 func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
+	entry, err := c.registerEntry(ctx)
+	if err != nil {
+		return err
+	}
+	// Mirror the accepted entry AFTER releasing entryMx: the sink is the
+	// SD-registration-over-CXO publisher, and a treestore Put briefly takes
+	// the publisher mutex that subscriber I/O also contends.
+	if c.conf.Sink != nil {
+		c.conf.Sink.PutEntry(entry)
+	}
+	return nil
+}
+
+// registerEntry does the locked register: refresh the entry's volatile
+// fields, POST it, and store what the SD echoed back. Returns a copy of
+// the stored entry for the caller to mirror.
+func (c *HTTPClient) registerEntry(ctx context.Context) (Service, error) {
 	c.entryMx.Lock()
 	defer c.entryMx.Unlock()
 	if c.conf.Type == ServiceTypeVisor && len(c.entry.LocalIPs) == 0 {
 		ips, err := netutil.DefaultNetworkInterfaceIPs()
 		if err != nil {
-			return err
+			return Service{}, err
 		}
 		c.entry.LocalIPs = make([]string, 0, len(ips))
 		for _, ip := range ips {
@@ -245,11 +280,11 @@ func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
 
 	entry, err := c.postEntry(ctx)
 	if err != nil {
-		return err
+		return Service{}, err
 	}
 	c.entry = entry
 	c.log.WithField("entry", c.entry.String()).Debug("Entry registered successfully")
-	return nil
+	return c.entry, nil
 }
 
 // postEntry calls 'POST /api/services' and sends current service entry
@@ -309,28 +344,44 @@ func (c *HTTPClient) postEntry(ctx context.Context) (Service, error) {
 }
 
 // DeleteEntry calls 'DELETE /api/services/{entry_addr}'.
-func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
+func (c *HTTPClient) DeleteEntry(ctx context.Context) error {
+	entry, err := c.deleteEntry(ctx)
+	if err != nil {
+		return err
+	}
+	// Drop it from the mirrored live set too, so the CXO feed stops
+	// carrying an entry the SD no longer holds. See RegisterEntry for why
+	// this runs outside entryMx.
+	if c.conf.Sink != nil {
+		c.conf.Sink.DelEntry(entry)
+	}
+	return nil
+}
+
+// deleteEntry does the locked delete and returns the entry that was
+// removed, for the caller to mirror.
+func (c *HTTPClient) deleteEntry(ctx context.Context) (removed Service, err error) {
 	c.entryMx.Lock()
 	defer c.entryMx.Unlock()
 
 	auth, err := c.Auth(ctx)
 	if err != nil {
-		return err
+		return Service{}, err
 	}
 
 	url, err := c.addr("/api/services/"+c.entry.Addr.String(), c.entry.Type, "", "", 1)
 	if err != nil {
-		return err
+		return Service{}, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
-		return err
+		return Service{}, err
 	}
 
 	resp, err := auth.Do(req)
 	if err != nil {
-		return err
+		return Service{}, err
 	}
 	if resp != nil {
 		defer func() {
@@ -344,12 +395,12 @@ func (c *HTTPClient) DeleteEntry(ctx context.Context) (err error) {
 		var hErr HTTPError
 		if err = json.NewDecoder(resp.Body).Decode(&hErr); err != nil {
 			// If we can't decode JSON, return HTTP status info
-			return fmt.Errorf("service discovery error: %s (status %d)", http.StatusText(resp.StatusCode), resp.StatusCode)
+			return Service{}, fmt.Errorf("service discovery error: %s (status %d)", http.StatusText(resp.StatusCode), resp.StatusCode)
 		}
-		return &hErr
+		return Service{}, &hErr
 	}
 	c.log.WithField("entry", c.entry).Debug("Entry deleted successfully")
-	return nil
+	return c.entry, nil
 }
 
 // Register calls 'POST /api/services' to register service discovery entry

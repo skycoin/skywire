@@ -157,6 +157,10 @@ var (
 	// arBindCXOMod mirrors this visor's AR bindings onto a CXO feed the
 	// address-resolver aggregates (AR-bind-over-CXO), always-on/additive
 	arBindCXOMod vinit.Module
+	// sdRegCXOMod mirrors this visor's live service-discovery entry set onto
+	// a CXO feed the service-discovery aggregates (SD-registration-over-CXO),
+	// always-on/additive
+	sdRegCXOMod vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 )
@@ -284,8 +288,14 @@ func registerModules(logger *logging.MasterLogger) {
 	// client (the bind hook it publishes from) and dmsgC (the feed transport).
 	// See init_ar_bind_cxo.go.
 	arBindCXOMod = maker("ar_bind_cxo", initARBindCXO, &ar, &dmsgC)
+	// SD-registration-over-CXO publisher: mirror this visor's live
+	// service-discovery entry set onto a CXO feed the SD aggregates, off the
+	// 90s HTTP re-POST (each a fresh dmsg Noise handshake). Depends on disc
+	// (the SD clients whose entries it mirrors) and dmsgC (the feed
+	// transport). See init_sd_reg_cxo.go.
+	sdRegCXOMod = maker("sd_reg_cxo", initSDRegCXO, &disc, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgSrv, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &meshProxy, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod, &regCXOMod, &arBindCXOMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgSrv, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &meshProxy, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod, &regCXOMod, &arBindCXOMod, &sdRegCXOMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
