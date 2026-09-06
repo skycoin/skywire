@@ -75,7 +75,6 @@ var (
 	reload js.Value
 	tabs   []*tab
 	active = -1
-	nextID int
 )
 
 type tab struct {
@@ -383,7 +382,7 @@ func setFavicon(t *tab, iconURL string) {
 // somewhere cross-origin; that just means no title, not a broken tab.
 func watchDirect(t *tab, url string) {
 	read := func() {
-		defer func() { _ = recover() }()
+		defer func() { recover() }() //nolint:errcheck // deliberate: a throw here is not fatal
 		d := t.frame.Get("contentDocument")
 		if !d.Truthy() {
 			return
@@ -503,7 +502,7 @@ func absURL(ref, base string) string {
 	if !u.Truthy() {
 		return ref
 	}
-	defer func() { _ = recover() }() // a malformed base throws; no icon is fine
+	defer func() { recover() }() //nolint:errcheck // deliberate: a throw here is not fatal // a malformed base throws; no icon is fine
 	return u.New(ref, base).Get("href").String()
 }
 
@@ -532,7 +531,6 @@ func indexOf(t *tab) int {
 }
 
 func addTab(url string) {
-	nextID++
 	t := &tab{}
 	t.btn = mk("div")
 	t.btn.Get("style").Set("cssText", "display:flex;align-items:center;gap:.4em;max-width:12em;padding:.25em .6em;cursor:pointer;font:11px monospace;color:#cdd2da;border:1px solid #2a2342;border-bottom:0;border-radius:5px 5px 0 0;white-space:nowrap")

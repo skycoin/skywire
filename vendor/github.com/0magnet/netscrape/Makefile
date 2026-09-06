@@ -90,7 +90,7 @@ lint: ## Run golangci-lint. Needs it installed (make install-linters)
 	fi
 	@# A host run cannot see js/wasm-tagged files, so anything only they use
 	@# reads as dead — and anything wrong inside them is never checked at all.
-	@if grep -rlq '^//go:build js' --include='*.go' . 2>/dev/null; then \
+	@if grep -rlq '^//go:build js' --include='*.go' --exclude-dir=vendor . 2>/dev/null; then \
 		echo '--- again in the js/wasm build context'; \
 		CGO_ENABLED=0 GOOS=js GOARCH=wasm ${OPTS} golangci-lint run --modules-download-mode=$(MODMODE) -c $(LINTCFG) $(JSPKGS); \
 	fi
@@ -100,7 +100,7 @@ vet: ## Run go vet
 	@if [ -n "$(PKGS)" ]; then \
 		CGO_ENABLED=$(CGO) ${OPTS} go vet $(PKGS); \
 	fi
-	@if grep -rlq '^//go:build js' --include='*.go' . 2>/dev/null; then \
+	@if grep -rlq '^//go:build js' --include='*.go' --exclude-dir=vendor . 2>/dev/null; then \
 		CGO_ENABLED=0 GOOS=js GOARCH=wasm ${OPTS} go vet $(JSPKGS); \
 	fi
 	$(recurse)

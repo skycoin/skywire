@@ -126,7 +126,7 @@ func (p *Painter) reset(s sheet) {
 
 	steps := p.o.Steps
 	if steps == 0 {
-		rng := rand.New(rand.NewSource(s.seed))
+		rng := rand.New(rand.NewSource(s.seed)) //nolint:gosec
 		steps = 3*s.rows + rng.Intn(4*s.rows+40)
 	}
 	p.m.Advance(steps)

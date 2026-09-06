@@ -172,7 +172,7 @@ type Matrix struct {
 // makes tests repeatable.
 func New(seed int64) *Matrix {
 	return &Matrix{
-		rng:      rand.New(rand.NewSource(seed)),
+		rng:      rand.New(rand.NewSource(seed)), //nolint:gosec
 		Glyphs:   Glyphs,
 		Palette:  canvas.Matrix,
 		Density:  40,

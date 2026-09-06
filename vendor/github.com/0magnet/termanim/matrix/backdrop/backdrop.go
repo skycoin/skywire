@@ -174,7 +174,7 @@ func Render(text string, o Options) string {
 
 	// The rain is generated at the full width whatever the text does, so a
 	// short help still gets a screen-wide backdrop rather than a green box.
-	rng := rand.New(rand.NewSource(l.seed))
+	rng := rand.New(rand.NewSource(l.seed)) //nolint:gosec
 	steps := o.Steps
 	if steps == 0 {
 		// Enough for the first columns to have fallen off the bottom, plus a

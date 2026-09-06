@@ -297,7 +297,7 @@ func (g *Generator) SetColorMap(path string) error {
 		g.workingPalette = DefaultPalette
 		return nil
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
 		return err
 	}
@@ -368,7 +368,7 @@ func (g *Generator) lineNum() {
 }
 
 // write emits s to the output stream.
-func (g *Generator) write(s string) { _, _ = g.out.WriteString(s) }
+func (g *Generator) write(s string) { _, _ = g.out.WriteString(s) } //nolint:errcheck,gosec
 
 // ---------------------------------------------------------------------------
 // Entry points
@@ -384,7 +384,7 @@ func (g *Generator) Generate(r io.Reader, w io.Writer) error {
 	}
 	g.in = bufio.NewReader(r)
 	g.out = bufio.NewWriter(w)
-	defer g.out.Flush()
+	defer g.out.Flush() //nolint:errcheck,gosec
 
 	if !g.fragmentOutput {
 		g.write(g.f.header())
@@ -399,7 +399,9 @@ func (g *Generator) Generate(r io.Reader, w io.Writer) error {
 // GenerateString converts input and returns the result.
 func (g *Generator) GenerateString(input string) string {
 	var buf bytes.Buffer
-	_ = g.Generate(strings.NewReader(input), &buf)
+	// Both ends are in memory — a strings.Reader and a bytes.Buffer — so there
+	// is no failure to report, and the signature returns only the string.
+	_ = g.Generate(strings.NewReader(input), &buf) //nolint:errcheck
 	return buf.String()
 }
 
@@ -408,20 +410,20 @@ func (g *Generator) GenerateString(input string) string {
 func (g *Generator) GenerateFile(inFileName, outFileName string) error {
 	var r io.Reader = os.Stdin
 	if inFileName != "" {
-		f, err := os.Open(inFileName)
+		f, err := os.Open(inFileName) //nolint:gosec
 		if err != nil {
 			return ErrBadInput
 		}
-		defer f.Close()
+		defer f.Close() //nolint:errcheck,gosec
 		r = f
 	}
 	var w io.Writer = os.Stdout
 	if outFileName != "" {
-		f, err := os.Create(outFileName)
+		f, err := os.Create(outFileName) //nolint:gosec
 		if err != nil {
 			return ErrBadOutput
 		}
-		defer f.Close()
+		defer f.Close() //nolint:errcheck,gosec
 		w = f
 	}
 	return g.Generate(r, w)
@@ -841,7 +843,7 @@ func (g *Generator) printTermBuffer() {
 		}
 		g.write(g.newLineTag)
 	}
-	g.out.Flush()
+	g.out.Flush() //nolint:errcheck,gosec
 	g.termBuffer = nil
 }
 
@@ -919,7 +921,7 @@ func (g *Generator) processInput() {
 		if eof {
 			// Imitate tail: keep reading past end of file.
 			if g.readAfterEOF {
-				g.out.Flush()
+				g.out.Flush() //nolint:errcheck,gosec
 				time.Sleep(time.Second)
 				continue
 			}
@@ -1113,7 +1115,7 @@ func (g *Generator) processInput() {
 	if g.parseCP437 {
 		g.printTermBuffer()
 	}
-	g.out.Flush()
+	g.out.Flush() //nolint:errcheck,gosec
 }
 
 // stepCP437 processes one input position while rendering codepage 437 art and
@@ -1197,7 +1199,7 @@ func (g *Generator) seekForTail() {
 		}
 		g.in.Reset(g.seeker)
 		// Discard the partial first line.
-		_, _ = g.in.ReadString('\n')
+		_, _ = g.in.ReadString('\n') //nolint:errcheck // the partial line is being thrown away
 		return
 	}
 	if _, err := g.seeker.Seek(0, io.SeekStart); err != nil {
