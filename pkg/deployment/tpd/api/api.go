@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -65,7 +66,12 @@ type API struct {
 
 	transportsCache         []*transport.Entry
 	transportsCacheFiltered []*transport.Entry // excludes self-transports
-	transportsMu            sync.RWMutex
+	// transportsCacheAt identifies the snapshot the two slices above are.
+	// Published on the read endpoints that derive from them (see
+	// snapshotHeaders) so a consumer comparing two of those bodies can tell
+	// whether it is comparing one snapshot or two.
+	transportsCacheAt time.Time
+	transportsMu      sync.RWMutex
 
 	// allTpsRespCache memoizes the marshaled (+gzip) /all-transports body so the
 	// dominant-egress endpoint doesn't re-marshal/re-send ~3MB per call.
@@ -489,6 +495,7 @@ func (api *API) refreshTransportsCache(ctx context.Context, logger logrus.FieldL
 	api.transportsMu.Lock()
 	api.transportsCache = entries
 	api.transportsCacheFiltered = filtered
+	api.transportsCacheAt = time.Now().UTC()
 	api.transportsMu.Unlock()
 
 	api.metrics.SetTPCounts(counts)
@@ -497,13 +504,54 @@ func (api *API) refreshTransportsCache(ctx context.Context, logger logrus.FieldL
 // getTransportsFromCache returns the cached transports, optionally filtering self-transports.
 // Returns nil if the cache has not been initialized yet (caller should fall back to the store).
 func (api *API) getTransportsFromCache(selfTransports bool) []*transport.Entry {
+	entries, _ := api.transportsSnapshot(selfTransports)
+	return entries
+}
+
+// transportsSnapshot returns the cached transports together with the instant
+// the cache was filled. The stamp is zero when the cache is cold, matching
+// getTransportsFromCache's nil.
+//
+// The stamp exists because /all-transports/stats and
+// /all-transports/per-key-stats are two REDUCTIONS OF ONE SLICE. Read off the
+// same snapshot they agree exactly — every transport is two edges, so the
+// per-key sum is twice the aggregate total — and a consumer checking that
+// identity is checking a real invariant. Read off two snapshots they do not,
+// and the network total moves fast enough (skycoin/skywire#4513 measured 2.4x
+// inside forty seconds) that the disagreement is large. Without a way to tell
+// the cases apart, a consumer that finds them disagreeing concludes the
+// per-key index is losing edges, which is the wrong conclusion drawn from a
+// correct observation.
+func (api *API) transportsSnapshot(selfTransports bool) ([]*transport.Entry, time.Time) {
 	api.transportsMu.RLock()
 	defer api.transportsMu.RUnlock()
 	if api.transportsCache == nil {
-		return nil
+		return nil, time.Time{}
 	}
 	if selfTransports {
-		return api.transportsCache
+		return api.transportsCache, api.transportsCacheAt
 	}
-	return api.transportsCacheFiltered
+	return api.transportsCacheFiltered, api.transportsCacheAt
+}
+
+// Snapshot headers. Absent on a cold-cache response, which is the honest
+// answer: that body was counted straight out of the store and shares no
+// snapshot with anything.
+const (
+	// SnapshotAtHeader carries the RFC3339Nano instant the serving snapshot
+	// was filled. Two bodies with the same value are two views of one set.
+	SnapshotAtHeader = "X-Tpd-Snapshot-At"
+	// SnapshotTransportsHeader carries how many transports that snapshot
+	// holds, so the per-key body can be checked against its OWN aggregate
+	// rather than against whatever the aggregate reads at some other moment.
+	SnapshotTransportsHeader = "X-Tpd-Snapshot-Transports"
+)
+
+// setSnapshotHeaders stamps a response with the snapshot it was derived from.
+func setSnapshotHeaders(w http.ResponseWriter, at time.Time, total int) {
+	if at.IsZero() {
+		return
+	}
+	w.Header().Set(SnapshotAtHeader, at.Format(time.RFC3339Nano))
+	w.Header().Set(SnapshotTransportsHeader, strconv.Itoa(total))
 }
