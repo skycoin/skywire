@@ -1,5 +1,5 @@
-// Package gobimpl pkg/gobrpc/gobimpl/gobimpl.go c0-com-http
-// net/rpc the skywire router uses, over encoding/gob. It speaks the
+// Package gobimpl is a dependency-free reimplementation of the subset of
+// net/rpc most callers need, over encoding/gob. It speaks the
 // IDENTICAL gob wire protocol as net/rpc's default codec:
 //
 //	request:  gob(Request{ServiceMethod, Seq})        then gob(args)

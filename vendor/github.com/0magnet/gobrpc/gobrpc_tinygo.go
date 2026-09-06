@@ -1,13 +1,13 @@
 //go:build tinygo
 
-// Package gobrpc pkg/gobrpc/gobrpc_tinygo.go c0-com-http
+// Package gobrpc — TinyGo build.
 // On the TinyGo js/wasm target net/rpc is unavailable (it pulls net/http,
 // which does not compile there), so pkg/gobrpc aliases to the dependency-free
 // gobimpl reimplementation, which speaks the identical gob wire protocol. See
 // gobrpc_native.go for the native (net/rpc) side.
 package gobrpc
 
-import "github.com/skycoin/skywire/pkg/gobrpc/gobimpl"
+import "github.com/0magnet/gobrpc/gobimpl"
 
 // Client is gobimpl.Client (net/rpc-compatible).
 type Client = gobimpl.Client

@@ -20,7 +20,7 @@ func available() bool {
 func send(n Notification) error {
 	app := n.AppName
 	if app == "" {
-		app = "Skywire"
+		app = DefaultAppName()
 	}
 	// Title/body are passed as separate argv elements (no shell), so untrusted
 	// text cannot inject a command. `--` stops option parsing so a title

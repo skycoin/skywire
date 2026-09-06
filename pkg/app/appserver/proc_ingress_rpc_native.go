@@ -4,7 +4,7 @@
 package appserver
 
 import (
-	rpc "github.com/skycoin/skywire/pkg/gobrpc"
+	rpc "github.com/0magnet/gobrpc"
 )
 
 // registerIngressRPC registers the ingress gateway on the native build using

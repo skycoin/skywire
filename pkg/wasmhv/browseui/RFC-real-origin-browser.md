@@ -282,7 +282,7 @@ indicator.
 1. **Native, behind a flag:** implement the reverse-proxy origin
    (`dmsgweb`-derived) + `*.localhost` per-site origins; point the WinBox iframe
    at real URLs; keep the transcoder as fallback. Validate against the
-   Waterfox+resolving-proxy reference (`cmd/wfdrive`).
+   Waterfox+resolving-proxy reference (`github.com/0magnet/wfdrive`).
 2. **Wasm:** SW network layer on an isolated origin; same validation.
 3. **Flip the default** to the real-origin path; transcoder only as fallback.
 4. **Delete** the redundant approximation code paths once parity holds.
@@ -305,5 +305,5 @@ the reverse proxy is a thin re-framing of the forward proxy, not a re-write.
 - Keeping the visor identity/control surface unreachable from the site origin.
 - Performance: streaming vs. today's base64 (strictly better), and a **bounded**
   transport pool to replace unbounded fan-out.
-- The `cmd/wfdrive` (Waterfox/BiDi) + `cmd/hvinspect` (Brave/CDP) rigs give us a
+- The `0magnet/wfdrive` (Waterfox/BiDi) + `cmd/hvinspect` (Brave/CDP) rigs give us a
   real-browser oracle to diff the WinBox browser against during migration.

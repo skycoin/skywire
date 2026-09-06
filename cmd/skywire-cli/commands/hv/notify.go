@@ -38,9 +38,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/0magnet/osnotify"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/pkg/osnotify"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 

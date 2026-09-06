@@ -37,7 +37,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/skycoin/skywire/pkg/bitree"
+	"github.com/0magnet/bitree"
 )
 
 // Route-state glyphs. The caller supplies them into the left annotation; a

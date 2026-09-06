@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/bitree"
+	"github.com/0magnet/bitree"
 )
 
 // refreshSeconds is the fallback full-page reload cadence for surfaces that have

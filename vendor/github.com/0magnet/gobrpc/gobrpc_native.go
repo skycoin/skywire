@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package gobrpc pkg/gobrpc/gobrpc_native.go c0-com-http
+// Package gobrpc is net/rpc with a TinyGo-safe fallback, speaking the stdlib
 // default (gob) codec.
 //
 // On every NON-TinyGo build this file makes the package a thin set of
@@ -14,7 +14,7 @@
 // wire protocol, so a TinyGo gobrpc client/server interoperates with a
 // native net/rpc peer unchanged (verified in gobimpl/gobimpl_test.go).
 //
-// Only the surface the skywire router actually uses is exposed:
+// Only the commonly used surface is exposed:
 // NewClient, (*Client).Go/Call/Close, NewServer, (*Server).Register/
 // ServeConn, the Call value, and ErrShutdown.
 package gobrpc

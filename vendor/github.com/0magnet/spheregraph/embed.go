@@ -1,9 +1,10 @@
-// Package latency pkg/tpviz/latency/embed.go c4-vis-latency
+// Package spheregraph embeds a weighted graph on the unit sphere and
+// tessellates it.
 //
-// Positions visors on a unit sphere so that great-circle distance
+// Positions points on a unit sphere so that great-circle distance
 // approximates measured round-trip time. This is a metric embedding, not
 // a force layout: a force simulation with uniform springs would ignore
-// the latencies entirely, and cosmos-go's link distance is one global
+// the latencies entirely, and a GPU renderer's link distance is one global
 // scalar, so the positions have to be solved here and handed to it.
 //
 // The solver is stress majorization (Gansner, Koren and North, "Graph
@@ -11,8 +12,8 @@
 // iteration moves a point toward the weighted mean of where its
 // neighbors would place it, then renormalizes onto the sphere. On a
 // sparse graph this converges in tens of iterations and each one is
-// O(edges), so 43k edges over 1.3k visors is a few million operations.
-package latency
+// O(edges), so 43k edges over 1.3k sites is a few million operations.
+package spheregraph
 
 import (
 	"math"
@@ -35,7 +36,7 @@ type Params struct {
 	// Iterations of stress majorization.
 	Iterations int
 	// Seed makes the initial placement deterministic, so the same graph
-	// embeds the same way on every visor and across refreshes.
+	// embeds the same way on every site and across refreshes.
 	Seed int64
 	// FloorMS clamps implausibly small measurements. A sub-millisecond
 	// RTT between two internet hosts is a measurement artifact, and
@@ -77,7 +78,7 @@ func target(ms float64, p Params) float64 {
 // Embed places n points on the unit sphere from the measured edges.
 //
 // Points with no edges are left on the initial spiral rather than
-// dropped, so indices stay aligned with the caller's visor list.
+// dropped, so indices stay aligned with the caller's site list.
 func Embed(n int, edges []Edge, p Params) []Vec3 {
 	if n <= 0 {
 		return nil
@@ -163,7 +164,7 @@ func slerpToward(from, to Vec3, theta float64) Vec3 {
 }
 
 // fibonacciSphere is a deterministic near-uniform initial placement. A
-// random start makes the result differ between visors looking at the
+// random start makes the result differ between sites looking at the
 // same network, which for a shared picture is a defect.
 func fibonacciSphere(n int, seed int64) []Vec3 {
 	pts := make([]Vec3, n)

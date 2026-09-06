@@ -4,7 +4,7 @@
 // terminal and captures what came back.
 //
 // It exists because the other browser rigs cannot type. cmd/hvinspect and
-// cmd/cdpeval evaluate JS, and cmd/wfdrive drives Waterfox over BiDi — but the
+// cmd/cdpeval evaluate JS, and 0magnet/wfdrive drives Waterfox over BiDi — but the
 // visor shell is an xterm canvas fed by keyboard events, so verifying that a
 // shell applet works means synthesizing real key events and reading the result
 // back. Doing that by hand, or from a throwaway script, is how a regression in

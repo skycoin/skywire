@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
+	gobrpc "github.com/0magnet/gobrpc"
+
 	"github.com/skycoin/skywire/pkg/cipher"
-	gobrpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
