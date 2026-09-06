@@ -65,7 +65,7 @@ require (
 	github.com/0magnet/bitree v0.0.0-20260906024001-ee60eac20a9d
 	github.com/0magnet/bottle v0.0.0-20260905154223-835049919520
 	github.com/0magnet/calvin v0.0.0-20260905171945-6d046e156c9b
-	github.com/0magnet/desk v0.0.0-20260905010738-0c9209d8b7b7
+	github.com/0magnet/desk v0.0.0-20260906155330-9925d12693bb
 	github.com/0magnet/desk/panes v0.0.0-20260905010738-0c9209d8b7b7
 	github.com/0magnet/gobrpc v0.0.0-20260906024008-cd93b2d1ef48
 	github.com/0magnet/golang-ipc v1.2.5-0.20260901195306-becfc11f7586

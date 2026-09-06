@@ -82,8 +82,8 @@ github.com/0magnet/coloredcobra v1.0.3-0.20260902084726-57ccbecfc077 h1:cWpt53uN
 github.com/0magnet/coloredcobra v1.0.3-0.20260902084726-57ccbecfc077/go.mod h1:Kn7dmRJcnVybFNKY0FNUjLcsivW4FCbAec8ZfVmz51I=
 github.com/0magnet/cosmos-go v0.0.0-20260905162431-a5584b3ff959 h1:5Cm6K8ajBt653BHbYaXkD/ul6weOkViWtpc0205GIUY=
 github.com/0magnet/cosmos-go v0.0.0-20260905162431-a5584b3ff959/go.mod h1:dp0q1zfKQmTaohUrPEPZbPExxBWLu9DyeaFxKUBnw6Y=
-github.com/0magnet/desk v0.0.0-20260905010738-0c9209d8b7b7 h1:lo7ac0NQnL0xAAX8pp5FsFs2LwOfaXoFZHgovKvUUUc=
-github.com/0magnet/desk v0.0.0-20260905010738-0c9209d8b7b7/go.mod h1:9VSe+GQN9638OmSPr8J84CgTMinZ6qNj4Xj6aNCfKlU=
+github.com/0magnet/desk v0.0.0-20260906155330-9925d12693bb h1:JjxsT6JlhNIgzxxihgHP0+r9bWOAMQOMfmoq8wJjlpk=
+github.com/0magnet/desk v0.0.0-20260906155330-9925d12693bb/go.mod h1:9VSe+GQN9638OmSPr8J84CgTMinZ6qNj4Xj6aNCfKlU=
 github.com/0magnet/desk/panes v0.0.0-20260905010738-0c9209d8b7b7 h1:L26z7aBIBiDk8q2i/YhJyi6x9hrvdRgIygKtkGUUVmM=
 github.com/0magnet/desk/panes v0.0.0-20260905010738-0c9209d8b7b7/go.mod h1:z/ML2hEd//x/SznagiS5+g3NskrU49QYO2zpkO3Y3p8=
 github.com/0magnet/go-dsp v0.0.0-20260904172328-4474a45054c8 h1:dix2DTc6kVttvmez6KKA6Zux4khpyE3Lrfv7iPXDUQM=
