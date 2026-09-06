@@ -175,6 +175,7 @@ func initCoinNodes(_ context.Context, v *Visor, log *logging.Logger) error {
 				SK:       v.conf.SK,
 				Port:     node.DmsgPort,
 				DiscAddr: sdURL,
+				Sink:     v.sdEntryMirror,
 			}, httpC, "")
 
 		go runCoinRegistrar(ctx, log.WithField("dmsg_port", node.DmsgPort), sdClient, localHTTP, node)

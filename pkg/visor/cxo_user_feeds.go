@@ -228,6 +228,15 @@ func (v *Visor) setRegCXOPub(pub *treestore.Publisher) {
 	v.cxoUserFeedsMu.Unlock()
 }
 
+// setSDRegCXOPub retains the SD-registration-over-CXO publisher so its
+// gating (allowlist + denied subscribers) shows up in
+// `skywire cli visor state`.
+func (v *Visor) setSDRegCXOPub(pub *treestore.Publisher) {
+	v.cxoUserFeedsMu.Lock()
+	v.sdRegCXOPub = pub
+	v.cxoUserFeedsMu.Unlock()
+}
+
 // setTPListCXOPub retains the dedicated tp-list discovery feed publisher
 // so CXOFeedStates can read its live PublishState. Called once by
 // initStats; pub is nil when the dedicated publisher didn't start (the
@@ -340,6 +349,7 @@ func (v *Visor) CXOFeedStates() []CXOFeedState {
 	sysPub := v.systemCXOPub
 	tplistPub := v.tplistCXOPub
 	regPub := v.regCXOPub
+	sdRegPub := v.sdRegCXOPub
 	users := make([]*cxoUserFeed, 0, len(v.cxoUserFeeds))
 	for _, fd := range v.cxoUserFeeds {
 		users = append(users, fd)
@@ -383,6 +393,19 @@ func (v *Visor) CXOFeedStates() []CXOFeedState {
 			Name:         "registration",
 			Port:         skyenv.DmsgDMSGDRegistrationCXOPort,
 			PublishState: regPub.PublishState(),
+			Allowlist:    allow,
+			Denied:       denied,
+		})
+	}
+	// The SD-registration-over-CXO feed (this visor's live service entry
+	// set). Same reasoning as above: a service-discovery whose subscribe is
+	// refused only shows up here.
+	if sdRegPub != nil {
+		allow, denied := feedGating(sdRegPub)
+		out = append(out, CXOFeedState{
+			Name:         "sd_registration",
+			Port:         skyenv.DmsgVisorSDRegCXOPort,
+			PublishState: sdRegPub.PublishState(),
 			Allowlist:    allow,
 			Denied:       denied,
 		})

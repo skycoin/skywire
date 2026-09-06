@@ -38,6 +38,12 @@ type Factory struct {
 	// snapshot captured at init (before that lookup), which dropped country from
 	// every registration that lost the race.
 	GeoFunc any
+	// EntrySink, when set, is a `servicedisc.EntrySink` handed to every
+	// service-discovery client this factory builds, so the visor's
+	// SD-registration-over-CXO publisher sees the exact entries the SD
+	// accepted. Typed `any` for the same reason as Client/Geo: pkg/servicedisc
+	// pulls net/http, which this shared struct must not.
+	EntrySink any
 }
 
 func (f *Factory) setDefaults() {
