@@ -171,9 +171,10 @@ func newLoopHarness(t *testing.T) (*Client, *gatedConn) {
 	}
 	t.Cleanup(func() {
 		c.Close() //nolint:errcheck,gosec
-		// Join the keepalive loop before the tunable-restoring cleanup (registered
-		// earlier, so it runs after this one) writes the package-level cadence
-		// vars the loop reads.
+		// Join the keepalive loop so the goroutine is done before the test ends.
+		// The loop reads this client's own snapshot of the cadence tunables, not
+		// the package-level vars, so restoring those no longer races it — but
+		// joining still keeps the goroutine from outliving its test.
 		<-c.keepAliveDone
 	})
 	return c, gate
