@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	geoip2 "github.com/oschwald/geoip2-golang/v2"
 
@@ -1454,9 +1455,16 @@ func (s *Server) getCacheAgeSeconds(cacheFile string) int64 {
 	return int64(time.Since(info.ModTime()).Seconds())
 }
 
-// Handler returns the HTTP handler for the server
+// Handler returns the HTTP handler for the server.
+//
+// gzipped on the way out: this mux is mounted on two dmsg listeners
+// (init_services.go) as well as TCP, and /api/transports writes the
+// TPD all-transports snapshot verbatim — the ~3 MB body TPD itself
+// caches pre-gzipped (all_transports_response_cache.go) and then serves
+// raw from here. The content-type gate leaves the wasm blob
+// (application/wasm) and the websocket upgrade alone.
 func (s *Server) Handler() http.Handler {
-	return s.mux
+	return middleware.Compress(5)(s.mux)
 }
 
 // Start initializes the cache and starts auto-refresh without starting the HTTP server.
