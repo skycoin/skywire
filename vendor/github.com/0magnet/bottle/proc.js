@@ -51,8 +51,36 @@
 	}
 
 	const moduleCache = new Map(); // path -> WebAssembly.Module
+	const registered = new Set(); // paths bound to a module with no jsfs bytes
+
+	// registerModule pre-binds a compiled module to a path, so spawn can run a
+	// program whose bytes were never materialized in jsfs.
+	//
+	// The normal path — bytes in jsfs, compiled on first spawn — assumes a
+	// program small enough to hold twice (once as bytes, once compiled). A large
+	// module served over HTTP does not fit that: WebAssembly.compileStreaming
+	// compiles it as it downloads and never holds the whole thing, and writing
+	// the bytes into jsfs purely to satisfy resolution would give back exactly
+	// the buffer streaming avoided (skywire.wasm is ~158MB raw, ~40MB gzipped).
+	// Register the compiled module under the path it would have occupied and
+	// spawn resolves it without ever reading bytes.
+	function registerModule(path, mod) {
+		if (!path || !mod) return false;
+		moduleCache.set(path, mod);
+		registered.add(path);
+		return true;
+	}
 
 	function readProgram(argv0, cwd, env) {
+		// A registered module has no bytes to read; resolve it by path alone,
+		// honoring the same absolute / cwd-relative / PATH-walk order.
+		const reg = (p) => registered.has(p) ? { path: p, bytes: null } : null;
+		if (argv0.startsWith("/")) { const r = reg(argv0); if (r) return r; }
+		else if (argv0.includes("/")) { const r = reg(join(cwd || jsfs.getCwd(), argv0)); if (r) return r; }
+		else for (const dir of ((env && env.PATH) || "/bin").split(":")) {
+			const r = reg(join(dir, argv0)); if (r) return r;
+		}
+
 		// Resolve argv[0] to bytes in jsfs. Absolute or cwd-relative first,
 		// then a PATH walk (env.PATH, colon-separated) as a shell would.
 		const tryPath = (p) => {
@@ -129,6 +157,7 @@
 		const exited = (async () => {
 			let mod = moduleCache.get(prog.path);
 			if (!mod) {
+				if (!prog.bytes) throw new Error("proc: no module registered for " + prog.path);
 				mod = await WebAssembly.compile(prog.bytes);
 				moduleCache.set(prog.path, mod);
 			}
@@ -347,5 +376,5 @@ self.onmessage = async (ev) => {
 		return { pid, exited };
 	}
 
-	globalThis.proc = { installed: true, spawn, spawnWorker, pipeSink, pipeSource, assets };
+	globalThis.proc = { installed: true, spawn, spawnWorker, pipeSink, pipeSource, assets, registerModule };
 })();
