@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/0magnet/bbolt"
@@ -79,6 +80,24 @@ func (r SessionRecord) Duration() time.Duration {
 type Store struct {
 	db         *bbolt.DB
 	instanceID string
+
+	// writeTxns counts committed read-write transactions on this store.
+	// One atomic add per transaction, so it costs nothing measurable, and
+	// it lets a test assert the COST of an operation in transactions —
+	// which is what "New must be a single bbolt open plus two writes"
+	// actually means — instead of in wall-clock milliseconds, which on a
+	// loaded CI runner measures the disk rather than the code.
+	writeTxns atomic.Int64
+}
+
+// update runs fn in a read-write transaction and counts it. Every write
+// path on Store goes through here so writeTxns stays honest.
+func (s *Store) update(fn func(tx *bbolt.Tx) error) error {
+	if err := s.db.Update(fn); err != nil {
+		return err
+	}
+	s.writeTxns.Add(1)
+	return nil
 }
 
 // OpenStore opens (or creates) the bbolt database at path and ensures
@@ -103,7 +122,7 @@ func OpenStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("serviceuptime: open %s: %w", path, err)
 	}
 	s := &Store{db: db}
-	if err := db.Update(func(tx *bbolt.Tx) error {
+	if err := s.update(func(tx *bbolt.Tx) error {
 		for _, b := range [][]byte{bucketMeta, bucketSessions, bucketSlots} {
 			if _, err := tx.CreateBucketIfNotExists(b); err != nil {
 				return fmt.Errorf("create bucket %s: %w", b, err)
@@ -160,7 +179,7 @@ func (s *Store) PutSession(rec SessionRecord) error {
 	if err != nil {
 		return err
 	}
-	return s.db.Update(func(tx *bbolt.Tx) error {
+	return s.update(func(tx *bbolt.Tx) error {
 		return tx.Bucket(bucketSessions).Put(sessionKey(rec.StartedAt), data)
 	})
 }
@@ -201,7 +220,7 @@ func (s *Store) MarkSlot(date time.Time, slot int) error {
 		return fmt.Errorf("serviceuptime: slot %d out of range", slot)
 	}
 	dateKey := []byte(date.UTC().Format(dateFmt))
-	return s.db.Update(func(tx *bbolt.Tx) error {
+	return s.update(func(tx *bbolt.Tx) error {
 		bm := tx.Bucket(bucketSlots).Get(dateKey)
 		buf := make([]byte, BitmapSize)
 		if bm != nil {
@@ -248,7 +267,7 @@ func (s *Store) Dates() ([]string, error) {
 func (s *Store) Prune(cutoff time.Time) (sessions, bitmaps int, err error) {
 	cutoffUTC := cutoff.UTC()
 	cutoffDate := cutoffUTC.Format(dateFmt)
-	err = s.db.Update(func(tx *bbolt.Tx) error {
+	err = s.update(func(tx *bbolt.Tx) error {
 		// Sessions: walk and delete by key (which is StartedAt). A
 		// session that started before the cutoff but has a fresh
 		// LastSeen is preserved — that's a long-running incarnation
