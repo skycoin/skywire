@@ -109,6 +109,9 @@ func New(log *logging.Logger, conf Config, domain, dmsgAddr string) *API {
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	// gzip JSON responses on the wire — this router is also served over
+	// dmsg, where every byte is relayed. Matches rf/ut/sd.
+	r.Use(middleware.Compress(5))
 	r.Use(httputil.SetLoggerMiddleware(log))
 	r.Get("/health", api.health)
 	r.Get("/", api.config)
