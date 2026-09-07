@@ -51,7 +51,7 @@ var (
 func init() {
 	probeCmd.Flags().StringVar(&probePort, "port", "9222", "debug port of the running browser")
 	probeCmd.Flags().StringVar(&probeBrowser, "browser", "auto", "protocol to speak: auto, cdp (Chromium/Brave) or bidi (Waterfox/Firefox)")
-	probeCmd.Flags().StringVar(&probeDriver, "driver", "", "control port of a running `hv drive`, e.g. 127.0.0.1:9224 — probes through its session instead of opening one")
+	probeCmd.Flags().StringVar(&probeDriver, "driver", "", "control port of a running \"hv drive\", e.g. 127.0.0.1:9224 — probes through its session instead of opening one")
 	probeCmd.Flags().StringVar(&probeWS, "ws", "", "webSocketDebuggerUrl of an existing target; a fresh tab is opened when empty")
 	probeCmd.Flags().StringVar(&probeNavigate, "navigate", "", "URL to load while watching")
 	probeCmd.Flags().StringVar(&probeEval, "eval", "", "expression to evaluate; the stream is printed until the result arrives")

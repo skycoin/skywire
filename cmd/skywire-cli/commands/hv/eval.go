@@ -51,7 +51,7 @@ func init() {
 	evalCmd.Flags().StringVar(&evalPort, "port", "9222", "debug port of the running browser, when no webSocketDebuggerUrl is given")
 	evalCmd.Flags().StringVar(&evalBrowser, "browser", "auto", "protocol to speak: auto, cdp (Chromium/Brave) or bidi (Waterfox/Firefox)")
 	evalCmd.Flags().StringVar(&bidiTab, "tab", "", "BiDi only: substring of the URL of the already-open tab to attach to; the first tab otherwise")
-	evalCmd.Flags().StringVar(&evalDriver, "driver", "", "control port of a running `hv drive`, e.g. 127.0.0.1:9224 — evaluates through its session instead of opening one")
+	evalCmd.Flags().StringVar(&evalDriver, "driver", "", "control port of a running \"hv drive\", e.g. 127.0.0.1:9224 — evaluates through its session instead of opening one")
 	RootCmd.AddCommand(evalCmd)
 }
 
