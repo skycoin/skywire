@@ -761,7 +761,17 @@ func fetchServiceConfig(log *logging.Logger) {
 		if fetchServiceConfigDmsg(log) {
 			return
 		}
-		// Fall back to HTTP
+		// Fall back to HTTP. A dmsg:// conf URL has no plain-HTTP form —
+		// net/http rejects it with "unsupported protocol scheme" — so skip
+		// straight to the embedded config rather than logging a bogus fetch
+		// failure.
+		if strings.HasPrefix(serviceConfURL, "dmsg://") {
+			if !isStdout {
+				log.Warnf("Could not reach %s over dmsg; falling back on embedded config", serviceConfURL)
+			}
+			loadServicesFromFile(log)
+			return
+		}
 		client := http.Client{Timeout: servicesFetchTimeout}
 		if serviceConfURL == "" {
 			serviceConfURL = "http://"
@@ -844,6 +854,13 @@ func fetchServiceConfigDmsg(log *logging.Logger) bool {
 	embeddedConf := deployment.Prod
 	if isTestEnv {
 		embeddedConf = deployment.Test
+	}
+
+	// An explicit dmsg:// --url overrides the embedded conf-service address.
+	// Without this the flag was silently ignored on the DMSG path and only
+	// reached the (now dead for a dmsg-only deployment) plain-HTTP fallback.
+	if strings.HasPrefix(serviceConfURL, "dmsg://") {
+		embeddedConf.ConfDmsg = serviceConfURL
 	}
 
 	// Need both embedded DMSG servers and a config service DMSG address
