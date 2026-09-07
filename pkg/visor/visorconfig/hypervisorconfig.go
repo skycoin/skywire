@@ -268,8 +268,13 @@ func (c *CookieConfig) Secure() bool {
 }
 
 // HTTPOnly gets cookie's `HTTPOnly` value.
+//
+// Unconditionally true: the session cookie is never read from JavaScript, so
+// keeping it out of document.cookie costs nothing and blocks XSS-based session
+// theft. It used to return !c.TLS, which inverted the protection exactly when
+// an operator opted into TLS — the safer configuration turned HTTPOnly off.
 func (c *CookieConfig) HTTPOnly() bool {
-	return !c.TLS
+	return true
 }
 
 // SameSite gets cookie's `SameSite` value.

@@ -444,7 +444,7 @@ func (a *API) bindForType(w http.ResponseWriter, r *http.Request, tpType types.T
 			remoteAddr = localAddresses.PublicIP
 		} else {
 			err := fmt.Sprintf("Cannot bind %v to %v (%s). Invalid IP address in request: %v", pk, remoteAddr, tpType, localAddresses)
-			a.logger(r).Errorf(err)
+			a.logger(r).Errorf("%s", err)
 			a.writeJSON(w, r, http.StatusBadRequest, &Error{
 				Error: err,
 			})
@@ -456,7 +456,7 @@ func (a *API) bindForType(w http.ResponseWriter, r *http.Request, tpType types.T
 		// visor didn't provide the IP it's trying to bind from
 		// probably is behind NAT and shouldn't bind
 		err := fmt.Sprintf("Cannot bind %v to %v (%s). Remote address not present in request: %v", pk, remoteAddr, tpType, localAddresses)
-		a.logger(r).Errorf(err)
+		a.logger(r).Errorf("%s", err)
 
 		a.writeJSON(w, r, http.StatusBadRequest, &Error{
 			Error: err,

@@ -133,7 +133,11 @@ func (s *service) Run(ctx context.Context) error {
 		return errors.New("setup-node: public_key and secret_key required (inline or via config_path)")
 	}
 
-	log.Infof("Config: %#v", conf)
+	// Never log the whole SetupConfig: it embeds this node's SECRET KEY, and
+	// cipher.SecKey.String() returns the raw hex rather than a mask, so no
+	// verb is safe here. Log the fields that are useful for diagnosis instead.
+	log.Infof("Config: public_key=%s transport_discovery=%s log_level=%s cascade=%t transport=%t",
+		conf.PK, conf.TransportDiscovery, conf.LogLevel, conf.Cascade != nil, conf.Transport != nil)
 	sn, err := router.NewNode(conf)
 	if err != nil {
 		return fmt.Errorf("setup-node: create node: %w", err)
