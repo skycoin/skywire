@@ -82,6 +82,7 @@ require (
 	github.com/0magnet/sysinfo v1.1.4-0.20260901201859-b4abd4e87c26
 	github.com/0magnet/termanim v0.0.0-20260905171704-496bb97da414
 	github.com/0magnet/visnetwork-go v0.0.0-20260906025559-6b0de1648ee9
+	github.com/0magnet/wfdrive v0.3.0
 	github.com/0magnet/winbox-go v0.0.0-20260905172045-cfee586c8360
 	github.com/0magnet/yamux v0.1.3-0.20260901201804-38cdbd63617a
 	github.com/DATA-DOG/go-sqlmock v1.5.2

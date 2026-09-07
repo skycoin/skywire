@@ -124,6 +124,8 @@ github.com/0magnet/visnetwork-go v0.0.0-20260906025559-6b0de1648ee9 h1:Gsalhpwzk
 github.com/0magnet/visnetwork-go v0.0.0-20260906025559-6b0de1648ee9/go.mod h1:BOarXYUS+pozU5nzdst9t1P+jMlWrMIM2ckEDdszOTE=
 github.com/0magnet/websh v0.0.0-20260906001908-5f8df8dbc4c5 h1:DIvQONJEuw+GCHWMLRha7MungXDNMWR8TNhkNYVvqNA=
 github.com/0magnet/websh v0.0.0-20260906001908-5f8df8dbc4c5/go.mod h1:zM6emVi15GzCgqt30dRv3cWxBVgt3A+W7Fwx3GZPcKI=
+github.com/0magnet/wfdrive v0.3.0 h1:zNK/ForoRgdxIsF2GxwIM3DbMDdUks9nNEtmMWbU7Tg=
+github.com/0magnet/wfdrive v0.3.0/go.mod h1:ckGVOflE4OC+G0MTrcin3hRoOwEFOCtRxY8nWxVt2bw=
 github.com/0magnet/winbox-go v0.0.0-20260905172045-cfee586c8360 h1:JvM2BRAHZqOWrTuC22RzgSCrmZZ1yWZrUlIU4cf6xxk=
 github.com/0magnet/winbox-go v0.0.0-20260905172045-cfee586c8360/go.mod h1:19+/rRQWd/tc9/8CFcUr6C+3AipeZmHyyda2tVombe4=
 github.com/0magnet/xterm-go v0.0.0-20260905172047-f0008e1479ee h1:gaoixDCvMDkgNqAnvqg7yRYZcgCkm7rcn6+dg8YA2Nk=

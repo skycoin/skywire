@@ -4,11 +4,17 @@
 // terminal and captures what came back.
 //
 // It exists because the other browser rigs cannot type. cmd/hvinspect and
-// cmd/cdpeval evaluate JS, and 0magnet/wfdrive drives Waterfox over BiDi — but the
+// `hv eval` evaluate JS, and `hv drive` drives Waterfox over BiDi — but the
 // visor shell is an xterm canvas fed by keyboard events, so verifying that a
 // shell applet works means synthesizing real key events and reading the result
 // back. Doing that by hand, or from a throwaway script, is how a regression in
 // an applet goes unnoticed.
+//
+// This is the one `hv` browser verb that is CDP-only. Typing needs BiDi's
+// input.* module, which the driver behind `hv drive` does not implement, and a
+// half-implemented typist that silently drops keys into a canvas would be worse
+// than none: the screenshot looks the same either way. Drive the shell in
+// Chromium/Brave; use `hv eval --port <bidi>` to read state out of Waterfox.
 //
 // Attach to a browser started with --remote-debugging-port=9222:
 //
