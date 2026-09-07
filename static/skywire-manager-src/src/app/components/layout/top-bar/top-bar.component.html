@@ -162,60 +162,64 @@
     </div>
 
     <div class="lower-container">
-      <!-- Tabs list. Only shown on large screens or if there is only one tab. -->
-      @for (tabData of tabsData; track tabData; let i = $index) {
-        @if (!tabData.hidden) {
-        @if (i > 0 && tabsData[i - 1].group !== tabData.group) {
-          <span class="tab-group-separator d-none d-md-inline-block" aria-hidden="true"></span>
-        }
-        <div
-          [ngClass]="{'d-lg-none': tabData.onlyIfLessThanLg, 'd-none d-md-inline-block': tabsData.length !== 1}"
-          >
-          @if (tabData.externalUrl) {
-            <a
-              mat-button
-              class="tab-button white-theme"
-              [href]="tabData.externalUrl"
-              target="_blank"
-              rel="noreferrer nofollow noopener"
-              [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse}"
-              >
-              <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
-              <span>{{ tabData.label | translate }}</span>
-            </a>
+      <!-- Tab strip. Scrolls horizontally on its own when the tabs do not fit,
+           so a full strip never widens the page (see .tabs-scroller). -->
+      <div class="tabs-scroller">
+        <!-- Tabs list. Only shown on large screens or if there is only one tab. -->
+        @for (tabData of tabsData; track tabData; let i = $index) {
+          @if (!tabData.hidden) {
+          @if (i > 0 && tabsData[i - 1].group !== tabData.group) {
+            <span class="tab-group-separator d-none d-md-inline-block" aria-hidden="true"></span>
           }
-          @if (!tabData.externalUrl) {
-            <a
-              mat-button
-              class="tab-button white-theme"
-              [disabled]="i === selectedTabIndex"
-              [routerLink]="tabData.linkParts"
-              [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse && i !== selectedTabIndex}"
-              >
-              <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
-              <span>{{ tabData.label | translate }}</span>
-            </a>
-          }
-        </div>
-        }
-      }
-      <!-- Select tab button. Only shown on small screens when there is only one tab. -->
-      @if (tabsData && tabsData[selectedTabIndex]) {
-        <div class="d-md-none" [ngClass]="{'d-none': tabsData.length === 1}">
-          <button
-            mat-button
-            class="tab-button select-tab-button white-theme"
-            [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse}"
-            (click)="openTabSelector()"
+          <div
+            [ngClass]="{'d-lg-none': tabData.onlyIfLessThanLg, 'd-none d-md-inline-block': tabsData.length !== 1}"
             >
-            <div class="d-flex">
-              <mat-icon [inline]="true">{{ tabsData[selectedTabIndex].icon }}</mat-icon>
-              <span>{{ tabsData[selectedTabIndex].label | translate }}</span>
-              <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
-            </div>
-          </button>
-        </div>
-      }
+            @if (tabData.externalUrl) {
+              <a
+                mat-button
+                class="tab-button white-theme"
+                [href]="tabData.externalUrl"
+                target="_blank"
+                rel="noreferrer nofollow noopener"
+                [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse}"
+                >
+                <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
+                <span>{{ tabData.label | translate }}</span>
+              </a>
+            }
+            @if (!tabData.externalUrl) {
+              <a
+                mat-button
+                class="tab-button white-theme"
+                [disabled]="i === selectedTabIndex"
+                [routerLink]="tabData.linkParts"
+                [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse && i !== selectedTabIndex}"
+                >
+                <mat-icon [inline]="true">{{ tabData.icon }}</mat-icon>
+                <span>{{ tabData.label | translate }}</span>
+              </a>
+            }
+          </div>
+          }
+        }
+        <!-- Select tab button. Only shown on small screens when there is only one tab. -->
+        @if (tabsData && tabsData[selectedTabIndex]) {
+          <div class="d-md-none" [ngClass]="{'d-none': tabsData.length === 1}">
+            <button
+              mat-button
+              class="tab-button select-tab-button white-theme"
+              [ngClass]="{'mouse-disabled' : disableMouse, 'grey-button-background' : !disableMouse}"
+              (click)="openTabSelector()"
+              >
+              <div class="d-flex">
+                <mat-icon [inline]="true">{{ tabsData[selectedTabIndex].icon }}</mat-icon>
+                <span>{{ tabsData[selectedTabIndex].label | translate }}</span>
+                <mat-icon [inline]="true">keyboard_arrow_down</mat-icon>
+              </div>
+            </button>
+          </div>
+        }
+      </div>
       <!-- Right buttons area. -->
       @if (!showVpnInfo) {
         <div class="right-container">
