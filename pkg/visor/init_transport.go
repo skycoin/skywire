@@ -1072,12 +1072,6 @@ func initEnsureTPDConcurrency(ctx context.Context, v *Visor, log *logging.Logger
 	return nil
 }
 
-// tpdReconcileCXOBackstop is how often the HTTP TPD reconciliation still runs on
-// a visor that is mirroring its transport list to CXO. CXO handles the fast path
-// declaratively; this is only a floor under a silently stalled feed, so it wants
-// to be rare rather than responsive.
-const tpdReconcileCXOBackstop = time.Hour
-
 // reconcileTPDWithRetry retries TPD reconciliation until success
 // This is critical because routing breaks completely if TPD data is stale
 func reconcileTPDWithRetry(ctx context.Context, v *Visor, log *logging.Logger) {
@@ -1112,30 +1106,27 @@ func reconcileTPDWithRetry(ctx context.Context, v *Visor, log *logging.Logger) {
 }
 
 func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
-	// Drop to a slow backstop when CXO mirroring is installed. This visor then
-	// publishes its full transport list as one snapshot leaf and TPD's
-	// aggregator reconciles against it: entries absent from the snapshot are
-	// deregistered, and a dropped registration is re-asserted by the next
-	// publish. Both directions this function repairs are already covered, so
-	// running it every 5 minutes is duplicate load — one TPD query per visor
-	// per 5 minutes, fleet-wide, to find nothing.
+	// CXO mirroring installed means CXO owns registration. This visor publishes
+	// its full transport list as one snapshot leaf and TPD's aggregator
+	// reconciles against it: entries absent from the snapshot are deregistered,
+	// and a dropped registration is re-asserted by the next publish. Nothing
+	// here has anything to repair.
 	//
-	// Not skipped outright, because "CXO is installed" is not "CXO is landing".
-	// A stalled feed leaves TPD holding the last snapshot, and stale entries
-	// would then persist with no HTTP path to clear them. An hourly pass is a
-	// cheap floor under that (a twelfth of the queries) while leaving the fast
-	// path to CXO. Visors where CXO publishing is off or unavailable
-	// (Stats.Disabled, or buildStatsPublisher failing — non-fatal by design,
-	// see init_stats.go) keep the original 5-minute cadence.
+	// Deliberately no HTTP backstop for a stalled feed. It would not be one: a
+	// stalled feed's real failure is that new registrations never land, and
+	// this function cannot register anything — it only deletes TPD entries the
+	// visor no longer holds. Running it anyway would clear the visible symptom
+	// (stale entries) while the actual outage continued unnoticed, which is
+	// worse than not running it. A stalled publisher is meant to be found by
+	// looking at publisher health (`visor state --jq '.cxo'`) and fixed, not
+	// papered over from a second code path.
+	//
+	// The 5-minute HTTP pass below is for visors that are not on CXO at all —
+	// Stats.Disabled, or buildStatsPublisher having failed (non-fatal by
+	// design, see init_stats.go). That is a different deployment mode, not a
+	// fallback.
 	if v.tpM != nil && v.tpM.HasTPDLeafPublisher() {
-		v.tpdReconcileMu.Lock()
-		since := time.Since(v.tpdReconcileLast)
-		if !v.tpdReconcileLast.IsZero() && since < tpdReconcileCXOBackstop {
-			v.tpdReconcileMu.Unlock()
-			return nil
-		}
-		v.tpdReconcileLast = time.Now()
-		v.tpdReconcileMu.Unlock()
+		return nil
 	}
 
 	// Query TPD with retry logic

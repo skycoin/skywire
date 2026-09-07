@@ -157,12 +157,6 @@ type Visor struct {
 	// flips it to connecting. Kept for backward compatibility with the
 	// /visors/{pk}/health API response.
 	isServicesHealthy *internalHealthInfo
-
-	// tpdReconcileLast is when the HTTP TPD reconciliation last actually ran.
-	// Only consulted on a visor mirroring its transport list to CXO, where the
-	// pass drops to the tpdReconcileCXOBackstop cadence — see reconcileTPD.
-	tpdReconcileMu   sync.Mutex
-	tpdReconcileLast time.Time
 	// Per-subsystem health flags so the UI can show which subsystem is
 	// actually unhealthy instead of one generic "services" label.
 	isUptimeTrackerHealthy    *internalHealthInfo
