@@ -13,7 +13,7 @@ import type { TPSTransportResponse } from './types';
 
 export async function checkTPSStatus(): Promise<void> {
     try {
-        const resp = await fetch('/api/tps/status');
+        const resp = await fetch(API_BASE + '/api/tps/status');
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
         setTpsRunning(data.running);
@@ -80,7 +80,7 @@ export async function tpsAddTransport(): Promise<void> {
         resultEl.textContent = 'Dialing via dmsg...';
 
         try {
-            const resp = await fetch('/api/tps/add-transport', {
+            const resp = await fetch(API_BASE + '/api/tps/add-transport', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ target_pk: targetVisors[0], remote_pk: remoteVisors[0], type: tpType })
@@ -136,7 +136,7 @@ export async function tpsAddTransport(): Promise<void> {
             log(`${target.substring(0, 8)}\u2192${remote.substring(0, 8)}...`, '#ffd166');
 
             try {
-                const resp = await fetch('/api/tps/add-transport', {
+                const resp = await fetch(API_BASE + '/api/tps/add-transport', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ target_pk: target, remote_pk: remote, type: tpType })
@@ -188,7 +188,7 @@ export async function tpsRefreshTransports(): Promise<void> {
     resultEl.textContent = 'Querying remote visor via dmsg...';
 
     try {
-        const resp = await fetch('/api/tps/refresh-transports?pk=' + encodeURIComponent(targetPK));
+        const resp = await fetch(API_BASE + '/api/tps/refresh-transports?pk=' + encodeURIComponent(targetPK));
         const data = await resp.json();
         if (!resp.ok) {
             throw new Error(data.error || 'Request failed');
@@ -237,7 +237,7 @@ export async function tpsRemoveTransport(
     btnElement.textContent = '...';
 
     try {
-        const resp = await fetch('/api/tps/remove-transport', {
+        const resp = await fetch(API_BASE + '/api/tps/remove-transport', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ target_pk: targetPK, id: tpID })
@@ -389,7 +389,7 @@ export async function localCreateTransport(): Promise<void> {
     updateLocalTPResult('warning', 'Creating transport...');
 
     try {
-        const resp = await fetch('/api/local/add-transport', {
+        const resp = await fetch(API_BASE + '/api/local/add-transport', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ remote_pk: remotePK, type: tpType })
@@ -488,7 +488,7 @@ export async function mhBuildRoute(): Promise<void> {
         progressEl.innerHTML += `<div style="color:#aaa;font-size:0.9em;">Hop ${i + 1}: ${targetPK.substring(0, 8)}... \u2192 ${remotePK.substring(0, 8)}... <span id="mh-status-${i}" style="color:#ffd166;">\u23F3</span></div>`;
 
         try {
-            const resp = await fetch('/api/tps/add-transport', {
+            const resp = await fetch(API_BASE + '/api/tps/add-transport', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ target_pk: targetPK, remote_pk: remotePK, type: tpType })

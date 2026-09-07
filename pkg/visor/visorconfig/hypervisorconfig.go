@@ -126,6 +126,17 @@ type WasmServeConf struct {
 	NoWallet bool   `json:"no_wallet,omitempty"` // default serves the bundled skycoin-web wallet; set true to omit it
 	Variant  string `json:"variant,omitempty"`   // "" = build default; "go" | "tinygo"
 	Password string `json:"password,omitempty"`  // optional access-password gate (use with TLS)
+	// ExecWasm is the path to the FULL skywire CLI built for GOOS=js, served at
+	// /skywire.wasm. It is what turns this surface into the DESK: without it the
+	// root serves the legacy hv-boot page (bare Angular over a SharedWorker
+	// core), because the desk's terminal has no `skywire` command to run
+	// `autoconfig` in. `skywire cli hv serve` has always had this as
+	// --exec-wasm; the visor-hosted equivalent had no way to set it, so a
+	// visor-hosted wasm_serve could never produce a desk. Empty = legacy page.
+	// Build it with:
+	//   GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" \
+	//     -trimpath -ldflags "-s -w" -o build/skywire.wasm .
+	ExecWasm string `json:"exec_wasm,omitempty"`
 	// BrowseSuffix is the real-origin browser's browse-origin domain suffix
 	// (leading dot); empty = ".mesh.localhost".
 	BrowseSuffix string `json:"browse_suffix,omitempty"`
@@ -268,8 +279,13 @@ func (c *CookieConfig) Secure() bool {
 }
 
 // HTTPOnly gets cookie's `HTTPOnly` value.
+//
+// Unconditionally true: the session cookie is never read from JavaScript, so
+// keeping it out of document.cookie costs nothing and blocks XSS-based session
+// theft. It used to return !c.TLS, which inverted the protection exactly when
+// an operator opted into TLS — the safer configuration turned HTTPOnly off.
 func (c *CookieConfig) HTTPOnly() bool {
-	return !c.TLS
+	return true
 }
 
 // SameSite gets cookie's `SameSite` value.

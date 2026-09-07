@@ -1833,17 +1833,34 @@ func (s *Server) handleTPSStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleTPSAddTransport creates a transport between two remote visors via TPS RPC.
+// requireSameOriginJSON gates the four endpoints that MUTATE a visor's
+// transports. They are only ever called same-origin by the tpviz UI, so they
+// send no Access-Control-Allow-Origin header and refuse preflight outright —
+// they previously answered both with "*", which let any page the operator
+// happened to visit create or delete transports on their visor.
+//
+// Requiring a JSON content type closes the other half: without it a
+// cross-origin caller could skip preflight entirely with a "simple" POST,
+// whose side effect lands even though the attacker cannot read the reply.
+//
+// Returns true when the request may proceed.
+func requireSameOriginJSON(w http.ResponseWriter, r *http.Request) bool {
+	switch {
+	case r.Method == http.MethodOptions:
+		http.Error(w, `{"error":"cross-origin requests are not allowed"}`, http.StatusForbidden)
+	case r.Method != http.MethodPost:
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	case !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json"):
+		http.Error(w, `{"error":"content-type must be application/json"}`, http.StatusUnsupportedMediaType)
+	default:
+		return true
+	}
+	return false
+}
+
 func (s *Server) handleTPSAddTransport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	if r.Method == http.MethodOptions {
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	if !requireSameOriginJSON(w, r) {
 		return
 	}
 
@@ -1894,15 +1911,7 @@ func (s *Server) handleTPSAddTransport(w http.ResponseWriter, r *http.Request) {
 // handleTPSRemoveTransport removes a transport from a remote visor via TPS RPC.
 func (s *Server) handleTPSRemoveTransport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	if r.Method == http.MethodOptions {
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	if !requireSameOriginJSON(w, r) {
 		return
 	}
 
@@ -1977,15 +1986,7 @@ func (s *Server) handleTPSRefreshTransports(w http.ResponseWriter, r *http.Reque
 // handleLocalAddTransport creates a transport from the local visor to a remote visor.
 func (s *Server) handleLocalAddTransport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	if r.Method == http.MethodOptions {
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	if !requireSameOriginJSON(w, r) {
 		return
 	}
 
@@ -2041,15 +2042,7 @@ func (s *Server) handleLocalAddTransport(w http.ResponseWriter, r *http.Request)
 // handleLocalRemoveTransport removes a transport from the local visor.
 func (s *Server) handleLocalRemoveTransport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	if r.Method == http.MethodOptions {
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	if !requireSameOriginJSON(w, r) {
 		return
 	}
 
