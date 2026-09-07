@@ -14,6 +14,8 @@ import (
 var (
 	serveAddr         string
 	serveHarness      bool
+	serveHelpTerminal bool
+	serveDocsPort     int
 	serveTLS          bool
 	serveTLSCert      string
 	serveTLSKey       string
@@ -30,6 +32,8 @@ var (
 func init() {
 	serveCmd.Flags().StringVarP(&serveAddr, "addr", "a", ":7999", "HTTP listen address")
 	serveCmd.Flags().BoolVar(&serveHarness, "harness", false, "mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly")
+	serveCmd.Flags().BoolVar(&serveHelpTerminal, "desk-help-terminal", false, "open a desk terminal that has already run 'skywire --help' — costs a whole extra Go/wasm runtime of the full binary, and that memory is never returned")
+	serveCmd.Flags().IntVar(&serveDocsPort, "desk-docs-port", 0, "run 'skywire doc serve' on this desk vnet port (0 = off) — same cost as above")
 	serveCmd.Flags().BoolVar(&serveTLS, "tls", false, "serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts")
 	serveCmd.Flags().StringVar(&serveTLSCert, "tls-cert", "", "PEM cert to serve TLS with instead of the self-signed localhost cert — e.g. a locally-trusted *.mesh.localhost cert (mkcert) so real-origin browse iframes load without a per-host accept. Requires --tls-key")
 	serveCmd.Flags().StringVar(&serveTLSKey, "tls-key", "", "PEM key paired with --tls-cert")
@@ -80,6 +84,8 @@ page never asks anyone to type a secret key.`,
 			TLSCert:          serveTLSCert,
 			TLSKey:           serveTLSKey,
 			Harness:          serveHarness,
+			DeskHelpTerminal: serveHelpTerminal,
+			DeskDocsPort:     serveDocsPort,
 			Wallet:           serveWallet,
 			Variant:          serveVariant,
 			Password:         servePassword,

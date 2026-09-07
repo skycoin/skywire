@@ -165,7 +165,7 @@ func TestDeskShellHTMLWasmMode(t *testing.T) {
 		`<script src="/wasm_exec.js?variant=go"></script>`+"\n"+
 			`<script src="/browse.js"></script>`+"\n"+
 			`<script src="/desk-boot.js"></script>`,
-		deskWasmBootOpts))
+		deskWasmBootOpts(false, 0)))
 	for _, want := range []string{
 		"deskWasmURL: '/wasm-visor.wasm'",
 		"wasmURL: '/skywire.wasm'",

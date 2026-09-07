@@ -645,6 +645,8 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 				Variant:          ws.Variant,
 				Password:         ws.Password,
 				ExecWasmPath:     ws.ExecWasm,
+				DeskHelpTerminal: ws.DeskHelpTerminal,
+				DeskDocsPort:     ws.DeskDocsPort,
 				BrowseSuffix:     ws.BrowseSuffix,
 				BrowseOriginAddr: ws.BrowseOriginAddr,
 				VOrigin:          ws.VOrigin,
