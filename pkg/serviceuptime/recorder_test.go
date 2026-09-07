@@ -149,15 +149,25 @@ func TestNewIsCheapEnoughForEarlyMain(t *testing.T) {
 	// Sanity: New must be a single bbolt open + two writes. Anything
 	// more risks slowing the canary-process startup we depend on for
 	// recording crashes during config parsing.
+	//
+	// That is a claim about WORK, so count transactions rather than
+	// milliseconds. The wall-clock form of this assertion ("New took %v,
+	// expected <500ms") measured the runner's disk instead of this code and
+	// failed on Windows CI at 4.10s: three fsync-ing commits on a loaded
+	// shared runner have no business fitting in a fixed 500ms, and widening
+	// the constant would only move the next false failure. The count below
+	// cannot be moved by load, and unlike a duration it actually fails when
+	// someone adds a fourth transaction — which is the regression the
+	// comment above is guarding against.
 	path := filepath.Join(t.TempDir(), "uptime.db")
-	start := time.Now()
 	r, err := New(path, Config{Service: "tester", Version: "v0.0"})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	took := time.Since(start)
-	if took > 500*time.Millisecond {
-		t.Errorf("New took %v, expected <500ms", took)
+	defer r.Close() //nolint:errcheck
+
+	// OpenStore's schema transaction, then PutSession, then MarkSlot.
+	if got := r.Store().writeTxns.Load(); got != 3 {
+		t.Errorf("New performed %d write transactions, want 3 (bbolt open + two writes)", got)
 	}
-	_ = r.Close() //nolint:errcheck
 }
