@@ -10,6 +10,7 @@
 import indexHtml from '../index.html';
 import { wireEventListeners } from './events';
 import { setHostOpts } from './persist';
+import { setApiBase } from './constants';
 import { teardown, installVisibilityGate } from './lifecycle';
 
 // scopeSelector rewrites one selector so it only matches inside `scope`. Global
@@ -73,9 +74,20 @@ export interface TpvizMountHandle { unmount(): void }
 
 // mount renders the transport-graph UI into `root` (in the host's own document/JS
 // context — no iframe). opts.view seeds the initial view (globe/flat/webgl);
-// opts.onViewChange lets the host reflect view switches into its own URL. Returns
-// a handle whose unmount() clears the DOM + styles.
-export function mount(root: HTMLElement, opts?: { view?: string; onViewChange?: (v: string) => void }): TpvizMountHandle {
+// opts.onViewChange lets the host reflect view switches into its own URL.
+//
+// opts.apiBase overrides the origin/prefix every REST call is made against.
+// Omit it for the same-origin case (the native hypervisor, which serves this
+// API itself). A host that does NOT serve the API from its own origin — the
+// in-tab wasm visor, which reaches its visor over vnet — must pass it, or every
+// fetch resolves against the page origin and 404s. Applied before any fetch.
+//
+// Returns a handle whose unmount() clears the DOM + styles.
+export function mount(
+  root: HTMLElement,
+  opts?: { view?: string; onViewChange?: (v: string) => void; apiBase?: string },
+): TpvizMountHandle {
+  if (opts && typeof opts.apiBase === 'string') { setApiBase(opts.apiBase); }
   setHostOpts(opts);
   const doc = new DOMParser().parseFromString(indexHtml, 'text/html');
 
