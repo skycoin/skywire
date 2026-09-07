@@ -58,7 +58,7 @@ jobs:
           DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           COMMIT="$(git rev-list -1 HEAD)"
           BASE="github.com/skycoin/skywire"
-          UTIL="$BASE/pkg/skywire-utilities/pkg/buildinfo"
+          UTIL="$BASE/pkg/buildinfo"
           # Same stamping as `make build`, plus -s -w to shrink the artifact.
           LDFLAGS="-s -w -X ${UTIL}.version=${VERSION} -X ${UTIL}.date=${DATE} -X ${UTIL}.commit=${COMMIT} -X ${BASE}/pkg/visor.BuildTag=${BRANCH}"
           mkdir -p dist
