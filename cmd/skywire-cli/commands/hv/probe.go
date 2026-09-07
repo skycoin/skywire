@@ -92,6 +92,12 @@ func probeRun() error {
 		return fmt.Errorf("give --navigate or --eval (or both)")
 	}
 	if probeDriver != "" {
+		if probeWS != "" {
+			return fmt.Errorf("--driver and --ws address different browsers; give one or the other")
+		}
+		if probeBrowser == protoCDP {
+			return fmt.Errorf("--driver speaks BiDi; --browser cdp cannot go through it")
+		}
 		return probeViaDriver()
 	}
 	// A --ws target is a CDP address by construction: BiDi has no per-target

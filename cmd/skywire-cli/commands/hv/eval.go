@@ -91,6 +91,15 @@ func evalRun(args []string) error {
 	expr := args[len(args)-1]
 
 	if evalDriver != "" {
+		// Silently ignoring an argument the caller passed is how a command
+		// answers confidently about the wrong thing: --driver addresses the
+		// driver's tab, which a webSocketDebuggerUrl cannot name.
+		if len(args) == 2 {
+			return fmt.Errorf("--driver and a webSocketDebuggerUrl address different browsers; give one or the other")
+		}
+		if evalBrowser == protoCDP {
+			return fmt.Errorf("--driver speaks BiDi; --browser cdp cannot go through it")
+		}
 		body, err := driverGet(evalDriver, "/eval", map[string][]string{"expr": {expr}}, timeout)
 		if err != nil {
 			return err
