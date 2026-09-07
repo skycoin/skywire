@@ -438,7 +438,7 @@ func TestLegLivenessKeepsEchoingLeg(t *testing.T) {
 }
 
 // TestMuxStatsReportsFullMultihopLegChain verifies that a mux leg whose full
-// forward route was recorded (SetForwardHops for the primary, recordLegHops for
+// forward route was recorded (SetForwardHops for the primary, recordLegRoute for
 // aux legs — the two paths the dial-side establishment sites feed) reports EVERY
 // hop in MuxStats().Legs[i].Hops, ending at the true destination — not just the
 // leg's first-hop transport remote (the first INTERMEDIATE, which the pre-fix
@@ -460,12 +460,12 @@ func TestMuxStatsReportsFullMultihopLegChain(t *testing.T) {
 	})
 
 	// Leg 1 (aux): a 2-hop forward path src -> mid1 -> dst, recorded the way the
-	// establishMuxRoutes / rotation add-leg sites now do via recordLegHops.
+	// establishMuxRoutes / rotation add-leg sites now do via recordLegRoute.
 	mid1, _ := cipher.GenerateKeyPair()
-	rg.recordLegHops([]routing.Hop{
+	rg.recordLegRoute([]routing.Hop{
 		{TpID: mts[1].Entry.ID, From: src, To: mid1},
 		{TpID: uuid.New(), From: mid1, To: dst},
-	})
+	}, nil)
 
 	// Leg 2: deliberately NOT recorded — models the pre-fix gap.
 

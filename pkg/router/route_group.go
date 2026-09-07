@@ -232,6 +232,24 @@ type RouteGroup struct {
 	// (aux legs). Guarded by rg.mu.
 	legForwardHops map[uuid.UUID][]routing.Hop
 
+	// legRemoteTp maps a leg's LOCAL first-hop transport ID (the same key
+	// legForwardHops uses) to the FAR END's first-hop transport ID for that
+	// leg — i.e. Reverse[0].TpID of the plan this leg was dialed with.
+	//
+	// That value is an exact mirror of one entry in the peer's own rg.tps: the
+	// setup node installs `respEdge.Forward` on the destination, which is the
+	// ForwardRule generated for the reverse route's first hop, and
+	// appendRouteToGroup registers r.tm.Transport(rules.Forward.NextTransportID())
+	// as that leg's transport there. Keeping the mapping locally lets the
+	// aux-leg planners predict — before paying a setup-node round trip — that
+	// the destination would refuse a plan whose reverse leaves it over a
+	// transport it already has a leg on. Initiator-local; no wire change.
+	//
+	// Read only through remoteLegTransportIDs, which walks the LIVE tps, so an
+	// entry for a leg that has since been pruned stops excluding anything
+	// (it is inert, not sticky). Guarded by rg.mu.
+	legRemoteTp map[uuid.UUID]uuid.UUID
+
 	// initiator is true when this visor dialed the remote end (called
 	// router.DialRoutes); false when this visor accepted the route via
 	// AcceptRoutes / saveRouteGroupRules from a setup-node request.
@@ -420,6 +438,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		legE2ELatency:      make(map[uuid.UUID]float64),
 		legOWD:             make(map[uuid.UUID]*sbdWindow),
 		legForwardHops:     make(map[uuid.UUID][]routing.Hop),
+		legRemoteTp:        make(map[uuid.UUID]uuid.UUID),
 		legRecvSnap:        make(map[uuid.UUID]uint64),
 	}
 
@@ -1579,15 +1598,53 @@ func (rg *RouteGroup) SetForwardHops(hops []routing.Hop) {
 	}
 }
 
-// recordLegHops stores a mux leg's full forward route keyed by its
-// first-hop transport ID. Called by AddMuxRouteByHops for aux legs.
-func (rg *RouteGroup) recordLegHops(hops []routing.Hop) {
-	if len(hops) == 0 {
+// recordLegRoute stores a mux leg's full forward route keyed by its first-hop
+// transport ID, AND the far end's first-hop transport for that leg, taken from
+// the reverse path the leg was dialed with. Called by every aux-mux-leg commit path and by
+// the primary dial, so remoteLegTransportIDs mirrors the peer's live leg
+// transports. A nil/empty rev records the forward route only (best-effort: an
+// unrecorded leg simply contributes no exclusion).
+func (rg *RouteGroup) recordLegRoute(fwd, rev []routing.Hop) {
+	if len(fwd) == 0 {
 		return
 	}
 	rg.mu.Lock()
-	rg.legForwardHops[hops[0].TpID] = hops
+	rg.legForwardHops[fwd[0].TpID] = fwd
+	if len(rev) > 0 {
+		rg.legRemoteTp[fwd[0].TpID] = rev[0].TpID
+	}
 	rg.mu.Unlock()
+}
+
+// remoteLegTransportIDs returns the far end's first-hop transport ID for every
+// LIVE leg of this group — the peer's own rg.tps set, as far as this side
+// recorded it. A planned aux leg whose Reverse[0].TpID is in this set is
+// guaranteed to be refused by the peer's appendRouteToGroup/appendRouteAsymmetric
+// duplicate-transport guard, so the planners drop it BEFORE the setup-node dial.
+//
+// Derived from the live tps on every call (not from an accumulating set), so a
+// leg that has been pruned locally immediately stops excluding its remote
+// transport and a replacement leg over that same far-end link can be built
+// again. Callers must NOT hold rg.mu.
+func (rg *RouteGroup) remoteLegTransportIDs() []uuid.UUID {
+	if rg == nil {
+		return nil
+	}
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	if len(rg.legRemoteTp) == 0 {
+		return nil
+	}
+	out := make([]uuid.UUID, 0, len(rg.tps))
+	for _, tp := range rg.tps {
+		if tp == nil {
+			continue
+		}
+		if remote, ok := rg.legRemoteTp[tp.Entry.ID]; ok {
+			out = append(out, remote)
+		}
+	}
+	return out
 }
 
 // legHopsFor returns a copy of the full forward route for the leg on
