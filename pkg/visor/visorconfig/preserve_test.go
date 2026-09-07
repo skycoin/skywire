@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -262,6 +263,14 @@ func TestFlushWithNoPriorFile(t *testing.T) {
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("stat: %v", err)
+	}
+	// Windows has no POSIX mode bits: Go synthesizes them from the read-only
+	// attribute, so Perm() reports 0666 (or 0444) whatever mode WriteFile was
+	// given, and 0640 can never hold. The rest of this test — that a config
+	// flushes and loads back when no prior file exists — is meaningful on every
+	// platform, so only the permission assertion is skipped.
+	if runtime.GOOS == "windows" {
+		return
 	}
 	if perm := info.Mode().Perm(); perm != 0o640 {
 		t.Errorf("config file mode = %o, want 640 (it holds the secret key)", perm)
