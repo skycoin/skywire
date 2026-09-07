@@ -767,6 +767,18 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		r.Route("/api", func(r chi.Router) {
 			r.Use(middleware.Timeout(httpTimeout))
 
+			// The /api surface is JSON, most of it list-shaped and
+			// re-sent on every UI poll (the node list refreshes every
+			// 10s by default). /visors-tree-summary alone measured
+			// 8.8 MB on a nine-visor deployment; gzip takes it to
+			// 1.5 MB. Restricted to application/json so SSE
+			// (text/event-stream, /log and /notify) and the websocket
+			// upgrades under /visors/{pk}/... are left untouched —
+			// chi only swaps in the compressing writer once it sees a
+			// listed Content-Type, so Hijack and Flush still reach the
+			// real ResponseWriter on those routes.
+			r.Use(middleware.Compress(5, "application/json"))
+
 			r.Get("/ping", hv.getPong())
 
 			r.Get("/csrf", hv.getCsrf())
