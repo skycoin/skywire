@@ -607,10 +607,10 @@ func TestTPSRemoveTransport_Paths(t *testing.T) {
 	s := testServer(t)
 	s.SetTPSAPI(&fakeTPSAPI{pk: "PK"})
 
-	t.Run("OPTIONS", func(t *testing.T) {
+	t.Run("OPTIONS is refused", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodOptions, "/api/tps/remove-transport", nil))
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusForbidden, rec.Code)
 	})
 	t.Run("wrong method", func(t *testing.T) {
 		rec := httptest.NewRecorder()
@@ -619,12 +619,12 @@ func TestTPSRemoveTransport_Paths(t *testing.T) {
 	})
 	t.Run("invalid body", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/tps/remove-transport", strings.NewReader("{bad")))
+		s.Handler().ServeHTTP(rec, postJSON("/api/tps/remove-transport", "{bad"))
 		require.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 	t.Run("success", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/tps/remove-transport", strings.NewReader(`{"target_pk":"a","id":"b"}`)))
+		s.Handler().ServeHTTP(rec, postJSON("/api/tps/remove-transport", `{"target_pk":"a","id":"b"}`))
 		require.Equal(t, http.StatusOK, rec.Code)
 	})
 }
@@ -634,10 +634,10 @@ func TestLocalTransportHandlers_EdgePaths(t *testing.T) {
 		s := testServer(t)
 		s.SetVisorAPI(&fakeVisorAPI{}, "PK")
 
-		t.Run("OPTIONS "+p, func(t *testing.T) {
+		t.Run("OPTIONS is refused "+p, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodOptions, p, nil))
-			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, http.StatusForbidden, rec.Code)
 		})
 		t.Run("wrong method "+p, func(t *testing.T) {
 			rec := httptest.NewRecorder()
@@ -646,7 +646,7 @@ func TestLocalTransportHandlers_EdgePaths(t *testing.T) {
 		})
 		t.Run("invalid body "+p, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, p, strings.NewReader("{bad")))
+			s.Handler().ServeHTTP(rec, postJSON(p, "{bad"))
 			require.Equal(t, http.StatusBadRequest, rec.Code)
 		})
 	}
