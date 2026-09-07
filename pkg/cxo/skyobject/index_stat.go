@@ -17,13 +17,19 @@ type indexStat struct {
 	closeo sync.Once
 }
 
-func newIndexStat(samples int) (i *indexStat) {
+func newIndexStat(samples int, rollingAverages bool) (i *indexStat) {
 	i = new(indexStat)
 
 	i.rps = statutil.NewFloat(samples)
 	i.quit = make(chan struct{})
 
-	go i.secondLoop()
+	// The per-second roll only feeds rootsPerSecond, which is reachable solely
+	// through Container.Stat() -> Node.Stat() -> the node RPC. A node with no RPC
+	// listener has no reader, so the goroutine would tick forever for nobody.
+	// See Config.TrackRollingAverages.
+	if rollingAverages {
+		go i.secondLoop()
+	}
 
 	return
 }
@@ -51,6 +57,8 @@ func (i *indexStat) secondLoop() {
 		tk = time.NewTicker(time.Second)
 		tc = tk.C
 	)
+
+	defer tk.Stop() // was missing; its twin in cxds_stat.go has it
 
 	for {
 

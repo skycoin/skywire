@@ -170,7 +170,7 @@ func (c *Container) initCache() {
 	c.Cache.rs = make(map[registry.RegistryRef]*itemRegistry,
 		c.conf.CacheRegistries)
 
-	c.Cache.stat = newCxdsStat(c.conf.RollAvgSamples)
+	c.Cache.stat = newCxdsStat(c.conf.RollAvgSamples, c.conf.TrackRollingAverages)
 }
 
 func (c *Cache) amountVolume() (a, v int) {

@@ -131,13 +131,23 @@ func NewNode(conf *Config) (n *Node, err error) {
 	}
 
 	if err = conf.Validate(); err != nil {
-		return // invalid
+		return nil, err // invalid
+	}
+
+	// The container's per-second rolling-average goroutines exist only to feed
+	// Container.Stat() -> Node.Stat(), which is reachable solely over this
+	// node's RPC. With no RPC listener (the check at the bottom of this
+	// function) nothing can ever read them, so don't start them. Every in-visor
+	// CXO node sets conf.RPC = "" — treestore publisher and subscriber,
+	// cxoaggregate, cxopreview — which is where the saving lands.
+	if conf.RPC == "" {
+		conf.Config.TrackRollingAverages = false
 	}
 
 	var c *skyobject.Container
 
 	if c, err = skyobject.NewContainer(conf.Config); err != nil {
-		return
+		return nil, err
 	}
 
 	return NewNodeContainer(conf, c)

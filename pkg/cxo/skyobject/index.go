@@ -66,7 +66,7 @@ type Index struct {
 func (i *Index) load(c *Container) (err error) {
 
 	// create statistic
-	i.stat = newIndexStat(c.conf.RollAvgSamples)
+	i.stat = newIndexStat(c.conf.RollAvgSamples, c.conf.TrackRollingAverages)
 
 	i.feeds = make(map[cipher.PubKey]*indexHeads)
 	i.c = c
