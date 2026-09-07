@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/0magnet/bottle/vnet"
@@ -62,6 +63,11 @@ type Hypervisor struct {
 	logger       *logging.Logger
 	tpvizServer  *tpviz.Server
 	lanDmsg      *LANDmsgServer // embedded LAN DMSG server (nil if disabled)
+
+	// wsMux holds the finished router (as a muxRef) so /ws can replay each
+	// frame through the SAME handlers the HTTP surface uses — one API, two
+	// transports. Written once at the end of makeMux, read per request.
+	wsMux atomic.Value
 
 	// summaryCache holds the most recent successful Summary per
 	// remote visor PK so the UI can keep showing version / IP / etc
@@ -1067,6 +1073,21 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			r.Get("/{pk}", hv.getPty())
 		})
 
+		// /ws — the /api surface as a message transport, for a UI that talks to
+		// its visor over a socket instead of same-origin XHR. Out here beside
+		// /pty rather than under /api: that group's middleware.Timeout wraps the
+		// ResponseWriter in something that is not an http.Hijacker, which
+		// websocket.Accept requires, and its 30s deadline would cut a long-lived
+		// connection. Auth is opted into explicitly, as /pty does. Replayed
+		// requests still traverse /api and pick that middleware up per request.
+		r.Group(func(r chi.Router) {
+			if hv.c.EnableAuth {
+				r.Use(hv.users.Authorize)
+			}
+
+			r.Get("/ws", hv.getAPIWebSocket())
+		})
+
 		// Mount tp-viz UI if enabled.
 		//
 		// Inside its own authenticated group: these paths sit OUTSIDE the
@@ -1122,6 +1143,12 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		r.Get("/api/ui-version", hv.getUIVersion())
 		r.Handle("/*", hv.uiHandler())
 	})
+
+	// Hand the finished router to the /ws transport, which replays each frame
+	// through it so the socket and the HTTP surface can never drift apart.
+	// Stored rather than closed over because the routes above are registered
+	// while r is still being built; /ws only reads this at request time.
+	hv.wsMux.Store(muxRef{h: r})
 
 	return r
 }
