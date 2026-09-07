@@ -2,26 +2,40 @@
 
 [← skywire cli hv](../README.md)
 
-Evaluate JavaScript on a specific CDP target, addressed by its
-webSocketDebuggerUrl.
+Evaluate JavaScript in a running browser.
 
-Addressing the target directly is the point: several targets in a page can
-share a URL (OOPIF iframes, workers, a second wasm instance), and matching by
-URL cannot tell them apart.
-
-List them with:
+With a webSocketDebuggerUrl it addresses one specific CDP target, which is the
+point on Chromium/Brave: several targets in a page can share a URL (OOPIF
+iframes, workers, a second wasm instance), and matching by URL cannot tell them
+apart. List them with:
   curl -s localhost:9222/json/list | jq -r '.[] | "\(.type) \(.url) \(.webSocketDebuggerUrl)"'
+
+With only an expression it uses --port and detects the protocol: Chromium
+answers /json/version, Waterfox/Firefox does not and speaks WebDriver BiDi
+instead. On CDP it evaluates in the first page target; on BiDi it drives the
+one session Firefox allows.
+
+  skywire cli hv eval ws://localhost:9222/devtools/page/ABC 'typeof skywireVisor'
+  skywire cli hv eval --port 9223 'document.title'
+  skywire cli hv eval --driver 127.0.0.1:9224 'document.title'
+
+--driver is the safe way to use Firefox repeatedly: it evaluates through a
+running "hv drive" session instead of taking the single session for itself.
 
 ## Usage
 
 ```
-skywire cli hv eval <webSocketDebuggerUrl> <js-expression>
+skywire cli hv eval [webSocketDebuggerUrl] <js-expression>
 ```
 
 ## Flags
 
 ```
-      --timeout int   seconds to wait for the result (default 30)
+      --browser string   protocol to speak: auto, cdp (Chromium/Brave) or bidi (Waterfox/Firefox) (default "auto")
+      --driver string    control port of a running "hv drive", e.g. 127.0.0.1:9224 — evaluates through its session instead of opening one
+      --port string      debug port of the running browser, when no webSocketDebuggerUrl is given (default "9222")
+      --tab string       BiDi only: substring of the URL of the already-open tab to attach to; the first tab otherwise
+      --timeout int      seconds to wait for the result (default 30)
 ```
 
 ## Global Flags
