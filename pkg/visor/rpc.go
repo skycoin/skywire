@@ -116,6 +116,36 @@ type TransportSummary struct {
 	// Populated from tp.ConnDetails().
 	Endpoint *network.ConnDetails `json:"endpoint,omitempty"`
 }
+
+// MarshalJSON emits id / local_pk / remote_pk only when they are set.
+//
+// encoding/json's `omitempty` cannot express this: uuid.UUID and
+// cipher.PubKey are fixed-size arrays, and omitempty never treats an
+// array as empty — so an otherwise-blank entry still costs ~170 bytes
+// of "000…0" on the wire. That is what makes the node-list projection
+// worth doing at all (see compactTransportSummaries, which emits type
+// and direction only). A real transport has all three set and
+// serializes exactly as it did before.
+func (ts TransportSummary) MarshalJSON() ([]byte, error) {
+	type alias TransportSummary
+	out := struct {
+		*alias
+		ID     *uuid.UUID     `json:"id,omitempty"`
+		Local  *cipher.PubKey `json:"local_pk,omitempty"`
+		Remote *cipher.PubKey `json:"remote_pk,omitempty"`
+	}{alias: (*alias)(&ts)}
+	if ts.ID != (uuid.UUID{}) {
+		out.ID = &ts.ID
+	}
+	if !ts.Local.Null() {
+		out.Local = &ts.Local
+	}
+	if !ts.Remote.Null() {
+		out.Remote = &ts.Remote
+	}
+	return json.Marshal(out)
+}
+
 type TransportLogEntry struct {
 	TpID      uuid.UUID `json:"tp_id"`
 	RecvBytes uint64    `json:"recv_bytes"`
