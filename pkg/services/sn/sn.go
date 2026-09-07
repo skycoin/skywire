@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
@@ -280,26 +281,13 @@ func (s *service) startDMSGHealth(
 		}
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 	})
-	mux.HandleFunc("/stats", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		snap := collector.Snapshot()
-		// Sanitize: strip src/dst PKs to avoid leaking visor topology.
-		for i := range snap.RecentFailures {
-			snap.RecentFailures[i].SrcPK = ""
-			snap.RecentFailures[i].DstPK = ""
-		}
-		for i := range snap.TopDestinations {
-			snap.TopDestinations[i].PK = ""
-		}
-		for i := range snap.TopFailedDestinations {
-			snap.TopFailedDestinations[i].PK = ""
-		}
-		json.NewEncoder(w).Encode(snap) //nolint:errcheck,gosec
-	})
+	mux.Handle("/stats", statsHandler(collector, deployment.Prod.SurveyWhitelist))
 
 	snClient := sn.DmsgClient()
 	// Fold pprof + /debug/log onto the main dmsg :80 (survey-gated) instead of a
-	// separate :81 listener. The ring buffer captures route-setup logs (the
+	// separate :81 listener. Note WithDebug gates ONLY /debug/ — /health and
+	// /stats fall through to the mux, which is why /stats carries its own
+	// whitelist above. The ring buffer captures route-setup logs (the
 	// router logs via the global logger) so /debug/log needs no disk file —
 	// e.g. the live id-reservation failures behind the /stats counters.
 	rb := logging.NewRingBuffer(0)
@@ -312,6 +300,39 @@ func (s *service) startDMSGHealth(
 		}
 	}()
 	log.Infof("DMSG HTTP (health/stats/debug) available at %s", dmsgAddr)
+}
+
+// statsHandler serves the route-setup metrics snapshot, restricted to the
+// survey whitelist.
+//
+// It used to be public and blanked the structured public keys before encoding
+// (RecentFailures[].SrcPK / DstPK, TopDestinations[].PK,
+// TopFailedDestinations[].PK) with the comment "strip src/dst PKs to avoid
+// leaking visor topology". That did not work. The FailureEvent.Error string is
+// not sanitized and carries the same keys verbatim, e.g.
+//
+//	failed to reserve route ids: reserve routeID from
+//	03d672c32a56a666a4931f6327ff85874af614dccf17b19cc6f665b1219c317dd7
+//	failed: context deadline exceeded
+//
+// so the topology went out anyway; all the blanking removed was the
+// machine-readable half — exactly the fields needed to answer "which
+// destination is failing", which a live incident could not get.
+//
+// The stripping was written as if /stats were already behind the survey
+// whitelist. It was not: dmsghttp.WithDebug gates only paths under /debug/,
+// and /stats fell through to the plain mux, unauthenticated to anyone able to
+// dial the setup node over dmsg. So the choice was never "gate or sanitize" —
+// there was no gate and no working sanitizer. Gating it is what makes the
+// stated intent true, and once the endpoint is actually restricted there is no
+// reason to withhold the fields from the operators it is restricted to.
+//
+// /health stays public; it carries no keys beyond the node's own.
+func statsHandler(collector *setupmetrics.Collector, whitelist []cipher.PubKey) http.Handler {
+	return dmsghttp.WhitelistMiddleware(whitelist, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(collector.Snapshot()) //nolint:errcheck,gosec
+	}))
 }
 
 // getHTTPClient returns an *http.Client for the given service URL,
