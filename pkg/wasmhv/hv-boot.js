@@ -787,48 +787,17 @@
     return pk;
   })();
 
-  // Minimal Go<->TinyGo switcher. Shown only when the server advertises >1 embedded
-  // variant (a TinyGo-only build hides it). Selecting a variant persists it and
-  // reloads; the SK is variant-independent, so the page reboots the OTHER blob as
-  // the SAME PK — the A/B test harness. Lives here (not Angular) so it works in the
-  // served PWA and under --harness alike, with no UI rebuild.
-  function injectVariantToggle() {
-    // Only on the TOP-level page. When the app is iframed at ?embed=1 (the ☰
-    // chat/log WinBox windows host the Angular tab that way), this boot script
-    // runs inside the frame too — without this guard the Go/TinyGo selector
-    // renders a second time inside the chat iframe. The toggle belongs to the
-    // one shared visor, so one instance on the outermost page is correct.
-    try { if (window.top !== window.self) { return; } } catch (e) { return; } // cross-origin frame → treat as embedded
-    if ((location.hash || '').indexOf('embed=1') >= 0) { return; }
-    try {
-      fetch('wasm-variants.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (info) {
-        var avail = (info && info.available) || [];
-        if (avail.length < 2) { return; }
-        var cur = loadVariant() || (info && info.default) || avail[0];
-        function build() {
-          if (!document.body || document.getElementById('sky-variant-toggle')) { return; }
-          var wrap = document.createElement('div');
-          wrap.id = 'sky-variant-toggle';
-          wrap.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:2147483647;font:12px system-ui,sans-serif;background:rgba(20,20,24,.9);color:#ddd;padding:4px 8px;border-radius:6px;border:1px solid #555;box-shadow:0 1px 4px rgba(0,0,0,.4)';
-          var lab = document.createElement('span'); lab.textContent = 'visor: '; wrap.appendChild(lab);
-          var sel = document.createElement('select');
-          sel.title = 'wasm-visor toolchain — reloads with the same identity';
-          sel.style.cssText = 'background:#111;color:#ddd;border:1px solid #555;border-radius:4px;font:inherit';
-          avail.forEach(function (v) {
-            var o = document.createElement('option'); o.value = v; o.textContent = v;
-            if (v === cur) { o.selected = true; }
-            sel.appendChild(o);
-          });
-          sel.addEventListener('change', function () {
-            try { localStorage.setItem(VARIANT_KEY, sel.value); } catch (e) {}
-            location.reload();
-          });
-          wrap.appendChild(sel);
-          document.body.appendChild(wrap);
-        }
-        if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', build); } else { build(); }
-      }).catch(function () {});
-    } catch (e) {}
-  }
-  injectVariantToggle();
+  // The Go<->TinyGo picker is deliberately NOT rendered. It was a fixed-position
+  // widget at the bottom-right with z-index 2147483647, so it sat on top of
+  // whatever control shared that corner. It comes back once the TinyGo blob has
+  // had more testing; until then the toolchain is not something to offer in the
+  // UI as if the two were interchangeable.
+  //
+  // Switching is still fully supported from the address bar — `?variant=go` or
+  // `?variant=tinygo` (handled at the top of this file) writes the same
+  // localStorage key the picker used, so an operator or A/B harness pins a
+  // variant by URL and it persists per-origin from then on. The identity is
+  // variant-independent, so the page reboots the other blob as the SAME public
+  // key. `wasm-variants.json` is still served, so the available set remains
+  // discoverable without the widget.
 })();
