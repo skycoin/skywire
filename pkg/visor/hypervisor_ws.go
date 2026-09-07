@@ -31,6 +31,12 @@
 //
 // Bodies are strings, not base64: the hypervisor API is JSON in and JSON out,
 // and the UI's gateway contract already decodes a text body.
+//
+// wsReadLimit bounds what a client may SEND; responses are not capped, and some
+// are large — /api/visors-tree-summary is 8.6 MB on a fleet of nine visors, over
+// plain HTTP as much as here. A browser's WebSocket has no read limit so the UI
+// is unaffected, but a Go client must raise coder/websocket's 32 KiB default
+// (SetReadLimit) or the first big response closes the connection.
 package visor
 
 import (
@@ -42,6 +48,7 @@ import (
 	"sync"
 
 	"github.com/coder/websocket"
+	"github.com/go-chi/chi/v5"
 )
 
 const (
@@ -264,6 +271,13 @@ func (hv *Hypervisor) serveWSRequest(ctx context.Context, up *http.Request, req 
 	if req.Body != nil {
 		body = strings.NewReader(*req.Body)
 	}
+	// Drop the upgrade request's chi routing context before replaying. chi's
+	// Mux.ServeHTTP reuses an existing *chi.Context when it finds one — without
+	// resetting it — so a sub-request built from this handler's context inherits
+	// RoutePath "/ws" and every replayed path resolves straight back to this
+	// handler. Clearing the key makes chi's type assertion miss and allocate a
+	// fresh routing context, which is what a new request should get.
+	ctx = context.WithValue(ctx, chi.RouteCtxKey, nil)
 	sub, err := http.NewRequestWithContext(ctx, strings.ToUpper(req.Method), req.Path, body)
 	if err != nil {
 		res.Status, res.Body = http.StatusBadRequest, "bad request line"
