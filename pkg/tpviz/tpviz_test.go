@@ -499,23 +499,31 @@ func TestHandleTPSStatus(t *testing.T) {
 	require.Equal(t, "TPSPK", body["tps_pk"])
 }
 
+// postJSON builds a same-origin JSON POST, as the tpviz UI sends. The
+// transport-mutating endpoints require the content type; see
+// requireSameOriginJSON.
+func postJSON(path, body string) *http.Request {
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
 func TestHandleTPSAddTransport(t *testing.T) {
 	s := testServer(t)
 
 	t.Run("TPS not running", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/tps/add-transport",
-			strings.NewReader(`{"target_pk":"a","remote_pk":"b","type":"stcpr"}`))
+		req := postJSON("/api/tps/add-transport", `{"target_pk":"a","remote_pk":"b","type":"stcpr"}`)
 		s.Handler().ServeHTTP(rec, req)
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	})
 
-	t.Run("OPTIONS preflight", func(t *testing.T) {
+	t.Run("OPTIONS preflight is refused", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodOptions, "/api/tps/add-transport", nil)
 		s.Handler().ServeHTTP(rec, req)
-		require.Equal(t, http.StatusOK, rec.Code)
-		require.Contains(t, rec.Header().Get("Access-Control-Allow-Methods"), "POST")
+		require.Equal(t, http.StatusForbidden, rec.Code)
+		require.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"))
 	})
 
 	t.Run("wrong method", func(t *testing.T) {
@@ -528,8 +536,7 @@ func TestHandleTPSAddTransport(t *testing.T) {
 	t.Run("invalid type rejected", func(t *testing.T) {
 		s.SetTPSAPI(&fakeTPSAPI{pk: "PK"})
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/tps/add-transport",
-			strings.NewReader(`{"target_pk":"a","remote_pk":"b","type":"dmsg"}`))
+		req := postJSON("/api/tps/add-transport", `{"target_pk":"a","remote_pk":"b","type":"dmsg"}`)
 		s.Handler().ServeHTTP(rec, req)
 		require.Equal(t, http.StatusBadRequest, rec.Code)
 	})
@@ -537,8 +544,7 @@ func TestHandleTPSAddTransport(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		s.SetTPSAPI(&fakeTPSAPI{pk: "PK"})
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/tps/add-transport",
-			strings.NewReader(`{"target_pk":"a","remote_pk":"b","type":"stcpr"}`))
+		req := postJSON("/api/tps/add-transport", `{"target_pk":"a","remote_pk":"b","type":"stcpr"}`)
 		s.Handler().ServeHTTP(rec, req)
 		require.Equal(t, http.StatusOK, rec.Code)
 	})
@@ -934,7 +940,7 @@ func TestLocalTransportHandlers_NotConnected(t *testing.T) {
 
 	for _, path := range []string{"/api/local/add-transport", "/api/local/remove-transport"} {
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+		req := postJSON(path, `{}`)
 		s.Handler().ServeHTTP(rec, req)
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code, path)
 	}
@@ -946,23 +952,21 @@ func TestHandleLocalAddTransport(t *testing.T) {
 
 	t.Run("missing remote_pk", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/local/add-transport", strings.NewReader(`{}`))
+		req := postJSON("/api/local/add-transport", `{}`)
 		s.Handler().ServeHTTP(rec, req)
 		require.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 
 	t.Run("invalid type", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/local/add-transport",
-			strings.NewReader(`{"remote_pk":"abc","type":"bogus"}`))
+		req := postJSON("/api/local/add-transport", `{"remote_pk":"abc","type":"bogus"}`)
 		s.Handler().ServeHTTP(rec, req)
 		require.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 
 	t.Run("success", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/local/add-transport",
-			strings.NewReader(`{"remote_pk":"abc","type":"stcpr"}`))
+		req := postJSON("/api/local/add-transport", `{"remote_pk":"abc","type":"stcpr"}`)
 		s.Handler().ServeHTTP(rec, req)
 		require.Equal(t, http.StatusOK, rec.Code)
 	})
@@ -974,15 +978,14 @@ func TestHandleLocalRemoveTransport(t *testing.T) {
 
 	t.Run("missing id", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/local/remove-transport", strings.NewReader(`{}`))
+		req := postJSON("/api/local/remove-transport", `{}`)
 		s.Handler().ServeHTTP(rec, req)
 		require.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 
 	t.Run("success", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/local/remove-transport",
-			strings.NewReader(`{"id":"tp-id"}`))
+		req := postJSON("/api/local/remove-transport", `{"id":"tp-id"}`)
 		s.Handler().ServeHTTP(rec, req)
 		require.Equal(t, http.StatusOK, rec.Code)
 	})
@@ -1002,8 +1005,42 @@ func TestTPSHandlers_NotRunning(t *testing.T) {
 	for _, c := range cases {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(c.method, c.path, strings.NewReader(c.body))
+		if c.method == http.MethodPost {
+			// The mutating endpoints require a JSON content type, as the UI sends.
+			req.Header.Set("Content-Type", "application/json")
+		}
 		s.Handler().ServeHTTP(rec, req)
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code, c.path)
+	}
+}
+
+// TestTPSWriteEndpointsAreSameOriginOnly pins the guard on the endpoints that
+// mutate a visor's transports: no wildcard CORS header, no preflight approval,
+// and no "simple" cross-origin POST slipping past preflight without one.
+func TestTPSWriteEndpointsAreSameOriginOnly(t *testing.T) {
+	s := testServer(t)
+	s.SetTPSAPI(&fakeTPSAPI{pk: "PK"})
+
+	for _, path := range []string{
+		"/api/tps/add-transport",
+		"/api/tps/remove-transport",
+		"/api/local/add-transport",
+		"/api/local/remove-transport",
+	} {
+		// Preflight is refused outright, and never answered with "*".
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodOptions, path, nil))
+		require.Equal(t, http.StatusForbidden, rec.Code, path)
+		require.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"), path)
+
+		// A form-encoded POST is a "simple" request that skips preflight, so it
+		// must be rejected before it can take effect.
+		rec = httptest.NewRecorder()
+		req := postJSON(path, `{}`)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		s.Handler().ServeHTTP(rec, req)
+		require.Equal(t, http.StatusUnsupportedMediaType, rec.Code, path)
+		require.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"), path)
 	}
 }
 
