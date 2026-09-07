@@ -25,6 +25,7 @@ import (
 	skycipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	cxotransport "github.com/skycoin/skywire/pkg/cxo/node/transport"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject"
@@ -177,6 +178,15 @@ type Subscriber struct {
 	// Surfaced only for tests; treat as opaque metric otherwise.
 	reconnectAttempts atomic.Int64
 
+	// cleanupNudge / cleanupStop / cleanupDone drive the CXDS sweep
+	// goroutine (runCleanupLoop). Non-nil only when this Subscriber owns
+	// its node — a caller-owned node is swept by whoever owns it (a
+	// co-hosted Publisher already runs the identical sweep). See
+	// startCleanup.
+	cleanupNudge chan struct{}
+	cleanupStop  chan struct{}
+	cleanupDone  chan struct{}
+
 	closed   bool
 	closeMu  sync.Mutex
 	closeErr error
@@ -257,6 +267,7 @@ func NewSubscriber(dmsgC *dmsg.Client, feedPK cipher.PubKey, conf SubConfig) (*S
 	cxoNode.SwapOnFillingBreaks(func(_ *node.Node, r *registry.Root, err error) {
 		s.handleFillingBreaks(r, err)
 	})
+	s.startCleanup()
 	return s, nil
 }
 
@@ -308,6 +319,7 @@ func NewSubscriberTCP(listenAddr string, feedPK cipher.PubKey, conf SubConfig) (
 	cxoNode.SwapOnFillingBreaks(func(_ *node.Node, r *registry.Root, err error) {
 		s.handleFillingBreaks(r, err)
 	})
+	s.startCleanup()
 	return s, nil
 }
 
@@ -736,6 +748,15 @@ func (s *Subscriber) Close() error {
 			close(stop)
 		}
 	})
+	// Stop the sweeper before the node goes away — runCleanup touches the
+	// Container, so it must not still be running when Close tears it down.
+	// No final sweep: the node (and, for InMemoryDB, the whole CXDS) is
+	// about to be dropped anyway, and a last O(CXDS) pass would only slow
+	// Close down. Nil when this Subscriber does not own its node.
+	if s.cleanupStop != nil {
+		close(s.cleanupStop)
+		<-s.cleanupDone
+	}
 	if s.ownsNode {
 		s.closeErr = s.cxoNode.Close()
 	}
@@ -831,6 +852,91 @@ func (s *Subscriber) handleRootFilled(r *registry.Root) {
 	// subscriber that a Root was received and the fill walk
 	// completed — the subscription is verifiably live now.
 	s.signalRootObserved()
+	// The walk above copied every leaf it cares about into s.cache, so
+	// the Root we just superseded (and its whole object tree) is dead
+	// weight in the CXDS from here on. Ask the sweeper to drop it.
+	s.nudgeCleanup()
+}
+
+// subCleanupForceInterval is how often the subscriber's sweep runs even
+// without a fill nudge — the backstop for a feed that went quiet while
+// still holding superseded Roots, and for orphans a nudge-driven sweep
+// missed (DelRoot's rc-decrement walk short-circuits on a missing hash,
+// leaving siblings at rc>=1 until a later unconditional pass). Matches
+// the publisher's cleanupForceInterval; the nudge remains the fast path.
+const subCleanupForceInterval = 10 * time.Minute
+
+// startCleanup arms the CXDS sweep goroutine. Called only from the
+// constructors that give the Subscriber sole ownership of its node
+// (NewSubscriber / NewSubscriberTCP); NewSubscriberOnNode shares a
+// container whose owner — in practice a co-hosted Publisher, which has
+// run this same sweep since #3047 — is responsible for cleaning it.
+func (s *Subscriber) startCleanup() {
+	s.cleanupNudge = make(chan struct{}, 1)
+	s.cleanupStop = make(chan struct{})
+	s.cleanupDone = make(chan struct{})
+	go s.runCleanupLoop()
+}
+
+// nudgeCleanup asks for a sweep without ever blocking the CXO filler
+// goroutine that calls it; a burst of Roots coalesces into one pass.
+func (s *Subscriber) nudgeCleanup() {
+	if s.cleanupNudge == nil {
+		return
+	}
+	select {
+	case s.cleanupNudge <- struct{}{}:
+	default:
+	}
+}
+
+// runCleanupLoop drops superseded Roots and frees CXDS entries whose
+// reference count fell to zero.
+//
+// CXO reclaims nothing on its own: a filled Root and every object under
+// it stay at rc>=1 forever unless something calls DelRoot and then
+// sweeps the rc==0 remainder. The Publisher has done that since #3047;
+// the Subscriber never did, so it accumulated every version of every
+// leaf it had ever filled. With InMemoryDB — what cxosub.Manager gives
+// every visor's feed subscribers — that is unbounded heap growth, and
+// because memoryCXDS.Set keeps the caller's slice by reference the
+// retained bytes are the msg.Decode buffers the fill decoded them from
+// (which is why heap profiles pinned the growth on
+// encoder.DeserializeRawToValue under Conn.receiveMsg rather than on
+// anything that looks like storage).
+//
+// keepLast=1: the subscriber re-walks the whole tree on every Root and
+// keeps what it needs in s.cache, so only the newest Root has any value
+// to it. RemoveRootObjects works off the last FULL Root's seq, so a
+// newer Root still being filled is never touched, and RemoveObjects
+// skips keys the Cache is tracking (an in-flight fill's wanted items).
+func (s *Subscriber) runCleanupLoop() {
+	defer close(s.cleanupDone)
+
+	t := time.NewTicker(subCleanupForceInterval)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-s.cleanupStop:
+			return
+		case <-s.cleanupNudge:
+			s.runCleanup()
+		case <-t.C:
+			s.runCleanup()
+		}
+	}
+}
+
+func (s *Subscriber) runCleanup() {
+	c := s.cxoNode.Container()
+	if err := cxoutils.RemoveRootObjects(c, 1); err != nil {
+		s.log.WithError(err).Debug("treestore-sub: RemoveRootObjects failed; will retry on the next Root")
+		return
+	}
+	if err := cxoutils.RemoveObjects(c); err != nil {
+		s.log.WithError(err).Debug("treestore-sub: RemoveObjects failed; will retry on the next Root")
+	}
 }
 
 // signalRootObserved closes the current rootObservedSignal channel
