@@ -64,6 +64,53 @@
 
 	let execSeq = 0;
 
+	// makeTails and makeInterrupt build the two objects that OUTLIVE a command:
+	// the tail registry entry (kept forever, deliberately) and the interrupt
+	// handle handed to the caller. Both are built HERE, at module scope, and
+	// never inside skywireExec.
+	//
+	// Why it matters: a closure created inside skywireExec captures that
+	// invocation's whole scope, and skywireExec is `async`, so its frame holds
+	// `go` and the WebAssembly.Instance across every await. Storing such a
+	// closure in a global registry pinned the frame — and with it the instance's
+	// entire linear memory — for the life of the page, so an exited command's
+	// heap was never returned even though the command was long gone. Measured
+	// live on the desk: deleting the registry entry and forcing GC returned
+	// 114 MB, the whole footprint of a one-shot `skywire --version`. Closing
+	// over a small plain record instead lets the frame die when the call returns.
+	function makeTails(argv) {
+		const rec = { argv: argv, tail: '', routerTail: '', exitInfo: null };
+		const fn = function () { return rec.tail; };
+		fn.argv = rec.argv;
+		fn.router = function () { return rec.routerTail; };
+		// exitInfo stays readable AND writable at reg[iid].exitInfo, which is the
+		// shape desk-boot and ctl-bridge already consume (desk-boot tells a
+		// CRASHED visor from a stopped one by it). Proxying to rec keeps that
+		// contract while the storage itself stays off this command's frame.
+		Object.defineProperty(fn, 'exitInfo', {
+			get() { return rec.exitInfo; },
+			set(v) { rec.exitInfo = v; },
+			enumerable: true,
+			configurable: true,
+		});
+		// The write side. The running command updates the tails through this
+		// handle; nothing reachable from here can reach the command's frame.
+		fn.rec = rec;
+		return fn;
+	}
+
+	function makeInterrupt(iid) {
+		return {
+			interrupt() {
+				try {
+					const reg = globalThis.__skywireSignals;
+					const f = reg && reg[iid];
+					if (f) f();
+				} catch (e) { /* instance already gone */ }
+			},
+		};
+	}
+
 	async function skywireExec(args, hooks) {
 		if (!globalThis.jsfs || !globalThis.jsfs.installed) {
 			throw new Error('jsfs is not installed — load jsfs.js before running commands');
@@ -71,6 +118,9 @@
 		await ensureGoLoader();
 		const mod = await compileOnce();
 		const iid = 'x' + (++execSeq);
+		// Built before the tails are written to, and at module scope, so the
+		// registry entry never captures this frame. See makeTails.
+		const tails = makeTails(args.slice());
 		const go = new Go();
 		go.argv = ['skywire', ...args];
 		go.env = {
@@ -92,15 +142,7 @@
 		// shuts down exactly as it would on SIGINT.
 		go.env.SKYWIRE_EXEC_ID = iid;
 		if (hooks && typeof hooks.instance === 'function') {
-			hooks.instance({
-				interrupt() {
-					try {
-						const reg = globalThis.__skywireSignals;
-						const f = reg && reg[iid];
-						if (f) f();
-					} catch (e) { /* instance already gone */ }
-				},
-			});
+			hooks.instance(makeInterrupt(iid));
 		}
 		let code = 0;
 		go.exit = (c) => { code = c; };
@@ -122,25 +164,25 @@
 		// foreground visor) dies, its panic went only to an xterm nobody was
 		// scrolled to. The tail is mirrored to the console below so a crash
 		// is diagnosable from DevTools / a CDP probe.
-		let stderrTail = '';
+
 		// routerTail: a SELECTIVE ring of route-establishment lines. The full
 		// tail churns through its window in seconds under dmsg DEBUG spam, so
 		// the one error that explains a failed dial is gone before anyone
 		// looks; these lines are rare and survive.
-		let routerTail = '';
+
 		let lineBuf = '';
 		const ROUTERISH = /(router|route_setup|RouteGroup|routegroup|setupclient|rule|cascade|rsn)/i;
 		const tailDec = new TextDecoder();
 		const keepTail = (buf) => {
 			try {
 				const s = tailDec.decode(buf, { stream: true });
-				stderrTail = (stderrTail + s).slice(-16384);
+				tails.rec.tail = (tails.rec.tail + s).slice(-16384);
 				lineBuf += s;
 				let nl;
 				while ((nl = lineBuf.indexOf('\n')) >= 0) {
 					const line = lineBuf.slice(0, nl);
 					lineBuf = lineBuf.slice(nl + 1);
-					if (ROUTERISH.test(line)) { routerTail = (routerTail + line + '\n').slice(-8192); }
+					if (ROUTERISH.test(line)) { tails.rec.routerTail = (tails.rec.routerTail + line + '\n').slice(-8192); }
 				}
 			} catch (e) { /* ignore */ }
 		};
@@ -150,10 +192,7 @@
 		// programmatically. Kept after exit (the crash's last words); replaced
 		// naturally as new instances reuse the registry.
 		try {
-			(globalThis.__skywireExecTails = globalThis.__skywireExecTails || {})[iid] =
-				function () { return stderrTail; };
-			globalThis.__skywireExecTails[iid].argv = args.slice();
-			globalThis.__skywireExecTails[iid].router = function () { return routerTail; };
+			(globalThis.__skywireExecTails = globalThis.__skywireExecTails || {})[iid] = tails;
 		} catch (e) { /* ignore */ }
 		{
 			const userErr = (hooks && hooks.stderr) || null;
@@ -190,14 +229,14 @@
 			// CRASH from a deliberate stop (the desk session: a crashed visor
 			// restarts on the next load; only a clean exit stays stopped).
 			try {
-				const reg2 = globalThis.__skywireExecTails;
-				if (reg2 && reg2[iid]) reg2[iid].exitInfo = { code: code, crashed: !!runErr };
+
+				tails.rec.exitInfo = { code: code, crashed: !!runErr };
 			} catch (e) { /* ignore */ }
 			// Mirror abnormal endings to the console with the stderr tail.
 			if (runErr || code !== 0) {
 				try {
 					console.error('[skywire-exec ' + iid + '] ' + (runErr ? 'crashed: ' + (runErr.message || runErr) : 'exited code ' + code)
-						+ (stderrTail ? '\n--- last stderr ---\n' + stderrTail : ''));
+						+ (tails.rec.tail ? '\n--- last stderr ---\n' + tails.rec.tail : ''));
 				} catch (e) { /* ignore */ }
 			}
 		}
