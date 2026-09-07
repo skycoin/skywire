@@ -2,14 +2,19 @@
 
 [← skywire cli hv](../README.md)
 
-Watch one page over CDP and stream what it reports: console output,
-uncaught exceptions, renderer crashes, execution contexts and load progress.
+Watch one page and stream what it reports: console output, uncaught
+exceptions, renderer crashes, execution contexts and load progress.
 
 Use it when a tab stops answering. "hv eval returned nothing" cannot
 distinguish a busy main thread from a missing execution context, a stalled
 navigation or a dead renderer; this can.
 
-Needs a browser started with --remote-debugging-port=9222.
+Chromium/Brave is watched over CDP, Waterfox/Firefox over WebDriver BiDi; the
+protocol is detected from --port unless --browser says otherwise. BiDi reports
+no renderer-crash event, so --fail-on-fault there gates on uncaught exceptions
+alone.
+
+Needs a browser started with --remote-debugging-port.
 
 ## Usage
 
@@ -20,11 +25,13 @@ skywire cli hv probe
 ## Flags
 
 ```
+      --browser string    protocol to speak: auto, cdp (Chromium/Brave) or bidi (Waterfox/Firefox) (default "auto")
+      --driver string     control port of a running "hv drive", e.g. 127.0.0.1:9224 — probes through its session instead of opening one
       --eval string       expression to evaluate; the stream is printed until the result arrives
       --expect string     require the --eval result to contain this substring; exit non-zero if it does not, or if no result arrives before --seconds elapse
       --fail-on-fault     exit non-zero if an uncaught exception or a renderer crash is seen — turns this watch into a CI gate. Implies watching for the full --seconds, so a fault thrown from a timer or promise after --eval returns is still caught
       --navigate string   URL to load while watching
-      --port string       CDP port of the running browser (default "9222")
+      --port string       debug port of the running browser (default "9222")
       --seconds int       how long to watch (default 60)
       --ws string         webSocketDebuggerUrl of an existing target; a fresh tab is opened when empty
 ```
