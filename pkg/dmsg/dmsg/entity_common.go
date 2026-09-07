@@ -39,6 +39,12 @@ type EntityCommon struct {
 	// atomic requires 64-bit alignment for struct field access
 	lastUpdate int64 // Timestamp (in unix seconds) of last update.
 
+	// lastInbound is the time a remote-initiated stream was last accepted on any
+	// of this entity's listeners, as unix nanoseconds. atomic.Int64 rather than a
+	// bare int64 because it carries its own alignment guarantee — this repo ships
+	// armv7, where a misaligned 64-bit atomic panics at runtime.
+	lastInbound atomic.Int64
+
 	pk cipher.PubKey
 	sk cipher.SecKey
 	// dc is the primary discovery — kept as a separate field for
@@ -308,6 +314,27 @@ func (c *EntityCommon) LocalPK() cipher.PubKey { return c.pk }
 
 // LocalSK returns the local secret key of the entity.
 func (c *EntityCommon) LocalSK() cipher.SecKey { return c.sk }
+
+// markInbound records that a remote-initiated stream was just accepted. Passed to
+// every Listener this entity creates; see Listener.onInbound.
+func (c *EntityCommon) markInbound() { c.lastInbound.Store(time.Now().UnixNano()) }
+
+// InboundSince reports whether any remote peer has opened a stream to this entity
+// since t.
+//
+// This is positive, zero-cost evidence that the dmsg server is still forwarding
+// inbound streams to us — the same property a self-dial through the server proves,
+// established by a real remote rather than by talking to ourselves. A caller that
+// would otherwise probe its own reachability on a timer can consult this first and
+// only probe during genuine inbound silence.
+//
+// False means "no evidence", not "unreachable": a visor nobody has contacted is
+// indistinguishable from one nobody can contact, which is exactly the case where an
+// active probe is worth its cost.
+func (c *EntityCommon) InboundSince(t time.Time) bool {
+	ns := c.lastInbound.Load()
+	return ns != 0 && ns > t.UnixNano()
+}
 
 // Logger obtains the logger.
 func (c *EntityCommon) Logger() logrus.FieldLogger { return c.log }
