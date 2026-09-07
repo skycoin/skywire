@@ -50,6 +50,7 @@ var streamingCommands = map[string]string{
 	"commands/hv/shell.go":                          "drives a browser terminal over CDP; output is a live transcript",
 	"commands/hv/eval.go":                           "prints whatever the page's JS returned; the caller chose the shape",
 	"commands/hv/probe.go":                          "streams CDP events as they arrive, unbounded",
+	"commands/hv/bidi.go":                           "streams BiDi events as they arrive, and hv drive is a control server, not a command that returns a value",
 	"commands/dmsg/curl.go":                         "writes the fetched body, which is the point",
 	"commands/dmsg/iperf.go":                        "a throughput meter; prints intervals as they elapse",
 	"commands/dmsg/probe.go":                        "prints per-port progress while probing",
