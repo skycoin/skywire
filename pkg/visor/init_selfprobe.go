@@ -3,17 +3,12 @@ package visor
 
 import (
 	"context"
-	"fmt"
-	"io"
-	"net/http"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // selfProbeInterval is how often the visor probes its own dmsg listeners.
@@ -32,12 +27,20 @@ const selfProbeRecoveryThreshold = 2
 // side and reconnecting won't help — we only try once per cooldown.
 const selfProbeRecoveryCooldown = 5 * time.Minute
 
-// initSelfProbe starts a background loop that periodically verifies the
-// visor's own dmsg listeners are reachable end-to-end. Each probe dials
-// the visor's own PK through the dmsg server — exercising the full path
-// that remote clients use:
+// initSelfProbe starts a background loop that verifies the visor's own dmsg
+// listeners are reachable end-to-end, but only when nothing else already proves
+// it. Each probe dials the visor's own PK through the dmsg server — exercising
+// the full path that remote clients use:
 //
 //	visor → session → server → forward back to visor → listener → accept
+//
+// An accepted inbound stream from any real peer traverses that same path, so the
+// loop consults dmsgC.InboundSince first and skips the probe entirely whenever a
+// remote has reached us since the previous tick. A visor with live traffic — any
+// hypervisor with transports, which is the common case — therefore never dials
+// itself at all. The probe remains for the situation it was written for: a visor
+// nobody is contacting, where silence and unreachability look identical from the
+// inside and only an active dial can tell them apart.
 //
 // If a probe fails persistently (selfProbeRecoveryThreshold consecutive
 // misses), the loop calls dmsgC.ForceReconnect() to tear down and re-dial
@@ -83,13 +86,30 @@ func selfProbeLoop(ctx context.Context, v *Visor, dmsgC *dmsg.Client, log *loggi
 	ticker := time.NewTicker(selfProbeInterval)
 	defer ticker.Stop()
 
+	lastTick := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			now := time.Now()
+			// Skip the probe when a real remote has reached us since the last tick.
+			// An accepted inbound stream traverses the same path the probe tests —
+			// server forwards to our session, listener accepts — so it is strictly
+			// better evidence than dialing ourselves, and it costs nothing. A busy
+			// visor therefore never probes; the probe survives for the case it was
+			// written for, a visor nobody is reaching, where observation tells us
+			// nothing and we genuinely cannot distinguish quiet from broken.
+			if dmsgC.InboundSince(lastTick) {
+				lastTick = now
+				for port := range state.consecutiveFails {
+					state.consecutiveFails[port] = 0
+				}
+				continue
+			}
+			lastTick = now
 			probeResults := runSelfProbes(ctx, v, dmsgC, log)
-			handleProbeResults(dmsgC, state, probeResults, time.Now(), log)
+			handleProbeResults(dmsgC, state, probeResults, now, log)
 		}
 	}
 }
@@ -150,7 +170,7 @@ func handleProbeResults(reconn probeReconnector, state *probeState, results map[
 }
 
 // runSelfProbes probes each critical dmsg port and returns a map of port → healthy.
-func runSelfProbes(ctx context.Context, _ *Visor, dmsgC *dmsg.Client, log *logging.Logger) map[uint16]bool {
+func runSelfProbes(ctx context.Context, _ *Visor, dmsgC *dmsg.Client, _ *logging.Logger) map[uint16]bool {
 	results := make(map[uint16]bool)
 	myPK := dmsgC.LocalPK()
 
@@ -160,12 +180,6 @@ func runSelfProbes(ctx context.Context, _ *Visor, dmsgC *dmsg.Client, log *loggi
 	// closes for untrusted — but the dial success confirms reachability.
 	results[skyenv.DmsgAwaitSetupPort] = probeRawDial(ctx, dmsgC, myPK, skyenv.DmsgAwaitSetupPort)
 
-	// Probe port 80 (dmsghttp log server) — HTTP GET /health over dmsg.
-	// Uses the visor's own dmsg client to make an HTTP request through
-	// the server bridge back to itself. /health is the lightest open
-	// endpoint on the log server (open to everyone, no auth required).
-	results[visorconfig.DmsgHTTPPort] = probeDmsgHTTP(ctx, dmsgC, myPK, log)
-
 	return results
 }
 
@@ -174,29 +188,4 @@ func probeRawDial(ctx context.Context, dmsgC *dmsg.Client, pk cipher.PubKey, por
 	probeCtx, cancel := context.WithTimeout(ctx, selfProbeTimeout)
 	defer cancel()
 	return dmsgC.Probe(probeCtx, pk, port)
-}
-
-// probeDmsgHTTP does an HTTP GET /health over dmsg to the visor's own log server.
-func probeDmsgHTTP(ctx context.Context, dmsgC *dmsg.Client, myPK cipher.PubKey, log *logging.Logger) bool {
-	probeCtx, cancel := context.WithTimeout(ctx, selfProbeTimeout)
-	defer cancel()
-
-	tr := dmsghttp.MakeHTTPTransport(probeCtx, dmsgC)
-	client := &http.Client{Transport: tr, Timeout: selfProbeTimeout}
-
-	url := fmt.Sprintf("dmsg://%s:%d/health", myPK.Hex(), visorconfig.DmsgHTTPPort)
-	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, url, nil)
-	if err != nil {
-		log.WithError(err).Debug("Self-probe HTTP: failed to create request")
-		return false
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.WithError(err).Debug("Self-probe HTTP: request failed")
-		return false
-	}
-	_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck,gosec
-	_ = resp.Body.Close()                 //nolint:errcheck,gosec
-	return resp.StatusCode == http.StatusOK
 }
