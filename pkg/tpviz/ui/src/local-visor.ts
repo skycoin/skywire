@@ -313,10 +313,20 @@ export function connectLocalVisorWS(): void {
         return;
     }
 
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = window.location.hostname || 'localhost';
-    const wsPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-    const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/ws/local-visor`;
+    // Derive the socket from API_BASE so it follows the REST prefix rather than
+    // the page origin: an embedding host that points the bundle elsewhere (the
+    // in-tab wasm visor over vnet) would otherwise dial its own origin here and
+    // reconnect-storm until WS_MAX_RECONNECT_ATTEMPTS gives up. Empty API_BASE
+    // keeps the previous same-origin behaviour.
+    let wsUrl: string;
+    if (API_BASE) {
+        wsUrl = new URL('/ws/local-visor', API_BASE).toString().replace(/^http/, 'ws');
+    } else {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsHost = window.location.hostname || 'localhost';
+        const wsPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+        wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/ws/local-visor`;
+    }
 
     console.log('Connecting to local visor WebSocket:', wsUrl);
 
