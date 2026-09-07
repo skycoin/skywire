@@ -17,7 +17,6 @@ RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
 
 PROJECT_BASE := github.com/skycoin/skywire
-SKYWIRE_UTILITIES_BASE := github.com/skycoin/skywire/pkg/skywire-utilities
 ifeq ($(OS),Windows_NT)
 	SHELL := pwsh
 	OPTS?=powershell -Command setx GO111MODULE on;
@@ -83,7 +82,7 @@ ifneq (,$(findstring 64,$(GOARCH)))
     TEST_OPTS:=$(TEST_OPTS) -race
 endif
 
-BUILDINFO_PATH := $(SKYWIRE_UTILITIES_BASE)/pkg/buildinfo
+BUILDINFO_PATH := $(PROJECT_BASE)/pkg/buildinfo
 BUILD_PATH := ./build/
 
 BUILDINFO_VERSION := -X $(BUILDINFO_PATH).version=$(VERSION)
@@ -206,9 +205,10 @@ MOBILE_TAGS := mobile,withoutsystray
 # over it so the lite variant can't silently rot or regain the stripped fat.
 ANDROID_MOBILE_MAX_BYTES := 83886080
 
-# Both buildinfo paths are stamped: the visor internals read skywire-utilities'
-# buildinfo ($(BUILDINFO)), but /api/about + cobra --version — what the phone
-# app's info card shows — read the repo-local pkg/buildinfo. That version MUST
+# MOBILE_APPINFO stamps the same symbols as $(BUILDINFO) with the phone's own
+# version. It is listed AFTER $(BUILDINFO) on the ldflags line, and the linker
+# takes the last -X for a symbol, so MOBILE_VERSION wins — which is what
+# /api/about + cobra --version show on the phone's info card. That version MUST
 # parse as semver (visorconfig.Parse semver-checks it and FATALs otherwise), and
 # on a checkout with no reachable tag `git describe --always` is a bare hash —
 # so fall back to a v0.0.0-<sha> pseudo-version.
