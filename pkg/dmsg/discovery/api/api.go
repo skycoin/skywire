@@ -149,6 +149,9 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	// gzip JSON responses on the wire — this router is also served over
+	// dmsg, where every byte is relayed. Matches rf/ut/sd.
+	r.Use(middleware.Compress(5))
 	if enableMetrics {
 		r.Use(api.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)
