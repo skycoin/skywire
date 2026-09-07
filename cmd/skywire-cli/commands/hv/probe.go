@@ -12,9 +12,16 @@
 //
 //	skywire cli hv probe --navigate http://127.0.0.1:7998/ --seconds 90
 //	skywire cli hv probe --ws ws://localhost:9222/devtools/page/ABC --eval 'typeof skywireVisor'
+//	skywire cli hv probe --port 9223 --navigate https://127.0.0.1:8443/ --seconds 30
 //
 // With no --ws it opens a fresh tab, which is usually what you want: a reused
 // tab carries the state of whatever ran in it before.
+//
+// Waterfox/Firefox speaks WebDriver BiDi rather than CDP and is detected by
+// --port; the stream is the same shape, minus the renderer-crash event, which
+// BiDi has no equivalent for. Prefer --driver against a running `hv drive`
+// when the browser will be probed more than once — see bidi.go on why a
+// session per invocation is a hazard there.
 package clihv
 
 import (
@@ -37,10 +44,14 @@ var (
 	probeSeconds     int
 	probeFailOnFault bool
 	probeExpect      string
+	probeBrowser     string
+	probeDriver      string
 )
 
 func init() {
-	probeCmd.Flags().StringVar(&probePort, "port", "9222", "CDP port of the running browser")
+	probeCmd.Flags().StringVar(&probePort, "port", "9222", "debug port of the running browser")
+	probeCmd.Flags().StringVar(&probeBrowser, "browser", "auto", "protocol to speak: auto, cdp (Chromium/Brave) or bidi (Waterfox/Firefox)")
+	probeCmd.Flags().StringVar(&probeDriver, "driver", "", "control port of a running `hv drive`, e.g. 127.0.0.1:9224 — probes through its session instead of opening one")
 	probeCmd.Flags().StringVar(&probeWS, "ws", "", "webSocketDebuggerUrl of an existing target; a fresh tab is opened when empty")
 	probeCmd.Flags().StringVar(&probeNavigate, "navigate", "", "URL to load while watching")
 	probeCmd.Flags().StringVar(&probeEval, "eval", "", "expression to evaluate; the stream is printed until the result arrives")
@@ -54,15 +65,20 @@ func init() {
 
 var probeCmd = &cobra.Command{
 	Use:   "probe",
-	Short: "Watch a page load over CDP and stream console, exceptions and crashes",
-	Long: `Watch one page over CDP and stream what it reports: console output,
-uncaught exceptions, renderer crashes, execution contexts and load progress.
+	Short: "Watch a page load and stream console, exceptions and crashes",
+	Long: `Watch one page and stream what it reports: console output, uncaught
+exceptions, renderer crashes, execution contexts and load progress.
 
 Use it when a tab stops answering. "hv eval returned nothing" cannot
 distinguish a busy main thread from a missing execution context, a stalled
 navigation or a dead renderer; this can.
 
-Needs a browser started with --remote-debugging-port=9222.`,
+Chromium/Brave is watched over CDP, Waterfox/Firefox over WebDriver BiDi; the
+protocol is detected from --port unless --browser says otherwise. BiDi reports
+no renderer-crash event, so --fail-on-fault there gates on uncaught exceptions
+alone.
+
+Needs a browser started with --remote-debugging-port.`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if err := probeRun(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -74,6 +90,20 @@ Needs a browser started with --remote-debugging-port=9222.`,
 func probeRun() error {
 	if probeNavigate == "" && probeEval == "" {
 		return fmt.Errorf("give --navigate or --eval (or both)")
+	}
+	if probeDriver != "" {
+		return probeViaDriver()
+	}
+	// A --ws target is a CDP address by construction: BiDi has no per-target
+	// websocket, so there is nothing to detect when one is given.
+	if probeWS == "" {
+		proto, err := resolveProto(probeBrowser, probePort)
+		if err != nil {
+			return err
+		}
+		if proto == protoBiDi {
+			return probeBiDi()
+		}
 	}
 	wsURL := probeWS
 	var opened string
