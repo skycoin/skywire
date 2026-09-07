@@ -38,7 +38,6 @@ var scanDirs = []string{"commands", "../../pkg/flags"}
 // instead?".
 var streamingCommands = map[string]string{
 	"commands/gotop/root.go":                        "a full-screen TUI; there is no document to emit",
-	"commands/visor/top.go":                         "a full-screen TUI; there is no document to emit",
 	"commands/visor/ping/mux_bandwidth_tui_impl.go": "a live bandwidth TUI",
 	"commands/proxy/mux_plot.go":                    "a live per-leg bandwidth+RTT terminal chart; there is no document to emit",
 	"commands/tp/tp-viz.go":                         "starts a visualizer HTTP server; it serves pages, it does not return a value",
