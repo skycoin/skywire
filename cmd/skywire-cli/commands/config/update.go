@@ -121,27 +121,13 @@ min-hops (--set-minhop). Passing -b/--url a value implies --endpoints.`,
 			if isTestEnv {
 				serviceConfURL = deployment.TestConf.Conf
 			}
-			mLog := logging.NewMasterLogger()
-			mLog.SetLevel(logrus.InfoLevel)
-			services := visorconfig.Fetch(mLog, serviceConfURL, isStdout)
-			conf.Dmsg = &dmsgc.DmsgConfig{
-				Discovery: services.DmsgDiscovery, //utilenv.DefaultDmsgDiscAddr,
-			}
-			conf.Transport = &visorconfig.Transport{
-				Discovery:       services.TransportDiscovery, //utilenv.DefaultTpDiscAddr,
-				AddressResolver: services.AddressResolver,    //utilenv.DefaultAddressResolverAddr,
-			}
-			conf.Routing = &visorconfig.Routing{
-				RouteFinder:     services.RouteFinder,     //utilenv.DefaultRouteFinderAddr,
-				RouteSetupNodes: services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.DefaultSetupPK)},
-			}
-			conf.Launcher = &visorconfig.Launcher{
-				ServiceDisc: services.ServiceDiscovery, //utilenv.DefaultServiceDiscAddr,
-			}
-			conf.UptimeTracker = &visorconfig.UptimeTracker{
-				Addr: services.UptimeTracker, //utilenv.DefaultUptimeTrackerAddr,
-			}
-			conf.StunServers = services.StunServers //utilenv.GetStunServers()
+			// Reuse the same fetch chain `config gen` uses: DMSG first (the
+			// deployment is dmsg-only, so a plain http.Client can never reach
+			// the conf service), then plain HTTP, then the embedded
+			// services-config.json. Every branch leaves `services` populated,
+			// so there is no nil to dereference below.
+			fetchServiceConfig(logging.MustGetLogger("config-update"))
+			applyServiceEndpoints(conf)
 		}
 
 		if conf.LogLevel != logLevel {
@@ -165,6 +151,83 @@ min-hops (--set-minhop). Passing -b/--url a value implies --endpoints.`,
 		}
 		saveConfig(conf)
 	},
+}
+
+// applyServiceEndpoints writes the service endpoints held in the package-level
+// `services` (filled by fetchServiceConfig) into an EXISTING config.
+//
+// It mutates only the endpoint fields. It deliberately does NOT replace
+// conf.Dmsg / conf.Transport / conf.Routing / conf.Launcher with fresh structs
+// the way this code used to: those carry unrelated operator state — launcher
+// apps and binary paths, the transport log store and stcpr/sudph/quic ports,
+// the dmsg session count, carriers and protocol, min-hops — and `config update
+// -a` (documented as "update server endpoints") must not silently discard it.
+//
+// Empty values are skipped rather than written, so a services payload that
+// omits a field leaves the config's existing value alone instead of blanking
+// it. The deployment is dmsg-only, so the plain-HTTP endpoint fields in
+// services-config.json are all null today; the *_dmsg URLs are applied to the
+// primary config fields exactly as `config gen` does.
+func applyServiceEndpoints(conf *visorconfig.V1) {
+	if conf.Dmsg == nil {
+		conf.Dmsg = &dmsgc.DmsgConfig{}
+	}
+	if conf.Transport == nil {
+		conf.Transport = &visorconfig.Transport{}
+	}
+	if conf.Routing == nil {
+		conf.Routing = &visorconfig.Routing{}
+	}
+	if conf.Launcher == nil {
+		conf.Launcher = &visorconfig.Launcher{}
+	}
+
+	setIfNotEmpty(&conf.Dmsg.Discovery, services.DmsgDiscovery)
+	setIfNotEmpty(&conf.Transport.Discovery, services.TransportDiscovery)
+	setIfNotEmpty(&conf.Transport.AddressResolver, services.AddressResolver)
+	setIfNotEmpty(&conf.Routing.RouteFinder, services.RouteFinder)
+	setIfNotEmpty(&conf.Launcher.ServiceDisc, services.ServiceDiscovery)
+	setIfNotEmpty(&conf.ConfServiceDmsg, services.ConfDmsg)
+
+	// Deployment services are dmsg-only: the dmsg:// URLs go into the primary
+	// fields, mirroring configureServiceURLs() in gen.go.
+	if services.HasDmsgEndpoints() {
+		if servers := deployment.DmsgServerEntriesToDisc(services.DmsgServers); len(servers) > 0 {
+			conf.Dmsg.Servers = servers
+		}
+		setIfNotEmpty(&conf.Dmsg.Discovery, services.DmsgDiscoveryDmsg)
+		setIfNotEmpty(&conf.Transport.Discovery, services.TransportDiscoveryDmsg)
+		setIfNotEmpty(&conf.Transport.AddressResolver, services.AddressResolverDmsg)
+		setIfNotEmpty(&conf.Routing.RouteFinder, services.RouteFinderDmsg)
+		setIfNotEmpty(&conf.Launcher.ServiceDisc, services.ServiceDiscoveryDmsg)
+	}
+
+	if len(services.RouteSetupNodes) > 0 {
+		conf.Routing.RouteSetupNodes = services.RouteSetupNodes
+	}
+	if len(services.TransportSetupPKs) > 0 {
+		conf.Transport.TransportSetupPKs = services.TransportSetupPKs
+	}
+	if len(services.StunServers) > 0 {
+		conf.StunServers = services.StunServers
+	}
+	// The standalone uptime tracker is deprecated and fresh configs no longer
+	// carry the block (see configureLauncher in gen.go) — only refresh it for a
+	// config that already has one.
+	if conf.UptimeTracker != nil {
+		addr := services.UptimeTrackerDmsg
+		if addr == "" {
+			addr = services.UptimeTracker
+		}
+		setIfNotEmpty(&conf.UptimeTracker.Addr, addr)
+	}
+}
+
+// setIfNotEmpty assigns v to *dst unless v is empty.
+func setIfNotEmpty(dst *string, v string) {
+	if v != "" {
+		*dst = v
+	}
 }
 
 func changeAppsConfig(conf *visorconfig.V1, appName string, argName string, argValue string) {
