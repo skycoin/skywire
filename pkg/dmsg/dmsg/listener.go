@@ -24,14 +24,21 @@ type Listener struct {
 	doneFunc atomic.Value // callback when done, type: func()
 	done     chan struct{}
 	once     sync.Once
+
+	// onInbound, when non-nil, is called each time a remote-initiated stream is
+	// successfully queued for Accept. It is the client's evidence that the dmsg
+	// server is still forwarding inbound streams to us — see
+	// EntityCommon.markInbound. Called with l.mx held, so it must not block.
+	onInbound func()
 }
 
-func newListener(porter *netutil.Porter, addr Addr) *Listener {
+func newListener(porter *netutil.Porter, addr Addr, onInbound func()) *Listener {
 	return &Listener{
-		porter: porter,
-		addr:   addr,
-		accept: make(chan *Stream, AcceptBufferSize),
-		done:   make(chan struct{}),
+		porter:    porter,
+		addr:      addr,
+		accept:    make(chan *Stream, AcceptBufferSize),
+		done:      make(chan struct{}),
+		onInbound: onInbound,
 	}
 }
 
@@ -55,6 +62,13 @@ func (l *Listener) introduceStream(tp *Stream) error {
 
 	select {
 	case l.accept <- tp:
+		// A remote peer just reached us through the dmsg server, which is exactly
+		// what a self-probe dial sets out to prove — with a real remote instead of
+		// ourselves. Recording it lets the visor's self-probe stay quiet while
+		// there is live evidence of reachability.
+		if l.onInbound != nil {
+			l.onInbound()
+		}
 		return nil
 
 	case <-l.done:
