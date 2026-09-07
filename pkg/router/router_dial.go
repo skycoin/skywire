@@ -353,7 +353,7 @@ func (r *router) DialRoutes(
 				}
 				nrg, rules, winIdx, rerr := r.raceCandidateSetup(ctx, log, candidates, dial, handshake, onLoser)
 				if rerr == nil {
-					return r.finishDial(log, nrg, rules, candidates[winIdx].Forward, forwardDesc, opts, rPK, lPort, rPort), nil
+					return r.finishDial(log, nrg, rules, candidates[winIdx].Forward, candidates[winIdx].Reverse, forwardDesc, opts, rPK, lPort, rPort), nil
 				}
 				if ctx.Err() != nil {
 					return nil, ctx.Err()
@@ -597,7 +597,7 @@ func (r *router) DialRoutes(
 
 		// The route group is up: this is the working base. Wire mux
 		// growth / self-heal / hooks on top and return.
-		return r.finishDial(log, nrg, rules, forwardPath, forwardDesc, opts, rPK, lPort, rPort), nil
+		return r.finishDial(log, nrg, rules, forwardPath, reversePath, forwardDesc, opts, rPK, lPort, rPort), nil
 	}
 
 	// Should never reach here, but handle it gracefully
@@ -615,7 +615,7 @@ func (r *router) finishDial(
 	log *logging.Logger,
 	nrg *NoiseRouteGroup,
 	rules routing.EdgeRules,
-	forwardPath []routing.Hop,
+	forwardPath, reversePath []routing.Hop,
 	forwardDesc routing.RouteDescriptor,
 	opts *DialOptions,
 	rPK cipher.PubKey,
@@ -623,6 +623,11 @@ func (r *router) finishDial(
 ) net.Conn {
 	// Store the complete forward route hops for later retrieval
 	nrg.SetForwardHops(forwardPath)
+	// Record the PRIMARY leg's far-end transport (reversePath[0].TpID) — the one
+	// the destination's route group registers for this leg. It is what every aux
+	// mux leg planned later must avoid re-using on its own reverse path, since
+	// the destination refuses a second leg over a transport already in its group.
+	nrg.rg.recordLegRoute(forwardPath, reversePath)
 
 	nrg.rg.startOffServiceLoops()
 
@@ -1351,6 +1356,31 @@ fetchRoutesAgain:
 				return localFwd, localRev, nil
 			}
 			log.Warnf("diversify: no disjoint first-hop transport to %s is free; extra tunnel shares an existing first hop (aggregation limited)", dst)
+		}
+	}
+
+	// Keep an aux mux leg's REVERSE off the far-end transports the destination's
+	// route group already has a leg on. The setup node installs the reverse
+	// route's first-hop ForwardRule on the destination, whose appendRouteToGroup
+	// refuses a duplicate transport — so a reverse candidate leaving over one of
+	// these is a route setup that is certain to fail. The forward and reverse
+	// directions are ranked independently below and a direct reverse carries no
+	// intermediates, so ExcludeIntermediatePKs cannot express this; only the
+	// far-end transport ID can.
+	//
+	// Preference, not a hard cut (same discipline as the forward diversify
+	// above): if no reverse candidate leaves over a free transport we keep the
+	// full set and let the caller's pre-dial gate decide, so no dial is ever
+	// starved of a route by this filter.
+	if len(opts.ExcludeRemoteTransportIDs) > 0 {
+		if disjoint := filterDisjointFirstHop(paths[backward], opts.ExcludeRemoteTransportIDs); len(disjoint) > 0 {
+			if len(disjoint) != len(paths[backward]) {
+				log.Debugf("mux: %d/%d reverse candidate(s) leave the destination over a free transport; preferring those",
+					len(disjoint), len(paths[backward]))
+			}
+			paths[backward] = disjoint
+		} else {
+			log.Debugf("mux: every reverse candidate leaves %s over a transport its route group already uses; the leg will be skipped before the setup-node dial", dst)
 		}
 	}
 
@@ -2428,6 +2458,13 @@ func (r *router) establishMuxRoutes(
 	rPK := forwardDesc.DstPK()
 	excludeIDs := []uuid.UUID{primaryTpID}
 
+	// Far-end transports the group's live legs (here: the primary) already
+	// occupy. See DialOptions.ExcludeRemoteTransportIDs — the destination
+	// refuses a leg whose reverse path leaves it over one of these, so the
+	// exclude set accumulates each planned leg's Reverse[0] exactly the way
+	// excludeIDs accumulates its Forward[0].
+	excludeRemoteIDs := nrg.rg.remoteLegTransportIDs()
+
 	// Disjoint-intermediate routing is the default for multiplexed
 	// routes: routes 2..N must NOT share intermediate visors with
 	// any earlier route (primary or aux). Operators who want
@@ -2510,18 +2547,19 @@ func (r *router) establishMuxRoutes(
 		}
 
 		muxOpts := &DialOptions{
-			MinForwardRts:          1,
-			MaxForwardRts:          1,
-			MinConsumeRts:          1,
-			MaxConsumeRts:          1,
-			Retries:                1,
-			MinHops:                parentMinHops,
-			ForwardMinHops:         parentFwdMinHops,
-			ReverseMinHops:         parentRevMinHops,
-			AppName:                parentAppName,
-			ExcludeTransportIDs:    excludeIDs,
-			ExcludeIntermediatePKs: excludePKs,
-			ExcludeDMSG:            true,
+			MinForwardRts:             1,
+			MaxForwardRts:             1,
+			MinConsumeRts:             1,
+			MaxConsumeRts:             1,
+			Retries:                   1,
+			MinHops:                   parentMinHops,
+			ForwardMinHops:            parentFwdMinHops,
+			ReverseMinHops:            parentRevMinHops,
+			AppName:                   parentAppName,
+			ExcludeTransportIDs:       excludeIDs,
+			ExcludeRemoteTransportIDs: excludeRemoteIDs,
+			ExcludeIntermediatePKs:    excludePKs,
+			ExcludeDMSG:               true,
 		}
 
 		// Mux aux legs plan over the GLOBAL TPD graph via the route-finder
@@ -2597,6 +2635,24 @@ func (r *router) establishMuxRoutes(
 			excludeIDs = append(excludeIDs, muxFwd[0].TpID)
 		}
 
+		// Destination-side twin of the check above. The setup node installs the
+		// reverse route's first-hop ForwardRule on the DESTINATION, so its route
+		// group holds one transport per leg — exactly Reverse[0].TpID — and it
+		// refuses a second leg over a transport already in that set. Forward and
+		// reverse are ranked independently, and a direct (0-intermediate) reverse
+		// gives ExcludeIntermediatePKs nothing to bite on, so the finder happily
+		// pairs a disjoint forward with a reverse over the destination's primary
+		// link. That plan is guaranteed to be refused after a full setup-node
+		// round trip, so drop it here and let the next slot diverge.
+		if firstHopTransportExcluded(muxRev, excludeRemoteIDs) {
+			log.Debugf("Mux route %d/%d: planned leg's reverse leaves the destination over transport %s, which already carries one of its legs (it would be refused); skipping before dial",
+				i+1, maxCount, muxRev[0].TpID)
+			continue
+		}
+		if len(muxRev) > 0 {
+			excludeRemoteIDs = append(excludeRemoteIDs, muxRev[0].TpID)
+		}
+
 		muxKeepAlive := DefaultRouteKeepAlive
 		if opts != nil && opts.KeepAlive > 0 {
 			muxKeepAlive = opts.KeepAlive
@@ -2662,7 +2718,7 @@ func (r *router) establishMuxRoutes(
 			// path's first-hop TpID matches muxRules.Forward.NextTransportID (the
 			// transport appendRouteAsymmetric registered), so legHopsFor finds it.
 			if p.addFwd {
-				nrg.rg.recordLegHops(p.req.Forward)
+				nrg.rg.recordLegRoute(p.req.Forward, p.req.Reverse)
 			}
 			log.Infof("Mux route %d/%d established (fwd=%v rev=%v) via tp %s",
 				p.slot, maxCount, p.addFwd, p.addRev, muxRules.Forward.NextTransportID())
@@ -2738,6 +2794,11 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 	}
 	nrg.rg.mu.Unlock()
 
+	// Far-end transports this group's live legs already occupy. The destination
+	// refuses a leg whose reverse leaves it over one of these, so they must be
+	// excluded from the REVERSE pick just as excludeIDs is from the forward one.
+	excludeRemoteIDs := nrg.rg.remoteLegTransportIDs()
+
 	parentMinHops := 0
 	parentFwdMinHops := 0
 	parentAppName := ""
@@ -2748,17 +2809,18 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 	}
 
 	muxOpts := &DialOptions{
-		MinForwardRts:          1,
-		MaxForwardRts:          1,
-		MinConsumeRts:          1,
-		MaxConsumeRts:          1,
-		Retries:                1,
-		MinHops:                parentMinHops,
-		ForwardMinHops:         parentFwdMinHops,
-		AppName:                parentAppName,
-		ExcludeTransportIDs:    excludeIDs,
-		ExcludeIntermediatePKs: excludePKs,
-		ExcludeDMSG:            true,
+		MinForwardRts:             1,
+		MaxForwardRts:             1,
+		MinConsumeRts:             1,
+		MaxConsumeRts:             1,
+		Retries:                   1,
+		MinHops:                   parentMinHops,
+		ForwardMinHops:            parentFwdMinHops,
+		AppName:                   parentAppName,
+		ExcludeTransportIDs:       excludeIDs,
+		ExcludeRemoteTransportIDs: excludeRemoteIDs,
+		ExcludeIntermediatePKs:    excludePKs,
+		ExcludeDMSG:               true,
 	}
 
 	// SHARED WARM-ROUTE POOL (phase 1): before the route-finder round-trip, try
@@ -2775,7 +2837,7 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 		keyMinHops = uint16(e) //nolint:gosec
 	}
 	var muxFwd, muxRev []routing.Hop
-	if cf, cr, ok := r.warmRoutes.bestPlan(rPK, keyMinHops, excludeIDs, excludePKs); ok {
+	if cf, cr, ok := r.warmRoutes.bestPlan(rPK, keyMinHops, excludeIDs, excludeRemoteIDs, excludePKs); ok {
 		muxFwd, muxRev = cf, cr
 		log.WithField("first_tp", func() string {
 			if len(cf) > 0 {
@@ -2831,6 +2893,21 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 		}
 	}
 
+	// The DESTINATION-side twin of the check above, and the one that was missing.
+	// The setup node installs the reverse route's first-hop ForwardRule on the
+	// destination, so the destination's route group holds exactly Reverse[0].TpID
+	// per leg — and its appendRouteToGroup refuses a second leg over a transport
+	// already in that set. Forward and reverse are ranked INDEPENDENTLY and a
+	// direct (0-intermediate) reverse carries nothing for ExcludeIntermediatePKs
+	// to bite on, so the finder keeps handing back a reverse over the destination's
+	// primary-leg transport. Dialing that burns a full setup-node round trip (ID
+	// reservation on every hop + intermediary rule install) for a guaranteed
+	// "refusing to append mux leg over transport %s already in the group".
+	// Skip before the dial; the group keeps the legs it has and retries next tick.
+	if firstHopTransportExcluded(muxRev, excludeRemoteIDs) {
+		return fmt.Errorf("rotation add-leg: planned leg's reverse leaves the destination over transport %s, which already carries one of its legs (it would be refused); skipping before dial", muxRev[0].TpID)
+	}
+
 	muxKeepAlive := DefaultRouteKeepAlive
 	if opts != nil && opts.KeepAlive > 0 {
 		muxKeepAlive = opts.KeepAlive
@@ -2863,7 +2940,7 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 	// Record this leg's full forward route (addFwd is always true here) so the
 	// per-leg mux view shows its whole path instead of the first-hop transport's
 	// remote — which for a multihop leg is the first intermediate, not the exit.
-	nrg.rg.recordLegHops(muxFwd)
+	nrg.rg.recordLegRoute(muxFwd, muxRev)
 	log.Infof("Rotation aux leg established (addRev=%v) via tp %s", addRev, muxRules.Forward.NextTransportID())
 	return nil
 }
