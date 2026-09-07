@@ -1106,6 +1106,21 @@ func reconcileTPDWithRetry(ctx context.Context, v *Visor, log *logging.Logger) {
 }
 
 func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
+	// Skip entirely when CXO mirroring is installed. This visor then publishes
+	// its full transport list as one snapshot leaf and TPD's aggregator
+	// reconciles against it: entries absent from the snapshot are deregistered,
+	// and a dropped registration is re-asserted by the next publish. Both
+	// directions this function exists to repair are already covered, so the
+	// GetTransportsByEdge query and the batch delete are pure duplicate load —
+	// at fleet scale, one TPD query per visor every 5 minutes for nothing.
+	//
+	// Kept for visors where CXO publishing is off or unavailable
+	// (Stats.Disabled, or buildStatsPublisher failing — which is non-fatal by
+	// design, see pkg/visor/init_stats.go). Those still need the HTTP path.
+	if v.tpM != nil && v.tpM.HasTPDLeafPublisher() {
+		return nil
+	}
+
 	// Query TPD with retry logic
 	var entries []*transport.Entry
 	var err error
@@ -1162,19 +1177,45 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 
-	// Find stale TPD entries (in TPD but not local)
+	// Diff both directions from the two sets we already hold.
+	//
+	// Was a nested loop over tpdIDs x localIDs — a million comparisons per pass
+	// on a visor carrying ~1000 transports, every 5 minutes, to find a handful
+	// of stale IDs.
+	localSet := make(map[uuid.UUID]struct{}, len(localIDs))
+	for _, id := range localIDs {
+		localSet[id] = struct{}{}
+	}
+	tpdSet := make(map[uuid.UUID]struct{}, len(tpdIDs))
+	for _, id := range tpdIDs {
+		tpdSet[id] = struct{}{}
+	}
+
+	// Stale: in TPD but not local. These get deleted below.
 	var staleIDs []uuid.UUID
 	for _, tpdID := range tpdIDs {
-		found := false
-		for _, localID := range localIDs {
-			if localID == tpdID {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if _, ok := localSet[tpdID]; !ok {
 			staleIDs = append(staleIDs, tpdID)
 		}
+	}
+
+	// Missing: local but not reflected in TPD — our published set did not take.
+	// This is the signal pkg/transport's discovery-conformance loop used to
+	// produce on its own 5-minute timer with its own GetTransportsByEdge call.
+	// Nothing ever read the DiscoveryConformance value it stored, so the only
+	// outcome was this warning; we already have both sets here, so it costs
+	// nothing and the fleet stops issuing a second identical TPD query.
+	var missing int
+	for _, localID := range localIDs {
+		if _, ok := tpdSet[localID]; !ok {
+			missing++
+		}
+	}
+	if missing > 0 && len(localIDs) > 0 {
+		log.WithField("missing", missing).
+			WithField("local", len(localIDs)).
+			WithField("reflected", len(localIDs)-missing).
+			Warn("Transports published locally are not reflected in TPD")
 	}
 
 	// Remove stale entries from TPD using batch delete
