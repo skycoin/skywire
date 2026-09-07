@@ -820,15 +820,40 @@ func (tm *Manager) hasActiveRoutes(tpID uuid.UUID) bool {
 	return rc(tpID)
 }
 
-// InitClient initilizes a network client
+// InitClient initilizes a network client.
+//
+// Safe to call again for a netType that already has one — ReinitiateModule
+// ("stcpr" et al, api_network.go) and the SUDPH retry in init_transport.go both
+// do. The previous client is closed before being replaced.
 func (tm *Manager) InitClient(ctx context.Context, netType types.Type, port int) {
 	client, err := tm.factory.MakeClient(netType, port)
 	if err != nil {
-		tm.Logger.Warnf("Cannot initialize %s transport client", netType)
+		// Do NOT install the result. MakeClient yields a nil client alongside
+		// its error, and storing that used to replace a perfectly good client
+		// with nothing — a failed re-init took down a working network type.
+		tm.Logger.WithError(err).Warnf("Cannot initialize %s transport client; keeping the existing one", netType)
+		return
 	}
+
+	// Swap under the lock, close outside it: a client's Close tears down its
+	// listener and waits on its serve goroutines, which is not work to do while
+	// holding the manager lock every dial and accept contends for.
 	tm.mx.Lock()
+	prev := tm.netClients[netType]
 	tm.netClients[netType] = client
 	tm.mx.Unlock()
+
+	// Without this the evicted client leaked. Its 90s AR re-registration loop
+	// exits only on the done channel that genericClient.Close closes, so an
+	// orphan kept POSTing /bind/<type> advertising the OLD port and fighting
+	// the live client for the address-resolver record, plus a leaked
+	// acceptTransports goroutine. Each re-init added another.
+	if prev != nil && prev != client {
+		if cerr := prev.Close(); cerr != nil {
+			tm.Logger.WithError(cerr).Debugf("Closing replaced %s transport client", netType)
+		}
+	}
+
 	tm.runClient(ctx, netType)
 
 	// Transport Manager is 'ready' once we have successfully initilized
