@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
 
@@ -167,7 +166,7 @@ func Serve(ctx context.Context, port, ctrlAddr, tab string, announce func(tab st
 	srv.Handler = mux
 
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	signal.Notify(sig, shutdownSignals...)
 	defer signal.Stop(sig)
 	go func() {
 		select {
