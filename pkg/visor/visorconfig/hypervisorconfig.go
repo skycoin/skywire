@@ -137,6 +137,14 @@ type WasmServeConf struct {
 	//   GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" \
 	//     -trimpath -ldflags "-s -w" -o build/skywire.wasm .
 	ExecWasm string `json:"exec_wasm,omitempty"`
+	// DeskHelpTerminal opens a second desk terminal that has already run
+	// `skywire --help`. Off by default: it is a whole extra Go/wasm runtime of
+	// the full binary, and that memory is never returned to the browser. See
+	// pkg/visor.deskWasmBootOpts for the measurement.
+	DeskHelpTerminal bool `json:"desk_help_terminal,omitempty"`
+	// DeskDocsPort runs `skywire doc serve` on this virtual-loopback port of the
+	// desk. 0 (the default) = off, for the same reason.
+	DeskDocsPort int `json:"desk_docs_port,omitempty"`
 	// BrowseSuffix is the real-origin browser's browse-origin domain suffix
 	// (leading dot); empty = ".mesh.localhost".
 	BrowseSuffix string `json:"browse_suffix,omitempty"`

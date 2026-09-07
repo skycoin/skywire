@@ -81,6 +81,13 @@ type WasmServeConfig struct {
 	//   GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" \
 	//     -trimpath -ldflags "-s -w" -o build/skywire.wasm .
 	ExecWasmPath string
+	// DeskHelpTerminal opens a second terminal that has already run
+	// `skywire --help`. Off by default: it costs a whole extra Go/wasm runtime
+	// of the full binary, permanently — see deskWasmBootOpts.
+	DeskHelpTerminal bool
+	// DeskDocsPort runs `skywire doc serve` on this virtual-loopback port.
+	// 0 (default) = off, for the same reason.
+	DeskDocsPort int
 	Log          *logging.Logger // nil → package default
 }
 
@@ -338,7 +345,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 			`<script src="/wasm_exec.js?variant=go"></script>`+"\n"+
 				`<script src="/browse.js"></script>`+"\n"+
 				`<script src="/desk-boot.js"></script>`,
-			deskWasmBootOpts)
+			deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort))
 		if cfg.Harness {
 			// Same rule as injectWasmBoot on the standalone page: --harness
 			// injects ctl-bridge.js (its presence IS the harness signal). On
@@ -977,21 +984,36 @@ func browseSWAssetType(p string) string {
 	return "text/javascript"
 }
 
-// deskWasmBootOpts is the skywireDeskBoot options object for the wasm-served
-// desk (`hv serve --exec-wasm`'s /desk): the tab as a Linux host. Assets come
-// from the routes ServeWasm already exposes: /browse.js is the full desk
-// bundle, /wasm-visor.wasm the desk host (raw), /skywire.wasm the command
+// deskWasmBootOpts renders the skywireDeskBoot options object for the
+// wasm-served desk (`hv serve --exec-wasm`'s /desk): the tab as a Linux host.
+// Assets come from the routes ServeWasm already exposes: /browse.js is the full
+// desk bundle, /wasm-visor.wasm the desk host (raw), /skywire.wasm the command
 // module, /wasm_exec.js?variant=go the matching loader.
-const deskWasmBootOpts = `{
+//
+// helpTerminal and the docs server are OFF unless asked for, because each one
+// is a whole extra Go/wasm runtime of the full skywire binary and that memory
+// never comes back. Measured on a live desk: three instances — `autoconfig`,
+// `doc serve` and an already-EXITED `--help` — held a 1.3 GB renderer, of which
+// the JS heap was 27 MB; a forced GC returned 36 MB. WebAssembly.Memory only
+// ever grows and Go's wasm runtime never hands pages back, so every instance's
+// peak becomes a permanent floor for the tab, and exiting does not release it.
+//
+// The visor is worth that cost. A terminal whose sole content is the output of
+// `skywire --help`, printed once and then exited, is not — and the docs are a
+// server that most sessions never open. Both stay available on request.
+func deskWasmBootOpts(helpTerminal bool, docsPort int) string {
+	return fmt.Sprintf(`{
   persistDB: 'skywire-desk',
   deskWasmURL: '/wasm-visor.wasm',
   wasmURL: '/skywire.wasm',
   wasmExecURL: '/wasm_exec.js?variant=go',
   winboxURL: '/winbox.wasm',
   autostartVisor: true,
-  helpTerminal: true,
+  helpTerminal: %t,
+  docsPort: %d,
   hvWindow: true,
-}`
+}`, helpTerminal, docsPort)
+}
 
 // deskShellTemplate is the shared skeleton of the converged desk page (/desk):
 // boot overlay + error capture + the skywireDeskBoot call. ONE skeleton behind
