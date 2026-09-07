@@ -131,7 +131,7 @@ func NewNode(conf *Config) (n *Node, err error) {
 	}
 
 	if err = conf.Validate(); err != nil {
-		return // invalid
+		return nil, err // invalid
 	}
 
 	// The container's per-second rolling-average goroutines exist only to feed
@@ -147,7 +147,7 @@ func NewNode(conf *Config) (n *Node, err error) {
 	var c *skyobject.Container
 
 	if c, err = skyobject.NewContainer(conf.Config); err != nil {
-		return
+		return nil, err
 	}
 
 	return NewNodeContainer(conf, c)
