@@ -116,12 +116,6 @@ type Manager struct {
 	tpdLeafPubMu sync.RWMutex
 	tpdLeafPub   TPDLeafPublisher
 
-	// conformance holds the most recent publish-then-verify check of our
-	// published transport set against what TPD reflects for our edge. See
-	// conformance.go — it makes discovery drift observable instead of silent.
-	conformanceMu sync.RWMutex
-	conformance   DiscoveryConformance
-
 	// regNudge signals the re-registration loop to run soon (after a short debounce).
 	// Sent after accepting a new transport so it gets batch-registered quickly.
 	regNudge chan struct{}
@@ -203,7 +197,6 @@ func (tm *Manager) Serve(ctx context.Context) {
 	go tm.runReRegisterTransports(ctx)
 	go tm.runDeferredDeletions(ctx)
 	go tm.runTransportMaintenance(ctx)
-	go tm.runDiscoveryConformance(ctx)
 	go func() { defer tm.wg.Done(); tm.serveLockWatchdog(ctx.Done()) }()
 	tm.Logger.Debug("transport manager is serving.")
 }
@@ -613,6 +606,17 @@ func (tm *Manager) tpdLeafPublisher() TPDLeafPublisher {
 	defer tm.tpdLeafPubMu.RUnlock()
 	return tm.tpdLeafPub
 }
+
+// HasTPDLeafPublisher reports whether CXO mirroring is installed.
+//
+// When it is, this visor publishes its FULL transport list as one snapshot leaf
+// and TPD's aggregator reconciles against it — absence means deletion, and a
+// missed update self-heals on the next publish (see publishTPDList). That makes
+// the HTTP publish-then-verify reconciliation redundant in both directions: a
+// stale TPD entry disappears because it is not in the next snapshot, and a
+// dropped registration is re-asserted by it. Callers use this to skip that work
+// and keep it only for visors where CXO publishing is off or unavailable.
+func (tm *Manager) HasTPDLeafPublisher() bool { return tm.tpdLeafPublisher() != nil }
 
 // currentBareEntries returns this visor's live, non-self-loop transport entries —
 // the authoritative set it publishes to TPD. Closed transports are excluded even if
