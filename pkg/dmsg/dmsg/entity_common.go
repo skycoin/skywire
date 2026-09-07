@@ -776,12 +776,18 @@ func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType stri
 	}
 	c.sessionsMx.Unlock()
 
+	// Deliberately no recordUpdate() anywhere below. lastUpdate means "the
+	// delegated-server set now in discovery is current", and this function
+	// asserts nothing of the sort: it runs before any session exists, so the
+	// entry it posts carries an EMPTY srvPKs, and on the already-registered
+	// path it writes nothing at all. Stamping lastUpdate here pushed the first
+	// real publish a whole updateInterval — 30 m once the CXO keepalive is
+	// healthy — into the future, so a client that failed its first publish
+	// stayed advertised with no delegated servers for that long.
 	var firstErr error
-	anyOK := false
 	for _, ep := range endpoints {
 		_, lookupErr := ep.Client.Entry(ctx, c.pk)
 		if lookupErr == nil {
-			anyOK = true
 			continue
 		}
 		// Only a genuine "entry not found" means we should register a fresh
@@ -814,10 +820,6 @@ func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType stri
 			}
 			continue
 		}
-		anyOK = true
-	}
-	if anyOK {
-		c.recordUpdate()
 	}
 	return firstErr
 }
@@ -1098,6 +1100,13 @@ const (
 	entryUpdateMaxBackoff = 30 * time.Second
 )
 
+// entryUpdateMaxFastRetries bounds how many consecutive failures keep the loop
+// on the backoff ladder instead of the periodic cadence. 1+2+4+8+16+30+30+30 ≈
+// 2 minutes of fast retries, which covers the transient failures the ladder is
+// for (the dmsg-HTTP cold-start race, a discovery restart) without leaving a
+// whole fleet retrying a genuinely-down discovery every 30 s.
+const entryUpdateMaxFastRetries = 8
+
 // entryFailureBackoff returns the delay before the next attempt after
 // `consecutiveFailures` consecutive failed updates. Exponential, clamped
 // to entryUpdateMaxBackoff.
@@ -1163,16 +1172,36 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 			return
 
 		case <-t.C:
-			if _, due := c.updateIsDue(); !due {
-				// Re-evaluate every base updateInterval rather than sleeping
-				// the full (possibly CXO-stretched) remaining time: this
-				// bounds how long a keepalive stays stretched after the CXO
-				// feed drops (effectiveUpdateInterval falls back to the base
-				// interval the moment cxoKeepaliveHealthyFn goes false), and
-				// avoids a negative Reset when the effective interval exceeds
-				// the base one.
-				t.Reset(c.updateInterval)
-				continue
+			// The due-gate governs the PERIODIC tick only. A failed attempt
+			// leaves lastUpdate untouched, so updateIsDue() is still false
+			// when the short backoff timer that rearm() armed fires: gating
+			// on it here resets the timer to the full updateInterval and
+			// silently discards the retry. That is what has happened to every
+			// retry since #3829 put this check in front of #3168's backoff —
+			// a client whose publish lost the dmsg-HTTP cold-start race sat
+			// in discovery with an EMPTY delegated-server set, unreachable by
+			// lookup, until the whole (CXO-stretched: 30 m) interval elapsed,
+			// and this branch logs nothing to say so.
+			//
+			// The bypass is capped rather than open-ended: past
+			// entryUpdateMaxFastRetries the failure is not the transient race
+			// the ladder is for, and letting every client in the fleet keep
+			// hammering a discovery that is down at the 30 s backoff floor is
+			// the handshake storm the coalescing elsewhere in this file exists
+			// to avoid. Beyond the cap we fall back to the periodic cadence,
+			// which still republishes — just once per updateInterval.
+			if consecutiveFailures == 0 || consecutiveFailures > entryUpdateMaxFastRetries {
+				if _, due := c.updateIsDue(); !due {
+					// Re-evaluate every base updateInterval rather than
+					// sleeping the full (possibly CXO-stretched) remaining
+					// time: this bounds how long a keepalive stays stretched
+					// after the CXO feed drops (effectiveUpdateInterval falls
+					// back to the base interval the moment
+					// cxoKeepaliveHealthyFn goes false), and avoids a negative
+					// Reset when the effective interval exceeds the base one.
+					t.Reset(c.updateInterval)
+					continue
+				}
 			}
 
 			// updateClientEntry takes sessionsMx itself for its snapshot;
