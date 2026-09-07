@@ -88,6 +88,12 @@ type API struct {
 	dhtMirrorStcpr dhtMirror
 	dhtMirrorSudph dhtMirror
 
+	// dialAssistFails aggregates the SUDPH reverse dial-assist requests that
+	// are skipped because the peer has no live UDP connection — an expected
+	// outcome that was logged once per attempt and, at ~9,475 lines/min on the
+	// live deployment, drowned the address-resolver log. See dial_assist_log.go.
+	dialAssistFails *dialAssistFailures
+
 	// bindPub is the CXO bindings publisher, installed after the dmsg client
 	// exists (see pkg/services/ar). Held atomically because the store writes
 	// that notify it run on HTTP, UDP and CXO-ingest goroutines while the
@@ -250,6 +256,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
 		publicUDPAddr:               publicUDPAddr,
+		dialAssistFails:             newDialAssistFailures(dialAssistSummaryInterval),
 	}
 	// Every store write goes through the notifier so the CXO bindings feed
 	// (pkg/deployment/ar/api/cxo_publisher.go) learns about it from ONE place
@@ -607,6 +614,24 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 
 		// The receiver is also asked to dail to the sender in (SUDPH).
 		if err := a.askToDialUDP(receiverPK, senderPK, r, senderVisorData); err != nil {
+			// "peer is not connected" means the receiver has an AR record but
+			// no live UDP control connection right now — it is offline, or the
+			// record is stale. The sender already has its 200 and will still
+			// dial; only the simultaneous-open nudge is skipped. That is an
+			// expected outcome, not a fault, and one WARN per attempt made it
+			// ~9,475 lines/min in production. Count it and report the rate
+			// once per window instead; the individual event stays at Debug.
+			if errors.Is(err, ErrNotConnected) {
+				a.logger(r).Debugf("Failed to ask %v to dial %v@%v: %v", receiverPK, senderPK, remoteAddr, err)
+				if s := a.dialAssistFails.record(time.Now(), receiverPK); s != nil {
+					a.log.WithField("window", s.Window.Round(time.Second).String()).
+						WithField("skipped", s.Count).
+						WithField("peers", s.Peers).
+						WithField("top_peers", s.TopPeers).
+						Info("SUDPH dial-assist requests skipped: peer is not connected")
+				}
+				return
+			}
 			a.logger(r).Warnf("Failed to ask %v to dial %v@%v: %v", receiverPK, senderPK, remoteAddr, err)
 			return
 		}
