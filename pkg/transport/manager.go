@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
@@ -686,7 +687,13 @@ func (tm *Manager) publishTPDList(entries []*Entry) {
 		tm.Logger.WithError(err).Debug("Failed to marshal transport list leaf")
 		return
 	}
-	if err := pub.Put(tpdListPath, body); err != nil {
+	// CXO stores and propagates object bytes verbatim, so the leaf travels
+	// uncompressed unless the publisher compresses it — and this one is a
+	// JSON array of near-identical records, which gzip crushes. TPD's reader
+	// has been self-describing since #4105 (cxoutils.Gunzip magic-byte-detects
+	// and passes raw bodies through), so an aggregator that predates this
+	// still reads the feed and a visor that predates it still publishes raw.
+	if err := pub.Put(tpdListPath, cxoutils.Gzip(body)); err != nil {
 		tm.Logger.WithError(err).Debug("Failed to publish transport list leaf to CXO")
 	}
 }
