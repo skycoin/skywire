@@ -222,6 +222,31 @@ var (
 
 const pubKeyVerifyCacheMax = 1 << 15
 
+// lookupVerifiedPubKey returns the already-validated key for the exact 33 bytes in
+// data, if secp256k1 has accepted those bytes before. A wrong length is never a
+// hit, so callers still get full validation for anything malformed.
+func lookupVerifiedPubKey(data []byte) (PubKey, bool) {
+	var cand PubKey
+	if len(data) != len(cand) {
+		return cand, false
+	}
+	copy(cand[:], data)
+	pubKeyVerifyMu.RLock()
+	_, ok := pubKeyVerifyCache[cand]
+	pubKeyVerifyMu.RUnlock()
+	return cand, ok
+}
+
+// rememberVerifiedPubKey records a key that secp256k1 has just accepted.
+func rememberVerifiedPubKey(pk PubKey) {
+	pubKeyVerifyMu.Lock()
+	if len(pubKeyVerifyCache) >= pubKeyVerifyCacheMax {
+		pubKeyVerifyCache = make(map[PubKey]struct{}, 1024) // bound growth; re-warms
+	}
+	pubKeyVerifyCache[pk] = struct{}{}
+	pubKeyVerifyMu.Unlock()
+}
+
 // UnmarshalText implements encoding.TextUnmarshaler.
 func (pk *PubKey) UnmarshalText(data []byte) error {
 	if bytes.Count(data, []byte("0")) == len(data) {
@@ -230,13 +255,8 @@ func (pk *PubKey) UnmarshalText(data []byte) error {
 
 	// Fast path: an exact key we've already validated skips the expensive secp256k1
 	// point decompression (PubKeyFromHex → Verify). See pubKeyVerifyCache.
-	var cand PubKey
-	if b, derr := hex.DecodeString(string(data)); derr == nil && len(b) == len(cand) {
-		copy(cand[:], b)
-		pubKeyVerifyMu.RLock()
-		_, ok := pubKeyVerifyCache[cand]
-		pubKeyVerifyMu.RUnlock()
-		if ok {
+	if b, derr := hex.DecodeString(string(data)); derr == nil {
+		if cand, ok := lookupVerifiedPubKey(b); ok {
 			*pk = cand
 			return nil
 		}
@@ -247,12 +267,7 @@ func (pk *PubKey) UnmarshalText(data []byte) error {
 		return err
 	}
 	*pk = PubKey(dPK)
-	pubKeyVerifyMu.Lock()
-	if len(pubKeyVerifyCache) >= pubKeyVerifyCacheMax {
-		pubKeyVerifyCache = make(map[PubKey]struct{}, 1024) // bound growth; re-warms
-	}
-	pubKeyVerifyCache[PubKey(dPK)] = struct{}{}
-	pubKeyVerifyMu.Unlock()
+	rememberVerifiedPubKey(PubKey(dPK))
 	return nil
 }
 
@@ -263,11 +278,25 @@ func (pk PubKey) MarshalBinary() ([]byte, error) {
 
 // UnmarshalBinary implements encoding.BinaryUnmarshaler.
 func (pk *PubKey) UnmarshalBinary(data []byte) error {
-	dPK, err := cipher.NewPubKey(data)
-	if err == nil {
-		*pk = PubKey(dPK)
+	// Fast path, same as UnmarshalText: skip the secp256k1 point decompression for a
+	// key we have already validated. This is the gob path, which net/rpc uses for
+	// every hypervisor-to-visor response — the same ~1000 fleet PKs are decoded out
+	// of every summary several times a minute, and each occurrence was re-validated.
+	// A 30s CPU profile of the dev hypervisor put PubKey.Verify beneath
+	// UnmarshalBinary at 21% of all visor CPU (Field.Sqr alone 18% flat), so this
+	// path matters at least as much as the hex one. See pubKeyVerifyCache.
+	if cand, ok := lookupVerifiedPubKey(data); ok {
+		*pk = cand
+		return nil
 	}
-	return err
+
+	dPK, err := cipher.NewPubKey(data)
+	if err != nil {
+		return err
+	}
+	*pk = PubKey(dPK)
+	rememberVerifiedPubKey(PubKey(dPK))
+	return nil
 }
 
 // PubKeys represents a slice of PubKeys.
