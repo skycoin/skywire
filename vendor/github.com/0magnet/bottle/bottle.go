@@ -53,8 +53,11 @@ func VNetJS() []byte { return vnetJS }
 
 // ProcJS returns proc.js — the globalThis.proc process layer: spawn another
 // wasm module from jsfs as a child that shares the page's fs and vnet, with
-// per-process stdio and an exit promise. Load it after jsfs.js and
-// wasm_exec.js. See the proc subpackage for the Go adapter.
+// per-process stdio, a process id, kill(), and an exit promise. A program
+// too large to hold as bytes is bound to its path with proc.registerURL and
+// streamed straight into the compiler. Load it after jsfs.js; wasm_exec.js
+// may be loaded ahead of it or left to the first spawn. See the proc
+// subpackage for the Go adapter.
 func ProcJS() []byte { return procJS }
 
 // FSBridgeJS returns fsbridge.js — a blocking, synchronous view of the page's

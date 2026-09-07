@@ -71,6 +71,9 @@
 	// (code 0, no crash) counts as "the operator stopped it".
 	function visorCrashed() {
 		try {
+			// proc.tails, aliased by skywire-exec.js. Records are plain
+			// {argv, tail, filtered, exitInfo}; argv is the FULL argv, so
+			// argv[0] is "skywire" and the subcommand is argv[1].
 			var reg = globalThis.__skywireExecTails || {};
 			var crashed = false;
 			Object.keys(reg).forEach(function (k) {

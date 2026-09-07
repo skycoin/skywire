@@ -68,12 +68,13 @@
   }
   dialRPCBridge();
 
-  // Desk pages run the visor as a skywireExec instance (a terminal running
+  // Desk pages run the visor as a skywireExec process (a terminal running
   // `skywire autoconfig`), so its stderr only reaches an xterm — mirror the
-  // FOREGROUND visor instance's 16KB stderr ring (skywire-exec.js keeps it in
-  // globalThis.__skywireExecTails) to /ctl/log so a plain curl tells the whole
-  // story: started, log lines, crash/stop. Pages that never exec simply never
-  // grow the registry, so this stays a no-op on the standalone HV page.
+  // FOREGROUND visor process's 16KB stderr ring (bottle's proc keeps it, and
+  // skywire-exec.js publishes proc.tails as globalThis.__skywireExecTails) to
+  // /ctl/log so a plain curl tells the whole story: started, log lines,
+  // crash/stop. Pages that never exec simply never grow the registry, so this
+  // stays a no-op on the standalone HV page.
   var visIID = null;   // instance currently (or last) mirrored
   var visTail = '';    // the ring as last posted, for incremental diffs
   var visEnded = false; // exitInfo already reported for visIID
@@ -81,9 +82,10 @@
     var found = null;
     Object.keys(reg).forEach(function (k) {
       // A visor runs as `skywire autoconfig` (the desk autostart) or
-      // `skywire visor …` — argv[0] exactly, so `cli visor info` doesn't match.
-      var a0 = (reg[k].argv || [])[0];
-      if (a0 === 'autoconfig' || a0 === 'visor') { found = k; } // last wins: the newest (re)start
+      // `skywire visor …`. proc records the FULL argv, so the subcommand is
+      // argv[1] — matched exactly, so `cli visor info` does not qualify.
+      var a1 = (reg[k].argv || [])[1];
+      if (a1 === 'autoconfig' || a1 === 'visor') { found = k; } // last wins: the newest (re)start
     });
     return found;
   }
@@ -105,11 +107,11 @@
       var iid = visorInstance(reg);
       if (iid !== null && iid !== visIID) {
         visIID = iid; visTail = ''; visEnded = false;
-        post('/ctl/log?tab=' + tabId, '[desk] visor started (' + iid + ': skywire ' + (reg[iid].argv || []).join(' ') + ')');
+        post('/ctl/log?tab=' + tabId, '[desk] visor started (' + iid + ': ' + (reg[iid].argv || []).join(' ') + ')');
       }
       if (visIID === null || !reg[visIID]) { return; }
       var ent = reg[visIID];
-      var cur = ent();
+      var cur = ent.tail || '';
       if (cur !== visTail) {
         var add = ringDelta(visTail, cur);
         if (add === null) { add = '[desk] (stderr ring outran the mirror — resynced)\n' + cur; }
