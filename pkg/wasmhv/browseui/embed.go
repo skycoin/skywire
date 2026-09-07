@@ -1,6 +1,6 @@
 // Package browseui pkg/wasmhv/browseui/embed.go c3-vis-wasm
 // Assembles the mini-desktop bundle from its promoted homes — the OS layer
-// (github.com/0magnet/bottle: jsfs + vnet) and the window manager
+// (github.com/0magnet/bottle: jsfs + vnet + proc) and the window manager
 // (github.com/0magnet/winbox-go/dist: module + loader glue) — plus the
 // skywire-specific pieces: seed-skywire.js (the package-install filesystem
 // layout), skywire-exec.js (per-command execution of the skywire CLI wasm),
@@ -31,9 +31,10 @@ import (
 //go:embed seed-skywire.js
 var seedSkywireJS []byte
 
-// skywireExecJS provides globalThis.skywireExec: per-invocation execution of
-// the full skywire CLI wasm module (served at /skywire.wasm) against jsfs,
-// with swappable stdio so the terminal captures each command's output.
+// skywireExecJS provides globalThis.skywireExec: one skywire CLI command as a
+// PROCESS on bottle's proc layer — the module registered at its package path
+// and streamed into the compiler, argv/env/stdio per invocation, an interrupt
+// under skywire's own SKYWIRE_EXEC_ID, and the stderr ring the desk reads.
 //
 //go:embed skywire-exec.js
 var skywireExecJS []byte
@@ -67,13 +68,14 @@ func DeskBootJS() []byte { return deskBootJS }
 // WinBoxWasm below.
 //
 // Order matters: Go instances capture globalThis.fs at START, so jsfs (and
-// its skywire seeding) and vnet sit at the top, before anything can start a
-// wasm module.
+// its skywire seeding), vnet and proc sit at the top, before anything can
+// start a wasm module. proc must follow jsfs — it delegates jsfs.stdio.
 var BrowseJS = func() []byte {
 	parts := [][]byte{
 		bottle.JSFS(),
 		seedSkywireJS,
 		bottle.VNetJS(),
+		bottle.ProcJS(),
 		winboxdist.ExecJS(),
 		winboxdist.LoaderJS(),
 		desk.PanelNoWasmJS(),

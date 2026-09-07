@@ -1,258 +1,147 @@
-// pkg/wasmhv/browseui/skywire-exec.js — execute the full skywire CLI wasm
-// module per command invocation, OS-style: the module is fetched and compiled
-// once, then each command instantiates it fresh with its own argv/env and
-// exits when main returns. All instances share the page's jsfs (jsfs.js), so
-// `skywire cli config gen -rp` writes /opt/skywire/skywire.json and the
-// shell's cat/jq read it back.
+// pkg/wasmhv/browseui/skywire-exec.js — the skywire CLI as a PROCESS on
+// bottle's process layer.
+//
+// This file used to be a second process layer beside bottle's: its own module
+// cache, streaming fetch/compile, stdio swapping, exit capture, vnet claim
+// release, interrupt registry and stderr ring. None of that was skywire's —
+// bottle owns jsfs and vnet, so a process's bookkeeping across them belongs
+// there, and it is bottle's proc.js now. What is left here is the part that
+// really is skywire's: where the module is served, the package-install PATH
+// it answers to, the environment a skywire command expects, the names
+// skywire's Go code and its page consumers already use, and which log lines
+// are worth keeping.
 //
 // globalThis.skywireExec(args, hooks) -> Promise<exitCode>
 //   args:  ["cli","config","gen","-rp"]   (argv[0] "skywire" is implied)
-//   hooks: { stdout(Uint8Array), stderr(Uint8Array) }  — the command's output
+//   hooks: { stdout(Uint8Array), stderr(Uint8Array), stdin(), env, instance }
 //
-// Requires: jsfs installed (jsfs.js), Go's wasm_exec.js loaded (the standard
-// Go class — the skywire.wasm blob is a standard-Go build), and the module
-// served at skywireExec.wasmURL (default /skywire.wasm; 404 = feature off).
+// Requires jsfs.js and proc.js installed (both are in the browse bundle) and
+// the module served at skywireExec.wasmURL (default /skywire.wasm; 404 = the
+// feature is simply off and the shell registers no `skywire` command).
 (function () {
 	'use strict';
 	if (globalThis.skywireExec) return;
 
-	let modPromise = null;
+	// Where the CLI lives in the package tree seed-skywire.js lays down. The
+	// module is REGISTERED at that path rather than written to it: it is
+	// ~158MB raw (~40MB gzipped) and proc streams it straight into the
+	// compiler, so the bytes never exist as a buffer at all.
+	var PROG = '/opt/skywire/bin/skywire';
 
-	async function compileOnce() {
-		if (!modPromise) {
-			modPromise = (async () => {
-				const url = skywireExec.wasmURL;
-				const resp = await fetch(url);
-				if (!resp.ok) throw new Error('fetch ' + url + ': HTTP ' + resp.status);
-				// A .gz module (static hosting that can't set Content-Encoding —
-				// GitHub Pages serving the raw 158MB is over its file cap, the
-				// ~40MB gzip isn't) is inflated here via DecompressionStream.
-				if (/\.gz(\?|$)/.test(url)) {
-					const inflated = resp.body.pipeThrough(new DecompressionStream('gzip'));
-					return WebAssembly.compileStreaming
-						? WebAssembly.compileStreaming(new Response(inflated, { headers: { 'Content-Type': 'application/wasm' } }))
-						: WebAssembly.compile(await new Response(inflated).arrayBuffer());
-				}
-				return WebAssembly.compileStreaming
-					? WebAssembly.compileStreaming(Promise.resolve(resp))
-					: WebAssembly.compile(await resp.arrayBuffer());
-			})().catch((e) => { modPromise = null; throw e; });
-		}
-		return modPromise;
+	// The page-lifetime registries are bottle's, published under the names
+	// skywire already uses for them — ALIASES, not copies, so the Go side
+	// writes into the very object proc reads:
+	//   __skywireSignals    pkg/cmdutil/signal_js.go registers each instance's
+	//                       interrupt here, keyed by SKYWIRE_EXEC_ID; proc's
+	//                       kill() invokes it and drops it on exit.
+	//   __skywireExecTails  the post-mortem stderr rings desk-boot.js reads to
+	//                       tell a CRASHED visor from a stopped one, and
+	//                       ctl-bridge.js mirrors to /ctl/log.
+	if (globalThis.proc) {
+		globalThis.__skywireSignals = globalThis.proc.signals;
+		globalThis.__skywireExecTails = globalThis.proc.tails;
 	}
 
-	// ensureGoLoader loads Go's wasm_exec.js on demand: the DOM realm only
-	// needs it once a command actually runs (the visor's copy lives in the
-	// SharedWorker realm). jsfs must already be installed — wasm_exec's own
-	// fs stub only fills in when globalThis.fs is absent.
-	let goLoaderPromise = null;
-	function ensureGoLoader() {
-		if (typeof Go === 'function') return Promise.resolve();
-		if (!goLoaderPromise) {
-			goLoaderPromise = new Promise((resolveP, rejectP) => {
-				const s = document.createElement('script');
-				s.src = skywireExec.wasmExecURL;
-				s.onload = () => (typeof Go === 'function')
-					? resolveP()
-					: rejectP(new Error(skywireExec.wasmExecURL + ' loaded but defines no Go class'));
-				s.onerror = () => rejectP(new Error('failed to load ' + skywireExec.wasmExecURL));
-				document.head.appendChild(s);
-			}).catch((e) => { goLoaderPromise = null; throw e; });
-		}
-		return goLoaderPromise;
+	// ROUTERISH selects the lines kept in the second, slower-churning ring.
+	// The full ring churns through its window in seconds under dmsg DEBUG
+	// spam, so the one error that explains a failed dial is gone before anyone
+	// looks; these lines are rare and survive.
+	var ROUTERISH = /(router|route_setup|RouteGroup|routegroup|setupclient|rule|cascade|rsn)/i;
+	var TAIL_BYTES = 16384;
+
+	var boundURL = null;
+	function bind() {
+		if (boundURL === skywireExec.wasmURL) return;
+		globalThis.proc.registerURL(PROG, skywireExec.wasmURL);
+		// The loader for THIS module: the standard-Go wasm_exec.js, which is
+		// not necessarily the one the page loaded for its own blob. proc
+		// fetches it on the first spawn if the realm has no Go class yet.
+		globalThis.proc.assets.wasmExec = skywireExec.wasmExecURL;
+		boundURL = skywireExec.wasmURL;
 	}
 
-	let execSeq = 0;
-
-	// makeTails and makeInterrupt build the two objects that OUTLIVE a command:
-	// the tail registry entry (kept forever, deliberately) and the interrupt
-	// handle handed to the caller. Both are built HERE, at module scope, and
-	// never inside skywireExec.
-	//
-	// Why it matters: a closure created inside skywireExec captures that
-	// invocation's whole scope, and skywireExec is `async`, so its frame holds
-	// `go` and the WebAssembly.Instance across every await. Storing such a
-	// closure in a global registry pinned the frame — and with it the instance's
-	// entire linear memory — for the life of the page, so an exited command's
-	// heap was never returned even though the command was long gone. Measured
-	// live on the desk: deleting the registry entry and forcing GC returned
-	// 114 MB, the whole footprint of a one-shot `skywire --version`. Closing
-	// over a small plain record instead lets the frame die when the call returns.
-	function makeTails(argv) {
-		const rec = { argv: argv, tail: '', routerTail: '', exitInfo: null };
-		const fn = function () { return rec.tail; };
-		fn.argv = rec.argv;
-		fn.router = function () { return rec.routerTail; };
-		// exitInfo stays readable AND writable at reg[iid].exitInfo, which is the
-		// shape desk-boot and ctl-bridge already consume (desk-boot tells a
-		// CRASHED visor from a stopped one by it). Proxying to rec keeps that
-		// contract while the storage itself stays off this command's frame.
-		Object.defineProperty(fn, 'exitInfo', {
-			get() { return rec.exitInfo; },
-			set(v) { rec.exitInfo = v; },
-			enumerable: true,
-			configurable: true,
-		});
-		// The write side. The running command updates the tails through this
-		// handle; nothing reachable from here can reach the command's frame.
-		fn.rec = rec;
-		return fn;
+	// mirror reports an abnormal ending to the console with the stderr tail.
+	// A long-running instance's panic otherwise goes only to an xterm nobody
+	// is scrolled to; here it is diagnosable from DevTools or a CDP probe.
+	// Module scope, and it reads the ring back out of proc.tails — it never
+	// closes over the spawn that produced it.
+	function mirror(id, code, err) {
+		try {
+			var rec = globalThis.proc.tails[id];
+			var tail = (rec && rec.tail) || '';
+			console.error('[skywire-exec ' + id + '] ' +
+				(err ? 'crashed: ' + (err.message || err) : 'exited code ' + code) +
+				(tail ? '\n--- last stderr ---\n' + tail : ''));
+		} catch (e) { /* ignore */ }
 	}
 
-	function makeInterrupt(iid) {
-		return {
-			interrupt() {
-				try {
-					const reg = globalThis.__skywireSignals;
-					const f = reg && reg[iid];
-					if (f) f();
-				} catch (e) { /* instance already gone */ }
-			},
-		};
-	}
+	var execSeq = 0;
 
-	async function skywireExec(args, hooks) {
+	function skywireExec(args, hooks) {
 		if (!globalThis.jsfs || !globalThis.jsfs.installed) {
-			throw new Error('jsfs is not installed — load jsfs.js before running commands');
+			return Promise.reject(new Error('jsfs is not installed — load jsfs.js before running commands'));
 		}
-		await ensureGoLoader();
-		const mod = await compileOnce();
-		const iid = 'x' + (++execSeq);
-		// Built before the tails are written to, and at module scope, so the
-		// registry entry never captures this frame. See makeTails.
-		const tails = makeTails(args.slice());
-		const go = new Go();
-		go.argv = ['skywire', ...args];
-		go.env = {
+		if (!globalThis.proc) {
+			return Promise.reject(new Error('bottle proc.js is not loaded — no process layer'));
+		}
+		bind();
+		hooks = hooks || {};
+		var id = 'x' + (++execSeq);
+		var env = {
 			HOME: '/home/user', USER: 'user', PWD: globalThis.jsfs.getCwd(),
 			PATH: '/opt/skywire/bin:/usr/bin:/bin', TMPDIR: '/tmp', TERM: 'xterm-256color',
 			COLUMNS: '100', LINES: '30',
 		};
-		// hooks.env: per-invocation environment overrides — the shell passes
-		// the terminal's live COLUMNS/LINES so help styling (colors, the rain
-		// backdrop width) matches the window it renders in.
-		if (hooks && hooks.env) {
-			for (const k in hooks.env) {
-				if (Object.prototype.hasOwnProperty.call(hooks.env, k)) go.env[k] = String(hooks.env[k]);
+		// hooks.env: per-invocation overrides — the shell passes the terminal's
+		// live COLUMNS/LINES so help styling (colors, the rain backdrop width)
+		// matches the window it renders in.
+		if (hooks.env) {
+			for (var k in hooks.env) {
+				if (Object.prototype.hasOwnProperty.call(hooks.env, k)) env[k] = String(hooks.env[k]);
 			}
 		}
-		// Ctrl+C parity: the instance registers a JS-callable interrupt under
-		// this id (cmdutil.SignalContext under js), and hooks.instance hands
-		// the caller a way to invoke it — a foreground `skywire visor` then
-		// shuts down exactly as it would on SIGINT.
-		go.env.SKYWIRE_EXEC_ID = iid;
-		if (hooks && typeof hooks.instance === 'function') {
-			hooks.instance(makeInterrupt(iid));
+		var p = globalThis.proc.spawn({
+			argv: ['skywire'].concat(args),
+			env: env,
+			id: id,
+			// SKYWIRE_EXEC_ID is the name pkg/cmdutil/signal_js.go looks the id
+			// up under; BOTTLE_PID is proc's own, which bottle's vnet adapter
+			// reads to tag this instance's port claims.
+			idEnv: ['BOTTLE_PID', 'SKYWIRE_EXEC_ID'],
+			stdout: hooks.stdout || null,
+			stderr: hooks.stderr || null,
+			stdin: hooks.stdin || null,
+			// The ring is kept REGARDLESS of hooks: it is the only readable
+			// copy of a long-running instance's log.
+			tail: TAIL_BYTES,
+			tailFilter: ROUTERISH,
+		});
+		// Ctrl+C parity: proc's kill() calls the interrupt the instance
+		// registered under this id, so a foreground `skywire visor` shuts down
+		// exactly as it would on SIGINT. Handed over SYNCHRONOUSLY, before the
+		// command starts, which is the contract skywirecmd_js.go relies on.
+		if (typeof hooks.instance === 'function') {
+			hooks.instance({ interrupt: p.kill });
 		}
-		let code = 0;
-		go.exit = (c) => { code = c; };
-		const stdio = globalThis.jsfs.stdio;
-		const prev = { stdout: stdio.stdout, stderr: stdio.stderr, stdin: stdio.stdin };
-		// Deliver output hooks on a MICROTASK, never synchronously: a hook that
-		// writes into another wasm instance (the shell's terminal) would
-		// otherwise nest that instance's frames on top of this command's still-
-		// running wasm stack — two Go runtimes deep, which overflows the JS
-		// call stack and corrupts whichever runtime the RangeError lands in.
-		// The microtask runs once this instance yields, with a clean stack.
-		const deferred = (fn) => (buf) => {
-			const copy = buf.slice();
-			queueMicrotask(() => { try { fn(copy); } catch (e) { /* sink gone */ } });
-		};
-		if (hooks && hooks.stdout) stdio.stdout = deferred(hooks.stdout);
-		// stderrTail: a small ring of the command's last stderr bytes, kept
-		// REGARDLESS of hooks — when a long-running instance (the desk's
-		// foreground visor) dies, its panic went only to an xterm nobody was
-		// scrolled to. The tail is mirrored to the console below so a crash
-		// is diagnosable from DevTools / a CDP probe.
-
-		// routerTail: a SELECTIVE ring of route-establishment lines. The full
-		// tail churns through its window in seconds under dmsg DEBUG spam, so
-		// the one error that explains a failed dial is gone before anyone
-		// looks; these lines are rare and survive.
-
-		let lineBuf = '';
-		const ROUTERISH = /(router|route_setup|RouteGroup|routegroup|setupclient|rule|cascade|rsn)/i;
-		const tailDec = new TextDecoder();
-		const keepTail = (buf) => {
-			try {
-				const s = tailDec.decode(buf, { stream: true });
-				tails.rec.tail = (tails.rec.tail + s).slice(-16384);
-				lineBuf += s;
-				let nl;
-				while ((nl = lineBuf.indexOf('\n')) >= 0) {
-					const line = lineBuf.slice(0, nl);
-					lineBuf = lineBuf.slice(nl + 1);
-					if (ROUTERISH.test(line)) { tails.rec.routerTail = (tails.rec.routerTail + line + '\n').slice(-8192); }
-				}
-			} catch (e) { /* ignore */ }
-		};
-		// Live observability: __skywireExecTails[iid]() returns the tail at any
-		// moment (DevTools, CDP probes, the operator) — the only other copy of
-		// a long-running instance's log lives inside an xterm nobody can read
-		// programmatically. Kept after exit (the crash's last words); replaced
-		// naturally as new instances reuse the registry.
-		try {
-			(globalThis.__skywireExecTails = globalThis.__skywireExecTails || {})[iid] = tails;
-		} catch (e) { /* ignore */ }
-		{
-			const userErr = (hooks && hooks.stderr) || null;
-			const fallbackErr = prev.stderr; // no hook → keep the page's default sink
-			stdio.stderr = deferred((buf) => {
-				keepTail(buf);
-				if (userErr) { userErr(buf); } else if (fallbackErr) { try { fallbackErr(buf); } catch (e) { /* sink gone */ } }
-			});
-		}
-		if (hooks && hooks.stdin) stdio.stdin = hooks.stdin;
-		let runErr = null;
-		try {
-			const inst = await WebAssembly.instantiate(mod, go.importObject);
-			await go.run(inst);
-		} catch (e) {
-			runErr = e;
+		return p.exited.then(function (code) {
+			if (code !== 0) mirror(id, code, null);
+			return code;
+		}, function (e) {
+			mirror(id, null, e);
 			throw e;
-		} finally {
-			stdio.stdout = prev.stdout; stdio.stderr = prev.stderr; stdio.stdin = prev.stdin;
-			try {
-				const reg = globalThis.__skywireSignals;
-				if (reg && reg[iid]) delete reg[iid]; // never call into an exited instance
-			} catch (e) { /* ignore */ }
-			// Release this instance's vnet claims: a dead program cannot
-			// unlisten its ports, and zombie entries fake liveness (and hold
-			// the port against a rebind) forever.
-			try {
-				if (globalThis.vnet && globalThis.vnet.releaseOwner) {
-					const n = globalThis.vnet.releaseOwner(iid);
-					if (n > 0) console.warn('[skywire-exec ' + iid + '] released ' + n + ' vnet claim(s) on exit');
-				}
-			} catch (e) { /* ignore */ }
-			// Record how this instance ended, for consumers that must tell a
-			// CRASH from a deliberate stop (the desk session: a crashed visor
-			// restarts on the next load; only a clean exit stays stopped).
-			try {
-
-				tails.rec.exitInfo = { code: code, crashed: !!runErr };
-			} catch (e) { /* ignore */ }
-			// Mirror abnormal endings to the console with the stderr tail.
-			if (runErr || code !== 0) {
-				try {
-					console.error('[skywire-exec ' + iid + '] ' + (runErr ? 'crashed: ' + (runErr.message || runErr) : 'exited code ' + code)
-						+ (tails.rec.tail ? '\n--- last stderr ---\n' + tails.rec.tail : ''));
-				} catch (e) { /* ignore */ }
-			}
-		}
-		return code;
+		});
 	}
+
 	skywireExec.wasmURL = '/skywire.wasm';
 	// The standard-Go loader; the served page pairs it with the blob variant.
 	skywireExec.wasmExecURL = '/wasm_exec.js?variant=go';
 
 	// available() resolves true when the module is served (used by the shell
 	// to decide whether to register the command at all).
-	skywireExec.available = async function () {
-		try {
-			const resp = await fetch(skywireExec.wasmURL, { method: 'HEAD' });
-			return resp.ok;
-		} catch (_) { return false; }
+	skywireExec.available = function () {
+		return fetch(skywireExec.wasmURL, { method: 'HEAD' })
+			.then(function (resp) { return resp.ok; })
+			.catch(function () { return false; });
 	};
 
 	globalThis.skywireExec = skywireExec;

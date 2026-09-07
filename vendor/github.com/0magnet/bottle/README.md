@@ -28,10 +28,17 @@ a few page-global primitives:
 
 - **`proc.js`** — a process layer: `proc.spawn({argv, env, cwd, stdio})`
   instantiates another wasm module from jsfs as a child that shares the
-  page's fs and vnet, with per-process stdio and an exit promise. A tab has
-  no fork/exec, but instantiating a wasm module IS spawning a process — this
-  makes that a primitive, the third leg under a Unix-shaped orchestrator
-  (a shell, and eventually `go build`). The **`proc`** subpackage is its Go
+  page's fs and vnet, with per-process stdio, a process id, `kill()` and an
+  exit promise. A tab has no fork/exec, but instantiating a wasm module IS
+  spawning a process — this makes that a primitive, the third leg under a
+  Unix-shaped orchestrator (a shell, and eventually `go build`). It also does
+  the bookkeeping a process layer owes the other two legs: an exited child's
+  vnet claims are released for it (a dead program cannot unlisten its ports,
+  and a zombie entry fakes liveness and holds the port against a rebind), and
+  `proc.registerURL(path, url)` binds a program too large to hold as bytes to
+  its path, streaming it into the compiler on first spawn instead of through
+  jsfs. `opts.tail` keeps a per-process stderr ring in `proc.tails`, so a
+  crashed child's last words survive it. The **`proc`** subpackage is its Go
   adapter (`proc.Command(...).Run()`, os/exec-shaped).
 - **`fsbridge.js`** — the same filesystem, reachable from a Worker.
   `proc.spawnWorker` runs a child off the main thread, so a long compile no
