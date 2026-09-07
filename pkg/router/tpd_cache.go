@@ -58,8 +58,13 @@ const defaultTPDSnapshotTTL = 5 * time.Minute
 // pointer under the write lock, so a snapshot handed to a caller is
 // never mutated underneath it.
 type tpdSnapshotCache struct {
-	mu    sync.RWMutex
-	snap  *tpdSnapshot
+	mu   sync.RWMutex
+	snap *tpdSnapshot
+	// gen counts snapshot rebuilds. It is the identity consumers memoize
+	// against (see localRouteMemo): unlike tpdSnapshot.version it is set on
+	// EVERY path, including the TTL fallback where there is no CXO timestamp
+	// to key on. Starts at 1 so zero can mean "no snapshot / no cache".
+	gen   uint64
 	ttl   time.Duration
 	clock func() time.Time // injectable for tests
 }
@@ -94,6 +99,10 @@ type tpdSnapshot struct {
 	// (a discovery client with no version signal — tests, bare HTTP). It is
 	// not consulted on the CXO path.
 	expires time.Time
+	// gen is the cache's rebuild counter at the time this snapshot was
+	// built — a generation identity that exists on both the CXO and the TTL
+	// path, which version does not. Never zero for a real snapshot.
+	gen uint64
 }
 
 // tpdVersioner is implemented by a discovery client whose GetAllTransports
@@ -177,8 +186,11 @@ func (c *tpdSnapshotCache) fresh() *tpdSnapshot {
 
 // buildSnapshot materializes a snapshot (and its derived lookups) from a
 // freshly-fetched entry set, stamping it with the CXO version (zero on the
-// TTL path) and always setting the wall-clock TTL floor.
+// TTL path), the next generation counter, and the wall-clock TTL floor.
+//
+// Callers hold c.mu for writing (gen is bumped here).
 func (c *tpdSnapshotCache) buildSnapshot(entries []*transport.Entry, version time.Time) *tpdSnapshot {
+	c.gen++
 	byID := make(map[uuid.UUID]*transport.Entry, len(entries))
 	for _, e := range entries {
 		if e != nil {
@@ -195,6 +207,7 @@ func (c *tpdSnapshotCache) buildSnapshot(entries []*transport.Entry, version tim
 		throughputByID: throughputByID,
 		version:        version,
 		expires:        c.clock().Add(c.ttl),
+		gen:            c.gen,
 	}
 }
 
