@@ -904,6 +904,7 @@ func (tm *Manager) acceptTransports(ctx context.Context, lis network.Listener, t
 func (tm *Manager) cleanupTransports(ctx context.Context) {
 	defer tm.wg.Done()
 	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
@@ -921,7 +922,17 @@ func (tm *Manager) cleanupTransports(ctx context.Context) {
 			if len(toDelete) > 0 {
 				tm.Logger.Debugf("Deleted %d unused transport entries", len(toDelete))
 			}
+		// Both cancellations end the loop. ctx.Done() previously had an empty
+		// body and no return, which is a busy-wait: a canceled context's
+		// channel stays ready forever, so this select spun as fast as the
+		// scheduler would run it from the moment ctx was canceled until
+		// Manager.Close() closed tm.done. Those are separate signals —
+		// Visor.Suspend cancels the network context first (api_suspend.go) and
+		// only then walks the close stack — so the spin covers the whole
+		// teardown window, and lasts indefinitely for any caller that cancels
+		// the serve context without going on to close the manager.
 		case <-ctx.Done():
+			return
 		case <-tm.done:
 			return
 		}
