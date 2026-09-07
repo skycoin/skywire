@@ -644,6 +644,7 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 				Wallet:           !ws.NoWallet,
 				Variant:          ws.Variant,
 				Password:         ws.Password,
+				ExecWasmPath:     ws.ExecWasm,
 				BrowseSuffix:     ws.BrowseSuffix,
 				BrowseOriginAddr: ws.BrowseOriginAddr,
 				VOrigin:          ws.VOrigin,
