@@ -81,7 +81,10 @@ func saveFile(filename string, view *femto.View) error {
 	if filename == "untitled" {
 		return fmt.Errorf("no filename specified, use: edit <filename>")
 	}
-	return os.WriteFile(filename, []byte(view.Buf.String()), 0644) //nolint:gosec
+	// 0640, matching visorconfig's own write path: this editor is pointed at the
+	// visor config, which holds the SECRET KEY. Writing it back world-readable
+	// silently undid that protection.
+	return os.WriteFile(filename, []byte(view.Buf.String()), 0640) //nolint:gosec
 }
 
 func loadColorscheme() femto.Colorscheme {
