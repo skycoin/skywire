@@ -21,6 +21,11 @@ $top-bar-height: 56px;
 
   .main-area {
     flex-grow: 1;
+    // Without this the flex item keeps min-width:auto, so its min-content size
+    // (the whole nowrap tab strip plus the right-hand controls) becomes a hard
+    // floor and the bar widens the entire document instead of the strip
+    // scrolling. See .tabs-scroller below.
+    min-width: 0;
   }
 
   .title {
@@ -60,7 +65,24 @@ $top-bar-height: 56px;
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
-    gap: 2px;
+    min-width: 0;
+
+    // The tabs scroll horizontally inside this box when they do not fit, so a
+    // full tab strip plus the right-hand controls can never push the page wider
+    // than the viewport. The right-hand controls stay OUTSIDE the scroller so
+    // the refresh and menu buttons remain pinned to the right edge rather than
+    // scrolling away with the tabs.
+    .tabs-scroller {
+      display: flex;
+      flex: 1 1 auto;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 2px;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: thin;
+    }
 
     // Visual divider between tab groups (e.g. "this hypervisor"
     // tabs vs network-wide tabs on the home top-bar). Inserted
@@ -77,7 +99,7 @@ $top-bar-height: 56px;
     // Each tab is wrapped in its own <div>. Force them to size by
     // their content — without this, an unexplained gap can appear
     // mid-strip on some viewports (likely a flex-item growth quirk).
-    > div {
+    .tabs-scroller > div {
       flex: 0 0 auto;
       min-width: 0;
     }
@@ -126,6 +148,7 @@ $top-bar-height: 56px;
 
     .right-container {
       display: flex;
+      flex: 0 0 auto;
       align-items: center;
       margin-left: auto;
 
