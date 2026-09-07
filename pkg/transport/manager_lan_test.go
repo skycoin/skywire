@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -137,12 +138,14 @@ func TestManagerPublishTPDList(t *testing.T) {
 
 	tm.publishTPDList([]*Entry{&entry})
 	require.Equal(t, tpdListPath, cap.path)
+	// The leaf is gzipped on the wire; TPD's reader gunzips it.
+	require.NotEqual(t, cap.body, cxoutils.Gunzip(cap.body), "tp-list leaf should be published gzipped")
 
 	var got struct {
 		Version string         `json:"version,omitempty"`
 		Compact []CompactEntry `json:"c"`
 	}
-	require.NoError(t, json.Unmarshal(cap.body, &got))
+	require.NoError(t, json.Unmarshal(cxoutils.Gunzip(cap.body), &got))
 	require.Len(t, got.Compact, 1)
 	// Compact form drops the reporter's own PK and keeps the remote edge + type.
 	require.Equal(t, remote, got.Compact[0].Remote)
@@ -151,7 +154,7 @@ func TestManagerPublishTPDList(t *testing.T) {
 
 	// nil entries publishes an explicit empty list.
 	tm.publishTPDList(nil)
-	require.NoError(t, json.Unmarshal(cap.body, &got))
+	require.NoError(t, json.Unmarshal(cxoutils.Gunzip(cap.body), &got))
 	require.Empty(t, got.Compact)
 }
 
