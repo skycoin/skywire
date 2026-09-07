@@ -123,7 +123,12 @@ func populateEntryFromSummary(entry *HVVisorEntry, summary *Summary) {
 	entry.CountryCode = summary.Overview.CountryCode
 	entry.IsSymmetricNAT = summary.Overview.IsSymmetricNAT
 	entry.Transports = len(summary.Overview.Transports)
-	entry.TransportSummaries = summary.Overview.Transports
+	// Only the type and the direction survive: this entry feeds the
+	// node-list table (and `hv ls`, which reads the count alone), and
+	// it crosses dmsg on every HVListDirectVisors call. Sending the
+	// full per-transport detail put ~2.7 MB on the wire per poll for a
+	// three-sub-hypervisor tree. See compactTransportSummaries.
+	entry.TransportSummaries = compactTransportSummaries(summary.Overview.Transports)
 	entry.Apps = len(summary.Overview.Apps)
 	entry.ConfigVersion = summary.ConfigVersion
 	entry.RewardAddress = summary.RewardAddress

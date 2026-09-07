@@ -279,7 +279,7 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 							if visors[idx].Overview == nil {
 								return
 							}
-							visors[idx].Overview.Transports = full.Overview.Transports
+							visors[idx].Overview.Transports = compactTransportSummaries(full.Overview.Transports)
 						case <-time.After(5 * time.Second):
 						}
 					}(ft.idx, ft.pk)
@@ -372,6 +372,60 @@ func (hv *Hypervisor) collectLocalVisorSummaries() []Summary {
 	return out
 }
 
+// compactTransportSummaries projects transports down to the two fields
+// the node-list's Transports column actually renders — the type and
+// the direction — dropping the id, both public keys, the byte
+// counters, latency, throughput and the endpoint block.
+//
+// That array is essentially the whole node-list payload: on a
+// nine-visor deployment carrying 13.6k transports,
+// /api/visors-tree-summary measured 8,810,495 bytes, of which
+// 8,670,341 were overview.transports — and 3,082,324 of those were the
+// endpoint sub-object alone, whose remote_addr / local_addr strings
+// re-state the two public keys the entry already carries. The hvui
+// reads only `type`, `initiator` and the array length from it
+// (node-list.component.ts getTransportCounts / getTransportTotals).
+// Per-transport detail comes from /visors/{pk}/transports and
+// /visors/{pk}/summary, which are untouched.
+//
+// The JSON keys are unchanged, so an hvui build older than this one
+// still renders the column correctly against a newer hypervisor — it
+// just finds the fields it never read absent. TransportSummary's
+// MarshalJSON is what makes the dropped keys actually vanish rather
+// than serialize as zero-filled arrays.
+func compactTransportSummaries(in []*TransportSummary) []*TransportSummary {
+	if len(in) == 0 {
+		return in
+	}
+	out := make([]*TransportSummary, len(in))
+	for i, t := range in {
+		if t == nil {
+			continue
+		}
+		out[i] = &TransportSummary{Type: t.Type, Initiator: t.Initiator}
+	}
+	return out
+}
+
+// compactSummaryTransports applies compactTransportSummaries to a
+// slice of summaries bound for a node-list response.
+//
+// Overview is copied rather than mutated in place: the *Overview a
+// Summary carries is shared with hv.summaryCache, and the per-visor
+// detail endpoints serve out of that cache.
+func compactSummaryTransports(in []Summary) []Summary {
+	for i := range in {
+		ov := in[i].Overview
+		if ov == nil || len(ov.Transports) == 0 {
+			continue
+		}
+		cp := *ov
+		cp.Transports = compactTransportSummaries(ov.Transports)
+		in[i].Overview = &cp
+	}
+	return in
+}
+
 // projectEntryTransports returns the per-transport detail the
 // node-list's Transports column iterates. Prefers the full
 // TransportSummaries field populated post-#2789. Falls back to a slice
@@ -381,7 +435,10 @@ func (hv *Hypervisor) collectLocalVisorSummaries() []Summary {
 // least sees the right total instead of a "-" dash.
 func projectEntryTransports(e HVVisorEntry) []*TransportSummary {
 	if len(e.TransportSummaries) > 0 {
-		return e.TransportSummaries
+		// Compacted here as well as at the source (see
+		// populateEntryFromSummary) because a sub-hypervisor running
+		// an older binary still sends the full per-transport detail.
+		return compactTransportSummaries(e.TransportSummaries)
 	}
 	if e.Transports <= 0 {
 		return nil
@@ -792,6 +849,6 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 			}
 		}
 
-		httputil.WriteJSON(w, r, http.StatusOK, summaries)
+		httputil.WriteJSON(w, r, http.StatusOK, compactSummaryTransports(summaries))
 	}
 }
