@@ -20,10 +20,19 @@ Build & serve:
 Desktop bridge:
   notify   show a remote visor's app notifications on THIS machine (SSE bridge)
 
-Browser automation (CDP — needs --remote-debugging-port=9222):
+Browser automation (needs --remote-debugging-port):
   probe    watch one page load and stream console, exceptions and crashes
+  eval     evaluate JavaScript in a page
+  drive    hold a persistent WebDriver BiDi session on a local control port
   shell    drive the visor shell in a browser tab and capture the result
-  eval     evaluate JavaScript on a specific CDP target by webSocketDebuggerUrl`,
+
+probe and eval speak CDP to Chromium/Brave and WebDriver BiDi to
+Waterfox/Firefox, detected from the debug port. shell is CDP-only: it
+synthesizes keystrokes, which BiDi's input.* module would be needed for.
+
+Firefox allows ONE BiDi session and does not release it when a socket drops.
+Run drive once and point --driver at it rather than spending a session per
+command.`,
 }
 
 func init() {
