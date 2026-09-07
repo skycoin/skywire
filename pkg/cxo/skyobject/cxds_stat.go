@@ -29,7 +29,7 @@ type cxdsStat struct {
 	closeo sync.Once
 }
 
-func newCxdsStat(rollAvgSamples int) (c *cxdsStat) {
+func newCxdsStat(rollAvgSamples int, rollingAverages bool) (c *cxdsStat) {
 
 	c = new(cxdsStat)
 
@@ -42,7 +42,12 @@ func newCxdsStat(rollAvgSamples int) (c *cxdsStat) {
 
 	c.quit = make(chan struct{})
 
-	go c.secondLoop()
+	// Same reasoning as newIndexStat: these rolling averages surface only via
+	// Container.Stat() -> Node.Stat() -> the node RPC, so a node with no RPC
+	// listener never reads them. See Config.TrackRollingAverages.
+	if rollingAverages {
+		go c.secondLoop()
+	}
 
 	return
 }

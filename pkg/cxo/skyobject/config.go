@@ -105,6 +105,22 @@ type Config struct {
 	// statistic
 	RollAvgSamples int
 
+	// TrackRollingAverages runs the per-second goroutines that roll the
+	// statistics above into moving averages. Default true.
+	//
+	// Those averages are readable only through Container.Stat() -> Node.Stat()
+	// -> the node RPC, so a node started without an RPC listener has no way to
+	// observe them and the goroutines tick once a second for nobody. The node
+	// clears this for itself when conf.RPC is empty (see node.NewNode), which
+	// is every in-visor CXO construction — treestore publisher and subscriber,
+	// cxoaggregate and cxopreview — seven nodes per visor, each running two of
+	// these loops. Costly out of proportion on the single-threaded js/wasm
+	// visor, where every wakeup is a full scheduler cycle.
+	//
+	// Counters and totals are unaffected; only the derived per-second averages
+	// stop advancing, and only where nothing could read them.
+	TrackRollingAverages bool
+
 	// Cache configs. Set the CacheMaxAmount or the
 	// CacheMaxVolume to zero to switch the cache off
 
@@ -225,6 +241,7 @@ func NewConfig() (conf *Config) {
 
 	conf.Degree = Degree
 	conf.RollAvgSamples = RollAvgSamples
+	conf.TrackRollingAverages = true
 
 	// cache configs
 
