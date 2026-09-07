@@ -141,9 +141,24 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 		return fmt.Errorf("SaveRoutingRules: %w", err)
 	}
 
+	// Every rejection below must also drop the rules SaveRoutingRules just
+	// installed, exactly as appendRouteAsymmetric does. A refused aux leg is
+	// never added to the group, so nothing will ever read or expire these two
+	// rules through the group; and the setup node cannot clean them up either —
+	// CreateRouteGroup only records the destination edge in its teardown tracker
+	// AFTER AddEdgeRules returns ok, so a refusal leaves the pair pinned until
+	// the ~10-minute keepalive GC. On the live network the duplicate-transport
+	// refusal below fires often enough (98 of 128 sampled route-setup failures)
+	// that the leak is a standing rule-table and transport-pin cost on every
+	// popular exit.
+	drop := func() {
+		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+	}
+
 	nextTpID := rules.Forward.NextTransportID()
 	tp := r.tm.Transport(nextTpID)
 	if tp == nil {
+		drop()
 		return fmt.Errorf("transport %s not found for additional mux route", nextTpID)
 	}
 
@@ -151,6 +166,7 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	// A dmsg server is an opaque intermediary; multiplexing routes that share or
 	// overlap dmsg servers can loop traffic with no way to detect it.
 	if tp.Entry.Type == tptypes.DMSG {
+		drop()
 		return errors.New("refusing to append DMSG transport to mux route group")
 	}
 	nrg.rg.mu.Lock()
@@ -160,11 +176,25 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 		}
 		if existing.Entry.Type == tptypes.DMSG {
 			nrg.rg.mu.Unlock()
+			drop()
 			return errors.New("refusing to mux: route group already contains a DMSG transport")
 		}
 		// Mux invariant: no two legs share a transport (see appendRouteAsymmetric).
+		//
+		// This refusal MUST stay an error. The rules carry freshly reserved route
+		// IDs and the far end has been told this leg exists; answering the setup
+		// node "ok" would make the initiator append a leg locally whose consume
+		// rule here has been discarded, so everything the peer stripes onto it is
+		// dropped — and because the reorder buffer is lossless, the missing
+		// sequences head-of-line-stall the whole group (the black-hole failure
+		// mode documented at addOneAuxLeg). The duplicate is not idempotent
+		// either: it is a DIFFERENT route-ID chain over the same physical link,
+		// which is exactly what #3954 removed. The fix for the churn is to stop
+		// the initiator from planning a leg over a transport we already hold —
+		// see DialOptions.ExcludeRemoteTransportIDs — not to accept it here.
 		if existing.Entry.ID == nextTpID {
 			nrg.rg.mu.Unlock()
+			drop()
 			return fmt.Errorf("refusing to append mux leg over transport %s already in the group", nextTpID)
 		}
 	}
@@ -253,6 +283,17 @@ func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []rout
 	}
 	nrg.rg.mu.Unlock()
 
+	// Same rejection, on the DESTINATION's side of the leg. The setup node gives
+	// the destination the reverse route's first-hop ForwardRule, so its route
+	// group registers rev[0].TpID for this leg and its own duplicate-transport
+	// guard refuses a second leg over a transport it already holds. Catch it at
+	// this commit boundary — the one chokepoint every explicit-hops caller passes
+	// through — so a doomed leg never reaches the setup node. Derived from the
+	// LIVE legs, so a pruned leg immediately frees its far-end transport again.
+	if remoteIDs := nrg.rg.remoteLegTransportIDs(); firstHopTransportExcluded(rev, remoteIDs) {
+		return fmt.Errorf("reverse path leaves the destination over transport %s, which already carries one of its legs (the destination would refuse this leg)", rev[0].TpID)
+	}
+
 	// Hard mux invariants, enforced at the commit boundary so they hold for
 	// every caller (GrowMuxRoute's planner and external callers that supply
 	// explicit hops alike): (b) neither the forward nor the reverse path may
@@ -312,7 +353,7 @@ func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []rout
 
 	// Record this leg's full forward route so the per-leg mux view can show
 	// its whole path (all hops, full PKs, per-hop transport type).
-	nrg.rg.recordLegHops(fwd)
+	nrg.rg.recordLegRoute(fwd, rev)
 
 	r.logger.Infof("Added mux route via %d-hop path (first tp=%s) to route group %s", len(fwd), tpID, desc.String())
 	return nil
@@ -362,6 +403,12 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 	}
 	nrg.rg.mu.Unlock()
 
+	// Far-end transports the live legs already occupy: the destination refuses a
+	// leg whose reverse leaves it over one of these (see
+	// DialOptions.ExcludeRemoteTransportIDs), so they are excluded from the
+	// reverse pick and accumulated per planned leg just like excludeIDs.
+	excludeRemoteIDs := nrg.rg.remoteLegTransportIDs()
+
 	deficit := target - current
 	if deficit <= 0 {
 		return 0, nil
@@ -383,15 +430,16 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 			break
 		}
 		muxOpts := &DialOptions{
-			MinForwardRts:          1,
-			MaxForwardRts:          1,
-			MinConsumeRts:          1,
-			MaxConsumeRts:          1,
-			Retries:                1,
-			MinHops:                minHops,
-			ExcludeTransportIDs:    excludeIDs,
-			ExcludeIntermediatePKs: excludePKs,
-			ExcludeDMSG:            true,
+			MinForwardRts:             1,
+			MaxForwardRts:             1,
+			MinConsumeRts:             1,
+			MaxConsumeRts:             1,
+			Retries:                   1,
+			MinHops:                   minHops,
+			ExcludeTransportIDs:       excludeIDs,
+			ExcludeRemoteTransportIDs: excludeRemoteIDs,
+			ExcludeIntermediatePKs:    excludePKs,
+			ExcludeDMSG:               true,
 		}
 
 		// Route-finder FIRST, local calc as fallback — matching the initial mux
@@ -472,6 +520,22 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 			}
 		}
 
+		// Destination-side twin of the check above: the destination's route group
+		// holds one transport per leg — the reverse route's first hop — and
+		// refuses a second leg over one it already has. Independent forward/reverse
+		// ranking plus a 0-intermediate reverse (nothing for ExcludeIntermediatePKs
+		// to reject) makes that the finder's default answer, so without this gate
+		// every iteration pays a setup-node round trip to be refused.
+		if firstHopTransportExcluded(rev, excludeRemoteIDs) {
+			consecutiveFailures++
+			log.Debugf("GrowMuxRoute: planned leg %d/%d has a reverse leaving the destination over transport %s, which already carries one of its legs (it would be refused); skipping before dial",
+				current+added+1, target, rev[0].TpID)
+			if consecutiveFailures >= maxConsecutiveFailures {
+				break
+			}
+			continue
+		}
+
 		if err := r.AddMuxRouteByHops(desc, fwd, rev); err != nil {
 			consecutiveFailures++
 			log.Debugf("GrowMuxRoute: add leg %d/%d failed: %v", current+added+1, target, err)
@@ -481,6 +545,9 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 			continue
 		}
 		excludeIDs = append(excludeIDs, fwd[0].TpID)
+		if len(rev) > 0 {
+			excludeRemoteIDs = append(excludeRemoteIDs, rev[0].TpID)
+		}
 		consecutiveFailures = 0
 		added++
 	}

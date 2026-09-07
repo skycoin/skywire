@@ -69,8 +69,15 @@ const warmPlanBucketCap = 64
 type routePlan struct {
 	fwd     []routing.Hop
 	rev     []routing.Hop
-	firstTp uuid.UUID       // fwd[0].TpID — the first-hop transport this plan rides
-	inter   []cipher.PubKey // intermediate visor PKs (for disjointness matching)
+	firstTp uuid.UUID // fwd[0].TpID — the first-hop transport this plan rides
+	// remoteTp is rev[0].TpID — the transport the DESTINATION would install this
+	// leg over (the setup node hands it the reverse route's first-hop
+	// ForwardRule). Matched against the caller's far-end exclude set so a cached
+	// plan the destination is certain to refuse is never re-served: the bucket
+	// dedupes on firstTp alone, so without this a single such plan is handed out
+	// for its whole TTL and every hit becomes a wasted setup-node round trip.
+	remoteTp uuid.UUID
+	inter    []cipher.PubKey // intermediate visor PKs (for disjointness matching)
 }
 
 // planKey identifies a bucket of disjoint plans to one exit at one min-hops
@@ -148,6 +155,9 @@ func (p *warmRoutePool) put(dst cipher.PubKey, minHops uint16, fwd, rev []routin
 		firstTp: fwd[0].TpID,
 		inter:   planIntermediates(fwd),
 	}
+	if len(rev) > 0 {
+		plan.remoteTp = rev[0].TpID
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	b := p.byExit[key]
@@ -177,9 +187,14 @@ func (p *warmRoutePool) put(dst cipher.PubKey, minHops uint16, fwd, rev []routin
 // disjointFrom reports whether plan's first-hop transport and intermediates
 // avoid the caller's per-group exclude sets — the same disjointness the caller
 // would demand of a freshly-fetched leg.
-func (pl *routePlan) disjointFrom(excludeTps map[uuid.UUID]struct{}, excludePKs map[cipher.PubKey]struct{}) bool {
+func (pl *routePlan) disjointFrom(excludeTps, excludeRemoteTps map[uuid.UUID]struct{}, excludePKs map[cipher.PubKey]struct{}) bool {
 	if _, bad := excludeTps[pl.firstTp]; bad {
 		return false
+	}
+	if pl.remoteTp != (uuid.UUID{}) {
+		if _, bad := excludeRemoteTps[pl.remoteTp]; bad {
+			return false
+		}
 	}
 	for _, pk := range pl.inter {
 		if _, bad := excludePKs[pk]; bad {
@@ -194,7 +209,11 @@ func (pl *routePlan) disjointFrom(excludeTps map[uuid.UUID]struct{}, excludePKs 
 // ok=false on a miss. The returned slices are the cached copies — callers feed
 // them into a setup-node Dial (read-only) and run their usual validMuxLeg gate,
 // so aliasing is safe. A miss is a clean signal to fall back to fetchBestRoutes.
-func (p *warmRoutePool) bestPlan(dst cipher.PubKey, minHops uint16, excludeTps []uuid.UUID, excludePKs []cipher.PubKey) (fwd, rev []routing.Hop, ok bool) {
+// excludeRemoteTps is the far-end (destination) transport set the plan's
+// REVERSE first hop must avoid — the destination refuses a leg over a transport
+// its own route group already holds, so a plan matching one of these is a
+// guaranteed setup-node failure and must not be served from cache.
+func (p *warmRoutePool) bestPlan(dst cipher.PubKey, minHops uint16, excludeTps, excludeRemoteTps []uuid.UUID, excludePKs []cipher.PubKey) (fwd, rev []routing.Hop, ok bool) {
 	if p == nil {
 		return nil, nil, false
 	}
@@ -202,6 +221,10 @@ func (p *warmRoutePool) bestPlan(dst cipher.PubKey, minHops uint16, excludeTps [
 	exTp := make(map[uuid.UUID]struct{}, len(excludeTps))
 	for _, id := range excludeTps {
 		exTp[id] = struct{}{}
+	}
+	exRemoteTp := make(map[uuid.UUID]struct{}, len(excludeRemoteTps))
+	for _, id := range excludeRemoteTps {
+		exRemoteTp[id] = struct{}{}
 	}
 	exPK := make(map[cipher.PubKey]struct{}, len(excludePKs))
 	for _, pk := range excludePKs {
@@ -218,7 +241,7 @@ func (p *warmRoutePool) bestPlan(dst cipher.PubKey, minHops uint16, excludeTps [
 		return nil, nil, false
 	}
 	for i := range b.plans {
-		if b.plans[i].disjointFrom(exTp, exPK) {
+		if b.plans[i].disjointFrom(exTp, exRemoteTp, exPK) {
 			p.hits++
 			return b.plans[i].fwd, b.plans[i].rev, true
 		}

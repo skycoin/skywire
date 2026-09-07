@@ -280,6 +280,32 @@ type DialOptions struct {
 	ReverseHops           []routing.Hop // If set, use these hops for reverse path (skips route calculation)
 	MuxRoutes             int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
 	ExcludeTransportIDs   []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
+	// ExcludeRemoteTransportIDs is the DESTINATION-side analog of
+	// ExcludeTransportIDs: transport IDs the REVERSE path must not leave the
+	// destination over.
+	//
+	// Why it exists: the setup node hands the destination `respEdge.Forward`,
+	// which is the ForwardRule generated for the REVERSE route's first hop
+	// (setupnode.go GenerateRules — fwdRules is keyed by each route's
+	// Hops[0].From, and the reverse route starts at the destination). So the
+	// destination's route group registers one transport per leg, and that
+	// transport is exactly `Reverse[0].TpID` of the plan the initiator dialed.
+	// appendRouteToGroup then refuses any leg whose transport is already in
+	// that set ("refusing to append mux leg over transport %s already in the
+	// group"), because two legs over one link break the mux data plane (#3954).
+	//
+	// The forward and reverse paths are ranked INDEPENDENTLY (pickDisjointPath),
+	// and a 0-intermediate direct reverse carries no intermediates to exclude —
+	// so ExcludeIntermediatePKs cannot keep a new leg's reverse off the direct
+	// transport the destination is already using for the primary leg. Without
+	// this field every aux mux leg to such a destination is planned, dialed
+	// through the setup node (full ID reservation + intermediary rule install)
+	// and then refused: the churn measured on the live setup nodes.
+	//
+	// Populated by the aux-mux-leg planners from the group's live legs
+	// (RouteGroup.remoteLegTransportIDs). Unset for every non-mux dial, which
+	// is therefore byte-identical to before.
+	ExcludeRemoteTransportIDs []uuid.UUID
 	// Datagram, when true, asks the dial to build a faithful-UDP
 	// DatagramRouteGroup sibling over the established route (#2607).
 	// The route's reliable RouteGroup is still set up exactly as
