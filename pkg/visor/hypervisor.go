@@ -1067,26 +1067,39 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			r.Get("/{pk}", hv.getPty())
 		})
 
-		// Mount tp-viz UI if enabled
+		// Mount tp-viz UI if enabled.
+		//
+		// Inside its own authenticated group: these paths sit OUTSIDE the
+		// r.Route("/api") group above, so before this they carried no session
+		// check at all — including the two POSTs that add and remove transports
+		// on the visor. Registering them here with the same Authorize middleware
+		// the rest of the hypervisor uses keeps every path identical while
+		// putting them behind the session.
 		if hv.tpvizServer != nil {
-			r.Mount("/tp-viz", http.StripPrefix("/tp-viz", hv.tpvizServer.Handler()))
-			// tp-viz bundle.js uses absolute paths like /api/health, /api/transports etc.
-			// Mount the tp-viz handler at root to serve those paths too.
-			tpvHandler := hv.tpvizServer.Handler()
-			r.Get("/api/health", tpvHandler.ServeHTTP)
-			r.Get("/api/transports", tpvHandler.ServeHTTP)
-			r.Get("/api/uptimes", tpvHandler.ServeHTTP)
-			r.Get("/api/services", tpvHandler.ServeHTTP)
-			r.Get("/api/ip-groups", tpvHandler.ServeHTTP)
-			r.Get("/api/local-visor", tpvHandler.ServeHTTP)
-			r.Get("/api/tps/status", tpvHandler.ServeHTTP)
-			r.Post("/api/tps/add-transport", tpvHandler.ServeHTTP)
-			r.Post("/api/tps/remove-transport", tpvHandler.ServeHTTP)
-			r.Get("/api/tps/refresh-transports", tpvHandler.ServeHTTP)
-			r.Post("/api/local/add-transport", tpvHandler.ServeHTTP)
-			r.Get("/api/dmsg/servers", tpvHandler.ServeHTTP)
-			r.Get("/api/dmsg/entries", tpvHandler.ServeHTTP)
-			r.Get("/api/dmsg/health", tpvHandler.ServeHTTP)
+			r.Group(func(r chi.Router) {
+				if hv.c.EnableAuth {
+					r.Use(hv.users.Authorize)
+				}
+
+				r.Mount("/tp-viz", http.StripPrefix("/tp-viz", hv.tpvizServer.Handler()))
+				// tp-viz bundle.js uses absolute paths like /api/health, /api/transports etc.
+				// Mount the tp-viz handler at root to serve those paths too.
+				tpvHandler := hv.tpvizServer.Handler()
+				r.Get("/api/health", tpvHandler.ServeHTTP)
+				r.Get("/api/transports", tpvHandler.ServeHTTP)
+				r.Get("/api/uptimes", tpvHandler.ServeHTTP)
+				r.Get("/api/services", tpvHandler.ServeHTTP)
+				r.Get("/api/ip-groups", tpvHandler.ServeHTTP)
+				r.Get("/api/local-visor", tpvHandler.ServeHTTP)
+				r.Get("/api/tps/status", tpvHandler.ServeHTTP)
+				r.Post("/api/tps/add-transport", tpvHandler.ServeHTTP)
+				r.Post("/api/tps/remove-transport", tpvHandler.ServeHTTP)
+				r.Get("/api/tps/refresh-transports", tpvHandler.ServeHTTP)
+				r.Post("/api/local/add-transport", tpvHandler.ServeHTTP)
+				r.Get("/api/dmsg/servers", tpvHandler.ServeHTTP)
+				r.Get("/api/dmsg/entries", tpvHandler.ServeHTTP)
+				r.Get("/api/dmsg/health", tpvHandler.ServeHTTP)
+			})
 		}
 
 		// Route visualizer: a self-contained static page (no Angular build)
