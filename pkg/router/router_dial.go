@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"net"
 	"sort"
 	"strings"
@@ -1954,12 +1953,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	log.Debugf("Calculating route locally from %s to %s (self-ping=%v)", src, dst, isSelfPing)
 
 	// Collect local transports
-	type localTp struct {
-		id       uuid.UUID
-		remotePK cipher.PubKey
-		tpType   string
-	}
-	var localTps []localTp
+	var localTps []localTpRef
 
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		if tp == nil {
@@ -1978,7 +1972,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		if tp.Entry.Label == transport.LabelSetup {
 			return true
 		}
-		localTps = append(localTps, localTp{
+		localTps = append(localTps, localTpRef{
 			id:       tp.Entry.ID,
 			remotePK: tp.Entry.RemoteEdge(src),
 			tpType:   string(tp.Entry.Type),
@@ -1992,10 +1986,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 
 	// Sort local transports by type preference so direct types (STCPR > SUDPH > STCP)
 	// are tried before DMSG. WalkTransports iteration order is undefined.
-	sort.SliceStable(localTps, func(i, j int) bool {
-		return tptypes.TypePreference(tptypes.Type(localTps[i].tpType)) <
-			tptypes.TypePreference(tptypes.Type(localTps[j].tpType))
-	})
+	sort.Stable(localTpsByTypePref(localTps))
 
 	log.Debugf("Found %d local transports", len(localTps))
 
@@ -2067,7 +2058,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		tpLatencyMs      map[uuid.UUID]float64
 		tpTypeOf         map[uuid.UUID]string
 		tpThroughput     map[uuid.UUID]float64
-		snapVersion      time.Time // TPD-snapshot generation, for the local-route memo (zero on the no-cache path)
+		snapGen          uint64 // TPD-snapshot generation, for the local-route memo (zero on the no-cache path)
 	)
 	if r.tpdCache != nil {
 		snap, serr := r.tpdCache.snapshot(ctx, dc.GetAllTransports, versionProbe(dc))
@@ -2082,7 +2073,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		tpLatencyMs = snap.latencyByID
 		tpTypeOf = snap.typeByID
 		tpThroughput = snap.throughputByID
-		snapVersion = snap.version
+		snapGen = snap.gen
 	} else {
 		allEntries, err = dc.GetAllTransports(ctx)
 		if err != nil {
@@ -2181,196 +2172,56 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// single js/wasm thread. Only the plain case (no DisjointMux intermediate
 	// exclusions) is memoized; the mux path varies the exclusions per leg on purpose
 	// and must always recompute.
+	//
+	// The generation is snapGen, a counter the snapshot cache bumps on every
+	// rebuild — NOT the CXO sync timestamp it used to be. That timestamp is the
+	// zero time on the cache's TTL path (a discovery client with no CXO version
+	// signal, or a CXO feed that hasn't primed), and the memo used to require it
+	// to be non-zero, so on exactly the visor this cache exists for — the wasm
+	// visor, whose big tpd-all-transports feed frequently never primes — the memo
+	// was unconditionally disabled and every dial re-ran the whole BFS.
 	var (
 		memoKey     localRouteKey
-		memoEnabled = len(excludeIntermediates) == 0 && r.localRoutes != nil && !snapVersion.IsZero()
+		memoEnabled = len(excludeIntermediates) == 0 && r.localRoutes != nil && snapGen != 0
 		localSig    uint64
 	)
 	if memoEnabled {
-		h := fnv.New64a()
-		for i := range localTps {
-			id := localTps[i].id
-			_, _ = h.Write(id[:])
-		}
-		localSig = h.Sum64()
+		localSig = localTpSignature(localTps)
 		memoKey = localRouteKey{src: src, dst: dst, min: minHops, max: maxHops}
-		if fwd, rev, ok := r.localRoutes.get(snapVersion, localSig, memoKey); ok {
+		if fwd, rev, found, ok := r.localRoutes.get(snapGen, localSig, memoKey); ok {
+			if !found {
+				log.Debugf("Local-route memo hit (no path) %s→%s (min=%d max=%d)", src, dst, minHops, maxHops)
+				return nil, nil, fmt.Errorf("local BFS found no path to %s with min_hops=%d max_hops=%d", dst, minHops, maxHops)
+			}
 			log.Debugf("Local-route memo hit %s→%s (min=%d max=%d)", src, dst, minHops, maxHops)
 			return fwd, rev, nil
 		}
 	}
 
-	type bfsNode struct {
-		pk   cipher.PubKey
-		path []routing.Hop
+	best, level, found := localRouteBFS(src, dst, localTps, localBFSGraph{
+		byEdge:         transportsByEdge,
+		latencyByID:    tpLatencyMs,
+		typeByID:       tpTypeOf,
+		throughputByID: tpThroughput,
+	}, excludeIntermediates, minHops, maxHops)
+	if !found {
+		// Cache the miss too. A search that finds nothing is the EXPENSIVE
+		// case — it exhausts the graph to maxHops instead of returning at the
+		// first level that reaches dst — and it is the common one on a visor
+		// with no path to the destination, where the caller retries. Leaving
+		// misses uncached meant the memo never covered the calls that cost
+		// the most.
+		if memoEnabled {
+			r.localRoutes.putMiss(snapGen, localSig, memoKey)
+		}
+		return nil, nil, fmt.Errorf("local BFS found no path to %s with min_hops=%d max_hops=%d", dst, minHops, maxHops)
 	}
-
-	// Seed the BFS with the local transports (each is a 1-hop path
-	// from src to a direct neighbor). Sort for determinism — same
-	// seeding order across calls means same expansion order.
-	//
-	// DMSG seeds are dropped here on purpose. A DMSG transport
-	// relays through a dmsg server (and, since server-to-server
-	// forwarding landed, potentially a chain of dmsg servers) that
-	// neither end of the route can observe — the intermediate
-	// server is unaccounted-for in the transport entry. Using a
-	// DMSG hop anywhere in a multihop route would let data transit
-	// the same dmsg server multiple times with no way to detect it.
-	// Direct DMSG dials (1-hop, src→dst over a DMSG transport) are
-	// fine and were already handled above; the BFS only produces
-	// multihop paths, so we strictly require non-DMSG hops here.
-	seed := make([]bfsNode, 0, len(localTps))
-	for _, tp := range localTps {
-		if tp.tpType == "dmsg" {
-			continue
-		}
-		if _, hit := excludeIntermediates[tp.remotePK]; hit {
-			continue
-		}
-		seed = append(seed, bfsNode{
-			pk: tp.remotePK,
-			path: []routing.Hop{
-				{TpID: tp.id, From: src, To: tp.remotePK},
-			},
-		})
+	log.Debugf("Local BFS found %d-hop route via %v", level, hopPath(best))
+	revPath := reverseHops(best)
+	if memoEnabled {
+		r.localRoutes.put(snapGen, localSig, memoKey, best, revPath)
 	}
-	sort.SliceStable(seed, func(i, j int) bool {
-		return pkLess(seed[i].pk, seed[j].pk)
-	})
-
-	// pkInPath returns true if pk already appears as a From or To in
-	// the path (loop prevention). Per-path membership, not global —
-	// the same intermediate can appear in different paths at
-	// different depths.
-	pkInPath := func(pk cipher.PubKey, path []routing.Hop) bool {
-		if len(path) > 0 && path[0].From == pk {
-			return true
-		}
-		for _, h := range path {
-			if h.To == pk {
-				return true
-			}
-		}
-		return false
-	}
-
-	// expandedAtDepth caches which (pk, depth) pairs we've already
-	// expanded — avoids redundant work when multiple inbound paths
-	// converge on the same node at the same depth. State capped to
-	// O(|visors| × MaxHops), bounded by Config.MaxHops. Without this
-	// the search could revisit identical (node, depth) combinations
-	// exponentially; with it, each (node, depth) is expanded at most
-	// once and the BFS stays linear in graph size.
-	expandedAtDepth := make(map[cipher.PubKey]map[int]bool)
-
-	// Per-TpID latency / type / throughput lookups (hydrated by the CXO
-	// telemetry aggregator on TPD's side) come prebuilt from the snapshot
-	// alongside transportsByEdge — see the derive comment above. Used to
-	// rank multiple same-level dst-hits below.
-	localLatencyFor := func(id uuid.UUID) float64 { return tpLatencyMs[id] }
-	localTypeFor := func(id uuid.UUID) string { return tpTypeOf[id] }
-	localThroughputFor := func(id uuid.UUID) float64 { return tpThroughput[id] }
-
-	queue := seed
-	for level := 1; level <= maxHops && len(queue) > 0; level++ {
-		nextQueue := make([]bfsNode, 0)
-		// Collect ALL dst-hits at this level, then pick the lowest-
-		// latency among them. Pre-fix this loop returned on the first
-		// hit, leaving the BFS's deterministic-by-PK ordering as the
-		// only tiebreaker — which empirically picked geo-distant
-		// intermediates over healthier same-hop-count alternatives.
-		var dstCandidates [][]routing.Hop
-		for _, node := range queue {
-			// Did we reach the destination at an acceptable depth?
-			if node.pk == dst && level >= minHops {
-				dstCandidates = append(dstCandidates, node.path)
-				continue
-			}
-			// Stop expanding nodes already at maxHops — children would
-			// exceed the cap.
-			if level >= maxHops {
-				continue
-			}
-			// Skip excluded intermediates (DisjointMux).
-			if _, hit := excludeIntermediates[node.pk]; hit {
-				continue
-			}
-			// Skip if we've already expanded this (pk, depth) — same
-			// children would be produced. Different from the previous
-			// global visited[pk] check, which (incorrectly) blocked
-			// the same node at OTHER depths and could shadow longer
-			// paths when a shorter one existed.
-			if expandedAtDepth[node.pk][level] {
-				continue
-			}
-			if expandedAtDepth[node.pk] == nil {
-				expandedAtDepth[node.pk] = make(map[int]bool)
-			}
-			expandedAtDepth[node.pk][level] = true
-			// Expand: every transport from this node to a new neighbor
-			// becomes a candidate next node, sorted by remote-PK for
-			// deterministic order. DMSG entries are skipped — see the
-			// seed-loop comment above; a DMSG hop anywhere in a
-			// multihop path makes the route unaccountable since the
-			// dmsg server (and any server-to-server hops) are
-			// invisible to both endpoints.
-			entries := transportsByEdge[node.pk]
-			children := make([]bfsNode, 0, len(entries))
-			for _, entry := range entries {
-				if entry == nil {
-					continue
-				}
-				if entry.Type == tptypes.DMSG {
-					continue
-				}
-				nextPK := entry.RemoteEdge(node.pk)
-				// Loop prevention: skip when the next PK is already
-				// part of this path. Per-path check (not global) —
-				// the same intermediate may legitimately appear in
-				// other paths at other depths.
-				if pkInPath(nextPK, node.path) {
-					continue
-				}
-				newPath := make([]routing.Hop, len(node.path), len(node.path)+1)
-				copy(newPath, node.path)
-				newPath = append(newPath, routing.Hop{
-					TpID: entry.ID,
-					From: node.pk,
-					To:   nextPK,
-				})
-				children = append(children, bfsNode{pk: nextPK, path: newPath})
-			}
-			sort.SliceStable(children, func(i, j int) bool {
-				return pkLess(children[i].pk, children[j].pk)
-			})
-			nextQueue = append(nextQueue, children...)
-		}
-		// If any dst-candidates were collected at this level, pick the
-		// lowest-latency one and return. BFS continues to higher levels
-		// only when no dst-hit happened — shorter paths still beat
-		// longer ones, as before; the change is purely a tiebreaker
-		// among same-hop-count candidates.
-		if len(dstCandidates) > 0 {
-			best := dstCandidates[0]
-			bestScore := pathLatencyScore(best, localLatencyFor, localTypeFor, localThroughputFor)
-			for _, p := range dstCandidates[1:] {
-				if s := pathLatencyScore(p, localLatencyFor, localTypeFor, localThroughputFor); s < bestScore {
-					best = p
-					bestScore = s
-				}
-			}
-			log.Debugf("Local BFS found %d-hop route via %v (best of %d same-level candidates, score=%.1fms)",
-				level, hopPath(best), len(dstCandidates), bestScore)
-			rev := reverseHops(best)
-			if memoEnabled {
-				r.localRoutes.put(snapVersion, localSig, memoKey, best, rev)
-			}
-			return best, rev, nil
-		}
-		queue = nextQueue
-	}
-
-	return nil, nil, fmt.Errorf("local BFS found no path to %s with min_hops=%d max_hops=%d", dst, minHops, maxHops)
+	return best, revPath, nil
 }
 
 // localRouteMemo caches calculateLocalRoutes' multi-hop BFS result. That BFS over
@@ -2389,7 +2240,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 // ExcludeIntermediatePKs per leg on purpose and must always recompute.
 type localRouteMemo struct {
 	mu       sync.Mutex
-	version  time.Time
+	gen      uint64
 	localSig uint64
 	m        map[localRouteKey]localRoutePair
 }
@@ -2399,42 +2250,74 @@ type localRouteKey struct {
 	min, max int
 }
 
-type localRoutePair struct{ fwd, rev []routing.Hop }
+// localRoutePair is one memoized answer. found=false records a searched-and-
+// empty result — the "no path" case, which costs MORE to compute than a hit
+// (it exhausts the graph rather than stopping at the first level that reaches
+// dst) and so is the one most worth caching.
+type localRoutePair struct {
+	fwd, rev []routing.Hop
+	found    bool
+}
 
 func newLocalRouteMemo() *localRouteMemo { return &localRouteMemo{} }
 
-// get returns cached (fwd, rev) copies for k when the memo's generation matches
-// the current snapshot version + local signature; a mismatch or miss returns ok
-// false so the caller recomputes (and put resets the generation).
-func (c *localRouteMemo) get(version time.Time, sig uint64, k localRouteKey) (fwd, rev []routing.Hop, ok bool) {
+// get returns the cached answer for k when the memo's generation matches the
+// current snapshot generation + local signature. ok=false means "not cached,
+// recompute"; ok=true with found=false means "cached: this search finds no
+// path".
+func (c *localRouteMemo) get(gen, sig uint64, k localRouteKey) (fwd, rev []routing.Hop, found, ok bool) {
+	if c == nil {
+		return nil, nil, false, false
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.m == nil || !c.version.Equal(version) || c.localSig != sig {
-		return nil, nil, false
+	if c.m == nil || c.gen != gen || c.localSig != sig {
+		return nil, nil, false, false
 	}
 	p, hit := c.m[k]
 	if !hit {
-		return nil, nil, false
+		return nil, nil, false, false
 	}
-	return append([]routing.Hop(nil), p.fwd...), append([]routing.Hop(nil), p.rev...), true
+	if !p.found {
+		return nil, nil, false, true
+	}
+	return append([]routing.Hop(nil), p.fwd...), append([]routing.Hop(nil), p.rev...), true, true
 }
 
 // put stores (fwd, rev) copies for k, resetting the whole generation first when the
-// snapshot version or local signature moved (keeps the map fresh and bounded).
-func (c *localRouteMemo) put(version time.Time, sig uint64, k localRouteKey, fwd, rev []routing.Hop) {
+// snapshot generation or local signature moved (keeps the map fresh and bounded).
+func (c *localRouteMemo) put(gen, sig uint64, k localRouteKey, fwd, rev []routing.Hop) {
 	if c == nil {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.m == nil || !c.version.Equal(version) || c.localSig != sig {
-		c.version = version
+	c.reseatLocked(gen, sig)
+	c.m[k] = localRoutePair{
+		fwd:   append([]routing.Hop(nil), fwd...),
+		rev:   append([]routing.Hop(nil), rev...),
+		found: true,
+	}
+}
+
+// putMiss records that k has no acceptable path in this generation.
+func (c *localRouteMemo) putMiss(gen, sig uint64, k localRouteKey) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.reseatLocked(gen, sig)
+	c.m[k] = localRoutePair{}
+}
+
+// reseatLocked drops the whole map when the generation moved, so a stale route
+// is never served and the map stays bounded to one graph's worth of entries.
+func (c *localRouteMemo) reseatLocked(gen, sig uint64) {
+	if c.m == nil || c.gen != gen || c.localSig != sig {
+		c.gen = gen
 		c.localSig = sig
 		c.m = make(map[localRouteKey]localRoutePair)
-	}
-	c.m[k] = localRoutePair{
-		fwd: append([]routing.Hop(nil), fwd...),
-		rev: append([]routing.Hop(nil), rev...),
 	}
 }
 
