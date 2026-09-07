@@ -82,9 +82,9 @@ func TestUpdateClientEntry_FirstPublishIsNotSkipped(t *testing.T) {
 	c.init(pk, sk, dc, logging.MustGetLogger("test"), time.Minute*5)
 	c.sessions[srvPK] = &SessionCommon{rPK: srvPK}
 
-	// initilizeClientEntry records an update before any session exists, so the
-	// periodic timer is NOT due when the first session lands. Without that the
-	// due-timer alone would force the write and hide the bug.
+	// Stand in for a publish that already landed, so the periodic timer is NOT
+	// due when the session lands. Without that the due-timer alone would force
+	// the write and hide the bug.
 	c.recordUpdate()
 	_, due := c.updateIsDue()
 	require.False(t, due, "test setup: the first publish must race a not-due timer")
