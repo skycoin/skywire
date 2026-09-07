@@ -239,7 +239,7 @@ export function updateCountdown(): void {
 
 export async function syncWithServer(): Promise<void> {
     try {
-        const resp = await fetchWithTimeout('/api/health', 5000);
+        const resp = await fetchWithTimeout(API_BASE + '/api/health', 5000);
         if (resp.ok) {
             const info = await resp.json();
             console.log('Server health:', info);
@@ -267,7 +267,7 @@ function startRefreshTimer(secondsUntilRefresh: number): void {
 
 export async function checkServer(): Promise<void> {
     try {
-        const resp = await fetch('/api/health');
+        const resp = await fetch(API_BASE + '/api/health');
         if (resp.ok) {
             const info = await resp.json();
             setServerCacheAge(info.cache_max_age);

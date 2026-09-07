@@ -1,8 +1,23 @@
 // Color and configuration constants
 
-export const API_BASE = window.location.hostname === '' || window.location.protocol === 'file:'
+// API_BASE prefixes every REST call. Default: same-origin, except when the page
+// was opened from disk (file:) where there is no origin to serve from.
+//
+// A `let` with a setter rather than a const because an embedding host may need
+// to point the bundle somewhere other than its own origin — the in-tab wasm
+// visor serves this API over vnet, not from the page's origin. ESM live
+// bindings mean the 20-odd `API_BASE + '/api/...'` call sites pick the new
+// value up without threading it through every function. Set it via
+// SkywireTpviz.mount(el, { apiBase }) BEFORE the first fetch.
+export let API_BASE = window.location.hostname === '' || window.location.protocol === 'file:'
     ? 'https://tpd.skywire.skycoin.com'
     : '';
+
+// setApiBase overrides the REST prefix. Pass '' to mean same-origin. A trailing
+// slash is trimmed so callers can pass either form.
+export function setApiBase(base: string): void {
+    API_BASE = base.replace(/\/+$/, '');
+}
 
 export const WS_MAX_RECONNECT_DELAY = 30000;
 // Give up on the /ws/local-visor upgrade after this many failed attempts and
