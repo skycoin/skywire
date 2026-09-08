@@ -82,8 +82,8 @@ github.com/0magnet/coloredcobra v1.0.3 h1:s/3WW+wAssjMEKgzlXWcQ6PGSoKJIoambL68yt
 github.com/0magnet/coloredcobra v1.0.3/go.mod h1:Kn7dmRJcnVybFNKY0FNUjLcsivW4FCbAec8ZfVmz51I=
 github.com/0magnet/cosmos-go v0.0.0-20260908144221-45e3d0561585 h1:G2m5S+A3CMsHobihQUfsl2ZLnepQCPjeWcwDp7505Rs=
 github.com/0magnet/cosmos-go v0.0.0-20260908144221-45e3d0561585/go.mod h1:dp0q1zfKQmTaohUrPEPZbPExxBWLu9DyeaFxKUBnw6Y=
-github.com/0magnet/desk v0.0.0-20260908190105-9bb2944487db h1:EerFzR/1OAe/NG6r1ysuG1+lyS0qMJ6YwaoognLG6gY=
-github.com/0magnet/desk v0.0.0-20260908190105-9bb2944487db/go.mod h1:L+8Y1fP55UjK6RFOG0iAsR9oO6zXidCr9LZJy+8oN/k=
+github.com/0magnet/desk v0.0.0-20260908195947-f72d9b0a9bb1 h1:818rzhVmbPOZLtwshwHs04zsFLv/Q5GXdt+oLwZg6CY=
+github.com/0magnet/desk v0.0.0-20260908195947-f72d9b0a9bb1/go.mod h1:L+8Y1fP55UjK6RFOG0iAsR9oO6zXidCr9LZJy+8oN/k=
 github.com/0magnet/desk/panes v0.0.0-20260908190105-9bb2944487db h1:t/kQDGFMvKhpRBTdEjiLCkVG9Pe/qmDuD8D65DJrdrs=
 github.com/0magnet/desk/panes v0.0.0-20260908190105-9bb2944487db/go.mod h1:EDtFhI1TlDPunQIoT8IRbhe8wa5R4GAI+iL04vQDk2Y=
 github.com/0magnet/go-dsp v0.0.0-20260907230215-136ba239cc2d h1:AE2MbqkqaB88h+jtiWo5aI6zODI+0QZZRI4lY0p9Fhw=
@@ -100,8 +100,8 @@ github.com/0magnet/lolcat-go v0.0.0-20260907230215-22c54b7702c7 h1:0l4PGiCpSu06V
 github.com/0magnet/lolcat-go v0.0.0-20260907230215-22c54b7702c7/go.mod h1:DbbClVrvQ558CvwGWU78xx0k03aEY/uS9qf5Wtw+n3o=
 github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c h1:Uj+2n5pWraLqGRmu9uFMZDr2TImQN0LqLUSSMd92iWk=
 github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c/go.mod h1:9MHaZG+XGoXfQW/L7yOpJx/gbKmCynAejV3Xpll/usw=
-github.com/0magnet/netscrape v0.0.0-20260908062733-9acf9bfa0061 h1:57zEXMWapu1Ta3yEImhq+JReM015aj7J99CCXVJhQR4=
-github.com/0magnet/netscrape v0.0.0-20260908062733-9acf9bfa0061/go.mod h1:8KUKD6yyp1VhFqWG8MYA+xM9CD+6cdjoNoXrhP/QMOM=
+github.com/0magnet/netscrape v0.0.0-20260908195716-c9218b3f4966 h1:d+xEuIADmGxnurlqSzVRIwV4KC9j32pgSTUVWT1eS+8=
+github.com/0magnet/netscrape v0.0.0-20260908195716-c9218b3f4966/go.mod h1:8KUKD6yyp1VhFqWG8MYA+xM9CD+6cdjoNoXrhP/QMOM=
 github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d h1:T/CISGqaX8Sw1F+SYH6Uz8UQTsSN4KBabrCLShG+WRk=
 github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d/go.mod h1:xNKk6t2OtJQfb/pmWNiH8zUi0YCBuhYAr+fYa+rQ46s=
 github.com/0magnet/plot-go v0.0.0-20260908184629-9cfdeb563e8f h1:P1mbxDg4oisWjKscItJzjTaT38BS59GRQ3uLzoNuojU=

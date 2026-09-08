@@ -556,6 +556,7 @@ func addTab(url string) {
 
 	onClick(t.btn, func() { activate(indexOf(t)) })
 	onClick(x, func() { closeTab(indexOf(t)) })
+	wireTabDrag(t)
 	// Middle-click closes a tab, as everywhere else.
 	t.btn.Call("addEventListener", "auxclick", js.FuncOf(func(_ js.Value, a []js.Value) any {
 		if len(a) > 0 && a[0].Get("button").Int() == 1 {
@@ -822,8 +823,20 @@ func Navigate(url string) {
 // NewTab opens url in a new tab. With background true the current tab keeps
 // focus — the browser-style "open in background tab" a host uses to preload
 // secondary pages behind the one the user is looking at. A no-op before Open.
+//
+// The first host-driven tab REPLACES the start page rather than joining it.
+// Open has to show something, so it opens the built-in page; a host that then
+// names its own first page (the visor desk opens its hypervisor UI) was left
+// with a "new tab" nobody asked for sitting first in the strip. The
+// replacement happens only while that tab is still the untouched start page —
+// one tab, no history — so a person who has begun using it keeps it.
 func NewTab(url string, background bool) {
 	if doc.IsUndefined() {
+		return
+	}
+	if len(tabs) == 1 && isUntouchedStart(tabs[0]) {
+		navigate(tabs[0], url)
+		activate(0)
 		return
 	}
 	prev := active
@@ -831,4 +844,85 @@ func NewTab(url string, background bool) {
 	if background && prev >= 0 && prev < len(tabs) {
 		activate(prev)
 	}
+}
+
+// isUntouchedStart reports whether t is still the tab Open created and nobody
+// has used: its only history entry is the start page.
+func isUntouchedStart(t *tab) bool {
+	return t != nil && len(t.hist) == 1 && t.pos == 0 && t.hist[0] == home()
+}
+
+// TabStrip returns the tab strip element once Open has built it, so a host can
+// move it out of the browser's own box — into its window's title bar, where a
+// browser keeps its tabs, level with the window controls. The strip keeps
+// working wherever it lives: tabs are wired to their frames, not to their
+// parent. Undefined before Open.
+func TabStrip() js.Value {
+	return strip
+}
+
+// dragging is the tab being dragged across the strip, nil between drags.
+var dragging *tab
+
+// wireTabDrag lets a tab be picked up and dropped on another to reorder them,
+// the way every browser's strip works. HTML5 drag events, not pointer math:
+// the strip may live in a window's title bar whose own pointer handler moves
+// the window, and a native drag does not start one of those.
+func wireTabDrag(t *tab) {
+	t.btn.Set("draggable", true)
+	t.btn.Call("addEventListener", "dragstart", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		dragging = t
+		if len(a) > 0 {
+			if dt := a[0].Get("dataTransfer"); dt.Truthy() {
+				dt.Set("effectAllowed", "move")
+				// Some engines cancel the drag with an empty payload.
+				dt.Call("setData", "text/plain", labelFor(t.hist[t.pos]))
+			}
+		}
+		return nil
+	}))
+	t.btn.Call("addEventListener", "dragover", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if dragging != nil && dragging != t && len(a) > 0 {
+			a[0].Call("preventDefault") // allow the drop
+			if dt := a[0].Get("dataTransfer"); dt.Truthy() {
+				dt.Set("dropEffect", "move")
+			}
+		}
+		return nil
+	}))
+	t.btn.Call("addEventListener", "drop", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) > 0 {
+			a[0].Call("preventDefault")
+		}
+		if dragging != nil && dragging != t {
+			moveTab(indexOf(dragging), indexOf(t))
+		}
+		dragging = nil
+		return nil
+	}))
+	t.btn.Call("addEventListener", "dragend", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		dragging = nil
+		return nil
+	}))
+}
+
+// moveTab moves the tab at from to position to, in the slice and in the strip,
+// keeping the active tab active.
+func moveTab(from, to int) {
+	if from < 0 || to < 0 || from >= len(tabs) || to >= len(tabs) || from == to {
+		return
+	}
+	cur := tabs[active]
+	t := tabs[from]
+	tabs = append(tabs[:from], tabs[from+1:]...)
+	rest := append([]*tab{}, tabs[to:]...)
+	tabs = append(append(tabs[:to], t), rest...)
+	// Re-place the button before the one now following it, or before the +
+	// button when it moved to the end.
+	if to+1 < len(tabs) {
+		strip.Call("insertBefore", t.btn, tabs[to+1].btn)
+	} else {
+		strip.Call("insertBefore", t.btn, strip.Get("lastChild"))
+	}
+	active = indexOf(cur)
 }

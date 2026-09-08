@@ -88,7 +88,12 @@ func newTabset(win *winbox.WinBox) *tabset {
 	views := doc.Call("createElement", "div")
 	views.Get("style").Set("cssText", "position:relative;flex:1 1 auto;min-height:0")
 
-	body.Call("appendChild", strip)
+	// The strip lives in the title bar, level with the window controls, the way
+	// a browser keeps its tabs. Only if the window has no title bar does it
+	// fall back to the top of the body.
+	if !MountInHeader(win.DOM, strip) {
+		body.Call("appendChild", strip)
+	}
 	body.Call("appendChild", views)
 
 	ts := &tabset{win: win, strip: strip, views: views, active: -1}
