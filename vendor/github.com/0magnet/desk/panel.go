@@ -229,10 +229,23 @@ func (p *Panel) key(ev js.Value) {
 	}
 }
 
+// launchFromMenu starts an app the person picked, off the event callback.
+//
+// The goroutine is not decoration. This runs inside a DOM click (or keydown)
+// handler, and on js/wasm a syscall/js callback MUST NOT BLOCK: the Go runtime
+// is executing on the browser's event loop, so anything that waits for JS to
+// call back — a host filesystem read, a fetch, a worker — waits for a turn of
+// the loop that this handler is itself holding, and the page hangs with no
+// error anywhere. Mounting is exactly where a pane does that: a terminal over
+// the machine's filesystem asks the host for /bin before it can draw a prompt.
+// Off the handler, the launch blocks a goroutine of its own and the loop keeps
+// turning.
 func launchFromMenu(name string) {
-	if _, err := Launch(name); err != nil {
-		js.Global().Get("console").Call("warn", "desk: "+err.Error())
-	}
+	go func() {
+		if _, err := Launch(name); err != nil {
+			js.Global().Get("console").Call("warn", "desk: "+err.Error())
+		}
+	}()
 }
 
 // SetActive marks which window the task buttons should show as focused. Only

@@ -78,6 +78,12 @@ func TestNativeDeskServing(t *testing.T) {
 		if !strings.Contains(body, pk.Hex()) {
 			t.Error("page lacks the injected local PK")
 		}
+		// The terminal window: the host visor's pty page, relative like the
+		// dashboard URL, keyed by the local PK. Parity with the wasm desk's
+		// console window.
+		if !strings.Contains(body, "terminalURL: './pty/"+pk.Hex()+"'") {
+			t.Error("page lacks the relative pty terminal window URL")
+		}
 		// The ONE-VISOR rule, as served bytes: the native desk page must not
 		// even reference the wasm-visor module or its loader.
 		for _, banned := range []string{"wasm-visor.wasm", "wasm_exec", "skywire.wasm"} {
