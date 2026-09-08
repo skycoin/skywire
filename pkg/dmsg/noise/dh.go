@@ -12,8 +12,6 @@ import (
 	secp256k1 "github.com/skycoin/skycoin/src/cipher/secp256k1-go"
 )
 
-const keypairPoolSize = 512
-
 // keypairPool holds pre-generated ephemeral keypairs for noise handshakes.
 // secp256k1 key generation is expensive (EC multiply + validation), so we
 // generate them in the background and serve them from a buffered channel.
@@ -25,10 +23,14 @@ const keypairPoolSize = 512
 //
 // Multiple generator goroutines fill the pool in parallel to keep up with
 // burst demand (thundering herd after deployment restart).
+//
+// keypairPoolSize and keypairGenerators are build-tagged — see
+// dh_pool_native.go and dh_pool_js.go. "In parallel" is only true off the
+// browser: js/wasm is GOMAXPROCS=1, so extra generators there take turns with
+// the boot path rather than adding throughput.
 var keypairPool = func() chan noise.DHKey {
 	ch := make(chan noise.DHKey, keypairPoolSize)
-	numGenerators := 4
-	for i := 0; i < numGenerators; i++ {
+	for i := 0; i < keypairGenerators; i++ {
 		go func() {
 			for {
 				ch <- generateDHKey()
