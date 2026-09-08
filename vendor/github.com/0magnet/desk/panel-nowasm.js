@@ -150,7 +150,9 @@
 				var url = wo.url; delete wo.url;
 				var wb = panel.open(wo);
 				var body = wb.body;
-				if (!body.style.position) body.style.position = 'relative';
+				// winbox positions .wb-body absolutely under the title bar; the frames
+				// below are absolute against it as-is. Setting position here collapsed
+				// the body to zero height (a blank window, seen live).
 				var strip = doc.createElement('div');
 				strip.style.cssText = 'display:flex;gap:2px;align-items:flex-end';
 				var plus = doc.createElement('div');
