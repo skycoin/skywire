@@ -82,7 +82,7 @@ func TestRelayedResponseOKRejectsLiveInterstitial(t *testing.T) {
 					}
 					go func(c net.Conn) {
 						_ = proxyinterstitial.ServeSOCKS5(c, "", "skysocks", nil, tc.exitReachable) //nolint:errcheck
-						c.Close()                                                                   //nolint:errcheck
+						_ = c.Close()                                                               //nolint:errcheck
 					}(c)
 				}
 			}()
