@@ -3,13 +3,16 @@
 package visor
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	mathrand "math/rand"
 	"mime"
 	"net"
 	nrpc "net/rpc"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/proxyinterstitial"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
@@ -222,9 +226,13 @@ func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
 		}
 		if v.verifyProxyExit(ctx, log) {
 			log.Info("Configured proxy exit verified end to end")
-			return
+			if !v.holdVerifiedProxyExit(ctx, log) {
+				return
+			}
+			log.Warn("configured proxy exit stopped relaying; rotating to discovery")
+		} else {
+			log.Warn("configured proxy exit failed end-to-end verification; rotating to discovery")
 		}
-		log.Warn("configured proxy exit failed end-to-end verification; rotating to discovery")
 		_ = v.StopSkysocksClients() //nolint:errcheck
 	}
 	for {
@@ -257,11 +265,54 @@ func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
 			}
 			if v.verifyProxyExit(ctx, log) {
 				log.WithField("exit", pk).Info("Proxy client auto-started on a VERIFIED exit")
-				return
+				if !v.holdVerifiedProxyExit(ctx, log) {
+					return
+				}
+				log.WithField("exit", pk).Warn("verified proxy exit stopped relaying; rotating")
+			} else {
+				log.WithField("exit", pk).Warn("proxy-client exit failed end-to-end verification; rotating")
 			}
-			log.WithField("exit", pk).Warn("proxy-client exit failed end-to-end verification; rotating")
 			_ = v.StopSkysocksClients() //nolint:errcheck
 		}
+	}
+}
+
+// proxyExitRecheckInterval is how often an already-VERIFIED exit is re-probed.
+// Verification is cheap but not free — it fetches a small clearnet page through
+// the exit — and an exit that is relaying is the common case, so this is
+// deliberately slow: half an hour bounds how long a visor can sit on an exit
+// that died AFTER it was accepted (previously: forever) without turning a
+// healthy exit into a metronome of extra traffic, and without risking a rotation
+// off a working exit because of one unlucky probe during a route hiccup —
+// verifyProxyExit already retries for 90s internally before it gives a verdict.
+const proxyExitRecheckInterval = 30 * time.Minute
+
+// proxyVerifyReadLimit bounds how much of the verification response is read.
+// It has to clear the interstitial's `id="mesh-boot"` wrapper (~3 KiB in, past
+// the inlined CSS and cloud image) so the pre-header fallback marker is still
+// seen when the page comes from an older skysocks-client build.
+const proxyVerifyReadLimit = 4096
+
+// holdVerifiedProxyExit keeps a verified exit in place, re-verifying it every
+// proxyExitRecheckInterval. It returns true when the exit has stopped relaying
+// and the caller should rotate, and false when the visor is shutting down. A
+// single verification pass only proves the exit worked at that instant; without
+// this the visor would stay pinned to an exit that died later — the same
+// failure end-to-end verification exists to prevent, just deferred.
+func (v *Visor) holdVerifiedProxyExit(ctx context.Context, log *logging.Logger) bool {
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(proxyExitRecheckInterval):
+		}
+		if !v.verifyProxyExit(ctx, log) {
+			if ctx.Err() != nil {
+				return false
+			}
+			return true
+		}
+		log.Debug("proxy exit re-verified end to end")
 	}
 }
 
@@ -271,6 +322,13 @@ func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
 // on the page's virtual loopback and a native visor's on the real one. Route
 // establishment can take a while on a fresh visor, so it retries within a
 // bounded window before giving the verdict.
+//
+// The response is VALIDATED, not merely counted: when every tunnel is down the
+// skysocks client answers a plaintext-HTTP CONNECT itself with the branded
+// interstitial (pkg/skysocks: proxyinterstitial.ServeSOCKS5 on a nil session),
+// and port 80 is exactly that case — so "some bytes arrived" is satisfied by a
+// page this visor just generated for itself, which would certify a dead exit as
+// working. See relayedResponseOK.
 func (v *Visor) verifyProxyExit(ctx context.Context, log *logging.Logger) bool {
 	deadline := time.Now().Add(90 * time.Second)
 	for time.Now().Before(deadline) {
@@ -290,15 +348,44 @@ func (v *Visor) verifyProxyExit(ctx context.Context, log *logging.Logger) bool {
 		}
 		_ = conn.SetDeadline(time.Now().Add(15 * time.Second))                                         //nolint:errcheck
 		_, _ = conn.Write([]byte("GET / HTTP/1.0\r\nHost: neverssl.com\r\nConnection: close\r\n\r\n")) //nolint:errcheck
-		one := make([]byte, 16)
-		n, rerr := conn.Read(one)
+		// Read a bounded prefix, not one byte: the verdict needs the status line,
+		// the whole header block and enough body for the pre-header fallback
+		// marker, which sits ~3 KiB into the interstitial. The request asked for
+		// HTTP/1.0 + Connection: close, so this stops at EOF well before the cap
+		// on any real reply.
+		head := make([]byte, proxyVerifyReadLimit)
+		n, rerr := io.ReadFull(conn, head)
 		_ = conn.Close() //nolint:errcheck
-		if n > 0 {
+		if n > 0 && relayedResponseOK(head[:n]) {
 			return true
 		}
-		log.WithError(rerr).Debug("proxy verify: no response byte; retrying within window")
+		log.WithError(rerr).WithField("bytes", n).
+			Debug("proxy verify: no relayed HTTP response (locally synthesized or malformed); retrying within window")
 	}
 	return false
+}
+
+// relayedResponseOK reports whether the bytes read back through the skysocks
+// listener are a real reply RELAYED from the exit. Two things have to hold: it
+// must be a well-formed HTTP/1.x status line with a 2xx/3xx code (a zombie exit
+// that accepts the CONNECT and then relays nothing produces neither), and it
+// must not be one of the responses the local client synthesises when it has no
+// session — those are ordinary-looking 200s carrying an HTML page, and treating
+// one as proof of life is the bug this guards.
+func relayedResponseOK(raw []byte) bool {
+	line, _, ok := bytes.Cut(raw, []byte("\r\n"))
+	if !ok || !bytes.HasPrefix(line, []byte("HTTP/1.")) {
+		return false
+	}
+	f := bytes.Fields(line)
+	if len(f) < 2 {
+		return false
+	}
+	code, err := strconv.Atoi(string(f[1]))
+	if err != nil || code < 200 || code >= 400 {
+		return false
+	}
+	return !proxyinterstitial.IsSyntheticResponse(raw)
 }
 
 // vnetProxyDialer adapts bottle/vnet dialing to x/net/proxy's Dialer, so the

@@ -189,6 +189,43 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#7a80a8;--accent:#7c83ff;--
 	`.ready{color:var(--accent);margin:12px 0 0;font-size:13px;font-weight:600}` +
 	`.err #mesh-title{color:var(--err)}.err .sp{display:none}`
 
+// MarkerHeader labels every HTTP response THIS package synthesises in-process —
+// the waiting interstitial and the fall-through reload page. Both are minted by
+// the local skysocks-client when it cannot reach the exit, yet on the wire they
+// are indistinguishable from an ordinary relayed "HTTP/1.1 200 OK" with an HTML
+// body. Anything that has to tell "the exit really relayed this" from "our own
+// client answered for it" — the visor's end-to-end proxy-exit verification, for
+// one — is otherwise fooled by the very page it triggered. The header makes the
+// distinction explicit; see IsSyntheticResponse.
+const MarkerHeader = "X-Skywire-Interstitial"
+
+// markerHeaderLine is MarkerHeader as a ready-to-write response header line.
+const markerHeaderLine = MarkerHeader + ": 1\r\n"
+
+// IsSyntheticResponse reports whether raw HTTP response bytes were synthesised
+// by this package rather than relayed from a real exit. It checks MarkerHeader
+// first and falls back to sniffing the two page bodies for their distinctive
+// markup, so a NEWER verifier still recognises a page served by an OLDER
+// skysocks-client build that predates the header. raw may be a prefix of the
+// response (callers commonly read a bounded first chunk), so the sniff runs
+// over whatever was supplied.
+func IsSyntheticResponse(raw []byte) bool {
+	head := raw
+	if i := bytes.Index(raw, []byte("\r\n\r\n")); i >= 0 {
+		head = raw[:i]
+	}
+	for _, line := range bytes.Split(head, []byte("\r\n")) {
+		name, _, ok := bytes.Cut(line, []byte(":"))
+		if ok && strings.EqualFold(strings.TrimSpace(string(name)), MarkerHeader) {
+			return true
+		}
+	}
+	// Pre-header fallbacks: the interstitial's wrapper element and the reload
+	// page's self-re-request. Both are unique to the pages minted here.
+	return bytes.Contains(raw, []byte(`id="mesh-boot"`)) ||
+		bytes.Contains(raw, []byte("location.replace(location.href)"))
+}
+
 // httpResponse wraps the HTML in a minimal HTTP/1.1 response. Connection:close
 // so the browser tears the socket down and honors the meta-refresh cleanly;
 // no-store so a transient page is never cached in place of the real content.
@@ -202,6 +239,7 @@ func httpResponse(target, detail, mechanism string, isError bool) []byte {
 	fmt.Fprintf(&b, "HTTP/1.1 %s\r\n", status)
 	b.WriteString("Content-Type: text/html; charset=utf-8\r\n")
 	fmt.Fprintf(&b, "Content-Length: %d\r\n", len(bodyStr))
+	b.WriteString(markerHeaderLine)
 	b.WriteString("Cache-Control: no-store, must-revalidate\r\n")
 	b.WriteString("Connection: close\r\n")
 	b.WriteString("\r\n")
@@ -409,6 +447,7 @@ func reloadHTTPResponse() []byte {
 	b.WriteString("HTTP/1.1 200 OK\r\n")
 	b.WriteString("Content-Type: text/html; charset=utf-8\r\n")
 	fmt.Fprintf(&b, "Content-Length: %d\r\n", len(body))
+	b.WriteString(markerHeaderLine)
 	b.WriteString("Cache-Control: no-store, must-revalidate\r\n")
 	b.WriteString("Connection: close\r\n\r\n")
 	b.WriteString(body)
