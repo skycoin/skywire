@@ -92,6 +92,25 @@
 			return b;
 		}
 
+		// mountInHeader puts el in a window's title bar, right of the title and level
+		// with the controls, where a browser keeps its tabs. Presses on el's children
+		// stop before winbox's drag handle sees them, so a tab click is a click and an
+		// HTML5 tab drag is not swallowed by a window drag; a press on el's own empty
+		// space still moves the window, as the rest of the bar does.
+		function mountInHeader(wbEl, el) {
+			var drag = wbEl && wbEl.querySelector('.wb-drag');
+			if (!drag) return false;
+			drag.style.display = 'flex'; drag.style.alignItems = 'flex-end'; drag.style.minWidth = '0';
+			var title = wbEl.querySelector('.wb-title');
+			if (title) { title.style.flex = '0 1 auto'; title.style.maxWidth = '40%'; title.style.marginRight = '8px'; title.style.alignSelf = 'center'; }
+			el.style.cssText += ';flex:1 1 auto;min-width:0;height:100%;display:flex;align-items:flex-end;gap:2px;padding:0 4px;background:transparent;border:0;overflow-x:auto;overflow-y:hidden;line-height:normal;cursor:default';
+			var stop = function (ev) { if (ev.target !== el) ev.stopPropagation(); };
+			el.addEventListener('mousedown', stop);
+			el.addEventListener('touchstart', stop);
+			drag.appendChild(el);
+			return true;
+		}
+
 		var panel = {
 			root: root,
 			bar: bar,
@@ -121,6 +140,63 @@
 				winArea.appendChild(btn);
 				return wb;
 			},
+			// openTabbed opens a window whose body is a stack of iframes behind a tab
+			// strip in the title bar: "+" adds another tab on wo.url (a terminal page
+			// gives a fresh session each time), × closes one, closing the last closes
+			// the window. The engine-free twin of the Go desk's tabbed panes, for a
+			// host page with no wasm desk of its own.
+			openTabbed: function (wo) {
+				wo = wo || {};
+				var url = wo.url; delete wo.url;
+				var wb = panel.open(wo);
+				var body = wb.body;
+				if (!body.style.position) body.style.position = 'relative';
+				var strip = doc.createElement('div');
+				strip.style.cssText = 'display:flex;gap:2px;align-items:flex-end';
+				var plus = doc.createElement('div');
+				plus.textContent = '+';
+				plus.title = 'new tab';
+				plus.style.cssText = 'color:#cdd2da;border:1px solid #2a3040;border-bottom:none;border-radius:5px 5px 0 0;padding:3px 8px;cursor:pointer;font:12px monospace';
+				strip.appendChild(plus);
+				var tabs = [];
+				function activate(t) {
+					tabs.forEach(function (x) {
+						x.frame.style.display = x === t ? 'block' : 'none';
+						x.btn.style.background = x === t ? '#2a3040' : 'transparent';
+					});
+				}
+				function addTab() {
+					var t = { btn: doc.createElement('div'), frame: doc.createElement('iframe') };
+					t.btn.style.cssText = 'display:flex;align-items:center;gap:6px;color:#cdd2da;border:1px solid #2a3040;border-bottom:none;border-radius:5px 5px 0 0;padding:3px 8px;cursor:pointer;font:12px monospace;white-space:nowrap';
+					var lbl = doc.createElement('span');
+					lbl.textContent = (wo.title || 'tab') + (tabs.length ? ' ' + (tabs.length + 1) : '');
+					var x = doc.createElement('span');
+					x.textContent = '×'; x.style.cssText = 'opacity:.6;padding:0 2px';
+					t.btn.appendChild(lbl); t.btn.appendChild(x);
+					t.frame.src = url;
+					t.frame.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0;display:none';
+					t.btn.addEventListener('click', function (ev) { ev.stopPropagation(); activate(t); });
+					x.addEventListener('click', function (ev) {
+						ev.stopPropagation();
+						if (tabs.length === 1) { wb.close(); return; }
+						var i = tabs.indexOf(t);
+						tabs.splice(i, 1); t.btn.remove(); t.frame.remove();
+						activate(tabs[Math.min(i, tabs.length - 1)]);
+					});
+					strip.insertBefore(t.btn, plus);
+					body.appendChild(t.frame);
+					tabs.push(t);
+					activate(t);
+				}
+				plus.addEventListener('click', function (ev) { ev.stopPropagation(); addTab(); });
+				if (!mountInHeader(wb.dom || body.closest('.winbox'), strip)) {
+					strip.style.background = '#151922';
+					body.insertBefore(strip, body.firstChild);
+				}
+				addTab();
+				return wb;
+			},
+			mountInHeader: mountInHeader,
 		};
 
 		if (opts.dashboardURL) {
@@ -137,7 +213,7 @@
 		// does. The in-page shell wins where both exist.
 		if (opts.terminalURL && !(globalThis.skywireShell && typeof globalThis.skywireShell.open === 'function')) {
 			menuItem('terminal', function () {
-				panel.open({ title: 'terminal', url: opts.terminalURL, x: 'center', y: 'center', width: '70%', height: '60%' });
+				panel.openTabbed({ title: 'terminal', url: opts.terminalURL, x: 'center', y: 'center', width: '70%', height: '60%' });
 			});
 		}
 		if (globalThis.skywireShell && typeof globalThis.skywireShell.open === 'function') {

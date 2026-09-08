@@ -19,6 +19,7 @@ package main
 import (
 	"syscall/js"
 
+	"github.com/0magnet/desk"
 	"github.com/0magnet/netscrape"
 )
 
@@ -63,6 +64,7 @@ func jsOpenBrowser(_ js.Value, args []js.Value) any {
 		return nil
 	}
 	netscrape.Open(netscrapeHost(el))
+	hoistBrowserTabs(el)
 	return nil
 }
 
@@ -122,4 +124,20 @@ func netscrapeHost(el js.Value) js.Value {
 		"position:relative;width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden")
 	el.Call("appendChild", inner)
 	return inner
+}
+
+// hoistBrowserTabs moves netscrape's tab strip out of the browser's box and
+// into the title bar of the desk window that holds el, level with the window
+// controls — where a browser keeps its tabs. A host element outside any window
+// keeps the strip where netscrape put it. Both desks come through here: the
+// wasm desk's browser pane and the native page's dashboard window.
+func hoistBrowserTabs(el js.Value) {
+	if !el.Truthy() || el.Get("closest").Type() != js.TypeFunction {
+		return
+	}
+	win := el.Call("closest", ".winbox")
+	if !win.Truthy() {
+		return
+	}
+	desk.MountInHeader(win, netscrape.TabStrip())
 }
