@@ -281,6 +281,22 @@
 		function mountDashboardBrowser(wb, dashURL) {
 			var body = wb && wb.body;
 			if (!body) return;
+			// ABSOLUTE, resolved against this document.
+			//
+			// dashURL is relative ("./?embed=1#/?embed=1") and has to stay that
+			// way for the iframe fallback: reached through the vnet service
+			// worker this page lives under a "/vnet/<port>/" prefix the server
+			// never sees, so a hardcoded absolute "/" would escape the prefix
+			// onto the OUTER server's root — a different visor entirely.
+			//
+			// netscrape cannot take it in that form though: load() treats a
+			// scheme-less address as a HOST and prepends http://, so "./?embed=1"
+			// became "http://./?embed=1" and rendered a 404. Resolving against
+			// location.href gives netscrape the absolute URL it needs while
+			// keeping whatever prefix this document is actually served under —
+			// which is what the relative form was protecting in the first place.
+			var tabURL = dashURL;
+			try { tabURL = new URL(dashURL, globalThis.location.href).href; } catch (e) { /* keep the relative form */ }
 			function fallbackIframe() {
 				try {
 					var f = document.createElement('iframe');
@@ -293,7 +309,7 @@
 				if (!ok || !globalThis.skywireBrowser) { fallbackIframe(); return; }
 				try {
 					globalThis.skywireBrowser.open(body);
-					globalThis.skywireBrowser.newTab(dashURL, false);
+					globalThis.skywireBrowser.newTab(tabURL, false);
 				} catch (e) {
 					console.warn('dashboard browser:', e);
 					fallbackIframe();
