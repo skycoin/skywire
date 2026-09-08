@@ -481,3 +481,47 @@ func TestController_RawTextPeerStillDecodes(t *testing.T) {
 		t.Errorf("bare-text frame surfaced with id %q; want none", in.ID)
 	}
 }
+
+// TestController_OutEventNamesTheConnsNetwork pins that the outbound event and
+// SendResult report the transport the frame actually left on, not the network
+// the caller named. The standalone app's tcp-direct listener hands accepted
+// conns to the cache; a reply to that peer rides the cached conn while the HTTP
+// handler still passes its skynet default. Seen live: inbound said tcp-direct,
+// outbound said skynet, for the same conversation.
+func TestController_OutEventNamesTheConnsNetwork(t *testing.T) {
+	hub := newMemHub()
+	pkA, pkB := mustPK(t), mustPK(t)
+	recA, recB := &recorder{}, &recorder{}
+
+	ctrlB := New(Config{Client: &memClient{hub, pkB}, Networks: []appnet.Type{appnet.TypeTCPDirect}, OnEvent: recB.on})
+	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeTCPDirect}, OnEvent: recA.on})
+	if err := ctrlB.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrlA.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() }) //nolint
+
+	if _, err := ctrlA.Send(context.Background(), pkB, appnet.TypeTCPDirect, "over tcp-direct", SendOpts{}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	in := waitFor(t, recB, func(e Event) bool { return e.Dir == "in" && e.Text == "over tcp-direct" })
+	if in.Network != string(appnet.TypeTCPDirect) {
+		t.Fatalf("inbound network = %q, want %q", in.Network, appnet.TypeTCPDirect)
+	}
+
+	// B replies naming skynet, the HTTP handler's default. The cached accepted
+	// conn carries it, so the report must say tcp-direct.
+	res, err := ctrlB.Send(context.Background(), pkA, appnet.TypeSkynet, "reply", SendOpts{})
+	if err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+	if res.Network != appnet.TypeTCPDirect {
+		t.Errorf("SendResult.Network = %q, want %q", res.Network, appnet.TypeTCPDirect)
+	}
+	out := waitFor(t, recB, func(e Event) bool { return e.Dir == "out" && e.Text == "reply" })
+	if out.Network != string(appnet.TypeTCPDirect) {
+		t.Errorf("outbound event network = %q, want %q", out.Network, appnet.TypeTCPDirect)
+	}
+}
