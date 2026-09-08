@@ -123,7 +123,7 @@ type Values struct {
 	StunServers string // STUNSERVERS (comma-separated)
 
 	// --- Public-visor transport limit ---
-	MaxTransports int // MAXTRANSPORTS (deregister from AR once this many transports exist)
+	MaxTransports int // MAXTRANSPORTS (pause service-discovery registration at this DISTINCT-PEER count)
 
 	// --- Transport ports ---
 	StcprPort     int
@@ -282,7 +282,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().StringVar(&v.URL, "url", "", "services-config URL(s), comma-separated — writes SVCCONFADDR in skywire.conf")
 	cmd.Flags().StringVar(&v.SvcConf, "svcconf", "", "fallback service-configuration file path — writes SVCCONF in skywire.conf")
 	cmd.Flags().IntVar(&v.MinSess, "minsess", 0, "number of dmsg servers to connect to (0 = unlimited; leave unset to keep default 2) — writes MINDMSGSESS in skywire.conf")
-	cmd.Flags().IntVar(&v.MaxTransports, "maxtransports", 0, "public visor transport limit — deregister from the address resolver once this many transports exist (0 = leave unset; default 1000) — writes MAXTRANSPORTS in skywire.conf")
+	cmd.Flags().IntVar(&v.MaxTransports, "maxtransports", 0, "public visor peer limit — pause service-discovery registration once this many DISTINCT PEERS are connected, resuming when it drops (0 = leave unset; default 2048) — writes MAXTRANSPORTS in skywire.conf")
 	cmd.Flags().StringVar(&v.StunServers, "stun", "", "STUN servers, comma-separated — writes STUNSERVERS in skywire.conf")
 
 	// --- Transport ports ---
@@ -290,7 +290,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().IntVar(&v.SudphPort, "sudph", 0, "sudp transport listening port (0 = leave unchanged, random at runtime) — writes SUDPHPORT in skywire.conf")
 	cmd.Flags().IntVar(&v.TransportPort, "transport-port", 0, "ONE shared master port for ALL transport types — stcpr+WS on <port>/tcp, sudph+quic+wt+webrtc on <port>/udp (0 = per-type ports) — writes TRANSPORTPORT in skywire.conf")
 	cmd.Flags().IntVar(&v.MinHops, "min-hops", 1, "minimum route hops — 1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy — writes MINHOPS in skywire.conf")
-	cmd.Flags().IntVar(&v.ARTransportLimit, "ar-transport-limit", 0, "address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible) — writes ARTRANSPORTLIMIT in skywire.conf")
+	cmd.Flags().IntVar(&v.ARTransportLimit, "ar-transport-limit", 0, "address-resolver registration: >=0 = register (default), <0 = never register (inbound-invisible). Only the sign is used; a positive value does NOT deregister after N transports — writes ARTRANSPORTLIMIT in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoDirectTransports, "no-direct-transports", false, "never create direct p2p transports; dmsg relay still allowed — writes NODIRECTTRANSPORTS=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.PtyRPCExec, "pty-rpc-exec", false, "allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off closes a local privilege-escalation vector) — writes PTYRPCEXEC=true in skywire.conf")
 	cmd.Flags().IntVar(&v.LanDmsgPort, "lan-dmsg-port", 0, "LAN dmsg-server listening port (0 = leave unchanged) — writes LANDMSGPORT in skywire.conf")
@@ -431,7 +431,7 @@ var envMap = map[string]EnvMapping{
 	"url":           {Key: "SVCCONFADDR", Format: EnvFormatBashArray},
 	"svcconf":       {Key: "SVCCONF", Format: EnvFormatString},
 	"minsess":       {Key: "MINDMSGSESS", Format: EnvFormatInt, Default: "2"},
-	"maxtransports": {Key: "MAXTRANSPORTS", Format: EnvFormatInt, Default: "1000"},
+	"maxtransports": {Key: "MAXTRANSPORTS", Format: EnvFormatInt, Default: "2048"},
 	"stun":          {Key: "STUNSERVERS", Format: EnvFormatBashArray},
 
 	// Transport ports. 0 = OS-assigned random port at runtime;

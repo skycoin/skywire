@@ -589,11 +589,16 @@ type Transport struct {
 	// wt_table). Lets a visor DIAL a QUIC transport to a configured peer with no
 	// address-resolver lookup. Consulted before the AR; empty/omitted = AR-only.
 	QUICTable map[cipher.PubKey]string `json:"quic_table,omitempty"`
-	// ARTransportLimit controls address resolver registration for privacy:
-	//   0 (default): stay registered indefinitely
-	//   N > 0: deregister from AR after N transports are established
-	//   N < 0: never register with AR at all
-	// When deregistered, the visor cannot receive new inbound transports
+	// ARTransportLimit controls address resolver registration for privacy.
+	// Only its SIGN is meaningful — it is a static switch, not a counter:
+	//   >= 0 (default): register with the address resolver
+	//   <  0: never register with AR at all
+	// A positive value does NOT deregister after N transports. That was
+	// deliberately not implemented: a running visor must never drop its AR
+	// registration on a transport count, because AR discoverability is what
+	// lets peers dial it. Runtime load-shedding is a separate mechanism —
+	// the public-visor service-discovery drain (PublicVisorConfig.MaxTransports).
+	// When never-registered, the visor cannot receive new inbound transports
 	// but can still initiate outbound connections.
 	ARTransportLimit int `json:"ar_transport_limit,omitempty"`
 	// NoDirectTransports, when true, stops the visor from CREATING direct
@@ -765,11 +770,12 @@ type PublicVisorConfig struct {
 	// Default: 10m
 	RegistrationTimeout Duration `json:"registration_timeout,omitempty"`
 
-	// MaxTransports is the maximum transport count before deregistering from
-	// service discovery. Once reached, the visor has served its purpose of
-	// bootstrapping other visors and deregisters to make room for others.
-	// Set to 0 to never deregister based on transport count.
-	// Default: 1000
+	// MaxTransports is the DISTINCT-PEER count at which a public visor
+	// drain-pauses its service-discovery registration, resuming when the
+	// count drops back below it. It counts unique remote visors, not raw
+	// transports — several transport types to the same peer count as one.
+	// Set to 0 to never drain based on peer count.
+	// Default: PublicVisorMaxTransports (2048).
 	MaxTransports int `json:"max_transports,omitempty"`
 }
 
