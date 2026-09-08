@@ -425,8 +425,18 @@ func initEmbeddedRouteSetup(ctx context.Context, v *Visor, log *logging.Logger) 
 
 	// Create a separate dmsg client with the route setup-node identity.
 	// Reuses the visor's dmsg discovery URL but with route setup-node keys.
+	// MinSessions follows the visor's own sessions_count rather than 0. Zero
+	// means "connect to every server in the deployment" AND disables the
+	// idle-session reaper (reapIdleSessionsLoop returns immediately at <=0), so
+	// this client's sessions only ever grow — see initEmbeddedTransportSetup for
+	// the measured numbers. Reachability does not depend on it: peers dial this
+	// client via the delegated servers in its own discovery entry.
+	rsMinSessions := 0
+	if v.conf.Dmsg != nil {
+		rsMinSessions = v.conf.Dmsg.SessionsCount
+	}
 	dmsgConf := &dmsg.Config{
-		MinSessions: 0, // Connect to all servers for better connectivity
+		MinSessions: rsMinSessions,
 		Protocol:    v.conf.Dmsg.Protocol,
 	}
 	dmsgConf.ClientType = "route_setup"
