@@ -103,8 +103,37 @@
 		} catch (e) { /* storage denied — session just resets to defaults */ }
 	}
 
+	// framedWithoutEmbed: this desk page is running INSIDE a frame and its URL
+	// carries no embed marker — which can only mean a server served the desk
+	// where it meant to serve the dashboard.
+	//
+	// Both servers decide by `Sec-Fetch-Dest: iframe` OR `?embed=1`, and through
+	// bottle's vnet service worker only the second survives: Sec-Fetch-* are
+	// forbidden header names, unreadable from a service worker, so vnet-sw.js
+	// cannot forward them however much it would like to. Any in-frame
+	// navigation that drops the query — the Angular router rewrites the frame's
+	// URL to its current route within seconds of loading — therefore comes back
+	// as a DESK, and a desk inside the desk's own dashboard window is never what
+	// anyone wanted. The servers say so themselves, in the comment above each
+	// `framed` test.
+	//
+	// So the page corrects its own address and lets the server answer again.
+	// Bounded by construction: the retry carries embed=1, so the second load
+	// cannot reach here.
+	function framedWithoutEmbed() {
+		try {
+			if (self === top) return false;
+			if (/(^|[?&])embed=1(&|$)/.test(location.search)) return false;
+			return true;
+		} catch (e) { return false; } // cross-origin top — not our frame to judge
+	}
+
 	globalThis.skywireDeskBoot = function (opts) {
 		opts = opts || {};
+		if (framedWithoutEmbed()) {
+			location.replace(location.pathname + '?embed=1' + (location.hash || ''));
+			return new Promise(function () {}); // never settles; the document is going away
+		}
 		var status = opts.onStatus || function () {};
 		var hvPort = opts.hvPort || 8001;
 		// 0 disables. Native mode leaves it off: a native hypervisor serves its
@@ -510,7 +539,21 @@
 											var fr = document.querySelector('iframe[src^="/vnet/' + hvPort + '"]');
 											if (!fr || !fr.contentWindow || !fr.contentWindow.document.fonts) return;
 											if (!fr.contentWindow.document.fonts.check('24px "Material Icons"')) {
-												fr.contentWindow.location.reload();
+												// NOT reload(): by now the Angular router has
+												// rewritten the frame's URL to its current route
+												// (".../vnet/8001/#/nodes/list/1") and the
+												// ?embed=1 that opened it is GONE. Reloading that
+												// URL asks the hypervisor for its ROOT with no
+												// embed marker, and the marker is the only one it
+												// can see — bottle's vnet service worker cannot
+												// forward Sec-Fetch-Dest (a forbidden header name,
+												// unreadable from a SW), so the server's "am I
+												// framed?" test has nothing else to go on and it
+												// serves its DESK page. That is the "desk inside
+												// the desk" this window exists to avoid, and it is
+												// what the self-heal itself was producing.
+												var w2 = fr.contentWindow;
+												w2.location.replace(w2.location.pathname + '?embed=1' + (w2.location.hash || ''));
 											}
 										} catch (e3) { /* cross-origin or torn-down frame — leave it */ }
 									}, 25000);
