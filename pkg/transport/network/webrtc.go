@@ -43,6 +43,13 @@ import (
 // and browser carriers share this constant so they interoperate.
 const webrtcSignalPort = skyenv.DmsgWebRTCSignalPort
 
+// ErrWebRTCUnavailable is the sentinel MakeClient returns when the runtime has
+// no way to construct a peer connection (see WebRTCAvailable). It is expected,
+// not a failure: the transport manager simply leaves WEBRTC out of its known
+// networks, and every caller that picks candidate transport types from the
+// manager stops offering it.
+var ErrWebRTCUnavailable = errors.New("webrtc: no peer connection available in this runtime")
+
 // signalMsg is one signaling message exchanged over the dmsg signaling stream.
 // The JSON field set + names match the browser carrier exactly (interop).
 type signalMsg struct {
