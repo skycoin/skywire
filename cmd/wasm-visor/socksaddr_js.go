@@ -86,7 +86,7 @@ func socksProxyHTTPClient(addr string) (*http.Client, error) {
 	c := &http.Client{
 		Transport: &http.Transport{
 			DialContext:           dialCtx,
-			TLSClientConfig:       &tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS12},
+			TLSClientConfig:       &tls.Config{RootCAs: caPool(), MinVersion: tls.VersionTLS12},
 			TLSHandshakeTimeout:   20 * time.Second,
 			MaxIdleConns:          8,
 			ResponseHeaderTimeout: 30 * time.Second,

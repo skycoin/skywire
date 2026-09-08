@@ -47,11 +47,23 @@ import (
 //go:embed cacert.pem
 var caBundle []byte
 
-var caPool = func() *x509.CertPool {
+// caPool parses the embedded bundle on FIRST USE, not at package init.
+//
+// The bundle is 186 KB / 122 certs, and parsing it measures ~47ms, 853 KB and
+// ~10,000 allocations under js/wasm — 98.6% of the bytes and 98.8% of the
+// allocations of this package's entire initialization, which is itself the
+// largest init in the binary. That was being paid on every browser boot, on the
+// one thread js/wasm has, before anything the visor does.
+//
+// It is needed at exactly two call sites, both inside HTTPS-through-skysocks
+// paths (skysocks_js.go and socksaddr_js.go) that a boot may never reach. Same
+// shape as pkg/geoip's 29 MB embed, which is likewise decompressed lazily
+// behind a sync.Once rather than at init.
+var caPool = sync.OnceValue(func() *x509.CertPool {
 	p := x509.NewCertPool()
 	p.AppendCertsFromPEM(caBundle)
 	return p
-}()
+})
 
 // skysocksPort is the skywire app port a skysocks-server listens on.
 const skysocksPort = routing.Port(skyenv.SkysocksPort)
@@ -250,7 +262,7 @@ func skysocksHTTPClient(sess *yamux.Session) (*http.Client, error) {
 	return &http.Client{
 		Transport: &http.Transport{
 			DialContext:         dialCtx,
-			TLSClientConfig:     &tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS12},
+			TLSClientConfig:     &tls.Config{RootCAs: caPool(), MinVersion: tls.VersionTLS12},
 			TLSHandshakeTimeout: 20 * time.Second,
 			MaxIdleConns:        8,
 			// A route/session can establish to an exit whose clearnet EGRESS is

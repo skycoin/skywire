@@ -1,4 +1,4 @@
-//go:build tinygo
+//go:build tinygo || js
 
 // Package deployment pkg/deployment/config_js.go
 //
