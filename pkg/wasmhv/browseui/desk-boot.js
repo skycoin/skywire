@@ -30,9 +30,11 @@
 //                   one; where it is not, the commands stay in-page exactly as
 //                   they were. Nothing selects between the two but whether the
 //                   asset answers.
-//   native          the page is served by a NATIVE hypervisor — see below
-//   dashboardURL    native mode: the same-origin dashboard URL for the
-//                   dashboard window ('/#/?embed=1')
+//   dashboardURL    the page the browser window opens on. A hypervisor that
+//                   serves this desk names its own same-origin page here;
+//                   the default is the in-tab visor's UI on vnet:<hvPort>.
+//   terminalURL     the host's pty page (xterm over a websocket). When set,
+//                   the terminal app is that page and it opens at boot.
 //   onStatus(msg)   boot progress for the page's overlay
 (function () {
 	'use strict';
@@ -46,20 +48,6 @@
 			if (!/\.gz(\?|$)/.test(url)) return r.arrayBuffer();
 			var inflated = r.body.pipeThrough(new DecompressionStream('gzip'));
 			return new Response(inflated, { headers: { 'Content-Type': 'application/wasm' } }).arrayBuffer();
-		});
-	}
-
-	// loadScript appends a <script src> and resolves when it has run. The desk
-	// page normally carries wasm_exec.js as a tag of its own; the native
-	// hypervisor's page does not, because until the browser role existed it had
-	// no wasm to run.
-	function loadScript(src) {
-		return new Promise(function (res, rej) {
-			var s = document.createElement('script');
-			s.src = src;
-			s.onload = function () { res(); };
-			s.onerror = function () { rej(new Error('load ' + src)); };
-			document.head.appendChild(s);
 		});
 	}
 
@@ -171,193 +159,13 @@
 		// gets null and boots exactly as it does today.
 		function hostBridge() {
 			if (!globalThis.SkywireHVWS || !globalThis.SkywireHVBridge || !globalThis.vnet) {
-				return Promise.resolve(null);
+				return Promise.resolve(false);
 			}
-			return globalThis.SkywireHVWS.probe().then(function (ok) {
-				if (!ok) return null;
-				// 3435 is the visor's control surface and hvPort its
-				// hypervisor UI — the two ports the desk asks about. The
-				// bridge claims only what is free, so a tab that is already
-				// running its own visor keeps it.
-				return globalThis.SkywireHVBridge.install({ ports: [3435, hvPort] });
-			}).catch(function () { return null; });
-		}
-
-		// bootHost: the page is served by a NATIVE hypervisor, whose visor is
-		// the host process — the desk is a shell OVER that visor, never a
-		// second one, so nothing wasm-shaped boots here (no jsfs snapshot, no
-		// desk-host module, no skywireExec). The server injects
-		// skywire-browse-launcher.js beside this file; that launcher mounts
-		// the panel with its /api-backed providers (the same ones the Angular
-		// dashboard gets) and publishes it as __skywireDesk. All that is left
-		// to do is open the dashboard window.
-		//
-		// The bridge also makes the host's hypervisor UI addressable the way the
-		// wasm desk addresses its own: with the vnet service worker registered,
-		// /vnet/<hvPort>/ is a real same-origin URL that resolves natively —
-		// the Angular bundle comes off the host, its relative "api/" calls ride
-		// the /ws socket, and the nested browser's DirectLoader claims the URL
-		// as a document instead of transcoding it. Verified live.
-		//
-		// It is NOT what the dashboard window opens on, though, and the reason
-		// is worth writing down: bottle's vnet-sw.js gives a page 8s to answer
-		// each forwarded request (askClient), and this hypervisor's
-		// /api/visors-tree-summary takes 15s against a live fleet — measured,
-		// three runs, over plain HTTP as much as over the bridge. Through the
-		// service worker that endpoint 504s and the dashboard renders its
-		// "connection to the Hypervisor" error instead of the tree. The
-		// same-origin iframe has no such budget, so it stays the default until
-		// bottle's timeout is raised (or made per-request); until then the vnet
-		// address is published for whatever wants it, and nothing is forced
-		// through a path that would make a working dashboard worse.
-		function bootHost(bridge) {
-			status('starting the desk…');
-			// Registered up front: activation takes a moment, and the window
-			// below must not open before the question is settled either way.
-			var swReady = (bridge && globalThis.vnet.enableSW)
-				? globalThis.vnet.enableSW(opts.vnetSWURL || 'vnet-sw.js').catch(function () { return false; })
-				: Promise.resolve(false);
-			return Promise.all([
-				waitFor(function () { return globalThis.__skywireDesk; }, 'the desk panel'),
-				waitFor(function () { return typeof globalThis.WinBox === 'function'; }, 'the window manager'),
-				swReady,
-			]).then(function (r) {
-				var panel = r[0];
-				if (bridge && r[2] && globalThis.vnet.listening(hvPort)) {
-					globalThis.__DESK_VNET_DASHBOARD_URL__ =
-						'http://vnet:' + hvPort + '/?embed=1#/?embed=1';
-				}
-				var dashURL = opts.dashboardURL || '/#/?embed=1';
-				// The ☰ menu's dashboard entry reads this too, on both pages.
-				globalThis.__DESK_DASHBOARD_URL__ = dashURL;
-				try {
-					// Join the panel's own stacking context (its windows root)
-					// so focus raises the dashboard above/below sibling windows
-					// like any other desk window; keep clear of the taskbar on
-					// whichever edge it is docked (applyDock pins top OR bottom
-					// to "0", persisted across reloads).
-					var root = document.getElementById('skywire-skynet-root') || undefined;
-					var bar = document.getElementById('skywire-skynet-taskbar');
-					var barH = bar ? (bar.offsetHeight || 36) : 0;
-					// applyDock writes bottom:"0" for a bottom dock (read back as
-					// "0px" by most engines) and "auto" for a top dock.
-					var bd = bar ? bar.style.bottom : 'auto';
-					var topDocked = !(bd === '0' || bd === '0px');
-					// The terminal, for parity with the wasm desk's console window: the
-					// host visor's pty over a websocket (/pty/<pk>), the page the
-					// dashboard's Terminal tab opens. Opened BEFORE the dashboard so the
-					// dashboard keeps focus, the way the wasm desk keeps its dashboard in
-					// front of the console it has already opened.
-					if (opts.terminalURL && panel && typeof panel.open === 'function') {
-						try {
-							// openTabbed where the panel has it: tabs in the title bar, "+"
-							// for another session, the way the wasm desk tabs its terminals.
-							var openTerm = typeof panel.openTabbed === 'function' ? panel.openTabbed : panel.open;
-							openTerm.call(panel, { title: 'skywire', url: opts.terminalURL, x: 'center', y: 'center', width: '70%', height: '60%' });
-						} catch (e) { console.warn('terminal window:', e); }
-					}
-					// No `url:` — the body is handed to netscrape below, which
-					// opens dashURL as a TAB. WinBox's own `url` would make the
-					// body a bare iframe, which is what this page did before
-					// the browser was available here.
-					var wb = new WinBox({
-						title: 'dashboard',
-						root: root,
-						top: topDocked ? barH : 0,
-						bottom: topDocked ? 0 : barH,
-						// The panel's window chrome (dark header + pointer
-						// events); no-full keeps "maximize" in-tab.
-						'class': ['skywire-wb', 'no-full'],
-						x: 'center', y: 'center', width: '85%', height: '85%',
-					});
-					if (wb.maximize) wb.maximize(true);
-					mountDashboardBrowser(wb, dashURL);
-				} catch (e) { console.error('dashboard window:', e); }
-				return { panel: panel, startedVisor: false };
-			});
-		}
-
-		// mountDashboardBrowser puts netscrape inside the dashboard window and
-		// opens the hypervisor UI as a TAB, so the native desk matches the wasm
-		// one instead of showing a bare iframe in a plain window.
-		//
-		// netscrape is Go/wasm (cmd/wasm-visor). This page has a desk panel of
-		// its own already — the engine-free JS one the native launcher mounts —
-		// so the module is loaded in the "browser" ROLE: it installs netscrape
-		// and NOTHING else, no shell, no second desk panel, no visor. The native
-		// hypervisor serving this page IS the visor.
-		//
-		// Best-effort throughout: where the blob is not served (an older binary,
-		// or a build without it embedded) the window keeps the iframe it would
-		// have had, which is why the iframe is created here rather than left to
-		// WinBox's `url`.
-		function mountDashboardBrowser(wb, dashURL) {
-			var body = wb && wb.body;
-			if (!body) return;
-			// ABSOLUTE, resolved against this document.
-			//
-			// dashURL is relative ("./?embed=1#/?embed=1") and has to stay that
-			// way for the iframe fallback: reached through the vnet service
-			// worker this page lives under a "/vnet/<port>/" prefix the server
-			// never sees, so a hardcoded absolute "/" would escape the prefix
-			// onto the OUTER server's root — a different visor entirely.
-			//
-			// netscrape cannot take it in that form though: load() treats a
-			// scheme-less address as a HOST and prepends http://, so "./?embed=1"
-			// became "http://./?embed=1" and rendered a 404. Resolving against
-			// location.href gives netscrape the absolute URL it needs while
-			// keeping whatever prefix this document is actually served under —
-			// which is what the relative form was protecting in the first place.
-			var tabURL = dashURL;
-			try { tabURL = new URL(dashURL, globalThis.location.href).href; } catch (e) { /* keep the relative form */ }
-			function fallbackIframe() {
-				try {
-					var f = document.createElement('iframe');
-					f.setAttribute('src', dashURL);
-					f.style.cssText = 'border:0;width:100%;height:100%;display:block';
-					body.appendChild(f);
-				} catch (e) { /* nothing left to try */ }
-			}
-			loadDeskBrowser().then(function (ok) {
-				if (!ok || !globalThis.skywireBrowser) { fallbackIframe(); return; }
-				try {
-					globalThis.skywireBrowser.open(body);
-					globalThis.skywireBrowser.newTab(tabURL, false);
-				} catch (e) {
-					console.warn('dashboard browser:', e);
-					fallbackIframe();
-				}
-			}, function () { fallbackIframe(); });
-		}
-
-		// loadDeskBrowser loads the desk-host module in the browser-only role.
-		// Resolves true once globalThis.skywireBrowser is up, false if the
-		// assets are not served here. Runs at most once per page.
-		var deskBrowserPromise = null;
-		function loadDeskBrowser() {
-			if (deskBrowserPromise) return deskBrowserPromise;
-			if (globalThis.skywireBrowser) return (deskBrowserPromise = Promise.resolve(true));
-			// Set BEFORE the module runs: wasmRole() reads this global as the
-			// program starts, and a missing role would default to "visor" —
-			// which publishes the whole skywireVisor API on a page that already
-			// has a visor behind it.
-			globalThis.__SKYWIRE_WASM_ROLE__ = 'browser';
-			deskBrowserPromise = fetch(opts.deskWasmURL || 'wasm-visor.wasm', { method: 'HEAD' })
-				.then(function (r) {
-					if (!r.ok) return false;
-					return loadScript(opts.wasmExecURL || 'wasm_exec.js').then(function () {
-						var go = new Go();
-						return WebAssembly.instantiateStreaming(
-							fetch(opts.deskWasmURL || 'wasm-visor.wasm'), go.importObject,
-						).then(function (res) {
-							go.run(res.instance).catch(function (e) { console.error('desk browser:', e); });
-							return waitFor(function () { return globalThis.skywireBrowser; }, 'the browser', 200)
-								.then(function () { return true; });
-						});
-					});
-				})
-				.catch(function () { return false; });
-			return deskBrowserPromise;
+			// The PROBE only — one cheap GET. The socket itself is opened later,
+			// once the desk module is up: opening it here made boot wait on the
+			// bridge's connect timeout before fetching the module, and a socket
+			// that never opened left the desk without its host for good.
+			return globalThis.SkywireHVWS.probe().catch(function () { return false; });
 		}
 
 		// execWorker: the Worker every skywire command runs in once it is up,
@@ -385,7 +193,21 @@
 		// panel reaches it through vnet. Unchanged by the host bridge above:
 		// where a page can run its own visor there is no /ws to bridge to, so
 		// the probe simply comes back empty.
-		function bootWasm() {
+		function bootWasm(bridged) {
+			// The host's pty page, published BEFORE the module runs so installDesk
+			// registers it as the terminal app.
+			if (opts.terminalURL) {
+				try { globalThis.__SKYWIRE_PTY_URL__ = new URL(opts.terminalURL, location.href).href; } catch (e) { /* keep unset */ }
+			}
+			// The dashboard the browser window opens on. A hypervisor serving this
+			// desk names its own page: same-origin, rendered natively by the
+			// DirectLoader with no service worker in the path — which matters on a
+			// LAN address over plain http, where no service worker can register.
+			// The default is the in-tab visor's UI on the virtual loopback.
+			var dashURL = 'http://vnet:' + hvPort + '/?embed=1#/?embed=1';
+			if (opts.dashboardURL) {
+				try { dashURL = new URL(opts.dashboardURL, location.href).href; } catch (e) { /* keep vnet */ }
+			}
 			skywireExec.wasmURL = opts.wasmURL || 'skywire.wasm.gz';
 			skywireExec.wasmExecURL = opts.wasmExecURL || 'wasm_exec.js';
 			globalThis.__WINBOX_WASM_URL__ = opts.winboxURL || 'winbox.wasm';
@@ -464,8 +286,7 @@
 				// serves the dashboard instead whenever the request is framed, and
 				// embed=1 also rides in the hash so the injected launcher inside
 				// knows not to grow a taskbar of its own.
-				globalThis.__DESK_DASHBOARD_URL__ =
-					'http://vnet:' + hvPort + '/?embed=1#/?embed=1';
+				globalThis.__DESK_DASHBOARD_URL__ = dashURL;
 				var go = new Go();
 				return WebAssembly.instantiate(buf, go.importObject).then(function (r) {
 					go.run(r.instance).catch(function (e) { console.error('desk host:', e); });
@@ -477,6 +298,17 @@
 				});
 			}).then(function () {
 				var sv = globalThis.skywireVisor;
+				// Served by a hypervisor: claim the visor's virtual-loopback ports
+				// for the HOST visor now that the module's vnet is up. 3435 is the
+				// visor's control surface and hvPort its hypervisor UI — the two
+				// ports the desk asks about; the bridge claims only what is free.
+				// Nothing waits on the socket: vnet.listening() flips when it
+				// opens, and everything below already polls that.
+				if (bridged && globalThis.SkywireHVBridge) {
+					globalThis.SkywireHVBridge.install({ ports: [3435, hvPort] }).then(function (b) {
+						if (!b) console.warn('host bridge: /ws did not open; the desk has no visor to reach');
+					});
+				}
 				// The desk's REAL visor is the root binary running in a terminal —
 				// a separate wasm instance the page cannot call. The desk host's
 				// own skywireVisor core is deliberately never booted here, so the
@@ -563,6 +395,48 @@
 				// openConsole/openWindow contract this boot drives. The dashboard ☰
 				// entry reads __DESK_DASHBOARD_URL__ (set above) — the running
 				// visor's hypervisor UI over the vnet service worker.
+				// Over the host bridge the tab runs no visor of its own, so netscrape's
+				// transport is the hypervisor's browse API: mesh hosts (.dmsg /
+				// .skynet / .skysocks, or a bare PK) through /api/browse/fetch — a
+				// skynet route first, dmsg-HTTP as the fallback — and everything else
+				// through /api/browse/clearnet, honoring the browser's proxy setting.
+				// Same-origin pages never get here: the DirectLoader renders them
+				// natively. Without this the browser fell back to a same-origin
+				// /fetch proxy the hypervisor has never had (seen live as a 404 body).
+				if (bridged) {
+					var b64Bytes = function (b64) {
+						var s = atob(b64 || '');
+						var out = new Uint8Array(s.length);
+						for (var i = 0; i < s.length; i++) { out[i] = s.charCodeAt(i); }
+						return out;
+					};
+					var browsePost = function (path, req) {
+						return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) })
+							.then(function (res) {
+								return res.json().then(function (j) {
+									if (!res.ok) {
+										return new Response('skywire browse: ' + ((j && j.error) || res.status), { status: 502, headers: { 'content-type': 'text/plain' } });
+									}
+									var h = new Headers();
+									if (j && j.header) { for (var k in j.header) { try { h.set(k, j.header[k]); } catch (e) { /* forbidden name */ } } }
+									return new Response(b64Bytes(j && j.body), { status: (j && j.status_code) || 200, headers: h });
+								});
+							});
+					};
+					globalThis.__netscrapeFetch = function (url) {
+						var u;
+						try { u = new URL(url, location.href); } catch (e) { return fetch(url); }
+						var host = u.hostname || '';
+						if (/\.(dmsg|skynet|skysocks)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
+							return browsePost('/api/browse/fetch', { host: host, port: u.port ? (parseInt(u.port, 10) || 80) : 80, method: 'GET', path: (u.pathname || '/') + (u.search || '') });
+						}
+						var p = globalThis.__netscrapeProxy || {};
+						var req = { method: 'GET', url: u.href };
+						if (p.mode === 'direct' && globalThis.__SKYWIRE_LOCAL_PK__) { req.exit_pk = globalThis.__SKYWIRE_LOCAL_PK__; }
+						else if (p.mode === 'exit' && /^[0-9a-f]{66}$/i.test(p.exit || '')) { req.exit_pk = p.exit; }
+						return browsePost('/api/browse/clearnet', req);
+					};
+				}
 				var panel = globalThis.__skywireDesk;
 				// selfPK cache: poll the visor's /api/about once its HV listens;
 				// re-check occasionally in case the operator restarts the visor
@@ -622,6 +496,11 @@
 					// only starts when first clicked.
 					panel.openConsole({ title: 'skywire', initCmd: 'skywire --help', bg: !!startedVisor });
 				}
+				if (opts.terminalURL && typeof panel.launch === 'function') {
+					// The host's pty as the terminal window — opened before the
+					// dashboard, so the dashboard keeps focus.
+					try { panel.launch('terminal'); } catch (e) { console.warn('terminal:', e); }
+				}
 				if (opts.hvWindow) {
 					// The hypervisor UI comes up on the virtual loopback a while
 					// after boot (its module waits on the visor tree + dmsg).
@@ -630,8 +509,12 @@
 					// operator starts BY HAND still gets its UI window. Autostarted
 					// visors get a bounded wait; the manual case waits as long as
 					// the page lives.
+					// A same-origin dashboard (a hypervisor serving this desk) is ready the
+					// moment the desk is: it is this origin's own page and needs no visor on
+					// the virtual loopback to render. Only the in-tab visor's UI has to wait
+					// for its port to listen.
 					(function waitHV(n) {
-						if (globalThis.vnet && globalThis.vnet.listening(hvPort)) {
+						if (opts.dashboardURL || (globalThis.vnet && globalThis.vnet.listening(hvPort))) {
 							// Hold the open until the service-worker question is
 							// settled either way — opening a beat earlier would
 							// route this first load through the transcoder.
@@ -651,7 +534,7 @@
 									// unconditionally is how this produced two (measured).
 									var win = deskWin;
 									if (win && win.openTab) {
-										try { win.openTab('vnet:' + hvPort, '/?embed=1#/?embed=1', 'http', false); } catch (e2) {}
+										try { var du = new URL(dashURL); win.openTab(du.host, du.pathname + du.search + du.hash, du.protocol.replace(':', ''), false); } catch (e2) {}
 									} else {
 										win = panel.openWindow(true, globalThis.__DESK_DASHBOARD_URL__);
 										deskWin = win;
@@ -747,15 +630,10 @@
 
 		// Which visor this desk is a shell over is decided by a CAPABILITY, not
 		// by configuration: hostBridge probes for a /ws on this origin and, if
-		// one answers, claims the visor's vnet ports for the host visor. A
-		// bridge means there is a native visor underneath; no bridge means the
-		// tab is on its own and boots the wasm path. opts.native stays as the
-		// server's own declaration of the same fact, so a native page whose
-		// socket is refused still gets its desk (over same-origin /api) rather
-		// than trying to start a wasm visor that was never served to it.
-		return hostBridge().then(function (bridge) {
-			if (bridge || opts.native) return bootHost(bridge);
-			return bootWasm();
-		});
+		// one answers, claims the visor's vnet ports for the host visor. Either
+		// way the SAME desk boots — one desk, one code path; the bridge only
+		// decides where the panels' traffic goes and whether a visor of the
+		// tab's own is offered at all.
+		return hostBridge().then(bootWasm);
 	};
 })();
