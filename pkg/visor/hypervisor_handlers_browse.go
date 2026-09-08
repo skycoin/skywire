@@ -87,9 +87,6 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			w.Header().Set("Cache-Control", "no-cache")
 			_, _ = w.Write(browseui.WinBoxWasm()) //nolint:errcheck
 			return
-		case "/skywire-browse-launcher.js":
-			serveJS(w, []byte(nativeBrowseLauncherJS))
-			return
 		case "/wasm-visor.wasm":
 			// The desk-host blob. netscrape — the nested browser the desk
 			// renders its windows as TABS in — is Go/wasm and lives in this
@@ -229,7 +226,7 @@ func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request,
 	ver := uiVersionHash(b)
 	inject := []byte(`<script>window.__SKYWIRE_LOCAL_PK__=` + strconv.Quote(hv.visor.conf.PK.Hex()) +
 		`;window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;` + browseOriginInjectJS(hv.visor) + `</script>` +
-		`<script src="browse.js"></script><script src="skywire-browse-launcher.js"></script>` +
+		`<script src="browse.js"></script>` +
 		`<script>` + uiAutoReloadJS + `</script>`)
 	out := bytes.Replace(b, []byte("</body>"), append(inject, []byte("</body>")...), 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -237,14 +234,17 @@ func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request,
 	_, _ = w.Write(out) //nolint:errcheck
 }
 
-// serveNativeDesk serves the converged desk shell at /desk on the NATIVE
-// hypervisor UI port — the same page skeleton `skywire cli hv serve` renders
-// (deskShellTemplate in wasmserve.go), in native mode: the browse launcher
-// (the exact script the dashboard injection loads) mounts the desk panel over
-// its /api-backed providers, and desk-boot's native branch opens the Angular
-// dashboard as a same-origin window inside it. NO wasm-visor module is
-// referenced or served on this port — the native visor IS the visor; the desk
-// here is a shell over it, so the in-page-visor machinery stays dormant.
+// serveNativeDesk serves THE desk at the root of the native hypervisor UI
+// port — the same page skeleton and the same desk module `skywire cli hv
+// serve` renders (deskShellTemplate in wasmserve.go). There is one desk; what
+// differs here is what it is a shell over. desk-boot probes this origin's /ws,
+// finds the hypervisor, and bridges the desk's virtual-loopback ports to the
+// host visor, so the panels, the nested browser and the terminal all reach the
+// native visor and never a visor of the tab's own: autostartVisor is off, the
+// help terminal and the docs server (both need the skywire command module,
+// which this port does not serve) are off, the dashboard tab is this origin's
+// own Angular UI, and the terminal is the host's pty page. The native visor IS
+// the visor; the desk is a shell over it.
 func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 	localPK, browseJS := "", ""
 	if hv.visor != nil {
@@ -252,8 +252,10 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 		browseJS = browseOriginInjectJS(hv.visor)
 	}
 	// Mirror serveInjectedIndex's page environment (local PK, browse-origin
-	// mode, served-bundle fingerprint + auto-reloader) so the launcher and the
-	// update behavior are identical on /desk and on the dashboard beneath it.
+	// mode, served-bundle fingerprint + auto-reloader) so the desk and the
+	// dashboard beneath it see the same page and update together. The local
+	// PK doubles as the desk module's "this page is served by a visor" signal:
+	// its DirectLoader renders same-origin pages natively only when it is set.
 	var ver string
 	if hv.c.UIAssets != nil {
 		if f, err := hv.c.UIAssets.Open("index.html"); err == nil {
@@ -265,8 +267,8 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 	}
 	scripts := `<script>window.__SKYWIRE_LOCAL_PK__=` + strconv.Quote(localPK) +
 		`;window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;` + browseJS + `</script>` + "\n" +
+		`<script src="/wasm_exec.js"></script>` + "\n" +
 		`<script src="/browse.js"></script>` + "\n" +
-		`<script src="/skywire-browse-launcher.js"></script>` + "\n" +
 		`<script>` + uiAutoReloadJS + `</script>` + "\n" +
 		`<script src="/desk-boot.js"></script>`
 	page := deskShellHTML(scripts, nativeDeskBootOpts(localPK))
@@ -275,18 +277,27 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 	_, _ = w.Write(page) //nolint:errcheck
 }
 
-// nativeDeskBootOpts is the skywireDeskBoot options object for the
-// native-served /desk: native mode (no wasm anything), dashboard window on
-// the same-origin Angular UI, and a terminal window on the host visor's pty
-// page. embed=1 rides in the HASH (the Angular UI is hash-routed) so the
-// iframe's own injected launcher hides its taskbar — the same chrome-less
-// guard the ☰ chat/log windows rely on.
-//
-// terminalURL is the page the dashboard's Terminal tab opens: /pty/<pk>,
-// xterm over a websocket to the local visor's pty. Relative for the same
-// reason dashboardURL is. Absent when no visor is attached (nothing to open).
+// nativeDeskBootOpts is the skywireDeskBoot options object for the desk the
+// native hypervisor serves. The desk module and winbox come off this port; the
+// skywire command module does not, so nothing that would exec it is enabled:
+// no visor autostart, no help terminal, no docs server. The dashboard tab is
+// this origin's Angular UI — RELATIVE, since through a vnet service worker the
+// page can sit under a /vnet/<port>/ prefix the server never sees, and an
+// absolute URL would escape onto the outer server (the trap #4499 fixed).
+// embed=1 rides in the HASH (the Angular UI is hash-routed) so the framed
+// dashboard hides its own taskbar. terminalURL is the host's pty page,
+// /pty/<pk>, xterm over a websocket; absent when no visor is attached.
 func nativeDeskBootOpts(localPK string) string {
-	opts := "{\n  native: true,\n  dashboardURL: './?embed=1#/?embed=1',\n"
+	opts := "{\n" +
+		"  persistDB: 'skywire-desk',\n" +
+		"  deskWasmURL: '/wasm-visor.wasm',\n" +
+		"  wasmExecURL: '/wasm_exec.js',\n" +
+		"  winboxURL: '/winbox.wasm',\n" +
+		"  autostartVisor: false,\n" +
+		"  helpTerminal: false,\n" +
+		"  docsPort: 0,\n" +
+		"  hvWindow: true,\n" +
+		"  dashboardURL: './?embed=1#/?embed=1',\n"
 	if localPK != "" {
 		opts += "  terminalURL: './pty/" + localPK + "',\n"
 	}
@@ -333,96 +344,4 @@ const uiAutoReloadJS = `(function(){
       }
     }).catch(function(){});
   }, 30000);
-})();`
-
-// nativeBrowseLauncherJS is the native HV-UI launcher: it mounts the
-// engine-free desk panel (browseui/desk-panel.js, part of /browse.js) and
-// publishes it as __skywireDesk — the handle desk-boot's native branch waits
-// on before opening the dashboard window. It refuses to mount inside an
-// embedded frame (embed=1 in the hash/query): the dashboard window is an
-// iframe of the framed root and must not grow its own taskbar. The retired
-// browse.js engine's providers are gone with it. The native desk's terminal
-// is the host visor's pty page (/pty/<pk>, xterm over a websocket — the same
-// backend as the dashboard's Terminal tab), opened as a desk window at boot by
-// desk-boot and from the ☰ menu here, until the shared shell integration lands.
-const nativeBrowseLauncherJS = `(function () {
-  if (/[#?&]embed=1/.test(location.hash + location.search)) { return; }
-  // netscrape's transport on this page: the hypervisor's browse API. Mesh
-  // hosts (.dmsg / .skynet / .skysocks, or a bare PK) go through
-  // /api/browse/fetch — a skynet route first, dmsg-HTTP as the fallback — and
-  // everything else through /api/browse/clearnet, where the visor picks a
-  // proxy exit. The wasm desk does the same through its in-page visor's
-  // fetchDmsg/fetchClearnet. Without a hook netscrape asks for a same-origin
-  // /fetch proxy this server has never had, and every foreign URL rendered
-  // "404 page not found" (seen live). Same-origin pages never get here: the
-  // browser role's DirectLoader renders them natively.
-  function b64Bytes(b64) {
-    var s = atob(b64 || "");
-    var out = new Uint8Array(s.length);
-    for (var i = 0; i < s.length; i++) { out[i] = s.charCodeAt(i); }
-    return out;
-  }
-  function browseResponse(r) {
-    var h = new Headers();
-    if (r && r.header) { for (var k in r.header) { try { h.set(k, r.header[k]); } catch (e) { /* forbidden name */ } } }
-    return new Response(b64Bytes(r && r.body), { status: (r && r.status_code) || 200, headers: h });
-  }
-  function browsePost(path, req) {
-    return fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) })
-      .then(function (res) {
-        return res.json().then(function (j) {
-          if (!res.ok) {
-            return new Response("skywire browse: " + ((j && j.error) || res.status), { status: 502, headers: { "content-type": "text/plain" } });
-          }
-          return browseResponse(j);
-        });
-      });
-  }
-  if (!globalThis.__netscrapeFetch) {
-    globalThis.__netscrapeFetch = function (url) {
-      var u;
-      try { u = new URL(url, location.href); } catch (e) { return fetch(url); }
-      var host = u.hostname || "";
-      if (/\.(dmsg|skynet|skysocks)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
-        return browsePost("/api/browse/fetch", { host: host, port: u.port ? (parseInt(u.port, 10) || 80) : 80, method: "GET", path: (u.pathname || "/") + (u.search || "") });
-      }
-      // The browser's proxy setting (its ⚙ panel) picks the exit: a named
-      // skysocks exit, this visor's own egress ("direct" — the visor's PK is
-      // the exit the API treats as fetch-it-yourself), or the visor's default.
-      var p = globalThis.__netscrapeProxy || {};
-      var req = { method: "GET", url: u.href };
-      if (p.mode === "direct" && window.__SKYWIRE_LOCAL_PK__) { req.exit_pk = window.__SKYWIRE_LOCAL_PK__; }
-      else if (p.mode === "exit" && /^[0-9a-f]{66}$/i.test(p.exit || "")) { req.exit_pk = p.exit; }
-      return browsePost("/api/browse/clearnet", req);
-    };
-  }
-  function ready() {
-    if (!self.skywireDeskPanel || !document.body || typeof self.WinBox !== "function") { return setTimeout(ready, 200); }
-    // RELATIVE: reached through the vnet service worker this page lives under
-    // a "/vnet/<port>/" prefix the server never sees, so an absolute URL
-    // escapes it onto the outer server's root — a different visor entirely
-    // (the same trap #4499 fixed for /desk). "./" is resolved by the browser
-    // against the URL it actually asked for, which keeps the prefix.
-    //
-    // The root, not a /dashboard path: the hypervisor serves the dashboard at
-    // the root whenever the request is framed, and the SW normalises deeper
-    // paths away anyway. The launcher already returns early on an embed=1
-    // page, so this only ever runs on the desk root.
-    var dashURL = "./?embed=1#/?embed=1";
-    // The terminal entry: the host visor's pty over a websocket (/pty/<pk>),
-    // the page the dashboard's Terminal tab opens. Relative for the same
-    // reason dashURL is.
-    var termURL = window.__SKYWIRE_LOCAL_PK__ ? "./pty/" + window.__SKYWIRE_LOCAL_PK__ : "";
-    var p = self.skywireDeskPanel.mount(document, { dashboardURL: dashURL, terminalURL: termURL });
-    // Stream the NATIVE visor's server-side log (/api/log SSE) into the log
-    // window's buffer, when a log consumer exists on the page.
-    try {
-      var es = new EventSource("/api/log");
-      es.onmessage = function (ev) {
-        try { var j = JSON.parse(ev.data); if (self.skywireLog) { self.skywireLog.emit(j.level || "log", [j.msg]); } } catch (e) {}
-      };
-    } catch (e) {}
-    self.__skywireDesk = p;
-  }
-  ready();
 })();`
