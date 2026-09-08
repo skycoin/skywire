@@ -44,45 +44,47 @@ func jsOpenBrowser(_ js.Value, args []js.Value) any {
 	if !el.Truthy() {
 		return nil
 	}
-	ensureFlexColumn(el)
-	netscrape.Open(el)
+	netscrape.Open(netscrapeHost(el))
 	return nil
 }
 
-// ensureFlexColumn makes el a flex column before netscrape mounts into it.
+// netscrapeHost returns an element for netscrape to own, nested one level
+// inside el rather than el itself.
 //
-// netscrape lays its chrome out as a flex column: the tab strip and address bar
-// are fixed-height rows, and the views container that holds the page takes the
-// remainder with `position:relative;flex:1;min-height:0` (netscrape browser.go).
-// It repairs `position` on the element it is handed — turning a `static` host
-// element `relative` so the absolutely-positioned page views have a containing
-// block — but it does NOT repair `display`.
+// netscrape styles its host: it sets display:flex + flexDirection:column so its
+// tab strip and address bar sit above a views container that claims the rest
+// with `flex:1;min-height:0` (netscrape browser.go). That is correct and
+// netscrape does it unprompted — the host does not need to.
 //
-// So a host that passes a plain block element gets a views container whose
-// `flex:1` is inert (no flex parent to distribute along) and whose
-// `min-height:0` permits it to collapse. Its only child is an absolutely
-// positioned iframe, which contributes no content height, so the container
-// resolves to ZERO height. The page inside loads and runs perfectly and is
-// simply never visible — which is exactly how it presented: a fully loaded
-// hypervisor UI, document title and all, in a frame 1000px wide and 0px tall.
+// The problem is that something else styles the same element AFTERWARDS. The
+// desk's tab machinery shows a pane with `view.style.display = "block"`
+// (0magnet/desk tabs_js.go, both on add and on every tab SHOW). That overwrites
+// netscrape's `display:flex` while leaving `flex-direction:column` behind — the
+// contradictory pair is the fingerprint. The views container's `flex:1` then has
+// no flex parent to distribute along, `min-height:0` lets it collapse, and its
+// only child is an absolutely positioned iframe contributing no content height.
+// It resolves to ZERO height, so the page inside loads, runs, and is never
+// visible: a fully working hypervisor UI in a frame 1000px wide and 0px tall.
 //
-// Fixed here rather than in netscrape so no vendored dependency is patched, and
-// because the flex context is properly the host's responsibility — netscrape is
-// mounted into a WinBox body here, a docked pane elsewhere, and each host knows
-// its own layout. Only set when the element is not already a flex container, so
-// a host that has arranged this itself is left alone.
-func ensureFlexColumn(el js.Value) {
-	cs := js.Global().Call("getComputedStyle", el)
-	if !cs.Truthy() {
-		return
+// That file's own comment notes "one that styles its host (the browser does)
+// needs to find a position it can keep" — position was preserved, display was
+// not.
+//
+// Giving netscrape its own child means the tab machinery keeps setting
+// display:block on the outer element, where block is exactly right, and the
+// inner element netscrape owns is never touched. No vendored dependency is
+// patched and nothing has to win a race over one style property.
+func netscrapeHost(el js.Value) js.Value {
+	doc := js.Global().Get("document")
+	if !doc.Truthy() {
+		return el
 	}
-	if d := cs.Get("display").String(); d == "flex" || d == "inline-flex" {
-		return
-	}
-	style := el.Get("style")
-	if !style.Truthy() {
-		return
-	}
-	style.Set("display", "flex")
-	style.Set("flexDirection", "column")
+	inner := doc.Call("createElement", "div")
+	// position:relative so netscrape leaves position alone (it only supplies one
+	// when the host computes to static); 100%/100% so the inner box inherits the
+	// outer's geometry whatever the host sized it to.
+	inner.Get("style").Set("cssText",
+		"position:relative;width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden")
+	el.Call("appendChild", inner)
+	return inner
 }
