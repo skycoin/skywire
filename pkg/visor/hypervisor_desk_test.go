@@ -54,10 +54,14 @@ func TestNativeDeskServing(t *testing.T) {
 			t.Errorf("Content-Type=%q, want text/html", ct)
 		}
 		body := w.Body.String()
-		// The native-mode marker: desk-boot must take its native branch, which
-		// boots no in-page visor and opens the same-origin dashboard window.
-		if !strings.Contains(body, "native: true") {
-			t.Error("page lacks the native-mode marker (native: true)")
+		// ONE desk: the page boots the same desk module the wasm page does, as a
+		// shell over the host visor — no in-tab visor, no help terminal and no
+		// docs server (those need the skywire command module this port does
+		// not serve), the dashboard tab on this origin's own UI.
+		for _, want := range []string{"deskWasmURL: '/wasm-visor.wasm'", "autostartVisor: false", "helpTerminal: false", "docsPort: 0", "hvWindow: true"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("page lacks %s", want)
+			}
 		}
 		// RELATIVE and rooted: an absolute URL escapes the /vnet/<port>/ prefix
 		// onto the outer server's root (the trap #4499 fixed for /desk), and the
@@ -70,7 +74,7 @@ func TestNativeDeskServing(t *testing.T) {
 		}
 		// The shell is assembled from the SAME assets the dashboard injection
 		// uses plus the shared desk boot.
-		for _, want := range []string{`src="/browse.js"`, `src="/skywire-browse-launcher.js"`, `src="/desk-boot.js"`, "skywireDeskBoot("} {
+		for _, want := range []string{`src="/wasm_exec.js"`, `src="/browse.js"`, `src="/desk-boot.js"`, "skywireDeskBoot("} {
 			if !strings.Contains(body, want) {
 				t.Errorf("page lacks %s", want)
 			}
@@ -84,26 +88,31 @@ func TestNativeDeskServing(t *testing.T) {
 		if !strings.Contains(body, "terminalURL: './pty/"+pk.Hex()+"'") {
 			t.Error("page lacks the relative pty terminal window URL")
 		}
-		// The ONE-VISOR rule, as served bytes: the native desk page must not
-		// even reference the wasm-visor module or its loader.
-		for _, banned := range []string{"wasm-visor.wasm", "wasm_exec", "skywire.wasm"} {
+		// The ONE-VISOR rule, as served bytes: the desk module is served, but
+		// nothing that would start a visor of the tab's own is — no autostart
+		// and no reference to the skywire command module.
+		for _, banned := range []string{"autostartVisor: true", "/skywire.wasm", "skywire.wasm.gz", "skywire-browse-launcher"} {
 			if strings.Contains(body, banned) {
-				t.Errorf("native desk page references %s — the in-page-visor machinery must stay dormant", banned)
+				t.Errorf("desk page references %s — the native visor IS the visor", banned)
 			}
 		}
 	})
 
-	t.Run("the launcher gives netscrape a transport through the browse API", func(t *testing.T) {
-		w := get("/skywire-browse-launcher.js")
+	t.Run("the JS-panel launcher is gone; desk-boot carries the browse-API transport", func(t *testing.T) {
+		if w := get("/skywire-browse-launcher.js"); w.Code != http.StatusNotFound {
+			t.Errorf("launcher status=%d, want 404 — the engine-free panel was retired", w.Code)
+		}
+		w := get("/desk-boot.js")
 		if w.Code != http.StatusOK {
-			t.Fatalf("status=%d, want 200", w.Code)
+			t.Fatalf("desk-boot status=%d, want 200", w.Code)
 		}
 		body := w.Body.String()
-		// Without a hook netscrape falls back to a same-origin /fetch proxy this
+		// Over the host bridge netscrape's transport is the hypervisor's browse
+		// API; without a hook it falls back to a same-origin /fetch proxy this
 		// server does not have, and every foreign URL renders a 404 body.
 		for _, want := range []string{"__netscrapeFetch", "/api/browse/fetch", "/api/browse/clearnet"} {
 			if !strings.Contains(body, want) {
-				t.Errorf("launcher lacks %s", want)
+				t.Errorf("desk-boot lacks %s", want)
 			}
 		}
 	})
@@ -121,7 +130,7 @@ func TestNativeDeskServing(t *testing.T) {
 		}
 	})
 
-	t.Run("Angular serves at the FRAMED root, with the launcher injection intact", func(t *testing.T) {
+	t.Run("Angular serves at the FRAMED root, with the page injection intact", func(t *testing.T) {
 		// The dashboard has no path of its own. Under the vnet service worker a
 		// framed page gets its <base href> rewritten to the /vnet/<port>/ prefix,
 		// so any deeper path is normalised back to the root before the document
@@ -146,7 +155,7 @@ func TestNativeDeskServing(t *testing.T) {
 				t.Error("Angular index not served at the framed root")
 			}
 			if !strings.Contains(body, `src="browse.js"`) || !strings.Contains(body, "__SKYWIRE_LOCAL_PK__") {
-				t.Error("index injection (desk launcher) missing on the framed root")
+				t.Error("index injection (browse.js + local PK) missing on the framed root")
 			}
 		}
 	})
@@ -203,13 +212,14 @@ func TestNativeDeskServing(t *testing.T) {
 			t.Fatalf("status=%d, want 200", w.Code)
 		}
 		body := w.Body.String()
-		if !strings.Contains(body, "native: true") {
-			t.Error("native desk page lost its native:true boot option")
+		if !strings.Contains(body, "autostartVisor: false") {
+			t.Error("native desk page lost its explicit autostartVisor: false")
 		}
-		// These two are what the WASM desk passes to run a visor in the tab.
-		// Their absence here is the guarantee, and it is what makes serving the
-		// module above safe: nothing tells the desk to boot one.
-		for _, never := range []string{"autostartVisor", "wasmURL: '/skywire.wasm'"} {
+		// These are what the WASM desk passes to run a visor in the tab. Their
+		// absence here is the guarantee, and it is what makes serving the desk
+		// module safe: nothing tells the desk to boot one, and the command
+		// module it would need is not even named.
+		for _, never := range []string{"autostartVisor: true", "wasmURL: '/skywire.wasm'"} {
 			if strings.Contains(body, never) {
 				t.Errorf("native desk page carries %q — it must not start a visor", never)
 			}
