@@ -133,6 +133,64 @@ skywire app skychat \
 - Members come from `--cxo-peer`. Drive the group from the client with
   `cli skychat group …` ([skychat-visor.md](skychat-visor.md)).
 
+## Verified walkthrough: two instances on one host
+
+The smallest end-to-end check, run on 2026-09-08 against the develop build
+(v1.3.94-0). Two chat-apps on loopback, each with its own identity, one
+listening and one dialing, a message each way over TCP-direct.
+
+Mint two identities (`gen-keys` prints the public key on the first line and
+the secret key on the second):
+
+```bash
+skywire cli config gen-keys > keysA.txt
+skywire cli config gen-keys > keysB.txt
+```
+
+Start A listening, pinned to B, and B dialing A. Neither needs a visor. The
+HTTP control surfaces sit on 8801 and 8802; the TCP-direct listener on 8800:
+
+```bash
+skywire app skychat --standalone --sk 1000 3 10 983 1000sed -n 2p keysA.txt) --addr 127.0.0.1:8801 --tcp-listen 127.0.0.1:8800 --tcp-whitelist 1000 3 10 983 1000sed -n 1p keysB.txt)
+skywire app skychat --standalone --sk 1000 3 10 983 1000sed -n 2p keysB.txt) --addr 127.0.0.1:8802 --tcp-peer tcp://1000 3 10 983 1000sed -n 1p keysA.txt).0.0.1:8800
+```
+
+A logs `tcp-direct conn accepted from <pkB>` and B logs `tcp-peer connected
+to <pkA>.0.0.1` within a second. Both `/status` endpoints then report
+`"active_peer_conns":1`.
+
+Send a message from each side. `wait_ms` makes the call block until the
+peer acknowledges, and the response carries the message id:
+
+```bash
+curl -s -X POST http://127.0.0.1:8801/message -H 'Content-Type: application/json' \
+  -d '{"recipient":"<pkB>","message":"hello from A over tcp-direct","wait_ms":3000}'
+# {"acked":true,"id":"8077ca12ee05c806","ms":2}
+curl -s -X POST http://127.0.0.1:8802/message -H 'Content-Type: application/json' \
+  -d '{"recipient":"<pkA>","message":"hello from B over tcp-direct","wait_ms":3000}'
+# {"acked":true,"id":"490cd10ae04ff9c7","ms":1}
+```
+
+Every message carries an id whether or not you wait for it. The receiving
+side sees it on its SSE stream (`curl -N http://127.0.0.1:8802/sse`):
+
+```
+data: {"dir":"in","id":"8077ca12ee05c806","len":28,"message":"hello from A over tcp-direct","network":"tcp-direct","sender":"<pkA>"}
+```
+
+and the sending side sees its own `"dir":"out"` event followed by a
+`dm-status` event with `"status":"received"` once the peer confirms. The
+`/status` counters end at one inbound and one outbound message on each side
+with `outbound_fail_count` still zero.
+
+Two things people get wrong:
+
+- The peer address is `tcp://<pk>:port`. The scheme is mandatory; a
+  bare `<pk>:port` is rejected with `tcp-peer: must start with
+  "tcp://"`.
+- `/history` answers `persistence not enabled` unless `--persist` is on.
+  Without it, the SSE stream is the only place inbound messages appear.
+
 ## Persisted history
 
 Off by default; enable a local BoltDB:
