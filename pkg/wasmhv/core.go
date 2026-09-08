@@ -137,6 +137,9 @@ type DMSGServerInfo struct {
 	// visor.DMSGServerInfo so the shared node UI shows the connection type.
 	Carrier  string `json:"carrier,omitempty"`
 	Protocol string `json:"protocol,omitempty"`
+	// Streams is the session's open mux stream count (0 = idle, -1 =
+	// unmeasurable). Mirrors visor.DMSGServerInfo.
+	Streams int `json:"streams"`
 }
 
 // Summary mirrors the scalar fields of visor.Summary the node table reads.
