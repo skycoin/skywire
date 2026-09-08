@@ -248,12 +248,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 			w.WriteHeader(http.StatusNotModified)
 			return
 		}
-		b, err := wasmbin.GetVariant(pickVariant(r))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		_, _ = w.Write(b) //nolint:errcheck
+		writeWasmVariant(w, r, pickVariant(r))
 	})
 	mux.HandleFunc("/wasm_exec.js", func(w http.ResponseWriter, r *http.Request) {
 		vtag := variantETag(r)
@@ -284,12 +279,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 				w.WriteHeader(http.StatusNotModified)
 				return
 			}
-			b, err := wasmbin.GetVariant(v)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			_, _ = w.Write(b) //nolint:errcheck
+			writeWasmVariant(w, r, v)
 		})
 		mux.HandleFunc("/wasm/"+string(v)+"/wasm_exec.js", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/javascript")
@@ -375,7 +365,21 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		w.Header().Set("Location", "./")
 		w.WriteHeader(http.StatusMovedPermanently)
 	})
-	serveBytes("/winbox.wasm", "application/wasm", wasmhv.WinBoxWasm())
+	// Same reasoning as writeWasmVariant: winbox is committed gzipped, and
+	// WinBoxWasm() inflates it (once, behind a sync.Once — so the cost here is
+	// the transfer and the proxy's recompress rather than a per-request
+	// inflate). Hand over the committed bytes when the client takes gzip.
+	mux.HandleFunc("/winbox.wasm", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/wasm")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Vary", "Accept-Encoding")
+		if gz := wasmhv.WinBoxWasmGz(); len(gz) > 0 && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			w.Header().Set("Content-Encoding", "gzip")
+			_, _ = w.Write(gz) //nolint:errcheck
+			return
+		}
+		_, _ = w.Write(wasmhv.WinBoxWasm()) //nolint:errcheck
+	})
 	serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
 	serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)
@@ -929,6 +933,39 @@ func wasmPasswordGate(h http.Handler, password string, secure bool) http.Handler
 		}
 		loginPage(w, "access password required")
 	})
+}
+
+// writeWasmVariant writes an embedded wasm-visor blob, preferring the COMMITTED
+// gzip bytes over bytes it has to inflate first.
+//
+// The blob is stored gzipped (~12MB) and only needs inflating (~59MB) by
+// something that INSTANTIATES it. wasmbin.GetVariant inflates on every call —
+// there is no cache — so serving it that way inflated tens of megabytes per
+// request, and a reverse proxy in front then compressed the result straight
+// back down. That is three copies of the work to deliver bytes we already had
+// in the right shape.
+//
+// Browsers decompress a Content-Encoding: gzip response themselves and
+// WebAssembly.instantiateStreaming is happy with what comes out, so handing
+// over the committed bytes skips both the inflate and the recompress. It also
+// ships a gzip -9 blob rather than whatever level a proxy picks for speed:
+// measured on the live deploy, 12.3MB committed against 13.8MB recompressed.
+//
+// Falls back to inflating for a client that did not offer gzip. Vary is set so
+// a cache between here and the browser keeps the two encodings apart.
+func writeWasmVariant(w http.ResponseWriter, r *http.Request, v wasmbin.Variant) {
+	w.Header().Set("Vary", "Accept-Encoding")
+	if gz := wasmbin.GetVariantGz(v); len(gz) > 0 && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		_, _ = w.Write(gz) //nolint:errcheck
+		return
+	}
+	b, err := wasmbin.GetVariant(v)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_, _ = w.Write(b) //nolint:errcheck
 }
 
 // randomHex returns n cryptographically-random bytes as a lowercase hex string.
