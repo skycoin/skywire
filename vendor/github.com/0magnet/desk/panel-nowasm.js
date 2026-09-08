@@ -131,6 +131,15 @@
 		// Capability-gated entries: present only when the page actually carries
 		// the machinery (the wasm-visor DOM instance installs these; the native
 		// desk page has neither and shows neither).
+		// A host with no in-page shell can still name a terminal PAGE: the native
+		// hypervisor passes its /pty/<pk> — xterm over a websocket to the host
+		// visor's pty — and it opens as an iframe window the way the dashboard
+		// does. The in-page shell wins where both exist.
+		if (opts.terminalURL && !(globalThis.skywireShell && typeof globalThis.skywireShell.open === 'function')) {
+			menuItem('terminal', function () {
+				panel.open({ title: 'terminal', url: opts.terminalURL, x: 'center', y: 'center', width: '70%', height: '60%' });
+			});
+		}
 		if (globalThis.skywireShell && typeof globalThis.skywireShell.open === 'function') {
 			menuItem('terminal', function () {
 				var wb = panel.open({ title: 'terminal', x: 'center', y: 'center', width: '70%', height: '60%' });

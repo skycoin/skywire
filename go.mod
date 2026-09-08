@@ -65,7 +65,7 @@ require (
 	github.com/0magnet/bitree v0.0.0-20260906144807-e66de0b4c738
 	github.com/0magnet/bottle v0.0.0-20260908155251-920d2280a387
 	github.com/0magnet/calvin v0.0.0-20260907164811-60c88e364a88
-	github.com/0magnet/desk v0.0.0-20260908155111-f022a08dc97e
+	github.com/0magnet/desk v0.0.0-20260908190105-9bb2944487db
 	github.com/0magnet/desk/panes v0.0.0-20260908155111-f022a08dc97e
 	github.com/0magnet/gobrpc v0.0.0-20260906144809-5215ec59d553
 	github.com/0magnet/golang-ipc v1.2.5-0.20260905172007-25d9c1a262d0
@@ -83,7 +83,7 @@ require (
 	github.com/0magnet/termanim v0.0.0-20260907160035-43b5e3d1c5a0
 	github.com/0magnet/visnetwork-go v0.0.0-20260906025559-6b0de1648ee9
 	github.com/0magnet/wfdrive v0.3.1
-	github.com/0magnet/winbox-go v0.0.0-20260907164818-1573f12aafdd
+	github.com/0magnet/winbox-go v0.0.0-20260908011106-113d480c4188
 	github.com/0magnet/yamux v0.1.3-0.20260905172050-450c4058f851
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0

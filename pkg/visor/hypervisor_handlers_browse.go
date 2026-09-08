@@ -269,7 +269,7 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 		`<script src="/skywire-browse-launcher.js"></script>` + "\n" +
 		`<script>` + uiAutoReloadJS + `</script>` + "\n" +
 		`<script src="/desk-boot.js"></script>`
-	page := deskShellHTML(scripts, nativeDeskBootOpts)
+	page := deskShellHTML(scripts, nativeDeskBootOpts(localPK))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(page) //nolint:errcheck
@@ -277,13 +277,21 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 
 // nativeDeskBootOpts is the skywireDeskBoot options object for the
 // native-served /desk: native mode (no wasm anything), dashboard window on
-// the same-origin Angular UI. embed=1 rides in the HASH (the Angular UI is
-// hash-routed) so the iframe's own injected launcher hides its taskbar — the
-// same chrome-less guard the ☰ chat/log windows rely on.
-const nativeDeskBootOpts = `{
-  native: true,
-  dashboardURL: './?embed=1#/?embed=1',
-}`
+// the same-origin Angular UI, and a terminal window on the host visor's pty
+// page. embed=1 rides in the HASH (the Angular UI is hash-routed) so the
+// iframe's own injected launcher hides its taskbar — the same chrome-less
+// guard the ☰ chat/log windows rely on.
+//
+// terminalURL is the page the dashboard's Terminal tab opens: /pty/<pk>,
+// xterm over a websocket to the local visor's pty. Relative for the same
+// reason dashboardURL is. Absent when no visor is attached (nothing to open).
+func nativeDeskBootOpts(localPK string) string {
+	opts := "{\n  native: true,\n  dashboardURL: './?embed=1#/?embed=1',\n"
+	if localPK != "" {
+		opts += "  terminalURL: './pty/" + localPK + "',\n"
+	}
+	return opts + "}"
+}
 
 // uiVersionHash fingerprints the served UI bundle (short sha256 of index.html,
 // which embeds the content-hashed chunk names).
@@ -333,9 +341,10 @@ const uiAutoReloadJS = `(function(){
 // on before opening the dashboard window. It refuses to mount inside an
 // embedded frame (embed=1 in the hash/query): the dashboard window is an
 // iframe of the framed root and must not grow its own taskbar. The retired
-// browse.js engine's providers are gone with it; the native desk's terminal
-// remains the dashboard's Terminal tab (dmsgpty) until the shared shell
-// integration lands.
+// browse.js engine's providers are gone with it. The native desk's terminal
+// is the host visor's pty page (/pty/<pk>, xterm over a websocket — the same
+// backend as the dashboard's Terminal tab), opened as a desk window at boot by
+// desk-boot and from the ☰ menu here, until the shared shell integration lands.
 const nativeBrowseLauncherJS = `(function () {
   if (/[#?&]embed=1/.test(location.hash + location.search)) { return; }
   function ready() {
@@ -351,7 +360,11 @@ const nativeBrowseLauncherJS = `(function () {
     // paths away anyway. The launcher already returns early on an embed=1
     // page, so this only ever runs on the desk root.
     var dashURL = "./?embed=1#/?embed=1";
-    var p = self.skywireDeskPanel.mount(document, { dashboardURL: dashURL });
+    // The terminal entry: the host visor's pty over a websocket (/pty/<pk>),
+    // the page the dashboard's Terminal tab opens. Relative for the same
+    // reason dashURL is.
+    var termURL = window.__SKYWIRE_LOCAL_PK__ ? "./pty/" + window.__SKYWIRE_LOCAL_PK__ : "";
+    var p = self.skywireDeskPanel.mount(document, { dashboardURL: dashURL, terminalURL: termURL });
     // Stream the NATIVE visor's server-side log (/api/log SSE) into the log
     // window's buffer, when a log consumer exists on the page.
     try {
