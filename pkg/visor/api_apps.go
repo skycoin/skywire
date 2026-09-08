@@ -962,7 +962,7 @@ func (v *Visor) GetVPNClientAddress() string {
 // GetSkysocksClientAddress get PK address of server set on skysocks-client
 func (v *Visor) GetSkysocksClientAddress() string {
 	for _, v := range v.conf.Launcher.Apps {
-		if v.Name == skyenv.SkysocksClientAddr {
+		if v.Name == skyenv.SkysocksClientName {
 			for index := range v.Args {
 				if v.Args[index] == "--srv" && index+1 < len(v.Args) {
 					return v.Args[index+1]
