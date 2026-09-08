@@ -4,7 +4,7 @@ A Go port of [annacrombie/plot](https://github.com/annacrombie/plot) — line
 graphs on the command line — built on
 [asciigraph](https://github.com/guptarohit/asciigraph) for the drawing.
 
-**[Live demo](https://0magnet.github.io/plot-go/)** — two counters the tab actually has, followed and redrawn in a terminal. The pipeline comes from the query: [`?p=roc:5`](https://0magnet.github.io/plot-go/?p=roc:5), [`?p=avg:5|roc:5`](https://0magnet.github.io/plot-go/?p=avg:5%7Croc:5), [`?p=cma`](https://0magnet.github.io/plot-go/?p=cma).
+**[Live demo](https://plot-go.magnetosphere.net/)** — two counters the tab actually has, followed and redrawn in a terminal. The pipeline comes from the query: [`?p=roc:5`](https://plot-go.magnetosphere.net/?p=roc:5), [`?p=avg:5|roc:5`](https://plot-go.magnetosphere.net/?p=avg:5%7Croc:5), [`?p=cma`](https://plot-go.magnetosphere.net/?p=cma).
 
 ![plot-go in the browser](docs/plot-go-demo.png "frame interval and event-loop lag, smoothed and plotted live into an xterm-go terminal")
 

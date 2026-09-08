@@ -7,7 +7,7 @@ cosmos-go is a full Go port of [cosmos.gl](https://github.com/cosmograph-org/cos
 
 The Go port drives the shaders through `syscall/js` with a raw-WebGL command layer (replacing `regl`), reimplements the d3-zoom / d3-drag interaction behaviors — including d3's smooth van Wijk–Nuij zoom transitions — and compiles with both the **standard Go toolchain** (`GOOS=js GOARCH=wasm`, ~3.4 MB) and **TinyGo** (`-target wasm`, ~610 KB).
 
-[🎮 Live demo](https://0magnet.github.io/cosmos-go/) (compiled with TinyGo)
+[🎮 Live demo](https://cosmos-go.magnetosphere.net/) (compiled with TinyGo)
 
 ![cosmos-go in the browser](docs/cosmos-go-demo.png "the force simulation running on the GPU, points and links drawn from shaders")
 

@@ -1,9 +1,15 @@
-// Package cobrarain puts the code rain behind a cobra command's help.
+// Package cobrarain puts the code rain — or any other animation — behind a
+// cobra command's help.
 //
 // It is one call, and it is separate from matrix/backdrop so that package
 // stays free of a CLI framework:
 //
 //	cobrarain.On(rootCmd, backdrop.Options{})
+//	cobrarain.On(rootCmd, backdrop.Options{Anim: plasma.New()})
+//
+// The name is historical. Nothing here knows what the backdrop is: it hands
+// the options to backdrop.Render, which draws the rain when Anim is nil and
+// that animation when it is not.
 //
 // Help for every command under the root goes through it, because cobra looks
 // up the help function on the parent when a command has none of its own.
