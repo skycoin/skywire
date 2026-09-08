@@ -705,8 +705,25 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	// Create a separate dmsg client with the TPS identity.
 	// Reuses the visor's dmsg discovery URL but with TPS keys.
-	// Default: MinSessions=0 (connect to ALL servers), ServerType="" (all types).
+	//
+	// MinSessions defaults to the VISOR's own sessions_count, not 0. Zero means
+	// "connect to every server in the deployment" AND disables the idle-session
+	// reaper (reapIdleSessionsLoop returns immediately at <=0), so the setup
+	// node's sessions only ever grow. Measured on a visor with
+	// sessions_count: 2 — the main client held 6 sessions while this one held 9,
+	// one per server in the deployment, permanently.
+	//
+	// Connect-to-all was never needed for reachability: a dmsg client is dialed
+	// via the delegated servers published in its own discovery entry, so peers
+	// find it through those regardless of how many it holds. What connect-to-all
+	// buys is a rendezvous shortcut; what it costs is N_visors x N_servers
+	// connections across the fleet, which is the shape that does not scale.
+	// transport.tps_dmsg.min_sessions still overrides for a deployment that
+	// wants the old behavior (0 = all).
 	minSessions := 0
+	if v.conf.Dmsg != nil {
+		minSessions = v.conf.Dmsg.SessionsCount
+	}
 	serverType := ""
 	if tpsDmsgConf := v.conf.Transport.TPSDmsg; tpsDmsgConf != nil {
 		minSessions = tpsDmsgConf.MinSessions
