@@ -53,15 +53,30 @@ POST /routes
 Content-Type: application/json
 ```
 
+> The request and response structs carry no `json` struct tags (except
+> `Latency`), so the wire keys are the Go field names verbatim. Two
+> consequences, and they differ by direction:
+>
+> - **Responses** are emitted capitalised: `TpID`, `From`, `To`. A client
+>   reading `tp_id` finds nothing.
+> - **Requests** are decoded case-insensitively, so `edges` and `opts` do
+>   match. But `min_hops` and `max_hops` do NOT — case-folding does not
+>   bridge an underscore. Those options are dropped silently and the
+>   request still succeeds, so a hop-constrained query comes back
+>   unconstrained with no error to indicate why.
+>
+> Use the exact keys below in both directions.
+
 ```json
 {
-    "edges": [
+    "Edges": [
         ["<source-public-key>", "<destination-public-key>"],
         ["<source-public-key-2>", "<destination-public-key-2>"]
     ],
-    "opts": {
-        "min_hops": 0,
-        "max_hops": 16
+    "Opts": {
+        "MinHops": 0,
+        "MaxHops": 16,
+        "NumRoutes": 0
     }
 }
 ```
@@ -70,10 +85,11 @@ Content-Type: application/json
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `edges` | array | Yes | Array of [source, destination] public key pairs |
-| `opts` | object | No | Route filtering options |
-| `opts.min_hops` | integer | No | Minimum number of hops (default: 0) |
-| `opts.max_hops` | integer | No | Maximum number of hops (default: 0, meaning no limit) |
+| `Edges` | array | Yes | Array of [source, destination] public key pairs |
+| `Opts` | object | No | Route filtering options |
+| `Opts.MinHops` | integer | No | Minimum number of hops (default: 0) |
+| `Opts.MaxHops` | integer | No | Maximum number of hops (default: 0, meaning no limit) |
+| `Opts.NumRoutes` | integer | No | Desired number of distinct routes per edge. Zero means the service default. A multiplexed dial MUST set this to its mux degree (plus headroom); otherwise the finder caps at 3 routes and a higher requested mux degree silently degrades. |
 
 **Responses:**
 
@@ -83,14 +99,15 @@ Content-Type: application/json
         "<source-pk>:<destination-pk>": [
             [
                 {
-                    "tp_id": "<transport-id-uuid>",
-                    "from": "<source-visor-pk>",
-                    "to": "<next-hop-visor-pk>"
+                    "TpID": "<transport-id-uuid>",
+                    "From": "<source-visor-pk>",
+                    "To": "<next-hop-visor-pk>",
+                    "Latency": 12.5
                 },
                 {
-                    "tp_id": "<transport-id-uuid>",
-                    "from": "<next-hop-visor-pk>",
-                    "to": "<destination-visor-pk>"
+                    "TpID": "<transport-id-uuid>",
+                    "From": "<next-hop-visor-pk>",
+                    "To": "<destination-visor-pk>"
                 }
             ]
         ]
@@ -107,9 +124,10 @@ The response is a JSON object where:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `tp_id` | string (UUID) | Transport ID connecting the two nodes |
-| `from` | string | Source visor public key (hex) |
-| `to` | string | Destination visor public key (hex) |
+| `TpID` | string (UUID) | Transport ID connecting the two nodes |
+| `From` | string | Source visor public key (hex) |
+| `To` | string | Destination visor public key (hex) |
+| `Latency` | number | Measured transport latency for this hop, in milliseconds. Informational only — it is NOT used in route-rule setup. Omitted when the edge has no measurement, and by route-finders that predate the field. |
 
 **Error Responses:**
 

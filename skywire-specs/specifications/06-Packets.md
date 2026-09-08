@@ -24,7 +24,7 @@ Packets are the data units transmitted over Skywire transports and routes. Every
 | `PingPacket` | 4 | Timestamp (8 bytes BE) + throughput (8 bytes BE) | Route-level latency measurement. Requires an established route. |
 | `PongPacket` | 5 | Timestamp (8 bytes BE) | Route-level pong response. Echoes the timestamp from PingPacket. |
 | `ErrorPacket` | 6 | Error message (variable) | Error notification to the route group. |
-| `SACKPacket` | 7 | Last contiguous seq (4 bytes BE) + bitmap (8 bytes BE) | Selective acknowledgment for CapSACK retransmission. |
+| `SACKPacket` | 7 | `last_contiguous_seq` (4 bytes BE) + `word_count` (1 byte) + `word_count` bitmap words (8 bytes BE each), optionally followed by a DSACK field `[flag:1][dsack_seq:4 BE]` | Selective acknowledgment for CapSACK retransmission. Minimum payload is 5 bytes (zero words); `word_count` is capped at 32 (2048 sequences). A reader MUST consume exactly `word_count` words and ignore any trailing bytes it does not recognise — that is what makes the optional DSACK field backward-compatible. The fixed 12-byte single-word form is legacy. |
 | `TransportPingPacket` | 8 | Timestamp (8 bytes BE, unix nano) | Transport-level latency measurement. Route ID = 0. Intercepted before routing. |
 | `TransportPongPacket` | 9 | Timestamp (8 bytes BE, echoed) | Transport-level pong response. Route ID = 0. Intercepted before routing. |
 

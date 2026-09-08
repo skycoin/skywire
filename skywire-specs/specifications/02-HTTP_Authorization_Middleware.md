@@ -34,7 +34,10 @@ denotes Skywire):
 |-------------|-------|
 | `SW-Public` | The remote's public key, hexadecimal-encoded. |
 | `SW-Nonce`  | The current Security Nonce for this request, decimal-encoded. |
-| `SW-Sig`    | The signature, hexadecimal-encoded, over `SHA256(nonce_bytes \|\| body)`, where `nonce_bytes` is the 8-byte big-endian encoding of the nonce and `body` is the verbatim request body. |
+| `SW-Sig`    | The signature, hexadecimal-encoded, over `SHA256(body || nonce)`, where `body` is the verbatim request body and `nonce` is the nonce rendered as decimal ASCII and appended to it (NOT a fixed-width binary encoding, and NOT prefixed). |
+
+Concretely: for body `{"a":1}` and nonce `7`, the signed preimage is the
+eight-byte string `{"a":1}7`, and the signature is over its SHA256.
 
 The server SHALL reject a request with HTTP 401 if any of the
 following hold:
@@ -44,7 +47,7 @@ following hold:
 - The nonce in `SW-Nonce` does not match the server's next-expected
   nonce for the entity.
 - The signature in `SW-Sig` does not verify against the
-  reconstructed `SHA256(nonce_bytes || body)` digest using the
+  reconstructed `SHA256(body || nonce)` digest using the
   declared public key.
 - The request body length exceeds the server's configured maximum
   (when set).
