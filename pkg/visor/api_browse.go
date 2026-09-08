@@ -237,6 +237,18 @@ func (v *Visor) BrowseClearnet(req BrowseClearnetRequest) (*SkynetHTTPResponse, 
 	// upstream proxy to the local visor's own PK. The visor fetches and the caller
 	// inlines, so unlike a browser-direct iframe load it isn't blocked by the target
 	// site's X-Frame-Options/frame-ancestors.
+	// No exit named: use the one the visor already routes its own proxy traffic
+	// through, the skysocks-client's --srv. That is what the wasm visor's
+	// fetchClearnet does with an empty exit, and what the browse-API caller
+	// (netscrape on the native desk) means by "auto". Routing to the zero key
+	// failed with "empty remote public key", so the choice is this or an error.
+	if req.ExitPK.Null() {
+		pk, ok := v.browseDefaultExit()
+		if !ok {
+			return nil, fmt.Errorf("no proxy exit: pass exit_pk or configure skysocks-client --srv")
+		}
+		req.ExitPK = pk
+	}
 	if req.ExitPK == v.conf.PK {
 		return v.directClearnetFetch(req)
 	}
@@ -379,4 +391,18 @@ func (v *Visor) skysocksDialFunc(exitPK cipher.PubKey) func(network, addr string
 		}
 		return &tunnelConn{Conn: stream, closers: []io.Closer{sess, conn}}, nil
 	}
+}
+
+// browseDefaultExit is the exit a clearnet browse uses when the caller names
+// none: the skysocks server the visor's own skysocks-client is configured
+// against. False when there is no such app or it has no --srv.
+func (v *Visor) browseDefaultExit() (cipher.PubKey, bool) {
+	if v.conf == nil || v.conf.Launcher == nil {
+		return cipher.PubKey{}, false
+	}
+	var pk cipher.PubKey
+	if err := pk.Set(v.GetSkysocksClientAddress()); err != nil || pk.Null() {
+		return cipher.PubKey{}, false
+	}
+	return pk, true
 }

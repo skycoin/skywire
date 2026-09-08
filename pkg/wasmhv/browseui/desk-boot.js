@@ -547,7 +547,14 @@
 						return Promise.resolve(sv.fetchDmsg(u.hostname, 'GET', path, null)).then(respond);
 					}
 					if (sv.fetchClearnet) {
-						return Promise.resolve(sv.fetchClearnet('', 'GET', url, null)).then(respond);
+						// The browser's proxy setting (netscrape's ⚙ panel) picks the
+						// exit: a named skysocks exit, this visor's own egress
+						// ("direct"), or empty for the visor's default.
+						var p = globalThis.__netscrapeProxy || {};
+						var exit = '';
+						if (p.mode === 'direct') exit = deskSelfPK;
+						else if (p.mode === 'exit' && /^[0-9a-f]{66}$/i.test(p.exit || '')) exit = p.exit;
+						return Promise.resolve(sv.fetchClearnet(exit, 'GET', url, null)).then(respond);
 					}
 					return fetch(url);
 				};

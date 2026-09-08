@@ -347,6 +347,55 @@ const uiAutoReloadJS = `(function(){
 // desk-boot and from the ☰ menu here, until the shared shell integration lands.
 const nativeBrowseLauncherJS = `(function () {
   if (/[#?&]embed=1/.test(location.hash + location.search)) { return; }
+  // netscrape's transport on this page: the hypervisor's browse API. Mesh
+  // hosts (.dmsg / .skynet / .skysocks, or a bare PK) go through
+  // /api/browse/fetch — a skynet route first, dmsg-HTTP as the fallback — and
+  // everything else through /api/browse/clearnet, where the visor picks a
+  // proxy exit. The wasm desk does the same through its in-page visor's
+  // fetchDmsg/fetchClearnet. Without a hook netscrape asks for a same-origin
+  // /fetch proxy this server has never had, and every foreign URL rendered
+  // "404 page not found" (seen live). Same-origin pages never get here: the
+  // browser role's DirectLoader renders them natively.
+  function b64Bytes(b64) {
+    var s = atob(b64 || "");
+    var out = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) { out[i] = s.charCodeAt(i); }
+    return out;
+  }
+  function browseResponse(r) {
+    var h = new Headers();
+    if (r && r.header) { for (var k in r.header) { try { h.set(k, r.header[k]); } catch (e) { /* forbidden name */ } } }
+    return new Response(b64Bytes(r && r.body), { status: (r && r.status_code) || 200, headers: h });
+  }
+  function browsePost(path, req) {
+    return fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) })
+      .then(function (res) {
+        return res.json().then(function (j) {
+          if (!res.ok) {
+            return new Response("skywire browse: " + ((j && j.error) || res.status), { status: 502, headers: { "content-type": "text/plain" } });
+          }
+          return browseResponse(j);
+        });
+      });
+  }
+  if (!globalThis.__netscrapeFetch) {
+    globalThis.__netscrapeFetch = function (url) {
+      var u;
+      try { u = new URL(url, location.href); } catch (e) { return fetch(url); }
+      var host = u.hostname || "";
+      if (/\.(dmsg|skynet|skysocks)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
+        return browsePost("/api/browse/fetch", { host: host, port: u.port ? (parseInt(u.port, 10) || 80) : 80, method: "GET", path: (u.pathname || "/") + (u.search || "") });
+      }
+      // The browser's proxy setting (its ⚙ panel) picks the exit: a named
+      // skysocks exit, this visor's own egress ("direct" — the visor's PK is
+      // the exit the API treats as fetch-it-yourself), or the visor's default.
+      var p = globalThis.__netscrapeProxy || {};
+      var req = { method: "GET", url: u.href };
+      if (p.mode === "direct" && window.__SKYWIRE_LOCAL_PK__) { req.exit_pk = window.__SKYWIRE_LOCAL_PK__; }
+      else if (p.mode === "exit" && /^[0-9a-f]{66}$/i.test(p.exit || "")) { req.exit_pk = p.exit; }
+      return browsePost("/api/browse/clearnet", req);
+    };
+  }
   function ready() {
     if (!self.skywireDeskPanel || !document.body || typeof self.WinBox !== "function") { return setTimeout(ready, 200); }
     // RELATIVE: reached through the vnet service worker this page lives under

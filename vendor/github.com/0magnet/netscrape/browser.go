@@ -685,7 +685,8 @@ func Open(root js.Value) {
 		return nil
 	}))
 	goBtn := btn("Go", "padding:2px 8px")
-	for _, el := range []js.Value{back, fwd, reload, addr, goBtn} {
+	proxyBtn, proxyRow := proxyPanel()
+	for _, el := range []js.Value{back, fwd, reload, addr, goBtn, proxyBtn} {
 		bar.Call("appendChild", el)
 	}
 
@@ -694,6 +695,7 @@ func Open(root js.Value) {
 
 	root.Call("appendChild", strip)
 	root.Call("appendChild", bar)
+	root.Call("appendChild", proxyRow)
 	root.Call("appendChild", views)
 
 	onClick(goBtn, func() {
@@ -925,4 +927,134 @@ func moveTab(from, to int) {
 		strip.Call("insertBefore", t.btn, strip.Get("lastChild"))
 	}
 	active = indexOf(cur)
+}
+
+// Proxy setting. netscrape does not carry traffic itself — the host's
+// __netscrapeFetch does — so the proxy control is a published preference the
+// host reads: globalThis.__netscrapeProxy = {mode, exit}. mode is "auto" (the
+// host's default exit), "exit" (the named skysocks exit PK) or "direct" (the
+// host egresses itself, no anonymity). It persists in localStorage so a
+// person's choice survives a reload, the way a browser's proxy setting does.
+const proxyStoreKey = "netscrape.proxy"
+
+var (
+	proxyMode = "auto"
+	proxyExit = ""
+)
+
+// Proxy reports the current proxy preference: mode and, for mode "exit", the
+// exit public key (hex).
+func Proxy() (mode, exit string) { return proxyMode, proxyExit }
+
+func loadProxy() {
+	ls := js.Global().Get("localStorage")
+	if !ls.Truthy() {
+		return
+	}
+	raw := ls.Call("getItem", proxyStoreKey)
+	if raw.Type() != js.TypeString || raw.String() == "" {
+		publishProxy()
+		return
+	}
+	obj := js.Global().Get("JSON").Call("parse", raw.String())
+	if m := obj.Get("mode"); m.Type() == js.TypeString {
+		proxyMode = m.String()
+	}
+	if e := obj.Get("exit"); e.Type() == js.TypeString {
+		proxyExit = e.String()
+	}
+	publishProxy()
+}
+
+func saveProxy() {
+	if ls := js.Global().Get("localStorage"); ls.Truthy() {
+		ls.Call("setItem", proxyStoreKey, `{"mode":"`+proxyMode+`","exit":"`+proxyExit+`"}`)
+	}
+	publishProxy()
+}
+
+func publishProxy() {
+	obj := js.Global().Get("Object").New()
+	obj.Set("mode", proxyMode)
+	obj.Set("exit", proxyExit)
+	js.Global().Set("__netscrapeProxy", obj)
+}
+
+// proxyPanel builds the ⚙ button and the settings row it toggles: a mode
+// selector and, for "exit", a field for the exit PK. Returns the button (for
+// the address bar) and the panel (for below it).
+func proxyPanel() (button, panel js.Value) {
+	button = btn("⚙", "padding:2px 8px")
+	button.Set("title", "proxy settings")
+	panel = mk("div")
+	panel.Get("style").Set("cssText", "display:none;gap:8px;align-items:center;padding:4px 6px;background:#100d18;border-bottom:1px solid #2a2342;font:12px monospace;color:#cdd2da")
+	label := mk("span")
+	label.Set("textContent", "clearnet pages via")
+	sel := mk("select")
+	sel.Get("style").Set("cssText", "background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;font:12px monospace;padding:1px 4px")
+	for _, o := range [][2]string{{"auto", "auto (host's default exit)"}, {"exit", "a skysocks exit"}, {"direct", "direct (this visor egresses, not anonymous)"}} {
+		opt := mk("option")
+		opt.Set("value", o[0])
+		opt.Set("textContent", o[1])
+		sel.Call("appendChild", opt)
+	}
+	exit := mk("input")
+	exit.Set("spellcheck", false)
+	exit.Set("placeholder", "exit public key (66 hex)")
+	exit.Get("style").Set("cssText", "flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:1px 6px;font:12px monospace")
+	status := mk("span")
+	status.Get("style").Set("cssText", "opacity:.7")
+	sync := func() {
+		sel.Set("value", proxyMode)
+		exit.Set("value", proxyExit)
+		if proxyMode == "exit" {
+			exit.Get("style").Set("display", "")
+		} else {
+			exit.Get("style").Set("display", "none")
+		}
+		switch {
+		case proxyMode == "exit" && !isPK(proxyExit):
+			status.Set("textContent", "needs a 66-hex public key")
+		default:
+			status.Set("textContent", "")
+		}
+	}
+	sel.Call("addEventListener", "change", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		proxyMode = sel.Get("value").String()
+		saveProxy()
+		sync()
+		return nil
+	}))
+	exit.Call("addEventListener", "change", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		proxyExit = strings.TrimSpace(exit.Get("value").String())
+		saveProxy()
+		sync()
+		return nil
+	}))
+	onClick(button, func() {
+		if panel.Get("style").Get("display").String() == "none" {
+			panel.Get("style").Set("display", "flex")
+		} else {
+			panel.Get("style").Set("display", "none")
+		}
+	})
+	for _, el := range []js.Value{label, sel, exit, status} {
+		panel.Call("appendChild", el)
+	}
+	loadProxy()
+	sync()
+	return button, panel
+}
+
+// isPK reports whether s looks like a compressed secp256k1 public key in hex.
+func isPK(s string) bool {
+	if len(s) != 66 || (s[:2] != "02" && s[:2] != "03") {
+		return false
+	}
+	for _, c := range s[2:] {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
