@@ -26,7 +26,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall/js"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -359,10 +358,10 @@ func dialDirect(ctx context.Context, ar *arDmsg, pk cipher.PubKey, port uint16, 
 // RTCPeerConnection (page main thread / in-page boot) OR the main-thread bridge
 // (globalThis.__skywireRTC, installed by worker.js) that proxies it out of the Web
 // Worker where the wasm runtime runs. Absent both, WebRTC dials would fail, so the
-// autoconnect pass is skipped.
-func webrtcAvailable() bool {
-	return js.Global().Get("RTCPeerConnection").Truthy() || js.Global().Get("__skywireRTC").Truthy()
-}
+// autoconnect pass is skipped. The probe itself lives with the carrier
+// (network.WebRTCAvailable) so this and the transport manager's client
+// registration cannot drift apart.
+func webrtcAvailable() bool { return network.WebRTCAvailable() }
 
 var warnedWebRTCUnavailable bool
 
