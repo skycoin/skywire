@@ -93,6 +93,21 @@ func TestNativeDeskServing(t *testing.T) {
 		}
 	})
 
+	t.Run("the launcher gives netscrape a transport through the browse API", func(t *testing.T) {
+		w := get("/skywire-browse-launcher.js")
+		if w.Code != http.StatusOK {
+			t.Fatalf("status=%d, want 200", w.Code)
+		}
+		body := w.Body.String()
+		// Without a hook netscrape falls back to a same-origin /fetch proxy this
+		// server does not have, and every foreign URL renders a 404 body.
+		for _, want := range []string{"__netscrapeFetch", "/api/browse/fetch", "/api/browse/clearnet"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("launcher lacks %s", want)
+			}
+		}
+	})
+
 	t.Run("the old /desk path redirects to the root", func(t *testing.T) {
 		w := get("/desk")
 		if w.Code != http.StatusMovedPermanently {
