@@ -31,6 +31,10 @@ const (
 	poolIdleTimeout = 90 * time.Second
 )
 
+// idleEvictDelay is how long after a stream is parked in the pool an unattended
+// eviction fires (see evictIdle). poolIdleTimeout by default; tests shorten it.
+var idleEvictDelay = poolIdleTimeout
+
 // HTTPTransport implements http.RoundTripper. It dials fresh dmsg
 // streams via dmsgC.DialStream, runs HTTP/1.1 request/response over
 // the stream directly, and pools idle streams per destination so
@@ -292,9 +296,59 @@ func (t *HTTPTransport) putIdle(ps *pooledStream) {
 		delete(t.tracking, oldest)
 	}
 	ps.idleAt = time.Now()
+	idleAt := ps.idleAt
 	queue = append(queue, ps)
 	t.idle[ps.host] = queue
 	t.mu.Unlock()
+	time.AfterFunc(idleEvictDelay, func() { t.evictIdle(ps, idleAt) })
+}
+
+// evictIdle drops ps from the idle pool if it is still parked there from the
+// putIdle that scheduled this call (a stream taken and re-parked since carries
+// a newer idleAt and is left to its own timer).
+//
+// Eviction used to happen only inside takeIdle, on the transport's NEXT
+// request. A transport built for a single request and then dropped — a
+// periodic probe, a one-shot push — parked its stream in a pool nobody would
+// ever read again, and the stream stayed reserved in the dmsg porter for the
+// life of the process. The v1.3.93 self-probe leaked one this way every
+// minute; long-lived visors were measured holding several thousand reserved
+// ephemeral ports, which also pinned every dmsg session as busy so the
+// idle-session reaper could never trim any of them.
+func (t *HTTPTransport) evictIdle(ps *pooledStream, idleAt time.Time) {
+	t.mu.Lock()
+	queue := t.idle[ps.host]
+	found := -1
+	for i, q := range queue {
+		if q == ps && q.idleAt.Equal(idleAt) {
+			found = i
+			break
+		}
+	}
+	if found < 0 {
+		t.mu.Unlock()
+		return
+	}
+	queue = append(queue[:found], queue[found+1:]...)
+	if len(queue) == 0 {
+		delete(t.idle, ps.host)
+	} else {
+		t.idle[ps.host] = queue
+	}
+	delete(t.tracking, ps)
+	t.mu.Unlock()
+	ps.discard()
+}
+
+// idleLen reports how many streams the pool currently holds. Test hook.
+func (t *HTTPTransport) idleLen() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	n := 0
+	for _, q := range t.idle {
+		n += len(q)
+	}
+	return n
 }
 
 func (t *HTTPTransport) track(ps *pooledStream) {
