@@ -49,6 +49,20 @@
 		});
 	}
 
+	// loadScript appends a <script src> and resolves when it has run. The desk
+	// page normally carries wasm_exec.js as a tag of its own; the native
+	// hypervisor's page does not, because until the browser role existed it had
+	// no wasm to run.
+	function loadScript(src) {
+		return new Promise(function (res, rej) {
+			var s = document.createElement('script');
+			s.src = src;
+			s.onload = function () { res(); };
+			s.onerror = function () { rej(new Error('load ' + src)); };
+			document.head.appendChild(s);
+		});
+	}
+
 	function waitFor(fn, what, tries) {
 		return new Promise(function (res, rej) {
 			var n = 0;
@@ -229,9 +243,12 @@
 					// "0px" by most engines) and "auto" for a top dock.
 					var bd = bar ? bar.style.bottom : 'auto';
 					var topDocked = !(bd === '0' || bd === '0px');
+					// No `url:` — the body is handed to netscrape below, which
+					// opens dashURL as a TAB. WinBox's own `url` would make the
+					// body a bare iframe, which is what this page did before
+					// the browser was available here.
 					var wb = new WinBox({
 						title: 'dashboard',
-						url: dashURL,
 						root: root,
 						top: topDocked ? barH : 0,
 						bottom: topDocked ? 0 : barH,
@@ -241,9 +258,77 @@
 						x: 'center', y: 'center', width: '85%', height: '85%',
 					});
 					if (wb.maximize) wb.maximize(true);
+					mountDashboardBrowser(wb, dashURL);
 				} catch (e) { console.error('dashboard window:', e); }
 				return { panel: panel, startedVisor: false };
 			});
+		}
+
+		// mountDashboardBrowser puts netscrape inside the dashboard window and
+		// opens the hypervisor UI as a TAB, so the native desk matches the wasm
+		// one instead of showing a bare iframe in a plain window.
+		//
+		// netscrape is Go/wasm (cmd/wasm-visor). This page has a desk panel of
+		// its own already — the engine-free JS one the native launcher mounts —
+		// so the module is loaded in the "browser" ROLE: it installs netscrape
+		// and NOTHING else, no shell, no second desk panel, no visor. The native
+		// hypervisor serving this page IS the visor.
+		//
+		// Best-effort throughout: where the blob is not served (an older binary,
+		// or a build without it embedded) the window keeps the iframe it would
+		// have had, which is why the iframe is created here rather than left to
+		// WinBox's `url`.
+		function mountDashboardBrowser(wb, dashURL) {
+			var body = wb && wb.body;
+			if (!body) return;
+			function fallbackIframe() {
+				try {
+					var f = document.createElement('iframe');
+					f.setAttribute('src', dashURL);
+					f.style.cssText = 'border:0;width:100%;height:100%;display:block';
+					body.appendChild(f);
+				} catch (e) { /* nothing left to try */ }
+			}
+			loadDeskBrowser().then(function (ok) {
+				if (!ok || !globalThis.skywireBrowser) { fallbackIframe(); return; }
+				try {
+					globalThis.skywireBrowser.open(body);
+					globalThis.skywireBrowser.newTab(dashURL, false);
+				} catch (e) {
+					console.warn('dashboard browser:', e);
+					fallbackIframe();
+				}
+			}, function () { fallbackIframe(); });
+		}
+
+		// loadDeskBrowser loads the desk-host module in the browser-only role.
+		// Resolves true once globalThis.skywireBrowser is up, false if the
+		// assets are not served here. Runs at most once per page.
+		var deskBrowserPromise = null;
+		function loadDeskBrowser() {
+			if (deskBrowserPromise) return deskBrowserPromise;
+			if (globalThis.skywireBrowser) return (deskBrowserPromise = Promise.resolve(true));
+			// Set BEFORE the module runs: wasmRole() reads this global as the
+			// program starts, and a missing role would default to "visor" —
+			// which publishes the whole skywireVisor API on a page that already
+			// has a visor behind it.
+			globalThis.__SKYWIRE_WASM_ROLE__ = 'browser';
+			deskBrowserPromise = fetch(opts.deskWasmURL || 'wasm-visor.wasm', { method: 'HEAD' })
+				.then(function (r) {
+					if (!r.ok) return false;
+					return loadScript(opts.wasmExecURL || 'wasm_exec.js').then(function () {
+						var go = new Go();
+						return WebAssembly.instantiateStreaming(
+							fetch(opts.deskWasmURL || 'wasm-visor.wasm'), go.importObject,
+						).then(function (res) {
+							go.run(res.instance).catch(function (e) { console.error('desk browser:', e); });
+							return waitFor(function () { return globalThis.skywireBrowser; }, 'the browser', 200)
+								.then(function () { return true; });
+						});
+					});
+				})
+				.catch(function () { return false; });
+			return deskBrowserPromise;
 		}
 
 		// execWorker: the Worker every skywire command runs in once it is up,
