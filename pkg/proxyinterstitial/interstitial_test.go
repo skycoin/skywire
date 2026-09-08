@@ -367,3 +367,81 @@ func TestPageMechanismAndSteps(t *testing.T) {
 		}
 	}
 }
+
+// TestSyntheticMarker pins the header that lets a caller tell a page minted in
+// this process from a reply actually relayed by an exit. Both synthetic
+// responses must carry it, and IsSyntheticResponse must accept it as well as
+// the pre-header body markers an older client build would emit.
+func TestSyntheticMarker(t *testing.T) {
+	t.Run("interstitial response carries the marker", func(t *testing.T) {
+		cli, srv := net.Pipe()
+		defer cli.Close() //nolint:errcheck
+		done := make(chan error, 1)
+		go func() { done <- ServeSOCKS5(srv, "", "skysocks", nil, nil); srv.Close() }() //nolint:errcheck,gosec
+		got := serveSOCKS5CONNECT(t, cli, "example.com", 80)
+		if !strings.Contains(got, MarkerHeader+": 1\r\n") {
+			t.Errorf("interstitial response is missing %s", MarkerHeader)
+		}
+		if !IsSyntheticResponse([]byte(got)) {
+			t.Error("IsSyntheticResponse rejected the interstitial response")
+		}
+		if err := <-done; err != nil {
+			t.Errorf("ServeSOCKS5: %v", err)
+		}
+	})
+
+	t.Run("reload fall-through carries the marker", func(t *testing.T) {
+		cli, srv := net.Pipe()
+		defer cli.Close() //nolint:errcheck
+		done := make(chan error, 1)
+		go func() { done <- ServeSOCKS5(srv, "", "skysocks", nil, func() bool { return true }); srv.Close() }() //nolint:errcheck,gosec
+		got := serveSOCKS5CONNECT(t, cli, "example.com", 80)
+		if !strings.Contains(got, MarkerHeader+": 1\r\n") {
+			t.Errorf("reload response is missing %s", MarkerHeader)
+		}
+		if !IsSyntheticResponse([]byte(got)) {
+			t.Error("IsSyntheticResponse rejected the reload response")
+		}
+		if err := <-done; err != nil {
+			t.Errorf("ServeSOCKS5: %v", err)
+		}
+	})
+
+	t.Run("Conn response carries the marker", func(t *testing.T) {
+		c := Conn("example.com", "", "skysocks", false)
+		raw, err := io.ReadAll(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !IsSyntheticResponse(raw) {
+			t.Error("IsSyntheticResponse rejected the Conn response")
+		}
+	})
+
+	t.Run("classification", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			raw  string
+			want bool
+		}{
+			"relayed page": {
+				"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body>hi</body></html>", false,
+			},
+			"header, case-insensitive": {
+				"HTTP/1.1 200 OK\r\nx-skywire-interstitial: 1\r\n\r\n<html></html>", true,
+			},
+			"older build, interstitial body only": {
+				"HTTP/1.1 200 OK\r\n\r\n<body><div id=\"mesh-boot\"><div class=\"card\">", true,
+			},
+			"older build, reload body only": {
+				"HTTP/1.1 200 OK\r\n\r\n<script>location.replace(location.href)</script>", true,
+			},
+			"marker-looking text in the body only is not a header": {
+				"HTTP/1.1 200 OK\r\n\r\nX-Skywire-Interstitial: 1 (quoted in an article)", false,
+			},
+		} {
+			if got := IsSyntheticResponse([]byte(tc.raw)); got != tc.want {
+				t.Errorf("%s: IsSyntheticResponse = %v, want %v", name, got, tc.want)
+			}
+		}
+	})
+}
