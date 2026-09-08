@@ -39,6 +39,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
 	skycall "github.com/skycoin/skywire/pkg/skychat/call"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -782,9 +783,21 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broad
 	v.isAutoconnectHealthy.init()
 	v.isTransportabilityHealthy.init()
 
+	// An absent log_level means "unconfigured", so fall back to the SAME
+	// default config generation uses — skyenv.LogLevel ("info"), documented
+	// there as "the default log level of the visor". This used to fall back to
+	// "debug", so any config that reached the visor without the field ran at
+	// debug forever while every other layer said the default was info.
+	//
+	// It bites hardest in the browser: measured on the wasm desk, the visor
+	// emitted 11.6 log lines/sec of which 75% were DEBUG — string formatting
+	// and allocation nobody reads, on a single-threaded runtime where the Go
+	// heap's peak is never returned to the host. The wasm config writer
+	// (pkg/skywireconfig/genvisor/marshal_js.go) writes LogLevel verbatim with
+	// no default of its own, which is one way to arrive here empty.
 	logLevel := conf.LogLevel
 	if logLevel == "" {
-		logLevel = "debug"
+		logLevel = skyenv.LogLevel
 	}
 	if logLvl, err := logging.LevelFromString(logLevel); err != nil {
 		v.log.WithError(err).Warn("Failed to read log level from config.")
