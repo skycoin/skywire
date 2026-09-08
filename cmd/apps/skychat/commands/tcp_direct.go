@@ -93,7 +93,7 @@ const (
 var (
 	tcpListen     string   // --tcp-listen :PORT  (empty disables)
 	tcpPeers      []string // --tcp-peer  tcp://<pk>@host:port  (repeatable)
-	tcpWhitelist  string   // --tcp-whitelist <pk>,<pk>  (REQUIRED if --tcp-listen)
+	tcpWhitelist  string   // --tcp-whitelist <pk>,<pk>  (empty = any authenticated key)
 	tcpSKFlag     string   // --sk <hex>  (overrides config / env / ephemeral)
 	tcpConfigPath string   // -c / --config <path>  (reads SK from skywire.json)
 )
@@ -149,8 +149,8 @@ func parseTCPPeerSpec(spec string) (cipher.PubKey, string, error) {
 // identical to the dmsg / skynet accept paths in skychat.go.
 //
 // localPK / localSK is the chat-app's identity; tcpWhitelist (set
-// when len > 0) is the per-PK accept list. Empty whitelist rejects
-// all incoming peers — fail-safe for misconfiguration.
+// when len > 0) is the per-PK accept list. Empty whitelist accepts any
+// authenticated key (see acceptTCPConn); a non-empty one pins peers.
 //
 // Returns when the listener errors or ctx is canceled.
 func runTCPListen(
