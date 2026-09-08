@@ -320,6 +320,11 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// page's virtual loopback, so the nested browser renders in-page servers
 	// (the hypervisor UI SPA) natively. Must live beside the pages (scope cap).
 	serveBytes("/vnet-sw.js", "text/javascript", wasmhv.VNetSWJS())
+	// The worker bundle every skywire COMMAND runs in. Its presence IS the
+	// capability the desk probes for: where it answers, the visor's Go runtime
+	// schedules on its own thread instead of the one that draws the page;
+	// where it 404s, desk-boot keeps the in-page skywireExec unchanged.
+	serveBytes("/skywire-worker.js", "text/javascript", wasmhv.ExecWorkerJS())
 	// deskPage is the desk shell, served AT THE ROOT below when there is one.
 	// Declared out here because the root handler is built further down and the
 	// desk is only assembled when a CLI module was given to run in it.

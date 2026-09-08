@@ -47,6 +47,12 @@ func DeskBootJS() []byte { return browseui.DeskBootJS() }
 // Re-exported from the browseui leaf like BrowseJS.
 func VNetSWJS() []byte { return browseui.VNetSWJS() }
 
+// ExecWorkerJS is the worker bundle served beside the desk pages as
+// /skywire-worker.js — the thread every skywire COMMAND runs on, so the visor's
+// Go runtime is not the thing scheduling on the page's main thread. Re-exported
+// from the browseui leaf like BrowseJS.
+func ExecWorkerJS() []byte { return browseui.ExecWorkerJS }
+
 // WalletConfigHTML is the single wallet-config page (served at /wallet/config by
 // both the native HV and `hv serve`, embedded via iframe by the ☰ wallet window
 // and the Angular wallet tab). Re-exported from the browseui leaf like BrowseJS.
