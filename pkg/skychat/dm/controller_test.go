@@ -136,13 +136,22 @@ func TestController_SendReceive(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() }) //nolint
 
-	// Plain send A -> B.
-	if _, err := ctrlA.Send(context.Background(), pkB, appnet.TypeDmsg, "hello B", SendOpts{}); err != nil {
+	// Plain send A -> B. Even with no ack or reply requested the message rides
+	// an envelope with a minted id — replies, read ticks and delete-for-everyone
+	// all key on it, on the native app and the wasm visor alike.
+	res, err := ctrlA.Send(context.Background(), pkB, appnet.TypeDmsg, "hello B", SendOpts{})
+	if err != nil {
 		t.Fatalf("send: %v", err)
+	}
+	if res.ID == "" {
+		t.Fatal("plain send returned no id")
 	}
 	inB := waitFor(t, recB, func(e Event) bool { return e.Dir == "in" && e.Text == "hello B" })
 	if inB.Peer != pkA.Hex() {
 		t.Errorf("inbound peer = %s, want %s", inB.Peer, pkA.Hex())
+	}
+	if inB.ID != res.ID {
+		t.Errorf("inbound id %q != sent id %q", inB.ID, res.ID)
 	}
 	// A sees the outbound mirror.
 	if _, ok := recA.find(func(e Event) bool { return e.Dir == "out" && e.Text == "hello B" && e.Peer == pkB.Hex() }); !ok {
@@ -440,5 +449,35 @@ func TestController_AutoDmsgFirstThenSkynetUpgrade(t *testing.T) {
 	}
 	if res2.Network != appnet.TypeSkynet {
 		t.Fatalf("second auto send network = %q, want skynet", res2.Network)
+	}
+}
+
+// TestController_RawTextPeerStillDecodes pins interop with a pre-envelope peer:
+// a bare-text frame (what RawText sends, and what older peers put on the wire)
+// is still surfaced as a chat line — it just has no id to address.
+func TestController_RawTextPeerStillDecodes(t *testing.T) {
+	hub := newMemHub()
+	pkOld, pkB := mustPK(t), mustPK(t)
+	recB := &recorder{}
+
+	ctrlB := New(Config{Client: &memClient{hub, pkB}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: recB.on})
+	ctrlOld := New(Config{Client: &memClient{hub, pkOld}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}, RawText: true})
+	_ = ctrlB.Start(context.Background())                        //nolint
+	_ = ctrlOld.Start(context.Background())                      //nolint
+	t.Cleanup(func() { _ = ctrlOld.Close(); _ = ctrlB.Close() }) //nolint
+
+	res, err := ctrlOld.Send(context.Background(), pkB, appnet.TypeDmsg, "plain text", SendOpts{})
+	if err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if res.ID != "" {
+		t.Errorf("RawText send minted an id %q; want none", res.ID)
+	}
+	in := waitFor(t, recB, func(e Event) bool { return e.Dir == "in" && e.Text == "plain text" })
+	if in.Peer != pkOld.Hex() {
+		t.Errorf("inbound peer = %s, want %s", in.Peer, pkOld.Hex())
+	}
+	if in.ID != "" {
+		t.Errorf("bare-text frame surfaced with id %q; want none", in.ID)
 	}
 }
