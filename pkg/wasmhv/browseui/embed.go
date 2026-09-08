@@ -48,6 +48,23 @@ var skywireExecJS []byte
 //go:embed gobrowser-loader.js
 var goBrowserLoaderJS []byte
 
+// hvwsClientJS is the page-side client for the hypervisor's /ws endpoint
+// (pkg/visor/hypervisor_ws.go): globalThis.SkywireHVWS — a capability probe
+// plus one multiplexed socket that replays /api calls through the hypervisor's
+// own router.
+//
+//go:embed hvws-client.js
+var hvwsClientJS []byte
+
+// hvwsVNetJS is the vnet adapter over that client: globalThis.SkywireHVBridge
+// claims the visor's virtual-loopback ports and serves them from the HOST
+// visor, so a desk page served by a native hypervisor reaches it through the
+// exact vnet calls the in-tab wasm visor answers. Loaded on every desk-ish
+// origin; it installs only where a /ws actually answers.
+//
+//go:embed hvws-vnet.js
+var hvwsVNetJS []byte
+
 // deskBootJS is the shared desk boot (skywireDeskBoot(opts)) behind both
 // desk-first pages: the docs playground and the converged visor page. Served
 // as its own asset (not part of the bundle) because it runs page-level
@@ -75,6 +92,11 @@ var BrowseJS = func() []byte {
 		bottle.JSFS(),
 		seedSkywireJS,
 		bottle.VNetJS(),
+		// The host-visor bridge sits directly on vnet: it is a listener on the
+		// same port table, so it belongs beside it and ahead of anything that
+		// might dial one of those ports.
+		hvwsClientJS,
+		hvwsVNetJS,
 		bottle.ProcJS(),
 		winboxdist.ExecJS(),
 		winboxdist.LoaderJS(),
