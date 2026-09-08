@@ -533,11 +533,18 @@ func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
 	// Map each server PK to the carrier/protocol of its live session, so the UI
 	// can show HOW the visor reached each server (tcp/ws/wt/quic), not just that
 	// it did — the same data `cli dmsg sessions` reports.
+	//
+	// The open-stream count of each session comes along for the ride: it is the
+	// number reapExcessIdleSessions decides on, and without it an operator
+	// holding more sessions than dmsg.sessions_count cannot tell a session
+	// legitimately carrying streams from an idle one the reaper failed to close.
 	carrier := make(map[cipher.PubKey]string)
 	protocol := make(map[cipher.PubKey]string)
+	streams := make(map[cipher.PubKey]int)
 	for _, s := range v.dmsgC.AllSessions() {
 		carrier[s.RemotePK()] = s.Carrier()
 		protocol[s.RemotePK()] = s.Protocol()
+		streams[s.RemotePK()] = s.NumStreams()
 	}
 
 	// Build list with latencies
@@ -548,11 +555,18 @@ func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
 		if err := pk.Set(pkStr); err != nil {
 			continue
 		}
+		// No matching session means the count is unknown, not zero: -1 keeps
+		// "unmeasurable" distinct from "idle", as NumStreams itself does.
+		n, ok := streams[pk]
+		if !ok {
+			n = -1
+		}
 		info := DMSGServerInfo{
 			PK:       pk,
 			Latency:  v.dmsgLatency.servers[pk],
 			Carrier:  carrier[pk],
 			Protocol: protocol[pk],
+			Streams:  n,
 		}
 		servers = append(servers, info)
 	}
@@ -733,6 +747,7 @@ func dmsgClientServerSessions(c *dmsg.Client) ([]cipher.PubKey, []DmsgServerSess
 			Carrier:  s.Carrier(),
 			Protocol: s.Protocol(),
 			Address:  s.CarrierAddr(),
+			Streams:  s.NumStreams(),
 		})
 	}
 	sort.Slice(sessions, func(i, j int) bool { return sessions[i].PK.String() < sessions[j].PK.String() })

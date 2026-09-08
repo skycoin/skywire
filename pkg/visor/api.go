@@ -817,6 +817,14 @@ type DMSGServerInfo struct {
 	// UI show HOW each server was reached, not just that it was.
 	Carrier  string `json:"carrier,omitempty"`
 	Protocol string `json:"protocol,omitempty"`
+	// Streams is the number of open mux streams on this session: 0 = idle (a
+	// candidate for the idle-session reaper once it is over min_sessions), >0 =
+	// carrying traffic, -1 = unmeasurable (quic, or no session matched this
+	// server PK) which the reaper treats as busy. This is the same count
+	// reapExcessIdleSessions decides on, so an operator seeing more sessions
+	// than sessions_count can tell whether they are legitimately in use or the
+	// reaper is not doing its job.
+	Streams int `json:"streams"`
 }
 
 // DmsgClientSessions enumerates every dmsg client running inside the visor
@@ -855,6 +863,9 @@ type DmsgServerSession struct {
 	Protocol string `json:"protocol"`
 	// Address is the endpoint the carrier dialed (host:port or ws(s)://…).
 	Address string `json:"address,omitempty"`
+	// Streams is the number of open mux streams on this session (0 = idle,
+	// -1 = unmeasurable/quic). Same count the idle-session reaper uses.
+	Streams int `json:"streams"`
 }
 
 // DmsgHTTPRequest represents an HTTP request to be made over dmsg
