@@ -569,7 +569,7 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 		// Last resort: the alternate network.
 		if fbConn, alt := c.tryNetworkFallback(ctx, pk, netType); fbConn != nil {
 			if werr := fbConn.WriteFrameDeadline(wire, writeTimeout); werr == nil {
-				res.Network, err = alt, nil
+				conn, res.Network, err = fbConn, alt, nil
 				c.bump(func(s *Stats) { s.OutboundFallbk++ })
 			} else {
 				c.evict(pk, fbConn)
@@ -579,6 +579,17 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 			c.bump(func(s *Stats) { s.OutboundFails++ })
 			return res, err
 		}
+	}
+
+	// Report the network the frame ACTUALLY left on. A cached conn may be one
+	// the peer opened to us over a transport the caller never named — the
+	// standalone app's tcp-direct listener hands its accepted conns to the
+	// cache, and a send to that peer rides them while netType still says the
+	// caller's default (skynet). The outbound event and SendResult used to
+	// carry that default, so the two sides of one conversation disagreed on the
+	// transport (inbound said tcp-direct, outbound said skynet — seen live).
+	if ra, ok := conn.RemoteAddr().(appnet.Addr); ok && ra.Net != "" {
+		res.Network = ra.Net
 	}
 
 	c.bump(func(s *Stats) { s.OutboundMsgs++; s.LastTxAt = time.Now().UTC() })
