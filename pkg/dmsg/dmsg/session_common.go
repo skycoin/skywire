@@ -61,6 +61,15 @@ type SessionCommon struct {
 	// A value of 0 means no measurement yet (treated as max latency for sorting).
 	lastPingNs atomic.Int64
 
+	// reaped is set by the client's idle-session reaper just before it closes
+	// this session. The serve goroutine's exit path reads it so a deliberate
+	// trim is not mistaken for a dropped server. Without it the exit path
+	// reported the close on errCh and noted the server as lost, and the Serve
+	// loop's prefer-the-server-we-just-lost re-dial (#4086) dialed it straight
+	// back: one reap and one re-dial of the same server every minute, with the
+	// session count never actually falling.
+	reaped atomic.Bool
+
 	log logrus.FieldLogger
 }
 
@@ -97,6 +106,13 @@ func (sm *SessionManager) NumStreams() int {
 // NumStreams reports the number of open mux streams on this session (0 = idle;
 // -1 = unmeasurable, treated as busy). Used by the idle-session reaper.
 func (sc *SessionCommon) NumStreams() int { return sc.sm.NumStreams() }
+
+// markReaped flags this session as deliberately closed by the idle-session
+// reaper, so its serve goroutine does not report the server as lost.
+func (sc *SessionCommon) markReaped() { sc.reaped.Store(true) }
+
+// wasReaped reports whether the idle-session reaper closed this session.
+func (sc *SessionCommon) wasReaped() bool { return sc != nil && sc.reaped.Load() }
 
 // GetConn returns underlying TCP `net.Conn`.
 func (sc *SessionCommon) GetConn() net.Conn {

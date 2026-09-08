@@ -39,6 +39,8 @@ func TestPickIdleSessionsToReap(t *testing.T) {
 	reap := pickIdleSessionsToReap(streams, streak, min, thresh)
 	require.Len(t, reap, 1, "reap only the surplus above MinSessions")
 	require.NotEqual(t, c, reap[0], "never reap a busy session")
+	_, streakKept := streak[reap[0]]
+	require.False(t, streakKept, "a reaped server's idle streak is cleared so a re-dialed session gets a fresh grace period")
 
 	// A busy session resets its streak.
 	streams2 := map[cipher.PubKey]int{a: 0, b: 5}
@@ -66,4 +68,18 @@ func TestPickIdleSessionsToReap(t *testing.T) {
 	pickIdleSessionsToReap(map[cipher.PubKey]int{a: 0}, streak5, 1, 5)
 	_, stillThere := streak5[gone]
 	require.False(t, stillThere, "streak pruned for a session no longer present")
+}
+
+// TestReapedSessionFlag pins the marker the reaper sets before closing a
+// session. The serve goroutine's exit path reads it to skip the errCh wake and
+// the lost-server note that would otherwise re-dial the server just trimmed —
+// observed live as one reap and one re-dial of the same server every minute.
+func TestReapedSessionFlag(t *testing.T) {
+	var nilSes *SessionCommon
+	require.False(t, nilSes.wasReaped(), "a nil session is never reaped")
+
+	sc := &SessionCommon{}
+	require.False(t, sc.wasReaped(), "fresh session is not reaped")
+	sc.markReaped()
+	require.True(t, sc.wasReaped(), "flag sticks once set")
 }

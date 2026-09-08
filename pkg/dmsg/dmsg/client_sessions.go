@@ -716,6 +716,15 @@ func (ce *Client) finishDialedSession(ctx context.Context, dSes ClientSession, n
 		ce.sesMx.Lock()
 		if isClosed(ce.done) {
 			ce.sesMx.Unlock()
+		} else if dSes.wasReaped() {
+			// The idle-session reaper closed this session on purpose. Neither
+			// wake the Serve loop nor note the server as lost: either re-dials
+			// it (redialLostSession, or the fall-through to EnsureSession after
+			// an errCh wake) and undoes the trim. The floor is intact by
+			// construction, since the reaper never takes the count below
+			// MinSessions.
+			ce.sesMx.Unlock()
+			ce.delSession(ctx, dSes.RemotePK(), dSes.SessionCommon)
 		} else {
 			select {
 			case ce.errCh <- fmt.Errorf("failed to serve dialed session to %s: %v", dSes.RemotePK(), err):
