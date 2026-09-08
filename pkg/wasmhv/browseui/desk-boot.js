@@ -250,7 +250,10 @@
 					// front of the console it has already opened.
 					if (opts.terminalURL && panel && typeof panel.open === 'function') {
 						try {
-							panel.open({ title: 'skywire', url: opts.terminalURL, x: 'center', y: 'center', width: '70%', height: '60%' });
+							// openTabbed where the panel has it: tabs in the title bar, "+"
+							// for another session, the way the wasm desk tabs its terminals.
+							var openTerm = typeof panel.openTabbed === 'function' ? panel.openTabbed : panel.open;
+							openTerm.call(panel, { title: 'skywire', url: opts.terminalURL, x: 'center', y: 'center', width: '70%', height: '60%' });
 						} catch (e) { console.warn('terminal window:', e); }
 					}
 					// No `url:` — the body is handed to netscrape below, which

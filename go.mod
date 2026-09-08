@@ -65,7 +65,7 @@ require (
 	github.com/0magnet/bitree v0.0.0-20260906144807-e66de0b4c738
 	github.com/0magnet/bottle v0.0.0-20260908155251-920d2280a387
 	github.com/0magnet/calvin v0.0.0-20260908180241-0893f4bff56a
-	github.com/0magnet/desk v0.0.0-20260908190105-9bb2944487db
+	github.com/0magnet/desk v0.0.0-20260908195947-f72d9b0a9bb1
 	github.com/0magnet/desk/panes v0.0.0-20260908190105-9bb2944487db
 	github.com/0magnet/gobrpc v0.0.0-20260906144809-5215ec59d553
 	github.com/0magnet/golang-ipc v1.2.5-0.20260905172007-25d9c1a262d0
@@ -73,7 +73,7 @@ require (
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260905172009-f9d674fb6dfd
 	github.com/0magnet/lolcat-go v0.0.0-20260907230215-22c54b7702c7
 	github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c
-	github.com/0magnet/netscrape v0.0.0-20260908062733-9acf9bfa0061
+	github.com/0magnet/netscrape v0.0.0-20260908195716-c9218b3f4966
 	github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d
 	github.com/0magnet/plot-go v0.0.0-20260908184629-9cfdeb563e8f
 	github.com/0magnet/realorigin v0.2.1
