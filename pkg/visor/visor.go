@@ -812,6 +812,8 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broad
 
 	// Set Go memory limit based on config
 	applyMemoryLimit(v.log, conf.MemoryLimit)
+	// Platform GC default (wasm keeps its heap peak forever; see gctune_js.go).
+	applyGCTuning(v.log)
 	if isStoreLog {
 		storeLog(conf)
 	}
