@@ -357,7 +357,8 @@ func TestHTTPTransport_IdleStreamEvictedUnattended(t *testing.T) {
 
 	resp, err := httpC.Get("http://" + addr + endpointHTML)
 	require.NoError(t, err)
-	_, _ = io.Copy(io.Discard, resp.Body)
+	_, err = io.Copy(io.Discard, resp.Body)
+	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 
 	require.Equal(t, 1, tr.idleLen(), "stream is parked in the pool once the body is closed")
