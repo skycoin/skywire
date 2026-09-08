@@ -182,6 +182,16 @@ type Options struct {
 	// MinCols and MinRows refuse to run in a window too small to show
 	// anything. Zero means 8 by 4.
 	MinCols, MinRows int
+	// Audio supplies the sound of each frame to an animation that reacts to
+	// it — see AudioSource and AudioListener in audio.go.
+	//
+	// Nil, which is the zero value, means no sound at all, and that is not the
+	// same thing as silence being fed in: nothing is asked for and Listen is
+	// never called, so an animation is left on precisely the code path it was
+	// on before any of this existed. Both are meant to look identical, and the
+	// tests in the animation packages assert that they do; leaving the field
+	// nil is the case where they cannot help but be.
+	Audio AudioSource
 }
 
 // CellAnimation is an effect that draws glyphs rather than pixels.
@@ -205,12 +215,23 @@ type CellAnimation interface {
 // host application that owns the screen already.
 func Run(screen tcell.Screen, a Animation, opt Options) error {
 	var surf *Surface
+	// Resolved once here rather than asserted every frame, and nil unless
+	// there is both a source and something that wants one.
+	tap := audioTap(a, opt.Audio)
 	return run(screen, opt,
 		func(cols, rows int) {
 			surf = NewSurface(cols, rows*2)
 			a.Resize(cols, rows*2)
 		},
 		func(cols, rows int, dt float64) {
+			// Before Frame, so the animation draws the sound of the frame it
+			// is drawing rather than of the one before it. The source is asked
+			// only for frames that are actually drawn — a hidden window skips
+			// the tick entirely — which is right: nobody is listening with
+			// their eyes shut.
+			if tap != nil {
+				tap(dt)
+			}
 			a.Frame(surf, dt)
 			surf.flush(screen)
 		})
@@ -219,9 +240,19 @@ func Run(screen tcell.Screen, a Animation, opt Options) error {
 // RunCells drives a glyph animation. Same loop, same keys, same resize
 // handling; the animation paints the screen itself.
 func RunCells(screen tcell.Screen, a CellAnimation, opt Options) error {
+	// A glyph animation can react to sound as well as a pixel one — falling
+	// text that quickens on a beat is the obvious case — and the seam is the
+	// same three lines, so there is no reason for the two loops to disagree
+	// about whether it exists.
+	tap := audioTap(a, opt.Audio)
 	return run(screen, opt,
 		func(cols, rows int) { a.Resize(cols, rows) },
-		func(cols, rows int, dt float64) { a.Frame(screen, cols, rows, dt) })
+		func(cols, rows int, dt float64) {
+			if tap != nil {
+				tap(dt)
+			}
+			a.Frame(screen, cols, rows, dt)
+		})
 }
 
 // watched is implemented by a screen that knows whether anyone is looking at

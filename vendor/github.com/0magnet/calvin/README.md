@@ -1,7 +1,7 @@
 # calvin
 convert text to Calvin S ascii font (https://patorjk.com/software/taag/#p=display&amp;f=Calvin%20S&amp;t=)
 
-**[Live demo](https://0magnet.github.io/calvin/)** — type in the box and watch the letters turn, in both fonts.
+**[Live demo](https://calvin.magnetosphere.net/)** — type in the box and watch the letters turn, in both fonts.
 
 ![calvin in the browser](docs/calvin-demo.png "text converted live to the Calvin S box-drawing font and to BlackboardBold")
 

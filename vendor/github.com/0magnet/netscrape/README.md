@@ -9,7 +9,7 @@ A web browser written in Go/wasm.
 A static page can only fetch its own origin, so the demo reaches the sample
 site and says so for anything else. That limit is the transport's, not the
 browser's: the same seam dials the dmsg mesh in skywire's wasm visor, and in
-[shipyard](https://0magnet.github.io/shipyard/) it reaches a Go server running
+[shipyard](https://shipyard.magnetosphere.net/) it reaches a Go server running
 in the same tab over a virtual loopback.
 
 The chrome — a tab strip, an address bar, back/forward/reload, history — is DOM

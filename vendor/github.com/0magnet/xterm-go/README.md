@@ -2,7 +2,7 @@
 
 A Go port of [xterm.js](https://github.com/xtermjs/xterm.js) 6.0.0 — a terminal emulator library, compiled to WebAssembly for the browser. The VT core is pure Go and also works headless on any platform.
 
-**[Live demo](https://0magnet.github.io/xterm-go/)** — a wasm terminal with an in-browser echo shell.
+**[Live demo](https://xterm-go.magnetosphere.net/)** — a wasm terminal with an in-browser echo shell.
 
 ![xterm-go in the browser](docs/xterm-go-demo.png "the ported terminal drawing a truecolor box through the WebGL renderer")
 
