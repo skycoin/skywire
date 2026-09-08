@@ -3,7 +3,7 @@
 </h1>
 <h3>winbox-go: a full Go/WebAssembly port of WinBox.js — modern window manager for the web: lightweight, no dependencies, fully customizable, open source!</h3>
 
-<a href="https://0magnet.github.io/winbox-go/">Demo</a> &ensp;&bull;&ensp; <a href="#started">Getting Started</a> &ensp;&bull;&ensp; <a href="#options">Options</a> &ensp;&bull;&ensp; <a href="#api">API</a> &ensp;&bull;&ensp; <a href="#themes">Themes</a> &ensp;&bull;&ensp; <a href="#customize">Customize</a> &ensp;&bull;&ensp; <a href="#jsapi">From JavaScript</a> &ensp;&bull;&ensp; <a href="#differences">Differences from WinBox.js</a>
+<a href="https://winbox-go.magnetosphere.net/">Demo</a> &ensp;&bull;&ensp; <a href="#started">Getting Started</a> &ensp;&bull;&ensp; <a href="#options">Options</a> &ensp;&bull;&ensp; <a href="#api">API</a> &ensp;&bull;&ensp; <a href="#themes">Themes</a> &ensp;&bull;&ensp; <a href="#customize">Customize</a> &ensp;&bull;&ensp; <a href="#jsapi">From JavaScript</a> &ensp;&bull;&ensp; <a href="#differences">Differences from WinBox.js</a>
 
 This is a complete port of [WinBox.js](https://github.com/nextapps-de/winbox) by Thomas Wilkerling to Go, targeting WebAssembly via `syscall/js`. It compiles with both the **standard Go toolchain** (`GOOS=js GOARCH=wasm`) and **TinyGo** (`-target wasm`), and ports the entire feature set: drag, 8-direction resize, minimize with split-screen taskbar stacking, maximize, browser fullscreen, modals, DOM mount/unmount, iframes, custom controls and templates, viewport limits, percentage/centered positioning, and all lifecycle callbacks.
 
@@ -14,7 +14,7 @@ If you find the underlying window manager useful, consider [supporting the origi
 <a name="demo"></a>
 ### Live Demo
 
-<a href="https://0magnet.github.io/winbox-go/">https://0magnet.github.io/winbox-go/</a> (compiled with TinyGo)
+<a href="https://winbox-go.magnetosphere.net/">https://winbox-go.magnetosphere.net/</a> (compiled with TinyGo)
 
 ![winbox-go in the browser](docs/winbox-go-demo.png "windows with drag, resize, minimize and the split-screen taskbar, drawn from Go")
 

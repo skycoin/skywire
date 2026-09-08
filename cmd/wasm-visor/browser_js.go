@@ -31,6 +31,23 @@ func installBrowser() {
 	}))
 }
 
+// installBrowserDirectLoader gives netscrape the browser role's DirectLoader:
+// same-origin pages render natively (sameOriginSrc). The browser role installs
+// no desk, so it never ran installDesk's loader, and without ANY loader the
+// native desk's dashboard tab was fetched through netscrape's transcoder —
+// which, absent a __netscrapeFetch hook, asks the origin's /fetch proxy. A
+// native hypervisor has no such endpoint, so the tab rendered the server's
+// "404 page not found" body (observed live on :8000).
+func installBrowserDirectLoader() {
+	netscrape.DirectLoader = func(u string) (string, bool) {
+		loc := js.Global().Get("location")
+		if !loc.Truthy() {
+			return "", false
+		}
+		return sameOriginSrc(loc.Get("origin").String(), u)
+	}
+}
+
 // jsOpenBrowser(el) mounts the netscrape browser into el (an element, or its
 // id). It returns nil — the browser lives on through its own event handlers,
 // this instance's runtime already being kept alive by the visor/shell.
