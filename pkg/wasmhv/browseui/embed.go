@@ -39,6 +39,22 @@ var seedSkywireJS []byte
 //go:embed skywire-exec.js
 var skywireExecJS []byte
 
+// execRemoteJS provides globalThis.SkywireExecWorker: the page half of running
+// skywire commands in a dedicated Worker instead of on the page main thread. It
+// replaces globalThis.skywireExec with a same-contract shim and bridges the
+// worker's vnet claims onto the page's port table, so a visor over there is
+// indistinguishable from one in here to every panel, the service worker and
+// desk-boot's vnet.listening() gates.
+//
+//go:embed exec-remote.js
+var execRemoteJS []byte
+
+// execWorkerJS is the worker half — the tail of ExecWorkerJS() below, not part
+// of the page bundle.
+//
+//go:embed exec-worker.js
+var execWorkerJS []byte
+
 // goBrowserLoaderJS defines globalThis.SkywireGoBrowser.open() — the launcher
 // for the netscrape Go/wasm browser (github.com/0magnet/netscrape). The browser
 // is NOT a separate module any more: it is compiled into the wasm-visor binary
@@ -102,8 +118,18 @@ var BrowseJS = func() []byte {
 		winboxdist.LoaderJS(),
 		desk.PanelNoWasmJS(),
 		skywireExecJS,
+		// Directly after it: the shim that can REPLACE it with a worker-hosted
+		// one. Nothing else in the bundle cares which of the two is installed.
+		execRemoteJS,
 		goBrowserLoaderJS,
 	}
+	return concat(parts)
+}()
+
+// concat joins bundle parts with a statement separator between them — an IIFE
+// that ends without a semicolon must not run into the next part's opening
+// paren.
+func concat(parts [][]byte) []byte {
 	n := 0
 	for _, p := range parts {
 		n += len(p) + 3
@@ -116,6 +142,29 @@ var BrowseJS = func() []byte {
 		out = append(out, p...)
 	}
 	return out
+}
+
+// ExecWorkerJS is the worker bundle — served BESIDE each desk page as
+// skywire-worker.js, and started by exec-remote.js with `new Worker()`.
+//
+// It is a whole bottle of its own: jsfs (with the same skywire seeding the page
+// gets), vnet, proc and skywire-exec, plus the glue that speaks the page's
+// protocol. That duplication is the point — a Worker has its own global scope,
+// so the visor's filesystem, port table and process table have to exist over
+// there, and sharing the page's would take SharedArrayBuffer (bottle's
+// fsbridge.js) and therefore cross-origin isolation the desk does not have.
+//
+// No window-manager, browser or desk parts: this thread runs Go COMMANDS and
+// nothing that draws.
+var ExecWorkerJS = func() []byte {
+	return concat([][]byte{
+		bottle.JSFS(),
+		seedSkywireJS,
+		bottle.VNetJS(),
+		bottle.ProcJS(),
+		skywireExecJS,
+		execWorkerJS,
+	})
 }()
 
 // VNetSWJS is bottle's vnet service worker — served BESIDE each desk page as

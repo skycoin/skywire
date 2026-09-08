@@ -28,7 +28,11 @@ func main() {
 		"bundle.js":    browseui.BrowseJS,
 		"desk-boot.js": browseui.DeskBootJS(),
 		"vnet-sw.js":   browseui.VNetSWJS(),
-		"winbox.wasm":  browseui.WinBoxWasm(),
+		// The worker every skywire command runs in — the playground's terminal
+		// starts real visors, and a Go runtime on the page main thread makes
+		// the whole desk stutter.
+		"skywire-worker.js": browseui.ExecWorkerJS,
+		"winbox.wasm":       browseui.WinBoxWasm(),
 	}
 	for name, data := range files {
 		p := filepath.Join(out, name)

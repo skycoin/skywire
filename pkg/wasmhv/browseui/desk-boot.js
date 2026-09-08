@@ -24,6 +24,12 @@
 //                   (8002). The desk starts it and opens it as a browser tab,
 //                   so the CLI reference and the prose are readable BESIDE a
 //                   terminal you can run the documented commands in. 0 = off.
+//   execWorkerURL   the worker bundle that hosts the skywire commands
+//                   ('skywire-worker.js'). Where it is served, every command —
+//                   the visor above all — runs on that thread instead of this
+//                   one; where it is not, the commands stay in-page exactly as
+//                   they were. Nothing selects between the two but whether the
+//                   asset answers.
 //   native          the page is served by a NATIVE hypervisor — see below
 //   dashboardURL    native mode: the same-origin dashboard URL for the
 //                   dashboard window ('/#/?embed=1')
@@ -97,8 +103,37 @@
 		} catch (e) { /* storage denied — session just resets to defaults */ }
 	}
 
+	// framedWithoutEmbed: this desk page is running INSIDE a frame and its URL
+	// carries no embed marker — which can only mean a server served the desk
+	// where it meant to serve the dashboard.
+	//
+	// Both servers decide by `Sec-Fetch-Dest: iframe` OR `?embed=1`, and through
+	// bottle's vnet service worker only the second survives: Sec-Fetch-* are
+	// forbidden header names, unreadable from a service worker, so vnet-sw.js
+	// cannot forward them however much it would like to. Any in-frame
+	// navigation that drops the query — the Angular router rewrites the frame's
+	// URL to its current route within seconds of loading — therefore comes back
+	// as a DESK, and a desk inside the desk's own dashboard window is never what
+	// anyone wanted. The servers say so themselves, in the comment above each
+	// `framed` test.
+	//
+	// So the page corrects its own address and lets the server answer again.
+	// Bounded by construction: the retry carries embed=1, so the second load
+	// cannot reach here.
+	function framedWithoutEmbed() {
+		try {
+			if (self === top) return false;
+			if (/(^|[?&])embed=1(&|$)/.test(location.search)) return false;
+			return true;
+		} catch (e) { return false; } // cross-origin top — not our frame to judge
+	}
+
 	globalThis.skywireDeskBoot = function (opts) {
 		opts = opts || {};
+		if (framedWithoutEmbed()) {
+			location.replace(location.pathname + '?embed=1' + (location.hash || ''));
+			return new Promise(function () {}); // never settles; the document is going away
+		}
 		var status = opts.onStatus || function () {};
 		var hvPort = opts.hvPort || 8001;
 		// 0 disables. Native mode leaves it off: a native hypervisor serves its
@@ -211,6 +246,26 @@
 			});
 		}
 
+		// execWorker: the Worker every skywire command runs in once it is up,
+		// or null where this page cannot host one (see workerExec below).
+		var execWorker = null;
+
+		// workerExec moves the skywire CLI — and therefore the visor — off the
+		// page main thread. Resolves the installed worker, or null to keep the
+		// in-page skywireExec.
+		function workerExec() {
+			if (!globalThis.SkywireExecWorker) return Promise.resolve(null);
+			return globalThis.SkywireExecWorker.install({
+				url: opts.execWorkerURL || 'skywire-worker.js',
+				persistDB: opts.persistDB || 'skywire-desk',
+				wasmURL: skywireExec.wasmURL,
+				wasmExecURL: skywireExec.wasmExecURL,
+			}).catch(function (e) {
+				console.warn('exec worker:', e);
+				return null;
+			});
+		}
+
 		// bootWasm: the standalone desk — the tab IS the host. A wasm visor
 		// runs in a terminal, claims the virtual-loopback ports, and every
 		// panel reaches it through vnet. Unchanged by the host bridge above:
@@ -231,14 +286,35 @@
 				: Promise.resolve(false);
 
 			status('restoring filesystem…');
-			return jsfs.persist.enable(opts.persistDB || 'skywire-desk', {
-				// Persist identity + config + user files; NEVER the runtime
-				// stores. A bbolt database snapshotted mid-write restores corrupt
-				// and hangs its consumer on the next boot (the hypervisor module
-				// stalling on a restored users.db) — caches rebuild, keys don't.
-				exclude: function (p) {
-					return /\.db$/.test(p) || p.indexOf('/opt/skywire/local/') === 0 || p === '/opt/skywire/local';
-				},
+			// Where the skywire commands RUN. A Go/wasm visor never lets its
+			// runtime idle — profiled on this page 2026-09-07, 95% of
+			// one-second samples over 16.5 minutes sat above 90% of a core,
+			// with findRunnable/stealWork/nanotime1 and NOT ONE application or
+			// GC frame in the symbolized profile — so on the main thread it
+			// starves the compositor and dragging a window stutters. Given a
+			// Worker, every command's runtime spins over there instead and this
+			// thread only draws. hv-boot.js has refused an in-page visor for
+			// this exact reason since the legacy page; the desk had regressed
+			// it.
+			//
+			// A capability, not a setting: no Worker, no vnet, or no
+			// /skywire-worker.js served and install() resolves null, after
+			// which everything below is the in-page path exactly as before.
+			// The worker owns the IndexedDB snapshot when it comes up (one
+			// writer, and it is the side the visor writes from), so the page
+			// enables persistence only when there is no worker.
+			return workerExec().then(function (w) {
+				execWorker = w;
+				if (w) return { restored: w.restored };
+				return jsfs.persist.enable(opts.persistDB || 'skywire-desk', {
+					// Persist identity + config + user files; NEVER the runtime
+					// stores. A bbolt database snapshotted mid-write restores corrupt
+					// and hangs its consumer on the next boot (the hypervisor module
+					// stalling on a restored users.db) — caches rebuild, keys don't.
+					exclude: function (p) {
+						return /\.db$/.test(p) || p.indexOf('/opt/skywire/local/') === 0 || p === '/opt/skywire/local';
+					},
+				});
 			}).then(function (p) {
 				status((p.restored ? 'filesystem restored — ' : '') + 'starting the desk…');
 				// The desk host: the wasm-visor binary in-page. It installs the
@@ -463,7 +539,21 @@
 											var fr = document.querySelector('iframe[src^="/vnet/' + hvPort + '"]');
 											if (!fr || !fr.contentWindow || !fr.contentWindow.document.fonts) return;
 											if (!fr.contentWindow.document.fonts.check('24px "Material Icons"')) {
-												fr.contentWindow.location.reload();
+												// NOT reload(): by now the Angular router has
+												// rewritten the frame's URL to its current route
+												// (".../vnet/8001/#/nodes/list/1") and the
+												// ?embed=1 that opened it is GONE. Reloading that
+												// URL asks the hypervisor for its ROOT with no
+												// embed marker, and the marker is the only one it
+												// can see — bottle's vnet service worker cannot
+												// forward Sec-Fetch-Dest (a forbidden header name,
+												// unreadable from a SW), so the server's "am I
+												// framed?" test has nothing else to go on and it
+												// serves its DESK page. That is the "desk inside
+												// the desk" this window exists to avoid, and it is
+												// what the self-heal itself was producing.
+												var w2 = fr.contentWindow;
+												w2.location.replace(w2.location.pathname + '?embed=1' + (w2.location.hash || ''));
 											}
 										} catch (e3) { /* cross-origin or torn-down frame — leave it */ }
 									}, 25000);
@@ -509,7 +599,9 @@
 					})(0);
 				}
 
-				return { panel: panel, startedVisor: startedVisor };
+				// execWorker is null on the in-page fallback — a caller (and a
+				// CDP probe) can tell which thread the visor is on from it.
+				return { panel: panel, startedVisor: startedVisor, execWorker: execWorker };
 			});
 		}
 
