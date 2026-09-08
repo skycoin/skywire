@@ -1277,7 +1277,7 @@ func (s visorSelf) SelfSummary() wasmhv.Summary {
 	if dmsgC != nil {
 		for _, cs := range dmsgC.AllSessions() {
 			srv := cs.RemotePK()
-			dmsgServers = append(dmsgServers, wasmhv.DMSGServerInfo{PK: srv, Carrier: cs.Carrier(), Protocol: cs.Protocol()})
+			dmsgServers = append(dmsgServers, wasmhv.DMSGServerInfo{PK: srv, Carrier: cs.Carrier(), Protocol: cs.Protocol(), Streams: cs.NumStreams()})
 			if primarySrv == (cipher.PubKey{}) {
 				primarySrv = srv
 			}

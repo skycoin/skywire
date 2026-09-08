@@ -64,7 +64,7 @@ func printDmsgSessions(result *visor.DmsgClientSessions) {
 		// reached over); fall back to bare PKs for older visors.
 		if len(info.Sessions) > 0 {
 			for _, s := range info.Sessions {
-				fmt.Printf("    %s  %s\n", s.PK, s.Protocol)
+				fmt.Printf("    %s  %s  %s\n", s.PK, s.Protocol, formatStreams(s.Streams))
 			}
 		} else {
 			for _, s := range info.Servers {
@@ -79,5 +79,22 @@ func printDmsgSessions(result *visor.DmsgClientSessions) {
 
 	if result.Main == nil && result.RouteSetup == nil && result.TransportSetup == nil {
 		fmt.Println("No dmsg clients running on this visor.")
+	}
+}
+
+// formatStreams renders a session's open mux stream count. "idle" is the state
+// the idle-session reaper looks for, so it is spelled out rather than printed
+// as a bare 0; "?" is an unmeasurable count (quic), which the reaper treats as
+// busy and never closes.
+func formatStreams(n int) string {
+	switch {
+	case n < 0:
+		return "? streams"
+	case n == 0:
+		return "idle"
+	case n == 1:
+		return "1 stream"
+	default:
+		return fmt.Sprintf("%d streams", n)
 	}
 }
