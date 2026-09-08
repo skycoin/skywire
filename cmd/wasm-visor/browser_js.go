@@ -44,6 +44,45 @@ func jsOpenBrowser(_ js.Value, args []js.Value) any {
 	if !el.Truthy() {
 		return nil
 	}
+	ensureFlexColumn(el)
 	netscrape.Open(el)
 	return nil
+}
+
+// ensureFlexColumn makes el a flex column before netscrape mounts into it.
+//
+// netscrape lays its chrome out as a flex column: the tab strip and address bar
+// are fixed-height rows, and the views container that holds the page takes the
+// remainder with `position:relative;flex:1;min-height:0` (netscrape browser.go).
+// It repairs `position` on the element it is handed — turning a `static` host
+// element `relative` so the absolutely-positioned page views have a containing
+// block — but it does NOT repair `display`.
+//
+// So a host that passes a plain block element gets a views container whose
+// `flex:1` is inert (no flex parent to distribute along) and whose
+// `min-height:0` permits it to collapse. Its only child is an absolutely
+// positioned iframe, which contributes no content height, so the container
+// resolves to ZERO height. The page inside loads and runs perfectly and is
+// simply never visible — which is exactly how it presented: a fully loaded
+// hypervisor UI, document title and all, in a frame 1000px wide and 0px tall.
+//
+// Fixed here rather than in netscrape so no vendored dependency is patched, and
+// because the flex context is properly the host's responsibility — netscrape is
+// mounted into a WinBox body here, a docked pane elsewhere, and each host knows
+// its own layout. Only set when the element is not already a flex container, so
+// a host that has arranged this itself is left alone.
+func ensureFlexColumn(el js.Value) {
+	cs := js.Global().Call("getComputedStyle", el)
+	if !cs.Truthy() {
+		return
+	}
+	if d := cs.Get("display").String(); d == "flex" || d == "inline-flex" {
+		return
+	}
+	style := el.Get("style")
+	if !style.Truthy() {
+		return
+	}
+	style.Set("display", "flex")
+	style.Set("flexDirection", "column")
 }
