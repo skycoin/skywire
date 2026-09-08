@@ -105,12 +105,23 @@ Each entry in the PK table maps a visor's public key to its network address:
 
 ## Transport Handshake
 
-After TCP connection is established:
+The connection is authenticated by a four-frame nonce-challenge exchange —
+this is **not** a Noise handshake, and Noise runs only after it succeeds:
 
-1. Initiator sends Noise protocol handshake initiation
-2. Responder verifies initiator's public key
-3. Session keys are derived for encrypted communication
-4. Transport is ready for use
+1. Initiator sends frame 0: the literal string `get_nonce`.
+2. Responder replies with frame 1: a freshly generated random nonce.
+3. Initiator sends frame 2: its `{SrcAddr, DstAddr, Nonce}` signed under its
+   secret key.
+4. Responder verifies the signature against the nonce it issued, checks the
+   destination port has a listener, and replies with frame 3: OK, or an
+   error message.
+
+Only once frame 3 reports OK is the connection wrapped in a Noise `KK`
+handshake, which derives the session keys used for all subsequent traffic.
+
+The nonce challenge is what makes the signature non-replayable: because the
+responder chooses the nonce per connection, a captured frame 2 cannot
+authenticate a later one.
 
 ## Error Handling
 
