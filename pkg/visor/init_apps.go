@@ -307,10 +307,7 @@ func (v *Visor) holdVerifiedProxyExit(ctx context.Context, log *logging.Logger) 
 		case <-time.After(proxyExitRecheckInterval):
 		}
 		if !v.verifyProxyExit(ctx, log) {
-			if ctx.Err() != nil {
-				return false
-			}
-			return true
+			return ctx.Err() == nil
 		}
 		log.Debug("proxy exit re-verified end to end")
 	}
@@ -369,7 +366,7 @@ func (v *Visor) verifyProxyExit(ctx context.Context, log *logging.Logger) bool {
 // listener are a real reply RELAYED from the exit. Two things have to hold: it
 // must be a well-formed HTTP/1.x status line with a 2xx/3xx code (a zombie exit
 // that accepts the CONNECT and then relays nothing produces neither), and it
-// must not be one of the responses the local client synthesises when it has no
+// must not be one of the responses the local client synthesizes when it has no
 // session — those are ordinary-looking 200s carrying an HTML page, and treating
 // one as proof of life is the bug this guards.
 func relayedResponseOK(raw []byte) bool {
