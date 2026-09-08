@@ -84,11 +84,11 @@ If a visor fails to re-register, its entry expires and it becomes unreachable vi
 
 ## Transport Handshake
 
-After TCP connection is established, a Noise protocol handshake authenticates both parties:
-
-1. Initiator sends handshake initiation with its public key
-2. Responder verifies and responds
-3. Both parties derive session keys for encrypted communication
+STCPR uses the same authentication as STCP — see
+[STCP.md](STCP.md#transport-handshake). After the TCP connection is
+established, a four-frame nonce-challenge exchange authenticates both parties
+(`get_nonce` → nonce → signed addresses → OK), and only then is the connection
+wrapped in a Noise `KK` handshake to derive session keys.
 
 ## Configuration
 

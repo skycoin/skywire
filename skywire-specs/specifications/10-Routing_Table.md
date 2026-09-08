@@ -20,34 +20,37 @@ A routing rule is a variable-length byte slice with a fixed header:
 
 Delivers the packet to a local application. Additional fields:
 
-| Field | Size | Description |
-|---|---|---|
-| SrcPK | 33 bytes | Source visor public key |
-| DstPK | 33 bytes | Destination visor public key |
-| SrcPort | 2 bytes | Source routing port |
-| DstPort | 2 bytes | Destination routing port |
+| Field | Offset | Size | Description |
+|---|---|---|---|
+| SrcPK | 13 | 33 bytes | Source visor public key |
+| DstPK | 46 | 33 bytes | Destination visor public key |
+| SrcPort | 79 | 2 bytes | Source routing port |
+| DstPort | 81 | 2 bytes | Destination routing port |
 
 ### Forward Rule
 
 Forwards the packet to the next hop. Additional fields:
 
-| Field | Size | Description |
-|---|---|---|
-| NextRouteID | 4 bytes | Route ID on the next hop |
-| NextTransportID | 16 bytes | UUID of the transport to use |
-| SrcPK | 33 bytes | Source visor public key |
-| DstPK | 33 bytes | Destination visor public key |
-| SrcPort | 2 bytes | Source routing port |
-| DstPort | 2 bytes | Destination routing port |
+Fields appear in this order on the wire — the route descriptor comes first,
+then the next-hop fields. Offsets are from the start of the rule.
+
+| Field | Offset | Size | Description |
+|---|---|---|---|
+| SrcPK | 13 | 33 bytes | Source visor public key |
+| DstPK | 46 | 33 bytes | Destination visor public key |
+| SrcPort | 79 | 2 bytes | Source routing port |
+| DstPort | 81 | 2 bytes | Destination routing port |
+| NextRouteID | 83 | 4 bytes | Route ID on the next hop |
+| NextTransportID | 87 | 16 bytes | UUID of the transport to use |
 
 ### IntermediaryForward Rule
 
 Forwards the packet through an intermediary visor. Additional fields:
 
-| Field | Size | Description |
-|---|---|---|
-| NextRouteID | 4 bytes | Route ID on the next hop |
-| NextTransportID | 16 bytes | UUID of the transport to use |
+| Field | Offset | Size | Description |
+|---|---|---|---|
+| NextRouteID | 13 | 4 bytes | Route ID on the next hop |
+| NextTransportID | 17 | 16 bytes | UUID of the transport to use |
 
 Intermediary rules do not contain source/destination PKs or ports — the intermediary visor only knows the previous and next hop.
 
