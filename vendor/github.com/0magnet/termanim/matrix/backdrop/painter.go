@@ -51,11 +51,14 @@ type Painter struct {
 	last time.Time
 }
 
-// New returns a painter that draws text over the code rain. The options are
-// the same ones Render takes, and mean the same things; Width and Pad are the
-// two worth setting for a full-screen caller, which usually wants its own
-// width and no padding at all.
-func New(o Options) *Painter { return &Painter{o: o} }
+// New returns a painter that draws text over the code rain, or over
+// Options.Anim when one is set. The options are the same ones Render takes,
+// and mean the same things; Width and Pad are the two worth setting for a
+// full-screen caller, which usually wants its own width and no padding at all.
+//
+// NewFor is the same thing with the animation passed directly, for a caller
+// that has one to hand rather than a set of options to fill in.
+func New(o Options) *Painter { return &Painter{o: o, a: o.Anim} }
 
 // NewFor returns a painter that draws text over a pixel animation.
 //

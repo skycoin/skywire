@@ -88,6 +88,10 @@ const (
 // access to a Context from multiple goroutines requires external
 // synchronization.
 type Context struct {
+	// constructed is set to true after the Context is fully initialized.
+	// Options can check this flag to reject updates that are only valid during construction.
+	constructed bool
+
 	cipher srtpCipher
 
 	srtpSSRCStates  map[uint32]*srtpSSRCState
@@ -169,6 +173,8 @@ func CreateContext(
 	if len(c.sendMKI) != 0 {
 		c.mkis[string(c.sendMKI)] = c.cipher
 	}
+
+	c.constructed = true
 
 	return c, nil
 }
@@ -437,4 +443,30 @@ func (c *Context) checkRCCMode() error {
 	}
 
 	return nil
+}
+
+// UpdateOptions updates Context options after it has been created.
+// This function is not thread-safe, you need to provide synchronization with encrypting/decrypting packets.
+func (c *Context) UpdateOptions(opts ...ContextOption) error {
+	for _, opt := range opts {
+		if err := opt(c); err != nil {
+			return err
+		}
+	}
+
+	c.updateCryptexForCiphers()
+
+	return nil
+}
+
+func (c *Context) updateCryptexForCiphers() {
+	useCryptex := c.cryptexMode != CryptexModeDisabled && c.encryptSRTP
+
+	if c.cipher != nil {
+		c.cipher.setCryptex(useCryptex)
+	}
+
+	for _, cipher := range c.mkis {
+		cipher.setCryptex(useCryptex)
+	}
 }

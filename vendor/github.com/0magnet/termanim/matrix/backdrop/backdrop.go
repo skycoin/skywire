@@ -42,6 +42,7 @@ import (
 
 	"github.com/gdamore/tcell/v3"
 
+	"github.com/0magnet/termanim/canvas"
 	"github.com/0magnet/termanim/matrix"
 )
 
@@ -148,6 +149,29 @@ type Options struct {
 	// document plain even when it is being written to a terminal, and that is
 	// a decision only the caller is in a position to make.
 	Off bool
+
+	// Anim puts something other than the rain behind the text. nil is the
+	// rain, which is what this package started as and what every existing
+	// caller gets without changing anything.
+	//
+	// It is here rather than only as a parameter to RenderAnim and NewFor
+	// because the animation is a property of how a program wants its backdrop
+	// to look, and the places that decide that are not always the places that
+	// call Render. cobrarain is the case that matters: it takes Options and
+	// hands them to Render, so putting the animation in Options is what lets
+	// a CLI put a plasma behind its help without cobrarain growing a second
+	// entry point, and without the caller reaching past it.
+	//
+	// Steps is the rain's and does nothing here; Warm takes its place. Dim
+	// scales the colors themselves rather than walking a ramp — see
+	// Frame.FromSurface.
+	//
+	// Not everything suits it. The rain is mostly gaps, which is what makes
+	// it read as something behind the text rather than a wall the text is
+	// painted on; a plasma or a fire covers every cell. GapMin and Dim are
+	// the knobs for that, and something sparse — a starfield, fireworks —
+	// needs neither.
+	Anim canvas.Animation
 }
 
 const (
@@ -157,12 +181,20 @@ const (
 	unknown = "\x00"
 )
 
-// Render returns text drawn over a still frame of the rain.
+// Render returns text drawn over a still frame of the rain, or over whatever
+// Options.Anim is when one is set.
 //
 // It returns text unchanged when stdout is not a terminal or NO_COLOR is set,
 // unless Force says otherwise, so a caller can hand its help to this
 // unconditionally.
 func Render(text string, o Options) string {
+	if o.Anim != nil {
+		// Everything below this point is the rain's own setup — its word
+		// seeding, its step count — and none of it applies to an animation.
+		// Handing it straight to RenderAnim keeps one implementation of each
+		// rather than a branch running down the middle of this function.
+		return RenderAnim(text, o.Anim, o)
+	}
 	if o.Off {
 		return text
 	}
