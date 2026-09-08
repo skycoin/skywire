@@ -58,7 +58,7 @@ When both visors share the same public IP (same LAN), SUDPH:
 2. Creates a `PacketFilter` to multiplex the UDP socket between:
    - Address-resolver connection (for registration and signaling)
    - Peer connections (for hole-punched transports)
-3. Performs Noise handshake with address-resolver over UDP
+3. Performs the four-frame nonce-challenge handshake with the address-resolver over UDP (the same exchange STCP uses — see [STCP.md](STCP.md#transport-handshake) — not Noise)
 4. Sends binding information (port, local addresses)
 5. Waits for incoming dial requests via `addrCh` channel
 
@@ -101,11 +101,13 @@ const holePunchMessage = "holepunch"
 
 ## Address Resolver API
 
-### UDP Binding (Noise Handshake)
+### UDP Binding (nonce-challenge handshake)
 
-Visors bind via UDP with a Noise protocol handshake:
+Visors bind via UDP with the same four-frame nonce-challenge handshake used for
+STCP transports (`get_nonce` -> nonce -> signed addresses -> OK). It is NOT a
+Noise handshake:
 
-1. Visor initiates Noise handshake with address-resolver
+1. Visor completes the nonce-challenge handshake with the address-resolver
 2. After handshake, visor sends binding data:
    ```json
    {
