@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -333,19 +334,25 @@ var dmsgServersCmd = &cobra.Command{
 }
 
 func formatDMSGServers(servers []visor.DMSGServerInfo) string {
-	msg := "+--------------------------------------------------------------------+-------------+\n"
-	msg += fmt.Sprintf("| %-66s | %11s |\n", "Server Public Key", "Latency")
-	msg += "|--------------------------------------------------------------------+-------------|\n"
+	msg := "+--------------------------------------------------------------------+-------------+---------+\n"
+	msg += fmt.Sprintf("| %-66s | %11s | %7s |\n", "Server Public Key", "Latency", "Streams")
+	msg += "|--------------------------------------------------------------------+-------------+---------|\n"
 	for _, server := range servers {
 		latStr := "-"
 		if server.Latency > 0 {
 			latStr = fmt.Sprintf("%.1fms", float64(server.Latency.Milliseconds()))
 		}
-		msg += fmt.Sprintf("| %-66s | %11s |\n", server.PK.String(), latStr)
+		strStr := strconv.Itoa(server.Streams)
+		if server.Streams < 0 {
+			strStr = "?"
+		}
+		msg += fmt.Sprintf("| %-66s | %11s | %7s |\n", server.PK.String(), latStr, strStr)
 	}
-	msg += "+--------------------------------------------------------------------+-------------+\n"
+	msg += "+--------------------------------------------------------------------+-------------+---------+\n"
 	msg += "Note: Latency is measured via self-ping through each server.\n"
 	msg += "Servers with '-' latency have not been measured yet (wait ~5s after startup).\n"
+	msg += "Streams is the session's open mux stream count: 0 = idle (reapable once\n"
+	msg += "over dmsg.sessions_count), '?' = unmeasurable (quic), treated as busy.\n"
 	return msg
 }
 
