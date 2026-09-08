@@ -1,2 +1,4 @@
 examples/demo/demo.wasm
 examples/demo/wasm_exec.js
+/gen
+*.test
