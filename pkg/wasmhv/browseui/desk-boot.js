@@ -211,7 +211,7 @@
 				var panel = r[0];
 				if (bridge && r[2] && globalThis.vnet.listening(hvPort)) {
 					globalThis.__DESK_VNET_DASHBOARD_URL__ =
-						globalThis.location.origin + '/vnet/' + hvPort + '/?embed=1#/?embed=1';
+						'http://vnet:' + hvPort + '/?embed=1#/?embed=1';
 				}
 				var dashURL = opts.dashboardURL || '/#/?embed=1';
 				// The ☰ menu's dashboard entry reads this too, on both pages.
@@ -322,10 +322,25 @@
 				// so no visor runs except the one started IN a terminal.
 				return gunzipFetch(opts.deskWasmURL || 'wasm-visor.wasm.gz');
 			}).then(function (buf) {
-				// Where the hypervisor UI lives, as an ABSOLUTE same-origin URL —
-				// the browser normalises a scheme-less address to http://, so a
-				// bare path would not survive being opened as a tab, and the
-				// DirectLoader that renders it natively matches on origin.
+				// Where the hypervisor UI lives, spelled CANONICALLY as
+				// vnet:<port> rather than as the served form
+				// "<origin>/vnet/<port>/". Both reach the same page, but only
+				// the canonical spelling keeps the plumbing out of the UI:
+				// DirectLoader (cmd/wasm-visor/desk_js.go) claims vnet:<port>
+				// and hands netscrape the service-worker URL as the iframe SRC,
+				// leaving the canonical form in the address bar. The served form
+				// is instead passed straight through as "already served", which
+				// is what made the hypervisor tab read
+				// "http://<host>:<port>/vnet/8001/?embed=1#/?embed=1".
+				//
+				// The distinction is not cosmetic. That leading 127.0.0.1 is the
+				// HOST's loopback — the origin the desk is served from — while
+				// the port after /vnet/ is the TAB's own virtual loopback. They
+				// are different networks, and concatenating them reads as one
+				// address. Spelling it "vnet" is what disambiguates the two, and
+				// is why vnetTarget accepts localhost/127.0.0.1 as INPUT (real
+				// server software binds those) while vnet:<port> is canonical.
+				// `skywire doc serve`'s tab below is already addressed this way.
 				//
 				// The vnet ROOT with ?embed=1, not "/dashboard": the service worker
 				// rewrites a framed page's <base href> to the "/vnet/<port>/"
@@ -335,8 +350,8 @@
 				// serves the dashboard instead whenever the request is framed, and
 				// embed=1 also rides in the hash so the injected launcher inside
 				// knows not to grow a taskbar of its own.
-				globalThis.__DESK_DASHBOARD_URL__ = globalThis.location.origin +
-					'/vnet/' + hvPort + '/?embed=1#/?embed=1';
+				globalThis.__DESK_DASHBOARD_URL__ =
+					'http://vnet:' + hvPort + '/?embed=1#/?embed=1';
 				var go = new Go();
 				return WebAssembly.instantiate(buf, go.importObject).then(function (r) {
 					go.run(r.instance).catch(function (e) { console.error('desk host:', e); });
@@ -536,7 +551,11 @@
 									// live: a manual frame reload cured it every time).
 									setTimeout(function () {
 										try {
-											var fr = document.querySelector('iframe[src^="/vnet/' + hvPort + '"]');
+											// *= not ^=: DirectLoader hands netscrape an ABSOLUTE
+										// src ("<origin>/vnet/<port>/…"), so anchoring to a
+										// leading "/vnet/" matched nothing and this repair
+										// never ran.
+										var fr = document.querySelector('iframe[src*="/vnet/' + hvPort + '/"]');
 											if (!fr || !fr.contentWindow || !fr.contentWindow.document.fonts) return;
 											if (!fr.contentWindow.document.fonts.check('24px "Material Icons"')) {
 												// NOT reload(): by now the Angular router has
