@@ -197,6 +197,7 @@ func main() {
 	// itself lives in a worker (which has no DOM). Each role installs only its
 	// surface and never boots a visor.
 	//   - "shell":   the websh terminal (shell_js.go).
+	//   - "browser": netscrape ONLY — no shell, no desk panel.
 	//   - "netview": the tpviz WebGL network visualizer (tpviz_js.go) — runs in
 	//                the main thread so it can own a WebGL canvas, and reaches
 	//                the worker-side visor for data over the skywireVisor proxy.
@@ -206,6 +207,17 @@ func main() {
 		installBrowser()
 		installDesk()
 		fmt.Println("wasm-visor: shell role — call skywireShell.open(el) / skywireBrowser.open(el)")
+		keepAlive()
+	case "browser":
+		// netscrape alone, for a page that already HAS a desk panel and wants
+		// only the nested browser. The native hypervisor is the case: its
+		// launcher mounts the engine-free JS panel (browseui/desk-panel.js) and
+		// publishes its own __skywireDesk, so installing the Go desk here would
+		// put two panels — and two taskbars — on one page. Installing just the
+		// browser lets that page render the hypervisor UI as a netscrape TAB
+		// instead of a bare iframe, without touching the panel it already has.
+		installBrowser()
+		fmt.Println("wasm-visor: browser role — call skywireBrowser.open(el)")
 		keepAlive()
 	case "netview":
 		installNetView()

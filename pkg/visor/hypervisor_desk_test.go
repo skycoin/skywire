@@ -148,10 +148,49 @@ func TestNativeDeskServing(t *testing.T) {
 		}
 	})
 
-	t.Run("the wasm-visor module is not exposed on the hypervisor port", func(t *testing.T) {
-		for _, p := range []string{"/wasm-visor.wasm", "/skywire.wasm", "/wasm_exec.js", "/hv-boot.js", "/worker.js"} {
+	// The rule is that native mode must not START a visor in the page — not
+	// that the module may never be served. Those were the same thing while the
+	// only reason to ship the module was to boot a visor out of it; they came
+	// apart when the desk began rendering the hypervisor UI as a netscrape tab,
+	// because netscrape is Go/wasm and lives in that same module. So the module
+	// is served, in a role that installs the browser and nothing else, while
+	// everything that could actually start a visor stays absent.
+	t.Run("the visor BOOT path is not exposed on the hypervisor port", func(t *testing.T) {
+		// hv-boot.js and worker.js ARE the boot path (worker.js hosts a visor
+		// off-thread; hv-boot.js spawns it). skywire.wasm is the in-tab CLI,
+		// which is how the wasm desk starts one via `skywire autoconfig`.
+		// Without these three there is nothing on this origin that starts a
+		// visor, whatever else it serves.
+		for _, p := range []string{"/skywire.wasm", "/hv-boot.js", "/worker.js"} {
 			if w := get(p); w.Code != http.StatusNotFound {
-				t.Errorf("GET %s → %d, want 404 (native mode must not serve the in-page visor)", p, w.Code)
+				t.Errorf("GET %s → %d, want 404 (native mode must not be able to start an in-page visor)", p, w.Code)
+			}
+		}
+	})
+
+	t.Run("the desk-host module is served for the browser, not for a visor", func(t *testing.T) {
+		for _, p := range []string{"/wasm-visor.wasm", "/wasm_exec.js"} {
+			if w := get(p); w.Code != http.StatusOK {
+				t.Errorf("GET %s → %d, want 200 (netscrape lives in this module)", p, w.Code)
+			}
+		}
+	})
+
+	t.Run("the native desk page does not autostart a visor", func(t *testing.T) {
+		w := get("/")
+		if w.Code != http.StatusOK {
+			t.Fatalf("status=%d, want 200", w.Code)
+		}
+		body := w.Body.String()
+		if !strings.Contains(body, "native: true") {
+			t.Error("native desk page lost its native:true boot option")
+		}
+		// These two are what the WASM desk passes to run a visor in the tab.
+		// Their absence here is the guarantee, and it is what makes serving the
+		// module above safe: nothing tells the desk to boot one.
+		for _, never := range []string{"autostartVisor", "wasmURL: '/skywire.wasm'"} {
+			if strings.Contains(body, never) {
+				t.Errorf("native desk page carries %q — it must not start a visor", never)
 			}
 		}
 	})

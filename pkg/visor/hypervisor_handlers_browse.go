@@ -16,6 +16,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
+	"github.com/skycoin/skywire/pkg/wasmhv/wasmbin"
 )
 
 // postBrowseFetch fetches a dmsg/skynet site for the in-UI browser (local visor).
@@ -58,6 +59,14 @@ func (hv *Hypervisor) postBrowseClearnet() http.HandlerFunc {
 // wasm-visor has.
 func (hv *Hypervisor) uiHandler() http.Handler {
 	fileServer := uiCacheControl(http.FileServer(http.FS(hv.c.UIAssets)))
+	// Fingerprint the desk-host blob once, so a rebuilt binary serves a fresh
+	// module and an unchanged one 304s instead of re-sending ~59MB. Hash the
+	// COMPRESSED bytes: they are already in memory, and they change exactly
+	// when the module does.
+	deskWasmETag := func() string {
+		h := sha256.Sum256(wasmbin.GetVariantGz(wasmbin.Default()))
+		return `"` + hex.EncodeToString(h[:])[:16] + `"`
+	}()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/browse.js":
@@ -80,6 +89,37 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			return
 		case "/skywire-browse-launcher.js":
 			serveJS(w, []byte(nativeBrowseLauncherJS))
+			return
+		case "/wasm-visor.wasm":
+			// The desk-host blob. netscrape — the nested browser the desk
+			// renders its windows as TABS in — is Go/wasm and lives in this
+			// module (cmd/wasm-visor/browser_js.go installBrowser). Without it
+			// this origin has a window manager and no browser, so the
+			// hypervisor UI can only open as a bare iframe in a WinBox, which
+			// is not what the wasm desk at `hv serve` looks like.
+			//
+			// It boots in the "shell" ROLE: surfaces only (shell + browser +
+			// desk panel), boot() is never called, no visor runs in this tab.
+			// The native hypervisor already IS the visor.
+			w.Header().Set("Content-Type", "application/wasm")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("ETag", deskWasmETag)
+			if r.Header.Get("If-None-Match") == deskWasmETag {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			b, err := wasmbin.Get()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			_, _ = w.Write(b) //nolint:errcheck
+			return
+		case "/wasm_exec.js":
+			// Go's loader, and it must be the one that PAIRS with the blob
+			// above — a std-Go wasm_exec.js cannot run a TinyGo module or vice
+			// versa (see wasmbin/embed.go).
+			serveJS(w, wasmbin.WasmExecJSVariant(wasmbin.Default()))
 			return
 		case "/desk-boot.js":
 			// The shared desk boot (skywireDeskBoot) — same asset `hv serve`
