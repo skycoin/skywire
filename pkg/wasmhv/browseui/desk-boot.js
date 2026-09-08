@@ -24,6 +24,12 @@
 //                   (8002). The desk starts it and opens it as a browser tab,
 //                   so the CLI reference and the prose are readable BESIDE a
 //                   terminal you can run the documented commands in. 0 = off.
+//   execWorkerURL   the worker bundle that hosts the skywire commands
+//                   ('skywire-worker.js'). Where it is served, every command —
+//                   the visor above all — runs on that thread instead of this
+//                   one; where it is not, the commands stay in-page exactly as
+//                   they were. Nothing selects between the two but whether the
+//                   asset answers.
 //   native          the page is served by a NATIVE hypervisor — see below
 //   dashboardURL    native mode: the same-origin dashboard URL for the
 //                   dashboard window ('/#/?embed=1')
@@ -211,6 +217,26 @@
 			});
 		}
 
+		// execWorker: the Worker every skywire command runs in once it is up,
+		// or null where this page cannot host one (see workerExec below).
+		var execWorker = null;
+
+		// workerExec moves the skywire CLI — and therefore the visor — off the
+		// page main thread. Resolves the installed worker, or null to keep the
+		// in-page skywireExec.
+		function workerExec() {
+			if (!globalThis.SkywireExecWorker) return Promise.resolve(null);
+			return globalThis.SkywireExecWorker.install({
+				url: opts.execWorkerURL || 'skywire-worker.js',
+				persistDB: opts.persistDB || 'skywire-desk',
+				wasmURL: skywireExec.wasmURL,
+				wasmExecURL: skywireExec.wasmExecURL,
+			}).catch(function (e) {
+				console.warn('exec worker:', e);
+				return null;
+			});
+		}
+
 		// bootWasm: the standalone desk — the tab IS the host. A wasm visor
 		// runs in a terminal, claims the virtual-loopback ports, and every
 		// panel reaches it through vnet. Unchanged by the host bridge above:
@@ -231,14 +257,35 @@
 				: Promise.resolve(false);
 
 			status('restoring filesystem…');
-			return jsfs.persist.enable(opts.persistDB || 'skywire-desk', {
-				// Persist identity + config + user files; NEVER the runtime
-				// stores. A bbolt database snapshotted mid-write restores corrupt
-				// and hangs its consumer on the next boot (the hypervisor module
-				// stalling on a restored users.db) — caches rebuild, keys don't.
-				exclude: function (p) {
-					return /\.db$/.test(p) || p.indexOf('/opt/skywire/local/') === 0 || p === '/opt/skywire/local';
-				},
+			// Where the skywire commands RUN. A Go/wasm visor never lets its
+			// runtime idle — profiled on this page 2026-09-07, 95% of
+			// one-second samples over 16.5 minutes sat above 90% of a core,
+			// with findRunnable/stealWork/nanotime1 and NOT ONE application or
+			// GC frame in the symbolized profile — so on the main thread it
+			// starves the compositor and dragging a window stutters. Given a
+			// Worker, every command's runtime spins over there instead and this
+			// thread only draws. hv-boot.js has refused an in-page visor for
+			// this exact reason since the legacy page; the desk had regressed
+			// it.
+			//
+			// A capability, not a setting: no Worker, no vnet, or no
+			// /skywire-worker.js served and install() resolves null, after
+			// which everything below is the in-page path exactly as before.
+			// The worker owns the IndexedDB snapshot when it comes up (one
+			// writer, and it is the side the visor writes from), so the page
+			// enables persistence only when there is no worker.
+			return workerExec().then(function (w) {
+				execWorker = w;
+				if (w) return { restored: w.restored };
+				return jsfs.persist.enable(opts.persistDB || 'skywire-desk', {
+					// Persist identity + config + user files; NEVER the runtime
+					// stores. A bbolt database snapshotted mid-write restores corrupt
+					// and hangs its consumer on the next boot (the hypervisor module
+					// stalling on a restored users.db) — caches rebuild, keys don't.
+					exclude: function (p) {
+						return /\.db$/.test(p) || p.indexOf('/opt/skywire/local/') === 0 || p === '/opt/skywire/local';
+					},
+				});
 			}).then(function (p) {
 				status((p.restored ? 'filesystem restored — ' : '') + 'starting the desk…');
 				// The desk host: the wasm-visor binary in-page. It installs the
@@ -509,7 +556,9 @@
 					})(0);
 				}
 
-				return { panel: panel, startedVisor: startedVisor };
+				// execWorker is null on the in-page fallback — a caller (and a
+				// CDP probe) can tell which thread the visor is on from it.
+				return { panel: panel, startedVisor: startedVisor, execWorker: execWorker };
 			});
 		}
 
