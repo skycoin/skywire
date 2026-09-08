@@ -40,23 +40,38 @@ func (funcPane) Close()                    {}
 // installDesk registers skywire's desk apps and mounts the library panel.
 // Call from a DOM-bearing role after installShell/installBrowser.
 func installDesk() {
-	desk.Register(desk.App{
-		Name: "terminal", Title: "terminal",
-		Help:  "websh — the skywire shell",
-		Width: 900, Height: 540,
-		Open: func(args []string) (desk.Pane, error) {
-			return funcPane{mount: func(el js.Value) error {
-				h := jsOpenShell(js.Undefined(), []js.Value{el})
-				// args[0] (optional): a command to run once the session is up.
-				if len(args) > 0 && args[0] != "" {
-					if hv, ok := h.(js.Value); ok && hv.Truthy() && hv.Get("run").Type() == js.TypeFunction {
-						hv.Call("run", args[0])
+	// The terminal app. On a page a hypervisor serves (host-bridge mode) the
+	// terminal is the HOST's pty page — xterm over a websocket to the machine
+	// the visor runs on — which the page names in __SKYWIRE_PTY_URL__ before
+	// this module runs. Elsewhere it is websh, the in-tab shell. Same app name
+	// and the same tabbing either way, so the ☰ entry and desk-boot's launch
+	// need not know which one they got.
+	if ptyURL := js.Global().Get("__SKYWIRE_PTY_URL__"); ptyURL.Type() == js.TypeString && ptyURL.String() != "" {
+		desk.Register(desk.App{
+			Name: "terminal", Title: "terminal",
+			Help:  "the host's shell (pty over websocket)",
+			Width: 900, Height: 540,
+			Open: func(_ []string) (desk.Pane, error) { return framePane(ptyURL.String()), nil },
+		})
+	} else {
+		desk.Register(desk.App{
+			Name: "terminal", Title: "terminal",
+			Help:  "websh — the skywire shell",
+			Width: 900, Height: 540,
+			Open: func(args []string) (desk.Pane, error) {
+				return funcPane{mount: func(el js.Value) error {
+					h := jsOpenShell(js.Undefined(), []js.Value{el})
+					// args[0] (optional): a command to run once the session is up.
+					if len(args) > 0 && args[0] != "" {
+						if hv, ok := h.(js.Value); ok && hv.Truthy() && hv.Get("run").Type() == js.TypeFunction {
+							hv.Call("run", args[0])
+						}
 					}
-				}
-				return nil
-			}}, nil
-		},
-	})
+					return nil
+				}}, nil
+			},
+		})
+	}
 	desk.Register(desk.App{
 		Name: "browser", Title: "browser",
 		Help:  "netscrape — browse the mesh and the clearnet",
@@ -117,6 +132,17 @@ func installDesk() {
 		origin := loc.Get("origin").String()
 		if origin == "" {
 			return "", false
+		}
+		// A page a visor serves itself — it injects __SKYWIRE_LOCAL_PK__ — is
+		// that visor's own UI on every same-origin path, the hypervisor
+		// dashboard above all. Those render natively with no service worker in
+		// the way, which is what makes the desk work on a LAN address over
+		// plain http. A docs site hosting the desk injects no such key, so its
+		// other pages keep going through the transcoder.
+		if js.Global().Get("__SKYWIRE_LOCAL_PK__").Type() == js.TypeString {
+			if src, ok := sameOriginSrc(origin, u); ok {
+				return src, true
+			}
 		}
 		if strings.HasPrefix(u, origin+"/vnet/") {
 			return u, true // already the served form
@@ -230,4 +256,16 @@ func installDesk() {
 			})
 		}),
 	}))
+}
+
+// framePane is a pane that is one iframe on url, filling its host. A fresh
+// pane per Open, so a second terminal tab is a second pty session.
+func framePane(url string) desk.Pane {
+	return funcPane{mount: func(el js.Value) error {
+		f := js.Global().Get("document").Call("createElement", "iframe")
+		f.Set("src", url)
+		f.Get("style").Set("cssText", "border:0;width:100%;height:100%;display:block;background:#000")
+		el.Call("appendChild", f)
+		return nil
+	}}
 }
