@@ -217,6 +217,7 @@ func main() {
 		// browser lets that page render the hypervisor UI as a netscrape TAB
 		// instead of a bare iframe, without touching the panel it already has.
 		installBrowser()
+		installBrowserDirectLoader()
 		fmt.Println("wasm-visor: browser role — call skywireBrowser.open(el)")
 		keepAlive()
 	case "netview":
