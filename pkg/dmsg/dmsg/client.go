@@ -1468,6 +1468,7 @@ func (ce *Client) reapExcessIdleSessions(idleStreak map[cipher.PubKey]int, idleC
 		if ses := sessions[pk]; ses != nil {
 			ce.log.WithField("remote_pk", pk.String()).
 				Debug("reaping idle dmsg session (streamless, over min_sessions)")
+			ses.markReaped()
 			_ = ses.Close() //nolint:errcheck
 		}
 	}
@@ -1505,6 +1506,12 @@ func pickIdleSessionsToReap(streams, idleStreak map[cipher.PubKey]int, min, idle
 	}
 	if len(reap) > surplus {
 		reap = reap[:surplus]
+	}
+	// A reaped server starts over: if a later DialStream re-dials it, the new
+	// session gets the full idle grace rather than inheriting a streak that
+	// would reap it on its first check.
+	for _, pk := range reap {
+		delete(idleStreak, pk)
 	}
 	return reap
 }
