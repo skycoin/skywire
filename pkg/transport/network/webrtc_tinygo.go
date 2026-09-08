@@ -25,3 +25,7 @@ func webrtcDial(_ context.Context, _ io.ReadWriteCloser, _ []string) (net.Conn, 
 func webrtcAccept(_ context.Context, _ io.ReadWriteCloser, _ []string) (net.Conn, error) {
 	return nil, errWebRTCUnsupported
 }
+
+// WebRTCAvailable reports whether this runtime can construct a peer connection.
+// These targets have neither pion nor RTCPeerConnection, so it never can.
+func WebRTCAvailable() bool { return false }

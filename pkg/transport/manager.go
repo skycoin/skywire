@@ -828,6 +828,12 @@ func (tm *Manager) hasActiveRoutes(tpID uuid.UUID) bool {
 func (tm *Manager) InitClient(ctx context.Context, netType types.Type, port int) {
 	client, err := tm.factory.MakeClient(netType, port)
 	if err != nil {
+		if errors.Is(err, network.ErrWebRTCUnavailable) {
+			// Expected on a runtime with no peer connection (a plain Web
+			// Worker): the type is simply not offered here, not broken.
+			tm.Logger.WithError(err).Infof("Not registering %s transport client in this runtime", netType)
+			return
+		}
 		// Do NOT install the result. MakeClient yields a nil client alongside
 		// its error, and storing that used to replace a perfectly good client
 		// with nothing — a failed re-init took down a working network type.
