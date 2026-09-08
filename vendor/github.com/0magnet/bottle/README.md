@@ -7,7 +7,7 @@ in a browser tab the way they run on a host.
 so its demos are the programs that stand on it:
 **[shipwright](https://0magnet.github.io/shipwright/)** runs `cmd/compile` and
 `cmd/link` against bottle's jsfs, and
-**[shipyard](https://0magnet.github.io/shipyard/)** is a whole workstation on
+**[shipyard](https://shipyard.magnetosphere.net/)** is a whole workstation on
 it — a shell, `go build`, processes and pipes, and a Go server the in-tab
 browser fetches from over bottle's vnet. Between them they exercise all three
 primitives: the filesystem, the network and the process layer.

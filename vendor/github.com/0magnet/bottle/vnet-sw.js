@@ -32,6 +32,20 @@ const PREFIX = (() => {
 	return '/vnet/';
 })();
 
+// How long ONE client gets to answer before it is treated as not listening.
+// Configurable at register time via ?timeout=<ms>, because the right value is a
+// property of what the page SERVES, not of this worker: a page whose slowest
+// in-page endpoint takes 10s needs a budget above that or its own dashboard
+// 504s, while a page serving small JSON would rather fail over sooner.
+// Clamped to 1s..120s so a typo cannot wedge the path or disable it.
+const ASK_TIMEOUT_MS = (() => {
+	try {
+		const t = parseInt(new URL(self.location.href).searchParams.get('timeout'), 10);
+		if (Number.isFinite(t)) return Math.min(120000, Math.max(1000, t));
+	} catch (e) { /* fall through */ }
+	return 8000;
+})();
+
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); });
 
@@ -39,7 +53,7 @@ function askClient(client, req) {
 	return new Promise((resolve) => {
 		const ch = new MessageChannel();
 		let done = false;
-		const timer = setTimeout(() => { if (!done) { done = true; resolve(null); } }, 8000);
+		const timer = setTimeout(() => { if (!done) { done = true; resolve(null); } }, ASK_TIMEOUT_MS);
 		ch.port1.onmessage = (ev) => {
 			if (done) return;
 			done = true;
@@ -82,9 +96,25 @@ self.addEventListener('fetch', (event) => {
 		const req = { port: port, method: event.request.method, path: path, headers: headers, body: body };
 
 		const clis = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-		for (const c of clis) {
-			const m = await askClient(c, req);
-			if (!m) continue;
+		// Ask every client AT ONCE and take the first real answer.
+		//
+		// This used to await each client in turn. A client that has no vnet
+		// responder installed never replies at all — an iframe rendering a
+		// page, say — so it costs the FULL timeout before the next client is
+		// tried, and the page that would have answered in milliseconds is
+		// reached only after the silent ones have each burned it. A desk with
+		// three iframes could spend 24s on an 8s budget, and a navigation that
+		// exceeded it got the "no page answered" body permanently, with no
+		// retry, while the server behind it was healthy.
+		//
+		// Asking in parallel makes the latency the FASTEST answering client
+		// rather than the sum of the silent ones, which is what the multi-tab
+		// note at the top of this file already describes as the contract.
+		const m = await firstAnswer(clis.map((c) => askClient(c, req)));
+		{
+			if (!m) {
+				return new Response('vnet: no page answered for port ' + port, { status: 504, headers: { 'content-type': 'text/plain' } });
+			}
 			const respHeaders = new Headers();
 			const hs = m.headers || {};
 			for (const k in hs) { if (Object.prototype.hasOwnProperty.call(hs, k)) { try { respHeaders.set(k, hs[k]); } catch (e) { /* forbidden name */ } } }
@@ -98,6 +128,26 @@ self.addEventListener('fetch', (event) => {
 			}
 			return new Response(bodyBytes, { status: m.status || 200, headers: respHeaders });
 		}
-		return new Response('vnet: no page answered for port ' + port, { status: 504, headers: { 'content-type': 'text/plain' } });
 	})());
 });
+
+// firstAnswer resolves with the first promise to produce a truthy value, or
+// null once every one has settled without producing one. Unlike Promise.race
+// it ignores the losers' nulls, and unlike Promise.all it does not wait for
+// the slowest — which is the whole point when the slow ones are clients that
+// will never reply and only run out their timeout.
+function firstAnswer(promises) {
+	if (!promises.length) return Promise.resolve(null);
+	return new Promise((resolve) => {
+		let outstanding = promises.length;
+		let settled = false;
+		const lose = () => { if (!settled && --outstanding === 0) { settled = true; resolve(null); } };
+		for (const p of promises) {
+			p.then((v) => {
+				if (settled) return;
+				if (v) { settled = true; resolve(v); return; }
+				lose();
+			}, lose);
+		}
+	});
+}

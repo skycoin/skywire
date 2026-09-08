@@ -35,6 +35,17 @@ type paneTab struct {
 	btn   js.Value
 	label js.Value
 	title string
+	// shown is the `display` this tab's view is restored to when the tab is
+	// activated. It is "block" unless the pane replaced it during Mount, in
+	// which case it is whatever the pane chose.
+	//
+	// A pane is allowed to style the host it is handed — the netscrape browser
+	// lays its host out as a flex column so its tab strip and address bar sit
+	// above a views container that claims the rest. Re-asserting "block" on
+	// every activate() clobbered that, leaving a contradictory
+	// display:block + flex-direction:column, and the container collapsed to
+	// zero height: a fully working page, invisible.
+	shown string
 }
 
 var (
@@ -120,6 +131,13 @@ func (ts *tabset) add(pane Pane, title string) error {
 		ts.views.Call("removeChild", view)
 		return err
 	}
+	// Read back what Mount left: a pane that styles its host keeps that display
+	// from here on, and only the show/hide toggle is ours. Falls back to
+	// "block" if the pane cleared it entirely.
+	t.shown = view.Get("style").Get("display").String()
+	if t.shown == "" || t.shown == "none" {
+		t.shown = "block"
+	}
 
 	t.btn = doc.Call("createElement", "div")
 	t.btn.Get("style").Set("cssText", "display:flex;align-items:center;gap:6px;background:#1b2130;"+
@@ -178,7 +196,11 @@ func (ts *tabset) activate(i int) {
 	for j, t := range ts.tabs {
 		on := j == i
 		if on {
-			t.view.Get("style").Set("display", "block")
+			shown := t.shown
+			if shown == "" {
+				shown = "block"
+			}
+			t.view.Get("style").Set("display", shown)
 			t.btn.Get("style").Set("background", "#2a3040")
 		} else {
 			t.view.Get("style").Set("display", "none")

@@ -34,7 +34,7 @@ github.com/0magnet/bbolt/internal/freelist
 # github.com/0magnet/bitree v0.0.0-20260906144807-e66de0b4c738
 ## explicit; go 1.25.0
 github.com/0magnet/bitree
-# github.com/0magnet/bottle v0.0.0-20260907194324-ccf25f76a5da
+# github.com/0magnet/bottle v0.0.0-20260908155251-920d2280a387
 ## explicit; go 1.24
 github.com/0magnet/bottle
 github.com/0magnet/bottle/vnet
@@ -47,11 +47,11 @@ github.com/0magnet/coloredcobra
 # github.com/0magnet/cosmos-go v0.0.0-20260907164823-2289c429c265
 ## explicit; go 1.24
 github.com/0magnet/cosmos-go
-# github.com/0magnet/desk v0.0.0-20260907180626-de20774940a9
+# github.com/0magnet/desk v0.0.0-20260908155111-f022a08dc97e
 ## explicit; go 1.26
 github.com/0magnet/desk
 github.com/0magnet/desk/dom
-# github.com/0magnet/desk/panes v0.0.0-20260907180626-de20774940a9
+# github.com/0magnet/desk/panes v0.0.0-20260908155111-f022a08dc97e
 ## explicit; go 1.26
 github.com/0magnet/desk/panes/files
 # github.com/0magnet/go-dsp v0.0.0-20260905172003-9e5bb50ba887
