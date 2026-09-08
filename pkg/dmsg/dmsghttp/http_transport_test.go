@@ -331,3 +331,38 @@ func TestHTTPTransport_TransparentGzip(t *testing.T) {
 		assert.Equal(t, payload, string(body))
 	})
 }
+
+// TestHTTPTransport_IdleStreamEvictedUnattended pins that a stream parked in
+// the keep-alive pool is released even when the transport never sees another
+// request. Eviction used to run only inside takeIdle, so a transport built for
+// one request and then dropped (the v1.3.93 self-probe did this every minute)
+// kept its stream reserved in the dmsg porter for the life of the process.
+func TestHTTPTransport_IdleStreamEvictedUnattended(t *testing.T) {
+	logging.SetLevel(logrus.WarnLevel)
+	old := idleEvictDelay
+	idleEvictDelay = 500 * time.Millisecond
+	t.Cleanup(func() { idleEvictDelay = old })
+
+	dc := startDmsgEnv(t, 1, 10)
+	results := make(chan httpServerResult, 4)
+	lis, err := newDmsgClient(t, dc, 1, "server").Listen(80)
+	require.NoError(t, err)
+	startHTTPServer(t, results, lis)
+	addr := lis.Addr().String()
+
+	dmsgC := newDmsgClient(t, dc, 1, "client")
+	tr := MakeHTTPTransport(context.Background(), dmsgC)
+	httpC := http.Client{Transport: tr, Timeout: 30 * time.Second}
+	time.Sleep(2 * time.Second)
+
+	resp, err := httpC.Get("http://" + addr + endpointHTML)
+	require.NoError(t, err)
+	_, _ = io.Copy(io.Discard, resp.Body)
+	require.NoError(t, resp.Body.Close())
+
+	require.Equal(t, 1, tr.idleLen(), "stream is parked in the pool once the body is closed")
+	require.Eventually(t, func() bool {
+		return tr.idleLen() == 0 && len(dmsgC.AllStreams()) == 0
+	}, 5*time.Second, 50*time.Millisecond,
+		"the parked stream must be evicted and its porter entry freed with no further request")
+}
