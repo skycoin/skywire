@@ -1,13 +1,3 @@
-					// The terminal, for parity with the wasm desk's console window: the
-					// host visor's pty over a websocket (/pty/<pk>), the page the
-					// dashboard's Terminal tab opens. Opened BEFORE the dashboard so the
-					// dashboard keeps focus, the way the wasm desk keeps its dashboard in
-					// front of the console it has already opened.
-					if (opts.terminalURL && panel && typeof panel.open === 'function') {
-						try {
-							panel.open({ title: 'skywire', url: opts.terminalURL, x: 'center', y: 'center', width: '70%', height: '60%' });
-						} catch (e) { console.warn('terminal window:', e); }
-					}
 // pkg/wasmhv/browseui/desk-boot.js c3-vis-wasm
 // The shared desk boot: one parameterized entry point behind both desk-first
 // pages — the docs-site playground (no visor by default) and the converged
@@ -253,6 +243,16 @@
 					// "0px" by most engines) and "auto" for a top dock.
 					var bd = bar ? bar.style.bottom : 'auto';
 					var topDocked = !(bd === '0' || bd === '0px');
+					// The terminal, for parity with the wasm desk's console window: the
+					// host visor's pty over a websocket (/pty/<pk>), the page the
+					// dashboard's Terminal tab opens. Opened BEFORE the dashboard so the
+					// dashboard keeps focus, the way the wasm desk keeps its dashboard in
+					// front of the console it has already opened.
+					if (opts.terminalURL && panel && typeof panel.open === 'function') {
+						try {
+							panel.open({ title: 'skywire', url: opts.terminalURL, x: 'center', y: 'center', width: '70%', height: '60%' });
+						} catch (e) { console.warn('terminal window:', e); }
+					}
 					// No `url:` — the body is handed to netscrape below, which
 					// opens dashURL as a TAB. WinBox's own `url` would make the
 					// body a bare iframe, which is what this page did before
