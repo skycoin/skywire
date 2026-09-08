@@ -26,7 +26,8 @@ import (
 // open(el) mounts the Go browser into el and runs it in this instance.
 func installBrowser() {
 	js.Global().Set("skywireBrowser", js.ValueOf(map[string]interface{}{
-		"open": js.FuncOf(jsOpenBrowser),
+		"open":   js.FuncOf(jsOpenBrowser),
+		"newTab": js.FuncOf(jsBrowserNewTab),
 	}))
 }
 
@@ -45,6 +46,23 @@ func jsOpenBrowser(_ js.Value, args []js.Value) any {
 		return nil
 	}
 	netscrape.Open(netscrapeHost(el))
+	return nil
+}
+
+// jsBrowserNewTab(url, background?) opens url in a new netscrape tab. A host
+// that mounts the browser itself needs this: Open(el) brings the browser up on
+// its default page, and without a way to name the first page a host can only
+// show that. A no-op before open() — netscrape's own NewTab guards on the
+// document it captured there.
+//
+// Background defaults to false: the caller is normally opening the ONE page the
+// window exists for, and that page should have focus.
+func jsBrowserNewTab(_ js.Value, args []js.Value) any {
+	if len(args) == 0 || args[0].Type() != js.TypeString {
+		return nil
+	}
+	background := len(args) > 1 && args[1].Truthy()
+	netscrape.NewTab(args[0].String(), background)
 	return nil
 }
 
