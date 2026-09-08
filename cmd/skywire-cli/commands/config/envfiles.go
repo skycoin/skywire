@@ -348,7 +348,7 @@ const envfileLinux = `#
 #REGTIMEOUT='10m'
 
 #--	Public visor max transports (default 1000)
-#MAXTRANSPORTS=1000
+#MAXTRANSPORTS=2048
 
 #--	Number of parallel mux routes per connection (default 0)
 #MUXROUTES=0
@@ -574,7 +574,7 @@ const envfileWindows = `#
 #$REGTIMEOUT='10m'
 
 #--	Public visor max transports (default 1000)
-#$MAXTRANSPORTS=1000
+#$MAXTRANSPORTS=2048
 
 #--	Number of parallel mux routes per connection (default 0)
 #$MUXROUTES=0
