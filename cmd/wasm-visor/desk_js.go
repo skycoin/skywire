@@ -63,13 +63,7 @@ func installDesk() {
 		Width: 1000, Height: 640,
 		Open: func(args []string) (desk.Pane, error) {
 			return funcPane{mount: func(el js.Value) error {
-				// Same flex-root requirement as the standalone entry in
-				// browser_js.go: netscrape sizes its views container with
-				// flex:1 and repairs only `position` on the element it is
-				// given, so a non-flex host collapses the page to zero height.
-				// This is the site the DESK uses.
-				ensureFlexColumn(el)
-				netscrape.Open(el)
+				netscrape.Open(netscrapeHost(el))
 				if len(args) > 0 && args[0] != "" {
 					netscrape.Navigate(args[0])
 				}
