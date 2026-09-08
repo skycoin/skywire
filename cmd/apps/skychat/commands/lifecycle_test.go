@@ -319,7 +319,8 @@ func TestMessageHandler_SendsPlainAndReceipts(t *testing.T) {
 	h := messageHandler(context.Background())
 	pk, _ := cipher.GenerateKeyPair()
 
-	// Plain send: byte-identical wire (no envelope), empty 200 body.
+	// Plain send: rides an id'd envelope like every other message (replies,
+	// read ticks and delete-for-everyone key on the id), empty 200 body.
 	rr := httptest.NewRecorder()
 	h(rr, httptest.NewRequest(http.MethodPost, "/message",
 		strings.NewReader(`{"recipient":"`+pk.Hex()+`","message":"plain hello"}`)))
@@ -328,8 +329,9 @@ func TestMessageHandler_SendsPlainAndReceipts(t *testing.T) {
 	}
 	select {
 	case raw := <-cc.frames:
-		if string(raw) != "plain hello" {
-			t.Errorf("wire payload = %q, want the bare text (a default send must stay envelope-free)", raw)
+		env, ok := message.ParseEnvelope(raw)
+		if !ok || env.Type != message.TypeMsg || env.ID == "" || env.Body != "plain hello" {
+			t.Errorf("wire payload = %q, want a chat-msg envelope with an id and body %q", raw, "plain hello")
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("nothing reached the wire on a plain send")

@@ -238,14 +238,14 @@ func runBrowserSkychat(ctx context.Context, _ []string) error {
 	// pkg/skychat/dm.Controller — the same core the native app uses. It listens
 	// on dmsg:1 + skynet:1, surfaces every message (in + the outbound mirror)
 	// through OnEvent → appendChat (which persists to the in-memory history
-	// store the page polls). AlwaysID keeps every DM addressable (id-keyed
-	// buffer, quoted replies). Store is nil here — appendChat owns persistence
-	// so file entries (fileMeta) and DM text share one MemStore writer.
+	// store the page polls). The controller ids every DM, which keeps the
+	// id-keyed buffer and quoted replies addressable. Store is nil here —
+	// appendChat owns persistence so file entries (fileMeta) and DM text share
+	// one MemStore writer.
 	chatCtrl = dm.New(dm.Config{
 		Client:   cl,
 		Networks: []appnet.Type{appnet.TypeDmsg, appnet.TypeSkynet},
 		Port:     skychatPort,
-		AlwaysID: true,
 		OnEvent: func(ev dm.Event) {
 			appendChat(chatMsg{
 				ID: ev.ID, From: ev.Peer, Text: ev.Text,
@@ -286,7 +286,7 @@ func runBrowserSkychat(ctx context.Context, _ []string) error {
 }
 
 // sendChat delivers text to the peer via the shared DM controller. network is
-// "dmsg" (default) or "skynet". The controller mints the message id (AlwaysID),
+// "dmsg" (default) or "skynet". The controller mints the message id,
 // frames the chat-msg envelope (carrying replyTo when set), dials/reuses the
 // conn, and surfaces the outbound mirror through OnEvent → appendChat — so this
 // no longer buffers or frames anything itself.
