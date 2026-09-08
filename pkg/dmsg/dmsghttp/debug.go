@@ -58,6 +58,34 @@ func WithDebug(next http.Handler, whitelistPKs []cipher.PubKey, logSource func()
 	})
 }
 
+// RemoteIsWhitelisted reports whether the request's remote public key is in the
+// whitelist. When serving over dmsg, RemoteAddr is "<pk>:<port>".
+//
+// For a handler that serves a REDUCED response to non-whitelisted callers rather
+// than denying them — see the setup node's /stats, which is public in aggregate
+// and gated only for the per-destination detail. An empty whitelist, or a
+// RemoteAddr that will not parse, is not whitelisted: the caller then gets the
+// public view, never the privileged one.
+//
+// Deliberately not shared with WhitelistMiddleware below, which must keep
+// distinguishing an unparseable RemoteAddr (500) from a denied one (401). Here
+// both simply mean "not privileged".
+func RemoteIsWhitelisted(r *http.Request, whitelistedPKs []cipher.PubKey) bool {
+	if len(whitelistedPKs) == 0 || r == nil {
+		return false
+	}
+	remotePK, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	for _, pk := range whitelistedPKs {
+		if pk.String() == remotePK {
+			return true
+		}
+	}
+	return false
+}
+
 // WhitelistMiddleware wraps an http.Handler with public-key-based access control.
 // When serving over dmsg, RemoteAddr is in the format "<pk>:<port>".
 //
