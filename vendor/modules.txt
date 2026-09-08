@@ -47,7 +47,7 @@ github.com/0magnet/coloredcobra
 # github.com/0magnet/cosmos-go v0.0.0-20260908144221-45e3d0561585
 ## explicit; go 1.24
 github.com/0magnet/cosmos-go
-# github.com/0magnet/desk v0.0.0-20260908190105-9bb2944487db
+# github.com/0magnet/desk v0.0.0-20260908195947-f72d9b0a9bb1
 ## explicit; go 1.26
 github.com/0magnet/desk
 github.com/0magnet/desk/dom
@@ -85,7 +85,7 @@ github.com/0magnet/lolcat-go/lol
 # github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c
 ## explicit; go 1.25.0
 github.com/0magnet/metrics
-# github.com/0magnet/netscrape v0.0.0-20260908062733-9acf9bfa0061
+# github.com/0magnet/netscrape v0.0.0-20260908195716-c9218b3f4966
 ## explicit; go 1.24
 github.com/0magnet/netscrape
 # github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d

@@ -64,6 +64,7 @@ func installDesk() {
 		Open: func(args []string) (desk.Pane, error) {
 			return funcPane{mount: func(el js.Value) error {
 				netscrape.Open(netscrapeHost(el))
+				hoistBrowserTabs(el)
 				if len(args) > 0 && args[0] != "" {
 					netscrape.Navigate(args[0])
 				}
