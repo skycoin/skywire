@@ -85,7 +85,7 @@ github.com/0magnet/lolcat-go/lol
 # github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c
 ## explicit; go 1.25.0
 github.com/0magnet/metrics
-# github.com/0magnet/netscrape v0.0.0-20260908202925-8a8dea1c8609
+# github.com/0magnet/netscrape v0.0.0-20260909235121-57c7ea4544f8
 ## explicit; go 1.24
 github.com/0magnet/netscrape
 # github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d
