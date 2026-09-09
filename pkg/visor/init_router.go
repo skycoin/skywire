@@ -123,6 +123,12 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			// wins, and the ~20 s STUN wait with it.
 			var lastErr error
 			for _, nType := range types.PreferredOrder(types.STCPR, types.SUDPH, types.DMSG) {
+				// A type this visor has no client for (a browser has no stcpr/sudph
+				// socket) can only fail with ErrUnknownNetwork — skip it rather than
+				// spend the retrier's three attempts (~4 s) on it at every dial.
+				if !tm.IsKnownNetwork(nType) {
+					continue
+				}
 				switch nType {
 				case types.DMSG:
 					// Same gate as EnsureBestTransport: a browser visor never
