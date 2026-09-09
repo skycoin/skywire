@@ -40,12 +40,35 @@ func (funcPane) Close()                    {}
 // installDesk registers skywire's desk apps and mounts the library panel.
 // Call from a DOM-bearing role after installShell/installBrowser.
 func installDesk() {
+	// websh, the in-tab shell, is ALWAYS registered — as "console", unlisted:
+	// it is what openConsole fills with a command (the boot script starts the
+	// tab's visor in one), so it must exist and must be websh whatever the
+	// terminal entry below turns out to be. Only when the page does not name a
+	// host pty does it also stand in as the listed "terminal".
+	websh := func(args []string) (desk.Pane, error) {
+		return funcPane{mount: func(el js.Value) error {
+			h := jsOpenShell(js.Undefined(), []js.Value{el})
+			// args[0] (optional): a command to run once the session is up.
+			if len(args) > 0 && args[0] != "" {
+				if hv, ok := h.(js.Value); ok && hv.Truthy() && hv.Get("run").Type() == js.TypeFunction {
+					hv.Call("run", args[0])
+				}
+			}
+			return nil
+		}}, nil
+	}
+	desk.Register(desk.App{
+		Name: "console", Title: "console", Unlisted: true,
+		Help:  "websh — the skywire shell",
+		Width: 900, Height: 540,
+		Open: websh,
+	})
 	// The terminal app. On a page a hypervisor serves (host-bridge mode) the
 	// terminal is the HOST's pty page — xterm over a websocket to the machine
 	// the visor runs on — which the page names in __SKYWIRE_PTY_URL__ before
-	// this module runs. Elsewhere it is websh, the in-tab shell. Same app name
-	// and the same tabbing either way, so the ☰ entry and desk-boot's launch
-	// need not know which one they got.
+	// this module runs. Elsewhere it is websh. Same app name and the same
+	// tabbing either way, so the ☰ entry and desk-boot's launch need not know
+	// which one they got.
 	if ptyURL := js.Global().Get("__SKYWIRE_PTY_URL__"); ptyURL.Type() == js.TypeString && ptyURL.String() != "" {
 		desk.Register(desk.App{
 			Name: "terminal", Title: "terminal",
@@ -58,18 +81,7 @@ func installDesk() {
 			Name: "terminal", Title: "terminal",
 			Help:  "websh — the skywire shell",
 			Width: 900, Height: 540,
-			Open: func(args []string) (desk.Pane, error) {
-				return funcPane{mount: func(el js.Value) error {
-					h := jsOpenShell(js.Undefined(), []js.Value{el})
-					// args[0] (optional): a command to run once the session is up.
-					if len(args) > 0 && args[0] != "" {
-						if hv, ok := h.(js.Value); ok && hv.Truthy() && hv.Get("run").Type() == js.TypeFunction {
-							hv.Call("run", args[0])
-						}
-					}
-					return nil
-				}}, nil
-			},
+			Open: websh,
 		})
 	}
 	desk.Register(desk.App{
@@ -170,7 +182,7 @@ func installDesk() {
 			}
 			return nil
 		}),
-		// openConsole({title, initCmd, bg}): a terminal, optionally running a
+		// openConsole({title, initCmd, bg}): a websh console, optionally running a
 		// first command. The FIRST call opens the terminal window; every one
 		// after joins it as a tab, so a desk with three shells has one window
 		// and three tabs rather than three frames. bg leaves the new tab
@@ -188,7 +200,7 @@ func installDesk() {
 			}
 			if termWin != nil {
 				front := termFront
-				if err := desk.AddTabOpts(termWin, "terminal", desk.Options{Title: title}, initCmd); err == nil {
+				if err := desk.AddTabOpts(termWin, "console", desk.Options{Title: title}, initCmd); err == nil {
 					if bg && front != "" {
 						// Put the previously-front tab back; the new one is
 						// open, just not on top.
@@ -202,7 +214,7 @@ func installDesk() {
 				// than reporting an error for a terminal nobody can see.
 				termWin = nil
 			}
-			w, err := desk.LaunchOpts("terminal", desk.Options{Title: title}, initCmd)
+			w, err := desk.LaunchOpts("console", desk.Options{Title: title}, initCmd)
 			if err != nil {
 				return err.Error()
 			}

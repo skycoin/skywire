@@ -167,6 +167,9 @@ func (p *Panel) refilter() {
 	q := p.search.Get("value").String()
 	p.filtered = p.filtered[:0]
 	for _, a := range Apps() {
+		if a.Unlisted {
+			continue
+		}
 		if q == "" || containsFold(a.Name, q) || containsFold(a.Help, q) {
 			p.filtered = append(p.filtered, a)
 		}
