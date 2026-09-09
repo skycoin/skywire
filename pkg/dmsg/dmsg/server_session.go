@@ -470,6 +470,9 @@ func (ss *ServerSession) forwardViaPeer(log logrus.FieldLogger, yStr io.ReadWrit
 			return nil
 		}
 		log.WithError(err).Debug("Peer forward failed, trying next.")
+		if ss.relayInbound && ss.entity.forwardFailedFunc != nil {
+			ss.entity.forwardFailedFunc(req.DstAddr.PK, peer.RemotePK())
+		}
 	}
 
 	ss.m.RecordStream(metrics.DeltaFailed)

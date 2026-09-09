@@ -161,6 +161,9 @@ type EntityCommon struct {
 	// forwardedFunc, if set, is told which peer carried a relayed request to
 	// dst, so the next request for dst can try that peer first.
 	forwardedFunc func(dst, peer cipher.PubKey)
+	// forwardFailedFunc, if set, is told which peer failed to carry a relayed
+	// request to dst, so it is not the first tried next time.
+	forwardFailedFunc func(dst, peer cipher.PubKey)
 
 	// acceptPeerAnnouncements, peerAnnounceAllowedFunc and
 	// promoteToPeerFunc support inbound peer announcements: a server
