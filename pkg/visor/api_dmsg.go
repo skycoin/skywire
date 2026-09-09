@@ -670,11 +670,13 @@ func (v *Visor) DmsgSessions() (*DmsgClientSessions, error) {
 	if v.dmsgC != nil {
 		servers, sessions := dmsgClientServerSessions(v.dmsgC)
 		out.Main = &DmsgClientSessionInfo{
-			PK:       v.conf.PK,
-			Role:     "main",
-			Count:    len(servers),
-			Servers:  servers,
-			Sessions: sessions,
+			PK:           v.conf.PK,
+			Role:         "main",
+			Count:        len(servers),
+			Servers:      servers,
+			Sessions:     sessions,
+			RelayPeers:   sortedPKs(v.dmsgC.RelayPeers()),
+			RelayClients: sortedPKs(v.dmsgC.RelaySessions()),
 		}
 	}
 
@@ -943,4 +945,9 @@ func (b *dmsgStreamBody) Close() error {
 		return err1
 	}
 	return err2
+}
+
+func sortedPKs(pks []cipher.PubKey) []cipher.PubKey {
+	sort.Slice(pks, func(i, j int) bool { return pks[i].String() < pks[j].String() })
+	return pks
 }
