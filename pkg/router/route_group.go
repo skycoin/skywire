@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"sort"
 	"sync"
@@ -687,8 +688,17 @@ func (rg *RouteGroup) Read(p []byte) (n int, err error) {
 	return rg.read(p)
 }
 
-// Write writes payload to a RouteGroup
-// For the first version, only the first ForwardRule (fwd[0]) is used for writing.
+// Write writes payload to a RouteGroup, splitting it into as many data frames as
+// the wire format needs. A routing packet's payload length is a uint16, so one
+// frame carries at most maxWritePayload bytes of application data. Before
+// per-frame noise the stream-noise wrapper (EncryptConn) sliced every write into
+// ≤4 KiB frames, so this path never saw a large payload; with per-frame noise the
+// group receives the application's raw writes (net/rpc hands a >64 KiB gob reply
+// down in a single call), and a payload over the frame limit has to be segmented
+// here rather than rejected — the rejection burned a sequence number, and the
+// peer's no-skip reorder buffer then waited on that hole forever (#4484 stage 2:
+// hypervisor RPC over skynet stalled after the first 4 KiB of a Summary reply).
+// Each segment goes through leg selection on its own, so a mux stripes them.
 func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	if rg.isClosed() {
 		return 0, io.ErrClosedPipe
@@ -702,15 +712,36 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 		return 0, nil
 	}
 
-	rg.mu.Lock()
-	tp, rule, leg, err := rg.nextTransport(p)
-	if err != nil {
+	for n < len(p) {
+		rg.mu.Lock()
+		chunk := len(p) - n
+		if maxChunk := rg.maxWritePayload(); chunk > maxChunk {
+			chunk = maxChunk
+		}
+		tp, rule, leg, err := rg.nextTransport(p[n : n+chunk])
 		rg.mu.Unlock()
-		return 0, err
-	}
-	rg.mu.Unlock()
+		if err != nil {
+			return n, err
+		}
 
-	return rg.write(p, tp, rule, leg)
+		written, err := rg.write(p[n:n+chunk], tp, rule, leg)
+		n += written
+		if err != nil {
+			return n, err
+		}
+	}
+	return n, nil
+}
+
+// maxWritePayload is the most application bytes one data frame of this group
+// can carry: the uint16 packet payload limit less the mux frame's own overhead
+// (sequence number, and the AEAD tag under per-frame noise). Called with rg.mu
+// held (mux.seal is wired under it).
+func (rg *RouteGroup) maxWritePayload() int {
+	if rg.mux == nil {
+		return math.MaxUint16
+	}
+	return math.MaxUint16 - rg.mux.frameOverhead()
 }
 
 // Close closes a RouteGroup.
