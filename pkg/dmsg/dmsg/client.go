@@ -5,6 +5,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -505,6 +506,7 @@ func (ce *Client) Serve(ctx context.Context) {
 
 	needInitialPost := true
 
+serve:
 	for {
 		if isClosed(ce.done) {
 			return
@@ -713,6 +715,13 @@ func (ce *Client) Serve(ctx context.Context) {
 					ce.log.WithError(err).Debug("Session stopped.")
 					if isClosed(ce.done) {
 						return
+					}
+					if errors.Is(err, errRelayNominated) {
+						// New nominees: rebuild the candidate list with them in
+						// front. Walking on to the next server here would dial
+						// every remaining server (sessionsSatisfied stays false
+						// until a relay session exists) and never the relay.
+						continue serve
 					}
 					// Prefer re-dialing the server we just lost. Reconnecting to
 					// the SAME server leaves Client.DelegatedServers unchanged, so
