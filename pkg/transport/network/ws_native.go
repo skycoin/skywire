@@ -80,7 +80,35 @@ func (c *wsClient) serve() {
 			return
 		}
 	}
+	c.mu.Lock()
+	c.wsLis = lis
+	c.mu.Unlock()
 	c.acceptTransports(lis)
+}
+
+// ServeHTTP lets a foreign HTTP server take WS transport handshakes for this
+// visor — the hypervisor UI port mounts it at /tp/ws so a desk it serves can
+// open a transport at the one address it already knows (no address-resolver
+// lookup, nothing published). The socket is then exactly what the WS listener
+// would have accepted on the transport port: same Noise handshake, same peer
+// verification, same transport. Requests before the listener is up wait for it.
+func (c *wsClient) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	select {
+	case <-c.listenStarted:
+	case <-c.done:
+		http.Error(w, "ws transport client closed", http.StatusServiceUnavailable)
+		return
+	case <-r.Context().Done():
+		return
+	}
+	c.mu.RLock()
+	lis, _ := c.wsLis.(*wsListener)
+	c.mu.RUnlock()
+	if lis == nil {
+		http.Error(w, "ws transport listener not running", http.StatusServiceUnavailable)
+		return
+	}
+	lis.handle(w, r)
 }
 
 // wsListener fronts a WebSocket HTTP server as a net.Listener: each upgraded

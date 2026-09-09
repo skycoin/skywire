@@ -100,6 +100,12 @@ func hasFastTransportTo(tpM *transport.Manager, pk cipher.PubKey) bool {
 	if tp, err := tpM.GetTransport(pk, tptypes.SUDPH); err == nil && tp != nil {
 		return true
 	}
+	// A WebSocket transport is direct too: a browser visor attached to this
+	// hypervisor opens one back to it at the page's own origin, and that socket
+	// is the fast path for the RPC and pty this visor serves it.
+	if tp, err := tpM.GetTransport(pk, tptypes.WS); err == nil && tp != nil {
+		return true
+	}
 	return false
 }
 

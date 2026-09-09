@@ -40,6 +40,10 @@ type wsClient struct {
 	// stcpr cmux port, so resolveWSURLViaAR resolves the peer's stcpr address and
 	// forms ws://host:port/. nil on the browser (which dials from the table only).
 	ar any
+	// wsLis is the running *wsListener (native only; `any` for the same reason
+	// as ar), so ServeHTTP can hand it handshakes that arrive on a foreign HTTP
+	// server — the hypervisor UI port mounting this client at /tp/ws.
+	wsLis any
 }
 
 func newWS(generic *genericClient, table stcp.PKTable) Client {

@@ -1088,6 +1088,16 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			r.Get("/ws", hv.getAPIWebSocket())
 		})
 
+		// /tp/ws — a skywire TRANSPORT handshake over a WebSocket on this port.
+		// A page this hypervisor serves knows exactly one address for the visor
+		// behind it: its own origin. It dials the WS transport here with no
+		// address-resolver lookup, no forwarded port and nothing published about
+		// itself. The transport authenticates itself by key in its own handshake,
+		// so this sits outside the session-auth group — the pairing gate is on
+		// the RPC the transport carries, not on the socket. Beside /ws for the
+		// reason /ws is: /api's timeout middleware is not an http.Hijacker.
+		r.Get("/tp/ws", hv.getTransportWS())
+
 		// Mount tp-viz UI if enabled.
 		//
 		// Inside its own authenticated group: these paths sit OUTSIDE the
