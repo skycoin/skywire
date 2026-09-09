@@ -239,8 +239,17 @@ func (ce *Client) SetRelayPeers(pks []cipher.PubKey, port uint16) bool {
 		ce.relayGen++
 	}
 	ce.relayMx.Unlock()
-	if !changed {
+	// An unchanged set still wakes the loop while a nominee is pending: a
+	// dialable nominee with no session, i.e. one whose failure backoff has
+	// lapsed. Nothing else re-runs the pass when a backoff expires — the loop
+	// is parked on errCh — so the visor's periodic re-nomination is the retry.
+	if !changed && !ce.relayPending() {
 		return false
+	}
+	if !changed {
+		ce.relayMx.Lock()
+		ce.relayGen++
+		ce.relayMx.Unlock()
 	}
 	// Wake a serve loop parked on errCh so it re-evaluates the candidate list.
 	ce.sesMx.Lock()
@@ -251,7 +260,13 @@ func (ce *Client) SetRelayPeers(pks []cipher.PubKey, port uint16) bool {
 		}
 	}
 	ce.sesMx.Unlock()
-	return true
+	return changed
+}
+
+// relayPending reports whether a nominee is dialable right now (not backed
+// off) while no relay session exists.
+func (ce *Client) relayPending() bool {
+	return len(ce.relayEntries()) > 0 && !ce.hasRelaySession()
 }
 
 // relayGeneration is the nomination change counter (see SetRelayPeers).
