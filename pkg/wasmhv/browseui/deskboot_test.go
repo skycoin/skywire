@@ -59,6 +59,8 @@ func TestDeskBootAttachBuildsTheWSPeer(t *testing.T) {
 		"if (opts.attach && opts.attach.pk)",
 		"location.host + (opts.attach.path || '/tp/ws')",
 		"' --disable-public-autoconn --ws-peer ' + opts.attach.pk + '@' + tpURL",
+		"new URLSearchParams(location.search).get('loglvl')",
+		"autoconfigCmd += ' --loglvl ' + loglvl",
 		"initCmd: startVisor ? autoconfigCmd : ''",
 	} {
 		if !strings.Contains(src, want) {
