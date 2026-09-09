@@ -71,6 +71,18 @@ func printDmsgSessions(result *visor.DmsgClientSessions) {
 				fmt.Printf("    %s\n", s)
 			}
 		}
+		if len(info.RelayPeers) > 0 {
+			fmt.Println("  Relay nominees:")
+			for _, pk := range info.RelayPeers {
+				fmt.Printf("    %s\n", pk)
+			}
+		}
+		if len(info.RelayClients) > 0 {
+			fmt.Println("  Relaying for:")
+			for _, pk := range info.RelayClients {
+				fmt.Printf("    %s\n", pk)
+			}
+		}
 		fmt.Println()
 	}
 	printOne(result.Main)

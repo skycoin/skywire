@@ -336,6 +336,7 @@ type Client struct {
 	relayPeers  map[cipher.PubKey]struct{}
 	relayPort   uint16
 	relayFailAt map[cipher.PubKey]time.Time
+	relayGen    uint64 // bumped on every nomination change; the serve loop restarts its pass on a new value
 	relayMx     sync.Mutex
 }
 
@@ -513,6 +514,7 @@ serve:
 		}
 		var entries []*disc.Entry
 		var err error
+		relayGen := ce.relayGeneration()
 		ce.log.Debug("Discovering dmsg servers...")
 		pinned := ctx.Value("dmsgServer") != nil
 		pinnedAddr, _ := ctx.Value("dmsgServerAddr").(string)
@@ -684,6 +686,11 @@ serve:
 		for n, entry := range entries {
 			if isClosed(ce.done) {
 				return
+			}
+			if ce.relayGeneration() != relayGen {
+				// Nominees changed during this pass (the wake-up sentinel is only
+				// heard while parked): rebuild the list with them in front.
+				continue serve
 			}
 
 			// A visor running its own dmsg server in-process (same PK) must
