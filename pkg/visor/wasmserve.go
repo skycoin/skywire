@@ -182,7 +182,10 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// Injected so browse.js enters real-origin mode and builds <pk><suffix>[:<port>]
 	// origins for the WinBox browser iframe.
 	browseOriginJS := "window.__SKYWIRE_BROWSE_ORIGIN__={suffix:" + strconv.Quote(suffix) + ",scheme:" + strconv.Quote(bScheme) + ",port:" + strconv.Quote(bPort) + "};"
-	index := injectWasmBoot(indexB, wasmVer, cfg.Harness, browseOriginJS)
+	// The page's boot stamp is the servedVersionToken, filled per request by
+	// the root handler: the fingerprint it polls (/wasm-version) folds in the
+	// command module on disk, which changes underneath a running server.
+	index := injectWasmBoot(indexB, servedVersionToken, cfg.Harness, browseOriginJS)
 
 	browseBootstrap := bytes.ReplaceAll(wasmhv.BrowseBootstrapHTML, []byte("__APP_ORIGIN__"), []byte(browseScheme+"://"+vHostPort))
 	browseBootstrap = bytes.ReplaceAll(browseBootstrap, []byte("__SUFFIX__"), []byte(suffix))
@@ -336,11 +339,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		// nested browser opens it maximized on top. A visor the operator
 		// stopped stays stopped across reloads (desk-boot's session).
 		serveBytes("/desk-boot.js", "text/javascript", wasmhv.DeskBootJS())
-		deskHTML := deskShellHTML(
-			`<script src="/wasm_exec.js?variant=go"></script>`+"\n"+
-				`<script src="/browse.js"></script>`+"\n"+
-				`<script src="/desk-boot.js"></script>`,
-			deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort))
+		deskHTML := deskShellHTML(wasmDeskScripts(), deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort))
 		if cfg.Harness {
 			// Same rule as injectWasmBoot on the standalone page: --harness
 			// injects ctl-bridge.js (its presence IS the harness signal). On
@@ -413,10 +412,15 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write(swJS) //nolint:errcheck
 	})
+	// /wasm-version is what autoupdate.js polls. It is wasmVer plus, when a
+	// command module is served, that file's current stamp — stat'd per
+	// request, because skywire.wasm is rebuilt in place under a running
+	// server and a desk tab whose visor IS that module must reload to run the
+	// new one. (An open desk sat 22 h on a blob rebuilt several times over.)
 	mux.HandleFunc("/wasm-version", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write([]byte(wasmVer)) //nolint:errcheck
+		_, _ = w.Write([]byte(servedVersion(wasmVer, cfg.ExecWasmPath))) //nolint:errcheck
 	})
 	// Distinct browser-tab favicon for the wasm-visor surface (violet mesh-cloud),
 	// so it reads apart at a glance from a host-native hypervisor tab.
@@ -554,11 +558,14 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 			// /vnet/<port>/ prefix has its <base href> rewritten to that
 			// prefix, so a deeper path is normalised back to here anyway.
 			framed := r.Header.Get("Sec-Fetch-Dest") == "iframe" || r.URL.Query().Get("embed") == "1"
+			// Both pages boot with the fingerprint /wasm-version answers RIGHT
+			// NOW, so a poll compares like with like.
+			cur := servedVersion(wasmVer, cfg.ExecWasmPath)
 			if deskPage != nil && !framed {
-				_, _ = w.Write(deskPage) //nolint:errcheck
+				_, _ = w.Write(renderServedVersion(deskPage, cur)) //nolint:errcheck
 				return
 			}
-			_, _ = w.Write(index) //nolint:errcheck
+			_, _ = w.Write(renderServedVersion(index, cur)) //nolint:errcheck
 			return
 		}
 		fileServer.ServeHTTP(w, r)
@@ -1055,6 +1062,20 @@ func deskWasmBootOpts(helpTerminal bool, docsPort int) string {
   docsPort: %d,
   hvWindow: true,
 }`, helpTerminal, docsPort)
+}
+
+// wasmDeskScripts is the script include list of the wasm-served desk: the Go
+// loader, the desk bundle, the served-build stamp with its poller, then
+// desk-boot. autoupdate.js reloads the tab once /wasm-version moves — which a
+// rebuilt skywire.wasm now makes it do — and the exec worker the tab's visor
+// runs in dies with the page, so the reload boots the new module. The stamp
+// is the servedVersionToken; the root handler fills it per request.
+func wasmDeskScripts() string {
+	return `<script src="/wasm_exec.js?variant=go"></script>` + "\n" +
+		`<script src="/browse.js"></script>` + "\n" +
+		`<script>window.__SKYWIRE_WASM_VERSION__="` + servedVersionToken + `";</script>` + "\n" +
+		`<script src="/autoupdate.js"></script>` + "\n" +
+		`<script src="/desk-boot.js"></script>`
 }
 
 // deskShellTemplate is the shared skeleton of the converged desk page (/desk):

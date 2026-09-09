@@ -1,13 +1,15 @@
-// autoupdate.js — wasm-visor self-update for the `skywire cli hv serve` page.
+// autoupdate.js — self-update for the pages wasm-serve serves (`skywire cli hv
+// serve`, or a visor's hypervisor.wasm_serve): the legacy wasm-visor page and
+// the desk.
 //
-// The standalone wasm-visor's ONLY update step is a page reload: the server
-// (hv serve) embeds the wasm in the running skywire binary, so when that binary
-// updates the served /wasm-visor.wasm changes and a reload picks it up. This
-// script polls a tiny /wasm-version fingerprint and, when it differs from the
-// version this page booted with, reloads to the new build — by default, with a
-// user-visible toast that lets them keep the current version (disabling
-// auto-update). It is injected ONLY by hv serve, so it never runs for a
-// native-hosted hypervisor UI.
+// Their ONLY update step is a page reload: the served /wasm-visor.wasm is
+// embedded in the running skywire binary and the desk's /skywire.wasm is read
+// from disk, so when either changes a reload picks it up. This script polls a
+// tiny /wasm-version fingerprint (the build plus the served command module's
+// stamp) and, when it differs from the version this page booted with, reloads
+// to the new build — by default, with a user-visible toast that lets them keep
+// the current version (disabling auto-update). It is injected ONLY by
+// wasm-serve; the native hypervisor port has its own poller (uiAutoReloadJS).
 (function () {
   'use strict';
   var POLL_MS = 60000;          // how often to check for a new build
@@ -30,15 +32,19 @@
 
   var notifying = false;
 
-  // The wasm runs in a SharedWorker that stays alive across a tab's
-  // location.reload() (it dies only when the LAST tab disconnects), so a plain
-  // reload reconnects to the SAME stale runtime — the new wasm never loads.
-  // Before reloading, tell the worker to self.close() so the post-reload page
-  // boots a FRESH worker that fetches the new wasm-visor.wasm. (The dedicated-
-  // Worker fallback already dies on unload, so the message is a no-op there.)
+  // On the legacy page the wasm runs in a SharedWorker that stays alive across
+  // a tab's location.reload() (it dies only when the LAST tab disconnects), so
+  // a plain reload reconnects to the SAME stale runtime — the new wasm never
+  // loads. Before reloading, tell the worker to self.close() so the post-reload
+  // page boots a FRESH worker that fetches the new wasm-visor.wasm. (The
+  // dedicated-Worker fallback already dies on unload, so the message is a no-op
+  // there.) Only where hv-boot.js is on the page: the desk has no SharedWorker
+  // visor — its visor is an exec worker that dies with the page — and
+  // constructing one here would fetch and boot a whole wasm-visor just to shut
+  // it down (worker.js instantiates on load).
   function reloadFresh() {
     try {
-      if (typeof SharedWorker !== 'undefined') {
+      if (typeof SharedWorker !== 'undefined' && document.querySelector('script[src*="hv-boot"]')) {
         var w = new SharedWorker('worker.js');
         if (w.port.start) { w.port.start(); }
         w.port.postMessage({ t: 'shutdown' });
@@ -55,7 +61,7 @@
       'background:#2b2540;color:#eee;font:13px/1.4 system-ui,sans-serif;padding:12px 14px;' +
       'border:1px solid #6c5ce7;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.4)';
     var secs = Math.round(GRACE_MS / 1000);
-    box.innerHTML = '<b>New wasm-visor available</b><br>Updating in <span id="su-c">' + secs +
+    box.innerHTML = '<b>New skywire build available</b><br>Updating in <span id="su-c">' + secs +
       '</span>s… <div style="margin-top:8px"><button id="su-now" style="margin-right:8px">Update now</button>' +
       '<button id="su-keep">Keep this version</button></div>';
     document.body.appendChild(box);
