@@ -192,6 +192,12 @@ type Config struct {
 	AcceptedPeerPKs   []cipher.PubKey `json:"accepted_peer_pks,omitempty"`
 	MaxPeerLinks      int             `json:"max_peer_links,omitempty"`
 	MaxRelayedStreams int             `json:"max_relayed_streams,omitempty"`
+	// RejectRelayedRequests turns off the default acceptance of stream
+	// requests that a visor forwards on another key's behalf over its own
+	// client session (dmsg over skynet through a host). They are signed by
+	// their source key and charged to max_relayed_streams; set this only to
+	// make the server relay for peers alone.
+	RejectRelayedRequests bool `json:"reject_relayed_requests,omitempty"`
 }
 
 // GenerateDefaultConfig generate default config for dmsg-server

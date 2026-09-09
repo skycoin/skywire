@@ -166,6 +166,12 @@ type EntityCommon struct {
 	maxRelayedStreams int
 	relayedStreams    int64
 
+	// acceptRelayedRequests admits a stream request over a CLIENT session
+	// whose SrcAddr.PK is not the session's remote key (see
+	// ServerConfig.AcceptRelayedRequests). Such a request is charged to the
+	// relay slots above exactly like a peer bridge.
+	acceptRelayedRequests bool
+
 	// lastPushedSrvPKs is the set of delegated server PKs most recently
 	// pushed to the dmsg discovery. It is used by updateClientEntry to
 	// short-circuit redundant GET/PUT round-trips when nothing has
