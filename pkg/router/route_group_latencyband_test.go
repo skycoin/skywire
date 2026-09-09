@@ -485,9 +485,14 @@ func TestDemoteStalledLegsParksNotRemoves(t *testing.T) {
 }
 
 func TestSoleLegBlackHoled(t *testing.T) {
-	// active==1, sent a request, got ~nothing -> black-hole
-	if !soleLegBlackHoled(1, 500, 160) {
-		t.Fatal("sole leg with sent=500 recv=160 should be flagged")
+	// active==1, sent a request, no payload ever delivered -> black-hole
+	if !soleLegBlackHoled(1, 500, 0) {
+		t.Fatal("sole leg with sent=500 payload=0 should be flagged")
+	}
+	// delivered a small response -> not a black-hole: a light session (a proxy
+	// client fetching a few hundred bytes) never reaches bulk, yet the route works
+	if soleLegBlackHoled(1, 500, 160) {
+		t.Fatal("sole leg that delivered payload must NOT be flagged")
 	}
 	// received bulk -> not a black-hole (route delivered)
 	if soleLegBlackHoled(1, 500, 20_000) {
@@ -498,11 +503,11 @@ func TestSoleLegBlackHoled(t *testing.T) {
 		t.Fatal("idle sole leg (no request sent) must NOT be flagged")
 	}
 	// more than one active leg -> the ordinary data-progress prune handles it
-	if soleLegBlackHoled(2, 500, 160) {
+	if soleLegBlackHoled(2, 500, 0) {
 		t.Fatal("multi-leg group must NOT use the sole-leg path")
 	}
 	// zero active legs -> not applicable
-	if soleLegBlackHoled(0, 500, 160) {
+	if soleLegBlackHoled(0, 500, 0) {
 		t.Fatal("zero active legs must NOT be flagged")
 	}
 }
