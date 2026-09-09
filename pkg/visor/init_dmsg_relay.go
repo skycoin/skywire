@@ -20,12 +20,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // skynetSessionDialer is the dmsg client's SessionDialer for the skynet
@@ -112,5 +114,80 @@ func (v *Visor) relayPeerAllowed(pk cipher.PubKey) bool {
 			return true
 		}
 	}
-	return false
+	// A peer we hold a transport to may relay through us: a transport is
+	// mutual, and a tab served by this visor has exactly one — to us.
+	return v.hasTransportTo(pk)
+}
+
+// relayNominationInterval is how often the visor re-derives its relay
+// nominees from the transports it currently holds.
+const relayNominationInterval = 10 * time.Second
+
+// nominateRelayPeers keeps the dmsg client's relay nominees in step with the
+// visor's transports: a hypervisor or a persistent-transport peer that this
+// visor has a live transport to is nominated (dmsg.Client.SetRelayPeers);
+// when the transport goes, so does the nomination. No configuration takes
+// part — the trust is the hypervisor relationship or the operator's pinned
+// transport, and the reachability is the transport itself. A nominee that
+// has no relay acceptor, or refuses us, fails the dial and is backed off by
+// the client; the configured servers stay the bootstrap and the fallback.
+func (v *Visor) nominateRelayPeers(ctx context.Context, dmsgC *dmsg.Client) {
+	t := time.NewTicker(relayNominationInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			dmsgC.SetRelayPeers(v.relayNominees(), skyenv.DmsgRelayPort)
+		}
+	}
+}
+
+// relayNominees returns the trusted peers this visor has a live transport to.
+func (v *Visor) relayNominees() []cipher.PubKey {
+	if v.tpM == nil || v.conf == nil {
+		return nil
+	}
+	trusted := make(map[cipher.PubKey]struct{}, len(v.conf.Hypervisors)+len(v.conf.PersistentTransports))
+	for _, pk := range v.conf.Hypervisors {
+		trusted[pk] = struct{}{}
+	}
+	for _, pt := range v.conf.PersistentTransports {
+		trusted[pt.PK] = struct{}{}
+	}
+	if len(trusted) == 0 {
+		return nil
+	}
+	seen := make(map[cipher.PubKey]struct{})
+	var out []cipher.PubKey
+	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		pk := tp.Remote()
+		if _, ok := trusted[pk]; !ok || tp.IsClosed() || pk == v.conf.PK {
+			return true
+		}
+		if _, dup := seen[pk]; dup {
+			return true
+		}
+		seen[pk] = struct{}{}
+		out = append(out, pk)
+		return true
+	})
+	return out
+}
+
+// hasTransportTo reports whether this visor holds a live transport to pk.
+func (v *Visor) hasTransportTo(pk cipher.PubKey) bool {
+	if v.tpM == nil {
+		return false
+	}
+	found := false
+	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if tp.Remote() == pk && !tp.IsClosed() {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/0magnet/yamux"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
 )
 
@@ -189,5 +190,154 @@ func (ce *Client) relayForwardSessions(dst cipher.PubKey) []*SessionCommon {
 		}
 		out = append(out, s.SessionCommon)
 	}
+	return out
+}
+
+// relayFailureBackoff is how long a nominated relay that refused or failed a
+// session dial is left alone before the serve loop tries it again. It is the
+// capability negotiation for relays: a peer without a relay acceptor, or one
+// that will not admit us, simply fails the dial, and we stop asking for a while.
+const relayFailureBackoff = 5 * time.Minute
+
+// relayProbation is how long a fresh relay session must survive before its
+// loss counts as an ordinary disconnect rather than a refusal: an acceptor
+// that will not admit us can only say so after the Noise handshake has
+// proven our key, by closing the conn.
+const relayProbation = 10 * time.Second
+
+// errRelayNominated is the sentinel the serve loop is woken with when new
+// relay candidates arrive while it is parked waiting for a session to fail.
+var errRelayNominated = errors.New("dmsg: relay candidates changed")
+
+// SetRelayPeers nominates the peers this client should hold a dmsg session
+// through as RELAYS, at the given dmsg port, replacing any earlier nomination.
+// The visor calls it as its transports change: a nominee is a peer it has a
+// live skywire transport to and a reason to trust with its dmsg traffic (a
+// hypervisor, a pinned persistent peer). The serve loop dials nominees FIRST
+// and treats "no relay session while nominees exist" as one session short, so
+// a client already at MinSessions still attaches; a nominee that refuses is
+// backed off for relayFailureBackoff. Stream dials prefer a relay session
+// (see DialStream). Passing an empty set withdraws every nomination; existing
+// relay sessions are left to close on their own.
+func (ce *Client) SetRelayPeers(pks []cipher.PubKey, port uint16) {
+	ce.relayMx.Lock()
+	changed := len(pks) != len(ce.relayPeers) || port != ce.relayPort
+	next := make(map[cipher.PubKey]struct{}, len(pks))
+	for _, pk := range pks {
+		if pk.Null() || pk == ce.pk {
+			continue
+		}
+		next[pk] = struct{}{}
+		if _, had := ce.relayPeers[pk]; !had {
+			changed = true
+		}
+	}
+	ce.relayPeers = next
+	ce.relayPort = port
+	ce.relayMx.Unlock()
+	if !changed {
+		return
+	}
+	// Wake a serve loop parked on errCh so it re-evaluates the candidate list.
+	ce.sesMx.Lock()
+	if !isClosed(ce.done) {
+		select {
+		case ce.errCh <- errRelayNominated:
+		default:
+		}
+	}
+	ce.sesMx.Unlock()
+}
+
+// RelayPeers returns the current relay nominees.
+func (ce *Client) RelayPeers() []cipher.PubKey {
+	ce.relayMx.Lock()
+	defer ce.relayMx.Unlock()
+	out := make([]cipher.PubKey, 0, len(ce.relayPeers))
+	for pk := range ce.relayPeers {
+		out = append(out, pk)
+	}
+	return out
+}
+
+// relayEntries returns server entries for the nominated relays this client has
+// no session with and is not backing off, at their skynet address.
+func (ce *Client) relayEntries() []*disc.Entry {
+	ce.relayMx.Lock()
+	defer ce.relayMx.Unlock()
+	if len(ce.relayPeers) == 0 {
+		return nil
+	}
+	now := time.Now()
+	out := make([]*disc.Entry, 0, len(ce.relayPeers))
+	for pk := range ce.relayPeers {
+		if _, ok := ce.session(pk); ok {
+			continue
+		}
+		if until, ok := ce.relayFailAt[pk]; ok && now.Before(until) {
+			continue
+		}
+		out = append(out, &disc.Entry{
+			Static: pk,
+			Server: &disc.Server{Address: SkynetAddr(pk, ce.relayPort), AvailableSessions: 1},
+		})
+	}
+	return out
+}
+
+// isRelayPeer reports whether pk is a current relay nominee.
+func (ce *Client) isRelayPeer(pk cipher.PubKey) bool {
+	ce.relayMx.Lock()
+	defer ce.relayMx.Unlock()
+	_, ok := ce.relayPeers[pk]
+	return ok
+}
+
+// noteRelayFailure backs a nominee off after a failed session dial.
+func (ce *Client) noteRelayFailure(pk cipher.PubKey) {
+	ce.relayMx.Lock()
+	if ce.relayFailAt == nil {
+		ce.relayFailAt = make(map[cipher.PubKey]time.Time)
+	}
+	ce.relayFailAt[pk] = time.Now().Add(relayFailureBackoff)
+	ce.relayMx.Unlock()
+}
+
+// hasRelaySession reports whether any current session rides the skynet carrier.
+func (ce *Client) hasRelaySession() bool {
+	ce.sessionsMx.Lock()
+	defer ce.sessionsMx.Unlock()
+	for _, ses := range ce.sessions {
+		if ses.carrier == CarrierSkynet {
+			return true
+		}
+	}
+	return false
+}
+
+// sessionsSatisfied is the serve loop's "enough sessions" test: MinSessions
+// met, and — when relays are nominated and dialable — at least one relay
+// session held. Only meaningful when MinSessions != 0.
+func (ce *Client) sessionsSatisfied() bool {
+	if ce.SessionCount() < ce.conf.MinSessions {
+		return false
+	}
+	if len(ce.relayEntries()) > 0 && !ce.hasRelaySession() {
+		return false
+	}
+	return true
+}
+
+// sortedRelaySessions returns the sessions riding the skynet carrier, by
+// latency. DialStream tries these before any server session: a relay is the
+// path the visor chose for this client's dmsg traffic.
+func (ce *Client) sortedRelaySessions() []ClientSession {
+	var out []ClientSession
+	for _, ses := range ce.allClientSessions(ce.porter) {
+		if ses.carrier == CarrierSkynet {
+			out = append(out, ses)
+		}
+	}
+	sortSessionsByLatency(out)
 	return out
 }

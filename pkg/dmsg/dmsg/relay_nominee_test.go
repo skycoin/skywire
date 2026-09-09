@@ -1,0 +1,104 @@
+package dmsg
+
+import (
+	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/logging"
+)
+
+// A client that already holds its MinSessions server sessions, then has a
+// relay nominated at runtime, attaches to the relay without being told about
+// any server address, keeps its server sessions, and dials destinations
+// through the relay first.
+func TestRelayNominee_AttachesAtRuntimeAndIsPreferred(t *testing.T) {
+	env := newRelayedTestEnv(t, nil)
+	env.relay.maxRelayedStreams = 8
+	relayPK := env.relay.LocalPK()
+
+	// An ordinary client on the shared discovery: one server session.
+	pk, sk := GenKeyPair(t, "nominee-client")
+	c := NewClient(pk, sk, env.dc, &Config{MinSessions: 1})
+	c.SetLogger(logging.MustGetLogger("nominee-client"))
+	var dials atomic.Int32
+	c.SetSessionDialer(skynetDialer(t, env.relay, relayPK, nil, &dials))
+	go c.Serve(context.Background())
+	t.Cleanup(func() { _ = c.Close() }) //nolint:errcheck
+	require.Eventually(t, func() bool { _, ok := c.Session(env.srvPK); return ok }, 15*time.Second, 50*time.Millisecond)
+	require.False(t, c.hasRelaySession())
+
+	// Nominate the relay: the serve loop, parked at MinSessions, must wake and dial it.
+	c.SetRelayPeers([]cipher.PubKey{relayPK}, 70)
+	require.Eventually(t, c.hasRelaySession, 15*time.Second, 50*time.Millisecond)
+	_, direct := c.Session(env.srvPK)
+	require.True(t, direct, "the server session stays; the relay is added, not swapped in")
+	require.Equal(t, []cipher.PubKey{relayPK}, c.RelayPeers())
+
+	// A stream to dst goes through the relay (phase 0), not the shared server.
+	accepted := acceptOne(t, env.dstLis)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	str, err := c.DialStream(ctx, Addr{PK: env.dstPK, Port: relayedDstPort})
+	require.NoError(t, err)
+	defer str.Close() //nolint:errcheck
+	s := <-accepted
+	require.NotNil(t, s)
+	defer s.Close() //nolint:errcheck
+	require.Equal(t, pk, s.RawRemoteAddr().PK)
+	require.Equal(t, 1, env.relay.RelayedStreams(), "the stream must be carried by the relay")
+	echoCheck(t, str, s)
+
+	// The idle reaper never takes the relay session: with MinSessions 1 and two
+	// sessions, the streamless SERVER session is the surplus.
+	streak := map[cipher.PubKey]int{}
+	c.reapExcessIdleSessions(streak, 1)
+	require.Eventually(t, func() bool { _, ok := c.Session(env.srvPK); return !ok }, 5*time.Second, 50*time.Millisecond)
+	require.True(t, c.hasRelaySession())
+}
+
+// A nominee that refuses is backed off: the client does not keep re-dialing it,
+// and stays satisfied with its server sessions.
+func TestRelayNominee_RefusalBacksOff(t *testing.T) {
+	env := newRelayedTestEnv(t, nil)
+	relayPK := env.relay.LocalPK()
+
+	pk, sk := GenKeyPair(t, "nominee-refused")
+	c := NewClient(pk, sk, env.dc, &Config{MinSessions: 1})
+	c.SetLogger(logging.MustGetLogger("nominee-refused"))
+	var dials atomic.Int32
+	c.SetSessionDialer(skynetDialer(t, env.relay, relayPK, func(cipher.PubKey) bool { return false }, &dials))
+	go c.Serve(context.Background())
+	t.Cleanup(func() { _ = c.Close() }) //nolint:errcheck
+	require.Eventually(t, func() bool { _, ok := c.Session(env.srvPK); return ok }, 15*time.Second, 50*time.Millisecond)
+
+	c.SetRelayPeers([]cipher.PubKey{relayPK}, 70)
+	require.Eventually(t, func() bool { return dials.Load() >= 1 }, 15*time.Second, 50*time.Millisecond)
+	require.Eventually(t, func() bool { return len(c.relayEntries()) == 0 }, 5*time.Second, 50*time.Millisecond, "a refused nominee must be backed off")
+	require.True(t, c.sessionsSatisfied(), "with the nominee backed off the server session suffices")
+	time.Sleep(time.Second)
+	require.LessOrEqual(t, dials.Load(), int32(2), "no redial storm against a refusing nominee")
+	require.False(t, c.hasRelaySession())
+
+	// Withdrawing the nomination clears the candidate list entirely.
+	c.SetRelayPeers(nil, 70)
+	require.Empty(t, c.RelayPeers())
+}
+
+func TestRelayNominee_EntriesSkipSelfAndSessions(t *testing.T) {
+	pk, sk := GenKeyPair(t, "nominee-entries")
+	c := NewClient(pk, sk, disc.NewMock(0), &Config{MinSessions: 1})
+	other, _ := GenKeyPair(t, "nominee-other")
+	c.SetRelayPeers([]cipher.PubKey{pk, other}, 70)
+	require.Equal(t, []cipher.PubKey{other}, c.RelayPeers(), "a client never nominates itself")
+	entries := c.relayEntries()
+	require.Len(t, entries, 1)
+	require.Equal(t, SkynetAddr(other, 70), entries[0].Server.Address)
+	c.noteRelayFailure(other)
+	require.Empty(t, c.relayEntries())
+}
