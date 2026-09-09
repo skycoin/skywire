@@ -1760,6 +1760,21 @@ func (mc *mockRPCClient) AddHypervisor(_ cipher.PubKey) error {
 	return nil
 }
 
+// PendingHypervisors implements API.
+func (mc *mockRPCClient) PendingHypervisors() ([]PendingHypervisor, error) {
+	return nil, nil
+}
+
+// ApproveHypervisor implements API.
+func (mc *mockRPCClient) ApproveHypervisor(_ string) (cipher.PubKey, error) {
+	return cipher.PubKey{}, nil
+}
+
+// NewPairCode implements API.
+func (mc *mockRPCClient) NewPairCode(_ time.Duration) (PairCode, error) {
+	return PairCode{}, nil
+}
+
 // RemoveHypervisor implements API.
 func (mc *mockRPCClient) RemoveHypervisor(_ cipher.PubKey) error {
 	return nil

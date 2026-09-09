@@ -171,6 +171,10 @@ type Visor struct {
 	// Seeded from config; extended at runtime when a connected
 	// hypervisor pushes its own hypervisors. See peer_whitelist.go.
 	peerWhitelist pty.Whitelist
+
+	// hvPair is the hypervisor pairing state (pairing_hv.go), made on first use.
+	hvPairOnce sync.Once
+	hvPair     *hvPairing
 	// hypervisorCancels holds the per-hypervisor context.CancelFunc
 	// installed by AddHypervisor, keyed by the remote hypervisor PK.
 	// RemoveHypervisor looks up the cancel func and invokes it; the
