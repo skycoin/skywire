@@ -31,6 +31,7 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cliout/clivisor"
 )
@@ -85,7 +86,15 @@ Examples:
 		defer cancel()
 		raw, err := fetchPprofGoroutines(ctx, pprofAddr)
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), err)
+			// No pprof listener (a visor in a browser tab has none): ask the
+			// visor itself over RPC for the same debug=2 text.
+			rpcClient, rpcErr := clirpc.Client(cmd.Flags())
+			if rpcErr != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%w; rpc: %v", err, rpcErr))
+			}
+			if raw, rpcErr = rpcClient.GoroutineDump(); rpcErr != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%w; rpc GoroutineDump: %v", err, rpcErr))
+			}
 		}
 
 		goroutines, parseErr := parseGoroutineDump(raw)

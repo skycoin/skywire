@@ -966,6 +966,11 @@ func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 	return "", nil
 }
 
+// GoroutineDump implements API.
+func (mc *mockRPCClient) GoroutineDump() (string, error) {
+	return "", nil
+}
+
 // RuntimeStats implements API.
 func (mc *mockRPCClient) RuntimeStats() (*RuntimeStatsInfo, error) {
 	return &RuntimeStatsInfo{

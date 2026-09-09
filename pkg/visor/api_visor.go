@@ -462,6 +462,20 @@ func (v *Visor) RuntimeStats() (*RuntimeStatsInfo, error) {
 	}, nil
 }
 
+// GoroutineDump implements API: every goroutine's stack in the pprof debug=2
+// text format. For builds with no pprof listener (a visor in a browser tab):
+// the CLI's `visor goroutines` falls back to it.
+func (v *Visor) GoroutineDump() (string, error) {
+	buf := make([]byte, 1<<20)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			return string(buf[:n]), nil
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+}
+
 // SetRewardAddress implements API. The durable store is <local_path>/reward.txt,
 // not skywire-config.json — the in-memory conf field below is never flushed, and
 // reward.txt sits outside the generated json, so the address survives both a

@@ -130,6 +130,10 @@ func (proxyDefaultAPI) RuntimeStats() (*RuntimeStatsInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) GoroutineDump() (string, error) {
+	return "", ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) Reload() error {
 	return ErrProxyNotSupported
 }

@@ -79,6 +79,13 @@ func (r *RPC) Health(_ *struct{}, out *HealthInfo) (err error) {
 	return err
 }
 
+// GoroutineDump returns every goroutine's stack (pprof debug=2 text).
+func (r *RPC) GoroutineDump(_ *struct{}, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "GoroutineDump", nil)(nil, &err)
+	*out, err = r.visor.GoroutineDump()
+	return err
+}
+
 // RuntimeStats returns Go runtime statistics for the visor process.
 func (r *RPC) RuntimeStats(_ *struct{}, out *RuntimeStatsInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "RuntimeStats", nil)(out, &err)
