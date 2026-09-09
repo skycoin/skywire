@@ -623,6 +623,41 @@ func TestManagerHandlerSetters(t *testing.T) {
 	require.NotNil(t, tm.tpdLeafPublisher())
 }
 
+// TestManagerApplyHandlers: a transport that is NOT yet in tm.tps when the
+// handlers are registered (the dial path: created, dialing for up to ~20s,
+// inserted afterwards) gets them from applyHandlers at insertion time. Before
+// the fix the dial path copied them before the dial and never again, so a
+// handler registered during the dial was missed for the transport's lifetime.
+func TestManagerApplyHandlers(t *testing.T) {
+	tm := newTestManager(t)
+	mt := NewManagedTransportForTest(newMemTransport())
+	mt.Entry = MakeEntry(tm.Conf.PubKey, mustPK(t), types.STCPR, LabelUser)
+
+	// Registered while mt is "still dialing" — not in tm.tps, so the setters'
+	// fan-out cannot reach it.
+	h := func(_ routing.Packet, _ *ManagedTransport) {}
+	tm.SetCascadeHandler(h)
+	tm.SetDHTHandler(h)
+	tm.SetVisorRPCHandler(h)
+	tm.SetSkynetForwardHandler(h)
+	tm.SetAppDirectHandler(h)
+	tm.SetSetupRPCHandler(h)
+	require.Nil(t, mt.appDirectHandler)
+	require.Nil(t, mt.skynetFwdHandler)
+
+	// Insertion (what saveTransportInternal does once the dial returns).
+	tm.mx.Lock()
+	tm.tps[mt.Entry.ID] = mt
+	tm.applyHandlers(mt)
+	tm.mx.Unlock()
+	require.NotNil(t, mt.cascadeHandler)
+	require.NotNil(t, mt.dhtHandler)
+	require.NotNil(t, mt.visorRPCHandler)
+	require.NotNil(t, mt.skynetFwdHandler)
+	require.NotNil(t, mt.appDirectHandler)
+	require.NotNil(t, mt.setupRPCHandler)
+}
+
 func TestManagerARLimit(t *testing.T) {
 	// AR registration is a static, config-only switch: >= 0 registers, < 0 never
 	// registers. There is deliberately NO runtime transport-count deregister —

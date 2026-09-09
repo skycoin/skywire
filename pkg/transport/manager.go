@@ -788,6 +788,36 @@ func (tm *Manager) SetAppDirectHandler(h func(p routing.Packet, mt *ManagedTrans
 	tm.mx.RUnlock()
 }
 
+// applyHandlers copies the manager's current route-ID-0 packet handlers onto
+// mTp. Call it once mTp is in tm.tps: the Set*Handler propagation walks that
+// map, so a transport that copied the handlers before its dial (which can
+// take up to ~20s) and was inserted afterwards kept nil/stale handlers for
+// life — every handler registered in between (init_services binds the skynet
+// and app-direct muxes while a persistent transport is still dialing) was
+// missed, and those packets fell through to the router as "unknown packet
+// type". Symptom: a browser tab whose only transport dropped every inbound
+// app-direct ack from its host.
+func (tm *Manager) applyHandlers(mTp *ManagedTransport) {
+	tm.cascadeHandlerMu.RLock()
+	mTp.cascadeHandler = tm.cascadeHandler
+	tm.cascadeHandlerMu.RUnlock()
+	tm.dhtHandlerMu.RLock()
+	mTp.dhtHandler = tm.dhtHandler
+	tm.dhtHandlerMu.RUnlock()
+	tm.setupRPCHandlerMu.RLock()
+	mTp.setupRPCHandler = tm.setupRPCHandler
+	tm.setupRPCHandlerMu.RUnlock()
+	tm.visorRPCHandlerMu.RLock()
+	mTp.visorRPCHandler = tm.visorRPCHandler
+	tm.visorRPCHandlerMu.RUnlock()
+	tm.skynetFwdHandlerMu.RLock()
+	mTp.skynetFwdHandler = tm.skynetFwdHandler
+	tm.skynetFwdHandlerMu.RUnlock()
+	tm.appDirectHandlerMu.RLock()
+	mTp.appDirectHandler = tm.appDirectHandler
+	tm.appDirectHandlerMu.RUnlock()
+}
+
 // SetSetupRPCHandler sets the handler for RSN RPC relay packets (route ID 0).
 func (tm *Manager) SetSetupRPCHandler(h func(p routing.Packet, mt *ManagedTransport)) {
 	tm.setupRPCHandlerMu.Lock()
@@ -1165,24 +1195,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			QueueDeletion:  tm.queueDeletion,
 			IsInitiator:    false, // remote dialed us — incoming transport
 		})
-		tm.cascadeHandlerMu.RLock()
-		mTp.cascadeHandler = tm.cascadeHandler
-		tm.cascadeHandlerMu.RUnlock()
-		tm.dhtHandlerMu.RLock()
-		mTp.dhtHandler = tm.dhtHandler
-		tm.dhtHandlerMu.RUnlock()
-		tm.setupRPCHandlerMu.RLock()
-		mTp.setupRPCHandler = tm.setupRPCHandler
-		tm.setupRPCHandlerMu.RUnlock()
-		tm.visorRPCHandlerMu.RLock()
-		mTp.visorRPCHandler = tm.visorRPCHandler
-		tm.visorRPCHandlerMu.RUnlock()
-		tm.skynetFwdHandlerMu.RLock()
-		mTp.skynetFwdHandler = tm.skynetFwdHandler
-		tm.skynetFwdHandlerMu.RUnlock()
-		tm.appDirectHandlerMu.RLock()
-		mTp.appDirectHandler = tm.appDirectHandler
-		tm.appDirectHandlerMu.RUnlock()
+		tm.applyHandlers(mTp)
 
 		go func() {
 			mTp.Serve(tm.readCh)
@@ -1460,24 +1473,6 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		QueueDeletion:  tm.queueDeletion,
 		IsInitiator:    true, // we are dialing out — outgoing transport
 	})
-	tm.cascadeHandlerMu.RLock()
-	mTp.cascadeHandler = tm.cascadeHandler
-	tm.cascadeHandlerMu.RUnlock()
-	tm.dhtHandlerMu.RLock()
-	mTp.dhtHandler = tm.dhtHandler
-	tm.dhtHandlerMu.RUnlock()
-	tm.setupRPCHandlerMu.RLock()
-	mTp.setupRPCHandler = tm.setupRPCHandler
-	tm.setupRPCHandlerMu.RUnlock()
-	tm.visorRPCHandlerMu.RLock()
-	mTp.visorRPCHandler = tm.visorRPCHandler
-	tm.visorRPCHandlerMu.RUnlock()
-	tm.skynetFwdHandlerMu.RLock()
-	mTp.skynetFwdHandler = tm.skynetFwdHandler
-	tm.skynetFwdHandlerMu.RUnlock()
-	tm.appDirectHandlerMu.RLock()
-	mTp.appDirectHandler = tm.appDirectHandler
-	tm.appDirectHandlerMu.RUnlock()
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
 	errCh := make(chan error)
@@ -1502,6 +1497,7 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		return existing, nil
 	}
 	tm.tps[tpID] = mTp
+	tm.applyHandlers(mTp)
 	tm.mx.Unlock()
 	// Serve runs for the transport's lifetime, not the dial's; its internal
 	// datagram-read context correctly derives from Background (a short-lived
