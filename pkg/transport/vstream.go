@@ -26,12 +26,15 @@
 package transport
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -70,9 +73,18 @@ type VStreamMux struct {
 	tm         *Manager
 	packetType routing.PacketType // which route-ID-0 packet type to use
 
-	streams   map[uint64]*VStream
+	// streams is keyed by (transport, wire stream id): ids are only unique
+	// per peer pair, and both ends allocate them. Local ids take the parity
+	// nextIDFor derives from the two PKs, so a stream this side opened can
+	// never collide with one the peer opened on the same transport.
+	streams   map[streamKey]*VStream
 	streamsMu sync.Mutex
 	streamID  uint64
+
+	// Counters for `visor state` (see Stats). Atomics.
+	framesUnknownStream int64 // DATA/FIN for a stream id we do not have
+	stalledStreams      int64 // streams closed because the reader never drained
+	acceptDropped       int64 // SYNs closed because Accept was not called in time
 
 	// relays holds active relay legs keyed by (inbound transport, wire
 	// streamID). Each direction of a bridged stream is registered pointing
@@ -102,7 +114,7 @@ func NewVStreamMux(tm *Manager, packetType routing.PacketType, log *logging.Logg
 		log:        log,
 		tm:         tm,
 		packetType: packetType,
-		streams:    make(map[uint64]*VStream),
+		streams:    make(map[streamKey]*VStream),
 		relays:     make(map[relayKey]relayKey),
 		maxRelays:  DefaultMaxRelayedVStreams,
 		incoming:   make(chan *VStream, 32),
@@ -110,8 +122,80 @@ func NewVStreamMux(tm *Manager, packetType routing.PacketType, log *logging.Logg
 	}
 }
 
-func (m *VStreamMux) nextID() uint64 {
-	return atomic.AddUint64(&m.streamID, 1)
+// streamKey identifies a stream on one transport. Wire ids are per peer pair.
+type streamKey struct {
+	tp uuid.UUID
+	id uint64
+}
+
+const (
+	// vstreamReadBuf is the per-stream inbound frame queue.
+	vstreamReadBuf = 1024
+	// vstreamStallTimeout is how long HandlePacket (the transport read loop)
+	// waits for a full queue to drain before it gives the stream up.
+	vstreamStallTimeout = 30 * time.Second
+	// vstreamAcceptTimeout bounds the wait for Accept on an inbound SYN.
+	vstreamAcceptTimeout = 5 * time.Second
+)
+
+// nextIDFor allocates a wire stream id for a stream this side opens to
+// remotePK. Both ends of a transport allocate ids, and the map is keyed per
+// transport, so the two allocators must not overlap: the side with the larger
+// PK uses odd ids, the other even. Before this both used a plain counter and,
+// with both sides freshly started, a tab's relay session and its host's RPC
+// dial to the tab got the same id — frames crossed streams and yamux died
+// with "invalid protocol version".
+func (m *VStreamMux) nextIDFor(remotePK cipher.PubKey) uint64 {
+	id := atomic.AddUint64(&m.streamID, 1) << 1
+	local := m.localPK()
+	if bytes.Compare(local[:], remotePK[:]) > 0 {
+		id |= 1
+	}
+	return id
+}
+
+// deliver queues one inbound DATA frame for the stream's reader, blocking the
+// transport's read loop (back-pressure) while the queue is full. A VStream
+// carries yamux/Noise sessions that assume a reliable ordered byte stream, so
+// a frame must never be dropped: that corrupts the session instead of closing
+// it. A reader that drains nothing for vstreamStallTimeout is dead — close the
+// stream so the peer sees EOF and the read loop is freed.
+func (m *VStreamMux) deliver(stream *VStream, buf []byte) {
+	select {
+	case stream.readBuf <- buf:
+		return
+	case <-stream.closed:
+		return
+	default:
+	}
+	t := time.NewTimer(vstreamStallTimeout)
+	defer t.Stop()
+	select {
+	case stream.readBuf <- buf:
+	case <-stream.closed:
+	case <-t.C:
+		atomic.AddInt64(&m.stalledStreams, 1)
+		m.log.WithField("stream", stream.id).WithField("remote", stream.remotePK.String()).
+			Warn("vstream: reader stalled; closing stream")
+		stream.Close() //nolint:errcheck,gosec
+	}
+}
+
+// offerIncoming hands an inbound stream to Accept, waiting up to
+// vstreamAcceptTimeout for the accept loop; a mux nobody accepts from closes
+// the stream (counted) instead of leaking it.
+func (m *VStreamMux) offerIncoming(stream *VStream, what string) {
+	t := time.NewTimer(vstreamAcceptTimeout)
+	defer t.Stop()
+	select {
+	case m.incoming <- stream:
+	case <-m.done:
+		stream.Close() //nolint:errcheck,gosec
+	case <-t.C:
+		atomic.AddInt64(&m.acceptDropped, 1)
+		m.log.Warn("vstream: " + what + " not accepted in time; closing")
+		stream.Close() //nolint:errcheck,gosec
+	}
 }
 
 func (m *VStreamMux) localPK() cipher.PubKey {
@@ -224,18 +308,18 @@ func (m *VStreamMux) DialByTransportID(remotePK cipher.PubKey, tpID uuid.UUID) (
 
 // DialOnTransport opens a virtual stream on a specific transport.
 func (m *VStreamMux) DialOnTransport(tp *ManagedTransport) (*VStream, error) {
-	id := m.nextID()
+	id := m.nextIDFor(tp.Remote())
 	stream := &VStream{
 		id:       id,
 		remotePK: tp.Remote(),
 		tpID:     tp.Entry.ID,
-		readBuf:  make(chan []byte, 64),
+		readBuf:  make(chan []byte, vstreamReadBuf),
 		closed:   make(chan struct{}),
 		mux:      m,
 	}
 
 	m.streamsMu.Lock()
-	m.streams[id] = stream
+	m.streams[streamKey{tp.Entry.ID, id}] = stream
 	m.streamsMu.Unlock()
 
 	// Send SYN.
@@ -287,47 +371,40 @@ func (m *VStreamMux) HandlePacket(p routing.Packet, mt *ManagedTransport) {
 			id:       streamID,
 			remotePK: remotePK,
 			tpID:     mt.Entry.ID,
-			readBuf:  make(chan []byte, 64),
+			readBuf:  make(chan []byte, vstreamReadBuf),
 			closed:   make(chan struct{}),
 			mux:      m,
 		}
 		m.streamsMu.Lock()
-		m.streams[streamID] = stream
+		m.streams[streamKey{mt.Entry.ID, streamID}] = stream
 		m.streamsMu.Unlock()
-
-		select {
-		case m.incoming <- stream:
-		default:
-			m.log.Warn("vstream: incoming stream dropped (buffer full)")
-			stream.Close() //nolint:errcheck,gosec
-		}
+		m.offerIncoming(stream, "incoming stream")
 
 	case flags&VStreamFlagFin != 0:
+		key := streamKey{mt.Entry.ID, streamID}
 		m.streamsMu.Lock()
-		stream, ok := m.streams[streamID]
+		stream, ok := m.streams[key]
 		if ok {
-			delete(m.streams, streamID)
+			delete(m.streams, key)
 		}
 		m.streamsMu.Unlock()
 		if ok {
 			stream.Close() //nolint:errcheck,gosec
+		} else {
+			atomic.AddInt64(&m.framesUnknownStream, 1)
 		}
 
 	default: // DATA
 		m.streamsMu.Lock()
-		stream, ok := m.streams[streamID]
+		stream, ok := m.streams[streamKey{mt.Entry.ID, streamID}]
 		m.streamsMu.Unlock()
 		if !ok {
+			atomic.AddInt64(&m.framesUnknownStream, 1)
 			return
 		}
 		buf := make([]byte, len(data))
 		copy(buf, data)
-		select {
-		case stream.readBuf <- buf:
-		case <-stream.closed:
-		default:
-			m.log.Warn("vstream: read buffer full, dropping data")
-		}
+		m.deliver(stream, buf)
 	}
 }
 
@@ -398,9 +475,32 @@ func (s *VStream) Read(p []byte) (int, error) {
 	}
 }
 
-// Write implements io.Writer.
+// vstreamMaxData is the most payload one DATA frame carries: the transport
+// packet size field is 16 bits and the frame header takes VStreamHeaderSize
+// of it.
+const vstreamMaxData = math.MaxUint16 - VStreamHeaderSize
+
+// Write implements io.Writer, segmenting p into frames of at most
+// vstreamMaxData bytes. Before this the whole of p went into ONE packet whose
+// 16-bit size field silently truncated (uint16(len)), so a yamux frame or RPC
+// reply over 64 KiB was written in full but declared short — the receiver
+// parsed the excess as packet headers ("unknown packet type: Unknown(112)"
+// with ASCII payload bytes as the type) and the session on top died with
+// "invalid protocol version".
 func (s *VStream) Write(p []byte) (int, error) {
-	return len(p), s.sendFlag(VStreamFlagData, p)
+	n := 0
+	for len(p) > 0 {
+		chunk := p
+		if len(chunk) > vstreamMaxData {
+			chunk = p[:vstreamMaxData]
+		}
+		if err := s.sendFlag(VStreamFlagData, chunk); err != nil {
+			return n, err
+		}
+		n += len(chunk)
+		p = p[len(chunk):]
+	}
+	return n, nil
 }
 
 // Close closes the virtual stream.
@@ -408,7 +508,7 @@ func (s *VStream) Close() error {
 	s.once.Do(func() {
 		close(s.closed)
 		s.mux.streamsMu.Lock()
-		delete(s.mux.streams, s.id)
+		delete(s.mux.streams, streamKey{s.tpID, s.id})
 		s.mux.streamsMu.Unlock()
 		// Best-effort FIN — don't block if transport is dead.
 		s.sendFlag(VStreamFlagFin, nil) //nolint:errcheck,gosec
@@ -435,6 +535,9 @@ func (s *VStream) sendFlag(flag byte, data []byte) error {
 		return fmt.Errorf("vstream write: transport %s: %w", s.tpID, err)
 	}
 
+	if len(data) > vstreamMaxData {
+		return fmt.Errorf("vstream write: frame of %d bytes exceeds %d", len(data), vstreamMaxData)
+	}
 	localPK := s.mux.localPK()
 	payload := make([]byte, VStreamHeaderSize+len(data))
 	binary.BigEndian.PutUint64(payload[:8], s.id)
@@ -448,4 +551,32 @@ func (s *VStream) sendFlag(flag byte, data []byte) error {
 	copy(pkt[routing.PacketPayloadOffset:], payload)
 
 	return tp.WriteRawPacket(pkt)
+}
+
+// VStreamMuxStats is the mux's `visor state` view: what the logs used to be the
+// only window on. Counters are cumulative since start.
+type VStreamMuxStats struct {
+	PacketType          string `json:"packet_type"`
+	Streams             int    `json:"streams"`
+	RelayLegs           int64  `json:"relay_legs"`
+	FramesUnknownStream int64  `json:"frames_unknown_stream"`
+	StalledStreams      int64  `json:"stalled_streams"`
+	AcceptDropped       int64  `json:"accept_dropped"`
+}
+
+// Stats snapshots the mux counters. FramesUnknownStream climbing on a healthy
+// link means frames are arriving for streams this side does not have: the
+// peer's transport lost a handler (see Manager.applyHandlers) or ids collided.
+func (m *VStreamMux) Stats() VStreamMuxStats {
+	m.streamsMu.Lock()
+	n := len(m.streams)
+	m.streamsMu.Unlock()
+	return VStreamMuxStats{
+		PacketType:          m.packetType.String(),
+		Streams:             n,
+		RelayLegs:           atomic.LoadInt64(&m.relayCount),
+		FramesUnknownStream: atomic.LoadInt64(&m.framesUnknownStream),
+		StalledStreams:      atomic.LoadInt64(&m.stalledStreams),
+		AcceptDropped:       atomic.LoadInt64(&m.acceptDropped),
+	}
 }

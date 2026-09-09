@@ -1854,3 +1854,11 @@ func (tm *Manager) isClosing() bool {
 func (tm *Manager) tpIDFromPK(pk cipher.PubKey, netType types.Type) uuid.UUID {
 	return MakeTransportID(tm.Conf.PubKey, pk, netType)
 }
+
+// ReadQueue is the depth and capacity of the shared inbound packet queue every
+// transport's read loop feeds and the router drains. A full queue means the
+// router is not keeping up (a route group whose app stopped reading blocks it),
+// and every transport's read loop — pings and pongs included — stalls behind it.
+func (tm *Manager) ReadQueue() (depth, capacity int) {
+	return len(tm.readCh), cap(tm.readCh)
+}

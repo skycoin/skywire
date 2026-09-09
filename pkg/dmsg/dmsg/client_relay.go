@@ -460,3 +460,45 @@ func (ce *Client) relayDialSkipped(dst cipher.PubKey) bool {
 	until, ok := ce.relayDialSkip[dst]
 	return ok && time.Now().Before(until)
 }
+
+// RelayBackoffs lists the relay nominees currently backed off after a failed
+// attach, with the time each backoff lapses. For `visor state`.
+func (ce *Client) RelayBackoffs() map[cipher.PubKey]time.Time {
+	ce.relayMx.Lock()
+	defer ce.relayMx.Unlock()
+	out := make(map[cipher.PubKey]time.Time, len(ce.relayFailAt))
+	now := time.Now()
+	for pk, until := range ce.relayFailAt {
+		if until.After(now) {
+			out[pk] = until
+		}
+	}
+	return out
+}
+
+// RelayDialSkips lists the destinations DialStream is currently not trying
+// over the relay (the relay failed to reach them), with the skip's end.
+func (ce *Client) RelayDialSkips() map[cipher.PubKey]time.Time {
+	ce.relayMx.Lock()
+	defer ce.relayMx.Unlock()
+	out := make(map[cipher.PubKey]time.Time, len(ce.relayDialSkip))
+	now := time.Now()
+	for pk, until := range ce.relayDialSkip {
+		if until.After(now) {
+			out[pk] = until
+		}
+	}
+	return out
+}
+
+// RelaySessionStreams is the open-stream count of every peer attached to
+// this client as a relay (the "Relaying for" side).
+func (ce *Client) RelaySessionStreams() map[cipher.PubKey]int {
+	ce.relaySessionsMx.Lock()
+	defer ce.relaySessionsMx.Unlock()
+	out := make(map[cipher.PubKey]int, len(ce.relaySessions))
+	for pk, ses := range ce.relaySessions {
+		out[pk] = ses.NumStreams()
+	}
+	return out
+}
