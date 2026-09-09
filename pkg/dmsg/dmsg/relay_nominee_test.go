@@ -208,3 +208,38 @@ func TestRelayNominee_RelayGoesBeforeLookupAndCache(t *testing.T) {
 	c.setCachedRoute(env.dstPK, env.srvPK)
 	dialThroughRelay()
 }
+
+// A nominee whose failure backoff has lapsed is dialed again on the next
+// (unchanged) nomination: nothing else wakes the parked serve loop.
+func TestRelayNominee_RetriesAfterBackoffLapses(t *testing.T) {
+	env := newRelayedTestEnv(t, nil)
+	env.relay.maxRelayedStreams = 8
+	relayPK := env.relay.LocalPK()
+
+	pk, sk := GenKeyPair(t, "nominee-retry")
+	c := NewClient(pk, sk, env.dc, &Config{MinSessions: 1})
+	c.SetLogger(logging.MustGetLogger("nominee-retry"))
+	var admit atomic.Bool
+	var dials atomic.Int32
+	c.SetSessionDialer(skynetDialer(t, env.relay, relayPK, func(cipher.PubKey) bool { return admit.Load() }, &dials))
+	go c.Serve(context.Background())
+	t.Cleanup(func() { _ = c.Close() }) //nolint:errcheck
+	require.Eventually(t, func() bool { _, ok := c.Session(env.srvPK); return ok }, 15*time.Second, 50*time.Millisecond)
+
+	// Refused once: backed off, no relay session.
+	require.True(t, c.SetRelayPeers([]cipher.PubKey{relayPK}, 70))
+	require.Eventually(t, func() bool { return dials.Load() >= 1 && c.relayBackedOff(relayPK) }, 15*time.Second, 50*time.Millisecond)
+	require.False(t, c.hasRelaySession())
+
+	// The same nomination while still backed off is a no-op.
+	require.False(t, c.SetRelayPeers([]cipher.PubKey{relayPK}, 70))
+	time.Sleep(300 * time.Millisecond)
+	require.False(t, c.hasRelaySession())
+
+	// Backoff lapses (and the relay now admits us): the next unchanged
+	// nomination wakes the loop and the client attaches.
+	admit.Store(true)
+	c.noteRelayFailure(relayPK, -time.Second)
+	require.False(t, c.SetRelayPeers([]cipher.PubKey{relayPK}, 70), "the set did not change")
+	require.Eventually(t, c.hasRelaySession, 15*time.Second, 50*time.Millisecond)
+}
