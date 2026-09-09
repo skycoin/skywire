@@ -46,11 +46,15 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// itself — so it goes before the discovery lookup (the deployment services
 	// have no client entry and would otherwise take the connected-servers
 	// fallback), before the cached route, and before any server session.
-	if relaySessions := ce.sortedRelaySessions(); len(relaySessions) > 0 {
+	if relaySessions := ce.sortedRelaySessions(); len(relaySessions) > 0 && !ce.relayDialSkipped(addr.PK) {
 		if stream, ok := ce.sequentialPhaseDial(ctx, addr, relaySessions, len(relaySessions)); ok {
 			ce.dialFailClear(addr.PK)
 			return stream, nil
 		}
+		// The relay could not reach this destination (its servers may predate
+		// #4703): leave it out of the ladder for this destination for a while
+		// so the server phases are not delayed by the same failure each time.
+		ce.noteRelayDialFailure(addr.PK)
 	}
 
 	entry, discErr := ce.getClientEntryCached(ctx, addr.PK)
