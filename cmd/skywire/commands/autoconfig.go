@@ -38,6 +38,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
@@ -98,29 +99,29 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addBool := func(key, onName, offName string, on, off bool) {
 		switch {
 		case cmd.Flags().Changed(onName) && on:
-			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(true)})
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(true), Raw: "true"})
 		case cmd.Flags().Changed(offName) && off:
-			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(false)})
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(false), Raw: "false"})
 		}
 	}
 	addSoloBool := func(key, name string, val bool) {
 		if cmd.Flags().Changed(name) {
-			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(val)})
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(val), Raw: formatSkyenvBool(val)})
 		}
 	}
 	addString := func(key, name, val string) {
 		if cmd.Flags().Changed(name) {
-			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvString(val)})
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvString(val), Raw: val})
 		}
 	}
 	addArray := func(key, name, val string) {
 		if cmd.Flags().Changed(name) {
-			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBashArray(val)})
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBashArray(val), Raw: val})
 		}
 	}
 	addInt := func(key, name string, val int) {
 		if cmd.Flags().Changed(name) {
-			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvInt(val)})
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvInt(val), Raw: formatSkyenvInt(val)})
 		}
 	}
 
@@ -275,7 +276,8 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 	// Resolves the skyenv path FIRST so we know which file to
 	// edit — same lookup the downstream stages use, just lifted
 	// up to do the edits first.
-	if edits := collectSkyenvEdits(cmd); len(edits) > 0 {
+	edits := collectSkyenvEdits(cmd)
+	if len(edits) > 0 {
 		pre := resolveConfig()
 		target := pre.skyenvPath
 		if target == "" {
@@ -307,7 +309,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 
 	resolved := resolveConfig()
 
-	if err := generateConfig(resolved, hvArg); err != nil {
+	if err := generateConfig(resolved, hvArg, edits); err != nil {
 		fmt.Printf("%s>>> FATAL:%s %v\n", colorRed, colorReset, err)
 		os.Exit(1)
 	}
@@ -545,7 +547,7 @@ func resolveConfig() resolvedConfig {
 // `cli config show .hypervisors` returned `[]` even though
 // HYPERVISORPKS / ISHYPERVISOR were set in the env file. Propagating
 // -p/-u from resolvedConfig closes the gap.
-func generateConfig(r resolvedConfig, hvArg string) error {
+func generateConfig(r resolvedConfig, hvArg string, edits []skyenvEdit) error {
 	// printableArgs is what we PRINT for the operator to copy-paste.
 	// Intentionally omits -w (we suppress the noisy fetch logs
 	// ourselves). If the install fails, the operator can paste this
@@ -605,6 +607,23 @@ func generateConfig(r resolvedConfig, hvArg string) error {
 	extra := extraGenArgs()
 	args = append(args, extra...)
 	printableArgs = append(printableArgs, extra...)
+
+	// Every edit just written to the SKYENV file, as the gen flag that sets
+	// the same thing. gen reads that file into its flag DEFAULTS when the
+	// program starts; in a subprocess that is after the edit, in the browser
+	// build (which re-enters gen in this process) it is before, and the edit
+	// would be lost. Explicit flags make both paths read the same. Keys that
+	// the arguments above already carry are left to them.
+	for _, e := range edits {
+		switch e.Key {
+		case "PKGENV", "USRENV", "ISHYPERVISOR", "HYPERVISORPKS":
+			continue
+		}
+		if fa, ok := cliconfig.FlagArgsForSkyenv(e.Key, e.Raw); ok {
+			args = append(args, fa...)
+			printableArgs = append(printableArgs, fa...)
+		}
+	}
 
 	envPrefix := ""
 	if r.skyenvPath != "" {

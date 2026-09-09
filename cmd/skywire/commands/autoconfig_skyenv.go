@@ -34,6 +34,7 @@ import (
 type skyenvEdit struct {
 	Key   string // bash variable name (e.g. "HYPERVISORPKS")
 	Value string // RHS, including quoting / array parens / value
+	Raw   string // the value as the flag gave it: bool text, string, number, or comma-separated list
 }
 
 // updateSkyenvFile applies the edits to the file at path. The file
