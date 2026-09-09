@@ -2,6 +2,7 @@
 package router
 
 import (
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1013,6 +1014,21 @@ func ewmaRate(prev float64, delta uint64, secs float64) float64 {
 	return goodputEWMAAlpha*sample + (1-goodputEWMAAlpha)*prev
 }
 
+// perFrameSealOverhead is the AEAD tag the per-frame seal appends to every mux
+// frame. Both noise cipher suites in use (AES-GCM, ChaCha20-Poly1305) carry a
+// 16-byte tag.
+const perFrameSealOverhead = 16
+
+// frameOverhead is what a sequenced data frame spends on top of the application
+// payload: the sequence number, plus the AEAD tag once per-frame noise is wired.
+func (m *routeMux) frameOverhead() int {
+	overhead := routing.SeqSize
+	if m.seal != nil {
+		overhead += perFrameSealOverhead
+	}
+	return overhead
+}
+
 // wrapPayload creates a sequenced data packet and optionally stores it for
 // retransmission, tagged with the TRANSPORT UUID of the leg it is about to be
 // sent on (uuid.Nil = unknown) so the demote-time flush can target only the
@@ -1020,6 +1036,13 @@ func ewmaRate(prev float64, delta uint64, secs float64) float64 {
 // index — indices shift on slice compaction.
 // Returns the packet and the sequence number used.
 func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte, tpID uuid.UUID) (routing.Packet, uint32, error) {
+	// Reject an oversized frame BEFORE taking a sequence number. A seq consumed by
+	// a frame that never goes out is a permanent hole: the receiver's no-skip
+	// reorder buffer waits on it forever. RouteGroup.Write segments to
+	// maxWritePayload so this is a guard, not a path.
+	if len(data)+m.frameOverhead() > math.MaxUint16 {
+		return nil, 0, routing.ErrPayloadTooBig
+	}
 	seq := atomic.AddUint32(&m.writeSeq, 1) - 1
 	// Per-frame AEAD: seal the app payload under seq as the nonce. The sealed
 	// bytes are what go on the wire AND into the retx buffer, so a SACK
