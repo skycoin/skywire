@@ -139,6 +139,11 @@ func remotePK(addr net.Addr) (cipher.PubKey, bool) {
 		return a.PK, true
 	case appnet.Addr:
 		return a.PubKey, true
+	case routing.Addr:
+		// A route-group conn (the setup-node path, taken when no direct
+		// app-dial mux stream could be opened) reports its remote as the
+		// route descriptor's source address.
+		return a.PubKey, true
 	}
 	return cipher.PubKey{}, false
 }
