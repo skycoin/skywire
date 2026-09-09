@@ -41,6 +41,18 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		return nil, failErr
 	}
 
+	// Relay first. The visor nominated these peers to carry this client's dmsg
+	// traffic, and a relay resolves the destination and forwards to its servers
+	// itself — so it goes before the discovery lookup (the deployment services
+	// have no client entry and would otherwise take the connected-servers
+	// fallback), before the cached route, and before any server session.
+	if relaySessions := ce.sortedRelaySessions(); len(relaySessions) > 0 {
+		if stream, ok := ce.sequentialPhaseDial(ctx, addr, relaySessions, len(relaySessions)); ok {
+			ce.dialFailClear(addr.PK)
+			return stream, nil
+		}
+	}
+
 	entry, discErr := ce.getClientEntryCached(ctx, addr.PK)
 	if discErr != nil {
 		// Discovery lookup failed. For direct clients or when the destination
@@ -136,16 +148,6 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// calls consume — breaking any caller that expects consecutive
 	// dials to produce consecutive, usable streams (the exact failure
 	// mode of TestMultiServerStreams).
-	// Phase 0: relay sessions (skynet carrier). The visor nominated these
-	// peers to carry this client's dmsg traffic; the relay forwards to the
-	// destination's servers itself, so they go before any server session.
-	if relaySessions := ce.sortedRelaySessions(); len(relaySessions) > 0 {
-		if stream, ok := ce.sequentialPhaseDial(ctx, addr, relaySessions, maxPerExistingPhase); ok {
-			ce.dialFailClear(addr.PK)
-			return stream, nil
-		}
-	}
-
 	delegatedSessions := ce.sortedDelegatedSessions(entry.Client.DelegatedServers)
 	if stream, ok := ce.sequentialPhaseDial(ctx, addr, delegatedSessions, maxPerExistingPhase); ok {
 		ce.dialFailClear(addr.PK)
