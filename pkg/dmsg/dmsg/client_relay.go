@@ -305,13 +305,28 @@ func (ce *Client) isRelayPeer(pk cipher.PubKey) bool {
 	return ok
 }
 
-// noteRelayFailure backs a nominee off after a failed session dial.
-func (ce *Client) noteRelayFailure(pk cipher.PubKey) {
+// relayTimeoutRetry is the backoff after a nominee dial that merely timed out:
+// at boot the skynet dial races the router's own cold start (setup node,
+// route finder), so a timeout says nothing about the nominee. Refusals and
+// other errors get relayFailureBackoff.
+const relayTimeoutRetry = 30 * time.Second
+
+// relayBackoffFor picks the backoff a failed nominee dial earns.
+func relayBackoffFor(err error) time.Duration {
+	var nerr net.Error
+	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &nerr) && nerr.Timeout()) {
+		return relayTimeoutRetry
+	}
+	return relayFailureBackoff
+}
+
+// noteRelayFailure backs a nominee off for d after a failed session dial.
+func (ce *Client) noteRelayFailure(pk cipher.PubKey, d time.Duration) {
 	ce.relayMx.Lock()
 	if ce.relayFailAt == nil {
 		ce.relayFailAt = make(map[cipher.PubKey]time.Time)
 	}
-	ce.relayFailAt[pk] = time.Now().Add(relayFailureBackoff)
+	ce.relayFailAt[pk] = time.Now().Add(d)
 	ce.relayMx.Unlock()
 }
 
@@ -352,4 +367,12 @@ func (ce *Client) sortedRelaySessions() []ClientSession {
 	}
 	sortSessionsByLatency(out)
 	return out
+}
+
+// relayBackedOff reports whether nominee pk is inside its failure backoff.
+func (ce *Client) relayBackedOff(pk cipher.PubKey) bool {
+	ce.relayMx.Lock()
+	defer ce.relayMx.Unlock()
+	until, ok := ce.relayFailAt[pk]
+	return ok && time.Now().Before(until)
 }
