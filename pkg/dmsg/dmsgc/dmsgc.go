@@ -101,6 +101,9 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 		// the client must skip its own server entry in the serve loop rather
 		// than dial a transit session to itself.
 		SkipSelfServer: conf.Server != nil && conf.Server.Enabled,
+		// The visor runs a dmsg relay acceptor on skyenv.DmsgRelayPort (see
+		// initDmsgRelay): streams it carries for attached peers are bounded here.
+		MaxRelayedStreams: dmsg.DefaultClientMaxRelayedStreams,
 	}
 	dmsgConf.ClientType = "visor"
 
