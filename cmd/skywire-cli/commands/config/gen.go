@@ -592,6 +592,15 @@ var genConfigCmd = &cobra.Command{
 			if !cmd.Flags().Changed("startproxyclient") {
 				enableProxyClientAutostart = true
 			}
+			// Route setup: a browser visor is not dmsg-reachable (no discovery
+			// entry once it rides its host's relay), so the legacy path — the
+			// setup node dialing the SOURCE back over dmsg to install its rules —
+			// cannot work for it. The source-driven cascade installs the source's
+			// rules locally and signs via the RSN over the source's own outbound
+			// dmsg, so it is the default under js. --cascade=false still wins.
+			if !cmd.Flags().Changed("cascade") {
+				cascadeRouteSetup = true
+			}
 		}
 		//use test deployment
 		if isTestEnv {
@@ -1293,9 +1302,10 @@ func configureRouting() {
 		// routing_policy); an explicit skywire.conf value is always honored and
 		// wins over this default (see the resolve logic below).
 		PolicyPerDial: "none",
-		// Cascade route setup is opt-in (--cascade); the legacy setup-node
-		// path stays the default until the cascade multihop data-plane bug
-		// is fixed and enough of the network has updated to support it.
+		// Cascade route setup is opt-in (--cascade) on native builds until enough
+		// of the network runs the cascade handler (#3843 gates 1/3/4 passed; the
+		// former "multihop data-plane bug" was #3085). Default ON under js: see the
+		// browser-defaults block above.
 		EnableCascadeRouteSetup: cascadeRouteSetup,
 		// RSN-oracle 2-hop routing ON by default. It computes single-intermediate
 		// routes from the DESTINATION's own transports (fetched via an RSN-signed
