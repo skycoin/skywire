@@ -149,7 +149,28 @@ func (v *Visor) RemoveHypervisor(hvPK cipher.PubKey) error {
 	// Persist the removal regardless (even if the connection was already gone or
 	// never tracked) so the visor doesn't reconnect to it on the next restart.
 	v.persistHypervisors(removePK(v.configuredHypervisors(), hvPK))
+	v.dropPeerTrust(hvPK)
 	return nil
+}
+
+// dropPeerTrust takes a removed hypervisor off the live peer whitelist, so
+// it stops driving RPC and pty now and shows up as pending again if it
+// tries — unless it is whitelisted in its own right (Pty.Whitelist) or is
+// this visor. The inverse of the admission AddHypervisor does.
+func (v *Visor) dropPeerTrust(pk cipher.PubKey) {
+	if v.peerWhitelist == nil || v.conf == nil || pk == v.conf.PK {
+		return
+	}
+	if v.conf.Pty != nil {
+		for _, w := range v.conf.Pty.Whitelist {
+			if w == pk {
+				return
+			}
+		}
+	}
+	if err := v.peerWhitelist.Remove(pk); err == nil {
+		v.refreshGatedCXOAllowlists()
+	}
 }
 
 // RemoveAllHypervisors tears down every runtime-added hypervisor
