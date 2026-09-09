@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 
@@ -372,6 +373,11 @@ func (v *Visor) retryStunOnTransientFail(log *logging.Logger) {
 }
 
 func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if runtime.GOOS == "js" {
+		// No UDP in a browser either; see initStcprClient.
+		log.Debug("sudph transport is not available in a browser; not started")
+		return nil
+	}
 	// Previously this short-circuited when AR was reached via dmsg
 	// because the dmsg URL host is a PK with no IP for SUDPH. The AR
 	// client now learns AR's public UDP address from /health
@@ -394,7 +400,17 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initStcprClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
+func initStcprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if runtime.GOOS == "js" {
+		// A browser has no TCP: it can neither accept nor dial stcpr. Starting
+		// the client here would still "listen" — on a port of the page's
+		// virtual network — and BIND that port in the address resolver, so
+		// every peer that looked the visor up dialed a public IP:port nothing
+		// answers at. The browser visor advertises nothing; its peers reach
+		// it over the transports it opens (ws/wt/webrtc).
+		log.Debug("stcpr transport is not available in a browser; not started")
+		return nil
+	}
 	v.tpM.InitClient(ctx, types.STCPR, v.conf.Transport.StcprPort)
 	return nil
 }
