@@ -346,3 +346,46 @@ func TestRelayNominee_DialSkipsRelayAfterItFails(t *testing.T) {
 	require.True(t, c.relayDialSkipped(env.dstPK), "the relay is skipped for this destination now")
 	echoCheck(t, str, s)
 }
+
+// TestRelayNominee_UnpublishedClientHoldsRelayOnly: a client that publishes no
+// discovery entry (Config.NoRegister — the browser visor) keeps no server-
+// session floor once its relay is attached: the reaper trims idle server
+// sessions down to the relay alone and the serve loop does not re-dial them
+// (#4484 stage 4: exactly one dmsg session). A published client with the same
+// MinSessions would redial the server it just lost.
+func TestRelayNominee_UnpublishedClientHoldsRelayOnly(t *testing.T) {
+	env := newRelayedTestEnv(t, nil)
+	env.relay.maxRelayedStreams = 8
+	relayPK := env.relay.LocalPK()
+
+	pk, sk := GenKeyPair(t, "unpublished-client")
+	c := NewClient(pk, sk, env.dc, &Config{MinSessions: 2, NoRegister: true})
+	c.SetLogger(logging.MustGetLogger("unpublished-client"))
+	var dials atomic.Int32
+	c.SetSessionDialer(skynetDialer(t, env.relay, relayPK, nil, &dials))
+	go c.Serve(context.Background())
+	t.Cleanup(func() { _ = c.Close() }) //nolint:errcheck
+	require.Eventually(t, func() bool { _, ok := c.Session(env.srvPK); return ok }, 15*time.Second, 50*time.Millisecond)
+	require.True(t, c.Unpublished())
+	require.False(t, c.sessionsSatisfied(), "one server, MinSessions 2, no relay: not satisfied")
+
+	c.SetRelayPeers([]cipher.PubKey{relayPK}, 70)
+	require.Eventually(t, c.hasRelaySession, 15*time.Second, 50*time.Millisecond)
+	require.True(t, c.sessionsSatisfied(), "the relay alone satisfies an unpublished client")
+
+	// Idle server session reaped below MinSessions; the relay stays.
+	streak := map[cipher.PubKey]int{}
+	c.reapExcessIdleSessions(streak, 1)
+	require.Eventually(t, func() bool { _, ok := c.Session(env.srvPK); return !ok }, 5*time.Second, 50*time.Millisecond)
+	require.True(t, c.hasRelaySession())
+	require.Equal(t, 1, c.SessionCount())
+
+	// And it is not dialed straight back: still one session a little later.
+	time.Sleep(1500 * time.Millisecond)
+	require.Equal(t, 1, c.SessionCount(), "unpublished client must not redial servers to reach MinSessions")
+	require.True(t, c.sessionsSatisfied())
+
+	// Its entry was never posted.
+	_, err := env.dc.Entry(context.Background(), pk)
+	require.Error(t, err, "an unpublished client posts no discovery entry")
+}

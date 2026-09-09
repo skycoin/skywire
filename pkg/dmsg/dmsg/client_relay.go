@@ -378,6 +378,12 @@ func (ce *Client) hasRelaySession() bool {
 // met, and — when relays are nominated and dialable — at least one relay
 // session held. Only meaningful when MinSessions != 0.
 func (ce *Client) sessionsSatisfied() bool {
+	if ce.noRegister && ce.hasRelaySession() {
+		// Unpublished client on a relay: the relay is the session. Holding
+		// MinSessions servers besides it would only republish what the relay
+		// already carries (#4484 stage 4: exactly one session).
+		return true
+	}
 	if ce.SessionCount() < ce.conf.MinSessions {
 		return false
 	}
