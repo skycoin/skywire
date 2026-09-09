@@ -365,6 +365,10 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 		return err
 	}
 	log.Debug("Forwarded stream request.")
+	if ss.relayInbound && ss.entity.forwardedFunc != nil {
+		// The peer accepted: remember it for the next request to this dst.
+		ss.entity.forwardedFunc(req.DstAddr.PK, dst.RemotePK())
+	}
 
 	if err := ss.writeObject(yStr, resp); err != nil {
 		// Original client disconnected (or stream broke) while we were

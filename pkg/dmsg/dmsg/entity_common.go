@@ -158,6 +158,9 @@ type EntityCommon struct {
 	// through AcceptRelaySession, so a destination that is itself attached to
 	// this relay is bridged locally instead of forwarded. nil on servers.
 	relaySessionLookup func(pk cipher.PubKey) (*SessionCommon, bool)
+	// forwardedFunc, if set, is told which peer carried a relayed request to
+	// dst, so the next request for dst can try that peer first.
+	forwardedFunc func(dst, peer cipher.PubKey)
 
 	// acceptPeerAnnouncements, peerAnnounceAllowedFunc and
 	// promoteToPeerFunc support inbound peer announcements: a server
