@@ -95,6 +95,12 @@ type App struct {
 	// both are set, since an app that can do its own thing has no use for a
 	// pane the desk would wrap it in.
 	Run func(args []string) error
+
+	// Unlisted keeps the app out of the launcher. For a pane type a page opens
+	// itself and does not want offered as a menu entry beside the real apps —
+	// a console the boot script fills with a command, say — while Launch and
+	// AddTab still find it by name.
+	Unlisted bool
 }
 
 var (
