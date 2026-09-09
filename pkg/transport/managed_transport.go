@@ -170,6 +170,11 @@ type ManagedTransport struct {
 	// have failed pongMissThreshold consecutive ticks the link is closed.
 	pingWriteFails atomic.Int64
 
+	// malformedFrames counts received packets whose type byte is outside the
+	// known range: the peer's framing is off (a size field that did not match
+	// the bytes written). Logged with the header bytes; for `visor state`.
+	malformedFrames atomic.Int64
+
 	// cascadeHandler handles cascade protocol packets (route ID 0).
 	// Set by the transport manager from the router's CascadeHandler.
 	cascadeHandler func(p routing.Packet, mt *ManagedTransport)
@@ -504,6 +509,16 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 		// Any received packet (pong, the peer's own ping, or route data) proves
 		// the link is alive — feed the unarmed-silence reaper in tickPing.
 		mt.lastRecvNanos.Store(time.Now().UnixNano())
+		if p.Type() > routing.DirectionPacket {
+			mt.malformedFrames.Add(1)
+			head := p
+			if len(head) > 24 {
+				head = head[:24]
+			}
+			log.WithField("type", byte(p.Type())).WithField("size", p.Size()).
+				WithField("head_hex", fmt.Sprintf("%x", []byte(head))).
+				Debug("Malformed frame: unknown packet type (peer framing off)")
+		}
 		// Intercept transport-level ping/pong before forwarding to router.
 		if p.RouteID() == 0 {
 			switch p.Type() {
@@ -1377,3 +1392,49 @@ func (mt *ManagedTransport) ConnDetails() *network.ConnDetails {
 	cd := d.ConnDetails()
 	return &cd
 }
+
+// MissedPongs is the number of transport pings sent since the last pong
+// (pongMissThreshold closes the transport). For `visor state`.
+func (mt *ManagedTransport) MissedPongs() int64 { return mt.missedPongs.Load() }
+
+// PongSeen reports whether the peer has ever answered a transport ping.
+func (mt *ManagedTransport) PongSeen() bool { return mt.pongSeen.Load() }
+
+// LastRecvAt is when the read loop last received any packet (zero = never).
+func (mt *ManagedTransport) LastRecvAt() time.Time {
+	ns := mt.lastRecvNanos.Load()
+	if ns == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, ns)
+}
+
+// Handlers names the route-ID-0 packet handlers wired on this transport. A
+// transport missing one delivers that packet type to the router instead, where
+// it is dropped as unknown — the #4725 failure mode, visible here per transport.
+func (mt *ManagedTransport) Handlers() []string {
+	var out []string
+	if mt.cascadeHandler != nil {
+		out = append(out, "cascade")
+	}
+	if mt.dhtHandler != nil {
+		out = append(out, "dht")
+	}
+	if mt.setupRPCHandler != nil {
+		out = append(out, "setup_rpc")
+	}
+	if mt.visorRPCHandler != nil {
+		out = append(out, "visor_rpc")
+	}
+	if mt.skynetFwdHandler != nil {
+		out = append(out, "skynet_forward")
+	}
+	if mt.appDirectHandler != nil {
+		out = append(out, "app_direct")
+	}
+	return out
+}
+
+// MalformedFrames counts received frames whose type byte is outside the known
+// range — the peer's framing is off. For `visor state`.
+func (mt *ManagedTransport) MalformedFrames() int64 { return mt.malformedFrames.Load() }

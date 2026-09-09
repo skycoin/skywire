@@ -77,10 +77,12 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		// These are intercepted in ManagedTransport.readLoop when the transport
 		// has the matching handler. Reaching the router means the transport has
 		// none (see Manager.applyHandlers) — name the type so that is visible.
+		r.intake.noteControl(packet.Type())
 		r.logger.WithField("type", packet.Type().String()).
 			Warn("Control-plane packet reached router (should be handled at transport layer)")
 		return nil
 	default:
+		r.intake.noteUnknown(packet.Type())
 		return fmt.Errorf("%w: %s (routeID=%d)", ErrUnknownPacketType, packet.Type(), packet.RouteID())
 	}
 }
