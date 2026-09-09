@@ -50,10 +50,10 @@ func skynetSessionDialer(ctx context.Context, network, addr string) (net.Conn, e
 
 // initDmsgRelay binds the relay listener on skyenv.DmsgRelayPort over skynet
 // (once the router's networker exists) and serves every accepted conn as a
-// relay session on dmsgC. Admission is the peer whitelist — self, configured
-// hypervisors, the pty whitelist and anything a hypervisor vouched for — and
-// the key the peer proves in the dmsg Noise handshake must be the key the
-// route was set up for.
+// relay session on dmsgC. Admission (relayPeerAllowed) is the peer whitelist
+// plus the visors this node manages as their hypervisor, and the key the peer
+// proves in the dmsg Noise handshake must be the key the route was set up
+// for.
 func (v *Visor) initDmsgRelay(ctx context.Context, dmsgC *dmsg.Client) {
 	log := v.MasterLogger().PackageLogger("dmsg_relay")
 	goServeSkynetMirror(ctx, v.conf.PK, skyenv.DmsgRelayPort, "dmsg_relay", log,
@@ -93,11 +93,24 @@ func (v *Visor) initDmsgRelay(ctx context.Context, dmsgC *dmsg.Client) {
 		})
 }
 
-// relayPeerAllowed reports whether pk may attach to this visor's dmsg relay.
+// relayPeerAllowed reports whether pk may attach to this visor's dmsg relay:
+// a peer on the peer whitelist (self, configured hypervisors, the pty
+// whitelist, anything a hypervisor vouched for), or a visor this node manages
+// as its hypervisor. A managed visor already lets us run RPC and a shell on
+// it; carrying its dmsg streams when it cannot reach a server itself is the
+// hypervisor's side of that relationship, and it needs no configuration —
+// the fleet case for stage 3 of #4484.
 func (v *Visor) relayPeerAllowed(pk cipher.PubKey) bool {
-	if v.peerWhitelist == nil {
-		return false
+	if v.peerWhitelist != nil {
+		if ok, err := v.peerWhitelist.Get(pk); err == nil && ok {
+			return true
+		}
 	}
-	ok, err := v.peerWhitelist.Get(pk)
-	return err == nil && ok
+	// Lock-free read of remoteVisors, as RemoteVisors/ManagedVisors do.
+	for _, conn := range v.remoteVisors {
+		if conn.Addr.PK == pk {
+			return true
+		}
+	}
+	return false
 }
