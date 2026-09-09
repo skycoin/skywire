@@ -8,6 +8,7 @@
 package transport
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -860,4 +861,91 @@ func mustPK(t *testing.T) cipher.PubKey {
 	t.Helper()
 	pk, _ := cipher.GenerateKeyPair()
 	return pk
+}
+
+// TestVStreamIDsScopedPerTransport: wire stream ids are only unique per peer
+// pair, and both ends allocate them. Streams must be keyed by (transport, id)
+// so equal ids on two transports are two streams, and ids this side allocates
+// must not collide with ids the peer allocates on the same transport (parity
+// split by PK order). Before this fix a tab's relay session and its host's RPC
+// dial to the tab shared an id and yamux died with "invalid protocol version".
+func TestVStreamIDsScopedPerTransport(t *testing.T) {
+	tm := newTestManager(t)
+	remoteA := mustPK(t)
+	remoteB := mustPK(t)
+	mtA, _ := servingTransport(t, tm, remoteA, types.STCPR)
+	mtB, _ := servingTransport(t, tm, remoteB, types.SUDPH)
+	mux := NewVStreamMux(tm, routing.DHTPacket, logging.MustGetLogger("vstream-test"))
+
+	// Same wire id from two peers → two streams.
+	const sid = uint64(7)
+	mux.HandlePacket(buildVStreamPacket(routing.DHTPacket, sid, remoteA, VStreamFlagSyn, nil), mtA)
+	sA, err := mux.Accept()
+	require.NoError(t, err)
+	mux.HandlePacket(buildVStreamPacket(routing.DHTPacket, sid, remoteB, VStreamFlagSyn, nil), mtB)
+	sB, err := mux.Accept()
+	require.NoError(t, err)
+	require.NotSame(t, sA, sB)
+	mux.HandlePacket(buildVStreamPacket(routing.DHTPacket, sid, remoteB, VStreamFlagData, []byte("b")), mtB)
+	buf := make([]byte, 1)
+	n, err := sB.Read(buf)
+	require.NoError(t, err)
+	require.Equal(t, "b", string(buf[:n]))
+	select {
+	case <-sA.readBuf:
+		t.Fatal("frame for B's stream landed on A's stream with the same id")
+	default:
+	}
+	require.Equal(t, int64(0), mux.Stats().FramesUnknownStream)
+
+	// Local ids never share parity with the peer's on the same transport.
+	local := tm.Local()
+	idA := mux.nextIDFor(remoteA)
+	idB := mux.nextIDFor(remoteB)
+	wantOddA := bytes.Compare(local[:], remoteA[:]) > 0
+	wantOddB := bytes.Compare(local[:], remoteB[:]) > 0
+	require.Equal(t, wantOddA, idA%2 == 1)
+	require.Equal(t, wantOddB, idB%2 == 1)
+
+	// A frame for an id nobody has is counted, not silently dropped.
+	mux.HandlePacket(buildVStreamPacket(routing.DHTPacket, 999, remoteA, VStreamFlagData, []byte("x")), mtA)
+	require.Equal(t, int64(1), mux.Stats().FramesUnknownStream)
+}
+
+// TestVStreamWriteSegments: a Write larger than the 16-bit packet size field
+// must go out as several DATA frames, each declared exactly as long as it is,
+// and reassemble to the input. Before this fix it went out as ONE packet with a
+// truncated size field, and the receiver parsed the rest as garbage headers.
+func TestVStreamWriteSegments(t *testing.T) {
+	tm := newTestManager(t)
+	mt, mem := servingTransport(t, tm, mustPK(t), types.STCPR)
+	mux := NewVStreamMux(tm, routing.DHTPacket, logging.MustGetLogger("vstream-test"))
+	s, err := mux.DialOnTransport(mt)
+	require.NoError(t, err)
+	mem.written = nil
+
+	data := make([]byte, 200_000)
+	for i := range data {
+		data[i] = byte(i)
+	}
+	n, err := s.Write(data)
+	require.NoError(t, err)
+	require.Equal(t, len(data), n)
+
+	var got []byte
+	frames := 0
+	for buf := mem.written; len(buf) > 0; frames++ {
+		require.GreaterOrEqual(t, len(buf), routing.PacketHeaderSize)
+		pkt := routing.Packet(buf)
+		size := int(pkt.Size())
+		require.Equal(t, routing.DHTPacket, pkt.Type())
+		require.LessOrEqual(t, size, int(vstreamMaxData)+VStreamHeaderSize)
+		require.GreaterOrEqual(t, len(buf), routing.PacketHeaderSize+size, "declared size must not exceed the bytes written")
+		payload := buf[routing.PacketHeaderSize : routing.PacketHeaderSize+size]
+		require.Equal(t, byte(VStreamFlagData), payload[41])
+		got = append(got, payload[VStreamHeaderSize:]...)
+		buf = buf[routing.PacketHeaderSize+size:]
+	}
+	require.Equal(t, 4, frames)
+	require.Equal(t, data, got)
 }

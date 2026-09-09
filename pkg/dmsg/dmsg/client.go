@@ -1490,6 +1490,7 @@ func (ce *Client) pingSessions(_ context.Context, fails map[*SessionCommon]int) 
 		rtt, err := ses.Ping()
 		if err != nil {
 			fails[key]++
+			key.pingFails.Store(int32(fails[key])) //nolint:gosec
 			ce.log.WithError(err).
 				WithField("server", ses.RemotePK()).
 				WithField("consecutive_fails", fails[key]).
@@ -1504,6 +1505,7 @@ func (ce *Client) pingSessions(_ context.Context, fails map[*SessionCommon]int) 
 			continue
 		}
 		fails[key] = 0
+		key.pingFails.Store(0)
 		ses.SetLastPing(rtt)
 		ce.log.WithField("server", ses.RemotePK()).WithField("rtt", rtt).
 			Trace("Session ping measured")

@@ -72,6 +72,11 @@ type StateSnapshot struct {
 	// snapshot, so the default payload is unchanged.
 	Proxy *proxystatus.Snapshot `json:"proxy,omitempty"`
 
+	// Diag is the in-process plumbing view (router intake, transport read
+	// queue and handlers, VStream muxes, dmsg ping/relay state, Go runtime) —
+	// see DiagSnapshot. Cheap; part of the default snapshot.
+	Diag *DiagSnapshot `json:"diag,omitempty"`
+
 	// Notes collects per-section errors ("routing: <err>") so the snapshot is
 	// self-describing about what it could and could not read.
 	Notes []string `json:"notes,omitempty"`
@@ -94,12 +99,13 @@ const (
 	SelectModules    = "modules"    // modules
 	SelectCXO        = "cxo"        // cxo feed publish-health
 	SelectProxy      = "proxy"      // visor-side proxystatus snapshot (skysocks); opt-in only
+	SelectDiag       = "diag"       // router intake, transport queues/handlers, vstream, dmsg ping/relay, runtime
 )
 
 // StateSelectKeys is the documented set of --select keys, in help order.
 var StateSelectKeys = []string{
 	SelectSummary, SelectHealth, SelectRouting, SelectMux,
-	SelectApps, SelectTransports, SelectModules, SelectCXO, SelectProxy,
+	SelectApps, SelectTransports, SelectModules, SelectCXO, SelectProxy, SelectDiag,
 }
 
 // stateFieldSet is the parsed --select set. A nil set means "everything in the
@@ -295,6 +301,10 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		if cf := v.CXOFeedStates(); len(cf) > 0 {
 			snap.CXOFeeds = cf
 		}
+	}
+
+	if want.has(SelectDiag) {
+		snap.Diag = v.DiagSnapshot()
 	}
 
 	// proxy is opt-in (never in the default snapshot): the visor-side

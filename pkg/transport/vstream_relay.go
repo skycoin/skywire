@@ -9,6 +9,7 @@ package transport
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"sync/atomic"
 
 	"github.com/google/uuid"
@@ -104,19 +105,14 @@ func (m *VStreamMux) handleRelaySyn(mt *ManagedTransport, wireID uint64, senderP
 			id:       wireID,
 			remotePK: senderPK,
 			tpID:     mt.Entry.ID,
-			readBuf:  make(chan []byte, 64),
+			readBuf:  make(chan []byte, vstreamReadBuf),
 			closed:   make(chan struct{}),
 			mux:      m,
 		}
 		m.streamsMu.Lock()
-		m.streams[wireID] = stream
+		m.streams[streamKey{mt.Entry.ID, wireID}] = stream
 		m.streamsMu.Unlock()
-		select {
-		case m.incoming <- stream:
-		default:
-			m.log.Warn("vstream relay: incoming (relayed) stream dropped (buffer full)")
-			stream.Close() //nolint:errcheck,gosec
-		}
+		m.offerIncoming(stream, "incoming (relayed) stream")
 		return
 	}
 
@@ -137,7 +133,7 @@ func (m *VStreamMux) handleRelaySyn(mt *ManagedTransport, wireID uint64, senderP
 		return
 	}
 
-	outID := m.nextID()
+	outID := m.nextIDFor(outTp.Remote())
 	inKey := relayKey{tp: mt.Entry.ID, streamID: wireID}
 	outKey := relayKey{tp: outTp.Entry.ID, streamID: outID}
 	m.registerRelayLeg(inKey, outKey)
@@ -170,7 +166,7 @@ func (m *VStreamMux) DialThroughRelay(relayPK, dstPK cipher.PubKey, appName stri
 		}
 	}
 
-	id := m.nextID()
+	id := m.nextIDFor(relayTp.Remote())
 	sig, err := cipher.SignPayload(relaySigPayload(id, m.localPK(), dstPK), m.tm.Conf.SecKey)
 	if err != nil {
 		return nil, fmt.Errorf("vstream: sign relay SYN: %w", err)
@@ -180,12 +176,12 @@ func (m *VStreamMux) DialThroughRelay(relayPK, dstPK cipher.PubKey, appName stri
 		id:       id,
 		remotePK: dstPK,
 		tpID:     relayTp.Entry.ID,
-		readBuf:  make(chan []byte, 64),
+		readBuf:  make(chan []byte, vstreamReadBuf),
 		closed:   make(chan struct{}),
 		mux:      m,
 	}
 	m.streamsMu.Lock()
-	m.streams[id] = stream
+	m.streams[streamKey{relayTp.Entry.ID, id}] = stream
 	m.streamsMu.Unlock()
 
 	// originID == id: the origin's own stream id, preserved end-to-end so the
@@ -216,6 +212,9 @@ func (m *VStreamMux) sendRelaySyn(tp *ManagedTransport, wireID uint64, senderPK,
 // writePayload frames payload as a route-ID-0 packet of this mux's type and
 // writes it on tp.
 func (m *VStreamMux) writePayload(tp *ManagedTransport, payload []byte) error {
+	if len(payload) > math.MaxUint16 {
+		return fmt.Errorf("vstream relay: frame of %d bytes exceeds the packet size field", len(payload))
+	}
 	pkt := make(routing.Packet, routing.PacketHeaderSize+len(payload))
 	pkt[routing.PacketTypeOffset] = byte(m.packetType)
 	binary.BigEndian.PutUint16(pkt[routing.PacketPayloadSizeOffset:], uint16(len(payload))) //nolint:gosec

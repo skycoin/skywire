@@ -67,6 +67,11 @@ type SessionCommon struct {
 	// A value of 0 means no measurement yet (treated as max latency for sorting).
 	lastPingNs atomic.Int64
 
+	// pingFails is the consecutive liveness-ping failure count the client's
+	// ping loop is at for this session (pingDeadThreshold closes it). For
+	// `visor state`.
+	pingFails atomic.Int32
+
 	// reaped is set by the client's idle-session reaper just before it closes
 	// this session. The serve goroutine's exit path reads it so a deliberate
 	// trim is not mistaken for a dropped server. Without it the exit path
@@ -460,6 +465,9 @@ func (sc *SessionCommon) smuxPing(smuxSes *smux.Session) (time.Duration, error) 
 
 // LastPing returns the last measured round-trip latency.
 // Returns 0 if no measurement has been taken yet.
+// PingFails is the consecutive liveness-ping failure count for this session.
+func (sc *SessionCommon) PingFails() int { return int(sc.pingFails.Load()) }
+
 func (sc *SessionCommon) LastPing() time.Duration {
 	return time.Duration(sc.lastPingNs.Load())
 }
