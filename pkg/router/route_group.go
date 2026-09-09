@@ -72,15 +72,19 @@ const (
 	legBlackHoleMinTopBytes = 128 * 1024
 	// soleBlackHole* gate the sole-leg black-hole reaping (see soleLegBlackHoled).
 	// A group down to one active leg whose route has SENT more than
-	// soleBlackHoleSentFloor (a real request went out) but RECEIVED less than
-	// soleBlackHoleRecvFloor (essentially nothing came back), held for
-	// soleBlackHoleTicks consecutive data-progress intervals, is a dead route the
-	// two ordinary prunes cannot see — dial a replacement. The recv floor is a few
-	// packets of handshake/headers; the sent floor rejects an idle group that
-	// never requested anything; the tick count (≥15s at a 5s cadence) rejects a
-	// merely-slow origin. recv is CUMULATIVE, so a route that ever delivered bulk
-	// is never flagged — this targets dead-from-establishment routes.
-	soleBlackHoleRecvFloor = 16 * 1024
+	// soleBlackHoleSentFloor (a real request went out) but DELIVERED no payload at
+	// all, held for soleBlackHoleTicks consecutive data-progress intervals, is a
+	// dead route the two ordinary prunes cannot see — dial a replacement. The
+	// judgment is on the leg's PayloadBytes (unique in-order payload), not its raw
+	// RecvBytes: the raw count includes the handshake, liveness pongs and SACKs,
+	// which a black-holed route still receives, so it used to be held against a
+	// 16 KiB floor — and a working route carrying a light session (a proxy client
+	// whose responses are a few hundred bytes) never cleared that floor and was
+	// replaced every 15 s, tearing down the session it was serving. The sent
+	// floor rejects an idle group that never requested anything; the tick count
+	// (≥15s at a 5s cadence) rejects a merely-slow origin. Both counters are
+	// CUMULATIVE, so a route that ever delivered payload is never flagged — this
+	// targets dead-from-establishment routes.
 	soleBlackHoleSentFloor = 256
 	soleBlackHoleTicks     = 3
 	// reorderStallInterval is how often the receive side checks for a reorder
@@ -2342,9 +2346,9 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	// selectDataStalledLegs bails at active<2 (no leader to compare against). So
 	// a --mux 1 client that lands a black-holing route stays dead forever — the
 	// establishment lottery this fixes. Detect it directly: the sole active leg
-	// has SENT a request (cumulative sent past a floor) yet RECEIVED almost
-	// nothing (cumulative recv under a small floor) for several consecutive
-	// intervals, so dial a REPLACEMENT (bypassing the target<=1 self-heal gate).
+	// has SENT a request (cumulative sent past a floor) yet DELIVERED no payload
+	// (cumulative unique payload still zero) for several consecutive intervals,
+	// so dial a REPLACEMENT (bypassing the target<=1 self-heal gate).
 	// Once a second leg is up the ordinary black-hole prune sheds the dead one.
 	activeCnt, soleSent, soleRecv := 0, uint64(0), uint64(0)
 	for i, tp := range tpsCopy {
@@ -2352,7 +2356,7 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 			continue
 		}
 		activeCnt++
-		soleSent, soleRecv = stats[i].SentBytes, stats[i].RecvBytes
+		soleSent, soleRecv = stats[i].SentBytes, stats[i].PayloadBytes
 	}
 	// Direction-aware exemption: under unidirectional assignment (CapUniDir) the
 	// sole active leg is the light-direction leg (the direct upload leg on a
@@ -2366,7 +2370,7 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	} else if soleLegBlackHoled(activeCnt, soleSent, soleRecv) {
 		rg.soleBHTicks++
 		if rg.soleBHTicks >= soleBlackHoleTicks {
-			rg.logger.Warnf("sole-leg black-hole: only active route sent %dB but received %dB over %v — dialing a replacement route",
+			rg.logger.Warnf("sole-leg black-hole: only active route sent %dB but delivered %dB of payload over %v — dialing a replacement route",
 				soleSent, soleRecv, time.Duration(soleBlackHoleTicks)*legDataProgressInterval)
 			rg.soleBHTicks = 0
 			go rg.healReplaceSoleLeg()
@@ -2418,11 +2422,12 @@ type legRecvDelta struct {
 // mux via SACK retransmits. It never selects so many that fewer than one active
 // leg would remain. Pure (no rg state / locks) so it is unit-tested directly.
 // soleLegBlackHoled reports whether a group's ONLY active leg is a data
-// black-hole: a request was sent (cumulative sent past the floor) but almost
-// nothing came back (cumulative recv under the floor). Pure so it is unit-tested
-// directly; the caller applies the consecutive-interval hysteresis and the dial.
-func soleLegBlackHoled(activeCnt int, sent, recv uint64) bool {
-	return activeCnt == 1 && sent > soleBlackHoleSentFloor && recv < soleBlackHoleRecvFloor
+// black-hole: a request was sent (cumulative sent past the floor) but no payload
+// ever came back (cumulative unique payload delivered is zero). Pure so it is
+// unit-tested directly; the caller applies the consecutive-interval hysteresis
+// and the dial.
+func soleLegBlackHoled(activeCnt int, sent, payload uint64) bool {
+	return activeCnt == 1 && sent > soleBlackHoleSentFloor && payload == 0
 }
 
 // parkStalledLegs decides whether data-stalled legs are PARKED to warm standby
