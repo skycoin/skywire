@@ -49,6 +49,7 @@ type API interface {
 	Uptime() (float64, error)
 	UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error)
 	RuntimeStats() (*RuntimeStatsInfo, error)
+	GoroutineDump() (string, error)
 	Reload() error
 	Suspend() error
 	Resume() error

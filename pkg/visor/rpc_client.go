@@ -1154,6 +1154,13 @@ func (rc *rpcClient) RuntimeStats() (*RuntimeStatsInfo, error) {
 	return &stats, err
 }
 
+// GoroutineDump calls GoroutineDump.
+func (rc *rpcClient) GoroutineDump() (string, error) {
+	var out string
+	err := rc.Call("GoroutineDump", &struct{}{}, &out)
+	return out, err
+}
+
 // SetMinHops sets the min_hops from visor routing config
 func (rc *rpcClient) SetMinHops(hops uint16) error {
 	err := rc.Call("SetMinHops", &hops, &struct{}{})
