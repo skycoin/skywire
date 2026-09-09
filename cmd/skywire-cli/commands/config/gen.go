@@ -2315,6 +2315,14 @@ func configureApps(log *logging.Logger) {
 		if isEnableAuth {
 			conf.Hypervisor.EnableAuth = true
 		}
+		// First run: the UI password gate is on unless the operator said
+		// --disable-auth. A regen keeps whatever the existing config has (the
+		// reset stays `skywire cli visor hv passwd --force`, on the board). Not
+		// in a browser tab: its visor keeps no users.db across reloads, so a
+		// forced gate there would demand a new password every load.
+		if !isRegen && !isDisableAuth && skyenv.OS != "js" {
+			conf.Hypervisor.EnableAuth = true
+		}
 	}
 	// Enable hypervisor UI authentication on windows & macos
 	if (selectedOS == "win") || (selectedOS == "mac") {

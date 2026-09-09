@@ -623,6 +623,27 @@ func (r *RPC) AddHypervisor(in *cipher.PubKey, _ *struct{}) (err error) {
 	return r.visor.AddHypervisor(*in)
 }
 
+// PendingHypervisors lists peers waiting to be approved as hypervisors.
+func (r *RPC) PendingHypervisors(_ *struct{}, out *[]PendingHypervisor) (err error) {
+	defer rpcutil.LogCall(r.log, "PendingHypervisors", nil)(out, &err)
+	*out, err = r.visor.PendingHypervisors()
+	return err
+}
+
+// ApproveHypervisor approves a pending key by public key or fingerprint.
+func (r *RPC) ApproveHypervisor(sel *string, out *cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "ApproveHypervisor", sel)(out, &err)
+	*out, err = r.visor.ApproveHypervisor(*sel)
+	return err
+}
+
+// NewPairCode mints a one-time pairing code.
+func (r *RPC) NewPairCode(ttl *time.Duration, out *PairCode) (err error) {
+	defer rpcutil.LogCall(r.log, "NewPairCode", ttl)(out, &err)
+	*out, err = r.visor.NewPairCode(*ttl)
+	return err
+}
+
 // RemoveHypervisor tears down a runtime-added hypervisor connection
 // by PK. Idempotent: succeeds with nil if the PK is not currently a
 // runtime-added hypervisor on this visor (covers double-rm, rm of a

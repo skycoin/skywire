@@ -147,6 +147,7 @@ func (v *Visor) nominateRelayPeers(ctx context.Context, dmsgC *dmsg.Client, log 
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			v.scanPendingPairs()
 			nominees := v.relayNominees()
 			if dmsgC.SetRelayPeers(nominees, skyenv.DmsgRelayPort) {
 				log.WithField("nominees", nominees).Info("dmsg relay nominees changed")

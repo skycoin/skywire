@@ -1023,17 +1023,20 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 		if v.conf.Pty != nil {
 			whitelistPKs = append(whitelistPKs, v.conf.Pty.Whitelist...)
 		}
-		if len(whitelistPKs) > 0 {
-			tpRPCS, tpRPCErr := newRPCServer(v, "TransportRPC")
-			if tpRPCErr != nil {
-				log.WithError(tpRPCErr).Warn("Failed to create transport RPC server")
-			} else {
-				tpRPCSrv := NewTransportRPCServer(tpRPCLog, tpRPCS, v.peerWhitelist, v.transportRPCMux)
-				v.pushCloseStack("transport_rpc.server", tpRPCSrv.Close)
-				go tpRPCSrv.Serve()
-				tpRPCLog.WithField("whitelist_pks", len(whitelistPKs)).
-					Info("Transport RPC server started (VisorRPCPacket on route ID 0)")
-			}
+		// Always serve: the whitelist is consulted live per stream, so a peer
+		// approved at runtime (`hv pair`) is admitted without a restart; with
+		// nothing whitelisted every stream is refused — and recorded as a
+		// pending hypervisor for the operator to approve.
+		tpRPCS, tpRPCErr := newRPCServer(v, "TransportRPC")
+		if tpRPCErr != nil {
+			log.WithError(tpRPCErr).Warn("Failed to create transport RPC server")
+		} else {
+			tpRPCSrv := NewTransportRPCServer(tpRPCLog, tpRPCS, v.peerWhitelist, v.transportRPCMux)
+			tpRPCSrv.SetRejectedHook(func(pk cipher.PubKey) { v.notePendingHypervisor(pk, "rpc") })
+			v.pushCloseStack("transport_rpc.server", tpRPCSrv.Close)
+			go tpRPCSrv.Serve()
+			tpRPCLog.WithField("whitelist_pks", len(whitelistPKs)).
+				Info("Transport RPC server started (VisorRPCPacket on route ID 0)")
 		}
 	}
 

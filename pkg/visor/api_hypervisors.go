@@ -67,6 +67,16 @@ func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 	// hypervisor, not just connecting once). Best-effort — see persistHypervisors.
 	v.persistHypervisors(addPK(v.configuredHypervisors(), hvPK))
 
+	// A hypervisor drives this visor over RPC and pty: admit it now, not on
+	// the next restart when the whitelist is rebuilt from config (#4484 stage
+	// 5 — approval must take effect while the tab waits).
+	if v.peerWhitelist != nil {
+		if err := v.peerWhitelist.Add(hvPK); err == nil {
+			v.refreshGatedCXOAllowlists()
+		}
+	}
+	v.hvPairingState().forget(hvPK)
+
 	return nil
 }
 
