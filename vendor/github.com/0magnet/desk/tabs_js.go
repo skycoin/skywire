@@ -136,6 +136,15 @@ func (ts *tabset) add(pane Pane, title string) error {
 		ts.views.Call("removeChild", view)
 		return err
 	}
+	// A pane may own an element that belongs in the title bar rather than the
+	// body — a browser's tab strip. After Mount, because the pane builds it
+	// while mounting; here rather than in the host, because this is what knows
+	// the window.
+	if hp, ok := pane.(HeaderPane); ok {
+		if el := hp.HeaderEl(); el.Truthy() {
+			MountInHeader(ts.win.DOM, el)
+		}
+	}
 	// Read back what Mount left: a pane that styles its host keeps that display
 	// from here on, and only the show/hide toggle is ours. Falls back to
 	// "block" if the pane cleared it entirely.

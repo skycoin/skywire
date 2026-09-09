@@ -44,6 +44,26 @@ type Resizer interface {
 	Resize(width, height float64)
 }
 
+// HeaderPane is implemented by a pane with an element that belongs in the
+// window's title bar rather than in its body — a browser's tab strip, level
+// with the window controls, is the case this exists for.
+//
+// Most panes have none. Implement it and the desk moves the element into the
+// title bar after the pane mounts; return a zero Value to keep everything in
+// the body, and a pane mounted outside any window keeps its element where it
+// built it.
+//
+// The desk does this rather than each host doing it, because the desk is what
+// owns the window. A host wiring it up itself has to find the window from the
+// mount element and has to remember at every call site — and both hosts using
+// this package wanted the same behavior while only one of them had the call,
+// which is the argument against leaving it to them.
+type HeaderPane interface {
+	// HeaderEl returns the element to move into the title bar. Called once,
+	// after Mount, so a pane can build the element while mounting.
+	HeaderEl() js.Value
+}
+
 // TexturePane is implemented by a pane whose pixels all live in one canvas.
 //
 // It exists because the DOM cannot be sampled into a WebGL texture and a canvas
