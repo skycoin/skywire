@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -446,7 +447,7 @@ func startDmsgClientWT(ctx context.Context, log *logging.Logger, pk cipher.PubKe
 
 func rpcClient(_ *cobra.Command) (visor.API, error) {
 	const rpcDialTimeout = time.Second * 5
-	conn, err := net.DialTimeout("tcp", rpcAddr, rpcDialTimeout)
+	conn, err := vnet.DialTimeout("tcp", rpcAddr, rpcDialTimeout)
 	if err != nil {
 		return nil, err
 	}
