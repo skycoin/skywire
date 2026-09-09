@@ -96,6 +96,7 @@ func (ss *ServerSession) Serve() {
 					}
 				}()
 				err := ss.serveStream(log, sStr, ss.sm.addr)
+				ss.closeRefused(sStr, err)
 				log.WithError(err).Debug("Stopped stream.")
 			}(sStr)
 		}
@@ -125,6 +126,7 @@ func (ss *ServerSession) Serve() {
 					}
 				}()
 				err := ss.serveStream(log, qStr, ss.sm.addr)
+				ss.closeRefused(qStr, err)
 				log.WithError(err).Debug("Stopped stream.")
 			}(qStr)
 		}
@@ -163,10 +165,25 @@ func (ss *ServerSession) Serve() {
 					}
 				}()
 				err := ss.serveStream(log, yStr, ss.sm.addr)
+				ss.closeRefused(yStr, err)
 				log.WithError(err).Debug("Stopped stream.")
 			}(yStr)
 		}
 	}
+}
+
+// closeRefused closes a stream whose request serveStream did not serve. A
+// refusal (bad signature, no listener, relay slots exhausted, no next
+// session) carries no response the dialer could verify — a StreamResponse is
+// signed by the destination, which never saw the request — so the only signal
+// is EOF. Without the close the dialer sat out the full HandshakeTimeout on a
+// stream nobody would ever write to. Closing after a served bridge is a no-op:
+// CopyReadWriteCloser has already closed both sides.
+func (ss *ServerSession) closeRefused(str io.Closer, err error) {
+	if err == nil {
+		return
+	}
+	_ = str.Close() //nolint:errcheck,gosec
 }
 
 // struct
@@ -334,7 +351,7 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 	// this server carrying traffic for someone that is not its own client.
 	// Bound the concurrent count so an always-open relay can't be amplified. A
 	// plain local client↔client bridge is normal operation and is never gated.
-	if ss.isPeer || dst.isPeer || req.SrcAddr.PK != ss.rPK {
+	if ss.isPeer || dst.isPeer || ss.relayInbound || req.SrcAddr.PK != ss.rPK {
 		if !ss.entity.tryAcquireRelaySlot() {
 			ss.m.RecordStream(metrics.DeltaFailed)
 			return ErrRelayCapacityReached
@@ -429,7 +446,7 @@ func (c *idleTimeoutConn) SetWriteDeadline(t time.Time) error {
 // forwardViaPeer tries to forward a stream request through peer server sessions.
 // This is only called for client-originated requests (not peer-originated, enforcing 1-hop max).
 func (ss *ServerSession) forwardViaPeer(log logrus.FieldLogger, yStr io.ReadWriteCloser, req StreamRequest) error {
-	peers := ss.entity.peerServerSessions()
+	peers := ss.entity.forwardSessions(req.DstAddr.PK)
 	if len(peers) == 0 {
 		ss.m.RecordStream(metrics.DeltaFailed)
 		return ErrReqNoNextSession

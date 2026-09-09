@@ -192,6 +192,17 @@ const (
 	// is set (default OFF), so it adds no listener on the default configuration.
 	DmsgTransportQueryPort uint16 = 68
 
+	// DmsgRelayPort is the dmsg port a visor's dmsg RELAY listens on over
+	// skynet (pkg/dmsg/dmsg/client_relay.go, #4484 stage 3). A peer with a
+	// skywire route to this visor — a served desk tab, a visor behind a network
+	// that cannot reach any dmsg server — dials skynet://<this pk>:70 as its
+	// dmsg "server": the visor answers with a server-role dmsg session on its
+	// own dmsg client and carries the peer's stream requests over its own
+	// server sessions, under the peer's key. Gated by the peer whitelist.
+	// Numbered 70 (69 is DmsgVisorTPListCXOPort, 71 DmsgVisorARBindCXOPort);
+	// the value only needs to be collision-free, which ports_test guards.
+	DmsgRelayPort uint16 = 70
+
 	// DmsgWebRTCSignalPort is the dmsg port the WebRTC carrier exchanges its SDP
 	// offer/answer + ICE candidates on (a visor dials a peer here to open a
 	// signaling stream; the answerer listens). It MUST live in this registry: it

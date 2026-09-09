@@ -228,6 +228,9 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		entryResolve = v.newDmsgEntryCXOResolver()
 	}
 	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, &dmsgConf, httpC, v.dClient, directOnly, entryResolve, v.MasterLogger())
+	// skynet carrier: seeded "skynet://<pk>:70" server entries are dialed as a
+	// skywire route to that visor's dmsg relay (init_dmsg_relay.go).
+	dmsgC.SetSessionDialer(skynetSessionDialer)
 	httpC.Transport = dmsghttp.MakeHTTPTransport(ctx, dmsgC)
 
 	wg := new(sync.WaitGroup)
@@ -272,6 +275,8 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	v.dmsgDC = dmsgC // single client: dmsgDC consumers (router, resolver, vpn) ride dmsgC
 	v.dmsgHTTP = httpC
 	v.initLock.Unlock()
+	// The other half of the skynet carrier: serve attached peers as a dmsg relay.
+	v.initDmsgRelay(ctx, dmsgC)
 	select {
 	case <-v.dmsgHTTPReady:
 	default:

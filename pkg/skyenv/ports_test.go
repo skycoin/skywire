@@ -44,6 +44,7 @@ func TestVisorPortsAreUnique(t *testing.T) {
 		"DmsgVisorSDRegCXOPort":           DmsgVisorSDRegCXOPort,
 		"DmsgVisorTPListCXOPort":          DmsgVisorTPListCXOPort,
 		"DmsgTransportQueryPort":          DmsgTransportQueryPort,
+		"DmsgRelayPort":                   DmsgRelayPort,
 		"DmsgWebRTCSignalPort":            DmsgWebRTCSignalPort,
 		"SkychatVoiceSignalPort":          SkychatVoiceSignalPort,
 		"SkychatVoiceMediaPort":           SkychatVoiceMediaPort,
