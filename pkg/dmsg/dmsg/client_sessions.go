@@ -728,6 +728,9 @@ func (ce *Client) finishDialedSession(ctx context.Context, dSes ClientSession, n
 		}
 	}
 
+	if dSes.carrier == CarrierSkynet {
+		ce.log.WithField("relay", dSes.RemotePK()).Info("Attached to dmsg relay.")
+	}
 	started := time.Now()
 	go func() {
 		defer ce.wg.Done()

@@ -219,7 +219,8 @@ var errRelayNominated = errors.New("dmsg: relay candidates changed")
 // backed off for relayFailureBackoff. Stream dials prefer a relay session
 // (see DialStream). Passing an empty set withdraws every nomination; existing
 // relay sessions are left to close on their own.
-func (ce *Client) SetRelayPeers(pks []cipher.PubKey, port uint16) {
+// It reports whether the nomination changed.
+func (ce *Client) SetRelayPeers(pks []cipher.PubKey, port uint16) bool {
 	ce.relayMx.Lock()
 	changed := len(pks) != len(ce.relayPeers) || port != ce.relayPort
 	next := make(map[cipher.PubKey]struct{}, len(pks))
@@ -234,9 +235,12 @@ func (ce *Client) SetRelayPeers(pks []cipher.PubKey, port uint16) {
 	}
 	ce.relayPeers = next
 	ce.relayPort = port
+	if changed {
+		ce.relayGen++
+	}
 	ce.relayMx.Unlock()
 	if !changed {
-		return
+		return false
 	}
 	// Wake a serve loop parked on errCh so it re-evaluates the candidate list.
 	ce.sesMx.Lock()
@@ -247,6 +251,14 @@ func (ce *Client) SetRelayPeers(pks []cipher.PubKey, port uint16) {
 		}
 	}
 	ce.sesMx.Unlock()
+	return true
+}
+
+// relayGeneration is the nomination change counter (see SetRelayPeers).
+func (ce *Client) relayGeneration() uint64 {
+	ce.relayMx.Lock()
+	defer ce.relayMx.Unlock()
+	return ce.relayGen
 }
 
 // RelayPeers returns the current relay nominees.

@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -134,7 +135,7 @@ const relayNominationInterval = 10 * time.Second
 // not carry its dmsg through a browser. Pairing (stage 5) will widen this. A nominee that
 // has no relay acceptor, or refuses us, fails the dial and is backed off by
 // the client; the configured servers stay the bootstrap and the fallback.
-func (v *Visor) nominateRelayPeers(ctx context.Context, dmsgC *dmsg.Client) {
+func (v *Visor) nominateRelayPeers(ctx context.Context, dmsgC *dmsg.Client, log *logging.Logger) {
 	t := time.NewTicker(relayNominationInterval)
 	defer t.Stop()
 	for {
@@ -142,7 +143,10 @@ func (v *Visor) nominateRelayPeers(ctx context.Context, dmsgC *dmsg.Client) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			dmsgC.SetRelayPeers(v.relayNominees(), skyenv.DmsgRelayPort)
+			nominees := v.relayNominees()
+			if dmsgC.SetRelayPeers(nominees, skyenv.DmsgRelayPort) {
+				log.WithField("nominees", nominees).Info("dmsg relay nominees changed")
+			}
 		}
 	}
 }
