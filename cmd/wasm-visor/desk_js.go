@@ -40,6 +40,32 @@ type funcPane struct{ mount func(el js.Value) error }
 func (p funcPane) Mount(el js.Value) error { return p.mount(el) }
 func (funcPane) Close()                    {}
 
+// browserPane is the netscrape browser as a desk pane.
+//
+// A type of its own rather than another funcPane because it has something to
+// say about the window it lands in: desk.HeaderPane asks a pane for the element
+// that belongs in the title bar, and the desk moves it there. That is how the
+// tab strip ends up level with the window controls without this file reaching
+// into the window to put it there.
+//
+// jsOpenBrowser still hoists by hand — see browser_js.go. It is not a desk pane
+// and has no window of the desk's to be asked about, being called from the
+// native page's JS with an element the desk never mounted.
+type browserPane struct{ url string }
+
+func (p browserPane) Mount(el js.Value) error {
+	netscrape.Open(netscrapeHost(el))
+	if p.url != "" {
+		netscrape.Navigate(p.url)
+	}
+	return nil
+}
+
+func (browserPane) Close() {}
+
+// HeaderEl is desk.HeaderPane: netscrape's tab strip goes in the title bar.
+func (browserPane) HeaderEl() js.Value { return netscrape.TabStrip() }
+
 // installDesk registers skywire's desk apps and mounts the library panel.
 // Call from a DOM-bearing role after installShell/installBrowser.
 func installDesk() {
@@ -92,14 +118,11 @@ func installDesk() {
 		Help:  "netscrape — browse the mesh and the clearnet",
 		Width: 1000, Height: 640,
 		Open: func(args []string) (desk.Pane, error) {
-			return funcPane{mount: func(el js.Value) error {
-				netscrape.Open(netscrapeHost(el))
-				hoistBrowserTabs(el)
-				if len(args) > 0 && args[0] != "" {
-					netscrape.Navigate(args[0])
-				}
-				return nil
-			}}, nil
+			var url string
+			if len(args) > 0 {
+				url = args[0]
+			}
+			return browserPane{url: url}, nil
 		},
 	})
 	desk.Register(desk.App{

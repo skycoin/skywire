@@ -129,8 +129,12 @@ func netscrapeHost(el js.Value) js.Value {
 // hoistBrowserTabs moves netscrape's tab strip out of the browser's box and
 // into the title bar of the desk window that holds el, level with the window
 // controls — where a browser keeps its tabs. A host element outside any window
-// keeps the strip where netscrape put it. Both desks come through here: the
-// wasm desk's browser pane and the native page's dashboard window.
+// keeps the strip where netscrape put it.
+//
+// Only jsOpenBrowser needs this now: it is called from the native page's JS
+// with an element the desk never mounted, so there is no pane for the desk to
+// ask. The wasm desk's browser is a desk.HeaderPane and the desk moves its
+// strip without being told — see browserPane in desk_js.go.
 func hoistBrowserTabs(el js.Value) {
 	if !el.Truthy() || el.Get("closest").Type() != js.TypeFunction {
 		return
