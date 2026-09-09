@@ -850,6 +850,11 @@ type DmsgClientSessionInfo struct {
 	// over (tcp / ws / wss / webtransport / quic). Parallel to Servers, sorted
 	// the same way, so existing Servers consumers keep working.
 	Sessions []DmsgServerSession `json:"sessions,omitempty"`
+	// RelayPeers are the visor's current relay nominees (peers it wants a
+	// skynet-carried session through); RelayClients the peers currently
+	// attached to THIS visor's relay acceptor.
+	RelayPeers   []cipher.PubKey `json:"relay_peers,omitempty"`
+	RelayClients []cipher.PubKey `json:"relay_clients,omitempty"`
 }
 
 // DmsgServerSession is one active dmsg-server session and the protocol the

@@ -277,7 +277,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	v.initLock.Unlock()
 	// The other half of the skynet carrier: serve attached peers as a dmsg relay.
 	v.initDmsgRelay(ctx, dmsgC)
-	go v.nominateRelayPeers(ctx, dmsgC)
+	go v.nominateRelayPeers(ctx, dmsgC, log)
 	select {
 	case <-v.dmsgHTTPReady:
 	default:
