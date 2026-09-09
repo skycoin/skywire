@@ -42,6 +42,7 @@ package visor
 import (
 	"context"
 	"encoding/json"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"io"
 	"net/http"
 	"strings"
@@ -312,4 +313,23 @@ func (hv *Hypervisor) serveWSRequest(ctx context.Context, up *http.Request, req 
 		}
 	}
 	return res
+}
+
+// getTransportWS → GET /tp/ws : hands the WebSocket upgrade to the visor's WS
+// transport client, which runs its normal accept-side handshake on it. The
+// same-origin transport a served desk opens back to this visor (see the route
+// comment in hypervisor.go).
+func (hv *Hypervisor) getTransportWS() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if hv.visor == nil || hv.visor.tpM == nil {
+			http.Error(w, "no visor behind this hypervisor", http.StatusServiceUnavailable)
+			return
+		}
+		h, ok := hv.visor.tpM.HTTPAcceptor(tptypes.WS)
+		if !ok {
+			http.Error(w, "ws transport not available on this visor", http.StatusServiceUnavailable)
+			return
+		}
+		h.ServeHTTP(w, r)
+	}
 }

@@ -100,6 +100,7 @@ type Values struct {
 
 	// --- Hypervisor / identity ---
 	Hvpks        string
+	WSPeers      string // WSPEERS: <pk>@<ws(s)://…> peers held as WebSocket transports
 	Ishv         bool
 	NoIshv       bool
 	PkEndpoint   bool // ENABLEPKENDPOINT
@@ -262,6 +263,7 @@ func New(v *Values) *cobra.Command {
 
 	// --- Hypervisor / identity ---
 	cmd.Flags().StringVar(&v.Hvpks, "hvpks", "", "comma-separated remote hypervisor PKs to dial — writes HYPERVISORPKS in skywire.conf")
+	cmd.Flags().StringVar(&v.WSPeers, "ws-peer", "", "peers held as WebSocket transports, <pk>@<ws(s)://host[:port]/path>, comma-separated — writes WSPEERS in skywire.conf")
 	cmd.Flags().BoolVar(&v.Ishv, "ishv", false, "enable local hypervisor — writes ISHYPERVISOR=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoIshv, "no-ishv", false, "disable local hypervisor — writes ISHYPERVISOR=false in skywire.conf")
 	cmd.Flags().BoolVar(&v.PkEndpoint, "pk-endpoint", false, "expose unauthenticated GET /api/pk on the hypervisor — writes ENABLEPKENDPOINT=true in skywire.conf (skybian / Arch-ARM image builds set this)")
@@ -411,6 +413,7 @@ func EnvMap() map[string]EnvMapping {
 var envMap = map[string]EnvMapping{
 	// Hypervisor / identity
 	"hvpks":          {Key: "HYPERVISORPKS", Format: EnvFormatBashArray},
+	"ws-peer":        {Key: "WSPEERS", Format: EnvFormatBashArray},
 	"ishv":           {Key: "ISHYPERVISOR", Format: EnvFormatBool},
 	"no-ishv":        {Key: "ISHYPERVISOR", Format: EnvFormatBool, Negate: true},
 	"pk-endpoint":    {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool},

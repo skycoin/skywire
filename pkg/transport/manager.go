@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 
@@ -865,6 +866,21 @@ func (tm *Manager) InitClient(ctx context.Context, netType types.Type, port int)
 	// Transport Manager is 'ready' once we have successfully initilized
 	// with at least one transport client.
 	tm.readyOnce.Do(func() { close(tm.ready) })
+}
+
+// HTTPAcceptor returns the network client for netType as an http.Handler when
+// it can take transport handshakes arriving on a foreign HTTP server — the WS
+// client on native builds does (wsClient.ServeHTTP). The hypervisor UI port
+// mounts it so a desk it serves can open a transport at the address it knows.
+func (tm *Manager) HTTPAcceptor(netType types.Type) (http.Handler, bool) {
+	tm.mx.RLock()
+	c := tm.netClients[netType]
+	tm.mx.RUnlock()
+	if c == nil {
+		return nil, false
+	}
+	h, ok := c.(http.Handler)
+	return h, ok
 }
 
 // Ready checks if the transport manager is ready with atleast one transport
