@@ -150,3 +150,36 @@ func (l *pipeListener) Close() error {
 }
 
 func (l *pipeListener) Addr() net.Addr { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)} }
+
+// TestProxyExitTakenOver covers the decision that stops the auto-exit loop from
+// stopping or re-pointing a skysocks-client the operator started. The observed
+// failure was `cli proxy start <pk>` losing its exit to a random discovery pick
+// because the loop treated the operator's session as its own failed candidate.
+func TestProxyExitTakenOver(t *testing.T) {
+	const loopPK = "02f9aa588dffa20b205e1c10bd0236130f080af157044d0eaa35753d2f2fcd6c36"
+	const operatorPK = "038af6b913d13eb726d8d1e195968af0cb894f2a0316fe98a031135e3c102da165"
+	cases := []struct {
+		name          string
+		configured    string
+		want          string
+		running       bool
+		expectRunning bool
+		takenOver     bool
+	}{
+		{"loop's own exit still configured", loopPK, loopPK, true, true, false},
+		{"operator re-pointed the client", operatorPK, loopPK, true, true, true},
+		{"operator re-pointed it and it already died", operatorPK, loopPK, false, true, true},
+		{"operator started a client the loop had stopped", operatorPK, "", true, false, true},
+		{"nothing running where the loop expects nothing", operatorPK, "", false, false, false},
+		{"pinned exit unchanged and down", loopPK, loopPK, false, true, false},
+		{"srv cleared entirely is not a takeover", "", loopPK, false, true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := proxyExitTakenOver(tc.configured, tc.want, tc.running, tc.expectRunning); got != tc.takenOver {
+				t.Fatalf("proxyExitTakenOver(%q, %q, running=%v, expectRunning=%v) = %v, want %v",
+					tc.configured, tc.want, tc.running, tc.expectRunning, got, tc.takenOver)
+			}
+		})
+	}
+}
