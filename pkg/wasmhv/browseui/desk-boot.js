@@ -496,6 +496,14 @@
 						var tpURL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + (opts.attach.path || '/tp/ws');
 						autoconfigCmd += ' --disable-public-autoconn --ws-peer ' + opts.attach.pk + '@' + tpURL;
 					}
+					// ?loglvl=debug on the page URL boots the visor at that log level: the
+					// config is regenerated on every load, so this is the one place a
+					// level for the tab's visor can be set. Letters only, so the URL
+					// cannot inject anything else into the command.
+					var loglvl = new URLSearchParams(location.search).get('loglvl');
+					if (loglvl && /^[a-z]+$/.test(loglvl)) {
+						autoconfigCmd += ' --loglvl ' + loglvl;
+					}
 					panel.openConsole({ title: 'visor', initCmd: startVisor ? autoconfigCmd : '' });
 					startedVisor = startVisor;
 				}
