@@ -328,6 +328,14 @@ type Client struct {
 	// mistakes an attached peer for a server. Guarded by relaySessionsMx.
 	relaySessions   map[cipher.PubKey]*SessionCommon
 	relaySessionsMx sync.Mutex
+
+	// relayPeers are the peers the visor nominated as relays (SetRelayPeers),
+	// relayPort the dmsg port their acceptors listen on, relayFailAt the
+	// per-nominee backoff after a failed dial. Guarded by relayMx.
+	relayPeers  map[cipher.PubKey]struct{}
+	relayPort   uint16
+	relayFailAt map[cipher.PubKey]time.Time
+	relayMx     sync.Mutex
 }
 
 // AddDiscovery registers an additional dmsg-discovery this client
@@ -587,6 +595,13 @@ func (ce *Client) Serve(ctx context.Context) {
 				continue
 			}
 		}
+		// Relay nominees (SetRelayPeers) are dialed FIRST: the visor chose them
+		// for this client's dmsg traffic. They count as entries so a client with
+		// no reachable server still attaches through its relay.
+		var relays []*disc.Entry
+		if !pinned {
+			relays = ce.relayEntries()
+		}
 		if len(entries) == 0 && !pinned {
 			// Fallback for dmsg-only deployments and fleet cold-starts:
 			// when the disc.APIClient yields no entries (because the HTTP
@@ -602,7 +617,7 @@ func (ce *Client) Serve(ctx context.Context) {
 				entries = seeded
 			}
 		}
-		if len(entries) == 0 {
+		if len(entries) == 0 && len(relays) == 0 {
 			ce.log.Warnf("No entries found. Retrying after %s...", ce.bo.String())
 			if pinned {
 				ce.pinnedFailures.Add(1)
@@ -649,6 +664,9 @@ func (ce *Client) Serve(ctx context.Context) {
 		for i := range weighted {
 			entries[i] = weighted[i].entry
 		}
+		if len(relays) > 0 {
+			entries = append(relays, entries...)
+		}
 
 		if needInitialPost {
 			// use this for put protocol type of client to disc, for dicision part of dmsg-server
@@ -687,7 +705,7 @@ func (ce *Client) Serve(ctx context.Context) {
 
 			// If MinSessions is set to 0 then we connect to all available servers.
 			// If MinSessions is not 0 AND we have enough sessions, we wait for error or done signal.
-			if ce.conf.MinSessions != 0 && ce.SessionCount() >= ce.conf.MinSessions {
+			if ce.conf.MinSessions != 0 && ce.sessionsSatisfied() {
 				select {
 				case <-ce.done:
 					return
@@ -711,6 +729,11 @@ func (ce *Client) Serve(ctx context.Context) {
 				if err == context.Canceled || err == context.DeadlineExceeded {
 					ce.log.WithField("remote_pk", entry.Static).WithError(err).Warn("Failed to establish session.")
 					return
+				}
+				if ce.isRelayPeer(entry.Static) {
+					// A nominee that refused us or has no acceptor: leave it alone for
+					// a while and carry on with the servers.
+					ce.noteRelayFailure(entry.Static)
 				}
 				// we send an error if this is the last server
 				if n == (len(entries) - 1) {
@@ -1537,6 +1560,12 @@ func (ce *Client) reapExcessIdleSessions(idleStreak map[cipher.PubKey]int, idleC
 	streams := make(map[cipher.PubKey]int, len(ce.sessions))
 	for pk, ses := range ce.sessions {
 		sessions[pk] = ses
+		if ses.carrier == CarrierSkynet {
+			// A relay session counts toward the floor but is never reaped: it is
+			// the path the visor chose, idle or not.
+			streams[pk] = -1
+			continue
+		}
 		streams[pk] = ses.NumStreams()
 	}
 	ce.sessionsMx.Unlock()

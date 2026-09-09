@@ -136,6 +136,16 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// calls consume — breaking any caller that expects consecutive
 	// dials to produce consecutive, usable streams (the exact failure
 	// mode of TestMultiServerStreams).
+	// Phase 0: relay sessions (skynet carrier). The visor nominated these
+	// peers to carry this client's dmsg traffic; the relay forwards to the
+	// destination's servers itself, so they go before any server session.
+	if relaySessions := ce.sortedRelaySessions(); len(relaySessions) > 0 {
+		if stream, ok := ce.sequentialPhaseDial(ctx, addr, relaySessions, maxPerExistingPhase); ok {
+			ce.dialFailClear(addr.PK)
+			return stream, nil
+		}
+	}
+
 	delegatedSessions := ce.sortedDelegatedSessions(entry.Client.DelegatedServers)
 	if stream, ok := ce.sequentialPhaseDial(ctx, addr, delegatedSessions, maxPerExistingPhase); ok {
 		ce.dialFailClear(addr.PK)
@@ -297,6 +307,9 @@ func (ce *Client) sortedMeshSessions(delegatedServers []cipher.PubKey) []ClientS
 	for _, ses := range ce.allClientSessions(ce.porter) {
 		if hasPK(delegatedServers, ses.RemotePK()) {
 			continue
+		}
+		if ses.carrier == CarrierSkynet {
+			continue // relay sessions are DialStream's phase 0, not a mesh path
 		}
 		sessions = append(sessions, ses)
 	}
