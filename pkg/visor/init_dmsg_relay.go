@@ -31,9 +31,13 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
+// skynetSessionDialTimeout bounds one relay session dial over skynet.
+const skynetSessionDialTimeout = 30 * time.Second
+
 // skynetSessionDialer is the dmsg client's SessionDialer for the skynet
 // carrier: it turns "skynet://<pk>:<port>" into a skywire route dial to that
-// visor's relay listener. Bounded by dmsg.DialTimeout like the TCP carrier.
+// visor's relay listener. Bounded by skynetSessionDialTimeout: unlike a TCP dial
+// this one sets up a route, and at boot that waits on the setup node.
 func skynetSessionDialer(ctx context.Context, network, addr string) (net.Conn, error) {
 	if network != dmsg.CarrierSkynet {
 		return nil, fmt.Errorf("dmsg session dialer: unsupported carrier %q", network)
@@ -42,7 +46,7 @@ func skynetSessionDialer(ctx context.Context, network, addr string) (net.Conn, e
 	if err != nil {
 		return nil, err
 	}
-	dialCtx, cancel := context.WithTimeout(ctx, dmsg.DialTimeout)
+	dialCtx, cancel := context.WithTimeout(ctx, skynetSessionDialTimeout)
 	defer cancel()
 	return appnet.DialContext(dialCtx, appnet.Addr{
 		Net:    appnet.TypeSkynet,

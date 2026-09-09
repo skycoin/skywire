@@ -692,6 +692,11 @@ serve:
 				// heard while parked): rebuild the list with them in front.
 				continue serve
 			}
+			if ce.isRelayPeer(entry.Static) && ce.relayBackedOff(entry.Static) {
+				// Backed off after this pass's list was built (a refusal that
+				// only showed after the handshake): do not re-dial it now.
+				continue
+			}
 
 			// A visor running its own dmsg server in-process (same PK) must
 			// not open a transit session to itself. Conditional: the
@@ -749,7 +754,7 @@ serve:
 				if ce.isRelayPeer(entry.Static) {
 					// A nominee that refused us or has no acceptor: leave it alone for
 					// a while and carry on with the servers.
-					ce.noteRelayFailure(entry.Static)
+					ce.noteRelayFailure(entry.Static, relayBackoffFor(err))
 				}
 				// we send an error if this is the last server
 				if n == (len(entries) - 1) {

@@ -102,7 +102,7 @@ func TestRelayNominee_EntriesSkipSelfAndSessions(t *testing.T) {
 	entries := c.relayEntries()
 	require.Len(t, entries, 1)
 	require.Equal(t, SkynetAddr(other, 70), entries[0].Server.Address)
-	c.noteRelayFailure(other)
+	c.noteRelayFailure(other, relayFailureBackoff)
 	require.Empty(t, c.relayEntries())
 }
 
