@@ -1439,3 +1439,36 @@ func (c *EntityCommon) nudgeEntryUpdate() {
 func (c *EntityCommon) recordUpdate() {
 	atomic.StoreInt64(&c.lastUpdate, time.Now().UnixNano())
 }
+
+// Unpublished reports whether this entity publishes no discovery entry
+// (Config.NoRegister). For `visor state`.
+func (c *EntityCommon) Unpublished() bool { return c.noRegister }
+
+// deleteOwnEntry removes this entity's discovery entry if one exists — an
+// unpublished client that was published in an earlier life (or by an older
+// build) would otherwise keep advertising delegated servers it no longer
+// holds sessions with. Best effort: a discovery that has no entry, or that
+// cannot be reached, is left alone.
+func (c *EntityCommon) deleteOwnEntry(ctx context.Context) {
+	for _, ep := range c.snapshotDiscoveries() {
+		callCtx, cancel := context.WithTimeout(ctx, entryUpdateAttemptTimeout)
+		entry, err := ep.Client.Entry(callCtx, c.pk)
+		if err != nil || entry == nil {
+			cancel()
+			continue
+		}
+		entry.Sequence++
+		entry.Timestamp = time.Now().UnixNano()
+		if err := entry.Sign(c.sk); err != nil {
+			cancel()
+			c.log.WithError(err).Debug("Unpublished client: could not sign stale entry for deletion.")
+			continue
+		}
+		if err := ep.Client.DelEntry(callCtx, entry); err != nil {
+			c.log.WithError(err).Debug("Unpublished client: stale discovery entry not deleted.")
+		} else {
+			c.log.Info("Unpublished client: deleted stale discovery entry.")
+		}
+		cancel()
+	}
+}
