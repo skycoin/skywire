@@ -245,9 +245,21 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 		return err
 	}
-	// For peer sessions, the SrcAddr.PK is the original client, not the
-	// peer server. The request signature is still verified above.
-	if !ss.isPeer && req.SrcAddr.PK != ss.rPK {
+	// A request whose source is not this session's remote key is RELAYED: a
+	// peer server has always carried its clients' requests this way, and a
+	// visor may now forward a request on another key's behalf over its own
+	// client session (#4484 stage 3). The signature verified above binds the
+	// envelope to the claimed source key, so the relaying session cannot
+	// impersonate anyone; what it spends is this server's relay capacity,
+	// charged in bridgeStream.
+	relayed := req.SrcAddr.PK != ss.rPK
+	if relayed && !ss.isPeer && !ss.entity.acceptRelayedRequests {
+		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
+		return ErrReqInvalidSrcPK
+	}
+	// The address an IP request reports is the session's, which for a relayed
+	// request is the relay's, not the source's. Refuse rather than mislead.
+	if relayed && req.IPinfo {
 		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 		return ErrReqInvalidSrcPK
 	}
@@ -317,12 +329,12 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 
 // bridgeStream forwards a request to a destination session and bridges the two streams.
 func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteCloser, dst ServerSession, req StreamRequest) error {
-	// A bridge where either side is a peer session is a *relayed* stream —
-	// this server carrying traffic on behalf of another server. Bound the
-	// concurrent count so an always-open relay can't be amplified. A plain
-	// local client↔client bridge (neither side a peer) is normal operation
-	// and is never gated.
-	if ss.isPeer || dst.isPeer {
+	// A bridge where either side is a peer session, or whose request arrived
+	// over a client session on another key's behalf, is a *relayed* stream —
+	// this server carrying traffic for someone that is not its own client.
+	// Bound the concurrent count so an always-open relay can't be amplified. A
+	// plain local client↔client bridge is normal operation and is never gated.
+	if ss.isPeer || dst.isPeer || req.SrcAddr.PK != ss.rPK {
 		if !ss.entity.tryAcquireRelaySlot() {
 			ss.m.RecordStream(metrics.DeltaFailed)
 			return ErrRelayCapacityReached
