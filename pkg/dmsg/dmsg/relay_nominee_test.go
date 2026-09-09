@@ -2,6 +2,8 @@ package dmsg
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -101,4 +103,52 @@ func TestRelayNominee_EntriesSkipSelfAndSessions(t *testing.T) {
 	require.Equal(t, SkynetAddr(other, 70), entries[0].Server.Address)
 	c.noteRelayFailure(other)
 	require.Empty(t, c.relayEntries())
+}
+
+// addServer registers one more dmsg server on the env's discovery.
+func addServer(t *testing.T, dc disc.APIClient, name string) cipher.PubKey {
+	t.Helper()
+	pk, sk := GenKeyPair(t, name)
+	srv := NewServer(pk, sk, dc, nil, nil)
+	srv.SetLogger(logging.MustGetLogger(name))
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := lis.Addr().String()
+	entry := disc.NewServerEntry(pk, 0, addr, 10)
+	require.NoError(t, entry.Sign(sk))
+	require.NoError(t, dc.PostEntry(context.Background(), entry))
+	go func() { _ = srv.Serve(lis, addr) }() //nolint:errcheck
+	t.Cleanup(func() { _ = srv.Close() })    //nolint:errcheck
+	return pk
+}
+
+// A nomination must not fan the client out across the remaining servers. The
+// serve loop parks inside its per-server walk once MinSessions is met; woken
+// by a nomination it has to rebuild the candidate list with the relay in front
+// rather than carry on down the server list (where sessionsSatisfied stays
+// false until a relay session exists, so every server would be dialed).
+func TestRelayNominee_DoesNotFanOutAcrossServers(t *testing.T) {
+	env := newRelayedTestEnv(t, nil)
+	relayPK := env.relay.LocalPK()
+	for i := 0; i < 3; i++ {
+		addServer(t, env.dc, fmt.Sprintf("fanout-srv-%d", i))
+	}
+
+	pk, sk := GenKeyPair(t, "nominee-fanout")
+	c := NewClient(pk, sk, env.dc, &Config{MinSessions: 1})
+	c.SetLogger(logging.MustGetLogger("nominee-fanout"))
+	var dials atomic.Int32
+	c.SetSessionDialer(skynetDialer(t, env.relay, relayPK, nil, &dials))
+	go c.Serve(context.Background())
+	t.Cleanup(func() { _ = c.Close() }) //nolint:errcheck
+	require.Eventually(t, func() bool { return c.SessionCount() == 1 }, 15*time.Second, 50*time.Millisecond)
+	// Let the walk park on the second candidate.
+	time.Sleep(300 * time.Millisecond)
+	require.Equal(t, 1, c.SessionCount())
+
+	c.SetRelayPeers([]cipher.PubKey{relayPK}, 70)
+	require.Eventually(t, c.hasRelaySession, 15*time.Second, 50*time.Millisecond)
+	time.Sleep(time.Second)
+	require.Equal(t, 2, c.SessionCount(), "one server session plus the relay; no fan-out to the other servers")
+	require.Equal(t, int32(1), dials.Load())
 }
