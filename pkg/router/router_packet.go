@@ -65,15 +65,23 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		return r.dispatchToRouteGroup(ctx, packet)
 	case routing.DatagramPacket:
 		return r.handleDatagramPacket(ctx, packet)
+	case routing.DirectionPacket:
+		// Manual direction pin (CapUniDir): route-ID-driven like LegState — the
+		// destination route group applies it (handleDirectionPacket). Without
+		// this case the router dropped every pin as ErrUnknownPacketType.
+		return r.dispatchToRouteGroup(ctx, packet)
 	case routing.TransportPingPacket, routing.TransportPongPacket,
 		routing.CascadeSetupPacket, routing.CascadeAckPacket, routing.DHTPacket,
-		routing.SetupRPCPacket, routing.VisorRPCPacket:
-		// These should be intercepted at the transport layer (ManagedTransport.readLoop).
-		// If they reach the router, something is wrong — drop silently.
-		r.logger.Warn("Control-plane packet reached router (should be handled at transport layer)")
+		routing.SetupRPCPacket, routing.VisorRPCPacket, routing.SkynetForwardPacket,
+		routing.AppDirectPacket, routing.TransportBwProbePacket, routing.TransportBwAckPacket:
+		// These are intercepted in ManagedTransport.readLoop when the transport
+		// has the matching handler. Reaching the router means the transport has
+		// none (see Manager.applyHandlers) — name the type so that is visible.
+		r.logger.WithField("type", packet.Type().String()).
+			Warn("Control-plane packet reached router (should be handled at transport layer)")
 		return nil
 	default:
-		return ErrUnknownPacketType
+		return fmt.Errorf("%w: %s (routeID=%d)", ErrUnknownPacketType, packet.Type(), packet.RouteID())
 	}
 }
 
