@@ -34,7 +34,12 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 	retrier := netutil.NewRetrier(log, time.Second, time.Second*20, 3, 1.3)
 	return []router.RouteSetupHook{
 		func(rPK cipher.PubKey, tm *transport.Manager) error {
-			establishedTransports, _ := v.Transports([]string{string(types.STCPR), string(types.SUDPH), string(types.DMSG)}, []cipher.PubKey{v.conf.PK}, false) //nolint:errcheck
+			// ANY established transport to the peer carries a 1-hop route — a
+			// WebSocket a browser visor opened to this hypervisor as much as an
+			// stcpr this visor dialed. Filtering to stcpr/sudph/dmsg here made
+			// the router dial a NEW stcpr transport to a peer it already held a
+			// swsr to, and fail the dial when that peer had no address to dial.
+			establishedTransports, _ := v.Transports(nil, []cipher.PubKey{v.conf.PK}, false) //nolint:errcheck
 			for _, transportSum := range establishedTransports {
 				if transportSum.Remote.Hex() == rPK.Hex() {
 					log.Debugf("Established transport exist. Type: %s", transportSum.Type)
