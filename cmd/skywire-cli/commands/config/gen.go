@@ -2323,6 +2323,12 @@ func configureApps(log *logging.Logger) {
 		if !isRegen && !isDisableAuth && skyenv.OS != "js" {
 			conf.Hypervisor.EnableAuth = true
 		}
+		// A regen keeps the gate as the existing config has it — the default
+		// config is rebuilt from scratch and would otherwise reset an operator's
+		// --noauth to the platform default on every autoconfig run.
+		if isRegen && !isDisableAuth && !isEnableAuth && oldConfCache != nil && oldConfCache.Hypervisor != nil {
+			conf.Hypervisor.EnableAuth = oldConfCache.Hypervisor.EnableAuth
+		}
 	}
 	// Enable hypervisor UI authentication on windows & macos
 	if (selectedOS == "win") || (selectedOS == "mac") {
