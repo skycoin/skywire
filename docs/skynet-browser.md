@@ -4,10 +4,10 @@ The wasm-visor ships an in-tab **skynet browser** — a WinBox window whose addr
 bar accepts a visor **PK**, **`pk.dmsg`**, an **`alias.dmsg`** (e.g.
 **`home.dmsg`**), or an **`https://`** clearnet URL. Pages are fetched over dmsg
 (skynet) — no DNS, no certificate authorities, IP-anonymous — or, for clearnet,
-routed through a skysocks exit selected in the ⚙ panel.
+sent through the proxy named in the ⚙ field — one `[scheme://]host:port` (empty: the visor's default egress).
 
 Nav bar: `◀ ▶ ⟳ ⌂` (back / forward / reload / **home** → `home.dmsg`), the
-address bar + `go`, `⚙` (skysocks proxy + per-window request log), and `ⓘ`
+address bar + `go`, `⚙` (the proxy address + per-window request log), and `ⓘ`
 (this page's summary, in-UI).
 
 ## Limitations (by design)
