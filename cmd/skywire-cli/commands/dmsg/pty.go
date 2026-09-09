@@ -5,12 +5,12 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"regexp"
 	"strconv"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/toqueteos/webbrowser"
@@ -611,7 +611,7 @@ var ptyURLCmd = &cobra.Command{
 
 func ptyRPCClient(cmdFlags *pflag.FlagSet) visor.API {
 	const rpcDialTimeout = time.Second * 5
-	conn, err := net.DialTimeout("tcp", ptyRpcAddr, rpcDialTimeout)
+	conn, err := vnet.DialTimeout("tcp", ptyRpcAddr, rpcDialTimeout)
 	if err != nil {
 		internal.PrintFatalError(cmdFlags, fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
 	}
