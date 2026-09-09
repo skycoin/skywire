@@ -189,18 +189,25 @@ func (ce *Client) relayForwardSessions(dst cipher.PubKey) []*SessionCommon {
 	// entry, so without it every relayed request walked the mesh in latency
 	// order and burned a handshake timeout on each server that did not hold
 	// the service.
-	if cached, ok := ce.getCachedRoute(dst); ok {
+	if cached, ok := ce.getCachedRoute(dst); ok && !ce.relayForwardFailed(dst, cached) {
 		if ses, ok := ce.session(cached); ok && ses.carrier != CarrierSkynet {
 			out = append(out, ses)
 		}
 	}
+	// Peers that recently failed for dst go last: during the #4703 rollout a
+	// server without it lets a relayed request hit the handshake timeout.
+	var failed []*SessionCommon
 	for _, s := range ordered {
 		if s.carrier == CarrierSkynet || (len(out) > 0 && s.SessionCommon == out[0]) {
 			continue
 		}
+		if ce.relayForwardFailed(dst, s.RemotePK()) {
+			failed = append(failed, s.SessionCommon)
+			continue
+		}
 		out = append(out, s.SessionCommon)
 	}
-	return out
+	return append(out, failed...)
 }
 
 // relayFailureBackoff is how long a nominated relay that refused or failed a
@@ -399,5 +406,57 @@ func (ce *Client) relayBackedOff(pk cipher.PubKey) bool {
 	ce.relayMx.Lock()
 	defer ce.relayMx.Unlock()
 	until, ok := ce.relayFailAt[pk]
+	return ok && time.Now().Before(until)
+}
+
+// relayForwardFailureTTL is how long a (destination, peer) pair that failed a
+// relayed forward is demoted to the end of the relay's forwarding order.
+const relayForwardFailureTTL = 2 * time.Minute
+
+// relayDialSkipTTL is how long a dialer leaves the relay out of the ladder for
+// a destination the relay just failed to reach, so the server phases are not
+// delayed by a relay attempt that will fail the same way.
+const relayDialSkipTTL = time.Minute
+
+type dstPeer struct{ dst, peer cipher.PubKey }
+
+// noteRelayForwardFailure records that peer could not carry a relayed request
+// to dst (relay side), and evicts a cached route that pointed at it.
+func (ce *Client) noteRelayForwardFailure(dst, peer cipher.PubKey) {
+	ce.relayMx.Lock()
+	if ce.relayForwardBad == nil {
+		ce.relayForwardBad = make(map[dstPeer]time.Time)
+	}
+	ce.relayForwardBad[dstPeer{dst, peer}] = time.Now().Add(relayForwardFailureTTL)
+	ce.relayMx.Unlock()
+	if cached, ok := ce.getCachedRoute(dst); ok && cached == peer {
+		ce.evictCachedRoute(dst)
+	}
+}
+
+// relayForwardFailed reports whether peer recently failed to carry a relayed
+// request to dst.
+func (ce *Client) relayForwardFailed(dst, peer cipher.PubKey) bool {
+	ce.relayMx.Lock()
+	defer ce.relayMx.Unlock()
+	until, ok := ce.relayForwardBad[dstPeer{dst, peer}]
+	return ok && time.Now().Before(until)
+}
+
+// noteRelayDialFailure records (dialer side) that the relay could not reach dst.
+func (ce *Client) noteRelayDialFailure(dst cipher.PubKey) {
+	ce.relayMx.Lock()
+	if ce.relayDialSkip == nil {
+		ce.relayDialSkip = make(map[cipher.PubKey]time.Time)
+	}
+	ce.relayDialSkip[dst] = time.Now().Add(relayDialSkipTTL)
+	ce.relayMx.Unlock()
+}
+
+// relayDialSkipped reports whether dials to dst currently bypass the relay.
+func (ce *Client) relayDialSkipped(dst cipher.PubKey) bool {
+	ce.relayMx.Lock()
+	defer ce.relayMx.Unlock()
+	until, ok := ce.relayDialSkip[dst]
 	return ok && time.Now().Before(until)
 }
