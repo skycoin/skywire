@@ -151,20 +151,11 @@ func (v *Visor) autoUpgradeHypervisorTransport(ctx context.Context, hvPK cipher.
 	}
 }
 
-// hasFastTransportTo returns true when the transport manager has a
-// stcpr or sudph automatic-label transport to the given peer.
+// hasFastTransportTo reports whether a direct (non-dmsg) transport to
+// remotePK exists, whatever its label: an automatic stcpr/sudph one this
+// loop created, or the swsr a browser visor opened back to us at the
+// page origin. Any of those is the fast path the RPC dialer wants, so
+// there is nothing left for this loop to do while one is present.
 func (v *Visor) hasFastTransportTo(remotePK cipher.PubKey) bool {
-	if v.tpM == nil {
-		return false
-	}
-	for _, tp := range v.tpM.GetTransportsByLabel(transport.LabelAutomatic) {
-		if tp.Remote() != remotePK {
-			continue
-		}
-		switch tp.Type() {
-		case tptypes.STCPR, tptypes.SUDPH:
-			return true
-		}
-	}
-	return false
+	return hasFastTransportTo(v.tpM, remotePK)
 }
