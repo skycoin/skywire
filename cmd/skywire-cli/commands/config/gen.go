@@ -2525,6 +2525,7 @@ var (
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{
 		"cliaddr": "CLIADDR",
+		"loglvl":  "LOGLVL",
 		"hvaddr":  "HVHTTPADDR",
 		"timeout": "SHUTDOWNTIMEOUT",
 		"reward":  "REWARDSKYADDR",

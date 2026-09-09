@@ -20,6 +20,7 @@ func TestFlagArgsForSkyenv(t *testing.T) {
 		{"HYPERVISORPKS", "a,b", []string{"--hvpks", "a,b"}, true},
 		{"TRANSPORTPORT", "7777", []string{"--transport-port", "7777"}, true},
 		{"REWARDSKYADDR", "2jBbGxZ", []string{"--reward", "2jBbGxZ"}, true},
+		{"LOGLVL", "debug", []string{"--loglvl", "debug"}, true},
 		{"NOSUCHKEY", "x", nil, false},
 	} {
 		got, ok := FlagArgsForSkyenv(tc.key, tc.value)
