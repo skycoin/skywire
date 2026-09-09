@@ -7,10 +7,12 @@ package visor
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -220,16 +222,28 @@ func (v *Visor) dmsgHTTPFetch(pk cipher.PubKey, port uint16, method, path string
 // BrowseClearnetRequest fetches a CLEARNET url through a skysocks exit over a
 // skywire route (IP-anonymous; the exit does the egress).
 type BrowseClearnetRequest struct {
+	// ExitPK names a skysocks exit to route the fetch through; zero means the
+	// visor's default exit (the skysocks-client's server). Ignored when Proxy
+	// is set.
 	ExitPK cipher.PubKey `json:"exit_pk"`
-	Method string        `json:"method"`
-	URL    string        `json:"url"`
-	Body   []byte        `json:"body,omitempty"`
+	// Proxy is "[scheme://]host:port" of a proxy THIS visor dials for the
+	// fetch — socks5 (default scheme), socks5h, http or https. It is the one
+	// proxy setting a browser has (#4484 stage 6): "vnet:1080" and
+	// "localhost:1080" name the visor's own loopback (its skysocks-client),
+	// anything else a proxy the visor can reach.
+	Proxy  string `json:"proxy,omitempty"`
+	Method string `json:"method"`
+	URL    string `json:"url"`
+	Body   []byte `json:"body,omitempty"`
 }
 
 // BrowseClearnet originates a route group to the skysocks server, runs SOCKS5
 // over a yamux stream, and performs the HTTP(S) request — TLS terminates here
 // (system cert pool), so the exit only relays ciphertext for https.
 func (v *Visor) BrowseClearnet(req BrowseClearnetRequest) (*SkynetHTTPResponse, error) {
+	if strings.TrimSpace(req.Proxy) != "" {
+		return v.proxyClearnetFetch(req)
+	}
 	// Self-PK exit = "fall through to clearnet directly": the local visor does the
 	// egress itself (a plain http.Get over the host's default route), NOT a skysocks
 	// route to its own PK (which would hang dialing itself, like the home.dmsg
@@ -405,4 +419,74 @@ func (v *Visor) browseDefaultExit() (cipher.PubKey, bool) {
 		return cipher.PubKey{}, false
 	}
 	return pk, true
+}
+
+// parseBrowseProxy turns "[scheme://]host:port" into a URL the fetch dials
+// through. No scheme means socks5; "vnet" and the loopback names resolve to
+// 127.0.0.1 — the visor's own virtual or real loopback, where its
+// skysocks-client listens.
+func parseBrowseProxy(s string) (*url.URL, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, errors.New("empty proxy address")
+	}
+	if !strings.Contains(s, "://") {
+		s = "socks5://" + s
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return nil, fmt.Errorf("proxy %q: %w", s, err)
+	}
+	switch u.Scheme {
+	case "socks5", "socks5h", "http", "https":
+	default:
+		return nil, fmt.Errorf("proxy %q: scheme must be socks5, socks5h, http or https", s)
+	}
+	if u.Port() == "" {
+		return nil, fmt.Errorf("proxy %q: port required", s)
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "vnet", "localhost", "::1":
+		u.Host = net.JoinHostPort("127.0.0.1", u.Port())
+	}
+	return u, nil
+}
+
+// proxyClearnetFetch fetches req.URL through the proxy req.Proxy names, dialed
+// by this visor.
+func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*SkynetHTTPResponse, error) {
+	pu, err := parseBrowseProxy(req.Proxy)
+	if err != nil {
+		return nil, err
+	}
+	tr := &http.Transport{TLSHandshakeTimeout: 20 * time.Second}
+	switch pu.Scheme {
+	case "socks5", "socks5h":
+		sd, err := proxy.SOCKS5("tcp", pu.Host, nil, proxy.Direct)
+		if err != nil {
+			return nil, err
+		}
+		tr.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) { return sd.Dial(network, addr) }
+	default:
+		tr.Proxy = http.ProxyURL(pu)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), browseFetchTimeout)
+	defer cancel()
+	method := req.Method
+	if method == "" {
+		method = "GET"
+	}
+	var rdr io.Reader
+	if len(req.Body) > 0 {
+		rdr = bytes.NewReader(req.Body)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, method, req.URL, rdr)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := (&http.Client{Transport: tr, Timeout: browseFetchTimeout}).Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("fetch via proxy %s: %w", pu.Redacted(), err)
+	}
+	return readBrowseResp(resp)
 }

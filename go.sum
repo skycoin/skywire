@@ -102,6 +102,8 @@ github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c h1:Uj+2n5pWraLq
 github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c/go.mod h1:9MHaZG+XGoXfQW/L7yOpJx/gbKmCynAejV3Xpll/usw=
 github.com/0magnet/netscrape v0.0.0-20260908202925-8a8dea1c8609 h1:NaNeMDXsvjbGkE/qSX0lmx7GcVKJDmiarFV+suNPWaI=
 github.com/0magnet/netscrape v0.0.0-20260908202925-8a8dea1c8609/go.mod h1:8KUKD6yyp1VhFqWG8MYA+xM9CD+6cdjoNoXrhP/QMOM=
+github.com/0magnet/netscrape v0.0.0-20260909235121-57c7ea4544f8 h1:EyD0MMVbgrIiJoCek49mg41SvAz8X9q2y+V8KiL6Dwo=
+github.com/0magnet/netscrape v0.0.0-20260909235121-57c7ea4544f8/go.mod h1:8KUKD6yyp1VhFqWG8MYA+xM9CD+6cdjoNoXrhP/QMOM=
 github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d h1:T/CISGqaX8Sw1F+SYH6Uz8UQTsSN4KBabrCLShG+WRk=
 github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d/go.mod h1:xNKk6t2OtJQfb/pmWNiH8zUi0YCBuhYAr+fYa+rQ46s=
 github.com/0magnet/plot-go v0.0.0-20260908184629-9cfdeb563e8f h1:P1mbxDg4oisWjKscItJzjTaT38BS59GRQ3uLzoNuojU=

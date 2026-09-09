@@ -348,6 +348,25 @@
 					}
 					return 0;
 				}
+					// The browser's proxy setting (netscrape's ⚙ field) is one
+					// [scheme://]host:port, or empty for the visor's default egress.
+					// proxyPort reads it: {addr, port, err} — port is set when the
+					// address is this tab's own loopback (vnet:<port>, localhost:<port>),
+					// the one proxy a page can speak SOCKS5 to itself; err names an
+					// address that parses as nothing.
+					function proxyPort(p) {
+						var addr = String((p && p.proxy) || '').trim();
+						if (!addr) return { addr: '', port: 0 };
+						var s = /:\/\//.test(addr) ? addr : 'socks5://' + addr;
+						var pu;
+						try { pu = new URL(s); } catch (e) { return { addr: addr, port: 0, err: 'proxy: not [scheme://]host:port: ' + addr }; }
+						if (!pu.port) return { addr: addr, port: 0, err: 'proxy: port required: ' + addr };
+						return { addr: addr, port: vnetPort(pu) };
+					}
+					function proxyError(msg) {
+						return new Response('<body style="font:14px sans-serif;padding:2em;color:#a33">' + msg + '</body>',
+							{ status: 502, headers: new Headers({ 'content-type': 'text/html' }) });
+					}
 				globalThis.__netscrapeFetch = function (url) {
 					var u;
 					try { u = new URL(url, 'http://x/'); } catch (e) { return fetch(url); }
@@ -378,16 +397,21 @@
 					if (mesh && sv.fetchDmsg) {
 						return Promise.resolve(sv.fetchDmsg(u.hostname, 'GET', path, null)).then(respond);
 					}
-					if (sv.fetchClearnet) {
-						// The browser's proxy setting (netscrape's ⚙ panel) picks the
-						// exit: a named skysocks exit, this visor's own egress
-						// ("direct"), or empty for the visor's default.
-						var p = globalThis.__netscrapeProxy || {};
-						var exit = '';
-						if (p.mode === 'direct') exit = deskSelfPK;
-						else if (p.mode === 'exit' && /^[0-9a-f]{66}$/i.test(p.exit || '')) exit = p.exit;
-						return Promise.resolve(sv.fetchClearnet(exit, 'GET', url, null)).then(respond);
-					}
+						// A loopback proxy is this tab's own visor (its skysocks-client on
+						// the virtual loopback): the page speaks SOCKS5 to it directly, for
+						// http — it cannot do TLS through it. A page cannot reach any other
+						// proxy; the host-bridged desk below hands those to the visor.
+						var pp = proxyPort(globalThis.__netscrapeProxy);
+						if (pp.err) return Promise.resolve(proxyError(pp.err));
+						if (pp.port) {
+							if (u.protocol === 'https:') return Promise.resolve(proxyError('https through a loopback proxy needs the visor: use a proxy address the host can dial, or leave the field empty'));
+							if (!(globalThis.vnet && globalThis.vnet.listening(pp.port))) return Promise.resolve(proxyError('nothing is listening on vnet port ' + pp.port));
+							return Promise.resolve(globalThis.vnet.socksHttpFetch(pp.port, u.hostname + ':' + (u.port || 80), 'GET', path, null, {})).then(respond);
+						}
+						if (pp.addr) return Promise.resolve(proxyError('a browser visor can only use a proxy on its own loopback (vnet:&lt;port&gt;); ' + pp.addr + ' is not one'));
+						if (sv.fetchClearnet) {
+							return Promise.resolve(sv.fetchClearnet('', 'GET', url, null)).then(respond);
+						}
 					return fetch(url);
 				};
 				// The desk chrome comes from the library (0magnet/desk), mounted by
@@ -430,30 +454,24 @@
 						if (/\.(dmsg|skynet|skysocks)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
 							return browsePost('/api/browse/fetch', { host: host, port: u.port ? (parseInt(u.port, 10) || 80) : 80, method: 'GET', path: (u.pathname || '/') + (u.search || '') });
 						}
-						var p = globalThis.__netscrapeProxy || {};
-						var req = { method: 'GET', url: u.href };
-						if (p.mode === 'direct' && globalThis.__SKYWIRE_LOCAL_PK__) { req.exit_pk = globalThis.__SKYWIRE_LOCAL_PK__; }
-						else if (p.mode === 'exit' && /^[0-9a-f]{66}$/i.test(p.exit || '')) { req.exit_pk = p.exit; }
-						return browsePost('/api/browse/clearnet', req);
+							// The proxy field: a loopback address is this tab's own visor's
+							// SOCKS on the virtual loopback (http only — the page cannot do
+							// TLS through it); anything else the host visor dials.
+							var pp = proxyPort(globalThis.__netscrapeProxy);
+							if (pp.err) return Promise.resolve(proxyError(pp.err));
+							if (pp.port && u.protocol !== 'https:' && globalThis.vnet && globalThis.vnet.listening(pp.port)) {
+								return Promise.resolve(globalThis.vnet.socksHttpFetch(pp.port, host + ':' + (u.port || 80), 'GET', (u.pathname || '/') + (u.search || ''), null, {})).then(function (r) {
+									var h = new Headers();
+									if (r && r.headers) { try { for (var k in r.headers) h.set(k, r.headers[k]); } catch (e) { /* ignore */ } }
+									return new Response((r && r.body) || new Uint8Array(0), { status: (r && r.status) || 200, headers: h });
+								});
+							}
+							var req = { method: 'GET', url: u.href };
+							if (pp.addr && !pp.port) { req.proxy = pp.addr; }
+							return browsePost('/api/browse/clearnet', req);
 					};
 				}
 				var panel = globalThis.__skywireDesk;
-				// selfPK cache: poll the visor's /api/about once its HV listens;
-				// re-check occasionally in case the operator restarts the visor
-				// under a different identity.
-				var deskSelfPK = '';
-				(function pollPK() {
-					if (globalThis.vnet && globalThis.vnet.listening(hvPort)) {
-						globalThis.vnet.httpFetch(hvPort, 'GET', '/api/about', null, {}).then(function (r) {
-							try {
-								var a = JSON.parse(new TextDecoder().decode(r.body));
-								if (a && a.public_key) deskSelfPK = a.public_key;
-							} catch (e) { /* ignore */ }
-						}).catch(function () { /* ignore */ });
-					}
-					setTimeout(pollPK, deskSelfPK ? 60000 : 3000);
-				})();
-
 				// Session: remember across reloads whether a visor was RUNNING when
 				// the page went away — a visor the operator stopped stays stopped.
 				// Start the docs server. It is a plain HTTP server over the embedded
