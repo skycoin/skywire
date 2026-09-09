@@ -284,3 +284,65 @@ func TestRelayForwardSessions_CachedRouteFirst(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, env.srvPK, learned)
 }
+
+// A peer that failed to carry a relayed request to dst is demoted behind the
+// others (and a cached route to it dropped); the demotion lapses.
+func TestRelayForwardSessions_FailedPeerDemoted(t *testing.T) {
+	env := newRelayedTestEnv(t, nil)
+	other := addServer(t, env.dc, "demoted-other")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	entry, err := env.dc.Entry(ctx, other)
+	require.NoError(t, err)
+	require.NoError(t, env.relay.EnsureSession(ctx, entry))
+
+	env.relay.setCachedRoute(env.dstPK, env.srvPK)
+	got := env.relay.relayForwardSessions(env.dstPK)
+	require.Equal(t, env.srvPK, got[0].RemotePK())
+
+	env.relay.noteRelayForwardFailure(env.dstPK, env.srvPK)
+	_, cached := env.relay.getCachedRoute(env.dstPK)
+	require.False(t, cached, "a cached route to the failing peer is dropped")
+	got = env.relay.relayForwardSessions(env.dstPK)
+	require.Len(t, got, 2)
+	require.Equal(t, other, got[0].RemotePK(), "the failing peer goes last")
+	require.Equal(t, env.srvPK, got[1].RemotePK(), "but is still tried")
+
+	env.relay.relayMx.Lock()
+	env.relay.relayForwardBad[dstPeer{env.dstPK, env.srvPK}] = time.Now().Add(-time.Second)
+	env.relay.relayMx.Unlock()
+	got = env.relay.relayForwardSessions(env.dstPK)
+	require.Equal(t, env.srvPK, got[0].RemotePK(), "the demotion lapses")
+}
+
+// A dialer whose relay could not reach dst leaves the relay out of the ladder
+// for that destination for a while, and the server session carries the stream.
+func TestRelayNominee_DialSkipsRelayAfterItFails(t *testing.T) {
+	env := newRelayedTestEnv(t, nil)
+	require.Equal(t, 0, env.relay.maxRelayedStreams, "this relay refuses every stream")
+	relayPK := env.relay.LocalPK()
+
+	pk, sk := GenKeyPair(t, "nominee-skip")
+	c := NewClient(pk, sk, env.dc, &Config{MinSessions: 1})
+	c.SetLogger(logging.MustGetLogger("nominee-skip"))
+	var dials atomic.Int32
+	c.SetSessionDialer(skynetDialer(t, env.relay, relayPK, nil, &dials))
+	go c.Serve(context.Background())
+	t.Cleanup(func() { _ = c.Close() }) //nolint:errcheck
+	require.Eventually(t, func() bool { _, ok := c.Session(env.srvPK); return ok }, 15*time.Second, 50*time.Millisecond)
+	c.SetRelayPeers([]cipher.PubKey{relayPK}, 70)
+	require.Eventually(t, c.hasRelaySession, 15*time.Second, 50*time.Millisecond)
+
+	accepted := acceptOne(t, env.dstLis)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	str, err := c.DialStream(ctx, Addr{PK: env.dstPK, Port: relayedDstPort})
+	require.NoError(t, err)
+	defer str.Close() //nolint:errcheck
+	s := <-accepted
+	require.NotNil(t, s)
+	defer s.Close() //nolint:errcheck
+	require.Equal(t, 0, env.relay.RelayedStreams())
+	require.True(t, c.relayDialSkipped(env.dstPK), "the relay is skipped for this destination now")
+	echoCheck(t, str, s)
+}

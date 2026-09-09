@@ -333,11 +333,13 @@ type Client struct {
 	// relayPeers are the peers the visor nominated as relays (SetRelayPeers),
 	// relayPort the dmsg port their acceptors listen on, relayFailAt the
 	// per-nominee backoff after a failed dial. Guarded by relayMx.
-	relayPeers  map[cipher.PubKey]struct{}
-	relayPort   uint16
-	relayFailAt map[cipher.PubKey]time.Time
-	relayGen    uint64 // bumped on every nomination change; the serve loop restarts its pass on a new value
-	relayMx     sync.Mutex
+	relayPeers      map[cipher.PubKey]struct{}
+	relayPort       uint16
+	relayFailAt     map[cipher.PubKey]time.Time
+	relayGen        uint64                      // bumped on every nomination change; the serve loop restarts its pass on a new value
+	relayForwardBad map[dstPeer]time.Time       // relay side: peers that recently failed for a destination
+	relayDialSkip   map[cipher.PubKey]time.Time // dialer side: destinations the relay recently failed to reach
+	relayMx         sync.Mutex
 }
 
 // AddDiscovery registers an additional dmsg-discovery this client
@@ -397,6 +399,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	c.EntityCommon.relaySessionLookup = c.relaySession
 	c.EntityCommon.forwardSessionsFunc = c.relayForwardSessions
 	c.EntityCommon.forwardedFunc = c.setCachedRoute
+	c.EntityCommon.forwardFailedFunc = c.noteRelayForwardFailure
 
 	// Init callback: on set session.
 	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
