@@ -777,7 +777,7 @@ func (ce *Client) finishDialedSession(ctx context.Context, dSes ClientSession, n
 				// (the acceptor's allow check runs on the proven key): back the
 				// nominee off instead of re-dialing it on every loss.
 				if time.Since(started) < relayProbation {
-					ce.noteRelayFailure(dSes.RemotePK())
+					ce.noteRelayFailure(dSes.RemotePK(), relayFailureBackoff)
 				}
 			} else {
 				ce.noteLostSession(dSes.RemotePK())
