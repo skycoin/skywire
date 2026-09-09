@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -234,11 +235,7 @@ func TestNativeDeskServing(t *testing.T) {
 // the shared skeleton: `hv serve`'s desk must still wire the wasm assets and
 // the harness injection anchor exactly as before.
 func TestDeskShellHTMLWasmMode(t *testing.T) {
-	page := string(deskShellHTML(
-		`<script src="/wasm_exec.js?variant=go"></script>`+"\n"+
-			`<script src="/browse.js"></script>`+"\n"+
-			`<script src="/desk-boot.js"></script>`,
-		deskWasmBootOpts(false, 0)))
+	page := string(deskShellHTML(wasmDeskScripts(), deskWasmBootOpts(false, 0)))
 	for _, want := range []string{
 		"deskWasmURL: '/wasm-visor.wasm'",
 		"wasmURL: '/skywire.wasm'",
@@ -246,6 +243,11 @@ func TestDeskShellHTMLWasmMode(t *testing.T) {
 		"skywireDeskBoot(",
 		// The exact tag ServeWasm's --harness injection keys on.
 		`<script src="/desk-boot.js"></script>`,
+		// The served-build stamp the poller compares against, and the poller
+		// itself — without both, a desk tab never learns that the skywire.wasm
+		// its visor runs has been rebuilt (one sat 22 h on a stale blob).
+		`window.__SKYWIRE_WASM_VERSION__="` + servedVersionToken + `"`,
+		`<script src="/autoupdate.js"></script>`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("wasm desk page lacks %s", want)
@@ -253,6 +255,73 @@ func TestDeskShellHTMLWasmMode(t *testing.T) {
 	}
 	if strings.Contains(page, "__DESK_SCRIPTS__") || strings.Contains(page, "__DESK_OPTS__") {
 		t.Error("template placeholders leaked into the rendered page")
+	}
+	// The poller must run before desk-boot, so it is armed even if boot fails.
+	if strings.Index(page, "/autoupdate.js") > strings.Index(page, "/desk-boot.js") {
+		t.Error("autoupdate.js must be included before desk-boot.js")
+	}
+	rendered := string(renderServedVersion([]byte(page), "abc-def"))
+	if strings.Contains(rendered, servedVersionToken) || !strings.Contains(rendered, `window.__SKYWIRE_WASM_VERSION__="abc-def"`) {
+		t.Error("served-version token not filled in the rendered page")
+	}
+}
+
+// TestServedUIVersionTracksExecWasm pins that the native port's /api/ui-version
+// — what the desk's poller compares against — changes when the skywire command
+// module it serves changes (appears, or is rebuilt in place), and that the
+// served desk page boots with exactly the value the endpoint answers, so a
+// poll compares like with like.
+func TestServedUIVersionTracksExecWasm(t *testing.T) {
+	hv, _ := deskTestHypervisor(t)
+	h := hv.uiHandler()
+	get := func(path string) string {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s: status=%d", path, w.Code)
+		}
+		return w.Body.String()
+	}
+	// /api/ui-version is mounted on the API router, not uiHandler; ask its
+	// handler directly.
+	version := func() string {
+		w := httptest.NewRecorder()
+		hv.getUIVersion()(w, httptest.NewRequest(http.MethodGet, "/api/ui-version", nil))
+		return w.Body.String()
+	}
+	v0 := version()
+	if v0 == "" {
+		t.Fatal("/api/ui-version is empty with UI assets present")
+	}
+	if !strings.Contains(get("/"), `window.__SKYWIRE_UI_VERSION__="`+v0+`"`) {
+		t.Errorf("desk page does not boot with the polled version %q", v0)
+	}
+
+	// A command module appears (hypervisor.wasm_serve.exec_wasm).
+	p := filepath.Join(t.TempDir(), "skywire.wasm")
+	if err := os.WriteFile(p, []byte("build one"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Date(2026, 9, 8, 9, 38, 0, 0, time.UTC)
+	if err := os.Chtimes(p, t0, t0); err != nil {
+		t.Fatal(err)
+	}
+	hv.c.WasmServe = &visorconfig.WasmServeConf{ExecWasm: p}
+	v1 := version()
+	if v1 == v0 {
+		t.Fatalf("version %q did not change when a command module appeared", v1)
+	}
+	if !strings.Contains(get("/"), `window.__SKYWIRE_UI_VERSION__="`+v1+`"`) {
+		t.Errorf("desk page does not boot with the polled version %q", v1)
+	}
+
+	// The module is rebuilt in place while the server runs.
+	t1 := t0.Add(5 * time.Hour)
+	if err := os.Chtimes(p, t1, t1); err != nil {
+		t.Fatal(err)
+	}
+	if v2 := version(); v2 == v1 {
+		t.Fatalf("version %q did not change when the command module was rebuilt", v2)
 	}
 }
 
