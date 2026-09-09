@@ -124,6 +124,13 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 			var lastErr error
 			for _, nType := range types.PreferredOrder(types.STCPR, types.SUDPH, types.DMSG) {
 				switch nType {
+				case types.DMSG:
+					// Same gate as EnsureBestTransport: a browser visor never
+					// mints a dmsg-type transport (it held one per proxy exit
+					// its auto-exit loop had tried, never released).
+					if !transport.DmsgRelayFallback {
+						continue
+					}
 				case types.STCPR:
 					if !advertised[types.STCPR] {
 						continue
