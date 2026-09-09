@@ -393,8 +393,11 @@ func (v *Visor) verifyProxyExit(ctx context.Context, log *logging.Logger) bool {
 			log.WithError(err).Debug("proxy verify: CONNECT failed; retrying within window")
 			continue
 		}
-		_ = conn.SetDeadline(time.Now().Add(15 * time.Second))                                         //nolint:errcheck
-		_, _ = conn.Write([]byte("GET / HTTP/1.0\r\nHost: neverssl.com\r\nConnection: close\r\n\r\n")) //nolint:errcheck
+		_ = conn.SetDeadline(time.Now().Add(15 * time.Second)) //nolint:errcheck
+		// The User-Agent matters: neverssl.com (Apache) answers a header-less
+		// request with 403. relayedResponseOK no longer judges the code, but a
+		// 200 is the reply the read limit below was sized for.
+		_, _ = conn.Write([]byte("GET / HTTP/1.0\r\nHost: neverssl.com\r\nUser-Agent: skywire-visor\r\nConnection: close\r\n\r\n")) //nolint:errcheck
 		// Read a bounded prefix, not one byte: the verdict needs the status line,
 		// the whole header block and enough body for the pre-header fallback
 		// marker, which sits ~3 KiB into the interstitial. The request asked for
@@ -414,11 +417,17 @@ func (v *Visor) verifyProxyExit(ctx context.Context, log *logging.Logger) bool {
 
 // relayedResponseOK reports whether the bytes read back through the skysocks
 // listener are a real reply RELAYED from the exit. Two things have to hold: it
-// must be a well-formed HTTP/1.x status line with a 2xx/3xx code (a zombie exit
-// that accepts the CONNECT and then relays nothing produces neither), and it
-// must not be one of the responses the local client synthesizes when it has no
-// session — those are ordinary-looking 200s carrying an HTML page, and treating
-// one as proof of life is the bug this guards.
+// must be a well-formed HTTP/1.x status line (a zombie exit that accepts the
+// CONNECT and then relays nothing produces none), and it must not be one of the
+// responses the local client synthesizes when it has no session — those are
+// ordinary-looking 200s carrying an HTML page, and treating one as proof of
+// life is the bug this guards. The status CODE is deliberately not judged: a
+// 4xx/5xx still came from the origin through the exit, which is all that is
+// being proven — the skysocks exit never synthesizes HTTP, and the origin's
+// policy toward the request says nothing about the exit's health. The old
+// 2xx/3xx-only rule, paired with a request that carried no User-Agent,
+// rejected every working exit once neverssl.com started answering such
+// requests with 403.
 func relayedResponseOK(raw []byte) bool {
 	line, _, ok := bytes.Cut(raw, []byte("\r\n"))
 	if !ok || !bytes.HasPrefix(line, []byte("HTTP/1.")) {
@@ -429,7 +438,7 @@ func relayedResponseOK(raw []byte) bool {
 		return false
 	}
 	code, err := strconv.Atoi(string(f[1]))
-	if err != nil || code < 200 || code >= 400 {
+	if err != nil || code < 100 || code >= 600 {
 		return false
 	}
 	return !proxyinterstitial.IsSyntheticResponse(raw)
