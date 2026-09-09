@@ -111,9 +111,9 @@ var (
 
 // RouteSetupHook is an alias for a function that takes remote public key
 // and a reference to transport manager in order to setup i.e:
-// 1. If the remote is either available stcpr or sudph, establish the transport to the remote and then continue with the route creation process.
-// 2. If neither of these direct transports is available, check if automatic transports are currently active. If they are continue with route creation.
-// 3. If none of the first two checks was successful, establish a dmsg transport and then continue with route creation.
+// 1. If a transport of any type to the remote already exists, continue with route creation over it.
+// 2. Otherwise, if the remote advertises stcpr or sudph, establish that transport and continue.
+// 3. Otherwise try the remaining direct types in preference order, and a dmsg transport last.
 type RouteSetupHook func(cipher.PubKey, *transport.Manager) error
 
 // Config configures Router.
