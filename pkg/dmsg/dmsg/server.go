@@ -61,15 +61,25 @@ type ServerConfig struct {
 	// Zero uses DefaultMaxRelayedStreams. Local client↔client bridging on
 	// this same server is unaffected — only peer-relayed streams count.
 	MaxRelayedStreams int
+
+	// AcceptRelayedRequests lets a CLIENT session carry stream requests whose
+	// source key is not the session's own: a visor forwarding a request on
+	// another key's behalf over its own session (#4484 stage 3, dmsg over
+	// skynet through a host). The request is still signed by, and verified
+	// against, its source key, so the relaying session cannot impersonate
+	// anyone; what it spends is this server's relay capacity, charged like a
+	// peer bridge. Peer sessions carry foreign sources regardless.
+	AcceptRelayedRequests bool
 }
 
 // DefaultServerConfig returns the default server config.
 func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
-		MaxSessions:       DefaultMaxSessions,
-		UpdateInterval:    DefaultUpdateInterval,
-		MaxPeerLinks:      DefaultMaxPeerLinks,
-		MaxRelayedStreams: DefaultMaxRelayedStreams,
+		MaxSessions:           DefaultMaxSessions,
+		UpdateInterval:        DefaultUpdateInterval,
+		MaxPeerLinks:          DefaultMaxPeerLinks,
+		MaxRelayedStreams:     DefaultMaxRelayedStreams,
+		AcceptRelayedRequests: true,
 	}
 }
 
@@ -193,6 +203,7 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 		s.acceptedPeerPKs[pk] = struct{}{}
 	}
 	s.EntityCommon.acceptPeerAnnouncements = true
+	s.EntityCommon.acceptRelayedRequests = conf.AcceptRelayedRequests
 	s.EntityCommon.maxRelayedStreams = conf.MaxRelayedStreams
 	if s.EntityCommon.maxRelayedStreams <= 0 {
 		s.EntityCommon.maxRelayedStreams = DefaultMaxRelayedStreams
