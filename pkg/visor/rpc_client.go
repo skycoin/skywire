@@ -2132,6 +2132,27 @@ func (rc *rpcClient) AddHypervisor(pk cipher.PubKey) error {
 	return rc.Call("AddHypervisor", &pk, &struct{}{})
 }
 
+// PendingHypervisors calls PendingHypervisors.
+func (rc *rpcClient) PendingHypervisors() ([]PendingHypervisor, error) {
+	var out []PendingHypervisor
+	err := rc.Call("PendingHypervisors", &struct{}{}, &out)
+	return out, err
+}
+
+// ApproveHypervisor calls ApproveHypervisor.
+func (rc *rpcClient) ApproveHypervisor(sel string) (cipher.PubKey, error) {
+	var out cipher.PubKey
+	err := rc.Call("ApproveHypervisor", &sel, &out)
+	return out, err
+}
+
+// NewPairCode calls NewPairCode.
+func (rc *rpcClient) NewPairCode(ttl time.Duration) (PairCode, error) {
+	var out PairCode
+	err := rc.Call("NewPairCode", &ttl, &out)
+	return out, err
+}
+
 // RemoveHypervisor tears down a runtime-added hypervisor connection.
 func (rc *rpcClient) RemoveHypervisor(pk cipher.PubKey) error {
 	return rc.Call("RemoveHypervisor", &pk, &struct{}{})

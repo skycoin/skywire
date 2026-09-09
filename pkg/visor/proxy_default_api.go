@@ -1102,6 +1102,18 @@ func (proxyDefaultAPI) AddHypervisor(_ cipher.PubKey) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) PendingHypervisors() ([]PendingHypervisor, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) ApproveHypervisor(_ string) (cipher.PubKey, error) {
+	return cipher.PubKey{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) NewPairCode(_ time.Duration) (PairCode, error) {
+	return PairCode{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) RemoveHypervisor(_ cipher.PubKey) error {
 	return ErrProxyNotSupported
 }

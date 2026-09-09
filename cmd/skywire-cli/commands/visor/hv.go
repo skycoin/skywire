@@ -543,3 +543,73 @@ var hvTreeCmd = &cobra.Command{
 	Hidden: true,
 	Run:    hvLsCmd.Run,
 }
+
+var (
+	hvPairCode bool
+	hvPairTTL  time.Duration
+)
+
+func init() {
+	hvPairCmd.Flags().BoolVar(&hvPairCode, "code", false, "mint a one-time pairing code to type into the tab instead of approving here")
+	hvPairCmd.Flags().DurationVar(&hvPairTTL, "ttl", 10*time.Minute, "how long a minted code stays valid")
+	hvCmd.AddCommand(hvPairCmd)
+}
+
+var hvPairCmd = &cobra.Command{
+	Use:   "pair [fingerprint|public-key]",
+	Short: "List pending hypervisors by fingerprint and approve one (or mint a one-time code)",
+	Long: `Pair a desk tab (or any peer) with this visor as its hypervisor.
+
+A peer that holds a same-origin transport to this visor, or that tried
+the transport RPC without being whitelisted, is PENDING. With no
+argument this lists pending keys by fingerprint; with a fingerprint
+(or a unique prefix of one, or a full public key) it approves that
+peer — the existing 'hv add' path, so the approval persists like one
+and takes effect at once.
+
+--code mints a one-time code instead. Type it into the tab's Pair
+window; the tab redeems it over the page's own origin. Codes expire
+after --ttl and are single-use; a few wrong codes revoke every
+outstanding one. Fingerprint = first 40 bits of sha256(pk).`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		switch {
+		case hvPairCode:
+			code, err := rpcClient.NewPairCode(hvPairTTL)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			internal.PrintOutput(cmd.Flags(), code,
+				fmt.Sprintf("Pairing code: %s  (valid until %s)\n", code.Code, code.Expires.Format(time.Kitchen)))
+		case len(args) == 1:
+			pk, err := rpcClient.ApproveHypervisor(args[0])
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			internal.PrintOutput(cmd.Flags(), map[string]any{"pk": pk.Hex(), "paired": true},
+				fmt.Sprintf("Paired %s (%s)\n", pk.Hex(), visor.HypervisorFingerprint(pk)))
+		default:
+			pending, err := rpcClient.PendingHypervisors()
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			if len(pending) == 0 {
+				internal.PrintOutput(cmd.Flags(), pending, "No pending hypervisors.\n")
+				return
+			}
+			var b strings.Builder
+			tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(tw, "FINGERPRINT\tVIA\tFIRST SEEN\tLAST SEEN\tPUBLIC KEY")
+			for _, p := range pending {
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.Fingerprint, p.Via,
+					p.FirstSeen.Format(time.Kitchen), p.LastSeen.Format(time.Kitchen), p.PK.Hex())
+			}
+			_ = tw.Flush() //nolint:errcheck
+			internal.PrintOutput(cmd.Flags(), pending, b.String())
+		}
+	},
+}

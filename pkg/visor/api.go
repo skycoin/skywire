@@ -378,6 +378,14 @@ type API interface {
 	DmsgReconnect() (int, error)
 	DmsgSetMinSessions(n int) error
 	AddHypervisor(pk cipher.PubKey) error
+	// PendingHypervisors lists peers waiting to be approved as hypervisors
+	// (a same-origin transport or a refused RPC), by fingerprint.
+	PendingHypervisors() ([]PendingHypervisor, error)
+	// ApproveHypervisor approves a pending key by public key or fingerprint
+	// (or unique prefix); it is AddHypervisor with a lookup in front.
+	ApproveHypervisor(sel string) (cipher.PubKey, error)
+	// NewPairCode mints a one-time pairing code valid for ttl (0 = default).
+	NewPairCode(ttl time.Duration) (PairCode, error)
 	RemoveHypervisor(pk cipher.PubKey) error
 	RemoveAllHypervisors() (int, error)
 	SetHypervisorPassword(oldPassword, newPassword string) error

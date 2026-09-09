@@ -1098,6 +1098,12 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// reason /ws is: /api's timeout middleware is not an http.Hijacker.
 		r.Get("/tp/ws", hv.getTransportWS())
 
+		// /pair — pairing for a tab that has no session yet: its own standing,
+		// and the one-time-code fallback to `skywire cli visor hv pair`. See
+		// hypervisor_handlers_pair.go.
+		r.Get("/pair/status", hv.getPairStatus())
+		r.Post("/pair", hv.postPair())
+
 		// Mount tp-viz UI if enabled.
 		//
 		// Inside its own authenticated group: these paths sit OUTSIDE the

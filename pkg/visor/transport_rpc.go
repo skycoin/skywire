@@ -10,6 +10,7 @@
 package visor
 
 import (
+	"github.com/skycoin/skywire/pkg/cipher"
 	"net/rpc"
 	"sync"
 
@@ -23,9 +24,12 @@ type TransportRPCServer struct {
 	log       *logging.Logger
 	rpcServer *rpc.Server
 	whitelist pty.Whitelist
-	mux       *transport.VStreamMux
-	done      chan struct{}
-	once      sync.Once
+	// onRejected, when set, is told about each peer refused for not being
+	// whitelisted — the pairing list feeds on it.
+	onRejected func(cipher.PubKey)
+	mux        *transport.VStreamMux
+	done       chan struct{}
+	once       sync.Once
 }
 
 // NewTransportRPCServer creates a transport-level RPC server.
@@ -79,6 +83,9 @@ func (s *TransportRPCServer) Serve() {
 		if ok, err := s.whitelist.Get(remotePK); err != nil || !ok {
 			s.log.WithField("remote_pk", remotePK.String()).
 				Warn("Transport RPC rejected: PK not in whitelist")
+			if s.onRejected != nil {
+				s.onRejected(remotePK)
+			}
 			stream.Close() //nolint:errcheck,gosec
 			continue
 		}
@@ -92,6 +99,9 @@ func (s *TransportRPCServer) Serve() {
 		}()
 	}
 }
+
+// SetRejectedHook installs the callback run for each refused peer.
+func (s *TransportRPCServer) SetRejectedHook(f func(cipher.PubKey)) { s.onRejected = f }
 
 // Close stops the server.
 func (s *TransportRPCServer) Close() error {

@@ -41,6 +41,20 @@ skywire cli config gen -i
 
 After starting up the visor, the UI will be exposed by default on `localhost:8000`.
 
+From another device on the same LAN, use the machine's mDNS name:
+`http://<hostname>.local:8000/`. That name comes from the OS (Avahi on
+Linux, Bonjour on macOS/Windows); the visor advertises nothing itself.
+
+The UI password gate is on for a freshly generated hypervisor config; the
+first visit creates the admin account, and the reset is
+`skywire cli visor hv passwd --force` on the machine itself.
+
+A desk tab opened from that page runs its own visor and asks to drive the
+host as a hypervisor. Approve it on the machine with
+`skywire cli visor hv pair` (lists pending tabs by fingerprint, then
+`hv pair <fingerprint>`), or mint a one-time code with
+`skywire cli visor hv pair --code` and type it into the tab's Pair window.
+
 ## Hypervisor terminal UI
 
 A terminal-based hypervisor that mirrors the web UI's read and write actions
