@@ -509,7 +509,10 @@ func (ce *Client) Serve(ctx context.Context) {
 	porterReapLoopOnce := new(sync.Once)
 	reapLoopOnce := new(sync.Once)
 
-	needInitialPost := true
+	// An unpublished client (Config.NoRegister) never posts an entry; it also
+	// deletes any stale one it left behind while it was published.
+	needInitialPost := !ce.noRegister
+	staleEntryChecked := false
 
 serve:
 	for {
@@ -685,6 +688,10 @@ serve:
 				ce.log.Info("Initial post entry succeeded")
 				needInitialPost = false
 			}
+		}
+		if ce.noRegister && !staleEntryChecked {
+			staleEntryChecked = true
+			go ce.deleteOwnEntry(cancellabelCtx)
 		}
 
 		for n, entry := range entries {
@@ -1582,6 +1589,12 @@ func (ce *Client) reapExcessIdleSessions(idleStreak map[cipher.PubKey]int, idleC
 	min := ce.MinSessions()
 	if min <= 0 {
 		return
+	}
+	if ce.noRegister && ce.hasRelaySession() {
+		// An unpublished client with a relay attached keeps no server-session
+		// floor: the relay carries its dmsg; servers are dialed on demand and
+		// reaped when idle. The relay session itself is never idle (see below).
+		min = 1
 	}
 	ce.sessionsMx.Lock()
 	sessions := make(map[cipher.PubKey]*SessionCommon, len(ce.sessions))

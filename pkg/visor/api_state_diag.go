@@ -64,6 +64,8 @@ type DiagVStreamMux struct {
 
 // DiagDmsg is the dmsg client's session and relay state.
 type DiagDmsg struct {
+	// Unpublished: this client publishes no discovery entry (a browser visor).
+	Unpublished   bool              `json:"unpublished"`
 	Sessions      []DiagDmsgSession `json:"sessions,omitempty"`
 	RelayNominees []cipher.PubKey   `json:"relay_nominees,omitempty"`
 	RelayingFor   []DiagRelayClient `json:"relaying_for,omitempty"`
@@ -171,7 +173,7 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 	}
 
 	if v.dmsgC != nil {
-		dd := &DiagDmsg{}
+		dd := &DiagDmsg{Unpublished: v.dmsgC.Unpublished()}
 		for _, s := range v.dmsgC.AllSessions() {
 			dd.Sessions = append(dd.Sessions, DiagDmsgSession{
 				PK:        s.RemotePK(),
