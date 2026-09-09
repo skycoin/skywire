@@ -47,7 +47,7 @@ github.com/0magnet/coloredcobra
 # github.com/0magnet/cosmos-go v0.0.0-20260908144221-45e3d0561585
 ## explicit; go 1.24
 github.com/0magnet/cosmos-go
-# github.com/0magnet/desk v0.0.0-20260908201307-31a6f6d6f00c
+# github.com/0magnet/desk v0.0.0-20260909002914-271c2999cd2c
 ## explicit; go 1.26
 github.com/0magnet/desk
 github.com/0magnet/desk/dom
