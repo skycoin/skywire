@@ -305,7 +305,8 @@ func (v *Visor) proxyClientTakenOver(log *logging.Logger, want string, expectRun
 	configured := v.GetSkysocksClientAddress()
 	running := false
 	if v.procM != nil {
-		_, running = v.procM.ProcByName(skyenv.SkysocksClientName)
+		proc, ok := v.procM.ProcByName(skyenv.SkysocksClientName)
+		running = ok && proc != nil
 	}
 	if !proxyExitTakenOver(configured, want, running, expectRunning) {
 		return false
