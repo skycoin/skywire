@@ -153,3 +153,58 @@ func TestRelayNominee_DoesNotFanOutAcrossServers(t *testing.T) {
 	require.Equal(t, 2, c.SessionCount(), "one server session plus the relay; no fan-out to the other servers")
 	require.Equal(t, int32(1), dials.Load())
 }
+
+// hideEntryDisc hides one client entry from the dialer, the way the deployment
+// services (which register no client entry) look to every client.
+type hideEntryDisc struct {
+	disc.APIClient
+	hidden cipher.PubKey
+}
+
+func (d hideEntryDisc) Entry(ctx context.Context, pk cipher.PubKey) (*disc.Entry, error) {
+	if pk == d.hidden {
+		return nil, disc.ErrKeyNotFound
+	}
+	return d.APIClient.Entry(ctx, pk)
+}
+
+// With a relay attached, every stream goes through it first: a destination
+// without a discovery entry (which otherwise takes the connected-servers
+// fallback) and a destination with a cached server route alike.
+func TestRelayNominee_RelayGoesBeforeLookupAndCache(t *testing.T) {
+	env := newRelayedTestEnv(t, nil)
+	env.relay.maxRelayedStreams = 8
+	relayPK := env.relay.LocalPK()
+
+	pk, sk := GenKeyPair(t, "nominee-first")
+	c := NewClient(pk, sk, hideEntryDisc{APIClient: env.dc, hidden: env.dstPK}, &Config{MinSessions: 1})
+	c.SetLogger(logging.MustGetLogger("nominee-first"))
+	var dials atomic.Int32
+	c.SetSessionDialer(skynetDialer(t, env.relay, relayPK, nil, &dials))
+	go c.Serve(context.Background())
+	t.Cleanup(func() { _ = c.Close() }) //nolint:errcheck
+	require.Eventually(t, func() bool { _, ok := c.Session(env.srvPK); return ok }, 15*time.Second, 50*time.Millisecond)
+	c.SetRelayPeers([]cipher.PubKey{relayPK}, 70)
+	require.Eventually(t, c.hasRelaySession, 15*time.Second, 50*time.Millisecond)
+
+	dialThroughRelay := func() {
+		accepted := acceptOne(t, env.dstLis)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		str, err := c.DialStream(ctx, Addr{PK: env.dstPK, Port: relayedDstPort})
+		require.NoError(t, err)
+		defer str.Close() //nolint:errcheck
+		s := <-accepted
+		require.NotNil(t, s)
+		defer s.Close() //nolint:errcheck
+		require.Equal(t, 1, env.relay.RelayedStreams(), "the stream must be carried by the relay")
+		echoCheck(t, str, s)
+	}
+	// No entry for dst on the dialer's discovery: still the relay, not the
+	// connected-servers fallback.
+	dialThroughRelay()
+	require.Eventually(t, func() bool { return env.relay.RelayedStreams() == 0 }, 5*time.Second, 20*time.Millisecond)
+	// A cached server route for dst does not outrank the relay either.
+	c.setCachedRoute(env.dstPK, env.srvPK)
+	dialThroughRelay()
+}
