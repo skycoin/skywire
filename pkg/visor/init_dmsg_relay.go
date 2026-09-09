@@ -124,11 +124,14 @@ func (v *Visor) relayPeerAllowed(pk cipher.PubKey) bool {
 const relayNominationInterval = 10 * time.Second
 
 // nominateRelayPeers keeps the dmsg client's relay nominees in step with the
-// visor's transports: a hypervisor or a persistent-transport peer that this
-// visor has a live transport to is nominated (dmsg.Client.SetRelayPeers);
-// when the transport goes, so does the nomination. No configuration takes
-// part — the trust is the hypervisor relationship or the operator's pinned
-// transport, and the reachability is the transport itself. A nominee that
+// visor's transports: a persistent-transport peer that this visor has a live
+// transport to is nominated (dmsg.Client.SetRelayPeers); when the transport
+// goes, so does the nomination. No configuration takes part beyond the pin the
+// operator already made — a persistent transport says "keep a link to this
+// peer", and a desk tab's attach to the visor serving it is exactly one. The
+// hypervisor list is deliberately NOT a source: it names the peers that manage
+// THIS visor, which on a hypervisor includes the tabs it serves — a host must
+// not carry its dmsg through a browser. Pairing (stage 5) will widen this. A nominee that
 // has no relay acceptor, or refuses us, fails the dial and is backed off by
 // the client; the configured servers stay the bootstrap and the fallback.
 func (v *Visor) nominateRelayPeers(ctx context.Context, dmsgC *dmsg.Client) {
@@ -144,15 +147,13 @@ func (v *Visor) nominateRelayPeers(ctx context.Context, dmsgC *dmsg.Client) {
 	}
 }
 
-// relayNominees returns the trusted peers this visor has a live transport to.
+// relayNominees returns the persistent-transport peers this visor has a live
+// transport to.
 func (v *Visor) relayNominees() []cipher.PubKey {
 	if v.tpM == nil || v.conf == nil {
 		return nil
 	}
-	trusted := make(map[cipher.PubKey]struct{}, len(v.conf.Hypervisors)+len(v.conf.PersistentTransports))
-	for _, pk := range v.conf.Hypervisors {
-		trusted[pk] = struct{}{}
-	}
+	trusted := make(map[cipher.PubKey]struct{}, len(v.conf.PersistentTransports))
 	for _, pt := range v.conf.PersistentTransports {
 		trusted[pt.PK] = struct{}{}
 	}
