@@ -692,9 +692,10 @@ serve:
 				// heard while parked): rebuild the list with them in front.
 				continue serve
 			}
-			if ce.isRelayPeer(entry.Static) && ce.relayBackedOff(entry.Static) {
-				// Backed off after this pass's list was built (a refusal that
-				// only showed after the handshake): do not re-dial it now.
+			if ce.relayBackedOff(entry.Static) {
+				// A relay (nominee or seeded skynet entry) backed off after this
+				// pass's list was built — a refusal only shows after the
+				// handshake: do not re-dial it now.
 				continue
 			}
 
