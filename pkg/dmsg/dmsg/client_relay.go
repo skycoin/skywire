@@ -184,8 +184,18 @@ func (ce *Client) relayForwardSessions(dst cipher.PubKey) []*SessionCommon {
 	}
 	ordered := append(ce.sortedDelegatedSessions(delegated), ce.sortedMeshSessions(delegated)...)
 	out := make([]*SessionCommon, 0, len(ordered))
+	// The server that last reached dst — from this client's own dials or an
+	// earlier forward — goes first. The deployment services have no client
+	// entry, so without it every relayed request walked the mesh in latency
+	// order and burned a handshake timeout on each server that did not hold
+	// the service.
+	if cached, ok := ce.getCachedRoute(dst); ok {
+		if ses, ok := ce.session(cached); ok && ses.carrier != CarrierSkynet {
+			out = append(out, ses)
+		}
+	}
 	for _, s := range ordered {
-		if s.carrier == CarrierSkynet {
+		if s.carrier == CarrierSkynet || (len(out) > 0 && s.SessionCommon == out[0]) {
 			continue
 		}
 		out = append(out, s.SessionCommon)

@@ -243,3 +243,44 @@ func TestRelayNominee_RetriesAfterBackoffLapses(t *testing.T) {
 	require.False(t, c.SetRelayPeers([]cipher.PubKey{relayPK}, 70), "the set did not change")
 	require.Eventually(t, c.hasRelaySession, 15*time.Second, 50*time.Millisecond)
 }
+
+// The relay forwards via the server that last reached the destination first,
+// and learns that server from a forward it carried.
+func TestRelayForwardSessions_CachedRouteFirst(t *testing.T) {
+	env := newRelayedTestEnv(t, nil)
+	env.relay.maxRelayedStreams = 8
+	relayPK := env.relay.LocalPK()
+	other := addServer(t, env.dc, "cached-other")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	entry, err := env.dc.Entry(ctx, other)
+	require.NoError(t, err)
+	require.NoError(t, env.relay.EnsureSession(ctx, entry))
+
+	// No cache: the destination's delegated server (srv) leads.
+	got := env.relay.relayForwardSessions(env.dstPK)
+	require.Len(t, got, 2)
+	require.Equal(t, env.srvPK, got[0].RemotePK())
+	// A cached route to the other server outranks it.
+	env.relay.setCachedRoute(env.dstPK, other)
+	got = env.relay.relayForwardSessions(env.dstPK)
+	require.Len(t, got, 2, "the cached server is not listed twice")
+	require.Equal(t, other, got[0].RemotePK())
+	env.relay.evictCachedRoute(env.dstPK)
+
+	// A forward the relay carries teaches it the route.
+	c, _ := newSkynetDialer(t, env, "cached-dialer")
+	var dials atomic.Int32
+	c.SetSessionDialer(skynetDialer(t, env.relay, relayPK, nil, &dials))
+	require.Eventually(t, func() bool { _, ok := c.Session(relayPK); return ok }, 15*time.Second, 50*time.Millisecond)
+	accepted := acceptOne(t, env.dstLis)
+	str, err := c.DialStream(ctx, Addr{PK: env.dstPK, Port: relayedDstPort})
+	require.NoError(t, err)
+	defer str.Close() //nolint:errcheck
+	s := <-accepted
+	require.NotNil(t, s)
+	defer s.Close() //nolint:errcheck
+	learned, ok := env.relay.getCachedRoute(env.dstPK)
+	require.True(t, ok)
+	require.Equal(t, env.srvPK, learned)
+}

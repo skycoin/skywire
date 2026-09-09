@@ -396,6 +396,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	c.relaySessions = make(map[cipher.PubKey]*SessionCommon)
 	c.EntityCommon.relaySessionLookup = c.relaySession
 	c.EntityCommon.forwardSessionsFunc = c.relayForwardSessions
+	c.EntityCommon.forwardedFunc = c.setCachedRoute
 
 	// Init callback: on set session.
 	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
