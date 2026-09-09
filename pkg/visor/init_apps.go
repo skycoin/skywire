@@ -219,6 +219,7 @@ func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
 		// The launcher autostarted the configured exit; give it a beat, then
 		// hold it to the same end-to-end bar. A live pin wins and we're done;
 		// a dead one is stopped and the discovery rotation below takes over.
+		want := v.GetSkysocksClientAddress()
 		select {
 		case <-ctx.Done():
 			return
@@ -232,6 +233,9 @@ func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
 			log.Warn("configured proxy exit stopped relaying; rotating to discovery")
 		} else {
 			log.Warn("configured proxy exit failed end-to-end verification; rotating to discovery")
+		}
+		if v.proxyClientTakenOver(log, want, true) {
+			return
 		}
 		_ = v.StopSkysocksClients() //nolint:errcheck
 	}
@@ -259,6 +263,11 @@ func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
 			default:
 			}
 			pk := svcs[i].Addr.PubKey().String()
+			// The loop last left the client STOPPED; a client running now was
+			// started by the operator in the meantime, and is theirs.
+			if v.proxyClientTakenOver(log, "", false) {
+				return
+			}
 			if err := v.StartSkysocksClient(pk); err != nil {
 				log.WithError(err).Debug("proxy-client auto-exit candidate failed to start; trying another")
 				continue
@@ -272,9 +281,49 @@ func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
 			} else {
 				log.WithField("exit", pk).Warn("proxy-client exit failed end-to-end verification; rotating")
 			}
+			if v.proxyClientTakenOver(log, pk, true) {
+				return
+			}
 			_ = v.StopSkysocksClients() //nolint:errcheck
 		}
 	}
+}
+
+// proxyClientTakenOver reports whether the operator has taken skysocks-client
+// over from the auto-exit loop, and says so once. The loop owns the client only
+// while it is the last thing to have touched it: want is the exit the loop set
+// ("" when it has set none yet) and expectRunning is whether the loop believes
+// the client is up. An operator's hand — `cli proxy start <pk>`, the
+// hypervisor's proxy page, `visor app set-pk` — shows as either the configured
+// --srv no longer being the loop's pick, or the client running when the loop
+// last stopped it. In both cases the explicit choice wins and the loop stands
+// down: it must never stop or re-point a client it did not start. Without this
+// the loop verified the operator's session as if it were its own candidate and,
+// on a failed probe, "rotated" it onto a random discovery exit — an operator's
+// `proxy start <pk>` lost its exit 30-90s in, every time.
+func (v *Visor) proxyClientTakenOver(log *logging.Logger, want string, expectRunning bool) bool {
+	configured := v.GetSkysocksClientAddress()
+	running := false
+	if v.procM != nil {
+		_, running = v.procM.ProcByName(skyenv.SkysocksClientName)
+	}
+	if !proxyExitTakenOver(configured, want, running, expectRunning) {
+		return false
+	}
+	log.WithField("configured_exit", configured).WithField("loop_exit", want).
+		Info("proxy client re-pointed by the operator; auto-exit rotation stands down")
+	return true
+}
+
+// proxyExitTakenOver is the decision behind proxyClientTakenOver, kept pure so
+// it is unit-tested directly: configured is the client's current --srv, want
+// the exit the loop set ("" = none yet), running whether a skysocks-client proc
+// is live and expectRunning whether the loop believes it left one running.
+func proxyExitTakenOver(configured, want string, running, expectRunning bool) bool {
+	if want != "" && configured != "" && configured != want {
+		return true
+	}
+	return running && !expectRunning
 }
 
 // proxyExitRecheckInterval is how often an already-VERIFIED exit is re-probed.
