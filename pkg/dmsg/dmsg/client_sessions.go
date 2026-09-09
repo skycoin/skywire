@@ -728,6 +728,7 @@ func (ce *Client) finishDialedSession(ctx context.Context, dSes ClientSession, n
 		}
 	}
 
+	started := time.Now()
 	go func() {
 		defer ce.wg.Done()
 		defer func() {
@@ -766,7 +767,18 @@ func (ce *Client) finishDialedSession(ctx context.Context, dSes ClientSession, n
 			ce.delSession(ctx, dSes.RemotePK(), dSes.SessionCommon)
 			// Remember which server we just lost so the Serve loop re-dials
 			// THIS server before moving to a different one (#4086).
-			ce.noteLostSession(dSes.RemotePK())
+			if dSes.carrier == CarrierSkynet {
+				// A relay session is re-derived from the nominee list, not re-dialed
+				// as a lost server (its entry is synthetic — a lookup would 404). One
+				// that died within its probation was refused after the handshake
+				// (the acceptor's allow check runs on the proven key): back the
+				// nominee off instead of re-dialing it on every loss.
+				if time.Since(started) < relayProbation {
+					ce.noteRelayFailure(dSes.RemotePK())
+				}
+			} else {
+				ce.noteLostSession(dSes.RemotePK())
+			}
 		}
 
 		// Trigger disconnect callback.
