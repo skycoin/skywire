@@ -3,11 +3,11 @@ package clireward
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -154,7 +154,7 @@ func longText() string {
 	//show configured reward address if valid configuration exists
 	// try RPC first to get the visor's actual reward address
 	const rpcDialTimeout = time.Second * 2
-	conn, dialErr := net.DialTimeout("tcp", clirpc.Addr, rpcDialTimeout)
+	conn, dialErr := vnet.DialTimeout("tcp", clirpc.Addr, rpcDialTimeout)
 	if dialErr == nil {
 		rpcLogger := logging.MustGetLogger("rpc-reward")
 		client := visor.NewRPCClient(rpcLogger, conn, visor.RPCPrefix, 0)
