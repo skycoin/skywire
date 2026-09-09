@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"net"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -107,6 +110,21 @@ type Config struct {
 	// its own PK (see self_session_test.go), so only the co-resident-server
 	// visor sets it.
 	SkipSelfServer bool
+
+	// SessionDialer dials the byte pipe to a server whose advertised address
+	// names a carrier this client has no native dial for — today the skynet
+	// carrier: a "skynet://<pk>:<port>" address is a dmsg relay run by a visor
+	// (see Client.AcceptRelaySession) reached over a skywire route. The conn it
+	// returns is wrapped in the same Noise+yamux session as every other
+	// carrier; the pipe is invisible above it. nil leaves such servers
+	// undialable (the seeded entry is skipped with an error, like a browser
+	// meeting a tcp-only server).
+	SessionDialer SessionDialer
+
+	// MaxRelayedStreams bounds the concurrent streams this client relays for
+	// sessions accepted through AcceptRelaySession. 0 (the default) refuses
+	// every relayed stream: a client is not a relay unless configured as one.
+	MaxRelayedStreams int
 }
 
 // Carrier names for Config.Carriers.
@@ -115,7 +133,49 @@ const (
 	CarrierWS   = "ws"
 	CarrierWT   = "wt"
 	CarrierQUIC = "quic"
+
+	// CarrierSkynet is the skynet carrier: the session rides a skywire route to
+	// a visor acting as a dmsg relay (not a discovery-registered server). It is
+	// selected by the server entry's address, never by Config.Carriers, and
+	// dialed through Config.SessionDialer.
+	CarrierSkynet = "skynet"
 )
+
+// SessionDialer dials the byte pipe for a session over a carrier the client
+// cannot dial natively (Config.SessionDialer). network is the carrier name
+// (CarrierSkynet) and addr the server entry's advertised address.
+type SessionDialer func(ctx context.Context, network, addr string) (net.Conn, error)
+
+// SkynetScheme prefixes the advertised address of a dmsg relay reachable over a
+// skywire route: "skynet://<relay pk>:<dmsg port>". See SkynetAddr.
+const SkynetScheme = "skynet://"
+
+// SkynetAddr renders the advertised address of a dmsg relay listening on the
+// given dmsg port of the visor pk. A server entry carrying it is dialed over the
+// skynet carrier.
+func SkynetAddr(pk cipher.PubKey, port uint16) string {
+	return SkynetScheme + pk.String() + ":" + strconv.Itoa(int(port))
+}
+
+// ParseSkynetAddr parses an address produced by SkynetAddr.
+func ParseSkynetAddr(addr string) (cipher.PubKey, uint16, error) {
+	var pk cipher.PubKey
+	if !strings.HasPrefix(addr, SkynetScheme) {
+		return pk, 0, fmt.Errorf("dmsg: %q is not a %s address", addr, SkynetScheme)
+	}
+	host, portStr, err := net.SplitHostPort(strings.TrimPrefix(addr, SkynetScheme))
+	if err != nil {
+		return pk, 0, fmt.Errorf("dmsg: skynet address %q: %w", addr, err)
+	}
+	if err := pk.Set(host); err != nil {
+		return pk, 0, fmt.Errorf("dmsg: skynet address %q: %w", addr, err)
+	}
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		return pk, 0, fmt.Errorf("dmsg: skynet address %q: %w", addr, err)
+	}
+	return pk, uint16(port), nil
+}
 
 // Ensure ensures all config values are set.
 func (c *Config) Ensure() {
@@ -260,6 +320,14 @@ type Client struct {
 	// the closed-set in Close and the closed-check + Add in
 	// dialSession provides the happens-before edge.
 	closed bool
+
+	// relaySessions are the server-role sessions this client accepted through
+	// AcceptRelaySession, keyed by the attached peer's PK. Kept apart from
+	// sessions (which are this client's sessions TO servers) so nothing that
+	// walks sessions — entry publishing, dial phases, pings, the reaper —
+	// mistakes an attached peer for a server. Guarded by relaySessionsMx.
+	relaySessions   map[cipher.PubKey]*SessionCommon
+	relaySessionsMx sync.Mutex
 }
 
 // AddDiscovery registers an additional dmsg-discovery this client
@@ -310,6 +378,14 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	// Init common fields.
 	c.EntityCommon.init(pk, sk, dc, log, conf.UpdateInterval)
 	c.EntityCommon.noRegister = conf.NoRegister
+	c.EntityCommon.maxRelayedStreams = conf.MaxRelayedStreams
+	// Relay acceptor hooks (see client_relay.go): a request arriving over an
+	// accepted relay session is forwarded over this client's own server
+	// sessions, and a destination that is itself attached to this relay is
+	// reached directly.
+	c.relaySessions = make(map[cipher.PubKey]*SessionCommon)
+	c.EntityCommon.relaySessionLookup = c.relaySession
+	c.EntityCommon.forwardSessionsFunc = c.relayForwardSessions
 
 	// Init callback: on set session.
 	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
@@ -788,6 +864,7 @@ func (ce *Client) Close() error {
 		ce.sessions = make(map[cipher.PubKey]*SessionCommon)
 		ce.log.Debug("All sessions closed.")
 		ce.sessionsMx.Unlock()
+		ce.closeRelaySessions()
 		ce.porter.CloseAll(ce.log)
 		ce.wg.Wait()
 		// Use a short timeout for discovery cleanup — if the discovery

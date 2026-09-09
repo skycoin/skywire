@@ -1,0 +1,103 @@
+// Package visor pkg/visor/init_dmsg_relay.go c3-vis-core
+//
+// dmsg over skynet through this visor (#4484 stage 3). Two halves of one
+// mechanism, both on the visor's single dmsg client:
+//
+//   - RELAY (accept side): a listener on skyenv.DmsgRelayPort over skynet. A
+//     whitelisted peer that dials it gets a server-role dmsg session on this
+//     client (dmsg.Client.AcceptRelaySession); its stream requests are carried
+//     over this visor's own dmsg server sessions under the PEER's key.
+//   - CARRIER (dial side): the client's session dialer for skynet:// server
+//     addresses. A seeded server entry "skynet://<pk>:70" is dialed as a
+//     skywire route to that visor's relay, then wrapped in the usual
+//     Noise+yamux dmsg session.
+//
+// Neither half registers anything in discovery or opens a TCP listener.
+package visor
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+
+	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
+)
+
+// skynetSessionDialer is the dmsg client's SessionDialer for the skynet
+// carrier: it turns "skynet://<pk>:<port>" into a skywire route dial to that
+// visor's relay listener. Bounded by dmsg.DialTimeout like the TCP carrier.
+func skynetSessionDialer(ctx context.Context, network, addr string) (net.Conn, error) {
+	if network != dmsg.CarrierSkynet {
+		return nil, fmt.Errorf("dmsg session dialer: unsupported carrier %q", network)
+	}
+	pk, port, err := dmsg.ParseSkynetAddr(addr)
+	if err != nil {
+		return nil, err
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, dmsg.DialTimeout)
+	defer cancel()
+	return appnet.DialContext(dialCtx, appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: pk,
+		Port:   routing.Port(port),
+	})
+}
+
+// initDmsgRelay binds the relay listener on skyenv.DmsgRelayPort over skynet
+// (once the router's networker exists) and serves every accepted conn as a
+// relay session on dmsgC. Admission is the peer whitelist — self, configured
+// hypervisors, the pty whitelist and anything a hypervisor vouched for — and
+// the key the peer proves in the dmsg Noise handshake must be the key the
+// route was set up for.
+func (v *Visor) initDmsgRelay(ctx context.Context, dmsgC *dmsg.Client) {
+	log := v.MasterLogger().PackageLogger("dmsg_relay")
+	goServeSkynetMirror(ctx, v.conf.PK, skyenv.DmsgRelayPort, "dmsg_relay", log,
+		func(lis net.Listener) {
+			go func() {
+				<-ctx.Done()
+				_ = lis.Close() //nolint:errcheck
+			}()
+			for {
+				conn, err := lis.Accept()
+				if err != nil {
+					if ctx.Err() == nil && !errors.Is(err, net.ErrClosed) {
+						log.WithError(err).Warn("dmsg relay accept failed; relay listener stopped")
+					}
+					return
+				}
+				routePK, hasRoutePK := remotePK(conn.RemoteAddr())
+				if hasRoutePK && !v.relayPeerAllowed(routePK) {
+					// Refuse before the handshake: the route already names the
+					// peer, so an unlisted one costs no crypto.
+					log.WithField("peer", routePK.String()).Debug("dmsg relay: peer not whitelisted")
+					_ = conn.Close() //nolint:errcheck
+					continue
+				}
+				go func(conn net.Conn) {
+					allow := func(pk cipher.PubKey) bool {
+						if hasRoutePK && pk != routePK {
+							return false
+						}
+						return v.relayPeerAllowed(pk)
+					}
+					if err := dmsgC.AcceptRelaySession(ctx, conn, allow); err != nil {
+						log.WithError(err).Debug("dmsg relay session ended with error")
+					}
+				}(conn)
+			}
+		})
+}
+
+// relayPeerAllowed reports whether pk may attach to this visor's dmsg relay.
+func (v *Visor) relayPeerAllowed(pk cipher.PubKey) bool {
+	if v.peerWhitelist == nil {
+		return false
+	}
+	ok, err := v.peerWhitelist.Get(pk)
+	return err == nil && ok
+}

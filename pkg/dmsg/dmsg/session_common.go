@@ -47,6 +47,12 @@ type SessionCommon struct {
 	// server that can't do WT just re-dials wss on the next tick (churn).
 	wtCapable bool
 
+	// relayInbound marks a server-role session a CLIENT accepted through
+	// Client.AcceptRelaySession: the attached peer's requests are relayed over
+	// this client's own server sessions, so every bridge from it is charged to
+	// the relay slots (see bridgeStream). Never set on server entities.
+	relayInbound bool
+
 	netConn net.Conn // underlying net.Conn (TCP connection to the dmsg server)
 	// ys      *yamux.Session
 	// ss      *smux.Session

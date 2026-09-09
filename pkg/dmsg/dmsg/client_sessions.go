@@ -294,6 +294,9 @@ func (ce *Client) ConvergeCarriers() int {
 
 	converged := 0
 	for _, s := range sessions {
+		if s.carrier == CarrierSkynet {
+			continue // a relay has one carrier and no discovery entry to converge on
+		}
 		if ce.carrierBackedOff(s.pk) {
 			continue
 		}
@@ -392,6 +395,11 @@ func (ce *Client) carrierNote(pk cipher.PubKey) string {
 }
 
 func pickCarrier(carriers []string, entry *disc.Entry) (network, addr string) {
+	// A relay reached over a skywire route advertises only a skynet address; it
+	// is dialable by exactly that carrier, whatever the preference list says.
+	if strings.HasPrefix(entry.Server.Address, SkynetScheme) {
+		return CarrierSkynet, entry.Server.Address
+	}
 	for _, c := range carriers {
 		switch c {
 		case CarrierWT:
@@ -446,6 +454,8 @@ func ProtocolLabel(carrier, addr string) string {
 		return "webtransport"
 	case CarrierQUIC:
 		return "quic"
+	case CarrierSkynet:
+		return "skynet"
 	case "":
 		return "accepted"
 	default:
@@ -596,6 +606,25 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 			}
 			ce.log.Infof("yamux stream session initial for %s", dSes.RemotePK().String())
 		}
+	}
+	if network == CarrierSkynet {
+		dialer := ce.sessionDialer()
+		if dialer == nil {
+			return ClientSession{}, fmt.Errorf("dmsg: server %s is reachable only over %s and this client has no session dialer", entry.Static, dialAddr)
+		}
+		conn, err := dialer(ctx, network, dialAddr)
+		if err != nil {
+			return ClientSession{}, fmt.Errorf("failed to dial %s: %w", dialAddr, err)
+		}
+		if dSes, err = makeClientSession(&ce.EntityCommon, ce.porter, conn, entry.Static); err != nil {
+			conn.Close() //nolint:errcheck,gosec
+			return ClientSession{}, err
+		}
+		if dSes.sm.yamux, err = yamux.Client(conn, YamuxConfig()); err != nil {
+			conn.Close() //nolint:errcheck,gosec
+			return ClientSession{}, err
+		}
+		ce.log.Infof("skynet stream session initial for %s", dSes.RemotePK().String())
 	}
 
 	return ce.finishDialedSession(ctx, dSes, network, dialAddr, entry)

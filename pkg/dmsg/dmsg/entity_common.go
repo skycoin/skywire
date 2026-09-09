@@ -148,6 +148,17 @@ type EntityCommon struct {
 	// Only set on Server entities; nil for clients.
 	peerSessionsFunc func() []*SessionCommon
 
+	// forwardSessionsFunc is the CLIENT counterpart of peerSessionsFunc: a
+	// client acting as a dmsg relay (Client.AcceptRelaySession) forwards a
+	// request it cannot serve locally over its own server sessions, ordered
+	// for the destination. nil on servers and on clients not relaying.
+	forwardSessionsFunc func(dst cipher.PubKey) []*SessionCommon
+
+	// relaySessionLookup finds a server-role session this client accepted
+	// through AcceptRelaySession, so a destination that is itself attached to
+	// this relay is bridged locally instead of forwarded. nil on servers.
+	relaySessionLookup func(pk cipher.PubKey) (*SessionCommon, bool)
+
 	// acceptPeerAnnouncements, peerAnnounceAllowedFunc and
 	// promoteToPeerFunc support inbound peer announcements: a server
 	// announcing itself as a forwardable peer over the link it dials out.
@@ -371,7 +382,28 @@ func (c *EntityCommon) session(pk cipher.PubKey) (*SessionCommon, bool) {
 // serverSession obtains a session as a server.
 func (c *EntityCommon) serverSession(pk cipher.PubKey) (ServerSession, bool) {
 	ses, ok := c.session(pk)
+	if !ok && c.relaySessionLookup != nil {
+		ses, ok = c.relaySessionLookup(pk)
+	}
 	return ServerSession{SessionCommon: ses}, ok
+}
+
+// forwardSessions returns the sessions a request for dst may be forwarded
+// over when dst is not attached locally: a server's peer servers, or a
+// relaying client's own server sessions (ordered for dst). nil = no forwarding.
+func (c *EntityCommon) forwardSessions(dst cipher.PubKey) []ServerSession {
+	if c.peerSessionsFunc != nil {
+		return c.peerServerSessions()
+	}
+	if c.forwardSessionsFunc == nil {
+		return nil
+	}
+	raw := c.forwardSessionsFunc(dst)
+	sessions := make([]ServerSession, len(raw))
+	for i, ses := range raw {
+		sessions[i] = ServerSession{SessionCommon: ses}
+	}
+	return sessions
 }
 
 // peerServerSessions returns all peer server sessions for mesh forwarding.
@@ -805,6 +837,11 @@ func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType stri
 	c.sessionsMx.Lock()
 	srvPKs := make([]cipher.PubKey, 0, len(c.sessions))
 	for pk := range c.sessions {
+		// A relay reached over skynet is not a discovery-registered server:
+		// nobody can resolve it, so advertising it as delegated only misleads.
+		if c.sessions[pk].carrier == CarrierSkynet {
+			continue
+		}
 		srvPKs = append(srvPKs, pk)
 	}
 	c.sessionsMx.Unlock()
@@ -913,6 +950,11 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 	c.sessionsMx.Lock()
 	srvPKs := make([]cipher.PubKey, 0, len(c.sessions))
 	for pk := range c.sessions {
+		// A relay reached over skynet is not a discovery-registered server:
+		// nobody can resolve it, so advertising it as delegated only misleads.
+		if c.sessions[pk].carrier == CarrierSkynet {
+			continue
+		}
 		srvPKs = append(srvPKs, pk)
 	}
 	c.sessionsMx.Unlock()

@@ -20,15 +20,15 @@ import (
 // dst, which listens on dstPort. src is a bare keypair that holds no session at
 // all — the identity a served desk tab or a service would have in stage 3.
 type relayedTestEnv struct {
-	srv           *Server
-	srvPK         cipher.PubKey
-	relay         *Client
-	dst           *Client
-	dstPK         cipher.PubKey
-	srcPK         cipher.PubKey
-	srcSK         cipher.SecKey
-	dstLis        *Listener
-	acceptedFirst chan *Stream
+	dc     disc.APIClient
+	srv    *Server
+	srvPK  cipher.PubKey
+	relay  *Client
+	dst    *Client
+	dstPK  cipher.PubKey
+	srcPK  cipher.PubKey
+	srcSK  cipher.SecKey
+	dstLis *Listener
 }
 
 const relayedDstPort = 80
@@ -69,6 +69,7 @@ func newRelayedTestEnv(t *testing.T, conf *ServerConfig) *relayedTestEnv {
 
 	srcPK, srcSK := GenKeyPair(t, "relayed-src")
 	return &relayedTestEnv{
+		dc:  dc,
 		srv: srv, srvPK: srvPK, relay: relay, dst: dst, dstPK: dstPK,
 		srcPK: srcPK, srcSK: srcSK, dstLis: dstLis,
 	}
