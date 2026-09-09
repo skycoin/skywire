@@ -236,12 +236,11 @@ func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request,
 		fallback.ServeHTTP(w, r)
 		return
 	}
-	// Stamp the served bundle's fingerprint + a poller that reloads the tab when
-	// a newer bundle is served (after the visor binary updates its embedded UI),
-	// so an open dashboard never sits on a stale build. Mirrors the wasm
-	// visor's autoupdate.js. The fingerprint is a hash of index.html, which
-	// references the content-hashed chunk filenames — it changes iff the UI does.
-	ver := uiVersionHash(b)
+	// Stamp the served build's fingerprint + a poller that reloads the tab when
+	// a newer build is served (a visor binary with a new embedded UI or desk
+	// client, or a rebuilt skywire.wasm), so an open dashboard never sits on a
+	// stale build. Mirrors the wasm visor's autoupdate.js.
+	ver := hv.servedUIVersion()
 	inject := []byte(`<script>window.__SKYWIRE_LOCAL_PK__=` + strconv.Quote(hv.visor.conf.PK.Hex()) +
 		`;window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;` + browseOriginInjectJS(hv.visor) + `</script>` +
 		`<script src="browse.js"></script>` +
@@ -274,15 +273,7 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 	// dashboard beneath it see the same page and update together. The local
 	// PK doubles as the desk module's "this page is served by a visor" signal:
 	// its DirectLoader renders same-origin pages natively only when it is set.
-	var ver string
-	if hv.c.UIAssets != nil {
-		if f, err := hv.c.UIAssets.Open("index.html"); err == nil {
-			if b, rerr := io.ReadAll(f); rerr == nil {
-				ver = uiVersionHash(b)
-			}
-			_ = f.Close() //nolint:errcheck
-		}
-	}
+	ver := hv.servedUIVersion()
 	scripts := `<script>window.__SKYWIRE_LOCAL_PK__=` + strconv.Quote(localPK) +
 		`;window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;` + browseJS + `</script>` + "\n" +
 		`<script src="/wasm_exec.js"></script>` + "\n" +
@@ -341,22 +332,33 @@ func uiVersionHash(indexHTML []byte) string {
 	return hex.EncodeToString(sum[:])[:16]
 }
 
-// getUIVersion → GET /api/ui-version : the current served-bundle fingerprint
+// servedUIVersion is the fingerprint the pages on this port boot with and poll
+// at /api/ui-version: the Angular bundle (index.html names its content-hashed
+// chunks), the desk client this binary embeds, and — when one is served — the
+// skywire command module on disk, stat'd per call. That last part is what a
+// rebuilt skywire.wasm changes: the desk's own visor is that module, and it
+// only ever runs a new one after a reload. Before it was folded in, a desk sat
+// on a blob that had been rebuilt several times.
+func (hv *Hypervisor) servedUIVersion() string {
+	var ui string
+	if hv.c.UIAssets != nil {
+		if f, err := hv.c.UIAssets.Open("index.html"); err == nil {
+			if b, rerr := io.ReadAll(f); rerr == nil {
+				ui = uiVersionHash(b)
+			}
+			_ = f.Close() //nolint:errcheck
+		}
+	}
+	return servedVersion(ui+"."+deskAssetsStamp(), hv.execWasmPath())
+}
+
+// getUIVersion → GET /api/ui-version : the current served-build fingerprint
 // (no-store), polled by the injected auto-reloader.
 func (hv *Hypervisor) getUIVersion() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
-		var ver string
-		if hv.c.UIAssets != nil {
-			if f, err := hv.c.UIAssets.Open("index.html"); err == nil {
-				if b, rerr := io.ReadAll(f); rerr == nil {
-					ver = uiVersionHash(b)
-				}
-				_ = f.Close() //nolint:errcheck
-			}
-		}
 		w.Header().Set("Content-Type", "text/plain")
 		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write([]byte(ver)) //nolint:errcheck
+		_, _ = w.Write([]byte(hv.servedUIVersion())) //nolint:errcheck
 	}
 }
 
