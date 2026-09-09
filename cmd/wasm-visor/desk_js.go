@@ -13,8 +13,11 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"syscall/js"
+	"time"
 
 	"github.com/0magnet/desk"
 	"github.com/0magnet/desk/panes/files"
@@ -181,6 +184,31 @@ func installDesk() {
 				return err.Error()
 			}
 			return nil
+		}),
+		// exec(cmd, {timeoutMs}): run one shell command with no terminal and
+		// resolve {out, err} — the harness's way to drive the tab's visor over
+		// CDP and read text back instead of screenshotting a console.
+		"exec": js.FuncOf(func(_ js.Value, a []js.Value) any {
+			if len(a) == 0 || a[0].Type() != js.TypeString {
+				return promise(func() (interface{}, error) { return nil, errors.New("exec(cmd): missing command") })
+			}
+			cmd := a[0].String()
+			timeout := execDefaultTimeout
+			if len(a) > 1 && a[1].Type() == js.TypeObject {
+				if v := a[1].Get("timeoutMs"); v.Type() == js.TypeNumber && v.Int() > 0 {
+					timeout = time.Duration(v.Int()) * time.Millisecond
+				}
+			}
+			return promise(func() (interface{}, error) {
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				defer cancel()
+				out, err := runHeadless(ctx, cmd)
+				res := map[string]interface{}{"out": out}
+				if err != nil {
+					res["err"] = err.Error()
+				}
+				return res, nil
+			})
 		}),
 		// openConsole({title, initCmd, bg}): a websh console, optionally running a
 		// first command. The FIRST call opens the terminal window; every one
