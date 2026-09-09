@@ -165,6 +165,36 @@ func dialHypervisorRPC(
 	return conn, transportDmsg, nil
 }
 
+// rpcUpgradePoll is how often a dmsg-served hypervisor RPC conn checks
+// whether a direct transport to the hypervisor has appeared.
+const rpcUpgradePoll = 3 * time.Second
+
+// shouldUpgradeToSkynet is the decision behind watchForSkynetUpgrade: a
+// direct transport exists and skynet is not in its failure cooldown.
+func shouldUpgradeToSkynet(hasFast bool, lastSkyFail *atomic.Int64) bool {
+	return hasFast && !inSkynetCooldown(lastSkyFail)
+}
+
+// watchForSkynetUpgrade closes conn (a dmsg-served RPC conn) once a direct
+// transport to pk exists and skynet is dialable, so ServeRPCClient redials
+// over skynet. Returns when ctx (the conn's serve context) ends.
+func watchForSkynetUpgrade(ctx context.Context, log logrus.FieldLogger, tpM *transport.Manager, pk cipher.PubKey, lastSkyFail *atomic.Int64, conn net.Conn) {
+	t := time.NewTicker(rpcUpgradePoll)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if shouldUpgradeToSkynet(hasFastTransportTo(tpM, pk), lastSkyFail) {
+				log.Info("Direct transport to hypervisor is up; closing dmsg RPC conn to redial over skynet.")
+				_ = conn.Close() //nolint:errcheck,gosec
+				return
+			}
+		}
+	}
+}
+
 // inSkynetCooldown reports whether the most recent recorded skynet
 // failure is recent enough to skip skynet on this dial cycle.
 func inSkynetCooldown(lastFail *atomic.Int64) bool {
@@ -219,6 +249,14 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, tpM *transport.
 			rpcS.ServeConn(idleConn)
 			cancel()
 		}()
+		// A conn that came up over dmsg is only the bootstrap: if a direct
+		// transport to the hypervisor appears while it is serving (the
+		// upgrade loop built one, or a browser visor attached over /tp/ws
+		// after we had already started redialing), drop it so the next
+		// dial rides skynet instead of sitting on the relay until idle.
+		if via == transportDmsg {
+			go watchForSkynetUpgrade(connCtx, log, tpM, rAddr.PK, &lastSkyFail, idleConn)
+		}
 		<-connCtx.Done()
 		idleConn.stop()
 
