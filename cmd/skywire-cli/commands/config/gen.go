@@ -2505,13 +2505,12 @@ func getInterfaceNames() string { //nolint Note: pending implementation for conf
 	return strings.Join(interfaceNames, ", ")
 }
 
-// applyFlagsToConf uncomments settings in the conf template that correspond
-// to flags passed on the command line. This makes -q/-Q output reflect the
-// user's intent (e.g., `config gen -iq` uncomments ISHYPERVISOR=true).
-func applyFlagsToConf(conf string, cmd *cobra.Command) string {
-	// Map of flag names to the SKYENV variable they control.
-	// When a flag is explicitly set, uncomment the corresponding line.
-	flagToEnv := map[string]string{
+// Which SKYENV variable each `config gen` flag controls. applyFlagsToConf
+// uses them to uncomment the matching template line; FlagArgsForSkyenv walks
+// them the other way, from a variable to the flag that sets it.
+var (
+	// Boolean flags: the line the flag turns on.
+	flagToEnv = map[string]string{
 		"pkg":                  "PKGENV=true",
 		"ishv":                 "ISHYPERVISOR=true",
 		"testenv":              "TESTENV=true",
@@ -2523,33 +2522,26 @@ func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 		"no-direct-transports": "NODIRECTTRANSPORTS=true",
 		"pty-rpc-exec":         "PTYRPCEXEC=true",
 	}
-
-	// Also handle string/value flags
-	valueFlagToEnv := map[string]string{
+	// String flags: KEY='value' lines.
+	valueFlagToEnv = map[string]string{
 		"cliaddr": "CLIADDR",
 		"hvaddr":  "HVHTTPADDR",
 		"timeout": "SHUTDOWNTIMEOUT",
 		"reward":  "REWARDSKYADDR",
 	}
-
-	// Integer/port flags map to bare KEY=N env lines (e.g. #TRANSPORTPORT=0).
-	// When the flag is explicitly set, uncomment + replace with the value so
-	// `config gen --transport-port 7777 -q` reflects it in the template.
-	intFlagToEnv := map[string]string{
+	// Integer/port flags: bare KEY=N lines (e.g. #TRANSPORTPORT=0).
+	intFlagToEnv = map[string]string{
 		"transport-port":     "TRANSPORTPORT",
 		"stcpr":              "STCPRPORT",
 		"sudph":              "SUDPHPORT",
 		"min-hops":           "MINHOPS",
 		"ar-transport-limit": "ARTRANSPORTLIMIT",
 	}
-
-	// Array-shaped flags map to bash-array env vars of the form
-	// KEY=('a' 'b' 'c'). Values come in comma-separated form from the
-	// CLI (`--hvpks PK1,PK2`); we split on comma, trim each entry,
-	// drop empties, and emit the canonical single-quoted-space-joined
-	// bash-array form. Mirrors how SkyenvArray decodes the same lines
-	// back out — round-trip safe.
-	arrayFlagToEnv := map[string]string{
+	// Array-shaped flags: bash-array lines KEY=('a' 'b' 'c'), taken
+	// comma-separated on the CLI (`--hvpks PK1,PK2`) — split, trimmed, empties
+	// dropped, single-quoted. Mirrors how SkyenvArray decodes them: round-trip
+	// safe.
+	arrayFlagToEnv = map[string]string{
 		"hvpks":           "HYPERVISORPKS",
 		"dmsgpty":         "DMSGPTYPKS",
 		"survey":          "SURVEYPKS",
@@ -2560,8 +2552,40 @@ func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 		"proxywl":         "PROXYSERVERWL",
 		"skycoinwebnodes": "SKYCOINWEBNODES",
 		"stun":            "STUNSERVERS",
+		"ws-peer":         "WSPEERS",
 	}
+)
 
+// FlagArgsForSkyenv returns the `config gen` arguments that set what the
+// SKYENV line key=value would — value in the plain form autoconfig holds
+// before it quotes it for the file: "true"/"false", a string, a number, or a
+// comma-separated list. ok is false when no flag controls key.
+//
+// It exists for a caller that has just EDITED the SKYENV file and re-enters
+// `config gen` in the same process (the browser build has no subprocess):
+// gen reads the file into its flag DEFAULTS at init, so an edit made after
+// that is invisible to it unless passed explicitly. A subprocess would have
+// re-read the file; passing the flags gives both paths the same result.
+func FlagArgsForSkyenv(key, value string) (args []string, ok bool) {
+	for flag, line := range flagToEnv {
+		if k, _, _ := strings.Cut(line, "="); k == key {
+			return []string{"--" + flag + "=" + value}, true
+		}
+	}
+	for _, m := range []map[string]string{valueFlagToEnv, intFlagToEnv, arrayFlagToEnv} {
+		for flag, k := range m {
+			if k == key {
+				return []string{"--" + flag, value}, true
+			}
+		}
+	}
+	return nil, false
+}
+
+// applyFlagsToConf uncomments settings in the conf template that correspond
+// to flags passed on the command line. This makes -q/-Q output reflect the
+// user's intent (e.g., `config gen -iq` uncomments ISHYPERVISOR=true).
+func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 	lines := strings.Split(conf, "\n")
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
