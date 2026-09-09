@@ -24,11 +24,16 @@ func TestRelayedResponseOK(t *testing.T) {
 		raw  string
 		want bool
 	}{
-		"relayed 200":                      {"HTTP/1.1 200 OK\r\nServer: nginx\r\n\r\n<html>hi</html>", true},
-		"relayed 301":                      {"HTTP/1.1 301 Moved Permanently\r\nLocation: /x\r\n\r\n", true},
-		"relayed HTTP/1.0":                 {"HTTP/1.0 200 OK\r\n\r\nbody", true},
-		"upstream 404":                     {"HTTP/1.1 404 Not Found\r\n\r\n", false},
-		"upstream 502":                     {"HTTP/1.1 502 Bad Gateway\r\n\r\n", false},
+		"relayed 200":      {"HTTP/1.1 200 OK\r\nServer: nginx\r\n\r\n<html>hi</html>", true},
+		"relayed 301":      {"HTTP/1.1 301 Moved Permanently\r\nLocation: /x\r\n\r\n", true},
+		"relayed HTTP/1.0": {"HTTP/1.0 200 OK\r\n\r\nbody", true},
+		// An origin's 4xx/5xx still travelled through the exit — that is relay.
+		// neverssl.com answers a User-Agent-less request with 403; rejecting it
+		// failed every working exit.
+		"upstream 403":                     {"HTTP/1.1 403 Forbidden\r\n\r\n<html>", true},
+		"upstream 404":                     {"HTTP/1.1 404 Not Found\r\n\r\n", true},
+		"upstream 502":                     {"HTTP/1.1 502 Bad Gateway\r\n\r\n", true},
+		"impossible code":                  {"HTTP/1.1 999 Nope\r\n\r\n", false},
 		"not HTTP at all":                  {"garbage bytes from a zombie exit", false},
 		"truncated status line":            {"HTTP/1.1 200 OK", false},
 		"status line without a code":       {"HTTP/1.1\r\n\r\n", false},
