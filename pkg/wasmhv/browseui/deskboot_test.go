@@ -43,3 +43,26 @@ func TestDeskBootHasNoCodeBeforeItsHeader(t *testing.T) {
 		}
 	}
 }
+
+// TestDeskBootAttachBuildsTheWSPeer pins the attached boot: when the page is
+// served with attach:{pk,path}, the visor the desk starts is told to hold ONE
+// WebSocket transport back to the page origin (--ws-peer <pk>@<ws(s)://origin
+// + path>) and to stay off public autoconnect. The address comes from
+// location, so the same page works on any hostname the host is reached by.
+func TestDeskBootAttachBuildsTheWSPeer(t *testing.T) {
+	b, err := os.ReadFile("desk-boot.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, want := range []string{
+		"if (opts.attach && opts.attach.pk)",
+		"location.host + (opts.attach.path || '/tp/ws')",
+		"' --disable-public-autoconn --ws-peer ' + opts.attach.pk + '@' + tpURL",
+		"initCmd: startVisor ? autoconfigCmd : ''",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("desk-boot.js lacks %q", want)
+		}
+	}
+}

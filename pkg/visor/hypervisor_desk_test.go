@@ -6,6 +6,8 @@ package visor
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -88,12 +90,13 @@ func TestNativeDeskServing(t *testing.T) {
 		if !strings.Contains(body, "terminalURL: './pty/"+pk.Hex()+"'") {
 			t.Error("page lacks the relative pty terminal window URL")
 		}
-		// The ONE-VISOR rule, as served bytes: the desk module is served, but
-		// nothing that would start a visor of the tab's own is — no autostart
-		// and no reference to the skywire command module.
+		// With no command module configured (hypervisor.wasm_serve.exec_wasm
+		// unset) the page is a shell over the host visor only: no autostart and
+		// no reference to the skywire command module. TestNativeDeskAttachedVisor
+		// covers the configured case.
 		for _, banned := range []string{"autostartVisor: true", "/skywire.wasm", "skywire.wasm.gz", "skywire-browse-launcher"} {
 			if strings.Contains(body, banned) {
-				t.Errorf("desk page references %s — the native visor IS the visor", banned)
+				t.Errorf("desk page references %s without a command module to serve", banned)
 			}
 		}
 	})
@@ -187,13 +190,13 @@ func TestNativeDeskServing(t *testing.T) {
 	// everything that could actually start a visor stays absent.
 	t.Run("the visor BOOT path is not exposed on the hypervisor port", func(t *testing.T) {
 		// hv-boot.js and worker.js ARE the boot path (worker.js hosts a visor
-		// off-thread; hv-boot.js spawns it). skywire.wasm is the in-tab CLI,
-		// which is how the wasm desk starts one via `skywire autoconfig`.
-		// Without these three there is nothing on this origin that starts a
-		// visor, whatever else it serves.
+		// off-thread; hv-boot.js spawns it) and are never served here.
+		// skywire.wasm is the in-tab CLI the desk starts a visor with; it is
+		// served only when the operator configured a command module (see
+		// TestNativeDeskAttachedVisor) — with none, 404 like the rest.
 		for _, p := range []string{"/skywire.wasm", "/hv-boot.js", "/worker.js"} {
 			if w := get(p); w.Code != http.StatusNotFound {
-				t.Errorf("GET %s → %d, want 404 (native mode must not be able to start an in-page visor)", p, w.Code)
+				t.Errorf("GET %s → %d, want 404 (no command module configured)", p, w.Code)
 			}
 		}
 	})
@@ -206,7 +209,7 @@ func TestNativeDeskServing(t *testing.T) {
 		}
 	})
 
-	t.Run("the native desk page does not autostart a visor", func(t *testing.T) {
+	t.Run("the native desk page does not autostart a visor without a command module", func(t *testing.T) {
 		w := get("/")
 		if w.Code != http.StatusOK {
 			t.Fatalf("status=%d, want 200", w.Code)
@@ -250,5 +253,91 @@ func TestDeskShellHTMLWasmMode(t *testing.T) {
 	}
 	if strings.Contains(page, "__DESK_SCRIPTS__") || strings.Contains(page, "__DESK_OPTS__") {
 		t.Error("template placeholders leaked into the rendered page")
+	}
+}
+
+// TestNativeDeskAttachedVisor pins the ATTACHED desk: when the operator has a
+// skywire command module for js/wasm (hypervisor.wasm_serve.exec_wasm), the
+// hypervisor UI port serves it and its worker, and the page boots a visor of
+// the tab's own whose one transport is a WebSocket back to this origin — the
+// same-origin transport at /tp/ws, addressed by the host's public key, no
+// address-resolver lookup — with public autoconnect off.
+func TestNativeDeskAttachedVisor(t *testing.T) {
+	hv, pk := deskTestHypervisor(t)
+	exec := filepath.Join(t.TempDir(), "skywire.wasm")
+	if err := os.WriteFile(exec, []byte("\x00asm-test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hv.c.WasmServe = &visorconfig.WasmServeConf{ExecWasm: exec}
+	h := hv.uiHandler()
+	get := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		return w
+	}
+
+	t.Run("the command module and its worker are served", func(t *testing.T) {
+		w := get("/skywire.wasm")
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET /skywire.wasm → %d, want 200", w.Code)
+		}
+		if ct := w.Header().Get("Content-Type"); ct != "application/wasm" {
+			t.Errorf("Content-Type=%q, want application/wasm", ct)
+		}
+		if w.Body.String() != "\x00asm-test" {
+			t.Errorf("served body is not the configured module")
+		}
+		if w := get("/skywire-worker.js"); w.Code != http.StatusOK {
+			t.Errorf("GET /skywire-worker.js → %d, want 200", w.Code)
+		}
+		// The off-thread boot path stays absent: the attached visor runs in
+		// the desk's own terminal, not in a worker the page spawns.
+		for _, p := range []string{"/hv-boot.js", "/worker.js"} {
+			if w := get(p); w.Code != http.StatusNotFound {
+				t.Errorf("GET %s → %d, want 404", p, w.Code)
+			}
+		}
+	})
+
+	t.Run("the page boots a visor attached to this origin", func(t *testing.T) {
+		w := get("/")
+		if w.Code != http.StatusOK {
+			t.Fatalf("status=%d, want 200", w.Code)
+		}
+		body := w.Body.String()
+		for _, want := range []string{
+			"autostartVisor: true",
+			"wasmURL: '/skywire.wasm'",
+			"execWorkerURL: '/skywire-worker.js'",
+			"attach: { pk: '" + pk.Hex() + "', path: '/tp/ws' }",
+			// Still the ONE desk: dashboard and pty are the host's.
+			"dashboardURL: './?embed=1#/?embed=1'",
+			"terminalURL: './pty/" + pk.Hex() + "'",
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("attached desk page lacks %s", want)
+			}
+		}
+		if strings.Contains(body, "autostartVisor: false") {
+			t.Error("attached desk page still carries autostartVisor: false")
+		}
+	})
+}
+
+// TestTransportWSEndpoint pins /tp/ws on the hypervisor port: it is the WS
+// transport client's own acceptor, so with no visor (or no transport manager)
+// behind the hypervisor it refuses rather than pretending.
+func TestTransportWSEndpoint(t *testing.T) {
+	hv, _ := deskTestHypervisor(t)
+	w := httptest.NewRecorder()
+	hv.getTransportWS()(w, httptest.NewRequest(http.MethodGet, "/tp/ws", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("no transport manager: status=%d, want 503", w.Code)
+	}
+	hv.visor = nil
+	w = httptest.NewRecorder()
+	hv.getTransportWS()(w, httptest.NewRequest(http.MethodGet, "/tp/ws", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("no visor: status=%d, want 503", w.Code)
 	}
 }

@@ -85,6 +85,9 @@ const envfileLinux = `#
 #--	Set remote hypervisor public keys
 #HYPERVISORPKS=('')
 
+#--	Peers held as WebSocket transports at a known address: <pk>@<ws(s)://host[:port]/path>
+#WSPEERS=('')
+
 #--	Grant access to pseudoterminal (pty) for public keys
 #DMSGPTYPKS=('')
 
@@ -487,6 +490,9 @@ const envfileWindows = `#
 
 #--	Set remote hypervisor public keys
 #$HYPERVISORPKS=@('')
+
+#--	Peers held as WebSocket transports at a known address: <pk>@<ws(s)://host[:port]/path>
+#$WSPEERS=@('')
 
 #--	Grant access to pseudoterminal (pty) for public keys
 #$DMSGPTYPKS=@('')

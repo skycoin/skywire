@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/skycoin/skywire/pkg/wasmhv"
 	"io"
 	"net"
 	"net/http"
@@ -117,6 +118,23 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			// above — a std-Go wasm_exec.js cannot run a TinyGo module or vice
 			// versa (see wasmbin/embed.go).
 			serveJS(w, wasmbin.WasmExecJSVariant(wasmbin.Default()))
+			return
+		case "/skywire.wasm":
+			// The FULL skywire command module — the visor the served desk runs
+			// in its terminal — from the same file the wasm-serve port serves,
+			// when the operator has one (hypervisor.wasm_serve.exec_wasm).
+			// Absent that, the desk boots with no visor of its own, as before.
+			if p := hv.execWasmPath(); p != "" {
+				w.Header().Set("Content-Type", "application/wasm")
+				w.Header().Set("Cache-Control", "no-cache")
+				http.ServeFile(w, r, p)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		case "/skywire-worker.js":
+			// The worker every skywire command runs on when the page hosts one.
+			serveJS(w, wasmhv.ExecWorkerJS())
 			return
 		case "/desk-boot.js":
 			// The shared desk boot (skywireDeskBoot) — same asset `hv serve`
@@ -271,7 +289,7 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 		`<script src="/browse.js"></script>` + "\n" +
 		`<script>` + uiAutoReloadJS + `</script>` + "\n" +
 		`<script src="/desk-boot.js"></script>`
-	page := deskShellHTML(scripts, nativeDeskBootOpts(localPK))
+	page := deskShellHTML(scripts, nativeDeskBootOpts(localPK, hv.execWasmPath() != ""))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(page) //nolint:errcheck
@@ -287,17 +305,29 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 // embed=1 rides in the HASH (the Angular UI is hash-routed) so the framed
 // dashboard hides its own taskbar. terminalURL is the host's pty page,
 // /pty/<pk>, xterm over a websocket; absent when no visor is attached.
-func nativeDeskBootOpts(localPK string) string {
+func nativeDeskBootOpts(localPK string, execWasm bool) string {
 	opts := "{\n" +
 		"  persistDB: 'skywire-desk',\n" +
 		"  deskWasmURL: '/wasm-visor.wasm',\n" +
 		"  wasmExecURL: '/wasm_exec.js',\n" +
-		"  winboxURL: '/winbox.wasm',\n" +
-		"  autostartVisor: false,\n" +
+		"  winboxURL: '/winbox.wasm',\n"
+	if execWasm && localPK != "" {
+		// The command module is served here, so the desk runs a visor of the
+		// tab's own — ATTACHED to this hypervisor: its one transport is a
+		// WebSocket back to this origin (see /tp/ws), it does not go looking
+		// for public peers, and the host reaches it over that socket.
+		opts += "  autostartVisor: true,\n" +
+			"  wasmURL: '/skywire.wasm',\n" +
+			"  execWorkerURL: '/skywire-worker.js',\n" +
+			"  attach: { pk: '" + localPK + "', path: '/tp/ws' },\n"
+	} else {
+		opts += "  autostartVisor: false,\n"
+	}
+	opts +=
 		"  helpTerminal: false,\n" +
-		"  docsPort: 0,\n" +
-		"  hvWindow: true,\n" +
-		"  dashboardURL: './?embed=1#/?embed=1',\n"
+			"  docsPort: 0,\n" +
+			"  hvWindow: true,\n" +
+			"  dashboardURL: './?embed=1#/?embed=1',\n"
 	if localPK != "" {
 		opts += "  terminalURL: './pty/" + localPK + "',\n"
 	}
@@ -345,3 +375,13 @@ const uiAutoReloadJS = `(function(){
     }).catch(function(){});
   }, 30000);
 })();`
+
+// execWasmPath is the path of the full skywire command module for js/wasm, when
+// the operator configured one for the wasm-serve port; the desk on this port
+// shares it. Empty when there is none.
+func (hv *Hypervisor) execWasmPath() string {
+	if hv.c.WasmServe == nil {
+		return ""
+	}
+	return hv.c.WasmServe.ExecWasm
+}

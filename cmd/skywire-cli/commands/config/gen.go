@@ -40,6 +40,8 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	tspec "github.com/skycoin/skywire/pkg/transport/spec"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -253,6 +255,7 @@ func init() {
 		msg += "\n\r"
 	}
 	genConfigCmd.Flags().StringVarP(&hypervisorPKs, "hvpks", "j", scriptExecArray("${HYPERVISORPKS[@]}"), msg)
+	genConfigCmd.Flags().StringVar(&wsPeers, "ws-peer", scriptExecArray("${WSPEERS[@]}"), "peers to hold a WebSocket transport to, <pk>@<ws(s)://host[:port]/path>, comma-separated — pins each in transport.ws_table and makes it a persistent transport (no address-resolver lookup; the address is the one given)")
 	genConfigCmd.Flags().BoolVarP(&isDisableAuth, "noauth", "c", false, "disable authentication for hypervisor UI")
 	gHiddenFlags = append(gHiddenFlags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI")
@@ -732,6 +735,7 @@ var genConfigCmd = &cobra.Command{
 		configureLauncher(log)
 
 		configureHypervisor(log)
+		configureWSPeers(log)
 
 		configureApps(log)
 
@@ -1519,6 +1523,47 @@ func configureLauncher(log *logging.Logger) {
 
 // configureHypervisor sets up hypervisor PKs, dmsgpty whitelist, survey
 // whitelist, and package/user-specific config paths.
+// wsPeers is --ws-peer: peers reached over a WebSocket transport at an address
+// the operator names, "<pk>@<ws(s)://…>". It is the unresolved WS dial — as stcp
+// is to stcpr — for a peer whose address is already known and never published:
+// the desk a hypervisor serves reaches that hypervisor at its own origin.
+var wsPeers string
+
+// configureWSPeers pins each --ws-peer in transport.ws_table (the dialer
+// consults the table before the address resolver) and lists it as a persistent
+// transport, so the visor opens it at boot and re-dials it when it drops.
+func configureWSPeers(log *logging.Logger) {
+	if strings.TrimSpace(wsPeers) == "" {
+		return
+	}
+	for _, spec := range strings.Split(wsPeers, ",") {
+		spec = strings.TrimSpace(spec)
+		if spec == "" {
+			continue
+		}
+		at := strings.IndexByte(spec, '@')
+		if at <= 0 || at == len(spec)-1 {
+			log.Fatalf("--ws-peer %q: want <pk>@<ws(s)://host[:port]/path>", spec)
+		}
+		var pk cipher.PubKey
+		if err := pk.Set(spec[:at]); err != nil {
+			log.WithError(err).Fatalf("--ws-peer %q: invalid public key", spec)
+		}
+		url := spec[at+1:]
+		if !strings.HasPrefix(url, "ws://") && !strings.HasPrefix(url, "wss://") {
+			log.Fatalf("--ws-peer %q: address must start with ws:// or wss://", spec)
+		}
+		if conf.Transport == nil {
+			conf.Transport = &visorconfig.Transport{}
+		}
+		if conf.Transport.WSTable == nil {
+			conf.Transport.WSTable = map[cipher.PubKey]string{}
+		}
+		conf.Transport.WSTable[pk] = url
+		conf.PersistentTransports = append(conf.PersistentTransports, tspec.PersistentTransports{PK: pk, NetType: tptypes.WS})
+	}
+}
+
 func configureHypervisor(log *logging.Logger) {
 	// Manipulate Hypervisor PKs
 	conf.Hypervisors = make([]cipher.PubKey, 0)

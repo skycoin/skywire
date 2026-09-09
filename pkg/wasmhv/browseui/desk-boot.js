@@ -487,7 +487,16 @@
 					// The visor terminal opens either way — running autoconfig
 					// (which ends by starting the visor in the foreground), or idle
 					// at the prompt when the operator had stopped it.
-					panel.openConsole({ title: 'visor', initCmd: startVisor ? 'skywire autoconfig' : '' });
+					var autoconfigCmd = 'skywire autoconfig';
+					if (opts.attach && opts.attach.pk) {
+						// Attached to the hypervisor that served this page: the visor's one
+						// transport is a WebSocket back to this origin — an address the page
+						// already has, so no address-resolver lookup — and it does not go
+						// looking for public peers; everything else rides that socket.
+						var tpURL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + (opts.attach.path || '/tp/ws');
+						autoconfigCmd += ' --disable-public-autoconn --ws-peer ' + opts.attach.pk + '@' + tpURL;
+					}
+					panel.openConsole({ title: 'visor', initCmd: startVisor ? autoconfigCmd : '' });
 					startedVisor = startVisor;
 				}
 				if (opts.helpTerminal !== false) {
