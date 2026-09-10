@@ -451,6 +451,22 @@
 						var u;
 						try { u = new URL(url, location.href); } catch (e) { return fetch(url); }
 						var host = u.hostname || '';
+						// Same-origin URLs — this page's own assets, above all the favicon
+						// of a natively rendered same-origin tab — and the tab's own
+						// loopback (vnet:<port>) are fetched here, not sent to the host to
+						// dial as clearnet: the host would reach for a loopback of its own.
+						if (u.origin === location.origin) return fetch(url);
+						var lp = vnetPort(u);
+						if (lp) {
+							if (globalThis.vnet && globalThis.vnet.listening(lp)) {
+								return Promise.resolve(globalThis.vnet.httpFetch(lp, 'GET', (u.pathname || '/') + (u.search || ''), null, {})).then(function (r) {
+									var h = new Headers();
+									if (r && r.headers) { try { for (var k in r.headers) h.set(k, r.headers[k]); } catch (e) { /* ignore */ } }
+									return new Response((r && r.body) || new Uint8Array(0), { status: (r && r.status) || 200, headers: h });
+								});
+							}
+							return Promise.resolve(proxyError('nothing is listening on vnet port ' + lp));
+						}
 						if (/\.(dmsg|skynet|skysocks)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
 							return browsePost('/api/browse/fetch', { host: host, port: u.port ? (parseInt(u.port, 10) || 80) : 80, method: 'GET', path: (u.pathname || '/') + (u.search || '') });
 						}
