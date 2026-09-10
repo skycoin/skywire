@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main cmd/wasm-visor/curl_js.go c3-vis-wasm
+// Package deskhost pkg/wasmhv/deskhost/curl_js.go c3-vis-wasm
 //
 // curl with -x support: the shell's curl, upgraded from websh's fetch()-based
 // applet to Go's net/http so it can honor a proxy flag —
@@ -13,7 +13,7 @@
 // with TLS terminated in-tab. Without -x it uses Go's default js transport
 // (the browser's fetch, CORS applies), matching the applet it replaces.
 // Registered AFTER browser.Register() so this definition wins the name.
-package main
+package deskhost
 
 import (
 	"context"

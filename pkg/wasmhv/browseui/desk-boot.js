@@ -8,10 +8,11 @@
 //
 // opts (all optional):
 //   persistDB       IndexedDB name for the jsfs snapshot ('skywire-desk')
-//   deskWasmURL     the desk-host module ('wasm-visor.wasm.gz'; .gz inflated)
+//   deskWasmURL     the desk-host module; default = wasmURL, the one command
+//                   module, run as `skywire desk-host` (a different URL is the
+//                   legacy wasm-visor.wasm blob, .gz inflated)
 //   wasmURL         the skywire command module for skywireExec
 //   wasmExecURL     Go's wasm_exec.js for command instances
-//   winboxURL       the window-manager module
 //   autostartVisor  open a visor terminal running `skywire autoconfig` —
 //                   unless the operator STOPPED the visor before the last
 //                   reload (the session remembers; the terminal still opens,
@@ -210,7 +211,38 @@
 			}
 			skywireExec.wasmURL = opts.wasmURL || 'skywire.wasm.gz';
 			skywireExec.wasmExecURL = opts.wasmExecURL || 'wasm_exec.js';
-			globalThis.__WINBOX_WASM_URL__ = opts.winboxURL || 'winbox.wasm';
+			// The desk host: `skywire desk-host` out of the ONE command module,
+			// spawned on THIS realm through the page's process layer (bottle
+			// proc.js) — the same URL, compile cache and argv/env contract as
+			// every command the terminal runs. It installs the shell, the
+			// browser and the desk chrome and parks; no visor runs in it. The
+			// in-page skywireExec is captured now, before the exec worker
+			// replaces the global with its remote shim: the desk host draws, so
+			// it runs where the document is, never in the worker.
+			//
+			// deskWasmURL stays an override for a page whose server has no
+			// command module: a different URL is the legacy desk-host blob
+			// (wasm-visor.wasm), instantiated bare — no argv — as before.
+			var localExec = globalThis.skywireExec;
+			var deskWasmURL = opts.deskWasmURL || skywireExec.wasmURL;
+			function sameURL(a, b) {
+				try { return new URL(a, location.href).href === new URL(b, location.href).href; } catch (e) { return a === b; }
+			}
+			function startDeskHost() {
+				if (localExec && typeof localExec.spawn === 'function' && sameURL(deskWasmURL, localExec.wasmURL)) {
+					var p = localExec.spawn(['desk-host'], {});
+					p.exited.then(function (code) {
+						console.error('desk host exited (' + code + ') — the desk surfaces are gone; reload the page');
+					}, function (e) { console.error('desk host:', e); });
+					return Promise.resolve();
+				}
+				return gunzipFetch(deskWasmURL).then(function (buf) {
+					var go = new Go();
+					return WebAssembly.instantiate(buf, go.importObject).then(function (r) {
+						go.run(r.instance).catch(function (e) { console.error('desk host:', e); });
+					});
+				});
+			}
 
 			// The vnet service worker: registered up front (it takes a moment to
 			// activate), so by the time anything opens a loopback window the
@@ -253,16 +285,11 @@
 				});
 			}).then(function (p) {
 				status((p.restored ? 'filesystem restored — ' : '') + 'starting the desk…');
-				// The desk host: the wasm-visor binary in-page. It installs the
-				// shell + the skywireVisor API and waits — boot() is never called,
-				// so no visor runs except the one started IN a terminal.
-				return gunzipFetch(opts.deskWasmURL || 'wasm-visor.wasm.gz');
-			}).then(function (buf) {
 				// Where the hypervisor UI lives, spelled CANONICALLY as
 				// vnet:<port> rather than as the served form
 				// "<origin>/vnet/<port>/". Both reach the same page, but only
 				// the canonical spelling keeps the plumbing out of the UI:
-				// DirectLoader (cmd/wasm-visor/desk_js.go) claims vnet:<port>
+				// DirectLoader (pkg/wasmhv/deskhost/desk_js.go) claims vnet:<port>
 				// and hands netscrape the service-worker URL as the iframe SRC,
 				// leaving the canonical form in the address bar. The served form
 				// is instead passed straight through as "already served", which
@@ -287,17 +314,17 @@
 				// embed=1 also rides in the hash so the injected launcher inside
 				// knows not to grow a taskbar of its own.
 				globalThis.__DESK_DASHBOARD_URL__ = dashURL;
-				var go = new Go();
-				return WebAssembly.instantiate(buf, go.importObject).then(function (r) {
-					go.run(r.instance).catch(function (e) { console.error('desk host:', e); });
-					return Promise.all([
-						waitFor(function () { return globalThis.skywireShell; }, 'the shell'),
-						waitFor(function () { return globalThis.__skywireDesk; }, 'the desk panel'),
-						waitFor(function () { return typeof globalThis.WinBox === 'function'; }, 'the window manager'),
-					]);
-				});
+				return startDeskHost();
 			}).then(function () {
-				var sv = globalThis.skywireVisor;
+				return Promise.all([
+					waitFor(function () { return globalThis.skywireShell; }, 'the shell'),
+					waitFor(function () { return globalThis.__skywireDesk; }, 'the desk panel'),
+				]);
+			}).then(function () {
+				// skywireVisor is the legacy in-page visor's function table. The
+				// desk host publishes none (its visor is the terminal instance),
+				// so the fallbacks below that reach for it simply do not apply.
+				var sv = globalThis.skywireVisor || {};
 				// Served by a hypervisor: claim the visor's virtual-loopback ports
 				// for the HOST visor now that the module's vnet is up. 3435 is the
 				// visor's control surface and hvPort its hypervisor UI — the two

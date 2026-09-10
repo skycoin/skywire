@@ -193,6 +193,7 @@ func GenerateStandalone(uiFS fs.FS, wasmExecJS, wasm, overrideJS []byte, cfg Sta
 		// travels inside the page: still gzipped, base64'd, and inflated by
 		// winbox-loader.js — the same shape wasmJS above uses for the visor blob.
 		head += "<script>self.__WINBOX_WASM_B64__=\"" + base64.StdEncoding.EncodeToString(WinBoxWasmGz()) + "\";</script>\n" +
+			"<script>" + jsSafe(WinBoxJS) + "</script>\n" +
 			"<script>" + jsSafe(BrowseJS) + "</script>" + "\n" +
 			"<script>" + BrowseLauncherJS + "</script>\n"
 	}

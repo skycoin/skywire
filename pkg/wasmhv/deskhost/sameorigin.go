@@ -1,8 +1,8 @@
-// Package main cmd/wasm-visor/sameorigin.go c3-vis-wasm
+// Package deskhost pkg/wasmhv/deskhost/sameorigin.go c3-vis-wasm
 // Untagged on purpose, like vnetaddr.go: pure string work with no syscall/js,
 // so the rule it encodes — which URLs the browser role renders UNSANDBOXED —
 // is pinned by a test that actually runs in CI.
-package main
+package deskhost
 
 import "strings"
 

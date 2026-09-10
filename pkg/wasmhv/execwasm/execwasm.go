@@ -15,13 +15,9 @@ package execwasm
 
 import (
 	"crypto/sha256"
-	"embed"
 	"encoding/hex"
 	"sync"
 )
-
-//go:embed blob
-var blobFS embed.FS
 
 const blobName = "blob/skywire.wasm.gz"
 
@@ -33,8 +29,8 @@ var (
 
 func load() {
 	once.Do(func() {
-		b, err := blobFS.ReadFile(blobName)
-		if err != nil || len(b) == 0 {
+		b := embeddedGz()
+		if len(b) == 0 {
 			return
 		}
 		gz = b
