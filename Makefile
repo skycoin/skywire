@@ -1,7 +1,7 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race wasm-visor embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
+.PHONY : build clean install format  bin build-race
 .PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-aab android-apk-debug check-mobile-version
 .PHONY : generate services vet check-cg check-help check-inner check-ci
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
@@ -97,12 +97,12 @@ INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 # targets stamp it (MOBILE_APPINFO below): /api/about + cobra --version read this
 # package.
 #
-# The wasm-visor deliberately takes NO version ldflags. Its blob is a build
-# artifact carried in the repo, compiled at a commit that always precedes the
-# binary that embeds it, so it cannot borrow a stamped version. Instead it
-# self-describes from the VCS info the Go/TinyGo toolchain records automatically
-# (debug.BuildInfo vcs.revision / vcs.modified, written into a GOOS=js binary as
-# plain text via -buildvcs): buildinfo.VersionOrCommit() turns that into a
+# The js/wasm command module (exec-wasm) deliberately takes NO version
+# ldflags. It is built first and embedded into the native binary that follows,
+# so it cannot borrow that binary's stamped version. Instead it self-describes
+# from the VCS info the Go toolchain records automatically (debug.BuildInfo
+# vcs.revision / vcs.modified, written into a GOOS=js binary as plain text via
+# -buildvcs): buildinfo.VersionOrCommit() turns that into a
 # "dev-<commit>[-dirty]" string. No git-describe, no -X, no git dependency for
 # the wasm build. skycoin reads the same vcs records in
 # ci-scripts/check-wasm-version.js.
@@ -344,6 +344,10 @@ clean: ## Clean project: remove created binaries and apps
 
 build-wasm: ## Compile-check every js/wasm binary (GOOS=js GOARCH=wasm), no run — mirrors the CI wasm lane
 	@echo "compile-checking js/wasm binaries..."
+	@# The root module first: it IS the one command module every page serves
+	@# (exec-wasm), built with the same tags.
+	@echo "  GOOS=js GOARCH=wasm go build -tags \"$(EXEC_WASM_TAGS)\" ."
+	@GOOS=js GOARCH=wasm go build -mod=vendor -tags "$(EXEC_WASM_TAGS)" -o /dev/null . || exit 1
 	@for p in ./cmd/dmsg-wasm ./cmd/wasm-visor ./cmd/wasm-visor-probe ./cmd/websh-probe; do \
 		echo "  GOOS=js GOARCH=wasm go build $$p"; \
 		GOOS=js GOARCH=wasm go build -mod=vendor -o /dev/null "$$p" || exit 1; \
@@ -431,81 +435,11 @@ tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~
 	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
 	@echo "built ./build/dmsg-wasm (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
 
-# TINYGO points at the TinyGo binary. The FULL wasm-visor (net/http + crypto/tls)
-# needs the fork at github.com/0magnet/tinygo (v0.42.0-skycoin.1+, LLVM 22) — its
-# net/http-on-js support is what unblocks the browser visor. Build the fork with
-# `go build -tags llvm22 -o build/tinygo .` and point TINYGO at it + export
-# TINYGOROOT=<fork checkout>. Stock upstream TinyGo cannot compile this target.
-TINYGO ?= tinygo
-
 # The Go/wasm WebGL tpviz view builds no separate tpviz-gl.wasm: it is a role
 # of the one skywire command module (`skywire desk-host --role netview`,
 # pkg/wasmhv/deskhost), which pkg/tpviz serves at /tpviz-gl.wasm out of the
 # copy the native binary embeds (make embed-exec-wasm). bundle.js in
 # pkg/tpviz/legacy/ loads it lazily when the "WebGL (Go)" view is selected.
-
-tinygo-wasm-visor: ## Build the FULL browser WASM visor (dmsg+transport+router+appserver, net/http+crypto/tls, route origination) into build/wasm-visor — TinyGo FORK (~7MB / ~2.9MB gzip vs 43MB/9.5MB std-Go). Needs the 0magnet/tinygo fork; set TINYGO=<fork>/build/tinygo TINYGOROOT=<fork>
-	mkdir -p ./build/wasm-visor
-	$(TINYGO) build -target wasm -no-debug -opt=z -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
-	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/wasm_exec.js
-	gzip -dc ./vendor/github.com/0magnet/winbox-go/dist/winbox.wasm.gz > ./build/wasm-visor/winbox.wasm
-	cp ./pkg/wasmhv/hv-boot.js ./build/wasm-visor/
-	cp ./pkg/wasmhv/worker.js ./build/wasm-visor/
-	@echo "built ./build/wasm-visor (TinyGo fork) — embed it with 'make embed-wasm-visor-tinygo', then serve the real UI: './skywire cli hv serve --variant tinygo'"
-
-test-wasm-headless: ## Tier B headless smoke: run the REAL compiled wasm-visor blob under Node (no browser) against a loopback dmsg server — boot → ws dmsg session → /api core. Needs node >= 22.
-	./scripts/wasm-headless/run.sh
-
-wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into build/wasm-visor-go — larger (~38MB) but full crypto/tls + net/http (https clearnet via skysocks). Does NOT touch the committed embed blob.
-	mkdir -p ./build/wasm-visor-go
-	# -buildvcs=true (not the default auto): the committed blob self-describes its
-	# version from the VCS stamp, and auto SILENTLY omits it if the git probe
-	# fails (e.g. under heavy load / concurrent git ops) — shipping a "(devel)"
-	# blob that renders its version as "unknown". Force it so the build fails loud
-	# instead.
-	GOOS=js GOARCH=wasm go build -buildvcs=true -ldflags="-s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
-	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
-	gzip -dc ./vendor/github.com/0magnet/winbox-go/dist/winbox.wasm.gz > ./build/wasm-visor-go/winbox.wasm
-	cp ./pkg/wasmhv/hv-boot.js ./build/wasm-visor-go/
-	cp ./pkg/wasmhv/worker.js ./build/wasm-visor-go/
-	@echo "built ./build/wasm-visor-go (standard Go js/wasm) — serve dev: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor-go'"
-
-# embeddable-tree refuses the two ways a committed wasm artifact silently
-# loses its provenance. Both have already happened here:
-#
-#   dirty tree — Go stamps vcs.modified=true, so the artifact records that
-#   no commit describes it. That is what TestCommittedWasmBuiltFromCommit
-#   rejects, and what a recent blob shipped with.
-#
-#   git worktree — .git is a FILE there, not a directory, and Go's buildvcs
-#   skips stamping entirely, without warning. The result carries no
-#   vcs.revision at all, which is worse than a dirty stamp and currently
-#   passes the test only because wasmgo is not yet goStamped.
-#
-# Commit the source first, then rebuild, then commit the artifact.
-# ALLOW_DIRTY=1 overrides the dirty check for local experiments — never for
-# a blob you intend to commit.
-embeddable-tree:
-	@test -d .git || { \
-	  echo "refusing: .git is not a directory — this looks like a git worktree."; \
-	  echo "Go's buildvcs will not stamp vcs.revision here, so the artifact could"; \
-	  echo "not say what it was built from. Build from the main clone."; \
-	  exit 1; }
-	@test -n "$(ALLOW_DIRTY)" || test -z "$$(git status --porcelain)" || { \
-	  echo "refusing: working tree is dirty, so the artifact would be stamped"; \
-	  echo "vcs.modified=true and no commit would describe it. Commit the source"; \
-	  echo "first, then rebuild. (ALLOW_DIRTY=1 overrides, for local testing only.)"; \
-	  exit 1; }
-
-embed-wasm-visor: embeddable-tree wasm-visor ## Update the COMMITTED std-Go embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasmgo/) — run intentionally, then `git add` + commit it. Deterministic gzip (-n) so re-running on the same wasm yields no diff.
-	gzip -9 -n -c ./build/wasm-visor-go/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasmgo/wasm-visor.wasm.gz
-	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./pkg/wasmhv/wasmbin/wasmgo/wasm_exec.js
-	@echo "updated pkg/wasmhv/wasmbin/wasmgo/ (wasm-visor.wasm.gz + wasm_exec.js) — review with 'git status', commit intentionally (~9.5MB blob)."
-
-embed-wasm-visor-tinygo: embeddable-tree tinygo-wasm-visor ## Update the COMMITTED TinyGo embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasmtinygo/) — needs the 0magnet/tinygo fork (set TINYGO=<fork>/build/tinygo TINYGOROOT=<fork>). Pairs the TinyGo wasm with TinyGo's wasm_exec.js.
-	gzip -9 -n -c ./build/wasm-visor/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasmtinygo/wasm-visor.wasm.gz
-	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./pkg/wasmhv/wasmbin/wasmtinygo/wasm_exec.js
-	@echo "updated pkg/wasmhv/wasmbin/wasmtinygo/ (wasm-visor.wasm.gz + wasm_exec.js) — review with 'git status', commit intentionally (~2.9MB blob)."
 
 # embed-winbox was removed: the window manager now lives in
 # github.com/0magnet/winbox-go, whose committed dist/ assets (winbox.wasm.gz +
@@ -517,8 +451,6 @@ embed-wasm-visor-tinygo: embeddable-tree tinygo-wasm-visor ## Update the COMMITT
 # visor.WalletUIFS) — a skycoin vendor bump IS the wallet update; there is no
 # copied pkg/visor/static/wallet tree to sync (or forget to sync) anymore.
 
-prune-wasm-embed-history: ## Drop OLD embedded wasm-visor blobs from git history, keeping only the current one (reclaims ~9MB per past update). REWRITES HISTORY — needs git-filter-repo; run on a fresh clone, then force-push. See scripts/prune-wasm-embed-history.sh for the full warning.
-	scripts/prune-wasm-embed-history.sh
 
 dmsg-wasm-hv: ## Build the browser hypervisor-over-dmsg bundle (Service Worker proxy) into build/dmsg-wasm-hv
 	mkdir -p ./build/dmsg-wasm-hv
@@ -1045,12 +977,11 @@ sync-upstream-develop: #sync develop branch with upstream develop branch for for
 	git merge upstream/develop && \
 	git push
 
-playground: wasm-visor ## Build the docs-site playground (static desk page: shell + skywire commands + nested browser, NO auto-started visor) into build/playground
+playground: ## Build the docs-site playground (static desk page: shell + skywire commands + nested browser, NO auto-started visor) into build/playground
 	mkdir -p ./build/playground
 	GOOS=js GOARCH=wasm go build -buildvcs=true -tags "withoutsystray withoutgotop" -trimpath -ldflags="-s -w" -o ./build/playground/skywire.wasm .
 	gzip -9 -n -f ./build/playground/skywire.wasm
-	gzip -9 -n -c ./build/wasm-visor-go/wasm-visor.wasm > ./build/playground/wasm-visor.wasm.gz
-	cp ./build/wasm-visor-go/wasm_exec.js ./build/playground/
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/playground/
 	go run ./scripts/stage-playground ./build/playground
 	cp ./docs/playground/index.html ./build/playground/
 	@echo "built ./build/playground — serve it statically to test (any static file server)"

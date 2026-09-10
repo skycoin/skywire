@@ -15,7 +15,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
-	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 // deskTestHypervisor builds the minimal Hypervisor uiHandler needs: embedded
@@ -35,15 +34,18 @@ func deskTestHypervisor(t *testing.T) (*Hypervisor, cipher.PubKey) {
 	return hv, pk
 }
 
-// TestNativeDeskServing pins the /desk serving contract on the NATIVE
-// hypervisor UI port: the converged desk shell is served in native mode, the
-// Angular dashboard stays untouched at its existing routes, and nothing
-// wasm-visor-shaped is exposed (the native visor IS the visor — the desk is a
-// shell over it, so the in-page-visor machinery must have nothing to fetch).
+// TestNativeDeskServing pins the root serving contract on the NATIVE
+// hypervisor UI port in BOTH build states. With a skywire command module
+// (the two-stage build embeds one; a source build has none unless one is on
+// disk) the root is the converged desk, hosted out of that ONE module. Without
+// one there is no desk host, so the root is the dashboard exactly as the
+// legacy_ui option serves it. Either way the Angular dashboard stays at its
+// framed root, the retired paths stay gone, and the legacy wasm-visor blob
+// is not served: netscrape, the desk host and the tab's visor all live in
+// the command module now.
 func TestNativeDeskServing(t *testing.T) {
-	if execwasm.Present() {
-		t.Skip("a command module is embedded in this build (two-stage build); this test pins the no-module behaviour")
-	}
+	_, haveModule := execModuleSource("")
+	t.Logf("command module available in this build: %v", haveModule)
 	hv, pk := deskTestHypervisor(t)
 	h := hv.uiHandler()
 	get := func(path string) *httptest.ResponseRecorder {
@@ -52,7 +54,7 @@ func TestNativeDeskServing(t *testing.T) {
 		return w
 	}
 
-	t.Run("GET / serves the desk shell in native mode (the desk IS the UI)", func(t *testing.T) {
+	t.Run("GET / serves the desk with a command module, the dashboard without", func(t *testing.T) {
 		w := get("/")
 		if w.Code != http.StatusOK {
 			t.Fatalf("status=%d, want 200", w.Code)
@@ -61,14 +63,28 @@ func TestNativeDeskServing(t *testing.T) {
 			t.Errorf("Content-Type=%q, want text/html", ct)
 		}
 		body := w.Body.String()
-		// ONE desk: the page boots the same desk module the wasm page does, as a
-		// shell over the host visor — no in-tab visor, no help terminal and no
-		// docs server (those need the skywire command module this port does
-		// not serve), the dashboard tab on this origin's own UI.
-		for _, want := range []string{"deskWasmURL: '/wasm-visor.wasm'", "autostartVisor: false", "helpTerminal: false", "docsPort: 0", "hvWindow: true"} {
+		if !haveModule {
+			// No module, no desk host: the root is the injected dashboard,
+			// the same page legacy_ui serves (#4753). Nothing desk-shaped.
+			if !strings.Contains(body, "ANGULAR") || !strings.Contains(body, "__SKYWIRE_LOCAL_PK__") {
+				t.Error("without a command module the root must serve the injected dashboard")
+			}
+			if strings.Contains(body, "skywireDeskBoot(") || strings.Contains(body, "/skywire.wasm") {
+				t.Error("a desk was served with no command module to host it")
+			}
+			return
+		}
+		// ONE desk: the page boots the desk host out of the one command
+		// module, the dashboard tab on this origin's own UI, no help terminal
+		// and no docs server. With a local PK the tab's visor attaches to this
+		// hypervisor (TestNativeDeskAttachedVisor pins that wiring).
+		for _, want := range []string{"deskWasmURL: '/skywire.wasm'", "wasmURL: '/skywire.wasm'", "autostartVisor: true", "helpTerminal: false", "docsPort: 0", "hvWindow: true"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("page lacks %s", want)
 			}
+		}
+		if strings.Contains(body, "wasm-visor.wasm") {
+			t.Error("page still names the retired wasm-visor.wasm blob")
 		}
 		// RELATIVE and rooted: an absolute URL escapes the /vnet/<port>/ prefix
 		// onto the outer server's root (the trap #4499 fixed for /desk), and the
@@ -94,15 +110,6 @@ func TestNativeDeskServing(t *testing.T) {
 		// console window.
 		if !strings.Contains(body, "terminalURL: './pty/"+pk.Hex()+"'") {
 			t.Error("page lacks the relative pty terminal window URL")
-		}
-		// With no command module configured (hypervisor.wasm_serve.exec_wasm
-		// unset) the page is a shell over the host visor only: no autostart and
-		// no reference to the skywire command module. TestNativeDeskAttachedVisor
-		// covers the configured case.
-		for _, banned := range []string{"autostartVisor: true", "/skywire.wasm", "skywire.wasm.gz", "skywire-browse-launcher"} {
-			if strings.Contains(body, banned) {
-				t.Errorf("desk page references %s without a command module to serve", banned)
-			}
 		}
 	})
 
@@ -186,53 +193,36 @@ func TestNativeDeskServing(t *testing.T) {
 		}
 	})
 
-	// The rule is that native mode must not START a visor in the page — not
-	// that the module may never be served. Those were the same thing while the
-	// only reason to ship the module was to boot a visor out of it; they came
-	// apart when the desk began rendering the hypervisor UI as a netscrape tab,
-	// because netscrape is Go/wasm and lives in that same module. So the module
-	// is served, in a role that installs the browser and nothing else, while
-	// everything that could actually start a visor stays absent.
-	t.Run("the visor BOOT path is not exposed on the hypervisor port", func(t *testing.T) {
-		// hv-boot.js and worker.js ARE the boot path (worker.js hosts a visor
-		// off-thread; hv-boot.js spawns it) and are never served here.
-		// skywire.wasm is the in-tab CLI the desk starts a visor with; it is
-		// served only when the operator configured a command module (see
-		// TestNativeDeskAttachedVisor) — with none, 404 like the rest.
-		for _, p := range []string{"/skywire.wasm", "/hv-boot.js", "/worker.js"} {
+	t.Run("the SharedWorker boot path is never exposed on the hypervisor port", func(t *testing.T) {
+		// hv-boot.js and worker.js ARE the legacy boot path (worker.js hosts a
+		// visor off-thread; hv-boot.js spawns it) and are never served here.
+		// skywire.wasm is served exactly when there is a command module.
+		for _, p := range []string{"/hv-boot.js", "/worker.js"} {
 			if w := get(p); w.Code != http.StatusNotFound {
-				t.Errorf("GET %s → %d, want 404 (no command module configured)", p, w.Code)
+				t.Errorf("GET %s → %d, want 404", p, w.Code)
 			}
+		}
+		want := http.StatusNotFound
+		if haveModule {
+			want = http.StatusOK
+		}
+		if w := get("/skywire.wasm"); w.Code != want {
+			t.Errorf("GET /skywire.wasm → %d, want %d (module available: %v)", w.Code, want, haveModule)
 		}
 	})
 
-	t.Run("the desk-host module is served for the browser, not for a visor", func(t *testing.T) {
-		for _, p := range []string{"/wasm-visor.wasm", "/wasm_exec.js"} {
-			// (wasm-visor.wasm only until every desk has a command module: with
-			// none, it is still the desk host.)
-			if w := get(p); w.Code != http.StatusOK {
-				t.Errorf("GET %s → %d, want 200 (netscrape lives in this module)", p, w.Code)
-			}
+	t.Run("the legacy wasm-visor blob is gone; Go's loader stays", func(t *testing.T) {
+		// Everything that blob carried — netscrape, the desk host, the tab's
+		// visor — is a role of the one command module now.
+		if w := get("/wasm-visor.wasm"); w.Code != http.StatusNotFound {
+			t.Errorf("GET /wasm-visor.wasm → %d, want 404 (the blob was removed)", w.Code)
 		}
-	})
-
-	t.Run("the native desk page does not autostart a visor without a command module", func(t *testing.T) {
-		w := get("/")
+		w := get("/wasm_exec.js")
 		if w.Code != http.StatusOK {
-			t.Fatalf("status=%d, want 200", w.Code)
+			t.Fatalf("GET /wasm_exec.js → %d, want 200", w.Code)
 		}
-		body := w.Body.String()
-		if !strings.Contains(body, "autostartVisor: false") {
-			t.Error("native desk page lost its explicit autostartVisor: false")
-		}
-		// These are what the WASM desk passes to run a visor in the tab. Their
-		// absence here is the guarantee, and it is what makes serving the desk
-		// module safe: nothing tells the desk to boot one, and the command
-		// module it would need is not even named.
-		for _, never := range []string{"autostartVisor: true", "wasmURL: '/skywire.wasm'"} {
-			if strings.Contains(body, never) {
-				t.Errorf("native desk page carries %q — it must not start a visor", never)
-			}
+		if !strings.Contains(w.Body.String(), "globalThis.Go") {
+			t.Error("/wasm_exec.js is not Go's loader")
 		}
 	})
 }

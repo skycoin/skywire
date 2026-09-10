@@ -311,32 +311,6 @@ jobs:
       - name: Build android payload + enforce size budget
         run: make android-mobile-check
 
-  # Headless RUNTIME smoke of the real wasm-visor blob (Tier B of the
-  # wasm-visor test plan): Node ≥22 executes the compiled js/wasm binary via
-  # Go's wasm_exec.js — no browser — boots the visor against a loopback dmsg
-  # server started by the script, and asserts the browser-critical path: boot →
-  # ws dmsg session → dmsg_connected → the in-wasm hypervisor /api core
-  # answering. The compile-check above can't catch runtime-only breakage
-  # (boot-glue regressions, carrier selection, the /api dispatch); this does.
-  wasm-headless:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version: 'stable'
-          cache: true
-          cache-dependency-path: go.sum
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 'lts/*'
-
-      - name: Headless wasm-visor smoke (boot → dmsg(ws) → /api)
-        run: ./scripts/wasm-headless/run.sh
-
   # TinyGo lane. Several wasm binaries are ALSO built with TinyGo for the
   # embedded/browser targets (smaller output, no crypto/tls): the dmsg IoT
   # probe (wasip1), the tpviz/dmsg-wasm/wasm-visor browser edges (wasm), and

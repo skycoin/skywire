@@ -5,17 +5,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// RootCmd is the `hv` command group: tools for building, serving, driving and
+// RootCmd is the `hv` command group: tools for serving, driving and
 // bridging the hypervisor UI / wasm-visor.
 var RootCmd = &cobra.Command{
 	Use:   "hv",
 	Short: "Hypervisor / wasm-visor tools",
-	Long: `Tools for building, serving, driving and bridging the hypervisor UI and the
+	Long: `Tools for serving, driving and bridging the hypervisor UI and the
 standalone wasm-visor.
 
-Build & serve:
-  gen      generate a self-contained standalone hypervisor.html (opens from file://)
-  serve    serve the keyless standalone wasm-visor over HTTP (reverse-proxy with Caddy)
+Serve:
+  serve    serve the keyless standalone wasm-visor desk over HTTP (reverse-proxy with Caddy)
 
 Desktop bridge:
   notify   show a remote visor's app notifications on THIS machine (SSE bridge)
@@ -33,8 +32,4 @@ synthesizes keystrokes, which BiDi's input.* module would be needed for.
 Firefox allows ONE BiDi session and does not release it when a socket drops.
 Run drive once and point --driver at it rather than spending a session per
 command.`,
-}
-
-func init() {
-	RootCmd.AddCommand(genCmd)
 }

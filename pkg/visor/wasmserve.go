@@ -21,7 +21,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"html"
@@ -44,7 +43,7 @@ import (
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 	"github.com/skycoin/skywire/pkg/wasmhv/ctlbridge"
-	"github.com/skycoin/skywire/pkg/wasmhv/wasmbin"
+	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 // WasmServeConfig configures ServeWasm. Mirrors the `hv serve` flags.
@@ -55,7 +54,6 @@ type WasmServeConfig struct {
 	TLSKey   string // optional key file (PEM), paired with TLSCert
 	Harness  bool   // mount the /ctl/* operator control bridge (DEV ONLY)
 	Wallet   bool   // serve the bundled skycoin-web wallet at /wallet/
-	Variant  string // "" = build default; "go" | "tinygo"
 	Password string // optional access-password gate
 	// BrowseSuffix is the browse-origin domain suffix (leading dot), e.g.
 	// ".mesh.localhost" (local) or ".haltingstate.net" (hosted). Empty →
@@ -70,15 +68,13 @@ type WasmServeConfig struct {
 	// "https://theskywirenetwork.net") that B's bootstrap postMessages to — used
 	// only with BrowseOriginAddr behind a proxy. Empty = derive from Addr (local).
 	VOrigin string
-	// BrowseWasmSW serves the Go/wasm transport worker on the browse origins
-	// instead of realorigin's JS one. For testing that implementation only —
-	// see browseSWWasm for what the swap gives up on the untrusted origin.
-	BrowseWasmSW bool
 	// ExecWasmPath, when set, serves the file at /skywire.wasm: the FULL
-	// skywire CLI compiled for GOOS=js (see docs/design), which the page's
-	// terminal executes per command against the shared in-memory filesystem
-	// (bottle jsfs.js + browseui skywire-exec.js). Empty = the terminal has no
-	// `skywire` command. Empty = the module embedded by the two-stage build (pkg/wasmhv/execwasm), else the package location on disk. Build it with
+	// skywire CLI compiled for GOOS=js (see docs/design) — the desk host, the
+	// tab's visor and every command the page's terminal runs against the
+	// shared in-memory filesystem (bottle jsfs.js + browseui skywire-exec.js).
+	// Empty = the module embedded by the two-stage build (pkg/wasmhv/execwasm),
+	// else the package location on disk. There is no page without it: ServeWasm
+	// refuses to start rather than serve a desk with nothing to run. Build it with
 	//   GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" \
 	//     -trimpath -ldflags "-s -w" -o build/skywire.wasm .
 	ExecWasmPath string
@@ -101,21 +97,16 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	if log == nil {
 		log = logging.MustGetLogger("wasm-serve")
 	}
-	if !wasmbin.Embedded() {
-		return fmt.Errorf("no embedded wasm-visor: rebuild skywire after `make embed-wasm-visor`")
+	// The ONE module everything served here runs out of: the desk host, the
+	// tab's visor, every command the terminal executes. Explicit path, else
+	// the module embedded by the two-stage build, else the package location
+	// on disk (execModuleSource). Without one there is nothing to serve — a
+	// plain source build stops here rather than put up a desk with no host.
+	execWasmPath, haveExecWasm := execModuleSource(cfg.ExecWasmPath)
+	if !haveExecWasm {
+		return fmt.Errorf("no skywire command module embedded: run `make build-embedded` or pass --exec-wasm")
 	}
-	// Pick which embedded wasm-visor to serve. Empty = the build default.
-	variant := wasmbin.Default()
-	if cfg.Variant != "" {
-		variant = wasmbin.Variant(cfg.Variant)
-		if !wasmbin.Has(variant) {
-			return fmt.Errorf("wasm-visor variant %q not embedded (available: %v)", cfg.Variant, wasmbin.Available())
-		}
-	}
-	wasm, err := wasmbin.GetVariant(variant)
-	if err != nil {
-		return fmt.Errorf("embedded wasm-visor: %w", err)
-	}
+	cfg.ExecWasmPath = execWasmPath
 	uiFS, err := HypervisorUIFS()
 	if err != nil {
 		return fmt.Errorf("hypervisor UI assets: %w", err)
@@ -124,10 +115,11 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	if err != nil {
 		return fmt.Errorf("read index.html: %w", err)
 	}
-	// wasmVer fingerprints the WHOLE served build (wasm + Angular index +
-	// binary version) so the page self-reloads on any newer deploy.
+	// wasmVer fingerprints the served BUILD (Angular index + binary version +
+	// the client JS below) so the page self-reloads on any newer deploy. The
+	// command module is not hashed here: servedVersion folds its stamp in per
+	// request, since the on-disk one is rebuilt under a running server.
 	vh := sha256.New()
-	vh.Write(wasm)
 	vh.Write(indexB)
 	vh.Write([]byte(buildinfo.Version()))
 	// Fold the served client JS into the fingerprint too, so a rebuild that
@@ -209,7 +201,6 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 				TLS:     cfg.TLS,
 				TLSCert: cfg.TLSCert,
 				TLSKey:  cfg.TLSKey,
-				WasmSW:  cfg.BrowseWasmSW,
 				Log:     log,
 			}); err != nil {
 				log.WithError(err).Error("browse-origin bootstrap server failed")
@@ -230,83 +221,9 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 			_, _ = w.Write(body) //nolint:errcheck
 		})
 	}
-	// Both embedded blobs served from one origin so the PWA can switch
-	// Go<->TinyGo at runtime via ?variant=. wasm_exec.js matches the blob.
-	pickVariant := func(r *http.Request) wasmbin.Variant {
-		if q := r.URL.Query().Get("variant"); q != "" && wasmbin.Has(wasmbin.Variant(q)) {
-			return wasmbin.Variant(q)
-		}
-		return variant
-	}
-	// Per-variant ETag: ?variant= serves different bytes under the same URL, so
-	// the variant is part of the tag to keep the browser's cache from crossing
-	// them. For the default variant the tag tracks wasmVer (the blob's own hash),
-	// so a rebuild-restart fetches the fresh 9.5MB blob; an unchanged one 304s.
-	variantETag := func(r *http.Request) string { return `"` + wasmVer + "-" + string(pickVariant(r)) + `"` }
-	mux.HandleFunc("/wasm-visor.wasm", func(w http.ResponseWriter, r *http.Request) {
-		vtag := variantETag(r)
-		w.Header().Set("Content-Type", "application/wasm")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("ETag", vtag)
-		if r.Header.Get("If-None-Match") == vtag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-		writeWasmVariant(w, r, pickVariant(r))
-	})
-	mux.HandleFunc("/wasm_exec.js", func(w http.ResponseWriter, r *http.Request) {
-		vtag := variantETag(r)
-		w.Header().Set("Content-Type", "text/javascript")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("ETag", vtag)
-		if r.Header.Get("If-None-Match") == vtag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-		_, _ = w.Write(wasmbin.WasmExecJSVariant(pickVariant(r))) //nolint:errcheck
-	})
-	// Per-variant PATHS alongside the ?variant= query form above. A query string
-	// cannot select bytes on a static host (GitHub Pages and friends serve one
-	// body per path), so publishing this surface as files requires the variant to
-	// live in the URL path. The blob and its wasm_exec.js loader are
-	// toolchain-specific and must never be mixed (see wasmbin/embed.go), so both
-	// are served under the same /wasm/<variant>/ prefix and travel as a pair.
-	// The query form stays for already-cached clients.
-	for _, v := range wasmbin.Available() {
-		v := v
-		tag := `"` + wasmVer + "-" + string(v) + `"`
-		mux.HandleFunc("/wasm/"+string(v)+"/wasm-visor.wasm", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/wasm")
-			w.Header().Set("Cache-Control", "no-cache")
-			w.Header().Set("ETag", tag)
-			if r.Header.Get("If-None-Match") == tag {
-				w.WriteHeader(http.StatusNotModified)
-				return
-			}
-			writeWasmVariant(w, r, v)
-		})
-		mux.HandleFunc("/wasm/"+string(v)+"/wasm_exec.js", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/javascript")
-			w.Header().Set("Cache-Control", "no-cache")
-			w.Header().Set("ETag", tag)
-			if r.Header.Get("If-None-Match") == tag {
-				w.WriteHeader(http.StatusNotModified)
-				return
-			}
-			_, _ = w.Write(wasmbin.WasmExecJSVariant(v)) //nolint:errcheck
-		})
-	}
-	mux.HandleFunc("/wasm-variants.json", func(w http.ResponseWriter, _ *http.Request) {
-		avail := wasmbin.Available()
-		names := make([]string, len(avail))
-		for i, v := range avail {
-			names[i] = string(v)
-		}
-		b, _ := json.Marshal(map[string]interface{}{"available": names, "default": string(variant)}) //nolint:errcheck
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write(b) //nolint:errcheck
-	})
+	// Go's loader for the one module. It is std-Go's wasm_exec.js because the
+	// module is a std-Go build; the loader and the module are a pair.
+	serveBytes("/wasm_exec.js", "text/javascript", wasmhv.WasmExecJS)
 	serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
 	serveBytes("/worker.js", "text/javascript", wasmhv.WorkerJS)
 	serveBytes("/browse.js", "text/javascript", wasmhv.BrowseJS)
@@ -319,40 +236,29 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// schedules on its own thread instead of the one that draws the page;
 	// where it 404s, desk-boot keeps the in-page skywireExec unchanged.
 	serveBytes("/skywire-worker.js", "text/javascript", wasmhv.ExecWorkerJS())
-	// deskPage is the desk shell, served AT THE ROOT below when there is one.
-	// Declared out here because the root handler is built further down and the
-	// desk is only assembled when a CLI module was given to run in it.
-	var deskPage []byte
-	// The full skywire CLI module for the terminal's `skywire` command —
-	// embedded by the two-stage build (pkg/wasmhv/execwasm) or served from disk.
-	// Neither present = 404, and the shell simply does not register the command.
-	// Explicit path, else the module embedded by the two-stage build, else
-	// the package location on disk (execModuleSource).
-	execWasmPath, haveExecWasm := execModuleSource(cfg.ExecWasmPath)
-	cfg.ExecWasmPath = execWasmPath
-	if haveExecWasm {
-		mux.HandleFunc("/skywire.wasm", func(w http.ResponseWriter, r *http.Request) {
-			serveExecWasm(w, r, execWasmPath)
-		})
-		// /desk — the CONVERGED page: the tab as a Linux host. No SharedWorker
-		// visor; the terminal runs `skywire autoconfig` which starts the FULL
-		// binary's visor in the foreground, a second terminal shows the help,
-		// and once the hypervisor UI listens on the virtual loopback the
-		// nested browser opens it maximized on top. A visor the operator
-		// stopped stays stopped across reloads (desk-boot's session).
-		serveBytes("/desk-boot.js", "text/javascript", wasmhv.DeskBootJS())
-		deskHTML := deskShellHTML(wasmDeskScripts(), deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort))
-		if cfg.Harness {
-			// Same rule as injectWasmBoot on the standalone page: --harness
-			// injects ctl-bridge.js (its presence IS the harness signal). On
-			// the desk it registers the tab and mirrors the foreground visor
-			// instance's stderr ring to /ctl/log, so `curl /ctl/log?tab=<id>`
-			// reads the in-terminal visor's log.
-			deskHTML = bytes.Replace(deskHTML,
-				[]byte(`<script src="/desk-boot.js"></script>`),
-				[]byte("<script src=\"/ctl-bridge.js\"></script>\n<script src=\"/desk-boot.js\"></script>"), 1)
-		}
-		deskPage = deskHTML
+	// The full skywire CLI module (resolved at the top: ServeWasm does not
+	// start without one) — the desk host, the tab's visor and every command
+	// the terminal runs.
+	mux.HandleFunc("/skywire.wasm", func(w http.ResponseWriter, r *http.Request) {
+		serveExecWasm(w, r, execWasmPath)
+	})
+	// The desk — the CONVERGED page, served AT THE ROOT below: the tab as a
+	// Linux host. No SharedWorker visor; the terminal runs `skywire autoconfig`
+	// which starts the FULL binary's visor in the foreground, a second terminal
+	// shows the help, and once the hypervisor UI listens on the virtual
+	// loopback the nested browser opens it maximized on top. A visor the
+	// operator stopped stays stopped across reloads (desk-boot's session).
+	serveBytes("/desk-boot.js", "text/javascript", wasmhv.DeskBootJS())
+	deskPage := deskShellHTML(wasmDeskScripts(), deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort))
+	if cfg.Harness {
+		// Same rule as injectWasmBoot on the standalone page: --harness
+		// injects ctl-bridge.js (its presence IS the harness signal). On
+		// the desk it registers the tab and mirrors the foreground visor
+		// instance's stderr ring to /ctl/log, so `curl /ctl/log?tab=<id>`
+		// reads the in-terminal visor's log.
+		deskPage = bytes.Replace(deskPage,
+			[]byte(`<script src="/desk-boot.js"></script>`),
+			[]byte("<script src=\"/ctl-bridge.js\"></script>\n<script src=\"/desk-boot.js\"></script>"), 1)
 	}
 	// The desk IS the root here too, matching the visor-attached hypervisor
 	// (#4491). The old separate path redirects rather than serving a second
@@ -366,8 +272,8 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		w.Header().Set("Location", "./")
 		w.WriteHeader(http.StatusMovedPermanently)
 	})
-	// The window-manager module of the LEGACY page above (hv-boot.js +
-	// BrowseLauncherJS need globalThis.WinBox). The desk pages link winbox-go
+	// The window-manager module of the LEGACY page above (hv-boot.js
+	// needs globalThis.WinBox). The desk pages link winbox-go
 	// into the Go desk host and never fetch this; it goes with hv-boot.js.
 	//
 	// Same reasoning as writeWasmVariant: winbox is committed gzipped, and
@@ -395,21 +301,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// responder calls, and is the only skywire-specific piece. All three are
 	// static — the same bytes work on every origin. The B navigation shell is
 	// host-routed below, since it needs per-request substitution.
-	if cfg.BrowseWasmSW {
-		// Opt-in: the same wasm-visor blob V already serves, loaded into the
-		// worker with the browse-sw role. Testing only — see browseSWWasm.
-		loader, assets, err := browseSWWasm(variant)
-		if err != nil {
-			return err
-		}
-		serveBytes("/browse-sw.js", "text/javascript", loader)
-		for p, b := range assets {
-			serveBytes(p, browseSWAssetType(p), b)
-		}
-		log.Warn("serving the Go/wasm transport worker on browse origins — for testing, not deployment")
-	} else {
-		serveBytes("/browse-sw.js", "text/javascript", realorigin.ServiceWorkerJS())
-	}
+	serveBytes("/browse-sw.js", "text/javascript", realorigin.ServiceWorkerJS())
 	serveBytes("/browse-responder.js", "text/javascript", realorigin.ResponderJS())
 	serveBytes("/browse-transport.js", "text/javascript", wasmhv.BrowseTransportJS)
 	swJS := wasmhv.ServiceWorkerFor(wasmVer, []string{"./", "manifest.webmanifest", "icon-192.png", "icon-512.png", "wasm_exec.js", "hv-boot.js", "worker.js", "browse.js", "winbox.wasm"})
@@ -538,7 +430,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 			// Both pages boot with the fingerprint /wasm-version answers RIGHT
 			// NOW, so a poll compares like with like.
 			cur := servedVersion(wasmVer, cfg.ExecWasmPath)
-			if deskPage != nil && !framed {
+			if !framed {
 				_, _ = w.Write(renderServedVersion(deskPage, cur)) //nolint:errcheck
 				return
 			}
@@ -600,7 +492,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		}
 		return nil
 	}
-	log.Infof("serving standalone wasm-visor (ui + %d-byte wasm + hv-boot) on %s", len(wasm), cfg.Addr)
+	log.Infof("serving the desk (skywire.wasm: %s) on %s", execModuleDesc(execWasmPath), cfg.Addr)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("serve: %w", err)
 	}
@@ -620,11 +512,6 @@ type BrowseOriginConfig struct {
 	TLSCert string          // optional PEM cert (paired with TLSKey)
 	TLSKey  string          // optional PEM key
 	Log     *logging.Logger // nil → package default
-
-	// WasmSW serves the Go/wasm transport worker instead of realorigin's JS one.
-	// For testing that implementation; leave it off for anything deployed. See
-	// browseSWWasm and browse-sw-loader.js for what the swap gives up.
-	WasmSW bool
 }
 
 // ServeBrowseOrigin runs the browse-origin bootstrap server (RFC §4b, hosted mode):
@@ -659,14 +546,6 @@ func ServeBrowseOrigin(ctx context.Context, cfg BrowseOriginConfig) error {
 		AppOrigin: cfg.VOrigin,
 		SWPath:    "/browse-sw.js",
 		Shell:     wasmhv.BrowseBootstrapHTML,
-	}
-	if cfg.WasmSW {
-		loader, assets, err := browseSWWasm(wasmbin.Default())
-		if err != nil {
-			return err
-		}
-		roCfg.Worker, roCfg.Assets = loader, assets
-		log.Warn("browse-origin: serving the Go/wasm transport worker — for testing, not deployment")
 	}
 	handler, err := realorigin.Handler(roCfg)
 	if err != nil {
@@ -790,7 +669,6 @@ func injectWasmBoot(index []byte, wasmVer string, harness bool, browseOriginJS s
 		// configures the responder, so it loads after it.
 		"<script src=\"browse-responder.js\"></script>\n" +
 		"<script src=\"browse-transport.js\"></script>\n" +
-		"<script>" + wasmhv.BrowseLauncherJS + "</script>\n" +
 		"<script>window.__SKYWIRE_WASM_VERSION__=" + strconv.Quote(wasmVer) + ";</script>\n" +
 		"<script src=\"autoupdate.js\"></script>\n"
 	if harness {
@@ -924,37 +802,13 @@ func wasmPasswordGate(h http.Handler, password string, secure bool) http.Handler
 	})
 }
 
-// writeWasmVariant writes an embedded wasm-visor blob, preferring the COMMITTED
-// gzip bytes over bytes it has to inflate first.
-//
-// The blob is stored gzipped (~12MB) and only needs inflating (~59MB) by
-// something that INSTANTIATES it. wasmbin.GetVariant inflates on every call —
-// there is no cache — so serving it that way inflated tens of megabytes per
-// request, and a reverse proxy in front then compressed the result straight
-// back down. That is three copies of the work to deliver bytes we already had
-// in the right shape.
-//
-// Browsers decompress a Content-Encoding: gzip response themselves and
-// WebAssembly.instantiateStreaming is happy with what comes out, so handing
-// over the committed bytes skips both the inflate and the recompress. It also
-// ships a gzip -9 blob rather than whatever level a proxy picks for speed:
-// measured on the live deploy, 12.3MB committed against 13.8MB recompressed.
-//
-// Falls back to inflating for a client that did not offer gzip. Vary is set so
-// a cache between here and the browser keeps the two encodings apart.
-func writeWasmVariant(w http.ResponseWriter, r *http.Request, v wasmbin.Variant) {
-	w.Header().Set("Vary", "Accept-Encoding")
-	if gz := wasmbin.GetVariantGz(v); len(gz) > 0 && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-		w.Header().Set("Content-Encoding", "gzip")
-		_, _ = w.Write(gz) //nolint:errcheck
-		return
+// execModuleDesc names where the served command module comes from, for the
+// startup log: the path when it is a file, else the embedded copy's stamp.
+func execModuleDesc(path string) string {
+	if path != "" {
+		return path
 	}
-	b, err := wasmbin.GetVariant(v)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	_, _ = w.Write(b) //nolint:errcheck
+	return "embedded " + execwasm.Stamp()
 }
 
 // randomHex returns n cryptographically-random bytes as a lowercase hex string.
@@ -966,62 +820,13 @@ func randomHex(n int) (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// Paths the Go/wasm browse worker needs on the browse origin B. They sit beside
-// the worker rather than on V because a service worker fetches its own module,
-// and a cross-origin fetch from B to V would be a request the whole design
-// exists to avoid.
-const (
-	browseSWWasmPath = "/browse-sw.wasm"
-	browseSWExecPath = "/browse-sw-exec.js"
-)
-
-// browseSWWasm builds the opt-in Go/wasm transport worker: the loader with its
-// two asset paths substituted, plus the module and the wasm_exec.js that matches
-// it. The blob is the wasm-visor that is already embedded for V, so choosing this
-// worker costs no second binary — only the bytes of the browse-sw role inside it.
-//
-// It is off unless asked for. See browse-sw-loader.js for why: the JS worker can
-// be audited by reading it, and this one cannot.
-func browseSWWasm(variant wasmbin.Variant) ([]byte, map[string][]byte, error) {
-	if !wasmbin.Embedded() {
-		return nil, nil, fmt.Errorf("browse-origin wasm worker: no wasm-visor is embedded in this build")
-	}
-	if !wasmbin.Has(variant) {
-		variant = wasmbin.Default()
-	}
-	wasm, err := wasmbin.GetVariant(variant)
-	if err != nil {
-		return nil, nil, fmt.Errorf("browse-origin wasm worker: %w", err)
-	}
-	execJS := wasmbin.WasmExecJSVariant(variant)
-	if len(execJS) == 0 {
-		return nil, nil, fmt.Errorf("browse-origin wasm worker: variant %q has no wasm_exec.js", variant)
-	}
-	loader := bytes.ReplaceAll(wasmhv.BrowseSWLoaderJS, []byte("__WASM_EXEC__"), []byte(browseSWExecPath))
-	loader = bytes.ReplaceAll(loader, []byte("__WASM_URL__"), []byte(browseSWWasmPath))
-	return loader, map[string][]byte{
-		browseSWWasmPath: wasm,
-		browseSWExecPath: execJS,
-	}, nil
-}
-
-// browseSWAssetType types the worker's companion files. The wasm one matters:
-// instantiateStreaming refuses a module that does not arrive as application/wasm,
-// and the failure reads like a corrupt module rather than a header problem.
-func browseSWAssetType(p string) string {
-	if strings.HasSuffix(p, ".wasm") {
-		return "application/wasm"
-	}
-	return "text/javascript"
-}
-
 // deskWasmBootOpts renders the skywireDeskBoot options object for the
 // wasm-served desk (`hv serve --exec-wasm`'s /desk): the tab as a Linux host.
 // Assets come from the routes ServeWasm already exposes: /browse.js is the full
 // desk bundle, /skywire.wasm the ONE command module — the desk host (`skywire
 // desk-host`), the tab's visor and every command the terminal runs — and
-// /wasm_exec.js?variant=go its loader. (/desk exists only when that module is
-// served, so there is no legacy desk-host fallback here.)
+// /wasm_exec.js its loader. (ServeWasm does not start without that module, so
+// there is no legacy desk-host fallback here.)
 //
 // helpTerminal and the docs server are OFF unless asked for, because each one
 // is a whole extra Go/wasm runtime of the full skywire binary and that memory
@@ -1039,7 +844,7 @@ func deskWasmBootOpts(helpTerminal bool, docsPort int) string {
   persistDB: 'skywire-desk',
   deskWasmURL: '/skywire.wasm',
   wasmURL: '/skywire.wasm',
-  wasmExecURL: '/wasm_exec.js?variant=go',
+  wasmExecURL: '/wasm_exec.js',
   autostartVisor: true,
   helpTerminal: %t,
   docsPort: %d,
@@ -1054,7 +859,7 @@ func deskWasmBootOpts(helpTerminal bool, docsPort int) string {
 // runs in dies with the page, so the reload boots the new module. The stamp
 // is the servedVersionToken; the root handler fills it per request.
 func wasmDeskScripts() string {
-	return `<script src="/wasm_exec.js?variant=go"></script>` + "\n" +
+	return `<script src="/wasm_exec.js"></script>` + "\n" +
 		`<script src="/browse.js"></script>` + "\n" +
 		`<script>window.__SKYWIRE_WASM_VERSION__="` + servedVersionToken + `";</script>` + "\n" +
 		`<script src="/autoupdate.js"></script>` + "\n" +

@@ -120,8 +120,8 @@ manager, and route-setup responder.
   The signaling layer is dmsg-native regardless; only the media path needs ICE.
 - **Config source = the VISOR's config, not the embedded default.** The test
   harness (cmd/dmsg-wasm) exposes `deployment.Prod.StunServers` — the embedded
-  defaults. But when the UI is generated/embedded BY a visor (the standalone-HV
-  generator, `cli hv gen`), it must inject THAT visor's runtime config — its
+  defaults. But when the UI is served BY a visor (`hv serve`, or the visor-hosted
+  `hypervisor.wasm_serve`), it must inject THAT visor's runtime config — its
   configured STUN servers, dmsg servers, discovery, and service URLs — which may
   differ on custom/private deployments. The generator already inlines config; the
   STUN/ICE config (and any other deployment-specific values) rides along.

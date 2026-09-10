@@ -130,7 +130,6 @@ type WasmServeConf struct {
 	TLSKey   string `json:"tls_key,omitempty"`   // optional PEM key, paired with TLSCert
 	Harness  bool   `json:"harness,omitempty"`   // mount the /ctl/* operator control bridge (DEV ONLY — never expose publicly)
 	NoWallet bool   `json:"no_wallet,omitempty"` // default serves the bundled skycoin-web wallet; set true to omit it
-	Variant  string `json:"variant,omitempty"`   // "" = build default; "go" | "tinygo"
 	Password string `json:"password,omitempty"`  // optional access-password gate (use with TLS)
 	// ExecWasm is the path to the FULL skywire CLI built for GOOS=js, served at
 	// /skywire.wasm. It is what turns this surface into the DESK: without it the
