@@ -2439,3 +2439,8 @@ func (rc *rpcClient) ARSelfInfo() (*ARSelfRegistration, error) {
 	}
 	return &resp, nil
 }
+
+// SetHypervisorLegacyUIPersist serves the legacy dashboard (true) or the desk (false) at the web UI root.
+func (rc *rpcClient) SetHypervisorLegacyUIPersist(legacy, persist bool) error {
+	return rc.Call("SetHypervisorLegacyUI", &SetHypervisorLegacyUIIn{Legacy: legacy, Persist: persist}, &struct{}{})
+}

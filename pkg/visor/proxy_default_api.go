@@ -1269,3 +1269,7 @@ func (proxyDefaultAPI) HVUpdateForwardedPort(_ cipher.PubKey, _ ForwardedPort) e
 func (proxyDefaultAPI) Close() error {
 	return ErrProxyNotSupported
 }
+
+func (proxyDefaultAPI) SetHypervisorLegacyUIPersist(_, _ bool) error {
+	return ErrProxyNotSupported
+}
