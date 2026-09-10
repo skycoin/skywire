@@ -250,10 +250,16 @@ func (s *service) Run(ctx context.Context) error {
 	srv := dmsg.NewServer(cfg.PubKey, cfg.SecKey, newDmsgOnly(dmsgC, discPKs[0], log), &srvConf, m)
 	srv.SetLogger(log)
 
-	if geoDB, err := geoip.OpenEmbedded(); err != nil {
-		log.WithError(err).Warn("failed to open embedded geoip DB; LookupIPGeo will return empty geo fields")
+	// The embedded geoip DB opens on the first lookup (geoip.Shared): ~60 MB of
+	// heap, paid only if a geo field is ever asked for.
+	if !geoip.Embedded() {
+		log.Warn("no embedded geoip DB in this build; LookupIPGeo will return empty geo fields")
 	} else {
 		srv.SetGeoLookup(func(ip net.IP) (country, region string, lat, lon float64) {
+			geoDB, err := geoip.Shared()
+			if err != nil {
+				return "", "", 0, 0
+			}
 			res, err := geoip.Lookup(geoDB, ip.String())
 			if err != nil || res == nil {
 				return "", "", 0, 0

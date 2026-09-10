@@ -33,7 +33,7 @@ func geoCountryForIP(ip string) string {
 		return ""
 	}
 	geoSummary.once.Do(func() {
-		if db, err := geoip.OpenEmbedded(); err == nil {
+		if db, err := geoip.Shared(); err == nil {
 			geoSummary.db = db
 		}
 	})
