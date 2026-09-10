@@ -242,7 +242,9 @@ func registerModules(logger *logging.MasterLogger) {
 	skyFwd = maker("sky_forward_conn", initSkywireForwardConn, &dmsgC, &dmsgCtrl, &tr, &launch)
 	pi = maker("ping", initPing, &dmsgC, &tm)
 	dmsgPi = maker("dmsg_ping", initDmsgPing, &dmsgC)
-	dmsgSrv = maker("dmsg_server", initDmsgServer, &dmsgC)
+	// &tr: the in-process server serves on the transport stage's shared TCP
+	// cmux branch by default, so that stage must have bound it first.
+	dmsgSrv = maker("dmsg_server", initDmsgServer, &dmsgC, &tr)
 	dmsgServerLatency = maker("dmsg_server_latency", initDmsgServerLatency, &dmsgPi)
 	tc = maker("transportable", initEnsureVisorIsTransportable, &dmsgC, &tm, &stcprC)
 	tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &dmsgC, &tm)

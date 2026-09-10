@@ -20,7 +20,7 @@ func TestTCPDemux_RoutesByPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen master: %v", err)
 	}
-	d := newTCPDemux(master)
+	d := newTCPDemux(master, false)
 	defer d.Close() //nolint:errcheck
 	addr := master.Addr().String()
 

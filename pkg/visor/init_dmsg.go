@@ -1081,18 +1081,31 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
+	// Share the visor's transport TCP port unless the operator pinned this
+	// server to an address of its own. The shared branch comes from the same
+	// cmux that already splits stcpr from WS, so the server needs no port of
+	// its own and nothing new has to be opened on the host or forwarded.
+	lis := v.dmsgSharedLis
+	shared := lis != nil
 	localAddr := srvCfg.LocalAddress
-	if localAddr == "" {
-		localAddr = ":8081"
+	if !shared {
+		if localAddr == "" {
+			localAddr = ":8081"
+		}
 	}
 
 	srvConf := dmsg.DefaultServerConfig()
 	srv := dmsg.NewServer(v.conf.PK, v.conf.SK, dmsgOnlyDisc(dmsgC, discPK, log), srvConf, dmsgmetrics.NewEmpty())
 	srv.SetLogger(log)
 
-	lis, err := net.Listen("tcp", localAddr)
-	if err != nil {
-		return fmt.Errorf("in-process dmsg server: listen on %s: %w", localAddr, err)
+	if !shared {
+		var err error
+		if lis, err = net.Listen("tcp", localAddr); err != nil {
+			return fmt.Errorf("in-process dmsg server: listen on %s: %w", localAddr, err)
+		}
+	}
+	if localAddr == "" {
+		localAddr = lis.Addr().String()
 	}
 
 	go func() {
@@ -1106,10 +1119,17 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	log.WithField("local_pk", v.conf.PK).
 		WithField("local_address", localAddr).
 		WithField("public_address", srvCfg.PublicAddress).
+		WithField("shared_transport_port", shared).
 		Info("Started in-process dmsg server on the visor key")
 
 	v.pushCloseStack("dmsg_server", func() error {
 		cerr := srv.Close()
+		// Only a listener this server owns is closed here. The shared branch
+		// belongs to the transport cmux, which stcpr and WS are still serving;
+		// closing it is the transport stage's job.
+		if shared {
+			return cerr
+		}
 		if lerr := lis.Close(); lerr != nil && !errors.Is(lerr, net.ErrClosed) && cerr == nil {
 			cerr = lerr
 		}
