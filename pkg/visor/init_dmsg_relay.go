@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -156,9 +157,77 @@ func (v *Visor) nominateRelayPeers(ctx context.Context, dmsgC *dmsg.Client, log 
 	}
 }
 
-// relayNominees returns the persistent-transport peers this visor has a live
-// transport to.
+// relayHubLimit bounds how many co-resident visor+dmsg-server hubs are
+// nominated alongside the operator's own pins. Each nominee costs a dial
+// attempt, and one working relay is all a visor needs; a handful is enough
+// cover for the working one going away.
+const relayHubLimit = 4
+
+// relayNominees returns this visor's relay candidates: the persistent-transport
+// peers it holds a live transport to, then the hubs it can find.
 func (v *Visor) relayNominees() []cipher.PubKey {
+	if v.conf == nil {
+		return nil
+	}
+	seen := make(map[cipher.PubKey]struct{})
+	out := v.pinnedRelayNominees(seen)
+	return append(out, v.hubRelayNominees(seen)...)
+}
+
+// hubRelayNominees returns the visors that also run a dmsg server on their own
+// key. Those are the hubs: a plain dmsg server has no visor behind it and so no
+// relay acceptor to attach to, while a visor that IS a server holds the real
+// sessions this visor is trying to stop holding itself.
+//
+// The signal is the discovery entry carrying BOTH a Client and a Server
+// section, which only a co-resident pair produces. No direct transport is
+// required: the attach dials skynet://<pk>:70, which resolves over a direct
+// transport, a one-hop relay through a shared peer, or a route. A nominee that
+// cannot be reached, has no acceptor, or refuses simply fails and is backed off
+// by the client, so proposing one costs a dial and nothing else.
+//
+// Peers already reachable directly come first, being the cheapest path.
+func (v *Visor) hubRelayNominees(seen map[cipher.PubKey]struct{}) []cipher.PubKey {
+	if v.dmsgServersCache == nil || v.conf == nil {
+		return nil
+	}
+	var direct, remote []cipher.PubKey
+	for _, e := range v.dmsgServersCache.All() {
+		if e == nil || e.Server == nil || e.Client == nil {
+			continue // a plain server, or a plain client: not a hub
+		}
+		pk := e.Static
+		if pk == v.conf.PK {
+			continue
+		}
+		if _, dup := seen[pk]; dup {
+			continue
+		}
+		seen[pk] = struct{}{}
+		if v.hasTransportTo(pk) {
+			direct = append(direct, pk)
+			continue
+		}
+		remote = append(remote, pk)
+	}
+	// Stable order: the nominee set is compared for equality every tick, and a
+	// set that reshuffles would restart the client's serve pass each time.
+	sortPubKeys(direct)
+	sortPubKeys(remote)
+	out := append(direct, remote...)
+	if len(out) > relayHubLimit {
+		out = out[:relayHubLimit]
+	}
+	return out
+}
+
+func sortPubKeys(pks []cipher.PubKey) {
+	sort.Slice(pks, func(i, j int) bool { return pks[i].Hex() < pks[j].Hex() })
+}
+
+// pinnedRelayNominees returns the persistent-transport peers this visor has a
+// live transport to.
+func (v *Visor) pinnedRelayNominees(seen map[cipher.PubKey]struct{}) []cipher.PubKey {
 	if v.tpM == nil || v.conf == nil {
 		return nil
 	}
@@ -169,7 +238,6 @@ func (v *Visor) relayNominees() []cipher.PubKey {
 	if len(trusted) == 0 {
 		return nil
 	}
-	seen := make(map[cipher.PubKey]struct{})
 	var out []cipher.PubKey
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		pk := tp.Remote()
