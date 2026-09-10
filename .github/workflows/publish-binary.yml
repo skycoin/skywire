@@ -92,14 +92,11 @@ jobs:
           # FIRST and gzipped into pkg/wasmhv/execwasm/blob/ so every native
           # binary below embeds it and serves the desk with no extra file
           # (hv serve, visor-hosted wasm_serve, the native hypervisor). Same
-          # toolchain as the embedded wasm_exec.js, same version stamping. It
-          # is also published beside the binaries for hosts that predate the
-          # embed (the updater installs it as /opt/skywire/bin/skywire.wasm).
+          # toolchain as the embedded wasm_exec.js, same version stamping.
           echo "==> building js/wasm command module"
           GOOS=js GOARCH=wasm \
             go build -trimpath -buildvcs=true -mod=vendor -tags "withoutsystray withoutgotop" -ldflags="${LDFLAGS}" -o skywire.wasm .
           gzip -9 -n -c skywire.wasm > pkg/wasmhv/execwasm/blob/skywire.wasm.gz
-          zstd -19 -q -f -o "dist/skywire-js-wasm.zst" skywire.wasm
           rm -f skywire.wasm
           ls -la pkg/wasmhv/execwasm/blob/
           build_arch amd64   amd64   ""

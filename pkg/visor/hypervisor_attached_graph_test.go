@@ -125,7 +125,10 @@ func TestCXOAwareTPD_MergesLocalGraph(t *testing.T) {
 		t.Fatal("version must stay unreported without a primed CXO feed")
 	}
 	v.SetLocalGraphSource(nil)
-	got, _ = dc.GetAllTransports(context.Background())
+	got, err = dc.GetAllTransports(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(got) != 1 {
 		t.Fatalf("source removed but %d entries", len(got))
 	}

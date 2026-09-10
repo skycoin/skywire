@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -405,5 +406,28 @@ func TestTransportWSEndpoint(t *testing.T) {
 	hv.getTransportWS()(w, httptest.NewRequest(http.MethodGet, "/tp/ws", nil))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("no visor: status=%d, want 503", w.Code)
+	}
+}
+
+// logUIRoot runs from makeMux, which Enable/EnableUI call under enableMu, so it
+// must not take that mutex. A re-entrant LegacyUI() call deadlocked every
+// hypervisor without a command module — the native e2e's /api/ping never
+// answered (chunk A of #4484).
+func TestLogUIRootDoesNotTakeEnableMu(t *testing.T) {
+	hv, _ := deskTestHypervisor(t)
+	if hv.logger == nil {
+		hv.logger = logging.MustGetLogger("test")
+	}
+	done := make(chan struct{})
+	go func() {
+		hv.enableMu.Lock()
+		defer hv.enableMu.Unlock()
+		hv.logUIRoot()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("logUIRoot blocked while enableMu was held: it takes the mutex again")
 	}
 }

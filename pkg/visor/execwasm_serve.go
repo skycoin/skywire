@@ -7,20 +7,15 @@ import (
 	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
-// execModuleSource resolves where the skywire command module comes from:
-// an explicit path (config or flag), else the embedded module, else the
-// package location on disk. path=="" with ok=true means embedded.
+// execModuleSource resolves where the skywire command module comes from: an
+// explicit path (the --exec-wasm flag or hypervisor.wasm_serve.exec_wasm, a
+// developer override), else the module embedded by the two-stage build.
+// path=="" with ok=true means embedded; ok=false means this build has none.
 func execModuleSource(explicit string) (path string, ok bool) {
 	if explicit != "" {
 		return explicit, true
 	}
-	if execwasm.Present() {
-		return "", true
-	}
-	if p := DefaultExecWasmPath(); p != "" {
-		return p, true
-	}
-	return "", false
+	return "", execwasm.Present()
 }
 
 // serveExecWasm answers GET /skywire.wasm from path when set, else from the
