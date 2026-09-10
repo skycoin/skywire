@@ -192,6 +192,7 @@ func (s *service) Run(ctx context.Context) error {
 		storeDataPath = "/var/lib/skywire/tpd/bandwidth"
 	}
 	tpdAPI := api.New(logger, st, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
+	tpdAPI.SetEntryTimeout(cfg.EntryTimeout.Std())
 	if uptimeRec != nil {
 		tpdAPI.SetUptimeRecorder(uptimeRec)
 	}
