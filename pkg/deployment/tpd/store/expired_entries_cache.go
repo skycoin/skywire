@@ -4,78 +4,65 @@ package store
 import (
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
-
-	"github.com/skycoin/skywire/pkg/transport"
 )
 
-// expiredEntriesCacheTTL bounds how long the SCAN-derived expired-transport
-// candidate set is reused before it is recomputed. The expired set changes
-// on a ~daily cadence (a transport ages out of the registered set), not
-// every minute, so a few-minute TTL is safe: a newly-EXPIRED transport may
-// appear up to one TTL late, which is acceptable.
+// bwIndexTTL bounds how long one SCAN-derived bandwidth day index is reused
+// before it is rebuilt. Which (transport, day) hashes exist changes on the
+// cadence of a transport's first bandwidth report of a day, and the index
+// treats today and yesterday as "may have appeared since the scan" anyway
+// (see bwDayIndex.fetchDays), so a few-minute TTL costs nothing in
+// correctness: only a transport newly aged out of the registered set can
+// show up late, by at most one TTL.
 //
-// This cache exists because the CXO metrics publisher
-// (pkg/deployment/tpd/api/cxo_metrics_publisher.go) turned
-// expiredTransportEntries from a low-frequency path (rewards dashboard /
-// daily reward calc) into a per-60s path: the publisher calls
-// GetAllTransportMetrics on a ticker (1 day every 60s, the full 30-day window
-// every 30m), and each call SCANned the bw:daily:*:<date> keyspace once per
-// day in the window (up to 35 passes) over a ~13k-transport keyspace, then
-// recovered edges per candidate.
-// That put expiredTransportEntries at ~12% of TPD CPU with redis I/O
-// dominating. Memoizing the registered-INDEPENDENT SCAN result collapses the
-// repeated ticks onto one SCAN per TTL per window.
-const expiredEntriesCacheTTL = 5 * time.Minute
+// The index exists because the CXO metrics publisher
+// (pkg/deployment/tpd/api/cxo_metrics_publisher.go) calls
+// GetAllTransportMetrics on a ticker (1 day every 60 s, the full 30-day
+// window every 30 min). Before it, every full cycle SCANned the whole
+// keyspace once per day in the window (35 passes over ~3M keys, ~70 s of
+// redis CPU), fetched each candidate's edge pair with an unpipelined GET
+// (~270k round trips) and then HGETALLed every (transport × day) key of the
+// window whether or not it existed — 8.4M HGETALLs of which 92% missed.
+const bwIndexTTL = 5 * time.Minute
 
-// expiredEntriesCache memoizes, per day-window, the raw expired-transport
-// candidate set derived purely from the redis SCAN + recoverBandwidthEdges.
-// It deliberately does NOT bake in the caller's `registered` filter: that
-// filter is applied fresh on every call (see expiredTransportEntries) so a
-// transport that just (re)registered is dropped immediately and never counted
-// as expired for up to the TTL. Keyed by `days` because the publisher's
-// current-day and full-window queries scan different date ranges.
-type expiredEntriesCache struct {
-	mu     sync.Mutex
-	ttl    time.Duration
-	byDays map[int]expiredEntriesCacheEntry
+// bwIndexCache memoizes the registered-INDEPENDENT bandwidth day index. The
+// caller's `registered` filter is applied fresh on every use (see
+// expiredTransportEntries) so a transport that just (re)registered is dropped
+// immediately and never reported as expired for up to the TTL.
+type bwIndexCache struct {
+	mu  sync.Mutex
+	ttl time.Duration
+	ix  *bwDayIndex
 }
 
-type expiredEntriesCacheEntry struct {
-	entries    []*transport.Entry
-	expiredIDs map[uuid.UUID]bool
-	cachedAt   time.Time
-}
-
-func newExpiredEntriesCache(ttl time.Duration) *expiredEntriesCache {
+func newBWIndexCache(ttl time.Duration) *bwIndexCache {
 	if ttl <= 0 {
-		ttl = expiredEntriesCacheTTL
+		ttl = bwIndexTTL
 	}
-	return &expiredEntriesCache{ttl: ttl, byDays: make(map[int]expiredEntriesCacheEntry)}
+	return &bwIndexCache{ttl: ttl}
 }
 
-// get returns the cached raw candidate set for the window if present and
-// unexpired. The returned slice/map are the cache's own backing storage —
-// callers must treat them as read-only.
-func (c *expiredEntriesCache) get(days int) ([]*transport.Entry, map[uuid.UUID]bool, bool) {
+// get returns the cached index if present and unexpired.
+func (c *bwIndexCache) get() (*bwDayIndex, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	e, ok := c.byDays[days]
-	if !ok || time.Since(e.cachedAt) > c.ttl {
-		return nil, nil, false
+	if c.ix == nil || time.Since(c.ix.scannedAt) > c.ttl {
+		return nil, false
 	}
-	return e.entries, e.expiredIDs, true
+	return c.ix, true
 }
 
-// put stores the raw candidate set for the window, stamped with the current
-// time so get can treat entries older than the TTL as stale.
-func (c *expiredEntriesCache) put(days int, entries []*transport.Entry, expiredIDs map[uuid.UUID]bool) {
+// peek returns whatever index is cached, stale or not, or nil. Readers that
+// only use it to skip keys the scan proved absent can tolerate a stale index:
+// a key can only appear for today (or yesterday across a UTC rollover), and
+// fetchDays always includes those two days.
+func (c *bwIndexCache) peek() *bwDayIndex {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.byDays[days] = expiredEntriesCacheEntry{
-		entries:    entries,
-		expiredIDs: expiredIDs,
-		cachedAt:   time.Now(),
-	}
+	return c.ix
+}
+
+func (c *bwIndexCache) put(ix *bwDayIndex) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ix = ix
 }

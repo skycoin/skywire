@@ -73,13 +73,13 @@ type ThroughputRecord struct {
 const throughputTTL = latencyTTL
 
 type redisStore struct {
-	client       *redis.Client
-	ttl          time.Duration
-	log          *logging.Logger
-	pkCache      *pubKeyCache
-	edgeCache    *edgeEntriesCache
-	allTpsCache  *allTransportsCache
-	expiredCache *expiredEntriesCache
+	client      *redis.Client
+	ttl         time.Duration
+	log         *logging.Logger
+	pkCache     *pubKeyCache
+	edgeCache   *edgeEntriesCache
+	allTpsCache *allTransportsCache
+	bwIndex     *bwIndexCache
 }
 
 func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl time.Duration, logger *logging.Logger) (*redisStore, error) {
@@ -114,13 +114,13 @@ func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl
 	}
 
 	return &redisStore{
-		client:       redisCl,
-		ttl:          ttl,
-		log:          logger,
-		pkCache:      newPubKeyCache(defaultPubKeyCacheCap),
-		edgeCache:    newEdgeEntriesCache(defaultEdgeEntriesCacheCap, defaultEdgeEntriesCacheTTL),
-		allTpsCache:  newAllTransportsCache(defaultAllTransportsCacheTTL),
-		expiredCache: newExpiredEntriesCache(expiredEntriesCacheTTL),
+		client:      redisCl,
+		ttl:         ttl,
+		log:         logger,
+		pkCache:     newPubKeyCache(defaultPubKeyCacheCap),
+		edgeCache:   newEdgeEntriesCache(defaultEdgeEntriesCacheCap, defaultEdgeEntriesCacheTTL),
+		allTpsCache: newAllTransportsCache(defaultAllTransportsCacheTTL),
+		bwIndex:     newBWIndexCache(bwIndexTTL),
 	}, nil
 }
 func (s *redisStore) Close() {
