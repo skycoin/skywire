@@ -59,6 +59,7 @@ type API struct {
 	reqsInFlightCountMiddleware *metricsutil.RequestsInFlightCountMiddleware
 	rateLimiter                 *PubKeyRateLimiter
 	store                       store.Store
+	reconcile                   *reconcileThrottle
 	startedAt                   time.Time
 	dmsgAddr                    string
 	DmsgServers                 []string
@@ -127,6 +128,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		reqsInFlightCountMiddleware: metricsutil.NewRequestsInFlightCountMiddleware(),
 		rateLimiter:                 NewPubKeyRateLimiter(30, 10), // 30 req/min with burst of 10
 		store:                       s,
+		reconcile:                   newReconcileThrottle(defaultReconcileRefreshGap, reconcileHeartbeatGap),
 		startedAt:                   time.Now(),
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
@@ -559,4 +561,14 @@ func setSnapshotHeaders(w http.ResponseWriter, at time.Time, total int) {
 	}
 	w.Header().Set(SnapshotAtHeader, at.Format(time.RFC3339Nano))
 	w.Header().Set(SnapshotTransportsHeader, strconv.Itoa(total))
+}
+
+// SetEntryTimeout tells the API the store's transport entry TTL so the CXO
+// reconcile path refreshes an unchanged registration a third of the way
+// through it rather than on every visor heartbeat (see reconcileThrottle).
+func (api *API) SetEntryTimeout(ttl time.Duration) {
+	if ttl <= 0 {
+		return
+	}
+	api.reconcile.setRefreshGap(ttl / 3)
 }
