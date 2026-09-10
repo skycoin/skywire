@@ -2,7 +2,9 @@
 package wasmhv
 
 import (
+	"bytes"
 	_ "embed"
+	"encoding/json"
 
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
 )
@@ -163,3 +165,13 @@ var FaviconICO []byte
 //
 //go:embed wasm_exec.js
 var WasmExecJS []byte
+
+// ServiceWorkerFor renders sw.js for one serving context: build is the
+// fingerprint that names the cache (a new build ships a byte-different worker,
+// which is what makes the browser re-install it), precache the shell files
+// installed up front — the rest is cached as it is fetched.
+func ServiceWorkerFor(build string, precache []string) []byte {
+	list, _ := json.Marshal(precache) //nolint:errcheck // a []string always marshals
+	out := bytes.ReplaceAll(ServiceWorkerJS, []byte("__BUILD__"), []byte(build))
+	return bytes.ReplaceAll(out, []byte("__PRECACHE__"), list)
+}
