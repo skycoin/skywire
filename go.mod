@@ -66,7 +66,7 @@ require (
 	github.com/0magnet/bottle v0.0.0-20260908155251-920d2280a387
 	github.com/0magnet/calvin v0.0.0-20260908180241-0893f4bff56a
 	github.com/0magnet/desk v0.0.0-20260910001430-2e7b6fa4face
-	github.com/0magnet/desk/panes v0.0.0-20260908190105-9bb2944487db
+	github.com/0magnet/desk/panes v0.0.0-20260910005138-02e96496996c
 	github.com/0magnet/gobrpc v0.0.0-20260906144809-5215ec59d553
 	github.com/0magnet/golang-ipc v1.2.5-0.20260905172007-25d9c1a262d0
 	github.com/0magnet/got v0.0.0-20260905231830-8b4c51f6f6f8
@@ -131,7 +131,7 @@ require (
 	github.com/0magnet/cosmos-go v0.0.0-20260908144221-45e3d0561585
 	github.com/0magnet/sh/v3 v3.13.2-0.20260818190530-13d0024da85c
 	github.com/0magnet/websh v0.0.0-20260908184825-10432f75b8da
-	github.com/0magnet/xterm-go v0.0.0-20260908011048-6bbc23473554
+	github.com/0magnet/xterm-go v0.0.0-20260909230905-494f3085d6ed
 	github.com/benhoyt/goawk v1.31.0 // indirect
 )
 
