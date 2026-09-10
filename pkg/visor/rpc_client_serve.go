@@ -3,8 +3,10 @@ package visor
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/rpc"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,8 +15,8 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
+	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
@@ -205,34 +207,128 @@ func inSkynetCooldown(lastFail *atomic.Int64) bool {
 	return time.Since(time.Unix(0, last)) < rpcSkynetCooldown
 }
 
+const (
+	// rpcDialInitBackoff / rpcDialMaxBackoff / rpcDialBackoffFactor pace the
+	// redial after a transient failure (the peer is published but the dial
+	// did not complete).
+	rpcDialInitBackoff   = time.Second
+	rpcDialMaxBackoff    = 5 * time.Second
+	rpcDialBackoffFactor = 1.3
+	// rpcAbsentMaxBackoff caps the pause between dials to a hypervisor that
+	// has no discovery entry. Each attempt costs a discovery lookup and the
+	// peer will not answer until it publishes again, so the pause doubles
+	// from rpcDialInitBackoff up to this. A direct transport from the peer
+	// cuts the pause short (waitForRedial), so a re-opened desk tab is
+	// served within rpcUpgradePoll, and an off-LAN tab that publishes an
+	// entry is reached within this bound.
+	rpcAbsentMaxBackoff = time.Minute
+)
+
+// isPeerAbsent reports whether a dial failed because the hypervisor has no
+// discovery entry. The dmsg client wraps dmsgdisc.ErrKeyNotFound through a few
+// layers (some by string), so match both ways, as pkg/dmsg does.
+func isPeerAbsent(err error) bool {
+	return err != nil &&
+		(errors.Is(err, dmsgdisc.ErrKeyNotFound) || strings.Contains(err.Error(), dmsgdisc.ErrKeyNotFound.Error()))
+}
+
+// nextDialBackoff grows a transient-failure pause geometrically to
+// rpcDialMaxBackoff; zero (fresh) starts at rpcDialInitBackoff.
+func nextDialBackoff(prev time.Duration) time.Duration {
+	if prev <= 0 {
+		return rpcDialInitBackoff
+	}
+	next := time.Duration(float64(prev) * rpcDialBackoffFactor)
+	if next > rpcDialMaxBackoff {
+		return rpcDialMaxBackoff
+	}
+	return next
+}
+
+// absentDialBackoff is the pause after the n-th consecutive "no discovery
+// entry" failure: 1s, 2s, 4s, … capped at rpcAbsentMaxBackoff.
+func absentDialBackoff(n int) time.Duration {
+	d := rpcDialInitBackoff
+	for i := 1; i < n && d < rpcAbsentMaxBackoff; i++ {
+		d *= 2
+	}
+	if d > rpcAbsentMaxBackoff {
+		return rpcAbsentMaxBackoff
+	}
+	return d
+}
+
+// waitForRedial sleeps for wait, returning early (true) when a direct
+// transport to pk appears — the next dial then rides skynet instead of
+// waiting out a pause meant for an absent peer. Returns false when ctx ends.
+func waitForRedial(ctx context.Context, wait time.Duration, tpM *transport.Manager, pk cipher.PubKey) bool {
+	deadline := time.NewTimer(wait)
+	defer deadline.Stop()
+	poll := time.NewTicker(rpcUpgradePoll)
+	defer poll.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-deadline.C:
+			return true
+		case <-poll.C:
+			if hasFastTransportTo(tpM, pk) {
+				return true
+			}
+		}
+	}
+}
+
 // ServeRPCClient repetitively dials to a remote hypervisor and serves
 // a RPC server to that address. The dial uses dmsg by default, switching
 // to skynet when an underlying fast transport exists and isn't in
 // cooldown — see dialHypervisorRPC.
 func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, tpM *transport.Manager, dmsgC *dmsg.Client, rpcS *rpc.Server, rAddr dmsg.Addr, errCh chan<- error) {
-	const maxBackoff = time.Second * 5
-	retry := netutil.NewRetrier(log, netutil.DefaultInitBackoff, maxBackoff, netutil.DefaultTries, netutil.DefaultFactor)
-
 	// lastSkyFail is per-hypervisor (this function is one goroutine
 	// per hypervisor PK). Records the most recent skynet failure so
 	// dialHypervisorRPC can apply the cooldown.
 	var lastSkyFail atomic.Int64
 
+	var (
+		wait   time.Duration // next pause after a failed dial
+		absent int           // consecutive "no discovery entry" failures
+	)
 	for {
-		var conn net.Conn
-		var via rpcTransport
-		err := retry.Do(ctx, func() (rErr error) {
-			conn, via, rErr = dialHypervisorRPC(ctx, log, tpM, dmsgC, rAddr, &lastSkyFail)
-			return rErr
-		})
+		conn, via, err := dialHypervisorRPC(ctx, log, tpM, dmsgC, rAddr, &lastSkyFail)
 		if err != nil {
-			if errCh != nil {
-				log.WithError(err).Info("Pushed error into 'errCh'.")
-				errCh <- err
+			if isDone(ctx) {
+				if errCh != nil {
+					log.WithError(ctx.Err()).Info("Pushed error into 'errCh'.")
+					errCh <- ctx.Err()
+				}
+				log.WithError(ctx.Err()).Info("Stopped Serving.")
+				return
 			}
-			log.WithError(err).Info("Stopped Serving.")
-			return
+			if isPeerAbsent(err) {
+				// The hypervisor has no discovery entry: a desk tab that was
+				// closed, or a paired peer that is simply not online. Every
+				// attempt is a discovery lookup, so back off far longer than
+				// for a transient failure — and wake at once if it reappears
+				// over a direct transport (a re-opened tab).
+				absent++
+				wait = absentDialBackoff(absent)
+				log.WithError(err).WithField("wait", wait).Debug("Hypervisor is not published; waiting.")
+			} else {
+				absent = 0
+				wait = nextDialBackoff(wait)
+				log.WithError(err).Debug("Dial to hypervisor failed; retrying.")
+			}
+			if !waitForRedial(ctx, wait, tpM, rAddr.PK) {
+				if errCh != nil {
+					errCh <- ctx.Err()
+				}
+				log.WithError(ctx.Err()).Info("Stopped Serving.")
+				return
+			}
+			continue
 		}
+		wait, absent = 0, 0
 		if conn == nil {
 			log.WithField("conn == nil", conn == nil).Warn("An unexpected occurrence happened.")
 			continue
