@@ -109,7 +109,33 @@ type ARSelfRegistration struct {
 // visors that don't self-publish are covered by the AR mirror).
 type arSelfState struct {
 	mu      sync.RWMutex
-	entries map[string]addrresolver.VisorData // key: "stcpr" | "sudph"
+	entries map[string]addrresolver.VisorData // key: "stcpr" | "sudph" | "wt"
+	// refreshedAt is when the last refresh completed; zero = never. The CLI
+	// path refreshes on demand when this is older than arSelfMaxAge, so the
+	// background loop can be slow (every visor on the network was asking the
+	// address resolver for its own key three times a minute — a third of the
+	// AR's request load, 2026-09-10).
+	refreshedAt time.Time
+	refreshMu   sync.Mutex // serializes refreshes (loop + on-demand)
+}
+
+// arSelfMaxAge is how old the cached self-registration may be before a CLI
+// query refreshes it first.
+const arSelfMaxAge = 5 * time.Minute
+
+func (s *arSelfState) age() time.Duration {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.refreshedAt.IsZero() {
+		return time.Duration(1<<62 - 1)
+	}
+	return time.Since(s.refreshedAt)
+}
+
+func (s *arSelfState) stamp() {
+	s.mu.Lock()
+	s.refreshedAt = time.Now()
+	s.mu.Unlock()
 }
 
 func newARSelfState() arSelfState {
@@ -155,6 +181,14 @@ func (s *arSelfState) snapshot() map[string]addrresolver.VisorData { //nolint:un
 // ARSelfInfo returns the visor's own cached AR registration. Reads the
 // in-memory cache populated by the refresh loop — no HTTP round-trip.
 func (v *Visor) ARSelfInfo() (*ARSelfRegistration, error) {
+	// Refresh on demand: the background loop is deliberately slow (see
+	// arSelfRefreshLoop), so a query answers from a cache no older than
+	// arSelfMaxAge, refreshing synchronously when it is.
+	if v.arSelf.age() > arSelfMaxAge {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		v.arSelfRefreshOnce(ctx, nil)
+		cancel()
+	}
 	out := &ARSelfRegistration{Queried: append([]string(nil), arSelfTypes...)}
 	for _, tpType := range arSelfTypes {
 		d, ok := v.arSelf.get(tpType)
@@ -181,9 +215,13 @@ func (v *Visor) ARSelfInfo() (*ARSelfRegistration, error) {
 //
 // The first refresh runs after a short warmup, then every refreshEvery.
 func (v *Visor) arSelfRefreshLoop(ctx context.Context, log *logging.Logger) {
+	// refreshEvery was 60 s: every visor on the network resolved its own key
+	// for three transport types each minute, only to keep a CLI display warm —
+	// a third of the address resolver's requests (2026-09-10). The display now
+	// refreshes on demand (ARSelfInfo), so the loop is a slow reconciler.
 	const (
 		warmup       = 15 * time.Second
-		refreshEvery = 60 * time.Second
+		refreshEvery = 15 * time.Minute
 	)
 
 	select {
@@ -217,6 +255,9 @@ func (v *Visor) arSelfRefreshOnce(ctx context.Context, _ *logging.Logger) {
 	if arClient == nil {
 		return
 	}
+	v.arSelf.refreshMu.Lock()
+	defer v.arSelf.refreshMu.Unlock()
+	defer v.arSelf.stamp()
 
 	for _, tpType := range arSelfTypes {
 		rctx, rcancel := context.WithTimeout(ctx, 10*time.Second)
