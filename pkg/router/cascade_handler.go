@@ -38,6 +38,24 @@ type CascadeHandler struct {
 
 	// defaultTimeout is the per-hop timeout for waiting for a cascade ACK.
 	defaultTimeout time.Duration
+
+	// noTransit refuses cascade installs that would make this visor a transit
+	// hop (routing.no_transit). Cascade reaches a transit hop over the wire,
+	// so the guard belongs on that path only: ProcessLocalOrigin shares
+	// processInstall to lay THIS visor's own rules as the source of its own
+	// route, and refusing there would stop it originating routes at all.
+	noTransit bool
+}
+
+// SetNoTransit makes the handler refuse cascade installs that would make this
+// visor an intermediate hop on another visor's route.
+func (ch *CascadeHandler) SetNoTransit(v bool) { ch.noTransit = v }
+
+// refusesTransit reports whether this install, arriving over the wire, would
+// make this visor a transit hop it has been configured not to be. An EDGE
+// install means the route ENDS here, which no_transit does not forbid.
+func (ch *CascadeHandler) refusesTransit(msg *routing.CascadeSetup) bool {
+	return ch.noTransit && !msg.IsEdge()
 }
 
 // NewCascadeHandler creates a new cascade handler. introduceRules is the
@@ -159,6 +177,14 @@ func (ch *CascadeHandler) processReserve(msg *routing.CascadeSetup) (*routing.Ca
 }
 
 func (ch *CascadeHandler) handleInstall(msg *routing.CascadeSetup, sourceTp *transport.ManagedTransport) {
+	// A non-edge install arriving over the wire is another visor asking this
+	// one to forward for it. That is precisely transit. An edge install (this
+	// visor is the route's responding destination) is not, and still applies.
+	if ch.refusesTransit(msg) {
+		ch.log.Debug("Refusing cascade install: this visor does not transit routes.")
+		ch.sendErrorAck(sourceTp, msg.SessionID, msg.Phase, "visor does not transit routes")
+		return
+	}
 	ack, err := ch.processInstall(msg)
 	if err != nil {
 		ch.log.WithError(err).Warn("Cascade install failed")

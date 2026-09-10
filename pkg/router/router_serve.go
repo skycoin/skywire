@@ -113,6 +113,7 @@ func (r *router) Serve(ctx context.Context) error {
 		trustedPKs = append(trustedPKs, pk)
 	}
 	ch := NewCascadeHandler(r.logger, r.conf.PubKey, trustedPKs, r.rt, r.tm, r.IntroduceRules)
+	ch.SetNoTransit(r.conf.NoTransit)
 
 	// Source-driven cascade: the visor's route-group dialer owns a send-only
 	// CascadeBuilder that injects RSN-signed cascades down this visor's own

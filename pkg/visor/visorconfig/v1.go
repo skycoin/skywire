@@ -650,6 +650,18 @@ type Routing struct {
 	RouteFinderDmsg     string          `json:"route_finder_dmsg,omitempty"`
 	RouteFinderTimeout  Duration        `json:"route_finder_timeout,omitempty"`
 	MinHops             uint16          `json:"min_hops"`
+	// NoTransit, when true, makes this visor refuse to be an INTERMEDIATE hop
+	// on anyone else's route. It still originates its own routes and still
+	// accepts routes that END here, and it is unaffected by anything that does
+	// not install a routing rule — dmsg-over-skynet relaying rides VStreamMux
+	// at route ID 0 and is deliberately not a route, so a visor hosting a dmsg
+	// server can carry that traffic while refusing transit.
+	//
+	// This is the ENFORCING half and needs nobody's cooperation. The route
+	// finder is told separately so it stops proposing routes that would be
+	// refused here; a stale or missing advertisement costs a failed setup and
+	// a retry, never a transited visor.
+	NoTransit bool `json:"no_transit,omitempty"`
 	// CalculateRoutes enables local route calculation instead of using the route finder service.
 	// When enabled, routes are calculated locally using cached TPD data.
 	// Can be overridden at runtime with --use-rf flag.

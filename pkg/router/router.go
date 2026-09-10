@@ -138,6 +138,10 @@ type Config struct {
 	// types from the candidate set (see visorconfig.Routing.RouteExcludeTransportTypes).
 	// Empty = nothing excluded. Lowercased type names.
 	ExcludeTransportTypes []string
+	// NoTransit refuses every request to act as an intermediate hop on another
+	// visor's route (visorconfig.Routing.NoTransit). Routes that originate or
+	// terminate here are unaffected.
+	NoTransit bool
 	// MuxRoutes seeds the router's runtime parallel-mux-routes value from
 	// routing.mux_routes at construction, the way MinHops already is. The
 	// dial-time default is applied by the app networker (which the launcher

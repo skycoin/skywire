@@ -106,7 +106,7 @@ func serveRouterRPC(t *testing.T, r Router) (addr string) {
 
 	mlog := logging.NewMasterLogger()
 	rpcS := rpc.NewServer()
-	require.NoError(t, rpcS.Register(NewRPCGateway(r, mlog)))
+	require.NoError(t, rpcS.Register(NewRPCGateway(r, mlog, false)))
 	go rpcS.Accept(l)
 
 	return l.Addr().String()
