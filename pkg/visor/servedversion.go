@@ -36,7 +36,7 @@ func execWasmStamp(path string) string {
 		return ""
 	}
 	h := sha256.New()
-	fmt.Fprintf(h, "%d:%d", fi.Size(), fi.ModTime().UnixNano())
+	h.Write([]byte(fmt.Sprintf("%d:%d", fi.Size(), fi.ModTime().UnixNano()))) //nolint:errcheck // hash.Hash never errors
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 

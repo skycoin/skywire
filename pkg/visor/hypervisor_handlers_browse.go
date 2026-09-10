@@ -15,7 +15,6 @@ import (
 	"strconv"
 
 	"github.com/skycoin/skywire/pkg/httputil"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
 )
@@ -321,14 +320,17 @@ func nativeDeskBootOpts(localPK string) string {
 // skywire command module to host the desk out of. Nothing is logged for the
 // desk (the default) or for legacy_ui (the operator asked for it).
 func (hv *Hypervisor) logUIRoot() {
-	if hv.logger == nil || hv.LegacyUI() {
+	// Called from makeMux, which Enable/EnableUI run under enableMu: read the
+	// flag directly — LegacyUI() would take the same mutex and deadlock (the
+	// native e2e caught exactly that: /api/ping never answered).
+	if hv.logger == nil || hv.c.LegacyUI {
 		return
 	}
 	if _, ok := hv.execModule(); ok {
 		return
 	}
-	hv.logger.Info("no skywire command module in this build (make build-embedded; or " +
-		"hypervisor.wasm_serve.exec_wasm; or " + skyenv.ExecWasmFile + " under the package bin dir): " +
+	hv.logger.Info("no skywire command module in this build (make build-embedded, or " +
+		"hypervisor.wasm_serve.exec_wasm for a developer override): " +
 		"the web UI root serves the dashboard, not the desk")
 }
 
