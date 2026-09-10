@@ -306,6 +306,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		SecKey:                v.conf.SK,
 		TransportManager:      v.tpM,
 		RouteFinder:           rfClient,
+		PreferLocalRouteTo:    v.localGraphHasPeer,
 		RouteGroupDialer:      rgDialer,
 		SetupNodes:            v.conf.EffectiveRouteSetupNodes(),
 		MinHops:               v.conf.Routing.MinHops,

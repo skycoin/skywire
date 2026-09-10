@@ -86,6 +86,13 @@ type Hypervisor struct {
 	uiServing      bool      // web UI (HTTP) server active — independent of `enabled`
 	tpvizStartOnce sync.Once // tpviz is start-once (its Stop closes a chan that can't be reopened)
 	enableMu       sync.Mutex
+
+	// attachedGraph* version the attached-visor transport graph
+	// (hypervisor_attached_graph.go): the hash of the last ID set and
+	// when it last changed.
+	attachedGraphMu   sync.Mutex
+	attachedGraphHash [32]byte
+	attachedGraphAt   time.Time
 }
 
 // cachedSummary is one entry in Hypervisor.summaryCache.
@@ -406,6 +413,11 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 	// redial+re-accept needlessly. It's slower than typical UI
 	// poll cadence so we don't double-fire when both are active
 	// (UI polls overlap-and-skip via summary's own goroutine).
+	// The attached visors' transports become a local graph source for this
+	// visor's route calculation (#4750).
+	if hv.visor != nil {
+		hv.visor.SetLocalGraphSource(hv.AttachedTransportEntries)
+	}
 	go hv.runBackgroundSummaryPoll(ctx)
 
 	// setup local PTY using direct connection (bypasses DMSG for local visor)
