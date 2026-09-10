@@ -69,7 +69,11 @@ func init() {
 	ServerCmd.Flags().StringVarP(&wl, "wl", "w", scriptExecArray("${REWARDPKS[@]}"), msg)
 	wd, err = os.Getwd()
 	if err != nil {
-		log.Fatal("Error getting current directory:", err)
+		// Only a flag default. A js/wasm instance started by Go's stock
+		// wasm_exec.js has no working directory (process.cwd throws ENOSYS),
+		// and this init runs in every such instance of the root binary — the
+		// wallet cipher, the tpviz view — so it must not be fatal there.
+		wd = "."
 	}
 	ServerCmd.Flags().StringVarP(&wd, "wd", "W", wd, "location of dir containing 'log_collection' & reward 'hist' dirs")
 	LoginChainCmd.Flags().StringVarP(&wd, "wd", "W", wd, "working directory for login chain files (login_genesis.json, login_fiber.toml)")

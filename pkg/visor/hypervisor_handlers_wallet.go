@@ -208,6 +208,12 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 			hv.walletNodeProxy(w, r, rest)
 			return
 		}
+		// The cipher the bundle instantiates (assets/scripts/skycoin-lite.wasm +
+		// wasm_exec.js) — the vendored dist carries neither; they come from the
+		// one skywire command module (wallet_cipher.go).
+		if serveWalletCipherAsset(w, r, rest) {
+			return
+		}
 		if fsErr != nil {
 			http.Error(w, "wallet UI not embedded in this build", http.StatusNotFound)
 			return

@@ -21,11 +21,10 @@ import (
 )
 
 func init() {
-	usrLvl, err := user.Current()
-	if err != nil {
-		panic(err)
-	}
-	if usrLvl.Username == "root" {
+	// Only the root check. A host with no resolvable user — a js/wasm
+	// instance with no $USER/$HOME, a container without a passwd entry — is
+	// not root; panicking here took the whole binary down in init.
+	if usrLvl, err := user.Current(); err == nil && usrLvl.Username == "root" {
 		isRoot = true
 	}
 	RootCmd.AddCommand(updateCmd)

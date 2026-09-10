@@ -21,7 +21,7 @@ import (
 var deskHostRole string
 
 func init() {
-	deskHostCmd.Flags().StringVar(&deskHostRole, "role", "auto", "which surfaces to install: shell|browser|netview|auto")
+	deskHostCmd.Flags().StringVar(&deskHostRole, "role", "auto", "which surfaces to install: shell|browser|netview|cipher|auto")
 	RootCmd.AddCommand(deskHostCmd)
 }
 
