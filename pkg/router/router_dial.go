@@ -1186,12 +1186,14 @@ fetchRoutesAgain:
 	if r.conf.PreferLocalRouteTo != nil && r.conf.PreferLocalRouteTo(dst) {
 		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
 		if localErr == nil {
+			r.routeSource.localAttached.Add(1)
 			log.Infof("Local route from attached graph: Forward=%v, Reverse=%v", localFwd, localRev)
 			return localFwd, localRev, nil
 		}
 		log.WithError(localErr).Debug("Attached-graph local route failed; asking the route finder")
 	}
 
+	r.routeSource.rfQueries.Add(1)
 	var paths map[routing.PathEdges][][]routing.Hop
 	if fwdMinHops == revMinHops {
 		// Common path: single query covers both directions. One count
@@ -1229,6 +1231,7 @@ fetchRoutesAgain:
 		log.Info("Route finder returned transport not found, attempting local route calculation...")
 		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
 		if localErr == nil {
+			r.routeSource.localFallback.Add(1)
 			log.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
 			return localFwd, localRev, nil
 		}
@@ -1241,6 +1244,7 @@ fetchRoutesAgain:
 		log.Info("Route finder exhausted retries, attempting local route calculation...")
 		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
 		if localErr == nil {
+			r.routeSource.localFallback.Add(1)
 			log.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
 			return localFwd, localRev, nil
 		}
@@ -1268,6 +1272,7 @@ fetchRoutesAgain:
 			log.Info("Route finder timed out, attempting local route calculation...")
 			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
 			if localErr == nil {
+				r.routeSource.localFallback.Add(1)
 				log.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
 				return localFwd, localRev, nil
 			}
