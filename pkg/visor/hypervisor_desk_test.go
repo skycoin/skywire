@@ -15,6 +15,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 // deskTestHypervisor builds the minimal Hypervisor uiHandler needs: embedded
@@ -40,6 +41,9 @@ func deskTestHypervisor(t *testing.T) (*Hypervisor, cipher.PubKey) {
 // wasm-visor-shaped is exposed (the native visor IS the visor — the desk is a
 // shell over it, so the in-page-visor machinery must have nothing to fetch).
 func TestNativeDeskServing(t *testing.T) {
+	if execwasm.Present() {
+		t.Skip("a command module is embedded in this build (two-stage build); this test pins the no-module behaviour")
+	}
 	hv, pk := deskTestHypervisor(t)
 	h := hv.uiHandler()
 	get := func(path string) *httptest.ResponseRecorder {
