@@ -883,8 +883,20 @@ func (r *webglRenderer) updateDimensions() {
 	d.deviceCharLeft = int(term.Core.Options.LetterSpacing / 2)
 	d.deviceCanvasHeight = term.Core.Rows() * d.deviceCellHeight
 	d.deviceCanvasWidth = term.Core.Cols() * d.deviceCellWidth
-	d.cssCanvasHeight = jsRound(float64(d.deviceCanvasHeight) / dpr)
-	d.cssCanvasWidth = jsRound(float64(d.deviceCanvasWidth) / dpr)
+	// The CSS box is the SCREEN's box, not the device buffer scaled back down.
+	//
+	// deviceCharHeight is ceil-ed so a glyph is never clipped in the atlas, and
+	// dividing that back by dpr does not return the height it came from — it
+	// returns up to 1/dpr more, per row. .xterm-screen is sized cellH*rows in CSS
+	// units with no such rounding, so the canvas came out TALLER than the screen
+	// it is supposed to overlay: 951px against 906 at 46 rows on a 0.8125 dpr
+	// display, which pushed 41px of canvas past the bottom of the terminal and
+	// put a scrollbar on a window whose content fitted.
+	//
+	// The drawing buffer stays at device resolution, so nothing about the
+	// rendering changes; only the box it is presented in, which now matches the
+	// element it sits on top of exactly.
+	d.cssCanvasWidth, d.cssCanvasHeight = screenBoxPx(term.cellW, term.cellH, term.Core.Cols(), term.Core.Rows())
 }
 
 func maxF(a, b float64) float64 {

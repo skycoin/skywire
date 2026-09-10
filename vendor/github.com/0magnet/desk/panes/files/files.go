@@ -62,6 +62,9 @@ type Pane struct {
 	fns                             dom.Funcs
 	menuTarget                      string
 	menuIsDir                       bool
+	// gen counts renders; a listing that comes back for an older render is
+	// dropped, so fast navigation never paints a stale directory.
+	gen int
 }
 
 // New opens at dir, or /home/user if empty.
@@ -162,12 +165,14 @@ func (p *Pane) mkdir() {
 	if name == "" {
 		return
 	}
-	if err := p.fs.MkdirAll(path.Join(p.dir, name), 0o755); err != nil {
-		p.fail(err)
-		return
-	}
-	p.fail(nil)
-	p.render()
+	go func() {
+		if err := p.fs.MkdirAll(path.Join(p.dir, name), 0o755); err != nil {
+			p.fail(err)
+			return
+		}
+		p.fail(nil)
+		p.render()
+	}()
 }
 
 func (p *Pane) rename(full string) {
@@ -176,12 +181,14 @@ func (p *Pane) rename(full string) {
 	if name == "" || name == old {
 		return
 	}
-	if err := p.fs.Rename(full, path.Join(path.Dir(full), name)); err != nil {
-		p.fail(err)
-		return
-	}
-	p.fail(nil)
-	p.render()
+	go func() {
+		if err := p.fs.Rename(full, path.Join(path.Dir(full), name)); err != nil {
+			p.fail(err)
+			return
+		}
+		p.fail(nil)
+		p.render()
+	}()
 }
 
 func (p *Pane) remove(full string, isDir bool) {
@@ -192,18 +199,20 @@ func (p *Pane) remove(full string, isDir bool) {
 	if !confirm(what) {
 		return
 	}
-	var err error
-	if isDir {
-		err = p.fs.RemoveAll(full)
-	} else {
-		err = p.fs.Remove(full)
-	}
-	if err != nil {
-		p.fail(err)
-		return
-	}
-	p.fail(nil)
-	p.render()
+	go func() {
+		var err error
+		if isDir {
+			err = p.fs.RemoveAll(full)
+		} else {
+			err = p.fs.Remove(full)
+		}
+		if err != nil {
+			p.fail(err)
+			return
+		}
+		p.fail(nil)
+		p.render()
+	}()
 }
 
 func prompt(message, def string) string {
@@ -226,11 +235,25 @@ func (p *Pane) chdir(dir string) {
 	p.render()
 }
 
+// render lists p.dir. The read happens on its own goroutine: on js/wasm a
+// filesystem call from the goroutine servicing a JS event (a click, the
+// desk's Launch) deadlocks the page — the filesystem answers on a microtask,
+// which cannot run until that handler returns. Every fs call here follows
+// the same rule.
 func (p *Pane) render() {
 	p.pathEl.Set("textContent", p.dir)
-	dom.Clear(p.list)
+	p.gen++
+	go p.renderGen(p.gen)
+}
 
+// renderGen lists p.dir for render generation gen and paints it unless a
+// newer render has started since.
+func (p *Pane) renderGen(gen int) {
 	infos, err := afero.ReadDir(p.fs, p.dir)
+	if gen != p.gen {
+		return
+	}
+	dom.Clear(p.list)
 	if err != nil {
 		p.list.Call("appendChild",
 			dom.El("div", dom.Class("dfm-empty"), dom.Text(err.Error())))
