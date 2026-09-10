@@ -667,6 +667,7 @@ type router struct {
 	rgsRaw             map[routing.RouteDescriptor]*RouteGroup         // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
 	rgsDatagrams       map[routing.RouteDescriptor]*DatagramRouteGroup // faithful-UDP (DatagramPacket) route groups, keyed like rgsNs; #2607 stage-4 dispatch
 	intake             intakeCounters                                  // inbound-path counters for `visor state` (router_intake.go)
+	routeSource        routeSourceCounters                             // where routes came from (router_route_source.go)
 	datagramPorts      map[routing.Port]struct{}                       // local ports with faithful-UDP intent; the accept side builds a datagram sibling only for these (#2607 on-demand-by-local-intent)
 	acceptDatagram     chan datagramAccept                             // accept-side datagram siblings, drained by AcceptDatagram (the forwarded_ports.udp server loop)
 	pending            *pendingPackets                                 // frames parked during the rule-save -> route-group-register window (see router_pending.go)

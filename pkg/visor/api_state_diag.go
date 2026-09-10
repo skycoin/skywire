@@ -29,6 +29,9 @@ type DiagSnapshot struct {
 	// Intake is the router's inbound-path view: unknown/control packets by
 	// type, stale-route drops, and each route group's app queue depth.
 	Intake *router.IntakeStats `json:"intake,omitempty"`
+	// RouteSource is where multi-hop routes came from: the local graph (a
+	// hypervisor's attached visors), the route finder, or the local fallback.
+	RouteSource *router.RouteSourceStats `json:"route_source,omitempty"`
 	// VStream is one entry per virtual-stream mux (skynet forwarding,
 	// app-direct dials, visor RPC): open streams, relay legs, and frames that
 	// arrived for streams this side does not have.
@@ -151,6 +154,13 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 			return true
 		})
 		sort.Slice(d.Transports, func(i, j int) bool { return d.Transports[i].ID.String() < d.Transports[j].ID.String() })
+	}
+
+	if rs, ok := v.router.(interface {
+		RouteSourceStats() router.RouteSourceStats
+	}); ok {
+		stats := rs.RouteSourceStats()
+		d.RouteSource = &stats
 	}
 
 	if is, ok := v.router.(interface{ IntakeStats() router.IntakeStats }); ok {
