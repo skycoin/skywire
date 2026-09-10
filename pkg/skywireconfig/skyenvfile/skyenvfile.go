@@ -108,6 +108,10 @@ func Update(path string, edits []Edit) error {
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("Update: scan %s: %w", path, err)
 	}
+	// Close the source before the rename below: Windows refuses to replace a
+	// file that is still open (the deferred Close alone left autoconfig and
+	// the visor unable to write skywire.conf there).
+	_ = src.Close() //nolint:errcheck
 
 	// Append any keys we never matched. Tag the block so operators
 	// scanning the file later can tell autoconfig wrote it.
