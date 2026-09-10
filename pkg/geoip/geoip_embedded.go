@@ -72,13 +72,20 @@ var (
 func Embedded() bool { return len(embeddedGz) > 0 }
 
 // Shared returns the process-wide reader over the embedded database, opening
-// it on first use. Inflating the ~30 MB gzip costs ~60 MB of heap for the life
-// of the process, so callers keep this lazy: a visor that never answers a geo
-// query never pays it (every visor and dmsg server used to open it at start).
-// The reader is safe for concurrent use and is never closed.
+// it on first use. Callers keep this lazy: a visor that never answers a geo
+// query never pays for it. The reader is memory-mapped over a cached inflated
+// copy (see geoip_mapped.go) so the ~60 MB database stays out of the Go heap;
+// only if that cache cannot be written does it fall back to inflating into
+// memory. The reader is safe for concurrent use and is never closed.
 func Shared() (*geoip2.Reader, error) {
 	sharedOnce.Do(func() {
+		if r, err := openMapped(mappedDir()); err == nil {
+			shared = r
+			return
+		}
 		shared, sharedErr = OpenEmbedded()
 	})
 	return shared, sharedErr
 }
+
+func bytesReader(b []byte) io.Reader { return bytes.NewReader(b) }
