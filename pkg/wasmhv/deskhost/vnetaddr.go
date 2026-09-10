@@ -1,10 +1,10 @@
-// Package main cmd/wasm-visor/vnetaddr.go c3-vis-wasm
+// Package deskhost pkg/wasmhv/deskhost/vnetaddr.go c3-vis-wasm
 // Untagged on purpose: vnetTarget is pure string/URL work with no syscall/js
 // in it, and a js-only test never runs in CI. The rule it encodes — which
 // spellings get rendered UNSANDBOXED out of this origin — is worth a test
 // that actually executes.
 
-package main
+package deskhost
 
 import (
 	"net/url"

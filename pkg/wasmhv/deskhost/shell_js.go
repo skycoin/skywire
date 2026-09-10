@@ -1,13 +1,13 @@
 //go:build js && wasm
 
-// Package main cmd/wasm-visor/shell_js.go c3-vis-wasm
-// A real shell for the browser visor. The wasm visor has no host to run a
-// dmsgpty against — browse.js says as much where it opens terminal windows —
-// so the "visor cli" window has been a bespoke REPL in JS: one command per
-// line, no pipes, no scripting, its own history and alias table.
+// Package deskhost pkg/wasmhv/deskhost/shell_js.go c3-vis-wasm
+// A real shell for the browser desk. The wasm desk has no host to run a
+// dmsgpty against, so the "visor cli" window was once a bespoke REPL in JS:
+// one command per line, no pipes, no scripting, its own history and alias
+// table.
 //
-// This replaces it with websh (github.com/0magnet/websh): a Bash/POSIX
-// interpreter over an in-memory filesystem, rendered by the xterm.js Go port
+// This is websh (github.com/0magnet/websh) instead: a Bash/POSIX interpreter
+// over an in-memory filesystem, rendered by the xterm.js Go port
 // (github.com/0magnet/xterm-go), with the visor's own API as applets whose
 // JSON output pipes into the shell's jq:
 //
@@ -15,26 +15,18 @@
 //	tps | jq -r '.[].type' | sort | uniq -c
 //	for pk in $(visors -c | jq -r '.[].local_pk'); do echo "$pk"; done
 //
-// # One binary, two roles
+// # Where the visor is
 //
-// The terminal needs a DOM; the visor normally runs in a SharedWorker, which
-// has none (hv-boot.js: one visor per origin, tabs talk to it over a
-// postMessage proxy). Rather than ship a second wasm binary, THIS binary
-// carries both roles and picks at startup:
+// The terminal needs a DOM; the visor does not run in this instance. On the
+// served desk it is the `skywire autoconfig` instance in the exec worker, and
+// its hypervisor UI listens on the virtual loopback (vnet:8001) — so the
+// visor applets call that API over vnet, exactly as the dashboard tab renders
+// it. A page that still publishes the legacy globalThis.skywireVisor proxy
+// (the in-page visor of cmd/wasm-visor) is honoured first, so one code path
+// serves both.
 //
-//   - role "visor" (default): the existing visor. If it happens to have a DOM
-//     — the in-page host fallback — it ALSO installs the shell, so no second
-//     instance is needed there.
-//   - role "shell" (globalThis.__SKYWIRE_WASM_ROLE__ = "shell" before
-//     instantiating): install only the terminal. browse.js loads this in the
-//     tab when the visor lives in a worker.
-//
-// The visor applets follow the same principle: when this instance IS the visor
-// they call wasmhv.Core.ServeHTTP directly, and otherwise they go through the
-// public globalThis.skywireVisor proxy — so one code path serves both roles.
-//
-// Exposed to the UI as skywireShell.open(el) → { close, fit, focus }.
-package main
+// Exposed to the UI as skywireShell.open(el) → { close, fit, focus, run }.
+package deskhost
 
 import (
 	"context"
@@ -55,38 +47,6 @@ import (
 	"github.com/0magnet/websh/shell/browser"
 	xterm "github.com/0magnet/xterm-go"
 )
-
-// wasmRole reports how this instance was invoked: "shell" for the DOM-side
-// terminal instance, "visor" (default) otherwise.
-func wasmRole() string {
-	if r := js.Global().Get("__SKYWIRE_WASM_ROLE__"); r.Type() == js.TypeString {
-		return r.String()
-	}
-	// Fail closed in a service worker. Everywhere else this binary is loaded on
-	// the visor origin V, so defaulting to a visor is right. A service worker may
-	// be running on an isolated browse origin B, which is untrusted by
-	// construction and must never boot a visor; an absent role there means "do
-	// nothing", never "do the most privileged thing".
-	if inServiceWorker() {
-		return "inert"
-	}
-	return "visor"
-}
-
-// inServiceWorker reports whether this instance is running as a ServiceWorker.
-// clients+registration together are what distinguish it from a dedicated or
-// shared worker, which have neither.
-func inServiceWorker() bool {
-	g := js.Global()
-	return g.Get("clients").Truthy() && g.Get("registration").Truthy()
-}
-
-// hasDOM reports whether this instance can touch the document — false in a
-// (Shared)Worker.
-func hasDOM() bool {
-	d := js.Global().Get("document")
-	return d.Truthy() && d.Get("createElement").Type() == js.TypeFunction
-}
 
 // wasmShellFS is the ONE in-tab filesystem shared by every websh terminal and
 // the GUI file browser — files created in the shell show up in the browser and
@@ -263,70 +223,91 @@ func jsAwait(v js.Value) (js.Value, error) {
 	return res, err
 }
 
-// visorAPI calls the hypervisor API: in-process when this instance is the
-// visor, else over the skywireVisor proxy the tab already holds.
+// hvVNetPort is the port of the tab's hypervisor UI on the virtual loopback:
+// the port desk-boot.js opens the dashboard tab on (its hvPort default) and,
+// on a desk a native hypervisor serves, the one its host bridge claims for
+// the host visor.
+const hvVNetPort = 8001
+
+// visorAPI calls the hypervisor API of the visor this tab is looking at: over
+// the globalThis.skywireVisor proxy where a page publishes one (the legacy
+// in-page visor), else over the virtual loopback to the hypervisor UI the
+// tab's visor listens on (vnet.httpFetch, bottle vnet.js) — the same port the
+// dashboard tab renders.
 func visorAPI(method, path string, body []byte) (status int, out []byte, err error) {
-	if hvCore != nil {
-		status, out = hvCore.ServeHTTP(method, path, body)
-		return status, out, nil
+	if v := js.Global().Get("skywireVisor"); v.Truthy() && v.Get("hvApi").Type() == js.TypeFunction {
+		var arg any
+		if body != nil {
+			arg = string(body)
+		}
+		res, err := jsAwait(v.Call("hvApi", method, path, arg))
+		if err != nil {
+			return 0, nil, err
+		}
+		return res.Get("status").Int(), jsBytes(res.Get("body")), nil
 	}
-	v := js.Global().Get("skywireVisor")
-	if !v.Truthy() || v.Get("hvApi").Type() != js.TypeFunction {
+	vn := js.Global().Get("vnet")
+	if !vn.Truthy() || vn.Get("httpFetch").Type() != js.TypeFunction {
 		return 0, nil, errors.New("no visor in this tab")
 	}
-	var arg any
-	if body != nil {
-		arg = string(body)
+	if l := vn.Get("listening"); l.Type() == js.TypeFunction && !vn.Call("listening", hvVNetPort).Truthy() {
+		return 0, nil, fmt.Errorf("no visor in this tab yet — nothing listens on vnet:%d", hvVNetPort)
 	}
-	res, err := jsAwait(v.Call("hvApi", method, path, arg))
+	var arg any
+	hdrs := js.Global().Get("Object").New()
+	if body != nil {
+		buf := js.Global().Get("Uint8Array").New(len(body))
+		js.CopyBytesToJS(buf, body)
+		arg = buf
+		hdrs.Set("Content-Type", "application/json")
+	}
+	res, err := jsAwait(vn.Call("httpFetch", hvVNetPort, method, path, arg, hdrs))
 	if err != nil {
 		return 0, nil, err
 	}
-	status = res.Get("status").Int()
-	b := res.Get("body")
-	if b.Truthy() {
-		out = make([]byte, b.Get("length").Int())
-		js.CopyBytesToGo(out, b)
-	}
-	return status, out, nil
+	return res.Get("status").Int(), jsBytes(res.Get("body")), nil
 }
 
-// visorPK returns this tab's visor public key, from whichever side holds it.
+// jsBytes copies a response body — a Uint8Array, or a string — into Go.
+func jsBytes(b js.Value) []byte {
+	switch b.Type() {
+	case js.TypeString:
+		return []byte(b.String())
+	case js.TypeObject:
+		if n := b.Get("length"); n.Type() == js.TypeNumber {
+			out := make([]byte, n.Int())
+			js.CopyBytesToGo(out, b)
+			return out
+		}
+	}
+	return nil
+}
+
 // visorPK returns the visor's public key for the prompt, WITHOUT waiting for
 // it. The first call that misses starts a background fetch and returns empty;
 // the prompt says "visor" until the answer lands, and every prompt after that
 // is served from memory.
 //
-// It must not wait, and this is not a matter of taste. Where the visor lives in
-// a worker, skywireVisor is a postMessage proxy: every method returns a promise
-// that only settles once the JS event loop runs. This is called from prompt(),
-// which is called from the line editor's redraw, which is called from the
-// terminal's data handler — a js.Func — and from openShell, itself a js.Func.
-// The standard-Go wasm runtime hands control back to the browser only when
-// every goroutine is blocked, and a js.Func callback must return before that
-// can happen. So waiting here waits for a reply that cannot arrive until we
-// stop waiting: the renderer spins inside wasm at full CPU, the page stops
-// answering anything, the terminal window will not drag, and a stack sample
-// shows a dozen frames of wasm under the Chromium frames.
+// It must not wait, and this is not a matter of taste. Every way of asking
+// the visor settles on the JS event loop — a postMessage proxy's promise, a
+// vnet exchange's callbacks. This is called from prompt(), which is called
+// from the line editor's redraw, which is called from the terminal's data
+// handler — a js.Func — and from openShell, itself a js.Func. The standard-Go
+// wasm runtime hands control back to the browser only when every goroutine is
+// blocked, and a js.Func callback must return before that can happen. So
+// waiting here waits for a reply that cannot arrive until we stop waiting:
+// the renderer spins inside wasm at full CPU, the page stops answering
+// anything, the terminal window will not drag, and a stack sample shows a
+// dozen frames of wasm under the Chromium frames.
 //
-// It looked fine everywhere it was tested. With the visor in-page selfPK is
-// already set, so the wait never happens; on a bare page skywireVisor is absent
-// and it returns immediately; under TinyGo the asyncify scheduler can suspend a
-// callback and return to JS, so the same code works. Only the split this build
-// uses — visor in a SharedWorker, shell a second instance in the tab — reaches
-// it, and only under standard Go.
-//
-// A goroutine may block on the proxy safely: it is not a callback, so the
-// runtime can park and let the event loop deliver the reply.
+// A goroutine may block on the reply safely: it is not a callback, so the
+// runtime can park and let the event loop deliver it.
 var (
 	visorPKCache    atomic.Value // string
 	visorPKFetching atomic.Bool
 )
 
 func visorPK() string {
-	if !selfPK.Null() {
-		return selfPK.Hex()
-	}
 	if pk, _ := visorPKCache.Load().(string); pk != "" {
 		return pk
 	}
@@ -335,20 +316,52 @@ func visorPK() string {
 	if visorPKFetching.CompareAndSwap(false, true) {
 		go func() {
 			defer visorPKFetching.Store(false)
-			v := js.Global().Get("skywireVisor")
-			if !v.Truthy() || v.Get("status").Type() != js.TypeFunction {
-				return
-			}
-			st, err := jsAwait(v.Call("status"))
-			if err != nil || !st.Truthy() {
-				return
-			}
-			if pk := st.Get("pk"); pk.Type() == js.TypeString && pk.String() != "" {
-				visorPKCache.Store(pk.String())
+			if pk := fetchVisorPK(); pk != "" {
+				visorPKCache.Store(pk)
 			}
 		}()
 	}
 	return ""
+}
+
+// visorPKWait is visorPK for callers OFF the callback stack — the applets,
+// which run on the shell's goroutine — where waiting for the answer is safe
+// and a first `pk` should not have to be asked twice.
+func visorPKWait() string {
+	if pk := visorPK(); pk != "" {
+		return pk
+	}
+	if pk := fetchVisorPK(); pk != "" {
+		visorPKCache.Store(pk)
+		return pk
+	}
+	return ""
+}
+
+// fetchVisorPK asks the visor for its key: skywireVisor.status() where a page
+// publishes one, else GET /api/about on its hypervisor over the loopback.
+func fetchVisorPK() string {
+	if v := js.Global().Get("skywireVisor"); v.Truthy() && v.Get("status").Type() == js.TypeFunction {
+		st, err := jsAwait(v.Call("status"))
+		if err != nil || !st.Truthy() {
+			return ""
+		}
+		if pk := st.Get("pk"); pk.Type() == js.TypeString {
+			return pk.String()
+		}
+		return ""
+	}
+	status, out, err := visorAPI("GET", "/api/about", nil)
+	if err != nil || status != 200 {
+		return ""
+	}
+	var about struct {
+		PubKey string `json:"public_key"`
+	}
+	if json.Unmarshal(out, &about) != nil {
+		return ""
+	}
+	return about.PubKey
 }
 
 // registerVisorApplets adds the visor commands to the shell's applet set. The
@@ -427,7 +440,7 @@ var registerVisorApplets = sync.OnceFunc(func() {
 	}
 	self := func(suffix string) func(*interp.HandlerContext) (string, bool) {
 		return func(hc *interp.HandlerContext) (string, bool) {
-			pk := visorPK()
+			pk := visorPKWait()
 			if pk == "" {
 				_, _ = fmt.Fprintln(hc.Stderr, "no visor identity yet — boot the visor first") //nolint:errcheck
 				return "", false
@@ -445,7 +458,7 @@ var registerVisorApplets = sync.OnceFunc(func() {
 	get("routes", "this visor's routes", self("/routes"))
 
 	shell.RegisterApplet("pk", "print this visor's public key", func(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, _ []string) int {
-		pk := visorPK()
+		pk := visorPKWait()
 		if pk == "" {
 			_, _ = fmt.Fprintln(hc.Stderr, "no visor identity yet — boot the visor first") //nolint:errcheck
 			return 1
@@ -682,7 +695,7 @@ func (s *shellSession) run() {
 		// Canceling this at the end of the line is safe: the interpreter
 		// detaches background jobs from it, so `sleep 30 &` survives to the
 		// next prompt as it would in bash. close() stops them instead.
-		runCtx, cancel := context.WithCancel(ctx)
+		runCtx, cancel := context.WithCancel(context.Background())
 		s.cancelRun = cancel
 		s.running = true
 

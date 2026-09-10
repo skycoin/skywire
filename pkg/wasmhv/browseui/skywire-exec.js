@@ -77,12 +77,17 @@
 
 	var execSeq = 0;
 
-	function skywireExec(args, hooks) {
+	// spawnLocal starts one command as a process on THIS realm's process
+	// layer and returns proc's handle ({pid, id, exited, kill}). skywireExec
+	// below is the same thing reduced to an exit code; the desk boot takes the
+	// handle itself for the one command that must run where the document is
+	// and never exits — `skywire desk-host`, the desk's surfaces.
+	function spawnLocal(args, hooks) {
 		if (!globalThis.jsfs || !globalThis.jsfs.installed) {
-			return Promise.reject(new Error('jsfs is not installed — load jsfs.js before running commands'));
+			throw new Error('jsfs is not installed — load jsfs.js before running commands');
 		}
 		if (!globalThis.proc) {
-			return Promise.reject(new Error('bottle proc.js is not loaded — no process layer'));
+			throw new Error('bottle proc.js is not loaded — no process layer');
 		}
 		bind();
 		hooks = hooks || {};
@@ -123,14 +128,21 @@
 		if (typeof hooks.instance === 'function') {
 			hooks.instance({ interrupt: p.kill });
 		}
+		return p;
+	}
+
+	function skywireExec(args, hooks) {
+		var p;
+		try { p = spawnLocal(args, hooks); } catch (e) { return Promise.reject(e); }
 		return p.exited.then(function (code) {
-			if (code !== 0) mirror(id, code, null);
+			if (code !== 0) mirror(p.id, code, null);
 			return code;
 		}, function (e) {
-			mirror(id, null, e);
+			mirror(p.id, null, e);
 			throw e;
 		});
 	}
+	skywireExec.spawn = spawnLocal;
 
 	skywireExec.wasmURL = '/skywire.wasm';
 	// The standard-Go loader; the served page pairs it with the blob variant.

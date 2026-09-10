@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main cmd/wasm-visor/browser_js.go c3-vis-wasm
+// Package deskhost pkg/wasmhv/deskhost/browser_js.go c3-vis-wasm
 // The netscrape Go/wasm browser as a page-realm SURFACE of the wasm-visor
 // binary — the same "one binary, several roles" trick shell_js.go documents.
 //
@@ -14,7 +14,7 @@
 // Exposed as globalThis.skywireBrowser.open(el): the launcher sets
 // globalThis.__netscrapeFetch — the visor's dmsg/clearnet transport, bridged
 // from the worker through skywireVisor — and calls open(mountElement).
-package main
+package deskhost
 
 import (
 	"syscall/js"

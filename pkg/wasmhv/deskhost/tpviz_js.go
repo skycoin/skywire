@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main cmd/wasm-visor/tpviz_js.go c3-vis-wasm
+// Package deskhost pkg/wasmhv/deskhost/tpviz_js.go c3-vis-wasm
 // The network-visualizer role of the one wasm-visor blob.
 //
 // # One binary, another role
@@ -26,7 +26,7 @@
 // more: the native tpviz server serves THIS blob at /tpviz-gl.wasm (out of
 // pkg/wasmhv/wasmbin), so the only browser-side change is that
 // cosmos-go-graph.ts sets __SKYWIRE_WASM_ROLE__="netview" before instantiating.
-package main
+package deskhost
 
 import (
 	"github.com/skycoin/skywire/pkg/tpviz/wasmgl"

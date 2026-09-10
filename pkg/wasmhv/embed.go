@@ -28,11 +28,17 @@ var OverrideJS []byte
 // (pkg/wasmhv's gob-mirror test imports pkg/visor).
 var BrowseJS = browseui.BrowseJS
 
-// WinBoxWasm is the window-manager wasm module the browse bundle loads — a Go
+// WinBoxJS is the window-manager loader pair the LEGACY pages inline (the
+// hv-boot page of `hv serve`, the `hv gen` single file): they build windows in
+// JS and need globalThis.WinBox. The desk pages do not — their chrome is Go
+// and links winbox-go — so it is no longer part of BrowseJS.
+var WinBoxJS = browseui.WinBoxJS
+
+// WinBoxWasm is the window-manager wasm module that loader fetches — a Go
 // port of WinBox.js (github.com/0magnet/winbox-go) compiled to wasm. Served at
-// /winbox.wasm by both the `hv serve` page and the native hypervisor UI;
-// base64-inlined instead by the single-file generator, which has no server.
-// Re-exported from the browseui leaf like BrowseJS.
+// /winbox.wasm by the legacy `hv serve` page; base64-inlined instead by the
+// single-file generator, which has no server. Re-exported from the browseui
+// leaf like BrowseJS.
 func WinBoxWasm() []byte { return browseui.WinBoxWasm() }
 
 // WinBoxWasmGz is the same module still compressed, for the single-file

@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// cmd/wasm-visor/desk_js.go — the desk surface, from its promoted home.
+// Package deskhost pkg/wasmhv/deskhost/desk_js.go — the desk surface, from its promoted home.
 //
 // The desk chrome and window registry come from github.com/0magnet/desk (the
 // panel, the Applications menu, task buttons, launch/teardown); this file only
@@ -10,7 +10,7 @@
 // openConsole/openWindow contract the desk pages already use). Nothing
 // chrome-shaped is hand-rolled here: skywire brings panes, the library brings
 // the desk.
-package main
+package deskhost
 
 import (
 	"context"

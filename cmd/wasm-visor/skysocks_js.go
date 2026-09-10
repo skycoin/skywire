@@ -16,8 +16,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"crypto/x509"
-	_ "embed"
 	"errors"
 	"fmt"
 	"io"
@@ -36,34 +34,14 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/wasmhv/cabundle"
 )
 
-// caBundle is a Mozilla CA root bundle, embedded because Go's js/wasm runtime has
-// NO system cert pool (crypto/x509.SystemCertPool fails), so https verification
-// would otherwise fail. We MUST verify — the tab does TLS end-to-end to the origin
-// so the skysocks exit can't read or MITM the https stream; skipping verification
-// would hand the exit exactly that power.
-//
-//go:embed cacert.pem
-var caBundle []byte
-
-// caPool parses the embedded bundle on FIRST USE, not at package init.
-//
-// The bundle is 186 KB / 122 certs, and parsing it measures ~47ms, 853 KB and
-// ~10,000 allocations under js/wasm — 98.6% of the bytes and 98.8% of the
-// allocations of this package's entire initialization, which is itself the
-// largest init in the binary. That was being paid on every browser boot, on the
-// one thread js/wasm has, before anything the visor does.
-//
-// It is needed at exactly two call sites, both inside HTTPS-through-skysocks
-// paths (skysocks_js.go and socksaddr_js.go) that a boot may never reach. Same
-// shape as pkg/geoip's 29 MB embed, which is likewise decompressed lazily
-// behind a sync.Once rather than at init.
-var caPool = sync.OnceValue(func() *x509.CertPool {
-	p := x509.NewCertPool()
-	p.AppendCertsFromPEM(caBundle)
-	return p
-})
+// caPool is the embedded Mozilla root bundle (pkg/wasmhv/cabundle): Go's
+// js/wasm runtime has no system cert pool, and the tab MUST verify — it does
+// TLS end-to-end to the origin so the skysocks exit cannot read or MITM the
+// stream. Parsed lazily on first use, not at init.
+var caPool = cabundle.Pool
 
 // skysocksPort is the skywire app port a skysocks-server listens on.
 const skysocksPort = routing.Port(skyenv.SkysocksPort)

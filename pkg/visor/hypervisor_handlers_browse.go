@@ -89,7 +89,7 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 		case "/sw.js":
 			w.Header().Set("Content-Type", "text/javascript")
 			w.Header().Set("Cache-Control", "no-store")
-			_, _ = w.Write(wasmhv.ServiceWorkerFor(hv.servedUIVersion(), []string{"/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/browse.js", "/desk-boot.js", "/wasm_exec.js", "/winbox.wasm", "/skywire-worker.js", "/autoupdate.js"})) //nolint:errcheck
+			_, _ = w.Write(wasmhv.ServiceWorkerFor(hv.servedUIVersion(), []string{"/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/browse.js", "/desk-boot.js", "/wasm_exec.js", "/skywire-worker.js", "/autoupdate.js"})) //nolint:errcheck
 			return
 		case "/browse.js":
 			serveJS(w, browseui.BrowseJS)
@@ -102,15 +102,9 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			// served by `hv serve`.
 			serveJS(w, browseui.VNetSWJS())
 			return
-		case "/winbox.wasm":
-			// The window manager the browse bundle loads. instantiateStreaming
-			// refuses a module that does not arrive as application/wasm.
-			w.Header().Set("Content-Type", "application/wasm")
-			w.Header().Set("Cache-Control", "no-cache")
-			_, _ = w.Write(browseui.WinBoxWasm()) //nolint:errcheck
-			return
 		case "/wasm-visor.wasm":
-			// The desk-host blob. netscrape — the nested browser the desk
+			// The LEGACY desk-host blob, for a desk with no command module to
+			// run `skywire desk-host` out of (nativeDeskBootOpts). netscrape — the nested browser the desk
 			// renders its windows as TABS in — is Go/wasm and lives in this
 			// module (cmd/wasm-visor/browser_js.go installBrowser). Without it
 			// this origin has a window manager and no browser, so the
@@ -313,9 +307,12 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 }
 
 // nativeDeskBootOpts is the skywireDeskBoot options object for the desk the
-// native hypervisor serves. The desk module and winbox come off this port; the
-// skywire command module does not, so nothing that would exec it is enabled:
-// no visor autostart, no help terminal, no docs server. The dashboard tab is
+// native hypervisor serves. With a command module (embedded by the two-stage
+// build, on disk, or hypervisor.wasm_serve.exec_wasm) the desk host is
+// `skywire desk-host` out of that ONE module; without one the legacy
+// wasm-visor.wasm blob still carries the surfaces, and nothing that would
+// exec a command is enabled: no visor autostart, no help terminal, no docs
+// server. The dashboard tab is
 // this origin's Angular UI — RELATIVE, since through a vnet service worker the
 // page can sit under a /vnet/<port>/ prefix the server never sees, and an
 // absolute URL would escape onto the outer server (the trap #4499 fixed).
@@ -325,16 +322,19 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 func nativeDeskBootOpts(localPK string, execWasm bool) string {
 	opts := "{\n" +
 		"  persistDB: 'skywire-desk',\n" +
-		"  deskWasmURL: '/wasm-visor.wasm',\n" +
-		"  wasmExecURL: '/wasm_exec.js',\n" +
-		"  winboxURL: '/winbox.wasm',\n"
+		"  wasmExecURL: '/wasm_exec.js',\n"
+	if execWasm {
+		opts += "  deskWasmURL: '/skywire.wasm',\n" +
+			"  wasmURL: '/skywire.wasm',\n"
+	} else {
+		opts += "  deskWasmURL: '/wasm-visor.wasm',\n"
+	}
 	if execWasm && localPK != "" {
 		// The command module is served here, so the desk runs a visor of the
 		// tab's own — ATTACHED to this hypervisor: its one transport is a
 		// WebSocket back to this origin (see /tp/ws), it does not go looking
 		// for public peers, and the host reaches it over that socket.
 		opts += "  autostartVisor: true,\n" +
-			"  wasmURL: '/skywire.wasm',\n" +
 			"  execWorkerURL: '/skywire-worker.js',\n" +
 			"  attach: { pk: '" + localPK + "', path: '/tp/ws' },\n"
 	} else {

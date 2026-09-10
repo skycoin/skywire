@@ -1,11 +1,11 @@
-// Package main cmd/wasm-visor/shell_exec_js.go c3-wasm-visor
+// Package deskhost pkg/wasmhv/deskhost/shell_exec_js.go c3-wasm-visor
 //
 // A headless websh: one command line run in a shell with no terminal
 // attached, its output returned as text. This is what a CDP-driven harness
 // calls (globalThis.__skywireDesk.exec) to drive the tab's visor —
 // `skywire cli …` — and read the result back, where a console tab could
 // only be screenshotted.
-package main
+package deskhost
 
 import (
 	"bytes"

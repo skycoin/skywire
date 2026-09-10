@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 // TestExecWasmStamp pins the command-module stamp: absent → empty, present →
@@ -41,6 +43,9 @@ func TestExecWasmStamp(t *testing.T) {
 // TestServedVersion pins that the fingerprint a page polls is the build plus
 // the module stamp, and that a page's placeholder is filled with exactly that.
 func TestServedVersion(t *testing.T) {
+	if execwasm.Present() {
+		t.Skip("a command module is embedded in this build; the empty-path case then carries its stamp")
+	}
 	require.Equal(t, "abc", servedVersion("abc", ""), "no module → build alone")
 
 	p := filepath.Join(t.TempDir(), "skywire.wasm")
