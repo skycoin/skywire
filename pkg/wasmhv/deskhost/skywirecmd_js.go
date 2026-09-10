@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main cmd/wasm-visor/skywirecmd_js.go c3-vis-wasm
+// Package deskhost pkg/wasmhv/deskhost/skywirecmd_js.go c3-vis-wasm
 //
 // The `skywire` command inside the browser shell: each invocation executes
 // the FULL skywire CLI wasm module (the repo-root binary compiled for
@@ -16,7 +16,7 @@
 // blocks until the command exits. Registered only when the page provides
 // skywireExec — a served deployment without /skywire.wasm simply has no
 // `skywire` command in the shell.
-package main
+package deskhost
 
 import (
 	"context"

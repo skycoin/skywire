@@ -89,6 +89,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/netview"
 	"github.com/skycoin/skywire/pkg/visor/visorcore"
 	"github.com/skycoin/skywire/pkg/wasmhv"
+	"github.com/skycoin/skywire/pkg/wasmhv/deskhost"
 )
 
 var (
@@ -203,11 +204,7 @@ func main() {
 	//                the worker-side visor for data over the skywireVisor proxy.
 	switch wasmRole() {
 	case "shell":
-		installShell()
-		installBrowser()
-		installDesk()
-		fmt.Println("wasm-visor: shell role — call skywireShell.open(el) / skywireBrowser.open(el)")
-		keepAlive()
+		deskhost.Run("shell")
 	case "browser":
 		// netscrape alone, for a page that already HAS a desk panel and wants
 		// only the nested browser. The native hypervisor is the case: its
@@ -216,14 +213,9 @@ func main() {
 		// put two panels — and two taskbars — on one page. Installing just the
 		// browser lets that page render the hypervisor UI as a netscrape TAB
 		// instead of a bare iframe, without touching the panel it already has.
-		installBrowser()
-		installBrowserDirectLoader()
-		fmt.Println("wasm-visor: browser role — call skywireBrowser.open(el)")
-		keepAlive()
+		deskhost.Run("browser")
 	case "netview":
-		installNetView()
-		fmt.Println("wasm-visor: netview role — call tpvizGL.init(elId, onEvent)")
-		keepAlive()
+		deskhost.Run("netview")
 	case "browse-sw":
 		// The transport service worker for a real-origin browse frame
 		// (browsesw_js.go). Opt-in via `hv serve --browse-origin-wasm`; what
@@ -322,9 +314,9 @@ func main() {
 	// The desk goes with them: this is the path the desk page takes, and
 	// desk-boot waits on the panel this publishes.
 	if hasDOM() {
-		installShell()
-		installBrowser()
-		installDesk()
+		// deskhost.Run never returns (it parks the surfaces' instance), so it
+		// runs beside the visor here rather than in its place.
+		go deskhost.Run("shell")
 	}
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	// keepAlive, not select{}: a bare select parks main with NO pending Go

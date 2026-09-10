@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main cmd/wasm-visor/shellmesh_js.go c3-vis-wasm
+// Package deskhost pkg/wasmhv/deskhost/shellmesh_js.go c3-vis-wasm
 // The mesh as the shell's network: fetch and dial by public key, over dmsg,
 // from the terminal in the visor tab.
 //
@@ -18,14 +18,12 @@
 //
 // # Which instance is talking
 //
-// These go through globalThis.skywireVisor rather than reaching for the
-// visor's own dmsg client, because the shell usually is not the visor: the
-// terminal needs a DOM and the visor normally runs in a SharedWorker, so the
-// tab holds a SECOND wasm instance in the "shell" role whose package-level
-// dmsgC and resolverAliases are nil and empty. Going through skywireVisor
-// works either way — it is the real function table in the visor instance and a
-// postMessage proxy in the tab — which is the same reason the visor applets in
-// shell_js.go call hvApi rather than hvCore directly.
+// These go through globalThis.skywireVisor — the function table of the legacy
+// in-page visor (cmd/wasm-visor), or its postMessage proxy — because the desk
+// host never holds a dmsg client of its own. The served desk publishes no
+// skywireVisor (its visor is a separate instance in the exec worker, reached
+// only over the virtual loopback), so there these applets report "no visor in
+// this tab" rather than guessing.
 //
 // # Capability
 //
@@ -39,7 +37,7 @@
 // mesh. That is deliberately absent; it belongs behind the existing exec gate
 // (visorconfig.Pty.AllowRPCExec, off by default), in the milestone that adds
 // it.
-package main
+package deskhost
 
 import (
 	"context"
@@ -272,15 +270,4 @@ func runAliases(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, _ 
 		_, _ = fmt.Fprintf(hc.Stdout, "%-8s %s\n", name, res.Get(name).String()) //nolint:errcheck
 	}
 	return 0
-}
-
-// jsMeshAliases exposes the resolver's alias table to the tab, so a shell in
-// another wasm instance can list what names resolve here. It runs in the visor
-// instance, where resolverAliases is populated.
-func jsMeshAliases(js.Value, []js.Value) interface{} {
-	out := map[string]interface{}{}
-	for name, pk := range resolverAliases {
-		out[name] = pk.Hex()
-	}
-	return js.ValueOf(out)
 }
