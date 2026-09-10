@@ -127,11 +127,12 @@ type Values struct {
 	MaxTransports int // MAXTRANSPORTS (pause service-discovery registration at this DISTINCT-PEER count)
 
 	// --- Transport ports ---
-	StcprPort     int
-	SudphPort     int
-	TransportPort int
-	LanDmsgPort   int
-	LanDmsgPublic string
+	StcprPort      int
+	SudphPort      int
+	TransportPort  int
+	LanDmsgPort    int
+	LanDmsgPublic  string
+	DmsgServerConf string
 
 	// --- Privacy / routing knobs ---
 	MinHops            int  // MINHOPS (>=2 forces multihop for sender privacy)
@@ -297,6 +298,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().BoolVar(&v.PtyRPCExec, "pty-rpc-exec", false, "allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off closes a local privilege-escalation vector) — writes PTYRPCEXEC=true in skywire.conf")
 	cmd.Flags().IntVar(&v.LanDmsgPort, "lan-dmsg-port", 0, "LAN dmsg-server listening port (0 = leave unchanged) — writes LANDMSGPORT in skywire.conf")
 	cmd.Flags().StringVar(&v.LanDmsgPublic, "lan-dmsg-public", "", "public host:port for the LAN dmsg-server entry in dmsg discovery — writes LANDMSGPUBLIC in skywire.conf")
+	cmd.Flags().StringVar(&v.DmsgServerConf, "dmsg-server-conf", "", "standalone dmsg-server config file to run inside the visor instead of a separate unit — writes DMSGSERVERCONF in skywire.conf")
 
 	// --- Whitelists ---
 	cmd.Flags().StringVar(&v.DmsgptyPks, "dmsgpty-pks", "", "additional dmsgpty-whitelist PKs (hypervisor PKs are already implicit) — writes DMSGPTYPKS in skywire.conf")

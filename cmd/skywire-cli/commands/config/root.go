@@ -208,6 +208,7 @@ var (
 	// on whenever ISHYPERVISOR=true.
 	lanDmsgPort          int
 	lanDmsgPublicAddress string
+	dmsgServerConf       string
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor

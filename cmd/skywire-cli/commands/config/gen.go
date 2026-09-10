@@ -473,6 +473,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "lan-dmsg-port")
 	genConfigCmd.Flags().StringVar(&lanDmsgPublicAddress, "lan-dmsg-public", scriptExecString("${LANDMSGPUBLIC}"), "embedded DMSG server WAN-reachable address (host:port; requires port-forward)")
 	gHiddenFlags = append(gHiddenFlags, "lan-dmsg-public")
+	genConfigCmd.Flags().StringVar(&dmsgServerConf, "dmsg-server-conf", scriptExecString("${DMSGSERVERCONF}"), "run the dmsg server from this standalone dmsg-server config file inside the visor (replaces a separate dmsg server unit)")
+	gHiddenFlags = append(gHiddenFlags, "dmsg-server-conf")
 
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 
@@ -1486,6 +1488,12 @@ func configureLauncher(log *logging.Logger) {
 		conf.Transport.Discovery = dmsgConf.TransportDiscovery
 		conf.Routing.RouteFinder = dmsgConf.RouteFinder
 		conf.Launcher.ServiceDisc = dmsgConf.ServiceDiscovery
+	}
+
+	// Fold a standalone dmsg server into this visor: DMSGSERVERCONF names the
+	// dmsg-server config file the separate unit used to run from.
+	if dmsgServerConf != "" {
+		conf.Dmsg.Server = &dmsgc.DmsgServerConfig{Enabled: true, ConfigPath: dmsgServerConf}
 	}
 
 	// Configure the skycoin-web wallet. Only emit a block when the operator
