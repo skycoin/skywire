@@ -579,7 +579,11 @@ func preflightSingleInstance(conf *visorconfig.V1, log logrus.FieldLogger) error
 // and the multi-service supervisor. parentCtx is the parent of the
 // SignalContext built around it.
 func run(parentCtx context.Context, conf *visorconfig.V1) error {
-	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
+	// The runtime-log hook JSON-encodes every entry it accepts under a
+	// process-wide mutex, so it captures info and above by default rather than
+	// every level (see logstore.DefaultHookLevel). SKYWIRE_LOG_HOOK_LEVEL puts
+	// debug back in the buffer for a debugging session.
+	store, hook := logstore.MakeStoreLevel(runtimeLogMaxEntries, logging.HookLevel(logstore.DefaultHookLevel))
 	mLog.AddHook(hook)
 
 	// logBroadcaster fans out logrus entries to gRPC StreamAppLogs

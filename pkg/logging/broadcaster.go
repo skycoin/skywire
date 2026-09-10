@@ -20,6 +20,15 @@ import (
 type Broadcaster struct {
 	mu   sync.RWMutex
 	subs map[*subscription]struct{}
+	// subCount mirrors len(subs) so Fire can tell there is nobody to fan out
+	// to with one atomic load instead of an RWMutex acquire plus a map range,
+	// on every entry. Zero subscribers is the steady state: the verbose
+	// gRPC stream only exists while somebody is watching it.
+	subCount atomic.Int64
+
+	// ringCaptureOff disables the per-app ring below. Inverted so the zero
+	// value keeps capture on, matching the previous behavior.
+	ringCaptureOff atomic.Bool
 
 	// ring is a bounded per-app history captured from the same Fire path
 	// that feeds live subscribers (see ring.go). It lets the proxy status
@@ -80,22 +89,43 @@ func (b *Broadcaster) Levels() []logrus.Level {
 	return logrus.AllLevels
 }
 
+// SetRingCapture turns the bounded per-app ring on or off. It is on by
+// default; a process that never reads the ring back (nothing calls
+// RecentByApp / RecentMerged) can turn it off so Fire returns on a single
+// atomic load, before any field resolution or Record allocation.
+func (b *Broadcaster) SetRingCapture(enabled bool) {
+	b.ringCaptureOff.Store(!enabled)
+}
+
 // Fire delivers e to every subscriber whose filter matches. Never
 // blocks on a slow consumer: full subscriber channels increment a
 // drop counter and continue.
+//
+// The hook is installed on the visor's master logger at AllLevels, so Fire
+// runs on every entry the process emits — measured at ~67k lines/min on a
+// busy node. Both halves are therefore short-circuited: the subscriber
+// fan-out is skipped entirely (no RWMutex acquire, no map range) when nothing
+// is subscribed, which is the steady state, and the ring capture is skipped
+// when it has been turned off. Only when one of them is actually live does an
+// entry pay for field resolution or allocation.
 func (b *Broadcaster) Fire(e *logrus.Entry) error {
-	b.mu.RLock()
-	for sub := range b.subs {
-		if !sub.matches(e) {
-			continue
+	if b.subCount.Load() > 0 {
+		b.mu.RLock()
+		for sub := range b.subs {
+			if !sub.matches(e) {
+				continue
+			}
+			select {
+			case sub.ch <- e:
+			default:
+				atomic.AddUint64(&sub.dropped, 1)
+			}
 		}
-		select {
-		case sub.ch <- e:
-		default:
-			atomic.AddUint64(&sub.dropped, 1)
-		}
+		b.mu.RUnlock()
 	}
-	b.mu.RUnlock()
+	if b.ringCaptureOff.Load() {
+		return nil
+	}
 	// Capture into the bounded per-app ring for later read-back. Same tap,
 	// not a second sink.
 	b.record(e)
@@ -118,7 +148,11 @@ func (b *Broadcaster) Subscribe(f Filter, capacity int) (<-chan *logrus.Entry, f
 		ch:     make(chan *logrus.Entry, capacity),
 	}
 	b.mu.Lock()
+	if b.subs == nil {
+		b.subs = make(map[*subscription]struct{})
+	}
 	b.subs[sub] = struct{}{}
+	b.subCount.Store(int64(len(b.subs)))
 	b.mu.Unlock()
 
 	cancel := func() uint64 {
@@ -130,6 +164,7 @@ func (b *Broadcaster) Subscribe(f Filter, capacity int) (<-chan *logrus.Entry, f
 		// sending to a closed channel.
 		b.mu.Lock()
 		delete(b.subs, sub)
+		b.subCount.Store(int64(len(b.subs)))
 		b.mu.Unlock()
 		close(sub.ch)
 		return atomic.LoadUint64(&sub.dropped)

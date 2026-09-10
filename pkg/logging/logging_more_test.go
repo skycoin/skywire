@@ -120,7 +120,9 @@ func TestWithAppName(t *testing.T) {
 func TestWriteHook(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewWriteHook(&buf)
-	assert.Equal(t, logrus.AllLevels, h.Levels())
+	// Info and above by default — see DefaultHookLevel; the full-level
+	// behavior is covered in hook_levels_test.go.
+	assert.Equal(t, logrus.AllLevels[:logrus.InfoLevel+1], h.Levels())
 
 	require.NoError(t, h.Fire(newEntry(logrus.InfoLevel, "hooked-line", logrus.Fields{"k": "v"})))
 	out := buf.String()
