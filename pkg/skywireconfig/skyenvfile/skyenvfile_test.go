@@ -22,7 +22,7 @@ func TestUpdateReplacesCommentedKeyAndAppendsMissing(t *testing.T) {
 	if err := Update(p, edits); err != nil {
 		t.Fatal(err)
 	}
-	got, err := os.ReadFile(p)
+	got, err := os.ReadFile(p) //nolint:gosec // G304: p is this test's own temp file
 	if err != nil {
 		t.Fatal(err)
 	}
