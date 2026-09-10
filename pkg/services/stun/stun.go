@@ -84,12 +84,7 @@ func (s *service) Run(ctx context.Context) error {
 	// stunserver.Server.Log uses skycoin's logging package, not
 	// pkg/logging — supply a separate logger instance for it.
 	skyLogger := skycoinlogging.MustGetLogger(tag)
-	logger := logging.MustGetLogger(tag)
-	if cfg.LogLevel != "" {
-		if lvl, err := logging.LevelFromString(cfg.LogLevel); err == nil {
-			logging.SetLevel(lvl)
-		}
-	}
+	logger := services.NewLogger(tag, cfg.LogLevel)
 	_ = s.log // logger is replaced with a tag-scoped one
 	_ = logger
 

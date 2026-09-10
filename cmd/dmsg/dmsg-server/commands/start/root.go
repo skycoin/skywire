@@ -56,11 +56,16 @@ var RootCmd = &cobra.Command{
 			logger.WithError(err).Fatal("parsing config failed, generating default one...")
 		}
 
-		logLvl, _, err := cmdutil.LevelFromString(inner.LogLevel)
-		if err != nil {
-			log.Printf("Failed to set log level: %v", err)
+		// An empty log_level leaves the level the flags picked (info by
+		// default); an unparseable one is reported rather than silently
+		// dropping the server to debug for the life of the process.
+		if inner.LogLevel != "" {
+			logLvl, _, err := cmdutil.LevelFromString(inner.LogLevel)
+			if err != nil {
+				logger.WithError(err).Warnf("bad log_level in config; using %q", logLvl)
+			}
+			logging.SetLevel(logLvl)
 		}
-		logging.SetLevel(logLvl)
 
 		cfg := &dmsgsrv.Config{
 			Config:         inner,

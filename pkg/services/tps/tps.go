@@ -87,12 +87,7 @@ func (s *service) Run(ctx context.Context) error {
 	if tag == "" {
 		tag = "transport_setup"
 	}
-	logger := logging.MustGetLogger(tag)
-	if cfg.LogLevel != "" {
-		if lvl, err := logging.LevelFromString(cfg.LogLevel); err == nil {
-			logging.SetLevel(lvl)
-		}
-	}
+	logger := services.NewLogger(tag, cfg.LogLevel)
 	_ = s.log
 
 	conf := &cfg.Config

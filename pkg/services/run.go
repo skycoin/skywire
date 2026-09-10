@@ -57,6 +57,18 @@ func ParseFile(data []byte) (File, error) {
 // apart.
 func Run(ctx context.Context, file File, master *logging.MasterLogger) error {
 	log := master.PackageLogger("services-supervisor")
+
+	// Record the fan-out before building anything: NewLogger uses it to
+	// decide whether a block's log_level may touch the process-global
+	// level (single service) or must stay scoped to that service alone.
+	setHosted(len(file.Services))
+	if len(file.Services) > 1 {
+		if lvl, ok := sharedLogLevel(log, file); ok {
+			logging.SetLevel(lvl)
+			log.WithField("level", lvl.String()).
+				Info("several services share this process; shared library log level is the quietest any block asked for, each service's own level is independent")
+		}
+	}
 	// Build all services up front before starting any. A factory
 	// failure (bad config, bad PK, bad URL) is fatal — abort
 	// without partial startup. Cheaper than discovering it 30s in
