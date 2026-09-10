@@ -121,6 +121,14 @@ type App struct {
 	// a console the boot script fills with a command, say — while Launch and
 	// AddTab still find it by name.
 	Unlisted bool
+
+	// NewTab puts a "+" at the end of the window's tab strip that opens another
+	// instance of this app — Open with no args — as a tab of the same window:
+	// what a terminal wants (another shell beside this one) and a file browser
+	// does not. The strip stays visible for a window whose app has it, so the
+	// "+" can be found while there is still only one tab. An app that draws its
+	// own tab strip (a browser) leaves it false.
+	NewTab bool
 }
 
 var (
@@ -279,6 +287,7 @@ func LaunchOpts(name string, opt Options, args ...string) (*winbox.WinBox, error
 	// tab set even for its first pane — see tabs_js.go for why one cannot be
 	// retrofitted later.
 	ts := newTabset(win)
+	ts.setApp(app)
 	if err := ts.add(pane, title); err != nil {
 		dropTabset(win)
 		win.Close(true)

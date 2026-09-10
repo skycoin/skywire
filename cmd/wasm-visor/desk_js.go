@@ -88,8 +88,9 @@ func installDesk() {
 	}
 	desk.Register(desk.App{
 		Name: "console", Title: "console", Unlisted: true,
-		Help:  "websh — the skywire shell",
-		Width: 900, Height: 540,
+		NewTab: true, // "+" in the strip: another shell beside this one
+		Help:   "websh — the skywire shell",
+		Width:  900, Height: 540,
 		Open: websh,
 	})
 	// The terminal app. On a page a hypervisor serves (host-bridge mode) the
@@ -100,14 +101,14 @@ func installDesk() {
 	// which one they got.
 	if ptyURL := js.Global().Get("__SKYWIRE_PTY_URL__"); ptyURL.Type() == js.TypeString && ptyURL.String() != "" {
 		desk.Register(desk.App{
-			Name: "terminal", Title: "terminal",
+			Name: "terminal", Title: "terminal", NewTab: true,
 			Help:  "the host's shell (pty over websocket)",
 			Width: 900, Height: 540,
 			Open: func(_ []string) (desk.Pane, error) { return framePane(ptyURL.String()), nil },
 		})
 	} else {
 		desk.Register(desk.App{
-			Name: "terminal", Title: "terminal",
+			Name: "terminal", Title: "terminal", NewTab: true,
 			Help:  "websh — the skywire shell",
 			Width: 900, Height: 540,
 			Open: websh,
