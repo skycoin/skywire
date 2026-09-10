@@ -58,6 +58,12 @@ Approval is written to the visor config and, on a package install, mirrored
 into `HYPERVISORPKS` in `/etc/skywire.conf`, so it survives the next
 `skywire autoconfig` run (every package update performs one).
 
+The desk is the default hypervisor UI. To serve the legacy Angular dashboard
+at the root instead, with no desk and no wasm visor in the page, set
+`LEGACYHVUI=true` in `/etc/skywire.conf` (or `config gen --legacy-hv-ui`),
+or switch a running hypervisor with `skywire cli visor hv enable --legacy -w`
+(`--legacy=false` switches back). The change applies on the next page load.
+
 ## Hypervisor terminal UI
 
 A terminal-based hypervisor that mirrors the web UI's read and write actions

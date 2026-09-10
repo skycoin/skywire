@@ -101,6 +101,11 @@ const envfileLinux = `#
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
 
+#--	Serve the legacy Angular dashboard at the hypervisor web UI root instead
+#	of the desk (no wasm visor in the page). Default false = the desk.
+#	Runtime: skywire cli visor hv enable --legacy[=false] -w
+#LEGACYHVUI=true
+
 #--	Hypervisor web-UI listen address (host:port). Default ':8000' = all
 #	interfaces (reachable on the LAN at http://<this-host-ip>:8000).
 #	Use '127.0.0.1:8000' to restrict the UI to localhost, or pin a

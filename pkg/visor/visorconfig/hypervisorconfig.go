@@ -66,7 +66,13 @@ type HypervisorConfig struct {
 	// hypervisor's DMSG-RPC listener + managed-visor tracking (and `hv ls` over
 	// the visor RPC) stay active. Toggled at runtime with `hv ui enable/disable`.
 	// Default false (UI served) — backward-compatible with configs that omit it.
-	UIDisable  bool          `json:"ui_disable,omitempty"`
+	UIDisable bool `json:"ui_disable,omitempty"`
+	// LegacyUI, when true, serves the Angular hypervisor UI at the root of the
+	// web UI port instead of the desk (no wasm visor in the page). Set from
+	// LEGACYHVUI in skywire.conf, `config gen --legacy-hv-ui`, or at runtime
+	// with `hv enable --legacy` / `hv ui enable --legacy`. Default false: the
+	// desk is the hypervisor UI.
+	LegacyUI   bool          `json:"legacy_ui,omitempty"`
 	UIAssets   fs.FS         `json:"-"`
 	PK         cipher.PubKey `json:"-"`
 	SK         cipher.SecKey `json:"-"`
