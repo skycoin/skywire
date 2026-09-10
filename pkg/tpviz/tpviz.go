@@ -604,15 +604,17 @@ func (s *Server) setupRoutes() {
 	// selected from the toggle. It is a ROLE of the one skywire command module
 	// (`skywire desk-host --role netview`, pkg/wasmhv/deskhost), which the
 	// native binary embeds (pkg/wasmhv/execwasm) — no separate tpviz-gl.wasm.
-	// The URLs are kept so bundle.js needs no path change; it sets the argv
-	// before go.run. Where nothing is embedded (a source build, or this server
-	// running inside a tab's wasm hypervisor) execwasm.Serve redirects to the
-	// page origin's /skywire.wasm.
+	// The URLs are kept so bundle.js needs no path change. The loader is Go's
+	// wasm_exec.js pinned to the netview role (argv + the env the root binary's
+	// inits expect, execwasm.LoaderJS); bundle.js sets the same argv before
+	// go.run. Where nothing is embedded (a source build, or this server running
+	// inside a tab's wasm hypervisor) execwasm.Serve redirects to the page
+	// origin's /skywire.wasm.
 	s.mux.HandleFunc("/tpviz-gl.wasm", execwasm.Serve)
 	s.mux.HandleFunc("/tpviz-gl-exec.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
-		w.Write(wasmhv.WasmExecJS) //nolint:errcheck,gosec
+		w.Write(execwasm.LoaderJS(wasmhv.WasmExecJS, "netview")) //nolint:errcheck,gosec
 	})
 
 	// Serve textures for globe visualization

@@ -1379,10 +1379,11 @@ func statusWasmResponse() []byte {
 }
 
 // statusWasmExecResponse returns the raw HTTP/1.1 response for /wasm_exec.js —
-// Go's loader (pkg/wasmhv), the one the module was built for. Small, so served
-// uncompressed. The page sets go.argv itself (pkg/proxystatus/render.go).
+// Go's loader (pkg/wasmhv) pinned to the module's netview role (argv + env,
+// execwasm.LoaderJS); the page sets the same argv itself
+// (pkg/proxystatus/render.go). Small, so served uncompressed.
 func statusWasmExecResponse() []byte {
-	js := wasmhv.WasmExecJS
+	js := execwasm.LoaderJS(wasmhv.WasmExecJS, "netview")
 	if len(js) == 0 {
 		return statusServiceUnavailable("wasm loader unavailable")
 	}

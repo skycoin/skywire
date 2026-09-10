@@ -57,7 +57,9 @@ function loadModule(): Promise<boolean> {
     // it as `skywire desk-host --role netview` so it installs only the WebGL
     // view (globalThis.tpvizGL) and never boots a visor — the same
     // one-module-many-roles trick as the desk's terminal. wasm_exec.js reads
-    // go.argv when go.run() starts the instance.
+    // go.argv when go.run() starts the instance; the loader served at
+    // WASM_EXEC is already pinned to this role (argv + env), this just says
+    // so where the instance is made.
     const script = document.createElement('script');
     script.src = WASM_EXEC;
     script.onerror = () => resolve(false);

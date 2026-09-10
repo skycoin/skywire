@@ -2,6 +2,7 @@ package skysocks
 
 import (
 	"bufio"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -42,6 +43,10 @@ func TestStatusWasmResponses(t *testing.T) {
 	}
 	if ct := execResp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/javascript") {
 		t.Errorf("/wasm_exec.js content-type = %q", ct)
+	}
+	body, _ := io.ReadAll(execResp.Body)
+	if !strings.Contains(string(body), "this.argv=['skywire','desk-host','--role','netview']") {
+		t.Error("/wasm_exec.js is not pinned to the netview role")
 	}
 }
 

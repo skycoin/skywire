@@ -76,15 +76,21 @@ func Serve(w http.ResponseWriter, r *http.Request) {
 }
 
 // LoaderJS returns Go's wasm_exec.js (execJS, as embedded by pkg/wasmhv) with
-// a prelude that fixes the argv of every instance the page creates: `Go` is
-// replaced by a subclass whose constructor sets this.argv to
-// ["skywire", "desk-host", "--role", role]. It is for a page whose loader
-// script is not ours to change — the vendored skycoin-web wallet instantiates
-// assets/scripts/skycoin-lite.wasm with a bare `new Go()`, and with this
-// loader that instance runs the module's cipher role instead of the CLI's
-// usage text.
+// a prelude that fixes the contract of every instance the page creates: `Go`
+// is replaced by a subclass whose constructor sets this.argv to
+// ["skywire", "desk-host", "--role", role] and gives this.env the same
+// HOME/USER/PWD the desk's process layer spawns every command with
+// (browseui/skywire-exec.js) — package inits in the root binary resolve the
+// current user and directory, and the stock loader hands them nothing. It is
+// for a page whose loader script is not ours to change — the vendored
+// skycoin-web wallet instantiates assets/scripts/skycoin-lite.wasm with a bare
+// `new Go()` — and it is what the tpviz and skysocks status pages get too, so
+// one place spells the contract; those pages set go.argv as well, to the same
+// value.
 func LoaderJS(execJS []byte, role string) []byte {
-	prelude := "\n;(function(){var _Go=globalThis.Go;globalThis.Go=class extends _Go{constructor(){super();this.argv=['skywire','desk-host','--role','" + role + "'];}};})();\n"
+	prelude := "\n;(function(){var _Go=globalThis.Go;globalThis.Go=class extends _Go{constructor(){super();" +
+		"this.argv=['skywire','desk-host','--role','" + role + "'];" +
+		"this.env=Object.assign({HOME:'/home/user',USER:'user',PWD:'/home/user'},this.env);}};})();\n"
 	out := make([]byte, 0, len(execJS)+len(prelude))
 	out = append(out, execJS...)
 	return append(out, prelude...)

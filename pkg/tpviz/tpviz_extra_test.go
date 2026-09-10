@@ -26,6 +26,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
+
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -526,6 +528,28 @@ func TestListenAndServe(t *testing.T) {
 }
 
 // ---- static asset routes (setupRoutes closures) ---------------------------
+
+// TestNetviewLoaderPinned: the WebGL view's loader is Go's wasm_exec.js pinned
+// to the command module's netview role, and the module route answers from the
+// embedded copy or sends the browser to the page origin's /skywire.wasm.
+func TestNetviewLoaderPinned(t *testing.T) {
+	s := testServer(t)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tpviz-gl-exec.js", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Header().Get("Content-Type"), "javascript")
+	require.Contains(t, rec.Body.String(), "this.argv=['skywire','desk-host','--role','netview']")
+
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tpviz-gl.wasm", nil))
+	if execwasm.Present() {
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, "application/wasm", rec.Header().Get("Content-Type"))
+	} else {
+		require.Equal(t, http.StatusFound, rec.Code)
+		require.Equal(t, execwasm.OriginPath, rec.Header().Get("Location"))
+	}
+}
 
 func TestStaticAssetRoutes(t *testing.T) {
 	s := testServer(t)

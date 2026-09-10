@@ -20,11 +20,9 @@ var sourcerun bool
 var root bool
 
 func init() {
-	usrLvl, err := user.Current()
-	if err != nil {
-		panic(err)
-	}
-	if usrLvl.Username == "root" {
+	// Only the root check; see cmd/skywire-cli/commands/config/update.go —
+	// a host with no resolvable user is not root, not a reason to panic.
+	if usrLvl, err := user.Current(); err == nil && usrLvl.Username == "root" {
 		root = true
 	}
 	RootCmd.AddCommand(startCmd)

@@ -86,7 +86,7 @@ func TestLoaderJS(t *testing.T) {
 	if !strings.HasPrefix(out, string(exec)) {
 		t.Fatal("loader must start with the loader it wraps")
 	}
-	for _, want := range []string{"class extends _Go", "super();", "this.argv=['skywire','desk-host','--role','cipher']"} {
+	for _, want := range []string{"class extends _Go", "super();", "this.argv=['skywire','desk-host','--role','cipher']", "HOME:'/home/user'", "USER:'user'"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("prelude missing %q", want)
 		}
