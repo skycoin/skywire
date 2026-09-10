@@ -160,7 +160,7 @@ android/app/src/main/jniLibs/
 # 11MB ELF (cmd/hvinspect/hvinspect) and a stale 11MB wasm (the since-removed
 # pkg/tpviz/wasm)
 # were committed. Only artifacts something actually embeds belong in the tree:
-# pkg/wasmhv/wasmbin/*, pkg/tpviz/legacy/*, pkg/geoip/*.
+# pkg/tpviz/legacy/*, pkg/geoip/*.
 #
 # Named, not matched by shape. The general form of this rule cannot be written
 # safely: gitignore has no way to say "a file, not a directory", so any pattern

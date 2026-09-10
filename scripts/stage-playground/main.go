@@ -1,7 +1,7 @@
 // Command stage-playground writes the playground's embedded page assets —
 // bundle.js (the browseui desk bundle)
 // inflated) — into the directory given as the first argument. The wasm
-// modules themselves (skywire.wasm.gz, wasm-visor.wasm.gz, wasm_exec.js) are
+// modules themselves (skywire.wasm.gz, wasm_exec.js) are
 // staged by the `make playground` target that runs this; together they make
 // build/playground a fully static page for the docs site.
 package main
