@@ -607,7 +607,7 @@ func (s *Server) maintainPeerConnection(ctx context.Context, peer PeerEntry) {
 		s.peerSessionsMx.Unlock()
 
 		log.Info("Connected to peer server.")
-		bo = 5 * time.Second // reset backoff on success
+		connectedAt := time.Now()
 
 		// Announce ourselves as a forwardable peer over this outbound
 		// link so we (and, for a non-public server, our clients) become
@@ -650,10 +650,32 @@ func (s *Server) maintainPeerConnection(ctx context.Context, peer PeerEntry) {
 		}
 		s.peerSessionsMx.Unlock()
 		ses.Close() //nolint:errcheck,gosec
-
-		log.Info("Peer session closed, will reconnect.")
+		// Pace the redial. A session that lived a while earned an immediate
+		// retry at the base delay; one that died young (the remote closed it
+		// right after the handshake) backs off, so a broken pair costs a
+		// handshake a minute rather than several a second.
+		if time.Since(connectedAt) >= peerSessionHealthyAfter {
+			bo = 5 * time.Second
+		}
+		log.WithField("lived", time.Since(connectedAt).Round(time.Second)).
+			WithField("redial_in", bo).Info("Peer session closed, will reconnect.")
+		select {
+		case <-time.After(bo):
+		case <-ctx.Done():
+			return
+		case <-s.done:
+			return
+		}
+		if time.Since(connectedAt) < peerSessionHealthyAfter && bo < time.Minute {
+			bo = time.Duration(float64(bo) * 1.5)
+		}
 	}
 }
+
+// peerSessionHealthyAfter is how long a peer session must have lived for its
+// close to be treated as ordinary (redial at the base delay) rather than as a
+// rejection worth backing off from.
+const peerSessionHealthyAfter = 30 * time.Second
 
 // isPeerPK returns true if the given PK is a known peer server.
 func (s *Server) isPeerPK(pk cipher.PubKey) bool {
@@ -748,6 +770,7 @@ func (s *Server) handleSession(conn net.Conn) {
 		return
 	}
 	log = log.WithField("remote_pk", dSes.RemotePK())
+	conn = dSes.GetConn() // may carry bytes buffered during the handshake
 
 	// Mark session as peer if remote PK is a known peer server.
 	if s.isPeerPK(dSes.RemotePK()) {
