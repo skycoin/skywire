@@ -4,19 +4,21 @@ package visor
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skywireconfig/skyenvfile"
 )
 
 // AddHypervisor adds a remote hypervisor PK and connects to it at runtime.
 // The PK is written to the config's hypervisors list (see persistHypervisors),
-// so the connection survives a restart — but skywire-config.json is a derived
-// artifact: the next `skywire autoconfig` run rebuilds it from
-// /etc/skywire.conf and drops a PK that is only in the json. Set HYPERVISORPKS
-// in skywire.conf for a hypervisor that must survive a package update.
+// so the connection survives a restart, and on a package install it is mirrored
+// into HYPERVISORPKS in skywire.conf so the next `skywire autoconfig` run (every
+// package update) keeps it.
 func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 	if v.dmsgC == nil {
 		return fmt.Errorf("DMSG client not running")
@@ -116,12 +118,37 @@ func removePK(pks []cipher.PubKey, pk cipher.PubKey) []cipher.PubKey {
 // a restart. Best-effort: a non-file-backed config (wasm tab / STDIN) can't write
 // — the runtime connection change already took effect, so a write error is only
 // logged, never fatal.
+//
+// On a package install the json is a derived artifact: `skywire autoconfig`
+// (run by every package update) rebuilds it from skywire.conf, so the list is
+// mirrored into HYPERVISORPKS there too. Only the package config path does
+// this — a dev visor on a repo-local config never touches /etc/skywire.conf.
 func (v *Visor) persistHypervisors(want []cipher.PubKey) {
 	if v.conf == nil || v.conf.Path() == "" {
 		return // not file-backed; runtime change stands without persistence
 	}
 	if err := v.conf.UpdateHypervisors(want); err != nil {
 		v.log.WithError(err).Warn("failed to persist hypervisors to config")
+	}
+	if v.conf.Path() != skyenv.SkywireConfig() {
+		return
+	}
+	skyenvPath := skyenvfile.DefaultPath()
+	if _, err := os.Stat(skyenvPath); err != nil {
+		return // not an autoconfig-managed host
+	}
+	pks := make([]string, 0, len(want))
+	for _, pk := range want {
+		pks = append(pks, pk.String())
+	}
+	edit := skyenvfile.Edit{
+		Key:   "HYPERVISORPKS",
+		Value: skyenvfile.FormatBashArray(strings.Join(pks, ",")),
+		Raw:   strings.Join(pks, ","),
+	}
+	if err := skyenvfile.Update(skyenvPath, []skyenvfile.Edit{edit}); err != nil {
+		v.log.WithError(err).WithField("path", skyenvPath).
+			Warn("failed to mirror hypervisors into skywire.conf; the next autoconfig run will drop them")
 	}
 }
 
