@@ -107,30 +107,37 @@ func (api *API) ReconcileTransportsFromCXO(ctx context.Context, entries []*trans
 	// Accept only entries the reporter is actually an edge of (auth parity with the
 	// per-entry path); build the authoritative keep-set.
 	keep := make(map[uuid.UUID]struct{}, len(entries))
-	signed := make([]*transport.SignedEntry, 0, len(entries))
+	accepted := make([]*transport.Entry, 0, len(entries))
 	touchedEdges := map[cipher.PubKey]struct{}{}
 	for _, e := range entries {
 		if e == nil || e.EdgeIndex(reporter) < 0 {
 			continue
 		}
 		keep[e.ID] = struct{}{}
-		signed = append(signed, &transport.SignedEntry{Entry: e, Version: version})
+		accepted = append(accepted, e)
 		touchedEdges[e.Edges[0]] = struct{}{}
 		touchedEdges[e.Edges[1]] = struct{}{}
 	}
 
-	// Register/refresh everything currently present.
-	if len(signed) > 0 {
+	// Register/refresh what is new, changed, or due for a TTL refresh, and
+	// record heartbeats that are due; the rest was written moments ago by
+	// this or the other edge's snapshot (see reconcileThrottle).
+	toRegister, toHeartbeat := api.reconcile.plan(time.Now(), accepted)
+	if len(toRegister) > 0 {
+		signed := make([]*transport.SignedEntry, 0, len(toRegister))
+		for _, e := range toRegister {
+			signed = append(signed, &transport.SignedEntry{Entry: e, Version: version})
+		}
 		if err := api.store.RegisterTransportsBatch(ctx, reporter, signed); err != nil {
+			api.reconcile.forget(toRegister)
 			return fmt.Errorf("register batch: %w", err)
 		}
-		for _, se := range signed {
-			if err := api.store.RecordTransportHeartbeat(ctx, se.Entry.ID, string(se.Entry.Type), time.Time{}); err != nil {
-				_ = err //nolint:errcheck // uptime is auxiliary; store logs
-			}
+	}
+	for _, e := range toHeartbeat {
+		if err := api.store.RecordTransportHeartbeat(ctx, e.ID, string(e.Type), time.Time{}); err != nil {
+			_ = err //nolint:errcheck // uptime is auxiliary; store logs
 		}
 	}
-
 	// Deregister any of the reporter's existing transports absent from the snapshot.
 	// A transport the reporter no longer lists is a deregister signal for that edge —
 	// exactly what a tombstone was in the delta model.
