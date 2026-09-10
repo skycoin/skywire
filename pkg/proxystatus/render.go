@@ -192,15 +192,15 @@ const liveScript = `<script>(function(){var t,ws,pend=null,last=null,pv=null;` +
 	`document.body.classList.add("js");connect();})();</script>`
 
 // graphScript drives the GPU route-graph view. It reuses the network
-// visualizer's engine WITHOUT any new wasm: it loads the one wasm-visor blob in
-// its "netview" role (globalThis.__SKYWIRE_WASM_ROLE__="netview" before go.run,
+// visualizer's engine WITHOUT any new wasm: it loads the one skywire command
+// module in its "netview" role (go.argv = skywire desk-host --role netview,
 // exactly as pkg/tpviz/ui/src/cosmos-go-graph.ts does), which publishes the
 // generic cosmos-go graph API on globalThis.tpvizGL (pkg/tpviz/wasmgl.Register),
 // then drives tpvizGL.init/setData with the route subgraph the page emits in the
 // #rgdata JSON. /main.wasm and /wasm_exec.js are served same-origin by the
-// skysocks status handler (pkg/skysocks/client.go) out of pkg/wasmhv/wasmbin.
+// skysocks status handler (pkg/skysocks/client.go) out of pkg/wasmhv/execwasm.
 //
-// Lazy: the ~3 MB blob is fetched only the first time the graph view is opened,
+// Lazy: the module is fetched only the first time the graph view is opened,
 // so a user who stays on the tree pays nothing. Live: a MutationObserver on the
 // live region re-reads #rgdata on each ~1s push and refreshes the hover-tooltip
 // data every time, but re-feeds the force layout (setData) ONLY when the
@@ -234,9 +234,9 @@ const graphScript = `<script>(function(){` +
 	`function observe(){if(io){return;}var live=document.getElementById("live");if(!live){return;}io=new MutationObserver(function(){apply(false);});io.observe(live,{childList:true,subtree:true});}` +
 	`function fail(){var c=document.getElementById("rgcanvas");if(c){c.innerHTML='<div class="rgfail">The GPU graph view failed to load (main.wasm). The tree view shows the same routes.</div>';}}` +
 	`function ready(){var g=gl();if(g&&g.ready){booted=true;booting=false;if(!g.init("rgcanvas",onEvent)){setTimeout(function(){g.init("rgcanvas",onEvent);apply(true);observe();},80);}else{apply(true);observe();}return true;}return false;}` +
-	`function boot(){if(booted||booting){return;}booting=true;window.__SKYWIRE_WASM_ROLE__="netview";` +
+	`function boot(){if(booted||booting){return;}booting=true;` +
 	`var s=document.createElement("script");s.src="/wasm_exec.js";s.onerror=function(){booting=false;fail();};` +
-	`s.onload=function(){var G=window.Go;if(!G){booting=false;fail();return;}var go=new G();` +
+	`s.onload=function(){var G=window.Go;if(!G){booting=false;fail();return;}var go=new G();go.argv=["skywire","desk-host","--role","netview"];` +
 	`WebAssembly.instantiateStreaming(fetch("/main.wasm"),go.importObject).then(function(res){go.run(res.instance);` +
 	`var tries=0;(function wait(){if(ready()){return;}if(++tries>150){booting=false;fail();return;}setTimeout(wait,20);})();` +
 	`}).catch(function(){booting=false;fail();});};document.head.appendChild(s);}` +
@@ -266,7 +266,7 @@ const graphScript = `<script>(function(){` +
 	`window.rgFit=function(){var g=gl();if(g&&g.fit){g.fit();}};` +
 	`["log","tree"].forEach(function(name){if(hidden(name)){document.body.classList.add("sec-hide-"+name);}});` +
 	// The GPU route graph is OFF by default: it must be explicitly started (its
-	// section "show" toggle boots the ~3 MB netview wasm + force-sim), because a
+	// section "show" toggle boots the netview module + force-sim), because a
 	// running force-directed graph pegs CPU. It only stays open across reloads once
 	// the user has turned it on (secToggle writes sh_graph="0" when revealed).
 	`try{if(localStorage.getItem("sh_graph")!=="0"){document.body.classList.add("sec-hide-graph");}}catch(e){document.body.classList.add("sec-hide-graph");}` +

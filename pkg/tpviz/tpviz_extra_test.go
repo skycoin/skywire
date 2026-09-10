@@ -535,9 +535,8 @@ func TestStaticAssetRoutes(t *testing.T) {
 	// way the handler body executes.
 	paths := []string{
 		"/bundle.js",
-		"/wasm",
-		"/main.wasm",
-		"/wasm_exec.js",
+		"/tpviz-gl.wasm",
+		"/tpviz-gl-exec.js",
 		"/textures/earth.jpg",
 		"/textures/earth.png",
 		"/index.html",
