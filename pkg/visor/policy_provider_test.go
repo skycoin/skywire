@@ -35,12 +35,10 @@ func TestHostFromAddr(t *testing.T) {
 // in the embedded geoip db, and an AR record with no usable IP yields
 // "".
 func TestCountryFromVisorData(t *testing.T) {
-	db, err := geoip.OpenEmbedded()
-	if err != nil {
+	if _, err := geoip.Shared(); err != nil {
 		t.Skipf("embedded geoip db unavailable: %v", err)
 	}
-	defer db.Close() //nolint:errcheck,gosec
-	p := &visorPolicyProvider{geoDB: db}
+	p := &visorPolicyProvider{}
 
 	if got := p.countryFromVisorData(addrresolver.VisorData{RemoteAddr: gbIP + ":1234"}); got != "GB" {
 		t.Errorf("countryFromVisorData(v4) = %q, want GB", got)
