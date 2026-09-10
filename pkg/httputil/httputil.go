@@ -130,13 +130,22 @@ type ctxKeyLogger int
 // LoggerKey defines logger HTTP context key.
 const LoggerKey ctxKeyLogger = -1
 
-// GetLogger returns logger from HTTP context.
+// GetLogger returns the logger carried by the HTTP request context, or the
+// package logger when the context has none.
+//
+// The miss is the common case, not an edge case: SetLoggerMiddleware only
+// puts a logger in the context when a request ID is present. This used to
+// return logging.NewMasterLogger(), which built a whole logrus.Logger,
+// TextFormatter and hook map per call, and whose entries then bypassed the
+// process hooks and configured level because it was its own master. The
+// package logger is created once and routes through the master logger, so
+// hooks and level apply.
 func GetLogger(r *http.Request) logrus.FieldLogger {
-	if log, ok := r.Context().Value(LoggerKey).(logrus.FieldLogger); ok && log != nil {
-		return log
+	if ctxLog, ok := r.Context().Value(LoggerKey).(logrus.FieldLogger); ok && ctxLog != nil {
+		return ctxLog
 	}
 
-	return logging.NewMasterLogger()
+	return log
 }
 
 // todo: investigate if it's used throughout the services (didn't work properly for UT)
