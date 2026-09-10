@@ -32,6 +32,11 @@ type Connector struct {
 	DmsgC          *dmsg.Client // for reachability probes
 	ClientPublicIP string
 	Log            *logging.Logger
+
+	// failed remembers (target, type) pairs whose last dial failed and when
+	// they may be tried again — see autoconnect_backoff.go.
+	failedMu sync.Mutex
+	failed   map[dialKey]dialFailure
 }
 
 // ConnectPhaseResult tracks the outcome of a connection phase.
@@ -93,6 +98,15 @@ func (c *Connector) ConnectToVisors(
 		if pk == selfPK {
 			continue
 		}
+		// A target whose last dial failed waits out its backoff (autoconnect_backoff.go).
+		if c.inBackoff(pk, tpType, time.Now()) {
+			if trackAll {
+				mu.Lock()
+				result.Connected = append(result.Connected, pk)
+				mu.Unlock()
+			}
+			continue
+		}
 
 		// Skip if we already have this transport type to this visor
 		if existingByPK[pk][tpType] {
@@ -145,7 +159,8 @@ func (c *Connector) ConnectToVisors(
 				if isContextError(err) {
 					logger.WithError(err).Debugln("Transport creation canceled (shutdown)")
 				} else {
-					logger.WithError(err).Warnln("Failed to add transport")
+					wait := c.noteFailure(pk, tpType, time.Now())
+					logger.WithError(err).WithField("retry_in", wait).Warnln("Failed to add transport")
 				}
 				if trackAll {
 					mu.Lock()
@@ -156,6 +171,7 @@ func (c *Connector) ConnectToVisors(
 			}
 
 			mu.Lock()
+			c.noteSuccess(pk, tpType)
 			result.Count++
 			result.Connected = append(result.Connected, pk)
 			mu.Unlock()
