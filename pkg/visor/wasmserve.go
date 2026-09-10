@@ -38,7 +38,6 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 	"github.com/skycoin/skywire/pkg/wasmhv/ctlbridge"
@@ -67,15 +66,10 @@ type WasmServeConfig struct {
 	// "https://theskywirenetwork.net") that B's bootstrap postMessages to — used
 	// only with BrowseOriginAddr behind a proxy. Empty = derive from Addr (local).
 	VOrigin string
-	// ExecWasmPath, when set, serves the file at /skywire.wasm: the FULL
-	// skywire CLI compiled for GOOS=js (see docs/design) — the desk host, the
-	// tab's visor and every command the page's terminal runs against the
-	// shared in-memory filesystem (bottle jsfs.js + browseui skywire-exec.js).
-	// Empty = the module embedded by the two-stage build (pkg/wasmhv/execwasm),
-	// else the package location on disk. There is no page without it: ServeWasm
-	// refuses to start rather than serve a desk with nothing to run. Build it with
-	//   GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" \
-	//     -trimpath -ldflags "-s -w" -o build/skywire.wasm .
+	// ExecWasmPath, when set, serves the skywire command module (the root
+	// binary built for GOOS=js) from that file at /skywire.wasm instead of the
+	// copy the two-stage build embedded (pkg/wasmhv/execwasm). A developer
+	// override for rebuild-in-place work; distributed binaries leave it empty.
 	ExecWasmPath string
 	// DeskHelpTerminal opens a second terminal that has already run
 	// `skywire --help`. Off by default: it costs a whole extra Go/wasm runtime
@@ -850,19 +844,4 @@ skywireDeskBoot(Object.assign({
 func deskShellHTML(scriptsHTML, deskOptsJS string) []byte {
 	out := strings.ReplaceAll(deskShellTemplate, "__DESK_SCRIPTS__", scriptsHTML)
 	return []byte(strings.ReplaceAll(out, "__DESK_OPTS__", deskOptsJS))
-}
-
-// DefaultExecWasmPath returns the package location of the skywire command
-// module (skyenv.ExecWasmPath) when that file exists, else "". It is the
-// fallback for an empty ExecWasmPath, so a host whose updater installed the
-// module serves the desk without any flag or config change.
-func DefaultExecWasmPath() string {
-	p := skyenv.ExecWasmPath()
-	if p == "" {
-		return ""
-	}
-	if st, err := os.Stat(p); err != nil || st.IsDir() {
-		return ""
-	}
-	return p
 }

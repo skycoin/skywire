@@ -15,7 +15,6 @@ import (
 	"strconv"
 
 	"github.com/skycoin/skywire/pkg/httputil"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
 )
@@ -327,8 +326,8 @@ func (hv *Hypervisor) logUIRoot() {
 	if _, ok := hv.execModule(); ok {
 		return
 	}
-	hv.logger.Info("no skywire command module in this build (make build-embedded; or " +
-		"hypervisor.wasm_serve.exec_wasm; or " + skyenv.ExecWasmFile + " under the package bin dir): " +
+	hv.logger.Info("no skywire command module in this build (make build-embedded, or " +
+		"hypervisor.wasm_serve.exec_wasm for a developer override): " +
 		"the web UI root serves the dashboard, not the desk")
 }
 
