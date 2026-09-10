@@ -30,6 +30,10 @@ import (
 const browseFetchTimeout = 60 * time.Second
 const browseMaxBody = 16 << 20 // 16 MiB
 
+// browseProxyDialTimeout bounds the connect to a proxy named in
+// BrowseClearnetRequest.Proxy.
+const browseProxyDialTimeout = 10 * time.Second
+
 // BrowseFetchRequest fetches a dmsg/skynet site for the HV-UI browser. Host is
 // the resolving-proxy form (NOT dmsg://): a bare PK, "<pk>:<port>", "<pk>.dmsg",
 // a friendly alias like "home.dmsg"/"tpd.dmsg", or "name.skynet" — resolved the
@@ -462,13 +466,16 @@ func (v *Visor) proxyClearnetFetch(req BrowseClearnetRequest) (*SkynetHTTPRespon
 	tr := &http.Transport{TLSHandshakeTimeout: 20 * time.Second}
 	switch pu.Scheme {
 	case "socks5", "socks5h":
-		sd, err := proxy.SOCKS5("tcp", pu.Host, nil, proxy.Direct)
+		// A proxy that does not answer (an unroutable address) must fail in
+		// seconds, not after the OS connect timeout: the browser is waiting.
+		sd, err := proxy.SOCKS5("tcp", pu.Host, nil, &net.Dialer{Timeout: browseProxyDialTimeout})
 		if err != nil {
 			return nil, err
 		}
 		tr.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) { return sd.Dial(network, addr) }
 	default:
 		tr.Proxy = http.ProxyURL(pu)
+		tr.DialContext = (&net.Dialer{Timeout: browseProxyDialTimeout}).DialContext
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), browseFetchTimeout)
 	defer cancel()

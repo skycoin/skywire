@@ -27,6 +27,10 @@ type tabset struct {
 	views  js.Value
 	tabs   []*paneTab
 	active int
+	// app is the app the window was opened with; plus is the "+" its NewTab
+	// puts at the end of the strip (a zero js.Value otherwise).
+	app  App
+	plus js.Value
 }
 
 type paneTab struct {
@@ -182,7 +186,11 @@ func (ts *tabset) add(pane Pane, title string) error {
 		return nil
 	}))
 	// Before the "+"-less strip's end; the strip holds only tab buttons.
-	ts.strip.Call("appendChild", t.btn)
+	if ts.plus.Truthy() {
+		ts.strip.Call("insertBefore", t.btn, ts.plus)
+	} else {
+		ts.strip.Call("appendChild", t.btn)
+	}
 
 	ts.tabs = append(ts.tabs, t)
 	ts.activate(idx)
@@ -252,7 +260,7 @@ func (ts *tabset) closeTab(i int) {
 
 // sync hides the strip while there is nothing to choose between.
 func (ts *tabset) sync() {
-	if len(ts.tabs) > 1 {
+	if len(ts.tabs) > 1 || ts.plus.Truthy() {
 		ts.strip.Get("style").Set("display", "flex")
 	} else {
 		ts.strip.Get("style").Set("display", "none")
@@ -318,4 +326,32 @@ func AddTabOpts(win *winbox.WinBox, name string, opt Options, args ...string) er
 		title = opt.Title
 	}
 	return ts.add(pane, title)
+}
+
+// setApp records the app a window was opened with and, when that app asks
+// for NewTab, puts a "+" at the end of its strip that opens another instance
+// of the app (Open with no args) as a tab of this window.
+func (ts *tabset) setApp(app App) {
+	ts.app = app
+	if !app.NewTab || ts.plus.Truthy() {
+		return
+	}
+	doc := js.Global().Get("document")
+	plus := doc.Call("createElement", "div")
+	plus.Set("textContent", "+")
+	plus.Set("title", "new "+app.Title)
+	plus.Get("style").Set("cssText", "display:flex;align-items:center;color:#cdd2da;border:1px solid #2a3040;"+
+		"border-bottom:none;border-radius:5px 5px 0 0;padding:3px 9px;cursor:pointer;font:12px monospace;opacity:.8")
+	plus.Call("addEventListener", "click", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) > 0 {
+			a[0].Call("stopPropagation")
+		}
+		// Open with no args: a fresh instance, not a replay of whatever the
+		// first tab was started with.
+		_ = AddTabOpts(ts.win, ts.app.Name, Options{}) //nolint:errcheck // a failed open leaves the strip as it was
+		return nil
+	}))
+	ts.strip.Call("appendChild", plus)
+	ts.plus = plus
+	ts.sync()
 }
