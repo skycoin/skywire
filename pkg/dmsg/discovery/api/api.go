@@ -151,7 +151,9 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	r.Use(middleware.Recoverer)
 	// gzip JSON responses on the wire — this router is also served over
 	// dmsg, where every byte is relayed. Matches rf/ut/sd.
-	r.Use(middleware.Compress(5))
+	// gzip only bodies over CompressMinBytes: single entries and health lines are
+	// smaller than the flate state that would compress them (httputil.CompressMin).
+	r.Use(httputil.CompressMin(httputil.CompressMinBytes, 5))
 	if enableMetrics {
 		r.Use(api.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)
