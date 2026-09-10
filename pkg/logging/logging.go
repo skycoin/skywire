@@ -84,3 +84,21 @@ func SetOutputTo(w io.Writer) {
 func Disable() {
 	log.Out = io.Discard
 }
+
+// DebugEnabled reports whether the master logger emits at debug level or
+// below. Use it to skip building log fields on a hot path: logrus's
+// WithField allocates a new Entry and copies the field map whether or not
+// the level is enabled, so an ungated WithField chain costs the same when
+// the line is never printed.
+func DebugEnabled() bool { return log.GetLevel() >= logrus.DebugLevel }
+
+// TraceEnabled reports whether the master logger emits at trace level.
+// Same rationale as DebugEnabled; trace carries the per-stream and
+// per-frame diagnostics that are useless in aggregate and expensive to
+// format at volume.
+func TraceEnabled() bool { return log.GetLevel() >= logrus.TraceLevel }
+
+// Trace emits msg at trace level through a logrus.FieldLogger, whose
+// interface omits the Trace methods (see Logger.Tracef). Callers on a hot
+// path must guard it with TraceEnabled: reaching the entry allocates.
+func Trace(l logrus.FieldLogger, msg string) { l.WithFields(logrus.Fields{}).Trace(msg) }

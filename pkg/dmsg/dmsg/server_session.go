@@ -14,6 +14,7 @@ import (
 	"github.com/xtaci/smux"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 )
 
@@ -87,7 +88,7 @@ func (ss *ServerSession) Serve() {
 				continue
 			}
 
-			log.Debug("Initiating stream.")
+			started := time.Now()
 			go func(sStr *smux.Stream) {
 				defer func() { <-sem }()
 				defer func() {
@@ -97,7 +98,12 @@ func (ss *ServerSession) Serve() {
 				}()
 				err := ss.serveStream(log, sStr, ss.sm.addr)
 				ss.closeRefused(sStr, err)
-				log.WithError(err).Debug("Stopped stream.")
+				// One line per stream, at its close, carrying the outcome and how
+				// long it lived. It used to be two ("Initiating stream." on open,
+				// "Stopped stream." on close), which at 8.8k streams a minute on a
+				// production server is 17.6k lines that say the same thing twice.
+				log.WithError(err).WithField("took", time.Since(started)).
+					Debug("Stream closed.")
 			}(sStr)
 		}
 	} else if ss.sm.quic != nil {
@@ -117,7 +123,7 @@ func (ss *ServerSession) Serve() {
 				continue
 			}
 
-			log.Debug("Initiating stream.")
+			started := time.Now()
 			go func(qStr quicStream) {
 				defer func() { <-sem }()
 				defer func() {
@@ -127,7 +133,12 @@ func (ss *ServerSession) Serve() {
 				}()
 				err := ss.serveStream(log, qStr, ss.sm.addr)
 				ss.closeRefused(qStr, err)
-				log.WithError(err).Debug("Stopped stream.")
+				// One line per stream, at its close, carrying the outcome and how
+				// long it lived. It used to be two ("Initiating stream." on open,
+				// "Stopped stream." on close), which at 8.8k streams a minute on a
+				// production server is 17.6k lines that say the same thing twice.
+				log.WithError(err).WithField("took", time.Since(started)).
+					Debug("Stream closed.")
 			}(qStr)
 		}
 	} else {
@@ -156,7 +167,7 @@ func (ss *ServerSession) Serve() {
 				continue
 			}
 
-			log.Debug("Initiating stream.")
+			started := time.Now()
 			go func(yStr *yamux.Stream) {
 				defer func() { <-sem }()
 				defer func() {
@@ -166,7 +177,12 @@ func (ss *ServerSession) Serve() {
 				}()
 				err := ss.serveStream(log, yStr, ss.sm.addr)
 				ss.closeRefused(yStr, err)
-				log.WithError(err).Debug("Stopped stream.")
+				// One line per stream, at its close, carrying the outcome and how
+				// long it lived. It used to be two ("Initiating stream." on open,
+				// "Stopped stream." on close), which at 8.8k streams a minute on a
+				// production server is 17.6k lines that say the same thing twice.
+				log.WithError(err).WithField("took", time.Since(started)).
+					Debug("Stream closed.")
 			}(yStr)
 		}
 	}
@@ -292,13 +308,21 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 		return ErrReqInvalidSrcPK
 	}
 
-	log = log.
-		WithField("src_addr", req.SrcAddr).
-		WithField("dst_addr", req.DstAddr)
+	// Only the trace/debug lines below read these, and WithField allocates
+	// an Entry and copies the field map even when the level is off.
+	if logging.DebugEnabled() {
+		log = log.
+			WithField("src_addr", req.SrcAddr).
+			WithField("dst_addr", req.DstAddr)
+	}
 
-	log.Debug("Read stream request from initiating side.")
+	if logging.TraceEnabled() {
+		logging.Trace(log, "Read stream request from initiating side.")
+	}
 	if req.IPinfo && req.DstAddr.PK == ss.entity.LocalPK() {
-		log.Debug("Received IP stream request.")
+		if logging.TraceEnabled() {
+			logging.Trace(log, "Received IP stream request.")
+		}
 
 		ip, err := addrToIP(addr)
 		if err != nil {
@@ -334,7 +358,9 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 			ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 			return err
 		}
-		log.Debug("Wrote IP stream response.")
+		if logging.TraceEnabled() {
+			logging.Trace(log, "Wrote IP stream response.")
+		}
 		return nil
 	}
 
@@ -350,7 +376,9 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 		}
 		return ss.forwardViaPeer(log, yStr, req)
 	}
-	log.Debug("Obtained next session.")
+	if logging.TraceEnabled() {
+		logging.Trace(log, "Obtained next session.")
+	}
 
 	return ss.bridgeStream(log, yStr, ss2, req)
 }
@@ -375,7 +403,9 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 		ss.m.RecordStream(metrics.DeltaFailed)
 		return err
 	}
-	log.Debug("Forwarded stream request.")
+	if logging.TraceEnabled() {
+		logging.Trace(log, "Forwarded stream request.")
+	}
 	if ss.relayInbound && ss.entity.forwardedFunc != nil {
 		// The peer accepted: remember it for the next request to this dst.
 		ss.entity.forwardedFunc(req.DstAddr.PK, dst.RemotePK())
@@ -393,7 +423,9 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 		ss.m.RecordStream(metrics.DeltaFailed)
 		return err
 	}
-	log.Debug("Forwarded stream response.")
+	if logging.TraceEnabled() {
+		logging.Trace(log, "Forwarded stream response.")
+	}
 
 	// Set an idle timeout on both sides of the bridge. If no data flows
 	// in either direction for this duration, both streams are closed.
@@ -408,7 +440,9 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 	yStr = &idleTimeoutConn{rwc: yStr, timeout: streamIdleTimeout}
 	yStr2 = &idleTimeoutConn{rwc: yStr2, timeout: streamIdleTimeout}
 
-	log.Debug("Serving stream.")
+	if logging.TraceEnabled() {
+		logging.Trace(log, "Serving stream.")
+	}
 	ss.m.RecordStream(metrics.DeltaConnect)
 	defer ss.m.RecordStream(metrics.DeltaDisconnect)
 	return netutil.CopyReadWriteCloser(yStr, yStr2)
@@ -474,7 +508,9 @@ func (ss *ServerSession) forwardViaPeer(log logrus.FieldLogger, yStr io.ReadWrit
 		}
 
 		log := log.WithField("peer", peer.RemotePK())
-		log.Debug("Trying peer server for forwarding.")
+		if logging.TraceEnabled() {
+			logging.Trace(log, "Trying peer server for forwarding.")
+		}
 
 		err := ss.bridgeStream(log, yStr, peer, req)
 		if err == nil {
@@ -511,9 +547,14 @@ func (ss *ServerSession) forwardRequest(req StreamRequest) (mStr io.ReadWriteClo
 	// allocations in the dmsg-server heap).
 	defer func() {
 		if err != nil && mStr != nil {
-			ss.log.
-				WithError(mStr.Close()).
-				Debugf("After forwardRequest failed, the yamux stream is closed.")
+			// Close FIRST, then log. The close used to be the log call's
+			// argument, so anything that skipped or removed the log line would
+			// silently stop reclaiming the stream.
+			cerr := mStr.Close()
+			if logging.TraceEnabled() {
+				logging.Trace(ss.log.WithError(cerr),
+					"After forwardRequest failed, the yamux stream is closed.")
+			}
 		}
 	}()
 	switch {
