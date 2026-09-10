@@ -1,0 +1,146 @@
+plain/no-fields
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: serving\n"
+plain/empty-message
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]:\n"
+plain/no-module
+"[2026-03-04T05:06:07.8901Z] INFO []: serving\n"
+plain/one-field
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: stream closed dst=\"abc\"\n"
+plain/three-fields
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: stream closed dst=\"abc\" size=4096 src=\"def\"\n"
+plain/unsorted-keys
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: z first alpha=2 mike=3 zulu=1\n"
+plain/error-field
+"[2026-03-04T05:06:07.8901Z] ERROR [dmsg_server]: dial failed error=\"connection refused\"\n"
+plain/error-field-plain-word
+"[2026-03-04T05:06:07.8901Z] ERROR [dmsg_server]: dial failed error=\"refused\"\n"
+plain/message-with-spaces-and-quotes
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: he said \"hi there\" & left\n"
+plain/value-with-quotes
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: quoting raw=\"a \"b\" c\"\n"
+plain/empty-value
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: empty empty=\"\"\n"
+plain/bool-and-float-values
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: typed n=-7 ok=true ratio=1.5\n"
+plain/struct-value
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: typed pt={X:1 Y:two}\n"
+plain/nil-value
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: typed nothing=<nil>\n"
+plain/module-with-colon
+"[2026-03-04T05:06:07.8901Z] INFO [dmsgC:disc:cxo-lookup]: serving\n"
+plain/empty-module
+"[2026-03-04T05:06:07.8901Z] INFO []: serving\n"
+plain/skipped-prefix-key
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: serving kept=\"yes\"\n"
+plain/many-fields
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: many a=1 b=2 c=3 d=4 e=5 f=6 g=7 h=8 i=9 j=10 k=11 l=12\n"
+plain/exactly-eight-keys
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: eight a=1 b=2 c=3 d=4 e=5 f=6 g=7\n"
+colored/many-fields
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m many \x1b[0;32ma\x1b[0m=1 \x1b[0;32mb\x1b[0m=2 \x1b[0;32mc\x1b[0m=3 \x1b[0;32md\x1b[0m=4 \x1b[0;32me\x1b[0m=5 \x1b[0;32mf\x1b[0m=6 \x1b[0;32mg\x1b[0m=7 \x1b[0;32mh\x1b[0m=8 \x1b[0;32mi\x1b[0m=9 \x1b[0;32mj\x1b[0m=10 \x1b[0;32mk\x1b[0m=11 \x1b[0;32ml\x1b[0m=12\n"
+level/plain/trace
+"[2026-03-04T05:06:07.8901Z] TRACE [dmsg_server]: level check k=\"v\"\n"
+level/colored/trace
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;30mTRACE\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m level check \x1b[0;30mk\x1b[0m=\"v\"\n"
+level/plain/debug
+"[2026-03-04T05:06:07.8901Z] DEBUG [dmsg_server]: level check k=\"v\"\n"
+level/colored/debug
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;34mDEBUG\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m level check \x1b[0;34mk\x1b[0m=\"v\"\n"
+level/plain/info
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: level check k=\"v\"\n"
+level/colored/info
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m level check \x1b[0;32mk\x1b[0m=\"v\"\n"
+level/plain/warning
+"[2026-03-04T05:06:07.8901Z] WARN [dmsg_server]: level check k=\"v\"\n"
+level/colored/warning
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;33mWARN\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m level check \x1b[0;33mk\x1b[0m=\"v\"\n"
+level/plain/error
+"[2026-03-04T05:06:07.8901Z] ERROR [dmsg_server]: level check k=\"v\"\n"
+level/colored/error
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;31mERROR\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m level check \x1b[0;31mk\x1b[0m=\"v\"\n"
+level/plain/fatal
+"[2026-03-04T05:06:07.8901Z] FATAL [dmsg_server]: level check k=\"v\"\n"
+level/colored/fatal
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;31mFATAL\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m level check \x1b[0;31mk\x1b[0m=\"v\"\n"
+level/plain/panic
+"[2026-03-04T05:06:07.8901Z] PANIC [dmsg_server]: level check k=\"v\"\n"
+level/colored/panic
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;31mPANIC\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m level check \x1b[0;31mk\x1b[0m=\"v\"\n"
+colored/no-fields
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m serving\n"
+colored/no-module
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m []:\x1b[0m serving\n"
+colored/three-fields
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m stream closed \x1b[0;32mdst\x1b[0m=\"abc\" \x1b[0;32msize\x1b[0m=4096 \x1b[0;32msrc\x1b[0m=\"def\"\n"
+colored/error-field
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;31mERROR\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m dial failed \x1b[0;31merror\x1b[0m=\"connection refused\"\n"
+critical/plain
+"[2026-03-04T05:06:07.8901Z] ERROR [dmsg_server:CRITICAL]: the sky is falling\n"
+critical/colored
+"\x1b[0;95m[2026-03-04T05:06:07.8901Z] ERROR [dmsg_server:CRITICAL]: the sky is falling\x1b[0m\n"
+critical/colored-with-fields
+"\x1b[0;95m[2026-03-04T05:06:07.8901Z] ERROR [dmsg_server:CRITICAL]: the sky is falling\x1b[0m \x1b[0;31mk\x1b[0m=\"v\"\n"
+critical/no-module
+"\x1b[0;95m[2026-03-04T05:06:07.8901Z] ERROR [CRITICAL]: the sky is falling\x1b[0m\n"
+critical/non-critical-priority
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;31mERROR\x1b[0m\x1b[0;36m [dmsg_server:LOW]:\x1b[0m odd priority\n"
+callcontext/file-only
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m \x1b[0;90mserver.go\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m cc\n"
+callcontext/func-only
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m \x1b[0;90mServe\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m cc\n"
+callcontext/line-int
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m \x1b[0;90m42\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m cc\n"
+callcontext/line-string
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m \x1b[0;90m42\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m cc\n"
+callcontext/line-uint64
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m \x1b[0;90m42\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m cc\n"
+callcontext/line-float-ignored
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m cc\n"
+callcontext/all-three
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m \x1b[0;90mserver.go:Serve:42\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m cc\n"
+callcontext/all-three-plain
+"[2026-03-04T05:06:07.8901Z] INFO server.go:Serve:42 [dmsg_server]: cc\n"
+callcontext/empty-strings
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m cc\n"
+callcontext/wrong-types
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m cc\n"
+callcontext/critical
+"\x1b[0;95m[2026-03-04T05:06:07.8901Z] ERRORserver.go:42 [dmsg_server:CRITICAL]: cc\x1b[0m\n"
+opt/no-timestamp
+"\x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m no ts \x1b[0;32mk\x1b[0m=\"v\"\n"
+opt/no-timestamp-critical
+"\x1b[0;95mERROR [dmsg_server:CRITICAL]: no ts\x1b[0m\n"
+opt/mini-timestamp
+"\x1b[0;90m[0042]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m mini ts\n"
+opt/mini-timestamp-critical
+"\x1b[0;95m[0042] INFO [dmsg_server:CRITICAL]: mini ts\x1b[0m\n"
+opt/default-timestamp-format
+"\x1b[0;90m[2026-03-04T05:06:07Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m rfc3339\n"
+opt/no-uppercase
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;33mwarn\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m lowercase level\n"
+opt/no-sorting
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: unsorted only=\"one\"\n"
+opt/space-padding
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m padded                         \x1b[0;32mk\x1b[0m=\"v\"\n"
+opt/space-padding-empty-message
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m          \n"
+opt/space-padding-overflow
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m a much longer message\n"
+opt/space-padding-multibyte
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m héllo wörld \n"
+opt/space-padding-critical
+"\x1b[0;95m[2026-03-04T05:06:07.8901Z] ERROR [dmsg_server:CRITICAL]: padded                        \x1b[0m\n"
+opt/no-quoting
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m quotes off \x1b[0;32mempty\x1b[0m= \x1b[0;32merr\x1b[0m=\"a b\" \x1b[0;32merrplain\x1b[0m=ab \x1b[0;32mplain\x1b[0m=abc-1.2 \x1b[0;32mspaced\x1b[0m=\"a b\"\n"
+opt/custom-quote-character
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;32mINFO\x1b[0m\x1b[0;36m [dmsg_server]:\x1b[0m custom quote \x1b[0;32mk\x1b[0m='v'\n"
+opt/disable-colors-wins
+"[2026-03-04T05:06:07.8901Z] INFO [dmsg_server]: no colors k=\"v\"\n"
+opt/custom-color-scheme
+"\x1b[0;90m[2026-03-04T05:06:07.8901Z]\x1b[0m \x1b[0;35mINFO\x1b[0m\x1b[0;91m [dmsg_server]:\x1b[0m custom scheme \x1b[0;35mk\x1b[0m=\"v\"\n"
+unformatted/no-fields
+"time=\"2026-03-04T05:06:07.8901Z\" level=\"info\" msg=\"serving\" _module=\"dmsg_server\"\n"
+unformatted/fields
+"time=\"2026-03-04T05:06:07.8901Z\" level=\"info\" msg=\"serving\" _module=\"dmsg_server\" dst=\"abc\" n=3\n"
+unformatted/no-timestamp-no-message
+"level=\"info\" _module=\"dmsg_server\" dst=\"abc\"\n"
