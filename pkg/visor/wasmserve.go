@@ -40,6 +40,7 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 	"github.com/skycoin/skywire/pkg/wasmhv/ctlbridge"
@@ -325,6 +326,9 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// The full skywire CLI module for the terminal's `skywire` command —
 	// served from disk (too large to embed), gzip left to the transport.
 	// Absent path = 404, and the shell simply doesn't register the command.
+	if cfg.ExecWasmPath == "" {
+		cfg.ExecWasmPath = DefaultExecWasmPath()
+	}
 	if cfg.ExecWasmPath != "" {
 		execWasmPath := cfg.ExecWasmPath
 		mux.HandleFunc("/skywire.wasm", func(w http.ResponseWriter, r *http.Request) {
@@ -1156,4 +1160,19 @@ skywireDeskBoot(Object.assign({
 func deskShellHTML(scriptsHTML, deskOptsJS string) []byte {
 	out := strings.ReplaceAll(deskShellTemplate, "__DESK_SCRIPTS__", scriptsHTML)
 	return []byte(strings.ReplaceAll(out, "__DESK_OPTS__", deskOptsJS))
+}
+
+// DefaultExecWasmPath returns the package location of the skywire command
+// module (skyenv.ExecWasmPath) when that file exists, else "". It is the
+// fallback for an empty ExecWasmPath, so a host whose updater installed the
+// module serves the desk without any flag or config change.
+func DefaultExecWasmPath() string {
+	p := skyenv.ExecWasmPath()
+	if p == "" {
+		return ""
+	}
+	if st, err := os.Stat(p); err != nil || st.IsDir() {
+		return ""
+	}
+	return p
 }
