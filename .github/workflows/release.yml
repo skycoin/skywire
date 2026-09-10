@@ -98,10 +98,30 @@ jobs:
       - name: Build libusb for musl target
         run: ./build-libusb-musl.sh ${{ matrix.arch }} ${{ matrix.toolchain }} ./musl-data/${{ matrix.toolchain }}-cross
 
+      - name: Checkout skywire at the tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build the js/wasm command module (stage 1 of the two-stage build)
+        env:
+          CGO_ENABLED: "0"
+          GOOS: js
+          GOARCH: wasm
+        run: |
+          # The desk's `skywire` command and the tab visor, embedded into the
+          # native binary below (pkg/wasmhv/execwasm) so every release serves
+          # the desk with no extra file. Same toolchain as wasm_exec.js.
+          go build -trimpath -buildvcs=true -mod=vendor -tags "withoutsystray withoutgotop" \
+            -ldflags "-s -w -buildid=" -o skywire.wasm .
+          gzip -9 -n -c skywire.wasm > pkg/wasmhv/execwasm/blob/skywire.wasm.gz
+          rm -f skywire.wasm
+          ls -la pkg/wasmhv/execwasm/blob/
+
       - name: Build skywire release binary
         env:
-          GOPROXY: "https://proxy.golang.org,direct"
-          GOSUMDB: "off"
           CGO_ENABLED: "1"
           CC: ${{ github.workspace }}/musl-data/${{ matrix.toolchain }}-cross/bin/${{ matrix.toolchain }}-gcc
           PKG_CONFIG_PATH: ${{ github.workspace }}/musl-data/${{ matrix.toolchain }}-cross/${{ matrix.toolchain }}/lib/pkgconfig
@@ -109,21 +129,13 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
         run: |
-          go install -tags="cgo,withoutsystray" -trimpath \
-            -ldflags "-s -w -linkmode external -extldflags '-static' -buildid=" \
-            ${{ env.MODULE }}@${{ github.ref_name }}
-
+          # Built from the checked-out tag (not `go install module@tag`) so the
+          # staged js/wasm module above is embedded. -mod=vendor: the tree
+          # vendors its dependencies.
           mkdir -p bin
-          GOPATH_BIN="$(go env GOPATH)/bin"
-          if [ -f "${GOPATH_BIN}/linux_${{ matrix.goarch }}/skywire" ]; then
-            cp "${GOPATH_BIN}/linux_${{ matrix.goarch }}/skywire" bin/skywire
-          elif [ -f "${GOPATH_BIN}/skywire" ]; then
-            cp "${GOPATH_BIN}/skywire" bin/skywire
-          else
-            echo "Binary not found in expected locations"
-            find "${GOPATH_BIN}" -name "skywire*" -type f
-            exit 1
-          fi
+          go build -tags="cgo,withoutsystray" -trimpath -mod=vendor \
+            -ldflags "-s -w -linkmode external -extldflags '-static' -buildid=" \
+            -o bin/skywire .
 
           # Verify binary on native arch
           if [ "${{ matrix.arch }}" = "amd64" ]; then

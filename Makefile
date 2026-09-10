@@ -1073,3 +1073,26 @@ playground: wasm-visor ## Build the docs-site playground (static desk page: shel
 	go run ./scripts/stage-playground ./build/playground
 	cp ./docs/playground/index.html ./build/playground/
 	@echo "built ./build/playground — serve it statically to test (any static file server)"
+
+# --- one wasm module (#4484 convergence) --------------------------------------
+# The full skywire command module for GOOS=js: the desk's `skywire` command and
+# the tab visor. Built FIRST and gzipped into pkg/wasmhv/execwasm/blob/
+# (gitignored), then the native binary is built with it embedded — the
+# two-stage build every distributed binary gets (publish-binary.yml,
+# release.yml). A plain `make build` / `go build .` embeds only the README
+# placeholder and the visor falls back to an on-disk module.
+EXEC_WASM_TAGS ?= withoutsystray withoutgotop
+
+exec-wasm: ## Build the js/wasm command module to build/exec-wasm/skywire.wasm
+	mkdir -p ./build/exec-wasm
+	GOOS=js GOARCH=wasm go build -trimpath -buildvcs=true -mod=vendor -tags "$(EXEC_WASM_TAGS)" -ldflags="-s -w" -o ./build/exec-wasm/skywire.wasm .
+	@ls -la ./build/exec-wasm/skywire.wasm
+
+embed-exec-wasm: exec-wasm ## Stage the js/wasm command module for embedding (pkg/wasmhv/execwasm/blob/, gitignored)
+	gzip -9 -n -c ./build/exec-wasm/skywire.wasm > ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz
+	@ls -la ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz
+
+build-embedded: embed-exec-wasm build ## Two-stage build: the native binary with the js/wasm command module embedded
+
+clean-exec-wasm: ## Remove the staged js/wasm command module so the next build embeds the placeholder
+	rm -f ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz ./build/exec-wasm/skywire.wasm

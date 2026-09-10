@@ -78,7 +78,7 @@ type WasmServeConfig struct {
 	// skywire CLI compiled for GOOS=js (see docs/design), which the page's
 	// terminal executes per command against the shared in-memory filesystem
 	// (bottle jsfs.js + browseui skywire-exec.js). Empty = the terminal has no
-	// `skywire` command. The blob is too large to embed — build it with
+	// `skywire` command. Empty = the module embedded by the two-stage build (pkg/wasmhv/execwasm), else the package location on disk. Build it with
 	//   GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" \
 	//     -trimpath -ldflags "-s -w" -o build/skywire.wasm .
 	ExecWasmPath string
@@ -324,17 +324,15 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// desk is only assembled when a CLI module was given to run in it.
 	var deskPage []byte
 	// The full skywire CLI module for the terminal's `skywire` command —
-	// served from disk (too large to embed), gzip left to the transport.
-	// Absent path = 404, and the shell simply doesn't register the command.
-	if cfg.ExecWasmPath == "" {
-		cfg.ExecWasmPath = DefaultExecWasmPath()
-	}
-	if cfg.ExecWasmPath != "" {
-		execWasmPath := cfg.ExecWasmPath
+	// embedded by the two-stage build (pkg/wasmhv/execwasm) or served from disk.
+	// Neither present = 404, and the shell simply does not register the command.
+	// Explicit path, else the module embedded by the two-stage build, else
+	// the package location on disk (execModuleSource).
+	execWasmPath, haveExecWasm := execModuleSource(cfg.ExecWasmPath)
+	cfg.ExecWasmPath = execWasmPath
+	if haveExecWasm {
 		mux.HandleFunc("/skywire.wasm", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/wasm")
-			w.Header().Set("Cache-Control", "no-cache")
-			http.ServeFile(w, r, execWasmPath)
+			serveExecWasm(w, r, execWasmPath)
 		})
 		// /desk — the CONVERGED page: the tab as a Linux host. No SharedWorker
 		// visor; the terminal runs `skywire autoconfig` which starts the FULL
