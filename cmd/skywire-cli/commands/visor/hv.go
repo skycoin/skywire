@@ -608,9 +608,9 @@ outstanding one. Fingerprint = first 40 bits of sha256(pk).`,
 			}
 			var b strings.Builder
 			tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(tw, "FINGERPRINT\tVIA\tFIRST SEEN\tLAST SEEN\tPUBLIC KEY")
+			_, _ = fmt.Fprintln(tw, "FINGERPRINT\tVIA\tFIRST SEEN\tLAST SEEN\tPUBLIC KEY") //nolint:errcheck // strings.Builder never errors
 			for _, p := range pending {
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.Fingerprint, p.Via,
+				_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.Fingerprint, p.Via, //nolint:errcheck // strings.Builder never errors
 					p.FirstSeen.Format(time.Kitchen), p.LastSeen.Format(time.Kitchen), p.PK.Hex())
 			}
 			_ = tw.Flush() //nolint:errcheck

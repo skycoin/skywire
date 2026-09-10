@@ -11,8 +11,6 @@ type skyenvEdit = skyenvfile.Edit
 
 func updateSkyenvFile(path string, edits []skyenvEdit) error { return skyenvfile.Update(path, edits) }
 
-func skyenvLineKey(line string) string { return skyenvfile.LineKey(line) }
-
 func formatSkyenvBool(b bool) string { return skyenvfile.FormatBool(b) }
 
 func formatSkyenvString(s string) string { return skyenvfile.FormatString(s) }

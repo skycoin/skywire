@@ -47,3 +47,7 @@ func (hv *Hypervisor) getUIVersion() http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-store")
 	}
 }
+
+// logUIRoot is a no-op on mobile: the phone serves no desk and no dashboard
+// root, so there is nothing to explain about the UI root.
+func (hv *Hypervisor) logUIRoot() {}
