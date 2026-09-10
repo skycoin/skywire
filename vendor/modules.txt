@@ -51,7 +51,7 @@ github.com/0magnet/cosmos-go
 ## explicit; go 1.26
 github.com/0magnet/desk
 github.com/0magnet/desk/dom
-# github.com/0magnet/desk/panes v0.0.0-20260908190105-9bb2944487db
+# github.com/0magnet/desk/panes v0.0.0-20260910005138-02e96496996c
 ## explicit; go 1.26
 github.com/0magnet/desk/panes/files
 # github.com/0magnet/go-dsp v0.0.0-20260907230215-136ba239cc2d
@@ -140,7 +140,7 @@ github.com/0magnet/wfdrive/bidi
 ## explicit; go 1.24
 github.com/0magnet/winbox-go
 github.com/0magnet/winbox-go/dist
-# github.com/0magnet/xterm-go v0.0.0-20260908011048-6bbc23473554
+# github.com/0magnet/xterm-go v0.0.0-20260909230905-494f3085d6ed
 ## explicit; go 1.24
 github.com/0magnet/xterm-go
 github.com/0magnet/xterm-go/vt

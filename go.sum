@@ -88,6 +88,8 @@ github.com/0magnet/desk v0.0.0-20260910001430-2e7b6fa4face h1:fnFyReJIvbc0OCeaSX
 github.com/0magnet/desk v0.0.0-20260910001430-2e7b6fa4face/go.mod h1:L+8Y1fP55UjK6RFOG0iAsR9oO6zXidCr9LZJy+8oN/k=
 github.com/0magnet/desk/panes v0.0.0-20260908190105-9bb2944487db h1:t/kQDGFMvKhpRBTdEjiLCkVG9Pe/qmDuD8D65DJrdrs=
 github.com/0magnet/desk/panes v0.0.0-20260908190105-9bb2944487db/go.mod h1:EDtFhI1TlDPunQIoT8IRbhe8wa5R4GAI+iL04vQDk2Y=
+github.com/0magnet/desk/panes v0.0.0-20260910005138-02e96496996c h1:2++YlzL8fNx2rHiA5whXsUrS5cvEFpAtJEU4ML1OOFs=
+github.com/0magnet/desk/panes v0.0.0-20260910005138-02e96496996c/go.mod h1:03HcaBfBFU2kiG/F3NUwNXxAn0rMOeSZM6EBiLesn3M=
 github.com/0magnet/go-dsp v0.0.0-20260907230215-136ba239cc2d h1:AE2MbqkqaB88h+jtiWo5aI6zODI+0QZZRI4lY0p9Fhw=
 github.com/0magnet/go-dsp v0.0.0-20260907230215-136ba239cc2d/go.mod h1:ThqukkPy/kmN6c6cyboZYESC9qdJKfYgHTMVp0iW7T0=
 github.com/0magnet/gobrpc v0.0.0-20260906144809-5215ec59d553 h1:Ko3+QbLQffRCkBiwD7O67LtZvDdhcuy0d9AtlWg0z5s=
@@ -136,6 +138,8 @@ github.com/0magnet/winbox-go v0.0.0-20260908011106-113d480c4188 h1:NY8NY7qUThHl9
 github.com/0magnet/winbox-go v0.0.0-20260908011106-113d480c4188/go.mod h1:19+/rRQWd/tc9/8CFcUr6C+3AipeZmHyyda2tVombe4=
 github.com/0magnet/xterm-go v0.0.0-20260908011048-6bbc23473554 h1:y8d7qkjDGex2mY5H1IOlQqMZWyK6ZvaFve5CPrO9EaE=
 github.com/0magnet/xterm-go v0.0.0-20260908011048-6bbc23473554/go.mod h1:W6c6ofSTsxXuQEr1rSZ3qmfOj5a3LGB3uLQBL0/TiKc=
+github.com/0magnet/xterm-go v0.0.0-20260909230905-494f3085d6ed h1:5vjSGoRZsXFVhOqfDIkuW/tpK7moB3sNSMcfkbRbSoE=
+github.com/0magnet/xterm-go v0.0.0-20260909230905-494f3085d6ed/go.mod h1:W6c6ofSTsxXuQEr1rSZ3qmfOj5a3LGB3uLQBL0/TiKc=
 github.com/0magnet/yamux v0.1.3-0.20260905172050-450c4058f851 h1:kCRHPdm/JLtNrPlHUyb/HiNRb5XJQEFtCKYtLEUlQT4=
 github.com/0magnet/yamux v0.1.3-0.20260905172050-450c4058f851/go.mod h1:Yu78IjOQxwmdP7GXF2D6ty5iyxdBiTU8JidU1WtNzbw=
 github.com/ActiveState/termtest/conpty v0.5.0 h1:JLUe6YDs4Jw4xNPCU+8VwTpniYOGeKzQg4SM2YHQNA8=
