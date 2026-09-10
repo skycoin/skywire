@@ -518,3 +518,19 @@ func (r *RPC) UIServerStatus(_ *struct{}, out *UIServerStatus) (err error) {
 	*out = *status
 	return nil
 }
+
+// SetHypervisorLegacyUIIn is the input for SetHypervisorLegacyUI.
+type SetHypervisorLegacyUIIn struct {
+	Legacy  bool
+	Persist bool
+}
+
+// SetHypervisorLegacyUI switches the hypervisor web UI root between the desk
+// and the legacy Angular dashboard.
+func (r *RPC) SetHypervisorLegacyUI(in *SetHypervisorLegacyUIIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetHypervisorLegacyUI", in)(nil, &err)
+	if in == nil {
+		in = &SetHypervisorLegacyUIIn{}
+	}
+	return r.visor.SetHypervisorLegacyUIPersist(in.Legacy, in.Persist)
+}

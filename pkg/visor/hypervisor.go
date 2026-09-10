@@ -1401,3 +1401,20 @@ func setupLocalPtyUI(cliNet, cliAddr string) *dmsgPtyUI {
 		PtyUI: pty.NewUI(ptyDialer, pty.DefaultUIConfig()),
 	}
 }
+
+// LegacyUI reports whether the web UI root serves the legacy Angular
+// dashboard instead of the desk.
+func (hv *Hypervisor) LegacyUI() bool {
+	hv.enableMu.Lock()
+	defer hv.enableMu.Unlock()
+	return hv.c.LegacyUI
+}
+
+// SetLegacyUI switches the web UI root between the desk (false) and the
+// legacy Angular dashboard (true). Takes effect on the next page load; the
+// UI server keeps running.
+func (hv *Hypervisor) SetLegacyUI(legacy bool) {
+	hv.enableMu.Lock()
+	hv.c.LegacyUI = legacy
+	hv.enableMu.Unlock()
+}

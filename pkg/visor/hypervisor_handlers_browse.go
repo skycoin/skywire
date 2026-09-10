@@ -181,6 +181,12 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			// The DESK is the hypervisor UI (operator decision 2026-09-04): the
 			// shell greets at the root with the Angular dashboard as a tab
 			// inside it, matching the wasm visor's desk surface.
+			if hv.LegacyUI() {
+				// Opt-in legacy mode: the Angular dashboard is the page, no desk
+				// and no wasm visor (hypervisor.legacy_ui / LEGACYHVUI).
+				hv.serveInjectedIndex(w, r, fileServer)
+				return
+			}
 			hv.serveNativeDesk(w)
 			return
 		case "/desk":
