@@ -2,11 +2,11 @@
 
 package dmsgc
 
-// browserUnpublished: a browser visor publishes no dmsg discovery entry. It is
-// reached over skynet (its host's transport, the forwarding mux) and its own
-// dmsg traffic rides its relay; an entry would only advertise server sessions
-// it does not hold. Route setup no longer needs the entry either — the
-// source-driven cascade is the browser default (#4730). Without an entry the
-// client also holds no server-session floor once a relay is attached (see
-// dmsg.Client sessionsSatisfied / reapExcessIdleSessions): #4484 stage 4.
-const browserUnpublished = true
+// browserRelayOnly: a browser visor served by a hypervisor rides that host's
+// dmsg relay (the skynet carrier) and holds no server session while it does —
+// so it has no discovery entry then (there is nothing to name in one; peers
+// reach it over skynet). Off the host's LAN the relay never attaches and the
+// same visor behaves as any other: server sessions over wss and a normal
+// entry, so the host reaches it as its hypervisor over dmsg. #4484 stages 4
+// and 7. See dmsg.Config.RelayOnly.
+const browserRelayOnly = true

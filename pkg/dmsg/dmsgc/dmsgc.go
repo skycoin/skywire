@@ -101,8 +101,9 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 		// the client must skip its own server entry in the serve loop rather
 		// than dial a transit session to itself.
 		SkipSelfServer: conf.Server != nil && conf.Server.Enabled,
-		// A browser visor publishes no discovery entry (browserUnpublished).
-		NoRegister: browserUnpublished,
+		// A browser visor rides its host's relay when attached and publishes an
+		// entry only while it holds server sessions (browserRelayOnly).
+		RelayOnly: browserRelayOnly,
 		// The visor runs a dmsg relay acceptor on skyenv.DmsgRelayPort (see
 		// initDmsgRelay): streams it carries for attached peers are bounded here.
 		MaxRelayedStreams: dmsg.DefaultClientMaxRelayedStreams,

@@ -85,7 +85,16 @@ type Config struct {
 	// The alternative it replaces was handing the client a discovery whose
 	// writes silently succeed without publishing (direct.NewClient), which left
 	// the client believing it had registered.
-	NoRegister           bool
+	NoRegister bool
+	// RelayOnly makes a relay session (SetRelayPeers, the skynet carrier) the
+	// only session this client holds while one is attached: the serve loop is
+	// satisfied by it, the idle reaper trims server sessions to it, and with no
+	// server session there is nothing to publish — the discovery entry is
+	// deleted. With no relay attached the client behaves as any other: it holds
+	// MinSessions server sessions and publishes an entry naming them. A browser
+	// visor sets it: attached to its host it rides the relay; off the host's
+	// LAN it falls back to servers over wss and is reachable over dmsg.
+	RelayOnly            bool
 	Callbacks            *ClientCallbacks
 	ClientType           string
 	ConnectedServersType string
@@ -390,6 +399,7 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 	// Init common fields.
 	c.EntityCommon.init(pk, sk, dc, log, conf.UpdateInterval)
 	c.EntityCommon.noRegister = conf.NoRegister
+	c.EntityCommon.relayOnly = conf.RelayOnly
 	c.EntityCommon.maxRelayedStreams = conf.MaxRelayedStreams
 	// Relay acceptor hooks (see client_relay.go): a request arriving over an
 	// accepted relay session is forwarded over this client's own server
@@ -509,8 +519,9 @@ func (ce *Client) Serve(ctx context.Context) {
 	porterReapLoopOnce := new(sync.Once)
 	reapLoopOnce := new(sync.Once)
 
-	// An unpublished client (Config.NoRegister) never posts an entry; it also
-	// deletes any stale one it left behind while it was published.
+	// A NoRegister client never posts an entry. A RelayOnly client posts one
+	// only while it holds server sessions (initilizeClientEntry checks), and
+	// deletes the stale one it left behind once it rides its relay.
 	needInitialPost := !ce.noRegister
 	staleEntryChecked := false
 
@@ -679,7 +690,7 @@ serve:
 			entries = append(relays, entries...)
 		}
 
-		if needInitialPost {
+		if needInitialPost && !(ce.relayOnly && !ce.hasServerSession()) {
 			// use this for put protocol type of client to disc, for dicision part of dmsg-server
 			err = ce.initilizeClientEntry(cancellabelCtx, ce.conf.ClientType, ce.conf.Protocol)
 			if err != nil {
@@ -689,7 +700,7 @@ serve:
 				needInitialPost = false
 			}
 		}
-		if ce.noRegister && !staleEntryChecked {
+		if (ce.noRegister || (ce.relayOnly && ce.hasRelaySession())) && !staleEntryChecked {
 			staleEntryChecked = true
 			go ce.deleteOwnEntry(cancellabelCtx)
 		}
@@ -1590,8 +1601,8 @@ func (ce *Client) reapExcessIdleSessions(idleStreak map[cipher.PubKey]int, idleC
 	if min <= 0 {
 		return
 	}
-	if ce.noRegister && ce.hasRelaySession() {
-		// An unpublished client with a relay attached keeps no server-session
+	if ce.relayOnly && ce.hasRelaySession() {
+		// A relay-only client with a relay attached keeps no server-session
 		// floor: the relay carries its dmsg; servers are dialed on demand and
 		// reaped when idle. The relay session itself is never idle (see below).
 		min = 1

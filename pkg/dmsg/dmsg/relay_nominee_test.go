@@ -347,27 +347,29 @@ func TestRelayNominee_DialSkipsRelayAfterItFails(t *testing.T) {
 	echoCheck(t, str, s)
 }
 
-// TestRelayNominee_UnpublishedClientHoldsRelayOnly: a client that publishes no
-// discovery entry (Config.NoRegister — the browser visor) keeps no server-
-// session floor once its relay is attached: the reaper trims idle server
-// sessions down to the relay alone and the serve loop does not re-dial them
-// (#4484 stage 4: exactly one dmsg session). A published client with the same
-// MinSessions would redial the server it just lost.
-func TestRelayNominee_UnpublishedClientHoldsRelayOnly(t *testing.T) {
+// TestRelayNominee_RelayOnlyClientHoldsRelayOnly: a Config.RelayOnly client
+// (the browser visor) behaves as any client until a relay attaches — server
+// sessions, a published entry — then keeps no server-session floor: the
+// reaper trims idle server sessions down to the relay alone, the serve loop
+// does not re-dial them, and with nothing to name the entry is deleted (#4484
+// stages 4 and 7). A published client with the same MinSessions would redial
+// the server it just lost.
+func TestRelayNominee_RelayOnlyClientHoldsRelayOnly(t *testing.T) {
 	env := newRelayedTestEnv(t, nil)
 	env.relay.maxRelayedStreams = 8
 	relayPK := env.relay.LocalPK()
 
 	pk, sk := GenKeyPair(t, "unpublished-client")
-	c := NewClient(pk, sk, env.dc, &Config{MinSessions: 2, NoRegister: true})
-	c.SetLogger(logging.MustGetLogger("unpublished-client"))
+	c := NewClient(pk, sk, env.dc, &Config{MinSessions: 2, RelayOnly: true})
+	c.SetLogger(logging.MustGetLogger("relayonly-client"))
 	var dials atomic.Int32
 	c.SetSessionDialer(skynetDialer(t, env.relay, relayPK, nil, &dials))
 	go c.Serve(context.Background())
 	t.Cleanup(func() { _ = c.Close() }) //nolint:errcheck
 	require.Eventually(t, func() bool { _, ok := c.Session(env.srvPK); return ok }, 15*time.Second, 50*time.Millisecond)
-	require.True(t, c.Unpublished())
+	require.False(t, c.Unpublished(), "no relay yet: a published client like any other")
 	require.False(t, c.sessionsSatisfied(), "one server, MinSessions 2, no relay: not satisfied")
+	require.Eventually(t, func() bool { _, err := env.dc.Entry(context.Background(), pk); return err == nil }, 10*time.Second, 50*time.Millisecond, "with a server session the entry is published")
 
 	c.SetRelayPeers([]cipher.PubKey{relayPK}, 70)
 	require.Eventually(t, c.hasRelaySession, 15*time.Second, 50*time.Millisecond)
@@ -385,7 +387,9 @@ func TestRelayNominee_UnpublishedClientHoldsRelayOnly(t *testing.T) {
 	require.Equal(t, 1, c.SessionCount(), "unpublished client must not redial servers to reach MinSessions")
 	require.True(t, c.sessionsSatisfied())
 
-	// Its entry was never posted.
+	// Riding the relay with no server session, the entry comes down.
+	require.True(t, c.Unpublished())
+	require.NoError(t, c.updateClientEntry(context.Background(), c.done, c.conf.ClientType))
 	_, err := env.dc.Entry(context.Background(), pk)
-	require.Error(t, err, "an unpublished client posts no discovery entry")
+	require.Error(t, err, "a relay-only client on its relay has no discovery entry")
 }
