@@ -109,7 +109,7 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 		RelayOnly: browserRelayOnly,
 		// The visor runs a dmsg relay acceptor on skyenv.DmsgRelayPort (see
 		// initDmsgRelay): streams it carries for attached peers are bounded here.
-		MaxRelayedStreams: dmsg.DefaultClientMaxRelayedStreams,
+		MaxRelayedStreams: relayMaxStreams(conf),
 	}
 	dmsgConf.ClientType = "visor"
 
@@ -225,4 +225,14 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 		)
 	}
 	return dmsgC
+}
+
+// relayMaxStreams resolves the relay-slot cap for this visor's dmsg client:
+// the configured dmsg.relay_max_streams, or the default when unset. A negative
+// value is passed through so a visor can refuse to relay entirely.
+func relayMaxStreams(conf *spec.DmsgConfig) int {
+	if conf != nil && conf.RelayMaxStreams != 0 {
+		return conf.RelayMaxStreams
+	}
+	return dmsg.DefaultClientMaxRelayedStreams
 }

@@ -32,10 +32,22 @@ import (
 )
 
 // DefaultClientMaxRelayedStreams is the relay-slot cap a visor gives its dmsg
-// client when it runs the relay acceptor: enough for a desk's worth of
-// concurrent streams, small enough that an attached peer cannot amplify the
-// visor into a public relay.
-const DefaultClientMaxRelayedStreams = 256
+// client when it runs the relay acceptor.
+//
+// It was 256, sized for a desk's worth of streams from a handful of attached
+// peers. That is the wrong order of magnitude for a hub: a visor co-resident
+// with a dmsg server is what visors attach to when they stop holding their own
+// server sessions, and one core dmsg server carries several hundred client
+// connections today (771 on a production server, 2026-09-10). A hub fronting a
+// few hundred of those, each with a few concurrent streams, exhausts 256 long
+// before it runs out of anything real, and the failure is a refused stream that
+// looks like an unreachable service.
+//
+// Any visor with transports can be nominated as a relay by a peer, and a visor
+// co-resident with a dmsg server is doing a server's job outright, so this now
+// matches DefaultMaxRelayedStreams: what the server beside it would allow.
+// Bound it per visor with dmsg.relay_max_streams.
+const DefaultClientMaxRelayedStreams = DefaultMaxRelayedStreams
 
 // relayEntryLookupTimeout bounds the discovery lookup the relay makes to
 // order its forward candidates by the destination's delegated servers. The

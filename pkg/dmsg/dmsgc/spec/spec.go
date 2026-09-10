@@ -120,6 +120,12 @@ type DmsgConfig struct {
 	// dmsg client for discovery rather than standing up a second transit
 	// client. Nil (the default) = no in-process server. See DmsgServerConfig.
 	Server *DmsgServerConfig `json:"server,omitempty"`
+
+	// RelayMaxStreams bounds the concurrent streams this visor will relay for
+	// peers attached to its dmsg relay acceptor. 0 uses
+	// dmsg.DefaultClientMaxRelayedStreams. A negative value refuses to relay at
+	// all, for a visor that should never carry other people's traffic.
+	RelayMaxStreams int `json:"relay_max_streams,omitempty"`
 }
 
 // DmsgServerConfig configures the OPTIONAL in-process dmsg server co-resident
