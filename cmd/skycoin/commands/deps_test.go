@@ -4,6 +4,8 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 // TestNoPackageLinksSkycoinsCipherWasm pins the reason this package exists.
@@ -53,11 +55,16 @@ func TestNoPackageLinksSkycoinsCipherWasm(t *testing.T) {
 // TestCipherWasmIsRegisteredForWeb guards the opposite regression.
 //
 // Declining skycoin's cipher means `skywire skycoin web` has none unless this
-// package supplies one. If registerCipherWasm stopped being called, or wasmbin
-// stopped carrying a blob, the two /assets/scripts routes would 404 and the
-// wallet would fail in the browser with no cipher — while everything still
-// compiled and every other test passed.
+// package supplies one. If registerCipherWasm stopped being called, or the
+// command module stopped being embedded, the two /assets/scripts routes would
+// 404 and the wallet would fail in the browser with no cipher — while
+// everything still compiled and every other test passed. A source build
+// without the two-stage embed has no module to register, so that case is
+// skipped, not failed.
 func TestCipherWasmIsRegisteredForWeb(t *testing.T) {
+	if !execwasm.Present() {
+		t.Skip("no skywire.wasm module embedded in this build (make embed-exec-wasm); `skywire skycoin web` serves no cipher")
+	}
 	// init() has already run registerCipherWasm by the time a test executes.
 	if !cipherWasmAvailable() {
 		t.Error("no cipher wasm registered with skycoin-web; `skywire skycoin web` " +

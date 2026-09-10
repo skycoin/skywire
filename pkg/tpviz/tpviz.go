@@ -30,28 +30,9 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
-	"github.com/skycoin/skywire/pkg/wasmhv/wasmbin"
+	"github.com/skycoin/skywire/pkg/wasmhv"
+	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
-
-// tpvizNetviewVariant picks which embedded wasm-visor variant the cosmos-go
-// ("netview") WebGL view is served from. The view is no longer a separate
-// tpviz-gl.wasm blob: it is a ROLE of the one wasm-visor binary (cmd/wasm-visor,
-// __SKYWIRE_WASM_ROLE__="netview"), served straight from pkg/wasmhv/wasmbin —
-// exactly how `skywire skycoin web` serves the wallet cipher out of the same
-// blob (cmd/skycoin/commands/cipherwasm.go). TinyGo is preferred (far smaller —
-// ~4 MB vs ~10 MB gz) because this page pays for the whole blob just to run the
-// view out of it. Returns ok=false when no blob is embedded, so the view fails
-// to load gracefully and the operator can pick another one.
-func tpvizNetviewVariant() (wasmbin.Variant, bool) {
-	switch {
-	case !wasmbin.Embedded():
-		return wasmbin.Default(), false
-	case wasmbin.Has(wasmbin.TinyGo):
-		return wasmbin.TinyGo, true
-	default:
-		return wasmbin.Default(), true
-	}
-}
 
 // legacyFS (the embedded legacy JavaScript UI, `//go:embed legacy/*`) lives in
 // tpviz_legacy_on.go; the `mobile` build variant leaves it empty
@@ -620,32 +601,20 @@ func (s *Server) setupRoutes() {
 	})
 
 	// The Go/wasm WebGL view, loaded lazily by bundle.js when that view is
-	// selected from the toggle. It is served from the embedded wasm-visor blob
-	// (run in its "netview" role) rather than a separate tpviz-gl.wasm, so the
-	// binary carries one fewer wasm — the URLs are kept the same so bundle.js
-	// needs no path change, only the role flag it sets before instantiating.
-	s.mux.HandleFunc("/tpviz-gl.wasm", func(w http.ResponseWriter, r *http.Request) {
-		v, ok := tpvizNetviewVariant()
-		if !ok {
-			http.Error(w, "no wasm-visor blob embedded in this build", http.StatusServiceUnavailable)
-			return
-		}
-		wasm, err := wasmbin.GetVariant(v)
-		if err != nil {
-			http.Error(w, "Failed to read wasm-visor blob", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/wasm")
-		w.Write(wasm) //nolint:errcheck,gosec
-	})
-	s.mux.HandleFunc("/tpviz-gl-exec.js", func(w http.ResponseWriter, r *http.Request) {
-		v, ok := tpvizNetviewVariant()
-		if !ok {
-			http.Error(w, "no wasm-visor blob embedded in this build", http.StatusServiceUnavailable)
-			return
-		}
+	// selected from the toggle. It is a ROLE of the one skywire command module
+	// (`skywire desk-host --role netview`, pkg/wasmhv/deskhost), which the
+	// native binary embeds (pkg/wasmhv/execwasm) — no separate tpviz-gl.wasm.
+	// The URLs are kept so bundle.js needs no path change. The loader is Go's
+	// wasm_exec.js pinned to the netview role (argv + the env the root binary's
+	// inits expect, execwasm.LoaderJS); bundle.js sets the same argv before
+	// go.run. Where nothing is embedded (a source build, or this server running
+	// inside a tab's wasm hypervisor) execwasm.Serve redirects to the page
+	// origin's /skywire.wasm.
+	s.mux.HandleFunc("/tpviz-gl.wasm", execwasm.Serve)
+	s.mux.HandleFunc("/tpviz-gl-exec.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Write(wasmbin.WasmExecJSVariant(v)) //nolint:errcheck,gosec
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Write(execwasm.LoaderJS(wasmhv.WasmExecJS, "netview")) //nolint:errcheck,gosec
 	})
 
 	// Serve textures for globe visualization

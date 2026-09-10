@@ -344,7 +344,7 @@ clean: ## Clean project: remove created binaries and apps
 
 build-wasm: ## Compile-check every js/wasm binary (GOOS=js GOARCH=wasm), no run — mirrors the CI wasm lane
 	@echo "compile-checking js/wasm binaries..."
-	@for p in ./pkg/tpviz/wasm ./cmd/dmsg-wasm ./cmd/wasm-visor ./cmd/wasm-visor-probe ./cmd/websh-probe; do \
+	@for p in ./cmd/dmsg-wasm ./cmd/wasm-visor ./cmd/wasm-visor-probe ./cmd/websh-probe; do \
 		echo "  GOOS=js GOARCH=wasm go build $$p"; \
 		GOOS=js GOARCH=wasm go build -mod=vendor -o /dev/null "$$p" || exit 1; \
 	done
@@ -370,7 +370,7 @@ build-wasm-tinygo: ## Compile-check every TinyGo wasm binary (-o /dev/null, no r
 	@# full js/wasm binaries ./cmd/dmsg-wasm and ./cmd/wasm-visor deliberately use
 	@# net/http (HTTP-over-dmsg; dmsg-wasm also needs logrus+gob reflection) and are
 	@# standard-Go-only — they are compile-checked by the `build-wasm` lane instead.
-	@for p in ./pkg/tpviz/wasm ./cmd/websh-probe; do \
+	@for p in ./cmd/websh-probe; do \
 		echo "  tinygo build -target wasm $$p"; \
 		GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasm -no-debug -interp-timeout 15m -o /dev/null "$$p" || exit 1; \
 	done
@@ -413,20 +413,6 @@ check-bundle-wasm: ## Fail if the committed routing-policy bundle.wasm is stale 
 		ls -l "$$tmp" "$(CURDIR)/$(BUNDLE_WASM)"; rm -f "$$tmp"; exit 1; \
 	fi
 
-tpviz-wasm: ## Build transport visualizer WASM binary to build/tpviz (standalone)
-	mkdir -p ./build/tpviz
-	GOOS=js GOARCH=wasm go build -o ./build/tpviz/main.wasm ./pkg/tpviz/wasm
-	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/tpviz/
-	cp ./pkg/tpviz/dist/index.html ./build/tpviz/
-
-tpviz-wasm-standalone: tpviz-wasm ## Alias for tpviz-wasm (both build standalone now)
-
-tpviz-wasm-tinygo: ## Build transport visualizer WASM binary with tinygo to build/tpviz (smaller, ~750KB)
-	mkdir -p ./build/tpviz
-	GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -o ./build/tpviz/main.wasm -target wasm -no-debug -opt=z -panic=trap ./pkg/tpviz/wasm
-	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/tpviz/
-	cp ./pkg/tpviz/dist/index.html ./build/tpviz/
-
 tinygo-dmsg: ## Build-check the dmsg client under TinyGo (IoT target wasip1); ~2.2MB -opt=z
 	GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasip1 -no-debug -opt=z -o ./build/dmsg-tinygo.wasm ./cmd/dmsg-tinygo-probe
 	@echo "built ./build/dmsg-tinygo.wasm — the dmsg client compiles under TinyGo (see docs/design/tinygo-dmsg-client.md)"
@@ -452,16 +438,11 @@ tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~
 # TINYGOROOT=<fork checkout>. Stock upstream TinyGo cannot compile this target.
 TINYGO ?= tinygo
 
-# The Go/wasm WebGL tpviz view. Unlike the wasm-visor lane this needs no fork —
-# the engine (github.com/0magnet/cosmos-go) is pure syscall/js, so stock TinyGo
-# 0.41+ builds it. The artifacts live in pkg/tpviz/legacy/ because that whole
-# directory is go:embed'ed and served next to bundle.js, which loads the module
-# lazily when the "WebGL (Go)" view is selected.
-# NOTE: the cosmos-go WebGL tpviz view no longer builds a separate
-# tpviz-gl.wasm. It is a role of the one wasm-visor blob (cmd/wasm-visor,
-# __SKYWIRE_WASM_ROLE__="netview"); pkg/tpviz serves that blob from
-# pkg/wasmhv/wasmbin. Rebuild it with the wasm-visor blob (make wasm-visor /
-# wasm-visor-tinygo), not a standalone target.
+# The Go/wasm WebGL tpviz view builds no separate tpviz-gl.wasm: it is a role
+# of the one skywire command module (`skywire desk-host --role netview`,
+# pkg/wasmhv/deskhost), which pkg/tpviz serves at /tpviz-gl.wasm out of the
+# copy the native binary embeds (make embed-exec-wasm). bundle.js in
+# pkg/tpviz/legacy/ loads it lazily when the "WebGL (Go)" view is selected.
 
 tinygo-wasm-visor: ## Build the FULL browser WASM visor (dmsg+transport+router+appserver, net/http+crypto/tls, route origination) into build/wasm-visor — TinyGo FORK (~7MB / ~2.9MB gzip vs 43MB/9.5MB std-Go). Needs the 0magnet/tinygo fork; set TINYGO=<fork>/build/tinygo TINYGOROOT=<fork>
 	mkdir -p ./build/wasm-visor

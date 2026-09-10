@@ -2,10 +2,7 @@
 package visor
 
 import (
-	"compress/gzip"
-	"io"
 	"net/http"
-	"strings"
 
 	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
@@ -27,9 +24,8 @@ func execModuleSource(explicit string) (path string, ok bool) {
 }
 
 // serveExecWasm answers GET /skywire.wasm from path when set, else from the
-// embedded module. The embedded bytes are gzipped; they go out as-is with
-// Content-Encoding: gzip when the client accepts it and are inflated on the
-// fly otherwise, so the module is never held inflated in memory.
+// embedded module (execwasm.ServeGz: gzip as embedded when the client accepts
+// it, inflated on the fly otherwise).
 func serveExecWasm(w http.ResponseWriter, r *http.Request, path string) {
 	w.Header().Set("Content-Type", "application/wasm")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -40,30 +36,9 @@ func serveExecWasm(w http.ResponseWriter, r *http.Request, path string) {
 	serveExecWasmGz(w, r, execwasm.Gz(), execwasm.Stamp())
 }
 
+// serveExecWasmGz is execwasm.ServeGz; the surfaces that serve the module in
+// a role (tpviz, the wallet cipher) call it there without importing this
+// package.
 func serveExecWasmGz(w http.ResponseWriter, r *http.Request, gz []byte, stamp string) {
-	if len(gz) == 0 {
-		http.NotFound(w, r)
-		return
-	}
-	if stamp != "" {
-		etag := `"` + stamp + `"`
-		w.Header().Set("ETag", etag)
-		if r.Header.Get("If-None-Match") == etag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-	}
-	w.Header().Set("Vary", "Accept-Encoding")
-	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-		w.Header().Set("Content-Encoding", "gzip")
-		_, _ = w.Write(gz) //nolint:errcheck
-		return
-	}
-	zr, err := gzip.NewReader(strings.NewReader(string(gz)))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer zr.Close()      //nolint:errcheck
-	_, _ = io.Copy(w, zr) //nolint:errcheck
+	execwasm.ServeGz(w, r, gz, stamp)
 }
