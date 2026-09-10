@@ -264,11 +264,10 @@ func LookupGeo(ip string) *GeoData {
 	if ip == "" {
 		return nil
 	}
-	db, err := geoip.OpenEmbedded()
+	db, err := geoip.Shared()
 	if err != nil {
 		return nil
 	}
-	defer db.Close() //nolint:errcheck
 	res, err := geoip.Lookup(db, ip)
 	if err != nil {
 		return nil
