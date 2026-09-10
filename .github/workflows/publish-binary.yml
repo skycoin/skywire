@@ -93,6 +93,17 @@ jobs:
           build_arch armhf   arm     7
           build_arch 386     386     ""
           build_arch riscv64 riscv64 ""
+          # The full skywire command module for GOOS=js: the `skywire` command
+          # inside a desk terminal, which is what turns a served wasm-visor page
+          # into the desk (hv serve --exec-wasm; visor-hosted wasm_serve.exec_wasm).
+          # Too large to embed, so it ships beside the native binary and the
+          # auto-updater installs it as /opt/skywire/bin/skywire.wasm. Same
+          # toolchain as the embedded wasm_exec.js, same version stamping.
+          echo "==> building js/wasm command module"
+          GOOS=js GOARCH=wasm \
+            go build -trimpath -buildvcs=true -mod=vendor -tags "withoutsystray withoutgotop" -ldflags="${LDFLAGS}" -o skywire.wasm .
+          zstd -19 -q -f -o "dist/skywire-js-wasm.zst" skywire.wasm
+          rm -f skywire.wasm
           ( cd dist && sha256sum *.zst > SHA256SUMS )
           {
             echo "BRANCH=${BRANCH}"
@@ -123,9 +134,9 @@ jobs:
               --prerelease \
               --title "${BRANCH} latest (${VERSION})" \
               --notes "${NOTES}"
-            gh release upload "${TAG}" dist/skywire-linux-*.zst dist/SHA256SUMS --clobber
+            gh release upload "${TAG}" dist/*.zst dist/SHA256SUMS --clobber
           else
-            gh release create "${TAG}" dist/skywire-linux-*.zst dist/SHA256SUMS \
+            gh release create "${TAG}" dist/*.zst dist/SHA256SUMS \
               --target "${GITHUB_SHA}" \
               --prerelease \
               --title "${BRANCH} latest (${VERSION})" \
