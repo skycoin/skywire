@@ -293,7 +293,6 @@ func nativeDeskBootOpts(localPK string) string {
 	opts := "{\n" +
 		"  persistDB: 'skywire-desk',\n" +
 		"  wasmExecURL: '/wasm_exec.js',\n" +
-		"  deskWasmURL: '/skywire.wasm',\n" +
 		"  wasmURL: '/skywire.wasm',\n"
 	if localPK != "" {
 		// The command module is served here, so the desk runs a visor of the

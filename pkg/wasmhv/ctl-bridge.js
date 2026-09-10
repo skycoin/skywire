@@ -1,7 +1,7 @@
 // ctl-bridge.js — connects this serverless-HV tab to the ctlbridge control
 // surface (SSE /ctl/events) so a shell can inspect/drive the in-tab visor
 // (status, checkRegistered, hvApi, …) and see boot progress in /ctl/log. Served
-// by the cmd/dmsg-wasm harness and by `cli hv serve --harness`. Debug aid for
+// by `cli hv serve --harness`. Debug aid for
 // the serverless-UI harness; NOT part of the shipped standalone.
 (function () {
   // This file is served ONLY when the control surface is mounted, so its

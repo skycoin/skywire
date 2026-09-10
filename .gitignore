@@ -135,7 +135,6 @@ skysocks-client
 /hist/
 
 
-!cmd/wasm-visor/cacert.pem
 /skywire-cli
 
 
@@ -149,7 +148,6 @@ android/local.properties
 android/app/src/main/jniLibs/
 *.keystore
 *.jks
-/wasm-visor
 
 # `make install-shellcheck` drops the binary here for `make lint-shell` to find.
 /shellcheck

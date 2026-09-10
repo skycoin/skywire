@@ -311,10 +311,8 @@ jobs:
       - name: Build android payload + enforce size budget
         run: make android-mobile-check
 
-  # TinyGo lane. Several wasm binaries are ALSO built with TinyGo for the
-  # embedded/browser targets (smaller output, no crypto/tls): the dmsg IoT
-  # probe (wasip1), the tpviz/dmsg-wasm/wasm-visor browser edges (wasm), and
-  # the app-mux routing policy (wasi). The standard-Go `wasm` job above cannot
+  # TinyGo lane. The app-mux routing policy is built with TinyGo (wasi); the
+  # standard-Go `wasm` job above cannot
   # catch TinyGo-only breakage (different compiler, different std-lib subset),
   # so this job installs TinyGo and compile-checks each of them. It then runs a
   # real WASM *runtime* smoke test: rebuild app-mux.wasm from source and drive

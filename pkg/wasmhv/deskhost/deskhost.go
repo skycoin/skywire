@@ -16,8 +16,8 @@
 // core that was never booted, so it is now a subcommand of the command module:
 // desk-boot.js spawns `skywire desk-host` through the page's process layer
 // (bottle proc.js) with the same URL, the same compile cache and the same
-// argv/env contract as every other command instance. cmd/wasm-visor still
-// carries a legacy in-page role over Run until it is retired.
+// argv/env contract as every other command instance. cmd/wasm-visor is
+// retired.
 //
 // # Where the visor is
 //

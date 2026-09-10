@@ -30,7 +30,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -111,24 +110,18 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	if err != nil {
 		return fmt.Errorf("hypervisor UI assets: %w", err)
 	}
-	indexB, err := fs.ReadFile(uiFS, "index.html")
-	if err != nil {
-		return fmt.Errorf("read index.html: %w", err)
-	}
-	// wasmVer fingerprints the served BUILD (Angular index + binary version +
-	// the client JS below) so the page self-reloads on any newer deploy. The
-	// command module is not hashed here: servedVersion folds its stamp in per
-	// request, since the on-disk one is rebuilt under a running server.
+	// wasmVer fingerprints the served BUILD (binary version + the client JS
+	// below) so the page self-reloads on any newer deploy. The command module
+	// is not hashed here: servedVersion folds its stamp in per request, since
+	// the on-disk one is rebuilt under a running server.
 	vh := sha256.New()
-	vh.Write(indexB)
 	vh.Write([]byte(buildinfo.Version()))
 	// Fold the served client JS into the fingerprint too, so a rebuild that
-	// only touches hv-boot/worker/browse/autoupdate still bumps /wasm-version
-	// (and the ETag below) and the page picks up the new assets.
-	vh.Write(wasmhv.HvBootJS)
-	vh.Write(wasmhv.WorkerJS)
+	// only touches desk-boot/browse/autoupdate still bumps /wasm-version (and
+	// the ETag below) and the page picks up the new assets.
+	vh.Write(wasmhv.DeskBootJS())
+	vh.Write(wasmhv.ExecWorkerJS())
 	vh.Write(wasmhv.BrowseJS)
-	vh.Write(wasmhv.WinBoxWasmGz())
 	vh.Write(wasmhv.AutoUpdateJS)
 	vh.Write(realorigin.ServiceWorkerJS())
 	vh.Write(wasmhv.BrowseBootstrapHTML)
@@ -143,10 +136,9 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// already reports the new hash.)
 	etag := `"` + wasmVer + `"`
 
-	// Real-origin browse origin (RFC §4a/§4b): the browse iframe loads a mesh site
-	// from an isolated origin B (<pkslug>.mesh.localhost) on THIS listener (host-
-	// routed below). Compute scheme+port once so the injected client config and the
-	// bootstrap substitutions agree; B and V share this listener + TLS cert.
+	// Real-origin browse origin (RFC §4a/§4b): a mesh site loads from an isolated
+	// origin B (<pkslug>.mesh.localhost) on THIS listener (host-routed below).
+	// B and V share this listener + TLS cert.
 	browseScheme := "http"
 	if cfg.TLS {
 		browseScheme = "https"
@@ -164,22 +156,6 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	if suffix == "" {
 		suffix = ".mesh.localhost"
 	}
-	// B-origin scheme+port. B may live elsewhere than V: for the *.localhost local
-	// model B and V share THIS listener + cert, so B inherits browseScheme/bport;
-	// for a hosted suffix B is fronted by Caddy TLS on 443 (a separate process /
-	// host — see ServeBrowseOrigin), so it's plain https with no explicit port.
-	bScheme, bPort := browseScheme, bport
-	if !strings.HasSuffix(suffix, ".localhost") {
-		bScheme, bPort = "https", ""
-	}
-	// Injected so browse.js enters real-origin mode and builds <pk><suffix>[:<port>]
-	// origins for the WinBox browser iframe.
-	browseOriginJS := "window.__SKYWIRE_BROWSE_ORIGIN__={suffix:" + strconv.Quote(suffix) + ",scheme:" + strconv.Quote(bScheme) + ",port:" + strconv.Quote(bPort) + "};"
-	// The page's boot stamp is the servedVersionToken, filled per request by
-	// the root handler: the fingerprint it polls (/wasm-version) folds in the
-	// command module on disk, which changes underneath a running server.
-	index := injectWasmBoot(indexB, servedVersionToken, cfg.Harness, browseOriginJS)
-
 	browseBootstrap := bytes.ReplaceAll(wasmhv.BrowseBootstrapHTML, []byte("__APP_ORIGIN__"), []byte(browseScheme+"://"+vHostPort))
 	browseBootstrap = bytes.ReplaceAll(browseBootstrap, []byte("__SUFFIX__"), []byte(suffix))
 
@@ -224,8 +200,6 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// Go's loader for the one module. It is std-Go's wasm_exec.js because the
 	// module is a std-Go build; the loader and the module are a pair.
 	serveBytes("/wasm_exec.js", "text/javascript", wasmhv.WasmExecJS)
-	serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
-	serveBytes("/worker.js", "text/javascript", wasmhv.WorkerJS)
 	serveBytes("/browse.js", "text/javascript", wasmhv.BrowseJS)
 	// The vnet service worker: real same-origin /vnet/<port>/ URLs into the
 	// page's virtual loopback, so the nested browser renders in-page servers
@@ -242,18 +216,17 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	mux.HandleFunc("/skywire.wasm", func(w http.ResponseWriter, r *http.Request) {
 		serveExecWasm(w, r, execWasmPath)
 	})
-	// The desk — the CONVERGED page, served AT THE ROOT below: the tab as a
-	// Linux host. No SharedWorker visor; the terminal runs `skywire autoconfig`
-	// which starts the FULL binary's visor in the foreground, a second terminal
+	// The desk — the ONE page, served AT THE ROOT below: the tab as a Linux
+	// host. The page spawns no visor of its own; the terminal runs `skywire
+	// autoconfig` which starts the FULL binary's visor in the foreground, a second terminal
 	// shows the help, and once the hypervisor UI listens on the virtual
 	// loopback the nested browser opens it maximized on top. A visor the
 	// operator stopped stays stopped across reloads (desk-boot's session).
 	serveBytes("/desk-boot.js", "text/javascript", wasmhv.DeskBootJS())
 	deskPage := deskShellHTML(wasmDeskScripts(), deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort))
 	if cfg.Harness {
-		// Same rule as injectWasmBoot on the standalone page: --harness
-		// injects ctl-bridge.js (its presence IS the harness signal). On
-		// the desk it registers the tab and mirrors the foreground visor
+		// --harness injects ctl-bridge.js (its presence IS the harness
+		// signal). On the desk it registers the tab and mirrors the foreground visor
 		// instance's stderr ring to /ctl/log, so `curl /ctl/log?tab=<id>`
 		// reads the in-terminal visor's log.
 		deskPage = bytes.Replace(deskPage,
@@ -272,25 +245,6 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		w.Header().Set("Location", "./")
 		w.WriteHeader(http.StatusMovedPermanently)
 	})
-	// The window-manager module of the LEGACY page above (hv-boot.js
-	// needs globalThis.WinBox). The desk pages link winbox-go
-	// into the Go desk host and never fetch this; it goes with hv-boot.js.
-	//
-	// Same reasoning as writeWasmVariant: winbox is committed gzipped, and
-	// WinBoxWasm() inflates it (once, behind a sync.Once — so the cost here is
-	// the transfer and the proxy's recompress rather than a per-request
-	// inflate). Hand over the committed bytes when the client takes gzip.
-	mux.HandleFunc("/winbox.wasm", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/wasm")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Vary", "Accept-Encoding")
-		if gz := wasmhv.WinBoxWasmGz(); len(gz) > 0 && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			w.Header().Set("Content-Encoding", "gzip")
-			_, _ = w.Write(gz) //nolint:errcheck
-			return
-		}
-		_, _ = w.Write(wasmhv.WinBoxWasm()) //nolint:errcheck
-	})
 	serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
 	serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)
@@ -304,7 +258,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	serveBytes("/browse-sw.js", "text/javascript", realorigin.ServiceWorkerJS())
 	serveBytes("/browse-responder.js", "text/javascript", realorigin.ResponderJS())
 	serveBytes("/browse-transport.js", "text/javascript", wasmhv.BrowseTransportJS)
-	swJS := wasmhv.ServiceWorkerFor(wasmVer, []string{"./", "manifest.webmanifest", "icon-192.png", "icon-512.png", "wasm_exec.js", "hv-boot.js", "worker.js", "browse.js", "winbox.wasm"})
+	swJS := wasmhv.ServiceWorkerFor(wasmVer, []string{"./", "manifest.webmanifest", "icon-192.png", "icon-512.png", "wasm_exec.js", "browse.js", "desk-boot.js", "skywire-worker.js", "autoupdate.js"})
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript")
 		w.Header().Set("Cache-Control", "no-store")
@@ -421,20 +375,17 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache")
-			// EMBEDDED: the dashboard, never the desk. A desk inside a desk
-			// window is not what an embedder wanted, and the root is the only
-			// path that survives being framed — a page served under a
-			// /vnet/<port>/ prefix has its <base href> rewritten to that
-			// prefix, so a deeper path is normalised back to here anyway.
-			framed := r.Header.Get("Sec-Fetch-Dest") == "iframe" || r.URL.Query().Get("embed") == "1"
-			// Both pages boot with the fingerprint /wasm-version answers RIGHT
+			// The desk, framed or not. This origin serves one page: the
+			// dashboard it shows is the in-tab visor's, reached through the
+			// vnet service worker at /vnet/<port>/ — a request that never
+			// arrives here — so, unlike the visor-attached hypervisor
+			// (uiHandler), the desk's own nested browser never frames THIS
+			// root. What does frame it is an embedder of the whole surface,
+			// and the desk is the surface.
+			//
+			// The page boots with the fingerprint /wasm-version answers RIGHT
 			// NOW, so a poll compares like with like.
-			cur := servedVersion(wasmVer, cfg.ExecWasmPath)
-			if !framed {
-				_, _ = w.Write(renderServedVersion(deskPage, cur)) //nolint:errcheck
-				return
-			}
-			_, _ = w.Write(renderServedVersion(index, cur)) //nolint:errcheck
+			_, _ = w.Write(renderServedVersion(deskPage, servedVersion(wasmVer, cfg.ExecWasmPath))) //nolint:errcheck
 			return
 		}
 		fileServer.ServeHTTP(w, r)
@@ -646,49 +597,6 @@ func walletDmsgFetchShim() string {
 		`})();</script>`
 }
 
-// injectWasmBoot inserts the hv-boot.js bootstrap (+ browse/autoupdate,
-// and either the harness ctl-bridge or the PWA manifest/SW) right after
-// <head> so it runs before Angular's deferred module scripts.
-func injectWasmBoot(index []byte, wasmVer string, harness bool, browseOriginJS string) []byte {
-	s := string(index)
-	tag := "\n"
-	if browseOriginJS != "" {
-		// Set BEFORE browse.js loads so the WinBox browser picks real-origin mode.
-		tag += "<script>" + browseOriginJS + "</script>\n"
-	}
-	// The WinBox loader is this legacy page's alone now — the desk chrome is
-	// Go and links winbox-go directly — so it rides inline here rather than
-	// in the shared bundle, where every desk page would fetch /winbox.wasm
-	// for nothing. Goes with hv-boot.js when the legacy page is retired.
-	tag += "<script>" + string(wasmhv.WinBoxJS) + "</script>\n" +
-		"<script src=\"hv-boot.js\"></script>\n" +
-		"<script src=\"browse.js\"></script>\n" +
-		// realorigin's responder owns the trust boundary for embedded
-		// <id>.mesh.localhost browse frames; browse-transport.js gives it the
-		// dmsg/skynet/skysocks transport to call. Order matters: the transport
-		// configures the responder, so it loads after it.
-		"<script src=\"browse-responder.js\"></script>\n" +
-		"<script src=\"browse-transport.js\"></script>\n" +
-		"<script>window.__SKYWIRE_WASM_VERSION__=" + strconv.Quote(wasmVer) + ";</script>\n" +
-		"<script src=\"autoupdate.js\"></script>\n"
-	if harness {
-		tag += "<script src=\"ctl-bridge.js\"></script>\n"
-	} else {
-		tag += "<link rel=\"manifest\" href=\"manifest.webmanifest\">\n" +
-			"<meta name=\"theme-color\" content=\"#0e0c14\">\n" +
-			"<link rel=\"apple-touch-icon\" href=\"icon-192.png\">\n" +
-			"<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(e){console.warn('sw register failed',e)})})}</script>\n"
-	}
-	lower := strings.ToLower(s)
-	if i := strings.Index(lower, "<head"); i >= 0 {
-		if j := strings.IndexByte(s[i:], '>'); j >= 0 {
-			pos := i + j + 1
-			return []byte(s[:pos] + tag + s[pos:])
-		}
-	}
-	return []byte(tag + s)
-}
-
 // isMeshBrowseHost reports whether an HTTP Host header targets an isolated
 // real-origin browse origin B (<...><suffix>[:port]) rather than the visor
 // origin V. For the *.mesh.localhost local model browsers resolve *.localhost to
@@ -825,8 +733,7 @@ func randomHex(n int) (string, error) {
 // Assets come from the routes ServeWasm already exposes: /browse.js is the full
 // desk bundle, /skywire.wasm the ONE command module — the desk host (`skywire
 // desk-host`), the tab's visor and every command the terminal runs — and
-// /wasm_exec.js its loader. (ServeWasm does not start without that module, so
-// there is no legacy desk-host fallback here.)
+// /wasm_exec.js its loader. (ServeWasm does not start without that module.)
 //
 // helpTerminal and the docs server are OFF unless asked for, because each one
 // is a whole extra Go/wasm runtime of the full skywire binary and that memory
@@ -842,7 +749,6 @@ func randomHex(n int) (string, error) {
 func deskWasmBootOpts(helpTerminal bool, docsPort int) string {
 	return fmt.Sprintf(`{
   persistDB: 'skywire-desk',
-  deskWasmURL: '/skywire.wasm',
   wasmURL: '/skywire.wasm',
   wasmExecURL: '/wasm_exec.js',
   autostartVisor: true,

@@ -66,7 +66,7 @@ type V1 struct {
 
 	// KeyRing is a small wallet-like set of deterministically-derived keys (from
 	// the visor secret key). Currently mints standalone-hypervisor identities
-	// (cli hv gen). Optional; absent on visors that never derived one.
+	// (the since-retired cli hv gen). Optional; absent on visors that never derived one.
 	KeyRing *KeyRing `json:"keyring,omitempty"`
 
 	LogLevel             string                       `json:"log_level"`

@@ -20,7 +20,7 @@ skywire cli hv shell [command]...
 
 ```
       --boot int      seconds to wait for the shell wasm after opening the console (default 20)
-      --keep-tabs     leave other tabs on the same origin open; by default they are closed first, because the visor is one SharedWorker per origin while every tab spawns its own shell instance against it
+      --keep-tabs     leave other tabs on the same origin open; by default they are closed first, because every tab boots its own desk and visor, and leftover tabs compete for the same identity and CPU
       --load int      seconds to wait for the page to load (default 30)
       --log-all       record every console level, not just errors and warnings — a wasm module's fatal error is written at log level
       --no-console    skip opening the visor console window

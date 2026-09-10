@@ -6,7 +6,7 @@
 //
 // A worker is the right home for a wasm visor and a poor home for a shell, so
 // the split is: the page keeps the UI — the desk, the terminals, the nested
-// browser, all of cmd/wasm-visor — and this thread keeps every Go runtime that
+// browser, the desk host — and this thread keeps every Go runtime that
 // is a skywire COMMAND. The page's own jsfs stays where it is, seeded and
 // in-memory; this worker's jsfs is the one the visor writes and the one that
 // holds the IndexedDB snapshot, so the identity in /opt/skywire survives a
