@@ -54,6 +54,9 @@ host as a hypervisor. Approve it on the machine with
 `skywire cli visor hv pair` (lists pending tabs by fingerprint, then
 `hv pair <fingerprint>`), or mint a one-time code with
 `skywire cli visor hv pair --code` and type it into the tab's Pair window.
+Approval is written to the visor config and, on a package install, mirrored
+into `HYPERVISORPKS` in `/etc/skywire.conf`, so it survives the next
+`skywire autoconfig` run (every package update performs one).
 
 ## Hypervisor terminal UI
 
