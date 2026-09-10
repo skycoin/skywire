@@ -366,6 +366,10 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		w.Header().Set("Location", "./")
 		w.WriteHeader(http.StatusMovedPermanently)
 	})
+	// The window-manager module of the LEGACY page above (hv-boot.js +
+	// BrowseLauncherJS need globalThis.WinBox). The desk pages link winbox-go
+	// into the Go desk host and never fetch this; it goes with hv-boot.js.
+	//
 	// Same reasoning as writeWasmVariant: winbox is committed gzipped, and
 	// WinBoxWasm() inflates it (once, behind a sync.Once — so the cost here is
 	// the transfer and the proxy's recompress rather than a per-request
@@ -802,7 +806,12 @@ func injectWasmBoot(index []byte, wasmVer string, harness bool, browseOriginJS s
 		// Set BEFORE browse.js loads so the WinBox browser picks real-origin mode.
 		tag += "<script>" + browseOriginJS + "</script>\n"
 	}
-	tag += "<script src=\"hv-boot.js\"></script>\n" +
+	// The WinBox loader is this legacy page's alone now — the desk chrome is
+	// Go and links winbox-go directly — so it rides inline here rather than
+	// in the shared bundle, where every desk page would fetch /winbox.wasm
+	// for nothing. Goes with hv-boot.js when the legacy page is retired.
+	tag += "<script>" + string(wasmhv.WinBoxJS) + "</script>\n" +
+		"<script src=\"hv-boot.js\"></script>\n" +
 		"<script src=\"browse.js\"></script>\n" +
 		// realorigin's responder owns the trust boundary for embedded
 		// <id>.mesh.localhost browse frames; browse-transport.js gives it the
@@ -1038,8 +1047,10 @@ func browseSWAssetType(p string) string {
 // deskWasmBootOpts renders the skywireDeskBoot options object for the
 // wasm-served desk (`hv serve --exec-wasm`'s /desk): the tab as a Linux host.
 // Assets come from the routes ServeWasm already exposes: /browse.js is the full
-// desk bundle, /wasm-visor.wasm the desk host (raw), /skywire.wasm the command
-// module, /wasm_exec.js?variant=go the matching loader.
+// desk bundle, /skywire.wasm the ONE command module — the desk host (`skywire
+// desk-host`), the tab's visor and every command the terminal runs — and
+// /wasm_exec.js?variant=go its loader. (/desk exists only when that module is
+// served, so there is no legacy desk-host fallback here.)
 //
 // helpTerminal and the docs server are OFF unless asked for, because each one
 // is a whole extra Go/wasm runtime of the full skywire binary and that memory
@@ -1055,10 +1066,9 @@ func browseSWAssetType(p string) string {
 func deskWasmBootOpts(helpTerminal bool, docsPort int) string {
 	return fmt.Sprintf(`{
   persistDB: 'skywire-desk',
-  deskWasmURL: '/wasm-visor.wasm',
+  deskWasmURL: '/skywire.wasm',
   wasmURL: '/skywire.wasm',
   wasmExecURL: '/wasm_exec.js?variant=go',
-  winboxURL: '/winbox.wasm',
   autostartVisor: true,
   helpTerminal: %t,
   docsPort: %d,

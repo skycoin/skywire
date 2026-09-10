@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"syscall/js"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsgweb"
@@ -110,4 +111,16 @@ func resolveFetchHost(pkHost string) (resolved, vhost string, homeBody []byte) {
 		resolved += ":" + port
 	}
 	return resolved, "", nil
+}
+
+// jsMeshAliases exposes the resolver's alias table to the tab, so a shell in
+// another wasm instance (the desk host's `aliases` applet) can list what names
+// resolve here. It runs in the visor instance, where resolverAliases is
+// populated.
+func jsMeshAliases(js.Value, []js.Value) interface{} {
+	out := map[string]interface{}{}
+	for name, pk := range resolverAliases {
+		out[name] = pk.Hex()
+	}
+	return js.ValueOf(out)
 }

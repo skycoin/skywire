@@ -1,5 +1,5 @@
 // Command stage-playground writes the playground's embedded page assets —
-// bundle.js (the browseui desk bundle) and winbox.wasm (the window manager,
+// bundle.js (the browseui desk bundle)
 // inflated) — into the directory given as the first argument. The wasm
 // modules themselves (skywire.wasm.gz, wasm-visor.wasm.gz, wasm_exec.js) are
 // staged by the `make playground` target that runs this; together they make
@@ -32,7 +32,6 @@ func main() {
 		// starts real visors, and a Go runtime on the page main thread makes
 		// the whole desk stutter.
 		"skywire-worker.js": browseui.ExecWorkerJS,
-		"winbox.wasm":       browseui.WinBoxWasm(),
 	}
 	for name, data := range files {
 		p := filepath.Join(out, name)

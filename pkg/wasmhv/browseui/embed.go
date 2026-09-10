@@ -21,8 +21,6 @@ import (
 
 	"github.com/0magnet/bottle"
 	winboxdist "github.com/0magnet/winbox-go/dist"
-
-	"github.com/0magnet/desk"
 )
 
 // seedSkywireJS lays the skywire package tree + /etc/skywire.conf into the
@@ -97,8 +95,10 @@ func DeskBootJS() []byte { return deskBootJS }
 // native hypervisor dashboard as a single script asset. Concatenating here
 // means every consumer (pkg/visor's /browse.js handler, pkg/wasmhv's
 // single-file generator, the harness) gets the whole stack with no extra
-// script wiring; only the winbox wasm module itself is a separate fetch, from
-// WinBoxWasm below.
+// script wiring. The window manager is not in it: the desk chrome is Go
+// (0magnet/desk, linking winbox-go directly), so no page that boots the desk
+// needs globalThis.WinBox — only the legacy hv-boot page does, and it inlines
+// WinBoxJS below itself.
 //
 // Order matters: Go instances capture globalThis.fs at START, so jsfs (and
 // its skywire seeding), vnet and proc sit at the top, before anything can
@@ -114,9 +114,6 @@ var BrowseJS = func() []byte {
 		hvwsClientJS,
 		hvwsVNetJS,
 		bottle.ProcJS(),
-		winboxdist.ExecJS(),
-		winboxdist.LoaderJS(),
-		desk.PanelNoWasmJS(),
 		skywireExecJS,
 		// Directly after it: the shim that can REPLACE it with a worker-hosted
 		// one. Nothing else in the bundle cares which of the two is installed.
@@ -175,6 +172,13 @@ var ExecWorkerJS = func() []byte {
 // with native resolution instead of the transcoder.
 func VNetSWJS() []byte { return bottle.VNetSWJS() }
 
+// WinBoxJS is the window-manager loader pair (its TinyGo wasm_exec + the
+// loader that publishes globalThis.WinBox from /winbox.wasm or an inlined
+// base64 module) for the LEGACY pages that still build windows in JS:
+// `hv serve`'s hv-boot page and `hv gen`'s single file. Not part of BrowseJS —
+// the loader fetches its module eagerly, and no desk page has a use for it.
+var WinBoxJS = concat([][]byte{winboxdist.ExecJS(), winboxdist.LoaderJS()})
+
 // WinBoxWasmGz is the compressed module, for a consumer that ships it inside a
 // page (the single-file generator base64s exactly these bytes) rather than
 // serving it.
@@ -185,7 +189,8 @@ var (
 	winBoxWasm []byte
 )
 
-// WinBoxWasm is the module as served at /winbox.wasm. Inflated once on first
+// WinBoxWasm is the module as served at /winbox.wasm by the legacy `hv serve`
+// page. Inflated once on first
 // use and kept, since every page load asks for the same ~400 kB.
 func WinBoxWasm() []byte {
 	winBoxOnce.Do(func() {

@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main cmd/wasm-visor/desk_pair_js.go c4-wasm-desk
+// Package deskhost pkg/wasmhv/deskhost/desk_pair_js.go c4-wasm-desk
 //
 // Two ☰ apps for a desk a visor serves (#4484 stage 5):
 //
@@ -16,7 +16,7 @@
 // The key never leaves the tab except as text the operator copies; the desk
 // asks the CLI for it (`skywire cli config identity`), which reads the visor's
 // own config file in the exec worker's filesystem.
-package main
+package deskhost
 
 import (
 	"bytes"
