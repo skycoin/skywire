@@ -409,8 +409,8 @@ const uiAutoReloadJS = `(function(){
 // the operator configured one for the wasm-serve port; the desk on this port
 // shares it. Empty when there is none.
 func (hv *Hypervisor) execWasmPath() string {
-	if hv.c.WasmServe == nil {
-		return ""
+	if hv.c.WasmServe != nil && hv.c.WasmServe.ExecWasm != "" {
+		return hv.c.WasmServe.ExecWasm
 	}
-	return hv.c.WasmServe.ExecWasm
+	return DefaultExecWasmPath()
 }
