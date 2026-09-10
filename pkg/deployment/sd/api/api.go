@@ -234,7 +234,7 @@ func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore,
 func (a *API) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP) //nolint:staticcheck
-	r.Use(middleware.Logger)
+	r.Use(httputil.NewLogMiddleware(a.log))
 	// gzip service-discovery JSON responses on the wire (skips small bodies,
 	// honors Vary; net/http clients get transparent gzip).
 	// gzip only bodies over CompressMinBytes: single entries and health lines are

@@ -42,7 +42,7 @@ func New(log *logging.Logger, conf config.Config) *API {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP) //nolint:staticcheck
-	r.Use(middleware.Logger)
+	r.Use(httputil.NewLogMiddleware(log))
 	r.Use(middleware.Recoverer)
 	r.Use(httputil.SetLoggerMiddleware(log))
 

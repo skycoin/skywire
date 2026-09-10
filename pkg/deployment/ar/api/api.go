@@ -269,7 +269,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP) //nolint:staticcheck
-	r.Use(middleware.Logger)
+	r.Use(httputil.NewLogMiddleware(log))
 	r.Use(middleware.Recoverer)
 	// gzip JSON responses on the wire — this router is also served over
 	// dmsg, where every byte is relayed. Matches rf/ut/sd.
