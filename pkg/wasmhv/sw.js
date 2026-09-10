@@ -19,17 +19,10 @@
 // cache. Routine deploys need no manual edit here.
 
 const CACHE_VERSION = 'skywire-wasm-visor-__BUILD__';
-const PRECACHE = [
-  './',
-  'manifest.webmanifest',
-  'icon-192.png',
-  'icon-512.png',
-  'wasm_exec.js',
-  'hv-boot.js',
-  'worker.js',
-  'browse.js',
-  'winbox.wasm',
-];
+// The shell to precache is per serving context — the standalone wasm-visor
+// page and the hypervisor-served desk load different files — so the server
+// substitutes the list (a JSON array) along with the build fingerprint.
+const PRECACHE = __PRECACHE__;
 
 // Content-hashed (immutable) build assets: Angular emits main.<hash>.js,
 // styles.<hash>.css, <chunk>.<hash>.js — an 8+ hex-char segment between dots.
