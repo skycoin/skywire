@@ -67,6 +67,11 @@ type Block struct {
 	Type string
 	Name string
 	Raw  json.RawMessage
+
+	// LogLevel is the block's optional "log_level", read here so the
+	// supervisor can pick a shared level for the library packages
+	// before any service is built. Each factory still reads its own.
+	LogLevel string
 }
 
 // UnmarshalJSON captures both the typed fields ("type", optional
@@ -76,8 +81,9 @@ type Block struct {
 // object and reach the factory via Raw.
 func (b *Block) UnmarshalJSON(data []byte) error {
 	var probe struct {
-		Type string `json:"type"`
-		Name string `json:"name,omitempty"`
+		Type     string `json:"type"`
+		Name     string `json:"name,omitempty"`
+		LogLevel string `json:"log_level,omitempty"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return fmt.Errorf("services: parse block header: %w", err)
@@ -87,6 +93,7 @@ func (b *Block) UnmarshalJSON(data []byte) error {
 	}
 	b.Type = probe.Type
 	b.Name = probe.Name
+	b.LogLevel = probe.LogLevel
 	b.Raw = make(json.RawMessage, len(data))
 	copy(b.Raw, data)
 	return nil

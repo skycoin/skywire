@@ -114,8 +114,8 @@ func TestRunStartFailsWithExplicitConfig(t *testing.T) {
 }
 
 func TestRunInvalidLogLevelIgnored(t *testing.T) {
-	// A bad log level is swallowed (LevelFromString errors → no SetLevel);
-	// Run still proceeds and fails at start.
+	// A bad log level is reported at warn and falls back to info (never
+	// debug); Run still proceeds and fails at start.
 	cfg := &Config{PrimaryIP: "256.256.256.256", SecondaryIP: "256.256.256.256", LogLevel: "not-a-level"}
 	err := New(cfg, testLog()).(*service).Run(context.Background())
 	require.Error(t, err)
