@@ -469,23 +469,6 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 	finishAutoconfig(resolved)
 }
 
-// defaultSkyenvPath returns the canonical SKYENV file location for
-// the host OS. Linux uses /etc/skywire.conf (FHS); Windows uses
-// %ProgramData%\Skywire\skywire.conf (the equivalent system-wide
-// configuration path — picked up by an elevated Notepad or the
-// %ProgramData% environment variable). Anything else falls back to
-// the Linux path so darwin / freebsd builds keep their previous
-// behavior; they're not formally supported here but shouldn't regress.
-func defaultSkyenvPath() string {
-	if runtime.GOOS == "windows" {
-		if pd := os.Getenv("ProgramData"); pd != "" {
-			return filepath.Join(pd, "Skywire", "skywire.conf")
-		}
-		return `C:\ProgramData\Skywire\skywire.conf`
-	}
-	return "/etc/skywire.conf"
-}
-
 // resolveConfig reads the skyenv file and translates it to the
 // concrete answers downstream code needs. Falls back gracefully to
 // the legacy PKGENV-on-root behavior when the file is silent.
