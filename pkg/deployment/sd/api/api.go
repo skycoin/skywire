@@ -237,7 +237,9 @@ func (a *API) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.Use(middleware.Logger)
 	// gzip service-discovery JSON responses on the wire (skips small bodies,
 	// honors Vary; net/http clients get transparent gzip).
-	r.Use(middleware.Compress(5))
+	// gzip only bodies over CompressMinBytes: single entries and health lines are
+	// smaller than the flate state that would compress them (httputil.CompressMin).
+	r.Use(httputil.CompressMin(httputil.CompressMinBytes, 5))
 	if a.enableMetrics {
 		r.Use(a.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)
