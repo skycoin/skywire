@@ -132,7 +132,11 @@ type DmsgServerConfig struct {
 	// = the visor runs no server.
 	Enabled bool `json:"enabled"`
 	// LocalAddress is the TCP listen address for inbound sessions. Empty
-	// defaults to ":8081".
+	// means the server SHARES the visor's transport TCP port — the same cmux
+	// that already splits stcpr from WS gains a dmsg branch — so no second
+	// port is opened and none has to be forwarded. Set it to pin the server
+	// to an address of its own instead (the old default was ":8081", which is
+	// what a visor with no transport cmux still falls back to).
 	LocalAddress string `json:"local_address,omitempty"`
 	// PublicAddress is the externally-reachable address advertised in the
 	// server's discovery entry. Empty = don't advertise a public address

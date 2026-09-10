@@ -48,10 +48,11 @@ func (f *ClientFactory) bindTCPDemux(port int) error {
 	if err != nil {
 		return fmt.Errorf("tcp cmux (stcpr+ws) port %d: %w", port, err)
 	}
-	d := newTCPDemux(lis)
+	d := newTCPDemux(lis, f.ShareTCPWithDmsgServer)
 	f.tcpDemux = d
 	f.stcprSharedListener = d.STCPR()
 	f.wsSharedListener = d.WS()
+	f.dmsgSharedListener = d.DMSG()
 	return nil
 }
 
@@ -80,3 +81,10 @@ func (f *ClientFactory) stcprSharedListenerFor(perTypePort int) net.Listener {
 	}
 	return f.stcprSharedListener
 }
+
+// DmsgSharedListener returns the TCP cmux branch the co-resident dmsg server
+// serves on, or nil when the port is not shared with it (ShareTCPWithDmsgServer
+// was false, or no demux is bound). Its Addr is the master listener's, so a
+// server that advertises what its listener resolves to advertises the shared
+// transport port.
+func (f *ClientFactory) DmsgSharedListener() net.Listener { return f.dmsgSharedListener }

@@ -614,6 +614,11 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	//     cmux peeks: WS-upgrade → WS, else raw handshake → stcpr; existing stcpr
 	//     peers unaffected). This is what lets a browser visor reach any visor
 	//     over WS. UDP-side unification stays opt-in (it would shift sudph's port).
+	// A visor running the in-process dmsg server on its own key shares this
+	// TCP port with it by default: the server binds nothing of its own unless
+	// dmsg.server.local_address says otherwise. Decided before the bind — the
+	// cmux branch cannot be added afterwards.
+	factory.ShareTCPWithDmsgServer = dmsgServerSharesTransportPort(v.conf)
 	if v.conf.Transport != nil && v.conf.Transport.TransportPort != 0 {
 		port := v.conf.Transport.TransportPort
 		if err := factory.EnableUnifiedUDP(port); err != nil {
@@ -635,6 +640,11 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 		log.Info("stcpr + WS share the stcpr TCP port (cmux) — this visor is reachable over WebSocket")
 		v.pushCloseStack("transport.tcp_cmux", factory.CloseUnifiedTCP)
+	}
+	if lis := factory.DmsgSharedListener(); lis != nil {
+		v.dmsgSharedLis = lis
+		log.WithField("addr", lis.Addr()).
+			Info("In-process dmsg server will share the visor's transport TCP port")
 	}
 	// Shared construction (pkg/visor/visorcore) — the same seam the wasm edge
 	// uses. Serve stays in this visor's own WaitGroup-wrapped goroutine below
@@ -1390,4 +1400,17 @@ func newV6ForcedHTTPClient() *http.Client {
 		},
 	}
 	return &http.Client{Transport: tr, Timeout: 30 * time.Second}
+}
+
+// dmsgServerSharesTransportPort reports whether the in-process dmsg server
+// should serve on the visor's shared transport TCP port rather than bind its
+// own. It does when it is enabled, runs on the visor's key (a standalone
+// config_path server has its own key and its own addresses), and the operator
+// has not pinned it to an address with dmsg.server.local_address.
+func dmsgServerSharesTransportPort(conf *visorconfig.V1) bool {
+	if conf == nil || conf.Dmsg == nil || conf.Dmsg.Server == nil {
+		return false
+	}
+	s := conf.Dmsg.Server
+	return s.Enabled && s.ConfigPath == "" && s.LocalAddress == ""
 }

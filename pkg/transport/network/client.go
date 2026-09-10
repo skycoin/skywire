@@ -110,6 +110,15 @@ type ClientFactory struct {
 	// WS case in MakeClient (untagged) can read wsSharedListener directly.
 	stcprSharedListener net.Listener
 	wsSharedListener    net.Listener
+	// dmsgSharedListener is the tcpDemux branch carrying dmsg sessions, set
+	// only when ShareTCPWithDmsgServer was true at bind time.
+	dmsgSharedListener net.Listener
+	// ShareTCPWithDmsgServer asks the TCP cmux for a dmsg branch, so a visor
+	// running the in-process dmsg server on its own key serves it on the same
+	// TCP port as stcpr and WS instead of binding a second one. Set it before
+	// EnableUnifiedTCP / EnableDefaultTCPDemux; the branch is not installed
+	// afterwards, because an unconsumed cmux branch stalls its connections.
+	ShareTCPWithDmsgServer bool
 	// tcpDefaultDemux is true when the TCP cmux is the DEFAULT one bound on the
 	// stcpr port (EnableDefaultTCPDemux) rather than an explicit transport_port
 	// master. In that case stcpr always rides the cmux (the demux IS its port), so
