@@ -15,6 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 // AddMetricsHandler adds a prometheus-format Handle at '/metrics' to the provided serve mux.
@@ -90,7 +91,7 @@ func ServeHTTPMetrics(log logrus.FieldLogger, addr string) {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP) //nolint:staticcheck
-	r.Use(middleware.Logger)
+	r.Use(httputil.NewLogMiddleware(log))
 	r.Use(middleware.Recoverer)
 
 	AddMetricsHandler(r)
