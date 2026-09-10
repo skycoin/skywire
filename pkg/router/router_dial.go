@@ -1180,6 +1180,18 @@ fetchRoutesAgain:
 	fwdNum := findRouteNum(opts.EffectiveMuxRoutes(true))
 	revNum := findRouteNum(opts.EffectiveMuxRoutes(false))
 
+	// A destination this visor already holds a graph for (a hypervisor's
+	// attached visors) is routed locally first; the route finder is asked
+	// only when that yields nothing.
+	if r.conf.PreferLocalRouteTo != nil && r.conf.PreferLocalRouteTo(dst) {
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
+		if localErr == nil {
+			log.Infof("Local route from attached graph: Forward=%v, Reverse=%v", localFwd, localRev)
+			return localFwd, localRev, nil
+		}
+		log.WithError(localErr).Debug("Attached-graph local route failed; asking the route finder")
+	}
+
 	var paths map[routing.PathEdges][][]routing.Hop
 	if fwdMinHops == revMinHops {
 		// Common path: single query covers both directions. One count

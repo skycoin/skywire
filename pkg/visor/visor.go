@@ -139,10 +139,15 @@ type Visor struct {
 	// STUN client state
 	stun stunState
 
-	tpM      *transport.Manager
-	arClient addrresolver.APIClient
-	router   router.Router
-	rfClient rfclient.Client
+	tpM *transport.Manager
+
+	// localGraph is an extra transport-graph source merged into every
+	// GetAllTransports answer (see local_graph.go).
+	localGraphMu sync.RWMutex
+	localGraph   LocalGraphSource
+	arClient     addrresolver.APIClient
+	router       router.Router
+	rfClient     rfclient.Client
 
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.AppLauncher // app launcher
