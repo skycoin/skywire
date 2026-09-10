@@ -4,6 +4,7 @@
 package cxds
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -102,6 +103,60 @@ func TestStartupGCCompact_SkipsMostlyLive(t *testing.T) {
 	for _, v := range live {
 		_, rc, err := ds2.Get(cipher.SumSHA256(v), 0)
 		require.NoError(t, err, "all-live store must be untouched")
+		require.Equal(t, uint32(1), rc)
+	}
+}
+
+// A store whose dead objects were already deleted at runtime is "mostly live"
+// to the object scan, yet the file keeps every freed page: the free-page
+// criterion must still rewrite it and give the space back.
+func TestStartupGCCompact_ReclaimsFreedPages(t *testing.T) {
+	fn := filepath.Join(t.TempDir(), "cxds.db")
+	ds, err := NewDriveCXDS(fn)
+	require.NoError(t, err)
+	// Phase 1: grow the file with 600 live objects.
+	var keep, drop [][]byte
+	for i := 0; i < 600; i++ {
+		v := mkVal(byte(i%251), 8192)
+		v[0], v[1] = byte(i>>8), byte(i) // distinct objects
+		_, err := ds.Set(cipher.SumSHA256(v), v, 1)
+		require.NoError(t, err)
+		if i < 6 {
+			keep = append(keep, v)
+		} else {
+			drop = append(drop, v)
+		}
+	}
+	require.NoError(t, ds.Close())
+	// Phase 2: delete nearly all of them in a fresh session — the pages they
+	// used go to the freelist, the file keeps its high-water size.
+	ds, err = NewDriveCXDS(fn)
+	require.NoError(t, err)
+	for _, v := range drop {
+		require.NoError(t, ds.Del(cipher.SumSHA256(v)))
+	}
+	require.NoError(t, ds.Close())
+	before, err := os.Stat(fn)
+	require.NoError(t, err)
+
+	old := compactMinFileBytes
+	compactMinFileBytes = 4096
+	defer func() { compactMinFileBytes = old }()
+
+	reclaimed, err := startupGCCompact(fn)
+	require.NoError(t, err)
+	require.Greater(t, reclaimed, int64(0), "freed pages must be reclaimed by a rewrite")
+	after, err := os.Stat(fn)
+	require.NoError(t, err)
+	require.Less(t, after.Size(), before.Size()/2, "file must shrink: %d -> %d", before.Size(), after.Size())
+
+	ds2, err := NewDriveCXDS(fn)
+	require.NoError(t, err)
+	defer ds2.Close() //nolint:errcheck
+	for _, v := range keep {
+		got, rc, err := ds2.Get(cipher.SumSHA256(v), 0)
+		require.NoError(t, err)
+		require.Equal(t, v, got)
 		require.Equal(t, uint32(1), rc)
 	}
 }

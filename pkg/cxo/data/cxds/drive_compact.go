@@ -30,6 +30,13 @@ const (
 	// object volume is dead (rc==0); otherwise the store is mostly live and a
 	// rewrite would reclaim little.
 	compactMinDeadFrac = 0.40
+	// compactMinFreeFrac: also compact when at least this fraction of the FILE is
+	// not object data (bbolt free pages). The publisher deletes dead objects at runtime
+	// (cxoutils.RemoveObjects), so the object scan sees a mostly-live store,
+	// but bbolt never shrinks its file: a visor's telemetry store sat at 2.9 GB
+	// on disk (and in page cache, pulled in by this very scan) holding a few MB
+	// of live objects (2026-09-10). Only a rewrite gives that back.
+	compactMinFreeFrac = 0.50
 	// compactRescanGrowth: after a scan that decided NOT to compact, skip
 	// re-scanning until the file has grown by this factor, so a legitimately
 	// large mostly-live store is not rescanned on every start.
@@ -123,8 +130,14 @@ func startupGCCompact(fileName string) (reclaimed int64, err error) {
 		return 0, sErr
 	}
 
+	// Sparse file: the objects (live and dead) occupy well under half of it, the
+	// rest being freed pages bbolt keeps for reuse but never returns. Measured
+	// from the scan rather than the freelist, which bbolt loads lazily (it can
+	// read as empty right after open).
 	totalVol := liveVol + deadVol
-	if totalVol == 0 || float64(deadVol) < compactMinDeadFrac*float64(totalVol) {
+	sparse := float64(totalVol) < (1-compactMinFreeFrac)*float64(origSize)
+	mostlyLive := totalVol == 0 || float64(deadVol) < compactMinDeadFrac*float64(totalVol)
+	if mostlyLive && !sparse {
 		// Mostly live — remember this size so we don't rescan until it grows.
 		_ = src.Update(func(tx *bolt.Tx) error { //nolint:errcheck // best-effort meta write
 			if m := tx.Bucket(metaBucket); m != nil {
