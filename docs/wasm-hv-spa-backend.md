@@ -1,5 +1,11 @@
 # One Angular HV UI, two backends: a clean SkywireHttpBackend
 
+> **Retired (stage 4 of #4484).** The in-tab wasm backend (hv-boot.js over a
+> SharedWorker core) and the dmsg-remote viewer are gone: the Angular UI is
+> always served by a real hypervisor — the native one, or the in-tab visor's,
+> reached through the vnet service worker — so only the native path of
+> `SkywireHttpBackend` is exercised. Kept as history.
+
 ## Goal
 
 Let the **single** Angular hypervisor UI (`static/skywire-manager-src`) run unchanged

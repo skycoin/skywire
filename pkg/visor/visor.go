@@ -1266,7 +1266,7 @@ func (v *Visor) FetchAllTransportEntries(ctx context.Context) ([]*transport.Entr
 
 // HypervisorUIFS returns the embedded Angular hypervisor UI filesystem (the
 // built static/ assets). Exposed for consumers like the standalone-html
-// generator (cli hv gen) that need to read index.html + the chunk JS/CSS.
+// generator (the since-retired cli hv gen) that need to read index.html + the chunk JS/CSS.
 func HypervisorUIFS() (fs.FS, error) {
 	return fs.Sub(ui, "static")
 }

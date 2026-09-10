@@ -12,7 +12,7 @@ hard to make *robust* because the same logic exists two or three times and the
 copies drift:
 
 - **Three parallel implementations.** The native app (`cmd/apps/skychat/commands/skychat.go`,
-  ~2160 lines), the browser-tab wasm reimplementation (`cmd/wasm-visor/skychat_js.go`),
+  ~2160 lines), the browser-tab wasm reimplementation (the since-retired `cmd/wasm-visor/skychat_js.go`),
   and the visor-side RPC wrapper (`pkg/visor/group.go` + friends). The
   length-prefixed frame protocol (4-byte big-endian length, 64 KiB cap,
   `chat-msg`/`chat-ack` envelopes) is written out **three times**, each with its
@@ -72,7 +72,7 @@ pkg/skychat/
                 in-memory ring (wasm, //go:build js). Same pattern as cxds/idxdb.
 
 cmd/apps/skychat            → thin adapter: core + app-client transport + HTTP/SSE UI + bbolt store
-cmd/wasm-visor/skychat_js.go → thin adapter: SAME core + DmsgNetworker + in-memory store + JS hooks
+cmd/wasm-visor/skychat_js.go (since retired) → thin adapter: SAME core + DmsgNetworker + in-memory store + JS hooks
 pkg/visor/*group*/*pairing*  → RPC surface over the core (unchanged externally)
 ```
 

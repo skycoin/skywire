@@ -342,20 +342,16 @@ docs-install-deps: ## Install MkDocs + plugins (run once per machine)
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./build ./local
 
-build-wasm: ## Compile-check every js/wasm binary (GOOS=js GOARCH=wasm), no run — mirrors the CI wasm lane
-	@echo "compile-checking js/wasm binaries..."
-	@# The root module first: it IS the one command module every page serves
+build-wasm: ## Compile-check the js/wasm module (GOOS=js GOARCH=wasm), no run — mirrors the CI wasm lane
+	@echo "compile-checking the js/wasm module..."
+	@# The root module: it IS the one command module every page serves
 	@# (exec-wasm), built with the same tags.
 	@echo "  GOOS=js GOARCH=wasm go build -tags \"$(EXEC_WASM_TAGS)\" ."
 	@GOOS=js GOARCH=wasm go build -mod=vendor -tags "$(EXEC_WASM_TAGS)" -o /dev/null . || exit 1
-	@for p in ./cmd/dmsg-wasm ./cmd/wasm-visor ./cmd/wasm-visor-probe ./cmd/websh-probe; do \
-		echo "  GOOS=js GOARCH=wasm go build $$p"; \
-		GOOS=js GOARCH=wasm go build -mod=vendor -o /dev/null "$$p" || exit 1; \
-	done
-	@echo "all js/wasm binaries compile."
+	@echo "the js/wasm module compiles."
 
-build-wasm-tinygo: ## Compile-check every TinyGo wasm binary (-o /dev/null, no run) — mirrors the CI wasm-tinygo lane
-	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/design/tinygo-dmsg-client.md (TinyGo 0.41+)"; exit 1; }
+build-wasm-tinygo: ## Compile-check the TinyGo wasm binaries (-o /dev/null, no run) — mirrors the CI wasm-tinygo lane
+	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
 	@# TinyGo trails Go by weeks after each Go minor, and refuses to run at all
 	@# against a newer one ("requires go version 1.19 through 1.26, got go1.27").
 	@# CI installs the current Go, so this lane went red the day #4221 bumped it.
@@ -367,17 +363,9 @@ build-wasm-tinygo: ## Compile-check every TinyGo wasm binary (-o /dev/null, no r
 	@# inside the default on a CI runner but not on a slower machine building
 	@# from a cold cache, so the ceiling does not depend on whose machine runs it.
 	@echo "compile-checking TinyGo wasm binaries..."
-	@echo "  tinygo build -target wasip1 ./cmd/dmsg-tinygo-probe"
-	@GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasip1 -no-debug -opt=z -interp-timeout 15m -o /dev/null ./cmd/dmsg-tinygo-probe || exit 1
-	@# Only net/http-free binaries belong here: TinyGo 0.41 cannot compile net/http
-	@# for wasm (roundtrip_js.go references an unexported Transport.roundTrip). The
-	@# full js/wasm binaries ./cmd/dmsg-wasm and ./cmd/wasm-visor deliberately use
-	@# net/http (HTTP-over-dmsg; dmsg-wasm also needs logrus+gob reflection) and are
-	@# standard-Go-only — they are compile-checked by the `build-wasm` lane instead.
-	@for p in ./cmd/websh-probe; do \
-		echo "  tinygo build -target wasm $$p"; \
-		GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasm -no-debug -interp-timeout 15m -o /dev/null "$$p" || exit 1; \
-	done
+	@# Only net/http-free binaries belong here: TinyGo cannot compile net/http
+	@# for wasm. The one js/wasm module (the root binary) uses it and is
+	@# standard-Go-only — the `build-wasm` lane compile-checks it instead.
 	@echo "  tinygo build -target wasi (app-mux routing policy)"
 	@cd docs/examples/routing-policies/wasm/app-mux && GOTOOLCHAIN=$$(cd ../../../../.. && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o /dev/null . || exit 1
 	@echo "all TinyGo wasm binaries compile."
@@ -417,24 +405,6 @@ check-bundle-wasm: ## Fail if the committed routing-policy bundle.wasm is stale 
 		ls -l "$$tmp" "$(CURDIR)/$(BUNDLE_WASM)"; rm -f "$$tmp"; exit 1; \
 	fi
 
-tinygo-dmsg: ## Build-check the dmsg client under TinyGo (IoT target wasip1); ~2.2MB -opt=z
-	GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasip1 -no-debug -opt=z -o ./build/dmsg-tinygo.wasm ./cmd/dmsg-tinygo-probe
-	@echo "built ./build/dmsg-tinygo.wasm — the dmsg client compiles under TinyGo (see docs/design/tinygo-dmsg-client.md)"
-
-dmsg-wasm: ## Build the browser WASM dmsg client + dev harness into build/dmsg-wasm
-	mkdir -p ./build/dmsg-wasm
-	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/dmsg-wasm/dmsg.wasm ./cmd/dmsg-wasm
-	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/dmsg-wasm/
-	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
-	@echo "built ./build/dmsg-wasm — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
-
-tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~21MB) into build/dmsg-wasm
-	mkdir -p ./build/dmsg-wasm
-	GOTOOLCHAIN=$$(sh scripts/tinygo-toolchain.sh) tinygo build -target wasm -o ./build/dmsg-wasm/dmsg.wasm ./cmd/dmsg-wasm
-	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/dmsg-wasm/
-	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
-	@echo "built ./build/dmsg-wasm (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
-
 # The Go/wasm WebGL tpviz view builds no separate tpviz-gl.wasm: it is a role
 # of the one skywire command module (`skywire desk-host --role netview`,
 # pkg/wasmhv/deskhost), which pkg/tpviz serves at /tpviz-gl.wasm out of the
@@ -442,33 +412,13 @@ tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~
 # pkg/tpviz/legacy/ loads it lazily when the "WebGL (Go)" view is selected.
 
 # embed-winbox was removed: the window manager now lives in
-# github.com/0magnet/winbox-go, whose committed dist/ assets (winbox.wasm.gz +
-# wrapped wasm_exec + loader) are vendored here like any module. To update it:
-# `make dist` in winbox-go, push, then
+# github.com/0magnet/winbox-go, which the Go desk host links directly. To
+# update it: push winbox-go, then
 # `go get github.com/0magnet/winbox-go@main && go mod vendor` here.
 # embed-wallet was removed: the wallet is now served straight from the VENDORED
 # skycoin module's own embedded dist (skycoin-web/src/gui.DistFS, via
 # visor.WalletUIFS) — a skycoin vendor bump IS the wallet update; there is no
 # copied pkg/visor/static/wallet tree to sync (or forget to sync) anymore.
-
-
-dmsg-wasm-hv: ## Build the browser hypervisor-over-dmsg bundle (Service Worker proxy) into build/dmsg-wasm-hv
-	mkdir -p ./build/dmsg-wasm-hv
-	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/dmsg-wasm-hv/dmsg.wasm ./cmd/dmsg-wasm
-	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/dmsg-wasm-hv/
-	cp ./cmd/dmsg-wasm/sw.js ./cmd/dmsg-wasm/hv.html ./build/dmsg-wasm-hv/
-	@echo "built ./build/dmsg-wasm-hv — serve over http (cd build/dmsg-wasm-hv && python -m http.server 8080) and open http://localhost:8080/hv.html"
-
-dmsg-wasm-inline: dmsg-wasm ## Emit a single self-contained dmsg-client.html (wasm_exec.js + base64 wasm inlined, no static host needed)
-	@cd ./build/dmsg-wasm && { \
-	  printf '<!DOCTYPE html><html><head><meta charset="utf-8"><title>skywire dmsg</title></head><body><script>'; \
-	  cat wasm_exec.js; \
-	  printf '</script><script>const _b="'; base64 -w0 dmsg.wasm; printf '";'; \
-	  printf 'const _go=new Go();const _u8=Uint8Array.from(atob(_b),c=>c.charCodeAt(0));'; \
-	  printf 'WebAssembly.instantiate(_u8,_go.importObject).then(r=>{_go.run(r.instance);console.log("skywireDmsg ready");});'; \
-	  printf '</script></body></html>'; \
-	} > dmsg-client.html
-	@echo "built ./build/dmsg-wasm/dmsg-client.html (single self-contained file, base64-inlined wasm)"
 
 tpviz-ui: ## Build transport visualizer TypeScript UI into pkg/tpviz/legacy for embedding
 	cd ./pkg/tpviz/ui && npm install && npm run build

@@ -3,9 +3,9 @@
 // transports.
 //
 // The browser is NO LONGER a separate wasm module. It is compiled into the
-// wasm-visor binary and exposed as globalThis.skywireBrowser.open(el) by that
-// binary's DOM-side instance (the same one that carries the terminal —
-// cmd/wasm-visor/browser_js.go). So this launcher does not fetch or instantiate
+// skywire module and exposed as globalThis.skywireBrowser.open(el) by the
+// desk host instance (the same one that carries the terminal —
+// pkg/wasmhv/deskhost/browser_js.go). So this launcher does not fetch or instantiate
 // anything: it opens a window and calls skywireBrowser.open, and the browser
 // runs in the already-loaded instance's Go runtime. The browser's chrome, page
 // transcoding and navigation are Go/syscall/js; only the network is delegated

@@ -1,5 +1,10 @@
 # Visor-core convergence: one assembly, two shells
 
+> **Status (stage 4 of #4484):** resolved by making the root binary build for
+> `GOOS=js` — the tab runs `pkg/visor` itself (`skywire autoconfig` in the desk
+> terminal), so there is no second assembly to converge. `cmd/wasm-visor` is
+> retired. Kept as history.
+
 ## Problem
 
 There are two implementations of "assemble a skywire visor from its subsystems":

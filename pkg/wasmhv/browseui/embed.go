@@ -1,26 +1,20 @@
 // Package browseui pkg/wasmhv/browseui/embed.go c3-vis-wasm
-// Assembles the mini-desktop bundle from its promoted homes — the OS layer
-// (github.com/0magnet/bottle: jsfs + vnet + proc) and the window manager
-// (github.com/0magnet/winbox-go/dist: module + loader glue) — plus the
-// skywire-specific pieces: seed-skywire.js (the package-install filesystem
-// layout), skywire-exec.js (per-command execution of the skywire CLI wasm),
-// and gobrowser-loader.js (the launcher for the netscrape Go browser, which is
-// compiled into the wasm-visor binary as globalThis.skywireBrowser).
-// A dependency-free-in-skywire leaf package, so BOTH the wasm-visor
-// (pkg/wasmhv) and the native hypervisor UI (pkg/visor) can use it without an
-// import cycle (pkg/wasmhv's gob-mirror test imports pkg/visor).
+// Assembles the desk bundle from its promoted home — the OS layer
+// (github.com/0magnet/bottle: jsfs + vnet + proc) — plus the skywire-specific
+// pieces: seed-skywire.js (the package-install filesystem layout),
+// skywire-exec.js (per-command execution of the skywire CLI wasm), and
+// gobrowser-loader.js (the launcher for the netscrape Go browser, which is
+// compiled into the one skywire module as globalThis.skywireBrowser). The
+// window manager is not here: the desk chrome is Go (0magnet/desk, linking
+// winbox-go directly). A dependency-free-in-skywire leaf package, so BOTH
+// pkg/wasmhv and the native hypervisor UI (pkg/visor) can use it without an
+// import cycle.
 package browseui
 
 import (
-	"bytes"
-	"compress/gzip"
-	"io"
-	"sync"
-
 	_ "embed"
 
 	"github.com/0magnet/bottle"
-	winboxdist "github.com/0magnet/winbox-go/dist"
 )
 
 // seedSkywireJS lays the skywire package tree + /etc/skywire.conf into the
@@ -55,8 +49,8 @@ var execWorkerJS []byte
 
 // goBrowserLoaderJS defines globalThis.SkywireGoBrowser.open() — the launcher
 // for the netscrape Go/wasm browser (github.com/0magnet/netscrape). The browser
-// is NOT a separate module any more: it is compiled into the wasm-visor binary
-// and exposed as globalThis.skywireBrowser.open (cmd/wasm-visor/browser_js.go),
+// is NOT a separate module: it is compiled into the one skywire module and
+// exposed as globalThis.skywireBrowser.open (pkg/wasmhv/deskhost/browser_js.go),
 // so this launcher just opens a window and calls that — no second Go runtime.
 //
 //go:embed gobrowser-loader.js
@@ -90,15 +84,13 @@ var deskBootJS []byte
 // DeskBootJS returns desk-boot.js.
 func DeskBootJS() []byte { return deskBootJS }
 
-// BrowseJS is the full mini-desktop bundle — OS layer, window manager loader,
-// browser engine, skywire glue — injected into the wasm-visor page and the
-// native hypervisor dashboard as a single script asset. Concatenating here
-// means every consumer (pkg/visor's /browse.js handler, pkg/wasmhv's
-// single-file generator, the harness) gets the whole stack with no extra
-// script wiring. The window manager is not in it: the desk chrome is Go
-// (0magnet/desk, linking winbox-go directly), so no page that boots the desk
-// needs globalThis.WinBox — only the legacy hv-boot page does, and it inlines
-// WinBoxJS below itself.
+// BrowseJS is the full desk bundle — OS layer, host-visor bridge, exec glue,
+// Go-browser launcher — served to every desk page (`hv serve`, the native
+// hypervisor, the docs playground) as a single script asset. Concatenating
+// here means every consumer gets the whole stack with no extra script wiring.
+// The window manager is not in it: the desk chrome is Go (0magnet/desk,
+// linking winbox-go directly), so no page that boots the desk needs
+// globalThis.WinBox.
 //
 // Order matters: Go instances capture globalThis.fs at START, so jsfs (and
 // its skywire seeding), vnet and proc sit at the top, before anything can
@@ -171,39 +163,3 @@ var ExecWorkerJS = func() []byte {
 // table, and the nested browser loads in-page servers (the hypervisor UI)
 // with native resolution instead of the transcoder.
 func VNetSWJS() []byte { return bottle.VNetSWJS() }
-
-// WinBoxJS is the window-manager loader pair (its TinyGo wasm_exec + the
-// loader that publishes globalThis.WinBox from /winbox.wasm or an inlined
-// base64 module) for the LEGACY pages that still build windows in JS:
-// `hv serve`'s hv-boot page and `hv gen`'s single file. Not part of BrowseJS —
-// the loader fetches its module eagerly, and no desk page has a use for it.
-var WinBoxJS = concat([][]byte{winboxdist.ExecJS(), winboxdist.LoaderJS()})
-
-// WinBoxWasmGz is the compressed module, for a consumer that ships it inside a
-// page (the single-file generator base64s exactly these bytes) rather than
-// serving it.
-func WinBoxWasmGz() []byte { return winboxdist.WasmGz() }
-
-var (
-	winBoxOnce sync.Once
-	winBoxWasm []byte
-)
-
-// WinBoxWasm is the module as served at /winbox.wasm by the legacy `hv serve`
-// page. Inflated once on first
-// use and kept, since every page load asks for the same ~400 kB.
-func WinBoxWasm() []byte {
-	winBoxOnce.Do(func() {
-		zr, err := gzip.NewReader(bytes.NewReader(winboxdist.WasmGz()))
-		if err != nil {
-			return
-		}
-		defer zr.Close() //nolint:errcheck
-		b, err := io.ReadAll(zr)
-		if err != nil {
-			return
-		}
-		winBoxWasm = b
-	})
-	return winBoxWasm
-}

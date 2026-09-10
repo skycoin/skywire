@@ -78,7 +78,7 @@ func TestNativeDeskServing(t *testing.T) {
 		// module, the dashboard tab on this origin's own UI, no help terminal
 		// and no docs server. With a local PK the tab's visor attaches to this
 		// hypervisor (TestNativeDeskAttachedVisor pins that wiring).
-		for _, want := range []string{"deskWasmURL: '/skywire.wasm'", "wasmURL: '/skywire.wasm'", "autostartVisor: true", "helpTerminal: false", "docsPort: 0", "hvWindow: true"} {
+		for _, want := range []string{"wasmURL: '/skywire.wasm'", "autostartVisor: true", "helpTerminal: false", "docsPort: 0", "hvWindow: true"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("page lacks %s", want)
 			}
@@ -193,9 +193,9 @@ func TestNativeDeskServing(t *testing.T) {
 		}
 	})
 
-	t.Run("the SharedWorker boot path is never exposed on the hypervisor port", func(t *testing.T) {
-		// hv-boot.js and worker.js ARE the legacy boot path (worker.js hosts a
-		// visor off-thread; hv-boot.js spawns it) and are never served here.
+	t.Run("the retired boot path is never exposed on the hypervisor port", func(t *testing.T) {
+		// hv-boot.js and worker.js were the retired SharedWorker boot path;
+		// nothing serves them any more, and nothing may bring them back.
 		// skywire.wasm is served exactly when there is a command module.
 		for _, p := range []string{"/hv-boot.js", "/worker.js"} {
 			if w := get(p); w.Code != http.StatusNotFound {
@@ -233,7 +233,6 @@ func TestNativeDeskServing(t *testing.T) {
 func TestDeskShellHTMLWasmMode(t *testing.T) {
 	page := string(deskShellHTML(wasmDeskScripts(), deskWasmBootOpts(false, 0)))
 	for _, want := range []string{
-		"deskWasmURL: '/skywire.wasm'",
 		"wasmURL: '/skywire.wasm'",
 		"autostartVisor: true",
 		"skywireDeskBoot(",
@@ -355,8 +354,8 @@ func TestNativeDeskAttachedVisor(t *testing.T) {
 		if w := get("/skywire-worker.js"); w.Code != http.StatusOK {
 			t.Errorf("GET /skywire-worker.js → %d, want 200", w.Code)
 		}
-		// The off-thread boot path stays absent: the attached visor runs in
-		// the desk's own terminal, not in a worker the page spawns.
+		// The retired SharedWorker boot path stays absent: the attached visor
+		// runs in the desk's own terminal, not in a worker the page spawns.
 		for _, p := range []string{"/hv-boot.js", "/worker.js"} {
 			if w := get(p); w.Code != http.StatusNotFound {
 				t.Errorf("GET %s → %d, want 404", p, w.Code)
@@ -373,8 +372,7 @@ func TestNativeDeskAttachedVisor(t *testing.T) {
 		for _, want := range []string{
 			"autostartVisor: true",
 			// ONE module: the desk host is `skywire desk-host` out of the command
-			// module, not a wasm-visor.wasm of its own.
-			"deskWasmURL: '/skywire.wasm'",
+			// module, not a blob of its own.
 			"wasmURL: '/skywire.wasm'",
 			"execWorkerURL: '/skywire-worker.js'",
 			"attach: { pk: '" + pk.Hex() + "', path: '/tp/ws' }",

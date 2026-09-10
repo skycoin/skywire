@@ -13,7 +13,7 @@ effectively unusable through a browser-configured SOCKS5 proxy.
 Separately, we now have **two-and-a-half implementations of the same thing** — dial
 a PK over skynet with some routing policy, then carry bytes:
 
-- **skysocks-client-lite** (`cmd/wasm-visor/skysocks_js.go`) — clearnet egress.
+- **skysocks-client-lite** (the since-retired `cmd/wasm-visor/skysocks_js.go`) — clearnet egress.
 - **the resolving proxy** (native `pkg/skynetweb` + wasm `fetchDmsg`) — skynet/dmsg sites.
 - **skychat** (`skynet:1` networker) — messages, which also pick a route.
 

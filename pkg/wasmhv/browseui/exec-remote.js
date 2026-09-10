@@ -10,14 +10,14 @@
 // runtime.nanotime1, the scheduler looking for work, finding none, and reading
 // the clock through a JS crossing. Nothing in skywire can be optimized to fix
 // that: the cost is the runtime's, and the only cure is to put it on a thread
-// that is not drawing the UI. hv-boot.js has refused to boot a visor in-page
-// for exactly this reason since the legacy page existed; the desk regressed the
-// property and this restores it.
+// that is not drawing the UI. The retired legacy page refused to boot a visor
+// in-page for exactly this reason; the desk regressed the property and this
+// restores it.
 //
 // WHAT. install() starts ONE dedicated Worker (exec-worker.js, bundled with
 // jsfs + vnet + proc + skywire-exec) and REPLACES globalThis.skywireExec with a
 // same-contract shim that runs each command over there. Nothing above it
-// changes: cmd/wasm-visor's `skywire` applet still calls
+// changes: the desk host's shell still calls
 // skywireExec(args, hooks) and still gets hooks.instance({interrupt})
 // synchronously and a Promise<exitCode> back.
 //

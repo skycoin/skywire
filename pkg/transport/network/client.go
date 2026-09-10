@@ -167,9 +167,9 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 		return wc, nil
 	case types.WEBRTC:
 		// Capability probe, not a build tag: the same js/wasm binary HAS a peer
-		// connection on a page main thread (and through worker.js's __skywireRTC
-		// bridge in the hypervisor's SharedWorker) but has none in a plain Web
-		// Worker such as the desk's exec worker. Refusing the client there keeps
+		// connection on a page main thread (or through a host-installed
+		// __skywireRTC bridge) but has none in a plain Web Worker such as the
+		// desk's exec worker. Refusing the client there keeps
 		// WEBRTC out of tm.netClients, so IsKnownNetwork is false and
 		// public_autoconnect never queues dials that can only fail — instead of
 		// one "RTCPeerConnection unavailable in this runtime" per peer per cycle.

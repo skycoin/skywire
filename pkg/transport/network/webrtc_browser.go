@@ -5,16 +5,16 @@
 // Browser WebRTC carrier: dial/accept a direct DataChannel via the browser-native
 // RTCPeerConnection (syscall/js), signaling over the same dmsg-backed signalConn
 // the native pion carrier uses — so a browser visor and a native pion visor
-// interoperate (identical wire format). This ports the proven cmd/dmsg-wasm
-// webrtc_js.go logic to the network.Client interface.
+// interoperate (identical wire format). This ports the proven (since-retired)
+// cmd/dmsg-wasm webrtc_js.go logic to the network.Client interface.
 //
 // Used for ALL js/wasm builds (standard Go and TinyGo): pion's js backend looks up
 // `window.RTCPeerConnection`, which is absent in a Web Worker (no `window`), so the
-// wasm-visor — whose Go runtime runs in a worker — can't use pion. This hand-rolled
+// wasm visor — whose Go runtime runs in a worker — can't use pion. This hand-rolled
 // carrier instead goes through newPeerConnection, which prefers a main-thread
-// RTCPeerConnection PROXY (globalThis.__skywireRTC, installed by pkg/wasmhv
-// worker.js and driven by hv-boot.js) when present, and falls back to a direct
-// RTCPeerConnection on the page main thread otherwise.
+// RTCPeerConnection PROXY (globalThis.__skywireRTC, when the host page installs
+// one) when present, and falls back to a direct RTCPeerConnection on the page
+// main thread otherwise.
 //
 // Start + the dmsg signaling listener are shared (untagged, webrtc.go); this file
 // supplies the build-tagged webrtcDial (offerer) + webrtcAccept (answerer).
