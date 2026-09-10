@@ -50,6 +50,9 @@ const reconnectQuietThreshold = 60 * time.Second
 // tick. Cheap — one map read + one timestamp comparison per tick.
 const reconnectWatchdogTick = 30 * time.Second
 
+// reconnectQuietMax caps the backed-off quiet threshold (see quietStreak).
+const reconnectQuietMax = 15 * time.Minute
+
 // reconnectConnectTimeout bounds each watchdog-triggered Connect
 // attempt. Matches the deadline pairing.Manager.PairAdd uses for
 // the initial Connect; we don't want a hung dial to wedge the
@@ -177,6 +180,14 @@ type Subscriber struct {
 	// (incremented BEFORE the Connect call regardless of outcome).
 	// Surfaced only for tests; treat as opaque metric otherwise.
 	reconnectAttempts atomic.Int64
+	// quietStreak counts consecutive watchdog reconnects that were triggered by
+	// silence alone and were not followed by a Root. Each one doubles the quiet
+	// threshold up to reconnectQuietMax, so a feed that is simply idle (an empty
+	// pairing feed, a registration feed with nothing new) is re-dialed every
+	// ~15 min instead of every ~90 s by every subscriber on the network; a
+	// stalled connection is still healed within the base threshold the first
+	// time. Reset by handleRootFilled.
+	quietStreak atomic.Int64
 
 	// cleanupNudge / cleanupStop / cleanupDone drive the CXDS sweep
 	// goroutine (runCleanupLoop). Non-nil only when this Subscriber owns
@@ -509,7 +520,7 @@ func (s *Subscriber) runReconnectWatchdogWith(tickEvery, quietThreshold time.Dur
 				continue
 			}
 			quiet = time.Since(time.Unix(0, last))
-			if quiet < quietThreshold {
+			if quiet < quietThresholdFor(quietThreshold, s.quietStreak.Load()) {
 				continue
 			}
 		}
@@ -527,6 +538,9 @@ func (s *Subscriber) runReconnectWatchdogWith(tickEvery, quietThreshold time.Dur
 		// a Root) but here we want a non-blocking refresh — the next
 		// tick will catch a still-quiet feed.
 		s.reconnectAttempts.Add(1)
+		if !kicked {
+			s.quietStreak.Add(1)
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), reconnectConnectTimeout)
 		var (
 			err    error
@@ -847,6 +861,7 @@ func (s *Subscriber) handleRootFilled(r *registry.Root) {
 	// A successful fill clears the fill-break backoff so the next transient
 	// break gets a fast kick again.
 	s.fillBreakStreak.Store(0)
+	s.quietStreak.Store(0)
 	s.lastFillBreakKickNs.Store(0)
 	// Signal any ConnectAndWaitForRoot caller blocked on this
 	// subscriber that a Root was received and the fill walk
@@ -1221,4 +1236,18 @@ func bytesEqual(a, b []byte) bool {
 		}
 	}
 	return true
+}
+
+// quietThresholdFor is the silence the watchdog tolerates after streak
+// consecutive silence-only reconnects: base, 2×base, 4×base … capped at
+// reconnectQuietMax.
+func quietThresholdFor(base time.Duration, streak int64) time.Duration {
+	d := base
+	for i := int64(0); i < streak && d < reconnectQuietMax; i++ {
+		d *= 2
+	}
+	if d > reconnectQuietMax {
+		return reconnectQuietMax
+	}
+	return d
 }
