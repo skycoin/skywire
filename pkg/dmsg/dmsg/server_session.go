@@ -68,7 +68,7 @@ func (ss *ServerSession) Serve() {
 			sStr, err := ss.sm.smux.AcceptStream()
 			if err != nil {
 				if err == io.EOF || err == smux.ErrInvalidProtocol || ss.sm.smux.IsClosed() {
-					ss.log.WithError(err).Info("Stopping session...")
+					ss.log.WithError(err).Debug("Stopping session...")
 					return
 				}
 				ss.log.WithError(err).Warn("Failed to accept smux stream, continuing...")
@@ -104,7 +104,7 @@ func (ss *ServerSession) Serve() {
 		for {
 			qStr, err := ss.sm.quic.AcceptStream(context.Background())
 			if err != nil {
-				ss.log.WithError(err).Info("Stopping session...")
+				ss.log.WithError(err).Debug("Stopping session...")
 				return
 			}
 			log := ss.log.WithField("quic_id", qStr.quicStreamID())
@@ -141,7 +141,7 @@ func (ss *ServerSession) Serve() {
 				// it can arrive before yamux.IsClosed() flips — so the old narrow
 				// check spun this loop forever ("Failed to accept yamux stream,
 				// continuing"). Stop the session on any accept error.
-				ss.log.WithError(err).Info("Stopping session...")
+				ss.log.WithError(err).Debug("Stopping session...")
 				return
 			}
 
