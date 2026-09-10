@@ -102,7 +102,7 @@ func New(s store.Store, logger *logging.Logger, urls ServicesURLs, config Networ
 	r.Use(
 		middleware.RequestID,
 		middleware.RealIP, //nolint:staticcheck
-		middleware.Logger,
+		httputil.NewLogMiddleware(logger),
 		middleware.Recoverer,
 		// gzip JSON responses on the wire. Matches rf/ut/sd.
 		httputil.CompressMin(httputil.CompressMinBytes, 5),
