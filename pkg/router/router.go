@@ -124,11 +124,16 @@ type Config struct {
 	SecKey           cipher.SecKey
 	TransportManager *transport.Manager
 	RouteFinder      rfclient.Client
-	RouteGroupDialer RouteGroupDialer
-	SetupNodes       []cipher.PubKey
-	RulesGCInterval  time.Duration
-	MinHops          uint16
-	MaxHops          uint16
+	// PreferLocalRouteTo, when set and true for dst, tries the local route
+	// calculation (this visor's transports plus the transport-discovery
+	// snapshot, which includes any local graph source) before the route
+	// finder is asked. A hypervisor sets it for its attached visors.
+	PreferLocalRouteTo func(dst cipher.PubKey) bool
+	RouteGroupDialer   RouteGroupDialer
+	SetupNodes         []cipher.PubKey
+	RulesGCInterval    time.Duration
+	MinHops            uint16
+	MaxHops            uint16
 	// ExcludeTransportTypes hard-excludes routes traversing any of these transport
 	// types from the candidate set (see visorconfig.Routing.RouteExcludeTransportTypes).
 	// Empty = nothing excluded. Lowercased type names.

@@ -49,7 +49,7 @@ type cxoAwareTPD struct {
 // of re-tearing-down between dials. JSON unmarshal of the snapshot
 // is the same code the HTTP path runs; cost is negligible compared
 // to a DMSG-HTTP round-trip.
-func (c *cxoAwareTPD) GetAllTransports(ctx context.Context) ([]*transport.Entry, error) {
+func (c *cxoAwareTPD) getAllTransportsBase(ctx context.Context) ([]*transport.Entry, error) {
 	if c.v != nil {
 		if mgr := c.v.CXOSubMgr(); mgr != nil {
 			mgr.AcquireFor(TabCLITransports)
@@ -84,7 +84,7 @@ func (c *cxoAwareTPD) GetAllTransports(ctx context.Context) ([]*transport.Entry,
 // CXO sync cadence instead of an independent wall-clock TTL. ok=false
 // (feed not yet primed / CXO unavailable) tells the caller to keep its
 // TTL fallback. Copies no body — a cheap version probe.
-func (c *cxoAwareTPD) AllTransportsSyncedAt() (time.Time, bool) {
+func (c *cxoAwareTPD) allTransportsSyncedAtCXO() (time.Time, bool) {
 	if c.v == nil {
 		return time.Time{}, false
 	}
@@ -103,4 +103,30 @@ func wrapDiscoveryClientWithCXO(dc transport.DiscoveryClient, v *Visor) transpor
 		return dc
 	}
 	return &cxoAwareTPD{DiscoveryClient: dc, v: v}
+}
+
+// GetAllTransports is the CXO-or-HTTP network view (getAllTransportsBase)
+// plus the visor's local graph source, deduplicated by transport ID with the
+// network view preferred. The merge is what lets route calculation and the
+// router's local BFS see a hypervisor's attached visors without a TPD query.
+func (c *cxoAwareTPD) GetAllTransports(ctx context.Context) ([]*transport.Entry, error) {
+	entries, err := c.getAllTransportsBase(ctx)
+	if err != nil {
+		return entries, err
+	}
+	local, _ := c.v.localGraphEntries()
+	return mergeTransportEntries(entries, local), nil
+}
+
+// AllTransportsSyncedAt is the CXO sync time with the local graph's
+// version folded in: the later of the two, so a change on either side
+// advances it. Only reported when the CXO side is primed — without that the
+// TTL fallback must keep refetching the network view.
+func (c *cxoAwareTPD) AllTransportsSyncedAt() (time.Time, bool) {
+	ts, ok := c.allTransportsSyncedAtCXO()
+	if !ok {
+		return time.Time{}, false
+	}
+	_, localAt := c.v.localGraphEntries()
+	return laterTime(ts, localAt), true
 }
