@@ -105,7 +105,7 @@ func New(s store.Store, logger *logging.Logger, urls ServicesURLs, config Networ
 		middleware.Logger,
 		middleware.Recoverer,
 		// gzip JSON responses on the wire. Matches rf/ut/sd.
-		middleware.Compress(5),
+		httputil.CompressMin(httputil.CompressMinBytes, 5),
 		httputil.SetLoggerMiddleware(logger),
 	)
 	r.Get("/status", api.getStatus)

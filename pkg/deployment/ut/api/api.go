@@ -118,7 +118,9 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore, 
 	// constantly by the reward system + CLIs; it compresses ~80-90%. Clients
 	// using net/http get transparent gzip (Accept-Encoding auto-added +
 	// decoded); the middleware skips small bodies and honors Vary.
-	r.Use(middleware.Compress(5))
+	// gzip only bodies over CompressMinBytes: single entries and health lines are
+	// smaller than the flate state that would compress them (httputil.CompressMin).
+	r.Use(httputil.CompressMin(httputil.CompressMinBytes, 5))
 	if enableMetrics {
 		r.Use(api.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)
