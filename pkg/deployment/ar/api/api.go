@@ -273,7 +273,10 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Use(middleware.Recoverer)
 	// gzip JSON responses on the wire — this router is also served over
 	// dmsg, where every byte is relayed. Matches rf/ut/sd.
-	r.Use(middleware.Compress(5))
+	// No blanket response compression: the per-visor resolve and bind answers
+	// are under 100 bytes, and chi's Compress kept ~130 pooled flate writers
+	// (~110 MB) live under a 256 MiB GOMEMLIMIT — the AR spent two thirds of
+	// its CPU in GC (2026-09-10). Only the bulk /transports listing is worth it.
 	if enableMetrics {
 		r.Use(api.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)
@@ -291,7 +294,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	})
 
 	r.Get("/health", api.health)
-	r.Get("/transports", api.transports)
+	r.With(middleware.Compress(5)).Get("/transports", api.transports)
 	r.Delete("/deregister/{network}", api.deregister)
 
 	nonceHandler := &httpauth.NonceHandler{Store: nonceStore}
@@ -418,7 +421,7 @@ func (a *API) bindQUIC(w http.ResponseWriter, r *http.Request) {
 // additionally mirrors to the secondary (v6) AR.
 func (a *API) bindForType(w http.ResponseWriter, r *http.Request, tpType types.Type) {
 	remoteAddr := httpauth.GetRemoteAddr(r)
-	a.logger(r).Infof("New POST /bind/%s request from %v", tpType, remoteAddr)
+	a.logger(r).Debugf("New POST /bind/%s request from %v", tpType, remoteAddr)
 
 	ctx := r.Context()
 
@@ -515,7 +518,7 @@ func (a *API) bindForType(w http.ResponseWriter, r *http.Request, tpType types.T
 func (a *API) delBind(w http.ResponseWriter, r *http.Request) {
 	remoteAddr := httpauth.GetRemoteAddr(r)
 
-	a.logger(r).Infof("New DELETE /bind/stcpr request from %v", remoteAddr)
+	a.logger(r).Debugf("New DELETE /bind/stcpr request from %v", remoteAddr)
 
 	ctx := r.Context()
 
@@ -556,11 +559,11 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 
 	remoteAddr := httpauth.GetRemoteAddr(r)
 
-	a.logger(r).Infof("New /resolve request from %v", remoteAddr)
+	a.logger(r).Debugf("New /resolve request from %v", remoteAddr)
 
 	tpType := chi.URLParam(r, "type")
 	rawReceiverPK := chi.URLParam(r, "pk")
-	a.logger(r).Infof("New /resolve request of type %v from %v", tpType, remoteAddr)
+	a.logger(r).Debugf("New /resolve request of type %v from %v", tpType, remoteAddr)
 
 	ctx := r.Context()
 
@@ -594,15 +597,15 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sameIP(receiverVisorData.RemoteAddr, remoteAddr) {
-		a.logger(r).Infof("Visors have the same remote address: %v, %v", receiverVisorData.RemoteAddr, remoteAddr)
+		a.logger(r).Debugf("Visors have the same remote address: %v, %v", receiverVisorData.RemoteAddr, remoteAddr)
 		receiverVisorData.IsLocal = true
 	} else {
-		a.logger(r).Infof("Visors have different remote addresses: %v, %v", receiverVisorData.RemoteAddr, remoteAddr)
+		a.logger(r).Debugf("Visors have different remote addresses: %v, %v", receiverVisorData.RemoteAddr, remoteAddr)
 	}
 
 	// Sender gets the receiver's data and dails to it.
 	a.writeJSON(w, r, http.StatusOK, receiverVisorData)
-	a.logger(r).Infof("Resolved %v to %v (%v)", receiverPK, receiverVisorData, tpType)
+	a.logger(r).Debugf("Resolved %v to %v (%v)", receiverPK, receiverVisorData, tpType)
 
 	if types.Type(tpType) == types.SUDPH {
 
@@ -636,7 +639,7 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		a.logger(r).Infof("Asked %v to dial %v (%v)", receiverPK, senderPK, tpType)
+		a.logger(r).Debugf("Asked %v to dial %v (%v)", receiverPK, senderPK, tpType)
 	}
 }
 
@@ -768,7 +771,7 @@ func (a *API) askToDialUDP(dialerPK, dialeePK cipher.PubKey, r *http.Request, di
 		return ErrNotConnected
 	}
 
-	a.logger(r).Infof("Sending %v@%v to %v", dialeePK, dialeeVisorData.RemoteAddr, dialerPK)
+	a.logger(r).Debugf("Sending %v@%v to %v", dialeePK, dialeeVisorData.RemoteAddr, dialerPK)
 
 	remote := addrresolver.RemoteVisor{
 		PK:   dialeePK,
