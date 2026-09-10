@@ -267,6 +267,19 @@ func (a *API) log(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
 }
 
+// logServerRegistration emits the dmsg-server registration line. reason names
+// what made this registration worth a line, so a grep can separate a restart
+// from a key collision without diffing sequences by eye.
+func (a *API) logServerRegistration(r *http.Request, entry *disc.Entry, prevSeq uint64, reason string) {
+	a.log(r).WithField("server_pk", entry.Static).
+		WithField("address", entry.Server.Address).
+		WithField("sequence", entry.Sequence).
+		WithField("prev_sequence", prevSeq).
+		WithField("src", r.RemoteAddr).
+		WithField("reason", reason).
+		Info("dmsg-server entry registration")
+}
+
 // RunBackgroundTasks is goroutine which runs in background periodic tasks of dmsg-discovery.
 func (a *API) RunBackgroundTasks(ctx context.Context, log logrus.FieldLogger) {
 	ticker := time.NewTicker(time.Second * 10)
@@ -529,17 +542,32 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 		// `src` for one `server_pk`, or a sequence climbing far faster than the
 		// ~1/min heartbeat, points straight at the offender. Placed before the
 		// iteration check so rejected (out-of-sequence) attempts are logged too.
+		//
+		// Only when something actually changed. A healthy server re-registers
+		// about once a minute and the entry is identical bar a sequence that
+		// stepped by exactly one — nine servers logging that at Info was ~78
+		// lines per two minutes saying nothing. A first registration, a
+		// sequence that did not step by one (a restart, an out-of-order
+		// attempt, or two processes sharing a key), or a moved address are all
+		// news and still logged.
 		if entry.Server != nil {
 			var prevSeq uint64
-			if err == nil && oldEntry != nil {
+			var prevAddr string
+			known := err == nil && oldEntry != nil
+			if known {
 				prevSeq = oldEntry.Sequence
+				if oldEntry.Server != nil {
+					prevAddr = oldEntry.Server.Address
+				}
 			}
-			a.log(r).WithField("server_pk", entry.Static).
-				WithField("address", entry.Server.Address).
-				WithField("sequence", entry.Sequence).
-				WithField("prev_sequence", prevSeq).
-				WithField("src", r.RemoteAddr).
-				Info("dmsg-server entry registration")
+			switch {
+			case !known:
+				a.logServerRegistration(r, entry, prevSeq, "new")
+			case entry.Sequence != prevSeq+1:
+				a.logServerRegistration(r, entry, prevSeq, "sequence-gap")
+			case prevAddr != entry.Server.Address:
+				a.logServerRegistration(r, entry, prevSeq, "address-changed")
+			}
 		}
 
 		if err == disc.ErrKeyNotFound {

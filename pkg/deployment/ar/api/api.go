@@ -889,7 +889,12 @@ func (a *API) ListenUDP(listener net.Listener) {
 			continue
 		}
 
-		a.log.Debugf("Accepted new UDP connection from %q", conn.RemoteAddr())
+		// Per-connection and below debug: every visor in the network
+		// re-dials this listener, and the interesting line is the "Bound
+		// ... (SUDPH)" that follows a successful handshake, not the accept.
+		if logging.TraceEnabled() {
+			logging.Trace(a.log, fmt.Sprintf("Accepted new UDP connection from %q", conn.RemoteAddr()))
+		}
 
 		go func(c net.Conn) {
 			defer func() { <-sem }()
@@ -1018,6 +1023,11 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 	go func(pk cipher.PubKey, fromAddr string, conn net.Conn) {
 		defer a.cleanupUDPConn(pk, conn)
 
+		// Last address this peer was bound to, so a routine re-register
+		// (once a minute per visor, address unchanged) stays at trace and
+		// only an actual move is worth debug.
+		boundV4, boundV6 := visorData.RemoteAddr, visorData.RemoteAddrV6
+
 		for {
 			if err := conn.SetReadDeadline(time.Now().Add(sudphReadTimeout)); err != nil {
 				a.log.Warnf("Failed to set read deadline for %v: %v", pk, err)
@@ -1033,7 +1043,7 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 			}
 
 			data := buf[:n]
-			a.log.Debugf("(SUDPH) New packet from %v@%v: %v", pk, fromAddr, string(data))
+			logSUDPHPacket(a.log, pk, fromAddr, data)
 			if string(data) == addrresolver.UDPKeepHeartbeatMessage {
 				// Echo heartbeats so the visor can detect a dead AR
 				// connection. Over KCP-on-UDP a visor's writes keep
@@ -1076,11 +1086,40 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 					a.log.Warnf("Failed to re-bind (SUDPH) for %v: %v", pk, err)
 				} else {
 					a.mirrorSUDPH(pk, &newVisorData)
-					a.log.Debugf("Re-bound %v to %v (SUDPH)", pk, fromAddr)
+					if v4Re != boundV4 || v6Re != boundV6 {
+						a.log.Debugf("Re-bound %v to %v/%v (SUDPH, was %v/%v)", pk, v4Re, v6Re, boundV4, boundV6)
+						boundV4, boundV6 = v4Re, v6Re
+					} else if logging.TraceEnabled() {
+						logging.Trace(a.log, fmt.Sprintf("(SUDPH) re-register from %v@%v, address unchanged", pk, fromAddr))
+					}
 				}
 			}
 		}
 	}(pk, remoteAddr, conn)
+}
+
+// logSUDPHPacket records the arrival of an inbound SUDPH datagram.
+//
+// It is on the hottest path in the address resolver: every visor in the
+// network sends a keepalive here on a short timer, and this runs once per
+// datagram. Two things therefore matter.
+//
+// The payload is not logged. It used to be formatted as string(data), which
+// copies the whole datagram on every packet whether or not the level is on,
+// because the conversion happens at the call site before the logger ever
+// sees it. The bytes are also not worth having: a packet is either one of
+// two fixed control words, which the branches below already report, or a
+// visor's local-address JSON, which the re-bind line reports. Only the
+// length is kept, in case a peer starts sending something unexpected.
+//
+// The level is trace, and guarded. Per-packet lines are noise in aggregate,
+// and reaching a logrus entry at all allocates even when the entry is
+// discarded, so the gate has to be here rather than inside logrus.
+func logSUDPHPacket(log logrus.FieldLogger, pk cipher.PubKey, fromAddr string, data []byte) {
+	if !logging.TraceEnabled() {
+		return
+	}
+	logging.Trace(log, fmt.Sprintf("(SUDPH) new packet from %v@%v: %d bytes", pk, fromAddr, len(data)))
 }
 
 // cleanupUDPConn removes the connection from the map (if it's still the same one)
