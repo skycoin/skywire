@@ -9,15 +9,15 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/skycoin/skywire/pkg/wasmhv"
 	"io"
 	"net"
 	"net/http"
 	"strconv"
 
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/wasmhv"
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
-	"github.com/skycoin/skywire/pkg/wasmhv/wasmbin"
 )
 
 // postBrowseFetch fetches a dmsg/skynet site for the in-UI browser (local visor).
@@ -60,14 +60,6 @@ func (hv *Hypervisor) postBrowseClearnet() http.HandlerFunc {
 // wasm-visor has.
 func (hv *Hypervisor) uiHandler() http.Handler {
 	fileServer := uiCacheControl(http.FileServer(http.FS(hv.c.UIAssets)))
-	// Fingerprint the desk-host blob once, so a rebuilt binary serves a fresh
-	// module and an unchanged one 304s instead of re-sending ~59MB. Hash the
-	// COMPRESSED bytes: they are already in memory, and they change exactly
-	// when the module does.
-	deskWasmETag := func() string {
-		h := sha256.Sum256(wasmbin.GetVariantGz(wasmbin.Default()))
-		return `"` + hex.EncodeToString(h[:])[:16] + `"`
-	}()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		// PWA: the desk installs as an app. The manifest and icons are the ones
@@ -102,43 +94,17 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			// served by `hv serve`.
 			serveJS(w, browseui.VNetSWJS())
 			return
-		case "/wasm-visor.wasm":
-			// The LEGACY desk-host blob, for a desk with no command module to
-			// run `skywire desk-host` out of (nativeDeskBootOpts). netscrape — the nested browser the desk
-			// renders its windows as TABS in — is Go/wasm and lives in this
-			// module (cmd/wasm-visor/browser_js.go installBrowser). Without it
-			// this origin has a window manager and no browser, so the
-			// hypervisor UI can only open as a bare iframe in a WinBox, which
-			// is not what the wasm desk at `hv serve` looks like.
-			//
-			// It boots in the "shell" ROLE: surfaces only (shell + browser +
-			// desk panel), boot() is never called, no visor runs in this tab.
-			// The native hypervisor already IS the visor.
-			w.Header().Set("Content-Type", "application/wasm")
-			w.Header().Set("Cache-Control", "no-cache")
-			w.Header().Set("ETag", deskWasmETag)
-			if r.Header.Get("If-None-Match") == deskWasmETag {
-				w.WriteHeader(http.StatusNotModified)
-				return
-			}
-			b, err := wasmbin.Get()
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			_, _ = w.Write(b) //nolint:errcheck
-			return
 		case "/wasm_exec.js":
-			// Go's loader, and it must be the one that PAIRS with the blob
-			// above — a std-Go wasm_exec.js cannot run a TinyGo module or vice
-			// versa (see wasmbin/embed.go).
-			serveJS(w, wasmbin.WasmExecJSVariant(wasmbin.Default()))
+			// Go's loader for the one command module below (a std-Go build,
+			// so std-Go's wasm_exec.js; the two are a pair).
+			serveJS(w, wasmhv.WasmExecJS)
 			return
 		case "/skywire.wasm":
-			// The FULL skywire command module — the visor the served desk runs
-			// in its terminal — from the same file the wasm-serve port serves,
-			// when the operator has one (hypervisor.wasm_serve.exec_wasm).
-			// Absent that, the desk boots with no visor of its own, as before.
+			// The ONE skywire command module — the desk host, the visor the
+			// served desk runs in its terminal, every command — embedded by
+			// the two-stage build, from the package location on disk, or the
+			// operator's hypervisor.wasm_serve.exec_wasm. Absent all three
+			// there is no desk: the root serves the dashboard (see "/").
 			if p, ok := hv.execModule(); ok {
 				serveExecWasm(w, r, p)
 				return
@@ -173,9 +139,15 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			// The DESK is the hypervisor UI (operator decision 2026-09-04): the
 			// shell greets at the root with the Angular dashboard as a tab
 			// inside it, matching the wasm visor's desk surface.
-			if hv.LegacyUI() {
-				// Opt-in legacy mode: the Angular dashboard is the page, no desk
-				// and no wasm visor (hypervisor.legacy_ui / LEGACYHVUI).
+			//
+			// Two things put the dashboard at the root instead: the opt-in
+			// legacy mode (hypervisor.legacy_ui / LEGACYHVUI), and a build
+			// with no skywire command module to host the desk out of — a
+			// plain source build without `make build-embedded` and nothing
+			// on disk. The desk is `skywire desk-host` out of that module;
+			// there is no other host for it, and the dashboard is what the
+			// operator can still use. Logged once at startup (logUIRoot).
+			if _, haveExec := hv.execModule(); hv.LegacyUI() || !haveExec {
 				hv.serveInjectedIndex(w, r, fileServer)
 				return
 			}
@@ -299,37 +271,31 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 		`<script src="/browse.js"></script>` + "\n" +
 		`<script>` + uiAutoReloadJS + `</script>` + "\n" +
 		`<script src="/desk-boot.js"></script>`
-	_, haveExec := hv.execModule()
-	page := deskShellHTML(scripts, nativeDeskBootOpts(localPK, haveExec))
+	page := deskShellHTML(scripts, nativeDeskBootOpts(localPK))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(page) //nolint:errcheck
 }
 
 // nativeDeskBootOpts is the skywireDeskBoot options object for the desk the
-// native hypervisor serves. With a command module (embedded by the two-stage
-// build, on disk, or hypervisor.wasm_serve.exec_wasm) the desk host is
-// `skywire desk-host` out of that ONE module; without one the legacy
-// wasm-visor.wasm blob still carries the surfaces, and nothing that would
-// exec a command is enabled: no visor autostart, no help terminal, no docs
-// server. The dashboard tab is
+// native hypervisor serves. The desk host is `skywire desk-host` out of the
+// ONE command module (embedded by the two-stage build, on disk, or
+// hypervisor.wasm_serve.exec_wasm); serveNativeDesk is only reached when
+// there is one. No help terminal and no docs server — each is a whole extra
+// Go/wasm runtime the tab never gets back. The dashboard tab is
 // this origin's Angular UI — RELATIVE, since through a vnet service worker the
 // page can sit under a /vnet/<port>/ prefix the server never sees, and an
 // absolute URL would escape onto the outer server (the trap #4499 fixed).
 // embed=1 rides in the HASH (the Angular UI is hash-routed) so the framed
 // dashboard hides its own taskbar. terminalURL is the host's pty page,
 // /pty/<pk>, xterm over a websocket; absent when no visor is attached.
-func nativeDeskBootOpts(localPK string, execWasm bool) string {
+func nativeDeskBootOpts(localPK string) string {
 	opts := "{\n" +
 		"  persistDB: 'skywire-desk',\n" +
-		"  wasmExecURL: '/wasm_exec.js',\n"
-	if execWasm {
-		opts += "  deskWasmURL: '/skywire.wasm',\n" +
-			"  wasmURL: '/skywire.wasm',\n"
-	} else {
-		opts += "  deskWasmURL: '/wasm-visor.wasm',\n"
-	}
-	if execWasm && localPK != "" {
+		"  wasmExecURL: '/wasm_exec.js',\n" +
+		"  deskWasmURL: '/skywire.wasm',\n" +
+		"  wasmURL: '/skywire.wasm',\n"
+	if localPK != "" {
 		// The command module is served here, so the desk runs a visor of the
 		// tab's own — ATTACHED to this hypervisor: its one transport is a
 		// WebSocket back to this origin (see /tp/ws), it does not go looking
@@ -349,6 +315,22 @@ func nativeDeskBootOpts(localPK string, execWasm bool) string {
 		opts += "  terminalURL: './pty/" + localPK + "',\n"
 	}
 	return opts + "}"
+}
+
+// logUIRoot says, once at mount, why the web UI root is the dashboard rather
+// than the desk when that is not the operator's own choice: the build has no
+// skywire command module to host the desk out of. Nothing is logged for the
+// desk (the default) or for legacy_ui (the operator asked for it).
+func (hv *Hypervisor) logUIRoot() {
+	if hv.logger == nil || hv.LegacyUI() {
+		return
+	}
+	if _, ok := hv.execModule(); ok {
+		return
+	}
+	hv.logger.Info("no skywire command module in this build (make build-embedded; or " +
+		"hypervisor.wasm_serve.exec_wasm; or " + skyenv.ExecWasmFile + " under the package bin dir): " +
+		"the web UI root serves the dashboard, not the desk")
 }
 
 // uiVersionHash fingerprints the served UI bundle (short sha256 of index.html,

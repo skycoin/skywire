@@ -195,10 +195,10 @@ Steps 1, 2 and 4 have landed and were each live-validated (native HV + a fresh
 - **Step 4 — VPN lazy module (#3717):** the eight VPN components moved into a
   lazy `VpnModule`; `/vpn` uses `loadChildren`, shipping VPN as its own ~100 KB
   chunk fetched on demand (out of `main.js`). Confirmed the chunk loads on
-  demand over `hv serve` and renders. Caveat: the single-file `hv gen` build
-  can't serve dynamic-import chunks (documented in `serve.go`/`generate.go`), so
-  `/vpn` degrades there — acceptable, since VPN is non-functional on a
-  browser/wasm visor anyway.
+  demand over `hv serve` and renders. (The since-retired single-file `hv gen`
+  build could not serve dynamic-import chunks, so `/vpn` degraded there —
+  acceptable, since VPN is non-functional on a
+  browser/wasm visor anyway.)
 
 **Steps 3 + 5 — skychat/logs WinBox windows now mount the real Angular component
 (#3720).** The concern below turned out tractable: `SkychatComponent` and

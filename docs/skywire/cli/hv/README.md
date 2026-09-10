@@ -2,12 +2,11 @@
 
 [← skywire cli](../README.md)
 
-Tools for building, serving, driving and bridging the hypervisor UI and the
+Tools for serving, driving and bridging the hypervisor UI and the
 standalone wasm-visor.
 
-Build & serve:
-  gen      generate a self-contained standalone hypervisor.html (opens from file://)
-  serve    serve the keyless standalone wasm-visor over HTTP (reverse-proxy with Caddy)
+Serve:
+  serve    serve the keyless standalone wasm-visor desk over HTTP (reverse-proxy with Caddy)
 
 Desktop bridge:
   notify   show a remote visor's app notifications on THIS machine (SSE bridge)
@@ -36,7 +35,6 @@ skywire cli hv
 
 - [drive](drive/README.md) — Hold a persistent WebDriver BiDi session and serve it over a control port
 - [eval](eval/README.md) — Evaluate JavaScript in a browser over CDP or WebDriver BiDi
-- [gen](gen/README.md) — Generate a self-contained standalone hypervisor.html
 - [notify](notify/README.md) — Show a visor's app notifications on this machine
 - [probe](probe/README.md) — Watch a page load and stream console, exceptions and crashes
 - [serve](serve/README.md) — Serve the standalone wasm-visor over HTTP (keyless; reverse-proxy with Caddy)
