@@ -140,6 +140,10 @@ type Visor struct {
 	stun stunState
 
 	tpM *transport.Manager
+	// dmsgSharedLis is the transport port's cmux branch for dmsg sessions,
+	// handed to the in-process dmsg server so it shares the visor's TCP port.
+	// nil when the server is off, keyed separately, or pinned to its own address.
+	dmsgSharedLis net.Listener
 
 	// localGraph is an extra transport-graph source merged into every
 	// GetAllTransports answer (see local_graph.go).
