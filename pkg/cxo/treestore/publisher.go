@@ -986,6 +986,23 @@ func (p *Publisher) runCleanupLoop() {
 	// case; this is the backstop, not the steady-state sweeper.
 	t := time.NewTicker(cleanupForceInterval)
 	defer t.Stop()
+	// Nudges are paced by the cost of the previous sweep (see
+	// cleanupPacer): a sweep walks the whole object store in one bbolt
+	// write transaction, so on a large store a nudge per publish
+	// (every 12 s for the visor's telemetry feed) kept the visor at 80%
+	// of its CPU in IterateDel over a 2.9 GB file (2026-09-10).
+	var pacer cleanupPacer
+	var wait *time.Timer
+	var waitC <-chan time.Time
+	sweep := func() {
+		start := time.Now()
+		p.runCleanup()
+		pacer.ran(start, time.Since(start))
+		if wait != nil {
+			wait.Stop()
+			wait, waitC = nil, nil
+		}
+	}
 	for {
 		select {
 		case <-p.done:
@@ -993,9 +1010,18 @@ func (p *Publisher) runCleanupLoop() {
 			p.runCleanup()
 			return
 		case <-p.cleanupNudge:
-			p.runCleanup()
+			if d := pacer.holdFor(time.Now()); d > 0 {
+				if wait == nil {
+					wait = time.NewTimer(d)
+					waitC = wait.C
+				}
+				continue
+			}
+			sweep()
+		case <-waitC:
+			sweep()
 		case <-t.C:
-			p.runCleanup()
+			sweep()
 		}
 	}
 }
