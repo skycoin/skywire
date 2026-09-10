@@ -5,15 +5,22 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mgutz/ansi"
 	"github.com/sirupsen/logrus"
 )
 
 const defaultTimestampFormat = time.RFC3339
+
+// stackKeys is the number of entry fields whose key list fits in Format's
+// stack scratch array. Skywire entries carry the module key plus a handful of
+// fields, so the heap allocation is avoided on effectively every line.
+const stackKeys = 8
 
 var (
 	baseTimestamp      = time.Now()
@@ -31,17 +38,17 @@ var (
 		CriticalStyle:    "magenta+h",
 	}
 	noColorsColorScheme = &compiledColorScheme{
-		InfoLevelColor:   ansi.ColorFunc(""),
-		WarnLevelColor:   ansi.ColorFunc(""),
-		ErrorLevelColor:  ansi.ColorFunc(""),
-		FatalLevelColor:  ansi.ColorFunc(""),
-		PanicLevelColor:  ansi.ColorFunc(""),
-		DebugLevelColor:  ansi.ColorFunc(""),
-		TraceLevelColor:  ansi.ColorFunc(""),
-		PrefixColor:      ansi.ColorFunc(""),
-		TimestampColor:   ansi.ColorFunc(""),
-		CallContextColor: ansi.ColorFunc(""),
-		CriticalColor:    ansi.ColorFunc(""),
+		InfoLevelColor:   newANSIStyle(""),
+		WarnLevelColor:   newANSIStyle(""),
+		ErrorLevelColor:  newANSIStyle(""),
+		FatalLevelColor:  newANSIStyle(""),
+		PanicLevelColor:  newANSIStyle(""),
+		DebugLevelColor:  newANSIStyle(""),
+		TraceLevelColor:  newANSIStyle(""),
+		PrefixColor:      newANSIStyle(""),
+		TimestampColor:   newANSIStyle(""),
+		CallContextColor: newANSIStyle(""),
+		CriticalColor:    newANSIStyle(""),
 	}
 	defaultCompiledColorScheme = compileColorScheme(defaultColorScheme)
 )
@@ -65,18 +72,69 @@ type ColorScheme struct {
 	CriticalStyle    string
 }
 
+// ansiStyle is a compiled color held as its raw escape prefix rather than as
+// the closure ansi.ColorFunc returns, so colored text can be appended straight
+// into the output buffer instead of allocating a new string for every element
+// of every log line. Its semantics match ansi.ColorFunc exactly: an empty
+// style is the identity, and any other style leaves an empty input untouched.
+type ansiStyle struct {
+	code     string
+	identity bool
+}
+
+func newANSIStyle(style string) ansiStyle {
+	if style == "" {
+		return ansiStyle{identity: true}
+	}
+	return ansiStyle{code: ansi.ColorCode(style)}
+}
+
+// apply is the equivalent of ansi.ColorFunc(style)(s).
+func (s ansiStyle) apply(str string) string {
+	if s.identity || str == "" {
+		return str
+	}
+	return s.code + str + ansi.Reset
+}
+
+// write appends str to b colored, without allocating.
+func (s ansiStyle) write(b *bytes.Buffer, str string) {
+	if s.identity || str == "" {
+		b.WriteString(str) //nolint:gosec
+		return
+	}
+	b.WriteString(s.code) //nolint:gosec
+	b.WriteString(str)    //nolint:gosec
+	b.WriteString(ansi.Reset)
+}
+
+// open and close bracket content appended to b piecewise. Callers must only
+// use them around content that is never empty, since apply leaves an empty
+// string uncolored.
+func (s ansiStyle) open(b *bytes.Buffer) {
+	if !s.identity {
+		b.WriteString(s.code) //nolint:gosec
+	}
+}
+
+func (s ansiStyle) close(b *bytes.Buffer) {
+	if !s.identity {
+		b.WriteString(ansi.Reset) //nolint:gosec
+	}
+}
+
 type compiledColorScheme struct {
-	InfoLevelColor   func(string) string
-	WarnLevelColor   func(string) string
-	ErrorLevelColor  func(string) string
-	FatalLevelColor  func(string) string
-	PanicLevelColor  func(string) string
-	DebugLevelColor  func(string) string
-	TraceLevelColor  func(string) string
-	PrefixColor      func(string) string
-	TimestampColor   func(string) string
-	CallContextColor func(string) string
-	CriticalColor    func(string) string
+	InfoLevelColor   ansiStyle
+	WarnLevelColor   ansiStyle
+	ErrorLevelColor  ansiStyle
+	FatalLevelColor  ansiStyle
+	PanicLevelColor  ansiStyle
+	DebugLevelColor  ansiStyle
+	TraceLevelColor  ansiStyle
+	PrefixColor      ansiStyle
+	TimestampColor   ansiStyle
+	CallContextColor ansiStyle
+	CriticalColor    ansiStyle
 }
 
 // TextFormatter formats log output
@@ -133,14 +191,14 @@ type TextFormatter struct {
 	sync.Once
 }
 
-func getCompiledColor(main string, fallback string) func(string) string {
+func getCompiledColor(main string, fallback string) ansiStyle {
 	var style string
 	if main != "" {
 		style = main
 	} else {
 		style = fallback
 	}
-	return ansi.ColorFunc(style)
+	return newANSIStyle(style)
 }
 
 func compileColorScheme(s *ColorScheme) *compiledColorScheme {
@@ -181,13 +239,20 @@ func (f *TextFormatter) SetColorScheme(colorScheme *ColorScheme) {
 // Format formats a logrus.Entry
 func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	var b *bytes.Buffer
-	keys := make([]string, 0, len(entry.Data))
+
+	var keyArr [stackKeys]string
+	keys := keyArr[:0]
+	if len(entry.Data) > stackKeys {
+		keys = make([]string, 0, len(entry.Data))
+	}
 	for k := range entry.Data {
 		keys = append(keys, k)
 	}
 	lastKeyIdx := len(keys) - 1
 
-	if !f.DisableSorting {
+	// Nothing to order below two keys, and the overwhelming majority of
+	// entries carry just the module key plus a field or two.
+	if !f.DisableSorting && len(keys) > 1 {
 		sort.Strings(keys)
 	}
 	if entry.Buffer != nil {
@@ -235,8 +300,7 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 }
 
 func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys []string, timestampFormat string, colorScheme *compiledColorScheme) {
-	var levelColor func(string) string
-	var levelText string
+	var levelColor ansiStyle
 	switch entry.Level {
 	case logrus.InfoLevel:
 		levelColor = colorScheme.InfoLevelColor
@@ -254,9 +318,10 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys 
 		levelColor = colorScheme.DebugLevelColor
 	}
 
-	priority, ok := entry.Data[logPriorityKey]
-	hasPriority := ok && priority == logPriorityCritical
+	module, priority := prefixParts(entry)
+	hasPriority := priority == logPriorityCritical
 
+	var levelText string
 	if entry.Level != logrus.WarnLevel {
 		levelText = entry.Level.String()
 	} else {
@@ -264,19 +329,61 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys 
 	}
 
 	if !f.DisableUppercase {
-		levelText = strings.ToUpper(levelText)
+		levelText = upperLevelText(entry.Level, levelText)
 	}
 
-	level := levelColor(levelText)
 	message := entry.Message
-	prefix := ""
+	ccFile, ccFunc, ccLine := callContext(entry)
+	hasCallContext := ccFile != "" || ccFunc != "" || ccLine != ""
 
-	prefixText := extractPrefix(entry)
-	if prefixText != "" {
-		prefixText = " " + prefixText + ":"
-		prefix = colorScheme.PrefixColor(prefixText)
+	if hasPriority {
+		// The critical color wraps the whole line, so it cannot be streamed
+		// piecewise; this path is rare enough to leave on fmt.
+		f.printCritical(b, entry, colorScheme, levelText, message, timestampFormat, ccFile, ccFunc, ccLine)
+	} else {
+		if !f.DisableTimestamp {
+			colorScheme.TimestampColor.open(b)
+			b.WriteByte('[') //nolint:gosec
+			f.appendTimestamp(b, entry, timestampFormat)
+			b.WriteByte(']') //nolint:gosec
+			colorScheme.TimestampColor.close(b)
+			b.WriteByte(' ') //nolint:gosec
+		}
+		levelColor.write(b, levelText)
+		if hasCallContext {
+			// The leading space sits outside the color, as it did when this
+			// was " " + CallContextColor(strings.Join(parts, ":")).
+			b.WriteByte(' ') //nolint:gosec
+			colorScheme.CallContextColor.open(b)
+			writeJoined(b, ccFile, ccFunc, ccLine)
+			colorScheme.CallContextColor.close(b)
+		}
+		// extractPrefix never returns an empty string: with no module and no
+		// priority it still renders "[]". The bracketed module is therefore
+		// unconditional, and is written piecewise to skip the per-entry
+		// Sprintf plus the " " + text + ":" concatenation it used to cost.
+		colorScheme.PrefixColor.open(b)
+		b.WriteString(" [") //nolint:gosec
+		writePrefixBody(b, module, priority)
+		b.WriteString("]:") //nolint:gosec
+		colorScheme.PrefixColor.close(b)
+		f.appendMessage(b, message)
 	}
 
+	for _, k := range keys {
+		if k != "prefix" && k != "file" && k != "func" && k != "line" && k != logPriorityKey && k != logModuleKey {
+			b.WriteByte(' ') //nolint:gosec
+			levelColor.write(b, k)
+			b.WriteByte('=') //nolint:gosec
+			f.appendFormattedValue(b, entry.Data[k])
+		}
+	}
+}
+
+// printCritical renders a _priority=CRITICAL entry, whose whole line is wrapped
+// in one color. Kept on fmt deliberately: it is a rare path and the padded
+// message format is easier to get right there.
+func (f *TextFormatter) printCritical(b *bytes.Buffer, entry *logrus.Entry, colorScheme *compiledColorScheme, levelText, message, timestampFormat string, ccFile, ccFunc, ccLine string) {
 	messageFormat := "%s"
 	if f.SpacePadding != 0 {
 		messageFormat = fmt.Sprintf("%%-%ds", f.SpacePadding)
@@ -285,66 +392,149 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys 
 		messageFormat = " " + messageFormat
 	}
 
-	callContextParts := []string{}
-	if ifile, ok := entry.Data["file"]; ok {
-		if sfile, ok := ifile.(string); ok && sfile != "" {
-			callContextParts = append(callContextParts, sfile)
-		}
-	}
-	if ifunc, ok := entry.Data["func"]; ok {
-		if sfunc, ok := ifunc.(string); ok && sfunc != "" {
-			callContextParts = append(callContextParts, sfunc)
-		}
-	}
-	if iline, ok := entry.Data["line"]; ok {
-		sline := ""
-		switch iline := iline.(type) {
-		case string:
-			sline = iline
-		case int, uint, int32, int64, uint32, uint64:
-			sline = fmt.Sprint(iline)
-		}
-		if sline != "" {
-			callContextParts = append(callContextParts, fmt.Sprint(sline))
-		}
-	}
-	callContextText := strings.Join(callContextParts, ":")
-	callContext := colorScheme.CallContextColor(callContextText)
-	if callContext != "" {
-		callContext = " " + callContext
+	var cc bytes.Buffer
+	writeJoined(&cc, ccFile, ccFunc, ccLine)
+	callContextText := cc.String()
+
+	prefixText := extractPrefix(entry)
+	if prefixText != "" {
+		prefixText = " " + prefixText + ":"
 	}
 
+	var str string
 	if f.DisableTimestamp {
-		if hasPriority {
-			str := fmt.Sprintf("%s%s%s"+messageFormat, levelText, callContextText, prefixText, message)
-			fmt.Fprint(b, colorScheme.CriticalColor(str))
-		} else {
-			fmt.Fprintf(b, "%s%s%s"+messageFormat, level, callContext, prefix, message)
-		}
+		str = fmt.Sprintf("%s%s%s"+messageFormat, levelText, callContextText, prefixText, message)
 	} else {
-		var timestamp string
-		if !f.FullTimestamp {
-			timestamp = fmt.Sprintf("[%04d]", miniTS())
-		} else {
-			timestamp = fmt.Sprintf("[%s]", entry.Time.Format(timestampFormat))
-		}
+		var ts bytes.Buffer
+		ts.WriteByte('[') //nolint:gosec
+		f.appendTimestamp(&ts, entry, timestampFormat)
+		ts.WriteByte(']') //nolint:gosec
+		str = fmt.Sprintf("%s %s%s%s"+messageFormat, ts.String(), levelText, callContextText, prefixText, message)
+	}
+	b.WriteString(colorScheme.CriticalColor.apply(str)) //nolint:gosec
+}
 
-		coloredTimestamp := colorScheme.TimestampColor(timestamp)
+// upperLevelText returns the uppercased level name. strings.ToUpper allocates
+// for the lowercase names logrus hands back, and the set is closed.
+func upperLevelText(level logrus.Level, text string) string {
+	switch level {
+	case logrus.PanicLevel:
+		return "PANIC"
+	case logrus.FatalLevel:
+		return "FATAL"
+	case logrus.ErrorLevel:
+		return "ERROR"
+	case logrus.WarnLevel:
+		return "WARN"
+	case logrus.InfoLevel:
+		return "INFO"
+	case logrus.DebugLevel:
+		return "DEBUG"
+	case logrus.TraceLevel:
+		return "TRACE"
+	default:
+		return strings.ToUpper(text)
+	}
+}
 
-		if hasPriority {
-			str := fmt.Sprintf("%s %s%s%s"+messageFormat, timestamp, levelText, callContextText, prefixText, message)
-			fmt.Fprint(b, colorScheme.CriticalColor(str))
-		} else {
-			fmt.Fprintf(b, "%s %s%s%s"+messageFormat, coloredTimestamp, level, callContext, prefix, message)
+// writeJoined appends the non-empty parts separated by ":", as
+// strings.Join(parts, ":") did over a slice built per entry.
+func writeJoined(b *bytes.Buffer, parts ...string) {
+	first := true
+	for _, p := range parts {
+		if p == "" {
+			continue
 		}
+		if !first {
+			b.WriteByte(':') //nolint:gosec
+		}
+		b.WriteString(p) //nolint:gosec
+		first = false
+	}
+}
+
+func writePrefixBody(b *bytes.Buffer, module, priority string) {
+	switch {
+	case priority == "":
+		b.WriteString(module) //nolint:gosec
+	case module == "":
+		b.WriteString(priority) //nolint:gosec
+	default:
+		b.WriteString(module)   //nolint:gosec
+		b.WriteByte(':')        //nolint:gosec
+		b.WriteString(priority) //nolint:gosec
+	}
+}
+
+// appendTimestamp writes the timestamp without its brackets.
+func (f *TextFormatter) appendTimestamp(b *bytes.Buffer, entry *logrus.Entry, timestampFormat string) {
+	if f.FullTimestamp {
+		var scratch [64]byte
+		b.Write(entry.Time.AppendFormat(scratch[:0], timestampFormat)) //nolint:gosec,errcheck
+		return
 	}
 
-	for _, k := range keys {
-		if k != "prefix" && k != "file" && k != "func" && k != "line" && k != logPriorityKey && k != logModuleKey {
-			v := entry.Data[k]
-			fmt.Fprintf(b, " %s", f.formatKeyValue(levelColor(k), v))
+	// "%04d" over the seconds since process start.
+	n := miniTS()
+	if n < 0 {
+		fmt.Fprintf(b, "%04d", n)
+		return
+	}
+	var scratch [20]byte
+	digits := strconv.AppendInt(scratch[:0], int64(n), 10)
+	for i := len(digits); i < 4; i++ {
+		b.WriteByte('0') //nolint:gosec
+	}
+	b.Write(digits) //nolint:gosec,errcheck
+}
+
+// appendMessage writes the message, padded to SpacePadding runes when set, as
+// the "%s" / "%-<n>ds" format did.
+func (f *TextFormatter) appendMessage(b *bytes.Buffer, message string) {
+	if message != "" {
+		b.WriteByte(' ') //nolint:gosec
+	}
+	if f.SpacePadding < 0 {
+		// A negative width makes a malformed verb; leave that to fmt so the
+		// output stays whatever it always was.
+		fmt.Fprintf(b, fmt.Sprintf("%%-%ds", f.SpacePadding), message)
+		return
+	}
+	b.WriteString(message) //nolint:gosec
+	for n := f.SpacePadding - utf8.RuneCountInString(message); n > 0; n-- {
+		b.WriteByte(' ') //nolint:gosec
+	}
+}
+
+// callContext pulls the file/func/line keys out of the entry. Skywire sets
+// none of them, so returning three strings keeps the common case free of the
+// slice that used to be built and thrown away for every line.
+func callContext(entry *logrus.Entry) (file, fn, line string) {
+	if v, ok := entry.Data["file"]; ok {
+		file, _ = v.(string)
+	}
+	if v, ok := entry.Data["func"]; ok {
+		fn, _ = v.(string)
+	}
+	if v, ok := entry.Data["line"]; ok {
+		switch v := v.(type) {
+		case string:
+			line = v
+		case int:
+			line = strconv.Itoa(v)
+		case uint:
+			line = strconv.FormatUint(uint64(v), 10)
+		case int32:
+			line = strconv.FormatInt(int64(v), 10)
+		case int64:
+			line = strconv.FormatInt(v, 10)
+		case uint32:
+			line = strconv.FormatUint(uint64(v), 10)
+		case uint64:
+			line = strconv.FormatUint(v, 10)
 		}
 	}
+	return file, fn, line
 }
 
 func (f *TextFormatter) needsQuoting(text string) bool {
@@ -368,47 +558,50 @@ func (f *TextFormatter) needsQuoting(text string) bool {
 	return false
 }
 
-func extractPrefix(e *logrus.Entry) string {
-	var module string
+func prefixParts(e *logrus.Entry) (module, priority string) {
 	if iModule, ok := e.Data[logModuleKey]; ok {
 		module, _ = iModule.(string)
 	}
-
-	var priority string
 	if iPriority, ok := e.Data[logPriorityKey]; ok {
 		priority, _ = iPriority.(string)
 	}
+	return module, priority
+}
+
+func extractPrefix(e *logrus.Entry) string {
+	module, priority := prefixParts(e)
 
 	switch {
 	case priority == "":
-		return fmt.Sprintf("[%s]", module)
+		return "[" + module + "]"
 	case module == "":
-		return fmt.Sprintf("[%s]", priority)
+		return "[" + priority + "]"
 	default:
-		return fmt.Sprintf("[%s:%s]", module, priority)
+		return "[" + module + ":" + priority + "]"
 	}
 }
 
-func (f *TextFormatter) formatKeyValue(key string, value interface{}) string {
-	return fmt.Sprintf("%s=%s", key, f.formatValue(value))
-}
-
-func (f *TextFormatter) formatValue(value interface{}) string {
+// appendFormattedValue is the buffer-appending equivalent of the old
+// formatKeyValue/formatValue pair, which cost two Sprintf calls per field.
+func (f *TextFormatter) appendFormattedValue(b *bytes.Buffer, value interface{}) {
 	switch value := value.(type) {
 	case string:
-		if f.needsQuoting(value) {
-			return fmt.Sprintf("%s%+v%s", f.QuoteCharacter, value, f.QuoteCharacter)
-		}
-		return value
+		f.appendMaybeQuoted(b, value)
 	case error:
-		errmsg := value.Error()
-		if f.needsQuoting(errmsg) {
-			return fmt.Sprintf("%s%+v%s", f.QuoteCharacter, errmsg, f.QuoteCharacter)
-		}
-		return errmsg
+		f.appendMaybeQuoted(b, value.Error())
 	default:
-		return fmt.Sprintf("%+v", value)
+		fmt.Fprintf(b, "%+v", value)
 	}
+}
+
+func (f *TextFormatter) appendMaybeQuoted(b *bytes.Buffer, s string) {
+	if !f.needsQuoting(s) {
+		b.WriteString(s) //nolint:gosec
+		return
+	}
+	b.WriteString(f.QuoteCharacter) //nolint:gosec
+	b.WriteString(s)                //nolint:gosec
+	b.WriteString(f.QuoteCharacter) //nolint:gosec
 }
 
 func (f *TextFormatter) appendKeyValue(b *bytes.Buffer, key string, value interface{}, appendSpace bool) {
