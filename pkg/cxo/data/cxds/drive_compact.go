@@ -44,9 +44,14 @@ const (
 )
 
 // gcCheckedSizeKey records (in the meta bucket) the file size at the last scan
-// that decided the store was mostly live, so we don't rescan a large healthy
-// store on every start.
-var gcCheckedSizeKey = []byte("gc_checked_size")
+// that decided the store was mostly live and not sparse, so we don't rescan a
+// large healthy store on every start. The key is versioned: a memo written
+// under an earlier criterion must not veto a rescan under a stricter one.
+// The v1 memo only meant "mostly live"; the sparse-file criterion added
+// afterwards never got to run on a store v1 had already cleared, which is
+// why a 2.9 GB telemetry store holding a few MB of objects survived every
+// restart (2026-09-10).
+var gcCheckedSizeKey = []byte("gc_checked_size_v2")
 
 func putUint64Meta(b *bolt.Bucket, key []byte, v uint64) error {
 	var ub [8]byte

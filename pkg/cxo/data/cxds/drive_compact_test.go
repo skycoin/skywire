@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	bolt "github.com/0magnet/bbolt"
 	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/stretchr/testify/require"
 
@@ -159,4 +160,57 @@ func TestStartupGCCompact_ReclaimsFreedPages(t *testing.T) {
 		require.Equal(t, v, got)
 		require.Equal(t, uint32(1), rc)
 	}
+}
+
+// A memo written by the pre-sparse-criterion scan ("gc_checked_size", v1)
+// must not stop the sparse check from running: the file below is exactly the
+// case that memo used to hide, and it must still be compacted.
+func TestStartupGCCompact_IgnoresPreCriteriaMemo(t *testing.T) {
+	fn := filepath.Join(t.TempDir(), "cxds.db")
+	ds, err := NewDriveCXDS(fn)
+	require.NoError(t, err)
+	var drop [][]byte
+	for i := 0; i < 600; i++ {
+		v := mkVal(byte(i%251), 8192)
+		v[0], v[1] = byte(i>>8), byte(i)
+		_, err := ds.Set(cipher.SumSHA256(v), v, 1)
+		require.NoError(t, err)
+		if i >= 6 {
+			drop = append(drop, v)
+		}
+	}
+	require.NoError(t, ds.Close())
+	ds, err = NewDriveCXDS(fn)
+	require.NoError(t, err)
+	for _, v := range drop {
+		require.NoError(t, ds.Del(cipher.SumSHA256(v)))
+	}
+	require.NoError(t, ds.Close())
+	before, err := os.Stat(fn)
+	require.NoError(t, err)
+
+	// Plant the v1 memo saying "checked at this very size, mostly live".
+	db, err := bolt.Open(fn, 0600, nil)
+	require.NoError(t, err)
+	require.NoError(t, db.Update(func(tx *bolt.Tx) error {
+		m, err := tx.CreateBucketIfNotExists(metaBucket)
+		if err != nil {
+			return err
+		}
+		return putUint64Meta(m, []byte("gc_checked_size"), uint64(before.Size()))
+	}))
+	require.NoError(t, db.Close())
+
+	old := compactMinFileBytes
+	compactMinFileBytes = 4096
+	defer func() { compactMinFileBytes = old }()
+
+	reclaimed, err := startupGCCompact(fn)
+	require.NoError(t, err)
+	require.Greater(t, reclaimed, int64(0), "the v1 memo must not veto the sparse-file rewrite")
+
+	// And the v2 memo now written does veto a second, pointless scan.
+	reclaimed, err = startupGCCompact(fn)
+	require.NoError(t, err)
+	require.Zero(t, reclaimed)
 }
