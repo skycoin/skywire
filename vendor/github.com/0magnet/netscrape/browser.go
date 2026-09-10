@@ -369,6 +369,12 @@ func setFavicon(t *tab, iconURL string) {
 		if h := a[0].Get("headers").Call("get", "content-type"); h.Truthy() {
 			ct = h.String()
 		}
+		// A favicon is an image. A same-origin fallback that answers /favicon.ico
+		// with an HTML page (a single-page app's catch-all) is not one, and
+		// showing it as the icon painted a broken image in the tab.
+		if !strings.HasPrefix(strings.ToLower(ct), "image/") {
+			return g.Get("Promise").Call("reject")
+		}
 		return a[0].Call("arrayBuffer")
 	})
 	fetchVia(iconURL).Call("then", onResp).Call("then", onBuf).Call("catch", onErr)

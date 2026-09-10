@@ -406,7 +406,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	}
 	serveBytes("/browse-responder.js", "text/javascript", realorigin.ResponderJS())
 	serveBytes("/browse-transport.js", "text/javascript", wasmhv.BrowseTransportJS)
-	swJS := bytes.ReplaceAll(wasmhv.ServiceWorkerJS, []byte("__BUILD__"), []byte(wasmVer))
+	swJS := wasmhv.ServiceWorkerFor(wasmVer, []string{"./", "manifest.webmanifest", "icon-192.png", "icon-512.png", "wasm_exec.js", "hv-boot.js", "worker.js", "browse.js", "winbox.wasm"})
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript")
 		w.Header().Set("Cache-Control", "no-store")
@@ -1092,9 +1092,13 @@ const deskShellTemplate = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e0c14">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>skywire</title>
 <style>
   html,body{margin:0;height:100%;background:#0e0c14;color:#cdd2da;font:14px/1.5 system-ui,sans-serif}
+  #install{position:fixed;right:14px;bottom:14px;z-index:20;display:none;padding:8px 14px;border-radius:8px;border:1px solid #2a2342;background:#1b1626;color:#cdd2da;font:13px system-ui;cursor:pointer}
   #boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8em;z-index:10}
   #boot .t{color:#9d7cff;font:600 18px system-ui}
   #boot .s{color:#9aa0a6;font:12px monospace;max-width:44em;text-align:center}
@@ -1102,10 +1106,27 @@ const deskShellTemplate = `<!DOCTYPE html>
 </style>
 </head>
 <body>
+<button id="install" title="Install this desk as an app: it opens on its own and keeps working when this address is out of reach">Install Skywire</button>
 <div id="boot">
   <div class="t">skywire</div>
   <div class="s" id="boot-msg">loading…</div>
 </div>
+<script>
+// PWA: a service worker keeps the desk shell (and, once fetched, the wasm
+// modules) so the installed app opens off the LAN too — its visor then falls
+// back to dmsg over wss. The install prompt is offered as a button, not forced.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) { console.warn('sw register failed', e); });
+  });
+}
+(function () {
+  var btn = document.getElementById('install'), deferred = null;
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; if (btn) btn.style.display = 'block'; });
+  window.addEventListener('appinstalled', function () { deferred = null; if (btn) btn.style.display = 'none'; });
+  if (btn) btn.addEventListener('click', function () { if (!deferred) return; deferred.prompt(); deferred.userChoice.then(function () { deferred = null; btn.style.display = 'none'; }); });
+})();
+</script>
 <script>
 window.__errs = [];
 Error.stackTraceLimit = 300;

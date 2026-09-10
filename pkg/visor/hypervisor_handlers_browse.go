@@ -70,6 +70,27 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 	}()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		// PWA: the desk installs as an app. The manifest and icons are the ones
+		// `hv serve` uses; the service worker precaches THIS context's shell and
+		// is named by the served-build stamp, so a new build re-installs it.
+		case "/manifest.webmanifest":
+			w.Header().Set("Content-Type", "application/manifest+json")
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = w.Write(wasmhv.PWAManifest) //nolint:errcheck
+			return
+		case "/icon-192.png":
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(wasmhv.PWAIcon192) //nolint:errcheck
+			return
+		case "/icon-512.png":
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(wasmhv.PWAIcon512) //nolint:errcheck
+			return
+		case "/sw.js":
+			w.Header().Set("Content-Type", "text/javascript")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(wasmhv.ServiceWorkerFor(hv.servedUIVersion(), []string{"/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/browse.js", "/desk-boot.js", "/wasm_exec.js", "/winbox.wasm", "/skywire-worker.js", "/autoupdate.js"})) //nolint:errcheck
+			return
 		case "/browse.js":
 			serveJS(w, browseui.BrowseJS)
 			return

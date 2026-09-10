@@ -73,6 +73,8 @@ type EntityCommon struct {
 	// with a fixed set of destinations, or for a deployment with no discovery
 	// at all; leave it clear for anything that must be findable by public key.
 	noRegister bool
+	// relayOnly: see Config.RelayOnly — publish only while server sessions exist.
+	relayOnly bool
 
 	// serverVersion, when non-empty, overrides the disc.Entry.Version a dmsg
 	// SERVER advertises (default "0.0.1") with its real build version. Set once
@@ -975,6 +977,18 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 	c.pushedSrvPKsMx.Lock()
 	lastPushed := c.lastPushedSrvPKs
 	c.pushedSrvPKsMx.Unlock()
+	if c.relayOnly && len(srvPKs) == 0 {
+		// Relay-only and riding the relay: no server session, nothing to name in
+		// an entry. Take down the one published while servers were held; peers
+		// reach this client over skynet, not through a server it left.
+		if len(lastPushed) > 0 {
+			c.deleteOwnEntry(ctx)
+			c.pushedSrvPKsMx.Lock()
+			c.lastPushedSrvPKs = []cipher.PubKey{}
+			c.pushedSrvPKsMx.Unlock()
+		}
+		return nil
+	}
 	if _, due := c.updateIsDue(); !due && lastPushed != nil && cipher.SamePubKeys(srvPKs, lastPushed) {
 		return nil
 	}
@@ -1442,7 +1456,24 @@ func (c *EntityCommon) recordUpdate() {
 
 // Unpublished reports whether this entity publishes no discovery entry
 // (Config.NoRegister). For `visor state`.
-func (c *EntityCommon) Unpublished() bool { return c.noRegister }
+func (c *EntityCommon) Unpublished() bool {
+	return c.noRegister || (c.relayOnly && c.hasSkynetSession())
+}
+
+// RelayOnly reports Config.RelayOnly.
+func (c *EntityCommon) RelayOnly() bool { return c.relayOnly }
+
+// hasSkynetSession reports whether a session rides the skynet carrier (a relay).
+func (c *EntityCommon) hasSkynetSession() bool {
+	c.sessionsMx.Lock()
+	defer c.sessionsMx.Unlock()
+	for _, ses := range c.sessions {
+		if ses.carrier == CarrierSkynet {
+			return true
+		}
+	}
+	return false
+}
 
 // deleteOwnEntry removes this entity's discovery entry if one exists — an
 // unpublished client that was published in an earlier life (or by an older

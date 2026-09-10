@@ -378,8 +378,8 @@ func (ce *Client) hasRelaySession() bool {
 // met, and — when relays are nominated and dialable — at least one relay
 // session held. Only meaningful when MinSessions != 0.
 func (ce *Client) sessionsSatisfied() bool {
-	if ce.noRegister && ce.hasRelaySession() {
-		// Unpublished client on a relay: the relay is the session. Holding
+	if ce.relayOnly && ce.hasRelaySession() {
+		// Relay-only client on a relay: the relay is the session. Holding
 		// MinSessions servers besides it would only republish what the relay
 		// already carries (#4484 stage 4: exactly one session).
 		return true
@@ -507,4 +507,17 @@ func (ce *Client) RelaySessionStreams() map[cipher.PubKey]int {
 		out[pk] = ses.NumStreams()
 	}
 	return out
+}
+
+// hasServerSession reports whether any session is to a dmsg server (not the
+// skynet relay carrier): what a discovery entry can name.
+func (ce *Client) hasServerSession() bool {
+	ce.sessionsMx.Lock()
+	defer ce.sessionsMx.Unlock()
+	for _, ses := range ce.sessions {
+		if ses.carrier != CarrierSkynet {
+			return true
+		}
+	}
+	return false
 }
