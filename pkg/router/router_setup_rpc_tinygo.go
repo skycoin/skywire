@@ -17,7 +17,7 @@ import (
 // (matching the gateway method's arg type) and returns the reply value; the wire
 // format is identical to net/rpc, so a native router peer interoperates.
 func (r *router) registerSetupRPC(mLog *logging.MasterLogger) error {
-	gw := NewRPCGateway(r, mLog)
+	gw := NewRPCGateway(r, mLog, r.conf.NoTransit)
 
 	r.rpcSrv.HandleFunc(RPCName+".AddEdgeRules", func(dec *gob.Decoder) (interface{}, error) {
 		var rules routing.EdgeRules

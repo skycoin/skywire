@@ -38,10 +38,13 @@ type RouterDeps struct {
 	MinHops               uint16
 	MuxRoutes             int
 	ExcludeTransportTypes []string
-	ParallelRouteSetup    int
-	AwaitSetupListener    *dmsg.Listener
-	Logger                *logging.Logger
-	MasterLogger          *logging.MasterLogger
+	// NoTransit refuses to act as an intermediate hop on another visor's route
+	// (visorconfig.Routing.NoTransit).
+	NoTransit          bool
+	ParallelRouteSetup int
+	AwaitSetupListener *dmsg.Listener
+	Logger             *logging.Logger
+	MasterLogger       *logging.MasterLogger
 
 	AppLookup       func(routing.Port) (string, bool)
 	DialHook        router.DialHook
@@ -86,6 +89,7 @@ func BuildRouter(serveCtx context.Context, deps RouterDeps) (router.Router, erro
 		MinHops:               deps.MinHops,
 		MuxRoutes:             deps.MuxRoutes,
 		ExcludeTransportTypes: deps.ExcludeTransportTypes,
+		NoTransit:             deps.NoTransit,
 		ParallelRouteSetup:    deps.ParallelRouteSetup,
 		AwaitSetupListener:    deps.AwaitSetupListener,
 		AppLookup:             deps.AppLookup,

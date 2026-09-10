@@ -94,7 +94,7 @@ func prepRPCServerAndClient(t *testing.T, r Router) (s *rpc.Server, cl *Client, 
 	require.NoError(t, err)
 	mlog := logging.NewMasterLogger()
 	s = rpc.NewServer()
-	require.NoError(t, s.Register(NewRPCGateway(r, mlog)))
+	require.NoError(t, s.Register(NewRPCGateway(r, mlog, false)))
 	go s.Accept(l)
 
 	conn, err := net.Dial("tcp", l.Addr().String())

@@ -9,5 +9,5 @@ import "github.com/skycoin/skywire/pkg/logging"
 // (gobrpc.Server is net/rpc.Server on native builds). The TinyGo build registers
 // explicit handlers instead — see router_setup_rpc_tinygo.go.
 func (r *router) registerSetupRPC(mLog *logging.MasterLogger) error {
-	return r.rpcSrv.Register(NewRPCGateway(r, mLog))
+	return r.rpcSrv.Register(NewRPCGateway(r, mLog, r.conf.NoTransit))
 }
