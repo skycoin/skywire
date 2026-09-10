@@ -14,8 +14,12 @@ func TestServeExecWasmGz(t *testing.T) {
 	raw := bytes.Repeat([]byte("\x00asm module bytes "), 512)
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
-	_, _ = zw.Write(raw)
-	_ = zw.Close()
+	if _, err := zw.Write(raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	gz := buf.Bytes()
 
 	// gzip-accepting client gets the bytes as embedded.
@@ -34,7 +38,10 @@ func TestServeExecWasmGz(t *testing.T) {
 	r = httptest.NewRequest(http.MethodGet, "/skywire.wasm", nil)
 	w = httptest.NewRecorder()
 	serveExecWasmGz(w, r, gz, "abcd")
-	body, _ := io.ReadAll(w.Body)
+	body, err := io.ReadAll(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if w.Code != 200 || w.Header().Get("Content-Encoding") != "" || !bytes.Equal(body, raw) {
 		t.Fatalf("identity path: code=%d enc=%q len=%d", w.Code, w.Header().Get("Content-Encoding"), len(body))
 	}

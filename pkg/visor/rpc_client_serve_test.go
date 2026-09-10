@@ -68,7 +68,7 @@ func TestDialBackoffs(t *testing.T) {
 	}
 }
 
-// waitForRedial honours the deadline with no transport manager and returns
+// waitForRedial honors the deadline with no transport manager and returns
 // false as soon as the context ends.
 func TestWaitForRedial(t *testing.T) {
 	var pk cipher.PubKey
@@ -82,6 +82,6 @@ func TestWaitForRedial(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if waitForRedial(ctx, time.Hour, nil, pk) {
-		t.Fatal("cancelled context should report false")
+		t.Fatal("canceled context should report false")
 	}
 }

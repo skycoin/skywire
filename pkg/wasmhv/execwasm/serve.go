@@ -46,7 +46,7 @@ func ServeGz(w http.ResponseWriter, r *http.Request, gz []byte, stamp string) {
 		return
 	}
 	defer zr.Close()      //nolint:errcheck
-	_, _ = io.Copy(w, zr) //nolint:errcheck
+	_, _ = io.Copy(w, zr) //nolint:errcheck,gosec // G110: the module is our own build artifact, not untrusted input
 }
 
 // Serve answers a GET for the module from the EMBEDDED copy alone — for a
@@ -55,7 +55,7 @@ func ServeGz(w http.ResponseWriter, r *http.Request, gz []byte, stamp string) {
 // also serve a configured file.
 //
 // When nothing is embedded the request is redirected to OriginPath. That is
-// the one behaviour both builds want: the js build never embeds anything (it
+// the one behavior both builds want: the js build never embeds anything (it
 // IS the module — see embed_js.go), so a tpviz or wallet route running inside
 // a tab's wasm hypervisor can only hand the browser back to the origin that
 // delivered the module in the first place, which serves it at OriginPath; a
