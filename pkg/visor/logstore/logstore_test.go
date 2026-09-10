@@ -1,6 +1,7 @@
 package logstore
 
 import (
+	"io"
 	"strings"
 	"testing"
 
@@ -21,7 +22,47 @@ func TestMakeStoreAndLevels(t *testing.T) {
 	store, hook := MakeStore(10)
 	require.NotNil(t, store)
 	require.NotNil(t, hook)
-	require.Equal(t, logrus.AllLevels, hook.Levels())
+	// Info and above only: the hook JSON-encodes every accepted entry under a
+	// process-wide mutex, so the debug firehose must not reach it by default.
+	require.Equal(t, logrus.AllLevels[:logrus.InfoLevel+1], hook.Levels())
+	require.NotContains(t, hook.Levels(), logrus.DebugLevel)
+	require.NotContains(t, hook.Levels(), logrus.TraceLevel)
+}
+
+// The hook must be a genuine no-op below its level — logrus consults Levels()
+// before calling Fire, so a debug line never reaches the JSON formatter or the
+// store mutex.
+func TestHookLevelGatesFire(t *testing.T) {
+	store, hook := MakeStore(10)
+
+	l := logrus.New()
+	l.SetLevel(logrus.DebugLevel)
+	l.SetOutput(io.Discard)
+	l.AddHook(hook)
+
+	l.Debug("hot-path-debug")
+	l.Info("kept-info")
+
+	logs, _ := store.GetLogs()
+	require.Len(t, logs, 1)
+	require.Contains(t, logs[0], "kept-info")
+}
+
+// An operator can still opt back in to capturing debug in the buffer.
+func TestMakeStoreLevelOptIn(t *testing.T) {
+	store, hook := MakeStoreLevel(10, logrus.DebugLevel)
+	require.Contains(t, hook.Levels(), logrus.DebugLevel)
+
+	l := logrus.New()
+	l.SetLevel(logrus.DebugLevel)
+	l.SetOutput(io.Discard)
+	l.AddHook(hook)
+
+	l.Debug("wanted-debug")
+
+	logs, _ := store.GetLogs()
+	require.Len(t, logs, 1)
+	require.Contains(t, logs[0], "wanted-debug")
 }
 
 func TestGetLogs_UnderCapacity(t *testing.T) {
