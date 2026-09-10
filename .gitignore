@@ -157,9 +157,10 @@ android/app/src/main/jniLibs/
 
 # Compiled binaries built in place. A `go build` in a cmd/ directory writes its
 # output beside the source, where `git add -A` sweeps it up — which is how an
-# 11MB ELF (cmd/hvinspect/hvinspect) and a stale 11MB wasm (pkg/tpviz/wasm)
+# 11MB ELF (cmd/hvinspect/hvinspect) and a stale 11MB wasm (the since-removed
+# pkg/tpviz/wasm)
 # were committed. Only artifacts something actually embeds belong in the tree:
-# pkg/wasmhv/wasmbin/*, pkg/tpviz/dist/*, pkg/tpviz/legacy/*, pkg/geoip/*.
+# pkg/wasmhv/wasmbin/*, pkg/tpviz/legacy/*, pkg/geoip/*.
 #
 # Named, not matched by shape. The general form of this rule cannot be written
 # safely: gitignore has no way to say "a file, not a directory", so any pattern
@@ -168,7 +169,6 @@ android/app/src/main/jniLibs/
 # can be re-included, so new source files would silently fail to be added. That
 # was the first version of this rule, and it was wrong.
 /cmd/hvinspect/hvinspect
-/pkg/tpviz/wasm/*.wasm
 
 # Angular build cache (static/skywire-manager-src builds emit .angular/cache).
 # Left untracked it is the sole dirty entry in an otherwise clean tree, so

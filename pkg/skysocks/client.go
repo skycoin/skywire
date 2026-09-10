@@ -26,7 +26,8 @@ import (
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetca"
-	"github.com/skycoin/skywire/pkg/wasmhv/wasmbin"
+	"github.com/skycoin/skywire/pkg/wasmhv"
+	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 // muxStreamWindowBytes is the per-stream yamux flow-control window skysocks
@@ -1334,11 +1335,12 @@ func (c *Client) serveStatusPage(conn, stream net.Conn) {
 		c.serveStatusWS(conn)
 		return
 	case "/main.wasm":
-		// The GPU route-graph view's engine: the one wasm-visor blob run in its
-		// "netview" role (it publishes the generic cosmos-go graph API the page
-		// drives), served same-origin so the page's strict self-contained context
-		// can instantiate it. Same blob pkg/tpviz serves at /tpviz-gl.wasm; served
-		// here straight from pkg/wasmhv/wasmbin. In-process, no exit round-trip.
+		// The GPU route-graph view's engine: the one skywire command module run
+		// in its "netview" role (it publishes the generic cosmos-go graph API the
+		// page drives), served same-origin so the page's strict self-contained
+		// context can instantiate it. Same module pkg/tpviz serves at
+		// /tpviz-gl.wasm; served here straight from the copy the native binary
+		// embeds (pkg/wasmhv/execwasm). In-process, no exit round-trip.
 		stream.Close()                          //nolint:errcheck,gosec
 		_, _ = conn.Write(statusWasmResponse()) //nolint:errcheck
 		return
@@ -1352,40 +1354,24 @@ func (c *Client) serveStatusPage(conn, stream net.Conn) {
 	_, _ = conn.Write(statusHTTPResponse(body)) //nolint:errcheck
 }
 
-// statusWasmVariant picks which embedded wasm-visor variant backs the route-graph
-// view, preferring the smaller TinyGo blob when present (a ~3 MB download vs the
-// ~9.5 MB standard-Go one). Mirrors pkg/tpviz's tpvizNetviewVariant. The second
-// return is false when no blob is embedded, in which case the page silently
-// falls back to the ASCII tree view.
-func statusWasmVariant() (wasmbin.Variant, bool) {
-	switch {
-	case !wasmbin.Embedded():
-		return wasmbin.Default(), false
-	case wasmbin.Has(wasmbin.TinyGo):
-		return wasmbin.TinyGo, true
-	default:
-		return wasmbin.Default(), true
-	}
-}
-
-// statusWasmResponse returns the raw HTTP/1.1 response carrying the wasm-visor
-// blob for /main.wasm. It serves the gzip-committed bytes verbatim with
+// statusWasmResponse returns the raw HTTP/1.1 response carrying the skywire
+// command module for /main.wasm, out of the copy embedded in the native
+// binary (pkg/wasmhv/execwasm). It serves the gzipped bytes verbatim with
 // Content-Encoding: gzip (the browser inflates; WebAssembly.instantiateStreaming
-// is happy with the result), avoiding inflating megabytes per request. A 503 is
-// returned when no blob is embedded.
+// is happy with the result), avoiding inflating megabytes per request. A 503
+// is returned when no module is embedded — a source build without
+// `make embed-exec-wasm`, or the js build, which embeds nothing (it IS the
+// module) — in which case the page silently keeps the ASCII tree view.
 func statusWasmResponse() []byte {
-	v, ok := statusWasmVariant()
-	if !ok {
-		return statusServiceUnavailable("no wasm-visor blob embedded in this build")
-	}
-	gz := wasmbin.GetVariantGz(v)
+	gz := execwasm.Gz()
 	if len(gz) == 0 {
-		return statusServiceUnavailable("wasm-visor blob unavailable")
+		return statusServiceUnavailable("no skywire.wasm module embedded in this build")
 	}
 	var b bytes.Buffer
 	b.WriteString("HTTP/1.1 200 OK\r\n")
 	b.WriteString("Content-Type: application/wasm\r\n")
 	b.WriteString("Content-Encoding: gzip\r\n")
+	fmt.Fprintf(&b, "ETag: %q\r\n", execwasm.Stamp())
 	fmt.Fprintf(&b, "Content-Length: %d\r\n", len(gz))
 	b.WriteString("Cache-Control: no-store\r\nConnection: close\r\n\r\n")
 	b.Write(gz)
@@ -1393,14 +1379,11 @@ func statusWasmResponse() []byte {
 }
 
 // statusWasmExecResponse returns the raw HTTP/1.1 response for /wasm_exec.js —
-// the loader that matches the served blob's toolchain (a TinyGo blob needs
-// TinyGo's loader). Small, so served uncompressed.
+// Go's loader (pkg/wasmhv) pinned to the module's netview role (argv + env,
+// execwasm.LoaderJS); the page sets the same argv itself
+// (pkg/proxystatus/render.go). Small, so served uncompressed.
 func statusWasmExecResponse() []byte {
-	v, ok := statusWasmVariant()
-	if !ok {
-		return statusServiceUnavailable("no wasm-visor blob embedded in this build")
-	}
-	js := wasmbin.WasmExecJSVariant(v)
+	js := execwasm.LoaderJS(wasmhv.WasmExecJS, "netview")
 	if len(js) == 0 {
 		return statusServiceUnavailable("wasm loader unavailable")
 	}

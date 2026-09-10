@@ -85,22 +85,24 @@ func init() {
 	RootCmd.AddCommand(
 		systemdServicesCmd,
 	)
+	// Flag defaults only: the working directory and its owner. Neither may
+	// be resolvable — a js/wasm instance under Go's stock wasm_exec.js has no
+	// cwd and no filesystem, a container may lack the passwd entry — and this
+	// init runs in every instance of the root binary, so it must not be fatal.
 	currentDir, err := os.Getwd()
 	if err != nil {
-		log.Fatal(err)
+		currentDir = "."
+	}
+	defaultUser := os.Getenv("USER")
+	if fileInfo, err := os.Stat(currentDir); err == nil {
+		if stat, ok := fileInfo.Sys().(*syscall.Stat_t); ok {
+			if owner, err := user.LookupId(fmt.Sprint(stat.Uid)); err == nil {
+				defaultUser = owner.Username
+			}
+		}
 	}
 
-	fileInfo, err := os.Stat(currentDir)
-	if err != nil {
-		log.Fatal(err)
-	}
-	stat := fileInfo.Sys().(*syscall.Stat_t)
-	owner, err := user.LookupId(fmt.Sprint(stat.Uid))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	systemdServicesCmd.Flags().StringVarP(&userName, "user", "u", owner.Username, "user to set - should have write permission on path")
+	systemdServicesCmd.Flags().StringVarP(&userName, "user", "u", defaultUser, "user to set - should have write permission on path")
 	systemdServicesCmd.Flags().StringVarP(&workingDir, "path", "p", currentDir, "reward system data dir path")
 	systemdServicesCmd.Flags().StringVarP(&skyenvConf, "skyenv", "s", "fr.conf", "env config file path")
 	systemdServicesCmd.Flags().StringVarP(&outputPath, "out", "o", "/etc/systemd/system", "path to output systemd services")

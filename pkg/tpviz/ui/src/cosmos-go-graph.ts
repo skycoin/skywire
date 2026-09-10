@@ -52,12 +52,14 @@ function loadModule(): Promise<boolean> {
   if (loading) { return loading; }
   loading = new Promise<boolean>((resolve) => {
     if (gl()) { resolve(true); return; }
-    // The module served at WASM_MODULE is the one wasm-visor blob, not a
-    // separate tpviz-gl build. Run it in its "netview" role so its main()
-    // installs only the WebGL view (globalThis.tpvizGL) and never boots a
-    // visor — the same one-binary-many-roles trick as the websh terminal.
-    // Must be set before go.run() executes the module's main().
-    (window as any).__SKYWIRE_WASM_ROLE__ = 'netview';
+    // The module served at WASM_MODULE is the one skywire command module
+    // (the root binary built for js/wasm), not a separate tpviz-gl build. Run
+    // it as `skywire desk-host --role netview` so it installs only the WebGL
+    // view (globalThis.tpvizGL) and never boots a visor — the same
+    // one-module-many-roles trick as the desk's terminal. wasm_exec.js reads
+    // go.argv when go.run() starts the instance; the loader served at
+    // WASM_EXEC is already pinned to this role (argv + env), this just says
+    // so where the instance is made.
     const script = document.createElement('script');
     script.src = WASM_EXEC;
     script.onerror = () => resolve(false);
@@ -65,8 +67,7 @@ function loadModule(): Promise<boolean> {
       const GoCtor = (window as any).Go;
       if (!GoCtor) { resolve(false); return; }
       const go = new GoCtor();
-      // TinyGo's glue expects a crypto shim under some hosts; harmless when
-      // the standard-Go build is served instead.
+      go.argv = ['skywire', 'desk-host', '--role', 'netview'];
       WebAssembly.instantiateStreaming(fetch(WASM_MODULE), go.importObject)
         .then((res: any) => {
           go.run(res.instance);

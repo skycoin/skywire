@@ -240,9 +240,9 @@ func TestRenderGraphView(t *testing.T) {
 		`<script type="application/json" id="rgdata">`, `"nodes":`, `"links":`, `"sig":`, `"x":`, `"y":`,
 		// driver hands the seed positions to setData and re-fits after a settle
 		`nd.x`, `nd.y`, "positions:pp",
-		// driver reuses the network visualizer's engine with no new wasm:
-		// netview role → tpvizGL (cosmos-go), served same-origin
-		`__SKYWIRE_WASM_ROLE__`, `"netview"`, "/main.wasm", "/wasm_exec.js",
+		// driver reuses the network visualizer's engine with no new wasm: the
+		// command module in its netview role → tpvizGL (cosmos-go), same-origin
+		`go.argv=["skywire","desk-host","--role","netview"]`, "/main.wasm", "/wasm_exec.js",
 		"tpvizGL", "instantiateStreaming", "MutationObserver", "setData",
 		// per-stream + exit colors reach the payload
 		rgExitColor, rgStreamColors[0], rgStreamColors[1],
