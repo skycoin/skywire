@@ -351,3 +351,23 @@ func isTemp(err error) bool {
 	}
 	return false
 }
+
+// Unread returns a copy of the bytes the handshake reader has buffered past
+// the final handshake message. In an XK handshake the initiator may start
+// writing session frames the moment it has sent its last message, so those
+// frames can land in the responder's read buffer together with that message.
+// They are valid post-handshake data and must be handed to the session
+// transport, not discarded.
+func (rw *ReadWriter) Unread() []byte {
+	n := rw.rawInput.Buffered()
+	if n == 0 {
+		return nil
+	}
+	b, err := rw.rawInput.Peek(n)
+	if err != nil {
+		return nil
+	}
+	out := make([]byte, n)
+	copy(out, b)
+	return out
+}

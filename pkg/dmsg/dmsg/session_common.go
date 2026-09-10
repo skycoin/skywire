@@ -2,6 +2,7 @@
 package dmsg
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -225,8 +226,11 @@ func (sc *SessionCommon) initServer(entity *EntityCommon, conn net.Conn) error {
 	if err := rw.Handshake(HandshakeTimeout); err != nil {
 		return err
 	}
-	if rw.Buffered() > 0 {
-		return ErrSessionHandshakeExtraBytes
+	if early := rw.Unread(); len(early) > 0 {
+		// The initiator already sent session frames behind its final
+		// handshake message (a peering server announces itself immediately);
+		// keep them for the multiplexer instead of tearing the session down.
+		conn = &prefixedConn{Conn: conn, r: io.MultiReader(bytes.NewReader(early), conn)}
 	}
 
 	sc.entity = entity
@@ -498,3 +502,12 @@ func (sc *SessionCommon) Close() error {
 	sc.rMx.Unlock()
 	return err
 }
+
+// prefixedConn is a net.Conn whose reads first drain bytes that arrived
+// during the noise handshake but belong to the session (see initServer).
+type prefixedConn struct {
+	net.Conn
+	r io.Reader
+}
+
+func (c *prefixedConn) Read(p []byte) (int, error) { return c.r.Read(p) }

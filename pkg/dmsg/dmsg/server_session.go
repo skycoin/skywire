@@ -231,20 +231,31 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 	// Inbound peer announcement: when this server opts in, a dialing
 	// server's first stream may carry a signed PeerAnnounce that promotes
 	// this session to a forwardable peer — the reverse-path enabler for a
-	// non-public server. Checked before the StreamRequest path; a normal
-	// request decoded as an announce has a null/foreign SrcPK and fails
-	// Verify, so it falls through harmlessly.
-	if ss.entity.acceptPeerAnnouncements && !ss.isPeer {
-		if ann, aErr := obj.ObtainPeerAnnounce(); aErr == nil {
-			if ann.Verify(ss.rPK) == nil && ss.entity.peerAnnounceAllowed(ss.rPK) {
+	// non-public server. Gob is lenient, so an ordinary StreamRequest also
+	// decodes as an announce (SrcPK null); only an object that Verifies
+	// against the session's noise-authenticated PK is treated as one,
+	// everything else falls through to the StreamRequest path.
+	//
+	// This runs whether or not the session is already marked isPeer. With
+	// mutual configs both sides dial and both pre-mark the other as a peer;
+	// before, an announce on an already-peer session was skipped here, fell
+	// through to the StreamRequest parser, failed and closed the session.
+	// The dialer saw EOF, logged "Peer session closed, will reconnect" and
+	// redialed at once, so every mutually configured server pair flapped
+	// several times a second (thousands of noise handshakes a minute
+	// fleet-wide, 2026-09-10). The announce is idempotent: (re)register, ack.
+	if ss.entity.acceptPeerAnnouncements {
+		if ann, aErr := obj.ObtainPeerAnnounce(); aErr == nil && ann.Verify(ss.rPK) == nil {
+			accepted := ss.isPeer || ss.entity.peerAnnounceAllowed(ss.rPK)
+			if accepted {
 				ss.entity.promoteToPeer(ss.rPK, ss.SessionCommon)
-				resp := StreamResponse{ReqHash: obj.Hash(), Accepted: true}
-				ackObj, mErr := MakeSignedStreamResponse(&resp, ss.entity.LocalSK())
-				if mErr != nil {
-					return mErr
-				}
-				return ss.writeObject(yStr, ackObj)
 			}
+			resp := StreamResponse{ReqHash: obj.Hash(), Accepted: accepted}
+			ackObj, mErr := MakeSignedStreamResponse(&resp, ss.entity.LocalSK())
+			if mErr != nil {
+				return mErr
+			}
+			return ss.writeObject(yStr, ackObj)
 		}
 	}
 
