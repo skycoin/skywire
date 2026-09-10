@@ -5,7 +5,7 @@ Package logging provides application logging utilities
 package logging
 
 import (
-	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -23,7 +23,12 @@ const (
 	logPriorityCritical = "CRITICAL"
 )
 
-// LevelFromString returns a logrus.Level from a string identifier
+// LevelFromString returns a logrus.Level from a string identifier.
+//
+// An unrecognized (or empty) identifier returns logrus.InfoLevel along with an
+// error naming the offending string. It used to fall back to DebugLevel, which
+// meant a missing or misspelled "log_level" silently ran a service at debug in
+// production for callers that logged the error and carried on.
 func LevelFromString(s string) (logrus.Level, error) {
 	switch strings.ToLower(s) {
 	case "debug":
@@ -41,7 +46,7 @@ func LevelFromString(s string) (logrus.Level, error) {
 	case "trace":
 		return logrus.TraceLevel, nil
 	default:
-		return logrus.DebugLevel, errors.New("could not convert string to log level")
+		return logrus.InfoLevel, fmt.Errorf("unrecognized log level %q; want one of debug, info, warn, error, fatal, panic, trace", s)
 	}
 }
 
@@ -102,3 +107,10 @@ func TraceEnabled() bool { return log.GetLevel() >= logrus.TraceLevel }
 // interface omits the Trace methods (see Logger.Tracef). Callers on a hot
 // path must guard it with TraceEnabled: reaching the entry allocates.
 func Trace(l logrus.FieldLogger, msg string) { l.WithFields(logrus.Fields{}).Trace(msg) }
+
+// ScopedLogger returns a package-aware logger derived from the global master
+// logger whose minimum level is independent of it. See
+// MasterLogger.ScopedLogger.
+func ScopedLogger(module string, level logrus.Level) *Logger {
+	return log.ScopedLogger(module, level)
+}

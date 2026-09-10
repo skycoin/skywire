@@ -5,6 +5,7 @@
 package cmdutil
 
 import (
+	"fmt"
 	"log/syslog"
 	"strings"
 
@@ -25,7 +26,10 @@ func (sf *ServiceFlags) sysLogHook(log *logging.Logger, sysLvl int) {
 	logging.AddHook(hook)
 }
 
-// LevelFromString returns a logrus.Level and syslog.Priority from a string identifier.
+// LevelFromString returns a logrus.Level and syslog.Priority from a string
+// identifier. An unrecognized (or empty) identifier yields info level plus an
+// error naming it — never debug, which would silently make an unattended
+// service verbose in production.
 func LevelFromString(s string) (logrus.Level, int, error) {
 	switch strings.ToLower(s) {
 	case "debug":
@@ -40,7 +44,9 @@ func LevelFromString(s string) (logrus.Level, int, error) {
 		return logrus.FatalLevel, int(syslog.LOG_CRIT), nil
 	case "panic":
 		return logrus.PanicLevel, int(syslog.LOG_EMERG), nil
+	case "trace":
+		return logrus.TraceLevel, int(syslog.LOG_DEBUG), nil
 	default:
-		return logrus.DebugLevel, int(syslog.LOG_DEBUG), ErrInvalidLogString
+		return logrus.InfoLevel, int(syslog.LOG_INFO), fmt.Errorf("%w: %q", ErrInvalidLogString, s)
 	}
 }

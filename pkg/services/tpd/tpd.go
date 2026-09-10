@@ -77,13 +77,8 @@ func (s *service) Run(ctx context.Context) error {
 	if cfg.Tag == "" {
 		cfg.Tag = "transport_discovery"
 	}
-	logger := logging.MustGetLogger(cfg.Tag)
+	logger := services.NewLogger(cfg.Tag, cfg.LogLevel)
 	_ = s.log // logger is replaced with a tag-scoped one
-	if cfg.LogLevel != "" {
-		if lvl, err := logging.LevelFromString(cfg.LogLevel); err == nil {
-			logging.SetLevel(lvl)
-		}
-	}
 
 	redisURL := cfg.Redis
 	if redisURL == "" {
