@@ -16,13 +16,16 @@ const RPCName = "RPCGateway"
 type RPCGateway struct {
 	logger *logging.Logger
 	router Router
+	// noTransit refuses intermediary rules outright (routing.no_transit).
+	noTransit bool
 }
 
 // NewRPCGateway creates a new RPCGateway.
-func NewRPCGateway(router Router, mLog *logging.MasterLogger) *RPCGateway {
+func NewRPCGateway(router Router, mLog *logging.MasterLogger, noTransit bool) *RPCGateway {
 	return &RPCGateway{
-		logger: mLog.PackageLogger("router-gateway"),
-		router: router,
+		logger:    mLog.PackageLogger("router-gateway"),
+		router:    router,
+		noTransit: noTransit,
 	}
 }
 
@@ -41,8 +44,16 @@ func (r *RPCGateway) AddEdgeRules(rules routing.EdgeRules, ok *bool) error {
 	return nil
 }
 
-// AddIntermediaryRules adds intermediary rules.
+// AddIntermediaryRules adds intermediary rules. This RPC exists only to make
+// this visor a transit hop on someone else's route, so refusing it outright is
+// exactly what routing.no_transit means. Edge rules arrive by AddEdgeRules and
+// are untouched, so routes that start or end here still work.
 func (r *RPCGateway) AddIntermediaryRules(rules []routing.Rule, ok *bool) error {
+	if r.noTransit {
+		*ok = false
+		r.logger.Debug("Refusing intermediary rules: this visor does not transit routes.")
+		return routing.Failure{Code: routing.FailureAddRules, Msg: "visor does not transit routes"}
+	}
 	if err := r.router.SaveRoutingRules(rules...); err != nil {
 		*ok = false
 

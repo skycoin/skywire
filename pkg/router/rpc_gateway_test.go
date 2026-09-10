@@ -33,7 +33,7 @@ func TestRPCGateway_AddEdgeRules(t *testing.T) {
 		r.On("IntroduceRules", rules).Return(testhelpers.NoErr)
 		r.On("SaveRoutingRules", rules.Forward, rules.Reverse).Return(testhelpers.NoErr)
 
-		gateway := NewRPCGateway(r, mlog)
+		gateway := NewRPCGateway(r, mlog, false)
 
 		var ok bool
 		err := gateway.AddEdgeRules(rules, &ok)
@@ -45,7 +45,7 @@ func TestRPCGateway_AddEdgeRules(t *testing.T) {
 		r := &MockRouter{}
 		r.On("IntroduceRules", rules).Return(testhelpers.Err)
 
-		gateway := NewRPCGateway(r, mlog)
+		gateway := NewRPCGateway(r, mlog, false)
 
 		var ok bool
 		err := gateway.AddEdgeRules(rules, &ok)
@@ -63,7 +63,7 @@ func TestRPCGateway_AddEdgeRules(t *testing.T) {
 		r := &MockRouter{}
 		r.On("IntroduceRules", rules).Return(testhelpers.Err)
 
-		gateway := NewRPCGateway(r, mlog)
+		gateway := NewRPCGateway(r, mlog, false)
 
 		wantErr := routing.Failure{
 			Code: routing.FailureAddRules,
@@ -87,7 +87,7 @@ func TestRPCGateway_AddIntermediaryRules(t *testing.T) {
 		r := &MockRouter{}
 		r.On("SaveRoutingRules", rulesIfc...).Return(testhelpers.NoErr)
 
-		gateway := NewRPCGateway(r, mlog)
+		gateway := NewRPCGateway(r, mlog, false)
 
 		var ok bool
 		err := gateway.AddIntermediaryRules(rules, &ok)
@@ -99,7 +99,7 @@ func TestRPCGateway_AddIntermediaryRules(t *testing.T) {
 		r := &MockRouter{}
 		r.On("SaveRoutingRules", rulesIfc...).Return(testhelpers.Err)
 
-		gateway := NewRPCGateway(r, mlog)
+		gateway := NewRPCGateway(r, mlog, false)
 
 		wantErr := routing.Failure{
 			Code: routing.FailureAddRules,
@@ -121,7 +121,7 @@ func TestRPCGateway_ReserveIDs(t *testing.T) {
 		r := &MockRouter{}
 		r.On("ReserveKeys", n).Return(ids, testhelpers.NoErr)
 
-		gateway := NewRPCGateway(r, mlog)
+		gateway := NewRPCGateway(r, mlog, false)
 
 		var gotIDs []routing.RouteID
 		err := gateway.ReserveIDs(uint8(n), &gotIDs) //nolint: gosec
@@ -133,7 +133,7 @@ func TestRPCGateway_ReserveIDs(t *testing.T) {
 		r := &MockRouter{}
 		r.On("ReserveKeys", n).Return(nil, testhelpers.Err)
 
-		gateway := NewRPCGateway(r, mlog)
+		gateway := NewRPCGateway(r, mlog, false)
 
 		wantErr := routing.Failure{
 			Code: routing.FailureReserveRtIDs,
