@@ -90,14 +90,35 @@ OR:
 ```
 skywire cli config gen --hvpks <public-key>
 ```
-OR, on a running visor (connects out immediately and writes the PK to
-skywire-config.json — but the *inbound* CLI-bridge access the PK grants
-starts on the visor's next restart, when the RPC listeners and
-whitelist are rebuilt, and the PK is dropped by the next `skywire
-autoconfig` run unless it is also in `HYPERVISORPKS`):
+OR, on a running visor:
 ```
 skywire cli visor hv add <public-key>
 ```
+This connects out at once and admits the key for RPC and pty at once. It is
+written to skywire-config.json and, on a package install, mirrored into
+`HYPERVISORPKS` in `/etc/skywire.conf`, so it survives the `skywire
+autoconfig` run every package update performs. `hv rm <public-key>` undoes
+all of it. A desk tab pairs the same way through `hv pair` (see above).
+
+A paired hypervisor that is offline is not dialed aggressively: once its
+dmsg entry is gone the visor doubles its wait up to one minute between
+attempts, and connects within seconds when the peer comes back over a direct
+transport (a re-opened tab).
+
+## Run a dmsg server inside the visor
+
+A host that runs a public dmsg server as a separate unit
+(`skywire dmsg server start /etc/skywire-dmsg.json`) can fold it into the
+visor process and save the second Go runtime. Stop and disable that unit,
+drop it from `RESTART_SERVICES`, then set in `/etc/skywire.conf`:
+
+```
+DMSGSERVERCONF='/etc/skywire-dmsg.json'
+```
+
+and run `skywire autoconfig`. The server keeps its own key, ports, wss domain
+and health endpoint from that file; it appears in `skywire cli mdisc servers`
+as before. In the visor config this is `dmsg.server.config_path`.
 
 A listed hypervisor PK is also what authorizes full remote CLI control
 of the visor (`skywire cli --via dmsg://<pk> …`) — the trust model,
