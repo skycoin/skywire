@@ -11,7 +11,7 @@ The wallet **frontend is always a browser SPA** (Angular + `skycoin-lite.wasm`).
 Two things vary by platform and the operator should never think about them:
 
 - **How the frontend is served** — native Go handler (`walletHandler`) / static
-  embedded assets (`hv serve`, wasm) / inlined single-file (`hv gen`).
+  embedded assets (`hv serve`, wasm).
 - **How the node API is reached** — server-side dmsg proxy (native) / in-tab
   fetch-over-dmsg (wasm/standalone). This is the `/coin/<index>` seam.
 

@@ -7,8 +7,10 @@ process behind a reverse proxy.
 
 ## How it works
 
-The skywire binary **embeds** both the wasm-visor (`pkg/wasmhv/wasmbin/wasm-visor.wasm.gz`,
-the standard-Go build) and the hypervisor UI. So:
+The skywire binary **embeds** both the one skywire command module for js/wasm
+(`pkg/wasmhv/execwasm`, staged by `make build-embedded` — every published binary
+has it; a plain source build does not, and `hv serve` refuses to start without it
+or `--exec-wasm`) and the hypervisor UI. So:
 
 ```
 skywire cli hv serve --addr 127.0.0.1:7999
@@ -25,11 +27,10 @@ with skywire-cli interactively.
 
 ## Keyless = safe to serve from a domain
 
-With no key flags, the page bakes in **no key**. Each visitor's browser mints its own
-ephemeral key and persists it in `localStorage` (via `hv-boot.js`), so refreshes keep the
-same in-browser visor while picking up freshly served code. The page never asks anyone to
-type a secret key — which is why serving it from a domain is fine. (The key-entry-spoof
-risk only applies to key-BEARING `hv gen` files; never serve those from a domain.)
+The page bakes in **no key**. Each visitor's browser mints its own ephemeral key
+and persists it (the desk's session), so refreshes keep the same in-browser visor
+while picking up freshly served code. The page never asks anyone to type a secret
+key — which is why serving it from a domain is fine.
 
 ## Setup
 
@@ -101,8 +102,5 @@ The page is built at process start, so restart the serve service after skywire u
 ## Notes
 
 - Force a manual refresh of the served build: `sudo systemctl restart skywire-wasm-visor-serve.service`.
-- For a viewer-only page or a key-bearing personal build, use `skywire cli hv gen`
-  (`--viewer-pk`, `--sk`, `--password`) and open it from `file://` — do **not** serve a
-  key-bearing build from a domain.
 - Future: ship `skywire-wasm-visor-serve.service` with the skywire package so this is a
   one-liner enable.

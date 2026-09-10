@@ -1,6 +1,13 @@
 # wasm-visor binary: embedded by default, blob updated intentionally
 
-## What ships
+> **Retired (stage 4 of #4484).** The committed `pkg/wasmhv/wasmbin` blobs, the
+> `?variant=` / `--variant` selection, `hv gen` and the `embed-wasm-visor*`
+> targets described below are gone. The one js/wasm module is the root binary
+> itself (`pkg/wasmhv/execwasm`, gitignored, staged by `make build-embedded`);
+> every page serves it at `/skywire.wasm` and runs it in a role
+> (`skywire desk-host --role shell|browser|netview|cipher`). Kept as history.
+
+## What shipped
 
 The standard-Go `wasm-visor.wasm` (the browser visor — TinyGo can't do TLS, see
 [tinygo issue #3259]) is **embedded in the skywire binary by default**, gzipped:

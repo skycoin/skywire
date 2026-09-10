@@ -9,14 +9,6 @@ import (
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
 )
 
-// OverrideJS is pkg/wasmhv/override.js — the classic <script> that, in a
-// generated standalone file, boots the WASM dmsg client and routes the UI's
-// /api over dmsg (or to the in-wasm core in standalone mode). Embedded so
-// GenerateStandalone consumers don't need to locate it on disk.
-//
-//go:embed override.js
-var OverrideJS []byte
-
 // BrowseJS is pkg/wasmhv/browse.js — the dmsg virtual-browser engine (the same
 // file the wasm-visor dev harness loads). Injected into a generated standalone
 // file in VISOR mode so the page gets a browse/host overlay (skynet sites
@@ -29,20 +21,19 @@ var OverrideJS []byte
 var BrowseJS = browseui.BrowseJS
 
 // WinBoxJS is the window-manager loader pair the LEGACY pages inline (the
-// hv-boot page of `hv serve`, the `hv gen` single file): they build windows in
+// hv-boot page of `hv serve`): they build windows in
 // JS and need globalThis.WinBox. The desk pages do not — their chrome is Go
 // and links winbox-go — so it is no longer part of BrowseJS.
 var WinBoxJS = browseui.WinBoxJS
 
 // WinBoxWasm is the window-manager wasm module that loader fetches — a Go
 // port of WinBox.js (github.com/0magnet/winbox-go) compiled to wasm. Served at
-// /winbox.wasm by the legacy `hv serve` page; base64-inlined instead by the
-// single-file generator, which has no server. Re-exported from the browseui
+// /winbox.wasm by the legacy `hv serve` page. Re-exported from the browseui
 // leaf like BrowseJS.
 func WinBoxWasm() []byte { return browseui.WinBoxWasm() }
 
-// WinBoxWasmGz is the same module still compressed, for the single-file
-// generator to inline.
+// WinBoxWasmGz is the same module still compressed, for a page that inlines
+// it.
 func WinBoxWasmGz() []byte { return browseui.WinBoxWasmGz() }
 
 // DeskBootJS is the shared desk boot (skywireDeskBoot) behind the desk-first
@@ -140,14 +131,6 @@ var BrowseBootstrapHTML []byte
 //go:embed browse-transport.js
 var BrowseTransportJS []byte
 
-// BrowseSWLoaderJS boots the Go/wasm transport worker in place of realorigin's
-// JS one, and is served only when `hv serve --browse-origin-wasm` asks for it.
-// __WASM_EXEC__ and __WASM_URL__ are substituted with the paths the same origin
-// serves those two files from.
-//
-//go:embed browse-sw-loader.js
-var BrowseSWLoaderJS []byte
-
 // PWAIcon192 / PWAIcon512 are the maskable install icons referenced by the
 // manifest, served at /icon-192.png and /icon-512.png.
 //
@@ -164,10 +147,11 @@ var PWAIcon512 []byte
 //go:embed favicon.ico
 var FaviconICO []byte
 
-// WasmExecJS is Go's lib/wasm/wasm_exec.js, vendored here so a generated file is
-// self-contained. It MUST match the Go toolchain that built the embedded/passed
-// dmsg.wasm — refresh it with the wasm build (the Makefile bundle target copies
-// it from $(go env GOROOT)/lib/wasm/wasm_exec.js).
+// WasmExecJS is Go's lib/wasm/wasm_exec.js — the loader every page serves
+// beside the one skywire command module (/wasm_exec.js, and the role-pinned
+// copies execwasm.LoaderJS derives from it). It MUST match the Go toolchain
+// that built the module — refresh it from $(go env GOROOT)/lib/wasm/wasm_exec.js
+// when the toolchain moves.
 //
 //go:embed wasm_exec.js
 var WasmExecJS []byte
