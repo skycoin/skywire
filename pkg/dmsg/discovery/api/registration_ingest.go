@@ -34,11 +34,19 @@ func (a *API) IngestEntryFromCXO(ctx context.Context, entry *disc.Entry, reporte
 	if entry == nil {
 		return
 	}
-	// Registration-over-CXO is for client (visor) entries only. Server
-	// entries register over HTTP; a client must not be able to publish a
-	// server entry (which advertises a reachable address) via its own feed.
-	if entry.Client == nil || entry.Server != nil {
-		log.WithField("reporter", reporter).Debug("registration-cxo: ignoring non-client entry")
+	// This path carries CLIENT registration, so an entry with no client half
+	// has nothing to register here.
+	//
+	// A server half alongside it IS accepted. A visor running the in-process
+	// dmsg server on its own key has one entry carrying both sections, and
+	// rejecting it would force that visor back onto the HTTP re-PUT this
+	// whole path exists to avoid — a fresh Noise+PQ handshake per refresh,
+	// which is what dominated dmsg-discovery CPU. It grants nothing new:
+	// entry.Static == reporter is enforced below, so a visor can only ever
+	// publish its OWN key, and the HTTP path already accepts a server entry
+	// from that same key under the same signature check.
+	if entry.Client == nil {
+		log.WithField("reporter", reporter).Debug("registration-cxo: ignoring entry with no client section")
 		return
 	}
 	// A visor may only publish its OWN entry: the feed PK (reporter) signs
