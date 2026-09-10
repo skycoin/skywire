@@ -67,6 +67,12 @@ var WhitelistPKs = nmpk.GetWhitelistPKs()
 
 // API represents the service-discovery API.
 type API struct {
+	// Handler is the chi router, built once in New. Every sibling
+	// service (tpd, ar, dmsg-discovery) does the same; SD used to
+	// rebuild the whole router — middleware stack and all routes —
+	// on every single request before serving it.
+	http.Handler
+
 	log                         logrus.FieldLogger
 	db                          store.Store
 	metrics                     sdmetrics.Metrics
@@ -227,11 +233,16 @@ func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore,
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
 	}
+	api.Handler = api.newRouter()
 	return api
 }
 
-// ServeHTTP implements http.Handler
-func (a *API) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+// newRouter builds the service-discovery router. Called once from New,
+// after every field it closes over is set. Everything it reads
+// (log, enableMetrics, nonceDB, reqsInFlightCountMiddleware) is
+// assigned in New and never mutated afterwards, so the resulting
+// handler is safe to share across request goroutines.
+func (a *API) newRouter() chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(a.log))
@@ -278,7 +289,7 @@ func (a *API) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.Get("/security/nonces/{pk}", handler.ServeHTTP)
 	}
 
-	r.ServeHTTP(w, req)
+	return r
 }
 
 // RunBackgroundTasks is goroutine which runs in background periodic tasks of skycoin-service-discovery.
