@@ -87,3 +87,38 @@ func (logger *MasterLogger) EnableColors() {
 func (logger *MasterLogger) DisableColors() {
 	logger.Formatter.(*TextFormatter).DisableColors = true
 }
+
+// ScopedLogger returns a package-aware logger whose minimum level is
+// independent of this master logger's, so setting it cannot change what any
+// other logger in the process emits.
+//
+// Output and formatter are shared with the parent; hooks are copied as of this
+// call. A scoped logger therefore still writes where everything else writes —
+// only the level is its own. Hooks installed on the parent afterwards do not
+// reach it, which is fine for the one caller that needs this: services install
+// their hooks (syslog) at startup, before any service builds its logger.
+func (logger *MasterLogger) ScopedLogger(module string, level logrus.Level) *Logger {
+	hooks := make(logrus.LevelHooks, len(logger.Hooks))
+	for lvl, hs := range logger.Hooks {
+		hooks[lvl] = append([]logrus.Hook(nil), hs...)
+	}
+	scoped := &MasterLogger{Logger: &logrus.Logger{
+		Out:          logger.Out,
+		Formatter:    logger.Formatter,
+		Hooks:        hooks,
+		Level:        level,
+		ExitFunc:     logger.ExitFunc,
+		ReportCaller: logger.ReportCaller,
+	}}
+	return scoped.PackageLogger(module)
+}
+
+// Level reports the minimum level this logger emits at. Loggers built by
+// PackageLogger or ScopedLogger report their own master's level; anything else
+// falls back to the process-global level.
+func (logger *Logger) Level() logrus.Level {
+	if e, ok := logger.FieldLogger.(*logrus.Entry); ok && e.Logger != nil {
+		return e.Logger.GetLevel()
+	}
+	return GetLevel()
+}
