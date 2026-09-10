@@ -204,6 +204,8 @@ func TestNativeDeskServing(t *testing.T) {
 
 	t.Run("the desk-host module is served for the browser, not for a visor", func(t *testing.T) {
 		for _, p := range []string{"/wasm-visor.wasm", "/wasm_exec.js"} {
+			// (wasm-visor.wasm only until every desk has a command module: with
+			// none, it is still the desk host.)
 			if w := get(p); w.Code != http.StatusOK {
 				t.Errorf("GET %s → %d, want 200 (netscrape lives in this module)", p, w.Code)
 			}
@@ -237,7 +239,7 @@ func TestNativeDeskServing(t *testing.T) {
 func TestDeskShellHTMLWasmMode(t *testing.T) {
 	page := string(deskShellHTML(wasmDeskScripts(), deskWasmBootOpts(false, 0)))
 	for _, want := range []string{
-		"deskWasmURL: '/wasm-visor.wasm'",
+		"deskWasmURL: '/skywire.wasm'",
 		"wasmURL: '/skywire.wasm'",
 		"autostartVisor: true",
 		"skywireDeskBoot(",
@@ -376,6 +378,9 @@ func TestNativeDeskAttachedVisor(t *testing.T) {
 		body := w.Body.String()
 		for _, want := range []string{
 			"autostartVisor: true",
+			// ONE module: the desk host is `skywire desk-host` out of the command
+			// module, not a wasm-visor.wasm of its own.
+			"deskWasmURL: '/skywire.wasm'",
 			"wasmURL: '/skywire.wasm'",
 			"execWorkerURL: '/skywire-worker.js'",
 			"attach: { pk: '" + pk.Hex() + "', path: '/tp/ws' }",
