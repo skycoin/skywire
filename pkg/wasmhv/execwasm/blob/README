@@ -1,0 +1,5 @@
+The full skywire command module for GOOS=js (skywire.wasm.gz) is placed here
+by the two-stage build (make build-embedded, publish-binary.yml, release.yml)
+and embedded into the native binary. It is gitignored: a plain `go build .`
+embeds only this file and the visor falls back to the disk path. See
+pkg/wasmhv/execwasm.
