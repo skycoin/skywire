@@ -198,7 +198,7 @@ func (s *service) Run(ctx context.Context) error {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP) //nolint:staticcheck
-	r.Use(middleware.Logger)
+	r.Use(httputil.NewLogMiddleware(log))
 	r.Use(middleware.Recoverer)
 
 	srvAPI := dmsgserver.NewServerAPI(r, log, m)
