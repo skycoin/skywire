@@ -43,6 +43,9 @@ type API interface {
 	DisableHypervisorPersist(persist bool) error
 	IsHypervisorEnabled() bool
 	EnableHypervisorUIPersist(persist bool) error
+	// SetHypervisorLegacyUIPersist serves the legacy Angular dashboard (true) or
+	// the desk (false) at the web UI root; persist writes hypervisor.legacy_ui.
+	SetHypervisorLegacyUIPersist(legacy, persist bool) error
 	DisableHypervisorUIPersist(persist bool) error
 	IsHypervisorUIServing() bool
 	DmsgPortHits() []dmsg.PortHit

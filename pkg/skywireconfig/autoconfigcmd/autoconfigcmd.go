@@ -103,6 +103,8 @@ type Values struct {
 	WSPeers      string // WSPEERS: <pk>@<ws(s)://…> peers held as WebSocket transports
 	Ishv         bool
 	NoIshv       bool
+	LegacyHVUI   bool
+	NoLegacyHVUI bool
 	PkEndpoint   bool // ENABLEPKENDPOINT
 	NoPkEndpoint bool
 	HvAddr       string // HVHTTPADDR
@@ -267,6 +269,8 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().StringVar(&v.WSPeers, "ws-peer", "", "peers held as WebSocket transports, <pk>@<ws(s)://host[:port]/path>, comma-separated — writes WSPEERS in skywire.conf")
 	cmd.Flags().BoolVar(&v.Ishv, "ishv", false, "enable local hypervisor — writes ISHYPERVISOR=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoIshv, "no-ishv", false, "disable local hypervisor — writes ISHYPERVISOR=false in skywire.conf")
+	cmd.Flags().BoolVar(&v.LegacyHVUI, "legacy-hv-ui", false, "serve the legacy Angular dashboard at the hypervisor web UI root instead of the desk — writes LEGACYHVUI=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoLegacyHVUI, "no-legacy-hv-ui", false, "serve the desk at the hypervisor web UI root (default) — writes LEGACYHVUI=false in skywire.conf")
 	cmd.Flags().BoolVar(&v.PkEndpoint, "pk-endpoint", false, "expose unauthenticated GET /api/pk on the hypervisor — writes ENABLEPKENDPOINT=true in skywire.conf (skybian / Arch-ARM image builds set this)")
 	cmd.Flags().BoolVar(&v.NoPkEndpoint, "no-pk-endpoint", false, "do not expose GET /api/pk — writes ENABLEPKENDPOINT=false in skywire.conf")
 	cmd.Flags().StringVar(&v.HvAddr, "hvaddr", "", "hypervisor HTTP address (host:port) — writes HVHTTPADDR in skywire.conf")

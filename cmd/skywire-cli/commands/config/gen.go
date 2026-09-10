@@ -250,6 +250,8 @@ func init() {
 
 	// Hypervisor and security flags
 	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", scriptExecBool("${ISHYPERVISOR:-false}"), "local hypervisor configuration")
+	genConfigCmd.Flags().BoolVar(&isLegacyHVUI, "legacy-hv-ui", scriptExecBool("${LEGACYHVUI:-false}"), "serve the legacy Angular dashboard at the hypervisor web UI root instead of the desk")
+	gHiddenFlags = append(gHiddenFlags, "legacy-hv-ui")
 	msg = "list of public keys to add as hypervisor"
 	if scriptExecArray("${HYPERVISORPKS[@]}") != "" {
 		msg += "\n\r"
@@ -1609,6 +1611,7 @@ func configureHypervisor(log *logging.Logger) {
 	{
 		config := visorconfig.GenerateWorkDirConfig(isTestEnv)
 		config.Enable = isHypervisor
+		config.LegacyUI = isLegacyHVUI
 		config.EnablePKEndpoint = isEnablePKEndpoint
 		if hvHTTPAddr != "" {
 			config.HTTPAddr = hvHTTPAddr
