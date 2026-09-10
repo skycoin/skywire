@@ -145,10 +145,8 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			// in its terminal — from the same file the wasm-serve port serves,
 			// when the operator has one (hypervisor.wasm_serve.exec_wasm).
 			// Absent that, the desk boots with no visor of its own, as before.
-			if p := hv.execWasmPath(); p != "" {
-				w.Header().Set("Content-Type", "application/wasm")
-				w.Header().Set("Cache-Control", "no-cache")
-				http.ServeFile(w, r, p)
+			if p, ok := hv.execModule(); ok {
+				serveExecWasm(w, r, p)
 				return
 			}
 			http.NotFound(w, r)
@@ -307,7 +305,8 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 		`<script src="/browse.js"></script>` + "\n" +
 		`<script>` + uiAutoReloadJS + `</script>` + "\n" +
 		`<script src="/desk-boot.js"></script>`
-	page := deskShellHTML(scripts, nativeDeskBootOpts(localPK, hv.execWasmPath() != ""))
+	_, haveExec := hv.execModule()
+	page := deskShellHTML(scripts, nativeDeskBootOpts(localPK, haveExec))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(page) //nolint:errcheck
@@ -376,7 +375,8 @@ func (hv *Hypervisor) servedUIVersion() string {
 			_ = f.Close() //nolint:errcheck
 		}
 	}
-	return servedVersion(ui+"."+deskAssetsStamp(), hv.execWasmPath())
+	execPath, _ := hv.execModule()
+	return servedVersion(ui+"."+deskAssetsStamp(), execPath)
 }
 
 // getUIVersion → GET /api/ui-version : the current served-build fingerprint
@@ -408,9 +408,10 @@ const uiAutoReloadJS = `(function(){
 // execWasmPath is the path of the full skywire command module for js/wasm, when
 // the operator configured one for the wasm-serve port; the desk on this port
 // shares it. Empty when there is none.
-func (hv *Hypervisor) execWasmPath() string {
-	if hv.c.WasmServe != nil && hv.c.WasmServe.ExecWasm != "" {
-		return hv.c.WasmServe.ExecWasm
+func (hv *Hypervisor) execModule() (path string, ok bool) {
+	explicit := ""
+	if hv.c.WasmServe != nil {
+		explicit = hv.c.WasmServe.ExecWasm
 	}
-	return DefaultExecWasmPath()
+	return execModuleSource(explicit)
 }

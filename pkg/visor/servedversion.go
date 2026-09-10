@@ -2,6 +2,8 @@
 package visor
 
 import (
+	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
+
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -59,6 +61,11 @@ var deskAssetsStamp = sync.OnceValue(func() string {
 func servedVersion(build, execWasmPath string) string {
 	if s := execWasmStamp(execWasmPath); s != "" {
 		return build + "-" + s
+	}
+	if execWasmPath == "" {
+		if s := execwasm.Stamp(); s != "" {
+			return build + "-" + s
+		}
 	}
 	return build
 }

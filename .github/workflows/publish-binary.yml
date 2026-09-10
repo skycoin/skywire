@@ -87,23 +87,27 @@ jobs:
             zstd -19 -q -f -o "dist/skywire-linux-${name}.zst" skywire
             rm -f skywire
           }
+          # Stage 1 of the two-stage build: the full skywire command module for
+          # GOOS=js — the desk's `skywire` command and the tab visor — built
+          # FIRST and gzipped into pkg/wasmhv/execwasm/blob/ so every native
+          # binary below embeds it and serves the desk with no extra file
+          # (hv serve, visor-hosted wasm_serve, the native hypervisor). Same
+          # toolchain as the embedded wasm_exec.js, same version stamping. It
+          # is also published beside the binaries for hosts that predate the
+          # embed (the updater installs it as /opt/skywire/bin/skywire.wasm).
+          echo "==> building js/wasm command module"
+          GOOS=js GOARCH=wasm \
+            go build -trimpath -buildvcs=true -mod=vendor -tags "withoutsystray withoutgotop" -ldflags="${LDFLAGS}" -o skywire.wasm .
+          gzip -9 -n -c skywire.wasm > pkg/wasmhv/execwasm/blob/skywire.wasm.gz
+          zstd -19 -q -f -o "dist/skywire-js-wasm.zst" skywire.wasm
+          rm -f skywire.wasm
+          ls -la pkg/wasmhv/execwasm/blob/
           build_arch amd64   amd64   ""
           build_arch arm64   arm64   ""
           build_arch arm     arm     6
           build_arch armhf   arm     7
           build_arch 386     386     ""
           build_arch riscv64 riscv64 ""
-          # The full skywire command module for GOOS=js: the `skywire` command
-          # inside a desk terminal, which is what turns a served wasm-visor page
-          # into the desk (hv serve --exec-wasm; visor-hosted wasm_serve.exec_wasm).
-          # Too large to embed, so it ships beside the native binary and the
-          # auto-updater installs it as /opt/skywire/bin/skywire.wasm. Same
-          # toolchain as the embedded wasm_exec.js, same version stamping.
-          echo "==> building js/wasm command module"
-          GOOS=js GOARCH=wasm \
-            go build -trimpath -buildvcs=true -mod=vendor -tags "withoutsystray withoutgotop" -ldflags="${LDFLAGS}" -o skywire.wasm .
-          zstd -19 -q -f -o "dist/skywire-js-wasm.zst" skywire.wasm
-          rm -f skywire.wasm
           ( cd dist && sha256sum *.zst > SHA256SUMS )
           {
             echo "BRANCH=${BRANCH}"
