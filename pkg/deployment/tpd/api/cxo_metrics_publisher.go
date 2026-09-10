@@ -47,6 +47,8 @@
 package api
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"sort"
@@ -56,7 +58,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -345,16 +346,10 @@ func sortOpsByPath(ops []treestore.PutOp) {
 // at most max bytes. One part is the normal case; a day only splits when even
 // compressed it will not fit in a single CXO object.
 func gzipParts(metrics []store.TransportMetric, max int) ([][]byte, error) {
-	if metrics == nil {
-		// json.Marshal of a nil slice is "null", which is not the empty
-		// array a reader unmarshals into []TransportMetric.
-		metrics = []store.TransportMetric{}
-	}
-	whole, err := json.Marshal(metrics)
+	gz, err := gzipRecords(metrics)
 	if err != nil {
 		return nil, err
 	}
-	gz := cxoutils.Gzip(whole)
 	if len(gz) <= max {
 		return [][]byte{gz}, nil
 	}
@@ -387,11 +382,11 @@ func appendGzipped(out *[][]byte, part []store.TransportMetric, max int) error {
 	if len(part) == 0 {
 		return nil
 	}
-	body, err := json.Marshal(part)
+	gz, err := gzipRecords(part)
 	if err != nil {
 		return err
 	}
-	if gz := cxoutils.Gzip(body); len(gz) <= max || len(part) == 1 {
+	if len(gz) <= max || len(part) == 1 {
 		*out = append(*out, gz)
 		return nil
 	}
@@ -437,4 +432,39 @@ func (m *MetricsCXOPublisher) LastError() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.lastError
+}
+
+// gzipRecords is the gzipped JSON array of metrics, streamed one record at a
+// time straight into the compressor. The output is byte-identical to
+// gzip(json.Marshal(metrics)) — "[]" for an empty or nil slice — but the whole
+// JSON body is never held: a day of metrics marshalled to ~130 MB before
+// compression and was built twice (whole, then per part), which is what pushed
+// the TPD's heap to multi-GB peaks every minute (2026-09-10 heap profile).
+func gzipRecords(metrics []store.TransportMetric) ([]byte, error) {
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write([]byte{'['}); err != nil {
+		return nil, err
+	}
+	for i := range metrics {
+		if i > 0 {
+			if _, err := zw.Write([]byte{','}); err != nil {
+				return nil, err
+			}
+		}
+		b, err := json.Marshal(&metrics[i])
+		if err != nil {
+			return nil, err
+		}
+		if _, err := zw.Write(b); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := zw.Write([]byte{']'}); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
