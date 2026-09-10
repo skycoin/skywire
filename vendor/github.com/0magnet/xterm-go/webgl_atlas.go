@@ -692,6 +692,29 @@ func (a *textureAtlas) findGlyphBoundingBox(pix []byte, canvasW, allowedWidth in
 		height = cfg.deviceCellHeight
 		width = cfg.deviceCellWidth
 	}
+	// Clamp every scan to the pixels that were actually read back.
+	//
+	// The left and right scans run to padding+width, which reaches past the
+	// end of the canvas whenever the temp canvas was grown to exactly
+	// allowedWidth -- a combined character of three runes or more does that,
+	// and a five-rune ZWJ emoji sequence does it at any font size. In
+	// JavaScript the overrun reads undefined out of the Uint8ClampedArray and
+	// compares unequal to 0, so upstream silently takes those columns as
+	// opaque and reports a glyph a few pixels too wide. Go indexes the same
+	// bytes and panics, which killed the renderer on the first emoji drawn.
+	//
+	// Clamping fixes both: the columns past the canvas hold no glyph, so
+	// leaving them out is what the scan meant to do.
+	if rows := len(pix) / maxIntv(canvasW*4, 1); height > rows {
+		height = rows
+	}
+	if width > canvasW {
+		width = canvasW
+	}
+	xMax := padding + width
+	if xMax > canvasW {
+		xMax = canvasW
+	}
 	alpha := func(x, y int) byte { return pix[y*canvasW*4+x*4+3] }
 
 	top := 0
@@ -706,7 +729,7 @@ found1:
 	}
 	left := 0
 found2:
-	for x := 0; x < padding+width; x++ {
+	for x := 0; x < xMax; x++ {
 		for y := 0; y < height; y++ {
 			if alpha(x, y) != 0 {
 				left = x
@@ -716,7 +739,7 @@ found2:
 	}
 	right := width
 found3:
-	for x := padding + width - 1; x >= padding; x-- {
+	for x := xMax - 1; x >= padding; x-- {
 		for y := 0; y < height; y++ {
 			if alpha(x, y) != 0 {
 				right = x

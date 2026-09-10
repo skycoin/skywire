@@ -256,8 +256,9 @@ func (t *Terminal) refreshRowEls() {
 		t.rowsEl.Call("removeChild", last)
 		t.rowEls = t.rowEls[:len(t.rowEls)-1]
 	}
-	t.screen.Get("style").Set("width", jsPx(t.cellW*float64(t.Core.Cols())))
-	t.screen.Get("style").Set("height", jsPx(t.cellH*float64(rows)))
+	sw, sh := screenBoxPx(t.cellW, t.cellH, t.Core.Cols(), rows)
+	t.screen.Get("style").Set("width", jsPx(sw))
+	t.screen.Get("style").Set("height", jsPx(sh))
 }
 
 func (t *Terminal) updateScrollArea() {
