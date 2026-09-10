@@ -36,8 +36,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/oschwald/geoip2-golang/v2"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -92,7 +90,6 @@ type visorPolicyProvider struct {
 	visor *Visor // for CXOSubMgr access + servicesFromCXO/HTTP fallback
 
 	geoMu sync.Mutex
-	geoDB *geoip2.Reader // nil when OpenEmbedded failed
 
 	// SD-derived PK→country map. Populated lazily on first Geo
 	// lookup and refreshed on a TTL. Lifetime-scoped to the
@@ -128,13 +125,10 @@ func newVisorPolicyProvider(v *Visor) *visorPolicyProvider {
 		arInFlight:  make(map[string]struct{}),
 	}
 
-	// Embedded geoip DB. Failure to open isn't fatal — Geo() just
-	// returns "??" until OpenEmbedded() works.
-	if db, err := geoip.OpenEmbedded(); err == nil {
-		p.geoDB = db
-	} else if v.log != nil {
-		v.log.WithError(err).Warn("routing-policy provider: embedded geoip db unavailable; geo.country() will return \"??\"")
-	}
+	// The embedded geoip DB is opened lazily on the first lookup (geoip.Shared):
+	// inflating it costs ~60 MB of heap for the life of the process, and most
+	// visors never evaluate geo.country(). Failure to open isn't fatal — Geo()
+	// just returns "??".
 
 	// Pre-build the hypervisor set from config. Hypervisors are
 	// auto-trusted (they're the operator's control plane).
@@ -171,12 +165,12 @@ func (p *visorPolicyProvider) Geo(pk string) string {
 	}
 
 	// 2. Direct-transport IP + embedded geoip.
-	if p.geoDB != nil && p.tpM != nil {
+	if geoip.Embedded() && p.tpM != nil {
 		if pubkey, ok := parsePK(pk); ok {
 			ip := p.remoteIPForPeer(pubkey)
 			if ip != "" {
 				p.geoMu.Lock()
-				res, err := geoip.Lookup(p.geoDB, ip)
+				res, err := p.geoLookup(ip)
 				p.geoMu.Unlock()
 				if err == nil && res != nil && res.CountryCode != "" {
 					return res.CountryCode
@@ -212,7 +206,7 @@ func (p *visorPolicyProvider) arGeoForPK(pk cipher.PubKey, pkLower string) strin
 	// Miss/expired: only spend a resolve when we actually can (AR
 	// client + geoip db present) and no resolve is already running
 	// for this PK.
-	if p.tpM == nil || p.geoDB == nil {
+	if p.tpM == nil || !geoip.Embedded() {
 		p.arMu.Unlock()
 		return ""
 	}
@@ -275,7 +269,7 @@ func (p *visorPolicyProvider) countryFromVisorData(vd addrresolver.VisorData) st
 			continue
 		}
 		p.geoMu.Lock()
-		res, err := geoip.Lookup(p.geoDB, ip)
+		res, err := p.geoLookup(ip)
 		p.geoMu.Unlock()
 		if err == nil && res != nil && res.CountryCode != "" {
 			return res.CountryCode
@@ -476,4 +470,14 @@ func (p *visorPolicyProvider) remoteIPForPeer(peer cipher.PubKey) string {
 		return ""
 	}
 	return mt.RemoteIP()
+}
+
+// geoLookup resolves ip against the shared embedded database, opening it on
+// first use.
+func (p *visorPolicyProvider) geoLookup(ip string) (*geoip.Result, error) {
+	db, err := geoip.Shared()
+	if err != nil {
+		return nil, err
+	}
+	return geoip.Lookup(db, ip)
 }

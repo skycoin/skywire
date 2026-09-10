@@ -21,3 +21,9 @@ func EmbeddedDB() []byte { return nil }
 func OpenEmbedded() (*geoip2.Reader, error) {
 	return nil, errors.New("geoip: embedded database not included in this build")
 }
+
+// Embedded reports the database absent in this build.
+func Embedded() bool { return false }
+
+// Shared reports the database absent in this build.
+func Shared() (*geoip2.Reader, error) { return OpenEmbedded() }

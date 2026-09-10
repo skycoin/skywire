@@ -60,3 +60,25 @@ func EmbeddedDB() []byte {
 func OpenEmbedded() (*geoip2.Reader, error) {
 	return geoip2.OpenBytes(EmbeddedDB())
 }
+
+var (
+	sharedOnce sync.Once
+	shared     *geoip2.Reader
+	sharedErr  error
+)
+
+// Embedded reports whether this build carries the database at all, without
+// decompressing it.
+func Embedded() bool { return len(embeddedGz) > 0 }
+
+// Shared returns the process-wide reader over the embedded database, opening
+// it on first use. Inflating the ~30 MB gzip costs ~60 MB of heap for the life
+// of the process, so callers keep this lazy: a visor that never answers a geo
+// query never pays it (every visor and dmsg server used to open it at start).
+// The reader is safe for concurrent use and is never closed.
+func Shared() (*geoip2.Reader, error) {
+	sharedOnce.Do(func() {
+		shared, sharedErr = OpenEmbedded()
+	})
+	return shared, sharedErr
+}
