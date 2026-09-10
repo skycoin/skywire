@@ -754,13 +754,13 @@ func (s *Server) handleSession(conn net.Conn) {
 		dSes.isPeer = true
 		log.Info("Started peer server session.")
 	} else {
-		log.Info("Started session.")
+		log.Debug("Started session.")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		awaitDone(ctx, s.done)
-		log.WithError(dSes.Close()).Info("Stopped session.")
+		log.WithError(dSes.Close()).Debug("Stopped session.")
 	}()
 
 	if hook := testHookHandleSessionPreMux; hook != nil {
@@ -781,7 +781,7 @@ func (s *Server) handleSession(conn net.Conn) {
 			return
 		}
 		dSes.sm.addr = dSes.sm.smux.RemoteAddr()
-		log.Infof("smux stream session initial for %s", dSes.RemotePK().String())
+		log.Debugf("smux stream session initial for %s", dSes.RemotePK().String())
 	} else {
 		dSes.sm.yamux, err = yamux.Server(conn, YamuxConfig())
 		if err != nil {
@@ -791,7 +791,7 @@ func (s *Server) handleSession(conn net.Conn) {
 			return
 		}
 		dSes.sm.addr = dSes.sm.yamux.RemoteAddr()
-		log.Infof("yamux stream session initial for %s", dSes.RemotePK().String())
+		log.Debugf("yamux stream session initial for %s", dSes.RemotePK().String())
 	}
 	dSes.sm.mutx.Unlock()
 
