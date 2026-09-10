@@ -1,15 +1,14 @@
-// autoupdate.js — self-update for the pages wasm-serve serves (`skywire cli hv
-// serve`, or a visor's hypervisor.wasm_serve): the legacy wasm-visor page and
-// the desk.
+// autoupdate.js — self-update for the desk wasm-serve serves (`skywire cli hv
+// serve`, or a visor's hypervisor.wasm_serve).
 //
-// Their ONLY update step is a page reload: the served /wasm-visor.wasm is
-// embedded in the running skywire binary and the desk's /skywire.wasm is read
-// from disk, so when either changes a reload picks it up. This script polls a
-// tiny /wasm-version fingerprint (the build plus the served command module's
-// stamp) and, when it differs from the version this page booted with, reloads
-// to the new build — by default, with a user-visible toast that lets them keep
-// the current version (disabling auto-update). It is injected ONLY by
-// wasm-serve; the native hypervisor port has its own poller (uiAutoReloadJS).
+// Its ONLY update step is a page reload: the served /skywire.wasm is embedded
+// in the running skywire binary or read from disk, so when it changes a reload
+// picks it up. This script polls a tiny /wasm-version fingerprint (the build
+// plus the served command module's stamp) and, when it differs from the
+// version this page booted with, reloads to the new build — by default, with a
+// user-visible toast that lets them keep the current version (disabling
+// auto-update). It is injected ONLY by wasm-serve; the native hypervisor port
+// has its own poller (uiAutoReloadJS).
 (function () {
   'use strict';
   var POLL_MS = 60000;          // how often to check for a new build
@@ -32,24 +31,10 @@
 
   var notifying = false;
 
-  // On the legacy page the wasm runs in a SharedWorker that stays alive across
-  // a tab's location.reload() (it dies only when the LAST tab disconnects), so
-  // a plain reload reconnects to the SAME stale runtime — the new wasm never
-  // loads. Before reloading, tell the worker to self.close() so the post-reload
-  // page boots a FRESH worker that fetches the new wasm-visor.wasm. (The
-  // dedicated-Worker fallback already dies on unload, so the message is a no-op
-  // there.) Only where hv-boot.js is on the page: the desk has no SharedWorker
-  // visor — its visor is an exec worker that dies with the page — and
-  // constructing one here would fetch and boot a whole wasm-visor just to shut
-  // it down (worker.js instantiates on load).
+  // A plain reload is a fresh boot: the desk's visor runs in a dedicated exec
+  // worker that dies with the page, so nothing survives to serve the old
+  // module to the reloaded tab.
   function reloadFresh() {
-    try {
-      if (typeof SharedWorker !== 'undefined' && document.querySelector('script[src*="hv-boot"]')) {
-        var w = new SharedWorker('worker.js');
-        if (w.port.start) { w.port.start(); }
-        w.port.postMessage({ t: 'shutdown' });
-      }
-    } catch (e) { /* fall through to a plain reload */ }
     setTimeout(function () { location.reload(); }, 200);
   }
 

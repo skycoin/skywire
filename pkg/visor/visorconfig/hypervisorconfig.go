@@ -132,12 +132,10 @@ type WasmServeConf struct {
 	NoWallet bool   `json:"no_wallet,omitempty"` // default serves the bundled skycoin-web wallet; set true to omit it
 	Password string `json:"password,omitempty"`  // optional access-password gate (use with TLS)
 	// ExecWasm is the path to the FULL skywire CLI built for GOOS=js, served at
-	// /skywire.wasm. It is what turns this surface into the DESK: without it the
-	// root serves the legacy hv-boot page (bare Angular over a SharedWorker
-	// core), because the desk's terminal has no `skywire` command to run
-	// `autoconfig` in. `skywire cli hv serve` has always had this as
-	// --exec-wasm; the visor-hosted equivalent had no way to set it, so a
-	// visor-hosted wasm_serve could never produce a desk. Empty = legacy page.
+	// /skywire.wasm — the desk host, the tab's visor and every command the
+	// desk's terminal runs. Empty = the module embedded by the two-stage build
+	// (make build-embedded), else the package location on disk; without one
+	// wasm_serve does not start. Same as `skywire cli hv serve --exec-wasm`.
 	// Build it with:
 	//   GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" \
 	//     -trimpath -ldflags "-s -w" -o build/skywire.wasm .

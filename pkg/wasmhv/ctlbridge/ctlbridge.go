@@ -6,13 +6,10 @@
 // lines (/ctl/log). Two tabs can be orchestrated headlessly — e.g. `listen` on
 // one and dial from the other.
 //
-// The handler set is shared by two front-ends:
-//   - the dev harness  cmd/dmsg-wasm/serve.go  (serves a -dir build)
-//   - `skywire cli hv serve --harness`         (serves the embedded wasm + UI)
-//
-// so the production serving path can opt into the same debug surface behind a
-// flag instead of duplicating it. The browser side is ctl-bridge.js (embedded
-// in pkg/wasmhv as CtlBridgeJS); inject it onto the page to activate the tab.
+// The handler set is mounted by `skywire cli hv serve --harness`, so the
+// production serving path opts into the debug surface behind a flag. The
+// browser side is ctl-bridge.js (embedded in pkg/wasmhv as CtlBridgeJS);
+// inject it onto the page to activate the tab.
 package ctlbridge
 
 import (

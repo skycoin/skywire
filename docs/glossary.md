@@ -54,7 +54,8 @@ codebase evolved; this is the reference for "what we mean when we say X."
 ## wasm / PWA
 
 - **wasm visor** — a full visor compiled to WebAssembly, running entirely
-  inside a browser tab (no install, no server). → `cmd/wasm-visor`
+  inside a browser tab (no install, no server). → the root binary built for
+  `GOOS=js` (`/skywire.wasm`), run by the desk terminal
 - **standalone wasm-visor** — the keyless PWA served by `skywire cli hv serve`;
   each visitor's browser mints its own ephemeral key.
 - **☰ menu** — the desk-bundle taskbar app menu present on both the native and
@@ -62,7 +63,7 @@ codebase evolved; this is the reference for "what we mean when we say X."
   → `pkg/wasmhv/browseui`
 - **Go browser** — the mesh browser compiled into the wasm-visor binary
   (`globalThis.skywireBrowser`, netscrape); replaced the retired JavaScript
-  browse engine (browse.js / SkywireBrowse). → `cmd/wasm-visor`
+  browse engine (browse.js / SkywireBrowse). → `pkg/wasmhv/deskhost`
 
 ## Apps & wallet
 

@@ -54,7 +54,7 @@ Gated by the sandbox, not the compiler (TinyGo vs Go only changes binary size):
 |---|---|---|---|
 | WebSocket | a dmsg **server** | dmsg session carrier | ✅ `ws_js_tinygo.go` |
 | WebTransport (HTTP/3) | a dmsg **server** | dmsg session carrier, CA-free (cert-hash pin) | ✅ `wt_js_tinygo.go` |
-| WebRTC DataChannel | a **peer** (tab/visor) | true p2p link | ⚙️ `cmd/dmsg-wasm/webrtc_js.go` (foundation) |
+| WebRTC DataChannel | a **peer** (tab/visor) | true p2p link | ⚙️ `pkg/transport/network/webrtc_browser.go` (foundation) |
 | raw TCP (stcp/stcpr) | — | — | ❌ no raw sockets |
 | raw UDP (sudph/KCP) | — | — | ❌ no raw sockets |
 
@@ -91,7 +91,7 @@ skywire **mesh transport** (so routes can traverse a tab) means:
 4. App hosting: a minimal app server so the tab can answer on app ports
    (a website, skychat, an API) addressed by its PK.
 
-Items 3–4 are the bulk of a "wasm visor": today `cmd/dmsg-wasm` is a dmsg leaf +
+Items 3–4 are the bulk of a "wasm visor": the original (since-retired) `cmd/dmsg-wasm` was a dmsg leaf +
 in-wasm hypervisor; a wasm *visor* additionally runs the router, transport
 manager, and route-setup responder.
 
@@ -119,13 +119,12 @@ manager, and route-setup responder.
   same-network / public-peer optimization and keep dmsg as the universal path.
   The signaling layer is dmsg-native regardless; only the media path needs ICE.
 - **Config source = the VISOR's config, not the embedded default.** The test
-  harness (cmd/dmsg-wasm) exposes `deployment.Prod.StunServers` — the embedded
+  harness (the since-retired cmd/dmsg-wasm) exposed `deployment.Prod.StunServers` — the embedded
   defaults. But when the UI is served BY a visor (`hv serve`, or the visor-hosted
   `hypervisor.wasm_serve`), it must inject THAT visor's runtime config — its
   configured STUN servers, dmsg servers, discovery, and service URLs — which may
   differ on custom/private deployments. The generator already inlines config; the
   STUN/ICE config (and any other deployment-specific values) rides along.
-  See the `TODO(wasm-visor)` in cmd/dmsg-wasm/main.go.
 - **TPD trust for ephemeral tabs.** A tab churns more than a visor; TPD edge TTL
   and the finder's liveness weighting (see the dead-edge work) need to tolerate
   high-churn leaf edges without polluting routes for everyone.
@@ -139,7 +138,7 @@ manager, and route-setup responder.
 ## 7. How much of the visor ports? (measured frontier)
 
 Measured with `go list -deps -tags tinygo` (GOOS=js) and confirmed by
-`tinygo build ./cmd/wasm-visor-probe`. The recurring blockers are a small set:
+`tinygo build` of the since-retired `cmd/wasm-visor-probe`. The recurring blockers were a small set:
 **quic-go** (the raw-socket networks), **net/http** (RF/TPD/AR discovery
 clients), **net/rpc** (app-event + RSN cascade), and **os/exec** (app
 subprocesses).
@@ -155,7 +154,7 @@ subprocesses).
 | `pkg/app/appnet` | quic-go, net/http, net/rpc | |
 | `pkg/visor` | + os/exec | the app-**subprocess** model is the deepest gap |
 
-`cmd/wasm-visor-probe` is the living frontier check — add imports as packages
+`cmd/wasm-visor-probe` was the frontier check (retired: the whole root binary now builds for js/wasm) — add imports as packages
 port; what `tinygo build` accepts is what's portable.
 
 ### Phased plan
@@ -193,7 +192,7 @@ port; what `tinygo build` accepts is what's portable.
    see §8. (This dovetails with the unified-app-framework direction, #2775.)
 5. **Persistence + glue.** Config/transport-log/route-store over a browser store
    (localStorage/IndexedDB via syscall/js) instead of the filesystem; assemble a
-   `cmd/wasm-visor` that wires router + transport-manager(dmsg/webrtc) + route-setup
+   a browser shell (the since-retired `cmd/wasm-visor`) that wires router + transport-manager(dmsg/webrtc) + route-setup
    responder + in-process apps.
 
 Phases 1–3 are mechanical (tag splits + the proven HTTP-over-dmsg pattern) and get
@@ -283,7 +282,7 @@ found-by-anyone reachability.
 - `pkg/dmsg/dmsg/ws_js_tinygo.go` — browser WebSocket `net.Conn` dmsg carrier.
 - `pkg/dmsg/dmsg/wt_js_tinygo.go` — browser WebTransport `net.Conn` dmsg carrier
   (cert-hash pinned, CA-free), `wt_stub_tinygo.go` for non-browser TinyGo.
-- `cmd/dmsg-wasm/webrtc_js.go` — WebRTC DataChannel `net.Conn` + offer/answer/ICE
+- `pkg/transport/network/webrtc_browser.go` — WebRTC DataChannel `net.Conn` + offer/answer/ICE
   state machine over a dmsg `SignalChannel`; JS API `webrtcDial` / `webrtcListen`.
 
 All compile-verified under both standard-Go wasm and TinyGo wasm. None is
