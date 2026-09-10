@@ -687,8 +687,16 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 		return ep.Client.PostEntry(ctx, entry)
 	}
 
-	if entry.Server == nil {
-		return errors.New("entry in discovery is not of a dmsg server")
+	// The key is already registered as a client: a visor running the
+	// in-process dmsg server on its own key. One Entry carries a Client and a
+	// Server section independently (Validate requires only that at least one
+	// is present), so ADD the server half to the existing entry rather than
+	// refusing it. Refusing is what made the two roles unable to share a key
+	// at all: whichever registered first locked the other out permanently,
+	// and silently, since this error is only ever logged by a retry loop.
+	serverAdded := entry.Server == nil
+	if serverAdded {
+		entry.Server = &disc.Server{Address: addr, AvailableSessions: availableSessions}
 	}
 
 	if authPassphrase != "" {
@@ -710,7 +718,7 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	versionDelta := c.serverVersion != "" && entry.Version != c.serverVersion
 
 	// No update needed if entry has no delta AND update is not due.
-	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !wsDelta && !wtDelta && !versionDelta && !due {
+	if _, due := c.updateIsDue(); !serverAdded && !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !wsDelta && !wtDelta && !versionDelta && !due {
 		return nil
 	}
 
@@ -1114,18 +1122,14 @@ func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *disc
 		return entry, nil
 	}
 
-	// The entry might be a server entry (e.g., debug client running on a dmsg server).
-	// In that case, entry.Client is nil and we need to create a new client entry.
-	if entry.Client == nil {
-		entry = disc.NewClientEntry(c.pk, 0, srvPKs)
-		entry.ClientType = clientType
-		if err := entry.Sign(c.sk); err != nil {
-			return nil, err
-		}
-		if err := ep.Client.PostEntry(ctx, entry); err != nil {
-			return nil, err
-		}
-		return entry, nil
+	// The key is already registered as a server: the same key also running a
+	// dmsg server. ADD the client half to that entry. Replacing it with a
+	// fresh sequence-0 entry, as this used to, both dropped the server half
+	// and was rejected outright, because a new entry's sequence must exceed
+	// the stored one — so the client could never register at all.
+	clientAdded := entry.Client == nil
+	if clientAdded {
+		entry.Client = &disc.Client{DelegatedServers: srvPKs}
 	}
 
 	// Whether the client's CURRENT delegated servers is the same as what would be advertised.
@@ -1133,7 +1137,7 @@ func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *disc
 
 	// No update is needed if delegated servers has no delta, an entry update is
 	// not due, and this is not the client's first publish.
-	if _, due := c.updateIsDue(); sameSrvPKs && !due && !mustPublish {
+	if _, due := c.updateIsDue(); !clientAdded && sameSrvPKs && !due && !mustPublish {
 		return nil, nil
 	}
 
