@@ -111,7 +111,9 @@ func New(log *logging.Logger, conf Config, domain, dmsgAddr string) *API {
 	r.Use(middleware.Recoverer)
 	// gzip JSON responses on the wire — this router is also served over
 	// dmsg, where every byte is relayed. Matches rf/ut/sd.
-	r.Use(middleware.Compress(5))
+	// gzip only bodies over CompressMinBytes: single entries and health lines are
+	// smaller than the flate state that would compress them (httputil.CompressMin).
+	r.Use(httputil.CompressMin(httputil.CompressMinBytes, 5))
 	r.Use(httputil.SetLoggerMiddleware(log))
 	r.Get("/health", api.health)
 	r.Get("/", api.config)

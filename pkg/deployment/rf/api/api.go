@@ -70,7 +70,9 @@ func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr 
 	r.Use(middleware.Recoverer)
 	// gzip route-finder JSON responses on the wire (skips small bodies,
 	// honors Vary; net/http clients get transparent gzip).
-	r.Use(middleware.Compress(5))
+	// gzip only bodies over CompressMinBytes: single entries and health lines are
+	// smaller than the flate state that would compress them (httputil.CompressMin).
+	r.Use(httputil.CompressMin(httputil.CompressMinBytes, 5))
 	if enableMetrics {
 		r.Use(api.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)
