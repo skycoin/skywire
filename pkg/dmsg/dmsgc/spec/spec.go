@@ -138,6 +138,14 @@ type DmsgServerConfig struct {
 	// server's discovery entry. Empty = don't advertise a public address
 	// (the server is reachable only over whatever the listener resolves to).
 	PublicAddress string `json:"public_address,omitempty"`
+	// ConfigPath, when set, runs the full dmsg-server service (pkg/services/dmsgsrv)
+	// inside the visor process from that standalone dmsg-server config file
+	// — its own key, listen/public/wss addresses, health endpoint and
+	// max_sessions — instead of the bare server on the visor key above.
+	// LocalAddress and PublicAddress are ignored when it is set. This is
+	// how a host that ran `skywire dmsg server start <file>` as a separate
+	// unit folds that server into its visor (DMSGSERVERCONF in skywire.conf).
+	ConfigPath string `json:"config_path,omitempty"`
 }
 
 // MarshalJSON and UnmarshalJSON live in spec_native.go under

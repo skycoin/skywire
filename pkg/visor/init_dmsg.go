@@ -38,6 +38,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgscp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
+	"github.com/skycoin/skywire/pkg/services/dmsgsrv"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/osutil"
@@ -1049,6 +1050,12 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 	srvCfg := v.conf.Dmsg.Server
 
+	// A standalone dmsg-server config file: run the whole service in-process
+	// (own key, wss, health, route-setup surfaces) — nothing below applies.
+	if srvCfg.ConfigPath != "" {
+		return initDmsgServerFromFile(ctx, v, log, srvCfg.ConfigPath)
+	}
+
 	dmsgC := v.dmsgC
 	if dmsgC == nil {
 		return nil
@@ -1420,4 +1427,27 @@ func buildPtyAppFunc(v *Visor, host *pty.Host, dmsgPort uint16, sshAddr string) 
 		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 		return nil
 	}
+}
+
+// initDmsgServerFromFile runs the standalone dmsg-server service from its
+// config file inside the visor process. The service builds its own transit
+// dmsg client under the server's key, so it neither shares nor collides with
+// the visor's client; it is stopped through the close stack.
+func initDmsgServerFromFile(_ context.Context, v *Visor, log *logging.Logger, path string) error {
+	svc := dmsgsrv.New(&dmsgsrv.Config{ConfigPath: path}, log)
+	runCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := svc.Run(runCtx); err != nil && !errors.Is(err, context.Canceled) {
+			log.WithError(err).Error("in-process dmsg server (config file) stopped")
+		}
+	}()
+	log.WithField("config_path", path).Info("Started in-process dmsg server from config file")
+	v.pushCloseStack("dmsg_server", func() error {
+		cancel()
+		<-done
+		return nil
+	})
+	return nil
 }

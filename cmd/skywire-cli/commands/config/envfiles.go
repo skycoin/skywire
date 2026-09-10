@@ -128,6 +128,13 @@ const envfileLinux = `#
 #	hypervisors on a NAT.
 #LANDMSGPUBLIC='203.0.113.42:8082'
 
+#--	Run a public dmsg server inside the visor from a standalone dmsg-server
+#	config file (the one "skywire dmsg server start <file>" used). Replaces
+#	a separate dmsg server unit on the same host: stop and disable that
+#	unit first, and drop it from RESTART_SERVICES. The server keeps its own
+#	key, ports, wss domain and health endpoint from that file.
+#DMSGSERVERCONF='/etc/skywire-dmsg.json'
+
 ### Rewards #############################################################
 
 #--	Skycoin reward address or xpub key

@@ -31,6 +31,9 @@ type Deployment = spec.Deployment
 // spec.DmsgConfig for the type doc and the JSON-polymorphism notes.
 type DmsgConfig = spec.DmsgConfig
 
+// DmsgServerConfig is the in-process dmsg server block (Dmsg.Server).
+type DmsgServerConfig = spec.DmsgServerConfig
+
 // lanPriorityDisc wraps a disc.APIClient to prepend LAN server entries
 // to discovery results. LAN servers are tried first, with automatic
 // fallback to public servers if the LAN server is unreachable.
