@@ -129,17 +129,25 @@ func (v *Visor) relayPeerAllowed(pk cipher.PubKey) bool {
 // nominees from the transports it currently holds.
 const relayNominationInterval = 10 * time.Second
 
-// nominateRelayPeers keeps the dmsg client's relay nominees in step with the
-// visor's transports: a persistent-transport peer that this visor has a live
-// transport to is nominated (dmsg.Client.SetRelayPeers); when the transport
-// goes, so does the nomination. No configuration takes part beyond the pin the
-// operator already made — a persistent transport says "keep a link to this
-// peer", and a desk tab's attach to the visor serving it is exactly one. The
-// hypervisor list is deliberately NOT a source: it names the peers that manage
-// THIS visor, which on a hypervisor includes the tabs it serves — a host must
-// not carry its dmsg through a browser. Pairing (stage 5) will widen this. A nominee that
-// has no relay acceptor, or refuses us, fails the dial and is backed off by
-// the client; the configured servers stay the bootstrap and the fallback.
+// nominateRelayPeers keeps the dmsg client's relay nominees in step with what
+// this visor can currently reach (dmsg.Client.SetRelayPeers).
+//
+// Nomination requires NO configuration. It used to demand that a peer be pinned
+// as a persistent transport, which almost nobody sets, so almost every visor
+// nominated nothing and the relay tier never engaged unless an operator had
+// hand-configured it. The pin was standing in for a trust judgement it does not
+// actually need to make: a relay cannot read or forge what it carries, because
+// stream requests are signed by the source and verified against SrcAddr.PK and
+// client-to-client traffic is end-to-end encrypted. A bad relay can drop or
+// delay, which the dial timeout and backoff already handle.
+//
+// What the pin WAS protecting is kept explicitly: this visor's hypervisors are
+// never nominated. On a hypervisor that list includes the desk tabs it serves,
+// and a host must not carry its dmsg through a browser it is hosting.
+//
+// A nominee that has no relay acceptor, or refuses us, fails the dial and is
+// backed off by the client; the configured servers stay the bootstrap and the
+// fallback.
 func (v *Visor) nominateRelayPeers(ctx context.Context, dmsgC *dmsg.Client, log *logging.Logger) {
 	t := time.NewTicker(relayNominationInterval)
 	defer t.Stop()
@@ -163,15 +171,69 @@ func (v *Visor) nominateRelayPeers(ctx context.Context, dmsgC *dmsg.Client, log 
 // cover for the working one going away.
 const relayHubLimit = 4
 
-// relayNominees returns this visor's relay candidates: the persistent-transport
-// peers it holds a live transport to, then the hubs it can find.
+// relayNominees returns this visor's relay candidates: the hubs it can see,
+// then the peers it holds a live transport to. Hubs come first because they are
+// the durable answer — a visor co-resident with a dmsg server keeps the sessions
+// everyone else is trying to stop holding — while an ordinary peer is only a
+// useful relay for as long as it still has sessions of its own to forward over.
 func (v *Visor) relayNominees() []cipher.PubKey {
 	if v.conf == nil {
 		return nil
 	}
 	seen := make(map[cipher.PubKey]struct{})
-	out := v.pinnedRelayNominees(seen)
-	return append(out, v.hubRelayNominees(seen)...)
+	for _, pk := range v.conf.Hypervisors {
+		seen[pk] = struct{}{} // never relay through something that manages us
+	}
+	seen[v.conf.PK] = struct{}{}
+	out := v.hubRelayNominees(seen)
+	out = append(out, v.transportRelayNominees(seen, relayNomineeLimit-len(out))...)
+	return out
+}
+
+// relayNomineeLimit bounds the whole nominee set. Each nominee costs a dial
+// attempt, and one working relay is all a visor needs; the rest is cover for
+// the working one going away.
+const relayNomineeLimit = 6
+
+// transportRelayNominees returns peers this visor holds a live transport to,
+// operator-pinned ones first. No pin is required — the pin is a preference, not
+// a gate.
+func (v *Visor) transportRelayNominees(seen map[cipher.PubKey]struct{}, limit int) []cipher.PubKey {
+	if v.tpM == nil || v.conf == nil || limit <= 0 {
+		return nil
+	}
+	pinned := make(map[cipher.PubKey]struct{}, len(v.conf.PersistentTransports))
+	for _, pt := range v.conf.PersistentTransports {
+		pinned[pt.PK] = struct{}{}
+	}
+	var pins, rest []cipher.PubKey
+	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		pk := tp.Remote()
+		if tp.IsClosed() {
+			return true
+		}
+		if _, dup := seen[pk]; dup {
+			return true
+		}
+		seen[pk] = struct{}{}
+		if _, ok := pinned[pk]; ok {
+			pins = append(pins, pk)
+			return true
+		}
+		rest = append(rest, pk)
+		return true
+	})
+	// Stable order: the set is compared for equality every tick, and one that
+	// reshuffles would restart the client's serve pass each time. A visor can
+	// hold hundreds of transports, so which ones surface must not depend on map
+	// iteration.
+	sortPubKeys(pins)
+	sortPubKeys(rest)
+	out := append(pins, rest...)
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
 }
 
 // hubRelayNominees returns the visors that also run a dmsg server on their own
@@ -223,35 +285,6 @@ func (v *Visor) hubRelayNominees(seen map[cipher.PubKey]struct{}) []cipher.PubKe
 
 func sortPubKeys(pks []cipher.PubKey) {
 	sort.Slice(pks, func(i, j int) bool { return pks[i].Hex() < pks[j].Hex() })
-}
-
-// pinnedRelayNominees returns the persistent-transport peers this visor has a
-// live transport to.
-func (v *Visor) pinnedRelayNominees(seen map[cipher.PubKey]struct{}) []cipher.PubKey {
-	if v.tpM == nil || v.conf == nil {
-		return nil
-	}
-	trusted := make(map[cipher.PubKey]struct{}, len(v.conf.PersistentTransports))
-	for _, pt := range v.conf.PersistentTransports {
-		trusted[pt.PK] = struct{}{}
-	}
-	if len(trusted) == 0 {
-		return nil
-	}
-	var out []cipher.PubKey
-	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		pk := tp.Remote()
-		if _, ok := trusted[pk]; !ok || tp.IsClosed() || pk == v.conf.PK {
-			return true
-		}
-		if _, dup := seen[pk]; dup {
-			return true
-		}
-		seen[pk] = struct{}{}
-		out = append(out, pk)
-		return true
-	})
-	return out
 }
 
 // hasTransportTo reports whether this visor holds a live transport to pk.
