@@ -101,7 +101,7 @@ error as terminal (spun forever → hung `Close()`).
 
 **The dmsg client now compiles under TinyGo for the `wasip1` (IoT) target.**
 `tinygo build -target wasip1 -no-debug -opt=z` produces a **~2.2 MB** wasm binary
-(`make tinygo-dmsg`; build-check main at `cmd/dmsg-tinygo-probe`).
+(the `make tinygo-dmsg` build-check and its `cmd/dmsg-tinygo-probe` main were retired in stage 4 of #4484 — the TinyGo CI lane now builds only the routing-policy wasm, so this claim is no longer verified by CI).
 
 The peripheral blockers cleared, each with the same `!tinygo`-split-plus-stub or
 de-tag-the-obsolete-`!tinygo` pattern:

@@ -28,7 +28,7 @@ type KeyEntry struct {
 // The keys are derived ONE-WAY from the visor secret key (the implicit seed) via
 // cipher.DeriveChildKey, so they are regenerable from the one visor key (no
 // separate backup) and a leaked child can't expose the visor key. This is used
-// to mint standalone-hypervisor identities (cli hv gen) deterministically
+// to mint standalone-hypervisor identities (the since-retired cli hv gen) deterministically
 // instead of random, unrelated keys — so the standalone hypervisor is provably a
 // child of the visor and recoverable.
 type KeyRing struct {

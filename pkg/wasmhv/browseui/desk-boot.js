@@ -8,10 +8,8 @@
 //
 // opts (all optional):
 //   persistDB       IndexedDB name for the jsfs snapshot ('skywire-desk')
-//   deskWasmURL     the desk-host module; default = wasmURL, the one command
-//                   module, run as `skywire desk-host` (a different URL is the
-//                   legacy wasm-visor.wasm blob, .gz inflated)
-//   wasmURL         the skywire command module for skywireExec
+//   wasmURL         the skywire command module for skywireExec — also the
+//                   desk host, run out of it as `skywire desk-host`
 //   wasmExecURL     Go's wasm_exec.js for command instances
 //   autostartVisor  open a visor terminal running `skywire autoconfig` —
 //                   unless the operator STOPPED the visor before the last
@@ -42,15 +40,6 @@
 	if (globalThis.skywireDeskBoot) return;
 
 	var SESSION_KEY = 'skywire-desk-session';
-
-	function gunzipFetch(url) {
-		return fetch(url).then(function (r) {
-			if (!r.ok) throw new Error('fetch ' + url + ': HTTP ' + r.status);
-			if (!/\.gz(\?|$)/.test(url)) return r.arrayBuffer();
-			var inflated = r.body.pipeThrough(new DecompressionStream('gzip'));
-			return new Response(inflated, { headers: { 'Content-Type': 'application/wasm' } }).arrayBuffer();
-		});
-	}
 
 	function waitFor(fn, what, tries) {
 		return new Promise(function (res, rej) {
@@ -219,29 +208,16 @@
 			// in-page skywireExec is captured now, before the exec worker
 			// replaces the global with its remote shim: the desk host draws, so
 			// it runs where the document is, never in the worker.
-			//
-			// deskWasmURL stays an override for a page whose server has no
-			// command module: a different URL is the legacy desk-host blob
-			// (wasm-visor.wasm), instantiated bare — no argv — as before.
 			var localExec = globalThis.skywireExec;
-			var deskWasmURL = opts.deskWasmURL || skywireExec.wasmURL;
-			function sameURL(a, b) {
-				try { return new URL(a, location.href).href === new URL(b, location.href).href; } catch (e) { return a === b; }
-			}
 			function startDeskHost() {
-				if (localExec && typeof localExec.spawn === 'function' && sameURL(deskWasmURL, localExec.wasmURL)) {
-					var p = localExec.spawn(['desk-host'], {});
-					p.exited.then(function (code) {
-						console.error('desk host exited (' + code + ') — the desk surfaces are gone; reload the page');
-					}, function (e) { console.error('desk host:', e); });
-					return Promise.resolve();
+				if (!localExec || typeof localExec.spawn !== 'function') {
+					return Promise.reject(new Error('no process layer to spawn the desk host on'));
 				}
-				return gunzipFetch(deskWasmURL).then(function (buf) {
-					var go = new Go();
-					return WebAssembly.instantiate(buf, go.importObject).then(function (r) {
-						go.run(r.instance).catch(function (e) { console.error('desk host:', e); });
-					});
-				});
+				var p = localExec.spawn(['desk-host'], {});
+				p.exited.then(function (code) {
+					console.error('desk host exited (' + code + ') — the desk surfaces are gone; reload the page');
+				}, function (e) { console.error('desk host:', e); });
+				return Promise.resolve();
 			}
 
 			// The vnet service worker: registered up front (it takes a moment to
@@ -261,9 +237,8 @@
 			// GC frame in the symbolized profile — so on the main thread it
 			// starves the compositor and dragging a window stutters. Given a
 			// Worker, every command's runtime spins over there instead and this
-			// thread only draws. hv-boot.js has refused an in-page visor for
-			// this exact reason since the legacy page; the desk had regressed
-			// it.
+			// thread only draws. The retired legacy page refused an in-page
+			// visor for this exact reason; the desk had regressed it.
 			//
 			// A capability, not a setting: no Worker, no vnet, or no
 			// /skywire-worker.js served and install() resolves null, after

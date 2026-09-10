@@ -63,7 +63,7 @@ func init() {
 	shellCmd.Flags().IntVar(&shellBoot, "boot", 20, "seconds to wait for the shell wasm after opening the console")
 	shellCmd.Flags().IntVar(&shellSettle, "settle", 8, "seconds to wait after each command")
 	shellCmd.Flags().BoolVar(&shellNoConsole, "no-console", false, "skip opening the visor console window")
-	shellCmd.Flags().BoolVar(&shellKeepTabs, "keep-tabs", false, "leave other tabs on the same origin open; by default they are closed first, because the visor is one SharedWorker per origin while every tab spawns its own shell instance against it")
+	shellCmd.Flags().BoolVar(&shellKeepTabs, "keep-tabs", false, "leave other tabs on the same origin open; by default they are closed first, because every tab boots its own desk and visor, and leftover tabs compete for the same identity and CPU")
 	shellCmd.Flags().BoolVar(&shellLogAll, "log-all", false, "record every console level, not just errors and warnings — a wasm module's fatal error is written at log level")
 	RootCmd.AddCommand(shellCmd)
 }

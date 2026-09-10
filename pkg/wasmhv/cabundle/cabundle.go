@@ -8,8 +8,7 @@
 // the exit cannot read or MITM the stream, and skipping it hands the exit
 // exactly that power.
 //
-// Shared by the desk host (pkg/wasmhv/deskhost, the shell's `curl -x`) and the
-// legacy browser visor (cmd/wasm-visor, skysocks https).
+// Used by the desk host (pkg/wasmhv/deskhost, the shell's `curl -x`).
 package cabundle
 
 import (

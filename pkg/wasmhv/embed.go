@@ -9,32 +9,13 @@ import (
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
 )
 
-// BrowseJS is pkg/wasmhv/browse.js — the dmsg virtual-browser engine (the same
-// file the wasm-visor dev harness loads). Injected into a generated standalone
-// file in VISOR mode so the page gets a browse/host overlay (skynet sites
-// rendered + self-hosting over dmsg, via globalThis.skywireVisor). Unused in
-// viewer/standalone-hypervisor modes (no skywireVisor).
+// BrowseJS is the desk bundle (bottle's jsfs + vnet + proc, the skywire
+// seeding and exec glue, the Go-browser launcher) served as /browse.js beside
+// every desk page.
 //
 // Re-exported from the dependency-free browseui leaf package so pkg/visor can
-// serve the SAME engine in the native hypervisor UI without an import cycle
-// (pkg/wasmhv's gob-mirror test imports pkg/visor).
+// serve the SAME bundle in the native hypervisor UI without an import cycle.
 var BrowseJS = browseui.BrowseJS
-
-// WinBoxJS is the window-manager loader pair the LEGACY pages inline (the
-// hv-boot page of `hv serve`): they build windows in
-// JS and need globalThis.WinBox. The desk pages do not — their chrome is Go
-// and links winbox-go — so it is no longer part of BrowseJS.
-var WinBoxJS = browseui.WinBoxJS
-
-// WinBoxWasm is the window-manager wasm module that loader fetches — a Go
-// port of WinBox.js (github.com/0magnet/winbox-go) compiled to wasm. Served at
-// /winbox.wasm by the legacy `hv serve` page. Re-exported from the browseui
-// leaf like BrowseJS.
-func WinBoxWasm() []byte { return browseui.WinBoxWasm() }
-
-// WinBoxWasmGz is the same module still compressed, for a page that inlines
-// it.
-func WinBoxWasmGz() []byte { return browseui.WinBoxWasmGz() }
 
 // DeskBootJS is the shared desk boot (skywireDeskBoot) behind the desk-first
 // pages — the docs playground and `hv serve`'s /desk. Re-exported from the
@@ -57,34 +38,13 @@ func ExecWorkerJS() []byte { return browseui.ExecWorkerJS }
 // and the Angular wallet tab). Re-exported from the browseui leaf like BrowseJS.
 var WalletConfigHTML = browseui.WalletConfigHTML
 
-// AutoUpdateJS is pkg/wasmhv/autoupdate.js — the wasm-visor self-update poller for
-// the `hv serve` page: it compares a /wasm-version fingerprint against the version
+// AutoUpdateJS is pkg/wasmhv/autoupdate.js — the self-update poller for the
+// `hv serve` desk: it compares a /wasm-version fingerprint against the version
 // the page booted with and reloads to a newer build (toast + opt-out). Injected
 // ONLY by hv serve, so it never runs for a native-hosted hypervisor UI.
 //
 //go:embed autoupdate.js
 var AutoUpdateJS []byte
-
-// HvBootJS is pkg/wasmhv/hv-boot.js — the clean boot bootstrap for serving the
-// wasm-VISOR hypervisor UI as separate files (the `hv serve` / dev-harness model,
-// as opposed to the single-file generator's inlined override.js). It sets
-// CFG.visor, loads wasm_exec.js + wasm-visor.wasm, calls skywireVisor.boot(), and
-// exposes the boot promise as CFG.ready — which the UI's SkywireHttpBackend awaits
-// before its first /api call. Routing is owned by the Angular HttpBackend, so no
-// fetch/XHR monkey-patch (unlike override.js).
-//
-//go:embed hv-boot.js
-var HvBootJS []byte
-
-// WorkerJS is pkg/wasmhv/worker.js — the dedicated Web Worker that hosts the Go/wasm
-// visor runtime OFF the page's main thread. hv-boot.js spawns it and proxies every
-// globalThis.skywireVisor call to it over postMessage, so the visor's blocking work
-// (dmsg/WS/WT dials, route setup) can't freeze the UI event loop. Served alongside
-// hv-boot.js by `hv serve` (the served model); the single-file generator keeps the
-// in-page path since it can't load a separate worker script.
-//
-//go:embed worker.js
-var WorkerJS []byte
 
 // CtlBridgeJS is pkg/wasmhv/ctl-bridge.js — the browser side of the ctlbridge
 // control surface (pkg/wasmhv/ctlbridge). It connects the tab to /ctl/events

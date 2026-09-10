@@ -1,13 +1,13 @@
-// sw.js — service worker for the standalone wasm-visor PWA.
+// sw.js — service worker for the desk PWA.
 //
-// Goal: make the served wasm-visor installable + offline-capable WITHOUT ever
+// Goal: make the served desk installable + offline-capable WITHOUT ever
 // serving a stale wasm/UI to an online user (autoupdate.js polls /wasm-version
 // and self-reloads, so freshness when online is mandatory).
 //
 // Strategy:
 //   - content-hashed Angular bundles (…/main.<hash>.js, styles.<hash>.css, lazy
 //     chunks) are immutable → cache-first (fast, never stale by construction).
-//   - everything else (index, /wasm-visor.wasm, /wasm-version, hv-boot.js, …) is
+//   - everything else (index, /skywire.wasm, /wasm-version, desk-boot.js, …) is
 //     network-first: fresh when online, falls back to the last cached copy only
 //     when the network is unavailable (offline launch).
 //
