@@ -1122,7 +1122,18 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 		WithField("shared_transport_port", shared).
 		Info("Started in-process dmsg server on the visor key")
 
+	v.dmsgSrvRole.Store(&DmsgServerRole{
+		Mode:                dmsgServerModeOwnKey,
+		PK:                  v.conf.PK,
+		OwnKey:              true,
+		SharedTransportPort: shared,
+		LocalAddress:        localAddr,
+		PublicAddress:       srvCfg.PublicAddress,
+		StartedAt:           time.Now(),
+	})
+
 	v.pushCloseStack("dmsg_server", func() error {
+		v.dmsgSrvRole.Store(nil)
 		cerr := srv.Close()
 		// Only a listener this server owns is closed here. The shared branch
 		// belongs to the transport cmux, which stcpr and WS are still serving;
@@ -1464,7 +1475,26 @@ func initDmsgServerFromFile(_ context.Context, v *Visor, log *logging.Logger, pa
 		}
 	}()
 	log.WithField("config_path", path).Info("Started in-process dmsg server from config file")
+
+	role := &DmsgServerRole{
+		Mode:       dmsgServerModeConfigPath,
+		ConfigPath: path,
+		StartedAt:  time.Now(),
+	}
+	// The service holds the config privately; re-read the file for the public
+	// half of it (key and addresses — never the secret key) so `visor state`
+	// can name the key this server registers under, which is NOT the visor's.
+	if cfg, lerr := dmsgsrv.LoadFile(path); lerr != nil {
+		log.WithError(lerr).Debug("in-process dmsg server: config unreadable for state reporting")
+	} else {
+		role.PK = cfg.PubKey
+		role.LocalAddress = cfg.LocalAddress
+		role.PublicAddress = cfg.PublicAddress
+	}
+	v.dmsgSrvRole.Store(role)
+
 	v.pushCloseStack("dmsg_server", func() error {
+		v.dmsgSrvRole.Store(nil)
 		cancel()
 		<-done
 		return nil

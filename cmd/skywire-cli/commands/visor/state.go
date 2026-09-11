@@ -52,9 +52,13 @@ dozen subcommands. The visor's secret key is never included.
 --select builds ONLY the requested subtree(s) SERVER-side, so a cheap
 '--select mux' skips the ~307 KB transports build (full snapshot ~900 KB, mux
 ~75 KB). Keys (comma-separated): summary, health, routing, mux, apps,
-transports, modules, cxo, proxy. The projected keys match the full snapshot's
-JSON field names, so --jq expressions transfer unchanged. 'proxy' is opt-in
-(the visor-side skysocks proxystatus: per-leg mux + range-split when pushed).
+transports, modules, cxo, proxy, diag, roles. The projected keys match the full
+snapshot's JSON field names, so --jq expressions transfer unchanged. 'proxy' is
+opt-in (the visor-side skysocks proxystatus: per-leg mux + range-split when
+pushed). 'roles' is what this visor is FOR the network: the in-process dmsg
+server (key, address, whether it shares the transport port), both directions of
+the dmsg relay (nominees, who it is attached to, who is attached to it and the
+streams carried against the cap), and whether it refuses transit.
 
 --watch <interval> opens the RPC once and emits one snapshot per tick as NDJSON
 (newline-delimited JSON, no banners/ANSI) to stdout until Ctrl-C — a clean pipe
@@ -67,6 +71,7 @@ Examples:
   skywire cli visor state --jq '.health'          # just the health section
   skywire cli visor state --select mux            # server builds ONLY mux_route_groups
   skywire cli visor state --select health,routing # several subtrees
+  skywire cli visor state --select roles          # dmsg server + relay + transit roles
   skywire cli visor state --watch 1s --select mux --jq '.mux_route_groups'
   skywire cli visor state --via dmsg://<pk> --jq '.routing_policy'  # a remote visor`,
 	Run: func(cmd *cobra.Command, _ []string) {

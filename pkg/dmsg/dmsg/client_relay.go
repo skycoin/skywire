@@ -165,6 +165,13 @@ func (ce *Client) RelayedStreams() int {
 	return int(atomic.LoadInt64(&ce.relayedStreams))
 }
 
+// MaxRelayedStreams is the relay-slot cap RelayedStreams is charged against
+// (Config.MaxRelayedStreams, i.e. dmsg.relay_max_streams). Zero or less means
+// this client refuses to relay at all. Set once at construction.
+func (ce *Client) MaxRelayedStreams() int {
+	return ce.maxRelayedStreams
+}
+
 func (ce *Client) relaySession(pk cipher.PubKey) (*SessionCommon, bool) {
 	ce.relaySessionsMx.Lock()
 	defer ce.relaySessionsMx.Unlock()
