@@ -1017,7 +1017,16 @@ func readExistingConfig(log *logging.Logger) {
 				}
 				_, sk = cipher.GenerateKeyPair()
 			} else {
-				sk = oldConf.SK
+				// An explicitly supplied key wins over the one already in the
+				// config: --sk, or SK in skywire.conf, which the flag default
+				// reads. Taking oldConf.SK unconditionally made SK look like it
+				// pinned the visor's identity while silently doing nothing,
+				// because autoconfig regenerates on every run and handed the old
+				// key straight back. Unset leaves sk null, so the overwhelmingly
+				// common case still keeps the existing identity.
+				if sk.Null() {
+					sk = oldConf.SK
+				}
 				if isRetainHypervisors {
 					for _, j := range oldConf.Hypervisors {
 						hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
