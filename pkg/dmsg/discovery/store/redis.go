@@ -145,10 +145,28 @@ func (r *redisStore) SetEntry(ctx context.Context, entry *disc.Entry, timeout ti
 		return disc.ErrUnexpected
 	}
 
-	if entry.Server != nil {
+	// A server-ONLY entry expires fast: a dmsg server re-registers every
+	// update interval, so two of them is generous, and letting a dead one
+	// linger is how clients end up dialing a delegated server that is gone.
+	//
+	// A DUAL entry — one key carrying both halves, which is what folding a
+	// dmsg server into its visor produces (#4787) — must NOT take that TTL.
+	// It is the same Redis key, so the two-minute expiry applied to the
+	// visor's CLIENT registration too, dropping it from sixty minutes to
+	// two: a thirtyfold cut in how long that visor tolerates a gap in its
+	// own re-registration. Any hiccup longer than two minutes and it
+	// vanishes from discovery outright — not merely unavailable as a
+	// server, but unresolvable as a client, which is the harder failure and
+	// the one its peers feel.
+	//
+	// The short TTL is no longer what retires a dead server anyway. #4797
+	// judges server liveness from the registration timestamp and withdraws a
+	// stale one from the servers set whether or not its key still exists. So
+	// a dual entry keeping the client TTL loses nothing: its server half is
+	// still withdrawn promptly, and its client half survives a hiccup.
+	if entry.Server != nil && entry.Client == nil {
 		timeout = dmsg.DefaultUpdateInterval * 2
 	}
-
 	err = r.client.Set(ctx, entry.Static.Hex(), payload, timeout).Err()
 	if err != nil {
 		log.WithError(err).Errorf("Failed to set entry in redis")
