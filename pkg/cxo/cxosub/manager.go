@@ -834,8 +834,11 @@ func (m *Manager) acquireFeedLocked(fk Feed) {
 		// not called" check can't see across the timer hop.
 		ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec
 		f.cancel = cancel
-		f.done = make(chan struct{})
-		go m.cycleLoop(ctx, fk, f)
+		done := make(chan struct{})
+		f.done = done
+		// Hand the goroutine the channel it owns rather than letting it
+		// re-read f.done on the way out — see cycleLoop.
+		go m.cycleLoop(ctx, fk, f, done)
 	}
 }
 
@@ -891,8 +894,18 @@ func (m *Manager) releaseFeedLocked(fk Feed) {
 // pushes. liveServe only returns on a setup/first-Root failure; the
 // loop then retries with capped backoff so a temporarily-down publisher
 // is picked up without hammering it.
-func (m *Manager) cycleLoop(ctx context.Context, fk Feed, f *managedFeed) {
-	defer close(f.done)
+// done is the channel THIS invocation owns, passed in rather than read back
+// off f. Reading f.done on the way out raced its own stopper: the grace timer
+// captures f.done, nils the field, cancels the context and then waits on its
+// captured copy — so a loop that returned after the field was nilled paniced
+// with "close of nil channel" and left the stopper waiting on a channel
+// nothing would ever close. Releasing and re-acquiring a feed has the same
+// shape from the other side: the replacement goroutine installs a new f.done,
+// and the outgoing loop would close the newcomer's channel instead of its own,
+// making the next close a "close of closed channel". Owning the channel for
+// the lifetime of the invocation removes both.
+func (m *Manager) cycleLoop(ctx context.Context, fk Feed, f *managedFeed, done chan struct{}) {
+	defer close(done)
 	backoff := initialLiveRetry
 	for {
 		if ctx.Err() != nil {
