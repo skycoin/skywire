@@ -466,13 +466,52 @@ func (r *router) DialRoutes(
 		// "starting"). On timeout we fall through to the retry-with-exclude loop
 		// below, which re-fetches a fresh route and tries again. See
 		// routeSetupDialTimeout.
+		// A --direct dial whose route is the single transport this visor is
+		// already holding needs neither the route finder (skipped above,
+		// #4552) nor the setup node: with no intermediaries there is nothing
+		// the RSN can do that the two endpoints cannot do between themselves,
+		// over the transport itself. Try that first.
+		//
+		// The destination circuit breaker is deliberately NOT consulted here.
+		// It tracks whether route setup can reach a destination over dmsg;
+		// this path uses neither dmsg nor the RSN, so an open breaker says
+		// nothing about it. Consulting it meant a destination whose dmsg had
+		// been unreachable stayed undialable over a working transport for the
+		// breaker's whole 5-minute window — and every one of the retries below
+		// fires within seconds of the first, so all of them fast-failed.
+		// Multihop behaviour is untouched.
+		var directRules routing.EdgeRules
+		directDone := false
+		if opts != nil && (opts.EnsureDirectTransport || opts.UseExistingTpOnly) &&
+			len(forwardPath) == 1 && len(reversePath) == 1 {
+			directCtx, cancelDirect := context.WithTimeout(ctx, routeSetupDialTimeout)
+			dRules, dErr := r.setupDirectRoute(directCtx, log, req)
+			cancelDirect()
+			switch {
+			case dErr == nil:
+				directRules, directDone = dRules, true
+			case ctx.Err() != nil:
+				return nil, ctx.Err()
+			default:
+				log.WithError(dErr).Debug("Direct 1-hop route setup unavailable; falling back to the setup node")
+			}
+		}
+
 		setupCtx := ctx
 		if escalateToLegacy {
 			setupCtx = WithForceLegacyRouteSetup(ctx)
 		}
-		dialCtx, cancelDial := context.WithTimeout(setupCtx, routeSetupDialTimeout)
-		rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(dialCtx, log, r.dmsgC, r.conf.SetupNodes, req)
-		cancelDial()
+		var rules routing.EdgeRules
+		var connectedNode cipher.PubKey
+		if directDone {
+			// Set up endpoint-to-endpoint over the transport; no setup node
+			// was involved, so connectedNode stays zero.
+			rules, err = directRules, nil
+		} else {
+			dialCtx, cancelDial := context.WithTimeout(setupCtx, routeSetupDialTimeout)
+			rules, connectedNode, err = r.conf.RouteGroupDialer.Dial(dialCtx, log, r.dmsgC, r.conf.SetupNodes, req)
+			cancelDial()
+		}
 		if err != nil {
 			// If the PARENT context (the overall dial deadline) is done, stop
 			// retrying and surface it — the per-attempt timeout above only bounds

@@ -78,6 +78,15 @@ func (d *setupNodeDialer) CascadeAckRegistry() *ackRegistry {
 	return d.srcCascade.AckRegistry()
 }
 
+// SetupRPCMux exposes the visor's single SetupRPC virtual-stream mux so the
+// router can accept inbound direct-setup streams on it (see direct_setup.go).
+// Only one handler per packet type can be registered on the transport
+// manager, so the inbound side must share the mux this dialer created rather
+// than making a second one. Returns nil when no transport manager was given.
+func (d *setupNodeDialer) SetupRPCMux() *transport.VStreamMux {
+	return d.setupRPCMux
+}
+
 // NewSetupNodeDialer returns a wrapper for (*Client).DialRouteGroup.
 func NewSetupNodeDialer() RouteGroupDialer {
 	return &setupNodeDialer{}

@@ -144,6 +144,15 @@ func (r *router) Serve(ctx context.Context) error {
 
 	go r.serveSetup()
 
+	// Accept 1-hop route setup from transport peers on the SetupRPC virtual
+	// stream, so a peer holding a transport to this visor can establish a
+	// direct route without a setup node and without dmsg (direct_setup.go).
+	if provider, ok := r.conf.RouteGroupDialer.(setupRPCMuxProvider); ok {
+		if mux := provider.SetupRPCMux(); mux != nil {
+			go r.serveDirectSetup(ctx, mux)
+		}
+	}
+
 	// Reclaim frames parked during the route-group registration window whose
 	// route group never registers (see router_pending.go).
 	go r.pending.runSweep(ctx, r.logger)
