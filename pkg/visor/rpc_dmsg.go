@@ -34,6 +34,24 @@ func (r *RPC) DmsgProbe(req *DmsgProbeRequest, out *bool) (err error) {
 	return nil
 }
 
+// DmsgProbeReasonResponse carries a probe result together with why it failed.
+type DmsgProbeReasonResponse struct {
+	Reachable bool
+	Reason    string
+}
+
+// DmsgProbeReason checks dmsg reachability and reports the failure reason.
+func (r *RPC) DmsgProbeReason(req *DmsgProbeRequest, out *DmsgProbeReasonResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgProbeReason", req)(out, &err)
+
+	reachable, reason, err := r.visor.DmsgProbeReason(req.PK, req.Port)
+	if err != nil {
+		return err
+	}
+	*out = DmsgProbeReasonResponse{Reachable: reachable, Reason: reason}
+	return nil
+}
+
 // DmsgProbeViaServer probes dmsg reachability forced through a specific server.
 func (r *RPC) DmsgProbeViaServer(req *DmsgProbeViaServerRequest, out *bool) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgProbeViaServer", req)(out, &err)

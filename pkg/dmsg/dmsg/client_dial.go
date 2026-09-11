@@ -41,13 +41,26 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		return nil, failErr
 	}
 
+	// lastCause carries the most informative per-attempt failure seen while
+	// walking the dial ladder. Every phase has a specific reason for failing
+	// (a destination with no listener, a server that cannot forward, a
+	// refused TCP connection) and the ladder then collapses all of them into
+	// ErrCannotConnectToDelegated. Returning that bare code told operators
+	// only that everything failed, never why: a --direct dial that died
+	// because the destination's dmsg server had stopped listening reported
+	// "cannot connect to delegated server", which reads as a problem with
+	// the delegated servers themselves. Carry the cause out with the code.
+	var lastCause error
+
 	// Relay first. The visor nominated these peers to carry this client's dmsg
 	// traffic, and a relay resolves the destination and forwards to its servers
 	// itself — so it goes before the discovery lookup (the deployment services
 	// have no client entry and would otherwise take the connected-servers
 	// fallback), before the cached route, and before any server session.
 	if relaySessions := ce.sortedRelaySessions(); len(relaySessions) > 0 && !ce.relayDialSkipped(addr.PK) {
-		if stream, ok := ce.sequentialPhaseDial(ctx, addr, relaySessions, len(relaySessions)); ok {
+		stream, ok, cause := ce.sequentialPhaseDial(ctx, addr, relaySessions, len(relaySessions))
+		noteDialCause(&lastCause, cause)
+		if ok {
 			ce.dialFailClear(addr.PK)
 			return stream, nil
 		}
@@ -153,7 +166,9 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// dials to produce consecutive, usable streams (the exact failure
 	// mode of TestMultiServerStreams).
 	delegatedSessions := ce.sortedDelegatedSessions(entry.Client.DelegatedServers)
-	if stream, ok := ce.sequentialPhaseDial(ctx, addr, delegatedSessions, maxPerExistingPhase); ok {
+	stream, ok, cause := ce.sequentialPhaseDial(ctx, addr, delegatedSessions, maxPerExistingPhase)
+	noteDialCause(&lastCause, cause)
+	if ok {
 		ce.dialFailClear(addr.PK)
 		return stream, nil
 	}
@@ -163,7 +178,9 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// forwards the request to the target's server. Sorted by latency.
 	// Skips negative-cached pairs.
 	meshSessions := ce.sortedMeshSessions(entry.Client.DelegatedServers)
-	if stream, ok := ce.sequentialPhaseDial(ctx, addr, meshSessions, maxPerExistingPhase); ok {
+	stream, ok, cause = ce.sequentialPhaseDial(ctx, addr, meshSessions, maxPerExistingPhase)
+	noteDialCause(&lastCause, cause)
+	if ok {
 		ce.dialFailClear(addr.PK)
 		return stream, nil
 	}
@@ -175,12 +192,14 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 		}
 		dSes, err := ce.EnsureAndObtainSession(ctx, srvPK)
 		if err != nil {
+			noteDialCause(&lastCause, err)
 			continue
 		}
 		stream, err := dSes.DialStream(ctx, addr)
 		if err != nil {
 			ce.log.WithError(err).WithField("server", srvPK).
 				Debug("DialStream failed via new session, trying next server")
+			noteDialCause(&lastCause, err)
 			continue
 		}
 		ce.setCachedRoute(addr.PK, srvPK)
@@ -201,9 +220,31 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 	// out (its short deadline says nothing about the destination — recording
 	// it would fast-fail other callers with healthy budgets).
 	if ctx.Err() == nil {
-		ce.dialFailRecord(addr.PK, ErrCannotConnectToDelegated)
+		ce.dialFailRecord(addr.PK, dialLadderErr(lastCause))
 	}
-	return nil, ErrCannotConnectToDelegated
+	return nil, dialLadderErr(lastCause)
+}
+
+// noteDialCause keeps the FIRST non-nil per-attempt failure seen while
+// walking the dial ladder. First rather than last: the earliest phase is
+// the one whose sessions were most likely to be the right path, so its
+// reason describes the destination better than a later phase's does.
+func noteDialCause(dst *error, cause error) {
+	if dst == nil || cause == nil || *dst != nil {
+		return
+	}
+	*dst = cause
+}
+
+// dialLadderErr is what a fully-exhausted dial ladder returns: the same 202
+// code every caller already matches on, carrying the per-attempt cause so
+// the reason is not lost. errors.Is(err, ErrCannotConnectToDelegated) still
+// holds — Error.Is matches on the code, not on the wrapped chain.
+func dialLadderErr(cause error) error {
+	if cause == nil {
+		return ErrCannotConnectToDelegated
+	}
+	return ErrCannotConnectToDelegated.Wrap(cause)
 }
 
 // getClientEntryCached returns a client entry. Resolution order:
@@ -270,14 +311,15 @@ func (ce *Client) getClientEntryCached(ctx context.Context, clientPK cipher.PubK
 // orphan streams in the destination's accept queue after cancellation
 // — same failure mode but from a different angle (the exact failure
 // mode of TestMultiServerStreams).
-func (ce *Client) sequentialPhaseDial(ctx context.Context, addr Addr, sessions []ClientSession, cap int) (*Stream, bool) {
+func (ce *Client) sequentialPhaseDial(ctx context.Context, addr Addr, sessions []ClientSession, cap int) (*Stream, bool, error) {
 	tried := 0
+	var cause error
 	for _, s := range sessions {
 		if tried >= cap {
 			break
 		}
 		if ctx.Err() != nil {
-			return nil, false
+			return nil, false, cause
 		}
 		tried++
 
@@ -285,12 +327,13 @@ func (ce *Client) sequentialPhaseDial(ctx context.Context, addr Addr, sessions [
 		if err != nil {
 			ce.log.WithError(err).WithField("server", s.RemotePK()).
 				Debug("DialStream failed, trying next session")
+			noteDialCause(&cause, err)
 			continue
 		}
 		ce.setCachedRoute(addr.PK, s.RemotePK())
-		return stream, true
+		return stream, true, nil
 	}
-	return nil, false
+	return nil, false, cause
 }
 
 // sortedDelegatedSessions returns existing sessions to the given delegated servers,
