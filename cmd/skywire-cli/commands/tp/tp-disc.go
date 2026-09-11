@@ -74,7 +74,9 @@ Examples:
   skywire cli tp disc --type webrtc
   skywire cli tp disc --type stcpr --pk <public-key>`,
 	DisableFlagsInUseLine: true,
-	Run: func(cmd *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, args []string) {
+		// Reclaim a space-separated --pk value before anything reads tpPK.
+		adoptSpacedPKArg(args)
 		// A bare `-p` (or `--pk` with an empty value) means "the local visor
 		// pk" — resolve the sentinel to the real hex pk once here so every
 		// path below (discovery, per-key stats, keys-by-type) sees a real key.
@@ -175,6 +177,29 @@ Examples:
 // given an explicit value or omitted entirely. Resolving the local pk requires
 // the visor RPC (there is no other source of "this visor's" key), so a bare
 // `-p` combined with --no-rpc is a fatal error.
+// adoptSpacedPKArg recovers the value of a space-separated `--pk <key>`.
+//
+// --pk carries a NoOptDefVal so that a bare `-p` can mean "the local visor".
+// The price pflag charges for that is that the flag then binds ONLY the
+// `--pk=<value>` form: in `--pk <value>` the flag takes its NoOptDefVal and
+// the value is split off as a positional argument, which this command used to
+// discard. So `tp disc --pk <someone-else>` reported the LOCAL visor's
+// transports under the requested key's name — a plausible wrong answer, which
+// is worse than an error, and both spaced forms are in the examples above.
+//
+// Adopt that stray argument when it parses as a public key. A non-key
+// argument is left alone so the bare `-p` meaning still holds.
+func adoptSpacedPKArg(args []string) {
+	if tpPK != pkLocalSentinel || len(args) == 0 {
+		return
+	}
+	var pk cipher.PubKey
+	if err := pk.Set(args[0]); err != nil {
+		return
+	}
+	tpPK = args[0]
+}
+
 func resolveLocalPKSentinel(cmd *cobra.Command) {
 	if tpPK != pkLocalSentinel {
 		return
