@@ -37,7 +37,25 @@ var (
 	// DmsgServerAddr specifies a specific dmsg server to connect through.
 	// Format: pk@ip:port (e.g., 02a2d4c3...@45.79.124.73:30082)
 	DmsgServerAddr string
+
+	// DmsgAttach is the local visor dmsg-relay acceptor to attach to instead
+	// of dialing dmsg servers: a unix socket path, or "tcp://host:port" for a
+	// loopback listener. The tool keeps its own key — that is the whole point
+	// — and holds no server sessions and no discovery entry while attached.
+	// See StartDmsgLocalRelay.
+	DmsgAttach string
 )
+
+// AttachTarget splits DmsgAttach into (network, address). A bare path is a
+// unix socket — the default and the one with a filesystem gate; "tcp://" opts
+// into the loopback listener, which the visor only serves when it has an
+// explicit key allowlist.
+func AttachTarget(s string) (network, addr string) {
+	if rest, ok := strings.CutPrefix(s, "tcp://"); ok {
+		return "tcp", rest
+	}
+	return "unix", strings.TrimPrefix(s, "unix://")
+}
 
 // InitFlags is used to set command flags for the above variables.
 //
@@ -52,6 +70,7 @@ func InitFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&DmsgHTTPPath, "dmsgconf", "D", "", "dmsghttp-config path")
 	cmd.Flags().IntVarP(&DmsgSessions, "sess", "e", DmsgSessions, "number of DMSG Servers to connect to")
 	cmd.Flags().StringVarP(&DmsgServerAddr, "srv", "S", "", "connect via specific dmsg server `pk@ip:port`")
+	cmd.Flags().StringVar(&DmsgAttach, "attach", "", "attach to a local visor's dmsg relay `socket` (holds no server sessions, publishes no entry, keeps this key)")
 }
 
 // ParseServerAddr parses the --srv flag value into a disc.Entry.

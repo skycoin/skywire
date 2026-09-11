@@ -37,6 +37,12 @@ type deploymentWithServer struct {
 	// deployment in the single-object shape (like Server). See
 	// DmsgConfig.LookupCXO.
 	LookupCXO bool `json:"lookup_cxo,omitempty"`
+	// LocalRelay is visor-wide too (like Server): the local relay acceptor
+	// belongs to the client, not to any one deployment. Without this key
+	// here the field would be silently dropped on read AND on write — the
+	// custom codec below is the only one V1 uses for this struct, so a
+	// `json` tag on DmsgConfig alone buys nothing.
+	LocalRelay *DmsgLocalRelayConfig `json:"local_relay,omitempty"`
 }
 
 // UnmarshalJSON accepts either a single Deployment object or an
@@ -58,6 +64,7 @@ func (c *DmsgConfig) UnmarshalJSON(data []byte) error {
 		c.LookupCXO = single.LookupCXO
 		c.DirectOnly = single.DirectOnly
 		c.RelayMaxStreams = single.RelayMaxStreams
+		c.LocalRelay = single.LocalRelay
 	}
 	c.mirrorPrimary()
 	return nil
@@ -71,11 +78,18 @@ func (c *DmsgConfig) UnmarshalJSON(data []byte) error {
 // so the JSON output is correct.
 func (c DmsgConfig) MarshalJSON() ([]byte, error) {
 	deployments := c.Deployments
-	if len(deployments) == 0 && (c.Discovery != "" || c.DiscoveryDmsg != "" || len(c.Servers) > 0 || c.SessionsCount != 0 || c.ConnectedServersType != "" || c.Protocol != "" || len(c.Carriers) > 0 || len(c.LANServers) > 0 || c.HypervisorDiscovery != "" || c.Server != nil) {
+	if len(deployments) == 0 && (c.Discovery != "" || c.DiscoveryDmsg != "" || len(c.Servers) > 0 || c.SessionsCount != 0 || c.ConnectedServersType != "" || c.Protocol != "" || len(c.Carriers) > 0 || len(c.LANServers) > 0 || c.HypervisorDiscovery != "" || c.Server != nil || c.LocalRelay != nil) {
 		deployments = []Deployment{c.toDeployment()}
 	}
 	if len(deployments) == 1 {
-		return json.Marshal(deploymentWithServer{Deployment: deployments[0], Server: c.Server, LookupCXO: c.LookupCXO, DirectOnly: c.DirectOnly, RelayMaxStreams: c.RelayMaxStreams})
+		return json.Marshal(deploymentWithServer{
+			Deployment:      deployments[0],
+			Server:          c.Server,
+			LookupCXO:       c.LookupCXO,
+			DirectOnly:      c.DirectOnly,
+			RelayMaxStreams: c.RelayMaxStreams,
+			LocalRelay:      c.LocalRelay,
+		})
 	}
 	return json.Marshal(deployments)
 }

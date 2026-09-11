@@ -58,6 +58,16 @@ Default mode of operation is dmsghttp:
 
 // InitDmsgWithFlags starts dmsg with flags from the flags package
 func InitDmsgWithFlags(ctx context.Context, dlog *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, httpClient *http.Client, destination string) (dmsgC *dmsg.Client, stop func(), err error) {
+	// --attach short-circuits every server-dialing mode below: an attached
+	// client holds no server session for --srv to pin, no discovery to reach
+	// over --disc-addr, and no use for the --direct seed set. It is checked
+	// FIRST so a stale server flag in someone's unit file cannot quietly put
+	// the process back on the servers it was moved off.
+	if DmsgAttach != "" {
+		network, addr := AttachTarget(DmsgAttach)
+		c, stopFn, _, err := StartDmsgLocalRelay(ctx, dlog, pk, sk, network, addr)
+		return c, stopFn, err
+	}
 	if DmsgServerAddr != "" {
 		srvEntry, err := ParseServerAddr(DmsgServerAddr)
 		if err != nil {

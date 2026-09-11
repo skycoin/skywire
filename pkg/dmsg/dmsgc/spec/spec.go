@@ -126,6 +126,63 @@ type DmsgConfig struct {
 	// dmsg.DefaultClientMaxRelayedStreams. A negative value refuses to relay at
 	// all, for a visor that should never carry other people's traffic.
 	RelayMaxStreams int `json:"relay_max_streams,omitempty"`
+
+	// LocalRelay, when non-nil AND Enabled, opens a LOCAL acceptor (unix
+	// socket, optionally a loopback listener) onto the same relay the visor
+	// already serves over skynet, so a standalone process on this host can
+	// hold a dmsg identity WITHOUT holding dmsg server sessions of its own.
+	// Nil (the default) = no local acceptor: this is a grant of the visor's
+	// sessions and transports, so it is opt-in. See DmsgLocalRelayConfig.
+	LocalRelay *DmsgLocalRelayConfig `json:"local_relay,omitempty"`
+}
+
+// DmsgLocalRelayConfig configures the visor's LOCAL dmsg relay acceptor
+// (dmsg.Client.ServeLocalRelay). Default off — the whole struct is nil in
+// generated configs.
+//
+// What it grants: a process that attaches here dials dmsg under ITS OWN key,
+// but its streams are forwarded over THIS visor's dmsg sessions and transports
+// and are charged to this visor's relay slots (dmsg.relay_max_streams). The
+// attached key never rotates and never appears in dmsg-discovery.
+//
+// How it is authorized, in two independent layers:
+//
+//   - The listener. A unix socket at Socket, created with SocketMode (0600 by
+//     default), makes the filesystem the gate: only a process running as the
+//     visor's user can open it — and such a process can already read the
+//     visor's own secret key, so attaching grants it nothing new.
+//   - AllowedKeys. The dmsg session handshake is Noise XK, which PROVES the
+//     attaching process holds the secret key for the public key it claims, so
+//     an entry in this list is authentication and not a hint. Empty means "any
+//     key that can open the listener", which is the right default for a 0600
+//     socket and the wrong one for anything else.
+//
+// TCPAddress exists for the cases a unix socket cannot serve (a container
+// sharing the host's loopback but not its filesystem, Windows). It has no
+// filesystem gate, so it REQUIRES a non-empty AllowedKeys and a loopback
+// address; the visor refuses to bind it otherwise rather than quietly opening
+// an unauthenticated path to its own transports.
+type DmsgLocalRelayConfig struct {
+	// Enabled gates the whole acceptor. False (or a nil
+	// *DmsgLocalRelayConfig) = the visor serves no local relay.
+	Enabled bool `json:"enabled"`
+	// Socket is the unix socket path the acceptor listens on. Empty means
+	// "<local_path>/dmsg_relay.sock". Set it to "-" to run with no unix
+	// socket at all (TCPAddress only).
+	Socket string `json:"socket,omitempty"`
+	// SocketMode is the unix socket's file mode in octal, as a string
+	// ("0600", "0660"). Empty = "0600" (owner only). Widening it to a group
+	// mode is how an operator lets a service account that is NOT the visor's
+	// user attach; pair that with AllowedKeys, because the group is then the
+	// only thing standing between any of its members and this visor's
+	// transports.
+	SocketMode string `json:"socket_mode,omitempty"`
+	// TCPAddress is an optional loopback listen address ("127.0.0.1:7070").
+	// Empty = none. Requires AllowedKeys; a non-loopback host is refused.
+	TCPAddress string `json:"tcp_address,omitempty"`
+	// AllowedKeys, when non-empty, admits ONLY these public keys. Empty
+	// leaves the listener's own gate as the only one (see the type comment).
+	AllowedKeys []cipher.PubKey `json:"allowed_keys,omitempty"`
 }
 
 // DmsgServerConfig configures the OPTIONAL in-process dmsg server co-resident
