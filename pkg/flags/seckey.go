@@ -77,6 +77,23 @@ func fillSecKeys(cmd *cobra.Command) error {
 // root covers every subcommand that does not define one of its own, and a
 // subcommand that does keeps its behavior.
 func installSecKeyFallback(cmd *cobra.Command) {
+	// Run every persistent hook in the chain, not only the nearest one.
+	//
+	// This is load-bearing rather than tidy. cobra normally runs the FIRST
+	// PersistentPreRun it finds walking up from the executed command, so a
+	// subcommand that has one of its own hides the root's — and `skywire dmsg`
+	// has one, for the signal handling behind --kill. That shadowed this
+	// fallback across the whole `skywire dmsg ...` subtree, which is where most
+	// of the secret-key flags in this repository live, and it failed silently:
+	// no error, just a key that stayed unset. Verified against the built
+	// binary, not reasoned about — a malformed SK in the file was accepted
+	// without complaint before this line and reports the file after it.
+	//
+	// Nothing is lost by traversing. The only persistent hooks in this
+	// repository are `skywire dmsg`'s, `cli mdisc`'s, and this one, so the
+	// change is that this one now also runs; theirs still do.
+	cobra.EnableTraverseRunHooks = true
+
 	prev := cmd.PersistentPreRunE
 	prevPlain := cmd.PersistentPreRun
 	cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {

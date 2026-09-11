@@ -2,6 +2,7 @@
 package flags
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -132,5 +133,81 @@ func TestExistingPreRunPreserved(t *testing.T) {
 	}
 	if got := sk.Hex(); got != testSK {
 		t.Errorf("sk = %s, want %s", got, testSK)
+	}
+}
+
+// TestEndToEndThroughCobra is the one that says the feature works rather than
+// that its parts do: a root wired by InitFlags exactly as every binary wires
+// its own, a subcommand carrying --sk, and the key arriving by way of cobra's
+// own dispatch rather than a direct call to fillSecKeys.
+//
+// Worth its own test because the wiring is the part that can silently not
+// happen. cobra runs only the NEAREST PersistentPreRunE in the chain, so a
+// subcommand defining one of its own would shadow the root's and the fallback
+// would never fire for that subtree — with no error, just an unset key.
+func TestEndToEndThroughCobra(t *testing.T) {
+	skyenvWith(t, "SK='"+testSK+"'\n")
+
+	var sk cipher.SecKey
+	var ran bool
+
+	root := &cobra.Command{Use: "root"}
+	sub := &cobra.Command{
+		Use:  "sub",
+		RunE: func(*cobra.Command, []string) error { ran = true; return nil },
+	}
+	sub.Flags().VarP(&sk, "sk", "s", "secret key")
+	root.AddCommand(sub)
+
+	InitFlags(root, false)
+
+	root.SetArgs([]string{"sub"})
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !ran {
+		t.Fatal("the subcommand never ran")
+	}
+	if got := sk.Hex(); got != testSK {
+		t.Errorf("sk = %s, want %s — the fallback did not reach a real command", got, testSK)
+	}
+}
+
+// A subcommand with a persistent hook of its own must NOT hide the root's.
+//
+// This is the regression test for the bug that made the feature not work at
+// all: `skywire dmsg` has a PersistentPreRun for --kill's signal handling, and
+// cobra normally runs only the nearest hook, so the fallback never fired for
+// the whole `skywire dmsg ...` subtree — silently, with the key left unset.
+// installSecKeyFallback sets cobra.EnableTraverseRunHooks to fix it; this
+// fails if that is ever removed.
+func TestSubcommandPreRunDoesNotShadowTheFallback(t *testing.T) {
+	skyenvWith(t, "SK='"+testSK+"'\n")
+
+	var sk cipher.SecKey
+	var ownRan bool
+	root := &cobra.Command{Use: "root"}
+	sub := &cobra.Command{
+		Use:               "sub",
+		PersistentPreRunE: func(*cobra.Command, []string) error { ownRan = true; return nil },
+		RunE:              func(*cobra.Command, []string) error { return nil },
+	}
+	sub.Flags().VarP(&sk, "sk", "s", "secret key")
+	root.AddCommand(sub)
+
+	InitFlags(root, false)
+	root.SetArgs([]string{"sub"})
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !ownRan {
+		t.Error("the subcommand's own hook did not run — traversal must add to the chain, not replace it")
+	}
+	if got := sk.Hex(); got != testSK {
+		t.Errorf("sk = %s, want %s — a subcommand hook is hiding the root's fallback", got, testSK)
 	}
 }
