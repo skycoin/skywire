@@ -144,6 +144,10 @@ type Visor struct {
 	// handed to the in-process dmsg server so it shares the visor's TCP port.
 	// nil when the server is off, keyed separately, or pinned to its own address.
 	dmsgSharedLis net.Listener
+	// dmsgSrvRole records the in-process dmsg server that actually started
+	// (nil = none), so `visor state --select roles` can report the running
+	// server's key and address rather than only what the config asked for.
+	dmsgSrvRole atomic.Pointer[DmsgServerRole]
 
 	// localGraph is an extra transport-graph source merged into every
 	// GetAllTransports answer (see local_graph.go).
