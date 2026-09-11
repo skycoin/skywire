@@ -31,6 +31,39 @@ const (
 	entryCacheTTL  = 5 * time.Second
 )
 
+// serverEntryStaleAfter bounds how long a dmsg-server entry may go without
+// a server-side re-registration before the discovery stops offering it.
+//
+// A server re-registers at least every dmsg.DefaultUpdateInterval, so three
+// intervals is a comfortable margin over normal jitter. The bound exists
+// because key existence alone stopped being proof of liveness once one key
+// could hold both a Client and a Server section (#4787): a visor's client
+// half keeps the shared Redis key (and its TTL) alive — over HTTP, and over
+// the equal-sequence registration-over-CXO heartbeat, which rewrites the
+// STORED entry — long after the in-process dmsg server behind the Server
+// section has stopped listening. The entry then sits in discovery
+// advertising a reachable address and ~1200 free sessions, clients keep
+// picking it as a delegated server, and every dial to anything homed on it
+// fails with "cannot connect to delegated server" (dmsg error 202).
+// Observed in production: four folded visors whose dmsg listeners were down
+// stayed in the server set for 13-22 minutes with a frozen sequence,
+// which took the deployment services homed on them off the network.
+//
+// Staleness is judged on Entry.Timestamp, the registration instant. Only
+// the SERVER role is withdrawn: the key is left in place, so the visor
+// stays dialable as a client.
+const serverEntryStaleAfter = 3 * dmsg.DefaultUpdateInterval
+
+// serverEntryIsStale reports whether entry's registration is too old for it
+// to still be offered as a dmsg server. A zero timestamp (entries written
+// before timestamps were recorded) is never treated as stale.
+func serverEntryIsStale(entry *disc.Entry, now time.Time) bool {
+	if entry == nil || entry.Server == nil || entry.Timestamp == 0 {
+		return false
+	}
+	return now.Sub(time.Unix(0, entry.Timestamp)) > serverEntryStaleAfter
+}
+
 type redisStore struct {
 	client  *redis.Client
 	timeout time.Duration
@@ -155,6 +188,7 @@ func (r *redisStore) DelEntry(ctx context.Context, staticPubKey cipher.PubKey) e
 
 // AvailableServers implements Storer AvailableServers method for redisdb database
 func (r *redisStore) AvailableServers(ctx context.Context, maxCount int) ([]*disc.Entry, error) {
+	now := time.Now()
 	var entries []*disc.Entry
 
 	pks, err := r.client.SRandMemberN(ctx, "servers", int64(maxCount)).Result()
@@ -186,6 +220,14 @@ func (r *redisStore) AvailableServers(ctx context.Context, maxCount int) ([]*dis
 			continue
 		}
 
+		// A server that stopped re-registering is no longer offered, even
+		// though its key is still present — see serverEntryStaleAfter.
+		if serverEntryIsStale(entry, now) {
+			log.WithField("server_pk", entry.Static).
+				WithField("registered_at", entry.Timestamp).
+				Warn("Server entry is stale (no re-registration). Skipping...")
+			continue
+		}
 		if entry.Server.AvailableSessions <= 0 {
 			log.WithField("server_pk", entry.Static).
 				Warn("Server is at max capacity. Skipping...")
@@ -256,13 +298,37 @@ func (r *redisStore) CountEntries(ctx context.Context) (int64, int64, error) {
 	return numberOfServers, numberOfClients, nil
 }
 
+// RemoveOldServerEntries implements Storer RemoveOldServerEntries for redisdb.
+//
+// Two things retire a server: its key is gone (expired via TTL), or its
+// registration has gone stale while the key lives on because the same key
+// also carries a Client section that keeps being refreshed (see
+// serverEntryStaleAfter). In both cases the PK leaves the "servers" set so
+// it is no longer selected as a delegated server. The key itself is left
+// alone — the visor behind it stays reachable as a client.
 func (r *redisStore) RemoveOldServerEntries(ctx context.Context) error {
 	servers, err := r.client.SMembers(ctx, "servers").Result()
 	if err != nil {
 		return err
 	}
+	now := time.Now()
 	for _, server := range servers {
 		if r.client.Exists(ctx, server).Val() == 0 {
+			r.client.SRem(ctx, "servers", server)
+			continue
+		}
+		payload, err := r.client.Get(ctx, server).Bytes()
+		if err != nil {
+			continue
+		}
+		var entry *disc.Entry
+		if err := json.Unmarshal(payload, &entry); err != nil {
+			continue
+		}
+		if serverEntryIsStale(entry, now) {
+			log.WithField("server_pk", server).
+				WithField("registered_at", entry.Timestamp).
+				Info("Withdrawing stale dmsg-server entry from the servers set")
 			r.client.SRem(ctx, "servers", server)
 		}
 	}
