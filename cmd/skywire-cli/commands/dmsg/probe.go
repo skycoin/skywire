@@ -162,20 +162,20 @@ Examples:
 		}
 
 		start := time.Now()
-		reachable, err := rpcProbeOne(rpcClient, pk, uint16(port))
+		reachable, reason, err := rpcProbeOne(rpcClient, pk, uint16(port))
 		latency := time.Since(start)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("probe failed: %w", err))
 		}
 
-		emitProbeResult(cmd, pk, uint16(port), reachable, latency)
+		emitProbeResult(cmd, pk, uint16(port), reachable, reason, latency)
 	},
 }
 
 // emitProbeResult prints one single-port probe result, honoring the
 // global --json flag (the multi-port sweep already does). Keeps the
 // human line identical to what the command has always printed.
-func emitProbeResult(cmd *cobra.Command, pk cipher.PubKey, port uint16, reachable bool, latency time.Duration) {
+func emitProbeResult(cmd *cobra.Command, pk cipher.PubKey, port uint16, reachable bool, reason string, latency time.Duration) {
 	scheme, suffix := probeSchemeSuffix()
 	if jsonMode, _ := cmd.Flags().GetBool(internal.JSONString); jsonMode { //nolint:errcheck
 		b, _ := json.MarshalIndent(struct { //nolint:errcheck
@@ -185,7 +185,8 @@ func emitProbeResult(cmd *cobra.Command, pk cipher.PubKey, port uint16, reachabl
 			Server    string `json:"server,omitempty"`
 			Reachable bool   `json:"reachable"`
 			LatencyMS int64  `json:"latency_ms"`
-		}{pk.String(), port, scheme, probeServer, reachable, latency.Milliseconds()}, "", "  ")
+			Reason    string `json:"reason,omitempty"`
+		}{pk.String(), port, scheme, probeServer, reachable, latency.Milliseconds(), reason}, "", "  ")
 		fmt.Println(string(b))
 		return
 	}
@@ -193,26 +194,42 @@ func emitProbeResult(cmd *cobra.Command, pk cipher.PubKey, port uint16, reachabl
 	if reachable {
 		state = "reachable"
 	}
+	if !reachable && reason != "" {
+		fmt.Printf("%s://%s:%d%s — %s (%s): %s\n", scheme, pk, port, suffix, state, latency.Round(time.Millisecond), reason)
+		return
+	}
 	fmt.Printf("%s://%s:%d%s — %s (%s)\n", scheme, pk, port, suffix, state, latency.Round(time.Millisecond))
 }
 
 // rpcProbeOne dispatches a single RPC-mode probe by the selected transport.
+// The reason is "" for the transports that have no reason-carrying RPC, and
+// for a visor too old to serve DmsgProbeReason — in both cases the result is
+// still the plain reachable/unreachable answer, as before.
 func rpcProbeOne(rpcClient interface {
 	DmsgProbe(cipher.PubKey, uint16) (bool, error)
+	DmsgProbeReason(cipher.PubKey, uint16) (bool, string, error)
 	DmsgProbeViaServer(cipher.PubKey, uint16, cipher.PubKey) (bool, error)
 	SkynetProbe(cipher.PubKey, uint16) (bool, error)
-}, pk cipher.PubKey, port uint16) (bool, error) {
+}, pk cipher.PubKey, port uint16) (bool, string, error) {
 	if probeSkynet {
-		return rpcClient.SkynetProbe(pk, port)
+		reachable, err := rpcClient.SkynetProbe(pk, port)
+		return reachable, "", err
 	}
 	if probeServer != "" {
 		srv, err := parsePK(probeServer)
 		if err != nil {
-			return false, fmt.Errorf("invalid --server pk: %w", err)
+			return false, "", fmt.Errorf("invalid --server pk: %w", err)
 		}
-		return rpcClient.DmsgProbeViaServer(pk, port, srv)
+		reachable, err := rpcClient.DmsgProbeViaServer(pk, port, srv)
+		return reachable, "", err
 	}
-	return rpcClient.DmsgProbe(pk, port)
+	reachable, reason, err := rpcClient.DmsgProbeReason(pk, port)
+	if err != nil && strings.Contains(err.Error(), "can't find method") {
+		// Visor predates DmsgProbeReason — fall back to the boolean probe.
+		reachable, err = rpcClient.DmsgProbe(pk, port)
+		return reachable, "", err
+	}
+	return reachable, reason, err
 }
 
 // probeSchemeSuffix returns the URL scheme + an optional suffix for the
@@ -270,6 +287,10 @@ func runTCPProbe(cmd *cobra.Command) {
 	conn, err := tcpnoise.Dial(ctx, hostPort, myPK, mySK, rPK)
 	latency := time.Since(start)
 	reachable := err == nil
+	var reason string
+	if err != nil {
+		reason = err.Error()
+	}
 	if conn != nil {
 		_ = conn.Close() //nolint:errcheck
 	}
@@ -280,7 +301,8 @@ func runTCPProbe(cmd *cobra.Command) {
 			Addr      string `json:"addr"`
 			Reachable bool   `json:"reachable"`
 			LatencyMS int64  `json:"latency_ms"`
-		}{rPK.String(), "tcp", hostPort, reachable, latency.Milliseconds()}, "", "  ")
+			Reason    string `json:"reason,omitempty"`
+		}{rPK.String(), "tcp", hostPort, reachable, latency.Milliseconds(), reason}, "", "  ")
 		fmt.Println(string(b))
 		return
 	}
@@ -420,10 +442,13 @@ func runMultiPortProbeRPC(cmd *cobra.Command, pk cipher.PubKey, ports []uint16, 
 			defer wg.Done()
 			defer func() { <-sem }()
 			start := time.Now()
-			reachable, perr := rpcProbeOne(rpcClient, pk, p)
+			reachable, reason, perr := rpcProbeOne(rpcClient, pk, p)
 			results[i] = portProbeResult{Port: p, Reachable: reachable && perr == nil, Latency: time.Since(start)}
-			if perr != nil {
+			switch {
+			case perr != nil:
 				results[i].Err = perr.Error()
+			case !reachable:
+				results[i].Err = reason
 			}
 		}()
 	}
@@ -464,12 +489,15 @@ func runMultiPortProbeStandalone(cmd *cobra.Command, pk cipher.PubKey, ports []u
 			defer func() { <-sem }()
 			start := time.Now()
 			var reachable bool
+			var reason string
 			if serverSet {
 				reachable = dmsgC.ProbeViaServer(ctx, pk, p, serverPK)
+			} else if perr := dmsgC.ProbeErr(ctx, pk, p); perr != nil {
+				reason = perr.Error()
 			} else {
-				reachable = dmsgC.Probe(ctx, pk, p)
+				reachable = true
 			}
-			results[i] = portProbeResult{Port: p, Reachable: reachable, Latency: time.Since(start)}
+			results[i] = portProbeResult{Port: p, Reachable: reachable, Latency: time.Since(start), Err: reason}
 		}()
 	}
 	wg.Wait()
@@ -502,12 +530,15 @@ func runStandaloneProbe(cmd *cobra.Command, pk cipher.PubKey, port uint16) {
 
 	start := time.Now()
 	var reachable bool
+	var reason string
 	if serverSet {
 		reachable = dmsgC.ProbeViaServer(ctx, pk, port, serverPK)
+	} else if perr := dmsgC.ProbeErr(ctx, pk, port); perr != nil {
+		reason = perr.Error()
 	} else {
-		reachable = dmsgC.Probe(ctx, pk, port)
+		reachable = true
 	}
 	latency := time.Since(start)
 
-	emitProbeResult(cmd, pk, port, reachable, latency)
+	emitProbeResult(cmd, pk, port, reachable, reason, latency)
 }

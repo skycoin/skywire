@@ -738,6 +738,10 @@ func (proxyDefaultAPI) DmsgProbe(_ cipher.PubKey, _ uint16) (bool, error) {
 	return false, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) DmsgProbeReason(_ cipher.PubKey, _ uint16) (bool, string, error) {
+	return false, "", ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) DmsgProbeViaServer(_ cipher.PubKey, _ uint16, _ cipher.PubKey) (bool, error) {
 	return false, ErrProxyNotSupported
 }

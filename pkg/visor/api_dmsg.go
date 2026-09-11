@@ -772,6 +772,22 @@ func (v *Visor) DmsgProbe(pk cipher.PubKey, port uint16) (bool, error) {
 	return v.dmsgC.Probe(ctx, pk, port), nil
 }
 
+// DmsgProbeReason is DmsgProbe with the failure reason kept. Unreachable is
+// a result, not an RPC error, so the reason comes back as a string and the
+// error return stays reserved for the RPC itself — callers that only want
+// the boolean keep using DmsgProbe. reason is "" when reachable.
+func (v *Visor) DmsgProbeReason(pk cipher.PubKey, port uint16) (reachable bool, reason string, err error) {
+	if err := v.mustWaitDmsgReady(); err != nil {
+		return false, "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if perr := v.dmsgC.ProbeErr(ctx, pk, port); perr != nil {
+		return false, perr.Error(), nil
+	}
+	return true, "", nil
+}
+
 // DmsgProbeViaServer probes dmsg reachability of pk:port forced through a
 // specific dmsg server (serverPK), for per-server reachability diagnosis.
 // Returns true if reachable via that server.

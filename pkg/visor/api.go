@@ -257,6 +257,7 @@ type API interface {
 
 	//dmsg utilities
 	DmsgProbe(pk cipher.PubKey, port uint16) (bool, error)
+	DmsgProbeReason(pk cipher.PubKey, port uint16) (bool, string, error)
 	DmsgProbeViaServer(pk cipher.PubKey, port uint16, serverPK cipher.PubKey) (bool, error)
 	SkynetProbe(pk cipher.PubKey, port uint16) (bool, error)
 	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)

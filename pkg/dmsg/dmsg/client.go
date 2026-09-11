@@ -1372,12 +1372,22 @@ func (ce *Client) DiscEntry(ctx context.Context, pk cipher.PubKey) (*disc.Entry,
 // route setup: if Probe fails, the destination is unreachable and there
 // is no point attempting a full route setup that will time out.
 func (ce *Client) Probe(ctx context.Context, pk cipher.PubKey, port uint16) bool {
+	return ce.ProbeErr(ctx, pk, port) == nil
+}
+
+// ProbeErr is Probe with the reason kept. Probe answers only "reachable or
+// not", which makes an unreachable result undiagnosable: the caller cannot
+// tell a destination with no listener on that port from one whose dmsg
+// server stopped listening from a dial that ran out of budget. Every one of
+// those reads as a bare "no" in `skywire cli dmsg probe`'s output, whose
+// ERROR column was consequently always empty.
+func (ce *Client) ProbeErr(ctx context.Context, pk cipher.PubKey, port uint16) error {
 	stream, err := ce.DialStream(ctx, Addr{PK: pk, Port: port})
 	if err != nil {
-		return false
+		return err
 	}
 	_ = stream.Close() //nolint:errcheck
-	return true
+	return nil
 }
 
 // ProbeViaServer is like Probe but forces the stream through a specific
