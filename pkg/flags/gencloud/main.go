@@ -1,0 +1,187 @@
+// Command gencloud turns the Skycoin cloud logo into stencil rows for the
+// help screen's backdrop mask.
+//
+// The source is skycoin-cloud.png next to this file: the icon half of the logo
+// skycoin/skycoin serves in its block explorer (explorer/src/assets/img/
+// logo.svg), with the wordmark paths dropped and the result rasterized and
+// trimmed to the mark's own bounds.
+//
+// Only the alpha channel is read. The mask says where the shape is, not what
+// color it is — the rain supplies the color, which is the whole point of
+// drawing the logo as a silhouette rather than as a picture pasted on top.
+//
+// A terminal cell is about twice as tall as it is wide, so a square logo is
+// sampled into a grid twice as wide as it is tall. Several sizes are emitted
+// because the help screen it has to fit into is a different size on every
+// command; pkg/flags picks the largest that fits.
+//
+// Run it with `go generate ./pkg/flags/...`.
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"go/format"
+	"image"
+	_ "image/png"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// sizes are the variants emitted, in rows. Columns are twice the rows, which
+// is what keeps the logo square on screen.
+//
+// None smaller than this. The mark is a cloud cut by diagonal slashes, and
+// below about fifteen rows a slash is narrower than a cell: the sampler
+// breaks it into speckle, the outline goes with it, and what is left reads as
+// noise rather than as a logo. A terminal without room for a size that
+// resolves the slashes gets no logo at all, which is the better failure.
+var sizes = []int{15, 18, 22}
+
+// coverage is the share of a cell that must be inside the logo for the cell to
+// count as inside. Half: the shape is a solid blob with a soft edge, and a
+// speckles the bottom row of the smaller variants with half-covered cells.
+const coverage = 190
+
+func main() {
+	if len(os.Args) != 3 {
+		fmt.Fprintln(os.Stderr, "usage: gencloud <logo.png> <out.go>")
+		os.Exit(2)
+	}
+	rows, err := shapes(os.Args[1])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if err := write(os.Args[2], os.Args[1], rows); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// shapes samples the image at each size.
+func shapes(path string) ([][]string, error) {
+	f, err := os.Open(path) //nolint:gosec // build-time tool, path from the generate directive
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close() //nolint:errcheck
+
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([][]string, 0, len(sizes))
+	for _, rows := range sizes {
+		out = append(out, trim(sample(img, 2*rows, rows)))
+	}
+	return out, nil
+}
+
+// sample reduces the image to a character grid, one character per cell, by
+// averaging the alpha over the image region the cell covers.
+func sample(img image.Image, cols, rows int) []string {
+	b := img.Bounds()
+	out := make([]string, rows)
+	for y := 0; y < rows; y++ {
+		var line strings.Builder
+		for x := 0; x < cols; x++ {
+			x0 := b.Min.X + x*b.Dx()/cols
+			x1 := b.Min.X + (x+1)*b.Dx()/cols
+			y0 := b.Min.Y + y*b.Dy()/rows
+			y1 := b.Min.Y + (y+1)*b.Dy()/rows
+			if avgAlpha(img, x0, y0, x1, y1) > coverage {
+				line.WriteByte('#')
+				continue
+			}
+			line.WriteByte(' ')
+		}
+		out[y] = line.String()
+	}
+	return out
+}
+
+// avgAlpha is the mean alpha over a rectangle of the image, 0-255.
+func avgAlpha(img image.Image, x0, y0, x1, y1 int) int {
+	var sum, n int64
+	for y := y0; y < y1; y++ {
+		for x := x0; x < x1; x++ {
+			_, _, _, a := img.At(x, y).RGBA()
+			sum += int64(a >> 8)
+			n++
+		}
+	}
+	if n == 0 {
+		return 0
+	}
+	return int(sum / n)
+}
+
+// trim drops blank rows off the top and bottom, and blank columns off both
+// sides, so the block's own extent is the shape's extent. Placement arithmetic
+// measures the block, and padding baked into it would push the logo off
+// center by however much padding the source image happened to have.
+func trim(rows []string) []string {
+	for len(rows) > 0 && strings.TrimSpace(rows[0]) == "" {
+		rows = rows[1:]
+	}
+	for len(rows) > 0 && strings.TrimSpace(rows[len(rows)-1]) == "" {
+		rows = rows[:len(rows)-1]
+	}
+	if len(rows) == 0 {
+		return rows
+	}
+
+	left, right := len(rows[0]), 0
+	for _, r := range rows {
+		t := strings.TrimRight(r, " ")
+		if t == "" {
+			continue
+		}
+		if n := len(r) - len(strings.TrimLeft(r, " ")); n < left {
+			left = n
+		}
+		if len(t) > right {
+			right = len(t)
+		}
+	}
+	for i, r := range rows {
+		if right > len(r) {
+			right = len(r)
+		}
+		rows[i] = strings.TrimRight(r[left:right], " ")
+	}
+	return rows
+}
+
+// write emits the generated Go source.
+func write(path, src string, shapes [][]string) error {
+	var b bytes.Buffer
+	// The base name only: go generate runs from the package directory and a
+	// hand-run from the repository root passes a different relative path, and
+	// the generated file should not differ between the two.
+	fmt.Fprintf(&b, "// Code generated by pkg/flags/gencloud from %s. DO NOT EDIT.\n\n", filepath.Base(src))
+	fmt.Fprintf(&b, "package flags\n\n")
+	fmt.Fprintf(&b, "// cloudShapes are the logo's silhouette at several sizes, smallest first.\n")
+	fmt.Fprintf(&b, "// A '#' is inside the shape and a space is outside; see backdrop.Stencil.\n")
+	fmt.Fprintf(&b, "var cloudShapes = [][]string{\n")
+	for _, s := range shapes {
+		fmt.Fprintf(&b, "\t{\n")
+		for _, r := range s {
+			fmt.Fprintf(&b, "\t\t%q,\n", r)
+		}
+		fmt.Fprintf(&b, "\t},\n")
+	}
+	fmt.Fprintf(&b, "}\n")
+
+	out, err := format.Source(b.Bytes())
+	if err != nil {
+		return err
+	}
+	// Build-time tool: both paths come from the go:generate directive a few
+	// lines above the code it writes, not from anything a program is run with.
+	return os.WriteFile(path, out, 0o600) //nolint:gosec
+
+}
