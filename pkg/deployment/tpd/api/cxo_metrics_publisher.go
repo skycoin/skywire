@@ -50,7 +50,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	jsoniter "github.com/json-iterator/go"
 	"sort"
 	"sync"
 	"time"
@@ -64,6 +64,12 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
+
+// json is jsoniter's fastest config. The metrics feed marshals one record per
+// transport per day, and that marshal — not the compression — is where its
+// allocations go; the stdlib encoder's reflection is the slower half of a
+// publish measured at a third of this service's CPU (2026-09-11).
+var fastJSON = jsoniter.ConfigFastest
 
 const (
 	// metricsWindowDays is how much history the feed carries. It is
@@ -442,7 +448,16 @@ func (m *MetricsCXOPublisher) LastError() error {
 // the TPD's heap to multi-GB peaks every minute (2026-09-10 heap profile).
 func gzipRecords(metrics []store.TransportMetric) ([]byte, error) {
 	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
+	// BestSpeed, not the default level 6. This body is rebuilt and republished
+	// every tick and the publisher was measured at a third of transport-
+	// discovery's CPU with two thirds of that inside deflate (2026-09-11).
+	// The feed is machine-read from CXO, where a few percent of size buys
+	// back most of that CPU, and the bodies are far below the split ceiling
+	// either way so nothing gains a part.
+	zw, err := gzip.NewWriterLevel(&buf, gzip.BestSpeed)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := zw.Write([]byte{'['}); err != nil {
 		return nil, err
 	}
@@ -452,7 +467,7 @@ func gzipRecords(metrics []store.TransportMetric) ([]byte, error) {
 				return nil, err
 			}
 		}
-		b, err := json.Marshal(&metrics[i])
+		b, err := fastJSON.Marshal(&metrics[i])
 		if err != nil {
 			return nil, err
 		}
