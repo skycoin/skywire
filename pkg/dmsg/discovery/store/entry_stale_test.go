@@ -42,3 +42,32 @@ func TestServerEntryIsStale(t *testing.T) {
 		})
 	}
 }
+
+// Entry.Timestamp is written in two units in this codebase — disc.PutEntry
+// stamps UnixNano, several constructors and tests use Unix seconds. Reading a
+// seconds value as nanoseconds dates the entry to 1970, which would withdraw a
+// live server from discovery permanently.
+func TestServerEntryStaleAcceptsBothTimestampUnits(t *testing.T) {
+	now := time.Now()
+	srv := func(ts int64) *disc.Entry {
+		return &disc.Entry{Server: &disc.Server{}, Timestamp: ts}
+	}
+
+	t.Run("fresh in nanoseconds", func(t *testing.T) {
+		require.False(t, serverEntryIsStale(srv(now.UnixNano()), now))
+	})
+	t.Run("fresh in seconds", func(t *testing.T) {
+		require.False(t, serverEntryIsStale(srv(now.Unix()), now))
+	})
+	t.Run("stale in nanoseconds", func(t *testing.T) {
+		require.True(t, serverEntryIsStale(srv(now.Add(-time.Hour).UnixNano()), now))
+	})
+	t.Run("stale in seconds", func(t *testing.T) {
+		require.True(t, serverEntryIsStale(srv(now.Add(-time.Hour).Unix()), now))
+	})
+	t.Run("the unit boundary is not a date any entry can carry", func(t *testing.T) {
+		// Just under the ceiling read as seconds is the year 33658 — far in
+		// the future, so definitively not stale either way.
+		require.False(t, serverEntryIsStale(srv(secondsTimestampCeiling-1), now))
+	})
+}
