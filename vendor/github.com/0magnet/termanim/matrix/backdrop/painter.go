@@ -116,6 +116,7 @@ func (p *Painter) Tick(text string) string {
 func (p *Painter) reset(s sheet) {
 	p.cols, p.rows = s.cols, s.rows
 	p.f = NewFrame(s.cols, s.rows)
+	p.f.SetMask(s.mask)
 
 	if p.a != nil {
 		p.surf = canvas.NewSurface(s.cols, s.rows*2)

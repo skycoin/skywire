@@ -40,6 +40,7 @@ type Frame struct {
 	cols, rows int
 	cells      []Cell
 	lit        []bool
+	mask       Mask
 }
 
 // NewFrame returns a cleared frame of the given size.
@@ -99,6 +100,15 @@ func (f *Frame) At(x, y int) (Cell, bool) {
 	return f.cells[i], f.lit[i]
 }
 
+// SetMask sets the per-cell intensity map applied by the next fill, or nil for
+// none.
+//
+// It lives on the frame rather than on the fill calls because a frame is
+// filled over and over — an animated backdrop refills it many times a second
+// — and the shape being made of it is a property of the screen, not of any
+// one frame.
+func (f *Frame) SetMask(m Mask) { f.mask = m }
+
 // FromMatrix fills f from the rain's current frame.
 //
 // dim scales the intensity before the palette is read rather than scaling the
@@ -110,21 +120,41 @@ func (f *Frame) At(x, y int) (Cell, bool) {
 // The palette is the matrix's own, so a caller that tuned it — Painter.Matrix
 // exists for exactly that — sees the change behind its text as well as on a
 // screen of its own.
+//
+// A mask changes which cells have to be looked at. Without one only the lit
+// cells matter and Cells reports exactly those; with one, a dark cell may be
+// asked to light up, so every cell of the grid is visited. The unmasked path
+// is kept because it is the common one and it is the cheaper of the two.
 func (f *Frame) FromMatrix(m *matrix.Matrix, dim int) {
+	fitMask(f.mask, f.cols, f.rows)
 	f.Clear()
 	pal := m.Palette
-	m.Cells(func(x, y int, c matrix.Cell) {
-		n := c.Intensity
-		if dim != 256 {
-			n = n * dim / 256
+
+	if f.mask == nil {
+		m.Cells(func(x, y int, c matrix.Cell) {
+			f.Set(x, y, Cell{Rune: c.Rune, Fg: pal[clamp255(scale(c.Intensity, dim))], Bold: c.Hot})
+		})
+		return
+	}
+
+	for y := 0; y < f.rows; y++ {
+		for x := 0; x < f.cols; x++ {
+			c, lit := m.CellAt(x, y)
+			n := maskIntensity(f.mask, x, y, clamp255(scale(c.Intensity, dim)))
+			if n <= 0 {
+				continue
+			}
+			r := c.Rune
+			if !lit {
+				// The rain holds a glyph in every cell whether it is lighting
+				// it or not, and that is the one to draw: the alphabet and the
+				// scrambling stay the rain's own, so a filled shape reads as
+				// rain that is denser here rather than as something stamped on.
+				r = m.GlyphAt(x, y)
+			}
+			f.Set(x, y, Cell{Rune: r, Fg: pal[n], Bold: c.Hot && lit})
 		}
-		if n < 0 {
-			n = 0
-		} else if n > 255 {
-			n = 255
-		}
-		f.Set(x, y, Cell{Rune: c.Rune, Fg: pal[n], Bold: c.Hot})
-	})
+	}
 }
 
 // FromSurface fills f from a pixel surface, two pixel rows to a cell row.
@@ -144,6 +174,7 @@ func (f *Frame) FromMatrix(m *matrix.Matrix, dim int) {
 // dim scales the colors themselves here. There is no ramp to walk down: a
 // surface is already the picture.
 func (f *Frame) FromSurface(s *canvas.Surface, dim int) {
+	fitMask(f.mask, f.cols, f.rows)
 	f.Clear()
 	w, h := s.Size()
 	cols, rows := f.cols, f.rows
@@ -155,8 +186,12 @@ func (f *Frame) FromSurface(s *canvas.Surface, dim int) {
 	}
 	for y := 0; y < rows; y++ {
 		for x := 0; x < cols; x++ {
-			t := dimColor(s.At(x, 2*y), dim)
-			b := dimColor(s.At(x, 2*y+1), dim)
+			// A surface is already the picture, so a mask acts on it as a scale:
+			// what it would do to a full-intensity cell is what it does to this
+			// one. There is no glyph to fill an empty cell with here.
+			d := dim * maskIntensity(f.mask, x, y, 256) / 256
+			t := dimColor(s.At(x, 2*y), d)
+			b := dimColor(s.At(x, 2*y+1), d)
 			switch {
 			case t == tcell.ColorDefault && b == tcell.ColorDefault:
 				// Nothing here. Left unlit, so the text's own row shows
@@ -182,5 +217,30 @@ func dimColor(c tcell.Color, dim int) tcell.Color {
 		dim = 0
 	}
 	r, g, b := c.RGB()
-	return tcell.NewRGBColor(r*int32(dim)/256, g*int32(dim)/256, b*int32(dim)/256)
+	// A mask may scale past 256 to brighten, so the channels are clamped
+	// rather than allowed to wrap around into a different color.
+	return tcell.NewRGBColor(chn(r, dim), chn(g, dim), chn(b, dim))
+}
+
+// chn scales one color channel by dim out of 256, clamped to a byte.
+//
+// dim is clamped before the conversion as well as after the multiply: a mask
+// is caller-supplied and nothing stops it returning a number far larger than
+// any color, which would wrap on the way into an int32 and come out as a
+// different color rather than a brighter one.
+func chn(v int32, dim int) int32 {
+	if dim > 4096 {
+		dim = 4096
+	}
+	if dim < 0 {
+		dim = 0
+	}
+	v = v * int32(dim) / 256
+	if v > 255 {
+		return 255
+	}
+	if v < 0 {
+		return 0
+	}
+	return v
 }

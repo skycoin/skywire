@@ -114,6 +114,11 @@ func rainOptions(cmd *cobra.Command) backdrop.Options {
 
 	return backdrop.Options{
 		Off: plain || cliout.MachineMode(cmd) || os.Getenv(NoRainEnv) != "",
+
+		// A fresh mask per help screen. It places itself against that
+		// screen's width and the number of rows the text came to, and two
+		// help screens are rarely the same size. See cloud.go.
+		Mask: &cloudMask{},
 	}
 }
 
