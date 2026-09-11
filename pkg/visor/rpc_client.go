@@ -1563,6 +1563,13 @@ func (rc *rpcClient) DmsgProbe(pk cipher.PubKey, port uint16) (bool, error) {
 	return reachable, err
 }
 
+// DmsgProbeReason checks dmsg reachability and reports the failure reason.
+func (rc *rpcClient) DmsgProbeReason(pk cipher.PubKey, port uint16) (bool, string, error) {
+	var resp DmsgProbeReasonResponse
+	err := rc.Call("DmsgProbeReason", &DmsgProbeRequest{PK: pk, Port: port}, &resp)
+	return resp.Reachable, resp.Reason, err
+}
+
 // DmsgProbeViaServer checks dmsg reachability of a remote PK:port forced
 // through a specific dmsg server.
 func (rc *rpcClient) DmsgProbeViaServer(pk cipher.PubKey, port uint16, serverPK cipher.PubKey) (bool, error) {

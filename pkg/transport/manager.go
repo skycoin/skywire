@@ -1096,7 +1096,14 @@ func (tm *Manager) EnsureBestTransport(ctx context.Context, remote cipher.PubKey
 			return nil
 		}
 	}
-	var lastErr error
+	// Collect EVERY type's failure, not just the last one. The preference
+	// order is walked to the end, so keeping only lastErr reported whichever
+	// type happened to sort last and silently dropped the rest — an
+	// on-demand --direct dial where all five types failed identically at
+	// address resolution surfaced as "webrtc: dial signaling: ..." alone,
+	// which reads as a webrtc-specific problem and hides that stcpr, sudph,
+	// squicr and swtr died the same way one line earlier.
+	var attemptErrs []error
 	for _, nt := range order {
 		if skipSet[nt] {
 			continue
@@ -1114,7 +1121,7 @@ func (tm *Manager) EnsureBestTransport(ctx context.Context, remote cipher.PubKey
 		if ctx.Err() != nil { // parent canceled (not just this type's per-type cap) → abort
 			return ctx.Err()
 		}
-		lastErr = err
+		attemptErrs = append(attemptErrs, fmt.Errorf("%s: %w", nt, err))
 	}
 	// Last resort: the DMSG relay — loud, because it means no direct type worked.
 	// Callers can opt OUT by passing types.DMSG in `skip`. The js build opts out
@@ -1126,11 +1133,11 @@ func (tm *Manager) EnsureBestTransport(ctx context.Context, remote cipher.PubKey
 		if _, err := tm.SaveTransport(ctx, remote, types.DMSG, LabelAutomatic); err == nil {
 			tm.Logger.Warnf("auto-transport: all direct types %v failed for %s — created a DMSG RELAY transport (relayed data plane; usually signals a p2p reachability problem)", order, remote)
 			return nil
-		} else if lastErr == nil {
-			lastErr = err
+		} else { //nolint:revive // the else keeps the dmsg attempt's error in the joined set
+			attemptErrs = append(attemptErrs, fmt.Errorf("%s: %w", types.DMSG, err))
 		}
 	}
-	return lastErr
+	return errors.Join(attemptErrs...)
 }
 
 // Stcpr returns stcpr client

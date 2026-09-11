@@ -116,3 +116,18 @@ func (e Error) Wrap(err error) Error {
 	e.nxt = err
 	return e
 }
+
+// Is reports whether target is the same dmsg error, comparing the code
+// alone. Without it, wrapping (Error.Wrap, used by dialLadderErr to carry
+// the per-attempt cause behind a 202) would defeat every
+// errors.Is(err, dmsg.ErrX) check in the tree: Error is a comparable
+// struct, so the default equality also compares the wrapped `nxt` and a
+// wrapped error would no longer match its own sentinel.
+func (e Error) Is(target error) bool {
+	t, ok := target.(Error)
+	return ok && e.code == t.code
+}
+
+// Unwrap exposes the wrapped cause so errors.Is/As can also reach past a
+// dmsg error to what actually failed underneath it.
+func (e Error) Unwrap() error { return e.nxt }

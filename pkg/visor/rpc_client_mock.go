@@ -1271,6 +1271,11 @@ func (mc *mockRPCClient) DmsgProbe(_ cipher.PubKey, _ uint16) (bool, error) {
 	return true, nil
 }
 
+// DmsgProbeReason implements API.
+func (mc *mockRPCClient) DmsgProbeReason(_ cipher.PubKey, _ uint16) (bool, string, error) {
+	return true, "", nil
+}
+
 // DmsgProbeViaServer implements API.
 func (mc *mockRPCClient) DmsgProbeViaServer(_ cipher.PubKey, _ uint16, _ cipher.PubKey) (bool, error) {
 	return true, nil
