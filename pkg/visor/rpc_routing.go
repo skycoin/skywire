@@ -135,7 +135,6 @@ func (r *RPC) SetForceLocalRoutes(enabled *bool, _ *struct{}) (err error) {
 	return err
 }
 
-
 // SetMuxMode sets the weight distribution mode for mux transport selection
 func (r *RPC) SetMuxMode(mode *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetMuxMode", *mode)(nil, &err)

@@ -251,8 +251,6 @@
         "force-local-routes-hint": "Skip the route-finder service; calculate routes locally from cached transport data. Same as 'cli proxy start --local-route'.",
         "existing-tp-only": "Use existing transports only",
         "existing-tp-only-hint": "Don't create new transports when dialing routes; only use what's already established. Same as 'cli proxy start --existing-tp'.",
-        "mux-routes": "Mux routes (default)",
-        "mux-routes-hint": "Parallel routes per dial. 0 = unlimited (every distinct path), 1 = disabled, 2+ = N routes. Same as 'cli proxy start --mux N'.",
         "min-hops": "Minimum hops",
         "min-hops-hint": "Minimum number of hops on routes. 1 = no minimum (allow direct). Same as 'cli proxy start --min-hops N'."
       },

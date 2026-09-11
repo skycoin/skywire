@@ -321,20 +321,6 @@ func TestConfigGenStunServers(t *testing.T) {
 	}
 }
 
-func TestConfigGenMuxRoutes(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-	conf := runConfigGen(t, "--muxroutes 3")
-
-	if conf.Routing == nil {
-		t.Fatal("Routing config is nil")
-	}
-	if conf.Routing.MuxRoutes != 3 {
-		t.Errorf("MuxRoutes = %d, want 3", conf.Routing.MuxRoutes)
-	}
-}
-
 func TestConfigGenPublicVisor(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")

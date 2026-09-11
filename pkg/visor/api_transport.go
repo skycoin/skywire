@@ -136,7 +136,6 @@ func (v *Visor) SetForceLocalRoutes(enabled bool) error {
 	return nil
 }
 
-
 // SetMuxMode implements API.
 // Sets the weight distribution mode for mux transport selection.
 // Runtime-only: held in the router, never written to the config, lost on

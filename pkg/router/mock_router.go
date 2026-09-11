@@ -449,11 +449,6 @@ func (_m *MockRouter) SetDstTransportOracle(_a0 DstTransportOracle) {
 	_m.Called(_a0)
 }
 
-// SetMuxRoutes provides a mock function with given fields: _a0
-func (_m *MockRouter) SetMuxRoutes(_a0 int) {
-	_m.Called(_a0)
-}
-
 // SetMuxMode provides a mock function with given fields: _a0
 func (_m *MockRouter) SetMuxMode(_a0 WeightMode) {
 	_m.Called(_a0)

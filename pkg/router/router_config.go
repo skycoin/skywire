@@ -75,7 +75,6 @@ func (r *router) SetForceLocalRoutes(enabled bool) {
 	r.logger.Infof("SetForceLocalRoutes: %v", enabled)
 }
 
-
 // SetMuxMode sets the weight distribution mode for mux transport selection.
 // Propagates to all active route groups with mux enabled.
 func (r *router) SetMuxMode(mode WeightMode) {
@@ -125,7 +124,6 @@ func (r *router) GetForceLocalRoutes() bool {
 	defer r.forceLocalRoutesMu.Unlock()
 	return r.forceLocalRoutes
 }
-
 
 // GetLastRouteCalcTime returns the time it took to calculate the last local route.
 func (r *router) GetLastRouteCalcTime() time.Duration {

@@ -69,7 +69,6 @@ export class NodeInfoContentComponent implements OnDestroy {
   routerSettings = {
     force_local_routes: false,
     existing_tp_only: false,
-    mux_routes: 1,
     min_hops: 0,
   };
   routerSettingsSaving = false;
@@ -201,7 +200,6 @@ return {
         this.routerSettings = {
           force_local_routes: !!result.force_local_routes,
           existing_tp_only: !!result.existing_tp_only,
-          mux_routes: typeof result.mux_routes === 'number' ? result.mux_routes : 1,
           min_hops: typeof result.min_hops === 'number' ? result.min_hops : 0,
         };
         this.routerSettingsLoaded = true;
@@ -230,7 +228,6 @@ return {
         this.routerSettings = {
           force_local_routes: !!result.force_local_routes,
           existing_tp_only: !!result.existing_tp_only,
-          mux_routes: typeof result.mux_routes === 'number' ? result.mux_routes : 1,
           min_hops: typeof result.min_hops === 'number' ? result.min_hops : 0,
         };
         this.routerSettingsSaveMsg = 'Saved';
