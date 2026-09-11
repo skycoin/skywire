@@ -83,6 +83,17 @@ type EnvMapping struct {
 	// string-typed defaults. Keep in sync — if config-gen's
 	// defaults change, update this table too.
 	Default string
+	// Note is operator-facing guidance that does not fit the flag's
+	// own one-line description because it is about how this variable
+	// interacts with ANOTHER one: a dependency ("pin TRANSPORTPORT
+	// when you turn this on") or a conflict ("this and DMSGSERVERCONF
+	// are mutually exclusive"). The install-page form renders it
+	// beside the field; the CLI does not print it, since --help
+	// already shows every flag at once and the cross-references read
+	// as noise there.
+	//
+	// Empty for the vast majority of variables, which stand alone.
+	Note string
 }
 
 // Values holds the destination addresses for every flag binding
@@ -303,17 +314,17 @@ func New(v *Values) *cobra.Command {
 	// --- Transport ports ---
 	cmd.Flags().IntVar(&v.StcprPort, "stcpr", 0, "stcp transport listening port (0 = leave unchanged, random at runtime) — writes STCPRPORT in skywire.conf")
 	cmd.Flags().IntVar(&v.SudphPort, "sudph", 0, "sudp transport listening port (0 = leave unchanged, random at runtime) — writes SUDPHPORT in skywire.conf")
-	cmd.Flags().IntVar(&v.TransportPort, "transport-port", 0, "ONE shared master port for ALL transport types — stcpr+WS on <port>/tcp, sudph+quic+wt+webrtc on <port>/udp (0 = per-type ports) — writes TRANSPORTPORT in skywire.conf")
+	cmd.Flags().IntVar(&v.TransportPort, "transport-port", 0, "ONE shared master port for ALL transport types — stcpr+WS on <port>/tcp, sudph+quic+wt+webrtc on <port>/udp, and the in-visor dmsg server when --dmsg-server is on, so pin it to a forwarded port in that case (0 = per-type ports) — writes TRANSPORTPORT in skywire.conf")
 	cmd.Flags().IntVar(&v.MinHops, "min-hops", 1, "minimum route hops — 1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy — writes MINHOPS in skywire.conf")
 	cmd.Flags().IntVar(&v.ARTransportLimit, "ar-transport-limit", 0, "address-resolver registration: >=0 = register (default), <0 = never register (inbound-invisible). Only the sign is used; a positive value does NOT deregister after N transports — writes ARTRANSPORTLIMIT in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoDirectTransports, "no-direct-transports", false, "never create direct p2p transports; dmsg relay still allowed — writes NODIRECTTRANSPORTS=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.PtyRPCExec, "pty-rpc-exec", false, "allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off closes a local privilege-escalation vector) — writes PTYRPCEXEC=true in skywire.conf")
 	cmd.Flags().IntVar(&v.LanDmsgPort, "lan-dmsg-port", 0, "LAN dmsg-server listening port (0 = leave unchanged) — writes LANDMSGPORT in skywire.conf")
 	cmd.Flags().StringVar(&v.LanDmsgPublic, "lan-dmsg-public", "", "public host:port for the LAN dmsg-server entry in dmsg discovery — writes LANDMSGPUBLIC in skywire.conf")
-	cmd.Flags().StringVar(&v.DmsgServerConf, "dmsg-server-conf", "", "standalone dmsg-server config file to run inside the visor instead of a separate unit — writes DMSGSERVERCONF in skywire.conf")
-	cmd.Flags().BoolVar(&v.DmsgServer, "dmsg-server", false, "run a dmsg server inside the visor on the visor's own key, sharing its transport port — writes DMSGSERVER in skywire.conf")
-	cmd.Flags().BoolVar(&v.NoDmsgServer, "no-dmsg-server", false, "stop running a dmsg server inside the visor — unsets DMSGSERVER in skywire.conf")
-	cmd.Flags().StringVar(&v.DmsgServerPublic, "dmsg-server-public", "", "address that in-visor dmsg server advertises (host:port) — writes DMSGSERVERPUBLIC in skywire.conf")
+	cmd.Flags().StringVar(&v.DmsgServerConf, "dmsg-server-conf", "", "run a STANDALONE dmsg-server config file inside the visor instead of a separate unit — that server keeps its OWN key, ports and wss domain, so the host publishes two discovery entries. Takes precedence over --dmsg-server — writes DMSGSERVERCONF in skywire.conf")
+	cmd.Flags().BoolVar(&v.DmsgServer, "dmsg-server", false, "run a dmsg server inside the visor on the VISOR's OWN key, sharing --transport-port (one identity, one discovery entry, one forwarded port). Pin --transport-port to a port reachable from outside. Ignored when --dmsg-server-conf is set — writes DMSGSERVER in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoDmsgServer, "no-dmsg-server", false, "stop running a dmsg server inside the visor — writes DMSGSERVER=false in skywire.conf")
+	cmd.Flags().StringVar(&v.DmsgServerPublic, "dmsg-server-public", "", "host:port the in-visor dmsg server advertises; empty advertises whatever its listener resolves to, which is only right on a LAN — writes DMSGSERVERPUBLIC in skywire.conf")
 
 	// --- Whitelists ---
 	cmd.Flags().StringVar(&v.DmsgptyPks, "dmsgpty-pks", "", "additional dmsgpty-whitelist PKs (hypervisor PKs are already implicit) — writes DMSGPTYPKS in skywire.conf")
@@ -429,15 +440,18 @@ func EnvMap() map[string]EnvMapping {
 // section comments so cross-referencing stays one-to-one.
 var envMap = map[string]EnvMapping{
 	// Hypervisor / identity
-	"hvpks":          {Key: "HYPERVISORPKS", Format: EnvFormatBashArray},
-	"ws-peer":        {Key: "WSPEERS", Format: EnvFormatBashArray},
-	"ishv":           {Key: "ISHYPERVISOR", Format: EnvFormatBool},
-	"no-ishv":        {Key: "ISHYPERVISOR", Format: EnvFormatBool, Negate: true},
-	"pk-endpoint":    {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool},
-	"no-pk-endpoint": {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool, Negate: true},
-	"hvaddr":         {Key: "HVHTTPADDR", Format: EnvFormatString},
-	"sk":             {Key: "SK", Format: EnvFormatString},
-	"version":        {Key: "VERSION", Format: EnvFormatString},
+	"hvpks":   {Key: "HYPERVISORPKS", Format: EnvFormatBashArray},
+	"ws-peer": {Key: "WSPEERS", Format: EnvFormatBashArray},
+	"ishv":    {Key: "ISHYPERVISOR", Format: EnvFormatBool},
+	"no-ishv": {Key: "ISHYPERVISOR", Format: EnvFormatBool, Negate: true},
+	"legacy-hv-ui": {Key: "LEGACYHVUI", Format: EnvFormatBool, Default: "false (the desk)",
+		Note: "Only affects a visor that serves the hypervisor web UI — ISHYPERVISOR=true, or enabled later with `skywire cli visor hv enable`."},
+	"no-legacy-hv-ui": {Key: "LEGACYHVUI", Format: EnvFormatBool, Negate: true, Default: "false (the desk)"},
+	"pk-endpoint":     {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool},
+	"no-pk-endpoint":  {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool, Negate: true},
+	"hvaddr":          {Key: "HVHTTPADDR", Format: EnvFormatString},
+	"sk":              {Key: "SK", Format: EnvFormatString},
+	"version":         {Key: "VERSION", Format: EnvFormatString},
 
 	// Visor public/private + autoconnect
 	"rewardaddr":              {Key: "REWARDSKYADDR", Format: EnvFormatString},
@@ -457,9 +471,24 @@ var envMap = map[string]EnvMapping{
 	// Transport ports. 0 = OS-assigned random port at runtime;
 	// stays unchanged across visor restarts only when pinned to a
 	// non-zero value.
-	"stcpr":          {Key: "STCPRPORT", Format: EnvFormatInt, Default: "0 (random)"},
-	"sudph":          {Key: "SUDPHPORT", Format: EnvFormatInt, Default: "0 (random)"},
-	"transport-port": {Key: "TRANSPORTPORT", Format: EnvFormatInt, Default: "0 (per-type ports)"},
+	"stcpr": {Key: "STCPRPORT", Format: EnvFormatInt, Default: "0 (random)"},
+	"sudph": {Key: "SUDPHPORT", Format: EnvFormatInt, Default: "0 (random)"},
+	"transport-port": {Key: "TRANSPORTPORT", Format: EnvFormatInt, Default: "0 (per-type ports)",
+		Note: "Pin this to a forwarded, externally reachable port when DMSGSERVER is on: the in-visor dmsg server serves its peers on this same port, so a random one leaves it unreachable."},
+
+	// In-visor dmsg server. Two mutually exclusive modes, and the
+	// distinction matters because they produce different identities:
+	// DMSGSERVER runs on the VISOR's key (one entry, both roles),
+	// DMSGSERVERCONF runs a standalone server config on that file's
+	// OWN key (two entries). gen.go gives the config path precedence
+	// when an operator somehow sets both.
+	"dmsg-server-conf": {Key: "DMSGSERVERCONF", Format: EnvFormatString,
+		Note: "Runs a standalone dmsg-server config file inside the visor, on that file's OWN key and ports. Takes precedence over DMSGSERVER. Stop and disable the separate dmsg server unit first."},
+	"dmsg-server": {Key: "DMSGSERVER", Format: EnvFormatBool, Default: "false",
+		Note: "Runs the dmsg server on the VISOR's own key, sharing TRANSPORTPORT — pin TRANSPORTPORT to a reachable port. Ignored when DMSGSERVERCONF is set."},
+	"no-dmsg-server": {Key: "DMSGSERVER", Format: EnvFormatBool, Negate: true, Default: "false"},
+	"dmsg-server-public": {Key: "DMSGSERVERPUBLIC", Format: EnvFormatString,
+		Note: "host:port the DMSGSERVER entry advertises. Empty advertises whatever the listener resolves to, which is only right on a LAN."},
 
 	// Privacy / routing knobs.
 	"min-hops":             {Key: "MINHOPS", Format: EnvFormatInt, Default: "1"},
