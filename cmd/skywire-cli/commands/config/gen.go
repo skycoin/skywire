@@ -477,6 +477,10 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "lan-dmsg-public")
 	genConfigCmd.Flags().StringVar(&dmsgServerConf, "dmsg-server-conf", scriptExecString("${DMSGSERVERCONF}"), "run the dmsg server from this standalone dmsg-server config file inside the visor (replaces a separate dmsg server unit)")
 	gHiddenFlags = append(gHiddenFlags, "dmsg-server-conf")
+	genConfigCmd.Flags().BoolVar(&dmsgServerOwnKey, "dmsg-server", scriptExecBool("${DMSGSERVER:-false}"), "run a dmsg server inside the visor on the visor's OWN key, sharing its transport port")
+	gHiddenFlags = append(gHiddenFlags, "dmsg-server")
+	genConfigCmd.Flags().StringVar(&dmsgServerPublicAddr, "dmsg-server-public", scriptExecString("${DMSGSERVERPUBLIC}"), "address that in-visor dmsg server advertises (host:port); empty advertises whatever its listener resolves to")
+	gHiddenFlags = append(gHiddenFlags, "dmsg-server-public")
 
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 
@@ -1493,9 +1497,20 @@ func configureLauncher(log *logging.Logger) {
 	}
 
 	// Fold a standalone dmsg server into this visor: DMSGSERVERCONF names the
-	// dmsg-server config file the separate unit used to run from.
+	// dmsg-server config file the separate unit used to run from. That server
+	// keeps its OWN key and its own ports.
 	if dmsgServerConf != "" {
 		conf.Dmsg.Server = &dmsgc.DmsgServerConfig{Enabled: true, ConfigPath: dmsgServerConf}
+	} else if dmsgServerOwnKey {
+		// DMSGSERVER runs the server on the VISOR's key instead, so the host has
+		// one identity and one discovery entry carrying both roles. Leaving
+		// LocalAddress empty shares the visor's transport port, so no second
+		// port is opened and none has to be forwarded — which also means
+		// TRANSPORTPORT should be pinned to a port that is actually reachable.
+		conf.Dmsg.Server = &dmsgc.DmsgServerConfig{
+			Enabled:       true,
+			PublicAddress: dmsgServerPublicAddr,
+		}
 	}
 
 	// Configure the skycoin-web wallet. Only emit a block when the operator

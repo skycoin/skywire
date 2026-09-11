@@ -140,6 +140,17 @@ const envfileLinux = `#
 #	key, ports, wss domain and health endpoint from that file.
 #DMSGSERVERCONF='/etc/skywire-dmsg.json'
 
+#--	Run a dmsg server inside the visor on the visor's OWN key, so the host has
+#	one identity and one discovery entry carrying both roles. The server shares
+#	the visor's transport port, so pin TRANSPORTPORT to a port that is actually
+#	reachable from outside. Mutually exclusive with DMSGSERVERCONF, which runs a
+#	server on its own key instead.
+#DMSGSERVER=true
+
+#--	Address the in-visor dmsg server advertises (host:port). Empty advertises
+#	whatever its listener resolves to, which is only right on a LAN.
+#DMSGSERVERPUBLIC='1.2.3.4:30084'
+
 ### Rewards #############################################################
 
 #--	Skycoin reward address or xpub key

@@ -135,6 +135,14 @@ type Values struct {
 	LanDmsgPort    int
 	LanDmsgPublic  string
 	DmsgServerConf string
+	// DmsgServer runs a dmsg server inside the visor on the visor's OWN key,
+	// sharing its transport port — writes DMSGSERVER. NoDmsgServer turns it
+	// back off, the way every other boolean here is unset.
+	DmsgServer   bool
+	NoDmsgServer bool
+	// DmsgServerPublic is the address that server advertises — writes
+	// DMSGSERVERPUBLIC.
+	DmsgServerPublic string
 
 	// --- Privacy / routing knobs ---
 	MinHops            int  // MINHOPS (>=2 forces multihop for sender privacy)
@@ -303,6 +311,9 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().IntVar(&v.LanDmsgPort, "lan-dmsg-port", 0, "LAN dmsg-server listening port (0 = leave unchanged) — writes LANDMSGPORT in skywire.conf")
 	cmd.Flags().StringVar(&v.LanDmsgPublic, "lan-dmsg-public", "", "public host:port for the LAN dmsg-server entry in dmsg discovery — writes LANDMSGPUBLIC in skywire.conf")
 	cmd.Flags().StringVar(&v.DmsgServerConf, "dmsg-server-conf", "", "standalone dmsg-server config file to run inside the visor instead of a separate unit — writes DMSGSERVERCONF in skywire.conf")
+	cmd.Flags().BoolVar(&v.DmsgServer, "dmsg-server", false, "run a dmsg server inside the visor on the visor's own key, sharing its transport port — writes DMSGSERVER in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoDmsgServer, "no-dmsg-server", false, "stop running a dmsg server inside the visor — unsets DMSGSERVER in skywire.conf")
+	cmd.Flags().StringVar(&v.DmsgServerPublic, "dmsg-server-public", "", "address that in-visor dmsg server advertises (host:port) — writes DMSGSERVERPUBLIC in skywire.conf")
 
 	// --- Whitelists ---
 	cmd.Flags().StringVar(&v.DmsgptyPks, "dmsgpty-pks", "", "additional dmsgpty-whitelist PKs (hypervisor PKs are already implicit) — writes DMSGPTYPKS in skywire.conf")

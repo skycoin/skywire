@@ -210,6 +210,8 @@ var (
 	lanDmsgPort          int
 	lanDmsgPublicAddress string
 	dmsgServerConf       string
+	dmsgServerOwnKey     bool
+	dmsgServerPublicAddr string
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor
