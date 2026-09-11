@@ -158,7 +158,6 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 		BinPath:       conf.BinPath,
 		LocalPath:     v.conf.LocalPath,
 		DisplayNodeIP: conf.DisplayNodeIP,
-		MuxRoutes:     v.conf.Routing.MuxRoutes,
 	}
 
 	launchLog := v.MasterLogger().PackageLogger("launcher")
