@@ -64,20 +64,20 @@ func initColoredCobra(cmd *cobra.Command) {
 const helpTemplateNoUsage = `{{with (or .Long .Short)}}{{. | trimTrailingWhitespaces}}
 
 {{end}}{{if .HasAvailableSubCommands}}{{if eq (len .Groups) 0}}{{HeadingStyle "Available Commands:"}}{{range .Commands}}{{if and (ne .Name "completion") .IsAvailableCommand}}
-  {{rpad (CommandStyle .Name) (sum .NamePadding 12) }} {{CmdShortStyle .Short}}{{end}}{{end}}
+{{CmdRow .Name .Short .NamePadding}}{{end}}{{end}}
 {{else}}{{$cmds := .Commands}}{{range $group := .Groups}}
 {{HeadingStyle $group.Title}}{{range $cmds}}{{if and (eq .GroupID $group.ID) (ne .Name "completion") .IsAvailableCommand}}
-  {{rpad (CommandStyle .Name) (sum .NamePadding 12) }} {{CmdShortStyle .Short}}{{end}}{{end}}
+{{CmdRow .Name .Short .NamePadding}}{{end}}{{end}}
 {{end}}{{if not .AllChildCommandsHaveGroup}}
 {{HeadingStyle "Additional Commands:"}}{{range $cmds}}{{if and (eq .GroupID "") (ne .Name "completion") .IsAvailableCommand}}
-  {{rpad (CommandStyle .Name) (sum .NamePadding 12) }} {{CmdShortStyle .Short}}{{end}}{{end}}
+{{CmdRow .Name .Short .NamePadding}}{{end}}{{end}}
 {{end}}{{end}}
 
 {{end}}{{if .HasAvailableLocalFlags}}{{HeadingStyle "Flags:"}}
-{{FlagStyle .LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
+{{FlagBlock .LocalFlags}}{{end}}{{if .HasAvailableInheritedFlags}}
 
 {{HeadingStyle "Global Flags:"}}
-{{FlagStyle .InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}
+{{FlagBlock .InheritedFlags}}{{end}}
 `
 
 // help is used as usage template (coloredcobra will add colors to it).
@@ -89,19 +89,19 @@ const helpTemplateNoUsage = `{{with (or .Long .Short)}}{{. | trimTrailingWhitesp
 // titles. The functions are registered globally by cc.Init, so both
 // paths render identically.
 const help = `{{if gt (len .Aliases) 0}}{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}{{if eq (len .Groups) 0}}Available Commands:{{range .Commands}}{{if and (ne .Name "completion") .IsAvailableCommand}}
-  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{else}}{{$cmds := .Commands}}{{range $group := .Groups}}
+{{CmdRow .Name .Short .NamePadding}}{{end}}{{end}}{{else}}{{$cmds := .Commands}}{{range $group := .Groups}}
 {{HeadingStyle $group.Title}}{{range $cmds}}{{if and (eq .GroupID $group.ID) (ne .Name "completion") .IsAvailableCommand}}
-  {{rpad (CommandStyle .Name) (sum .NamePadding 12)}} {{CmdShortStyle .Short}}{{end}}{{end}}
+{{CmdRow .Name .Short .NamePadding}}{{end}}{{end}}
 {{end}}{{if not .AllChildCommandsHaveGroup}}
 {{HeadingStyle "Additional Commands:"}}{{range $cmds}}{{if and (eq .GroupID "") (ne .Name "completion") .IsAvailableCommand}}
-  {{rpad (CommandStyle .Name) (sum .NamePadding 12)}} {{CmdShortStyle .Short}}{{end}}{{end}}
+{{CmdRow .Name .Short .NamePadding}}{{end}}{{end}}
 {{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
 
 Flags:
-{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
+{{FlagBlock .LocalFlags}}{{end}}{{if .HasAvailableInheritedFlags}}
 
 Global Flags:
-{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}
+{{FlagBlock .InheritedFlags}}{{end}}
 `
 
 const helpUsage = `Usage:

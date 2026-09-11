@@ -512,3 +512,33 @@ func (m *Matrix) draw(screen tcell.Screen) {
 func Run(screen tcell.Screen, seed int64) error {
 	return canvas.RunCells(screen, New(seed), canvas.Options{})
 }
+
+// CellAt reports what is drawn at x, y and whether anything is.
+//
+// Cells is the way to read a whole frame; this is for a caller that needs to
+// ask about a cell the rain left dark — a backdrop mask that fills a shape in
+// has to know which cells it is filling, and Cells does not report those.
+// Coordinates outside the grid report nothing.
+func (m *Matrix) CellAt(x, y int) (Cell, bool) {
+	if x < 0 || y < 0 || x >= m.cols || y >= m.rows {
+		return Cell{}, false
+	}
+	return m.cellAt(x, y)
+}
+
+// GlyphAt is the glyph the rain holds at x, y, whether or not it is lit there.
+//
+// Every cell of the grid carries a glyph at all times — the rain scrambles
+// them as it falls and lights the ones its streams are passing through — so
+// this is what a caller lighting a dark cell should draw in it. Using it
+// rather than a glyph of one's own is the difference between rain that is
+// denser in one place and a shape stamped on top of rain: the alphabet, the
+// scrambling and the position are the rain's own either way.
+//
+// Zero outside the grid.
+func (m *Matrix) GlyphAt(x, y int) rune {
+	if x < 0 || y < 0 || x >= m.cols || y >= m.rows {
+		return 0
+	}
+	return m.glyph[y*m.cols+x]
+}

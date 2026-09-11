@@ -150,6 +150,14 @@ type Options struct {
 	// a decision only the caller is in a position to make.
 	Off bool
 
+	// Mask scales the backdrop cell by cell — see Mask and Stencil. nil is no
+	// mask, which is every existing caller.
+	//
+	// It composes with Dim rather than replacing it: Dim sets the level of the
+	// whole backdrop and the mask varies it from there, so a caller can turn
+	// the rain down and still cut a bright shape out of it.
+	Mask Mask
+
 	// Anim puts something other than the rain behind the text. nil is the
 	// rain, which is what this package started as and what every existing
 	// caller gets without changing anything.
@@ -222,6 +230,7 @@ func Render(text string, o Options) string {
 	m.Advance(steps)
 
 	f := NewFrame(l.cols, l.rows)
+	f.SetMask(l.mask)
 	f.FromMatrix(m, l.dim)
 	return paint(f, l, o)
 }
@@ -241,6 +250,11 @@ func RenderFrame(text string, f *Frame, o Options) string {
 	if !o.Force && !colorOK() {
 		return text
 	}
+	// Only when one was given: the caller built this frame and may have set a
+	// mask on it directly, which an unconditional assignment would clear.
+	if o.Mask != nil {
+		f.SetMask(o.Mask)
+	}
 	return paint(f, layout(text, o), o)
 }
 
@@ -258,6 +272,7 @@ type sheet struct {
 	styled     bool
 	gapMin     int
 	textStyle  string
+	mask       Mask
 	dim        int
 	seed       int64
 }
@@ -270,6 +285,7 @@ func layout(text string, o Options) sheet {
 		dim:    o.Dim,
 		seed:   o.Seed,
 		gapMin: o.GapMin,
+		mask:   o.Mask,
 	}
 	if s.pad == 0 {
 		s.pad = 2
