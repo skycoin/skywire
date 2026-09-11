@@ -57,6 +57,12 @@ const (
 	// allows. A 0700 directory closes that window: an unreachable path cannot
 	// be connected to whatever the file's own bits say for those few
 	// microseconds.
+	//
+	// It closes it only for a directory this visor CREATES, though —
+	// os.MkdirAll leaves an existing one alone, and the default path sits
+	// under local_path, which usually already exists. See
+	// warnIfLocalRelayDirPermissive for what is done about that and why it is
+	// a warning rather than a refusal.
 	localRelaySocketDirMode os.FileMode = 0700
 
 	// maxUnixSocketPath is the shortest sockaddr_un.sun_path across the
@@ -91,7 +97,7 @@ func (v *Visor) initLocalDmsgRelay(ctx context.Context, dmsgC *dmsg.Client) {
 	}
 
 	if sock := localRelaySocketPath(conf, v.conf.LocalPath); sock != "" {
-		if lis, err := listenLocalRelaySocket(sock, conf.SocketMode); err != nil {
+		if lis, err := listenLocalRelaySocket(sock, conf.SocketMode, log); err != nil {
 			log.WithError(err).WithField("socket", sock).Error("dmsg local relay: unix listener failed")
 		} else {
 			log.WithField("socket", sock).WithField("allowed_keys", len(conf.AllowedKeys)).
@@ -154,14 +160,31 @@ func localRelaySocketPath(conf *spec.DmsgLocalRelayConfig, localPath string) str
 // bind() on an existing path is EADDRINUSE whether or not anything is
 // listening. Unlinking is safe here because the path is the visor's own and a
 // second visor sharing one local_path is already broken for other reasons.
-func listenLocalRelaySocket(path string, mode string) (net.Listener, error) {
+func listenLocalRelaySocket(path string, mode string, log *logging.Logger) (net.Listener, error) {
 	fileMode, err := parseSocketMode(mode)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), localRelaySocketDirMode); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, localRelaySocketDirMode); err != nil {
 		return nil, fmt.Errorf("failed to prepare directory for dmsg local relay socket: %w", err)
 	}
+	// MkdirAll applies its mode only to directories it CREATES. A pre-existing
+	// parent — the common case, since the default path sits under the visor's
+	// local_path — keeps whatever mode it already had, so the window-closing
+	// property described on localRelaySocketDirMode is not guaranteed and has
+	// to be checked rather than assumed. Observed in practice: ~/.skywire
+	// already existed as 0705, world-traversable.
+	//
+	// This is a narrow concern, not a hole: the socket's FINAL mode is 0600
+	// either way, and connecting to a unix socket needs write permission, so
+	// under the usual umask 022 the file is 0755 for the few microseconds
+	// before the chmod and nobody else can connect to it even then. It only
+	// bites under a permissive umask (002/000), where those bytes are 0775 or
+	// 0777. Warn rather than fail: the operator may have deliberately relaxed
+	// the directory, and refusing to serve would be a worse answer than
+	// naming the exposure.
+	warnIfLocalRelayDirPermissive(dir, log)
 	if err := osutil.UnlinkSocketFiles(path); err != nil {
 		return nil, fmt.Errorf("failed to unlink stale dmsg local relay socket: %w", err)
 	}
@@ -271,4 +294,22 @@ func localRelayAllow(conf *spec.DmsgLocalRelayConfig, selfPK cipher.PubKey) (fun
 		_, ok := allowed[pk]
 		return ok
 	}, nil
+}
+
+// warnIfLocalRelayDirPermissive logs when the socket's parent directory is
+// reachable by group or other, which weakens the bind→chmod window described in
+// listenLocalRelaySocket. Best-effort: a stat failure is not worth failing the
+// listener over, since the socket's own 0600 remains the operative gate.
+func warnIfLocalRelayDirPermissive(dir string, log *logging.Logger) {
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return
+	}
+	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
+		log.WithField("dir", dir).
+			WithField("mode", fmt.Sprintf("%#o", perm)).
+			Warnf("dmsg local-relay socket directory is reachable by group/other; "+
+				"the socket itself is %#o so this is only exposed under a permissive umask, "+
+				"but chmod 0700 %s closes it entirely", defaultLocalRelaySocketMode, dir)
+	}
 }

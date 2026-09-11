@@ -9,6 +9,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 func TestLocalRelaySocketPath(t *testing.T) {
@@ -43,7 +44,7 @@ func TestParseSocketMode(t *testing.T) {
 // gate on a grant of the visor's transports.
 func TestListenLocalRelaySocketMode(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "sub", "relay.sock")
-	lis, err := listenLocalRelaySocket(sock, "")
+	lis, err := listenLocalRelaySocket(sock, "", logging.MustGetLogger("test"))
 	require.NoError(t, err)
 	defer lis.Close() //nolint:errcheck
 
@@ -66,7 +67,7 @@ func TestListenLocalRelaySocketReplacesStale(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "relay.sock")
 	require.NoError(t, os.WriteFile(sock, nil, 0600))
 
-	lis, err := listenLocalRelaySocket(sock, "")
+	lis, err := listenLocalRelaySocket(sock, "", logging.MustGetLogger("test"))
 	require.NoError(t, err)
 	defer lis.Close() //nolint:errcheck
 
