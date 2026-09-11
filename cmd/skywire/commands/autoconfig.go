@@ -160,6 +160,8 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addInt("LANDMSGPORT", "lan-dmsg-port", autoconfigVals.LanDmsgPort)
 	addString("LANDMSGPUBLIC", "lan-dmsg-public", autoconfigVals.LanDmsgPublic)
 	addString("DMSGSERVERCONF", "dmsg-server-conf", autoconfigVals.DmsgServerConf)
+	addBool("DMSGSERVER", "dmsg-server", "no-dmsg-server", autoconfigVals.DmsgServer, autoconfigVals.NoDmsgServer)
+	addString("DMSGSERVERPUBLIC", "dmsg-server-public", autoconfigVals.DmsgServerPublic)
 
 	// Whitelists
 	addArray("DMSGPTYPKS", "dmsgpty-pks", autoconfigVals.DmsgptyPks)
