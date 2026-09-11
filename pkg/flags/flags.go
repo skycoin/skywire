@@ -20,6 +20,7 @@ func InitFlags(cmd *cobra.Command, usage bool) {
 	// the previous `&cobra.Command{Hidden: true}` stub that disabled
 	// `cmd help` entirely.
 	InstallHelp(cmd)
+	installSecKeyFallback(cmd)
 	cmd.PersistentFlags().MarkHidden("help") //nolint:errcheck,gosec
 
 	// Set help template BEFORE cc.Init() so coloredcobra can colorize it
