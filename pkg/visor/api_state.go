@@ -77,6 +77,12 @@ type StateSnapshot struct {
 	// see DiagSnapshot. Cheap; part of the default snapshot.
 	Diag *DiagSnapshot `json:"diag,omitempty"`
 
+	// Roles is what this visor is FOR the network: the in-process dmsg
+	// server (if any, and on which key/address), both directions of the dmsg
+	// relay, and whether it refuses transit. See RolesSnapshot. Cheap; part
+	// of the default snapshot.
+	Roles *RolesSnapshot `json:"roles,omitempty"`
+
 	// Notes collects per-section errors ("routing: <err>") so the snapshot is
 	// self-describing about what it could and could not read.
 	Notes []string `json:"notes,omitempty"`
@@ -100,12 +106,14 @@ const (
 	SelectCXO        = "cxo"        // cxo feed publish-health
 	SelectProxy      = "proxy"      // visor-side proxystatus snapshot (skysocks); opt-in only
 	SelectDiag       = "diag"       // router intake, transport queues/handlers, vstream, dmsg ping/relay, runtime
+	SelectRoles      = "roles"      // in-process dmsg server, dmsg relay (both directions), transit refusal
 )
 
 // StateSelectKeys is the documented set of --select keys, in help order.
 var StateSelectKeys = []string{
 	SelectSummary, SelectHealth, SelectRouting, SelectMux,
 	SelectApps, SelectTransports, SelectModules, SelectCXO, SelectProxy, SelectDiag,
+	SelectRoles,
 }
 
 // stateFieldSet is the parsed --select set. A nil set means "everything in the
@@ -305,6 +313,10 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 
 	if want.has(SelectDiag) {
 		snap.Diag = v.DiagSnapshot()
+	}
+
+	if want.has(SelectRoles) {
+		snap.Roles = v.RolesSnapshot()
 	}
 
 	// proxy is opt-in (never in the default snapshot): the visor-side
