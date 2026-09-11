@@ -23,6 +23,16 @@ import (
 type deploymentWithServer struct {
 	Deployment
 	Server *DmsgServerConfig `json:"server,omitempty"`
+	// DirectOnly and RelayMaxStreams are visor-wide too, and were MISSING
+	// here: both carry a json tag on DmsgConfig but the codec never read or
+	// wrote them, so every value an operator set was silently dropped on the
+	// way in and never written back out. relay_max_streams is the documented
+	// bound on how many streams this visor will relay for others — the only
+	// knob against relay amplification — so "unsettable" is the wrong default
+	// for it to have had. Defaults are unchanged; this only makes a value the
+	// operator actually wrote take effect.
+	DirectOnly      bool `json:"direct_only,omitempty"`
+	RelayMaxStreams int  `json:"relay_max_streams,omitempty"`
 	// LookupCXO is a visor-wide flag carried alongside the primary
 	// deployment in the single-object shape (like Server). See
 	// DmsgConfig.LookupCXO.
@@ -46,6 +56,8 @@ func (c *DmsgConfig) UnmarshalJSON(data []byte) error {
 		c.Deployments = []Deployment{single.Deployment}
 		c.Server = single.Server
 		c.LookupCXO = single.LookupCXO
+		c.DirectOnly = single.DirectOnly
+		c.RelayMaxStreams = single.RelayMaxStreams
 	}
 	c.mirrorPrimary()
 	return nil
@@ -63,7 +75,7 @@ func (c DmsgConfig) MarshalJSON() ([]byte, error) {
 		deployments = []Deployment{c.toDeployment()}
 	}
 	if len(deployments) == 1 {
-		return json.Marshal(deploymentWithServer{Deployment: deployments[0], Server: c.Server, LookupCXO: c.LookupCXO})
+		return json.Marshal(deploymentWithServer{Deployment: deployments[0], Server: c.Server, LookupCXO: c.LookupCXO, DirectOnly: c.DirectOnly, RelayMaxStreams: c.RelayMaxStreams})
 	}
 	return json.Marshal(deployments)
 }
