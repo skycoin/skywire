@@ -61,7 +61,27 @@ func serverEntryIsStale(entry *disc.Entry, now time.Time) bool {
 	if entry == nil || entry.Server == nil || entry.Timestamp == 0 {
 		return false
 	}
-	return now.Sub(time.Unix(0, entry.Timestamp)) > serverEntryStaleAfter
+	return now.Sub(entryRegisteredAt(entry.Timestamp)) > serverEntryStaleAfter
+}
+
+// secondsTimestampCeiling separates the two units Entry.Timestamp is written
+// in. Anything below it cannot be a nanosecond timestamp of a real date (1e12
+// ns is 16 minutes past the epoch) and is therefore seconds; anything above it
+// cannot be seconds (1e12 s is the year 33658).
+const secondsTimestampCeiling = 1e12
+
+// entryRegisteredAt interprets Entry.Timestamp, which is written in two
+// different units in this codebase: disc.PutEntry stamps UnixNano (what every
+// production entry carries), while several entry constructors and tests use
+// Unix seconds. Guessing wrong by a factor of a billion is not a rounding
+// error — reading a seconds value as nanoseconds dates the entry to 1970, so
+// a live server would be judged stale and silently withdrawn from discovery
+// forever. Accept both rather than trusting one.
+func entryRegisteredAt(ts int64) time.Time {
+	if ts > 0 && ts < secondsTimestampCeiling {
+		return time.Unix(ts, 0)
+	}
+	return time.Unix(0, ts)
 }
 
 type redisStore struct {
