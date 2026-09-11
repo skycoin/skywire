@@ -12,25 +12,34 @@ import (
 var allFlags = []string{
 	"verbose",
 	// Hypervisor / identity
-	"hvpks", "ishv", "no-ishv", "pk-endpoint", "no-pk-endpoint", "hvaddr", "sk", "version",
+	"hvpks", "ws-peer", "ishv", "no-ishv", "legacy-hv-ui", "no-legacy-hv-ui",
+	"pk-endpoint", "no-pk-endpoint", "hvaddr", "sk", "version",
 	// Visor public/private + autoconnect
 	"rewardaddr", "public", "no-public", "publicip", "disable-public-autoconn",
 	// Service discovery / deployment
 	"testenv", "url", "svcconf", "minsess", "maxtransports", "stun",
-	// Transport ports
-	"stcpr", "sudph", "transport-port", "lan-dmsg-port", "lan-dmsg-public",
+	// Transport ports + privacy/routing knobs
+	"stcpr", "sudph", "transport-port", "min-hops", "ar-transport-limit",
+	"no-direct-transports", "pty-rpc-exec", "lan-dmsg-port", "lan-dmsg-public",
+	"dmsg-server-conf", "dmsg-server", "no-dmsg-server", "dmsg-server-public",
 	// Whitelists
 	"dmsgpty-pks", "survey", "routesetup", "tpsetup",
 	// Route calculation
 	"calculate-routes",
 	// VPN server
-	"vpnserver", "no-vpnserver", "vpnrouter", "vpnrouter-lan-ifc", "killsw", "addvpn", "vpnwl", "secure", "netifc",
+	"vpnserver", "no-vpnserver", "vpnrouter", "vpnrouter-lan-ifc", "vpnrouter-subnet",
+	"vpnrouter-wifi", "vpnrouter-ssid", "vpnrouter-passphrase", "vpnrouter-band",
+	"vpnrouter-channel", "vpnrouter-country", "vpnrouter-open", "vpnrouter-mesh-gateway",
+	"vpnrouter-mesh-gateway-cidr", "vpnrouter-mesh-gateway-tls",
+	"killsw", "addvpn", "vpnwl", "secure", "netifc",
 	// Proxy
 	"proxyserver", "no-proxyserver", "proxyclientpk", "startproxyclient", "proxywl",
 	// SOCKS5 web bridges
-	"dmsgweb", "no-dmsgweb", "skynetweb", "no-skynetweb", "dmsgweb-upstream", "skynetweb-upstream",
+	"dmsgweb", "no-dmsgweb", "skynetweb", "no-skynetweb", "dmsgweb-upstream",
+	"skynetweb-upstream", "dmsgweb-addr", "skynetweb-addr",
 	// Skychat
-	"skychat", "no-skychat", "chataddr", "servechatpair", "no-servechatpair",
+	"skychat", "no-skychat", "chataddr", "chatportless", "no-chatportless",
+	"servechatpair", "no-servechatpair",
 	// Skymail bridge
 	"skymail-bridge", "no-skymail-bridge",
 	// Skycoin daemon
@@ -59,6 +68,9 @@ var negationPairs = []struct {
 	pos, neg string
 }{
 	{"ishv", "no-ishv"},
+	{"legacy-hv-ui", "no-legacy-hv-ui"},
+	{"dmsg-server", "no-dmsg-server"},
+	{"chatportless", "no-chatportless"},
 	{"pk-endpoint", "no-pk-endpoint"},
 	{"public", "no-public"},
 	{"vpnserver", "no-vpnserver"},
@@ -232,5 +244,61 @@ func TestNew_UsageString_RendersWithoutError(t *testing.T) {
 		if !strings.Contains(usage, "--"+name) {
 			t.Errorf("UsageString missing --%s", name)
 		}
+	}
+}
+
+// TestEnvMap_InVisorDmsgServerAndLegacyUI pins the env mappings for
+// the knobs that shipped with the in-visor dmsg server (#4792) and
+// the opt-in legacy hypervisor UI. Their flags were registered and
+// autoconfig wrote them, but envMap had no entries — so the
+// install-page form, which renders from this table, could not offer
+// them at all. Assert the exact SKYENV names and encodings, because
+// a typo here is invisible until an operator's generated
+// skywire.conf silently fails to change anything.
+func TestEnvMap_InVisorDmsgServerAndLegacyUI(t *testing.T) {
+	m := EnvMap()
+	want := map[string]EnvMapping{
+		"legacy-hv-ui":       {Key: "LEGACYHVUI", Format: EnvFormatBool},
+		"no-legacy-hv-ui":    {Key: "LEGACYHVUI", Format: EnvFormatBool, Negate: true},
+		"dmsg-server":        {Key: "DMSGSERVER", Format: EnvFormatBool},
+		"no-dmsg-server":     {Key: "DMSGSERVER", Format: EnvFormatBool, Negate: true},
+		"dmsg-server-public": {Key: "DMSGSERVERPUBLIC", Format: EnvFormatString},
+		"dmsg-server-conf":   {Key: "DMSGSERVERCONF", Format: EnvFormatString},
+	}
+	for flag, w := range want {
+		got, ok := m[flag]
+		if !ok {
+			t.Errorf("envMap missing --%s", flag)
+			continue
+		}
+		if got.Key != w.Key {
+			t.Errorf("--%s Key = %q; want %q", flag, got.Key, w.Key)
+		}
+		if got.Format != w.Format {
+			t.Errorf("--%s Format = %q; want %q", flag, got.Format, w.Format)
+		}
+		if got.Negate != w.Negate {
+			t.Errorf("--%s Negate = %v; want %v", flag, got.Negate, w.Negate)
+		}
+	}
+}
+
+// TestEnvMap_TransportPortDependencyNoted asserts the cross-field
+// guidance survives: the in-visor dmsg server shares TRANSPORTPORT,
+// so a random port leaves it unreachable from outside. The page has
+// no other way to learn that these two fields are coupled, and the
+// two dmsg-server modes are easy to confuse, so each carries a Note.
+func TestEnvMap_TransportPortDependencyNoted(t *testing.T) {
+	m := EnvMap()
+	for _, flag := range []string{"transport-port", "dmsg-server", "dmsg-server-conf", "dmsg-server-public"} {
+		if m[flag].Note == "" {
+			t.Errorf("--%s should carry a Note explaining its cross-field dependency", flag)
+		}
+	}
+	if !strings.Contains(m["transport-port"].Note, "DMSGSERVER") {
+		t.Errorf("--transport-port Note should name DMSGSERVER; got %q", m["transport-port"].Note)
+	}
+	if !strings.Contains(m["dmsg-server"].Note, "DMSGSERVERCONF") {
+		t.Errorf("--dmsg-server Note should say DMSGSERVERCONF wins; got %q", m["dmsg-server"].Note)
 	}
 }
