@@ -1322,6 +1322,15 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 		// returns early once ready; this cap just prevents a never-ready dmsg
 		// from blocking boot here indefinitely.
 		tpdDmsgReadyWait = 60 * time.Second
+		// tpdBootWait bounds how long boot tries to reach the transport
+		// discovery before proceeding without it. Long enough to cover a
+		// deployment that is merely slow to answer, short enough that an
+		// unreachable one costs a visor half a minute rather than its whole
+		// control plane.
+		tpdBootWait = 30 * time.Second
+		// tpdDeferredRetry is how often the background connector retries once
+		// boot has moved on.
+		tpdDeferredRetry = 10 * time.Second
 	)
 
 	conf := v.conf.Transport
@@ -1362,24 +1371,51 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 		return nil, err
 	}
 
+	connect := func(context.Context) (transport.DiscoveryClient, error) {
+		return tpdclient.NewHTTP(tpdURL, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+	}
+
+	// One bounded attempt on the boot path, so the common case (TPD reachable)
+	// is connected by the time the transport manager starts and nothing below
+	// changes.
 	tpdCRetrier := netutil.NewRetrier(log, initBO, maxBO, tries, factor)
+	bootCtx, cancelBoot := context.WithTimeout(ctx, tpdBootWait)
+	defer cancelBoot()
 
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
 		var err error
-		tpdC, err = tpdclient.NewHTTP(tpdURL, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+		tpdC, err = connect(bootCtx)
 		if err != nil {
-			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
+			log.WithError(err).Debug("Transport discovery not reachable yet, retrying...")
 			return err
 		}
 		return nil
 	}
 
-	if err := tpdCRetrier.Do(context.Background(), retryFunc); err != nil {
-		return nil, err
+	if err := tpdCRetrier.Do(bootCtx, retryFunc); err == nil {
+		return tpdC, nil
 	}
 
-	return tpdC, nil
+	// Boot must NOT wait on the transport discovery. Constructing the client
+	// does network I/O (an httpauth nonce fetch), and this used to retry it
+	// unbounded on context.Background() — so a visor that could not reach the
+	// TPD never finished starting. The transport module gates the RPC server,
+	// the launcher (dmsgpty, the hypervisor RPC, every app listener) and the
+	// router, so such a visor holds dmsg sessions, answers nothing and cannot
+	// be managed remotely for as long as the TPD is away.
+	//
+	// That cascades. The deployment services are reached over dmsg, so when a
+	// visor co-located with the TPD wedges this way it takes the TPD with it,
+	// and every visor that restarts afterwards wedges on the missing TPD —
+	// observed in production spreading host by host with a rollout.
+	//
+	// Transports work before they are registered and registration is already
+	// retried on a timer, so carry on with a deferred client that connects in
+	// the background.
+	log.WithField("tpd", tpdURL).
+		Warn("Transport discovery unreachable at boot; continuing without it and connecting in the background")
+	return transport.NewDeferredDiscoveryClient(v.ctx, log, tpdDeferredRetry, connect), nil
 }
 
 // newV6ForcedHTTPClient returns an *http.Client whose underlying
