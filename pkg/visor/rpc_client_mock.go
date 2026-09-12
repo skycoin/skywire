@@ -778,10 +778,6 @@ func (mc *mockRPCClient) SetForceLocalRoutes(_ bool) error {
 	return nil
 }
 
-func (mc *mockRPCClient) SetMuxRoutes(_ int) error {
-	return nil
-}
-
 func (mc *mockRPCClient) SetMuxMode(_ string) error {
 	return nil
 }
@@ -1657,11 +1653,6 @@ func (mc *mockRPCClient) HVAddTransport(_, _ cipher.PubKey, _, _ string, _ time.
 
 // HVSetPublicAutoconnect implements API.
 func (mc *mockRPCClient) HVSetPublicAutoconnect(_ cipher.PubKey, _ bool) error {
-	return fmt.Errorf("not supported in mock")
-}
-
-// HVSetMuxRoutes implements API.
-func (mc *mockRPCClient) HVSetMuxRoutes(_ cipher.PubKey, _ int) error {
 	return fmt.Errorf("not supported in mock")
 }
 

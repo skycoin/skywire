@@ -118,7 +118,6 @@ var (
 	// existing transport flag
 	existingTpOnly     bool
 	forceLocalRoutes   bool
-	muxRoutes          int
 	muxMode            string
 	minHops            uint16
 	startTunnels       int

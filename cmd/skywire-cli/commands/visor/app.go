@@ -31,7 +31,6 @@ var useInternal bool
 var useExternal bool
 var appExistingTP bool
 var appLocalRoute bool
-var appMuxRoutes int
 var appMuxMode string
 var appMinHops uint16
 var lsAppsLive bool
@@ -86,7 +85,6 @@ func init() {
 	// Applied (only when passed) before the app starts, matching proxy/vpn.
 	startAppCmd.Flags().BoolVar(&appExistingTP, "existing-tp", false, "only use existing transports, don't create new ones")
 	startAppCmd.Flags().BoolVar(&appLocalRoute, "local-route", false, "calculate routes locally instead of using the route finder")
-	startAppCmd.Flags().IntVar(&appMuxRoutes, "mux", 1, "parallel mux routes: 0=unlimited, 1=disabled (default), 2+=N routes")
 	startAppCmd.Flags().StringVar(&appMuxMode, "mux-mode", "auto", "mux weight mode: auto (latency-based) or equal (round-robin)")
 	startAppCmd.Flags().Uint16Var(&appMinHops, "min-hops", 0, "minimum route hops for this app's routes")
 	startAppCmd.Flags().StringVar(&startAppRoutingPolicy, "routing-policy", "",
@@ -230,9 +228,6 @@ var startAppCmd = &cobra.Command{
 		}
 		if cmd.Flags().Changed("local-route") {
 			o.LocalRoute = &appLocalRoute
-		}
-		if cmd.Flags().Changed("mux") {
-			o.MuxRoutes = &appMuxRoutes
 		}
 		if cmd.Flags().Changed("mux-mode") {
 			o.MuxMode = &appMuxMode

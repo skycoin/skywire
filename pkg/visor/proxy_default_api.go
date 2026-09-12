@@ -390,10 +390,6 @@ func (proxyDefaultAPI) SetForceLocalRoutes(_ bool) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) SetMuxRoutes(_ int) error {
-	return ErrProxyNotSupported
-}
-
 func (proxyDefaultAPI) GetRouterSettings() (RouterSettings, error) {
 	return RouterSettings{}, ErrProxyNotSupported
 }
@@ -1191,10 +1187,6 @@ func (proxyDefaultAPI) HVAddTransport(_ cipher.PubKey, _ cipher.PubKey, _ string
 }
 
 func (proxyDefaultAPI) HVSetPublicAutoconnect(_ cipher.PubKey, _ bool) error {
-	return ErrProxyNotSupported
-}
-
-func (proxyDefaultAPI) HVSetMuxRoutes(_ cipher.PubKey, _ int) error {
 	return ErrProxyNotSupported
 }
 

@@ -712,27 +712,6 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						})
 					}()
 					return nil
-				case 'M':
-					v, ok := selectedVisor()
-					if !ok {
-						return nil
-					}
-					showInputModal("Set mux_routes on "+v.PK.String(), "mux_routes (0 or 1 = single)", "1", func(s string) {
-						n, err := strconv.Atoi(s)
-						if err != nil || n < 0 {
-							setStatus("mux_routes: invalid number")
-							return
-						}
-						go func() {
-							if err := rpcClient.HVSetMuxRoutes(v.PK, n); err != nil {
-								setStatus("set mux_routes failed: " + err.Error())
-								return
-							}
-							setStatus(fmt.Sprintf("mux_routes=%d on %s", n, v.PK.String()))
-							refresh()
-						}()
-					})
-					return nil
 				case 'c':
 					v, ok := selectedVisor()
 					if !ok {

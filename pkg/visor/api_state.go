@@ -156,7 +156,6 @@ func (s stateFieldSet) has(k string) bool {
 // (PolicyPerDial is a path/inline-source string, never a secret).
 type EffectiveRoutingConfig struct {
 	MinHops                 uint16   `json:"min_hops"`
-	MuxRoutes               int      `json:"mux_routes"`
 	ForceLocalRoutes        bool     `json:"force_local_routes"`
 	ExistingTPOnly          bool     `json:"existing_tp_only"`
 	TransportPreference     []string `json:"transport_preference,omitempty"`
@@ -237,7 +236,6 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 		} else {
 			erc := &EffectiveRoutingConfig{
 				MinHops:             rc.MinHops,
-				MuxRoutes:           rc.MuxRoutes,
 				ForceLocalRoutes:    rc.ForceLocalRoutes,
 				ExistingTPOnly:      rc.ExistingTPOnly,
 				TransportPreference: rc.TransportPreference,

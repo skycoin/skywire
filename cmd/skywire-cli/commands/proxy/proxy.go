@@ -80,12 +80,10 @@ func init() {
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 	startCmd.Flags().BoolVar(&existingTpOnly, "existing-tp", false, "only use existing transports, don't create new ones")
 	startCmd.Flags().BoolVar(&forceLocalRoutes, "local-route", false, "calculate routes locally instead of using route finder")
-	startCmd.Flags().IntVar(&muxRoutes, "mux", 1, "parallel mux routes: 0=unlimited (every distinct path), 1=disabled (default), 2+=N routes")
 	// --routes is the cross-group spelling for the same parallel-route count
 	// (`skynet start --routes`, `proxy mux plot --routes`, `proxy mux auto`).
 	// Bound to the same var as --mux so either spelling works; hidden to keep
 	// the primary `--mux` name on this command. Passing both = last parsed wins.
-	startCmd.Flags().IntVar(&muxRoutes, "routes", 1, "alias for --mux (parallel route count)")
 	startCmd.Flags().MarkHidden("routes") //nolint:errcheck,gosec
 	startCmd.Flags().StringVar(&muxMode, "mux-mode", "auto", "mux weight distribution mode: auto (latency-based) or equal (round-robin)")
 	startCmd.Flags().Uint16Var(&minHops, "min-hops", 1, "minimum routing hops for this session (1=no minimum). Set on the visor before app start; rolled back is not automatic — restart visor or re-run with --min-hops=1 to revert.")
@@ -197,23 +195,18 @@ var startCmd = &cobra.Command{
 		// normalize the session to a single route so the visor-global adaptive mux
 		// can't grow a warm-standby set over the 1-hop control route.
 		if startDirect {
-			if cmd.Flags().Changed("mux") && muxRoutes > 1 {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--direct forces a single direct route; it cannot be combined with --mux %d", muxRoutes))
-			}
 			if cmd.Flags().Changed("min-hops") && minHops > 1 {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--direct is a 1-hop route; it cannot be combined with --min-hops %d", minHops))
 			}
 			if startTunnels > 1 {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--direct is a single route; it cannot be combined with --tunnels %d", startTunnels))
 			}
-			muxRoutes = 1
 			minHops = 1
 		}
 
 		routeOpts := clirpc.RoutingSessionOpts{
 			ExistingTP: &existingTpOnly,
 			LocalRoute: &forceLocalRoutes,
-			MuxRoutes:  &muxRoutes,
 			MuxMode:    &muxMode,
 		}
 		// For --direct pin the session to a single route (mux=1) so the adaptive

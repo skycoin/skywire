@@ -140,7 +140,6 @@ type API interface {
 	//transport settings
 	SetExistingTPOnly(enabled bool) error
 	SetForceLocalRoutes(enabled bool) error
-	SetMuxRoutes(n int) error
 	GetRouterSettings() (RouterSettings, error)
 	SetRouterSettings(s RouterSettings) error
 	SetMuxMode(mode string) error
@@ -409,7 +408,6 @@ type API interface {
 	HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) error
 	HVAddTransport(pk, remote cipher.PubKey, tpType, label string, timeout time.Duration) (*TransportSummary, error)
 	HVSetPublicAutoconnect(pk cipher.PubKey, enable bool) error
-	HVSetMuxRoutes(pk cipher.PubKey, n int) error
 	HVSetCalculateRoutes(pk cipher.PubKey, enable bool) error
 	HVReload(pk cipher.PubKey) error
 	HVShutdown(pk cipher.PubKey) error
