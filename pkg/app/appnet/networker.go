@@ -65,7 +65,7 @@ type carrierDialCtxKey struct{}
 //
 // min_hops exists so an intermediate cannot learn the true source and
 // destination of this visor's TRAFFIC — with enough hops it only ever sees
-// its neighbours. A carrier dial is not traffic. Its destination IS the peer
+// its neighbors. A carrier dial is not traffic. Its destination IS the peer
 // that will carry the session, chosen by this visor, and that peer terminates
 // the session and therefore knows exactly whose it is. Extra hops hide
 // nothing from the only party in a position to learn anything, so min_hops
