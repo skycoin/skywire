@@ -141,9 +141,18 @@ func (f *Frame) FromMatrix(m *matrix.Matrix, dim int) {
 		for x := 0; x < f.cols; x++ {
 			c, lit := m.CellAt(x, y)
 			n := maskIntensity(f.mask, x, y, clamp255(scale(c.Intensity, dim)))
+			bg, washed := washAt(f.mask, x, y)
+
 			if n <= 0 {
+				// Dark, but a wash is still a reason to draw: a space in the
+				// washed color is what makes a shape solid where the backdrop
+				// is only gaps. Without one there is nothing here at all.
+				if washed {
+					f.Set(x, y, Cell{Rune: ' ', Bg: bg})
+				}
 				continue
 			}
+
 			r := c.Rune
 			if !lit {
 				// The rain holds a glyph in every cell whether it is lighting
@@ -152,7 +161,12 @@ func (f *Frame) FromMatrix(m *matrix.Matrix, dim int) {
 				// rain that is denser here rather than as something stamped on.
 				r = m.GlyphAt(x, y)
 			}
-			f.Set(x, y, Cell{Rune: r, Fg: tintAt(f.mask, x, y, pal[n]), Bold: c.Hot && lit})
+			f.Set(x, y, Cell{
+				Rune: r,
+				Fg:   tintAt(f.mask, x, y, pal[n]),
+				Bg:   bg,
+				Bold: c.Hot && lit,
+			})
 		}
 	}
 }
