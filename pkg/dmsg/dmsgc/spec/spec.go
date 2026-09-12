@@ -163,9 +163,24 @@ type DmsgConfig struct {
 // address; the visor refuses to bind it otherwise rather than quietly opening
 // an unauthenticated path to its own transports.
 type DmsgLocalRelayConfig struct {
-	// Enabled gates the whole acceptor. False (or a nil
-	// *DmsgLocalRelayConfig) = the visor serves no local relay.
-	Enabled bool `json:"enabled"`
+	// Enabled gates the whole acceptor, and defaults to TRUE: a visor serves
+	// its unix-socket relay unless an operator turns it off.
+	//
+	// It used to default to false, and the flag was defending nothing. The
+	// socket is 0600 and owned by the visor's user, and on a packaged install
+	// so is the visor's config file — which holds the secret key. Any process
+	// that can open the socket can already read that key outright, so the
+	// acceptor grants strictly LESS than what such a process has. What the
+	// default did cost was real: every host wanting to run a keyed service
+	// against its visor (the resolving proxy under a survey-whitelist key is
+	// the motivating one) needed a config edit and a restart first.
+	//
+	// TCPAddress is the part that genuinely needs opting into, and is gated
+	// separately: it has no filesystem gate at all. Nothing here changes that.
+	//
+	// A pointer so "unset" is distinguishable from an explicit false: nil means
+	// the default, false means an operator said no.
+	Enabled *bool `json:"enabled,omitempty"`
 	// Socket is the unix socket path the acceptor listens on. Empty means
 	// "<local_path>/dmsg_relay.sock". Set it to "-" to run with no unix
 	// socket at all (TCPAddress only).
