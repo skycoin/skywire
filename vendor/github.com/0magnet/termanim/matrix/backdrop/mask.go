@@ -11,6 +11,8 @@
 // than a sticker.
 package backdrop
 
+import "github.com/gdamore/tcell/v3"
+
 // Mask maps the backdrop's own intensity at one cell to the intensity to draw
 // there. Both are 0-255, the scale the rain's palette is indexed by.
 //
@@ -86,7 +88,7 @@ type Stencil struct {
 
 // IntensityAt implements Mask.
 func (s *Stencil) IntensityAt(x, y, n int) int {
-	if !s.inside(x, y) {
+	if !s.Covers(x, y) {
 		return clamp255(scale(n, s.Outside))
 	}
 	n = scale(n, s.Inside)
@@ -96,9 +98,17 @@ func (s *Stencil) IntensityAt(x, y, n int) int {
 	return clamp255(n)
 }
 
-// inside reports whether the grid cell x, y falls on a non-space character of
-// the block.
-func (s *Stencil) inside(x, y int) bool {
+// Covers reports whether the grid cell x, y falls on a non-space character of
+// the block — whether the shape is there.
+//
+// Exported because a mask that wraps a Stencil needs the same answer for its
+// own purposes: a Tinter has to know which cells are its shape before it can
+// recolor them, and recomputing that from IntensityAt would mean inferring a
+// boolean from an arithmetic result.
+//
+// Named Covers rather than Inside because Inside is already the field holding
+// the scale applied within the shape.
+func (s *Stencil) Covers(x, y int) bool {
 	row := y - s.Y
 	if row < 0 || row >= len(s.Rows) {
 		return false
@@ -156,4 +166,58 @@ func fitMask(m Mask, cols, rows int) {
 	if f, ok := m.(Fitter); ok {
 		f.Fit(cols, rows)
 	}
+}
+
+// Tinter is a Mask that also recolors the cells it covers.
+//
+// Intensity alone cannot separate a shape from the rain it is made of. The
+// rain's palette is one ramp of green, so a masked shape can only ever be
+// brighter or dimmer green among green — legible up close, and easy to lose at
+// a glance, which is the whole problem with a silhouette drawn in the same ink
+// as its background. A mask that can say "and this cell is blue" gets a shape
+// the eye finds without looking for it.
+//
+// TintAt is handed the RGB the backdrop resolved for the cell — for the rain,
+// its palette entry for the post-mask intensity — and returns what to draw. It
+// is called only for cells that end up lit, so a mask need not care about the
+// dark ones, and returning the channels unchanged is a no-op.
+//
+// Plain channels rather than a tcell.Color so that implementing this does not
+// oblige a caller to depend on the terminal library. A mask is a statement
+// about a shape; which library ends up painting it is the compositor's
+// business, and skywire — the first consumer — would otherwise have promoted
+// tcell from an indirect dependency to a direct one to write four lines of
+// arithmetic.
+//
+// Optional, like Fitter: a mask that only varies brightness need not implement
+// it.
+type Tinter interface {
+	Mask
+
+	// TintAt returns the color to draw at x, y, given the one already resolved.
+	TintAt(x, y int, r, g, b int32) (int32, int32, int32)
+}
+
+// tintAt applies a possibly-absent tint, converting at the boundary so the
+// Tinter never sees a tcell type.
+func tintAt(m Mask, x, y int, c tcell.Color) tcell.Color {
+	t, ok := m.(Tinter)
+	if !ok {
+		return c
+	}
+	r, g, b := c.RGB()
+	r, g, b = t.TintAt(x, y, r, g, b)
+	return tcell.NewRGBColor(clampChan(r), clampChan(g), clampChan(b))
+}
+
+// clampChan holds a tint's channel inside a byte; a Tinter is caller-supplied
+// and nothing stops it returning a number no color has.
+func clampChan(v int32) int32 {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return v
 }
