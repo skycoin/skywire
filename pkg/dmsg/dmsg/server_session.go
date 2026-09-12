@@ -391,11 +391,11 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 	// Bound the concurrent count so an always-open relay can't be amplified. A
 	// plain local client↔client bridge is normal operation and is never gated.
 	if ss.isPeer || dst.isPeer || ss.relayInbound || req.SrcAddr.PK != ss.rPK {
-		if !ss.entity.tryAcquireRelaySlot() {
+		if !ss.entity.tryAcquireRelaySlot(ss.rPK) {
 			ss.m.RecordStream(metrics.DeltaFailed)
 			return ErrRelayCapacityReached
 		}
-		defer ss.entity.releaseRelaySlot()
+		defer ss.entity.releaseRelaySlot(ss.rPK)
 	}
 
 	yStr2, resp, err := dst.forwardRequest(req)
