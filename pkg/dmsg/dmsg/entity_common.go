@@ -186,6 +186,13 @@ type EntityCommon struct {
 	relayedStreams    int64
 	relayShare        map[cipher.PubKey]int64
 	relayShareMx      sync.Mutex
+	// relayRefused counts stream requests this entity turned away with
+	// ErrRelayCapacityReached (308). An overload error with no counter is an
+	// overload you first hear about from a user reporting an unreachable
+	// service: the refusal is indistinguishable, at the dialer, from the
+	// destination being down. libp2p's relay service exports rejections by
+	// reason for the same purpose.
+	relayRefused int64
 
 	// acceptRelayedRequests admits a stream request over a CLIENT session
 	// whose SrcAddr.PK is not the session's remote key (see

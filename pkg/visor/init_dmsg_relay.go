@@ -47,7 +47,11 @@ func skynetSessionDialer(ctx context.Context, network, addr string) (net.Conn, e
 	if err != nil {
 		return nil, err
 	}
-	dialCtx, cancel := context.WithTimeout(ctx, skynetSessionDialTimeout)
+	// Mark this as a carrier dial: min_hops must not apply to it (see
+	// appnet.WithCarrierDial), or a visor configured for privacy cannot
+	// converge onto skynet and fails into route setup over the dmsg it is
+	// replacing.
+	dialCtx, cancel := context.WithTimeout(appnet.WithCarrierDial(ctx), skynetSessionDialTimeout)
 	defer cancel()
 	return appnet.DialContext(dialCtx, appnet.Addr{
 		Net:    appnet.TypeSkynet,

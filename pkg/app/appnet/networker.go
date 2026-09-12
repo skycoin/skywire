@@ -54,6 +54,48 @@ func AppNameFromContext(ctx context.Context) string {
 	return v
 }
 
+// carrierDialCtxKey marks a dial as a SESSION-CARRIER dial: this visor
+// reaching a peer it chose to carry its own dmsg session (the skynet carrier
+// — see pkg/visor/init_dmsg_relay.go). SkywireNetworker reads it via
+// IsCarrierDial.
+type carrierDialCtxKey struct{}
+
+// WithCarrierDial marks ctx as a session-carrier dial, which exempts it from
+// the visor-global min_hops.
+//
+// min_hops exists so an intermediate cannot learn the true source and
+// destination of this visor's TRAFFIC — with enough hops it only ever sees
+// its neighbours. A carrier dial is not traffic. Its destination IS the peer
+// that will carry the session, chosen by this visor, and that peer terminates
+// the session and therefore knows exactly whose it is. Extra hops hide
+// nothing from the only party in a position to learn anything, so min_hops
+// buys no privacy on this dial.
+//
+// What it costs is the bootstrap. min_hops >= 2 makes the carrier dial
+// ineligible for the 0-hop AppDirectMux shortcut, so it falls through to
+// route setup — which reaches the route finder and the setup node over dmsg,
+// the very thing the carrier is replacing. hasDirectTransportTo deliberately
+// refuses a multi-hop route for exactly this reason, but it cannot see that
+// min_hops has already forced one: holding a direct transport does not make a
+// dial one hop when the config forbids one hop. So on a visor configured for
+// privacy, dmsg-over-skynet silently could not converge — and failed into the
+// circular path rather than cleanly.
+//
+// Traffic dials are untouched: this marks only the carrier, and only the
+// visor sets it.
+func WithCarrierDial(ctx context.Context) context.Context {
+	return context.WithValue(ctx, carrierDialCtxKey{}, true)
+}
+
+// IsCarrierDial reports whether ctx was marked by WithCarrierDial.
+func IsCarrierDial(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	v, _ := ctx.Value(carrierDialCtxKey{}).(bool)
+	return v
+}
+
 // AddNetworker associates Networker with the `network`.
 func AddNetworker(t Type, n Networker) error {
 	networkersMx.Lock()

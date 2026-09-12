@@ -94,6 +94,12 @@ type DmsgRelayRole struct {
 	// A cap of 0 or less means this visor relays for nobody.
 	RelayedStreams    int `json:"relayed_streams"`
 	MaxRelayedStreams int `json:"max_relayed_streams"`
+	// RelayRefused counts stream requests turned away at capacity (dmsg error
+	// 308) since start. Nonzero means this hub refused traffic it was asked to
+	// carry — at the dialer that refusal is indistinguishable from the
+	// destination being down, so without this it is only ever diagnosed from
+	// the wrong end.
+	RelayRefused int `json:"relay_refused"`
 }
 
 // DmsgRelayAttachment is one nominated relay this visor holds a session with.
@@ -150,6 +156,7 @@ func (v *Visor) RolesSnapshot() *RolesSnapshot {
 		v.dmsgC.RelaySessionStreams(),
 		v.dmsgC.RelayedStreams(),
 		v.dmsgC.MaxRelayedStreams(),
+		v.dmsgC.RelayRefused(),
 	)
 	return r
 }
@@ -210,13 +217,14 @@ const (
 // clientStreams the per-peer stream count of the peers attached to this visor,
 // and relayed/max the slot usage against the configured cap.
 func dmsgRelayRole(port uint16, nominees []cipher.PubKey, sessions []dmsgSessionView,
-	clientStreams map[cipher.PubKey]int, relayed, maxStreams int) DmsgRelayRole {
+	clientStreams map[cipher.PubKey]int, relayed, maxStreams, refused int) DmsgRelayRole {
 
 	role := DmsgRelayRole{
 		Port:              port,
 		RelayPeers:        sortedPKs(nominees),
 		RelayedStreams:    relayed,
 		MaxRelayedStreams: maxStreams,
+		RelayRefused:      refused,
 	}
 
 	nominated := make(map[cipher.PubKey]struct{}, len(nominees))
