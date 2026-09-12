@@ -80,7 +80,7 @@ require (
 	github.com/0magnet/router7 v0.0.0-20260908180141-0ea01e083539
 	github.com/0magnet/spheregraph v0.0.0-20260906144810-35af719bf2f1
 	github.com/0magnet/sysinfo v1.1.4-0.20260905172033-914ade4a2548
-	github.com/0magnet/termanim v0.0.0-20260912180616-5fa253f0fdbd
+	github.com/0magnet/termanim v0.0.0-20260912172617-9e520e861b43
 	github.com/0magnet/wfdrive v0.3.1
 	github.com/0magnet/winbox-go v0.0.0-20260908011106-113d480c4188
 	github.com/0magnet/yamux v0.1.3-0.20260905172050-450c4058f851
