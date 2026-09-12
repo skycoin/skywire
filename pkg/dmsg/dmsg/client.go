@@ -640,6 +640,33 @@ serve:
 			}
 		}
 		if len(entries) == 0 && len(relays) == 0 {
+			// Nothing to dial can mean two opposite things, and the loop used
+			// to assume the bad one. relayEntries() lists nominees that still
+			// NEED a session — it skips any nominee already connected — so an
+			// ATTACHED client's list goes empty at the exact moment its attach
+			// SUCCEEDS. With no servers in discovery either (an attached client
+			// carries an empty direct discovery by design), this read as
+			// "nothing to connect to" and warned + backed off, forever, while
+			// the relay session was up and carrying traffic. Observed live: a
+			// `dmsg web --attach` serving correctly logged "No entries found"
+			// eleven times in ten minutes.
+			//
+			// A satisfied client rests the same way it does when it DOES have
+			// entries (the select further down): block until a session drops,
+			// then re-enter and redial. That path is unreachable from here only
+			// because it sits inside the per-entry loop.
+			if ce.conf.MinSessions != 0 && ce.sessionsSatisfied() {
+				select {
+				case <-ce.done:
+					return
+				case err := <-ce.errCh:
+					ce.log.WithError(err).Debug("Session stopped.")
+					if isClosed(ce.done) {
+						return
+					}
+				}
+				continue
+			}
 			ce.log.Warnf("No entries found. Retrying after %s...", ce.bo.String())
 			if pinned {
 				ce.pinnedFailures.Add(1)
