@@ -13,6 +13,11 @@ codebase evolved; this is the reference for "what we mean when we say X."
 - **dmsg** — the encrypted, public-key-addressed peer-to-peer messaging layer
   every visor speaks. Noise-encrypted streams relayed by dmsg *servers*; the
   substrate everything else rides on. → `pkg/dmsg`
+- **skynet** — the routed mesh: a PK dialed over skywire *routes*, forwarded
+  hop by hop by intermediate visors, as against dmsg which is *relayed* by
+  dmsg servers. The two are the alternatives behind `--transport
+  auto|dmsg|skynet|tcp`, where `auto` tries skynet first and falls back to
+  dmsg. Hostnames under `.skynet` resolve to it. → `pkg/skynet`
 - **transport** — a link between two visors. Types: `dmsg`, `stcpr`, `sudph`,
   `stcp`, `squicr` (QUIC), `swsr` (WebSocket), `swtr` (WebTransport),
   `webrtc`; legacy aliases `quic`/`squic`, `ws`, `wt` are still accepted.
@@ -164,6 +169,40 @@ codebase evolved; this is the reference for "what we mean when we say X."
   → `pkg/dmsg/dmsg/client.go`, `pkg/router/policy/distribution.go`
 - **mux cap** — the ceiling on how wide the adaptive mux may grow at runtime.
   → `SetMuxCap`
+
+## Bridges & gateways
+
+- **meshgw** — the mesh gateway in the VPN router: registers `.dmsg` and
+  `.skynet` DNS zone handlers so those names resolve to leased synthetic IPs,
+  letting an unmodified program on the LAN reach the mesh by name.
+  → `pkg/vpnrouter/meshgw`
+- **skymailbridge** — SMTP over skywire: a minimal server-side state machine
+  that reads the peer's PK out of the recipient domain's pre-suffix DNS label
+  and dials it over a transport. → `pkg/skymailbridge`
+- **skynetca** — the local certificate authority the resolver uses to
+  terminate TLS for `*.skynet`, `*.dmsg` and `*.skysocks` names in the
+  visitor's browser, so mesh sites get a padlock without a public CA.
+  → `pkg/skynetca`
+- **skyudpbridge** — UDP carried over a reliable skywire byte stream as
+  length-prefixed datagrams ("Plan B" of the UDP-over-skynet split, as against
+  true packet-level UDP). → `pkg/skyudpbridge`
+- **telemetrywire** — the compact sharded binary codec for the visor→TPD
+  telemetry feed over CXO, shared by both the publishing and consuming sides.
+  → `pkg/telemetrywire`
+- **tpviz** — the transport visualizer: the mesh drawn as a graph, including a
+  latency-space view where edge weight is measured round-trip time.
+  → `pkg/tpviz`
+
+## Code navigation
+
+- **component tag** — the `c<layer>-<domain>-<area>` marker in the header
+  comment of nearly every Go file (`c0-com-util`, `c1-net-dmsg`,
+  `c3-vis-core`, `c5-cli-visor`…). One tag per package — files within a
+  package are expected to agree, which #4276 went through and enforced by
+  hand. The layer runs 0–5, ascending roughly from shared primitives
+  (`c0-com-*`) to the CLI surface (`c5-cli-*`); the domain and area say which
+  part of the tree a file belongs to. Nothing enforces it automatically, so it
+  is a reading aid rather than a guarantee.
 
 ## Component libraries
 
