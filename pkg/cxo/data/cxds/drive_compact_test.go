@@ -15,8 +15,12 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/data"
 )
 
-func mkVal(b byte, n int) []byte {
-	d := make([]byte, n)
+// objSize is the value size every object in these tests uses — every caller
+// passed the same 8192, so it is a property of the fixture, not a parameter.
+const objSize = 8192
+
+func mkVal(b byte) []byte {
+	d := make([]byte, objSize)
 	for i := range d {
 		d[i] = b
 	}
@@ -34,13 +38,13 @@ func TestStartupGCCompact_DropsDeadKeepsLive(t *testing.T) {
 
 	var live, dead [][]byte
 	for i := 0; i < 3; i++ { // live: rc=1
-		v := mkVal(byte('L'+i), 8192)
+		v := mkVal(byte('L' + i))
 		_, err := ds.Set(cipher.SumSHA256(v), v, 1)
 		require.NoError(t, err)
 		live = append(live, v)
 	}
 	for i := 0; i < 3; i++ { // dead: Set rc=1 then Inc -1 -> rc=0 (retained by CXDS)
-		v := mkVal(byte('D'+i), 8192)
+		v := mkVal(byte('D' + i))
 		k := cipher.SumSHA256(v)
 		_, err := ds.Set(k, v, 1)
 		require.NoError(t, err)
@@ -87,7 +91,7 @@ func TestStartupGCCompact_SkipsMostlyLive(t *testing.T) {
 	require.NoError(t, err)
 	var live [][]byte
 	for i := 0; i < 6; i++ {
-		v := mkVal(byte('a'+i), 8192)
+		v := mkVal(byte('a' + i))
 		_, err := ds.Set(cipher.SumSHA256(v), v, 1)
 		require.NoError(t, err)
 		live = append(live, v)
@@ -118,8 +122,8 @@ func TestStartupGCCompact_ReclaimsFreedPages(t *testing.T) {
 	// Phase 1: grow the file with 600 live objects.
 	var keep, drop [][]byte
 	for i := 0; i < 600; i++ {
-		v := mkVal(byte(i%251), 8192)
-		v[0], v[1] = byte(i>>8), byte(i) // distinct objects
+		v := mkVal(byte(i % 251))
+		v[0], v[1] = byte(uint(i)>>8&0xff), byte(uint(i)&0xff) // distinct objects
 		_, err := ds.Set(cipher.SumSHA256(v), v, 1)
 		require.NoError(t, err)
 		if i < 6 {
@@ -171,8 +175,8 @@ func TestStartupGCCompact_IgnoresPreCriteriaMemo(t *testing.T) {
 	require.NoError(t, err)
 	var drop [][]byte
 	for i := 0; i < 600; i++ {
-		v := mkVal(byte(i%251), 8192)
-		v[0], v[1] = byte(i>>8), byte(i)
+		v := mkVal(byte(i % 251))
+		v[0], v[1] = byte(uint(i)>>8&0xff), byte(uint(i)&0xff)
 		_, err := ds.Set(cipher.SumSHA256(v), v, 1)
 		require.NoError(t, err)
 		if i >= 6 {
@@ -197,7 +201,13 @@ func TestStartupGCCompact_IgnoresPreCriteriaMemo(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return putUint64Meta(m, []byte("gc_checked_size"), uint64(before.Size()))
+		// FileInfo.Size is non-negative for a regular file; the guard makes that
+		// explicit rather than leaving a signed-to-unsigned conversion to trust.
+		size := before.Size()
+		if size < 0 {
+			size = 0
+		}
+		return putUint64Meta(m, []byte("gc_checked_size"), uint64(size))
 	}))
 	require.NoError(t, db.Close())
 
