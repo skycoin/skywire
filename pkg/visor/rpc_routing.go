@@ -135,13 +135,6 @@ func (r *RPC) SetForceLocalRoutes(enabled *bool, _ *struct{}) (err error) {
 	return err
 }
 
-// SetMuxRoutes sets the number of parallel mux routes for new connections
-func (r *RPC) SetMuxRoutes(n *int, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetMuxRoutes", *n)(nil, &err)
-	err = r.visor.SetMuxRoutes(*n)
-	return err
-}
-
 // SetMuxMode sets the weight distribution mode for mux transport selection
 func (r *RPC) SetMuxMode(mode *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetMuxMode", *mode)(nil, &err)

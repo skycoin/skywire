@@ -75,12 +75,6 @@ func (r *router) SetForceLocalRoutes(enabled bool) {
 	r.logger.Infof("SetForceLocalRoutes: %v", enabled)
 }
 
-// SetMuxRoutes sets the number of parallel mux routes for new connections.
-func (r *router) SetMuxRoutes(n int) {
-	r.muxRoutes = n
-	r.logger.Infof("SetMuxRoutes: %v", n)
-}
-
 // SetMuxMode sets the weight distribution mode for mux transport selection.
 // Propagates to all active route groups with mux enabled.
 func (r *router) SetMuxMode(mode WeightMode) {
@@ -129,11 +123,6 @@ func (r *router) GetForceLocalRoutes() bool {
 	r.forceLocalRoutesMu.Lock()
 	defer r.forceLocalRoutesMu.Unlock()
 	return r.forceLocalRoutes
-}
-
-// GetMuxRoutes returns the current parallel-mux-routes value.
-func (r *router) GetMuxRoutes() int {
-	return r.muxRoutes
 }
 
 // GetLastRouteCalcTime returns the time it took to calculate the last local route.

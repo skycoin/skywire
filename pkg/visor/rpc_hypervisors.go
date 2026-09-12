@@ -161,16 +161,6 @@ func (r *RPC) HVSetPublicAutoconnect(in *HVAutoconnectArgs, _ *struct{}) (err er
 	return v.HVSetPublicAutoconnect(in.PK, in.Enable)
 }
 
-// HVSetMuxRoutes sets mux_routes on a remote visor.
-func (r *RPC) HVSetMuxRoutes(in *HVMuxArgs, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "HVSetMuxRoutes", in)(nil, &err)
-	v, ok := r.visor.(*Visor)
-	if !ok {
-		return fmt.Errorf("not a visor instance")
-	}
-	return v.HVSetMuxRoutes(in.PK, in.N)
-}
-
 // HVSetCalculateRoutes toggles calculate_routes on a remote visor.
 func (r *RPC) HVSetCalculateRoutes(in *HVCalcRoutesArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVSetCalculateRoutes", in)(nil, &err)

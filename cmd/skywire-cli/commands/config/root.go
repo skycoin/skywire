@@ -199,7 +199,6 @@ var (
 	shutdownTimeout          string
 	publicVisorRegTimeout    string
 	publicVisorMaxTransports int
-	muxRoutes                int
 	cliAddr                  string
 	// Hypervisor-embedded DMSG server (LAN/WAN). Operator-set knobs:
 	// port and an optional public address advertised to remote
