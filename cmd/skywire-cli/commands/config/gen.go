@@ -331,6 +331,7 @@ func init() {
 	// When both are enabled, the runtime auto-chains dmsgweb's
 	// upstream → skynetweb so one entry covers both TLDs.
 	genConfigCmd.Flags().BoolVar(&enableDmsgWeb, "dmsgweb", scriptExecBool("${DMSGWEB:-false}"), "enable embedded .dmsg resolving SOCKS5 proxy on 127.0.0.1:4445")
+	genConfigCmd.Flags().StringVar(&dmsgWebSecretKey, "dmsgweb-sk", scriptExecString("${DMSGWEBSK}"), "run the embedded resolver under THIS secret key instead of the visor's, attached in-process (for a key a deployment already knows, e.g. a survey whitelist)")
 	genConfigCmd.Flags().BoolVar(&enableSkynetWeb, "skynetweb", scriptExecBool("${SKYNETWEB:-false}"), "enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446")
 	genConfigCmd.Flags().BoolVar(&enableSkymailBridge, "skymail-bridge", scriptExecBool("${SKYMAILBRIDGE:-false}"), "enable SMTP to skywire bridge on 127.0.0.1:1025")
 	genConfigCmd.Flags().StringVar(&dmsgWebUpstreamSOCKS, "dmsgweb-upstream", scriptExecString("${DMSGWEBUPSTREAM}"), "upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb)")
@@ -2409,6 +2410,19 @@ func configureResolvingProxies() {
 			Enable:        true,
 			UpstreamSOCKS: dmsgWebUpstreamSOCKS,
 			ProxyAddr:     dmsgWebProxyAddr,
+		}
+		// A key the deployment already knows — the survey whitelist is the
+		// motivating one — cannot rotate, so the resolver has to answer under
+		// it. Attaching in-process keeps that identity without a second full
+		// dmsg client: one session, no discovery entry. Without this knob the
+		// key could only be hand-written into the json, and the next autoconfig
+		// would drop it.
+		if dmsgWebSecretKey != "" {
+			var sk cipher.SecKey
+			if err := sk.Set(dmsgWebSecretKey); err != nil {
+				logger.WithError(err).Fatal("invalid --dmsgweb-sk")
+			}
+			conf.DmsgWeb.SecretKey = &sk
 		}
 	}
 	if enableSkynetWeb {
