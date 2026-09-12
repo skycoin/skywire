@@ -789,18 +789,6 @@ func (v *Visor) HVSetPublicAutoconnect(pk cipher.PubKey, enable bool) error {
 	return sub.HVSetPublicAutoconnect(pk, enable)
 }
 
-// HVSetMuxRoutes sets the mux_routes count on the visor identified by pk.
-func (v *Visor) HVSetMuxRoutes(pk cipher.PubKey, n int) error {
-	direct, sub, err := v.hvDispatch(pk)
-	if err != nil {
-		return err
-	}
-	if direct != nil {
-		return direct.SetMuxRoutes(n)
-	}
-	return sub.HVSetMuxRoutes(pk, n)
-}
-
 // HVSetCalculateRoutes toggles calculate_routes on the visor identified by pk.
 func (v *Visor) HVSetCalculateRoutes(pk cipher.PubKey, enable bool) error {
 	direct, sub, err := v.hvDispatch(pk)

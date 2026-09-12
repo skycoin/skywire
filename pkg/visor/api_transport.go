@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/policy/preset"
@@ -25,7 +24,6 @@ import (
 type RouterSettings struct {
 	ForceLocalRoutes bool   `json:"force_local_routes"`
 	ExistingTPOnly   bool   `json:"existing_tp_only"`
-	MuxRoutes        int    `json:"mux_routes"`
 	MinHops          uint16 `json:"min_hops"`
 	// TransportPreference is the transport-type priority order: which type
 	// is tried first when a transport has to be created, and which existing
@@ -63,7 +61,6 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 	return RouterSettings{
 		ForceLocalRoutes:    v.router.GetForceLocalRoutes(),
 		ExistingTPOnly:      v.router.GetExistingTPOnly(),
-		MuxRoutes:           v.router.GetMuxRoutes(),
 		MinHops:             hops,
 		TransportPreference: preference,
 	}, nil
@@ -82,9 +79,6 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 		return err
 	}
 	if err := v.SetExistingTPOnly(s.ExistingTPOnly); err != nil {
-		return err
-	}
-	if err := v.SetMuxRoutes(s.MuxRoutes); err != nil {
 		return err
 	}
 	if err := v.SetMinHops(s.MinHops); err != nil {
@@ -139,33 +133,6 @@ func (v *Visor) SetForceLocalRoutes(enabled bool) error {
 	}
 	v.router.SetForceLocalRoutes(enabled)
 	v.log.Infof("SetForceLocalRoutes: %v", enabled)
-	return nil
-}
-
-// SetMuxRoutes implements API.
-// Sets the number of parallel mux routes for new connections at runtime.
-// Also writes routing.mux_routes to skywire-config.json, so it survives a
-// restart — but not a config regen: `skywire autoconfig` rebuilds the json
-// from /etc/skywire.conf, and the MUXROUTES line in the generated
-// skywire.conf template is not read by `config gen`, so there is currently
-// no durable skywire.conf field for this.
-func (v *Visor) SetMuxRoutes(n int) error {
-	if v.router == nil {
-		return errors.New("router not available")
-	}
-	v.router.SetMuxRoutes(n)
-	// Also update the networker so future app dials use the new value
-	if skyN, err := appnet.ResolveNetworker(appnet.TypeSkynet); err == nil {
-		if sn, ok := skyN.(*appnet.SkywireNetworker); ok {
-			sn.MuxRoutes = n
-		}
-	}
-	// Persist to config
-	v.conf.Routing.MuxRoutes = n
-	if err := v.conf.Flush(); err != nil {
-		v.log.WithError(err).Warn("Failed to persist mux_routes to config")
-	}
-	v.log.Infof("SetMuxRoutes: %v", n)
 	return nil
 }
 

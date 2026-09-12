@@ -905,11 +905,6 @@ func (rc *rpcClient) SetForceLocalRoutes(enabled bool) error {
 	return rc.Call("SetForceLocalRoutes", &enabled, &struct{}{})
 }
 
-// SetMuxRoutes sets the number of parallel mux routes for new connections.
-func (rc *rpcClient) SetMuxRoutes(n int) error {
-	return rc.Call("SetMuxRoutes", &n, &struct{}{})
-}
-
 // SetMuxMode sets the weight distribution mode for mux transport selection.
 func (rc *rpcClient) SetMuxMode(mode string) error {
 	return rc.Call("SetMuxMode", &mode, &struct{}{})
@@ -2302,11 +2297,6 @@ func (rc *rpcClient) HVAddTransport(pk, remote cipher.PubKey, tpType, label stri
 // HVSetPublicAutoconnect toggles public_autoconnect on a remote visor.
 func (rc *rpcClient) HVSetPublicAutoconnect(pk cipher.PubKey, enable bool) error {
 	return rc.Call("HVSetPublicAutoconnect", &HVAutoconnectArgs{PK: pk, Enable: enable}, &struct{}{})
-}
-
-// HVSetMuxRoutes sets mux_routes on a remote visor.
-func (rc *rpcClient) HVSetMuxRoutes(pk cipher.PubKey, n int) error {
-	return rc.Call("HVSetMuxRoutes", &HVMuxArgs{PK: pk, N: n}, &struct{}{})
 }
 
 // HVSetCalculateRoutes toggles calculate_routes on a remote visor.

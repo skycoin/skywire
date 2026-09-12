@@ -197,10 +197,6 @@ func (p *proxiedVisorAPI) SetMinHops(n uint16) error {
 	return p.hvAPI.HVSetMinHops(p.targetPK, n)
 }
 
-func (p *proxiedVisorAPI) SetMuxRoutes(n int) error {
-	return p.hvAPI.HVSetMuxRoutes(p.targetPK, n)
-}
-
 func (p *proxiedVisorAPI) SetCalculateRoutes(enabled bool) error {
 	return p.hvAPI.HVSetCalculateRoutes(p.targetPK, enabled)
 }

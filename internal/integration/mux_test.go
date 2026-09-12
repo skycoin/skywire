@@ -123,23 +123,30 @@ func testMuxOverStcprTriangle(t *testing.T, env *TestEnv) {
 	t.Logf("bridge  c↔b transport: %s", bridgeTP)
 
 	// Start skysocks-client with mux=2. `proxy start` first calls
-	// SetMuxRoutes(2) on visor-c (via RPC), then sets the --srv arg
-	// on the app and launches it under --internal mode. The CLI
-	// polls until the app reaches Running or terminates with an
-	// error and exits — so when this Exec returns success we know
-	// both route groups (primary + 1 alternate) have been set up.
+	// sets the --srv arg on the app and launches it under --internal
+	// mode. The CLI polls until the app reaches Running or terminates
+	// with an error and exits.
 	// `proxy start --pk` is the CLI flag for "server public key" (set
 	// up via DoCustomSetting → app's --srv arg internally); the CLI
-	// itself doesn't take --srv. The CLI also calls SetMuxRoutes(2)
-	// before launching, so the visor's networker threads MuxRoutes=2
-	// into the dial.
+	// itself doesn't take --srv.
+	//
+	// The route count is NOT pinned at start any more: `--mux N` used to
+	// set a visor-wide mux_routes, which is the wrong shape for something
+	// that depends on load and on which transports exist between these two
+	// visors right now. Start the session, then reshape the live route
+	// group to two legs with the runtime mux control.
 	startCmd := fmt.Sprintf(
-		"/release/skywire cli proxy start --rpc %s:3435 --pk %s --mux 2 --internal --timeout %d",
+		"/release/skywire cli proxy start --rpc %s:3435 --pk %s --internal --timeout %d",
 		visorC, serverPK, muxClientStartTimeoutSec,
 	)
 	startOut, startErr := env.Exec(startCmd)
-	require.NoErrorf(t, startErr, "proxy start --mux 2 failed: %s", startOut)
-	t.Logf("proxy start --mux 2 output: %s", startOut)
+	require.NoErrorf(t, startErr, "proxy start failed: %s", startOut)
+	t.Logf("proxy start output: %s", startOut)
+
+	widthCmd := fmt.Sprintf("/release/skywire cli proxy mux width 2 --rpc %s:3435", visorC)
+	widthOut, widthErr := env.Exec(widthCmd)
+	require.NoErrorf(t, widthErr, "proxy mux width 2 failed: %s", widthOut)
+	t.Logf("proxy mux width 2 output: %s", widthOut)
 
 	env.VerifyAppRunning(t, visorC, skyenv.SkysocksClientName)
 

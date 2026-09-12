@@ -454,7 +454,6 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "regtimeout")
 	genConfigCmd.Flags().IntVar(&publicVisorMaxTransports, "maxtransports", scriptExecInt("${MAXTRANSPORTS:-0}"), "public visor max transports")
 	gHiddenFlags = append(gHiddenFlags, "maxtransports")
-	genConfigCmd.Flags().IntVar(&muxRoutes, "muxroutes", 0, "number of parallel mux routes per connection")
 	gHiddenFlags = append(gHiddenFlags, "muxroutes")
 	genConfigCmd.Flags().StringVar(&cliAddr, "cliaddr", scriptExecString("${CLIADDR}"), "CLI RPC address (e.g. 0.0.0.0:3435 for Docker)")
 	gHiddenFlags = append(gHiddenFlags, "cliaddr")
@@ -1335,10 +1334,6 @@ func configureRouting() {
 		// the TPD-backed route-finder unchanged, so it degrades gracefully as the
 		// fleet updates.
 		EnableRSNOracleRoutes: true,
-	}
-
-	if muxRoutes > 0 {
-		conf.Routing.MuxRoutes = muxRoutes
 	}
 
 	if policyPerDial != "" {

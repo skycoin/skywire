@@ -142,15 +142,6 @@ type Config struct {
 	// visor's route (visorconfig.Routing.NoTransit). Routes that originate or
 	// terminate here are unaffected.
 	NoTransit bool
-	// MuxRoutes seeds the router's runtime parallel-mux-routes value from
-	// routing.mux_routes at construction, the way MinHops already is. The
-	// dial-time default is applied by the app networker (which the launcher
-	// seeds from the same config field) — this seed is what makes
-	// GetMuxRoutes/GetRouterSettings report the configured value from boot,
-	// so a read-modify-write of the settings (the mobile app's min_hops
-	// control does one) echoes the real value back instead of a zero that
-	// silently turns the configured default off.
-	MuxRoutes int
 	// DisableRaceRouteSetup turns OFF the app-dial race (default: race ON).
 	// Normally, when a dial would create a direct transport to the peer
 	// (min-hops==1, not existing-tp-only), DialRoutes runs that transport
@@ -596,11 +587,9 @@ type Router interface {
 	// destination-transport oracle (see rsn_oracle_routes.go). nil leaves the
 	// path inert even when Config.EnableRSNOracleRoutes is set.
 	SetDstTransportOracle(DstTransportOracle)
-	SetMuxRoutes(int)
 	SetMuxMode(WeightMode)
 	GetExistingTPOnly() bool
 	GetForceLocalRoutes() bool
-	GetMuxRoutes() int
 	GetLastRouteCalcTime() time.Duration
 	ActiveRouteStatuses() []RouteStatus
 	RoutingTableStats() routing.RoutingTableStats
@@ -696,7 +685,6 @@ type router struct {
 	// protects conf.MinHops, which SetMinHop changes at runtime while dials
 	// are reading it — see SetMinHop / MinHops.
 	minHopsMu         sync.RWMutex
-	muxRoutes         int               // number of parallel mux routes (0 or 1 = disabled)
 	muxMode           WeightMode        // default weight mode for new mux connections
 	lastRouteCalcTime time.Duration     // last route calculation time (for local routes)
 	lastRouteCalcMu   sync.Mutex        // protects lastRouteCalcTime
@@ -801,7 +789,6 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		conf:            config,
 		logger:          config.Logger,
 		mLogger:         config.MasterLogger,
-		muxRoutes:       config.MuxRoutes,
 		tm:              config.TransportManager,
 		rt:              routing.NewTable(config.Logger),
 		sl:              sl,

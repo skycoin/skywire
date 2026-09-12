@@ -36,7 +36,6 @@ type RouterDeps struct {
 	RouteGroupDialer      router.RouteGroupDialer
 	SetupNodes            []cipher.PubKey
 	MinHops               uint16
-	MuxRoutes             int
 	ExcludeTransportTypes []string
 	// NoTransit refuses to act as an intermediate hop on another visor's route
 	// (visorconfig.Routing.NoTransit).
@@ -87,7 +86,6 @@ func BuildRouter(serveCtx context.Context, deps RouterDeps) (router.Router, erro
 		RouteGroupDialer:      deps.RouteGroupDialer,
 		SetupNodes:            deps.SetupNodes,
 		MinHops:               deps.MinHops,
-		MuxRoutes:             deps.MuxRoutes,
 		ExcludeTransportTypes: deps.ExcludeTransportTypes,
 		NoTransit:             deps.NoTransit,
 		ParallelRouteSetup:    deps.ParallelRouteSetup,
