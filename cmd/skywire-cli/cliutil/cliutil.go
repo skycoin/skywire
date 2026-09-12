@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/bitfield/script"
 	"github.com/google/uuid"
 	"github.com/spf13/pflag"
 
@@ -191,4 +193,46 @@ func CheckDirectViaScheme(cmdFlags *pflag.FlagSet, value, want string) {
 				want, value))
 		}
 	}
+}
+
+// PrintPipe renders a bitfield/script pipeline through PrintOutput so the
+// global --json / --jq / --shape flags apply to it.
+//
+// Commands that build their output with a script pipeline used to end it in
+// .Stdout(), writing straight past the printer. The flags were then accepted
+// and silently ignored: `cli pv --jq length` printed the list of keys, and
+// --shape printed the list too. Nothing in --help distinguished those commands
+// from the ones that honor the contract, so the only way to find out was to
+// pipe the result somewhere and notice it was not JSON.
+//
+// The JSON form is the pipeline's non-empty output lines as an array of
+// strings, which is what a caller filtering a list command actually wants
+// (`--jq length` counts them). The human form is the text exactly as the
+// pipeline produced it, so default output is unchanged.
+func PrintPipe(cmdFlags *pflag.FlagSet, p *script.Pipe) {
+	out, err := p.String()
+	if err != nil {
+		PrintError(cmdFlags, err)
+		return
+	}
+	lines := []string{}
+	for _, l := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if strings.TrimSpace(l) != "" {
+			lines = append(lines, l)
+		}
+	}
+	PrintOutput(cmdFlags, lines, out)
+}
+
+// PrintRawJSON renders an already-serialized JSON document through PrintOutput
+// so --jq / --shape can address its real structure rather than its text.
+//
+// Used by the --raw branches of the discovery commands, which previously
+// colorized the document and wrote it straight to stdout.
+func PrintRawJSON(cmdFlags *pflag.FlagSet, raw, human string) {
+	if raw == "" {
+		PrintOutput(cmdFlags, nil, human)
+		return
+	}
+	PrintOutput(cmdFlags, json.RawMessage(raw), human)
 }
