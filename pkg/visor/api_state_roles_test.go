@@ -136,7 +136,7 @@ func TestDmsgServerRole_NoTransitAndPK(t *testing.T) {
 // A visor that nominates nobody and relays for nobody reports empty lists and
 // the cap it would enforce if anyone attached.
 func TestDmsgRelayRole_Idle(t *testing.T) {
-	role := dmsgRelayRole(skyenv.DmsgRelayPort, nil, nil, nil, 0, 4096)
+	role := dmsgRelayRole(skyenv.DmsgRelayPort, nil, nil, nil, 0, 4096, 0)
 
 	require.Equal(t, skyenv.DmsgRelayPort, role.Port)
 	require.Empty(t, role.RelayPeers)
@@ -144,6 +144,7 @@ func TestDmsgRelayRole_Idle(t *testing.T) {
 	require.Empty(t, role.RelayClients)
 	require.Zero(t, role.RelayedStreams)
 	require.Equal(t, 4096, role.MaxRelayedStreams)
+	require.Zero(t, role.RelayRefused, "an idle hub has refused nothing")
 }
 
 // Nominees are reported whether or not they were reached; only the ones with a
@@ -158,7 +159,7 @@ func TestDmsgRelayRole_AttachedNominees(t *testing.T) {
 		[]dmsgSessionView{
 			{PK: hub, Carrier: "skynet", Streams: 3, LatencyMS: 42},
 			{PK: server, Carrier: "tcp", Streams: 9}, // a plain server, not a nominee
-		}, nil, 0, 4096)
+		}, nil, 0, 4096, 0)
 
 	require.Len(t, role.RelayPeers, 2, "both nominees are reported")
 	require.Len(t, role.Attached, 1, "only the nominee with a session is attached")
@@ -178,11 +179,12 @@ func TestDmsgRelayRole_RelayingForPeers(t *testing.T) {
 	b, _ := cipher.GenerateKeyPair()
 
 	role := dmsgRelayRole(skyenv.DmsgRelayPort, nil, nil,
-		map[cipher.PubKey]int{a: 2, b: 5}, 7, 4096)
+		map[cipher.PubKey]int{a: 2, b: 5}, 7, 4096, 3)
 
 	require.Len(t, role.RelayClients, 2)
 	require.Equal(t, 7, role.RelayedStreams)
 	require.Equal(t, 4096, role.MaxRelayedStreams)
+	require.Equal(t, 3, role.RelayRefused, "refusals are reported from the hub that made them")
 
 	streams := map[cipher.PubKey]int{}
 	for _, c := range role.RelayClients {
@@ -199,7 +201,7 @@ func TestDmsgRelayRole_RelayingForPeers(t *testing.T) {
 // A negative cap is the "never relay for anyone" setting, and stays visible as
 // such rather than being normalized away.
 func TestDmsgRelayRole_RefusesToRelay(t *testing.T) {
-	role := dmsgRelayRole(skyenv.DmsgRelayPort, nil, nil, nil, 0, -1)
+	role := dmsgRelayRole(skyenv.DmsgRelayPort, nil, nil, nil, 0, -1, 0)
 	require.Equal(t, -1, role.MaxRelayedStreams)
 	require.Empty(t, role.RelayClients)
 }

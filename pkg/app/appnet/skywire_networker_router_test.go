@@ -116,7 +116,7 @@ func TestSkywireNetworker_DirectShortcutEligible(t *testing.T) {
 		{4, false},
 	}
 	for _, c := range cases {
-		got := r.directShortcutEligible(&router.DialOptions{MuxRoutes: c.mux})
+		got := r.directShortcutEligible(&router.DialOptions{MuxRoutes: c.mux}, false)
 		if got != c.want {
 			t.Errorf("directShortcutEligible(MuxRoutes=%d) = %v, want %v", c.mux, got, c.want)
 		}

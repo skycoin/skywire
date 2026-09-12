@@ -138,7 +138,7 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 	// "inherit Config.MinHops", so testing opts alone let a VPN client
 	// configured for min_hops=3 take this shortcut and get a single direct
 	// hop — the constraint bypassed before route setup was ever reached.
-	if r.directShortcutEligible(opts) {
+	if r.directShortcutEligible(opts, IsCarrierDial(ctx)) {
 		if directConn, ok := r.tryDirectDial(addr, opts.AppName); ok {
 			return &SkywireConn{
 				Conn:     directConn,
@@ -170,8 +170,19 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 //     one", so mux_routes=1 no longer silently collapses to a 0-hop direct
 //     conn and never forming a route group. mux >= 2 already skipped the
 //     shortcut; this extends the same treatment to an explicit single route.
-func (r *SkywireNetworker) directShortcutEligible(opts *router.DialOptions) bool {
-	return r.r.EffectiveMinHops(opts) <= 1 && opts.MuxRoutes == 0
+func (r *SkywireNetworker) directShortcutEligible(opts *router.DialOptions, carrier bool) bool {
+	if opts.MuxRoutes != 0 {
+		return false
+	}
+	// A session-carrier dial skips the min-hops test entirely — not by
+	// passing a lower per-dial value, which cannot work: EffectiveMinHops
+	// takes the MAX of the visor-global floor and any per-dial value, so a
+	// per-dial number can only ever raise it. See appnet.WithCarrierDial for
+	// why min_hops buys no privacy on this dial and costs the bootstrap.
+	if carrier {
+		return true
+	}
+	return r.r.EffectiveMinHops(opts) <= 1
 }
 
 // DialPacketContext implements PacketNetworker — it opens a faithful-UDP

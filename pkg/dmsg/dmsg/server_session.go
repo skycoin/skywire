@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/0magnet/yamux"
@@ -393,6 +394,7 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 	if ss.isPeer || dst.isPeer || ss.relayInbound || req.SrcAddr.PK != ss.rPK {
 		if !ss.entity.tryAcquireRelaySlot(ss.rPK) {
 			ss.m.RecordStream(metrics.DeltaFailed)
+			atomic.AddInt64(&ss.entity.relayRefused, 1)
 			return ErrRelayCapacityReached
 		}
 		defer ss.entity.releaseRelaySlot(ss.rPK)
