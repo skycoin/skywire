@@ -1,0 +1,1939 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Skywire — peer-to-peer encrypted networking">
+      
+      
+      
+        <link rel="canonical" href="https://skycoin.github.io/skywire/routing_policy_rfc/">
+      
+      
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.50">
+    
+    
+      
+        <title>RFC: Operator-Programmable Routing Policy (skylark) - Skywire</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.a40c8224.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#rfc-operator-programmable-routing-policy-skylark" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Skywire" class="md-header__button md-logo" aria-label="Skywire" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Skywire
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              RFC: Operator-Programmable Routing Policy (skylark)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/skycoin/skywire" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    skycoin/skywire
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://skycoin.github.io/skywire/playground/" class="md-tabs__link">
+        
+  
+    
+  
+  Terminal
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../guides/" class="md-tabs__link">
+        
+  
+    
+  
+  Guides
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../skywire/" class="md-tabs__link">
+        
+  
+    
+  
+  Command Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../apps-overview/" class="md-tabs__link">
+          
+  
+    
+  
+  Apps
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../packaging/" class="md-tabs__link">
+          
+  
+    
+  
+  Packaging & Updates
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../specs/" class="md-tabs__link">
+        
+  
+    
+  
+  Specs
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../graph/" class="md-tabs__link">
+        
+  
+    
+  
+  Code Graph
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../glossary/" class="md-tabs__link">
+        
+  
+    
+  
+  Glossary
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../rewards/" class="md-tabs__link">
+        
+  
+    
+  
+  Rewards
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://blog.theskywirenetwork.net" class="md-tabs__link">
+        
+  
+    
+  
+  Blog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Skywire" class="md-nav__button md-logo" aria-label="Skywire" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Skywire
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/skycoin/skywire" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    skycoin/skywire
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://skycoin.github.io/skywire/playground/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Terminal
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guides
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skywire/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Apps
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Apps
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../apps-overview/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../pty/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    PTY
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
+            <span class="md-nav__icon md-icon"></span>
+            PTY
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pty/skywire-pty/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Mode 1 — the visor-hosted pty (skywire cli pty)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pty/standalone-pty/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Modes 2 &amp; 3 — the standalone pty (skywire app pty)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../skychat/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Skychat
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            Skychat
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skychat/skychat-visor/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Visor-hosted skychat (skywire cli skychat)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skychat/standalone-skychat/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Standalone skychat — TCP-direct &amp; CXO
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../skynet/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    SkyNet
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_4">
+            <span class="md-nav__icon md-icon"></span>
+            SkyNet
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skynet/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SkyNet client
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../skysocks/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    SOCKS5 Proxy
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_5">
+            <span class="md-nav__icon md-icon"></span>
+            SOCKS5 Proxy
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skysocks/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SOCKS5 proxy — client (skysocks-client)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../vpn/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    VPN
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            VPN
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../vpn/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    VPN client (vpn-client)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../vpn/router/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    VPN router (vpn-router)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../packaging/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Packaging & Updates
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Packaging & Updates
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../packaging/auto-update/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Auto-Update
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../packaging/aur-packages/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AUR Packages
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../specs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Specs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../graph/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Code Graph
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../glossary/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Glossary
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rewards/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Rewards
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://blog.theskywirenetwork.net" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Blog
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#background" class="md-nav__link">
+    <span class="md-ellipsis">
+      Background
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      Goals
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#non-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      Non-goals
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#design" class="md-nav__link">
+    <span class="md-ellipsis">
+      Design
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#two-layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Two layers
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#language-starlark" class="md-nav__link">
+    <span class="md-ellipsis">
+      Language: Starlark
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#operator-facing-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      Operator-facing example
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#per-app-override-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Per-app override hierarchy
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#standard-library-mcl-flavored" class="md-nav__link">
+    <span class="md-ellipsis">
+      Standard library (mcl-flavored)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#failure-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failure modes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tooling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tooling
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#phased-implementation-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phased implementation plan
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Phased implementation plan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-1-go-side-scaffold" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 1 — Go-side scaffold
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-2-starlark-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 2 — Starlark integration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-3-mcl-flavored-stdlib" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 3 — mcl-flavored stdlib
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-4-operator-tooling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 4 — Operator tooling
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-5-layer-2-distribution-descriptor-landed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 5 — Layer 2 distribution descriptor (LANDED)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-6-post-setup-leg-change-callback-landed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Phase 6 — Post-setup leg-change callback (LANDED)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-questions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Open questions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      Decision checklist
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/skycoin/skywire/edit/develop/docs/routing_policy_rfc.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="rfc-operator-programmable-routing-policy-skylark">RFC: Operator-Programmable Routing Policy (skylark)<a class="headerlink" href="#rfc-operator-programmable-routing-policy-skylark" title="Permalink">&para;</a></h1>
+<p>Status: <strong>Active</strong> — phases 1–6 landed. Subsequent additions land as new descriptor verbs / hook touchpoints (PRs #2890 → #2911) rather than re-opening the RFC core.</p>
+<p>Operator-facing name: <strong>skylark</strong> — the embedded language is Starlark (Skylark was its original name before Google's 2017 rename); the operator-facing surface (Starlark + the skywire routing stdlib <code>datetime</code> / <code>geo</code> / <code>transports</code> / <code>peers</code> / <code>logging</code> / <code>RouteSpec</code> / <code>Candidate</code> / <code>on_leg_change</code>) keeps the historical name, matching the <code>sky_*</code> pattern used elsewhere in the project. Code references stay <code>starlark</code> because <code>go.starlark.net</code> is the upstream dep we import.</p>
+<p>Related work: this builds on the unified-app-framework groundwork (RFC #2863, PRs #2860–#2879). It's downstream of that work but not blocked on it.</p>
+<h2 id="background">Background<a class="headerlink" href="#background" title="Permalink">&para;</a></h2>
+<p>Today the visor's routing decisions are driven by a handful of CLI flags and per-dial overrides:</p>
+<ul>
+<li><code>--routes N</code> — number of parallel mux legs</li>
+<li><code>--min-hops K</code> — reject direct paths below K</li>
+<li><code>--forward-min-hops</code> / <code>--reverse-min-hops</code> — per-direction overrides</li>
+<li><code>--forward-mux</code> / <code>--reverse-mux</code> — per-direction leg counts</li>
+<li><code>--via PK</code> — pin a specific intermediate</li>
+</ul>
+<p>These are useful for ad-hoc experiments but fall short as a <em>policy</em> system:</p>
+<ol>
+<li><strong>No persistence.</strong> Operators specify routing knobs on every CLI invocation. There's no per-app persistent policy that says "for skychat, always prefer routes through trusted intermediates."</li>
+<li><strong>No conditionality.</strong> The knobs are static. There's no way to say "use mux=4 only during business hours" or "prefer routes through Indonesia on Fridays."</li>
+<li><strong>No composition.</strong> A flag like <code>--min-hops 2</code> either applies or doesn't. Operators can't write "first try mux=4 over min-hops=2; if no candidate matches, fall back to direct."</li>
+<li><strong>No introspection.</strong> The router picks a route opaquely. Operators can't see <em>why</em> a particular route was chosen, only that one was.</li>
+<li><strong>No per-app default differentiation.</strong> A skywire visor running both skychat and vpn-client today applies the same routing posture to both, even though they have very different requirements (low-latency interactive vs. high-throughput streamed).</li>
+</ol>
+<p>Operator framing: <em>"we are really lacking a good interface for multihop/multiplexed routing control, a way to show routes in use by client app, well-defined automatic routing modes, and manual controls that don't fight automatic modes."</em></p>
+<p>The proposal in this RFC: <strong>let operators write a routing policy in a small embedded scripting language that the visor evaluates at dial time.</strong></p>
+<h2 id="goals">Goals<a class="headerlink" href="#goals" title="Permalink">&para;</a></h2>
+<ol>
+<li><strong>Arbitrary expressiveness.</strong> The operator can write any decision logic that maps <code>(dial context, candidate routes) → chosen route</code>. Examples that must be expressible:</li>
+<li>"Only routes through Indonesia on Friday at 5pm"</li>
+<li>"Mux=4 if peer is in same datacenter, mux=1 otherwise"</li>
+<li>"Avoid intermediates I've had &gt;3 failures with in the last hour"</li>
+<li>"For skychat: prefer low-latency direct routes; for vpn: prefer high-bandwidth multi-hop"</li>
+<li><strong>Per-app override of a visor-wide default.</strong> Each app can carry its own policy that supplants the global. The script always sees <code>ctx.app</code> so a single global can branch internally if the operator prefers.</li>
+<li><strong>Deterministic, fast, sandboxed.</strong> Per-dial budget is ~10ms. The policy must never block the visor, never do I/O, never hang on infinite loops.</li>
+<li><strong>Hot-reload.</strong> Operator edits their policy file; visor picks it up without restart.</li>
+<li><strong>Failure-safe.</strong> If the policy panics, times out, or returns garbage, the visor falls back to the current built-in default selection and logs the violation. A broken policy never breaks dialing.</li>
+</ol>
+<h2 id="non-goals">Non-goals<a class="headerlink" href="#non-goals" title="Permalink">&para;</a></h2>
+<ul>
+<li><strong>Not</strong> a full Turing-complete runtime for the operator to do arbitrary work. The policy is a <em>decision function</em>, not a daemon.</li>
+<li><strong>Not</strong> replacing the existing flags. CLI flags remain as per-invocation overrides; the policy is the persistent default.</li>
+<li><strong>Not</strong> building a new language. The aesthetic the operator wants is achievable in existing embedded-script ecosystems.</li>
+<li><strong>Not</strong> per-packet decision-making in the first pass. Per-packet decisions need a different perf tier (&lt;10µs vs. &lt;10ms); they're a deferred layer (see below).</li>
+<li><strong>Not</strong> distributed policy synchronization. Each visor owns its own policy file. Cluster-wide reconciliation is out of scope.</li>
+</ul>
+<h2 id="design">Design<a class="headerlink" href="#design" title="Permalink">&para;</a></h2>
+<h3 id="two-layers">Two layers<a class="headerlink" href="#two-layers" title="Permalink">&para;</a></h3>
+<p><strong>Layer 1 (per-dial)</strong> — fires when an app dials a peer. Operator writes:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">decide_route</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">candidates</span><span class="p">):</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="c1"># ... operator logic ...</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="k">return</span> <span class="n">RouteSpec</span><span class="p">(</span><span class="n">chosen</span><span class="o">=</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">mux</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">"direct"</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Tens to hundreds of calls per minute. Budget ~10ms. Operator's "Indonesia on Friday" lives here.</p>
+<p><strong>Layer 2 (per-packet)</strong> — fires inside the mux router when a packet needs assignment to one of N parallel legs. Thousands of calls per second. Budget &lt;10µs.</p>
+<p>Layer 2 is <strong>deferred</strong> in this RFC. The Layer 1 <code>RouteSpec</code> returns a distribution descriptor (<code>"round-robin"</code>, <code>"weighted: [0.5, 0.3, 0.2]"</code>, <code>"size-threshold:1500"</code>) and the per-packet Go code stays compiled. The operator gets to <em>configure</em> per-packet behavior from Layer 1; the hot path stays fast.</p>
+<p>When real per-packet scripting becomes necessary (operator wants logic per-packet that can't be expressed as a static distribution descriptor), Layer 2 lands as a separate RFC with its own language choice (CEL or compiled-bytecode candidates).</p>
+<h3 id="language-starlark">Language: Starlark<a class="headerlink" href="#language-starlark" title="Permalink">&para;</a></h3>
+<p>Compared against CEL, Expr, Lua (gopher-lua), Goja (JavaScript), Tengo, Risor, Yaegi, Rego, WASM, and clean-room mini-mcl.</p>
+<p>Eliminated outright:
+- <strong>Yaegi / WASM</strong> — overkill (Yaegi is a Go interpreter; WASM forces operators to compile their scripts for what's usually a 10-line policy).
+- <strong>Rego</strong> — technically excellent for policy but Datalog/logic-programming mental model is alien to most operators.
+- <strong>Clean-room mini-mcl</strong> — writing a new language for one feature commits the project to maintaining a parser, type checker, evaluator, and tooling forever. Bad trade.
+- <strong>CEL / Expr</strong> — fastest by far (&lt;1µs/eval, bytecode-compiled) but <strong>expression-only</strong>. The Indonesia-Friday example already wants intermediate bindings; CEL forces it into one nested ternary that gets unreadable fast. CEL stays in scope for Layer 2 <em>because</em> it's an expression language fits per-packet's <code>(state) → leg_index</code> shape.</p>
+<p>The remaining tournament was <strong>Starlark vs. Lua</strong>. Both are technically excellent, mature, sandboxable, sub-millisecond. Starlark wins on three counts:</p>
+<ol>
+<li><strong>Safety by default.</strong> Starlark literally cannot do I/O, spawn goroutines, mutate globals, or run unbounded loops. Sandboxing is the design, not a configuration of removed APIs.</li>
+<li><strong>Aesthetic match.</strong> The mgmt mcl example that prompted this proposal:
+   <div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>$is_friday = datetime.weekday(datetime.now()) == "friday"
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>mode =&gt; if $is_friday { "0550" } else { "0770" }
+</span></code></pre></div>
+   In Starlark:
+   <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">is_friday</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">weekday</span><span class="p">(</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">())</span> <span class="o">==</span> <span class="s2">"friday"</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">mode</span> <span class="o">=</span> <span class="s2">"0550"</span> <span class="k">if</span> <span class="n">is_friday</span> <span class="k">else</span> <span class="s2">"0770"</span>
+</span></code></pre></div>
+   Near-1:1.</li>
+<li><strong>Maintained by Google for Bazel.</strong> Several decades of operational hardening, including the precise use case of "untrusted operators writing configuration scripts."</li>
+</ol>
+<p>Lua is the runner-up. Notably more operators have touched Lua before (OpenResty / Redis / Wireshark / game scripting), and gopher-lua is pure Go. If the team prefers Lua for ecosystem familiarity over mgmt-aesthetic match, it's a defensible choice. The recommendation here is Starlark.</p>
+<p>License: <code>go.starlark.net</code> is Apache-2.0.</p>
+<h3 id="operator-facing-example">Operator-facing example<a class="headerlink" href="#operator-facing-example" title="Permalink">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># /etc/skywire/policies/friday-id.star</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">load</span><span class="p">(</span><span class="s2">"datetime"</span><span class="p">)</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">load</span><span class="p">(</span><span class="s2">"transports"</span><span class="p">)</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">decide_route</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">candidates</span><span class="p">):</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="c1"># Bind intermediate concepts cleanly.</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">is_friday_evening</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>        <span class="n">datetime</span><span class="o">.</span><span class="n">weekday</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">now</span><span class="p">())</span> <span class="o">==</span> <span class="s2">"friday"</span> <span class="ow">and</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>        <span class="n">ctx</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">hour</span> <span class="o">==</span> <span class="mi">17</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="p">)</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="k">if</span> <span class="n">is_friday_evening</span><span class="p">:</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>        <span class="c1"># Only routes that transit through Indonesia.</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>        <span class="n">candidates</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">candidates</span> <span class="k">if</span> <span class="s2">"ID"</span> <span class="ow">in</span> <span class="n">c</span><span class="o">.</span><span class="n">hops_geo</span><span class="p">]</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">candidates</span><span class="p">:</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>        <span class="c1"># Nothing matched our filter — fall back to direct.</span>
+</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>        <span class="k">return</span> <span class="n">RouteSpec</span><span class="p">(</span><span class="n">fallback</span><span class="o">=</span><span class="s2">"direct"</span><span class="p">)</span>
+</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>
+</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>    <span class="c1"># Pick the lowest-latency surviving candidate.</span>
+</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>    <span class="n">candidates</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">c</span><span class="p">:</span> <span class="n">c</span><span class="o">.</span><span class="n">est_latency_ms</span><span class="p">)</span>
+</span><span id="__span-3-22"><a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>    <span class="k">return</span> <span class="n">RouteSpec</span><span class="p">(</span>
+</span><span id="__span-3-23"><a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>        <span class="n">chosen</span><span class="o">=</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+</span><span id="__span-3-24"><a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>        <span class="n">mux</span><span class="o">=</span><span class="mi">4</span> <span class="k">if</span> <span class="n">ctx</span><span class="o">.</span><span class="n">app</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"vpn-client"</span><span class="p">,</span> <span class="s2">"vpn-server"</span><span class="p">)</span> <span class="k">else</span> <span class="mi">1</span><span class="p">,</span>
+</span><span id="__span-3-25"><a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>        <span class="n">min_hops</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+</span><span id="__span-3-26"><a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>    <span class="p">)</span>
+</span></code></pre></div>
+<h3 id="per-app-override-hierarchy">Per-app override hierarchy<a class="headerlink" href="#per-app-override-hierarchy" title="Permalink">&para;</a></h3>
+<p>Two levels:</p>
+<ul>
+<li><strong>Visor-wide default</strong>: <code>conf.Routing.PolicyPerDial</code> — file path (<code>@/etc/skywire/policies/global.star</code>) or inline string. Applies to every dial unless the app supplants it.</li>
+<li><strong>Per-app override</strong>: <code>AppConfig.RoutingPolicy</code> — same shape. When set on a specific app, that policy wins for dials originating from that app.</li>
+</ul>
+<p>The script always sees <code>ctx.app</code> so a single visor-wide policy can branch on app name internally if the operator prefers a unified file.</p>
+<h3 id="standard-library-mcl-flavored">Standard library (mcl-flavored)<a class="headerlink" href="#standard-library-mcl-flavored" title="Permalink">&para;</a></h3>
+<p>Exposed to Starlark as importable modules:</p>
+<ul>
+<li><strong><code>datetime</code></strong> — <code>now()</code>, <code>weekday(t)</code>, <code>hour</code>, <code>minute</code>, time arithmetic. Returns operator-config-timezone values.</li>
+<li><strong><code>transports</code></strong> — <code>latency(pk)</code>, <code>kind(pk)</code> (stcpr/sudph/dmsg), <code>history(pk)</code> (recent successes/failures).</li>
+<li><strong><code>geo</code></strong> — <code>country(pk)</code> returning ISO-3166 code from the embedded geoip database. Already available in the binary; this just surfaces it.</li>
+<li><strong><code>peers</code></strong> — <code>is_trusted(pk)</code>, <code>is_hypervisor(pk)</code>, <code>whitelist_contains(pk)</code>.</li>
+<li><strong><code>logging</code></strong> — <code>info(msg)</code>, <code>warn(msg)</code>. Bounded — script can't log-flood the visor; rate-limited per-script-instance.</li>
+</ul>
+<p>Expensive lookups (geoip, transport history) are memoized per-visor-uptime. Even a policy that asks "where are all my known transports geographically?" doesn't burn CPU on every dial.</p>
+<h3 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permalink">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>"routing": {
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>  "policy_per_dial": "@/etc/skywire/policies/global.star",
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>  "policy_timeout_per_dial_ms": 50,
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>  "policy_failure_mode": "fallback-to-default"  // or "drop"
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>}
+</span></code></pre></div>
+<p>Inline scripts allowed for tiny policies; <code>@</code> prefix references a file. File-watcher reloads on change. In-flight evaluations finish on the old version; subsequent dials use the new one.</p>
+<h3 id="failure-modes">Failure modes<a class="headerlink" href="#failure-modes" title="Permalink">&para;</a></h3>
+<p>Every policy invocation runs under a context with the configured timeout (default 50ms). If the script:</p>
+<ul>
+<li><strong>Panics</strong> — caught by the host. Fallback to built-in default. Logged at WARN.</li>
+<li><strong>Times out</strong> — context canceled. Fallback. Logged at WARN.</li>
+<li><strong>Returns the wrong type</strong> — type-checked at receive. Fallback. Logged at WARN.</li>
+<li><strong>Returns <code>None</code></strong> — explicit "I have no preference"; visor uses built-in default. No log.</li>
+</ul>
+<p><code>policy_failure_mode: "drop"</code> is for operators who want a broken policy to actually break dialing (so they notice immediately). Default is <code>"fallback-to-default"</code>.</p>
+<h3 id="tooling">Tooling<a class="headerlink" href="#tooling" title="Permalink">&para;</a></h3>
+<ul>
+<li><strong><code>skywire cli route policy test --script foo.star --dial '&lt;json ctx&gt;'</code></strong> — preview the decision a script would return for a synthetic dial context. No actual dial. Operators iterate without bouncing the visor.</li>
+<li><strong><code>skywire cli route policy bench --script foo.star</code></strong> — runs the policy 1M times against synthetic contexts, reports p50/p99 eval time. Hard error at load if budget exceeded.</li>
+<li><strong><code>skywire cli route policy reload</code></strong> — explicit reload (the file-watcher is the normal path).</li>
+<li><strong><code>skywire cli route policy trace --tail</code></strong> — every decision streams a structured event (input context, candidates considered, return value, elapsed µs). Deferred to post-MVP per operator direction; mentioned here for completeness.</li>
+</ul>
+<h2 id="phased-implementation-plan">Phased implementation plan<a class="headerlink" href="#phased-implementation-plan" title="Permalink">&para;</a></h2>
+<p>Five phases. Each lands as one PR. Each is independently revertable.</p>
+<h3 id="phase-1-go-side-scaffold">Phase 1 — Go-side scaffold<a class="headerlink" href="#phase-1-go-side-scaffold" title="Permalink">&para;</a></h3>
+<p><code>pkg/router/policy</code> package. Defines <code>RoutingContext</code> (Go struct), <code>Candidate</code> (Go struct), <code>RouteSpec</code> (Go struct). Adds a no-op policy hook in the dial path that always returns the built-in default. Wired behind a feature flag in <code>conf.Routing</code> so the existing dial path is unchanged when the policy field is empty.</p>
+<h3 id="phase-2-starlark-integration">Phase 2 — Starlark integration<a class="headerlink" href="#phase-2-starlark-integration" title="Permalink">&para;</a></h3>
+<p>Add <code>go.starlark.net</code> to <code>go.mod</code>. Implement <code>policy.NewEvaluator(scriptPath)</code> that loads + parses + validates the script, returns an evaluator with <code>Decide(ctx, candidates) (RouteSpec, error)</code>. Timeout enforced via <code>starlark.Thread.SetMaxExecutionSteps</code>. Failure mode wired up.</p>
+<p>After this phase, the Indonesia-Friday example is parseable and the visor can call it, but the stdlib is empty so the script can't actually inspect the world.</p>
+<h3 id="phase-3-mcl-flavored-stdlib">Phase 3 — mcl-flavored stdlib<a class="headerlink" href="#phase-3-mcl-flavored-stdlib" title="Permalink">&para;</a></h3>
+<p><code>datetime</code>, <code>transports</code>, <code>geo</code>, <code>peers</code>, <code>logging</code> modules exposed as Starlark builtins. Per-visor-uptime caches for the expensive lookups.</p>
+<p>After this phase, the Indonesia-Friday example <em>works</em>.</p>
+<h3 id="phase-4-operator-tooling">Phase 4 — Operator tooling<a class="headerlink" href="#phase-4-operator-tooling" title="Permalink">&para;</a></h3>
+<p><code>cli route policy test</code> + <code>cli route policy bench</code> subcommands. File-watcher for hot-reload. Per-app override field on <code>AppConfig</code>.</p>
+<h3 id="phase-5-layer-2-distribution-descriptor-landed">Phase 5 — Layer 2 distribution descriptor (LANDED)<a class="headerlink" href="#phase-5-layer-2-distribution-descriptor-landed" title="Permalink">&para;</a></h3>
+<p><code>RouteSpec.distribution</code> field is parsed by <code>pkg/router/policy.ParseDistribution</code> and applied to the route group's existing <code>transportSelector</code> via <code>DialAdjustment.Distribution</code>. Starlark stays out of the per-packet path; operator gets to configure distribution from Layer 1.</p>
+<p><strong>Descriptor vocabulary (v1, finalized):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Descriptor</th>
+<th>Mode</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>""</code></td>
+<td><code>DistributionUnset</code></td>
+<td>No override — route group uses the router's visor-wide <code>muxMode</code> default (<code>WeightModeAuto</code>, latency-weighted).</td>
+</tr>
+<tr>
+<td><code>"auto"</code></td>
+<td><code>DistributionAuto</code></td>
+<td>Force <code>WeightModeAuto</code> (latency-weighted with round-robin fallback).</td>
+</tr>
+<tr>
+<td><code>"round-robin"</code> / <code>"equal"</code></td>
+<td><code>DistributionRoundRobin</code></td>
+<td>Force <code>WeightModeEqual</code> — packets alternate across legs ignoring latency.</td>
+</tr>
+<tr>
+<td><code>"weighted: f1, f2, ..."</code></td>
+<td><code>DistributionWeighted</code></td>
+<td>Operator-supplied fractional weights normalized into the selector's integer schedule. Length must match leg count; mismatches fall through with a log line.</td>
+</tr>
+<tr>
+<td><code>"size-threshold: N"</code></td>
+<td><code>DistributionSizeThreshold</code></td>
+<td>Payloads <code>&gt; N</code> bytes go to leg 0 (wide pipe); payloads <code>≤ N</code> round-robin across the remaining legs. Single-leg routes ignore the descriptor. Control/handshake packets (size unknown) take leg 0.</td>
+</tr>
+<tr>
+<td><code>"sticky:5tuple"</code></td>
+<td><code>DistributionSticky5Tuple</code></td>
+<td>Hashes the IPv4 5-tuple (src/dst IP + src/dst port + protocol) and picks <code>hash % live-leg-count</code>. Same flow → same leg deterministically. Non-IPv4 payloads fall back to a payload-prefix FNV hash. Avoids TCP-over-overlay reordering.</td>
+</tr>
+<tr>
+<td><code>"latency-adaptive"</code> / <code>"latency-aware"</code></td>
+<td><code>DistributionLatencyAdaptive</code></td>
+<td>Per-packet linear scan over live legs for lowest <code>GetLatency()</code>. Differs from <code>"auto"</code>: adaptive evaluates every packet, so a leg whose RTT spikes mid-session loses traffic immediately.</td>
+</tr>
+<tr>
+<td><code>"dscp-priority: N"</code></td>
+<td><code>DistributionDSCPPriority</code></td>
+<td>Reads IPv4 DSCP (upper 6 bits of ToS byte). DSCP ≥ N → leg 0; rest → RR. Threshold in <code>[1, 63]</code>; common values: 46 (EF/VoIP), 18 (AF21), 10 (AF11). Non-IPv4 payloads default to RR.</td>
+</tr>
+</tbody>
+</table>
+<p>Real per-packet scripting (CEL or compiled bytecode) remains a separate RFC, opened only when an operator demonstrates a use case that no descriptor can express. As of this update, the vocabulary covers the realistic per-packet decision space — future additions (e.g. <code>"chaff: rate"</code> for anti-traffic-analysis chaff insertion) would land as new verbs rather than scripting.</p>
+<h3 id="phase-6-post-setup-leg-change-callback-landed">Phase 6 — Post-setup leg-change callback (LANDED)<a class="headerlink" href="#phase-6-post-setup-leg-change-callback-landed" title="Permalink">&para;</a></h3>
+<p><code>decide_route(ctx, candidates)</code> is one-shot at dial-setup time. But mux route groups have dynamic legs: <code>appendRouteToGroup</code> can add legs after setup, and transport failure can drop legs mid-session. Phase 5's distribution descriptor was set once and the selector adapted internally (skipping nil / closed transports during <code>Rebuild</code>), but the script had no way to react — a <code>"weighted: 3, 1"</code> schedule against an initial 2 legs stayed at <code>[3, 1]</code> even after the route group grew to 3 legs.</p>
+<p>Phase 6 adds an optional script function:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">on_leg_change</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">legs</span><span class="p">,</span> <span class="n">change</span><span class="p">):</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="c1"># ctx is the dial's RoutingContext (same fields as decide_route's ctx).</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="c1"># legs is the route group's current legs:</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="c1">#   [{index, kind, latency_ms, alive, sent_bytes, recv_bytes, hops}, ...].</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="c1"># sent_bytes/recv_bytes are the leg transport's cumulative payload-byte</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="c1"># counters; hops is the leg's intermediate-PK chain (endpoints excluded,</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="c1"># empty for a direct leg) — usable to build an exclude_hops set.</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="c1"># change is {"event": "added" | "dropped", "leg_index": N}.</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="c1">#</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="c1"># Return a RouteSpec; only the distribution field is honored</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>    <span class="c1"># — mux/min_hops/chosen are dial-time decisions that can't be</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>    <span class="c1"># changed after setup.</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="n">n</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">([</span><span class="mi">1</span> <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">legs</span> <span class="k">if</span> <span class="n">l</span><span class="o">.</span><span class="n">alive</span><span class="p">])</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>    <span class="k">if</span> <span class="n">n</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>        <span class="k">return</span> <span class="n">RouteSpec</span><span class="p">()</span>
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>    <span class="c1"># Re-balance weights across all live legs.</span>
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>    <span class="n">weights</span> <span class="o">=</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s2">"1"</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">)</span>
+</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>    <span class="k">return</span> <span class="n">RouteSpec</span><span class="p">(</span><span class="n">distribution</span> <span class="o">=</span> <span class="s2">"weighted: "</span> <span class="o">+</span> <span class="n">weights</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Scripts that don't define <code>on_leg_change</code> get phase 5's static behavior — the function is optional. The route group fires the callback synchronously from leg-mutation paths (<code>appendForwardLeg</code>, transport close detection) so the schedule rebuild stays consistent with the leg set. Failure / panic / parse-error in the callback falls through to the previous distribution; the leg change itself isn't undone.</p>
+<p>The callback runs under the same step-ceiling budget as <code>decide_route</code> (<code>DefaultMaxSteps</code> = 100k). A leg-change storm (e.g. mass transport failure on dmsg server outage) won't pin the read loop — each callback is bounded.</p>
+<h2 id="open-questions">Open questions<a class="headerlink" href="#open-questions" title="Permalink">&para;</a></h2>
+<ol>
+<li>
+<p><strong>Trace / audit storage.</strong> Per the operator's direction, trace is deferred. But policies will eventually need an audit trail — "why did this dial in 2026-Q3 route through Singapore?" Needs to land <em>before</em> anyone uses policies for security-sensitive routing (e.g. "never route through country X"). Suggested: trace events land in the existing visor log pipeline with a <code>policy=true</code> tag, plus a ring buffer for the last N decisions readable via RPC.</p>
+</li>
+<li>
+<p><strong>Versioning.</strong> When the visor's stdlib gains new modules (or removes old ones), existing operator policies should keep working. Need a <code>starlark_compat=2026.05</code> style version tag in the policy file's header. Out of scope for v1 but worth flagging.</p>
+</li>
+<li>
+<p><strong>Multi-script composition.</strong> Should an operator be able to <code>load("./common.star")</code> shared helpers from their own policy file? Starlark supports this natively; cost is reading multiple files at policy-load time. Default: yes, allow within a single directory; out-of-directory loads rejected.</p>
+</li>
+<li>
+<p>~~<strong>Layer 2 contract finalization.</strong> What exactly is the distribution descriptor's vocabulary?~~ <strong>Resolved</strong> — see Phase 5 table above. Vocabulary is <code>""</code> / <code>"auto"</code> / <code>"round-robin"</code> / <code>"equal"</code> / <code>"weighted: f1, f2, ..."</code> / <code>"size-threshold: N"</code>. Unknown descriptors error at parse time so future additions stay unambiguous.</p>
+</li>
+<li>
+<p>~~<strong>Policy granularity vs. CLI flags.</strong>~~ <strong>Resolved</strong> — policy is source of truth: <code>applyAdjustment</code> only overrides <code>DialOptions</code> when the policy explicitly sets a non-zero value. CLI's <code>--routes N --min-hops K</code> etc. populate <code>opts</code> first; the policy script reads them via <code>ctx.cli_overrides</code> (snake_case keys: <code>mux_routes</code>, <code>min_hops</code>, <code>forward_mux_routes</code>, ...). The policy chooses to honor by returning empty <code>RouteSpec()</code> (CLI values stick) or override by returning explicit values (policy wins). The earlier proposal had CLI &gt; policy; the implementation went the other way and operators preferred it that way.</p>
+</li>
+</ol>
+<h2 id="decision-checklist">Decision checklist<a class="headerlink" href="#decision-checklist" title="Permalink">&para;</a></h2>
+<p>For approval:</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Confirm Starlark as the Layer 1 language (vs. Lua, the runner-up).</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Confirm the two-layer model (Starlark Layer 1 + deferred Layer 2 distribution descriptor).</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Confirm per-app overrides global (single hierarchy, app wins).</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Resolve open questions 4 and 5 (Layer 2 contract + CLI/policy interaction) before phase 1 lands.</li>
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Pick the v1 stdlib surface (currently: <code>datetime</code>, <code>transports</code>, <code>geo</code>, <code>peers</code>, <code>logging</code>).</li>
+</ul>
+<p>Phases should not start until the above are settled.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/skycoin/skywire" target="_blank" rel="noopener" title="skycoin/skywire on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://t.me/skywire" target="_blank" rel="noopener" title="Skywire on Telegram" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M248 8C111.033 8 0 119.033 0 256s111.033 248 248 248 248-111.033 248-248S384.967 8 248 8m114.952 168.66c-3.732 39.215-19.881 134.378-28.1 178.3-3.476 18.584-10.322 24.816-16.948 25.425-14.4 1.326-25.338-9.517-39.287-18.661-21.827-14.308-34.158-23.215-55.346-37.177-24.485-16.135-8.612-25 5.342-39.5 3.652-3.793 67.107-61.51 68.335-66.746.153-.655.3-3.1-1.154-4.384s-3.59-.849-5.135-.5q-3.283.746-104.608 69.142-14.845 10.194-26.894 9.934c-8.855-.191-25.888-5.006-38.551-9.123-15.531-5.048-27.875-7.717-26.8-16.291q.84-6.7 18.45-13.7 108.446-47.248 144.628-62.3c68.872-28.647 83.183-33.623 92.511-33.789 2.052-.034 6.639.474 9.61 2.885a10.45 10.45 0 0 1 3.53 6.716 43.8 43.8 0 0 1 .417 9.769"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://blog.theskywirenetwork.net" target="_blank" rel="noopener" title="Skycoin blog" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M0 64c0-17.7 14.3-32 32-32 229.8 0 416 186.2 416 416 0 17.7-14.3 32-32 32s-32-14.3-32-32C384 253.6 226.4 96 32 96 14.3 96 0 81.7 0 64m0 352a64 64 0 1 1 128 0 64 64 0 1 1-128 0m32-256c159.1 0 288 128.9 288 288 0 17.7-14.3 32-32 32s-32-14.3-32-32c0-123.7-100.3-224-224-224-17.7 0-32-14.3-32-32s14.3-32 32-32"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "navigation.tracking", "navigation.indexes", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.action.edit", "toc.follow"], "search": "../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.60a45f97.min.js"></script>
+      
+        <script src="../javascripts/desk-shell.js"></script>
+      
+    
+  </body>
+</html>
