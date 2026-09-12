@@ -117,7 +117,7 @@ github.com/0magnet/spheregraph
 ## explicit; go 1.22
 github.com/0magnet/sysinfo
 github.com/0magnet/sysinfo/cpuid
-# github.com/0magnet/termanim v0.0.0-20260912172617-9e520e861b43
+# github.com/0magnet/termanim v0.0.0-20260912180616-5fa253f0fdbd
 ## explicit; go 1.26.0
 github.com/0magnet/termanim/canvas
 github.com/0magnet/termanim/matrix
