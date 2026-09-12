@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -56,6 +57,7 @@ func init() {
 	curlCmd.Flags().StringVar(&curlVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	curlCmd.Flags().BoolVar(&curlWT, "wt", false, "standalone (--sk): dial the dmsg-server session over WebTransport (HTTP/3) with no TCP/QUIC fallback")
 	curlCmd.Flags().StringVar(&curlDisc, "disc", "", "standalone (--wt): HTTP dmsg-discovery URL to fetch the WebTransport server set from (e.g. http://dmsg-discovery:9090)")
+	curlCmd.Flags().StringVar(&attachSocket, "attach", "", "standalone (--sk): attach to a local visor's dmsg relay `socket` instead of dialing dmsg servers")
 	if os.Getenv("DMSG_SK") != "" {
 		sk.Set(os.Getenv("DMSG_SK")) //nolint
 	}
@@ -365,6 +367,18 @@ func curlStandalone(ctx context.Context, log *logging.Logger, pk cipher.PubKey, 
 
 // startDmsgClient starts a standalone dmsg client
 func startDmsgClient(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey) (*dmsg.Client, func(), error) {
+	// --attach: ride the local visor's relay instead of dialing servers. It
+	// comes first because it is mutually exclusive with everything below —
+	// an attached client has no server session and no discovery entry, and
+	// seeding it with the embedded prod server set would only give the serve
+	// loop somewhere else to go if the socket were briefly unavailable, which
+	// is precisely the fallback an operator chooses --attach to prevent.
+	if attachSocket != "" {
+		network, addr := dmsgclient.AttachTarget(attachSocket)
+		c, stop, _, err := dmsgclient.StartDmsgLocalRelay(ctx, log, pk, sk, network, addr)
+		return c, stop, err
+	}
+
 	// Use DMSG servers from deployment config (respects SKYDEPLOY env override).
 	if len(dmsg.Prod.DmsgServers) == 0 {
 		return nil, nil, fmt.Errorf("no DMSG servers configured")
