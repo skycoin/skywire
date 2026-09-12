@@ -79,19 +79,28 @@ func (v *Visor) FetchTPDStatsCXO(kind string) ([]byte, time.Time, error) {
 	mgr.AcquireFor(TabNetworkStats)
 	defer mgr.ReleaseFor(TabNetworkStats)
 
-	if body, ts, ok := readStatsLeaf(mgr, path); ok {
+	// A leaf that is present AND fresh is served straight from the snapshot.
+	// Freshness is checked, not assumed: the cycle stops between calls, so a
+	// leaf can sit here aging indefinitely, and serving it unconditionally is
+	// what made this path disagree with the live endpoint it mirrors.
+	maxAge := statsMaxAge(kind)
+	if body, ts, ok := readStatsLeaf(mgr, path); ok && time.Since(ts) <= maxAge {
 		return body, ts, nil
 	}
-	// Cold snapshot: AcquireFor only started the cycle. Block briefly for the
-	// first sync (over dmsg) so CXO serves this call instead of the caller
+	// Cold or stale snapshot: AcquireFor only started the cycle. Block briefly
+	// for the sync (over dmsg) so CXO serves this call instead of the caller
 	// falling back to dmsg-http. These are sub-kilobyte leaves, so the short
 	// FirstSyncTimeout applies — no large-feed budget for this feed.
 	ctx, cancel := context.WithTimeout(context.Background(), feedFirstSyncTimeout(FeedTPDStats))
 	_, _ = mgr.RefreshNow(ctx, FeedTPDStats) //nolint:errcheck
 	cancel()
-	if body, ts, ok := readStatsLeaf(mgr, path); ok {
+	if body, ts, ok := readStatsLeaf(mgr, path); ok && time.Since(ts) <= maxAge {
 		return body, ts, nil
 	}
+	// Still stale after a resync: report a miss so the caller's chain falls
+	// through to the live service rather than being handed a number that is
+	// quietly wrong. A stale aggregate is worse than a slower correct one —
+	// nothing downstream can tell it apart from a current reading.
 	return nil, time.Time{}, ErrTPDStatsNotReady
 }
 
@@ -117,4 +126,27 @@ func readStatsLeaf(mgr statsSnapshot, path string) ([]byte, time.Time, bool) {
 	// Walk/Get lend the snapshot's bytes and Gunzip of a raw body returns
 	// that same slice, so copy before handing it to an RPC marshaller.
 	return append([]byte(nil), decoded...), ts, true
+}
+
+// statsMaxAge bounds how old a cached leaf may be before FetchTPDStatsCXO
+// treats it as stale and forces a resync.
+//
+// AcquireFor/ReleaseFor bracket a single call, so the refcount drops back to
+// zero the moment it returns and the cycle stops. The snapshot then sits in the
+// manager's map and ages. Because the old read path only called RefreshNow when
+// the leaf was ABSENT, a present-but-stale leaf was served forever: observed
+// live as `cli tp net-stats` reporting a total 34% above what TPD itself
+// returned, frozen at the same value for twenty minutes, while
+// `cli svc tpd stats` (which does not take the CXO step) tracked the network.
+// Two commands, one endpoint, two answers.
+//
+// The bounds follow the publisher's cadence
+// (pkg/deployment/tpd/api/cxo_stats_publisher.go): network and versions are
+// rewritten every ~12s, daily every ~5m. A few multiples of that is late enough
+// to be unambiguously a stopped cycle rather than a slow one.
+func statsMaxAge(kind string) time.Duration {
+	if kind == StatsKindDaily {
+		return 15 * time.Minute
+	}
+	return 90 * time.Second
 }
