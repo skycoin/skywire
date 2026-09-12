@@ -7,6 +7,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // A guest attached in-process holds exactly one session — to its host, over an
@@ -82,4 +86,59 @@ func TestAttachInProcessRejects(t *testing.T) {
 		_, err := d(ctx, CarrierSkynet, SkynetAddr(otherPK, 70))
 		require.ErrorContains(t, err, "host is")
 	})
+}
+
+// TestInProcessGuestNotChargedRelayBudget covers the case the refuse-and-fall-
+// back path does not: a guest attached to its OWN host has nowhere to fall back
+// TO.
+//
+// MaxRelayedStreams bounds what a visor carries for other people. Every attach
+// path set relayInbound identically, so a host's own in-process service — the
+// resolving proxy under a key the deployment already knows — was charged
+// against that budget too. A remote peer refused by a full or opted-out relay
+// falls back to its own server sessions (TestSkynetRelay_RefusedFallsBack...).
+// A RelayOnly+NoRegister guest holds exactly one session, to its host, and has
+// no server sessions and no discovery to fall back to: refusing it is fatal,
+// not slow. So a visor that set a cap of zero to relay for nobody silently
+// broke its own resolver.
+func TestInProcessGuestNotChargedRelayBudget(t *testing.T) {
+	hostPK, hostSK := cipher.GenerateKeyPair()
+	// Zero cap: this host relays for nobody. Its OWN guest must still work.
+	host := NewClient(hostPK, hostSK, disc.NewMock(0), &Config{MinSessions: 1})
+	host.SetLogger(logging.MustGetLogger("budget-host"))
+	defer host.Close() //nolint:errcheck
+
+	guestPK, guestSK := cipher.GenerateKeyPair()
+	guest := NewClient(guestPK, guestSK, disc.NewMock(0), &Config{
+		MinSessions: 1, RelayOnly: true, NoRegister: true,
+	})
+	guest.SetLogger(logging.MustGetLogger("budget-guest"))
+	defer guest.Close() //nolint:errcheck
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	require.NoError(t, AttachInProcess(ctx, host, guest, 70, nil))
+	go guest.Serve(ctx) //nolint:errcheck
+
+	select {
+	case <-guest.Ready():
+	case <-ctx.Done():
+		t.Fatal("guest never attached to its host")
+	}
+
+	// The host's view of the attach: present, and marked local so the budget
+	// The host stores the session after the guest's handshake completes, so the
+	// guest being Ready does not yet mean the host has registered it.
+	var ses *SessionCommon
+	require.Eventually(t, func() bool {
+		var ok bool
+		ses, ok = host.relaySession(guestPK)
+		return ok
+	}, 10*time.Second, 50*time.Millisecond, "host must hold the guest's relay session")
+
+	require.True(t, ses.relayInbound, "an attached session is always relayInbound")
+	require.True(t, ses.relayLocal, "an in-process attach is the host's OWN service, not a third party")
+	// The whole point: a zero budget refuses third parties without touching the
+	// host's own guest.
+	require.LessOrEqual(t, host.maxRelayedStreams, 0, "this host relays for nobody")
 }

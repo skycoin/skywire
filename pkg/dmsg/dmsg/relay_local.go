@@ -167,7 +167,7 @@ func (ce *Client) ServeLocalRelay(ctx context.Context, lis net.Listener, port ui
 			// Clear it again: the session that follows manages its own
 			// deadlines, and a stale write deadline would kill it mid-stream.
 			_ = conn.SetWriteDeadline(time.Time{}) //nolint:errcheck
-			if err := ce.AcceptRelaySession(ctx, conn, allow); err != nil {
+			if err := ce.AcceptLocalRelaySession(ctx, conn, allow); err != nil {
 				ce.log.WithError(err).Debug("dmsg local relay session ended with error")
 			}
 		}(conn)
