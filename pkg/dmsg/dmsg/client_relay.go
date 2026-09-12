@@ -540,3 +540,11 @@ func (ce *Client) hasServerSession() bool {
 	}
 	return false
 }
+
+// RelayRefused reports how many stream requests this client has turned away
+// with ErrRelayCapacityReached since start — either the global budget or one
+// peer's share of it was full. Surfaced in `visor state` so a hub at its cap
+// is diagnosable from the hub rather than inferred from the peers it refused.
+func (ce *Client) RelayRefused() int {
+	return int(atomic.LoadInt64(&ce.relayRefused))
+}
