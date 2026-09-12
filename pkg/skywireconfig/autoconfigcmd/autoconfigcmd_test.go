@@ -23,6 +23,7 @@ var allFlags = []string{
 	"no-direct-transports", "pty-rpc-exec", "lan-dmsg-port", "lan-dmsg-public",
 	"dmsg-server-conf", "dmsg-server", "no-dmsg-server", "dmsg-server-public",
 	"dmsg-relay-addr", "dmsg-relay-keys", "no-dmsg-relay",
+	"dmsgweb-sk",
 	// Whitelists
 	"dmsgpty-pks", "survey", "routesetup", "tpsetup",
 	// Route calculation
