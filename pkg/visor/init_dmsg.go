@@ -1126,6 +1126,7 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 		WithField("shared_transport_port", shared).
 		Info("Started in-process dmsg server on the visor key")
 
+	v.dmsgSrv.Store(srv)
 	v.dmsgSrvRole.Store(&DmsgServerRole{
 		Mode:                dmsgServerModeOwnKey,
 		PK:                  v.conf.PK,
@@ -1138,6 +1139,7 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	v.pushCloseStack("dmsg_server", func() error {
 		v.dmsgSrvRole.Store(nil)
+		v.dmsgSrv.Store(nil)
 		cerr := srv.Close()
 		// Only a listener this server owns is closed here. The shared branch
 		// belongs to the transport cmux, which stcpr and WS are still serving;

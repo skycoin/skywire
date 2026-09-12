@@ -227,6 +227,12 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 	return s
 }
 
+// IsPeerPK reports whether pk is a known peer SERVER rather than a client.
+// Exported so a co-resident visor can separate the two when it reports what
+// its in-process server is holding: a server-to-server link counted as a
+// client makes the server look busier than it is.
+func (s *Server) IsPeerPK(pk cipher.PubKey) bool { return s.isPeerPK(pk) }
+
 // GetSessions returns underlying sessions map.
 func (s *Server) GetSessions() map[cipher.PubKey]*SessionCommon {
 	s.sessionsMx.Lock()
