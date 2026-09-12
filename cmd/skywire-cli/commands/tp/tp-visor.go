@@ -115,7 +115,7 @@ Set cache file location to "" to avoid using cache files`,
 		// --- Fetch SD ---
 		sds := clirpc.FetchCachedServiceURL(cmd.Flags(), vCacheFileSD, vSDURL+"/api/services?type="+visorServiceType, vCacheFilesAge)
 		if vRawData {
-			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint:errcheck,gosec
+			internal.PrintRawJSON(cmd.Flags(), sds, string(pretty.Color(pretty.Pretty([]byte(sds)), nil)))
 			return
 		}
 
@@ -136,7 +136,7 @@ Set cache file location to "" to avoid using cache files`,
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
-			script.Echo(string(pretty.Color(pretty.Pretty(jsonOut), nil))).Stdout() //nolint:errcheck,gosec
+			internal.PrintRawJSON(cmd.Flags(), string(jsonOut), string(pretty.Color(pretty.Pretty(jsonOut), nil)))
 			return
 		}
 
@@ -174,10 +174,12 @@ Set cache file location to "" to avoid using cache files`,
 				if err != nil {
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 				}
-				script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
+				internal.PrintOutput(cmd.Flags(), struct {
+					Count int `json:"count"`
+				}{Count: count}, fmt.Sprintf("%v\n", count))
 				return
 			}
-			script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
+			internal.PrintPipe(cmd.Flags(), script.Echo(sds).JQ(sdJQ).Replace(`"`, ""))
 			return
 		}
 
@@ -193,10 +195,12 @@ Set cache file location to "" to avoid using cache files`,
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
 			}
-			script.Echo(fmt.Sprintf("%v\n", count)).Stdout() //nolint:errcheck,gosec
+			internal.PrintOutput(cmd.Flags(), struct {
+				Count int `json:"count"`
+			}{Count: count}, fmt.Sprintf("%v\n", count))
 			return
 		}
 
-		script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
+		internal.PrintPipe(cmd.Flags(), script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, ""))
 	},
 }

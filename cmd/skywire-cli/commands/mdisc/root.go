@@ -168,7 +168,7 @@ selects the test deployment. Both apply to every subcommand.`,
 			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d dmsg clients\n", stats), fmt.Sprintf("%d dmsg clients\n", stats))
 			return
 		}
-		script.Echo(dmsgclientkeys).JQ(".[]").Replace("\"", "").Freq().Column(2).Stdout() //nolint:errcheck,gosec
+		internal.PrintPipe(cmd.Flags(), script.Echo(dmsgclientkeys).JQ(".[]").Replace("\"", "").Freq().Column(2))
 	},
 }
 

@@ -185,7 +185,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		// Fetch SD
 		sds := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
 		if rawData {
-			script.Echo(string(pretty.Color(pretty.Pretty([]byte(sds)), nil))).Stdout() //nolint:errcheck,gosec
+			internal.PrintRawJSON(cmd.Flags(), sds, string(pretty.Color(pretty.Pretty([]byte(sds)), nil)))
 			return
 		}
 
@@ -214,7 +214,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 					}{Count: count}, fmt.Sprintf("%v\n", count))
 					return
 				}
-				script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
+				internal.PrintPipe(cmd.Flags(), script.Echo(sds).JQ(sdJQ).Replace(`"`, ""))
 				return
 			}
 
@@ -256,7 +256,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 					}{Count: count}, fmt.Sprintf("%v\n", count))
 					return
 				}
-				script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").Stdout() //nolint:errcheck,gosec
+				internal.PrintPipe(cmd.Flags(), script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, ""))
 				return
 			}
 

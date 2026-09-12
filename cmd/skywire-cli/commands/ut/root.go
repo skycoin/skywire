@@ -380,10 +380,10 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		// Handle list-versions flag (without version filter)
 		if listVersions {
 			if isStats {
-				script.Echo(uts).JQ(baseSelector+" | .version").Freq().Replace("\"", "").Stdout() //nolint:errcheck,gosec
+				internal.PrintPipe(cmd.Flags(), script.Echo(uts).JQ(baseSelector+" | .version").Freq().Replace("\"", ""))
 				return
 			}
-			script.Echo(uts).JQ(baseSelector+" | \"\\(.pk) \\(.version)\"").Match(pk).Replace("\"", "").Stdout() //nolint:errcheck,gosec
+			internal.PrintPipe(cmd.Flags(), script.Echo(uts).JQ(baseSelector+" | \"\\(.pk) \\(.version)\"").Match(pk).Replace("\"", ""))
 			return
 		}
 
@@ -395,7 +395,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 				return
 			}
 			if isMoreStats {
-				script.Echo(uts).JQ(".[] | select(.on) | .version").Freq().Replace("\"", "").Stdout() //nolint:errcheck,gosec
+				internal.PrintPipe(cmd.Flags(), script.Echo(uts).JQ(".[] | select(.on) | .version").Freq().Replace("\"", ""))
 				return
 			}
 			for _, i := range utKeysOnline {
@@ -410,7 +410,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 			return
 		}
 		if isMoreStats {
-			script.Echo(uts).JQ(".[] | .version").Freq().Replace("\"", "").Stdout() //nolint:errcheck,gosec
+			internal.PrintPipe(cmd.Flags(), script.Echo(uts).JQ(".[] | .version").Freq().Replace("\"", ""))
 			return
 		}
 
@@ -418,6 +418,6 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		if dateFilter != "" {
 			dailyFilter = " | select(.key == \"" + dateFilter + "\")"
 		}
-		script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[]"+dailyFilter+" | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Match(pk).Replace("\"", "").Stdout() //nolint:errcheck,gosec
+		internal.PrintPipe(cmd.Flags(), script.Echo(uts).JQ(".[] | \"\\(.pk) \\(.daily | to_entries[]"+dailyFilter+" | select(.value | tonumber > "+fmt.Sprintf("%d", minUT)+") | \"\\(.key) \\(.value)\")\"").Match(pk).Replace("\"", ""))
 	},
 }
