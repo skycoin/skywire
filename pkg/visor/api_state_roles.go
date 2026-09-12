@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -69,6 +70,32 @@ type DmsgServerRole struct {
 	ConfigPath          string `json:"config_path,omitempty"`
 	// StartedAt is when the server was started (zero when it is not running).
 	StartedAt time.Time `json:"started_at,omitempty"`
+	// SessionCount is how many dmsg sessions this server currently holds, and
+	// Clients names them. Answering "who is actually on this dmsg server" used
+	// to require asking the discovery — which reports what CLIENTS claim about
+	// their delegated servers, not what the server itself is holding, and says
+	// nothing about how much traffic each one is running. A co-resident visor
+	// knows the real answer; this reports it.
+	//
+	// Peers are separated from ordinary clients because a server-to-server link
+	// is not a client at all: counting the two together makes a server look
+	// busier than it is, and the peer mesh is the part an operator tunes
+	// separately.
+	//
+	// Only populated in own_key mode — config_path mode runs the server inside
+	// an unexported service type that exposes no session handle.
+	SessionCount int                `json:"session_count"`
+	PeerCount    int                `json:"peer_count"`
+	Clients      []DmsgServerClient `json:"clients,omitempty"`
+}
+
+// DmsgServerClient is one session held by this visor's in-process dmsg server:
+// the connected key, how many streams it has open, and whether the session is
+// another dmsg server (a peer link) rather than a client.
+type DmsgServerClient struct {
+	PK      cipher.PubKey `json:"pk"`
+	Streams int           `json:"streams"`
+	Peer    bool          `json:"peer,omitempty"`
 }
 
 // DmsgRelayRole is both directions of the dmsg relay: the relays this visor
@@ -130,6 +157,9 @@ type dmsgSessionView struct {
 // zero-valued rather than failing.
 func (v *Visor) RolesSnapshot() *RolesSnapshot {
 	r := &RolesSnapshot{DmsgServer: dmsgServerRole(v.conf, v.dmsgSrvRole.Load())}
+	if srv := v.dmsgSrv.Load(); srv != nil {
+		r.DmsgServer.SessionCount, r.DmsgServer.PeerCount, r.DmsgServer.Clients = dmsgServerSessions(srv)
+	}
 	if v.conf != nil {
 		r.PK = confPK(v.conf)
 		if v.conf.Routing != nil {
@@ -251,4 +281,36 @@ func dmsgRelayRole(port uint16, nominees []cipher.PubKey, sessions []dmsgSession
 		return role.RelayClients[i].PK.String() < role.RelayClients[j].PK.String()
 	})
 	return role
+}
+
+// dmsgServerSessions snapshots what the in-process dmsg server is holding:
+// the total session count, how many of those are peer servers rather than
+// clients, and a stable-ordered list naming each one with its open streams.
+//
+// This is the server's own view. The discovery's is not a substitute: an entry
+// records what a CLIENT claims about the servers it delegated to, so it is
+// self-reported, lags reality by the entry refresh interval, and carries no
+// per-client stream count at all. For "which clients is this server actually
+// carrying, and how hard", only the server knows.
+func dmsgServerSessions(srv *dmsg.Server) (total, peers int, clients []DmsgServerClient) {
+	sessions := srv.GetSessions()
+	clients = make([]DmsgServerClient, 0, len(sessions))
+	for pk, ses := range sessions {
+		if ses == nil {
+			continue
+		}
+		isPeer := srv.IsPeerPK(pk)
+		if isPeer {
+			peers++
+		}
+		clients = append(clients, DmsgServerClient{
+			PK:      pk,
+			Streams: ses.NumStreams(),
+			Peer:    isPeer,
+		})
+	}
+	// Stable order: a caller diffing two snapshots must not see map iteration
+	// masquerading as churn.
+	sort.Slice(clients, func(i, j int) bool { return clients[i].PK.String() < clients[j].PK.String() })
+	return len(clients), peers, clients
 }

@@ -149,6 +149,12 @@ type Visor struct {
 	// server's key and address rather than only what the config asked for.
 	dmsgSrvRole atomic.Pointer[DmsgServerRole]
 
+	// dmsgSrv is the running own-key in-process dmsg server, kept so the
+	// state API can report the clients CONNECTED TO it. Every co-resident
+	// visor+server ("hub") runs this mode; config_path mode keeps the server
+	// inside an unexported service type and stores nothing here.
+	dmsgSrv atomic.Pointer[dmsg.Server]
+
 	// localGraph is an extra transport-graph source merged into every
 	// GetAllTransports answer (see local_graph.go).
 	localGraphMu sync.RWMutex
