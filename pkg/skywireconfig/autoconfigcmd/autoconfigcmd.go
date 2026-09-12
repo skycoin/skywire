@@ -155,6 +155,18 @@ type Values struct {
 	// DMSGSERVERPUBLIC.
 	DmsgServerPublic string
 
+	// DmsgRelayAddr is a loopback host:port for the local dmsg relay acceptor —
+	// writes DMSGRELAYADDR. The unix socket is served by default and needs no
+	// config, but it carries the VISOR's uid at 0600, so a service running as a
+	// different user cannot open it. A loopback acceptor has no such problem;
+	// its gate is DmsgRelayKeys instead of file permissions.
+	DmsgRelayAddr string
+	// DmsgRelayKeys are the public keys allowed to attach, comma-separated —
+	// writes DMSGRELAYKEYS. Required with DmsgRelayAddr.
+	DmsgRelayKeys string
+	// NoDmsgRelay turns the acceptor off entirely — writes NODMSGRELAY.
+	NoDmsgRelay bool
+
 	// --- Privacy / routing knobs ---
 	MinHops            int  // MINHOPS (>=2 forces multihop for sender privacy)
 	ARTransportLimit   int  // ARTRANSPORTLIMIT (address-resolver registration policy)
@@ -325,6 +337,9 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().BoolVar(&v.DmsgServer, "dmsg-server", false, "run a dmsg server inside the visor on the VISOR's OWN key, sharing --transport-port (one identity, one discovery entry, one forwarded port). Pin --transport-port to a port reachable from outside. Ignored when --dmsg-server-conf is set — writes DMSGSERVER in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoDmsgServer, "no-dmsg-server", false, "stop running a dmsg server inside the visor — writes DMSGSERVER=false in skywire.conf")
 	cmd.Flags().StringVar(&v.DmsgServerPublic, "dmsg-server-public", "", "host:port the in-visor dmsg server advertises; empty advertises whatever its listener resolves to, which is only right on a LAN — writes DMSGSERVERPUBLIC in skywire.conf")
+	cmd.Flags().StringVar(&v.DmsgRelayAddr, "dmsg-relay-addr", "", "loopback host:port for the local dmsg relay acceptor, for services that run as a different user than the visor and so cannot open its 0600 unix socket. Requires --dmsg-relay-keys — writes DMSGRELAYADDR in skywire.conf")
+	cmd.Flags().StringVar(&v.DmsgRelayKeys, "dmsg-relay-keys", "", "public keys allowed to attach to the dmsg relay, comma-separated. Required with --dmsg-relay-addr: a TCP acceptor has no filesystem gate — writes DMSGRELAYKEYS in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoDmsgRelay, "no-dmsg-relay", false, "do not serve the local dmsg relay acceptor at all (served by default) — writes NODMSGRELAY in skywire.conf")
 
 	// --- Whitelists ---
 	cmd.Flags().StringVar(&v.DmsgptyPks, "dmsgpty-pks", "", "additional dmsgpty-whitelist PKs (hypervisor PKs are already implicit) — writes DMSGPTYPKS in skywire.conf")
@@ -489,6 +504,12 @@ var envMap = map[string]EnvMapping{
 	"no-dmsg-server": {Key: "DMSGSERVER", Format: EnvFormatBool, Negate: true, Default: "false"},
 	"dmsg-server-public": {Key: "DMSGSERVERPUBLIC", Format: EnvFormatString,
 		Note: "host:port the DMSGSERVER entry advertises. Empty advertises whatever the listener resolves to, which is only right on a LAN."},
+	"dmsg-relay-addr": {Key: "DMSGRELAYADDR", Format: EnvFormatString,
+		Note: "Loopback host:port for the local dmsg relay acceptor. The unix socket is served by default but carries the VISOR's uid at 0600, so a service running as another user cannot open it; this gives those services a way in. Requires DMSGRELAYKEYS."},
+	"dmsg-relay-keys": {Key: "DMSGRELAYKEYS", Format: EnvFormatString,
+		Note: "Comma-separated public keys allowed to attach to the dmsg relay. Required with DMSGRELAYADDR — a TCP acceptor has no filesystem gate, so the key allowlist IS the gate."},
+	"no-dmsg-relay": {Key: "NODMSGRELAY", Format: EnvFormatBool, Default: "false",
+		Note: "Turns the local dmsg relay acceptor off entirely. It is served by default; a process that can open its socket could already read the visor's secret key, so the acceptor grants no more than it has."},
 
 	// Privacy / routing knobs.
 	"min-hops":             {Key: "MINHOPS", Format: EnvFormatInt, Default: "1"},
