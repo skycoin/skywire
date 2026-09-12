@@ -116,8 +116,8 @@ github.com/0magnet/spheregraph v0.0.0-20260906144810-35af719bf2f1 h1:ec89d2yMSHm
 github.com/0magnet/spheregraph v0.0.0-20260906144810-35af719bf2f1/go.mod h1:Lo6dEOjpVn+ra0q7gNWsvxxcd/SUF7Pg3dkRhykOScI=
 github.com/0magnet/sysinfo v1.1.4-0.20260905172033-914ade4a2548 h1:J7C/fYqBFSM4JF9+aRO3/s9f6uyriTQWv40sYc5p8Fg=
 github.com/0magnet/sysinfo v1.1.4-0.20260905172033-914ade4a2548/go.mod h1:X0RvvBVc0OJr+hvmABCWXQlPg7J5AUHsuqJrbBCTP8E=
-github.com/0magnet/termanim v0.0.0-20260912172617-9e520e861b43 h1:YzUN4PdlUI++o3ReMXgEEcOZu/ZIj4XoHq1SF5YONFY=
-github.com/0magnet/termanim v0.0.0-20260912172617-9e520e861b43/go.mod h1:GWNgt2KhsKUcnDh+Fes1xnCo5MgykNIIDWmC+YoMJ3o=
+github.com/0magnet/termanim v0.0.0-20260912180616-5fa253f0fdbd h1:KC5glrnMG3f6mIP2BzEiwthPnAk/I7tiDJshvIEdRt0=
+github.com/0magnet/termanim v0.0.0-20260912180616-5fa253f0fdbd/go.mod h1:GWNgt2KhsKUcnDh+Fes1xnCo5MgykNIIDWmC+YoMJ3o=
 github.com/0magnet/u-root v0.16.1-0.20260907161518-7972ea755b47 h1:uYelfGoqdFDxsKGgiIZ9/cvbrBSR+e6mA29OhVMVlFw=
 github.com/0magnet/u-root v0.16.1-0.20260907161518-7972ea755b47/go.mod h1:YBQz88D4gXBLb9++oXsiZZjfbtRC0bp4c2pduFOyZts=
 github.com/0magnet/websh v0.0.0-20260908184825-10432f75b8da h1:ZQsKIsDkjo4cejCHOATP9x3/QgzziubKJMJjbBKzPFQ=
