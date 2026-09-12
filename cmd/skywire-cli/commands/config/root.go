@@ -211,6 +211,9 @@ var (
 	dmsgServerConf       string
 	dmsgServerOwnKey     bool
 	dmsgServerPublicAddr string
+	dmsgRelayAddr        string
+	dmsgRelayKeys        string
+	noDmsgRelay          bool
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor
