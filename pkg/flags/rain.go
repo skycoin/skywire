@@ -115,6 +115,19 @@ func rainOptions(cmd *cobra.Command) backdrop.Options {
 	return backdrop.Options{
 		Off: plain || cliout.MachineMode(cmd) || os.Getenv(NoRainEnv) != "",
 
+		// Let the rain through the layout's own gaps.
+		//
+		// The default rule makes a line opaque from its first column to its
+		// last word, which for a help screen blanks the column gap between a
+		// flag and its description and between a command and its short — the
+		// widest, most regular holes on the screen, and the ones the rain most
+		// wants to fall through. Three is the smallest value that leaves a
+		// single space between two words solid: a run that short is word
+		// spacing, and a glyph landing in it reads as part of the words either
+		// side. Wider runs are layout, and backdrop keeps a cell of clear at
+		// each end of one so the rain never abuts a word.
+		GapMin: 3,
+
 		// A fresh mask per help screen. It places itself against that
 		// screen's width and the number of rows the text came to, and two
 		// help screens are rarely the same size. See cloud.go.

@@ -80,7 +80,7 @@ require (
 	github.com/0magnet/router7 v0.0.0-20260908180141-0ea01e083539
 	github.com/0magnet/spheregraph v0.0.0-20260906144810-35af719bf2f1
 	github.com/0magnet/sysinfo v1.1.4-0.20260905172033-914ade4a2548
-	github.com/0magnet/termanim v0.0.0-20260911211414-636527028b39
+	github.com/0magnet/termanim v0.0.0-20260912172617-9e520e861b43
 	github.com/0magnet/wfdrive v0.3.1
 	github.com/0magnet/winbox-go v0.0.0-20260908011106-113d480c4188
 	github.com/0magnet/yamux v0.1.3-0.20260905172050-450c4058f851
@@ -137,7 +137,7 @@ require (
 require (
 	github.com/0magnet/go-dsp v0.0.0-20260907230215-136ba239cc2d // indirect
 	github.com/0magnet/u-root v0.16.1-0.20260907161518-7972ea755b47 // indirect
-	github.com/gdamore/tcell/v3 v3.4.2 // indirect
+	github.com/gdamore/tcell/v3 v3.5.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/mdlayher/packet v1.1.2 // indirect

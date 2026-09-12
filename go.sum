@@ -116,8 +116,8 @@ github.com/0magnet/spheregraph v0.0.0-20260906144810-35af719bf2f1 h1:ec89d2yMSHm
 github.com/0magnet/spheregraph v0.0.0-20260906144810-35af719bf2f1/go.mod h1:Lo6dEOjpVn+ra0q7gNWsvxxcd/SUF7Pg3dkRhykOScI=
 github.com/0magnet/sysinfo v1.1.4-0.20260905172033-914ade4a2548 h1:J7C/fYqBFSM4JF9+aRO3/s9f6uyriTQWv40sYc5p8Fg=
 github.com/0magnet/sysinfo v1.1.4-0.20260905172033-914ade4a2548/go.mod h1:X0RvvBVc0OJr+hvmABCWXQlPg7J5AUHsuqJrbBCTP8E=
-github.com/0magnet/termanim v0.0.0-20260911211414-636527028b39 h1:IOyAg4nvougmbCZa0NLkaNqjKBqKqICJD0lNITI2VIM=
-github.com/0magnet/termanim v0.0.0-20260911211414-636527028b39/go.mod h1:+onWL0kYoZ0M0DnO7pXaN0aGeq7KRwXWQf+9vxgiKYY=
+github.com/0magnet/termanim v0.0.0-20260912172617-9e520e861b43 h1:YzUN4PdlUI++o3ReMXgEEcOZu/ZIj4XoHq1SF5YONFY=
+github.com/0magnet/termanim v0.0.0-20260912172617-9e520e861b43/go.mod h1:GWNgt2KhsKUcnDh+Fes1xnCo5MgykNIIDWmC+YoMJ3o=
 github.com/0magnet/u-root v0.16.1-0.20260907161518-7972ea755b47 h1:uYelfGoqdFDxsKGgiIZ9/cvbrBSR+e6mA29OhVMVlFw=
 github.com/0magnet/u-root v0.16.1-0.20260907161518-7972ea755b47/go.mod h1:YBQz88D4gXBLb9++oXsiZZjfbtRC0bp4c2pduFOyZts=
 github.com/0magnet/websh v0.0.0-20260908184825-10432f75b8da h1:ZQsKIsDkjo4cejCHOATP9x3/QgzziubKJMJjbBKzPFQ=
@@ -347,8 +347,8 @@ github.com/gdamore/tcell/v2 v2.0.1-0.20201017141208-acf90d56d591/go.mod h1:vSVL/
 github.com/gdamore/tcell/v2 v2.1.0/go.mod h1:vSVL/GV5mCSlPC6thFP5kfOFdM9MGZcalipmpTxTgQA=
 github.com/gdamore/tcell/v2 v2.13.10 h1:Afs3JKt83HnhuUKdZ3MnxUgOqQRWftj5JyDqv1LLynA=
 github.com/gdamore/tcell/v2 v2.13.10/go.mod h1:+Wfe208WDdB7INEtCsNrAN6O2m+wsTPk1RAovjaILlo=
-github.com/gdamore/tcell/v3 v3.4.2 h1:gGW+6z2Bz5Wl2mNwFlm9+eRmg2JQrWcKjSkL1LRfpNU=
-github.com/gdamore/tcell/v3 v3.4.2/go.mod h1:Oe5U3S3jm3NzypswDNUhe+LUnF5CoFq2b4sepD++QHo=
+github.com/gdamore/tcell/v3 v3.5.0 h1:SCp9czLv2K2aPORgD6+4fjV0xNAzKIkiezCkp6bHLe4=
+github.com/gdamore/tcell/v3 v3.5.0/go.mod h1:Oe5U3S3jm3NzypswDNUhe+LUnF5CoFq2b4sepD++QHo=
 github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d h1:dHYKX8CBAs1zSGXm3q3M15CLAEwPEkwrK1ed8FCo+Xo=
 github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d/go.mod h1:/eFcjDXaU2THSOOqLxOPETIbHETnamk8FA/hMjhg/gU=
 github.com/gen2brain/malgo v0.11.26 h1:k5WcPIKw1bbJAbPqrvNPt7nehPLoaPNcOFde2+eruiM=
