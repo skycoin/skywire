@@ -72,7 +72,8 @@ func TestPublisherCleanupBoundedWithSubscriber(t *testing.T) {
 	// One ~2 MB leaf + a handful of small structural objects per kept Root.
 	// keepLast=1 means ~4 MB steady state. 40 ticks × 2 MB = 80 MB if the
 	// per-Root cleanup is fully defeated; anything past 16 MB is the leak.
-	if vol > 16*1024*1024 {
+	const limit = 16 * 1024 * 1024
+	if vol = awaitVolumeBound(t, cxds, limit, 30*time.Second); vol > limit {
 		t.Errorf("CXDS volume %d > 16 MB — leak with a subscriber connected (per-Root retention should be ~4 MB)", vol)
 	}
 }

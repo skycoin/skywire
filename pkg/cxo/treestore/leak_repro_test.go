@@ -143,7 +143,34 @@ func TestPublisherAsyncCleanupBounded(t *testing.T) {
 	// One stable Root references ~10–12 small structural objects plus
 	// 2 large leaf TreeEntries. Total volume bound: ~6 MB. Anything
 	// larger means the per-tick leak returned.
-	if vol > 8*1024*1024 {
+	const limit = 8 * 1024 * 1024
+	if vol = awaitVolumeBound(t, cxds, limit, 30*time.Second); vol > limit {
 		t.Errorf("CXDS volume %d > 8 MB — async cleanup leak (per-Root retention should be ~6 MB)", vol)
 	}
+}
+
+// awaitVolumeBound waits for CXDS volume to settle at or under limit, and
+// reports the final volume either way.
+//
+// These tests assert an EVENTUAL property — that async cleanup keeps retention
+// bounded — but used to sample it once, immediately, after giving the cleanup
+// goroutine a fixed 20ms per tick to drain. That is enough on an idle machine
+// and not enough on a loaded CI runner, where the three platform lanes failed
+// on every PR while the same tests passed locally five times in a row. Polling
+// keeps exactly the property under test (retention settles within the bound)
+// and drops the assumption about how fast a background goroutine gets
+// scheduled. A real leak never settles, so it still fails — just after the
+// deadline instead of immediately.
+func awaitVolumeBound(t *testing.T, cxds interface{ Volume() (int, int) }, limit int, within time.Duration) int {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	vol, _ := cxds.Volume()
+	for time.Now().Before(deadline) {
+		if vol <= limit {
+			return vol
+		}
+		time.Sleep(100 * time.Millisecond)
+		vol, _ = cxds.Volume()
+	}
+	return vol
 }
