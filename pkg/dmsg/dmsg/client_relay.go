@@ -74,8 +74,8 @@ func (ce *Client) sessionDialer() SessionDialer {
 	return ce.conf.SessionDialer
 }
 
-// AcceptRelaySession runs one attached peer's relay session over conn until
-// the peer hangs up, ctx is canceled, or the client closes; it blocks for the
+// AcceptRelaySession runs one REMOTE peer's relay session over conn until the
+// peer hangs up, ctx is canceled, or the client closes; it blocks for the
 // session's lifetime, so callers run it in the accept loop's goroutine. The
 // client answers the peer's Noise XK handshake as the server side, learns the
 // peer's key from it, and asks allow (if non-nil) whether to keep the peer;
@@ -86,6 +86,20 @@ func (ce *Client) sessionDialer() SessionDialer {
 //
 // conn is closed on every return.
 func (ce *Client) AcceptRelaySession(ctx context.Context, conn net.Conn, allow func(cipher.PubKey) bool) error {
+	return ce.acceptRelaySession(ctx, conn, allow, false)
+}
+
+// AcceptLocalRelaySession is AcceptRelaySession for an attach this HOST made —
+// the unix socket, the loopback listener, or the in-process pipe. Its streams
+// are not charged to the relay budget: that budget bounds what this visor
+// carries for OTHER PEOPLE, and a service the operator runs beside the visor
+// under its own key is not other people. The socket's file mode and
+// allowed_keys are that path's gate.
+func (ce *Client) AcceptLocalRelaySession(ctx context.Context, conn net.Conn, allow func(cipher.PubKey) bool) error {
+	return ce.acceptRelaySession(ctx, conn, allow, true)
+}
+
+func (ce *Client) acceptRelaySession(ctx context.Context, conn net.Conn, allow func(cipher.PubKey) bool, local bool) error {
 	ss, err := makeServerSession(metrics.NewEmpty(), &ce.EntityCommon, conn)
 	if err != nil {
 		_ = conn.Close() //nolint:errcheck
@@ -99,6 +113,7 @@ func (ce *Client) AcceptRelaySession(ctx context.Context, conn net.Conn, allow f
 		return ErrRelayPeerNotAllowed
 	}
 	ss.relayInbound = true
+	ss.relayLocal = local
 
 	ss.sm.mutx.Lock()
 	ss.sm.yamux, err = yamux.Server(conn, YamuxConfig())
