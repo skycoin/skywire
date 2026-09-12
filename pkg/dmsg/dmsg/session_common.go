@@ -54,6 +54,21 @@ type SessionCommon struct {
 	// the relay slots (see bridgeStream). Never set on server entities.
 	relayInbound bool
 
+	// relayLocal narrows relayInbound to an attach this HOST made: the unix
+	// socket, the loopback listener, or the in-process pipe. Those are the
+	// operator's own services running under their own keys beside the visor —
+	// the resolving proxy under a survey-whitelist key is the motivating one —
+	// and they are gated by the socket's file mode and allowed_keys, not by the
+	// relay budget.
+	//
+	// The budget bounds OTHER PEOPLE's traffic. Charging a host's own service
+	// against it conflated the two, with two visible consequences: a visor that
+	// set a negative relay_max_streams to refuse relaying silently black-holed
+	// its OWN resolver, and at the default cap that resolver competed with
+	// strangers for the same slots and was held to the same per-peer quarter
+	// share.
+	relayLocal bool
+
 	netConn net.Conn // underlying net.Conn (TCP connection to the dmsg server)
 	// ys      *yamux.Session
 	// ss      *smux.Session

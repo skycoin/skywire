@@ -72,7 +72,7 @@ func (ce *Client) InProcessRelayDialer(ctx context.Context, allow func(cipher.Pu
 			// guest's dial, which returns as soon as the session handshake
 			// completes. Tying the accept side to it would tear the session
 			// down the moment it came up.
-			if err := ce.AcceptRelaySession(ctx, hostEnd, allow); err != nil {
+			if err := ce.AcceptLocalRelaySession(ctx, hostEnd, allow); err != nil {
 				ce.log.WithError(err).Debug("dmsg in-process relay session ended with error")
 			}
 			_ = hostEnd.Close() //nolint:errcheck
