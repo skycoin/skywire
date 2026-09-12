@@ -135,3 +135,65 @@ func TestReadStatsLeafCopiesBody(t *testing.T) {
 		t.Fatalf("returned body aliases the snapshot: %q", body)
 	}
 }
+
+// TestStatsMaxAgeTracksPublisherCadence pins the staleness bounds to the
+// publisher's republish cadence: network and versions are rewritten every ~12s,
+// daily every ~5m, so the bound for the fast leaves must be far tighter than
+// for daily and both must leave room for a slow-but-live cycle.
+func TestStatsMaxAgeTracksPublisherCadence(t *testing.T) {
+	fast := statsMaxAge(StatsKindNetwork)
+	if got := statsMaxAge(StatsKindVersions); got != fast {
+		t.Fatalf("versions bound = %v, want the same as network (%v)", got, fast)
+	}
+	if fast <= 12*time.Second {
+		t.Fatalf("network bound %v leaves no room for a slow publish (cadence ~12s)", fast)
+	}
+	if fast >= 5*time.Minute {
+		t.Fatalf("network bound %v is too loose to catch a stopped cycle", fast)
+	}
+	daily := statsMaxAge(StatsKindDaily)
+	if daily <= 5*time.Minute {
+		t.Fatalf("daily bound %v is tighter than the ~5m publish cadence", daily)
+	}
+	if daily <= fast {
+		t.Fatalf("daily bound %v must exceed the fast-leaf bound %v", daily, fast)
+	}
+}
+
+// TestStatsFreshnessGate is the read-path decision FetchTPDStatsCXO makes
+// around readStatsLeaf: a present leaf is only servable while it is within the
+// bound for its kind. Before this gate existed a present-but-stale leaf was
+// returned unconditionally, which is how `cli tp net-stats` came to report a
+// total 34% above the live endpoint, frozen for twenty minutes.
+func TestStatsFreshnessGate(t *testing.T) {
+	raw, err := json.Marshal(tpdapi.NetworkStats{Total: 11551, UniqueVisors: 912})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	maxAge := statsMaxAge(StatsKindNetwork)
+
+	for _, tc := range []struct {
+		name     string
+		age      time.Duration
+		servable bool
+	}{
+		{"just published", 0, true},
+		{"within bound", maxAge - time.Second, true},
+		{"past bound", maxAge + time.Second, false},
+		{"cycle long stopped", 20 * time.Minute, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mgr := fakeStatsSnapshot{
+				bodies: map[string][]byte{tpdapi.StatsPathNetwork: cxoutils.Gzip(raw)},
+				at:     time.Now().Add(-tc.age),
+			}
+			_, ts, ok := readStatsLeaf(mgr, tpdapi.StatsPathNetwork)
+			if !ok {
+				t.Fatal("readStatsLeaf missed a present leaf")
+			}
+			if servable := time.Since(ts) <= maxAge; servable != tc.servable {
+				t.Fatalf("leaf aged %v servable = %v, want %v", tc.age, servable, tc.servable)
+			}
+		})
+	}
+}
