@@ -37,7 +37,7 @@ import (
 // breaks it into speckle, the outline goes with it, and what is left reads as
 // noise rather than as a logo. A terminal without room for a size that
 // resolves the slashes gets no logo at all, which is the better failure.
-var sizes = []int{15, 18, 22}
+var sizes = []int{15, 18, 22, 26, 30, 36}
 
 // coverage is the share of a cell that must be inside the logo for the cell to
 // count as inside. Half: the shape is a solid blob with a soft edge, and a

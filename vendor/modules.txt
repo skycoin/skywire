@@ -117,7 +117,7 @@ github.com/0magnet/spheregraph
 ## explicit; go 1.22
 github.com/0magnet/sysinfo
 github.com/0magnet/sysinfo/cpuid
-# github.com/0magnet/termanim v0.0.0-20260911211414-636527028b39
+# github.com/0magnet/termanim v0.0.0-20260912172617-9e520e861b43
 ## explicit; go 1.26.0
 github.com/0magnet/termanim/canvas
 github.com/0magnet/termanim/matrix
@@ -502,7 +502,7 @@ github.com/gdamore/tcell/v2/terminfo/x/xfce
 github.com/gdamore/tcell/v2/terminfo/x/xterm
 github.com/gdamore/tcell/v2/terminfo/x/xterm_ghostty
 github.com/gdamore/tcell/v2/terminfo/x/xterm_kitty
-# github.com/gdamore/tcell/v3 v3.4.2
+# github.com/gdamore/tcell/v3 v3.5.0
 ## explicit; go 1.25.0
 github.com/gdamore/tcell/v3
 github.com/gdamore/tcell/v3/color

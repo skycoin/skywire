@@ -152,7 +152,7 @@ func (f *Frame) FromMatrix(m *matrix.Matrix, dim int) {
 				// rain that is denser here rather than as something stamped on.
 				r = m.GlyphAt(x, y)
 			}
-			f.Set(x, y, Cell{Rune: r, Fg: pal[n], Bold: c.Hot && lit})
+			f.Set(x, y, Cell{Rune: r, Fg: tintAt(f.mask, x, y, pal[n]), Bold: c.Hot && lit})
 		}
 	}
 }
