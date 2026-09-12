@@ -4,6 +4,7 @@
 package geoip
 
 import (
+	"math"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -67,7 +68,9 @@ func TestOpenMapped_UnwritableDirFails(t *testing.T) {
 		t.Skip("root can write anywhere")
 	}
 	ro := t.TempDir()
-	require.NoError(t, os.Chmod(ro, 0o500))
+	// 0o500 is the subject of the test: a directory the process may traverse but
+	// not write. G302's 0600 ceiling is about files, not this.
+	require.NoError(t, os.Chmod(ro, 0o500)) //nolint:gosec // G302: intentionally non-writable dir
 	_, err := openMapped(filepath.Join(ro, "skywire"))
 	require.Error(t, err, "Shared() falls back to the in-memory reader on this error")
 }
@@ -85,7 +88,29 @@ func TestOpenMapped_HeapFootprint(t *testing.T) {
 	defer r.Close() //nolint:errcheck
 	runtime.GC()
 	runtime.ReadMemStats(&after)
-	t.Logf("mapped: heap +%d KiB", (int64(after.HeapInuse)-int64(before.HeapInuse))/1024)
+	// Heap sizes here are far below the int64 ceiling; the helper keeps the
+	// signed subtraction (the delta can legitimately be negative) without an
+	// unchecked uint64→int64 conversion at the call site.
+	t.Logf("mapped: heap +%d KiB", heapDeltaKiB(before.HeapInuse, after.HeapInuse))
 
 	t.Logf("in-memory: heap +%d KiB pinned by EmbeddedDB()", len(EmbeddedDB())/1024)
+}
+
+// heapDeltaKiB reports after-before in KiB. Both are runtime.MemStats byte
+// counts, so the subtraction is done in the unsigned domain and only the
+// (small) result is signed — a direct int64(x) on each operand is an
+// unchecked narrowing that gosec flags, and rightly so as a habit.
+func heapDeltaKiB(before, after uint64) int64 {
+	d, neg := after-before, false
+	if after < before {
+		d, neg = before-after, true
+	}
+	d /= 1024
+	if d > math.MaxInt64 {
+		d = math.MaxInt64
+	}
+	if neg {
+		return -int64(d)
+	}
+	return int64(d)
 }

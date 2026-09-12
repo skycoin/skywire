@@ -136,7 +136,7 @@ func TestDmsgServerRole_NoTransitAndPK(t *testing.T) {
 // A visor that nominates nobody and relays for nobody reports empty lists and
 // the cap it would enforce if anyone attached.
 func TestDmsgRelayRole_Idle(t *testing.T) {
-	role := dmsgRelayRole(skyenv.DmsgRelayPort, nil, nil, nil, 0, 4096, 0)
+	role := dmsgRelayRole(nil, nil, nil, 0, 4096, 0)
 
 	require.Equal(t, skyenv.DmsgRelayPort, role.Port)
 	require.Empty(t, role.RelayPeers)
@@ -154,7 +154,7 @@ func TestDmsgRelayRole_AttachedNominees(t *testing.T) {
 	unreached, _ := cipher.GenerateKeyPair()
 	server, _ := cipher.GenerateKeyPair()
 
-	role := dmsgRelayRole(skyenv.DmsgRelayPort,
+	role := dmsgRelayRole(
 		[]cipher.PubKey{hub, unreached},
 		[]dmsgSessionView{
 			{PK: hub, Carrier: "skynet", Streams: 3, LatencyMS: 42},
@@ -178,7 +178,7 @@ func TestDmsgRelayRole_RelayingForPeers(t *testing.T) {
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
 
-	role := dmsgRelayRole(skyenv.DmsgRelayPort, nil, nil,
+	role := dmsgRelayRole(nil, nil,
 		map[cipher.PubKey]int{a: 2, b: 5}, 7, 4096, 3)
 
 	require.Len(t, role.RelayClients, 2)
@@ -201,7 +201,7 @@ func TestDmsgRelayRole_RelayingForPeers(t *testing.T) {
 // A negative cap is the "never relay for anyone" setting, and stays visible as
 // such rather than being normalized away.
 func TestDmsgRelayRole_RefusesToRelay(t *testing.T) {
-	role := dmsgRelayRole(skyenv.DmsgRelayPort, nil, nil, nil, 0, -1, 0)
+	role := dmsgRelayRole(nil, nil, nil, 0, -1, 0)
 	require.Equal(t, -1, role.MaxRelayedStreams)
 	require.Empty(t, role.RelayClients)
 }

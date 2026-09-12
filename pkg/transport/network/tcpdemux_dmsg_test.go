@@ -103,7 +103,7 @@ func TestTCPDemux_WithoutDmsgKeepsStcprCatchAll(t *testing.T) {
 
 	other := dmsgFrame(48)
 	speak(t, addr, other)
-	wantOn(t, d.STCPR(), other, "an unrecognised opener with dmsg not sharing")
+	wantOn(t, d.STCPR(), other, "an unrecognized opener with dmsg not sharing")
 }
 
 // The shared listener is handed out only when the factory asked for it, and it

@@ -180,7 +180,6 @@ func (v *Visor) RolesSnapshot() *RolesSnapshot {
 		})
 	}
 	r.DmsgRelay = dmsgRelayRole(
-		skyenv.DmsgRelayPort,
 		v.dmsgC.RelayPeers(),
 		sessions,
 		v.dmsgC.RelaySessionStreams(),
@@ -246,11 +245,11 @@ const (
 // client holds (to pair a nominee with the carrier it was reached over),
 // clientStreams the per-peer stream count of the peers attached to this visor,
 // and relayed/max the slot usage against the configured cap.
-func dmsgRelayRole(port uint16, nominees []cipher.PubKey, sessions []dmsgSessionView,
+func dmsgRelayRole(nominees []cipher.PubKey, sessions []dmsgSessionView,
 	clientStreams map[cipher.PubKey]int, relayed, maxStreams, refused int) DmsgRelayRole {
 
 	role := DmsgRelayRole{
-		Port:              port,
+		Port:              skyenv.DmsgRelayPort,
 		RelayPeers:        sortedPKs(nominees),
 		RelayedStreams:    relayed,
 		MaxRelayedStreams: maxStreams,
@@ -265,12 +264,7 @@ func dmsgRelayRole(port uint16, nominees []cipher.PubKey, sessions []dmsgSession
 		if _, ok := nominated[s.PK]; !ok {
 			continue
 		}
-		role.Attached = append(role.Attached, DmsgRelayAttachment{
-			PK:        s.PK,
-			Carrier:   s.Carrier,
-			Streams:   s.Streams,
-			LatencyMS: s.LatencyMS,
-		})
+		role.Attached = append(role.Attached, DmsgRelayAttachment(s))
 	}
 	sort.Slice(role.Attached, func(i, j int) bool { return role.Attached[i].PK.String() < role.Attached[j].PK.String() })
 
