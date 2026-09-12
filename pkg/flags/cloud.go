@@ -3,23 +3,20 @@
 // The cloud in the rain.
 //
 // On a terminal wide enough to have room to spare beside the help text, the
-// Skycoin cloud appears in it — a field of the logo's own blue with the rain
-// falling through it as a knockout, the same glyphs in the same streams, drawn
-// black where they cross the mark and green everywhere else.
+// Skycoin cloud appears in it — not drawn over the rain but made of it. Cells
+// inside the silhouette are lit to a dim floor with the glyph the rain already
+// holds at that position, so the mark is the same alphabet scrambling in the
+// same streams, and the streams still fall visibly brighter through it.
 //
-// The color is the shape and the rain is only what passes over it. Three
-// earlier attempts had it the other way round and each failed for the same
-// reason: the rain is mostly gaps and its streams are vertical, so anything
-// that draws a shape *out of* the rain is at the mercy of where the rain
-// happens to be. Brightening the lit cells traced the streams. Filling the
-// dark ones with the rain's glyphs made a picture out of katakana. Recoloring
-// only the lit cells was the prettiest and the least legible of the three.
+// Brightening the rain that was already there does not work, and the reason is
+// worth keeping: the rain is mostly gaps and its streams are vertical, so
+// scaling only the lit cells traces the streams rather than the shape. Filling
+// the silhouette to a floor is what makes it findable.
 //
 // The shape is Skycoin's own, from the logo skycoin/skycoin serves in its block
 // explorer — a cloud cut by diagonal slashes. The slashes are what distinguish
 // it from any other cloud, and they are also what costs the resolution: see
-// gencloud for why there is no small variant. They survive at one cell wide
-// here because the wash does not depend on a stream falling in them.
+// gencloud for why there is no small variant.
 //
 // It costs nothing when there is no room. The whole thing is gated on width:
 // the help text is wrapped to a hardcoded 80 columns (see HelpWidth), which is
@@ -46,10 +43,30 @@ const (
 	// cloudRowRoom is the rows that must be left over after the logo, so it
 	// never fills the screen top to bottom.
 	cloudRowRoom = 2
+
+	// cloudFloor is the least the rain may be inside the shape, on the 0-255
+	// scale its palette is indexed by.
+	//
+	// This is what makes the logo legible. Brightening the cells the rain
+	// already lit is not enough on its own — the rain is mostly gaps and its
+	// streams run vertically, so brightening traces the streams and not the
+	// shape. Lighting every cell inside the silhouette to a dim floor draws
+	// the outline; the streams still fall through it at their own brightness,
+	// four times this and up, so the shape reads as rain that is denser here
+	// rather than as a panel behind the rain.
+	//
+	// 95 against trails that run to 200. The mark is a cloud cut by diagonal
+	// slashes, and the slashes are the part that identifies it: they are one or
+	// two cells wide, which is also the width of the rain's own gaps, so the
+	// filled bands have to sit clearly above an ordinary trail cell or the
+	// slashes read as more rain. Higher flattens the streams into an even block
+	// and loses the weather; lower and the mark stops being a Skycoin cloud and
+	// becomes a cloud.
+	cloudFloor = 95
 )
 
-// cloudMask washes the logo's silhouette in Skycoin blue and knocks the rain
-// through it in black, when there is room for it beside the help text.
+// cloudMask brightens the rain inside the logo's silhouette, when there is
+// room for it beside the help text.
 //
 // It implements backdrop.Fitter because neither half of the placement can be
 // known when the options are built: the screen width is settled inside the
@@ -91,7 +108,7 @@ func (c *cloudMask) Fit(cols, rows int) {
 
 	for i := len(cloudShapes) - 1; i >= 0; i-- {
 		shape := cloudShapes[i]
-		st := backdrop.Stencil{Rows: shape}
+		st := backdrop.Stencil{Rows: shape, Floor: cloudFloor}
 		w, h := st.Size()
 		if w > free || h+cloudRowRoom > rows {
 			continue
@@ -103,57 +120,37 @@ func (c *cloudMask) Fit(cols, rows int) {
 	}
 }
 
-// WashAt implements backdrop.Washer: the silhouette is a solid field of
-// Skycoin blue, painted whether or not the rain lit the cell.
+// TintAt implements backdrop.Tinter: inside the silhouette the rain runs
+// Skycoin blue instead of green.
 //
-// This is what finally makes the mark read, and it took three tries to get
-// here. Brightening the rain inside the shape traced the streams instead of
-// the shape, because the streams are vertical and the shape is not. Lighting
-// the shape's dark cells with the rain's own glyphs made it solid but turned
-// it into a picture made of katakana rather than rain. Recoloring only the
-// cells the rain lit was prettiest and least legible of all: the rain is
-// mostly gaps, so the mark came out as a handful of blue smears.
+// This is what makes the logo findable at a glance. Brightness alone leaves it
+// green among green — a shape you can see once you know it is there and lose
+// the moment you look away, which is not much of an easter egg. The mark has a
+// color of its own, and borrowing it separates the cloud from the rain while
+// the glyphs, their scrambling and their falling stay exactly what they were.
 //
-// Painting the background leaves the rain exactly as sparse as it was and
-// makes the region solid anyway. The outline is crisp and the diagonal slashes
-// survive at one cell wide, because neither depends on a stream happening to
-// fall there.
-func (c *cloudMask) WashAt(x, y int) (int32, int32, int32, bool) {
-	if !c.on || !c.st.Covers(x, y) {
-		return 0, 0, 0, false
-	}
-	return cloudR, cloudG, cloudB, true
-}
-
-// TintAt implements backdrop.Tinter: the rain crossing the silhouette is drawn
-// black, so it reads as a knockout through the blue rather than as glyphs laid
-// on top of it.
-//
-// Black rather than a darkened green: against the wash the point is contrast,
-// not hue, and the rain keeps its shape — the same glyphs in the same streams,
-// scrambling as they always do — while the color behind them is the logo. What
-// falls through the slashes stays green, which is what keeps the mark looking
-// like weather passing behind something rather than a panel with a pattern.
+// The cell's own brightness is carried over rather than replaced: the green is
+// reduced to a level and that level is applied to the blue, so trails still
+// read as trails and the hot heads still flare inside the shape. A flat fill
+// would turn the logo into a panel, which is the thing this has avoided all
+// along.
 func (c *cloudMask) TintAt(x, y int, r, g, b int32) (int32, int32, int32) {
 	if !c.on || !c.st.Covers(x, y) {
 		return r, g, b
 	}
-	return 0, 0, 0
+	// Luma of the green the palette gave this cell, as a 0-255 level. The ramp
+	// is overwhelmingly green, so this tracks the trail's falloff closely while
+	// still lifting the white-hot heads.
+	lvl := (r*30 + g*59 + b*11) / 100
+	return cloudR * lvl / 255, cloudG * lvl / 255, cloudB * lvl / 255
 }
 
-// The blue the silhouette is washed in: #002d66, the logo's own #0072ff taken
-// down to something that sits behind the rain rather than in front of it.
-//
-// Dimmed because it can be. The shape comes from the wash covering every cell
-// of the silhouette, not from the color being loud, so the mark stays exactly
-// as crisp at a fifth of the brightness — the slashes are cut by which cells
-// are washed, and that does not change. At full strength the cloud reads as a
-// panel bolted over the screen; at this one it reads as something the rain is
-// falling in front of, which is the effect worth having.
+// The Skycoin blue the silhouette is drawn in, #0072ff — the fill color of the
+// logo gencloud sampled the shape from.
 const (
 	cloudR = 0x00
-	cloudG = 0x2d
-	cloudB = 0x66
+	cloudG = 0x72
+	cloudB = 0xff
 )
 
 // IntensityAt implements backdrop.Mask. With no room found, every cell is
