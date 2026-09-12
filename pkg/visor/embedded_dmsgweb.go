@@ -31,12 +31,14 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/dmsgweb"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxystatus"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -501,8 +503,21 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 			Info("Auto-chaining dmsgweb → skynetweb for unified proxy")
 	}
 
+	// Run under the configured key when one is set, borrowing the visor's
+	// client otherwise. A failure here is not fatal: falling back to the
+	// visor's identity keeps the resolver working, and the log says the
+	// identity is not the configured one — which is the part an operator has
+	// to know, since the survey whitelist is keyed on it.
+	resolverC, resolverPK := v.dmsgC, v.conf.PK
+	if guest, guestPK, err := v.dmsgWebGuestClient(ctx, cfg, log); err != nil {
+		log.WithError(err).Error("dmsg_web secret_key configured but its client could not be attached; " +
+			"falling back to the visor's identity")
+	} else if guest != nil {
+		resolverC, resolverPK = guest, guestPK
+	}
+
 	aliases, dmsgSet := resolverAliasesAndDmsgServers(v)
-	runtime := newEmbeddedDmsgWeb(ctx, v.dmsgC, v.dmsgDC, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, aliases, dmsgSet, cfg, log)
+	runtime := newEmbeddedDmsgWeb(ctx, resolverC, v.dmsgDC, resolverPK, v.services.SelfDial, v.services.SelfDialAs, aliases, dmsgSet, cfg, log)
 	runtime.statusProvider = v.proxyStatusProvider()
 	v.initLock.Lock()
 	v.embeddedDmsgWeb = runtime
@@ -546,4 +561,46 @@ func buildDmsgWebAppFunc(rt *EmbeddedDmsgWeb, log *logging.Logger) appcommon.App
 		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 		return nil
 	}
+}
+
+// dmsgWebGuestClient builds the resolver's own dmsg client when
+// dmsg_web.secret_key is set, attached in-process to the visor's relay.
+//
+// Returns (nil, zero, nil) when no key is configured — the common case, where
+// the resolver borrows the visor's client and answers as the visor.
+//
+// The guest is RelayOnly + NoRegister: one session, to this visor, over an
+// in-memory pipe, and no discovery entry. That is what separates it from the
+// second full dmsg client this replaces — see dmsg.AttachInProcess for why a
+// registering guest is the thing that got removed in #4500/#4501 and this is
+// not it.
+func (v *Visor) dmsgWebGuestClient(ctx context.Context, cfg *visorconfig.DmsgWebConfig, log *logging.Logger) (*dmsg.Client, cipher.PubKey, error) {
+	if cfg == nil || cfg.SecretKey == nil || *cfg.SecretKey == (cipher.SecKey{}) {
+		return nil, cipher.PubKey{}, nil
+	}
+	sk := *cfg.SecretKey
+	pk, err := sk.PubKey()
+	if err != nil {
+		return nil, cipher.PubKey{}, fmt.Errorf("invalid dmsg_web.secret_key: %w", err)
+	}
+
+	glog := v.MasterLogger().PackageLogger("dmsg_web_identity")
+	guest := dmsg.NewClient(pk, sk, direct.NewClient(nil, glog), &dmsg.Config{
+		MinSessions: 1,
+		RelayOnly:   true,
+		NoRegister:  true,
+		ClientType:  "resolver",
+	})
+	guest.SetLogger(glog)
+
+	if err := dmsg.AttachInProcess(ctx, v.dmsgC, guest, skyenv.DmsgRelayPort, nil); err != nil {
+		_ = guest.Close() //nolint:errcheck
+		return nil, cipher.PubKey{}, err
+	}
+	go guest.Serve(ctx)
+	v.pushCloseStack("dmsg_web_identity", guest.Close)
+
+	log.WithField("resolver_pk", pk).WithField("host_pk", v.conf.PK).
+		Info("Resolver running under its own dmsg identity, attached in-process to this visor")
+	return guest, pk, nil
 }
