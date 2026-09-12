@@ -12,7 +12,7 @@ import (
 // whatever f.done happened to hold when it returned, which raced its own
 // stopper: the grace timer captures f.done, nils the field, cancels the
 // context and then waits on its captured copy. The loop therefore woke on a
-// context that was cancelled only AFTER the field had already been nilled,
+// context that was canceled only AFTER the field had already been nilled,
 // and paniced with "close of nil channel" — taking the whole visor down, on
 // every visor, as soon as boot got far enough to acquire and release a feed.
 //

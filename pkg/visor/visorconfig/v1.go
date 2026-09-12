@@ -307,7 +307,7 @@ type DmsgWebConfig struct {
 	// Enable must be true for the resolver to start.
 	Enable bool `json:"enable"`
 	// SecretKey runs the resolver under its OWN dmsg identity instead of the
-	// visor's. Unset (the default) keeps today's behaviour: the resolver
+	// visor's. Unset (the default) keeps today's behavior: the resolver
 	// borrows v.dmsgC and answers as the visor.
 	//
 	// It exists because some keys cannot move. The survey whitelist knows the

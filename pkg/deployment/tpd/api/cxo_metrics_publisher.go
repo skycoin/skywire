@@ -443,7 +443,7 @@ func (m *MetricsCXOPublisher) LastError() error {
 // gzipRecords is the gzipped JSON array of metrics, streamed one record at a
 // time straight into the compressor. The output is byte-identical to
 // gzip(json.Marshal(metrics)) — "[]" for an empty or nil slice — but the whole
-// JSON body is never held: a day of metrics marshalled to ~130 MB before
+// JSON body is never held: a day of metrics marshaled to ~130 MB before
 // compression and was built twice (whole, then per part), which is what pushed
 // the TPD's heap to multi-GB peaks every minute (2026-09-10 heap profile).
 func gzipRecords(metrics []store.TransportMetric) ([]byte, error) {

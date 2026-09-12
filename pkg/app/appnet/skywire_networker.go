@@ -123,7 +123,7 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 	//
 	// min_hops stays global, because it IS a visor-wide property: enough hops
 	// keeps an intermediate from learning the true source and destination
-	// rather than just its neighbours. That is why min-hops is read through the
+	// rather than just its neighbors. That is why min-hops is read through the
 	// router — opts.MinHops == 0 means "inherit Config.MinHops", so testing
 	// opts alone let a VPN client configured for min_hops=3 take this shortcut
 	// and get a single direct hop, bypassing the privacy constraint before
