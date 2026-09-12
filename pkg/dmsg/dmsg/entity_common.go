@@ -184,6 +184,8 @@ type EntityCommon struct {
 	// bridging on the same server is not counted. Set on Server entities.
 	maxRelayedStreams int
 	relayedStreams    int64
+	relayShare        map[cipher.PubKey]int64
+	relayShareMx      sync.Mutex
 
 	// acceptRelayedRequests admits a stream request over a CLIENT session
 	// whose SrcAddr.PK is not the session's remote key (see
@@ -436,25 +438,84 @@ func (c *EntityCommon) peerAnnounceAllowed(remotePK cipher.PubKey) bool {
 	return c.peerAnnounceAllowedFunc(remotePK)
 }
 
-// tryAcquireRelaySlot reserves capacity for one peer-relayed stream,
-// reporting false when the server is already at maxRelayedStreams. A
-// zero/unset cap means relaying is not configured (client entities) —
-// reject rather than relay unbounded. Pair every true return with a
-// releaseRelaySlot.
-func (c *EntityCommon) tryAcquireRelaySlot() bool {
+// relayPeerShareDivisor bounds how much of the global relay budget any ONE
+// attached peer may hold: maxRelayedStreams / this. The global cap alone is
+// not a fair share — it is a single counter, so the first peer to open 4096
+// streams starves every other peer on the hub, and the victims see refused
+// streams that look like unreachable services rather than a busy relay.
+//
+// A hub is exactly where that matters. Visors attach to a visor co-resident
+// with a dmsg server precisely because it is well connected, so the peers
+// sharing one budget are many and mutually unaware. libp2p's circuit relay
+// pairs its global reservation cap with a per-peer circuit cap for this
+// reason; a global-only cap was one of the things that made v1 relays "an
+// expensive proposition requiring dedicated hosts".
+//
+// Four is deliberately generous: it bounds the blast radius to a quarter
+// rather than partitioning the budget evenly across an unknown peer count,
+// which would starve a legitimate heavy user to protect against a
+// hypothetical one. An operator who wants a tighter share lowers
+// dmsg.relay_max_streams, which now takes effect (it was silently dropped by
+// the config codec until #4811).
+const relayPeerShareDivisor = 4
+
+// maxRelayedStreamsPerPeer is the per-peer ceiling, never below one: a cap so
+// small that the share rounds to zero would refuse every relayed stream and
+// read as a broken relay rather than a strict one.
+func (c *EntityCommon) maxRelayedStreamsPerPeer() int64 {
+	share := int64(c.maxRelayedStreams) / relayPeerShareDivisor
+	if share < 1 {
+		return 1
+	}
+	return share
+}
+
+// tryAcquireRelaySlot reserves capacity for one peer-relayed stream on behalf
+// of peer, reporting false when either the global budget or that peer's share
+// of it is exhausted. A zero/unset cap means relaying is not configured
+// (client entities) — reject rather than relay unbounded. Pair every true
+// return with a releaseRelaySlot for the same peer.
+func (c *EntityCommon) tryAcquireRelaySlot(peer cipher.PubKey) bool {
 	if c.maxRelayedStreams <= 0 {
 		return false
 	}
+	perPeer := c.maxRelayedStreamsPerPeer()
+
+	c.relayShareMx.Lock()
+	if c.relayShare == nil {
+		c.relayShare = make(map[cipher.PubKey]int64)
+	}
+	if c.relayShare[peer] >= perPeer {
+		c.relayShareMx.Unlock()
+		return false
+	}
+	c.relayShare[peer]++
+	c.relayShareMx.Unlock()
+
 	if atomic.AddInt64(&c.relayedStreams, 1) > int64(c.maxRelayedStreams) {
 		atomic.AddInt64(&c.relayedStreams, -1)
+		c.releasePeerShare(peer)
 		return false
 	}
 	return true
 }
 
 // releaseRelaySlot returns a slot reserved by tryAcquireRelaySlot.
-func (c *EntityCommon) releaseRelaySlot() {
+func (c *EntityCommon) releaseRelaySlot(peer cipher.PubKey) {
 	atomic.AddInt64(&c.relayedStreams, -1)
+	c.releasePeerShare(peer)
+}
+
+// releasePeerShare drops one of peer's held slots, deleting the entry at zero
+// so the map tracks live relaying rather than every peer ever seen.
+func (c *EntityCommon) releasePeerShare(peer cipher.PubKey) {
+	c.relayShareMx.Lock()
+	defer c.relayShareMx.Unlock()
+	if n := c.relayShare[peer]; n > 1 {
+		c.relayShare[peer] = n - 1
+	} else {
+		delete(c.relayShare, peer)
+	}
 }
 
 // promoteToPeer files an announced inbound session in the server's peer
