@@ -5,9 +5,12 @@ import (
 	"context"
 	"net"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -191,4 +194,86 @@ func TestLocalRelaySessionDialerRejectsOtherCarriers(t *testing.T) {
 	_, err := d.SessionDialer()(context.Background(), CarrierTCP, "1.2.3.4:80")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unsupported carrier")
+}
+
+// TestAttachedClientRestsInsteadOfHuntingServers is the regression for the
+// serve loop treating a SUCCESSFUL attach as "nothing to connect to".
+//
+// relayEntries() lists nominees that still NEED a session, so an attached
+// client's list is empty precisely because its one nominee is connected; its
+// discovery is empty by design. The loop read both emptinesses together as a
+// failure and warned + backed off on a client that was up and serving. The
+// symptom in production was `dmsg web --attach` logging "No entries found"
+// every few seconds forever while it answered requests correctly.
+//
+// The assertion is behavioral rather than log-scraping: once ready, the client
+// must SETTLE — the same single relay session, still on the skynet carrier,
+// across several backoff intervals. A client stuck in the old path re-entered
+// discovery on every pass, so it could not be relied on to hold still.
+func TestAttachedClientRestsInsteadOfHuntingServers(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "relay.sock")
+	lis, err := net.Listen("unix", sock)
+	require.NoError(t, err)
+
+	relay, _ := newLocalRelayTestClient(t, "rest-acceptor", false, DefaultClientMaxRelayedStreams)
+	defer relay.Close() //nolint:errcheck
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	go func() {
+		_ = relay.ServeLocalRelay(ctx, lis, 70, nil) //nolint:errcheck
+	}()
+
+	attached, _ := newLocalRelayTestClient(t, "rest-client", true, 0)
+	// A logger private to this client: the package-level logger is shared with
+	// every other client in the test binary, and redirecting IT races with their
+	// serve goroutines.
+	logs := &syncBuffer{}
+	lr := logrus.New()
+	lr.SetOutput(logs)
+	lr.SetLevel(logrus.DebugLevel)
+	attached.SetLogger(&logging.Logger{FieldLogger: lr})
+	defer attached.Close() //nolint:errcheck
+
+	_, err = attached.AttachLocalRelay(ctx, "unix", sock)
+	require.NoError(t, err)
+	go attached.Serve(ctx)
+
+	select {
+	case <-attached.Ready():
+	case <-ctx.Done():
+		t.Fatal("attached client never became ready")
+	}
+
+	// sessionsSatisfied is what the fixed guard consults; it must agree that a
+	// relay-only client holding its relay session wants nothing more.
+	require.True(t, attached.sessionsSatisfied(),
+		"a relay-only client on its relay must be satisfied, else the loop hunts for servers")
+
+	// The symptom itself: a satisfied attached client must stop re-entering
+	// discovery. Each pass through the old path emitted this warning and grew
+	// the backoff; the fixed path blocks until a session drops.
+	time.Sleep(1500 * time.Millisecond)
+	require.Zero(t, strings.Count(logs.String(), "No entries found"),
+		"a serving attached client must not report \"No entries found\"")
+	require.Len(t, attached.AllSessions(), 1, "still exactly one session")
+}
+
+// syncBuffer is a logrus output sink the test can read while the serve
+// goroutine is still writing to it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
