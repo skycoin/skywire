@@ -219,7 +219,11 @@ type Values struct {
 	DmsgwebUpstream   string // DMSGWEBUPSTREAM
 	SkynetwebUpstream string // SKYNETWEBUPSTREAM
 	DmsgwebAddr       string // DMSGWEBADDR
-	SkynetwebAddr     string // SKYNETWEBADDR
+	// DmsgwebSK runs the embedded resolver under this secret key instead of the
+	// visor's — writes DMSGWEBSK. For a key the deployment already knows and
+	// cannot rotate, such as a survey whitelist.
+	DmsgwebSK     string // DMSGWEBSK
+	SkynetwebAddr string // SKYNETWEBADDR
 
 	// --- Skychat ---
 	Skychat         bool
@@ -387,6 +391,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().StringVar(&v.DmsgwebUpstream, "dmsgweb-upstream", "", "upstream SOCKS5 for non-.dmsg traffic (empty chains to skynetweb) — writes DMSGWEBUPSTREAM in skywire.conf")
 	cmd.Flags().StringVar(&v.SkynetwebUpstream, "skynetweb-upstream", "", "upstream SOCKS5 for non-.skynet traffic — writes SKYNETWEBUPSTREAM in skywire.conf")
 	cmd.Flags().StringVar(&v.DmsgwebAddr, "dmsgweb-addr", "", "host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN) — writes DMSGWEBADDR in skywire.conf")
+	cmd.Flags().StringVar(&v.DmsgwebSK, "dmsgweb-sk", "", "secret key the embedded resolver answers under, instead of the visor's; attached in-process so it costs one session and no discovery entry — writes DMSGWEBSK in skywire.conf")
 	cmd.Flags().StringVar(&v.SkynetwebAddr, "skynetweb-addr", "", "host the .skynet SOCKS5 proxy binds to — writes SKYNETWEBADDR in skywire.conf")
 
 	// --- Skychat ---
@@ -558,12 +563,14 @@ var envMap = map[string]EnvMapping{
 	"proxywl":          {Key: "PROXYSERVERWL", Format: EnvFormatBashArray},
 
 	// SOCKS5 web bridges
-	"dmsgweb":            {Key: "DMSGWEB", Format: EnvFormatBool},
-	"no-dmsgweb":         {Key: "DMSGWEB", Format: EnvFormatBool, Negate: true},
-	"skynetweb":          {Key: "SKYNETWEB", Format: EnvFormatBool},
-	"no-skynetweb":       {Key: "SKYNETWEB", Format: EnvFormatBool, Negate: true},
-	"dmsgweb-upstream":   {Key: "DMSGWEBUPSTREAM", Format: EnvFormatString},
-	"dmsgweb-addr":       {Key: "DMSGWEBADDR", Format: EnvFormatString},
+	"dmsgweb":          {Key: "DMSGWEB", Format: EnvFormatBool},
+	"no-dmsgweb":       {Key: "DMSGWEB", Format: EnvFormatBool, Negate: true},
+	"skynetweb":        {Key: "SKYNETWEB", Format: EnvFormatBool},
+	"no-skynetweb":     {Key: "SKYNETWEB", Format: EnvFormatBool, Negate: true},
+	"dmsgweb-upstream": {Key: "DMSGWEBUPSTREAM", Format: EnvFormatString},
+	"dmsgweb-addr":     {Key: "DMSGWEBADDR", Format: EnvFormatString},
+	"dmsgweb-sk": {Key: "DMSGWEBSK", Format: EnvFormatString,
+		Note: "Secret key the embedded resolver answers under instead of the visor's. For a key the deployment already knows and cannot rotate (a survey whitelist). Attached in-process: one session, no discovery entry."},
 	"skynetweb-addr":     {Key: "SKYNETWEBADDR", Format: EnvFormatString},
 	"skynetweb-upstream": {Key: "SKYNETWEBUPSTREAM", Format: EnvFormatString},
 

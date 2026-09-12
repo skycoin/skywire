@@ -213,6 +213,7 @@ var (
 	dmsgServerPublicAddr string
 	dmsgRelayAddr        string
 	dmsgRelayKeys        string
+	dmsgWebSecretKey     string
 	noDmsgRelay          bool
 )
 
