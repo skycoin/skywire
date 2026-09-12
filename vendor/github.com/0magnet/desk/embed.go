@@ -1,34 +1,16 @@
 // The package doc lives in desk.go, which is js/wasm-only. This file carries no
-// build tag so that the embedded assets — and therefore the serve command — are
-// available to a native binary, which is the whole point of having them.
+// build tag so that panel-nowasm.js is available to a native binary, which is
+// the whole point of having it.
+//
+// The demo itself is NOT embedded here. It moved to the docs package, beside
+// the files it carries, so that importing this package for the desk chrome no
+// longer drags 16.4 MB of compiled wasm into a consumer's vendor tree. See
+// docs/docs.go for why a directory split is the only thing that works.
 package desk
 
 import (
-	"embed"
-	"io/fs"
+	_ "embed"
 )
-
-// Assets is the built demo — the page, the wasm and its loader shim.
-//
-// Embedding it means the serve command is a single binary with nothing to host
-// and nothing to fetch: `desk serve` works on a machine with no network and no
-// checkout. The cost is that the binary carries the wasm, and that the build
-// has to have been run before this package compiles — which is why docs/ holds
-// a committed build rather than being a build artifact.
-//
-//go:embed docs
-var assets embed.FS
-
-// Assets returns the demo's web root, ready to hand to http.FileServerFS.
-func Assets() fs.FS {
-	sub, err := fs.Sub(assets, "docs")
-	if err != nil {
-		// docs is embedded above, so this cannot fail at runtime; if it does
-		// the package is broken rather than the caller.
-		panic("desk: embedded assets missing: " + err.Error())
-	}
-	return sub
-}
 
 // panelNoWasm is the desk chrome as a single plain-JS asset — the taskbar, the
 // ☰ launcher menu, and per-window taskbar buttons over winbox — for pages that
