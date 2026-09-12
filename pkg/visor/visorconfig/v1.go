@@ -306,6 +306,25 @@ type RewardsConfig struct {
 type DmsgWebConfig struct {
 	// Enable must be true for the resolver to start.
 	Enable bool `json:"enable"`
+	// SecretKey runs the resolver under its OWN dmsg identity instead of the
+	// visor's. Unset (the default) keeps today's behaviour: the resolver
+	// borrows v.dmsgC and answers as the visor.
+	//
+	// It exists because some keys cannot move. The survey whitelist knows the
+	// key the resolving proxy runs under, so rotating it means updating the
+	// deployment; but running a second FULL dmsg client to hold that key
+	// costs its own sessions to every server and its own discovery entry,
+	// re-registered on every restart — the identity churn that got the tpviz
+	// throwaway client removed in #4500/#4501.
+	//
+	// Set here, the resolver's client is attached IN-PROCESS to the visor's
+	// own relay (dmsg.AttachInProcess): one session, over an in-memory pipe,
+	// no discovery entry, and every stream carried by the visor's sessions
+	// and transports. The host pays for dmsg once and the key never rotates.
+	//
+	// Nothing dials this key inbound except through the visor, so it suits an
+	// outbound resolver and NOT a service that must be reachable on its own.
+	SecretKey *cipher.SecKey `json:"secret_key,omitempty"`
 	// ProxyPort is the local SOCKS5 listener. Default 4445.
 	ProxyPort uint `json:"proxy_port,omitempty"`
 	// ProxyAddr is the host the SOCKS5 proxy binds to. Empty = loopback
