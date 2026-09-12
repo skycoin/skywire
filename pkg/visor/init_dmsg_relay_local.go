@@ -84,8 +84,14 @@ func (v *Visor) initLocalDmsgRelay(ctx context.Context, dmsgC *dmsg.Client) {
 	if v.conf == nil || v.conf.Dmsg == nil {
 		return
 	}
+	// No local_relay block at all is the common case and now means "defaults":
+	// the unix socket, 0600, under the visor's local path. See
+	// DmsgLocalRelayConfig.Enabled for why this is on rather than off.
 	conf := v.conf.Dmsg.LocalRelay
-	if conf == nil || !conf.Enabled {
+	if conf == nil {
+		conf = &spec.DmsgLocalRelayConfig{}
+	}
+	if conf.Enabled != nil && !*conf.Enabled {
 		return
 	}
 	log := v.MasterLogger().PackageLogger("dmsg_relay_local")
