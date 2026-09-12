@@ -479,6 +479,9 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&dmsgServerOwnKey, "dmsg-server", scriptExecBool("${DMSGSERVER:-false}"), "run a dmsg server inside the visor on the visor's OWN key, sharing its transport port")
 	gHiddenFlags = append(gHiddenFlags, "dmsg-server")
 	genConfigCmd.Flags().StringVar(&dmsgServerPublicAddr, "dmsg-server-public", scriptExecString("${DMSGSERVERPUBLIC}"), "address that in-visor dmsg server advertises (host:port); empty advertises whatever its listener resolves to")
+	genConfigCmd.Flags().StringVar(&dmsgRelayAddr, "dmsg-relay-addr", scriptExecString("${DMSGRELAYADDR}"), "loopback host:port for the dmsg relay acceptor, for local services that cannot use the unix socket (a different user than the visor). Requires --dmsg-relay-keys")
+	genConfigCmd.Flags().StringVar(&dmsgRelayKeys, "dmsg-relay-keys", scriptExecString("${DMSGRELAYKEYS}"), "public keys allowed to attach to the dmsg relay, comma-separated. Required with --dmsg-relay-addr: a TCP listener has no filesystem gate")
+	genConfigCmd.Flags().BoolVar(&noDmsgRelay, "no-dmsg-relay", scriptExecBool("${NODMSGRELAY:-false}"), "do not serve the local dmsg relay acceptor at all (it is served by default)")
 	gHiddenFlags = append(gHiddenFlags, "dmsg-server-public")
 
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
@@ -1515,6 +1518,33 @@ func configureLauncher(log *logging.Logger) {
 			Enabled:       true,
 			PublicAddress: dmsgServerPublicAddr,
 		}
+	}
+
+	// Local dmsg relay acceptor. The unix socket is served by default and needs
+	// no config, but it is created with the VISOR's uid at 0600 — so on a
+	// packaged install (visor as root) a service running as any other user
+	// cannot open it, and socket_mode does not help because the group is the
+	// visor's. DMSGRELAYADDR gives those services a loopback TCP acceptor
+	// instead, where the gate is the key allowlist rather than file
+	// permissions. Without these knobs the block could only be hand-edited into
+	// the json, and the next autoconfig would drop it — the same trap
+	// dmsg.server hit before DMSGSERVER existed.
+	if noDmsgRelay {
+		off := false
+		conf.Dmsg.LocalRelay = &dmsgc.DmsgLocalRelayConfig{Enabled: &off}
+	} else if dmsgRelayAddr != "" || dmsgRelayKeys != "" {
+		relay := &dmsgc.DmsgLocalRelayConfig{TCPAddress: dmsgRelayAddr}
+		for _, k := range strings.FieldsFunc(dmsgRelayKeys, func(r rune) bool { return r == ',' || r == ';' || r == ' ' }) {
+			var pk cipher.PubKey
+			if err := pk.Set(k); err != nil {
+				log.Fatalf("invalid --dmsg-relay-keys entry %q: %v", k, err)
+			}
+			relay.AllowedKeys = append(relay.AllowedKeys, pk)
+		}
+		if relay.TCPAddress != "" && len(relay.AllowedKeys) == 0 {
+			log.Fatal("--dmsg-relay-addr requires --dmsg-relay-keys: a TCP acceptor has no filesystem gate")
+		}
+		conf.Dmsg.LocalRelay = relay
 	}
 
 	// Configure the skycoin-web wallet. Only emit a block when the operator

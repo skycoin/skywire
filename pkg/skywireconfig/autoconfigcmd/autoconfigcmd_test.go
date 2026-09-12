@@ -22,6 +22,7 @@ var allFlags = []string{
 	"stcpr", "sudph", "transport-port", "min-hops", "ar-transport-limit",
 	"no-direct-transports", "pty-rpc-exec", "lan-dmsg-port", "lan-dmsg-public",
 	"dmsg-server-conf", "dmsg-server", "no-dmsg-server", "dmsg-server-public",
+	"dmsg-relay-addr", "dmsg-relay-keys", "no-dmsg-relay",
 	// Whitelists
 	"dmsgpty-pks", "survey", "routesetup", "tpsetup",
 	// Route calculation
