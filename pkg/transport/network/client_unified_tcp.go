@@ -12,6 +12,7 @@ package network
 import (
 	"fmt"
 	"net"
+	"sync/atomic"
 )
 
 // EnableUnifiedTCP binds the master TCP listener on port and prepares the cmux
@@ -53,6 +54,9 @@ func (f *ClientFactory) bindTCPDemux(port int) error {
 	f.stcprSharedListener = d.STCPR()
 	f.wsSharedListener = d.WS()
 	f.dmsgSharedListener = d.DMSG()
+	// Allocate BEFORE any MakeClient call, so every copy of this factory shares
+	// the one the WS listener reads. See ClientFactory.dmsgWSHandler.
+	f.dmsgWSHandler = new(atomic.Value)
 	return nil
 }
 
@@ -95,7 +99,7 @@ func (f *ClientFactory) DmsgSharedListener() net.Listener { return f.dmsgSharedL
 // ARClient is. Called once the co-resident server is up; the WS client reads it
 // per request, so ordering does not matter.
 func (f *ClientFactory) SetDmsgWSHandler(h any) {
-	if f == nil || h == nil {
+	if f == nil || h == nil || f.dmsgWSHandler == nil {
 		return
 	}
 	f.dmsgWSHandler.Store(h)
