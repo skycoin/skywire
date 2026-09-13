@@ -42,7 +42,7 @@ var prodData = Services{
 		"172.104.247.120:3478",
 	},
 	DNSServer: "1.1.1.1",
-	GeoIP:     "http://ip.skycoin.com",
+	GeoIP:     "https://ip.skycoin.com",
 	SurveyWhitelist: []cipher.PubKey{
 		mustPubKey("02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637"),
 		mustPubKey("03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3"),
@@ -124,7 +124,7 @@ var testData = Services{
 		"172.104.247.120:3478",
 	},
 	DNSServer: "1.1.1.1",
-	GeoIP:     "http://ip.skywire.dev",
+	GeoIP:     "https://ip.skywire.dev",
 	SurveyWhitelist: []cipher.PubKey{
 		mustPubKey("02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637"),
 		mustPubKey("03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3"),
