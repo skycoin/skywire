@@ -83,3 +83,18 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	s.handleSession(conn)
 }
+
+// WSHandler returns the dmsg-over-WebSocket handler and records advertisedWSURL
+// as this server's AddressWS, without binding a listener of its own.
+//
+// ServeWS owns a port. A dmsg server folded into a visor does not have one: it
+// shares the visor's transport port, whose HTTP/1 branch already belongs to the
+// WS transport. This lets that branch route the dmsg path here instead, so one
+// port keeps carrying raw dmsg, stcpr, WS transports AND dmsg-over-WS — which
+// is what the standalone server did on its own main port before the fold, and
+// what a browser visor needs to reach this server at all.
+func (s *Server) WSHandler(advertisedWSURL string) http.Handler {
+	s.setAdvertisedWSAddr(advertisedWSURL)
+	s.log.WithField("addr_ws", advertisedWSURL).Info("Serving dmsg over WebSocket on the shared transport port.")
+	return http.HandlerFunc(s.handleWS)
+}

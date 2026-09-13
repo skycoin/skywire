@@ -294,7 +294,7 @@ func (b *syncBuffer) String() string {
 //
 // os.MkdirTemp with a two-character prefix keeps the path short regardless of
 // how the test is named, so naming stays free.
-func shortSocketPath(t *testing.T, sub ...string) string {
+func shortSocketPath(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("unix sockets are not supported on Windows")
@@ -302,5 +302,5 @@ func shortSocketPath(t *testing.T, sub ...string) string {
 	dir, err := os.MkdirTemp("", "dr")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) }) //nolint:errcheck
-	return filepath.Join(append([]string{dir}, append(sub, "relay.sock")...)...)
+	return filepath.Join(dir, "relay.sock")
 }

@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -1126,6 +1127,29 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 		WithField("shared_transport_port", shared).
 		Info("Started in-process dmsg server on the visor key")
 
+	// Restore the WebSocket front. A standalone dmsg server served
+	// dmsg-over-WS on its own main port and advertised
+	// wss://<DNSLabel>.<suffix>/dmsg, which is the ONLY way a browser or wasm
+	// visor can reach it. Folded into a visor the server shares the transport
+	// port, whose HTTP/1 cmux branch belongs to the WS transport — so the WS
+	// front silently disappeared from every folded server, and browser visors
+	// were left with just the hosts that had never been folded.
+	//
+	// The port is unchanged by the fold (transport_port is pinned to the port
+	// the server already used), so the existing DNS record and TLS front still
+	// point at the right place. Only the routing was missing.
+	if shared && v.dmsgWSFactory != nil {
+		suffix := strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, ".")
+		// Gate on the deployment knowing this key, exactly as the standalone
+		// service does: a third party running this binary must never advertise
+		// the deployment's domain for a PK with no DNS record.
+		if suffix != "" && deployment.Prod.IsKnownDmsgServer(v.conf.PK) {
+			wssURL := "wss://" + v.conf.PK.DNSLabel() + "." + suffix + "/dmsg"
+			v.dmsgWSFactory.SetDmsgWSHandler(srv.WSHandler(wssURL))
+			log.WithField("ws_url", wssURL).
+				Info("Serving dmsg over WebSocket on the shared transport port")
+		}
+	}
 	v.dmsgSrv.Store(srv)
 	v.dmsgSrvRole.Store(&DmsgServerRole{
 		Mode:                dmsgServerModeOwnKey,

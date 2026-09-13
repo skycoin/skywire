@@ -18,6 +18,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync/atomic"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
@@ -27,6 +28,11 @@ import (
 // wsClient is the WS-transport implementation of Client. table maps a peer PK to
 // its wss:// (or ws://) URL.
 type wsClient struct {
+	// dmsgWS routes the dmsg-over-WebSocket path on the shared transport port.
+	// An *atomic.Value holding an http.Handler, typed loosely for the same reason
+	// sharedListener is a net.Listener: this file is untagged and must not pull
+	// net/http into the TinyGo graph. Only ws_native.go loads it.
+	dmsgWS *atomic.Value
 	*genericClient
 	table stcp.PKTable
 	// sharedListener, when set, is the TCP listener the WS HTTP server serves over

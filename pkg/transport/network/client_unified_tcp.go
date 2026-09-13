@@ -88,3 +88,15 @@ func (f *ClientFactory) stcprSharedListenerFor(perTypePort int) net.Listener {
 // server that advertises what its listener resolves to advertises the shared
 // transport port.
 func (f *ClientFactory) DmsgSharedListener() net.Listener { return f.dmsgSharedListener }
+
+// SetDmsgWSHandler routes the dmsg-over-WebSocket path on the shared transport
+// port to h (an http.Handler), so a dmsg server folded into this visor keeps a
+// WS front. Typed `any` to keep net/http out of this file's import graph, as
+// ARClient is. Called once the co-resident server is up; the WS client reads it
+// per request, so ordering does not matter.
+func (f *ClientFactory) SetDmsgWSHandler(h any) {
+	if f == nil || h == nil {
+		return
+	}
+	f.dmsgWSHandler.Store(h)
+}

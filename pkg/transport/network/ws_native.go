@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -71,7 +72,7 @@ func (c *wsClient) serve() {
 	if c.sharedListener != nil {
 		// Unified transport port: run the WS HTTP server over the shared listener's
 		// HTTP virtual listener instead of binding our own.
-		lis = newWSListenerOver(c.sharedListener)
+		lis = newWSListenerOver(c.sharedListener, c.dmsgWS)
 	} else {
 		var err error
 		lis, err = newWSListener(c.listenAddr)
@@ -114,11 +115,16 @@ func (c *wsClient) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // wsListener fronts a WebSocket HTTP server as a net.Listener: each upgraded
 // WebSocket connection is delivered as a net.Conn from Accept().
 type wsListener struct {
-	addr  net.Addr
-	conns chan net.Conn
-	done  chan struct{}
-	srv   *http.Server
-	once  sync.Once
+	addr   net.Addr
+	conns  chan net.Conn
+	done   chan struct{}
+	srv    *http.Server
+	once   sync.Once
+	dmsgWS *atomic.Value
+	// dmsgWS, when set, answers the dmsg-over-WebSocket path on this same
+	// branch. Set late: the WS transport's listener comes up during transport
+	// init, the co-resident dmsg server only later, so the mux consults this at
+	// request time rather than capturing a handler at construction.
 }
 
 func newWSListener(addr string) (*wsListener, error) {
@@ -126,20 +132,35 @@ func newWSListener(addr string) (*wsListener, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newWSListenerOver(tcpLis), nil
+	return newWSListenerOver(tcpLis, nil), nil
 }
 
 // newWSListenerOver runs the WebSocket HTTP server over an already-bound TCP
 // listener (e.g. the HTTP virtual listener of a unified transport_port demux),
 // rather than binding its own.
-func newWSListenerOver(tcpLis net.Listener) *wsListener {
+func newWSListenerOver(tcpLis net.Listener, dmsgWS *atomic.Value) *wsListener {
 	l := &wsListener{
-		addr:  tcpLis.Addr(),
-		conns: make(chan net.Conn),
-		done:  make(chan struct{}),
+		addr:   tcpLis.Addr(),
+		conns:  make(chan net.Conn),
+		done:   make(chan struct{}),
+		dmsgWS: dmsgWS,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", l.handle)
+	// The dmsg path is registered unconditionally and resolved at request time:
+	// a visor with no co-resident dmsg server answers 404 here, exactly as it
+	// did when this branch was the WS transport's alone.
+	mux.HandleFunc("/dmsg", func(w http.ResponseWriter, r *http.Request) {
+		if l.dmsgWS == nil {
+			http.NotFound(w, r)
+			return
+		}
+		if h, ok := l.dmsgWS.Load().(http.Handler); ok && h != nil {
+			h.ServeHTTP(w, r)
+			return
+		}
+		http.NotFound(w, r)
+	})
 	l.srv = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go l.srv.Serve(tcpLis) //nolint:errcheck
 	return l
