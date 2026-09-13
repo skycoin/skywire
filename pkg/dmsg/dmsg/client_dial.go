@@ -474,6 +474,7 @@ func (ce *Client) LookupIPGeo(ctx context.Context, servers []cipher.PubKey) (Str
 
 	// Otherwise dial a delegated server.
 	for _, srvPK := range servers {
+		_, hadBefore := ce.clientSession(ce.porter, srvPK)
 		dSes, err := ce.EnsureAndObtainSession(ctx, srvPK)
 		if err != nil {
 			continue
@@ -481,11 +482,10 @@ func (ce *Client) LookupIPGeo(ctx context.Context, servers []cipher.PubKey) (Str
 		resp, err := dSes.LookupIPGeo(Addr{PK: dSes.RemotePK(), Port: 1})
 		if err != nil {
 			ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to dial server for IP+geo.")
+			ce.closeIfDialed(srvPK, dSes, hadBefore)
 			continue
 		}
-		if err := dSes.Close(); err != nil {
-			ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to close session")
-		}
+		ce.closeIfDialed(srvPK, dSes, hadBefore)
 		if ce.conf.ClientType == "test" {
 			return resp, nil
 		}
@@ -543,6 +543,7 @@ func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP n
 	// Attempt to connect to a delegated server.
 	// And Close it after getting the IP.
 	for _, srvPK := range servers {
+		_, hadBefore := ce.clientSession(ce.porter, srvPK)
 		dSes, err := ce.EnsureAndObtainSession(ctx, srvPK)
 		if err != nil {
 			continue
@@ -550,12 +551,10 @@ func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP n
 		ip, err := dSes.LookupIP(Addr{PK: dSes.RemotePK(), Port: 1})
 		if err != nil {
 			ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to dial server for IP.")
+			ce.closeIfDialed(srvPK, dSes, hadBefore)
 			continue
 		}
-		err = dSes.Close()
-		if err != nil {
-			ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to close session")
-		}
+		ce.closeIfDialed(srvPK, dSes, hadBefore)
 
 		// If the client is test client then ignore Public IP check
 		if ce.conf.ClientType == "test" {
@@ -850,4 +849,22 @@ func (ce *Client) resolveViaResolvers(ctx context.Context, pk cipher.PubKey) (*d
 		return entry, r.Name(), true
 	}
 	return nil, "", false
+}
+
+// closeIfDialed closes ses only when this lookup is what opened it.
+//
+// EnsureAndObtainSession returns an EXISTING session on a cache hit, so closing
+// its result unconditionally destroys a session the client is using for
+// everything else. The loops below are especially prone to it: the first pass
+// deliberately SKIPS a server that reported a non-public IP, so the second pass
+// picks up the very session that pass is still relying on and closes it.
+//
+// Probing for this visor's own public IP must not cost it a session.
+func (ce *Client) closeIfDialed(srvPK cipher.PubKey, ses ClientSession, hadBefore bool) {
+	if hadBefore {
+		return
+	}
+	if err := ses.Close(); err != nil {
+		ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to close session")
+	}
 }
