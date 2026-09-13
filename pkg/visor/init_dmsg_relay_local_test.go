@@ -3,6 +3,7 @@ package visor
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -43,7 +44,7 @@ func TestParseSocketMode(t *testing.T) {
 // end up owner-only, because with no allowed_keys its file mode is the ONLY
 // gate on a grant of the visor's transports.
 func TestListenLocalRelaySocketMode(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "sub", "relay.sock")
+	sock := shortRelaySocketPath(t, "sub")
 	lis, err := listenLocalRelaySocket(sock, "", logging.MustGetLogger("test"))
 	require.NoError(t, err)
 	defer lis.Close() //nolint:errcheck
@@ -64,7 +65,7 @@ func TestListenLocalRelaySocketMode(t *testing.T) {
 // bind() on an existing path fails whether or not anything is listening — so
 // the second start must unlink before it binds.
 func TestListenLocalRelaySocketReplacesStale(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "relay.sock")
+	sock := shortRelaySocketPath(t)
 	require.NoError(t, os.WriteFile(sock, nil, 0600))
 
 	lis, err := listenLocalRelaySocket(sock, "", logging.MustGetLogger("test"))
@@ -125,4 +126,25 @@ func TestLocalRelayAllow(t *testing.T) {
 	require.Error(t, err)
 	_, err = localRelayAllow(&spec.DmsgLocalRelayConfig{AllowedKeys: []cipher.PubKey{selfPK}}, selfPK)
 	require.Error(t, err)
+}
+
+// shortRelaySocketPath returns a bindable unix-socket path and skips where unix
+// sockets do not exist.
+//
+// sun_path caps a socket path at about 103 bytes, and t.TempDir() derives its
+// directory from the test's NAME — fine under /tmp on Linux, over the cap on
+// macOS where the base is already /var/folders/<2>/<28>/T/. The failure is
+// EINVAL from bind, which reads as a broken socket rather than a long path.
+//
+// Windows skips outright: these tests assert unix-socket binding and 0600
+// permission bits, neither of which it has (it reports 0666 for every file).
+func shortRelaySocketPath(t *testing.T, sub ...string) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("unix sockets and POSIX permission bits are not supported on Windows")
+	}
+	dir, err := os.MkdirTemp("", "vr")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) }) //nolint:errcheck
+	return filepath.Join(append([]string{dir}, append(sub, "relay.sock")...)...)
 }
