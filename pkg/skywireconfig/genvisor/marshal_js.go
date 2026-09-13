@@ -254,6 +254,10 @@ func marshalV1(w *strings.Builder, v *visorconfig.V1, indent int) {
 		o.field("skynet_web")
 		marshalSkynetWeb(w, v.SkynetWeb, o.indent+1)
 	}
+	if v.Resolvers != nil {
+		o.field("resolvers")
+		marshalResolvers(w, v.Resolvers, o.indent+1)
+	}
 	if v.SkymailBridge != nil {
 		o.field("skymail_bridge")
 		marshalSkymailBridge(w, v.SkymailBridge, o.indent+1)
@@ -634,13 +638,34 @@ func marshalRewards(w *strings.Builder, r *visorconfig.RewardsConfig, indent int
 	o.close()
 }
 
+// marshalDmsgWeb emits the dmsg_web block.
+//
+// Field order follows DmsgWebConfig's declaration order, which is what
+// encoding/json uses — the comparison test only checks structural equality,
+// but the point of this marshaler is to stand in for the stdlib codec.
+//
+// Every omitempty field is emitted. It did not used to be: secret_key,
+// proxy_addr, self_loopback, alias, self_loopback_authenticated and the
+// forward-proxy pair were missing, so a config carried through this marshaler
+// came back with the resolver silently reverted to a loopback listener under
+// the visor's own identity. The comparison test never caught it because
+// Generate() sets none of them, so nothing diverged from the stdlib output it
+// is compared against.
 func marshalDmsgWeb(w *strings.Builder, d *visorconfig.DmsgWebConfig, indent int) {
 	o := newObj(w, indent)
 	o.field("enable")
 	writeBool(w, d.Enable)
+	if d.SecretKey != nil {
+		o.field("secret_key")
+		writeSecKey(w, *d.SecretKey)
+	}
 	if d.ProxyPort != 0 {
 		o.field("proxy_port")
 		writeUint(w, uint64(d.ProxyPort))
+	}
+	if d.ProxyAddr != "" {
+		o.field("proxy_addr")
+		writeQuoted(w, d.ProxyAddr)
 	}
 	if d.WebPort != 0 {
 		o.field("web_port")
@@ -670,9 +695,31 @@ func marshalDmsgWeb(w *strings.Builder, d *visorconfig.DmsgWebConfig, indent int
 		o.field("tls_ca_key_path")
 		writeQuoted(w, d.TLSCAKeyPath)
 	}
+	if d.SelfLoopback != nil {
+		o.field("self_loopback")
+		writeBool(w, *d.SelfLoopback)
+	}
+	if d.Alias != "" {
+		o.field("alias")
+		writeQuoted(w, d.Alias)
+	}
+	if d.SelfLoopbackAuthenticated != nil {
+		o.field("self_loopback_authenticated")
+		writeBool(w, *d.SelfLoopbackAuthenticated)
+	}
+	if d.ForwardProxy {
+		o.field("forward_proxy")
+		writeBool(w, d.ForwardProxy)
+	}
+	if d.ForwardPort != 0 {
+		o.field("forward_port")
+		writeUint(w, uint64(d.ForwardPort))
+	}
 	o.close()
 }
 
+// marshalSkynetWeb emits the skynet_web block — same completeness rule as
+// marshalDmsgWeb above, and the same fields were missing.
 func marshalSkynetWeb(w *strings.Builder, s *visorconfig.SkynetWebConfig, indent int) {
 	o := newObj(w, indent)
 	o.field("enable")
@@ -680,6 +727,10 @@ func marshalSkynetWeb(w *strings.Builder, s *visorconfig.SkynetWebConfig, indent
 	if s.ProxyPort != 0 {
 		o.field("proxy_port")
 		writeUint(w, uint64(s.ProxyPort))
+	}
+	if s.ProxyAddr != "" {
+		o.field("proxy_addr")
+		writeQuoted(w, s.ProxyAddr)
 	}
 	if s.WebPort != 0 {
 		o.field("web_port")
@@ -713,7 +764,118 @@ func marshalSkynetWeb(w *strings.Builder, s *visorconfig.SkynetWebConfig, indent
 		o.field("tls_ca_key_path")
 		writeQuoted(w, s.TLSCAKeyPath)
 	}
+	if s.SelfLoopback != nil {
+		o.field("self_loopback")
+		writeBool(w, *s.SelfLoopback)
+	}
+	if s.Alias != "" {
+		o.field("alias")
+		writeQuoted(w, s.Alias)
+	}
+	if s.SelfLoopbackAuthenticated != nil {
+		o.field("self_loopback_authenticated")
+		writeBool(w, *s.SelfLoopbackAuthenticated)
+	}
 	o.close()
+}
+
+// marshalResolvers emits the `resolvers` list — the ADDITIONAL resolving
+// proxies beyond dmsg_web / skynet_web (see visorconfig/resolvers.go).
+//
+// Every field is emitted, unlike marshalDmsgWeb / marshalSkynetWeb above,
+// which silently drop proxy_addr, secret_key, alias, self_loopback and
+// forward_proxy: a config rendered through this marshaler comes back without
+// them. That is a live bug for the two primaries and MUST NOT be inherited
+// here — an operator's second resolver losing its secret_key or its
+// addr=0.0.0.0 on a round-trip would turn a LAN gateway into a loopback proxy
+// under the visor's own identity, silently.
+func marshalResolvers(w *strings.Builder, rs []visorconfig.ResolverConfig, indent int) {
+	if rs == nil {
+		w.WriteString("null")
+		return
+	}
+	if len(rs) == 0 {
+		w.WriteString("[]")
+		return
+	}
+	w.WriteByte('[')
+	for i := range rs {
+		r := &rs[i]
+		if i > 0 {
+			w.WriteByte(',')
+		}
+		w.WriteByte('\n')
+		writeIndent(w, indent+1)
+		o := newObj(w, indent+1)
+		if r.Name != "" {
+			o.field("name")
+			writeQuoted(w, r.Name)
+		}
+		if r.Kind != "" {
+			o.field("kind")
+			writeQuoted(w, r.Kind)
+		}
+		o.field("enable")
+		writeBool(w, r.Enable)
+		if r.SecretKey != nil {
+			o.field("secret_key")
+			writeSecKey(w, *r.SecretKey)
+		}
+		o.field("proxy_port")
+		writeUint(w, uint64(r.ProxyPort))
+		if r.ProxyAddr != "" {
+			o.field("proxy_addr")
+			writeQuoted(w, r.ProxyAddr)
+		}
+		if r.DomainSuffix != "" {
+			o.field("domain_suffix")
+			writeQuoted(w, r.DomainSuffix)
+		}
+		if r.UpstreamSOCKS != "" {
+			o.field("upstream_socks")
+			writeQuoted(w, r.UpstreamSOCKS)
+		}
+		if r.Chain != nil {
+			o.field("chain")
+			writeBool(w, *r.Chain)
+		}
+		if r.Alias != "" {
+			o.field("alias")
+			writeQuoted(w, r.Alias)
+		}
+		if r.SelfLoopback != nil {
+			o.field("self_loopback")
+			writeBool(w, *r.SelfLoopback)
+		}
+		if r.SelfLoopbackAuthenticated != nil {
+			o.field("self_loopback_authenticated")
+			writeBool(w, *r.SelfLoopbackAuthenticated)
+		}
+		if r.RouteTimeout != 0 {
+			o.field("route_timeout")
+			writeDuration(w, r.RouteTimeout)
+		}
+		if r.TLSMITM {
+			o.field("tls_mitm")
+			writeBool(w, r.TLSMITM)
+		}
+		if r.TLSPort != 0 {
+			o.field("tls_port")
+			writeUint(w, uint64(r.TLSPort))
+		}
+		if r.TLSCAPath != "" {
+			o.field("tls_ca_path")
+			writeQuoted(w, r.TLSCAPath)
+		}
+		if r.TLSCAKeyPath != "" {
+			o.field("tls_ca_key_path")
+			writeQuoted(w, r.TLSCAKeyPath)
+		}
+		o.close()
+	}
+	w.WriteByte('\n')
+	writeIndent(w, indent)
+	w.WriteByte(']')
 }
 
 func marshalSkymailBridge(w *strings.Builder, s *visorconfig.SkymailBridgeConfig, indent int) {
