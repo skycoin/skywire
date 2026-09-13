@@ -94,6 +94,14 @@ type Config struct {
 // all nine production servers advertise an identical "v1.3.94-0" and left no
 // way to tell from discovery which commit any of them was running — so after a
 // dmsg-server fix ships there is no way to see which servers picked it up.
+// EntryVersion is dmsgEntryVersion for the server a VISOR folds in on its own
+// key, which reached discovery advertising the bare "0.0.1" default because it
+// builds its config from dmsg.DefaultServerConfig() and never set one. Six of
+// nine production servers read "0.0.1" in `cli mdisc servers` on 2026-09-13,
+// so a deployment audit could not tell which of them had picked up a fix —
+// the exact failure the comment above describes, from the other direction.
+func EntryVersion() string { return dmsgEntryVersion() }
+
 func dmsgEntryVersion() string {
 	if v := buildinfo.Get().Version; v != "" && v != "unknown" {
 		return v
