@@ -155,6 +155,14 @@ type Values struct {
 	// DMSGSERVERPUBLIC.
 	DmsgServerPublic string
 
+	// DmsgServerWSTLS is where that server self-terminates TLS for its wss
+	// front (":443") instead of leaving it to a reverse proxy on the host —
+	// writes DMSGSERVERWSTLS. Which is right differs per host: some already
+	// run Caddy on :443, and on the rest the standalone dmsg server WAS the
+	// terminator, so folding it left the advertised wss front with nothing
+	// listening behind it.
+	DmsgServerWSTLS string
+
 	// DmsgRelayAddr is a loopback host:port for the local dmsg relay acceptor —
 	// writes DMSGRELAYADDR. The unix socket is served by default and needs no
 	// config, but it carries the VISOR's uid at 0600, so a service running as a
@@ -341,6 +349,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().BoolVar(&v.DmsgServer, "dmsg-server", false, "run a dmsg server inside the visor on the VISOR's OWN key, sharing --transport-port (one identity, one discovery entry, one forwarded port). Pin --transport-port to a port reachable from outside. Ignored when --dmsg-server-conf is set — writes DMSGSERVER in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoDmsgServer, "no-dmsg-server", false, "stop running a dmsg server inside the visor — writes DMSGSERVER=false in skywire.conf")
 	cmd.Flags().StringVar(&v.DmsgServerPublic, "dmsg-server-public", "", "host:port the in-visor dmsg server advertises; empty advertises whatever its listener resolves to, which is only right on a LAN — writes DMSGSERVERPUBLIC in skywire.conf")
+	cmd.Flags().StringVar(&v.DmsgServerWSTLS, "dmsg-server-ws-tls", "", "address (\":443\") where the in-visor dmsg server self-terminates TLS for its wss front via Let's Encrypt; empty leaves TLS to a reverse proxy on this host — writes DMSGSERVERWSTLS in skywire.conf")
 	cmd.Flags().StringVar(&v.DmsgRelayAddr, "dmsg-relay-addr", "", "loopback host:port for the local dmsg relay acceptor, for services that run as a different user than the visor and so cannot open its 0600 unix socket. Requires --dmsg-relay-keys — writes DMSGRELAYADDR in skywire.conf")
 	cmd.Flags().StringVar(&v.DmsgRelayKeys, "dmsg-relay-keys", "", "public keys allowed to attach to the dmsg relay, comma-separated. Required with --dmsg-relay-addr: a TCP acceptor has no filesystem gate — writes DMSGRELAYKEYS in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoDmsgRelay, "no-dmsg-relay", false, "do not serve the local dmsg relay acceptor at all (served by default) — writes NODMSGRELAY in skywire.conf")

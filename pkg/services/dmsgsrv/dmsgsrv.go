@@ -14,7 +14,6 @@ package dmsgsrv
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,7 +29,6 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -378,13 +376,10 @@ func (s *service) Run(ctx context.Context) error {
 
 	// Built-in wss (opt-in via ws_tls_address): self-terminate TLS for this
 	// server's own <DNSLabel>.<suffix> host via Let's Encrypt autocert, so a dmsg
-	// host needs NO external reverse proxy (Caddy). It only ADDS a TLS listener —
-	// the plain-ws main port and the wss advert (mainWSURL) are unchanged — so it
-	// coexists with the Caddy-fronts-it path. If the address can't be bound (Caddy
-	// or another dmsg server on the host already owns :443) we log and skip, and
-	// the external-front path stands. Best-effort: a failure here never stops the
-	// server. Requires :443 (autocert's TLS-ALPN-01 challenge runs on the serving
-	// port); a host with >1 dmsg server, or that already serves :443, uses Caddy.
+	// host needs NO external reverse proxy (Caddy). See ServeWSTLS — best-effort,
+	// a bind failure leaves the external-front path standing. Requires :443
+	// (autocert's TLS-ALPN-01 challenge runs on the serving port); a host with
+	// >1 dmsg server, or that already serves :443, uses Caddy.
 	if cfg.WSTLSAddress != "" {
 		if wssHost == "" {
 			log.Warn("dmsg-ws-tls: ws_tls_address set but no wss host derivable (need wss_domain_suffix or a known fleet PK) — skipping built-in TLS")
@@ -396,22 +391,7 @@ func (s *service) Run(ctx context.Context) error {
 					cacheDir = filepath.Join(filepath.Dir(cfg.Path), "dmsg-autocert")
 				}
 			}
-			acm := &autocert.Manager{
-				Prompt:     autocert.AcceptTOS,
-				HostPolicy: autocert.HostWhitelist(wssHost),
-				Cache:      autocert.DirCache(cacheDir),
-			}
-			if tlsLis, terr := tls.Listen("tcp", cfg.WSTLSAddress, acm.TLSConfig()); terr != nil {
-				log.WithError(terr).Warnf("dmsg-ws-tls: cannot bind %s (a reverse proxy or another dmsg server may own it) — leaving TLS to an external front (Caddy)", cfg.WSTLSAddress)
-			} else {
-				log.WithField("ws_url", mainWSURL).WithField("tls_addr", cfg.WSTLSAddress).WithField("cache", cacheDir).
-					Infof("dmsg-ws-tls: self-terminating wss for %s via Let's Encrypt — no reverse proxy needed", wssHost)
-				go func() {
-					if err := srv.ServeWS(tlsLis, mainWSURL); err != nil {
-						log.Errorf("dmsg-ws-tls ServeWS: %v", err)
-					}
-				}()
-			}
+			ServeWSTLS(log, srv, cfg.WSTLSAddress, cacheDir, wssHost, mainWSURL)
 		}
 	}
 
