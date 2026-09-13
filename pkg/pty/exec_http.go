@@ -504,8 +504,22 @@ func execStreamHandler(hostCtx context.Context, log *logging.Logger) http.Handle
 
 		if framed {
 			stopKA := make(chan struct{})
-			defer close(stopKA)
-			go keepaliveLoop(stopKA, &mu, w, flusher, cancel)
+			kaDone := make(chan struct{})
+			go func() {
+				defer close(kaDone)
+				keepaliveLoop(stopKA, &mu, w, flusher, cancel)
+			}()
+			// Signalling the loop is not enough, it has to be JOINED. A
+			// ResponseWriter is only valid for the lifetime of the handler:
+			// the moment this function returns, net/http's finishRequest
+			// flushes the very bufio.Writer the keepalive flushes, with no
+			// happens-before edge between the two. A loop already past its
+			// select — blocked on mu, or mid-write — would then flush after
+			// the handler is gone. Waiting on kaDone closes that window.
+			defer func() {
+				close(stopKA)
+				<-kaDone
+			}()
 		}
 
 		runErr := cmd.Run()
