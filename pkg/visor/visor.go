@@ -144,6 +144,10 @@ type Visor struct {
 	// handed to the in-process dmsg server so it shares the visor's TCP port.
 	// nil when the server is off, keyed separately, or pinned to its own address.
 	dmsgSharedLis net.Listener
+	// dmsgWSFactory is the transport ClientFactory, kept so the co-resident dmsg
+	// server can register its WebSocket handler on the shared port once it is up
+	// (see initDmsgServer). Only set when the port is actually shared.
+	dmsgWSFactory interface{ SetDmsgWSHandler(any) }
 	// dmsgSrvRole records the in-process dmsg server that actually started
 	// (nil = none), so `visor state --select roles` can report the running
 	// server's key and address rather than only what the config asked for.

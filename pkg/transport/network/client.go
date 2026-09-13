@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -110,6 +111,10 @@ type ClientFactory struct {
 	// WS case in MakeClient (untagged) can read wsSharedListener directly.
 	stcprSharedListener net.Listener
 	wsSharedListener    net.Listener
+	// dmsgWSHandler routes the dmsg-over-WebSocket path on the shared transport
+	// port. Held here rather than on the WS client because the client is built
+	// per MakeClient call while the co-resident dmsg server is wired once, later.
+	dmsgWSHandler atomic.Value
 	// dmsgSharedListener is the tcpDemux branch carrying dmsg sessions, set
 	// only when ShareTCPWithDmsgServer was true at bind time.
 	dmsgSharedListener net.Listener
@@ -156,6 +161,7 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 		wc.(*wsClient).ar = f.ARClient // native: resolve ws:// from the stcpr AR record
 		if f.wsSharedListener != nil { // unified transport port
 			wc.(*wsClient).sharedListener = f.wsSharedListener
+			wc.(*wsClient).dmsgWS = &f.dmsgWSHandler
 		}
 		return wc, nil
 	case types.WT:
