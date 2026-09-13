@@ -509,7 +509,7 @@ func execStreamHandler(hostCtx context.Context, log *logging.Logger) http.Handle
 				defer close(kaDone)
 				keepaliveLoop(stopKA, &mu, w, flusher, cancel)
 			}()
-			// Signalling the loop is not enough, it has to be JOINED. A
+			// Signaling the loop is not enough, it has to be JOINED. A
 			// ResponseWriter is only valid for the lifetime of the handler:
 			// the moment this function returns, net/http's finishRequest
 			// flushes the very bufio.Writer the keepalive flushes, with no
