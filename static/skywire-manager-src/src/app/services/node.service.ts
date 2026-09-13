@@ -483,7 +483,6 @@ return {
         node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
         node.minHops = response.min_hops;
         node.buildTag = response.build_tag;
-        node.skybianBuildVersion = response.skybian_build_version;
         node.connectedDmsgServers = response.connected_dmsg_servers || [];
         node.isSymmeticNat = response.overview.is_symmetic_nat;
         node.publicIp = response.overview.public_ip;

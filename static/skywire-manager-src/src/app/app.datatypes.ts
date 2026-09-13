@@ -46,7 +46,6 @@ export class Node {
   hypervisors?: string[];
   connectedHypervisors?: string[];
   buildTag!: string;
-  skybianBuildVersion?: string;
   autoconnectTransports!: boolean;
   isPublic?: boolean;
   rewardsAddress!: string;

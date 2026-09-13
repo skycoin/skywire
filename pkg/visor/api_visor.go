@@ -531,11 +531,6 @@ func (v *Visor) DeleteRewardAddress() error {
 	return nil
 }
 
-// SkybianBuildVersion implements API.
-func (v *Visor) SkybianBuildVersion() string {
-	return os.Getenv("SKYBIAN_BUILD_VERSION")
-}
-
 // Reload implements API.
 func (v *Visor) Reload() error {
 	return reload(v)
