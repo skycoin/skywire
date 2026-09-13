@@ -461,8 +461,6 @@ type EmbeddedProxyInfo struct {
 	// SocksAddr is the localhost SOCKS5 listener (e.g. "127.0.0.1:4445").
 	// Empty when disabled or when Config.ProxyPort is 0.
 	SocksAddr string `json:"socks_addr,omitempty"`
-	// WebAddr is the localhost HTTP bridge listener.
-	WebAddr string `json:"web_addr,omitempty"`
 	// UpstreamSOCKS is the configured fallthrough, empty for direct.
 	UpstreamSOCKS string `json:"upstream_socks,omitempty"`
 	// Stats is the cumulative request counter snapshot. Zero-valued
