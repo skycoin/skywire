@@ -24,7 +24,7 @@
       "172.104.247.120:3478"
     ],
     "dns_server": "1.1.1.1",
-    "geoip": "http://ip.skywire.dev",
+    "geoip": "https://ip.skywire.dev",
     "skycoin_node_dmsg": "dmsg://03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c:6420",
     "skycoin_explorer_dmsg": "dmsg://03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c:8081",
     "skycoin_blog_dmsg": "dmsg://03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c:8082",
@@ -153,7 +153,7 @@
       "172.104.247.120:3478"
     ],
     "dns_server": "1.1.1.1",
-    "geoip": "http://ip.skycoin.com",
+    "geoip": "https://ip.skycoin.com",
     "skycoin_node_dmsg": "https://node.skycoin.com.aong2hr4en7v6bnxr3az5hzruad7qsbv27xr5ajioyicfaor3n2mc.dmsg",
     "skycoin_explorer_dmsg": "dmsg://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1:8081",
     "skycoin_blog_dmsg": "dmsg://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1:8082",
