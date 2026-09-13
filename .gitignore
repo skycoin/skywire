@@ -182,3 +182,4 @@ docs/playground/wasm_exec.js
 
 # The js/wasm command module the two-stage build embeds (pkg/wasmhv/execwasm).
 /pkg/wasmhv/execwasm/blob/skywire.wasm.gz
+/pkg/wasmhv/execwasm/blob/revision.txt
