@@ -210,6 +210,26 @@ func (ce *Client) closeRelaySessions() {
 // uses for its own dials. Sessions that are themselves relay attachments
 // (skynet carrier) are skipped: a relay does not chain through a relay.
 func (ce *Client) relayForwardSessions(dst cipher.PubKey) []*SessionCommon {
+	// Terminal leg first: a relay attachment whose remote IS dst delivers
+	// straight there, and nothing beats the destination itself. It has to be
+	// added explicitly because sortedMeshSessions drops skynet-carrier sessions
+	// — correctly, since for this client's OWN dials they are DialStream's
+	// phase 0 rather than a mesh path, and that helper is shared with it.
+	//
+	// This is the one case that is not chaining: the next hop is the
+	// destination, so the far end can only deliver locally or fail. Without it
+	// an attached guest's reach is "peers already attached to this relay"
+	// rather than "peers this relay can reach over skynet" — on a live hub, 2
+	// versus 504.
+	if ses, ok := ce.session(dst); ok && ses.carrier == CarrierSkynet {
+		return append([]*SessionCommon{ses}, ce.relayForwardMesh(dst)...)
+	}
+	return ce.relayForwardMesh(dst)
+}
+
+// relayForwardMesh is relayForwardSessions' ordinary path: server sessions
+// only, ordered for dst.
+func (ce *Client) relayForwardMesh(dst cipher.PubKey) []*SessionCommon {
 	var delegated []cipher.PubKey
 	ctx, cancel := context.WithTimeout(context.Background(), relayEntryLookupTimeout)
 	defer cancel()
