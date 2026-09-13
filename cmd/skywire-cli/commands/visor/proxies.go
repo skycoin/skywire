@@ -133,8 +133,8 @@ func formatProxies(s *visor.EmbeddedProxiesStatus) string {
 	}
 	var buf strings.Builder
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "name\tenabled\trunning\tdomain\tsocks\tweb\tupstream\trequests\tactive\tfailures") //nolint:errcheck,gosec
-	fmt.Fprintln(w, "----\t-------\t-------\t------\t-----\t---\t--------\t--------\t------\t--------") //nolint:errcheck,gosec
+	fmt.Fprintln(w, "name\tenabled\trunning\tdomain\tsocks\tupstream\trequests\tactive\tfailures") //nolint:errcheck,gosec
+	fmt.Fprintln(w, "----\t-------\t-------\t------\t-----\t--------\t--------\t------\t--------") //nolint:errcheck,gosec
 	row := func(name string, p *visor.EmbeddedProxyInfo) {
 		if p == nil {
 			return
@@ -146,11 +146,10 @@ func formatProxies(s *visor.EmbeddedProxiesStatus) string {
 			active = uint64(p.Stats.Active) //nolint:gosec
 			failed = p.Stats.Failed
 		}
-		fmt.Fprintf(w, "%s\t%v\t%v\t%s\t%s\t%s\t%s\t%d\t%d\t%d\n", //nolint:errcheck,gosec
+		fmt.Fprintf(w, "%s\t%v\t%v\t%s\t%s\t%s\t%d\t%d\t%d\n", //nolint:errcheck,gosec
 			name, p.Enabled, p.Running,
 			dashIfEmpty(p.DomainSuffix),
 			dashIfEmpty(p.SocksAddr),
-			dashIfEmpty(p.WebAddr),
 			dashIfEmpty(p.UpstreamSOCKS),
 			total, active, failed)
 	}
