@@ -75,6 +75,13 @@ the tree companion to 'proxy log' (which streams the events/log).
 		}
 
 		if len(rgs) == 0 {
+			// A shortcut-eligible dial builds no route group, so the tree
+			// would be empty for a working proxy. Say what the direct path
+			// is carrying instead of implying the proxy is down.
+			if direct := fetchProxyDirect(rpcClient, clientName); len(direct) > 0 {
+				fmt.Printf("%s\n", renderProxyDirect(direct))
+				return
+			}
 			fmt.Printf("no active route group for app=%s (is the proxy running?)\n", clientName)
 			return
 		}
