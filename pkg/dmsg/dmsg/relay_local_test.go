@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"net"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -82,7 +84,7 @@ func newLocalRelayTestClient(t *testing.T, name string, relayOnly bool, maxRelay
 // attaches to it with AttachLocalRelay and ends up holding exactly one
 // session — to the acceptor, on the skynet carrier — under its OWN key.
 func TestAttachLocalRelay(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "relay.sock")
+	sock := shortSocketPath(t)
 	lis, err := net.Listen("unix", sock)
 	require.NoError(t, err)
 
@@ -134,7 +136,7 @@ func TestAttachLocalRelay(t *testing.T) {
 // local pipe exactly as it is on the skynet one: a key the acceptor refuses
 // gets its conn closed after the handshake, and never becomes a relay session.
 func TestAttachLocalRelayRefused(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "relay.sock")
+	sock := shortSocketPath(t)
 	lis, err := net.Listen("unix", sock)
 	require.NoError(t, err)
 
@@ -166,7 +168,7 @@ func TestAttachLocalRelayRefused(t *testing.T) {
 }
 
 func TestLocalRelayDialerWrongPeer(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "relay.sock")
+	sock := shortSocketPath(t)
 	lis, err := net.Listen("unix", sock)
 	require.NoError(t, err)
 
@@ -211,7 +213,7 @@ func TestLocalRelaySessionDialerRejectsOtherCarriers(t *testing.T) {
 // across several backoff intervals. A client stuck in the old path re-entered
 // discovery on every pass, so it could not be relied on to hold still.
 func TestAttachedClientRestsInsteadOfHuntingServers(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "relay.sock")
+	sock := shortSocketPath(t)
 	lis, err := net.Listen("unix", sock)
 	require.NoError(t, err)
 
@@ -276,4 +278,29 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+// shortSocketPath returns a unix-socket path short enough to bind, and skips
+// the test where unix sockets are not available at all.
+//
+// A unix socket path is capped at about 103 bytes (sun_path), and t.TempDir()
+// builds its directory out of the TEST'S NAME. On Linux that is
+// /tmp/<TestName><digits>/001 and there is room to spare; on macOS the base is
+// /var/folders/<2>/<28>/T/ before the name is even added, so a long test name
+// pushes the total past the cap and bind fails with EINVAL — which reads as a
+// broken socket rather than a path-length problem. That is what happened to
+// TestAttachedClientRestsInsteadOfHuntingServers, whose only sin was a
+// descriptive name.
+//
+// os.MkdirTemp with a two-character prefix keeps the path short regardless of
+// how the test is named, so naming stays free.
+func shortSocketPath(t *testing.T, sub ...string) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("unix sockets are not supported on Windows")
+	}
+	dir, err := os.MkdirTemp("", "dr")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) }) //nolint:errcheck
+	return filepath.Join(append([]string{dir}, append(sub, "relay.sock")...)...)
 }
