@@ -100,6 +100,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		return fmt.Errorf("no skywire command module embedded: run `make build-embedded` or pass --exec-wasm")
 	}
 	cfg.ExecWasmPath = execWasmPath
+	warnStaleExecModule(log)
 	uiFS, err := HypervisorUIFS()
 	if err != nil {
 		return fmt.Errorf("hypervisor UI assets: %w", err)
@@ -867,4 +868,35 @@ skywireDeskBoot(Object.assign({
 func deskShellHTML(scriptsHTML, deskOptsJS string) []byte {
 	out := strings.ReplaceAll(deskShellTemplate, "__DESK_SCRIPTS__", scriptsHTML)
 	return []byte(strings.ReplaceAll(out, "__DESK_OPTS__", deskOptsJS))
+}
+
+// warnStaleExecModule says so when the embedded command module was built from
+// a different commit than this binary.
+//
+// Both halves of that mismatch are silent by default. `go build .` embeds
+// whatever pkg/wasmhv/execwasm/blob already holds instead of rebuilding it, so
+// a freshly installed binary can serve a module many commits old; and the desk
+// reports the MODULE's version, which reads as a different number rather than
+// an old one. A visor was found on 2026-09-13 serving a three-day-old module
+// after several reinstalls, with nothing anywhere saying so.
+//
+// Only a warning: an older module still runs, and a developer deliberately
+// pinning one with --exec-wasm should not be stopped. It names both revisions
+// and the command that fixes it.
+func warnStaleExecModule(log *logging.Logger) {
+	if log == nil {
+		return
+	}
+	modRev := execwasm.Revision()
+	binRev := buildinfo.Commit()
+	if modRev == "" || binRev == "" || binRev == "unknown" {
+		return // nothing recorded to compare; say nothing rather than guess
+	}
+	if modRev == binRev {
+		return
+	}
+	log.WithField("module_revision", modRev).
+		WithField("binary_revision", binRev).
+		Warn("The embedded skywire command module was built from a different commit than this binary — " +
+			"the desk is serving older code than the visor. Run `make embed-exec-wasm` and rebuild.")
 }

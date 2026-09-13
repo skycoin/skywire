@@ -16,15 +16,17 @@ package execwasm
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 	"sync"
 )
 
 const blobName = "blob/skywire.wasm.gz"
 
 var (
-	once  sync.Once
-	gz    []byte
-	stamp string
+	once     sync.Once
+	gz       []byte
+	stamp    string
+	revision string
 )
 
 func load() {
@@ -36,6 +38,9 @@ func load() {
 		gz = b
 		sum := sha256.Sum256(b)
 		stamp = hex.EncodeToString(sum[:])[:16]
+		if rb, rerr := blobFS.ReadFile(revisionName); rerr == nil {
+			revision = strings.TrimSpace(string(rb))
+		}
 	})
 }
 
@@ -56,4 +61,25 @@ func Gz() []byte {
 func Stamp() string {
 	load()
 	return stamp
+}
+
+// revisionName is written beside the module by `make embed-exec-wasm`: the
+// vcs.revision the module was built from, lifted at build time because the
+// module is never inflated in memory and scanning 176 MB for it at startup
+// would defeat that.
+const revisionName = "blob/revision.txt"
+
+// Revision is the commit the embedded module was built from, or "" when that
+// is not recorded (a source build with no staged module, or one staged before
+// this was written).
+//
+// It exists because the two failure modes here are silent. `go build .` embeds
+// whatever blob/ already holds rather than rebuilding it, so a native binary
+// happily serves a module many commits older than itself; and the served page
+// reports the module's own version, which simply looks like a different number
+// rather than a stale one. Comparing this to buildinfo.Commit() is the only
+// cheap way to notice.
+func Revision() string {
+	load()
+	return revision
 }
