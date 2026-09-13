@@ -393,3 +393,47 @@ func TestRelayNominee_RelayOnlyClientHoldsRelayOnly(t *testing.T) {
 	_, err := env.dc.Entry(context.Background(), pk)
 	require.Error(t, err, "a relay-only client on its relay has no discovery entry")
 }
+
+// TestRelayForwardSessions_TerminalSkynetLegToDestination pins the one
+// exception to "a relay does not chain through a relay".
+//
+// Forwarding an attached guest's request over a session that is itself a relay
+// attachment chains relays: unbounded path, no loop prevention, far end free to
+// forward again. So skynet-carrier sessions are skipped — unless the session's
+// remote IS the destination, where the next hop is the end of the line and the
+// far end can only deliver locally or fail.
+//
+// Without the exception a guest's reach is "peers already attached to this
+// relay"; with it, "peers this relay can reach over skynet". On a live hub
+// those were 2 and 504.
+func TestRelayForwardSessions_TerminalSkynetLegToDestination(t *testing.T) {
+	env := newRelayedTestEnv(t, nil)
+	// The serve loop may redial and replace a session, which resets its
+	// carrier — so mark it immediately before each check rather than once up
+	// front, and re-fetch rather than holding a pointer across assertions.
+	asSkynet := func() {
+		ses, ok := env.relay.session(env.srvPK)
+		require.True(t, ok, "the relay holds a session to the destination's server")
+		ses.carrier = CarrierSkynet
+	}
+
+	offersSrv := func(dst cipher.PubKey) bool {
+		for _, s := range env.relay.relayForwardSessions(dst) {
+			if s.RemotePK() == env.srvPK {
+				return true
+			}
+		}
+		return false
+	}
+
+	// A relay attachment must not carry someone else's request onward.
+	asSkynet()
+	require.False(t, offersSrv(env.dstPK),
+		"a relay attachment must not carry a relayed request onward — that is chaining")
+
+	// But it is exactly the right leg when the destination is its own remote:
+	// terminal delivery, nothing further to forward.
+	asSkynet()
+	require.True(t, offersSrv(env.srvPK),
+		"a relay attachment whose remote IS the destination must be offered — terminal, not a chain")
+}
