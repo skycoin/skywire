@@ -86,3 +86,53 @@ func renderTree(n *bitree.Node) string {
 	walk(n)
 	return sb.String()
 }
+
+// TestRouteTree_DirectLegShowsTypeIDAndRTT: naming the exit is not enough —
+// the tree must also say WHICH transport carries it and how fast.
+//
+// hopToNode renders Cols{[type], tpID, rtt}, but a leg with no Hops never
+// reaches it: routeToNode returns a bare public-key node instead. So a direct
+// session drew the exit and nothing about the transport under it. The fix is
+// to describe the direct path as the one hop it actually is, rather than to
+// special-case the renderer.
+func TestRouteTree_DirectLegShowsTypeIDAndRTT(t *testing.T) {
+	snap := directSnapshot(true)
+	snap.Legs[0].LatencyMS = 12.5
+	snap.Legs[0].Hops = []Hop{{
+		From:      directSelfPK,
+		To:        directExitPK,
+		TpID:      "c63e3d2b-6041-0518-86d6-d321bf57fa57",
+		TpType:    "stcpr",
+		LatencyMS: 12.5,
+	}}
+	snap.Tunnels[0].Legs = snap.Legs
+
+	cols := collectCols(RouteTree(snap))
+	joined := strings.Join(cols, " ")
+	require.Contains(t, joined, "stcpr", "the transport type must be rendered")
+	require.Contains(t, joined, "c63e3d2b-6041-0518-86d6-d321bf57fa57", "the transport id must be rendered")
+	require.Regexp(t, `12(\.5)?`, joined, "the transport RTT must be rendered; got %q", joined)
+
+	// The hop's destination is still the exit, so the earlier guarantee holds.
+	require.Equal(t, hopClass(true, 0), hopClassMap(snap)[directExitPK])
+}
+
+// collectCols gathers every node's Cols across the tree.
+func collectCols(n *bitree.Node) []string {
+	var out []string
+	var walk func(*bitree.Node)
+	walk = func(cur *bitree.Node) {
+		if cur == nil {
+			return
+		}
+		out = append(out, cur.Cols...)
+		for _, c := range cur.Left {
+			walk(c)
+		}
+		for _, c := range cur.Right {
+			walk(c)
+		}
+	}
+	walk(n)
+	return out
+}
