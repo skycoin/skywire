@@ -23,7 +23,6 @@
     "window-size-error": "La ventana es demasiado estrecha para el contenido.",
     "data-update-problems": "Problema actualizando los datos."
   },
-
   "labeled-element": {
     "edit-label": "Editar etiqueta",
     "remove-label": "Remover etiqueta",
@@ -37,7 +36,6 @@
     "tooltip": "Haga clic para copiar la entrada o cambiar la etiqueta",
     "tooltip-with-text": "{{ text }} (Haga clic para copiar la entrada o cambiar la etiqueta)"
   },
-
   "labels": {
     "title": "Etiquetas",
     "info": "Etiquetas que ha introducido para identificar fácilmente visores, transportes y otros elementos, en lugar de tener que leer identificadores generados por una máquina.",
@@ -55,7 +53,6 @@
       "label": "La etiqueta debe contener",
       "id": "El id debe contener",
       "type": "El tipo debe ser",
-
       "type-options": {
         "any": "Cualquiera",
         "visor": "Visor",
@@ -64,14 +61,12 @@
       }
     }
   },
-
   "filters": {
     "filter-action": "Filtrar",
     "filter-info": "Lista de filtros.",
     "press-to-remove": "(Presione para remover los filtros)",
     "remove-confirmation": "¿Seguro que desea remover los filtros?"
   },
-
   "tables": {
     "title": "Ordenar por",
     "sorting-title": "Ordenado por:",
@@ -80,16 +75,14 @@
     "label": "(etiqueta)",
     "inverted-order": "(invertido)"
   },
-
   "start": {
     "title": "Inicio",
     "loading-error": "Hubo un error obteniendo los datos iniciales. Reintentando..."
   },
-
   "node": {
     "title": "Detalles del visor",
     "not-found": "Visor no encontrado.",
-    "logs" : {
+    "logs": {
       "title": "Registros de operación",
       "no-logs": "No se encontraron registros de operación para este visor.",
       "no-logs-for-filter": "No hay registros de operación que coincidan con el filtro seleccionado.",
@@ -134,7 +127,6 @@
         "config-version": "Versión de config:",
         "os": "SO:",
         "arch": "Arquitectura:",
-        "skybian-version": "Versión de Skybian:",
         "time": {
           "title": "Tiempo online:",
           "seconds": "unos segundos",
@@ -195,7 +187,6 @@
     },
     "error-load": "Hubo un error al intentar refrescar los datos. Reintentando..."
   },
-
   "rewards-address-config": {
     "title": "Configuración de dirección de recompensas",
     "info": "Aquí usted puede establecer la dirección de Skycoin a la que quiere que se envíen las recompensas. Si deja la dirección vacía, el registro será eliminado y el visor no recibirá recompensas.",
@@ -206,7 +197,6 @@
     "done": "Cambios guardados.",
     "empty-warning": "La dirección está vacía, así que el registro será eliminado y no recibirá recompensas. ¿Realmente desea continuar?"
   },
-
   "router-config": {
     "title": "Configuración del Enrutador",
     "info": "Aquí podrá configurar cuantos saltos la conexión deberá realizar a través de otros visores de Skywire antes de alcanzar el destino final. NOTA: los cambios no afectarán a las rutas ya existentes.",
@@ -215,7 +205,6 @@
     "save-config-button": "Guardar configuración",
     "done": "Cambios guardados."
   },
-
   "nodes": {
     "title": "Lista de visores",
     "dmsg-title": "DMSG",
@@ -255,7 +244,6 @@
       "label": "La etiqueta debe contener",
       "key": "La llave debe contener",
       "dmsg": "La llave del servidor DMSG debe contener",
-
       "online-options": {
         "any": "Online u offline",
         "online": "Online",
@@ -263,7 +251,6 @@
       }
     }
   },
-
   "bulk-rewards": {
     "title": "Cambiar dirección de recompensas",
     "info": "Introduzca la dirección de Skycoin donde desea recibir las recompensas. La dirección será establecida en todos los visores seleccionados. Si deja la dirección vacía, el registro será eliminado y los visores no recibirán recompensas. También puede colocar la dirección de recompensas de cada visor individualmente usando la opción en la pantalla de detalles del visor.",
@@ -280,17 +267,15 @@
     "perform-changes": "Aplicar cambios",
     "empty-warning": "La dirección está vacía, así que los registros serán eliminados y no recibirá recompensas. ¿Realmente desea continuar?"
   },
-
   "edit-label": {
     "label": "Etiqueta",
     "done": "Etiqueta guardada.",
     "label-removed-warning": "La etiqueta fue removida."
   },
-
   "settings": {
     "title": "Configuración",
     "checking-auth": "Revisando configuración de autenticación.",
-    "password" : {
+    "password": {
       "initial-config-help": "Use esta opción para establecer la contraseña inicial. Después de establecer una contraseña no es posible usar esta opción para modificarla.",
       "help": "Opciones para cambiar la contraseña.",
       "old-password": "Contraseña actual",
@@ -314,7 +299,7 @@
         "default-password": "No utilice la contraseña por defecto (1234)."
       }
     },
-    "updater-config" : {
+    "updater-config": {
       "open-link": "Mostrar la configuración del actualizador",
       "open-confirmation": "La configuración del actualizador es sólo para usuarios experimentados. Seguro que desea continuar?",
       "help": "Utilice este formulario para modificar la configuración que utilizará el actualizador. Se ignorarán todos los campos vacíos. La configuración se utilizará para todas las operaciones de actualización, sin importar qué elemento se esté actualizando, así que por favor tenga cuidado.",
@@ -336,13 +321,11 @@
     "refresh-rate-confirmation": "Frecuencia de refrescado cambiada.",
     "seconds": "segundos"
   },
-
   "login": {
     "password": "Contraseña",
     "incorrect-password": "Contraseña incorrecta.",
     "initial-config": "Configurar lanzamiento inicial"
   },
-
   "actions": {
     "menu": {
       "terminal": "Terminal",
@@ -368,7 +351,6 @@
       "error": "Error inesperado mientras se intentaba ejecutar el comando."
     }
   },
-
   "update": {
     "title": "Actualizar",
     "error-title": "Error",
@@ -394,14 +376,12 @@
     "finished": "Conexión de estado terminada",
     "install": "Instalar actualizaciones"
   },
-
   "update-all": {
     "title": "Actualizar",
     "updatable-list-text": "Por favor, presione los botones de los visores que desea actualizar. Una terminal será abierta en una nueva pestaña por cada visor y el proceso de actualización iniciará automáticamente.",
     "non-updatable-list-text": "Los siguientes visores no pueden ser actualizados vía la terminal:",
     "update-button": "Actualizar"
   },
-
   "apps": {
     "log": {
       "title": "Log",
@@ -437,19 +417,16 @@
       "autostart-disabled": "Autoinicio deshabilitado",
       "autostart-enabled": "Autoinicio habilitado",
       "unavailable-logs-error": "No es posible mostrar los logs mientras la aplicación no se está ejecutando.",
-
       "filter-dialog": {
         "state": "El estado debe ser",
         "name": "El nombre debe contener",
         "port": "El puerto debe contener",
         "autostart": "El autoinicio debe estar",
-  
         "state-options": {
           "any": "Iniciada o detenida",
           "running": "Iniciada",
           "stopped": "Detenida"
         },
-
         "autostart-options": {
           "any": "Activado or desactivado",
           "enabled": "Activado",
@@ -535,19 +512,16 @@
       "killswitch-info": "Cuando está activo, todas las conexiones de red se desactivarán si la aplicación se está ejecutando pero la protección VPN está interrumpida (por errores temporales o cualquier otro problema). Esto evita fugas de datos.",
       "settings-changed-alert": "Los cambios aún no se han guardado.",
       "save-settings": "Guardar configuracion",
-
       "change-note-dialog": {
         "title": "Cambiar Nota",
         "note": "Nota"
       },
-
       "password-dialog": {
         "title": "Introducir Contraseña",
         "password": "Contraseña",
         "info": "Se le solicita una contraseña porque una contraseña fue utilizada cuando se creó la entrada seleccionada, pero no fue guardada por razones de seguridad. Puede dejar la contraseña vacía si es necesario.",
         "continue-button": "Continuar"
       },
-
       "filter-dialog": {
         "title": "Filtros",
         "country": "El país debe ser",
@@ -580,7 +554,6 @@
     "status-stopped-tooltip": "La aplicación está actualmente detenida",
     "status-failed-tooltip": "La app finalizó con el siguiente error: {{ error }}"
   },
-
   "transports": {
     "title": "Transportes",
     "info": "Conexiones que tiene con visores remotos de Skywire, para permitir que las aplicaciones Skywire locales se comuniquen con las aplicaciones que se ejecutan en esos visores remotos.",
@@ -648,7 +621,6 @@
       "persistent": "El transporte debe ser",
       "id": "El id debe contener",
       "remote-node": "La llave remota debe contener",
-
       "persistent-options": {
         "any": "Cualquiera",
         "persistent": "Persistente",
@@ -656,7 +628,6 @@
       }
     }
   },
-
   "routes": {
     "title": "Rutas",
     "info": "Caminos utilizados para llegar a los visores remotos con los que se han establecido transportes. Las rutas se generan automáticamente según sea necesario.",
@@ -706,13 +677,11 @@
       "any-type-option": "Cualquiera"
     }
   },
-
   "copy": {
     "tooltip": "Presione para copiar",
     "tooltip-with-text": "{{ text }} (Presione para copiar)",
     "copied": "¡Copiado!"
   },
-
   "selection": {
     "select-all": "Seleccionar todo",
     "unselect-all": "Deseleccionar todo",
@@ -722,7 +691,6 @@
     "enable-autostart-all": "Habilitar el autoinicio de las apps seleccionadas",
     "disable-autostart-all": "Deshabilitar el autoinicio de las apps seleccionadas"
   },
-
   "refresh-button": {
     "seconds": "Refrescado hace unos segundos",
     "minute": "Refrescado hace un minuto",
@@ -735,19 +703,16 @@
     "weeks": "Refrescado hace {{ time }} semanas",
     "error-tooltip": "Hubo un error al intentar refrescar los datos. Reintentando automáticamente cada {{ time }} segundos..."
   },
-
   "view-all-link": {
     "label": "Ver todos los {{ number }} elementos"
   },
-
   "paginator": {
     "first": "Primera",
     "last": "Última",
     "total": "Total: {{ number }} páginas",
     "select-page-title": "Seleccionar página"
   },
-
-  "confirmation" : {
+  "confirmation": {
     "header-text": "Confirmación",
     "confirm-button": "Sí",
     "cancel-button": "No",
@@ -755,29 +720,22 @@
     "error-header-text": "Error",
     "done-header-text": "Hecho"
   },
-
-  "language" : {
+  "language": {
     "title": "Seleccionar lenguaje"
   },
-
-  "tabs-window" : {
-    "title" : "Cambiar pestaña"
+  "tabs-window": {
+    "title": "Cambiar pestaña"
   },
-
-  "vpn" : {
+  "vpn": {
     "title": "Panel de Control de VPN",
     "start": "Inicio",
     "servers": "Servidores",
     "settings": "Configuracion",
-
     "unnamed": "Sin nombre",
-
     "starting-blocked-server-error": "No se puede conectar con el servidor seleccionado porque se ha agregado a la lista de servidores bloqueados.",
     "unexpedted-error": "Se produjo un error inesperado y no se pudo completar la operación.",
-
     "remote-access-title": "Parece que está accediendo al sistema de manera remota",
     "remote-access-text": "Esta aplicación sólo permite administrar la protección VPN del dispositivo en el que fue instalada. Los cambios hechos con ella no afectarán a dispositivos remotos como el que parece estar usando. También es posible que los datos de IP que se muestren sean incorrectos.",
-
     "server-change": {
       "busy-error": "El sistema está ocupado. Por favor, espere.",
       "backend-error": "No fue posible cambiar el servidor. Por favor, asegúrese de que la clave pública sea correcta y de que la aplicación VPN se esté ejecutando.",
@@ -785,7 +743,6 @@
       "change-server-while-connected-confirmation": "La protección VPN se interrumpirá mientras se cambia el servidor y algunos datos pueden transmitirse sin protección durante el proceso. ¿Desea continuar?",
       "start-same-server-confirmation": "Ya había seleccionado ese servidor. ¿Desea conectarte a él?"
     },
-
     "error-page": {
       "text": "La aplicación de cliente VPN no está disponible.",
       "more-info": "No fue posible conectarse a la aplicación cliente VPN. Esto puede deberse a un error de configuración, un problema inesperado con el visor o porque utilizó una clave pública no válida en la URL.",
@@ -796,8 +753,7 @@
       "text-pk-change": "Operación inválida.",
       "more-info-pk-change": "Por favor, utilice esta aplicación para administrar sólo un cliente VPN."
     },
-
-    "connection-info" : {
+    "connection-info": {
       "state-title": "El estado de tu conexión es actualmente:",
       "state-connecting": "Conectando",
       "state-connecting-info": "Se está activando la protección VPN.",
@@ -814,12 +770,10 @@
       "upload-info": "Velocidad de subida.",
       "download-info": "Velocidad de descarga."
     },
-
-    "connection-error" : {
+    "connection-error": {
       "text": "Error de conexión",
       "info": "Problema conectando con la app vpn. Algunos datos mostrados podrían estar desactualizados."
     },
-
     "status-page": {
       "start-title": "Iniciar VPN",
       "no-server": "¡Ningún servidor seleccionado!",
@@ -836,7 +790,6 @@
       "problem-stopping-error": "No fue posible detener la VPN. Por favor, asegúrese de que la aplicación base de cliente VPN esté ejecutandose.",
       "generic-problem-error": "No fue posible realizar la operación. Por favor, asegúrese de que la aplicación base de cliente VPN esté ejecutandose.",
       "select-server-warning": "Por favor, seleccione un servidor primero.",
-
       "data": {
         "ip": "Dirección IP:",
         "ip-problem-info": "Hubo un problema al intentar obtener la IP. Por favor, verifíquela utilizando un servicio externo.",
@@ -853,7 +806,6 @@
         "unavailable": "No disponible"
       }
     },
-
     "server-options": {
       "tooltip": "Opciones",
       "connect-without-password": "Conectarse sin contraseña",
@@ -877,7 +829,6 @@
       "remove-from-history": "Quitar del historial",
       "remove-from-history-confirmation": "¿Realmente desea quitar del historial el servidor?",
       "remove-from-history-done": "Eliminado del historial.",
-
       "edit-value": {
         "name-title": "Nombre Personalizado",
         "note-title": "Nota Personalizada",
@@ -887,7 +838,6 @@
         "changes-made-confirmation": "Se ha realizado el cambio."
       }
     },
-
     "server-conditions": {
       "selected-info": "Este es el servidor actualmente seleccionado.",
       "blocked-info": "Este servidor está en la lista de bloqueados.",
@@ -895,8 +845,7 @@
       "history-info": "Este servidor está en el historial de servidores.",
       "has-password-info": "Se estableció una contraseña para conectarse con este servidor."
     },
-
-    "server-list" : {
+    "server-list": {
       "date-small-table-label": "Fecha",
       "date-info": "Última vez en la que usó este servidor.",
       "country-small-table-label": "País",
@@ -930,14 +879,12 @@
       "current-filters": "Filtros actuales (presione para eliminar)",
       "none": "Ninguno",
       "unknown": "Desconocido",
-
       "tabs": {
         "public": "Públicos",
         "history": "Historial",
         "favorites": "Favoritos",
         "blocked": "Bloqueados"
       },
-
       "add-server-dialog": {
         "title": "Ingresar manualmente",
         "pk-label": "Llave pública del servidor",
@@ -948,14 +895,12 @@
         "pk-chars-error": "La llave pública sólo debe contener caracteres hexadecimales.",
         "use-server-button": "Usar servidor"
       },
-
       "password-dialog": {
         "title": "Introducir Contraseña",
         "password-if-any-label": "Contraseña del servidor (si tiene)",
         "password-label": "Contraseña del servidor",
         "continue-button": "Continuar"
       },
-
       "filter-dialog": {
         "country": "El país debe ser",
         "name": "El nombre debe contener",
@@ -963,20 +908,17 @@
         "public-key": "La llave pública debe contener",
         "congestion-rating": "La calificación de congestión debe ser",
         "latency-rating": "La calificación de latencia debe ser",
-  
         "rating-options": {
           "any": "Cualquiera",
           "gold": "Oro",
           "silver": "Plata",
           "bronze": "Bronce"
         },
-
         "country-options": {
           "any": "Cualquiera"
         }
       }
     },
-
     "settings-page": {
       "setting-small-table-label": "Ajuste",
       "value-small-table-label": "Valor",
@@ -995,7 +937,6 @@
       "setting-off": "Apagado",
       "working-warning": "El sistema está ocupado. Por favor, espere a que finalice la operación anterior.",
       "change-while-connected-confirmation": "La protección VPN se interrumpirá mientras se realiza el cambio. ¿Desea continuar?",
-
       "data-units-modal": {
         "title": "Unidades de Datos",
         "only-bits": "Bits para todas las estadísticas",
@@ -1003,7 +944,6 @@
         "bits-speed-and-bytes-volume": "Bits para velocidad y bytes para volumen (predeterminado)"
       }
     },
-
     "dns-config": {
       "title": "Servidor DNS personalizado",
       "ip": "Dirección IP del servidor DNS personalizado",

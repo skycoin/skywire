@@ -587,7 +587,6 @@ type Summary struct {
 	LastSeenAt           *time.Time                       `json:"last_seen_at,omitempty"`
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
-	SkybianBuildVersion  string                           `json:"skybian_build_version,omitempty"` // Deprecated
 	RewardAddress        string                           `json:"reward_address"`
 	// RewardEligible reflects the reward system's verdict on this visor's most
 	// recent survey PUSH: non-nil false = REJECTED (e.g. version below the reward

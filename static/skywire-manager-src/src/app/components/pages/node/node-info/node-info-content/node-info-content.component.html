@@ -103,12 +103,6 @@
           <span class="title">{{ 'node.details.node-info.arch' | translate }} </span>
           {{ node.arch ? node.arch : ('common.unknown' | translate) }}
         </span>
-        @if (node.skybianBuildVersion) {
-          <span class="info-line">
-            <span class="title">{{ 'node.details.node-info.skybian-version' | translate }} </span>
-            {{ node.skybianBuildVersion }}
-          </span>
-        }
       </div>
 
       <!-- Network — NAT/IP/ping. Compact card; sits next to DMSG
