@@ -27,7 +27,6 @@
     "data-update-problems": "Problem updating the data.",
     "visors": "visors"
   },
-
   "labeled-element": {
     "edit-label": "Edit label",
     "remove-label": "Remove label",
@@ -41,7 +40,6 @@
     "tooltip": "Click to copy the entry or change the label",
     "tooltip-with-text": "{{ text }} (Click to copy the entry or change the label)"
   },
-
   "labels": {
     "title": "Labels",
     "info": "Labels you have entered to easily identify visors, transports and other elements, instead of having to read machine generated identifiers.",
@@ -59,7 +57,6 @@
       "label": "The label must contain",
       "id": "The id must contain",
       "type": "The type must be",
-
       "type-options": {
         "any": "Any",
         "visor": "Visor",
@@ -68,14 +65,12 @@
       }
     }
   },
-
   "filters": {
     "filter-action": "Filter",
     "filter-info": "Filter list.",
     "press-to-remove": "(Press to remove the filters)",
     "remove-confirmation": "Are you sure you want to remove the filters?"
   },
-
   "tables": {
     "title": "Order by",
     "sorting-title": "Ordered by:",
@@ -84,12 +79,10 @@
     "label": "(label)",
     "inverted-order": "(inverted)"
   },
-
   "start": {
     "title": "Start",
     "loading-error": "An error occurred while getting the initial data. Retrying..."
   },
-
   "node": {
     "title": "Visor details",
     "not-found": "Visor not found.",
@@ -107,7 +100,7 @@
       "goroutines": "Goroutines",
       "gc": "GC rate"
     },
-    "logs" : {
+    "logs": {
       "title": "Runtime Logs",
       "no-logs": "No runtime logs were found for this visor.",
       "no-logs-for-filter": "No runtime logs matches the selected filter.",
@@ -169,7 +162,6 @@
         "config-version": "Config version:",
         "os": "OS:",
         "arch": "Architecture:",
-        "skybian-version": "Skybian version:",
         "time": {
           "title": "Time online:",
           "seconds": "a few seconds",
@@ -281,7 +273,6 @@
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },
-
   "rewards-address-config": {
     "title": "Reward Address Configuration",
     "info": "Here you can set to which Skycoin address you want the rewards to be sent. If you leave the address empty, the registration will be deleted and the visor will not receive rewards.",
@@ -292,7 +283,6 @@
     "done": "Changes saved.",
     "empty-warning": "The address in empty, so the registration will be deleted and no rewards will be received. Do you really want to continue?"
   },
-
   "router-config": {
     "title": "Router Configuration",
     "info": "Here you can configure how many hops the connections must pass through other Skywire visors before reaching the final destination. NOTE: the changes will not affect the existing routes.",
@@ -301,7 +291,6 @@
     "save-config-button": "Save configuration",
     "done": "Changes saved."
   },
-
   "nodes": {
     "title": "Visor list",
     "local-visor-title": "Local Visor",
@@ -369,7 +358,6 @@
       "label": "The label must contain",
       "key": "The public key must contain",
       "dmsg": "The DMSG server key must contain",
-
       "online-options": {
         "any": "Online or offline",
         "online": "Online",
@@ -377,7 +365,6 @@
       }
     }
   },
-
   "network-transports": {
     "loading": "Fetching transport metrics from TPD…",
     "summary": "{{transports}} transports · {{bandwidth}} network bandwidth ({{days}} days)",
@@ -403,7 +390,6 @@
     "total": "Total",
     "latency": "Latency"
   },
-
   "multi-resources": {
     "loading": "Polling visor host stats…",
     "summary": "{{count}} visors",
@@ -416,7 +402,6 @@
     "rx": "RX",
     "proc-rss": "Process RSS"
   },
-
   "services-health": {
     "loading": "Checking deployment services…",
     "not-available-wasm": "Deployment service health is not available on a browser visor. A wasm visor running in the browser does not probe the deployment services' health endpoints.",
@@ -447,12 +432,10 @@
     "rsn-failure-reasons": "Top failure reasons",
     "rsn-error": "Unreachable"
   },
-
   "terminal": {
     "help": "Live shell on the visor (dmsgpty). Ctrl+D or type \"exit\" to close.",
     "open-fullscreen": "Open in new window"
   },
-
   "app-settings": {
     "title": "App Settings",
     "args": "Args",
@@ -469,7 +452,6 @@
     "saved": "Settings saved (restart the app for changes to take effect)",
     "last-error": "Last error"
   },
-
   "skysocks-tab": {
     "select-server": {
       "button": "Choose server",
@@ -514,7 +496,6 @@
     "added": "Instance added — configure remote PK in the settings dialog and then Start",
     "add-error": "Failed to add instance (name may be in use)"
   },
-
   "vpn-tab": {
     "client": {
       "title": "VPN Client",
@@ -543,7 +524,6 @@
     "start-error": "Failed to start app",
     "stop-error": "Failed to stop app"
   },
-
   "wallet": {
     "help": "Client-side Skycoin wallet — keys stay in your browser; the hypervisor serves it over the mesh at",
     "open-fullscreen": "Open in new window",
@@ -588,7 +568,6 @@
       }
     }
   },
-
   "web-proxy": {
     "title": "Resolving Proxy",
     "help": "Browse .skynet and .dmsg domains. Optionally route all other traffic through an upstream SOCKS5 proxy (e.g. skysocks).",
@@ -602,7 +581,6 @@
     "set": "Set",
     "refresh": "Refresh"
   },
-
   "logs": {
     "loading": "Loading runtime logs…",
     "empty": "No log entries match the current filter.",
@@ -617,7 +595,6 @@
     "view-rest": "View all {{number}} entries in raw format >",
     "dropped": "Skipped {{count}} older entries that aged out of the visor's runtime buffer."
   },
-
   "bandwidth": {
     "loading": "Reading local transport stats…",
     "empty": "No transport bandwidth recorded yet.",
@@ -638,7 +615,6 @@
     "latency-min-avg-max": "Lat min/avg/max",
     "sampled-at": "Sampled at"
   },
-
   "uptime": {
     "loading": "Reading local uptime bitmaps…",
     "empty": "No uptime data recorded yet.",
@@ -681,7 +657,6 @@
     "services-col-recent": "Last 7 days",
     "services-no-data": "No data for this visor."
   },
-
   "skychat": {
     "title": "Skychat",
     "connected": "Connected",
@@ -758,7 +733,6 @@
       }
     }
   },
-
   "network-view": {
     "loading": "Aggregating service-discovery, transport-discovery and uptime-tracker…",
     "last-updated": "last fetched",
@@ -783,7 +757,6 @@
       "low-transports": "online but <2 stcpr/sudph"
     }
   },
-
   "dmsg-settings": {
     "loading": "Loading DMSG session state…",
     "summary": "DMSG client sessions",
@@ -799,7 +772,6 @@
     "result-new": "newly connected:",
     "result-failed": "failed"
   },
-
   "bulk-rewards": {
     "title": "Change reward address",
     "info": "Enter the Skycoin address where you want to receive the rewards. The address will be set on all the selected visors. If you leave the address empty, the registration will be deleted and the visors will not receive rewards. You can also set the reward address of each node individually using the option on the visor details page.",
@@ -816,13 +788,11 @@
     "perform-changes": "Perform changes",
     "empty-warning": "The address in empty, so the registrations will be deleted and no rewards will be received. Do you really want to continue?"
   },
-
   "edit-label": {
     "label": "Label",
     "done": "Label saved.",
     "label-removed-warning": "The label was removed."
   },
-
   "settings": {
     "title": "Settings",
     "checking-auth": "Checking authentication settings.",
@@ -839,7 +809,7 @@
       "info": "Terminate the in-browser visor's shared worker and reload the page with a fresh build. Use this if the visor becomes unresponsive.",
       "confirmation": "This will terminate the in-browser visor and reload the page with a fresh worker. Continue?"
     },
-    "password" : {
+    "password": {
       "initial-config-help": "Use this option for setting the initial password. After a password has been set, it is not possible to use this option to modify it.",
       "help": "Options for changing your password.",
       "old-password": "Old password",
@@ -863,7 +833,7 @@
         "default-password": "Don't use the default password (1234)."
       }
     },
-    "updater-config" : {
+    "updater-config": {
       "open-link": "Show updater settings",
       "open-confirmation": "The updater settings are for experienced users only. Are you sure you want to continue?",
       "help": "Use this form for overriding the settings that will be used by the updater. All empty fields will be ignored. The settings will be used for all updating operations, no mater which element is being updated, so please be careful.",
@@ -885,13 +855,11 @@
     "refresh-rate-confirmation": "Refresh rate changed.",
     "seconds": "seconds"
   },
-
   "login": {
     "password": "Password",
     "incorrect-password": "Incorrect password.",
     "initial-config": "Configure initial launch"
   },
-
   "actions": {
     "menu": {
       "terminal": "Terminal",
@@ -918,7 +886,6 @@
       "error": "Unexpected error while trying to execute the command."
     }
   },
-
   "update": {
     "title": "Update",
     "error-title": "Error",
@@ -944,14 +911,12 @@
     "finished": "Status connection finished",
     "install": "Install updates"
   },
-
   "update-all": {
     "title": "Update",
     "updatable-list-text": "Please press the buttons of the visors you want to update. A terminal will be opened in a new tab for each visor and the update procedure will be started automatically.",
     "non-updatable-list-text": "The following visors can not be updated via the terminal:",
     "update-button": "Update"
   },
-
   "apps": {
     "tabs": {
       "list": "All Apps",
@@ -986,7 +951,7 @@
       "state-tooltip": "Current state",
       "auto-start": "Auto start",
       "otp": "OTP",
-      "otp-tooltip": "One-time code for logging into this app's own web UI. It is replaced after every login attempt, successful or not \u2014 re-read it here after a failed entry.",
+      "otp-tooltip": "One-time code for logging into this app's own web UI. It is replaced after every login attempt, successful or not — re-read it here after a failed entry.",
       "empty-official": "This visor doesn't have any official applications.",
       "empty-user": "This visor doesn't have any user applications.",
       "empty-with-filter": "No app matches the selected filtering criteria.",
@@ -995,19 +960,16 @@
       "autostart-disabled": "Autostart disabled",
       "autostart-enabled": "Autostart enabled",
       "unavailable-logs-error": "Unable to show the logs while the app is not running.",
-
       "filter-dialog": {
         "state": "The state must be",
         "name": "The name must contain",
         "port": "The port must contain",
         "autostart": "The autostart must be",
-  
         "state-options": {
           "any": "Running or stopped",
           "running": "Running",
           "stopped": "Stopped"
         },
-
         "autostart-options": {
           "any": "Enabled or disabled",
           "enabled": "Enabled",
@@ -1116,7 +1078,6 @@
       "killswitch-info": "When active, all network connections will be disabled if the app is running but the VPN protection is interrupted (for temporary errors or any other problem). This avoids data leaks.",
       "settings-changed-alert": " The changes have not been saved yet.",
       "save-settings": "Save settings",
-
       "addr": "Listener address (--addr)",
       "addr-hint": "Where the SOCKS5 server listens locally (default: 127.0.0.1:1080)",
       "http": "HTTP proxy address (--http)",
@@ -1125,19 +1086,16 @@
       "tries-hint": "Number of attempts before giving up (default: 3)",
       "retry-time": "Retry delay seconds (--retry-time)",
       "retry-time-hint": "Wait between retry attempts (default: 5)",
-
       "change-note-dialog": {
         "title": "Change Note",
         "note": "Note"
       },
-
       "password-dialog": {
         "title": "Enter Password",
         "password": "Password",
         "info": "You are being asked for a password because a password was set when the selected entry was created, but the it was not saved for security reasons. You can leave the password empty if needed.",
         "continue-button": "Continue"
       },
-
       "filter-dialog": {
         "title": "Filters",
         "country": "The country must be",
@@ -1170,7 +1128,6 @@
     "status-stopped-tooltip": "App is currently stopped",
     "status-failed-tooltip": "The app finished with the following error: {{ error }}"
   },
-
   "transports": {
     "title": "Transports",
     "info": "Connections you have with remote Skywire visors, to allow local Skywire apps to communicate with apps running on those remote visors.",
@@ -1239,7 +1196,6 @@
       "persistent": "The transport must be",
       "id": "The id must contain",
       "remote-node": "The remote key must contain",
-
       "persistent-options": {
         "any": "Any",
         "persistent": "Persistent",
@@ -1247,7 +1203,6 @@
       }
     }
   },
-
   "reach": {
     "title": "Reachability Probes",
     "help": "Test live reachability to a target visor: skywire-route ping, dmsg ping, or remote /health fetch over dmsg. Each result is appended below; results stay until cleared.",
@@ -1261,7 +1216,6 @@
     "clear": "Clear",
     "empty": "No probes run yet."
   },
-
   "dmsg": {
     "title": "DMSG Clients",
     "loading": "Loading dmsg sessions…",
@@ -1274,7 +1228,6 @@
     "no-servers": "No connected servers.",
     "fetched-at": "Fetched"
   },
-
   "routing": {
     "view": {
       "rules": "Rules",
@@ -1343,7 +1296,6 @@
       "found": "Found {{count}} routes."
     }
   },
-
   "routes": {
     "title": "Routes",
     "info": "Paths used to reach the remote visors to which transports have been established. Routes are automatically generated as needed.",
@@ -1399,13 +1351,11 @@
       "any-type-option": "Any"
     }
   },
-
   "copy": {
     "tooltip": "Click to copy",
     "tooltip-with-text": "{{ text }} (Click to copy)",
     "copied": "Copied!"
   },
-
   "selection": {
     "select-all": "Select all",
     "unselect-all": "Unselect all",
@@ -1415,7 +1365,6 @@
     "enable-autostart-all": "Enable autostart for all selected apps",
     "disable-autostart-all": "Disable autostart for all selected apps"
   },
-
   "refresh-button": {
     "seconds": "Updated a few seconds ago",
     "minute": "Updated 1 minute ago",
@@ -1428,19 +1377,16 @@
     "weeks": "Updated {{ time }} weeks ago",
     "error-tooltip": "There was an error updating the data. Retrying automatically every {{ time }} seconds..."
   },
-
   "view-all-link": {
     "label": "View all {{ number }} elements"
   },
-
   "paginator": {
     "first": "First",
     "last": "Last",
     "total": "Total: {{ number }} pages",
     "select-page-title": "Select page"
   },
-
-  "confirmation" : {
+  "confirmation": {
     "header-text": "Confirmation",
     "confirm-button": "Yes",
     "cancel-button": "No",
@@ -1448,29 +1394,22 @@
     "error-header-text": "Error",
     "done-header-text": "Done"
   },
-
-  "language" : {
+  "language": {
     "title": "Select language"
   },
-
-  "tabs-window" : {
-    "title" : "Change tab"
+  "tabs-window": {
+    "title": "Change tab"
   },
-
-  "vpn" : {
+  "vpn": {
     "title": "VPN Control Panel",
     "start": "Start",
     "servers": "Servers",
     "settings": "Settings",
-
     "unnamed": "Unnamed",
-
     "starting-blocked-server-error": "Unable to connect to the selected server because it has been added to the blocked servers list.",
     "unexpedted-error": "An unexpected error occurred and the operation could not be completed.",
-
     "remote-access-title": "It appears that you are accessing the system remotely",
     "remote-access-text": "This application only allows you to manage the VPN protection of the device on which it was installed. Changes made with it will not affect remote devices like the one you seem to be using. Also, the displayed IP data may be incorrect.",
-
     "server-change": {
       "busy-error": "The system is busy. Please wait.",
       "backend-error": "It was not possible to change the server. Please make sure the public key is correct and the VPN app is running.",
@@ -1478,7 +1417,6 @@
       "change-server-while-connected-confirmation": "The VPN protection will be interrupted while changing the server and some data may be transmitted unprotected during the process. Do you want to continue?",
       "start-same-server-confirmation": "You had already selected that server. Do you want to connect to it?"
     },
-
     "error-page": {
       "text": "The VPN client app is not available.",
       "more-info": "It was not possible to connect to the VPN client app. This may be due to a configuration error, an unexpected problem with the visor or because you used an invalid public key in the URL.",
@@ -1489,8 +1427,7 @@
       "text-pk-change": "Invalid operation.",
       "more-info-pk-change": "Please use this application to manage only one VPN client."
     },
-
-    "connection-info" : {
+    "connection-info": {
       "state-title": "Your connection is currently:",
       "state-connecting": "Connecting",
       "state-connecting-info": "The VPN protection is being activated.",
@@ -1507,12 +1444,10 @@
       "upload-info": "Upload speed.",
       "download-info": "Download speed."
     },
-
-    "connection-error" : {
+    "connection-error": {
       "text": "Connection error",
       "info": "Problem connecting with the vpn app. Some data being displayed could be outdated."
     },
-
     "status-page": {
       "start-title": "Start VPN",
       "no-server": "No server selected!",
@@ -1529,7 +1464,6 @@
       "problem-stopping-error": "It was not possible to stop the VPN. Please make sure the base VPN client app is running.",
       "generic-problem-error": "It was not possible to perform the operation. Please make sure the base VPN client app is running.",
       "select-server-warning": "Please select a server first.",
-
       "route-options": {
         "title": "Route options",
         "hops": "Hops",
@@ -1538,7 +1472,6 @@
         "mux-info": "Number of parallel routes to dial the server over. 1 disables multiplexing. Experimental: multiplexed routes (2 or more) are not yet stable.",
         "experimental": "experimental"
       },
-
       "data": {
         "ip": "IP address:",
         "ip-problem-info": "There was a problem trying to get the IP. Please verify it using an external service.",
@@ -1555,7 +1488,6 @@
         "unavailable": "Unavailable"
       }
     },
-
     "server-options": {
       "tooltip": "Options",
       "connect-without-password": "Connect without password",
@@ -1579,7 +1511,6 @@
       "remove-from-history": "Remove from history",
       "remove-from-history-confirmation": "Are you sure you want to remove this server from the history?",
       "remove-from-history-done": "Removed from history.",
-
       "edit-value": {
         "name-title": "Custom Name",
         "note-title": "Custom Note",
@@ -1589,7 +1520,6 @@
         "changes-made-confirmation": "The change has been made."
       }
     },
-
     "server-conditions": {
       "selected-info": "This is the currently selected server.",
       "blocked-info": "This server is in the blocked list.",
@@ -1597,8 +1527,7 @@
       "history-info": "This server is in the server history.",
       "has-password-info": "A password was set for connecting with this server."
     },
-
-    "server-list" : {
+    "server-list": {
       "date-small-table-label": "Date",
       "date-info": "Last time you used this server.",
       "country-small-table-label": "Country",
@@ -1632,14 +1561,12 @@
       "current-filters": "Current filters (press to remove)",
       "none": "None",
       "unknown": "Unknown",
-
       "tabs": {
         "public": "Public",
         "history": "History",
         "favorites": "Favorites",
         "blocked": "Blocked"
       },
-
       "add-server-dialog": {
         "title": "Enter manually",
         "pk-label": "Server public key",
@@ -1650,14 +1577,12 @@
         "pk-chars-error": "The public key must only contain hexadecimal characters.",
         "use-server-button": "Use server"
       },
-
       "password-dialog": {
         "title": "Enter Password",
         "password-if-any-label": "Server password (if any)",
         "password-label": "Server password",
         "continue-button": "Continue"
       },
-
       "filter-dialog": {
         "country": "The country must be",
         "name": "The name must contain",
@@ -1665,20 +1590,17 @@
         "public-key": "The public key must contain",
         "congestion-rating": "The congestion rating must be",
         "latency-rating": "The latency rating must be",
-  
         "rating-options": {
           "any": "Any",
           "gold": "Gold",
           "silver": "Silver",
           "bronze": "Bronze"
         },
-
         "country-options": {
           "any": "Any"
         }
       }
     },
-
     "settings-page": {
       "setting-small-table-label": "Setting",
       "value-small-table-label": "Value",
@@ -1697,7 +1619,6 @@
       "setting-off": "Off",
       "working-warning": "The system is busy. Please wait for the previous operation to finish.",
       "change-while-connected-confirmation": "The VPN protection will be interrupted while changing the setting. Do you want to continue?",
-
       "data-units-modal": {
         "title": "Data Units",
         "only-bits": "Bits for all stats",
@@ -1705,7 +1626,6 @@
         "bits-speed-and-bytes-volume": "Bits for speed and bytes for volume (default)"
       }
     },
-
     "dns-config": {
       "title": "Custom DNS server",
       "ip": "Custom DNS server IP address",
