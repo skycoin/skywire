@@ -868,3 +868,36 @@ func (ce *Client) closeIfDialed(srvPK cipher.PubKey, ses ClientSession, hadBefor
 		ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to close session")
 	}
 }
+
+// DialStreamVia dials addr through a PINNED rendezvous server: it establishes a
+// session to serverPK and dials the destination over that session. This is how
+// a browser reaches a direct or hidden client by naming the server it sits on
+// — <server-pk>.<dest-pk>.dmsg — when the destination's own entry names no
+// server the dialer can use.
+//
+// A relay-attached client cannot do that, and should not have to. It holds one
+// session, the relay, and an empty discovery by construction (see
+// dmsgclient.StartDmsgLocalRelay), so EnsureAndObtainSession(serverPK) fails
+// the entry lookup with error 100 whichever server is named — there is no
+// address for it to dial. But a pin is not a demand for a particular session;
+// it is the caller saying where the destination can be found. A relay answers
+// that question better: DialStream tries relay sessions before any lookup, the
+// relay resolves the destination with the visor's entry cache and forwards over
+// the visor's own sessions, and since #4829 it can deliver over a terminal
+// skynet leg straight to the destination visor. Falling through to the ordinary
+// ladder honors the pin's intent rather than failing on its mechanism.
+//
+// With no relay the pin stays binding: the caller named a server deliberately
+// and nothing here knows better.
+func (ce *Client) DialStreamVia(ctx context.Context, serverPK cipher.PubKey, addr Addr) (*Stream, error) {
+	ses, err := ce.EnsureAndObtainSession(ctx, serverPK)
+	if err == nil {
+		return ses.DialStream(ctx, addr)
+	}
+	if len(ce.sortedRelaySessions()) == 0 {
+		return nil, fmt.Errorf("pin via dmsg server %s: %w", serverPK, err)
+	}
+	ce.log.WithError(err).WithField("server", serverPK).WithField("remote_pk", addr.PK).
+		Debug("No session to the pinned server; dialing over the relay, which resolves the destination itself.")
+	return ce.DialStream(ctx, addr)
+}

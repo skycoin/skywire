@@ -505,11 +505,11 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 					}
 					serverPK := rl.PK
 					log.WithField("server", serverPK).WithField("port", port).Debug("SOCKS5 → DMSG pinned via server")
-					ses, serr := dmsgC.EnsureAndObtainSession(ctx, serverPK)
-					if serr != nil {
-						return nil, fmt.Errorf("pin via dmsg server %s: %w", serverPK, serr)
-					}
-					str, derr := ses.DialStream(ctx, dstAddr)
+					// DialStreamVia, not EnsureAndObtainSession + DialStream:
+					// a relay-attached client has no discovery to resolve the
+					// pinned server's address with, and does not need one —
+					// its relay resolves the destination itself. See its doc.
+					str, derr := dmsgC.DialStreamVia(ctx, serverPK, dstAddr)
 					if derr != nil {
 						return nil, derr
 					}
