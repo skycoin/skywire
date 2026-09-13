@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -188,10 +189,18 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 						Legs: []proxystatus.Leg{{
 							Index:       di,
 							TransportID: s.TpID.String(),
+							TpType:      p.directTpType(s.TpID),
 							RemotePK:    s.RemotePK.String(),
 							Direct:      true,
-							SentBytes:   s.SentBytes,
-							RecvBytes:   s.RecvBytes,
+							// Alive is what the tree renderer gates on: it skips
+							// every leg that is not alive, so leaving this false
+							// drew a tree with the local PK and nothing under it
+							// — no exit — on a proxy that was carrying traffic.
+							// A stream in the mux's live map IS alive; StreamInfo
+							// lists no other kind.
+							Alive:     true,
+							SentBytes: s.SentBytes,
+							RecvBytes: s.RecvBytes,
 						}},
 					})
 				}
@@ -524,4 +533,20 @@ func proxyHopsFrom(hops []MuxHopInfo) []proxystatus.Hop {
 		}
 	}
 	return out
+}
+
+// directTpType resolves the transport type carrying a direct stream, so the
+// status tree labels it the way it labels a route-group leg (which gets the
+// type from MuxInfo). Empty when the transport manager is gone or the id no
+// longer resolves — a stream can outlive the lookup by a moment, and a blank
+// type is a better answer than failing the whole snapshot.
+func (p *visorStatusProvider) directTpType(tpID uuid.UUID) string {
+	if p.v == nil || p.v.tpM == nil {
+		return ""
+	}
+	tp, err := p.v.tpM.GetTransportByID(tpID)
+	if err != nil || tp == nil {
+		return ""
+	}
+	return string(tp.Type())
 }
