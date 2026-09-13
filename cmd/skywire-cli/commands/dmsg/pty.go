@@ -4,10 +4,12 @@ package clidmsg
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"regexp"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/0magnet/bottle/vnet"
@@ -384,11 +386,23 @@ A target scheme that disagrees with an explicit --transport errors.`,
 		// hung past Ctrl-C with no way for the user to recover except
 		// SIGKILL — combined with `timeout(1)` wrappers that send only
 		// SIGTERM, the process would leak indefinitely.
-		go func() {
-			<-ctx.Done()
-			fmt.Fprintln(cmd.ErrOrStderr(), "exec: interrupted") //nolint:errcheck
-			os.Exit(130)
-		}()
+		// finished distinguishes "this command returned" from "a signal
+		// arrived". ctx here is a SignalContext, so ctx.Done() closes for
+		// BOTH — including the `defer cancel()` above on a perfectly normal
+		// return. Without this flag the watcher woke on every successful run
+		// and raced the process's own exit: measured 2 of 5 trivial `echo ok`
+		// execs reporting "exec: interrupted" and exiting 130 at ~0.6s, after
+		// reportExecResult had already written the real output. Scripted
+		// callers then read that line as the result and saw healthy hosts as
+		// unreachable.
+		//
+		// Registered AFTER `defer cancel()`, so defer LIFO runs it BEFORE
+		// cancel: by the time cancel() closes Done, finished is already true,
+		// and the store happens-before the close which happens-before the
+		// watcher's receive. A real signal still finds finished false.
+		var finished atomic.Bool
+		defer finished.Store(true)
+		go execInterruptWatch(ctx, &finished, cmd.ErrOrStderr(), os.Exit)
 		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint:errcheck
 		name := args[1]
@@ -616,4 +630,21 @@ func ptyRPCClient(cmdFlags *pflag.FlagSet) visor.API {
 		internal.PrintFatalError(cmdFlags, fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
 	}
 	return visor.NewRPCClient(ptyLogger, conn, visor.RPCPrefix, 0)
+}
+
+// execInterruptWatch reports an interrupted `pty exec` and exits 130 — but ONLY
+// when the cancellation came from a signal. It is split out of the command so
+// both outcomes are testable without running the command or exiting the test
+// binary; exit is os.Exit in production.
+//
+// The distinction matters because ctx is a cmdutil.SignalContext: its Done
+// channel closes on the command's own deferred cancel just as readily as on
+// SIGINT, and the success path reaches that cancel on every clean run.
+func execInterruptWatch(ctx context.Context, finished *atomic.Bool, w io.Writer, exit func(int)) {
+	<-ctx.Done()
+	if finished.Load() {
+		return
+	}
+	fmt.Fprintln(w, "exec: interrupted") //nolint:errcheck
+	exit(130)
 }
