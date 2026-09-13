@@ -42,6 +42,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // VStream header constants.
@@ -246,11 +247,24 @@ func (m *VStreamMux) loadDirectDialHook() DirectDialHookFn {
 func (m *VStreamMux) Dial(remotePK cipher.PubKey, appName string) (*VStream, error) {
 	// Find a non-DMSG transport to this peer. DMSG transports use their
 	// own stream multiplexing and don't support route ID 0 packets.
+	//
+	// Pick the MOST PREFERRED one rather than whichever the walk yields
+	// first. This used to stop at the first match, so when a peer had
+	// several transports the one carrying every direct session was decided
+	// by map iteration order: a visor holding both stcpr and webrtc to an
+	// exit ran its proxy over webrtc — seventh in the default preference,
+	// and the worst of the two — while the stcpr sat unused. types
+	// .TypePreference reads the same order the router applies, which the
+	// visor sets from routing.transport_preference at init, so the direct
+	// path and the routed path now agree on what "best" means.
 	var targetTp *ManagedTransport
+	bestRank := math.MaxInt
 	m.tm.WalkTransports(func(tp *ManagedTransport) bool {
-		if tp.Remote() == remotePK && !tp.IsClosed() && tp.Type() != "dmsg" {
-			targetTp = tp
-			return false
+		if tp.Remote() != remotePK || tp.IsClosed() || tp.Type() == "dmsg" {
+			return true
+		}
+		if rank := types.TypePreference(tp.Type()); rank < bestRank {
+			bestRank, targetTp = rank, tp
 		}
 		return true
 	})
