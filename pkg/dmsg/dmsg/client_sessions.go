@@ -25,9 +25,10 @@ import (
 // ce.dc may be a dmsgfirst-wrapped client whose primary path dials over
 // DMSG itself — DialStream → phase 3 → EnsureAndObtainSession on the
 // same goroutine, which would re-acquire sesMx and self-deadlock on a
-// non-reentrant mutex. Holding the lock only during the cache check and
-// the dialSession step still serializes concurrent dials to the same
-// server, preserving the invariant the lock was protecting.
+// non-reentrant mutex. It is released across the dial too, for the same
+// reason; what serializes concurrent dials to one server is not sesMx but
+// dialSessionOnce, which is where the reason they must be serialized is
+// written down.
 //
 // We also resolve the server entry from the local entryCache first when
 // possible. If we go to ce.dc here, the dmsgfirst wrapper's primary
@@ -70,9 +71,92 @@ func (ce *Client) EnsureAndObtainSession(ctx context.Context, srvPK cipher.PubKe
 	// EnsureAndObtainSession through this same client. Holding sesMx here
 	// would re-lock this non-reentrant mutex on the same goroutine and
 	// deadlock the whole dmsg client — a fatal, fleet-wide wedge.
-	// dialSession's sessionsMx insertion is newest-session-wins, so a
-	// racing duplicate dial is replaced (and closed), not leaked.
-	return ce.dialSession(ctx, srvEntry)
+	// dialSessionOnce coalesces racing callers so the dial happens once.
+	return ce.dialSessionOnce(ctx, srvEntry)
+}
+
+// sessionDialFlight is one in-flight session dial to a server, shared by every
+// caller that asked for that server while it was running.
+type sessionDialFlight struct {
+	done chan struct{}
+	ses  ClientSession
+	err  error
+}
+
+// sessionDialFlightWait bounds how long a caller waits on someone else's dial
+// before dialing itself. A dial is bounded by DialTimeout plus the handshake,
+// so reaching this means the leader is stuck somewhere unforeseen; dialing
+// anyway is exactly today's behavior, which is a far better degradation than
+// blocking a caller forever.
+var sessionDialFlightWait = DialTimeout + 2*HandshakeTimeout
+
+// dialSessionOnce establishes a session to entry.Static, coalescing concurrent
+// callers so that exactly one dial per server is ever in flight.
+//
+// A duplicate dial is not merely wasted work, it is DESTRUCTIVE at both ends. A
+// dmsg server keeps one session per client PK, so the second session evicts the
+// first at the server (setSession, newest-session-wins) and the first dies with
+// a remote close; the client's own finishDialedSession then does the same to its
+// map, closing the predecessor it just handed to another caller. Both ends of a
+// live session — and every stream on it — are lost, and the Serve loop re-dials
+// the server it never lost.
+//
+// Nothing serialized these before: EnsureAndObtainSession re-checks the session
+// map and then dials WITHOUT holding sesMx (it must not hold it: the dial path
+// can re-enter session establishment through a self-hosted discovery and would
+// self-deadlock on a non-reentrant mutex), so N callers arriving together for a
+// server with no session all miss the check and all dial. The pinned-rendezvous
+// hostname in pkg/dmsgweb — <server-pk>.<dest-pk>.dmsg — is the way a user
+// reaches that: a browser opens several connections for one page and each one
+// dials the named server.
+//
+// The flight covers only the dial, never the discovery lookup that precedes it,
+// so the re-entrancy the sesMx comment warns about cannot land inside it:
+// dialSession does no lookups, and the entry-registration callback that can
+// re-enter runs AFTER the session is in the map, where the cache check
+// short-circuits. The bounded wait below is there in case that reasoning is
+// ever wrong: a caller degrades to today's duplicate dial rather than wedging.
+func (ce *Client) dialSessionOnce(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
+	srvPK := entry.Static
+
+	ce.dialFlightMx.Lock()
+	if fl, ok := ce.dialFlight[srvPK]; ok {
+		ce.dialFlightMx.Unlock()
+		select {
+		case <-fl.done:
+			// The map is the truth: the leader's session may already have been
+			// replaced by a later reconnect while we waited.
+			if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
+				return dSes, nil
+			}
+			return fl.ses, fl.err
+		case <-ctx.Done():
+			return ClientSession{}, ctx.Err()
+		case <-time.After(sessionDialFlightWait):
+			// Fall through and dial: see sessionDialFlightWait.
+			return ce.dialSession(ctx, entry)
+		}
+	}
+	fl := &sessionDialFlight{done: make(chan struct{})}
+	if ce.dialFlight == nil {
+		ce.dialFlight = make(map[cipher.PubKey]*sessionDialFlight)
+	}
+	ce.dialFlight[srvPK] = fl
+	ce.dialFlightMx.Unlock()
+
+	fl.ses, fl.err = ce.dialSession(ctx, entry)
+
+	// Publish the result BEFORE dropping the flight, so a caller that grabs
+	// this flight in the instant between the two takes the finished result
+	// instead of becoming a second leader and dialing a duplicate.
+	close(fl.done)
+	ce.dialFlightMx.Lock()
+	if ce.dialFlight[srvPK] == fl {
+		delete(ce.dialFlight, srvPK)
+	}
+	ce.dialFlightMx.Unlock()
+
+	return fl.ses, fl.err
 }
 
 // EnsureSession ensures the existence of a session.
@@ -102,8 +186,10 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 	// Dial WITHOUT holding sesMx — same re-entrancy hazard as
 	// EnsureAndObtainSession: the dial path can re-enter session
 	// establishment via the self-hosted transport, which would
-	// self-deadlock on the non-reentrant sesMx.
-	_, err := ce.dialSession(ctx, &e)
+	// self-deadlock on the non-reentrant sesMx. Coalesced, so the Serve
+	// loop's dial and a caller's dial to the same server are one dial and
+	// not two sessions that evict each other.
+	_, err := ce.dialSessionOnce(ctx, &e)
 	return err
 }
 

@@ -286,6 +286,14 @@ type Client struct {
 	lostSession   map[cipher.PubKey]int
 	lostSessionMx sync.Mutex
 
+	// dialFlight coalesces concurrent session establishment per dmsg-server
+	// PK: at most ONE dial to a given server is in flight, and everyone else
+	// waiting on it gets that dial's result. See dialSessionOnce for why a
+	// duplicate dial is destructive rather than merely wasteful. Lazily
+	// initialized; guarded by dialFlightMx.
+	dialFlight   map[cipher.PubKey]*sessionDialFlight
+	dialFlightMx sync.Mutex
+
 	// carrier convergence controls: convMx guards a runtime override of the
 	// ordered carrier preference (nil = Config.Carriers) and a live-only
 	// discovery client used to read a server's CURRENT WT/QUIC endpoints
