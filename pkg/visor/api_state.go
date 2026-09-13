@@ -5,9 +5,11 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 // StateSnapshot is a curated, secrets-free view of the visor's live runtime
@@ -171,6 +173,30 @@ type ModulePresence struct {
 	UptimeRecorder     bool `json:"uptime_recorder"`
 	EmbeddedTPS        bool `json:"embedded_transport_setup"`
 	EmbeddedRouteSetup bool `json:"embedded_route_setup"`
+
+	// ExecWasm describes the js/wasm command module this binary serves to
+	// browser desks. Queryable rather than log-only on purpose: `go build .`
+	// embeds whatever pkg/wasmhv/execwasm/blob already holds instead of
+	// rebuilding it, so a current binary can serve a module many commits
+	// old, and the only other signal is a startup warning that scrolls past.
+	ExecWasm *ExecWasmInfo `json:"exec_wasm,omitempty"`
+}
+
+// ExecWasmInfo reports the embedded js/wasm command module's provenance.
+type ExecWasmInfo struct {
+	// Present is false for a plain source build, which embeds only the
+	// placeholder README and falls back to an on-disk module.
+	Present bool `json:"present"`
+	// Revision is the commit the module was built from, recorded beside it
+	// by `make embed-exec-wasm`. Empty when the module predates that.
+	Revision string `json:"revision,omitempty"`
+	// BinaryRevision is this visor's own commit, for comparison.
+	BinaryRevision string `json:"binary_revision,omitempty"`
+	// Stale is true when both revisions are known and differ: the desk is
+	// serving older code than the visor. Fix with `make embed-exec-wasm`.
+	Stale bool `json:"stale"`
+	// Stamp is the served content fingerprint, which the page polls.
+	Stamp string `json:"stamp,omitempty"`
 }
 
 // StateSnapshot assembles the full runtime StateSnapshot (every default
@@ -300,6 +326,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 			UptimeRecorder:     v.uptimeRecorder != nil,
 			EmbeddedTPS:        v.embeddedTPS != nil,
 			EmbeddedRouteSetup: v.embeddedRouteSetup != nil,
+			ExecWasm:           execWasmInfo(),
 		}
 	}
 
@@ -329,4 +356,26 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*StateSnapshot, error) 
 	}
 
 	return snap, nil
+}
+
+// execWasmInfo describes the embedded js/wasm command module for the state
+// snapshot. Nil when nothing is embedded and nothing is recorded — a plain
+// source build has no module and no story to tell about one.
+func execWasmInfo() *ExecWasmInfo {
+	present := execwasm.Present()
+	rev := execwasm.Revision()
+	if !present && rev == "" {
+		return nil
+	}
+	bin := buildinfo.Commit()
+	if bin == "unknown" {
+		bin = ""
+	}
+	return &ExecWasmInfo{
+		Present:        present,
+		Revision:       rev,
+		BinaryRevision: bin,
+		Stale:          rev != "" && bin != "" && rev != bin,
+		Stamp:          execwasm.Stamp(),
+	}
 }
