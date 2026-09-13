@@ -642,6 +642,9 @@ build-ui: install-deps-ui  ## Builds the UI
 	mkdir ${MANAGER_UI_BUILT_DIR}
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
 
+check-dead-api-fields: ## Fail if a json-tagged API field is never assigned (always serializes as its zero value)
+	bash scripts/check-dead-api-fields.sh
+
 check-onpush:  ## Fail if an OnPush component has an unmarked asynchronous callback
 	node ci-scripts/check-onpush-marks.js $(MANAGER_UI_DIR)/src
 
