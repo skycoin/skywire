@@ -16,7 +16,6 @@ package execwasm
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"strings"
 	"sync"
 )
 
@@ -38,9 +37,7 @@ func load() {
 		gz = b
 		sum := sha256.Sum256(b)
 		stamp = hex.EncodeToString(sum[:])[:16]
-		if rb, rerr := blobFS.ReadFile(revisionName); rerr == nil {
-			revision = strings.TrimSpace(string(rb))
-		}
+		revision = embeddedRevision()
 	})
 }
 
