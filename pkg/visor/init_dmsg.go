@@ -1105,6 +1105,11 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	srvConf := dmsg.DefaultServerConfig()
+	// Advertise the binary's version, as the standalone service does. Without
+	// it the entry carries disc.currentVersion ("0.0.1") and the server is
+	// indistinguishable in discovery from any other, so there is no way to see
+	// which servers have picked up a fix.
+	srvConf.Version = dmsgsrv.EntryVersion()
 	srv := dmsg.NewServer(v.conf.PK, v.conf.SK, dmsgOnlyDisc(dmsgC, discPK, log), srvConf, dmsgmetrics.NewEmpty())
 	srv.SetLogger(log)
 
