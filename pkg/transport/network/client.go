@@ -114,7 +114,15 @@ type ClientFactory struct {
 	// dmsgWSHandler routes the dmsg-over-WebSocket path on the shared transport
 	// port. Held here rather than on the WS client because the client is built
 	// per MakeClient call while the co-resident dmsg server is wired once, later.
-	dmsgWSHandler atomic.Value
+	//
+	// It is a POINTER on purpose. A ClientFactory is passed around BY VALUE —
+	// visorcore.TransportManagerDeps.Factory and transport.NewManager both take
+	// one — so a bare atomic.Value here is copied, and the copy the WS client
+	// reads is not the one SetDmsgWSHandler writes to. The handler then never
+	// arrives and the /dmsg path 404s on every folded dmsg server. Sharing one
+	// allocation makes the copies agree. atomic.Value carries no noCopy, so go
+	// vet's copylocks cannot catch the mistake; this comment is the guard.
+	dmsgWSHandler *atomic.Value
 	// dmsgSharedListener is the tcpDemux branch carrying dmsg sessions, set
 	// only when ShareTCPWithDmsgServer was true at bind time.
 	dmsgSharedListener net.Listener
@@ -161,7 +169,7 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 		wc.(*wsClient).ar = f.ARClient // native: resolve ws:// from the stcpr AR record
 		if f.wsSharedListener != nil { // unified transport port
 			wc.(*wsClient).sharedListener = f.wsSharedListener
-			wc.(*wsClient).dmsgWS = &f.dmsgWSHandler
+			wc.(*wsClient).dmsgWS = f.dmsgWSHandler
 		}
 		return wc, nil
 	case types.WT:
