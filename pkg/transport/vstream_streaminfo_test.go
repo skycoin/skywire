@@ -78,3 +78,34 @@ func TestVStreamMux_StreamInfoLeavesInternalStreamsUnattributed(t *testing.T) {
 	require.Empty(t, infos[0].AppName)
 	require.Empty(t, mux.StreamInfo("skysocks-client"))
 }
+
+// TestVStreamMux_DialPicksThePreferredTransport: with several transports to a
+// peer, the direct path must take the most preferred one.
+//
+// Dial used to stop at the first transport WalkTransports yielded, so which one
+// carried every direct session was decided by map iteration order. Observed
+// live: a visor holding both stcpr and webrtc to an exit ran its proxy over
+// webrtc — seventh in the default preference order, and much the worse of the
+// two — while the stcpr sat idle.
+func TestVStreamMux_DialPicksThePreferredTransport(t *testing.T) {
+	tm := newTestManager(t)
+	remote := mustPK(t)
+
+	// Same peer, two carriers. webrtc is created first so a first-match walk
+	// would be likely to take it.
+	_, _ = servingTransport(t, tm, remote, types.WEBRTC)
+	_, _ = servingTransport(t, tm, remote, types.STCPR)
+
+	mux := NewVStreamMux(tm, routing.AppDirectPacket, logging.MustGetLogger("vstream-pref-test"))
+	s, err := mux.Dial(remote, "skysocks-client")
+	require.NoError(t, err)
+	defer s.Close() //nolint:errcheck
+
+	info := mux.StreamInfo("")
+	require.Len(t, info, 1)
+
+	tp, err := tm.GetTransportByID(info[0].TpID)
+	require.NoError(t, err)
+	require.Equal(t, types.STCPR, tp.Type(),
+		"stcpr outranks webrtc in the preference order; the direct dial must take it")
+}
