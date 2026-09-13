@@ -53,6 +53,7 @@ var (
 	dmsgServerAddr        string // populated from --dmsg-server when given as pk@host:port; empty means "use discovery"
 	dmsgServerMaxAttempts int
 	isStoreLog            bool
+	isLogJSON             bool
 	isForceColor          bool
 	useRouteFinder        bool // override local route calculation to use route finder
 )
@@ -149,6 +150,8 @@ func init() {
 	hiddenflags = append(hiddenflags, "completion")
 	RootCmd.Flags().BoolVarP(&isStoreLog, "storelog", "s", false, "store all logs to file")
 	hiddenflags = append(hiddenflags, "storelog")
+	RootCmd.Flags().BoolVar(&isLogJSON, "log-json", false, "also write structured JSON lines to <local_path>/log/skywire.jsonl (needs --storelog)")
+	hiddenflags = append(hiddenflags, "log-json")
 	RootCmd.Flags().BoolVar(&isForceColor, "forcecolor", false, "force color logging when out is not STDOUT")
 	hiddenflags = append(hiddenflags, "forcecolor")
 	RootCmd.Flags().BoolVar(&useCsrf, "csrf", true, "Request a CSRF token for sensitive hypervisor API requests")

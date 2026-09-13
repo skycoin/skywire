@@ -1425,6 +1425,54 @@ func storeLog(conf *visorconfig.V1) {
 	)
 	mLog.Hooks.Add(hook)
 	conf.MasterLogger().Hooks.Add(hook)
+
+	if isLogJSON {
+		addJSONLogHook(conf)
+	}
+}
+
+// addJSONLogHook mirrors every log entry to <local_path>/log/skywire.jsonl as
+// one JSON object per line, IN ADDITION to the human-readable skywire.log.
+//
+// The text log is the right thing to read; it is the wrong thing to query.
+// Answering "what did wasm-serve report during this boot" means grepping a
+// format that was never meant to be parsed, and the fields logrus was given —
+// module, error, and whatever WithField carried — are flattened into the
+// message on the way out. The JSON lines keep them, so the same question is
+// `jq 'select(.module=="wasm-serve")' skywire.jsonl` with no regex at all.
+//
+// Opt-in (--log-json) because it doubles the write volume. Prefer `cli visor
+// state` for anything that is CURRENT state; this is for transient events —
+// boot ordering, a crash sequence, what happened before a restart — which a
+// snapshot cannot express.
+func addJSONLogHook(conf *visorconfig.V1) {
+	path := conf.LocalPath + "/log/skywire.jsonl"
+	hook, err := newJSONLogHook(path)
+	if err != nil {
+		mLog.WithError(err).Warn("Failed to open the JSON log; text logging is unaffected")
+		return
+	}
+	mLog.Hooks.Add(hook)
+	conf.MasterLogger().Hooks.Add(hook)
+	mLog.PackageLogger("visor").WithField("path", path).
+		Info("Writing structured JSON log lines alongside the text log.")
+}
+
+// newJSONLogHook builds the JSON-lines hook for path. Split out so a test
+// can assert the on-disk shape without a running visor.
+func newJSONLogHook(path string) (logrus.Hook, error) {
+	return lumberjackrus.NewHook(&lumberjackrus.LogFile{
+		Filename:   path,
+		MaxSize:    1,
+		MaxBackups: 1,
+		MaxAge:     1,
+		Compress:   false,
+		LocalTime:  false,
+	}, logrus.TraceLevel, &logrus.JSONFormatter{
+		// RFC3339 with nanoseconds: the text log is second-resolution, too
+		// coarse to order a boot sequence.
+		TimestampFormat: time.RFC3339Nano,
+	}, nil)
 }
 
 func setForceColor(conf *visorconfig.V1) {
