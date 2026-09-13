@@ -546,6 +546,10 @@ func (proxyDefaultAPI) RoutingPolicies() (*RoutingPoliciesSummary, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) AppDirectStreams(_ string) ([]transport.VStreamInfo, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) RouteGroupMuxInfo(_ string) ([]MuxRouteGroupInfo, error) {
 	return nil, ErrProxyNotSupported
 }

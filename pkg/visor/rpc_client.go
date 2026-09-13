@@ -2441,3 +2441,10 @@ func (rc *rpcClient) ARSelfInfo() (*ARSelfRegistration, error) {
 func (rc *rpcClient) SetHypervisorLegacyUIPersist(legacy, persist bool) error {
 	return rc.Call("SetHypervisorLegacyUI", &SetHypervisorLegacyUIIn{Legacy: legacy, Persist: persist}, &struct{}{})
 }
+
+// AppDirectStreams calls AppDirectStreams.
+func (rc *rpcClient) AppDirectStreams(appName string) ([]transport.VStreamInfo, error) {
+	var infos []transport.VStreamInfo
+	err := rc.Call("AppDirectStreams", &appName, &infos)
+	return infos, err
+}
