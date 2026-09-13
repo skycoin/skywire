@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -69,15 +71,17 @@ func (v *Visor) Overview() (*Overview, error) {
 	}
 
 	overview := &Overview{
-		PubKey:          v.conf.PK,
-		BuildInfo:       buildinfo.Get(),
-		AppProtoVersion: supportedProtocolVersion,
-		Apps:            apps,
-		Transports:      tSummaries,
-		RoutesCount:     routesCount,
-		PublicIP:        publicIP,
-		IsSymmetricNAT:  isSymmetricNAT,
-		NATType:         natType,
+		PubKey:              v.conf.PK,
+		BuildInfo:           buildinfo.Get(),
+		AppProtoVersion:     supportedProtocolVersion,
+		Apps:                apps,
+		Transports:          tSummaries,
+		RoutesCount:         routesCount,
+		PublicIP:            publicIP,
+		IsSymmetricNAT:      isSymmetricNAT,
+		NATType:             natType,
+		Hypervisors:         v.conf.Hypervisors,
+		ConnectedHypervisor: v.connectedHypervisorPKs(),
 	}
 
 	// Add geolocation data if available
@@ -613,4 +617,24 @@ func (v *Visor) SetHypervisorLegacyUIPersist(legacy, persist bool) error {
 	}
 	v.conf.Hypervisor.LegacyUI = legacy
 	return v.conf.Flush()
+}
+
+// connectedHypervisorPKs snapshots the hypervisors this visor currently holds a
+// connection to, sorted so the summary is stable between calls.
+//
+// Summary.Hypervisors and Summary.ConnectedHypervisor were declared but never
+// assigned, so both reported null on every visor — including one with three
+// hypervisors configured and connected. A state field that always reads empty
+// is worse than an absent one: callers trust it and conclude there are none.
+// Found 2026-09-13 after reading skywire-config.json by hand for an answer
+// `cli visor state` was supposed to give.
+func (v *Visor) connectedHypervisorPKs() []cipher.PubKey {
+	v.initLock.RLock()
+	out := make([]cipher.PubKey, 0, len(v.connectedHypervisors))
+	for pk := range v.connectedHypervisors {
+		out = append(out, pk)
+	}
+	v.initLock.RUnlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	return out
 }
