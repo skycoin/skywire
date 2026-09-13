@@ -786,7 +786,6 @@ const deskShellTemplate = `<!DOCTYPE html>
 <title>skywire</title>
 <style>
   html,body{margin:0;height:100%;background:#0e0c14;color:#cdd2da;font:14px/1.5 system-ui,sans-serif}
-  #install{position:fixed;right:14px;bottom:14px;z-index:20;display:none;padding:8px 14px;border-radius:8px;border:1px solid #2a2342;background:#1b1626;color:#cdd2da;font:13px system-ui;cursor:pointer}
   #boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8em;z-index:10}
   #boot .t{color:#9d7cff;font:600 18px system-ui}
   #boot .s{color:#9aa0a6;font:12px monospace;max-width:44em;text-align:center}
@@ -794,7 +793,6 @@ const deskShellTemplate = `<!DOCTYPE html>
 </style>
 </head>
 <body>
-<button id="install" title="Install this desk as an app: it opens on its own and keeps working when this address is out of reach">Install Skywire</button>
 <div id="boot">
   <div class="t">skywire</div>
   <div class="s" id="boot-msg">loading…</div>
@@ -802,17 +800,42 @@ const deskShellTemplate = `<!DOCTYPE html>
 <script>
 // PWA: a service worker keeps the desk shell (and, once fetched, the wasm
 // modules) so the installed app opens off the LAN too — its visor then falls
-// back to dmsg over wss. The install prompt is offered as a button, not forced.
+// back to dmsg over wss. The install prompt is offered, not forced.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('sw.js').catch(function (e) { console.warn('sw register failed', e); });
   });
 }
+// The offer is published for the DESK to surface as an Applications entry
+// rather than drawn here as a floating button. A fixed button at the bottom
+// right sits exactly where the desk panel is, so it was obscured by the very
+// UI it was offered alongside.
+//
+// State is held rather than only broadcast: beforeinstallprompt fires within a
+// second of load, and the desk is a ~170 MB wasm module that takes far longer
+// than that to boot, so by the time anything can register a menu entry the
+// event is long past. The desk reads available() at boot; the event is only
+// for the case where it boots first.
 (function () {
-  var btn = document.getElementById('install'), deferred = null;
-  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; if (btn) btn.style.display = 'block'; });
-  window.addEventListener('appinstalled', function () { deferred = null; if (btn) btn.style.display = 'none'; });
-  if (btn) btn.addEventListener('click', function () { if (!deferred) return; deferred.prompt(); deferred.userChoice.then(function () { deferred = null; btn.style.display = 'none'; }); });
+  var deferred = null;
+  window.__skywireInstall = {
+    available: function () { return !!deferred; },
+    prompt: function () {
+      if (!deferred) { return Promise.resolve(false); }
+      var d = deferred;
+      d.prompt();
+      return d.userChoice.then(function (c) {
+        if (c && c.outcome === 'accepted') { deferred = null; }
+        return !!(c && c.outcome === 'accepted');
+      });
+    }
+  };
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferred = e;
+    window.dispatchEvent(new Event('skywire-install-available'));
+  });
+  window.addEventListener('appinstalled', function () { deferred = null; });
 })();
 </script>
 <script>
