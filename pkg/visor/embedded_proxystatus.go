@@ -184,15 +184,29 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 		if len(snap.Tunnels) == 0 {
 			if direct, derr := p.v.AppDirectStreams(app); derr == nil {
 				for di, s := range direct {
+					tpType, rtt := p.directTpDetail(s.TpID)
 					snap.Tunnels = append(snap.Tunnels, proxystatus.Tunnel{
 						Index:  di,
 						ExitPK: s.RemotePK.String(),
 						Legs: []proxystatus.Leg{{
 							Index:       di,
 							TransportID: s.TpID.String(),
-							TpType:      p.directTpType(s.TpID),
+							TpType:      tpType,
 							RemotePK:    s.RemotePK.String(),
-							Direct:      true,
+							LatencyMS:   rtt,
+							// The direct path IS one hop, so describe it as one
+							// rather than as a leg with no path. hopToNode then
+							// renders the type, transport id and RTT exactly as
+							// it does for a routed hop — without it the tree drew
+							// a bare public key and nothing else.
+							Hops: []proxystatus.Hop{{
+								From:      self.String(),
+								To:        s.RemotePK.String(),
+								TpID:      s.TpID.String(),
+								TpType:    tpType,
+								LatencyMS: rtt,
+							}},
+							Direct: true,
 							// Alive is what the tree renderer gates on: it skips
 							// every leg that is not alive, so leaving this false
 							// drew a tree with the local PK and nothing under it
@@ -535,18 +549,18 @@ func proxyHopsFrom(hops []MuxHopInfo) []proxystatus.Hop {
 	return out
 }
 
-// directTpType resolves the transport type carrying a direct stream, so the
-// status tree labels it the way it labels a route-group leg (which gets the
-// type from MuxInfo). Empty when the transport manager is gone or the id no
-// longer resolves — a stream can outlive the lookup by a moment, and a blank
-// type is a better answer than failing the whole snapshot.
-func (p *visorStatusProvider) directTpType(tpID uuid.UUID) string {
+// directTpDetail resolves the type and measured RTT of the transport carrying a
+// direct stream, so the status tree labels it the way it labels a route-group
+// hop (which gets both from MuxInfo). Zero values when the transport manager is
+// gone or the id no longer resolves — a stream can outlive the lookup by a
+// moment, and a blank type is a better answer than failing the whole snapshot.
+func (p *visorStatusProvider) directTpDetail(tpID uuid.UUID) (string, float64) {
 	if p.v == nil || p.v.tpM == nil {
-		return ""
+		return "", 0
 	}
 	tp, err := p.v.tpM.GetTransportByID(tpID)
 	if err != nil || tp == nil {
-		return ""
+		return "", 0
 	}
-	return string(tp.Type())
+	return string(tp.Type()), tp.GetLatency()
 }
