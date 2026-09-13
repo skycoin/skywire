@@ -228,6 +228,21 @@ type DmsgServerConfig struct {
 	// how a host that ran `skywire dmsg server start <file>` as a separate
 	// unit folds that server into its visor (DMSGSERVERCONF in skywire.conf).
 	ConfigPath string `json:"config_path,omitempty"`
+	// WSTLSAddress, when set (":443"), makes the server SELF-TERMINATE TLS for
+	// its own wss:// host via Let's Encrypt, exactly as ws_tls_address does in a
+	// standalone dmsg-server config. Empty (the default) leaves TLS to an
+	// external front — which is the right answer on a host that already runs
+	// Caddy, and the wrong one on a host where the standalone dmsg server WAS
+	// the terminator, since folding it retired the only listener on :443.
+	// Requires :443, where autocert's TLS-ALPN-01 challenge is answered.
+	// Binding is best-effort: if something else owns the address the server
+	// logs and carries on with the external front.
+	WSTLSAddress string `json:"ws_tls_address,omitempty"`
+	// WSTLSCacheDir is the on-disk autocert certificate cache. Empty means
+	// "dmsg-autocert" beside the visor config file — where a folded standalone
+	// server kept it, so the server reuses the certificate it already has
+	// instead of asking Let's Encrypt for a fresh one.
+	WSTLSCacheDir string `json:"ws_tls_cache_dir,omitempty"`
 }
 
 // MarshalJSON and UnmarshalJSON live in spec_native.go under

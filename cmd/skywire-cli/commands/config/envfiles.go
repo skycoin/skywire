@@ -151,6 +151,14 @@ const envfileLinux = `#
 #	whatever its listener resolves to, which is only right on a LAN.
 #DMSGSERVERPUBLIC='1.2.3.4:30084'
 
+#--	Where the in-visor dmsg server self-terminates TLS for its wss front
+#	via Let's Encrypt, so a browser or wasm visor can reach it. Set it on a
+#	host with NO reverse proxy — including any host where the standalone
+#	dmsg server used to be the thing serving :443, since folding it into the
+#	visor retired that listener. Leave it empty where Caddy (or another
+#	front) already owns :443.
+#DMSGSERVERWSTLS=':443'
+
 ### Rewards #############################################################
 
 #--	Skycoin reward address or xpub key

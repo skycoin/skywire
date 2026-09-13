@@ -211,6 +211,7 @@ var (
 	dmsgServerConf       string
 	dmsgServerOwnKey     bool
 	dmsgServerPublicAddr string
+	dmsgServerWSTLSAddr  string
 	dmsgRelayAddr        string
 	dmsgRelayKeys        string
 	dmsgWebSecretKey     string

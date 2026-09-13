@@ -480,6 +480,8 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&dmsgServerOwnKey, "dmsg-server", scriptExecBool("${DMSGSERVER:-false}"), "run a dmsg server inside the visor on the visor's OWN key, sharing its transport port")
 	gHiddenFlags = append(gHiddenFlags, "dmsg-server")
 	genConfigCmd.Flags().StringVar(&dmsgServerPublicAddr, "dmsg-server-public", scriptExecString("${DMSGSERVERPUBLIC}"), "address that in-visor dmsg server advertises (host:port); empty advertises whatever its listener resolves to")
+	genConfigCmd.Flags().StringVar(&dmsgServerWSTLSAddr, "dmsg-server-ws-tls", scriptExecString("${DMSGSERVERWSTLS}"), "address (\":443\") where the in-visor dmsg server self-terminates TLS for its wss front via Let's Encrypt; empty leaves TLS to a reverse proxy on this host")
+	gHiddenFlags = append(gHiddenFlags, "dmsg-server-ws-tls")
 	genConfigCmd.Flags().StringVar(&dmsgRelayAddr, "dmsg-relay-addr", scriptExecString("${DMSGRELAYADDR}"), "loopback host:port for the dmsg relay acceptor, for local services that cannot use the unix socket (a different user than the visor). Requires --dmsg-relay-keys")
 	genConfigCmd.Flags().StringVar(&dmsgRelayKeys, "dmsg-relay-keys", scriptExecString("${DMSGRELAYKEYS}"), "public keys allowed to attach to the dmsg relay, comma-separated. Required with --dmsg-relay-addr: a TCP listener has no filesystem gate")
 	genConfigCmd.Flags().BoolVar(&noDmsgRelay, "no-dmsg-relay", scriptExecBool("${NODMSGRELAY:-false}"), "do not serve the local dmsg relay acceptor at all (it is served by default)")
@@ -1518,6 +1520,7 @@ func configureLauncher(log *logging.Logger) {
 		conf.Dmsg.Server = &dmsgc.DmsgServerConfig{
 			Enabled:       true,
 			PublicAddress: dmsgServerPublicAddr,
+			WSTLSAddress:  dmsgServerWSTLSAddr,
 		}
 	}
 
