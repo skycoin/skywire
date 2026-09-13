@@ -682,6 +682,11 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 				BrowseSuffix:     ws.BrowseSuffix,
 				BrowseOriginAddr: ws.BrowseOriginAddr,
 				VOrigin:          ws.VOrigin,
+				// Without this ServeWasm falls back to a standalone package
+				// logger whose output never reaches the visor's log file, so
+				// everything it reports — including the stale-command-module
+				// warning added in #4845 — was invisible in ./local/log.
+				Log: mLog.PackageLogger("wasm-serve"),
 			}); err != nil {
 				mLog.WithError(err).Error("wasm-serve failed")
 			}
