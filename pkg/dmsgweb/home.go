@@ -161,7 +161,7 @@ func renderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cip
 	// the reported IP is the PROXY EXIT's — a one-click way to see which exit
 	// this tab browses through. Elsewhere they're plain external links.
 	b.WriteString(`<p class="ipcheck">Check your exit IP: `)
-	b.WriteString(`<a href="http://ip.skycoin.com">ip.skycoin.com</a> &middot; `)
+	b.WriteString(`<a href="https://ip.skycoin.com">ip.skycoin.com</a> &middot; `)
 	b.WriteString(`<a href="https://ip.skywire.dev">ip.skywire.dev</a></p>`)
 	// The visor serves a real landing page at "/"; the deployment services,
 	// setup nodes and dmsg servers don't, but they all answer "/health". A
