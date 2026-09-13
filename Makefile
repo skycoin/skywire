@@ -952,7 +952,29 @@ exec-wasm: ## Build the js/wasm command module to build/exec-wasm/skywire.wasm
 
 embed-exec-wasm: exec-wasm ## Stage the js/wasm command module for embedding (pkg/wasmhv/execwasm/blob/, gitignored)
 	gzip -9 -n -c ./build/exec-wasm/skywire.wasm > ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz
+	@# Record which commit the module was built from, so the native binary can
+	@# say at serve time that it is serving a module older than itself. The
+	@# module is built with -buildvcs=true and is never inflated in memory, so
+	@# the revision is lifted here rather than scanned from 176 MB at runtime.
+	@# vcs.revision= is not at the start of a strings(1) line, so match the
+	@# substring rather than anchoring: an anchored sed silently records an
+	@# empty revision, which then reads as "stale" forever.
+	@strings -a ./build/exec-wasm/skywire.wasm | grep -oE 'vcs\.revision=[0-9a-f]{40}' \
+		| head -1 | cut -d= -f2 > ./pkg/wasmhv/execwasm/blob/revision.txt
 	@ls -la ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz
+	@echo "staged module revision: $$(cat ./pkg/wasmhv/execwasm/blob/revision.txt)"
+
+check-exec-wasm: ## Report whether the staged js/wasm command module matches HEAD
+	@test -f ./pkg/wasmhv/execwasm/blob/revision.txt || { \
+		echo "no staged js/wasm command module — run 'make embed-exec-wasm'"; exit 1; }
+	@staged=$$(cat ./pkg/wasmhv/execwasm/blob/revision.txt); head=$$(git rev-parse HEAD); \
+	if [ "$$staged" = "$$head" ]; then \
+		echo "staged js/wasm command module is current ($$head)"; \
+	else \
+		echo "STALE: the staged js/wasm command module is $$staged, HEAD is $$head"; \
+		echo "Run 'make embed-exec-wasm' and rebuild, or the desk serves older code than the binary."; \
+		exit 1; \
+	fi
 
 build-embedded: embed-exec-wasm build ## Two-stage build: the native binary with the js/wasm command module embedded
 
