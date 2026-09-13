@@ -613,6 +613,7 @@ var statusCmd = &cobra.Command{
 			Args      []string            `json:"args"`
 			AppPort   routing.Port        `json:"app_port"`
 			Route     []muxRouteGroupInfo `json:"route,omitempty"`
+			Direct    []directStreamInfo  `json:"direct,omitempty"`
 		}
 		var jsonAppStatus []appState
 		_, err = fmt.Fprintf(w, "---- All Proxy List -----------------------------------------------------\n\n")
@@ -654,8 +655,16 @@ var statusCmd = &cobra.Command{
 					// `proxy mux info` call — and can spot a fragile single-leg
 					// route at a glance.
 					var route []muxRouteGroupInfo
+					var direct []directStreamInfo
 					if status == "running" {
 						route = fetchProxyRoute(rpcClient, state.Name)
+						// A shortcut-eligible dial (min_hops <= 1, no per-dial
+						// --mux) builds NO route group — so a perfectly healthy
+						// proxy reported "(no active route group)" and nothing
+						// else. Ask the direct path what it is carrying.
+						if len(route) == 0 {
+							direct = fetchProxyDirect(rpcClient, state.Name)
+						}
 					}
 					jsonAppStatus = append(jsonAppStatus, appState{
 						Name:      state.Name,
@@ -664,8 +673,9 @@ var statusCmd = &cobra.Command{
 						Args:      state.Args,
 						AppPort:   state.Port,
 						Route:     route,
+						Direct:    direct,
 					})
-					_, err = fmt.Fprintf(w, "Name: %s\nStatus: %s\nServer: %s\nAddress: %s\nAppPort: %d\nAutoStart: %t\n%s\n", state.Name, status, tmpSrv, tmpAddr, state.Port, state.AutoStart, renderProxyRoute(route))
+					_, err = fmt.Fprintf(w, "Name: %s\nStatus: %s\nServer: %s\nAddress: %s\nAppPort: %d\nAutoStart: %t\n%s\n", state.Name, status, tmpSrv, tmpAddr, state.Port, state.AutoStart, renderProxyRoute(route, direct))
 					internal.Catch(cmd.Flags(), err)
 				}
 			}
@@ -699,13 +709,51 @@ func fetchProxyRoute(rpcClient visor.API, appName string) []muxRouteGroupInfo {
 	return rgs
 }
 
+// directStreamInfo mirrors transport.VStreamInfo over the JSON contract, the
+// same way muxRouteGroupInfo mirrors the route-group shape.
+type directStreamInfo struct {
+	AppName   string `json:"app_name,omitempty"`
+	RemotePK  string `json:"remote_pk"`
+	TpID      string `json:"transport_id"`
+	StreamID  uint64 `json:"stream_id"`
+	SentBytes uint64 `json:"sent_bytes"`
+	RecvBytes uint64 `json:"recv_bytes"`
+	UptimeMS  int64  `json:"uptime_ms"`
+}
+
+// fetchProxyDirect returns the live DIRECT (0-hop) streams the app holds.
+// Consulted when there is no route group: a dial that took the AppDirectMux
+// shortcut has a real path — a vstream over a named transport to the server —
+// and reporting nothing about it reads as a broken proxy when it is working.
+func fetchProxyDirect(rpcClient visor.API, appName string) []directStreamInfo {
+	infos, err := rpcClient.AppDirectStreams(appName)
+	if err != nil || len(infos) == 0 {
+		return nil
+	}
+	out := make([]directStreamInfo, 0, len(infos))
+	for _, s := range infos {
+		out = append(out, directStreamInfo{
+			AppName:   s.AppName,
+			RemotePK:  s.RemotePK.String(),
+			TpID:      s.TpID.String(),
+			StreamID:  s.StreamID,
+			SentBytes: s.SentBytes,
+			RecvBytes: s.RecvBytes,
+			UptimeMS:  s.UptimeMS,
+		})
+	}
+	return out
+}
+
 // renderProxyRoute formats the active route group(s) for `proxy status`: the
 // destination + each leg's first-hop transport (type, remote, latency). A
 // single-leg route is flagged since it has no failover — a first-hop flap drops
 // the whole session (the common cause of intermittent proxy drops).
-func renderProxyRoute(rgs []muxRouteGroupInfo) string {
+// With no route group it falls through to the DIRECT path instead of
+// reporting nothing, which is what a shortcut-eligible dial produces.
+func renderProxyRoute(rgs []muxRouteGroupInfo, direct []directStreamInfo) string {
 	if len(rgs) == 0 {
-		return "Route: (no active route group)"
+		return renderProxyDirect(direct)
 	}
 	var sb strings.Builder
 	for i, rg := range rgs {
@@ -2227,4 +2275,24 @@ func testProxyWithPooledClient(rpcClient proxyTestClient, clientName string, por
 	}
 
 	return result
+}
+
+// renderProxyDirect formats the DIRECT (0-hop) streams a proxy holds when it
+// has no route group. "(no active route group)" was the whole answer before,
+// which reads as a broken proxy on a session that is working: the dial simply
+// took the AppDirectMux shortcut, which builds no route group by design. Name
+// the peer and the transport actually carrying it.
+func renderProxyDirect(direct []directStreamInfo) string {
+	if len(direct) == 0 {
+		return "Route: (no active route group)"
+	}
+	var sb strings.Builder
+	sb.WriteString("Route: direct (0-hop, no route group)")
+	for _, s := range direct {
+		sb.WriteString(fmt.Sprintf("\n  → %s over transport %s", s.RemotePK, s.TpID))
+		sb.WriteString(fmt.Sprintf("\n    sent %s, recv %s, up %s",
+			humanBytes(s.SentBytes), humanBytes(s.RecvBytes),
+			(time.Duration(s.UptimeMS) * time.Millisecond).Round(time.Second)))
+	}
+	return sb.String()
 }

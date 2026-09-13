@@ -194,6 +194,12 @@ type API interface {
 	// app (skysocks-client, vpn-client, etc.). Empty slice when
 	// nothing is currently dialed via that app.
 	RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error)
+	// AppDirectStreams reports the live DIRECT (0-hop) streams the named
+	// app holds — the AppDirectMux shortcut's counterpart to
+	// RouteGroupMuxInfo. A dial eligible for that shortcut builds no route
+	// group, so an app using it has a well-defined path that the
+	// route-group queries above cannot see. Empty appName reports all.
+	AppDirectStreams(appName string) ([]transport.VStreamInfo, error)
 	ActiveRoutes() ([]AppRouteStatus, error)
 	AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error
 	GrowMuxRoute(appName string, target, minHops int, srcPort uint16) (int, error)

@@ -886,6 +886,10 @@ func (*mockRPCClient) RoutingPolicies() (*RoutingPoliciesSummary, error) {
 }
 
 // RouteGroupMuxInfo implements API.
+func (mc *mockRPCClient) AppDirectStreams(_ string) ([]transport.VStreamInfo, error) {
+	return nil, nil
+}
+
 func (mc *mockRPCClient) RouteGroupMuxInfo(_ string) ([]MuxRouteGroupInfo, error) {
 	return nil, nil
 }

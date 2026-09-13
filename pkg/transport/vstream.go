@@ -32,6 +32,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -161,6 +162,7 @@ func (m *VStreamMux) nextIDFor(remotePK cipher.PubKey) uint64 {
 // it. A reader that drains nothing for vstreamStallTimeout is dead — close the
 // stream so the peer sees EOF and the read loop is freed.
 func (m *VStreamMux) deliver(stream *VStream, buf []byte) {
+	atomic.AddInt64(&stream.recvBytes, int64(len(buf)))
 	select {
 	case stream.readBuf <- buf:
 		return
@@ -275,7 +277,7 @@ func (m *VStreamMux) Dial(remotePK cipher.PubKey, appName string) (*VStream, err
 		WithField("remote", remotePK.String()).
 		Debug("VStreamMux: dialing on transport")
 
-	return m.DialOnTransport(targetTp)
+	return m.DialOnTransportAs(targetTp, appName)
 }
 
 // DialByTransportID opens a virtual stream to remotePK pinned to a
@@ -308,11 +310,21 @@ func (m *VStreamMux) DialByTransportID(remotePK cipher.PubKey, tpID uuid.UUID) (
 
 // DialOnTransport opens a virtual stream on a specific transport.
 func (m *VStreamMux) DialOnTransport(tp *ManagedTransport) (*VStream, error) {
+	return m.DialOnTransportAs(tp, "")
+}
+
+// DialOnTransportAs is DialOnTransport, recording which app the stream
+// belongs to so StreamInfo can report it. Dial and DialByTransportID carry
+// the caller's app name here; DialOnTransport keeps the unattributed form
+// for internal users (setup-RPC, ping-tree) that are not an app.
+func (m *VStreamMux) DialOnTransportAs(tp *ManagedTransport, appName string) (*VStream, error) {
 	id := m.nextIDFor(tp.Remote())
 	stream := &VStream{
 		id:       id,
 		remotePK: tp.Remote(),
 		tpID:     tp.Entry.ID,
+		appName:  appName,
+		openedAt: time.Now(),
 		readBuf:  make(chan []byte, vstreamReadBuf),
 		closed:   make(chan struct{}),
 		mux:      m,
@@ -441,14 +453,24 @@ func (m *VStreamMux) Close() error {
 
 // VStream is a virtual bidirectional connection over route ID 0 packets.
 type VStream struct {
-	id       uint64
-	remotePK cipher.PubKey
-	tpID     uuid.UUID
-	readBuf  chan []byte
-	readLeft []byte // leftover from partial read
-	closed   chan struct{}
-	once     sync.Once
-	mux      *VStreamMux
+	id uint64
+	// appName attributes this stream to the app that opened it, so a
+	// direct (0-hop) session is reportable. Without it a proxy taking the
+	// AppDirectMux shortcut is invisible to every status surface: they all
+	// render route groups, and the shortcut deliberately builds none.
+	appName  string
+	openedAt time.Time
+	// sentBytes/recvBytes are this stream's payload counters, the direct
+	// path's answer to a route group's per-leg totals.
+	sentBytes int64
+	recvBytes int64
+	remotePK  cipher.PubKey
+	tpID      uuid.UUID
+	readBuf   chan []byte
+	readLeft  []byte // leftover from partial read
+	closed    chan struct{}
+	once      sync.Once
+	mux       *VStreamMux
 }
 
 // Read implements io.Reader. Handles partial reads correctly.
@@ -497,6 +519,7 @@ func (s *VStream) Write(p []byte) (int, error) {
 		if err := s.sendFlag(VStreamFlagData, chunk); err != nil {
 			return n, err
 		}
+		atomic.AddInt64(&s.sentBytes, int64(len(chunk)))
 		n += len(chunk)
 		p = p[len(chunk):]
 	}
@@ -579,4 +602,72 @@ func (m *VStreamMux) Stats() VStreamMuxStats {
 		StalledStreams:      atomic.LoadInt64(&m.stalledStreams),
 		AcceptDropped:       atomic.LoadInt64(&m.acceptDropped),
 	}
+}
+
+// VStreamInfo describes one live direct (0-hop) stream: which app opened it,
+// which peer it reaches, and over which transport.
+//
+// This is the direct path's counterpart to a route group's MuxInfo. A dial that
+// takes the AppDirectMux shortcut builds no route group by design, so every
+// surface that reports "the route" — `proxy status`, `proxy tree`, the
+// status.skysocks page — had nothing to show for a working session and said
+// "(no active route group)". The path is perfectly well defined; it just was
+// not being described.
+type VStreamInfo struct {
+	AppName   string        `json:"app_name,omitempty"`
+	RemotePK  cipher.PubKey `json:"remote_pk"`
+	TpID      uuid.UUID     `json:"transport_id"`
+	StreamID  uint64        `json:"stream_id"`
+	SentBytes uint64        `json:"sent_bytes"`
+	RecvBytes uint64        `json:"recv_bytes"`
+	UptimeMS  int64         `json:"uptime_ms"`
+}
+
+// StreamInfo snapshots every live stream on this mux. Pass a non-empty appName
+// to report only that app's streams; "" reports all of them.
+func (m *VStreamMux) StreamInfo(appName string) []VStreamInfo {
+	m.streamsMu.Lock()
+	streams := make([]*VStream, 0, len(m.streams))
+	for _, s := range m.streams {
+		streams = append(streams, s)
+	}
+	m.streamsMu.Unlock()
+
+	now := time.Now()
+	out := make([]VStreamInfo, 0, len(streams))
+	for _, s := range streams {
+		if appName != "" && s.appName != appName {
+			continue
+		}
+		var uptime int64
+		if !s.openedAt.IsZero() {
+			uptime = now.Sub(s.openedAt).Milliseconds()
+		}
+		out = append(out, VStreamInfo{
+			AppName:   s.appName,
+			RemotePK:  s.remotePK,
+			TpID:      s.tpID,
+			StreamID:  s.id,
+			SentBytes: nonNegativeCount(atomic.LoadInt64(&s.sentBytes)),
+			RecvBytes: nonNegativeCount(atomic.LoadInt64(&s.recvBytes)),
+			UptimeMS:  uptime,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].AppName != out[j].AppName {
+			return out[i].AppName < out[j].AppName
+		}
+		return out[i].StreamID < out[j].StreamID
+	})
+	return out
+}
+
+// nonNegativeCount converts a monotonic counter to uint64. The counters only
+// ever increase, so the clamp never fires; it is here so the conversion is
+// provably safe rather than assumed, and so callers need no cast of their own.
+func nonNegativeCount(n int64) uint64 {
+	if n < 0 {
+		return 0
+	}
+	return uint64(n)
 }

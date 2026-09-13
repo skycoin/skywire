@@ -175,6 +175,32 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 			snap.MuxEnabled = snap.Tunnels[0].MuxEnabled
 			snap.Legs = snap.Tunnels[0].Legs
 		}
+		// No route group at all: a shortcut-eligible dial builds none, so the
+		// page showed an empty route for a working proxy — the report behind
+		// this. Model each direct stream as a one-leg tunnel so the tree has
+		// something true to draw.
+		if len(snap.Tunnels) == 0 {
+			if direct, derr := p.v.AppDirectStreams(app); derr == nil {
+				for di, s := range direct {
+					snap.Tunnels = append(snap.Tunnels, proxystatus.Tunnel{
+						Index:  di,
+						ExitPK: s.RemotePK.String(),
+						Legs: []proxystatus.Leg{{
+							Index:       di,
+							TransportID: s.TpID.String(),
+							RemotePK:    s.RemotePK.String(),
+							Direct:      true,
+							SentBytes:   s.SentBytes,
+							RecvBytes:   s.RecvBytes,
+						}},
+					})
+				}
+				if len(snap.Tunnels) > 0 {
+					snap.Legs = snap.Tunnels[0].Legs
+					snap.Note = appendNote(snap.Note, "direct (0-hop) session: no route group is built for a shortcut-eligible dial")
+				}
+			}
+		}
 	} else {
 		snap.Note = appendNote(snap.Note, "mux info unavailable: "+err.Error())
 	}

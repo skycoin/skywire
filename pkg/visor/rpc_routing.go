@@ -3,6 +3,7 @@ package visor
 
 import (
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
 
@@ -214,4 +215,16 @@ func (r *RPC) RemoveMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
 func (r *RPC) SetMuxDirection(in *MuxDirectionInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetMuxDirection", in)(nil, &err)
 	return r.visor.SetMuxDirection(in.AppName, in.Mode)
+}
+
+// AppDirectStreams retrieves the live direct (0-hop) streams for the named app.
+func (r *RPC) AppDirectStreams(in *string, out *[]transport.VStreamInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "AppDirectStreams", in)(out, &err)
+	if in == nil {
+		empty := ""
+		in = &empty
+	}
+	infos, err := r.visor.AppDirectStreams(*in)
+	*out = infos
+	return err
 }

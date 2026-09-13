@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // RoutingRules implements API.
@@ -400,4 +401,17 @@ func (v *Visor) SetCalculateRoutes(enabled bool) error {
 // GetCalculateRoutes gets calculate_routes routing config of visor
 func (v *Visor) GetCalculateRoutes() (bool, error) {
 	return v.conf.GetCalculateRoutes(), nil
+}
+
+// AppDirectStreams implements API. Reports the live direct (0-hop) streams the
+// AppDirectMux holds for appName, which is where a proxy session goes when the
+// dial is shortcut-eligible (min_hops <= 1 and no per-dial --mux). Those
+// sessions build no route group by design, so RouteGroupMuxInfo is empty for
+// them and every "what route is this using?" surface came up blank on a working
+// proxy. Empty appName reports every app's streams.
+func (v *Visor) AppDirectStreams(appName string) ([]transport.VStreamInfo, error) {
+	if v.appDirectMux == nil {
+		return nil, nil
+	}
+	return v.appDirectMux.StreamInfo(appName), nil
 }
