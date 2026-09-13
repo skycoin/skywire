@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"net/http"
 	"testing"
 	"time"
 
@@ -122,4 +123,41 @@ func TestClientFactory_DmsgSharedListener(t *testing.T) {
 	require.NotNil(t, shared)
 	require.Equal(t, on.stcprSharedListener.Addr().String(), shared.Addr().String(),
 		"the dmsg branch listens on the same port as stcpr")
+}
+
+// TestClientFactory_DmsgWSHandlerSurvivesAValueCopy is the regression for the
+// folded dmsg server's /dmsg path answering 404 on every host.
+//
+// A ClientFactory travels BY VALUE: visorcore.TransportManagerDeps.Factory and
+// transport.NewManager both take one, so the factory the WS client is built
+// from is a copy of the one the visor keeps a pointer to and later calls
+// SetDmsgWSHandler on. With the handler held as a bare atomic.Value the copy
+// got its own, the WS listener read that empty one forever, and the advertised
+// wss://<label>/dmsg URL resolved to a 404 — while every part looked wired.
+//
+// go vet's copylocks cannot see this: atomic.Value carries no noCopy. So the
+// invariant is asserted here instead.
+func TestClientFactory_DmsgWSHandlerSurvivesAValueCopy(t *testing.T) {
+	f := ClientFactory{ShareTCPWithDmsgServer: true}
+	require.NoError(t, f.EnableDefaultTCPDemux(0))
+	defer f.CloseUnifiedTCP() //nolint:errcheck
+
+	// cp stands in for the factory transport.NewManager holds and calls
+	// MakeClient on; f stands in for v.dmsgWSFactory.
+	cp := f
+	f.SetDmsgWSHandler(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+
+	require.NotNil(t, cp.dmsgWSHandler, "the copy must share the original's allocation")
+	got, ok := cp.dmsgWSHandler.Load().(http.Handler)
+	require.True(t, ok, "a handler set on the original must be visible through a copy")
+	require.NotNil(t, got)
+}
+
+// A factory with no shared TCP listener never allocates the handler slot, so
+// SetDmsgWSHandler must be a no-op rather than a nil dereference.
+func TestClientFactory_SetDmsgWSHandlerWithoutASharedListener(t *testing.T) {
+	var f ClientFactory
+	require.NotPanics(t, func() {
+		f.SetDmsgWSHandler(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	})
 }
