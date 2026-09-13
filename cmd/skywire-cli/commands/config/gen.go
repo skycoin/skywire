@@ -342,6 +342,11 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-addr")
 	genConfigCmd.Flags().StringVar(&skynetWebProxyAddr, "skynetweb-addr", scriptExecString("${SKYNETWEBADDR}"), "host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-addr")
+	// Additional resolving proxies beyond the two above — each its own port,
+	// bind address and (for a dmsg one) its own dmsg identity. The two
+	// singular blocks stay the primaries; this only adds.
+	genConfigCmd.Flags().StringVar(&extraResolvers, "resolvers", scriptExecArray("${RESOLVERS[@]}"), "additional resolving proxies; CSV of <kind>:<port>[;name=|addr=|suffix=|sk=|upstream=|chain=|alias=]")
+	gHiddenFlags = append(gHiddenFlags, "resolvers")
 
 	// Browse-origin flags: the loopback real-origin browse proxy also serves the
 	// warning-free HTTPS proxy-status pages (status-<surface>.<suffix>) when a real
@@ -761,7 +766,7 @@ var genConfigCmd = &cobra.Command{
 
 		configureApps(log)
 
-		configureResolvingProxies()
+		configureResolvingProxies(log)
 
 		applyOverrides()
 
@@ -2407,7 +2412,7 @@ func configureApps(log *logging.Logger) {
 // each block at boot when Enable=true and (when both are enabled)
 // auto-chains dmsgweb → skynetweb so a browser pointed at port 4445
 // covers both .dmsg and .skynet traffic.
-func configureResolvingProxies() {
+func configureResolvingProxies(log *logging.Logger) {
 	if enableDmsgWeb {
 		conf.DmsgWeb = &visorconfig.DmsgWebConfig{
 			Enable:        true,
@@ -2442,7 +2447,30 @@ func configureResolvingProxies() {
 			Mode:   "b",
 		}
 	}
+	configureExtraResolvers(log)
 	configureBrowseOrigin()
+}
+
+// configureExtraResolvers turns the --resolvers CSV (${RESOLVERS[@]}) into the
+// `resolvers` config list, then validates the WHOLE resolver set — the two
+// primaries included — before the config is written.
+//
+// Validating here rather than only in the visor is the point of doing it at
+// all: a port conflict produced by a skywire.conf edit is an operator typo,
+// and the moment to say so is while the operator is still looking at the
+// terminal that made it. Discovering it later means reading a visor log to
+// find out why a proxy that says "running" answers nothing.
+func configureExtraResolvers(log *logging.Logger) {
+	if strings.TrimSpace(extraResolvers) != "" {
+		rs, err := visorconfig.ParseResolverSpecs(extraResolvers)
+		if err != nil {
+			log.WithError(err).Fatal("invalid resolvers configuration")
+		}
+		conf.Resolvers = rs
+	}
+	if err := conf.ValidateResolvers(); err != nil {
+		log.WithError(err).Fatal("invalid resolvers configuration")
+	}
 }
 
 // configureBrowseOrigin enables, by default, the loopback "real-origin" browse

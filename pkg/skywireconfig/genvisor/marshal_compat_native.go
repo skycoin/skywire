@@ -272,6 +272,10 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 		o.field("skynet_web")
 		marshalSkynetWebNative(w, v.SkynetWeb, o.indent+1)
 	}
+	if v.Resolvers != nil {
+		o.field("resolvers")
+		marshalResolversNative(w, v.Resolvers, o.indent+1)
+	}
 	if v.SkymailBridge != nil {
 		o.field("skymail_bridge")
 		marshalSkymailBridgeNative(w, v.SkymailBridge, o.indent+1)
@@ -652,13 +656,34 @@ func marshalRewardsNative(w *strings.Builder, r *visorconfig.RewardsConfig, inde
 	o.close()
 }
 
+// marshalDmsgWebNative emits the dmsg_web block.
+//
+// Field order follows DmsgWebConfig's declaration order, which is what
+// encoding/json uses — the comparison test only checks structural equality,
+// but the point of this marshaler is to stand in for the stdlib codec.
+//
+// Every omitempty field is emitted. It did not used to be: secret_key,
+// proxy_addr, self_loopback, alias, self_loopback_authenticated and the
+// forward-proxy pair were missing, so a config carried through this marshaler
+// came back with the resolver silently reverted to a loopback listener under
+// the visor's own identity. The comparison test never caught it because
+// Generate() sets none of them, so nothing diverged from the stdlib output it
+// is compared against.
 func marshalDmsgWebNative(w *strings.Builder, d *visorconfig.DmsgWebConfig, indent int) {
 	o := newObjNative(w, indent)
 	o.field("enable")
 	writeBoolNative(w, d.Enable)
+	if d.SecretKey != nil {
+		o.field("secret_key")
+		writeSecKeyNative(w, *d.SecretKey)
+	}
 	if d.ProxyPort != 0 {
 		o.field("proxy_port")
 		writeUintNative(w, uint64(d.ProxyPort))
+	}
+	if d.ProxyAddr != "" {
+		o.field("proxy_addr")
+		writeQuotedNative(w, d.ProxyAddr)
 	}
 	if d.WebPort != 0 {
 		o.field("web_port")
@@ -688,9 +713,31 @@ func marshalDmsgWebNative(w *strings.Builder, d *visorconfig.DmsgWebConfig, inde
 		o.field("tls_ca_key_path")
 		writeQuotedNative(w, d.TLSCAKeyPath)
 	}
+	if d.SelfLoopback != nil {
+		o.field("self_loopback")
+		writeBoolNative(w, *d.SelfLoopback)
+	}
+	if d.Alias != "" {
+		o.field("alias")
+		writeQuotedNative(w, d.Alias)
+	}
+	if d.SelfLoopbackAuthenticated != nil {
+		o.field("self_loopback_authenticated")
+		writeBoolNative(w, *d.SelfLoopbackAuthenticated)
+	}
+	if d.ForwardProxy {
+		o.field("forward_proxy")
+		writeBoolNative(w, d.ForwardProxy)
+	}
+	if d.ForwardPort != 0 {
+		o.field("forward_port")
+		writeUintNative(w, uint64(d.ForwardPort))
+	}
 	o.close()
 }
 
+// marshalSkynetWebNative emits the skynet_web block — same completeness rule as
+// marshalDmsgWebNative above, and the same fields were missing.
 func marshalSkynetWebNative(w *strings.Builder, s *visorconfig.SkynetWebConfig, indent int) {
 	o := newObjNative(w, indent)
 	o.field("enable")
@@ -698,6 +745,10 @@ func marshalSkynetWebNative(w *strings.Builder, s *visorconfig.SkynetWebConfig, 
 	if s.ProxyPort != 0 {
 		o.field("proxy_port")
 		writeUintNative(w, uint64(s.ProxyPort))
+	}
+	if s.ProxyAddr != "" {
+		o.field("proxy_addr")
+		writeQuotedNative(w, s.ProxyAddr)
 	}
 	if s.WebPort != 0 {
 		o.field("web_port")
@@ -731,7 +782,118 @@ func marshalSkynetWebNative(w *strings.Builder, s *visorconfig.SkynetWebConfig, 
 		o.field("tls_ca_key_path")
 		writeQuotedNative(w, s.TLSCAKeyPath)
 	}
+	if s.SelfLoopback != nil {
+		o.field("self_loopback")
+		writeBoolNative(w, *s.SelfLoopback)
+	}
+	if s.Alias != "" {
+		o.field("alias")
+		writeQuotedNative(w, s.Alias)
+	}
+	if s.SelfLoopbackAuthenticated != nil {
+		o.field("self_loopback_authenticated")
+		writeBoolNative(w, *s.SelfLoopbackAuthenticated)
+	}
 	o.close()
+}
+
+// marshalResolversNative emits the `resolvers` list — the ADDITIONAL resolving
+// proxies beyond dmsg_web / skynet_web (see visorconfig/resolvers.go).
+//
+// Every field is emitted, unlike marshalDmsgWeb / marshalSkynetWeb above,
+// which silently drop proxy_addr, secret_key, alias, self_loopback and
+// forward_proxy: a config rendered through this marshaler comes back without
+// them. That is a live bug for the two primaries and MUST NOT be inherited
+// here — an operator's second resolver losing its secret_key or its
+// addr=0.0.0.0 on a round-trip would turn a LAN gateway into a loopback proxy
+// under the visor's own identity, silently.
+func marshalResolversNative(w *strings.Builder, rs []visorconfig.ResolverConfig, indent int) {
+	if rs == nil {
+		w.WriteString("null")
+		return
+	}
+	if len(rs) == 0 {
+		w.WriteString("[]")
+		return
+	}
+	w.WriteByte('[')
+	for i := range rs {
+		r := &rs[i]
+		if i > 0 {
+			w.WriteByte(',')
+		}
+		w.WriteByte('\n')
+		writeIndentNative(w, indent+1)
+		o := newObjNative(w, indent+1)
+		if r.Name != "" {
+			o.field("name")
+			writeQuotedNative(w, r.Name)
+		}
+		if r.Kind != "" {
+			o.field("kind")
+			writeQuotedNative(w, r.Kind)
+		}
+		o.field("enable")
+		writeBoolNative(w, r.Enable)
+		if r.SecretKey != nil {
+			o.field("secret_key")
+			writeSecKeyNative(w, *r.SecretKey)
+		}
+		o.field("proxy_port")
+		writeUintNative(w, uint64(r.ProxyPort))
+		if r.ProxyAddr != "" {
+			o.field("proxy_addr")
+			writeQuotedNative(w, r.ProxyAddr)
+		}
+		if r.DomainSuffix != "" {
+			o.field("domain_suffix")
+			writeQuotedNative(w, r.DomainSuffix)
+		}
+		if r.UpstreamSOCKS != "" {
+			o.field("upstream_socks")
+			writeQuotedNative(w, r.UpstreamSOCKS)
+		}
+		if r.Chain != nil {
+			o.field("chain")
+			writeBoolNative(w, *r.Chain)
+		}
+		if r.Alias != "" {
+			o.field("alias")
+			writeQuotedNative(w, r.Alias)
+		}
+		if r.SelfLoopback != nil {
+			o.field("self_loopback")
+			writeBoolNative(w, *r.SelfLoopback)
+		}
+		if r.SelfLoopbackAuthenticated != nil {
+			o.field("self_loopback_authenticated")
+			writeBoolNative(w, *r.SelfLoopbackAuthenticated)
+		}
+		if r.RouteTimeout != 0 {
+			o.field("route_timeout")
+			writeDurationNative(w, r.RouteTimeout)
+		}
+		if r.TLSMITM {
+			o.field("tls_mitm")
+			writeBoolNative(w, r.TLSMITM)
+		}
+		if r.TLSPort != 0 {
+			o.field("tls_port")
+			writeUintNative(w, uint64(r.TLSPort))
+		}
+		if r.TLSCAPath != "" {
+			o.field("tls_ca_path")
+			writeQuotedNative(w, r.TLSCAPath)
+		}
+		if r.TLSCAKeyPath != "" {
+			o.field("tls_ca_key_path")
+			writeQuotedNative(w, r.TLSCAKeyPath)
+		}
+		o.close()
+	}
+	w.WriteByte('\n')
+	writeIndentNative(w, indent)
+	w.WriteByte(']')
 }
 
 func marshalSkymailBridgeNative(w *strings.Builder, s *visorconfig.SkymailBridgeConfig, indent int) {

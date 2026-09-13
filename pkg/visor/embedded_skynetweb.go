@@ -42,7 +42,7 @@ import (
 
 // Default SOCKS5 listener port — chosen so it doesn't clash with
 // dmsgweb's default (4445) and both resolvers can run side by side.
-const defaultSkynetWebProxyPort = 4446
+const defaultSkynetWebProxyPort = visorconfig.DefaultSkynetWebProxyPort
 
 // EmbeddedSkynetWeb holds the runtime state for the visor-hosted
 // skynetweb resolver.

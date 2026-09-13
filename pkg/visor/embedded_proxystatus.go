@@ -34,6 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetweb"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // statusLogLookback bounds how far back the status page's log tail reaches. The
@@ -223,14 +224,13 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 // resolverListenAddr renders a resolving proxy's SOCKS5 listener the way its
 // runtime binds it: an empty ProxyAddr means loopback, and a zero port means the
 // SOCKS5 front-end is disabled (rendered as empty, never as ":0").
+//
+// The implementation lives in visorconfig because the config layer's
+// port-conflict check has to render the same listener strings this does — two
+// renderings that could drift would mean the conflict message names an address
+// the runtime never binds.
 func resolverListenAddr(addr string, port uint) string {
-	if port == 0 {
-		return ""
-	}
-	if strings.TrimSpace(addr) == "" {
-		addr = "127.0.0.1"
-	}
-	return fmt.Sprintf("%s:%d", addr, port)
+	return visorconfig.ResolverListenAddr(addr, port)
 }
 
 // chainTargetState labels what the visor KNOWS sits behind a downstream SOCKS5

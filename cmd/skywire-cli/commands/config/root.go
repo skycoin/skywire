@@ -127,6 +127,7 @@ var (
 	skynetWebUpstreamSOCKS     string
 	dmsgWebProxyAddr           string
 	skynetWebProxyAddr         string
+	extraResolvers             string
 	noBrowseOrigin             bool
 	browseOriginSuffix         string
 	browseOriginTLSCert        string

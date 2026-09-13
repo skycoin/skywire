@@ -40,6 +40,7 @@ type v1JSON struct {
 	LogServer     *LogServer           `json:"log_server,omitempty"`
 	DmsgWeb       *DmsgWebConfig       `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig     `json:"skynet_web,omitempty"`
+	Resolvers     []ResolverConfig     `json:"resolvers,omitempty"`
 	BrowseOrigin  *BrowseOriginConfig  `json:"browse_origin,omitempty"`
 	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
 	Rewards       *RewardsConfig       `json:"rewards,omitempty"`
@@ -104,6 +105,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.LogServer = mirror.LogServer
 	v.DmsgWeb = mirror.DmsgWeb
 	v.SkynetWeb = mirror.SkynetWeb
+	v.Resolvers = mirror.Resolvers
 	v.BrowseOrigin = mirror.BrowseOrigin
 	v.SkymailBridge = mirror.SkymailBridge
 	v.Rewards = mirror.Rewards

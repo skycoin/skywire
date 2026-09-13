@@ -125,6 +125,8 @@ var (
 	embFwdProxy vinit.Module
 	// Embedded skynetweb resolver (localhost SOCKS5 for .skynet browsing)
 	embSkynetWeb vinit.Module
+	// Additional resolving proxies from the `resolvers` config list
+	embResolvers vinit.Module
 	// Native real-origin browse proxy (loopback reverse-proxy origin over dmsg)
 	meshProxy vinit.Module
 	// Embedded SMTP→skywire bridge (localhost SMTP listener for *.skynet recipients)
@@ -208,6 +210,13 @@ func registerModules(logger *logging.MasterLogger) {
 	rt = maker("router", initRouter, &tr, &dmsgC, &dmsgHTTP, &embRouteSetup, &routerListener)
 	// skynetweb depends on the router being up, unlike dmsgweb.
 	embSkynetWeb = maker("embedded_skynetweb", initEmbeddedSkynetWeb, &rt)
+	// The additional `resolvers` list can hold entries of BOTH kinds, so it
+	// takes the stricter of the two dependencies: rt (which transitively
+	// brings up dmsgC) rather than dmsgC alone. A dmsg-only list would be
+	// happy earlier, but gating on the kinds actually present would make the
+	// module graph depend on config contents — and get it wrong the first
+	// time someone adds a skynet entry.
+	embResolvers = maker("embedded_resolvers", initEmbeddedResolvers, &rt)
 	// Native real-origin browse proxy: reverse-proxies mesh sites over dmsg AND
 	// skynet from an isolated loopback origin. Depends on the router module (rt) —
 	// which transitively brings up dmsgC (assigns v.dmsgHTTP) AND sets v.router
@@ -222,7 +231,7 @@ func registerModules(logger *logging.MasterLogger) {
 	// skynetweb (dep rt — the same module launch waits on, so they start
 	// concurrently) reliably lost: skynet_web.enable=true bound nothing and
 	// `app ls` had no skynetweb row.
-	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt, &embDmsgWeb, &embSkynetWeb)
+	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt, &embDmsgWeb, &embSkynetWeb, &embResolvers)
 	// cli depends on tr so v.tpM is set when initCLI wires up the
 	// shared VStreamMux for transport-RPC (registered as the manager's
 	// VisorRPCPacket handler). Without this dep, initCLI could run
@@ -297,7 +306,7 @@ func registerModules(logger *logging.MasterLogger) {
 	// transport). See init_sd_reg_cxo.go.
 	sdRegCXOMod = maker("sd_reg_cxo", initSDRegCXO, &disc, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgSrv, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &meshProxy, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod, &regCXOMod, &arBindCXOMod, &sdRegCXOMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgSrv, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &embResolvers, &meshProxy, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod, &regCXOMod, &arBindCXOMod, &sdRegCXOMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.

@@ -259,6 +259,21 @@ const envfileLinux = `#
 #DMSGWEBADDR='0.0.0.0'
 #SKYNETWEBADDR='0.0.0.0'
 
+#--	ADDITIONAL resolving proxies, beyond the DMSGWEB/SKYNETWEB pair above.
+#--	One array element per proxy: <kind>:<port>[;key=value…], where kind is
+#--	dmsg or skynet and the options are name=, addr=, suffix=, sk=,
+#--	upstream=, chain= and alias=. The port is required — there is no
+#--	default for an extra resolver, since defaulting one would land it on
+#--	top of DMSGWEB's 4445.
+#--	A second .dmsg proxy on the LAN, under its OWN dmsg identity (so the
+#--	LAN's requests are attributable to a key you can revoke without
+#--	rotating the visor's), not chained to anything (so it does not become
+#--	an open clearnet proxy for every device on the network):
+#		RESOLVERS=('dmsg:4447;name=lan;addr=0.0.0.0;sk=<64-hex-secret-key>;chain=false')
+#--	A .dmsg and a .skynet proxy side by side:
+#		RESOLVERS=('dmsg:4447;name=alt' 'skynet:4448;name=alt-skynet')
+#RESOLVERS=('')
+
 #--	Autostart the skymail bridge (SMTP <-> skywire mail gateway). Off by default.
 #SKYMAILBRIDGE=false
 

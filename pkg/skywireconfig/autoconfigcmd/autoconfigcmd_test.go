@@ -38,7 +38,7 @@ var allFlags = []string{
 	"proxyserver", "no-proxyserver", "proxyclientpk", "startproxyclient", "proxywl",
 	// SOCKS5 web bridges
 	"dmsgweb", "no-dmsgweb", "skynetweb", "no-skynetweb", "dmsgweb-upstream",
-	"skynetweb-upstream", "dmsgweb-addr", "skynetweb-addr",
+	"skynetweb-upstream", "dmsgweb-addr", "skynetweb-addr", "resolvers",
 	// Skychat
 	"skychat", "no-skychat", "chataddr", "chatportless", "no-chatportless",
 	"servechatpair", "no-servechatpair",

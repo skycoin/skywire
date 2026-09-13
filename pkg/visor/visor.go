@@ -375,6 +375,11 @@ type Visor struct {
 	// Embedded Skynet Web resolver (nil if skynet_web.enable is false).
 	// Like embeddedDmsgWeb but for .skynet hosts, dialed via the visor's router.
 	embeddedSkynetWeb *EmbeddedSkynetWeb
+	// Additional resolving proxies declared by the `resolvers` config list —
+	// beyond the dmsg_web / skynet_web primaries above. Empty on every config
+	// that doesn't use the list, which is the default. See
+	// embedded_resolvers.go.
+	embeddedResolvers []*embeddedResolver
 	// Embedded SMTP→skywire bridge (nil if skymail_bridge.enable is false).
 	// Accepts inbound SMTP from a co-located Postfix and dials peers via
 	// the visor's dmsg client. Standalone hosts use cmd/smb.

@@ -182,6 +182,37 @@ curl -x socks5h://192.168.1.50:4445 http://tpd.dmsg/health   # from another LAN 
 > **Security:** a non-loopback bind exposes the proxy to everyone on the LAN.
 > Only do this on a trusted network.
 
+#### 2a-bis. Keep the loopback proxy, add a separate one for the LAN
+
+Re-binding `DMSGWEBADDR` moves the board's *own* resolver onto the LAN: there is
+then one proxy, serving both the board and every device on the network, under
+the visor's public key. `RESOLVERS` adds a **second** proxy instead, on its own
+port, so the loopback one stays exactly as it was:
+
+```
+DMSGWEB=true
+SKYNETWEB=true
+RESOLVERS=('dmsg:4447;name=lan;addr=0.0.0.0;sk=<64-hex-secret-key>;chain=false')
+```
+```
+sudo skywire autoconfig
+```
+
+Three things that entry buys over re-binding 4445:
+
+- **`sk=`** gives the LAN proxy its own dmsg identity, attached in-process to
+  this visor's relay (one session, no discovery entry — the visor pays for dmsg
+  once). The LAN's requests are then attributable to a key you can rotate or
+  revoke on its own, without touching the visor's.
+- **`chain=false`** leaves it unchained, so non-`.dmsg` CONNECTs are not
+  forwarded to skynetweb → skysocks-client. Chained, the LAN proxy would be a
+  working clearnet SOCKS5 proxy for every device on the network.
+- The board's own loopback `4445` keeps the full chain, unchanged.
+
+Generate a key with `skywire cli config gen -n --stdout | grep '"sk"'`, or reuse
+one you already hold. Each entry needs its own port: `config gen` refuses a set
+where two enabled resolvers claim the same one, naming both.
+
 ### 2b. On each device (or browser) — point at the proxy
 
 **Option A — per-device SOCKS5 (works on both OpenWRT and DD-WRT).** Set the

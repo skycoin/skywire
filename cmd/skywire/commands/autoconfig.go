@@ -207,6 +207,7 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addString("SKYNETWEBUPSTREAM", "skynetweb-upstream", autoconfigVals.SkynetwebUpstream)
 	addString("DMSGWEBADDR", "dmsgweb-addr", autoconfigVals.DmsgwebAddr)
 	addString("SKYNETWEBADDR", "skynetweb-addr", autoconfigVals.SkynetwebAddr)
+	addArray("RESOLVERS", "resolvers", autoconfigVals.Resolvers)
 
 	// Skychat
 	addBool("SKYCHAT", "skychat", "no-skychat", autoconfigVals.Skychat, autoconfigVals.NoSkychat)
