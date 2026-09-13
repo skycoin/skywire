@@ -44,7 +44,7 @@ import (
 
 // Default SOCKS5 listener port — matches `skywire dmsg web` so the two
 // surfaces behave identically from a browser's perspective.
-const defaultDmsgWebProxyPort = 4445
+const defaultDmsgWebProxyPort = visorconfig.DefaultDmsgWebProxyPort
 
 // dmsgWebReadyWait bounds how long serve() waits for the dmsg client to be
 // ready before binding the listener anyway.
@@ -509,7 +509,7 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 	// identity is not the configured one — which is the part an operator has
 	// to know, since the survey whitelist is keyed on it.
 	resolverC, resolverPK := v.dmsgC, v.conf.PK
-	if guest, guestPK, err := v.dmsgWebGuestClient(ctx, cfg, log); err != nil {
+	if guest, guestPK, err := v.dmsgWebGuestClient(ctx, "dmsg_web", cfg, log); err != nil {
 		log.WithError(err).Error("dmsg_web secret_key configured but its client could not be attached; " +
 			"falling back to the visor's identity")
 	} else if guest != nil {
@@ -574,17 +574,23 @@ func buildDmsgWebAppFunc(rt *EmbeddedDmsgWeb, log *logging.Logger) appcommon.App
 // second full dmsg client this replaces — see dmsg.AttachInProcess for why a
 // registering guest is the thing that got removed in #4500/#4501 and this is
 // not it.
-func (v *Visor) dmsgWebGuestClient(ctx context.Context, cfg *visorconfig.DmsgWebConfig, log *logging.Logger) (*dmsg.Client, cipher.PubKey, error) {
+//
+// name distinguishes this resolver's identity in the package logger and the
+// close stack. With additional resolvers (V1.Resolvers) several guests can be
+// attached at once, each under its own key; a single hardcoded label would
+// make their log lines indistinguishable — exactly when telling them apart
+// matters, since the survey whitelist is keyed per identity.
+func (v *Visor) dmsgWebGuestClient(ctx context.Context, name string, cfg *visorconfig.DmsgWebConfig, log *logging.Logger) (*dmsg.Client, cipher.PubKey, error) {
 	if cfg == nil || cfg.SecretKey == nil || *cfg.SecretKey == (cipher.SecKey{}) {
 		return nil, cipher.PubKey{}, nil
 	}
 	sk := *cfg.SecretKey
 	pk, err := sk.PubKey()
 	if err != nil {
-		return nil, cipher.PubKey{}, fmt.Errorf("invalid dmsg_web.secret_key: %w", err)
+		return nil, cipher.PubKey{}, fmt.Errorf("invalid %s secret_key: %w", name, err)
 	}
 
-	glog := v.MasterLogger().PackageLogger("dmsg_web_identity")
+	glog := v.MasterLogger().PackageLogger(name + "_identity")
 	guest := dmsg.NewClient(pk, sk, direct.NewClient(nil, glog), &dmsg.Config{
 		MinSessions: 1,
 		RelayOnly:   true,
@@ -598,9 +604,9 @@ func (v *Visor) dmsgWebGuestClient(ctx context.Context, cfg *visorconfig.DmsgWeb
 		return nil, cipher.PubKey{}, err
 	}
 	go guest.Serve(ctx)
-	v.pushCloseStack("dmsg_web_identity", guest.Close)
+	v.pushCloseStack(name+"_identity", guest.Close)
 
-	log.WithField("resolver_pk", pk).WithField("host_pk", v.conf.PK).
+	log.WithField("resolver", name).WithField("resolver_pk", pk).WithField("host_pk", v.conf.PK).
 		Info("Resolver running under its own dmsg identity, attached in-process to this visor")
 	return guest, pk, nil
 }

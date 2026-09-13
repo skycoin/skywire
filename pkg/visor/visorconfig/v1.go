@@ -15,13 +15,19 @@ type V1 struct {
 	*Common
 	mu sync.RWMutex
 
-	Dmsg          *dmsgspec.DmsgConfig `json:"dmsg"`
-	Pty           *Pty                 `json:"pty,omitempty"`
-	Dmsgscp       *Dmsgscp             `json:"dmsgscp,omitempty"`
-	UIServer      *UIServer            `json:"ui_server,omitempty"`
-	LogServer     *LogServer           `json:"log_server,omitempty"`
-	DmsgWeb       *DmsgWebConfig       `json:"dmsg_web,omitempty"`
-	SkynetWeb     *SkynetWebConfig     `json:"skynet_web,omitempty"`
+	Dmsg      *dmsgspec.DmsgConfig `json:"dmsg"`
+	Pty       *Pty                 `json:"pty,omitempty"`
+	Dmsgscp   *Dmsgscp             `json:"dmsgscp,omitempty"`
+	UIServer  *UIServer            `json:"ui_server,omitempty"`
+	LogServer *LogServer           `json:"log_server,omitempty"`
+	DmsgWeb   *DmsgWebConfig       `json:"dmsg_web,omitempty"`
+	SkynetWeb *SkynetWebConfig     `json:"skynet_web,omitempty"`
+	// Resolvers declares ADDITIONAL resolving proxies beyond the dmsg_web /
+	// skynet_web pair above — each with its own port, bind address, domain
+	// suffix and (for a dmsg one) its own identity. Purely additive: absent,
+	// which is every config written before it existed, means exactly the
+	// two primaries. See resolvers.go.
+	Resolvers     []ResolverConfig     `json:"resolvers,omitempty"`
 	BrowseOrigin  *BrowseOriginConfig  `json:"browse_origin,omitempty"`
 	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
 	Rewards       *RewardsConfig       `json:"rewards,omitempty"`
