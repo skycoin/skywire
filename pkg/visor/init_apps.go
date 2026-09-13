@@ -124,6 +124,21 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 			RestartPolicy: string(appcommon.RestartOnFailure),
 		})
 	}
+	// Additional resolvers from the `resolvers` config list, one row each,
+	// named "resolver-<name>". initEmbeddedResolvers registered their RunFuncs
+	// and already dropped any entry that lost a port conflict, so every
+	// runtime here is one that can actually bind.
+	for _, er := range v.embeddedResolvers {
+		if appsContains(apps, er.appName) {
+			continue
+		}
+		apps = append(apps, appserver.AppConfig{
+			Name:          er.appName,
+			AutoStart:     er.enable,
+			LauncherMode:  string(appcommon.RunModeInternal),
+			RestartPolicy: string(appcommon.RestartOnFailure),
+		})
+	}
 
 	// Proxy-client auto-exit. skysocks-client hard-requires a server key —
 	// autostart with none configured would just crash-loop. Instead of

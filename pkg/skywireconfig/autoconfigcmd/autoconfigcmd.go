@@ -232,6 +232,10 @@ type Values struct {
 	// cannot rotate, such as a survey whitelist.
 	DmsgwebSK     string // DMSGWEBSK
 	SkynetwebAddr string // SKYNETWEBADDR
+	// Resolvers (RESOLVERS) declares ADDITIONAL resolving proxies beyond
+	// the DMSGWEB/SKYNETWEB pair, one comma-separated spec each. See the
+	// flag's help text for the spec grammar.
+	Resolvers string
 
 	// --- Skychat ---
 	Skychat         bool
@@ -402,6 +406,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().StringVar(&v.DmsgwebAddr, "dmsgweb-addr", "", "host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN) — writes DMSGWEBADDR in skywire.conf")
 	cmd.Flags().StringVar(&v.DmsgwebSK, "dmsgweb-sk", "", "secret key the embedded resolver answers under, instead of the visor's; attached in-process so it costs one session and no discovery entry — writes DMSGWEBSK in skywire.conf")
 	cmd.Flags().StringVar(&v.SkynetwebAddr, "skynetweb-addr", "", "host the .skynet SOCKS5 proxy binds to — writes SKYNETWEBADDR in skywire.conf")
+	cmd.Flags().StringVar(&v.Resolvers, "resolvers", "", "additional resolving proxies beyond the two above, comma-separated: <kind>:<port>[;name=|addr=|suffix=|sk=|upstream=|chain=|alias=] (kind is dmsg or skynet) — writes RESOLVERS in skywire.conf")
 
 	// --- Skychat ---
 	cmd.Flags().BoolVar(&v.Skychat, "skychat", false, "autostart skychat — writes SKYCHAT=true in skywire.conf")
@@ -582,6 +587,10 @@ var envMap = map[string]EnvMapping{
 		Note: "Secret key the embedded resolver answers under instead of the visor's. For a key the deployment already knows and cannot rotate (a survey whitelist). Attached in-process: one session, no discovery entry."},
 	"skynetweb-addr":     {Key: "SKYNETWEBADDR", Format: EnvFormatString},
 	"skynetweb-upstream": {Key: "SKYNETWEBUPSTREAM", Format: EnvFormatString},
+	"resolvers": {Key: "RESOLVERS", Format: EnvFormatBashArray,
+		Note: "Additional proxies only — DMSGWEB/SKYNETWEB stay the primaries on 4445/4446. Each spec needs its own port; " +
+			"config gen refuses a set where two enabled resolvers claim one port. A LAN-facing entry (addr=0.0.0.0) should " +
+			"normally carry its own sk= and chain=false, so it is attributable to a revocable key and is not an open clearnet proxy."},
 
 	// Skychat
 	"skychat":          {Key: "SKYCHAT", Format: EnvFormatBool},
