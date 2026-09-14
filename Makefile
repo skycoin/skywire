@@ -152,7 +152,38 @@ check: ## Run linters and tests (lint, check-cg, check-help, test). Serialized v
 		$(MAKE) --no-print-directory -f $(firstword $(MAKEFILE_LIST)) check-inner; \
 	fi
 
-check-inner: lint check-cg check-help test ## Internal: the actual check targets, run inside flock by 'make check'. Don't call directly unless you've already acquired .make-check.lock.
+check-inner: lint check-cg check-browseui check-help test ## Internal: the actual check targets, run inside flock by 'make check'. Don't call directly unless you've already acquired .make-check.lock.
+
+
+# BROWSEUI_ENTRYPOINTS: embedded browser scripts that define a global when they
+# load, as path:symbol. Only scripts that assign unconditionally belong here —
+# seed-skywire.js and autoupdate.js return early off-environment and define
+# nothing, so asserting a symbol for them would fail for the wrong reason.
+BROWSEUI_ENTRYPOINTS := \
+	pkg/wasmhv/browseui/desk-boot.js:skywireDeskBoot \
+	pkg/wasmhv/browseui/exec-remote.js:SkywireExecWorker \
+	pkg/wasmhv/browseui/skywire-exec.js:skywireExec
+
+check-browseui: ## Fail if an embedded browser script does not load and define its entry point
+	@# node --check is NOT enough. It validates syntax, and a statement at the
+	@# wrong scope is syntactically perfect: #4675 and again #4869 both shipped
+	@# a stray insert at the top of desk-boot.js that referenced `opts` outside
+	@# the function it belonged to, threw ReferenceError at load, and killed the
+	@# IIFE before it assigned skywireDeskBoot — so no desk booted at all. Both
+	@# times `node --check` passed. Load the file and assert the entry point.
+	@command -v node >/dev/null 2>&1 || { echo "node not found; skipping browser-script load check"; exit 0; }
+	@set -e; \
+	for f in $(BROWSEUI_ENTRYPOINTS); do \
+		path=$${f%%:*}; sym=$${f##*:}; \
+		node -e "globalThis.window = globalThis; \
+			try { require('$(CURDIR)/$$path'); } \
+			catch (e) { console.error('$$path threw at load: ' + e.message); process.exit(1); } \
+			if (typeof globalThis['$$sym'] !== 'function' && typeof globalThis['$$sym'] !== 'object') { \
+				console.error('$$path loaded but did not define $$sym'); process.exit(1); \
+			}" || exit 1; \
+		echo "  ok  $$path defines $$sym"; \
+	done
+	@echo "embedded browser scripts load and define their entry points"
 
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
 	@echo "checking dmsghttp offline config gen"
