@@ -99,6 +99,22 @@ jobs:
           cp -r build/playground/. site/
           test -f site/skywire.wasm.gz || { echo "the wasm module did not land at the root"; exit 1; }
           echo "site root is now the desk:"; ls -la site/index.html site/skywire.wasm.gz
+          # mkdocs publishes everything under docs/, and docs/playground/index.html
+          # is the desk page's SOURCE — so the desk also lands at /playground/,
+          # where its relative asset paths resolve to files that are now at the
+          # root. That copy cannot work. Replace it with a redirect: the path was
+          # the desk's home until this change, so old bookmarks and any cached
+          # copy of the former desk-shell.js both point at it.
+          printf '%s\n' \
+            '<!DOCTYPE html>' \
+            '<html lang="en"><head><meta charset="utf-8">' \
+            '<title>skywire terminal</title>' \
+            '<link rel="canonical" href="../">' \
+            '<meta http-equiv="refresh" content="0; url=../">' \
+            '<script>location.replace("../");</script>' \
+            '</head><body>The terminal is at <a href="../">the site root</a>.</body></html>' \
+            > site/playground/index.html
+          echo "/playground/ now redirects to the root"
 
       - name: Deploy to gh-pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
