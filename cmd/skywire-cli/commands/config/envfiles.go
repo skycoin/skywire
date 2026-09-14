@@ -117,6 +117,12 @@ const envfileLinux = `#
 #	set it so a freshly-imaged board can be discovered on the LAN.
 #ENABLEPKENDPOINT=true
 
+#--	Password gate on the hypervisor UI. Unset leaves it as-is: on for a
+#	first run, and a regen keeps whatever the config already had. Set it
+#	to make the choice survive a config rebuild (autoconfig runs on every
+#	package update). Windows and macOS force the gate on regardless.
+#HVAUTH=false
+
 #--	Embedded LAN/WAN DMSG server is always on whenever ISHYPERVISOR=true.
 #	Managed visors relay through this hypervisor instead of public DMSG
 #	servers. The two knobs below control the WAN-reachability path; see

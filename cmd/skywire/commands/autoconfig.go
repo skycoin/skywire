@@ -131,6 +131,7 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addBool("ISHYPERVISOR", "ishv", "no-ishv", autoconfigVals.Ishv, autoconfigVals.NoIshv)
 	addBool("LEGACYHVUI", "legacy-hv-ui", "no-legacy-hv-ui", autoconfigVals.LegacyHVUI, autoconfigVals.NoLegacyHVUI)
 	addBool("ENABLEPKENDPOINT", "pk-endpoint", "no-pk-endpoint", autoconfigVals.PkEndpoint, autoconfigVals.NoPkEndpoint)
+	addBool("HVAUTH", "hv-auth", "no-hv-auth", autoconfigVals.HvAuth, autoconfigVals.NoHvAuth)
 	addString("HVHTTPADDR", "hvaddr", autoconfigVals.HvAddr)
 	addString("SK", "sk", autoconfigVals.SecretKey)
 	addString("VERSION", "version", autoconfigVals.Version)
