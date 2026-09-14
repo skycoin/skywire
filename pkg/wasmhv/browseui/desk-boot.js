@@ -248,6 +248,13 @@
 	}
 
 	globalThis.skywireDeskBoot = function (opts) {
+		// Drop the pre-vault plaintext key an older build left behind. It does
+		// not derive this visor's public key and nothing reads it — a dead
+		// 32-byte secret sitting in storage only ever benefits whoever takes
+		// the device. Cheap, unconditional, and independent of whether the
+		// operator has turned on a passphrase.
+		if (globalThis.SkywireIdentityVault) { globalThis.SkywireIdentityVault.dropLegacyKey(); }
+
 		// Boot guard. The chain below waits on the desk host and the shell and
 		// has no terminal catch, so a module that never installs them leaves the
 		// page looking alive — taskbar up, dashboard aimed at vnet:8001 — with
