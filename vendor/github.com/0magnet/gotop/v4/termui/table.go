@@ -97,8 +97,15 @@ func (t *Table) Draw(buf *ui.Buffer) {
 		style := ui.NewStyle(ui.Theme.Default.Fg)
 		if t.ShowCursor {
 			if (t.SelectedItem == "" && rowNum == t.SelectedRow) || (t.SelectedItem != "" && t.SelectedItem == row[t.UniqueCol]) {
-				style.Fg = t.CursorColor
-				style.Modifier = ui.ModifierReverse
+				// Paint the cursor colour as the BACKGROUND and keep a real
+				// foreground, rather than asking the terminal to reverse the
+				// pair. Reverse swapped Fg with a Bg that NewStyle leaves at
+				// ColorClear, so the text came out in the terminal's default
+				// background — black on any dark theme, over a dark cursor
+				// colour. The first row is selected at startup, so the top
+				// entry was the one nobody could read.
+				style.Fg = ui.Theme.Default.Fg
+				style.Bg = t.CursorColor
 				for _, width := range t.ColWidths {
 					if width == 0 {
 						continue

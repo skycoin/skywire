@@ -254,11 +254,10 @@ func runDirectGotop() error {
 	help.Resize(termWidth, termHeight)
 
 	// Build-version overlay in the top-right corner (what `skywire -b` prints).
-	versionLabel = w.NewVersionLabel(skywireBuildVersion())
+	versionLabel = w.NewVersionLabel(gotopLabel())
 	versionLabel.Reposition(termWidth)
 
-	ui.Render(grid)
-	renderVersionLabel()
+	renderGrid(grid)
 	if conf.Statusbar {
 		bar.SetRect(0, termHeight-1, termWidth, termHeight)
 		ui.Render(bar)
@@ -457,11 +456,10 @@ func runGotopWithConfig(updateInterval time.Duration, remoteMode bool) error {
 	help.Resize(termWidth, termHeight)
 
 	// Build-version overlay in the top-right corner (what `skywire -b` prints).
-	versionLabel = w.NewVersionLabel(skywireBuildVersion())
+	versionLabel = w.NewVersionLabel(gotopLabel())
 	versionLabel.Reposition(termWidth)
 
-	ui.Render(grid)
-	renderVersionLabel()
+	renderGrid(grid)
 	if conf.Statusbar {
 		bar.SetRect(0, termHeight-1, termWidth, termHeight)
 		ui.Render(bar)
@@ -519,12 +517,36 @@ func skywireBuildVersion() string {
 	return buildinfo.Version()
 }
 
-// renderVersionLabel draws the build-version overlay on top of the grid's
-// top-right border. Call after every ui.Render(grid).
-func renderVersionLabel() {
-	if versionLabel != nil {
-		ui.Render(versionLabel)
+// gotopLabel is what the top-right overlay reads: the host this gotop is
+// showing, then the build. The hostname comes first because it is the part
+// that differs when several machines are being watched side by side — the
+// version is usually the same across them and answers a different question.
+// An unavailable hostname just leaves the version, rather than printing a
+// placeholder that looks like a machine name.
+func gotopLabel() string {
+	v := skywireBuildVersion()
+	h, err := os.Hostname()
+	if err != nil || h == "" {
+		return v
 	}
+	return h + " " + v
+}
+
+// renderGrid draws the grid and the top-right overlay in ONE pass.
+//
+// They used to be two ui.Render calls — the grid, then the label over it —
+// which is a second flush to the terminal and reads as the label flickering in
+// after the display is already up. ui.Render takes several drawables and
+// composes them into one buffer, so ordering within the frame still puts the
+// label on top without a visible second pass. Some paths also rendered the
+// grid alone, which erased the label until the next tick; going through here
+// means that cannot happen.
+func renderGrid(grid *layout.MyGrid) {
+	if versionLabel != nil {
+		ui.Render(grid, versionLabel)
+		return
+	}
+	renderGrid(grid)
 }
 
 func eventLoop(c gotop.Config, grid *layout.MyGrid) {
@@ -542,8 +564,7 @@ func eventLoop(c gotop.Config, grid *layout.MyGrid) {
 			return
 		case <-drawTicker:
 			if !c.HelpVisible {
-				ui.Render(grid)
-				renderVersionLabel()
+				renderGrid(grid)
 				if c.Statusbar {
 					ui.Render(bar)
 				}
@@ -581,20 +602,20 @@ func eventLoop(c gotop.Config, grid *layout.MyGrid) {
 					ui.Render(help)
 				case "<Escape>":
 					c.HelpVisible = false
-					ui.Render(grid)
+					renderGrid(grid)
 				case "<Resize>":
 					ui.Render(help)
 				}
 			} else {
 				switch e.ID {
 				case "?":
-					ui.Render(grid)
+					renderGrid(grid)
 				case "h":
 					c.GraphHorizontalScale += graphHorizontalScaleDelta
 					for _, item := range grid.Lines {
 						item.Scale(c.GraphHorizontalScale)
 					}
-					ui.Render(grid)
+					renderGrid(grid)
 				case "l":
 					if c.GraphHorizontalScale > graphHorizontalScaleDelta {
 						c.GraphHorizontalScale -= graphHorizontalScaleDelta
@@ -608,8 +629,7 @@ func eventLoop(c gotop.Config, grid *layout.MyGrid) {
 						grid.Net.Mbps = !grid.Net.Mbps
 					}
 				case "<Resize>":
-					ui.Render(grid)
-					renderVersionLabel()
+					renderGrid(grid)
 					if c.Statusbar {
 						ui.Render(bar)
 					}

@@ -70,7 +70,7 @@ require (
 	github.com/0magnet/gobrpc v0.0.0-20260906144809-5215ec59d553
 	github.com/0magnet/golang-ipc v1.2.5-0.20260905172007-25d9c1a262d0
 	github.com/0magnet/got v0.0.0-20260905231830-8b4c51f6f6f8
-	github.com/0magnet/gotop/v4 v4.2.1-0.20260905172009-f9d674fb6dfd
+	github.com/0magnet/gotop/v4 v4.2.1-0.20260914190639-4f45ea554d47
 	github.com/0magnet/lolcat-go v0.0.0-20260907230215-22c54b7702c7
 	github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c
 	github.com/0magnet/netscrape v0.0.0-20260910002431-4317eab0bb2d

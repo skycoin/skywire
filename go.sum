@@ -96,6 +96,8 @@ github.com/0magnet/got v0.0.0-20260905231830-8b4c51f6f6f8 h1:9+5uCBxA9g7V66XXCL8
 github.com/0magnet/got v0.0.0-20260905231830-8b4c51f6f6f8/go.mod h1:BOz9CE+se/wSmhJHIRF3hLNZO0bPLBuvaaVDXQBkKp0=
 github.com/0magnet/gotop/v4 v4.2.1-0.20260905172009-f9d674fb6dfd h1:vEjQb0T9bmH0rQtVX7JBaCJsQUKWEwgzPVWmHU+xLOI=
 github.com/0magnet/gotop/v4 v4.2.1-0.20260905172009-f9d674fb6dfd/go.mod h1:haYbhBW68wqSPNiH6Q0ZOBBQhgEufUS2ZECSpagUSVc=
+github.com/0magnet/gotop/v4 v4.2.1-0.20260914190639-4f45ea554d47 h1:SbttY7dk1jvFj0/+P/9I2GTNjEzdNiUe1kr1UweWGbE=
+github.com/0magnet/gotop/v4 v4.2.1-0.20260914190639-4f45ea554d47/go.mod h1:haYbhBW68wqSPNiH6Q0ZOBBQhgEufUS2ZECSpagUSVc=
 github.com/0magnet/lolcat-go v0.0.0-20260907230215-22c54b7702c7 h1:0l4PGiCpSu06V8loRKO68KtWnJvdVV0LeOmcIWr+f5g=
 github.com/0magnet/lolcat-go v0.0.0-20260907230215-22c54b7702c7/go.mod h1:DbbClVrvQ558CvwGWU78xx0k03aEY/uS9qf5Wtw+n3o=
 github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c h1:Uj+2n5pWraLqGRmu9uFMZDr2TImQN0LqLUSSMd92iWk=
