@@ -6,24 +6,30 @@
 // visor reports to. ServeRPCClient establishes a dmsg session to
 // each as the bootstrap RPC channel — that's the "is the hypervisor
 // reachable" signal. Once that session is up, the goroutine started
-// here attempts to establish a stcpr / sudph transport between the
-// visor and the hypervisor too, so subsequent RPC + skypty dials
-// can ride the fast p2p path instead of the dmsg relay.
+// here attempts a direct transport between the visor and the
+// hypervisor too, so subsequent RPC + skypty dials can ride the fast
+// p2p path instead of the dmsg relay.
 //
 // Ordering rationale:
 //
-//  1. dmsg session up  → hypervisor is alive + reachable through the
+//  1. dmsg session up → hypervisor is alive + reachable through the
 //     network.
-//  2. Attempt stcpr (no dmsg needed) — direct TCP via address
-//     resolver bind. Falls through quickly when the visor or
-//     hypervisor lacks a public stcpr endpoint.
-//  3. Attempt sudph (uses dmsg for signaling) — direct UDP via
-//     address resolver, hole-punched through NAT.
+//  2. Attempt every direct carrier this visor can open, in the active
+//     preference order (tptypes.PreferenceOrder), stopping at the
+//     first that succeeds. dmsg is skipped — it is the relay being
+//     escaped, not a destination.
 //
-// Both transports persist past first creation; the goroutine
+// The carrier set is deliberately NOT a fixed pair. It used to be
+// stcpr-then-sudph, which quietly excluded every visor that has
+// neither: a browser visor opens swtr/swsr/webrtc and nothing else,
+// so it never upgraded off the relay at all. Preference is one
+// setting, owned by tptypes and settable at runtime; this loop reads
+// it rather than restating a subset of it.
+//
+// The transport persists past first creation; the goroutine
 // reconciles every 5 minutes (or after a failed attempt's backoff
-// expires) by re-checking whether the fast transport is still
-// present and re-trying if not.
+// expires) by re-checking whether a fast transport is still present
+// and re-trying if not.
 //
 // Stops cleanly when the visor's lifecycle ctx is canceled.
 package visor
@@ -75,14 +81,14 @@ func (v *Visor) autoUpgradeHypervisorTransport(ctx context.Context, hvPK cipher.
 			backoff = hypervisorTransportInitialBackoff
 			continue
 		}
-
-		// Skip the work if neither fast transport type is available
-		// locally — common on visors that disable stcpr/sudph or that
-		// run pure-dmsg builds. Re-check every cycle in case config
-		// changes at runtime (RPC API can flip these).
-		localSTCPR := v.tpM.IsKnownNetwork(tptypes.STCPR)
-		localSUDPH := v.tpM.IsKnownNetwork(tptypes.SUDPH)
-		if !localSTCPR && !localSUDPH {
+		// Which direct carriers can this visor actually open? Walk the
+		// active preference order rather than a hardcoded pair: a browser
+		// visor has neither stcpr nor sudph but does have swtr/swsr/webrtc,
+		// and gating on the pair meant it never upgraded off the dmsg relay
+		// at all. Re-read every cycle — the order is settable at runtime and
+		// the RPC API can flip which networks are known.
+		candidates := directCarrierCandidates(tptypes.PreferenceOrder(), v.tpM.IsKnownNetwork)
+		if len(candidates) == 0 {
 			backoff = hypervisorTransportReconcileInterval
 			continue
 		}
@@ -110,40 +116,31 @@ func (v *Visor) autoUpgradeHypervisorTransport(ctx context.Context, hvPK cipher.
 			continue
 		}
 
-		// Try stcpr first — direct TCP, no dmsg signaling needed.
-		if localSTCPR {
-			if _, err := v.tpM.SaveTransport(ctx, hvPK, tptypes.STCPR, transport.LabelAutomatic); err == nil {
-				log.WithField("type", string(tptypes.STCPR)).
+		// Try each carrier in preference order, stopping at the first that
+		// takes. Every type is worth attempting: the point is to get off the
+		// dmsg relay, and which carrier achieves that is the preference
+		// order's decision, not this loop's.
+		upgraded := false
+		for _, t := range candidates {
+			if _, err := v.tpM.SaveTransport(ctx, hvPK, t, transport.LabelAutomatic); err == nil {
+				log.WithField("type", string(t)).
 					WithField("hypervisor_pk", hvPK).
 					Info("Upgraded hypervisor transport")
 				backoff = hypervisorTransportReconcileInterval
-				continue
+				upgraded = true
+				break
 			} else if isContextError(err) {
 				return
 			} else {
-				log.WithField("type", string(tptypes.STCPR)).WithError(err).
-					Debug("stcpr transport to hypervisor failed; trying sudph")
+				log.WithField("type", string(t)).WithError(err).
+					Debug("transport to hypervisor failed; trying next carrier")
 			}
 		}
-
-		// stcpr unavailable or failed — try sudph (UDP, NAT-hole-punch
-		// via address resolver signaling).
-		if localSUDPH {
-			if _, err := v.tpM.SaveTransport(ctx, hvPK, tptypes.SUDPH, transport.LabelAutomatic); err == nil {
-				log.WithField("type", string(tptypes.SUDPH)).
-					WithField("hypervisor_pk", hvPK).
-					Info("Upgraded hypervisor transport")
-				backoff = hypervisorTransportReconcileInterval
-				continue
-			} else if isContextError(err) {
-				return
-			} else {
-				log.WithField("type", string(tptypes.SUDPH)).WithError(err).
-					Debug("sudph transport to hypervisor failed")
-			}
+		if upgraded {
+			continue
 		}
 
-		// Both attempts failed — back off and try again later. dmsg
+		// Every carrier failed — back off and try again later. dmsg
 		// session remains the working channel.
 		if backoff < hypervisorTransportMaxBackoff {
 			backoff *= 2
@@ -158,4 +155,25 @@ func (v *Visor) autoUpgradeHypervisorTransport(ctx context.Context, hvPK cipher.
 // there is nothing left for this loop to do while one is present.
 func (v *Visor) hasFastTransportTo(remotePK cipher.PubKey) bool {
 	return hasFastTransportTo(v.tpM, remotePK)
+}
+
+// directCarrierCandidates filters the preference order down to the direct
+// carriers this visor can actually open, preserving order. DMSG is dropped:
+// it is the relay the upgrade exists to escape, so "upgrading" to it would
+// be a no-op that also stops the loop from trying anything better.
+//
+// Taking the order and the predicate as arguments keeps the selection
+// testable without standing up a transport manager, and keeps the policy
+// (which carriers, in what order) owned by tptypes rather than restated here.
+func directCarrierCandidates(order []tptypes.Type, known func(tptypes.Type) bool) []tptypes.Type {
+	candidates := make([]tptypes.Type, 0, len(order))
+	for _, t := range order {
+		if t == tptypes.DMSG {
+			continue
+		}
+		if known(t) {
+			candidates = append(candidates, t)
+		}
+	}
+	return candidates
 }
