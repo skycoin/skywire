@@ -4,19 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>skywire terminal</title>
-<script>
-// One desk surface: the docs site root. Loaded as a top-level page
-// (a deep link to /playground/) this redirects to the root, where the
-// desk shell (javascripts/desk-shell.js) hosts this same page in its
-// persistent iframe. Inside that iframe, boot proceeds below.
-var __redirecting = false;
-try {
-  if (window.top === window.self) {
-    __redirecting = true;
-    location.replace('../');
-  }
-} catch (e) { /* cross-origin top — we are framed, boot normally */ }
-</script>
 <style>
   html,body{margin:0;height:100%;background:#0e0c14;color:#cdd2da;font:14px/1.5 system-ui,sans-serif}
   #boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8em;z-index:10;background:#0e0c14}
@@ -90,7 +77,7 @@ addEventListener('error', function (e) {
 //
 // The nested browser reaches the visor's hypervisor UI at http://127.0.0.1:8001
 // over the tab's virtual loopback, and the filesystem persists in IndexedDB.
-if (!__redirecting) skywireDeskBoot({
+skywireDeskBoot({
   persistDB: 'skywire-playground',
   autostartVisor: false,
   helpTerminal: true,

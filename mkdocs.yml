@@ -26,14 +26,12 @@ docs_dir: docs
 theme:
   name: material
   features:
-    # Instant loading turns the site into a persistent shell: internal
-    # doc links are intercepted and the page content swapped via fetch +
-    # history.pushState (real URLs, working back/forward). This is what
-    # lets the desk shell (javascripts/desk-shell.js) keep its wasm
-    # terminal, visor, and nested browser alive while the reader
-    # navigates between pages. Direct hits on any URL still render that
-    # page standalone; without JS the site degrades to plain static
-    # pages.
+    # Instant loading swaps page content via fetch + history.pushState
+    # (real URLs, working back/forward) rather than reloading. It no longer
+    # has a desk to keep alive — the desk is the site root now, a page of
+    # its own — but it still makes moving between the static pages quick.
+    # Direct hits on any URL render that page standalone; without JS the
+    # site degrades to plain static pages.
     - navigation.instant
     - navigation.instant.progress
     - navigation.tabs
@@ -74,10 +72,10 @@ theme:
 # docs/skywire/ comes out alphabetical, which matches `--help` order).
 nav:
   - Home: index.md
-  # The Terminal nav item surfaces the desk layer in place (desk-shell.js
-  # intercepts the click); a direct hit on /playground/ redirects to the
-  # root, which IS the desk surface.
-  - Terminal: https://skycoin.github.io/skywire/playground/
+  # "Home" IS the desk: the site root is the terminal + nested browser, with
+  # the docs served inside it by `skywire doc serve`. There is no separate
+  # Terminal entry any more, and no /playground/ — that split existed only
+  # while mkdocs owned the root and hosted the desk in an iframe.
   - Guides: guides/README.md
   - Command Reference: skywire/README.md
   - Apps:
@@ -113,18 +111,6 @@ nav:
 plugins:
   - search
   - awesome-pages
-
-# The desk shell: the SITE ROOT is the desk surface. The root page
-# auto-opens the playground (the whole skywire binary compiled to wasm
-# behind a websh terminal + nested browser) as a layer over the page,
-# greeting the visitor with a terminal that has just run
-# `skywire --help`; the index content renders underneath and one click
-# minimizes the layer to read it. The iframe is created only at the
-# root (or on a Terminal click) and survives doc navigation (see
-# navigation.instant above) as a `>_ terminal` pill, so anything
-# started in it keeps running while you read.
-extra_javascript:
-  - javascripts/desk-shell.js
 
 markdown_extensions:
   - admonition
