@@ -118,6 +118,8 @@ type Values struct {
 	NoLegacyHVUI bool
 	PkEndpoint   bool // ENABLEPKENDPOINT
 	NoPkEndpoint bool
+	HvAuth       bool // HVAUTH
+	NoHvAuth     bool
 	HvAddr       string // HVHTTPADDR
 	SecretKey    string // SK — security-sensitive; see flag description
 	Version      string // VERSION — testing override
@@ -320,6 +322,8 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().BoolVar(&v.NoLegacyHVUI, "no-legacy-hv-ui", false, "serve the desk at the hypervisor web UI root (default) — writes LEGACYHVUI=false in skywire.conf")
 	cmd.Flags().BoolVar(&v.PkEndpoint, "pk-endpoint", false, "expose unauthenticated GET /api/pk on the hypervisor — writes ENABLEPKENDPOINT=true in skywire.conf (skybian / Arch-ARM image builds set this)")
 	cmd.Flags().BoolVar(&v.NoPkEndpoint, "no-pk-endpoint", false, "do not expose GET /api/pk — writes ENABLEPKENDPOINT=false in skywire.conf")
+	cmd.Flags().BoolVar(&v.HvAuth, "hv-auth", false, "require a password on the hypervisor UI — writes HVAUTH=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoHvAuth, "no-hv-auth", false, "serve the hypervisor UI with no password gate — writes HVAUTH=false in skywire.conf")
 	cmd.Flags().StringVar(&v.HvAddr, "hvaddr", "", "hypervisor HTTP address (host:port) — writes HVHTTPADDR in skywire.conf")
 	cmd.Flags().StringVar(&v.SecretKey, "sk", "", "pin visor secret key (64-hex) — writes SK in skywire.conf. SECURITY: appears in shell history; prefer letting the visor generate its own SK on first boot.")
 	cmd.Flags().StringVar(&v.Version, "version", "", "custom version override for testing — writes VERSION in skywire.conf")
@@ -483,6 +487,8 @@ var envMap = map[string]EnvMapping{
 	"no-legacy-hv-ui": {Key: "LEGACYHVUI", Format: EnvFormatBool, Negate: true, Default: "false (the desk)"},
 	"pk-endpoint":     {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool},
 	"no-pk-endpoint":  {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool, Negate: true},
+	"hv-auth":         {Key: "HVAUTH", Format: EnvFormatBool},
+	"no-hv-auth":      {Key: "HVAUTH", Format: EnvFormatBool, Negate: true},
 	"hvaddr":          {Key: "HVHTTPADDR", Format: EnvFormatString},
 	"sk":              {Key: "SK", Format: EnvFormatString},
 	"version":         {Key: "VERSION", Format: EnvFormatString},
