@@ -23,11 +23,14 @@
 package doc
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"html"
+	"io"
 	"io/fs"
 	"net/http"
+	"path"
 	"sort"
 	"strings"
 
@@ -127,23 +130,76 @@ func docHandler(root *cobra.Command) http.Handler {
 	return mux
 }
 
-// proseIndex lists the embedded prose. A flat sorted list rather than a tree:
-// 102 files fit on a page, and a reader looking for one knows its name.
-func proseIndex() []byte {
-	var names []string
-	walkErr := fs.WalkDir(skydocs.Prose(), ".", func(p string, d fs.DirEntry, err error) error {
-		if err == nil && !d.IsDir() && strings.HasSuffix(p, ".md") {
-			names = append(names, p)
+// proseTitle reads the first markdown heading of a doc, which is what a
+// reader recognises — "Skywire Deployment on Kubernetes" rather than
+// KUBERNETES_DEPLOYMENT.md. Falls back to the file name when a doc opens
+// with something else, so a missing heading costs a nicer label and not the
+// entry itself. Reads only the head of the file: the title is in the first
+// few lines or it is not there.
+func proseTitle(fsys fs.FS, p string) string {
+	f, err := fsys.Open(p)
+	if err != nil {
+		return path.Base(p)
+	}
+	defer f.Close() //nolint:errcheck
+	sc := bufio.NewScanner(io.LimitReader(f, 8<<10))
+	for n := 0; sc.Scan() && n < 40; n++ {
+		line := strings.TrimSpace(sc.Text())
+		if strings.HasPrefix(line, "# ") {
+			t := strings.TrimSpace(strings.TrimPrefix(line, "# "))
+			if t != "" {
+				return t
+			}
 		}
+	}
+	return path.Base(p)
+}
+
+// proseIndex lists the embedded prose, grouped by the directory it lives in
+// and titled by its first heading.
+//
+// It was a flat alphabetical list of file names, on the reasoning that the
+// whole set fits on one page and a reader knows the name of the file they
+// want. That holds for someone who already knows; for everyone else a
+// hundred entries reading DHT_ARCHITECTURE.md through vpn-server.md is a
+// directory listing, not documentation — and this is the page the desk shows
+// in its browser, where it stands in for a full docs site.
+func proseIndex() []byte {
+	fsys := skydocs.Prose()
+	bySection := map[string][]string{}
+	var sections []string
+	walkErr := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+			return nil
+		}
+		sec := path.Dir(p)
+		if sec == "." {
+			sec = "" // top level, rendered first and unlabelled
+		}
+		if _, seen := bySection[sec]; !seen {
+			sections = append(sections, sec)
+		}
+		bySection[sec] = append(bySection[sec], p)
 		return nil
 	})
-	sort.Strings(names)
+	sort.Strings(sections) // "" sorts first, so the top level leads
 	var b strings.Builder
-	b.WriteString("<h1>prose</h1><ul>")
-	for _, n := range names {
-		fmt.Fprintf(&b, "<li><a href=%q>%s</a></li>", "/prose/"+n, n)
+	b.WriteString("<h1>prose</h1>")
+	for _, sec := range sections {
+		names := bySection[sec]
+		sort.Slice(names, func(i, j int) bool {
+			return strings.ToLower(proseTitle(fsys, names[i])) < strings.ToLower(proseTitle(fsys, names[j]))
+		})
+		if sec != "" {
+			fmt.Fprintf(&b, "<h2>%s</h2>", html.EscapeString(sec))
+		}
+		b.WriteString("<ul>")
+		for _, n := range names {
+			fmt.Fprintf(&b, "<li><a href=%q>%s</a> <small>%s</small></li>",
+				"/prose/"+n, html.EscapeString(proseTitle(fsys, n)), html.EscapeString(path.Base(n)))
+		}
+		b.WriteString("</ul>")
 	}
-	b.WriteString("</ul>")
 	// The walk cannot fail over an embedded FS, but a truncated index that
 	// says nothing is the one outcome worth ruling out: a reader would take
 	// a short list for the whole of the prose.
