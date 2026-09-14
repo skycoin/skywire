@@ -1,3 +1,6 @@
+						// Same endpoint over http, for the liveness probe: asking whether the
+						// host still answers is how a stop gets attributed (see stopVerdict).
+						attachOrigin = new URL(opts.attach.path || '/tp/ws', location.href).href;
 // pkg/wasmhv/browseui/desk-boot.js c3-vis-wasm
 // The shared desk boot: one parameterized entry point behind both desk-first
 // pages — the docs-site playground (no visor by default) and the converged
@@ -178,12 +181,43 @@
 			return !!latest && latest.trim() !== booted;
 		}).catch(function () { return false; });
 	}
+	// attachOrigin: the same-origin transport endpoint this tab's visor dials,
+	// when it has one. Set during boot; empty for a standalone page with no
+	// host behind it.
+	var attachOrigin = '';
+	// stopVerdict: WHY the visor stopped, decided the moment it goes down
+	// rather than at teardown. 'operator' — it went down while its host was
+	// still answering, so something in the tab stopped it on purpose.
+	// 'environment' — the host was gone too, which is not a decision anybody
+	// made and must not suppress the next autostart.
+	//
+	// saveSession used to form this verdict itself, at pagehide, from "down
+	// after having been up". Those two causes are identical by then: a visor
+	// the operator stopped and a visor whose host restarted underneath it both
+	// exit 0. The observed failure was the second one being recorded as the
+	// first — a host restart, then a reload, and the desk came back with the
+	// autostart suppressed and the liveness watchdog standing down with it,
+	// because the watchdog is gated on the same flag.
+	var stopVerdict = null;
+	// hostAnswers resolves true when the attach origin is still serving. Any
+	// HTTP response counts, including the 426 a plain GET to a WebSocket route
+	// returns — the question is whether the host is there, not what it said.
+	// A page with no attach origin has no host to lose, so nothing to blame.
+	function hostAnswers() {
+		if (!attachOrigin) { return Promise.resolve(true); }
+		return fetch(attachOrigin, { method: 'GET', cache: 'no-store' })
+			.then(function () { return true; })
+			.catch(function () { return false; });
+	}
 	function saveSession() {
 		try {
 			var up = !!(globalThis.vnet && globalThis.vnet.listening(3435));
 			if (up) { visorSawUp = true; }
 			if (!up && !visorSawUp) { return; } // still booting (or never started) — keep the previous verdict
 			if (!up && visorCrashed()) { up = true; } // crashed ≠ stopped: restart on the next load
+			// The host went away under it. Nobody decided that, so it must not read
+			// as a decision — record it as running and let the next load start it.
+			if (!up && stopVerdict === 'environment') { up = true; }
 			localStorage.setItem(SESSION_KEY, JSON.stringify({
 				visorRunning: up,
 				at: Date.now(),
@@ -639,6 +673,9 @@
 						// already has, so no address-resolver lookup — and it does not go
 						// looking for public peers; everything else rides that socket.
 						var tpURL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + (opts.attach.path || '/tp/ws');
+						// The same endpoint for the liveness probe: whether the host still
+						// answers is how a stop gets attributed (see stopVerdict).
+						attachOrigin = new URL(opts.attach.path || '/tp/ws', location.href).href;
 						autoconfigCmd += ' --disable-public-autoconn --ws-peer ' + opts.attach.pk + '@' + tpURL;
 					}
 					// ?loglvl=debug on the page URL boots the visor at that log level: the
@@ -670,7 +707,7 @@
 						var GRACE_TICKS = 45; // ~90s: a cold boot waits on the visor tree + dmsg
 						var DOWN_TICKS = 3;   // ~6s down before it counts as gone, not a blip
 						var MAX_RESTARTS = 3;
-						var ticks = 0, downFor = 0, restarts = 0, cooldown = 0;
+						var ticks = 0, downFor = 0, restarts = 0, cooldown = 0, wasDown = false;
 						function restartInPlace() {
 							try {
 								console.warn('skywire desk: visor not listening on 3435 — restarting (' +
@@ -681,7 +718,18 @@
 						setInterval(function () {
 							var up = !!(globalThis.vnet && globalThis.vnet.listening(3435));
 							ticks++;
-							if (up) { visorSawUp = true; downFor = 0; return; }
+							if (up) { visorSawUp = true; downFor = 0; wasDown = false; return; }
+
+							// Attribute the stop the moment it happens, while the host's
+							// reachability still says which kind it was. Once per
+							// transition — wasDown latches so a visor that stays down
+							// does not re-probe every tick.
+							if (!wasDown && visorSawUp) {
+								wasDown = true;
+								hostAnswers().then(function (ok) {
+									stopVerdict = ok ? 'operator' : 'environment';
+								});
+							}
 							// Tracking runs whenever an autostart was possible — saveSession
 							// needs the up-transition either way. Only the RESTART is gated on
 							// this load having actually asked for one.
