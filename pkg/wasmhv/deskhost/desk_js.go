@@ -185,11 +185,46 @@ func installDesk() {
 				return src, true
 			}
 		}
-		if strings.HasPrefix(u, origin+"/vnet/") {
-			return u, true // already the served form
+		// Already the served form. Matched on "/vnet/" anywhere in a
+		// same-origin URL rather than on origin+"/vnet/": under a base path the
+		// served form is /<base>/vnet/<port>/, which an origin-anchored test
+		// does not recognise, and the URL would be run through the rewrite a
+		// second time.
+		if strings.HasPrefix(u, origin+"/") && strings.Contains(u[len(origin):], "/vnet/") {
+			return u, true
+		}
+		// vnet owns where its service worker is mounted, and it is the only
+		// thing that knows: the SW registers relative to the PAGE, so a desk
+		// served from a subpath gets /<base>/vnet/ and one served from the
+		// origin root gets /vnet/. Ask it rather than rebuilding the path from
+		// the origin — origin+"/vnet/" drops the base, which put the docs site
+		// (the one deployment served from a subpath, /skywire/ on gh-pages) at
+		// https://host/vnet/8002/ while its worker claimed /skywire/vnet/.
+		// Outside the scope, so nothing intercepted it and GitHub Pages
+		// answered "Site not found" — invisible everywhere the desk sits at the
+		// root, which is everywhere else.
+		vnetBase := func(port, path string) (string, bool) {
+			v := js.Global().Get("vnet")
+			if !v.Truthy() {
+				return "", false
+			}
+			fn := v.Get("swURL")
+			if fn.Type() != js.TypeFunction {
+				return "", false
+			}
+			got := fn.Invoke(port)
+			if got.Type() != js.TypeString || got.String() == "" {
+				return "", false
+			}
+			// swURL returns the directory for the port ("/base/vnet/<port>/");
+			// path is the in-page path and already carries its own leading "/".
+			return strings.TrimSuffix(got.String(), "/") + path, true
 		}
 		if port, path := vnetTarget(u); port != "" {
-			return origin + "/vnet/" + port + path, true
+			if built, ok := vnetBase(port, path); ok {
+				return built, true
+			}
+			return origin + "/vnet/" + port + path, true // vnet absent: old behaviour
 		}
 		return "", false
 	}
