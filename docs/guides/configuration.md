@@ -45,9 +45,33 @@ From another device on the same LAN, use the machine's mDNS name:
 `http://<hostname>.local:8000/`. That name comes from the OS (Avahi on
 Linux, Bonjour on macOS/Windows); the visor advertises nothing itself.
 
-The UI password gate is on for a freshly generated hypervisor config; the
-first visit creates the admin account, and the reset is
-`skywire cli visor hv passwd --force` on the machine itself.
+The UI password gate is on for a freshly generated hypervisor config. The
+first visit creates the account, and the username is always `admin` — it is
+fixed in the hypervisor, not a choice, and any other name is refused with
+`name not allowed` without saying what would be accepted. The password needs
+6–64 characters with at least one upper, one lower, one digit and one special.
+
+To change a password you know, use `skywire cli visor hv passwd --force` on
+the machine itself.
+
+**If you have forgotten it**, that command cannot help — it authenticates
+first. The account lives in the file named by `hypervisor.db_path` in the
+visor config, the running visor holds it open, and there is no reset flag.
+Stop the visor, remove the file, start again:
+
+```
+systemctl stop skywire                             # or: skywire cli visor halt
+rm /opt/skywire/local/hypervisor/users.db          # a package install
+systemctl start skywire
+```
+
+Check `hypervisor.db_path` if that path does not exist: macOS and Windows put
+it at `~/.skywire/users.db`, and a config generated with a custom output path
+puts it wherever that config says.
+
+The next visit is a first visit again: it creates the account, and every
+paired tab and every managed visor is untouched — `users.db` holds the web
+login and nothing else.
 
 A desk tab opened from that page runs its own visor and asks to drive the
 host as a hypervisor. Approve it on the machine with
@@ -57,6 +81,39 @@ host as a hypervisor. Approve it on the machine with
 Approval is written to the visor config and, on a package install, mirrored
 into `HYPERVISORPKS` in `/etc/skywire.conf`, so it survives the next
 `skywire autoconfig` run (every package update performs one).
+
+Note which way that points: approval makes the TAB the hypervisor and the
+machine the thing it drives. The tab does not appear in the machine's
+`hv ls`; the machine appears in the tab's. Checking the wrong end and
+concluding the pairing failed is an easy mistake — the tab is the manager.
+
+### Resetting a tab's identity
+
+A desk tab's visor has its own keypair, and it keeps it in the browser: in
+the page's IndexedDB under `skywire-desk`, as part of the filesystem snapshot
+the tab restores on load. It is NOT in `localStorage`, so clearing that alone
+changes nothing.
+
+Discarding it gives the tab a new public key, which the machine then sees as
+a new pending peer to pair. The previous approval stays behind, against a key
+nothing holds any more; `skywire cli visor hv rm <old-pk>` removes it. (That
+command is not in `hv --help`'s list but it is there.)
+
+The exec worker holds the database open while the visor runs, so a delete
+attempted from the running page is refused as blocked. Navigate the tab away
+first — the browser's own "clear site data" does this for you, or from the
+page's console:
+
+```js
+location.href = 'about:blank';           // releases the worker's handle
+indexedDB.deleteDatabase('skywire-desk'); // then this succeeds
+location.href = '/';                      // back; a new key is generated
+```
+
+Run those one at a time, waiting for each. The delete reports success
+whether or not there was anything to delete, so confirm by the key changing
+rather than by the result: `skywire cli visor pk` in the tab's terminal
+before and after.
 
 The desk is the default hypervisor UI. To serve the legacy Angular dashboard
 at the root instead, with no desk and no wasm visor in the page, set
