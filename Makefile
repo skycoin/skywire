@@ -162,7 +162,8 @@ check-inner: lint check-cg check-browseui check-help test ## Internal: the actua
 BROWSEUI_ENTRYPOINTS := \
 	pkg/wasmhv/browseui/desk-boot.js:skywireDeskBoot \
 	pkg/wasmhv/browseui/exec-remote.js:SkywireExecWorker \
-	pkg/wasmhv/browseui/skywire-exec.js:skywireExec
+	pkg/wasmhv/browseui/skywire-exec.js:skywireExec \
+	pkg/wasmhv/browseui/identity-vault.js:SkywireIdentityVault
 
 check-browseui: ## Fail if an embedded browser script does not load and define its entry point
 	@# node --check is NOT enough. It validates syntax, and a statement at the
@@ -183,6 +184,11 @@ check-browseui: ## Fail if an embedded browser script does not load and define i
 			}" || exit 1; \
 		echo "  ok  $$path defines $$sym"; \
 	done
+	@# The identity vault is a device-theft defence; assert its properties, not
+	@# just that it parses. Plain node, no framework.
+	@if [ -f pkg/wasmhv/browseui/identity-vault.test.js ]; then \
+		node pkg/wasmhv/browseui/identity-vault.test.js "$(CURDIR)/pkg/wasmhv/browseui/identity-vault.js" || exit 1; \
+	fi
 	@echo "embedded browser scripts load and define their entry points"
 
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen

@@ -23,6 +23,16 @@ import (
 //go:embed seed-skywire.js
 var seedSkywireJS []byte
 
+// identityVaultJS provides globalThis.SkywireIdentityVault: the tab visor's
+// secret key encrypted at rest under a passphrase, so a stolen device cannot
+// simply open the page and be that visor. Also removes the pre-vault plaintext
+// key an older build left in localStorage. No dependencies — it is WebCrypto
+// and localStorage — so it sits early, before anything that might want an
+// identity.
+//
+//go:embed identity-vault.js
+var identityVaultJS []byte
+
 // skywireExecJS provides globalThis.skywireExec: one skywire CLI command as a
 // PROCESS on bottle's proc layer — the module registered at its package path
 // and streamed into the compiler, argv/env/stdio per invocation, an interrupt
@@ -99,6 +109,7 @@ var BrowseJS = func() []byte {
 	parts := [][]byte{
 		bottle.JSFS(),
 		seedSkywireJS,
+		identityVaultJS,
 		bottle.VNetJS(),
 		// The host-visor bridge sits directly on vnet: it is a listener on the
 		// same port table, so it belongs beside it and ahead of anything that
