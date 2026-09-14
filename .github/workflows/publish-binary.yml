@@ -97,6 +97,20 @@ jobs:
           GOOS=js GOARCH=wasm \
             go build -trimpath -buildvcs=true -mod=vendor -tags "withoutsystray withoutgotop" -ldflags="${LDFLAGS}" -o skywire.wasm .
           gzip -9 -n -c skywire.wasm > pkg/wasmhv/execwasm/blob/skywire.wasm.gz
+          # Record which commit the module was built from, beside it, so a
+          # served binary can report that its desk is older than itself. Without
+          # this the blob has no revision, execwasm.Revision() is "", and the
+          # staleness check (rev != "" && bin != "" && rev != bin) is hard-false
+          # — inert on exactly the binaries that ship. Same lift as
+          # `make embed-exec-wasm`: vcs.revision= is not at the start of a
+          # strings(1) line, so match the substring rather than anchoring.
+          strings -a skywire.wasm | grep -oE 'vcs\.revision=[0-9a-f]{40}' \
+            | head -1 | cut -d= -f2 > pkg/wasmhv/execwasm/blob/revision.txt
+          # An empty revision is the silent failure this exists to prevent, so
+          # fail the build rather than publish a binary that cannot self-report.
+          test -s pkg/wasmhv/execwasm/blob/revision.txt || {
+            echo "ERROR: could not read vcs.revision from the js/wasm module"; exit 1; }
+          echo "staged module revision: $(cat pkg/wasmhv/execwasm/blob/revision.txt)"
           rm -f skywire.wasm
           ls -la pkg/wasmhv/execwasm/blob/
           build_arch amd64   amd64   ""
