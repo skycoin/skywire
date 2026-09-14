@@ -241,7 +241,12 @@ type AtaIdentifyDevice struct {
 	// bit 1 Ultra DMA mode 1 and below are supported.
 	// bit 0 Ultra DMA mode 0 is supported.
 	DMAModes uint16    // Word 88, Ultra DMA modes (see 7.12.6.42)
-	_        [4]uint16 // ...
+	_        [2]uint16 // ... (words 89..90)
+	// Current APM level (see 7.12.7)
+	// bit 7:0 Current APM level value.
+	// bit 15:8 Reserved (ATA8-APS defined 40h as a validity indicator).
+	CurrentApmLevelRaw uint16    // Word 91, current APM level
+	_                  [1]uint16 // ... (word 92)
 	// Hardware reset results (see 7.12.6.47)
 	// For SATA devices, word 93 shall be set to the value 0000h.
 	// bit 15 Shall be cleared to zero
@@ -338,17 +343,24 @@ type AtaIdentifyDevice struct {
 	_                   [33]uint16 // ...
 } // 512 bytes
 
-func (a *AtaIdentifyDevice) IsGeneralPurposeLoggingCapable() bool {
-	// Per ATA spec, words 84/87 bits 15:14 must be 0b01 to indicate that the word
-	// contains valid data (bit 14 set, bit 15 cleared). Bit 5 indicates GPL support.
-	enabled := uint16(1) << 14
-	enabledMask := uint16(0b11) << 14
-	glLoggingAttr := uint16(1) << 5
+// isWordSignatureValid reports the validity signature of an IDENTIFY word: bits 15:14
+// must be 0b01 (bit 14 set, bit 15 cleared) for the word to contain valid data.
+func isWordSignatureValid(word uint16) bool {
+	const (
+		enabled     = uint16(1) << 14
+		enabledMask = uint16(0b11) << 14
+	)
+	return word&enabledMask == enabled
+}
 
-	if a.CommandsSupported3&enabledMask == enabled {
+func (a *AtaIdentifyDevice) IsGeneralPurposeLoggingCapable() bool {
+	// Bit 5 indicates GPL support.
+	const glLoggingAttr = uint16(1) << 5
+
+	if isWordSignatureValid(a.CommandsSupported3) {
 		return a.CommandsSupported3&glLoggingAttr != 0
 	}
-	if a.CommandsEnabled3&enabledMask == enabled {
+	if isWordSignatureValid(a.CommandsEnabled3) {
 		return a.CommandsEnabled3&glLoggingAttr != 0
 	}
 
@@ -357,6 +369,49 @@ func (a *AtaIdentifyDevice) IsGeneralPurposeLoggingCapable() bool {
 
 func (i *AtaIdentifyDevice) ModelNumber() string {
 	return fromAtaString(i.ModelNumberRaw[:])
+}
+
+func (i *AtaIdentifyDevice) EpcSupported() bool {
+	// Word 119 is valid when word 86 bit 15 is set and the word 119 signature is valid.
+	if i.CommandsEnabled2&0x8000 == 0 || !isWordSignatureValid(i.CommandsSupported4) {
+		return false
+	}
+	return i.CommandsSupported4&(1<<7) != 0
+}
+
+func (i *AtaIdentifyDevice) EpcEnabled() bool {
+	// Word 120 is valid when word 86 bit 15 is set and the word 120 signature is valid.
+	if i.CommandsEnabled2&0x8000 == 0 || !isWordSignatureValid(i.CommandsEnabled4) {
+		return false
+	}
+	return i.CommandsEnabled4&(1<<7) != 0
+}
+
+func (i *AtaIdentifyDevice) ApmSupported() bool {
+	// Word 83 is valid only when its bits 15:14 == 0b01.
+	if !isWordSignatureValid(i.CommandsSupported2) {
+		return false
+	}
+	return i.CommandsSupported2&(1<<3) != 0
+}
+
+func (i *AtaIdentifyDevice) ApmEnabled() bool {
+	// Word 86 carries no validity signature of its own
+	return i.CommandsEnabled2&(1<<3) != 0
+}
+
+// CurrentApmLevel returns the current Advanced Power Management level.
+// The value is meaningful only when ApmEnabled reports true.
+func (i *AtaIdentifyDevice) CurrentApmLevel() uint8 {
+	return uint8(i.CurrentApmLevelRaw)
+}
+
+func (i *AtaIdentifyDevice) UnloadSupported() bool {
+	// Word 84 is valid only when its bits 15:14 == 0b01.
+	if !isWordSignatureValid(i.CommandsSupported3) {
+		return false
+	}
+	return i.CommandsSupported3&(1<<13) != 0
 }
 
 func (i *AtaIdentifyDevice) SerialNumber() string {
