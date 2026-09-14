@@ -17,7 +17,7 @@ its help text — any command can be run straight from it:
 
 ![skywire --tui — interactive command browser](img/skywire-tui.gif)
 
-The **[terminal](playground/)** that greets you on the front page of
+The **[terminal](.)** that greets you on the front page of
 this site is the same binary compiled to WebAssembly, already running
 `skywire --help` in your browser — nothing to install. Minimize it to
 read this page; the **`>_ terminal`** pill (bottom right) surfaces it
@@ -27,7 +27,7 @@ again, and it keeps running while you browse the docs.
 
 <div class="grid cards" markdown>
 
-- :material-console-line: **[Terminal](playground/)**
+- :material-console-line: **[Terminal](.)**
 
     Try skywire without installing anything: the whole binary compiled
     to WebAssembly behind a browser terminal — the one that greets you
