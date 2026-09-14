@@ -664,7 +664,7 @@
 					// (which ends by starting the visor in the foreground), or idle
 					// at the prompt when the operator had stopped it.
 					var autoconfigCmd = 'skywire autoconfig';
-					if (opts.attach && opts.attach.pk) {
+					if (opts.attach && opts.attach.pk && bridged) {
 						// Attached to the hypervisor that served this page: the visor's one
 						// transport is a WebSocket back to this origin — an address the page
 						// already has, so no address-resolver lookup — and it does not go
@@ -674,6 +674,28 @@
 						// answers is how a stop gets attributed (see stopVerdict).
 						attachOrigin = new URL(opts.attach.path || '/tp/ws', location.href).href;
 						autoconfigCmd += ' --disable-public-autoconn --ws-peer ' + opts.attach.pk + '@' + tpURL;
+					} else if (opts.attach && opts.attach.pk) {
+						// ROAMING. The page was served by a hypervisor — it carries an
+						// attach PK — but that hypervisor is not answering now. Pinning
+						// the visor to a WebSocket back to an origin with nothing behind
+						// it would leave it with one dead transport and no way to find a
+						// peer, which is what a PWA installed from the hypervisor did as
+						// soon as it left the LAN.
+						//
+						// So drop the attach flags and let the visor come up the way a
+						// standalone one does: public autoconnect finds peers, and relay
+						// nomination reaches dmsg through them. Same identity, same
+						// storage, different peers.
+						//
+						// The mode is chosen per load rather than stored, because the
+						// config is regenerated on every load anyway — coming home puts
+						// the host back in reach and the next load attaches again with
+						// nothing to undo. What this DOES change while roaming is that
+						// the visor publishes a dmsg client entry, so its key becomes
+						// dialable; attached it stays unpublished. Its transports are in
+						// the transport discovery either way.
+						console.info('skywire desk: hypervisor ' + opts.attach.pk.slice(0, 8) +
+							'… not answering — starting the visor in roaming mode');
 					}
 					// ?loglvl=debug on the page URL boots the visor at that log level: the
 					// config is regenerated on every load, so this is the one place a
