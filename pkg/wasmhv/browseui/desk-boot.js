@@ -105,6 +105,79 @@
 			return bestClean;
 		} catch (e) { return false; }
 	}
+	// notifyReload: the same bargain autoupdate.js offers — say what is about
+	// to happen, count down, and let the operator decline. Used where the desk
+	// wants a RELOAD rather than an in-place restart: a reload is the only way
+	// to pick up a new wasm module (the exec worker is created once per page
+	// load and dies with the page), so a silent one would swap the code under
+	// someone mid-task, and a silent refusal would strand them on a build that
+	// cannot work.
+	//
+	// Declining is per-prompt, not a global setting: this is not the
+	// autoupdate toggle and must not disable it. The caller re-arms on its own
+	// schedule if the condition persists.
+	var reloadNotice = null;
+	function notifyReload(title, detail, secs, onDecline) {
+		if (reloadNotice) { return; } // one at a time — never stack these
+		secs = secs || 10;
+		var box = document.createElement('div');
+		reloadNotice = box;
+		box.style.cssText = 'position:fixed;z-index:2147483647;right:16px;bottom:16px;max-width:340px;' +
+			'background:#2b2540;color:#eee;font:13px/1.4 system-ui,sans-serif;padding:12px 14px;' +
+			'border:1px solid #6c5ce7;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.4)';
+		var cd = document.createElement('span');
+		cd.textContent = String(secs);
+		var head = document.createElement('b');
+		head.textContent = title;
+		var body = document.createElement('div');
+		body.style.margin = '6px 0 8px';
+		body.textContent = detail;
+		var line = document.createElement('div');
+		line.appendChild(document.createTextNode('Reloading in '));
+		line.appendChild(cd);
+		line.appendChild(document.createTextNode('s…'));
+		var now = document.createElement('button');
+		now.textContent = 'Reload now';
+		now.style.marginRight = '8px';
+		var not = document.createElement('button');
+		not.textContent = 'Not now';
+		var btns = document.createElement('div');
+		btns.style.marginTop = '8px';
+		btns.appendChild(now);
+		btns.appendChild(not);
+		box.appendChild(head);
+		box.appendChild(body);
+		box.appendChild(line);
+		box.appendChild(btns);
+		try { document.body.appendChild(box); } catch (e) { reloadNotice = null; return; }
+		function close() { try { box.remove(); } catch (e) {} reloadNotice = null; }
+		function go() { clearInterval(t); close(); setTimeout(function () { location.reload(); }, 200); }
+		var t = setInterval(function () {
+			secs -= 1;
+			cd.textContent = String(secs);
+			if (secs <= 0) { go(); }
+		}, 1000);
+		now.onclick = go;
+		not.onclick = function () {
+			clearInterval(t); close();
+			console.log('[desk] reload declined: ' + title);
+			if (typeof onDecline === 'function') { try { onDecline(); } catch (e) {} }
+		};
+	}
+
+	// servedVersionDiffers resolves true when the server is serving a wasm
+	// module other than the one this page booted with. Same fingerprint
+	// autoupdate.js polls; asked only at the moment it matters, so this adds
+	// no steady-state traffic.
+	function servedVersionDiffers() {
+		var booted = globalThis.__SKYWIRE_WASM_VERSION__ || '';
+		if (!booted) { return Promise.resolve(false); }
+		return fetch('wasm-version', { cache: 'no-store' }).then(function (r) {
+			return r.ok ? r.text() : null;
+		}).then(function (latest) {
+			return !!latest && latest.trim() !== booted;
+		}).catch(function () { return false; });
+	}
 	function saveSession() {
 		try {
 			var up = !!(globalThis.vnet && globalThis.vnet.listening(3435));
@@ -144,6 +217,24 @@
 	}
 
 	globalThis.skywireDeskBoot = function (opts) {
+		// Boot guard. The chain below waits on the desk host and the shell and
+		// has no terminal catch, so a module that never installs them leaves the
+		// page looking alive — taskbar up, dashboard aimed at vnet:8001 — with
+		// no visor, no error and no recovery but a manual reload. That is the
+		// state this was found in, and the liveness watchdog further down cannot
+		// help: it lives inside this boot, so a boot that never finishes never
+		// arms it.
+		//
+		// Armed on ATTEMPT, not on load: a page that merely includes this script
+		// without calling in is left alone. One prompt only — if the operator
+		// declines, the desk stays as it is rather than nagging.
+		var BOOT_DEADLINE_MS = 60000; // waitFor gives up around 30s; leave room past it
+		setTimeout(function () {
+			if (globalThis.__skywireDesk) { return; }
+			console.warn('skywire desk: no desk panel after ' + (BOOT_DEADLINE_MS / 1000) + 's');
+			notifyReload('The desk did not finish starting',
+				'Reloading fetches the module again and starts over.', 15);
+		}, BOOT_DEADLINE_MS);
 		opts = opts || {};
 		if (framedWithoutEmbed()) {
 			location.replace(location.pathname + '?embed=1' + (location.hash || ''));
@@ -580,6 +671,13 @@
 						var DOWN_TICKS = 3;   // ~6s down before it counts as gone, not a blip
 						var MAX_RESTARTS = 3;
 						var ticks = 0, downFor = 0, restarts = 0, cooldown = 0;
+						function restartInPlace() {
+							try {
+								console.warn('skywire desk: visor not listening on 3435 — restarting (' +
+									restarts + '/' + MAX_RESTARTS + ')');
+								panel.openConsole({ title: 'visor', initCmd: autoconfigCmd });
+							} catch (e) { console.warn('skywire desk: visor restart failed:', e); }
+						}
 						setInterval(function () {
 							var up = !!(globalThis.vnet && globalThis.vnet.listening(3435));
 							ticks++;
@@ -597,11 +695,22 @@
 							if (restarts >= MAX_RESTARTS) { return; }
 							restarts++;
 							cooldown = 15; // ~30s to let the restart come up before judging it
-							try {
-								console.warn('skywire desk: visor not listening on 3435 — restarting (' +
-									restarts + '/' + MAX_RESTARTS + ')');
-								panel.openConsole({ title: 'visor', initCmd: autoconfigCmd });
-							} catch (e) { console.warn('skywire desk: visor restart failed:', e); }
+							// A restart runs in the worker this page already has, on the
+							// module it booted with. If the server has moved on, that
+							// re-runs superseded code — and the exec worker is created
+							// once per page load, so a reload is the ONLY way to reach
+							// the new module. Offer that instead, with the countdown the
+							// operator can decline; declining falls back to restarting
+							// what we have, which is better than leaving it down.
+							servedVersionDiffers().then(function (differs) {
+								if (differs) {
+									notifyReload('Visor stopped — a newer build is available',
+										'Reloading starts it on the new version. Staying restarts the current one.',
+										10, restartInPlace);
+									return;
+								}
+								restartInPlace();
+							});
 						}, WATCH_MS);
 					}
 					startedVisor = startVisor;
