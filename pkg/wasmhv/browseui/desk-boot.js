@@ -82,6 +82,29 @@
 			return crashed;
 		} catch (e) { return false; }
 	}
+	// visorStoppedByOperator: the MOST RECENT autoconfig instance ended
+	// cleanly (code 0, no crash). That is the operator stopping the visor, and
+	// the liveness watchdog must leave it stopped. A crash, or no record at
+	// all, is not a stop — an exec worker that went away takes its registry
+	// with it, and treating that silence as "the operator meant this" is what
+	// would keep a dead desk dead.
+	function visorStoppedByOperator() {
+		try {
+			var reg = globalThis.__skywireExecTails || {};
+			var best = -1, bestClean = false;
+			Object.keys(reg).forEach(function (k) {
+				var rec = reg[k];
+				if (!/autoconfig/.test((rec.argv || []).join(' '))) { return; }
+				// Keys are w1, w2, … wN — compare the number, not the string,
+				// or w10 sorts before w2 and an old record wins.
+				var n = parseInt(String(k).replace(/^\D+/, ''), 10);
+				if (!isFinite(n) || n < best) { return; }
+				best = n;
+				bestClean = !!(rec.exitInfo && !rec.exitInfo.crashed && rec.exitInfo.code === 0);
+			});
+			return bestClean;
+		} catch (e) { return false; }
+	}
 	function saveSession() {
 		try {
 			var up = !!(globalThis.vnet && globalThis.vnet.listening(3435));
@@ -510,11 +533,6 @@
 					addEventListener('visibilitychange', function () {
 						if (document.visibilityState === 'hidden') saveSession();
 					});
-					// Track up-transitions continuously so a save after a stop can
-					// tell "operator stopped it" from "it never came up".
-					setInterval(function () {
-						if (globalThis.vnet && globalThis.vnet.listening(3435)) { visorSawUp = true; }
-					}, 2000);
 				}
 
 				var startVisor = !!opts.autostartVisor && !(session && session.visorRunning === false);
@@ -541,6 +559,51 @@
 						autoconfigCmd += ' --loglvl ' + loglvl;
 					}
 					panel.openConsole({ title: 'visor', initCmd: startVisor ? autoconfigCmd : '' });
+					// Liveness watchdog. The session flag is only ever read to
+					// SUPPRESS an autostart, so nothing noticed a visor that was
+					// gone while the page stayed open: the desk kept pointing its
+					// dashboard at vnet:8001 with nothing listening, indefinitely,
+					// while localStorage still said visorRunning:true (observed
+					// live). Poll the RPC port rather than trust that flag.
+					//
+					// Restarts are gated on this load having asked for one; the
+					// up-transition tracking below runs either way, since saveSession
+					// needs it to tell an operator stop from a visor that never came up.
+					// A clean exit is the operator stopping it and is left alone;
+					// a crash, or a worker that went away with its registry, is
+					// not. Attempts are bounded and spaced because each one opens
+					// a terminal tab — a visor that cannot start must not paper
+					// the desk with them.
+					{
+						var WATCH_MS = 2000;
+						var GRACE_TICKS = 45; // ~90s: a cold boot waits on the visor tree + dmsg
+						var DOWN_TICKS = 3;   // ~6s down before it counts as gone, not a blip
+						var MAX_RESTARTS = 3;
+						var ticks = 0, downFor = 0, restarts = 0, cooldown = 0;
+						setInterval(function () {
+							var up = !!(globalThis.vnet && globalThis.vnet.listening(3435));
+							ticks++;
+							if (up) { visorSawUp = true; downFor = 0; return; }
+							// Tracking runs whenever an autostart was possible — saveSession
+							// needs the up-transition either way. Only the RESTART is gated on
+							// this load having actually asked for one.
+							if (!startVisor) { return; }
+							if (cooldown > 0) { cooldown--; return; }
+							// Never came up yet and still inside the boot grace.
+							if (!visorSawUp && ticks < GRACE_TICKS) { return; }
+							if (++downFor < DOWN_TICKS) { return; }
+							downFor = 0;
+							if (visorStoppedByOperator()) { return; }
+							if (restarts >= MAX_RESTARTS) { return; }
+							restarts++;
+							cooldown = 15; // ~30s to let the restart come up before judging it
+							try {
+								console.warn('skywire desk: visor not listening on 3435 — restarting (' +
+									restarts + '/' + MAX_RESTARTS + ')');
+								panel.openConsole({ title: 'visor', initCmd: autoconfigCmd });
+							} catch (e) { console.warn('skywire desk: visor restart failed:', e); }
+						}, WATCH_MS);
+					}
 					startedVisor = startVisor;
 				}
 				if (opts.helpTerminal !== false) {
