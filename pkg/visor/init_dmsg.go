@@ -191,6 +191,26 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	_ = primary // discovery URL selection now lives in dmsgc.New (Discovery || DiscoveryDmsg)
 	_ = primaryDmsg
 	dmsgConf := *v.conf.Dmsg
+
+	// Prefer the addresses last learned from dmsg-discovery over the ones
+	// baked into skywire.json. dmsgc.New pre-seeds every configured server
+	// entry into the client's entry cache, and resolveServerEntry answers
+	// from that cache before it ever consults the discovery — so a config
+	// address that has gone stale is dialed for the lifetime of the
+	// process, and a restart re-seeds the same stale address. initDmsgHTTP
+	// already guards its bootstrap list this way; without the same merge
+	// here the two paths disagree and the session path keeps the old IP.
+	if v.dmsgServersCache != nil {
+		dmsgConf.Servers = v.dmsgServersCache.MergePreferringCache(dmsgConf.Servers)
+		if len(dmsgConf.Deployments) > 0 {
+			deps := make([]dmsgc.Deployment, len(dmsgConf.Deployments))
+			copy(deps, dmsgConf.Deployments)
+			for i := range deps {
+				deps[i].Servers = v.dmsgServersCache.MergePreferringCache(deps[i].Servers)
+			}
+			dmsgConf.Deployments = deps
+		}
+	}
 	// --dmsg-server pins the client to one server (discovery filter in
 	// dmsg.Client.serve). Force sessions_count=1 so the client doesn't
 	// burn retries trying to open additional sessions when only one
