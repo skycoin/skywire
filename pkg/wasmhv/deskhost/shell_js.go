@@ -599,13 +599,6 @@ func openShell(el js.Value) *shellSession {
 
 	go s.run()
 
-	term.WriteString("\x1b[1;36mwebsh\x1b[0m — a shell in the visor tab · type \x1b[1mhelp\x1b[0m\r\n")
-	term.WriteString("visor commands: \x1b[1mpk about visors net health apps tps routes hvapi\x1b[0m " +
-		"(JSON — pipe into \x1b[1mjq\x1b[0m)\r\n")
-	term.WriteString("browser: \x1b[1mlogs\x1b[0m (-f follow, -e errors) · \x1b[1mjs\x1b[0m <expr> · " +
-		"\x1b[1mcurl download upload pbcopy\x1b[0m\r\n")
-	term.WriteString("mesh: \x1b[1mdcurl\x1b[0m dmsg://<pk|alias>[:port][/path] · \x1b[1mdial\x1b[0m <pk> · " +
-		"\x1b[1maliases\x1b[0m\r\n\r\n")
 	s.writePrompt()
 	return s
 }
