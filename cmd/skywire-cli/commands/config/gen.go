@@ -262,6 +262,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI")
 	gHiddenFlags = append(gHiddenFlags, "auth")
+	hvAuthEnv = scriptExecString("${HVAUTH}")
 	genConfigCmd.Flags().BoolVar(&isEnablePKEndpoint, "pk-endpoint", scriptExecBool("${ENABLEPKENDPOINT:-false}"), "expose unauthenticated GET /api/pk on the hypervisor (skybian / Arch-ARM image builds set this)")
 	gHiddenFlags = append(gHiddenFlags, "pk-endpoint")
 
@@ -2398,6 +2399,18 @@ func configureApps(log *logging.Logger) {
 		if isRegen && !isDisableAuth && !isEnableAuth && oldConfCache != nil && oldConfCache.Hypervisor != nil {
 			conf.Hypervisor.EnableAuth = oldConfCache.Hypervisor.EnableAuth
 		}
+		// HVAUTH in skywire.conf is the declarative answer, so it outranks
+		// the regen-retain above: an operator who writes it there means it
+		// to survive a config rebuild, which is the whole point of the conf
+		// file. Explicit --auth/--noauth on the command line still wins, and
+		// an unset HVAUTH changes nothing.
+		if !isDisableAuth && !isEnableAuth {
+			if v, ok := hvAuthFromEnv(hvAuthEnv); ok {
+				conf.Hypervisor.EnableAuth = v
+			} else if strings.TrimSpace(hvAuthEnv) != "" {
+				log.Warnf("ignoring HVAUTH=%q in skywire.conf: want true or false", hvAuthEnv)
+			}
+		}
 	}
 	// Enable hypervisor UI authentication on windows & macos
 	if (selectedOS == "win") || (selectedOS == "mac") {
@@ -2782,4 +2795,21 @@ func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// hvAuthFromEnv interprets the HVAUTH value from skywire.conf. ok is
+// false when HVAUTH is unset or is not a recognized boolean — the
+// caller leaves the gate untouched in both cases, and warns in the
+// second. Anything other than these spellings is a typo in the conf
+// rather than an instruction, and silently picking a side there would
+// either expose an unauthenticated UI or lock an operator out.
+func hvAuthFromEnv(s string) (value, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "true", "1", "yes":
+		return true, true
+	case "false", "0", "no":
+		return false, true
+	default:
+		return false, false
+	}
 }

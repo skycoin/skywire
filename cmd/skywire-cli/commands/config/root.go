@@ -69,6 +69,7 @@ var (
 	vpnRouterMeshTLS           bool
 	isDisableAuth              bool
 	isEnableAuth               bool
+	hvAuthEnv                  string
 	isEnablePKEndpoint         bool
 	selectedOS                 string
 	disableApps                string
