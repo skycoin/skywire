@@ -90,5 +90,81 @@ fmt.Println("Power Cycles count ", a.PowerCycles)
 fmt.Println("Power On Hours ", a.PowerOnHours)
 ```
 
+SATA drives can report their current power state (whether the platters are spinning or the drive is in standby). The underlying ATA CHECK POWER MODE command never spins up a spun-down drive, so it is safe to call at any time.
+
+```go
+dev, err := smart.OpenSata("/dev/sda")
+require.NoError(t, err)
+defer dev.Close()
+
+mode, err := dev.CheckPowerMode()
+require.NoError(t, err)
+fmt.Println("Power mode: ", mode) // "active or idle", "idle" or "standby"
+```
+
+SATA drives can also be put into a power state. The setters map to the ATA
+power management commands; all of them return an error if the drive rejects
+the command.
+
+```go
+// Spin down to Standby_z (hdparm -y equivalent). Does not flush the OS page
+// cache - sync first if that matters.
+err := dev.Standby()
+
+// Enter Idle_a; platters keep spinning (hdparm --idle-immediate equivalent).
+err = dev.Idle()
+
+// Retract the heads to the ramp/landing zone; the drive stays spinning in
+// Idle_a and reloads the heads on the next media access. Requires the Unload
+// feature - check with Identify().UnloadSupported() first.
+err := dev.IdleUnload()
+
+// EPC-only conditions (Standby_y, Idle_a/b/c) via SET FEATURES; requires
+// the Extended Power Conditions feature set (check with Identify().EpcSupported()).
+err := dev.SetPowerMode(smart.AtaPowerModeIdleA)
+
+// Standby timer: spin down after 10 seconds of inactivity. Also spins the
+// drive down immediately (STANDBY command side effect). 0 disables the timer.
+err := dev.SetStandbyTimer(10 * time.Second)
+
+// Raw Table 52 timer value, for encodings outside the duration API
+// (e.g. vendor-specific 0xfd). Same side effect as SetStandbyTimer.
+err := dev.SetStandbyTimerRaw(0xfd)
+
+// Idle timer: set the Standby timer without spinning down (IDLE command).
+err := dev.SetIdleTimer(10 * time.Second)
+
+// Raw Table 52 timer value via the IDLE command, for encodings outside the
+// duration API (e.g. vendor-specific 0xfd). Same side effect as SetIdleTimer.
+err := dev.SetIdleTimerRaw(0xfd)
+
+// APM level 1..254 (1 = minimum power, 254 = maximum performance).
+// APM and EPC are mutually exclusive: enabling APM disables EPC.
+err := dev.SetAPMLevel(128)
+err = dev.DisableAPM()
+```
+
+APM status comes from the IDENTIFY DEVICE data (no ATA command reads it), and
+the level is only meaningful while APM is enabled; re-issue Identify() after
+SetAPMLevel/DisableAPM to see the new value. The same data tells you which
+optional features the drive implements, so skip commands for unsupported ones:
+
+```go
+i, err := dev.Identify()
+require.NoError(t, err)
+fmt.Println("APM supported:    ", i.ApmSupported())
+fmt.Println("APM enabled:      ", i.ApmEnabled())
+fmt.Println("APM level:        ", i.CurrentApmLevel()) // 1..254
+fmt.Println("EPC supported:    ", i.EpcSupported())
+fmt.Println("EPC enabled:      ", i.EpcEnabled())
+fmt.Println("Unload supported: ", i.UnloadSupported())
+```
+
+`Sleep()` puts the drive into PM3:Sleep - the deepest state, from which **no
+ATA command can wake it**. Recovery requires a hardware/software reset: a
+sysfs rescan (`echo 1 > /sys/block/sdX/device/delete` then
+`echo "- - -" > /sys/class/scsi_host/hostN/scan`), replugging the drive, or
+a reboot. Use it only if you understand the recovery procedure.
+
 ### Credit
 This project is inspired by https://github.com/dswarbrick/smart
