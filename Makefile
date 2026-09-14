@@ -976,7 +976,7 @@ playground: ## Build the docs-site playground (static desk page: shell + skywire
 	gzip -9 -n -f ./build/playground/skywire.wasm
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/playground/
 	go run ./scripts/stage-playground ./build/playground
-	cp ./docs/playground/index.html ./build/playground/
+	cp ./docs/playground/index.html ./docs/playground/favicon.ico ./build/playground/
 	@echo "built ./build/playground — serve it statically to test (any static file server)"
 
 # --- one wasm module (#4484 convergence) --------------------------------------
