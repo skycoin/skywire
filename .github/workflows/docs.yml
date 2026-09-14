@@ -53,22 +53,29 @@ jobs:
 
       - name: Stage external doc trees under docs/
         run: bash scripts/docs-prepare.sh
-
-      # The playground: the whole skywire binary compiled to js/wasm plus the
-      # desk (shell + windows + nested browser), served as static files at
-      # /playground/. Skipped on PRs — the wasm build costs minutes and PR
-      # checks only need the docs to build.
+      # The desk IS the site root: the whole skywire binary compiled to js/wasm
+      # behind a websh terminal and a nested browser, exactly as the wasm visor
+      # page is, with two differences — no visor is started, and the terminal
+      # has already run `skywire --help`. The docs themselves are served INSIDE
+      # that page by `skywire doc serve`, which renders the live cobra tree and
+      # the embedded prose from the same binary, and netscrape displays it.
+      #
+      # It used to be the other way round: mkdocs at the root with the desk
+      # opened over it in an iframe from /playground/. That made the docs the
+      # wrapper and the desk the guest, which is backwards — every other
+      # deployment of this page has the desk at the root.
+      #
+      # Skipped on PRs — the wasm build costs minutes and PR checks only need
+      # the static pages to build.
       - uses: actions/setup-go@v6
         if: github.event_name != 'pull_request'
         with:
           go-version: stable
           cache: true
 
-      - name: Build the playground
+      - name: Build the desk
         if: github.event_name != 'pull_request'
-        run: |
-          make playground
-          cp -r build/playground/. docs/playground/
+        run: make playground
 
       - name: Build
         # No --strict here — the upstream skywire-specs/ and rewards/
@@ -79,9 +86,28 @@ jobs:
         # a content-cleanup follow-up can address them.
         run: mkdocs build
 
+      # Overlay the desk ON TOP of the built site, replacing mkdocs' landing
+      # page with it. Every other static page keeps its path, so existing
+      # links, the sitemap and search-engine indexing are untouched — only the
+      # root changes hands. Done after `mkdocs build` rather than by staging
+      # into docs/ because mkdocs would otherwise try to process the wasm and
+      # the bundle as page assets.
+      - name: Put the desk at the site root
+        if: github.event_name != 'pull_request'
+        run: |
+          test -f build/playground/index.html || { echo "no desk build to overlay"; exit 1; }
+          cp -r build/playground/. site/
+          test -f site/skywire.wasm.gz || { echo "the wasm module did not land at the root"; exit 1; }
+          echo "site root is now the desk:"; ls -la site/index.html site/skywire.wasm.gz
+
       - name: Deploy to gh-pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
         run: |
+          # ghp-import rather than `mkdocs gh-deploy`: gh-deploy REBUILDS the
+          # site before publishing, which would discard the overlay above and
+          # put mkdocs' own index.html back at the root.
+          pip install ghp-import==2.*
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          mkdocs gh-deploy --force --message "Deploy docs from {sha}"
+          ghp-import --no-jekyll --push --force \
+            --message "Deploy docs from ${GITHUB_SHA}" site
