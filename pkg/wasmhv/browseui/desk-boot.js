@@ -1,6 +1,3 @@
-						// Same endpoint over http, for the liveness probe: asking whether the
-						// host still answers is how a stop gets attributed (see stopVerdict).
-						attachOrigin = new URL(opts.attach.path || '/tp/ws', location.href).href;
 // pkg/wasmhv/browseui/desk-boot.js c3-vis-wasm
 // The shared desk boot: one parameterized entry point behind both desk-first
 // pages — the docs-site playground (no visor by default) and the converged
