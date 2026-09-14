@@ -103,7 +103,13 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   rewardDataLoaded = false;
 
   // Vars for the pagination functionality.
-  allNodes!: Node[];
+  // Initialized, not asserted: the template's empty-list message reads
+  // allNodes.length while gated only on dataSource.length === 0, which is
+  // exactly the pre-first-load state. A definite-assignment `!` there
+  // promised an array that does not exist until the first summary arrives,
+  // so the branch that exists to say "the list is empty" threw whenever it
+  // actually was. dataSource beside it was already initialized this way.
+  allNodes: Node[] = [];
   filteredNodes!: Node[];
   nodesToShow!: Node[] | null;
   hasOfflineNodes = false;
