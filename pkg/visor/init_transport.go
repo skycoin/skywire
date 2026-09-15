@@ -306,6 +306,18 @@ func stunIsTransientFail(t stun.NATType) bool {
 }
 
 func initStunClient(_ context.Context, v *Visor, log *logging.Logger) error {
+	if runtime.GOOS == "js" {
+		// STUN is UDP, and the only consumer of its verdict is SUDPH, which a
+		// browser does not start either. Probing anyway logs a "UDP blocked or
+		// STUN server unreachable" warning per configured server, every time,
+		// for a NAT classification nothing will read.
+		//
+		// stun.ready still has to be closed: anything waiting on the STUN
+		// verdict would otherwise block for the life of the visor.
+		log.Debug("stun is not available in a browser; not probed")
+		v.stun.readyOnce.Do(func() { close(v.stun.ready) })
+		return nil
+	}
 
 	sc := network.GetStunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
@@ -457,6 +469,16 @@ func initWTClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 // initQuicClient starts the experimental QUIC transport when a quic_port is
 // configured (#2607 QUIC follow-on). Opt-in: a zero port leaves it disabled.
 func initQuicClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if runtime.GOOS == "js" {
+		// A browser has no UDP, so QUIC cannot dial and cannot bind. Started
+		// anyway it registers as a carrier, IsKnownNetwork reports it usable, and
+		// autoconnect spends a whole phase dialing squicr to every public visor
+		// — each attempt waiting out its full timeout before failing with
+		// "timeout: no recent network activity". Measured on the wasm visor at
+		// theskywirenetwork.net. Same reason stcpr and sudph stay off here.
+		log.Debug("quic transport is not available in a browser; not started")
+		return nil
+	}
 	// QUIC is on by default, like stcpr/sudph — a visor accepts every transport
 	// type it can. quic_port (if set) PINS the UDP port for a stable firewall
 	// rule / AR registration; left 0 it binds an ephemeral port, exactly as
