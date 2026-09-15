@@ -963,10 +963,25 @@ func (v *Visor) processRuntimeErrs() bool {
 	}
 }
 
+// isStunReady reports whether there is a STUN verdict to READ — the channel
+// being closed AND a client behind it.
+//
+// The channel alone is not enough, and the one caller dereferences
+// v.stun.client the moment this returns true. A browser visor closes
+// stun.ready without ever probing (STUN is UDP, initStunClient returns early
+// under GOOS=js) precisely so nothing waits forever on a verdict that is not
+// coming — which left the channel closed and the client nil, and crashed the
+// hypervisor's tpviz refresh loop on every pass:
+//
+//	panic: runtime error: invalid memory address or nil pointer dereference
+//	  pkg/visor.(*Visor).Overview  api_visor.go:50
+//	  pkg/tpviz.(*Server).refreshVisorData
+//
+// "Ready" has to mean readable, or the signal is a trap for its own consumer.
 func (v *Visor) isStunReady() bool {
 	select {
 	case <-v.stun.ready:
-		return true
+		return v.stun.client != nil
 	default:
 		return false
 	}
