@@ -9,7 +9,6 @@ An optional jq filter can be provided to extract specific fields:
   skywire cli config show .dmsg
   skywire cli config show .transport.public_autoconnect
   skywire cli config show '.launcher.apps[] | .name'
-  skywire cli config show .dht
   skywire cli config show .routing.route_setup_nodes
 
 Use --path to print just the config file path.
