@@ -137,7 +137,7 @@ func docHandler(root *cobra.Command) http.Handler {
 }
 
 // proseTitle reads the first markdown heading of a doc, which is what a
-// reader recognises — "Skywire Deployment on Kubernetes" rather than
+// reader recognizes — "Skywire Deployment on Kubernetes" rather than
 // KUBERNETES_DEPLOYMENT.md. Falls back to the file name when a doc opens
 // with something else, so a missing heading costs a nicer label and not the
 // entry itself. Reads only the head of the file: the title is in the first
