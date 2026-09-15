@@ -213,6 +213,16 @@ func rankOfCarrier(carriers []string, c string) int {
 	return -1
 }
 
+// canDialTCP reports whether this client may dial a server's TCP endpoint: an
+// explicit carrier list must name tcp, and an EMPTY list is the native default,
+// which has always meant "QUIC when advertised, else TCP". The fallback
+// branches below used hasCarrier alone, and hasCarrier(nil, tcp) is false, so a
+// client on the default could never fall back from a failed QUIC or WT dial —
+// it just failed the server and moved on.
+func (ce *Client) canDialTCP() bool {
+	return len(ce.conf.Carriers) == 0 || hasCarrier(ce.conf.Carriers, CarrierTCP)
+}
+
 func hasCarrier(carriers []string, c string) bool {
 	for _, x := range carriers {
 		if x == c {
@@ -564,6 +574,11 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	// default (QUIC when advertised, else TCP). The chosen carrier is dialed below
 	// with a TCP fallback on failure.
 	network, dialAddr := pickCarrier(ce.conf.Carriers, entry)
+	if network == CarrierQUIC && ce.quicBackedOff(entry.Static) && entry.Server.Address != "" &&
+		ce.canDialTCP() {
+		ce.log.WithField("remote_pk", entry.Static).Debug("QUIC to this server is backed off; dialing TCP.")
+		network, dialAddr = CarrierTCP, entry.Server.Address
+	}
 	if network == "" {
 		// The server advertises no endpoint this client can dial (e.g. a browser,
 		// which can only do wss/WebTransport, reaching a server whose entry carries
@@ -596,7 +611,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 			case hasCarrier(ce.conf.Carriers, CarrierWS) && entry.Server.AddressWS != "":
 				ce.log.WithError(err).Debugf("WT dial to %s failed, falling back to WS", entry.Static)
 				network = CarrierWS
-			case entry.Server.Address != "" && hasCarrier(ce.conf.Carriers, CarrierTCP):
+			case entry.Server.Address != "" && ce.canDialTCP():
 				ce.log.WithError(err).Debugf("WT dial to %s failed, falling back to TCP", entry.Static)
 				network = "tcp"
 				dialAddr = entry.Server.Address
@@ -616,7 +631,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 			// (Carriers=[WT,WS], no TCP) would fall back to a raw `dial tcp` it can
 			// never satisfy ("connection refused"), instead of surfacing the WS
 			// error so the rendezvous moves on to another of the peer's servers.
-			if entry.Server.Address == "" || !hasCarrier(ce.conf.Carriers, CarrierTCP) {
+			if entry.Server.Address == "" || !ce.canDialTCP() {
 				return ClientSession{}, err
 			}
 			ce.log.WithError(err).Debugf("WS dial to %s failed, falling back to TCP", entry.Static)
@@ -632,7 +647,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 			// the server's TCP endpoint, which a QUIC-advertising server also
 			// listens on (dual-listen). Only if this client can actually dial TCP
 			// (a browser can't) and the server has a TCP address.
-			if entry.Server.Address == "" || !hasCarrier(ce.conf.Carriers, CarrierTCP) {
+			if entry.Server.Address == "" || !ce.canDialTCP() {
 				return ClientSession{}, err
 			}
 			ce.log.WithError(err).Debugf("QUIC dial to %s failed, falling back to TCP", entry.Static)
@@ -850,6 +865,13 @@ func (ce *Client) finishDialedSession(ctx context.Context, dSes ClientSession, n
 			default:
 			}
 			ce.sesMx.Unlock()
+			if dSes.carrier == CarrierQUIC {
+				if time.Since(started) < quicShortSession {
+					ce.noteQUICShortSession(dSes.RemotePK())
+				} else {
+					ce.noteQUICSessionOK(dSes.RemotePK())
+				}
+			}
 			// Identity-checked: a newer reconnect may have already
 			// replaced this session in the map (newest-session-wins);
 			// deleting by PK alone would evict that live successor.
@@ -884,4 +906,58 @@ func (ce *Client) finishDialedSession(ctx context.Context, dSes ClientSession, n
 // Session obtains an established session.
 func (ce *Client) Session(pk cipher.PubKey) (ClientSession, bool) {
 	return ce.clientSession(ce.porter, pk)
+}
+
+// quicShortSession is how long a QUIC session has to live to count as having
+// worked. One that ends sooner — the remote closed it as "no stream opened",
+// or it never carried a frame — was not a session at all. After
+// quicShortSessionStrikes of those in a row the server is dialed over TCP for
+// quicBackoff before QUIC is tried again. Without this the client redialed
+// QUIC to the same server every 30 s forever: the QUIC handshake itself had
+// succeeded, so the dial-failure fallback to TCP never fired, and nothing
+// else ever said "this carrier is not working here".
+const (
+	quicShortSession        = 45 * time.Second
+	quicShortSessionStrikes = 2
+)
+
+// quicBackoff is how long a server stays on TCP after its QUIC sessions kept
+// dying young. A var so a test can expire it.
+var quicBackoff = carrierConvergeBackoff
+
+// noteQUICShortSession records a QUIC session to pk that died young.
+func (ce *Client) noteQUICShortSession(pk cipher.PubKey) {
+	ce.convMx.Lock()
+	defer ce.convMx.Unlock()
+	if ce.quicStrikes == nil {
+		ce.quicStrikes = make(map[cipher.PubKey]int)
+		ce.quicBadUntil = make(map[cipher.PubKey]time.Time)
+	}
+	ce.quicStrikes[pk]++
+	if ce.quicStrikes[pk] < quicShortSessionStrikes {
+		return
+	}
+	ce.quicStrikes[pk] = 0
+	ce.quicBadUntil[pk] = time.Now().Add(quicBackoff)
+	ce.log.WithField("remote_pk", pk).WithField("for", quicBackoff.String()).
+		Warn("QUIC sessions to this dmsg server keep dying young; dialing it over TCP for a while.")
+}
+
+// noteQUICSessionOK records a QUIC session to pk that lived long enough to
+// have worked, clearing its strikes.
+func (ce *Client) noteQUICSessionOK(pk cipher.PubKey) {
+	ce.convMx.Lock()
+	if ce.quicStrikes != nil {
+		delete(ce.quicStrikes, pk)
+	}
+	ce.convMx.Unlock()
+}
+
+// quicBackedOff reports whether pk is currently to be dialed over TCP rather
+// than QUIC.
+func (ce *Client) quicBackedOff(pk cipher.PubKey) bool {
+	ce.convMx.RLock()
+	defer ce.convMx.RUnlock()
+	until, ok := ce.quicBadUntil[pk]
+	return ok && time.Now().Before(until)
 }
