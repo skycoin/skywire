@@ -23,7 +23,7 @@ func TestOpenMapped_WritesCacheOnceAndMatchesEmbedded(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "skywire")
 	r, err := openMapped(dir)
 	require.NoError(t, err)
-	defer r.Close() //nolint:errcheck
+	// Closed explicitly further down, before the cache file is rewritten.
 
 	crc, size, ok := gzTrailer(embeddedGz)
 	require.True(t, ok)
@@ -45,19 +45,27 @@ func TestOpenMapped_WritesCacheOnceAndMatchesEmbedded(t *testing.T) {
 	// A second open finds the file and does not rewrite it.
 	r2, err := openMapped(dir)
 	require.NoError(t, err)
-	defer r2.Close() //nolint:errcheck
+	// Closed explicitly below, with r, before the rewrite.
 	fi2, err := os.Stat(mappedPath(dir, crc))
 	require.NoError(t, err)
 	require.Equal(t, first, fi2.ModTime())
 
-	// A truncated cache file is rewritten.
+	// A truncated cache file is rewritten. Both readers have to let go of the
+	// file FIRST: they hold it memory-mapped, and Windows refuses to modify a
+	// file with a live mapping ("cannot be performed on a file with a
+	// user-mapped section open"). Unix allows it, which is why deferring these
+	// closes looked fine. Nothing below reads through r or r2.
+	require.NoError(t, r.Close())
+	require.NoError(t, r2.Close())
 	require.NoError(t, os.WriteFile(mappedPath(dir, crc), []byte("stale"), 0o600))
 	r3, err := openMapped(dir)
 	require.NoError(t, err)
-	defer r3.Close() //nolint:errcheck
 	fi3, err := os.Stat(mappedPath(dir, crc))
 	require.NoError(t, err)
 	require.Equal(t, size, fi3.Size())
+	// Not deferred, for the same reason: t.TempDir()'s cleanup removes this
+	// directory, and Windows will not unlink a file that is still mapped.
+	require.NoError(t, r3.Close())
 }
 
 func TestOpenMapped_UnwritableDirFails(t *testing.T) {
@@ -66,6 +74,13 @@ func TestOpenMapped_UnwritableDirFails(t *testing.T) {
 	}
 	if os.Geteuid() == 0 {
 		t.Skip("root can write anywhere")
+	}
+	if runtime.GOOS == "windows" {
+		// chmod 0500 does not make a directory unwritable on Windows — the mode
+		// bits are advisory there, os.Chmod only touches the read-only
+		// attribute, and openMapped happily creates its cache file. There is no
+		// portable way to stage the condition this asserts.
+		t.Skip("directory permissions are not enforced this way on Windows")
 	}
 	ro := t.TempDir()
 	// 0o500 is the subject of the test: a directory the process may traverse but
