@@ -47,6 +47,19 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
     super();
     this.tabsData = homeTabsData();
     this.mountOpts = {
+      // tpviz prefixes every REST call with API_BASE, which defaults to '' —
+      // meaning ROOT-ABSOLUTE '/api/transports'. That is only correct when this
+      // UI is served at the origin root. In the desk it is served through the
+      // vnet service worker at /<base>/vnet/<port>/, where '/api/transports'
+      // resolves to the desk page's own origin and the visualizer fails every
+      // call. Measured on a live desk: '/api/transports' failed to fetch,
+      // 'api/transports' returned 200.
+      //
+      // document.baseURI is what the rest of this UI already resolves against
+      // (api.service.ts asks for the relative 'api/'), so handing tpviz the
+      // same base keeps the two agreeing. setApiBase trims the trailing slash;
+      // at the origin root this yields exactly today's URLs.
+      apiBase: document.baseURI,
       view: this.route.snapshot.queryParamMap.get('view') || undefined,
       onViewChange: (v: string) => {
         this.router.navigate([], { relativeTo: this.route, queryParams: { view: v }, queryParamsHandling: 'merge', replaceUrl: true });
