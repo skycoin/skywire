@@ -45,6 +45,12 @@ var procJS []byte
 //go:embed fsbridge.js
 var fsbridgeJS []byte
 
+//go:embed coi-sw.js
+var coiSWJS []byte
+
+//go:embed coi-register.js
+var coiRegisterJS []byte
+
 // JSFS returns jsfs.js — the globalThis.fs / globalThis.process filesystem.
 func JSFS() []byte { return jsfs }
 
@@ -74,3 +80,22 @@ func FSBridgeJS() []byte { return fsbridgeJS }
 // load in-page servers with native resolution. Serve it at the page's
 // directory as vnet-sw.js and call vnet.enableSW() from the page.
 func VNetSWJS() []byte { return vnetSWJS }
+
+// COISWJS returns coi-sw.js — the service worker that makes a page
+// cross-origin isolated on a host that cannot set headers. It re-serves every
+// response with COOP, COEP and CORP attached, which is what SharedArrayBuffer
+// requires, and therefore what FSBridgeJS and proc.spawnWorker require.
+//
+// Serve it at the page's own directory (the scope must cover the page) and
+// load COIRegisterJS from the page. It does not conflict with vnet-sw.js:
+// that registers at the narrower /vnet/ scope and keeps serving those URLs,
+// which are same-origin, and COEP require-corp only demands CORP of
+// CROSS-origin subresources.
+func COISWJS() []byte { return coiSWJS }
+
+// COIRegisterJS returns coi-register.js — the page half of COISWJS. It
+// registers the worker and reloads ONCE after it takes control, because the
+// first navigation came from the server without the headers. Load it before
+// anything that wants SharedArrayBuffer, and keep tolerating
+// crossOriginIsolated being false on first paint.
+func COIRegisterJS() []byte { return coiRegisterJS }

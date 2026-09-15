@@ -15,8 +15,9 @@
 // history all behave natively.
 //
 // Navigations get one adjustment: <base href> is rewritten (or injected) to
-// point at /vnet/<port>/, so a document written for a server root resolves
-// its relative URLs back into the worker's scope.
+// point at the request's own directory under /vnet/<port>/, so a document
+// written for a server root resolves its relative URLs back into the
+// worker's scope — at whatever depth it was served from.
 //
 // Multi-tab caveat (v1): requests are offered to every window client of the
 // origin and the first non-refusing answer wins. Two tabs both listening on
@@ -30,6 +31,20 @@ const PREFIX = (() => {
 		if (p && /^(\/[A-Za-z0-9._-]+)+\/$/.test(p)) return p;
 	} catch (e) { /* fall through */ }
 	return '/vnet/';
+})();
+
+// COI: whether to stamp the cross-origin-isolation headers on what this
+// worker synthesizes, set at register time via ?coi=1 when the registering
+// page is itself isolated.
+//
+// It is not unconditional. COEP require-corp is INHERITED BY EMBEDDED
+// DOCUMENTS, so a vnet-served page inside an isolated parent is refused
+// unless it carries COEP of its own — that is what this is for. But the same
+// header then demands CORP from that page's own cross-origin subresources,
+// and pages served here legitimately pull remote images. Stamping only when
+// the parent is already isolated keeps the requirement where it is unavoidable.
+const COI = (() => {
+	try { return new URL(self.location.href).searchParams.get('coi') === '1'; } catch (e) { return false; }
 })();
 
 // How long ONE client gets to answer before it is treated as not listening.
@@ -65,8 +80,17 @@ function askClient(client, req) {
 	});
 }
 
-function rewriteBase(html, port) {
-	const href = PREFIX + port + '/';
+// rewriteBase points a document's <base> at the DIRECTORY the request came
+// from, not at the port root.
+//
+// The root is right only for a single-page server. For a site with depth it
+// silently breaks every relative link below the top: a page served at
+// /vnet/8002/cli/README.md linking to "dmsg/README.md" resolved to
+// /vnet/8002/dmsg/README.md — the base had thrown the "cli/" away. Measured
+// on skywire's doc serve, where only the landing page's links worked.
+function rewriteBase(html, port, path) {
+	const p = String(path || '/').split('?')[0];
+	const href = PREFIX + port + p.slice(0, p.lastIndexOf('/') + 1);
 	if (/<base\b[^>]*>/i.test(html)) return html.replace(/<base\b[^>]*>/i, '<base href="' + href + '">');
 	if (/<head\b[^>]*>/i.test(html)) return html.replace(/(<head\b[^>]*>)/i, '$1<base href="' + href + '">');
 	return '<base href="' + href + '">' + html;
@@ -119,10 +143,15 @@ self.addEventListener('fetch', (event) => {
 			const hs = m.headers || {};
 			for (const k in hs) { if (Object.prototype.hasOwnProperty.call(hs, k)) { try { respHeaders.set(k, hs[k]); } catch (e) { /* forbidden name */ } } }
 			respHeaders.set('cache-control', 'no-store');
+			if (COI) {
+				respHeaders.set('Cross-Origin-Embedder-Policy', 'require-corp');
+				respHeaders.set('Cross-Origin-Opener-Policy', 'same-origin');
+				respHeaders.set('Cross-Origin-Resource-Policy', 'same-origin');
+			}
 			let bodyBytes = m.body instanceof Uint8Array ? m.body : new Uint8Array(0);
 			const ct = (hs['content-type'] || '').toLowerCase();
 			if (event.request.mode === 'navigate' && ct.indexOf('text/html') >= 0) {
-				const html = rewriteBase(new TextDecoder().decode(bodyBytes), port);
+				const html = rewriteBase(new TextDecoder().decode(bodyBytes), port, path);
 				bodyBytes = new TextEncoder().encode(html);
 				respHeaders.delete('content-length');
 			}
