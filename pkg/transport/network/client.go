@@ -261,24 +261,78 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 	close(c.listenStarted)
 	c.mu.Unlock()
 	c.log.Debugf("listening on addr: %v", c.connListener.Addr())
-	for {
-		if err := c.acceptTransport(); err != nil {
-			if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "encrypt connection to") {
-				c.log.Debugf("Ignoring likely scanner/dummy connection: %v", err)
-				continue // likely it's a dummy connection from service discovery or port scanner
-			}
 
+	// One in-flight handshake must not hold the listener. This loop used to do
+	// Accept AND the handshake inline, so a single peer that connected and then
+	// said nothing owned the listener for the full handshake.Timeout (10s)
+	// while every other inbound connection waited its turn.
+	//
+	// That is a bad shape for any accepting server and a worse one here, where
+	// a public visor's dialers give up after the same 10s: a peer that waits
+	// out its turn is already gone by the time it is accepted, so the loop
+	// wakes to a closed socket, logs "handshake failed: EOF", and takes the
+	// next one. The failures feed the queue that causes them.
+	//
+	// The loop now only accepts, and hands each connection to a goroutine. The
+	// semaphore bounds concurrent handshakes: backpressure, not a queue, and at
+	// this width the listener stays responsive under any inbound rate a visor
+	// realistically sees.
+	sem := make(chan struct{}, maxConcurrentHandshakes)
+	for {
+		conn, err := c.acceptConn()
+		if err != nil {
 			if c.isClosed() && (errors.Is(err, io.ErrClosedPipe) || errors.Is(err, net.ErrClosed)) {
 				c.log.Debug("Cleanly stopped serving.")
 				return
 			}
-
+			// A failed Accept is about the LISTENER, not any one peer: there is
+			// no connection to hand off and nothing to retry per-connection.
 			c.log.Warnf("failed to accept incoming connection: %v", err)
-			if !handshake.IsHandshakeError(err) {
-				c.log.Warnf("non-handshake accept error, continuing: %v", err)
-				continue
-			}
+			continue
 		}
+
+		sem <- struct{}{}
+		go func() {
+			defer func() { <-sem }()
+			c.serveConn(conn)
+		}()
+	}
+}
+
+// maxConcurrentHandshakes caps the handshakes running off the accept loop at
+// once. Each costs a goroutine and at most handshake.Timeout, so this bounds
+// the damage from a flood of peers that connect and never speak, while being
+// far above the inbound rate of a busy public visor.
+const maxConcurrentHandshakes = 128
+
+// acceptConn takes the next raw connection off the listener. It does no
+// handshaking — see acceptTransports for why that must not happen here.
+func (c *genericClient) acceptConn() (net.Conn, error) {
+	if c.isClosed() {
+		return nil, io.ErrClosedPipe
+	}
+	conn, err := c.connListener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+// serveConn handshakes one accepted connection and introduces it to its
+// listener. Runs on its own goroutine; every error ends with the connection
+// closed, so a peer that never completes a handshake costs one goroutine for
+// at most handshake.Timeout and nothing else.
+func (c *genericClient) serveConn(conn net.Conn) {
+	if err := c.handleConn(conn); err != nil {
+		if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "encrypt connection to") {
+			// A dialer that hung up before handshaking: a port scanner, a
+			// service-discovery reachability probe, or — the case this whole
+			// change is about — a real peer that timed out waiting to be
+			// accepted. Debug, not warn: on a public visor it is constant.
+			c.log.Debugf("Ignoring likely scanner/dummy connection: %v", err)
+			return
+		}
+		c.log.Warnf("failed to accept incoming connection: %v", err)
 	}
 }
 
@@ -299,18 +353,14 @@ func (c *genericClient) wrapTransport(rawConn net.Conn, hs handshake.Handshake, 
 	return transport, nil
 }
 
-// acceptConn accepts new transport in underlying raw network listener,
-// performs handshake, and using the data from the handshake wraps
-// connection and delivers it to the appropriate listener.
-// The listener is chosen using skywire port from the incoming visor transport
-func (c *genericClient) acceptTransport() error {
-	if c.isClosed() {
-		return io.ErrClosedPipe
-	}
-	conn, err := c.connListener.Accept()
-	if err != nil {
-		return err
-	}
+// handleConn performs the handshake over one already-accepted raw connection,
+// wraps it in a network transport using the data from the handshake, and
+// delivers it to the appropriate listener — chosen by the skywire port the
+// incoming transport names.
+//
+// It is deliberately NOT called from the accept loop: it blocks for up to
+// handshake.Timeout, and doing that inline is what starved the listener.
+func (c *genericClient) handleConn(conn net.Conn) error {
 	// TCP_NODELAY on inbound TCP transports (stcpr/stcp) so the
 	// accepting end doesn't Nagle-batch responses to small
 	// interactive payloads (per-keystroke skypty bytes, small RPC

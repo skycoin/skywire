@@ -21,6 +21,7 @@
 package network
 
 import (
+	"io"
 	"net"
 
 	"github.com/soheilhy/cmux"
@@ -59,7 +60,7 @@ func newTCPDemux(master net.Listener, withDMSG bool) *tcpDemux {
 	// length-prefixed noise frame that no fixed prefix can match. Anything that
 	// is neither lands on the dmsg branch and fails its handshake there, which
 	// is what it did on the stcpr branch before.
-	d.stcpr = m.Match(cmux.PrefixMatcher(handshake.Message))
+	d.stcpr = m.Match(matchSTCPRHello)
 	d.dmsg = m.Match(cmux.Any())
 	go m.Serve() //nolint:errcheck // returns when the master listener closes
 	return d
@@ -77,3 +78,34 @@ func (d *tcpDemux) DMSG() net.Listener { return d.dmsg }
 
 // Close closes the master listener, stopping cmux and the virtual listeners.
 func (d *tcpDemux) Close() error { return d.master.Close() }
+
+// matchSTCPRHello matches a connection whose first bytes are the stcpr
+// handshake message, reading EXACTLY that many bytes and no more.
+//
+// cmux.PrefixMatcher cannot be used here, and the reason is a one-byte detail
+// with a total failure for a consequence. It builds a patricia tree with
+// `maxDepth: max + 1` — one past the longest pattern — and its matchPrefix
+// does io.ReadFull into a buffer that size. For handshake.Message that is a
+// 10-byte read against an initiator that writes 9 bytes and then waits for the
+// responder, per the protocol. ReadFull blocks for a tenth byte that is never
+// coming.
+//
+// The connection is not dropped, which is what made this hard to see: it is
+// merely stalled until the initiator's own handshake timeout fires and it
+// hangs up. The FIN then unblocks ReadFull with ErrUnexpectedEOF and 9 buffered
+// bytes, the prefix matches, and stcpr writes its reply into a socket that has
+// already gone. Captured on the wire: the responder's frame1 left 0.15ms after
+// the initiator's FIN, having sat silent for the full ten seconds before it.
+//
+// It only bites where this branch exists at all — a visor whose in-process
+// dmsg server shares the transport port, since otherwise stcpr is cmux.Any()
+// and nothing sniffs it. On such a visor NO inbound stcpr handshake can ever
+// complete: measured 125 accepted, 126 handshake failures and zero settlements
+// in an hour, while squicr and webrtc to the same visor were fine.
+func matchSTCPRHello(r io.Reader) bool {
+	buf := make([]byte, len(handshake.Message))
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return false
+	}
+	return string(buf) == handshake.Message
+}
