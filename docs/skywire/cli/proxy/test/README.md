@@ -36,7 +36,7 @@ skywire cli proxy test
       --testenv          use test deployment
   -t, --timeout int      timeout in seconds for HTTP request (route setup has separate 30s timeout) (default 10)
   -p, --transport        only test proxies that have an existing transport
-  -u, --url string       URL to fetch through proxy for testing (default "http://ip.skycoin.com")
+  -u, --url string       URL to fetch through proxy for testing (default "https://ip.skycoin.com")
   -w, --uturl string     TPD-integrated uptime tracker url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -v, --verbose          verbose output
   -V, --version string   filter proxies by version (empty to skip)

@@ -62,7 +62,9 @@ skywire cli config gen
       --rf                                   generate config for route-finder service
       --calculate-routes                     enable local route calculation
   -i, --ishv                                 local hypervisor configuration
+      --legacy-hv-ui                         serve the legacy Angular dashboard at the hypervisor web UI root instead of the desk
   -j, --hvpks string                         list of public keys to add as hypervisor
+      --ws-peer string                       peers to hold a WebSocket transport to, <pk>@<ws(s)://host[:port]/path>, comma-separated — pins each in transport.ws_table and makes it a persistent transport (no address-resolver lookup; the address is the one given)
   -c, --noauth                               disable authentication for hypervisor UI
   -e, --auth                                 enable auth on hypervisor UI
       --pk-endpoint                          expose unauthenticated GET /api/pk on the hypervisor (skybian / Arch-ARM image builds set this)
@@ -97,12 +99,14 @@ skywire cli config gen
       --serveproxy                           autostart proxy server (default true)
       --proxywl string                       proxy server whitelist (comma separated; empty allows all)
       --dmsgweb                              enable embedded .dmsg resolving SOCKS5 proxy on 127.0.0.1:4445
+      --dmsgweb-sk string                    run the embedded resolver under THIS secret key instead of the visor's, attached in-process (for a key a deployment already knows, e.g. a survey whitelist)
       --skynetweb                            enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446
       --skymail-bridge                       enable SMTP to skywire bridge on 127.0.0.1:1025
       --dmsgweb-upstream string              upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb)
       --skynetweb-upstream string            upstream SOCKS5 for non .skynet traffic
       --dmsgweb-addr string                  host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
       --skynetweb-addr string                host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
+      --resolvers string                     additional resolving proxies; CSV of <kind>:<port>[;name=|addr=|suffix=|sk=|upstream=|chain=|alias=]
       --no-browse-origin                     do not serve the loopback real-origin browse proxy / HTTPS proxy-status pages (status-<surface>.<suffix>)
       --browse-suffix string                 browse-origin domain suffix (leading dot) for the loopback browse proxy + HTTPS proxy-status pages. Empty = deployment default (".haltingstate.net")
       --browse-tls-cert string               PEM cert for the browse-origin listener — a real wildcard cert for *.<browse-suffix> so status-<surface>.<suffix> loads over warning-free HTTPS. Requires --browse-tls-key; empty = plain HTTP on loopback
@@ -136,10 +140,16 @@ skywire cli config gen
       --timeout string                       graceful shutdown timeout (e.g. 10s)
       --regtimeout string                    public visor registration timeout (e.g. 10m)
       --maxtransports int                    public visor max transports
-      --muxroutes int                        number of parallel mux routes per connection
       --cliaddr string                       CLI RPC address (e.g. 0.0.0.0:3435 for Docker)
       --lan-dmsg-port int                    embedded DMSG server TCP port (0 = OS-assigned at runtime; pin via LANDMSGPORT for stable WAN reachability)
       --lan-dmsg-public string               embedded DMSG server WAN-reachable address (host:port; requires port-forward)
+      --dmsg-server-conf string              run the dmsg server from this standalone dmsg-server config file inside the visor (replaces a separate dmsg server unit)
+      --dmsg-server                          run a dmsg server inside the visor on the visor's OWN key, sharing its transport port
+      --dmsg-server-public string            address that in-visor dmsg server advertises (host:port); empty advertises whatever its listener resolves to
+      --dmsg-server-ws-tls string            address (":443") where the in-visor dmsg server self-terminates TLS for its wss front via Let's Encrypt; empty leaves TLS to a reverse proxy on this host
+      --dmsg-relay-addr string               loopback host:port for the dmsg relay acceptor, for local services that cannot use the unix socket (a different user than the visor). Requires --dmsg-relay-keys
+      --dmsg-relay-keys string               public keys allowed to attach to the dmsg relay, comma-separated. Required with --dmsg-relay-addr: a TCP listener has no filesystem gate
+      --no-dmsg-relay                        do not serve the local dmsg relay acceptor at all (it is served by default)
       --all                                  show all flags
 ```
 

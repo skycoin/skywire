@@ -23,6 +23,7 @@ skywire dmsg curl
   -D, --dmsgconf string    dmsghttp-config path
   -e, --sess int           number of DMSG Servers to connect to (default 2)
   -S, --srv pk@ip:port     connect via specific dmsg server pk@ip:port
+      --attach socket      attach to a local visor's dmsg relay socket (holds no server sessions, publishes no entry, keeps this key)
   -p, --proxy string       connect to DMSG via proxy (i.e. '127.0.0.1:1080')
   -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ] (default "fatal")
   -d, --data string        dmsghttp POST data
@@ -30,7 +31,8 @@ skywire dmsg curl
   -r, --replace            replace existing file with new downloaded
   -t, --try int            download attempts (0 unlimits) (default 1)
   -w, --wait int           time to wait between requests
-  -a, --agent AGENT        identify as AGENT (default "dmsgcurl/v1.3.94-0.-<commit>")
+      --any-server         if the destination is in no discovery and was never seeded, try reaching it through every dmsg server (opens a session to each; off by default)
+  -a, --agent AGENT        identify as AGENT (default "dmsgcurl/unknown")
   -s, --sk cipher.SecKey   a random key is generated if unspecified (default 0000000000000000000000000000000000000000000000000000000000000000)
 ```
 
