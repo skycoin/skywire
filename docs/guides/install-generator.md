@@ -20,6 +20,7 @@ also available standalone at
 ## See also
 
 - [install.md](install.md) — all installation methods in detail
-- [configuration.md](configuration.md) — `config gen` flags and the hypervisor UI
+- [configuration.md](configuration.md) — `autoconfig` vs `config gen`
+- [hypervisor.md](hypervisor.md) — the hypervisor web UI
 - [Packaging & Updates](../packaging/README.md) — how the packages and
   auto-update mechanisms behind these commands work

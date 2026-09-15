@@ -19,7 +19,7 @@ generates a fresh ephemeral identity, so the public key differs between shots.
 
 ## 1. The dashboard (visor list)
 
-![wasm-visor dashboard](img/wasm-visor/01-visor-dashboard.png)
+![wasm-visor dashboard](https://github.com/skycoin/skywire/raw/develop/docs/img/wasm-visor/01-visor-dashboard.png)
 
 On boot the tab **is** a visor: it appears as the self entry in the visor list with
 its public key, self-reported public IP (via STUN), transport count, and build
@@ -32,7 +32,7 @@ RPC. The version string carries `os:js arch:wasm`, the tell-tale of a browser vi
 
 ## 2. The mini-desktop app menu
 
-![app menu](img/wasm-visor/02-app-menu.png)
+![app menu](https://github.com/skycoin/skywire/raw/develop/docs/img/wasm-visor/02-app-menu.png)
 
 The wasm-visor adds a **WinBox mini-desktop**: a taskbar with a ☰ launcher opening
 draggable, resizable windows over the dashboard. The app menu offers:
@@ -51,7 +51,7 @@ native HV UI doesn't expose); the native UI has its own Angular skychat tab.
 
 ## 3. Skynet browser
 
-![skynet browser](img/wasm-visor/03-skynet-browser.png)
+![skynet browser](https://github.com/skycoin/skywire/raw/develop/docs/img/wasm-visor/03-skynet-browser.png)
 
 A virtual browser that fetches over Skywire by **public key**, not DNS/IP. Typing
 `home:dmsg` (shown) lands on the visor's own resolver page listing reachable
@@ -64,7 +64,7 @@ resolving-proxy / skysocks route setup.
 
 ## 4. Skychat
 
-![skychat window](img/wasm-visor/04-skychat.png)
+![skychat window](https://github.com/skycoin/skywire/raw/develop/docs/img/wasm-visor/04-skychat.png)
 
 A 1:1 chat client that talks to any visor running skychat, over the wasm-visor's
 own dmsg client. Notable controls:
@@ -84,7 +84,7 @@ Messages are Noise-encrypted end to end; the wire is a length-prefixed frame
 
 ## 5. Host content
 
-![host content window](img/wasm-visor/05-host-content.png)
+![host content window](https://github.com/skycoin/skywire/raw/develop/docs/img/wasm-visor/05-host-content.png)
 
 The tab can **serve content over dmsg** while it's open — reachable at
 `<this-pk>.dmsg:<port>` by any visor. Add a text page, upload files, or a whole
@@ -97,7 +97,7 @@ hosted from a browser tab here.)
 
 ## 6. Console
 
-![console REPL](img/wasm-visor/06-console.png)
+![console REPL](https://github.com/skycoin/skywire/raw/develop/docs/img/wasm-visor/06-console.png)
 
 A REPL that dispatches to the running visor's API — `about`, `visors`, `net`,
 `app ls`, `tp ls`, `route ls`, or `raw <M> <path>`. In the wasm-visor these are
@@ -109,7 +109,7 @@ no shell. Shown: `about` returning the build (`os:"js"`, `arch:"wasm"`),
 
 ## 7. Logs
 
-![logs window](img/wasm-visor/07-logs.png)
+![logs window](https://github.com/skycoin/skywire/raw/develop/docs/img/wasm-visor/07-logs.png)
 
 A live view of the visor log — the captured console ring buffer — with a level
 filter and text filter. The operator can watch dmsg connects, transport setup,

@@ -687,7 +687,7 @@ skywire visor -sl debug
 
 ## Using Dmsg to connect to the deployment
 
-A JSON config file called `dmsghttp-config.json` can be created containing the dmsg addresses of the services for a deployment. This configuration is used automatically based on region (iran, china) with `skywire cli config gen -b` or used by default with `skywire cli config gen -d` and must be present at the expected path - either the current directory or the installation directory - for that configuration to be generated. This file is included in the skywire github repository as well as with our releases.
+A JSON config file called `dmsghttp-config.json` can be created containing the dmsg addresses of the services for a deployment. This configuration is used by default (deployment services are dmsg-only) and must be present at the expected path - either the current directory or the installation directory - for that configuration to be generated. This file is included in the skywire github repository as well as with our releases.
 
 the following file is created manually to reflect the deployment
 ```

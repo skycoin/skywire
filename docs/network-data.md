@@ -1,7 +1,7 @@
 # Network Data Reference
 
 This document covers CLI commands for querying network-wide data from
-the Skywire deployment services and the DHT.
+the Skywire deployment services.
 
 All commands try the visor RPC first using the visor's deployment
 configuration. Use `--direct` to skip the visor RPC.
@@ -37,7 +37,6 @@ pk                                                                         count
 - `/api/services` — [http://sd.skycoin.com/api/services](http://sd.skycoin.com/api/services) — `dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/api/services`
 - `/all-transports` — [http://tpd.skywire.skycoin.com/all-transports](http://tpd.skywire.skycoin.com/all-transports) — `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/all-transports`
 
-**DHT equivalent:** `skywire cli visor dht get <pk> tp`
 
 ---
 
@@ -252,7 +251,6 @@ version     registered              public-key                           address
 - [http://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers](http://dmsgd.skywire.skycoin.com/dmsg-discovery/available_servers)
 - `dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/available_servers`
 
-**DHT equivalent:** `skywire cli visor dht get <server-pk> dmsg`
 
 ### `skywire cli mdisc entry <pk>`
 
@@ -262,7 +260,6 @@ Fetch a visor's DMSG discovery entry (delegated servers, client type).
 - [http://dmsgd.skywire.skycoin.com/dmsg-discovery/entry/03d1d78e...](http://dmsgd.skywire.skycoin.com/dmsg-discovery/entry/03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c)
 - `dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80/dmsg-discovery/entry/<pk>`
 
-**DHT equivalent:** `skywire cli visor dht get <pk> dmsg`
 
 ### `skywire cli svc dmsgd all-servers`
 
@@ -409,24 +406,6 @@ skywire cli tps list --pk <visor-pk>   # list remote visor's transports
 skywire cli tps add --pk <visor-pk> --remote <remote-pk> --type stcpr
 skywire cli tps rm --pk <visor-pk> --id <transport-id>
 ```
-
----
-
-## DHT Data
-
-### `skywire cli visor dht status`
-
-DHT node status. Uses visor RPC.
-
-### `skywire cli visor dht get <pk> [salt]`
-
-Retrieve a value from the DHT via visor RPC. Salt selects the data type:
-- `dmsg` — DMSG discovery entry
-- `tp` — transport list
-- `svc` — service record
-- (empty) — default namespace
-
-**Data source:** Kademlia DHT (local store + iterative network lookup via visor RPC)
 
 ---
 

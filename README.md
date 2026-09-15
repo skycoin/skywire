@@ -388,7 +388,7 @@ Operator how-to guides:
 
 * [docs/guides/install.md](docs/guides/install.md) — install via package, release binary, Docker, Nix, or `go install`
 * [docs/guides/permissions.md](docs/guides/permissions.md) — VPN capabilities, sudoers, system survey
-* [docs/guides/configuration.md](docs/guides/configuration.md) — `config gen`, hypervisor UI, network visualization
+* [docs/guides/configuration.md](docs/guides/configuration.md) — `autoconfig` vs `config gen`; see also [hypervisor.md](docs/guides/hypervisor.md) and [config-gen.md](docs/guides/config-gen.md)
 * [docs/guides/visor.md](docs/guides/visor.md) — run / supervise `skywire visor`, transports, runtime files
 * [docs/guides/vpn.md](docs/guides/vpn.md) — Skywire VPN
 * [docs/guides/socks5.md](docs/guides/socks5.md) — Skywire SOCKS5 proxy

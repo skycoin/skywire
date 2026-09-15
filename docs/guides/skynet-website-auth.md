@@ -101,7 +101,7 @@ skywire cli serve 80 --inject-pk --preserve-host --proxy-addr 127.0.0.1:8080
   anonymous.
 
 A working end-to-end example (Caddyfile + a tiny PK-aware backend) lives in
-[../examples/pk-aware-website/](../examples/pk-aware-website/).
+[../examples/pk-aware-website/](../examples/pk-aware-website/README.md).
 
 ## Limits
 

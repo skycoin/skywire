@@ -75,6 +75,27 @@ func setup() {
 		return nil
 	}), js.Undefined())
 
+	// A click INSIDE an <iframe> never reaches this document. The iframe is a
+	// separate browsing context and mousedown does not cross it, so the
+	// per-window handler that raises a window on click (w.Body, in wire) never
+	// fires for a window whose content is a frame — a nested browser, an
+	// embedded page, a framed app. Clicking such a page left the window where
+	// it was in the stack while clicking a window that draws its own DOM raised
+	// it, which reads as the framed window being the only one you cannot click
+	// to the front.
+	//
+	// Focus does cross. Moving into a frame blurs this window and sets
+	// document.activeElement to the <iframe> ELEMENT — same-origin or not, in
+	// every engine. Read it once the blur has settled (the assignment lands
+	// after the event in some browsers) and raise whichever window owns it.
+	addListener(window, "blur", js.FuncOf(func(js.Value, []js.Value) interface{} {
+		window.Call("setTimeout", js.FuncOf(func(js.Value, []js.Value) interface{} {
+			focusWindowOfActiveFrame()
+			return nil
+		}), 0)
+		return nil
+	}), js.Undefined())
+
 	addListener(body, "mousedown", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		windowClicked = false
 		return nil
@@ -475,4 +496,26 @@ func cancelFullscreen() bool {
 		return true
 	}
 	return false
+}
+
+// focusWindowOfActiveFrame raises the window that owns document.activeElement
+// when that element is an iframe, and does nothing otherwise — so a blur from
+// leaving the page, or from focus landing on an ordinary control, changes no
+// z-order. Already-focused windows are left alone, which also makes the
+// tab-away-and-back case a no-op.
+func focusWindowOfActiveFrame() {
+	el := document.Get("activeElement")
+	if !el.Truthy() || !strings.EqualFold(el.Get("tagName").String(), "iframe") {
+		return
+	}
+	for node := el; node.Truthy(); node = node.Get("parentElement") {
+		for i := len(stackWin) - 1; i >= 0; i-- {
+			if w := stackWin[i]; w.DOM.Truthy() && w.DOM.Equal(node) {
+				if !w.Focused {
+					w.Focus()
+				}
+				return
+			}
+		}
+	}
 }

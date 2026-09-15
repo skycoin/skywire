@@ -53,13 +53,11 @@ distribution.
 EOF
 
 # --- Standalone repo-root files that the install guide references ---
-# DOCKER.md (repo root) and nix/README.md cover install paths; we want
-# them as pages in the site rather than as off-site links. Stage them
-# under docs/extras/ so they get a stable URL inside the site.
+# nix/README.md is canonical next to the flake it documents, so stage it
+# rather than move it. DOCKER.md used to be staged here too; it now lives
+# at docs/guides/docker.md, checked in and embedded, so both this site and
+# `skywire doc serve` have it.
 mkdir -p docs/extras
-if [ -f DOCKER.md ]; then
-  cp DOCKER.md docs/extras/docker.md
-fi
 if [ -f nix/README.md ]; then
   cp nix/README.md docs/extras/nix.md
 fi

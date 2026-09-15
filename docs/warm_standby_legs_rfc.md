@@ -1,7 +1,11 @@
 # RFC: warm-standby mux legs + gated directions
 
-Status: proposed. Author: routing team. Scope: `pkg/router` route-group leg
-lifecycle + the policy `on_tick`/`on_leg_change` ABI.
+Status: **landed** — the ABI shipped (`Standby`, `DemoteToStandby`,
+`PromoteFromStandby` in `pkg/router/dial_hook.go`) and the pool is operator-
+facing as `skywire cli proxy mux standby <n>`. Kept as the design reference
+that `pkg/router` cites, and the only write-up of `on_tick`'s RotationAction.
+Author: routing team. Scope: `pkg/router` route-group leg lifecycle + the
+policy `on_tick`/`on_leg_change` ABI.
 
 ## Problem
 

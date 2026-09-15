@@ -6,8 +6,9 @@ a local SOCKS5 port that any conventional SOCKS5 application can use. All
 traffic between the two visors is carried over an encrypted Skywire
 transport.
 
-The server optionally requires a passcode (set in its configuration). If no
-passcode is set, the server accepts connections without authentication.
+The server optionally restricts who may connect to a list of public keys. With
+no list set it accepts any authenticated peer — every transport is already
+authenticated by key, so there is no anonymous case to guard.
 
 ## Usage
 
@@ -27,18 +28,19 @@ skywire cli proxy server stop
 ## Configuration
 
 `skysocks` is enabled by default in a generated config (port `3`,
-`auto_start: true`). To require a passcode, pass `-passcode` in `args`:
+`auto_start: true`). To restrict it to named peers, pass `--whitelist` in
+`args` — or start it with `skywire cli proxy server start -w <pk>,<pk>`:
 
 ```json
 {
   "name": "skysocks",
-  "args": ["-passcode", "123456"],
+  "args": ["--whitelist", "<pk>,<pk>"],
   "auto_start": true,
   "port": 3
 }
 ```
 
-Leave `args` empty for an open (no-auth) server:
+Leave `args` empty to accept any peer:
 
 ```json
 {
@@ -56,10 +58,11 @@ key. Once the client is running, a local SOCKS5 proxy is available — e.g.
 verify it with `curl`:
 
 ```bash
-curl -v -x socks5://123456:@localhost:1080 https://api.ipify.org
+curl -v -x socks5://localhost:1080 https://api.ipify.org
 ```
 
-(omit the `123456:@` user:pass segment if the server has no passcode).
+The local SOCKS5 port takes no credentials: access is decided at the server by
+public key, not by a user:pass the client sends.
 
 ## See also
 

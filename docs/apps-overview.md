@@ -52,7 +52,7 @@ Every app entry in `skywire-config.json` has the same shape:
 ```json
 {
   "name": "skysocks",
-  "args": ["-passcode", "123456"],
+  "args": ["--whitelist", "<pk>,<pk>"],
   "auto_start": true,
   "port": 3
 }

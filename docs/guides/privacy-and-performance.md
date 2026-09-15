@@ -88,7 +88,7 @@ config JSON (or `skywire cli config gen` and hand-editing).
 - **`min_hops`** (visor-wide): `0` disables routing; `1` allows a direct 1-hop
   route when a transport exists; `≥ 2` **forces every route through at least N
   intermediate visors**, so no single hop sees both ends.
-- **Multiplexed routes** (`--mux N` / `--routes N` per app): split a flow across
+- **Multiplexed routes** (`--tunnels N` on `proxy start`, `--routes N` on `skynet start`): split a flow across
   N disjoint routes. No single route carries the whole conversation, which is
   both a **throughput** win and a **metadata** win. This is the single best
   "both worlds" setting.
@@ -115,8 +115,8 @@ single routes, all carrier families available. For heavy flows, add
 multiplexing per app:
 
 ```
-skywire cli vpn start --srv <server-pk> --mux 4          # 4 parallel routes
-skywire cli proxy start --srv <server-pk> --routes 4
+skywire cli proxy start --pk <server-pk> --tunnels 4   # 4 independent tunnels
+skywire cli vpn start   --pk <server-pk>              # then: proxy mux auto balanced
 ```
 
 Multiplexing gives you more throughput *and* better metadata privacy at once —
@@ -128,7 +128,7 @@ Keep autoconnect/rewards, but push metadata privacy with multihop multiplexed,
 rotating routes for sensitive apps:
 
 ```
-skywire cli proxy start --srv <exit-pk> --routes 4 --min-hops 2
+skywire cli proxy start --pk <exit-pk> --tunnels 4 --min-hops 2
 ```
 
 Add a routing policy with rotation for periodic leg turnover (see the
@@ -152,7 +152,7 @@ Combine the levers:
    the deployment's dmsg servers, so those servers see the relay's IP, not yours.
    *(Advanced/emerging — see [status](#feature-status) below.)*
 4. **Route with depth + spread + rotation.** For any app traffic, use
-   `--min-hops 4` (or 5) with `--routes 4` and a rotating routing policy, so the
+   `--min-hops 4` (or 5) with `--tunnels 4` and a rotating routing policy, so the
    full traffic is never on one path and the path set changes over time —
    defeating traffic correlation.
 5. **Rotate exits.** When using a skysocks exit for clearnet, change the exit

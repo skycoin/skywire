@@ -38,6 +38,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
 	ghtml "github.com/yuin/goldmark/renderer/html"
 
 	"github.com/0magnet/bottle/vnet"
@@ -96,6 +97,50 @@ func docHandler(root *cobra.Command) http.Handler {
 		name := strings.TrimPrefix(r.URL.Path, "/prose/")
 		if name == "" {
 			writeHTML(w, r.URL.Path, "prose", proseIndex())
+			return
+		}
+		// docs/skywire/ is the GENERATED CLI reference checked into the repo,
+		// so prose links into it ("../skywire/cli/config/README.md") are right
+		// on GitHub and were dead here: that tree is not embedded, because this
+		// server generates the same pages from the live cobra tree at /.
+		// Send the reader to the generated page instead of a 404. Relative, not
+		// absolute — the site is served under a base path on the docs site and
+		// on the desk's virtual loopback alike (see relRoot).
+		if rest, ok := strings.CutPrefix(name, "skywire/"); ok {
+			// Resolve against the real command tree and redirect to the page
+			// that MATCHED, never to the requested string. A prose link naming
+			// a command that no longer exists is then a 404 here rather than a
+			// redirect into one — and the Location header is built from the
+			// cobra tree, so nothing off the request reaches it.
+			want := strings.Trim(strings.TrimSuffix(strings.Trim(rest, "/"), "README.md"), "/")
+			var pages []page
+			collect(root, nil, &pages)
+			for i := range pages {
+				if strings.Join(pages[i].segs, "/") == want {
+					// nolint G710: neither half of this Location can leave the site.
+					// relRoot returns "./" or a run of "../" and nothing else; the
+					// tail is the matched page's own segments off the cobra tree.
+					// The analysis sees r.URL.Path reach relRoot and stops there.
+					http.Redirect(w, r, relRoot(r.URL.Path)+path.Join( //nolint:gosec
+						append(append([]string{}, pages[i].segs...), "README.md")...),
+						http.StatusFound)
+					return
+				}
+			}
+			http.NotFound(w, r)
+			return
+		}
+		// A directory: list it. See proseDirIndex.
+		if strings.HasSuffix(name, "/") {
+			if idx := proseDirIndex(strings.TrimSuffix(name, "/")); idx != nil {
+				writeHTML(w, r.URL.Path, name, idx)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+		if siteChrome(name) {
+			http.NotFound(w, r)
 			return
 		}
 		b, err := fs.ReadFile(skydocs.Prose(), name)
@@ -168,11 +213,61 @@ func proseTitle(fsys fs.FS, p string) string {
 const (
 	secReference = "reference"
 	secRFC       = "rfcs and proposals"
+	secHistory   = "history"
 )
+
+// statusLine matches the standing-status marker these docs open with, in the
+// spellings actually in use: "Status: draft", "**Status:** Draft", the same
+// inside a blockquote, and the bare "**Retired (stage 4 of #4484).**".
+var statusLine = regexp.MustCompile(`(?i)^>?\s*\*{0,2}(status|retired)\b`)
 
 // rfcName matches prose whose file name says it is a proposal rather than a
 // description of what the code does. Both spellings are in use.
 var rfcName = regexp.MustCompile("[-_]rfc[.]md$")
+
+// proseSection decides which bucket a top-level doc belongs in.
+//
+// It asks the DOCUMENT, not the file name. The file name was the whole of the
+// rule, and it was wrong for a quarter of these: a proposal that never got an
+// -rfc suffix read as reference, and three proposals that shipped kept
+// announcing themselves as proposals long after the code landed — one of them
+// (warm_standby_legs_rfc.md) while ten files in pkg/router cite it as their
+// design reference. A doc that has been retired is worse than either, because
+// "reference" is exactly where a reader looking for current behavior goes.
+//
+// Twelve of these docs already declare a status in their opening lines, which
+// is both more accurate and maintained by whoever changes the status. The file
+// name stays the fallback for the ones that do not.
+func proseSection(fsys fs.FS, p string) string {
+	f, err := fsys.Open(p)
+	if err == nil {
+		defer f.Close() //nolint:errcheck
+		sc := bufio.NewScanner(io.LimitReader(f, 8<<10))
+		for n := 0; sc.Scan() && n < 40; n++ {
+			line := strings.TrimSpace(sc.Text())
+			if !statusLine.MatchString(line) {
+				continue
+			}
+			l := strings.ToLower(line)
+			switch {
+			case strings.Contains(l, "retired"), strings.Contains(l, "history"),
+				strings.Contains(l, "superseded"):
+				return secHistory
+			case strings.Contains(l, "proposal"), strings.Contains(l, "proposed"),
+				strings.Contains(l, "draft"), strings.Contains(l, "discussion"),
+				strings.Contains(l, "design"):
+				return secRFC
+			case strings.Contains(l, "active"), strings.Contains(l, "landed"),
+				strings.Contains(l, "shipped"), strings.Contains(l, "implemented"):
+				return secReference
+			}
+		}
+	}
+	if rfcName.MatchString(path.Base(p)) {
+		return secRFC
+	}
+	return secReference
+}
 
 // proseIndex lists the embedded prose, grouped by the directory it lives in
 // and titled by its first heading.
@@ -188,7 +283,7 @@ func proseIndex() []byte {
 	bySection := map[string][]string{}
 	var sections []string
 	walkErr := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") || siteChrome(p) {
 			return nil
 		}
 		sec := path.Dir(p)
@@ -199,16 +294,12 @@ func proseIndex() []byte {
 			// shape that still read as a directory listing even after the
 			// per-directory grouping.
 			//
-			// A proposal and a description of what the code does are
-			// different things to a reader looking for one of them, and the
-			// file names already say which is which. Splitting on that beats
-			// a curated list, which would go stale the first time someone
-			// adds a file.
-			if rfcName.MatchString(path.Base(p)) {
-				sec = secRFC
-			} else {
-				sec = secReference
-			}
+			// A proposal, a description of what the code does, and a record
+			// of something that was removed are three different things to a
+			// reader looking for one of them. proseSection asks the document
+			// which it is; that beats a curated list, which would go stale
+			// the first time someone adds a file.
+			sec = proseSection(fsys, p)
 		}
 		if _, seen := bySection[sec]; !seen {
 			sections = append(sections, sec)
@@ -216,9 +307,9 @@ func proseIndex() []byte {
 		bySection[sec] = append(bySection[sec], p)
 		return nil
 	})
-	// Alphabetical, which puts "reference" before "rfcs and proposals" and both
-	// among the directory sections. No bucket is privileged: the top level is
-	// now two labeled sections like any other rather than an unlabeled run.
+	// Alphabetical, which files the three status buckets among the directory
+	// sections. No bucket is privileged: the top level is labeled sections like
+	// any other rather than an unlabeled run.
 	sort.Strings(sections)
 	var b strings.Builder
 	b.WriteString("<h1>prose</h1>")
@@ -252,6 +343,10 @@ func mdToHTML(src []byte) []byte {
 	var buf bytes.Buffer
 	md := goldmark.New(
 		goldmark.WithExtensions(extension.Strikethrough, extension.Table),
+		// Heading anchors: without them nothing can link to a SECTION, only to
+		// a file, and the desk needs to open this prose at the pairing procedure
+		// rather than at the top of a long page.
+		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
 		goldmark.WithRendererOptions(ghtml.WithUnsafe()),
 	)
 	if err := md.Convert(src, &buf); err != nil {
@@ -315,3 +410,83 @@ func writeHTML(w http.ResponseWriter, urlPath, title string, body []byte) {
 	// nothing to retry.
 	fmt.Fprintf(w, docPage, html.EscapeString(title), relRoot(urlPath), body) //nolint:errcheck,gosec
 }
+
+// proseDirIndex lists one directory of the embedded prose.
+//
+// The prose links at directories — "see the [guides](guides/)" — because that
+// is what resolves on GitHub, where a directory listing is a page. Here it was
+// a 404: the handler could serve a file and nothing else, so every such link
+// was dead. Listing the directory makes the same href mean the same thing in
+// both places.
+//
+// Returns nil when the directory holds no prose, which the caller turns into
+// the 404 it would have been anyway.
+func proseDirIndex(dir string) []byte {
+	fsys := skydocs.Prose()
+	entries, err := fs.ReadDir(fsys, dir)
+	if err != nil {
+		return nil
+	}
+	var files, subdirs []string
+	for _, e := range entries {
+		switch {
+		case e.IsDir():
+			subdirs = append(subdirs, e.Name())
+		case strings.HasSuffix(e.Name(), ".md"):
+			if !siteChrome(path.Join(dir, e.Name())) {
+				files = append(files, e.Name())
+			}
+		}
+	}
+	if len(files) == 0 && len(subdirs) == 0 {
+		return nil
+	}
+	sort.Slice(files, func(i, j int) bool {
+		return strings.ToLower(proseTitle(fsys, path.Join(dir, files[i]))) <
+			strings.ToLower(proseTitle(fsys, path.Join(dir, files[j])))
+	})
+	sort.Strings(subdirs)
+	var b strings.Builder
+	fmt.Fprintf(&b, "<h1>%s</h1><ul>", html.EscapeString(dir))
+	for _, d := range subdirs {
+		fmt.Fprintf(&b, "<li><a href=%q>%s/</a></li>", d+"/", html.EscapeString(d))
+	}
+	for _, n := range files {
+		fmt.Fprintf(&b, "<li><a href=%q>%s</a> <small>%s</small></li>",
+			n, html.EscapeString(proseTitle(fsys, path.Join(dir, n))), html.EscapeString(n))
+	}
+	b.WriteString("</ul>")
+	return []byte(b.String())
+}
+
+// siteChrome names embedded markdown that is not prose but MkDocs site
+// furniture, and must not be served here.
+//
+// docs/ feeds two pipelines: this server, and the MkDocs build behind
+// skycoin.github.io/skywire (mkdocs.yml, scripts/docs-prepare.sh). index.md is
+// the MkDocs HOME PAGE, and it belongs to that one alone. It is written in
+// mkdocs-material syntax — ":material-rocket-launch:", "<div class='grid
+// cards' markdown>", "!!! note" — none of which goldmark knows, so it rendered
+// here as literal punctuation. And every one of its section links (guides/,
+// specs/, rewards/, graph/) is an MkDocs nav route: two of those trees are
+// staged into docs/ by docs-prepare.sh at build time, gitignored and never
+// embedded, so they could not resolve here however the handler was written.
+//
+// Serving it was showing the desk's reader a broken copy of a page that is
+// correct on the site it was written for. The prose index and the command
+// reference are this server's own front door.
+func siteChrome(p string) bool { return p == "index.md" }
+
+// SiteChrome is siteChrome for the link check, which lives in the package that
+// assembles the command tree.
+func SiteChrome(p string) bool { return siteChrome(p) }
+
+// Handler is docHandler for callers outside this package: the site this
+// command serves, built against the command tree given.
+//
+// It exists so the link check can run where the REAL tree is assembled.
+// Prose links into the generated reference ("../skywire/cli/config/README.md")
+// are resolved against that tree, so a test holding only a stub root cannot
+// tell a dead link from a command it was never given — and this package cannot
+// import the root itself, which imports this one.
+func Handler(root *cobra.Command) http.Handler { return docHandler(root) }
