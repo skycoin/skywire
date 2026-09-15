@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/0magnet/yamux"
@@ -64,6 +65,11 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 		// deployment load) can never stall the ticker and drop the next slot's
 		// heartbeat. Kept well under tickDuration so rounds never overlap.
 		heartbeatSendTimeout = 2 * time.Minute
+		// heartbeatWarnAfter is how many CONSECUTIVE failed rounds pass before
+		// the failure is reported at Warn rather than Debug. 2 gives one free
+		// round for a visor whose dmsg sessions are still coming up, and puts a
+		// real outage on the log within roughly one tick of when it started.
+		heartbeatWarnAfter = 2
 	)
 
 	// Resolve both targets. The standalone uptime-tracker URL may be absent
@@ -107,20 +113,43 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 
 		// sendHeartbeats fires one heartbeat round, bounded by heartbeatSendTimeout
 		// so a hung send can't run forever.
+		//
+		// consecutiveFails counts rounds that failed in a row, and decides the
+		// LOG LEVEL only — the health flags below flip on the very first failure
+		// either way, so /health and `visor state` are honest immediately.
+		//
+		// Atomic because each round runs in its own goroutine. Today the cap-1
+		// semaphore below orders them, so a plain int would be safe by accident;
+		// raising that cap is a one-character change that would silently make it
+		// a race.
+		//
+		// Why the level waits: the first round fires before a freshly started
+		// visor necessarily has dmsg sessions, and a browser visor reliably has
+		// none for the first few seconds. That produced a WARN calling itself
+		// reward-critical during ordinary startup, every start, for a condition
+		// that cures itself — which is exactly the kind of false alarm that
+		// teaches operators to scroll past this line. The line exists because a
+		// SILENT failure once hid a fleet-wide reward-uptime outage for days, so
+		// it must not be removed or downgraded for a real outage: at
+		// heartbeatWarnAfter consecutive failures (~5 min at this cadence) it
+		// warns exactly as before, and keeps warning.
+		var consecutiveFails atomic.Int64
 		sendHeartbeats := func() {
 			c, cancel := context.WithTimeout(context.Background(), heartbeatSendTimeout)
 			defer cancel()
-			// The TPD heartbeat is the reward-critical presence signal. Surface
-			// failures at Warn and flip the health flags so a persistent 401 /
-			// auth / connectivity failure is visible in the visor's own logs and
-			// /health — the silent-failure class that hid a fleet-wide
-			// reward-uptime outage for days.
 			if tpdUT != nil {
 				if err := tpdUT.UpdateVisorUptime(c, v.conf.Version); err != nil {
 					v.isServicesHealthy.unset()
 					v.isUptimeTrackerHealthy.unset()
-					log.WithError(err).Warn("Failed to send TPD uptime heartbeat (reward-critical).")
+					n := consecutiveFails.Add(1)
+					e := log.WithError(err).WithField("consecutive_failures", n)
+					if n < heartbeatWarnAfter {
+						e.Debug("Failed to send TPD uptime heartbeat; retrying next tick.")
+					} else {
+						e.Warn("Failed to send TPD uptime heartbeat (reward-critical).")
+					}
 				} else {
+					consecutiveFails.Store(0)
 					v.isServicesHealthy.set()
 					v.isUptimeTrackerHealthy.set()
 				}
