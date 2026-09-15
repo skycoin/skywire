@@ -4,13 +4,13 @@ Skycoin rewards are the primary incentive for participation in the skywire netwo
 
 This document details the administration of the reward system and distribution of rewards for the skywire network.
 
-User-facing details of this system can be found in the [mainnet rules article](mainnet_rules.md)
+User-facing details of this system can be found in the [mainnet rules article](https://github.com/skycoin/skywire/blob/develop/rewards/mainnet_rules.md)
 
 This system replaces the [skywire whitelisting interface](https://whitelist.skycoin.com), and enables the daily distribution of rewards.
 
 ### User Participation
 
-Eligible skywire visors based on the criteria outlined in the [mainnet rules](mainnet_rules.md) may receive rewards when the user sets a reward address; either from the hypervisor UI or from the CLI with:
+Eligible skywire visors based on the criteria outlined in the [mainnet rules](https://github.com/skycoin/skywire/blob/develop/rewards/mainnet_rules.md) may receive rewards when the user sets a reward address; either from the hypervisor UI or from the CLI with:
 
 ```
 skywire-cli reward <skycoin address>
@@ -35,7 +35,7 @@ It should be noted that the system survey generation requires root for many of i
 
 ### Log & Survey Collection
 
-The log collection and [reward processing](#reward-processing) happens hourly via [skywire-reward.service](/scripts/rewards/services/skywire-reward.service) - triggered to run hourly by [skywire-reward.timer](/scripts/rewards/services/skywire-reward.timer).
+The log collection and [reward processing](#reward-processing) happens hourly via [skywire-reward.service](https://github.com/skycoin/skywire/blob/develop/scripts/rewards/services/skywire-reward.service) - triggered to run hourly by [skywire-reward.timer](https://github.com/skycoin/skywire/blob/develop/scripts/rewards/services/skywire-reward.timer).
 
 The log collection run can be viewed here:
 https://theskywirenetwork.net/log-collection
@@ -54,48 +54,45 @@ The collected surveys are then checked and backed up.
 
 The following scripts are used by the reward system:
 
-[`getlogs.sh`](/scripts/rewards/getlogs.sh) - a wrapper script for survey and transport bandwidth log collection via `skywire cli log`
-[`reward.sh`](/scripts/rewards/reward.sh) - a wrapper script for reward calculation via `skywire cli rewards`
-[`gettps.sh`](/scripts/rewards/gettps.sh) - a wrapper script for collecting responses to transport setup-node requests via `skywire svc tps ls`
-[`testproxies.sh`](/scripts/rewards/testproxies.sh) - WIP - a wrapper script for testing curl response time over the skywire socks5 proxy (not used for reward calculation)
+[`getlogs.sh`](https://github.com/skycoin/skywire/blob/develop/scripts/rewards/getlogs.sh) - a wrapper script for survey and transport bandwidth log collection via `skywire cli log`
+[`reward.sh`](https://github.com/skycoin/skywire/blob/develop/scripts/rewards/reward.sh) - a wrapper script for reward calculation via `skywire cli rewards`
+[`gettps.sh`](https://github.com/skycoin/skywire/blob/develop/scripts/rewards/gettps.sh) - a wrapper script for collecting responses to transport setup-node requests via `skywire svc tps ls`
+[`testproxies.sh`](https://github.com/skycoin/skywire/blob/develop/scripts/rewards/testproxies.sh) - WIP - a wrapper script for testing curl response time over the skywire socks5 proxy (not used for reward calculation)
 
 ### Reward Processing
 
-The rewards are calculated by `skywire cli rewards calc` with the aid of [`reward.sh`](scripts/rewards/reward.sh) to produce the reward distribution data for the previous day's uptime.
+The rewards are calculated by `skywire cli rewards calc` with the aid of [`reward.sh`](https://github.com/skycoin/skywire/blob/develop/scripts/rewards/reward.sh) to produce the reward distribution data for the previous day's uptime.
 
-### Per-IP reward limit
+### Per-IP and per-machine limits
 
-The total share of rewards for any given ip address is limited to 8, or one share per visor which met uptime and other requirements.
-
-If there are more than 8 visors which meet uptime and other requirements,the reward shares are divided among those skycoin addresses set in the survey for the reward eligible visors at that ip address
-
-### MAC Address reward limit
-
-To avoid a user running multiple instances of skywire on virtual machines, the MAC addresses from the surveys are compared to the mac addresses in all other surveys. If any two visors list the same mac address for the first interface after `lo` these are considered the same machine and 1 reward share is divided evenly between all the visors which list the same MAC address.
+Both caps are stated once, authoritatively, in the [mainnet rules](https://github.com/skycoin/skywire/blob/develop/rewards/mainnet_rules.md#per-machine-limit)
+— including the virtual-machine ineligibility rule and any temporary
+exceptions in force. They are deliberately not restated here: the copy that
+used to live here had drifted from the rules it was summarising.
 
 ## Automation via systemd service
 
 Automation of the hourly log & survey collection is accomplished via systemd service and timer
 
-/etc/systemd/system/[`skywire-reward.service`](/scripts/rewards/services/skywire-reward.service)
+/etc/systemd/system/[`skywire-reward.service`](https://github.com/skycoin/skywire/blob/develop/scripts/rewards/services/skywire-reward.service)
 
 **Note: change the user and working directory in the above systemd service**
 
 This service is called by a timer which triggers it to run hourly
 
-/etc/systemd/system/[`skywire-reward.timer`](/scripts/rewards/services/skywire-reward.timer).
+/etc/systemd/system/[`skywire-reward.timer`](https://github.com/skycoin/skywire/blob/develop/scripts/rewards/services/skywire-reward.timer).
 
 
 ## theskywirenetwork.net
 
 The 'frontend' of the reward system, is currently running at [theskywirenetwork.net](https://theskywirenetwork.net) and is reliant upon on the output of certain cli commands ~~and some scripts~~
 
-[`skywire cli rewards ui`](cmd/skywire-cli/commands/rewards/ui.go) serves the reward system frontend or user interface - via http and dmsghttp.
+[`skywire cli rewards ui`](https://github.com/skycoin/skywire/blob/develop/cmd/skywire-cli/commands/rewards/server/cmd.go) serves the reward system frontend or user interface - via http and dmsghttp.
 
 The service which runs the reward system UI:
-/etc/systemd/system/[`fiberreward.service`](/scripts/rewards/services/fiberreward.service)
+/etc/systemd/system/[`fiberreward.service`](https://github.com/skycoin/skywire/blob/develop/scripts/rewards/services/fiberreward.service)
 
-A wrapper script [`getlogs.sh`](scripts/rewards/getlogs.sh) is used to redirect the output of `skywire cli log` to a file, which is displayed at:
+A wrapper script [`getlogs.sh`](https://github.com/skycoin/skywire/blob/develop/scripts/rewards/getlogs.sh) is used to redirect the output of `skywire cli log` to a file, which is displayed at:
 
 https://theskywirenetwork.net/log-collection
 

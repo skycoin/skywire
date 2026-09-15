@@ -222,6 +222,12 @@ const (
 	// served within rpcUpgradePoll, and an off-LAN tab that publishes an
 	// entry is reached within this bound.
 	rpcAbsentMaxBackoff = time.Minute
+
+	// absentWarnAfter is the number of consecutive "no discovery entry" dials
+	// before the one-shot operator notice. The backoff is at its 1-minute
+	// ceiling well before this, so reaching it means several minutes of a key
+	// that resolves to nothing — past any plausible "the tab is reloading".
+	absentWarnAfter = 10
 )
 
 // isPeerAbsent reports whether a dial failed because the hypervisor has no
@@ -291,8 +297,9 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, tpM *transport.
 	var lastSkyFail atomic.Int64
 
 	var (
-		wait   time.Duration // next pause after a failed dial
-		absent int           // consecutive "no discovery entry" failures
+		wait         time.Duration // next pause after a failed dial
+		absent       int           // consecutive "no discovery entry" failures
+		absentWarned bool          // the one-shot notice below has been logged
 	)
 	for {
 		conn, via, err := dialHypervisorRPC(ctx, log, tpM, dmsgC, rAddr, &lastSkyFail)
@@ -314,6 +321,26 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, tpM *transport.
 				absent++
 				wait = absentDialBackoff(absent)
 				log.WithError(err).WithField("wait", wait).Debug("Hypervisor is not published; waiting.")
+				// Say so ONCE, out loud. Past this many consecutive absences the
+				// backoff is already at its ceiling and this is not a tab that
+				// will be reopened in a moment — it is a key that resolves to
+				// nothing, and the only cure is an operator removing it.
+				//
+				// Debug alone made that invisible. A stale entry costs an EOF
+				// per dmsg server per attempt, forever: on one visor three such
+				// keys were 185 of ~200 dial failures in a 2000-line sample, and
+				// nothing in the logs said which keys or why. The commonest
+				// source is a desk tab that was paired and then had its storage
+				// cleared — pairing makes the TAB the hypervisor, so its key
+				// lands here and outlives the tab.
+				if absent == absentWarnAfter && !absentWarned {
+					absentWarned = true
+					log.WithField("attempts", absent).
+						Warn("Hypervisor has had no discovery entry for many consecutive dials. " +
+							"If this key is gone for good (a closed desk tab, or a host that was " +
+							"rekeyed), remove it with `skywire cli visor hv rm <public-key>` — " +
+							"until then every retry walks all dmsg servers and fails.")
+				}
 			} else {
 				absent = 0
 				wait = nextDialBackoff(wait)

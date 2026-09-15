@@ -23,16 +23,25 @@ privacy and resilience rationale), see
 ## Starting an app with mux
 
 ```
-skywire cli proxy start --pk <server-pk> --mux 4
-skywire cli vpn start   --pk <server-pk> --mux 4
+skywire cli proxy start  --pk <server-pk> --tunnels 4
 skywire cli skynet start --pk <srv-pk> -r 8080 -l 9090 --routes 4
 ```
 
-`--mux` and `--routes` are the same knob (each accepts the other as an
-alias). `--min-hops N` forces every leg through at least N
-intermediaries. A visor-global default can be set in the config
-(`routing.mux_routes`, `routing.min_hops`); an explicit per-app value
-overrides it.
+The knob is spelled differently per command, and there is no single alias
+that works everywhere:
+
+- `proxy start` takes `--tunnels N` — N independent tunnels (route group +
+  noise + yamux each), auto-steered onto different first-hop transports so
+  their throughputs sum.
+- `skynet start` takes `--routes N` — N parallel routes in one group.
+- `vpn start` takes neither. Start it, then shape its legs with
+  `skywire cli proxy mux set` / `mux auto`, which drive a vpn-client
+  session as well as a skysocks one.
+
+`--min-hops N` forces every leg through at least N intermediaries. It is
+accepted by `proxy start` and `skynet start`; `vpn start` takes it no more
+than it takes a leg count. There is no visor-global default for either — both
+are per app, per start.
 
 ## Observing a live route group
 
