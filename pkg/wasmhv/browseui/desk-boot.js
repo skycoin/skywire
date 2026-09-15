@@ -381,6 +381,21 @@
 			return globalThis.SkywireHVWS.probe().catch(function () { return false; });
 		}
 
+		// hostAttachable: whether the tab's visor can hold a transport back to
+		// the hypervisor that served this page — a plain GET to the attach path
+		// answers 426 when the acceptor is there. Deliberately NOT the /ws probe
+		// above: that one needs a session, and gating the attach on it meant a
+		// tab that was not logged into the dashboard never attached, so it never
+		// showed up in `hv pair` and could not be paired at all. The transport
+		// authenticates itself by key and the pairing gate is on the RPC it
+		// carries, so attaching needs no login; only the panels' API bridge does.
+		function hostAttachable() {
+			if (!opts.attach || !opts.attach.pk || !globalThis.SkywireHVWS) {
+				return Promise.resolve(false);
+			}
+			return globalThis.SkywireHVWS.probe(opts.attach.path || '/tp/ws').catch(function () { return false; });
+		}
+
 		// execWorker: the Worker every skywire command runs in once it is up,
 		// or null where this page cannot host one (see workerExec below).
 		var execWorker = null;
@@ -406,7 +421,7 @@
 		// panel reaches it through vnet. Unchanged by the host bridge above:
 		// where a page can run its own visor there is no /ws to bridge to, so
 		// the probe simply comes back empty.
-		function bootWasm(bridged) {
+		function bootWasm(bridged, attachable) {
 			// The host's pty page, published BEFORE the module runs so installDesk
 			// registers it as the terminal app.
 			if (opts.terminalURL) {
@@ -737,7 +752,7 @@
 					// (which ends by starting the visor in the foreground), or idle
 					// at the prompt when the operator had stopped it.
 					var autoconfigCmd = 'skywire autoconfig';
-					if (opts.attach && opts.attach.pk && bridged) {
+					if (opts.attach && opts.attach.pk && attachable) {
 						// Attached to the hypervisor that served this page: the visor's one
 						// transport is a WebSocket back to this origin — an address the page
 						// already has, so no address-resolver lookup — and it does not go
@@ -1037,6 +1052,6 @@
 		// way the SAME desk boots — one desk, one code path; the bridge only
 		// decides where the panels' traffic goes and whether a visor of the
 		// tab's own is offered at all.
-		return hostBridge().then(bootWasm);
+		return Promise.all([hostBridge(), hostAttachable()]).then(function (r) { return bootWasm(r[0], r[1]); });
 	};
 })();
