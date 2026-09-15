@@ -117,6 +117,22 @@ const envfileLinux = `#
 #	set it so a freshly-imaged board can be discovered on the LAN.
 #ENABLEPKENDPOINT=true
 
+### Browse origin #########################################################
+
+#--	Domain the "real-origin" browse path serves untrusted mesh content
+#	under — a SEPARATE eTLD+1 from the visor's own domain, so browsed
+#	content is cookie- and origin-isolated from the visor identity.
+#	Leading dot. Empty uses the deployment default from
+#	services-config.json, and on a local visor that is '.mesh.localhost'
+#	(loopback, a secure context, no certificate needed).
+#BROWSESUFFIX='.example.net'
+
+#--	A real wildcard certificate for *.<BROWSESUFFIX>, so the browse
+#	origin and the status pages load over HTTPS with no warning. Both
+#	are needed; empty means plain HTTP on loopback.
+#BROWSETLSCERT='/etc/skywire/browse.crt'
+#BROWSETLSKEY='/etc/skywire/browse.key'
+
 #--	Password gate on the hypervisor UI. Unset leaves it as-is: on for a
 #	first run, and a regen keeps whatever the config already had. Set it
 #	to make the choice survive a config rebuild (autoconfig runs on every
