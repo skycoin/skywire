@@ -94,7 +94,7 @@ func docHandler(root *cobra.Command) http.Handler {
 	mux.HandleFunc("/prose/", func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(r.URL.Path, "/prose/")
 		if name == "" {
-			writeHTML(w, "prose", proseIndex())
+			writeHTML(w, r.URL.Path, "prose", proseIndex())
 			return
 		}
 		b, err := fs.ReadFile(skydocs.Prose(), name)
@@ -102,7 +102,7 @@ func docHandler(root *cobra.Command) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		writeHTML(w, name, mdToHTML(b))
+		writeHTML(w, r.URL.Path, name, mdToHTML(b))
 	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -110,9 +110,15 @@ func docHandler(root *cobra.Command) http.Handler {
 		collect(root, nil, &pages)
 
 		// URL path -> page. page.path() is the FILE layout ("cli/dmsg/cat/
-		// README.md"); the URL drops the README.md. Leaving path() alone keeps
-		// the file generator's contract untouched.
-		want := strings.Trim(r.URL.Path, "/")
+		// README.md") and the links render() emits use it verbatim, so the URL
+		// carries the README.md too. Trimming it here means the file layout IS
+		// the URL layout, and the file generator's contract stays untouched.
+		//
+		// It also makes every command a DIRECTORY as far as the browser is
+		// concerned, which is what lets those relative links resolve: from
+		// /cli/README.md a link to dmsg/README.md is /cli/dmsg/README.md.
+		// Without the suffix the same link would land at /dmsg/README.md.
+		want := strings.Trim(strings.TrimSuffix(strings.Trim(r.URL.Path, "/"), "README.md"), "/")
 		for i := range pages {
 			if strings.Join(pages[i].segs, "/") == want {
 				var md bytes.Buffer
@@ -120,7 +126,7 @@ func docHandler(root *cobra.Command) http.Handler {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
-				writeHTML(w, pages[i].title(), mdToHTML(md.Bytes()))
+				writeHTML(w, r.URL.Path, pages[i].title(), mdToHTML(md.Bytes()))
 				return
 			}
 		}
@@ -196,7 +202,7 @@ func proseIndex() []byte {
 		b.WriteString("<ul>")
 		for _, n := range names {
 			fmt.Fprintf(&b, "<li><a href=%q>%s</a> <small>%s</small></li>",
-				"/prose/"+n, html.EscapeString(proseTitle(fsys, n)), html.EscapeString(path.Base(n)))
+				n, html.EscapeString(proseTitle(fsys, n)), html.EscapeString(path.Base(n)))
 		}
 		b.WriteString("</ul>")
 	}
@@ -235,16 +241,40 @@ pre{background:#221d2e;padding:1em;overflow-x:auto;border-radius:4px}
 pre code{background:none;padding:0}
 table{border-collapse:collapse}td,th{border:1px solid #3a3350;padding:.3em .6em}
 nav{margin-bottom:2em;font-size:13px}
-</style><nav><a href="/">command reference</a> · <a href="/prose/">prose</a></nav>
-%s`
+</style><nav><a href="%[2]s">command reference</a> · <a href="%[2]sprose/">prose</a></nav>
+%[3]s`
+
+// relRoot is the path back to the site root FROM the directory the given URL
+// path lives in — "" at the root, "../" one down, and so on.
+//
+// The nav has to be spelled relatively because this server does not know
+// where it is mounted. In the browser visor it is reached through the vnet
+// service worker at /<base>/vnet/<port>/, a prefix stripped long before the
+// request arrives, so an absolute href="/prose/" leaves the desk entirely:
+// on the docs site it resolved to https://skycoin.github.io/prose/ and got
+// GitHub's "Site not found" page. Measured by clicking it.
+func relRoot(urlPath string) string {
+	// A browser resolves a relative href against the URL's DIRECTORY, which is
+	// the URL itself when it ends in a slash and its parent when it does not.
+	// Getting this wrong by one level is the whole bug being fixed, so it is
+	// spelled out rather than folded into path.Dir.
+	base := urlPath
+	if !strings.HasSuffix(base, "/") {
+		base = path.Dir(base)
+	}
+	if base = strings.Trim(base, "/"); base == "" || base == "." {
+		return "./"
+	}
+	return strings.Repeat("../", strings.Count(base, "/")+1)
+}
 
 // writeHTML wraps rendered markdown in a minimal document. No external assets:
 // this is served on a loopback with no transport behind it, so a stylesheet
 // from a CDN would simply never arrive.
-func writeHTML(w http.ResponseWriter, title string, body []byte) {
+func writeHTML(w http.ResponseWriter, urlPath, title string, body []byte) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// A dropped error, deliberately: a write failure here is the client
 	// hanging up mid-page. There is no second channel to report it on and
 	// nothing to retry.
-	fmt.Fprintf(w, docPage, title, body) //nolint:errcheck,gosec
+	fmt.Fprintf(w, docPage, title, relRoot(urlPath), body) //nolint:errcheck,gosec
 }
