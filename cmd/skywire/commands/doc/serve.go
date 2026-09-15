@@ -23,11 +23,14 @@
 package doc
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"html"
+	"io"
 	"io/fs"
 	"net/http"
+	"path"
 	"sort"
 	"strings"
 
@@ -91,7 +94,7 @@ func docHandler(root *cobra.Command) http.Handler {
 	mux.HandleFunc("/prose/", func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(r.URL.Path, "/prose/")
 		if name == "" {
-			writeHTML(w, "prose", proseIndex())
+			writeHTML(w, r.URL.Path, "prose", proseIndex())
 			return
 		}
 		b, err := fs.ReadFile(skydocs.Prose(), name)
@@ -99,7 +102,7 @@ func docHandler(root *cobra.Command) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		writeHTML(w, name, mdToHTML(b))
+		writeHTML(w, r.URL.Path, name, mdToHTML(b))
 	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -107,9 +110,15 @@ func docHandler(root *cobra.Command) http.Handler {
 		collect(root, nil, &pages)
 
 		// URL path -> page. page.path() is the FILE layout ("cli/dmsg/cat/
-		// README.md"); the URL drops the README.md. Leaving path() alone keeps
-		// the file generator's contract untouched.
-		want := strings.Trim(r.URL.Path, "/")
+		// README.md") and the links render() emits use it verbatim, so the URL
+		// carries the README.md too. Trimming it here means the file layout IS
+		// the URL layout, and the file generator's contract stays untouched.
+		//
+		// It also makes every command a DIRECTORY as far as the browser is
+		// concerned, which is what lets those relative links resolve: from
+		// /cli/README.md a link to dmsg/README.md is /cli/dmsg/README.md.
+		// Without the suffix the same link would land at /dmsg/README.md.
+		want := strings.Trim(strings.TrimSuffix(strings.Trim(r.URL.Path, "/"), "README.md"), "/")
 		for i := range pages {
 			if strings.Join(pages[i].segs, "/") == want {
 				var md bytes.Buffer
@@ -117,7 +126,7 @@ func docHandler(root *cobra.Command) http.Handler {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
-				writeHTML(w, pages[i].title(), mdToHTML(md.Bytes()))
+				writeHTML(w, r.URL.Path, pages[i].title(), mdToHTML(md.Bytes()))
 				return
 			}
 		}
@@ -127,23 +136,76 @@ func docHandler(root *cobra.Command) http.Handler {
 	return mux
 }
 
-// proseIndex lists the embedded prose. A flat sorted list rather than a tree:
-// 102 files fit on a page, and a reader looking for one knows its name.
-func proseIndex() []byte {
-	var names []string
-	walkErr := fs.WalkDir(skydocs.Prose(), ".", func(p string, d fs.DirEntry, err error) error {
-		if err == nil && !d.IsDir() && strings.HasSuffix(p, ".md") {
-			names = append(names, p)
+// proseTitle reads the first markdown heading of a doc, which is what a
+// reader recognizes — "Skywire Deployment on Kubernetes" rather than
+// KUBERNETES_DEPLOYMENT.md. Falls back to the file name when a doc opens
+// with something else, so a missing heading costs a nicer label and not the
+// entry itself. Reads only the head of the file: the title is in the first
+// few lines or it is not there.
+func proseTitle(fsys fs.FS, p string) string {
+	f, err := fsys.Open(p)
+	if err != nil {
+		return path.Base(p)
+	}
+	defer f.Close() //nolint:errcheck
+	sc := bufio.NewScanner(io.LimitReader(f, 8<<10))
+	for n := 0; sc.Scan() && n < 40; n++ {
+		line := strings.TrimSpace(sc.Text())
+		if strings.HasPrefix(line, "# ") {
+			t := strings.TrimSpace(strings.TrimPrefix(line, "# "))
+			if t != "" {
+				return t
+			}
 		}
+	}
+	return path.Base(p)
+}
+
+// proseIndex lists the embedded prose, grouped by the directory it lives in
+// and titled by its first heading.
+//
+// It was a flat alphabetical list of file names, on the reasoning that the
+// whole set fits on one page and a reader knows the name of the file they
+// want. That holds for someone who already knows; for everyone else a
+// hundred entries reading DHT_ARCHITECTURE.md through vpn-server.md is a
+// directory listing, not documentation — and this is the page the desk shows
+// in its browser, where it stands in for a full docs site.
+func proseIndex() []byte {
+	fsys := skydocs.Prose()
+	bySection := map[string][]string{}
+	var sections []string
+	walkErr := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+			return nil
+		}
+		sec := path.Dir(p)
+		if sec == "." {
+			sec = "" // top level, rendered first and unlabelled
+		}
+		if _, seen := bySection[sec]; !seen {
+			sections = append(sections, sec)
+		}
+		bySection[sec] = append(bySection[sec], p)
 		return nil
 	})
-	sort.Strings(names)
+	sort.Strings(sections) // "" sorts first, so the top level leads
 	var b strings.Builder
-	b.WriteString("<h1>prose</h1><ul>")
-	for _, n := range names {
-		fmt.Fprintf(&b, "<li><a href=%q>%s</a></li>", "/prose/"+n, n)
+	b.WriteString("<h1>prose</h1>")
+	for _, sec := range sections {
+		names := bySection[sec]
+		sort.Slice(names, func(i, j int) bool {
+			return strings.ToLower(proseTitle(fsys, names[i])) < strings.ToLower(proseTitle(fsys, names[j]))
+		})
+		if sec != "" {
+			fmt.Fprintf(&b, "<h2>%s</h2>", html.EscapeString(sec))
+		}
+		b.WriteString("<ul>")
+		for _, n := range names {
+			fmt.Fprintf(&b, "<li><a href=%q>%s</a> <small>%s</small></li>",
+				n, html.EscapeString(proseTitle(fsys, n)), html.EscapeString(path.Base(n)))
+		}
+		b.WriteString("</ul>")
 	}
-	b.WriteString("</ul>")
 	// The walk cannot fail over an embedded FS, but a truncated index that
 	// says nothing is the one outcome worth ruling out: a reader would take
 	// a short list for the whole of the prose.
@@ -179,16 +241,46 @@ pre{background:#221d2e;padding:1em;overflow-x:auto;border-radius:4px}
 pre code{background:none;padding:0}
 table{border-collapse:collapse}td,th{border:1px solid #3a3350;padding:.3em .6em}
 nav{margin-bottom:2em;font-size:13px}
-</style><nav><a href="/">command reference</a> · <a href="/prose/">prose</a></nav>
-%s`
+</style><nav><a href="%[2]s">command reference</a> · <a href="%[2]sprose/">prose</a></nav>
+%[3]s`
+
+// relRoot is the path back to the site root FROM the directory the given URL
+// path lives in — "" at the root, "../" one down, and so on.
+//
+// The nav has to be spelled relatively because this server does not know
+// where it is mounted. In the browser visor it is reached through the vnet
+// service worker at /<base>/vnet/<port>/, a prefix stripped long before the
+// request arrives, so an absolute href="/prose/" leaves the desk entirely:
+// on the docs site it resolved to https://skycoin.github.io/prose/ and got
+// GitHub's "Site not found" page. Measured by clicking it.
+func relRoot(urlPath string) string {
+	// A browser resolves a relative href against the URL's DIRECTORY, which is
+	// the URL itself when it ends in a slash and its parent when it does not.
+	// Getting this wrong by one level is the whole bug being fixed, so it is
+	// spelled out rather than folded into path.Dir.
+	base := urlPath
+	if !strings.HasSuffix(base, "/") {
+		base = path.Dir(base)
+	}
+	if base = strings.Trim(base, "/"); base == "" || base == "." {
+		return "./"
+	}
+	return strings.Repeat("../", strings.Count(base, "/")+1)
+}
 
 // writeHTML wraps rendered markdown in a minimal document. No external assets:
 // this is served on a loopback with no transport behind it, so a stylesheet
 // from a CDN would simply never arrive.
-func writeHTML(w http.ResponseWriter, title string, body []byte) {
+//
+// The title is ESCAPED: for a prose page it is the file name taken off the
+// request path, so it is request-controlled even though the file has to exist
+// in the embedded FS for the handler to get this far. relRoot needs no
+// escaping — it only ever returns "./" or a repetition of "../", never any
+// part of the input — and the body is goldmark output, already HTML.
+func writeHTML(w http.ResponseWriter, urlPath, title string, body []byte) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// A dropped error, deliberately: a write failure here is the client
 	// hanging up mid-page. There is no second channel to report it on and
 	// nothing to retry.
-	fmt.Fprintf(w, docPage, title, body) //nolint:errcheck,gosec
+	fmt.Fprintf(w, docPage, html.EscapeString(title), relRoot(urlPath), body) //nolint:errcheck,gosec
 }
