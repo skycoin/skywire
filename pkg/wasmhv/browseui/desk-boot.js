@@ -421,6 +421,13 @@
 			if (opts.dashboardURL) {
 				try { dashURL = new URL(opts.dashboardURL, location.href).href; } catch (e) { /* keep vnet */ }
 			}
+			// The browser's new-tab page: this desk's own pages, as tiles. netscrape
+			// reads the list when a tab opens on its start page, so it may grow
+			// after this — the proxy status page joins once a proxy serves it.
+			var startLinks = [{ label: 'Skywire Hypervisor', url: dashURL }];
+			if (docsPort) startLinks.push({ label: 'Documentation', url: 'http://vnet:' + docsPort + '/' });
+			startLinks.push({ label: 'home.dmsg', url: 'http://home.dmsg/' });
+			globalThis.__netscrapeStartLinks = startLinks;
 			skywireExec.wasmURL = opts.wasmURL || 'skywire.wasm.gz';
 			skywireExec.wasmExecURL = opts.wasmExecURL || 'wasm_exec.js';
 			// The desk host: `skywire desk-host` out of the ONE command module,
@@ -933,6 +940,7 @@
 										// app that was never started.
 										if (proxyIsServing()) {
 											try { win.openTab('status.skysocks', '/', 'http', true); } catch (e2) {}
+											try { globalThis.__netscrapeStartLinks.push({ label: 'status.skysocks', url: 'http://status.skysocks/' }); } catch (e2) {}
 										}
 										// Behind both: the pairing procedure, but only when the host says
 										// this tab is not approved yet. See openPairingDocsIfUnpaired.

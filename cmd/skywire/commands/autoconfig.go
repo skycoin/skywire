@@ -129,7 +129,7 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addArray("HYPERVISORPKS", "hvpks", autoconfigVals.Hvpks)
 	addArray("WSPEERS", "ws-peer", autoconfigVals.WSPeers)
 	addBool("ISHYPERVISOR", "ishv", "no-ishv", autoconfigVals.Ishv, autoconfigVals.NoIshv)
-	addBool("LEGACYHVUI", "legacy-hv-ui", "no-legacy-hv-ui", autoconfigVals.LegacyHVUI, autoconfigVals.NoLegacyHVUI)
+	addString("HVDESKADDR", "hvdeskaddr", autoconfigVals.HvDeskAddr)
 	addBool("ENABLEPKENDPOINT", "pk-endpoint", "no-pk-endpoint", autoconfigVals.PkEndpoint, autoconfigVals.NoPkEndpoint)
 	addBool("HVAUTH", "hv-auth", "no-hv-auth", autoconfigVals.HvAuth, autoconfigVals.NoHvAuth)
 	addString("HVHTTPADDR", "hvaddr", autoconfigVals.HvAddr)
@@ -434,6 +434,13 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 			hvPort = hvPort[i+1:]
 		}
 		msg2(fmt.Sprintf("Hypervisor UI Starting now on:\n%shttp://127.0.0.1:%s%s", colorRed, hvPort, colorReset))
+		if conf.Hypervisor != nil && conf.Hypervisor.EffectiveDeskAddr() != "" {
+			deskPort := conf.Hypervisor.EffectiveDeskAddr()
+			if i := strings.LastIndex(deskPort, ":"); i >= 0 {
+				deskPort = deskPort[i+1:]
+			}
+			msg2(fmt.Sprintf("Desk (the wasm-visor hypervisor UI) on:\n%shttp://127.0.0.1:%s%s", colorRed, deskPort, colorReset))
+		}
 		if pubkey != "" {
 			vpnURL := fmt.Sprintf("http://127.0.0.1:%s/#/vpn/%s", hvPort, pubkey)
 			msg2(fmt.Sprintf("Use the vpn:\n%s%s%s", colorRed, vpnURL, colorReset))

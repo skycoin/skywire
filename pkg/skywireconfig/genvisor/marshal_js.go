@@ -1236,6 +1236,8 @@ func marshalHypervisor(w *strings.Builder, h *visorconfig.HypervisorConfig, inde
 	}
 	o.field("http_addr")
 	writeQuoted(w, h.HTTPAddr)
+	o.field("desk_addr")
+	writeQuoted(w, h.DeskAddr)
 	o.field("enable_tls")
 	writeBool(w, h.EnableTLS)
 	o.field("tls_cert_file")

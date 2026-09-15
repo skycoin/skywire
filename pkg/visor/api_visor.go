@@ -595,25 +595,6 @@ func (v *Visor) RuntimeLogsSince(since int64) (RuntimeLogsDelta, error) {
 	}, nil
 }
 
-// SetHypervisorLegacyUIPersist implements API. Switches the hypervisor web UI
-// root between the desk and the legacy Angular dashboard, optionally
-// persisting hypervisor.legacy_ui to the config.
-func (v *Visor) SetHypervisorLegacyUIPersist(legacy, persist bool) error {
-	if v.hvInstance == nil {
-		return v.hvNotReadyErr()
-	}
-	v.hvInstance.SetLegacyUI(legacy)
-	if !persist {
-		return nil
-	}
-	if v.conf.Hypervisor == nil {
-		config := visorconfig.DefaultHypervisorConfig()
-		v.conf.Hypervisor = &config
-	}
-	v.conf.Hypervisor.LegacyUI = legacy
-	return v.conf.Flush()
-}
-
 // connectedHypervisorPKs snapshots the hypervisors this visor currently holds a
 // connection to, sorted so the summary is stable between calls.
 //
