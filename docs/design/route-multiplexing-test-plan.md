@@ -1,192 +1,206 @@
-# Route multiplexing: how it gets tested to perfection
+# Route multiplexing: the live campaign to finish it
 
-Status: plan, 2026-09-15. To be taken up after v1.3.94.
+Status: plan, 2026-09-15. To be taken up after v1.3.94. "Tested" here means
+tested live, on the fleet, until the implementation is actually right; the
+unit and CI material is an appendix, because it is the safety net, not the
+work.
 
-## Why this plan exists
+## 0. Where it stands
 
-Every serious mux defect to date was found live, on the fleet, by a person
-watching a transfer wedge, and none was caught first by a test. The list is
-the test plan's real specification:
+What works, proven live:
 
-| Found live | Root cause | Fix |
-|---|---|---|
-| download never completes, ~7× wire amplification | reorder `flushAll` **skipped a gap**; the mux carries a noise-AEAD stream, so a skip is corruption | #4005 no-skip, 2048 window |
-| 93% of packets are retransmits, stream torn down | RACK ceiling clamped at 1.5 s under bufferbloat; SACK re-selected the same hole every 25 ms with no backoff | #4399 per-seq backoff, RTT-floored ceiling |
-| aux leg appended, 0 bytes, route group rebuilt every ~2 s (#80) | responder init-window race: a leg arriving during the primary handshake was deleted or blocked | #4116, #4131 park the leg by descriptor |
-| app `Running`, 0 bytes forever | a lone leg was never probed and never replaced | #4247 sole-leg probe + heal |
-| more legs = strictly less throughput | same-LAN "2 ms" artifact legs black-hole bulk data | #4253 reject same-LAN intermediates |
-| ECF feeds the stalling leg more | BDP from congestion-inflated RTT; cold legs treated as unlimited | #4254 baseline-RTT BDP, congestion shed, cold budget |
-| pool grows to 100 legs, collapses to 0, grows back | in-band yamux pong HoL-blocked behind a reorder gap → false liveness teardown | #4346 late-pong tolerance (partial) |
-| adaptive default stalls 10 MB transfers | `adaptStandbyMax` drifted between source and the committed wasm bundle | #4109 |
-| RPC over skynet stalls | `RouteGroup.Write` did not segment > 64 KiB | #4701 |
-| **still open:** upload and download both anti-aggregate, monotonically, with healthy legs | the global-sequence **no-skip reorder frontier**: one lagging leg stalls the whole group | architectural; see §6 |
+- packet-level striping in both directions (exit and node both spray across
+  legs), transport-disjoint legs, same-LAN artifact legs rejected (#4253);
+- route setup stands up N disjoint legs without a rebuild (#4116, #4131);
+- the retransmit storm is gone (#4399: per-seq backoff, RTT-floored RACK);
+- the reorder buffer never skips (#4005), so the noise stream is never
+  corrupted;
+- a single black-holing leg is probed and replaced (#4247); latency-band
+  admission parks outliers (#4248); ECF is the default scheduler with a
+  baseline-RTT BDP, congestion shed and a cold budget (#4254);
+- per-direction leg assignment with a load-driven flip exists (#4304, #4305)
+  but its live demo never happened: the exit was still on the previous build;
+- the rig exists: `proxy loadtest serve/run`, `proxy mux info --ndjson`,
+  `proxy mux set/mode/cap/width/direction`, `visor state --via dmsg://<exit>`.
 
-Two things follow. The mux has a small set of invariants that were never
-written down as assertions, and the layer where the bugs live, the data plane
-under skewed and failing legs, has no test that can produce skew or failure.
-The unit tests exercise reassembly with hand-ordered packets; the docker e2e
-and the native e2e never form a mux at all.
+What does not work, and is the whole point:
 
-## 1. Invariants, stated once, asserted everywhere
+- **more legs = less throughput, monotonically, both directions**, with
+  healthy converged legs and a healthy single-leg baseline:
 
-Every tier below asserts the same five properties. A tier that cannot assert
-one of them says so.
+  | direction | 1 leg | 4 legs | 6 legs |
+  |---|---|---|---|
+  | download (exit-scheduled) | 350 KB/s | 144 | 12 |
+  | upload (client-scheduled) | 7.1 MB/s | 5.8 | 3.5 |
 
-1. **Integrity.** The delivered byte stream equals the sent byte stream. Not
-   "mostly": the stream carries a noise cipher, so one skipped or duplicated
-   byte is a permanent wedge. Assert by hash of the whole stream at the far
-   end, and by the reorder buffer's own `NextSeq` never advancing past a hole.
-2. **Liveness.** With at least one live leg, delivery progresses. A gap at the
-   frontier is closed within one retransmit round trip of the fastest live leg,
-   or, when the leg holding it is dead, within the prune delay. A stall longer
-   than that with a live leg present is a defect, whatever the throughput.
-3. **No anti-aggregation.** Goodput with N legs ≥ goodput of the best single
-   leg, minus a stated tolerance. Anything else means the scheduler or the
-   frontier is subtracting capacity. This is the invariant that fails today
-   under load (§6) and it stays a test, marked as a goal, until it passes.
-4. **Bounded amplification.** Wire bytes / goodput bytes ≤ 1.2 in steady state
-   with no loss; retransmits are never re-sent to the same hole faster than the
-   backoff allows.
-5. **Stability.** The leg set changes only for a cause the visor can name
-   (latency band, liveness, operator). The route group's local port never
-   changes during a transfer, because a changed port is a rebuild, not a
-   reshape. Leg churn per minute is a reported, bounded number.
+  Send-side governance is ruled out (the upload row is scheduled entirely by
+  the node that has every fix). The mechanism is the global-sequence no-skip
+  frontier plus **unbounded per-leg in-flight**: nothing stops a slow leg's
+  queue from growing, the frontier waits on it, and every added leg is another
+  queue to wait on.
+- the false liveness teardown is only partly fixed (#4346 halved it; the rest
+  are conn-error reconnects driven by the same wedges);
+- the adaptive default has never been shown to beat a single route on the
+  same path, so "adaptive by default" is a belief, not a measurement.
 
-The reasons a leg was promoted, parked or pruned already exist as decisions
-in the code; they become a per-leg `reason` field in `visor state` and
-`proxy mux info` so a failed assertion prints why, not just what.
+The only proof that aggregation is possible at all is a static hand-set mux
+of six homogeneous 175–312 ms legs that did about 2× a single leg, then was
+not touched. Everything dynamic loses to that.
 
-## 2. Tier 1: deterministic leg simulation in `pkg/router`
+## 1. Exit criteria, measured live
 
-The gap that matters most. Today `route_mux_e2e_test.go` hands packets to
-`deliverData` in an order the test chose. What is needed is legs that behave
-like the network did when each bug happened, under a clock the test controls.
+The campaign is done when all of the following hold on the rig in §2, for
+downloads and uploads, at 3, 10, 50 and 100 MB, five trials each:
 
-**Harness.** A `netsim` package under `pkg/router/internal` providing:
+1. **Completes.** 5/5, and the received bytes hash to the sent bytes.
+2. **Aggregates.** N-leg goodput ≥ single-leg goodput on the same exit,
+   measured concurrently, for N = 2, 4, 6; and 6 ≥ 4 ≥ 2 within tolerance.
+   Anti-aggregation of any degree fails the criterion.
+3. **Stays up.** The route group's local port is constant for the whole run
+   (no rebuild); leg changes carry a named reason and stay under a bound per
+   minute; no liveness teardown while any leg is live.
+4. **Does not amplify.** Wire bytes / goodput ≤ 1.2 with no loss present;
+   retransmits obey the backoff.
+5. **The default is the winner.** Whatever policy ships as the default is the
+   one that won the table. If a single route wins on a path, the default
+   must fall back to a single route on that path, by measurement, not by
+   configuration.
 
-- a simulated leg: in-memory pipe with configurable one-way latency, jitter,
-  bandwidth (token bucket), and a schedule of events: stall for D, black-hole
-  from T, die at T, RTT ramp (bufferbloat), reorder within the leg, duplicate;
-- a virtual clock. The mux reads `time.Now` and starts timers in `sack.go`,
-  `reorder.go`, `route_group.go` (liveness, data-progress cadence, ECF refresh)
-  and `transport_selector.go`. These move behind one injectable clock so a
-  30-minute scenario runs in seconds and every timing threshold is exact
-  (`livenessProbeInterval` is already a var; the rest follow the same pattern);
-- two real `RouteGroup`s wired end to end over N simulated legs, with the real
-  routeMux, reorder buffer, SACK and scheduler in the path, driven by a real
-  byte source and sink so integrity is checked on the whole stream.
+## 2. The rig, frozen and repeatable
 
-**Scenarios,** table-driven, seeded, each a regression for a row of the table
-above and each asserting all five invariants:
+Everything the last campaign learned the hard way, fixed as procedure:
 
-- two legs, 40 ms and 245 ms, no loss: aggregation, no stall (the ECF
-  hold-back case);
-- one slow leg in a fast set: share tracks capacity, frontier never waits
-  longer than one fastest-leg RTT for the slow leg's stragglers;
-- a leg black-holes mid-transfer: prune within the liveness window, stream
-  continues, no rebuild;
-- a leg dies at T, another is added at T+5 s: the new leg starts cold and
-  ramps; no burst on the frontier;
-- RTT inflation on one leg from 130 ms to 1 s over 20 s (bufferbloat): cwnd
-  does not grow with it, load sheds, no retransmit storm (assert the backoff
-  and amplification bound directly);
-- cold start with 6 identical legs: no single-leg dump;
-- 1, 2, 4, 8, 16, 60 legs of equal capacity: throughput monotone
-  non-decreasing, reorder window never the limit;
-- sole leg black-holes: probe fires, replacement dialed, dead leg pruned after;
-- upload and download direction separately, then both with `CapUniDir`;
-- FEC on and off across every scenario with loss > 0;
-- write sizes 1 B to 1 MiB, including the > 64 KiB segmentation;
-- a randomized long-run: 10⁴ events drawn from all of the above with a seed
-  printed on failure. Runs under `-race`. Integrity must never fail; the other
-  invariants log the first violation with the seed.
+- **One controlled exit** on Linode (02f9aa58… or 02ea1b80…), auto-update
+  timer stopped for the run, process uptime recorded at start and end so a
+  collapse can never again be blamed on a restart. Both ends run the **same
+  commit**; the deploy is the merge (fleet ripple) or, when the exit lags, the
+  manual binary copy recipe. Never start a run with mismatched ends.
+- **Two clients on the node, same exit:** A = one leg, the reference;
+  B = the subject with N legs. Dialed **sequentially**, each session confirmed
+  before the next (parallel dials contend in route setup and only one
+  connects). Pulled **concurrently**, so the exit's condition is the same for
+  both. B ≥ A is the test; A alone tells you the mesh's state that hour.
+- **No reconfiguration during a run.** Every `proxy mux set`, `mode`,
+  `width`, `cap` or policy change is its own run, from a fresh session.
+  `proxy start` on a live app drops its route; measuring mid-re-establishment
+  produced every false "storm" of the last campaign.
+- **Measurement:** `proxy loadtest run` NDJSON (goodput, gaps), `proxy mux
+  info --ndjson` every second, exit-side `visor state --via dmsg://<exit>`
+  before and after (per-leg sent/recv/retx are the decisive diagnostic;
+  logs are not). Results land in `bench/<date>/<commit>/` with the command
+  lines that produced them. From a **public node** for NAT-free numbers when
+  the question is the mesh, from this node when the question is the client.
+- **Hygiene:** never remove transports the operator's own proxy uses; never
+  let a same-LAN or NAT-hairpin leg into a subject group; watch the exit's
+  own leg counters, because the exit runs its own scheduler.
+- **The baseline table first.** Before any change: v1.3.94, the full grid of
+  §1, both directions. Every later run is a diff against it.
 
-**Scheduler conformance**, separately, because it is pure: given legs with
-known capacity and RTT, `ECF`, `equal` and `capacity` weighting produce shares
-within a stated tolerance of the ideal, at cold start and at steady state.
+## 3. The work, in order, each step judged by the rig
 
-Size: the harness is the bulk of the work, roughly a week; the scenarios are
-a day each once it exists. Everything in this tier is a normal `go test` and
-gates every PR.
+### 3.1 Bound what is in flight per leg
 
-## 3. Tier 2: control plane, in process
+The memory of the last campaign names this "defect C": `wrapPayload` accepts
+unbounded in-flight, so a slow leg is fed until its queue is seconds deep and
+the frontier waits on it. This is the first change because it is the one the
+anti-aggregation numbers point at directly.
 
-`router_mux80_test.go` and the IntroduceRules tests exist; they grow into a
-harness of several real routers connected by simulated transports, with
-induced handshake delay and failure, asserting:
+- A per-leg send window: in-flight bytes on a leg ≤ its baseline-RTT BDP,
+  from the delivery rate the receiver's SACKs prove, not from bytes handed to
+  the transport (ECF's `rateBps` still counts the latter).
+- When every leg is at its window the writer blocks; it never queues into a
+  bloated leg.
+- Control frames (SACK, pong, leg-state) are sent ahead of data on every leg.
+  The false liveness teardown is a pong stuck behind data; this removes the
+  cause rather than tolerating it.
 
-- N disjoint legs stand up concurrently without a rebuild (the #80 class),
-  with the init-window race reproduced on purpose;
-- standby, promote, demote and self-heal decisions match the policy's tick
-  inputs, and every decision carries its reason;
-- a manual pin (`proxy mux set`, `--route`, `--routing-policy none`) is
-  respected: the adaptive growth never fights it (this was broken live);
-- same-LAN and hop-exclusion filters reject what they should;
-- route-setup contention: several clients dialing one destination at once
-  each get a route, or fail with a named reason, never a silent 1-leg fallback
-  (the degrade `mux-route-probe.sh` was written to catch).
+Rig question after this step: does the download row stop being monotone
+decreasing? If 2 legs ≥ 1 leg but 6 < 4, the window is right and the
+scheduler is next. If 2 < 1 still, the frontier is next (§3.3).
 
-## 4. Tier 3: multi-visor CI lane with a shaped network
+### 3.2 Make the scheduler predict arrival, not throughput
 
-The docker e2e harness already runs several visors. It gains one scenario:
-four visors, a mux of at least two disjoint legs, and `tc netem` on the
-container links so each leg has its own latency, jitter and loss. The exit
-runs `proxy loadtest serve`; the client runs `proxy loadtest run` and
-`proxy mux info --ndjson`; the test reads the NDJSON and asserts the five
-invariants with CI-sized tolerances, plus `rg ls` leg count against what was
-asked for (the silent N→1 fallout). Kill one leg's container mid-run and
-assert the stream survives. Roughly two days on top of Tier 1's assertions,
-which it reuses. Starts non-required and becomes required after a week
-without a flake; a flake is classified with the usual protocol, never waited
-out.
+ECF picks the leg that completes soonest; it is only as good as its inputs.
 
-## 5. Tier 4: the fleet benchmark, scripted and repeatable
+- Delivery-proven rate per leg (from 3.1) and per-leg end-to-end latency
+  EWMA (#3985) feed the completion estimate; transport-level RTT is not used.
+- Cold legs get the probe budget and ramp; a leg whose delivery rate falls
+  below a fraction of its baseline is shed, not fed.
+- Live tuning through `proxy mux mode|cap|width` on the rig, one knob per
+  run; the constants that win go in as defaults with the numbers that chose
+  them.
 
-Everything the live campaign learned about method, made into one script so
-nobody rediscovers it:
+Rig question: at 4 and 6 legs, is the exit's per-leg `sent_bytes` share
+within tolerance of each leg's measured capacity share? If shares are right
+and goodput is still below the sum, the frontier is the remaining loss.
 
-- one controlled exit on a frozen build (auto-update timer stopped, uptime
-  recorded across the run to prove no restart);
-- two clients on the same node: A with one leg (the reference), B with N legs
-  (the subject), dialed sequentially, each session confirmed before the next;
-- no reconfiguration during a run; every `proxy mux set` / `mode` / `width`
-  change is its own run;
-- fixed sizes 3, 10, 50, 100 MB, five trials each, both directions, pulled
-  concurrently through A and B;
-- results as NDJSON in `bench/<date>/`, with `proxy mux info` sampled every
-  second and the exit's `visor state --via dmsg://` before and after;
-- pass: B completes 5/5, B ≥ A within tolerance, B's local port constant, and
-  churn/min below the bound; the report is a table, not a log.
+### 3.3 The frontier: stop waiting on the slowest leg
 
-This runs before every release and nightly against the previous release's
-numbers; a regression is a diff against last time's table.
+Only if 3.1 and 3.2 leave anti-aggregation on the table. Two candidates,
+both capability-negotiated, no flag:
 
-## 6. The open architectural problem, kept honest
+- **Per-leg sequencing with a stream-layer merge:** each leg carries its own
+  ordered sub-stream; the receiver keeps a cursor per leg and reassembles by
+  a global order only at stripe boundaries, so one leg's lag delays one
+  stripe, not every later packet. This is what MPTCP does with its two
+  sequence spaces.
+- **Aggregation above the route group** for what can be split: the HTTPS
+  range-split path already does this and is the one place multi-leg beats
+  single-leg in production today.
 
-The measurement that ended the aggregation campaign was clean: with healthy,
-converged legs, 1 leg 350 KB/s down, 4 legs 144, 6 legs 12; and upload, which
-the client schedules itself, 7.1 → 5.8 → 3.5 MB/s. More legs, less
-throughput, monotonically, on both sides. Send-side governance is ruled out.
-The cause is the global-sequence, no-skip frontier: one lagging leg stalls
-the whole group, and every added leg is another chance to lag.
+The rig decides between them by the same table. Neither is started until
+3.1 and 3.2 have been measured, because the last campaign spent weeks on the
+wrong layer.
 
-The test plan does not paper over this. Invariant 3 is written as a test
-now, tagged `muxgoal`, run nightly, expected to fail, with the failing numbers
-published. The candidate fixes it will judge are per-leg sequencing with a
-merge at the stream layer, and aggregation above the route group (the
-range-split path already proves the HTTPS case). Whichever lands, the same
-test passes it or it does not ship as the default.
+### 3.4 Liveness and stability, finished
 
-## 7. Order of work
+- With control-frame priority in place, re-run the frozen-exit 30-minute
+  continuous-load sample that measured 13/30 then 6/30 collapses. Target 0.
+- Every promote, park, prune and heal decision writes its reason into
+  `visor state` and `proxy mux info`; a run's churn is reported as a count
+  with reasons, and the bound in §1 is enforced against it.
+- A manual pin (`proxy mux set`, `--route`, `--routing-policy none`) is
+  respected by the adaptive growth. It was not, live.
 
-1. Clock injection and the `netsim` legs (Tier 1 harness).
-2. One scenario per row of the table in §0, each a regression test.
-3. Reason fields on leg decisions; `visor state` and `proxy mux info` carry them.
-4. The randomized long-run under `-race`.
-5. Tier 2 control-plane harness and the pin-respect test.
-6. Tier 3 docker lane, non-required, then required.
-7. Tier 4 benchmark script, first run against v1.3.94 as the baseline.
-8. The `muxgoal` anti-aggregation test, and the work it judges.
+### 3.5 Direction, proven
 
-Rule from here on: a mux bug found live gets its simulation reproduction
-before its fix is merged, and the reproduction stays as the regression.
+Both ends on the same build, download-heavy and upload-heavy runs: the
+direct leg carries one direction and the mux legs the other, the flip
+happens at the stated ratio and cools down as specified. This was
+implemented and never demonstrated.
+
+### 3.6 The default, decided by the table
+
+Adaptive ships as the default only when it wins §1 on the rig, and it must
+choose a single route on a path where a single route wins. Until then the
+default is whatever the table says, which today is a single route.
+
+## 4. Milestones
+
+1. Baseline table on v1.3.94 (both directions, four sizes, 1/2/4/6 legs).
+2. 3.1 merged and deployed both ends; table re-run. Decision: scheduler or
+   frontier next.
+3. 3.2 tuned live; table re-run.
+4. 3.3 if still needed; table re-run.
+5. 3.4 and 3.5; 30-minute stability sample at 0 collapses.
+6. 3.6: the default chosen by numbers; release notes carry the table.
+
+Rule from here on: no mux change merges without a before/after row from the
+rig, and no live-found bug is fixed without a reproduction (appendix) that
+stays as its regression.
+
+## Appendix: the safety net (not the work)
+
+- **Deterministic legs in `pkg/router`:** a `netsim` with latency, jitter,
+  bandwidth, stall, black-hole, death and RTT-ramp schedules behind one
+  injectable clock, two real route groups end to end; one scenario per bug
+  the campaign has found, plus a seeded randomized long-run under `-race`
+  asserting integrity, liveness, no anti-aggregation (tagged `muxgoal`,
+  expected to fail until §3.3 lands), amplification and stability.
+- **Control plane in process:** concurrent leg setup (#80 class), pin
+  respected, same-LAN filters, dial contention.
+- **Docker lane with `tc netem`:** four visors, ≥2 disjoint legs, the
+  loadtest driver, invariants with CI tolerances; non-required until a week
+  without a flake.
+- **The benchmark script:** §2 as one command, run before every release and
+  nightly against the last release's table.
