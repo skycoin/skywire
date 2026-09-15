@@ -149,6 +149,29 @@ func labelFor(url string) string {
 // itself serves.
 var DirectLoader func(url string) (src string, ok bool)
 
+// DirectAddress is the inverse of DirectLoader, for DISPLAY. A frame the host
+// claimed navigates itself to more of the host's served URLs, and those are
+// the rewritten form — skywire's "<origin>/vnet/<port>/path" — which is an
+// implementation detail of how the host serves the page, not an address anyone
+// typed or could type. Showing it in the address bar (and recording it in
+// history) told the reader a path that does not exist as far as the mesh is
+// concerned.
+//
+// A host that rewrites URLs should map one back to the address it stands for
+// ("http://vnet:<port>/path"). Returning ok=false, or leaving this nil, keeps
+// the served URL, which is right for a host that does not rewrite.
+var DirectAddress func(src string) (url string, ok bool)
+
+// displayURL is DirectAddress with the identity fallback.
+func displayURL(src string) string {
+	if DirectAddress != nil {
+		if u, ok := DirectAddress(src); ok && u != "" {
+			return u
+		}
+	}
+	return src
+}
+
 // load renders a URL into a tab's iframe. A data:/about:/blob: URL goes straight
 // to the iframe; anything else — an http(s) page, or a bare host like
 // example.com or home.dmsg — goes through the transport (fetchPage), which lets
@@ -429,21 +452,23 @@ func watchDirectNav(t *tab) {
 		// says we are: Back and Forward re-set the src, and a DirectLoader that
 		// hands back a different spelling than it was given would otherwise
 		// push a duplicate on every press and make Back walk in place.
-		if t.pos >= 0 && t.pos < len(t.hist) && cur == t.hist[t.pos] {
+		if t.pos >= 0 && t.pos < len(t.hist) && (cur == t.hist[t.pos] || displayURL(cur) == t.hist[t.pos]) {
 			t.directSrc = cur
 			return nil
 		}
 		// The frame moved itself. Record it WITHOUT reloading: the page the
-		// entry names is already on screen.
+		// entry names is already on screen. What is recorded and shown is the
+		// ADDRESS the served URL stands for — see DirectAddress.
 		t.directSrc = cur
+		shown := displayURL(cur)
 		if t.pos >= 0 && t.pos < len(t.hist)-1 {
 			t.hist = t.hist[:t.pos+1]
 		}
-		t.hist = append(t.hist, cur)
+		t.hist = append(t.hist, shown)
 		t.pos = len(t.hist) - 1
-		t.lbl.Set("textContent", labelFor(cur))
+		t.lbl.Set("textContent", labelFor(shown))
 		if active >= 0 && tabs[active] == t {
-			addr.Set("value", cur)
+			addr.Set("value", shown)
 		}
 		syncNav()
 		return nil
