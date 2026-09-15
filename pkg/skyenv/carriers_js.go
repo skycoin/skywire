@@ -26,3 +26,7 @@ var DefaultDmsgCarriers = []string{"wt", "ws"}
 // visor" even while a browser visor runs — while an operator who
 // EXPLICITLY configures :8000 shadows it, exactly like binding a port.
 const DefaultHypervisorHTTPAddr = ":8001"
+
+// DefaultHypervisorDeskAddr is empty in a browser: a page-hosted visor has no
+// command module to serve a desk out of, and it already runs inside one.
+const DefaultHypervisorDeskAddr = ""

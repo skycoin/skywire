@@ -2437,11 +2437,6 @@ func (rc *rpcClient) ARSelfInfo() (*ARSelfRegistration, error) {
 	return &resp, nil
 }
 
-// SetHypervisorLegacyUIPersist serves the legacy dashboard (true) or the desk (false) at the web UI root.
-func (rc *rpcClient) SetHypervisorLegacyUIPersist(legacy, persist bool) error {
-	return rc.Call("SetHypervisorLegacyUI", &SetHypervisorLegacyUIIn{Legacy: legacy, Persist: persist}, &struct{}{})
-}
-
 // AppDirectStreams calls AppDirectStreams.
 func (rc *rpcClient) AppDirectStreams(appName string) ([]transport.VStreamInfo, error) {
 	var infos []transport.VStreamInfo

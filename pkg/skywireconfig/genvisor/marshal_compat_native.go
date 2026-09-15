@@ -1250,6 +1250,8 @@ func marshalHypervisorNative(w *strings.Builder, h *visorconfig.HypervisorConfig
 	}
 	o.field("http_addr")
 	writeQuotedNative(w, h.HTTPAddr)
+	o.field("desk_addr")
+	writeQuotedNative(w, h.DeskAddr)
 	o.field("enable_tls")
 	writeBoolNative(w, h.EnableTLS)
 	o.field("tls_cert_file")

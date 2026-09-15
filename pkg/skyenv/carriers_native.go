@@ -12,3 +12,8 @@ var DefaultDmsgCarriers []string
 // DefaultHypervisorHTTPAddr is the platform default bind address for
 // the hypervisor web UI.
 const DefaultHypervisorHTTPAddr = ":8000"
+
+// DefaultHypervisorDeskAddr is the platform default bind address for the
+// desk — the wasm-visor hypervisor UI — served as its own listener beside
+// the dashboard's, with the same API behind it.
+const DefaultHypervisorDeskAddr = ":8002"

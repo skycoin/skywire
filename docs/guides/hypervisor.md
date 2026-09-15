@@ -16,7 +16,9 @@ In order to expose the hypervisor UI, generate a config file with the `-i` / `--
 skywire cli config gen -i
 ```
 
-After starting up the visor, the UI will be exposed by default on `localhost:8000`.
+After starting up the visor, the dashboard is on `localhost:8000` and the
+desk — the wasm-visor hypervisor UI, with the dashboard as a tab inside it —
+on `localhost:8002`. See [the two ports](#the-two-ports) below.
 
 From another device on the same LAN, use the machine's mDNS name:
 `http://<hostname>.local:8000/`. That name comes from the OS (Avahi on
@@ -91,11 +93,17 @@ whether or not there was anything to delete, so confirm by the key changing
 rather than by the result: `skywire cli visor pk` in the tab's terminal
 before and after.
 
-The desk is the default hypervisor UI. To serve the legacy Angular dashboard
-at the root instead, with no desk and no wasm visor in the page, set
-`LEGACYHVUI=true` in `/etc/skywire.conf` (or `config gen --legacy-hv-ui`),
-or switch a running hypervisor with `skywire cli visor hv enable --legacy -w`
-(`--legacy=false` switches back). The change applies on the next page load.
+### The two ports
+
+The desk — the wasm-visor hypervisor UI — and the Angular dashboard are both
+served, on two ports of the same hypervisor: the dashboard at the root of
+`hypervisor.addr` (`:8000`) and the desk at the root of
+`hypervisor.desk_addr` (`:8002`). Everything behind them is the same — one
+API, one login, every page on both — and the desk's browser opens the
+dashboard as its first tab. Set the desk address with `HVDESKADDR` in
+`/etc/skywire.conf` or `config gen --hvdeskaddr`. A build with no skywire
+command module has nothing to host a desk out of and serves only the
+dashboard.
 
 ## Hypervisor terminal UI
 

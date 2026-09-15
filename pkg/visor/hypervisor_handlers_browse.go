@@ -7,6 +7,7 @@ package visor
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -135,22 +136,23 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 				hv.serveInjectedIndex(w, r, fileServer)
 				return
 			}
-			// The DESK is the hypervisor UI (operator decision 2026-09-04): the
-			// shell greets at the root with the Angular dashboard as a tab
-			// inside it, matching the wasm visor's desk surface.
+			// Two roots, one handler. The DESK — the wasm-visor hypervisor UI,
+			// with the dashboard as a tab inside it — is the root of the desk
+			// listener (hypervisor.desk_addr, :8002). Every other root — the
+			// dashboard's own listener (hypervisor.addr, :8000), the dmsg UI
+			// port — is the Angular dashboard. The two used to share :8000 with
+			// a legacy_ui switch choosing between them; both are served now,
+			// each on its own port, the same API and login behind each.
 			//
-			// Two things put the dashboard at the root instead: the opt-in
-			// legacy mode (hypervisor.legacy_ui / LEGACYHVUI), and a build
-			// with no skywire command module to host the desk out of — a
-			// plain source build without `make build-embedded` and nothing
-			// on disk. The desk is `skywire desk-host` out of that module;
-			// there is no other host for it, and the dashboard is what the
-			// operator can still use. Logged once at startup (logUIRoot).
-			if _, haveExec := hv.execModule(); hv.LegacyUI() || !haveExec {
-				hv.serveInjectedIndex(w, r, fileServer)
+			// The desk is `skywire desk-host` out of the command module. A
+			// build without one (a plain source build without `make
+			// build-embedded` and nothing on disk) starts no desk listener,
+			// and its dashboard is the whole web UI (logUIRoot says so once).
+			if _, haveExec := hv.execModule(); haveExec && isDeskRoot(r) {
+				hv.serveNativeDesk(w)
 				return
 			}
-			hv.serveNativeDesk(w)
+			hv.serveInjectedIndex(w, r, fileServer)
 			return
 		case "/desk":
 			// The old separate desk path — gone; the desk IS the root now.
@@ -241,8 +243,8 @@ func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request,
 	_, _ = w.Write(out) //nolint:errcheck
 }
 
-// serveNativeDesk serves THE desk at the root of the native hypervisor UI
-// port — the same page skeleton and the same desk module `skywire cli hv
+// serveNativeDesk serves THE desk at the root of the desk listener
+// (hypervisor.desk_addr) — the same page skeleton and the same desk module `skywire cli hv
 // serve` renders (deskShellTemplate in wasmserve.go). There is one desk; what
 // differs here is what it is a shell over. desk-boot probes this origin's /ws,
 // finds the hypervisor, and bridges the desk's virtual-loopback ports to the
@@ -321,15 +323,15 @@ func nativeDeskBootOpts(localPK string) string {
 	return opts + "}"
 }
 
-// logUIRoot says, once at mount, why the web UI root is the dashboard rather
-// than the desk when that is not the operator's own choice: the build has no
-// skywire command module to host the desk out of. Nothing is logged for the
-// desk (the default) or for legacy_ui (the operator asked for it).
+// logUIRoot says, once at mount, why there is no desk: the build has no
+// skywire command module to host one out of, so no desk listener starts and
+// the dashboard on HTTPAddr is the whole web UI. Nothing is logged when the
+// desk is served.
 func (hv *Hypervisor) logUIRoot() {
-	// Called from makeMux, which Enable/EnableUI run under enableMu: read the
-	// flag directly — LegacyUI() would take the same mutex and deadlock (the
-	// native e2e caught exactly that: /api/ping never answered).
-	if hv.logger == nil || hv.c.LegacyUI {
+	// Called from makeMux, which Enable/EnableUI run under enableMu: nothing
+	// here may take that mutex again (the native e2e caught a deadlock that
+	// way once: /api/ping never answered).
+	if hv.logger == nil {
 		return
 	}
 	if _, ok := hv.execModule(); ok {
@@ -337,7 +339,7 @@ func (hv *Hypervisor) logUIRoot() {
 	}
 	hv.logger.Info("no skywire command module in this build (make build-embedded, or " +
 		"hypervisor.wasm_serve.exec_wasm for a developer override): " +
-		"the web UI root serves the dashboard, not the desk")
+		"no desk is served; the web UI is the dashboard on " + hv.c.HTTPAddr)
 }
 
 // uiVersionHash fingerprints the served UI bundle (short sha256 of index.html,
@@ -403,4 +405,24 @@ func (hv *Hypervisor) execModule() (path string, ok bool) {
 		explicit = hv.c.WasmServe.ExecWasm
 	}
 	return execModuleSource(explicit)
+}
+
+// deskRootKey marks a request that arrived on the desk listener.
+type deskRootKey struct{}
+
+// deskRootHandler is the desk listener's handler: the ONE mux, each request
+// marked so the root knows to serve the desk. Everything else on the two
+// listeners is identical by construction — same routes, same auth, same
+// pages — which is what lets the desk's browser open the dashboard by a
+// relative URL and land on its own origin.
+func deskRootHandler(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), deskRootKey{}, true)))
+	})
+}
+
+// isDeskRoot reports whether r arrived on the desk listener.
+func isDeskRoot(r *http.Request) bool {
+	v, _ := r.Context().Value(deskRootKey{}).(bool)
+	return v
 }

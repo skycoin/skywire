@@ -35,15 +35,15 @@ func deskTestHypervisor(t *testing.T) (*Hypervisor, cipher.PubKey) {
 	return hv, pk
 }
 
-// TestNativeDeskServing pins the root serving contract on the NATIVE
-// hypervisor UI port in BOTH build states. With a skywire command module
-// (the two-stage build embeds one; a source build has none unless one is on
-// disk) the root is the converged desk, hosted out of that ONE module. Without
-// one there is no desk host, so the root is the dashboard exactly as the
-// legacy_ui option serves it. Either way the Angular dashboard stays at its
-// framed root, the retired paths stay gone, and the legacy wasm-visor blob
-// is not served: netscrape, the desk host and the tab's visor all live in
-// the command module now.
+// TestNativeDeskServing pins the root serving contract of the native
+// hypervisor in BOTH build states. The dashboard listener's root is the
+// Angular dashboard, always. The desk listener's root is the converged desk,
+// hosted out of the ONE skywire command module (the two-stage build embeds
+// one; a source build has none unless one is on disk) — and without a module
+// there is no desk host, so even that root is the dashboard. Either way the
+// Angular dashboard stays at its framed root, the retired paths stay gone,
+// and the legacy wasm-visor blob is not served: netscrape, the desk host and
+// the tab's visor all live in the command module now.
 func TestNativeDeskServing(t *testing.T) {
 	_, haveModule := execModuleSource("")
 	t.Logf("command module available in this build: %v", haveModule)
@@ -54,9 +54,19 @@ func TestNativeDeskServing(t *testing.T) {
 		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
 		return w
 	}
+	// The same handler as the desk listener carries it: the root is marked.
+	hd := deskRootHandler(h)
+	getDesk := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		hd.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		return w
+	}
 
-	t.Run("GET / serves the desk with a command module, the dashboard without", func(t *testing.T) {
-		w := get("/")
+	t.Run("the dashboard listener's root is the dashboard; the desk listener's is the desk with a command module, the dashboard without", func(t *testing.T) {
+		if w := get("/"); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "ANGULAR") || strings.Contains(w.Body.String(), "skywireDeskBoot(") {
+			t.Errorf("the dashboard listener's root must serve the injected dashboard and never the desk (status=%d)", w.Code)
+		}
+		w := getDesk("/")
 		if w.Code != http.StatusOK {
 			t.Fatalf("status=%d, want 200", w.Code)
 		}
@@ -334,7 +344,8 @@ func TestNativeDeskAttachedVisor(t *testing.T) {
 		t.Fatal(err)
 	}
 	hv.c.WasmServe = &visorconfig.WasmServeConf{ExecWasm: exec}
-	h := hv.uiHandler()
+	// Through the desk listener's wrapper: the desk page is that root's.
+	h := deskRootHandler(hv.uiHandler())
 	get := func(path string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))

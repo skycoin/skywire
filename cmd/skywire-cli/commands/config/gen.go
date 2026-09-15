@@ -250,8 +250,8 @@ func init() {
 
 	// Hypervisor and security flags
 	genConfigCmd.Flags().BoolVarP(&isHypervisor, "ishv", "i", scriptExecBool("${ISHYPERVISOR:-false}"), "local hypervisor configuration")
-	genConfigCmd.Flags().BoolVar(&isLegacyHVUI, "legacy-hv-ui", scriptExecBool("${LEGACYHVUI:-false}"), "serve the legacy Angular dashboard at the hypervisor web UI root instead of the desk")
-	gHiddenFlags = append(gHiddenFlags, "legacy-hv-ui")
+	genConfigCmd.Flags().StringVar(&hvDeskAddr, "hvdeskaddr", scriptExecString("${HVDESKADDR}"), "hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default :8002)")
+	gHiddenFlags = append(gHiddenFlags, "hvdeskaddr")
 	msg = "list of public keys to add as hypervisor"
 	if scriptExecArray("${HYPERVISORPKS[@]}") != "" {
 		msg += "\n\r"
@@ -1670,7 +1670,11 @@ func configureHypervisor(log *logging.Logger) {
 	{
 		config := visorconfig.GenerateWorkDirConfig(isTestEnv)
 		config.Enable = isHypervisor
-		config.LegacyUI = isLegacyHVUI
+		if hvDeskAddr != "" {
+			config.DeskAddr = hvDeskAddr
+		} else {
+			config.DeskAddr = offsetAddr(config.DeskAddr)
+		}
 		config.EnablePKEndpoint = isEnablePKEndpoint
 		if hvHTTPAddr != "" {
 			config.HTTPAddr = hvHTTPAddr

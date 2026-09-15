@@ -1819,6 +1819,3 @@ func (mc *mockRPCClient) ARSelfInfo() (*ARSelfRegistration, error) {
 func (mc *mockRPCClient) Close() error {
 	return nil
 }
-
-// SetHypervisorLegacyUIPersist implements API
-func (mc *mockRPCClient) SetHypervisorLegacyUIPersist(_, _ bool) error { return nil }
