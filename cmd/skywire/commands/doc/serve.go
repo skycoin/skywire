@@ -31,6 +31,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -161,13 +162,25 @@ func proseTitle(fsys fs.FS, p string) string {
 	return path.Base(p)
 }
 
+// Section labels for the prose that sits at the top of docs/ with no directory
+// of its own. They are labels, not paths: each link still points at the file
+// where it actually lives, so nothing moves and no existing link breaks.
+const (
+	secReference = "reference"
+	secRFC       = "rfcs and proposals"
+)
+
+// rfcName matches prose whose file name says it is a proposal rather than a
+// description of what the code does. Both spellings are in use.
+var rfcName = regexp.MustCompile("[-_]rfc[.]md$")
+
 // proseIndex lists the embedded prose, grouped by the directory it lives in
 // and titled by its first heading.
 //
 // It was a flat alphabetical list of file names, on the reasoning that the
 // whole set fits on one page and a reader knows the name of the file they
 // want. That holds for someone who already knows; for everyone else a
-// hundred entries reading DHT_ARCHITECTURE.md through vpn-server.md is a
+// hundred entries reading apps-overview.md through vpn-server.md is a
 // directory listing, not documentation — and this is the page the desk shows
 // in its browser, where it stands in for a full docs site.
 func proseIndex() []byte {
@@ -180,7 +193,22 @@ func proseIndex() []byte {
 		}
 		sec := path.Dir(p)
 		if sec == "." {
-			sec = "" // top level, rendered first and unlabelled
+			// The top level holds a third of the prose — 33 files against
+			// ~68 in sections — so leaving it as one unlabeled run put all
+			// of them in a single wall above everything else. That is the
+			// shape that still read as a directory listing even after the
+			// per-directory grouping.
+			//
+			// A proposal and a description of what the code does are
+			// different things to a reader looking for one of them, and the
+			// file names already say which is which. Splitting on that beats
+			// a curated list, which would go stale the first time someone
+			// adds a file.
+			if rfcName.MatchString(path.Base(p)) {
+				sec = secRFC
+			} else {
+				sec = secReference
+			}
 		}
 		if _, seen := bySection[sec]; !seen {
 			sections = append(sections, sec)
@@ -188,7 +216,10 @@ func proseIndex() []byte {
 		bySection[sec] = append(bySection[sec], p)
 		return nil
 	})
-	sort.Strings(sections) // "" sorts first, so the top level leads
+	// Alphabetical, which puts "reference" before "rfcs and proposals" and both
+	// among the directory sections. No bucket is privileged: the top level is
+	// now two labeled sections like any other rather than an unlabeled run.
+	sort.Strings(sections)
 	var b strings.Builder
 	b.WriteString("<h1>prose</h1>")
 	for _, sec := range sections {

@@ -26,9 +26,9 @@ This means services are reachable at `dmsg://{service-pk}:80` by any DMSG client
 
 ### Source
 
-- Implementation: `vendor/github.com/skycoin/dmsg/pkg/direct/client.go`
-- Entry helpers: `vendor/github.com/skycoin/dmsg/pkg/direct/entries.go`
-- Startup: `vendor/github.com/skycoin/dmsg/pkg/direct/direct.go` (`StartDmsg()`)
+- Implementation: `pkg/dmsg/direct/client.go`
+- Entry helpers: `pkg/dmsg/direct/entries.go`
+- Startup: `pkg/dmsg/direct/direct.go` (`StartDmsg()`)
 
 ## Regular DMSG Client (`dmsgc.New` via `disc.NewHTTP`)
 
@@ -51,7 +51,7 @@ Key characteristics:
 ### Source
 
 - Implementation: `pkg/dmsg/dmsgc/dmsgc.go`
-- Discovery client: `vendor/github.com/skycoin/dmsg/pkg/disc/client.go` (`NewHTTP()`)
+- Discovery client: `pkg/dmsg/disc/client.go` (`NewHTTP()`)
 
 ## DMSG HTTP Client (Visor subsystem)
 
@@ -72,7 +72,7 @@ This gives the visor an `http.Client` that routes requests through DMSG, used to
 ### Source
 
 - Initialization: `pkg/visor/init_dmsg.go` (`initDmsgHTTP()`)
-- HTTP transport: `vendor/github.com/skycoin/dmsg/pkg/dmsghttp/http_transport.go`
+- HTTP transport: `pkg/dmsg/dmsghttp/http_transport.go`
 
 ## Summary
 
