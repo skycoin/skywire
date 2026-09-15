@@ -47,6 +47,34 @@ The only proof that aggregation is possible at all is a static hand-set mux
 of six homogeneous 175–312 ms legs that did about 2× a single leg, then was
 not touched. Everything dynamic loses to that.
 
+## 0b. The intended default, in the operator's words
+
+Stated 2026-09-15, and it is the specification the rest of this document serves:
+
+- Forward traffic goes over a direct route when one exists and is allowed;
+  otherwise over the lowest-latency route available. Reverse traffic fans out
+  over multiplexed multihop routes. Unidirectional whenever that is available.
+- The direction switches on demand when upload bandwidth exceeds download
+  bandwidth.
+- It always decays to a working connection, even if that ends up
+  bidirectional over a single transport or a single multihop route.
+- Establish as many routes to the exit as can exist and hold them in standby,
+  so they can switch in at a moment's notice. That may be a lot of routes in
+  standby, and that is fine.
+- The proxy already converts a GET into range requests when the server
+  supports it, so the reverse path carries many streams in parallel.
+
+Two consequences for the work below. First, the standby pool is large by
+design; the campaign tunes how standby legs are chosen, ordered and promoted,
+not how few there are. Second, the range-request case makes the reverse path
+a set of independent streams, and independent streams do not need to share
+one reorder frontier: pinning each stream to one leg (stream-to-leg affinity,
+ordered per leg, no cross-leg reassembly) aggregates across streams with no
+frontier at all, and is a smaller change than per-leg sequencing. A single
+large stream (a non-range download, a VPN flow) still needs the frontier work
+in §3.3, so both remain, with affinity first because it serves the case the
+proxy already produces.
+
 ## 1. Exit criteria, measured live
 
 The campaign is done when all of the following hold on the rig in §2, for
