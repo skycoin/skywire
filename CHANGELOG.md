@@ -15,8 +15,11 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 -   **Routing policy owns the route count (#4300s–#4400s).** `mux_routes` is gone as a visor-global setting: how many routes a stream uses is an output of the active policy, per dial, not a number configured once per visor. A visor can also refuse to be an intermediate hop.
 -   **Observability (#4840s–#4860s).** `visor state` reports the dmsg server, relay and transit roles, the clients attached to an in-process dmsg server, the embedded wasm module's provenance, and — new here — whether that module is older than the binary serving it. `status.skysocks` renders the full route including a direct leg's transport type, id and RTT.
 -   **Two ports for the hypervisor UI (#4904–#4907).** The Angular dashboard is at the root of `hypervisor.addr` (:8000) and the desk — the wasm-visor hypervisor UI — at `hypervisor.desk_addr` (:8010): one handler on two listeners, the same API and login on each. `legacy_ui`, `LEGACYHVUI` and `hv enable --legacy` are gone; `HVDESKADDR` / `config gen --hvdeskaddr` set the desk address, and `hv status` prints both. A desk tab pairs without a dashboard login, and its browser opens on a start page of the desk's own pages.
+-   **History rewritten on 2026-09-15, again.** The six superseded copies of the embedded command module (`pkg/wasmhv/execwasm/blob/skywire.wasm.gz`, 232 MB) were stripped from the commits after `v1.3.94-alpha1`; every commit after that tag has a new SHA, no tag moved, and the tree at the tip is unchanged. A clone that predates it must be reset onto `develop`, not merged.
 
 
+-   chore: re-embed the command module at 4c82aa80c  [#4909](https://github.com/skycoin/skywire/pull/4909)
+-   chore(release): changelog through #4907, and hv status says where the UI is  [#4908](https://github.com/skycoin/skywire/pull/4908)
 -   fix(desk): a tab could not be paired until the operator logged into the dashboard  [#4907](https://github.com/skycoin/skywire/pull/4907)
 -   fix(hypervisor): the desk's default port is :8010, not :8002  [#4906](https://github.com/skycoin/skywire/pull/4906)
 -   chore: re-embed the command module at bba82df2d  [#4905](https://github.com/skycoin/skywire/pull/4905)
