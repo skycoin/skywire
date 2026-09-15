@@ -63,15 +63,14 @@ skywire cli vpn start --pk <server-pk> [flags]
 
 `vpn-client` ships in a generated config (visor routing `port: 43`,
 `auto_start: false`). To connect automatically to a fixed server, set the server
-key (and a passcode if the server requires one) and flip `auto_start` — note the
-**app args use `-srv` / `-passcode`**, while the CLI flag is `--pk`:
+key and flip `auto_start` — note the **app arg is `--srv`**, while the CLI flag
+is `--pk`:
 
 ```json5
 {
   "name": "vpn-client",
   "args": [
-    "-srv", "<server-public-key>",
-    "-passcode", "1234"          // omit if the server has no passcode
+    "--srv", "<server-public-key>"
   ],
   "auto_start": true,
   "port": 43

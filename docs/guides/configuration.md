@@ -45,7 +45,7 @@ To generate a config in a checkout:
 ```
 skywire cli config gen -irx
 ```
-* **service protocol** — the config uses **dmsg only** by default (`-d --dmsghttp`); pass `--http` for HTTP-only, or `--dual` for HTTP with dmsg fallback
+* **service protocol** — deployment services are reached over **dmsg only**. `-d --dmsghttp` is the default and a no-op kept for back-compat; the former `--http` and `--dual` modes are gone.
 * `-i --ishv` create a local hypervisor configuration (optional)
 * `-r --regen` regenerate a config which may already exist, retaining the keys
 * `-x --retainhv` retain any remote hypervisors set in the config (optional)
@@ -77,27 +77,24 @@ fixed in the hypervisor, not a choice, and any other name is refused with
 `name not allowed` without saying what would be accepted. The password needs
 6–64 characters with at least one upper, one lower, one digit and one special.
 
-To change a password you know, use `skywire cli visor hv passwd --force` on
-the machine itself.
+To change a password you know, use `skywire cli visor hv passwd --old <old>
+--new <new>` on the machine itself.
 
-**If you have forgotten it**, that command cannot help — it authenticates
-first. The account lives in the file named by `hypervisor.db_path` in the
-visor config, the running visor holds it open, and there is no reset flag.
-Stop the visor, remove the file, start again:
+**If you have forgotten it**, the same command resets it — that is what
+`--force` is for: it sets `--new` without asking for the old one (it is also
+how you set the first password non-interactively).
 
 ```
-systemctl stop skywire                             # or: skywire cli visor halt
-rm /opt/skywire/local/hypervisor/users.db          # a package install
-systemctl start skywire
+skywire cli visor hv passwd --force --new <new-password>
 ```
 
-Check `hypervisor.db_path` if that path does not exist: macOS and Windows put
-it at `~/.skywire/users.db`, and a config generated with a custom output path
-puts it wherever that config says.
-
-The next visit is a first visit again: it creates the account, and every
-paired tab and every managed visor is untouched — `users.db` holds the web
-login and nothing else.
+It changes the web login and nothing else: every paired tab and every managed
+visor is untouched. The account lives in the file named by `hypervisor.db_path`
+in the visor config — `/opt/skywire/users.db` on a Linux package install,
+`/Library/Application Support/Skywire/users.db` on macOS,
+`C:/Program Files/Skywire/users.db` on Windows, and `~/.skywire/users.db` for a
+userspace install. You should not need to touch it; deleting it also works, and
+is the bigger hammer.
 
 ### Pairing a desk tab
 

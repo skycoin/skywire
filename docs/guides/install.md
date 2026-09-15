@@ -40,7 +40,7 @@ Flags:
 The skywire visor can now (as of v1.3.32) run directly with `go run` when using the default in-process visor native applications configuration
 
 ```
-go run github.com/skycoin/skywire@develop cli config gen -br #print the config & output to skywire-config.json
+go run github.com/skycoin/skywire@develop cli config gen -r #generate skywire-config.json, retaining any existing keys
 go run github.com/skycoin/skywire@develop visor #uses skywire-config.json by default
 ```
 

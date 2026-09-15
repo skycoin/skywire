@@ -213,11 +213,61 @@ func proseTitle(fsys fs.FS, p string) string {
 const (
 	secReference = "reference"
 	secRFC       = "rfcs and proposals"
+	secHistory   = "history"
 )
+
+// statusLine matches the standing-status marker these docs open with, in the
+// spellings actually in use: "Status: draft", "**Status:** Draft", the same
+// inside a blockquote, and the bare "**Retired (stage 4 of #4484).**".
+var statusLine = regexp.MustCompile(`(?i)^>?\s*\*{0,2}(status|retired)\b`)
 
 // rfcName matches prose whose file name says it is a proposal rather than a
 // description of what the code does. Both spellings are in use.
 var rfcName = regexp.MustCompile("[-_]rfc[.]md$")
+
+// proseSection decides which bucket a top-level doc belongs in.
+//
+// It asks the DOCUMENT, not the file name. The file name was the whole of the
+// rule, and it was wrong for a quarter of these: a proposal that never got an
+// -rfc suffix read as reference, and three proposals that shipped kept
+// announcing themselves as proposals long after the code landed — one of them
+// (warm_standby_legs_rfc.md) while ten files in pkg/router cite it as their
+// design reference. A doc that has been retired is worse than either, because
+// "reference" is exactly where a reader looking for current behavior goes.
+//
+// Twelve of these docs already declare a status in their opening lines, which
+// is both more accurate and maintained by whoever changes the status. The file
+// name stays the fallback for the ones that do not.
+func proseSection(fsys fs.FS, p string) string {
+	f, err := fsys.Open(p)
+	if err == nil {
+		defer f.Close() //nolint:errcheck
+		sc := bufio.NewScanner(io.LimitReader(f, 8<<10))
+		for n := 0; sc.Scan() && n < 40; n++ {
+			line := strings.TrimSpace(sc.Text())
+			if !statusLine.MatchString(line) {
+				continue
+			}
+			l := strings.ToLower(line)
+			switch {
+			case strings.Contains(l, "retired"), strings.Contains(l, "history"),
+				strings.Contains(l, "superseded"):
+				return secHistory
+			case strings.Contains(l, "proposal"), strings.Contains(l, "proposed"),
+				strings.Contains(l, "draft"), strings.Contains(l, "discussion"),
+				strings.Contains(l, "design"):
+				return secRFC
+			case strings.Contains(l, "active"), strings.Contains(l, "landed"),
+				strings.Contains(l, "shipped"), strings.Contains(l, "implemented"):
+				return secReference
+			}
+		}
+	}
+	if rfcName.MatchString(path.Base(p)) {
+		return secRFC
+	}
+	return secReference
+}
 
 // proseIndex lists the embedded prose, grouped by the directory it lives in
 // and titled by its first heading.
@@ -244,16 +294,12 @@ func proseIndex() []byte {
 			// shape that still read as a directory listing even after the
 			// per-directory grouping.
 			//
-			// A proposal and a description of what the code does are
-			// different things to a reader looking for one of them, and the
-			// file names already say which is which. Splitting on that beats
-			// a curated list, which would go stale the first time someone
-			// adds a file.
-			if rfcName.MatchString(path.Base(p)) {
-				sec = secRFC
-			} else {
-				sec = secReference
-			}
+			// A proposal, a description of what the code does, and a record
+			// of something that was removed are three different things to a
+			// reader looking for one of them. proseSection asks the document
+			// which it is; that beats a curated list, which would go stale
+			// the first time someone adds a file.
+			sec = proseSection(fsys, p)
 		}
 		if _, seen := bySection[sec]; !seen {
 			sections = append(sections, sec)
@@ -261,9 +307,9 @@ func proseIndex() []byte {
 		bySection[sec] = append(bySection[sec], p)
 		return nil
 	})
-	// Alphabetical, which puts "reference" before "rfcs and proposals" and both
-	// among the directory sections. No bucket is privileged: the top level is
-	// now two labeled sections like any other rather than an unlabeled run.
+	// Alphabetical, which files the three status buckets among the directory
+	// sections. No bucket is privileged: the top level is labeled sections like
+	// any other rather than an unlabeled run.
 	sort.Strings(sections)
 	var b strings.Builder
 	b.WriteString("<h1>prose</h1>")

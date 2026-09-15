@@ -1,6 +1,9 @@
 # RFC: Single-stream mux aggregation via per-frame noise (inverse-multiplexing)
 
-Status: draft. Companion to `mux_aggregation_rfc.md` (#4212), which took the
+Status: **shipped** — per-frame noise is on by default
+(`perFrameNoiseEnabled = true`, `pkg/router/router_serve.go`), advertised as
+`CapPerFrameNoise`. This describes the mux data plane as it runs. Companion to
+`mux_aggregation_rfc.md` (#4212), which took the
 *connection*-striped path (many independent flows). This RFC covers the piece
 that one deliberately skipped: making a **single** stream (one `curl`) saturate
 by striping its bytes across legs and summing them — true inverse-multiplexing —

@@ -43,10 +43,11 @@ Two consequences worth knowing before you troubleshoot:
   visor hv add <pk>` connects out to the new hypervisor immediately
   and writes the PK to the json, but *inbound* access for that PK (the
   `--via` path below) starts on the target's next restart.
-- **A runtime-added PK does not survive a package update.** The json
-  is regenerated from `/etc/skywire.conf` by `skywire autoconfig`, so
-  a PK added only with `hv add` is dropped. Put it in `HYPERVISORPKS`
-  to make the grant durable.
+- **A runtime-added PK does survive a package update.** The json is
+  regenerated from `/etc/skywire.conf` by `skywire autoconfig`, and on a
+  package install `hv add` mirrors the PK into `HYPERVISORPKS` there for
+  exactly that reason. Setting it in the .conf by hand is equivalent, not
+  required.
 
 Trust is transitive upward: when a visor connects to its hypervisor,
 the hypervisor pushes its *own* hypervisors into the visor's live

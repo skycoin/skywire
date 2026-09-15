@@ -2,7 +2,7 @@
 
 ## Summary
 
-An **OPTIONAL, opt-in** route-calculation path for **single-intermediate
+A route-calculation path, **on by default** in a generated config, for **single-intermediate
 (2-hop) multiplexed routes** `S → I → D` that gets the destination's transports
 **directly from the destination**, authorized by the transport/route setup-node
 (RSN) acting as a **signing oracle**, instead of relying on the
@@ -102,7 +102,7 @@ verbatim (`TransportQuery.Sign/Verify` mirror `CascadeSetup.Sign/Verify`).
 | S-side fetch-D's-transports-via-oracle | `pkg/router/rsn_oracle_routes.go` (`fetchDstTransportsViaOracle`) |
 | **Local 2-hop disjoint route computation (tested crux)** | `pkg/router/rsn_oracle_routes.go` (`computeDisjoint2HopRoutes`) |
 | Router-facing oracle seam | `pkg/router/router.go` (`DstTransportOracle`, `Router.SetDstTransportOracle`), `pkg/router/rsn_oracle_routes.go` (`router.oracle2HopRoutes`) |
-| Dial-path plug-in (gated, default OFF) | `pkg/router/router_dial.go` — top of `fetchBestRoutes` |
+| Dial-path plug-in (gated, on by default) | `pkg/router/router_dial.go` — top of `fetchBestRoutes` |
 | Config flag (`RouteOption`) | `pkg/router/router.go` (`Config.EnableRSNOracleRoutes`, `DialOptions.UseRSNOracle2Hop`) |
 | Config surface + plumbing | `pkg/visor/visorconfig/v1.go` (`Routing.EnableRSNOracleRoutes`), `pkg/visor/visorcore/router.go`, `pkg/visor/init_router.go` (oracle + listener wiring) |
 | Unit tests | `pkg/router/transport_query_test.go`, `pkg/router/rsn_oracle_routes_test.go`, `pkg/router/transport_query_dmsg_test.go` |
@@ -185,8 +185,8 @@ plug-in are all implemented, wired, and tested. Remaining items are optional:
 
 ## Safety / invariants
 
-- **Default OFF**, and inert even when on until an oracle is explicitly wired —
-  no existing dial path changes.
+- **On by default** in a generated config (`EnableRSNOracleRoutes`), and inert
+  until an oracle is explicitly wired — no existing dial path changes.
 - Reuses the cascade trust model verbatim: **RSN signs, D checks its trusted-RSN
   allow-list** — no new trust surface.
 - Never uses DMSG or `LabelSetup` transports as data hops.
