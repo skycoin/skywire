@@ -257,7 +257,7 @@
 				// opened before it listens is a dead tab nobody reloads.
 				(function waitDocs(n) {
 					if (globalThis.vnet && globalThis.vnet.listening(docsPort)) {
-						try { win.openTab('vnet:' + docsPort, '/prose/guides/configuration.md#pairing-a-desk-tab', 'http', true); } catch (e) {}
+						try { win.openTab('vnet:' + docsPort, '/prose/guides/hypervisor.md#pairing-a-desk-tab', 'http', true); } catch (e) {}
 						return;
 					}
 					if (n > 0) { setTimeout(function () { waitDocs(n - 1); }, 500); }

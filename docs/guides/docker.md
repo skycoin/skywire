@@ -28,7 +28,7 @@ docker run --rm -p 8000:8000 -v <YOUR_CONFIG_DIR>:/opt/skywire --name=skywire \
 
 `-p 8000:8000` publishes the hypervisor web UI. It is only served if the
 config was generated with `-i` / `--ishv`; see
-[configuration](configuration.md).
+[hypervisor.md](hypervisor.md).
 
 ## Generate or change a config
 

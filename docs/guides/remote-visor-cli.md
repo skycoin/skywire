@@ -201,7 +201,7 @@ deep Doze, which shows up as dmsg session drops, not as auth errors.
   the controller's PK was in its `hypervisors` at boot; `hv add` on
   the target (or a restart after a config edit) fixes it.
 
-Related: [configuration.md](configuration.md) (hypervisor setup,
+Related: [hypervisor.md](hypervisor.md) (hypervisor setup,
 `hv tui`), [config-runtime.md](config-runtime.md)
 (runtime vs config-file changes),
 [manual-routing.md](manual-routing.md) (what to do with the routes

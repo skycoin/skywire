@@ -94,6 +94,21 @@ skywire cli dmsg probe <pk> --ports 22,80,136    # listener reachability sweep
 `--standalone`/`--sk` run without a local visor. Useful dmsg ports:
 **80** dmsg-HTTP, **22** pty, **23** scp, **136** route setup.
 
+## Run a dmsg server inside the visor
+
+A host that runs a public dmsg server as a separate unit
+(`skywire dmsg server start /etc/skywire-dmsg.json`) can fold it into the
+visor process and save the second Go runtime. Stop and disable that unit,
+drop it from `RESTART_SERVICES`, then set in `/etc/skywire.conf`:
+
+```
+DMSGSERVERCONF='/etc/skywire-dmsg.json'
+```
+
+and run `skywire autoconfig`. The server keeps its own key, ports, wss domain
+and health endpoint from that file; it appears in `skywire cli mdisc servers`
+as before. In the visor config this is `dmsg.server.config_path`.
+
 ## Keeping the embedded server list fresh (maintainers)
 
 The binary embeds a snapshot of the deployment's dmsg servers

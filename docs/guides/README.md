@@ -14,10 +14,12 @@ cobra subcommand tree.
 - [install.md](install.md) — install via `go install` / `go run`, Linux packages, Docker, NixOS, release binaries
 - [install-generator.md](install-generator.md) — compose a copy-paste install command (platform, mirror, auto-update, config flags, optional in-browser keygen)
 - [permissions.md](permissions.md) — VPN client CAP_NET_ADMIN, VPN server iptables/sysctl, file system + survey
-- [configuration.md](configuration.md) — which of `autoconfig` / `config gen` to use, hypervisor web UI, desk-tab pairing, hypervisor TUI, remote hypervisors, network visualization UI
+- [configuration.md](configuration.md) — which of `autoconfig` / `config gen` to use
 - [config-gen.md](config-gen.md) — how the JSON config is produced, and every SKYENV variable with its default
 - [config-runtime.md](config-runtime.md) — changing a running visor without editing the config, and what persists across a restart
 - [docker.md](docker.md) — running a visor in a container: build, run, generate or change its config
+- [hypervisor.md](hypervisor.md) — the hypervisor web UI and its password, pairing a desk tab, the terminal UI, adding a remote hypervisor
+- [network-visualizer.md](network-visualizer.md) — the transport-graph UI (`cli tp viz`), which is not the hypervisor interface
 - [visor.md](visor.md) — running `skywire visor`, process control / while-loop pattern, transport setup, runtime files
 - [public-visor.md](public-visor.md) — make a visor reachable from the internet: `is_public`, a stable `transport_port`, router port-forwarding and host firewall (TCP **and** UDP), transport-type → protocol map, and reachability troubleshooting
 
