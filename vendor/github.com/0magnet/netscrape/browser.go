@@ -83,6 +83,13 @@ type tab struct {
 	pos                  int
 	title                string // the page's own <title>, when it has one
 	loading              bool
+	// directSrc is the frame src this browser last set for a natively
+	// rendered page. A frame that reports a DIFFERENT URL navigated itself —
+	// the reader clicked a link inside it — which is the only way to notice,
+	// since that navigation never passes through this browser. See watchDirect.
+	directSrc string
+	// directNavWired guards the one-time load listener that notices it.
+	directNavWired bool
 }
 
 func mk(tag string) js.Value { return doc.Call("createElement", tag) }
@@ -169,7 +176,9 @@ func load(t *tab, url string) {
 				t.frame.Call("removeAttribute", "srcdoc")
 				t.frame.Call("removeAttribute", "sandbox")
 				setLoading(t, true)
+				t.directSrc = src
 				t.frame.Set("src", src)
+				watchDirectNav(t)
 				// A natively rendered page is same-origin, so its title and
 				// icon can simply be read once it has loaded — no transcoding
 				// pass to pick them out of.
@@ -378,6 +387,67 @@ func setFavicon(t *tab, iconURL string) {
 		return a[0].Call("arrayBuffer")
 	})
 	fetchVia(iconURL).Call("then", onResp).Call("then", onBuf).Call("catch", onErr)
+}
+
+// watchDirectNav records navigations the FRAME makes on its own.
+//
+// A natively rendered page is loaded by setting frame.src and is then its own
+// browsing context: a link the reader clicks inside it navigates that frame
+// directly, without passing through this browser at all. So the tab's history
+// never grew, Back stayed greyed out for the whole visit, and a reader who had
+// walked several pages deep into a doc tree had no way back — the one place
+// the button is most obviously wanted.
+//
+// The frame is same-origin by construction (DirectLoader only claims URLs the
+// host serves), so its location is readable, and every navigation fires load.
+// Anything that does not match the src this browser set is the frame moving
+// itself, and gets recorded as an ordinary history entry — replaying it later
+// works because DirectLoader claims the served form too.
+//
+// Wired once per tab. Reads can throw if the host sent the frame somewhere
+// cross-origin after all; that costs a history entry, not the tab.
+func watchDirectNav(t *tab) {
+	if t == nil || t.directNavWired || !t.frame.Truthy() {
+		return
+	}
+	t.directNavWired = true
+	t.frame.Call("addEventListener", "load", js.FuncOf(func(js.Value, []js.Value) any {
+		defer func() { recover() }() //nolint:errcheck // a cross-origin read is not fatal
+		w := t.frame.Get("contentWindow")
+		if !w.Truthy() {
+			return nil
+		}
+		href := w.Get("location").Get("href")
+		if href.Type() != js.TypeString {
+			return nil
+		}
+		cur := href.String()
+		if cur == "" || cur == "about:blank" || cur == t.directSrc {
+			return nil
+		}
+		// Also not a self-navigation when it matches where history already
+		// says we are: Back and Forward re-set the src, and a DirectLoader that
+		// hands back a different spelling than it was given would otherwise
+		// push a duplicate on every press and make Back walk in place.
+		if t.pos >= 0 && t.pos < len(t.hist) && cur == t.hist[t.pos] {
+			t.directSrc = cur
+			return nil
+		}
+		// The frame moved itself. Record it WITHOUT reloading: the page the
+		// entry names is already on screen.
+		t.directSrc = cur
+		if t.pos >= 0 && t.pos < len(t.hist)-1 {
+			t.hist = t.hist[:t.pos+1]
+		}
+		t.hist = append(t.hist, cur)
+		t.pos = len(t.hist) - 1
+		t.lbl.Set("textContent", labelFor(cur))
+		if active >= 0 && tabs[active] == t {
+			addr.Set("value", cur)
+		}
+		syncNav()
+		return nil
+	}))
 }
 
 // watchDirect reads a natively rendered page's title and icon once it has

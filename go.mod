@@ -65,7 +65,7 @@ require (
 	github.com/0magnet/bitree v0.0.0-20260906144807-e66de0b4c738
 	github.com/0magnet/bottle v0.0.0-20260915003536-9cfc4e8512dd
 	github.com/0magnet/calvin v0.0.0-20260913215348-2de0c1f412b3
-	github.com/0magnet/desk v0.0.0-20260914105004-76463198b217
+	github.com/0magnet/desk v0.0.0-20260915170508-9c264b505323
 	github.com/0magnet/desk/panes v0.0.0-20260914105004-76463198b217
 	github.com/0magnet/gobrpc v0.0.0-20260906144809-5215ec59d553
 	github.com/0magnet/golang-ipc v1.2.5-0.20260905172007-25d9c1a262d0
@@ -73,7 +73,7 @@ require (
 	github.com/0magnet/gotop/v4 v4.2.1-0.20260914190639-4f45ea554d47
 	github.com/0magnet/lolcat-go v0.0.0-20260907230215-22c54b7702c7
 	github.com/0magnet/metrics v1.44.1-0.20260905010813-7e01f8bb5a1c
-	github.com/0magnet/netscrape v0.0.0-20260913215348-9ad8ff994b83
+	github.com/0magnet/netscrape v0.0.0-20260915170252-d70a7ee6fb99
 	github.com/0magnet/osnotify v0.0.0-20260906144808-7a227da43a0d
 	github.com/0magnet/plot-go v0.0.0-20260914104732-2ea1587ef4ae
 	github.com/0magnet/realorigin v0.2.1
@@ -82,7 +82,7 @@ require (
 	github.com/0magnet/sysinfo v1.1.4-0.20260905172033-914ade4a2548
 	github.com/0magnet/termanim v0.0.0-20260914104740-c2d1737f7963
 	github.com/0magnet/wfdrive v0.3.1
-	github.com/0magnet/winbox-go v0.0.0-20260915154346-4ab7a97ba459
+	github.com/0magnet/winbox-go v0.0.0-20260915170501-c7a984ac75b4
 	github.com/0magnet/yamux v0.1.3-0.20260905172050-450c4058f851
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0

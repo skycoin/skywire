@@ -393,6 +393,7 @@ func addWindowListener(w *WinBox, dir string) {
 	mouseupFn = js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		preventEvent(args[0], false)
 		removeClass(body, "wb-lock")
+		hideDragShield()
 
 		if touch {
 			removeListener(window, "touchmove", mousemoveFn, eventOptionsPassive)
@@ -436,6 +437,7 @@ func addWindowListener(w *WinBox, dir string) {
 
 		if !w.Min {
 			addClass(body, "wb-lock")
+			showDragShield()
 
 			touches := event.Get("touches")
 			if touches.Truthy() && touches.Index(0).Truthy() {
@@ -478,6 +480,45 @@ func cancelFullscreen() bool {
 		return true
 	}
 	return false
+}
+
+// dragShield is a transparent sheet laid over the whole viewport while a
+// window is being dragged or resized.
+//
+// Drag binds mousemove AND mouseup to this window. A frame is its own browsing
+// context and swallows both, so the moment the pointer crossed any window's
+// iframe mid-drag the parent stopped seeing the pointer — and because the
+// mouseup landed inside the frame too, the drag never ENDED: the window stayed
+// stuck to the cursor until the next click outside a frame. Dragging one
+// window across another is ordinary use, so this was reachable with two
+// windows open and a frame in either.
+//
+// The sheet sits above every window (z-index is assigned from indexCounter,
+// which counts up from 10) and takes the pointer itself, so it never reaches a
+// frame. Put up on drag start, taken down on drag end; while it is up, the
+// window's own mousemove handler keeps working, because those events are still
+// delivered to this document.
+var dragShieldEl js.Value
+
+func showDragShield() {
+	if dragShieldEl.Truthy() {
+		return
+	}
+	el := document.Call("createElement", "div")
+	el.Get("style").Set("cssText",
+		"position:fixed;inset:0;z-index:2147483647;background:transparent;cursor:inherit")
+	body.Call("appendChild", el)
+	dragShieldEl = el
+}
+
+func hideDragShield() {
+	if !dragShieldEl.Truthy() {
+		return
+	}
+	if p := dragShieldEl.Get("parentNode"); p.Truthy() {
+		p.Call("removeChild", dragShieldEl)
+	}
+	dragShieldEl = js.Undefined()
 }
 
 // focusWindowOwning raises the window that contains el, if it is not already
