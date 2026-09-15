@@ -80,23 +80,25 @@ func init() {
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 	startCmd.Flags().BoolVar(&existingTpOnly, "existing-tp", false, "only use existing transports, don't create new ones")
 	startCmd.Flags().BoolVar(&forceLocalRoutes, "local-route", false, "calculate routes locally instead of using route finder")
-	// --routes is the cross-group spelling for the same parallel-route count
-	// (`skynet start --routes`, `proxy mux plot --routes`, `proxy mux auto`).
-	// Bound to the same var as --mux so either spelling works; hidden to keep
-	// the primary `--mux` name on this command. Passing both = last parsed wins.
-	startCmd.Flags().MarkHidden("routes") //nolint:errcheck,gosec
+	// No --mux / --routes here, deliberately: the per-leg count is not settable
+	// at start on this command. It was, and the flags were removed without the
+	// MarkHidden("routes") that hid one of them — which then ran against a flag
+	// that does not exist, returning an error the nolint discarded. Legs are
+	// shaped after start with `proxy mux set` / `mux auto`; `skynet start` still
+	// takes --routes (and --mux as a hidden alias) for its own route count.
 	startCmd.Flags().StringVar(&muxMode, "mux-mode", "auto", "mux weight distribution mode: auto (latency-based) or equal (round-robin)")
 	startCmd.Flags().Uint16Var(&minHops, "min-hops", 1, "minimum routing hops for this session (1=no minimum). Set on the visor before app start; rolled back is not automatic — restart visor or re-run with --min-hops=1 to revert.")
-	startCmd.Flags().IntVar(&startTunnels, "tunnels", 1, "number of independent tunnels (route group + noise + yamux each) to stripe browser connections across; 1 = today's behavior. >1 AGGREGATES bandwidth: each extra tunnel is auto-steered by the visor onto a DIFFERENT first-hop transport (disjoint path) so their throughputs sum. Best paired with --mux 1 (one leg per tunnel).")
-	startCmd.Flags().StringVar(&startRoute, "route", "", "pin explicit route(s) chosen by you instead of the route finder: a JSON file of {forward,reverse} hop pairs ('cli route calc <exit> --count N --json' shape). Once the proxy is up its mux legs are reconciled to these — each pinned route is added as a leg and any AUX auto legs are pruned. NOTE: the auto PRIMARY leg (index 0) is privileged and cannot yet be pruned, so it remains alongside the pinned legs; full primary override is the dial-level follow-up. One pair = one pinned route; N pairs = N disjoint legs. Pair with --mux N. Tip: 'route calc --source tps' avoids stale-transport install failures.")
+	startCmd.Flags().IntVar(&startTunnels, "tunnels", 1, "number of independent tunnels (route group + noise + yamux each) to stripe browser connections across; 1 = today's behavior. >1 AGGREGATES bandwidth: each extra tunnel is auto-steered by the visor onto a DIFFERENT first-hop transport (disjoint path) so their throughputs sum. Shape the legs within each tunnel after start with `proxy mux set` / `mux auto`.")
+	startCmd.Flags().StringVar(&startRoute, "route", "", "pin explicit route(s) chosen by you instead of the route finder: a JSON file of {forward,reverse} hop pairs ('cli route calc <exit> --count N --json' shape). Once the proxy is up its mux legs are reconciled to these — each pinned route is added as a leg and any AUX auto legs are pruned. NOTE: the auto PRIMARY leg (index 0) is privileged and cannot yet be pruned, so it remains alongside the pinned legs; full primary override is the dial-level follow-up. One pair = one pinned route; N pairs = N disjoint legs. Tip: 'route calc --source tps' avoids stale-transport install failures.")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits")
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	startCmd.Flags().BoolVar(&reconnect, "reconnect", true, "in-process reconnect on route-group collapse: proxy keeps re-dialing with backoff instead of dropping the SOCKS5 listener; --reconnect=false restores exit-on-failure")
 	startCmd.Flags().StringVar(&startRoutingPolicy, "routing-policy", "", "per-app routing policy: @/path/to/policy.star, @/path/to/policy.wasm, or preset:<name> (\"\" or \"none\" clears any previously-installed override)")
-	startCmd.Flags().BoolVar(&startDirect, "direct", false, "force a DIRECT-transport-only route to the exit: create the transport on demand if none exists, dial 1-hop (bypassing the route-finder + setup node), and self-heal when the transport drops. Bypasses the routing policy and the adaptive mux entirely — the point is a single, stable, policy-free direct leg. Mutually exclusive with --routing-policy, --route, --mux>1, --min-hops>1 and --tunnels>1 (all of which ask for the multi-hop/overlay path --direct exists to avoid); any per-app policy is cleared.")
+	startCmd.Flags().BoolVar(&startDirect, "direct", false, "force a DIRECT-transport-only route to the exit: create the transport on demand if none exists, dial 1-hop (bypassing the route-finder + setup node), and self-heal when the transport drops. Bypasses the routing policy and the adaptive mux entirely — the point is a single, stable, policy-free direct leg. Mutually exclusive with --routing-policy, --route, --min-hops>1 and --tunnels>1 (all of which ask for the multi-hop/overlay path --direct exists to avoid); any per-app policy is cleared.")
 	// --direct is a policy-free single-direct-leg dial: it contradicts every flag
 	// that asks for the overlay / multi-hop / multi-leg path. Cobra enforces the
-	// clean pairwise contradictions; the value-dependent ones (--mux>1 etc.) are
+	// clean pairwise contradictions; the value-dependent ones (--tunnels>1,
+	// --min-hops>1) are
 	// checked in Run since a default of 1 is compatible.
 	startCmd.MarkFlagsMutuallyExclusive("direct", "routing-policy")
 	startCmd.MarkFlagsMutuallyExclusive("direct", "route")
@@ -658,8 +660,8 @@ var statusCmd = &cobra.Command{
 					var direct []directStreamInfo
 					if status == "running" {
 						route = fetchProxyRoute(rpcClient, state.Name)
-						// A shortcut-eligible dial (min_hops <= 1, no per-dial
-						// --mux) builds NO route group — so a perfectly healthy
+						// A shortcut-eligible dial (min_hops <= 1, one tunnel)
+						// builds NO route group — so a perfectly healthy
 						// proxy reported "(no active route group)" and nothing
 						// else. Ask the direct path what it is carrying.
 						if len(route) == 0 {

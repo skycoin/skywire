@@ -33,10 +33,10 @@ A minimal cluster runs the following workloads:
 | `postgres` | StatefulSet | 1 (or use a managed DB) | none — only `uptime-tracker` connects |
 | `dmsg-discovery` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9090 |
 | `address-resolver` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9093, plus LoadBalancer UDP :30178 |
-| `transport-discovery` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9094 |
+| `transport-discovery` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9091 |
 | `service-discovery` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9098 |
 | `route-finder` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9092 |
-| `uptime-tracker` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9095 |
+| `uptime-tracker` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9096 |
 | `config-bootstrapper` | Deployment | 1 | Ingress (TLS) → ClusterIP :9082 |
 | `setup-node` | Deployment | 1+ | none — dmsg-only |
 | `network-monitor` | Deployment | 1 | none — internal |
@@ -231,7 +231,7 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom: { secretKeyRef: { name: skywire-keys, key: redis-password } }
             - name: TPD_URL
-              value: http://transport-discovery:9094
+              value: http://transport-discovery:9091
             - name: SD_URL
               value: http://service-discovery:9098
             - name: SKYDEPLOY
@@ -327,7 +327,8 @@ Or, for a hand-rolled config, swap the service URLs to your cluster's hostnames.
 
 ## Pprof / debug access
 
-Each service in the cluster runs pprof on `dmsg port 81`, gated by the `survey_whitelist` baked into the binary or supplied via `SKYDEPLOY`. There is no cluster-side ingress for pprof — it's only reachable over dmsg, by callers whose PK is in the whitelist. This is by design (see PR #2390 series); don't expose `/debug/pprof/` over HTTP Ingress, and don't add Service entries for the dmsg-side pprof port.
+Each service in the cluster serves pprof over dmsg on its main `:80` handler,
+alongside /health and /metrics, gated by the `survey_whitelist` baked into the binary or supplied via `SKYDEPLOY`. There is no cluster-side ingress for pprof — it's only reachable over dmsg, by callers whose PK is in the whitelist. This is by design (see PR #2390 series); don't expose `/debug/pprof/` over HTTP Ingress, and don't add Service entries for the dmsg-side pprof port.
 
 For in-cluster Go pprof on individual pods, services accept `--pprof :PORT` to bind a plaintext HTTP pprof handler on a private port. Bind it to localhost or to a ClusterIP-only Service, never to the Ingress.
 
