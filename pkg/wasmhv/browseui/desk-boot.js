@@ -644,18 +644,6 @@
 				var panel = globalThis.__skywireDesk;
 				// Session: remember across reloads whether a visor was RUNNING when
 				// the page went away — a visor the operator stopped stays stopped.
-				// Start the docs server. It is a plain HTTP server over the embedded
-				// prose and the live cobra tree — no visor needed, nothing to wait
-				// for — so it is launched unconditionally and the tab that shows it
-				// opens with the rest once its port answers. Failure is silent by
-				// design: no docs tab is a smaller loss than a desk that will not boot.
-				if (docsPort && globalThis.skywireExec) {
-					try {
-						skywireExec(['doc', 'serve', '--addr', '127.0.0.1:' + docsPort], {})
-							.catch(function (e) { console.warn('doc serve:', e); });
-					} catch (e) { console.warn('doc serve:', e); }
-				}
-
 				var session = loadSession();
 				if (opts.autostartVisor) {
 					addEventListener('pagehide', saveSession);
@@ -794,6 +782,27 @@
 					// stays front, and this tab's session (and its `skywire --help`)
 					// only starts when first clicked.
 					panel.openConsole({ title: 'skywire', initCmd: 'skywire --help', bg: !!startedVisor });
+				}
+				// The docs server, in a terminal tab of its own — BEHIND the help
+				// tab, so the reader still lands on `skywire --help`.
+				//
+				// It used to run through a bare skywireExec, which bound the port
+				// but put the process nowhere a reader could see: on the docs site
+				// the server was invisible, and the only way to tell it was alive
+				// was that a tab eventually appeared. A websh tab is the same
+				// process with its output somewhere — it can be read, Ctrl-C'd and
+				// started again, which is what a terminal on a desk is for.
+				//
+				// initCmd runs on open, not on first click, so the port still binds
+				// immediately and the docs browser tab below opens on schedule.
+				if (docsPort && typeof panel.openConsole === 'function') {
+					try {
+						panel.openConsole({
+							title: 'docs',
+							initCmd: 'skywire doc serve --addr 127.0.0.1:' + docsPort,
+							bg: true,
+						});
+					} catch (e) { console.warn('doc serve:', e); }
 				}
 				if (opts.terminalURL && typeof panel.launch === 'function') {
 					// The host's pty as the terminal window — opened before the
