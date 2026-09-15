@@ -230,17 +230,35 @@ var hvDisableCmd = &cobra.Command{
 
 var hvStatusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Check if hypervisor is enabled",
+	Short: "Whether the hypervisor is enabled, and where its web UI is",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
-		if rpcClient.IsHypervisorEnabled() {
-			internal.PrintOutput(cmd.Flags(), "enabled\n", "enabled\n")
-		} else {
-			internal.PrintOutput(cmd.Flags(), "disabled\n", "disabled\n")
+		if !rpcClient.IsHypervisorEnabled() {
+			internal.PrintOutput(cmd.Flags(), map[string]any{"enabled": false}, "disabled\n")
+			return
 		}
+		// The two listeners: the dashboard on hypervisor.addr, the desk on
+		// hypervisor.desk_addr — both from the ports report, which is what
+		// the visor actually bound, not what a config file says.
+		out := map[string]any{"enabled": true, "ui_serving": rpcClient.IsHypervisorUIServing()}
+		human := "enabled\n"
+		if ports, perr := rpcClient.Ports(); perr == nil {
+			if p := ports["hypervisor"].Port; p != "" {
+				out["dashboard_port"] = p
+				human += "dashboard: http://127.0.0.1:" + p + "/\n"
+			}
+			if p := ports["hypervisor-desk"].Port; p != "" {
+				out["desk_port"] = p
+				human += "desk:      http://127.0.0.1:" + p + "/\n"
+			}
+		}
+		if !rpcClient.IsHypervisorUIServing() {
+			human += "web UI: not serving (skywire cli visor hv ui enable)\n"
+		}
+		internal.PrintOutput(cmd.Flags(), out, human)
 	},
 }
 
