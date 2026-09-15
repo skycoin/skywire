@@ -48,7 +48,9 @@ func (s *Server) ServeUnifiedQUIC(udpConn net.PacketConn, advertisedUDPAddr, adv
 	tr := &quic.Transport{Conn: udpConn}
 	defer tr.Close() //nolint:errcheck,gosec
 
-	identTLS := skyquic.TLSConfig(identCert, nil, nil)
+	// Both dmsg ALPNs: the dmsg id, and the transport id older clients still
+	// offer for dmsg (see skyquic.DmsgNextProto).
+	identTLS := skyquic.TLSConfigALPN(identCert, nil, nil, skyquic.DmsgNextProto, skyquic.NextProto)
 	quicConf := &quic.Config{
 		EnableDatagrams: true,
 		MaxIdleTimeout:  60 * time.Second,
@@ -71,7 +73,7 @@ func (s *Server) ServeUnifiedQUIC(udpConn net.PacketConn, advertisedUDPAddr, adv
 			tlsConf = &tls.Config{ //nolint:gosec // per-ALPN sub-configs set their own MinVersion/verification
 				// Union of ALPNs so the listener accepts both; GetConfigForClient
 				// supplies the actual per-handshake cert + verification.
-				NextProtos: []string{skyquic.NextProto, skyquic.WebTransportNextProto},
+				NextProtos: []string{skyquic.DmsgNextProto, skyquic.NextProto, skyquic.WebTransportNextProto},
 				GetConfigForClient: func(h *tls.ClientHelloInfo) (*tls.Config, error) {
 					for _, p := range h.SupportedProtos {
 						if p == skyquic.WebTransportNextProto { // "h3" → WebTransport

@@ -302,7 +302,12 @@ type Client struct {
 	// convergence must resolve through a live lookup — set via SetLiveDiscovery.
 	convMx           sync.RWMutex
 	carriersOverride []string
-	liveDisc         disc.APIClient
+	// quicStrikes counts consecutive QUIC sessions to a server that died young;
+	// at quicShortSessionStrikes the server goes into quicBadUntil and is dialed
+	// over TCP until the deadline. Guarded by convMx. See noteQUICShortSession.
+	quicStrikes  map[cipher.PubKey]int
+	quicBadUntil map[cipher.PubKey]time.Time
+	liveDisc     disc.APIClient
 
 	// entryResolvers are consulted before the discovery, in the order added by
 	// AddEntryResolver. See EntryResolver for what belongs here and why it is a

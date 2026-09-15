@@ -136,7 +136,11 @@ func (ce *Client) dialSessionQUIC(ctx context.Context, entry *disc.Entry) (Clien
 		return ClientSession{}, fmt.Errorf("quic: identity cert: %w", err)
 	}
 	rPK := entry.Static
-	tlsConf := skyquic.TLSConfig(cert, &rPK, nil) // pin the server PK
+	// Offer ONLY the dmsg ALPN: a transport-port socket with no dmsg server
+	// behind it then refuses the handshake here, and the caller falls back to
+	// TCP, instead of a transport acceptor holding the session 30 s and
+	// closing it (see skyquic.DmsgNextProto).
+	tlsConf := skyquic.TLSConfigALPN(cert, &rPK, nil, skyquic.DmsgNextProto) // pin the server PK
 	qc, err := quic.Dial(ctx, udpConn, udpAddr, tlsConf, &quic.Config{
 		EnableDatagrams: true,
 		KeepAlivePeriod: 25 * time.Second,
@@ -161,7 +165,9 @@ func (s *Server) ServeQUIC(udpConn net.PacketConn, advertisedUDPAddr string) err
 	}
 	// Server-side: accept any valid skywire PK; the peer PK is learned from
 	// the verified client certificate (see quicPeerPK).
-	tlsConf := skyquic.TLSConfig(cert, nil, nil)
+	// Accept the dmsg ALPN and, for clients built before it existed, the
+	// transport ALPN they still offer.
+	tlsConf := skyquic.TLSConfigALPN(cert, nil, nil, skyquic.DmsgNextProto, skyquic.NextProto)
 	lis, err := quic.Listen(udpConn, tlsConf, &quic.Config{
 		EnableDatagrams: true,
 		MaxIdleTimeout:  60 * time.Second,
