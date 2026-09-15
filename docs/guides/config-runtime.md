@@ -1,11 +1,11 @@
-# Visor Configuration — Runtime Changes
+# Visor configuration — runtime changes
 
 This document covers changing visor configuration on a running visor
 via CLI/RPC. These commands interact with the running visor process
 and take effect immediately without restarting.
 
 For config file changes (config gen, config update, SKYENV), see
-[VISOR_CONFIG_GEN.md](VISOR_CONFIG_GEN.md).
+[config-gen.md](config-gen.md).
 
 ## Important Notes
 
@@ -23,7 +23,7 @@ below do not yet distinguish them:
    rebuilds the json and discards it. Example: `visor hv add`.
 3. **Declared in `skywire.conf`** — the only lifetime that survives a
    package update. Set the SKYENV variable and re-run autoconfig. See
-   [VISOR_CONFIG_GEN.md](VISOR_CONFIG_GEN.md#skyenv-config-file).
+   [config-gen.md](config-gen.md#skyenv-variables).
 
 Lifetime 2 is the one that surprises operators: the change looks
 durable, and stays durable until the next update. If a setting must
@@ -88,7 +88,7 @@ The filter argument uses [jq syntax](https://jqlang.github.io/jq/manual/).
 | `dmsg.servers` | Not changeable at runtime |
 | `dmsg.protocol` | Not changeable at runtime |
 
-Config gen: [`MINDMSGSESS`](VISOR_CONFIG_GEN.md#deployment)
+Config gen: [`MINDMSGSESS`](config-gen.md#deployment)
 
 ## Transport (`transport`)
 
@@ -98,7 +98,7 @@ Config gen: [`MINDMSGSESS`](VISOR_CONFIG_GEN.md#deployment)
 | `transport.stcpr_port` | Not changeable at runtime |
 | `transport.sudph_port` | Not changeable at runtime |
 
-Config gen: [`VISORISPUBLIC`](VISOR_CONFIG_GEN.md#transports), [`STCPRPORT`](VISOR_CONFIG_GEN.md#transports)
+Config gen: [`VISORISPUBLIC`](config-gen.md#transports), [`STCPRPORT`](config-gen.md#transports)
 
 ## Routing (`routing`)
 
@@ -108,7 +108,7 @@ Config gen: [`VISORISPUBLIC`](VISOR_CONFIG_GEN.md#transports), [`STCPRPORT`](VIS
 | `routing.calculate_routes` | `skywire cli route calc --enable\|--disable` |
 | `routing.route_setup_nodes` | Not changeable at runtime |
 
-Config gen: [`ROUTESETUPPKS`](VISOR_CONFIG_GEN.md#routing), [`CALCULATEROUTES`](VISOR_CONFIG_GEN.md#routing)
+Config gen: [`ROUTESETUPPKS`](config-gen.md#routing), [`CALCULATEROUTES`](config-gen.md#routing)
 
 ## Apps (`launcher`)
 
@@ -128,7 +128,7 @@ Config gen: [`ROUTESETUPPKS`](VISOR_CONFIG_GEN.md#routing), [`CALCULATEROUTES`](
 | `skynet_web.enable` | `skywire cli visor proxies set skynet on\|off` |
 | upstream SOCKS5 | `skywire cli visor proxies upstream <dmsg\|skynet> <addr>` |
 
-Config gen: [`VPNSERVER`](VISOR_CONFIG_GEN.md#apps), [`PROXYSERVER`](VISOR_CONFIG_GEN.md#apps)
+Config gen: [`VPNSERVER`](config-gen.md#apps), [`PROXYSERVER`](config-gen.md#apps)
 
 ## Hypervisor (`hypervisor`)
 
@@ -141,13 +141,13 @@ Config gen: [`VPNSERVER`](VISOR_CONFIG_GEN.md#apps), [`PROXYSERVER`](VISOR_CONFI
 to the json — but the *inbound* access the PK grants (the `skywire cli
 --via dmsg://<pk>` bridge) starts on the next restart, when the dmsg
 RPC listeners and the peer whitelist are rebuilt from config. See
-[docs/guides/remote-visor-cli.md](docs/guides/remote-visor-cli.md).
+[remote-visor-cli.md](remote-visor-cli.md).
 
 Lifetime 2 (above): a runtime-added hypervisor is dropped by the next
 `skywire autoconfig` run. Put the PK in `HYPERVISORPKS` in
 `/etc/skywire.conf` for a hypervisor that must survive an update.
 
-Config gen: [`ISHYPERVISOR`](VISOR_CONFIG_GEN.md#hypervisor), [`HYPERVISORPKS`](VISOR_CONFIG_GEN.md#remote-access)
+Config gen: [`ISHYPERVISOR`](config-gen.md#hypervisor-ui), [`HYPERVISORPKS`](config-gen.md#remote-access)
 
 ## Log Level (`log_level`)
 
@@ -155,7 +155,7 @@ Config gen: [`ISHYPERVISOR`](VISOR_CONFIG_GEN.md#hypervisor), [`HYPERVISORPKS`](
 |---|---|
 | `log_level` | Not changeable at runtime |
 
-Config gen: [`LOGLVL`](VISOR_CONFIG_GEN.md#advanced-tuning)
+Config gen: [`LOGLVL`](config-gen.md#advanced-tuning)
 
 ## Survey Whitelist (`survey_whitelist`)
 
@@ -163,7 +163,7 @@ Config gen: [`LOGLVL`](VISOR_CONFIG_GEN.md#advanced-tuning)
 |---|---|
 | `survey_whitelist` | Not changeable at runtime |
 
-Config gen: [`SURVEYPKS`](VISOR_CONFIG_GEN.md#remote-access)
+Config gen: [`SURVEYPKS`](config-gen.md#remote-access)
 
 ## Reward Address
 
@@ -171,18 +171,7 @@ Config gen: [`SURVEYPKS`](VISOR_CONFIG_GEN.md#remote-access)
 |---|---|
 | `reward_address` | `skywire cli reward <address>` |
 
-Config gen: [`REWARDSKYADDR`](VISOR_CONFIG_GEN.md#rewards)
-
-## DHT (`dht`)
-
-| Config field | Runtime command |
-|---|---|
-| `dht.full_node` | `skywire cli visor dht full-node on\|off` |
-| `dht.bootstrap_pks` | Not changeable at runtime |
-| `dht.whitelisted_pks` | Not changeable at runtime |
-| `dht.trusted_pks` | Not changeable at runtime |
-
-Config gen: [DHT configuration](VISOR_CONFIG_GEN.md#dht-configuration-optional)
+Config gen: [`REWARDSKYADDR`](config-gen.md#rewards)
 
 ## Skynet Port Forwarding
 
@@ -193,4 +182,4 @@ the visor config. Changes are both immediate and persistent.
 |---|---|
 | forwarded ports | `skywire cli skynet port add\|rm\|ls` |
 
-See also: [Skynet forwarding guide](docs/skywire_forwarding.md)
+See also: [Skynet forwarding guide](../skywire_forwarding.md)

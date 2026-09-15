@@ -68,7 +68,6 @@ go run github.com/skycoin/skywire@develop cli config gen -q | sudo tee /etc/skyw
 Now, edit `/etc/skywire.conf` as desired.
 Remember to uncomment:
 * `PKGENV=true`
-* `BESTPROTO=true`
 
 Save the file. Now `config gen` can be added to the while loop
 

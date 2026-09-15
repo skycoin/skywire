@@ -15,4 +15,4 @@ themselves up to date.
 For the underlying rolling-release machinery that all three update paths track
 (tracking `develop`, tagged releases, pinned commits, and the prebuilt-binary
 pre-releases), see
-[AUTO_UPDATE.md](https://github.com/skycoin/skywire/blob/develop/AUTO_UPDATE.md).
+[auto-update.md](auto-update.md).

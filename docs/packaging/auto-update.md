@@ -15,9 +15,9 @@ running more than one at once is redundant and can fight over the binary.
 All three ultimately track the same **rolling release** off `develop`: the
 source updater installs the tip of `develop` (or a tagged release / pinned
 commit / prebuilt binary — see the channels below), and the docker path tracks
-the `:test` Docker tag. See [Skywire Auto-Update](https://github.com/skycoin/skywire/blob/develop/AUTO_UPDATE.md)
-for the update channels and how the prebuilt-binary pre-releases and the `:test`
-Docker tag are produced.
+the `:test` Docker tag. The update channels are described under mechanism 2
+below; how the prebuilt-binary pre-releases are produced is at the end of this
+page.
 
 ---
 
@@ -253,3 +253,18 @@ systemctl status skywire-docker-autopull.timer
 If more than one timer is enabled and active, disable all but the one that
 matches your install method — otherwise an apt reinstall, a source rebuild,
 and a container recreate can each clobber the others' binary.
+
+---
+
+## How the prebuilt binaries are produced
+
+`.github/workflows/publish-binary.yml` builds a compressed linux binary
+(amd64, arm64, armv7) on every merge to `develop` and `master` and publishes it
+to a single rolling GitHub **pre-release** tagged `<branch>-latest` (e.g.
+`develop-latest`), replaced in place on each merge. Each release ships a
+`SHA256SUMS` file; the `binary*` channels download the matching-arch archive and
+verify it against those checksums before installing.
+
+This is deliberately not a tagged semver release — the rolling tag and
+`prerelease=true` keep it out of the packaging/versioning flow (AUR/apt/MSI),
+which key off real `vX.Y.Z` tags.

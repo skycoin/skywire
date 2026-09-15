@@ -644,8 +644,8 @@ dep-github-release:
 	#./ci_scripts/build-libusb-musl.sh 386 i686-linux-musl ./musl-data/i686-linux-musl-cross  # 386 uses stub, no libusb needed
 	./ci_scripts/build-libusb-musl.sh riscv64 riscv64-linux-musl ./musl-data/riscv64-linux-musl-cross
 
-build-docker: ## Build docker image
-	./ci_scripts/docker-push.sh -t latest -b
+build-docker: ## Build docker image (alias for docker-build)
+	bash ./docker/docker_build.sh prod "" $(BUILD_ARCH)
 
 .PHONY: check-ui check-onpush bundle-wasm check-bundle-wasm
 

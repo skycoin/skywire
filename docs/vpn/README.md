@@ -6,8 +6,9 @@ network. A visor runs the **server**; another visor runs the
 the server. Unlike the per-application [SOCKS5 proxy](../skysocks/README.md),
 the VPN captures traffic at the IP layer.
 
-The server optionally requires a passcode (set in its configuration). If no
-passcode is set, the server accepts connections without authentication.
+The server optionally restricts who may connect to a list of public keys. With
+no list set it accepts any authenticated peer — every transport is already
+authenticated by key, so there is no anonymous case to guard.
 
 !!! note "Separate machines"
 
@@ -33,18 +34,19 @@ skywire cli vpn server stop
 ## Configuration
 
 `vpn-server` ships in a generated config (port `44`, `auto_start: true`).
-To require a passcode, pass `-passcode` in `args`:
+To restrict it to named peers, pass `--whitelist` in `args` — or start it with
+`skywire cli vpn server start -w <pk>,<pk>`:
 
 ```json
 {
   "name": "vpn-server",
-  "args": ["-passcode", "1234"],
+  "args": ["--whitelist", "<pk>,<pk>"],
   "auto_start": true,
   "port": 44
 }
 ```
 
-Leave `args` empty for an open (no-auth) server.
+Leave `args` empty to accept any peer.
 
 ## See also
 

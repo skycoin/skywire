@@ -82,7 +82,7 @@ require (
 	github.com/0magnet/sysinfo v1.1.4-0.20260905172033-914ade4a2548
 	github.com/0magnet/termanim v0.0.0-20260914104740-c2d1737f7963
 	github.com/0magnet/wfdrive v0.3.1
-	github.com/0magnet/winbox-go v0.0.0-20260913215348-e6a682de3c9b
+	github.com/0magnet/winbox-go v0.0.0-20260915144603-8d0d29c28556
 	github.com/0magnet/yamux v0.1.3-0.20260905172050-450c4058f851
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0

@@ -40,7 +40,7 @@ Flags:
 The skywire visor can now (as of v1.3.32) run directly with `go run` when using the default in-process visor native applications configuration
 
 ```
-go run github.com/skycoin/skywire@develop cli config gen -br #print the config & output to skywire-config.json
+go run github.com/skycoin/skywire@develop cli config gen -r #generate skywire-config.json, retaining any existing keys
 go run github.com/skycoin/skywire@develop visor #uses skywire-config.json by default
 ```
 
@@ -99,7 +99,7 @@ yay --mflags " -p git.PKGBUILD " -S skywire
 
 ### NixOS / Nix flake
 
-Two derivations under [`/nix/`](../extras/nix.md) — same flavors as the AUR
+Two derivations under [`/nix/`](https://github.com/skycoin/skywire/blob/develop/nix/README.md) — same flavors as the AUR
 packages: `skywire` (source build, static-musl, mirrors
 `make build-static`) and `skywire-bin` (the upstream release
 tarball).
@@ -119,7 +119,7 @@ inputs.skywire.url = "github:skycoin/skywire?dir=nix";
 environment.systemPackages = [ skywire.packages.${system}.skywire ];
 ```
 
-See the [nix details page](../extras/nix.md) for the per-arch hash-fill
+See the [nix details page](https://github.com/skycoin/skywire/blob/develop/nix/README.md) for the per-arch hash-fill
 flow on `skywire-bin`, the visor's `--apps-dir` integration, and
 the static-binary sanity check.
 
@@ -153,4 +153,4 @@ binaries. A custom app must have its binary present in `bin_path`.
 
 ## Docker
 
-For docker-specific documentation, see the [Docker guide](../extras/docker.md).
+For docker-specific documentation, see the [Docker guide](docker.md).

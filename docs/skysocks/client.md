@@ -82,7 +82,7 @@ A single proxy session can spread its traffic across **several parallel Skywire
 routes** ("mux legs") for throughput and resilience, and adapt them at runtime as
 network conditions change.
 
-- Start with N legs: `--mux 2` (or more); `--mux 0` uses every distinct path.
+- Start with N tunnels: `--tunnels 2` (or more).
 - Weighting: `--mux-mode auto` favors lower-latency legs; `equal` is round-robin.
 - Force legs through intermediates (e.g. for bandwidth-spreading): add
   `--min-hops 2`.
@@ -151,7 +151,7 @@ sends everything else out through the skysocks exit.
   transport and no route won't connect.
 - **Works then drops** — that's what `--reconnect` covers; check `proxy status`
   and `proxy mux info` for leg health, and `--verbose` to watch the session live.
-- **Slow** — add legs (`--mux 2+`) and/or `proxy mux auto balanced`.
+- **Slow** — add tunnels (`--tunnels 2+`) and/or `proxy mux auto balanced`.
 
 ## See also
 

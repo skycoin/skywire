@@ -19,7 +19,7 @@ visor on your own host or a peer's host, start here.
 
 The runtime log and the persistent file are two different things. The
 runtime log is a fixed-size in-memory ring buffer kept by every visor
-(default 5000 entries); the persistent file `/visor.log` is the on-disk
+(default 300 entries); the persistent file `/visor.log` is the on-disk
 sink that only exists when the visor is started with `-s` / `--save-log`.
 
 ---
@@ -43,7 +43,7 @@ skywire cli visor log [--follow] [--min-level <lvl>] [--module <regex>] [--json]
 | `--interval`   | Poll cadence in follow mode.                                             |
 
 If the buffer overflows between two polls a `[N entries dropped]` marker is
-printed once. The buffer is bounded by `runtimeLogMaxEntries` (5000 by default).
+printed once. The buffer is bounded by `runtimeLogMaxEntries` (300 by default).
 
 ### Reaching a remote visor with the same command
 
