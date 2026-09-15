@@ -14,7 +14,27 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 -   **The desk is the hypervisor UI (#4484, #4690–#4764).** One wasm module is both the served desk and the tab visor; the Angular dashboard is still there, in a tab, and `LEGACYHVUI=true` puts it back at the root. Pairing binds a browser visor to a hypervisor by PK, and the host's pty is available as the desk's terminal.
 -   **Routing policy owns the route count (#4300s–#4400s).** `mux_routes` is gone as a visor-global setting: how many routes a stream uses is an output of the active policy, per dial, not a number configured once per visor. A visor can also refuse to be an intermediate hop.
 -   **Observability (#4840s–#4860s).** `visor state` reports the dmsg server, relay and transit roles, the clients attached to an in-process dmsg server, the embedded wasm module's provenance, and — new here — whether that module is older than the binary serving it. `status.skysocks` renders the full route including a direct leg's transport type, id and RTT.
+-   **Two ports for the hypervisor UI (#4904–#4907).** The Angular dashboard is at the root of `hypervisor.addr` (:8000) and the desk — the wasm-visor hypervisor UI — at `hypervisor.desk_addr` (:8010): one handler on two listeners, the same API and login on each. `legacy_ui`, `LEGACYHVUI` and `hv enable --legacy` are gone; `HVDESKADDR` / `config gen --hvdeskaddr` set the desk address, and `hv status` prints both. A desk tab pairs without a dashboard login, and its browser opens on a start page of the desk's own pages.
 
+
+-   fix(desk): a tab could not be paired until the operator logged into the dashboard  [#4907](https://github.com/skycoin/skywire/pull/4907)
+-   fix(hypervisor): the desk's default port is :8010, not :8002  [#4906](https://github.com/skycoin/skywire/pull/4906)
+-   chore: re-embed the command module at bba82df2d  [#4905](https://github.com/skycoin/skywire/pull/4905)
+-   feat(hypervisor): the dashboard and the desk each on their own port; a start page for the browser  [#4904](https://github.com/skycoin/skywire/pull/4904)
+-   docs: regenerate the command reference  [#4903](https://github.com/skycoin/skywire/pull/4903)
+-   chore: re-embed the command module at fdabefc5a  [#4902](https://github.com/skycoin/skywire/pull/4902)
+-   fix(visor): a TPD heartbeat that fails once is not yet a warning  [#4901](https://github.com/skycoin/skywire/pull/4901)
+-   fix(desk): tabs in a window's title bar could not be clicked; address bar showed the rewrite  [#4900](https://github.com/skycoin/skywire/pull/4900)
+-   feat(cli): `hv input` — trusted pointer input, so frame bugs can be tested  [#4899](https://github.com/skycoin/skywire/pull/4899)
+-   chore: re-embed the command module at ad96405e7  [#4898](https://github.com/skycoin/skywire/pull/4898)
+-   fix: four things a frame was swallowing, plus documented ports, a call that would not compile, and a flag that was never declared  [#4897](https://github.com/skycoin/skywire/pull/4897)
+-   chore: re-embed the command module at 2c5587d9a  [#4896](https://github.com/skycoin/skywire/pull/4896)
+-   fix(desk): the pairing docs never opened, and the docs never ran, on :8000  [#4895](https://github.com/skycoin/skywire/pull/4895)
+-   fix(docs+desk): make the served docs navigable and accurate, and fix three desk rough edges  [#4894](https://github.com/skycoin/skywire/pull/4894)
+-   docs: stop documenting a DHT, a `cli sshd` and paths that no longer exist  [#4893](https://github.com/skycoin/skywire/pull/4893)
+-   fix(visor): a browser visor panicked on every tpviz refresh  [#4892](https://github.com/skycoin/skywire/pull/4892)
+-   fix(transport): no inbound stcpr could complete on a visor sharing its transport port  [#4891](https://github.com/skycoin/skywire/pull/4891)
+-   chore(release): changelog through #4889, and re-embed the command module  [#4890](https://github.com/skycoin/skywire/pull/4890)
 -   fix(config): the resolving proxies could not survive a conf round-trip  [#4889](https://github.com/skycoin/skywire/pull/4889)
 -   fix(test): the windows failures were POSIX assumptions, plus one flaky budget  [#4888](https://github.com/skycoin/skywire/pull/4888)
 -   fix(visor): a browser visor dialled QUIC and probed STUN, neither of which it has  [#4887](https://github.com/skycoin/skywire/pull/4887)
