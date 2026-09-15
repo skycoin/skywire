@@ -423,23 +423,41 @@ bundle-wasm: ## Rebuild the COMMITTED routing-policy bundle.wasm (pkg/router/pol
 	go test -count=1 -run 'TestDecideParity|TestTickParity' ./pkg/router/policy/wasm/presets/
 	@echo "review with 'git status' and commit $(BUNDLE_WASM) intentionally."
 
-check-bundle-wasm: ## Fail if the committed routing-policy bundle.wasm is stale vs a fresh TinyGo build
+check-bundle-wasm: ## Warn if the committed routing-policy bundle.wasm differs from a fresh TinyGo build
 	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
 	@# pkg/router/policy/wasm/presets/bundle.wasm is a build artifact committed to
 	@# the repo and embedded in the visor: a native visor on a preset:* policy runs
 	@# it via wazero. A stale one ships DIFFERENT routing decisions (and different
 	@# mux-control tunable defaults) than the source it is a compilation of
-	@# (pkg/router/policy/preset) — exactly #4325. This rebuilds it into a temp file
-	@# and byte-compares, the same provenance guard the check-ui target is for the
-	@# manager UI bundle; the parity test (pkg/router/policy/wasm/presets) is the
-	@# companion SEMANTIC guard. The TinyGo build is byte-reproducible for a given
-	@# toolchain, so run this in a lane with tinygo pinned (the wasm-tinygo lane).
+	@# (pkg/router/policy/preset) — exactly #4325.
+	@#
+	@# This used to FAIL on any byte difference. It does not any more, because the
+	@# build is not byte-reproducible across machines and the gate spent days red
+	@# on develop while nothing was actually stale. Measured: same TinyGo 0.42.0,
+	@# same Go 1.27.1, and CI's build came out 34 bytes smaller than the committed
+	@# blob (1110801 vs 1110835). Ruled out as causes — GOEXPERIMENT (incl. the
+	@# distro's nodwarf5), -trimpath, the build path, the TinyGo distribution
+	@# (official release tarball vs the distro package) and the Go distribution
+	@# (upstream go1.27.1 tarball vs the distro's). The local build is
+	@# deterministic and byte-identical to the committed blob; CI's differs
+	@# consistently. Whatever the remaining 34 bytes are, they are not staleness.
+	@#
+	@# Staleness is caught properly, and semantically, by the parity test in
+	@# pkg/router/policy/wasm/presets: it loads the COMMITTED blob through wazero
+	@# and compares it field-for-field against the native preset package, so a
+	@# blob built from a different revision of that package fails there and in the
+	@# ordinary linux lane. That is the gate. This target is the provenance hint
+	@# that goes with it, and a hint that cannot distinguish "rebuilt elsewhere"
+	@# from "out of date" has no business failing a build.
 	@tmp=$$(mktemp) && \
 	( cd $(BUNDLE_WASM_SRC) && GOTOOLCHAIN=$$(cd "$(CURDIR)" && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o "$$tmp" . ) && \
-	if cmp -s "$$tmp" "$(BUNDLE_WASM)"; then rm -f "$$tmp"; echo "The committed routing-policy bundle.wasm is up to date."; else \
-		echo "ERROR: the committed routing-policy bundle.wasm is stale vs a fresh build."; \
-		echo "Run 'make bundle-wasm' and commit the result."; \
-		ls -l "$$tmp" "$(CURDIR)/$(BUNDLE_WASM)"; rm -f "$$tmp"; exit 1; \
+	if cmp -s "$$tmp" "$(BUNDLE_WASM)"; then rm -f "$$tmp"; echo "The committed routing-policy bundle.wasm is byte-identical to a fresh build."; else \
+		echo "NOTE: the committed routing-policy bundle.wasm differs from a fresh build here."; \
+		echo "      Byte equality does not hold across toolchain builds, so this is not by"; \
+		echo "      itself staleness. If you CHANGED pkg/router/policy/preset, run"; \
+		echo "      'make bundle-wasm' and commit the result; the parity test in"; \
+		echo "      pkg/router/policy/wasm/presets is what actually fails on a stale blob."; \
+		ls -l "$$tmp" "$(CURDIR)/$(BUNDLE_WASM)"; rm -f "$$tmp"; \
 	fi
 
 # The Go/wasm WebGL tpviz view builds no separate tpviz-gl.wasm: it is a role
