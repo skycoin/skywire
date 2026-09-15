@@ -7,8 +7,19 @@ on:
   push:
     tags:
       - 'v*'
+  # Rebuild the assets of an EXISTING tag with the workflow as it is on the
+  # branch this is dispatched from. A tag-push run uses the workflow at the
+  # tag, so a workflow fix can only reach an already-tagged release this way;
+  # the tag itself never moves (see the v1.3.94 linux assets).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: existing release tag to build assets for
+        required: true
+        type: string
 
 env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
   GO_VERSION: 'stable'
   MUSL_RELEASE: 'v1.3.29'
   MODULE: github.com/skycoin/skywire
@@ -21,9 +32,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ github.ref_name }}" \
+          gh release create "${{ env.RELEASE_TAG }}" \
             --repo ${{ github.repository }} \
-            --title "${{ github.ref_name }}" \
+            --title "${{ env.RELEASE_TAG }}" \
             --generate-notes || true
 
   linux:
@@ -76,7 +87,7 @@ jobs:
           # push isn't saved as an error page and run as a shell script); retry
           # to ride out raw.github propagation lag / rate-limiting.
           curl -fsSL --retry 6 --retry-all-errors --retry-delay 4 \
-            "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/ci_scripts/build-libusb-musl.sh" \
+            "https://raw.githubusercontent.com/${{ github.repository }}/${{ env.RELEASE_TAG }}/ci_scripts/build-libusb-musl.sh" \
             -o build-libusb-musl.sh
           chmod +x build-libusb-musl.sh
 
@@ -101,7 +112,14 @@ jobs:
       - name: Checkout skywire at the tag
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.ref_name }}
+          # The musl cross toolchain was unpacked into musl-data/ in this
+          # workspace two steps up. checkout cleans untracked files by default,
+          # which deleted the compiler before the build ran: every linux job of
+          # the v1.3.94 and v1.3.94-alpha1 releases failed with "C compiler …
+          # not found" while darwin and windows, which fetch nothing first,
+          # published fine.
+          clean: false
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
           fetch-tags: true
 
@@ -159,7 +177,7 @@ jobs:
 
       - name: Create archive
         run: |
-          ARCHIVE_NAME="skywire-${{ github.ref_name }}-linux-${{ matrix.arch }}"
+          ARCHIVE_NAME="skywire-${{ env.RELEASE_TAG }}-linux-${{ matrix.arch }}"
           mkdir -p dist
           cp bin/skywire dist/
           cd dist
@@ -170,9 +188,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" \
-            dist/skywire-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.xz \
-            dist/skywire-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.xz.sha256 \
+          gh release upload "${{ env.RELEASE_TAG }}" \
+            dist/skywire-${{ env.RELEASE_TAG }}-linux-${{ matrix.arch }}.tar.xz \
+            dist/skywire-${{ env.RELEASE_TAG }}-linux-${{ matrix.arch }}.tar.xz.sha256 \
             --repo ${{ github.repository }} \
             --clobber
 
@@ -199,7 +217,7 @@ jobs:
           CGO_LDFLAGS: -L/usr/local/lib -L/opt/homebrew/lib -L/opt/homebrew/opt/hidapi/lib -L/opt/homebrew/opt/libusb/lib
         run: |
           go install -trimpath -ldflags "-s -w" \
-            ${{ env.MODULE }}@${{ github.ref_name }}
+            ${{ env.MODULE }}@${{ env.RELEASE_TAG }}
 
           mkdir -p bin
           cp "$(go env GOPATH)/bin/skywire" bin/skywire
@@ -208,7 +226,7 @@ jobs:
 
       - name: Create archive
         run: |
-          ARCHIVE_NAME="skywire-${{ github.ref_name }}-darwin-amd64"
+          ARCHIVE_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-amd64"
           mkdir -p dist
           cp bin/skywire dist/
           cd dist
@@ -217,12 +235,12 @@ jobs:
 
       - name: Create macOS package
         run: |
-          PKG_NAME="skywire-${{ github.ref_name }}-darwin-amd64"
+          PKG_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-amd64"
           mkdir -p pkg-root/usr/local/bin
           cp bin/skywire pkg-root/usr/local/bin/
           pkgbuild --root pkg-root \
             --identifier com.skycoin.skywire \
-            --version "${{ github.ref_name }}" \
+            --version "${{ env.RELEASE_TAG }}" \
             --install-location / \
             "dist/${PKG_NAME}.pkg"
           shasum -a 256 "dist/${PKG_NAME}.pkg" > "dist/${PKG_NAME}.pkg.sha256"
@@ -231,11 +249,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" \
-            dist/skywire-${{ github.ref_name }}-darwin-amd64.tar.xz \
-            dist/skywire-${{ github.ref_name }}-darwin-amd64.tar.xz.sha256 \
-            dist/skywire-${{ github.ref_name }}-darwin-amd64.pkg \
-            dist/skywire-${{ github.ref_name }}-darwin-amd64.pkg.sha256 \
+          gh release upload "${{ env.RELEASE_TAG }}" \
+            dist/skywire-${{ env.RELEASE_TAG }}-darwin-amd64.tar.xz \
+            dist/skywire-${{ env.RELEASE_TAG }}-darwin-amd64.tar.xz.sha256 \
+            dist/skywire-${{ env.RELEASE_TAG }}-darwin-amd64.pkg \
+            dist/skywire-${{ env.RELEASE_TAG }}-darwin-amd64.pkg.sha256 \
             --repo ${{ github.repository }} \
             --clobber
 
@@ -262,7 +280,7 @@ jobs:
           CGO_LDFLAGS: -L/opt/homebrew/lib -L/opt/homebrew/opt/hidapi/lib -L/opt/homebrew/opt/libusb/lib
         run: |
           go install -trimpath -ldflags "-s -w" \
-            ${{ env.MODULE }}@${{ github.ref_name }}
+            ${{ env.MODULE }}@${{ env.RELEASE_TAG }}
 
           mkdir -p bin
           cp "$(go env GOPATH)/bin/skywire" bin/skywire
@@ -271,7 +289,7 @@ jobs:
 
       - name: Create archive
         run: |
-          ARCHIVE_NAME="skywire-${{ github.ref_name }}-darwin-arm64"
+          ARCHIVE_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-arm64"
           mkdir -p dist
           cp bin/skywire dist/
           cd dist
@@ -280,12 +298,12 @@ jobs:
 
       - name: Create macOS package
         run: |
-          PKG_NAME="skywire-${{ github.ref_name }}-darwin-arm64"
+          PKG_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-arm64"
           mkdir -p pkg-root/usr/local/bin
           cp bin/skywire pkg-root/usr/local/bin/
           pkgbuild --root pkg-root \
             --identifier com.skycoin.skywire \
-            --version "${{ github.ref_name }}" \
+            --version "${{ env.RELEASE_TAG }}" \
             --install-location / \
             "dist/${PKG_NAME}.pkg"
           shasum -a 256 "dist/${PKG_NAME}.pkg" > "dist/${PKG_NAME}.pkg.sha256"
@@ -294,11 +312,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" \
-            dist/skywire-${{ github.ref_name }}-darwin-arm64.tar.xz \
-            dist/skywire-${{ github.ref_name }}-darwin-arm64.tar.xz.sha256 \
-            dist/skywire-${{ github.ref_name }}-darwin-arm64.pkg \
-            dist/skywire-${{ github.ref_name }}-darwin-arm64.pkg.sha256 \
+          gh release upload "${{ env.RELEASE_TAG }}" \
+            dist/skywire-${{ env.RELEASE_TAG }}-darwin-arm64.tar.xz \
+            dist/skywire-${{ env.RELEASE_TAG }}-darwin-arm64.tar.xz.sha256 \
+            dist/skywire-${{ env.RELEASE_TAG }}-darwin-arm64.pkg \
+            dist/skywire-${{ env.RELEASE_TAG }}-darwin-arm64.pkg.sha256 \
             --repo ${{ github.repository }} \
             --clobber
 
@@ -336,7 +354,7 @@ jobs:
       - name: Fetch Windows installer files
         shell: pwsh
         run: |
-          $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/scripts/win_installer"
+          $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ env.RELEASE_TAG }}/scripts/win_installer"
           New-Item -ItemType Directory -Force -Path "scripts\win_installer\images"
           # Retry each fetch — raw.github rate-limits (429) / lags right after a
           # tag push, and Invoke-WebRequest throws on that, failing the release.
@@ -364,7 +382,7 @@ jobs:
           # Compile from repo root (not cmd/release) because cmd/release imports
           # hardware wallet which requires libusb/libhidapi DLLs on Windows.
           # The hw wallet is built separately below with the required DLLs.
-          go install -trimpath -ldflags "-s -w" "${{ env.MODULE }}@${{ github.ref_name }}"
+          go install -trimpath -ldflags "-s -w" "${{ env.MODULE }}@${{ env.RELEASE_TAG }}"
 
           New-Item -ItemType Directory -Force -Path "bin"
           $gopath = go env GOPATH
@@ -412,7 +430,7 @@ jobs:
       - name: Create archive
         shell: pwsh
         run: |
-          $ARCHIVE_NAME = "skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}"
+          $ARCHIVE_NAME = "skywire-${{ env.RELEASE_TAG }}-windows-${{ matrix.arch }}"
           New-Item -ItemType Directory -Force -Path "dist"
           Copy-Item "bin\skywire.exe" "dist\"
 
@@ -436,8 +454,8 @@ jobs:
       - name: Create MSI installer
         shell: pwsh
         run: |
-          $MSI_NAME = "skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}"
-          $VERSION = "${{ github.ref_name }}" -replace '(^v|-.+$)', ''
+          $MSI_NAME = "skywire-installer-${{ env.RELEASE_TAG }}-windows-${{ matrix.arch }}"
+          $VERSION = "${{ env.RELEASE_TAG }}" -replace '(^v|-.+$)', ''
 
           # Download WiX 3.11
           Invoke-WebRequest "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip" -OutFile wix.zip
@@ -477,16 +495,16 @@ jobs:
         shell: pwsh
         run: |
           $files = @(
-            "dist\skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}.zip",
-            "dist\skywire-${{ github.ref_name }}-windows-${{ matrix.arch }}.zip.sha256"
+            "dist\skywire-${{ env.RELEASE_TAG }}-windows-${{ matrix.arch }}.zip",
+            "dist\skywire-${{ env.RELEASE_TAG }}-windows-${{ matrix.arch }}.zip.sha256"
           )
-          $msi = "dist\skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}.msi"
-          $msiSha = "dist\skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}.msi.sha256"
+          $msi = "dist\skywire-installer-${{ env.RELEASE_TAG }}-windows-${{ matrix.arch }}.msi"
+          $msiSha = "dist\skywire-installer-${{ env.RELEASE_TAG }}-windows-${{ matrix.arch }}.msi.sha256"
           if (Test-Path $msi) {
             $files += $msi
             $files += $msiSha
           }
-          gh release upload "${{ github.ref_name }}" @files --repo ${{ github.repository }} --clobber
+          gh release upload "${{ env.RELEASE_TAG }}" @files --repo ${{ github.repository }} --clobber
 
   android:
     needs: create-release
@@ -494,7 +512,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.ref_name }}
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
           fetch-tags: true
 
@@ -543,7 +561,7 @@ jobs:
         run: |
           raw="${GITHUB_REF_NAME#v}"
           if ! printf '%s' "$raw" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::Tag '${GITHUB_REF_NAME}' is not vX.Y.Z — cannot derive an Android version"
+            echo "::error::Tag '${RELEASE_TAG}' is not vX.Y.Z — cannot derive an Android version"
             exit 1
           fi
           rest=${raw#*.}; minor=${rest%%.*}; patch=${rest#*.}
@@ -607,7 +625,7 @@ jobs:
       # downloads a file that will not install (APK) or upload (AAB).
       - name: Verify signatures and stage assets
         run: |
-          ref="${GITHUB_REF_NAME}"
+          ref="${RELEASE_TAG}"
           apk=android/app/build/outputs/apk/release/app-release.apk
           aab=android/app/build/outputs/bundle/release/app-release.aab
           test -f "$apk" || { echo "::error::$apk not found"; exit 1; }
@@ -634,7 +652,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ref="${GITHUB_REF_NAME}"
+          ref="${RELEASE_TAG}"
           gh release upload "$ref" \
             "skywire-${ref}-android-arm64.apk" \
             "skywire-${ref}-android-arm64.apk.sha256" \
@@ -661,8 +679,8 @@ jobs:
         run: |
           make docker-push-test
           # Also tag with the release version
-          docker tag skycoin/skywire:test "skycoin/skywire:${{ github.ref_name }}"
-          docker push "skycoin/skywire:${{ github.ref_name }}"
+          docker tag skycoin/skywire:test "skycoin/skywire:${{ env.RELEASE_TAG }}"
+          docker push "skycoin/skywire:${{ env.RELEASE_TAG }}"
         shell: bash
 
   create-checksums:
@@ -673,14 +691,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release download "${{ github.ref_name }}" --repo ${{ github.repository }} --pattern "*.sha256"
+          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} --pattern "*.sha256"
           cat *.sha256 > checksums.txt
 
       - name: Upload combined checksums
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" checksums.txt \
+          gh release upload "${{ env.RELEASE_TAG }}" checksums.txt \
             --repo ${{ github.repository }} \
             --clobber
 
@@ -699,6 +717,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release edit "${{ github.ref_name }}" \
+          gh release edit "${{ env.RELEASE_TAG }}" \
             --repo ${{ github.repository }} \
             --draft=false
