@@ -81,6 +81,7 @@ type Hypervisor struct {
 
 	// Runtime state for enable/disable toggle
 	httpSrv        *http.Server // nil when the web UI isn't serving
+	deskSrv        *http.Server // the desk's own listener (DeskAddr); nil when not serving
 	srvCancel      context.CancelFunc
 	enabled        bool      // DMSG RPC + managed-visor tracking active
 	uiServing      bool      // web UI (HTTP) server active — independent of `enabled`
@@ -233,8 +234,9 @@ func (hv *Hypervisor) startUI() error {
 	if hv.uiServing {
 		return nil
 	}
+	h := hv.HTTPHandler()
 	hv.httpSrv = &http.Server{
-		Handler:           hv.HTTPHandler(),
+		Handler:           h,
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -257,6 +259,37 @@ func (hv *Hypervisor) startUI() error {
 		}
 	}()
 
+	// The desk on its own listener, SAME handler: only the root differs (see
+	// uiHandler). Not started when the build has no command module — there is
+	// nothing to host a desk out of, and the dashboard on HTTPAddr is the
+	// whole web UI then; logUIRoot says so once.
+	if _, haveExec := hv.execModule(); haveExec && hv.c.EffectiveDeskAddr() != "" {
+		deskAddr := hv.c.EffectiveDeskAddr()
+		deskLis, derr := vnet.Listen("tcp", deskAddr)
+		if derr != nil {
+			hv.logger.WithError(derr).Warnf("Hypervisor desk listen %s failed; the desk is not served", deskAddr)
+		} else {
+			hv.deskSrv = &http.Server{
+				Handler:           deskRootHandler(h),
+				ReadTimeout:       5 * time.Second,
+				WriteTimeout:      10 * time.Second,
+				ReadHeaderTimeout: 5 * time.Second,
+			}
+			go func(srv *http.Server) {
+				hv.logger.Infof("Hypervisor desk serving on %s", deskAddr)
+				var serr error
+				if hv.c.EnableTLS {
+					serr = srv.ServeTLS(deskLis, hv.c.TLSCertFile, hv.c.TLSKeyFile)
+				} else {
+					serr = srv.Serve(deskLis)
+				}
+				if serr != nil && !errors.Is(serr, http.ErrServerClosed) {
+					hv.logger.WithError(serr).Error("Hypervisor desk server error")
+				}
+			}(hv.deskSrv)
+		}
+	}
+
 	// Optionally also serve the SAME handler over dmsg (opt-in DmsgUIPort), so a
 	// browser dmsg client (the WASM hypervisor UI) can reach the fleet BY PUBLIC
 	// KEY — no exposed HTTP port, end-to-end over dmsg. The handler's own
@@ -269,7 +302,7 @@ func (hv *Hypervisor) startUI() error {
 			hv.logger.WithError(derr).Warnf("Hypervisor UI: dmsg listen on port %d failed", hv.c.DmsgUIPort)
 		} else {
 			dmsgUISrv := &http.Server{
-				Handler:           hv.HTTPHandler(),
+				Handler:           h,
 				ReadHeaderTimeout: 5 * time.Second,
 			}
 			go func() {
@@ -320,6 +353,14 @@ func (hv *Hypervisor) stopUI() {
 			hv.logger.WithError(err).Warn("Hypervisor HTTP shutdown error")
 		}
 		hv.httpSrv = nil
+	}
+	if hv.deskSrv != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := hv.deskSrv.Shutdown(shutdownCtx); err != nil {
+			hv.logger.WithError(err).Warn("Hypervisor desk shutdown error")
+		}
+		shutdownCancel()
+		hv.deskSrv = nil
 	}
 	hv.uiServing = false
 }
@@ -1401,21 +1442,4 @@ func setupLocalPtyUI(cliNet, cliAddr string) *dmsgPtyUI {
 	return &dmsgPtyUI{
 		PtyUI: pty.NewUI(ptyDialer, pty.DefaultUIConfig()),
 	}
-}
-
-// LegacyUI reports whether the web UI root serves the legacy Angular
-// dashboard instead of the desk.
-func (hv *Hypervisor) LegacyUI() bool {
-	hv.enableMu.Lock()
-	defer hv.enableMu.Unlock()
-	return hv.c.LegacyUI
-}
-
-// SetLegacyUI switches the web UI root between the desk (false) and the
-// legacy Angular dashboard (true). Takes effect on the next page load; the
-// UI server keeps running.
-func (hv *Hypervisor) SetLegacyUI(legacy bool) {
-	hv.enableMu.Lock()
-	hv.c.LegacyUI = legacy
-	hv.enableMu.Unlock()
 }

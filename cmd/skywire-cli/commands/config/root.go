@@ -45,7 +45,7 @@ var (
 	isPkgEnv                   bool
 	isUsrEnv                   bool
 	isHypervisor               bool
-	isLegacyHVUI               bool
+	hvDeskAddr                 string
 	hypervisorPKs              string
 	dmsgptyWlPKs               string
 	surveyWhitelistPKs         string

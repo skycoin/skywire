@@ -103,7 +103,7 @@ one that no longer exists. Regenerate rather than edit by hand.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ISHYPERVISOR` | `true` | Start the hypervisor interface for this visor |
-| `LEGACYHVUI` | `true` | Serve the legacy Angular dashboard at the hypervisor web UI root instead of the desk (no wasm visor in the page). Default false = the desk. Runtime: skywire cli visor hv enable --legacy[=false] -w |
+| `HVDESKADDR` | `:8002` | Desk (wasm-visor hypervisor UI) listen address, served beside the dashboard on `HVHTTPADDR` (no wasm visor in the page). Default false = the desk. Runtime: skywire cli visor hv enable --legacy[=false] -w |
 | `HVHTTPADDR` | `':8000'` | Hypervisor web-UI listen address (host:port). Default ':8000' = all interfaces (reachable on the LAN at http://<this-host-ip>:8000). Use '127.0.0.1:8000' to restrict the UI to localhost, or pin a specific LAN IP, e.g. '192.168.0.2:8000'. |
 | `ENABLEPKENDPOINT` | `true` | Expose an unauthenticated GET /api/pk on the hypervisor (returns this visor's public key). Off by default; skybian / Arch-ARM image builds set it so a freshly-imaged board can be discovered on the LAN. |
 

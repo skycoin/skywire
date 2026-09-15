@@ -114,9 +114,8 @@ type Values struct {
 	WSPeers      string // WSPEERS: <pk>@<ws(s)://…> peers held as WebSocket transports
 	Ishv         bool
 	NoIshv       bool
-	LegacyHVUI   bool
-	NoLegacyHVUI bool
-	PkEndpoint   bool // ENABLEPKENDPOINT
+	HvDeskAddr   string // HVDESKADDR
+	PkEndpoint   bool   // ENABLEPKENDPOINT
 	NoPkEndpoint bool
 	HvAuth       bool // HVAUTH
 	NoHvAuth     bool
@@ -318,8 +317,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().StringVar(&v.WSPeers, "ws-peer", "", "peers held as WebSocket transports, <pk>@<ws(s)://host[:port]/path>, comma-separated — writes WSPEERS in skywire.conf")
 	cmd.Flags().BoolVar(&v.Ishv, "ishv", false, "enable local hypervisor — writes ISHYPERVISOR=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoIshv, "no-ishv", false, "disable local hypervisor — writes ISHYPERVISOR=false in skywire.conf")
-	cmd.Flags().BoolVar(&v.LegacyHVUI, "legacy-hv-ui", false, "serve the legacy Angular dashboard at the hypervisor web UI root instead of the desk — writes LEGACYHVUI=true in skywire.conf")
-	cmd.Flags().BoolVar(&v.NoLegacyHVUI, "no-legacy-hv-ui", false, "serve the desk at the hypervisor web UI root (default) — writes LEGACYHVUI=false in skywire.conf")
+	cmd.Flags().StringVar(&v.HvDeskAddr, "hvdeskaddr", "", "hypervisor desk address (host:port): where the wasm-visor hypervisor UI is served, beside the dashboard — writes HVDESKADDR in skywire.conf")
 	cmd.Flags().BoolVar(&v.PkEndpoint, "pk-endpoint", false, "expose unauthenticated GET /api/pk on the hypervisor — writes ENABLEPKENDPOINT=true in skywire.conf (skybian / Arch-ARM image builds set this)")
 	cmd.Flags().BoolVar(&v.NoPkEndpoint, "no-pk-endpoint", false, "do not expose GET /api/pk — writes ENABLEPKENDPOINT=false in skywire.conf")
 	cmd.Flags().BoolVar(&v.HvAuth, "hv-auth", false, "require a password on the hypervisor UI — writes HVAUTH=true in skywire.conf")
@@ -482,16 +480,15 @@ var envMap = map[string]EnvMapping{
 	"ws-peer": {Key: "WSPEERS", Format: EnvFormatBashArray},
 	"ishv":    {Key: "ISHYPERVISOR", Format: EnvFormatBool},
 	"no-ishv": {Key: "ISHYPERVISOR", Format: EnvFormatBool, Negate: true},
-	"legacy-hv-ui": {Key: "LEGACYHVUI", Format: EnvFormatBool, Default: "false (the desk)",
+	"hvdeskaddr": {Key: "HVDESKADDR", Format: EnvFormatString, Default: ":8002",
 		Note: "Only affects a visor that serves the hypervisor web UI — ISHYPERVISOR=true, or enabled later with `skywire cli visor hv enable`."},
-	"no-legacy-hv-ui": {Key: "LEGACYHVUI", Format: EnvFormatBool, Negate: true, Default: "false (the desk)"},
-	"pk-endpoint":     {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool},
-	"no-pk-endpoint":  {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool, Negate: true},
-	"hv-auth":         {Key: "HVAUTH", Format: EnvFormatBool},
-	"no-hv-auth":      {Key: "HVAUTH", Format: EnvFormatBool, Negate: true},
-	"hvaddr":          {Key: "HVHTTPADDR", Format: EnvFormatString},
-	"sk":              {Key: "SK", Format: EnvFormatString},
-	"version":         {Key: "VERSION", Format: EnvFormatString},
+	"pk-endpoint":    {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool},
+	"no-pk-endpoint": {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool, Negate: true},
+	"hv-auth":        {Key: "HVAUTH", Format: EnvFormatBool},
+	"no-hv-auth":     {Key: "HVAUTH", Format: EnvFormatBool, Negate: true},
+	"hvaddr":         {Key: "HVHTTPADDR", Format: EnvFormatString},
+	"sk":             {Key: "SK", Format: EnvFormatString},
+	"version":        {Key: "VERSION", Format: EnvFormatString},
 
 	// Visor public/private + autoconnect
 	"rewardaddr":              {Key: "REWARDSKYADDR", Format: EnvFormatString},
