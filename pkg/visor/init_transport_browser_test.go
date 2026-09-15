@@ -10,7 +10,7 @@ import (
 // TestBrowserSkipsSocketCarriers. A browser has neither TCP nor UDP sockets, so
 // stcpr, sudph, quic and the STUN probe cannot work there. Starting one anyway
 // is not merely useless: the client registers, IsKnownNetwork reports the
-// carrier usable, and autoconnect spends a whole phase dialling it — every
+// carrier usable, and autoconnect spends a whole phase dialing it — every
 // attempt waiting out its full timeout. That shipped for squicr and for STUN,
 // which both missed the guard stcpr and sudph already had.
 //

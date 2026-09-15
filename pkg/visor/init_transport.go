@@ -472,7 +472,7 @@ func initQuicClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if runtime.GOOS == "js" {
 		// A browser has no UDP, so QUIC cannot dial and cannot bind. Started
 		// anyway it registers as a carrier, IsKnownNetwork reports it usable, and
-		// autoconnect spends a whole phase dialling squicr to every public visor
+		// autoconnect spends a whole phase dialing squicr to every public visor
 		// — each attempt waiting out its full timeout before failing with
 		// "timeout: no recent network activity". Measured on the wasm visor at
 		// theskywirenetwork.net. Same reason stcpr and sudph stay off here.
