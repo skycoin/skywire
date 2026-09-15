@@ -99,6 +99,50 @@ func docHandler(root *cobra.Command) http.Handler {
 			writeHTML(w, r.URL.Path, "prose", proseIndex())
 			return
 		}
+		// docs/skywire/ is the GENERATED CLI reference checked into the repo,
+		// so prose links into it ("../skywire/cli/config/README.md") are right
+		// on GitHub and were dead here: that tree is not embedded, because this
+		// server generates the same pages from the live cobra tree at /.
+		// Send the reader to the generated page instead of a 404. Relative, not
+		// absolute — the site is served under a base path on the docs site and
+		// on the desk's virtual loopback alike (see relRoot).
+		if rest, ok := strings.CutPrefix(name, "skywire/"); ok {
+			// Resolve against the real command tree and redirect to the page
+			// that MATCHED, never to the requested string. A prose link naming
+			// a command that no longer exists is then a 404 here rather than a
+			// redirect into one — and the Location header is built from the
+			// cobra tree, so nothing off the request reaches it.
+			want := strings.Trim(strings.TrimSuffix(strings.Trim(rest, "/"), "README.md"), "/")
+			var pages []page
+			collect(root, nil, &pages)
+			for i := range pages {
+				if strings.Join(pages[i].segs, "/") == want {
+					// nolint G710: neither half of this Location can leave the site.
+					// relRoot returns "./" or a run of "../" and nothing else; the
+					// tail is the matched page's own segments off the cobra tree.
+					// The analysis sees r.URL.Path reach relRoot and stops there.
+					http.Redirect(w, r, relRoot(r.URL.Path)+path.Join( //nolint:gosec
+						append(append([]string{}, pages[i].segs...), "README.md")...),
+						http.StatusFound)
+					return
+				}
+			}
+			http.NotFound(w, r)
+			return
+		}
+		// A directory: list it. See proseDirIndex.
+		if strings.HasSuffix(name, "/") {
+			if idx := proseDirIndex(strings.TrimSuffix(name, "/")); idx != nil {
+				writeHTML(w, r.URL.Path, name, idx)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+		if siteChrome(name) {
+			http.NotFound(w, r)
+			return
+		}
 		b, err := fs.ReadFile(skydocs.Prose(), name)
 		if err != nil {
 			http.NotFound(w, r)
@@ -189,7 +233,7 @@ func proseIndex() []byte {
 	bySection := map[string][]string{}
 	var sections []string
 	walkErr := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") || siteChrome(p) {
 			return nil
 		}
 		sec := path.Dir(p)
@@ -320,3 +364,83 @@ func writeHTML(w http.ResponseWriter, urlPath, title string, body []byte) {
 	// nothing to retry.
 	fmt.Fprintf(w, docPage, html.EscapeString(title), relRoot(urlPath), body) //nolint:errcheck,gosec
 }
+
+// proseDirIndex lists one directory of the embedded prose.
+//
+// The prose links at directories — "see the [guides](guides/)" — because that
+// is what resolves on GitHub, where a directory listing is a page. Here it was
+// a 404: the handler could serve a file and nothing else, so every such link
+// was dead. Listing the directory makes the same href mean the same thing in
+// both places.
+//
+// Returns nil when the directory holds no prose, which the caller turns into
+// the 404 it would have been anyway.
+func proseDirIndex(dir string) []byte {
+	fsys := skydocs.Prose()
+	entries, err := fs.ReadDir(fsys, dir)
+	if err != nil {
+		return nil
+	}
+	var files, subdirs []string
+	for _, e := range entries {
+		switch {
+		case e.IsDir():
+			subdirs = append(subdirs, e.Name())
+		case strings.HasSuffix(e.Name(), ".md"):
+			if !siteChrome(path.Join(dir, e.Name())) {
+				files = append(files, e.Name())
+			}
+		}
+	}
+	if len(files) == 0 && len(subdirs) == 0 {
+		return nil
+	}
+	sort.Slice(files, func(i, j int) bool {
+		return strings.ToLower(proseTitle(fsys, path.Join(dir, files[i]))) <
+			strings.ToLower(proseTitle(fsys, path.Join(dir, files[j])))
+	})
+	sort.Strings(subdirs)
+	var b strings.Builder
+	fmt.Fprintf(&b, "<h1>%s</h1><ul>", html.EscapeString(dir))
+	for _, d := range subdirs {
+		fmt.Fprintf(&b, "<li><a href=%q>%s/</a></li>", d+"/", html.EscapeString(d))
+	}
+	for _, n := range files {
+		fmt.Fprintf(&b, "<li><a href=%q>%s</a> <small>%s</small></li>",
+			n, html.EscapeString(proseTitle(fsys, path.Join(dir, n))), html.EscapeString(n))
+	}
+	b.WriteString("</ul>")
+	return []byte(b.String())
+}
+
+// siteChrome names embedded markdown that is not prose but MkDocs site
+// furniture, and must not be served here.
+//
+// docs/ feeds two pipelines: this server, and the MkDocs build behind
+// skycoin.github.io/skywire (mkdocs.yml, scripts/docs-prepare.sh). index.md is
+// the MkDocs HOME PAGE, and it belongs to that one alone. It is written in
+// mkdocs-material syntax — ":material-rocket-launch:", "<div class='grid
+// cards' markdown>", "!!! note" — none of which goldmark knows, so it rendered
+// here as literal punctuation. And every one of its section links (guides/,
+// specs/, rewards/, graph/) is an MkDocs nav route: two of those trees are
+// staged into docs/ by docs-prepare.sh at build time, gitignored and never
+// embedded, so they could not resolve here however the handler was written.
+//
+// Serving it was showing the desk's reader a broken copy of a page that is
+// correct on the site it was written for. The prose index and the command
+// reference are this server's own front door.
+func siteChrome(p string) bool { return p == "index.md" }
+
+// SiteChrome is siteChrome for the link check, which lives in the package that
+// assembles the command tree.
+func SiteChrome(p string) bool { return siteChrome(p) }
+
+// Handler is docHandler for callers outside this package: the site this
+// command serves, built against the command tree given.
+//
+// It exists so the link check can run where the REAL tree is assembled.
+// Prose links into the generated reference ("../skywire/cli/config/README.md")
+// are resolved against that tree, so a test holding only a stub root cannot
+// tell a dead link from a command it was never given — and this package cannot
+// import the root itself, which imports this one.
+func Handler(root *cobra.Command) http.Handler { return docHandler(root) }

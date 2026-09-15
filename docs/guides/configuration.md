@@ -1,12 +1,37 @@
 # Skywire Configuration
 
-The skywire visor requires a JSON-formatted config file to run,
-produced by `skywire cli config gen`.
+The skywire visor runs from a JSON config file. There are two ways to
+produce one, and which you should use depends on how skywire was
+installed.
 
-The `skywire-autoconfig` script included with the skywire package
-handles config generation and config updating for the user who
-installed the package, as well as restarting the skywire systemd
-service.
+## Which one: `autoconfig` or `config gen`
+
+**On a packaged install, use `skywire autoconfig`.** It is the single
+entry point that (re)generates the config and (re)starts the service,
+and the shape of what it writes — paths, owner, systemd unit — is
+driven entirely by the SKYENV file, `/etc/skywire.conf`.
+
+That file is the durable record, not the generated JSON. Every package
+update runs `skywire autoconfig` again, which rebuilds the config from
+`/etc/skywire.conf` — so anything you configured by running
+`skywire cli config gen` by hand, or by editing the JSON, is gone at
+the next update. Configure a packaged install by setting the variable
+in `/etc/skywire.conf`, or by passing the flag to `skywire autoconfig`,
+which records it there for you:
+
+```
+skywire autoconfig --ishv --transport-port 7773
+```
+
+`autoconfig --help` lists the flags; each one it accepts corresponds to
+a line it writes into `/etc/skywire.conf`.
+
+**`skywire cli config gen` is the lower-level tool.** Reach for it when
+there is no package and no SKYENV file — a checkout, a container, a
+one-off config written somewhere specific — or when you want a config
+without touching the system's. Nothing regenerates it for you, which is
+exactly the property you want there and exactly the trap on a packaged
+install.
 
 Detailed command flag documentation lives at
 [/docs/skywire/cli/config/](../skywire/cli/config/README.md) and
@@ -15,7 +40,7 @@ flags are noted below.
 
 ## Config gen
 
-To run skywire, first generate a config:
+To generate a config in a checkout:
 
 ```
 skywire cli config gen -irx
@@ -28,8 +53,9 @@ skywire cli config gen -irx
 More options for configuration are displayed with `skywire cli config gen --all`.
 
 NOTE: If you have installed skywire as a package or via the windows .msi
-or mac installer, include the `-p` flag — and `skywire cli config gen`
-must be run as root.
+or mac installer, prefer `skywire autoconfig` as above. If you do run
+`skywire cli config gen` there, include the `-p` flag and run it as
+root — and expect the next package update to replace the result.
 
 ## Hypervisor web UI
 
