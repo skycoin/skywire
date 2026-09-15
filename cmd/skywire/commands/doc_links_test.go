@@ -2,6 +2,8 @@
 package commands
 
 import (
+	"bytes"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -51,11 +53,13 @@ func TestEveryProseLinkResolves(t *testing.T) {
 			return err
 		}
 		for _, m := range mdLink.FindAllStringSubmatch(string(b), -1) {
-			target := m[1]
-			// Strip the fragment: the site addresses documents, and a heading
-			// id is resolved in the browser.
+			target, frag := m[1], ""
+			// The fragment is checked too, against the ids goldmark generates
+			// from the headings. An href that names a heading which was renamed
+			// lands at the top of the right page, silently — which is how a
+			// whole page of anchors went stale under a section rename.
 			if i := strings.IndexByte(target, '#'); i >= 0 {
-				target = target[:i]
+				target, frag = target[:i], target[i+1:]
 			}
 			switch {
 			case target == "": // a pure fragment — the same page
@@ -77,9 +81,17 @@ func TestEveryProseLinkResolves(t *testing.T) {
 				broken = append(broken, p+" -> "+m[1]+": "+err.Error())
 				continue
 			}
-			_ = resp.Body.Close() //nolint:errcheck
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+			_ = resp.Body.Close()            //nolint:errcheck
 			if resp.StatusCode != http.StatusOK {
 				broken = append(broken, p+" -> "+m[1]+" ("+resp.Status+")")
+				continue
+			}
+			// Reference pages are reached through a redirect this client does
+			// follow, but their anchors are generated from a command tree, not
+			// from prose headings; only prose fragments are checked here.
+			if frag != "" && !bytes.Contains(body, []byte(`id="`+frag+`"`)) {
+				broken = append(broken, p+" -> "+m[1]+" (no such heading)")
 			}
 		}
 		return nil

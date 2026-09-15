@@ -33,10 +33,11 @@ without touching the system's. Nothing regenerates it for you, which is
 exactly the property you want there and exactly the trap on a packaged
 install.
 
-Detailed command flag documentation lives at
-[/docs/skywire/cli/config/](../skywire/cli/config/README.md) and
-[/docs/skywire/visor/](../skywire/visor/README.md). The most important
-flags are noted below.
+The full reference for both is [config-gen.md](config-gen.md) — how the JSON
+is produced, and every SKYENV variable with its default. Per-flag help is
+generated from the live command tree at
+[cli/config](../skywire/cli/config/README.md) and
+[visor](../skywire/visor/README.md). The most important flags are noted below.
 
 ## Config gen
 
@@ -50,7 +51,9 @@ skywire cli config gen -irx
 * `-r --regen` regenerate a config which may already exist, retaining the keys
 * `-x --retainhv` retain any remote hypervisors set in the config (optional)
 
-More options for configuration are displayed with `skywire cli config gen --all`.
+More options are displayed with `skywire cli config gen --all`, and the SKYENV
+template behind a packaged install with `skywire cli config gen -q` — see
+[config-gen.md](config-gen.md).
 
 NOTE: If you have installed skywire as a package or via the windows .msi
 or mac installer, prefer `skywire autoconfig` as above. If you do run

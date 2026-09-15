@@ -202,7 +202,7 @@ deep Doze, which shows up as dmsg session drops, not as auth errors.
   the target (or a restart after a config edit) fixes it.
 
 Related: [configuration.md](configuration.md) (hypervisor setup,
-`hv tui`), [VISOR_CONFIG_RUNTIME.md](https://github.com/skycoin/skywire/blob/develop/VISOR_CONFIG_RUNTIME.md)
+`hv tui`), [config-runtime.md](config-runtime.md)
 (runtime vs config-file changes),
 [manual-routing.md](manual-routing.md) (what to do with the routes
 you can now see).

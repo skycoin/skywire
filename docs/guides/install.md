@@ -153,4 +153,4 @@ binaries. A custom app must have its binary present in `bin_path`.
 
 ## Docker
 
-For docker-specific documentation, see the [Docker guide](https://github.com/skycoin/skywire/blob/develop/DOCKER.md).
+For docker-specific documentation, see the [Docker guide](docker.md).

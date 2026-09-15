@@ -146,9 +146,9 @@ codebase evolved; this is the reference for "what we mean when we say X."
   → `pkg/skywireconfig/skyenvfile`
 - **skywire-config.json** — the visor's generated runtime config. A *derived*
   artifact: the skyenv file is the source of truth, and the next autoconfig
-  run rebuilds this from it. → `VISOR_CONFIG_GEN.md`
+  run rebuilds this from it. → [guides/config-gen.md](guides/config-gen.md)
 - **survey** — the node-metadata report a visor submits for rewards
-  (hardware, version, uptime), gated by `survey_whitelist`. → `REWARDS.md`
+  (hardware, version, uptime), gated by `survey_whitelist`. → [reward-system.md](reward-system.md)
 
 ## Routing & multiplexing
 

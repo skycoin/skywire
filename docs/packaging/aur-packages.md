@@ -97,7 +97,7 @@ for what their timers do.
 
 `arch=('any')`. Registers the Skycoin **apt repository** source list and GPG
 key (`48F19E5157BE6014D80A47328D6D51BC4AD7AE64`), ships the opt-in
-[unattended-upgrades example files](auto-update.md#1-unattended-upgrades-debian-apt),
+[unattended-upgrades example files](auto-update.md#1-unattended-upgrades-debian--apt),
 and a first-boot `install-skywire.service` (one-shot `apt reinstall
 skywire-bin`). It also absorbs the former skybian provisioning payload
 (`skymanager`, `skybian-reset`, `skyenv`, MOTD snippets) and therefore
