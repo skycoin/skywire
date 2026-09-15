@@ -3,6 +3,7 @@ package visor
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,13 +18,13 @@ import (
 // The JSON lines must keep module and every WithField intact so the same
 // question is a jq select with no regex.
 func TestJSONLogHook_PreservesFields(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "skywire.jsonl")
+	path := filepath.Join(jsonLogDir(t), "skywire.jsonl")
 
 	hook, err := newJSONLogHook(path)
 	require.NoError(t, err)
 
 	log := logrus.New()
-	log.SetOutput(os.NewFile(0, os.DevNull)) // the hook is what is under test
+	log.SetOutput(io.Discard) // the hook is what is under test
 	log.SetLevel(logrus.TraceLevel)
 	log.AddHook(hook)
 
@@ -50,12 +51,12 @@ func TestJSONLogHook_PreservesFields(t *testing.T) {
 // Nanosecond timestamps: the text log is second-resolution, which cannot order
 // a boot sequence where several subsystems start in the same second.
 func TestJSONLogHook_TimestampHasSubSecondResolution(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "skywire.jsonl")
+	path := filepath.Join(jsonLogDir(t), "skywire.jsonl")
 	hook, err := newJSONLogHook(path)
 	require.NoError(t, err)
 
 	log := logrus.New()
-	log.SetOutput(os.NewFile(0, os.DevNull))
+	log.SetOutput(io.Discard)
 	log.AddHook(hook)
 	log.Info("first")
 
@@ -66,4 +67,26 @@ func TestJSONLogHook_TimestampHasSubSecondResolution(t *testing.T) {
 
 	ts, _ := entry["time"].(string)
 	require.Regexp(t, `\.\d+`, ts, "timestamp %q carries no sub-second part", ts)
+}
+
+// jsonLogDir is t.TempDir with the one behavior this test cannot use: its
+// cleanup calls RemoveAll and FAILS the test if that errors.
+//
+// The hook holds skywire.jsonl open for as long as it exists, which is correct
+// for a log sink and which lumberjackrus gives no way to undo — Hook keeps its
+// *lumberjack.Logger unexported and exposes no Close. On Unix that is
+// invisible: an open file unlinks fine. On Windows it is not, and both tests
+// failed in cleanup, after every assertion had already passed:
+//
+//	TempDir RemoveAll cleanup: unlinkat ...\skywire.jsonl:
+//	  The process cannot access the file because it is being used by another process.
+//
+// So the directory is removed on a best-effort basis instead. A leftover temp
+// directory on a CI runner is not worth failing a green test over.
+func jsonLogDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "skywire-jsonlog")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) }) //nolint:errcheck // best-effort by design; see above
+	return dir
 }
