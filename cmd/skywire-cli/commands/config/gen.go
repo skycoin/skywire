@@ -2663,6 +2663,12 @@ var (
 		"publicip":             "DISPLAYNODEIP=true",
 		"no-direct-transports": "NODIRECTTRANSPORTS=true",
 		"pty-rpc-exec":         "PTYRPCEXEC=true",
+		// The resolving proxies. Missing from this map, `config gen --dmsgweb`
+		// left DMSGWEB commented in the conf it emitted, so a later run from
+		// that conf produced a config with no dmsg_web block at all. The proxy
+		// chain was silently off; found live with nothing on 4445 or 4446.
+		"dmsgweb":   "DMSGWEB=true",
+		"skynetweb": "SKYNETWEB=true",
 	}
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{
@@ -2671,6 +2677,14 @@ var (
 		"hvaddr":  "HVHTTPADDR",
 		"timeout": "SHUTDOWNTIMEOUT",
 		"reward":  "REWARDSKYADDR",
+		// The resolvers' string knobs, for the same reason as the two bools
+		// above: an upstream or a bind address that cannot round-trip is a
+		// chain that comes back up pointing somewhere else, or nowhere.
+		"dmsgweb-upstream":   "DMSGWEBUPSTREAM",
+		"skynetweb-upstream": "SKYNETWEBUPSTREAM",
+		"dmsgweb-addr":       "DMSGWEBADDR",
+		"skynetweb-addr":     "SKYNETWEBADDR",
+		"dmsgweb-sk":         "DMSGWEBSK",
 	}
 	// Integer/port flags: bare KEY=N lines (e.g. #TRANSPORTPORT=0).
 	intFlagToEnv = map[string]string{

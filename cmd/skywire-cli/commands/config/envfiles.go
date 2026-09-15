@@ -177,7 +177,7 @@ const envfileLinux = `#
 #DISPLAYNODEIP=true
 
 #--	Autostart vpn server for this visor
-#VPNSERVER=false
+#VPNSERVER=true
 
 #--	Autostart the vpn-router: a LAN/WiFi gateway that NATs downstream
 #	clients into the vpn-client tunnel. Needs VPNROUTERLANIFC (the
@@ -252,16 +252,19 @@ const envfileLinux = `#
 
 #--	Autostart the dmsgweb SOCKS bridge (browse dmsg sites over a local
 #	SOCKS5 proxy). Off by default.
-#DMSGWEB=false
+#DMSGWEB=true
 
-#--	dmsgweb upstream address the bridge listens on (host:port)
-#DMSGWEBUPSTREAM=':8082'
+#--	Upstream SOCKS5 server dmsgweb forwards NON-.dmsg traffic to.
+#--	Leave unset to auto-chain to skynetweb (4445 -> 4446), which is what
+#--	makes one proxy cover .dmsg, .skynet and clearnet.
+#DMSGWEBUPSTREAM='127.0.0.1:4446'
 
 #--	Autostart the skynetweb bridge (serve/reach skynet sites). Off by default.
-#SKYNETWEB=false
+#SKYNETWEB=true
 
-#--	skynetweb upstream address the bridge listens on (host:port)
-#SKYNETWEBUPSTREAM=':8083'
+#--	Upstream SOCKS5 server skynetweb forwards NON-.skynet traffic to.
+#--	127.0.0.1:1080 is the skysocks-client, i.e. the clearnet exit.
+#SKYNETWEBUPSTREAM='127.0.0.1:1080'
 #DMSGWEBADDR='0.0.0.0'
 #SKYNETWEBADDR='0.0.0.0'
 
