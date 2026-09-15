@@ -73,6 +73,8 @@ The next visit is a first visit again: it creates the account, and every
 paired tab and every managed visor is untouched — `users.db` holds the web
 login and nothing else.
 
+### Pairing a desk tab
+
 A desk tab opened from that page runs its own visor and asks to drive the
 host as a hypervisor. Approve it on the machine with
 `skywire cli visor hv pair` (lists pending tabs by fingerprint, then

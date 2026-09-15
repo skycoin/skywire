@@ -206,6 +206,65 @@
 			.then(function () { return true; })
 			.catch(function () { return false; });
 	}
+	// proxyIsServing reports whether THIS tab has a resolving proxy listening,
+	// which is the precondition for status.skysocks.
+	//
+	// That page is not fetched from anywhere: proxyinterstitial answers it in
+	// process as a reserved host, before the port gate and before the
+	// exit-reachability check, so it renders even when the exit is down — but
+	// only if a proxy is running to answer it. A desk that never started one
+	// has nothing to serve the page, and opening the tab anyway left a dead
+	// tab whose failure the caller's catch swallowed.
+	//
+	// 4445 is the dmsgweb resolver, the same port the mesh-browse path checks.
+	function proxyIsServing() {
+		try {
+			return !!(globalThis.vnet && globalThis.vnet.listening(4445));
+		} catch (e) {
+			return false;
+		}
+	}
+	// openPairingDocsIfUnpaired: the desk a VISOR serves (the :8000 case, where
+	// this page stands in for the host's native hypervisor UI) is not the same
+	// visor as the host. The tab runs its own, and until the operator approves
+	// that key on the machine the tab cannot drive it — the transport is up,
+	// the dashboard renders, and every RPC the tab makes is refused. Nothing on
+	// the desk said so, and the ☰ pair window only tells you once you know to
+	// look for it.
+	//
+	// So open the prose that spells the procedure out, at its section, as an
+	// ordinary tab beside the dashboard. Only when there IS a host to pair with
+	// (__SKYWIRE_LOCAL_PK__ is what a visor-served page injects), only when the
+	// host says this tab is not paired, and only when the docs are being
+	// served — a page with no docs port has nothing to open.
+	//
+	// /pair/status is pre-auth by design: a tab that has no session yet still
+	// has to be able to learn its own standing.
+	function openPairingDocsIfUnpaired(panel, win, docsPort) {
+		if (!docsPort || !win || !win.openTab) { return; }
+		if (typeof globalThis.__SKYWIRE_LOCAL_PK__ !== 'string') { return; }
+		if (!panel || typeof panel.exec !== 'function') { return; }
+		Promise.resolve(panel.exec('skywire cli visor pk'))
+			.then(function (r) {
+				var pk = ((r && r.out) || '').trim();
+				if (!/^[0-9a-f]{66}$/.test(pk)) { return null; }
+				return fetch(location.origin + '/pair/status?pk=' + pk, { cache: 'no-store' })
+					.then(function (resp) { return resp.ok ? resp.json() : null; });
+			})
+			.then(function (st) {
+				if (!st || st.paired) { return; }
+				// The docs server binds in seconds but not instantly, and a tab
+				// opened before it listens is a dead tab nobody reloads.
+				(function waitDocs(n) {
+					if (globalThis.vnet && globalThis.vnet.listening(docsPort)) {
+						try { win.openTab('vnet:' + docsPort, '/prose/guides/configuration.md#pairing-a-desk-tab', 'http', true); } catch (e) {}
+						return;
+					}
+					if (n > 0) { setTimeout(function () { waitDocs(n - 1); }, 500); }
+				})(60);
+			})
+			.catch(function () { /* no pairing surface here — say nothing */ });
+	}
 	function saveSession() {
 		try {
 			var up = !!(globalThis.vnet && globalThis.vnet.listening(3435));
@@ -848,8 +907,24 @@
 										deskWin = win;
 									}
 									if (win && win.openTab) {
+										// home.dmsg always: BrowseFetch answers it in-process as
+										// the resolver's synthetic alias directory, before any
+										// resolve or dial, so it renders with no proxy, no route
+										// and no transport.
 										try { win.openTab('home.dmsg', '/', 'http', true); } catch (e2) {}
-										try { win.openTab('status.skysocks', '/', 'http', true); } catch (e2) {}
+										// status.skysocks only when something serves it. It is a
+										// real page from a running skysocks-client, not a
+										// synthetic one — and this desk does not start a proxy.
+										// Opened unconditionally it produced a tab that could
+										// never load, with the failure swallowed by the catch
+										// below, which reads as a broken desk rather than as an
+										// app that was never started.
+										if (proxyIsServing()) {
+											try { win.openTab('status.skysocks', '/', 'http', true); } catch (e2) {}
+										}
+										// Behind both: the pairing procedure, but only when the host says
+										// this tab is not approved yet. See openPairingDocsIfUnpaired.
+										openPairingDocsIfUnpaired(panel, win, docsPort);
 									}
 									// One-shot subresources (the Material icon font above
 									// all) are a load-lottery on first paint: the tab opens
