@@ -75,26 +75,8 @@ func setup() {
 		return nil
 	}), js.Undefined())
 
-	// A click INSIDE an <iframe> never reaches this document. The iframe is a
-	// separate browsing context and mousedown does not cross it, so the
-	// per-window handler that raises a window on click (w.Body, in wire) never
-	// fires for a window whose content is a frame — a nested browser, an
-	// embedded page, a framed app. Clicking such a page left the window where
-	// it was in the stack while clicking a window that draws its own DOM raised
-	// it, which reads as the framed window being the only one you cannot click
-	// to the front.
-	//
-	// Focus does cross. Moving into a frame blurs this window and sets
-	// document.activeElement to the <iframe> ELEMENT — same-origin or not, in
-	// every engine. Read it once the blur has settled (the assignment lands
-	// after the event in some browsers) and raise whichever window owns it.
-	addListener(window, "blur", js.FuncOf(func(js.Value, []js.Value) interface{} {
-		window.Call("setTimeout", js.FuncOf(func(js.Value, []js.Value) interface{} {
-			focusWindowOfActiveFrame()
-			return nil
-		}), 0)
-		return nil
-	}), js.Undefined())
+	// Clicks inside framed windows raise them. See wireFrameFocus.
+	wireFrameFocus()
 
 	addListener(body, "mousedown", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		windowClicked = false
@@ -498,16 +480,10 @@ func cancelFullscreen() bool {
 	return false
 }
 
-// focusWindowOfActiveFrame raises the window that owns document.activeElement
-// when that element is an iframe, and does nothing otherwise — so a blur from
-// leaving the page, or from focus landing on an ordinary control, changes no
-// z-order. Already-focused windows are left alone, which also makes the
-// tab-away-and-back case a no-op.
-func focusWindowOfActiveFrame() {
-	el := document.Get("activeElement")
-	if !el.Truthy() || !strings.EqualFold(el.Get("tagName").String(), "iframe") {
-		return
-	}
+// focusWindowOwning raises the window that contains el, if it is not already
+// the focused one. Walks up from el because the click reaches us from inside a
+// frame, which can sit any depth below the window body.
+func focusWindowOwning(el js.Value) {
 	for node := el; node.Truthy(); node = node.Get("parentElement") {
 		for i := len(stackWin) - 1; i >= 0; i-- {
 			if w := stackWin[i]; w.DOM.Truthy() && w.DOM.Equal(node) {
@@ -518,4 +494,77 @@ func focusWindowOfActiveFrame() {
 			}
 		}
 	}
+}
+
+// wireFrameFocus makes a click INSIDE a frame raise the window holding it.
+//
+// A window whose content is an <iframe> could not be clicked to the front: a
+// frame is its own browsing context, mousedown does not cross it, and the
+// per-window body handler that raises a window therefore never fired. Only the
+// title bar and the resize edges — which are the window's own DOM — worked, so
+// a framed window looked like the one window you cannot click to the front.
+//
+// Focus is no substitute for the click. Moving into a frame does NOT fire blur
+// on this window (measured: focusing a frame left window.onblur silent), and
+// document.activeElement is already the frame whenever focus last landed there
+// — so a poll of it raises windows nobody clicked.
+//
+// What does work, for a SAME-ORIGIN frame, is listening inside it: its document
+// is reachable, and a capture-phase mousedown there is the click itself, with
+// nothing inferred and nothing swallowed. Every frame the desk puts in a window
+// is same-origin. A cross-origin frame stays as it was — unreachable by
+// construction, and not a case this manager has.
+//
+// Frames are wired as they appear (windows open long after this runs, and a
+// tab swaps its frame on navigation), so this observes the document and
+// re-wires on each load. Wiring is marked on the element to keep a re-render
+// from stacking listeners.
+func wireFrameFocus() {
+	var onMouseDown js.Func
+	onMouseDown = js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		if len(args) > 0 && args[0].Truthy() {
+			if t := args[0].Get("target"); t.Truthy() {
+				// The frame element, not the target inside it: the target
+				// belongs to the frame's document and has no parent chain
+				// leading to the window.
+				focusWindowOwning(this.Get("defaultView").Get("frameElement"))
+				return nil
+			}
+		}
+		return nil
+	})
+
+	attach := func(fr js.Value) {
+		if !fr.Truthy() || fr.Get("__wbFocusWired").Truthy() {
+			return
+		}
+		wire := js.FuncOf(func(js.Value, []js.Value) interface{} {
+			doc := fr.Get("contentDocument")
+			if !doc.Truthy() { // cross-origin, or not loaded yet
+				return nil
+			}
+			addListener(doc, "mousedown", onMouseDown, captureTrue)
+			return nil
+		})
+		addListener(fr, "load", wire, js.Undefined())
+		fr.Set("__wbFocusWired", true)
+		wire.Invoke() // already-loaded frames never fire load again
+	}
+
+	sweep := func() {
+		frames := document.Call("getElementsByTagName", "iframe")
+		for i := 0; i < frames.Get("length").Int(); i++ {
+			attach(frames.Index(i))
+		}
+	}
+
+	obs := js.Global().Get("MutationObserver")
+	if obs.Truthy() {
+		js.Global().Get("MutationObserver").New(js.FuncOf(func(js.Value, []js.Value) interface{} {
+			sweep()
+			return nil
+		})).Call("observe", document.Get("documentElement"),
+			map[string]interface{}{"childList": true, "subtree": true})
+	}
+	sweep()
 }
