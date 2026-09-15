@@ -67,12 +67,15 @@ type HypervisorConfig struct {
 	// the visor RPC) stay active. Toggled at runtime with `hv ui enable/disable`.
 	// Default false (UI served) — backward-compatible with configs that omit it.
 	UIDisable bool `json:"ui_disable,omitempty"`
-	// LegacyUI, when true, serves the Angular hypervisor UI at the root of the
-	// web UI port instead of the desk (no wasm visor in the page). Set from
-	// LEGACYHVUI in skywire.conf, `config gen --legacy-hv-ui`, or at runtime
-	// with `hv enable --legacy` / `hv ui enable --legacy`. Default false: the
-	// desk is the hypervisor UI.
-	LegacyUI   bool          `json:"legacy_ui,omitempty"`
+	// DeskAddr is where the desk — the wasm-visor hypervisor UI, hosted out of
+	// the skywire command module — is served: a second listener carrying the
+	// same handler as HTTPAddr, so the API, the login and every page are the
+	// same on both; only the root differs. The root of HTTPAddr is the Angular
+	// dashboard, the root of DeskAddr is the desk. Set from HVDESKADDR in
+	// skywire.conf or `config gen --hvdeskaddr`; empty takes the platform
+	// default (:8002 native, none in a browser). No listener is started when
+	// the build has no command module to host a desk out of.
+	DeskAddr   string        `json:"desk_addr"`
 	UIAssets   fs.FS         `json:"-"`
 	PK         cipher.PubKey `json:"-"`
 	SK         cipher.SecKey `json:"-"`
@@ -244,6 +247,7 @@ func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 		if c.HTTPAddr == "" {
 			c.HTTPAddr = httpAddr
 		}
+		c.DeskAddr = c.EffectiveDeskAddr()
 		c.Cookies.FillDefaults()
 		c.TPViz.Enable = true
 		c.EnableAuth = skyenv.EnableAuth
@@ -252,6 +256,16 @@ func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 		c.TLSKeyFile = skyenv.TLSKey
 
 	}
+}
+
+// EffectiveDeskAddr is where the desk is served: DeskAddr, or the platform
+// default when the config predates the field or leaves it empty. Empty is
+// the browser's default, and there it means no desk listener.
+func (c *HypervisorConfig) EffectiveDeskAddr() string {
+	if c.DeskAddr != "" {
+		return c.DeskAddr
+	}
+	return skyenv.DefaultHypervisorDeskAddr
 }
 
 // Parse parses the file at path and decodes its JSON into c.

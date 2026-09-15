@@ -101,16 +101,16 @@ const envfileLinux = `#
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
 
-#--	Serve the legacy Angular dashboard at the hypervisor web UI root instead
-#	of the desk (no wasm visor in the page). Default false = the desk.
-#	Runtime: skywire cli visor hv enable --legacy[=false] -w
-#LEGACYHVUI=true
-
 #--	Hypervisor web-UI listen address (host:port). Default ':8000' = all
 #	interfaces (reachable on the LAN at http://<this-host-ip>:8000).
 #	Use '127.0.0.1:8000' to restrict the UI to localhost, or pin a
 #	specific LAN IP, e.g. '192.168.0.2:8000'.
 #HVHTTPADDR=':8000'
+
+#--	Desk listen address (host:port): the wasm-visor hypervisor UI, served
+#	beside the dashboard with the same API and the same login. Default
+#	':8002'; the dashboard stays at HVHTTPADDR.
+#HVDESKADDR=':8002'
 
 #--	Expose an unauthenticated GET /api/pk on the hypervisor (returns this
 #	visor's public key). Off by default; skybian / Arch-ARM image builds
@@ -582,6 +582,9 @@ const envfileWindows = `#
 #	interfaces (reachable on the LAN at http://<this-host-ip>:8000).
 #	Use '127.0.0.1:8000' for localhost-only, or pin a LAN IP.
 #$HVHTTPADDR=':8000'
+
+#--	Desk (wasm-visor hypervisor UI) listen address. Default ':8002'.
+#$HVDESKADDR=':8002'
 
 ### Rewards #############################################################
 

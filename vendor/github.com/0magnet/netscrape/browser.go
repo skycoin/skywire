@@ -8,10 +8,6 @@ import (
 	"syscall/js"
 )
 
-const startPage = "data:text/html,<body style='font-family:sans-serif;padding:2em'>" +
-	"<h1>A browser, in Go</h1><p>The chrome is syscall/js. Each tab is an iframe. " +
-	"Use + for a new tab, or type a URL above.</p></body>"
-
 // home is the page a new tab opens. A host that has something of its own to
 // show — a demo site served beside the browser, a mesh index — sets
 // globalThis.__netscrapeStart to its URL; everyone else gets the built-in
@@ -20,7 +16,7 @@ func home() string {
 	if v := js.Global().Get("__netscrapeStart"); v.Type() == js.TypeString && v.String() != "" {
 		return v.String()
 	}
-	return startPage
+	return startURL
 }
 
 // navShim runs inside the sandboxed page. A sandboxed srcdoc has an opaque
@@ -119,7 +115,7 @@ func btn(label, style string) js.Value {
 // A generated page has no host worth showing, so it gets a plain word instead.
 func labelFor(url string) string {
 	switch {
-	case strings.HasPrefix(url, "data:"):
+	case url == startURL, strings.HasPrefix(url, "data:"):
 		return "new tab"
 	case strings.HasPrefix(url, "about:"), strings.HasPrefix(url, "blob:"):
 		return url
@@ -184,6 +180,13 @@ func load(t *tab, url string) {
 	// a strip where a whole URL never would.
 	if t != nil && t.lbl.Truthy() {
 		t.lbl.Set("textContent", labelFor(url))
+	}
+	if url == startURL {
+		renderStart(t)
+		if active >= 0 && tabs[active] == t {
+			addr.Set("value", "")
+		}
+		return
 	}
 	if strings.HasPrefix(url, "data:") || strings.HasPrefix(url, "about:") || strings.HasPrefix(url, "blob:") {
 		t.frame.Call("removeAttribute", "srcdoc")
@@ -290,7 +293,7 @@ func activate(i int) {
 			t.btn.Get("style").Set("background", "transparent")
 		}
 	}
-	addr.Set("value", tabs[i].hist[tabs[i].pos])
+	addr.Set("value", addrText(tabs[i].hist[tabs[i].pos]))
 	syncNav()
 }
 
@@ -672,6 +675,10 @@ func addTab(url string) {
 	tabs = append(tabs, t)
 	navigate(t, url)
 	activate(indexOf(t))
+	// A new tab is for typing an address into, so the bar takes the cursor.
+	if url == startURL {
+		addr.Call("focus")
+	}
 }
 
 func closeTab(i int) {
@@ -836,7 +843,7 @@ func Open(root js.Value) {
 		case "Escape":
 			// Put back what the tab is actually showing, as browsers do.
 			if t := cur(); t != nil {
-				addr.Set("value", t.hist[t.pos])
+				addr.Set("value", addrText(t.hist[t.pos]))
 			}
 			addr.Call("blur")
 		}

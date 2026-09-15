@@ -28,7 +28,6 @@ func init() {
 	hvCmd.AddCommand(hvuiCmd)
 	hvuiCmd.AddCommand(hvUIEnableCmd)
 	hvUIEnableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
-	hvUIEnableCmd.Flags().BoolVar(&hvLegacy, "legacy", false, "serve the legacy Angular dashboard at the web UI root instead of the desk (--legacy=false switches back); with -w also persists hypervisor.legacy_ui")
 	hvuiCmd.AddCommand(hvUIDisableCmd)
 	hvUIDisableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
 	hvCmd.AddCommand(hvpkCmd)
@@ -37,7 +36,6 @@ func init() {
 	hvCmd.AddCommand(chvpkCmd)
 	hvCmd.AddCommand(hvEnableCmd)
 	hvEnableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
-	hvEnableCmd.Flags().BoolVar(&hvLegacy, "legacy", false, "serve the legacy Angular dashboard at the web UI root instead of the desk (--legacy=false switches back); with -w also persists hypervisor.legacy_ui")
 	hvCmd.AddCommand(hvDisableCmd)
 	hvDisableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
 	hvCmd.AddCommand(hvStatusCmd)
@@ -61,7 +59,6 @@ var (
 	hvPasswdForce bool
 	hvLsFlat      bool
 	hvLsLoad      bool
-	hvLegacy      bool
 )
 
 var hvCmd = &cobra.Command{
@@ -163,7 +160,6 @@ var hvUIEnableCmd = &cobra.Command{
 		if err := rpcClient.EnableHypervisorUIPersist(hvPersist); err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
-		applyHVLegacyFlag(cmd, rpcClient)
 		if hvPersist {
 			internal.PrintOutput(cmd.Flags(), "Hypervisor web UI enabled (written to config)\n", "Hypervisor web UI enabled (written to config)\n")
 		} else {
@@ -204,7 +200,6 @@ var hvEnableCmd = &cobra.Command{
 		if err := rpcClient.EnableHypervisorPersist(hvPersist); err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
-		applyHVLegacyFlag(cmd, rpcClient)
 		if hvPersist {
 			internal.PrintOutput(cmd.Flags(), "Hypervisor enabled (written to config)\n", "Hypervisor enabled (written to config)\n")
 		} else {
@@ -617,21 +612,4 @@ outstanding one. Fingerprint = first 40 bits of sha256(pk).`,
 			internal.PrintOutput(cmd.Flags(), pending, b.String())
 		}
 	},
-}
-
-// applyHVLegacyFlag switches the web UI root when --legacy was given
-// explicitly (either value); an absent flag leaves the current mode alone.
-func applyHVLegacyFlag(cmd *cobra.Command, rpcClient visor.API) {
-	if !cmd.Flags().Changed("legacy") {
-		return
-	}
-	if err := rpcClient.SetHypervisorLegacyUIPersist(hvLegacy, hvPersist); err != nil {
-		internal.PrintFatalRPCError(cmd.Flags(), err)
-	}
-	mode := "desk"
-	if hvLegacy {
-		mode = "legacy dashboard"
-	}
-	msg := "Hypervisor web UI root: " + mode + "\n"
-	internal.PrintOutput(cmd.Flags(), msg, msg)
 }

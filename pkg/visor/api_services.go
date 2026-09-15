@@ -645,6 +645,9 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 	// endpoint must not panic on them.
 	if v.conf.Hypervisor != nil {
 		ports["hypervisor"] = PortDetail{Port: addrPort(v.conf.Hypervisor.HTTPAddr), Type: "TCP"}
+		if d := v.conf.Hypervisor.EffectiveDeskAddr(); d != "" {
+			ports["hypervisor-desk"] = PortDetail{Port: addrPort(d), Type: "TCP"}
+		}
 	}
 
 	if v.conf.Pty != nil {
