@@ -61,8 +61,11 @@ type Panel struct {
 	selected int
 	filtered []App
 	open     bool
-	ticker   *time.Ticker
-	stop     chan struct{}
+	// shield catches the dismissing click while the menu is open; a frame
+	// would otherwise swallow it. See showMenuShield.
+	shield js.Value
+	ticker *time.Ticker
+	stop   chan struct{}
 }
 
 type task struct {
@@ -154,13 +157,60 @@ func (p *Panel) setOpen(open bool) {
 	p.open = open
 	if open {
 		p.menu.Call("removeAttribute", "hidden")
+		p.showMenuShield()
 		p.search.Set("value", "")
 		p.selected = 0
 		p.refilter()
 		p.search.Call("focus")
 	} else {
 		p.menu.Call("setAttribute", "hidden", "")
+		p.hideMenuShield()
 	}
+}
+
+// menuShield is a transparent sheet laid under the open menu and over
+// everything else, whose only job is to catch the click that dismisses it.
+//
+// The dismissal used to hang off a document click listener. A frame is its own
+// browsing context and a click inside one never reaches this document, so with
+// the menu open, clicking a browser page or a terminal — the two things the
+// desk is mostly made of — left the menu hanging over the content with no way
+// to dismiss it but pressing Escape or opening it again. The sheet takes the
+// pointer before any frame can, which is also what a reader expects from a
+// menu: the first click outside it closes it and does nothing else.
+//
+// Below the taskbar (.dk-panel, z-index 100000) and the menu itself (100001),
+// so both stay clickable while it is up — a click on either still reaches the
+// document, which is where the original dismissal listener still handles them.
+// It covers only the windows and the desktop, which are the surfaces a frame
+// can hide behind.
+func (p *Panel) showMenuShield() {
+	if p.shield.Truthy() {
+		return
+	}
+	doc := js.Global().Get("document")
+	el := doc.Call("createElement", "div")
+	el.Get("style").Set("cssText",
+		"position:fixed;inset:0;z-index:99999;background:transparent")
+	el.Call("addEventListener", "mousedown", js.FuncOf(func(_ js.Value, a []js.Value) any {
+		if len(a) > 0 && a[0].Truthy() {
+			a[0].Call("preventDefault")
+		}
+		p.setOpen(false)
+		return nil
+	}))
+	rootElement().Call("appendChild", el)
+	p.shield = el
+}
+
+func (p *Panel) hideMenuShield() {
+	if !p.shield.Truthy() {
+		return
+	}
+	if parent := p.shield.Get("parentNode"); parent.Truthy() {
+		parent.Call("removeChild", p.shield)
+	}
+	p.shield = js.Undefined()
 }
 
 func (p *Panel) refilter() {

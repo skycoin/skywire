@@ -22,7 +22,8 @@
 //     pre-populated dmsg-discovery).
 //   - HTTP listener (tcpproxy.ListenAndServe).
 //   - dmsghttp listener (dmsghttp.ListenAndServe) and survey whitelist
-//     debug handler (dmsghttp.ServeDebug) when dmsg is enabled.
+//     debug handler (dmsghttp.WithDebug) when dmsg is enabled, folded
+//     onto the service's dmsg :80 handler rather than a second port.
 //   - Consistent shutdown: a single Handle.Close() that tears down
 //     both listeners and the bootstrap dmsg client.
 //

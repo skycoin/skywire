@@ -78,8 +78,10 @@ codebase evolved; this is the reference for "what we mean when we say X."
 - **wasm visor** — a full visor compiled to WebAssembly, running entirely
   inside a browser tab (no install, no server). → the root binary built for
   `GOOS=js` (`/skywire.wasm`), run by the desk terminal
-- **standalone wasm-visor** — the keyless PWA served by `skywire cli hv serve`;
-  each visitor's browser mints its own ephemeral key.
+- **standalone wasm-visor** — the PWA served by `skywire cli hv serve`;
+  each visitor's browser mints its own key on first load and KEEPS it, in that
+  origin's storage, so the tab is the same visor every visit — the page server
+  holds no key of its own. → `pkg/wasmhv/browseui`
 - **☰ menu** — the desk-bundle taskbar app menu present on both the native and
   wasm hypervisor UIs; where features (browser, terminal, wallet, about…) open.
   → `pkg/wasmhv/browseui`
@@ -118,9 +120,9 @@ codebase evolved; this is the reference for "what we mean when we say X."
   the address other visors dial, and nothing on the mesh is reached by IP.
   Written as 66 hex characters (a 33-byte compressed secp256k1 point).
   → `pkg/cipher`
-- **ephemeral key** — a key pair minted for one process or one browser tab and
-  never persisted. What the standalone wasm-visor gives each visitor, and what
-  a client gets when `--sk` is not supplied.
+- **ephemeral key** — a key pair minted for one process and never persisted.
+  What a client gets when `--sk` is not supplied. NOT what a desk tab has: a
+  tab persists its key, which is why it can be paired once and stay paired.
 - **noise / XK** — the handshake every transport runs once its carrier is up:
   Noise in XK mode, where the dialer already knows the responder's static PK
   and the responder learns the dialer's. This is what makes a PK an address
@@ -135,7 +137,9 @@ codebase evolved; this is the reference for "what we mean when we say X."
   PK over a noise-XK connection. The names parallel ssh/sshd/sshfs by analogy
   only; there is no SSH involved. → `skywire cli pty`, `pkg/pty`
 - **pty host** — the server side of dmsgpty. Reachable over the dmsg overlay,
-  or on a direct TCP port (`:2022` by default, the analogue of sshd's `:22`).
+  or, when the operator opts in by setting `pty.ssh_listen`, on a direct TCP
+  port (net.Listen syntax, e.g. `:2022`). That listener is OFF unless set —
+  `config gen` never writes the field.
 
 ## Config & operations
 

@@ -14,8 +14,8 @@ to the receiver's Postfix, so the receiver's existing
 The base32-PK form is required because RFC 1035 caps DNS labels at
 63 octets and SMTP inherits that — the 66-character hex form
 breaks SMTP parsing. The base32 encoding of the 33-byte
-secp256k1-compressed PK is 52 characters and fits one label.
-Translate via `skywire cli mail addr <pk>`.
+secp256k1-compressed PK is 53 characters and fits one label.
+Translate via `skywire cli visor pk dnslabel`.
 
 ## Receiver side
 

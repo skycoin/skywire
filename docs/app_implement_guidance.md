@@ -287,8 +287,11 @@ Keep a global disable flag (skychat's `--os-notify`) that your `TestMain` can sw
 For high-bandwidth or high-latency scenarios, you can use `DialWithOptions` to request multi-path routing (`muxRoutes`) or enforce a minimum number of hops for privacy (`minHops`).
 
 ```go
-// Force traffic through at least 2 intermediate nodes for extra privacy
-conn, err := appCl.DialWithOptions(remoteAddr, 1, 2, 0, 0, 0, 0, false)
+// DialWithOptions(remote, muxRoutes, minHops, fwdMinHops, revMinHops,
+//                 fwdMux, revMux int, direct, diversify bool)
+//
+// Force traffic through at least 2 intermediate nodes for extra privacy:
+conn, err := appCl.DialWithOptions(remoteAddr, 1, 2, 0, 0, 0, 0, false, false)
 ```
 
 ---
