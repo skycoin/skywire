@@ -1032,10 +1032,6 @@ func marshalRouting(w *strings.Builder, r *visorconfig.Routing, indent int) {
 		o.field("calculate_routes")
 		writeBool(w, r.CalculateRoutes)
 	}
-	if r.MuxRoutes != 0 {
-		o.field("mux_routes")
-		writeInt(w, int64(r.MuxRoutes))
-	}
 	if len(r.TransportPreference) > 0 {
 		o.field("transport_preference")
 		writeStringSlice(w, r.TransportPreference, o.indent+1)
