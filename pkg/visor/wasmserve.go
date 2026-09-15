@@ -244,6 +244,19 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
 	serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)
 	serveBytes("/icon-512.png", "image/png", wasmhv.PWAIcon512)
+	// NOTE on cross-origin isolation: this server CAN set COOP/COEP, and doing
+	// so would give the desk SharedArrayBuffer and let proc.spawnWorker run
+	// commands off the page main thread. It is deliberately not switched on
+	// here. COEP require-corp is inherited by embedded frames, and the
+	// real-origin browser below embeds browse origin B as a CROSS-ORIGIN iframe
+	// inside this page — B would have to carry COEP too, on every origin the
+	// browse suffix expands to. That is a two-origin change wanted on its own
+	// evidence, not a side effect of this one.
+	//
+	// The docs-site desk has no such frame and no server at all, so it takes
+	// the service-worker route instead (browseui.COISWJS, staged by
+	// scripts/stage-playground).
+	//
 	// Real-origin mesh browser. The transport worker (served on the B origin at
 	// scope "/") and the responder that answers B's handshake on V both come from
 	// github.com/0magnet/realorigin; browse-transport.js is the transport the

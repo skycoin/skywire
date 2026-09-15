@@ -63,7 +63,7 @@ require (
 	github.com/0magnet/audioprism-go v0.0.0-20260914104944-bf25ff50f434
 	github.com/0magnet/bbolt v1.5.1-0.20260905171939-18be1d6cb1b4
 	github.com/0magnet/bitree v0.0.0-20260906144807-e66de0b4c738
-	github.com/0magnet/bottle v0.0.0-20260908155251-920d2280a387
+	github.com/0magnet/bottle v0.0.0-20260915000123-adbc8685ab09
 	github.com/0magnet/calvin v0.0.0-20260913215348-2de0c1f412b3
 	github.com/0magnet/desk v0.0.0-20260914105004-76463198b217
 	github.com/0magnet/desk/panes v0.0.0-20260914105004-76463198b217
