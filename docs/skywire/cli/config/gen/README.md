@@ -62,7 +62,7 @@ skywire cli config gen
       --rf                                   generate config for route-finder service
       --calculate-routes                     enable local route calculation
   -i, --ishv                                 local hypervisor configuration
-      --hvdeskaddr string                    hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default :8002)
+      --hvdeskaddr string                    hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default :8010)
   -j, --hvpks string                         list of public keys to add as hypervisor
       --ws-peer string                       peers to hold a WebSocket transport to, <pk>@<ws(s)://host[:port]/path>, comma-separated — pins each in transport.ws_table and makes it a persistent transport (no address-resolver lookup; the address is the one given)
   -c, --noauth                               disable authentication for hypervisor UI

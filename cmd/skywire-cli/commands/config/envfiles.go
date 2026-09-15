@@ -109,8 +109,8 @@ const envfileLinux = `#
 
 #--	Desk listen address (host:port): the wasm-visor hypervisor UI, served
 #	beside the dashboard with the same API and the same login. Default
-#	':8002'; the dashboard stays at HVHTTPADDR.
-#HVDESKADDR=':8002'
+#	':8010'; the dashboard stays at HVHTTPADDR.
+#HVDESKADDR=':8010'
 
 #--	Expose an unauthenticated GET /api/pk on the hypervisor (returns this
 #	visor's public key). Off by default; skybian / Arch-ARM image builds
@@ -583,8 +583,8 @@ const envfileWindows = `#
 #	Use '127.0.0.1:8000' for localhost-only, or pin a LAN IP.
 #$HVHTTPADDR=':8000'
 
-#--	Desk (wasm-visor hypervisor UI) listen address. Default ':8002'.
-#$HVDESKADDR=':8002'
+#--	Desk (wasm-visor hypervisor UI) listen address. Default ':8010'.
+#$HVDESKADDR=':8010'
 
 ### Rewards #############################################################
 

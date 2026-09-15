@@ -15,5 +15,8 @@ const DefaultHypervisorHTTPAddr = ":8000"
 
 // DefaultHypervisorDeskAddr is the platform default bind address for the
 // desk — the wasm-visor hypervisor UI — served as its own listener beside
-// the dashboard's, with the same API behind it.
-const DefaultHypervisorDeskAddr = ":8002"
+// the dashboard's, with the same API behind it. Not :8002: that is
+// skycoin-web's default host port (SKYCOINWEBADDR), and it is also the
+// port the docs take on the tab's virtual loopback (vnet:8002), so a
+// desk there read as the same thing from inside and outside the tab.
+const DefaultHypervisorDeskAddr = ":8010"

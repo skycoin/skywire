@@ -18,7 +18,7 @@ skywire cli config gen -i
 
 After starting up the visor, the dashboard is on `localhost:8000` and the
 desk — the wasm-visor hypervisor UI, with the dashboard as a tab inside it —
-on `localhost:8002`. See [the two ports](#the-two-ports) below.
+on `localhost:8010`. See [the two ports](#the-two-ports) below.
 
 From another device on the same LAN, use the machine's mDNS name:
 `http://<hostname>.local:8000/`. That name comes from the OS (Avahi on
@@ -98,7 +98,7 @@ before and after.
 The desk — the wasm-visor hypervisor UI — and the Angular dashboard are both
 served, on two ports of the same hypervisor: the dashboard at the root of
 `hypervisor.addr` (`:8000`) and the desk at the root of
-`hypervisor.desk_addr` (`:8002`). Everything behind them is the same — one
+`hypervisor.desk_addr` (`:8010`). Everything behind them is the same — one
 API, one login, every page on both — and the desk's browser opens the
 dashboard as its first tab. Set the desk address with `HVDESKADDR` in
 `/etc/skywire.conf` or `config gen --hvdeskaddr`. A build with no skywire
