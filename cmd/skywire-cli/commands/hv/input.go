@@ -38,6 +38,9 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clihv"
 )
 
 var (
@@ -48,6 +51,7 @@ var (
 	inputPort    string
 	inputTimeout int
 	inputSettle  int
+	inputStrict  bool
 )
 
 func init() {
@@ -58,6 +62,7 @@ func init() {
 	inputCmd.Flags().StringVar(&inputPort, "port", "9222", "debug port of the running browser, when no webSocketDebuggerUrl is given")
 	inputCmd.Flags().IntVar(&inputTimeout, "timeout", 30, "seconds to wait for the browser to acknowledge")
 	inputCmd.Flags().IntVar(&inputSettle, "settle-ms", 16, "pause between the events of a drag, so the page can run its handlers between them")
+	inputCmd.Flags().BoolVar(&inputStrict, "strict", false, "fail, rather than warn, when the real pointer moved during the gesture — the page then saw a drag no test asked for, and the outcome is not that of the scripted input")
 	RootCmd.AddCommand(inputCmd)
 }
 
@@ -77,7 +82,13 @@ so read a target's box with "hv eval" and aim at it.
 
   skywire cli hv input ws://localhost:9222/devtools/page/ABC --click 400,300
   skywire cli hv input ws://localhost:9222/devtools/page/ABC --drag 120,40:900,500
-  skywire cli hv input --port 9222 --move 10,10`,
+  skywire cli hv input --port 9222 --move 10,10
+
+The real pointer stays live during a gesture. If it moves between a scripted
+press and release the page sees a drag this command did not send, and the
+outcome is not that of the scripted input; the command says so on stderr
+(--strict makes it fail instead). Keep the mouse off the browser while a
+gesture runs.`,
 	Args: cobra.RangeArgs(0, 1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := inputRun(cmd, args); err != nil {
@@ -141,14 +152,15 @@ func inputRun(cmd *cobra.Command, args []string) error {
 	c.SetReadLimit(8 << 20)
 
 	id := 0
-	// dispatch sends one event and waits for its acknowledgement. Waiting is
-	// the point: the browser applies these in order, and a drag whose moves
-	// are all in flight at once is not a drag the page ever sees.
-	dispatch := func(params map[string]interface{}) error {
+	// callResult sends one CDP method and waits for its acknowledgement,
+	// decoding the reply into out when out is given. Waiting is the point:
+	// the browser applies input in order, and a drag whose moves are all in
+	// flight at once is not a drag the page ever sees.
+	callResult := func(method string, params map[string]interface{}, out interface{}) error {
 		id++
 		want := id
 		b, err := json.Marshal(map[string]interface{}{
-			"id": want, "method": "Input.dispatchMouseEvent", "params": params,
+			"id": want, "method": method, "params": params,
 		})
 		if err != nil {
 			return err
@@ -161,22 +173,91 @@ func inputRun(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fmt.Errorf("read: %w", err)
 			}
-			var m map[string]interface{}
-			if json.Unmarshal(data, &m) != nil {
+			var m struct {
+				ID     int             `json:"id"`
+				Error  json.RawMessage `json:"error"`
+				Result json.RawMessage `json:"result"`
+			}
+			if json.Unmarshal(data, &m) != nil || m.ID != want {
 				continue
 			}
-			if e, ok := m["error"]; ok {
-				eb, _ := json.Marshal(e) //nolint:errcheck
-				return fmt.Errorf("cdp: %s", string(eb))
+			if len(m.Error) > 0 {
+				return fmt.Errorf("cdp: %s", string(m.Error))
 			}
-			if got, ok := m["id"].(float64); ok && int(got) == want {
-				return nil
+			if out != nil {
+				return json.Unmarshal(m.Result, out)
+			}
+			return nil
+		}
+	}
+	dispatch := func(params map[string]interface{}) error {
+		return callResult("Input.dispatchMouseEvent", params, nil)
+	}
+
+	// The real pointer stays live while a scripted gesture runs, and a hand
+	// resting on the mouse between a press and its release turns the click
+	// into a drag of whatever the press armed — the window under a tab, say,
+	// which then leaves with the pointer and takes the tab out from under the
+	// release. Input.setIgnoreInputEvents is no answer: it drops the
+	// dispatched events too (tried; the page saw nothing). What can be done
+	// is to notice. A capture-phase listener records every trusted pointer
+	// move the page sees, and after the gesture any move that was not one of
+	// ours is reported, so a contaminated run is never read as a result.
+	evaluate := func(expr string) (string, error) {
+		var out struct {
+			Result struct {
+				Value string `json:"value"`
+			} `json:"result"`
+		}
+		err := callResult("Runtime.evaluate", map[string]interface{}{
+			"expression": expr, "returnByValue": true,
+		}, &out)
+		return out.Result.Value, err
+	}
+	if _, err := evaluate(`(function(){ var w=window; w.__hvInputMoves=[]; if(!w.__hvInputWired){ w.__hvInputWired=true; w.addEventListener("mousemove", function(e){ if(e.isTrusted) w.__hvInputMoves.push([e.clientX,e.clientY]); }, true);} return ""; })()`); err != nil {
+		return fmt.Errorf("arming the pointer-move recorder: %w", err)
+	}
+	var ours [][2]float64
+	res := clihv.Input{}
+	checkReal := func() error {
+		s, err := evaluate(`JSON.stringify(window.__hvInputMoves||[])`)
+		if err != nil {
+			return fmt.Errorf("reading the pointer-move recorder: %w", err)
+		}
+		var seen [][2]float64
+		if err := json.Unmarshal([]byte(s), &seen); err != nil {
+			return fmt.Errorf("reading the pointer-move recorder: %w", err)
+		}
+		var foreign [][2]float64
+		for _, m := range seen {
+			mine := false
+			for _, o := range ours {
+				if o == m {
+					mine = true
+					break
+				}
+			}
+			if !mine {
+				foreign = append(foreign, m)
 			}
 		}
+		res.RealPointerMoves = len(foreign)
+		if len(foreign) == 0 {
+			return nil
+		}
+		res.FirstRealMove = &[2]float64{foreign[0][0], foreign[0][1]}
+		msg := fmt.Sprintf("the real pointer moved %d time(s) during the gesture (first to %g,%g): the page saw a drag this command did not send. Keep the mouse off the browser and retry.",
+			len(foreign), foreign[0][0], foreign[0][1])
+		if inputStrict {
+			return fmt.Errorf("%s", msg)
+		}
+		fmt.Fprintln(os.Stderr, "warning: "+msg)
+		return nil
 	}
 	settle := func() { time.Sleep(time.Duration(inputSettle) * time.Millisecond) }
 
 	move := func(p point, buttons int) error {
+		ours = append(ours, [2]float64{p.x, p.y})
 		return dispatch(map[string]interface{}{
 			"type": "mouseMoved", "x": p.x, "y": p.y, "buttons": buttons,
 		})
@@ -203,7 +284,7 @@ func inputRun(cmd *cobra.Command, args []string) error {
 		if err := move(p, 0); err != nil {
 			return err
 		}
-		fmt.Printf("moved to %g,%g\n", p.x, p.y)
+		res = clihv.Input{Action: "move", X: p.x, Y: p.y}
 
 	case cmd.Flags().Changed("click"):
 		p, err := parsePoint(inputClick)
@@ -224,7 +305,10 @@ func inputRun(cmd *cobra.Command, args []string) error {
 		if err := release(p); err != nil {
 			return err
 		}
-		fmt.Printf("clicked %g,%g\n", p.x, p.y)
+		if err := checkReal(); err != nil {
+			return err
+		}
+		res.Action, res.X, res.Y = "click", p.x, p.y
 
 	case cmd.Flags().Changed("drag"):
 		halves := strings.Split(inputDrag, ":")
@@ -261,7 +345,10 @@ func inputRun(cmd *cobra.Command, args []string) error {
 		if err := release(to); err != nil {
 			return err
 		}
-		fmt.Printf("dragged %g,%g -> %g,%g in %d steps\n", from.x, from.y, to.x, to.y, inputSteps)
+		if err := checkReal(); err != nil {
+			return err
+		}
+		res.Action, res.X, res.Y, res.ToX, res.ToY, res.Steps = "drag", from.x, from.y, to.x, to.y, inputSteps
 	}
-	return nil
+	return cliout.Print(cmd, res)
 }
