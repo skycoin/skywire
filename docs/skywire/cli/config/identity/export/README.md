@@ -1,31 +1,22 @@
-# skywire cli config update vpnc
+# skywire cli config identity export
 
-[← skywire cli config update](../README.md)
+[← skywire cli config identity](../README.md)
 
-update vpn-client config
+Print the config file's public and secret key as JSON
 
 ## Usage
 
 ```
-skywire cli config update vpnc
-```
-
-## Flags
-
-```
-  -x, --killsw string       change killswitch status of vpn-client
-      --add-server string   add server address to vpn-client
-  -r, --reset               reset vpn-client configurations
+skywire cli config identity export
 ```
 
 ## Global Flags
 
 ```
   -h, --help              show help menu
-  -i, --input string      path of input config file.
+  -i, --input string      config file (default: this install's config path)
       --jq string         filter JSON output through a jq/gojq expression (implies --json)
       --json              print output as JSON
-  -o, --output string     config file to output
       --shape             print the output schema skeleton (zero values, all fields) instead of data
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
       --tui               browse commands and help interactively

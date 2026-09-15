@@ -15,7 +15,9 @@ These commands fall into three families:
     diag          runtime diagnostics (porter / reconnect)
 
   standalone dmsg tools (bootstrap their own dmsg client; work with
-  no local visor — pass --sk for a stable identity)
+  no local visor — pass --sk for a stable identity, or --attach to
+  ride a local visor's sessions while keeping that identity)
+    attach        inspect the local visor's dmsg relay acceptor
     curl          fetch data over dmsg (HTTP-over-dmsg)
     cat           splice stdio with a peer over dmsg or skynet
     scp           copy a file to/from a remote visor's dmsgscp host
@@ -36,6 +38,7 @@ skywire cli dmsg
 
 ## Subcommands
 
+- [attach](attach/README.md) — Inspect a local visor's dmsg relay acceptor
 - [cat](cat/README.md) — Splice stdio with a remote peer over dmsg or skynet
 - [chat](chat/README.md) — Interactive chat over dmsg (standalone, no visor required)
 - [connect-all](connect-all/README.md) — Open a dmsg session to every known server

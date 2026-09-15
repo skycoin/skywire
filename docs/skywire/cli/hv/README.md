@@ -35,9 +35,10 @@ skywire cli hv
 
 - [drive](drive/README.md) — Hold a persistent WebDriver BiDi session and serve it over a control port
 - [eval](eval/README.md) — Evaluate JavaScript in a browser over CDP or WebDriver BiDi
+- [input](input/README.md) — Dispatch trusted mouse input into a browser over CDP
 - [notify](notify/README.md) — Show a visor's app notifications on this machine
 - [probe](probe/README.md) — Watch a page load and stream console, exceptions and crashes
-- [serve](serve/README.md) — Serve the standalone wasm-visor over HTTP (keyless; reverse-proxy with Caddy)
+- [serve](serve/README.md) — Serve the standalone wasm-visor desk over HTTP (keyless; reverse-proxy with Caddy)
 - [shell](shell/README.md) — Drive the visor shell in a browser over CDP
 
 ## Global Flags

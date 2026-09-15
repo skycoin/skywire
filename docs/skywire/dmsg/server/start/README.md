@@ -20,7 +20,7 @@ skywire dmsg server start
       --pprofmode string    [ cpu | mem | mutex | block | trace | http ]
       --stdin               whether to read config via stdin
       --syslog string       address in which to dial to syslog server
-      --syslog-lvl string   minimum log level to report (default "debug")
+      --syslog-lvl string   minimum log level to report (default "info")
       --syslog-net string   network in which to dial to syslog server (default "udp")
       --tag string          tag used for logging and metrics (default "dmsg_srv")
 ```

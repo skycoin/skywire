@@ -25,6 +25,7 @@ skywire dmsg web
 
 ```
   -r, --addproxy string    configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)
+      --attach socket      attach to a local visor's dmsg relay socket (holds no server sessions, publishes no entry, keeps this key)
   -B, --direct             use dmsg-direct client & don't connect to DMSG Discovery
   -A, --disc-addr string   DMSG Discovery dmsg address (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
   -D, --dmsgconf string    dmsghttp-config path
