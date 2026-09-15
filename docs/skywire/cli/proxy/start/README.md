@@ -14,24 +14,22 @@ skywire cli proxy start [pk]
 
 ```
   -a, --addr string             address of proxy for use (default ":1080")
-      --direct                  force a DIRECT-transport-only route to the exit: create the transport on demand if none exists, dial 1-hop (bypassing the route-finder + setup node), and self-heal when the transport drops. Bypasses the routing policy and the adaptive mux entirely — the point is a single, stable, policy-free direct leg. Mutually exclusive with --routing-policy, --route, --mux>1, --min-hops>1 and --tunnels>1 (all of which ask for the multi-hop/overlay path --direct exists to avoid); any per-app policy is cleared.
+      --direct                  force a DIRECT-transport-only route to the exit: create the transport on demand if none exists, dial 1-hop (bypassing the route-finder + setup node), and self-heal when the transport drops. Bypasses the routing policy and the adaptive mux entirely — the point is a single, stable, policy-free direct leg. Mutually exclusive with --routing-policy, --route, --min-hops>1 and --tunnels>1 (all of which ask for the multi-hop/overlay path --direct exists to avoid); any per-app policy is cleared.
       --existing-tp             only use existing transports, don't create new ones
       --external                force external launcher
       --http string             address for http proxy
       --internal                force internal launcher
       --local-route             calculate routes locally instead of using route finder
       --min-hops uint16         minimum routing hops for this session (1=no minimum). Set on the visor before app start; rolled back is not automatic — restart visor or re-run with --min-hops=1 to revert. (default 1)
-      --mux int                 parallel mux routes: 0=unlimited (every distinct path), 1=disabled (default), 2+=N routes (default 1)
       --mux-mode string         mux weight distribution mode: auto (latency-based) or equal (round-robin) (default "auto")
   -n, --name string             name of skysocks client
   -k, --pk string               server public key
       --port uint16             routing port for communication between proxy (skysocks) and visor
       --reconnect               in-process reconnect on route-group collapse: proxy keeps re-dialing with backoff instead of dropping the SOCKS5 listener; --reconnect=false restores exit-on-failure (default true)
-      --route string            pin explicit route(s) chosen by you instead of the route finder: a JSON file of {forward,reverse} hop pairs ('cli route calc <exit> --count N --json' shape). Once the proxy is up its mux legs are reconciled to these — each pinned route is added as a leg and any AUX auto legs are pruned. NOTE: the auto PRIMARY leg (index 0) is privileged and cannot yet be pruned, so it remains alongside the pinned legs; full primary override is the dial-level follow-up. One pair = one pinned route; N pairs = N disjoint legs. Pair with --mux N. Tip: 'route calc --source tps' avoids stale-transport install failures.
-      --routes int              alias for --mux (parallel route count) (default 1)
+      --route string            pin explicit route(s) chosen by you instead of the route finder: a JSON file of {forward,reverse} hop pairs ('cli route calc <exit> --count N --json' shape). Once the proxy is up its mux legs are reconciled to these — each pinned route is added as a leg and any AUX auto legs are pruned. NOTE: the auto PRIMARY leg (index 0) is privileged and cannot yet be pruned, so it remains alongside the pinned legs; full primary override is the dial-level follow-up. One pair = one pinned route; N pairs = N disjoint legs. Tip: 'route calc --source tps' avoids stale-transport install failures.
       --routing-policy string   per-app routing policy: @/path/to/policy.star, @/path/to/policy.wasm, or preset:<name> ("" or "none" clears any previously-installed override)
   -t, --timeout int             timeout for starting proxy
-      --tunnels int             number of independent tunnels (route group + noise + yamux each) to stripe browser connections across; 1 = today's behavior. >1 AGGREGATES bandwidth: each extra tunnel is auto-steered by the visor onto a DIFFERENT first-hop transport (disjoint path) so their throughputs sum. Best paired with --mux 1 (one leg per tunnel). (default 1)
+      --tunnels proxy mux set   number of independent tunnels (route group + noise + yamux each) to stripe browser connections across; 1 = today's behavior. >1 AGGREGATES bandwidth: each extra tunnel is auto-steered by the visor onto a DIFFERENT first-hop transport (disjoint path) so their throughputs sum. Shape the legs within each tunnel after start with proxy mux set / `mux auto`. (default 1)
   -v, --verbose                 stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits
       --verbose-level string    minimum log level when --verbose is set: trace|debug|info|warn|error (default "debug")
 ```

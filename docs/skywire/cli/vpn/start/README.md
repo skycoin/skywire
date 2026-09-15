@@ -15,7 +15,7 @@ skywire cli vpn start [pk]
 ```
       --existing-tp             only use existing transports, don't create new ones
       --external                force external launcher
-      --geoip string            geoip service URL queried through the tunnel to confirm the VPN changed the exit IP (default "http://ip.skycoin.com")
+      --geoip string            geoip service URL queried through the tunnel to confirm the VPN changed the exit IP (default "https://ip.skycoin.com")
       --internal                force internal launcher
       --local-route             calculate routes locally instead of using route finder
   -k, --pk string               server public key

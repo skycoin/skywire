@@ -23,7 +23,7 @@ skywire visor
   -b, --browser                        open hypervisor ui in default web browser
       --dmsg-server string             use specified dmsg server public key
       --dmsg-server-max-attempts int   max failed connect attempts before shutdown (only with --dmsg-server) (default 5)
-  -u, --user                           use config at: $HOME/skywire-config.json
+  -u, --user                           u̶s̶e̶r̶s̶p̶a̶c̶e̶ ̶c̶o̶n̶f̶i̶g̶ does not exist
   -p, --pkg                            p̶a̶c̶k̶a̶g̶e̶ ̶c̶o̶n̶f̶i̶g̶ requires root permissions
       --systray                        run the visor WITH the systray in one process (coupled; needs a desktop session)
       --systray-only                   run ONLY the systray, controlling a separately-running visor over RPC
@@ -37,6 +37,7 @@ skywire visor
   -t, --logtag string                  logging tag (default "skywire")
   -z, --completion string              [ bash | zsh | fish | powershell ]
   -s, --storelog                       store all logs to file
+      --log-json                       also write structured JSON lines to <local_path>/log/skywire.jsonl (needs --storelog)
       --forcecolor                     force color logging when out is not STDOUT
       --csrf                           Request a CSRF token for sensitive hypervisor API requests (default true)
       --use-rf                         force use of route finder (disable local route calculation)

@@ -14,6 +14,7 @@ skywire cli visor hv enable
 ## Flags
 
 ```
+      --legacy    serve the legacy Angular dashboard at the web UI root instead of the desk (--legacy=false switches back); with -w also persists hypervisor.legacy_ui
   -w, --persist   write change to config file
 ```
 

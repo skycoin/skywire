@@ -15,6 +15,7 @@ skywire cli config
 - [check-pk](check-pk/README.md) — check a skywire public key
 - [gen](gen/README.md) — Generate a config file
 - [gen-keys](gen-keys/README.md) — generate public / secret keypair
+- [identity](identity/README.md) — Export or import the keypair a config file holds
 - [parse](parse/README.md) — check for errors in parsing skywire config
 - [pk](pk/README.md) — derive public key from a secret key
 - [show](show/README.md) — Show the running visor's config

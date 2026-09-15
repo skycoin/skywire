@@ -36,6 +36,7 @@ skywire cli pv
   -r, --raw                print raw json data
       --rpc string         RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
   -a, --sdurl string       service discovery url (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+  -V, --showversion        show version per visor (implies -t; from the TPD-integrated uptime data pv already fetches)
       --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -s, --stats              return only a count of the results
       --testenv            use test deployment

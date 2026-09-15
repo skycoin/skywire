@@ -25,14 +25,14 @@ skywire cli svc health
 ## Flags
 
 ```
-      --carriers string       with --dmsg-server: probe THAT dmsg server DIRECTLY over each of these carriers (comma-sep: wt,ws,quic,tcp), one clean standalone session per carrier — reports which protocols actually reach it
-      --direct                query services directly instead of via visor RPC
-      --dmsg-server string    route the /health check through ONE specific dmsg server (PK or PK@host:port) using a standalone direct dmsg client — tests per-server reachability of --service, even for direct-client services not in discovery
-      --hold-carrier string   diagnostic: before probing --carriers, open and HOLD a session on this carrier to the same server IN THIS PROCESS — reproduces in-process carrier interference (e.g. --hold-carrier quic while probing wt)
-      --json                  print output as JSON
-      --port uint16           service dmsg port for the /health endpoint (default: 80, the dmsghttp log-server port) (default 80)
-      --rpc string            RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-      --service string        narrow to ONE deployment service by its dmsg PK; only effective with --dmsg-server or --direct (ignored by the default all-services RPC query). For an arbitrary visor use: dmsg curl dmsg://<pk>:80/health
+      --carriers dmsg sessions   with --dmsg-server: probe THAT dmsg server DIRECTLY over each of these carriers (comma-sep: tcp,ws,wt,quic), one clean standalone session per carrier — reports which protocols actually reach it. skynet is the fifth carrier and is NOT probeable here: it rides a skywire transport to the peer's relay acceptor and needs the visor's router (see dmsg sessions)
+      --direct                   query services directly instead of via visor RPC
+      --dmsg-server string       route the /health check through ONE specific dmsg server (PK or PK@host:port) using a standalone direct dmsg client — tests per-server reachability of --service, even for direct-client services not in discovery
+      --hold-carrier string      diagnostic: before probing --carriers, open and HOLD a session on this carrier to the same server IN THIS PROCESS — reproduces in-process carrier interference (e.g. --hold-carrier quic while probing wt)
+      --json                     print output as JSON
+      --port uint16              service dmsg port for the /health endpoint (default: 80, the dmsghttp log-server port) (default 80)
+      --rpc string               RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --service string           narrow to ONE deployment service by its dmsg PK; only effective with --dmsg-server or --direct (ignored by the default all-services RPC query). For an arbitrary visor use: dmsg curl dmsg://<pk>:80/health
 ```
 
 ## Global Flags

@@ -23,6 +23,7 @@ skywire dmsg http
   -D, --dmsgconf string    dmsghttp-config path
   -e, --sess int           number of DMSG Servers to connect to (default 2)
   -S, --srv pk@ip:port     connect via specific dmsg server pk@ip:port
+      --attach socket      attach to a local visor's dmsg relay socket (holds no server sessions, publishes no entry, keeps this key)
   -p, --proxy string       connect to DMSG via proxy (i.e. '127.0.0.1:1080')
   -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ] (default "debug")
   -r, --dir string         local dir to serve via dmsghttp (default ".")

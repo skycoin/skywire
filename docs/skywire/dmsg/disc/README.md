@@ -29,9 +29,9 @@ Response Examples:
 GET /health
 {
       "build_info": {
-        "commit": "<commit>",
-        "date": "<build-date>",
-        "version": "<version>"
+        "commit": "abc1234",
+        "date": "2024-01-15T10:30:00Z",
+        "version": "v1.3.29"
       },
       "dmsg_address": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7:80",
       "dmsg_servers": [
@@ -257,7 +257,7 @@ skywire dmsg disc
       --sk cipher.SecKey                                                               dmsg secret key
                                                                                         (default 0000000000000000000000000000000000000000000000000000000000000000)
       --syslog string                                                                  address in which to dial to syslog server
-      --syslog-lvl string                                                              minimum log level to report (default "debug")
+      --syslog-lvl string                                                              minimum log level to report (default "info")
       --syslog-net string                                                              network in which to dial to syslog server (default "udp")
       --tag string                                                                     tag used for logging and metrics (default "dmsg_disc")
       --test-environment                                                               distinguished between prod and test environment

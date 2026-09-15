@@ -28,11 +28,12 @@ skywire cli dmsg curl <dmsg-url>
   -r, --replace                replace existing output file
   -t, --try int                download attempts (0 unlimits) (default 1)
   -w, --wait int               time to wait between attempts (seconds)
-  -a, --agent string           HTTP user agent (default "skywire-cli/v1.3.94-0.-<commit>")
+  -a, --agent string           HTTP user agent (default "skywire-cli/unknown")
   -v, --verbose                stream visor's dmsg-layer logs to stderr while the request is in flight
       --verbose-level string   minimum log level when --verbose is set: trace|debug|info|warn|error (default "debug")
       --wt                     standalone (--sk): dial the dmsg-server session over WebTransport (HTTP/3) with no TCP/QUIC fallback
       --disc string            standalone (--wt): HTTP dmsg-discovery URL to fetch the WebTransport server set from (e.g. http://dmsg-discovery:9090)
+      --attach socket          standalone (--sk): attach to a local visor's dmsg relay socket instead of dialing dmsg servers
 ```
 
 ## Global Flags
