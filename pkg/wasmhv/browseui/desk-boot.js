@@ -244,26 +244,39 @@
 		if (!docsPort || !win || !win.openTab) { return; }
 		if (typeof globalThis.__SKYWIRE_LOCAL_PK__ !== 'string') { return; }
 		if (!panel || typeof panel.exec !== 'function') { return; }
-		Promise.resolve(panel.exec('skywire cli visor pk'))
-			.then(function (r) {
-				var pk = ((r && r.out) || '').trim();
-				if (!/^[0-9a-f]{66}$/.test(pk)) { return null; }
-				return fetch(location.origin + '/pair/status?pk=' + pk, { cache: 'no-store' })
-					.then(function (resp) { return resp.ok ? resp.json() : null; });
-			})
-			.then(function (st) {
-				if (!st || st.paired) { return; }
-				// The docs server binds in seconds but not instantly, and a tab
-				// opened before it listens is a dead tab nobody reloads.
-				(function waitDocs(n) {
-					if (globalThis.vnet && globalThis.vnet.listening(docsPort)) {
+		// Everything here waits for something that is not ready when the tabs
+		// open. On a visor-served desk the tab block does not wait for the
+		// in-tab visor at all — dashboardURL is set, so it fires at once — and
+		// the first version of this asked the visor for its key right then, got
+		// "RPC connection failed", failed the key check and gave up for good.
+		// Nothing retried, so the pairing tab never opened on the one surface
+		// it exists for.
+		function waitFor(ready, then, tries) {
+			if (ready()) { then(); return; }
+			if (tries > 0) { setTimeout(function () { waitFor(ready, then, tries - 1); }, 1000); }
+		}
+		var rpcUp = function () { return !!(globalThis.vnet && globalThis.vnet.listening(3435)); };
+		var docsUp = function () { return !!(globalThis.vnet && globalThis.vnet.listening(docsPort)); };
+		waitFor(rpcUp, function () {
+			Promise.resolve(panel.exec('skywire cli visor pk'))
+				.then(function (r) {
+					var pk = ((r && r.out) || '').trim();
+					if (!/^[0-9a-f]{66}$/.test(pk)) { return null; }
+					// /pair/status is pre-auth by design: a tab with no session
+					// still has to be able to learn its own standing.
+					return fetch(location.origin + '/pair/status?pk=' + pk, { cache: 'no-store' })
+						.then(function (resp) { return resp.ok ? resp.json() : null; });
+				})
+				.then(function (st) {
+					if (!st || st.paired) { return; }
+					// The docs server binds in seconds but not instantly, and a
+					// tab opened before it listens is a dead tab nobody reloads.
+					waitFor(docsUp, function () {
 						try { win.openTab('vnet:' + docsPort, '/prose/guides/hypervisor.md#pairing-a-desk-tab', 'http', true); } catch (e) {}
-						return;
-					}
-					if (n > 0) { setTimeout(function () { waitDocs(n - 1); }, 500); }
-				})(60);
-			})
-			.catch(function () { /* no pairing surface here — say nothing */ });
+					}, 60);
+				})
+				.catch(function () { /* no pairing surface here — say nothing */ });
+		}, 180);
 	}
 	function saveSession() {
 		try {
@@ -339,8 +352,7 @@
 		}
 		var status = opts.onStatus || function () {};
 		var hvPort = opts.hvPort || 8001;
-		// 0 disables. Native mode leaves it off: a native hypervisor serves its
-		// own docs and has no vnet to bind.
+		// 0 disables.
 		var docsPort = opts.docsPort === 0 ? 0 : (opts.docsPort || 8002);
 		// The one browser window, whichever surface opens it first. The docs do
 		// not wait on the hypervisor: with no visor started — the docs-site case —
