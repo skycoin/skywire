@@ -32,6 +32,12 @@ func main() {
 		// starts real visors, and a Go runtime on the page main thread makes
 		// the whole desk stutter.
 		"skywire-worker.js": browseui.ExecWorkerJS,
+		// Cross-origin isolation, the pair of them. The docs site is GitHub
+		// Pages: it cannot send COOP/COEP, so without these the page is not
+		// isolated, SharedArrayBuffer is absent and every skywire command the
+		// terminal runs lands on the page main thread instead of a worker.
+		"coi-sw.js":       browseui.COISWJS(),
+		"coi-register.js": browseui.COIRegisterJS(),
 	}
 	for name, data := range files {
 		p := filepath.Join(out, name)

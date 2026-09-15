@@ -359,7 +359,13 @@
 					})
 					.catch(() => { reply.postMessage({ status: 502, headers: { 'content-type': 'text/plain' }, body: new TextEncoder().encode('vnet: fetch failed') }); });
 			});
-			const url = (swPath || 'vnet-sw.js') + '?prefix=' + encodeURIComponent(prefix);
+			// coi=1 when this page is cross-origin isolated: an isolated parent
+			// refuses an embedded document carrying no COEP of its own, and
+			// everything this worker serves into an iframe is such a document.
+			// Passed at register time because a service worker cannot see its
+			// client's isolation.
+			const url = (swPath || 'vnet-sw.js') + '?prefix=' + encodeURIComponent(prefix)
+				+ (globalThis.crossOriginIsolated ? '&coi=1' : '');
 			return navigator.serviceWorker.register(url, { scope: prefix })
 				.then((reg) => new Promise((resolve) => {
 					// Wait on THIS registration's worker reaching 'activated'.

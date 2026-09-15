@@ -174,3 +174,20 @@ var ExecWorkerJS = func() []byte {
 // table, and the nested browser loads in-page servers (the hypervisor UI)
 // with native resolution instead of the transcoder.
 func VNetSWJS() []byte { return bottle.VNetSWJS() }
+
+// COISWJS and COIRegisterJS are bottle's cross-origin-isolation pair, served
+// beside a desk page that a STATIC host publishes — the docs site on GitHub
+// Pages, which cannot send COOP/COEP on a navigation.
+//
+// Isolation is what gates SharedArrayBuffer, and SharedArrayBuffer is what
+// fsbridge needs, so without it proc.spawnWorker refuses and every skywire
+// command runs on the page's main thread. The worker re-serves the navigation
+// with the three headers attached; coi-register.js registers it and reloads
+// once. Both halves must be served, from the same directory as the page.
+//
+// A native `hv serve` needs neither: it is a real HTTP server and sets the
+// headers itself. These exist for the case where nothing can.
+func COISWJS() []byte { return bottle.COISWJS() }
+
+// COIRegisterJS is the page half of COISWJS — see there.
+func COIRegisterJS() []byte { return bottle.COIRegisterJS() }
