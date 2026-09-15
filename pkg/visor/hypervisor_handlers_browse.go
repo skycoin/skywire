@@ -138,7 +138,7 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			}
 			// Two roots, one handler. The DESK — the wasm-visor hypervisor UI,
 			// with the dashboard as a tab inside it — is the root of the desk
-			// listener (hypervisor.desk_addr, :8002). Every other root — the
+			// listener (hypervisor.desk_addr, :8010). Every other root — the
 			// dashboard's own listener (hypervisor.addr, :8000), the dmsg UI
 			// port — is the Angular dashboard. The two used to share :8000 with
 			// a legacy_ui switch choosing between them; both are served now,

@@ -73,7 +73,7 @@ type HypervisorConfig struct {
 	// same on both; only the root differs. The root of HTTPAddr is the Angular
 	// dashboard, the root of DeskAddr is the desk. Set from HVDESKADDR in
 	// skywire.conf or `config gen --hvdeskaddr`; empty takes the platform
-	// default (:8002 native, none in a browser). No listener is started when
+	// default (:8010 native, none in a browser). No listener is started when
 	// the build has no command module to host a desk out of.
 	DeskAddr   string        `json:"desk_addr"`
 	UIAssets   fs.FS         `json:"-"`
