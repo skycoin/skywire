@@ -81,6 +81,19 @@ jobs:
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y wget tar xz-utils libusb-1.0-0-dev autoconf automake libtool
 
+      - name: Checkout skywire at the tag
+        uses: actions/checkout@v7
+        with:
+          # FIRST, before anything is put in the workspace: checkout deletes
+          # the whole workspace when it is not yet a repository, clean: false
+          # or not. The musl toolchain used to be unpacked here two steps
+          # earlier and vanished, so every linux job of v1.3.94-alpha1 and
+          # v1.3.94 failed with "C compiler … not found"; the dispatched
+          # rebuild of v1.3.94 proved clean: false alone was not enough.
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          fetch-tags: true
+
       - name: Fetch build-libusb-musl.sh
         run: |
           # -f fails on HTTP error (so a raw.github 404/429 right after the tag
@@ -108,20 +121,6 @@ jobs:
 
       - name: Build libusb for musl target
         run: ./build-libusb-musl.sh ${{ matrix.arch }} ${{ matrix.toolchain }} ./musl-data/${{ matrix.toolchain }}-cross
-
-      - name: Checkout skywire at the tag
-        uses: actions/checkout@v7
-        with:
-          # The musl cross toolchain was unpacked into musl-data/ in this
-          # workspace two steps up. checkout cleans untracked files by default,
-          # which deleted the compiler before the build ran: every linux job of
-          # the v1.3.94 and v1.3.94-alpha1 releases failed with "C compiler …
-          # not found" while darwin and windows, which fetch nothing first,
-          # published fine.
-          clean: false
-          ref: ${{ env.RELEASE_TAG }}
-          fetch-depth: 0
-          fetch-tags: true
 
       - name: Build the js/wasm command module (stage 1 of the two-stage build)
         env:
