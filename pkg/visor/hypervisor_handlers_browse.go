@@ -306,7 +306,13 @@ func nativeDeskBootOpts(localPK string) string {
 	}
 	opts +=
 		"  helpTerminal: false,\n" +
-			"  docsPort: 0,\n" +
+			// The docs, in a minimized websh tab, exactly as the docs site runs
+			// them. This was 0 — off — on the reasoning that a native hypervisor
+			// serves its own docs; it does not, and never has: every docs path on
+			// this origin is a 404. The desk that stands in for the hypervisor UI
+			// was the one desk with no documentation in it, which is also why the
+			// pairing procedure had nowhere to open from when a tab is unpaired.
+			"  docsPort: 8002,\n" +
 			"  hvWindow: true,\n" +
 			"  dashboardURL: './?embed=1#/?embed=1',\n"
 	if localPK != "" {

@@ -79,7 +79,7 @@ func TestNativeDeskServing(t *testing.T) {
 		// module, the dashboard tab on this origin's own UI, no help terminal
 		// and no docs server. With a local PK the tab's visor attaches to this
 		// hypervisor (TestNativeDeskAttachedVisor pins that wiring).
-		for _, want := range []string{"wasmURL: '/skywire.wasm'", "autostartVisor: true", "helpTerminal: false", "docsPort: 0", "hvWindow: true"} {
+		for _, want := range []string{"wasmURL: '/skywire.wasm'", "autostartVisor: true", "helpTerminal: false", "docsPort: 8002", "hvWindow: true"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("page lacks %s", want)
 			}

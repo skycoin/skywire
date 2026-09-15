@@ -124,8 +124,8 @@ github.com/0magnet/websh v0.0.0-20260914105251-9f3f0b910116 h1:cnogw0gosbEAXxcbz
 github.com/0magnet/websh v0.0.0-20260914105251-9f3f0b910116/go.mod h1:pkr2qkufmar+sR8zZPFxsGKCKzRluhkWeim9iyEkmmM=
 github.com/0magnet/wfdrive v0.3.1 h1:VKwgCprNRKJtyAO5RQ40yLsYec1QqaeLXykoDV9kT08=
 github.com/0magnet/wfdrive v0.3.1/go.mod h1:ckGVOflE4OC+G0MTrcin3hRoOwEFOCtRxY8nWxVt2bw=
-github.com/0magnet/winbox-go v0.0.0-20260915144603-8d0d29c28556 h1:jHOA4OzVTff9jCZe5ViVgrXIeSaw4bF8Uwb6wQQMNuk=
-github.com/0magnet/winbox-go v0.0.0-20260915144603-8d0d29c28556/go.mod h1:19+/rRQWd/tc9/8CFcUr6C+3AipeZmHyyda2tVombe4=
+github.com/0magnet/winbox-go v0.0.0-20260915154346-4ab7a97ba459 h1:dqVuTwcokYvWJ4u2HE72Ah6YpqYry62PXfH1hxMtwP8=
+github.com/0magnet/winbox-go v0.0.0-20260915154346-4ab7a97ba459/go.mod h1:19+/rRQWd/tc9/8CFcUr6C+3AipeZmHyyda2tVombe4=
 github.com/0magnet/xterm-go v0.0.0-20260913215439-50280f9bd203 h1:7gcGJn40OsCzIBMM+MD3NeJAWmBMcnSTKTlYD1V3gu4=
 github.com/0magnet/xterm-go v0.0.0-20260913215439-50280f9bd203/go.mod h1:W6c6ofSTsxXuQEr1rSZ3qmfOj5a3LGB3uLQBL0/TiKc=
 github.com/0magnet/yamux v0.1.3-0.20260905172050-450c4058f851 h1:kCRHPdm/JLtNrPlHUyb/HiNRb5XJQEFtCKYtLEUlQT4=
