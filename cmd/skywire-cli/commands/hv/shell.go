@@ -149,7 +149,7 @@ func (d *cdp) pump() {
 			d.mu.Unlock()
 			if ch != nil {
 				if m.Error != nil {
-					ch <- json.RawMessage(`{"error":` + strconv(m.Error.Message) + `}`)
+					ch <- json.RawMessage(`{"error":` + jsonQuote(m.Error.Message) + `}`)
 				} else {
 					ch <- m.Result
 				}
@@ -212,7 +212,12 @@ func (d *cdp) record(s string) {
 	d.logs = append(d.logs, s)
 }
 
-func strconv(s string) string {
+// jsonQuote renders s as a JSON string literal, for building a JS expression
+// around caller text. Named for what it does: it was called strconv, which
+// shadowed the standard package of that name for this whole package — the
+// next file to need strconv.ParseFloat failed to compile with a message
+// pointing at the import rather than at this.
+func jsonQuote(s string) string {
 	b, _ := json.Marshal(s) //nolint:errcheck
 	return string(b)
 }
@@ -316,7 +321,7 @@ func (d *cdp) clickText(text string) string {
       if (!e.length) { return 'not found'; }
       e[e.length-1].click();
       return 'clicked';
-    })()`, strconv(text)))
+    })()`, jsonQuote(text)))
 }
 
 func driveShell(port, pageURL, out string, load, boot, settle int, noConsole, keepTabs bool, cmds []string) error {
