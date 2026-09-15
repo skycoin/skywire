@@ -41,7 +41,15 @@ import (
 )
 
 func TestTwoAggregatorsShareOneClientSecondAccepts(t *testing.T) {
-	const timeout = 30 * time.Second
+	// 2 minutes, not 30 seconds. This drives a real dmsg handshake, a CXO
+	// subscribe, a Root delivery and a fill — on an idle machine the whole test
+	// takes 0.14s, so a passing run costs nothing extra, but on a contended CI
+	// runner the chain can stall well past 30s. It was failing intermittently on
+	// darwin (passing most runs, failing some) and more often on the slower
+	// windows runners. Intermittent is the tell: a deadlock would fail every
+	// time, on every platform, including locally — it does not (20 consecutive
+	// local runs pass, and 5 more under -race).
+	const timeout = 2 * time.Minute
 
 	env := dmsgtest.NewEnv(t, timeout)
 	require.NoError(t, env.Startup(0, 1, 0, &dmsg.Config{MinSessions: 1}))
