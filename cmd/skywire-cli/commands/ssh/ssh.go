@@ -7,11 +7,11 @@
 // equivalent), and the resulting stream runs the dmsgpty
 // mux — interactive shell or one-shot exec, your pick.
 //
-// This is a thin alias over `cli dmsg pty exec/start --via tcp://...`
+// This is a thin alias over `cli pty exec/start --via tcp://...`
 // with the destination spelled `<pk>@<host>:<port>` (matching ssh's
 // `user@host:port` muscle memory) and the visor's SK auto-loaded by
 // default (--no-visor-key opts out). The underlying machinery lives
-// in pkg/dmsg/dmsgpty/cli_tcp.go.
+// in pkg/pty/cli_tcp.go.
 package clissh
 
 import (
@@ -116,7 +116,7 @@ paths. A tcp://<pk>@host:port destination is accepted (the scheme is
 optional); dmsg:// / skynet:// destinations are rejected here.
 --standalone is not supported (errors if set).
 
-The underlying transport is identical to 'cli dmsg pty exec/start
+The underlying transport is identical to 'cli pty exec/start
 --via tcp://<pk>@<host>:<port>'; this command is the discoverable
 ssh-shaped alias over that path.`,
 	Args:                  cobra.MinimumNArgs(1),

@@ -2,7 +2,7 @@
 // dmsgpty sftp subsystem.
 //
 // Two surfaces: DialSftpTCP for the direct-TCP path (same noise-XK
-// pin-by-PK model used by `skywire cli ssh`), and DialSftpDmsg for the
+// pin-by-PK model used by `skywire cli pty shell`), and DialSftpDmsg for the
 // dmsg-overlay path. Both return an io.ReadWriteCloser ready to hand
 // to github.com/pkg/sftp.NewClientPipe — the dmsgpty mux handshake
 // (writeRequest(SftpURI) + readResponse) has already been performed.

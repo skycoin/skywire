@@ -15,7 +15,7 @@ binary is useful when:
 Three modes:
 
 - **DMSG-only**: defaults. Listens on dmsg at the configured port
-  (default 22). Reachable from peers via `skywire cli dmsg pty exec`.
+  (default 22). Reachable from peers via `skywire cli pty exec`.
 - **DMSG + TCP**: add `--tcplisten :PORT` to additionally accept
   noise-XK on a direct TCP port. Same identity, same whitelist.
 - **TCP-only** (`--no-dmsg`): skip the dmsg client + listener
@@ -63,12 +63,12 @@ config from stdin.
   --tcplisten :2022
 ```
 
-- `--dmsgport` — dmsg-side port (peers dial `dmsg pty exec
+- `--dmsgport` — dmsg-side port (peers dial `dmsg pty cli exec
   <host-pk>` and reach this).
 - `--tcplisten :2022` — TCP-direct entry point. noise-XK gated by
   the same whitelist as the dmsg side. Mirrors the visor-embedded
   `dmsgpty.SshListen` field. Exposed CLI-side as
-  `skywire cli sshd`.
+  `skywire cli pty host`.
 
 ### Reaching the TCP listener from outside the LAN
 
@@ -94,17 +94,17 @@ from the public internet, port-forward to the host:
 Peers connect from another host with:
 
 ```bash
-./skywire cli sshd \
-  --via tcp://<host-pk>@<host-public-ip>:2022 \
-  -c /peer/skywire-config.json
+./skywire cli pty shell tcp://<host-pk>@<host-public-ip>:2022
 ```
+
+The client identity is the local visor's SK by default
+(`--visor-key`, on unless `--sk` pins one).
 
 Or send a one-shot pty exec:
 
 ```bash
-./skywire cli dmsg pty exec \
+./skywire cli pty exec \
   --via tcp://<host-pk>@<host-public-ip>:2022 \
-  -c /peer/skywire-config.json \
   -- hostname
 ```
 
@@ -140,9 +140,7 @@ ls -la /tmp/dmsgpty.sock
 nc -zv <host-public-ip> 2022
 
 # Full round-trip — open a session
-./skywire cli sshd \
-  --via tcp://<host-pk>@<host-public-ip>:2022 \
-  -c /peer/skywire-config.json
+./skywire cli pty shell tcp://<host-pk>@<host-public-ip>:2022
 # (interactive shell on the dmsgpty-host's host)
 ```
 

@@ -37,7 +37,7 @@ paths. A tcp://<pk>@host:port destination is accepted (the scheme is
 optional); dmsg:// / skynet:// destinations are rejected here.
 --standalone is not supported (errors if set).
 
-The underlying transport is identical to 'cli dmsg pty exec/start
+The underlying transport is identical to 'cli pty exec/start
 --via tcp://<pk>@<host>:<port>'; this command is the discoverable
 ssh-shaped alias over that path.
 

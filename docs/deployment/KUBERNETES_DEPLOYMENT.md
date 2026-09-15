@@ -88,7 +88,7 @@ volumes:
       name: skywire-services-config
 ```
 
-The format follows `deployment/services-config.json` in the repo — `prod` and `test` keys, each with `dmsg_servers`, `dmsg_discovery`, `transport_discovery`, etc. **Every component in the cluster (services and visors)** must use the same `services-config.json` for DHT bootstrap to work; mismatched lists mean dmsg-servers won't peer with each other and visors won't find DHT full nodes.
+The format follows `deployment/services-config.json` in the repo — `prod` and `test` keys, each with `dmsg_servers`, `dmsg_discovery`, `transport_discovery`, etc. **Every component in the cluster (services and visors)** must use the same `services-config.json`; mismatched lists mean dmsg-servers will not peer with each other and visors bootstrap against servers the rest of the deployment does not know.
 
 ## Redis and Postgres
 
@@ -125,7 +125,7 @@ spec:
         resources: { requests: { storage: 10Gi } }
 ```
 
-The same Redis instance can back every service that needs it (`address-resolver`, `transport-discovery`, `dmsg-discovery`, `service-discovery`, `dmsg-server` DHT). The DHT keys live alongside the discovery keys in the same database — see `pkg/dht/mirror_redis.go`.
+The same Redis instance can back every service that needs it (`address-resolver`, `transport-discovery`, `dmsg-discovery`, `service-discovery`). The dmsg-server needs no Redis.
 
 ## A representative service Deployment
 
@@ -270,41 +270,18 @@ The dmsg-server's `config.json` (stored in `dmsg-server-1-config` Secret) must i
   "discovery": "http://dmsg-discovery:9090",
   "public_address": "203.0.113.10:30081",
   "local_address": ":8080",
-  "max_sessions": 2048,
-  "enable_dht": true,
-  "redis_addr": "redis:6379"
+  "max_sessions": 2048
 }
 ```
 
 `public_address` must match the LoadBalancer's external IP/port. There's no in-cluster way to discover this before the LB is provisioned; bring up the Service first, note its external IP, then write that into the config Secret. Custom controllers exist that automate this (e.g. CrossPlane, external-dns), but the manual two-step is the simplest path.
 
-See [DOCKER_DEPLOYMENT.md "DMSG Server DHT"](DOCKER_DEPLOYMENT.md#dmsg-server-dht-optional-recommended-for-production) for what `enable_dht`, `redis_addr`, `TPD_URL`, and `SD_URL` actually do.
-
-### DHT persistence in K8s
-
-If `redis_addr` points at the cluster's Redis Service, the dmsg-server uses the same Redis-backed disc-mirror dataset as the other services and you're done — no extra volumes needed.
-
-If you want to run a dmsg-server StatefulSet without Redis access (e.g. a remote pool of relays in a separate cluster that can't reach the primary's Redis), use `persist_path` for bbolt persistence. The config Secret is mounted read-only, so the bbolt file needs its own writable PV:
-
-```yaml
-spec:
-  containers:
-    - name: dmsg-server
-      # ...
-      volumeMounts:
-        - { name: dmsg-config,    mountPath: /etc/skywire/dmsg-server, readOnly: true }
-        - { name: dmsg-state,     mountPath: /var/lib/skywire-dmsg }
-        - { name: services-config, mountPath: /etc/skywire }
-  volumeClaimTemplates:
-    - metadata: { name: dmsg-state }
-      spec:
-        accessModes: [ReadWriteOnce]
-        resources: { requests: { storage: 1Gi } }
-```
-
-Then set `"persist_path": "/var/lib/skywire-dmsg/dht.db"` in the config Secret. The pod's StatefulSet PVC survives pod restarts and rescheduling on the same node; cross-node moves require an RWX storage class or accept a cold start.
-
-If neither `redis_addr` nor `persist_path` is set, the DHT runs in-memory only — fine for ephemeral / development clusters but every pod restart starts cold.
+Earlier revisions of this document also set `enable_dht`, `redis_addr` and
+`persist_path` here. The DHT full node those configured no longer exists — see
+[DOCKER_DEPLOYMENT.md "DMSG server DHT — removed"](DOCKER_DEPLOYMENT.md#dmsg-server-dht--removed).
+Drop all three from any dmsg-server config you are carrying forward; it needs
+neither Redis nor a volume of its own, so a dmsg-server StatefulSet needs
+no PVC.
 
 ## Ingress / TLS
 
@@ -346,7 +323,7 @@ Visors that should use this cluster get a config generated against your conf-ser
 skywire cli config gen -ip -a conf.example.com -o skywire-config.json
 ```
 
-Or, for a hand-rolled config, swap the service URLs to your cluster's hostnames. Make sure the visor's binary was built with (or has `SKYDEPLOY` pointing at) the same `services-config.json` the cluster uses, otherwise the dmsg-server PK list will be wrong and DHT bootstrap will fail.
+Or, for a hand-rolled config, swap the service URLs to your cluster's hostnames. Make sure the visor's binary was built with (or has `SKYDEPLOY` pointing at) the same `services-config.json` the cluster uses, otherwise the dmsg-server PK list will be wrong and the visor will bootstrap against servers the deployment does not run.
 
 ## Pprof / debug access
 
@@ -356,12 +333,12 @@ For in-cluster Go pprof on individual pods, services accept `--pprof :PORT` to b
 
 ## Troubleshooting
 
-**dmsg-servers not peering, DHT empty.** Check that every dmsg-server's `public_address` matches its LoadBalancer external address, that all dmsg-server PKs are in the same `services-config.json` mounted into every workload, and that each dmsg-server's `redis_addr` resolves and the password is correct. The dmsg-server's startup log prints "DHT bootstrap succeeded peers=N" when the mesh forms.
+**dmsg-servers not peering.** Check that every dmsg-server's `public_address` matches its LoadBalancer external address, and that all dmsg-server PKs are in the same `services-config.json` mounted into every workload.
 
 **Visors can't register SUDPH.** AR's UDP Service must hand visors a routable host:port that matches `--public-udp-address`. `externalTrafficPolicy: Local` is required so AR sees the visor's real source IP — without it, AR's `hasAddress` check rejects the bind because the kube-proxy SNAT'd address isn't in the visor's claimed local-addresses list.
 
 **STCPR works but SUDPH doesn't.** Same as above, plus check that the cluster's egress doesn't NAT outgoing UDP differently from inbound. SUDPH hole-punching needs symmetric NAT behavior; with strict-symmetric-NAT egress, only STCPR will work.
 
-**Services start but discovery returns empty.** Confirm Redis is reachable from the service pods (try `redis-cli -h redis -a $REDIS_PASSWORD ping` from a debug pod). Confirm the Postgres connection string for uptime-tracker. If service-discovery and transport-discovery are connected to Redis but their `dht:*` mirror is empty, check that they're using the same Redis DB index (`storeconfig.RedisDB` defaults to 0).
+**Services start but discovery returns empty.** Confirm Redis is reachable from the service pods (try `redis-cli -h redis -a $REDIS_PASSWORD ping` from a debug pod). Confirm the Postgres connection string for uptime-tracker. There is no `dht:*` mirror to inspect — the DHT is gone, and `storeconfig.Config` carries no DB-index field.
 
 **STUN unavailable.** Run STUN outside the cluster (a dedicated VM with two public IPs and `network_mode: host`). Reference its address from the cluster's `services-config.json` `stun_servers` list. There is no portable way to run STUN inside K8s.
