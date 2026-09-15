@@ -393,7 +393,6 @@ func addWindowListener(w *WinBox, dir string) {
 	mouseupFn = js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		preventEvent(args[0], false)
 		removeClass(body, "wb-lock")
-		hideDragShield()
 
 		if touch {
 			removeListener(window, "touchmove", mousemoveFn, eventOptionsPassive)
@@ -407,6 +406,15 @@ func addWindowListener(w *WinBox, dir string) {
 
 	mousedownFn := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		event := args[0]
+
+		// A press on a control that lives in the title bar — a tab, a button —
+		// is that control's, not the start of a drag. Leave the event alone so
+		// it reaches the control and its click can form; raising the window is
+		// still right, a press anywhere on a window does that.
+		if t := event.Get("target"); t.Truthy() && pressIsOwned(t, node) {
+			w.Focus()
+			return nil
+		}
 
 		// prevent the full iteration through the fallback chain of a touch
 		// event (touch > mouse > click)
@@ -437,7 +445,6 @@ func addWindowListener(w *WinBox, dir string) {
 
 		if !w.Min {
 			addClass(body, "wb-lock")
-			showDragShield()
 
 			touches := event.Get("touches")
 			if touches.Truthy() && touches.Index(0).Truthy() {
@@ -482,44 +489,17 @@ func cancelFullscreen() bool {
 	return false
 }
 
-// dragShield is a transparent sheet laid over the whole viewport while a
-// window is being dragged or resized.
+// Frames are made inert for the length of a drag by CSS, not by an overlay:
+// "body.wb-lock iframe { pointer-events: none }" in winbox.css, with wb-lock
+// added on mousedown and removed on mouseup. That is what keeps a pointer with
+// the button down from being captured by a frame — which would otherwise take
+// the mouseup with it and strand the drag.
 //
-// Drag binds mousemove AND mouseup to this window. A frame is its own browsing
-// context and swallows both, so the moment the pointer crossed any window's
-// iframe mid-drag the parent stopped seeing the pointer — and because the
-// mouseup landed inside the frame too, the drag never ENDED: the window stayed
-// stuck to the cursor until the next click outside a frame. Dragging one
-// window across another is ordinary use, so this was reachable with two
-// windows open and a frame in either.
-//
-// The sheet sits above every window (z-index is assigned from indexCounter,
-// which counts up from 10) and takes the pointer itself, so it never reaches a
-// frame. Put up on drag start, taken down on drag end; while it is up, the
-// window's own mousemove handler keeps working, because those events are still
-// delivered to this document.
-var dragShieldEl js.Value
-
-func showDragShield() {
-	if dragShieldEl.Truthy() {
-		return
-	}
-	el := document.Call("createElement", "div")
-	el.Get("style").Set("cssText",
-		"position:fixed;inset:0;z-index:2147483647;background:transparent;cursor:inherit")
-	body.Call("appendChild", el)
-	dragShieldEl = el
-}
-
-func hideDragShield() {
-	if !dragShieldEl.Truthy() {
-		return
-	}
-	if p := dragShieldEl.Get("parentNode"); p.Truthy() {
-		p.Call("removeChild", dragShieldEl)
-	}
-	dragShieldEl = js.Undefined()
-}
+// A viewport-covering shield element was added here for that job and removed
+// again: it duplicated this rule, and because it went up on mousedown it sat
+// under the pointer before the click completed. Every tab button lives inside
+// .wb-drag, so pressing one armed a drag and the mouseup landed on the sheet
+// instead of the button — no tab switching, and no new tabs, anywhere.
 
 // focusWindowOwning raises the window that contains el, if it is not already
 // the focused one. Walks up from el because the click reaches us from inside a
@@ -608,4 +588,26 @@ func wireFrameFocus() {
 			map[string]interface{}{"childList": true, "subtree": true})
 	}
 	sweep()
+}
+
+// NoDragClass marks an element in a window's title bar that owns the presses
+// on it and on everything inside it. The bar is the drag handle, and its
+// mousedown listener runs in the capture phase — before anything a control
+// placed in the bar could do — and stops the event, so a tab strip or a
+// button put there could not be clicked: the press armed a window drag,
+// the release fell wherever the window had moved to, and no click formed.
+// A listener on the control cannot fix that from below; the drag handle
+// has to know to stand aside, and this class is how it is told.
+const NoDragClass = "wb-nodrag"
+
+// pressIsOwned reports whether target sits under a NoDragClass element that
+// is itself inside node, the drag handle. Walks parentNode rather than
+// calling closest so it works on the fake DOM the tests use as well.
+func pressIsOwned(target, node js.Value) bool {
+	for n := target; n.Truthy() && !n.Equal(node); n = n.Get("parentNode") {
+		if cl := n.Get("classList"); cl.Truthy() && cl.Call("contains", NoDragClass).Bool() {
+			return true
+		}
+	}
+	return false
 }

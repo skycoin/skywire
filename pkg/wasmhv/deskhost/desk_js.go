@@ -229,6 +229,44 @@ func installDesk() {
 		return "", false
 	}
 
+	// DirectAddress inverts the rewrite above, for what the address bar shows
+	// and what history records.
+	//
+	// A claimed frame navigates itself to more served URLs, and those carry the
+	// rewritten shape — "<origin>/vnet/<port>/path", or "/<base>/vnet/..." when
+	// the desk is served from a subpath. That is how this host happens to serve
+	// the page; it is not an address anyone typed, and "http://127.0.0.1:8000/
+	// vnet/8002/prose/guides/hypervisor.md" names a path that does not exist as
+	// far as the mesh is concerned. Map it back to the address it stands for.
+	//
+	// Same-origin only, and only for the /vnet/ shape: a served URL that is the
+	// host's own page (the Angular dashboard) is already the address it stands
+	// for and is left alone.
+	netscrape.DirectAddress = func(src string) (string, bool) {
+		loc := js.Global().Get("location")
+		if !loc.Truthy() {
+			return "", false
+		}
+		origin := loc.Get("origin").String()
+		if origin == "" || !strings.HasPrefix(src, origin+"/") {
+			return "", false
+		}
+		rest := src[len(origin):]
+		i := strings.Index(rest, "/vnet/")
+		if i < 0 {
+			return "", false
+		}
+		rest = rest[i+len("/vnet/"):]
+		port, path, found := strings.Cut(rest, "/")
+		if port == "" {
+			return "", false
+		}
+		if !found {
+			path = ""
+		}
+		return "http://vnet:" + port + "/" + path, true
+	}
+
 	desk.NewPanel()
 	js.Global().Set("__skywireDesk", js.ValueOf(map[string]interface{}{
 		"library": "0magnet/desk",
