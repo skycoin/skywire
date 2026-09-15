@@ -35,8 +35,19 @@ import (
 // private-enterprise-style OID (53594 is arbitrary-but-fixed for skywire).
 var skywireTLSExtensionOID = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 53594, 1, 1}
 
-// NextProto is the ALPN protocol id for skywire QUIC.
+// NextProto is the ALPN protocol id for the skywire QUIC TRANSPORT (squicr).
 const NextProto = "skywire-quic-1"
+
+// DmsgNextProto is the ALPN protocol id for dmsg-over-QUIC. It is distinct from
+// NextProto on purpose: a dmsg server and the squicr transport can sit on the
+// same UDP port (the transport port), demuxed by ALPN, and when both offered
+// "skywire-quic-1" a dmsg session was handed to the transport acceptor, which
+// waited 30 s for a stream a dmsg session never opens and then closed it —
+// every dmsg client on QUIC redialed every server every 30 s. A dmsg client
+// offers ONLY this id, so a socket with no dmsg server behind it refuses the
+// handshake at once and the client falls back to TCP; a dmsg server accepts
+// both ids so clients built before this keep their sessions.
+const DmsgNextProto = "skywire-dmsg-1"
 
 // skywireSignedKey is the payload carried in the skywire X.509 extension: the
 // skywire PK and a signature, by the matching skywire SK, over the
@@ -85,12 +96,18 @@ func NewCertificate(lPK cipher.PubKey, lSK cipher.SecKey) (tls.Certificate, erro
 //   - expectedRemotePK != nil (dialer): the peer MUST present that exact PK.
 //   - onPeerPK != nil (listener): called with the verified remote PK.
 func TLSConfig(cert tls.Certificate, expectedRemotePK *cipher.PubKey, onPeerPK func(cipher.PubKey)) *tls.Config {
+	return TLSConfigALPN(cert, expectedRemotePK, onPeerPK, NextProto)
+}
+
+// TLSConfigALPN is TLSConfig with an explicit ALPN list: the ids this side
+// offers (dialer) or accepts (listener), most preferred first.
+func TLSConfigALPN(cert tls.Certificate, expectedRemotePK *cipher.PubKey, onPeerPK func(cipher.PubKey), protos ...string) *tls.Config {
 	return &tls.Config{
 		Certificates:           []tls.Certificate{cert},
 		InsecureSkipVerify:     true, //nolint:gosec // custom PK-binding verification below
 		ClientAuth:             tls.RequireAnyClientCert,
 		MinVersion:             tls.VersionTLS13,
-		NextProtos:             []string{NextProto},
+		NextProtos:             append([]string(nil), protos...),
 		SessionTicketsDisabled: true,
 		VerifyPeerCertificate:  makeVerifyPeerCertificate(expectedRemotePK, onPeerPK),
 	}
