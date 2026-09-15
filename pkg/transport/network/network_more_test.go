@@ -645,7 +645,11 @@ func TestNewListenerExported(t *testing.T) {
 func TestAcceptTransport_Closed(t *testing.T) {
 	c := newTestGenericClient(t, types.STCP)
 	require.NoError(t, c.Close())
-	require.ErrorIs(t, c.acceptTransport(), io.ErrClosedPipe)
+	// The closed check moved with the accept: acceptConn now takes the
+	// connection and handleConn does the handshake, so that a slow handshake
+	// cannot hold the listener.
+	_, err := c.acceptConn()
+	require.ErrorIs(t, err, io.ErrClosedPipe)
 }
 
 func TestWrapTransport_HandshakeError(t *testing.T) {

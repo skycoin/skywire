@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	skyvisor "github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -70,7 +71,7 @@ func init() {
 	healthCmd.Flags().StringVar(&healthService, "service", "", "narrow to ONE deployment service by its dmsg PK; only effective with --dmsg-server or --direct (ignored by the default all-services RPC query). For an arbitrary visor use: dmsg curl dmsg://<pk>:80/health")
 	healthCmd.Flags().StringVar(&healthViaServer, "dmsg-server", "", "route the /health check through ONE specific dmsg server (PK or PK@host:port) using a standalone direct dmsg client — tests per-server reachability of --service, even for direct-client services not in discovery")
 	healthCmd.Flags().Uint16Var(&healthPort, "port", 80, "service dmsg port for the /health endpoint (default: 80, the dmsghttp log-server port)")
-	healthCmd.Flags().StringVar(&healthCarriers, "carriers", "", "with --dmsg-server: probe THAT dmsg server DIRECTLY over each of these carriers (comma-sep: wt,ws,quic,tcp), one clean standalone session per carrier — reports which protocols actually reach it")
+	healthCmd.Flags().StringVar(&healthCarriers, "carriers", "", "with --dmsg-server: probe THAT dmsg server DIRECTLY over each of these carriers (comma-sep: tcp,ws,wt,quic), one clean standalone session per carrier — reports which protocols actually reach it. skynet is the fifth carrier and is NOT probeable here: it rides a skywire transport to the peer's relay acceptor and needs the visor's router (see `dmsg sessions`)")
 	healthCmd.Flags().StringVar(&healthHoldCarrier, "hold-carrier", "", "diagnostic: before probing --carriers, open and HOLD a session on this carrier to the same server IN THIS PROCESS — reproduces in-process carrier interference (e.g. --hold-carrier quic while probing wt)")
 	healthCmd.Flags().Bool(internal.JSONString, false, "print output as JSON")
 	RootCmd.AddCommand(healthCmd)
@@ -432,6 +433,25 @@ func fetchLiveServerEntry(ctx context.Context, srvPK cipher.PubKey, log *logging
 // client (no fallback, so a failure isolates that carrier) and reports whether
 // a direct session established.
 func probeOneCarrier(ctx context.Context, srvPK cipher.PubKey, entry *disc.Entry, carrier string, log *logging.Logger) CarrierProbe {
+	// skynet is the fifth carrier and the one this probe cannot run. The other
+	// four are dialed natively by a standalone client from an address the
+	// server advertises in discovery. skynet is neither: its "entry" is
+	// synthesized locally (dmsg.SkynetAddr, client_relay.go) for a visor acting
+	// as a relay, and dialing it needs a Config.SessionDialer backed by a
+	// router — which a standalone CLI client has not got.
+	//
+	// Saying so beats reporting "not-advertised", which is true of the
+	// discovery entry and utterly misleading about the carrier.
+	if carrier == dmsg.CarrierSkynet {
+		return CarrierProbe{
+			Carrier: carrier,
+			Addr:    dmsg.SkynetAddr(srvPK, skyenv.DmsgRelayPort),
+			Status:  "needs-visor",
+			Error: "the skynet carrier rides a skywire transport to the peer's relay acceptor, " +
+				"so it needs the visor's router: check it with `skywire cli dmsg sessions` " +
+				"(carrier column) or `skywire cli dmsg attach`, not this standalone probe",
+		}
+	}
 	res := CarrierProbe{Carrier: carrier, Addr: carrierAddr(entry, carrier)}
 	if res.Addr == "" {
 		res.Status = "not-advertised"

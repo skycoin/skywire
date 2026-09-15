@@ -36,9 +36,19 @@ import (
 const skynetSessionDialTimeout = 30 * time.Second
 
 // skynetSessionDialer is the dmsg client's SessionDialer for the skynet
-// carrier: it turns "skynet://<pk>:<port>" into a skywire route dial to that
-// visor's relay listener. Bounded by skynetSessionDialTimeout: unlike a TCP dial
-// this one sets up a route, and at boot that waits on the setup node.
+// carrier: it turns "skynet://<pk>:<port>" into an appnet dial to that visor's
+// relay listener.
+//
+// It does NOT normally set up a route, which this comment used to claim. The
+// dial is marked WithCarrierDial, and appnet's directShortcutEligible returns
+// true for any carrier dial, so it takes the 0-hop AppDirectMux shortcut over
+// an EXISTING DIRECT TRANSPORT and never builds a route group. Route setup is
+// the fallback for when there is no direct transport to the relay, not the
+// normal path — which is also why a working carrier session shows
+// route_groups=0 (#4839).
+//
+// Bounded by skynetSessionDialTimeout all the same: the fallback does set up a
+// route, and at boot that waits on the setup node.
 func skynetSessionDialer(ctx context.Context, network, addr string) (net.Conn, error) {
 	if network != dmsg.CarrierSkynet {
 		return nil, fmt.Errorf("dmsg session dialer: unsupported carrier %q", network)
