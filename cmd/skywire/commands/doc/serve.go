@@ -271,10 +271,16 @@ func relRoot(urlPath string) string {
 // writeHTML wraps rendered markdown in a minimal document. No external assets:
 // this is served on a loopback with no transport behind it, so a stylesheet
 // from a CDN would simply never arrive.
+//
+// The title is ESCAPED: for a prose page it is the file name taken off the
+// request path, so it is request-controlled even though the file has to exist
+// in the embedded FS for the handler to get this far. relRoot needs no
+// escaping — it only ever returns "./" or a repetition of "../", never any
+// part of the input — and the body is goldmark output, already HTML.
 func writeHTML(w http.ResponseWriter, urlPath, title string, body []byte) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// A dropped error, deliberately: a write failure here is the client
 	// hanging up mid-page. There is no second channel to report it on and
 	// nothing to retry.
-	fmt.Fprintf(w, docPage, title, relRoot(urlPath), body) //nolint:errcheck,gosec
+	fmt.Fprintf(w, docPage, html.EscapeString(title), relRoot(urlPath), body) //nolint:errcheck,gosec
 }

@@ -62,3 +62,18 @@ func TestNoAbsoluteNavHrefs(t *testing.T) {
 		}
 	}
 }
+
+// TestTitleIsEscaped. A prose page's title is the file name taken off the
+// request path — request-controlled, even though the file must exist in the
+// embedded FS to get this far. It lands inside <title>, so it is escaped;
+// CodeQL flagged the unescaped version as a reflected-XSS sink.
+func TestTitleIsEscaped(t *testing.T) {
+	rec := httptest.NewRecorder()
+	writeHTML(rec, "/prose/x.md", `</title><script>alert(1)</script>`, []byte("body"))
+	if strings.Contains(rec.Body.String(), "<script>") {
+		t.Error("writeHTML passed markup through the title unescaped")
+	}
+	if !strings.Contains(rec.Body.String(), "&lt;script&gt;") {
+		t.Error("the title was not escaped")
+	}
+}
