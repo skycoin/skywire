@@ -12,7 +12,7 @@ skywire app skycoin
 
 ## Subcommands
 
-- [web](web/README.md) — skycoin thin client web wallet
+- [web](web/README.md) — Skycoin Web Wallet
 
 ## Global Flags
 

@@ -115,7 +115,7 @@ skywire svc sd
       --entry-timeout duration    client service entry TTL (0 to disable)
                                    (default 5m0s)
       --geoip string              url of geoip service
-                                   (default "http://ip.skycoin.com")
+                                   (default "https://ip.skycoin.com")
       --keyfile string            path to file containing secret key (auto-generated if missing)
                                   
   -m, --metrics string            address to bind metrics API to

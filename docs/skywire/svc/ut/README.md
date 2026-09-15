@@ -122,7 +122,7 @@ skywire svc ut
                                   (default 80)
       --enable-load-testing      enable load testing
       --geoip string             url of geoip service
-                                  (default "http://ip.skycoin.com")
+                                  (default "https://ip.skycoin.com")
       --keyfile string           path to file containing secret key (auto-generated if missing)
                                  
   -l, --log                      enable request logging

@@ -34,6 +34,8 @@ skywire cli hv serve
   -a, --addr string            HTTP listen address (default ":7999")
       --browse-origin string   ALSO serve the browse-origin SW bootstrap on this second addr (e.g. 127.0.0.1:7998), for the hosted real-origin browser's B origins. Caddy routes *.<browse-suffix> here; this same process serves V on --addr and B here. Empty = off (V host-routes B on --addr, local mode)
       --browse-suffix string   browse-origin domain suffix for the real-origin browser (leading dot). Empty = .mesh.localhost (local); when --browse-origin is set (hosted mode) and this is empty it defaults to the deployment's browse_origin_suffix (".haltingstate.net" from services-config.json)
+      --desk-docs-port int     run 'skywire doc serve' on this desk vnet port (0 = off) — same cost as above
+      --desk-help-terminal     open a desk terminal that has already run 'skywire --help' — costs a whole extra Go/wasm runtime of the full binary, and that memory is never returned
       --exec-wasm string       path to the full skywire CLI wasm module to serve at /skywire.wasm — the desk host, the tab's visor and the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" -o build/skywire.wasm .). Empty = the module embedded by the two-stage build (make build-embedded; every published binary). Without one, serve refuses to start
       --harness                mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly
       --password string        gate the served PWA behind an access password (cookie login). Empty = open. Use over --tls / behind TLS so the password isn't sent in clear
