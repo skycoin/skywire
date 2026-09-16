@@ -154,6 +154,37 @@ type Manager struct {
 	// AppDirect VStreamMux.
 	appDirectHandler   func(p routing.Packet, mt *ManagedTransport)
 	appDirectHandlerMu sync.RWMutex
+	// tpCloseHooks are fired once, with the transport's id, when a transport
+	// closes. The VStream muxes register here so the streams that rode it are
+	// closed: nothing else ever tells them, and a stream on a dead transport
+	// gets neither the peer's FIN nor a local reader that can notice.
+	tpCloseHooks   []func(uuid.UUID) int
+	tpCloseHooksMu sync.RWMutex
+}
+
+// OnTransportClosed registers fn to be called with a transport's id when that
+// transport closes, for either reason (closeWith or the manager shutting down).
+// Hooks are fired outside every manager lock, in registration order; fn must
+// not block. Registration is for the life of the manager.
+func (tm *Manager) OnTransportClosed(fn func(uuid.UUID) int) {
+	if fn == nil {
+		return
+	}
+	tm.tpCloseHooksMu.Lock()
+	tm.tpCloseHooks = append(tm.tpCloseHooks, fn)
+	tm.tpCloseHooksMu.Unlock()
+}
+
+// fireTransportClosed runs the close hooks for id. The slice is copied under
+// the lock and the hooks called without it, so a hook is free to call back
+// into the manager.
+func (tm *Manager) fireTransportClosed(id uuid.UUID) {
+	tm.tpCloseHooksMu.RLock()
+	hooks := append([]func(uuid.UUID) int(nil), tm.tpCloseHooks...)
+	tm.tpCloseHooksMu.RUnlock()
+	for _, fn := range hooks {
+		fn(id)
+	}
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
