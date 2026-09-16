@@ -455,8 +455,14 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 	// request context.
 	hopCount := len(biRt.Forward)
 	collector, haveCollector := metrics.(*setupmetrics.Collector)
+	// probes carries the half-open circuit-breaker slots this request is
+	// admitted through (destination and/or intermediates). The deferred
+	// closure below resolves every one of them however this request ends
+	// — success, dial failure, or a bail-out before any dial — so a probe
+	// can never outlive the request that took it.
+	var probes setupmetrics.ProbeHolder
 	if haveCollector {
-		defer collector.RecordRouteContext(ctx, biRt.Desc.SrcPK(), biRt.Desc.DstPK(), hopCount)(&err)
+		defer collector.RecordRouteContextProbes(ctx, biRt.Desc.SrcPK(), biRt.Desc.DstPK(), hopCount, &probes)(&err)
 	} else {
 		defer metrics.RecordRoute()(&err)
 	}
@@ -469,7 +475,7 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 	// discovery) because one breaker decision saves ~10s of work per
 	// attempt.
 	if haveCollector {
-		if ok, reason := collector.AllowDestination(biRt.Desc.DstPK()); !ok {
+		if ok, reason := collector.AllowDestination(biRt.Desc.DstPK(), &probes); !ok {
 			log.Debugf("circuit breaker: %s", reason)
 			return routing.EdgeRules{}, fmt.Errorf("%w: %s", ErrCircuitOpen, reason)
 		}
@@ -482,7 +488,7 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 			if i == len(biRt.Forward)-1 {
 				break
 			}
-			if ok, reason := collector.AllowIntermediate(h.To); !ok {
+			if ok, reason := collector.AllowIntermediate(h.To, &probes); !ok {
 				log.Debugf("circuit breaker (intermediate): %s", reason)
 				return routing.EdgeRules{}, fmt.Errorf("%w: intermediate %s", ErrCircuitOpen, reason)
 			}
