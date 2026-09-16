@@ -118,6 +118,22 @@ var StateSelectKeys = []string{
 	SelectRoles,
 }
 
+// stateSelectAliases maps a snapshot JSON field name onto the --select key
+// that builds it, for the sections whose key is a short alias rather than the
+// field name. The doc comment above promises "the keys match the snapshot's
+// JSON field names (or a short alias)", and `--select mux_route_groups`
+// silently built NOTHING (an unrecognized key matches no section) — which reads
+// as "this visor has no mux route groups" rather than "wrong key".
+var stateSelectAliases = map[string]string{
+	"mux_route_groups":      SelectMux,
+	"routing_stats":         SelectRouting,
+	"route_groups":          SelectRouting,
+	"routing_policy":        SelectRouting,
+	"router_config":         SelectRouting,
+	"service_health":        SelectHealth,
+	"persistent_transports": SelectTransports,
+}
+
 // stateFieldSet is the parsed --select set. A nil set means "everything in the
 // default full snapshot" (proxy stays opt-in even then). An entry present but
 // unknown is ignored here and surfaced as a Note by the builder.
@@ -131,9 +147,13 @@ func newStateFieldSet(fields []string) stateFieldSet {
 	}
 	set := make(stateFieldSet, len(fields))
 	for _, f := range fields {
-		if f != "" {
-			set[f] = true
+		if f == "" {
+			continue
 		}
+		if alias, ok := stateSelectAliases[f]; ok {
+			f = alias
+		}
+		set[f] = true
 	}
 	if len(set) == 0 {
 		return nil

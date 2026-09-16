@@ -67,3 +67,24 @@ func TestStateFieldSet_Multi(t *testing.T) {
 		t.Error("multi-select must not build an unrequested key")
 	}
 }
+
+// TestStateFieldSet_JSONFieldNameAliases: a --select written with the
+// snapshot's JSON field name resolves to the key that builds that section.
+// `--select mux_route_groups` used to match nothing and return a snapshot with
+// no mux_route_groups at all, which reads as "this visor has none".
+func TestStateFieldSet_JSONFieldNameAliases(t *testing.T) {
+	for field, want := range map[string]string{
+		"mux_route_groups":      SelectMux,
+		"routing_stats":         SelectRouting,
+		"service_health":        SelectHealth,
+		"persistent_transports": SelectTransports,
+	} {
+		set := newStateFieldSet([]string{field})
+		if !set.has(want) {
+			t.Errorf("--select %q: has(%q) = false, want true", field, want)
+		}
+		if set.has(SelectApps) {
+			t.Errorf("--select %q also built apps, want only %q", field, want)
+		}
+	}
+}

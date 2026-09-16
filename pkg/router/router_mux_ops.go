@@ -75,7 +75,7 @@ func (r *router) appendRouteAsymmetric(nrg *NoiseRouteGroup, rules routing.EdgeR
 			}
 		}
 		nrg.rg.mu.Unlock()
-		nrg.rg.appendForwardLeg(rules.Forward, tp)
+		nrg.rg.appendForwardLeg(rules.Forward, tp, "mux append: asymmetric forward-only leg")
 
 		// Send handshake on the new forward transport.
 		rg := nrg.rg
@@ -200,7 +200,7 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	}
 	nrg.rg.mu.Unlock()
 
-	nrg.rg.appendRules(rules.Forward, rules.Reverse, tp)
+	nrg.rg.appendRules(rules.Forward, rules.Reverse, tp, "mux append: aux leg")
 
 	// Send handshake on the new transport to inform the remote side
 	rg := nrg.rg
@@ -344,10 +344,14 @@ func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []rout
 
 	rules, _, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, req)
 	if err != nil {
+		nrg.rg.noteLegEvent(MuxEventLegAddFailed, "route setup failed: "+err.Error(), MuxByLocal, -1,
+			nrg.rg.legCount(), tp, fwd)
 		return fmt.Errorf("route setup failed: %w", err)
 	}
 
 	if err := r.appendRouteToGroup(nrg, rules); err != nil {
+		nrg.rg.noteLegEvent(MuxEventLegAddFailed, "add failed: "+err.Error(), MuxByLocal, -1,
+			nrg.rg.legCount(), tp, fwd)
 		return fmt.Errorf("append route failed: %w", err)
 	}
 
@@ -635,6 +639,7 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	}
 
 	// Remove from slices
+	removedTp := rg.tps[idx]
 	rg.tps = append(rg.tps[:idx], rg.tps[idx+1:]...)
 	rg.fwd = append(rg.fwd[:idx], rg.fwd[idx+1:]...)
 	if idx < len(rg.rvs) {
@@ -651,6 +656,13 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	if rg.mux != nil {
 		rg.mux.removeLegs(idx)
 		rg.mux.rebuildWeights(rg.tps)
+	}
+
+	rg.noteLegEvent(MuxEventLegRemoved, "operator: mux remove", MuxByOperator, idx, len(rg.tps), removedTp,
+		rg.legHopsLocked(tpID))
+	if idx == 0 {
+		rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByOperator, LegIndex: 0, Legs: len(rg.tps),
+			Reason: "operator removed the primary leg"})
 	}
 
 	r.logger.Infof("Removed mux route via transport %s from route group %s", tpID, desc.String())

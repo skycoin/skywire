@@ -55,6 +55,13 @@ type DiagSnapshot struct {
 	// survives any amount of open churn: look up the transport id here to get
 	// the reason it died and how old it was.
 	TransportLastClose map[uuid.UUID]transport.TransportEvent `json:"transport_last_close,omitempty"`
+	// MuxEvents is the last router.MuxEventRingSize route-group and mux-leg
+	// changes, oldest first, each with the reason the code gave and who
+	// initiated it (local/remote/operator/adaptive/policy). This is where to
+	// look when a leg that was in `proxy mux info` is gone and
+	// transport_events shows its transport still open — the removal came from
+	// the router, not the transport layer.
+	MuxEvents []router.MuxEvent `json:"mux_events,omitempty"`
 }
 
 // DiagRuntime is the Go runtime at a glance.
@@ -181,6 +188,10 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 	if is, ok := v.router.(interface{ IntakeStats() router.IntakeStats }); ok {
 		stats := is.IntakeStats()
 		d.Intake = &stats
+	}
+
+	if v.router != nil {
+		d.MuxEvents = v.router.MuxEvents()
 	}
 
 	for _, mux := range []struct {
