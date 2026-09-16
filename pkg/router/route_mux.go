@@ -196,13 +196,20 @@ type routeMux struct {
 	// tlpProbes counts tail-loss probes, and sacksSent/sackSendErrors/
 	// lastSACKSentNano are the receiver-side mirror.
 	retxSkippedMissing uint64
-	retxSendErrors     uint64
-	tlpProbes          uint64
-	sacksRecv          uint64
-	lastSACKRecvNano   int64
-	sacksSent          uint64
-	sackSendErrors     uint64
-	lastSACKSentNano   int64
+	// retxReqSACK / retxReqHOL / retxReqFlush count the sequences each
+	// retransmit path ASKED to resend (reactive SACK holes past the RACK
+	// threshold, the proactive head-of-line nudge, the demote-time flush), so a
+	// retransmit storm names its source from visor state.
+	retxReqSACK      uint64
+	retxReqHOL       uint64
+	retxReqFlush     uint64
+	retxSendErrors   uint64
+	tlpProbes        uint64
+	sacksRecv        uint64
+	lastSACKRecvNano int64
+	sacksSent        uint64
+	sackSendErrors   uint64
+	lastSACKSentNano int64
 
 	// Incoming packet reordering
 	reorderBuf *reorderBuffer

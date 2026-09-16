@@ -587,6 +587,9 @@ type MuxRecovery struct {
 	RetxMaxSeq         uint32  `json:"retx_max_seq"`
 	RetxSent           uint64  `json:"retx_sent"`
 	RetxSkippedMissing uint64  `json:"retx_skipped_missing"`
+	RetxReqSACK        uint64  `json:"retx_req_sack"`
+	RetxReqHOL         uint64  `json:"retx_req_hol"`
+	RetxReqFlush       uint64  `json:"retx_req_flush"`
 	RetxSendErrors     uint64  `json:"retx_send_errors"`
 	TLPProbes          uint64  `json:"tlp_probes"`
 	SACKsRecv          uint64  `json:"sacks_recv"`
@@ -770,6 +773,9 @@ func (rg *RouteGroup) recoverySnapshot(legs []MuxLeg) *MuxRecovery {
 		RetxMinSeq:         minSeq,
 		RetxMaxSeq:         maxSeq,
 		RetxSkippedMissing: atomic.LoadUint64(&m.retxSkippedMissing),
+		RetxReqSACK:        atomic.LoadUint64(&m.retxReqSACK),
+		RetxReqHOL:         atomic.LoadUint64(&m.retxReqHOL),
+		RetxReqFlush:       atomic.LoadUint64(&m.retxReqFlush),
 		RetxSendErrors:     atomic.LoadUint64(&m.retxSendErrors),
 		TLPProbes:          atomic.LoadUint64(&m.tlpProbes),
 		SACKsRecv:          atomic.LoadUint64(&m.sacksRecv),
@@ -2007,6 +2013,7 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 		}
 		rg.mu.Unlock()
 		if seqs := rg.mux.heldRetxSeqsOnTps(demotedTps); len(seqs) > 0 {
+			atomic.AddUint64(&rg.mux.retxReqFlush, uint64(len(seqs)))
 			if err := rg.resendSeqs(seqs); err != nil {
 				rg.logger.WithError(err).Debug("demote retx flush: no active leg to resend on")
 			}
@@ -4416,6 +4423,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 	// advances the ack-progress edge (resets the TLP probe budget) and adapts the
 	// reorder factor from the DSACK signal (widen on a duplicate, decay otherwise).
 	retxSeqs := rg.mux.onSACKReceived(lastContig, words, dsackSeq, hasDSACK)
+	atomic.AddUint64(&rg.mux.retxReqSACK, uint64(len(retxSeqs)))
 
 	// Proactive HoL retransmit (CapHOLRetx): the frontier-blocking seq (and the
 	// next few contiguous holes) retransmitted NOW on the fastest leg, bypassing
@@ -4429,6 +4437,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 		legRTT := rg.mux.legLatencyByTp(rg.tps)
 		rg.mu.Unlock()
 		if due := rg.mux.proactiveRetxSeqs(lastContig, words, fastMs, legRTT, time.Now()); len(due) > 0 {
+			atomic.AddUint64(&rg.mux.retxReqHOL, uint64(len(due)))
 			retxSeqs = mergeSeqs(retxSeqs, due)
 		}
 	}
