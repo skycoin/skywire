@@ -123,6 +123,16 @@ Everything the last campaign learned the hard way, fixed as procedure:
   own leg counters, because the exit runs its own scheduler.
 - **The baseline table first.** Before any change: v1.3.94, the full grid of
   §1, both directions. Every later run is a diff against it.
+- **References, unattended:** `bench/run-refs.sh <exit> bench/<date>/<commit>
+  <pins>` takes the direct references (stcpr, squicr; a `--direct` proxy each,
+  `route settings --prefer` choosing the carrier) and one proxy per pinned
+  two-hop route (`proxy start --route <pin>`, the session on exactly that leg),
+  ten transfers per size and direction, each hash-verified, with the carrier
+  transport's byte deltas recorded per row and the exit-side hop-2 deltas per
+  set. A pin lands only once the setup nodes run #4923 (a folded dmsg-server
+  visor as an intermediate) and the client #4924 (`--route` dials a routed
+  group instead of the AppDirect shortcut); `skywire cli proxy mux info -n
+  <session> -v` must show the pinned first-hop transport as the only leg.
 
 ## 3. The work, in order, each step judged by the rig
 

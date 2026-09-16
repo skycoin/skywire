@@ -6,6 +6,40 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## Unreleased
+
+Develop after v1.3.94. Headlines: **routes through a folded dmsg-server visor work again** — every dmsg client built on the seeded discovery answered a lookup for such a key from its server-only seed and never asked the live discovery, so the route setup nodes failed id reservation for every hop through one of the seven folded servers and opened their circuit breakers (#4923); **a peer that re-dials after a restart keeps its new transport** instead of having it reset by the old connection's close (#4925); **`route settings`** shows and sets the router knobs, transport preference included (#4920); **`visor state --select diag`** carries the transport open/close event ring with close reasons (#4919); **sudph transports are kept alive** and autoconnect tries stcpr and squicr before sudph (#4921); **`proxy start --route`** pins a session to exactly the supplied routes (#4924); **`loadtest serve`** certifies transfers by hash so the mux campaign's rows are verified (#4917). The live route-multiplexing campaign and its intended default policy are in `docs/design/`; measurements land in `bench/`.
+
+The same day, measured on the live rig and fixed: **a v1.3.94 client culls every dmsg-over-QUIC session about every two minutes** because the liveness ping had no QUIC branch (#4926), on top of the ALPN collision (#4916) — both are reasons for a point release; **the QUIC transport ran on quic-go's 768 KB default receive window**, which caps a 150 ms path at 5 MB/s (#4929); **a pinned proxy exit is never rotated** by the visor's auto-exit loop, which had been moving operators' proxies to random exits and persisting the change (#4931); **`proxy start` watches the app it started** rather than the default one (#4933); **`visor state --select diag` carries mux leg events with reasons** and the last close per transport (#4930, #4928); **a transport's write no longer blocks its reads** (#4932); **a setup node releases a half-open probe** when the request that took it ends, instead of refusing every route through that hop for 30 minutes (#4935). The campaign's reference measurements are in `bench/2026-09-16/4e052d65b/`.
+
+-   fix(setupmetrics): release a half-open probe when the request that took it ends  [#4935](https://github.com/skycoin/skywire/pull/4935)
+-   fix(skysocks-client): per-invocation config, so one client cannot rewrite another's flags  [#4934](https://github.com/skycoin/skywire/pull/4934)
+-   fix(cli): proxy start watches the app it started, and proxy test restores the client it borrows  [#4933](https://github.com/skycoin/skywire/pull/4933)
+-   fix(transport): WritePacket held transportMx across the underlying write, so every read queued behind it  [#4932](https://github.com/skycoin/skywire/pull/4932)
+-   fix(visor): a pinned proxy exit is never rotated, and starting the client keeps its other args  [#4931](https://github.com/skycoin/skywire/pull/4931)
+-   feat(router): visor state diag carries mux leg events with reasons  [#4930](https://github.com/skycoin/skywire/pull/4930)
+-   fix(transport,dmsg): QUIC ran on the 768 KB default receive window  [#4929](https://github.com/skycoin/skywire/pull/4929)
+-   fix(transport): the event ring is flooded on a public visor, so keep the last close per transport  [#4928](https://github.com/skycoin/skywire/pull/4928)
+-   fix(transport): the UDP demux read loop leaked a timer per deadline change  [#4927](https://github.com/skycoin/skywire/pull/4927)
+-   fix(dmsg): the liveness ping had no QUIC branch, so every QUIC session was culled  [#4926](https://github.com/skycoin/skywire/pull/4926)
+-   fix(transport): a re-dialed peer's new connection survived the old one's close  [#4925](https://github.com/skycoin/skywire/pull/4925)
+-   fix(cli,skysocks-client): proxy start --route dials through a route group so the pins can land  [#4924](https://github.com/skycoin/skywire/pull/4924)
+-   fix(dmsg): a seeded server-only entry no longer hides a folded visor's client half  [#4923](https://github.com/skycoin/skywire/pull/4923)
+-   ci: autoconfig tests follow the legacy-UI removal, and go.sum is tidy  [#4922](https://github.com/skycoin/skywire/pull/4922)
+-   fix(transport,visor): sudph keepalive, and autoconnect tries stcpr and squicr before sudph  [#4921](https://github.com/skycoin/skywire/pull/4921)
+-   feat(cli): route settings shows and sets the router knobs, transport preference included  [#4920](https://github.com/skycoin/skywire/pull/4920)
+-   feat(transport): visor state diag carries transport open/close events with reasons  [#4919](https://github.com/skycoin/skywire/pull/4919)
+-   fix(router): a direct route took whichever transport the walk found first  [#4918](https://github.com/skycoin/skywire/pull/4918)
+-   feat(cli): loadtest serve certifies a finite transfer, and takes uploads  [#4917](https://github.com/skycoin/skywire/pull/4917)
+-   fix(dmsg): every QUIC session died at 30 s and was redialed forever  [#4916](https://github.com/skycoin/skywire/pull/4916)
+-   docs(design): the intended default routing policy, in the operator's words  [#4915](https://github.com/skycoin/skywire/pull/4915)
+-   fix(genvisor): the js config marshaller still wrote mux_routes, which #4803 removed  [#4914](https://github.com/skycoin/skywire/pull/4914)
+-   docs(design): route multiplexing — the live campaign to finish it  [#4913](https://github.com/skycoin/skywire/pull/4913)
+-   ci(release): check out before unpacking the musl toolchain  [#4912](https://github.com/skycoin/skywire/pull/4912)
+-   ci(release): the linux jobs lost their C compiler to checkout; rebuild a tag's assets by dispatch  [#4911](https://github.com/skycoin/skywire/pull/4911)
+-   docs(changelog): #4908, #4909, and the 2026-09-15 history rewrite  [#4910](https://github.com/skycoin/skywire/pull/4910)
+
+
 ## 1.3.94
 
 397 PRs on top of v1.3.93 — the largest release in this series. Headlines: **dmsg now runs over skynet**, so a visor with transports reaches the overlay through its peers instead of only through dmsg servers; **the desk replaces the Angular dashboard** as the hypervisor UI, with the same wasm module serving as the browser visor; **routing policy owns the route count** instead of a visor-global setting; and a long run of observability work makes `visor state` answer questions that previously needed log-grepping.
