@@ -513,12 +513,17 @@ func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk ci
 	// direct-transport-only dial (create-on-demand, bypass the route-finder +
 	// setup node, self-heals on server restart); dmsg is a plain relay stream.
 	dial := func(_ context.Context, a appnet.Addr) (net.Conn, error) {
-		if a.Net == netType && (cfg.direct || diversify || cfg.routed) {
+		if a.Net == netType && (cfg.direct || diversify || cfg.routed || cfg.tunnels > 1) {
 			// --routed asks for an explicit single-route group (MuxRoutes=1): the
 			// networker skips the direct shortcut for any explicit mux count, so
 			// the session has a route group whose legs can be pinned or reconciled.
+			// --tunnels N (N>1) implies it for EVERY tunnel: a tunnel is a route
+			// group by definition, and without it the first tunnel took the direct
+			// shortcut and the extras dialed with mux 0 and took it too, so N
+			// "tunnels" were N streams on one direct transport with no route group
+			// anywhere (measured live 2026-09-16: --tunnels 2, 0 route groups).
 			mux := 0
-			if cfg.routed {
+			if cfg.routed || cfg.tunnels > 1 {
 				mux = 1
 			}
 			return appCl.DialWithOptions(a, mux, 0, 0, 0, 0, 0, cfg.direct, diversify)
