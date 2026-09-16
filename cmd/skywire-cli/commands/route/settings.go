@@ -10,6 +10,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cliout/cliroute"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -64,7 +65,9 @@ effect at once; the preference is written to routing.transport_preference.`,
 			}
 			if cmd.Flags().Changed("prefer") {
 				if settingsPrefer == "default" {
-					next.TransportPreference = []string{}
+					for _, t := range types.DefaultPreferenceOrder() {
+						next.TransportPreference = append(next.TransportPreference, string(t))
+					}
 				} else {
 					next.TransportPreference = strings.Split(settingsPrefer, ",")
 				}

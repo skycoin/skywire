@@ -319,7 +319,7 @@ var calcCmd = &cobra.Command{
 				if p.HasFullLatency {
 					fmt.Fprintf(&textBuf, "cumulative latency: %.2f ms\n", p.CumLatencyMS)
 				} else {
-					fmt.Fprintf(&textBuf, "cumulative latency: %.2f ms  (some hops unmeasured)\n", p.CumLatencyMS)
+					fmt.Fprintf(&textBuf, "cumulative latency: %.2f ms  (measured hops only; some unmeasured)\n", p.CumLatencyMS)
 				}
 			}
 			fmt.Fprintf(&textBuf, "forward: %v\nreverse: %v", p.Forward, p.Reverse)
@@ -880,10 +880,11 @@ func fetchTpLatencyMap(cmd *cobra.Command, routesHops [][]routing.Hop) (map[uuid
 	return out, firstErr
 }
 
-// cumulativeLatencyMS sums per-hop latency for a route. Returns the
-// sum and a bool that's true only when every hop had a measurement;
-// unmeasured hops contribute +Inf to the sum so they sort to the
-// end and the bool flips false to surface that to the operator.
+// cumulativeLatencyMS sums the measured per-hop latency of a route. The
+// bool is true only when every hop had a measurement; an unmeasured hop is
+// left out of the sum (it used to make the sum +Inf, which encoding/json
+// refuses, so --by-latency --json printed nothing). Callers sort fully
+// measured routes ahead of partial ones.
 func cumulativeLatencyMS(hops []routing.Hop, latByID map[uuid.UUID]float64) (float64, bool) {
 	var sum float64
 	allMeasured := true
@@ -891,7 +892,6 @@ func cumulativeLatencyMS(hops []routing.Hop, latByID map[uuid.UUID]float64) (flo
 		if lat, ok := latByID[h.TpID]; ok {
 			sum += lat
 		} else {
-			sum = math.Inf(1)
 			allMeasured = false
 		}
 	}
