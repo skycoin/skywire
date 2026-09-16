@@ -53,7 +53,7 @@ func restoreProxyArgsOnExit(cmd *cobra.Command, rpcClient visor.API, appName str
 		case <-r.finished:
 		case <-sigCtx.Done():
 			r.restore()
-			fmt.Printf("\nInterrupted; %s configuration restored.\n", appName)
+			internal.PrintOutput(r.cmd.Flags(), nil, fmt.Sprintf("\nInterrupted; %s configuration restored.\n", appName))
 			os.Exit(1)
 		}
 	}()
@@ -81,7 +81,7 @@ func (r *proxyArgsRestorer) restore() {
 			return
 		}
 		if err := r.rpc.DoCustomSetting(r.appName, argsToCustomSetting(r.args)); err != nil {
-			fmt.Printf("Warning: could not restore %s arguments %v: %v\n", r.appName, r.args, err)
+			internal.PrintOutput(r.cmd.Flags(), nil, fmt.Sprintf("Warning: could not restore %s arguments %v: %v\n", r.appName, r.args, err))
 		}
 	})
 }
