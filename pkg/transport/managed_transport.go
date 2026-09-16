@@ -495,8 +495,20 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 	log := mt.log.WithField("src", "read_loop")
 	defer mt.wg.Done()
 	for {
-		p, err := mt.readPacket()
+		p, tp, err := mt.readPacket()
 		if err != nil {
+			// The underlying conn can be swapped under a live transport: a peer
+			// that re-dials after a restart lands on the same deterministic
+			// tpID, and setTransport closes the old conn to install the new one.
+			// That close surfaces here as a read error on the OLD conn; treating
+			// it as fatal closed the whole transport, new conn included, so the
+			// peer saw its fresh transport reset moments after the handshake.
+			// If a different conn is installed now, keep reading from it.
+			if cur := mt.getTransport(); cur != nil && cur != tp {
+				log.WithError(err).Debug("Underlying conn replaced; reading from the new one")
+				mt.lastRecvNanos.Store(time.Now().UnixNano())
+				continue
+			}
 			// Check if this is an expected shutdown error (closed pipe/connection)
 			// These occur during normal shutdown and should not be logged as warnings
 			errStr := err.Error()
@@ -1266,17 +1278,18 @@ func (mt *ManagedTransport) WriteRawPacket(packet routing.Packet) error {
 }
 
 // WARNING: Not thread safe.
-func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
+// readPacket also returns the conn the packet was read from (or that failed),
+// so readLoop can tell a swapped-out conn's error from a real failure.
+func (mt *ManagedTransport) readPacket() (packet routing.Packet, tp network.Transport, err error) {
 	log := mt.log.WithField("func", "readPacket")
 
-	var tp network.Transport
 	for {
 		if tp = mt.getTransport(); tp != nil {
 			break
 		}
 		select {
 		case <-mt.done:
-			return nil, ErrNotServing
+			return nil, nil, ErrNotServing
 		case <-mt.transportCh:
 		}
 	}
@@ -1294,13 +1307,13 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 	h := make(routing.Packet, routing.PacketHeaderSize)
 	if _, err = io.ReadFull(tp, h); err != nil {
 		log.WithError(err).Debugf("Failed to read packet header.")
-		return nil, err
+		return nil, tp, err
 	}
 	log.WithField("header_len", len(h)).WithField("header_raw", h).Trace("Read packet header.")
 	p := make([]byte, h.Size())
 	if _, err = io.ReadFull(tp, p); err != nil {
 		log.WithError(err).Debugf("Failed to read packet payload.")
-		return nil, err
+		return nil, tp, err
 	}
 	log.WithField("payload_len", len(p)).Trace("Read packet payload.")
 
@@ -1313,7 +1326,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, err error) {
 		WithField("rt_id", packet.RouteID()).
 		WithField("size", packet.Size()).
 		Trace("Received packet.")
-	return packet, nil
+	return packet, tp, nil
 }
 
 /*
