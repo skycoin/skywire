@@ -85,6 +85,9 @@ type Manager struct {
 	Conf   *ManagerConfig
 	tps    map[uuid.UUID]*ManagedTransport
 	events tpEventRing
+	// lastCloses is the last close event per transport id, which — unlike the
+	// ring — open churn cannot evict.
+	lastCloses tpLastCloseMap
 	// arClient is the address-resolver client (addrresolver.APIClient on native
 	// builds). Typed `any` so addrresolver — which pulls net/http — stays out of
 	// the TinyGo graph; recover it via the build-tagged ARClient() getter.

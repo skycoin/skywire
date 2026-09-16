@@ -47,6 +47,14 @@ type DiagSnapshot struct {
 	// where to look when a transport that was in `tp ls` is gone: the visor log
 	// ring holds minutes; this holds the events.
 	TransportEvents []transport.TransportEvent `json:"transport_events,omitempty"`
+	// TransportLastClose is the last close event of each of the last
+	// transport.TransportLastCloseMax transports that closed, keyed by
+	// transport id. TransportEvents is a ring and on a public visor it is
+	// flooded by autoconnect opens — 256 entries spanned three minutes on one
+	// exit visor — so the one close being chased was already gone. This
+	// survives any amount of open churn: look up the transport id here to get
+	// the reason it died and how old it was.
+	TransportLastClose map[uuid.UUID]transport.TransportEvent `json:"transport_last_close,omitempty"`
 }
 
 // DiagRuntime is the Go runtime at a glance.
@@ -138,6 +146,7 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 		depth, capacity := v.tpM.ReadQueue()
 		d.TransportReadQueue = &DiagQueue{Depth: depth, Capacity: capacity}
 		d.TransportEvents = v.tpM.Events()
+		d.TransportLastClose = v.tpM.LastCloses()
 		now := time.Now()
 		v.tpM.WalkTransports(func(mt *transport.ManagedTransport) bool {
 			if mt.IsClosed() {
