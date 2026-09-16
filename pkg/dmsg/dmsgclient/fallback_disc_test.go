@@ -28,6 +28,14 @@ type stubDisc struct {
 	all       []*disc.Entry
 	allErr    error
 	available []*disc.Entry
+	entry     *disc.Entry
+	entryErr  error
+	entryHits int
+}
+
+func (s *stubDisc) Entry(context.Context, cipher.PubKey) (*disc.Entry, error) {
+	s.entryHits++
+	return s.entry, s.entryErr
 }
 
 func (s *stubDisc) AllServers(context.Context) ([]*disc.Entry, error) { return s.all, s.allErr }
@@ -96,4 +104,51 @@ func TestFallbackDisc_AvailableServersStaysDirect(t *testing.T) {
 	got, err := f.AvailableServers(context.Background())
 	require.NoError(t, err)
 	require.Len(t, got, 2, "AvailableServers is the boot path — it must answer from the direct/seed client without touching the live discovery")
+}
+
+// A dmsg server folded into a visor registers BOTH halves under one key. The
+// seed knows only the server half; a client-entry lookup must reach the live
+// discovery instead of stopping at the seed with "not of client" (error 102).
+func TestFallbackDisc_EntrySeededServerOnlyPrefersLiveDualEntry(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	srvPK, _ := cipher.GenerateKeyPair()
+	seed := &disc.Entry{Static: pk, Server: &disc.Server{Address: "127.0.0.1:1"}}
+	live := &disc.Entry{Static: pk, Server: &disc.Server{Address: "127.0.0.1:1"},
+		Client: &disc.Client{DelegatedServers: []cipher.PubKey{srvPK}}}
+	direct := &stubDisc{entry: seed}
+	http := &stubDisc{entry: live}
+	f := NewRegisteringFallbackDiscClient(direct, http, logging.MustGetLogger("test"))
+
+	got, err := f.Entry(context.Background(), pk)
+	require.NoError(t, err)
+	require.NotNil(t, got.Client, "the live dual entry, not the server-only seed")
+	require.NotNil(t, got.Server)
+	require.Equal(t, 1, http.entryHits)
+}
+
+func TestFallbackDisc_EntrySeededServerOnlyKeepsSeedWhenLiveFails(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	seed := &disc.Entry{Static: pk, Server: &disc.Server{Address: "127.0.0.1:1"}}
+	f := NewRegisteringFallbackDiscClient(
+		&stubDisc{entry: seed},
+		&stubDisc{entryErr: errors.New("discovery unreachable")},
+		logging.MustGetLogger("test"),
+	)
+
+	got, err := f.Entry(context.Background(), pk)
+	require.NoError(t, err)
+	require.Same(t, seed, got, "server bootstrap must keep working without the discovery")
+}
+
+func TestFallbackDisc_EntrySeededClientShortCircuits(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	srvPK, _ := cipher.GenerateKeyPair()
+	seed := &disc.Entry{Static: pk, Client: &disc.Client{DelegatedServers: []cipher.PubKey{srvPK}}}
+	http := &stubDisc{entry: seed}
+	f := NewRegisteringFallbackDiscClient(&stubDisc{entry: seed}, http, logging.MustGetLogger("test"))
+
+	got, err := f.Entry(context.Background(), pk)
+	require.NoError(t, err)
+	require.Same(t, seed, got)
+	require.Equal(t, 0, http.entryHits, "a seeded client entry never consults the discovery")
 }
