@@ -33,6 +33,12 @@ on:
 permissions:
   contents: write
 
+# A newer push on the same branch or PR supersedes this run, and cancelling it
+# hands the runner straight to the head that matters.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
