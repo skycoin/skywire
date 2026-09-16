@@ -52,9 +52,15 @@ func (s *Server) ServeUnifiedQUIC(udpConn net.PacketConn, advertisedUDPAddr, adv
 	// offer for dmsg (see skyquic.DmsgNextProto).
 	identTLS := skyquic.TLSConfigALPN(identCert, nil, nil, skyquic.DmsgNextProto, skyquic.NextProto)
 	quicConf := &quic.Config{
-		EnableDatagrams: true,
-		MaxIdleTimeout:  60 * time.Second,
-		KeepAlivePeriod: 25 * time.Second,
+		// Receive windows: quic-go's 768 KB default connection window caps ONE
+		// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
+		InitialStreamReceiveWindow:     skyquic.InitialStreamReceiveWindow,
+		MaxStreamReceiveWindow:         skyquic.MaxStreamReceiveWindow,
+		InitialConnectionReceiveWindow: skyquic.InitialConnectionReceiveWindow,
+		MaxConnectionReceiveWindow:     skyquic.MaxConnectionReceiveWindow,
+		EnableDatagrams:                true,
+		MaxIdleTimeout:                 60 * time.Second,
+		KeepAlivePeriod:                25 * time.Second,
 	}
 
 	// Try to co-host WebTransport on the SAME listener, ALPN-demuxed. Because a
@@ -140,7 +146,16 @@ func (s *Server) buildWTServer() (*webtransport.Server, *tls.Config, [32]byte, e
 		TLSConfig:       wtTLS,
 		Handler:         mux,
 		EnableDatagrams: true,
-		QUICConfig:      &quic.Config{EnableDatagrams: true, EnableStreamResetPartialDelivery: true},
+		QUICConfig: &quic.Config{
+			EnableDatagrams:                  true,
+			EnableStreamResetPartialDelivery: true,
+			// Receive windows: quic-go's 768 KB default connection window caps ONE
+			// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
+			InitialStreamReceiveWindow:     skyquic.InitialStreamReceiveWindow,
+			MaxStreamReceiveWindow:         skyquic.MaxStreamReceiveWindow,
+			InitialConnectionReceiveWindow: skyquic.InitialConnectionReceiveWindow,
+			MaxConnectionReceiveWindow:     skyquic.MaxConnectionReceiveWindow,
+		},
 	}
 	webtransport.ConfigureHTTP3Server(h3)
 	wtSrv := &webtransport.Server{
