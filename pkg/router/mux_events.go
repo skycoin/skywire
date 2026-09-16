@@ -291,9 +291,11 @@ func (rg *RouteGroup) activatePinnedLeg(tpID uuid.UUID) {
 		}
 	}
 	rg.mu.Unlock()
-	if idx <= 0 || !rg.mux.isLegStandby(idx) {
+	if idx <= 0 {
 		return
 	}
+	// Unconditional: the leg's standby slot may not exist yet (the slice grows
+	// lazily, see setLegStandby), so "not standby" here does not mean active.
 	rg.mux.setLegStandby(idx, false)
 	rg.sendLegState(idx, false)
 	rg.noteLegEvent(MuxEventLegPromoted, "operator: pinned leg active", MuxByOperator, idx, rg.legCount(), tp, nil)

@@ -781,9 +781,14 @@ func (m *routeMux) setLegStandby(idx int, standby bool) {
 		return // leg 0 is never standby
 	}
 	m.legMu.Lock()
-	if idx < len(m.standby) {
-		m.standby[idx] = standby
+	// The standby slice grows lazily as legs are selected, so a leg appended a
+	// moment ago may have no slot yet — a bounded write then silently dropped an
+	// explicit promotion (the operator-pinned second leg of a two-leg set stayed
+	// parked). Grow to cover idx, filling the gap with the add-time default.
+	for len(m.standby) <= idx {
+		m.standby = append(m.standby, m.standbyNewLegs && len(m.standby) > 0)
 	}
+	m.standby[idx] = standby
 	m.legMu.Unlock()
 }
 
