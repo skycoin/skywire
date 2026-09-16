@@ -3399,7 +3399,7 @@ func (r *router) directHop(src, dst cipher.PubKey) (routing.Hop, bool) {
 // higher measured throughput, then the lower measured latency. Unmeasured
 // values (zero) never beat measured ones.
 func betterDirectTransport(a, b *transport.ManagedTransport) bool {
-	pa, pb := tptypes.TypePreference(tptypes.Type(a.Entry.Type)), tptypes.TypePreference(tptypes.Type(b.Entry.Type))
+	pa, pb := tptypes.TypePreference(a.Entry.Type), tptypes.TypePreference(b.Entry.Type)
 	if pa != pb {
 		return pa < pb
 	}
