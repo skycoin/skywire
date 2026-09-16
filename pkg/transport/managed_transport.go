@@ -91,6 +91,12 @@ type ManagedTransport struct {
 	transport   network.Transport
 	transportCh chan struct{}
 	transportMx sync.Mutex
+	// writeMx serializes writers against each other on the underlying conn, so
+	// a packet reaches the wire as one frame. It is deliberately NOT
+	// transportMx: readPacket takes that one on every read, and holding it
+	// across an underlying write serialized every read behind every write.
+	// Never taken while transportMx is held.
+	writeMx sync.Mutex
 
 	done chan struct{}
 	wg   sync.WaitGroup
@@ -1142,25 +1148,67 @@ const writeTimeout = 1 * time.Minute
 // WritePacket writes a packet to the remote.
 // Respects context cancellation to prevent blocking forever on dead transports.
 func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Packet) error {
-	mt.transportMx.Lock()
-
-	if mt.transport == nil {
-		mt.transportMx.Unlock()
+	tp := mt.getUnderlying()
+	if tp == nil {
 		return fmt.Errorf("write packet: cannot write to transport, transport is not set up")
 	}
 
-	// Capture the transport under the lock so the goroutine below never reads
-	// the shared mt.transport field (which setTransport/close can mutate once
-	// we release the lock on the ctx-cancel path — a data race). Set a write
-	// deadline so the goroutine can't park in Write forever on a half-open conn.
-	tp := mt.transport
-	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
-		mt.log.WithError(err).Debug("Failed to set write deadline")
+	n, err := mt.writeTo(ctx, tp, packet)
+	if err != nil && ctx.Err() == nil {
+		// The underlying conn can be swapped under a live transport (#4925): a
+		// peer that re-dials after a restart lands on the same deterministic
+		// tpID and setTransport closes the old conn to install the new one. A
+		// write that lost that race failed on a conn this transport no longer
+		// uses — retry once on the one that is current now rather than take the
+		// fresh conn down with the old one's error.
+		if cur := mt.getUnderlying(); cur != nil && cur != tp {
+			mt.log.WithError(err).Debug("Underlying conn replaced mid-write; retrying on the new one")
+			tp = cur
+			n, err = mt.writeTo(ctx, tp, packet)
+		}
 	}
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if cur := mt.getUnderlying(); cur != nil && cur != tp {
+			// Swapped again while this write was in flight: the failure belongs
+			// to a conn that is already gone. Report it, close nothing.
+			return err
+		}
+		mt.closeWith("write: " + err.Error())
+		return err
+	}
+	if n > routing.PacketHeaderSize {
+		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
+	}
+	return nil
+}
 
-	// Run the write in a goroutine so we can respect context cancellation.
-	// Without this, a dead transport's Write blocks forever, deadlocking
-	// the route group close path and the rules GC goroutine.
+// getUnderlying returns mt.transport without the isServing() gate getTransport
+// applies, so a write can name the conn it is about to use (and the one it
+// used) even as the transport is shutting down.
+func (mt *ManagedTransport) getUnderlying() network.Transport {
+	mt.transportMx.Lock()
+	tp := mt.transport
+	mt.transportMx.Unlock()
+	return tp
+}
+
+// writeTo writes packet to tp, holding writeMx — not transportMx — for the
+// underlying write.
+//
+// transportMx used to be held across the whole write, and readPacket takes
+// that same mutex on every read (through getTransport), so on a routed path
+// every read serialized behind every in-flight write on the transport. It also
+// happened to serialize writers against each other, which is a guarantee worth
+// keeping: a routing packet must reach the wire as one frame, not interleaved
+// with another writer's. writeMx keeps exactly that, and nothing else.
+//
+// The write runs in a goroutine so ctx cancellation is respected even when the
+// conn is wedged; tp is passed in so the goroutine never reads the shared
+// mt.transport field, which setTransport/close can mutate.
+func (mt *ManagedTransport) writeTo(ctx context.Context, tp network.Transport, packet routing.Packet) (int, error) {
 	type writeResult struct {
 		n   int
 		err error
@@ -1172,26 +1220,22 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 				ch <- writeResult{0, fmt.Errorf("panic in transport write: %v", r)}
 			}
 		}()
+		mt.writeMx.Lock()
+		defer mt.writeMx.Unlock()
+		// Deadline set after the queue, so time spent waiting for another
+		// writer is not charged against this write.
+		if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+			mt.log.WithError(err).Debug("Failed to set write deadline")
+		}
 		n, err := tp.Write(packet)
 		ch <- writeResult{n, err}
 	}()
 
 	select {
 	case <-ctx.Done():
-		mt.transportMx.Unlock()
-		return ctx.Err()
+		return 0, ctx.Err()
 	case res := <-ch:
-		if res.err != nil {
-			// Release the lock BEFORE calling close, which also acquires it
-			mt.transportMx.Unlock()
-			mt.closeWith("write: " + res.err.Error())
-			return res.err
-		}
-		if res.n > routing.PacketHeaderSize {
-			mt.logSent(uint64(res.n - routing.PacketHeaderSize)) //nolint:gosec
-		}
-		mt.transportMx.Unlock()
-		return nil
+		return res.n, res.err
 	}
 }
 
@@ -1216,9 +1260,7 @@ func datagramConnOf(tp network.Transport) (network.DatagramConn, bool) {
 // already end-to-end AEAD-sealed by the DatagramRouteGroup; QUIC's own TLS
 // adds hop-by-hop encryption to the datagram.
 func (mt *ManagedTransport) WriteDatagram(ctx context.Context, packet routing.Packet) error {
-	mt.transportMx.Lock()
-	tp := mt.transport
-	mt.transportMx.Unlock()
+	tp := mt.getUnderlying()
 	if tp == nil {
 		return fmt.Errorf("write datagram: cannot write to transport, transport is not set up")
 	}
@@ -1254,20 +1296,24 @@ func (mt *ManagedTransport) WriteRawPacket(packet routing.Packet) error {
 	// Capture the transport, then write WITHOUT holding transportMx: a wedged
 	// conn must not block here while holding the lock, which would freeze the
 	// whole transport — including its own close(), getTransport(), and every
-	// other method that needs the lock. WritePacket already avoids this via its
-	// goroutine; WriteRawPacket (cascade + VStreamMux direct-dial traffic) did
-	// not, and held the lock across an unbounded Write.
-	mt.transportMx.Lock()
-	tp := mt.transport
-	mt.transportMx.Unlock()
+	// other method that needs the lock. WritePacket now takes the same route.
+	// writeMx keeps this frame from interleaving with a routed write's.
+	tp := mt.getUnderlying()
 	if tp == nil {
 		return fmt.Errorf("write raw packet: transport not set up")
 	}
+	mt.writeMx.Lock()
 	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
 		mt.log.WithError(err).Debug("Failed to set write deadline")
 	}
 	n, err := tp.Write(packet)
+	mt.writeMx.Unlock()
 	if err != nil {
+		if cur := mt.getUnderlying(); cur != nil && cur != tp {
+			// The conn was swapped under this write (#4925); the error is the
+			// old conn's, and closing here would take the new one down too.
+			return err
+		}
 		mt.closeWith("raw write: " + err.Error())
 		return err
 	}
