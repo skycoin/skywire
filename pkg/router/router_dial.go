@@ -1075,6 +1075,7 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 
 	if forceLocal {
 		log.Info("Calculating route locally (--local-route enabled)")
+		opts.note("force-local")
 		calcStart := time.Now()
 		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
 		calcTime := time.Since(calcStart)
@@ -1157,6 +1158,7 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 			fwd := []routing.Hop{hop}
 			log.WithField("transport", hop.TpID).
 				Debug("--direct: 1-hop route over the existing transport; skipping the route finder")
+			opts.note("direct-hop %s", hop.TpID.String()[:8])
 			return fwd, reverseHops(fwd), nil
 		}
 	}
@@ -1252,9 +1254,13 @@ fetchRoutesAgain:
 		}
 	}
 
+	if err == nil {
+		opts.note("finder: %d forward candidate(s), first hops [%s]", len(paths[forward]), firstHopsOf(paths[forward]))
+	}
 	if err == rfclient.ErrTransportNotFound {
 		// Try local route calculation - may find a local transport that's not yet in TPD
 		log.Info("Route finder returned transport not found, attempting local route calculation...")
+		opts.note("finder: transport not found; local calc")
 		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
 		if localErr == nil {
 			r.routeSource.localFallback.Add(1)
@@ -2106,9 +2112,11 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 			}
 			if excluded {
 				log.Debugf("Skipping excluded transport %s to destination", tp.id)
+				dialOpts.note("local: skipped excluded direct tp %s", tp.id.String()[:8])
 				continue
 			}
 			log.Debugf("Found direct transport to destination: %s (type=%s)", tp.id, tp.tpType)
+			dialOpts.note("local: direct tp %s (%s)", tp.id.String()[:8], tp.tpType)
 			fwdHop := routing.Hop{TpID: tp.id, From: src, To: dst}
 			revHop := routing.Hop{TpID: tp.id, From: dst, To: src}
 			return []routing.Hop{fwdHop}, []routing.Hop{revHop}, nil
@@ -2257,8 +2265,10 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// visor, whose big tpd-all-transports feed frequently never primes — the memo
 	// was unconditionally disabled and every dial re-ran the whole BFS.
 	var (
-		memoKey     localRouteKey
-		memoEnabled = len(excludeIntermediates) == 0 && r.localRoutes != nil && snapGen != 0
+		memoKey localRouteKey
+		// Transport-ID exclusions shape the answer too (a diversify dial's first-hop
+		// exclusions), so a dial carrying them must not be served another dial's path.
+		memoEnabled = len(excludeIntermediates) == 0 && (dialOpts == nil || len(dialOpts.ExcludeTransportIDs) == 0) && r.localRoutes != nil && snapGen != 0
 		localSig    uint64
 	)
 	if memoEnabled {
@@ -2270,6 +2280,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 				return nil, nil, fmt.Errorf("local BFS found no path to %s with min_hops=%d max_hops=%d", dst, minHops, maxHops)
 			}
 			log.Debugf("Local-route memo hit %s→%s (min=%d max=%d)", src, dst, minHops, maxHops)
+			dialOpts.note("local: memo hit, first hops [%s]", firstHopsOf([][]routing.Hop{fwd}))
 			return fwd, rev, nil
 		}
 	}
@@ -2293,6 +2304,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		return nil, nil, fmt.Errorf("local BFS found no path to %s with min_hops=%d max_hops=%d", dst, minHops, maxHops)
 	}
 	log.Debugf("Local BFS found %d-hop route via %v", level, hopPath(best))
+	dialOpts.note("local: %d-hop BFS path, first hops [%s]", level, firstHopsOf([][]routing.Hop{best}))
 	revPath := reverseHops(best)
 	if memoEnabled {
 		r.localRoutes.put(snapGen, localSig, memoKey, best, revPath)
@@ -3455,6 +3467,20 @@ func shortTpIDs(ids []uuid.UUID) string {
 	out := make([]string, 0, len(ids))
 	for _, id := range ids {
 		out = append(out, id.String()[:8])
+	}
+	return strings.Join(out, ",")
+}
+
+// firstHopsOf renders each candidate path's first-hop transport (8 chars) for
+// the dial decision trail.
+func firstHopsOf(paths [][]routing.Hop) string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if len(p) == 0 {
+			out = append(out, "-")
+			continue
+		}
+		out = append(out, p[0].TpID.String()[:8])
 	}
 	return strings.Join(out, ",")
 }
