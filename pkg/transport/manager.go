@@ -224,9 +224,11 @@ func (tm *Manager) runTransportMaintenance(ctx context.Context) {
 
 	logTicker := time.NewTicker(logWriteInterval)
 	pingTicker := time.NewTicker(transportPingInterval)
+	sudphTicker := time.NewTicker(sudphKeepaliveInterval)
 	bwProbeTicker := time.NewTicker(bwProbeInterval)
 	defer logTicker.Stop()
 	defer pingTicker.Stop()
+	defer sudphTicker.Stop()
 	defer bwProbeTicker.Stop()
 
 	for {
@@ -239,6 +241,8 @@ func (tm *Manager) runTransportMaintenance(ctx context.Context) {
 			tm.recordAllTransportLogs()
 		case <-pingTicker.C:
 			tm.pingAllTransports()
+		case <-sudphTicker.C:
+			tm.pingSUDPHTransports()
 		case <-bwProbeTicker.C:
 			tm.probeUnmeasuredTransports()
 		}
@@ -1871,4 +1875,30 @@ func (tm *Manager) tpIDFromPK(pk cipher.PubKey, netType types.Type) uuid.UUID {
 // and every transport's read loop — pings and pongs included — stalls behind it.
 func (tm *Manager) ReadQueue() (depth, capacity int) {
 	return len(tm.readCh), cap(tm.readCh)
+}
+
+// sudphKeepaliveInterval is how often a sudph transport is pinged on top of
+// the transportPingInterval cadence every transport gets. sudph is KCP over a
+// hole-punched UDP flow with no keepalive of its own (the quic and tcp
+// carriers have one), so a NAT that rebinds the flow between two 60 s pings
+// kills it silently: kcp-go pins the source address of the first packet and
+// drops the rest, and the peer keys its session by the old address. Pinging
+// inside the shortest common UDP mapping lifetime (30 s) keeps the mapping
+// alive, and turns a dead flow into pong misses within a minute instead of
+// the 3-minute read deadline.
+const sudphKeepaliveInterval = 20 * time.Second
+
+// pingSUDPHTransports sends the maintenance ping to every sudph transport.
+func (tm *Manager) pingSUDPHTransports() {
+	tm.mx.RLock()
+	var snapshot []*ManagedTransport
+	for _, mt := range tm.tps {
+		if mt.Entry.Type == types.SUDPH {
+			snapshot = append(snapshot, mt)
+		}
+	}
+	tm.mx.RUnlock()
+	for _, mt := range snapshot {
+		mt.tickPing()
+	}
 }
