@@ -26,6 +26,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skyquic"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -273,9 +274,15 @@ func (c *quicClient) Start() error {
 	}
 	c.tlsCert = cert
 	c.qconf = &quic.Config{
-		EnableDatagrams: true,
-		MaxIdleTimeout:  quicMaxIdleTimeout,
-		KeepAlivePeriod: quicKeepAlivePeriod,
+		// Receive windows: quic-go's 768 KB default connection window caps ONE
+		// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
+		InitialStreamReceiveWindow:     skyquic.InitialStreamReceiveWindow,
+		MaxStreamReceiveWindow:         skyquic.MaxStreamReceiveWindow,
+		InitialConnectionReceiveWindow: skyquic.InitialConnectionReceiveWindow,
+		MaxConnectionReceiveWindow:     skyquic.MaxConnectionReceiveWindow,
+		EnableDatagrams:                true,
+		MaxIdleTimeout:                 quicMaxIdleTimeout,
+		KeepAlivePeriod:                quicKeepAlivePeriod,
 	}
 	go c.serve()
 	return nil
