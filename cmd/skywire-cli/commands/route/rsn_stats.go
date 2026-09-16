@@ -142,6 +142,32 @@ func formatRSNStats(s *setupmetrics.StatsSnapshot) string {
 		b.WriteString("\n")
 	}
 
+	// ----- circuit breakers (non-closed only) -----
+	if len(s.Breakers) > 0 {
+		fmt.Fprintf(&b, "Circuit breakers (open / half-open):\n")
+		pks := make([]string, 0, len(s.Breakers))
+		for pk := range s.Breakers {
+			pks = append(pks, pk)
+		}
+		sort.Strings(pks)
+		tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "  pk\tstate\topened\tfails\tprobe") //nolint:errcheck,gosec
+		for _, pk := range pks {
+			br := s.Breakers[pk]
+			probe := "-"
+			if br.ProbeInFlight {
+				probe = "in-flight"
+			}
+			opened := "-"
+			if !br.OpenedAt.IsZero() {
+				opened = br.OpenedAt.Format(time.RFC3339)
+			}
+			fmt.Fprintf(tw, "  %s\t%s\t%s\t%d\t%s\n", pk, br.State, opened, br.ConsecutiveFails, probe) //nolint:errcheck,gosec
+		}
+		tw.Flush() //nolint:errcheck,gosec
+		b.WriteString("\n")
+	}
+
 	// ----- top destinations -----
 	if len(s.TopDestinations) > 0 {
 		fmt.Fprintf(&b, "Top destinations (by total requests):\n")
