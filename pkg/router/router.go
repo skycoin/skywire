@@ -635,6 +635,13 @@ type Router interface {
 	// of all route groups (not just one app's) is wanted at once.
 	RouteGroupMuxInfoAll() []MuxInfo
 
+	// MuxEvents returns the bounded history of route-group and mux-leg
+	// changes — each add, removal, park, re-home and group close with the
+	// reason the code gave and who initiated it. This is where to look when
+	// a leg that was in `proxy mux info` is gone: the visor log ring holds
+	// minutes, this holds the events.
+	MuxEvents() []MuxEvent
+
 	// Routing table related methods
 	RoutesCount() int
 	Rules() []routing.Rule
@@ -660,6 +667,7 @@ type router struct {
 	rgsRaw             map[routing.RouteDescriptor]*RouteGroup         // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
 	rgsDatagrams       map[routing.RouteDescriptor]*DatagramRouteGroup // faithful-UDP (DatagramPacket) route groups, keyed like rgsNs; #2607 stage-4 dispatch
 	intake             intakeCounters                                  // inbound-path counters for `visor state` (router_intake.go)
+	muxEvents          muxEventRing                                    // bounded history of route-group/mux-leg changes with reasons (mux_events.go)
 	routeSource        routeSourceCounters                             // where routes came from (router_route_source.go)
 	datagramPorts      map[routing.Port]struct{}                       // local ports with faithful-UDP intent; the accept side builds a datagram sibling only for these (#2607 on-demand-by-local-intent)
 	acceptDatagram     chan datagramAccept                             // accept-side datagram siblings, drained by AcceptDatagram (the forwarded_ports.udp server loop)

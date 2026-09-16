@@ -107,6 +107,9 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 	// First try noise-wrapped route groups (fully initialized)
 	nrg, ok := r.popNoiseRouteGroup(rDesc)
 	if ok {
+		if nrg != nil && nrg.rg != nil {
+			nrg.rg.setCloseReason("rule expired: keepalive GC collected the group's consume rule")
+		}
 		if nrg.isClosed() {
 			log.Debug("Noise route group already closed. Nothing to be done.")
 			return

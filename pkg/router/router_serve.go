@@ -309,6 +309,7 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	}
 
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc, r.mLogger)
+	rg.muxEvents = &r.muxEvents
 	rg.SetAppName(appName)
 	rg.initiator = nsConf.Initiator
 	// Per-frame noise (inverse-mux): hand the RG the same KK keys EncryptConn
@@ -318,7 +319,13 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	// the stream-noise wrap unchanged.
 	rg.nsConf = nsConf
 	rg.perFrameNoiseWant = perFrameNoiseEnabled
-	rg.appendRules(rules.Forward, rules.Reverse, tp)
+	initiatorWord := "accepted from the setup node"
+	if nsConf.Initiator {
+		initiatorWord = "dialed by this visor"
+	}
+	rg.noteMuxEvent(MuxEvent{Event: MuxEventGroupCreated, By: MuxByLocal, LegIndex: -1,
+		Reason: "route group " + initiatorWord})
+	rg.appendRules(rules.Forward, rules.Reverse, tp, "route setup: primary leg")
 	// we put raw rg so it can be accessible to the router when handshake packets come in
 	r.rgsRaw[rules.Desc] = rg
 	r.mx.Unlock()

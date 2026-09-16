@@ -408,6 +408,15 @@ type RouteGroup struct {
 	// still echoes the tiny liveness ping, so pong-miss liveness never catches
 	// it). Guarded by legLivenessMu.
 	legRecvSnap map[uuid.UUID]uint64
+	// closeReason is why the next close of this group happens, when the caller
+	// knows more than the close code does (see setCloseReason). Its own mutex:
+	// the close paths reach it both with and without rg.mu held.
+	closeReasonMu sync.Mutex
+	closeReason   string
+	// muxEvents is the router's shared bounded history of leg/group changes
+	// (see mux_events.go). Set by the router that owns this group; nil for a
+	// route group built outside one, in which case nothing is recorded.
+	muxEvents *muxEventRing
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -530,6 +539,12 @@ type MuxInfo struct {
 	FECReconstructs    uint64
 	// Legs is in tps[] order. One entry per active mux leg.
 	Legs []MuxLeg
+	// Events is this group's most recent leg/group changes with their reasons,
+	// oldest first (the last muxEventsPerGroup of the router's ring). It puts
+	// the churn next to the legs, so a `proxy mux info --json` that shows a leg
+	// missing also shows who took it and why. The full ring is
+	// diag.mux_events in `visor state`.
+	Events []MuxEvent
 }
 
 // MuxLeg pairs the per-leg counters with the transport identity.
@@ -574,7 +589,7 @@ type MuxLeg struct {
 // MuxStats returns a point-in-time snapshot of the rg's per-leg
 // counters paired with each leg's transport identity.
 func (rg *RouteGroup) MuxStats() MuxInfo {
-	info := MuxInfo{Desc: rg.desc}
+	info := MuxInfo{Desc: rg.desc, Events: rg.muxEvents.forDesc(rg.desc, muxEventsPerGroup)}
 	rg.mu.Lock()
 	if rg.mux != nil {
 		info.MuxEnabled = true
@@ -1947,6 +1962,8 @@ func (rg *RouteGroup) dropLegsByIndex(indices []int) {
 			// window where the leg is closed but not yet pruned.
 			break
 		}
+		rg.noteLegEvent(MuxEventLegDropped, "policy rotation: on_tick asked to drop this leg", MuxByPolicy,
+			idx, len(rg.tps), tp, rg.legHopsLocked(tp.Entry.ID))
 		_ = tp.Close() //nolint:errcheck
 		aliveCount--
 		closed = append(closed, idx)
@@ -2714,6 +2731,9 @@ func (rg *RouteGroup) reelectPrimary(newIdx int) {
 		}
 	}
 	rg.logger.Infof("latency-band: re-elected leg %d into the primary slot (old primary was an out-of-band outlier)", newIdx)
+	rg.noteLegEvent(MuxEventPrimaryRehome,
+		fmt.Sprintf("latency band: leg %d re-elected, old primary was an out-of-band outlier", newIdx),
+		MuxByAdaptive, 0, len(rg.tps), rg.tps[0], rg.legHopsLocked(tpEntryID(rg.tps[0])))
 }
 
 // enforceBottleneckGroups detects SHARED-BOTTLENECK groups among the mux legs
@@ -3012,6 +3032,8 @@ func (rg *RouteGroup) demoteStalledLegs(deadIDs []uuid.UUID) {
 		}
 		if _, dead := deadSet[tp.Entry.ID]; dead {
 			idxs = append(idxs, i)
+			rg.noteLegEvent(MuxEventLegParked, "data progress stalled with an open reorder gap (parked to standby, rules kept)",
+				MuxByAdaptive, i, len(rg.tps), tp, rg.legHopsLocked(tp.Entry.ID))
 		}
 	}
 	rg.mu.Unlock()
@@ -3062,6 +3084,13 @@ func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
 			if tp != nil {
 				rg.logger.Infof("leg-liveness: pruning black-holing leg %v (no echo for %d probes; transport stays up)",
 					tp.Entry.ID, legPongMissThreshold)
+			}
+			reason := fmt.Sprintf("liveness: no echo for %d probes (transport stays up)", legPongMissThreshold)
+			rg.noteLegEvent(MuxEventLegRemoved, reason, MuxByAdaptive, i, remaining-1, tp,
+				rg.legHopsLocked(tpEntryID(tp)))
+			if i == 0 {
+				rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByAdaptive, LegIndex: 0,
+					Legs: remaining - 1, Reason: "primary leg failed " + reason})
 			}
 			droppedIdx = append(droppedIdx, i)
 			remaining--
@@ -3195,6 +3224,7 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 		failures := atomic.AddInt32(&rg.consecutiveWriteFailures, 1)
 		if failures >= maxConsecutiveWriteFailures {
 			rg.logger.Warnf("Closing RouteGroup after %d consecutive write failures: %v", failures, err)
+			rg.setCloseReason(fmt.Sprintf("%d consecutive keepalive write failures: %v", failures, err))
 			go func() { rg.Close() }() //nolint:errcheck,gosec
 			return
 		}
@@ -3258,8 +3288,17 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 			if i < len(rg.rvs) {
 				deadRuleIDs = append(deadRuleIDs, rg.rvs[i].KeyRouteID())
 			}
-			if tp != nil {
+			reason := "transport closed"
+			if tp == nil {
+				reason = "leg has no transport"
+			} else {
 				rg.logger.Infof("Pruning dead mux transport %v", tp.Entry.ID)
+			}
+			rg.noteLegEvent(MuxEventLegRemoved, reason, MuxByLocal, i, len(rg.tps)-len(droppedIdx)-1, tp,
+				rg.legHopsLocked(tpEntryID(tp)))
+			if i == 0 {
+				rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByLocal, LegIndex: 0,
+					Legs: len(rg.tps) - len(droppedIdx) - 1, Reason: "primary leg's " + reason})
 			}
 			droppedIdx = append(droppedIdx, i)
 		}
@@ -3325,7 +3364,9 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 		deadRuleIDs = append(deadRuleIDs, rg.rvs[idx].KeyRouteID())
 	}
 
+	var retiredTp *transport.ManagedTransport
 	if idx < len(rg.tps) {
+		retiredTp = rg.tps[idx]
 		rg.tps = append(rg.tps[:idx], rg.tps[idx+1:]...)
 	}
 	if idx < len(rg.fwd) {
@@ -3333,6 +3374,12 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 	}
 	if idx < len(rg.rvs) {
 		rg.rvs = append(rg.rvs[:idx], rg.rvs[idx+1:]...)
+	}
+	rg.noteLegEvent(MuxEventLegRemoved, "peer retired the leg (close: leg-retired)", MuxByRemote,
+		idx, len(rg.tps), retiredTp, rg.legHopsLocked(tpEntryID(retiredTp)))
+	if idx == 0 {
+		rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByRemote, LegIndex: 0, Legs: len(rg.tps),
+			Reason: "peer retired the primary leg"})
 	}
 
 	if len(deadRuleIDs) > 0 {
@@ -3572,6 +3619,13 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 	}
 
 	closeInitiator := rg.isCloseInitiator()
+
+	by, fallback := MuxByRemote, fmt.Sprintf("peer closed the group (code %d)", code)
+	if closeInitiator {
+		by, fallback = MuxByLocal, fmt.Sprintf("local close (code %d)", code)
+	}
+	rg.noteMuxEvent(MuxEvent{Event: MuxEventGroupClosed, By: by, LegIndex: -1, Legs: len(rg.tps),
+		Reason: rg.takeCloseReason(fallback)})
 
 	if closeInitiator {
 		// will wait for close response from all the transports
@@ -4647,13 +4701,17 @@ func (rg *RouteGroup) isClosed() bool {
 	return chanClosed(rg.closed)
 }
 
-func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.ManagedTransport) {
+// appendRules adds a forward/reverse rule pair and its transport as a new leg.
+// reason names what asked for the leg ("route setup", "mux append", …); it is
+// what the leg_added mux event carries.
+func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.ManagedTransport, reason string) {
 	rg.mu.Lock()
 
 	rg.fwd = append(rg.fwd, forward)
 	rg.rvs = append(rg.rvs, reverse)
 	rg.tps = append(rg.tps, tp)
 	newIdx := len(rg.tps) - 1
+	legs := len(rg.tps)
 
 	// Rebuild transport weights when transports change
 	if rg.mux != nil && len(rg.tps) > 1 {
@@ -4663,6 +4721,7 @@ func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.M
 	if rg.mux != nil {
 		rg.mux.growLegs(len(rg.tps))
 	}
+	rg.noteLegEvent(MuxEventLegAdded, reason, MuxByLocal, newIdx, legs, tp, rg.legHopsLocked(tpEntryID(tp)))
 	// Initial single-leg rg's get their first leg via appendRules
 	// too, but the policy doesn't need on_leg_change to fire for
 	// that — the BeforeDial/SelectRoute knobs already handled it.
@@ -4686,12 +4745,13 @@ func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.M
 // Mirrors appendRules' tps[]+fwd[] parallel maintenance but leaves
 // rvs[] untouched. Mux weight + per-leg counter bookkeeping treats
 // this as a new forward leg.
-func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.ManagedTransport) {
+func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.ManagedTransport, reason string) {
 	rg.mu.Lock()
 
 	rg.fwd = append(rg.fwd, forward)
 	rg.tps = append(rg.tps, tp)
 	newIdx := len(rg.tps) - 1
+	legs := len(rg.tps)
 
 	if rg.mux != nil && len(rg.tps) > 1 {
 		rg.mux.rebuildWeights(rg.tps)
@@ -4699,6 +4759,7 @@ func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.Manag
 	if rg.mux != nil {
 		rg.mux.growLegs(len(rg.tps))
 	}
+	rg.noteLegEvent(MuxEventLegAdded, reason, MuxByLocal, newIdx, legs, tp, rg.legHopsLocked(tpEntryID(tp)))
 	hookSet := rg.legChangeHook != nil
 	rg.mu.Unlock()
 

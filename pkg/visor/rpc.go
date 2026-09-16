@@ -12,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -366,6 +367,11 @@ type MuxRouteGroupInfo struct {
 	FECRepairBytesRecv uint64       `json:"fec_repair_bytes_recv,omitempty"`
 	FECReconstructs    uint64       `json:"fec_reconstructs,omitempty"`
 	Legs               []MuxLegInfo `json:"legs"`
+	// Events is this route group's most recent leg/group changes with their
+	// reasons, oldest first — the churn next to the legs, so a reading that
+	// shows a leg missing also shows who took it and why. The whole-visor ring
+	// is diag.mux_events in `visor state`.
+	Events []router.MuxEvent `json:"events,omitempty"`
 }
 
 // MuxLegInfo is one route in a mux'd group.
