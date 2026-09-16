@@ -313,6 +313,28 @@ func (r *router) fetchCandidateRoutes(
 		}
 	}
 
+	// Multi-tunnel diversify (opts.DiversifyTransports): keep this extra
+	// tunnel's FIRST HOP off the transports its sibling tunnels already hold
+	// (opts.ExcludeTransportIDs, seeded by siblingRouteGroupExclusions). The
+	// sequential path filters in fetchBestRoutes, but every tunnel dial with a
+	// mux count takes THIS race path, which handed each tunnel the same
+	// preferred direct first hop — measured live 2026-09-16: `--tunnels 3` put
+	// all three route groups on one stcpr transport. When nothing disjoint
+	// remains, report no route so the caller falls through to the sequential
+	// path and its local-calc disjoint fallback; a shared first hop is then its
+	// last resort, not this one's default.
+	if opts.DiversifyTransports && len(opts.ExcludeTransportIDs) > 0 {
+		disjoint := filterDisjointFirstHop(fwdCands, opts.ExcludeTransportIDs)
+		if len(disjoint) == 0 {
+			log.Debugf("diversify: none of %d candidate(s) leave over a free first-hop transport; deferring to the sequential dial", len(fwdCands))
+			return nil, ErrNoRouteFound
+		}
+		if len(disjoint) != len(fwdCands) {
+			log.Debugf("diversify: %d/%d candidate(s) leave over a disjoint first-hop transport; racing those", len(disjoint), len(fwdCands))
+		}
+		fwdCands = disjoint
+	}
+
 	fwdRanked := r.rankCandidatePaths(fwdCands, src, dst, opts.ExcludeIntermediatePKs, latencyFor, typeFor, throughputFor, k)
 	revRanked := r.rankCandidatePaths(revCands, dst, src, opts.ExcludeIntermediatePKs, latencyFor, typeFor, throughputFor, k)
 	if len(fwdRanked) == 0 || len(revRanked) == 0 {
