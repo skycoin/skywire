@@ -62,11 +62,27 @@ func NewRegisteringFallbackDiscClient(direct, http disc.APIClient, log *logging.
 	}
 }
 
-// Entry tries direct client first, falls back to HTTP for unknown entries
+// Entry tries direct client first, falls back to HTTP for unknown entries.
+//
+// A seeded SERVER-only hit is not the whole story any more: a dmsg server can
+// be folded into a visor under one key (#4787), so the same PK is also a live
+// CLIENT that peers and route setup dial. The seed only ever knew the server
+// half, and answering with it made the caller conclude "entry is not of
+// client" (dmsg error 102) without the live discovery ever being asked — every
+// route through a folded visor failed at id reservation. For such a hit ask
+// the live discovery and prefer its answer, which carries both halves; if the
+// discovery cannot be reached the seed still serves the server bootstrap.
+// Synthetic seeds for service PKs are CLIENT entries, so they short-circuit
+// as before and the discovery's own PK never recurses through here.
 func (f *fallbackDiscClient) Entry(ctx context.Context, pk cipher.PubKey) (*disc.Entry, error) {
 	// Try direct client first
 	entry, err := f.direct.Entry(ctx, pk)
 	if err == nil && entry.Static == pk {
+		if entry.Client == nil && entry.Server != nil {
+			if live, lerr := f.http.Entry(ctx, pk); lerr == nil && live != nil && live.Static == pk {
+				return live, nil
+			}
+		}
 		return entry, nil
 	}
 
