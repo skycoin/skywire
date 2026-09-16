@@ -92,7 +92,7 @@ func (r *router) setupInitializingPrimary(t *testing.T) (*RouteGroup, routing.Ro
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, desc, r.mLogger)
 	rg.mux = newRouteMux(r.mLogger.PackageLogger("mux80_mux"), false)
 	rg.initiator = false
-	rg.appendRules(fwd, rvs, mt)
+	rg.appendRules(fwd, rvs, mt, "test: primary leg")
 
 	r.mx.Lock()
 	r.rgsRaw[desc] = rg
