@@ -54,12 +54,17 @@ type MuxEvent struct {
 
 // Mux event kinds.
 const (
-	MuxEventGroupCreated  = "group_created"
-	MuxEventGroupClosed   = "group_closed"
-	MuxEventLegAdded      = "leg_added"
-	MuxEventLegRemoved    = "leg_removed"
-	MuxEventLegDropped    = "leg_dropped"
-	MuxEventLegParked     = "leg_parked"
+	MuxEventGroupCreated = "group_created"
+	MuxEventGroupClosed  = "group_closed"
+	MuxEventLegAdded     = "leg_added"
+	MuxEventLegRemoved   = "leg_removed"
+	MuxEventLegDropped   = "leg_dropped"
+	MuxEventLegParked    = "leg_parked"
+	// MuxEventLegPromoted is a warm-standby leg entering the active stripe set —
+	// the operator pinned it (mux add / mux set) or the policy tick promoted it.
+	// The counterpart of MuxEventLegParked, so churn is countable in both
+	// directions.
+	MuxEventLegPromoted   = "leg_promoted"
 	MuxEventLegAddFailed  = "leg_add_failed"
 	MuxEventPrimaryRehome = "primary_rehomed"
 	// MuxEventReorderWedge / ...Cleared bracket a RECEIVE-side reorder wedge:
@@ -263,4 +268,33 @@ func (rg *RouteGroup) legCount() int {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 	return len(rg.tps)
+}
+
+// activatePinnedLeg promotes the leg riding tpID out of warm standby and
+// mirrors the state to the peer. An operator-pinned leg (mux add / mux set) is
+// meant to carry traffic now: aux legs otherwise enter warm standby whenever a
+// rotation hook is wired (SetRotation), and with no policy engine behind that
+// hook nothing ever promotes them — the second leg of a two-leg pinned set sat
+// parked for every row of a bench, the latency band needing three legs to act.
+// No-op for the primary, an unknown transport, or a leg already active.
+func (rg *RouteGroup) activatePinnedLeg(tpID uuid.UUID) {
+	if rg.mux == nil {
+		return
+	}
+	rg.mu.Lock()
+	idx := -1
+	var tp *transport.ManagedTransport
+	for i, t := range rg.tps {
+		if t != nil && t.Entry.ID == tpID {
+			idx, tp = i, t
+			break
+		}
+	}
+	rg.mu.Unlock()
+	if idx <= 0 || !rg.mux.isLegStandby(idx) {
+		return
+	}
+	rg.mux.setLegStandby(idx, false)
+	rg.sendLegState(idx, false)
+	rg.noteLegEvent(MuxEventLegPromoted, "operator: pinned leg active", MuxByOperator, idx, rg.legCount(), tp, nil)
 }
