@@ -1959,6 +1959,8 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 			rg.mux.setLegStandby(idx, false)
 			// Tell the remote so it also promotes this leg into its send set.
 			rg.sendLegState(idx, false)
+			rg.noteMuxEvent(MuxEvent{Event: MuxEventLegPromoted, By: MuxByAdaptive, LegIndex: idx, Legs: rg.legCount(),
+				Reason: "policy tick promoted the leg from standby"})
 		}
 		for _, idx := range action.DemoteToStandby {
 			rg.mux.setLegStandby(idx, true)
