@@ -240,9 +240,9 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				Debugln("Found visors to connect to")
 
 			// Public autoconnect logic:
-			// Phase 1:  SUDPH to public visors (if SUDPH available)
-			// Phase 2:  STCPR to public visors (same visors, second carrier family)
-			// Phase 2b: QUIC (squicr) to public visors (third carrier family)
+			// Phase 1:  STCPR to public visors lacking one (first in the preference order)
+			// Phase 2:  QUIC (squicr) to public visors lacking one (second carrier family)
+			// Phase 2b: SUDPH to public visors that neither reached
 			// Phase 3:  SUDPH to other connected visors (non-public visors only)
 			// Phase 4:  WebRTC LAST-RESORT fallback to peers no direct carrier reached
 
@@ -282,24 +282,27 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// Track which public visors we connect to
 			connectedPublicVisors := make([]cipher.PubKey, 0, maxPublicVisors)
 
-			// Fetch SUDPH-capable visors from address resolver (cached for 5 minutes)
-			var sudphCapable map[cipher.PubKey]struct{}
-			if localSupportsSUDPH {
-				sudphCapable = a.fetchSUDPHVisors(ctx)
-			}
+			// Public visors are reached over the carriers the transport preference
+			// ranks first: stcpr, then squicr. sudph (hole-punched UDP) is for peers
+			// that cannot be reached over TCP or QUIC; a NAT'd visor still dials a
+			// public one over stcpr. Until now sudph came first and a peer with ANY
+			// automatic transport was dropped from the later phases, so a public
+			// visor that got a sudph never got stcpr or squicr — and a black-holed
+			// sudph (a UDP dial cannot fail) was all it ever had.
+			autoTPs := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
 
-			// Phase 1: SUDPH to public visors (if supported)
-			if localSupportsSUDPH {
-				a.log.Debug("Phase 1: Connecting to public visors via SUDPH")
-				phase1, err := a.conn.ConnectToVisors(ctx, v.conf.PK, absent1, tptypes.SUDPH,
-					existingByPK, sudphCapable, 0, 0, true)
+			// Phase 1: STCPR to every public visor that lacks one.
+			if localSupportsSTCPR {
+				a.log.Debug("Phase 1: Connecting to public visors via STCPR")
+				phase1, err := a.conn.ConnectToVisors(ctx, v.conf.PK, a.filterDuplicatesOfType(addrs, tptypes.STCPR, autoTPs), tptypes.STCPR,
+					existingByPK, nil, 0, 0, true)
 				if err != nil {
 					return err
 				}
-				countSUDPH += phase1.Count
+				countSTCPR += phase1.Count
 				connectedPublicVisors = phase1.Connected
 			} else {
-				// If no SUDPH, just pick public visors for STCPR
+				// No stcpr locally: pick public visors for the later phases.
 				for _, pk := range visorcore.ShufflePubKeys(absent1) {
 					if len(connectedPublicVisors) >= maxPublicVisors {
 						break
@@ -310,34 +313,35 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				}
 			}
 
-			// Phase 2: STCPR to ALL public visors — not just the ones phase 1 reached.
-			// STCPR was previously gated behind phase 1's SUDPH selection and its
-			// 5-visor budget, so a visor only ever tried stcpr against <=5 randomly
-			// shuffled public visors and fell through to the phase-4 WebRTC
-			// last-resort for every other one — even though stcpr worked fine to them.
-			if localSupportsSTCPR {
-				a.log.Debug("Phase 2: Connecting to public visors via STCPR")
-				phase2, err := a.conn.ConnectToVisors(ctx, v.conf.PK, absent1, tptypes.STCPR,
-					existingByPK, nil, 0, 0, false)
-				if err != nil {
-					return err
-				}
-				countSTCPR += phase2.Count
-			}
-
-			// Phase 2b: QUIC (squicr) to the SAME public visors — a third distinct
-			// carrier family alongside stcpr/sudph so route setup has a real per-hop
-			// choice (the transport-preference order ranks QUIC just below STCPR).
-			// Counts against the same distinct-peer drain budget as stcpr, so it
-			// adds path diversity without inflating the visor's peer count.
+			// Phase 2: QUIC (squicr) to public visors that lack one — a second
+			// carrier family next to stcpr so route setup has a real per-hop choice.
+			// Budgeted per cycle so the peer count grows gradually.
 			if localSupportsSQUICR {
-				a.log.Debug("Phase 2b: Connecting to public visors via QUIC (squicr)")
-				phase2b, err := a.conn.ConnectToVisors(ctx, v.conf.PK, connectedPublicVisors, tptypes.QUIC,
+				a.log.Debug("Phase 2: Connecting to public visors via QUIC (squicr)")
+				phase2, err := a.conn.ConnectToVisors(ctx, v.conf.PK, a.filterDuplicatesOfType(addrs, tptypes.QUIC, autoTPs), tptypes.QUIC,
 					existingByPK, nil, maxPublicVisors, 0, false)
 				if err != nil {
 					return err
 				}
-				countSQUICR += phase2b.Count
+				countSQUICR += phase2.Count
+			}
+
+			// Fetch SUDPH-capable visors from address resolver (cached for 5 minutes)
+			var sudphCapable map[cipher.PubKey]struct{}
+			if localSupportsSUDPH {
+				sudphCapable = a.fetchSUDPHVisors(ctx)
+			}
+
+			// Phase 2b: SUDPH to public visors that still have NO direct transport
+			// after the stcpr and squicr phases (re-read: those phases just added some).
+			if localSupportsSUDPH {
+				a.log.Debug("Phase 2b: Connecting to direct-unreachable public visors via SUDPH")
+				phase2b, err := a.conn.ConnectToVisors(ctx, v.conf.PK, a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic)), tptypes.SUDPH,
+					existingByPK, sudphCapable, 0, 0, false)
+				if err != nil {
+					return err
+				}
+				countSUDPH += phase2b.Count
 			}
 
 			// Phase 3: SUDPH to other connected visors (non-public visors only)
@@ -684,4 +688,22 @@ func (a *autoconnector) buildTransportCache(ctx context.Context, v *Visor) (*tra
 	}
 
 	return cache, nil
+}
+
+// filterDuplicatesOfType returns the pks that have no transport of type t in trs.
+func (a *autoconnector) filterDuplicatesOfType(pks []cipher.PubKey, t tptypes.Type, trs []*transport.ManagedTransport) []cipher.PubKey {
+	var absent []cipher.PubKey
+	for _, pk := range pks {
+		found := false
+		for _, tr := range trs {
+			if tptypes.Type(tr.Entry.Type) == t && tr.Entry.HasEdge(pk) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			absent = append(absent, pk)
+		}
+	}
+	return absent
 }

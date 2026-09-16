@@ -144,8 +144,8 @@ func (c *Connector) ConnectToVisors(
 			}()
 
 			// Skip visors behind the same NAT
-			if c.ClientPublicIP != "" {
-				if sameLAN := c.isSameLAN(ctx, pk, tpType); sameLAN {
+			if myIP := c.publicIP(); myIP != "" {
+				if sameLAN := c.isSameLAN(ctx, pk, tpType, myIP); sameLAN {
 					c.Log.WithField("pk", pk).Debugln("Skipping same-LAN visor")
 					return
 				}
@@ -230,7 +230,25 @@ func (c *Connector) tryEstablishTransport(ctx context.Context, pk cipher.PubKey,
 
 // isSameLAN checks if the remote visor is behind the same NAT as us by comparing
 // public IPs via the address resolver. Returns false on any error (fail-open).
-func (c *Connector) isSameLAN(ctx context.Context, pk cipher.PubKey, netType tptypes.Type) bool {
+// publicIP is the visor's public IP as best known now: the boot-time snapshot
+// when one was taken, else what the address resolver has learned since (empty
+// until it has). The snapshot is empty whenever the service discovery URL is
+// not dmsg://, which left the same-LAN guard off for the whole run on most
+// deployments.
+func (c *Connector) publicIP() string {
+	if c.ClientPublicIP != "" {
+		return c.ClientPublicIP
+	}
+	if c.Tm == nil {
+		return ""
+	}
+	if ar := c.Tm.ARClient(); ar != nil {
+		return ar.LocalPublicIP()
+	}
+	return ""
+}
+
+func (c *Connector) isSameLAN(ctx context.Context, pk cipher.PubKey, netType tptypes.Type, myIP string) bool {
 	arClient := c.Tm.ARClient()
 	if arClient == nil {
 		return false
@@ -246,7 +264,7 @@ func (c *Connector) isSameLAN(ctx context.Context, pk cipher.PubKey, netType tpt
 		remoteIP = host
 	}
 
-	return remoteIP != "" && remoteIP == c.ClientPublicIP
+	return remoteIP != "" && remoteIP == myIP
 }
 
 // isContextError returns true if the error is a context cancellation/deadline.
