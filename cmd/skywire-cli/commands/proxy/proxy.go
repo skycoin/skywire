@@ -89,7 +89,7 @@ func init() {
 	startCmd.Flags().StringVar(&muxMode, "mux-mode", "auto", "mux weight distribution mode: auto (latency-based) or equal (round-robin)")
 	startCmd.Flags().Uint16Var(&minHops, "min-hops", 1, "minimum routing hops for this session (1=no minimum). Set on the visor before app start; rolled back is not automatic — restart visor or re-run with --min-hops=1 to revert.")
 	startCmd.Flags().IntVar(&startTunnels, "tunnels", 1, "number of independent tunnels (route group + noise + yamux each) to stripe browser connections across; 1 = today's behavior. >1 AGGREGATES bandwidth: each extra tunnel is auto-steered by the visor onto a DIFFERENT first-hop transport (disjoint path) so their throughputs sum. Shape the legs within each tunnel after start with `proxy mux set` / `mux auto`.")
-	startCmd.Flags().StringVar(&startRoute, "route", "", "pin explicit route(s) chosen by you instead of the route finder: a JSON file of {forward,reverse} hop pairs ('cli route calc <exit> --count N --json' shape). Once the proxy is up its mux legs are reconciled to these — each pinned route is added as a leg and any AUX auto legs are pruned. The auto primary leg is pruned too (the router re-homes the primary), so the session runs on the pinned routes alone. One pair = one pinned route; N pairs = N disjoint legs. Tip: 'route calc --source tps' avoids stale-transport install failures.")
+	startCmd.Flags().StringVar(&startRoute, "route", "", "pin explicit route(s) chosen by you instead of the route finder: a JSON file of {forward,reverse} hop pairs ('cli route calc <exit> --count N --json' shape). Once the proxy is up its mux legs are reconciled to these — each pinned route is added as a leg and any AUX auto legs are pruned. The auto primary leg is pruned too (the router re-homes the primary), so the session runs on the pinned routes alone. One pair = one pinned route; N pairs = N disjoint legs. Tip: 'route calc --source tps' avoids stale-transport install failures. Implies a routed dial (no AppDirect shortcut) so the session has a route group to pin.")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits")
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	startCmd.Flags().BoolVar(&reconnect, "reconnect", true, "in-process reconnect on route-group collapse: proxy keeps re-dialing with backoff instead of dropping the SOCKS5 listener; --reconnect=false restores exit-on-failure")
@@ -334,6 +334,14 @@ var startCmd = &cobra.Command{
 				arguments["--direct"] = true
 			}
 
+			// --route: the pinned legs are reconciled onto the app's route group,
+			// so the app must form one. With a direct transport to the exit the
+			// default dial takes the AppDirect shortcut (no route group at all) and
+			// the reconcile has nothing to act on; --routed skips that shortcut.
+			if startRoute != "" {
+				arguments["--routed"] = true
+			}
+
 			if clientName == "" {
 				clientName = "skysocks-client"
 			}
@@ -483,7 +491,7 @@ var startCmd = &cobra.Command{
 			// The route group is up once the app reached Running; allow a brief
 			// lag before it is queryable.
 			var res legReconcile
-			for i := 0; i < 10; i++ {
+			for i := 0; i < 30; i++ {
 				res, rErr = reconcileLegs(rpcClient, clientName, 0, targets, true)
 				if rErr == nil {
 					break
