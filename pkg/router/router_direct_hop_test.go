@@ -6,16 +6,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // injectHopTp adds a live transport between the router's own key and remote.
 func injectHopTp(t *testing.T, r *router, remote cipher.PubKey, label transport.Label) uuid.UUID {
+	return injectHopTpOfType(t, r, remote, label, "test")
+}
+
+// injectHopTpOfType is injectHopTp with the entry's transport type chosen.
+func injectHopTpOfType(t *testing.T, r *router, remote cipher.PubKey, label transport.Label, tpType string) uuid.UUID {
 	t.Helper()
 	id := uuid.New()
 	mt := transport.NewManagedTransportForTest(newWorkingTransport())
 	mt.Entry = transport.Entry{
 		ID:    id,
-		Type:  "test",
+		Type:  tptypes.Type(tpType),
 		Edges: [2]cipher.PubKey{r.conf.PubKey, remote},
 		Label: label,
 	}
@@ -66,5 +72,33 @@ func TestDirectHopNoTransportFallsThrough(t *testing.T) {
 
 	if _, ok := r.directHop(r.conf.PubKey, unrelated); ok {
 		t.Fatal("directHop invented a route to a peer it has no transport to")
+	}
+}
+
+// TestDirectHopPrefersTheBetterTransport pins the choice among several live
+// transports to the same peer. It used to be whichever the walk produced
+// first — map order — so a --direct proxy to an exit holding stcpr, squicr
+// and sudph landed on sudph one restart and stcpr the next (4 MB/s against
+// 1 Mbit/s with gaps, measured live on the same three transports). The
+// configured type preference decides, in every order of insertion.
+func TestDirectHopPrefersTheBetterTransport(t *testing.T) {
+	for _, order := range [][]string{
+		{"sudph", "squicr", "stcpr"},
+		{"stcpr", "sudph", "squicr"},
+		{"squicr", "stcpr", "sudph"},
+	} {
+		r := newLegTestRouter(t)
+		remote, _ := cipher.GenerateKeyPair()
+		ids := map[string]uuid.UUID{}
+		for _, ty := range order {
+			ids[ty] = injectHopTpOfType(t, r, remote, transport.LabelUser, ty)
+		}
+		hop, ok := r.directHop(r.conf.PubKey, remote)
+		if !ok {
+			t.Fatalf("order %v: no direct hop", order)
+		}
+		if hop.TpID != ids["stcpr"] {
+			t.Errorf("order %v: chose %v, want the stcpr transport %v", order, hop.TpID, ids["stcpr"])
+		}
 	}
 }
