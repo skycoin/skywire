@@ -154,6 +154,12 @@ func wtDial(ctx context.Context, url, certHashHex string) (net.Conn, error) {
 	d := &webtransport.Transport{
 		TLSClientConfig: tlsConf,
 		QUICConfig: &quic.Config{
+			// Receive windows: quic-go's 768 KB default connection window caps ONE
+			// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
+			InitialStreamReceiveWindow:       skyquic.InitialStreamReceiveWindow,
+			MaxStreamReceiveWindow:           skyquic.MaxStreamReceiveWindow,
+			InitialConnectionReceiveWindow:   skyquic.InitialConnectionReceiveWindow,
+			MaxConnectionReceiveWindow:       skyquic.MaxConnectionReceiveWindow,
 			EnableDatagrams:                  true,
 			EnableStreamResetPartialDelivery: true, // required by webtransport-go
 		},
@@ -267,6 +273,12 @@ func (c *wtClient) serveShared(m *sharedQUICMux) (net.Listener, error) {
 		Handler:         srvMux,
 		EnableDatagrams: true,
 		QUICConfig: &quic.Config{
+			// Receive windows: quic-go's 768 KB default connection window caps ONE
+			// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
+			InitialStreamReceiveWindow:       skyquic.InitialStreamReceiveWindow,
+			MaxStreamReceiveWindow:           skyquic.MaxStreamReceiveWindow,
+			InitialConnectionReceiveWindow:   skyquic.InitialConnectionReceiveWindow,
+			MaxConnectionReceiveWindow:       skyquic.MaxConnectionReceiveWindow,
 			EnableDatagrams:                  true,
 			EnableStreamResetPartialDelivery: true,
 		},
@@ -357,6 +369,12 @@ func newWTListener(addr string) (*wtListener, error) {
 		Handler:         mux,
 		EnableDatagrams: true,
 		QUICConfig: &quic.Config{
+			// Receive windows: quic-go's 768 KB default connection window caps ONE
+			// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
+			InitialStreamReceiveWindow:       skyquic.InitialStreamReceiveWindow,
+			MaxStreamReceiveWindow:           skyquic.MaxStreamReceiveWindow,
+			InitialConnectionReceiveWindow:   skyquic.InitialConnectionReceiveWindow,
+			MaxConnectionReceiveWindow:       skyquic.MaxConnectionReceiveWindow,
 			EnableDatagrams:                  true,
 			EnableStreamResetPartialDelivery: true,
 		},
