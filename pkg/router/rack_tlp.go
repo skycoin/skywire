@@ -112,6 +112,17 @@ func (m *routeMux) onSACKReceived(lastContig uint32, words []uint64, dsackSeq ui
 		atomic.StoreInt32(&m.tlpProbeCount, 0)
 	}
 	if hasDSACK {
+		// The duplicate proves the ORIGINAL arrived after we had already
+		// retransmitted it, so its whole send→ack delay is a real delivery-delay
+		// sample — the one ProcessSACK cannot take (Karn: a retransmitted entry's
+		// ack is ambiguous there). Without it a storm sustains itself: once the
+		// threshold undershoots the loaded delay every frame is re-sent before its
+		// ack, the never-retransmitted sample set empties, and the estimate that
+		// would lift the threshold never moves (measured live 2026-09-16: 37207
+		// retransmits for 20304 frames on a three-leg group).
+		if sentAt, ok := m.retxBuf.SentAt(dsackSeq); ok {
+			m.recordAckDelay(time.Since(sentAt))
+		}
 		m.growRackFactor(dsackSeq)
 	} else {
 		m.decayRackFactor()
