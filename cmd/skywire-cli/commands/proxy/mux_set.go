@@ -66,7 +66,7 @@ func reconcileLegs(rpcClient visor.API, app string, srcPort uint16, targets []ro
 	if err != nil {
 		return res, fmt.Errorf("RouteGroupMuxInfo: %w", err)
 	}
-	current, err := currentLegTpIDs(infos, srcPort)
+	current, err := currentLegTpIDs(infos, app, srcPort)
 	if err != nil {
 		return res, err
 	}
@@ -147,12 +147,12 @@ func readRoutePairs(src string) ([]routePair, error) {
 // currentLegTpIDs returns the first-hop transport ids of the legs in the
 // target rg. With srcPort 0 it requires exactly one active rg; otherwise
 // it matches the rg by src_port (mux info prints it).
-func currentLegTpIDs(infos any, srcPort uint16) (map[uuid.UUID]struct{}, error) {
+func currentLegTpIDs(infos any, app string, srcPort uint16) (map[uuid.UUID]struct{}, error) {
 	raw, _ := json.Marshal(infos) //nolint:errcheck
 	var rgs []muxRouteGroupInfo
 	_ = json.Unmarshal(raw, &rgs) //nolint:errcheck
 	if len(rgs) == 0 {
-		return nil, fmt.Errorf("no active route groups for app=%s (start the proxy first)", muxSetApp)
+		return nil, fmt.Errorf("no active route groups for app=%s (start the proxy first)", app)
 	}
 
 	var rg *muxRouteGroupInfo
@@ -168,7 +168,7 @@ func currentLegTpIDs(infos any, srcPort uint16) (map[uuid.UUID]struct{}, error) 
 		}
 	} else {
 		if len(rgs) > 1 {
-			return nil, fmt.Errorf("app=%s has %d active route groups; pass --rg <src_port> (see 'mux info')", muxSetApp, len(rgs))
+			return nil, fmt.Errorf("app=%s has %d active route groups; pass --rg <src_port> (see 'mux info')", app, len(rgs))
 		}
 		rg = &rgs[0]
 	}

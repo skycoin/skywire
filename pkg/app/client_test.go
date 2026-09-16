@@ -307,3 +307,22 @@ func prepClient(l *logging.Logger, visorPK cipher.PubKey, rpc appserver.RPCIngre
 		cm:   idmanager.New(),
 	}
 }
+
+// An explicit per-call option of 1 (MuxRoutes=1 = "form a single-route group")
+// must reach the visor as DialWithOptions; the gateway treats any non-zero
+// value as an explicit override, so the client must not fold 1 into plain Dial.
+func TestClient_DialWithOptions_ExplicitOneReachesGateway(t *testing.T) {
+	l := logging.MustGetLogger("app2_client")
+	visorPK, _ := cipher.GenerateKeyPair()
+	remotePK, _ := cipher.GenerateKeyPair()
+	remote := appnet.Addr{Net: appnet.TypeSkynet, PubKey: remotePK, Port: routing.Port(3)}
+
+	rpc := &appserver.MockRPCIngressClient{}
+	rpc.On("DialWithOptions", remote, 1, 0, 0, 0, 0, 0, false, false).Return(uint16(7), routing.Port(9), nil)
+
+	cl := prepClient(l, visorPK, rpc)
+	conn, err := cl.DialWithOptions(remote, 1, 0, 0, 0, 0, 0, false, false)
+	require.NoError(t, err)
+	require.Equal(t, uint16(7), conn.(*Conn).id)
+	rpc.AssertNotCalled(t, "Dial", remote)
+}

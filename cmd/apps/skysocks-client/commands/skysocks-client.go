@@ -53,6 +53,7 @@ var (
 	reconnect      bool
 	reconnectDelay int64
 	direct         bool
+	routed         bool
 	dmsgFallback   bool
 	tunnels        int64
 	rangeSplit     bool
@@ -80,6 +81,7 @@ func init() {
 	RootCmd.Flags().BoolVar(&reconnect, "reconnect", false, "in-process reconnect on stream failure (vs exiting)")
 	RootCmd.Flags().Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between in-process reconnect attempts")
 	RootCmd.Flags().BoolVar(&direct, "direct", false, "force a direct-transport-only route to the server (create the transport on demand, dial 1-hop, bypass the route-finder + setup node); self-heals when the server restarts")
+	RootCmd.Flags().BoolVar(&routed, "routed", false, "always dial through a route group, even when a direct transport to the server exists (skips the direct shortcut, so the session has mux legs to pin or reconcile)")
 	RootCmd.Flags().BoolVar(&dmsgFallback, "dmsg-fallback", false, "if the skynet (route) dial to the server fails, fall back to a direct dmsg stream (opt-in: dmsg relays via a dmsg server — higher latency + the server sees both endpoint PKs)")
 	// N independent tunnels (route group + noise + yamux each); browser conns are
 	// striped across them by the least-loaded policy so throughput sums. Default 1
@@ -134,6 +136,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		fs.BoolVar(&reconnect, "reconnect", false, "in-process reconnect on stream failure")
 		fs.Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between reconnect attempts")
 		fs.BoolVar(&direct, "direct", false, "force a direct-transport-only route to the server (1-hop, bypass the route-finder + setup node); self-heals on server restart")
+		fs.BoolVar(&routed, "routed", false, "always dial through a route group (skip the direct shortcut)")
 		fs.BoolVar(&dmsgFallback, "dmsg-fallback", false, "fall back to a direct dmsg stream if the skynet dial fails")
 		fs.Int64Var(&tunnels, "tunnels", 1, "number of independent tunnels to stripe connections across")
 		// Range-split flags were absent from this launcher subset, so passing any of
@@ -440,8 +443,15 @@ func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey, port r
 	// direct-transport-only dial (create-on-demand, bypass the route-finder +
 	// setup node, self-heals on server restart); dmsg is a plain relay stream.
 	dial := func(_ context.Context, a appnet.Addr) (net.Conn, error) {
-		if a.Net == netType && (direct || diversify) {
-			return appCl.DialWithOptions(a, 0, 0, 0, 0, 0, 0, direct, diversify)
+		if a.Net == netType && (direct || diversify || routed) {
+			// --routed asks for an explicit single-route group (MuxRoutes=1): the
+			// networker skips the direct shortcut for any explicit mux count, so
+			// the session has a route group whose legs can be pinned or reconciled.
+			mux := 0
+			if routed {
+				mux = 1
+			}
+			return appCl.DialWithOptions(a, mux, 0, 0, 0, 0, 0, direct, diversify)
 		}
 		return appCl.Dial(a)
 	}
