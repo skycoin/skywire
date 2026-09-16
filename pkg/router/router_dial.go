@@ -3369,10 +3369,12 @@ func (r *router) directHop(src, dst cipher.PubKey) (routing.Hop, bool) {
 	if r.tm == nil {
 		return routing.Hop{}, false
 	}
-	var (
-		found routing.Hop
-		ok    bool
-	)
+	// Every live transport to dst, then the best of them. This used to take the
+	// first one the walk produced — map order — so with stcpr, squicr and sudph
+	// all up to the same exit a --direct dial landed on whichever came out
+	// first: measured live, the same proxy did 4 MB/s on stcpr and 1 Mbit/s
+	// with gaps on sudph, restart to restart, from the same three transports.
+	var best *transport.ManagedTransport
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		if tp == nil || tp.IsClosed() || tp.Entry.Label == transport.LabelSetup {
 			return true
@@ -3380,9 +3382,40 @@ func (r *router) directHop(src, dst cipher.PubKey) (routing.Hop, bool) {
 		if tp.Entry.RemoteEdge(src) != dst {
 			return true
 		}
-		found = routing.Hop{TpID: tp.Entry.ID, From: src, To: dst}
-		ok = true
-		return false
+		if best == nil || betterDirectTransport(tp, best) {
+			best = tp
+		}
+		return true
 	})
-	return found, ok
+	if best == nil {
+		return routing.Hop{}, false
+	}
+	return routing.Hop{TpID: best.Entry.ID, From: src, To: dst}, true
+}
+
+// betterDirectTransport orders two live transports to the same peer for a
+// direct route: the configured type preference first (stcpr > quic > sudph …,
+// the same order every other route decision uses), then, within a type, the
+// higher measured throughput, then the lower measured latency. Unmeasured
+// values (zero) never beat measured ones.
+func betterDirectTransport(a, b *transport.ManagedTransport) bool {
+	pa, pb := tptypes.TypePreference(tptypes.Type(a.Entry.Type)), tptypes.TypePreference(tptypes.Type(b.Entry.Type))
+	if pa != pb {
+		return pa < pb
+	}
+	ta, tb := a.GetThroughputBps(), b.GetThroughputBps()
+	if ta != tb {
+		return ta > tb
+	}
+	la, lb := a.GetLatency(), b.GetLatency()
+	if la != lb {
+		if la <= 0 {
+			return false
+		}
+		if lb <= 0 {
+			return true
+		}
+		return la < lb
+	}
+	return false
 }
