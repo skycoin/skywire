@@ -128,7 +128,7 @@ func TestCollector_LatencyPercentiles(t *testing.T) {
 		// Each attempt pretends to take (i * 1ms) by overriding start.
 		start := time.Now().Add(-time.Duration(i) * time.Millisecond)
 		var err error
-		c.finish(context.Background(), cipher.PubKey{}, dst, 1, start, &err)
+		c.finish(context.Background(), cipher.PubKey{}, dst, 1, start, &err, nil)
 	}
 
 	snap := c.Snapshot()
@@ -174,7 +174,7 @@ func TestCollector_CircuitBreaker(t *testing.T) {
 	dst, _ := cipher.GenerateKeyPair()
 
 	// Breaker closed initially — all attempts allowed.
-	if ok, _ := c.AllowDestination(dst); !ok {
+	if ok, _ := c.AllowDestination(dst, nil); !ok {
 		t.Fatal("initial state should allow the destination")
 	}
 
@@ -185,14 +185,14 @@ func TestCollector_CircuitBreaker(t *testing.T) {
 		e := idResErr
 		c.RecordRouteContext(context.Background(), cipher.PubKey{}, dst, 1)(&e)
 	}
-	if ok, _ := c.AllowDestination(dst); !ok {
+	if ok, _ := c.AllowDestination(dst, nil); !ok {
 		t.Fatal("under threshold: should still allow")
 	}
 
 	// One more failure trips the breaker.
 	e := idResErr
 	c.RecordRouteContext(context.Background(), cipher.PubKey{}, dst, 1)(&e)
-	if ok, reason := c.AllowDestination(dst); ok {
+	if ok, reason := c.AllowDestination(dst, nil); ok {
 		t.Fatalf("threshold reached: should deny, got allowed (%q)", reason)
 	}
 
@@ -215,7 +215,7 @@ func TestCollector_CircuitBreaker(t *testing.T) {
 	// A success while breaker is open should close it.
 	var okErr error
 	c.RecordRouteContext(context.Background(), cipher.PubKey{}, dst, 1)(&okErr)
-	if ok, _ := c.AllowDestination(dst); !ok {
+	if ok, _ := c.AllowDestination(dst, nil); !ok {
 		t.Fatal("after success: should allow again")
 	}
 }
@@ -253,7 +253,7 @@ func TestCollector_CircuitBreaker_SourceUnreachable(t *testing.T) {
 		c.RecordRouteContext(context.Background(), srcPK, dstPK, 1)(&e)
 	}
 
-	if ok, reason := c.AllowDestination(dstPK); !ok {
+	if ok, reason := c.AllowDestination(dstPK, nil); !ok {
 		t.Fatalf("source-side failures should NOT trip dst breaker, got denied: %q", reason)
 	}
 
@@ -280,7 +280,7 @@ func TestCollector_CircuitBreaker_DestinationUnreachable(t *testing.T) {
 		c.RecordRouteContext(context.Background(), srcPK, dstPK, 1)(&e)
 	}
 
-	if ok, _ := c.AllowDestination(dstPK); ok {
+	if ok, _ := c.AllowDestination(dstPK, nil); ok {
 		t.Fatal("destination-side failures should trip the dst breaker")
 	}
 
@@ -312,10 +312,10 @@ func TestCollector_CircuitBreaker_IntermediateUnreachable(t *testing.T) {
 		c.RecordRouteContext(context.Background(), srcPK, dstPK, 2)(&e)
 	}
 
-	if ok, reason := c.AllowDestination(dstPK); !ok {
+	if ok, reason := c.AllowDestination(dstPK, nil); !ok {
 		t.Fatalf("intermediate-side failures should NOT trip dst breaker, got denied: %q", reason)
 	}
-	if ok, _ := c.AllowIntermediate(interPK); ok {
+	if ok, _ := c.AllowIntermediate(interPK, nil); ok {
 		t.Fatal("intermediate-side failures should trip the intermediate's breaker")
 	}
 
@@ -354,13 +354,13 @@ func TestCollector_CircuitBreaker_IntermediateBreakerNotPoisoningDst(t *testing.
 	}
 
 	// Bad intermediate denied; good intermediate + dst still allowed.
-	if ok, _ := c.AllowIntermediate(badInter); ok {
+	if ok, _ := c.AllowIntermediate(badInter, nil); ok {
 		t.Fatal("bad intermediate breaker should be open")
 	}
-	if ok, _ := c.AllowIntermediate(goodInter); !ok {
+	if ok, _ := c.AllowIntermediate(goodInter, nil); !ok {
 		t.Fatal("good intermediate breaker should be closed")
 	}
-	if ok, _ := c.AllowDestination(dstPK); !ok {
+	if ok, _ := c.AllowDestination(dstPK, nil); !ok {
 		t.Fatal("dst breaker should be closed (intermediate failures must not poison it)")
 	}
 }
@@ -381,7 +381,7 @@ func TestCollector_CircuitBreakerOnlyIDReservation(t *testing.T) {
 		c.RecordRouteContext(context.Background(), cipher.PubKey{}, dst, 1)(&e)
 	}
 
-	if ok, _ := c.AllowDestination(dst); !ok {
+	if ok, _ := c.AllowDestination(dst, nil); !ok {
 		t.Fatal("non-id-reservation failures should not trip breaker")
 	}
 }
@@ -405,5 +405,216 @@ func TestCollector_Reset(t *testing.T) {
 	}
 	if len(snap.RouteLengthHist) != 0 {
 		t.Fatalf("route length hist not reset")
+	}
+}
+
+// ---------------------------------------------------------------------
+// Half-open probe accounting.
+//
+// A breaker's half-open state admits exactly ONE probe request. The
+// request that took the slot has to release it, whatever happens to
+// that request — otherwise the breaker refuses every later caller with
+// "probe in flight" until circuitMaxOpenDuration force-resets it 30
+// minutes later. That is the live 2026-09-16 failure these tests pin:
+// an intermediate admitted as a probe via AllowIntermediate was never
+// resolved by finish(), because finish() only ever touched the
+// destination's breaker (on success) or the PK that failed to dial (on
+// failure).
+// ---------------------------------------------------------------------
+
+// dialFailure builds the id_reservation error shape finish() parses,
+// with pk as the hop that could not be dialed.
+func dialFailure(pk cipher.PubKey) error {
+	return fmt.Errorf("failed to instantiate route id reserver: a dial attempt failed with: %w",
+		&dialErrStub{pk: pk, msg: "dial " + pk.String() + "@136: dmsg error 202"})
+}
+
+// tripBreakerVia drives pk's breaker to OPEN using dial failures
+// attributed to pk.
+func tripBreakerVia(t *testing.T, c *Collector, srcPK, dstPK, pk cipher.PubKey) {
+	t.Helper()
+	for i := 0; i < circuitFailureThreshold; i++ {
+		e := dialFailure(pk)
+		c.RecordRouteContext(context.Background(), srcPK, dstPK, 2)(&e)
+	}
+}
+
+// agePastOpenWindow backdates pk's breaker so the next caller is
+// admitted as the half-open probe, without making the test sleep for
+// circuitOpenDuration (5 minutes).
+func agePastOpenWindow(t *testing.T, c *Collector, pk cipher.PubKey) {
+	t.Helper()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	br, ok := c.breakers[pk.String()]
+	if !ok {
+		t.Fatalf("no breaker for %s", pk.String())
+	}
+	aged := time.Now().Add(-circuitOpenDuration - time.Second)
+	br.openedAt = aged
+	br.firstOpenedAt = aged
+}
+
+func breakerOf(t *testing.T, c *Collector, pk cipher.PubKey) (BreakerState, bool) {
+	t.Helper()
+	bs, ok := c.Snapshot().Breakers[pk.String()]
+	return bs, ok
+}
+
+// TestCollector_HalfOpenProbe_IntermediateClosedOnSuccess: an
+// intermediate admitted as the half-open probe must have its breaker
+// CLOSED when the request succeeds — the route that just came up ran
+// through that hop, which is the proof the probe was testing for.
+func TestCollector_HalfOpenProbe_IntermediateClosedOnSuccess(t *testing.T) {
+	c := NewCollector(CollectorConfig{})
+	srcPK, _ := cipher.GenerateKeyPair()
+	dstPK, _ := cipher.GenerateKeyPair()
+	interPK, _ := cipher.GenerateKeyPair()
+
+	tripBreakerVia(t, c, srcPK, dstPK, interPK)
+	if ok, _ := c.AllowIntermediate(interPK, nil); ok {
+		t.Fatal("intermediate breaker should be open after threshold failures")
+	}
+	agePastOpenWindow(t, c, interPK)
+
+	var probes ProbeHolder
+	done := c.RecordRouteContextProbes(context.Background(), srcPK, dstPK, 2, &probes)
+	if ok, reason := c.AllowIntermediate(interPK, &probes); !ok {
+		t.Fatalf("probe should be admitted once the open window elapsed: %q", reason)
+	}
+	// A concurrent request must NOT also get in — one probe at a time.
+	if ok, _ := c.AllowIntermediate(interPK, &ProbeHolder{}); ok {
+		t.Fatal("a second concurrent probe should be refused")
+	}
+
+	var noErr error
+	done(&noErr)
+
+	if ok, reason := c.AllowIntermediate(interPK, &ProbeHolder{}); !ok {
+		t.Fatalf("after a successful probe the breaker should be closed: %q", reason)
+	}
+	if bs, ok := breakerOf(t, c, interPK); ok {
+		t.Fatalf("closed breaker should not appear in the snapshot: %+v", bs)
+	}
+}
+
+// TestCollector_HalfOpenProbe_IntermediateReleasedOnDstFailure: the
+// request that holds an intermediate's probe fails because the
+// DESTINATION could not be dialed. That says nothing about the
+// intermediate, so its probe slot must be released — breaker back to
+// open, probe_in_flight false, next caller admitted as the new probe.
+// Before the fix probeInFlight stayed true and every later route
+// through this hop was refused for 30 minutes.
+func TestCollector_HalfOpenProbe_IntermediateReleasedOnDstFailure(t *testing.T) {
+	c := NewCollector(CollectorConfig{})
+	srcPK, _ := cipher.GenerateKeyPair()
+	dstPK, _ := cipher.GenerateKeyPair()
+	interPK, _ := cipher.GenerateKeyPair()
+
+	tripBreakerVia(t, c, srcPK, dstPK, interPK)
+	agePastOpenWindow(t, c, interPK)
+
+	var probes ProbeHolder
+	done := c.RecordRouteContextProbes(context.Background(), srcPK, dstPK, 2, &probes)
+	if ok, reason := c.AllowIntermediate(interPK, &probes); !ok {
+		t.Fatalf("probe should be admitted: %q", reason)
+	}
+	// The request dies on the destination, not on this hop.
+	e := dialFailure(dstPK)
+	done(&e)
+
+	bs, ok := breakerOf(t, c, interPK)
+	if !ok {
+		t.Fatal("intermediate breaker should still be tracked (it was never proven healthy)")
+	}
+	if bs.ProbeInFlight {
+		t.Fatal("probe slot leaked: probe_in_flight still set after the holding request ended")
+	}
+	if bs.State != CircuitOpen {
+		t.Fatalf("breaker state=%q, want open", bs.State)
+	}
+	if ok, reason := c.AllowIntermediate(interPK, &ProbeHolder{}); !ok {
+		t.Fatalf("the next caller should become the new probe: %q", reason)
+	}
+	// ...and the destination's own breaker took the failure.
+	if dbs, ok := breakerOf(t, c, dstPK); ok && dbs.ConsecutiveFails == 0 {
+		t.Fatal("destination breaker should have recorded the dial failure")
+	}
+}
+
+// TestCollector_HalfOpenProbe_DestinationReleasedOnNonDialFailure:
+// same hole on the destination side. A destination probe whose request
+// dies for a non-id_reservation reason (rule generation, an invalid
+// route, another hop's breaker short-circuiting the setup) never
+// reached the dial path, so the probe must be released rather than
+// left in flight.
+func TestCollector_HalfOpenProbe_DestinationReleasedOnNonDialFailure(t *testing.T) {
+	c := NewCollector(CollectorConfig{})
+	srcPK, _ := cipher.GenerateKeyPair()
+	dstPK, _ := cipher.GenerateKeyPair()
+
+	// Trip the destination's breaker (no DialError in the chain → the
+	// legacy "blame the destination" branch).
+	idResErr := errors.New("failed to instantiate route id reserver: dmsg error 202 - cannot connect to delegated server")
+	for i := 0; i < circuitFailureThreshold; i++ {
+		e := idResErr
+		c.RecordRouteContext(context.Background(), srcPK, dstPK, 1)(&e)
+	}
+	agePastOpenWindow(t, c, dstPK)
+
+	var probes ProbeHolder
+	done := c.RecordRouteContextProbes(context.Background(), srcPK, dstPK, 1, &probes)
+	if ok, reason := c.AllowDestination(dstPK, &probes); !ok {
+		t.Fatalf("destination probe should be admitted: %q", reason)
+	}
+	genErr := errors.New("generate rules: no key for hop")
+	done(&genErr)
+
+	bs, ok := breakerOf(t, c, dstPK)
+	if !ok {
+		t.Fatal("destination breaker should still be tracked")
+	}
+	if bs.ProbeInFlight {
+		t.Fatal("probe slot leaked: probe_in_flight still set after the holding request ended")
+	}
+	if bs.State != CircuitOpen {
+		t.Fatalf("breaker state=%q, want open", bs.State)
+	}
+	if bs.OpenedAt.IsZero() {
+		t.Fatal("opened_at should be reported for a non-closed breaker")
+	}
+	if ok, reason := c.AllowDestination(dstPK, &ProbeHolder{}); !ok {
+		t.Fatalf("the next caller should become the new probe: %q", reason)
+	}
+}
+
+// TestCollector_SnapshotBreakers_OnlyNonClosed: the /stats view lists
+// exactly the breakers that are refusing traffic, so an operator can
+// see a stuck probe without correlating error strings.
+func TestCollector_SnapshotBreakers_OnlyNonClosed(t *testing.T) {
+	c := NewCollector(CollectorConfig{})
+	srcPK, _ := cipher.GenerateKeyPair()
+	dstPK, _ := cipher.GenerateKeyPair()
+	interPK, _ := cipher.GenerateKeyPair()
+
+	if got := c.Snapshot().Breakers; got != nil {
+		t.Fatalf("no breakers tripped, want nil map, got %+v", got)
+	}
+
+	tripBreakerVia(t, c, srcPK, dstPK, interPK)
+
+	snap := c.Snapshot()
+	if len(snap.Breakers) != 1 {
+		t.Fatalf("breakers=%+v, want exactly the intermediate", snap.Breakers)
+	}
+	bs, ok := snap.Breakers[interPK.String()]
+	if !ok {
+		t.Fatalf("intermediate %s missing from breakers: %+v", interPK.String(), snap.Breakers)
+	}
+	if bs.State != CircuitOpen || bs.ConsecutiveFails != circuitFailureThreshold || bs.ProbeInFlight {
+		t.Fatalf("breaker state=%+v, want open/%d fails/no probe", bs, circuitFailureThreshold)
+	}
+	if _, ok := snap.Breakers[dstPK.String()]; ok {
+		t.Fatal("destination breaker is closed and must not be listed")
 	}
 }

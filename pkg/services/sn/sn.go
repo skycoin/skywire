@@ -353,7 +353,8 @@ func statsHandler(collector *setupmetrics.Collector, whitelist []cipher.PubKey) 
 // ungated health surface is for.
 //
 // What it drops is the who-talks-to-whom half: TopDestinations,
-// TopFailedDestinations and RecentFailures. The RSN participates in EVERY route
+// TopFailedDestinations, RecentFailures and Breakers (which name the visors
+// route setup is currently refusing). The RSN participates in EVERY route
 // setup, so its view of which visors set up routes to which is unusually
 // complete — publishing it is traffic-analysis material, and a routing overlay
 // handing that out undermines the property it exists to provide. Those fields
@@ -367,6 +368,7 @@ func publicSnapshot(s setupmetrics.StatsSnapshot) setupmetrics.StatsSnapshot {
 	s.TopDestinations = nil
 	s.TopFailedDestinations = nil
 	s.RecentFailures = nil
+	s.Breakers = nil
 	return s
 }
 
