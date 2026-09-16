@@ -79,10 +79,14 @@ type DiagQueue struct {
 	Capacity int `json:"capacity"`
 }
 
-// DiagVStreamMux names one VStream mux and carries its counters.
+// DiagVStreamMux names one VStream mux and carries its counters, plus one row
+// per live stream. The rows are what turn "streams: 27" into an answer: which
+// app (or none) opened each one, over which transport, how long ago, and how
+// deep its inbound queue is right now.
 type DiagVStreamMux struct {
 	Name string `json:"name"`
 	transport.VStreamMuxStats
+	StreamList []transport.VStreamInfo `json:"stream_list,omitempty"`
 }
 
 // DiagDmsg is the dmsg client's session and relay state.
@@ -205,7 +209,11 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 		if mux.m == nil {
 			continue
 		}
-		d.VStream = append(d.VStream, DiagVStreamMux{Name: mux.name, VStreamMuxStats: mux.m.Stats()})
+		d.VStream = append(d.VStream, DiagVStreamMux{
+			Name:            mux.name,
+			VStreamMuxStats: mux.m.Stats(),
+			StreamList:      mux.m.StreamInfo(""),
+		})
 	}
 
 	if v.dmsgC != nil {

@@ -158,5 +158,9 @@ func (tm *Manager) track(mt *ManagedTransport) {
 		}
 		tm.events.add(ev)
 		tm.lastCloses.add(ev)
+		// Both close paths (closeWith and closeWithoutDeregister) come through
+		// here exactly once, guarded by mt.done — so this is the one place that
+		// can tell everything riding the transport that it is gone.
+		tm.fireTransportClosed(mt.Entry.ID)
 	}
 }
