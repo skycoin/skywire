@@ -84,6 +84,7 @@ type Manager struct {
 	Logger *logging.Logger
 	Conf   *ManagerConfig
 	tps    map[uuid.UUID]*ManagedTransport
+	events tpEventRing
 	// arClient is the address-resolver client (addrresolver.APIClient on native
 	// builds). Typed `any` so addrresolver — which pulls net/http — stays out of
 	// the TinyGo graph; recover it via the build-tagged ARClient() getter.
@@ -1220,6 +1221,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		}()
 
 		tm.tps[tpID] = mTp
+		tm.track(mTp)
 	} else {
 		// Transport already exists. Before allowing Accept() to tear down the
 		// underlying connection (via setTransport), check whether any routing
@@ -1504,6 +1506,7 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		return existing, nil
 	}
 	tm.tps[tpID] = mTp
+	tm.track(mTp)
 	tm.applyHandlers(mTp)
 	tm.mx.Unlock()
 	// Serve runs for the transport's lifetime, not the dial's; its internal
@@ -1687,7 +1690,7 @@ func (tm *Manager) DeleteTransport(id uuid.UUID) {
 	// Close transport asynchronously
 	// For individual deletions (RPC calls), we want to return quickly
 	// The reconciliation process will catch any TPD cleanup failures
-	go tp.close()
+	go tp.closeWith("deleted by request")
 }
 
 // DeleteAllTransports deregisters all Transports in transport discovery and deletes them locally.
@@ -1712,7 +1715,7 @@ func (tm *Manager) DeleteAllTransports() {
 		wg.Add(1)
 		go func(mtp *ManagedTransport) {
 			defer wg.Done()
-			mtp.close()
+			mtp.closeWith("all transports deleted")
 		}(tp)
 	}
 

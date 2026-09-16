@@ -42,6 +42,11 @@ type DiagSnapshot struct {
 	// and which route-ID-0 handlers are wired (a missing one means that
 	// packet type is dropped by the router — #4725).
 	Transports []DiagTransport `json:"transports,omitempty"`
+	// TransportEvents is the last transport.TransportEventRingSize opens and
+	// closes, oldest first, each close with the reason the code gave. This is
+	// where to look when a transport that was in `tp ls` is gone: the visor log
+	// ring holds minutes; this holds the events.
+	TransportEvents []transport.TransportEvent `json:"transport_events,omitempty"`
 }
 
 // DiagRuntime is the Go runtime at a glance.
@@ -132,6 +137,7 @@ func (v *Visor) DiagSnapshot() *DiagSnapshot {
 	if v.tpM != nil {
 		depth, capacity := v.tpM.ReadQueue()
 		d.TransportReadQueue = &DiagQueue{Depth: depth, Capacity: capacity}
+		d.TransportEvents = v.tpM.Events()
 		now := time.Now()
 		v.tpM.WalkTransports(func(mt *transport.ManagedTransport) bool {
 			if mt.IsClosed() {
