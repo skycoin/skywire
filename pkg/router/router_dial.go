@@ -1115,7 +1115,20 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 		}
 		if hi <= 2 {
 			if oFwd, oRev, oErr := r.oracle2HopRoutes(ctx, log, src, dst, opts); oErr == nil {
-				return oFwd, oRev, nil
+				// The oracle knows nothing of a diversify dial's first-hop
+				// exclusions, and it returns before the finder filter below: it
+				// handed every extra tunnel the same direct first hop its sibling
+				// held (the dial_decision trail showed the exclusion seeded and
+				// nothing after it). Keep its answer only when it leaves over a
+				// free transport; otherwise fall through to the filtered paths.
+				if opts.DiversifyTransports && firstHopTransportExcluded(oFwd, opts.ExcludeTransportIDs) {
+					opts.note("oracle: path leaves over an excluded first hop; falling through")
+				} else {
+					if opts.DiversifyTransports {
+						opts.note("oracle: path over a free first hop")
+					}
+					return oFwd, oRev, nil
+				}
 			} else if !errors.Is(oErr, errRSNOracleInert) {
 				log.WithError(oErr).Debug("RSN-oracle 2-hop path missed; falling through to route finder")
 			}
