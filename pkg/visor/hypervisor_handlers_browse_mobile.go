@@ -51,3 +51,14 @@ func (hv *Hypervisor) getUIVersion() http.HandlerFunc {
 // logUIRoot is a no-op on mobile: the phone serves no desk and no dashboard
 // root, so there is nothing to explain about the UI root.
 func (hv *Hypervisor) logUIRoot() {}
+
+// execModule reports no command module: the mobile build embeds none, and the
+// desk is hosted out of one. The single caller in Serve() uses this to decide
+// whether to start the desk listener at all, so "false" is what keeps the desk
+// off the phone.
+func (hv *Hypervisor) execModule() (path string, ok bool) { return "", false }
+
+// deskRootHandler passes the handler through unchanged. execModule is always
+// false on mobile, so the desk listener this wraps is never started; the stub
+// exists to keep that one call site compiling.
+func deskRootHandler(h http.Handler) http.Handler { return h }

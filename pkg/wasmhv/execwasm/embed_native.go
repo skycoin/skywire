@@ -1,4 +1,4 @@
-//go:build !js
+//go:build !js && !mobile
 
 // Package execwasm pkg/wasmhv/execwasm/embed_native.go c3-wasm-embed
 package execwasm
