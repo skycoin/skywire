@@ -421,7 +421,7 @@ func (v *Visor) holdVerifiedProxyExit(ctx context.Context, log *logging.Logger) 
 // page this visor just generated for itself, which would certify a dead exit as
 // working. See relayedResponseOK.
 func (v *Visor) verifyProxyExit(ctx context.Context, log *logging.Logger) bool {
-	ok, _ := v.verifyProxyExitErr(ctx, log)
+	ok, _ := v.verifyProxyExitErr(ctx, log) //nolint:errcheck
 	return ok
 }
 
