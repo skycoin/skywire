@@ -358,6 +358,9 @@ func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []rout
 	// Record this leg's full forward route so the per-leg mux view can show
 	// its whole path (all hops, full PKs, per-hop transport type).
 	nrg.rg.recordLegRoute(fwd, rev)
+	// The operator asked for this leg: make it carry traffic now rather than
+	// wait in warm standby for a promotion that never comes without an engine.
+	nrg.rg.activatePinnedLeg(tpID)
 
 	r.logger.Infof("Added mux route via %d-hop path (first tp=%s) to route group %s", len(fwd), tpID, desc.String())
 	return nil
