@@ -27,10 +27,13 @@ permissions:
   contents: write # needed to create/replace the rolling release
 
 # Serialize per branch so a burst of merges doesn't race on the rolling release
-# (same rationale as Deploy). No cancel-in-progress: every commit still builds.
+# (same rationale as Deploy), and cancel the superseded run: the rolling
+# <branch>-latest release only ever holds the newest head, so an older head's
+# build is work whose output is thrown away — while it holds a runner the head
+# that will actually be published waits behind it.
 concurrency:
   group: publish-binary-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   publish:
