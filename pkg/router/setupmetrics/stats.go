@@ -93,6 +93,19 @@ const (
 	CircuitHalfOpen CircuitState = "half_open"
 )
 
+// BreakerState is the JSON view of one circuit breaker that is not
+// closed. Snapshot only emits non-closed entries, so an empty
+// "breakers" object means route setup is short-circuiting nobody —
+// and a lingering half_open entry with probe_in_flight=true is
+// immediately visible to an operator instead of only showing up as
+// "probe in flight" strings in the caller's error.
+type BreakerState struct {
+	State            CircuitState `json:"state"`
+	OpenedAt         time.Time    `json:"opened_at"`
+	ConsecutiveFails int          `json:"consecutive_fails"`
+	ProbeInFlight    bool         `json:"probe_in_flight"`
+}
+
 // Circuit breaker tuning. Kept as constants for simplicity — can be
 // promoted to CollectorConfig if tests need to vary them.
 const (
@@ -178,6 +191,11 @@ type StatsSnapshot struct {
 
 	// Most recent N failures, newest first.
 	RecentFailures []FailureEvent `json:"recent_failures"`
+
+	// Breakers holds every circuit breaker that is not closed, keyed
+	// by PK — destinations and intermediates alike. Omitted when all
+	// breakers are closed.
+	Breakers map[string]BreakerState `json:"breakers,omitempty"`
 
 	LastSuccessAt *time.Time `json:"last_success_at,omitempty"`
 	LastFailureAt *time.Time `json:"last_failure_at,omitempty"`
@@ -267,6 +285,51 @@ func NewCollector(cfg CollectorConfig) *Collector {
 	}
 }
 
+// ProbeHolder records which PKs a single request was admitted through
+// as the half-open probe, so finish() can resolve every one of them
+// when that request ends. Admission and resolution MUST be symmetric:
+// a probe left in flight past the end of the request that took it
+// locks the breaker's half-open slot until circuitMaxOpenDuration
+// force-resets it (30 minutes of refusing everybody), which is exactly
+// the failure observed live on 2026-09-16 for an intermediate that was
+// perfectly reachable.
+//
+// The zero value is ready to use. Create one per request, pass it to
+// every Allow* call that request makes, and hand the same holder to
+// RecordRouteContextProbes.
+type ProbeHolder struct {
+	mu  sync.Mutex
+	pks []string
+}
+
+// hold records that this request took pk's half-open probe slot.
+func (p *ProbeHolder) hold(pk string) {
+	if p == nil || pk == "" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, held := range p.pks {
+		if held == pk {
+			return
+		}
+	}
+	p.pks = append(p.pks, pk)
+}
+
+// take returns the held PKs and empties the holder, so a probe can
+// never be resolved twice.
+func (p *ProbeHolder) take() []string {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	pks := p.pks
+	p.pks = nil
+	return pks
+}
+
 // AllowDestination reports whether a new route setup to dst should
 // proceed. Returns (true, "") when the breaker is closed or
 // half-open, (false, reason) when it is open. Call this from the
@@ -277,11 +340,18 @@ func NewCollector(cfg CollectorConfig) *Collector {
 // breaker that has been open for circuitOpenDuration, we flip it to
 // half-open and allow the current probe through. A subsequent success
 // will close the breaker (via finish); a failure re-opens it and
-// resets the 60-second timer.
+// resets the per-cycle timer.
+//
+// held records the probe against the calling request; pass the same
+// *ProbeHolder that was given to RecordRouteContextProbes so finish()
+// can release the slot however the request ends. A nil holder is
+// accepted for callers that only inspect the breaker and never run a
+// request through finish() (tests, diagnostics) — such a caller never
+// takes the probe slot.
 //
 // AllowIntermediate is the per-intermediate sibling — see below.
-func (c *Collector) AllowDestination(dstPK cipher.PubKey) (bool, string) {
-	return c.allowPK(dstPK)
+func (c *Collector) AllowDestination(dstPK cipher.PubKey, held *ProbeHolder) (bool, string) {
+	return c.allowPK(dstPK, held)
 }
 
 // AllowIntermediate reports whether a route candidate whose path
@@ -296,14 +366,16 @@ func (c *Collector) AllowDestination(dstPK cipher.PubKey) (bool, string) {
 //
 // Uses the same allowPK helper as AllowDestination; intermediate
 // breakers live in the same map as destination breakers (keyed by
-// PK string), which keeps the bookkeeping uniform.
-func (c *Collector) AllowIntermediate(interPK cipher.PubKey) (bool, string) {
-	return c.allowPK(interPK)
+// PK string), which keeps the bookkeeping uniform — including the
+// half-open probe slot, which is why held matters here just as much
+// as it does for the destination.
+func (c *Collector) AllowIntermediate(interPK cipher.PubKey, held *ProbeHolder) (bool, string) {
+	return c.allowPK(interPK, held)
 }
 
 // allowPK is the shared half-open transition machinery for
 // destinations and intermediates.
-func (c *Collector) allowPK(pubKey cipher.PubKey) (bool, string) {
+func (c *Collector) allowPK(pubKey cipher.PubKey, held *ProbeHolder) (bool, string) {
 	pk := pubKey.String()
 	if pk == "" {
 		return true, ""
@@ -335,9 +407,14 @@ func (c *Collector) allowPK(pubKey cipher.PubKey) (bool, string) {
 			return false, "circuit open: " + pk + " unreachable"
 		}
 		// Time's up — transition to half-open and let THIS caller be the
-		// single probe.
+		// single probe. An observer (nil holder) is allowed through but
+		// does not consume the probe slot, since nothing will release it.
+		if held == nil {
+			return true, ""
+		}
 		br.state = CircuitHalfOpen
 		br.probeInFlight = true
+		held.hold(pk)
 		if d, ok := c.dests[pk]; ok {
 			d.Circuit = string(CircuitHalfOpen)
 		}
@@ -345,14 +422,19 @@ func (c *Collector) allowPK(pubKey cipher.PubKey) (bool, string) {
 	}
 	// Already HalfOpen: admit only ONE probe at a time. Concurrent callers are
 	// rejected until finish() resolves the probe (Closed on success / Open on
-	// failure, both of which clear probeInFlight). Without this, every caller
-	// arriving during the half-open window stampedes the recovering
-	// destination — a thundering herd against exactly the node that just came
-	// back, which can re-trip the breaker it was meant to test.
+	// failure / released back to Open when the request died for a reason that
+	// says nothing about this PK — all three clear probeInFlight). Without
+	// this, every caller arriving during the half-open window stampedes the
+	// recovering destination — a thundering herd against exactly the node that
+	// just came back, which can re-trip the breaker it was meant to test.
 	if br.probeInFlight {
 		return false, "circuit half-open: probe in flight for " + pk
 	}
+	if held == nil {
+		return true, ""
+	}
 	br.probeInFlight = true
+	held.hold(pk)
 	return true, ""
 }
 
@@ -388,9 +470,23 @@ func (c *Collector) RecordRoute() func(*error) {
 //
 //	defer collector.RecordRouteContext(ctx, src, dst, hopCount)(&err)
 func (c *Collector) RecordRouteContext(ctx context.Context, srcPK, dstPK cipher.PubKey, hopCount int) func(*error) {
+	return c.RecordRouteContextProbes(ctx, srcPK, dstPK, hopCount, nil)
+}
+
+// RecordRouteContextProbes is RecordRouteContext plus the half-open
+// probe bookkeeping: held is the same *ProbeHolder the request passes
+// to AllowDestination / AllowIntermediate, and every probe it holds is
+// resolved when the returned closure runs. Callers that consult the
+// breakers MUST use this variant — a probe taken by a request that
+// never releases it blocks the breaker's only recovery slot until the
+// 30-minute force-reset.
+//
+//	var probes setupmetrics.ProbeHolder
+//	defer collector.RecordRouteContextProbes(ctx, src, dst, hopCount, &probes)(&err)
+func (c *Collector) RecordRouteContextProbes(ctx context.Context, srcPK, dstPK cipher.PubKey, hopCount int, held *ProbeHolder) func(*error) {
 	start := time.Now()
 	return func(errp *error) {
-		c.finish(ctx, srcPK, dstPK, hopCount, start, errp)
+		c.finish(ctx, srcPK, dstPK, hopCount, start, errp, held)
 	}
 }
 
@@ -402,7 +498,7 @@ func (c *Collector) RecordConcurrencyDrop() {
 	c.mu.Unlock()
 }
 
-func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopCount int, start time.Time, errp *error) {
+func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopCount int, start time.Time, errp *error, held *ProbeHolder) {
 	duration := time.Since(start)
 	durMs := duration.Milliseconds()
 
@@ -413,6 +509,10 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Every half-open probe this request took is resolved before we
+	// return, whichever branch below runs — see resolveProbesLocked.
+	probes := held.take()
 
 	c.total++
 	dstStr := dstPK.String()
@@ -425,8 +525,11 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 			destStat.Total++
 		}
 		// Any success closes an open/half-open breaker and resets
-		// the consecutive failure counter.
+		// the consecutive failure counter — for the destination and
+		// for every intermediate this request probed, since the route
+		// that just succeeded ran through all of them.
 		c.recordCircuitSuccessLocked(dstStr)
+		c.resolveProbesLocked(probes, "", true)
 		// Record latency and hop count for successful attempts.
 		c.latencyRing[c.latencyRingIdx] = durMs
 		c.latencyRingIdx = (c.latencyRingIdx + 1) % len(c.latencyRing)
@@ -479,6 +582,10 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 	// attempts out — including ones through healthy intermediates.
 	reason := classifyError(ctx, err)
 	blameDst := true
+	// blamedPK is the breaker this failure was actually recorded
+	// against, if any. Probes held on any OTHER PK are released
+	// un-penalized below: this request learned nothing about them.
+	var blamedPK string
 	if reason == ReasonIDReservation {
 		failedPK, ok := failedDialPK(err)
 		switch {
@@ -488,9 +595,11 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 			// itself returning an error). Fall back to the legacy
 			// behavior of blaming the destination.
 			c.recordCircuitFailureLocked(dstStr)
+			blamedPK = dstStr
 		case failedPK == dstPK:
 			// Destination was the dial target that failed — legit.
 			c.recordCircuitFailureLocked(dstStr)
+			blamedPK = dstStr
 		case failedPK == srcPK:
 			// Source visor was unreachable. Do NOT blame the dst.
 			reason = ReasonSourceUnreachable
@@ -507,8 +616,18 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 			blameDst = false
 			c.touchDest(failedPK.String()) // ensure breaker entry exists
 			c.recordCircuitFailureLocked(failedPK.String())
+			blamedPK = failedPK.String()
 		}
 	}
+	// Release every probe this request held that was NOT the one we
+	// just blamed. The request failed for a reason that says nothing
+	// about those PKs (the destination was unreachable, biRt.Check
+	// rejected the route, rule generation failed, another hop's
+	// breaker short-circuited us), so they go back to Open with
+	// probeInFlight cleared and openedAt untouched — the next caller
+	// gets to be the probe instead of everybody being refused until
+	// the 30-minute force-reset.
+	c.resolveProbesLocked(probes, blamedPK, false)
 	if blameDst && destStat != nil {
 		destStat.Failed++
 	}
@@ -555,6 +674,52 @@ func (c *Collector) touchDest(pk string) *DestStat {
 	c.dests[pk] = d
 	c.breakers[pk] = &circuitBreaker{state: CircuitClosed}
 	return d
+}
+
+// resolveProbesLocked settles every half-open probe a finishing
+// request held. success closes the breakers (the route proved the PK
+// reachable); otherwise each probe except blamedPK — whose breaker the
+// failure path already updated — is released back to Open without a
+// penalty. Must be called with c.mu held.
+//
+// The invariant this enforces: probeInFlight is never true after the
+// request that set it has ended. AllowDestination / AllowIntermediate
+// admit exactly one probe per PK and finish() is the only place that
+// releases it, so the two have to cover every exit path of the
+// request, not just the dial-failed one.
+func (c *Collector) resolveProbesLocked(probes []string, blamedPK string, success bool) {
+	for _, pk := range probes {
+		if pk == "" || pk == blamedPK {
+			continue
+		}
+		if success {
+			c.recordCircuitSuccessLocked(pk)
+			continue
+		}
+		c.releaseProbeLocked(pk)
+	}
+}
+
+// releaseProbeLocked returns a half-open breaker to Open with the
+// probe slot free and openedAt unchanged, so the next request through
+// this PK becomes the probe. Consecutive-failure state is left alone:
+// the request that held this probe failed for reasons unrelated to pk,
+// so it is not evidence against pk. Must be called with c.mu held.
+func (c *Collector) releaseProbeLocked(pk string) {
+	br, ok := c.breakers[pk]
+	if !ok || !br.probeInFlight {
+		return
+	}
+	br.probeInFlight = false
+	// A concurrent success may already have closed the breaker; don't
+	// drag it back open.
+	if br.state != CircuitHalfOpen {
+		return
+	}
+	br.state = CircuitOpen
+	if d, ok := c.dests[pk]; ok {
+		d.Circuit = string(CircuitOpen)
+	}
 }
 
 // recordCircuitFailureLocked updates the breaker state for pk after a
@@ -733,6 +898,10 @@ func (c *Collector) Snapshot() StatsSnapshot {
 	// Recent failures, newest first.
 	snap.RecentFailures = c.recentFailuresLocked()
 
+	// Non-closed breakers, so an operator can see what route setup is
+	// refusing and why without reading the caller's error strings.
+	snap.Breakers = c.breakerStatesLocked()
+
 	if !c.lastSuccessAt.IsZero() {
 		t := c.lastSuccessAt
 		snap.LastSuccessAt = &t
@@ -854,6 +1023,28 @@ func (c *Collector) topDestsLocked(n int) (byTotal, byFailed []DestStat) {
 		byFailed = byFailed[:n]
 	}
 	return byTotal, byFailed
+}
+
+// breakerStatesLocked copies the non-closed breakers out for
+// Snapshot. Returns nil when every breaker is closed so the field
+// stays out of the JSON entirely.
+func (c *Collector) breakerStatesLocked() map[string]BreakerState {
+	var out map[string]BreakerState
+	for pk, br := range c.breakers {
+		if br.state == CircuitClosed {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]BreakerState)
+		}
+		out[pk] = BreakerState{
+			State:            br.state,
+			OpenedAt:         br.openedAt.UTC(),
+			ConsecutiveFails: br.consecutiveFails,
+			ProbeInFlight:    br.probeInFlight,
+		}
+	}
+	return out
 }
 
 func (c *Collector) recentFailuresLocked() []FailureEvent {
