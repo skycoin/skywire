@@ -152,13 +152,15 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	for i, ac := range apps {
 		if ac.Name == skyenv.SkysocksClientName && ac.AutoStart {
 			autoProxyClient = true
-			if argsContain(ac.Args, "--srv") {
-				// A pinned exit (an operator's, or one persisted from an
-				// earlier auto-pick) autostarts as configured — but still
-				// gets VERIFIED below, and rotated off if it's dead: a
-				// stale pin otherwise wedges the whole chain behind the
-				// connecting interstitial forever.
+			if pinned := argValue(ac.Args, "--srv"); pinned != "" {
+				// A pinned exit is the operator's CHOICE and is never
+				// rotated away from: it autostarts as configured and is
+				// verified once, advisorily. Rotation exists for the
+				// deferred-autostart case below (autostart with no --srv),
+				// where the visor picked the exit itself and so may pick
+				// again.
 				pinnedProxy = true
+				v.pinnedProxyExit.Store(&pinned)
 			} else {
 				apps[i].AutoStart = false
 			}
@@ -215,6 +217,29 @@ func argsContain(args []string, flag string) bool {
 	return false
 }
 
+// argValue returns the value following flag in an app's args, or "" when the
+// flag is absent or is the last token (a flag with no value).
+func argValue(args []string, flag string) string {
+	for i, a := range args {
+		if a == flag && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+// PinnedProxyExit returns the skysocks-client --srv key the CONFIG carried at
+// boot, or "" when the client did not autostart on a pinned exit. It is the
+// operator's choice, recorded before anything can re-point the app, so a
+// consumer can tell a configured exit from one the visor or the operator
+// switched to later.
+func (v *Visor) PinnedProxyExit() string {
+	if pk := v.pinnedProxyExit.Load(); pk != nil {
+		return *pk
+	}
+	return ""
+}
+
 // autoStartProxyClient picks a proxy exit from service discovery, starts
 // skysocks-client on it, and — critically — VERIFIES the exit end to end
 // before accepting it: route formation and even the SOCKS5 CONNECT succeed
@@ -230,28 +255,33 @@ func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
 		ctx = context.Background()
 	}
 	if pinned {
-		// The launcher autostarted the configured exit; give it a beat, then
-		// hold it to the same end-to-end bar. A live pin wins and we're done;
-		// a dead one is stopped and the discovery rotation below takes over.
-		want := v.GetSkysocksClientAddress()
+		// The launcher autostarted the CONFIGURED exit. Verification here is
+		// ADVISORY only: a pinned --srv is the operator's choice, and the
+		// visor does not get to overrule it. A failed probe says the exit
+		// looked dead from here — which is also what a route that has not
+		// formed yet, a throttled origin or a flapping first hop look like —
+		// so it is logged and nothing else. Rotating a pinned exit onto a
+		// random discovery pick (and PERSISTING that pick over the operator's
+		// key in skywire-config.json) is why a configured proxy "ended up on
+		// a seemingly random exit"; the periodic recheck is not run for a pin
+		// either, since there is no action it could take.
+		pin := v.PinnedProxyExit()
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(15 * time.Second):
 		}
-		if v.verifyProxyExit(ctx, log) {
-			log.Info("Configured proxy exit verified end to end")
-			if !v.holdVerifiedProxyExit(ctx, log) {
-				return
-			}
-			log.Warn("configured proxy exit stopped relaying; rotating to discovery")
-		} else {
-			log.Warn("configured proxy exit failed end-to-end verification; rotating to discovery")
-		}
-		if v.proxyClientTakenOver(log, want, true) {
+		ok, verr := v.verifyProxyExitErr(ctx, log)
+		if ok {
+			log.WithField("pinned_exit", pin).Info("Configured proxy exit verified end to end")
 			return
 		}
-		_ = v.StopSkysocksClients() //nolint:errcheck
+		if v.proxyClientTakenOver(log, pin, true) {
+			return
+		}
+		log.WithError(verr).WithField("pinned_exit", pin).
+			Warn("configured proxy exit failed end-to-end verification; KEEPING it — a pinned exit is never rotated")
+		return
 	}
 	for {
 		select {
@@ -391,19 +421,30 @@ func (v *Visor) holdVerifiedProxyExit(ctx context.Context, log *logging.Logger) 
 // page this visor just generated for itself, which would certify a dead exit as
 // working. See relayedResponseOK.
 func (v *Visor) verifyProxyExit(ctx context.Context, log *logging.Logger) bool {
+	ok, _ := v.verifyProxyExitErr(ctx, log)
+	return ok
+}
+
+// verifyProxyExitErr is verifyProxyExit plus the last probe error, so a caller
+// that only REPORTS a failure (the pinned-exit branch) can say what went wrong
+// instead of leaving the reason in a debug line.
+func (v *Visor) verifyProxyExitErr(ctx context.Context, log *logging.Logger) (bool, error) {
+	var lastErr error
 	deadline := time.Now().Add(90 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
-			return false
+			return false, ctx.Err()
 		case <-time.After(10 * time.Second):
 		}
 		sd, err := proxy.SOCKS5("tcp", skyenv.SkysocksClientAddr, nil, vnetProxyDialer{})
 		if err != nil {
+			lastErr = err
 			continue
 		}
 		conn, err := sd.Dial("tcp", "neverssl.com:80")
 		if err != nil {
+			lastErr = err
 			log.WithError(err).Debug("proxy verify: CONNECT failed; retrying within window")
 			continue
 		}
@@ -421,13 +462,22 @@ func (v *Visor) verifyProxyExit(ctx context.Context, log *logging.Logger) bool {
 		n, rerr := io.ReadFull(conn, head)
 		_ = conn.Close() //nolint:errcheck
 		if n > 0 && relayedResponseOK(head[:n]) {
-			return true
+			return true, nil
+		}
+		lastErr = rerr
+		if lastErr == nil {
+			lastErr = errNoRelayedResponse
 		}
 		log.WithError(rerr).WithField("bytes", n).
 			Debug("proxy verify: no relayed HTTP response (locally synthesized or malformed); retrying within window")
 	}
-	return false
+	return false, lastErr
 }
+
+// errNoRelayedResponse is the verdict when the probe read a complete reply that
+// the local client synthesized (the interstitial) rather than relayed — there is
+// no I/O error to report in that case, but there is still a reason.
+var errNoRelayedResponse = errors.New("no relayed HTTP response through the exit")
 
 // relayedResponseOK reports whether the bytes read back through the skysocks
 // listener are a real reply RELAYED from the exit. Two things have to hold: it

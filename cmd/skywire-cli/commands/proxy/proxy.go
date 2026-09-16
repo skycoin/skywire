@@ -624,6 +624,10 @@ var statusCmd = &cobra.Command{
 			AppPort   routing.Port        `json:"app_port"`
 			Route     []muxRouteGroupInfo `json:"route,omitempty"`
 			Direct    []directStreamInfo  `json:"direct,omitempty"`
+			// PinnedExit is reported only when the app is running on an exit
+			// other than the one the config pinned at boot, so the operator
+			// can see that something re-pointed it.
+			PinnedExit string `json:"pinned_exit,omitempty"`
 		}
 		var jsonAppStatus []appState
 		_, err = fmt.Fprintf(w, "---- All Proxy List -----------------------------------------------------\n\n")
@@ -676,16 +680,27 @@ var statusCmd = &cobra.Command{
 							direct = fetchProxyDirect(rpcClient, state.Name)
 						}
 					}
+					// The visor reports the exit the CONFIG pinned at boot.
+					// Showing it only when it differs from the active --srv
+					// answers "why is my proxy on some other exit?" at a
+					// glance, and stays silent in the ordinary case.
+					pinned := ""
+					srvDisplay := tmpSrv
+					if state.PinnedExit != "" && state.PinnedExit != tmpSrv {
+						pinned = state.PinnedExit
+						srvDisplay = fmt.Sprintf("%s (pinned: %s)", tmpSrv, pinned)
+					}
 					jsonAppStatus = append(jsonAppStatus, appState{
-						Name:      state.Name,
-						Status:    status,
-						AutoStart: state.AutoStart,
-						Args:      state.Args,
-						AppPort:   state.Port,
-						Route:     route,
-						Direct:    direct,
+						Name:       state.Name,
+						Status:     status,
+						AutoStart:  state.AutoStart,
+						Args:       state.Args,
+						AppPort:    state.Port,
+						Route:      route,
+						Direct:     direct,
+						PinnedExit: pinned,
 					})
-					_, err = fmt.Fprintf(w, "Name: %s\nStatus: %s\nServer: %s\nAddress: %s\nAppPort: %d\nAutoStart: %t\n%s\n", state.Name, status, tmpSrv, tmpAddr, state.Port, state.AutoStart, renderProxyRoute(route, direct))
+					_, err = fmt.Fprintf(w, "Name: %s\nStatus: %s\nServer: %s\nAddress: %s\nAppPort: %d\nAutoStart: %t\n%s\n", state.Name, status, srvDisplay, tmpAddr, state.Port, state.AutoStart, renderProxyRoute(route, direct))
 					internal.Catch(cmd.Flags(), err)
 				}
 			}
