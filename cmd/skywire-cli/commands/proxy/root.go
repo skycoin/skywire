@@ -79,33 +79,36 @@ func getDeployment() deployment.Services {
 }
 
 var (
-	binaryName      = "skysocks-client"
-	stateName       = "skysocks-client"
-	serviceType     = servicedisc.ServiceTypeProxy
-	rawData         bool
-	sdURL           string
-	utURL           string
-	cacheDirSD      string
-	cacheDirUT      string
-	cacheFilesAge   int
-	isStats         bool
-	pubkey          cipher.PubKey
-	pk              string
-	allClients      bool
-	noFilterOnline  bool
-	clientName      string
-	country         string
-	version         string
-	minVersion      string
-	maxVersion      string
-	showOffline     bool
-	addr            string
-	startingTimeout int
-	httpAddr        string
-	jsonOutput      bool
-	appPort         uint16
-	useInternal     bool
-	useExternal     bool
+	binaryName = "skysocks-client"
+	// defaultClientName is the app the proxy subcommands act on when -n/--name
+	// is not given. It is also what the poll loops and `proxy test` must name
+	// explicitly rather than assume.
+	defaultClientName = "skysocks-client"
+	serviceType       = servicedisc.ServiceTypeProxy
+	rawData           bool
+	sdURL             string
+	utURL             string
+	cacheDirSD        string
+	cacheDirUT        string
+	cacheFilesAge     int
+	isStats           bool
+	pubkey            cipher.PubKey
+	pk                string
+	allClients        bool
+	noFilterOnline    bool
+	clientName        string
+	country           string
+	version           string
+	minVersion        string
+	maxVersion        string
+	showOffline       bool
+	addr              string
+	startingTimeout   int
+	httpAddr          string
+	jsonOutput        bool
+	appPort           uint16
+	useInternal       bool
+	useExternal       bool
 	// test command vars
 	testURL         string
 	testTimeout     int
