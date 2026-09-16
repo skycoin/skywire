@@ -8,6 +8,7 @@ package cliroute
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -84,4 +85,19 @@ type Trace struct {
 	Src  string     `json:"src"`
 	Dst  string     `json:"dst"`
 	Hops []TraceHop `json:"hops"`
+}
+
+// Settings is the visor-wide router knobs (`route settings`).
+type Settings struct {
+	ForceLocalRoutes    bool     `json:"force_local_routes"`
+	ExistingTPOnly      bool     `json:"existing_tp_only"`
+	MinHops             uint16   `json:"min_hops"`
+	TransportPreference []string `json:"transport_preference"`
+}
+
+// Human writes one knob per line.
+func (s Settings) Human(w io.Writer) error {
+	_, err := fmt.Fprintf(w, "min_hops: %d\nexisting_tp_only: %v\nforce_local_routes: %v\ntransport_preference: %s\n",
+		s.MinHops, s.ExistingTPOnly, s.ForceLocalRoutes, strings.Join(s.TransportPreference, ","))
+	return err
 }

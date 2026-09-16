@@ -9,7 +9,6 @@ package cliroute
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"os"
 	"testing"
@@ -94,10 +93,11 @@ func TestCumulativeLatencyMS(t *testing.T) {
 	require.True(t, all)
 	require.InDelta(t, 15.0, sum, 0.001)
 
-	// A missing measurement folds in +Inf and flips allMeasured false.
+	// A missing measurement is left out of the sum (never +Inf: JSON cannot
+	// carry it) and flips allMeasured false.
 	sum, all = cumulativeLatencyMS(hops, map[uuid.UUID]float64{id1: 10})
 	require.False(t, all)
-	require.True(t, math.IsInf(sum, 1))
+	require.InDelta(t, 10.0, sum, 0.001)
 }
 
 func TestMemoryStore(t *testing.T) {

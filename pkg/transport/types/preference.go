@@ -111,3 +111,10 @@ func ParsePreferenceOrder(s []string) []Type {
 	}
 	return out
 }
+
+// DefaultPreferenceOrder returns a copy of the built-in order, for a caller
+// that wants to restore it explicitly (an empty slice does not survive gob
+// RPC, which delivers it as nil = "leave unchanged").
+func DefaultPreferenceOrder() []Type {
+	return append([]Type(nil), defaultPreference...)
+}
