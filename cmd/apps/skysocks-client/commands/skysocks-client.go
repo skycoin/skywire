@@ -42,8 +42,13 @@ const (
 	serverPort = routing.Port(3) // skysocks server port
 )
 
+// The vars below back the COBRA flags of the standalone `skysocks-client`
+// binary only. The app normally runs IN-PROCESS inside the visor (launcher →
+// appserver startInProcess), where every instance shares this package — so
+// reading them at dial time made a long-running proxy adopt the flags of
+// whichever instance was started last. RunSkysocksClient copies them into a
+// per-invocation clientConfig and the runtime path reads only that.
 var (
-	r              *netutil.Retrier
 	addr           string
 	serverPK       string
 	httpAddr       string
@@ -62,6 +67,86 @@ var (
 	rangeHTTPS     bool
 	rangeHTTPSCA   string
 )
+
+// clientConfig is ONE invocation's settings. Every value the run path needs
+// lives here rather than in a package var: the visor launches skysocks-client
+// in-process (appserver/proc.go startInProcess), so N proxy clients under one
+// visor share this package's globals. With ~8 instances the last one started
+// silently rewrote --srv, --addr, --direct, --routed, --tunnels and the
+// retrier for the ones already running — each re-dial (and every reconnect
+// cycle) picked up the newcomer's flags.
+type clientConfig struct {
+	retrier        *netutil.Retrier
+	addr           string
+	serverPK       string
+	httpAddr       string
+	retryDelay     int64
+	tries          int64
+	appPort        uint16
+	reconnect      bool
+	reconnectDelay int64
+	direct         bool
+	routed         bool
+	dmsgFallback   bool
+	tunnels        int64
+	rangeSplit     bool
+	rangeConc      int64
+	rangeChunkKiB  int64
+	rangeHTTPS     bool
+	rangeHTTPSCA   string
+}
+
+// configFromFlagVars snapshots the cobra flag vars — the standalone-binary
+// path, where cobra has already parsed os.Args into them. Copied ONCE, at
+// start; nothing reads the vars afterwards.
+func configFromFlagVars() *clientConfig {
+	return &clientConfig{
+		addr:           addr,
+		serverPK:       serverPK,
+		httpAddr:       httpAddr,
+		retryDelay:     retryDelay,
+		tries:          tries,
+		appPort:        appPort,
+		reconnect:      reconnect,
+		reconnectDelay: reconnectDelay,
+		direct:         direct,
+		routed:         routed,
+		dmsgFallback:   dmsgFallback,
+		tunnels:        tunnels,
+		rangeSplit:     rangeSplit,
+		rangeConc:      rangeConc,
+		rangeChunkKiB:  rangeChunkKiB,
+		rangeHTTPS:     rangeHTTPS,
+		rangeHTTPSCA:   rangeHTTPSCA,
+	}
+}
+
+// parseArgs binds a fresh flag set onto this invocation's config and parses
+// the args the visor launched it with. Defaults match the cobra flags.
+func (c *clientConfig) parseArgs(args []string) error {
+	fs := pflag.NewFlagSet("skysocks-client", pflag.ContinueOnError)
+	fs.StringVar(&c.addr, "addr", skyenv.SkysocksClientAddr, "Client address")
+	fs.StringVar(&c.serverPK, "srv", "", "PubKey of server")
+	fs.StringVar(&c.httpAddr, "http", "", "http proxy mode")
+	fs.Int64Var(&c.tries, "tries", 3, "number of tries")
+	fs.Int64Var(&c.retryDelay, "retry-time", 5, "delay between tries")
+	fs.Uint16Var(&c.appPort, "port", 0, "routing port")
+	fs.BoolVar(&c.reconnect, "reconnect", false, "in-process reconnect on stream failure")
+	fs.Int64Var(&c.reconnectDelay, "reconnect-delay", 2, "seconds between reconnect attempts")
+	fs.BoolVar(&c.direct, "direct", false, "force a direct-transport-only route to the server (1-hop, bypass the route-finder + setup node); self-heals on server restart")
+	fs.BoolVar(&c.routed, "routed", false, "always dial through a route group (skip the direct shortcut)")
+	fs.BoolVar(&c.dmsgFallback, "dmsg-fallback", false, "fall back to a direct dmsg stream if the skynet dial fails")
+	fs.Int64Var(&c.tunnels, "tunnels", 1, "number of independent tunnels to stripe connections across")
+	// Range-split flags were absent from this launcher subset, so passing any of
+	// them via the visor's app args errored. Bind them here too so the feature is
+	// configurable when the visor launches the app.
+	fs.BoolVar(&c.rangeSplit, "range-split", true, "split range-capable HTTP (:80) GETs across tunnels")
+	fs.Int64Var(&c.rangeConc, "range-concurrency", 8, "concurrent range streams per split download")
+	fs.Int64Var(&c.rangeChunkKiB, "range-chunk-kib", 4096, "bytes per range request, in KiB")
+	fs.BoolVar(&c.rangeHTTPS, "range-split-https", false, "also split HTTPS (:443) GETs via a local MITM root (opt-in)")
+	fs.StringVar(&c.rangeHTTPSCA, "range-split-https-ca-dir", "", "directory for the HTTPS range-split MITM root")
+	return fs.Parse(args)
+}
 
 func init() {
 	launcher.RegisterApp("skysocks-client", RunSkysocksClient)
@@ -124,53 +209,38 @@ var RootCmd = &cobra.Command{
 
 // RunSkysocksClient runs the skysocks client app logic.
 func RunSkysocksClient(ctx context.Context, args []string) error {
-	// Parse flags when called via internal launcher
+	// Every setting this invocation runs on is captured HERE, once, into a
+	// value nothing else can reach. Launched by the visor (args non-empty) the
+	// flags come from the args alone; run as the standalone binary they come
+	// from the cobra vars cobra has already filled in.
+	cfg := &clientConfig{}
 	if len(args) > 0 {
-		fs := pflag.NewFlagSet("skysocks-client", pflag.ContinueOnError)
-		fs.StringVar(&addr, "addr", skyenv.SkysocksClientAddr, "Client address")
-		fs.StringVar(&serverPK, "srv", "", "PubKey of server")
-		fs.StringVar(&httpAddr, "http", "", "http proxy mode")
-		fs.Int64Var(&tries, "tries", 3, "number of tries")
-		fs.Int64Var(&retryDelay, "retry-time", 5, "delay between tries")
-		fs.Uint16Var(&appPort, "port", 0, "routing port")
-		fs.BoolVar(&reconnect, "reconnect", false, "in-process reconnect on stream failure")
-		fs.Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between reconnect attempts")
-		fs.BoolVar(&direct, "direct", false, "force a direct-transport-only route to the server (1-hop, bypass the route-finder + setup node); self-heals on server restart")
-		fs.BoolVar(&routed, "routed", false, "always dial through a route group (skip the direct shortcut)")
-		fs.BoolVar(&dmsgFallback, "dmsg-fallback", false, "fall back to a direct dmsg stream if the skynet dial fails")
-		fs.Int64Var(&tunnels, "tunnels", 1, "number of independent tunnels to stripe connections across")
-		// Range-split flags were absent from this launcher subset, so passing any of
-		// them via the visor's app args errored. Bind them here too (same vars as the
-		// cobra flags) so the feature is configurable when the visor launches the app.
-		fs.BoolVar(&rangeSplit, "range-split", true, "split range-capable HTTP (:80) GETs across tunnels")
-		fs.Int64Var(&rangeConc, "range-concurrency", 8, "concurrent range streams per split download")
-		fs.Int64Var(&rangeChunkKiB, "range-chunk-kib", 4096, "bytes per range request, in KiB")
-		fs.BoolVar(&rangeHTTPS, "range-split-https", false, "also split HTTPS (:443) GETs via a local MITM root (opt-in)")
-		fs.StringVar(&rangeHTTPSCA, "range-split-https-ca-dir", "", "directory for the HTTPS range-split MITM root")
-		if err := fs.Parse(args); err != nil {
+		if err := cfg.parseArgs(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
+	} else {
+		cfg = configFromFlagVars()
 	}
 
 	appCl := app.NewClient(nil)
 	defer appCl.Close()
 	log := appCl.Log()
 
-	r = netutil.NewRetrier(log, time.Duration(retryDelay)*time.Second, netutil.DefaultMaxBackoff, tries, 1)
+	cfg.retrier = netutil.NewRetrier(log, time.Duration(cfg.retryDelay)*time.Second, netutil.DefaultMaxBackoff, cfg.tries, 1)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	port := appCl.Config().RoutingPort
-	if appPort != 0 {
-		port = routing.Port(appPort)
+	if cfg.appPort != 0 {
+		port = routing.Port(cfg.appPort)
 	}
 	setAppPort(appCl, log, port)
 
 	bi := buildinfo.Get()
 	log.Infof("Version %q built on %q against commit %q", bi.Version, bi.Date, bi.Commit)
 
-	if serverPK == "" {
+	if cfg.serverPK == "" {
 		err := errors.New("Empty server PubKey. Exiting")
 		log.Error(err)
 		setAppErr(appCl, log, err)
@@ -178,7 +248,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	}
 
 	pk := cipher.PubKey{}
-	if err := pk.UnmarshalText([]byte(serverPK)); err != nil {
+	if err := pk.UnmarshalText([]byte(cfg.serverPK)); err != nil {
 		log.WithError(err).Error("Invalid server PubKey")
 		setAppErr(appCl, log, err)
 		return err
@@ -192,8 +262,8 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	// connection-refused on the gap, retries succeed).
 	httpCtx, httpCancel := context.WithCancel(ctx)
 	defer httpCancel()
-	if httpAddr != "" {
-		go httpProxy(httpCtx, httpAddr, addr, log)
+	if cfg.httpAddr != "" {
+		go httpProxy(httpCtx, cfg.httpAddr, cfg.addr, log)
 	}
 
 	// HTTPS (:443) range-splitting is an explicit security opt-in. Create/load the
@@ -206,8 +276,8 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		mitmCert   *x509.Certificate
 		mitmMinter skynetca.LeafMinter
 	)
-	if rangeHTTPS {
-		caDir := rangeHTTPSCA
+	if cfg.rangeHTTPS {
+		caDir := cfg.rangeHTTPSCA
 		if caDir == "" {
 			home, herr := os.UserHomeDir()
 			if herr != nil {
@@ -257,7 +327,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// the bind fails we just skip it and dial as before.
 		dctx, dcancel := context.WithCancel(cycleCtx)
 		ddone := make(chan struct{})
-		if lis, lerr := skysocks.ReuseListen(addr); lerr == nil {
+		if lis, lerr := skysocks.ReuseListen(cfg.addr); lerr == nil {
 			go func() {
 				defer close(ddone)
 				skysocks.ServeDisconnected(dctx, lis, appCl)
@@ -267,7 +337,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 			close(ddone)
 		}
 
-		conn, err := dialServer(cycleCtx, appCl, pk, serverPort, false)
+		conn, err := dialServer(cycleCtx, cfg, appCl, pk, serverPort, false)
 		if err != nil {
 			// Stop the disconnected listener and wait for it to release :1080.
 			dcancel()
@@ -298,10 +368,10 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// scan — no inter-dial delay or route-group poll is needed. (The exclusion
 		// is a soft preference: if fewer than N disjoint transports exist, tunnels
 		// fall back to a shared path.)
-		for i := int64(1); i < tunnels; i++ {
-			extra, derr := dialServer(cycleCtx, appCl, pk, serverPort, true)
+		for i := int64(1); i < cfg.tunnels; i++ {
+			extra, derr := dialServer(cycleCtx, cfg, appCl, pk, serverPort, true)
 			if derr != nil {
-				log.WithError(derr).Warnf("tunnel %d/%d dial failed; continuing with %d tunnel(s)", i+1, tunnels, len(conns))
+				log.WithError(derr).Warnf("tunnel %d/%d dial failed; continuing with %d tunnel(s)", i+1, cfg.tunnels, len(conns))
 				continue
 			}
 			conns = append(conns, extra)
@@ -332,20 +402,20 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// runCycle: it only replaces individual dead tunnels while the client is
 		// otherwise alive; if EVERY tunnel dies, ListenAndServe returns and the
 		// runCycle re-dials the whole client.
-		client.SetTunnelTarget(int(tunnels))
+		client.SetTunnelTarget(int(cfg.tunnels))
 		// Transparent HTTP range-splitting (default-on; see rangesplit.go). One
 		// range-capable :80 GET is fetched as concurrent byte ranges over separate
 		// tunnels, so a single download aggregates across the mesh.
-		client.SetRangeSplit(rangeSplit, int(rangeConc), rangeChunkKiB*1024)
+		client.SetRangeSplit(cfg.rangeSplit, int(cfg.rangeConc), cfg.rangeChunkKiB*1024)
 		// HTTPS (:443) range-splitting: inject the MITM root minted ONCE at startup
 		// (mitmMinter, below) so it is the same persistent CA across every reconnect
 		// and exists before any dial. nil minter = feature off or CA init failed.
 		if mitmMinter != nil {
 			client.SetHTTPSRangeSplitMinter(mitmCert, mitmMinter)
 		}
-		if tunnels > 1 {
+		if cfg.tunnels > 1 {
 			client.SetTunnelRedial(func() (net.Conn, error) {
-				return dialServer(cycleCtx, appCl, pk, serverPort, true)
+				return dialServer(cycleCtx, cfg, appCl, pk, serverPort, true)
 			})
 		}
 		// Close the client when the outer ctx fires so
@@ -372,16 +442,16 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 			go client.ListenIPC(ipcClient)
 		}
 
-		log.Infof("Serving proxy client %v", addr)
+		log.Infof("Serving proxy client %v", cfg.addr)
 		setAppStatus(appCl, log, appserver.AppDetailedStatusRunning)
 		//nolint:staticcheck
-		if err := client.ListenAndServe(addr); err != nil {
+		if err := client.ListenAndServe(cfg.addr); err != nil {
 			return fmt.Errorf("serve proxy client: %w", err)
 		}
 		return nil
 	}
 
-	if !reconnect {
+	if !cfg.reconnect {
 		if err := runCycle(); err != nil {
 			log.WithError(err).Error("skysocks-client failed")
 			setAppErr(appCl, log, err)
@@ -396,7 +466,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	// cycle; a failure logs + sleeps + retries indefinitely.
 	// The visor-side restart_policy still wins as a backstop —
 	// if this proc itself panics, the restart loop catches it.
-	baseDelay := time.Duration(reconnectDelay) * time.Second
+	baseDelay := time.Duration(cfg.reconnectDelay) * time.Second
 	const maxReconnectDelay = 30 * time.Second
 	delay := baseDelay
 	for {
@@ -436,31 +506,31 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 // (docs/mux_aggregation_rfc.md step 3). The visor does all the transport-ID
 // bookkeeping; the app just signals intent. It is a no-op for the first tunnel
 // (no sibling route group to diverge from → dial is identical to today).
-func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey, port routing.Port, diversify bool) (net.Conn, error) {
+func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk cipher.PubKey, port routing.Port, diversify bool) (net.Conn, error) {
 	//nolint:errcheck
 	appCl.SetDetailedStatus(appserver.AppDetailedStatusStarting) //nolint:errcheck,gosec
 	// dial one network to the server. On skynet, --direct forces a 1-hop
 	// direct-transport-only dial (create-on-demand, bypass the route-finder +
 	// setup node, self-heals on server restart); dmsg is a plain relay stream.
 	dial := func(_ context.Context, a appnet.Addr) (net.Conn, error) {
-		if a.Net == netType && (direct || diversify || routed) {
+		if a.Net == netType && (cfg.direct || diversify || cfg.routed) {
 			// --routed asks for an explicit single-route group (MuxRoutes=1): the
 			// networker skips the direct shortcut for any explicit mux count, so
 			// the session has a route group whose legs can be pinned or reconciled.
 			mux := 0
-			if routed {
+			if cfg.routed {
 				mux = 1
 			}
-			return appCl.DialWithOptions(a, mux, 0, 0, 0, 0, 0, direct, diversify)
+			return appCl.DialWithOptions(a, mux, 0, 0, 0, 0, 0, cfg.direct, diversify)
 		}
 		return appCl.Dial(a)
 	}
 	nets := []appnet.Type{netType}
-	if dmsgFallback {
+	if cfg.dmsgFallback {
 		nets = append(nets, appnet.TypeDmsg)
 	}
 	var conn net.Conn
-	err := r.Do(ctx, func() error {
+	err := cfg.retrier.Do(ctx, func() error {
 		var err error
 		conn, _, err = appnet.DialWithFallback(ctx, dial, pk, port, nets...)
 		return err
