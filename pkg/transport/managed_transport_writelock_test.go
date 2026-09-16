@@ -75,7 +75,7 @@ func TestSlowWriteDoesNotBlockRead(t *testing.T) {
 
 	in, err := routing.MakeDataPacket(routing.RouteID(2), []byte("inbound while the write is parked"))
 	require.NoError(t, err)
-	go func() { _, _ = far.Write(in) }()
+	go func() { _, _ = far.Write(in) }() //nolint:errcheck
 
 	select {
 	case got := <-readCh:
