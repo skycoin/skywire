@@ -252,7 +252,7 @@ var startCmd = &cobra.Command{
 		var verboseStream *clirpc.VerboseStream
 		if startVerbose {
 			if clientName == "" {
-				clientName = "skysocks-client"
+				clientName = defaultClientName
 			}
 			vs, err := clirpc.OpenVerbose(ctx, clirpc.Addr, clirpc.VerboseFilter{
 				AppName: clientName,
@@ -343,7 +343,7 @@ var startCmd = &cobra.Command{
 			}
 
 			if clientName == "" {
-				clientName = "skysocks-client"
+				clientName = defaultClientName
 			}
 
 			if appPort != 0 {
@@ -379,7 +379,7 @@ var startCmd = &cobra.Command{
 			}
 		} else {
 			if clientName == "" {
-				clientName = "skysocks-client"
+				clientName = defaultClientName
 			}
 			applyRoutingPolicy(cmd, rpcClient, clientName)
 			internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(clientName, getLauncherMode()))
@@ -421,7 +421,14 @@ var startCmd = &cobra.Command{
 			}
 
 			for _, state := range states {
-				if state.Name == stateName {
+				// clientName, not a package-level "skysocks-client": this
+				// loop reports on the app that was just started. It used to
+				// match a `stateName` var that was declared as the default
+				// name and never assigned from -n, so `proxy start -n <name>`
+				// watched — and printed the errors of — the DEFAULT client
+				// instead, attributing another app's failed dial to the one
+				// the operator had just launched.
+				if state.Name == clientName {
 					// Bare Status flips to Running as soon as the OS
 					// process is alive — well before the app has
 					// dialed its remote. Skysocks-client (and friends)
@@ -457,7 +464,7 @@ var startCmd = &cobra.Command{
 						// Brief wait to let error propagate from proc cleanup
 						time.Sleep(500 * time.Millisecond)
 						// Re-fetch to get the error if it was set after stop
-						if updatedState, err := rpcClient.App(stateName); err == nil && updatedState != nil {
+						if updatedState, err := rpcClient.App(clientName); err == nil && updatedState != nil {
 							state = updatedState
 						}
 						errMsg := state.DetailedStatus
@@ -1293,6 +1300,13 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid public key: %w", err))
 			}
 
+			// The test borrows the DEFAULT client — and DoCustomSetting
+			// replaces its whole arg set — so put the operator's args back
+			// afterwards. Without this a test left the tested key persisted
+			// as the configured exit in skywire-config.json.
+			restore := restoreProxyArgsOnExit(cmd, rpcClient, defaultClientName)
+			defer restore.done()
+
 			// Stop existing client
 			rpcClient.StopApp("skysocks-client") //nolint:errcheck,gosec
 			time.Sleep(200 * time.Millisecond)
@@ -1306,12 +1320,12 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 
 			err = rpcClient.DoCustomSetting("skysocks-client", arguments)
 			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to configure proxy: %w", err))
+				restore.fatal(fmt.Errorf("failed to configure proxy: %w", err))
 			}
 
 			err = rpcClient.StartApp("skysocks-client")
 			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to start proxy: %w", err))
+				restore.fatal(fmt.Errorf("failed to start proxy: %w", err))
 			}
 
 			fmt.Printf("Started skysocks-client with server %s\n", serverPK.String())
@@ -1324,7 +1338,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			for i := 0; i < 20; i++ {
 				select {
 				case <-ctx.Done():
-					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("timeout waiting for proxy to start"))
+					restore.fatal(fmt.Errorf("timeout waiting for proxy to start"))
 				default:
 				}
 				states, err := rpcClient.Apps()
@@ -1335,7 +1349,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 							break
 						}
 						if state.Name == "skysocks-client" && state.Status == appserver.AppStatusErrored {
-							internal.PrintFatalError(cmd.Flags(), fmt.Errorf("proxy errored: %s", state.DetailedStatus))
+							restore.fatal(fmt.Errorf("proxy errored: %s", state.DetailedStatus))
 						}
 					}
 				}
@@ -1346,7 +1360,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			}
 
 			if !ready {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("proxy client failed to start"))
+				restore.fatal(fmt.Errorf("proxy client failed to start"))
 			}
 
 			fmt.Println("Proxy is running!")
@@ -1533,6 +1547,14 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			if !strings.HasPrefix(addr, ":") {
 				proxyAddr = addr
 			}
+
+			// Borrowing the default client means rewriting its args once per
+			// candidate; put the operator's set back when the run ends —
+			// including on ctrl+c, which is how a long sweep usually ends.
+			// Otherwise the LAST candidate tested stayed behind as the
+			// configured exit in skywire-config.json.
+			restore := restoreProxyArgsOnExit(cmd, rpcClient, defaultClientName)
+			defer restore.done()
 
 			for i, pxy := range proxiesToTest {
 				result := ProxyTestResult{
