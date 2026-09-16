@@ -394,12 +394,16 @@ func (sc *SessionCommon) Ping() (time.Duration, error) {
 	sc.sm.mutx.RLock()
 	yamuxSes := sc.sm.yamux
 	smuxSes := sc.sm.smux
+	quicSes := sc.sm.quic
 	sc.sm.mutx.RUnlock()
 	if yamuxSes != nil {
 		return sc.yamuxPing(yamuxSes)
 	}
 	if smuxSes != nil {
 		return sc.smuxPing(smuxSes)
+	}
+	if quicSes != nil {
+		return sc.quicPing(quicSes)
 	}
 	return 0, fmt.Errorf("no mux session available for ping")
 }
@@ -478,6 +482,41 @@ func (sc *SessionCommon) smuxPing(smuxSes *smux.Session) (time.Duration, error) 
 	resp := make([]byte, 2)
 	if _, err := io.ReadFull(str, resp); err != nil {
 		return 0, fmt.Errorf("smux ping: read: %w", err)
+	}
+	return time.Since(start), nil
+}
+
+// quicPing implements ping over a QUIC session. A QUIC connection has no
+// separate mux — its native streams ARE the dmsg streams — so the ping opens a
+// bidirectional stream, writes the marker and waits for the echo, exactly as
+// the yamux and smux paths do. ServerSession.serveStream is mux-agnostic and
+// already answers the marker on a QUIC stream, so no server change is needed.
+//
+// Without this branch Ping() fell through to "no mux session available for
+// ping" for every QUIC session: the liveness ping failed 100% of the time, and
+// two consecutive failures made pingSessionsLoop close a perfectly healthy
+// session and re-dial it, once every couple of minutes, for every QUIC server.
+func (sc *SessionCommon) quicPing(quicSes quicConn) (time.Duration, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), sessionPingTimeout)
+	defer cancel()
+
+	str, err := quicSes.OpenStreamSync(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("quic ping: open stream: %w", err)
+	}
+	defer str.Close() //nolint:errcheck
+
+	if err := str.SetDeadline(time.Now().Add(sessionPingTimeout)); err != nil {
+		return 0, fmt.Errorf("quic ping: set deadline: %w", err)
+	}
+
+	start := time.Now()
+	if _, err := str.Write(pingMarker); err != nil {
+		return 0, fmt.Errorf("quic ping: write: %w", err)
+	}
+	resp := make([]byte, 2)
+	if _, err := io.ReadFull(str, resp); err != nil {
+		return 0, fmt.Errorf("quic ping: read: %w", err)
 	}
 	return time.Since(start), nil
 }
