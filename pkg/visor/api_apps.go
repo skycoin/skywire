@@ -45,7 +45,21 @@ func (v *Visor) Apps() ([]*appserver.AppState, error) {
 	if v.appL == nil {
 		return nil, ErrAppLauncherNotAvailable
 	}
-	return v.appL.AppStates(), nil
+	states := v.appL.AppStates()
+	for _, st := range states {
+		v.annotatePinnedExit(st)
+	}
+	return states, nil
+}
+
+// annotatePinnedExit stamps the boot-time pinned proxy exit onto a
+// skysocks-client state. AppStates are built fresh per call, so this mutates
+// nothing shared.
+func (v *Visor) annotatePinnedExit(st *appserver.AppState) {
+	if st == nil || st.Name != skyenv.SkysocksClientName {
+		return
+	}
+	st.PinnedExit = v.PinnedProxyExit()
 }
 
 // App implements API.
@@ -58,6 +72,7 @@ func (v *Visor) App(appName string) (*appserver.AppState, error) {
 	if !ok {
 		return &appserver.AppState{}, ErrAppProcNotRunning
 	}
+	v.annotatePinnedExit(appState)
 	return appState, nil
 }
 
@@ -525,6 +540,13 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 				return errors.New("skysocks server pub key is missing")
 			}
 
+			// Only the exit key is (re)written. This used to REPLACE the
+			// whole args slice with a canonical six-token form, which
+			// silently dropped every other flag the operator had configured
+			// — --reconnect, --direct, --tunnels — and forced --addr back to
+			// the default, on every `proxy start`, every auto-exit pick and
+			// every hypervisor click. Those args are also persisted, so one
+			// start erased them from skywire-config.json for good.
 			if serverKey != "" {
 				var pk cipher.PubKey
 				if err := pk.Set(serverKey); err != nil {
@@ -533,20 +555,24 @@ func (v *Visor) StartSkysocksClient(serverKey string) error {
 				if err := v.SetAppPK(skyenv.SkysocksClientName, pk); err != nil {
 					return err
 				}
-				// we set the args in memory and pass it in `v.appL.StartApp`
-				// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
-				// but the args are set in the config
-				v.conf.Launcher.Apps[index].Args = []string{"app", "skysocks-client", "--srv", pk.Hex(), "--addr", skyenv.SkysocksClientAddr}
-			} else {
-				var pk cipher.PubKey
-				if err := pk.Set(v.GetSkysocksClientAddress()); err != nil {
+			}
+			// A config entry with no args at all has nothing to preserve and
+			// nothing to run with — the leading "app skysocks-client" tokens
+			// are the subcommand path for the root binary — so synthesize the
+			// canonical form there, and there only.
+			if len(v.conf.Launcher.Apps[index].Args) == 0 {
+				v.conf.Launcher.Apps[index].Args = []string{"app", "skysocks-client", "--srv", v.GetSkysocksClientAddress(), "--addr", skyenv.SkysocksClientAddr}
+			} else if !argsContain(v.conf.Launcher.Apps[index].Args, "--addr") {
+				if err := v.conf.UpdateAppArg(v.appL, skyenv.SkysocksClientName, "--addr", skyenv.SkysocksClientAddr); err != nil {
 					return err
 				}
-				v.conf.Launcher.Apps[index].Args = []string{"app", "skysocks-client", "--srv", pk.Hex(), "--addr", skyenv.SkysocksClientAddr}
 			}
 
 			// check process manager availability
 			if v.procM != nil {
+				// we pass the args in `v.appL.StartApp` unlike the api method
+				// `StartApp` where `nil` is passed as args, but the args are
+				// set in the config
 				return v.appL.StartApp(skyenv.SkysocksClientName, v.conf.Launcher.Apps[index].Args, envs)
 			}
 			return ErrProcNotAvailable
