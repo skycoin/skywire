@@ -112,7 +112,7 @@ type VStreamMux struct {
 
 // NewVStreamMux creates a virtual stream multiplexer for the given packet type.
 func NewVStreamMux(tm *Manager, packetType routing.PacketType, log *logging.Logger) *VStreamMux {
-	return &VStreamMux{
+	m := &VStreamMux{
 		log:        log,
 		tm:         tm,
 		packetType: packetType,
@@ -122,6 +122,62 @@ func NewVStreamMux(tm *Manager, packetType routing.PacketType, log *logging.Logg
 		incoming:   make(chan *VStream, 32),
 		done:       make(chan struct{}),
 	}
+	// A stream is removed from m.streams only by VStream.Close — called by the
+	// local reader, or by the peer's FIN. A transport that goes away sends
+	// neither: the peer cannot FIN over a dead link, and the local reader is
+	// parked in Read on a queue that will never receive again. So without this
+	// every stream that rode a closed transport stayed registered for the life
+	// of the visor, holding its 1024-frame queue and never handing its reader
+	// an EOF. Transports are ephemeral and churn constantly, which is why the
+	// app_direct mux accumulated dozens of "live" streams on a visor running
+	// no direct app at all.
+	if tm != nil {
+		tm.OnTransportClosed(m.CloseStreamsOnTransport)
+	}
+	return m
+}
+
+// CloseStreamsOnTransport closes every stream and relay leg riding tpID,
+// returning how many streams it closed. Registered with the transport manager
+// by NewVStreamMux and fired once per transport close.
+//
+// The streams are closed WITHOUT a FIN: the transport they would go out on is
+// the one that just died. That also keeps this callable from the manager's
+// close path — sending would re-enter the manager to look the transport up.
+func (m *VStreamMux) CloseStreamsOnTransport(tpID uuid.UUID) int {
+	m.streamsMu.Lock()
+	var dead []*VStream
+	for k, s := range m.streams {
+		if k.tp == tpID {
+			dead = append(dead, s)
+		}
+	}
+	m.streamsMu.Unlock()
+	for _, s := range dead {
+		s.closeSilently()
+	}
+
+	// Relay legs keyed on the dead transport (either direction) go too, so the
+	// relay count does not drift up by one per closed transport.
+	m.relaysMu.Lock()
+	var legs [][2]relayKey
+	for a, b := range m.relays {
+		if a.tp == tpID || b.tp == tpID {
+			legs = append(legs, [2]relayKey{a, b})
+		}
+	}
+	m.relaysMu.Unlock()
+	for _, ab := range legs {
+		m.teardownRelayLeg(ab[0], ab[1])
+	}
+
+	if len(dead) > 0 || len(legs) > 0 {
+		m.log.WithField("tp", tpID.String()).
+			WithField("streams", len(dead)).
+			WithField("relay_legs", len(legs)).
+			Debug("vstream: transport closed; closed its streams")
+	}
+	return len(dead)
 }
 
 // streamKey identifies a stream on one transport. Wire ids are per peer pair.
@@ -553,6 +609,18 @@ func (s *VStream) Close() error {
 	return nil
 }
 
+// closeSilently is Close without the FIN, for when the transport the FIN would
+// ride is the thing that went away. It shares Close's sync.Once, so a stream
+// closed either way is closed exactly once and the reader gets its EOF.
+func (s *VStream) closeSilently() {
+	s.once.Do(func() {
+		close(s.closed)
+		s.mux.streamsMu.Lock()
+		delete(s.mux.streams, streamKey{s.tpID, s.id})
+		s.mux.streamsMu.Unlock()
+	})
+}
+
 // RemotePK returns the remote peer's public key.
 func (s *VStream) RemotePK() cipher.PubKey {
 	return s.remotePK
@@ -599,7 +667,26 @@ type VStreamMuxStats struct {
 	FramesUnknownStream int64  `json:"frames_unknown_stream"`
 	StalledStreams      int64  `json:"stalled_streams"`
 	AcceptDropped       int64  `json:"accept_dropped"`
+	// ReadBufCap is the per-stream inbound frame queue's capacity; every
+	// stream on the mux has the same one (vstreamReadBuf).
+	ReadBufCap int `json:"read_buf_cap"`
+	// ReadBufMaxLen is the deepest queue across the live streams right now.
+	// A queue that sits near ReadBufCap is the reader — not the network —
+	// setting the pace: deliver() blocks the transport's read loop once it
+	// fills, and after vstreamStallTimeout it gives the stream up
+	// (StalledStreams). Sustained depth on a download is the signal that the
+	// receive chain, not the path, is the bottleneck.
+	ReadBufMaxLen int `json:"read_buf_max_len"`
+	// ReadBufNearFull counts streams whose queue is at least 90% full.
+	ReadBufNearFull int `json:"read_buf_near_full"`
 }
+
+// readBufNearFullNum/Den express the "near full" threshold (90%) as a ratio, so
+// the test is integer-exact for any capacity.
+const (
+	readBufNearFullNum = 9
+	readBufNearFullDen = 10
+)
 
 // Stats snapshots the mux counters. FramesUnknownStream climbing on a healthy
 // link means frames are arriving for streams this side does not have: the
@@ -607,6 +694,16 @@ type VStreamMuxStats struct {
 func (m *VStreamMux) Stats() VStreamMuxStats {
 	m.streamsMu.Lock()
 	n := len(m.streams)
+	maxLen, nearFull := 0, 0
+	for _, s := range m.streams {
+		l := len(s.readBuf)
+		if l > maxLen {
+			maxLen = l
+		}
+		if l*readBufNearFullDen >= cap(s.readBuf)*readBufNearFullNum {
+			nearFull++
+		}
+	}
 	m.streamsMu.Unlock()
 	return VStreamMuxStats{
 		PacketType:          m.packetType.String(),
@@ -615,6 +712,9 @@ func (m *VStreamMux) Stats() VStreamMuxStats {
 		FramesUnknownStream: atomic.LoadInt64(&m.framesUnknownStream),
 		StalledStreams:      atomic.LoadInt64(&m.stalledStreams),
 		AcceptDropped:       atomic.LoadInt64(&m.acceptDropped),
+		ReadBufCap:          vstreamReadBuf,
+		ReadBufMaxLen:       maxLen,
+		ReadBufNearFull:     nearFull,
 	}
 }
 
@@ -635,6 +735,13 @@ type VStreamInfo struct {
 	SentBytes uint64        `json:"sent_bytes"`
 	RecvBytes uint64        `json:"recv_bytes"`
 	UptimeMS  int64         `json:"uptime_ms"`
+	// ReadBufLen/ReadBufCap are this stream's inbound frame queue: how many
+	// frames the transport read loop has handed over that the reader has not
+	// taken yet, out of vstreamReadBuf. Len near Cap means the reader is the
+	// bottleneck — deliver() is back-pressuring the whole transport's read
+	// loop, and at vstreamStallTimeout the stream is given up.
+	ReadBufLen int `json:"read_buf_len"`
+	ReadBufCap int `json:"read_buf_cap"`
 }
 
 // StreamInfo snapshots every live stream on this mux. Pass a non-empty appName
@@ -658,13 +765,15 @@ func (m *VStreamMux) StreamInfo(appName string) []VStreamInfo {
 			uptime = now.Sub(s.openedAt).Milliseconds()
 		}
 		out = append(out, VStreamInfo{
-			AppName:   s.appName,
-			RemotePK:  s.remotePK,
-			TpID:      s.tpID,
-			StreamID:  s.id,
-			SentBytes: nonNegativeCount(atomic.LoadInt64(&s.sentBytes)),
-			RecvBytes: nonNegativeCount(atomic.LoadInt64(&s.recvBytes)),
-			UptimeMS:  uptime,
+			AppName:    s.appName,
+			RemotePK:   s.remotePK,
+			TpID:       s.tpID,
+			StreamID:   s.id,
+			SentBytes:  nonNegativeCount(atomic.LoadInt64(&s.sentBytes)),
+			RecvBytes:  nonNegativeCount(atomic.LoadInt64(&s.recvBytes)),
+			UptimeMS:   uptime,
+			ReadBufLen: len(s.readBuf),
+			ReadBufCap: cap(s.readBuf),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
