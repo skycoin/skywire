@@ -159,6 +159,13 @@ type Visor struct {
 	// inside an unexported service type and stores nothing here.
 	dmsgSrv atomic.Pointer[dmsg.Server]
 
+	// pinnedProxyExit is the skysocks-client --srv key the config carried at
+	// BOOT, recorded by initLauncher before anything can re-point the app.
+	// nil when the client did not autostart on a pinned exit. Read by Apps()
+	// so `proxy status` can say which exit was configured when the app is
+	// running on a different one.
+	pinnedProxyExit atomic.Pointer[string]
+
 	// localGraph is an extra transport-graph source merged into every
 	// GetAllTransports answer (see local_graph.go).
 	localGraphMu sync.RWMutex

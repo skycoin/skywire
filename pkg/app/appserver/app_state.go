@@ -63,6 +63,11 @@ type AppState struct {
 	// than AppConfig so it is never persisted to the visor config — and
 	// reaches the hypervisor app list, which is behind hypervisor auth.
 	OTP string `json:"otp,omitempty"`
+	// PinnedExit is the exit key the CONFIG carried at boot for a proxy
+	// client that autostarted on a pinned --srv. Runtime-only, like OTP, and
+	// set only for skysocks-client: it lets a reader tell the operator's
+	// configured exit from whatever key the app is running on now.
+	PinnedExit string `json:"pinned_exit,omitempty"`
 }
 
 // AppDetailedStatus is a app's detailed status.
