@@ -79,6 +79,11 @@ type ManagedTransport struct {
 	logUpdates  uint32
 	isInitiator bool // we dialed out (outgoing) vs accepted an inbound dial (incoming)
 
+	// openedAt and onClose feed the manager's transport event ring; see
+	// transport_events.go.
+	openedAt time.Time
+	onClose  func(reason string)
+
 	dc DiscoveryClient
 	ls LogStore
 
@@ -419,7 +424,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	log.Debug("Serving.")
 
 	defer func() {
-		mt.close()
+		mt.closeWith("serve loop ended")
 		// Final flush so the LogStore reflects the last byte counts
 		// before the manager drops this transport from its map.
 		mt.recordLog()
@@ -503,7 +508,7 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			} else {
 				log.WithError(err).Warn("Failed to read packet, closing transport")
 			}
-			mt.close()
+			mt.closeWith("read: " + err.Error())
 			return
 		}
 		// Any received packet (pong, the peer's own ping, or route data) proves
@@ -604,7 +609,7 @@ func (mt *ManagedTransport) tickPing() {
 		mt.log.WithField("missed_pongs", mt.missedPongs.Load()).
 			WithField("remote", mt.Remote()).
 			Warn("Transport peer stopped answering pings; closing half-open transport")
-		mt.close()
+		mt.closeWith(fmt.Sprintf("no pong for %d consecutive pings", mt.missedPongs.Load()))
 		return
 	}
 
@@ -619,7 +624,7 @@ func (mt *ManagedTransport) tickPing() {
 			mt.log.WithField("silent_for", time.Since(time.Unix(0, last)).Truncate(time.Second).String()).
 				WithField("remote", mt.Remote()).
 				Warn("Unarmed transport silent past threshold; closing dead half-open link")
-			mt.close()
+			mt.closeWith("unarmed peer silent for " + time.Since(time.Unix(0, last)).Truncate(time.Second).String())
 			return
 		}
 	}
@@ -674,7 +679,7 @@ func (mt *ManagedTransport) sendTransportPing() {
 			mt.log.WithField("write_fails", mt.pingWriteFails.Load()).
 				WithField("remote", mt.Remote()).
 				Warn("Transport unwritable across consecutive pings; closing dead half-open link")
-			mt.close()
+			mt.closeWith(fmt.Sprintf("ping unwritable %d times in a row", mt.pingWriteFails.Load()))
 		}
 		return
 	}
@@ -892,7 +897,7 @@ func (mt *ManagedTransport) isServing() bool {
 // It also waits for transport to stop serving before it returns.
 // It only returns an error if transport status update fails.
 func (mt *ManagedTransport) Close() (err error) {
-	mt.close()
+	mt.closeWith("Close() called")
 	mt.wg.Wait()
 	return nil
 }
@@ -911,12 +916,19 @@ func (mt *ManagedTransport) IsClosed() bool {
 // close underlying transport and queue deregistration from transport discovery.
 // If queueDeletion is set (manager-level batch deletion), the transport ID is
 // queued for deferred batch deletion instead of making an individual HTTP call.
-func (mt *ManagedTransport) close() {
+func (mt *ManagedTransport) close() { mt.closeWith("closed") }
+
+// closeWith is close with the reason recorded in the manager's transport event
+// ring (visor state --select diag). The first caller's reason wins.
+func (mt *ManagedTransport) closeWith(reason string) {
 	select {
 	case <-mt.done:
 		return
 	default:
 		close(mt.done)
+	}
+	if mt.onClose != nil {
+		mt.onClose(reason)
 	}
 	mt.transportMx.Lock()
 	close(mt.transportCh)
@@ -942,6 +954,9 @@ func (mt *ManagedTransport) closeWithoutDeregister() {
 		return
 	default:
 		close(mt.done)
+	}
+	if mt.onClose != nil {
+		mt.onClose("manager closing")
 	}
 	mt.transportMx.Lock()
 	close(mt.transportCh)
@@ -1157,7 +1172,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 		if res.err != nil {
 			// Release the lock BEFORE calling close, which also acquires it
 			mt.transportMx.Unlock()
-			mt.close()
+			mt.closeWith("write: " + res.err.Error())
 			return res.err
 		}
 		if res.n > routing.PacketHeaderSize {
@@ -1241,7 +1256,7 @@ func (mt *ManagedTransport) WriteRawPacket(packet routing.Packet) error {
 	}
 	n, err := tp.Write(packet)
 	if err != nil {
-		mt.close()
+		mt.closeWith("raw write: " + err.Error())
 		return err
 	}
 	if n > routing.PacketHeaderSize {
