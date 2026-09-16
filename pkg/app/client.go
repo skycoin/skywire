@@ -242,8 +242,9 @@ func (c *Client) DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinH
 }
 
 // dial is the common body for Dial + DialWithOptions. When all opts
-// are <= 1 it invokes the original rpcC.Dial path (preserving the
-// existing wire shape for non-mux callers); otherwise sends the
+// are 0 (unset) it invokes the original rpcC.Dial path (preserving the
+// existing wire shape for non-mux callers); any explicit value, 1 included
+// (the gateway treats MuxRoutes=1 as "form a route group"), sends the
 // DialWithOptions request so the server-side knows to take the
 // SkywireNetworker per-call-opts path.
 func (c *Client) dial(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int, direct, diversify bool) (net.Conn, error) {
@@ -252,7 +253,7 @@ func (c *Client) dial(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMin
 		localPort routing.Port
 		err       error
 	)
-	if direct || diversify || muxRoutes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 || fwdMux > 1 || revMux > 1 {
+	if direct || diversify || muxRoutes >= 1 || minHops >= 1 || fwdMinHops >= 1 || revMinHops >= 1 || fwdMux >= 1 || revMux >= 1 {
 		connID, localPort, err = c.rpcC.DialWithOptions(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, diversify)
 	} else {
 		connID, localPort, err = c.rpcC.Dial(remote)
