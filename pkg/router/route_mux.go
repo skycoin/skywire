@@ -183,6 +183,27 @@ type routeMux struct {
 	// atomic: UnixNano of the last SACK we sent.
 	lastSACKNano int64
 
+	// Loss-recovery counters (all atomic), surfaced as the `recovery` object in
+	// `visor state --select mux_route_groups` / `proxy mux info --json`. A
+	// reorder wedge is a TWO-ENDED failure — the receiver sees a frontier stuck
+	// at some seq while the sender sees nothing at all — and the only witness
+	// used to be the receiver's log. These make both halves readable from either
+	// end: sacksRecv/lastSACKRecvNano say whether the peer's SACKs are arriving
+	// at all (a silent sender + a wedged receiver means the feedback path itself
+	// is black-holed), retxSkippedMissing counts the seqs a SACK/TLP/flush asked
+	// for that the retx buffer no longer held (no retransmit can ever refill
+	// that gap), retxSendErrors counts the resends that failed to reach a leg,
+	// tlpProbes counts tail-loss probes, and sacksSent/sackSendErrors/
+	// lastSACKSentNano are the receiver-side mirror.
+	retxSkippedMissing uint64
+	retxSendErrors     uint64
+	tlpProbes          uint64
+	sacksRecv          uint64
+	lastSACKRecvNano   int64
+	sacksSent          uint64
+	sackSendErrors     uint64
+	lastSACKSentNano   int64
+
 	// Incoming packet reordering
 	reorderBuf *reorderBuffer
 
@@ -1183,6 +1204,28 @@ func (m *routeMux) reorderNextSeq() uint32 {
 // outgoing sequence number). A cheap aggregate outbound-progress counter.
 func (m *routeMux) writeSeqValue() uint32 {
 	return atomic.LoadUint32(&m.writeSeq)
+}
+
+// retxStats exposes the sender-side retx buffer's occupancy and the sequence
+// range it still holds (0,0,0 when SACK/retx is not in play). The receiver
+// naming a stuck frontier seq is only half a wedge diagnosis; this says whether
+// the sender can still honor a retransmit request for it.
+func (m *routeMux) retxStats() (held int, minSeq, maxSeq uint32) {
+	if m.retxBuf == nil {
+		return 0, 0, 0
+	}
+	return m.retxBuf.Stats()
+}
+
+// msSinceNano is the age in milliseconds of an atomic UnixNano stamp, or -1
+// when the stamp was never set (never vs "just now" are opposite diagnoses for
+// a SACK feedback path, so they must not both render as 0).
+func msSinceNano(p *int64) float64 {
+	nano := atomic.LoadInt64(p)
+	if nano == 0 {
+		return -1
+	}
+	return float64(time.Since(time.Unix(0, nano))) / float64(time.Millisecond)
 }
 
 // distributionMode returns the selector's current weight mode (how packets are
