@@ -227,25 +227,32 @@ func (c *demuxConn) ReadFrom(p []byte) (int, net.Addr, error) {
 		notify := c.notify
 		c.mu.Unlock()
 
+		// The timer belongs to THIS iteration, not to the call: a deadline
+		// change wakes the select via notify and loops without returning, so a
+		// deferred Stop would pile one live timer (and one defer record) per
+		// wakeup onto a frame that may never return. Stop it before looping.
 		var timeout <-chan time.Time
+		var t *time.Timer
 		if !deadline.IsZero() {
 			d := time.Until(deadline)
 			if d <= 0 {
 				return 0, nil, errDeadline{}
 			}
-			t := time.NewTimer(d)
-			defer t.Stop()
+			t = time.NewTimer(d)
 			timeout = t.C
 		}
 		select {
 		case pkt := <-c.in:
+			stopTimer(t)
 			return copy(p, pkt.data), pkt.addr, nil
 		case <-timeout:
 			return 0, nil, errDeadline{}
 		case <-notify:
 			// read deadline changed — re-evaluate (this is also how a blocked
 			// read is woken when a deadline is set).
+			stopTimer(t)
 		case <-c.done:
+			stopTimer(t)
 			return 0, nil, net.ErrClosed
 		}
 	}
@@ -288,3 +295,11 @@ type errDeadline struct{}
 func (errDeadline) Error() string   { return "udpdemux: i/o timeout" }
 func (errDeadline) Timeout() bool   { return true }
 func (errDeadline) Temporary() bool { return true }
+
+// stopTimer stops t when it was created, tolerating the nil case (no read
+// deadline set, so no timer was started for this iteration).
+func stopTimer(t *time.Timer) {
+	if t != nil {
+		t.Stop()
+	}
+}
