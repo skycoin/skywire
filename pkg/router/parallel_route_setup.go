@@ -327,11 +327,13 @@ func (r *router) fetchCandidateRoutes(
 		disjoint := filterDisjointFirstHop(fwdCands, opts.ExcludeTransportIDs)
 		if len(disjoint) == 0 {
 			log.Debugf("diversify: none of %d candidate(s) leave over a free first-hop transport; deferring to the sequential dial", len(fwdCands))
+			opts.note("K-race: none of %d candidate(s) disjoint; sequential dial", len(fwdCands))
 			return nil, ErrNoRouteFound
 		}
 		if len(disjoint) != len(fwdCands) {
 			log.Debugf("diversify: %d/%d candidate(s) leave over a disjoint first-hop transport; racing those", len(disjoint), len(fwdCands))
 		}
+		opts.note("K-race: %d/%d candidate(s) disjoint", len(disjoint), len(fwdCands))
 		fwdCands = disjoint
 	}
 

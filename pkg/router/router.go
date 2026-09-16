@@ -368,6 +368,11 @@ type DialOptions struct {
 	// untouched. Falls back gracefully — if no disjoint transport is free the
 	// dial proceeds on a shared path (a shared tunnel beats no tunnel).
 	DiversifyTransports bool
+	// dialNotes is the decision trail DialRoutes writes as it picks a route —
+	// sibling exclusions, candidate filtering, the first hop it settled on —
+	// which finishDial records on the group as a MuxEventDialDecision, so a
+	// tunnel that landed on a shared first hop says why in `visor state`.
+	dialNotes []string
 	// Distribution overrides the route group's per-packet
 	// distribution strategy when set (Mode != DistributionUnset).
 	// Populated either by a routing-policy script (see
@@ -842,4 +847,13 @@ func (r *router) RegisterSetupHooks(rshooks ...RouteSetupHook) {
 	r.routeSetupHookMu.Lock()
 	r.routeSetupHooks = append(r.routeSetupHooks, rshooks...)
 	r.routeSetupHookMu.Unlock()
+}
+
+// note appends one line to the dial's decision trail (MuxEventDialDecision).
+// Nil-safe so call sites need no guard.
+func (o *DialOptions) note(format string, args ...any) {
+	if o == nil {
+		return
+	}
+	o.dialNotes = append(o.dialNotes, fmt.Sprintf(format, args...))
 }
