@@ -477,3 +477,33 @@ func (rb *retxBuffer) Seqs() []uint32 {
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out
 }
+
+// Stats returns the buffer's occupancy and the sequence range it currently
+// holds: how many unacknowledged entries, and the lowest/highest of them
+// (0,0 when empty). It is the SENDER half of a reorder-wedge diagnosis — the
+// receiver reports a frontier stuck at seq N, and only this says whether the
+// sender still holds N (so a SACK asking for it can be honored) or has
+// already evicted it (so no retransmit can ever refill the gap). One pass
+// under the existing mutex, called from the telemetry path only.
+func (rb *retxBuffer) Stats() (held int, minSeq, maxSeq uint32) {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	held = len(rb.entries)
+	if held == 0 {
+		return 0, 0, 0
+	}
+	first := true
+	for s := range rb.entries {
+		if first {
+			minSeq, maxSeq, first = s, s, false
+			continue
+		}
+		if s < minSeq {
+			minSeq = s
+		}
+		if s > maxSeq {
+			maxSeq = s
+		}
+	}
+	return held, minSeq, maxSeq
+}

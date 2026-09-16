@@ -128,6 +128,39 @@ type muxRouteGroupInfo struct {
 	FECEnabled      bool         `json:"fec_enabled,omitempty"`
 	FECReconstructs uint64       `json:"fec_reconstructs,omitempty"`
 	Legs            []muxLegInfo `json:"legs"`
+	// Recovery is the loss-recovery view — the sender's retransmit machinery
+	// next to the receiver's reorder frontier. Mirrored here (and rendered as
+	// one text line) because BOTH output paths round-trip through this struct,
+	// so a field the visor sends but this mirror lacks is silently dropped.
+	Recovery *muxRecoveryInfo `json:"recovery,omitempty"`
+}
+
+// muxRecoveryInfo is the CLI-side mirror of router.MuxRecovery (json tags are
+// the stable contract). A reorder wedge is diagnosed by reading the sender half
+// against the receiver half: SACKsRecv flat with LastSACKRecvMsAgo growing means
+// the peer's feedback is not arriving; RetxSkippedMissing climbing means it IS
+// arriving but names sequences the retx buffer no longer holds.
+type muxRecoveryInfo struct {
+	WriteSeq           uint32  `json:"write_seq"`
+	RetxHeld           int     `json:"retx_held"`
+	RetxMinSeq         uint32  `json:"retx_min_seq"`
+	RetxMaxSeq         uint32  `json:"retx_max_seq"`
+	RetxSent           uint64  `json:"retx_sent"`
+	RetxSkippedMissing uint64  `json:"retx_skipped_missing"`
+	RetxSendErrors     uint64  `json:"retx_send_errors"`
+	TLPProbes          uint64  `json:"tlp_probes"`
+	SACKsRecv          uint64  `json:"sacks_recv"`
+	LastSACKRecvMsAgo  float64 `json:"last_sack_recv_ms_ago"`
+	LastSACKRecvContig uint32  `json:"last_sack_recv_contig"`
+	ReorderNextSeq     uint32  `json:"reorder_next_seq"`
+	ReorderPending     int     `json:"reorder_pending"`
+	GapAgeMS           float64 `json:"gap_age_ms"`
+	SACKsSent          uint64  `json:"sacks_sent"`
+	SACKSendErrors     uint64  `json:"sack_send_errors"`
+	LastSACKSentMsAgo  float64 `json:"last_sack_sent_ms_ago"`
+	WedgeTicks         int64   `json:"wedge_ticks"`
+	Wedges             uint64  `json:"wedges"`
+	LongestWedgeMS     int64   `json:"longest_wedge_ms"`
 }
 
 type muxLegInfo struct {
@@ -197,6 +230,18 @@ type muxLegBytes struct{ sent, recv uint64 }
 
 func newMuxRateTracker() *muxRateTracker { return &muxRateTracker{prev: map[string]muxLegBytes{}} }
 
+// msAgo renders a "milliseconds since" age from the recovery view. The wire
+// carries -1 for "never", which must not read as "just now".
+func msAgo(ms float64) string {
+	if ms < 0 {
+		return "(never)"
+	}
+	if ms < 1000 {
+		return fmt.Sprintf("%.0fms ago", ms)
+	}
+	return fmt.Sprintf("%.1fs ago", ms/1000)
+}
+
 // humanRate renders a bytes/sec rate (0 or negative → "0B/s").
 func humanRate(bytesPerSec float64) string {
 	if bytesPerSec <= 0 {
@@ -265,6 +310,17 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 			if rg.Directional {
 				fmt.Printf("       directional=true  flipped=%v  flip_pinned=%s\n",
 					rg.Flipped, rg.FlipPinned)
+			}
+			// Loss recovery, one line: the sender's retransmit window and the
+			// inbound SACK feedback, then the receive frontier's wedge history.
+			// A stalled group with sack_recv going stale is a dead feedback path;
+			// one with retx_skip climbing is a retx window that aged out.
+			if r := rg.Recovery; r != nil {
+				fmt.Printf("       recovery: retx_held=%d[%d..%d] sent=%d skip_missing=%d err=%d tlp=%d | sack_recv=%d %s contig=%d | sack_sent=%d %s | wedge_ticks=%d wedges=%d longest=%dms\n",
+					r.RetxHeld, r.RetxMinSeq, r.RetxMaxSeq, r.RetxSent, r.RetxSkippedMissing, r.RetxSendErrors, r.TLPProbes,
+					r.SACKsRecv, msAgo(r.LastSACKRecvMsAgo), r.LastSACKRecvContig,
+					r.SACKsSent, msAgo(r.LastSACKSentMsAgo),
+					r.WedgeTicks, r.Wedges, r.LongestWedgeMS)
 			}
 		}
 

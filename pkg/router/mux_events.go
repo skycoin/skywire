@@ -62,6 +62,14 @@ const (
 	MuxEventLegParked     = "leg_parked"
 	MuxEventLegAddFailed  = "leg_add_failed"
 	MuxEventPrimaryRehome = "primary_rehomed"
+	// MuxEventReorderWedge / ...Cleared bracket a RECEIVE-side reorder wedge:
+	// the frontier held past reorderTimeout because the sender's retransmit
+	// never refilled the missing sequence, and then it advanced again. Whole-
+	// group events (LegIndex -1) whose Reason names the stuck seq, how long it
+	// stayed stuck and how many packets were dammed behind it — so the wedge
+	// outlives the visor log ring and is readable from `visor state`.
+	MuxEventReorderWedge        = "reorder_wedge"
+	MuxEventReorderWedgeCleared = "reorder_wedge_cleared"
 )
 
 // Mux event initiators (MuxEvent.By).
