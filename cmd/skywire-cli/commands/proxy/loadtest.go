@@ -3,12 +3,16 @@ package skysocksc
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -83,11 +87,21 @@ var loadtestServeCmd = &cobra.Command{
 	Short: "Run an endless byte source (the controlled far-end sink for load tests)",
 	Long: `Serve an endless chunked octet-stream on GET / at the reader's line rate
 (TCP backpressure sets the rate; the source itself never gaps). Run this on a
-visor the proxy exit can reach; point 'loadtest run --url' at it.`,
+visor the proxy exit can reach; point 'loadtest run --url' at it.
+
+GET /?bytes=N serves exactly N bytes of a deterministic pattern and names its
+SHA-256 in the X-Sha256 header, so a transfer can be checked for completeness
+AND integrity, not just size. POST or PUT /upload discards the body and
+answers {"bytes":N,"sha256":"…"} for the same check in the upload direction.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		buf := make([]byte, 256*1024) // zeros
 		mux := http.NewServeMux()
+		mux.HandleFunc("/upload", loadtestUpload)
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			if n := r.URL.Query().Get("bytes"); n != "" {
+				loadtestFixed(w, r, n)
+				return
+			}
 			w.Header().Set("Content-Type", "application/octet-stream")
 			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Set("X-Accel-Buffering", "no")
@@ -240,4 +254,81 @@ func loadtestSample(elapsed time.Duration, bytes int64, sliceSeconds float64, ga
 		Gap:        gap,
 		Err:        errStr,
 	}
+}
+
+// loadtestPattern fills buf with a deterministic byte pattern derived from
+// seed and the absolute offset, so the same request always produces the same
+// bytes and a corrupted or truncated transfer cannot hash to the expected
+// value. An xorshift over the offset is cheap and has no long runs of one
+// byte, unlike zeros, which would let a stalled reader look like progress
+// under some compressing transports.
+func loadtestPattern(buf []byte, seed, offset uint64) {
+	x := seed ^ (offset * 0x9E3779B97F4A7C15)
+	for i := range buf {
+		x ^= x << 13
+		x ^= x >> 7
+		x ^= x << 17
+		buf[i] = byte(x)
+	}
+}
+
+// loadtestFixed serves exactly n bytes of the pattern with its SHA-256 in
+// X-Sha256 (the hash is computed in a first pass, which is fast next to the
+// transfer it certifies).
+func loadtestFixed(w http.ResponseWriter, r *http.Request, nStr string) {
+	n, err := strconv.ParseUint(nStr, 10, 63)
+	if err != nil || n == 0 {
+		http.Error(w, "bytes: want a positive integer", http.StatusBadRequest)
+		return
+	}
+	const chunk = 256 * 1024
+	buf := make([]byte, chunk)
+	h := sha256.New()
+	for off := uint64(0); off < n; off += chunk {
+		m := uint64(chunk)
+		if n-off < m {
+			m = n - off
+		}
+		loadtestPattern(buf[:m], n, off)
+		h.Write(buf[:m]) //nolint:errcheck,gosec // hash.Hash never errors
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Length", strconv.FormatUint(n, 10))
+	w.Header().Set("X-Sha256", hex.EncodeToString(h.Sum(nil)))
+	if r.Method == http.MethodHead {
+		return
+	}
+	fl, _ := w.(http.Flusher)
+	for off := uint64(0); off < n; off += chunk {
+		m := uint64(chunk)
+		if n-off < m {
+			m = n - off
+		}
+		loadtestPattern(buf[:m], n, off)
+		if _, err := w.Write(buf[:m]); err != nil {
+			return
+		}
+		if fl != nil {
+			fl.Flush()
+		}
+	}
+}
+
+// loadtestUpload is the upload-direction sink: it reads and discards the body
+// and answers with the byte count and SHA-256 it saw, so the sender can check
+// both against what it sent.
+func loadtestUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodPut {
+		http.Error(w, "POST or PUT a body", http.StatusMethodNotAllowed)
+		return
+	}
+	h := sha256.New()
+	n, err := io.Copy(h, r.Body)
+	if err != nil {
+		http.Error(w, "read: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"bytes": n, "sha256": hex.EncodeToString(h.Sum(nil))}) //nolint:errcheck
 }
