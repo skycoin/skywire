@@ -372,6 +372,15 @@ type MuxRouteGroupInfo struct {
 	// shows a leg missing also shows who took it and why. The whole-visor ring
 	// is diag.mux_events in `visor state`.
 	Events []router.MuxEvent `json:"events,omitempty"`
+	// Recovery is the group's loss-recovery state: the sender-side retransmit
+	// machinery (retx buffer occupancy and held seq range, retransmits sent /
+	// skipped-because-no-longer-held / failed, tail-loss probes, inbound SACK
+	// feedback) next to the receiver-side reorder frontier (the seq waited on,
+	// the packets dammed behind it, outbound SACK feedback, wedge counters). A
+	// reorder wedge is a two-ended failure, and before this only the RECEIVER
+	// logged anything — the sender had nothing to show. Nil when the group has
+	// no mux.
+	Recovery *router.MuxRecovery `json:"recovery,omitempty"`
 }
 
 // MuxLegInfo is one route in a mux'd group.
