@@ -224,3 +224,52 @@ func TestStartupGCCompact_IgnoresPreCriteriaMemo(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, reclaimed)
 }
+
+// TestStartupGCCompact_CopiesInBatches verifies the rewrite commits in bounded
+// batches — the single-transaction copy held the whole live set in memory and
+// OOM-killed a visor rewriting an 18 GB store — and still keeps every live
+// object and drops every dead one across the batch boundaries.
+func TestStartupGCCompact_CopiesInBatches(t *testing.T) {
+	fn := filepath.Join(t.TempDir(), "cxds.db")
+
+	ds, err := NewDriveCXDS(fn)
+	require.NoError(t, err)
+
+	var live, dead [][]byte
+	for i := 0; i < 7; i++ { // live: rc=1
+		v := mkVal(byte('a' + i))
+		_, err := ds.Set(cipher.SumSHA256(v), v, 1)
+		require.NoError(t, err)
+		live = append(live, v)
+	}
+	for i := 0; i < 5; i++ { // dead: rc=0 (5 of 12 objects = 42% dead, past the gate)
+		v := mkVal(byte('A' + i))
+		k := cipher.SumSHA256(v)
+		_, err := ds.Set(k, v, 1)
+		require.NoError(t, err)
+		_, err = ds.Inc(k, -1)
+		require.NoError(t, err)
+		dead = append(dead, v)
+	}
+	require.NoError(t, ds.Close())
+
+	oldMin, oldBatch := compactMinFileBytes, compactBatchBytes
+	compactMinFileBytes, compactBatchBytes = 4096, 2*objSize // two live objects per commit
+	defer func() { compactMinFileBytes, compactBatchBytes = oldMin, oldBatch }()
+
+	ds2, err := NewDriveCXDS(fn)
+	require.NoError(t, err)
+	defer ds2.Close() //nolint:errcheck
+
+	require.GreaterOrEqual(t, compactBatches, 4, "7 live objects at 2 per batch must take several commits")
+	for _, v := range live {
+		got, rc, err := ds2.Get(cipher.SumSHA256(v), 0)
+		require.NoError(t, err, "live object must survive a batched rewrite")
+		require.Equal(t, v, got)
+		require.Equal(t, uint32(1), rc)
+	}
+	for _, v := range dead {
+		_, _, err := ds2.Get(cipher.SumSHA256(v), 0)
+		require.ErrorIs(t, err, data.ErrNotFound, "dead (rc==0) object must be reclaimed")
+	}
+}
