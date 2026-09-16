@@ -696,7 +696,7 @@ func (a *autoconnector) filterDuplicatesOfType(pks []cipher.PubKey, t tptypes.Ty
 	for _, pk := range pks {
 		found := false
 		for _, tr := range trs {
-			if tptypes.Type(tr.Entry.Type) == t && tr.Entry.HasEdge(pk) {
+			if tr.Entry.Type == t && tr.Entry.HasEdge(pk) {
 				found = true
 				break
 			}

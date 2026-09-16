@@ -27,8 +27,8 @@ func TestQUICServerALPNs(t *testing.T) {
 	udpConn, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
 	udpAddr := udpConn.LocalAddr().String()
-	go func() { _ = srv.ServeQUIC(udpConn, udpAddr) }()
-	t.Cleanup(func() { _ = srv.Close() })
+	go func() { _ = srv.ServeQUIC(udpConn, udpAddr) }() //nolint:errcheck
+	t.Cleanup(func() { _ = srv.Close() })               //nolint:errcheck
 
 	pkC, skC := GenKeyPair(t, "client")
 	cert, err := skyquic.NewCertificate(pkC, skC)

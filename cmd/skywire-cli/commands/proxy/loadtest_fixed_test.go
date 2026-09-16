@@ -34,7 +34,7 @@ func TestLoadtestFixedIsDeterministicAndCertified(t *testing.T) {
 	rec := httptest.NewRecorder()
 	loadtestUpload(rec, httptest.NewRequest(http.MethodPost, "/upload", strings.NewReader("hello")))
 	require.Equal(t, http.StatusOK, rec.Code)
-	body, _ := io.ReadAll(rec.Body)
+	body, _ := io.ReadAll(rec.Body) //nolint:errcheck
 	hs := sha256.Sum256([]byte("hello"))
 	require.Contains(t, string(body), `"bytes":5`)
 	require.Contains(t, string(body), hex.EncodeToString(hs[:]))
