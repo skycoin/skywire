@@ -213,3 +213,34 @@ func TestSACKPacketDSACKRoundTrip(t *testing.T) {
 		t.Fatal("DSACK trailing field corrupted the bitmap read")
 	}
 }
+
+// TestDSACKSamplesAckDelay proves a DSACK feeds the ORIGINAL frame's whole
+// send→ack delay into the ack-delay estimate. ProcessSACK cannot sample a
+// retransmitted entry (Karn), so under a spurious-retransmit storm — every frame
+// re-sent before its ack — the estimate that would lift the threshold had no
+// samples left and the storm sustained itself; the duplicate report is the one
+// unambiguous witness that the original merely arrived late.
+func TestDSACKSamplesAckDelay(t *testing.T) {
+	log := logging.NewMasterLogger().PackageLogger("tlp-test")
+	m := newRouteMux(log, true)
+	if m.ackDelayMs() != 0 {
+		t.Fatalf("fresh mux ack delay = %v, want 0", m.ackDelayMs())
+	}
+	// A frame sent 3 s ago that we have already retransmitted once.
+	m.retxBuf.Store(7, []byte("frame"), uuid.Nil)
+	m.retxBuf.mu.Lock()
+	m.retxBuf.entries[7].sentAt = time.Now().Add(-3 * time.Second)
+	m.retxBuf.entries[7].retxCount = 1
+	m.retxBuf.mu.Unlock()
+
+	m.onSACKReceived(0, nil, 7, true) // DSACK for seq 7: the original arrived late
+	if got := m.ackDelayMs(); got < 1400 {
+		t.Fatalf("ack delay after DSACK = %.0f ms, want the original's ~3 s delay folded in (>= 1400 ms at α=0.5)", got)
+	}
+	// A DSACK for a seq no longer held changes nothing.
+	before := m.ackDelayMs()
+	m.onSACKReceived(0, nil, 99, true)
+	if got := m.ackDelayMs(); got != before {
+		t.Fatalf("DSACK for an unheld seq moved the ack delay: %v -> %v", before, got)
+	}
+}
