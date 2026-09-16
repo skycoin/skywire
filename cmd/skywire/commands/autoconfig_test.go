@@ -74,7 +74,7 @@ func TestResolveConfig_ExplicitUsrEnvHonored(t *testing.T) {
 
 // TestCollectSkyenvEdits_InVisorDmsgServer walks the whole generator
 // path for the knobs that shipped with the in-visor dmsg server
-// (#4792) and the opt-in legacy hypervisor UI: flags in, skywire.conf
+// (#4792) and the hypervisor desk address: flags in, skywire.conf
 // lines out. The install-page form emits exactly this command line,
 // so a knob that renders in the form but produces no .conf line is
 // indistinguishable from the form not offering it at all.
@@ -92,7 +92,7 @@ func TestCollectSkyenvEdits_InVisorDmsgServer(t *testing.T) {
 		"--dmsg-server",
 		"--dmsg-server-public", "1.2.3.4:30084",
 		"--transport-port", "30084",
-		"--legacy-hv-ui",
+		"--hvdeskaddr", ":8010",
 		"--ishv",
 	}); err != nil {
 		t.Fatalf("ParseFlags: %v", err)
@@ -106,7 +106,7 @@ func TestCollectSkyenvEdits_InVisorDmsgServer(t *testing.T) {
 		"DMSGSERVER":       "true",
 		"DMSGSERVERPUBLIC": "'1.2.3.4:30084'",
 		"TRANSPORTPORT":    "30084",
-		"LEGACYHVUI":       "true",
+		"HVDESKADDR":       "':8010'",
 		"ISHYPERVISOR":     "true",
 	} {
 		if got[key] != want {
@@ -118,7 +118,7 @@ func TestCollectSkyenvEdits_InVisorDmsgServer(t *testing.T) {
 	// the commented template line is replaced in place, not appended.
 	dir := t.TempDir()
 	conf := filepath.Join(dir, "skywire.conf")
-	body := "#DMSGSERVER=true\n#DMSGSERVERPUBLIC='1.2.3.4:30084'\n#TRANSPORTPORT=0\n#LEGACYHVUI=true\n#ISHYPERVISOR=true\n"
+	body := "#DMSGSERVER=true\n#DMSGSERVERPUBLIC='1.2.3.4:30084'\n#TRANSPORTPORT=0\n#HVDESKADDR=':8010'\n#ISHYPERVISOR=true\n"
 	if err := os.WriteFile(conf, []byte(body), 0o600); err != nil {
 		t.Fatalf("write conf: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestCollectSkyenvEdits_InVisorDmsgServer(t *testing.T) {
 		"\nDMSGSERVER=true\n",
 		"\nDMSGSERVERPUBLIC='1.2.3.4:30084'\n",
 		"\nTRANSPORTPORT=30084\n",
-		"\nLEGACYHVUI=true\n",
+		"\nHVDESKADDR=':8010'\n",
 	} {
 		if !strings.Contains("\n"+string(out), want) {
 			t.Errorf("generated skywire.conf missing %q; got:\n%s", want, out)
@@ -176,7 +176,7 @@ func TestCollectSkyenvEdits_NoDmsgServerWritesFalse(t *testing.T) {
 	autoconfigVals = autoconfigcmd.Values{}
 	cmd := autoconfigcmd.New(&autoconfigVals)
 
-	if err := cmd.ParseFlags([]string{"--no-dmsg-server", "--no-legacy-hv-ui"}); err != nil {
+	if err := cmd.ParseFlags([]string{"--no-dmsg-server"}); err != nil {
 		t.Fatalf("ParseFlags: %v", err)
 	}
 	got := map[string]string{}
@@ -185,8 +185,5 @@ func TestCollectSkyenvEdits_NoDmsgServerWritesFalse(t *testing.T) {
 	}
 	if got["DMSGSERVER"] != "false" {
 		t.Errorf("DMSGSERVER = %q; want %q", got["DMSGSERVER"], "false")
-	}
-	if got["LEGACYHVUI"] != "false" {
-		t.Errorf("LEGACYHVUI = %q; want %q", got["LEGACYHVUI"], "false")
 	}
 }
