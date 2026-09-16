@@ -125,10 +125,13 @@ func (r *router) DialRoutes(
 		if exIDs, exPKs, count := r.siblingRouteGroupExclusions(lPK, rPK, rPort); count > 0 {
 			opts.ExcludeTransportIDs = append(opts.ExcludeTransportIDs, exIDs...)
 			opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, exPKs...)
+			opts.note("diversify: %d sibling group(s) to %s:%d, excluding first-hop tp(s) %s", count, rPK.String()[:8], rPort, shortTpIDs(exIDs))
 			log.WithField("sibling_tunnels", count).
 				WithField("exclude_tps", len(exIDs)).
 				WithField("exclude_intermediates", len(exPKs)).
 				Debug("Diversifying multi-tunnel dial over disjoint first-hop transports.")
+		} else {
+			opts.note("diversify: no sibling group to %s:%d yet", rPK.String()[:8], rPort)
 		}
 	}
 
@@ -353,6 +356,7 @@ func (r *router) DialRoutes(
 				}
 				nrg, rules, winIdx, rerr := r.raceCandidateSetup(ctx, log, candidates, dial, handshake, onLoser)
 				if rerr == nil {
+					opts.note("K-race: candidate %d/%d won", winIdx+1, len(candidates))
 					return r.finishDial(log, nrg, rules, candidates[winIdx].Forward, candidates[winIdx].Reverse, forwardDesc, opts, rPK, lPort, rPort), nil
 				}
 				if ctx.Err() != nil {
@@ -623,6 +627,15 @@ func (r *router) finishDial(
 ) net.Conn {
 	// Store the complete forward route hops for later retrieval
 	nrg.SetForwardHops(forwardPath)
+	// A diversify dial leaves its decision trail on the group (see DialOptions.note).
+	if opts != nil && len(opts.dialNotes) > 0 {
+		first := "none"
+		if len(forwardPath) > 0 {
+			first = forwardPath[0].TpID.String()[:8]
+		}
+		nrg.rg.noteMuxEvent(MuxEvent{Event: MuxEventDialDecision, By: MuxByLocal, LegIndex: 0,
+			Reason: strings.Join(opts.dialNotes, "; ") + "; first hop " + first})
+	}
 	// Record the PRIMARY leg's far-end transport (reversePath[0].TpID) — the one
 	// the destination's route group registers for this leg. It is what every aux
 	// mux leg planned later must avoid re-using on its own reverse path, since
@@ -1365,13 +1378,16 @@ fetchRoutesAgain:
 				log.Debugf("diversify: %d/%d forward candidate(s) leave over a disjoint first-hop transport; preferring those",
 					len(disjoint), len(paths[forward]))
 			}
+			opts.note("finder: %d/%d candidate(s) leave over a free first hop", len(disjoint), len(paths[forward]))
 			paths[forward] = disjoint
 		} else {
 			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
 			if localErr == nil && len(localFwd) > 0 && !firstHopTransportExcluded(localFwd, opts.ExcludeTransportIDs) {
+				opts.note("finder: none of %d disjoint; local-calc path over %s", len(paths[forward]), localFwd[0].TpID.String()[:8])
 				log.Debug("diversify: no disjoint first-hop from route finder; using local-calc disjoint path")
 				return localFwd, localRev, nil
 			}
+			opts.note("finder: none of %d disjoint and no local-calc path; sharing a first hop", len(paths[forward]))
 			log.Warnf("diversify: no disjoint first-hop transport to %s is free; extra tunnel shares an existing first hop (aggregation limited)", dst)
 		}
 	}
@@ -3418,4 +3434,14 @@ func betterDirectTransport(a, b *transport.ManagedTransport) bool {
 		return la < lb
 	}
 	return false
+}
+
+// shortTpIDs renders transport IDs by their first 8 characters, for the dial
+// decision trail.
+func shortTpIDs(ids []uuid.UUID) string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, id.String()[:8])
+	}
+	return strings.Join(out, ",")
 }

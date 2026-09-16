@@ -70,6 +70,11 @@ const (
 	// outlives the visor log ring and is readable from `visor state`.
 	MuxEventReorderWedge        = "reorder_wedge"
 	MuxEventReorderWedgeCleared = "reorder_wedge_cleared"
+	// MuxEventDialDecision is recorded once per group this visor dialed with
+	// DiversifyTransports set: its Reason is the route-choice trail (sibling
+	// exclusions, candidate filtering, the chosen first hop), so a tunnel that
+	// shares a first hop with its siblings says why, from `visor state`.
+	MuxEventDialDecision = "dial_decision"
 )
 
 // Mux event initiators (MuxEvent.By).
