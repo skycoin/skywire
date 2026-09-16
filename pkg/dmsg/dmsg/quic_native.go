@@ -142,9 +142,15 @@ func (ce *Client) dialSessionQUIC(ctx context.Context, entry *disc.Entry) (Clien
 	// closing it (see skyquic.DmsgNextProto).
 	tlsConf := skyquic.TLSConfigALPN(cert, &rPK, nil, skyquic.DmsgNextProto) // pin the server PK
 	qc, err := quic.Dial(ctx, udpConn, udpAddr, tlsConf, &quic.Config{
-		EnableDatagrams: true,
-		KeepAlivePeriod: 25 * time.Second,
-		MaxIdleTimeout:  60 * time.Second,
+		// Receive windows: quic-go's 768 KB default connection window caps ONE
+		// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
+		InitialStreamReceiveWindow:     skyquic.InitialStreamReceiveWindow,
+		MaxStreamReceiveWindow:         skyquic.MaxStreamReceiveWindow,
+		InitialConnectionReceiveWindow: skyquic.InitialConnectionReceiveWindow,
+		MaxConnectionReceiveWindow:     skyquic.MaxConnectionReceiveWindow,
+		EnableDatagrams:                true,
+		KeepAlivePeriod:                25 * time.Second,
+		MaxIdleTimeout:                 60 * time.Second,
 	})
 	if err != nil {
 		udpConn.Close() //nolint:errcheck,gosec
@@ -169,9 +175,15 @@ func (s *Server) ServeQUIC(udpConn net.PacketConn, advertisedUDPAddr string) err
 	// transport ALPN they still offer.
 	tlsConf := skyquic.TLSConfigALPN(cert, nil, nil, skyquic.DmsgNextProto, skyquic.NextProto)
 	lis, err := quic.Listen(udpConn, tlsConf, &quic.Config{
-		EnableDatagrams: true,
-		MaxIdleTimeout:  60 * time.Second,
-		KeepAlivePeriod: 25 * time.Second,
+		// Receive windows: quic-go's 768 KB default connection window caps ONE
+		// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
+		InitialStreamReceiveWindow:     skyquic.InitialStreamReceiveWindow,
+		MaxStreamReceiveWindow:         skyquic.MaxStreamReceiveWindow,
+		InitialConnectionReceiveWindow: skyquic.InitialConnectionReceiveWindow,
+		MaxConnectionReceiveWindow:     skyquic.MaxConnectionReceiveWindow,
+		EnableDatagrams:                true,
+		MaxIdleTimeout:                 60 * time.Second,
+		KeepAlivePeriod:                25 * time.Second,
 	})
 	if err != nil {
 		return fmt.Errorf("dmsg-quic: listen: %w", err)

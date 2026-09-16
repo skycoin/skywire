@@ -80,6 +80,12 @@ func (s *Server) ServeWebTransport(udpConn net.PacketConn, advertisedWTURL strin
 		Handler:         mux,
 		EnableDatagrams: true, // required: WebTransport runs on HTTP/3 datagrams
 		QUICConfig: &quic.Config{
+			// Receive windows: quic-go's 768 KB default connection window caps ONE
+			// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
+			InitialStreamReceiveWindow:       skyquic.InitialStreamReceiveWindow,
+			MaxStreamReceiveWindow:           skyquic.MaxStreamReceiveWindow,
+			InitialConnectionReceiveWindow:   skyquic.InitialConnectionReceiveWindow,
+			MaxConnectionReceiveWindow:       skyquic.MaxConnectionReceiveWindow,
 			EnableDatagrams:                  true,
 			EnableStreamResetPartialDelivery: true, // required by webtransport-go
 		},
@@ -169,6 +175,12 @@ func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientS
 	d := &webtransport.Transport{
 		TLSClientConfig: tlsConf,
 		QUICConfig: &quic.Config{
+			// Receive windows: quic-go's 768 KB default connection window caps ONE
+			// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
+			InitialStreamReceiveWindow:       skyquic.InitialStreamReceiveWindow,
+			MaxStreamReceiveWindow:           skyquic.MaxStreamReceiveWindow,
+			InitialConnectionReceiveWindow:   skyquic.InitialConnectionReceiveWindow,
+			MaxConnectionReceiveWindow:       skyquic.MaxConnectionReceiveWindow,
 			EnableDatagrams:                  true,
 			EnableStreamResetPartialDelivery: true, // required by webtransport-go
 		},

@@ -64,6 +64,12 @@ func newSharedQUICMux(conn net.PacketConn, log *logging.Logger) *sharedQUICMux {
 	return &sharedQUICMux{
 		tr: &quic.Transport{Conn: conn},
 		conf: &quic.Config{
+			// Receive windows: quic-go's 768 KB default connection window caps ONE
+			// connection at 768 KiB/RTT = 5.1 MB/s at 150 ms; see pkg/skyquic.
+			InitialStreamReceiveWindow:       skyquic.InitialStreamReceiveWindow,
+			MaxStreamReceiveWindow:           skyquic.MaxStreamReceiveWindow,
+			InitialConnectionReceiveWindow:   skyquic.InitialConnectionReceiveWindow,
+			MaxConnectionReceiveWindow:       skyquic.MaxConnectionReceiveWindow,
 			EnableDatagrams:                  true,
 			EnableStreamResetPartialDelivery: true,
 			MaxIdleTimeout:                   quicMaxIdleTimeout,
