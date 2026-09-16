@@ -12,6 +12,7 @@
 package cxds
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -19,6 +20,19 @@ import (
 
 	bolt "github.com/0magnet/bbolt"
 )
+
+// compactBatchBytes bounds the object volume one write transaction of the
+// rewrite carries before it commits. bbolt keeps every page a transaction
+// dirties in memory until commit, so copying the live set in ONE transaction
+// held the whole live volume in RAM: a public visor with an 18 GB store on a
+// 3.3 GB memory cgroup was OOM-killed 21 minutes into the copy, seven times in
+// one day (2026-09-16), and the store never shrank because the copy never
+// committed. A var so tests can shrink it.
+var compactBatchBytes = int64(32) << 20 // 32 MiB
+
+// compactBatches is how many write transactions the last rewrite committed
+// (read by tests to prove the copy was batched).
+var compactBatches int
 
 // compactMinFileBytes: only stores at least this large on disk are considered —
 // small stores are not worth scanning on every start. A var (not const) so tests
@@ -153,10 +167,13 @@ func startupGCCompact(fileName string) (reclaimed int64, err error) {
 		return 0, nil
 	}
 
-	// Compact: copy version + live objects into a temp file, then swap.
+	// Compact: copy version + live objects into a temp file, then swap. The
+	// meta bucket goes in its own transaction, the objects in bounded batches
+	// (copyLiveBatched). NoSync while copying — the temp file is discarded on
+	// any failure, so one fsync at the end is all the durability it needs.
 	tmp := fileName + ".compact"
 	_ = os.Remove(tmp) //nolint:errcheck // clear any stale temp; absence is fine
-	dst, dErr := bolt.Open(tmp, 0644, &bolt.Options{Timeout: 500 * time.Millisecond})
+	dst, dErr := bolt.Open(tmp, 0644, &bolt.Options{Timeout: 500 * time.Millisecond, NoSync: true})
 	if dErr != nil {
 		return 0, dErr
 	}
@@ -183,23 +200,15 @@ func startupGCCompact(fileName string) (reclaimed int64, err error) {
 		if e = putUint32Meta(mo, volumeUsedKey, uint32(liveVol)); e != nil { //nolint:gosec
 			return e
 		}
-		ob, e := dtx.CreateBucketIfNotExists(objsBucket)
-		if e != nil {
-			return e
-		}
-		return src.View(func(stx *bolt.Tx) error {
-			so := stx.Bucket(objsBucket)
-			if so == nil {
-				return nil
-			}
-			return so.ForEach(func(k, v []byte) error {
-				if len(v) >= 4 && getRefsCount(v) > 0 {
-					return ob.Put(k, v)
-				}
-				return nil
-			})
-		})
+		_, e = dtx.CreateBucketIfNotExists(objsBucket)
+		return e
 	})
+	if cErr == nil {
+		cErr = copyLiveBatched(dst, src)
+	}
+	if cErr == nil {
+		cErr = dst.Sync()
+	}
 	_ = dst.Close() //nolint:errcheck // best-effort cleanup close
 	if cErr != nil {
 		_ = os.Remove(tmp) //nolint:errcheck // discard failed temp
@@ -215,6 +224,58 @@ func startupGCCompact(fileName string) (reclaimed int64, err error) {
 		reclaimed = origSize - nfi.Size()
 	}
 	return reclaimed, nil
+}
+
+// copyLiveBatched copies every live (rc>0) object of src's objects bucket into
+// dst's, committing once per compactBatchBytes of object data so the dirty
+// page set stays bounded whatever the store's size. Each batch resumes from
+// the key after the last one copied; the source is read-only throughout (it
+// is opened exclusively by startupGCCompact, so the walk sees one snapshot).
+func copyLiveBatched(dst, src *bolt.DB) error {
+	compactBatches = 0
+	var last []byte
+	for {
+		done := false
+		var n int64
+		err := dst.Update(func(dtx *bolt.Tx) error {
+			ob := dtx.Bucket(objsBucket)
+			return src.View(func(stx *bolt.Tx) error {
+				so := stx.Bucket(objsBucket)
+				if so == nil {
+					done = true
+					return nil
+				}
+				c := so.Cursor()
+				var k, v []byte
+				if last == nil {
+					k, v = c.First()
+				} else if k, v = c.Seek(last); k != nil && bytes.Equal(k, last) {
+					k, v = c.Next()
+				}
+				for ; k != nil; k, v = c.Next() {
+					if len(v) >= 4 && getRefsCount(v) > 0 {
+						if e := ob.Put(k, v); e != nil {
+							return e
+						}
+						n += int64(len(v))
+					}
+					last = append(last[:0], k...)
+					if n >= compactBatchBytes {
+						return nil // commit this batch; the next resumes after last
+					}
+				}
+				done = true
+				return nil
+			})
+		})
+		compactBatches++
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+	}
 }
 
 // maybeStartupGCCompact runs startupGCCompact and reports the outcome to stderr
