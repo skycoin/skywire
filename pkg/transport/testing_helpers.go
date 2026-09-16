@@ -26,6 +26,7 @@ func (tm *Manager) InjectTransportForTest(mt *ManagedTransport) {
 	tm.mx.Lock()
 	defer tm.mx.Unlock()
 	tm.tps[mt.Entry.ID] = mt
+	tm.track(mt)
 }
 
 // NewManagedTransportForTest creates a minimal ManagedTransport for testing.
