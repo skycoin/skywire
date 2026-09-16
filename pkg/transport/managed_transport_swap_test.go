@@ -46,7 +46,7 @@ func TestReadLoopSurvivesConnSwap(t *testing.T) {
 
 	pkt, err := routing.MakeDataPacket(routing.RouteID(7), []byte("after the swap"))
 	require.NoError(t, err)
-	go func() { _, _ = far.Write(pkt) }()
+	go func() { _, _ = far.Write(pkt) }() //nolint:errcheck
 
 	select {
 	case got := <-readCh:

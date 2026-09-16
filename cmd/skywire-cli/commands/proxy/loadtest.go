@@ -268,7 +268,7 @@ func loadtestPattern(buf []byte, seed, offset uint64) {
 		x ^= x << 13
 		x ^= x >> 7
 		x ^= x << 17
-		buf[i] = byte(x)
+		buf[i] = byte(x & 0xff)
 	}
 }
 
