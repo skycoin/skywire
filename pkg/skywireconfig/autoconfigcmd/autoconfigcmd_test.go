@@ -12,7 +12,7 @@ import (
 var allFlags = []string{
 	"verbose",
 	// Hypervisor / identity
-	"hvpks", "ws-peer", "ishv", "no-ishv", "legacy-hv-ui", "no-legacy-hv-ui",
+	"hvpks", "ws-peer", "ishv", "no-ishv", "hvdeskaddr",
 	"pk-endpoint", "no-pk-endpoint", "hvaddr", "sk", "version",
 	// Visor public/private + autoconnect
 	"rewardaddr", "public", "no-public", "publicip", "disable-public-autoconn",
@@ -70,7 +70,6 @@ var negationPairs = []struct {
 	pos, neg string
 }{
 	{"ishv", "no-ishv"},
-	{"legacy-hv-ui", "no-legacy-hv-ui"},
 	{"dmsg-server", "no-dmsg-server"},
 	{"chatportless", "no-chatportless"},
 	{"pk-endpoint", "no-pk-endpoint"},
@@ -251,7 +250,7 @@ func TestNew_UsageString_RendersWithoutError(t *testing.T) {
 
 // TestEnvMap_InVisorDmsgServerAndLegacyUI pins the env mappings for
 // the knobs that shipped with the in-visor dmsg server (#4792) and
-// the opt-in legacy hypervisor UI. Their flags were registered and
+// the hypervisor desk address. Their flags were registered and
 // autoconfig wrote them, but envMap had no entries — so the
 // install-page form, which renders from this table, could not offer
 // them at all. Assert the exact SKYENV names and encodings, because
@@ -260,8 +259,7 @@ func TestNew_UsageString_RendersWithoutError(t *testing.T) {
 func TestEnvMap_InVisorDmsgServerAndLegacyUI(t *testing.T) {
 	m := EnvMap()
 	want := map[string]EnvMapping{
-		"legacy-hv-ui":       {Key: "LEGACYHVUI", Format: EnvFormatBool},
-		"no-legacy-hv-ui":    {Key: "LEGACYHVUI", Format: EnvFormatBool, Negate: true},
+		"hvdeskaddr":         {Key: "HVDESKADDR", Format: EnvFormatString},
 		"dmsg-server":        {Key: "DMSGSERVER", Format: EnvFormatBool},
 		"no-dmsg-server":     {Key: "DMSGSERVER", Format: EnvFormatBool, Negate: true},
 		"dmsg-server-public": {Key: "DMSGSERVERPUBLIC", Format: EnvFormatString},
