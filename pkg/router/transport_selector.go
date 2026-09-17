@@ -142,11 +142,16 @@ const (
 // between refreshes (incremented per selected frame, drained by rate over
 // wall-clock), so it survives a refresh (SetECFState carries it forward).
 type ecfLegState struct {
-	// rttMs is the leg's mean round-trip latency estimate in ms (EWMA of
-	// tp.GetLatency()); 0 = unknown (deprioritized in the fast-leg pick).
+	// rttMs is the leg's mean END-TO-END feedback delay in ms: an EWMA of
+	// max(tp.GetLatency(), the leg's measured send→ack delay). The first-hop
+	// transport RTT alone understates a multi-hop leg — ECF's hold-back rule
+	// races the two legs on this number, so a near-edge-only basis held the
+	// whole stream on one leg until ~9 frames were queued. 0 = unknown
+	// (deprioritized in the fast-leg pick).
 	rttMs float64
-	// rttMinMs is the leg's baseline (minimum observed) RTT in ms — the
-	// uncongested latency. Used two ways: as the stable BDP latency for
+	// rttMinMs is the leg's baseline (minimum observed) RTT in ms over the SAME
+	// end-to-end basis as rttMs — the uncongested latency. Used two ways: as
+	// the stable BDP latency for
 	// cwndBytes (so congestion can't inflate a stalling leg's capacity) and,
 	// against the live rttMs, as the congestion signal in ecfSaturated. 0 =
 	// unknown (no congestion check, cwnd falls back to the live RTT).

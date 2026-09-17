@@ -413,6 +413,12 @@ type RouteGroup struct {
 	// probe traffic: it reuses the pong the liveness loop already sends. Guarded by
 	// legLivenessMu.
 	legOWD map[uuid.UUID]*sbdWindow
+	// legRTTWin holds each leg's TIME-bounded window of raw end-to-end round-trip
+	// samples (ms), keyed by transport ID, folded from the same leg-liveness pong
+	// as legE2ELatency. Its minimum is the load-robust latency statistic the
+	// latency band judges on — the latest sample (and the EWMA over it) is
+	// queue-inflated under load and made the band flap. Guarded by legLivenessMu.
+	legRTTWin map[uuid.UUID]*legRTTWindow
 	// adaptiveParkMu guards adaptiveParks. Leaf lock: NEVER held while taking
 	// rg.mu or legLivenessMu.
 	adaptiveParkMu sync.Mutex
@@ -481,6 +487,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		inflightPings:      make(map[int64]uuid.UUID),
 		legE2ELatency:      make(map[uuid.UUID]float64),
 		legOWD:             make(map[uuid.UUID]*sbdWindow),
+		legRTTWin:          make(map[uuid.UUID]*legRTTWindow),
 		legForwardHops:     make(map[uuid.UUID][]routing.Hop),
 		legRemoteTp:        make(map[uuid.UUID]uuid.UUID),
 		legRecvSnap:        make(map[uuid.UUID]uint64),
@@ -1543,6 +1550,7 @@ func (rg *RouteGroup) snapshotLegs() []LegInfo {
 			if _, ok := live[id]; !ok {
 				delete(rg.legE2ELatency, id)
 				delete(rg.legOWD, id)
+				delete(rg.legRTTWin, id)
 			}
 		}
 	}
@@ -1578,6 +1586,41 @@ func (rg *RouteGroup) legBandLatencyMs(tp *transport.ManagedTransport) float64 {
 		return stats.Avg
 	}
 	return 0
+}
+
+// legBandMinLatencyMs is the LOAD-ROBUST latency the latency band judges a leg
+// on: the minimum raw end-to-end sample over the last legRTTMinWindow. It
+// returns windowed=true only when the window actually holds a sample; otherwise
+// it falls back to legBandLatencyMs (the EWMA, else the first-hop RTT) so a leg
+// whose pongs have not landed yet is treated exactly as before.
+//
+// Queuing delay only ever ADDS to a path's latency, so the window minimum is the
+// leg's real latency with the load stripped out. The latest sample is not: on a
+// busy leg the in-band pong queues behind bulk data and reads 37 → 136 → 771 →
+// 955 → 435 ms within one transfer (measured live 2026-09-16), which put the leg
+// out of band and back in on alternate ticks — and with the 30s minimum park
+// hold (#4968) that is a park/promote every 30s for the whole transfer.
+func (rg *RouteGroup) legBandMinLatencyMs(tp *transport.ManagedTransport) (ms float64, windowed bool) {
+	if tp == nil {
+		return 0, false
+	}
+	rg.legLivenessMu.Lock()
+	minMs := rg.legRTTWin[tp.Entry.ID].minMs(time.Now())
+	rg.legLivenessMu.Unlock()
+	if minMs > 0 {
+		return minMs, true
+	}
+	return rg.legBandLatencyMs(tp), false
+}
+
+// bandStatLabel renders the statistic a band decision was taken on, for the leg
+// event's reason string — so an operator reading the event can tell a park taken
+// on a windowed minimum from one taken on the fallback single sample.
+func bandStatLabel(ms float64, windowed bool) string {
+	if windowed {
+		return fmt.Sprintf("min-RTT %.0f ms over %s", ms, legRTTMinWindow)
+	}
+	return fmt.Sprintf("%.0f ms", ms)
 }
 
 // fireLegChange calls the policy's OnLegChange hook (if any) and
@@ -2766,8 +2809,13 @@ func selectDataStalledLegs(legs []legRecvDelta, gapStuck bool) []uuid.UUID {
 // goodput (recvDelta, bytes over the last data-progress interval) used to gate
 // latency demotion (see the goodput-gate note in partitionLatencyBand).
 type bandLeg struct {
-	idx       int
-	latMs     float64
+	idx   int
+	latMs float64
+	// windowed is true when latMs is the leg's min-RTT over legRTTMinWindow
+	// rather than the fallback single EWMA/first-hop sample. Diagnostic only —
+	// the partition math treats both alike — but it is what the leg event's
+	// reason names, so an operator can tell the two apart.
+	windowed  bool
 	standby   bool
 	primary   bool
 	recvDelta uint64
@@ -3073,7 +3121,9 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 // enforceLatencyBand keeps the mux's active stripe set within a tight latency
 // band (see partitionLatencyBand). Runs on the data-progress cadence so it holds
 // even in a manual (non-adaptive) preset, where nothing else manages the active
-// set. Reads each leg's EWMA end-to-end latency, decides demotions/promotions,
+// set. Reads each leg's MINIMUM end-to-end latency over the last
+// legRTTMinWindow (legBandMinLatencyMs — the latest sample is queue-inflated
+// under load and made this controller flap), decides demotions/promotions,
 // and applies them via the mux's send-side standby marker — a demoted leg gets
 // zero scheduler weight and is never striped, so it can no longer open a reorder
 // gap, while its rules stay installed (a warm standby, promotable again if it
@@ -3098,9 +3148,11 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 		if tp == nil || tp.IsClosed() {
 			continue
 		}
+		latMs, windowed := rg.legBandMinLatencyMs(tp)
 		legs = append(legs, bandLeg{
 			idx:       i,
-			latMs:     rg.legBandLatencyMs(tp),
+			latMs:     latMs,
+			windowed:  windowed,
 			standby:   rg.mux.isLegStandby(i),
 			primary:   i == 0,
 			recvDelta: recvDeltas[tp.Entry.ID],
@@ -3123,9 +3175,11 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 			if tp == nil || tp.IsClosed() {
 				continue
 			}
+			latMs, windowed := rg.legBandMinLatencyMs(tp)
 			legs = append(legs, bandLeg{
 				idx:       i,
-				latMs:     rg.legBandLatencyMs(tp),
+				latMs:     latMs,
+				windowed:  windowed,
 				standby:   rg.mux.isLegStandby(i),
 				primary:   i == 0,
 				recvDelta: recvDeltas[tp.Entry.ID],
@@ -3136,10 +3190,11 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 
 	demote, promote := partitionLatencyBand(legs, manual, tight)
 	demote = rg.keepReverseFloor(demote, recvDeltas)
-	// latMs lookup for diagnostics (which latency triggered each decision).
-	latOf := make(map[int]float64, len(legs))
+	// Per-leg diagnostics: the rendered statistic each decision was taken on, so
+	// the log line and the leg event name the number AND what it is.
+	statOf := make(map[int]string, len(legs))
 	for _, l := range legs {
-		latOf[l.idx] = l.latMs
+		statOf[l.idx] = bandStatLabel(l.latMs, l.windowed)
 	}
 	if len(demote) > 0 || len(promote) > 0 {
 		mode := "adaptive"
@@ -3153,7 +3208,7 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 		rg.logger.Infof("latency-band[%s/%s]: %d active legs, demote=%v promote=%v", mode, band, len(legs), demote, promote)
 	}
 	for _, idx := range demote {
-		rg.logger.Infof("latency-band: parking leg %d to warm standby (latency %.0fms out-of-band, keeping the active stripe set homogeneous)", idx, latOf[idx])
+		rg.logger.Infof("latency-band: parking leg %d to warm standby (%s out-of-band, keeping the active stripe set homogeneous)", idx, statOf[idx])
 		rg.mux.setLegStandby(idx, true)
 		rg.mu.Lock()
 		var bandTp *transport.ManagedTransport
@@ -3163,7 +3218,7 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 		bandLegs := len(rg.tps)
 		rg.mu.Unlock()
 		if bandTp != nil {
-			reason := fmt.Sprintf("latency band: %.0f ms is out of the active set's band", latOf[idx])
+			reason := fmt.Sprintf("latency band: %s is out of the active set's band", statOf[idx])
 			rg.noteLegEvent(MuxEventLegParked, reason, MuxByAdaptive, idx, bandLegs, bandTp, nil)
 			rg.noteAdaptivePark(bandTp.Entry.ID, reason)
 		}
@@ -3176,10 +3231,10 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 		// as co-bottlenecked) is still perfectly in-band, so without the hold the
 		// band re-admits it microseconds after the park and the two controllers
 		// flap the leg once per tick.
-		if !rg.promoteLegAdaptive(idx, fmt.Sprintf("latency band: %.0f ms back within the active set's band", latOf[idx])) {
+		if !rg.promoteLegAdaptive(idx, fmt.Sprintf("latency band: %s back within the active set's band", statOf[idx])) {
 			continue
 		}
-		rg.logger.Infof("latency-band: re-admitting leg %d to active (latency %.0fms back within band)", idx, latOf[idx])
+		rg.logger.Infof("latency-band: re-admitting leg %d to active (%s back within band)", idx, statOf[idx])
 	}
 	if len(demote) > 0 || len(promote) > 0 {
 		rg.mu.Lock()
@@ -4895,6 +4950,18 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 			rg.legOWD[pongLegID] = w
 		}
 		w.push(latencyMs)
+		// Fold the same RAW sample into the leg's time-bounded window, whose
+		// minimum is the load-robust latency the band judges on (the EWMA above
+		// tracks a queue building on a busy leg and is not that).
+		if rg.legRTTWin == nil {
+			rg.legRTTWin = make(map[uuid.UUID]*legRTTWindow)
+		}
+		mw := rg.legRTTWin[pongLegID]
+		if mw == nil {
+			mw = &legRTTWindow{}
+			rg.legRTTWin[pongLegID] = mw
+		}
+		mw.push(latencyMs, time.Now())
 		rg.legLivenessMu.Unlock()
 	}
 
