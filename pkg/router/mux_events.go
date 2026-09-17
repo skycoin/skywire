@@ -294,6 +294,10 @@ func (rg *RouteGroup) activatePinnedLeg(tpID uuid.UUID) {
 	if idx <= 0 {
 		return
 	}
+	// The OPERATOR overrides an adaptive park outright: pinning or re-widening a
+	// leg is an explicit instruction, never something legParkMinHold may gate.
+	// Dropping the record also means the next adaptive park starts a fresh hold.
+	rg.clearAdaptivePark(tpID)
 	// Unconditional: the leg's standby slot may not exist yet (the slice grows
 	// lazily, see setLegStandby), so "not standby" here does not mean active.
 	rg.mux.setLegStandby(idx, false)
