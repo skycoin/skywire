@@ -2433,7 +2433,7 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 		}
 		legs = append(legs, legRecv{
 			id:      tp.Entry.ID,
-			recv:    stats[i].RecvBytes,
+			recv:    stats[i].PayloadBytes, // payload only: control frames (SACKs) must not elect a leader while the peer downloads
 			standby: rg.mux.isLegStandby(i),
 			direct:  rg.mux.legIsDirectTp(tp),
 		})
@@ -2985,6 +2985,9 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	for _, idx := range demote {
 		rg.logger.Infof("shared-bottleneck: parking leg %d to warm standby (co-bottlenecked with a kept active leg in group %d — one pipe, not two; striping it adds only reorder cost)", idx, groups[idx])
 		rg.mux.setLegStandby(idx, true)
+		if idx < len(tpsCopy) && tpsCopy[idx] != nil {
+			rg.noteLegEvent(MuxEventLegParked, "shared bottleneck: co-bottlenecked with a kept active leg (one pipe, not two)", MuxByAdaptive, idx, len(tpsCopy), tpsCopy[idx], nil)
+		}
 		// Mirror the park to the remote (CapLegState) so the bulk-sending peer
 		// stops striping across this leg — without this the native park is
 		// send-side-only here and the peer keeps spraying the download over it.
@@ -3077,6 +3080,16 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 	for _, idx := range demote {
 		rg.logger.Infof("latency-band: parking leg %d to warm standby (latency %.0fms out-of-band, keeping the active stripe set homogeneous)", idx, latOf[idx])
 		rg.mux.setLegStandby(idx, true)
+		rg.mu.Lock()
+		var bandTp *transport.ManagedTransport
+		if idx < len(rg.tps) {
+			bandTp = rg.tps[idx]
+		}
+		bandLegs := len(rg.tps)
+		rg.mu.Unlock()
+		if bandTp != nil {
+			rg.noteLegEvent(MuxEventLegParked, fmt.Sprintf("latency band: %.0f ms is out of the active set's band", latOf[idx]), MuxByAdaptive, idx, bandLegs, bandTp, nil)
+		}
 		// Mirror to the remote so the bulk sender stops striping across this leg
 		// (CapLegState) — the native park is otherwise send-side-only here.
 		rg.sendLegState(idx, true)
