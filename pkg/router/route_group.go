@@ -632,6 +632,10 @@ type MuxLeg struct {
 	// judges a leg by; it can differ sharply from LatencyMS on a multihop
 	// leg. Zero until the first pong lands.
 	RouteLatencyMS float64 `json:"route_latency_ms"`
+	// AckDelayMS is this leg's own EWMA send→ack delay in ms (0 = no sample):
+	// the loaded feedback delay its retransmit threshold is judged by
+	// (rackThresholdFor), distinct from the idle RTTs above.
+	AckDelayMS float64 `json:"ack_delay_ms"`
 	// Direct is true when this leg's first hop goes straight to the route
 	// group's destination (a 1-hop/direct route); false means the leg is
 	// multihop (relayed through one or more intermediates). Lets a viewer
@@ -699,6 +703,9 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 			// TRUE end-to-end route latency (all hops), from the leg-liveness
 			// pong — distinct from the first-hop transport RTT above.
 			leg.RouteLatencyMS = rg.legEndToEndLatencyMs(tp.Entry.ID)
+			if rg.mux != nil {
+				leg.AckDelayMS = rg.mux.ackDelayMsTp(tp.Entry.ID)
+			}
 			// Direct = this leg's first hop reaches the route group's FAR
 			// endpoint itself, i.e. a 1-hop route; otherwise it is relayed
 			// (multihop). The far endpoint is whichever descriptor end is not

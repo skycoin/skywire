@@ -175,6 +175,15 @@ type routeMux struct {
 	// upload). rackThreshold takes the max of both signals. Atomic; 0 = no
 	// sample yet.
 	ackDelayMilli int64
+	// ackDelayByTp is the same EWMA kept PER LEG, keyed by the transport the
+	// frame last rode. The group-wide value is refreshed by every SACK's
+	// fast-leg samples and collapses back within a second of each slow-leg
+	// sample, so judged by it a frame queued on a slow leg reads as lost while
+	// it is merely in flight (measured live 2026-09-16: 26801 of a three-leg
+	// group's 29360 retransmits came from the reactive SACK path). A leg's
+	// holes are judged against its own estimate (rackThresholdFor).
+	ackDelayByTp   map[uuid.UUID]float64
+	ackDelayByTpMu sync.Mutex
 
 	// lastSACKNano rate-limits receiver-side SACK feedback. Cross-leg
 	// reordering from latency skew makes nearly every packet arrive
@@ -409,6 +418,7 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 	// rackThreshold): under load the queue, not the wire, dominates feedback
 	// delay, and only this sample sees it.
 	m.retxBuf.onAckDelay = m.recordAckDelay
+	m.retxBuf.onAckDelayTp = m.recordAckDelayTp
 	// Default every mux to ECF (Earliest Completion First). It only spills a
 	// frame onto a slower leg once the fastest leg is saturated (a full BDP in
 	// flight), so it never over-assigns a slow leg and stalls the no-skip reorder
@@ -1392,6 +1402,55 @@ func (m *routeMux) recordAckDelay(d time.Duration) {
 // ackDelayMs returns the EWMA send→ack delay in milliseconds (0 = no sample).
 func (m *routeMux) ackDelayMs() float64 {
 	return float64(atomic.LoadInt64(&m.ackDelayMilli)) / 1000
+}
+
+// recordAckDelayTp folds one send→ack delay sample into the leg's own EWMA
+// (same asymmetric α as recordAckDelay: fast up, slow down).
+func (m *routeMux) recordAckDelayTp(tpID uuid.UUID, d time.Duration) {
+	ms := float64(d) / float64(time.Millisecond)
+	m.ackDelayByTpMu.Lock()
+	if m.ackDelayByTp == nil {
+		m.ackDelayByTp = make(map[uuid.UUID]float64)
+	}
+	cur := m.ackDelayByTp[tpID]
+	alpha := 0.125
+	if ms > cur {
+		alpha = 0.5
+	}
+	m.ackDelayByTp[tpID] = cur + alpha*(ms-cur)
+	m.ackDelayByTpMu.Unlock()
+}
+
+// ackDelayMsTp returns the leg's EWMA send→ack delay in milliseconds (0 = no
+// sample yet for that transport).
+func (m *routeMux) ackDelayMsTp(tpID uuid.UUID) float64 {
+	m.ackDelayByTpMu.Lock()
+	defer m.ackDelayByTpMu.Unlock()
+	return m.ackDelayByTp[tpID]
+}
+
+// rackThresholdFor is rackThreshold judged for one leg: when the leg's own
+// measured send→ack delay exceeds the group-wide basis, its holes wait for
+// that delay (× the reorder factor, the ceiling raised to it) before they are
+// presumed lost. Never below the group-wide threshold.
+func (m *routeMux) rackThresholdFor(tpID uuid.UUID) time.Duration {
+	th := m.rackThreshold()
+	ad := m.ackDelayMsTp(tpID)
+	if ad <= 0 {
+		return th
+	}
+	own := time.Duration(ad*m.rackFactor()) * time.Millisecond
+	ceil := rackCeil
+	if adDur := time.Duration(ad) * time.Millisecond; adDur > ceil {
+		ceil = adDur
+	}
+	if own > ceil {
+		own = ceil
+	}
+	if own < th {
+		return th
+	}
+	return own
 }
 
 // maxActiveLegRTTms returns the slowest active (non-standby) leg's EWMA RTT in
