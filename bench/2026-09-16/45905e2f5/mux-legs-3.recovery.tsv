@@ -1,0 +1,33 @@
+1	[{"rg":49172,"recovery":{"write_seq":136,"retx_held":6,"retx_min_seq":130,"retx_max_seq":135,"retx_sent":4,"retx_skipped_missing":0,"retx_req_sack":0,"retx_req_hol":0,"retx_req_flush":0,"retx_send_errors":0,"send_window_waits":0,"send_window_timeouts":0,"tlp_probes":4,"sacks_recv":23,"last_sack_recv_ms_ago":2542.283206,"last_sack_recv_contig":129,"reorder_next_seq":816,"reorder_pending":0,"gap_age_ms":0,"sacks_sent":99,"sack_send_errors":0,"last_sack_sent_ms_ago":2269.942293,"wedge_ticks":0,"wedges":0,"longest_wedge_ms":0}}]
+2	[{"rg":49172,"recovery":{"write_seq":184,"retx_held":0,"retx_min_seq":0,"retx_max_seq":0,"retx_sent":6,"retx_skipped_missing":0,"retx_req_sack":0,"retx_req_hol":0,"retx_req_flush":0,"retx_send_errors":0,"send_window_waits":0,"send_window_timeouts":0,"tlp_probes":6,"sacks_recv":34,"last_sack_recv_ms_ago":754.48726,"last_sack_recv_contig":183,"reorder_next_seq":1632,"reorder_pending":0,"gap_age_ms":0,"sacks_sent":173,"sack_send_errors":0,"last_sack_sent_ms_ago":920.56729,"wedge_ticks":0,"wedges":0,"longest_wedge_ms":0}}]
+3	[{"rg":49172,"recovery":{"write_seq":224,"retx_held":0,"retx_min_seq":0,"retx_max_seq":0,"retx_sent":6,"retx_skipped_missing":0,"retx_req_sack":0,"retx_req_hol":0,"retx_req_flush":0,"retx_send_errors":0,"send_window_waits":0,"send_window_timeouts":0,"tlp_probes":6,"sacks_recv":42,"last_sack_recv_ms_ago":1126.588303,"last_sack_recv_contig":223,"reorder_next_seq":2296,"reorder_pending":0,"gap_age_ms":0,"sacks_sent":240,"sack_send_errors":0,"last_sack_sent_ms_ago":1123.368746,"wedge_ticks":0,"wedges":0,"longest_wedge_ms":0}}]
+4	[{"rg":49172,"recovery":{"write_seq":272,"retx_held":0,"retx_min_seq":0,"retx_max_seq":0,"retx_sent":6,"retx_skipped_missing":0,"retx_req_sack":0,"retx_req_hol":0,"retx_req_flush":0,"retx_send_errors":0,"send_window_waits":0,"send_window_timeouts":0,"tlp_probes":6,"sacks_recv":53,"last_sack_recv_ms_ago":2357.346406,"last_sack_recv_contig":271,"reorder_next_seq":2976,"reorder_pending":0,"gap_age_ms":0,"sacks_sent":305,"sack_send_errors":0,"last_sack_sent_ms_ago":2397.21876,"wedge_ticks":0,"wedges":0,"longest_wedge_ms":0}}]
+5	[{"rg":49172,"recovery":{"write_seq":312,"retx_held":0,"retx_min_seq":0,"retx_max_seq":0,"retx_sent":6,"retx_skipped_missing":0,"retx_req_sack":0,"retx_req_hol":0,"retx_req_flush":0,"retx_send_errors":0,"send_window_waits":0,"send_window_timeouts":0,"tlp_probes":6,"sacks_recv":61,"last_sack_recv_ms_ago":1156.718014,"last_sack_recv_contig":311,"reorder_next_seq":3680,"reorder_pending":0,"gap_age_ms":0,"sacks_sent":412,"sack_send_errors":0,"last_sack_sent_ms_ago":1001.643436,"wedge_ticks":0,"wedges":0,"longest_wedge_ms":0}}]
+6	[{"rg":49172,"recovery":{"write_seq":1016,"retx_held":4,"retx_min_seq":1010,"retx_max_seq":1014,"retx_sent":387,"retx_skipped_missing":0,"retx_req_sack":279,"retx_req_hol":99,"retx_req_flush":0,"retx_send_errors":0,"send_window_waits":42,"send_window_timeouts":1,"tlp_probes":9,"sacks_recv":377,"last_sack_recv_ms_ago":2778.272306,"last_sack_recv_contig":1009,"reorder_next_seq":3736,"reorder_pending":0,"gap_age_ms":0,"sacks_sent":430,"sack_send_errors":0,"last_sack_sent_ms_ago":2662.975848,"wedge_ticks":0,"wedges":0,"longest_wedge_ms":0}}]
+7	[{"rg":49172,"recovery":{"write_seq":1736,"retx_held":4,"retx_min_seq":1730,"retx_max_seq":1734,"retx_sent":388,"retx_skipped_missing":0,"retx_req_sack":279,"retx_req_hol":99,"retx_req_flush":0,"retx_send_errors":0,"send_window_waits":47,"send_window_timeouts":2,"tlp_probes":10,"sacks_recv":434,"last_sack_recv_ms_ago":1857.141447,"last_sack_recv_contig":1729,"reorder_next_seq":3792,"reorder_pending":0,"gap_age_ms":0,"sacks_sent":443,"sack_send_errors":0,"last_sack_sent_ms_ago":1736.184861,"wedge_ticks":0,"wedges":0,"longest_wedge_ms":0}}]
+8	
+# exit-on-fail 8	
+9	
+# exit-on-fail 9	
+10	
+# exit-on-fail 10	
+11	
+# exit-on-fail 11	
+12	
+# exit-on-fail 12	
+13	
+# exit-on-fail 13	
+14	
+# exit-on-fail 14	
+15	
+# exit-on-fail 15	
+16	
+# exit-on-fail 16	
+17	
+# exit-on-fail 17	
+18	
+# exit-on-fail 18	
+19	
+# exit-on-fail 19	
+20	
+# exit-on-fail 20	

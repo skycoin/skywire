@@ -18,6 +18,11 @@ here=$(dirname "$0")
 mkdir -p "$out"
 local_commit=$(git -C "$here/.." rev-parse --short=9 HEAD)
 sizes="10000000 50000000"
+# APP=skysocks-client drives every set through the DEFAULT proxy instance on
+# :1080 (APP_PORT overrides), so status.skysocks in a browser shows the session
+# under test; sets run one at a time and each stops the instance first.
+app_name() { echo "${APP:-$1}"; }
+app_addr() { if [ -n "${APP:-}" ]; then echo "127.0.0.1:${APP_PORT:-1080}"; else echo "127.0.0.1:$1"; fi; }
 
 tp_counters() { # <tp id> -> "sent recv"
 	$CLI cli visor state --select transports --json 2>/dev/null |
@@ -58,8 +63,14 @@ exit_tp_counters() { # <tp id> -> "sent recv" as seen by the EXIT (hop 2 of a pi
 }
 
 # run_set <set> <socks> <tp ids (space separated)> <header> [exit-side tp id]
+# mux_events <set> <app>: the router's leg events for this app since the set began (criterion 7: churn with reasons)
+mux_events() {
+	$CLI cli visor state --select diag --json 2>/dev/null |
+		jq --arg app "$2" --arg since "$set_started" '[.diag.mux_events[]? | select(.app==$app and .at[0:19] >= $since)]' > "$out/$1.mux_events.json" 2>/dev/null
+	echo "$1: $(jq 'length' "$out/$1.mux_events.json" 2>/dev/null || echo 0) mux events: $(jq -r '[.[] | .event + "(" + (.reason // "") + ")"] | join(" ")' "$out/$1.mux_events.json" 2>/dev/null | cut -c1-300)"
+}
 run_set() {
-	set_name=$1; socks=$2; tps=$3; header=$4; exit_tp=${5:-}
+	set_name=$1; socks=$2; tps=$3; header=$4; exit_tp=${5:-}; set_started=$(date +%Y-%m-%dT%H:%M:%S) # visor-local time, the zone the event ring is stamped in
 	f="$out/$set_name.tsv"; c="$out/$set_name.carrier.tsv"
 	echo "# $header" > "$f"
 	echo "# row	tp	sent_delta	recv_delta" > "$c"
@@ -81,7 +92,10 @@ run_set() {
 				done
 				# the legs the session holds right after the row: the carrier claim needs exactly the pinned one
 				if [ -n "${cur_app:-}" ]; then
-					echo "$row	legs	$($CLI cli proxy mux info -n "$cur_app" --json 2>/dev/null | jq -r '[.[].legs[].transport_id[0:8]] | join(",")')	-" >> "$c"
+					info=$($CLI cli proxy mux info -n "$cur_app" --json 2>/dev/null)
+					echo "$row	legs	$(echo "$info" | jq -r '[.[].legs[].transport_id[0:8]] | join(",")')	-" >> "$c"
+					# loss-recovery counters (sender retx window + SACK feedback, receiver frontier) after every row
+					echo "$row	$(echo "$info" | jq -c '[.[] | {rg: .desc.dst_port, recovery}]')" >> "$out/$set_name.recovery.tsv"
 				fi
 				t=$((t + 1))
 			done
@@ -91,7 +105,13 @@ run_set() {
 		xa=$(exit_tp_counters "$exit_tp")
 		echo "# exit-side $exit_tp sent_delta=$(( ${xa% *} - ${xb% *} )) recv_delta=$(( ${xa#* } - ${xb#* } )) over the set" >> "$c"
 	fi
+	# the EXIT's view of the same group(s) at the end of the set (its receiver-side wedge counters)
+	if [ -n "${cur_app:-}" ]; then
+		ports=$($CLI cli proxy mux info -n "$cur_app" --json 2>/dev/null | jq -c '[.[].desc.dst_port]')
+		echo "# exit	$(timeout 90 $CLI cli visor state --via "dmsg://$exit_pk" --select mux_route_groups --json 2>/dev/null | jq -c --argjson p "$ports" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, recovery}]')" >> "$out/$set_name.recovery.tsv"
+	fi
 	echo "$set_name: $(grep -vc '^#' "$f") rows, hash_ok=$(grep -v '^#' "$f" | awk -F'\t' '$8==1' | wc -l)"
+	[ -n "${cur_app:-}" ] && mux_events "$set_name" "$cur_app"
 }
 
 ec=$(exit_commit)
@@ -105,20 +125,21 @@ for typ in ${DIRECT_TYPES-stcpr squicr}; do
 	squicr) pref=squicr,stcpr,sudph,stcp,swtr,swsr,webrtc,dmsg; port=1083 ;;
 	esac
 	$CLI cli route settings --prefer "$pref" >/dev/null 2>&1
-	cur_app=""; stop_app "ref$typ"
-	timeout 180 $CLI cli proxy start -k "$exit_pk" -n "ref$typ" -a "127.0.0.1:$port" --direct >/dev/null 2>&1
-	warm "127.0.0.1:$port" "ref$typ" -k "$exit_pk" --direct || echo "ref$typ: still failing probes after 3 restarts"
+	name=$(app_name "ref$typ"); socks=$(app_addr "$port")
+	cur_app=""; stop_app "$name"
+	timeout 180 $CLI cli proxy start -k "$exit_pk" -n "$name" -a "$socks" --direct >/dev/null 2>&1
+	warm "$socks" "$name" -k "$exit_pk" --direct || echo "$name: still failing probes after 3 restarts"
 	tp=$(tp_of "$exit_pk" "$typ")
 	if [ -z "$tp" ]; then
-		echo "ref$typ: no $typ transport to the exit after the proxy started — skipping set"
-		stop_app "ref$typ"; continue
+		echo "$name: no $typ transport to the exit after the proxy started — skipping set"
+		stop_app "$name"; continue
 	fi
 	# a 10 MB probe names the carrier before the set starts
-	b=$(tp_counters "$tp"); "$here/bench.sh" "127.0.0.1:$port" "$sink" 10000000 down probe >/dev/null; a=$(tp_counters "$tp")
-	echo "ref$typ carrier probe: tp=$tp recv_delta=$(( ${a#* } - ${b#* } ))"
-	run_set "ref-direct-$typ" "127.0.0.1:$port" "$tp" \
-		"exit=$exit_pk local=$local_commit exit_commit=$ec session=ref$typ route=direct transport=$typ tp=$tp sink=$sink"
-	cur_app=""; stop_app "ref$typ"
+	b=$(tp_counters "$tp"); "$here/bench.sh" "$socks" "$sink" 10000000 down probe >/dev/null; a=$(tp_counters "$tp")
+	echo "$name carrier probe: tp=$tp recv_delta=$(( ${a#* } - ${b#* } ))"
+	run_set "ref-direct-$typ" "$socks" "$tp" \
+		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name route=direct transport=$typ tp=$tp sink=$sink"
+	cur_app=""; stop_app "$name"
 done
 $CLI cli route settings --prefer default >/dev/null 2>&1
 
@@ -126,9 +147,9 @@ $CLI cli route settings --prefer default >/dev/null 2>&1
 port=1091
 for pin in "$pins"/${PINS_GLOB:-via-*.json}; do
 	short=$(basename "$pin" .json | sed 's/^via-//')
-	name="via$short"; cur_app=$name
+	name=$(app_name "via$short"); socks=$(app_addr "$port"); cur_app=$name
 	stop_app "$name"
-	timeout 240 $CLI cli proxy start -k "$exit_pk" -n "$name" -a "127.0.0.1:$port" --route "$pin" 2>&1 | grep -v DEBUG | grep -i "route pinned\|leg\|FATAL" | head -3
+	timeout 240 $CLI cli proxy start -k "$exit_pk" -n "$name" -a "$socks" --route "$pin" 2>&1 | grep -v DEBUG | grep -i "route pinned\|leg\|FATAL" | head -3
 	legs=$($CLI cli proxy mux info -n "$name" --json 2>/dev/null | jq -r '.[0].legs[]? | "\(.transport_id) \(.tp_type)"')
 	want=$(jq -r '.[0].forward[0].TpID' "$pin")
 	hops=$(jq -r '.[0].forward | map(.From[0:8] + ">" + .To[0:8] + "@" + .TpID[0:8]) | join(",")' "$pin")
@@ -139,9 +160,10 @@ for pin in "$pins"/${PINS_GLOB:-via-*.json}; do
 	if [ "$(echo "$legs" | wc -l)" -ne 1 ]; then
 		echo "$name: WARNING $(echo "$legs" | wc -l) legs, expected exactly the pinned one"
 	fi
-	warm "127.0.0.1:$port" "$name" -k "$exit_pk" --route "$pin" || echo "$name: still failing probes after 3 restarts"
+	warm "$socks" "$name" -k "$exit_pk" --route "$pin" || echo "$name: still failing probes after 3 restarts"
 	hop2=$(jq -r '.[0].forward[1].TpID' "$pin")
-	run_set "ref-via-$short" "127.0.0.1:$port" "$want" \
+	run_set "ref-via-$short" "$socks" "$want" \
 		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name route=$hops transport=stcpr,stcpr legs=[$(echo "$legs" | tr '\n' ';')] sink=$sink" "$hop2"
+	[ -n "${APP:-}" ] && stop_app "$name"
 	port=$((port + 1))
 done

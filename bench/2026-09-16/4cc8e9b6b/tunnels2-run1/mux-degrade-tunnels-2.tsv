@@ -1,0 +1,7 @@
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=4cc8e9b6b exit_commit=4cc8e9b6b session=skysocks-client subject=tunnels-2 tunnels=2 pin_assign=rg49191=03f57e7c rg49192=0371ab4b route_groups=2 legs_per_rg=1+1 rg_ports=49191,49192 groups=rg49191=[stcpr>03f57e7c@fdab37dd] rg49192=[stcpr>0371ab4b@95839ad0] cut=tp:95839ad0-b588-0b1d-8475-45fba6ae993c cut_pct=40 cut_after=6s sink=http://127.0.0.1:18080
+mux-degrade-tunnels-2-t1	down	50000000	7589048	200	50000000	6.588491	1
+mux-degrade-tunnels-2-t2	down	50000000	4953089	200	50000000	10.094812	1
+mux-degrade-tunnels-2-t3	down	50000000	6951332	200	50000000	7.192942	1
+mux-degrade-tunnels-2-t1	up	50000000	3994519	200	50000000	12.517154	1
+mux-degrade-tunnels-2-t2	up	50000000	8838411	200	50000000	5.657129	1
+mux-degrade-tunnels-2-t3	up	50000000	8876564	200	50000000	5.632815	1

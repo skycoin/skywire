@@ -1,0 +1,7 @@
+# row	subject	cut_at_s	what_cut	bytes_before_cut	ttfb_after_s	goodput_before_Bps	goodput_after_Bps	restored	rg_ports_after
+1	mux-degrade-legs-2	3.215	leg:95839ad0-b588-0b1d-8475-45fba6ae993c(ok=1)	20004864	0.923	6222353	9034680	1	49183
+2	mux-degrade-legs-2	6.066	leg:95839ad0-b588-0b1d-8475-45fba6ae993c(ok=1)	11157504	0.980	1839351	4363345	1	49183
+3	mux-degrade-legs-2	4.041	leg:95839ad0-b588-0b1d-8475-45fba6ae993c(ok=1)	21467136	0.941	5312333	8308930	1	49183
+4	mux-degrade-legs-2	4.329	leg:95839ad0-b588-0b1d-8475-45fba6ae993c(ok=1)	28648757	1.738	6617869	9085635	1	49183
+5	mux-degrade-legs-2	2.779	leg:95839ad0-b588-0b1d-8475-45fba6ae993c(ok=1)	21464733	1.707	7723905	8558868	1	49183
+6	mux-degrade-legs-2	2.753	leg:95839ad0-b588-0b1d-8475-45fba6ae993c(ok=1)	20338091	1.689	7387610	9519226	1	49183
