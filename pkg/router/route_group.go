@@ -413,6 +413,15 @@ type RouteGroup struct {
 	// probe traffic: it reuses the pong the liveness loop already sends. Guarded by
 	// legLivenessMu.
 	legOWD map[uuid.UUID]*sbdWindow
+	// adaptiveParkMu guards adaptiveParks. Leaf lock: NEVER held while taking
+	// rg.mu or legLivenessMu.
+	adaptiveParkMu sync.Mutex
+	// adaptiveParks holds, per leg transport ID (survives index shifts), the
+	// standing ADAPTIVE park: when a controller parked that leg and the reason it
+	// named. It is the hysteresis state that stops the shared-bottleneck and
+	// latency-band controllers — which share one data-progress tick — from
+	// trading the same leg back and forth every 5s. See park_hysteresis.go.
+	adaptiveParks map[uuid.UUID]adaptivePark
 	// legRecvSnap is each leg's last-sampled rg-scoped RecvBytes, keyed by
 	// transport ID (survives index shifts), for the fast data-progress prune:
 	// an ACTIVE leg whose recv is flat across an interval while the group keeps
@@ -2000,11 +2009,11 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 	demoted := false
 	if rg.mux != nil {
 		for _, idx := range action.PromoteFromStandby {
-			rg.mux.setLegStandby(idx, false)
-			// Tell the remote so it also promotes this leg into its send set.
-			rg.sendLegState(idx, false)
-			rg.noteMuxEvent(MuxEvent{Event: MuxEventLegPromoted, By: MuxByAdaptive, LegIndex: idx, Legs: rg.legCount(),
-				Reason: "policy tick promoted the leg from standby"})
+			// Through the hysteresis seam: an adaptive park that named a reason
+			// holds for legParkMinHold, so the policy tick cannot undo it on the
+			// next tick. It also mirrors the promotion to the peer and emits the
+			// lifecycle event.
+			rg.promoteLegAdaptive(idx, "policy tick promoted the leg from standby")
 		}
 		for _, idx := range action.DemoteToStandby {
 			rg.mux.setLegStandby(idx, true)
@@ -2987,6 +2996,10 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 		rg.mux.setLegStandby(idx, true)
 		if idx < len(tpsCopy) && tpsCopy[idx] != nil {
 			rg.noteLegEvent(MuxEventLegParked, "shared bottleneck: co-bottlenecked with a kept active leg (one pipe, not two)", MuxByAdaptive, idx, len(tpsCopy), tpsCopy[idx], nil)
+			// Start the park's minimum hold so the latency band — which runs later
+			// in THIS same data-progress tick and is blind to the grouping — cannot
+			// re-admit the leg on the spot (the measured 5s park/promote flap).
+			rg.noteAdaptivePark(tpsCopy[idx].Entry.ID, "shared bottleneck: co-bottlenecked with a kept active leg (one pipe, not two)")
 		}
 		// Mirror the park to the remote (CapLegState) so the bulk-sending peer
 		// stops striping across this leg — without this the native park is
@@ -3088,16 +3101,23 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 		bandLegs := len(rg.tps)
 		rg.mu.Unlock()
 		if bandTp != nil {
-			rg.noteLegEvent(MuxEventLegParked, fmt.Sprintf("latency band: %.0f ms is out of the active set's band", latOf[idx]), MuxByAdaptive, idx, bandLegs, bandTp, nil)
+			reason := fmt.Sprintf("latency band: %.0f ms is out of the active set's band", latOf[idx])
+			rg.noteLegEvent(MuxEventLegParked, reason, MuxByAdaptive, idx, bandLegs, bandTp, nil)
+			rg.noteAdaptivePark(bandTp.Entry.ID, reason)
 		}
 		// Mirror to the remote so the bulk sender stops striping across this leg
 		// (CapLegState) — the native park is otherwise send-side-only here.
 		rg.sendLegState(idx, true)
 	}
 	for _, idx := range promote {
+		// Through the hysteresis seam: a leg another controller just parked (say
+		// as co-bottlenecked) is still perfectly in-band, so without the hold the
+		// band re-admits it microseconds after the park and the two controllers
+		// flap the leg once per tick.
+		if !rg.promoteLegAdaptive(idx, fmt.Sprintf("latency band: %.0f ms back within the active set's band", latOf[idx])) {
+			continue
+		}
 		rg.logger.Infof("latency-band: re-admitting leg %d to active (latency %.0fms back within band)", idx, latOf[idx])
-		rg.mux.setLegStandby(idx, false)
-		rg.sendLegState(idx, false)
 	}
 	if len(demote) > 0 || len(promote) > 0 {
 		rg.mu.Lock()
@@ -3222,6 +3242,7 @@ func (rg *RouteGroup) demoteStalledLegs(deadIDs []uuid.UUID) {
 	}
 	rg.mu.Lock()
 	var idxs []int
+	var parkedIDs []uuid.UUID
 	for i, tp := range rg.tps {
 		if i == 0 || tp == nil {
 			continue // never park the primary anchor
@@ -3230,9 +3251,15 @@ func (rg *RouteGroup) demoteStalledLegs(deadIDs []uuid.UUID) {
 			idxs = append(idxs, i)
 			rg.noteLegEvent(MuxEventLegParked, "data progress stalled with an open reorder gap (parked to standby, rules kept)",
 				MuxByAdaptive, i, len(rg.tps), tp, rg.legHopsLocked(tp.Entry.ID))
+			parkedIDs = append(parkedIDs, tp.Entry.ID)
 		}
 	}
 	rg.mu.Unlock()
+	for _, id := range parkedIDs {
+		// Hold this park too: a stalled leg that is otherwise in-band must not be
+		// re-admitted by the latency band on the very next tick.
+		rg.noteAdaptivePark(id, "data progress stalled with an open reorder gap (parked to standby, rules kept)")
+	}
 	for _, i := range idxs {
 		rg.mux.setLegStandby(i, true)
 		// Mirror to the remote so it also stops sending on the dead leg
