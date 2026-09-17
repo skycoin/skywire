@@ -873,14 +873,25 @@ func (c *Client) exitConnect(st net.Conn, host string, port int) error {
 // exactly as before — the caller closes the stream and the queued payload is
 // never acted on. payload may be nil (handshake only).
 func (c *Client) exitConnectPipelined(st net.Conn, host string, port int, payload []byte) error {
+	if err := c.exitWriteConnect(st, host, port, payload); err != nil {
+		return err
+	}
+	return readSocks5Handshake(st)
+}
+
+// exitWriteConnect is exitConnectPipelined's write half, split out for the
+// striped upload: it queues the greeting, the CONNECT and the head, and the
+// caller then starts writing MORE payload (the chunk body) while it reads the
+// handshake replies. The exit reads its handshake sequentially off the stream
+// and only then splices, so everything queued behind it is simply the next thing
+// it reads — the same property the injected GET of rangeSplitInner relies on.
+func (c *Client) exitWriteConnect(st net.Conn, host string, port int, payload []byte) error {
 	head, err := buildSocks5Connect(host, port)
 	if err != nil {
 		return err
 	}
-	if _, err := st.Write(append(head, payload...)); err != nil {
-		return err
-	}
-	return readSocks5Handshake(st)
+	_, err = st.Write(append(head, payload...))
+	return err
 }
 
 // splicePrefixed is the original two-way splice, optionally replaying bytes already

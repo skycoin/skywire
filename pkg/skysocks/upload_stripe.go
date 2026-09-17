@@ -50,19 +50,22 @@ var (
 	// uploadStripeMinBytes is the smallest body worth addressing in chunks. Below
 	// it the per-chunk ack round trips cost more than the striping wins.
 	uploadStripeMinBytes int64 = 4 << 20
-	// uploadChunkBytes is one chunk, and so one buffer. Sized with
-	// uploadConcurrency against the router's per-leg send window: 4 MiB x 2 in
-	// flight is exactly ecfMaxWindowBytes (pkg/router/route_mux.go), so a third
-	// concurrent chunk on one tunnel would only park at the window.
+	// uploadChunkBytes is one chunk, and so one buffer.
 	uploadChunkBytes int64 = 4 << 20
 	// uploadMemBytes bounds the chunk buffers alive at once, independent of the
 	// body size: the producer reads the browser's body only into a free slot, and
-	// a slot is freed only when its chunk is durable (its 2xx). A 2c/4G exit has
-	// been OOM-killed for less (#4252) and the client end runs on the same class
-	// of hardware.
-	uploadMemBytes int64 = 16 << 20
-	// uploadConcurrency is how many chunks one tunnel may carry at once.
-	uploadConcurrency = 2
+	// a slot is freed only when its chunk is DURABLE (the sink's prefix past it),
+	// because only then are the bytes no longer needed for a re-send. A 2c/4G exit
+	// has been OOM-killed for less (#4252) and the client end runs on the same
+	// class of hardware.
+	uploadMemBytes int64 = 32 << 20
+	// uploadConcurrency is how many chunks one tunnel may carry at once. Holding
+	// it to the router's per-leg send window (2 x 4 MiB) was over-conservative: a
+	// writer that parks at the window is a writer with bytes ALREADY queued, which
+	// is what fills the leg at the next window opening — a single striped upload
+	// ran at 0.78 of the single-route reference with 2, while two concurrent ones
+	// with 8 chunks in flight reached 10.4 MB/s on the same pair.
+	uploadConcurrency = 4
 	// uploadReplayMaxBytes caps the generic-POST replay buffer: a body this size
 	// or smaller is remembered as it flows so the request can be re-sent whole
 	// when its tunnel dies before the origin committed a response.
@@ -70,10 +73,6 @@ var (
 )
 
 const (
-	// uploadSendWindowBytes mirrors the router's ecfMaxWindowBytes — the most one
-	// leg's send window ever opens to. chunk x per-tunnel-inflight is held at or
-	// below it (see uploadStripe.perTunnel).
-	uploadSendWindowBytes = 8 << 20
 	// uploadProbeTTL is how long an origin's opt-in answer is trusted. Short
 	// enough that a sink restarted without the feature stops being striped to
 	// within one cache generation.
@@ -413,9 +412,17 @@ func (s *uploadStripe) run() ([]byte, error) {
 		wg.Add(1)
 		go func(start, end int64, buf []byte) {
 			defer wg.Done()
-			err := s.sendChunk(start, end, buf)
+			// The admission slot and the memory slot come apart here. The SLOT is
+			// what admits the next chunk's stream, and the chunk stops needing it the
+			// moment the sink acks: waiting for DURABILITY instead made an
+			// out-of-order ack hold the slot until the prefix caught up, so the slots
+			// refilled in a burst and the tunnels idled at every wave edge. The
+			// memory slot still runs to durability — the bytes are the re-send.
+			var once sync.Once
+			freeSlot := func() { once.Do(s.dropSlot) }
+			err := s.sendChunk(start, end, buf, freeSlot)
+			freeSlot()
 			releaseUpload(int64(len(buf)))
-			s.dropSlot()
 			<-mem
 			if err != nil {
 				s.fail(err)
@@ -454,7 +461,7 @@ func (s *uploadStripe) run() ([]byte, error) {
 func (s *uploadStripe) slots() int {
 	n := uploadMemBytes / uploadChunkBytes
 	if w := s.u.window; w > 0 {
-		if sinkMax := w/uploadChunkBytes - int64(s.perTunnel()); sinkMax < n {
+		if sinkMax := w/uploadChunkBytes - int64(s.headroom()); sinkMax < n {
 			n = sinkMax
 		}
 	}
@@ -464,13 +471,23 @@ func (s *uploadStripe) slots() int {
 	return int(n)
 }
 
-// perTunnel is how many chunks one tunnel may carry at once, held at or below
-// the router's per-leg send window: beyond it a writer only parks.
+// headroom is the chunks of the sink's window slots() leaves free for re-sends:
+// one tunnel's worth, but never more than half the window — otherwise raising
+// perTunnel would narrow an OLD sink (a 16 MiB window) to a single live buffer,
+// which is the pipeline stall this is meant to remove.
+func (s *uploadStripe) headroom() int {
+	n := s.perTunnel()
+	if w := s.u.window; w > 0 {
+		if half := int(w / uploadChunkBytes / 2); half >= 1 && n > half {
+			n = half
+		}
+	}
+	return n
+}
+
+// perTunnel is how many chunks one tunnel may carry at once.
 func (s *uploadStripe) perTunnel() int {
 	n := uploadConcurrency
-	if max := int(uploadSendWindowBytes / uploadChunkBytes); max >= 1 && n > max {
-		n = max
-	}
 	if n < 1 {
 		n = 1
 	}
@@ -606,7 +623,13 @@ type chunkAck struct {
 // object would then never complete and nobody would know. So the buffer is kept
 // until the prefix passes it, and a prefix that has stopped moving means the
 // chunk is gone and goes again.
-func (s *uploadStripe) sendChunk(start, end int64, buf []byte) error {
+//
+// onAck frees the caller's admission slot as soon as the sink has the bytes, so
+// the next chunk's stream opens while this one is still waiting on the prefix. A
+// re-send does not take the slot back: it is the rare path, it must not queue
+// behind the chunks that are moving, and re-admitting it could only deadlock
+// against the slots the other waiters hold.
+func (s *uploadStripe) sendChunk(start, end int64, buf []byte, onAck func()) error {
 	for pass := 1; ; pass++ {
 		s.clearEviction(start)
 		s.mu.Lock()
@@ -619,6 +642,7 @@ func (s *uploadStripe) sendChunk(start, end int64, buf []byte) error {
 		if err != nil {
 			return err
 		}
+		onAck()
 		if s.awaitDurable(start, end) {
 			return nil
 		}
@@ -709,8 +733,9 @@ func uploadRetryWait(d time.Duration) time.Duration {
 }
 
 // putChunk makes ONE attempt: a fresh stream on a tunnel the picker chooses, the
-// SOCKS5 handshake and the PUT head in one write (one round trip, as a range
-// chunk's GET is), the body under a rolling write deadline, then the ack.
+// SOCKS5 greeting, CONNECT and PUT head in one write, then the body going out
+// under a rolling write deadline WHILE the handshake replies and the ack are
+// read back — so the chunk costs no idle round trip of its own at either end.
 func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err error) {
 	sess, st, err := s.c.openChunkStream()
 	if err != nil {
@@ -727,19 +752,26 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
 	head := buildUploadHead(s.u.req, http.MethodPut, s.chunkURI(), int64(len(buf)),
 		fmt.Sprintf("bytes %d-%d/%d", start, end, s.u.total))
-	if err := s.c.exitConnectPipelined(st, s.u.host, s.c.rangePlainPort(), head); err != nil {
+	if err := s.c.exitWriteConnect(st, s.u.host, s.c.rangePlainPort(), head); err != nil {
 		return ack, err
 	}
 
-	// The body goes out on its own goroutine and the answer is read WHILE it
-	// does. A sink that refuses a chunk — 425 when it is beyond the reorder
-	// window — answers without draining the body, deliberately: refusing to read
-	// is its backpressure. Writing the whole chunk first and only then looking
-	// for the answer turns that refusal into a broken pipe, which reads as a
-	// transport fault and burns the chunk's retry budget instead of waiting the
-	// Retry-After out (measured: a 502 to the browser, and 60 s for a 12 MiB
-	// object against a one-chunk window).
-	_ = st.SetReadDeadline(time.Now().Add(uploadAckTimeout)) //nolint:errcheck
+	// The body goes out on its own goroutine and the answers are read WHILE it
+	// does — BOTH answers. Blocking on the SOCKS5 handshake before starting the
+	// body left one whole leg RTT (~142 ms live) with nothing on the wire at the
+	// head of every 4 MiB chunk, and a second at its tail waiting for the ack; at
+	// 4 chunks in flight that idle is most of the gap to the single-route
+	// reference (0.78 of it). The exit reads its handshake off the stream
+	// sequentially and only then splices, so the body queued behind the CONNECT
+	// is exactly what it reads next — the pipelining exitWriteConnect documents.
+	//
+	// Reading the answer while the body is still going is separately load-bearing:
+	// a sink that refuses a chunk — 425 when it is beyond the reorder window —
+	// answers without draining the body, deliberately, and refusing to read is its
+	// backpressure. Writing the whole chunk first turns that refusal into a broken
+	// pipe, which reads as a transport fault and burns the chunk's retry budget
+	// instead of waiting the Retry-After out (measured: a 502 to the browser, and
+	// 60 s for a 12 MiB object against a one-chunk window).
 	werr := make(chan error, 1)
 	go func() {
 		e := writeChunkBody(st, buf, uploadIdleTimeout)
@@ -749,6 +781,14 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 		}
 		werr <- e
 	}()
+
+	// A handshake that fails is an ordinary failed attempt: end the writer, join
+	// it, and let deliverChunk decide (a dead tunnel is a free retry elsewhere).
+	if err := readSocks5Handshake(st); err != nil {
+		endBodyWriter(st, werr)
+		return ack, err
+	}
+	_ = st.SetReadDeadline(time.Now().Add(uploadAckTimeout)) //nolint:errcheck
 
 	resp, rerr := http.ReadResponse(bufio.NewReader(st), &http.Request{Method: http.MethodPut})
 	if rerr != nil {

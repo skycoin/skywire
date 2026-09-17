@@ -18,6 +18,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/0magnet/yamux"
 )
 
 // --- classification -------------------------------------------------------
@@ -137,18 +139,24 @@ func TestUploadRetryWaitIsBounded(t *testing.T) {
 	}
 }
 
-// TestUploadPerTunnelHonorsTheSendWindow: chunk x per-tunnel inflight never
-// passes the router's per-leg send window, whatever the chunk size is set to.
-func TestUploadPerTunnelHonorsTheSendWindow(t *testing.T) {
+// TestUploadPerTunnelIsTheConcurrency: one tunnel carries uploadConcurrency
+// chunks whatever the chunk size is. The old ceiling — chunk x inflight at or
+// below the router's 8 MiB per-leg send window — was over-conservative: a writer
+// parked at the window is a writer with bytes already queued for the next
+// opening, and holding it to 2 cost a single striped upload 22 % of the
+// single-route reference.
+func TestUploadPerTunnelIsTheConcurrency(t *testing.T) {
 	defer restoreUploadTunables(uploadChunkBytes, uploadMemBytes, uploadStripeMinBytes, uploadConcurrency)()
-	s := &uploadStripe{}
-	uploadChunkBytes = 4 << 20
-	if got := s.perTunnel(); got != 2 || int64(got)*uploadChunkBytes > uploadSendWindowBytes {
-		t.Fatalf("4 MiB chunks → %d in flight per tunnel, want 2 (<= %d bytes)", got, uploadSendWindowBytes)
+	s := &uploadStripe{u: &uploadCandidate{}}
+	for _, chunk := range []int64{4 << 20, 8 << 20} {
+		uploadChunkBytes = chunk
+		if got := s.perTunnel(); got != uploadConcurrency {
+			t.Fatalf("%d-byte chunks → %d in flight per tunnel, want %d", chunk, got, uploadConcurrency)
+		}
 	}
-	uploadChunkBytes = 8 << 20
+	uploadConcurrency = 0
 	if got := s.perTunnel(); got != 1 {
-		t.Fatalf("8 MiB chunks → %d in flight per tunnel, want 1 (the window is %d)", got, uploadSendWindowBytes)
+		t.Fatalf("a concurrency of 0 → %d, want the 1 floor", got)
 	}
 }
 
@@ -157,12 +165,23 @@ func TestUploadPerTunnelHonorsTheSendWindow(t *testing.T) {
 func TestUploadSlotsHonorTheSinksWindow(t *testing.T) {
 	defer restoreUploadTunables(uploadChunkBytes, uploadMemBytes, uploadStripeMinBytes, uploadConcurrency)()
 	uploadChunkBytes = 4 << 20
-	uploadMemBytes = 16 << 20
+	uploadMemBytes = 32 << 20
+	uploadConcurrency = 4
 	s := &uploadStripe{u: &uploadCandidate{}}
-	if got := s.slots(); got != 4 {
-		t.Fatalf("an origin that did not advertise a window → %d slots, want our own 4", got)
+	if got := s.slots(); got != 8 {
+		t.Fatalf("an origin that did not advertise a window → %d slots, want our own 8", got)
 	}
-	s.u.window = 8 << 20 // two chunks, both of them the re-send headroom
+	s.u.window = 64 << 20 // the sink's default: 16 chunks, 4 of them headroom
+	if got := s.slots(); got != 8 {
+		t.Fatalf("a 64 MiB window → %d slots, want our own 8 (the window is not the binding one)", got)
+	}
+	// An OLD sink advertising 16 MiB: 4 chunks, and the headroom is capped at half
+	// the window so raising the concurrency cannot narrow it to a single buffer.
+	s.u.window = 16 << 20
+	if got := s.slots(); got != 2 {
+		t.Fatalf("a 16 MiB window → %d slots, want 2", got)
+	}
+	s.u.window = 8 << 20 // two chunks: one live, one the re-send headroom
 	if got := s.slots(); got != 1 {
 		t.Fatalf("an 8 MiB window → %d slots, want 1", got)
 	}
@@ -209,6 +228,12 @@ type stubSink struct {
 	have  map[int64]int64
 	delay time.Duration
 	whole int // plain POSTs (no id/Content-Range) that arrived
+	// holdFirst keeps chunk 0 — and with it the contiguous prefix, which nothing
+	// else can advance — inside its handler for this long. earlyStarts is every
+	// other chunk start that reached the sink before chunk 0's response went out.
+	holdFirst   time.Duration
+	released    atomic.Bool
+	earlyStarts map[int64]bool
 }
 
 func (s *stubSink) handler() http.HandlerFunc {
@@ -234,6 +259,15 @@ func (s *stubSink) handler() http.HandlerFunc {
 			http.Error(w, "bad range", http.StatusBadRequest)
 			return
 		}
+		if s.holdFirst > 0 {
+			if start == 0 {
+				defer s.released.Store(true)
+			} else if !s.released.Load() {
+				s.mu.Lock()
+				s.earlyStarts[start] = true
+				s.mu.Unlock()
+			}
+		}
 		buf, err := io.ReadAll(io.LimitReader(r.Body, end-start+1))
 		if err != nil || int64(len(buf)) != end-start+1 {
 			http.Error(w, "short chunk", http.StatusBadRequest)
@@ -241,6 +275,9 @@ func (s *stubSink) handler() http.HandlerFunc {
 		}
 		if s.delay > 0 {
 			time.Sleep(s.delay)
+		}
+		if start == 0 && s.holdFirst > 0 {
+			time.Sleep(s.holdFirst)
 		}
 		s.mu.Lock()
 		if s.obj == nil {
@@ -545,18 +582,19 @@ func TestUploadSlotsLeaveTheSinkHeadroom(t *testing.T) {
 	defer restoreUploadTunables(uploadChunkBytes, uploadMemBytes, uploadStripeMinBytes, uploadConcurrency)()
 	uploadChunkBytes = 4 << 20
 	uploadMemBytes = 64 << 20
+	uploadConcurrency = 4
 	for _, window := range []int64{8 << 20, 16 << 20, 32 << 20, 64 << 20} {
 		s := &uploadStripe{u: &uploadCandidate{window: window}}
 		live := int64(s.slots()) * uploadChunkBytes
-		resend := int64(s.perTunnel()) * uploadChunkBytes
+		resend := int64(s.headroom()) * uploadChunkBytes
 		if live+resend > window && s.slots() > 1 {
 			t.Fatalf("a %d-byte window → %d live + %d re-send bytes, past the window",
 				window, live, resend)
 		}
 	}
 	s := &uploadStripe{u: &uploadCandidate{window: 32 << 20}}
-	if got := s.slots(); got != 6 {
-		t.Fatalf("a 32 MiB window with 4 MiB chunks → %d slots, want 8 less the 2-chunk headroom", got)
+	if got := s.slots(); got != 4 {
+		t.Fatalf("a 32 MiB window with 4 MiB chunks → %d slots, want 8 less the 4-chunk headroom", got)
 	}
 }
 
@@ -624,5 +662,231 @@ func TestEvictedChunkIsResentWithoutTheBackstop(t *testing.T) {
 	s.note(chunkAck{status: http.StatusOK, received: 12288})
 	if !s.awaitDurable(8192, 12287) {
 		t.Fatal("a prefix past the chunk's end is durable")
+	}
+}
+
+// --- the chunk's two idle round trips -------------------------------------
+
+// readSocks5ConnectRequest reads a SOCKS5 greeting and CONNECT request the way
+// the exit's own server does, WITHOUT answering either. What the client wrote
+// behind them is left on the stream for the caller to look at.
+func readSocks5ConnectRequest(st net.Conn) error {
+	hdr := make([]byte, 2)
+	if _, err := io.ReadFull(st, hdr); err != nil {
+		return err
+	}
+	if hdr[0] != 0x05 {
+		return fmt.Errorf("greeting version %d", hdr[0])
+	}
+	if _, err := io.ReadFull(st, make([]byte, int(hdr[1]))); err != nil {
+		return err
+	}
+	rh := make([]byte, 4)
+	if _, err := io.ReadFull(st, rh); err != nil {
+		return err
+	}
+	switch rh[3] {
+	case 0x01:
+		_, _ = io.ReadFull(st, make([]byte, 4)) //nolint:errcheck,gosec
+	case 0x03:
+		l := make([]byte, 1)
+		if _, err := io.ReadFull(st, l); err != nil {
+			return err
+		}
+		_, _ = io.ReadFull(st, make([]byte, int(l[0]))) //nolint:errcheck,gosec
+	case 0x04:
+		_, _ = io.ReadFull(st, make([]byte, 16)) //nolint:errcheck,gosec
+	}
+	_, err := io.ReadFull(st, make([]byte, 2)) // port
+	return err
+}
+
+// newUploadStripeOnExit builds a striped upload whose single tunnel ends in a
+// fake exit that runs exit() on every stream, so a test can script the SOCKS5
+// replies of one chunk PUT byte by byte.
+func newUploadStripeOnExit(t *testing.T, total int64, exit func(net.Conn)) *uploadStripe {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close() //nolint:errcheck
+	dialed := make(chan net.Conn, 1)
+	go func() {
+		c, _ := ln.Accept() //nolint:errcheck
+		dialed <- c
+	}()
+	cliConn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatalf("dial pair: %v", err)
+	}
+	exitConn := <-dialed
+	go func() {
+		sess, err := yamux.Server(exitConn, yamux.DefaultConfig())
+		if err != nil {
+			return
+		}
+		for {
+			st, err := sess.AcceptStream()
+			if err != nil {
+				return
+			}
+			go exit(st)
+		}
+	}()
+	client, err := NewClient(cliConn, nil)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	client.SetRangeSplit(true, 1, 1<<20)
+	t.Cleanup(func() { _ = client.Close() }) //nolint:errcheck
+
+	req := mustParseRequest(t, "PUT /up HTTP/1.1\r\nHost: sink.example\r\nContent-Length: 0\r\n\r\n")
+	return newUploadStripe(client, &uploadCandidate{req: req, host: "sink.example", total: total, stripe: true}, nil)
+}
+
+// TestPutChunkWritesTheBodyBeforeTheHandshakeReply: the chunk body goes out
+// WHILE the SOCKS5 replies are still coming back, not after them. Blocking on
+// the handshake first left one leg RTT (~142 ms live) idle at the head of every
+// chunk, which is most of the gap a single striped upload had to the
+// single-route reference. The exit here answers NOTHING until the whole body has
+// arrived, so a client that waited for the method reply deadlocks instead.
+func TestPutChunkWritesTheBodyBeforeTheHandshakeReply(t *testing.T) {
+	buf := make([]byte, 64<<10)
+	for i := range buf {
+		buf[i] = byte(i * 7)
+	}
+	saw := make(chan int, 1)
+	s := newUploadStripeOnExit(t, int64(len(buf)), func(st net.Conn) {
+		defer st.Close() //nolint:errcheck
+		if err := readSocks5ConnectRequest(st); err != nil {
+			saw <- -1
+			return
+		}
+		n, p := 0, make([]byte, 32<<10)
+		for n < len(buf) { // head + body: past len(buf) the body is certainly flowing
+			k, err := st.Read(p)
+			if err != nil {
+				saw <- n
+				return
+			}
+			n += k
+		}
+		saw <- n
+		ack := fmt.Sprintf("HTTP/1.1 202 Accepted\r\nX-Upload-Received: %d\r\nContent-Length: 0\r\n\r\n", len(buf))
+		_, _ = st.Write([]byte{0x05, 0x00}) //nolint:errcheck,gosec
+		_, _ = st.Write(socks5OKReply)      //nolint:errcheck,gosec
+		_, _ = io.WriteString(st, ack)      //nolint:errcheck,gosec
+	})
+
+	done := make(chan error, 1)
+	var ack chunkAck
+	go func() {
+		var err error
+		ack, err = s.putChunk(0, int64(len(buf))-1, buf)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("putChunk: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("putChunk never finished: the body waited for the handshake reply instead of overlapping it")
+	}
+	if n := <-saw; n < len(buf) {
+		t.Fatalf("the exit saw %d bytes before it answered, want at least the %d-byte body", n, len(buf))
+	}
+	if ack.status != http.StatusAccepted || ack.received != int64(len(buf)) {
+		t.Fatalf("ack = %+v, want a 202 with the whole chunk received", ack)
+	}
+}
+
+// TestPutChunkFailsCleanlyWhenTheHandshakeFails: overlapping the body with the
+// handshake must not turn a refused handshake into a leaked writer. The exit
+// selects a method we do not offer and then stops reading, so the body goroutine
+// is parked mid-chunk when the failure lands; putChunk has to end it, JOIN it and
+// hand deliverChunk an ordinary failed attempt. The buffer is touched after the
+// return, so -race fails the test if the writer outlived the attempt.
+func TestPutChunkFailsCleanlyWhenTheHandshakeFails(t *testing.T) {
+	buf := make([]byte, 512<<10) // larger than the yamux window: the writer parks
+	stop := make(chan struct{})
+	t.Cleanup(func() { close(stop) })
+	s := newUploadStripeOnExit(t, int64(len(buf)), func(st net.Conn) {
+		defer st.Close() //nolint:errcheck
+		if err := readSocks5ConnectRequest(st); err != nil {
+			return
+		}
+		_, _ = st.Write([]byte{0x05, 0xFF}) //nolint:errcheck,gosec // no acceptable method
+		<-stop
+	})
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.putChunk(0, int64(len(buf))-1, buf)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("a refused SOCKS5 handshake must fail the chunk")
+		}
+		if !strings.Contains(err.Error(), "non-no-auth") {
+			t.Fatalf("putChunk = %v, want the handshake's own refusal", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("putChunk hung on a refused handshake")
+	}
+	buf[0] ^= 0xFF // a writer still running would be a data race here
+}
+
+// TestUploadSlotIsFreedOnTheAckNotTheDurability: a chunk the sink has ACKED but
+// whose bytes are not yet in its contiguous prefix keeps its buffer — the
+// re-send needs the bytes — and gives up its admission SLOT, so the next chunk's
+// stream opens at once. Holding the slot to durability made every chunk queue
+// behind whichever one the prefix was waiting on: the slots refilled in a burst
+// and the tunnels idled at each wave edge.
+//
+// The sink holds chunk 0 (and with it the prefix) until the test releases it. A
+// client that freed the slot only on durability could not get chunk 2 out at
+// all, because nothing can advance the prefix while chunk 0 is held.
+func TestUploadSlotIsFreedOnTheAckNotTheDurability(t *testing.T) {
+	defer restoreUploadTunables(uploadChunkBytes, uploadMemBytes, uploadStripeMinBytes, uploadConcurrency)()
+	uploadChunkBytes = 64 << 10
+	uploadMemBytes = 1 << 20 // 16 buffers: the admission slot is the binding gate
+	uploadStripeMinBytes = 64 << 10
+	uploadConcurrency = 2
+
+	blob := make([]byte, 4*(64<<10))
+	for i := range blob {
+		blob[i] = byte(i*13 + 5)
+	}
+	want := sha256.Sum256(blob)
+
+	sink := &stubSink{holdFirst: 600 * time.Millisecond, earlyStarts: map[int64]bool{}}
+	backend := httptest.NewServer(sink.handler())
+	defer backend.Close()
+
+	resp := socks5Upload(t, newRSTestClient(t, backend.Listener.Addr().String(), 4, 1<<20), "/upload", blob)
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var got struct {
+		Bytes  int64  `json:"bytes"`
+		Sha256 string `json:"sha256"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Bytes != int64(len(blob)) || got.Sha256 != hex.EncodeToString(want[:]) {
+		t.Fatalf("sink saw %d bytes / %s, want %d / %s", got.Bytes, got.Sha256, len(blob), hex.EncodeToString(want[:]))
+	}
+	sink.mu.Lock()
+	early := len(sink.earlyStarts)
+	third := sink.earlyStarts[2*(64<<10)]
+	sink.mu.Unlock()
+	if !third {
+		t.Fatalf("only %d chunk(s) reached the sink while chunk 0 was held: the slot was not freed until the chunk was durable", early)
 	}
 }
