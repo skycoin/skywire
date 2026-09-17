@@ -56,6 +56,11 @@ type rangeSplitConfig struct {
 	minter       skynetca.LeafMinter // mints per-host leaves for browser-side TLS termination
 	caCert       *x509.Certificate   // the MITM root, for operator export/import
 	originRoots  *x509.CertPool      // origin-side verification roots (nil = system); tests inject here
+
+	// uploadProbes remembers which origins advertised X-Chunked-Upload, so an
+	// upload to one that did is striped without re-probing (upload_stripe.go).
+	// Per-client: a nil cache only means every upload probes.
+	uploadProbes *uploadProbeCache
 }
 
 const (
@@ -97,7 +102,12 @@ const (
 var errSessionClosed = errors.New("skysocks: tunnel closed under the fetch")
 
 func defaultRangeSplitConfig() rangeSplitConfig {
-	return rangeSplitConfig{enabled: true, concurrency: defaultRSConcurrency, chunkSize: defaultRSChunkSize}
+	return rangeSplitConfig{
+		enabled:      true,
+		concurrency:  defaultRSConcurrency,
+		chunkSize:    defaultRSChunkSize,
+		uploadProbes: &uploadProbeCache{},
+	}
 }
 
 // rangePlainPort is the port the splitter treats as plaintext HTTP (80 unless
@@ -160,15 +170,34 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	//    stop matching an HTTP method prefix and spliced with no meaningful delay.
 	reqHead, isHTTP := peekRequestHead(conn, rsHeadLimit)
 	clearDeadlines(conn)
-	var req *http.Request
+	var (
+		req *http.Request
+		up  *uploadCandidate
+	)
 	if isHTTP {
-		if r, perr := http.ReadRequest(bufio.NewReader(bytes.NewReader(reqHead))); perr == nil && splittableRequest(r) {
-			req = r
-			host = r.Host
-			if h, _, e := net.SplitHostPort(host); e == nil {
+		if r, perr := http.ReadRequest(bufio.NewReader(bytes.NewReader(reqHead))); perr == nil {
+			h := r.Host
+			if hh, _, e := net.SplitHostPort(h); e == nil {
+				h = hh
+			}
+			if splittableRequest(r) {
+				req, host = r, h
+			} else if up = classifyUpload(r, reqHead, h); up != nil {
+				// A POST/PUT with a known length: striped across the tunnels when the
+				// origin opts in, replayed on a live tunnel when it is small enough to
+				// remember, today's splice otherwise (upload_stripe.go).
 				host = h
 			}
 		}
+	}
+
+	// 2b. The upload opt-in probe, started NOW so it overlaps the CONNECT reply
+	//     read below rather than adding a round trip of its own. It rides its own
+	//     exit stream — stream0 stays pristine, so an origin that does not opt in
+	//     is spliced byte-for-byte as before.
+	var probe <-chan uploadProbeEntry
+	if up != nil && up.stripe {
+		probe = c.startUploadProbe(up)
 	}
 
 	// 3. chunk0 doubles as the range probe: original request + Range: bytes=0-(N-1).
@@ -202,6 +231,22 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	}
 	clearDeadlines(conn, stream)
 	if req == nil {
+		if up != nil {
+			if probe != nil {
+				if e := c.uploadProbeResult(probe); e.ok {
+					// The origin takes offset-addressed chunks: the body goes over its own
+					// per-chunk streams, so stream0 has nothing left to carry.
+					up.window = e.window
+					stream.Close() //nolint:errcheck,gosec
+					c.serveStripedUpload(conn, up)
+					return host, nil, true
+				}
+			}
+			if up.replay {
+				c.spliceReplayable(conn, stream, up)
+				return host, nil, true
+			}
+		}
 		return host, reqHead, false // let caller splice, replaying what we read
 	}
 
