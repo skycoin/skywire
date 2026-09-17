@@ -307,3 +307,69 @@ func TestPromoteBestStandby_EmptyPool(t *testing.T) {
 	require.Nil(t, c.promoteBestStandby("failover: active tunnel died"))
 	require.Equal(t, 1, c.activeLiveCount())
 }
+
+// A retire arms the fill but holds the DIAL off for one probe interval, so the
+// refill asks the router for a route only after the first hop the dead tunnel
+// occupied has had its restore window.
+//
+// Arming inline dialed at +11 s on the rig 2026-09-17 (fe53f42dc), while that
+// hop was still down: the diversify search had all seven held first hops
+// excluded and nothing left to take but a sudph leg, and two 50 MB uploads then
+// rode the 0.4-0.5 MB/s route it built. Healthy builds refilled at 21-22 s.
+func TestRetireTunnel_PoolFillWaitsOneProbeInterval(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		probe      time.Duration
+		duringHold int64
+	}{
+		{"one probe interval holds the dial off", time.Minute, 0},
+		{"no interval configured dials at once", 0, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, s, cleanup := failoverClient(t, 45)
+			defer cleanup()
+			c.probeInterval = tc.probe
+
+			var dials atomic.Int64
+			var closers []func()
+			defer func() {
+				for _, fn := range closers {
+					fn()
+				}
+			}()
+			c.SetStandbyPool(2)
+			c.SetPoolDial(func() (net.Conn, error) {
+				dials.Add(1)
+				conn, closeConn := newTestTunnelConn(t)
+				closers = append(closers, closeConn)
+				return conn, nil
+			})
+
+			require.True(t, c.retireTunnel(s[0], "liveness: no pong and no bytes for 47s"))
+			require.Equal(t, 1, c.activeLiveCount(), "the failover promote is immediate either way")
+
+			c.redialMu.Lock()
+			armed, retryAt := c.poolArmed, c.poolRetryAt
+			c.redialMu.Unlock()
+			require.True(t, armed, "the death still arms the fill; only the dial waits")
+			require.Equal(t, tc.probe > 0, !retryAt.IsZero(), "the wait is the existing poolRetryAt gate")
+
+			for i := 0; i < 5; i++ {
+				c.maybePoolFill()
+				waitFill(t, c)
+			}
+			require.EqualValues(t, tc.duringHold, dials.Load())
+
+			// The window passes and the same armed fill dials on its own: the
+			// hold-off is a wait, never a cancel.
+			c.redialMu.Lock()
+			c.poolRetryAt = time.Time{}
+			c.redialMu.Unlock()
+			c.maybePoolFill()
+			waitFill(t, c)
+			require.EqualValues(t, 1, dials.Load())
+			_, standby, _, _, _ := c.StandbyPoolState()
+			require.Equal(t, 1, standby, "and the refill still lands in the pool")
+		})
+	}
+}

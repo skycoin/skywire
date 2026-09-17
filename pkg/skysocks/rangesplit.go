@@ -711,19 +711,51 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	// 2.4x waste). Rolling the deadline forward on every read means only a
 	// genuinely STALLED stream fails; a slow-but-moving one completes.
 	buf := make([]byte, end-start+1)
+	if err := readChunkBody(st, resp.Body, buf, rsChunkIdleTimeout); err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
+// readDeadliner is the one thing readChunkBody needs of the exit stream: a
+// rolling read deadline. Narrowed to an interface so the loop is testable
+// without a live yamux session.
+type readDeadliner interface {
+	SetReadDeadline(t time.Time) error
+}
+
+// readChunkBody fills buf from body, refreshing st's read deadline before every
+// read so only a genuinely stalled stream fails.
+//
+// The zero-read guard is copyWithIdleTimeout's, for the same reason: a body
+// stuck returning the io.Reader contract's discouraged-but-legal (0, nil) pegs
+// this loop at 100 % with no read ever blocking, so the rolling deadline never
+// fires, retryWithBudget is never reached, and writeInOrder waits on this chunk
+// forever while it holds its memory permits — a silent all-paths stall. A
+// streak means a broken reader: fail the attempt and let the retry decide.
+func readChunkBody(st readDeadliner, body io.Reader, buf []byte, idle time.Duration) error {
 	got := 0
+	zeroReads := 0
+	const maxZeroReads = 64
 	for got < len(buf) {
-		_ = st.SetReadDeadline(time.Now().Add(rsChunkIdleTimeout)) //nolint:errcheck
-		n, rerr := resp.Body.Read(buf[got:])
+		_ = st.SetReadDeadline(time.Now().Add(idle)) //nolint:errcheck
+		n, rerr := body.Read(buf[got:])
 		got += n
+		if n > 0 {
+			zeroReads = 0
+		} else if rerr == nil {
+			if zeroReads++; zeroReads >= maxZeroReads {
+				return fmt.Errorf("chunk body stuck: %d consecutive zero-byte reads with no error", zeroReads)
+			}
+		}
 		if rerr != nil {
 			if got == len(buf) && rerr == io.EOF {
 				break
 			}
-			return nil, rerr
+			return rerr
 		}
 	}
-	return buf, nil
+	return nil
 }
 
 // socks5Greeting is the no-auth method-selection greeting; buildSocks5Connect
