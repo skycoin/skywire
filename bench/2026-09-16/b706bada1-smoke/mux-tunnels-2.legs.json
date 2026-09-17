@@ -1,0 +1,152 @@
+[
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49160,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 1,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "b414796d-14fc-080e-9ce6-a7162e3e562b",
+        "tp_type": "stcpr",
+        "remote_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "latency_ms": 139.383165,
+        "direct": true,
+        "sent_bytes": 32,
+        "sent_packets": 1,
+        "recv_bytes": 32,
+        "recv_packets": 1,
+        "payload_bytes": 12,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 38.43672194446836,
+        "goodput_up_bps": 19.21836097223418,
+        "goodput_down_bps": 19.21836097223418,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "b414796d-14fc-080e-9ce6-a7162e3e562b",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 139.383165
+          }
+        ],
+        "remote_ip": "143.42.59.213"
+      }
+    ],
+    "recovery": {
+      "write_seq": 1,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 1,
+      "last_sack_recv_ms_ago": 397.41812,
+      "last_sack_recv_contig": 0,
+      "reorder_next_seq": 1,
+      "reorder_pending": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 1,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 397.381977,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    }
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49161,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 1,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "bd7698ba-38c3-06c5-8add-fffc3872e75b",
+        "tp_type": "squicr",
+        "remote_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "latency_ms": 138.10512,
+        "direct": true,
+        "sent_bytes": 32,
+        "sent_packets": 1,
+        "recv_bytes": 32,
+        "recv_packets": 1,
+        "payload_bytes": 12,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 99.89163396561851,
+        "goodput_up_bps": 49.945816982809255,
+        "goodput_down_bps": 49.945816982809255,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "bd7698ba-38c3-06c5-8add-fffc3872e75b",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "squicr",
+            "latency_ms": 138.10512
+          }
+        ],
+        "remote_ip": "143.42.59.213"
+      }
+    ],
+    "recovery": {
+      "write_seq": 1,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 1,
+      "last_sack_recv_ms_ago": 399.420397,
+      "last_sack_recv_contig": 0,
+      "reorder_next_seq": 1,
+      "reorder_pending": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 1,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 398.348688,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    }
+  }
+]
