@@ -14,6 +14,10 @@ var (
 
 	// ErrValueAlreadyExists is returned when value associated with the specified key already exists.
 	ErrValueAlreadyExists = errors.New("value already exists")
+
+	// ErrManagerClosed is returned by Set / ReserveNextID once CloseAll has run.
+	// The caller owns the value it was about to store, so it must close it.
+	ErrManagerClosed = errors.New("id manager is closed")
 )
 
 // Manager manages allows to store and retrieve arbitrary values
@@ -23,6 +27,12 @@ type Manager struct {
 	values map[uint16]interface{}
 	mx     sync.RWMutex
 	lstID  uint16
+	// closed is set by CloseAll. The manager belongs to one app proc, and
+	// CloseAll runs at that proc's teardown, so nothing may be stored
+	// afterwards: a dial that was still in flight when the app stopped used
+	// to complete into a dead manager and its conn — a route group with its
+	// keep-alive loop running — was never closed by anything again.
+	closed bool
 
 	di *DeltaInformer // optional
 }
@@ -46,6 +56,11 @@ func (m *Manager) AddDeltaInformer() *DeltaInformer {
 // ReserveNextID reserves next free slot for the value and returns the id for it.
 func (m *Manager) ReserveNextID() (id *uint16, free func() bool, err error) {
 	m.mx.Lock()
+
+	if m.closed {
+		m.mx.Unlock()
+		return nil, nil, ErrManagerClosed
+	}
 
 	nxtID := m.lstID + 1
 	for ; nxtID != m.lstID; nxtID++ {
@@ -113,6 +128,11 @@ func (m *Manager) Add(id uint16, v interface{}) (free func() bool, err error) {
 func (m *Manager) Set(id uint16, v interface{}) error {
 	m.mx.Lock()
 
+	if m.closed {
+		m.mx.Unlock()
+		return ErrManagerClosed
+	}
+
 	l, ok := m.values[id]
 	if !ok {
 		m.mx.Unlock()
@@ -169,9 +189,15 @@ func (m *Manager) CloseAll() {
 	wg := new(sync.WaitGroup)
 
 	m.mx.Lock()
+	m.closed = true
 	for k, v := range m.values {
 		c, ok := v.(io.Closer)
 		if !ok {
+			// Reserved-but-unset slots (v == nil) go too. Leaving them behind
+			// kept the id reserved, so an in-flight dial completing after this
+			// point still passed Set's "id is not reserved" check and stored a
+			// live conn in a manager that is never walked again.
+			delete(m.values, k)
 			continue
 		}
 		delete(m.values, k)

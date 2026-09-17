@@ -490,3 +490,42 @@ func TestManager_constructFreeFunc(t *testing.T) {
 	require.False(t, ok)
 	require.Nil(t, gotV)
 }
+
+// closerStub counts Close calls so a test can assert the manager closed it.
+type closerStub struct{ closed bool }
+
+func (c *closerStub) Close() error {
+	c.closed = true
+	return nil
+}
+
+// TestManager_CloseAll_ClearsReservationsAndRejectsLateSet is the regression
+// test for a conn stored into a torn-down app's manager. CloseAll used to skip
+// reserved-but-unset slots (a nil value is no io.Closer), leaving the id
+// reserved, so a dial that was still in flight when the app stopped completed
+// into Set, passed the "id is not reserved" check, and parked a live conn —
+// for skysocks-client, a route group with its keep-alive loop running — where
+// nothing would ever close it again.
+func TestManager_CloseAll_ClearsReservationsAndRejectsLateSet(t *testing.T) {
+	m := New()
+
+	stored := &closerStub{}
+	_, err := m.Add(uint16(1), stored)
+	require.NoError(t, err)
+
+	inFlight, _, err := m.ReserveNextID()
+	require.NoError(t, err)
+
+	m.CloseAll()
+
+	require.True(t, stored.closed, "a stored conn must be closed")
+	require.Equal(t, 0, m.Len(), "reserved-but-unset slots must go too")
+
+	// The in-flight dial completes after the teardown: Set must refuse so the
+	// caller closes what it dialed instead of leaking it here.
+	require.ErrorIs(t, m.Set(*inFlight, &closerStub{}), ErrManagerClosed)
+	require.Equal(t, 0, m.Len())
+
+	_, _, err = m.ReserveNextID()
+	require.ErrorIs(t, err, ErrManagerClosed)
+}

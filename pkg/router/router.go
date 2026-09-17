@@ -644,6 +644,15 @@ type Router interface {
 	// of all route groups (not just one app's) is wanted at once.
 	RouteGroupMuxInfoAll() []MuxInfo
 
+	// CloseRouteGroupsForApp closes and de-registers every route group
+	// tagged with appName — the app's own tunnels plus the sibling groups
+	// a multi-tunnel dial (--tunnels N) created alongside them. Returns
+	// the number of groups closed. Called when the app stops, so a group
+	// the app will never read from again does not keep refreshing its
+	// rules by keep-alive and does not show up in `proxy mux info` (or
+	// the --route reconcile count) for a stopped app.
+	CloseRouteGroupsForApp(appName string) int
+
 	// MuxEvents returns the bounded history of route-group and mux-leg
 	// changes — each add, removal, park, re-home and group close with the
 	// reason the code gave and who initiated it. This is where to look when
