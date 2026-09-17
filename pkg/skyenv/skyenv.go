@@ -352,6 +352,17 @@ const (
 	// first hops settles at three and never dials again until a tunnel dies.
 	// Chasing an unreachable target is what made the self-heal storm of #4325.
 	//
+	// On a WELL-CONNECTED visor this ceiling, not exhaustion, is what stops the
+	// fill — and that is the intended reading of the number. A first hop is any
+	// transport this visor holds, so the disjoint bound is the size of its own
+	// transport set, not the handful of peers an operator thinks of as "the
+	// route": measured on the campaign rig 2026-09-17, the eighth pool dial
+	// still had 124 free ranked candidates to choose from, all of them disjoint
+	// by transport AND by peer. Exhaustion is the case of a visor holding only
+	// a few transports. A reader of the settled state must therefore look at
+	// the REASON ("pool ceiling" vs "no disjoint first hop left") before
+	// concluding anything about the topology.
+	//
 	// ONE home for the default so the CLI flag, the app's cobra flag and the
 	// app's launcher flag set cannot drift (CLI/GUI parity), exactly as with
 	// SkysocksClientTunnels. 0 disables the pool (active tunnels only).

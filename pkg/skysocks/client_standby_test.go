@@ -135,7 +135,7 @@ func TestPoolFill_StopsAtCeiling(t *testing.T) {
 		waitFill(t, c)
 	}
 	require.EqualValues(t, 2, dials.Load())
-	held, standby, settled, _ := c.StandbyPoolState()
+	held, standby, settled, _, _ := c.StandbyPoolState()
 	require.Equal(t, 3, held)
 	require.Equal(t, 2, standby, "everything past the active target is standby")
 	require.False(t, settled, "not settled until a fill tick observes the ceiling")
@@ -147,9 +147,10 @@ func TestPoolFill_StopsAtCeiling(t *testing.T) {
 		waitFill(t, c)
 	}
 	require.EqualValues(t, 2, dials.Load(), "the ceiling must not be dialed past")
-	_, _, settled, at := c.StandbyPoolState()
+	_, _, settled, at, reason := c.StandbyPoolState()
 	require.True(t, settled)
 	require.False(t, at.IsZero())
+	require.Equal(t, "pool ceiling", reason, "the ceiling stopped it, not the topology — a bench must not read this as the disjoint bound")
 }
 
 // Exhaustion is a settled answer about the topology, so one refusal ends the
@@ -172,11 +173,12 @@ func TestPoolFill_StopsAtExhaustionAndDoesNotRedial(t *testing.T) {
 	}
 	require.EqualValues(t, 1, dials.Load(), "one refusal must end the fill")
 
-	held, standby, settled, at := c.StandbyPoolState()
+	held, standby, settled, at, reason := c.StandbyPoolState()
 	require.Equal(t, 1, held)
 	require.Zero(t, standby)
 	require.True(t, settled)
 	require.False(t, at.IsZero())
+	require.Equal(t, "no disjoint first hop left", reason, "the bench must be able to tell exhaustion from the ceiling")
 
 	// A tunnel death is the ONE thing that frees a first hop, so it — and only
 	// it — re-arms the fill.
@@ -186,9 +188,12 @@ func TestPoolFill_StopsAtExhaustionAndDoesNotRedial(t *testing.T) {
 	require.EqualValues(t, 2, dials.Load(), "a tunnel death re-arms the fill")
 }
 
-// An ordinary dial failure backs off after maxRedialFails and settles, so an
-// exit that has gone unreachable is not hammered either.
-func TestPoolFill_BacksOffOnDialFailure(t *testing.T) {
+// An ordinary dial FAILURE is not exhaustion, so it buys a bounded second look:
+// maxRedialFails dials make a round, the fill then waits out a backoff, and only
+// after poolRetryRounds does it rest. Measured on the rig 2026-09-17, treating a
+// failure like exhaustion parked the pool at five tunnels with four disjoint rig
+// intermediates still free.
+func TestPoolFill_RetriesFailuresInBoundedRounds(t *testing.T) {
 	var dials atomic.Int64
 	c, closeFirst := newPoolClient(t, 8)
 	defer closeFirst()
@@ -197,13 +202,83 @@ func TestPoolFill_BacksOffOnDialFailure(t *testing.T) {
 		return nil, errors.New("route setup timed out")
 	})
 
-	for i := 0; i < 8; i++ {
-		c.maybePoolFill()
-		waitFill(t, c)
+	drainRound := func() {
+		// More ticks than a round can use: the extra ones must be swallowed by
+		// the backoff, not spent on dials.
+		for i := 0; i < 8; i++ {
+			c.maybePoolFill()
+			waitFill(t, c)
+		}
 	}
-	require.EqualValues(t, maxRedialFails, dials.Load())
-	_, _, settled, _ := c.StandbyPoolState()
+
+	drainRound()
+	require.EqualValues(t, maxRedialFails, dials.Load(), "a round is exactly maxRedialFails dials")
+	_, _, settled, _, _ := c.StandbyPoolState()
+	require.False(t, settled, "a failure round pauses the fill; it does not end it")
+	c.redialMu.Lock()
+	require.False(t, c.poolRetryAt.IsZero(), "the next round is scheduled")
+	require.Equal(t, poolRetryDelay(1), poolRetryDelay(c.poolRetryRound))
+	c.poolRetryAt = time.Time{} // the test does not wait out 30s
+	c.redialMu.Unlock()
+
+	drainRound()
+	require.EqualValues(t, 2*maxRedialFails, dials.Load())
+	_, _, settled, _, _ = c.StandbyPoolState()
+	require.False(t, settled)
+	c.redialMu.Lock()
+	c.poolRetryAt = time.Time{}
+	c.redialMu.Unlock()
+
+	// Round poolRetryRounds closes the ledger: the fill rests until a death.
+	drainRound()
+	require.EqualValues(t, poolRetryRounds*maxRedialFails, dials.Load(), "the retry is bounded")
+	_, _, settled, _, _ = c.StandbyPoolState()
 	require.True(t, settled)
+
+	// ...and a death re-arms it with a clean ledger.
+	c.armPoolFill()
+	c.maybePoolFill()
+	waitFill(t, c)
+	require.EqualValues(t, poolRetryRounds*maxRedialFails+1, dials.Load())
+}
+
+// A dial that LANDS clears the failure ledger, so an exit that hiccups twice and
+// then answers is not one failure away from a paused fill forever after.
+func TestPoolFill_SuccessClearsTheFailureLedger(t *testing.T) {
+	var closers []func()
+	defer func() {
+		for _, fn := range closers {
+			fn()
+		}
+	}()
+	var fail atomic.Bool
+	fail.Store(true)
+
+	c, closeFirst := newPoolClient(t, 8)
+	closers = append(closers, closeFirst)
+	c.SetPoolDial(func() (net.Conn, error) {
+		if fail.Load() {
+			return nil, errors.New("route setup timed out")
+		}
+		conn, closeConn := newTestTunnelConn(t)
+		closers = append(closers, closeConn)
+		return conn, nil
+	})
+
+	c.maybePoolFill()
+	waitFill(t, c)
+	c.redialMu.Lock()
+	require.Equal(t, 1, c.poolFails)
+	c.redialMu.Unlock()
+
+	fail.Store(false)
+	c.maybePoolFill()
+	waitFill(t, c)
+	c.redialMu.Lock()
+	require.Zero(t, c.poolFails)
+	require.Zero(t, c.poolRetryRound)
+	require.True(t, c.poolRetryAt.IsZero())
+	c.redialMu.Unlock()
 }
 
 // A pool dial lands in the ACTIVE set while that set is short — so the same
@@ -228,14 +303,14 @@ func TestPoolFill_RefillsTheActiveSetFirst(t *testing.T) {
 
 	c.maybePoolFill()
 	waitFill(t, c)
-	held, standby, _, _ := c.StandbyPoolState()
+	held, standby, _, _, _ := c.StandbyPoolState()
 	require.Equal(t, 2, held)
 	require.Zero(t, standby, "the active set was short, so the new tunnel is active")
 	require.Equal(t, 2, c.activeLiveCount())
 
 	c.maybePoolFill()
 	waitFill(t, c)
-	held, standby, _, _ = c.StandbyPoolState()
+	held, standby, _, _, _ = c.StandbyPoolState()
 	require.Equal(t, 3, held)
 	require.Equal(t, 1, standby, "the active set is full, so the surplus is standby")
 	require.Equal(t, 2, c.activeLiveCount())
@@ -255,7 +330,7 @@ func TestPoolFill_DisabledByZero(t *testing.T) {
 		waitFill(t, c)
 	}
 	require.Zero(t, dials.Load())
-	_, standby, settled, _ := c.StandbyPoolState()
+	_, standby, settled, _, _ := c.StandbyPoolState()
 	require.Zero(t, standby)
 	require.False(t, settled)
 }

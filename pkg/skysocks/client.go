@@ -195,12 +195,23 @@ type Client struct {
 	// and is re-armed ONLY by a tunnel death. Sizing is discovered, never
 	// chased: an exit reachable over three disjoint first hops settles at
 	// three and stops dialing, whatever poolMax says.
+	//
+	// A DIAL FAILURE is not exhaustion and must not rest the fill for good:
+	// measured on the rig 2026-09-17, three pool tunnels died, their three
+	// re-dials failed, and the pool stayed parked at five while the topology
+	// still had free first hops. poolRetryAt / poolRetryRound give failures a
+	// BOUNDED second look — poolRetryRounds rounds of maxRedialFails dials,
+	// each round behind a longer backoff — so the fill can still reach the
+	// real bound without ever becoming a loop. A dial that lands clears both.
 	poolDial          func() (net.Conn, error)
 	poolMax           int
 	poolArmed         bool
 	poolFails         int
+	poolRetryAt       time.Time
+	poolRetryRound    int
 	poolSettledAt     time.Time
 	poolSettledN      int
+	poolSettledReason string
 	poolSettledLogged bool
 	poolFillInFlight  atomic.Bool
 }
@@ -695,6 +706,41 @@ func (c *Client) SetTunnelRedial(fn func() (net.Conn, error)) {
 // or at exhaustion and is re-armed only by a tunnel death.
 const poolFillInterval = 2 * time.Second
 
+// Bounded retry after a pool dial FAILS — as opposed to being refused for want
+// of a disjoint first hop, which is a settled fact about the topology and is
+// never retried.
+//
+// A failure says nothing about how many disjoint routes exist. Measured on the
+// rig 2026-09-17: the pool filled to its ceiling of eight, three of the eight
+// tunnels then died on unreachable peers, each death re-armed the fill, the
+// three replacement dials failed, and the fill parked itself permanently at
+// five — with four rig intermediates still free. Treating a failure like
+// exhaustion is what kept it from the real bound.
+//
+// So a failure buys a second look, and a bounded one: maxRedialFails dials make
+// a round, each round waits longer than the last, and after poolRetryRounds the
+// fill rests until a tunnel death re-arms it. Worst case is 3x3 = 9 dials
+// spread over ~3.5 minutes, one ever in flight — three orders of magnitude off
+// the #4325 storm, and it still terminates on its own.
+const (
+	poolRetryBackoffBase = 30 * time.Second
+	poolRetryBackoffMax  = 4 * time.Minute
+	poolRetryRounds      = 3
+)
+
+// poolRetryDelay is the wait before failure round n (1-based): 30s, 60s, 120s,
+// capped at poolRetryBackoffMax.
+func poolRetryDelay(round int) time.Duration {
+	d := poolRetryBackoffBase
+	for i := 1; i < round && d < poolRetryBackoffMax; i++ {
+		d *= 2
+	}
+	if d > poolRetryBackoffMax {
+		d = poolRetryBackoffMax
+	}
+	return d
+}
+
 // SetPoolDial wires the app's REQUIRE-disjoint dial into the Client so the
 // standby pool can grow itself. It mirrors SetTunnelRedial — the dial lives in
 // the app (cmd/apps/skysocks-client) because it needs the server PK, the
@@ -719,6 +765,12 @@ func (c *Client) SetPoolDial(fn func() (net.Conn, error)) {
 // settles at three and never dials again until a tunnel dies. Setting it does
 // not reap anything — an already-held tunnel is never given up, because the
 // active target alone decides which tunnels carry streams.
+//
+// Which of the two actually stops a given fill depends on how many transports
+// the visor holds, since a first hop is one of its own transports. A visor with
+// a handful settles on exhaustion; one on the public network settles on this
+// ceiling with plenty left — the rig's eighth pool dial had 124 free ranked
+// candidates. StandbyPoolState's reason says which happened.
 func (c *Client) SetStandbyPool(n int) {
 	if n < 0 {
 		n = 0
@@ -728,14 +780,23 @@ func (c *Client) SetStandbyPool(n int) {
 	if n > 0 {
 		c.poolArmed = true
 		c.poolFails = 0
+		c.poolRetryRound = 0
+		c.poolRetryAt = time.Time{}
 	}
 	c.redialMu.Unlock()
 }
 
 // StandbyPoolState reports the pool's size (tunnels currently held, active and
-// standby), whether the fill has settled, and how many tunnels it settled at.
-// Read by the status page and the tests.
-func (c *Client) StandbyPoolState() (held, standby int, settled bool, settledAt time.Time) {
+// standby), whether the fill has settled, when, and WHY.
+//
+// The reason is the part a bench needs, because "settled" alone conflates two
+// very different outcomes: "pool ceiling" means --standby-pool is what stopped
+// the fill and the topology had more to give, while "no disjoint first hop
+// left" means the fill really did reach the topology's bound. On a visor
+// holding a hundred-odd transports the first is the ordinary case — measured on
+// the rig 2026-09-17, the eighth pool dial still had 124 free ranked candidates
+// to choose from.
+func (c *Client) StandbyPoolState() (held, standby int, settled bool, settledAt time.Time, reason string) {
 	c.sessionsMu.Lock()
 	for _, s := range c.sessions {
 		if s == nil || s.IsClosed() {
@@ -749,8 +810,9 @@ func (c *Client) StandbyPoolState() (held, standby int, settled bool, settledAt 
 	c.sessionsMu.Unlock()
 	c.redialMu.Lock()
 	settledAt = c.poolSettledAt
+	reason = c.poolSettledReason
 	c.redialMu.Unlock()
-	return held, standby, !settledAt.IsZero(), settledAt
+	return held, standby, !settledAt.IsZero(), settledAt, reason
 }
 
 // IsStandby reports whether s is held in the pool rather than carrying streams.
@@ -809,6 +871,8 @@ func (c *Client) armPoolFill() {
 	if c.poolMax > 0 {
 		c.poolArmed = true
 		c.poolFails = 0
+		c.poolRetryRound = 0
+		c.poolRetryAt = time.Time{}
 		c.poolSettledAt = time.Time{}
 		c.poolSettledLogged = false
 	}
@@ -824,11 +888,56 @@ func (c *Client) settlePool(held int, reason string) {
 	c.poolArmed = false
 	c.poolSettledAt = time.Now()
 	c.poolSettledN = held
+	c.poolSettledReason = reason
 	c.poolSettledLogged = true
 	c.redialMu.Unlock()
 	if first && c.appCl != nil {
 		c.appCl.Log().Infof("standby pool settled at %d tunnel(s) (%s)", held, reason)
 	}
+}
+
+// notePoolDialFailure books one failed pool dial and decides what happens next.
+//
+// A failure is not exhaustion: it says the dial did not land, not that the
+// topology has no disjoint route left. Within a round the next tick simply
+// tries again — and usually onto a DIFFERENT first hop, since the router
+// re-ranks and the intermediate that just failed is excluded from the retry.
+// After maxRedialFails in a row the round closes and the fill waits out a
+// backoff before the next one; after poolRetryRounds it rests until a tunnel
+// death re-arms it.
+func (c *Client) notePoolDialFailure(err error) {
+	c.redialMu.Lock()
+	c.poolFails++
+	fails := c.poolFails
+	var wait time.Duration
+	round := c.poolRetryRound
+	giveUp := false
+	if fails >= maxRedialFails {
+		c.poolFails = 0
+		c.poolRetryRound++
+		round = c.poolRetryRound
+		if round >= poolRetryRounds {
+			giveUp = true
+		} else {
+			wait = poolRetryDelay(round)
+			c.poolRetryAt = time.Now().Add(wait)
+		}
+	}
+	c.redialMu.Unlock()
+
+	if giveUp {
+		c.settlePool(c.liveSessionCount(), "dial failures")
+		return
+	}
+	if c.appCl == nil {
+		return
+	}
+	if wait > 0 {
+		c.appCl.Log().Warnf("Standby pool dial failed %d times; pausing the fill for %v (round %d/%d): %v",
+			maxRedialFails, wait, round, poolRetryRounds, err)
+		return
+	}
+	c.appCl.Log().Warnf("Standby pool dial failed (%d/%d): %v", fails, maxRedialFails, err)
 }
 
 // maybePoolFill dials at most ONE more sibling tunnel toward the pool ceiling.
@@ -842,8 +951,10 @@ func (c *Client) settlePool(held int, reason string) {
 //   - stop at the ceiling, and record it;
 //   - stop for good at the first router.ErrNoDisjointFirstHop — that answer is
 //     about the topology, not about luck, and re-asking cannot change it;
-//   - stop after maxRedialFails ordinary dial failures, so an exit that has
-//     gone unreachable is not hammered either;
+//   - give an ordinary dial FAILURE a bounded second look and no more —
+//     poolRetryRounds rounds of maxRedialFails dials behind a growing backoff
+//     (notePoolDialFailure), because a failure says nothing about how many
+//     disjoint routes exist, but an unreachable exit must not be hammered;
 //   - re-arm ONLY when a tunnel dies (armPoolFill), because that is the one
 //     event that makes a first hop free again.
 //
@@ -854,20 +965,21 @@ func (c *Client) maybePoolFill() {
 	fn := c.poolDial
 	poolMax := c.poolMax
 	armed := c.poolArmed
-	backedOff := c.poolFails >= maxRedialFails
+	retryAt := c.poolRetryAt
 	target := c.target
 	c.redialMu.Unlock()
 
 	if fn == nil || poolMax <= 0 || !armed {
 		return
 	}
+	// Serving out a failure round's backoff. The fill is still armed and will
+	// resume on its own; this is the wait between rounds, not a rest.
+	if !retryAt.IsZero() && time.Now().Before(retryAt) {
+		return
+	}
 	held := c.liveSessionCount()
 	if held <= 0 {
 		// Total collapse is the app's --reconnect business, not the pool's.
-		return
-	}
-	if backedOff {
-		c.settlePool(held, "dial failures")
 		return
 	}
 	if held >= poolMax {
@@ -888,13 +1000,7 @@ func (c *Client) maybePoolFill() {
 				c.settlePool(c.liveSessionCount(), "no disjoint first hop left")
 				return
 			}
-			c.redialMu.Lock()
-			c.poolFails++
-			fails := c.poolFails
-			c.redialMu.Unlock()
-			if c.appCl != nil {
-				c.appCl.Log().Warnf("Standby pool dial failed (%d/%d): %v", fails, maxRedialFails, err)
-			}
+			c.notePoolDialFailure(err)
 			return
 		}
 		// A pool dial lands in the ACTIVE set while that set is short — a
@@ -911,19 +1017,17 @@ func (c *Client) maybePoolFill() {
 		}
 		if aerr != nil {
 			_ = conn.Close() //nolint:errcheck,gosec
-			c.redialMu.Lock()
-			c.poolFails++
-			c.redialMu.Unlock()
-			if c.appCl != nil {
-				c.appCl.Log().Warnf("Standby pool dial connected but wrapping it failed: %v", aerr)
-			}
+			c.notePoolDialFailure(aerr)
 			return
 		}
+		// Progress: the topology is answering, so the failure ledger starts over.
 		c.redialMu.Lock()
 		c.poolFails = 0
+		c.poolRetryRound = 0
+		c.poolRetryAt = time.Time{}
 		c.redialMu.Unlock()
 		if c.appCl != nil {
-			held, standby, _, _ := c.StandbyPoolState()
+			held, standby, _, _, _ := c.StandbyPoolState()
 			c.appCl.Log().Infof("Standby pool grew by one %s tunnel; %d held (%d standby)", role, held, standby)
 		}
 	}()
