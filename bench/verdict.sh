@@ -141,6 +141,13 @@ for cf in "$mux"/*.cut.tsv; do
 	[ -f "$cf" ] || continue
 	s=$(basename "$cf" .cut.tsv)
 	head -1 "$cf" | grep -q 'first_hop_pk' || continue # run-degrade.sh's own cut file has another shape
+	# a set whose cut was fenced off (the only target left was the paired
+	# reference's route) records the reason instead of a row
+	if [ -z "$(grep -v '^#' "$cf")" ]; then
+		_vr=$(sed -n 's/^# cut=skipped://p' "$cf" | head -1)
+		printf '%-18s cut row: skipped — %s\n' "$s" "${_vr:-no row recorded}"
+		continue
+	fi
 	grep -v '^#' "$cf" | awk -F'\t' -v s="$s" \
 		'{printf "%-18s cut row %s: %s (first hop %s) ttfb_after_cut %ss, rg %s -> %s, cut_ok=%s restored=%s\n", s, $1, $2, $3, $5, $6, $7, $8, $9}'
 done

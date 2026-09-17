@@ -120,6 +120,19 @@ shares, and never one that cannot be restored to the same transport id.
 the timestamp, `ttfb_after_cut_s` and the surviving route group ports before and
 after.
 
+The cut also never targets the **paired reference's own route**. campaign21 chose
+Atlanta's first hop 95839ad0-b588-0b1d-8475-45fba6ae993c under `CUT_FENCE=auto`
+while `paired-ref.txt` named that same route (`0371ab4b`) for the :1081
+reference instance, so the reference lost its route at row 11 and the paired
+ratios of rows 12–16 measure the mux session against a rebuilt reference rather
+than the one rows 1–10 saw. Fenced off now: the first-hop transport of the
+reference route (resolved from the same pin file `lib-paired.sh` starts the
+instance on) and every transport the `skysocks-client-ref` / `-ref2` route
+groups hold. When that leaves no candidate the set carries **no cut row** —
+`<set>.cut.tsv` holds `# cut=skipped:<reason>` and `verdict.sh` prints it —
+because cutting the reference costs every later paired row of the set;
+`CUT_REF_FENCE=0` restores the old choice.
+
     bench/exit-resources.sh <out dir> <label>          # one reading
     bench/exit-resources-check.sh <out dir> <set>      # score the pre/post pair
 

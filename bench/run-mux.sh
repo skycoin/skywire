@@ -342,6 +342,14 @@ run_set() { # <set> <socks> <tp ids> <header>
 			cut_at_row=${CUT_ROW:-$(cut_row_number)}
 			printf '# row\ttp\tfirst_hop_pk\tts\tttfb_after_cut_s\trg_ports_before\trg_ports_after\tcut_ok\trestored\n' > "$out/$set_name.cut.tsv"
 			echo "$set_name: the cut row is row $cut_at_row (trial $CUT_TRIAL of the $CUT_CELL cell), ${cut_after}s in"
+		else
+			# choose_cut refused: the only targets left were the paired
+			# reference's route (CUT_REF_FENCE), or nothing could be put back.
+			# The set runs with NO cut row and says so where the cut row would
+			# have been recorded — cutting the reference would cost every later
+			# paired row of the set.
+			printf '# row\ttp\tfirst_hop_pk\tts\tttfb_after_cut_s\trg_ports_before\trg_ports_after\tcut_ok\trestored\n' > "$out/$set_name.cut.tsv"
+			printf '# cut=skipped:%s\n' "${cut_skip_reason:-no cut target}" >> "$out/$set_name.cut.tsv"
 		fi
 	fi
 	exit_snap_row start
