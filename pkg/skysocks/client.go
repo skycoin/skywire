@@ -317,6 +317,10 @@ func (c *countingConn) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// Unwrap returns the metered conn, so a caller that needs the yamux stream
+// itself — to find the tunnel under it (sessionOf) — can see past the meter.
+func (c *countingConn) Unwrap() net.Conn { return c.Conn }
+
 func (c *countingConn) Write(p []byte) (int, error) {
 	n, err := c.Conn.Write(p)
 	if n > 0 {
