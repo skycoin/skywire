@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -105,10 +106,11 @@ answers {"bytes":N,"sha256":"…"} for the same check in the upload direction.
 /upload also takes an upload as acked, offset-addressed chunks, so an upload
 survives losing the tunnel under it: HEAD /upload advertises 'X-Chunked-Upload:
 bytes', then PUT /upload?id=<id>&bytes=<N> with 'Content-Range: bytes s-e/N'
-answers each chunk with 'X-Upload-Received: <durable prefix>', and the chunk
-that completes the object answers the same JSON a plain POST does. The body is
-hashed over the contiguous prefix and never held: out-of-order chunks wait in a
-bounded window (--upload-window).`,
+answers each chunk with 'X-Upload-Received: <durable prefix>' — 200 once the
+chunk is inside that prefix, 202 while it only waits out of order (still
+evictable, so keep it) — and the chunk that completes the object answers the
+same JSON a plain POST does. The body is hashed over the contiguous prefix and
+never held: out-of-order chunks wait in a bounded window (--upload-window).`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		buf := make([]byte, 256*1024) // zeros
 		mux := http.NewServeMux()
@@ -463,7 +465,7 @@ func parseByteRange(h string, n uint64) (start, end uint64, ok bool) {
 //
 // The sink never holds the object. The SHA-256 is rolled over the CONTIGUOUS
 // PREFIX as chunks are absorbed; chunks that arrive ahead of the frontier wait
-// in a bounded reorder window (--upload-window, 16 MiB) and are absorbed when the
+// in a bounded reorder window (--upload-window, 64 MiB) and are absorbed when the
 // frontier reaches them. Memory is therefore O(window x sessions), not O(object).
 //
 // Contract:
@@ -471,7 +473,11 @@ func parseByteRange(h string, n uint64) (start, end uint64, ok bool) {
 //	HEAD|OPTIONS /upload            -> X-Chunked-Upload: bytes (the opt-in signal),
 //	                                   X-Upload-Window/-Sessions/-Idle
 //	PUT /upload?id=<id>&bytes=<N>   -> with Content-Range: bytes <s>-<e>/<N>;
-//	                                   2xx carries X-Upload-Received: <acked prefix>
+//	                                   200 = in the durable prefix, 202 = only
+//	                                   held out of order (evictable, re-send it);
+//	                                   both carry X-Upload-Received: <acked prefix>
+//	                                   and, when a held chunk was just dropped,
+//	                                   X-Upload-Evicted: <start>[,<start>...]
 //	GET /upload?id=<id>             -> the same counters, for a resume probe
 //	POST /upload                    -> unchanged whole-body sink (the control arm)
 //
@@ -494,11 +500,18 @@ var (
 	// loadtestUploadWindow bounds the bytes ONE session may buffer: chunks held
 	// ahead of the frontier plus the chunks being read. A frontier chunk is
 	// always admitted (held chunks are evicted for it if need be, and re-sent by
-	// the client, which never got a 2xx for them), so the window can never
+	// the client, which got 202 and not 200 for them), so the window can never
 	// deadlock a session.
-	loadtestUploadWindow int64 = 16 << 20
+	//
+	// 64 MiB is headroom, not an appetite: the striped client sizes its live
+	// chunk buffers as min(its own 16 MiB memory cap / 4 MiB chunk, window/chunk
+	// - 2), so a 16 MiB window left it two live chunks — one per tunnel, with an
+	// ack round trip between them — and cost ~20% of single-upload throughput.
+	// At 64 MiB the client's memory cap (4 chunks) binds again, and inflight
+	// plus held never comes near the window.
+	loadtestUploadWindow int64 = 64 << 20
 	// loadtestUploadSessions caps concurrent sessions, so the sink's ceiling is
-	// window x sessions (64 MiB by default) on an exit that has been OOM-killed
+	// window x sessions (256 MiB by default) on an exit that has been OOM-killed
 	// for less (#4252).
 	loadtestUploadSessions = 4
 	// loadtestUploadIdle expires a session that stopped making progress; its
@@ -508,6 +521,31 @@ var (
 
 // loadtestNow is the sink's clock, so the idle expiry is testable.
 var loadtestNow = time.Now
+
+const (
+	// loadtestUploadReadStep is how much of a chunk is read between progress
+	// stamps. A chunk read slower than --upload-idle is exactly what the degrade
+	// bench produces, and a session evicted mid-read would commit into an orphan
+	// and walk its prefix backwards, so liveness is measured on BYTES ARRIVING,
+	// not on when the chunk was admitted.
+	loadtestUploadReadStep = 256 << 10
+	// loadtestUploadEvictNotices bounds the eviction notices one session queues
+	// for its next response. Past it the sender falls back to noticing the drop
+	// itself, so the header can never grow without limit.
+	loadtestUploadEvictNotices = 32
+	// loadtestUploadSealedMemo is how many completed objects stay answerable for
+	// a late re-send or a resume probe. Sealed sessions hold no chunk buffers and
+	// do not occupy a concurrency slot; past this many, the oldest is dropped.
+	loadtestUploadSealedMemo = 8
+)
+
+var (
+	// loadtestUploadExpired counts sessions dropped by the idle sweep, and
+	// loadtestUploadEvicted counts held chunks dropped to admit a frontier chunk.
+	// Both lose bytes a sender must re-send, so neither may be silent.
+	loadtestUploadExpired atomic.Uint64
+	loadtestUploadEvicted atomic.Uint64
+)
 
 // loadtestWindow is the reorder window as an unsigned bound, so all the offset
 // arithmetic stays in one signedness. A non-positive flag value means no room
@@ -531,7 +569,13 @@ type loadtestUploadSession struct {
 	held      map[uint64][]byte
 	heldBytes uint64
 	inflight  uint64 // admitted chunks still being read off the wire
-	last      time.Time
+	// evicted names the start offsets dropped from held since the last response
+	// went out. A dropped chunk was answered 202 and only its sender can put it
+	// back, so the drop is TOLD to the sender on the very next ack
+	// (X-Upload-Evicted) instead of being inferred from a prefix that stopped
+	// moving — which costs the sender a multi-second timeout per eviction.
+	evicted []uint64
+	last    time.Time
 }
 
 var (
@@ -552,7 +596,7 @@ func loadtestUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	case http.MethodPost, http.MethodPut:
 	default:
-		http.Error(w, "POST or PUT a body", http.StatusMethodNotAllowed)
+		loadtestUploadRefuse(w, r, http.StatusMethodNotAllowed, "POST or PUT a body")
 		return
 	}
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
@@ -562,6 +606,36 @@ func loadtestUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	loadtestUploadChunk(w, r, id, cr)
+}
+
+// loadtestUploadRefuse answers a request whose body will not be absorbed. Go's
+// server gives up on the connection once more than 256 KiB of a declared body is
+// left unread, so a refusal that just returns closes the socket under a sender
+// that is still writing its chunk: it takes EPIPE and never reads the
+// X-Next-Offset/Retry-After the refusal was carrying, which is the whole
+// back-pressure protocol. Reading the chunk out of the way first costs no memory
+// (it goes to io.Discard) and keeps the connection reusable; a body too large to
+// be any chunk of ours gets a deliberate, documented close instead.
+func loadtestUploadRefuse(w http.ResponseWriter, r *http.Request, code int, msg string) {
+	if !loadtestUploadDrain(r) {
+		w.Header().Set("Connection", "close")
+	}
+	http.Error(w, msg, code)
+}
+
+// loadtestUploadDrain discards up to one window's worth of the body — the
+// largest chunk the sink would ever have admitted. It reports whether the body
+// was fully consumed.
+func loadtestUploadDrain(r *http.Request) bool {
+	if r.Body == nil {
+		return true
+	}
+	limit := int64(loadtestWindow()) //nolint:gosec // G115: loadtestWindow is bounded by the flag
+	if limit < 1<<20 {
+		limit = 1 << 20
+	}
+	n, _ := io.CopyN(io.Discard, r.Body, limit+1) //nolint:errcheck // a read error is a dead conn either way
+	return n <= limit
 }
 
 // loadtestUploadWhole reads and discards the body and answers with the byte
@@ -607,40 +681,41 @@ func loadtestUploadStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	s.last = loadtestNow()
-	acked, sum, total := s.acked, s.sum, s.total
+	acked, sum, total, drops := s.acked, s.sum, s.total, s.takeEvicted()
 	s.mu.Unlock()
-	loadtestUploadAck(w, id, "", acked, total, sum)
+	loadtestUploadSetEvicted(w, drops)
+	loadtestUploadAck(w, http.StatusOK, id, "", acked, total, sum)
 }
 
 // loadtestUploadChunk absorbs one offset-addressed chunk.
 func loadtestUploadChunk(w http.ResponseWriter, r *http.Request, id, cr string) {
 	if id == "" {
-		http.Error(w, "id: required with Content-Range", http.StatusBadRequest)
+		loadtestUploadRefuse(w, r, http.StatusBadRequest, "id: required with Content-Range")
 		return
 	}
 	if len(id) > 128 {
-		http.Error(w, "id: too long", http.StatusBadRequest)
+		loadtestUploadRefuse(w, r, http.StatusBadRequest, "id: too long")
 		return
 	}
 	start, end, total, ok := parseContentRange(cr)
 	if !ok {
-		http.Error(w, "Content-Range: want 'bytes <start>-<end>/<total>'", http.StatusBadRequest)
+		loadtestUploadRefuse(w, r, http.StatusBadRequest, "Content-Range: want 'bytes <start>-<end>/<total>'")
 		return
 	}
 	if q := r.URL.Query().Get("bytes"); q != "" {
 		n, err := strconv.ParseUint(q, 10, 63)
 		if err != nil || n != total {
-			http.Error(w, "bytes: disagrees with Content-Range", http.StatusBadRequest)
+			loadtestUploadRefuse(w, r, http.StatusBadRequest, "bytes: disagrees with Content-Range")
 			return
 		}
 	}
 	length := end - start + 1
 	if length > loadtestWindow() {
-		http.Error(w, "chunk larger than the reorder window", http.StatusRequestEntityTooLarge)
+		loadtestUploadRefuse(w, r, http.StatusRequestEntityTooLarge, "chunk larger than the reorder window")
 		return
 	}
 	if r.ContentLength >= 0 && uint64(r.ContentLength) != length { //nolint:gosec // G115: guarded non-negative
-		http.Error(w, "Content-Length disagrees with Content-Range", http.StatusBadRequest)
+		loadtestUploadRefuse(w, r, http.StatusBadRequest, "Content-Length disagrees with Content-Range")
 		return
 	}
 
@@ -649,7 +724,7 @@ func loadtestUploadChunk(w http.ResponseWriter, r *http.Request, id, cr string) 
 		if code == http.StatusServiceUnavailable {
 			w.Header().Set("Retry-After", "1")
 		}
-		http.Error(w, msg, code)
+		loadtestUploadRefuse(w, r, code, msg)
 		return
 	}
 
@@ -660,39 +735,41 @@ func loadtestUploadChunk(w http.ResponseWriter, r *http.Request, id, cr string) 
 	s.mu.Lock()
 	s.last = loadtestNow()
 	if s.sum != "" || end < s.acked { // already durable: absorb the resend, do not re-hash
-		acked, sum := s.acked, s.sum
+		acked, sum, drops := s.acked, s.sum, s.takeEvicted()
 		s.mu.Unlock()
 		_, _ = io.Copy(io.Discard, r.Body) //nolint:errcheck
-		loadtestUploadAck(w, id, cr, acked, total, sum)
+		loadtestUploadSetEvicted(w, drops)
+		loadtestUploadAck(w, http.StatusOK, id, cr, acked, total, sum)
 		return
 	}
 	if start > s.acked {
 		// Ahead of the frontier: it must fit the window, or the client backs off
-		// and re-sends it later. The body is deliberately NOT drained — refusing
-		// to read it is the backpressure.
+		// and re-sends it later.
 		if end >= s.acked+loadtestWindow() || s.inflight+s.heldBytes+length > loadtestWindow() {
-			acked := s.acked
+			acked, drops := s.acked, s.takeEvicted()
 			s.mu.Unlock()
+			loadtestUploadSetEvicted(w, drops)
 			w.Header().Set("X-Next-Offset", strconv.FormatUint(acked, 10))
 			w.Header().Set("X-Upload-Received", strconv.FormatUint(acked, 10))
 			w.Header().Set("Retry-After", "1")
-			http.Error(w, "reorder window full", http.StatusTooEarly)
+			loadtestUploadRefuse(w, r, http.StatusTooEarly, "reorder window full")
 			return
 		}
 	} else {
 		// The frontier chunk always wins: held chunks are not durable (they were
-		// never acked), so evicting the furthest of them only costs a re-send,
-		// while refusing the frontier would stall the object forever.
+		// answered 202, not 200), so evicting the furthest of them only costs a
+		// re-send, while refusing the frontier would stall the object forever.
 		for s.inflight+s.heldBytes+length > loadtestWindow() && len(s.held) > 0 {
 			s.evictFurthest()
 		}
 		if s.inflight+s.heldBytes+length > loadtestWindow() {
-			acked := s.acked
+			acked, drops := s.acked, s.takeEvicted()
 			s.mu.Unlock()
+			loadtestUploadSetEvicted(w, drops)
 			w.Header().Set("X-Next-Offset", strconv.FormatUint(acked, 10))
 			w.Header().Set("X-Upload-Received", strconv.FormatUint(acked, 10))
 			w.Header().Set("Retry-After", "1")
-			http.Error(w, "reorder window full", http.StatusTooEarly)
+			loadtestUploadRefuse(w, r, http.StatusTooEarly, "reorder window full")
 			return
 		}
 	}
@@ -700,15 +777,16 @@ func loadtestUploadChunk(w http.ResponseWriter, r *http.Request, id, cr string) 
 	s.mu.Unlock()
 
 	buf := make([]byte, length)
-	if _, err := io.ReadFull(r.Body, buf); err != nil {
+	if err := s.readChunk(r.Body, buf); err != nil {
 		s.mu.Lock()
 		s.inflight -= length
 		s.mu.Unlock()
 		// A short chunk never advances the prefix hash; the sender re-sends it.
-		http.Error(w, "short chunk: "+err.Error(), http.StatusBadRequest)
+		loadtestUploadRefuse(w, r, http.StatusBadRequest, "short chunk: "+err.Error())
 		return
 	}
 
+	ackCode := http.StatusOK
 	s.mu.Lock()
 	s.inflight -= length
 	s.last = loadtestNow()
@@ -723,11 +801,42 @@ func loadtestUploadChunk(w http.ResponseWriter, r *http.Request, id, cr string) 
 		}
 		s.held[start] = buf
 		s.heldBytes += length
+		// Held is NOT durable: the next frontier chunk may evict it. 202 says
+		// "received, not committed" — only a 200 (or an X-Upload-Received past
+		// the chunk's end) releases the sender from re-sending it.
+		ackCode = http.StatusAccepted
 	}
 	s.finish()
-	acked, sum := s.acked, s.sum
+	acked, sum, drops := s.acked, s.sum, s.takeEvicted()
 	s.mu.Unlock()
-	loadtestUploadAck(w, id, cr, acked, total, sum)
+	loadtestUploadSetEvicted(w, drops)
+	loadtestUploadAck(w, ackCode, id, cr, acked, total, sum)
+}
+
+// readChunk reads one admitted chunk, stamping the session's liveness as the
+// bytes arrive. Stamping only at admission would let the idle sweep evict a
+// session whose chunk is merely slow — the degrade bench's whole shape — and the
+// slow reader would then commit into an orphaned session while the next chunk
+// opened a fresh one, walking the durable prefix backwards with no error and no
+// log.
+func (s *loadtestUploadSession) readChunk(body io.Reader, buf []byte) error {
+	for off := 0; off < len(buf); {
+		end := off + loadtestUploadReadStep
+		if end > len(buf) {
+			end = len(buf)
+		}
+		n, err := io.ReadFull(body, buf[off:end])
+		off += n
+		if n > 0 {
+			s.mu.Lock()
+			s.last = loadtestNow()
+			s.mu.Unlock()
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // absorb folds bytes that start exactly at the frontier into the rolling hash.
@@ -782,6 +891,37 @@ func (s *loadtestUploadSession) evictFurthest() {
 	}
 	s.heldBytes -= uint64(len(s.held[at]))
 	delete(s.held, at)
+	if len(s.evicted) < loadtestUploadEvictNotices {
+		s.evicted = append(s.evicted, at)
+	}
+	loadtestUploadEvicted.Add(1)
+}
+
+// takeEvicted drains the pending eviction notices as a header value, called
+// with s.mu held. Empty when nothing was dropped, which is the common case —
+// the header is then absent and an old client sees exactly what it saw before.
+func (s *loadtestUploadSession) takeEvicted() string {
+	if len(s.evicted) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, off := range s.evicted {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.FormatUint(off, 10))
+	}
+	s.evicted = s.evicted[:0]
+	return b.String()
+}
+
+// loadtestUploadSetEvicted names the dropped chunks on the response being
+// built. It is set before the status line is written, so it rides every answer
+// the handler makes — an ack, or the 425 the eviction was making room for.
+func loadtestUploadSetEvicted(w http.ResponseWriter, list string) {
+	if list != "" {
+		w.Header().Set("X-Upload-Evicted", list)
+	}
 }
 
 // finish seals the object once the prefix is whole.
@@ -794,11 +934,14 @@ func (s *loadtestUploadSession) finish() {
 	s.heldBytes = 0
 }
 
-// loadtestUploadAck writes the per-chunk ack. X-Upload-Received is the durable
-// contiguous prefix — the only offset a sender may resume from. The chunk that
-// completes the object answers with the plain POST path's JSON, so the bench's
-// hash check does not change.
-func loadtestUploadAck(w http.ResponseWriter, id, cr string, acked, total uint64, sum string) {
+// loadtestUploadAck writes the per-chunk ack. code is 200 when the chunk is
+// inside the durable contiguous prefix and 202 when it is only held in the
+// reorder window — a held chunk can still be evicted for the frontier, so the
+// sender must keep it. X-Upload-Received is the durable contiguous prefix — the
+// only offset a sender may resume from. The chunk that completes the object
+// answers with the plain POST path's JSON, so the bench's hash check does not
+// change.
+func loadtestUploadAck(w http.ResponseWriter, code int, id, cr string, acked, total uint64, sum string) {
 	w.Header().Set("X-Upload-Id", id)
 	w.Header().Set("X-Upload-Received", strconv.FormatUint(acked, 10))
 	if cr != "" {
@@ -807,10 +950,68 @@ func loadtestUploadAck(w http.ResponseWriter, id, cr string, acked, total uint64
 	w.Header().Set("Content-Type", "application/json")
 	if sum != "" {
 		w.Header().Set("X-Sha256", sum)
+		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"bytes": total, "sha256": sum}) //nolint:errcheck
 		return
 	}
+	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{"received": acked, "total": total}) //nolint:errcheck
+}
+
+// loadtestUploadSweep drops the sessions that no longer earn their memory and
+// reports how many still occupy a concurrency slot. It is called with
+// loadtestUploadMu held; keep is the id this request is for, which is never
+// reaped out from under it.
+//
+// Two rules a plain "delete if idle" sweep got wrong:
+//
+//   - a session with a chunk still being READ is not idle, whatever the clock
+//     says. Evicting it mid-read orphans the reader, which then commits into a
+//     session nobody can find while the next chunk opens a fresh one at acked=0
+//     — the durable prefix walks backwards with no error and no log, and the
+//     orphan plus its replacement break the window x sessions ceiling;
+//   - a SEALED session holds no buffers and has nothing left to receive, so it
+//     must not deny the next upload a slot for a whole --upload-idle: four
+//     completed uploads used to refuse the fifth with 503 for two minutes. It
+//     stays answerable for a late re-send or a resume probe until the memo fills.
+func loadtestUploadSweep(keep string) int {
+	type sealedSession struct {
+		id   string
+		last time.Time
+	}
+	now := loadtestNow()
+	live := 0
+	var sealed []sealedSession
+	for k, v := range loadtestUploads {
+		v.mu.Lock()
+		idle, busy, done, last := now.Sub(v.last), v.inflight > 0, v.sum != "", v.last
+		v.mu.Unlock()
+		if !busy && idle > loadtestUploadIdle && k != keep {
+			delete(loadtestUploads, k)
+			loadtestUploadExpired.Add(1)
+			if !done {
+				fmt.Fprintf(os.Stderr,
+					"loadtest serve: upload %q expired after %s idle; its held chunks are dropped and must be re-sent\n",
+					k, idle.Truncate(time.Second))
+			}
+			continue
+		}
+		if done {
+			sealed = append(sealed, sealedSession{id: k, last: last})
+			continue
+		}
+		live++
+	}
+	if len(sealed) > loadtestUploadSealedMemo {
+		sort.Slice(sealed, func(i, j int) bool { return sealed[i].last.Before(sealed[j].last) })
+		for _, e := range sealed[:len(sealed)-loadtestUploadSealedMemo] {
+			if e.id == keep {
+				continue
+			}
+			delete(loadtestUploads, e.id)
+		}
+	}
+	return live
 }
 
 // loadtestUploadSessionFor finds or opens a session, expiring idle ones first so
@@ -819,29 +1020,21 @@ func loadtestUploadAck(w http.ResponseWriter, id, cr string, acked, total uint64
 func loadtestUploadSessionFor(id string, total uint64) (*loadtestUploadSession, int, string) {
 	loadtestUploadMu.Lock()
 	defer loadtestUploadMu.Unlock()
-	now := loadtestNow()
-	for k, v := range loadtestUploads {
-		v.mu.Lock()
-		idle := now.Sub(v.last)
-		v.mu.Unlock()
-		if idle > loadtestUploadIdle {
-			delete(loadtestUploads, k)
-		}
-	}
+	live := loadtestUploadSweep(id)
 	if s, ok := loadtestUploads[id]; ok {
 		if s.total != total {
 			return nil, http.StatusConflict, "id is in use for an object of a different size"
 		}
 		return s, 0, ""
 	}
-	if len(loadtestUploads) >= loadtestUploadSessions {
+	if live >= loadtestUploadSessions {
 		return nil, http.StatusServiceUnavailable, "too many concurrent upload sessions"
 	}
 	s := &loadtestUploadSession{
 		total: total,
 		hash:  sha256.New(),
 		held:  map[uint64][]byte{},
-		last:  now,
+		last:  loadtestNow(),
 	}
 	loadtestUploads[id] = s
 	return s, 0, ""
