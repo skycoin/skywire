@@ -97,6 +97,14 @@ jobs:
           # (hv serve, visor-hosted wasm_serve, the native hypervisor). Same
           # toolchain as the embedded wasm_exec.js, same version stamping.
           echo "==> building js/wasm command module"
+          # A dirty tree — one untracked file is enough — makes Go record
+          # vcs.modified=true in this module, and the desk then reports
+          # dev-<commit>-dirty for the life of the binary that embeds it.
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::work tree is dirty before the js/wasm build"
+            git status --porcelain
+            exit 1
+          fi
           GOOS=js GOARCH=wasm \
             go build -trimpath -buildvcs=true -mod=vendor -tags "withoutsystray withoutgotop" -ldflags="${LDFLAGS}" -o skywire.wasm .
           gzip -9 -n -c skywire.wasm > pkg/wasmhv/execwasm/blob/skywire.wasm.gz
@@ -116,6 +124,19 @@ jobs:
           echo "staged module revision: $(cat pkg/wasmhv/execwasm/blob/revision.txt)"
           rm -f skywire.wasm
           ls -la pkg/wasmhv/execwasm/blob/
+          # Both blob files are TRACKED, so the two writes above leave the tree
+          # modified and every native build below would record vcs.modified=true
+          # (`go version -m` then reads "+dirty"). assume-unchanged hides the
+          # work tree copy from git while the rebuilt bytes are still what gets
+          # embedded; nothing is committed and nothing is reverted.
+          git update-index --assume-unchanged \
+            pkg/wasmhv/execwasm/blob/skywire.wasm.gz \
+            pkg/wasmhv/execwasm/blob/revision.txt
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::work tree is dirty before the native builds"
+            git status --porcelain
+            exit 1
+          fi
           build_arch amd64   amd64   ""
           build_arch arm64   arm64   ""
           build_arch arm     arm     6

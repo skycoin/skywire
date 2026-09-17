@@ -999,11 +999,13 @@ playground: ## Build the docs-site playground (static desk page: shell + skywire
 
 # --- one wasm module (#4484 convergence) --------------------------------------
 # The full skywire command module for GOOS=js: the desk's `skywire` command and
-# the tab visor. Built FIRST and gzipped into pkg/wasmhv/execwasm/blob/
-# (gitignored), then the native binary is built with it embedded — the
-# two-stage build every distributed binary gets (publish-binary.yml,
-# release.yml). A plain `make build` / `go build .` embeds only the README
-# placeholder and the visor falls back to an on-disk module.
+# the tab visor. Built FIRST and gzipped into pkg/wasmhv/execwasm/blob/, then
+# the native binary is built with it embedded — the two-stage build every
+# distributed binary gets (publish-binary.yml, release.yml). The staged blob is
+# TRACKED (#4872), so a plain `make build` / `go build .` embeds whatever was
+# last committed there; restaging it modifies two tracked files, which is why
+# the release workflows hide them with `git update-index --assume-unchanged`
+# before building (a dirty tree stamps the binary "+dirty").
 EXEC_WASM_TAGS ?= withoutsystray withoutgotop
 
 exec-wasm: ## Build the js/wasm command module to build/exec-wasm/skywire.wasm
@@ -1011,7 +1013,7 @@ exec-wasm: ## Build the js/wasm command module to build/exec-wasm/skywire.wasm
 	GOOS=js GOARCH=wasm go build -trimpath -buildvcs=true -mod=vendor -tags "$(EXEC_WASM_TAGS)" -ldflags="-s -w" -o ./build/exec-wasm/skywire.wasm .
 	@ls -la ./build/exec-wasm/skywire.wasm
 
-embed-exec-wasm: exec-wasm ## Stage the js/wasm command module for embedding (pkg/wasmhv/execwasm/blob/, gitignored)
+embed-exec-wasm: exec-wasm ## Stage the js/wasm command module for embedding (pkg/wasmhv/execwasm/blob/, tracked)
 	gzip -9 -n -c ./build/exec-wasm/skywire.wasm > ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz
 	@# Record which commit the module was built from, so the native binary can
 	@# say at serve time that it is serving a module older than itself. The
@@ -1039,5 +1041,5 @@ check-exec-wasm: ## Report whether the staged js/wasm command module matches HEA
 
 build-embedded: embed-exec-wasm build ## Two-stage build: the native binary with the js/wasm command module embedded
 
-clean-exec-wasm: ## Remove the staged js/wasm command module so the next build embeds the placeholder
+clean-exec-wasm: ## Delete the staged js/wasm command module (it is tracked — `git checkout` the blob to get it back)
 	rm -f ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz ./build/exec-wasm/skywire.wasm

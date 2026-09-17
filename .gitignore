@@ -180,4 +180,11 @@ docs/playground/*.wasm
 docs/playground/*.wasm.gz
 docs/playground/wasm_exec.js
 
-# The js/wasm command module the two-stage build embeds (pkg/wasmhv/execwasm).
+# The js/wasm command module the two-stage build embeds
+# (pkg/wasmhv/execwasm/blob/) is TRACKED — #4872 committed it so a plain
+# `go build .` still serves a real desk. What is ignored is the scratch the
+# two-stage build leaves at the repo root: an untracked file there is enough
+# to make Go stamp vcs.modified=true and turn the version into "+dirty".
+/skywire.wasm
+/skywire
+/bin/

@@ -1,0 +1,98 @@
+# Refuse a pull request that adds a large binary blob to the history.
+#
+# Six superseded `skywire.wasm.gz` re-embeds (232 MB) had to be stripped from
+# develop by the 2026-09-15 history rewrite, and a rewrite is the only way to
+# get such a blob out once it is merged — every clone carries it forever, and
+# rewriting moves commits that tags and checksums already point at. So the
+# cheap place to say no is here, on the PR.
+#
+# The intended large files are listed below and are allowed to change. Anything
+# else over 4 MiB fails the lane; if a new large file really belongs in the
+# tree, add it to ALLOWLIST in the same PR so the decision is reviewed.
+name: Blob Guard
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  large-blobs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The whole history: the guard diffs this PR against the base branch.
+          fetch-depth: 0
+
+      - name: Refuse blobs over 4 MiB outside the allowlist
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          MAX_BYTES: "4194304"
+        run: |
+          set -euo pipefail
+
+          # The paths whose large files are intended. A prefix entry ends in /.
+          ALLOWLIST="pkg/wasmhv/execwasm/blob/skywire.wasm.gz
+          docs/graph/viewer/api/layout.json
+          pkg/geoip/GeoLite2-City.mmdb.gz
+          pkg/tpviz/legacy/bundle.js
+          pkg/router/policy/wasm/presets/bundle.wasm
+          vendor/"
+
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+
+          # Objects reachable from this PR but not from the base — i.e. what
+          # the merge would add to the repository, whether the file is new or
+          # a new version of an existing one.
+          git rev-list --objects "refs/remotes/origin/${BASE_REF}..HEAD" \
+            | git cat-file --batch-check='%(objecttype) %(objectname) %(objectsize) %(rest)' \
+            | awk -v max="$MAX_BYTES" '$1 == "blob" && $3 + 0 > max {
+                path = $4; for (i = 5; i <= NF; i++) path = path " " $i
+                if (path != "") print $3 "\t" path
+              }' \
+            | sort -u > "$RUNNER_TEMP/big.tsv"
+
+          : > "$RUNNER_TEMP/offenders.tsv"
+          while IFS="$(printf '\t')" read -r size path; do
+            [ -n "${path:-}" ] || continue
+            allowed=no
+            while read -r entry; do
+              entry="$(printf '%s' "$entry" | tr -d '[:space:]')"
+              [ -n "$entry" ] || continue
+              case "$entry" in
+                */) case "$path" in "$entry"*) allowed=yes ;; esac ;;
+                *)  if [ "$path" = "$entry" ]; then allowed=yes; fi ;;
+              esac
+            done <<EOF
+          $ALLOWLIST
+          EOF
+            [ "$allowed" = yes ] || printf '%s\t%s\n' "$size" "$path" \
+              >> "$RUNNER_TEMP/offenders.tsv"
+          done < "$RUNNER_TEMP/big.tsv"
+
+          if [ -s "$RUNNER_TEMP/big.tsv" ]; then
+            echo "blobs over 4 MiB added by this PR:"
+            awk -F'\t' '{ printf "  %8.1f MiB  %s\n", $1 / 1048576, $2 }' \
+              "$RUNNER_TEMP/big.tsv"
+          else
+            echo "no blob over 4 MiB added by this PR"
+          fi
+
+          if [ -s "$RUNNER_TEMP/offenders.tsv" ]; then
+            echo "::error::this PR adds a blob over 4 MiB that is not on the allowlist"
+            awk -F'\t' '{ printf "  %8.1f MiB  %s\n", $1 / 1048576, $2 }' \
+              "$RUNNER_TEMP/offenders.tsv"
+            echo ""
+            echo "A merged blob can only be removed by rewriting history, which"
+            echo "moves commits that tags and release checksums point at. Keep"
+            echo "the file out of the repository, or add its path to ALLOWLIST"
+            echo "in .github/workflows/blob-guard.yml in this PR."
+            exit 1
+          fi

@@ -94,15 +94,21 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      # Go stamps vcs.modified=true when the work tree is dirty — an UNTRACKED
+      # file is enough — and the version then reads v1.3.94+dirty, which is
+      # exactly what v1.3.94 shipped. So every scratch file this job writes
+      # goes to $RUNNER_TEMP, or is ignored (bin/, dist/, skywire.wasm,
+      # musl-data), and the steps that build assert a clean tree first.
       - name: Fetch build-libusb-musl.sh
         run: |
+          # Into $RUNNER_TEMP, not the workspace: see the note above.
           # -f fails on HTTP error (so a raw.github 404/429 right after the tag
           # push isn't saved as an error page and run as a shell script); retry
           # to ride out raw.github propagation lag / rate-limiting.
           curl -fsSL --retry 6 --retry-all-errors --retry-delay 4 \
             "https://raw.githubusercontent.com/${{ github.repository }}/${{ env.RELEASE_TAG }}/ci_scripts/build-libusb-musl.sh" \
-            -o build-libusb-musl.sh
-          chmod +x build-libusb-musl.sh
+            -o "$RUNNER_TEMP/build-libusb-musl.sh"
+          chmod +x "$RUNNER_TEMP/build-libusb-musl.sh"
 
       - name: Cache musl toolchain
         id: cache-toolchain
@@ -114,13 +120,17 @@ jobs:
       - name: Download musl toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
+          # The tarball lands in $RUNNER_TEMP: musl-data is gitignored, the
+          # tarball at the repo root was not, and it only has to exist while
+          # one step runs to dirty a build in another.
           mkdir -p musl-data
-          wget -q "https://github.com/skycoin/skywire/releases/download/${{ env.MUSL_RELEASE }}/${{ matrix.toolchain_file }}"
-          tar -xzf "${{ matrix.toolchain_file }}" -C ./musl-data
-          rm "${{ matrix.toolchain_file }}"
+          wget -q -O "$RUNNER_TEMP/${{ matrix.toolchain_file }}" \
+            "https://github.com/skycoin/skywire/releases/download/${{ env.MUSL_RELEASE }}/${{ matrix.toolchain_file }}"
+          tar -xzf "$RUNNER_TEMP/${{ matrix.toolchain_file }}" -C ./musl-data
+          rm "$RUNNER_TEMP/${{ matrix.toolchain_file }}"
 
       - name: Build libusb for musl target
-        run: ./build-libusb-musl.sh ${{ matrix.arch }} ${{ matrix.toolchain }} ./musl-data/${{ matrix.toolchain }}-cross
+        run: '"$RUNNER_TEMP/build-libusb-musl.sh" ${{ matrix.arch }} ${{ matrix.toolchain }} ./musl-data/${{ matrix.toolchain }}-cross'
 
       - name: Build the js/wasm command module (stage 1 of the two-stage build)
         env:
@@ -128,6 +138,14 @@ jobs:
           GOOS: js
           GOARCH: wasm
         run: |
+          # Gate: this module is built with -buildvcs=true, so a dirty tree is
+          # recorded IN THE MODULE as vcs.modified=true and the desk reports
+          # dev-<commit>-dirty forever after (v1.3.94's embedded module did).
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::work tree is dirty before the js/wasm build — the embedded module would be stamped dirty"
+            git status --porcelain
+            exit 1
+          fi
           # The desk's `skywire` command and the tab visor, embedded into the
           # native binary below (pkg/wasmhv/execwasm) so every release serves
           # the desk with no extra file. Same toolchain as wasm_exec.js.
@@ -150,6 +168,15 @@ jobs:
           echo "staged module revision: $(cat pkg/wasmhv/execwasm/blob/revision.txt)"
           rm -f skywire.wasm
           ls -la pkg/wasmhv/execwasm/blob/
+          # Both files above are TRACKED (committed by #4872), so overwriting
+          # them leaves two modified tracked files — which is what stamped the
+          # native binary +dirty. assume-unchanged makes git ignore the work
+          # tree copy while the rebuilt bytes are still what gets embedded;
+          # nothing is committed and nothing is reverted.
+          git update-index --assume-unchanged \
+            pkg/wasmhv/execwasm/blob/skywire.wasm.gz \
+            pkg/wasmhv/execwasm/blob/revision.txt
+          git status --porcelain
 
       - name: Build skywire release binary
         env:
@@ -160,12 +187,23 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
         run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::work tree is dirty before the release build — the binary would be stamped +dirty"
+            git status --porcelain
+            exit 1
+          fi
           # Built from the checked-out tag (not `go install module@tag`) so the
           # staged js/wasm module above is embedded. -mod=vendor: the tree
           # vendors its dependencies.
+          #
+          # -X …buildinfo.version: this was the one native build in the repo
+          # that stamped no version at all, so Version() fell back to
+          # bi.Main.Version — i.e. to whatever the VCS said, "+dirty" included.
+          # publish-binary.yml stamps the same symbol; belt and braces, the
+          # released binary now reports the tag whatever the toolchain records.
           mkdir -p bin
           go build -tags="cgo,withoutsystray" -trimpath -mod=vendor \
-            -ldflags "-s -w -linkmode external -extldflags '-static' -buildid=" \
+            -ldflags "-s -w -linkmode external -extldflags '-static' -buildid= -X ${MODULE}/pkg/buildinfo.version=${RELEASE_TAG}" \
             -o bin/skywire .
 
           # Verify binary on native arch
@@ -173,6 +211,38 @@ jobs:
             ./bin/skywire || true
             ./bin/skywire skycoin || true
           fi
+
+      # v1.3.94 shipped `mod github.com/skycoin/skywire v1.3.94+dirty` and an
+      # embedded module carrying vcs.modified=true. Both are checked here, on
+      # the artifact itself, so a release that would repeat it fails before the
+      # upload instead of being discovered in a downloaded tarball.
+      - name: Verify the built binary and its embedded module are clean
+        run: |
+          set -euo pipefail
+          go version -m bin/skywire > "$RUNNER_TEMP/buildinfo.txt"
+          grep -E 'vcs\.(revision|modified)|^[[:space:]]*mod[[:space:]]' "$RUNNER_TEMP/buildinfo.txt" || true
+          if grep -qE '^[[:space:]]*mod[[:space:]].*\+dirty' "$RUNNER_TEMP/buildinfo.txt"; then
+            echo "::error::bin/skywire is stamped +dirty"
+            exit 1
+          fi
+          if grep -q 'vcs.modified=true' "$RUNNER_TEMP/buildinfo.txt"; then
+            echo "::error::bin/skywire records vcs.modified=true"
+            exit 1
+          fi
+          # The module embedded in that binary is the staged blob, byte for
+          # byte, so read the blob rather than carving the gzip stream back out
+          # of a 100 MB binary — same bytes, and it works on every arch.
+          gzip -dc pkg/wasmhv/execwasm/blob/skywire.wasm.gz > "$RUNNER_TEMP/staged.wasm"
+          mod=$(grep -m1 -aoE 'vcs\.modified=[a-z]+' "$RUNNER_TEMP/staged.wasm" || true)
+          rev=$(grep -m1 -aoE 'vcs\.revision=[0-9a-f]{40}' "$RUNNER_TEMP/staged.wasm" || true)
+          rm -f "$RUNNER_TEMP/staged.wasm"
+          echo "embedded js/wasm module: ${rev:-<none>} ${mod:-<none>}"
+          if [ "$mod" != "vcs.modified=false" ]; then
+            echo "::error::the embedded js/wasm module is not clean (${mod:-no vcs.modified record})"
+            exit 1
+          fi
+          # …and that it was built from THIS commit, not carried in stale.
+          make check-exec-wasm
 
       - name: Create archive
         run: |
@@ -215,6 +285,10 @@ jobs:
           CGO_CFLAGS: -I/usr/local/include -I/opt/homebrew/include -I/opt/homebrew/opt/hidapi/include -I/opt/homebrew/opt/libusb/include
           CGO_LDFLAGS: -L/usr/local/lib -L/opt/homebrew/lib -L/opt/homebrew/opt/hidapi/lib -L/opt/homebrew/opt/libusb/lib
         run: |
+          # module@tag from the proxy: there is no work tree in this job, so
+          # nothing here can dirty the build and no clean-tree gate applies.
+          # The flip side is that this binary embeds the COMMITTED js/wasm
+          # blob, not a freshly built one — only the linux job rebuilds it.
           go install -trimpath -ldflags "-s -w" \
             ${{ env.MODULE }}@${{ env.RELEASE_TAG }}
 
@@ -278,6 +352,10 @@ jobs:
           CGO_CFLAGS: -I/opt/homebrew/include -I/opt/homebrew/opt/hidapi/include -I/opt/homebrew/opt/libusb/include
           CGO_LDFLAGS: -L/opt/homebrew/lib -L/opt/homebrew/opt/hidapi/lib -L/opt/homebrew/opt/libusb/lib
         run: |
+          # module@tag from the proxy: there is no work tree in this job, so
+          # nothing here can dirty the build and no clean-tree gate applies.
+          # The flip side is that this binary embeds the COMMITTED js/wasm
+          # blob, not a freshly built one — only the linux job rebuilds it.
           go install -trimpath -ldflags "-s -w" \
             ${{ env.MODULE }}@${{ env.RELEASE_TAG }}
 
@@ -381,6 +459,8 @@ jobs:
           # Compile from repo root (not cmd/release) because cmd/release imports
           # hardware wallet which requires libusb/libhidapi DLLs on Windows.
           # The hw wallet is built separately below with the required DLLs.
+          # module@tag from the proxy: no work tree in this job, so no
+          # clean-tree gate applies (see the linux job).
           go install -trimpath -ldflags "-s -w" "${{ env.MODULE }}@${{ env.RELEASE_TAG }}"
 
           New-Item -ItemType Directory -Force -Path "bin"
@@ -558,7 +638,11 @@ jobs:
       - name: Derive Android version from tag
         id: version
         run: |
-          raw="${GITHUB_REF_NAME#v}"
+          # RELEASE_TAG, not GITHUB_REF_NAME: on a workflow_dispatch rebuild
+          # GITHUB_REF_NAME is the branch the run was dispatched from, so every
+          # dispatched rebuild failed here with "Tag 'develop' is not vX.Y.Z".
+          # #4912 converted 46 sites and missed this one.
+          raw="${RELEASE_TAG#v}"
           if ! printf '%s' "$raw" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::Tag '${RELEASE_TAG}' is not vX.Y.Z — cannot derive an Android version"
             exit 1
@@ -598,6 +682,11 @@ jobs:
         run: |
           test -n "$ANDROID_NDK_LATEST_HOME" || {
             echo "::error::runner exposes no Android NDK"; exit 1; }
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::work tree is dirty before the android payload build — it would be stamped +dirty"
+            git status --porcelain
+            exit 1
+          fi
           ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" make android-mobile-ndk
 
       - name: Decode keystore
