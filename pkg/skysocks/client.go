@@ -1216,7 +1216,7 @@ func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
 	// every death exactly once.
 	//
 	// The fill is armed one probe interval LATER, though, and that hold-off is
-	// the point of routing it through here rather than dialling on the spot.
+	// the point of routing it through here rather than dialing on the spot.
 	// Measured on the rig 2026-09-17 (fe53f42dc): arming inline put the refill
 	// dial 11 s after the group closed, while the first hop the cut tunnel had
 	// occupied was not dialable again yet. The diversify search therefore had

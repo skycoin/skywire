@@ -312,7 +312,7 @@ func TestPromoteBestStandby_EmptyPool(t *testing.T) {
 // refill asks the router for a route only after the first hop the dead tunnel
 // occupied has had its restore window.
 //
-// Arming inline dialled at +11 s on the rig 2026-09-17 (fe53f42dc), while that
+// Arming inline dialed at +11 s on the rig 2026-09-17 (fe53f42dc), while that
 // hop was still down: the diversify search had all seven held first hops
 // excluded and nothing left to take but a sudph leg, and two 50 MB uploads then
 // rode the 0.4-0.5 MB/s route it built. Healthy builds refilled at 21-22 s.
