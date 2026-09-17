@@ -308,7 +308,9 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 		return nil, fmt.Errorf("transport %s not found locally", nextTpID)
 	}
 
-	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc, r.mLogger)
+	rgCfg := DefaultRouteGroupConfig()
+	rgCfg.FEC = r.conf.MuxFEC
+	rg := NewRouteGroup(rgCfg, r.rt, rules.Desc, r.mLogger)
 	rg.muxEvents = &r.muxEvents
 	rg.SetAppName(appName)
 	rg.initiator = nsConf.Initiator
