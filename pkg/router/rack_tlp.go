@@ -133,7 +133,9 @@ func (m *routeMux) onSACKReceived(lastContig uint32, words []uint64, dsackSeq ui
 	} else {
 		m.decayRackFactor()
 	}
-	return m.retxBuf.ProcessSACKWith(lastContig, words, m.rackThreshold(), m.rackThresholdFor)
+	retx := m.retxBuf.ProcessSACKWith(lastContig, words, m.rackThreshold(), m.rackThresholdFor)
+	m.signalWindow() // purged entries may have freed per-leg window for a parked writer
+	return retx
 }
 
 // ptoInterval is the tail-loss probe timeout: how long the sender stays idle with
