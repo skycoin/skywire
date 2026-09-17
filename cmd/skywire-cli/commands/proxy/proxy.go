@@ -91,8 +91,8 @@ func init() {
 	startCmd.Flags().IntVar(&startRangePort, "range-port", 80, "destination port the transparent range-splitter treats as plaintext HTTP (default 80; set to a bench origin's port to split it across --tunnels)")
 	startCmd.Flags().IntVar(&startRangeChunkKiB, "range-chunk-kib", 4096, "bytes per range request of the transparent range-splitter, in KiB (smaller chunks balance a download across tunnels of unequal speed at the cost of one request round trip per chunk)")
 	startCmd.Flags().IntVar(&startRangeConcurrency, "range-concurrency", 8, "concurrent range requests per split download")
-	startCmd.Flags().IntVar(&startTunnels, "tunnels", 1, "number of independent tunnels (route group + noise + yamux each) to stripe browser connections across; 1 = today's behavior. >1 AGGREGATES bandwidth: each extra tunnel is auto-steered by the visor onto a DIFFERENT first-hop transport (disjoint path) so their throughputs sum. Shape the legs within each tunnel after start with `proxy mux set` / `mux auto`.")
-	startCmd.Flags().StringVar(&startRoute, "route", "", "pin explicit route(s) chosen by you instead of the route finder: a JSON file of {forward,reverse} hop pairs ('cli route calc <exit> --count N --json' shape). Once the proxy is up its mux legs are reconciled to these — each pinned route is added as a leg and any AUX auto legs are pruned. The auto primary leg is pruned too (the router re-homes the primary), so the session runs on the pinned routes alone. One pair = one pinned route; N pairs = N disjoint legs. Tip: 'route calc --source tps' avoids stale-transport install failures. Implies a routed dial (no AppDirect shortcut) so the session has a route group to pin.")
+	startCmd.Flags().IntVar(&startTunnels, "tunnels", 1, "number of independent tunnels (route group + noise + yamux each) to stripe browser connections across; 1 = today's behavior. >1 AGGREGATES bandwidth: each extra tunnel is auto-steered by the visor onto a DIFFERENT first-hop transport (disjoint path) so their throughputs sum. Shape the legs within each tunnel after start with `proxy mux set --rg <port>` / `mux auto --rg <port>`, where <port> is the group's own port as `proxy mux info` prints it (desc.dst_port) — every tunnel shares one src_port, so only that port names a single tunnel. Not combinable with --route, which pins a single group.")
+	startCmd.Flags().StringVar(&startRoute, "route", "", "pin explicit route(s) chosen by you instead of the route finder: a JSON file of {forward,reverse} hop pairs ('cli route calc <exit> --count N --json' shape). Once the proxy is up its mux legs are reconciled to these — each pinned route is added as a leg and any AUX auto legs are pruned. The auto primary leg is pruned too (the router re-homes the primary), so the session runs on the pinned routes alone. One pair = one pinned route; N pairs = N disjoint legs. Tip: 'route calc --source tps' avoids stale-transport install failures. Implies a routed dial (no AppDirect shortcut) so the session has a route group to pin. Pins ONE group, so it cannot be combined with --tunnels >1 — start those, then pin each with `proxy mux set --rg <port>`.")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits")
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	startCmd.Flags().BoolVar(&reconnect, "reconnect", true, "in-process reconnect on route-group collapse: proxy keeps re-dialing with backoff instead of dropping the SOCKS5 listener; --reconnect=false restores exit-on-failure")
@@ -207,6 +207,17 @@ var startCmd = &cobra.Command{
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--direct is a single route; it cannot be combined with --tunnels %d", startTunnels))
 			}
 			minHops = 1
+		}
+
+		// --route pins the legs of ONE route group (reconcileLegs with rgPort 0,
+		// which requires exactly one group). With --tunnels N>1 the app comes up
+		// with N groups and the reconcile fails deep in startup with an ambiguity
+		// error; say so up front, and name the two-step that does work.
+		if startRoute != "" && startTunnels > 1 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf(
+				"--route pins one route group's legs; it cannot be combined with --tunnels %d. "+
+					"Start the tunnels, then pin each one: proxy mux set --rg <port from 'mux info'> --legs <file> --prune",
+				startTunnels))
 		}
 
 		routeOpts := clirpc.RoutingSessionOpts{
