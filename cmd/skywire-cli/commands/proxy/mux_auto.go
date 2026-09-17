@@ -62,7 +62,7 @@ var autoPresets = map[string]autoPreset{
 
 func init() {
 	muxAutoCmd.Flags().StringVarP(&muxAutoApp, "name", "n", "skysocks-client", "app to adapt")
-	muxAutoCmd.Flags().Uint16Var(&muxAutoSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
+	muxAutoCmd.Flags().Uint16Var(&muxAutoSrcPort, "rg", 0, "rg selector: the route group's own port as 'mux info' prints it (desc.dst_port; its src_port also matches). Only needed when the app has multiple active rg's — e.g. 'proxy start --tunnels N'")
 	muxAutoCmd.Flags().DurationVarP(&muxAutoWatch, "watch", "w", 0, "re-evaluate every interval (e.g. 5s); 0 = decide once and exit")
 	muxAutoCmd.Flags().BoolVar(&muxAutoDry, "dry-run", false, "print the prune/grow decision without acting")
 	muxAutoCmd.Flags().IntVar(&muxAutoMinHops, "min-hops", 2, "hop-count floor for legs added when growing toward the preset (>=2 keeps grown legs multihop)")
@@ -126,7 +126,7 @@ Example:
 			if len(rgs) == 0 {
 				return fmt.Errorf("no active route groups for app=%s (start the proxy first)", muxAutoApp)
 			}
-			rg, err := selectAutoRG(rgs, muxAutoSrcPort)
+			rg, err := selectAutoRG(rgs, muxAutoApp, muxAutoSrcPort)
 			if err != nil {
 				return err
 			}
@@ -236,18 +236,33 @@ func computePrune(rg muxRouteGroupInfo, p autoPreset) []prunedLeg {
 	return drops
 }
 
-// selectAutoRG picks the target rg by src_port, or requires exactly one.
-func selectAutoRG(rgs []muxRouteGroupInfo, srcPort uint16) (muxRouteGroupInfo, error) {
-	if srcPort != 0 {
+// selectAutoRG picks the target rg by its OWN port — desc.dst_port, the
+// ephemeral per-group value `mux info` prints — falling back to desc.src_port,
+// or requires exactly one rg when rgPort is 0.
+//
+// dst_port and not src_port because every rg a skysocks-client instance dials
+// to one exit shares the same src_port (the app's port, 3); only dst_port is
+// per-group, so under `proxy start --tunnels N` src_port can never name one
+// tunnel.
+func selectAutoRG(rgs []muxRouteGroupInfo, app string, rgPort uint16) (muxRouteGroupInfo, error) {
+	if rgPort != 0 {
 		for _, rg := range rgs {
-			if uint16(rg.Desc.SrcPort) == srcPort { //nolint:gosec
+			if uint16(rg.Desc.DstPort) == rgPort { //nolint:gosec
 				return rg, nil
 			}
 		}
-		return muxRouteGroupInfo{}, fmt.Errorf("no active route group with src_port=%d (see 'mux info')", srcPort)
+		for _, rg := range rgs {
+			if uint16(rg.Desc.SrcPort) == rgPort { //nolint:gosec
+				return rg, nil
+			}
+		}
+		return muxRouteGroupInfo{}, fmt.Errorf("no active route group with port=%d (matched neither dst_port nor src_port; see 'mux info')", rgPort)
 	}
 	if len(rgs) > 1 {
-		return muxRouteGroupInfo{}, fmt.Errorf("app=%s has %d active route groups; pass --rg <src_port> (see 'mux info')", muxAutoApp, len(rgs))
+		return muxRouteGroupInfo{}, fmt.Errorf("app=%s has %d active route groups; pass --rg <port> (the group's dst_port in 'mux info')", app, len(rgs))
+	}
+	if len(rgs) == 0 {
+		return muxRouteGroupInfo{}, fmt.Errorf("no active route groups for app=%s (start the proxy first)", app)
 	}
 	return rgs[0], nil
 }

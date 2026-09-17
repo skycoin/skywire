@@ -61,14 +61,14 @@ var (
 
 func init() {
 	muxAddCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route group to modify")
-	muxAddCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
+	muxAddCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg selector: the route group's own port as 'mux info' prints it (desc.dst_port; its src_port also matches). Only needed when the app has multiple active rg's — e.g. 'proxy start --tunnels N'")
 	muxAddCmd.Flags().StringVar(&muxAddRouteSrc, "route", "-", "route JSON file ('-' = stdin); shape is 'cli route calc --json' output")
 	muxRmCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route group to modify")
-	muxRmCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
+	muxRmCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg selector: the route group's own port as 'mux info' prints it (desc.dst_port; its src_port also matches). Only needed when the app has multiple active rg's — e.g. 'proxy start --tunnels N'")
 	addMuxSub(muxAddCmd, "mux-add")
 	addMuxSub(muxRmCmd, "mux-rm")
 	muxSwitchCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route to switch")
-	muxSwitchCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
+	muxSwitchCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg selector: the route group's own port as 'mux info' prints it (desc.dst_port; its src_port also matches). Only needed when the app has multiple active rg's — e.g. 'proxy start --tunnels N'")
 	muxSwitchCmd.Flags().StringVar(&muxSwitchRouteSrc, "route", "-", "new route JSON file ('-' = stdin); shape is 'cli route calc --json' output")
 	muxSwitchCmd.Flags().DurationVar(&muxSwitchTimeout, "ready-timeout", 20*time.Second, "how long to wait for the new leg to carry before retiring the old primary")
 	RootCmd.AddCommand(muxSwitchCmd)
@@ -227,9 +227,11 @@ Path-disjointness across intermediate hops, and "find me a disjoint
 route automatically," are deferred. For now the caller picks the
 route via 'route calc' (or constructs one).
 
-When the app has multiple concurrent rg's, pass --rg <src-port> to
-target one of them; otherwise the visor errors with the candidate
-list.
+When the app has multiple concurrent rg's — one per SOCKS5 connection,
+or one per tunnel under 'proxy start --tunnels N' — pass --rg <port> to
+target one of them; that is the group's own port as 'mux info' prints it
+(desc.dst_port), since every group shares one src_port. Otherwise the
+visor errors with the candidate list.
 
 Example:
   skywire cli proxy mux info                                # see current legs + rg src_port
@@ -271,9 +273,11 @@ packets already on it complete normally. Removing the last leg in a
 mux group leaves the group with the primary route only — to fully
 tear down the session, use 'proxy stop' instead.
 
-When the app has multiple concurrent rg's, pass --rg <src-port> to
-target one of them; otherwise the visor errors with the candidate
-list.
+When the app has multiple concurrent rg's — one per SOCKS5 connection,
+or one per tunnel under 'proxy start --tunnels N' — pass --rg <port> to
+target one of them; that is the group's own port as 'mux info' prints it
+(desc.dst_port), since every group shares one src_port. Otherwise the
+visor errors with the candidate list.
 
 Example:
   skywire cli proxy mux info                            # find the leg
@@ -378,7 +382,7 @@ Example:
 }
 
 // muxSwitchSelectRG fetches the app's mux route groups and selects the target
-// one (by --rg src_port when set, else the sole group).
+// one (by --rg port — dst_port then src_port — when set, else the sole group).
 func muxSwitchSelectRG(rpcClient visor.API) (muxRouteGroupInfo, error) {
 	infos, err := rpcClient.RouteGroupMuxInfo(muxOpsApp)
 	if err != nil {
@@ -390,7 +394,7 @@ func muxSwitchSelectRG(rpcClient visor.API) (muxRouteGroupInfo, error) {
 	if len(rgs) == 0 {
 		return muxRouteGroupInfo{}, fmt.Errorf("no active route groups for app=%s (start the proxy first)", muxOpsApp)
 	}
-	return selectAutoRG(rgs, muxOpsSrcPort)
+	return selectAutoRG(rgs, muxOpsApp, muxOpsSrcPort)
 }
 
 // primaryLegTpID returns the transport id of the primary leg (lowest Index) —

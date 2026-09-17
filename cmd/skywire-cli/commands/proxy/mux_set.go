@@ -52,7 +52,7 @@ type legReconcile struct {
 // It is the shared engine behind `proxy mux set` and `proxy start --route`.
 // The route group must already exist (start the proxy first). Per-leg RPC
 // errors are logged to stderr and skipped rather than aborting the batch.
-func reconcileLegs(rpcClient visor.API, app string, srcPort uint16, targets []routePair, prune bool) (legReconcile, error) {
+func reconcileLegs(rpcClient visor.API, app string, rgPort uint16, targets []routePair, prune bool) (legReconcile, error) {
 	var res legReconcile
 	want := make(map[uuid.UUID]routePair, len(targets))
 	for _, t := range targets {
@@ -66,7 +66,7 @@ func reconcileLegs(rpcClient visor.API, app string, srcPort uint16, targets []ro
 	if err != nil {
 		return res, fmt.Errorf("RouteGroupMuxInfo: %w", err)
 	}
-	current, err := currentLegTpIDs(infos, app, srcPort)
+	current, err := currentLegTpIDs(infos, app, rgPort)
 	if err != nil {
 		return res, err
 	}
@@ -77,7 +77,7 @@ func reconcileLegs(rpcClient visor.API, app string, srcPort uint16, targets []ro
 			res.existing++
 			continue
 		}
-		if err := rpcClient.AddMuxRoute(app, t.Forward, t.Reverse, srcPort); err != nil {
+		if err := rpcClient.AddMuxRoute(app, t.Forward, t.Reverse, rgPort); err != nil {
 			fmt.Fprintf(os.Stderr, "  add leg (first tp=%s): %v\n", tp, err)
 			continue
 		}
@@ -90,7 +90,7 @@ func reconcileLegs(rpcClient visor.API, app string, srcPort uint16, targets []ro
 			if _, ok := want[tp]; ok {
 				continue
 			}
-			if err := rpcClient.RemoveMuxRoute(app, tp, srcPort); err != nil {
+			if err := rpcClient.RemoveMuxRoute(app, tp, rgPort); err != nil {
 				fmt.Fprintf(os.Stderr, "  remove leg (tp=%s): %v\n", tp, err)
 				continue
 			}
@@ -109,7 +109,7 @@ var (
 
 func init() {
 	muxSetCmd.Flags().StringVarP(&muxSetApp, "name", "n", "skysocks-client", "app whose route group to reconcile")
-	muxSetCmd.Flags().Uint16Var(&muxSetSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
+	muxSetCmd.Flags().Uint16Var(&muxSetSrcPort, "rg", 0, "rg selector: the route group's own port as 'mux info' prints it (desc.dst_port; its src_port also matches). Only needed when the app has multiple active rg's — e.g. 'proxy start --tunnels N'")
 	muxSetCmd.Flags().StringVar(&muxSetFile, "legs", "-", "leg-set JSON file ('-' = stdin): array of {forward,reverse} pairs ('cli route calc --json' shape)")
 	muxSetCmd.Flags().BoolVar(&muxSetPrune, "prune", false, "also remove current legs not in the target set (exact reconcile). Careful: the primary route is a leg too — include it or it's removed")
 	addMuxSub(muxSetCmd, "mux-set")
@@ -145,32 +145,16 @@ func readRoutePairs(src string) ([]routePair, error) {
 }
 
 // currentLegTpIDs returns the first-hop transport ids of the legs in the
-// target rg. With srcPort 0 it requires exactly one active rg; otherwise
-// it matches the rg by src_port (mux info prints it).
-func currentLegTpIDs(infos any, app string, srcPort uint16) (map[uuid.UUID]struct{}, error) {
+// target rg. rgPort selects the rg exactly as selectAutoRG does (the group's
+// own dst_port, then src_port); 0 requires exactly one active rg.
+func currentLegTpIDs(infos any, app string, rgPort uint16) (map[uuid.UUID]struct{}, error) {
 	raw, _ := json.Marshal(infos) //nolint:errcheck
 	var rgs []muxRouteGroupInfo
 	_ = json.Unmarshal(raw, &rgs) //nolint:errcheck
-	if len(rgs) == 0 {
-		return nil, fmt.Errorf("no active route groups for app=%s (start the proxy first)", app)
-	}
 
-	var rg *muxRouteGroupInfo
-	if srcPort != 0 {
-		for i := range rgs {
-			if uint16(rgs[i].Desc.SrcPort) == srcPort { //nolint:gosec
-				rg = &rgs[i]
-				break
-			}
-		}
-		if rg == nil {
-			return nil, fmt.Errorf("no active route group with src_port=%d (see 'mux info')", srcPort)
-		}
-	} else {
-		if len(rgs) > 1 {
-			return nil, fmt.Errorf("app=%s has %d active route groups; pass --rg <src_port> (see 'mux info')", app, len(rgs))
-		}
-		rg = &rgs[0]
+	rg, err := selectAutoRG(rgs, app, rgPort)
+	if err != nil {
+		return nil, err
 	}
 
 	out := make(map[uuid.UUID]struct{}, len(rg.Legs))

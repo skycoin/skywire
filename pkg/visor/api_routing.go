@@ -261,39 +261,60 @@ func (v *Visor) ActiveRoutes() ([]AppRouteStatus, error) {
 // matching — the rg's descriptor uses an ephemeral source port that
 // the procManager.GetAppPort lookup can't see.
 //
-// srcPort disambiguates when multiple rg's are active for the same
-// app (one per concurrent SOCKS5 connection on skysocks-client, etc.):
+// port disambiguates when multiple rg's are active for the same app
+// (one per concurrent SOCKS5 connection on skysocks-client, and one
+// per tunnel under `proxy start --tunnels N`):
 //
-//   - srcPort == 0 and exactly 1 rg matches → that rg.
-//   - srcPort == 0 and >1 rg matches → error listing all candidates,
+//   - port == 0 and exactly 1 rg matches → that rg.
+//   - port == 0 and >1 rg matches → error listing all candidates,
 //     so the caller can pick.
-//   - srcPort != 0 → match the rg whose Desc.SrcPort equals srcPort.
-func (v *Visor) findRouteDescForApp(appName string, srcPort uint16) (routing.RouteDescriptor, error) {
-	var desc routing.RouteDescriptor
+//   - port != 0 → match the rg whose Desc.SrcPort OR Desc.DstPort
+//     equals port.
+//
+// Matching either end is not sloppiness: every rg a skysocks-client
+// instance dials to one exit carries the SAME src_port (the app's
+// port, 3), so src_port alone can never name a single tunnel. The
+// per-rg value is the ephemeral dst_port — which is exactly what
+// `proxy mux info` and the mux events (desc.dst_port) already print
+// as an rg's port.
+func (v *Visor) findRouteDescForApp(appName string, port uint16) (routing.RouteDescriptor, error) {
 	if v.router == nil {
-		return desc, errors.New("router not available")
+		return routing.RouteDescriptor{}, errors.New("router not available")
 	}
-	infos := v.router.RouteGroupMuxInfoForApp(appName)
+	return selectRouteDesc(v.router.RouteGroupMuxInfoForApp(appName), appName, port)
+}
+
+// selectRouteDesc is the pure selector behind findRouteDescForApp.
+func selectRouteDesc(infos []router.MuxInfo, appName string, port uint16) (routing.RouteDescriptor, error) {
+	var desc routing.RouteDescriptor
 	if len(infos) == 0 {
 		return desc, fmt.Errorf("no active route group for app %q", appName)
 	}
-	if srcPort != 0 {
+	if port != 0 {
+		// dst_port first: it is the per-rg value, so a dst_port match names
+		// exactly one tunnel. src_port is the fallback for the single-rg
+		// callers that have always passed it.
 		for _, info := range infos {
-			if uint16(info.Desc.SrcPort()) == srcPort { //nolint:gosec
+			if uint16(info.Desc.DstPort()) == port { //nolint:gosec
 				return info.Desc, nil
 			}
 		}
-		return desc, fmt.Errorf("no rg for app %q with src_port=%d", appName, srcPort)
+		for _, info := range infos {
+			if uint16(info.Desc.SrcPort()) == port { //nolint:gosec
+				return info.Desc, nil
+			}
+		}
+		return desc, fmt.Errorf("no rg for app %q with port=%d (matched neither dst_port nor src_port)", appName, port)
 	}
 	if len(infos) == 1 {
 		return infos[0].Desc, nil
 	}
 	// Ambiguous. Surface every candidate so the caller can pass --rg.
 	var b strings.Builder
-	fmt.Fprintf(&b, "app %q has %d active rg's; pass --rg <src_port>:\n", appName, len(infos))
+	fmt.Fprintf(&b, "app %q has %d active rg's; pass --rg <port> (the dst_port below):\n", appName, len(infos))
 	for _, info := range infos {
-		fmt.Fprintf(&b, "  src_port=%d  remote=%s  port=%d\n",
-			info.Desc.SrcPort(), info.Desc.DstPK(), info.Desc.DstPort())
+		fmt.Fprintf(&b, "  dst_port=%d  remote=%s  src_port=%d\n",
+			info.Desc.DstPort(), info.Desc.DstPK(), info.Desc.SrcPort())
 	}
 	return desc, errors.New(strings.TrimRight(b.String(), "\n"))
 }
@@ -304,15 +325,16 @@ func (v *Visor) findRouteDescForApp(appName string, srcPort uint16) (routing.Rou
 //
 //	skywire cli route calc <peer-pk> --json | skywire cli proxy mux-add
 //
-// srcPort disambiguates when the app has multiple concurrent rg's
-// (use 0 to auto-pick when there's exactly one). Auto-pick a
+// rgPort disambiguates when the app has multiple concurrent rg's —
+// the rg's own port as 'mux info' prints it (desc.dst_port), or its
+// src_port; 0 auto-picks when there's exactly one. Auto-pick a
 // disjoint route on the visor side is deferred — callers pick the
 // route explicitly for now.
-func (v *Visor) AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error {
+func (v *Visor) AddMuxRoute(appName string, fwd, rev []routing.Hop, rgPort uint16) error {
 	if v.router == nil {
 		return errors.New("router not available")
 	}
-	desc, err := v.findRouteDescForApp(appName, srcPort)
+	desc, err := v.findRouteDescForApp(appName, rgPort)
 	if err != nil {
 		return err
 	}
@@ -322,14 +344,14 @@ func (v *Visor) AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint
 // GrowMuxRoute implements API. Adds disjoint legs to the app's active rg
 // until it has `target` total legs (or route planning can no longer find
 // a disjoint path), for failover redundancy. minHops floors the added
-// legs' hop count so a multihop mux grows with multihop legs. srcPort
-// disambiguates concurrent rg's (0 auto-picks when exactly one is
-// active). Returns the number of legs actually added.
-func (v *Visor) GrowMuxRoute(appName string, target, minHops int, srcPort uint16) (int, error) {
+// legs' hop count so a multihop mux grows with multihop legs. rgPort
+// disambiguates concurrent rg's by dst_port or src_port (0 auto-picks
+// when exactly one is active). Returns the number of legs actually added.
+func (v *Visor) GrowMuxRoute(appName string, target, minHops int, rgPort uint16) (int, error) {
 	if v.router == nil {
 		return 0, errors.New("router not available")
 	}
-	desc, err := v.findRouteDescForApp(appName, srcPort)
+	desc, err := v.findRouteDescForApp(appName, rgPort)
 	if err != nil {
 		return 0, err
 	}
@@ -337,13 +359,13 @@ func (v *Visor) GrowMuxRoute(appName string, target, minHops int, srcPort uint16
 }
 
 // RemoveMuxRoute implements API. Drops the leg over the given
-// transport from the app's active rg; srcPort disambiguates as in
+// transport from the app's active rg; rgPort disambiguates as in
 // AddMuxRoute.
-func (v *Visor) RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error {
+func (v *Visor) RemoveMuxRoute(appName string, tpID uuid.UUID, rgPort uint16) error {
 	if v.router == nil {
 		return errors.New("router not available")
 	}
-	desc, err := v.findRouteDescForApp(appName, srcPort)
+	desc, err := v.findRouteDescForApp(appName, rgPort)
 	if err != nil {
 		return err
 	}
