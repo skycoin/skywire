@@ -240,6 +240,29 @@ type DialOptionsReq struct {
 	// visor-side to the case where a sibling route group already exists, so a
 	// lone dial is byte-identical to today. See router.DialOptions.
 	DiversifyTransports bool
+	// RequireDisjointFirstHop turns DiversifyTransports from a preference into
+	// a requirement: instead of conceding a shared first hop, the dial fails
+	// with router.ErrNoDisjointFirstHop. The skysocks standby pool sets it so
+	// it can tell "there are more disjoint routes to dial" from "the topology
+	// has none left" and stop filling at the real bound.
+	RequireDisjointFirstHop bool
+	// TunnelRole labels the route group this dial creates — "active" or
+	// "standby" — for `visor state --select mux_route_groups` and the proxy
+	// status page. The dialing app's own label; empty everywhere else.
+	TunnelRole string
+}
+
+// Explicit reports whether the request carries any per-call option at all.
+// When it does not, the dial is the plain router-picks-freely default and both
+// the app-side client and the gateway take the ordinary Dial path. Any
+// explicit value — INCLUDING 1 — is an override that must reach the networker
+// (MuxRoutes=1 / MinHops=1 lets an app force a single / direct route out from
+// under a visor-global min_hops or mux_routes > 1).
+func (r DialOptionsReq) Explicit() bool {
+	return r.Direct || r.DiversifyTransports || r.RequireDisjointFirstHop ||
+		r.MuxRoutes != 0 || r.MinHops != 0 ||
+		r.ForwardMinHops != 0 || r.ReverseMinHops != 0 ||
+		r.ForwardMuxRoutes != 0 || r.ReverseMuxRoutes != 0
 }
 
 // Dial dials to the remote.
@@ -329,15 +352,9 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 // route, preserving correctness with no extra plumbing).
 func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptionsReq) (net.Conn, error) {
 	// Take the default (global-inheriting) path only when the app requested
-	// NOTHING explicit — every per-call field left at its zero value. Any
-	// explicit value, INCLUDING 1, is a per-app override that must reach the
-	// networker: e.g. MuxRoutes=1 / MinHops=1 lets an app force a single /
-	// direct route out from under a visor-global min_hops/mux_routes>1 (which
-	// otherwise forces every skynet app dial into multi-hop mux — wrong for a
-	// 1:1 forward). Zero still means "inherit the visor-global default".
-	if req == nil || (!req.Direct && !req.DiversifyTransports && req.MuxRoutes == 0 && req.MinHops == 0 &&
-		req.ForwardMinHops == 0 && req.ReverseMinHops == 0 &&
-		req.ForwardMuxRoutes == 0 && req.ReverseMuxRoutes == 0) {
+	// NOTHING explicit — every per-call field left at its zero value (see
+	// DialOptionsReq.Explicit). Zero means "inherit the visor-global default".
+	if req == nil || !req.Explicit() {
 		return appnet.DialContext(ctx, remote)
 	}
 	nw, err := appnet.ResolveNetworker(remote.Net)
@@ -358,6 +375,8 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 	opts.ForwardMuxRoutes = req.ForwardMuxRoutes
 	opts.ReverseMuxRoutes = req.ReverseMuxRoutes
 	opts.DiversifyTransports = req.DiversifyTransports
+	opts.RequireDisjointFirstHop = req.RequireDisjointFirstHop
+	opts.TunnelRole = req.TunnelRole
 	if req.Direct {
 		// Force a 1-hop direct dial that creates the transport on demand and
 		// bypasses the route-finder. Mirrors the policy-layer Fallback="direct"
