@@ -151,6 +151,8 @@ type muxRecoveryInfo struct {
 	RetxReqHOL         uint64  `json:"retx_req_hol"`
 	RetxReqFlush       uint64  `json:"retx_req_flush"`
 	RetxSendErrors     uint64  `json:"retx_send_errors"`
+	SendWindowWaits    uint64  `json:"send_window_waits"`
+	SendWindowTimeouts uint64  `json:"send_window_timeouts"`
 	TLPProbes          uint64  `json:"tlp_probes"`
 	SACKsRecv          uint64  `json:"sacks_recv"`
 	LastSACKRecvMsAgo  float64 `json:"last_sack_recv_ms_ago"`
@@ -316,11 +318,11 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 			}
 			// Loss recovery, one line: the sender's retransmit window and the
 			// inbound SACK feedback, then the receive frontier's wedge history.
-			// A stalled group with sack_recv going stale is a dead feedback path;
+			// A stalled group witherr=%d window_waits=%d/%d tlp=%d | sack_recv going stale is a dead feedback path;
 			// one with retx_skip climbing is a retx window that aged out.
 			if r := rg.Recovery; r != nil {
-				fmt.Printf("       recovery: retx_held=%d[%d..%d] sent=%d skip_missing=%d req[sack=%d hol=%d flush=%d] err=%d tlp=%d | sack_recv=%d %s contig=%d | sack_sent=%d %s | wedge_ticks=%d wedges=%d longest=%dms\n",
-					r.RetxHeld, r.RetxMinSeq, r.RetxMaxSeq, r.RetxSent, r.RetxSkippedMissing, r.RetxReqSACK, r.RetxReqHOL, r.RetxReqFlush, r.RetxSendErrors, r.TLPProbes,
+				fmt.Printf("       recovery: retx_held=%d[%d..%d] sent=%d skip_missing=%d req[sack=%d hol=%d flush=%d] err=%d window_waits=%d/%d tlp=%d | sack_recv| sack_recv=%d %s contig=%d | sack_sent=%d %s | wedge_ticks=%d wedges=%d longest=%dms\n",
+					r.RetxHeld, r.RetxMinSeq, r.RetxMaxSeq, r.RetxSent, r.RetxSkippedMissing, r.RetxReqSACK, r.RetxReqHOL, r.RetxReqFlush, r.RetxSendErrors, r.SendWindowWaits, r.SendWindowTimeouts, r.TLPProbes,
 					r.SACKsRecv, msAgo(r.LastSACKRecvMsAgo), r.LastSACKRecvContig,
 					r.SACKsSent, msAgo(r.LastSACKSentMsAgo),
 					r.WedgeTicks, r.Wedges, r.LongestWedgeMS)

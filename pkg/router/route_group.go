@@ -581,16 +581,21 @@ type MuxRecovery struct {
 	// RetxSendErrors counts resends that failed to reach any leg; TLPProbes counts
 	// tail-loss probes; SACKsRecv / LastSACKRecvMsAgo / LastSACKRecvContig are the
 	// inbound feedback (ms-ago is -1 when no SACK has ever arrived).
-	WriteSeq           uint32  `json:"write_seq"`
-	RetxHeld           int     `json:"retx_held"`
-	RetxMinSeq         uint32  `json:"retx_min_seq"`
-	RetxMaxSeq         uint32  `json:"retx_max_seq"`
-	RetxSent           uint64  `json:"retx_sent"`
-	RetxSkippedMissing uint64  `json:"retx_skipped_missing"`
-	RetxReqSACK        uint64  `json:"retx_req_sack"`
-	RetxReqHOL         uint64  `json:"retx_req_hol"`
-	RetxReqFlush       uint64  `json:"retx_req_flush"`
-	RetxSendErrors     uint64  `json:"retx_send_errors"`
+	WriteSeq           uint32 `json:"write_seq"`
+	RetxHeld           int    `json:"retx_held"`
+	RetxMinSeq         uint32 `json:"retx_min_seq"`
+	RetxMaxSeq         uint32 `json:"retx_max_seq"`
+	RetxSent           uint64 `json:"retx_sent"`
+	RetxSkippedMissing uint64 `json:"retx_skipped_missing"`
+	RetxReqSACK        uint64 `json:"retx_req_sack"`
+	RetxReqHOL         uint64 `json:"retx_req_hol"`
+	RetxReqFlush       uint64 `json:"retx_req_flush"`
+	RetxSendErrors     uint64 `json:"retx_send_errors"`
+	// SendWindowWaits / SendWindowTimeouts: writers parked because every ready
+	// leg was at its per-leg send window, and the parks that gave up after
+	// sendWindowWaitMax and sent anyway.
+	SendWindowWaits    uint64  `json:"send_window_waits"`
+	SendWindowTimeouts uint64  `json:"send_window_timeouts"`
 	TLPProbes          uint64  `json:"tlp_probes"`
 	SACKsRecv          uint64  `json:"sacks_recv"`
 	LastSACKRecvMsAgo  float64 `json:"last_sack_recv_ms_ago"`
@@ -636,6 +641,10 @@ type MuxLeg struct {
 	// the loaded feedback delay its retransmit threshold is judged by
 	// (rackThresholdFor), distinct from the idle RTTs above.
 	AckDelayMS float64 `json:"ack_delay_ms"`
+	// InflightBytes / WindowBytes: the leg's real unacknowledged bytes and the
+	// per-leg send window they are bounded by (0 when not a predictive mode).
+	InflightBytes float64 `json:"inflight_bytes"`
+	WindowBytes   float64 `json:"window_bytes"`
 	// Direct is true when this leg's first hop goes straight to the route
 	// group's destination (a 1-hop/direct route); false means the leg is
 	// multihop (relayed through one or more intermediates). Lets a viewer
@@ -705,6 +714,9 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 			leg.RouteLatencyMS = rg.legEndToEndLatencyMs(tp.Entry.ID)
 			if rg.mux != nil {
 				leg.AckDelayMS = rg.mux.ackDelayMsTp(tp.Entry.ID)
+				if rg.mux.tpSelector != nil {
+					leg.InflightBytes, leg.WindowBytes = rg.mux.tpSelector.LegWindow(i)
+				}
 			}
 			// Direct = this leg's first hop reaches the route group's FAR
 			// endpoint itself, i.e. a 1-hop route; otherwise it is relayed
@@ -784,6 +796,8 @@ func (rg *RouteGroup) recoverySnapshot(legs []MuxLeg) *MuxRecovery {
 		RetxReqHOL:         atomic.LoadUint64(&m.retxReqHOL),
 		RetxReqFlush:       atomic.LoadUint64(&m.retxReqFlush),
 		RetxSendErrors:     atomic.LoadUint64(&m.retxSendErrors),
+		SendWindowWaits:    atomic.LoadUint64(&m.sendWindowWaits),
+		SendWindowTimeouts: atomic.LoadUint64(&m.sendWindowTimeouts),
 		TLPProbes:          atomic.LoadUint64(&m.tlpProbes),
 		SACKsRecv:          atomic.LoadUint64(&m.sacksRecv),
 		LastSACKRecvMsAgo:  msSinceNano(&m.lastSACKRecvNano),
@@ -848,6 +862,15 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	}
 
 	for n < len(p) {
+		// Per-leg send window: park while every ready leg is at its window so a
+		// slow leg is never fed seconds deep (test plan §3.1); bounded, so the
+		// write always makes progress.
+		if rg.mux != nil {
+			rg.mu.Lock()
+			tpsSnap := append([]*transport.ManagedTransport(nil), rg.tps...)
+			rg.mu.Unlock()
+			rg.mux.waitSendWindow(tpsSnap, rg.closed)
+		}
 		rg.mu.Lock()
 		chunk := len(p) - n
 		if maxChunk := rg.maxWritePayload(); chunk > maxChunk {
