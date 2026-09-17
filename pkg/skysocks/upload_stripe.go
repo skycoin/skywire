@@ -265,7 +265,7 @@ func (c *Client) probeChunkedUpload(u *uploadCandidate) (e uploadProbeEntry) {
 		return e
 	}
 	defer st.Close() //nolint:errcheck,gosec
-	g := guardTunnel(sess, st)
+	g := c.guardTunnel(sess, st)
 	defer g.stop()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
@@ -746,7 +746,7 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 	// slow tunnel, not a gone one — labeled errSessionClosed so the chunk goes to
 	// a live tunnel without backing off. guardTunnel unblocks a parked WRITE as
 	// readily as a parked read, which is what an upload spends its time in.
-	g := guardTunnel(sess, st)
+	g := s.c.guardTunnel(sess, st)
 	defer func() { err = g.err(err) }()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
@@ -881,7 +881,7 @@ func (s *uploadStripe) fetchFinal() ([]byte, error) {
 		return nil, err
 	}
 	defer st.Close() //nolint:errcheck,gosec
-	g := guardTunnel(sess, st)
+	g := s.c.guardTunnel(sess, st)
 	defer g.stop()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
@@ -1003,7 +1003,7 @@ func (c *Client) spliceReplayable(conn, stream net.Conn, u *uploadCandidate) {
 // whether it sent a 1xx interim.
 func (c *Client) relayUploadOnce(conn net.Conn, sess *yamux.Session, stream net.Conn, u *uploadCandidate, body *bytes.Buffer, replay, interimSent bool) (committed, sawInterim bool, err error) {
 	if sess != nil {
-		g := guardTunnel(sess, stream)
+		g := c.guardTunnel(sess, stream)
 		defer func() { err = g.err(err) }()
 	}
 	if !replay {

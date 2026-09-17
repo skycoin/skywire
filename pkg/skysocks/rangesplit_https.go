@@ -312,7 +312,7 @@ func (c *Client) fetchChunkTLS(req *http.Request, host, validator string, start,
 		return nil, err
 	}
 	defer st.Close() //nolint:errcheck,gosec
-	g := guardTunnel(sess, st)
+	g := c.guardTunnel(sess, st)
 	defer func() { err = g.err(err) }()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
@@ -355,7 +355,7 @@ func (c *Client) streamTailTLSOnce(w net.Conn, req *http.Request, host, validato
 		return 0, err
 	}
 	defer st.Close() //nolint:errcheck,gosec
-	g := guardTunnel(sess, st)
+	g := c.guardTunnel(sess, st)
 	defer func() { err = g.err(err) }()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck

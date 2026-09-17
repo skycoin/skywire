@@ -535,9 +535,26 @@ func (c *Client) rescueTail(conn net.Conn, start, total int64, rescue func(w net
 // fetchChunkRetry fetches one byte range, redialing a fresh stream on failure and
 // retrying over a time budget so a transient all-tunnels-down window (a --tunnels
 // rotation) is waited out rather than truncating the download.
+// A failed attempt keeps the bytes it did deliver: the retry asks for
+// [start+got, end] and fills the REST of the same buffer, rather than starting
+// the chunk over. A tunnel dies mid-body — that is the whole point of the
+// errSessionClosed free retry — and re-pulling the megabytes that already
+// arrived is what made the head chunk's recovery cost a full chunk time on the
+// survivor (measured on the rig 2026-09-17: 19.7 s to the first byte after a
+// first-hop cut, against ~1 s when the writer happened to be inside a chunk
+// that was not on the cut tunnel). Ranges are absolute byte offsets at the
+// origin, so a resume is just the next ranged GET; nothing about the chunk plan
+// changes.
 func (c *Client) fetchChunkRetry(req *http.Request, host, validator string, start, end int64) ([]byte, error) {
+	buf := make([]byte, end-start+1)
+	var got int64
 	return retryWithBudget(func() ([]byte, error) {
-		return c.fetchChunk(req, host, validator, start, end)
+		n, err := c.fetchChunk(req, host, validator, start+got, end, buf[got:])
+		got += n
+		if err != nil {
+			return nil, err
+		}
+		return buf, nil
 	}, rsChunkRetryBudget, rsChunkRetryBackoff, rsChunkRetryBackoffMax)
 }
 
@@ -614,6 +631,7 @@ func (c *Client) openChunkStream() (*yamux.Session, net.Conn, error) {
 // stream and so cannot see yamux's own shutdown error — and fired() then tells
 // the caller the failure was the tunnel, not the fetch.
 type tunnelGuard struct {
+	c     *Client
 	sess  *yamux.Session
 	fired atomic.Bool
 	done  chan struct{}
@@ -622,13 +640,29 @@ type tunnelGuard struct {
 
 // guardTunnel starts watching sess for st. The caller must call err (or stop) to
 // release the watcher.
-func guardTunnel(sess *yamux.Session, st net.Conn) *tunnelGuard {
-	g := &tunnelGuard{sess: sess, done: make(chan struct{})}
+//
+// The watcher also RETIRES the tunnel on the spot. A chunk's read is the first
+// thing in the client to learn that a route group is gone — yamux unblocks it
+// the moment the group's conn errors — while the retire that replaces the
+// tunnel from the standby pool hangs off the keepalive loop's own sighting of
+// s.IsClosed(), which is up to tunnelRTTProbeInterval (5 s) later. Measured on
+// the rig 2026-09-17 (bench/2026-09-16/e0d9e0430-smoke, mux-standby-8): the cut
+// tunnel's group closed 3.65 s after the cut and tunnel_retired/tunnel_promoted
+// only landed at 8.6 s, and until that promote every refetched chunk piled onto
+// the ONE surviving active tunnel — the pool's standby tunnels sit out of
+// pickSessionFor by design until one is promoted. Retiring here collapses that
+// window to the close itself: the failover promote happens in the same instant
+// the chunk fails, so the refetch has the promoted tunnel to land on.
+func (c *Client) guardTunnel(sess *yamux.Session, st net.Conn) *tunnelGuard {
+	g := &tunnelGuard{c: c, sess: sess, done: make(chan struct{})}
 	go func() {
 		select {
 		case <-sess.CloseChan():
 			g.fired.Store(true)
 			st.Close() //nolint:errcheck,gosec
+			if g.c != nil {
+				g.c.retireTunnel(sess, "tunnel closed under a range fetch")
+			}
 		case <-g.done:
 		}
 	}()
@@ -649,6 +683,13 @@ func (g *tunnelGuard) err(err error) error {
 	g.stop()
 	if err == nil || (!g.fired.Load() && !g.sess.IsClosed()) {
 		return err
+	}
+	// Retire here too, not only in the watcher: stop() and the close can race in
+	// the watcher's select (both channels ready), and this path is reached
+	// whenever the attempt itself noticed the death first. retireTunnel is
+	// once-only per tunnel, so the two callers cannot double-promote.
+	if g.c != nil {
+		g.c.retireTunnel(g.sess, "tunnel closed under a range fetch")
 	}
 
 	return fmt.Errorf("%w: %v", errSessionClosed, err)
@@ -671,7 +712,7 @@ func (c *Client) streamTailOnce(w net.Conn, req *http.Request, host, validator s
 		return 0, err
 	}
 	defer st.Close() //nolint:errcheck,gosec
-	g := guardTunnel(sess, st)
+	g := c.guardTunnel(sess, st)
 	defer func() { err = g.err(err) }()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
@@ -735,18 +776,22 @@ func copyWithIdleTimeout(dst io.Writer, body io.Reader, under net.Conn, limit in
 }
 
 // fetchChunk opens a new exit stream, SOCKS5-CONNECTs to host:80, issues a ranged
-// GET carrying the original request's headers plus If-Range, and returns exactly
-// the requested bytes.
-func (c *Client) fetchChunk(req *http.Request, host, validator string, start, end int64) (out []byte, err error) {
+// GET carrying the original request's headers plus If-Range, and fills buf with
+// exactly the requested bytes [start, end].
+//
+// It returns how many bytes it DID deliver even on failure, so the caller can
+// resume the chunk from start+n instead of re-fetching what already arrived.
+// buf must be end-start+1 long.
+func (c *Client) fetchChunk(req *http.Request, host, validator string, start, end int64, buf []byte) (n int64, err error) {
 	sess, st, err := c.openChunkStream()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	defer st.Close() //nolint:errcheck,gosec
 	// A tunnel that dies under this fetch fails it AT ONCE — the deadlines below
 	// are for a slow tunnel, not a gone one — and the failure is labelled
 	// errSessionClosed so the chunk is refetched immediately on a live tunnel.
-	g := guardTunnel(sess, st)
+	g := c.guardTunnel(sess, st)
 	defer func() { err = g.err(err) }()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
@@ -756,15 +801,15 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	// three quarters of a second of dead time before the first byte of every
 	// 4 MiB chunk.
 	if err := c.exitConnectPipelined(st, host, c.rangePlainPort(), buildRangedGet(req, host, validator, start, end)); err != nil {
-		return nil, err
+		return 0, err
 	}
 	resp, err := http.ReadResponse(bufio.NewReader(st), req)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusPartialContent {
-		return nil, fmt.Errorf("chunk %d-%d: status %d (validator changed?)", start, end, resp.StatusCode)
+		return 0, fmt.Errorf("chunk %d-%d: status %d (validator changed?)", start, end, resp.StatusCode)
 	}
 	// Body read under a ROLLING deadline: the single rsProbeTimeout set above
 	// (right for failing a dead stream's handshake fast) also covered the whole
@@ -774,11 +819,8 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	// carrying the file (measured live: 48.5MB received for a 20MB download,
 	// 2.4x waste). Rolling the deadline forward on every read means only a
 	// genuinely STALLED stream fails; a slow-but-moving one completes.
-	buf := make([]byte, end-start+1)
-	if err := readChunkBody(st, resp.Body, buf, rsChunkIdleTimeout); err != nil {
-		return nil, err
-	}
-	return buf, nil
+	got, rerr := readChunkBody(st, resp.Body, buf[:end-start+1], rsChunkIdleTimeout)
+	return int64(got), rerr
 }
 
 // readDeadliner is the one thing readChunkBody needs of the exit stream: a
@@ -789,7 +831,9 @@ type readDeadliner interface {
 }
 
 // readChunkBody fills buf from body, refreshing st's read deadline before every
-// read so only a genuinely stalled stream fails.
+// read so only a genuinely stalled stream fails. It returns the bytes it did
+// fill alongside the error, so a failed attempt can be RESUMED from that offset
+// (fetchChunkRetry re-asks for [start+got, end]) instead of starting over.
 //
 // The zero-read guard is copyWithIdleTimeout's, for the same reason: a body
 // stuck returning the io.Reader contract's discouraged-but-legal (0, nil) pegs
@@ -797,7 +841,7 @@ type readDeadliner interface {
 // fires, retryWithBudget is never reached, and writeInOrder waits on this chunk
 // forever while it holds its memory permits — a silent all-paths stall. A
 // streak means a broken reader: fail the attempt and let the retry decide.
-func readChunkBody(st readDeadliner, body io.Reader, buf []byte, idle time.Duration) error {
+func readChunkBody(st readDeadliner, body io.Reader, buf []byte, idle time.Duration) (int, error) {
 	got := 0
 	zeroReads := 0
 	const maxZeroReads = 64
@@ -809,17 +853,17 @@ func readChunkBody(st readDeadliner, body io.Reader, buf []byte, idle time.Durat
 			zeroReads = 0
 		} else if rerr == nil {
 			if zeroReads++; zeroReads >= maxZeroReads {
-				return fmt.Errorf("chunk body stuck: %d consecutive zero-byte reads with no error", zeroReads)
+				return got, fmt.Errorf("chunk body stuck: %d consecutive zero-byte reads with no error", zeroReads)
 			}
 		}
 		if rerr != nil {
 			if got == len(buf) && rerr == io.EOF {
 				break
 			}
-			return rerr
+			return got, rerr
 		}
 	}
-	return nil
+	return got, nil
 }
 
 // socks5Greeting is the no-auth method-selection greeting; buildSocks5Connect
