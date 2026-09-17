@@ -244,3 +244,45 @@ func TestDSACKSamplesAckDelay(t *testing.T) {
 		t.Fatalf("DSACK for an unheld seq moved the ack delay: %v -> %v", before, got)
 	}
 }
+
+// TestPerLegThresholdSparesSlowLegHoles proves a hole is judged against the
+// delay of the leg it rode: with the group-wide threshold at its floor and the
+// slow leg's own send→ack delay measured at seconds, a frame outstanding on
+// the slow leg for less than that delay is NOT retransmitted, while the same
+// age on the fast leg is — the storm's mechanism (26801 of 29360 retransmits
+// on a three-leg group from this path) removed.
+func TestPerLegThresholdSparesSlowLegHoles(t *testing.T) {
+	log := logging.NewMasterLogger().PackageLogger("tlp-test")
+	m := newRouteMux(log, true)
+	setLegRTTs(m, []float64{20}) // group-wide basis: a 20 ms fast leg → threshold at the 60 ms floor
+	slow, fast := uuid.New(), uuid.New()
+	// The slow leg has been acking its never-retransmitted frames after ~2 s.
+	for i := 0; i < 6; i++ {
+		m.recordAckDelayTp(slow, 2*time.Second)
+	}
+	if th := m.rackThresholdFor(slow); th < 1900*time.Millisecond {
+		t.Fatalf("slow leg threshold = %v, want its ~2 s measured delay (EWMA of six 2 s samples)", th)
+	}
+	if th := m.rackThresholdFor(fast); th != m.rackThreshold() {
+		t.Fatalf("fast leg threshold = %v, want the group-wide %v", th, m.rackThreshold())
+	}
+	// Seq 7 rode the slow leg, seq 8 the fast one, both sent 800 ms ago; the
+	// receiver reports seq 9 and neither of them.
+	for seq, tp := range map[uint32]uuid.UUID{7: slow, 8: fast} {
+		m.retxBuf.Store(seq, []byte("f"), tp)
+		m.retxBuf.mu.Lock()
+		m.retxBuf.entries[seq].sentAt = time.Now().Add(-800 * time.Millisecond)
+		m.retxBuf.mu.Unlock()
+	}
+	got := m.onSACKReceived(6, []uint64{0b100}, 0, false) // bit 2 = seq 9 received; 7 and 8 missing
+	want := map[uint32]bool{8: true}
+	for _, s := range got {
+		if !want[s] {
+			t.Fatalf("retransmitted seq %d (slow leg, younger than its own delay); got %v", s, got)
+		}
+		delete(want, s)
+	}
+	if len(want) != 0 {
+		t.Fatalf("fast-leg hole not retransmitted; got %v", got)
+	}
+}

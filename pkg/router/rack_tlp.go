@@ -4,6 +4,8 @@ package router
 import (
 	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // RACK-TLP (RFC 8985) completes the mux's loss recovery beyond the RTT-derived
@@ -120,14 +122,18 @@ func (m *routeMux) onSACKReceived(lastContig uint32, words []uint64, dsackSeq ui
 		// ack, the never-retransmitted sample set empties, and the estimate that
 		// would lift the threshold never moves (measured live 2026-09-16: 37207
 		// retransmits for 20304 frames on a three-leg group).
-		if sentAt, ok := m.retxBuf.SentAt(dsackSeq); ok {
-			m.recordAckDelay(time.Since(sentAt))
+		if sentAt, tpID, ok := m.retxBuf.SentInfo(dsackSeq); ok {
+			d := time.Since(sentAt)
+			m.recordAckDelay(d)
+			if tpID != uuid.Nil {
+				m.recordAckDelayTp(tpID, d)
+			}
 		}
 		m.growRackFactor(dsackSeq)
 	} else {
 		m.decayRackFactor()
 	}
-	return m.retxBuf.ProcessSACK(lastContig, words, m.rackThreshold())
+	return m.retxBuf.ProcessSACKWith(lastContig, words, m.rackThreshold(), m.rackThresholdFor)
 }
 
 // ptoInterval is the tail-loss probe timeout: how long the sender stays idle with

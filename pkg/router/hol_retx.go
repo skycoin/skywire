@@ -254,8 +254,14 @@ func (m *routeMux) proactiveRetxSeqs(lastContiguous uint32, words []uint64, fast
 		if rtt, ok := legRTTms[tpID]; ok && rtt > 0 {
 			gapTh = holGapThreshold(rtt * rackReorderFactor)
 		}
-		if ackTh > gapTh {
-			gapTh = ackTh
+		// The leg's own measured send→ack delay floors the gate too: judged by
+		// the group-wide estimate a slow leg's queued frame reads as stalled.
+		legAckTh := ackTh
+		if ad := time.Duration(m.ackDelayMsTp(tpID)) * time.Millisecond; ad > legAckTh {
+			legAckTh = ad
+		}
+		if legAckTh > gapTh {
+			gapTh = legAckTh
 		}
 		if now.Sub(sentAt) < gapTh {
 			continue
