@@ -88,6 +88,14 @@ func registerIngressRPC(s *rpc.Server, name string, gw *RPCIngressGateway) error
 		var r struct{}
 		return &r, gw.NoteMuxEvent(&a, &r)
 	})
+	h("AppSettings", func(dec *gob.Decoder) (interface{}, error) {
+		var a AppSettingsReq
+		if err := dec.Decode(&a); err != nil {
+			return nil, err
+		}
+		var r AppSettingsResp
+		return &r, gw.AppSettings(&a, &r)
+	})
 	h("Dial", func(dec *gob.Decoder) (interface{}, error) {
 		var a appnet.Addr
 		if err := dec.Decode(&a); err != nil {
