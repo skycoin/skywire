@@ -593,8 +593,16 @@ func (r *router) DialRoutes(
 			appName = opts.AppName
 			datagram = opts.Datagram
 		}
+		hsStart := time.Now()
 		nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName, datagram)
 		if err != nil {
+			// Remember the ROUTE, not just its intermediates. The per-dial
+			// opts exclusions below die with this DialOptions, so the next
+			// dial — a standby-pool fill runs a dozen back to back — ranked
+			// the same just-died route first all over again. This group never
+			// carried a byte: it burned handshakeAwaitTimeout (10s) and closed.
+			// See dead_route_cache.go.
+			r.deadRoutes.mark(forwardPath, time.Since(hsStart), time.Now())
 			// Clean up saved rules on failure
 			r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
 			// Check if context was canceled
@@ -694,6 +702,22 @@ func (r *router) finishDial(
 	// mux leg planned later must avoid re-using on its own reverse path, since
 	// the destination refuses a second leg over a transport already in its group.
 	nrg.rg.recordLegRoute(forwardPath, reversePath)
+
+	// A group whose handshake completed can still die seconds later without
+	// ever carrying a byte (the peer closes it, or the exit-side app is not
+	// there). That is the same evidence as a handshake timeout, so record it
+	// the same way — and clear the memory the moment the route proves itself
+	// by moving payload. See dead_route_cache.go.
+	if r.deadRoutes != nil && len(forwardPath) > 0 {
+		route := append([]routing.Hop(nil), forwardPath...)
+		nrg.rg.SetCloseObserver(func(age time.Duration, carried uint64) {
+			if carried > 0 {
+				r.deadRoutes.clear(route)
+				return
+			}
+			r.deadRoutes.mark(route, age, time.Now())
+		})
+	}
 
 	nrg.rg.startOffServiceLoops()
 
@@ -2259,7 +2283,11 @@ func (r *router) freeFirstHops(cands [][]routing.Hop, opts *DialOptions) [][]rou
 		return cands
 	}
 	out := filterDisjointFirstHop(cands, opts.ExcludeTransportIDs)
-	return r.filterDisjointFirstHopPeer(out, opts.ExcludeFirstHopPeers, opts.ExcludeFirstHopIPs)
+	out = r.filterDisjointFirstHopPeer(out, opts.ExcludeFirstHopPeers, opts.ExcludeFirstHopIPs)
+	// A route that died within seconds of its last dial without carrying a byte
+	// is not a free first hop, it is a known-dead one. Without this the pool fill
+	// re-picked the same dead route on every consecutive dial (dead_route_cache.go).
+	return r.filterDeadRoutes(out, opts)
 }
 
 // firstHopExcluded reports whether a single candidate path's first hop is taken
