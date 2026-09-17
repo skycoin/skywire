@@ -217,6 +217,10 @@ type Config struct {
 	// rsn_oracle_routes.go. TPD is still used for routes with >=2 intermediates.
 	EnableRSNOracleRoutes bool
 
+	// MuxFEC advertises CapFEC on mux route groups so repair frames are
+	// striped alongside data (off by default; see visorconfig Routing.MuxFEC).
+	MuxFEC bool
+
 	// ExcludeSameLANHops, when true (the default the visor wires from
 	// routing.exclude_same_lan_hops), makes route calculation drop candidate
 	// INTERMEDIATE hops that sit on this visor's own local network — a peer
