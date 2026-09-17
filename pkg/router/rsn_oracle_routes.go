@@ -95,7 +95,7 @@ type twoHopLeg struct {
 // over webrtc) is chosen on each side.
 //
 // Legs are returned BEST FIRST — ranked by the first hop's measured latency
-// (rankByFirstHopLatency, the same rule the route-finder and K-race diversify
+// (rankByPathLatency, the same rule the route-finder and K-race diversify
 // paths apply), falling back to the transport-type preference cost and then the
 // intermediate-PK string for determinism — and capped at max (0 = uncapped).
 // Each leg has a distinct intermediate, so the returned set is disjoint in the
@@ -172,8 +172,9 @@ func computeDisjoint2HopRoutes(
 	// reconstructed Entry carries the canonical (deterministic) transport ID the
 	// intermediate would use to reach dst.
 	type dstLeg struct {
-		id     uuid.UUID
-		tpType tptypes.Type
+		id        uuid.UUID
+		tpType    tptypes.Type
+		latencyMs float64
 	}
 	dstByPeer := map[cipher.PubKey]dstLeg{}
 	for _, e := range dstEntries {
@@ -192,7 +193,7 @@ func computeDisjoint2HopRoutes(
 		}
 		if cur, ok := dstByPeer[peer]; !ok ||
 			tptypes.TypePreference(e.Type) < tptypes.TypePreference(cur.tpType) {
-			dstByPeer[peer] = dstLeg{id: e.ID, tpType: e.Type}
+			dstByPeer[peer] = dstLeg{id: e.ID, tpType: e.Type, latencyMs: e.Latency}
 		}
 	}
 
@@ -240,7 +241,11 @@ func computeDisjoint2HopRoutes(
 			// the shared first-hop ranking below — and any caller that inspects
 			// the returned legs — see the same number as the leg snapshot.
 			{TpID: s.id, From: src, To: i, Latency: s.latencyMs},
-			{TpID: d.id, From: i, To: dst},
+			// The intermediate→exit hop. Its latency is whatever the destination's
+			// own entry carried (transport.Entry.Latency, latency_ms; 0 when the
+			// compact oracle response omitted it) — the dial's TPD-backed lookup
+			// fills it in rankFreeFirstHops when it is 0 here.
+			{TpID: d.id, From: i, To: dst, Latency: d.latencyMs},
 		}
 		legs = append(legs, twoHopLeg{
 			Intermediate: i,
@@ -253,23 +258,23 @@ func computeDisjoint2HopRoutes(
 	// above. Every intermediate on a homogeneous fleet shares one transport type
 	// (six stcpr first hops here), so legCost tied on all of them and the PK
 	// string decided — which is how a diversify tunnel ended up on a 470ms first
-	// hop while a 39ms one sat free (live 2026-09-16/17). rankByFirstHopLatency
+	// hop while a 39ms one sat free (live 2026-09-16/17). rankByPathLatency
 	// is the SAME helper the route-finder and K-race diversify paths use, and it
 	// sorts stably, so the type-preference/PK order it inherits stays the
 	// tiebreak wherever latency cannot separate two legs.
-	legs = rankLegsByFirstHopLatency(legs, nil)
+	legs = rankLegsByPathLatency(legs, nil)
 	if max > 0 && len(legs) > max {
 		legs = legs[:max]
 	}
 	return legs, nil
 }
 
-// rankLegsByFirstHopLatency orders 2-hop legs by the SAME first-hop rule the
-// route-finder paths use (rankByFirstHopLatency): measured first-hop latency
+// rankLegsByPathLatency orders 2-hop legs by the SAME first-hop rule the
+// route-finder paths use (rankByPathLatency): measured first-hop latency
 // lowest first, unmeasured last, ties keeping the input order. latencyFor is
 // the optional TpID lookup; the legs' own Hop.Latency is used when it returns
 // nothing, so a nil lookup still ranks legs built by computeDisjoint2HopRoutes.
-func rankLegsByFirstHopLatency(legs []twoHopLeg, latencyFor func(uuid.UUID) float64) []twoHopLeg {
+func rankLegsByPathLatency(legs []twoHopLeg, latencyFor func(uuid.UUID) float64) []twoHopLeg {
 	if len(legs) < 2 {
 		return legs
 	}
@@ -280,7 +285,7 @@ func rankLegsByFirstHopLatency(legs []twoHopLeg, latencyFor func(uuid.UUID) floa
 		}
 		fwds = append(fwds, l.Forward)
 	}
-	return reorderLegsTo(legs, rankByFirstHopLatency(fwds, latencyFor))
+	return reorderLegsTo(legs, rankByPathLatency(fwds, latencyFor))
 }
 
 // reorderLegsTo puts legs into the order of ranked forward paths, matching on
