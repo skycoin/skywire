@@ -292,6 +292,39 @@ type tunnelMeter struct {
 	busyAt   time.Time // when a busy window last updated the estimates
 	rxCapBps float64
 	txCapBps float64
+	// rttMs is the tunnel's round-trip time in milliseconds, an EWMA of the
+	// yamux pings the keepalive loop already issues (Session.Ping returns the
+	// RTT). 0 = never measured. It is what a LONE stream is picked on — see
+	// pickSessionFor.
+	rttMs float64
+}
+
+// tunnelRTTAlpha weights each new ping into the tunnel's RTT EWMA. The first
+// sample seeds it whole: an EWMA from zero would halve it, and a tunnel is
+// judged by this number from its very first pick.
+const tunnelRTTAlpha = 0.25
+
+// recordRTT folds one yamux ping round-trip into the tunnel's RTT estimate.
+func (m *tunnelMeter) recordRTT(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	ms := float64(d) / float64(time.Millisecond)
+	m.mu.Lock()
+	if m.rttMs == 0 {
+		m.rttMs = ms
+	} else {
+		m.rttMs += tunnelRTTAlpha * (ms - m.rttMs)
+	}
+	m.mu.Unlock()
+}
+
+// rtt returns the tunnel's measured round-trip time in milliseconds; ok is
+// false when it has never been pinged.
+func (m *tunnelMeter) rtt() (ms float64, ok bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.rttMs, m.rttMs > 0
 }
 
 // meterSampleMin is the shortest interval a capacity sample is taken over;
@@ -310,6 +343,16 @@ const (
 // estimates. busy says whether the tunnel carried streams over the interval:
 // only a busy window updates the estimates (peak kept, decayed per sample), so
 // idleness neither erodes a proven capacity nor invents one from keepalives.
+//
+// A DIRECTION is decayed only when that direction moved bytes. Decaying both
+// per busy window let one direction's load erase the other's measurement:
+// measured live 2026-09-17, after 34 s of downloads a tunnel's upload estimate
+// had decayed 0.9^68 — effectively to nothing — so the next five 50 MB uploads
+// were decided by download rates alone and every one of them went to the
+// 2.6 MB/s tunnel instead of the 9.8 MB/s one. A window that asked nothing of a
+// direction proves nothing about it. A busy window in which NEITHER direction
+// moved is a stalled tunnel, and both estimates decay then, so the "a capacity
+// a tunnel stops delivering is forgotten under load" rule survives intact.
 func (m *tunnelMeter) sample(now time.Time, busy bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -330,8 +373,13 @@ func (m *tunnelMeter) sample(now time.Time, busy bool) {
 		return
 	}
 	m.busyAt = now
-	m.rxCapBps *= meterCapDecay
-	m.txCapBps *= meterCapDecay
+	stalled := rxRate <= 0 && txRate <= 0
+	if rxRate > 0 || stalled {
+		m.rxCapBps *= meterCapDecay
+	}
+	if txRate > 0 || stalled {
+		m.txCapBps *= meterCapDecay
+	}
 	if rxRate > m.rxCapBps {
 		m.rxCapBps = rxRate
 	}
@@ -372,25 +420,34 @@ func (m *tunnelMeter) onBench(now time.Time) bool {
 	return until > 0 && now.UnixNano() < until
 }
 
-// capacity returns the tunnel's proven capacity in bytes/s for a stream of the
-// given direction: receive-heavy streams (range chunks) weigh the download
-// capacity, anything else both ways summed. 0 means nothing proven yet. fresh
-// says whether a busy window updated the estimate within meterFresh of now.
-func (m *tunnelMeter) capacity(dir pickDir, now time.Time) (bps float64, fresh bool) {
+// capacity returns the tunnel's proven DOWNLOAD capacity in bytes/s — what a
+// range chunk will use. 0 means nothing proven yet. fresh says whether a busy
+// window updated the estimate within meterFresh of now.
+func (m *tunnelMeter) capacity(now time.Time) (bps float64, fresh bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	fresh = !m.busyAt.IsZero() && now.Sub(m.busyAt) <= meterFresh
-	if dir == pickRecv {
-		return m.rxCapBps, fresh
-	}
-	return m.rxCapBps + m.txCapBps, fresh
+	return m.rxCapBps, fresh
 }
 
-// pickDir is what a new stream will mostly do, for pickSession's weighing.
+// pickDir is what a new stream will mostly do, for pickSessionFor.
+//
+// Only a range chunk (pickRecv) is capacity-weighted: it is one of several
+// parallel streams whose whole point is to fill the pipe, so what matters is
+// how much of the pipe each tunnel has been shown to deliver. A LONE stream —
+// a browser connection, an upload — is pickAny, and capacity is the wrong
+// statistic for it: it is not competing with anything, so it wants the tunnel
+// that answers fastest, which is the direct or lowest-latency one.
+//
+// pickAny cannot be refined into an upload/download hint, either. The tunnel
+// is picked at Accept and the exit stream it opens is what carries the SOCKS5
+// CONNECT whose reply must arrive before the browser sends a byte, so the
+// request head — the POST/PUT that would say "upload" — is peeked
+// (rangeSplitInner, peekRequestHead) only AFTER the pick has been made.
 type pickDir int
 
 const (
-	pickAny  pickDir = iota // a browser connection: direction unknown
+	pickAny  pickDir = iota // a lone stream (browser connection, upload): lowest RTT wins
 	pickRecv                // a range chunk: the tunnel will mostly deliver
 )
 
@@ -703,6 +760,17 @@ func (c *Client) lastRecvTime(s *yamux.Session) time.Time {
 	return time.Time{}
 }
 
+// recordTunnelRTT folds a yamux ping round-trip into the tunnel's RTT
+// estimate, which is what pickSessionFor(pickAny) sorts on.
+func (c *Client) recordTunnelRTT(s *yamux.Session, rtt time.Duration) {
+	c.sessionsMu.Lock()
+	m := c.recvStamp[s]
+	c.sessionsMu.Unlock()
+	if m != nil {
+		m.recordRTT(rtt)
+	}
+}
+
 // dropRecvStamp forgets a retired session's receive stamp (map hygiene mirroring
 // the keepalive loop's lastPong deletes).
 func (c *Client) dropRecvStamp(s *yamux.Session) {
@@ -737,21 +805,32 @@ func leastLoaded(counts []int) int {
 	return best
 }
 
-// pickSession returns the least-loaded live tunnel (fewest open yamux streams),
-// skipping any closed tunnel, or nil when every tunnel is closed. This is the
-// connection-striping policy: each accepted browser conn goes to the tunnel with
-// the most spare capacity. With a single tunnel it always returns that tunnel
-// while it is live (identical to the pre-aggregation c.session).
+// pickSession returns the tunnel for a LONE stream — an accepted browser
+// connection, an upload — or nil when every tunnel is closed. With a single
+// tunnel it always returns that tunnel while it is live (identical to the
+// pre-aggregation c.session).
 func (c *Client) pickSession() *yamux.Session {
 	return c.pickSessionFor(pickAny)
 }
 
-// pickSessionFor is pickSession weighing each live tunnel's proven capacity
-// for the stream's direction: the pick minimises (open streams + 1) / capacity,
-// i.e. the tunnel that would give the new stream the most bandwidth. A tunnel
-// with nothing proven yet is credited the best known capacity so it gets
-// probed; with nothing proven anywhere (cold start, or the single-tunnel
-// case) the pick is the plain fewest-streams rule.
+// pickSessionFor picks by the stream's shape.
+//
+// A LONE stream (pickAny) goes to the live tunnel with the lowest measured
+// RTT — the direct one, where there is one. It is not competing for the pipe
+// with sibling streams, so the statistic that matters is how fast the tunnel
+// answers, not how much it has been shown to move; a tunnel that never
+// answered a ping sorts last (it is unproven, not fast), and ties go to the
+// tunnel with the fewest open streams. Weighing a lone stream by capacity is
+// what put all five of a measured 50 MB upload set on a 470 ms Sydney tunnel
+// instead of the direct one (0.23 MB/s against 9.8).
+//
+// A RANGE CHUNK (pickRecv) is capacity-weighted, because it is one of several
+// parallel streams whose whole point is to fill the pipe: the pick minimizes
+// (open streams + 1) / download capacity, i.e. the tunnel that would give the
+// new chunk the most bandwidth. A tunnel with nothing proven yet is credited
+// the best known capacity so it gets probed; with nothing proven anywhere
+// (cold start, or the single-tunnel case) the pick is the plain fewest-streams
+// rule.
 //
 // While a transfer is in progress (some tunnel busy), an idle tunnel whose
 // estimate is stale is credited the best known capacity too: its estimate
@@ -776,6 +855,8 @@ func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 	counts := make([]int, len(c.sessions))
 	caps := make([]float64, len(c.sessions))
 	fresh := make([]bool, len(c.sessions))
+	rtts := make([]float64, len(c.sessions))
+	rttOK := make([]bool, len(c.sessions))
 	best := 0.0
 	anyBusy := false
 	// A tunnel whose last exit open timed out is benched for exitOpenPenalty and
@@ -803,11 +884,33 @@ func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 		anyBusy = anyBusy || counts[i] > 0
 		if m := c.recvStamp[s]; m != nil {
 			m.sample(now, counts[i] > 0)
-			caps[i], fresh[i] = m.capacity(dir, now)
+			caps[i], fresh[i] = m.capacity(now)
 			if caps[i] > best {
 				best = caps[i]
 			}
+			rtts[i], rttOK[i] = m.rtt()
 		}
+	}
+	if dir == pickAny {
+		// Lowest measured RTT wins; an unmeasured tunnel sorts last; ties go to
+		// the tunnel carrying fewer streams. leastLoaded's fewest-streams rule is
+		// the fallback when nothing has been pinged yet.
+		idx := -1
+		for i, n := range counts {
+			if n < 0 || !rttOK[i] {
+				continue
+			}
+			if idx == -1 || rtts[i] < rtts[idx] || (rtts[i] == rtts[idx] && n < counts[idx]) {
+				idx = i
+			}
+		}
+		if idx >= 0 {
+			return c.sessions[idx]
+		}
+		if idx = leastLoaded(counts); idx < 0 {
+			return nil
+		}
+		return c.sessions[idx]
 	}
 	idx := leastLoaded(counts)
 	if idx < 0 || best <= 0 {
@@ -977,6 +1080,12 @@ func (c *Client) ListenAndServe(addr string) error {
 // drive that client's loop fast.
 var livenessProbeInterval = 15 * time.Second
 
+// tunnelRTTProbeInterval is how often the keepalive loop re-measures each
+// tunnel's round-trip time for pickSessionFor(pickAny). Faster than the
+// liveness probe because it steers every lone stream, and cheap: one yamux
+// ping frame per tunnel.
+const tunnelRTTProbeInterval = 5 * time.Second
+
 // sessionHardDeadWindow is how long a tunnel may go WITHOUT any pong before the
 // keepalive loop retires it as dead. It is deliberately much larger than
 // livenessProbeInterval: the yamux ping/pong are ordinary frames on the
@@ -1021,9 +1130,18 @@ func (c *Client) sessionKeepAliveLoop() {
 	ticker := time.NewTicker(c.probeInterval)
 	defer ticker.Stop()
 
+	// The RTT probe rides the same loop on its own cadence: Session.Ping already
+	// returns the round-trip, so measuring the tunnel latency a lone stream is
+	// picked on costs one extra ping frame per tunnel per tick.
+	rttTicker := time.NewTicker(tunnelRTTProbeInterval)
+	defer rttTicker.Stop()
+	rttInFlight := make(map[*yamux.Session]bool)
+	rttDoneC := make(chan *yamux.Session, 64)
+
 	type probeResult struct {
-		s  *yamux.Session
-		ok bool
+		s   *yamux.Session
+		ok  bool
+		rtt time.Duration
 	}
 	// resC carries every ping's outcome back to the loop, even outcomes that
 	// arrive long after livenessProbeTimeout (a wedge-delayed pong). Buffered so a
@@ -1044,7 +1162,33 @@ func (c *Client) sessionKeepAliveLoop() {
 			inFlight[r.s] = false
 			if r.ok {
 				lastPong[r.s] = time.Now()
+				c.recordTunnelRTT(r.s, r.rtt)
 			}
+		case <-rttTicker.C:
+			// Refresh every live tunnel's RTT, at most one probe outstanding per
+			// tunnel: a ping wedged behind a reorder gap must not pile up.
+			for _, s := range c.snapshotSessions() {
+				if s.IsClosed() {
+					delete(rttInFlight, s)
+					continue
+				}
+				if rttInFlight[s] {
+					continue
+				}
+				rttInFlight[s] = true
+				go func(s *yamux.Session) {
+					rtt, err := s.Ping()
+					if err == nil {
+						c.recordTunnelRTT(s, rtt)
+					}
+					select {
+					case rttDoneC <- s:
+					case <-c.closeC:
+					}
+				}(s)
+			}
+		case s := <-rttDoneC:
+			rttInFlight[s] = false
 		case <-ticker.C:
 			now := time.Now()
 			for _, s := range c.snapshotSessions() {
@@ -1064,9 +1208,9 @@ func (c *Client) sessionKeepAliveLoop() {
 				if !inFlight[s] {
 					inFlight[s] = true
 					go func(s *yamux.Session) {
-						_, err := s.Ping()
+						rtt, err := s.Ping()
 						select {
-						case resC <- probeResult{s: s, ok: err == nil}:
+						case resC <- probeResult{s: s, ok: err == nil, rtt: rtt}:
 						case <-c.closeC:
 						}
 					}(s)
