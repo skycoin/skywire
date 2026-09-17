@@ -36,7 +36,9 @@
 #   SIZES / CELL100 — "a 100 MB download cell for criterion 4". SIZES takes
 #     megabytes ("10 50 100") or bytes; CELL100=1 appends the 100 MB cell to
 #     whatever SIZES holds. The 100 MB cell is a DOWNLOAD cell (DIRS100="down up"
-#     measures the upload too), so its rows are 21-25.
+#     measures the upload too). With the default 5 download / 3 upload trials
+#     the layout is 10 down 1-5, 10 up 6-8, 50 down 9-13, 50 up 14-16, 100 down
+#     17-21; with TRIALS_UP=5 it is the old 1-5/6-10/11-15/16-20 and 21-25.
 #   CUT_CELL / CUT_TRIAL / CUT_ROW — "every campaign includes a cut row".
 #     CUT_AFTER_S (5) seconds into trial CUT_TRIAL (3) of cell CUT_CELL (50down)
 #     one route group loses its first-hop transport, the set carries on, and
