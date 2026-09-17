@@ -1469,12 +1469,11 @@ func (c *Client) sniffSOCKS5Status(conn, stream net.Conn) (proceed bool, target 
 		return false, ""
 	}
 
-	// Non-status: open the exit's SOCKS session now (greeting + method reply) and
-	// replay the buffered CONNECT request, then splice.
-	if err := c.openExit(stream, greeting); err != nil {
-		return false, ""
-	}
-	if _, err := stream.Write(req); err != nil {
+	// Non-status: open the exit's SOCKS session now, with the buffered CONNECT
+	// request pipelined behind the greeting — exactly what a chunk fetch does —
+	// and then splice. The exit sees the same bytes in the same order; it just no
+	// longer costs a round trip to hand them over.
+	if err := c.openExitPipelined(stream, greeting, req); err != nil {
 		return false, ""
 	}
 	clearDeadlines(conn, stream)
@@ -1504,9 +1503,32 @@ func offersNoAuth(greeting []byte) bool {
 // logged and counted (noteExitOpenTimeout), and the tunnel it happened on sits
 // out the next picks.
 func (c *Client) openExit(stream net.Conn, greeting []byte) error {
+	return c.openExitPipelined(stream, greeting, nil)
+}
+
+// openExitPipelined is openExit with the bytes already known to follow the
+// greeting — the browser's buffered CONNECT request — written in the SAME write,
+// before the method reply is read. The exit's SOCKS5 server reads its handshake
+// sequentially off the stream, so the queued CONNECT is simply the next thing it
+// reads; the wire bytes and their order are identical to writing them one at a
+// time, only a round trip shorter. This is what a range-split chunk fetch has
+// always done (exitConnectPipelined), applied to the browser-facing first
+// stream, where the prelude before the first parallel fetch was three serial
+// exit round trips.
+//
+// Failure semantics are unchanged: a timeout or a non-no-auth method reply is
+// counted and benched exactly as before and the caller closes both ends, so a
+// CONNECT that was already queued is never acted on beyond the exit's own dial.
+func (c *Client) openExitPipelined(stream net.Conn, greeting, pipelined []byte) error {
 	started := time.Now()
 	_ = stream.SetReadDeadline(started.Add(c.exitOpenWindow())) //nolint:errcheck
-	if _, err := stream.Write(greeting); err != nil {
+	head := greeting
+	if len(pipelined) > 0 {
+		head = make([]byte, 0, len(greeting)+len(pipelined))
+		head = append(head, greeting...)
+		head = append(head, pipelined...)
+	}
+	if _, err := stream.Write(head); err != nil {
 		return err
 	}
 	method := make([]byte, 2)
