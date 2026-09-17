@@ -84,7 +84,9 @@ type Client struct {
 	// pong queues BEHIND the data it shares the conn with, so a pong-only
 	// hard-dead window retires the very tunnel that is delivering the download.
 	// Guarded by sessionsMu; entries are deleted where lastPong's are.
-	recvStamp map[*yamux.Session]*atomic.Int64
+	// The same meter counts the tunnel's bytes each way and remembers the
+	// capacity it has shown, which pickSession weighs a new stream by.
+	recvStamp map[*yamux.Session]*tunnelMeter
 	listener  net.Listener
 	once      sync.Once
 	closeC    chan struct{}
@@ -218,13 +220,14 @@ var errAllTunnelsDown = errors.New("all tunnels to the exit are down")
 // hard-dead window still ages out a genuinely dead tunnel.
 type recvStampConn struct {
 	net.Conn
-	stamp *atomic.Int64
+	m *tunnelMeter
 }
 
 func (c *recvStampConn) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
 	if n > 0 {
-		c.stamp.Store(time.Now().UnixNano())
+		c.m.stamp.Store(time.Now().UnixNano())
+		c.m.rx.Add(uint64(n)) //nolint:gosec // n > 0
 	}
 	return n, err
 }
@@ -232,26 +235,107 @@ func (c *recvStampConn) Read(p []byte) (int, error) {
 func (c *recvStampConn) Write(p []byte) (int, error) {
 	n, err := c.Conn.Write(p)
 	if n > 0 {
-		c.stamp.Store(time.Now().UnixNano())
+		c.m.stamp.Store(time.Now().UnixNano())
+		c.m.tx.Add(uint64(n)) //nolint:gosec // n > 0
 	}
 	return n, err
 }
 
+// tunnelMeter is one tunnel's byte meter: the receive-time stamp above, the
+// cumulative bytes each way, and the CAPACITY the tunnel has shown per
+// direction — the peak rate observed while it carried streams, decaying only
+// while it is busy so an idle tunnel keeps what it proved. pickSession weighs
+// a new stream by it: on a rig where the direct tunnel uploads at 9 MB/s and
+// the two-hop one at 5, the fewest-streams rule alone sent every upload to
+// whichever was idle first (measured: 10 MB uploads at 1.6 MB/s on the slow
+// tunnel against 6.5 on the fast one).
+type tunnelMeter struct {
+	stamp atomic.Int64
+	rx    atomic.Uint64
+	tx    atomic.Uint64
+
+	mu       sync.Mutex
+	lastAt   time.Time
+	lastRx   uint64
+	lastTx   uint64
+	rxCapBps float64
+	txCapBps float64
+}
+
+// meterSampleMin is the shortest interval a capacity sample is taken over;
+// meterCapDecay is applied per sample while the tunnel is busy, so a capacity
+// that a tunnel stops delivering is forgotten within a few seconds of load.
+const (
+	meterSampleMin = 500 * time.Millisecond
+	meterCapDecay  = 0.9
+)
+
+// sample folds the bytes moved since the previous sample into the capacity
+// estimates. busy says whether the tunnel carried streams over the interval:
+// only then may an estimate decay, so idleness never erodes a proven capacity.
+func (m *tunnelMeter) sample(now time.Time, busy bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	rx, tx := m.rx.Load(), m.tx.Load()
+	if m.lastAt.IsZero() {
+		m.lastAt, m.lastRx, m.lastTx = now, rx, tx
+		return
+	}
+	dt := now.Sub(m.lastAt)
+	if dt < meterSampleMin {
+		return
+	}
+	secs := dt.Seconds()
+	rxRate := float64(rx-m.lastRx) / secs
+	txRate := float64(tx-m.lastTx) / secs
+	m.lastAt, m.lastRx, m.lastTx = now, rx, tx
+	if busy {
+		m.rxCapBps *= meterCapDecay
+		m.txCapBps *= meterCapDecay
+	}
+	if rxRate > m.rxCapBps {
+		m.rxCapBps = rxRate
+	}
+	if txRate > m.txCapBps {
+		m.txCapBps = txRate
+	}
+}
+
+// capacity returns the tunnel's proven capacity in bytes/s for a stream of the
+// given direction: receive-heavy streams (range chunks) weigh the download
+// capacity, anything else both ways summed. 0 means nothing proven yet.
+func (m *tunnelMeter) capacity(dir pickDir) float64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if dir == pickRecv {
+		return m.rxCapBps
+	}
+	return m.rxCapBps + m.txCapBps
+}
+
+// pickDir is what a new stream will mostly do, for pickSession's weighing.
+type pickDir int
+
+const (
+	pickAny  pickDir = iota // a browser connection: direction unknown
+	pickRecv                // a range chunk: the tunnel will mostly deliver
+)
+
 // newYamuxSession wraps a dialed route-group conn in a yamux client session with
-// skysocks's flow-control window, metering inbound bytes into a receive-time
-// stamp for the keepalive loop. Shared by NewClient and AddTunnel so every
-// tunnel is configured identically.
-func newYamuxSession(conn net.Conn) (*yamux.Session, *atomic.Int64, error) {
-	stamp := new(atomic.Int64)
+// skysocks's flow-control window, metering the tunnel's bytes for the keepalive
+// loop's receive stamp and pickSession's capacity estimate. Shared by NewClient
+// and AddTunnel so every tunnel is configured identically.
+func newYamuxSession(conn net.Conn) (*yamux.Session, *tunnelMeter, error) {
+	m := new(tunnelMeter)
 	sessionCfg := yamux.DefaultConfig()
 	sessionCfg.EnableKeepAlive = false
 	sessionCfg.MaxStreamWindowSize = muxStreamWindowBytes
 	sessionCfg.ConnectionWriteTimeout = muxConnWriteTimeout
-	session, err := yamux.Client(&recvStampConn{Conn: conn, stamp: stamp}, sessionCfg)
+	session, err := yamux.Client(&recvStampConn{Conn: conn, m: m}, sessionCfg)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating client: yamux: %w", err)
 	}
-	return session, stamp, nil
+	return session, m, nil
 }
 
 // NewClient constructs a new single-tunnel Client. Signature unchanged: this is
@@ -281,7 +365,7 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 		return nil, err
 	}
 	c.sessions = []*yamux.Session{session}
-	c.recvStamp = map[*yamux.Session]*atomic.Int64{session: stamp}
+	c.recvStamp = map[*yamux.Session]*tunnelMeter{session: stamp}
 
 	go func() {
 		defer close(c.keepAliveDone)
@@ -328,7 +412,7 @@ func (c *Client) AddTunnel(conn net.Conn) error {
 	c.sessionsMu.Lock()
 	c.sessions = append(c.sessions, session)
 	if c.recvStamp == nil {
-		c.recvStamp = make(map[*yamux.Session]*atomic.Int64)
+		c.recvStamp = make(map[*yamux.Session]*tunnelMeter)
 	}
 	c.recvStamp[session] = stamp
 	c.sessionsMu.Unlock()
@@ -535,12 +619,12 @@ func (c *Client) maybeRedial(live int) {
 // evidence alongside pongs.
 func (c *Client) lastRecvTime(s *yamux.Session) time.Time {
 	c.sessionsMu.Lock()
-	stamp := c.recvStamp[s]
+	m := c.recvStamp[s]
 	c.sessionsMu.Unlock()
-	if stamp == nil {
+	if m == nil {
 		return time.Time{}
 	}
-	if ns := stamp.Load(); ns > 0 {
+	if ns := m.stamp.Load(); ns > 0 {
 		return time.Unix(0, ns)
 	}
 	return time.Time{}
@@ -586,22 +670,60 @@ func leastLoaded(counts []int) int {
 // the most spare capacity. With a single tunnel it always returns that tunnel
 // while it is live (identical to the pre-aggregation c.session).
 func (c *Client) pickSession() *yamux.Session {
+	return c.pickSessionFor(pickAny)
+}
+
+// pickSessionFor is pickSession weighing each live tunnel's proven capacity
+// for the stream's direction: the pick minimises (open streams + 1) / capacity,
+// i.e. the tunnel that would give the new stream the most bandwidth. A tunnel
+// with nothing proven yet is credited the best known capacity so it gets
+// probed; with nothing proven anywhere (cold start, or the single-tunnel
+// case) the pick is the plain fewest-streams rule.
+func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 	c.sessionsMu.Lock()
 	defer c.sessionsMu.Unlock()
 	if len(c.sessions) == 0 {
 		return nil
 	}
+	now := time.Now()
 	counts := make([]int, len(c.sessions))
+	caps := make([]float64, len(c.sessions))
+	best := 0.0
 	for i, s := range c.sessions {
 		if s == nil || s.IsClosed() {
 			counts[i] = -1
 			continue
 		}
 		counts[i] = s.NumStreams()
+		if m := c.recvStamp[s]; m != nil {
+			m.sample(now, counts[i] > 0)
+			caps[i] = m.capacity(dir)
+			if caps[i] > best {
+				best = caps[i]
+			}
+		}
 	}
 	idx := leastLoaded(counts)
-	if idx < 0 {
-		return nil
+	if idx < 0 || best <= 0 {
+		if idx < 0 {
+			return nil
+		}
+		return c.sessions[idx]
+	}
+	idx = -1
+	bestScore := 0.0
+	for i, n := range counts {
+		if n < 0 {
+			continue
+		}
+		cp := caps[i]
+		if cp <= 0 {
+			cp = best
+		}
+		score := float64(n+1) / cp
+		if idx == -1 || score < bestScore || (score == bestScore && n < counts[idx]) {
+			idx, bestScore = i, score
+		}
 	}
 	return c.sessions[idx]
 }
