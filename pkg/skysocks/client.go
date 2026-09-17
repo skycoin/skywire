@@ -1214,8 +1214,20 @@ func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
 	// leaves the level unchanged, and the pool — already settled at "pool
 	// ceiling" — would then stay one tunnel short for good. This path observes
 	// every death exactly once.
+	//
+	// The fill is armed one probe interval LATER, though, and that hold-off is
+	// the point of routing it through here rather than dialling on the spot.
+	// Measured on the rig 2026-09-17 (fe53f42dc): arming inline put the refill
+	// dial 11 s after the group closed, while the first hop the cut tunnel had
+	// occupied was not dialable again yet. The diversify search therefore had
+	// all seven held first hops excluded and nothing left but a sudph leg — the
+	// 0.4-0.5 MB/s route maybePoolFill's comment describes — and two 50 MB
+	// uploads rode it. Healthy builds refilled at 21-22 s, one keepalive tick
+	// after the death, which is about what the freed hop needs to come back.
+	// Liveness never waits on this: the failover promote below is immediate and
+	// this only schedules a dial that GROWS the pool.
 	c.resetRedialBackoff()
-	c.armPoolFill()
+	c.armPoolFillAfter(c.probeInterval)
 	if !wasStandby {
 		c.promoteBestStandby("failover: active tunnel died")
 	}
@@ -1227,13 +1239,25 @@ func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
 // "no disjoint first hop left" answer the router gave is stale — the hop the
 // dead tunnel occupied is free again. Everything else leaves the pool resting,
 // which is what keeps this from being a dial loop.
-func (c *Client) armPoolFill() {
+func (c *Client) armPoolFill() { c.armPoolFillAfter(0) }
+
+// armPoolFillAfter is armPoolFill with a hold-off: the fill is armed now, but
+// maybePoolFill serves out delay before the first dial, through the same
+// poolRetryAt gate a failure round already uses. A retire arms it one probe
+// interval out so the first hop the dead tunnel held gets its restore window
+// before the diversify search is asked which hops are still free; every other
+// caller arms with delay 0. A second death inside the window re-arms with a
+// fresh window, which is right — the newest freed hop is the one to wait for.
+func (c *Client) armPoolFillAfter(delay time.Duration) {
 	c.redialMu.Lock()
 	if c.poolMax > 0 {
 		c.poolArmed = true
 		c.poolFails = 0
 		c.poolRetryRound = 0
 		c.poolRetryAt = time.Time{}
+		if delay > 0 {
+			c.poolRetryAt = time.Now().Add(delay)
+		}
 		c.poolSettledAt = time.Time{}
 		c.poolSettledLogged = false
 	}

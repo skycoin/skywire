@@ -410,3 +410,39 @@ func TestTunnelRTTWindow_MinimumSurvivesASpike(t *testing.T) {
 	w.push(-1, later)
 	require.EqualValues(t, 400, w.minMs(later))
 }
+
+// A standby that is still carrying the stream of its own audition is BUSY, and
+// the offer must not re-arm under it. armAudition used to scan only the active
+// set for streams, and tunnelAuditionEvery is 60 s while a 50 MB upload on a
+// bad leg runs for minutes — so on the rig 2026-09-17 (fe53f42dc) the same
+// unproven standby was offered, and took, a second consecutive upload.
+func TestPromoter_NoAuditionWhileTheAuditionedStandbyIsStillBusy(t *testing.T) {
+	c, active, standby, cleanup := promoterClient(t, 100, 95)
+	defer cleanup()
+
+	c.maybePromote()
+	c.sessionsMu.Lock()
+	require.Same(t, standby, c.audition)
+	c.sessionsMu.Unlock()
+	require.Same(t, standby, c.pickSessionFor(pickAny), "a lone stream takes the offer")
+
+	st, err := standby.Open()
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return standby.NumStreams() == 1 }, time.Second, 5*time.Millisecond)
+
+	// The transfer outlives the per-tunnel rate limit, so that guard is no
+	// longer what keeps the offer from coming back.
+	c.sessionsMu.Lock()
+	c.auditionedAt[standby] = time.Now().Add(-2 * tunnelAuditionEvery)
+	c.sessionsMu.Unlock()
+
+	for i := 0; i < 3; i++ {
+		c.maybePromote()
+		c.sessionsMu.Lock()
+		armed := c.audition
+		c.sessionsMu.Unlock()
+		require.Nil(t, armed, "a busy standby is in flight, not idle")
+	}
+	require.Same(t, active, c.pickSessionFor(pickAny), "so the next lone stream goes to the measured tunnel")
+	require.NoError(t, st.Close())
+}
