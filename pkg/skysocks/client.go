@@ -1965,6 +1965,14 @@ func (c *Client) sessionKeepAliveLoop() {
 			// tunnel: a ping wedged behind a reorder gap must not pile up.
 			for _, s := range c.snapshotSessions() {
 				if s.IsClosed() {
+					// This tick SEES the death, so this tick answers it. It
+					// used to only drop the in-flight mark and leave the
+					// retire to the liveness ticker, which runs at
+					// probeInterval (15 s): a first-hop cut was then answered
+					// 0-15 s later depending on where in that window it fell,
+					// measured live at 1.2 s in one run and 13 s in the next
+					// for the same code. A failover must not be a coin toss.
+					c.retireTunnel(s, "tunnel session closed")
 					delete(rttInFlight, s)
 					continue
 				}

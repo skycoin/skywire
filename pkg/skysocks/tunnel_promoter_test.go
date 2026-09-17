@@ -329,6 +329,66 @@ func TestPromoter_NoPoolIsANoOp(t *testing.T) {
 	c.sessionsMu.Unlock()
 }
 
+// The failover is answered by the FIRST tick that can see the session closed,
+// and the promoter never gets to deliberate ahead of it.
+//
+// Measured on the rig 2026-09-17: the same first-hop cut was answered in 1.2 s
+// in one run and in 13 s in the next, because only the liveness ticker (15 s)
+// retired a self-closed session while the 5 s ticks merely observed it. Here
+// the promoter tick IS the first tick, and the standby is active before it
+// decides anything: the promote reason must be the failover's, never the
+// promoter's.
+func TestPromoter_ATickThatSeesTheCloseRetiresBeforeItDecides(t *testing.T) {
+	// The standby is WORSE than the active tunnel, so the promoter would never
+	// choose it — only the failover can explain it carrying streams.
+	c, active, standby, cleanup := promoterClient(t, 40, 200)
+	defer cleanup()
+	rec := newNoteRecorder(2)
+	c.muxNote = rec.note
+	c.startMuxNotes()
+	defer close(c.closeC)
+
+	require.NoError(t, active.Close())
+	require.Eventually(t, active.IsClosed, time.Second, 5*time.Millisecond)
+
+	c.maybePromote() // the promoter tick is the first to see it
+	require.False(t, c.IsStandby(standby), "promoted on the very tick that saw the close")
+	require.Equal(t, 1, c.activeLiveCount())
+	require.Same(t, standby, c.pickSessionFor(pickAny))
+
+	select {
+	case <-rec.done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("the failover was not reported: %+v", rec.events())
+	}
+	got := rec.events()
+	require.Equal(t, router.MuxEventTunnelRetired, got[0].event)
+	require.Equal(t, "tunnel session closed", got[0].reason)
+	require.Equal(t, router.MuxEventTunnelPromoted, got[1].event)
+	require.Equal(t, "failover: active tunnel died", got[1].reason,
+		"the retire owns this promote; a promoter decision would have had to wait for the hold")
+
+	// Later ticks must not spend another standby on the same corpse.
+	for i := 0; i < 5; i++ {
+		c.maybePromote()
+	}
+	require.Len(t, rec.events(), 2, "the retire is once-only")
+}
+
+// The sweep is what every loop branch calls, and it answers each death once.
+func TestSweepClosedTunnels_RetiresEachTunnelOnce(t *testing.T) {
+	c, active, standby, cleanup := promoterClient(t, 40, 200)
+	defer cleanup()
+
+	require.Zero(t, c.sweepClosedTunnels(), "nothing closed, nothing to do")
+	require.NoError(t, active.Close())
+	require.Eventually(t, active.IsClosed, time.Second, 5*time.Millisecond)
+
+	require.Equal(t, 1, c.sweepClosedTunnels())
+	require.Zero(t, c.sweepClosedTunnels(), "the second sweep finds the ledger already closed")
+	require.False(t, c.IsStandby(standby))
+}
+
 // The window, not the latest sample, is the statistic. A tunnel whose ping
 // spikes under its own load keeps the small samples that prove what the path
 // really costs — the escape that ended the leg-level park/promote every 30 s.

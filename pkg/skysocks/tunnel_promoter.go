@@ -155,6 +155,13 @@ type tunnelCandidate struct {
 //
 // Then, whether or not a swap happened, it arms the idle audition.
 func (c *Client) maybePromote() {
+	// A dead tunnel is retired BEFORE anything is decided, never after. The
+	// promoter runs oftener than the liveness ticker, so it is frequently the
+	// first tick to see a session close — and a promoter that deliberated
+	// first would both act on a set containing a corpse and put its own
+	// decision ahead of the failover. The retire is once-only, so this costs a
+	// map lookup when there is nothing to do.
+	c.sweepClosedTunnels()
 	now := time.Now()
 	active, standby := c.tunnelCandidates(now)
 	if len(active) == 0 || len(standby) == 0 {
@@ -208,6 +215,28 @@ func (c *Client) maybePromote() {
 	c.promoteTunnel(best.s, reason)
 	c.clearPromoteClocks(nil)
 	c.armAudition(now, active, standby)
+}
+
+// sweepClosedTunnels retires every session already observed closed, promoting
+// a standby for each ACTIVE one it finds, and reports how many it retired.
+//
+// It exists because the death and the tick that notices it were two different
+// things. A tunnel whose route group is torn down closes its own session, but
+// the only branch that retired such a session was the liveness ticker's, at
+// probeInterval (15 s) — so the same first-hop cut was answered in 1.2 s or in
+// 13 s depending on nothing but phase. Every loop branch that iterates the
+// sessions now calls this, so the answer comes on the FIRST tick that can see
+// the close. retireTunnel is once-only (the meter is the ledger), so calling
+// it from several branches retires each tunnel exactly once and promotes
+// exactly one standby for it.
+func (c *Client) sweepClosedTunnels() int {
+	n := 0
+	for _, s := range c.snapshotSessions() {
+		if s != nil && s.IsClosed() && c.retireTunnel(s, "tunnel session closed") {
+			n++
+		}
+	}
+	return n
 }
 
 // tunnelCandidates snapshots the live tunnels, split by role, scoring each on
