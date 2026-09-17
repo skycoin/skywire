@@ -364,6 +364,14 @@ func (c *Client) SetRangeSplit(enabled bool, concurrency int, chunkSize int64) {
 	}
 }
 
+// SetRangeSplitPort sets the destination port the splitter treats as plaintext
+// HTTP (default 80). Non-positive values keep the default.
+func (c *Client) SetRangeSplitPort(port int) {
+	if port > 0 && port <= 65535 {
+		c.rs.plainPort = port
+	}
+}
+
 // SetHTTPSRangeSplitMinter enables TLS-terminating (:443) range-splitting on this
 // client using a MITM root + minter the CALLER already created (via
 // LoadOrCreateMITMCA). This is the production path: the CA is a persistent local
@@ -937,7 +945,7 @@ func (c *Client) handleStream(conn, stream net.Conn) {
 	// ownership of both ends (splicing through byte-for-byte for anything it cannot
 	// split). Everything else — HTTPS, non-80 ports, feature disabled — splices as
 	// before.
-	if c.rs.enabled && isPort80(target) {
+	if c.rs.enabled && c.isPlainPort(target) {
 		c.serveHTTPRangeSplit(conn, stream)
 	} else if c.rs.httpsEnabled && c.rs.minter != nil && isPort443(target) {
 		// Opt-in TLS-terminating split (rangesplit_https.go). Only reached when the

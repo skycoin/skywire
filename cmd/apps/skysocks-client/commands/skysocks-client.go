@@ -64,6 +64,7 @@ var (
 	rangeSplit     bool
 	rangeConc      int64
 	rangeChunkKiB  int64
+	rangePort      int64
 	rangeHTTPS     bool
 	rangeHTTPSCA   string
 )
@@ -92,6 +93,7 @@ type clientConfig struct {
 	rangeSplit     bool
 	rangeConc      int64
 	rangeChunkKiB  int64
+	rangePort      int64
 	rangeHTTPS     bool
 	rangeHTTPSCA   string
 }
@@ -116,6 +118,7 @@ func configFromFlagVars() *clientConfig {
 		rangeSplit:     rangeSplit,
 		rangeConc:      rangeConc,
 		rangeChunkKiB:  rangeChunkKiB,
+		rangePort:      rangePort,
 		rangeHTTPS:     rangeHTTPS,
 		rangeHTTPSCA:   rangeHTTPSCA,
 	}
@@ -143,6 +146,7 @@ func (c *clientConfig) parseArgs(args []string) error {
 	fs.BoolVar(&c.rangeSplit, "range-split", true, "split range-capable HTTP (:80) GETs across tunnels")
 	fs.Int64Var(&c.rangeConc, "range-concurrency", 8, "concurrent range streams per split download")
 	fs.Int64Var(&c.rangeChunkKiB, "range-chunk-kib", 4096, "bytes per range request, in KiB")
+	fs.Int64Var(&c.rangePort, "range-port", 80, "destination port treated as plaintext HTTP for range-splitting")
 	fs.BoolVar(&c.rangeHTTPS, "range-split-https", false, "also split HTTPS (:443) GETs via a local MITM root (opt-in)")
 	fs.StringVar(&c.rangeHTTPSCA, "range-split-https-ca-dir", "", "directory for the HTTPS range-split MITM root")
 	return fs.Parse(args)
@@ -180,6 +184,7 @@ func init() {
 	RootCmd.Flags().BoolVar(&rangeSplit, "range-split", true, "transparently split range-capable HTTP (:80) GETs into concurrent byte ranges across tunnels")
 	RootCmd.Flags().Int64Var(&rangeConc, "range-concurrency", 8, "concurrent range streams per split download")
 	RootCmd.Flags().Int64Var(&rangeChunkKiB, "range-chunk-kib", 4096, "bytes per range request, in KiB")
+	RootCmd.Flags().Int64Var(&rangePort, "range-port", 80, "destination port treated as plaintext HTTP for range-splitting (a bench origin on another port can be split; production stays on 80)")
 	// HTTPS (:443) range-splitting terminates the browser's TLS with a leaf minted
 	// by a local UNCONSTRAINED root so the same split works inside TLS. Off by
 	// default and a deliberate security opt-in: the root can forge any host, and the
@@ -407,6 +412,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// range-capable :80 GET is fetched as concurrent byte ranges over separate
 		// tunnels, so a single download aggregates across the mesh.
 		client.SetRangeSplit(cfg.rangeSplit, int(cfg.rangeConc), cfg.rangeChunkKiB*1024)
+		client.SetRangeSplitPort(int(cfg.rangePort))
 		// HTTPS (:443) range-splitting: inject the MITM root minted ONCE at startup
 		// (mitmMinter, below) so it is the same persistent CA across every reconnect
 		// and exists before any dial. nil minter = feature off or CA init failed.
