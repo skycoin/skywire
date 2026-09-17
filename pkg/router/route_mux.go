@@ -132,7 +132,8 @@ type legCounters struct {
 	// window is this leg's send rate (kept separate from lastTotalBytes /
 	// lastRateSentBytes so the ECF sampler never disturbs the capacity or
 	// telemetry samplers). ecfRttMs / ecfJitterMs are the EWMA'd mean RTT and
-	// jitter (sigma) the ECF predicate consumes.
+	// jitter (sigma) the ECF predicate consumes — the RTT over the leg's
+	// END-TO-END feedback delay, max(first-hop RTT, send→ack delay).
 	ecfLastSentBytes uint64
 	// ecfLastAckedBytes snapshots the bytes the peer's SACKs had acknowledged on
 	// this leg at the previous ECF refresh: the delta is the leg's DELIVERY
@@ -1504,6 +1505,12 @@ func (m *routeMux) rackThresholdForWith(th time.Duration, tpID uuid.UUID) time.D
 // window basis: a frame striped onto any active leg should arrive within the
 // slowest leg's RTT plus a margin, so both the RACK loss threshold and the TLP
 // probe timeout are derived from it.
+//
+// ecfRttMs is the leg's END-TO-END feedback delay (refreshLegWindows folds
+// max(first-hop RTT, send→ack delay) into it), which is the delay a frame's
+// acknowledgement actually has to survive. Judged on the first-hop RTT alone
+// this returned ~95 ms while real feedback took ~170 ms, so RACK presumed loss
+// inside one round trip and retransmitted everything in flight.
 func (m *routeMux) maxActiveLegRTTms() float64 {
 	m.legMu.RLock()
 	defer m.legMu.RUnlock()
@@ -1656,10 +1663,10 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 	// ECF mode: build the per-leg {rate, RTT, jitter, ready, BDP} snapshot the
 	// predictive scheduler reasons over. Rate is the sent-byte delta over the
 	// refresh window (computed here, not from snapshotLegs, so it works even
-	// when nothing is observing the telemetry page). RTT is the leg's first-hop
-	// transport latency (tp.GetLatency(), ms) — the end-to-end route latency
-	// would be more accurate but is not reachable from the mux; noted as a
-	// follow-up. Jitter is an EWMA of |RTT-mean|, the ECF sigma margin.
+	// when nothing is observing the telemetry page). RTT is the leg's END-TO-END
+	// feedback delay — max(first-hop tp.GetLatency(), the leg's measured
+	// send→ack delay) — not the near-edge hop alone. Jitter is an EWMA of
+	// |RTT-mean|, the ECF sigma margin.
 	//
 	// OTIAS and STMS reason over the SAME ecfLegState snapshot (rate + RTT +
 	// jitter + BDP + the selector-tracked in-flight estimate), so this one
@@ -1694,6 +1701,15 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 			}
 		}
 	}
+	// Per-leg send→ack delay, read once here (outside legMu) and used for BOTH
+	// the leg's RTT basis and the window's feedback delay below — one lock trip
+	// instead of one per leg per use, and the same number in both places.
+	adByIdx := make([]float64, len(tps))
+	for i, tp := range tps {
+		if tp != nil {
+			adByIdx[i] = m.ackDelayMsTp(tp.Entry.ID)
+		}
+	}
 	{
 		m.legMu.Lock()
 		now := time.Now().UnixNano()
@@ -1713,10 +1729,28 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 				rate = float64(byteDelta(sent, lc.ecfLastSentBytes)) / elapsed
 			}
 			lc.ecfLastSentBytes = sent
-			// RTT EWMA + jitter (sigma) EWMA.
+			// RTT EWMA + jitter (sigma) EWMA, over the leg's END-TO-END feedback
+			// delay: max(first-hop transport RTT, measured send→ack delay).
+			//
+			// The first-hop RTT alone is the wrong basis for every consumer of
+			// this field. Measured live 2026-09-16 (exit sending, two pinned
+			// legs): first-hop 10 ms via Amsterdam vs 95 ms via Atlanta, while
+			// the real send→ack delay was ~170 ms on BOTH. ECF's hold-back rule
+			// (n*rttF < hyst*(rttS+d)) then needed n≈9.5 frames queued before it
+			// would spill to the second leg (split 41.5/9.5 MB of a 50 MB
+			// download), and RACK's threshold — derived from the same short
+			// basis via maxActiveLegRTTms — declared the in-flight frames lost
+			// when it finally did (199 retransmit bursts / 1824 packets over
+			// five rows, wire/goodput up to 1.19). The window sizing below
+			// already used max(baseline, ack delay); this makes the whole leg
+			// state agree with it. The first-hop value stays the FLOOR, so a
+			// leg with no ack sample yet behaves exactly as before.
 			var rttMs float64
 			if i < len(tps) && tps[i] != nil {
 				rttMs = tps[i].GetLatency()
+				if ad := adByIdx[i]; ad > rttMs {
+					rttMs = ad
+				}
 			}
 			if rttMs > 0 {
 				if lc.ecfRttMs == 0 {
@@ -1729,9 +1763,13 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 					}
 					lc.ecfJitterMs = ecfJitterAlpha*dev + (1-ecfJitterAlpha)*lc.ecfJitterMs
 					lc.ecfRttMs = ecfRttAlpha*rttMs + (1-ecfRttAlpha)*lc.ecfRttMs
-					// Baseline RTT = running minimum with a slow upward creep: a
-					// transient congestion spike never raises it, but a leg whose
-					// true latency rose for good is eventually tracked.
+					// Baseline RTT = running minimum of the SAME end-to-end basis,
+					// with a slow upward creep: a transient congestion spike never
+					// raises it, but a leg whose true latency rose for good is
+					// eventually tracked. It must track the combined value, not the
+					// first hop — ecfSaturated judges the live rtt against it, and a
+					// first-hop baseline beside an end-to-end live value would read
+					// as permanent congestion.
 					if rttMs < lc.ecfRttMinMs {
 						lc.ecfRttMinMs = rttMs
 					} else {
@@ -1777,7 +1815,7 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 						// under load (measured: uploads on a 2-tunnel session fell
 						// from 9.7 to 4.5 MB/s with 750 writer parks).
 						fbMs := bdpRttMs
-						if ad := m.ackDelayMsTp(tps[i].Entry.ID); ad > fbMs {
+						if ad := adByIdx[i]; ad > fbMs {
 							fbMs = ad
 						}
 						cwnd = deliv * fbMs / 1000.0 * ecfWindowMargin
