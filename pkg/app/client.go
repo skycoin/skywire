@@ -203,58 +203,42 @@ func (c *Client) SetAppPortOrLog(port routing.Port) {
 
 // Dial dials the remote visor using `remote`.
 func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
-	return c.dial(remote, 0, 0, 0, 0, 0, 0, false, false)
+	return c.dial(remote, nil)
 }
 
-// DialWithOptions dials remote with per-call dial options.
-// Honored options:
-//   - muxRoutes: when > 1 and the remote's transport family routes
-//     through SkywireNetworker, the router establishes N parallel
-//     mux routes.
-//   - minHops: when >= 2, the router rejects the direct path and
-//     finds routes through that many intermediates.
-//   - fwdMinHops / revMinHops: per-direction MinHops overrides for
-//     bandwidth-asymmetric path quality (e.g. direct upstream +
-//     multi-hop downstream).
-//   - fwdMux / revMux: per-direction MuxRoutes overrides for
-//     asymmetric route counts. Setting fwdMux=1 + revMux=N yields
-//     1 forward leg + N reverse legs — the canonical download-heavy
-//     workload shape where only the bulk-receive direction is
-//     aggregated.
+// DialWithOptions dials remote with the per-call dial options opts
+// carries — mux route counts (symmetric and per-direction), min-hops
+// (symmetric and per-direction), the `--direct` transport-only
+// shortcut, multi-tunnel diversification and its disjoint requirement,
+// and the tunnel role label. See appserver.DialOptionsReq for what
+// each field means to the router.
 //
-// All <= 1 is semantically equivalent to Dial. Apps requesting these
-// dial shapes (e.g. skynet-client with --routes / --min-hops /
-// --forward-min-hops / --reverse-min-hops / --forward-mux /
-// --reverse-mux flags) call this instead of Dial; non-mux callers
-// keep using Dial unchanged.
-//   - direct: when true, forces a direct-transport-only dial — the router
-//     creates a direct transport to the remote if none exists and dials
-//     1-hop over it, bypassing the route-finder (the `--direct` skynet flag).
-//   - diversify: when true, opts this dial into visor-side multi-tunnel
-//     transport diversification (docs/mux_aggregation_rfc.md step 3). The
-//     visor excludes the first-hop transports/intermediates already claimed
-//     by this visor's live route groups to the same dst, so a new tunnel to
-//     an exit leaves over a DIFFERENT first-hop transport and the tunnels'
-//     throughputs sum. Set by skysocks-client for tunnel 2..N; harmless on a
-//     lone dial (no sibling route group → no exclusions → identical to Dial).
-func (c *Client) DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int, direct, diversify bool) (net.Conn, error) {
-	return c.dial(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, diversify)
+// An opts with nothing explicit set is semantically equivalent to
+// Dial. Apps requesting these dial shapes (skynet-client's --routes /
+// --min-hops / --forward-mux …, skysocks-client's tunnels) call this
+// instead of Dial; non-mux callers keep using Dial unchanged.
+//
+// opts.Addr is filled in from remote, so a caller never has to state
+// the destination twice.
+func (c *Client) DialWithOptions(remote appnet.Addr, opts appserver.DialOptionsReq) (net.Conn, error) {
+	return c.dial(remote, &opts)
 }
 
-// dial is the common body for Dial + DialWithOptions. When all opts
-// are 0 (unset) it invokes the original rpcC.Dial path (preserving the
-// existing wire shape for non-mux callers); any explicit value, 1 included
-// (the gateway treats MuxRoutes=1 as "form a route group"), sends the
-// DialWithOptions request so the server-side knows to take the
-// SkywireNetworker per-call-opts path.
-func (c *Client) dial(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int, direct, diversify bool) (net.Conn, error) {
+// dial is the common body for Dial + DialWithOptions. With no opts (or
+// nothing explicit set in them) it invokes the original rpcC.Dial path,
+// preserving the existing wire shape for non-mux callers; any explicit
+// value, 1 included (the gateway treats MuxRoutes=1 as "form a route
+// group"), sends the DialWithOptions request so the server-side knows to
+// take the SkywireNetworker per-call-opts path.
+func (c *Client) dial(remote appnet.Addr, opts *appserver.DialOptionsReq) (net.Conn, error) {
 	var (
 		connID    uint16
 		localPort routing.Port
 		err       error
 	)
-	if direct || diversify || muxRoutes >= 1 || minHops >= 1 || fwdMinHops >= 1 || revMinHops >= 1 || fwdMux >= 1 || revMux >= 1 {
-		connID, localPort, err = c.rpcC.DialWithOptions(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct, diversify)
+	if opts != nil && opts.Explicit() {
+		opts.Addr = remote
+		connID, localPort, err = c.rpcC.DialWithOptions(*opts)
 	} else {
 		connID, localPort, err = c.rpcC.Dial(remote)
 	}

@@ -264,6 +264,12 @@ type Tunnel struct {
 	ExitPK     string // destination exit PK (full, never truncated); same across tunnels
 	MuxEnabled bool   // this tunnel's route group has packet-level mux enabled
 	Legs       []Leg  // this tunnel's packet-level mux legs
+	// Role is "active" (the tunnel carries streams) or "standby" (it is held
+	// open, kept alive and measured, carrying nothing, so it can be switched
+	// in without a route setup). Empty when the client did not label it — a
+	// single-tunnel session, or a route group belonging to something else.
+	// It is the local end's own label; an exit cannot know it.
+	Role string
 }
 
 // Stream is one open tunneled stream on the surface's session to the exit — the

@@ -167,6 +167,9 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 				Index:      ti,
 				ExitPK:     exit.String(),
 				MuxEnabled: info.MuxEnabled,
+				// "active" / "standby", as the dialing app labeled it. Empty
+				// unless this visor is the one holding the tunnels.
+				Role: info.TunnelRole,
 			}
 			for _, leg := range info.Legs {
 				t.Legs = append(t.Legs, proxyLegFrom(leg))

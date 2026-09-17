@@ -318,10 +318,10 @@ func TestClient_DialWithOptions_ExplicitOneReachesGateway(t *testing.T) {
 	remote := appnet.Addr{Net: appnet.TypeSkynet, PubKey: remotePK, Port: routing.Port(3)}
 
 	rpc := &appserver.MockRPCIngressClient{}
-	rpc.On("DialWithOptions", remote, 1, 0, 0, 0, 0, 0, false, false).Return(uint16(7), routing.Port(9), nil)
+	rpc.On("DialWithOptions", appserver.DialOptionsReq{Addr: remote, MuxRoutes: 1}).Return(uint16(7), routing.Port(9), nil)
 
 	cl := prepClient(l, visorPK, rpc)
-	conn, err := cl.DialWithOptions(remote, 1, 0, 0, 0, 0, 0, false, false)
+	conn, err := cl.DialWithOptions(remote, appserver.DialOptionsReq{MuxRoutes: 1})
 	require.NoError(t, err)
 	require.Equal(t, uint16(7), conn.(*Conn).id)
 	rpc.AssertNotCalled(t, "Dial", remote)

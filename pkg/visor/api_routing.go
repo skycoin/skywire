@@ -155,6 +155,7 @@ func muxRouteGroupInfoFrom(infos []router.MuxInfo) []MuxRouteGroupInfo {
 			Legs:               make([]MuxLegInfo, 0, len(info.Legs)),
 			Events:             info.Events,
 			Recovery:           info.Recovery,
+			TunnelRole:         info.TunnelRole,
 		}
 		for _, leg := range info.Legs {
 			entry.AggSentBytes += leg.SentBytes

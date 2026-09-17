@@ -124,6 +124,7 @@ var (
 	muxMode               string
 	minHops               uint16
 	startTunnels          int
+	startStandbyPool      int
 	startRangePort        int
 	startRangeChunkKiB    int
 	startRangeConcurrency int

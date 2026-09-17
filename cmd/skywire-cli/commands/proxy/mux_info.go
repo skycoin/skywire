@@ -133,6 +133,12 @@ type muxRouteGroupInfo struct {
 	// one text line) because BOTH output paths round-trip through this struct,
 	// so a field the visor sends but this mirror lacks is silently dropped.
 	Recovery *muxRecoveryInfo `json:"recovery,omitempty"`
+	// TunnelRole is the local end's label for this route group: "active" (it
+	// carries streams) or "standby" (held open and measured, ready to take
+	// over). Empty for a group that is not one of a multi-tunnel app's
+	// tunnels, and empty when read from the EXIT — the accepting end does not
+	// know which of a peer's tunnels are in standby.
+	TunnelRole string `json:"tunnel_role,omitempty"`
 }
 
 // muxRecoveryInfo is the CLI-side mirror of router.MuxRecovery (json tags are
@@ -296,11 +302,18 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 	next := make(map[string]muxLegBytes)
 
 	for ri, rg := range rgs {
-		fmt.Printf("rg[%d] %s:%d → %s:%d  mux=%v sack=%v perframe=%v  legs=%d\n",
+		// role=standby marks a tunnel held open, measured and ready to take
+		// over but carrying no streams. Printed only when the local end
+		// labeled the group; an exit never does.
+		role := ""
+		if rg.TunnelRole != "" {
+			role = "  role=" + rg.TunnelRole
+		}
+		fmt.Printf("rg[%d] %s:%d → %s:%d  mux=%v sack=%v perframe=%v  legs=%d%s\n",
 			ri,
 			shortPK(rg.Desc.SrcPK), rg.Desc.SrcPort,
 			shortPK(rg.Desc.DstPK), rg.Desc.DstPort,
-			rg.MuxEnabled, rg.SACKEnabled, rg.PerFrameNoise, len(rg.Legs))
+			rg.MuxEnabled, rg.SACKEnabled, rg.PerFrameNoise, len(rg.Legs), role)
 		if rg.MuxEnabled {
 			// dist + reorder frontier: a rising pending with a growing gap age is
 			// the head-of-line-blocking stall signal for a black-holing leg.

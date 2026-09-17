@@ -740,7 +740,7 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 	// (mux/min-hops) when set; dmsg is a plain relay stream with no such options.
 	dial := func(_ context.Context, a appnet.Addr) (net.Conn, error) {
 		if a.Net == netType && (c.cfg.MuxRoutes > 1 || c.cfg.MinHops >= 2) {
-			return appCl.DialWithOptions(a, c.cfg.MuxRoutes, c.cfg.MinHops, 0, 0, 0, 0, false, false)
+			return appCl.DialWithOptions(a, appserver.DialOptionsReq{MuxRoutes: c.cfg.MuxRoutes, MinHops: c.cfg.MinHops})
 		}
 		return appCl.Dial(a)
 	}

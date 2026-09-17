@@ -381,6 +381,15 @@ type MuxRouteGroupInfo struct {
 	// logged anything — the sender had nothing to show. Nil when the group has
 	// no mux.
 	Recovery *router.MuxRecovery `json:"recovery,omitempty"`
+	// TunnelRole is the DIALING end's label for this route group — "active"
+	// (it carries streams) or "standby" (held open, kept alive and measured,
+	// carrying nothing, ready to take over). Absent for every route group that
+	// is not one of a multi-tunnel app's tunnels.
+	//
+	// Read it on the LOCAL end. An exit sees how many tunnels a client holds
+	// but not which of them are in standby, so this field is always empty in
+	// an accepting visor's `visor state`.
+	TunnelRole string `json:"tunnel_role,omitempty"`
 }
 
 // MuxLegInfo is one route in a mux'd group.

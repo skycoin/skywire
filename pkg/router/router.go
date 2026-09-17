@@ -393,6 +393,28 @@ type DialOptions struct {
 	// untouched. Falls back gracefully — if no disjoint transport is free the
 	// dial proceeds on a shared path (a shared tunnel beats no tunnel).
 	DiversifyTransports bool
+	// RequireDisjointFirstHop turns the diversify PREFERENCE above into a
+	// REQUIREMENT: rather than conceding a shared first hop when nothing
+	// disjoint is free, the dial fails with ErrNoDisjointFirstHop. Only
+	// meaningful together with DiversifyTransports (without siblings there is
+	// nothing to be disjoint from, and the dial proceeds as usual).
+	//
+	// It exists so a caller that is GROWING a pool of sibling tunnels can tell
+	// "the topology has more disjoint paths to offer" from "it has none left".
+	// The skysocks standby pool dials with it set and stops filling on the
+	// first ErrNoDisjointFirstHop — the tunnel-level twin of the mux's
+	// "no disjoint path available right now; settling at current degree".
+	// A shared extra tunnel aggregates nothing, so for that caller a shared
+	// path is not a lesser success but a wrong answer.
+	RequireDisjointFirstHop bool
+	// TunnelRole records what the DIALER intends this route group to be:
+	// "active" (it carries streams) or "standby" (it is held open, measured
+	// and ready to take over). Set by the skysocks client; empty everywhere
+	// else, and empty is the only value a non-tunnel route group ever has.
+	// Surfaced as MuxInfo.TunnelRole. It is the dialing end's own label — the
+	// accepting end (the exit) has no idea which of its peers' tunnels are in
+	// standby, so this field is always empty there.
+	TunnelRole string
 	// dialNotes is the decision trail DialRoutes writes as it picks a route —
 	// sibling exclusions, candidate filtering, the first hop it settled on —
 	// which finishDial records on the group as a MuxEventDialDecision, so a
