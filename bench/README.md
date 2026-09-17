@@ -45,3 +45,42 @@ takes the stream-level and packet-level sets after the references:
 legs, transport types, remote pks); `<set>.carrier.tsv` has the per-row byte
 deltas of every first-hop transport. `TUNNELS="2 3"` and `LEGS="2 3 5"`
 choose the counts; `[pin order]` lists pin shorts best route first.
+
+## Standby tunnel pool, unattended
+
+`bench/run-standby.sh <exit pk> <out dir> <pins dir> [trials] [sink] [pin order]`
+measures the standby tunnel pool: the session holds every disjoint route to the
+exit as a dialed tunnel, and only `--tunnels` of them carry traffic.
+
+One set per run, `mux-standby-<pool>`, where `<pool>` is the pool size the
+session SETTLED at — the script starts the default proxy instance exactly as
+`run-mux.sh` starts a `mux-tunnels-N` set (no pins, no extra flag: the pool is
+on by default), then polls `visor state --select mux_route_groups` until the
+group count to the exit has not moved for `POOL_QUIET` (20 s). The count it
+finds names the set, so a run whose pool never grew past the active set is
+recorded as `mux-standby-2`, marked INVALID, and cannot be mistaken for a full
+pool. `<set>.legs.json` is the settled pool in `run-mux.sh`'s shape — groups,
+legs, hops with full public keys, `remote_ip` per leg — plus each group's
+`tunnel_role` when the visor reports one (`STANDBY_POOL=0` is the control run).
+
+Rows are `run-mux.sh`'s twenty in the same order (1–5 10 MB down, 6–10 10 MB up,
+11–15 50 MB down, 16–20 50 MB up). Row 11 — the first 50 MB download — is the
+chaos row: `CHAOS_AFTER_S` (5) seconds in, the first-hop transport of one ACTIVE
+tunnel is removed with `tp rm`, and the row is timed to the first byte that
+arrives afterwards. The active tunnel is the one `tunnel_role` names, or, when
+the visor does not report that field, the one whose first hop actually carried
+the downloads of rows 1–10. What may be cut is fenced as in `run-degrade.sh` —
+one of the pinned hop-1 stcpr transports (so `tp add -t stcpr <pk>` rebuilds the
+same id), never the transport to the exit, never one a second group shares — and
+a pool with no such candidate is INVALID before a row is measured. The transport
+is re-added right after the row and every pin is swept again at the end; a pin
+the sweep cannot restore is named, and `rig-restore.sh` is then the next step.
+
+`<set>.chaos.tsv` records what was cut (row, transport id, first-hop public key
+in full, timestamp, and the row's before/after goodput). `<set>.assert.tsv` is
+the set's pass/fail table: rows 11–15 all hash-verified; every pre-cut route
+group except the cut one still held afterwards (the no-rebuild test, with any
+port the pool refills recorded separately); at least one `tunnel_promoted` — or
+`leg_promoted`, and the row says which was found; time to first byte after the
+cut under `CHAOS_TTFB_MAX_S` (2); and zero reorder wedges at either end, read
+from the local event ring and both ends' recovery counters.
