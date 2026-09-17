@@ -3,6 +3,7 @@ package router
 import (
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -405,12 +406,24 @@ func TestEnforceLatencyBandParksArtifactLeg(t *testing.T) {
 		require.False(t, rg.mux.isLegStandby(i), "homogeneous cluster leg %d stays active", i)
 	}
 
-	// Idempotent: a second pass with the artifact now back in-band re-admits it.
+	// Idempotent: a second pass with the artifact now back in-band re-admits it —
+	// but only once the park's minimum hold has expired (see park_hysteresis.go).
+	// Without the hold the band re-admitted the leg on the very next tick, which
+	// is the measured 5s park/promote flap.
 	rg.legLivenessMu.Lock()
 	rg.legE2ELatency[mts[3].Entry.ID] = 150
 	rg.legLivenessMu.Unlock()
 	rg.enforceLatencyBand(nil)
-	require.False(t, rg.mux.isLegStandby(3), "leg back within band is re-admitted in manual mode")
+	require.True(t, rg.mux.isLegStandby(3), "an in-band leg stays parked while its adaptive park is held")
+
+	rg.adaptiveParkMu.Lock()
+	p := rg.adaptiveParks[mts[3].Entry.ID]
+	p.at = p.at.Add(-legParkMinHold - time.Second)
+	rg.adaptiveParks[mts[3].Entry.ID] = p
+	rg.adaptiveParkMu.Unlock()
+
+	rg.enforceLatencyBand(nil)
+	require.False(t, rg.mux.isLegStandby(3), "leg back within band is re-admitted in manual mode once the hold expires")
 }
 
 // TestEnforceLatencyBandReelectsBadPrimary drives the full rg path when the
