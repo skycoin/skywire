@@ -17,38 +17,37 @@ func TestTunnelMeterCapacity(t *testing.T) {
 	m.sample(t0, false) // first sample only anchors
 	m.rx.Add(69)        // a ping while idle
 	m.sample(t0.Add(time.Second), false)
-	bps, fresh := m.capacity(pickRecv, t0.Add(time.Second))
+	bps, fresh := m.capacity(t0.Add(time.Second))
 	require.Zero(t, bps, "an idle window proves nothing")
 	require.False(t, fresh)
 
 	m.rx.Add(1_000_000)
 	m.tx.Add(250_000)
 	m.sample(t0.Add(2*time.Second), true)
-	bps, fresh = m.capacity(pickRecv, t0.Add(2*time.Second))
+	bps, fresh = m.capacity(t0.Add(2 * time.Second))
 	require.InDelta(t, 1e6, bps, 1)
 	require.True(t, fresh)
-	bps, _ = m.capacity(pickAny, t0.Add(2*time.Second))
-	require.InDelta(t, 1.25e6, bps, 1)
 
 	m.sample(t0.Add(3*time.Second), false) // idle: nothing moved, nothing forgotten
-	bps, fresh = m.capacity(pickRecv, t0.Add(3*time.Second))
+	bps, fresh = m.capacity(t0.Add(3 * time.Second))
 	require.InDelta(t, 1e6, bps, 1)
 	require.True(t, fresh, "within meterFresh of the busy window")
-	_, fresh = m.capacity(pickRecv, t0.Add(2*time.Second+meterFresh+time.Millisecond))
+	_, fresh = m.capacity(t0.Add(2*time.Second + meterFresh + time.Millisecond))
 	require.False(t, fresh, "past meterFresh the estimate is stale")
 
 	m.sample(t0.Add(4*time.Second), true) // busy and slower: the estimate decays
-	bps, _ = m.capacity(pickRecv, t0.Add(4*time.Second))
+	bps, _ = m.capacity(t0.Add(4 * time.Second))
 	require.InDelta(t, 0.9e6, bps, 1)
 	m.sample(t0.Add(4*time.Second+100*time.Millisecond), true) // too soon: no sample
-	bps, _ = m.capacity(pickRecv, t0.Add(4*time.Second))
+	bps, _ = m.capacity(t0.Add(4 * time.Second))
 	require.InDelta(t, 0.9e6, bps, 1)
 }
 
-// TestPickSessionWeighsCapacity proves a new stream goes to the tunnel that
-// would give it the most bandwidth — proven capacity for its direction over
-// the streams already on the tunnel — while a tunnel with nothing proven is
-// credited the best known capacity so it gets probed.
+// TestPickSessionWeighsCapacity proves a range chunk goes to the tunnel that
+// would give it the most bandwidth — proven download capacity over the streams
+// already on the tunnel — while a tunnel with nothing proven is credited the
+// best known capacity so it gets probed. (A lone stream is picked on latency
+// instead; see TestPickAnyTakesTheLowestLatencyTunnel.)
 func TestPickSessionWeighsCapacity(t *testing.T) {
 	s0, close0 := newTestSession(t)
 	defer close0()
@@ -63,7 +62,6 @@ func TestPickSessionWeighsCapacity(t *testing.T) {
 		recvStamp: map[*yamux.Session]*tunnelMeter{s0: direct, s1: twoHop},
 		closeC:    make(chan struct{}),
 	}
-	require.Same(t, s0, c.pickSessionFor(pickAny), "a browser conn goes to the larger summed capacity")
 	require.Same(t, s1, c.pickSessionFor(pickRecv), "a range chunk weighs download capacity alone")
 
 	// Three chunks already on the two-hop tunnel: (3+1)/3e6 loses to (0+1)/2e6.
@@ -82,7 +80,7 @@ func TestPickSessionWeighsCapacity(t *testing.T) {
 	st, err := s0.Open()
 	require.NoError(t, err)
 	defer st.Close() //nolint:errcheck
-	require.Same(t, s2, c.pickSessionFor(pickAny), "an unproven tunnel is probed ahead of a busy proven one")
+	require.Same(t, s2, c.pickSessionFor(pickRecv), "an unproven tunnel is probed ahead of a busy proven one")
 }
 
 // TestPickSessionProbesStaleIdleTunnel proves the starvation escape: while a

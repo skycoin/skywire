@@ -152,6 +152,11 @@ type legCounters struct {
 	// as a running minimum with a slow upward creep (ecfRttMinCreep) so a leg
 	// whose true latency genuinely rose is not pinned to a stale floor forever.
 	ecfRttMinMs float64
+	// ecfHopRttMinMs is the same running minimum over the FIRST-HOP transport
+	// latency alone. It is the one delay on this leg that our own send window
+	// cannot inflate — the transport measures it out of band — so it is the
+	// ceiling the BDP baseline is held under (see refreshLegWindows).
+	ecfHopRttMinMs float64
 }
 
 // routeMux encapsulates route multiplexing state and logic.
@@ -192,7 +197,7 @@ type routeMux struct {
 	// it is merely in flight (measured live 2026-09-16: 26801 of a three-leg
 	// group's 29360 retransmits came from the reactive SACK path). A leg's
 	// holes are judged against its own estimate (rackThresholdFor).
-	ackDelayByTp   map[uuid.UUID]float64
+	ackDelayByTp   map[uuid.UUID]*ackDelayEst
 	ackDelayByTpMu sync.Mutex
 
 	// windowCh wakes a writer parked in waitSendWindow when a SACK may have
@@ -1435,37 +1440,71 @@ func (m *routeMux) ackDelayMs() float64 {
 	return float64(atomic.LoadInt64(&m.ackDelayMilli)) / 1000
 }
 
+// ackDelayEst is one leg's send→ack delay estimate: the asymmetric EWMA the
+// loss detectors judge holes against, and when the last sample landed.
+//
+// The EWMA rises fast, falls slowly, and had no time decay at all, so the
+// queue one transfer built was still the basis when the next one started:
+// measured live 2026-09-17, five consecutive 50 MB uploads over ONE leg
+// through a 470 ms intermediate ran 3.90, 3.05, 2.80, 1.59, 0.62 MB/s with
+// ZERO loss (retx 6→28, send_window_waits 0), the leg's reported delay
+// ratcheting to 13435 ms while sacks_recv per row went 125→476 at constant
+// frames. lastNano is what ends that: the estimate expires with the transfer.
+type ackDelayEst struct {
+	ms       float64
+	lastNano int64
+}
+
+// ackDelayStale is how long a leg's send→ack estimate survives without a new
+// sample. Past it the leg reads as unsampled again — the first-hop transport
+// latency is the basis until the next transfer proves otherwise — so an idle
+// gap between transfers resets both the loss threshold and the window's
+// feedback delay instead of carrying the previous transfer's queue into the
+// next one.
+const ackDelayStale = 5 * time.Second
+
 // recordAckDelayTp folds one send→ack delay sample into the leg's own EWMA
 // (same asymmetric α as recordAckDelay: fast up, slow down).
 func (m *routeMux) recordAckDelayTp(tpID uuid.UUID, d time.Duration) {
 	ms := float64(d) / float64(time.Millisecond)
+	now := time.Now().UnixNano()
 	m.ackDelayByTpMu.Lock()
 	if m.ackDelayByTp == nil {
-		m.ackDelayByTp = make(map[uuid.UUID]float64)
+		m.ackDelayByTp = make(map[uuid.UUID]*ackDelayEst)
 	}
 	cur := m.ackDelayByTp[tpID]
-	if cur == 0 {
-		// First sample seeds the estimate whole: an EWMA from zero would halve
-		// it, and a freshly added leg is judged against this very number while
-		// its first packets are still in flight.
-		m.ackDelayByTp[tpID] = ms
-		m.ackDelayByTpMu.Unlock()
-		return
+	if cur == nil {
+		cur = new(ackDelayEst)
+		m.ackDelayByTp[tpID] = cur
 	}
-	alpha := 0.125
-	if ms > cur {
-		alpha = 0.5
+	if cur.ms == 0 || now-cur.lastNano > int64(ackDelayStale) {
+		// First sample — or the first after an idle gap — seeds the estimate
+		// whole: an EWMA from zero would halve it, a freshly added leg is judged
+		// against this very number while its first packets are still in flight,
+		// and a stale estimate describes a queue that has since drained.
+		cur.ms = ms
+	} else {
+		alpha := 0.125
+		if ms > cur.ms {
+			alpha = 0.5
+		}
+		cur.ms += alpha * (ms - cur.ms)
 	}
-	m.ackDelayByTp[tpID] = cur + alpha*(ms-cur)
+	cur.lastNano = now
 	m.ackDelayByTpMu.Unlock()
 }
 
 // ackDelayMsTp returns the leg's EWMA send→ack delay in milliseconds (0 = no
-// sample yet for that transport).
+// sample yet for that transport, or none for ackDelayStale).
 func (m *routeMux) ackDelayMsTp(tpID uuid.UUID) float64 {
+	now := time.Now().UnixNano()
 	m.ackDelayByTpMu.Lock()
 	defer m.ackDelayByTpMu.Unlock()
-	return m.ackDelayByTp[tpID]
+	e := m.ackDelayByTp[tpID]
+	if e == nil || now-e.lastNano > int64(ackDelayStale) {
+		return 0
+	}
+	return e.ms
 }
 
 // rackThresholdFor is rackThreshold judged for one leg: when the leg's own
@@ -1745,11 +1784,23 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 			// already used max(baseline, ack delay); this makes the whole leg
 			// state agree with it. The first-hop value stays the FLOOR, so a
 			// leg with no ack sample yet behaves exactly as before.
-			var rttMs float64
+			var rttMs, hopMs float64
 			if i < len(tps) && tps[i] != nil {
-				rttMs = tps[i].GetLatency()
+				hopMs = tps[i].GetLatency()
+				rttMs = hopMs
 				if ad := adByIdx[i]; ad > rttMs {
 					rttMs = ad
+				}
+			}
+			// The first-hop minimum is tracked on its own, with the same creep:
+			// it is the BDP baseline's ceiling and must not be reachable from
+			// the combined value.
+			if hopMs > 0 {
+				switch {
+				case lc.ecfHopRttMinMs == 0 || hopMs < lc.ecfHopRttMinMs:
+					lc.ecfHopRttMinMs = hopMs
+				default:
+					lc.ecfHopRttMinMs += ecfRttMinCreep * (hopMs - lc.ecfHopRttMinMs)
 				}
 			}
 			if rttMs > 0 {
@@ -1780,7 +1831,24 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 			// BDP latency = the baseline (uncongested) RTT, never the live RTT,
 			// so a stalling leg's inflating RTT cannot grow its own cwnd and pull
 			// more traffic onto itself.
-			bdpRttMs := lc.ecfRttMinMs
+			// ...and it is the FIRST-HOP running minimum, not the combined
+			// end-to-end one #4970 put on ecfRttMinMs. The combined baseline
+			// tracks the send→ack EWMA, which rises with a queue THIS window
+			// created and (having no time decay) carried that queue into the next
+			// transfer: measured live 2026-09-17, five consecutive 50 MB uploads
+			// over ONE leg through a 470 ms intermediate fell 3.90 → 3.05 → 2.80
+			// → 1.59 → 0.62 MB/s with ZERO loss (retx 6→28, send_window_waits 0)
+			// while the leg's combined delay reading ratcheted to 13435 ms.
+			//
+			// The first-hop latency is the one delay on this leg our own window
+			// cannot inflate — the transport measures it out of band — so it is
+			// the stable floor the window is anchored to. ecfRttMs / rttMinMs keep
+			// the combined value for ecfPick, the RACK threshold and the latency
+			// band, which is what #4970 was for; only the BDP anchor comes back.
+			bdpRttMs := lc.ecfHopRttMinMs
+			if bdpRttMs <= 0 {
+				bdpRttMs = lc.ecfRttMinMs
+			}
 			if bdpRttMs <= 0 {
 				bdpRttMs = lc.ecfRttMs
 			}
@@ -1813,7 +1881,14 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 						// ping RTT), so the window must be sized over that delay too:
 						// sized over the shorter ping RTT it shrank every refresh
 						// under load (measured: uploads on a 2-tunnel session fell
-						// from 9.7 to 4.5 MB/s with 750 writer parks).
+						// from 9.7 to 4.5 MB/s with 750 writer parks, and clamping it
+						// to a first-hop multiple instead collapsed a 470 ms path to
+						// the 128 KiB floor: 0.23 MB/s on a 50 MB upload, wire/
+						// goodput 1.00, the starved window shrinking the delivery
+						// that sizes it). The ack delay only ever WIDENS the window
+						// here, and ackDelayStale expires it once the transfer ends,
+						// so the queue one transfer built is not the next one's
+						// basis — which is the ratchet, not this max.
 						fbMs := bdpRttMs
 						if ad := adByIdx[i]; ad > fbMs {
 							fbMs = ad
