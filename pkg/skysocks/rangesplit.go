@@ -210,7 +210,7 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	//    more useful thing to tell the browser.
 	var injectErr error
 	if req != nil {
-		if _, err := stream.Write(injectRange(reqHead, c.rs.chunkSize-1)); err != nil {
+		if _, err := stream.Write(injectRange(reqHead, c.probeChunkBytes()-1)); err != nil {
 			injectErr = err
 		}
 	}
@@ -299,29 +299,37 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	//    concurrently with chunk0's delivery below. Waiting for chunk0's whole
 	//    body to reach the browser first meant the parallel streams only began
 	//    paying their setup cost after a full chunk had been delivered.
+	//
+	//    The chunk size for the remainder follows the OBJECT, not a fixed step:
+	//    ~two chunks per active tunnel, floored at 1 MiB and capped by the
+	//    configured chunk size (see chunk_plan.go). chunk0 keeps the probe size —
+	//    it was requested before the total was known — so it is the only chunk
+	//    the plan cannot size.
+	chunk0Len := c.probeChunkBytes()
+	if total < chunk0Len {
+		chunk0Len = total
+	}
 	var pending *chunkFetches
-	if total > c.rs.chunkSize {
+	if total > chunk0Len {
+		chunkSize := c.planChunkSize(total, chunk0Len)
+		chunks := 1 + numChunks(total-chunk0Len, chunkSize)
 		if c.appCl != nil {
-			c.appCl.Log().Debugf("range-split: %s %d bytes → %d chunks × %d streams",
-				host, total, numChunks(total, c.rs.chunkSize), c.rs.concurrency)
+			c.appCl.Log().Debugf("range-split: %s %d bytes → %d chunks of %d bytes × %d streams",
+				host, total, chunks, chunkSize, c.rs.concurrency)
 		}
 		// Observability counters (surfaced as proxystatus.RangeSplit): this is a
 		// committed multi-chunk split, so record it and mark it in flight for the
 		// duration of the concurrent fetch.
 		c.rsSplits.Add(1)
-		c.rsChunks.Add(uint64(numChunks(total, c.rs.chunkSize))) //nolint:gosec // numChunks>0 here (total>chunkSize)
-		c.rsBytes.Add(uint64(total))                             //nolint:gosec // total>0 checked above
+		c.rsChunks.Add(uint64(chunks)) //nolint:gosec // chunks>=2 here (total>chunk0Len)
+		c.rsBytes.Add(uint64(total))   //nolint:gosec // total>0 checked above
 		c.rsActive.Add(1)
-		pending = c.startChunkFetches(total, func(start, end int64) ([]byte, error) {
+		pending = c.startChunkFetchesFrom(chunk0Len, total, chunkSize, func(start, end int64) ([]byte, error) {
 			return c.fetchChunkRetry(req, host, validator, start, end)
 		})
 	}
 
-	// 7. chunk0 body (bytes 0..min(chunkSize,total)-1) straight from stream0.
-	chunk0Len := c.rs.chunkSize
-	if total < chunk0Len {
-		chunk0Len = total
-	}
+	// 7. chunk0 body (bytes 0..chunk0Len-1) straight from stream0.
 	if _, err := io.CopyN(conn, br, chunk0Len); err != nil {
 		if pending != nil {
 			pending.abort()
@@ -389,9 +397,20 @@ type chunkFetches struct {
 // number of completed chunks wait their turn to be written in order.
 const rsOutstandingFactor = 2
 
-// startChunkFetches launches the concurrent fetches for [chunkSize, total) and
-// returns immediately. The caller must eventually call writeInOrder (or abort).
+// startChunkFetches launches the concurrent fetches for [chunkSize, total) at
+// the configured chunk size. Kept for callers with nothing to plan against (no
+// known total split point); startChunkFetchesFrom is the planned form.
 func (c *Client) startChunkFetches(total int64, fetch func(start, end int64) ([]byte, error)) *chunkFetches {
+	return c.startChunkFetchesFrom(c.rs.chunkSize, total, c.rs.chunkSize, fetch)
+}
+
+// startChunkFetchesFrom launches the concurrent fetches for [from, total) in
+// steps of chunkSize and returns immediately. The caller must eventually call
+// writeInOrder (or abort).
+func (c *Client) startChunkFetchesFrom(from, total, chunkSize int64, fetch func(start, end int64) ([]byte, error)) *chunkFetches {
+	if chunkSize < 1 {
+		chunkSize = defaultRSChunkSize
+	}
 	f := &chunkFetches{
 		c:     c,
 		total: total,
@@ -399,8 +418,8 @@ func (c *Client) startChunkFetches(total int64, fetch func(start, end int64) ([]
 		mem:   make(chan struct{}, rsOutstandingFactor*c.rs.concurrency),
 		stop:  make(chan struct{}),
 	}
-	for start := c.rs.chunkSize; start < total; start += c.rs.chunkSize {
-		end := start + c.rs.chunkSize - 1
+	for start := from; start < total; start += chunkSize {
+		end := start + chunkSize - 1
 		if end >= total {
 			end = total - 1
 		}

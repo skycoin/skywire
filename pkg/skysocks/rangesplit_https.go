@@ -203,7 +203,7 @@ func (c *Client) serveHTTPSRangeSplit(conn, stream net.Conn, target string) {
 func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, reqHead []byte, host string) {
 	// Probe: original request + Range: bytes=0-(chunk-1). A non-range origin ignores
 	// it and returns its normal 200, kept byte-identical by the relay path below.
-	if _, err := otls.Write(injectRange(reqHead, c.rs.chunkSize-1)); err != nil {
+	if _, err := otls.Write(injectRange(reqHead, c.probeChunkBytes()-1)); err != nil {
 		closeBoth(btls, otls)
 		return
 	}
@@ -246,26 +246,28 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 
 	// Start the remaining chunks NOW, so their streams (and the TLS handshakes
 	// behind them) overlap chunk0's delivery to the browser.
+	chunk0Len := c.probeChunkBytes()
+	if total < chunk0Len {
+		chunk0Len = total
+	}
 	var pending *chunkFetches
-	if total > c.rs.chunkSize {
+	if total > chunk0Len {
+		chunkSize := c.planChunkSize(total, chunk0Len)
+		chunks := 1 + numChunks(total-chunk0Len, chunkSize)
 		if c.appCl != nil {
-			c.appCl.Log().Debugf("https range-split: %s %d bytes → %d chunks × %d streams",
-				host, total, numChunks(total, c.rs.chunkSize), c.rs.concurrency)
+			c.appCl.Log().Debugf("https range-split: %s %d bytes → %d chunks of %d bytes × %d streams",
+				host, total, chunks, chunkSize, c.rs.concurrency)
 		}
 		c.rsSplits.Add(1)
-		c.rsChunks.Add(uint64(numChunks(total, c.rs.chunkSize))) //nolint:gosec // numChunks>0 here (total>chunkSize)
-		c.rsBytes.Add(uint64(total))                             //nolint:gosec // total>0 checked above
+		c.rsChunks.Add(uint64(chunks)) //nolint:gosec // chunks>=2 here (total>chunk0Len)
+		c.rsBytes.Add(uint64(total))   //nolint:gosec // total>0 checked above
 		c.rsActive.Add(1)
-		pending = c.startChunkFetches(total, func(start, end int64) ([]byte, error) {
+		pending = c.startChunkFetchesFrom(chunk0Len, total, chunkSize, func(start, end int64) ([]byte, error) {
 			return c.fetchChunkTLSRetry(req, host, validator, start, end)
 		})
 	}
 
 	// chunk0 body straight from the probe response.
-	chunk0Len := c.rs.chunkSize
-	if total < chunk0Len {
-		chunk0Len = total
-	}
 	if _, err := io.CopyN(btls, br, chunk0Len); err != nil {
 		if pending != nil {
 			pending.abort()
