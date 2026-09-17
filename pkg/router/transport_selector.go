@@ -1095,8 +1095,8 @@ func (ts *transportSelector) SetInflight(bytes []int64) {
 func (ts *transportSelector) AllReadySaturated() bool {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	if !ts.mode.isPredictive() {
-		return false
+	if !ts.realInflight {
+		return false // no real in-flight fed yet: nothing to judge against
 	}
 	ready := 0
 	for i := range ts.ecfLegs {
@@ -1120,4 +1120,31 @@ func (ts *transportSelector) LegWindow(i int) (inflight, window float64) {
 		return 0, 0
 	}
 	return ts.ecfLegs[i].inflightBytes, ts.ecfLegs[i].cwndBytes
+}
+
+// Saturated reports whether leg i is at its send window (real in-flight fed
+// and at or past the window). Unknown legs are never saturated.
+func (ts *transportSelector) Saturated(i int) bool {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if !ts.realInflight || i < 0 || i >= len(ts.ecfLegs) {
+		return false
+	}
+	return ecfSaturated(ts.ecfLegs[i])
+}
+
+// FirstUnsaturated returns the lowest-index ready leg with room under its
+// send window, or -1 when every ready leg is saturated (or none is known).
+func (ts *transportSelector) FirstUnsaturated() int {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if !ts.realInflight {
+		return -1
+	}
+	for i := range ts.ecfLegs {
+		if ts.ecfLegs[i].ready && !ecfSaturated(ts.ecfLegs[i]) {
+			return i
+		}
+	}
+	return -1
 }
