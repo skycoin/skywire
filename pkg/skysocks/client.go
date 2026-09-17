@@ -232,6 +232,30 @@ type Client struct {
 	// line in `visor state`, a blocked keepalive loop is an outage.
 	muxNote  func(port routing.Port, event, reason, role string) error
 	muxNoteC chan tunnelNote
+
+	// The promoter's hysteresis state, all guarded by sessionsMu and keyed
+	// like standby/recvStamp. See tunnel_promoter.go.
+	//
+	// promoteSince is when a standby FIRST beat the worst idle active tunnel
+	// by tunnelPromoteMargin, and is cleared the moment it stops doing so, so
+	// only an advantage that HOLDS for tunnelPromoteHold moves a stream.
+	// parkedAt is when a tunnel was parked, so tunnelParkMinHold can keep it
+	// out for a while — the three dampers that ended the leg-level flap of
+	// #4968 (14 parks in 65 s).
+	promoteSince map[*yamux.Session]time.Time
+	parkedAt     map[*yamux.Session]time.Time
+
+	// The idle capacity audition. A standby tunnel has an RTT but never a
+	// capacity — tunnelMeter.sample only learns from a window in which the
+	// tunnel carried streams (#4965) — so the promoter's own statistic can
+	// never be checked against throughput. audition names the one standby
+	// tunnel allowed to take the next LONE stream while nothing else is busy,
+	// auditionUntil bounds the offer, and auditionedAt rate-limits how often
+	// one tunnel is offered. No extra bytes are moved: a stream that was
+	// going to be carried anyway is carried by a different tunnel.
+	audition      *yamux.Session
+	auditionUntil time.Time
+	auditionedAt  map[*yamux.Session]time.Time
 }
 
 // tunnelNote is one queued mux event on its way to the visor.
@@ -390,6 +414,16 @@ type tunnelMeter struct {
 	// RTT). 0 = never measured. It is what a LONE stream is picked on — see
 	// pickSessionFor.
 	rttMs float64
+	// rttWin holds the same pings raw, for the sliding MINIMUM the promoter
+	// judges a swap on. The EWMA is the right statistic for placing a stream
+	// on a tunnel right now; it is the wrong one for deciding that a tunnel is
+	// permanently better, because a yamux ping shares the tunnel's send queue
+	// with bulk data and so reads base RTT + this transfer's own queuing
+	// delay. Queuing only ever ADDS, so the smallest sample in the recent past
+	// is the estimate load cannot inflate — the same escape the leg-level band
+	// took in legRTTWindow after one leg's samples walked 37 → 955 ms inside a
+	// single download and flapped a park every 30 s.
+	rttWin tunnelRTTWindow
 }
 
 // tunnelRTTAlpha weights each new ping into the tunnel's RTT EWMA. The first
@@ -409,7 +443,18 @@ func (m *tunnelMeter) recordRTT(d time.Duration) {
 	} else {
 		m.rttMs += tunnelRTTAlpha * (ms - m.rttMs)
 	}
+	m.rttWin.push(ms, time.Now())
 	m.mu.Unlock()
+}
+
+// minRTT returns the smallest ping still inside the promoter's window, and
+// whether the window holds one. This — not the EWMA — is what a SWAP is judged
+// on; see tunnelRTTWindow.
+func (m *tunnelMeter) minRTT(now time.Time) (ms float64, ok bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ms = m.rttWin.minMs(now)
+	return ms, ms > 0
 }
 
 // rtt returns the tunnel's measured round-trip time in milliseconds; ok is
@@ -994,7 +1039,10 @@ const standbyRTTStale = 3 * tunnelRTTProbeInterval
 // the router's per-leg route_latency_ms, whose pong always replies on leg 0.
 // A tunnel that has gone quiet for standbyRTTStale sorts behind every fresh
 // one but is still eligible, and a benched tunnel (its exit open timed out)
-// behind that again: at a failover the pool is what there is.
+// behind that again: at a failover the pool is what there is. For the same
+// reason a park hold does not apply here — tunnelParkMinHold exists to stop
+// the promoter trading two tunnels back and forth, not to withhold the last
+// live route from a client that just lost its active one.
 //
 // The flip is two map entries and one event. No stream is migrated, because a
 // standby tunnel by definition carries none.
@@ -1030,6 +1078,9 @@ func (c *Client) promoteBestStandby(reason string) *yamux.Session {
 	}
 	if best != nil {
 		delete(c.standby, best)
+		if c.audition == best {
+			c.audition = nil
+		}
 	}
 	c.sessionsMu.Unlock()
 	if best == nil {
@@ -1063,6 +1114,13 @@ func (c *Client) parkTunnel(s *yamux.Session, reason string) bool {
 		c.standby = make(map[*yamux.Session]bool)
 	}
 	c.standby[s] = true
+	// Every park starts its own hold, so the promoter cannot take a tunnel
+	// straight back (tunnelParkMinHold). A failover ignores the hold, by
+	// design — see promoteBestStandby.
+	if c.parkedAt == nil {
+		c.parkedAt = make(map[*yamux.Session]time.Time)
+	}
+	c.parkedAt[s] = time.Now()
 	c.sessionsMu.Unlock()
 	c.noteTunnel(s, router.MuxEventTunnelParked, reason, TunnelRoleStandby)
 	return true
@@ -1113,6 +1171,7 @@ func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
 	c.sessionsMu.Unlock()
 
 	_ = s.Close() //nolint:errcheck
+	c.forgetTunnel(s)
 	c.queueTunnelNote(port, router.MuxEventTunnelRetired, reason, "")
 	if !wasStandby {
 		c.promoteBestStandby("failover: active tunnel died")
@@ -1552,13 +1611,32 @@ func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 	// pinged and measured precisely so it can be switched in, so the escape
 	// matters as much as the skip: once no active tunnel is live, the pool is
 	// what the proxy runs on rather than a reason to fail.
+	//
+	// The ONE exception is an audition (tunnel_promoter.go): while every
+	// tunnel is idle, the promoter may offer the next lone stream to a standby
+	// tunnel whose capacity has never been measured, because a standby tunnel
+	// otherwise has only a ping and the promoter has nothing to check its
+	// ranking against. The stream was going to be carried by some tunnel
+	// anyway, so the measurement is free — and the offer is withdrawn the
+	// instant anything is busy, so no measured transfer is ever touched.
+	busyNow := false
+	for _, s := range c.sessions {
+		if s != nil && !s.IsClosed() && s.NumStreams() > 0 {
+			busyNow = true
+			break
+		}
+	}
+	var auditioning *yamux.Session
+	if dir == pickAny {
+		auditioning = c.auditionPickLocked(now, busyNow)
+	}
 	sitOut := make([]bool, len(c.sessions))
 	spare := 0
 	for i, s := range c.sessions {
 		if s == nil || s.IsClosed() {
 			continue
 		}
-		if c.standby[s] {
+		if c.standby[s] && s != auditioning {
 			sitOut[i] = true
 			continue
 		}
@@ -1567,6 +1645,15 @@ func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 			continue
 		}
 		spare++
+	}
+	// An audition is an instruction, not a preference: the point is to measure
+	// this tunnel, and leaving the choice to the RTT rule would just pick the
+	// active tunnel again.
+	if auditioning != nil && !auditioning.IsClosed() {
+		if m := c.recvStamp[auditioning]; m != nil {
+			m.sample(now, false) // start its sample window at the stream, not before
+		}
+		return auditioning
 	}
 	for i, s := range c.sessions {
 		if s == nil || s.IsClosed() || (sitOut[i] && spare > 0) {
@@ -1841,6 +1928,12 @@ func (c *Client) sessionKeepAliveLoop() {
 	poolTicker := time.NewTicker(poolFillInterval)
 	defer poolTicker.Stop()
 
+	// The promoter rides the same loop, on the cadence the RTT it reads is
+	// refreshed at. Inert with no pool: maybePromote returns at once when
+	// there is no standby tunnel or no active one.
+	promoteTicker := time.NewTicker(tunnelPromoteInterval)
+	defer promoteTicker.Stop()
+
 	type probeResult struct {
 		s   *yamux.Session
 		ok  bool
@@ -1872,6 +1965,14 @@ func (c *Client) sessionKeepAliveLoop() {
 			// tunnel: a ping wedged behind a reorder gap must not pile up.
 			for _, s := range c.snapshotSessions() {
 				if s.IsClosed() {
+					// This tick SEES the death, so this tick answers it. It
+					// used to only drop the in-flight mark and leave the
+					// retire to the liveness ticker, which runs at
+					// probeInterval (15 s): a first-hop cut was then answered
+					// 0-15 s later depending on where in that window it fell,
+					// measured live at 1.2 s in one run and 13 s in the next
+					// for the same code. A failover must not be a coin toss.
+					c.retireTunnel(s, "tunnel session closed")
 					delete(rttInFlight, s)
 					continue
 				}
@@ -1894,6 +1995,8 @@ func (c *Client) sessionKeepAliveLoop() {
 			rttInFlight[s] = false
 		case <-poolTicker.C:
 			c.maybePoolFill()
+		case <-promoteTicker.C:
+			c.maybePromote()
 		case <-ticker.C:
 			now := time.Now()
 			for _, s := range c.snapshotSessions() {
