@@ -16,6 +16,8 @@ Also that day the DE exit visor turned out to have been OOM-killed seven times i
 
 Then the mux sets themselves, run through the default proxy instance: `--tunnels N` had never dialed a route group (#4945), and once it did the candidate-route race handed every tunnel the same first hop (#4946, with #4947 recording each diversify dial's route choice on the group). The three-leg and five-leg groups exposed a spurious-retransmit storm — the exit re-sent 37,207 frames for 20,304 sent — because the ack-delay estimate the retransmit threshold floors on never samples a retransmitted frame; a DSACK now feeds the late original's delay into it (#4948).
 
+-   fix(skysocks): the first stream's exit handshake is pipelined like a chunk's  [#4979](https://github.com/skycoin/skywire/pull/4979)
+-   fix(skysocks): a lone stream picks the tunnel with the lowest RTT per open stream, so concurrent streams spread  [#4978](https://github.com/skycoin/skywire/pull/4978)
 -   fix(visor,router): an app's route groups close when the app stops  [#4975](https://github.com/skycoin/skywire/pull/4975)
 -   fix(router,skysocks): the send window follows the feedback delay over a first-hop baseline, and a lone stream takes the lowest-latency tunnel  [#4972](https://github.com/skycoin/skywire/pull/4972)
 -   fix(skysocks): chunks on a closed tunnel fail at once and refetch on a live one  [#4974](https://github.com/skycoin/skywire/pull/4974)
