@@ -59,6 +59,9 @@ type RouterDeps struct {
 	// OFF). Seeded from Routing.EnableRSNOracleRoutes; inert until the visor also
 	// calls router.SetDstTransportOracle.
 	EnableRSNOracleRoutes bool
+	// MuxFEC advertises CapFEC on mux route groups (repair frames striped
+	// alongside data). Seeded from Routing.MuxFEC; off by default.
+	MuxFEC bool
 
 	// ExcludeSameLANHops (default ON) drops same-LAN peers as routing
 	// intermediates; see router.Config.ExcludeSameLANHops. SelfPublicIP feeds its
@@ -95,6 +98,7 @@ func BuildRouter(serveCtx context.Context, deps RouterDeps) (router.Router, erro
 		PolicyOnControlPorts:  deps.PolicyOnControlPorts,
 		RulesGCInterval:       deps.RulesGCInterval,
 		EnableRSNOracleRoutes: deps.EnableRSNOracleRoutes,
+		MuxFEC:                deps.MuxFEC,
 		ExcludeSameLANHops:    deps.ExcludeSameLANHops,
 		SelfPublicIP:          deps.SelfPublicIP,
 	}
