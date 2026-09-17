@@ -422,6 +422,15 @@ type RouteGroup struct {
 	// latency-band controllers — which share one data-progress tick — from
 	// trading the same leg back and forth every 5s. See park_hysteresis.go.
 	adaptiveParks map[uuid.UUID]adaptivePark
+	// peerParkMu guards peerParkedLegs. Leaf lock: NEVER held while taking rg.mu.
+	peerParkMu sync.Mutex
+	// peerParkedLegs holds the leg indices currently standby because the PEER said
+	// so (a mirrored CapLegState park), not because a controller here decided it.
+	// The leg-state resync re-broadcasts this side's OWN active/standby set to
+	// repair a dropped signal; re-asserting a park the peer originated instead
+	// pins the leg down from both ends, which is how a peer-mirrored park survived
+	// five downloads. Written by handleLegStatePacket, read by the resync.
+	peerParkedLegs map[int]struct{}
 	// legRecvSnap is each leg's last-sampled rg-scoped RecvBytes, keyed by
 	// transport ID (survives index shifts), for the fast data-progress prune:
 	// an ACTIVE leg whose recv is flat across an interval while the group keeps
@@ -2413,7 +2422,16 @@ func (rg *RouteGroup) legStateResyncServiceFn(_ time.Duration) {
 	// their own locks, so the leg set changing mid-loop is safe (a since-removed
 	// index is a no-op).
 	for idx := 1; idx < n; idx++ {
-		rg.sendLegState(idx, rg.mux.isLegStandby(idx))
+		standby := rg.mux.isLegStandby(idx)
+		if standby && rg.legParkedByPeer(idx) {
+			// This park is the PEER's decision, mirrored here. The resync exists to
+			// repair a dropped signal of OUR OWN decisions; echoing the peer's park
+			// back at it holds the leg down from both ends even after the peer would
+			// have promoted it. The peer's own resync keeps its side asserted, and
+			// its promote clears this record (notePeerLegState).
+			continue
+		}
+		rg.sendLegState(idx, standby)
 	}
 }
 
@@ -2534,15 +2552,27 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 		// Only a genuine black-hole caught while the frontier is HEALTHY
 		// (gapStuck == false) is REMOVED + self-heal-redialed: there is no critical
 		// in-flight to orphan, and churning a dead leg for a fresh one is the intent.
-		if parkStalledLegs(manual, gapStuck) {
-			reason := "manual mode — pinned set kept for recovery"
-			if !manual {
-				reason = "frontier stuck — parking avoids orphaning in-flight (retransmits keep landing)"
+		switch stalledLegAction(manual, gapStuck) {
+		case legStallIgnore:
+			// IDLE, not stalled: the frontier is healthy, so nothing is being held
+			// up — these legs simply carried no payload because the PEER chose not
+			// to send on them. A receiver cannot tell "the sender skipped this leg"
+			// from "this leg dropped my data" except by the gap, so with no gap
+			// there is no evidence of a stall and no park. (Measured: during an
+			// upload the exit saw 9537/17/16 B on the idle leg, parked it with gap
+			// age 0s / stuck=false, mirrored the park back over CapLegState, and the
+			// next five downloads ran on one leg.)
+			rg.logger.Debugf("leg-dataprogress: %d leg(s) idle but frontier healthy (gap age %v) — idle is not stalled, not parking",
+				len(dead), rg.mux.gapAge())
+		case legStallPark:
+			reason := "frontier stuck — parking avoids orphaning in-flight (retransmits keep landing)"
+			if manual {
+				reason = "manual mode — pinned set kept for recovery"
 			}
 			rg.logger.Infof("leg-dataprogress: parking %d stalled leg(s) to warm standby (%s; reorder gap age %v, stuck=%v)",
 				len(dead), reason, rg.mux.gapAge(), gapStuck)
 			rg.demoteStalledLegs(dead)
-		} else {
+		default:
 			rg.logger.Infof("leg-dataprogress: fast-pruning %d data-black-holing leg(s) (delivered a negligible share of the fastest leg over %v while group moved %dB; reorder gap age %v, stuck=%v)",
 				len(dead), legDataProgressInterval, aggDelta, rg.mux.gapAge(), gapStuck)
 			rg.pruneLivenessDeadLegs(dead)
@@ -2639,15 +2669,47 @@ func soleLegBlackHoled(activeCnt int, sent, payload uint64) bool {
 	return activeCnt == 1 && sent > soleBlackHoleSentFloor && payload == 0
 }
 
-// parkStalledLegs decides whether data-stalled legs are PARKED to warm standby
-// (non-destructive, re-promotable, keeps the leg receiving so in-flight drains and
-// SACK retransmits still land) rather than REMOVED. Park when the set is pinned
-// (manual/static-mux) OR when the reorder frontier is stuck (gapStuck): a stuck
-// frontier makes many legs read as stalled only because delivery is HoL-blocked,
-// and removing them orphans their in-flight sequences — turning a transient stall
-// into a permanent wedge. Remove only a genuine black-hole caught while the
-// frontier is HEALTHY, where no critical in-flight is orphaned.
-func parkStalledLegs(manual, gapStuck bool) bool { return manual || gapStuck }
+// legStallAction is what the receive-side data-progress detector does with the
+// legs selectDataStalledLegs flagged.
+type legStallAction int
+
+const (
+	// legStallIgnore: the legs are IDLE, not stalled — leave them alone.
+	legStallIgnore legStallAction = iota
+	// legStallPark: park to warm standby (non-destructive, re-promotable).
+	legStallPark
+	// legStallRemove: remove + self-heal re-dial (a genuine data black-hole).
+	legStallRemove
+)
+
+// stalledLegAction decides what happens to data-stalled legs.
+//
+// An IDLE leg is not a STALLED leg. This detector runs on the RECEIVE side and
+// judges a leg by the payload IT delivered, but the receiver does not choose
+// which leg carries what — the PEER does. A leg the peer simply did not stripe
+// onto reads exactly like a leg that swallowed its share, and the ONE signal
+// that separates them is the reorder frontier: a leg that dropped assigned
+// sequences leaves a gap the receiver is stuck on. So a PARK requires gapStuck.
+// Without a gap the group is losing nothing and a park is pure damage — it
+// mirrors to the peer over CapLegState and the peer's own resync then keeps the
+// leg out of the set for the traffic that follows.
+//
+// With the frontier STUCK the pre-existing behaviour stands: park rather than
+// remove, because removing a leg the receiver is HoL-blocked behind orphans its
+// in-flight sequences (the retransmits land on a torn-down rule) and turns a
+// transient stall into a permanent wedge. Removal stays reserved for a genuine
+// goodput black-hole caught in ADAPTIVE mode with a HEALTHY frontier, where
+// there is no critical in-flight to orphan and churning the leg is the intent.
+func stalledLegAction(manual, gapStuck bool) legStallAction {
+	switch {
+	case gapStuck:
+		return legStallPark
+	case manual:
+		return legStallIgnore // pinned set, healthy frontier: nothing to act on
+	default:
+		return legStallRemove
+	}
+}
 
 func selectDataStalledLegs(legs []legRecvDelta, gapStuck bool) []uuid.UUID {
 	var agg, top uint64
@@ -4331,11 +4393,57 @@ func (rg *RouteGroup) handleLegStatePacket(packet routing.Packet) error {
 	if idx < 0 {
 		return nil // no matching leg (already pruned / unknown route)
 	}
+	// The peer re-broadcasts its COMPLETE set every legStateResyncInterval, so only
+	// a real transition is an event — otherwise a steady state would post one every
+	// tick and flood the 256-deep ring.
+	changed := rg.mux.isLegStandby(idx) != standby
 	rg.mux.setLegStandby(idx, standby)
+	rg.notePeerLegState(idx, standby)
 	if rg.logger != nil {
 		rg.logger.Debugf("LegState: peer marked leg %d %s", idx, map[bool]string{true: "standby", false: "active"}[standby])
 	}
+	if changed {
+		// A leg parked/promoted from the far end is a first-class lifecycle event:
+		// it changes which legs carry traffic here just as much as a local park
+		// does, and adopting it silently made a five-minute one-leg download look
+		// like a group that had simply never churned.
+		kind, reason := MuxEventLegPromoted, "peer-mirrored promote: the remote end marked this leg active (CapLegState)"
+		if standby {
+			kind, reason = MuxEventLegParked, "peer-mirrored park: the remote end marked this leg standby (CapLegState)"
+		}
+		tp := rg.legTransportAt(idx)
+		rg.noteLegEvent(kind, reason, MuxByPeer, idx, rg.legCount(), tp, rg.legHopsFor(tpEntryID(tp)))
+	}
 	return nil
+}
+
+// notePeerLegState records whether leg idx is standby because the PEER said so.
+// The leg-state resync re-broadcasts this side's own active/standby set to repair
+// a dropped signal; a park the peer originated is the peer's to re-assert, and
+// echoing it back pins the leg down from both ends — measured as a peer-mirrored
+// park that survived five consecutive downloads because our own 7s resync kept
+// re-asserting standby. A promote (standby=false) clears the record, so the moment
+// the peer promotes the leg our resync owns it again.
+func (rg *RouteGroup) notePeerLegState(idx int, standby bool) {
+	rg.peerParkMu.Lock()
+	defer rg.peerParkMu.Unlock()
+	if !standby {
+		delete(rg.peerParkedLegs, idx)
+		return
+	}
+	if rg.peerParkedLegs == nil {
+		rg.peerParkedLegs = make(map[int]struct{})
+	}
+	rg.peerParkedLegs[idx] = struct{}{}
+}
+
+// legParkedByPeer reports whether leg idx's standby state was mirrored from the
+// peer rather than decided here.
+func (rg *RouteGroup) legParkedByPeer(idx int) bool {
+	rg.peerParkMu.Lock()
+	defer rg.peerParkMu.Unlock()
+	_, ok := rg.peerParkedLegs[idx]
+	return ok
 }
 
 // sendLegState signals leg idx's new active/standby state to the remote so it
