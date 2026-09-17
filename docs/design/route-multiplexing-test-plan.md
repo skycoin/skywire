@@ -245,9 +245,10 @@ stays as its regression.
 
 ## Results (2026-09-16/17 live campaign)
 
-Eighteen campaigns ran over two days, `bench/2026-09-16/<commit>/`, one README per campaign;
-`bench/2026-09-16/a5b611278/` is the closing full suite and `bench/2026-09-16/bc0a4d35a/` its
-after-row. The campaign's scoreboard expands §1's five criteria into the eight below.
+Twenty campaigns ran over two days, `bench/2026-09-16/<commit>/`, one README per campaign;
+`bench/2026-09-16/a5b973a97/` is the closing full suite — the first run in which the tunnels sets
+were dialed by the **shipping default** rather than by hand. The campaign's scoreboard expands §1's
+five criteria into the eight below.
 
 ### The rig and the method
 
@@ -280,46 +281,79 @@ not CPU: per-thread sampling on both ends peaks at 10.5 % of a core, the transpo
 while moving 10 MB/s. So the honest ceiling for one object on this host is ~9.5, for the path
 10.4 down / 13.9 up, under a 12.1 MB/s link.
 
+### The closing run — campaign20, a5b973a97, no pins on the tunnels sets
+
+`bench/2026-09-16/a5b973a97/`, both ends at a5b973a97 (#4981 two tunnels by default + sibling dialed
+on the best-ranked unused route, #4982 sink hash cache + optimistic CONNECT, #4983 full-path latency
+ranking + LAN exclusion). The tunnels sets were auto-dialed by the shipping default; legs and compose
+were pinned. Bars are the eight-set reference suite measured into the same directory right after the
+mux sets, because the drift probe came back past 25 % on two cells in opposite directions (direct
+stcpr 50 MB down 2.11 vs its own 5.11 reference, Atlanta 50 MB down 10.06 vs 6.09).
+
+Bars: **10 down 5.00, 10 up 7.52, 50 up 10.32** direct stcpr; **50 down 5.43** via
+`0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13`. 120/120 mux rows and 160/160
+reference rows hash-verified; no reorder wedge on either end in the whole run.
+
+| set | down 10 | up 10 | down 50 | up 50 |
+|---|---|---|---|---|
+| tunnels-2 (auto) | 4.54 | 7.25 (96 %) | **7.37 PASS** | 9.07 (88 %) |
+| tunnels-3 (auto) | 4.71 | 5.57 | **7.00 PASS** | 9.11 |
+| legs-2 | **5.33 PASS** | 4.64 | **7.05 PASS** | 8.81 |
+| legs-3 | **5.14 PASS** | 5.09 | 6.05 (w/g **1.36**) | 8.67 |
+| compose-T2xL2 (2x2) | 3.47 | 4.53 | **6.51 PASS** | 8.94 |
+| compose-T2xL1 (2x1) | 4.61 | 4.69 | **8.33 PASS** | 8.73 |
+
+#4983 did what it was merged for: the auto-dial excluded the same-LAN first hop that wrecked
+campaign19 by name, ranked 35 candidates by first-hop *plus* second-hop latency and chose Atlanta
+`95839ad0`; tunnels-3's second decision ranked 164 and chose Frankfurt `f1012467`. Both are routes an
+operator would have pinned. tunnels-2 stripes 50 MB downloads 58/42–75/25 across its two tunnels at
+w/g 1.01; its uploads ride one tunnel whole, which is why every upload cell is a single-route number
+with mux overhead on it.
+
 ### The criteria
 
 1. **Refs — MET.** Eight single-route reference sets per campaign, hash-verified, wire/goodput
-   1.00–1.02; the closing bars are `bench/2026-09-16/8170476dd/ref-*.tsv` and every set's hop list
+   1.00–1.02; the closing bars are `bench/2026-09-16/a5b973a97/ref-*.tsv` and every set's hop list
    is recorded in its `.legs.json`.
-2. **Tunnels ≥ best ref, 5/5 — PARTLY.** Uploads pass when the tunnels are the best-measured routes:
-   10 MB up 6.64–6.82 vs the 5.97 bar and 50 MB up 10.00 vs 9.99 on one run. Downloads reach 95–96 %
-   of the best single route (8.36 on a5b611278, 8.49 on bc0a4d35a vs 8.84) with 5/5 hashes and
-   wire/goodput 1.00, and never exceed it.
-3. **Legs ≥ best ref, port constant — PARTLY.** Packet-level legs passed the bar twice: legs-2
-   50 MB down 8.46 vs 8.05 (4cc8e9b6b, w/g 1.02) and legs-2 10 MB down 5.71 vs 5.51 (52e430fff).
-   The group's dst_port was constant for every set of every campaign. But run-to-run variance is
-   ±20 % on the same pins and the same scheduler, so neither pass reproduced.
+2. **Tunnels ≥ best ref, 5/5 — PARTLY: MET on the 50 MB download, not on 10 MB down or 50 MB up.**
+   In the closing run the auto-dialed tunnels-2 passes the 50 MB download bar, 7.37 vs 5.43, w/g
+   1.01, 5/5 hashes. It reaches **96 %** of the direct uplink bar on 10 MB up (7.25 vs 7.52) and
+   88 % on 50 MB up (9.07 vs 10.32), and 91 % on 10 MB down (4.54 vs 5.00). Earlier runs pass
+   uploads outright when the bars are lower (10 MB up 6.64–6.82 vs 5.97; 50 MB up 10.00 vs 9.99).
+3. **Legs ≥ best ref, port constant — PARTLY: MET on the 50 MB download with two legs.** legs-2
+   passes both download cells in the closing run (10 MB 5.33 vs 5.00, 50 MB 7.05 vs 5.43), and
+   passed earlier at 8.46 vs 8.05 (4cc8e9b6b) and 5.71 vs 5.51 (52e430fff). **A third leg hurts**:
+   legs-3 drops to 6.05 on the 50 MB download and is the run's only amplification failure. The
+   group's dst_port was constant for every set of every campaign, but run-to-run variance is ±20 %
+   on the same pins and the same scheduler.
 4. **Composition ≥ each component — NOT MET.** Two legs inside each of two tunnels never beat either
-   alone: 5.63 (1ce356b2d), 6.67 (4cc8e9b6b), 7.15 (8170476dd), 7.11 (a5b611278) on the 50 MB
-   download, against 8.32–8.46 for the best single-shape cells.
+   alone: 5.63 (1ce356b2d), 6.67 (4cc8e9b6b), 7.15 (8170476dd), 7.11 (a5b611278), 6.51 (a5b973a97)
+   on the 50 MB download, against 7.05–8.46 for the best single-shape cells of the same runs.
 5. **Direction, from both ends — PARTLY.** Both ends' per-leg counters are captured per row since
-   campaign17 (`<set>.exit-recovery.tsv` beside our own `.recovery.tsv`), so attribution is measured
-   rather than inferred. Forward traffic rides the direct or lowest-RTT tunnel by policy (#4972,
-   #4978) — in the closing 2x1 set every upload object rode one tunnel — while the reverse path fans
-   over legs with stable splits (67/33 on legs-2, 34/66–58/42 on the 2x1 set). The automatic flip on
-   load was not demonstrated.
+   campaign17 (`<set>.exit-recovery.tsv` beside our own `.recovery.tsv`) — 119 of 120 rows in the
+   closing run, the miss a 40 s exit-snapshot timeout — so attribution is measured rather than
+   inferred. Forward traffic rides the direct or lowest-RTT tunnel by policy (#4972, #4978): in the
+   closing tunnels-2 set every upload object rode one tunnel whole, while its downloads fanned
+   58/42–75/25 across both. The automatic flip on load was not demonstrated.
 6. **Degradation — MET for legs, NOT MET for tunnels.** Cutting a leg mid-transfer
    (`proxy mux rm`, 50 MB, 3 trials): the port stays constant, no group is rebuilt, hashes 3/3 both
    directions, ttfb after the cut 0.9 s down / 1.7 s up, reorder wedge 1.5–1.9 s cleared in 0.5 s.
    Cutting a tunnel's transport closes its group, because a tunnel is a single-leg group: downloads
    survive at 1.1 MB/s with 35–40 s to resume, and a POST in flight on the cut tunnel cannot be
    resumed at all.
-7. **Does not amplify, bounded named churn — MET.** Wire/goodput is ≤ 1.19 in every cell of the
-   closing runs — 1.00–1.06 in every 50 MB cell — with two exceptions, both three-way 10 MB
-   downloads (tunnels-3 1.27, legs-3 1.25). Every park and promote carries a named reason
-   (shared bottleneck, latency band with its min-RTT, peer-mirrored, operator), and the 30 s park
-   hold from #4968 bounds the churn: 5–35 events per 20-row set.
-8. **The default, by the table — DECIDED, NOT SHIPPABLE YET.** The policy that wins the table is
-   stream-level tunnels pinned to the best-measured routes, one leg each, with the default 4 MiB
-   chunks: uploads meet or beat the bar, downloads reach 95–96 % of it, 5/5 hashes, w/g 1.00. It
-   cannot ship as the default until routes are ranked before they are dialed — today's
-   auto-diversify takes any unused first hop, which on this rig means the 470 ms Sydney route, and
-   measures 6.99–7.82 on the same code. So the default stays a single route, and the ranking work
-   (standby-pool probing, possibly via dmsg-over-skynet relay probes) is the next phase.
+7. **Does not amplify, bounded named churn — MET except legs-3's 50 MB download.** In the closing
+   run wire/goodput is 1.00–1.12 in every cell but one: legs-3 50 MB down at **1.36**, the run's
+   only amplification failure and the reason that cell does not pass despite clearing the rate bar.
+   Every park and promote carries a named reason (shared bottleneck, latency band with its min-RTT,
+   peer-mirrored, operator), and the 30 s park hold from #4968 bounds the churn: 5–26 events per
+   20-row set in the closing run, with **no reorder wedge on either end**.
+8. **The default, by the table — SHIPPED.** `tunnels=2` is the shipping default
+   (`skyenv.SkysocksClientTunnels`), with the sibling dialed on the best-ranked unused route (#4981)
+   ranked by first-hop *plus* second-hop path latency and with same-LAN first hops excluded (#4983).
+   Measured with no pins at all in campaign20: 50 MB down 7.37 vs the 5.43 bar, w/g 1.01, 5/5
+   hashes; 96 % of the direct uplink bar on 10 MB up, 88 % on 50 MB up. The auto-dial picked Atlanta
+   and Frankfurt by itself — the routes an operator would have pinned — where campaign19's
+   first-hop-only ranking picked a 1 ms LAN neighbour and collapsed. A third tunnel buys nothing.
 
 ### The fixes this campaign merged
 
@@ -343,6 +377,9 @@ while moving 10 MB/s. So the honest ceiling for one object on this host is ~9.5,
 | #4977 | park gate and retransmit charging reworked → measured worse twice (legs-2 50 MB down 5.86 and 6.54 vs 7.51); **closed, not merged** |
 | #4978 | two concurrent streams stacked on one tunnel (>99.5 % of bytes) → the pick scores `rtt × (streams+1)` |
 | #4979 | the first stream paid a serialized greeting and CONNECT → pipelined like a chunk's, one round trip off the prelude |
+| #4981 | the sibling tunnel took any unused first hop → it is dialed on the best-ranked unused route, and two tunnels are the default |
+| #4982 | the loadtest sink re-hashed its object per request, and the split path serialized CONNECT → hash cached once, CONNECT answered optimistically |
+| #4983 | ranking by first-hop latency chose a 1 ms LAN neighbour whose second hop was never measured → full path latency, and same-LAN first hops are not diversity |
 
 ### Open
 
@@ -353,9 +390,27 @@ while moving 10 MB/s. So the honest ceiling for one object on this host is ~9.5,
 - **Silent all-paths stalls,** roughly one per 100 transfers, on plain routes as well as mux: every
   group freezes together for 15–55 s and the client's exit-open sniff timeout closes the connection.
   Wants a transport last-read/last-write age diagnostic.
-- **10 MB downloads are 25–50 % under the bar in every variant** — three 4 MiB chunks leave nothing
-  to parallelise and the prelude is a fifth of the transfer.
+- **10 MB downloads are the weakest cell in every campaign** — three 4 MiB chunks leave nothing to
+  parallelise and the prelude is a fifth of the transfer. Only the pinned legs sets have ever
+  cleared it (5.33 and 5.14 vs 5.00 in campaign20); the auto-dialed tunnels sets sit at 91 %.
 - **A dmsg-only reference set** is still unmeasured; it is blocked until #4973 is deployed fleet-wide
   and measured.
-- **The standby-pool phase** — probing and ranking routes so the policy of criterion 8 can be the
-  default — has not started.
+- **Route volatility.** The 50 MB download bar was 8.84, then 6.63, then 5.43 in three consecutive
+  measurement windows, and the direct downlink lost 59 % of itself between one campaign's references
+  and the next campaign's drift probe. A ranking taken once, at dial time, is ranking against a
+  number that will be wrong within the hour.
+
+### Next phase — the standby pool
+
+This supersedes criterion 8's earlier "needs route ranking first" decision text. The ranked pre-dial
+of #4981/#4983 is an **interim step**: it made the default safe to ship and it demonstrably picks
+good routes, but it commits to a ranking taken before any bytes move. The user's direction, verbatim:
+
+> "route ranking before dialing isn't the best approach, just dial / set up the routes and hold them
+> in standby, that would be the best approach and the only way to have routes that can be switched in
+> in an instant."
+
+So the next phase dials a **standby pool** — routes set up and held, not carrying traffic — and
+switches on **live measurement** of the legs that are actually running, so a route that degrades
+mid-transfer is replaced in an instant rather than at the next dial. Probing the pool over
+dmsg-over-skynet relay legs is part of the same phase.
