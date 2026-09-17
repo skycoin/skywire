@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"io"
 	"net"
 	"net/http"
@@ -65,6 +66,12 @@ func init() {
 
 	loadtestServeCmd.Flags().StringVarP(&loadtestServeAddr, "addr", "a", ":9999",
 		"listen address for the endless byte source")
+	loadtestServeCmd.Flags().Int64Var(&loadtestUploadWindow, "upload-window", loadtestUploadWindow,
+		"bytes one chunked upload may hold out of order (the sink never holds the object)")
+	loadtestServeCmd.Flags().IntVar(&loadtestUploadSessions, "upload-sessions", loadtestUploadSessions,
+		"concurrent chunked uploads; the sink's memory ceiling is this times --upload-window")
+	loadtestServeCmd.Flags().DurationVar(&loadtestUploadIdle, "upload-idle", loadtestUploadIdle,
+		"expire a chunked upload that has made no progress for this long")
 
 	loadtestRunCmd.Flags().StringVarP(&loadtestName, "name", "n", "", "proxy session name (informational)")
 	loadtestRunCmd.Flags().StringVar(&loadtestAddr, "socks", skyenv.SkysocksClientAddr,
@@ -93,7 +100,15 @@ visor the proxy exit can reach; point 'loadtest run --url' at it.
 GET /?bytes=N serves exactly N bytes of a deterministic pattern and names its
 SHA-256 in the X-Sha256 header, so a transfer can be checked for completeness
 AND integrity, not just size. POST or PUT /upload discards the body and
-answers {"bytes":N,"sha256":"…"} for the same check in the upload direction.`,
+answers {"bytes":N,"sha256":"…"} for the same check in the upload direction.
+
+/upload also takes an upload as acked, offset-addressed chunks, so an upload
+survives losing the tunnel under it: HEAD /upload advertises 'X-Chunked-Upload:
+bytes', then PUT /upload?id=<id>&bytes=<N> with 'Content-Range: bytes s-e/N'
+answers each chunk with 'X-Upload-Received: <durable prefix>', and the chunk
+that completes the object answers the same JSON a plain POST does. The body is
+hashed over the contiguous prefix and never held: out-of-order chunks wait in a
+bounded window (--upload-window).`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		buf := make([]byte, 256*1024) // zeros
 		mux := http.NewServeMux()
@@ -435,14 +450,123 @@ func parseByteRange(h string, n uint64) (start, end uint64, ok bool) {
 	return 0, 0, false
 }
 
-// loadtestUpload is the upload-direction sink: it reads and discards the body
-// and answers with the byte count and SHA-256 it saw, so the sender can check
-// both against what it sent.
+// ---------------------------------------------------------------------------
+// Chunked, resumable uploads.
+//
+// A plain POST is one stream: if the tunnel under it dies the exit has consumed
+// an unknown prefix, the sender cannot say where to resume, and the transfer is
+// lost (measured: 30/45/44 MB of 50 delivered, hash_ok 0/3, on the same cut that
+// downloads survive in 0.6-1.2 s). Downloads survive because a range addresses a
+// chunk independently and a chunk can be re-fetched on a live tunnel. This gives
+// the upload direction the same property: a chunk is addressed by its offset and
+// is durable only once it is acked, so the sender may re-send it anywhere.
+//
+// The sink never holds the object. The SHA-256 is rolled over the CONTIGUOUS
+// PREFIX as chunks are absorbed; chunks that arrive ahead of the frontier wait
+// in a bounded reorder window (--upload-window, 16 MiB) and are absorbed when the
+// frontier reaches them. Memory is therefore O(window x sessions), not O(object).
+//
+// Contract:
+//
+//	HEAD|OPTIONS /upload            -> X-Chunked-Upload: bytes (the opt-in signal),
+//	                                   X-Upload-Window/-Sessions/-Idle
+//	PUT /upload?id=<id>&bytes=<N>   -> with Content-Range: bytes <s>-<e>/<N>;
+//	                                   2xx carries X-Upload-Received: <acked prefix>
+//	GET /upload?id=<id>             -> the same counters, for a resume probe
+//	POST /upload                    -> unchanged whole-body sink (the control arm)
+//
+// The chunk that completes the object answers with the plain POST's JSON, so a
+// hash check does not care which path carried the bytes.
+//
+// Harness (SINK=host:port; one 8 MiB object in four 2 MiB chunks, sent out of
+// order, with one duplicate, ending on a hash the sender can compare):
+//
+//	head -c 8388608 /dev/urandom > /tmp/p; sha256sum /tmp/p
+//	curl -sI "http://$SINK/upload" | grep -i x-chunked-upload
+//	id=$(date +%s%N); put() { dd if=/tmp/p bs=2097152 skip=$1 count=1 2>/dev/null | curl -sS -X PUT -H "Expect:" -H "Content-Range: bytes $((2097152*$1))-$((2097152*($1+1)-1))/8388608" --data-binary @- -D- -o- "http://$SINK/upload?id=$id&bytes=8388608"; }
+//	put 1; put 0; put 1; put 3; put 2
+//	curl -sS "http://$SINK/upload?id=$id"
+//
+// put 1 is held (out of order), put 0 absorbs both, the second put 1 is a
+// duplicate and is answered without re-hashing, and put 2 completes the object.
+
+var (
+	// loadtestUploadWindow bounds the bytes ONE session may buffer: chunks held
+	// ahead of the frontier plus the chunks being read. A frontier chunk is
+	// always admitted (held chunks are evicted for it if need be, and re-sent by
+	// the client, which never got a 2xx for them), so the window can never
+	// deadlock a session.
+	loadtestUploadWindow int64 = 16 << 20
+	// loadtestUploadSessions caps concurrent sessions, so the sink's ceiling is
+	// window x sessions (64 MiB by default) on an exit that has been OOM-killed
+	// for less (#4252).
+	loadtestUploadSessions = 4
+	// loadtestUploadIdle expires a session that stopped making progress; its
+	// buffers go with it.
+	loadtestUploadIdle = 2 * time.Minute
+)
+
+// loadtestNow is the sink's clock, so the idle expiry is testable.
+var loadtestNow = time.Now
+
+// loadtestWindow is the reorder window as an unsigned bound, so all the offset
+// arithmetic stays in one signedness. A non-positive flag value means no room
+// for anything out of order, not an enormous window.
+func loadtestWindow() uint64 {
+	if loadtestUploadWindow <= 0 {
+		return 0
+	}
+	return uint64(loadtestUploadWindow)
+}
+
+// loadtestUploadSession is one object in flight. hash rolls over the contiguous
+// prefix only — the object itself is never held — and held keeps the chunks that
+// arrived ahead of acked, keyed by their start offset.
+type loadtestUploadSession struct {
+	mu        sync.Mutex
+	total     uint64 // immutable after creation
+	acked     uint64 // contiguous prefix absorbed into hash
+	hash      hash.Hash
+	sum       string // set once acked == total
+	held      map[uint64][]byte
+	heldBytes uint64
+	inflight  uint64 // admitted chunks still being read off the wire
+	last      time.Time
+}
+
+var (
+	loadtestUploadMu sync.Mutex
+	loadtestUploads  = map[string]*loadtestUploadSession{}
+)
+
+// loadtestUpload is the upload-direction sink. A plain POST (no id, no
+// Content-Range) is the unchanged whole-body path; an id with a Content-Range is
+// a chunk of a resumable object.
 func loadtestUpload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost && r.Method != http.MethodPut {
+	switch r.Method {
+	case http.MethodHead, http.MethodOptions:
+		loadtestUploadAdvertise(w)
+		return
+	case http.MethodGet:
+		loadtestUploadStatus(w, r)
+		return
+	case http.MethodPost, http.MethodPut:
+	default:
 		http.Error(w, "POST or PUT a body", http.StatusMethodNotAllowed)
 		return
 	}
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	cr := strings.TrimSpace(r.Header.Get("Content-Range"))
+	if id == "" && cr == "" {
+		loadtestUploadWhole(w, r)
+		return
+	}
+	loadtestUploadChunk(w, r, id, cr)
+}
+
+// loadtestUploadWhole reads and discards the body and answers with the byte
+// count and SHA-256 it saw, so the sender can check both against what it sent.
+func loadtestUploadWhole(w http.ResponseWriter, r *http.Request) {
 	h := sha256.New()
 	n, err := io.Copy(h, r.Body)
 	if err != nil {
@@ -451,4 +575,304 @@ func loadtestUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{"bytes": n, "sha256": hex.EncodeToString(h.Sum(nil))}) //nolint:errcheck
+}
+
+// loadtestUploadAdvertise is the opt-in signal. X-Chunked-Upload is the ONLY
+// thing a client may key the chunked path on: sending a partial body to an
+// origin that did not advertise it is data corruption.
+func loadtestUploadAdvertise(w http.ResponseWriter) {
+	w.Header().Set("X-Chunked-Upload", "bytes")
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("X-Upload-Window", strconv.FormatInt(loadtestUploadWindow, 10))
+	w.Header().Set("X-Upload-Sessions", strconv.Itoa(loadtestUploadSessions))
+	w.Header().Set("X-Upload-Idle", loadtestUploadIdle.String())
+	w.Header().Set("Allow", "GET, HEAD, OPTIONS, POST, PUT")
+	w.WriteHeader(http.StatusOK)
+}
+
+// loadtestUploadStatus answers a resume probe: how much of the object is
+// durable, and the hash once it is whole.
+func loadtestUploadStatus(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	if id == "" {
+		http.Error(w, "id: want the upload session id", http.StatusBadRequest)
+		return
+	}
+	loadtestUploadMu.Lock()
+	s := loadtestUploads[id]
+	loadtestUploadMu.Unlock()
+	if s == nil {
+		http.Error(w, "no such upload session", http.StatusNotFound)
+		return
+	}
+	s.mu.Lock()
+	s.last = loadtestNow()
+	acked, sum, total := s.acked, s.sum, s.total
+	s.mu.Unlock()
+	loadtestUploadAck(w, id, "", acked, total, sum)
+}
+
+// loadtestUploadChunk absorbs one offset-addressed chunk.
+func loadtestUploadChunk(w http.ResponseWriter, r *http.Request, id, cr string) {
+	if id == "" {
+		http.Error(w, "id: required with Content-Range", http.StatusBadRequest)
+		return
+	}
+	if len(id) > 128 {
+		http.Error(w, "id: too long", http.StatusBadRequest)
+		return
+	}
+	start, end, total, ok := parseContentRange(cr)
+	if !ok {
+		http.Error(w, "Content-Range: want 'bytes <start>-<end>/<total>'", http.StatusBadRequest)
+		return
+	}
+	if q := r.URL.Query().Get("bytes"); q != "" {
+		n, err := strconv.ParseUint(q, 10, 63)
+		if err != nil || n != total {
+			http.Error(w, "bytes: disagrees with Content-Range", http.StatusBadRequest)
+			return
+		}
+	}
+	length := end - start + 1
+	if length > loadtestWindow() {
+		http.Error(w, "chunk larger than the reorder window", http.StatusRequestEntityTooLarge)
+		return
+	}
+	if r.ContentLength >= 0 && uint64(r.ContentLength) != length { //nolint:gosec // G115: guarded non-negative
+		http.Error(w, "Content-Length disagrees with Content-Range", http.StatusBadRequest)
+		return
+	}
+
+	s, code, msg := loadtestUploadSessionFor(id, total)
+	if s == nil {
+		if code == http.StatusServiceUnavailable {
+			w.Header().Set("Retry-After", "1")
+		}
+		http.Error(w, msg, code)
+		return
+	}
+
+	// Admission, then the read, then the commit — the read is NOT done under the
+	// session lock, so the concurrent chunks of one object do not serialize. The
+	// admitted length is reserved across the read, so the window bounds what is
+	// actually in memory.
+	s.mu.Lock()
+	s.last = loadtestNow()
+	if s.sum != "" || end < s.acked { // already durable: absorb the resend, do not re-hash
+		acked, sum := s.acked, s.sum
+		s.mu.Unlock()
+		_, _ = io.Copy(io.Discard, r.Body) //nolint:errcheck
+		loadtestUploadAck(w, id, cr, acked, total, sum)
+		return
+	}
+	if start > s.acked {
+		// Ahead of the frontier: it must fit the window, or the client backs off
+		// and re-sends it later. The body is deliberately NOT drained — refusing
+		// to read it is the backpressure.
+		if end >= s.acked+loadtestWindow() || s.inflight+s.heldBytes+length > loadtestWindow() {
+			acked := s.acked
+			s.mu.Unlock()
+			w.Header().Set("X-Next-Offset", strconv.FormatUint(acked, 10))
+			w.Header().Set("X-Upload-Received", strconv.FormatUint(acked, 10))
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "reorder window full", http.StatusTooEarly)
+			return
+		}
+	} else {
+		// The frontier chunk always wins: held chunks are not durable (they were
+		// never acked), so evicting the furthest of them only costs a re-send,
+		// while refusing the frontier would stall the object forever.
+		for s.inflight+s.heldBytes+length > loadtestWindow() && len(s.held) > 0 {
+			s.evictFurthest()
+		}
+		if s.inflight+s.heldBytes+length > loadtestWindow() {
+			acked := s.acked
+			s.mu.Unlock()
+			w.Header().Set("X-Next-Offset", strconv.FormatUint(acked, 10))
+			w.Header().Set("X-Upload-Received", strconv.FormatUint(acked, 10))
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "reorder window full", http.StatusTooEarly)
+			return
+		}
+	}
+	s.inflight += length
+	s.mu.Unlock()
+
+	buf := make([]byte, length)
+	if _, err := io.ReadFull(r.Body, buf); err != nil {
+		s.mu.Lock()
+		s.inflight -= length
+		s.mu.Unlock()
+		// A short chunk never advances the prefix hash; the sender re-sends it.
+		http.Error(w, "short chunk: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	s.mu.Lock()
+	s.inflight -= length
+	s.last = loadtestNow()
+	switch {
+	case s.sum != "" || end < s.acked: // it became durable while we read
+	case start <= s.acked: // the frontier, possibly overlapping: trim and absorb
+		s.absorb(buf[s.acked-start:])
+		s.drain()
+	default: // ahead of the frontier: hold it (a re-send of a held chunk replaces it)
+		if old, dup := s.held[start]; dup {
+			s.heldBytes -= uint64(len(old))
+		}
+		s.held[start] = buf
+		s.heldBytes += length
+	}
+	s.finish()
+	acked, sum := s.acked, s.sum
+	s.mu.Unlock()
+	loadtestUploadAck(w, id, cr, acked, total, sum)
+}
+
+// absorb folds bytes that start exactly at the frontier into the rolling hash.
+func (s *loadtestUploadSession) absorb(b []byte) {
+	if len(b) == 0 {
+		return
+	}
+	s.hash.Write(b) //nolint:errcheck,gosec // hash.Hash never errors
+	s.acked += uint64(len(b))
+}
+
+// drain absorbs every held chunk the frontier has reached, repeatedly, since
+// absorbing one can make the next contiguous.
+func (s *loadtestUploadSession) drain() {
+	for {
+		progressed := false
+		for st, b := range s.held {
+			end := st + uint64(len(b)) - 1
+			if end < s.acked { // wholly superseded
+				delete(s.held, st)
+				s.heldBytes -= uint64(len(b))
+				progressed = true
+				continue
+			}
+			if st <= s.acked {
+				s.absorb(b[s.acked-st:])
+				delete(s.held, st)
+				s.heldBytes -= uint64(len(b))
+				progressed = true
+			}
+		}
+		if !progressed {
+			return
+		}
+	}
+}
+
+// evictFurthest drops the held chunk with the highest start offset to make room
+// for the frontier. It was never acked, so the client re-sends it.
+func (s *loadtestUploadSession) evictFurthest() {
+	var (
+		at    uint64
+		found bool
+	)
+	for st := range s.held {
+		if !found || st > at {
+			at, found = st, true
+		}
+	}
+	if !found {
+		return
+	}
+	s.heldBytes -= uint64(len(s.held[at]))
+	delete(s.held, at)
+}
+
+// finish seals the object once the prefix is whole.
+func (s *loadtestUploadSession) finish() {
+	if s.sum != "" || s.acked < s.total {
+		return
+	}
+	s.sum = hex.EncodeToString(s.hash.Sum(nil))
+	s.held = map[uint64][]byte{}
+	s.heldBytes = 0
+}
+
+// loadtestUploadAck writes the per-chunk ack. X-Upload-Received is the durable
+// contiguous prefix — the only offset a sender may resume from. The chunk that
+// completes the object answers with the plain POST path's JSON, so the bench's
+// hash check does not change.
+func loadtestUploadAck(w http.ResponseWriter, id, cr string, acked, total uint64, sum string) {
+	w.Header().Set("X-Upload-Id", id)
+	w.Header().Set("X-Upload-Received", strconv.FormatUint(acked, 10))
+	if cr != "" {
+		w.Header().Set("Content-Range", cr)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if sum != "" {
+		w.Header().Set("X-Sha256", sum)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"bytes": total, "sha256": sum}) //nolint:errcheck
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"received": acked, "total": total}) //nolint:errcheck
+}
+
+// loadtestUploadSessionFor finds or opens a session, expiring idle ones first so
+// a stalled upload's buffers are not what refuses the next one. It returns a
+// status code and message instead of a session when it refuses.
+func loadtestUploadSessionFor(id string, total uint64) (*loadtestUploadSession, int, string) {
+	loadtestUploadMu.Lock()
+	defer loadtestUploadMu.Unlock()
+	now := loadtestNow()
+	for k, v := range loadtestUploads {
+		v.mu.Lock()
+		idle := now.Sub(v.last)
+		v.mu.Unlock()
+		if idle > loadtestUploadIdle {
+			delete(loadtestUploads, k)
+		}
+	}
+	if s, ok := loadtestUploads[id]; ok {
+		if s.total != total {
+			return nil, http.StatusConflict, "id is in use for an object of a different size"
+		}
+		return s, 0, ""
+	}
+	if len(loadtestUploads) >= loadtestUploadSessions {
+		return nil, http.StatusServiceUnavailable, "too many concurrent upload sessions"
+	}
+	s := &loadtestUploadSession{
+		total: total,
+		hash:  sha256.New(),
+		held:  map[uint64][]byte{},
+		last:  now,
+	}
+	loadtestUploads[id] = s
+	return s, 0, ""
+}
+
+// parseContentRange parses "bytes <start>-<end>/<total>" into an inclusive
+// range. ok is false for "*", a suffix form or an out-of-object range.
+func parseContentRange(h string) (start, end, total uint64, ok bool) {
+	spec, found := strings.CutPrefix(strings.TrimSpace(h), "bytes ")
+	if !found {
+		return 0, 0, 0, false
+	}
+	rng, tot, found := strings.Cut(spec, "/")
+	if !found {
+		return 0, 0, 0, false
+	}
+	a, b, found := strings.Cut(strings.TrimSpace(rng), "-")
+	if !found {
+		return 0, 0, 0, false
+	}
+	n, err := strconv.ParseUint(strings.TrimSpace(tot), 10, 63)
+	if err != nil || n == 0 {
+		return 0, 0, 0, false
+	}
+	s, err := strconv.ParseUint(strings.TrimSpace(a), 10, 63)
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	e, err := strconv.ParseUint(strings.TrimSpace(b), 10, 63)
+	if err != nil || e < s || e >= n {
+		return 0, 0, 0, false
+	}
+	return s, e, n, true
 }
