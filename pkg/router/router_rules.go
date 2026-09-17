@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/routing"
@@ -157,6 +158,113 @@ func (r *router) RouteGroupMuxInfoAll() []MuxInfo {
 	}
 	sortMuxInfos(out)
 	return out
+}
+
+// appRouteGroupCloseTimeout bounds the wait for an app's route groups to
+// finish their close handshake. The de-registration itself is immediate (the
+// map entries are dropped before any close runs), so this only bounds how long
+// the caller waits for the close packets the peer needs to reap its mirror
+// group; a leg over a dead transport must not hold the RPC open.
+const appRouteGroupCloseTimeout = 5 * time.Second
+
+// CloseRouteGroupsForApp implements Router. Closes and de-registers every
+// route group tagged with appName — the app's own tunnels AND the sibling
+// groups a multi-tunnel dial (--tunnels N, dial_decision(diversify …)) put
+// alongside them, since every one of them carries the same app tag.
+//
+// Nothing else does this. A route group is reaped either when the app's
+// net.Conn is closed (Proc teardown -> rpcGW.cm.CloseAll, pkg/app/appserver/
+// proc.go:392) or when the rules GC collects an expired consume rule
+// (router_gc.go:105). Neither fires for a group the app never took delivery
+// of — a dial that completed after the proc was torn down, or a leg-removal
+// survivor — so the group keeps its keep-alive loop running, keeps refreshing
+// its own rules (so the GC never collects them), and keeps appearing in
+// `proxy mux info` and the `--route reconcile` count for an app that is
+// stopped. Closing by app tag reaps those without waiting on rule expiry.
+//
+// Entries are removed from the registry under the lock BEFORE any close runs,
+// so a query right after this returns is already empty. Each close then runs
+// concurrently (close waits on the peer's close packets, which is what reaps
+// the mirror group on the far end) under one bounded wait.
+func (r *router) CloseRouteGroupsForApp(appName string) int {
+	if appName == "" {
+		return 0
+	}
+
+	type victim struct {
+		desc routing.RouteDescriptor
+		nrg  *NoiseRouteGroup
+		rg   *RouteGroup
+	}
+
+	r.mx.Lock()
+	victims := make([]victim, 0, len(r.rgsNs))
+	for desc, nrg := range r.rgsNs {
+		if nrg == nil || nrg.rg == nil || nrg.rg.AppName() != appName {
+			continue
+		}
+		delete(r.rgsNs, desc)
+		victims = append(victims, victim{desc: desc, nrg: nrg, rg: nrg.rg})
+	}
+	// Groups still finishing their noise handshake are the app's too; a dial
+	// that is mid-flight when the app stops would otherwise land in rgsNs
+	// moments later with nobody left to close it.
+	for desc, rg := range r.rgsRaw {
+		if rg == nil || rg.AppName() != appName {
+			continue
+		}
+		delete(r.rgsRaw, desc)
+		victims = append(victims, victim{desc: desc, rg: rg})
+	}
+	r.mx.Unlock()
+
+	if len(victims) == 0 {
+		return 0
+	}
+
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	for _, v := range victims {
+		// The reason rides the group_closed mux event RouteGroup.close emits.
+		v.rg.setCloseReason("app stopped: " + appName)
+		// The faithful-UDP sibling's lifetime is coupled to the reliable
+		// route (#2607), same as the rules-GC reap path.
+		r.closeDatagramSibling(v.desc)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var err error
+			if v.nrg != nil {
+				err = v.nrg.Close()
+			} else {
+				err = v.rg.Close()
+			}
+			if err != nil {
+				r.logger.WithError(err).
+					WithField("app_name", appName).
+					WithField("rt_desc", v.desc.String()).
+					Debug("Failed to close the stopped app's route group.")
+			}
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(appRouteGroupCloseTimeout):
+		r.logger.WithField("app_name", appName).
+			WithField("groups", len(victims)).
+			Warn("Timed out waiting for the stopped app's route groups to close; they are de-registered regardless.")
+	}
+
+	r.logger.WithField("app_name", appName).
+		WithField("groups", len(victims)).
+		Debug("Closed the stopped app's route groups.")
+
+	return len(victims)
 }
 
 // SetMuxDirectionForApp implements Router. Applies the operator's manual
