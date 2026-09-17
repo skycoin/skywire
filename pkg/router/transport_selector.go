@@ -1090,8 +1090,11 @@ func (ts *transportSelector) SetInflight(bytes []int64) {
 }
 
 // AllReadySaturated reports whether every ready leg is at its in-flight
-// window (no leg has send capacity now). False when no leg is ready or the
-// mode is not predictive, so a caller never waits on a mode without windows.
+// window (no leg has send capacity now). False when fewer than two legs are
+// ready or the mode is not predictive: a lone leg has nowhere to shed to, and
+// parking its writer only adds latency on top of the transport's own
+// backpressure (measured: single-leg tunnels lost a third of their upload
+// rate to parks). A caller never waits on a mode without windows.
 func (ts *transportSelector) AllReadySaturated() bool {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
@@ -1108,7 +1111,7 @@ func (ts *transportSelector) AllReadySaturated() bool {
 			return false
 		}
 	}
-	return ready > 0
+	return ready > 1
 }
 
 // LegWindow returns leg i's in-flight estimate and window in bytes (0, 0 when

@@ -138,8 +138,13 @@ type legCounters struct {
 	// this leg at the previous ECF refresh: the delta is the leg's DELIVERY
 	// rate, which sizes its send window (see rebuildWeights).
 	ecfLastAckedBytes uint64
-	ecfRttMs          float64
-	ecfJitterMs       float64
+	// ecfLastAckedNano is when ecfLastAckedBytes was taken (a refresh that saw
+	// new acks); ecfCwndBytes is the window that refresh proved, kept by
+	// refreshes that see no new ack.
+	ecfLastAckedNano int64
+	ecfCwndBytes     float64
+	ecfRttMs         float64
+	ecfJitterMs      float64
 	// ecfRttMinMs is the leg's baseline (minimum observed) RTT — the
 	// uncongested latency. It seeds the stable BDP for cwndBytes and, against
 	// the live ecfRttMs, is the congestion signal ecfSaturated reads. Tracked
@@ -1438,6 +1443,14 @@ func (m *routeMux) recordAckDelayTp(tpID uuid.UUID, d time.Duration) {
 		m.ackDelayByTp = make(map[uuid.UUID]float64)
 	}
 	cur := m.ackDelayByTp[tpID]
+	if cur == 0 {
+		// First sample seeds the estimate whole: an EWMA from zero would halve
+		// it, and a freshly added leg is judged against this very number while
+		// its first packets are still in flight.
+		m.ackDelayByTp[tpID] = ms
+		m.ackDelayByTpMu.Unlock()
+		return
+	}
 	alpha := 0.125
 	if ms > cur {
 		alpha = 0.5
@@ -1459,7 +1472,15 @@ func (m *routeMux) ackDelayMsTp(tpID uuid.UUID) float64 {
 // that delay (× the reorder factor, the ceiling raised to it) before they are
 // presumed lost. Never below the group-wide threshold.
 func (m *routeMux) rackThresholdFor(tpID uuid.UUID) time.Duration {
-	th := m.rackThreshold()
+	return m.rackThresholdForWith(m.rackThreshold(), tpID)
+}
+
+// rackThresholdForWith is rackThresholdFor with the group threshold already
+// computed. It touches no leg-table lock, so the SACK handler can call it
+// while it holds the retx buffer's lock (rackThreshold reads the leg table,
+// and the window refresh reads the buffer under that table's lock — the
+// inversion that froze a group).
+func (m *routeMux) rackThresholdForWith(th time.Duration, tpID uuid.UUID) time.Duration {
 	ad := m.ackDelayMsTp(tpID)
 	if ad <= 0 {
 		return th
@@ -1660,6 +1681,19 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 	if m.tpSelector == nil {
 		return
 	}
+	// Acked bytes are read BEFORE legMu is taken: the retx buffer's lock is
+	// held by the SACK handler while it asks for per-leg thresholds, which
+	// read the leg table — taking the two in the opposite order here deadlocked
+	// the group (measured live 2026-09-16: a three-leg session froze mid-upload
+	// with the refresh waiting on the buffer and the SACK handler on legMu).
+	ackedByIdx := make([]uint64, len(tps))
+	if m.retxBuf != nil {
+		for i, tp := range tps {
+			if tp != nil {
+				ackedByIdx[i] = m.retxBuf.AckedBytes(tp.Entry.ID)
+			}
+		}
+	}
 	{
 		m.legMu.Lock()
 		now := time.Now().UnixNano()
@@ -1719,9 +1753,23 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 			// (no acked bytes yet) keep the send-rate BDP and the probe budget.
 			cwnd := rate * bdpRttMs / 1000.0
 			if m.retxBuf != nil && i < len(tps) && tps[i] != nil {
-				acked := m.retxBuf.AckedBytes(tps[i].Entry.ID)
-				if elapsed > 0 && lc.ecfLastAckedBytes > 0 {
-					if deliv := float64(byteDelta(acked, lc.ecfLastAckedBytes)) / elapsed; deliv > 0 {
+				acked := ackedByIdx[i]
+				switch {
+				case acked == 0:
+					// cold: nothing acknowledged yet, send-rate BDP + probe budget
+				case lc.ecfLastAckedBytes == 0:
+					lc.ecfLastAckedBytes = acked
+					lc.ecfLastAckedNano = now
+				default:
+					// The window changes only on EVIDENCE: the delivery rate is the
+					// bytes acknowledged since the last refresh that saw an ack, over
+					// the time since that refresh. A refresh with no new ack (the
+					// SACK cadence is coarser than the refresh at low rates) keeps
+					// the last proven window instead of falling back to the send-rate
+					// estimate, which would have counted queued bytes as capacity.
+					delta := byteDelta(acked, lc.ecfLastAckedBytes)
+					if dt := float64(now-lc.ecfLastAckedNano) / float64(time.Second); delta > 0 && dt > 0 {
+						deliv := float64(delta) / dt
 						// The delivery rate is measured per FEEDBACK delay (send→SACK,
 						// which the delayed ack and the SACK cadence stretch past the
 						// ping RTT), so the window must be sized over that delay too:
@@ -1739,9 +1787,13 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 						if cwnd > ecfMaxWindowBytes {
 							cwnd = ecfMaxWindowBytes
 						}
+						lc.ecfCwndBytes = cwnd
+						lc.ecfLastAckedBytes = acked
+						lc.ecfLastAckedNano = now
+					} else if lc.ecfCwndBytes > 0 {
+						cwnd = lc.ecfCwndBytes
 					}
 				}
-				lc.ecfLastAckedBytes = acked
 			}
 			ready := true
 			if i < len(m.standby) && m.standby[i] {
@@ -1773,13 +1825,17 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 // its window before it sends anyway — progress is guaranteed even if feedback
 // stops (the frame then queues as before and TLP / RACK recover), and
 // sendWindowPoll re-checks in case a wake-up was coalesced.
+// windowRefreshInterval paces the growth: a leg's window can double per
+// refresh, so the ramp from the floor to a 3 MB BDP takes ~5 refreshes
+// (measured at 250 ms: 10 MB uploads over two legs ran at half the single-route
+// rate, the ramp alone costing more than a second).
 const (
 	ecfWindowMargin       = 2.0
 	ecfMinWindowBytes     = 128 * 1024
 	ecfMaxWindowBytes     = 8 * 1024 * 1024
 	sendWindowWaitMax     = 250 * time.Millisecond
 	sendWindowPoll        = 20 * time.Millisecond
-	windowRefreshInterval = 250 * time.Millisecond
+	windowRefreshInterval = 100 * time.Millisecond
 )
 
 // feedInflight hands the predictive selector each leg's REAL unacknowledged
