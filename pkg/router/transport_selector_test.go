@@ -453,3 +453,22 @@ func TestSelectorSaturatedSkip(t *testing.T) {
 		t.Fatal("both legs full must report no room")
 	}
 }
+
+// TestSelectorSingleLegNeverSaturated proves a group with one ready leg never
+// parks its writer: a lone leg has nowhere to shed to, so its window is
+// diagnostic only and the transport's own backpressure bounds it.
+func TestSelectorSingleLegNeverSaturated(t *testing.T) {
+	ts := newTransportSelector()
+	ts.SetMode(WeightModeECF)
+	ts.SetECFState([]ecfLegState{
+		{rttMs: 20, rttMinMs: 20, rateBps: 1e6, cwndBytes: 1000, ready: true},
+		{rttMs: 30, rttMinMs: 30, rateBps: 1e6, cwndBytes: 1000, ready: false}, // standby
+	})
+	ts.SetInflight([]int64{5000, 0})
+	if ts.AllReadySaturated() {
+		t.Fatal("a lone ready leg at its window must not park the writer")
+	}
+	if ts.FirstUnsaturated() != -1 {
+		t.Fatal("the lone leg is still saturated for selection purposes")
+	}
+}

@@ -3,6 +3,8 @@ package router
 
 import (
 	"github.com/google/uuid"
+	"github.com/skycoin/skywire/pkg/transport"
+	"sync"
 
 	"sync/atomic"
 	"testing"
@@ -284,5 +286,47 @@ func TestPerLegThresholdSparesSlowLegHoles(t *testing.T) {
 	}
 	if len(want) != 0 {
 		t.Fatalf("fast-leg hole not retransmitted; got %v", got)
+	}
+}
+
+// TestRefreshWindowsAndSACKNoLockInversion drives the window refresh (leg
+// table lock, then the retx buffer for acked bytes) against the SACK handler
+// (retx buffer lock, then the leg table for the per-leg threshold) from two
+// goroutines. Taken in opposite orders the two froze a three-leg session
+// mid-upload (live 2026-09-16: the refresh parked on the buffer, the SACK
+// handler on the leg table, every RPC that touched the group behind them).
+func TestRefreshWindowsAndSACKNoLockInversion(t *testing.T) {
+	log := logging.NewMasterLogger().PackageLogger("tlp-test")
+	m := newRouteMux(log, true)
+	tps := []*transport.ManagedTransport{mockTP(20), mockTP(200)}
+	for _, tp := range tps {
+		tp.Entry.ID = uuid.New()
+	}
+	setLegRTTs(m, []float64{20, 200})
+	for seq := uint32(1); seq <= 62; seq++ {
+		m.retxBuf.Store(seq, []byte("frame"), tps[seq%2].Entry.ID)
+	}
+	const rounds = 3000
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < rounds; i++ {
+			m.refreshLegWindows(tps)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < rounds; i++ {
+			// seq 63 acked, 1..62 holes below it: every hole is judged per leg
+			m.onSACKReceived(0, []uint64{1 << 63}, 0, false)
+		}
+	}()
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("window refresh and SACK handler deadlocked on each other's lock")
 	}
 }

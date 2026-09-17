@@ -89,6 +89,8 @@ func init() {
 	startCmd.Flags().StringVar(&muxMode, "mux-mode", "auto", "mux weight distribution mode: auto (latency-based) or equal (round-robin)")
 	startCmd.Flags().Uint16Var(&minHops, "min-hops", 1, "minimum routing hops for this session (1=no minimum). Set on the visor before app start; rolled back is not automatic — restart visor or re-run with --min-hops=1 to revert.")
 	startCmd.Flags().IntVar(&startRangePort, "range-port", 80, "destination port the transparent range-splitter treats as plaintext HTTP (default 80; set to a bench origin's port to split it across --tunnels)")
+	startCmd.Flags().IntVar(&startRangeChunkKiB, "range-chunk-kib", 4096, "bytes per range request of the transparent range-splitter, in KiB (smaller chunks balance a download across tunnels of unequal speed at the cost of one request round trip per chunk)")
+	startCmd.Flags().IntVar(&startRangeConcurrency, "range-concurrency", 8, "concurrent range requests per split download")
 	startCmd.Flags().IntVar(&startTunnels, "tunnels", 1, "number of independent tunnels (route group + noise + yamux each) to stripe browser connections across; 1 = today's behavior. >1 AGGREGATES bandwidth: each extra tunnel is auto-steered by the visor onto a DIFFERENT first-hop transport (disjoint path) so their throughputs sum. Shape the legs within each tunnel after start with `proxy mux set` / `mux auto`.")
 	startCmd.Flags().StringVar(&startRoute, "route", "", "pin explicit route(s) chosen by you instead of the route finder: a JSON file of {forward,reverse} hop pairs ('cli route calc <exit> --count N --json' shape). Once the proxy is up its mux legs are reconciled to these — each pinned route is added as a leg and any AUX auto legs are pruned. The auto primary leg is pruned too (the router re-homes the primary), so the session runs on the pinned routes alone. One pair = one pinned route; N pairs = N disjoint legs. Tip: 'route calc --source tps' avoids stale-transport install failures. Implies a routed dial (no AppDirect shortcut) so the session has a route group to pin.")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits")
@@ -314,6 +316,12 @@ var startCmd = &cobra.Command{
 			}
 			if startRangePort > 0 && startRangePort != 80 {
 				arguments["--range-port"] = fmt.Sprintf("%d", startRangePort)
+			}
+			if startRangeChunkKiB > 0 && startRangeChunkKiB != 4096 {
+				arguments["--range-chunk-kib"] = fmt.Sprintf("%d", startRangeChunkKiB)
+			}
+			if startRangeConcurrency > 0 && startRangeConcurrency != 8 {
+				arguments["--range-concurrency"] = fmt.Sprintf("%d", startRangeConcurrency)
 			}
 
 			if httpAddr != "" {

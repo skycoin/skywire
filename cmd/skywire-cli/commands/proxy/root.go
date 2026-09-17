@@ -119,18 +119,20 @@ var (
 	testConnectOnly bool
 	testVersion     string
 	// existing transport flag
-	existingTpOnly     bool
-	forceLocalRoutes   bool
-	muxMode            string
-	minHops            uint16
-	startTunnels       int
-	startRangePort     int
-	startRoute         string
-	startVerbose       bool
-	startVerboseLevel  string
-	reconnect          bool
-	startRoutingPolicy string
-	startDirect        bool
+	existingTpOnly        bool
+	forceLocalRoutes      bool
+	muxMode               string
+	minHops               uint16
+	startTunnels          int
+	startRangePort        int
+	startRangeChunkKiB    int
+	startRangeConcurrency int
+	startRoute            string
+	startVerbose          bool
+	startVerboseLevel     string
+	reconnect             bool
+	startRoutingPolicy    string
+	startDirect           bool
 	// multi-hop testing
 	viaVisor string
 	testEnv  bool
