@@ -79,6 +79,11 @@ _paired_median() {
 # paired_rank <outdir>: "<median MB/s> <token> <source>" per candidate route,
 # best first. PAIRED_REF_DIR overrides where the medians are read from (the
 # refs dir of the day, when the mux sets run into a dir of their own).
+#
+# A route measured by BOTH sources keeps its better reading: this is a
+# SHORTLIST, not a bar — bench/pick-ref.sh re-probes the top of it live, and
+# the bar itself is the paired row next to each mux row. A route that looked
+# good in either source has earned a probe.
 paired_rank() {
 	_prd=${PAIRED_REF_DIR:-$1}
 	{
