@@ -91,7 +91,7 @@ func init() {
 	startCmd.Flags().IntVar(&startRangePort, "range-port", 80, "destination port the transparent range-splitter treats as plaintext HTTP (default 80; set to a bench origin's port to split it across --tunnels)")
 	startCmd.Flags().IntVar(&startRangeChunkKiB, "range-chunk-kib", 4096, "bytes per range request of the transparent range-splitter, in KiB (smaller chunks balance a download across tunnels of unequal speed at the cost of one request round trip per chunk)")
 	startCmd.Flags().IntVar(&startRangeConcurrency, "range-concurrency", 8, "concurrent range requests per split download")
-	startCmd.Flags().IntVar(&startTunnels, "tunnels", 1, "number of independent tunnels (route group + noise + yamux each) to stripe browser connections across; 1 = today's behavior. >1 AGGREGATES bandwidth: each extra tunnel is auto-steered by the visor onto a DIFFERENT first-hop transport (disjoint path) so their throughputs sum. Shape the legs within each tunnel after start with `proxy mux set --rg <port>` / `mux auto --rg <port>`, where <port> is the group's own port as `proxy mux info` prints it (desc.dst_port) — every tunnel shares one src_port, so only that port names a single tunnel. Not combinable with --route, which pins a single group.")
+	startCmd.Flags().IntVar(&startTunnels, "tunnels", skyenv.SkysocksClientTunnels, "number of independent tunnels (route group + noise + yamux each) to stripe browser connections across. The default 2 AGGREGATES bandwidth: the second tunnel is dialed on the BEST-RANKED unused route — of the routes whose first hop no earlier tunnel holds, the one whose first-hop transport has the lowest measured latency (unmeasured ranked last) — so their throughputs sum. 1 = a single tunnel over the AppDirect shortcut (no route group). Shape the legs within each tunnel after start with `proxy mux set --rg <port>` / `mux auto --rg <port>`, where <port> is the group's own port as `proxy mux info` prints it (desc.dst_port) — every tunnel shares one src_port, so only that port names a single tunnel. Not combinable with --route, which pins a single group.")
 	startCmd.Flags().StringVar(&startRoute, "route", "", "pin explicit route(s) chosen by you instead of the route finder: a JSON file of {forward,reverse} hop pairs ('cli route calc <exit> --count N --json' shape). Once the proxy is up its mux legs are reconciled to these — each pinned route is added as a leg and any AUX auto legs are pruned. The auto primary leg is pruned too (the router re-homes the primary), so the session runs on the pinned routes alone. One pair = one pinned route; N pairs = N disjoint legs. Tip: 'route calc --source tps' avoids stale-transport install failures. Implies a routed dial (no AppDirect shortcut) so the session has a route group to pin. Pins ONE group, so it cannot be combined with --tunnels >1 — start those, then pin each with `proxy mux set --rg <port>`.")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits")
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
@@ -154,6 +154,19 @@ func applyRoutingPolicy(cmd *cobra.Command, rpcClient visor.API, clientName stri
 	internal.Catch(cmd.Flags(), rpcClient.SetAppRoutingPolicy(clientName, startRoutingPolicy))
 }
 
+// effectiveTunnels resolves the aggregation width for one `proxy start`.
+// --tunnels defaults to skyenv.SkysocksClientTunnels (2) so an ordinary proxy
+// session aggregates, but --direct and --route are single-route-group modes:
+// for them an UNSET --tunnels narrows itself to 1 rather than making the
+// command contradict its own default. An EXPLICIT --tunnels >1 with either flag
+// is still a real contradiction and is rejected by the caller.
+func effectiveTunnels(tunnels int, explicit, direct bool, route string) int {
+	if !explicit && (direct || route != "") {
+		return 1
+	}
+	return tunnels
+}
+
 var startCmd = &cobra.Command{
 	Use:   "start [pk]",
 	Short: "Start the proxy client",
@@ -194,6 +207,11 @@ var startCmd = &cobra.Command{
 		// doesn't silently inherit stale state); mux/mux-mode carry their
 		// sentinel/skip semantics inside the helper; --min-hops only fires when
 		// explicitly set (0 is rejected there).
+		// Resolve the aggregation width first: the default 2 narrows itself to 1
+		// for the single-route-group flags (see effectiveTunnels), so the two
+		// checks below still only fire on a real, explicit contradiction.
+		startTunnels = effectiveTunnels(startTunnels, cmd.Flags().Changed("tunnels"), startDirect, startRoute)
+
 		// --direct is a single, stable, policy-free direct leg. Reject the
 		// value-dependent contradictions cobra can't (defaults of 1 are fine; only
 		// a request for MORE than one hop/leg/tunnel contradicts direct), then
@@ -318,13 +336,13 @@ var startCmd = &cobra.Command{
 
 			// --tunnels N: the skysocks-client app opens N independent tunnels
 			// (route group + noise + yamux each) and stripes browser connections
-			// across them; the visor auto-diversifies each extra tunnel onto a
-			// disjoint first-hop transport so their bandwidth sums (the aggregation
-			// path, docs/mux_aggregation_rfc.md). Only pass it when >1 so the app's
-			// Args stay identical to today for the default single-tunnel case.
-			if startTunnels > 1 {
-				arguments["--tunnels"] = fmt.Sprintf("%d", startTunnels)
-			}
+			// across them; the visor steers each extra tunnel onto the best-ranked
+			// route whose first-hop transport no earlier tunnel holds, so their
+			// bandwidth sums (the aggregation path, docs/mux_aggregation_rfc.md).
+			// ALWAYS passed, including the default and --tunnels 1: the app's own
+			// default is 2 as well, so omitting the arg would silently upgrade an
+			// explicit `--tunnels 1` (the AppDirect shortcut) back to two tunnels.
+			arguments["--tunnels"] = fmt.Sprintf("%d", startTunnels)
 			if startRangePort > 0 && startRangePort != 80 {
 				arguments["--range-port"] = fmt.Sprintf("%d", startRangePort)
 			}

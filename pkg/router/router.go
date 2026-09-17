@@ -310,6 +310,27 @@ type DialOptions struct {
 	// (RouteGroup.remoteLegTransportIDs). Unset for every non-mux dial, which
 	// is therefore byte-identical to before.
 	ExcludeRemoteTransportIDs []uuid.UUID
+	// ExcludeFirstHopPeers / ExcludeFirstHopIPs are the diversify dial's
+	// PEER-level first-hop exclusion: the remote visor PKs (and, where the
+	// underlying transport exposes one, the remote IPs) that a sibling tunnel to
+	// the same exit already leaves over.
+	//
+	// ExcludeTransportIDs alone is not enough, because one peer commonly answers
+	// on SEVERAL transports: this visor holds an stcpr, a squicr and a sudph
+	// transport to the same exit host. Excluding only the sibling's transport ID
+	// left the other two as "free first hops", and a diversify dial took the
+	// squicr twin — same host, same NIC, same physical path — so the two tunnels
+	// shared one link and split it instead of summing (measured 2026-09-17: 50 MB
+	// up 2.57 MB/s, down 5.64 on a 29/21 MB split, against 8.36-8.49 down on two
+	// genuinely disjoint routes). Excluding the PEER makes every transport to
+	// that peer unavailable, so the candidates are the other intermediates — the
+	// disjointness the RFC promises.
+	//
+	// The IP list catches the same host reached under a different PK. Like the
+	// transport-ID exclusion these are a soft preference: a dial that can find
+	// nothing else still falls back to a shared first hop rather than failing.
+	ExcludeFirstHopPeers []cipher.PubKey
+	ExcludeFirstHopIPs   []string
 	// Datagram, when true, asks the dial to build a faithful-UDP
 	// DatagramRouteGroup sibling over the established route (#2607).
 	// The route's reliable RouteGroup is still set up exactly as

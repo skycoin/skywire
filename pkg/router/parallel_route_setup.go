@@ -324,7 +324,7 @@ func (r *router) fetchCandidateRoutes(
 	// path and its local-calc disjoint fallback; a shared first hop is then its
 	// last resort, not this one's default.
 	if opts.DiversifyTransports && len(opts.ExcludeTransportIDs) > 0 {
-		disjoint := filterDisjointFirstHop(fwdCands, opts.ExcludeTransportIDs)
+		disjoint := r.freeFirstHops(fwdCands, opts)
 		if len(disjoint) == 0 {
 			log.Debugf("diversify: none of %d candidate(s) leave over a free first-hop transport; deferring to the sequential dial", len(fwdCands))
 			opts.note("K-race: none of %d candidate(s) disjoint; sequential dial", len(fwdCands))
@@ -334,7 +334,12 @@ func (r *router) fetchCandidateRoutes(
 			log.Debugf("diversify: %d/%d candidate(s) leave over a disjoint first-hop transport; racing those", len(disjoint), len(fwdCands))
 		}
 		opts.note("K-race: %d/%d candidate(s) disjoint", len(disjoint), len(fwdCands))
-		fwdCands = disjoint
+		// Rank the free first hops by measured latency. rankCandidatePaths
+		// below sorts stably on the whole-path score, which an unknown
+		// intermediate→exit hop charges identically to every candidate — so
+		// without this the finder's arbitrary order decided which unused first
+		// hop the extra tunnel took.
+		fwdCands = r.rankFreeFirstHops(ctx, opts, disjoint, latencyFor)
 	}
 
 	fwdRanked := r.rankCandidatePaths(fwdCands, src, dst, opts.ExcludeIntermediatePKs, latencyFor, typeFor, throughputFor, k)
