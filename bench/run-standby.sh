@@ -150,12 +150,19 @@ mux_info() {
 # `proxy mux info --json` round-trips through a CLI-local mirror struct that
 # drops every field the mirror does not name — tunnel_role among them — so the
 # pool's shape is read from `visor state --select mux_route_groups`, the same
-# projection the exit side is read with. Groups are scoped to this exit by
-# desc.dst_pk; a visor that fails to answer reads as an empty array, never as
-# "the pool is empty".
+# projection the exit side is read with.
+#
+# Groups are scoped to this exit by EITHER end of the descriptor. For a group
+# THIS visor dialed to the exit the local projection reports desc.src_pk = the
+# EXIT and desc.dst_pk = this visor, so the old `desc.dst_pk == $e` filter
+# matched nothing: a settled pool of eight groups (two active, six standby)
+# counted as ZERO, the set aborted INVALID as mux-standby-0, and the
+# "roles: absent" it reported was only the empty list talking — tunnel_role was
+# on every element. A visor that fails to answer still reads as an empty array,
+# never as "the pool is empty".
 state_rgs() {
 	timeout "${1:-60}" $CLI cli visor state --select mux_route_groups --json 2>/dev/null |
-		jq -c --arg e "$exit_pk" '[.mux_route_groups[]? | select(.desc.dst_pk == $e)]' 2>/dev/null
+		jq -c --arg e "$exit_pk" '[.mux_route_groups[]? | select(.desc.src_pk == $e or .desc.dst_pk == $e)]' 2>/dev/null
 }
 # role_map: {"<dst_port>": "<tunnel_role>"} from a state_rgs snapshot. Empty
 # object when the field is absent, which is today's develop.
