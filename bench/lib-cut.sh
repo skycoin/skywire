@@ -77,7 +77,11 @@ tp_sent_all() { :; }
 # may be cut — the caller then runs the set with no cut rather than cutting
 # something it cannot put back.
 choose_cut() {
-	info=$(mux_info "$name")
+	# ACTIVE groups only: a standby tunnel (#4986) is dialed and kept alive but
+	# carries no streams, so cutting one would measure nothing. tunnel_role is
+	# omitempty — when no group carries it, every group is a candidate, which is
+	# the behaviour every binary before the pool had.
+	info=$(mux_info "$name" | jq -c '[.[]?] as $rgs | if ($rgs | map(select(.tunnel_role != null)) | length) == 0 then $rgs else ($rgs | map(select(.tunnel_role == "active"))) end' 2>/dev/null)
 	cut_rg=""; cut_tp=""; cut_pk=""; cut_short=""; cut_type=stcpr
 	_cshape=$1
 	case $_cshape in

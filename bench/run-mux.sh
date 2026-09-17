@@ -183,6 +183,56 @@ mux_info() {
 			then .legs |= map(. + {remote_ip: ($ips[.transport_id // ""] // "")})
 			else . end)' 2>/dev/null || echo "$_mi"
 }
+# --- standby pool (#4986) ------------------------------------------------------
+# `proxy start --standby-pool` holds MORE route groups than --tunnels N: the
+# active set plus standby tunnels that are dialed, kept alive and measured on the
+# same 5 s ping but carry no streams, so a tunnel that dies is replaced by a
+# route that already exists. A shape check that counts route groups therefore
+# has to count the ACTIVE ones — a live smoke run of `--tunnels 2` came up with
+# three groups (two active, one standby) and every tunnels set aborted INVALID.
+#
+# `proxy mux info --json` marks each group with tunnel_role, and the field is
+# omitempty: a binary that predates the pool emits none. When NO group carries
+# it, every group counts as active — exactly the old behaviour.
+_role_filter='[.[]?] as $rgs | if ($rgs | map(select(.tunnel_role != null)) | length) == 0 then $rgs else ($rgs | map(select(.tunnel_role == "active"))) end' # $rgs, never $g: wait_width passes jq an --argjson g
+# rg_roles <legs.json> -> "<all> <active> <standby>"
+rg_roles() {
+	jq -r '[.[]?] as $rgs
+		| ($rgs | map(select(.tunnel_role != null)) | length) as $tagged
+		| ($rgs | length) as $all
+		| ($rgs | map(select(.tunnel_role == "active")) | length) as $act
+		| ($rgs | map(select(.tunnel_role == "standby")) | length) as $sb
+		| if $tagged == 0 then "\($all) \($all) 0" else "\($all) \($act) \($sb)" end' "$1" 2>/dev/null || echo "0 0 0"
+}
+# active_json <legs.json> -> the same array filtered to the ACTIVE groups
+active_json() { jq -c "$_role_filter" "$1" 2>/dev/null || echo '[]'; }
+# active_ports <legs.json> -> the ACTIVE groups' dst_ports, one per line
+active_ports() { jq -r "$_role_filter | .[].desc.dst_port" "$1" 2>/dev/null; }
+# wait_pool <app>: the pool fills ONE dial at a time after the active set is up,
+# so a snapshot 5 s after `proxy start` sees a pool that is still growing. Wait
+# until the group count has been unchanged for POOL_STABLE_S, bounded by
+# POOL_WAIT_S, then say how big the pool settled at.
+POOL_STABLE_S=${POOL_STABLE_S:-10}
+POOL_WAIT_S=${POOL_WAIT_S:-60}
+wait_pool() {
+	_pw=0; _plast=-1; _pstable=0
+	while [ "$_pw" -lt "$POOL_WAIT_S" ]; do
+		_pn=$($CLI cli proxy mux info -n "$1" --json 2>/dev/null | jq 'length' 2>/dev/null)
+		case ${_pn:-} in '' | *[!0-9]*) _pn=0 ;; esac
+		if [ "$_pn" = "$_plast" ]; then
+			_pstable=$((_pstable + 2))
+			if [ "$_pstable" -ge "$POOL_STABLE_S" ]; then
+				echo "$1: route group count stable at $_pn for ${_pstable}s"
+				return 0
+			fi
+		else
+			_pstable=0; _plast=$_pn
+		fi
+		sleep 2; _pw=$((_pw + 2))
+	done
+	echo "$1: route group count still moving after ${POOL_WAIT_S}s (now $_plast) — snapshotting anyway"
+	return 0
+}
 # --- route-group hygiene (campaign16, 2026-09-17) ------------------------------
 # `proxy stop` does not always deregister the app's route groups. A group that
 # outlives the app makes the NEXT set's `proxy start --route` fail its reconcile
@@ -393,18 +443,24 @@ for N in $tunnel_counts; do
 	stop_app_clean "$name" || { abort_set "$set_name" "route group(s) $rg_left survived two proxy stops before setup"; port=$((port + 1)); continue; }
 	timeout 240 $CLI cli proxy start -k "$exit_pk" -n "$name" -a "$socks" --tunnels "$N" ${RANGE_PORT:+--range-port $RANGE_PORT} ${RANGE_CHUNK_KIB:+--range-chunk-kib $RANGE_CHUNK_KIB} ${RANGE_CONCURRENCY:+--range-concurrency $RANGE_CONCURRENCY} 2>&1 | grep -iv debug | grep -i "tunnel\|running\|error\|fatal" | head -3
 	sleep 5
+	wait_pool "$name" # the standby pool is still filling 5 s after the dial
 	mux_info "$name" > "$out/$set_name.legs.json"
-	groups=$(jq 'length' "$out/$set_name.legs.json" 2>/dev/null || echo 0)
+	roles=$(rg_roles "$out/$set_name.legs.json")
+	groups=${roles%% *}; roles_rest=${roles#* }; active=${roles_rest%% *}; standby=${roles_rest##* }
+	# the carriers are named from EVERY group, standby included: a standby tunnel
+	# moves only its keepalive, and a leg promoted mid-set has to be in the list.
 	tps=$(jq -r '.[].legs[].transport_id' "$out/$set_name.legs.json" 2>/dev/null | sort -u | tr '\n' ' ')
-	desc=$(jq -r '[.[] | "rg\(.desc.dst_port)=[" + ([.legs[] | .tp_type + ">" + .remote_pk[0:8] + "@" + .transport_id[0:8]] | join(";")) + "]"] | join(" ")' "$out/$set_name.legs.json" 2>/dev/null)
-	echo "$name: $groups route group(s); first-hop tps: $tps"
-	# the target IS N tunnels; a set that came up in another shape measures
-	# something else and must not be recorded as this set (campaign16).
-	[ "$groups" -eq "$N" ] || { abort_set "$set_name" "shape differs from target: $groups route group(s), asked for $N (groups=$desc)"; port=$((port + 1)); continue; }
+	desc=$(jq -r '[.[] | "rg\(.desc.dst_port)\(if .tunnel_role then "/" + .tunnel_role else "" end)=[" + ([.legs[] | .tp_type + ">" + .remote_pk[0:8] + "@" + .transport_id[0:8]] | join(";")) + "]"] | join(" ")' "$out/$set_name.legs.json" 2>/dev/null)
+	echo "$name: $groups route group(s) — $active active, $standby standby; first-hop tps: $tps"
+	# the target IS N ACTIVE tunnels; a set that came up in another shape measures
+	# something else and must not be recorded as this set (campaign16). Standby
+	# tunnels are not part of the shape: the pool holds as many as the router has
+	# disjoint first hops for.
+	[ "$active" -eq "$N" ] || { abort_set "$set_name" "shape differs from target: $active active route group(s) of $groups ($standby standby), asked for $N (groups=$desc)"; port=$((port + 1)); continue; }
 	warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
 	res_set "$set_name-pre"
 	run_set "$set_name" "$socks" "$tps" \
-		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=$N route_groups=$groups groups=$desc sink=$sink"
+		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=$N route_groups=$groups active=$active standby=$standby groups=$desc sink=$sink"
 	res_set "$set_name-post"; res_check "$set_name"
 	# the rows are already written, so a leftover group here invalidates the
 	# NEXT set (its own pre-setup check), not this one — just say so loudly.
@@ -435,24 +491,29 @@ for N in $leg_counts; do
 	$CLI cli proxy mux cap "$N" >/dev/null 2>&1; $CLI cli proxy mux width "$N" >/dev/null 2>&1
 	sleep 3
 	mux_info "$name" > "$out/$set_name.legs.json"
-	groups=$(jq 'length' "$out/$set_name.legs.json" 2>/dev/null || echo 0)
-	port_before=$(jq -r '.[0].desc.dst_port' "$out/$set_name.legs.json")
-	nlegs=$(jq '.[0].legs | length' "$out/$set_name.legs.json")
-	tps=$(jq -r '.[0].legs[].transport_id' "$out/$set_name.legs.json" | tr '\n' ' ')
+	roles=$(rg_roles "$out/$set_name.legs.json")
+	groups=${roles%% *}; roles_rest=${roles#* }; active=${roles_rest%% *}; standby=${roles_rest##* }
+	# a legs set is ONE active group; the standby pool may hold tunnels beside it,
+	# so every field below is read from the ACTIVE group, not from index 0.
+	aj=$(active_json "$out/$set_name.legs.json")
+	port_before=$(echo "$aj" | jq -r '.[0].desc.dst_port')
+	nlegs=$(echo "$aj" | jq '.[0].legs | length')
+	tps=$(echo "$aj" | jq -r '.[0].legs[].transport_id' | tr '\n' ' ')
 	want=$(jq -r '.[].forward[0].TpID' "$legs_file" | tr '\n' ' ')
-	desc=$(jq -r '[.[0].legs[] | .tp_type + ">" + .remote_pk[0:8] + "@" + .transport_id[0:8]] | join(";")' "$out/$set_name.legs.json")
-	echo "$name: $groups rg, src_port=$port_before, legs=$nlegs/$N present: $desc"
+	desc=$(echo "$aj" | jq -r '[.[0].legs[] | .tp_type + ">" + .remote_pk[0:8] + "@" + .transport_id[0:8]] | join(";")')
+	echo "$name: $groups rg ($active active, $standby standby), src_port=$port_before, legs=$nlegs/$N present: $desc"
 	missing=0; for w in $want; do echo "$tps" | grep -q "$w" || { echo "$name: pinned leg $w NOT present"; missing=$((missing + 1)); }; done
 	# rows for a leg set that is not the target one measure an unknown shape:
 	# abort the set instead of recording it (campaign16 produced 20 such rows).
-	[ "$groups" -eq 1 ] || { abort_set "$set_name" "$groups route group(s) for a legs set, want exactly 1 (rg_port=$port_before)"; port=$((port + 1)); continue; }
+	[ "$active" -eq 1 ] || { abort_set "$set_name" "$active active route group(s) of $groups for a legs set, want exactly 1 (rg_port=$port_before)"; port=$((port + 1)); continue; }
 	[ "$nlegs" -eq "$N" ] && [ "$missing" -eq 0 ] || { abort_set "$set_name" "leg set differs from target: legs=$nlegs/$N missing=$missing present=$desc"; port=$((port + 1)); continue; }
 	warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
 	res_set "$set_name-pre"
 	run_set "$set_name" "$socks" "$tps" \
-		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name legs=$N/$nlegs width=$N rg_port=$port_before pins=$(echo $chosen | tr ' ' ',') legs_desc=$desc sink=$sink"
+		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name legs=$N/$nlegs width=$N rg_port=$port_before route_groups=$groups active=$active standby=$standby pins=$(echo $chosen | tr ' ' ',') legs_desc=$desc sink=$sink"
 	res_set "$set_name-post"; res_check "$set_name"
-	port_after=$(mux_info "$name" | jq -r '.[0].desc.dst_port')
+	mux_info "$name" > "$tmp/$set_name.after.json"
+	port_after=$(active_json "$tmp/$set_name.after.json" | jq -r '.[0].desc.dst_port')
 	echo "# rg src_port before=$port_before after=$port_after $( [ "$port_before" = "$port_after" ] && echo constant || echo CHANGED)" >> "$out/$set_name.carrier.tsv"
 	$CLI cli proxy mux width 2 >/dev/null 2>&1 # back to the default steady width
 	echo "$name: rg src_port $port_before -> $port_after"
@@ -490,12 +551,14 @@ if [ "${UP2:-0}" = 1 ]; then
 	else
 		timeout 240 $CLI cli proxy start -k "$exit_pk" -n "$name" -a "$socks" --tunnels 2 ${RANGE_PORT:+--range-port $RANGE_PORT} ${RANGE_CHUNK_KIB:+--range-chunk-kib $RANGE_CHUNK_KIB} ${RANGE_CONCURRENCY:+--range-concurrency $RANGE_CONCURRENCY} 2>&1 | grep -iv debug | grep -i "tunnel\|running\|error\|fatal" | head -3
 		sleep 5
+		wait_pool "$name" # the standby pool is still filling 5 s after the dial
 		mux_info "$name" > "$out/$set_name.legs.json"
-		groups=$(jq 'length' "$out/$set_name.legs.json" 2>/dev/null || echo 0)
+		roles=$(rg_roles "$out/$set_name.legs.json")
+		groups=${roles%% *}; roles_rest=${roles#* }; active=${roles_rest%% *}; standby=${roles_rest##* }
 		tps=$(jq -r '.[].legs[].transport_id' "$out/$set_name.legs.json" 2>/dev/null | sort -u | tr '\n' ' ')
-		desc=$(jq -r '[.[] | "rg\(.desc.dst_port)=[" + ([.legs[] | .tp_type + ">" + .remote_pk[0:8] + "@" + .transport_id[0:8]] | join(";")) + "]"] | join(" ")' "$out/$set_name.legs.json" 2>/dev/null)
-		if [ "$groups" -ne 2 ]; then
-			abort_set "$set_name" "shape differs from target: $groups route group(s), asked for 2 (groups=$desc)"
+		desc=$(jq -r '[.[] | "rg\(.desc.dst_port)\(if .tunnel_role then "/" + .tunnel_role else "" end)=[" + ([.legs[] | .tp_type + ">" + .remote_pk[0:8] + "@" + .transport_id[0:8]] | join(";")) + "]"] | join(" ")' "$out/$set_name.legs.json" 2>/dev/null)
+		if [ "$active" -ne 2 ]; then
+			abort_set "$set_name" "shape differs from target: $active active route group(s) of $groups ($standby standby), asked for 2 (groups=$desc)"
 		elif ! paired_start 1 "$ref1" "$exit_pk" "$pins" "$sink"; then
 			invalid_set "$set_name" "reference slot 1 ($ref1) would not come up"
 			stop_app_clean "$name" >/dev/null 2>&1
@@ -506,7 +569,7 @@ if [ "${UP2:-0}" = 1 ]; then
 			warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
 			res_set "$set_name-pre"
 			set_started=$(date +%Y-%m-%dT%H:%M:%S)
-			echo "# exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=2 route_groups=$groups groups=$desc refs=$ref1,$ref2 size=$up2_size sink=$sink" > "$f"
+			echo "# exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=2 route_groups=$groups active=$active standby=$standby groups=$desc refs=$ref1,$ref2 size=$up2_size sink=$sink" > "$f"
 			printf '# reference uploads of %s (sequential, one per route), bench.sh rows\n' "$set_name" > "$out/$set_name.paired-rows.tsv"
 			printf '# trial\ta_MBps\tb_MBps\tsum_MBps\tref1_MBps\tref2_MBps\tref_sum_MBps\tratio\ta_ok\tb_ok\n' > "$u"
 			# payloads once, outside every timed section, as run-capcheck.sh does

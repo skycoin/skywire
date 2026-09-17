@@ -168,3 +168,22 @@ port the pool refills recorded separately); at least one `tunnel_promoted` — o
 `leg_promoted`, and the row says which was found; time to first byte after the
 cut under `CHAOS_TTFB_MAX_S` (2); and zero reorder wedges at either end, read
 from the local event ring and both ends' recovery counters.
+## The standby pool changes what "shape" means
+
+`proxy start --standby-pool` (#4986) holds more route groups than `--tunnels N`:
+the active set plus standby tunnels that are dialed, kept alive and measured on
+the same 5 s ping but carry no streams, so a tunnel that dies is replaced by a
+route that already exists instead of one set up from scratch. A live `--tunnels
+2` therefore comes up with **three** groups — two active, one standby — and the
+pool keeps filling one dial at a time after the active set is up.
+
+So every shape check counts the **active** groups, from the `tunnel_role` field
+`proxy mux info --json` puts on each group. The field is `omitempty`: when no
+group carries it (any binary before the pool) every group counts as active and
+the checks behave exactly as they did. The set header records
+`route_groups=<all> active=<n> standby=<m>`, `<set>.legs.json` keeps the role
+per group, and `run-mux.sh` / `run-compose.sh` wait for the group count to hold
+still for 10 s (bounded at 60 s, `POOL_STABLE_S` / `POOL_WAIT_S`) before
+snapshotting, then print the pool size they settled at. The carriers are still
+named from every group, standby included, because a standby leg can be promoted
+mid-set; the cut row only ever targets an active one.
