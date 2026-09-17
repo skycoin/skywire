@@ -10,6 +10,10 @@
 # A set whose run script could not put the rig in the target shape leaves a
 # <set>.INVALID marker holding the reason. Such a set is named once and then
 # skipped entirely: whatever rows it managed to write measure an unknown shape.
+#
+# The cell sizes are read from the rows themselves rather than assumed, so a run
+# that added the 100 MB download cell (SIZES / CELL100) summarizes with no
+# change here, and an old result dir summarizes exactly as it always did.
 set -u
 dir=$1
 for m in "$dir"/*.INVALID; do
@@ -18,11 +22,15 @@ for m in "$dir"/*.INVALID; do
 done
 printf '%-24s %-5s %-6s %-6s %-9s %-9s %-9s %-8s %s\n' set dir MB ok/n median min max carrier wire/good
 for f in "$dir"/*.tsv; do
-	case $f in *.carrier.tsv) continue ;; esac
+	# companion files of a set, not sets: they hold other columns entirely
+	case $f in
+	*.carrier.tsv | *.recovery.tsv | *.exit-recovery.tsv | *.paired.tsv | *.paired-rows.tsv | *.cut.tsv | *.up2.tsv) continue ;;
+	*/exit-resources.tsv | */paired-ref.tsv) continue ;;
+	esac
 	set_name=$(basename "$f" .tsv)
 	[ -f "$dir/$set_name.INVALID" ] && continue
 	c="$dir/$set_name.carrier.tsv"
-	for n in 10000000 50000000; do
+	for n in $(grep -v '^#' "$f" | awk -F'\t' '$3 ~ /^[0-9]+$/ {print $3}' | sort -n -u); do
 		for d in down up; do
 			rows=$(grep -v '^#' "$f" | awk -F'\t' -v n="$n" -v d="$d" '$2==d && $3==n')
 			[ -z "$rows" ] && continue

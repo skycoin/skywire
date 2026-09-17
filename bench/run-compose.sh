@@ -3,7 +3,7 @@
 #
 #   bench/run-compose.sh <exit pk> <out dir> <pins dir> [trials] [sink] [pin order]
 #
-# One set per COMPOSE entry "<tunnels>x<legs>" (default "2x2 3x2"): the proxy
+# One set per COMPOSE entry "<tunnels>x<legs>" (default "2x2"): the proxy
 # starts with `--tunnels T` (T independent route groups, stream-level mux) and
 # every route group is then pinned to L two-hop legs of its own (packet-level
 # mux), tunnel i taking pins [i*L, i*L+L) of the pin order — so the tunnels are
@@ -18,12 +18,21 @@
 #
 # Artefacts are exactly run-mux.sh's, so summarize.sh / verdict.sh work
 # unchanged: mux-compose-T<t>xL<l>.tsv (+ .carrier.tsv, .recovery.tsv,
-# .mux_events.json, .legs.json, .exit-recovery.tsv). Row order is run-mux.sh's:
-# 10 MB down x trials, 10 MB up, 50 MB down, 50 MB up.
+# .mux_events.json, .legs.json, .exit-recovery.tsv, .paired.tsv). Row order is
+# run-mux.sh's: 10 MB down x trials, 10 MB up, 50 MB down, 50 MB up, and — with
+# CELL100=1 — 100 MB down.
+#
+# The same 2026-09-17 goal knobs as run-mux.sh apply here, since criterion 4 is
+# scored against the other sets of the same run:
+#   PAIRED / PAIRED_REF  one contemporaneous reference row per mux row
+#                        (bench/lib-paired.sh, <set>.paired.tsv)
+#   SIZES / CELL100      the 100 MB download cell criterion 4 asks for
+#   TRIALS_UP            3 upload trials against the [trials] download trials
+#   EXIT_RES             exit RssAnon/CPU recorded and gated around every set
 #
 # The functions below are copied from run-mux.sh rather than sourced: run-mux.sh
-# is a script with top-level work, not a library, and factoring a bench/lib.sh
-# out of it would change the file a measurement run is reading right now.
+# is a script with top-level work, not a library. What IS shared lives in
+# bench/lib-paired.sh and bench/lib-cut.sh, which are libraries.
 set -u
 CLI=${CLI:-/home/d0mo/go/bin/skywire}
 exit_pk=$1; out=$2; pins=$3; trials=${4:-5}; sink=${5:-http://127.0.0.1:18080}
@@ -31,8 +40,37 @@ order=${6:-$(ls "$pins"/via-*.json | sed 's|.*/via-||; s|\.json$||' | tr '\n' ' 
 here=$(dirname "$0")
 mkdir -p "$out"
 local_commit=$(git -C "$here/.." rev-parse --short=9 HEAD)
-sizes=${SIZES:-"10000000 50000000"}
-compose=${COMPOSE:-"2x2 3x2"}
+PAIRED_HERE=$here # read by the library below
+export PAIRED_HERE
+# shellcheck source=bench/lib-paired.sh
+. "$here/lib-paired.sh"
+# norm_sizes: SIZES takes megabytes ("10 50 100") or bytes ("10000000 50000000");
+# an entry below 1000 is megabytes. Anything non-numeric is dropped.
+norm_sizes() {
+	for _ns in $1; do
+		case $_ns in *[!0-9]* | "") continue ;; esac
+		[ "$_ns" -lt 1000 ] && _ns=$((_ns * 1000000))
+		printf '%s ' "$_ns"
+	done
+}
+sizes=$(norm_sizes "${SIZES:-10000000 50000000}")
+# CELL100=1 adds the 100 MB DOWNLOAD cell criterion 4 asks for: composition has
+# to be "not worse than each alone at 10 MB, and >= the better of the two alone
+# at 50 MB and 100 MB", and the 100 MB cell is where a per-object prelude stops
+# dominating. DIRS100="down up" measures its upload too.
+if [ "${CELL100:-0}" = 1 ]; then
+	case " $sizes " in *" 100000000 "*) ;; *) sizes="${sizes}100000000 " ;; esac
+fi
+size_dirs() { if [ "$1" -ge 100000000 ]; then echo "${DIRS100:-down}"; else echo "${DIRS:-down up}"; fi; }
+# trials_for <dir>: 5 download trials, 3 upload trials. Upload medians repeat
+# within 5 % across runs; download medians do not.
+trials_for() { if [ "$1" = up ]; then echo "${TRIALS_UP:-3}"; else echo "$trials"; fi; }
+# DEFAULT SUITE: the 2x2 composition only. 2x1 — two tunnels of one pinned leg
+# each — is the hand-picked ceiling check (it took the best single cell of
+# campaign20, 8.33 MB/s) and is on demand: COMPOSE="2x2 2x1".
+compose=${COMPOSE:-"2x2"}
+EXIT_RES=${EXIT_RES:-1}
+exit_res_fail=0
 # APP=skysocks-client drives every set through the DEFAULT proxy instance on
 # :1080 (APP_PORT overrides), so status.skysocks in a browser shows the session
 # under test; sets run one at a time and each stops the instance first.
@@ -48,10 +86,12 @@ exit_commit() {
 		jq -r '.summary.overview.build_info.commit[0:9] // "unknown"'
 }
 stop_app() { $CLI cli proxy stop -n "$1" >/dev/null 2>&1; }
-# EXIT_SNAP=1 (the default) adds ONE exit-side query of the same route group(s)
-# after EVERY row, written to <set>.exit-recovery.tsv. The end-of-set snapshot
-# alone cannot date a receiver-side stall to a row; this can. EXIT_SNAP=0
-# restores the old end-of-set-only behaviour exactly.
+# EXIT_SNAP=1 (the default) writes the EXIT's view of this set's route group(s)
+# to <set>.exit-recovery.tsv at set START and set END — the row column holds
+# `start` or `end` instead of a row number. It used to be one query after EVERY
+# row, which costs up to EXIT_SNAP_TIMEOUT seconds of dead time per row whenever
+# dmsg is slow. A row that FAILS still snapshots the exit immediately, because a
+# re-dial would erase the evidence. EXIT_SNAP=0 turns the file off.
 EXIT_SNAP=${EXIT_SNAP:-1}
 EXIT_SNAP_TIMEOUT=${EXIT_SNAP_TIMEOUT:-40}
 # exit_rgs <timeout> <ports json array>: the exit's view of the groups whose
@@ -76,6 +116,56 @@ mux_info() {
 		'map(if (.legs | type) == "array"
 			then .legs |= map(. + {remote_ip: ($ips[.transport_id // ""] // "")})
 			else . end)' 2>/dev/null || echo "$_mi"
+}
+# --- standby pool (#4986) ------------------------------------------------------
+# `proxy start --standby-pool` holds MORE route groups than --tunnels N: the
+# active set plus standby tunnels that are dialed, kept alive and measured on the
+# same 5 s ping but carry no streams, so a tunnel that dies is replaced by a
+# route that already exists. A shape check that counts route groups therefore
+# has to count the ACTIVE ones — a live smoke run of `--tunnels 2` came up with
+# three groups (two active, one standby) and every tunnels set aborted INVALID.
+#
+# `proxy mux info --json` marks each group with tunnel_role, and the field is
+# omitempty: a binary that predates the pool emits none. When NO group carries
+# it, every group counts as active — exactly the old behaviour.
+_role_filter='[.[]?] as $rgs | if ($rgs | map(select(.tunnel_role != null)) | length) == 0 then $rgs else ($rgs | map(select(.tunnel_role == "active"))) end' # $rgs, never $g: wait_width passes jq an --argjson g
+# rg_roles <legs.json> -> "<all> <active> <standby>"
+rg_roles() {
+	jq -r '[.[]?] as $rgs
+		| ($rgs | map(select(.tunnel_role != null)) | length) as $tagged
+		| ($rgs | length) as $all
+		| ($rgs | map(select(.tunnel_role == "active")) | length) as $act
+		| ($rgs | map(select(.tunnel_role == "standby")) | length) as $sb
+		| if $tagged == 0 then "\($all) \($all) 0" else "\($all) \($act) \($sb)" end' "$1" 2>/dev/null || echo "0 0 0"
+}
+# active_json <legs.json> -> the same array filtered to the ACTIVE groups
+active_json() { jq -c "$_role_filter" "$1" 2>/dev/null || echo '[]'; }
+# active_ports <legs.json> -> the ACTIVE groups' dst_ports, one per line
+active_ports() { jq -r "$_role_filter | .[].desc.dst_port" "$1" 2>/dev/null; }
+# wait_pool <app>: the pool fills ONE dial at a time after the active set is up,
+# so a snapshot 5 s after `proxy start` sees a pool that is still growing. Wait
+# until the group count has been unchanged for POOL_STABLE_S, bounded by
+# POOL_WAIT_S, then say how big the pool settled at.
+POOL_STABLE_S=${POOL_STABLE_S:-10}
+POOL_WAIT_S=${POOL_WAIT_S:-60}
+wait_pool() {
+	_pw=0; _plast=-1; _pstable=0
+	while [ "$_pw" -lt "$POOL_WAIT_S" ]; do
+		_pn=$($CLI cli proxy mux info -n "$1" --json 2>/dev/null | jq 'length' 2>/dev/null)
+		case ${_pn:-} in '' | *[!0-9]*) _pn=0 ;; esac
+		if [ "$_pn" = "$_plast" ]; then
+			_pstable=$((_pstable + 2))
+			if [ "$_pstable" -ge "$POOL_STABLE_S" ]; then
+				echo "$1: route group count stable at $_pn for ${_pstable}s"
+				return 0
+			fi
+		else
+			_pstable=0; _plast=$_pn
+		fi
+		sleep 2; _pw=$((_pw + 2))
+	done
+	echo "$1: route group count still moving after ${POOL_WAIT_S}s (now $_plast) — snapshotting anyway"
+	return 0
 }
 # --- route-group hygiene (campaign16, 2026-09-17) ------------------------------
 # `proxy stop` does not always deregister the app's route groups. A group that
@@ -147,15 +237,37 @@ run_set() { # <set> <socks> <tp ids> <header>
 	echo "# $header" > "$f"
 	printf '# row\ttp\tsent_delta\trecv_delta\n' > "$c"
 	[ "$EXIT_SNAP" = 1 ] && printf '# row\texit_mux_route_groups\n' > "$out/$set_name.exit-recovery.tsv"
+	set_paired=0
+	if [ "$PAIRED" = 1 ]; then
+		if paired_start 1 "$paired_ref" "$exit_pk" "$pins" "$sink"; then
+			set_paired=1
+			paired_header "$paired_ref" "${paired_route:-?}"
+		else
+			echo "$set_name: no contemporaneous reference — the set is measured UNPAIRED (verdict.sh falls back to the bar)"
+		fi
+	fi
+	exit_snap_row start
 	row=0
 	for n in $sizes; do
-		for dir in down up; do
+		for dir in $(size_dirs "$n"); do
 			t=1
-			while [ $t -le "$trials" ]; do
+			while [ $t -le "$(trials_for "$dir")" ]; do
 				row=$((row + 1))
+				# the paired reference row of the SAME cell, on one single route,
+				# immediately BEFORE the mux row and never at the same time as it
+				pref=-; pok=0; plegs=-
+				if [ "$set_paired" = 1 ]; then
+					_pv=$(paired_row 1 "$row" "$n" "$dir")
+					pref=${_pv%% *}; _pv=${_pv#* }; pok=${_pv%% *}; plegs=${_pv##* }
+				fi
 				before=""
 				for tp in $tps; do before="$before $tp:$(tp_counters "$tp" | tr ' ' ',')"; done
 				"$here/bench.sh" "$socks" "$sink" "$n" "$dir" "$set_name-t$t" >> "$f"
+				if [ "$set_paired" = 1 ]; then
+					_mlast=$(tail -1 "$f")
+					paired_emit "$row" "$(paired_cell "$n" "$dir")" "$pref" "$pok" "$plegs" \
+						"$(echo "$_mlast" | awk -F'\t' '{printf "%.2f", $4/1e6}')" "$(echo "$_mlast" | cut -f8)"
+				fi
 				for tp in $tps; do
 					b=$(echo "$before" | tr ' ' '\n' | grep "^$tp:" | cut -d: -f2)
 					a=$(tp_counters "$tp" | tr ' ' ',')
@@ -167,27 +279,23 @@ run_set() { # <set> <socks> <tp ids> <header>
 				printf '%s\tlegs\t%s\t-\n' "$row" "$(echo "$info" | jq -r '[.[] | (.desc.dst_port|tostring) + ":" + ([.legs[].transport_id[0:8]] | join(",")) ] | join(" ")')" >> "$c"
 				printf '%s\t%s\n' "$row" "$(echo "$info" | jq -c '[.[] | {rg: .desc.dst_port, recovery}]')" >> "$out/$set_name.recovery.tsv"
 				p=$(echo "$info" | jq -c '[.[].desc.dst_port]')
-				# the EXIT's view of the same group(s) after this row. A slow exit
-				# must never stall the set, so it is bounded and a failure is
-				# recorded as an empty object rather than retried.
-				xr=""
-				if [ "$EXIT_SNAP" = 1 ]; then
-					xr=$(exit_rgs "$EXIT_SNAP_TIMEOUT" "$p")
-					[ -n "$xr" ] || { xr='{}'; echo "$set_name row $row: exit snapshot failed/timed out after ${EXIT_SNAP_TIMEOUT}s — empty object recorded"; }
-					printf '%s\t%s\n' "$row" "$xr" >> "$out/$set_name.exit-recovery.tsv"
-				fi
-				# a failed row loses the exit's view when the session re-dials: snapshot it NOW
+				# A FAILED row loses the exit's view when the session re-dials, so
+				# that one case is still snapshotted immediately. Healthy rows are
+				# not: the exit is queried once at set start and once at set end
+				# (see exit_snap_row), because a per-row query costs up to
+				# EXIT_SNAP_TIMEOUT seconds of dead time whenever dmsg is slow.
 				if [ "$(tail -1 "$f" | cut -f8)" != 1 ]; then
-					# the per-row snapshot above is that snapshot when it worked; only
-					# query the exit a second time when EXIT_SNAP is off or it failed
-					[ -n "$xr" ] && [ "$xr" != '{}' ] || xr=$(exit_rgs 60 "$p")
-					printf '# exit-on-fail %s\t%s\n' "$row" "$xr" >> "$out/$set_name.recovery.tsv"
+					printf '# exit-on-fail %s\t%s\n' "$row" "$(exit_rgs 60 "$p")" >> "$out/$set_name.recovery.tsv"
 				fi
 				t=$((t + 1))
 			done
 		done
 	done
+	[ "$set_paired" = 1 ] && paired_stop 1
 	echo "$set_name: $(grep -vc '^#' "$f") rows, hash_ok=$(grep -v '^#' "$f" | awk -F'\t' '$8==1' | wc -l)"
+	if [ -f "$out/$set_name.paired.tsv" ]; then
+		echo "$set_name: paired ratios vs $paired_ref: $(grep -v '^#' "$out/$set_name.paired.tsv" | awk -F'\t' '$5!="-" {v[$2]=v[$2]" "$5} END{for (k in v) printf "%s:%s ", k, v[k]}')"
+	fi
 	mux_events "$set_name" "$cur_app"
 	# the EXIT's view of the same groups at the end of the set (its receiver-side wedge counters);
 	# our desc.dst_port (the ephemeral local port) is the exit's desc.src_port for the same group
@@ -198,6 +306,21 @@ run_set() { # <set> <socks> <tp ids> <header>
 		sleep 3
 	done
 	printf '# exit\t%s\n' "$x" >> "$out/$set_name.recovery.tsv"
+	# the same reading is the `end` row of the per-set exit snapshots: one query,
+	# two readers.
+	[ "$EXIT_SNAP" = 1 ] && printf 'end\t%s\n' "${x:-{\}}" >> "$out/$set_name.exit-recovery.tsv"
+	return 0
+}
+
+# exit_snap_row <start|cut|end>: ONE exit-side snapshot of the set's current
+# route group(s), tagged with the moment rather than a row number.
+exit_snap_row() {
+	[ "$EXIT_SNAP" = 1 ] || return 0
+	_esp=$(mux_info "$cur_app" | jq -c '[.[].desc.dst_port]' 2>/dev/null)
+	[ -n "$_esp" ] || _esp='[]'
+	_esx=$(exit_rgs "$EXIT_SNAP_TIMEOUT" "$_esp")
+	[ -n "$_esx" ] || { _esx='{}'; echo "$set_name: $1 exit snapshot failed/timed out after ${EXIT_SNAP_TIMEOUT}s — empty object recorded"; }
+	printf '%s\t%s\n' "$1" "$_esx" >> "$out/$set_name.exit-recovery.tsv"
 }
 
 # wait_width <app> <groups> <legs each>: let the adaptive engine converge to the
@@ -205,7 +328,10 @@ run_set() { # <set> <socks> <tp ids> <header>
 wait_width() {
 	i=1
 	while [ $i -le 12 ]; do
-		got=$(mux_info "$1" | jq --argjson g "$2" --argjson l "$3" '[.[] | select((.legs|length) >= $l)] | length >= $g' 2>/dev/null)
+		# ACTIVE groups only: a standby tunnel holds one leg and would otherwise
+		# make a half-converged shape look converged.
+		got=$(mux_info "$1" | jq --argjson g "$2" --argjson l "$3" \
+			"$_role_filter | [.[] | select((.legs|length) >= \$l)] | length >= \$g" 2>/dev/null)
 		[ "$got" = true ] && return 0
 		sleep 2
 		i=$((i + 1))
@@ -214,7 +340,21 @@ wait_width() {
 }
 
 ec=$(exit_commit)
-echo "local=$local_commit exit=$ec order=$order compose=$compose"
+echo "local=$local_commit exit=$ec order=$order compose=$compose sizes=$sizes"
+paired_ref=""
+if [ "$PAIRED" = 1 ]; then
+	paired_ref=$(paired_resolve "$out" 1)
+	echo "paired references: PAIRED_REF=$PAIRED_REF resolved to '$paired_ref'"
+fi
+# res_set <label>: one exit RssAnon/CPU reading, named for the set it brackets.
+res_set() { [ "$EXIT_RES" = 1 ] && "$here/exit-resources.sh" "$out" "$1" "$exit_pk"; return 0; }
+# res_check <set>: score the pair. The FAILURE is remembered, not acted on — the
+# results are kept and this script exits non-zero only at the very end.
+res_check() {
+	[ "$EXIT_RES" = 1 ] || return 0
+	"$here/exit-resources-check.sh" "$out" "$1" || exit_res_fail=1
+	return 0
+}
 npins=$(echo "$order" | tr ' ' '\n' | grep -vc '^$')
 
 port=1121
@@ -235,20 +375,26 @@ for spec in $compose; do
 	# the tunnels plain, then pin each one by its own port below.
 	timeout 240 $CLI cli proxy start -k "$exit_pk" -n "$name" -a "$socks" --tunnels "$T" ${RANGE_PORT:+--range-port $RANGE_PORT} ${RANGE_CHUNK_KIB:+--range-chunk-kib $RANGE_CHUNK_KIB} ${RANGE_CONCURRENCY:+--range-concurrency $RANGE_CONCURRENCY} 2>&1 | grep -iv debug | grep -i "tunnel\|running\|error\|fatal" | head -3
 	sleep 5
+	wait_pool "$name" # the standby pool is still filling 5 s after the dial
 
 	# --- per-tunnel pinning, by the rg's OWN port (desc.dst_port, #4967) -----
 	# At this point each rg holds the single auto leg it dialed on; `mux set
 	# --rg <dst_port> --legs <L pins> --prune` replaces it with L pinned legs,
 	# so tunnel i ends up on pins [i*L, i*L+L) and the tunnels are disjoint.
+	# Only the ACTIVE groups are pinned and counted: the standby pool holds as
+	# many more as the router has disjoint first hops for, and they carry no
+	# streams (#4986).
 	pinned=no
 	mux_info "$name" > "$out/$set_name.legs.json"
-	ngroups=$(jq 'length' "$out/$set_name.legs.json" 2>/dev/null || echo 0)
-	ndst=$(jq '[.[].desc.dst_port] | unique | length' "$out/$set_name.legs.json" 2>/dev/null || echo 0)
+	roles=$(rg_roles "$out/$set_name.legs.json")
+	allgroups=${roles%% *}; roles_rest=${roles#* }; ngroups=${roles_rest%% *}; nstandby=${roles_rest##* }
+	ndst=$(active_json "$out/$set_name.legs.json" | jq '[.[].desc.dst_port] | unique | length' 2>/dev/null || echo 0)
+	echo "$name: $allgroups route group(s) — $ngroups active, $nstandby standby"
 	rm -f "$out/$set_name".rg*.target.json # a re-run's rg ports differ; don't mix targets
 	assign=""
 	if [ "$ngroups" -eq "$T" ] && [ "$ndst" -eq "$T" ] && [ $((T * L)) -le "$npins" ]; then
 		i=0
-		for dp in $(jq -r '.[].desc.dst_port' "$out/$set_name.legs.json"); do
+		for dp in $(active_ports "$out/$set_name.legs.json"); do
 			legs_file="$out/$set_name.rg$dp.target.json"
 			slice=$(echo "$order" | tr ' ' '\n' | grep -v '^$' | sed -n "$((i * L + 1)),$((i * L + L))p")
 			for s in $slice; do cat "$pins/via-$s.json"; done | jq -s 'add' > "$legs_file"
@@ -259,7 +405,7 @@ for spec in $compose; do
 		done
 		pinned=yes
 	else
-		echo "$set_name: per-tunnel pinning skipped (groups=$ngroups/$T distinct_dst_ports=$ndst pins=$npins needed=$((T * L))) — recording the engine's own shape"
+		echo "$set_name: per-tunnel pinning skipped (active groups=$ngroups/$T of $allgroups, distinct_dst_ports=$ndst pins=$npins needed=$((T * L))) — recording the engine's own shape"
 	fi
 	# pin the engine's active width to L AFTER the legs exist, so every pinned
 	# leg stripes from the first row instead of sitting in warm standby
@@ -274,30 +420,38 @@ for spec in $compose; do
 	missing=0
 	if [ "$pinned" = yes ]; then
 		want=$(cat "$out/$set_name".rg*.target.json | jq -r '.[].forward[0].TpID' | sort -u)
-		have=$(jq -r '.[].legs[].transport_id' "$out/$set_name.legs.json" 2>/dev/null)
+		have=$(active_json "$out/$set_name.legs.json" | jq -r '.[].legs[].transport_id' 2>/dev/null)
 		for w in $want; do echo "$have" | grep -q "$w" || { echo "$name: pinned leg $w NOT present"; missing=$((missing + 1)); }; done
 	fi
 
-	groups=$(jq 'length' "$out/$set_name.legs.json" 2>/dev/null || echo 0)
-	shape=$(jq -r '[.[].legs | length] | join("+")' "$out/$set_name.legs.json" 2>/dev/null)
+	roles=$(rg_roles "$out/$set_name.legs.json")
+	allgroups=${roles%% *}; roles_rest=${roles#* }; groups=${roles_rest%% *}; nstandby=${roles_rest##* }
+	aj=$(active_json "$out/$set_name.legs.json")
+	# the shape is the ACTIVE tunnels'; the carriers are named from every group,
+	# standby included, because a standby tunnel can be promoted mid-set.
+	shape=$(echo "$aj" | jq -r '[.[].legs | length] | join("+")')
 	tps=$(jq -r '.[].legs[].transport_id' "$out/$set_name.legs.json" 2>/dev/null | sort -u | tr '\n' ' ')
-	ports_before=$(jq -r '[.[].desc.dst_port] | join(",")' "$out/$set_name.legs.json" 2>/dev/null)
-	desc=$(jq -r '[.[] | "rg\(.desc.dst_port)=[" + ([.legs[] | .tp_type + ">" + .remote_pk[0:8] + "@" + .transport_id[0:8]] | join(";")) + "]"] | join(" ")' "$out/$set_name.legs.json" 2>/dev/null)
-	echo "$name: $groups/$T route group(s), legs per rg: $shape (want $L each), pinned=$pinned"
+	ports_before=$(echo "$aj" | jq -r '[.[].desc.dst_port] | join(",")')
+	desc=$(jq -r '[.[] | "rg\(.desc.dst_port)\(if .tunnel_role then "/" + .tunnel_role else "" end)=[" + ([.legs[] | .tp_type + ">" + .remote_pk[0:8] + "@" + .transport_id[0:8]] | join(";")) + "]"] | join(" ")' "$out/$set_name.legs.json" 2>/dev/null)
+	echo "$name: $groups/$T active route group(s) of $allgroups ($nstandby standby), legs per active rg: $shape (want $L each), pinned=$pinned"
 	echo "$name: first-hop tps: $tps"
 	# Nothing below here may run on a shape that is not the target one: rows from
 	# an unpinned or half-built session are indistinguishable from real ones in
 	# the TSV, which is exactly how campaign16 recorded 20 invalid rows.
 	narrow=$(echo "$shape" | tr '+' '\n' | awk -v l="$L" '$1!=l {bad++} END{print bad+0}')
-	[ "$groups" -eq "$T" ] || { abort_set "$set_name" "shape differs from target: $groups route group(s), asked for $T (groups=$desc)"; port=$((port + 1)); continue; }
+	[ "$groups" -eq "$T" ] || { abort_set "$set_name" "shape differs from target: $groups active route group(s) of $allgroups ($nstandby standby), asked for $T (groups=$desc)"; port=$((port + 1)); continue; }
 	[ "$narrow" -eq 0 ] || { abort_set "$set_name" "shape differs from target: legs per rg $shape, want $L each"; port=$((port + 1)); continue; }
 	[ "$missing" -eq 0 ] || { abort_set "$set_name" "$missing pinned leg(s) missing from the realized shape (groups=$desc)"; port=$((port + 1)); continue; }
 
 	warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
+	res_set "$set_name-pre"
 	run_set "$set_name" "$socks" "$tps" \
-		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name compose=${T}x${L} tunnels=$T width=$L route_groups=$groups legs_per_rg=$shape pinned=$pinned rg_ports=$ports_before pin_assign=$(echo $assign) groups=$desc sink=$sink"
+		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name compose=${T}x${L} tunnels=$T width=$L route_groups=$allgroups active=$groups standby=$nstandby legs_per_rg=$shape pinned=$pinned rg_ports=$ports_before pin_assign=$(echo $assign) groups=$desc sink=$sink"
 
-	ports_after=$(mux_info "$name" | jq -r '[.[].desc.dst_port] | join(",")')
+	res_set "$set_name-post"; res_check "$set_name"
+	mux_info "$name" > "$out/$set_name.after.json"
+	ports_after=$(active_json "$out/$set_name.after.json" | jq -r '[.[].desc.dst_port] | join(",")')
+	rm -f "$out/$set_name.after.json"
 	printf '# rg dst_ports before=%s after=%s %s\n' "$ports_before" "$ports_after" \
 		"$([ "$ports_before" = "$ports_after" ] && echo constant || echo CHANGED)" >> "$out/$set_name.carrier.tsv"
 	echo "$name: rg dst_ports $ports_before -> $ports_after"
@@ -307,3 +461,8 @@ for spec in $compose; do
 	stop_app_clean "$name" || echo "$set_name: dst_ports $rg_left outlived the set — the next set will be invalidated if they persist"
 	port=$((port + 1))
 done
+
+# The exit-resource gate is the only thing that can fail this script: every set
+# that ran is on disk either way.
+[ "$exit_res_fail" = 0 ] || echo "run-compose: an exit-resource check FAILED — see $out/exit-resources.tsv"
+exit "$exit_res_fail"

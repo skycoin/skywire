@@ -53,8 +53,11 @@
 # The rig is put back after every row (leg re-added from its pin, transport
 # re-added with `tp add -t stcpr <pk>`) and swept once more at the end.
 #
-# Functions are copied from run-mux.sh rather than sourced: it is a script with
-# top-level work, not a library.
+# The cut itself — choosing a target, the fences, the cut, the restore and the
+# timed transfer it happens inside — now lives in bench/lib-cut.sh, which this
+# script sources and run-mux.sh's single CUT_ROW uses too. The rest of the
+# helpers are still copied from run-mux.sh: it is a script with top-level work,
+# not a library.
 set -u
 CLI=${CLI:-/home/d0mo/go/bin/skywire}
 exit_pk=$1; out=$2; pins=$3; trials=${4:-5}; sink=${5:-http://127.0.0.1:18080}
@@ -62,6 +65,15 @@ order=${6:-$(ls "$pins"/via-*.json | sed 's|.*/via-||; s|\.json$||' | tr '\n' ' 
 here=$(dirname "$0")
 mkdir -p "$out"
 local_commit=$(git -C "$here/.." rev-parse --short=9 HEAD)
+CUT_HERE=$here # read by the library below
+# Every subject here is PINNED, so this script keeps the strict fence it always
+# had: a target that is not one of the pinned hop-1 transports is not cut, and
+# the subject is skipped. (run-mux.sh's single cut row uses CUT_FENCE=auto,
+# which also allows an auto-dialed tunnel's first hop.)
+CUT_FENCE=${CUT_FENCE:-pins}
+export CUT_HERE CUT_FENCE
+# shellcheck source=bench/lib-cut.sh
+. "$here/lib-cut.sh"
 subjects=${SUBJECTS:-"legs-2 tunnels-2"}
 size=${DEGRADE_SIZE:-50000000}
 dirs=${DIRS:-"down up"}
@@ -82,10 +94,6 @@ tp_sent_all() {
 	$CLI cli visor state --select transports --json 2>/dev/null |
 		jq -r --arg ids "$tps" '($ids | split(" ") | map(select(. != ""))) as $w |
 			.transports[] | select(.id as $i | $w | index($i)) | "\(.id) \(.log.sent)"'
-}
-tp_present() { # <tp id> -> 0 when the local visor holds it
-	$CLI cli tp ls --json 2>/dev/null |
-		jq -e --arg id "$1" 'any(.[]; .id==$id)' >/dev/null 2>&1
 }
 exit_commit() {
 	timeout 60 $CLI cli visor state --via "dmsg://$exit_pk" --select summary --json 2>/dev/null |
@@ -119,20 +127,8 @@ mux_events() {
 		jq --arg app "$2" --arg since "${setup_started:-$set_started}" '[.diag.mux_events[]? | select(.app==$app and .at[0:19] >= $since)]' > "$out/$1.mux_events.json" 2>/dev/null
 	echo "$1: $(jq 'length' "$out/$1.mux_events.json" 2>/dev/null || echo 0) mux events: $(jq -r '[.[] | .event + "(" + (.reason // "") + ")"] | join(" ")' "$out/$1.mux_events.json" 2>/dev/null | cut -c1-300)"
 }
-now() { date +%s.%N; }
-since_s() { awk -v a="$1" -v b="$(now)" 'BEGIN{printf "%.3f", b - a}'; }
-ge() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a + 0 >= b + 0)}'; }
-div() { awk -v a="$1" -v b="$2" 'BEGIN{if (b + 0 > 0) printf "%.0f", a / b; else print "-"}'; }
-# pin_short <tp id>: the pin file whose FIRST HOP is that transport. Doubles as
-# the "is this one of the six pins" fence — a transport no pin names cannot be
-# restored to the same id and is never cut.
-pin_short() {
-	for p in "$pins"/via-*.json; do
-		[ "$(jq -r '.[0].forward[0].TpID' "$p" 2>/dev/null)" = "$1" ] && { basename "$p" .json | sed 's/^via-//'; return 0; }
-	done
-	return 1
-}
-pin_pk() { jq -r '.[0].forward[0].To' "$pins/via-$1.json" 2>/dev/null; }
+# now / since_s / ge / div / tp_present / pin_short / pin_pk / choose_cut /
+# do_cut / restore_cut / cut_transfer all come from bench/lib-cut.sh.
 
 # start_subject <subject>: bring the session up in the shape the subject needs.
 # Also used to re-establish it when a cut cost the session a whole tunnel.
@@ -173,48 +169,6 @@ start_subject() {
 	esac
 }
 
-# do_cut: the one mid-transfer operation, by subject. Sets cut_ok.
-do_cut() {
-	case $cut_kind in
-	leg)
-		timeout 60 $CLI cli proxy mux rm "$cut_tp" -n "$name" --rg "$cut_rg" >> "$out/$set_name.cut.log" 2>&1 && cut_ok=1 || cut_ok=0
-		;;
-	tp)
-		timeout 60 $CLI cli tp rm "$cut_tp" >> "$out/$set_name.cut.log" 2>&1 && cut_ok=1 || cut_ok=0
-		;;
-	*) cut_ok=0 ;;
-	esac
-}
-
-# restore_cut: put the rig back. Echoes 1 when the leg/transport is present again.
-restore_cut() {
-	case $cut_kind in
-	leg)
-		# the group may have been rebuilt on a new port while the row ran; add the
-		# leg back to whatever group the session holds now.
-		_rg=$(mux_info "$name" | jq -r '.[0].desc.dst_port // empty')
-		timeout 180 $CLI cli proxy mux add -n "$name" ${_rg:+--rg $_rg} --route "$pins/via-$cut_short.json" >> "$out/$set_name.cut.log" 2>&1
-		sleep 2
-		if mux_info "$name" | jq -e --arg id "$cut_tp" 'any(.[].legs[]; .transport_id==$id)' >/dev/null 2>&1; then echo 1; else echo 0; fi
-		;;
-	tp)
-		# a re-dialled stcpr is not up the instant `tp add` returns, and a row that
-		# starts without it strands the next re-establish on the direct transport to
-		# the exit (which choose_cut then rightly refuses) — so retry until it is
-		# actually back rather than sampling once.
-		_ra=1
-		while [ "$_ra" -le 4 ]; do
-			tp_present "$cut_tp" && { echo 1; return; }
-			timeout 120 $CLI cli tp add -t stcpr "$cut_pk" >> "$out/$set_name.cut.log" 2>&1
-			sleep 5
-			_ra=$((_ra + 1))
-		done
-		if tp_present "$cut_tp"; then echo 1; else echo 0; fi
-		;;
-	*) echo 0 ;;
-	esac
-}
-
 # up_progress: wire bytes this row has pushed, summed per carrier against a
 # PER-CARRIER baseline; a carrier the cut removed keeps its last delta instead
 # of dropping out of the sum.
@@ -231,119 +185,26 @@ up_progress() {
 }
 
 # cut_row <label> <dir>: one hash-verified transfer with a cut in the middle.
-# Appends the bench.sh row to $f and the cut record to $cutf.
+# The transfer, the cut and its timing are cut_transfer's (bench/lib-cut.sh);
+# this writes the two rows the set records — the bench.sh row to $f and the cut
+# record to $cutf — and puts the rig back.
+# shellcheck disable=SC2154,SC2034 # ct_* and cut_* cross the lib-cut.sh source boundary
 cut_row() {
 	label=$1; dir=$2
-	w="$tmp/row"; rm -rf "$w"; mkdir -p "$w"
-	want_bytes=$((size * cut_pct / 100))
-	poll=0.25
-	if [ "$dir" = up ]; then
-		poll=1; tp_sent_all > "$tmp/base" 2>/dev/null; : > "$tmp/last"
-	fi
-	start=$(now)
-	if [ "$dir" = down ]; then
-		curl -s --socks5-hostname "$socks" -m 900 -D "$w/h" -o "$w/b" \
-			-w '%{http_code} %{size_download} %{time_total} %{speed_download}' "$sink/?bytes=$size" > "$w/w" 2>/dev/null &
-	else
-		curl -s --socks5-hostname "$socks" -m 900 -o "$w/r" \
-			-w '%{http_code} %{size_upload} %{time_total} %{speed_upload}' \
-			-X POST --data-binary "@$payload" "$sink/upload" > "$w/w" 2>/dev/null &
-	fi
-	cpid=$!
-	cut_done=0; cut_at=0; bytes_at_cut=0; ttfb=-; cut_ok=0
-	while kill -0 "$cpid" 2>/dev/null; do
-		e=$(since_s "$start")
-		if [ "$dir" = down ]; then
-			p=0; [ -f "$w/b" ] && p=$(wc -c < "$w/b" | tr -d ' ')
-		else
-			p=$(up_progress)
-		fi
-		case $p in '' | *[!0-9]*) p=0 ;; esac
-		if [ "$cut_done" -eq 0 ]; then
-			if [ "$p" -ge "$want_bytes" ] || ge "$e" "$cut_after"; then
-				bytes_at_cut=$p; cut_at=$e
-				do_cut
-				cut_done=1
-				echo "$set_name $label: cut $cut_kind $cut_tp at ${cut_at}s after $bytes_at_cut bytes (ok=$cut_ok)"
-			fi
-		elif [ "$ttfb" = - ] && [ "$p" -gt "$bytes_at_cut" ]; then
-			ttfb=$(awk -v a="$e" -v b="$cut_at" 'BEGIN{printf "%.3f", a - b}')
-		fi
-		sleep "$poll"
-	done
-	wait "$cpid" 2>/dev/null
-	# shellcheck disable=SC2046 # the four -w fields are split on purpose, as bench.sh does
-	set -- $(cat "$w/w" 2>/dev/null)
-	http=${1:-000}; got=${2:-0}; secs=${3:-0}; speed=${4:-0}
-	if [ "$dir" = down ]; then
-		want=$(tr -d '\r' < "$w/h" 2>/dev/null | awk 'tolower($1)=="x-sha256:"{print $2}')
-		have=$(sha256sum "$w/b" 2>/dev/null | cut -d' ' -f1)
-	else
-		want=$(jq -r .sha256 "$w/r" 2>/dev/null)
-		have=$payload_sha
-	fi
-	ok=0; [ -n "$want" ] && [ "$want" = "$have" ] && ok=1
-	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$label" "$dir" "$size" "$speed" "$http" "$got" "$secs" "$ok" >> "$f"
+	ct_payload=$payload; ct_payload_sha=$payload_sha
+	cut_transfer "$label" "$dir" "$size"
+	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$label" "$dir" "$size" "$ct_speed" "$ct_http" "$ct_got" "$ct_secs" "$ct_ok" >> "$f"
 	# An upload's progress is wire bytes, a download's is payload bytes, so an
 	# upload row's before/after pair is the wire-side approximation (clamped so
 	# the remainder can never go negative).
-	rem=$((got - bytes_at_cut)); [ "$rem" -lt 0 ] && rem=0
-	gp_before=$(div "$bytes_at_cut" "$cut_at")
-	gp_after=$(div "$rem" "$(awk -v a="$secs" -v b="$cut_at" 'BEGIN{printf "%.3f", a - b}')")
+	rem=$((ct_got - ct_bytes_at_cut)); [ "$rem" -lt 0 ] && rem=0
+	gp_before=$(div "$ct_bytes_at_cut" "$ct_cut_at")
+	gp_after=$(div "$rem" "$(awk -v a="$ct_secs" -v b="$ct_cut_at" 'BEGIN{printf "%.3f", a - b}')")
 	restored=$(restore_cut)
 	rg_after=$(mux_info "$name" | jq -r '[.[].desc.dst_port] | join(",")' 2>/dev/null)
 	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-		"$row" "$set_name" "$cut_at" "$cut_kind:$cut_tp(ok=$cut_ok)" "$bytes_at_cut" "$ttfb" "$gp_before" "$gp_after" "$restored" "$rg_after" >> "$cutf"
-	echo "$set_name $label: http=$http got=$got hash_ok=$ok before=${gp_before}B/s after=${gp_after}B/s ttfb_after=${ttfb}s restored=$restored rg_after=$rg_after"
-}
-
-# choose_cut <subject>: pick the leg (and its pin / remote pk) this subject cuts.
-# Never the transport to the exit — the rig's direct reference rides it — never
-# a transport outside the six pins, and never one a second route group shares.
-choose_cut() {
-	info=$(mux_info "$name")
-	cut_rg=""; cut_tp=""; cut_pk=""; cut_short=""
-	case $1 in
-	legs-2)
-		cut_kind=leg
-		cut_rg=$(echo "$info" | jq -r '.[0].desc.dst_port // empty')
-		cut_tp=$(echo "$info" | jq -r '.[0].legs[1].transport_id // empty')
-		cut_pk=$(echo "$info" | jq -r '.[0].legs[1].remote_pk // empty')
-		;;
-	tunnels-2)
-		cut_kind=tp
-		# every group but the first is a candidate; take the first candidate whose
-		# hop-1 transport is a pin and is not shared with another group.
-		# sh has no function locals: these loop vars are _c-prefixed so they cannot
-		# clobber the caller's trial counter when a re-establish re-selects.
-		_cn=$(echo "$info" | jq 'length' 2>/dev/null || echo 0)
-		_ci=1
-		while [ "$_ci" -lt "$_cn" ]; do
-			_ct=$(echo "$info" | jq -r --argjson i "$_ci" '.[$i].legs[0].transport_id // empty')
-			_cshared=$(echo "$info" | jq -r --argjson i "$_ci" '[to_entries[] | select(.key != $i) | .value.legs[].transport_id] | join(" ")')
-			if [ -n "$_ct" ] && ! echo " $_cshared " | grep -q " $_ct "; then
-				cut_tp=$_ct
-				cut_rg=$(echo "$info" | jq -r --argjson i "$_ci" '.[$i].desc.dst_port // empty')
-				cut_pk=$(echo "$info" | jq -r --argjson i "$_ci" '.[$i].legs[0].remote_pk // empty')
-				break
-			fi
-			[ -n "$_ct" ] && echo "$set_name: rg $(echo "$info" | jq -r --argjson i "$_ci" '.[$i].desc.dst_port') rides $_ct, which another group also holds — not a cut target"
-			_ci=$((_ci + 1))
-		done
-		;;
-	esac
-	[ -n "$cut_tp" ] || { echo "$set_name: no second leg/tunnel to cut — skipping the subject"; return 1; }
-	[ "$cut_pk" != "$exit_pk" ] || { echo "$set_name: the target rides the transport to the EXIT ($cut_tp) — refusing to cut it"; return 1; }
-	cut_short=$(pin_short "$cut_tp" || true)
-	if [ -z "${cut_short:-}" ]; then
-		echo "$set_name: $cut_kind $cut_tp is not one of the $(ls "$pins"/via-*.json | wc -l) pinned hop-1 transports — it could not be restored, skipping the subject"
-		return 1
-	fi
-	# restore by the PIN's pk, not mux info's: `tp add -t stcpr <pk>` has to
-	# rebuild the exact id the pin names.
-	cut_pk=$(pin_pk "$cut_short")
-	echo "$set_name: cut target = $cut_kind $cut_tp on rg $cut_rg (remote $cut_pk, pin via-$cut_short)"
-	return 0
+		"$row" "$set_name" "$ct_cut_at" "$cut_kind:$cut_tp(ok=$ct_cut_ok)" "$ct_bytes_at_cut" "$ct_ttfb" "$gp_before" "$gp_after" "$restored" "$rg_after" >> "$cutf"
+	echo "$set_name $label: http=$ct_http got=$ct_got hash_ok=$ct_ok before=${gp_before}B/s after=${gp_after}B/s ttfb_after=${ct_ttfb}s restored=$restored rg_after=$rg_after"
 }
 
 ec=$(exit_commit)
