@@ -206,6 +206,13 @@ type RouteGroup struct {
 	// info lookups since the descriptor's SrcPort is ephemeral and
 	// doesn't resolve through procManager.AppByPort.
 	appName string
+	// tunnelRole is the DIALING app's own label for this route group:
+	// "active" (it carries streams) or "standby" (held open, measured, ready
+	// to take over). Empty for every route group that is not one of a
+	// multi-tunnel app's tunnels, and empty on the accept side — the exit has
+	// no idea which of a peer's tunnels are in standby. Set via
+	// SetTunnelRole from finishDial, read back in MuxStats.
+	tunnelRole string
 
 	handshakeProcessed     chan struct{}
 	handshakeProcessedOnce sync.Once
@@ -516,6 +523,28 @@ func (rg *RouteGroup) AppName() string {
 	return rg.appName
 }
 
+// SetTunnelRole records the dialing app's label for this route group —
+// "active" or "standby". No-op when role is empty, so a route group that is
+// not one of a multi-tunnel app's tunnels keeps an empty role and the field is
+// simply absent from its JSON. Guarded by rg.mu because MuxStats reads it from
+// whichever goroutine is serving `visor state`.
+func (rg *RouteGroup) SetTunnelRole(role string) {
+	if role == "" {
+		return
+	}
+	rg.mu.Lock()
+	rg.tunnelRole = role
+	rg.mu.Unlock()
+}
+
+// TunnelRole returns the dialing app's label for this route group ("active" /
+// "standby"), or "" when it has none.
+func (rg *RouteGroup) TunnelRole() string {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	return rg.tunnelRole
+}
+
 // MuxInfo is a point-in-time snapshot of one route group's
 // multiplexing state — per-leg byte/packet counters plus the
 // transport identity each leg maps to. Returned by Router.MuxInfo
@@ -585,6 +614,13 @@ type MuxInfo struct {
 	// Recovery is the loss-recovery view (sender retransmit machinery +
 	// receiver reorder frontier). Nil for a group with no mux.
 	Recovery *MuxRecovery
+	// TunnelRole is the DIALING app's label for this route group — "active"
+	// (it carries streams) or "standby" (held open and measured, ready to take
+	// over). Empty for any group that is not one of a multi-tunnel app's
+	// tunnels, and ALWAYS empty on the accepting end: an exit knows how many
+	// tunnels a client holds but not which of them are in standby, so read the
+	// role on the local end.
+	TunnelRole string
 }
 
 // MuxRecovery is a route group's LOSS-RECOVERY state: the sender-side
@@ -715,6 +751,7 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 		}
 	}
 	info.PerFrameNoise = rg.perFrameNoiseActive
+	info.TunnelRole = rg.tunnelRole
 	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
 	rg.mu.Unlock()
 

@@ -338,6 +338,36 @@ const (
 	// (CLI/GUI parity). --tunnels 1 still takes the AppDirect shortcut.
 	SkysocksClientTunnels = 2
 
+	// SkysocksClientStandbyPool is the default CEILING on how many tunnels the
+	// socks5 proxy client holds open to the exit, the active
+	// SkysocksClientTunnels included (--standby-pool). Everything beyond the
+	// active set is held in STANDBY: dialed, kept alive and measured, carrying
+	// no streams, so a tunnel that fails is replaced by a route that already
+	// exists instead of one set up from scratch (8-9 s through the setup node).
+	//
+	// Eight, matching the adaptive mux's per-group leg ceiling
+	// (preset.AdaptCap), and it is a bound rather than a target: the pool
+	// fills one tunnel at a time and STOPS at the first
+	// router.ErrNoDisjointFirstHop, so a topology offering three disjoint
+	// first hops settles at three and never dials again until a tunnel dies.
+	// Chasing an unreachable target is what made the self-heal storm of #4325.
+	//
+	// On a WELL-CONNECTED visor this ceiling, not exhaustion, is what stops the
+	// fill — and that is the intended reading of the number. A first hop is any
+	// transport this visor holds, so the disjoint bound is the size of its own
+	// transport set, not the handful of peers an operator thinks of as "the
+	// route": measured on the campaign rig 2026-09-17, the eighth pool dial
+	// still had 124 free ranked candidates to choose from, all of them disjoint
+	// by transport AND by peer. Exhaustion is the case of a visor holding only
+	// a few transports. A reader of the settled state must therefore look at
+	// the REASON ("pool ceiling" vs "no disjoint first hop left") before
+	// concluding anything about the topology.
+	//
+	// ONE home for the default so the CLI flag, the app's cobra flag and the
+	// app's launcher flag set cannot drift (CLI/GUI parity), exactly as with
+	// SkysocksClientTunnels. 0 disables the pool (active tunnels only).
+	SkysocksClientStandbyPool = 8
+
 	// VPNServerName is the name of the vpn server app
 	VPNServerName = "vpn-server"
 
