@@ -458,6 +458,12 @@ func (r *router) DialRoutes(
 		} else {
 			forwardPath, reversePath, err = r.fetchBestRoutes(ctx, log, lPK, rPK, opts, baseMinHops)
 		}
+		if errors.Is(err, ErrNoDisjointFirstHop) {
+			// Settled, not transient: retrying re-runs the same exhausted
+			// candidate list against the same topology. Surface it at once so
+			// the caller can stop growing its pool.
+			return nil, err
+		}
 		if err != nil {
 			// RACE fallback: no route over existing transports (yet). If the
 			// background transport-creation hook is still running, wait for it
@@ -484,6 +490,16 @@ func (r *router) DialRoutes(
 				return nil, fmt.Errorf("local route calc: %w", err)
 			}
 			return nil, fmt.Errorf("route finder: %w", err)
+		}
+
+		// Last gate for RequireDisjointFirstHop. fetchBestRoutes reports
+		// exhaustion from its own candidate list, but a route can also reach
+		// here from the direct-transport hook race, the K-candidate race or a
+		// local calc. Checking the path we are ABOUT to set up covers every one
+		// of them, and costs a set lookup on a dial that is already seconds long.
+		if opts != nil && opts.DiversifyTransports && opts.RequireDisjointFirstHop && r.firstHopExcluded(forwardPath, opts) {
+			opts.note("required disjoint first hop: picked route shares %s; settling", forwardPath[0].TpID.String()[:8])
+			return nil, noDisjointFirstHopErr(rPK, 1)
 		}
 
 		keepAlive := DefaultRouteKeepAlive
@@ -659,6 +675,11 @@ func (r *router) finishDial(
 ) net.Conn {
 	// Store the complete forward route hops for later retrieval
 	nrg.SetForwardHops(forwardPath)
+	// A multi-tunnel app labels its own tunnels (active / standby) at dial
+	// time; every other dial leaves this empty.
+	if opts != nil {
+		nrg.rg.SetTunnelRole(opts.TunnelRole)
+	}
 	// A diversify dial leaves its decision trail on the group (see DialOptions.note).
 	if opts != nil && len(opts.dialNotes) > 0 {
 		first := "none"
@@ -1092,6 +1113,27 @@ func noRouteErr(fwdMinHops, revMinHops uint16, dst cipher.PubKey) error {
 		ErrNoRouteFound, dst, minHops, plural, minHops, intermediates, plural)
 }
 
+// ErrNoDisjointFirstHop is returned to a dial that set
+// DialOptions.RequireDisjointFirstHop when the ranked candidate list is
+// exhausted: every route this visor can offer to the destination leaves over a
+// first-hop transport / peer / IP that a sibling route group to the same
+// destination already holds.
+//
+// It is a SETTLED answer, not a transient failure — the topology is what it is
+// — so the caller must treat it as "stop dialing", never as "retry". The
+// skysocks standby pool stops filling on it and re-arms only when a tunnel dies
+// or the transport set changes; a retry loop against it is exactly the
+// setup-node storm of #4325.
+var ErrNoDisjointFirstHop = errors.New("no disjoint first-hop route is free")
+
+// noDisjointFirstHopErr wraps ErrNoDisjointFirstHop with the numbers a reader
+// needs: how many candidates were considered and which destination they were
+// to. Kept separate from the sentinel so errors.Is still matches.
+func noDisjointFirstHopErr(dst cipher.PubKey, considered int) error {
+	return fmt.Errorf("%w: all %d candidate route(s) to %s leave over a first hop a sibling route group already holds",
+		ErrNoDisjointFirstHop, considered, dst)
+}
+
 func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, dst cipher.PubKey, opts *DialOptions, baseMinHops uint16) (fwd, rev []routing.Hop, err error) {
 	if log == nil {
 		log = r.logger
@@ -1443,6 +1485,17 @@ fetchRoutesAgain:
 				opts.note("finder: none of %d disjoint; local-calc path over %s", len(paths[forward]), localFwd[0].TpID.String()[:8])
 				log.Debug("diversify: no disjoint first-hop from route finder; using local-calc disjoint path")
 				return localFwd, localRev, nil
+			}
+			// A caller GROWING a pool of sibling tunnels asked to be told when
+			// the topology is out of disjoint paths rather than handed a shared
+			// one (RequireDisjointFirstHop). This is that moment: the ranked
+			// candidate list is exhausted and the local calc had nothing free
+			// either. Report it as the settled answer it is, so the caller
+			// stops instead of re-dialing.
+			if opts.RequireDisjointFirstHop {
+				opts.note("finder: none of %d disjoint and no local-calc path; disjoint required, settling", len(paths[forward]))
+				log.Debugf("diversify: no disjoint first hop to %s is free and one was required; the pool has settled", dst)
+				return nil, nil, noDisjointFirstHopErr(dst, len(paths[forward]))
 			}
 			opts.note("finder: none of %d disjoint and no local-calc path; sharing a first hop", len(paths[forward]))
 			log.Warnf("diversify: no disjoint first-hop transport to %s is free; extra tunnel shares an existing first hop (aggregation limited)", dst)
