@@ -242,3 +242,120 @@ stays as its regression.
   without a flake.
 - **The benchmark script:** §2 as one command, run before every release and
   nightly against the last release's table.
+
+## Results (2026-09-16/17 live campaign)
+
+Eighteen campaigns ran over two days, `bench/2026-09-16/<commit>/`, one README per campaign;
+`bench/2026-09-16/a5b611278/` is the closing full suite and `bench/2026-09-16/bc0a4d35a/` its
+after-row. The campaign's scoreboard expands §1's five criteria into the eight below.
+
+### The rig and the method
+
+Everything was measured on one frozen rig: this host (US) as the client, one controlled exit in
+Frankfurt (`022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1`), and six
+single-intermediate stcpr routes to it whose first hops sit on six distinct /24s in five distinct
+/16s, none sharing a host or a NIC with another (`bench/2026-09-16/intermediates.md`). Every campaign
+ran both ends on the same commit against a reference set measured on that same commit within the
+same two hours — eight single-route references, five transfers per size and direction, each
+hash-verified — because the bars drift by up to 2x over twelve hours. From campaign15 on, every mux
+PR also got a two-trial smoke run before merge; that caught two regressions (#4972's first branch,
+#4977) that would otherwise have cost a full campaign each.
+
+### The ceilings
+
+The campaign's last day was spent establishing what the numbers are allowed to be:
+
+| measurement | down MB/s | up MB/s |
+|---|---|---|
+| this host's raw link (Cloudflare, four parallel; 11.4 single) | 12.1 | – |
+| skywire, two independent single routes at once (`run-capcheck.sh`) | 10.41 | 13.95 |
+| skywire, best single route (`8170476dd/ref-via-03f57e7c`, `ref-via-0371ab4b`) | 8.84 | 9.99 |
+| one range-split object, steady state | 9.1–9.7 | – |
+| the bench sink, measured locally on the exit | 205 | – |
+
+A range-split download fits `t = a + b·S` with a fixed prelude `a ≈ 1.1 s` (exit round trips before
+the parallel chunk fetches start) and `1/b = 9.1–9.7 MB/s`; the 8.x medians are that steady rate
+amortised over the prelude, which is 17 % of a 50 MB transfer and much more of a 10 MB one. It is
+not CPU: per-thread sampling on both ends peaks at 10.5 % of a core, the transport RX loop at 9 %
+while moving 10 MB/s. So the honest ceiling for one object on this host is ~9.5, for the path
+10.4 down / 13.9 up, under a 12.1 MB/s link.
+
+### The criteria
+
+1. **Refs — MET.** Eight single-route reference sets per campaign, hash-verified, wire/goodput
+   1.00–1.02; the closing bars are `bench/2026-09-16/8170476dd/ref-*.tsv` and every set's hop list
+   is recorded in its `.legs.json`.
+2. **Tunnels ≥ best ref, 5/5 — PARTLY.** Uploads pass when the tunnels are the best-measured routes:
+   10 MB up 6.64–6.82 vs the 5.97 bar and 50 MB up 10.00 vs 9.99 on one run. Downloads reach 95–96 %
+   of the best single route (8.36 on a5b611278, 8.49 on bc0a4d35a vs 8.84) with 5/5 hashes and
+   wire/goodput 1.00, and never exceed it.
+3. **Legs ≥ best ref, port constant — PARTLY.** Packet-level legs passed the bar twice: legs-2
+   50 MB down 8.46 vs 8.05 (4cc8e9b6b, w/g 1.02) and legs-2 10 MB down 5.71 vs 5.51 (52e430fff).
+   The group's dst_port was constant for every set of every campaign. But run-to-run variance is
+   ±20 % on the same pins and the same scheduler, so neither pass reproduced.
+4. **Composition ≥ each component — NOT MET.** Two legs inside each of two tunnels never beat either
+   alone: 5.63 (1ce356b2d), 6.67 (4cc8e9b6b), 7.15 (8170476dd), 7.11 (a5b611278) on the 50 MB
+   download, against 8.32–8.46 for the best single-shape cells.
+5. **Direction, from both ends — PARTLY.** Both ends' per-leg counters are captured per row since
+   campaign17 (`<set>.exit-recovery.tsv` beside our own `.recovery.tsv`), so attribution is measured
+   rather than inferred. Forward traffic rides the direct or lowest-RTT tunnel by policy (#4972,
+   #4978) — in the closing 2x1 set every upload object rode one tunnel — while the reverse path fans
+   over legs with stable splits (67/33 on legs-2, 34/66–58/42 on the 2x1 set). The automatic flip on
+   load was not demonstrated.
+6. **Degradation — MET for legs, NOT MET for tunnels.** Cutting a leg mid-transfer
+   (`proxy mux rm`, 50 MB, 3 trials): the port stays constant, no group is rebuilt, hashes 3/3 both
+   directions, ttfb after the cut 0.9 s down / 1.7 s up, reorder wedge 1.5–1.9 s cleared in 0.5 s.
+   Cutting a tunnel's transport closes its group, because a tunnel is a single-leg group: downloads
+   survive at 1.1 MB/s with 35–40 s to resume, and a POST in flight on the cut tunnel cannot be
+   resumed at all.
+7. **Does not amplify, bounded named churn — MET.** Wire/goodput is ≤ 1.19 in every cell of the
+   closing runs — 1.00–1.06 in every 50 MB cell — with two exceptions, both three-way 10 MB
+   downloads (tunnels-3 1.27, legs-3 1.25). Every park and promote carries a named reason
+   (shared bottleneck, latency band with its min-RTT, peer-mirrored, operator), and the 30 s park
+   hold from #4968 bounds the churn: 5–35 events per 20-row set.
+8. **The default, by the table — DECIDED, NOT SHIPPABLE YET.** The policy that wins the table is
+   stream-level tunnels pinned to the best-measured routes, one leg each, with the default 4 MiB
+   chunks: uploads meet or beat the bar, downloads reach 95–96 % of it, 5/5 hashes, w/g 1.00. It
+   cannot ship as the default until routes are ranked before they are dialed — today's
+   auto-diversify takes any unused first hop, which on this rig means the 470 ms Sydney route, and
+   measures 6.99–7.82 on the same code. So the default stays a single route, and the ranking work
+   (standby-pool probing, possibly via dmsg-over-skynet relay probes) is the next phase.
+
+### The fixes this campaign merged
+
+| PR | symptom → fix |
+|---|---|
+| #4962 | `proxy mux info` hung under load → the window-refresh/SACK lock inversion broken; a lone leg never parks |
+| #4963 | a new stream landed anywhere → it goes to the tunnel with the most proven bandwidth |
+| #4964 | the exit parked healthy legs during a download → the receive-side stall detector judges legs by payload |
+| #4965 | an idle tunnel's keepalive rate counted as proven capacity → busy-only sampling, stale idle tunnels re-probed |
+| #4966 | three serialized mesh round trips per range chunk → one, with parallel fetches starting at once |
+| #4967 | `--rg` could not name a tunnel (all groups share src_port 3) → it takes the group's own dst_port |
+| #4968 | a leg flapped 13 times in 65 s → an adaptive park holds 30 s; the latency band cannot undo a bottleneck park |
+| #4969 | an idle leg read as stalled, and a peer's park was silent → idle ≠ stalled, peer parks are events |
+| #4970 | ECF and RACK used first-hop RTT (10 ms vs 95 ms) where feedback was 170 ms → both use end-to-end delay; the band uses windowed min-RTT |
+| #4971 | a 15 s exit-open timeout surfaced only as http 000 → logged, counted, and that tunnel sits out the next picks |
+| #4972 | the BDP baseline ratcheted on a 470 ms path (50 MB up 9.82 → 2.80) → the window follows feedback delay over a first-hop baseline; a lone stream takes the lowest-latency tunnel |
+| #4973 | the standalone socks client could not carry over dmsg → it does, and takes the server flags |
+| #4974 | a chunk on a closed tunnel waited out 35–40 s of timeouts → it fails at once and refetches on a live tunnel |
+| #4975 | route groups outlived their app, so the next `--route` pin landed on a stale group → an app's groups close when it stops |
+| #4976 | — bench scripts, results and the campaign's data |
+| #4977 | park gate and retransmit charging reworked → measured worse twice (legs-2 50 MB down 5.86 and 6.54 vs 7.51); **closed, not merged** |
+| #4978 | two concurrent streams stacked on one tunnel (>99.5 % of bytes) → the pick scores `rtt × (streams+1)` |
+| #4979 | the first stream paid a serialized greeting and CONNECT → pipelined like a chunk's, one round trip off the prelude |
+
+### Open
+
+- **Per-object prelude.** ~0.9 s remains after #4979; it is the gap between one split object
+  (8.2–8.5) and two concurrent objects (10.0).
+- **The packet-level scheduler is left as measured.** Both #4977 variants regressed; legs-2 at
+  ~7.5 is 85 % of the best single route and that is where it stands.
+- **Silent all-paths stalls,** roughly one per 100 transfers, on plain routes as well as mux: every
+  group freezes together for 15–55 s and the client's exit-open sniff timeout closes the connection.
+  Wants a transport last-read/last-write age diagnostic.
+- **10 MB downloads are 25–50 % under the bar in every variant** — three 4 MiB chunks leave nothing
+  to parallelise and the prelude is a fifth of the transfer.
+- **A dmsg-only reference set** is still unmeasured; it is blocked until #4973 is deployed fleet-wide
+  and measured.
+- **The standby-pool phase** — probing and ranking routes so the policy of criterion 8 can be the
+  default — has not started.
