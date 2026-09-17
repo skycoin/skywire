@@ -24,7 +24,7 @@ printf '%-24s %-5s %-6s %-6s %-9s %-9s %-9s %-8s %s\n' set dir MB ok/n median mi
 for f in "$dir"/*.tsv; do
 	# companion files of a set, not sets: they hold other columns entirely
 	case $f in
-	*.carrier.tsv | *.recovery.tsv | *.exit-recovery.tsv | *.paired.tsv | *.paired-rows.tsv | *.cut.tsv | *.up2.tsv) continue ;;
+	*.carrier.tsv | *.recovery.tsv | *.exit-recovery.tsv | *.paired.tsv | *.paired-rows.tsv | *.cut.tsv | *.up2.tsv | *.tps.tsv) continue ;;
 	*/exit-resources.tsv | */paired-ref.tsv) continue ;;
 	esac
 	set_name=$(basename "$f" .tsv)

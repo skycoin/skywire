@@ -47,6 +47,19 @@ deltas of every first-hop transport. `TUNNELS` and `LEGS` choose the counts
 (both default to `2` — see the knob table below); `[pin order]` lists pin
 shorts best route first.
 
+The carrier list is a **union, re-read every row**, not the list captured at set
+start: the app's route groups are read before and after each row and every
+transport they hold joins the tracked list, which is never shortened.
+campaign21's cut row left the session holding a replacement group (49172) whose
+first hop was a transport that did not exist when the list was taken (sudph
+93139b56-acc0-00e5-8ca0-cd0bad229d62), so the three 50 MB uploads that rode it
+show no sender at all in `mux-tunnels-2.carrier.tsv` rows 14–16. A transport that
+appears mid-set simply becomes new carrier rows from the row it appeared at, so
+the columns `summarize.sh` and `verdict.sh` read are unchanged; `<set>.tps.tsv`
+names each tracked transport once — `tp type remote_pk first_seen_row`, where
+row 0 means held at set start — and the set's mux-events line names any route
+group created after row 1 with its port, first hop and transport type.
+
 ## Paired references (the 2026-09-17 goal rules)
 
 A reference set measured an hour before the subject is not a bar: the 50 MB
@@ -119,6 +132,19 @@ shares, and never one that cannot be restored to the same transport id.
 `<set>.cut.tsv` records the row, the transport, the first hop's full public key,
 the timestamp, `ttfb_after_cut_s` and the surviving route group ports before and
 after.
+
+The cut also never targets the **paired reference's own route**. campaign21 chose
+Atlanta's first hop 95839ad0-b588-0b1d-8475-45fba6ae993c under `CUT_FENCE=auto`
+while `paired-ref.txt` named that same route (`0371ab4b`) for the :1081
+reference instance, so the reference lost its route at row 11 and the paired
+ratios of rows 12–16 measure the mux session against a rebuilt reference rather
+than the one rows 1–10 saw. Fenced off now: the first-hop transport of the
+reference route (resolved from the same pin file `lib-paired.sh` starts the
+instance on) and every transport the `skysocks-client-ref` / `-ref2` route
+groups hold. When that leaves no candidate the set carries **no cut row** —
+`<set>.cut.tsv` holds `# cut=skipped:<reason>` and `verdict.sh` prints it —
+because cutting the reference costs every later paired row of the set;
+`CUT_REF_FENCE=0` restores the old choice.
 
     bench/exit-resources.sh <out dir> <label>          # one reading
     bench/exit-resources-check.sh <out dir> <set>      # score the pre/post pair
