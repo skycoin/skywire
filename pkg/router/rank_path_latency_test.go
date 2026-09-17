@@ -567,8 +567,8 @@ func mkDstEntryLat(dst, peer cipher.PubKey, tpType tptypes.Type, latencyMs float
 // candidates — a peer on our own uplink whose own hop to the exit was unknown —
 // and the tunnel delivered 3.85 MB/s on 50 MB down (2.46 on 10 MB), worse than
 // the 470ms intermediate the ranking was introduced to avoid. A candidate is
-// ranked by what it costs END TO END, and one whose remainder is unknown is not
-// ranked at all: it sorts with the unmeasured.
+// ranked by what it costs END TO END; one whose remainder is unknown pays the
+// unknown-hop penalty for it (see TestRankByPathLatency_UnknownPathRanksByTp).
 func TestRankByPathLatency_WholePathNotFirstHop(t *testing.T) {
 	a, b, c, d, e := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 
@@ -587,14 +587,17 @@ func TestRankByPathLatency_WholePathNotFirstHop(t *testing.T) {
 	}
 
 	ranked := rankByPathLatency(cands, nil)
-	require.Equal(t, []uuid.UUID{b, d, c, a, e}, firstTpIDs(ranked),
-		"measured paths rank by their total; partially-known ones keep input order, last")
+	require.Equal(t, []uuid.UUID{b, d, a, c, e}, firstTpIDs(ranked),
+		"fully measured paths rank by their total; a partially measured one ranks by "+
+			"its known hops plus the unknown-hop penalty, not at the bottom")
 
 	require.Equal(t,
-		b.String()[:8]+"=29+95ms, "+d.String()[:8]+"=134+1ms, "+c.String()[:8]+"=144+10ms, "+
-			a.String()[:8]+"=1ms+unknown, "+e.String()[:8]+"=199ms+unknown",
+		b.String()[:8]+"=29+95ms, "+d.String()[:8]+"=134+1ms, "+
+			a.String()[:8]+"=1ms+unknown (path latency unknown, ranked by tp latency 151 ms), "+
+			c.String()[:8]+"=144+10ms, "+
+			e.String()[:8]+"=199ms+unknown (path latency unknown, ranked by tp latency 349 ms)",
 		pathLatencyTrail(ranked, nil, nil),
-		"the trail spells the unknown remainder out rather than hiding it in a total")
+		"the trail spells the unknown remainder out and says what the candidate was ranked on")
 
 	total, ok := pathLatencyTotalMs(cands[1], nil)
 	require.True(t, ok)
@@ -642,4 +645,81 @@ func TestFilterLANFirstHops_ExcludesNeighbours(t *testing.T) {
 		"excluding 1 same-LAN first hop(s) (share our uplink): "+lanTp.String()[:8],
 		opts.dialNotes[0])
 	require.Contains(t, opts.dialNotes[1], "ranked by carrier class then path latency: "+viaA.String()[:8]+"=39+10ms")
+}
+
+// TestRankByPathLatency_UnknownPathRanksByTp is the 2026-09-17 fix
+// (bench/2026-09-16/a6a42506f-smoke, the diversify dial_decision trail). A
+// candidate whose end-to-end sample was missing or stale — another client on
+// this visor was holding that route — rendered as "33ms+unknown" and sorted
+// with the unmeasured, losing the dial to a 131+1ms path although it had
+// measured 8.23 MB/s against the winner's 3.03 minutes earlier. A path whose
+// first hop IS measured now ranks by the hops it knows plus a bounded penalty
+// per unknown hop: fast-but-unknown beats known-slow, known-fast still wins,
+// and a candidate with nothing measured at all still sorts last.
+func TestRankByPathLatency_UnknownPathRanksByTp(t *testing.T) {
+	mk := func(id uuid.UUID, hop1, hop2 float64) []routing.Hop {
+		p := rankCandPath(id, 2)
+		p[0].Latency = hop1
+		p[1].Latency = hop2 // 0 = unknown remainder
+		return p
+	}
+
+	for _, tc := range []struct {
+		name  string
+		build func(fast, slow, unknown uuid.UUID) [][]routing.Hop
+		want  func(fast, slow, unknown uuid.UUID) []uuid.UUID
+	}{
+		{
+			// The live case: 33ms first hop, path latency unknown, against the
+			// 131+1ms candidate that won and against a known-slow one.
+			name: "unknown but fast tp outranks a known slow path",
+			build: func(fast, slow, unknown uuid.UUID) [][]routing.Hop {
+				return [][]routing.Hop{mk(slow, 470, 180), mk(unknown, 33, 0), mk(fast, 131, 1)}
+			},
+			want: func(fast, slow, unknown uuid.UUID) []uuid.UUID {
+				return []uuid.UUID{fast, unknown, slow} // 132, 33+150, 650
+			},
+		},
+		{
+			name: "a known fast path still wins over an unknown one of the same tp latency",
+			build: func(fast, _, unknown uuid.UUID) [][]routing.Hop {
+				return [][]routing.Hop{mk(unknown, 33, 0), mk(fast, 33, 10)}
+			},
+			want: func(fast, _, unknown uuid.UUID) []uuid.UUID {
+				return []uuid.UUID{fast, unknown} // 43 beats 33+150
+			},
+		},
+		{
+			// A stale sample is the same shape as a missing one: the hop reads 0.
+			name: "a fully unmeasured candidate still sorts last",
+			build: func(fast, slow, unknown uuid.UUID) [][]routing.Hop {
+				return [][]routing.Hop{mk(unknown, 0, 0), mk(slow, 470, 180), mk(fast, 33, 0)}
+			},
+			want: func(fast, slow, unknown uuid.UUID) []uuid.UUID {
+				return []uuid.UUID{fast, slow, unknown} // 183, 650, no signal
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fast, slow, unknown := uuid.New(), uuid.New(), uuid.New()
+			ranked := rankByPathLatency(tc.build(fast, slow, unknown), nil)
+			require.Equal(t, tc.want(fast, slow, unknown), firstTpIDs(ranked))
+		})
+	}
+
+	// The partial score is the known hops plus one penalty per unknown hop, and
+	// a path with no measured first hop has none at all.
+	p := mk(uuid.New(), 33, 0)
+	ms, ok := pathLatencyPartialMs(p, nil)
+	require.True(t, ok)
+	require.Equal(t, 33+unknownHopPenaltyMs, ms)
+	_, ok = pathLatencyTotalMs(p, nil)
+	require.False(t, ok, "a path with an unmeasured hop still has no end-to-end total")
+	_, ok = pathLatencyPartialMs(mk(uuid.New(), 0, 0), nil)
+	require.False(t, ok, "nothing measured is not a ranking")
+
+	// The trail says what the candidate was ranked on, so a bench run can read
+	// the fallback back out of the dial_decision event.
+	require.Contains(t, pathLatencyTrail([][]routing.Hop{p}, nil, nil),
+		"=33ms+unknown (path latency unknown, ranked by tp latency 183 ms)")
 }
