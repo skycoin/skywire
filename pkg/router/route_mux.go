@@ -134,8 +134,12 @@ type legCounters struct {
 	// telemetry samplers). ecfRttMs / ecfJitterMs are the EWMA'd mean RTT and
 	// jitter (sigma) the ECF predicate consumes.
 	ecfLastSentBytes uint64
-	ecfRttMs         float64
-	ecfJitterMs      float64
+	// ecfLastAckedBytes snapshots the bytes the peer's SACKs had acknowledged on
+	// this leg at the previous ECF refresh: the delta is the leg's DELIVERY
+	// rate, which sizes its send window (see rebuildWeights).
+	ecfLastAckedBytes uint64
+	ecfRttMs          float64
+	ecfJitterMs       float64
 	// ecfRttMinMs is the leg's baseline (minimum observed) RTT — the
 	// uncongested latency. It seeds the stable BDP for cwndBytes and, against
 	// the live ecfRttMs, is the congestion signal ecfSaturated reads. Tracked
@@ -184,6 +188,13 @@ type routeMux struct {
 	// holes are judged against its own estimate (rackThresholdFor).
 	ackDelayByTp   map[uuid.UUID]float64
 	ackDelayByTpMu sync.Mutex
+
+	// windowCh wakes a writer parked in waitSendWindow when a SACK may have
+	// freed per-leg window; sendWindowWaits / sendWindowTimeouts count the waits
+	// and the ones that gave up after sendWindowWaitMax (diagnostics).
+	windowCh           chan struct{}
+	sendWindowWaits    uint64
+	sendWindowTimeouts uint64
 
 	// lastSACKNano rate-limits receiver-side SACK feedback. Cross-leg
 	// reordering from latency skew makes nearly every packet arrive
@@ -406,7 +417,8 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 		// Sender-side retx window kept in step with the receiver's reorder
 		// window so a genuinely-lost sequence is still held for retransmit
 		// while the receiver is holding the gap open for it.
-		retxBuf: newRetxBuffer(reorderWindow),
+		retxBuf:  newRetxBuffer(reorderWindow),
+		windowCh: make(chan struct{}, 1),
 		// Proactive HoL retransmit tracker is always constructed; it is only
 		// consulted when holRetxEnabled is set at handshake (see hol_retx.go).
 		holRetx: newHolRetxTracker(),
@@ -516,6 +528,7 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 			WeightModeECF,
 			WeightModeOTIAS,
 			WeightModeSTMS:
+			m.feedInflight(tps)
 			idx := m.tpSelector.SelectForPayload(payload)
 			if idx < len(tps) {
 				tp := tps[idx]
@@ -800,6 +813,7 @@ func (m *routeMux) setLegStandby(idx int, standby bool) {
 	}
 	m.standby[idx] = standby
 	m.legMu.Unlock()
+	m.signalWindow()
 }
 
 // parkAllAuxStandby marks every aux leg (index > 0) as warm standby. Used by the
@@ -1671,6 +1685,24 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 			if bdpRttMs <= 0 {
 				bdpRttMs = lc.ecfRttMs
 			}
+			// The send window is what the peer's SACKs PROVE the leg delivers per
+			// baseline RTT (× a growth margin), not what we managed to hand the
+			// transport: the send rate counts bytes queued into a bloated leg as
+			// capacity, which is how a slow leg was fed seconds deep. Cold legs
+			// (no acked bytes yet) keep the send-rate BDP and the probe budget.
+			cwnd := rate * bdpRttMs / 1000.0
+			if m.retxBuf != nil && i < len(tps) && tps[i] != nil {
+				acked := m.retxBuf.AckedBytes(tps[i].Entry.ID)
+				if elapsed > 0 && lc.ecfLastAckedBytes > 0 {
+					if deliv := float64(byteDelta(acked, lc.ecfLastAckedBytes)) / elapsed; deliv > 0 {
+						cwnd = deliv * bdpRttMs / 1000.0 * ecfWindowMargin
+						if cwnd < ecfMinWindowBytes {
+							cwnd = ecfMinWindowBytes
+						}
+					}
+				}
+				lc.ecfLastAckedBytes = acked
+			}
 			ready := true
 			if i < len(m.standby) && m.standby[i] {
 				ready = false
@@ -1683,7 +1715,7 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 				rttMinMs:  lc.ecfRttMinMs,
 				jitterMs:  lc.ecfJitterMs,
 				rateBps:   rate,
-				cwndBytes: rate * bdpRttMs / 1000.0,
+				cwndBytes: cwnd,
 				ready:     ready,
 			}
 		}
@@ -1692,4 +1724,86 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 		m.tpSelector.SetECFState(states)
 	}
 	m.tpSelector.Rebuild(tps)
+}
+
+// Per-leg send window (test plan §3.1). ecfWindowMargin scales the SACK-proven
+// delivery per baseline RTT into the window so a leg can grow: delivery
+// measured under a window is at most window/RTT, and ×2 lets it double each
+// refresh, the slow-start ratio. ecfMinWindowBytes keeps a thin leg probing.
+// sendWindowWaitMax bounds how long a writer parks when every ready leg is at
+// its window before it sends anyway — progress is guaranteed even if feedback
+// stops (the frame then queues as before and TLP / RACK recover), and
+// sendWindowPoll re-checks in case a wake-up was coalesced.
+const (
+	ecfWindowMargin   = 2.0
+	ecfMinWindowBytes = 128 * 1024
+	sendWindowWaitMax = 250 * time.Millisecond
+	sendWindowPoll    = 20 * time.Millisecond
+)
+
+// feedInflight hands the predictive selector each leg's REAL unacknowledged
+// bytes (from the retx buffer, attributed per transport) before a pick, so
+// ecfSaturated judges true backlog rather than a rate-drain estimate.
+func (m *routeMux) feedInflight(tps []*transport.ManagedTransport) {
+	if m.retxBuf == nil || !m.sackEnabled || m.tpSelector == nil {
+		return
+	}
+	ids := make([]uuid.UUID, len(tps))
+	for i, tp := range tps {
+		if tp != nil {
+			ids[i] = tp.Entry.ID
+		}
+	}
+	m.tpSelector.SetInflight(m.retxBuf.HeldBytes(ids))
+}
+
+// signalWindow wakes a writer parked in waitSendWindow (coalescing: one pending
+// wake-up at a time). Called when a SACK purged entries or a leg's standby
+// state changed.
+func (m *routeMux) signalWindow() {
+	if m.windowCh == nil {
+		return
+	}
+	select {
+	case m.windowCh <- struct{}{}:
+	default:
+	}
+}
+
+// waitSendWindow parks a writer while every ready leg is at its in-flight
+// window, until a SACK frees capacity, the group closes, or sendWindowWaitMax
+// elapses. A no-op unless SACK accounting and a predictive scheduler are on.
+func (m *routeMux) waitSendWindow(tps []*transport.ManagedTransport, closed <-chan struct{}) {
+	if m.retxBuf == nil || !m.sackEnabled || m.tpSelector == nil || !m.tpSelector.Mode().isPredictive() {
+		return
+	}
+	deadline := time.Now().Add(sendWindowWaitMax)
+	waited := false
+	for {
+		m.feedInflight(tps)
+		if !m.tpSelector.AllReadySaturated() {
+			return
+		}
+		if !waited {
+			atomic.AddUint64(&m.sendWindowWaits, 1)
+			waited = true
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			atomic.AddUint64(&m.sendWindowTimeouts, 1)
+			return
+		}
+		if remaining > sendWindowPoll {
+			remaining = sendWindowPoll
+		}
+		t := time.NewTimer(remaining)
+		select {
+		case <-m.windowCh:
+		case <-t.C:
+		case <-closed:
+			t.Stop()
+			return
+		}
+		t.Stop()
+	}
 }

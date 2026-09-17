@@ -223,12 +223,21 @@ type retxBuffer struct {
 	// send→ack delay with the transport it last rode, so the sender can keep a
 	// per-leg feedback-delay estimate (see routeMux.rackThresholdFor).
 	onAckDelayTp func(uuid.UUID, time.Duration)
+	// heldByTp / ackedByTp attribute the buffer to the transport each entry
+	// last rode: bytes still unacknowledged on that leg (its REAL in-flight,
+	// which the per-leg send window bounds) and the cumulative bytes the
+	// peer's SACKs have acknowledged on it (the delivery rate the window is
+	// sized from). Both keyed by transport id; uuid.Nil collects the unknown.
+	heldByTp  map[uuid.UUID]int64
+	ackedByTp map[uuid.UUID]uint64
 }
 
 func newRetxBuffer(capacity int) *retxBuffer {
 	return &retxBuffer{
-		entries:  make(map[uint32]*retxEntry),
-		capacity: capacity,
+		entries:   make(map[uint32]*retxEntry),
+		capacity:  capacity,
+		heldByTp:  make(map[uuid.UUID]int64),
+		ackedByTp: make(map[uuid.UUID]uint64),
 	}
 }
 
@@ -258,6 +267,9 @@ func (rb *retxBuffer) Store(seq uint32, data []byte, tpID uuid.UUID) bool {
 			}
 		}
 		if !first {
+			if e := rb.entries[lowest]; e != nil {
+				rb.subHeld(e.tpID, len(e.data))
+			}
 			delete(rb.entries, lowest)
 		}
 	}
@@ -270,7 +282,44 @@ func (rb *retxBuffer) Store(seq uint32, data []byte, tpID uuid.UUID) bool {
 		sentAt: time.Now(),
 		tpID:   tpID,
 	}
+	rb.heldByTp[tpID] += int64(len(cp))
 	return true
+}
+
+// subHeld releases n bytes from tp's in-flight accounting. Caller holds rb.mu.
+func (rb *retxBuffer) subHeld(tp uuid.UUID, n int) {
+	if v := rb.heldByTp[tp] - int64(n); v > 0 {
+		rb.heldByTp[tp] = v
+	} else {
+		delete(rb.heldByTp, tp)
+	}
+}
+
+// acked retires a purged entry: its bytes leave the leg's in-flight and join
+// the leg's delivered total. Caller holds rb.mu.
+func (rb *retxBuffer) acked(e *retxEntry) {
+	rb.subHeld(e.tpID, len(e.data))
+	rb.ackedByTp[e.tpID] += uint64(len(e.data))
+}
+
+// HeldBytes returns, for each transport id, the bytes still unacknowledged
+// that last rode it — the leg's real in-flight. One lock for the whole set.
+func (rb *retxBuffer) HeldBytes(ids []uuid.UUID) []int64 {
+	out := make([]int64, len(ids))
+	rb.mu.Lock()
+	for i, id := range ids {
+		out[i] = rb.heldByTp[id]
+	}
+	rb.mu.Unlock()
+	return out
+}
+
+// AckedBytes returns the cumulative bytes the peer's SACKs have acknowledged
+// on transport tp.
+func (rb *retxBuffer) AckedBytes(tp uuid.UUID) uint64 {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	return rb.ackedByTp[tp]
 }
 
 // SetTpID re-tags seq's last-send transport (a retransmit moved it). No-op for
@@ -278,7 +327,9 @@ func (rb *retxBuffer) Store(seq uint32, data []byte, tpID uuid.UUID) bool {
 func (rb *retxBuffer) SetTpID(seq uint32, tpID uuid.UUID) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
-	if e, ok := rb.entries[seq]; ok {
+	if e, ok := rb.entries[seq]; ok && e.tpID != tpID {
+		rb.subHeld(e.tpID, len(e.data))
+		rb.heldByTp[tpID] += int64(len(e.data))
 		e.tpID = tpID
 	}
 }
@@ -350,6 +401,7 @@ func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, thr
 	for seq, e := range rb.entries {
 		if seq <= lastContiguous {
 			sample(e)
+			rb.acked(e)
 			delete(rb.entries, seq)
 		}
 	}
@@ -377,6 +429,7 @@ func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, thr
 			if word&(1<<i) != 0 {
 				if e, ok := rb.entries[checkSeq]; ok {
 					sample(e)
+					rb.acked(e)
 					delete(rb.entries, checkSeq)
 				}
 			} else if e, ok := rb.entries[checkSeq]; ok {

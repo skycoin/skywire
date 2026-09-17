@@ -221,6 +221,9 @@ type transportSelector struct {
 	// ecfLastNano is the wall-clock (UnixNano) of the previous SelectECF call,
 	// used to drain each leg's inflightBytes by its rate over the elapsed gap.
 	ecfLastNano int64
+	// realInflight is set once the mux supplies per-leg unacknowledged bytes
+	// from its retx buffer (SetInflight); the rate-drain model is then bypassed.
+	realInflight bool
 }
 
 func newTransportSelector() *transportSelector {
@@ -865,6 +868,12 @@ func (ts *transportSelector) SelectSTMS(size int) int {
 // delivered ~RTT later). Caller holds ts.mu.
 func (ts *transportSelector) drainInflightLocked() {
 	now := time.Now().UnixNano()
+	if ts.realInflight {
+		// The mux feeds the REAL unacknowledged bytes per leg (SetInflight);
+		// the rate model would only erode that truth between picks.
+		ts.ecfLastNano = now
+		return
+	}
 	if ts.ecfLastNano != 0 {
 		dt := float64(now-ts.ecfLastNano) / float64(time.Second)
 		if dt > 0 {
@@ -1063,4 +1072,52 @@ func pickLowestLatency(live []int, liveTps []*transport.ManagedTransport) int {
 		}
 	}
 	return bestIdx
+}
+
+// SetInflight replaces each leg's in-flight estimate with the REAL bytes still
+// unacknowledged on it (from the sender's retx buffer, attributed per
+// transport). Slots beyond the given slice keep their estimate. Once called,
+// the rate-drain model is bypassed: the truth is refreshed before every pick.
+func (ts *transportSelector) SetInflight(bytes []int64) {
+	ts.mu.Lock()
+	ts.realInflight = true
+	for i := range bytes {
+		if i < len(ts.ecfLegs) {
+			ts.ecfLegs[i].inflightBytes = float64(bytes[i])
+		}
+	}
+	ts.mu.Unlock()
+}
+
+// AllReadySaturated reports whether every ready leg is at its in-flight
+// window (no leg has send capacity now). False when no leg is ready or the
+// mode is not predictive, so a caller never waits on a mode without windows.
+func (ts *transportSelector) AllReadySaturated() bool {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if !ts.mode.isPredictive() {
+		return false
+	}
+	ready := 0
+	for i := range ts.ecfLegs {
+		if !ts.ecfLegs[i].ready {
+			continue
+		}
+		ready++
+		if !ecfSaturated(ts.ecfLegs[i]) {
+			return false
+		}
+	}
+	return ready > 0
+}
+
+// LegWindow returns leg i's in-flight estimate and window in bytes (0, 0 when
+// the leg is unknown to the predictive state).
+func (ts *transportSelector) LegWindow(i int) (inflight, window float64) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if i < 0 || i >= len(ts.ecfLegs) {
+		return 0, 0
+	}
+	return ts.ecfLegs[i].inflightBytes, ts.ecfLegs[i].cwndBytes
 }
