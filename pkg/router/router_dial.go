@@ -122,12 +122,16 @@ func (r *router) DialRoutes(
 	// the route-finder / local calc treat these as soft preferences and fall
 	// back to a shared path when no disjoint transport is free.
 	if opts.DiversifyTransports {
-		if exIDs, exPKs, count := r.siblingRouteGroupExclusions(lPK, rPK, rPort); count > 0 {
+		if exIDs, exPKs, exPeers, exIPs, count := r.siblingRouteGroupExclusions(lPK, rPK, rPort); count > 0 {
 			opts.ExcludeTransportIDs = append(opts.ExcludeTransportIDs, exIDs...)
 			opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, exPKs...)
-			opts.note("diversify: %d sibling group(s) to %s:%d, excluding first-hop tp(s) %s", count, rPK.String()[:8], rPort, shortTpIDs(exIDs))
+			opts.ExcludeFirstHopPeers = append(opts.ExcludeFirstHopPeers, exPeers...)
+			opts.ExcludeFirstHopIPs = append(opts.ExcludeFirstHopIPs, exIPs...)
+			opts.note("diversify: %d sibling group(s) to %s:%d, excluding first-hop tp(s) %s and %d first-hop peer(s)",
+				count, rPK.String()[:8], rPort, shortTpIDs(exIDs), len(exPeers))
 			log.WithField("sibling_tunnels", count).
 				WithField("exclude_tps", len(exIDs)).
+				WithField("exclude_first_hop_peers", len(exPeers)).
 				WithField("exclude_intermediates", len(exPKs)).
 				Debug("Diversifying multi-tunnel dial over disjoint first-hop transports.")
 		} else {
@@ -412,9 +416,23 @@ func (r *router) DialRoutes(
 				// (the dial_decision trail ended at the seeded exclusion). Take the
 				// finder's filtered result instead.
 				f, rv, ok := r.directRoute(lPK, rPK)
-				if ok && opts.DiversifyTransports && firstHopTransportExcluded(f, opts.ExcludeTransportIDs) {
-					opts.note("hook-race: direct route over excluded %s; awaiting the finder", f[0].TpID.String()[:8])
-					ok = false
+				if ok && opts.DiversifyTransports && r.firstHopExcluded(f, opts) {
+					// Every direct transport to this exit is a TWIN of the one
+					// the sibling tunnel holds — same peer, same host, same
+					// path — so once a direct tunnel exists none of them is a
+					// free first hop and this race must not win with one. Only
+					// a genuinely free direct transport (a different peer, which
+					// for a 1-hop route to rPK cannot happen) is taken here;
+					// otherwise wait for the ranked oracle / finder candidates,
+					// which are the intermediates.
+					if free := r.freeFirstHops(r.directRoutes(lPK, rPK), opts); len(free) > 0 {
+						f = r.rankFreeFirstHops(ctx, opts, free, nil)[0]
+						rv = reverseHops(f)
+					} else {
+						opts.note("hook-race: every direct route to %s shares the sibling's first hop (%s); awaiting the ranked candidates",
+							rPK.String()[:8], f[0].TpID.String()[:8])
+						ok = false
+					}
 				}
 				if ok {
 					cancelFetch() // direct transport up → abandon the finder query
@@ -1136,7 +1154,7 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 				// held (the dial_decision trail showed the exclusion seeded and
 				// nothing after it). Keep its answer only when it leaves over a
 				// free transport; otherwise fall through to the filtered paths.
-				if opts.DiversifyTransports && firstHopTransportExcluded(oFwd, opts.ExcludeTransportIDs) {
+				if opts.DiversifyTransports && r.firstHopExcluded(oFwd, opts) {
 					opts.note("oracle: path leaves over an excluded first hop; falling through")
 				} else {
 					if opts.DiversifyTransports {
@@ -1406,16 +1424,22 @@ fetchRoutesAgain:
 	// exists anywhere do we keep a shared first hop — a shared tunnel still beats
 	// no tunnel, just with limited aggregation, which we log.
 	if opts.DiversifyTransports && len(opts.ExcludeTransportIDs) > 0 {
-		if disjoint := filterDisjointFirstHop(paths[forward], opts.ExcludeTransportIDs); len(disjoint) > 0 {
+		if disjoint := r.freeFirstHops(paths[forward], opts); len(disjoint) > 0 {
 			if len(disjoint) != len(paths[forward]) {
 				log.Debugf("diversify: %d/%d forward candidate(s) leave over a disjoint first-hop transport; preferring those",
 					len(disjoint), len(paths[forward]))
 			}
 			opts.note("finder: %d/%d candidate(s) leave over a free first hop", len(disjoint), len(paths[forward]))
-			paths[forward] = disjoint
+			// Order the free first hops by measured latency before the pick
+			// below: an unused first hop is not automatically a GOOD one (live
+			// 2026-09-16 this took a 470ms intermediate while a 39ms one was
+			// free). rankByFirstHopLatency is an ordering, not a filter, and the
+			// downstream rank is stable, so it decides every tie the whole-path
+			// score cannot.
+			paths[forward] = r.rankFreeFirstHops(ctx, opts, disjoint, latencyFor)
 		} else {
 			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
-			if localErr == nil && len(localFwd) > 0 && !firstHopTransportExcluded(localFwd, opts.ExcludeTransportIDs) {
+			if localErr == nil && len(localFwd) > 0 && !r.firstHopExcluded(localFwd, opts) {
 				opts.note("finder: none of %d disjoint; local-calc path over %s", len(paths[forward]), localFwd[0].TpID.String()[:8])
 				log.Debug("diversify: no disjoint first-hop from route finder; using local-calc disjoint path")
 				return localFwd, localRev, nil
@@ -1626,6 +1650,247 @@ func pickBestDirection(paths [][]routing.Hop, excludeSet map[cipher.PubKey]struc
 	return paths[bestIdx], true
 }
 
+// rankByFirstHopLatency orders a diversify dial's DISJOINT candidates (those
+// whose first hop is not already claimed by a sibling tunnel, i.e. the output
+// of filterDisjointFirstHop) by the MEASURED latency of their first-hop
+// transport, lowest first. Unmeasured first hops (latencyFor returns 0) sort
+// LAST — an unknown link is not evidence of a good one. Ties break on fewer
+// hops, then on the input order (the sort is stable), so the route-finder's own
+// preference survives wherever the latency signal cannot separate candidates.
+//
+// Why first-hop-only rather than the whole-path score pickDisjointPath /
+// rankCandidatePaths already compute: for an extra tunnel the first hop IS the
+// decision. It is the link this visor owns, the one the sibling tunnels are
+// being steered off, and the only hop whose latency this visor measures
+// directly; every later hop is shared infrastructure whose latency is often
+// unknown, and one unknown hop adds a flat unknownLatencyCostMs to every
+// candidate alike, flattening exactly the differences that matter. Measured
+// live 2026-09-16/17: an unranked diversify dial took a 470ms first hop while a
+// 39ms one sat free, and 50 MB down measured 6.99–7.82 MB/s against 8.36–8.49
+// for the same client pinned to the two best routes.
+//
+// This is an ORDERING, not a filter: no candidate is ever dropped, so a dial is
+// never starved of a route by it. The downstream rankers sort stably, so this
+// order decides every tie they cannot.
+func rankByFirstHopLatency(cands [][]routing.Hop, latencyFor func(uuid.UUID) float64) [][]routing.Hop {
+	if len(cands) < 2 {
+		return cands
+	}
+	type scored struct {
+		path    []routing.Hop
+		ms      float64
+		unknown bool
+	}
+	acc := make([]scored, 0, len(cands))
+	for _, p := range cands {
+		s := scored{path: p, unknown: true}
+		if ms := firstHopLatencyMs(p, latencyFor); ms > 0 {
+			s.ms, s.unknown = ms, false
+		}
+		acc = append(acc, s)
+	}
+	sort.SliceStable(acc, func(i, j int) bool {
+		a, b := acc[i], acc[j]
+		if a.unknown != b.unknown {
+			return !a.unknown
+		}
+		if !a.unknown && a.ms != b.ms {
+			return a.ms < b.ms
+		}
+		return len(a.path) < len(b.path)
+	})
+	out := make([][]routing.Hop, 0, len(acc))
+	for _, s := range acc {
+		out = append(out, s.path)
+	}
+	return out
+}
+
+// firstHopLatencyMs returns the measured latency of a path's FIRST hop in
+// milliseconds, or 0 when it has no measurement at all. Sources in order: the
+// dial's own TpID→latency lookup (buildHopLookups: this visor's ping/pong
+// average for a transport it holds, else TPD's latency_ms for the entry), then
+// the per-hop Latency the route-finder attached to the candidate. Zero means
+// unmeasured everywhere — ManagedTransport.GetLatency and TransportEntry.Latency
+// are both "0 = never sampled", never a real reading.
+func firstHopLatencyMs(path []routing.Hop, latencyFor func(uuid.UUID) float64) float64 {
+	if len(path) == 0 {
+		return 0
+	}
+	if latencyFor != nil {
+		if ms := latencyFor(path[0].TpID); ms > 0 {
+			return ms
+		}
+	}
+	if path[0].Latency > 0 {
+		return path[0].Latency
+	}
+	return 0
+}
+
+// firstHopLatencyTrail renders each candidate's first-hop transport (8 chars,
+// as the rest of the decision trail names transports) with the latency that
+// ranked it, so `mux info`'s dial_decision shows WHY a tunnel took the route it
+// took: "95839ad0=39ms, fdab37dd=148ms, 50cdb857=470ms, b414796d=unmeasured".
+func firstHopLatencyTrail(cands [][]routing.Hop, latencyFor func(uuid.UUID) float64, probed map[uuid.UUID]float64) string {
+	out := make([]string, 0, len(cands))
+	for _, p := range cands {
+		if len(p) == 0 {
+			out = append(out, "-")
+			continue
+		}
+		if ms := firstHopLatencyMs(p, latencyFor); ms > 0 {
+			mark := ""
+			if _, ok := probed[p[0].TpID]; ok {
+				mark = " probed"
+			}
+			out = append(out, fmt.Sprintf("%s=%.0fms%s", p[0].TpID.String()[:8], ms, mark))
+			continue
+		}
+		out = append(out, p[0].TpID.String()[:8]+"=unmeasured")
+	}
+	return strings.Join(out, ", ")
+}
+
+// firstHopProbeTimeout bounds the on-demand first-hop latency probe. One round
+// trip to an intermediate is tens to hundreds of milliseconds (39ms to 470ms
+// across the campaign fleet), and every candidate is probed CONCURRENTLY, so
+// this is a ceiling on the whole probe, not a per-candidate cost. A dial is
+// never delayed longer than this, and anything still unmeasured when it expires
+// simply sorts last.
+const firstHopProbeTimeout = 2 * time.Second
+
+// latencyProber is the transport-level active probe the diversify ranking uses:
+// one ping, wait for the pong, bounded by ctx. *transport.ManagedTransport
+// implements it; the interface exists so the ranking can be tested without a
+// live link.
+type latencyProber interface {
+	ProbeLatency(ctx context.Context) (float64, error)
+}
+
+// probeFirstHopLatencies measures the candidates' first hops that have no
+// sample, all at once, bounded by timeout. known reports an already-known
+// latency for a TpID (0 = none); probe yields the prober for a TpID, or nil when
+// this visor does not hold that transport (an intermediate-to-exit hop, say).
+// Returns only the values the probe actually obtained, keyed by TpID.
+//
+// Why a dial probes at all: the periodic transport ping samples a transport only
+// once it is READY, so a first hop this visor holds but has never sent traffic
+// over reports nothing — which is the state every candidate intermediate was in
+// when a multi-tunnel dial had to choose one (2026-09-17: "50cdb857=unmeasured,
+// f1012467=unmeasured, …", and the tie fell to the finder's arbitrary order,
+// landing on the 470ms hop again). One round trip per candidate, in parallel,
+// turns that into a real ranking.
+func probeFirstHopLatencies(
+	ctx context.Context,
+	cands [][]routing.Hop,
+	known func(uuid.UUID) float64,
+	probe func(uuid.UUID) latencyProber,
+	timeout time.Duration,
+) map[uuid.UUID]float64 {
+	if len(cands) == 0 || probe == nil {
+		return nil
+	}
+	todo := make(map[uuid.UUID]latencyProber)
+	for _, p := range cands {
+		if len(p) == 0 {
+			continue
+		}
+		id := p[0].TpID
+		if _, seen := todo[id]; seen {
+			continue
+		}
+		if firstHopLatencyMs(p, known) > 0 {
+			continue // already measured; no round trip needed
+		}
+		if pr := probe(id); pr != nil {
+			todo[id] = pr
+		}
+	}
+	if len(todo) == 0 {
+		return nil
+	}
+
+	pctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	var mu sync.Mutex
+	out := make(map[uuid.UUID]float64, len(todo))
+	var wg sync.WaitGroup
+	for id, pr := range todo {
+		wg.Add(1)
+		go func(id uuid.UUID, pr latencyProber) {
+			defer wg.Done()
+			ms, err := pr.ProbeLatency(pctx)
+			if err != nil || ms <= 0 {
+				return // still unmeasured — it will sort last
+			}
+			mu.Lock()
+			out[id] = ms
+			mu.Unlock()
+		}(id, pr)
+	}
+	wg.Wait()
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// rankFreeFirstHops is THE candidate ordering for a diversify dial, shared by
+// every selection that can win one (the route-finder path, the K-candidate race,
+// the RSN oracle and the hook-race direct route) so they cannot disagree. It
+// probes the first hops that carry no measurement, ranks by measured first-hop
+// latency, and records the ranking — marking probed values — on the dial's
+// decision trail.
+func (r *router) rankFreeFirstHops(ctx context.Context, opts *DialOptions, cands [][]routing.Hop, latencyFor func(uuid.UUID) float64) [][]routing.Hop {
+	probed := probeFirstHopLatencies(ctx, cands, latencyFor, r.firstHopProber, firstHopProbeTimeout)
+	return noteFirstHopRanking(opts, cands, mergeProbedLatency(latencyFor, probed), probed)
+}
+
+// firstHopProber returns the active prober for a transport this visor holds, or
+// nil for one it does not (so a hop deeper in the path is never probed).
+func (r *router) firstHopProber(id uuid.UUID) latencyProber {
+	if r.tm == nil {
+		return nil
+	}
+	tp := r.tm.Transport(id)
+	if tp == nil {
+		return nil
+	}
+	return tp
+}
+
+// mergeProbedLatency layers a probe's fresh readings over the dial's existing
+// TpID→latency lookup.
+func mergeProbedLatency(latencyFor func(uuid.UUID) float64, probed map[uuid.UUID]float64) func(uuid.UUID) float64 {
+	if len(probed) == 0 {
+		return latencyFor
+	}
+	return func(id uuid.UUID) float64 {
+		if ms, ok := probed[id]; ok && ms > 0 {
+			return ms
+		}
+		if latencyFor == nil {
+			return 0
+		}
+		return latencyFor(id)
+	}
+}
+
+// noteFirstHopRanking ranks cands and records the ranking on the dial's decision
+// trail. probed names the values a live probe supplied, so the trail says which
+// numbers were measured on the spot.
+func noteFirstHopRanking(opts *DialOptions, cands [][]routing.Hop, latencyFor func(uuid.UUID) float64, probed map[uuid.UUID]float64) [][]routing.Hop {
+	ranked := rankByFirstHopLatency(cands, latencyFor)
+	if len(ranked) == 0 {
+		return ranked
+	}
+	opts.note("ranked by first-hop latency: %s; chose %s",
+		firstHopLatencyTrail(ranked, latencyFor, probed), firstHopsOf(ranked[:1]))
+	return ranked
+}
+
 // filterDisjointFirstHop returns the candidate paths whose FIRST hop leaves
 // over a transport NOT in excludeTpIDs. It is the route-finder-path counterpart
 // to the local-calc's direct-transport exclusion (calculateLocalRoutes skips an
@@ -1654,6 +1919,77 @@ func filterDisjointFirstHop(cands [][]routing.Hop, excludeTpIDs []uuid.UUID) [][
 		out = append(out, hops)
 	}
 	return out
+}
+
+// filterDisjointFirstHopPeer is filterDisjointFirstHop's PEER-level companion:
+// it drops the candidates whose first hop goes to a visor (or, where the local
+// transport exposes one, an IP) a sibling tunnel already leaves over. One peer
+// answers on several transports — this visor holds stcpr, squicr and sudph
+// transports to the same exit host — so a transport-ID exclusion alone leaves
+// the twins looking free, and a diversify dial that takes one rides the very
+// link it was supposed to leave (measured 2026-09-17: the second tunnel took
+// the squicr twin of the sibling's stcpr first hop and the pair split one link).
+//
+// Returns the input unchanged when there is nothing to exclude; may return an
+// EMPTY slice when every candidate shares a peer — the caller decides whether to
+// fall back, exactly as with the transport-ID filter.
+func (r *router) filterDisjointFirstHopPeer(cands [][]routing.Hop, peers []cipher.PubKey, ips []string) [][]routing.Hop {
+	if len(cands) == 0 || (len(peers) == 0 && len(ips) == 0) {
+		return cands
+	}
+	exclPK := make(map[cipher.PubKey]struct{}, len(peers))
+	for _, pk := range peers {
+		exclPK[pk] = struct{}{}
+	}
+	exclIP := make(map[string]struct{}, len(ips))
+	for _, ip := range ips {
+		exclIP[ip] = struct{}{}
+	}
+	out := make([][]routing.Hop, 0, len(cands))
+	for _, hops := range cands {
+		if len(hops) == 0 {
+			continue
+		}
+		if _, bad := exclPK[hops[0].To]; bad {
+			continue
+		}
+		if len(exclIP) > 0 && r.tm != nil {
+			if tp := r.tm.Transport(hops[0].TpID); tp != nil {
+				if ip := tp.RemoteIP(); ip != "" {
+					if _, bad := exclIP[ip]; bad {
+						continue
+					}
+				}
+			}
+		}
+		out = append(out, hops)
+	}
+	return out
+}
+
+// freeFirstHops is THE first-hop admission test for a diversify dial, shared by
+// every candidate selection that can win one (the route-finder path, the
+// K-candidate race, the RSN oracle and the hook-race direct route) so they
+// cannot disagree about which first hops are taken. A first hop is free when its
+// transport is not one a sibling holds AND its peer/remote-IP is not one a
+// sibling already leaves over.
+func (r *router) freeFirstHops(cands [][]routing.Hop, opts *DialOptions) [][]routing.Hop {
+	if opts == nil {
+		return cands
+	}
+	out := filterDisjointFirstHop(cands, opts.ExcludeTransportIDs)
+	return r.filterDisjointFirstHopPeer(out, opts.ExcludeFirstHopPeers, opts.ExcludeFirstHopIPs)
+}
+
+// firstHopExcluded reports whether a single candidate path's first hop is taken
+// — by transport ID or by peer/IP. The single-path form of freeFirstHops, used
+// to confirm a local-calc or direct-route fallback is genuinely disjoint before
+// returning it for a diversify dial.
+func (r *router) firstHopExcluded(hops []routing.Hop, opts *DialOptions) bool {
+	if len(hops) == 0 || opts == nil {
+		return false
+	}
+	return len(r.freeFirstHops([][]routing.Hop{hops}, opts)) == 0
 }
 
 // firstHopTransportExcluded reports whether the path's first hop leaves over one
@@ -1836,7 +2172,18 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 				if bps := tp.GetThroughputBps(); bps > 0 {
 					throughputCache[id] = bps
 				}
-				continue
+				// A local transport whose ping/pong has not landed a sample yet
+				// (Avg == 0, e.g. freshly created, or the peer answers pings
+				// late) used to end the lookup here and stay unknown forever,
+				// even though TPD carries a measured latency_ms for that very
+				// entry. The first hop of a diversify candidate is ALWAYS a
+				// local transport, so that gap blanked the one signal the
+				// first-hop ranking runs on. Fall through to the snapshot when
+				// we have no local number; the local value still wins when we
+				// do (the snapshot only fills empty cache slots below).
+				if _, known := latencyCache[id]; known {
+					continue
+				}
 			}
 		}
 		misses = append(misses, id)
@@ -1866,11 +2213,17 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 				if entry == nil {
 					continue
 				}
-				if entry.Latency > 0 {
+				// Fill only what the local pass could not: a locally-held
+				// transport reaches this loop when it has no latency sample of
+				// its own, and its own type / throughput readings are fresher
+				// than TPD's.
+				if _, known := latencyCache[id]; !known && entry.Latency > 0 {
 					latencyCache[id] = entry.Latency
 				}
-				typeCache[id] = string(entry.Type)
-				if entry.ThroughputBps > 0 {
+				if typeCache[id] == "" {
+					typeCache[id] = string(entry.Type)
+				}
+				if _, known := throughputCache[id]; !known && entry.ThroughputBps > 0 {
 					throughputCache[id] = entry.ThroughputBps
 				}
 			}
@@ -2022,6 +2375,49 @@ func (r *router) directRoute(src, dst cipher.PubKey) (fwd, rev []routing.Hop, ok
 	})
 	id := cands[0].id
 	return []routing.Hop{{TpID: id, From: src, To: dst}}, []routing.Hop{{TpID: id, From: dst, To: src}}, true
+}
+
+// directRoutes returns EVERY live direct 1-hop route to dst, best first. It is
+// directRoute's multi-candidate form: directRoute answers "the" direct route
+// (type-preference winner) and its caller can then only accept or reject that
+// one, so a diversify dial whose sibling holds it conceded the hook race even
+// when this visor had a SECOND, free direct transport to the same exit. The
+// order is the shared first-hop rule (rankByFirstHopLatency): measured latency
+// lowest first, unmeasured last, with the transport-type preference it inherits
+// as the stable tiebreak. Each hop carries its own measured latency
+// (tp.GetLatency(), ms — the field a leg snapshot reports as latency_ms), so the
+// ranking needs no lookup.
+func (r *router) directRoutes(src, dst cipher.PubKey) [][]routing.Hop {
+	if r.tm == nil {
+		return nil
+	}
+	type cand struct {
+		id        uuid.UUID
+		tpType    string
+		latencyMs float64
+	}
+	var cands []cand
+	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if tp == nil || tp.IsClosed() || tp.Entry.Label == transport.LabelSetup {
+			return true
+		}
+		if tp.Entry.RemoteEdge(src) == dst {
+			cands = append(cands, cand{id: tp.Entry.ID, tpType: string(tp.Entry.Type), latencyMs: tp.GetLatency()})
+		}
+		return true
+	})
+	if len(cands) == 0 {
+		return nil
+	}
+	sort.SliceStable(cands, func(i, j int) bool {
+		return tptypes.TypePreference(tptypes.Type(cands[i].tpType)) <
+			tptypes.TypePreference(tptypes.Type(cands[j].tpType))
+	})
+	out := make([][]routing.Hop, 0, len(cands))
+	for _, c := range cands {
+		out = append(out, []routing.Hop{{TpID: c.id, From: src, To: dst, Latency: c.latencyMs}})
+	}
+	return rankByFirstHopLatency(out, nil)
 }
 
 // calculateLocalRoutes attempts to calculate routes locally using the transport manager
@@ -3090,7 +3486,7 @@ func intermediatesOfRouteGroup(nrg *NoiseRouteGroup, src, dst cipher.PubKey) []c
 // Locking: the matching *NoiseRouteGroup values are snapshotted under r.mx,
 // then their transports are read WITHOUT r.mx held (each via the group's own
 // rg.mu), so we never hold r.mx while taking a route-group lock.
-func (r *router) siblingRouteGroupExclusions(lPK, rPK cipher.PubKey, rPort routing.Port) (ids []uuid.UUID, pks []cipher.PubKey, count int) {
+func (r *router) siblingRouteGroupExclusions(lPK, rPK cipher.PubKey, rPort routing.Port) (ids []uuid.UUID, pks []cipher.PubKey, peers []cipher.PubKey, ips []string, count int) {
 	r.mx.Lock()
 	var siblings []*NoiseRouteGroup
 	for desc, nrg := range r.rgsNs {
@@ -3111,11 +3507,22 @@ func (r *router) siblingRouteGroupExclusions(lPK, rPK cipher.PubKey, rPort routi
 				continue
 			}
 			ids = append(ids, tp.Entry.ID)
+			// The first hop's PEER, not just its transport: one peer usually
+			// answers on several transports (stcpr + squicr + sudph to the same
+			// exit host), and a tunnel over any of them rides the same link as
+			// this sibling. Its remote IP too where the transport exposes one,
+			// so the same host behind a second PK is caught as well.
+			if peer := tp.Entry.RemoteEdge(lPK); peer != lPK {
+				peers = append(peers, peer)
+			}
+			if ip := tp.RemoteIP(); ip != "" {
+				ips = append(ips, ip)
+			}
 		}
 		nrg.rg.mu.Unlock()
 		pks = append(pks, intermediatesOfRouteGroup(nrg, lPK, rPK)...)
 	}
-	return ids, pks, count
+	return ids, pks, peers, ips, count
 }
 
 // extractFailedIntermediatePK walks an error chain looking for a
