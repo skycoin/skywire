@@ -341,10 +341,15 @@ type uploadStripe struct {
 	ackedAt  time.Time // when it last advanced
 	err      error
 	final    []byte
+	// evicted holds the chunk starts the sink NAMED as dropped (X-Upload-Evicted)
+	// since they were last sent. A named drop is re-sent the moment the notice
+	// lands, so the uploadDurableWait backstop is the rare path — it only covers
+	// an eviction whose notice was lost with its own tunnel.
+	evicted map[int64]bool
 }
 
 func newUploadStripe(c *Client, u *uploadCandidate, body io.Reader) *uploadStripe {
-	s := &uploadStripe{c: c, u: u, id: newUploadID(), body: body, ackedAt: time.Now()}
+	s := &uploadStripe{c: c, u: u, id: newUploadID(), body: body, ackedAt: time.Now(), evicted: map[int64]bool{}}
 	s.cond = sync.NewCond(&s.mu)
 	return s
 }
@@ -436,13 +441,22 @@ func (s *uploadStripe) run() ([]byte, error) {
 
 // slots is how many chunk buffers may exist at once — the memory gate, and with
 // it the most bytes the upload ever offers the sink out of order. It is the
-// smaller of our own ceiling and the reorder window the sink advertised: going
-// past what the sink will hold only earns 425s and a re-send of bytes that were
-// already on the wire.
+// smaller of our own ceiling and the reorder window the sink advertised, LESS
+// one tunnel's worth of headroom.
+//
+// The headroom is what the cut bench cost us: the sink charges inflight +
+// held + this chunk against its window, so a chunk being SENT AGAIN is a second
+// charge beside the copy it is still holding. Filling the window with live
+// buffers left no room for that, and the sink evicted an already-202'd chunk to
+// admit the re-send — each eviction a 5 s stall and a 4 MiB re-send, three of
+// them a failed object (bench/2026-09-16/3194b7cc8-smoke: 0.43/0.76 MB/s after
+// the cut, one trial a 502).
 func (s *uploadStripe) slots() int {
 	n := uploadMemBytes / uploadChunkBytes
-	if w := s.u.window; w > 0 && w/uploadChunkBytes < n {
-		n = w / uploadChunkBytes
+	if w := s.u.window; w > 0 {
+		if sinkMax := w/uploadChunkBytes - int64(s.perTunnel()); sinkMax < n {
+			n = sinkMax
+		}
 	}
 	if n < 1 {
 		n = 1
@@ -520,7 +534,23 @@ func (s *uploadStripe) note(ack chunkAck) {
 	if ack.final != nil && s.final == nil {
 		s.final, s.ackedAt = ack.final, time.Now()
 	}
+	for _, off := range ack.evicted {
+		if off > s.acked {
+			if s.evicted == nil {
+				s.evicted = map[int64]bool{}
+			}
+			s.evicted[off] = true
+		}
+	}
 	s.cond.Broadcast()
+	s.mu.Unlock()
+}
+
+// clearEviction forgets any notice for a chunk that is about to go out again, so
+// only a drop of THIS copy sends it a third time.
+func (s *uploadStripe) clearEviction(start int64) {
+	s.mu.Lock()
+	delete(s.evicted, start)
 	s.mu.Unlock()
 }
 
@@ -532,6 +562,11 @@ func (s *uploadStripe) awaitDurable(start, end int64) bool {
 	for {
 		if s.err != nil || s.final != nil || s.acked > end {
 			return true
+		}
+		// The sink NAMED this chunk as dropped. No waiting: put it back now.
+		if s.evicted[start] {
+			delete(s.evicted, start)
+			return false
 		}
 		// The prefix has reached our offset and our bytes are not in it. A chunk
 		// the sink still held would have been drained in under the same lock that
@@ -558,6 +593,7 @@ type chunkAck struct {
 	received   int64         // X-Upload-Received: the sink's durable contiguous prefix
 	nextOffset int64         // X-Next-Offset on a 425: where the sink's frontier is
 	retryAfter time.Duration // Retry-After
+	evicted    []int64       // X-Upload-Evicted: chunk starts the sink dropped from its window
 	final      []byte        // the serialized response, when it carries the object's hash
 }
 
@@ -572,6 +608,7 @@ type chunkAck struct {
 // chunk is gone and goes again.
 func (s *uploadStripe) sendChunk(start, end int64, buf []byte) error {
 	for pass := 1; ; pass++ {
+		s.clearEviction(start)
 		s.mu.Lock()
 		s.sending++
 		s.mu.Unlock()
@@ -723,12 +760,14 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 				return ack, e
 			}
 		default:
+			endBodyWriter(st, werr)
 		}
 		return ack, rerr
 	}
 	defer resp.Body.Close() //nolint:errcheck
 	body, err := io.ReadAll(io.LimitReader(resp.Body, uploadAckBodyLimit))
 	if err != nil {
+		endBodyWriter(st, werr)
 		return ack, err
 	}
 	ack = readChunkAck(resp, body)
@@ -738,8 +777,22 @@ func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err
 		if e := <-werr; e != nil {
 			return chunkAck{}, e
 		}
+		return ack, nil
 	}
+	// Anything else — a 425 above all — was answered WITHOUT draining the body,
+	// so the writer is still parked mid-chunk. Returning here would leave it
+	// writing into a stream the deferred Close is about to take away; end it and
+	// join it, so no goroutine outlives the attempt that started it.
+	endBodyWriter(st, werr)
 	return ack, nil
+}
+
+// endBodyWriter stops the body goroutine and joins it. Closing the stream is
+// what unparks a writer the sink stopped reading; the error it comes back with
+// is the expected one and is not the chunk's verdict — the sink's status is.
+func endBodyWriter(st net.Conn, werr <-chan error) {
+	_ = st.Close() //nolint:errcheck,gosec
+	<-werr
 }
 
 // chunkURI is the browser's own request-URI with the session id and object size
@@ -764,6 +817,14 @@ func readChunkAck(resp *http.Response, body []byte) chunkAck {
 	}
 	if v, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil && v > 0 {
 		ack.retryAfter = time.Duration(v) * time.Second
+	}
+	// A sink that names what it dropped saves us the uploadDurableWait guess. A
+	// sink that does not send the header is unchanged — the backstop still covers
+	// it, which is what makes the header safe to add to a live protocol.
+	for _, f := range strings.Split(resp.Header.Get("X-Upload-Evicted"), ",") {
+		if v, err := strconv.ParseInt(strings.TrimSpace(f), 10, 64); err == nil && v >= 0 {
+			ack.evicted = append(ack.evicted, v)
+		}
 	}
 	// The ack that carries the whole object's hash is the one the browser sees.
 	if resp.StatusCode/100 == 2 && resp.Header.Get("X-Sha256") != "" {

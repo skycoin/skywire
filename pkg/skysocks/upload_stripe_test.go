@@ -162,9 +162,9 @@ func TestUploadSlotsHonorTheSinksWindow(t *testing.T) {
 	if got := s.slots(); got != 4 {
 		t.Fatalf("an origin that did not advertise a window → %d slots, want our own 4", got)
 	}
-	s.u.window = 8 << 20
-	if got := s.slots(); got != 2 {
-		t.Fatalf("an 8 MiB window → %d slots, want 2", got)
+	s.u.window = 8 << 20 // two chunks, both of them the re-send headroom
+	if got := s.slots(); got != 1 {
+		t.Fatalf("an 8 MiB window → %d slots, want 1", got)
 	}
 	s.u.window = 1 << 20 // smaller than one chunk: one chunk at a time, never none
 	if got := s.slots(); got != 1 {
@@ -533,5 +533,96 @@ func TestUploadToNonOptInOriginIsUnchanged(t *testing.T) {
 	defer mu.Unlock()
 	if posts != 1 || puts != 0 {
 		t.Fatalf("origin saw %d POST(s) and %d PUT(s), want exactly one whole-body POST", posts, puts)
+	}
+}
+
+// TestUploadSlotsLeaveTheSinkHeadroom: the live buffers plus one tunnel's worth
+// of re-send always fit the sink's window. Without the headroom a re-send is a
+// second charge beside the copy the sink is still holding, and the sink evicts
+// an already-202'd chunk to admit it — the cut bench's 5 s-per-eviction stall
+// (bench/2026-09-16/3194b7cc8-smoke).
+func TestUploadSlotsLeaveTheSinkHeadroom(t *testing.T) {
+	defer restoreUploadTunables(uploadChunkBytes, uploadMemBytes, uploadStripeMinBytes, uploadConcurrency)()
+	uploadChunkBytes = 4 << 20
+	uploadMemBytes = 64 << 20
+	for _, window := range []int64{8 << 20, 16 << 20, 32 << 20, 64 << 20} {
+		s := &uploadStripe{u: &uploadCandidate{window: window}}
+		live := int64(s.slots()) * uploadChunkBytes
+		resend := int64(s.perTunnel()) * uploadChunkBytes
+		if live+resend > window && s.slots() > 1 {
+			t.Fatalf("a %d-byte window → %d live + %d re-send bytes, past the window",
+				window, live, resend)
+		}
+	}
+	s := &uploadStripe{u: &uploadCandidate{window: 32 << 20}}
+	if got := s.slots(); got != 6 {
+		t.Fatalf("a 32 MiB window with 4 MiB chunks → %d slots, want 8 less the 2-chunk headroom", got)
+	}
+}
+
+// TestReadChunkAckNamesTheEvictedChunks: the sink's eviction notice is parsed,
+// and an ack without one leaves the list empty (an old sink is unchanged).
+func TestReadChunkAckNamesTheEvictedChunks(t *testing.T) {
+	read := func(raw string) chunkAck {
+		t.Helper()
+		resp, err := http.ReadResponse(bufio.NewReader(strings.NewReader(raw)), &http.Request{Method: http.MethodPut})
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		return readChunkAck(resp, nil)
+	}
+	ack := read("HTTP/1.1 202 Accepted\r\nX-Upload-Received: 4096\r\nX-Upload-Evicted: 8192, 12288\r\nContent-Length: 0\r\n\r\n")
+	if len(ack.evicted) != 2 || ack.evicted[0] != 8192 || ack.evicted[1] != 12288 {
+		t.Fatalf("evicted = %v, want [8192 12288]", ack.evicted)
+	}
+	if ack := read("HTTP/1.1 202 Accepted\r\nX-Upload-Received: 4096\r\nContent-Length: 0\r\n\r\n"); ack.evicted != nil {
+		t.Fatalf("a sink that does not send the header → %v, want none", ack.evicted)
+	}
+}
+
+// TestEvictedChunkIsResentWithoutTheBackstop: a named eviction re-queues the
+// chunk at once. The uploadDurableWait backstop still covers a notice lost with
+// its tunnel, but it must no longer be the ordinary path — at 5 s per eviction
+// it is what failed the object after uploadResendPasses.
+func TestEvictedChunkIsResentWithoutTheBackstop(t *testing.T) {
+	s := newUploadStripe(nil, &uploadCandidate{total: 16384}, nil)
+	s.mu.Lock()
+	s.sending = 1 // something is still going out: the backstop cannot fire
+	s.mu.Unlock()
+
+	done := make(chan bool, 1)
+	go func() { done <- s.awaitDurable(8192, 12287) }()
+	select {
+	case got := <-done:
+		t.Fatalf("awaitDurable returned %v before any ack", got)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	s.note(chunkAck{status: http.StatusAccepted, received: 4096, evicted: []int64{8192}})
+	start := time.Now()
+	select {
+	case got := <-done:
+		if got {
+			t.Fatal("a named eviction must send the chunk again, not report it durable")
+		}
+		if elapsed := time.Since(start); elapsed >= uploadDurableWait {
+			t.Fatalf("the re-send waited %v; the notice must not go through the backstop", elapsed)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a named eviction did not re-queue the chunk")
+	}
+
+	// The notice is consumed: the same chunk, sent again, waits on the prefix.
+	s.mu.Lock()
+	stale := s.evicted[8192]
+	s.mu.Unlock()
+	if stale {
+		t.Fatal("the notice must be cleared once it has been acted on")
+	}
+
+	// A prefix that passes the chunk is durability, notice or not.
+	s.note(chunkAck{status: http.StatusOK, received: 12288})
+	if !s.awaitDurable(8192, 12287) {
+		t.Fatal("a prefix past the chunk's end is durable")
 	}
 }
