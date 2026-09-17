@@ -1,0 +1,7 @@
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=6745065a5 exit_commit=a5b973a97 session=degtunnels-2 subject=tunnels-2 tunnels=2 pin_assign=rg49213=03f57e7c rg49214=0371ab4b route_groups=2 legs_per_rg=1+1 rg_ports=49213,49214 groups=rg49213=[stcpr>03f57e7c@fdab37dd] rg49214=[stcpr>0371ab4b@95839ad0] cut=tp:95839ad0-b588-0b1d-8475-45fba6ae993c cut_pct=40 cut_after=3s sink=http://127.0.0.1:18080
+mux-degrade-tunnels-2-t1	down	50000000	6205692	200	50000000	8.057123	1
+mux-degrade-tunnels-2-t2	down	50000000	7042273	200	50000000	7.099984	1
+mux-degrade-tunnels-2-t3	down	50000000	3265510	200	50000000	15.311547	1
+mux-degrade-tunnels-2-t1	up	50000000	6082196	100	30408704	4.999644	0
+mux-degrade-tunnels-2-t2	up	50000000	10530464	100	45023232	4.275540	0
+mux-degrade-tunnels-2-t3	up	50000000	10825760	100	43843584	4.049948	0
