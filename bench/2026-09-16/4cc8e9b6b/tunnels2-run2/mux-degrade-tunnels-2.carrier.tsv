@@ -1,0 +1,8 @@
+# row	tp	sent_delta	recv_delta
+1	95839ad0-b588-0b1d-8475-45fba6ae993c	1223	1562778
+1	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	4039	50147291
+1	legs	49195:fdab37dd 49197:b414796d	-
+2	95839ad0-b588-0b1d-8475-45fba6ae993c	?	?
+2	fdab37dd-c35e-05bc-9e51-cd6b024e3eec	4402	50269355
+2	legs	49198:fdab37dd	-
+# rg dst_ports before=49195,49196 after=49201,49202,49203 CHANGED
