@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -88,5 +89,62 @@ func TestLoadtestFixedServesRanges(t *testing.T) {
 	}
 	if rec, _ := get("bytes=700000-"); rec.Code != http.StatusRequestedRangeNotSatisfiable || rec.Header().Get("Content-Range") != "bytes */700000" {
 		t.Fatalf("unsatisfiable range: code=%d content-range=%q", rec.Code, rec.Header().Get("Content-Range"))
+	}
+}
+
+// TestLoadtestFixedHashesAnObjectOnce pins the cost fix: the whole-object
+// SHA-256 that X-Sha256 carries is a function of N alone, so it is computed once
+// per N however many ranged GETs ask for it — a range-split download of a 50 MB
+// object used to make the sink hash 600 MB. The ranged bytes must still be the
+// whole object's bytes at that offset.
+func TestLoadtestFixedHashesAnObjectOnce(t *testing.T) {
+	const nStr = "1234567" // five 256 KiB chunks; a size no other test uses
+	get := func(rng string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/?bytes="+nStr, nil)
+		if rng != "" {
+			req.Header.Set("Range", rng)
+		}
+		rec := httptest.NewRecorder()
+		loadtestFixed(rec, req, nStr)
+		return rec
+	}
+
+	before := loadtestSumCalcs.Load()
+	full := get("")
+	require.Equal(t, http.StatusOK, full.Code)
+	require.Equal(t, before+1, loadtestSumCalcs.Load(), "the first request computes the hash")
+	body := full.Body.Bytes()
+	require.Len(t, body, 1234567)
+
+	after := loadtestSumCalcs.Load()
+	for _, r := range []string{"bytes=0-299999", "bytes=300000-1234566"} {
+		rec := get(r)
+		require.Equal(t, http.StatusPartialContent, rec.Code, r)
+		require.Equal(t, full.Header().Get("X-Sha256"), rec.Header().Get("X-Sha256"), r)
+		s, e, ok := parseByteRange(r, 1234567)
+		require.True(t, ok, r)
+		require.Equal(t, body[s:e+1], rec.Body.Bytes(), "%s: a range is the whole object's bytes at that offset", r)
+	}
+	require.Equal(t, after, loadtestSumCalcs.Load(), "a ranged GET must not re-hash the whole object")
+}
+
+// TestLoadtestSumIsComputedOnceUnderConcurrency covers the shape the bench
+// actually produces: the chunks of one range-split download arrive together, so
+// a plain map cache would let every one of them start its own hash. They share
+// the single computation instead.
+func TestLoadtestSumIsComputedOnceUnderConcurrency(t *testing.T) {
+	const n = 7_654_321 // a size no other test uses
+	before := loadtestSumCalcs.Load()
+	var wg sync.WaitGroup
+	sums := make([]string, 16)
+	for i := range sums {
+		wg.Add(1)
+		go func(i int) { defer wg.Done(); sums[i] = loadtestSum(n) }(i)
+	}
+	wg.Wait()
+	require.Equal(t, before+1, loadtestSumCalcs.Load(), "16 concurrent askers, one computation")
+	for _, s := range sums {
+		require.Equal(t, sums[0], s)
+		require.Len(t, s, 64)
 	}
 }

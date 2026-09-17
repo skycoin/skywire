@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -272,26 +273,75 @@ func loadtestPattern(buf []byte, seed, offset uint64) {
 	}
 }
 
-// loadtestFixed serves exactly n bytes of the pattern with its SHA-256 in
-// X-Sha256 (the hash is computed in a first pass, which is fast next to the
-// transfer it certifies).
-func loadtestFixed(w http.ResponseWriter, r *http.Request, nStr string) {
-	n, err := strconv.ParseUint(nStr, 10, 63)
-	if err != nil || n == 0 {
-		http.Error(w, "bytes: want a positive integer", http.StatusBadRequest)
-		return
+// loadtestChunk is the pattern's seeding granularity: the body is generated (and
+// hashed) 256 KiB at a time from the ABSOLUTE offset, so any byte range is a
+// slice of its aligned chunks and no range needs the bytes before it.
+const loadtestChunk = 256 * 1024
+
+// loadtestSumEntry is one cached whole-object hash. ready is closed once sum is
+// set, so the concurrent ranged GETs of a single range-split download share the
+// one computation instead of each starting their own.
+type loadtestSumEntry struct {
+	ready chan struct{}
+	sum   string
+}
+
+// loadtestSumCacheMax bounds the cache. The bench uses a handful of sizes; past
+// the cap a size is hashed per request, exactly as before.
+const loadtestSumCacheMax = 64
+
+var (
+	loadtestSumMu    sync.Mutex
+	loadtestSums     = map[uint64]*loadtestSumEntry{}
+	loadtestSumCalcs atomic.Uint64 // whole-object hash computations (the test asserts the cache holds)
+)
+
+// loadtestSum returns the hex SHA-256 of the whole n-byte body, computing it at
+// most once per n. The body is a pure function of n, so the hash is too — but it
+// used to be recomputed on EVERY request, including each ranged GET of a
+// range-split download: 12 chunks of a 50 MB object hashed 600 MB on a 2-core
+// exit, ~1.6 s of CPU that the equivalent single GET never paid, landing in
+// time-to-first-byte and taxing the split for being a split.
+func loadtestSum(n uint64) string {
+	loadtestSumMu.Lock()
+	e, hit := loadtestSums[n]
+	if hit {
+		loadtestSumMu.Unlock()
+		<-e.ready
+		return e.sum
 	}
-	const chunk = 256 * 1024
-	buf := make([]byte, chunk)
+	e = &loadtestSumEntry{ready: make(chan struct{})}
+	if len(loadtestSums) < loadtestSumCacheMax {
+		loadtestSums[n] = e
+	}
+	loadtestSumMu.Unlock()
+
+	loadtestSumCalcs.Add(1)
+	buf := make([]byte, loadtestChunk)
 	h := sha256.New()
-	for off := uint64(0); off < n; off += chunk {
-		m := uint64(chunk)
+	for off := uint64(0); off < n; off += loadtestChunk {
+		m := uint64(loadtestChunk)
 		if n-off < m {
 			m = n - off
 		}
 		loadtestPattern(buf[:m], n, off)
 		h.Write(buf[:m]) //nolint:errcheck,gosec // hash.Hash never errors
 	}
+	e.sum = hex.EncodeToString(h.Sum(nil))
+	close(e.ready)
+	return e.sum
+}
+
+// loadtestFixed serves exactly n bytes of the pattern with the whole object's
+// SHA-256 in X-Sha256 (cached per n by loadtestSum, so a ranged GET generates
+// only the bytes it serves).
+func loadtestFixed(w http.ResponseWriter, r *http.Request, nStr string) {
+	n, err := strconv.ParseUint(nStr, 10, 63)
+	if err != nil || n == 0 {
+		http.Error(w, "bytes: want a positive integer", http.StatusBadRequest)
+		return
+	}
+	const chunk = loadtestChunk
 	// Byte ranges (RFC 9110 §14): the proxy's transparent range-splitter fetches
 	// a range-capable :80 origin as concurrent chunks over separate tunnels, so
 	// the sink serves any byte range of the same deterministic body. The
@@ -313,11 +363,12 @@ func loadtestFixed(w http.ResponseWriter, r *http.Request, nStr string) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Length", strconv.FormatUint(end-start+1, 10))
-	w.Header().Set("X-Sha256", hex.EncodeToString(h.Sum(nil)))
+	w.Header().Set("X-Sha256", loadtestSum(n))
 	w.WriteHeader(status)
 	if r.Method == http.MethodHead {
 		return
 	}
+	buf := make([]byte, chunk)
 	fl, _ := w.(http.Flusher)
 	for off := start - start%chunk; off <= end; off += chunk {
 		m := uint64(chunk)
