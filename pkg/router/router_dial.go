@@ -405,9 +405,23 @@ func (r *router) DialRoutes(
 			select {
 			case <-hookDone:
 				hookDone = nil // consume the race signal once
-				if f, rv, ok := r.directRoute(lPK, rPK); ok {
+				// A diversify dial's direct route must not leave over a transport a
+				// sibling tunnel already holds: this race is won instantly when the
+				// direct transport already exists, and it handed every extra tunnel
+				// the same first hop with none of the filtered paths ever consulted
+				// (the dial_decision trail ended at the seeded exclusion). Take the
+				// finder's filtered result instead.
+				f, rv, ok := r.directRoute(lPK, rPK)
+				if ok && opts.DiversifyTransports && firstHopTransportExcluded(f, opts.ExcludeTransportIDs) {
+					opts.note("hook-race: direct route over excluded %s; awaiting the finder", f[0].TpID.String()[:8])
+					ok = false
+				}
+				if ok {
 					cancelFetch() // direct transport up → abandon the finder query
 					log.Debug("Direct transport ready; using 1-hop route (route-finder query abandoned)")
+					if opts.DiversifyTransports {
+						opts.note("hook-race: direct route %s", f[0].TpID.String()[:8])
+					}
 					forwardPath, reversePath, err = f, rv, nil
 				} else {
 					// Hook finished but no direct transport (dst not directly
