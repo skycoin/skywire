@@ -147,14 +147,37 @@ because cutting the reference costs every later paired row of the set;
 `CUT_REF_FENCE=0` restores the old choice.
 
     bench/exit-resources.sh <out dir> <label>          # one reading
-    bench/exit-resources-check.sh <out dir> <set>      # score the pre/post pair
+    bench/exit-resources-check.sh <out dir> <set>      # score one set
+    bench/exit-resources-check.sh <out dir> --slope    # score the whole run
 
 The reading is taken over `pty exec` on the exit: RssAnon and CPU seconds of the
-skywire unit's MainPID, the 1-minute load, and the idle CPU rate sampled inside
-the reading. The gate FAILS a set whose RssAnon grew by more than **64 MiB** or
-whose CPU per wall second ran more than **half a core** above the pre-set idle
-rate. A failed check keeps every result and makes the run script exit non-zero
-at the end; a reading that could not be taken is SKIP, not FAIL.
+skywire unit's MainPID, the 1-minute load, the idle CPU rate sampled inside the
+reading, and the visor's own `diag.runtime` (`sys_mb`, `heap_alloc_mb`,
+`num_gc`, `goroutines`) from the same exec, so the OS number and the Go number
+share an instant. A run opens with one 50 MB warm-up transfer and a `warmup`
+reading; each set is then scored on a `<set>-settled` reading taken
+`EXIT_RES_SETTLE_S` (30 s) after its post, and FAILS on `settled - pre` above
+**64 MiB** (`EXIT_RES_RSS_KB`), on `sys_mb` growth above **96 MB**
+(`EXIT_RES_SYS_MB`), or on CPU per wall second more than **half a core** above
+the pre-set idle rate; the run then ends with `--slope`, which FAILS a
+least-squares RssAnon drift above `EXIT_RES_SLOPE_KB_MIN` (2048 KiB/min) over a
+span of at least 20 minutes.
+
+Why that shape: the exit pays its cold-start heap high-water on whichever set
+runs first, which is the whole reason campaign21 and the dc23fd9ff smoke each
+failed set 1 by +66 / +76 MiB and passed every set after it, so the warm-up buys
+that high-water outside any set's bracket. Go's scavenger hands back what a set
+borrowed — the smoke returned 52 MiB in 29 idle seconds between two sets — so
+what a set KEPT is the settled reading, not the post. The per-set delta alone
+therefore flags warm-up and little else, while the drift that actually walks
+toward the cgroup ceiling (campaign21: 347 -> 479 MB, 2393 KiB/min over 43
+minutes) appears in no single set and is what the slope check is for — and
+RssAnon over the bar with `sys_mb` flat underneath it is named in the verdict as
+the non-Go anonymous class, the mmap'd-bbolt kind that OOM-killed this exit
+seven times on 2026-09-16.
+
+A failed check keeps every result and makes the run script exit non-zero at the
+end; a reading that could not be taken is SKIP, not FAIL.
 
 ## Standby tunnel pool, unattended
 
