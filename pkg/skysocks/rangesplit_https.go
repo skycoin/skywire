@@ -244,32 +244,43 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 		return
 	}
 
+	// Start the remaining chunks NOW, so their streams (and the TLS handshakes
+	// behind them) overlap chunk0's delivery to the browser.
+	var pending *chunkFetches
+	if total > c.rs.chunkSize {
+		if c.appCl != nil {
+			c.appCl.Log().Debugf("https range-split: %s %d bytes → %d chunks × %d streams",
+				host, total, numChunks(total, c.rs.chunkSize), c.rs.concurrency)
+		}
+		c.rsSplits.Add(1)
+		c.rsChunks.Add(uint64(numChunks(total, c.rs.chunkSize))) //nolint:gosec // numChunks>0 here (total>chunkSize)
+		c.rsBytes.Add(uint64(total))                             //nolint:gosec // total>0 checked above
+		c.rsActive.Add(1)
+		pending = c.startChunkFetches(total, func(start, end int64) ([]byte, error) {
+			return c.fetchChunkTLSRetry(req, host, validator, start, end)
+		})
+	}
+
 	// chunk0 body straight from the probe response.
 	chunk0Len := c.rs.chunkSize
 	if total < chunk0Len {
 		chunk0Len = total
 	}
 	if _, err := io.CopyN(btls, br, chunk0Len); err != nil {
+		if pending != nil {
+			pending.abort()
+			c.rsActive.Add(-1)
+		}
 		closeBoth(btls, otls)
 		return
 	}
 	otls.Close() //nolint:errcheck,gosec // origin stream0 done; remaining chunks use fresh TLS streams
-	if total <= c.rs.chunkSize {
+	if pending == nil {
 		btls.Close() //nolint:errcheck,gosec
 		return
 	}
 
-	if c.appCl != nil {
-		c.appCl.Log().Debugf("https range-split: %s %d bytes → %d chunks × %d streams",
-			host, total, numChunks(total, c.rs.chunkSize), c.rs.concurrency)
-	}
-	c.rsSplits.Add(1)
-	c.rsChunks.Add(uint64(numChunks(total, c.rs.chunkSize))) //nolint:gosec // numChunks>0 here (total>chunkSize)
-	c.rsBytes.Add(uint64(total))                             //nolint:gosec // total>0 checked above
-	c.rsActive.Add(1)
-	c.streamRemainingChunks(btls, total, func(start, end int64) ([]byte, error) {
-		return c.fetchChunkTLSRetry(req, host, validator, start, end)
-	}, func(w net.Conn, start int64) (int64, error) {
+	pending.writeInOrder(btls, func(w net.Conn, start int64) (int64, error) {
 		return c.streamTailTLSOnce(w, req, host, validator, start, total)
 	})
 	c.rsActive.Add(-1)
@@ -305,7 +316,10 @@ func (c *Client) fetchChunkTLS(req *http.Request, host, validator string, start,
 	defer st.Close() //nolint:errcheck,gosec
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
-	if err := c.exitConnect(st, host, 443); err != nil {
+	// Greeting and CONNECT go out together (one round trip instead of two); the
+	// TLS ClientHello cannot be queued behind them because the origin only exists
+	// once the exit has dialed it.
+	if err := c.exitConnectPipelined(st, host, 443, nil); err != nil {
 		return nil, err
 	}
 	tconn := tls.Client(st, c.originTLSConfig(host))

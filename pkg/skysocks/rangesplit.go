@@ -29,6 +29,7 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/skynetca"
@@ -207,39 +208,52 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 		return host, nil, true
 	}
 
-	// 6. chunk0 body (bytes 0..min(chunkSize,total)-1) straight from stream0.
+	// 6. Start the remaining chunks NOW, over fresh exit streams — they run
+	//    concurrently with chunk0's delivery below. Waiting for chunk0's whole
+	//    body to reach the browser first meant the parallel streams only began
+	//    paying their setup cost after a full chunk had been delivered.
+	var pending *chunkFetches
+	if total > c.rs.chunkSize {
+		if c.appCl != nil {
+			c.appCl.Log().Debugf("range-split: %s %d bytes → %d chunks × %d streams",
+				host, total, numChunks(total, c.rs.chunkSize), c.rs.concurrency)
+		}
+		// Observability counters (surfaced as proxystatus.RangeSplit): this is a
+		// committed multi-chunk split, so record it and mark it in flight for the
+		// duration of the concurrent fetch.
+		c.rsSplits.Add(1)
+		c.rsChunks.Add(uint64(numChunks(total, c.rs.chunkSize))) //nolint:gosec // numChunks>0 here (total>chunkSize)
+		c.rsBytes.Add(uint64(total))                             //nolint:gosec // total>0 checked above
+		c.rsActive.Add(1)
+		pending = c.startChunkFetches(total, func(start, end int64) ([]byte, error) {
+			return c.fetchChunkRetry(req, host, validator, start, end)
+		})
+	}
+
+	// 7. chunk0 body (bytes 0..min(chunkSize,total)-1) straight from stream0.
 	chunk0Len := c.rs.chunkSize
 	if total < chunk0Len {
 		chunk0Len = total
 	}
 	if _, err := io.CopyN(conn, br, chunk0Len); err != nil {
+		if pending != nil {
+			pending.abort()
+			c.rsActive.Add(-1)
+		}
 		conn.Close()   //nolint:errcheck,gosec
 		stream.Close() //nolint:errcheck,gosec
 		return host, nil, true
 	}
 	stream.Close() //nolint:errcheck,gosec // stream0 done; remaining chunks use fresh streams
-	if total <= c.rs.chunkSize {
+	if pending == nil {
 		conn.Close() //nolint:errcheck,gosec
 		return host, nil, true
 	}
 
-	// 7. Remaining chunks fetched concurrently over fresh exit streams, written in
-	//    order. A failed chunk (after retries) truncates the download — the browser
-	//    sees a short read and retries, exactly as with any dropped connection.
-	if c.appCl != nil {
-		c.appCl.Log().Debugf("range-split: %s %d bytes → %d chunks × %d streams",
-			host, total, numChunks(total, c.rs.chunkSize), c.rs.concurrency)
-	}
-	// Observability counters (surfaced as proxystatus.RangeSplit): this is a
-	// committed multi-chunk split, so record it and mark it in flight for the
-	// duration of the concurrent fetch.
-	c.rsSplits.Add(1)
-	c.rsChunks.Add(uint64(numChunks(total, c.rs.chunkSize))) //nolint:gosec // numChunks>0 here (total>chunkSize)
-	c.rsBytes.Add(uint64(total))                             //nolint:gosec // total>0 checked above
-	c.rsActive.Add(1)
-	c.streamRemainingChunks(conn, total, func(start, end int64) ([]byte, error) {
-		return c.fetchChunkRetry(req, host, validator, start, end)
-	}, func(w net.Conn, start int64) (int64, error) {
+	// 8. Drain the already-running chunk fetches to the browser in order. A chunk
+	//    that exhausts its retries degrades to the sequential rescue rather than
+	//    truncating the download.
+	pending.writeInOrder(conn, func(w net.Conn, start int64) (int64, error) {
 		return c.streamTailOnce(w, req, host, validator, start, total)
 	})
 	c.rsActive.Add(-1)
@@ -247,11 +261,95 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	return host, nil, true
 }
 
-// streamRemainingChunks fetches [chunkSize, total) as concurrent ranges and writes
-// them to conn in order, using fetch to retrieve one [start,end] byte range (the
-// caller supplies the plaintext or TLS-over-exit fetch). Outstanding (in-flight +
-// buffered) chunks are bounded to the configured concurrency so memory stays
-// ~concurrency×chunkSize.
+// rsChunk is one outstanding byte range: its bytes once fetched, or the error
+// that ended its retry budget.
+type rsChunk struct {
+	start, end int64
+	buf        []byte
+	err        error
+	done       chan struct{}
+}
+
+// chunkFetches is a running set of concurrent range fetches, started BEFORE the
+// consumer needs the bytes (chunk0 is still draining to the browser) and drained
+// in order by writeInOrder. Splitting start from drain is what lets the parallel
+// streams — and the exit's origin dials behind them — overlap chunk0's delivery
+// instead of beginning a full chunk later.
+type chunkFetches struct {
+	c      *Client
+	total  int64
+	chunks []*rsChunk
+	// sem bounds concurrent FETCHES. It is released the moment a chunk's bytes
+	// are in memory, so a slow in-order write to the browser never delays
+	// admission of the next fetch (it used to: with concurrency 8, chunk 9
+	// could not open its stream until chunk 1 had reached the browser, which
+	// forced a whole second wave of per-chunk setup round trips).
+	sem chan struct{}
+	// mem bounds the TOTAL outstanding buffers (in flight + fetched but not yet
+	// written), so decoupling admission from delivery cannot grow an unbounded
+	// queue behind a stalled browser.
+	mem chan struct{}
+	// stop halts the producer when the consumer loop returns early (rescue or
+	// write error) — otherwise it would block on a gate forever once nobody
+	// drains slots. Closed on every exit path; in-flight fetches finish and
+	// exit on their own (their chunk results are simply never read).
+	stop     chan struct{}
+	stopOnce sync.Once
+}
+
+// rsOutstandingFactor caps outstanding chunk buffers at this multiple of the
+// configured concurrency: `concurrency` fetches may be in flight while the same
+// number of completed chunks wait their turn to be written in order.
+const rsOutstandingFactor = 2
+
+// startChunkFetches launches the concurrent fetches for [chunkSize, total) and
+// returns immediately. The caller must eventually call writeInOrder (or abort).
+func (c *Client) startChunkFetches(total int64, fetch func(start, end int64) ([]byte, error)) *chunkFetches {
+	f := &chunkFetches{
+		c:     c,
+		total: total,
+		sem:   make(chan struct{}, c.rs.concurrency),
+		mem:   make(chan struct{}, rsOutstandingFactor*c.rs.concurrency),
+		stop:  make(chan struct{}),
+	}
+	for start := c.rs.chunkSize; start < total; start += c.rs.chunkSize {
+		end := start + c.rs.chunkSize - 1
+		if end >= total {
+			end = total - 1
+		}
+		f.chunks = append(f.chunks, &rsChunk{start: start, end: end, done: make(chan struct{})})
+	}
+
+	go func() {
+		for _, ch := range f.chunks {
+			if !f.acquire(f.mem) || !f.acquire(f.sem) {
+				return
+			}
+			go func(ch *rsChunk) {
+				ch.buf, ch.err = fetch(ch.start, ch.end)
+				<-f.sem // admission released on FETCH completion, not on delivery
+				close(ch.done)
+			}(ch)
+		}
+	}()
+	return f
+}
+
+// acquire takes one slot of gate, or reports false once the consumer has stopped.
+func (f *chunkFetches) acquire(gate chan struct{}) bool {
+	select {
+	case gate <- struct{}{}:
+		return true
+	case <-f.stop:
+		return false
+	}
+}
+
+// abort halts the producer without draining anything (the caller failed before
+// it could deliver a byte). Safe to call more than once.
+func (f *chunkFetches) abort() { f.stopOnce.Do(func() { close(f.stop) }) }
+
+// writeInOrder writes the fetched chunks to conn in order.
 //
 // When a chunk exhausts its retry budget, the split does NOT truncate the
 // download: it degrades to the SEQUENTIAL rescue path — rescue streams
@@ -263,51 +361,16 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 // short — and then the browser still detects it (Content-Length mismatch).
 // rescue may be nil (a caller without a sequential path keeps the old
 // truncating behavior).
-func (c *Client) streamRemainingChunks(conn net.Conn, total int64, fetch func(start, end int64) ([]byte, error), rescue func(w net.Conn, start int64) (int64, error)) {
-	type chunk struct {
-		start, end int64
-		buf        []byte
-		err        error
-		done       chan struct{}
-	}
-	var chunks []*chunk
-	for start := c.rs.chunkSize; start < total; start += c.rs.chunkSize {
-		end := start + c.rs.chunkSize - 1
-		if end >= total {
-			end = total - 1
-		}
-		chunks = append(chunks, &chunk{start: start, end: end, done: make(chan struct{})})
-	}
-
-	sem := make(chan struct{}, c.rs.concurrency)
-	// stop halts the producer when the consumer loop returns early (rescue or
-	// write error) — otherwise it would block on sem forever once nobody drains
-	// slots. Closed on every exit path; in-flight fetches finish and exit on
-	// their own (their chunk results are simply never read).
-	stop := make(chan struct{})
-	defer close(stop)
-	go func() {
-		for _, ch := range chunks {
-			select {
-			case sem <- struct{}{}: // gate: at most `concurrency` chunks outstanding
-			case <-stop:
-				return
-			}
-			go func(ch *chunk) {
-				ch.buf, ch.err = fetch(ch.start, ch.end)
-				close(ch.done)
-			}(ch)
-		}
-	}()
-
-	for _, ch := range chunks {
+func (f *chunkFetches) writeInOrder(conn net.Conn, rescue func(w net.Conn, start int64) (int64, error)) {
+	defer f.abort()
+	for _, ch := range f.chunks {
 		<-ch.done
 		if ch.err != nil {
-			if c.appCl != nil {
-				c.appCl.Log().Debugf("range-split: chunk %d-%d failed: %v", ch.start, ch.end, ch.err)
+			if f.c.appCl != nil {
+				f.c.appCl.Log().Debugf("range-split: chunk %d-%d failed: %v", ch.start, ch.end, ch.err)
 			}
 			if rescue != nil {
-				c.rescueTail(conn, ch.start, total, rescue)
+				f.c.rescueTail(conn, ch.start, f.total, rescue)
 			}
 			break // rescued (or truncated with no rescue); caller closes conn
 		}
@@ -315,8 +378,16 @@ func (c *Client) streamRemainingChunks(conn net.Conn, total int64, fetch func(st
 			break
 		}
 		ch.buf = nil
-		<-sem // release one slot
+		<-f.mem // the buffer is gone; let the producer queue another chunk
 	}
+}
+
+// streamRemainingChunks fetches [chunkSize, total) as concurrent ranges and writes
+// them to conn in order, using fetch to retrieve one [start,end] byte range (the
+// caller supplies the plaintext or TLS-over-exit fetch). It is startChunkFetches
+// followed immediately by writeInOrder, for callers with nothing to overlap.
+func (c *Client) streamRemainingChunks(conn net.Conn, total int64, fetch func(start, end int64) ([]byte, error), rescue func(w net.Conn, start int64) (int64, error)) {
+	c.startChunkFetches(total, fetch).writeInOrder(conn, rescue)
 }
 
 // rsRescueAttempts is how many consecutive ZERO-PROGRESS rescue attempts end the
@@ -486,10 +557,12 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	defer st.Close() //nolint:errcheck,gosec
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
-	if err := c.exitConnect(st, host, c.rangePlainPort()); err != nil {
-		return nil, err
-	}
-	if _, err := st.Write(buildRangedGet(req, host, validator, start, end)); err != nil {
+	// ONE round trip: the SOCKS5 greeting, the CONNECT and the ranged GET go out
+	// back-to-back and only then are the three replies read in sequence. Serially
+	// blocking on each reply cost three round trips per chunk — at a 250ms RTT,
+	// three quarters of a second of dead time before the first byte of every
+	// 4 MiB chunk.
+	if err := c.exitConnectPipelined(st, host, c.rangePlainPort(), buildRangedGet(req, host, validator, start, end)); err != nil {
 		return nil, err
 	}
 	resp, err := http.ReadResponse(bufio.NewReader(st), req)
@@ -524,14 +597,52 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	return buf, nil
 }
 
-// exitConnect performs the SOCKS5 client handshake to the exit's proxy server and
-// a CONNECT to host:port, with ATYP=domain so the EXIT resolves the name (matching
-// how the browser's original request reached it).
-func (c *Client) exitConnect(st net.Conn, host string, port int) error {
+// socks5Greeting is the no-auth method-selection greeting; buildSocks5Connect
+// returns it followed by the CONNECT request, so the two can be written together
+// or one at a time.
+var socks5Greeting = []byte{0x05, 0x01, 0x00}
+
+// buildSocks5Connect returns the SOCKS5 greeting followed by a CONNECT to
+// host:port with ATYP=domain, so the EXIT resolves the name (matching how the
+// browser's original request reached it).
+func buildSocks5Connect(host string, port int) ([]byte, error) {
 	if len(host) > 255 {
-		return fmt.Errorf("host too long: %d", len(host))
+		return nil, fmt.Errorf("host too long: %d", len(host))
 	}
-	if _, err := st.Write([]byte{0x05, 0x01, 0x00}); err != nil {
+	out := make([]byte, 0, len(socks5Greeting)+5+len(host)+2)
+	out = append(out, socks5Greeting...)
+	out = append(out, 0x05, 0x01, 0x00, 0x03, byte(len(host))) //nolint:gosec // len(host)<=255 checked above
+	out = append(out, host...)
+	out = append(out, byte(port>>8), byte(port&0xff)) //nolint:gosec // port is 80 or 443, well within a byte pair
+	return out, nil
+}
+
+// readSocks5Handshake reads the method-selection reply and then the CONNECT
+// reply, in the order the exit's SOCKS5 server emits them.
+func readSocks5Handshake(st net.Conn) error {
+	method := make([]byte, 2)
+	if _, err := io.ReadFull(st, method); err != nil {
+		return err
+	}
+	if method[0] != 0x05 || method[1] != 0x00 {
+		return fmt.Errorf("exit selected non-no-auth method %v", method)
+	}
+	_, err := readSocks5Reply(st)
+	return err
+}
+
+// exitConnect performs the SOCKS5 client handshake to the exit's proxy server and
+// a CONNECT to host:port, blocking on the method reply before sending CONNECT.
+// Used where there is nothing to pipeline behind the CONNECT (the sequential
+// rescue, which must handshake before wrapping the stream in TLS or before its
+// single long-lived ranged GET).
+func (c *Client) exitConnect(st net.Conn, host string, port int) error {
+	head, err := buildSocks5Connect(host, port)
+	if err != nil {
+		return err
+	}
+	greeting, connect := head[:len(socks5Greeting)], head[len(socks5Greeting):]
+	if _, err := st.Write(greeting); err != nil {
 		return err
 	}
 	method := make([]byte, 2)
@@ -541,14 +652,29 @@ func (c *Client) exitConnect(st net.Conn, host string, port int) error {
 	if method[0] != 0x05 || method[1] != 0x00 {
 		return fmt.Errorf("exit selected non-no-auth method %v", method)
 	}
-	req := []byte{0x05, 0x01, 0x00, 0x03, byte(len(host))} //nolint:gosec // len(host)<=255 checked above
-	req = append(req, host...)
-	req = append(req, byte(port>>8), byte(port&0xff)) //nolint:gosec // port is 80, well within a byte pair
-	if _, err := st.Write(req); err != nil {
+	if _, err := st.Write(connect); err != nil {
 		return err
 	}
-	_, err := readSocks5Reply(st)
+	_, err = readSocks5Reply(st)
 	return err
+}
+
+// exitConnectPipelined writes the SOCKS5 greeting, the CONNECT request and
+// payload back-to-back in ONE write, and only then reads the method reply and
+// the CONNECT reply. The exit's SOCKS5 server reads its handshake sequentially
+// from the stream, so the queued payload is simply the next thing it reads once
+// it starts splicing to the origin. A failed greeting or CONNECT is handled
+// exactly as before — the caller closes the stream and the queued payload is
+// never acted on. payload may be nil (handshake only).
+func (c *Client) exitConnectPipelined(st net.Conn, host string, port int, payload []byte) error {
+	head, err := buildSocks5Connect(host, port)
+	if err != nil {
+		return err
+	}
+	if _, err := st.Write(append(head, payload...)); err != nil {
+		return err
+	}
+	return readSocks5Handshake(st)
 }
 
 // splicePrefixed is the original two-way splice, optionally replaying bytes already
