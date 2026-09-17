@@ -693,35 +693,40 @@ type Router interface {
 // communicating with setup nodes, forward packets according to local
 // rules and manages route groups for apps.
 type router struct {
-	mx                 sync.Mutex
-	conf               *Config
-	logger             *logging.Logger
-	mLogger            *logging.MasterLogger
-	sl                 *dmsg.Listener
-	dmsgC              *dmsg.Client
-	trustedVisors      map[cipher.PubKey]struct{}
-	tm                 *transport.Manager
-	rt                 routing.Table
-	rgsNs              map[routing.RouteDescriptor]*NoiseRouteGroup    // Noise-wrapped route groups to push incoming reads from transports.
-	rgsRaw             map[routing.RouteDescriptor]*RouteGroup         // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
-	rgsDatagrams       map[routing.RouteDescriptor]*DatagramRouteGroup // faithful-UDP (DatagramPacket) route groups, keyed like rgsNs; #2607 stage-4 dispatch
-	intake             intakeCounters                                  // inbound-path counters for `visor state` (router_intake.go)
-	muxEvents          muxEventRing                                    // bounded history of route-group/mux-leg changes with reasons (mux_events.go)
-	routeSource        routeSourceCounters                             // where routes came from (router_route_source.go)
-	datagramPorts      map[routing.Port]struct{}                       // local ports with faithful-UDP intent; the accept side builds a datagram sibling only for these (#2607 on-demand-by-local-intent)
-	acceptDatagram     chan datagramAccept                             // accept-side datagram siblings, drained by AcceptDatagram (the forwarded_ports.udp server loop)
-	pending            *pendingPackets                                 // frames parked during the rule-save -> route-group-register window (see router_pending.go)
-	pendingLegs        *pendingLegs                                    // aux mux legs buffered while their route group is still initializing (see router_pending_legs.go, #80)
-	rpcSrv             *rpc.Server
-	accept             chan routing.EdgeRules
-	done               chan struct{}
-	once               sync.Once
-	routeSetupHookMu   sync.Mutex
-	routeSetupHooks    []RouteSetupHook // see RouteSetupHook description
-	existingTpOnly     bool             // when true, don't create new transports for routing
-	existingTpOnlyMu   sync.Mutex       // protects existingTpOnly
-	forceLocalRoutes   bool             // when true, skip route finder and use local route calculation
-	forceLocalRoutesMu sync.Mutex       // protects forceLocalRoutes
+	mx               sync.Mutex
+	conf             *Config
+	logger           *logging.Logger
+	mLogger          *logging.MasterLogger
+	sl               *dmsg.Listener
+	dmsgC            *dmsg.Client
+	trustedVisors    map[cipher.PubKey]struct{}
+	tm               *transport.Manager
+	rt               routing.Table
+	rgsNs            map[routing.RouteDescriptor]*NoiseRouteGroup    // Noise-wrapped route groups to push incoming reads from transports.
+	rgsRaw           map[routing.RouteDescriptor]*RouteGroup         // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
+	rgsDatagrams     map[routing.RouteDescriptor]*DatagramRouteGroup // faithful-UDP (DatagramPacket) route groups, keyed like rgsNs; #2607 stage-4 dispatch
+	intake           intakeCounters                                  // inbound-path counters for `visor state` (router_intake.go)
+	muxEvents        muxEventRing                                    // bounded history of route-group/mux-leg changes with reasons (mux_events.go)
+	routeSource      routeSourceCounters                             // where routes came from (router_route_source.go)
+	datagramPorts    map[routing.Port]struct{}                       // local ports with faithful-UDP intent; the accept side builds a datagram sibling only for these (#2607 on-demand-by-local-intent)
+	acceptDatagram   chan datagramAccept                             // accept-side datagram siblings, drained by AcceptDatagram (the forwarded_ports.udp server loop)
+	pending          *pendingPackets                                 // frames parked during the rule-save -> route-group-register window (see router_pending.go)
+	pendingLegs      *pendingLegs                                    // aux mux legs buffered while their route group is still initializing (see router_pending_legs.go, #80)
+	rpcSrv           *rpc.Server
+	accept           chan routing.EdgeRules
+	done             chan struct{}
+	once             sync.Once
+	routeSetupHookMu sync.Mutex
+	routeSetupHooks  []RouteSetupHook // see RouteSetupHook description
+	existingTpOnly   bool             // when true, don't create new transports for routing
+	existingTpOnlyMu sync.Mutex       // protects existingTpOnly
+	// sameLANPeersFn overrides where the same-LAN peer set comes from. nil in
+	// production — sameLANExcludedPKs then asks the transport manager
+	// (Manager.SameLANPeers, the #4253 check). Present so the LAN-neighbour
+	// refusal can be exercised without standing up real transports.
+	sameLANPeersFn     func() []cipher.PubKey
+	forceLocalRoutes   bool       // when true, skip route finder and use local route calculation
+	forceLocalRoutesMu sync.Mutex // protects forceLocalRoutes
 	// responderBulkSpread, when true (the default), puts a mux-enabled
 	// responder route group into the capacity bulk-spread distribution so the
 	// download it serves aggregates bandwidth across its legs instead of

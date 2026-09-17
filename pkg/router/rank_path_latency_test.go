@@ -19,14 +19,20 @@ import (
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-// rankCandPath builds a one-intermediate forward candidate leaving over tpID.
+// rankCandTailMs is the latency every hop AFTER the first carries in these
+// fixtures, so a candidate is measured end to end and the first hop is what
+// varies. Tests that need an unknown remainder build the path by hand.
+const rankCandTailMs = 10
+
+// rankCandPath builds a one-intermediate forward candidate leaving over tpID,
+// with every later hop measured at rankCandTailMs.
 func rankCandPath(tpID uuid.UUID, hops int) []routing.Hop {
 	src, _ := cipher.GenerateKeyPair()
 	mid, _ := cipher.GenerateKeyPair()
 	dst, _ := cipher.GenerateKeyPair()
 	out := []routing.Hop{{TpID: tpID, From: src, To: mid}}
 	for i := 1; i < hops; i++ {
-		out = append(out, routing.Hop{TpID: uuid.New(), From: mid, To: dst})
+		out = append(out, routing.Hop{TpID: uuid.New(), From: mid, To: dst, Latency: rankCandTailMs})
 	}
 	return out
 }
@@ -39,12 +45,12 @@ func firstTpIDs(paths [][]routing.Hop) []uuid.UUID {
 	return out
 }
 
-// TestRankByFirstHopLatency_OrdersUnusedFirstHops is the unit proof of the
+// TestRankByPathLatency_OrdersUnusedFirstHops is the unit proof of the
 // campaign's criterion: of the routes whose first hop no sibling tunnel holds,
 // the extra tunnel must take the FASTEST, not merely the first the route-finder
 // happened to return. The live rig's numbers are used verbatim — Sydney 470ms
 // was what an unranked diversify dial took while Atlanta 39ms sat free.
-func TestRankByFirstHopLatency_OrdersUnusedFirstHops(t *testing.T) {
+func TestRankByPathLatency_OrdersUnusedFirstHops(t *testing.T) {
 	sydney, atlanta, amsterdam, unmeasured := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	lat := map[uuid.UUID]float64{sydney: 470, atlanta: 39, amsterdam: 148}
 	latencyFor := func(id uuid.UUID) float64 { return lat[id] }
@@ -57,7 +63,7 @@ func TestRankByFirstHopLatency_OrdersUnusedFirstHops(t *testing.T) {
 		rankCandPath(unmeasured, 2),
 	}
 
-	ranked := rankByFirstHopLatency(cands, latencyFor)
+	ranked := rankByPathLatency(cands, latencyFor)
 	require.Equal(t,
 		[]uuid.UUID{atlanta, amsterdam, sydney, unmeasured},
 		firstTpIDs(ranked),
@@ -65,18 +71,18 @@ func TestRankByFirstHopLatency_OrdersUnusedFirstHops(t *testing.T) {
 
 	// The decision trail must name the ranking so a bench run can read it back
 	// out of the dial_decision mux event.
-	trail := firstHopLatencyTrail(ranked, latencyFor, nil)
+	trail := pathLatencyTrail(ranked, latencyFor, nil)
 	require.Equal(t,
-		atlanta.String()[:8]+"=39ms, "+amsterdam.String()[:8]+"=148ms, "+
-			sydney.String()[:8]+"=470ms, "+unmeasured.String()[:8]+"=unmeasured",
+		atlanta.String()[:8]+"=39+10ms, "+amsterdam.String()[:8]+"=148+10ms, "+
+			sydney.String()[:8]+"=470+10ms, "+unmeasured.String()[:8]+"=unmeasured",
 		trail)
 }
 
-// TestRankByFirstHopLatency_UsedFirstHopExcluded proves the ranking composes
+// TestRankByPathLatency_UsedFirstHopExcluded proves the ranking composes
 // with (and never undoes) the sibling exclusion: filterDisjointFirstHop drops
 // the first hop an existing group already holds, and the survivors are what
 // gets ranked — a used hop can never be chosen however fast it is.
-func TestRankByFirstHopLatency_UsedFirstHopExcluded(t *testing.T) {
+func TestRankByPathLatency_UsedFirstHopExcluded(t *testing.T) {
 	used, atlanta, sydney := uuid.New(), uuid.New(), uuid.New()
 	lat := map[uuid.UUID]float64{used: 1, atlanta: 39, sydney: 470}
 	latencyFor := func(id uuid.UUID) float64 { return lat[id] }
@@ -86,15 +92,15 @@ func TestRankByFirstHopLatency_UsedFirstHopExcluded(t *testing.T) {
 	disjoint := filterDisjointFirstHop(cands, []uuid.UUID{used})
 	require.Len(t, disjoint, 2)
 
-	ranked := rankByFirstHopLatency(disjoint, latencyFor)
+	ranked := rankByPathLatency(disjoint, latencyFor)
 	require.Equal(t, []uuid.UUID{atlanta, sydney}, firstTpIDs(ranked))
 	require.NotContains(t, firstTpIDs(ranked), used, "an already-used first hop is never a candidate")
 }
 
-// TestRankByFirstHopLatency_TieBreaks: equal (or absent) latency falls back to
+// TestRankByPathLatency_TieBreaks: equal (or absent) latency falls back to
 // fewer hops, then to the route-finder's own order — the ranking must never
 // shuffle candidates it has no evidence about.
-func TestRankByFirstHopLatency_TieBreaks(t *testing.T) {
+func TestRankByPathLatency_TieBreaks(t *testing.T) {
 	long, short, a, b := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	latencyFor := func(id uuid.UUID) float64 {
 		if id == long || id == short {
@@ -103,7 +109,7 @@ func TestRankByFirstHopLatency_TieBreaks(t *testing.T) {
 		return 0
 	}
 
-	ranked := rankByFirstHopLatency([][]routing.Hop{
+	ranked := rankByPathLatency([][]routing.Hop{
 		rankCandPath(long, 3),
 		rankCandPath(short, 2),
 		rankCandPath(a, 2),
@@ -130,29 +136,25 @@ func TestFirstHopLatencyMs_FallsBackToRouteFinderHop(t *testing.T) {
 	require.Equal(t, float64(0), firstHopLatencyMs(nil, nil))
 }
 
-// TestNoteFirstHopRanking_RecordsTheTrail: the chosen route and the ranking
+// TestNotePathRanking_RecordsTheTrail: the chosen route and the ranking
 // that produced it land on the dial's decision trail (MuxEventDialDecision), so
 // a bench run can attribute a tunnel's throughput to the hop it took.
-func TestNoteFirstHopRanking_RecordsTheTrail(t *testing.T) {
+func TestNotePathRanking_RecordsTheTrail(t *testing.T) {
 	fast, slow := uuid.New(), uuid.New()
-	latencyFor := func(id uuid.UUID) float64 {
-		if id == fast {
-			return 39
-		}
-		return 470
-	}
+	lat := map[uuid.UUID]float64{fast: 39, slow: 470}
+	latencyFor := func(id uuid.UUID) float64 { return lat[id] }
 
 	opts := &DialOptions{}
-	ranked := noteFirstHopRanking(opts, [][]routing.Hop{rankCandPath(slow, 2), rankCandPath(fast, 2)}, latencyFor, nil)
+	ranked := notePathRanking(opts, [][]routing.Hop{rankCandPath(slow, 2), rankCandPath(fast, 2)}, latencyFor, nil)
 
 	require.Equal(t, fast, ranked[0][0].TpID)
 	require.Len(t, opts.dialNotes, 1)
 	require.Equal(t,
-		"ranked by first-hop latency: "+fast.String()[:8]+"=39ms, "+slow.String()[:8]+"=470ms; chose "+fast.String()[:8],
+		"ranked by path latency: "+fast.String()[:8]+"=39+10ms, "+slow.String()[:8]+"=470+10ms; chose "+fast.String()[:8],
 		opts.dialNotes[0])
 
 	// Nil-safe: a dial with no options still ranks.
-	require.Equal(t, fast, noteFirstHopRanking(nil, [][]routing.Hop{rankCandPath(slow, 2), rankCandPath(fast, 2)}, latencyFor, nil)[0][0].TpID)
+	require.Equal(t, fast, notePathRanking(nil, [][]routing.Hop{rankCandPath(slow, 2), rankCandPath(fast, 2)}, latencyFor, nil)[0][0].TpID)
 }
 
 // mkLocalLat builds one of the source's own transports to peer with a measured
@@ -164,13 +166,13 @@ func mkLocalLat(src, peer cipher.PubKey, tpType tptypes.Type, latencyMs float64)
 	return tp
 }
 
-// TestComputeDisjoint2HopRoutes_RanksByFirstHopLatency is the oracle-side proof.
+// TestComputeDisjoint2HopRoutes_RanksByPathLatency is the oracle-side proof.
 // The RSN oracle — not the route-finder — is the candidate selection that wins a
 // diversify dial on a fleet where every first hop is stcpr: its old ranking tied
 // on transport-type preference and broke the tie on intermediate-PK STRING, an
 // arbitrary order that put a 470ms first hop ahead of a 39ms one. Measured
 // first-hop latency is now the primary key, unmeasured last.
-func TestComputeDisjoint2HopRoutes_RanksByFirstHopLatency(t *testing.T) {
+func TestComputeDisjoint2HopRoutes_RanksByPathLatency(t *testing.T) {
 	src, _ := cipher.GenerateKeyPair()
 	dst, _ := cipher.GenerateKeyPair()
 	sydney, _ := cipher.GenerateKeyPair()
@@ -185,10 +187,10 @@ func TestComputeDisjoint2HopRoutes_RanksByFirstHopLatency(t *testing.T) {
 		mkLocalLat(src, unknown, tptypes.STCPR, 0), // never sampled
 	}
 	dstEntries := []*transport.Entry{
-		mkDstEntry(dst, sydney, tptypes.STCPR),
-		mkDstEntry(dst, amsterdam, tptypes.STCPR),
-		mkDstEntry(dst, atlanta, tptypes.STCPR),
-		mkDstEntry(dst, unknown, tptypes.STCPR),
+		mkDstEntryLat(dst, sydney, tptypes.STCPR, rankCandTailMs),
+		mkDstEntryLat(dst, amsterdam, tptypes.STCPR, rankCandTailMs),
+		mkDstEntryLat(dst, atlanta, tptypes.STCPR, rankCandTailMs),
+		mkDstEntryLat(dst, unknown, tptypes.STCPR, rankCandTailMs),
 	}
 
 	legs, err := computeDisjoint2HopRoutes(src, dst, localTps, dstEntries, nil, 0)
@@ -231,9 +233,9 @@ func TestComputeDisjoint2HopRoutes_ExcludedFirstHopThenRanked(t *testing.T) {
 		mkLocalLat(src, atlanta, tptypes.STCPR, 39),
 	}
 	dstEntries := []*transport.Entry{
-		mkDstEntry(dst, fastButUsed, tptypes.STCPR),
-		mkDstEntry(dst, sydney, tptypes.STCPR),
-		mkDstEntry(dst, atlanta, tptypes.STCPR),
+		mkDstEntryLat(dst, fastButUsed, tptypes.STCPR, rankCandTailMs),
+		mkDstEntryLat(dst, sydney, tptypes.STCPR, rankCandTailMs),
+		mkDstEntryLat(dst, atlanta, tptypes.STCPR, rankCandTailMs),
 	}
 
 	opts := &DialOptions{DiversifyTransports: true, ExcludeTransportIDs: []uuid.UUID{used.id}}
@@ -279,7 +281,7 @@ func directCand(src, dst cipher.PubKey, tpID uuid.UUID, latencyMs float64) []rou
 func viaCand(src, mid, dst cipher.PubKey, tpID uuid.UUID, latencyMs float64) []routing.Hop {
 	return []routing.Hop{
 		{TpID: tpID, From: src, To: mid, Latency: latencyMs},
-		{TpID: uuid.New(), From: mid, To: dst},
+		{TpID: uuid.New(), From: mid, To: dst, Latency: rankCandTailMs},
 	}
 }
 
@@ -318,7 +320,7 @@ func TestFreeFirstHops_DirectTwinsExcludedByPeer(t *testing.T) {
 
 	free := r.freeFirstHops(cands, opts)
 	require.Len(t, free, 2, "every direct transport to the exit shares tunnel 1's first hop")
-	chosen := noteFirstHopRanking(opts, free, nil, nil)[0]
+	chosen := notePathRanking(opts, free, nil, nil)[0]
 	require.Equal(t, viaA, chosen[0].TpID, "the sibling must take the fastest intermediate, not a direct twin")
 	require.Equal(t, atlanta, chosen[0].To)
 
@@ -328,7 +330,7 @@ func TestFreeFirstHops_DirectTwinsExcludedByPeer(t *testing.T) {
 	// intermediates were ever candidates).
 	idOnly := filterDisjointFirstHop(cands, opts.ExcludeTransportIDs)
 	require.Len(t, idOnly, 4)
-	require.Equal(t, squicr, rankByFirstHopLatency(
+	require.Equal(t, squicr, rankByPathLatency(
 		[][]routing.Hop{directCand(src, exit, squicr, 138), directCand(src, exit, sudph, 139)}, nil)[0][0].TpID,
 		"with only the twins to choose from, the old filter had nothing better to offer")
 }
@@ -360,7 +362,7 @@ func TestFreeFirstHops_SiblingViaIntermediate(t *testing.T) {
 		ExcludeFirstHopPeers: []cipher.PubKey{atlanta},
 	}
 	free := r.freeFirstHops(cands, opts)
-	require.Equal(t, viaB, noteFirstHopRanking(opts, free, nil, nil)[0][0].TpID,
+	require.Equal(t, viaB, notePathRanking(opts, free, nil, nil)[0][0].TpID,
 		"a sibling of a via-A tunnel takes the next-best intermediate")
 
 	// The direct route is not forbidden in itself — with no tunnel on the exit's
@@ -478,14 +480,14 @@ func TestProbeFirstHopLatencies_RanksIdleTransports(t *testing.T) {
 
 	opts := &DialOptions{}
 	latencyFor := mergeProbedLatency(nil, probed)
-	ranked := noteFirstHopRanking(opts, cands, latencyFor, probed)
+	ranked := notePathRanking(opts, cands, latencyFor, probed)
 	require.Equal(t, []uuid.UUID{atlanta, amsterdam, sydney, dead}, firstTpIDs(ranked),
 		"probed values rank the candidates; the one that never answered sorts last")
 
 	// The trail says which numbers the probe supplied.
 	require.Equal(t,
-		"ranked by first-hop latency: "+atlanta.String()[:8]+"=39ms probed, "+
-			amsterdam.String()[:8]+"=148ms probed, "+sydney.String()[:8]+"=470ms probed, "+
+		"ranked by path latency: "+atlanta.String()[:8]+"=39p+10ms, "+
+			amsterdam.String()[:8]+"=148p+10ms, "+sydney.String()[:8]+"=470p+10ms, "+
 			dead.String()[:8]+"=unmeasured; chose "+atlanta.String()[:8],
 		opts.dialNotes[0])
 }
@@ -547,6 +549,97 @@ func TestProbeFirstHopLatencies_BoundedByTimeout(t *testing.T) {
 	require.Less(t, elapsed, 5*time.Second, "the probe is bounded by its cap, not by its slowest peer")
 	require.Equal(t, map[uuid.UUID]float64{quick: 148}, probed)
 	require.Equal(t, []uuid.UUID{quick, slow},
-		firstTpIDs(rankByFirstHopLatency(cands, mergeProbedLatency(nil, probed))),
+		firstTpIDs(rankByPathLatency(cands, mergeProbedLatency(nil, probed))),
 		"a first hop that did not answer the probe still sorts last")
+}
+
+// mkDstEntryLat is mkDstEntry with the destination-side hop's own measured
+// latency (transport.Entry.Latency, latency_ms) — the intermediate→exit number
+// the whole-path ranking needs.
+func mkDstEntryLat(dst, peer cipher.PubKey, tpType tptypes.Type, latencyMs float64) *transport.Entry {
+	e := mkDstEntry(dst, peer, tpType)
+	e.Latency = latencyMs
+	return e
+}
+
+// TestRankByPathLatency_WholePathNotFirstHop is the 2026-09-18 fix. Ranking on
+// the FIRST HOP alone put a 1ms LAN neighbour at the top of a list of ~25
+// candidates — a peer on our own uplink whose own hop to the exit was unknown —
+// and the tunnel delivered 3.85 MB/s on 50 MB down (2.46 on 10 MB), worse than
+// the 470ms intermediate the ranking was introduced to avoid. A candidate is
+// ranked by what it costs END TO END, and one whose remainder is unknown is not
+// ranked at all: it sorts with the unmeasured.
+func TestRankByPathLatency_WholePathNotFirstHop(t *testing.T) {
+	a, b, c, d, e := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+
+	mk := func(id uuid.UUID, hop1, hop2 float64) []routing.Hop {
+		p := rankCandPath(id, 2)
+		p[0].Latency = hop1
+		p[1].Latency = hop2 // 0 = unknown remainder
+		return p
+	}
+	cands := [][]routing.Hop{
+		mk(a, 1, 0),    // fastest first hop, unknown onward → not a ranking
+		mk(b, 29, 95),  // 124
+		mk(c, 144, 10), // 154
+		mk(d, 134, 1),  // 135
+		mk(e, 199, 0),  // unknown onward
+	}
+
+	ranked := rankByPathLatency(cands, nil)
+	require.Equal(t, []uuid.UUID{b, d, c, a, e}, firstTpIDs(ranked),
+		"measured paths rank by their total; partially-known ones keep input order, last")
+
+	require.Equal(t,
+		b.String()[:8]+"=29+95ms, "+d.String()[:8]+"=134+1ms, "+c.String()[:8]+"=144+10ms, "+
+			a.String()[:8]+"=1ms+unknown, "+e.String()[:8]+"=199ms+unknown",
+		pathLatencyTrail(ranked, nil, nil),
+		"the trail spells the unknown remainder out rather than hiding it in a total")
+
+	total, ok := pathLatencyTotalMs(cands[1], nil)
+	require.True(t, ok)
+	require.Equal(t, float64(124), total)
+	_, ok = pathLatencyTotalMs(cands[0], nil)
+	require.False(t, ok, "a path with an unmeasured hop has no total")
+}
+
+// TestFilterLANFirstHops_ExcludesNeighbours: a first hop on our own LAN is not
+// diversity — it shares our uplink — so it is dropped before ranking and named
+// on the dial trail. Reuses the #4253 same-LAN check (and its
+// routing.exclude_same_lan_hops switch), so turning that off restores the old
+// behavior here too.
+func TestFilterLANFirstHops_ExcludesNeighbours(t *testing.T) {
+	src, _ := cipher.GenerateKeyPair()
+	exit, _ := cipher.GenerateKeyPair()
+	neighbour, _ := cipher.GenerateKeyPair()
+	atlanta, _ := cipher.GenerateKeyPair()
+
+	lanTp, viaA := uuid.New(), uuid.New()
+	cands := [][]routing.Hop{
+		viaCand(src, neighbour, exit, lanTp, 1),
+		viaCand(src, atlanta, exit, viaA, 39),
+	}
+
+	// The check is driven by the transport manager's view of which peers are on
+	// our LAN; with none reported (or the feature off) nothing is dropped.
+	r := &router{conf: &Config{}}
+	keep, dropped := r.filterLANFirstHops(cands)
+	require.Len(t, keep, 2)
+	require.Empty(t, dropped)
+
+	// With the neighbour reported as same-LAN it is refused, and the survivor is
+	// what gets ranked.
+	r = &router{conf: &Config{}, sameLANPeersFn: func() []cipher.PubKey { return []cipher.PubKey{neighbour} }}
+	keep, dropped = r.filterLANFirstHops(cands)
+	require.Equal(t, []uuid.UUID{viaA}, firstTpIDs(keep))
+	require.Equal(t, []uuid.UUID{lanTp}, firstTpIDs(dropped))
+
+	opts := &DialOptions{}
+	ranked := r.rankFreeFirstHops(context.Background(), opts, cands, func(uuid.UUID) float64 { return 0 })
+	require.Equal(t, []uuid.UUID{viaA}, firstTpIDs(ranked))
+	require.Len(t, opts.dialNotes, 2)
+	require.Equal(t,
+		"excluding 1 same-LAN first hop(s) (share our uplink): "+lanTp.String()[:8],
+		opts.dialNotes[0])
+	require.Contains(t, opts.dialNotes[1], "ranked by path latency: "+viaA.String()[:8]+"=39+10ms")
 }

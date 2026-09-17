@@ -24,6 +24,11 @@ func IsPublicIP(IP net.IP) bool {
 			return false
 		case ip4[0] == 192 && ip4[1] == 168:
 			return false
+		case ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127:
+			// 100.64.0.0/10, RFC 6598 carrier-grade NAT. Not routable on the
+			// public internet and not a public endpoint: a peer seen at one is
+			// reached through the same carrier NAT we sit behind.
+			return false
 		default:
 			return true
 		}
