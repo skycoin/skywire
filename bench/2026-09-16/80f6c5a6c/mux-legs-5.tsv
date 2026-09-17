@@ -1,0 +1,8 @@
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=80f6c5a6c exit_commit=80f6c5a6c session=skysocks-client legs=5/ width=5 rg_port= pins=03f57e7c,0371ab4b,0255117b,0281a102,02c48393 legs_desc= sink=http://127.0.0.1:18080
+mux-legs-5-t1	down	10000000	0	000	0	0.000424	0
+mux-legs-5-t2	down	10000000	0	000	0	0.000474	0
+mux-legs-5-t3	down	10000000	0	000	0	0.000376	0
+mux-legs-5-t4	down	10000000	0	000	0	0.000519	0
+mux-legs-5-t5	down	10000000	0	000	0	0.000467	0
+mux-legs-5-t1	up	10000000	0	000	0	0.000486	0
+mux-legs-5-t2	up	10000000	0	000	0	0.000433	0
