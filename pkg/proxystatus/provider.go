@@ -158,7 +158,13 @@ type Snapshot struct {
 	// Conns is the surface's active raw forwarded connections with their metered
 	// port pairs — the conn-level view for layers that have no route-group Legs.
 	Conns []Conn `json:"conns,omitempty"`
-	Note  string // optional human note (e.g. why a section is empty)
+	// ExitOpenTimeouts counts the skysocks client's exit opens that timed out: a
+	// stream on a live tunnel whose exit never answered the SOCKS5 greeting, so
+	// the browser was handed nothing. Cumulative for the life of the client, and
+	// the one failure mode the page reported neither as a leg nor as a stream.
+	// Zero (omitted) for every other surface.
+	ExitOpenTimeouts uint64 `json:"exit_open_timeouts,omitempty"`
+	Note             string // optional human note (e.g. why a section is empty)
 }
 
 // Layer is the live state of one resolving-proxy layer (dmsg_web on :4445,
