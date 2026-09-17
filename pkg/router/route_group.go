@@ -669,9 +669,13 @@ type MuxRecovery struct {
 	// has been stuck. SACKsSent / SACKSendErrors / LastSACKSentMsAgo are the
 	// outbound feedback (ms-ago -1 when none ever sent). WedgeTicks is the
 	// CURRENT wedge's stall-tick count (0 = not wedged), Wedges how many have
-	// cleared on this group, LongestWedgeMS the worst one seen.
+	// cleared on this group, LongestWedgeMS the worst one seen. ReorderDrops
+	// counts arrivals the reorder buffer discarded because the gap already held
+	// a full window — they are deliberately NOT SACKed, so each one is owed a
+	// retransmit.
 	ReorderNextSeq    uint32  `json:"reorder_next_seq"`
 	ReorderPending    int     `json:"reorder_pending"`
+	ReorderDrops      uint64  `json:"reorder_drops"`
 	GapAgeMS          float64 `json:"gap_age_ms"`
 	SACKsSent         uint64  `json:"sacks_sent"`
 	SACKSendErrors    uint64  `json:"sack_send_errors"`
@@ -869,6 +873,7 @@ func (rg *RouteGroup) recoverySnapshot(legs []MuxLeg) *MuxRecovery {
 		LastSACKRecvContig: atomic.LoadUint32(&m.lastAckedContig),
 		ReorderNextSeq:     m.reorderNextSeq(),
 		ReorderPending:     m.reorderPending(),
+		ReorderDrops:       atomic.LoadUint64(&m.reorderDrops),
 		GapAgeMS:           float64(m.gapAge()) / float64(time.Millisecond),
 		SACKsSent:          atomic.LoadUint64(&m.sacksSent),
 		SACKSendErrors:     atomic.LoadUint64(&m.sackSendErrors),
@@ -986,9 +991,12 @@ func (rg *RouteGroup) Close() error {
 
 	atomic.StoreInt32(&rg.closeInitiated, 1)
 
-	rg.mu.Lock()
-	defer rg.mu.Unlock()
-
+	// rg.mu is deliberately NOT held across this call: close() broadcasts close
+	// packets (2s ctx) and then waits up to closeRoutineTimeout for the peer's
+	// replies, and serveTransportManager is a SINGLE loop that dispatches every
+	// transport's packets through rg.mu — a data packet for the closing group
+	// would block on it and stall the whole visor's packet intake for ~4s
+	// (the #4217 deadlock class). close() takes rg.mu itself, only to snapshot.
 	return rg.close(routing.CloseRequested)
 }
 
@@ -3996,9 +4004,20 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		return nil
 	}
 
+	// Snapshot the legs under rg.mu and RELEASE it before the broadcast and the
+	// wait below. Both are slow (a dead transport takes the full
+	// closeRoutineTimeout, and the wait another one), and rg.mu is the lock the
+	// router's single packet-dispatch loop takes for EVERY route group's data
+	// packets — holding it across ~4s of close stalls the whole visor's intake.
+	// The snapshot is what the broadcast needs; nothing here mutates rg.tps/rg.fwd.
+	rg.mu.Lock()
 	if len(rg.fwd) != len(rg.tps) {
+		rg.mu.Unlock()
 		return ErrRuleTransportMismatch
 	}
+	tps := append([]*transport.ManagedTransport(nil), rg.tps...)
+	fwd := append([]routing.Rule(nil), rg.fwd...)
+	rg.mu.Unlock()
 
 	closeInitiator := rg.isCloseInitiator()
 
@@ -4006,16 +4025,16 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 	if closeInitiator {
 		by, fallback = MuxByLocal, fmt.Sprintf("local close (code %d)", code)
 	}
-	rg.noteMuxEvent(MuxEvent{Event: MuxEventGroupClosed, By: by, LegIndex: -1, Legs: len(rg.tps),
+	rg.noteMuxEvent(MuxEvent{Event: MuxEventGroupClosed, By: by, LegIndex: -1, Legs: len(tps),
 		Reason: rg.takeCloseReason(fallback)})
 
 	if closeInitiator {
 		// will wait for close response from all the transports
-		atomic.StoreInt32(&rg.closeDonePending, int32(len(rg.tps))) //nolint:gosec
+		atomic.StoreInt32(&rg.closeDonePending, int32(len(tps))) //nolint:gosec
 		rg.closeDoneCh = make(chan struct{})
 	}
 
-	rg.broadcastClosePackets(code)
+	rg.broadcastClosePackets(code, tps, fwd)
 
 	if closeInitiator {
 		// if this visor initiated closing, we need to wait for close packets
@@ -4026,6 +4045,10 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		}
 	}
 
+	// Re-read the rule set under rg.mu (rather than reusing the snapshot above):
+	// the lock was released for the broadcast and the wait, so a leg may have
+	// come or gone in between and every live rule must still be deleted.
+	rg.mu.Lock()
 	rules := make([]routing.RouteID, 0, len(rg.fwd)+len(rg.rvs))
 	for _, r := range rg.fwd {
 		rules = append(rules, r.KeyRouteID())
@@ -4038,6 +4061,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 	for _, r := range rg.rvs {
 		rules = append(rules, r.KeyRouteID())
 	}
+	rg.mu.Unlock()
 
 	rg.rt.DelRules(rules)
 
@@ -5113,25 +5137,29 @@ func (rg *RouteGroup) MeasureLatency(ctx context.Context, count int) (min, max, 
 	return min, max, avg, nil
 }
 
-func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode) {
+// broadcastClosePackets sends the error + close packet on every leg. It takes
+// the leg snapshot (tps/fwd, index-aligned) rather than reading rg.tps/rg.fwd,
+// because it must run WITHOUT rg.mu: a dead transport makes it take the full
+// closeRoutineTimeout, and rg.mu is the router's whole packet-dispatch lock.
+func (rg *RouteGroup) broadcastClosePackets(code routing.CloseCode, tps []*transport.ManagedTransport, fwd []routing.Rule) {
 	// Use a timeout context to prevent blocking forever on dead transports.
 	// Without this, a dead transport causes writePacket to block indefinitely,
-	// holding rg.mu and deadlocking the GC goroutine.
+	// deadlocking the GC goroutine.
 	ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
 	defer cancel()
 
-	for i := 0; i < len(rg.tps) && i < len(rg.fwd); i++ {
-		if rg.tps[i] == nil || rg.fwd[i] == nil {
+	for i := 0; i < len(tps) && i < len(fwd); i++ {
+		if tps[i] == nil || fwd[i] == nil {
 			continue
 		}
 
-		if err := rg.sendError(ctx, rg.fwd[i], rg.tps[i]); err != nil {
-			rg.logger.WithError(err).Errorf("Failed to send error packet to %s", rg.tps[i].Remote())
+		if err := rg.sendError(ctx, fwd[i], tps[i]); err != nil {
+			rg.logger.WithError(err).Errorf("Failed to send error packet to %s", tps[i].Remote())
 		}
 
-		packet := routing.MakeClosePacket(rg.fwd[i].NextRouteID(), code)
-		if err := rg.writePacket(ctx, rg.tps[i], packet, rg.fwd[i].KeyRouteID()); err != nil {
-			rg.logger.WithError(err).Errorf("Failed to send close packet to %s", rg.tps[i].Remote())
+		packet := routing.MakeClosePacket(fwd[i].NextRouteID(), code)
+		if err := rg.writePacket(ctx, tps[i], packet, fwd[i].KeyRouteID()); err != nil {
+			rg.logger.WithError(err).Errorf("Failed to send close packet to %s", tps[i].Remote())
 		}
 	}
 }
