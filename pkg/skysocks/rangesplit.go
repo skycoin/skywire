@@ -120,8 +120,8 @@ func (c *Client) isPlainPort(target string) bool {
 }
 
 // serveHTTPRangeSplit takes ownership of a freshly-CONNECTed browser conn and the
-// exit stream (stream0) already SOCKS5-CONNECTed to a :80 origin. It forwards the
-// exit's CONNECT reply, peeks the browser's first HTTP request, and — when it is a
+// exit stream (stream0) already SOCKS5-CONNECTed to a :80 origin. It answers the
+// browser's CONNECT, peeks its first HTTP request, and — when it is a
 // splittable GET against a range-capable origin — fetches the body as N concurrent
 // byte ranges over separate exit streams, reassembling it in order into a single
 // synthesized 200 response. Anything not splittable falls back to a byte-identical
@@ -142,47 +142,69 @@ func (c *Client) serveHTTPRangeSplit(conn, stream net.Conn) {
 // ask the caller to splice, handing back any browser bytes it had buffered so they
 // can be replayed to the exit.
 func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPrefix []byte, ok bool) {
-	// 1. Relay the exit's SOCKS5 CONNECT reply to the browser byte-for-byte so it
-	//    proceeds to send its HTTP request.
-	_ = stream.SetReadDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
-	reply, err := readSocks5Reply(stream)
-	if err != nil {
+	// 1. Answer the browser's CONNECT at once, from here. A SOCKS5 CONNECT that
+	//    succeeds has exactly one reply — VER 5, REP 0, and a BND address a
+	//    CONNECT client ignores — so blocking on the exit's copy of it buys
+	//    nothing and costs a full exit round trip before the browser will send
+	//    the GET that steps 2 and 3 need. The real reply is read at step 4, in
+	//    the same round trip as the 206; a refused CONNECT is reported there as
+	//    an HTTP 502 instead of relayed, since the browser already has a reply.
+	if _, err := conn.Write(socks5OKReply); err != nil {
 		conn.Close()   //nolint:errcheck,gosec
 		stream.Close() //nolint:errcheck,gosec
 		return "", nil, true
 	}
-	if _, err := conn.Write(reply); err != nil {
-		conn.Close()   //nolint:errcheck,gosec
-		stream.Close() //nolint:errcheck,gosec
-		return "", nil, true
-	}
-	clearDeadlines(conn, stream)
 
 	// 2. Classify + read the browser's request head. Non-HTTP traffic on :80 (raw
 	//    tunnels, server-speaks-first protocols) is detected the instant the bytes
 	//    stop matching an HTTP method prefix and spliced with no meaningful delay.
 	reqHead, isHTTP := peekRequestHead(conn, rsHeadLimit)
 	clearDeadlines(conn)
-	if !isHTTP {
-		return "", reqHead, false // let caller splice, replaying what we read
-	}
-	req, perr := http.ReadRequest(bufio.NewReader(bytes.NewReader(reqHead)))
-	if perr != nil || !splittableRequest(req) {
-		return "", reqHead, false
-	}
-	host = req.Host
-	if h, _, e := net.SplitHostPort(host); e == nil {
-		host = h
+	var req *http.Request
+	if isHTTP {
+		if r, perr := http.ReadRequest(bufio.NewReader(bytes.NewReader(reqHead))); perr == nil && splittableRequest(r) {
+			req = r
+			host = r.Host
+			if h, _, e := net.SplitHostPort(host); e == nil {
+				host = h
+			}
+		}
 	}
 
 	// 3. chunk0 doubles as the range probe: original request + Range: bytes=0-(N-1).
 	//    Only a Range request header is added; a non-range origin ignores it and
-	//    returns its normal 200, so that fallback stays byte-identical.
-	if _, err := stream.Write(injectRange(reqHead, c.rs.chunkSize-1)); err != nil {
+	//    returns its normal 200, so that fallback stays byte-identical. It is
+	//    written BEFORE the CONNECT reply is read, so it queues behind that reply
+	//    on the exit's stream exactly as a chunk fetch queues its GET behind the
+	//    handshake (exitConnectPipelined). A write error is not fatal here: the
+	//    reply read below says whether the CONNECT itself failed, which is the
+	//    more useful thing to tell the browser.
+	var injectErr error
+	if req != nil {
+		if _, err := stream.Write(injectRange(reqHead, c.rs.chunkSize-1)); err != nil {
+			injectErr = err
+		}
+	}
+
+	// 4. The exit's real CONNECT reply, now overlapped with the browser's request
+	//    and the injected GET rather than serialized ahead of them. Its bytes are
+	//    dropped rather than forwarded — the browser has a reply already — and a
+	//    refusal becomes a 502 for an HTTP client, a bare close for anything else.
+	_ = stream.SetReadDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
+	reply, err := readSocks5Reply(stream)
+	if err != nil || len(reply) < 2 || reply[1] != 0x00 || injectErr != nil {
+		if isHTTP {
+			writeBadGateway(conn)
+		}
 		conn.Close()   //nolint:errcheck,gosec
 		stream.Close() //nolint:errcheck,gosec
 		return host, nil, true
 	}
+	clearDeadlines(conn, stream)
+	if req == nil {
+		return host, reqHead, false // let caller splice, replaying what we read
+	}
+
 	br := bufio.NewReader(stream)
 	statusLine, err := br.ReadString('\n')
 	if err != nil {
@@ -813,6 +835,25 @@ func (c *Client) splicePrefixed(conn, stream net.Conn, clientPrefix []byte) {
 }
 
 // --- small HTTP/SOCKS5 helpers ---
+
+// socks5OKReply is the one reply a successful CONNECT can have: VER 5, REP 0
+// (succeeded), RSV 0, ATYP IPv4, BND.ADDR 0.0.0.0, BND.PORT 0. BND names the
+// address the proxy bound toward the origin and is only meaningful to BIND, so
+// a CONNECT client ignores it — which is what lets the splitter answer the
+// browser before the exit has spoken (rangeSplitInner step 1).
+var socks5OKReply = []byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0}
+
+// rsBadGatewayBody is the body of the 502 below.
+const rsBadGatewayBody = "skysocks: the exit could not reach the origin\n"
+
+// writeBadGateway answers an HTTP request the splitter has already read with a
+// minimal 502. It is what a failed CONNECT becomes once the browser has been
+// told CONNECT succeeded: the refusal cannot be relayed as SOCKS any more, and
+// closing silently is indistinguishable from a network fault.
+func writeBadGateway(conn net.Conn) {
+	_, _ = fmt.Fprintf(conn, "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", //nolint:errcheck
+		len(rsBadGatewayBody), rsBadGatewayBody)
+}
 
 // readSocks5Reply reads one SOCKS5 reply (VER REP RSV ATYP ADDR PORT) and returns
 // its raw bytes.
