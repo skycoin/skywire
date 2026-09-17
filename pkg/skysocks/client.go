@@ -23,8 +23,11 @@ import (
 	"github.com/0magnet/yamux"
 
 	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/proxyinterstitial"
 	"github.com/skycoin/skywire/pkg/proxystatus"
+	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/wasmhv"
@@ -214,6 +217,29 @@ type Client struct {
 	poolSettledReason string
 	poolSettledLogged bool
 	poolFillInFlight  atomic.Bool
+
+	// muxNote reports one tunnel switch to the visor, which records it on the
+	// router's mux-event ring and re-labels the route group's tunnel role. Set
+	// by NewClient from the app client; nil (every unit test, and a Client
+	// built without an app) simply means nothing is reported.
+	//
+	// The calls go through muxNoteC and one drain goroutine rather than
+	// straight out of the keepalive loop, because this is an RPC to the visor
+	// over the same proc conn a dial uses: a slow visor must not be able to
+	// stall the loop that retires dead tunnels. The channel keeps the ORDER
+	// (retired before promoted, which is how a failover reads) and drops on a
+	// full buffer rather than blocking — an unreported event is a missing
+	// line in `visor state`, a blocked keepalive loop is an outage.
+	muxNote  func(port routing.Port, event, reason, role string) error
+	muxNoteC chan tunnelNote
+}
+
+// tunnelNote is one queued mux event on its way to the visor.
+type tunnelNote struct {
+	port   routing.Port
+	event  string
+	reason string
+	role   string
 }
 
 // Tunnel roles, as reported to the visor at dial time (router.DialOptions
@@ -337,6 +363,14 @@ type tunnelMeter struct {
 	stamp atomic.Int64
 	rx    atomic.Uint64
 	tx    atomic.Uint64
+
+	// port is the LOCAL port this tunnel was dialed from — the route group's
+	// source port, and the only name the app and the visor share for one
+	// tunnel. Set once at newYamuxSession from the dialed conn's local
+	// address and never written again, so it needs no lock. 0 when the conn
+	// is not an app conn (every unit test, and the single-tunnel fallback
+	// paths), which simply means no event can be reported for it.
+	port routing.Port
 
 	// openTimeouts counts exit-open timeouts charged to this tunnel and
 	// penaltyUntil (UnixNano; 0 = none) is the instant it may be picked again.
@@ -516,6 +550,7 @@ const (
 // and AddTunnel so every tunnel is configured identically.
 func newYamuxSession(conn net.Conn) (*yamux.Session, *tunnelMeter, error) {
 	m := new(tunnelMeter)
+	m.port = tunnelLocalPort(conn)
 	sessionCfg := yamux.DefaultConfig()
 	sessionCfg.EnableKeepAlive = false
 	sessionCfg.MaxStreamWindowSize = muxStreamWindowBytes
@@ -525,6 +560,22 @@ func newYamuxSession(conn net.Conn) (*yamux.Session, *tunnelMeter, error) {
 		return nil, nil, fmt.Errorf("error creating client: yamux: %w", err)
 	}
 	return session, m, nil
+}
+
+// tunnelLocalPort reads the local port a tunnel's conn was dialed from. It is
+// the route group's SOURCE port, which is what names the tunnel to the visor
+// (Client.noteTunnel -> app.Client.NoteMuxEvent -> router.NoteTunnelEvent).
+// 0 for anything that is not an app conn — a test pipe, or a tunnel dialed
+// over a network that does not carry an app address — and 0 simply means this
+// tunnel's switches go unreported rather than reported wrongly.
+func tunnelLocalPort(conn net.Conn) routing.Port {
+	if conn == nil {
+		return 0
+	}
+	if a, ok := conn.LocalAddr().(appnet.Addr); ok {
+		return a.Port
+	}
+	return 0
 }
 
 // NewClient constructs a new single-tunnel Client. Signature unchanged: this is
@@ -556,12 +607,79 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 	c.sessions = []*yamux.Session{session}
 	c.recvStamp = map[*yamux.Session]*tunnelMeter{session: stamp}
 
+	if appCl != nil {
+		c.muxNote = appCl.NoteMuxEvent
+	}
+	c.startMuxNotes()
+
 	go func() {
 		defer close(c.keepAliveDone)
 		c.sessionKeepAliveLoop()
 	}()
 
 	return c, nil
+}
+
+// muxNoteBuffer is how many tunnel events may be queued for the visor at once.
+// A failover writes two (retired + promoted) and the promoter at most two per
+// 5 s tick, so this is ~2 minutes of the worst churn the dampers allow — far
+// more than a visor answering an RPC in milliseconds can fall behind by.
+const muxNoteBuffer = 64
+
+// startMuxNotes runs the single goroutine that drains queued tunnel events to
+// the visor, in order, off the keepalive loop's back. No-op when no app client
+// wired a reporter.
+func (c *Client) startMuxNotes() {
+	if c.muxNote == nil {
+		return
+	}
+	c.muxNoteC = make(chan tunnelNote, muxNoteBuffer)
+	go func() {
+		for {
+			select {
+			case <-c.closeC:
+				return
+			case n := <-c.muxNoteC:
+				if err := c.muxNote(n.port, n.event, n.reason, n.role); err != nil && c.appCl != nil {
+					c.appCl.Log().Debugf("Reporting %s for tunnel on port %d failed: %v", n.event, n.port, err)
+				}
+			}
+		}
+	}()
+}
+
+// noteTunnel queues one tunnel event for the visor: it lands on the router's
+// mux-event ring (`visor state --select diag` .diag.mux_events, and the
+// group's own events in `proxy mux events`) stamped with the route group's
+// first hop, and role — when non-empty — re-labels that group's tunnel_role so
+// `visor state --select mux_route_groups` says what the tunnel is NOW.
+//
+// Never blocks: a full queue drops the event rather than holding up the
+// keepalive loop. Silent when the session has no local port (a test pipe) or
+// no reporter is wired.
+func (c *Client) noteTunnel(s *yamux.Session, event, reason, role string) {
+	if s == nil {
+		return
+	}
+	c.sessionsMu.Lock()
+	m := c.recvStamp[s]
+	c.sessionsMu.Unlock()
+	if m == nil {
+		return
+	}
+	c.queueTunnelNote(m.port, event, reason, role)
+}
+
+// queueTunnelNote is noteTunnel for a caller that already holds the tunnel's
+// local port — the retire path, which drops the meter as it goes.
+func (c *Client) queueTunnelNote(port routing.Port, event, reason, role string) {
+	if c.muxNoteC == nil || port == 0 {
+		return
+	}
+	select {
+	case c.muxNoteC <- tunnelNote{port: port, event: event, reason: reason, role: role}:
+	default:
+	}
 }
 
 // NewMultiClient constructs a Client striping across one tunnel per conn. With a
@@ -594,6 +712,13 @@ func NewMultiClient(conns []net.Conn, appCl *app.Client) (*Client, error) {
 // up automatically. This is the extension point the disjoint-dial coordinator
 // (RFC step 3) will call to grow the tunnel set at runtime.
 func (c *Client) AddTunnel(conn net.Conn) error {
+	return c.addTunnel(conn, false)
+}
+
+// addTunnel is the body of AddTunnel / AddStandbyTunnel: it wraps conn in a
+// yamux session and registers its meter and its standby mark together, so a
+// pool tunnel is never briefly visible to the picker as an active one.
+func (c *Client) addTunnel(conn net.Conn, standby bool) error {
 	session, stamp, err := newYamuxSession(conn)
 	if err != nil {
 		return err
@@ -604,6 +729,12 @@ func (c *Client) AddTunnel(conn net.Conn) error {
 		c.recvStamp = make(map[*yamux.Session]*tunnelMeter)
 	}
 	c.recvStamp[session] = stamp
+	if standby {
+		if c.standby == nil {
+			c.standby = make(map[*yamux.Session]bool)
+		}
+		c.standby[session] = true
+	}
 	c.sessionsMu.Unlock()
 	return nil
 }
@@ -828,22 +959,7 @@ func (c *Client) IsStandby(s *yamux.Session) bool {
 // ping, same hard-dead window — which is the whole point: its measurement is
 // current the moment it is needed.
 func (c *Client) AddStandbyTunnel(conn net.Conn) error {
-	session, stamp, err := newYamuxSession(conn)
-	if err != nil {
-		return err
-	}
-	c.sessionsMu.Lock()
-	c.sessions = append(c.sessions, session)
-	if c.recvStamp == nil {
-		c.recvStamp = make(map[*yamux.Session]*tunnelMeter)
-	}
-	c.recvStamp[session] = stamp
-	if c.standby == nil {
-		c.standby = make(map[*yamux.Session]bool)
-	}
-	c.standby[session] = true
-	c.sessionsMu.Unlock()
-	return nil
+	return c.addTunnel(conn, true)
 }
 
 // activeLiveCount counts the live tunnels that are NOT in standby — the width
@@ -859,6 +975,149 @@ func (c *Client) activeLiveCount() int {
 		n++
 	}
 	return n
+}
+
+// standbyRTTStale is how long a standby tunnel's last sign of life may be
+// before its RTT is treated as unproven for RANKING. The keepalive loop pings
+// every tunnel every tunnelRTTProbeInterval, so three intervals of silence
+// means the tunnel is not answering — exactly the "silently black-holing
+// standby promoted into a transfer" case. It never makes a tunnel ineligible
+// for FAILOVER, only worse-ranked: with an active tunnel already dead, a
+// standby of unknown latency still beats an 8-9 s route setup.
+const standbyRTTStale = 3 * tunnelRTTProbeInterval
+
+// promoteBestStandby moves the best live standby tunnel into the active set
+// and returns it (nil when the pool holds nothing usable).
+//
+// "Best" is the lowest yamux-ping RTT, the one statistic a tunnel carrying
+// nothing actually has. It is a true symmetric end-to-end round trip, unlike
+// the router's per-leg route_latency_ms, whose pong always replies on leg 0.
+// A tunnel that has gone quiet for standbyRTTStale sorts behind every fresh
+// one but is still eligible, and a benched tunnel (its exit open timed out)
+// behind that again: at a failover the pool is what there is.
+//
+// The flip is two map entries and one event. No stream is migrated, because a
+// standby tunnel by definition carries none.
+func (c *Client) promoteBestStandby(reason string) *yamux.Session {
+	now := time.Now()
+	c.sessionsMu.Lock()
+	var (
+		best  *yamux.Session
+		bestK [3]float64 // benched, stale, rtt — lower wins, in that order
+	)
+	for _, s := range c.sessions {
+		if s == nil || s.IsClosed() || !c.standby[s] {
+			continue
+		}
+		m := c.recvStamp[s]
+		k := [3]float64{0, 1, 0}
+		if m != nil {
+			if m.onBench(now) {
+				k[0] = 1
+			}
+			if ms, ok := m.rtt(); ok {
+				k[2] = ms
+				if ns := m.stamp.Load(); ns > 0 && now.Sub(time.Unix(0, ns)) <= standbyRTTStale {
+					k[1] = 0
+				}
+			}
+		}
+		if best == nil || k[0] < bestK[0] ||
+			(k[0] == bestK[0] && k[1] < bestK[1]) ||
+			(k[0] == bestK[0] && k[1] == bestK[1] && k[2] < bestK[2]) {
+			best, bestK = s, k
+		}
+	}
+	if best != nil {
+		delete(c.standby, best)
+	}
+	c.sessionsMu.Unlock()
+	if best == nil {
+		return nil
+	}
+	c.noteTunnel(best, router.MuxEventTunnelPromoted, reason, TunnelRoleActive)
+	if c.appCl != nil {
+		c.appCl.Log().Infof("Promoted a standby tunnel into the active set (%s); %d active of %d held",
+			reason, c.activeLiveCount(), c.liveSessionCount())
+	}
+	return best
+}
+
+// parkTunnel returns an ACTIVE tunnel to the pool: it stops being picked, goes
+// on being pinged and measured, and can be promoted again later. Reports
+// whether it was active to begin with.
+//
+// Parking never touches streams. A tunnel carrying any is not a candidate —
+// the caller checks that — because the pool's whole bargain is that switching
+// costs nothing in flight.
+func (c *Client) parkTunnel(s *yamux.Session, reason string) bool {
+	if s == nil {
+		return false
+	}
+	c.sessionsMu.Lock()
+	if c.standby[s] {
+		c.sessionsMu.Unlock()
+		return false
+	}
+	if c.standby == nil {
+		c.standby = make(map[*yamux.Session]bool)
+	}
+	c.standby[s] = true
+	c.sessionsMu.Unlock()
+	c.noteTunnel(s, router.MuxEventTunnelParked, reason, TunnelRoleStandby)
+	return true
+}
+
+// retireTunnel closes a tunnel the keepalive loop found dead and, when it was
+// an ACTIVE one, replaces it from the standby pool IN THE SAME TICK — before
+// any re-dial is considered.
+//
+// This is what the pool is for. Before it, the active width came back only
+// from a fresh dial: up to sessionHardDeadWindow (45 s) to notice the death,
+// then a route setup (8-9 s typical, dialSetupCeiling 90 s at worst) to
+// replace it, and the measured ttfb after a first-hop cut was 35-40 s. A
+// promote is a map lookup on a route group that is already set up, already
+// noise-handshaked and already being pinged.
+//
+// What it does NOT fix: a lone stream already spliced onto the cut tunnel
+// (a POST) still dies with it — handleStream has no retry and stream migration
+// is out of scope. Range chunks were already rescued in one round trip by
+// tunnelGuard. The promise here is that the NEXT stream lands instantly on a
+// live tunnel and the client never collapses, not that the in-flight upload
+// survives.
+//
+// The dead group is NOT rebuilt as active: maybeRedial sees a full active set
+// and stands down, and the pool fill — re-armed by this very death, since the
+// first hop it held is free again — dials the replacement into the pool TAIL
+// in the background. So the surviving route groups are left exactly as they
+// were.
+// Retiring is once-only per tunnel: a closed session stays in the session
+// slice (nothing prunes it), so the keepalive loop sees it again every tick,
+// and a promote per tick would drain the pool over one death. The meter's
+// presence is the ledger — this drops it — so the second
+// sighting reports false and does nothing.
+func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
+	if s == nil {
+		return false
+	}
+	c.sessionsMu.Lock()
+	m := c.recvStamp[s]
+	if m == nil {
+		c.sessionsMu.Unlock()
+		return false // already retired on an earlier tick
+	}
+	wasStandby := c.standby[s]
+	port := m.port
+	delete(c.recvStamp, s)
+	delete(c.standby, s)
+	c.sessionsMu.Unlock()
+
+	_ = s.Close() //nolint:errcheck
+	c.queueTunnelNote(port, router.MuxEventTunnelRetired, reason, "")
+	if !wasStandby {
+		c.promoteBestStandby("failover: active tunnel died")
+	}
+	return true
 }
 
 // armPoolFill re-opens the fill after it has settled. Called on a FRESH tunnel
@@ -1003,22 +1262,38 @@ func (c *Client) maybePoolFill() {
 			c.notePoolDialFailure(err)
 			return
 		}
-		// A pool dial lands in the ACTIVE set while that set is short — a
-		// tunnel died and this is its replacement — and in standby otherwise.
-		// So the same loop both restores aggregation width and grows the pool,
-		// and the active width is what the app asked for either way.
-		var aerr error
-		role := TunnelRoleStandby
-		if c.activeLiveCount() < target {
-			role = TunnelRoleActive
-			aerr = c.AddTunnel(conn)
-		} else {
-			aerr = c.AddStandbyTunnel(conn)
-		}
-		if aerr != nil {
+		// A pool dial ALWAYS lands in standby, never in the active set.
+		//
+		// It used to join the active set whenever that set was short, and
+		// measured on the rig 2026-09-17 (campaign21, develop 67dddb8be) that
+		// was a bad trade: the bench cut the active Atlanta tunnel's first hop
+		// with six healthy stcpr standbys held, the refill dial excluded every
+		// held hop and took the next-ranked candidate — a SUDPH hop to a fleet
+		// peer — and that brand-new group went straight into the active set.
+		// Every later lone upload picked it (pickAny is lowest RTT, and a
+		// fresh tunnel's first ping was good), so the three 50 MB uploads ran
+		// at 0.45-0.52 MB/s against a 9-10 MB/s reference while six held
+		// tunnels sat idle. A dial's RANK is not evidence that a route carries
+		// traffic well; a held tunnel that has been pinged for minutes is at
+		// least measured.
+		//
+		// So the two jobs are separated: the fill only ever grows the pool,
+		// and promotion — from the pool, by measurement — is the only way into
+		// the active set. If the active set is short when a pool tunnel lands
+		// (the pool was empty when its predecessor died), the promote happens
+		// immediately, but it goes through the same ranking as any other, so
+		// the tunnel that takes the slot is the best HELD one, not merely the
+		// newest.
+		if aerr := c.addTunnel(conn, true); aerr != nil {
 			_ = conn.Close() //nolint:errcheck,gosec
 			c.notePoolDialFailure(aerr)
 			return
+		}
+		// The pool just grew, so if the active set is still short — nothing was
+		// held when its predecessor died — promote now, by rank. Usually a
+		// no-op: the failover already refilled the set from the pool.
+		if c.activeLiveCount() < target {
+			c.promoteBestStandby("failover: active set short after a pool dial landed")
 		}
 		// Progress: the topology is answering, so the failure ledger starts over.
 		c.redialMu.Lock()
@@ -1028,7 +1303,7 @@ func (c *Client) maybePoolFill() {
 		c.redialMu.Unlock()
 		if c.appCl != nil {
 			held, standby, _, _, _ := c.StandbyPoolState()
-			c.appCl.Log().Infof("Standby pool grew by one %s tunnel; %d held (%d standby)", role, held, standby)
+			c.appCl.Log().Infof("Standby pool grew by one tunnel; %d held (%d standby)", held, standby)
 		}
 	}()
 }
@@ -1085,6 +1360,15 @@ const maxRedialFails = 3
 // deliberate follow-up: it needs the gigabit validation rig to tune the
 // slow-leg threshold, and mis-tuned it would thrash healthy tunnels. This method
 // is liveness-only: a DEAD tunnel is replaced; a live one is left alone.
+//
+// The target is compared against the ACTIVE tunnel count, not the total held.
+// Without a pool those are the same number and nothing changes. With one, a
+// death is answered in the same tick by promoting a standby (retireTunnel), so
+// by the time this runs the active set is already whole and the re-dial stands
+// down — the replacement route is dialed into the pool TAIL by maybePoolFill
+// instead, which is what leaves every surviving route group untouched. A
+// re-dial happens only when the pool had nothing to give, and then an ACTIVE
+// replacement is exactly the right answer.
 func (c *Client) maybeRedial(live int) {
 	c.redialMu.Lock()
 	fn := c.redial
@@ -1095,7 +1379,7 @@ func (c *Client) maybeRedial(live int) {
 	backedOff := c.redialFails >= maxRedialFails
 	c.redialMu.Unlock()
 
-	if fn == nil || backedOff || live >= target || live <= 0 {
+	if fn == nil || backedOff || c.activeLiveCount() >= target || live <= 0 {
 		return
 	}
 	if !c.redialInFlight.CompareAndSwap(false, true) {
@@ -1164,15 +1448,6 @@ func (c *Client) recordTunnelRTT(s *yamux.Session, rtt time.Duration) {
 	if m != nil {
 		m.recordRTT(rtt)
 	}
-}
-
-// dropRecvStamp forgets a retired session's receive stamp (map hygiene mirroring
-// the keepalive loop's lastPong deletes).
-func (c *Client) dropRecvStamp(s *yamux.Session) {
-	c.sessionsMu.Lock()
-	delete(c.recvStamp, s)
-	delete(c.standby, s)
-	c.sessionsMu.Unlock()
 }
 
 func (c *Client) snapshotSessions() []*yamux.Session {
@@ -1623,9 +1898,14 @@ func (c *Client) sessionKeepAliveLoop() {
 			now := time.Now()
 			for _, s := range c.snapshotSessions() {
 				if s.IsClosed() {
+					// A tunnel that closed on its OWN — the route group was
+					// torn down, the transport went away, the peer hung up —
+					// is just as much an active-tunnel death as one the
+					// hard-dead window catches, and is the common shape of a
+					// first-hop cut. Same failover, same once-only ledger.
+					c.retireTunnel(s, "tunnel session closed")
 					delete(lastPong, s)
 					delete(inFlight, s)
-					c.dropRecvStamp(s)
 					continue
 				}
 				if _, seen := lastPong[s]; !seen {
@@ -1655,13 +1935,17 @@ func (c *Client) sessionKeepAliveLoop() {
 					lastAlive = rt
 				}
 				if now.Sub(lastAlive) >= c.hardDeadWindow {
+					silent := now.Sub(lastAlive).Truncate(time.Second)
 					if c.appCl != nil {
-						c.appCl.Log().Warnf("No pong and no traffic either way for %v (> hard-dead window); tunnel gone, retiring it", now.Sub(lastAlive).Truncate(time.Second))
+						c.appCl.Log().Warnf("No pong and no traffic either way for %v (> hard-dead window); tunnel gone, retiring it", silent)
 					}
-					_ = s.Close() //nolint:errcheck
+					// Closes it AND, when it was an active tunnel, promotes the
+					// best standby into its place before this tick ends — so
+					// the next stream has somewhere live to go immediately
+					// rather than after a fresh route setup.
+					c.retireTunnel(s, fmt.Sprintf("liveness: no pong and no bytes for %v", silent))
 					delete(lastPong, s)
 					delete(inFlight, s)
-					c.dropRecvStamp(s)
 				}
 			}
 			if c.allSessionsClosed() {

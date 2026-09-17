@@ -576,6 +576,18 @@ func (_m *MockRouter) MuxEvents() []MuxEvent {
 	return nil
 }
 
+// NoteTunnelEvent provides a mock function
+func (_m *MockRouter) NoteTunnelEvent(localPort routing.Port, event string, reason string, role string) bool {
+	ret := _m.Called(localPort, event, reason, role)
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(routing.Port, string, string, string) bool); ok {
+		r0 = rf(localPort, event, reason, role)
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).(bool)
+	}
+	return r0
+}
+
 // ActiveRouteStatuses provides a mock function with no fields
 func (_m *MockRouter) ActiveRouteStatuses() []RouteStatus {
 	ret := _m.Called()

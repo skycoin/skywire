@@ -1703,10 +1703,61 @@ func pickBestDirection(paths [][]routing.Hop, excludeSet map[cipher.PubKey]struc
 	return paths[bestIdx], true
 }
 
+// Carrier classes for the diversify ranking, best first. The FIRST HOP's
+// carrier decides a candidate's class, and the class outranks latency
+// outright.
+//
+// Latency alone is the wrong key, measured on the rig 2026-09-17 (campaign21,
+// mux-tunnels-2-up2): on a fresh start the ranked sibling dial took a SUDPH
+// hop to a fleet peer as the second active tunnel and the pool then filled
+// five of six standby slots with more sudph fleet hops, because their
+// first-hop latencies beat the rig's stcpr intermediates. Three trials of two
+// concurrent 50 MB uploads gave 8.6 + 0.5 MB/s against references of
+// 10.1 + 8.8: the sudph tunnel carries about half a megabyte a second however
+// fast it answers a ping. A hole-punched UDP flow through two NATs is not the
+// same kind of link as a resolved TCP or QUIC connection, and latency does not
+// say so.
+//
+// This is an ORDERING, not a filter: a sudph or webrtc route is still dialed
+// and still held in the standby pool, and the promoter can still switch one in
+// on measurement. It only stops such a route being taken FIRST while a direct
+// one is free.
+const (
+	carrierClassDirect = 0 // stcpr / squicr / stcp: a resolved TCP or QUIC link this visor dials
+	carrierClassHole   = 1 // sudph: UDP hole-punched through both NATs
+	carrierClassP2P    = 2 // webrtc: DTLS+SCTP over ICE, browser-reachable
+	carrierClassOther  = 3 // dmsg (relayed), swsr / swtr, and anything unknown
+)
+
+// firstHopCarrierClass classes a candidate by the carrier of its first hop —
+// the transport this visor owns and chose. Later hops are not classed: their
+// carriers are not this visor's decision, and the evidence is about the link
+// it dials. An unrecognized or underivable type is classed with the others,
+// which is where an unknown carrier belongs.
+func firstHopCarrierClass(path []routing.Hop) int {
+	if len(path) == 0 {
+		return carrierClassOther
+	}
+	h := path[0]
+	switch transport.TypeFromTransportID(h.TpID, h.From, h.To) {
+	case tptypes.STCPR, tptypes.QUIC, tptypes.STCP:
+		return carrierClassDirect
+	case tptypes.SUDPH:
+		return carrierClassHole
+	case tptypes.WEBRTC:
+		return carrierClassP2P
+	default:
+		return carrierClassOther
+	}
+}
+
 // rankByPathLatency orders a diversify dial's admissible candidates (those whose
 // first hop is not already claimed by a sibling tunnel and is not a same-LAN
-// neighbour, i.e. the output of freeFirstHops) by their MEASURED END-TO-END
-// latency — the sum of every hop's latency — lowest first. A candidate with any
+// neighbour, i.e. the output of freeFirstHops) by their first hop's CARRIER
+// CLASS first (see carrierClassDirect — a resolved TCP/QUIC link beats a
+// hole-punched UDP one however good its ping) and then, within a class, by
+// their MEASURED END-TO-END latency — the sum of every hop's latency — lowest
+// first. A candidate with any
 // unmeasured hop sorts LAST: an unknown link is not evidence of a good one, and
 // a route known only as far as its first hop is not known at all. Ties break on
 // fewer hops, then on the input order (the sort is stable), so the route-finder's
@@ -1729,12 +1780,13 @@ func rankByPathLatency(cands [][]routing.Hop, latencyFor func(uuid.UUID) float64
 	}
 	type scored struct {
 		path    []routing.Hop
+		class   int
 		ms      float64
 		unknown bool
 	}
 	acc := make([]scored, 0, len(cands))
 	for _, p := range cands {
-		s := scored{path: p, unknown: true}
+		s := scored{path: p, class: firstHopCarrierClass(p), unknown: true}
 		if ms, ok := pathLatencyTotalMs(p, latencyFor); ok {
 			s.ms, s.unknown = ms, false
 		}
@@ -1742,6 +1794,9 @@ func rankByPathLatency(cands [][]routing.Hop, latencyFor func(uuid.UUID) float64
 	}
 	sort.SliceStable(acc, func(i, j int) bool {
 		a, b := acc[i], acc[j]
+		if a.class != b.class {
+			return a.class < b.class
+		}
 		if a.unknown != b.unknown {
 			return !a.unknown
 		}
@@ -1828,6 +1883,12 @@ func pathLatencyTrail(cands [][]routing.Hop, latencyFor func(uuid.UUID) float64,
 			continue
 		}
 		name := p[0].TpID.String()[:8]
+		// Name the carrier when it is derivable, since it is now the ranking's
+		// FIRST key and a reading of the trail that cannot see it would look
+		// like a latency ordering gone wrong.
+		if t := transport.TypeFromTransportID(p[0].TpID, p[0].From, p[0].To); t != "" {
+			name += "/" + string(t)
+		}
 		if firstHopLatencyMs(p, latencyFor) <= 0 {
 			out = append(out, name+"=unmeasured")
 			continue
@@ -2019,7 +2080,7 @@ func notePathRanking(opts *DialOptions, cands [][]routing.Hop, latencyFor func(u
 	if len(ranked) == 0 {
 		return ranked
 	}
-	opts.note("ranked by path latency: %s; chose %s",
+	opts.note("ranked by carrier class then path latency: %s; chose %s",
 		pathLatencyTrail(ranked, latencyFor, probed), firstHopsOf(ranked[:1]))
 	return ranked
 }

@@ -113,6 +113,24 @@ func (c *Client) SetAppPort(appPort routing.Port) error {
 	return c.rpcC.SetAppPort(appPort)
 }
 
+// NoteMuxEvent records a TUNNEL event this app decided — a standby tunnel
+// promoted into the active set, an active one parked back into standby, a dead
+// one retired — on the route group the app dialed from localPort, and re-labels
+// that group's tunnel role ("active" / "standby"; "" leaves it alone).
+//
+// The app is the only end that knows which of its tunnels carries streams, and
+// the router is the only end that knows the route behind one and owns the event
+// ring `visor state --select diag` reads. localPort — the port handed back by
+// the dial — is the one name both ends share.
+func (c *Client) NoteMuxEvent(localPort routing.Port, event, reason, role string) error {
+	return c.rpcC.NoteMuxEvent(appserver.NoteMuxEventReq{
+		LocalPort: localPort,
+		Event:     event,
+		Reason:    reason,
+		Role:      role,
+	})
+}
+
 // ProxyStatus fetches the visor-built rich read-only status snapshot for this
 // app (per-leg mux telemetry, recent logs, route/transport events). An app that
 // serves its own reserved status host (skysocks-client's status.skysocks)
