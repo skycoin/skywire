@@ -211,9 +211,3 @@ func TestCopyWithIdleTimeout_SilenceFails(t *testing.T) {
 		t.Logf("failure error (acceptable): %v", err)
 	}
 }
-
-// isTimeout reports whether err is a net timeout.
-func isTimeout(err error) bool {
-	var ne net.Error
-	return errors.As(err, &ne) && ne.Timeout()
-}

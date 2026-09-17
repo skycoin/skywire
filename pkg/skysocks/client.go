@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -109,6 +110,20 @@ type Client struct {
 	// than synchronizing it.
 	probeInterval  time.Duration
 	hardDeadWindow time.Duration
+
+	// exitOpenTimeouts is the client's cumulative count of exit opens that timed
+	// out — a stream whose exit never answered the SOCKS5 greeting inside
+	// statusSniffTimeout, which returns the browser nothing at all. Kept here as
+	// well as per-tunnel because a retired tunnel's meter is dropped, and the
+	// status page's number must not go backwards. Surfaced as
+	// proxystatus.Snapshot.ExitOpenTimeouts.
+	exitOpenTimeouts atomic.Uint64
+
+	// sniffTimeout overrides statusSniffTimeout for this client's exit opens.
+	// Zero (the only value production sets) means statusSniffTimeout. It is a
+	// per-client field rather than a package var because the package vars the
+	// keepalive loop used to read raced across tests; see probeInterval above.
+	sniffTimeout time.Duration
 
 	// streams tracks the currently open tunneled streams so the status page can
 	// expand the "N open stream(s)" count into per-stream rows (id + CONNECT
@@ -264,6 +279,12 @@ type tunnelMeter struct {
 	rx    atomic.Uint64
 	tx    atomic.Uint64
 
+	// openTimeouts counts exit-open timeouts charged to this tunnel and
+	// penaltyUntil (UnixNano; 0 = none) is the instant it may be picked again.
+	// See exitOpenPenalty.
+	openTimeouts atomic.Uint64
+	penaltyUntil atomic.Int64
+
 	mu       sync.Mutex
 	lastAt   time.Time
 	lastRx   uint64
@@ -317,6 +338,38 @@ func (m *tunnelMeter) sample(now time.Time, busy bool) {
 	if txRate > m.txCapBps {
 		m.txCapBps = txRate
 	}
+}
+
+// exitOpenPenalty is how long a tunnel sits out the picks after an exit open
+// timed out on it. A tunnel whose exit stops answering the SOCKS5 greeting
+// delivers the browser nothing, yet it stays "live": yamux sees no error, so
+// IsClosed() stays false, and the stale-idle rule above credits an idle tunnel
+// the best known capacity — which steers the very next stream straight back
+// onto the tunnel that just timed out (measured live during a ~55s all-paths
+// blackout: two consecutive 10MB downloads through a 3-tunnel client returned
+// nothing, each after exactly 15.0s). The window is short on purpose: long
+// enough that the next stream tries a different tunnel, short enough that a
+// tunnel recovering from a transient blackout is retried almost at once. It is
+// cleared by the first successful exit open on the tunnel, and never applied to
+// the only live tunnel — sitting out is only useful when something else can
+// take the stream.
+const exitOpenPenalty = 10 * time.Second
+
+// bench charges an exit-open timeout to the tunnel and benches it for
+// exitOpenPenalty.
+func (m *tunnelMeter) bench(now time.Time) {
+	m.openTimeouts.Add(1)
+	m.penaltyUntil.Store(now.Add(exitOpenPenalty).UnixNano())
+}
+
+// unbench returns the tunnel to the picks; called when an exit open on it
+// succeeds.
+func (m *tunnelMeter) unbench() { m.penaltyUntil.Store(0) }
+
+// onBench reports whether the tunnel is still benched at now.
+func (m *tunnelMeter) onBench(now time.Time) bool {
+	until := m.penaltyUntil.Load()
+	return until > 0 && now.UnixNano() < until
 }
 
 // capacity returns the tunnel's proven capacity in bytes/s for a stream of the
@@ -708,6 +761,11 @@ func (c *Client) pickSession() *yamux.Session {
 // three tunnels put every byte on one. With every tunnel idle (a lone upload,
 // a browser connection) the stale estimates are still the best information
 // there is, and the pick weighs them as proven.
+//
+// A tunnel whose last exit open timed out is skipped for exitOpenPenalty the
+// same way a closed tunnel is, unless it is the only live one — otherwise the
+// stale-idle credit above steers the next stream straight back onto the tunnel
+// that just failed to deliver a byte.
 func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 	c.sessionsMu.Lock()
 	defer c.sessionsMu.Unlock()
@@ -720,8 +778,24 @@ func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 	fresh := make([]bool, len(c.sessions))
 	best := 0.0
 	anyBusy := false
+	// A tunnel whose last exit open timed out is benched for exitOpenPenalty and
+	// skipped exactly like a closed one — but only while another live tunnel can
+	// take the stream. With no unbenched tunnel left the bench is ignored: a
+	// benched tunnel that is all there is still beats refusing to pick.
+	sitOut := make([]bool, len(c.sessions))
+	spare := 0
 	for i, s := range c.sessions {
 		if s == nil || s.IsClosed() {
+			continue
+		}
+		if m := c.recvStamp[s]; m != nil && m.onBench(now) {
+			sitOut[i] = true
+			continue
+		}
+		spare++
+	}
+	for i, s := range c.sessions {
+		if s == nil || s.IsClosed() || (sitOut[i] && spare > 0) {
 			counts[i] = -1
 			continue
 		}
@@ -1263,19 +1337,93 @@ func offersNoAuth(greeting []byte) bool {
 // with 05 00. It is called only after the local browser handshake, so it never
 // gates recognition of the reserved status host on the exit being reachable. A
 // read deadline bounds a dead exit so it can't wedge the goroutine.
+//
+// A timeout here used to be SILENT: handleStream closed both ends without
+// writing a byte and without a log line, so the browser saw a bare connection
+// close after exactly the sniff window and nothing anywhere said why. It is now
+// logged and counted (noteExitOpenTimeout), and the tunnel it happened on sits
+// out the next picks.
 func (c *Client) openExit(stream net.Conn, greeting []byte) error {
-	_ = stream.SetReadDeadline(time.Now().Add(statusSniffTimeout)) //nolint:errcheck
+	started := time.Now()
+	_ = stream.SetReadDeadline(started.Add(c.exitOpenWindow())) //nolint:errcheck
 	if _, err := stream.Write(greeting); err != nil {
 		return err
 	}
 	method := make([]byte, 2)
 	if _, err := io.ReadFull(stream, method); err != nil {
+		if isTimeout(err) {
+			c.noteExitOpenTimeout(stream, time.Since(started), err)
+		}
 		return err
 	}
 	if method[0] != 0x05 || method[1] != 0x00 {
 		return fmt.Errorf("exit selected non-no-auth method %v", method)
 	}
+	// The exit answered: whatever benched this tunnel is over.
+	if m, _ := c.tunnelOf(stream); m != nil {
+		m.unbench()
+	}
 	return nil
+}
+
+// exitOpenWindow is how long openExit waits for the exit's method-selection
+// reply: statusSniffTimeout unless this client was given a shorter one.
+func (c *Client) exitOpenWindow() time.Duration {
+	if c.sniffTimeout > 0 {
+		return c.sniffTimeout
+	}
+	return statusSniffTimeout
+}
+
+// isTimeout reports whether err is a deadline expiry rather than a real error.
+// yamux surfaces its own ErrTimeout for an expired stream deadline, which
+// satisfies net.Error; os.ErrDeadlineExceeded covers a plain net.Conn.
+func isTimeout(err error) bool {
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return true
+	}
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
+}
+
+// tunnelOf returns the meter of the tunnel a stream was opened on, and that
+// tunnel's index in the current set (-1 when unknown). Best-effort: a stream
+// that is not a *yamux.Stream of one of our sessions — the in-memory pipes some
+// tests splice through — yields (nil, -1) and is simply not charged.
+func (c *Client) tunnelOf(stream net.Conn) (*tunnelMeter, int) {
+	sr, ok := stream.(interface{ Session() *yamux.Session })
+	if !ok {
+		return nil, -1
+	}
+	sess := sr.Session()
+	c.sessionsMu.Lock()
+	defer c.sessionsMu.Unlock()
+	for i, s := range c.sessions {
+		if s == sess {
+			return c.recvStamp[s], i
+		}
+	}
+	return nil, -1
+}
+
+// noteExitOpenTimeout makes a silent exit-open timeout visible: a WARN naming
+// the tunnel and how long it waited, a cumulative counter the status page
+// renders, and a short bench on the tunnel so the next stream tries another one.
+func (c *Client) noteExitOpenTimeout(stream net.Conn, elapsed time.Duration, err error) {
+	c.exitOpenTimeouts.Add(1)
+	m, idx := c.tunnelOf(stream)
+	if m != nil {
+		m.bench(time.Now())
+	}
+	if c.appCl == nil {
+		return
+	}
+	tunnel := "tunnel ?"
+	if idx >= 0 {
+		tunnel = fmt.Sprintf("tunnel %d/%d", idx+1, len(c.snapshotSessions()))
+	}
+	c.appCl.Log().Warnf("Exit never answered the SOCKS5 greeting on %s after %s (%v); benching it for %s — %d exit-open timeout(s) so far",
+		tunnel, elapsed.Round(100*time.Millisecond), err, exitOpenPenalty, c.exitOpenTimeouts.Load())
 }
 
 // forwardExitHandshake is the transparent fallback for a browser that offers no
@@ -1896,6 +2044,13 @@ func (c *Client) statusSnapshot() proxystatus.Snapshot {
 		}
 	} else {
 		snap.Note = "no active session to the exit"
+	}
+	// Exit-open timeouts are local client truth too, and the one failure the page
+	// could not previously show at all: the tunnel is up, the browser gets
+	// nothing. Rendered in the note so it is visible without a JSON reader.
+	if n := c.exitOpenTimeouts.Load(); n > 0 {
+		snap.ExitOpenTimeouts = n
+		snap.Note = fmt.Sprintf("%s · exit-open timeouts: %d", snap.Note, n)
 	}
 	// Range-split summary is local client truth (the counters live here, not in
 	// the visor-built base), overlaid like Streams so status.skysocks shows
