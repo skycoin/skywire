@@ -1757,9 +1757,8 @@ func firstHopCarrierClass(path []routing.Hop) int {
 // CLASS first (see carrierClassDirect — a resolved TCP/QUIC link beats a
 // hole-punched UDP one however good its ping) and then, within a class, by
 // their MEASURED END-TO-END latency — the sum of every hop's latency — lowest
-// first. A candidate with any
-// unmeasured hop sorts LAST: an unknown link is not evidence of a good one, and
-// a route known only as far as its first hop is not known at all. Ties break on
+// first. A candidate whose FIRST hop is unmeasured sorts LAST: an unknown link is
+// not evidence of a good one. Ties break on
 // fewer hops, then on the input order (the sort is stable), so the route-finder's
 // own preference survives wherever the latency signal cannot separate candidates.
 //
@@ -1767,9 +1766,18 @@ func firstHopCarrierClass(path []routing.Hop) int {
 // can measure says nothing about where the route goes afterwards: ranking on it
 // alone picked a LAN neighbour whose own hop to the exit was unknown — 1ms to
 // the first hop, and 50 MB down measured 3.85 MB/s, 10 MB down 2.46, worse than
-// the 470ms intermediate the ranking was introduced to avoid (2026-09-18). A
-// candidate is therefore MEASURED only when every hop is: partial knowledge is
-// not a ranking, and a partially-known route sorts with the unmeasured.
+// the 470ms intermediate the ranking was introduced to avoid (2026-09-18).
+//
+// A PARTIALLY measured path is still ranked, by the sum of the hops it does
+// know (at least its first hop) plus unknownHopPenaltyMs per unknown hop — it
+// is not dropped to the bottom. Sorting partial knowledge with the unmeasured
+// threw away the only intermediate worth having: on 2026-09-17
+// (bench/2026-09-16/a6a42506f-smoke)
+// a 33ms first hop whose path sample was stale — another client on this visor
+// held the route — ranked below a 131+1ms candidate and lost the dial, having
+// measured 8.23 MB/s against the winner's 3.03 minutes earlier. The penalty is
+// bounded so a fast tp with an unknown remainder can beat a slow known path but
+// never a comparable known one.
 //
 // This is an ORDERING, not a filter: no candidate is ever dropped, so a dial is
 // never starved of a route by it. The downstream rankers sort stably, so this
@@ -1788,6 +1796,8 @@ func rankByPathLatency(cands [][]routing.Hop, latencyFor func(uuid.UUID) float64
 	for _, p := range cands {
 		s := scored{path: p, class: firstHopCarrierClass(p), unknown: true}
 		if ms, ok := pathLatencyTotalMs(p, latencyFor); ok {
+			s.ms, s.unknown = ms, false
+		} else if ms, ok := pathLatencyPartialMs(p, latencyFor); ok {
 			s.ms, s.unknown = ms, false
 		}
 		acc = append(acc, s)
@@ -1866,6 +1876,34 @@ func pathLatencyTotalMs(path []routing.Hop, latencyFor func(uuid.UUID) float64) 
 	return total, true
 }
 
+// unknownHopPenaltyMs is what one unmeasured hop costs a partially-measured
+// path in pathLatencyPartialMs. It sits above a typical intra-continent hop and
+// below a bad one (the campaign fleet spans 39ms to 470ms), so a fast tp into an
+// unknown remainder outranks a known-slow path but never a known-comparable one.
+const unknownHopPenaltyMs = 150.0
+
+// pathLatencyPartialMs scores a path whose latency is known for some hops but
+// not all: the sum of the hops that ARE measured plus unknownHopPenaltyMs for
+// each that is not. ok is false when the path is empty or its FIRST hop is
+// unmeasured — that is the "unmeasured" candidate the on-demand probe exists
+// for, and it keeps sorting last. This is the fallback for a route whose
+// end-to-end sample is missing or stale (another client on this visor holding
+// it, say), which pathLatencyTotalMs alone reported as unrankable.
+func pathLatencyPartialMs(path []routing.Hop, latencyFor func(uuid.UUID) float64) (float64, bool) {
+	if firstHopLatencyMs(path, latencyFor) <= 0 {
+		return 0, false
+	}
+	var total float64
+	for _, h := range path {
+		if ms := hopLatencyMs(h, latencyFor); ms > 0 {
+			total += ms
+			continue
+		}
+		total += unknownHopPenaltyMs
+	}
+	return total, true
+}
+
 // pathLatencyTrail renders each candidate as its first-hop transport (8 chars,
 // as the rest of the decision trail names transports) and its PER-HOP latencies,
 // so `mux info`'s dial_decision shows exactly what the ranking knew:
@@ -1914,13 +1952,18 @@ func pathLatencyTrail(cands [][]routing.Hop, latencyFor func(uuid.UUID) float64,
 			continue
 		}
 		// Mixed: spell the unit on each known hop so "1ms+unknown" cannot be
-		// misread as a total.
+		// misread as a total, and say what the candidate was actually ranked on,
+		// since it is no longer sorted with the unmeasured.
 		for i, s := range parts {
 			if s != "unknown" {
 				parts[i] = s + "ms"
 			}
 		}
-		out = append(out, name+"="+strings.Join(parts, "+"))
+		entry := name + "=" + strings.Join(parts, "+")
+		if ms, ok := pathLatencyPartialMs(p, latencyFor); ok {
+			entry += fmt.Sprintf(" (path latency unknown, ranked by tp latency %.0f ms)", ms)
+		}
+		out = append(out, entry)
 	}
 	return strings.Join(out, ", ")
 }
