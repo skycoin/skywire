@@ -1,0 +1,158 @@
+[
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49160,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 1,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "b414796d-14fc-080e-9ce6-a7162e3e562b",
+        "tp_type": "stcpr",
+        "remote_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "latency_ms": 133.99776,
+        "direct": true,
+        "sent_bytes": 32,
+        "sent_packets": 1,
+        "recv_bytes": 32,
+        "recv_packets": 1,
+        "payload_bytes": 12,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 0,
+        "goodput_bps": 64.04636957156981,
+        "goodput_up_bps": 32.023184785784906,
+        "goodput_down_bps": 32.023184785784906,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "b414796d-14fc-080e-9ce6-a7162e3e562b",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr",
+            "latency_ms": 133.99776
+          }
+        ],
+        "remote_ip": "143.42.59.213"
+      }
+    ],
+    "recovery": {
+      "write_seq": 1,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 0,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 0,
+      "sacks_recv": 1,
+      "last_sack_recv_ms_ago": 454.061579,
+      "last_sack_recv_contig": 0,
+      "reorder_next_seq": 1,
+      "reorder_pending": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 1,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 453.988923,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    }
+  },
+  {
+    "desc": {
+      "dst_pk": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+      "src_pk": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+      "dst_port": 49161,
+      "src_port": 3
+    },
+    "mux_enabled": true,
+    "sack_enabled": true,
+    "per_frame_noise": true,
+    "directional": true,
+    "flip_pinned": "auto",
+    "distribution": "ecf",
+    "write_seq": 1,
+    "legs": [
+      {
+        "index": 0,
+        "transport_id": "0be8b6f0-f9d2-0ea4-8063-7ac0961d787e",
+        "tp_type": "sudph",
+        "remote_pk": "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7",
+        "latency_ms": 0.404152,
+        "direct": false,
+        "sent_bytes": 64,
+        "sent_packets": 2,
+        "recv_bytes": 32,
+        "recv_packets": 1,
+        "payload_bytes": 12,
+        "dup_bytes": 0,
+        "repair_bytes": 0,
+        "retransmits": 1,
+        "goodput_bps": 138.90385762838443,
+        "goodput_up_bps": 92.60257175225628,
+        "goodput_down_bps": 46.30128587612814,
+        "alive": true,
+        "standby": false,
+        "hops": [
+          {
+            "tp_id": "0be8b6f0-f9d2-0ea4-8063-7ac0961d787e",
+            "from": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+            "to": "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7",
+            "tp_type": "sudph",
+            "latency_ms": 0.404152
+          },
+          {
+            "tp_id": "6327ca01-70c8-0b17-9c6e-3f593697d993",
+            "from": "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7",
+            "to": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+            "tp_type": "stcpr"
+          }
+        ],
+        "remote_ip": "192.168.1.118"
+      }
+    ],
+    "recovery": {
+      "write_seq": 1,
+      "retx_held": 0,
+      "retx_min_seq": 0,
+      "retx_max_seq": 0,
+      "retx_sent": 1,
+      "retx_skipped_missing": 0,
+      "retx_req_sack": 0,
+      "retx_req_hol": 0,
+      "retx_req_flush": 0,
+      "retx_send_errors": 0,
+      "send_window_waits": 0,
+      "send_window_timeouts": 0,
+      "tlp_probes": 1,
+      "sacks_recv": 1,
+      "last_sack_recv_ms_ago": 451.964386,
+      "last_sack_recv_contig": 0,
+      "reorder_next_seq": 1,
+      "reorder_pending": 0,
+      "gap_age_ms": 0,
+      "sacks_sent": 1,
+      "sack_send_errors": 0,
+      "last_sack_sent_ms_ago": 451.920245,
+      "wedge_ticks": 0,
+      "wedges": 0,
+      "longest_wedge_ms": 0
+    }
+  }
+]
