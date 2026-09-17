@@ -124,6 +124,7 @@ var (
 	muxMode            string
 	minHops            uint16
 	startTunnels       int
+	startRangePort     int
 	startRoute         string
 	startVerbose       bool
 	startVerboseLevel  string
