@@ -1,0 +1,309 @@
+#!/bin/sh
+# run-compose.sh — criterion 4 "composition": tunnels AND legs at the same time.
+#
+#   bench/run-compose.sh <exit pk> <out dir> <pins dir> [trials] [sink] [pin order]
+#
+# One set per COMPOSE entry "<tunnels>x<legs>" (default "2x2 3x2"): the proxy
+# starts with `--tunnels T` (T independent route groups, stream-level mux) and
+# every route group is then pinned to L two-hop legs of its own (packet-level
+# mux), tunnel i taking pins [i*L, i*L+L) of the pin order — so the tunnels are
+# transport-disjoint and T x L pinned first-hop transports carry the set.
+#
+# The rg selector is the group's OWN port, desc.dst_port (#4967): every rg of
+# one app shares src_port=3 and differs only in dst_port, so
+# `proxy mux set --rg <dst_port> --legs <file> --prune` is what names a single
+# tunnel. `proxy start --route ... --tunnels N>1` is rejected on purpose —
+# start the tunnels, then pin each one. The header records pinned=yes|no and
+# the realized shape is recorded as-is either way.
+#
+# Artefacts are exactly run-mux.sh's, so summarize.sh / verdict.sh work
+# unchanged: mux-compose-T<t>xL<l>.tsv (+ .carrier.tsv, .recovery.tsv,
+# .mux_events.json, .legs.json, .exit-recovery.tsv). Row order is run-mux.sh's:
+# 10 MB down x trials, 10 MB up, 50 MB down, 50 MB up.
+#
+# The functions below are copied from run-mux.sh rather than sourced: run-mux.sh
+# is a script with top-level work, not a library, and factoring a bench/lib.sh
+# out of it would change the file a measurement run is reading right now.
+set -u
+CLI=${CLI:-/home/d0mo/go/bin/skywire}
+exit_pk=$1; out=$2; pins=$3; trials=${4:-5}; sink=${5:-http://127.0.0.1:18080}
+order=${6:-$(ls "$pins"/via-*.json | sed 's|.*/via-||; s|\.json$||' | tr '\n' ' ')}
+here=$(dirname "$0")
+mkdir -p "$out"
+local_commit=$(git -C "$here/.." rev-parse --short=9 HEAD)
+sizes=${SIZES:-"10000000 50000000"}
+compose=${COMPOSE:-"2x2 3x2"}
+# APP=skysocks-client drives every set through the DEFAULT proxy instance on
+# :1080 (APP_PORT overrides), so status.skysocks in a browser shows the session
+# under test; sets run one at a time and each stops the instance first.
+app_name() { echo "${APP:-$1}"; }
+app_addr() { if [ -n "${APP:-}" ]; then echo "127.0.0.1:${APP_PORT:-1080}"; else echo "127.0.0.1:$1"; fi; }
+
+tp_counters() {
+	$CLI cli visor state --select transports --json 2>/dev/null |
+		jq -r --arg id "$1" '.transports[] | select(.id==$id) | "\(.log.sent) \(.log.recv)"'
+}
+exit_commit() {
+	timeout 60 $CLI cli visor state --via "dmsg://$exit_pk" --select summary --json 2>/dev/null |
+		jq -r '.summary.overview.build_info.commit[0:9] // "unknown"'
+}
+stop_app() { $CLI cli proxy stop -n "$1" >/dev/null 2>&1; }
+# EXIT_SNAP=1 (the default) adds ONE exit-side query of the same route group(s)
+# after EVERY row, written to <set>.exit-recovery.tsv. The end-of-set snapshot
+# alone cannot date a receiver-side stall to a row; this can. EXIT_SNAP=0
+# restores the old end-of-set-only behaviour exactly.
+EXIT_SNAP=${EXIT_SNAP:-1}
+EXIT_SNAP_TIMEOUT=${EXIT_SNAP_TIMEOUT:-40}
+# exit_rgs <timeout> <ports json array>: the exit's view of the groups whose
+# src_port is in <ports> (our desc.dst_port is the exit's desc.src_port).
+# `--select mux_route_groups` is the SelectMux projection: the visor builds only
+# that subtree (~75 KB) instead of the ~900 KB full snapshot. Empty on failure.
+exit_rgs() {
+	timeout "$1" $CLI cli visor state --via "dmsg://$exit_pk" --select mux_route_groups --json 2>/dev/null |
+		jq -c --argjson p "$2" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, recovery, legs: [.legs[] | {tp: .transport_id[0:8], standby, retransmits, dup_bytes, ack_delay_ms}]}]' 2>/dev/null
+}
+# tp id -> remote public IP. `mux info` names a leg's transport but not where
+# it lands; `tp ls --json` carries remote_ip per transport id. Empty object on
+# any failure so the enrichment below degrades to remote_ip "".
+tp_ips() { $CLI cli tp ls --json 2>/dev/null | jq -c 'map({(.id): (.remote_ip // "")}) | add // {}' 2>/dev/null; }
+# `mux info --json` with a remote_ip added to every leg. Pure addition: on a
+# failed lookup, or if jq chokes, the untouched mux info snapshot is emitted.
+mux_info() {
+	_mi=$($CLI cli proxy mux info -n "$1" --json 2>/dev/null) || return 1
+	_mi_ips=$(tp_ips)
+	[ -n "$_mi_ips" ] || _mi_ips='{}'
+	echo "$_mi" | jq --argjson ips "$_mi_ips" \
+		'map(if (.legs | type) == "array"
+			then .legs |= map(. + {remote_ip: ($ips[.transport_id // ""] // "")})
+			else . end)' 2>/dev/null || echo "$_mi"
+}
+# --- route-group hygiene (campaign16, 2026-09-17) ------------------------------
+# `proxy stop` does not always deregister the app's route groups. A group that
+# outlives the app makes the NEXT set's `proxy start --route` fail its reconcile
+# ("app=... has N active route groups; pass --rg <port>"); the client then rides
+# an unpinned group and every row of that set is worthless. No CLI closes a group
+# directly, so the only lever is a second `proxy stop` — and when that fails too
+# the set is marked INVALID and its rows are never recorded.
+RG_WAIT=${RG_WAIT:-30} # seconds to wait for an app's route groups to go away
+# rg_ports <app>: the app's route group dst_ports, space separated; empty = none.
+# A failed or refused `mux info` also reads empty — the assert immediately before
+# `proxy start --route` and the leg-set check after it still catch that case.
+rg_ports() { mux_info "$1" 2>/dev/null | jq -r '.[]?.desc.dst_port' 2>/dev/null | tr '\n' ' ' | sed 's/ *$//'; }
+# wait_no_rg <app>: poll until the app reports zero route groups (<= RG_WAIT s).
+# The last reading is left in $rg_left.
+wait_no_rg() {
+	_w=0
+	while :; do
+		rg_left=$(rg_ports "$1")
+		[ -z "$rg_left" ] && return 0
+		[ "$_w" -ge "$RG_WAIT" ] && return 1
+		sleep 2; _w=$((_w + 2))
+	done
+}
+# stop_app_clean <app>: stop, then insist on zero route groups, retrying the stop
+# once. Returns 1 with the surviving dst_ports in $rg_left.
+stop_app_clean() {
+	stop_app "$1"
+	wait_no_rg "$1" && return 0
+	echo "$1: route group(s) still registered ${RG_WAIT}s after proxy stop: dst_ports $rg_left — stopping again"
+	stop_app "$1"
+	wait_no_rg "$1" && return 0
+	echo "$1: route group(s) STILL registered after a second proxy stop: dst_ports $rg_left"
+	return 1
+}
+# invalid_set <set> <reason>: no rows for this set, ever. summarize.sh and
+# verdict.sh skip any set carrying a .INVALID marker and print the reason.
+invalid_set() {
+	printf '%s\n' "$2" > "$out/$1.INVALID"
+	echo "$1: INVALID — $2"
+}
+# abort_set <set> <reason>: invalid_set, then leave the rig as a finished set
+# leaves it (steady width 2, app stopped) before the next set starts.
+abort_set() {
+	invalid_set "$1" "$2"
+	$CLI cli proxy mux width 2 >/dev/null 2>&1
+	[ -n "${cur_app:-}" ] && { stop_app_clean "$cur_app" || echo "$cur_app: dst_ports $rg_left left behind by an aborted set"; }
+	return 0
+}
+warm() {
+	socks=$1; name=$2
+	bad=0
+	for _ in 1 2 3 4; do
+		code=$(curl -s -m 30 --socks5-hostname "$socks" -o /dev/null -w '%{http_code}' "$sink/?bytes=100000")
+		[ "$code" = 200 ] || bad=$((bad + 1))
+	done
+	echo "$name warm: $((4 - bad))/4 probes ok"
+	[ $bad -eq 0 ]
+}
+# mux_events <set> <app>: the router's leg events for this app since the set began (criterion 7: churn with reasons)
+mux_events() {
+	$CLI cli visor state --select diag --json 2>/dev/null |
+		jq --arg app "$2" --arg since "${setup_started:-$set_started}" '[.diag.mux_events[]? | select(.app==$app and .at[0:19] >= $since)]' > "$out/$1.mux_events.json" 2>/dev/null
+	echo "$1: $(jq 'length' "$out/$1.mux_events.json" 2>/dev/null || echo 0) mux events: $(jq -r '[.[] | .event + "(" + (.reason // "") + ")"] | join(" ")' "$out/$1.mux_events.json" 2>/dev/null | cut -c1-300)"
+}
+run_set() { # <set> <socks> <tp ids> <header>
+	set_name=$1; socks=$2; tps=$3; header=$4; set_started=$(date +%Y-%m-%dT%H:%M:%S) # visor-local time, the zone the event ring is stamped in
+	f="$out/$set_name.tsv"; c="$out/$set_name.carrier.tsv"
+	echo "# $header" > "$f"
+	printf '# row\ttp\tsent_delta\trecv_delta\n' > "$c"
+	[ "$EXIT_SNAP" = 1 ] && printf '# row\texit_mux_route_groups\n' > "$out/$set_name.exit-recovery.tsv"
+	row=0
+	for n in $sizes; do
+		for dir in down up; do
+			t=1
+			while [ $t -le "$trials" ]; do
+				row=$((row + 1))
+				before=""
+				for tp in $tps; do before="$before $tp:$(tp_counters "$tp" | tr ' ' ',')"; done
+				"$here/bench.sh" "$socks" "$sink" "$n" "$dir" "$set_name-t$t" >> "$f"
+				for tp in $tps; do
+					b=$(echo "$before" | tr ' ' '\n' | grep "^$tp:" | cut -d: -f2)
+					a=$(tp_counters "$tp" | tr ' ' ',')
+					[ -n "$a" ] && [ -n "$b" ] || { printf '%s\t%s\t?\t?\n' "$row" "$tp" >> "$c"; continue; }
+					printf '%s\t%s\t%s\t%s\n' "$row" "$tp" "$(( ${a%,*} - ${b%,*} ))" "$(( ${a#*,} - ${b#*,} ))" >> "$c"
+				done
+				# legs held per rg + loss-recovery counters after every row
+				info=$(mux_info "$cur_app")
+				printf '%s\tlegs\t%s\t-\n' "$row" "$(echo "$info" | jq -r '[.[] | (.desc.dst_port|tostring) + ":" + ([.legs[].transport_id[0:8]] | join(",")) ] | join(" ")')" >> "$c"
+				printf '%s\t%s\n' "$row" "$(echo "$info" | jq -c '[.[] | {rg: .desc.dst_port, recovery}]')" >> "$out/$set_name.recovery.tsv"
+				p=$(echo "$info" | jq -c '[.[].desc.dst_port]')
+				# the EXIT's view of the same group(s) after this row. A slow exit
+				# must never stall the set, so it is bounded and a failure is
+				# recorded as an empty object rather than retried.
+				xr=""
+				if [ "$EXIT_SNAP" = 1 ]; then
+					xr=$(exit_rgs "$EXIT_SNAP_TIMEOUT" "$p")
+					[ -n "$xr" ] || { xr='{}'; echo "$set_name row $row: exit snapshot failed/timed out after ${EXIT_SNAP_TIMEOUT}s — empty object recorded"; }
+					printf '%s\t%s\n' "$row" "$xr" >> "$out/$set_name.exit-recovery.tsv"
+				fi
+				# a failed row loses the exit's view when the session re-dials: snapshot it NOW
+				if [ "$(tail -1 "$f" | cut -f8)" != 1 ]; then
+					# the per-row snapshot above is that snapshot when it worked; only
+					# query the exit a second time when EXIT_SNAP is off or it failed
+					[ -n "$xr" ] && [ "$xr" != '{}' ] || xr=$(exit_rgs 60 "$p")
+					printf '# exit-on-fail %s\t%s\n' "$row" "$xr" >> "$out/$set_name.recovery.tsv"
+				fi
+				t=$((t + 1))
+			done
+		done
+	done
+	echo "$set_name: $(grep -vc '^#' "$f") rows, hash_ok=$(grep -v '^#' "$f" | awk -F'\t' '$8==1' | wc -l)"
+	mux_events "$set_name" "$cur_app"
+	# the EXIT's view of the same groups at the end of the set (its receiver-side wedge counters);
+	# our desc.dst_port (the ephemeral local port) is the exit's desc.src_port for the same group
+	ports=$(mux_info "$cur_app" | jq -c '[.[].desc.dst_port]')
+	x=""; for _ in 1 2 3; do
+		x=$(timeout 90 $CLI cli visor state --via "dmsg://$exit_pk" --select mux_route_groups --json 2>/dev/null | jq -c --argjson p "$ports" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, recovery, legs: [.legs[] | {tp: .transport_id[0:8], standby, retransmits, dup_bytes, ack_delay_ms}]}]')
+		[ -n "$x" ] && [ "$x" != "[]" ] && break
+		sleep 3
+	done
+	printf '# exit\t%s\n' "$x" >> "$out/$set_name.recovery.tsv"
+}
+
+# wait_width <app> <groups> <legs each>: let the adaptive engine converge to the
+# requested shape before the set starts (width applies on the rg's next tick).
+wait_width() {
+	i=1
+	while [ $i -le 12 ]; do
+		got=$(mux_info "$1" | jq --argjson g "$2" --argjson l "$3" '[.[] | select((.legs|length) >= $l)] | length >= $g' 2>/dev/null)
+		[ "$got" = true ] && return 0
+		sleep 2
+		i=$((i + 1))
+	done
+	return 1
+}
+
+ec=$(exit_commit)
+echo "local=$local_commit exit=$ec order=$order compose=$compose"
+npins=$(echo "$order" | tr ' ' '\n' | grep -vc '^$')
+
+port=1121
+for spec in $compose; do
+	T=${spec%x*}; L=${spec#*x}
+	case "$T$L" in *[!0-9]*) echo "compose entry '$spec' is not <tunnels>x<legs> — skipping"; continue ;; esac
+	name=$(app_name "comp$spec"); socks=$(app_addr "$port"); set_name="mux-compose-T${T}xL${L}"; cur_app=$name
+	setup_started=$(date +%Y-%m-%dT%H:%M:%S)
+	# a group left over from the previous set would be dialed instead of this
+	# set's own tunnels (and breaks any later `--route` reconcile): refuse to
+	# measure until the app owns nothing.
+	stop_app_clean "$name" || { abort_set "$set_name" "route group(s) $rg_left survived two proxy stops before setup"; port=$((port + 1)); continue; }
+	# pin the engine's active width to L BEFORE the dial: the established mux
+	# width is decided at dial time, and width/cap apply live on the next tick.
+	$CLI cli proxy mux cap "$L" >/dev/null 2>&1
+	$CLI cli proxy mux width "$L" >/dev/null 2>&1
+	# --route pins ONE group and is rejected with --tunnels >1 on purpose: start
+	# the tunnels plain, then pin each one by its own port below.
+	timeout 240 $CLI cli proxy start -k "$exit_pk" -n "$name" -a "$socks" --tunnels "$T" ${RANGE_PORT:+--range-port $RANGE_PORT} ${RANGE_CHUNK_KIB:+--range-chunk-kib $RANGE_CHUNK_KIB} ${RANGE_CONCURRENCY:+--range-concurrency $RANGE_CONCURRENCY} 2>&1 | grep -iv debug | grep -i "tunnel\|running\|error\|fatal" | head -3
+	sleep 5
+
+	# --- per-tunnel pinning, by the rg's OWN port (desc.dst_port, #4967) -----
+	# At this point each rg holds the single auto leg it dialed on; `mux set
+	# --rg <dst_port> --legs <L pins> --prune` replaces it with L pinned legs,
+	# so tunnel i ends up on pins [i*L, i*L+L) and the tunnels are disjoint.
+	pinned=no
+	mux_info "$name" > "$out/$set_name.legs.json"
+	ngroups=$(jq 'length' "$out/$set_name.legs.json" 2>/dev/null || echo 0)
+	ndst=$(jq '[.[].desc.dst_port] | unique | length' "$out/$set_name.legs.json" 2>/dev/null || echo 0)
+	rm -f "$out/$set_name".rg*.target.json # a re-run's rg ports differ; don't mix targets
+	assign=""
+	if [ "$ngroups" -eq "$T" ] && [ "$ndst" -eq "$T" ] && [ $((T * L)) -le "$npins" ]; then
+		i=0
+		for dp in $(jq -r '.[].desc.dst_port' "$out/$set_name.legs.json"); do
+			legs_file="$out/$set_name.rg$dp.target.json"
+			slice=$(echo "$order" | tr ' ' '\n' | grep -v '^$' | sed -n "$((i * L + 1)),$((i * L + L))p")
+			for s in $slice; do cat "$pins/via-$s.json"; done | jq -s 'add' > "$legs_file"
+			assign="$assign rg$dp=$(echo $slice | tr ' ' ',')"
+			echo "$set_name: rg$dp <- $(echo $slice | tr '\n' ' ')"
+			timeout 300 $CLI cli proxy mux set -n "$name" --rg "$dp" --legs "$legs_file" --prune 2>&1 | grep -iv debug | head -5
+			i=$((i + 1))
+		done
+		pinned=yes
+	else
+		echo "$set_name: per-tunnel pinning skipped (groups=$ngroups/$T distinct_dst_ports=$ndst pins=$npins needed=$((T * L))) — recording the engine's own shape"
+	fi
+	# pin the engine's active width to L AFTER the legs exist, so every pinned
+	# leg stripes from the first row instead of sitting in warm standby
+	# (width/cap apply live on the rg's next tick; the default steady width is 2).
+	$CLI cli proxy mux cap "$L" >/dev/null 2>&1
+	$CLI cli proxy mux width "$L" >/dev/null 2>&1
+	sleep 3
+	wait_width "$name" "$T" "$L" || echo "$name: engine did not reach ${T}x${L} within 24s — recording the shape it has"
+	mux_info "$name" > "$out/$set_name.legs.json"
+
+	# every pinned first hop actually present?
+	missing=0
+	if [ "$pinned" = yes ]; then
+		want=$(cat "$out/$set_name".rg*.target.json | jq -r '.[].forward[0].TpID' | sort -u)
+		have=$(jq -r '.[].legs[].transport_id' "$out/$set_name.legs.json" 2>/dev/null)
+		for w in $want; do echo "$have" | grep -q "$w" || { echo "$name: pinned leg $w NOT present"; missing=$((missing + 1)); }; done
+	fi
+
+	groups=$(jq 'length' "$out/$set_name.legs.json" 2>/dev/null || echo 0)
+	shape=$(jq -r '[.[].legs | length] | join("+")' "$out/$set_name.legs.json" 2>/dev/null)
+	tps=$(jq -r '.[].legs[].transport_id' "$out/$set_name.legs.json" 2>/dev/null | sort -u | tr '\n' ' ')
+	ports_before=$(jq -r '[.[].desc.dst_port] | join(",")' "$out/$set_name.legs.json" 2>/dev/null)
+	desc=$(jq -r '[.[] | "rg\(.desc.dst_port)=[" + ([.legs[] | .tp_type + ">" + .remote_pk[0:8] + "@" + .transport_id[0:8]] | join(";")) + "]"] | join(" ")' "$out/$set_name.legs.json" 2>/dev/null)
+	echo "$name: $groups/$T route group(s), legs per rg: $shape (want $L each), pinned=$pinned"
+	echo "$name: first-hop tps: $tps"
+	# Nothing below here may run on a shape that is not the target one: rows from
+	# an unpinned or half-built session are indistinguishable from real ones in
+	# the TSV, which is exactly how campaign16 recorded 20 invalid rows.
+	narrow=$(echo "$shape" | tr '+' '\n' | awk -v l="$L" '$1!=l {bad++} END{print bad+0}')
+	[ "$groups" -eq "$T" ] || { abort_set "$set_name" "shape differs from target: $groups route group(s), asked for $T (groups=$desc)"; port=$((port + 1)); continue; }
+	[ "$narrow" -eq 0 ] || { abort_set "$set_name" "shape differs from target: legs per rg $shape, want $L each"; port=$((port + 1)); continue; }
+	[ "$missing" -eq 0 ] || { abort_set "$set_name" "$missing pinned leg(s) missing from the realized shape (groups=$desc)"; port=$((port + 1)); continue; }
+
+	warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
+	run_set "$set_name" "$socks" "$tps" \
+		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name compose=${T}x${L} tunnels=$T width=$L route_groups=$groups legs_per_rg=$shape pinned=$pinned rg_ports=$ports_before pin_assign=$(echo $assign) groups=$desc sink=$sink"
+
+	ports_after=$(mux_info "$name" | jq -r '[.[].desc.dst_port] | join(",")')
+	printf '# rg dst_ports before=%s after=%s %s\n' "$ports_before" "$ports_after" \
+		"$([ "$ports_before" = "$ports_after" ] && echo constant || echo CHANGED)" >> "$out/$set_name.carrier.tsv"
+	echo "$name: rg dst_ports $ports_before -> $ports_after"
+	$CLI cli proxy mux width 2 >/dev/null 2>&1 # back to the default steady width
+	# the rows are already written, so a leftover group here invalidates the NEXT
+	# set (its own pre-setup check), not this one — just say so loudly.
+	stop_app_clean "$name" || echo "$set_name: dst_ports $rg_left outlived the set — the next set will be invalidated if they persist"
+	port=$((port + 1))
+done

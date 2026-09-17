@@ -1,0 +1,7 @@
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=4cc8e9b6b exit_commit=4cc8e9b6b session=skysocks-client subject=legs-2 legs=2 pins=03f57e7c,0371ab4b route_groups=1 legs_per_rg=2 rg_ports=49183 groups=rg49183=[stcpr>03f57e7c@fdab37dd;stcpr>0371ab4b@95839ad0] cut=leg:95839ad0-b588-0b1d-8475-45fba6ae993c cut_pct=40 cut_after=6s sink=http://127.0.0.1:18080
+mux-degrade-legs-2-t1	down	50000000	7651501	200	50000000	6.534669	1
+mux-degrade-legs-2-t2	down	50000000	3340354	200	50000000	14.968476	1
+mux-degrade-legs-2-t3	down	50000000	6689093	200	50000000	7.474859	1
+mux-degrade-legs-2-t1	up	50000000	7486251	200	50000000	6.678914	1
+mux-degrade-legs-2-t2	up	50000000	8179858	200	50000000	6.112579	1
+mux-degrade-legs-2-t3	up	50000000	8519182	200	50000000	5.869111	1
