@@ -555,6 +555,18 @@ func (_m *MockRouter) RouteGroupMuxInfoAll() []MuxInfo {
 	return r0
 }
 
+// CloseRouteGroupsForApp provides a mock function
+func (_m *MockRouter) CloseRouteGroupsForApp(_a0 string) int {
+	ret := _m.Called(_a0)
+	var r0 int
+	if rf, ok := ret.Get(0).(func(string) int); ok {
+		r0 = rf(_a0)
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).(int)
+	}
+	return r0
+}
+
 // MuxEvents provides a mock function with no fields
 func (_m *MockRouter) MuxEvents() []MuxEvent {
 	ret := _m.Called()

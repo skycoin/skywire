@@ -444,9 +444,35 @@ func (v *Visor) StopApp(appName string) error {
 	}
 	if v.procM != nil {
 		_, err := v.appL.StopApp(appName) //nolint:errcheck,gosec
+		v.closeAppRouteGroups(appName)
 		return err
 	}
 	return ErrProcNotAvailable
+}
+
+// closeAppRouteGroups closes every route group the visor dialed for appName.
+//
+// Stopping the app tears down its proc, and the proc teardown closes the app
+// conns the ingress gateway still holds (appserver.Proc -> rpcGW.cm.CloseAll).
+// That covers the conns the app took delivery of, and nothing else: a tunnel
+// whose dial completed after the teardown, or a group left behind by a leg
+// removal, is held by no one. It keeps its keep-alive loop running, which
+// keeps refreshing its own routing rules, so the rules GC never collects them
+// either — the group survives the app indefinitely and still shows up in
+// `proxy mux info` and in the `--route reconcile` group count for an app that
+// is stopped (a >1 count there aborts the next `proxy start --route`).
+//
+// Closing by app tag reaps them on both ends: the close packets the router
+// broadcasts are what reaps the peer's mirror group.
+func (v *Visor) closeAppRouteGroups(appName string) {
+	if v.router == nil || appName == "" {
+		return
+	}
+	if n := v.router.CloseRouteGroupsForApp(appName); n > 0 {
+		v.log.WithField("app_name", appName).
+			WithField("route_groups", n).
+			Info("Closed the stopped app's route groups.")
+	}
 }
 
 // KillApp implements API.
@@ -515,6 +541,7 @@ func (v *Visor) StopVPNClient(appName string) error {
 	}
 	if v.procM != nil {
 		_, err := v.appL.StopApp(appName) //nolint:errcheck,gosec
+		v.closeAppRouteGroups(appName)
 		return err
 	}
 	return ErrProcNotAvailable
@@ -594,6 +621,7 @@ func (v *Visor) StopSkysocksClients() error {
 					if _, err := v.appL.StopApp(app.Name); err != nil { //nolint:errcheck,gosec
 						v.log.WithError(err).Warnf("Failed to stop app %s", app.Name)
 					}
+					v.closeAppRouteGroups(app.Name)
 				}
 			}
 		}

@@ -626,8 +626,37 @@ var stopCmd = &cobra.Command{
 			return
 		}
 		internal.Catch(cmd.Flags(), rpcClient.StopApp(clientName))
+		if left := awaitNoRouteGroups(rpcClient, clientName); left > 0 {
+			fmt.Fprintf(os.Stderr, "warning: %d route group(s) still registered for app=%s after %s; see 'proxy mux info'\n",
+				left, clientName, stopRouteGroupWait)
+		}
 		internal.PrintOutput(cmd.Flags(), fmt.Sprintf("skysocks client %s stopped", clientName), fmt.Sprintf("skysocks client %s stopped\n", clientName))
 	},
+}
+
+// stopRouteGroupWait bounds how long `proxy stop` waits for the visor to
+// report zero route groups for the stopped app. The visor closes them
+// synchronously on stop; this only covers the close handshake with the peer.
+const stopRouteGroupWait = 5 * time.Second
+
+// awaitNoRouteGroups polls the visor until it reports no route group for app,
+// and returns how many are still registered when the budget runs out (0 on a
+// clean stop). A group outliving its app is what made the next
+// `proxy start --route <pins>` abort with "app=… has N active route groups".
+func awaitNoRouteGroups(rpcClient visor.API, app string) int {
+	deadline := time.Now().Add(stopRouteGroupWait)
+	left := 0
+	for {
+		rgs, err := rpcClient.RouteGroupMuxInfo(app)
+		if err != nil {
+			return 0 // the query itself failed; nothing to report on
+		}
+		left = len(rgs)
+		if left == 0 || !time.Now().Before(deadline) {
+			return left
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 }
 
 var statusCmd = &cobra.Command{
