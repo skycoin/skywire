@@ -1722,7 +1722,17 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 				acked := m.retxBuf.AckedBytes(tps[i].Entry.ID)
 				if elapsed > 0 && lc.ecfLastAckedBytes > 0 {
 					if deliv := float64(byteDelta(acked, lc.ecfLastAckedBytes)) / elapsed; deliv > 0 {
-						cwnd = deliv * bdpRttMs / 1000.0 * ecfWindowMargin
+						// The delivery rate is measured per FEEDBACK delay (send→SACK,
+						// which the delayed ack and the SACK cadence stretch past the
+						// ping RTT), so the window must be sized over that delay too:
+						// sized over the shorter ping RTT it shrank every refresh
+						// under load (measured: uploads on a 2-tunnel session fell
+						// from 9.7 to 4.5 MB/s with 750 writer parks).
+						fbMs := bdpRttMs
+						if ad := m.ackDelayMsTp(tps[i].Entry.ID); ad > fbMs {
+							fbMs = ad
+						}
+						cwnd = deliv * fbMs / 1000.0 * ecfWindowMargin
 						if cwnd < ecfMinWindowBytes {
 							cwnd = ecfMinWindowBytes
 						}
