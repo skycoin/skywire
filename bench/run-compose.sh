@@ -28,7 +28,10 @@
 #                        (bench/lib-paired.sh, <set>.paired.tsv)
 #   SIZES / CELL100      the 100 MB download cell criterion 4 asks for
 #   TRIALS_UP            3 upload trials against the [trials] download trials
-#   EXIT_RES             exit RssAnon/CPU recorded and gated around every set
+#   EXIT_RES             exit RssAnon/CPU recorded and gated around every set,
+#                        with the run's one warm-up transfer, the per-set
+#                        <set>-settled reading (EXIT_RES_SETTLE_S) and the
+#                        end-of-run --slope check
 #
 # The functions below are copied from run-mux.sh rather than sourced: run-mux.sh
 # is a script with top-level work, not a library. What IS shared lives in
@@ -355,6 +358,41 @@ res_check() {
 	"$here/exit-resources-check.sh" "$out" "$1" || exit_res_fail=1
 	return 0
 }
+# res_warmup <socks>: one warm-up transfer, once per run, before the FIRST
+# reading of the FIRST set. The exit pays its cold-start heap high-water on
+# whichever set runs first — campaign21 and the dc23fd9ff smoke both failed set 1
+# by +66 / +76 MiB and passed every set after it — so the high-water is bought
+# here, outside any set's pre/post bracket, and the `warmup` reading records
+# where it left the exit. Skipped when the out dir already holds a `-pre` row.
+res_warmup() {
+	[ "$EXIT_RES" = 1 ] || return 0
+	[ -f "$out/exit-resources.tsv" ] &&
+		awk -F'\t' '$2 ~ /-pre$/ { f = 1 } END { exit !f }' "$out/exit-resources.tsv" && return 0
+	echo "exit-resources: warm-up transfer (${EXIT_RES_WARM_BYTES:-50000000} B down) before the first reading of the run"
+	"$here/bench.sh" "$1" "$sink" "${EXIT_RES_WARM_BYTES:-50000000}" down warmup >/dev/null 2>&1
+	res_set warmup
+	return 0
+}
+# res_settle <set>: the reading the set is actually scored on. Go's scavenger
+# hands back what a set borrowed within seconds (the smoke returned 52 MiB in 29
+# idle ones), so `post` measures the peak and `settled` measures what the exit
+# kept. EXIT_RES_SETTLE_S=0 turns the wait off and the check falls back to
+# post - pre.
+res_settle() {
+	[ "$EXIT_RES" = 1 ] || return 0
+	[ "${EXIT_RES_SETTLE_S:-30}" -gt 0 ] 2>/dev/null || return 0
+	sleep "${EXIT_RES_SETTLE_S:-30}"
+	res_set "$1-settled"
+	return 0
+}
+# res_slope: the campaign check, once at the end of the run. No single set of
+# campaign21 failed the per-set rule while the exit drifted 347 -> 479 MB across
+# it; a slope over the whole run is what sees that.
+res_slope() {
+	[ "$EXIT_RES" = 1 ] || return 0
+	"$here/exit-resources-check.sh" "$out" --slope || exit_res_fail=1
+	return 0
+}
 npins=$(echo "$order" | tr ' ' '\n' | grep -vc '^$')
 
 port=1121
@@ -444,11 +482,12 @@ for spec in $compose; do
 	[ "$missing" -eq 0 ] || { abort_set "$set_name" "$missing pinned leg(s) missing from the realized shape (groups=$desc)"; port=$((port + 1)); continue; }
 
 	warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
+	res_warmup "$socks"
 	res_set "$set_name-pre"
 	run_set "$set_name" "$socks" "$tps" \
 		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name compose=${T}x${L} tunnels=$T width=$L route_groups=$allgroups active=$groups standby=$nstandby legs_per_rg=$shape pinned=$pinned rg_ports=$ports_before pin_assign=$(echo $assign) groups=$desc sink=$sink"
 
-	res_set "$set_name-post"; res_check "$set_name"
+	res_set "$set_name-post"; res_settle "$set_name"; res_check "$set_name"
 	mux_info "$name" > "$out/$set_name.after.json"
 	ports_after=$(active_json "$out/$set_name.after.json" | jq -r '[.[].desc.dst_port] | join(",")')
 	rm -f "$out/$set_name.after.json"
@@ -463,6 +502,8 @@ for spec in $compose; do
 done
 
 # The exit-resource gate is the only thing that can fail this script: every set
-# that ran is on disk either way.
+# that ran is on disk either way. The per-set checks have already run; this is
+# the campaign-long RssAnon slope over every reading the run took.
+res_slope
 [ "$exit_res_fail" = 0 ] || echo "run-compose: an exit-resource check FAILED — see $out/exit-resources.tsv"
 exit "$exit_res_fail"
