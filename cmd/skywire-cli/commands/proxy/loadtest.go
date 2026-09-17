@@ -465,7 +465,7 @@ func parseByteRange(h string, n uint64) (start, end uint64, ok bool) {
 //
 // The sink never holds the object. The SHA-256 is rolled over the CONTIGUOUS
 // PREFIX as chunks are absorbed; chunks that arrive ahead of the frontier wait
-// in a bounded reorder window (--upload-window, 16 MiB) and are absorbed when the
+// in a bounded reorder window (--upload-window, 64 MiB) and are absorbed when the
 // frontier reaches them. Memory is therefore O(window x sessions), not O(object).
 //
 // Contract:
@@ -502,9 +502,16 @@ var (
 	// always admitted (held chunks are evicted for it if need be, and re-sent by
 	// the client, which got 202 and not 200 for them), so the window can never
 	// deadlock a session.
-	loadtestUploadWindow int64 = 16 << 20
+	//
+	// 64 MiB is headroom, not an appetite: the striped client sizes its live
+	// chunk buffers as min(its own 16 MiB memory cap / 4 MiB chunk, window/chunk
+	// - 2), so a 16 MiB window left it two live chunks — one per tunnel, with an
+	// ack round trip between them — and cost ~20% of single-upload throughput.
+	// At 64 MiB the client's memory cap (4 chunks) binds again, and inflight
+	// plus held never comes near the window.
+	loadtestUploadWindow int64 = 64 << 20
 	// loadtestUploadSessions caps concurrent sessions, so the sink's ceiling is
-	// window x sessions (64 MiB by default) on an exit that has been OOM-killed
+	// window x sessions (256 MiB by default) on an exit that has been OOM-killed
 	// for less (#4252).
 	loadtestUploadSessions = 4
 	// loadtestUploadIdle expires a session that stopped making progress; its
