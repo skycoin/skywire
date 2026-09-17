@@ -219,6 +219,10 @@ type retxBuffer struct {
 	// declares every queued frame lost (measured live: 899 retransmits across a
 	// ~1250-frame upload). Called with rb.mu held — keep it lock-free/cheap.
 	onAckDelay func(time.Duration)
+	// onAckDelayTp, when set, receives every never-retransmitted entry's
+	// send→ack delay with the transport it last rode, so the sender can keep a
+	// per-leg feedback-delay estimate (see routeMux.rackThresholdFor).
+	onAckDelayTp func(uuid.UUID, time.Duration)
 }
 
 func newRetxBuffer(capacity int) *retxBuffer {
@@ -309,6 +313,15 @@ func (rb *retxBuffer) HeldSeqsOnTps(tps map[uuid.UUID]bool) []uint32 {
 // supplies an RTT-derived value (routeMux.rackThreshold); a zero/negative
 // threshold falls back to the fixed retxMinAge for any caller that doesn't.
 func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, threshold time.Duration) []uint32 {
+	return rb.ProcessSACKWith(lastContiguous, words, threshold, nil)
+}
+
+// ProcessSACKWith is ProcessSACK with a per-transport loss threshold:
+// thresholdFor(tpID), when non-nil and positive, judges a hole against the
+// delay of the leg it was last sent on instead of the group-wide threshold —
+// a frame queued on a slow leg is not lost because the fast leg's acks are
+// quick.
+func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, threshold time.Duration, thresholdFor func(uuid.UUID) time.Duration) []uint32 {
 	if threshold <= 0 {
 		threshold = retxMinAge
 	}
@@ -316,15 +329,20 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 	defer rb.mu.Unlock()
 
 	// Ack-delay sampling (see onAckDelay): the largest send→ack delay among the
-	// never-retransmitted entries this SACK purges.
+	// never-retransmitted entries this SACK purges, and every one of them per
+	// transport (onAckDelayTp).
 	var ackDelayMax time.Duration
 	sampleNow := time.Now()
 	sample := func(e *retxEntry) {
 		if e.retxCount != 0 {
 			return
 		}
-		if d := sampleNow.Sub(e.sentAt); d > ackDelayMax {
+		d := sampleNow.Sub(e.sentAt)
+		if d > ackDelayMax {
 			ackDelayMax = d
+		}
+		if rb.onAckDelayTp != nil && e.tpID != uuid.Nil {
+			rb.onAckDelayTp(e.tpID, d)
 		}
 	}
 
@@ -370,7 +388,13 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 				if shift > retxBackoffMaxShift {
 					shift = retxBackoffMaxShift
 				}
-				if now.Sub(ref) >= threshold<<shift {
+				th := threshold
+				if thresholdFor != nil && e.tpID != uuid.Nil {
+					if t := thresholdFor(e.tpID); t > 0 {
+						th = t
+					}
+				}
+				if now.Sub(ref) >= th<<shift {
 					retransmit = append(retransmit, checkSeq)
 					e.lastTxAt = now
 					if e.retxCount < math.MaxUint8 {
