@@ -80,6 +80,22 @@ const (
 	// exclusions, candidate filtering, the chosen first hop), so a tunnel that
 	// shares a first hop with its siblings says why, from `visor state`.
 	MuxEventDialDecision = "dial_decision"
+
+	// The TUNNEL-level counterparts of the leg events above, decided by the
+	// APP that holds the tunnels (the skysocks standby pool) and reported into
+	// this ring through NoteTunnelEvent. A tunnel is a whole route group, so
+	// these are group events (LegIndex 0, stamped with the group's first hop)
+	// rather than leg events.
+	//
+	// MuxEventTunnelPromoted is a standby tunnel entering the active set —
+	// after an active tunnel died, or because the promoter judged it better.
+	// MuxEventTunnelParked is its counterpart, an active tunnel going back to
+	// standby, so churn is countable in both directions. MuxEventTunnelRetired
+	// is the death that starts a failover: the app saw no pong and no bytes on
+	// the tunnel for its hard-dead window and closed the session.
+	MuxEventTunnelPromoted = "tunnel_promoted"
+	MuxEventTunnelParked   = "tunnel_parked"
+	MuxEventTunnelRetired  = "tunnel_retired"
 )
 
 // Mux event initiators (MuxEvent.By).
@@ -208,6 +224,32 @@ func (rg *RouteGroup) noteLegEvent(kind, reason, by string, idx, legs int, tp *t
 		e.Remote = tp.Remote()
 	}
 	rg.noteMuxEvent(e)
+}
+
+// noteTunnelEvent records an app-decided TUNNEL event (promoted / parked /
+// retired) on this route group. The app knows which of its tunnels is which
+// but nothing about routes, so the group fills in what it alone knows: the
+// first-hop transport the tunnel leaves over and that leg's forward path. This
+// is what makes a promote readable from `visor state --select diag` — "which
+// route took over" is the whole question a failover raises.
+//
+// Takes rg.mu to read the leg set; callers must NOT hold it.
+func (rg *RouteGroup) noteTunnelEvent(kind, reason string) {
+	if rg == nil {
+		return
+	}
+	rg.mu.Lock()
+	var tp *transport.ManagedTransport
+	if len(rg.tps) > 0 {
+		tp = rg.tps[0]
+	}
+	var hops []routing.Hop
+	if tp != nil {
+		hops = rg.legHopsLocked(tp.Entry.ID)
+	}
+	legs := len(rg.tps)
+	rg.mu.Unlock()
+	rg.noteLegEvent(kind, reason, MuxByAdaptive, 0, legs, tp, hops)
 }
 
 // legHopsLocked returns the recorded forward path for tpID. Callers MUST hold
