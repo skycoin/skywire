@@ -1919,7 +1919,7 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 						if ad := adByIdx[i]; ad > fbMs {
 							fbMs = ad
 						}
-						cwnd = deliv * fbMs / 1000.0 * ecfWindowMargin
+						cwnd = deliv * fbMs / 1000.0 * EcfWindowMargin()
 						lc.ecfCwndBytes = cwnd
 						lc.ecfLastAckedBytes = acked
 						lc.ecfLastAckedNano = now
@@ -1933,11 +1933,11 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 			// and a group with no retx buffer all reached here with a raw
 			// rate×BDP window and no ceiling, so a just-promoted leg was handed an
 			// unbounded send window and over-subscribed the no-skip frontier.
-			if cwnd < ecfMinWindowBytes {
-				cwnd = ecfMinWindowBytes
+			if lo := float64(EcfMinWindowBytes()); cwnd < lo {
+				cwnd = lo
 			}
-			if cwnd > ecfMaxWindowBytes {
-				cwnd = ecfMaxWindowBytes
+			if hi := float64(EcfMaxWindowBytes()); cwnd > hi {
+				cwnd = hi
 			}
 			ready := true
 			if i < len(m.standby) && m.standby[i] {
@@ -2018,7 +2018,7 @@ func (m *routeMux) waitSendWindow(tps []*transport.ManagedTransport, closed <-ch
 	if m.retxBuf == nil || !m.sackEnabled || m.tpSelector == nil {
 		return
 	}
-	deadline := time.Now().Add(sendWindowWaitMax)
+	deadline := time.Now().Add(SendWindowWaitMax())
 	waited := false
 	for {
 		m.feedInflight(tps)

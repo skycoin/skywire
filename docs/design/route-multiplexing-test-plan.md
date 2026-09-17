@@ -134,6 +134,51 @@ Everything the last campaign learned the hard way, fixed as procedure:
   group instead of the AppDirect shortcut); `skywire cli proxy mux info -n
   <session> -v` must show the pinned first-hop transport as the only leg.
 
+## 2b. Sweeping a value without a redeploy
+
+Six of the eight rig cycles of 2026-09-16/17 changed a NUMBER, not a formula,
+and each still cost a rebuild, a binary push and a restart — roughly three hours
+of the two-day window spent deploying constants. `proxy settings` and the mux
+half of `route settings` remove that cost: the value lives in an atomic the use
+site re-reads, the visor holds the set per app, and a running skysocks-client
+PULLS it on the keepalive tick it already runs (one `tunnel.probe_interval`,
+5 s by default). Nothing is persisted — a knob lives for as long as the app
+process does, so a restart is always a return to the compiled defaults, and a
+run that sets nothing is byte-for-byte the old binary.
+
+**Client knobs — `skywire cli proxy settings [--app skysocks-client]`**
+
+| group | knobs |
+|---|---|
+| standby pool | `pool.fill_interval` · `pool.retry_backoff_base` · `pool.retry_backoff_max` · `pool.retry_rounds` · `pool.standby_rtt_stale` |
+| tunnel promoter | `tunnel.promote_interval` · `tunnel.promote_margin` · `tunnel.promote_hold` · `tunnel.park_min_hold` · `tunnel.audition_window` · `tunnel.audition_every` |
+| probing and metering | `tunnel.probe_interval` · `tunnel.liveness_interval` · `tunnel.rtt_alpha` · `tunnel.meter_sample_min` · `tunnel.meter_cap_decay` · `tunnel.meter_fresh` · `tunnel.exit_open_penalty` |
+| range-split | `chunk.max_bytes` · `chunk.concurrency` · `chunk.retry_budget` · `chunk.idle_timeout` · `chunk.free_retries` · `chunk.outstanding_factor` |
+
+`chunk.max_bytes` and `chunk.concurrency` OVERRIDE the boot flags
+(`--range-chunk-kib`, `--range-concurrency`): unset, the flag still wins.
+
+**Router knobs — `skywire cli route settings`**
+
+`--ecf-max-window` · `--ecf-min-window` · `--ecf-window-margin` ·
+`--send-window-wait-max` · `--leg-park-min-hold` · `--mux-fec`. Visor-wide and
+per-end, like `proxy mux cap`; `--mux-fec` reaches route groups built after it,
+since FEC is negotiated when a group is created. `windowRefreshInterval` is
+NOT here: it becomes a per-route-group ticker when the group is built.
+
+One sweep cell, start to finish:
+
+```
+skywire cli proxy settings                                  # the table, with pending/applied
+skywire cli proxy settings chunk.max_bytes=8MiB chunk.concurrency=16
+skywire cli proxy settings --json | jq '.knobs[] | select(.state=="applied")'
+skywire cli proxy loadtest run -n sweep -u http://<host>/50M -d 2m -o bench/<date>/<commit>/chunk-8MiB.ndjson
+skywire cli proxy settings --reset chunk.max_bytes chunk.concurrency
+```
+
+A row is valid only once its knobs read `applied` — a `pending` row means the
+app has not pulled the change yet and is still measuring the previous value.
+
 ## 3. The work, in order, each step judged by the rig
 
 ### 3.1 Bound what is in flight per leg

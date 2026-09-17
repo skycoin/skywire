@@ -309,7 +309,7 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	}
 
 	rgCfg := DefaultRouteGroupConfig()
-	rgCfg.FEC = r.conf.MuxFEC
+	rgCfg.FEC = r.muxFEC.Load()
 	rg := NewRouteGroup(rgCfg, r.rt, rules.Desc, r.mLogger)
 	rg.muxEvents = &r.muxEvents
 	rg.SetAppName(appName)
