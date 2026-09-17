@@ -167,7 +167,55 @@ type Client struct {
 	rsSplits atomic.Uint64
 	rsChunks atomic.Uint64
 	rsBytes  atomic.Uint64
+
+	// standby marks the tunnels held in the POOL rather than carrying streams.
+	// Guarded by sessionsMu, keyed like recvStamp; absent means active. A
+	// standby tunnel is a fully dialed route group + noise + yamux session to
+	// the exit with zero user streams: it is pinged on the same 5 s cadence,
+	// so its RTT stays fresh, and the picker skips it exactly the way it skips
+	// a benched tunnel — unless nothing else is live, in which case a standby
+	// tunnel is far better than refusing to pick.
+	//
+	// The point is time. A fresh tunnel costs a setup-node round of ~8-9 s; a
+	// held one costs a map lookup. See poolDial for how the set is grown.
+	standby map[*yamux.Session]bool
+
+	// Standby pool fill (all guarded by redialMu except poolFillInFlight,
+	// which is its own single-flight guard, mirroring redialInFlight).
+	//
+	// poolDial dials ONE more sibling tunnel that REQUIRES a first hop no
+	// tunnel already held occupies; the app wires it (SetPoolDial) because the
+	// dial lives there. poolMax caps the tunnels held INCLUDING the active
+	// ones, so the setup-node load of a fill is bounded; 0 disables the pool.
+	//
+	// poolArmed is what keeps this from becoming the self-heal storm of #4325.
+	// The fill runs only while armed; it disarms itself the moment the router
+	// says no disjoint first hop is left (poolSettledAt / poolSettledN record
+	// where it rested and poolSettledLogged keeps that one line to one line),
+	// and is re-armed ONLY by a tunnel death. Sizing is discovered, never
+	// chased: an exit reachable over three disjoint first hops settles at
+	// three and stops dialing, whatever poolMax says.
+	poolDial          func() (net.Conn, error)
+	poolMax           int
+	poolArmed         bool
+	poolFails         int
+	poolSettledAt     time.Time
+	poolSettledN      int
+	poolSettledLogged bool
+	poolFillInFlight  atomic.Bool
 }
+
+// Tunnel roles, as reported to the visor at dial time (router.DialOptions
+// TunnelRole) and shown by `visor state --select mux_route_groups`, `proxy mux
+// info` and the proxy status page. They are the DIALING end's own labels: an
+// exit sees a peer's tunnels but has no idea which of them are in standby.
+const (
+	// TunnelRoleActive is a tunnel the picker may put streams on.
+	TunnelRoleActive = "active"
+	// TunnelRoleStandby is a tunnel held open, kept alive and measured, but
+	// carrying no streams while an active tunnel is live.
+	TunnelRoleStandby = "standby"
+)
 
 // streamMeta is the per-stream detail the status page surfaces for an open
 // tunneled stream. sent/recv are pointers so the map-by-value copy shares the one
@@ -638,6 +686,249 @@ func (c *Client) SetTunnelRedial(fn func() (net.Conn, error)) {
 	c.redialMu.Unlock()
 }
 
+// poolFillInterval is how often the keepalive loop considers adding one more
+// tunnel to the standby pool. It paces the fill, it does not drive it: exactly
+// one pool dial is ever in flight (poolFillInFlight), and a dial takes seconds
+// (a setup-node round), so this is really "how soon after one lands the next
+// begins". Short enough that a pool of eight is up within a minute of app
+// start, and inert the rest of the time — the fill disarms itself at the cap
+// or at exhaustion and is re-armed only by a tunnel death.
+const poolFillInterval = 2 * time.Second
+
+// SetPoolDial wires the app's REQUIRE-disjoint dial into the Client so the
+// standby pool can grow itself. It mirrors SetTunnelRedial — the dial lives in
+// the app (cmd/apps/skysocks-client) because it needs the server PK, the
+// retrier and the appnet fallback machinery — but differs in one decisive way:
+// this dial demands a first hop no tunnel already held occupies, and returns
+// router.ErrNoDisjointFirstHop rather than conceding a shared one. A shared
+// extra tunnel aggregates nothing, and the refusal is the signal the pool
+// stops on. A nil fn (the default) leaves the pool disabled.
+func (c *Client) SetPoolDial(fn func() (net.Conn, error)) {
+	c.redialMu.Lock()
+	c.poolDial = fn
+	c.redialMu.Unlock()
+}
+
+// SetStandbyPool sets the CEILING on tunnels held to the exit, the active ones
+// included, and arms the fill. n <= the active target means "active tunnels
+// only" and leaves the pool off — so --standby-pool 0 is byte-identical to the
+// behavior before the pool existed.
+//
+// It is a ceiling and not a target: the fill stops for good at the first
+// router.ErrNoDisjointFirstHop, so an exit with three disjoint first hops
+// settles at three and never dials again until a tunnel dies. Setting it does
+// not reap anything — an already-held tunnel is never given up, because the
+// active target alone decides which tunnels carry streams.
+func (c *Client) SetStandbyPool(n int) {
+	if n < 0 {
+		n = 0
+	}
+	c.redialMu.Lock()
+	c.poolMax = n
+	if n > 0 {
+		c.poolArmed = true
+		c.poolFails = 0
+	}
+	c.redialMu.Unlock()
+}
+
+// StandbyPoolState reports the pool's size (tunnels currently held, active and
+// standby), whether the fill has settled, and how many tunnels it settled at.
+// Read by the status page and the tests.
+func (c *Client) StandbyPoolState() (held, standby int, settled bool, settledAt time.Time) {
+	c.sessionsMu.Lock()
+	for _, s := range c.sessions {
+		if s == nil || s.IsClosed() {
+			continue
+		}
+		held++
+		if c.standby[s] {
+			standby++
+		}
+	}
+	c.sessionsMu.Unlock()
+	c.redialMu.Lock()
+	settledAt = c.poolSettledAt
+	c.redialMu.Unlock()
+	return held, standby, !settledAt.IsZero(), settledAt
+}
+
+// IsStandby reports whether s is held in the pool rather than carrying streams.
+func (c *Client) IsStandby(s *yamux.Session) bool {
+	c.sessionsMu.Lock()
+	defer c.sessionsMu.Unlock()
+	return c.standby[s]
+}
+
+// AddStandbyTunnel is AddTunnel for a POOL tunnel: the session joins the set
+// but is marked standby, so the picker passes it over while any active tunnel
+// is live. The keepalive loop treats it like any other tunnel — same 5 s RTT
+// ping, same hard-dead window — which is the whole point: its measurement is
+// current the moment it is needed.
+func (c *Client) AddStandbyTunnel(conn net.Conn) error {
+	session, stamp, err := newYamuxSession(conn)
+	if err != nil {
+		return err
+	}
+	c.sessionsMu.Lock()
+	c.sessions = append(c.sessions, session)
+	if c.recvStamp == nil {
+		c.recvStamp = make(map[*yamux.Session]*tunnelMeter)
+	}
+	c.recvStamp[session] = stamp
+	if c.standby == nil {
+		c.standby = make(map[*yamux.Session]bool)
+	}
+	c.standby[session] = true
+	c.sessionsMu.Unlock()
+	return nil
+}
+
+// activeLiveCount counts the live tunnels that are NOT in standby — the width
+// the picker actually stripes streams across.
+func (c *Client) activeLiveCount() int {
+	c.sessionsMu.Lock()
+	defer c.sessionsMu.Unlock()
+	n := 0
+	for _, s := range c.sessions {
+		if s == nil || s.IsClosed() || c.standby[s] {
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+// armPoolFill re-opens the fill after it has settled. Called on a FRESH tunnel
+// death (and nowhere else): the set of tunnels we hold just changed, so the
+// "no disjoint first hop left" answer the router gave is stale — the hop the
+// dead tunnel occupied is free again. Everything else leaves the pool resting,
+// which is what keeps this from being a dial loop.
+func (c *Client) armPoolFill() {
+	c.redialMu.Lock()
+	if c.poolMax > 0 {
+		c.poolArmed = true
+		c.poolFails = 0
+		c.poolSettledAt = time.Time{}
+		c.poolSettledLogged = false
+	}
+	c.redialMu.Unlock()
+}
+
+// settlePool records where the fill came to rest and disarms it, logging the
+// one line that says how wide the pool got and why it stopped. Idempotent: the
+// line is printed once per settle, not once per tick.
+func (c *Client) settlePool(held int, reason string) {
+	c.redialMu.Lock()
+	first := !c.poolSettledLogged
+	c.poolArmed = false
+	c.poolSettledAt = time.Now()
+	c.poolSettledN = held
+	c.poolSettledLogged = true
+	c.redialMu.Unlock()
+	if first && c.appCl != nil {
+		c.appCl.Log().Infof("standby pool settled at %d tunnel(s) (%s)", held, reason)
+	}
+}
+
+// maybePoolFill dials at most ONE more sibling tunnel toward the pool ceiling.
+//
+// It is the tunnel-level twin of the mux's leg self-heal, and it obeys the
+// same discipline, for the same reason. #4325 turned a pool TARGET of 513 into
+// an endless dial loop that the whole fleet felt, because an unreachable
+// target is chased forever. So this one is not a target at all:
+//
+//   - one dial in flight, ever (poolFillInFlight);
+//   - stop at the ceiling, and record it;
+//   - stop for good at the first router.ErrNoDisjointFirstHop — that answer is
+//     about the topology, not about luck, and re-asking cannot change it;
+//   - stop after maxRedialFails ordinary dial failures, so an exit that has
+//     gone unreachable is not hammered either;
+//   - re-arm ONLY when a tunnel dies (armPoolFill), because that is the one
+//     event that makes a first hop free again.
+//
+// Nothing here ever removes a tunnel. The pool is never reaped: the active
+// target alone decides which tunnels carry streams.
+func (c *Client) maybePoolFill() {
+	c.redialMu.Lock()
+	fn := c.poolDial
+	poolMax := c.poolMax
+	armed := c.poolArmed
+	backedOff := c.poolFails >= maxRedialFails
+	target := c.target
+	c.redialMu.Unlock()
+
+	if fn == nil || poolMax <= 0 || !armed {
+		return
+	}
+	held := c.liveSessionCount()
+	if held <= 0 {
+		// Total collapse is the app's --reconnect business, not the pool's.
+		return
+	}
+	if backedOff {
+		c.settlePool(held, "dial failures")
+		return
+	}
+	if held >= poolMax {
+		c.settlePool(held, "pool ceiling")
+		return
+	}
+	if !c.poolFillInFlight.CompareAndSwap(false, true) {
+		return // a pool dial is already running
+	}
+	go func() {
+		defer c.poolFillInFlight.Store(false)
+		conn, err := fn()
+		if err != nil {
+			if app.IsNoDisjointFirstHop(err) {
+				// The settled answer: every route to the exit now leaves over a
+				// first hop one of our tunnels already holds. This IS the size
+				// of the pool.
+				c.settlePool(c.liveSessionCount(), "no disjoint first hop left")
+				return
+			}
+			c.redialMu.Lock()
+			c.poolFails++
+			fails := c.poolFails
+			c.redialMu.Unlock()
+			if c.appCl != nil {
+				c.appCl.Log().Warnf("Standby pool dial failed (%d/%d): %v", fails, maxRedialFails, err)
+			}
+			return
+		}
+		// A pool dial lands in the ACTIVE set while that set is short — a
+		// tunnel died and this is its replacement — and in standby otherwise.
+		// So the same loop both restores aggregation width and grows the pool,
+		// and the active width is what the app asked for either way.
+		var aerr error
+		role := TunnelRoleStandby
+		if c.activeLiveCount() < target {
+			role = TunnelRoleActive
+			aerr = c.AddTunnel(conn)
+		} else {
+			aerr = c.AddStandbyTunnel(conn)
+		}
+		if aerr != nil {
+			_ = conn.Close() //nolint:errcheck,gosec
+			c.redialMu.Lock()
+			c.poolFails++
+			c.redialMu.Unlock()
+			if c.appCl != nil {
+				c.appCl.Log().Warnf("Standby pool dial connected but wrapping it failed: %v", aerr)
+			}
+			return
+		}
+		c.redialMu.Lock()
+		c.poolFails = 0
+		c.redialMu.Unlock()
+		if c.appCl != nil {
+			held, standby, _, _ := c.StandbyPoolState()
+			c.appCl.Log().Infof("Standby pool grew by one %s tunnel; %d held (%d standby)", role, held, standby)
+		}
+	}()
+}
+
 // liveSessionCount returns the number of tunnels still up.
 func (c *Client) liveSessionCount() int {
 	n := 0
@@ -776,6 +1067,7 @@ func (c *Client) recordTunnelRTT(s *yamux.Session, rtt time.Duration) {
 func (c *Client) dropRecvStamp(s *yamux.Session) {
 	c.sessionsMu.Lock()
 	delete(c.recvStamp, s)
+	delete(c.standby, s)
 	c.sessionsMu.Unlock()
 }
 
@@ -876,10 +1168,19 @@ func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 	// skipped exactly like a closed one — but only while another live tunnel can
 	// take the stream. With no unbenched tunnel left the bench is ignored: a
 	// benched tunnel that is all there is still beats refusing to pick.
+	//
+	// A STANDBY tunnel sits out on exactly the same terms. It is held open,
+	// pinged and measured precisely so it can be switched in, so the escape
+	// matters as much as the skip: once no active tunnel is live, the pool is
+	// what the proxy runs on rather than a reason to fail.
 	sitOut := make([]bool, len(c.sessions))
 	spare := 0
 	for i, s := range c.sessions {
 		if s == nil || s.IsClosed() {
+			continue
+		}
+		if c.standby[s] {
+			sitOut[i] = true
 			continue
 		}
 		if m := c.recvStamp[s]; m != nil && m.onBench(now) {
@@ -1154,6 +1455,13 @@ func (c *Client) sessionKeepAliveLoop() {
 	rttInFlight := make(map[*yamux.Session]bool)
 	rttDoneC := make(chan *yamux.Session, 64)
 
+	// The standby pool grows on this loop too, one tunnel at a time. The
+	// ticker only paces it — maybePoolFill is a no-op unless the fill is armed
+	// (SetStandbyPool at start, a tunnel death after that), so after the pool
+	// settles this costs a function call every poolFillInterval.
+	poolTicker := time.NewTicker(poolFillInterval)
+	defer poolTicker.Stop()
+
 	type probeResult struct {
 		s   *yamux.Session
 		ok  bool
@@ -1205,6 +1513,8 @@ func (c *Client) sessionKeepAliveLoop() {
 			}
 		case s := <-rttDoneC:
 			rttInFlight[s] = false
+		case <-poolTicker.C:
+			c.maybePoolFill()
 		case <-ticker.C:
 			now := time.Now()
 			for _, s := range c.snapshotSessions() {
@@ -1261,6 +1571,11 @@ func (c *Client) sessionKeepAliveLoop() {
 			live := c.liveSessionCount()
 			if prevLive >= 0 && live < prevLive {
 				c.resetRedialBackoff()
+				// The one event that can change the router's "no disjoint
+				// first hop left" answer: the hop the dead tunnel held is free
+				// again. Re-arm the fill so the pool grows back to what the
+				// topology now offers — and only here, never on a timer.
+				c.armPoolFill()
 			}
 			prevLive = live
 			c.maybeRedial(live)

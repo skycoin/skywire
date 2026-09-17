@@ -338,6 +338,25 @@ const (
 	// (CLI/GUI parity). --tunnels 1 still takes the AppDirect shortcut.
 	SkysocksClientTunnels = 2
 
+	// SkysocksClientStandbyPool is the default CEILING on how many tunnels the
+	// socks5 proxy client holds open to the exit, the active
+	// SkysocksClientTunnels included (--standby-pool). Everything beyond the
+	// active set is held in STANDBY: dialed, kept alive and measured, carrying
+	// no streams, so a tunnel that fails is replaced by a route that already
+	// exists instead of one set up from scratch (8-9 s through the setup node).
+	//
+	// Eight, matching the adaptive mux's per-group leg ceiling
+	// (preset.AdaptCap), and it is a bound rather than a target: the pool
+	// fills one tunnel at a time and STOPS at the first
+	// router.ErrNoDisjointFirstHop, so a topology offering three disjoint
+	// first hops settles at three and never dials again until a tunnel dies.
+	// Chasing an unreachable target is what made the self-heal storm of #4325.
+	//
+	// ONE home for the default so the CLI flag, the app's cobra flag and the
+	// app's launcher flag set cannot drift (CLI/GUI parity), exactly as with
+	// SkysocksClientTunnels. 0 disables the pool (active tunnels only).
+	SkysocksClientStandbyPool = 8
+
 	// VPNServerName is the name of the vpn server app
 	VPNServerName = "vpn-server"
 

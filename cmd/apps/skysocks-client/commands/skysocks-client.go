@@ -61,6 +61,7 @@ var (
 	routed         bool
 	dmsgFallback   bool
 	tunnels        int64
+	standbyPool    int64
 	rangeSplit     bool
 	rangeConc      int64
 	rangeChunkKiB  int64
@@ -90,6 +91,7 @@ type clientConfig struct {
 	routed         bool
 	dmsgFallback   bool
 	tunnels        int64
+	standbyPool    int64
 	rangeSplit     bool
 	rangeConc      int64
 	rangeChunkKiB  int64
@@ -115,6 +117,7 @@ func configFromFlagVars() *clientConfig {
 		routed:         routed,
 		dmsgFallback:   dmsgFallback,
 		tunnels:        tunnels,
+		standbyPool:    standbyPool,
 		rangeSplit:     rangeSplit,
 		rangeConc:      rangeConc,
 		rangeChunkKiB:  rangeChunkKiB,
@@ -140,6 +143,7 @@ func (c *clientConfig) parseArgs(args []string) error {
 	fs.BoolVar(&c.routed, "routed", false, "always dial through a route group (skip the direct shortcut)")
 	fs.BoolVar(&c.dmsgFallback, "dmsg-fallback", false, "fall back to a direct dmsg stream if the skynet dial fails")
 	fs.Int64Var(&c.tunnels, "tunnels", skyenv.SkysocksClientTunnels, "number of independent tunnels to stripe connections across")
+	fs.Int64Var(&c.standbyPool, "standby-pool", skyenv.SkysocksClientStandbyPool, "cap on tunnels held to the exit including the active ones; extras are kept in standby (0 = active tunnels only)")
 	// Range-split flags were absent from this launcher subset, so passing any of
 	// them via the visor's app args errored. Bind them here too so the feature is
 	// configurable when the visor launches the app.
@@ -178,6 +182,16 @@ func init() {
 	// best-ranked route whose first hop no sibling tunnel holds, so the default
 	// session aggregates. See docs/mux_aggregation_rfc.md.
 	RootCmd.Flags().Int64Var(&tunnels, "tunnels", skyenv.SkysocksClientTunnels, "number of independent tunnels to stripe connections across; each extra tunnel is dialed on the best-ranked route (lowest measured first-hop latency) whose first hop no earlier tunnel holds, so their throughputs sum. 1 = a single tunnel over the AppDirect shortcut")
+	// Standby pool: once the active --tunnels are up, keep dialing further
+	// SIBLING tunnels — each required to leave over a first hop no tunnel
+	// already held occupies — and hold them open, measured and ready. They
+	// carry no streams while an active tunnel is live; what they buy is a
+	// route that can be switched in instantly instead of set up from scratch
+	// (8-9 s through the setup node). The pool SIZE is discovered, not chased:
+	// it fills until the router reports no disjoint first hop is left and then
+	// rests. This value is the ceiling on that, including the active tunnels,
+	// so the setup-node load of one app start is bounded.
+	RootCmd.Flags().Int64Var(&standbyPool, "standby-pool", skyenv.SkysocksClientStandbyPool, "maximum tunnels held open to the exit INCLUDING the active --tunnels; the extras are held in standby (dialed, kept alive and measured, carrying no streams) so a failing tunnel is replaced instantly instead of re-dialed. The pool fills one tunnel at a time until the topology has no disjoint first hop left, then stops; this is the ceiling, not a target. 0 = hold only the active tunnels")
 	// Transparent HTTP range-splitting: a plain GET to a range-capable :80 origin is
 	// fetched as N concurrent byte ranges over separate tunnels and reassembled, so
 	// one unmodified download (curl or a browser on this proxy) aggregates across the
@@ -344,7 +358,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 			close(ddone)
 		}
 
-		conn, err := dialServer(cycleCtx, cfg, appCl, pk, serverPort, false)
+		conn, err := dialServer(cycleCtx, cfg, appCl, pk, false, false)
 		if err != nil {
 			// Stop the disconnected listener and wait for it to release :1080.
 			dcancel()
@@ -376,7 +390,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// is a soft preference: if fewer than N disjoint transports exist, tunnels
 		// fall back to a shared path.)
 		for i := int64(1); i < cfg.tunnels; i++ {
-			extra, derr := dialServer(cycleCtx, cfg, appCl, pk, serverPort, true)
+			extra, derr := dialServer(cycleCtx, cfg, appCl, pk, true, false)
 			if derr != nil {
 				log.WithError(derr).Warnf("tunnel %d/%d dial failed; continuing with %d tunnel(s)", i+1, cfg.tunnels, len(conns))
 				continue
@@ -423,8 +437,19 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		}
 		if cfg.tunnels > 1 {
 			client.SetTunnelRedial(func() (net.Conn, error) {
-				return dialServer(cycleCtx, cfg, appCl, pk, serverPort, true)
+				return dialServer(cycleCtx, cfg, appCl, pk, true, false)
 			})
+			// Standby pool. The same sequential diversify dial, but requiring a
+			// disjoint first hop rather than merely preferring one, so the
+			// router's refusal tells the Client the topology is exhausted and
+			// the fill can rest. The Client owns the loop (one dial at a time,
+			// stop at the cap or at exhaustion, re-arm only on a tunnel death);
+			// the dial lives here because the server PK, retrier and appnet
+			// fallback do.
+			client.SetPoolDial(func() (net.Conn, error) {
+				return dialServer(cycleCtx, cfg, appCl, pk, true, true)
+			})
+			client.SetStandbyPool(int(cfg.standbyPool))
 		}
 		// Close the client when the outer ctx fires so
 		// ListenAndServe returns. With --reconnect the loop
@@ -514,7 +539,21 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 // (docs/mux_aggregation_rfc.md step 3). The visor does all the transport-ID
 // bookkeeping; the app just signals intent. It is a no-op for the first tunnel
 // (no sibling route group to diverge from → dial is identical to today).
-func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk cipher.PubKey, port routing.Port, diversify bool) (net.Conn, error) {
+//
+// standby marks a STANDBY-POOL dial: one more sibling tunnel beyond the active
+// --tunnels set, dialed to be held open rather than to carry streams. Such a
+// dial requires a disjoint first hop instead of merely preferring one, and the
+// router's refusal (app.IsNoDisjointFirstHop) is the pool's stop signal, so it
+// is returned WITHOUT the retrier's usual re-attempts — retrying an exhausted
+// topology is the setup-node storm of #4325.
+func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk cipher.PubKey, diversify, standby bool) (net.Conn, error) {
+	role := ""
+	if cfg.tunnels > 1 || cfg.routed {
+		role = skysocks.TunnelRoleActive
+	}
+	if standby {
+		role = skysocks.TunnelRoleStandby
+	}
 	//nolint:errcheck
 	appCl.SetDetailedStatus(appserver.AppDetailedStatusStarting) //nolint:errcheck,gosec
 	// dial one network to the server. On skynet, --direct forces a 1-hop
@@ -534,7 +573,17 @@ func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk ci
 			if cfg.routed || cfg.tunnels > 1 {
 				mux = 1
 			}
-			return appCl.DialWithOptions(a, mux, 0, 0, 0, 0, 0, cfg.direct, diversify)
+			return appCl.DialWithOptions(a, appserver.DialOptionsReq{
+				MuxRoutes:           mux,
+				Direct:              cfg.direct,
+				DiversifyTransports: diversify,
+				// A standby-pool dial REQUIRES a first hop no sibling tunnel
+				// holds: a shared extra tunnel aggregates nothing, and the
+				// refusal is how the pool learns it has reached the topology's
+				// disjoint bound and stops.
+				RequireDisjointFirstHop: standby,
+				TunnelRole:              role,
+			})
 		}
 		return appCl.Dial(a)
 	}
@@ -543,11 +592,23 @@ func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk ci
 		nets = append(nets, appnet.TypeDmsg)
 	}
 	var conn net.Conn
+	// exhausted holds a "no disjoint first hop left" refusal. It is a settled
+	// answer about the topology, not a transient failure, so it leaves the
+	// retrier at once (by reporting success to it) and is returned to the
+	// caller as-is.
+	var exhausted error
 	err := cfg.retrier.Do(ctx, func() error {
 		var err error
-		conn, _, err = appnet.DialWithFallback(ctx, dial, pk, port, nets...)
+		conn, _, err = appnet.DialWithFallback(ctx, dial, pk, serverPort, nets...)
+		if err != nil && app.IsNoDisjointFirstHop(err) {
+			exhausted = err
+			return nil
+		}
 		return err
 	})
+	if exhausted != nil {
+		return nil, exhausted
+	}
 	if err != nil {
 		return nil, err
 	}
