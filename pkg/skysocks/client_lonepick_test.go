@@ -140,3 +140,65 @@ func TestMeterForgetsAStalledDirection(t *testing.T) {
 	require.InDelta(t, 1e6*0.9*0.9*0.9, m.rxCapBps, 1)
 	require.InDelta(t, 1e6*0.9*0.9*0.9, m.txCapBps, 1)
 }
+
+// TestPickAnySpreadsConcurrentStreams covers the load half of the lone-stream
+// rule: the pick minimizes rtt × (open streams + 1), so a second simultaneous
+// stream leaves the lowest-RTT tunnel unless the alternative is more than
+// (n+1)× slower to answer.
+//
+// Measured live 2026-09-17 (bench/2026-09-16/66e279fa6-tunsum): one client
+// with two tunnels (Amsterdam, Atlanta), two concurrent 50 MB downloads of
+// different objects, no range split — both landed on the SAME tunnel in 3 of 3
+// trials (>99.5 % of the 100 MB on one transport) and summed 5.07 / 8.90 /
+// 9.10 MB/s, against 10.41 for two independent one-tunnel clients.
+func TestPickAnySpreadsConcurrentStreams(t *testing.T) {
+	near, closeNear := newTestSession(t)
+	defer closeNear()
+	far, closeFar := newTestSession(t)
+	defer closeFar()
+
+	mNear, mFar := new(tunnelMeter), new(tunnelMeter)
+	mNear.rttMs, mFar.rttMs = 40, 100
+	c := &Client{
+		sessions:  []*yamux.Session{far, near},
+		recvStamp: map[*yamux.Session]*tunnelMeter{near: mNear, far: mFar},
+		closeC:    make(chan struct{}),
+	}
+
+	// Idle: identical to the plain lowest-RTT rule.
+	require.Same(t, near, c.pickSessionFor(pickAny), "with both tunnels idle the lowest RTT wins")
+
+	// One stream on the 40 ms tunnel: 40×2 = 80 still beats an idle 100 ms
+	// tunnel, so a tunnel is not abandoned for a much worse one.
+	_, err := near.Open()
+	require.NoError(t, err)
+	require.Same(t, near, c.pickSessionFor(pickAny), "100 ms is more than 2x worse than 40 ms")
+
+	// ...but an idle 60 ms tunnel does take the second stream (60 < 80). This
+	// is the case that regressed: before the load factor every concurrent lone
+	// stream stacked on the single lowest-RTT tunnel.
+	mFar.rttMs = 60
+	require.Same(t, far, c.pickSessionFor(pickAny), "the second concurrent stream moves to the idle tunnel")
+
+	// A second stream on the 40 ms tunnel (40×3 = 120) hands the next one to
+	// the 100 ms tunnel as well.
+	mFar.rttMs = 100
+	_, err = near.Open()
+	require.NoError(t, err)
+	require.Same(t, far, c.pickSessionFor(pickAny), "two streams on 40 ms outweigh an idle 100 ms tunnel")
+
+	// An idle 200 ms tunnel still loses to a 40 ms tunnel carrying two.
+	mFar.rttMs = 200
+	require.Same(t, near, c.pickSessionFor(pickAny), "an idle 200 ms tunnel loses to 40x3 = 120")
+
+	// A benched tunnel sits out the loaded pick exactly as it does the idle
+	// one, and the surviving tunnel is picked however loaded it is.
+	mFar.rttMs = 60
+	mFar.bench(time.Now())
+	require.Same(t, near, c.pickSessionFor(pickAny), "a benched tunnel is skipped while another is live")
+	mFar.unbench()
+
+	// The only live tunnel is always picked, load and RTT notwithstanding.
+	c.sessions = []*yamux.Session{near}
+	require.Same(t, near, c.pickSessionFor(pickAny), "a single tunnel is picked whatever it carries")
+}

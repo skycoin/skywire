@@ -816,13 +816,26 @@ func (c *Client) pickSession() *yamux.Session {
 // pickSessionFor picks by the stream's shape.
 //
 // A LONE stream (pickAny) goes to the live tunnel with the lowest measured
-// RTT — the direct one, where there is one. It is not competing for the pipe
-// with sibling streams, so the statistic that matters is how fast the tunnel
-// answers, not how much it has been shown to move; a tunnel that never
-// answered a ping sorts last (it is unproven, not fast), and ties go to the
-// tunnel with the fewest open streams. Weighing a lone stream by capacity is
-// what put all five of a measured 50 MB upload set on a 470 ms Sydney tunnel
-// instead of the direct one (0.23 MB/s against 9.8).
+// RTT PER OPEN STREAM: rtt × (open streams + 1), lowest wins. It is not
+// competing for the pipe with sibling streams, so the statistic that matters
+// is how fast the tunnel answers, not how much it has been shown to move; a
+// tunnel that never answered a ping sorts last (it is unproven, not fast), and
+// ties go to the tunnel with the fewest open streams. Weighing a lone stream
+// by capacity is what put all five of a measured 50 MB upload set on a 470 ms
+// Sydney tunnel instead of the direct one (0.23 MB/s against 9.8).
+//
+// The (streams + 1) factor is what keeps concurrent lone streams apart. With
+// every tunnel idle it cancels out and the rule is exactly lowest RTT, so the
+// upload fix above stands; but the next concurrent stream moves off a tunnel
+// already carrying n streams unless the alternative's RTT is more than (n+1)×
+// worse. Against a 40 ms tunnel carrying one stream (score 80) an idle 60 ms
+// tunnel takes the second stream and an idle 100 ms one does not; once the
+// 40 ms tunnel carries two (score 120) the 100 ms tunnel takes the third.
+// Without the factor every simultaneous lone stream stacked on the single
+// lowest-RTT tunnel: measured 2026-09-17, two concurrent 50 MB downloads of
+// different objects over a two-tunnel client (Amsterdam + Atlanta, no range
+// split) put >99.5 % of the 100 MB on one transport in 3 of 3 trials and
+// summed 5.07 / 8.90 / 9.10 MB/s, where one stream per tunnel gives ~10.4.
 //
 // A RANGE CHUNK (pickRecv) is capacity-weighted, because it is one of several
 // parallel streams whose whole point is to fill the pipe: the pick minimizes
@@ -892,16 +905,19 @@ func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 		}
 	}
 	if dir == pickAny {
-		// Lowest measured RTT wins; an unmeasured tunnel sorts last; ties go to
-		// the tunnel carrying fewer streams. leastLoaded's fewest-streams rule is
-		// the fallback when nothing has been pinged yet.
+		// Lowest RTT PER OPEN STREAM wins: rtt × (open streams + 1). An
+		// unmeasured tunnel sorts last; ties go to the tunnel carrying fewer
+		// streams. leastLoaded's fewest-streams rule is the fallback when
+		// nothing has been pinged yet.
 		idx := -1
+		bestRTT := 0.0
 		for i, n := range counts {
 			if n < 0 || !rttOK[i] {
 				continue
 			}
-			if idx == -1 || rtts[i] < rtts[idx] || (rtts[i] == rtts[idx] && n < counts[idx]) {
-				idx = i
+			score := rtts[i] * float64(n+1)
+			if idx == -1 || score < bestRTT || (score == bestRTT && n < counts[idx]) {
+				idx, bestRTT = i, score
 			}
 		}
 		if idx >= 0 {
