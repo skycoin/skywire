@@ -249,6 +249,16 @@ func (c *recvStampConn) Write(p []byte) (int, error) {
 // the two-hop one at 5, the fewest-streams rule alone sent every upload to
 // whichever was idle first (measured: 10 MB uploads at 1.6 MB/s on the slow
 // tunnel against 6.5 on the fast one).
+//
+// Only a window in which the tunnel carried streams proves anything. An idle
+// window moves keepalives and handshakes — tens of bytes — and a rate made of
+// those is noise, yet it is nonzero, so the first version of this meter
+// recorded it as the tunnel's capacity. Against a primary tunnel whose warm-up
+// probes had "proven" a kilobyte per second, a tunnel proven at 23 B/s by one
+// ping lost every pick, never carried a stream, and so was never re-measured:
+// two- and three-tunnel range-split downloads rode one tunnel (measured: 0 of
+// 10 MB on the second tunnel, 5 trials of 5). busyAt lets pickSession tell a
+// fresh estimate from a stale one, so an idle tunnel is probed again.
 type tunnelMeter struct {
 	stamp atomic.Int64
 	rx    atomic.Uint64
@@ -258,6 +268,7 @@ type tunnelMeter struct {
 	lastAt   time.Time
 	lastRx   uint64
 	lastTx   uint64
+	busyAt   time.Time // when a busy window last updated the estimates
 	rxCapBps float64
 	txCapBps float64
 }
@@ -265,14 +276,19 @@ type tunnelMeter struct {
 // meterSampleMin is the shortest interval a capacity sample is taken over;
 // meterCapDecay is applied per sample while the tunnel is busy, so a capacity
 // that a tunnel stops delivering is forgotten within a few seconds of load.
+// meterFresh is how long a busy window's estimate stays authoritative for an
+// idle tunnel; past it the tunnel is credited the best known capacity and
+// probed like an unproven one, so no tunnel is starved by an old estimate.
 const (
 	meterSampleMin = 500 * time.Millisecond
 	meterCapDecay  = 0.9
+	meterFresh     = 2 * time.Second
 )
 
 // sample folds the bytes moved since the previous sample into the capacity
 // estimates. busy says whether the tunnel carried streams over the interval:
-// only then may an estimate decay, so idleness never erodes a proven capacity.
+// only a busy window updates the estimates (peak kept, decayed per sample), so
+// idleness neither erodes a proven capacity nor invents one from keepalives.
 func (m *tunnelMeter) sample(now time.Time, busy bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -289,10 +305,12 @@ func (m *tunnelMeter) sample(now time.Time, busy bool) {
 	rxRate := float64(rx-m.lastRx) / secs
 	txRate := float64(tx-m.lastTx) / secs
 	m.lastAt, m.lastRx, m.lastTx = now, rx, tx
-	if busy {
-		m.rxCapBps *= meterCapDecay
-		m.txCapBps *= meterCapDecay
+	if !busy {
+		return
 	}
+	m.busyAt = now
+	m.rxCapBps *= meterCapDecay
+	m.txCapBps *= meterCapDecay
 	if rxRate > m.rxCapBps {
 		m.rxCapBps = rxRate
 	}
@@ -303,14 +321,16 @@ func (m *tunnelMeter) sample(now time.Time, busy bool) {
 
 // capacity returns the tunnel's proven capacity in bytes/s for a stream of the
 // given direction: receive-heavy streams (range chunks) weigh the download
-// capacity, anything else both ways summed. 0 means nothing proven yet.
-func (m *tunnelMeter) capacity(dir pickDir) float64 {
+// capacity, anything else both ways summed. 0 means nothing proven yet. fresh
+// says whether a busy window updated the estimate within meterFresh of now.
+func (m *tunnelMeter) capacity(dir pickDir, now time.Time) (bps float64, fresh bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	fresh = !m.busyAt.IsZero() && now.Sub(m.busyAt) <= meterFresh
 	if dir == pickRecv {
-		return m.rxCapBps
+		return m.rxCapBps, fresh
 	}
-	return m.rxCapBps + m.txCapBps
+	return m.rxCapBps + m.txCapBps, fresh
 }
 
 // pickDir is what a new stream will mostly do, for pickSession's weighing.
@@ -679,6 +699,15 @@ func (c *Client) pickSession() *yamux.Session {
 // with nothing proven yet is credited the best known capacity so it gets
 // probed; with nothing proven anywhere (cold start, or the single-tunnel
 // case) the pick is the plain fewest-streams rule.
+//
+// While a transfer is in progress (some tunnel busy), an idle tunnel whose
+// estimate is stale is credited the best known capacity too: its estimate
+// came from an old window (a chunk still in slow start, say) and the only way
+// to refresh it is to give it a stream. Without this a tunnel once measured
+// slow was never picked again, so never measured again — a range split over
+// three tunnels put every byte on one. With every tunnel idle (a lone upload,
+// a browser connection) the stale estimates are still the best information
+// there is, and the pick weighs them as proven.
 func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 	c.sessionsMu.Lock()
 	defer c.sessionsMu.Unlock()
@@ -688,16 +717,19 @@ func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 	now := time.Now()
 	counts := make([]int, len(c.sessions))
 	caps := make([]float64, len(c.sessions))
+	fresh := make([]bool, len(c.sessions))
 	best := 0.0
+	anyBusy := false
 	for i, s := range c.sessions {
 		if s == nil || s.IsClosed() {
 			counts[i] = -1
 			continue
 		}
 		counts[i] = s.NumStreams()
+		anyBusy = anyBusy || counts[i] > 0
 		if m := c.recvStamp[s]; m != nil {
 			m.sample(now, counts[i] > 0)
-			caps[i] = m.capacity(dir)
+			caps[i], fresh[i] = m.capacity(dir, now)
 			if caps[i] > best {
 				best = caps[i]
 			}
@@ -717,7 +749,7 @@ func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 			continue
 		}
 		cp := caps[i]
-		if cp <= 0 {
+		if cp <= 0 || (n == 0 && !fresh[i] && anyBusy) {
 			cp = best
 		}
 		score := float64(n+1) / cp
