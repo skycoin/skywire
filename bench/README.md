@@ -47,6 +47,19 @@ deltas of every first-hop transport. `TUNNELS` and `LEGS` choose the counts
 (both default to `2` — see the knob table below); `[pin order]` lists pin
 shorts best route first.
 
+The carrier list is a **union, re-read every row**, not the list captured at set
+start: the app's route groups are read before and after each row and every
+transport they hold joins the tracked list, which is never shortened.
+campaign21's cut row left the session holding a replacement group (49172) whose
+first hop was a transport that did not exist when the list was taken (sudph
+93139b56-acc0-00e5-8ca0-cd0bad229d62), so the three 50 MB uploads that rode it
+show no sender at all in `mux-tunnels-2.carrier.tsv` rows 14–16. A transport that
+appears mid-set simply becomes new carrier rows from the row it appeared at, so
+the columns `summarize.sh` and `verdict.sh` read are unchanged; `<set>.tps.tsv`
+names each tracked transport once — `tp type remote_pk first_seen_row`, where
+row 0 means held at set start — and the set's mux-events line names any route
+group created after row 1 with its port, first hop and transport type.
+
 ## Paired references (the 2026-09-17 goal rules)
 
 A reference set measured an hour before the subject is not a bar: the 50 MB
