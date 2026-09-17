@@ -48,7 +48,12 @@
 #   EXIT_RES — "every deploy records exit RssAnon and CPU before and after each
 #     set and fails the run if either grows across it". bench/exit-resources.sh
 #     around every set, bench/exit-resources-check.sh after it; a FAIL keeps the
-#     results and makes this script exit non-zero at the very end.
+#     results and makes this script exit non-zero at the very end. The run buys
+#     the exit's cold-start heap high-water in ONE warm-up transfer before the
+#     first reading (EXIT_RES_WARM_BYTES, 50 MB), each set is scored on a
+#     <set>-settled reading taken EXIT_RES_SETTLE_S (30) seconds after its post
+#     — Go's scavenger gives back what a set borrowed — and the whole run is
+#     scored once more by `exit-resources-check.sh <out> --slope`.
 #   TRIALS_UP — upload cells take 3 trials, download cells the [trials]
 #     argument (5). Uploads repeat themselves; downloads do not.
 #
@@ -502,6 +507,41 @@ res_check() {
 	"$here/exit-resources-check.sh" "$out" "$1" || exit_res_fail=1
 	return 0
 }
+# res_warmup <socks>: one warm-up transfer, once per run, before the FIRST
+# reading of the FIRST set. The exit pays its cold-start heap high-water on
+# whichever set runs first — campaign21 and the dc23fd9ff smoke both failed set 1
+# by +66 / +76 MiB and passed every set after it — so the high-water is bought
+# here, outside any set's pre/post bracket, and the `warmup` reading records
+# where it left the exit. Skipped when the out dir already holds a `-pre` row.
+res_warmup() {
+	[ "$EXIT_RES" = 1 ] || return 0
+	[ -f "$out/exit-resources.tsv" ] &&
+		awk -F'\t' '$2 ~ /-pre$/ { f = 1 } END { exit !f }' "$out/exit-resources.tsv" && return 0
+	echo "exit-resources: warm-up transfer (${EXIT_RES_WARM_BYTES:-50000000} B down) before the first reading of the run"
+	"$here/bench.sh" "$1" "$sink" "${EXIT_RES_WARM_BYTES:-50000000}" down warmup >/dev/null 2>&1
+	res_set warmup
+	return 0
+}
+# res_settle <set>: the reading the set is actually scored on. Go's scavenger
+# hands back what a set borrowed within seconds (the smoke returned 52 MiB in 29
+# idle ones), so `post` measures the peak and `settled` measures what the exit
+# kept. EXIT_RES_SETTLE_S=0 turns the wait off and the check falls back to
+# post - pre.
+res_settle() {
+	[ "$EXIT_RES" = 1 ] || return 0
+	[ "${EXIT_RES_SETTLE_S:-30}" -gt 0 ] 2>/dev/null || return 0
+	sleep "${EXIT_RES_SETTLE_S:-30}"
+	res_set "$1-settled"
+	return 0
+}
+# res_slope: the campaign check, once at the end of the run. No single set of
+# campaign21 failed the per-set rule while the exit drifted 347 -> 479 MB across
+# it; a slope over the whole run is what sees that.
+res_slope() {
+	[ "$EXIT_RES" = 1 ] || return 0
+	"$here/exit-resources-check.sh" "$out" --slope || exit_res_fail=1
+	return 0
+}
 
 # --- stream-level: N tunnels ---------------------------------------------------
 port=1101
@@ -528,10 +568,11 @@ for N in $tunnel_counts; do
 	# disjoint first hops for.
 	[ "$active" -eq "$N" ] || { abort_set "$set_name" "shape differs from target: $active active route group(s) of $groups ($standby standby), asked for $N (groups=$desc)"; port=$((port + 1)); continue; }
 	warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
+	res_warmup "$socks"
 	res_set "$set_name-pre"
 	run_set "$set_name" "$socks" "$tps" \
 		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=$N route_groups=$groups active=$active standby=$standby groups=$desc sink=$sink"
-	res_set "$set_name-post"; res_check "$set_name"
+	res_set "$set_name-post"; res_settle "$set_name"; res_check "$set_name"
 	# the rows are already written, so a leftover group here invalidates the
 	# NEXT set (its own pre-setup check), not this one — just say so loudly.
 	stop_app_clean "$name" || echo "$set_name: dst_ports $rg_left outlived the set — the next set will be invalidated if they persist"
@@ -578,10 +619,11 @@ for N in $leg_counts; do
 	[ "$active" -eq 1 ] || { abort_set "$set_name" "$active active route group(s) of $groups for a legs set, want exactly 1 (rg_port=$port_before)"; port=$((port + 1)); continue; }
 	[ "$nlegs" -eq "$N" ] && [ "$missing" -eq 0 ] || { abort_set "$set_name" "leg set differs from target: legs=$nlegs/$N missing=$missing present=$desc"; port=$((port + 1)); continue; }
 	warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
+	res_warmup "$socks"
 	res_set "$set_name-pre"
 	run_set "$set_name" "$socks" "$tps" \
 		"exit=$exit_pk local=$local_commit exit_commit=$ec session=$name legs=$N/$nlegs width=$N rg_port=$port_before route_groups=$groups active=$active standby=$standby pins=$(echo $chosen | tr ' ' ',') legs_desc=$desc sink=$sink"
-	res_set "$set_name-post"; res_check "$set_name"
+	res_set "$set_name-post"; res_settle "$set_name"; res_check "$set_name"
 	mux_info "$name" > "$tmp/$set_name.after.json"
 	port_after=$(active_json "$tmp/$set_name.after.json" | jq -r '.[0].desc.dst_port')
 	echo "# rg src_port before=$port_before after=$port_after $( [ "$port_before" = "$port_after" ] && echo constant || echo CHANGED)" >> "$out/$set_name.carrier.tsv"
@@ -638,6 +680,7 @@ if [ "${UP2:-0}" = 1 ]; then
 			paired_stop 1; stop_app_clean "$name" >/dev/null 2>&1
 		else
 			warm "$socks" "$name" || echo "$name: probes failing — running the set anyway"
+			res_warmup "$socks"
 			res_set "$set_name-pre"
 			set_started=$(date +%Y-%m-%dT%H:%M:%S)
 			echo "# exit=$exit_pk local=$local_commit exit_commit=$ec session=$name tunnels=2 route_groups=$groups active=$active standby=$standby groups=$desc refs=$ref1,$ref2 size=$up2_size sink=$sink" > "$f"
@@ -677,7 +720,7 @@ if [ "${UP2:-0}" = 1 ]; then
 				t=$((t + 1))
 			done
 			paired_stop 1; paired_stop 2
-			res_set "$set_name-post"; res_check "$set_name"
+			res_set "$set_name-post"; res_settle "$set_name"; res_check "$set_name"
 			echo "$set_name: $(grep -vc '^#' "$f") rows, hash_ok=$(grep -v '^#' "$f" | awk -F'\t' '$8==1' | wc -l)"
 			mux_events "$set_name" "$name"
 			stop_app_clean "$name" || echo "$set_name: dst_ports $rg_left outlived the set"
@@ -686,6 +729,8 @@ if [ "${UP2:-0}" = 1 ]; then
 fi
 
 # The exit-resource gate is the only thing that can fail this script: every set
-# that ran is on disk either way.
+# that ran is on disk either way. The per-set checks have already run; this is
+# the campaign-long RssAnon slope over every reading the run took.
+res_slope
 [ "$exit_res_fail" = 0 ] || echo "run-mux: an exit-resource check FAILED — see $out/exit-resources.tsv"
 exit "$exit_res_fail"
