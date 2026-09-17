@@ -139,7 +139,7 @@ func (c *clientConfig) parseArgs(args []string) error {
 	fs.BoolVar(&c.direct, "direct", false, "force a direct-transport-only route to the server (1-hop, bypass the route-finder + setup node); self-heals on server restart")
 	fs.BoolVar(&c.routed, "routed", false, "always dial through a route group (skip the direct shortcut)")
 	fs.BoolVar(&c.dmsgFallback, "dmsg-fallback", false, "fall back to a direct dmsg stream if the skynet dial fails")
-	fs.Int64Var(&c.tunnels, "tunnels", 1, "number of independent tunnels to stripe connections across")
+	fs.Int64Var(&c.tunnels, "tunnels", skyenv.SkysocksClientTunnels, "number of independent tunnels to stripe connections across")
 	// Range-split flags were absent from this launcher subset, so passing any of
 	// them via the visor's app args errored. Bind them here too so the feature is
 	// configurable when the visor launches the app.
@@ -173,9 +173,11 @@ func init() {
 	RootCmd.Flags().BoolVar(&routed, "routed", false, "always dial through a route group, even when a direct transport to the server exists (skips the direct shortcut, so the session has mux legs to pin or reconcile)")
 	RootCmd.Flags().BoolVar(&dmsgFallback, "dmsg-fallback", false, "if the skynet (route) dial to the server fails, fall back to a direct dmsg stream (opt-in: dmsg relays via a dmsg server — higher latency + the server sees both endpoint PKs)")
 	// N independent tunnels (route group + noise + yamux each); browser conns are
-	// striped across them by the least-loaded policy so throughput sums. Default 1
-	// == the single-tunnel pre-aggregation behavior. See docs/mux_aggregation_rfc.md.
-	RootCmd.Flags().Int64Var(&tunnels, "tunnels", 1, "number of independent tunnels to stripe connections across (1 = today's behavior; >1 aggregates ONLY over disjoint routes — see --help)")
+	// striped across them by the least-loaded policy so throughput sums. Default
+	// skyenv.SkysocksClientTunnels (2): each extra tunnel is dialed on the
+	// best-ranked route whose first hop no sibling tunnel holds, so the default
+	// session aggregates. See docs/mux_aggregation_rfc.md.
+	RootCmd.Flags().Int64Var(&tunnels, "tunnels", skyenv.SkysocksClientTunnels, "number of independent tunnels to stripe connections across; each extra tunnel is dialed on the best-ranked route (lowest measured first-hop latency) whose first hop no earlier tunnel holds, so their throughputs sum. 1 = a single tunnel over the AppDirect shortcut")
 	// Transparent HTTP range-splitting: a plain GET to a range-capable :80 origin is
 	// fetched as N concurrent byte ranges over separate tunnels and reassembled, so
 	// one unmodified download (curl or a browser on this proxy) aggregates across the

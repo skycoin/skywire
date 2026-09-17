@@ -54,6 +54,18 @@ type oracleLocalTp struct {
 	id       uuid.UUID
 	remotePK cipher.PubKey
 	tpType   tptypes.Type
+	// latencyMs is this transport's measured inter-visor RTT in milliseconds —
+	// ManagedTransport.GetLatency(), the SAME field a route group's leg snapshot
+	// reports as latency_ms (route_group.go: leg.LatencyMS = tp.GetLatency()).
+	// 0 = never sampled, never a real reading. It is the oracle's first-hop
+	// ranking signal: without it the oracle broke ties on PK string, which on a
+	// fleet of same-type (stcpr) first hops is an arbitrary order.
+	latencyMs float64
+	// remoteIP is the transport's remote host where the underlying type exposes
+	// one ("" for dmsg and for a transport that isn't serving). Used only to
+	// exclude a first hop that reaches a host a sibling tunnel already leaves
+	// over under a different PK.
+	remoteIP string
 }
 
 // twoHopLeg is one disjoint S->I->D route: the intermediate plus the forward
@@ -82,10 +94,12 @@ type twoHopLeg struct {
 // the same intermediate, the lowest TypePreference (most-preferred, e.g. stcpr
 // over webrtc) is chosen on each side.
 //
-// Legs are returned sorted by intermediate-PK string for determinism and capped
-// at max (0 = uncapped). Each leg has a distinct intermediate, so the returned
-// set is disjoint in the intermediate-PK sense — exactly what the mux splitter
-// wants for parallel legs.
+// Legs are returned BEST FIRST — ranked by the first hop's measured latency
+// (rankByFirstHopLatency, the same rule the route-finder and K-race diversify
+// paths apply), falling back to the transport-type preference cost and then the
+// intermediate-PK string for determinism — and capped at max (0 = uncapped).
+// Each leg has a distinct intermediate, so the returned set is disjoint in the
+// intermediate-PK sense — exactly what the mux splitter wants for parallel legs.
 func computeDisjoint2HopRoutes(
 	src, dst cipher.PubKey,
 	localTps []oracleLocalTp,
@@ -99,6 +113,10 @@ func computeDisjoint2HopRoutes(
 
 	excludeIntermediates := map[cipher.PubKey]struct{}{}
 	excludeTpIDs := map[uuid.UUID]struct{}{}
+	// A sibling tunnel's first-hop PEER (and host) is unavailable to this dial
+	// whichever transport would reach it — see DialOptions.ExcludeFirstHopPeers.
+	excludeFirstHopPeers := map[cipher.PubKey]struct{}{}
+	excludeFirstHopIPs := map[string]struct{}{}
 	if opts != nil {
 		for _, pk := range opts.ExcludeIntermediatePKs {
 			excludeIntermediates[pk] = struct{}{}
@@ -106,13 +124,20 @@ func computeDisjoint2HopRoutes(
 		for _, id := range opts.ExcludeTransportIDs {
 			excludeTpIDs[id] = struct{}{}
 		}
+		for _, pk := range opts.ExcludeFirstHopPeers {
+			excludeFirstHopPeers[pk] = struct{}{}
+		}
+		for _, ip := range opts.ExcludeFirstHopIPs {
+			excludeFirstHopIPs[ip] = struct{}{}
+		}
 	}
 
 	// Source side: best src-I transport per intermediate peer I (lowest
 	// TypePreference wins). DMSG and excluded transport IDs are dropped.
 	type srcLeg struct {
-		id     uuid.UUID
-		tpType tptypes.Type
+		id        uuid.UUID
+		tpType    tptypes.Type
+		latencyMs float64
 	}
 	srcByPeer := map[cipher.PubKey]srcLeg{}
 	for _, tp := range localTps {
@@ -129,9 +154,17 @@ func computeDisjoint2HopRoutes(
 		if _, hit := excludeIntermediates[peer]; hit {
 			continue
 		}
+		if _, hit := excludeFirstHopPeers[peer]; hit {
+			continue
+		}
+		if tp.remoteIP != "" {
+			if _, hit := excludeFirstHopIPs[tp.remoteIP]; hit {
+				continue
+			}
+		}
 		if cur, ok := srcByPeer[peer]; !ok ||
 			tptypes.TypePreference(tp.tpType) < tptypes.TypePreference(cur.tpType) {
-			srcByPeer[peer] = srcLeg{id: tp.id, tpType: tp.tpType}
+			srcByPeer[peer] = srcLeg{id: tp.id, tpType: tp.tpType, latencyMs: tp.latencyMs}
 		}
 	}
 
@@ -202,7 +235,11 @@ func computeDisjoint2HopRoutes(
 		s := srcByPeer[i]
 		d := dstByPeer[i]
 		fwd := []routing.Hop{
-			{TpID: s.id, From: src, To: i},
+			// Carry the first hop's measured latency on the Hop itself, the way
+			// the route-finder does (routing.Hop.Latency, ms). It is what makes
+			// the shared first-hop ranking below — and any caller that inspects
+			// the returned legs — see the same number as the leg snapshot.
+			{TpID: s.id, From: src, To: i, Latency: s.latencyMs},
 			{TpID: d.id, From: i, To: dst},
 		}
 		legs = append(legs, twoHopLeg{
@@ -210,11 +247,80 @@ func computeDisjoint2HopRoutes(
 			Forward:      fwd,
 			Reverse:      reverseHops(fwd),
 		})
-		if max > 0 && len(legs) >= max {
-			break
-		}
+	}
+
+	// FIRST-HOP LATENCY is the primary order, ahead of the type-preference cost
+	// above. Every intermediate on a homogeneous fleet shares one transport type
+	// (six stcpr first hops here), so legCost tied on all of them and the PK
+	// string decided — which is how a diversify tunnel ended up on a 470ms first
+	// hop while a 39ms one sat free (live 2026-09-16/17). rankByFirstHopLatency
+	// is the SAME helper the route-finder and K-race diversify paths use, and it
+	// sorts stably, so the type-preference/PK order it inherits stays the
+	// tiebreak wherever latency cannot separate two legs.
+	legs = rankLegsByFirstHopLatency(legs, nil)
+	if max > 0 && len(legs) > max {
+		legs = legs[:max]
 	}
 	return legs, nil
+}
+
+// rankLegsByFirstHopLatency orders 2-hop legs by the SAME first-hop rule the
+// route-finder paths use (rankByFirstHopLatency): measured first-hop latency
+// lowest first, unmeasured last, ties keeping the input order. latencyFor is
+// the optional TpID lookup; the legs' own Hop.Latency is used when it returns
+// nothing, so a nil lookup still ranks legs built by computeDisjoint2HopRoutes.
+func rankLegsByFirstHopLatency(legs []twoHopLeg, latencyFor func(uuid.UUID) float64) []twoHopLeg {
+	if len(legs) < 2 {
+		return legs
+	}
+	fwds := make([][]routing.Hop, 0, len(legs))
+	for _, l := range legs {
+		if len(l.Forward) == 0 {
+			continue
+		}
+		fwds = append(fwds, l.Forward)
+	}
+	return reorderLegsTo(legs, rankByFirstHopLatency(fwds, latencyFor))
+}
+
+// reorderLegsTo puts legs into the order of ranked forward paths, matching on
+// the first hop's transport ID (unique per leg: one transport per intermediate).
+// Legs whose forward path is missing from ranked keep their relative order at
+// the end, so nothing is ever dropped.
+func reorderLegsTo(legs []twoHopLeg, ranked [][]routing.Hop) []twoHopLeg {
+	if len(legs) < 2 || len(ranked) == 0 {
+		return legs
+	}
+	byFirstHop := make(map[uuid.UUID]twoHopLeg, len(legs))
+	for _, l := range legs {
+		if len(l.Forward) == 0 {
+			continue
+		}
+		byFirstHop[l.Forward[0].TpID] = l
+	}
+	out := make([]twoHopLeg, 0, len(legs))
+	taken := make(map[uuid.UUID]struct{}, len(legs))
+	for _, f := range ranked {
+		if len(f) == 0 {
+			continue
+		}
+		l, ok := byFirstHop[f[0].TpID]
+		if !ok {
+			continue
+		}
+		out = append(out, l)
+		taken[f[0].TpID] = struct{}{}
+	}
+	for _, l := range legs {
+		if len(l.Forward) == 0 {
+			continue
+		}
+		if _, hit := taken[l.Forward[0].TpID]; hit {
+			continue
+		}
+		out = append(out, l)
+	}
+	return out
 }
 
 // reconstructDstEntries rebuilds full transport entries from a destination's
@@ -299,13 +405,35 @@ func (r *router) oracle2HopRoutes(ctx context.Context, log *logging.Logger, src,
 			id:       tp.Entry.ID,
 			remotePK: tp.Entry.RemoteEdge(src),
 			tpType:   tp.Entry.Type,
+			// Same field the leg snapshot reports as latency_ms, so the ranking
+			// and the bench read one number.
+			latencyMs: tp.GetLatency(),
+			remoteIP:  tp.RemoteIP(),
 		})
 		return true
 	})
 
-	legs, err := computeDisjoint2HopRoutes(src, dst, localTps, dstEntries, opts, 1)
+	// Ask for EVERY leg, not just the first: the oracle is the candidate
+	// selection that actually wins a diversify dial's race on this rig, so it
+	// has to rank all of its free first hops rather than return whichever one
+	// the intermediate ordering happened to put first. computeDisjoint2HopRoutes
+	// returns them best-first.
+	legs, err := computeDisjoint2HopRoutes(src, dst, localTps, dstEntries, opts, 0)
 	if err != nil {
 		return nil, nil, err
+	}
+	// For a diversify dial, re-rank through the SHARED entry point: it probes
+	// the first hops that carry no measurement (an idle transport this visor has
+	// never sent over reports nothing, which is what left every candidate
+	// "unmeasured" and handed the choice back to an arbitrary order) and records
+	// the ranking on the dial decision trail, so `mux info` shows why the extra
+	// tunnel took the first hop it took wherever the choice was made.
+	if opts != nil && opts.DiversifyTransports {
+		fwds := make([][]routing.Hop, 0, len(legs))
+		for _, l := range legs {
+			fwds = append(fwds, l.Forward)
+		}
+		legs = reorderLegsTo(legs, r.rankFreeFirstHops(ctx, opts, fwds, nil))
 	}
 	leg := legs[0]
 	log.Infof("RSN-oracle 2-hop route via intermediate %s (no TPD)", leg.Intermediate)

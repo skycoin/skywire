@@ -327,6 +327,17 @@ const (
 	// SkysocksClientAddr is the default port the socks5 proxy client serves on
 	SkysocksClientAddr = ":1080"
 
+	// SkysocksClientTunnels is the default number of independent tunnels the
+	// socks5 proxy client stripes connections across (--tunnels). Two, so a
+	// default proxy session aggregates: the second tunnel is dialed on the
+	// best-ranked route whose first hop no sibling tunnel holds
+	// (rankByFirstHopLatency), and its throughput sums with the first's.
+	// ONE home for the default so the CLI flag, the app's cobra flag and the
+	// app's launcher flag set cannot drift — `proxy start` with no --tunnels and
+	// the hypervisor UI starting the app with none must mean the same thing
+	// (CLI/GUI parity). --tunnels 1 still takes the AppDirect shortcut.
+	SkysocksClientTunnels = 2
+
 	// VPNServerName is the name of the vpn server app
 	VPNServerName = "vpn-server"
 

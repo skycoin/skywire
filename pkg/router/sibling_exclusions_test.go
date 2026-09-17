@@ -66,10 +66,11 @@ func TestSiblingRouteGroupExclusions_DiversifiesSecondTunnel(t *testing.T) {
 
 	// Tunnel 2 dialing the same exit must see tunnel 1 as a sibling and be
 	// handed its transport + intermediate to exclude.
-	ids, pks, count := r.siblingRouteGroupExclusions(lPK, rPK, rPort)
+	ids, pks, peers, _, count := r.siblingRouteGroupExclusions(lPK, rPK, rPort)
 	require.Equal(t, 1, count, "tunnel 2 must see exactly one live sibling to the exit")
 	require.Equal(t, []uuid.UUID{tp1}, ids, "tunnel 2 must exclude tunnel 1's first-hop transport")
 	require.Equal(t, []cipher.PubKey{midPK}, pks, "tunnel 2 must exclude tunnel 1's intermediate")
+	require.Equal(t, []cipher.PubKey{midPK}, peers, "tunnel 2 must exclude tunnel 1's first-hop PEER, so every transport to that peer is off-limits")
 }
 
 // TestSiblingRouteGroupExclusions_LoneDialUntouched proves the bounding: the
@@ -85,7 +86,7 @@ func TestSiblingRouteGroupExclusions_LoneDialUntouched(t *testing.T) {
 	r := newExclusionTestRouter(t, lPK)
 
 	// No route group to (rPK, rPort) at all → lone dial, no exclusions.
-	ids, pks, count := r.siblingRouteGroupExclusions(lPK, rPK, rPort)
+	ids, pks, _, _, count := r.siblingRouteGroupExclusions(lPK, rPK, rPort)
 	require.Zero(t, count)
 	require.Empty(t, ids)
 	require.Empty(t, pks)
@@ -93,7 +94,7 @@ func TestSiblingRouteGroupExclusions_LoneDialUntouched(t *testing.T) {
 	// A live route group to a DIFFERENT exit (otherPK) must not be treated as
 	// a sibling — diversification is scoped to the exact destination.
 	seedSiblingRG(t, r, lPK, otherPK, midPK, rPort, routing.Port(1001), uuid.New())
-	ids, pks, count = r.siblingRouteGroupExclusions(lPK, rPK, rPort)
+	ids, pks, _, _, count = r.siblingRouteGroupExclusions(lPK, rPK, rPort)
 	require.Zero(t, count, "a route group to another exit is not a sibling")
 	require.Empty(t, ids)
 	require.Empty(t, pks)
@@ -101,6 +102,6 @@ func TestSiblingRouteGroupExclusions_LoneDialUntouched(t *testing.T) {
 	// A route group to the right exit PK but a DIFFERENT port is not a sibling
 	// either.
 	seedSiblingRG(t, r, lPK, rPK, midPK, routing.Port(9), routing.Port(1002), uuid.New())
-	_, _, count = r.siblingRouteGroupExclusions(lPK, rPK, rPort)
+	_, _, _, _, count = r.siblingRouteGroupExclusions(lPK, rPK, rPort)
 	require.Zero(t, count, "a route group to a different port on the exit is not a sibling")
 }
