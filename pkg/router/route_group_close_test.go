@@ -255,3 +255,45 @@ func TestConcurrentKeepAliveAndClose(t *testing.T) {
 		t.Fatal("Close deadlocked while keepalive held rg.mu on dead transport")
 	}
 }
+
+// TestRouteGroupCloseDoesNotHoldMuWhileBroadcasting proves Close() releases
+// rg.mu before the close broadcast and the wait for the peer's close packets.
+// It held the lock across both (~4s on a dead transport) while
+// serveTransportManager — a SINGLE loop dispatching EVERY transport's packets —
+// takes rg.mu for each data packet, so one closing group stalled the whole
+// visor's packet intake. Here a goroutine takes rg.mu while the close broadcast
+// is blocked on a dead transport; it must get it promptly.
+func TestRouteGroupCloseDoesNotHoldMuWhileBroadcasting(t *testing.T) {
+	rg, conn := createTestRouteGroupWithBlockingTransport(t)
+
+	closeDone := make(chan struct{})
+	go func() {
+		rg.Close() //nolint:errcheck,gosec
+		close(closeDone)
+	}()
+
+	// The close packet write is now blocked on the dead transport — exactly the
+	// window in which the old code still held rg.mu.
+	<-conn.writeCh
+
+	got := make(chan time.Duration, 1)
+	go func() {
+		start := time.Now()
+		rg.mu.Lock()
+		rg.mu.Unlock() //nolint:staticcheck
+		got <- time.Since(start)
+	}()
+
+	select {
+	case d := <-got:
+		t.Logf("rg.mu acquired during close broadcast after %v", d)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("rg.mu still held during the close broadcast: every route group's packet dispatch would stall behind this close")
+	}
+
+	select {
+	case <-closeDone:
+	case <-time.After(15 * time.Second):
+		t.Fatal("Close() did not complete")
+	}
+}

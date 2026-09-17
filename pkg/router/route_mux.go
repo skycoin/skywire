@@ -207,6 +207,14 @@ type routeMux struct {
 	sendWindowWaits    uint64
 	sendWindowTimeouts uint64
 
+	// reorderDrops counts RECEIVE-side packets the reorder buffer dropped at
+	// maxGap (see reorderBuffer.InsertOrDrop). Previously invisible: the drop
+	// was silent and the packet was SACKed anyway, so a wedge caused by it had
+	// no witness at all. Non-zero here means the frontier gap grew past the
+	// whole reorder window — a leg died mid-stream — and the dropped sequences
+	// are waiting on the sender's retransmit. atomic.
+	reorderDrops uint64
+
 	// lastSACKNano rate-limits receiver-side SACK feedback. Cross-leg
 	// reordering from latency skew makes nearly every packet arrive
 	// out-of-order, so firing a SACK per out-of-order packet would spawn a
@@ -1204,12 +1212,30 @@ func (m *routeMux) deliverData(leg int, seq uint32, data []byte) (delivered [][]
 		}
 	}
 
-	// Track for SACK generation
-	if m.sackEnabled && m.sackTracker != nil {
-		gapDetected = m.sackTracker.RecordReceived(seq)
+	// Insert FIRST, then track for SACK generation — and only if the packet was
+	// actually buffered. At maxGap the reorder buffer DROPS the packet; recording
+	// it as received (the old order) made the next SACK set its bit, the sender
+	// purged it from the retransmit buffer, and the no-skip frontier then wedged
+	// forever on a sequence nobody could resend. A dropped seq stays unrecorded,
+	// so the SACK reports it missing and the sender retransmits it.
+	var dropped bool
+	delivered, dropped = m.reorderBuf.InsertOrDrop(seq, data)
+	if dropped {
+		atomic.AddUint64(&m.reorderDrops, 1)
+		if m.logger != nil {
+			m.logger.Debugf("reorder buffer full: dropped seq %d (not SACKed, sender will retransmit)", seq)
+		}
 	}
 
-	delivered = m.reorderBuf.Insert(seq, data)
+	if m.sackEnabled && m.sackTracker != nil {
+		if dropped {
+			// The frontier is gap-blocked and this arrival was discarded: still ask
+			// for a SACK so the sender resends the sequence the frontier waits on.
+			gapDetected = true
+		} else {
+			gapDetected = m.sackTracker.RecordReceived(seq)
+		}
+	}
 
 	// Sync SACK tracker with reorder buffer delivery state
 	if m.sackEnabled && m.sackTracker != nil {
@@ -1894,12 +1920,6 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 							fbMs = ad
 						}
 						cwnd = deliv * fbMs / 1000.0 * ecfWindowMargin
-						if cwnd < ecfMinWindowBytes {
-							cwnd = ecfMinWindowBytes
-						}
-						if cwnd > ecfMaxWindowBytes {
-							cwnd = ecfMaxWindowBytes
-						}
 						lc.ecfCwndBytes = cwnd
 						lc.ecfLastAckedBytes = acked
 						lc.ecfLastAckedNano = now
@@ -1907,6 +1927,17 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 						cwnd = lc.ecfCwndBytes
 					}
 				}
+			}
+			// Clamp EVERY path to the window bounds, not just the evidence branch
+			// above: a cold leg (nothing acked yet), the first-ack seeding branch
+			// and a group with no retx buffer all reached here with a raw
+			// rate×BDP window and no ceiling, so a just-promoted leg was handed an
+			// unbounded send window and over-subscribed the no-skip frontier.
+			if cwnd < ecfMinWindowBytes {
+				cwnd = ecfMinWindowBytes
+			}
+			if cwnd > ecfMaxWindowBytes {
+				cwnd = ecfMaxWindowBytes
 			}
 			ready := true
 			if i < len(m.standby) && m.standby[i] {
