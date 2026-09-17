@@ -430,3 +430,26 @@ func TestSelectorRealInflightSaturation(t *testing.T) {
 		t.Fatalf("LegWindow(1) = %v/%v, want 2000/4000", in, win)
 	}
 }
+
+// TestSelectorSaturatedSkip proves the weighted modes honor the window too: a
+// leg at its window reads as saturated and FirstUnsaturated names a leg with
+// room, or -1 when none has any.
+func TestSelectorSaturatedSkip(t *testing.T) {
+	ts := newTransportSelector()
+	ts.SetMode(WeightModeCapacity)
+	ts.SetECFState([]ecfLegState{
+		{rttMs: 20, rttMinMs: 20, rateBps: 1e6, cwndBytes: 1000, ready: true},
+		{rttMs: 80, rttMinMs: 80, rateBps: 1e6, cwndBytes: 4000, ready: true},
+	})
+	if ts.Saturated(0) || ts.FirstUnsaturated() != -1 {
+		t.Fatal("before any real in-flight is fed nothing is saturated and no skip target exists")
+	}
+	ts.SetInflight([]int64{1000, 500})
+	if !ts.Saturated(0) || ts.Saturated(1) || ts.FirstUnsaturated() != 1 {
+		t.Fatalf("leg 0 full, leg 1 has room: saturated=%v/%v first=%d", ts.Saturated(0), ts.Saturated(1), ts.FirstUnsaturated())
+	}
+	ts.SetInflight([]int64{1000, 4000})
+	if ts.FirstUnsaturated() != -1 || !ts.AllReadySaturated() {
+		t.Fatal("both legs full must report no room")
+	}
+}

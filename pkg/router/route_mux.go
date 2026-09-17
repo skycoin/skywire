@@ -542,6 +542,17 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 	// Use weighted selector if available
 	if m.tpSelector != nil && m.tpSelector.Len() > 0 {
 		idx := m.tpSelector.Select()
+		// A weighted pick that lands on a leg at its send window moves to a
+		// leg with room, so the window bounds every mode, not only the
+		// predictive ones that consult saturation themselves.
+		if m.retxBuf != nil && m.sackEnabled {
+			m.feedInflight(tps)
+			if m.tpSelector.Saturated(idx) {
+				if alt := m.tpSelector.FirstUnsaturated(); alt >= 0 {
+					idx = alt
+				}
+			}
+		}
 		if idx < len(tps) {
 			tp := tps[idx]
 			if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
@@ -1633,7 +1644,23 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 	// jitter + BDP + the selector-tracked in-flight estimate), so this one
 	// branch feeds all three predictive schedulers; only the per-frame pick in
 	// the selector differs (ecfPick vs otiasPick vs stmsPick).
-	if m.tpSelector.Mode().isPredictive() {
+	if m.tpSelector.Mode().isPredictive() || (m.sackEnabled && m.retxBuf != nil) {
+		m.refreshLegWindows(tps)
+	}
+	m.tpSelector.Rebuild(tps)
+}
+
+// refreshLegWindows recomputes each leg's ECF state — RTT/jitter EWMAs, the
+// SACK-proven delivery rate and the send window it sizes — and hands it to
+// the selector. Every mode with SACK accounting gets a window (the download
+// sender on the rig ran the capacity mode and had none). Run from
+// rebuildWeights and, so a window can grow between rebuilds, from the route
+// group's send-window loop every windowRefreshInterval.
+func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
+	if m.tpSelector == nil {
+		return
+	}
+	{
 		m.legMu.Lock()
 		now := time.Now().UnixNano()
 		var elapsed float64
@@ -1699,6 +1726,9 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 						if cwnd < ecfMinWindowBytes {
 							cwnd = ecfMinWindowBytes
 						}
+						if cwnd > ecfMaxWindowBytes {
+							cwnd = ecfMaxWindowBytes
+						}
 					}
 				}
 				lc.ecfLastAckedBytes = acked
@@ -1723,7 +1753,6 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 		m.legMu.Unlock()
 		m.tpSelector.SetECFState(states)
 	}
-	m.tpSelector.Rebuild(tps)
 }
 
 // Per-leg send window (test plan §3.1). ecfWindowMargin scales the SACK-proven
@@ -1735,10 +1764,12 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 // stops (the frame then queues as before and TLP / RACK recover), and
 // sendWindowPoll re-checks in case a wake-up was coalesced.
 const (
-	ecfWindowMargin   = 2.0
-	ecfMinWindowBytes = 128 * 1024
-	sendWindowWaitMax = 250 * time.Millisecond
-	sendWindowPoll    = 20 * time.Millisecond
+	ecfWindowMargin       = 2.0
+	ecfMinWindowBytes     = 128 * 1024
+	ecfMaxWindowBytes     = 8 * 1024 * 1024
+	sendWindowWaitMax     = 250 * time.Millisecond
+	sendWindowPoll        = 20 * time.Millisecond
+	windowRefreshInterval = 250 * time.Millisecond
 )
 
 // feedInflight hands the predictive selector each leg's REAL unacknowledged
@@ -1774,7 +1805,7 @@ func (m *routeMux) signalWindow() {
 // window, until a SACK frees capacity, the group closes, or sendWindowWaitMax
 // elapses. A no-op unless SACK accounting and a predictive scheduler are on.
 func (m *routeMux) waitSendWindow(tps []*transport.ManagedTransport, closed <-chan struct{}) {
-	if m.retxBuf == nil || !m.sackEnabled || m.tpSelector == nil || !m.tpSelector.Mode().isPredictive() {
+	if m.retxBuf == nil || !m.sackEnabled || m.tpSelector == nil {
 		return
 	}
 	deadline := time.Now().Add(sendWindowWaitMax)

@@ -395,11 +395,17 @@ type MuxLegInfo struct {
 	// route straight to the destination, false for a relayed (multihop) leg.
 	LatencyMS      float64 `json:"latency_ms,omitempty"`
 	RouteLatencyMS float64 `json:"route_latency_ms,omitempty"`
-	Direct         bool    `json:"direct"`
-	SentBytes      uint64  `json:"sent_bytes"`
-	SentPackets    uint64  `json:"sent_packets"`
-	RecvBytes      uint64  `json:"recv_bytes"`
-	RecvPackets    uint64  `json:"recv_packets"`
+	// AckDelayMS is the leg's own EWMA send→ack delay; InflightBytes and
+	// WindowBytes are its real unacknowledged bytes and the send window they
+	// are bounded by (see router.MuxLeg).
+	AckDelayMS    float64 `json:"ack_delay_ms"`
+	InflightBytes float64 `json:"inflight_bytes"`
+	WindowBytes   float64 `json:"window_bytes"`
+	Direct        bool    `json:"direct"`
+	SentBytes     uint64  `json:"sent_bytes"`
+	SentPackets   uint64  `json:"sent_packets"`
+	RecvBytes     uint64  `json:"recv_bytes"`
+	RecvPackets   uint64  `json:"recv_packets"`
 	// PayloadBytes is the UNIQUE in-order payload this leg delivered (each seq
 	// counted once, retransmits/duplicates excluded) — so per-leg values sum to
 	// the transfer size and cleanly attribute which legs carried a direction's

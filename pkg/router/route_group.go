@@ -1927,6 +1927,11 @@ func (rg *RouteGroup) startOffServiceLoops() {
 	// reorder gap. Restores mux throughput to the reliable legs' rate instead of
 	// limping at the fragile leg's retransmit tax.
 	go rg.servicePacketLoop("leg-dataprogress", legDataProgressInterval, rg.legDataProgressServiceFn, nil)
+	// Send-window refresh: a leg's window grows with what the peer's SACKs
+	// prove delivered; refreshed only at the rebuild cadence (seconds) it
+	// doubled from 128 KiB every ~5 s and pinned an upload at ~1.7 MB/s, so
+	// refresh four times a second.
+	go rg.servicePacketLoop("send-window", windowRefreshInterval, rg.windowServiceFn, nil)
 	// Timer-driven reorder-stall recovery: when a frontier gap is stuck past
 	// reorderTimeout with no packet arriving to trigger the arrival-driven SACK,
 	// emit a SACK so the sender retransmits the missing seq in order (never skip).
@@ -4999,4 +5004,17 @@ func chanClosed(ch chan struct{}) bool {
 	}
 
 	return false
+}
+
+// windowServiceFn refreshes the per-leg send windows from the latest
+// SACK-proven delivery and wakes a parked writer (see routeMux.waitSendWindow).
+func (rg *RouteGroup) windowServiceFn(_ time.Duration) {
+	if rg.isClosed() || rg.mux == nil {
+		return
+	}
+	rg.mu.Lock()
+	tps := append([]*transport.ManagedTransport(nil), rg.tps...)
+	rg.mu.Unlock()
+	rg.mux.refreshLegWindows(tps)
+	rg.mux.signalWindow()
 }
