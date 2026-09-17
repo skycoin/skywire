@@ -58,9 +58,9 @@ Striping/resume is therefore an **opt-in-host feature**, never inferred. Silentl
 |---|---|
 | Advertise | `HEAD`/`OPTIONS /upload` → `Accept-Ranges: bytes` + **`X-Chunked-Upload: bytes`**. This header is the ONLY opt-in signal the client accepts |
 | Verb | `PUT /upload?id=<opaque>&bytes=<N>` with `Content-Range: bytes s-e/N` |
-| Ack | 2xx per chunk, echoing `Content-Range` + `X-Upload-Received: <contiguous prefix bytes>`. A chunk is durable only on 2xx |
+| Ack | `200` once the chunk is inside the contiguous prefix, `202 Accepted` while it is only held in the reorder window; both echo `Content-Range` + `X-Upload-Received: <contiguous prefix bytes>`. A chunk is durable only on `200` (or on an `X-Upload-Received` past its end) — a held chunk can still be evicted to admit the frontier, so the sender keeps it until then |
 | Reassembly + hash once | Rolling `sha256` over the **contiguous prefix** only; out-of-order chunks held in a bounded reorder window keyed by start offset. Hash is computed exactly once, incrementally — never a second pass, never the whole object in memory |
-| Memory bound (exit is 2c/4G, cf. #4252 OOM) | `--upload-window` default **16 MiB** (= 2 × client concurrency × chunk). A chunk beyond the window → `503` + `X-Next-Offset`; sessions capped (8) and GC'd after 60 s idle |
+| Memory bound (exit is 2c/4G, cf. #4252 OOM) | `--upload-window` default **64 MiB** (headroom: the client sizes live buffers as min(16 MiB cap / 4 MiB chunk, window/chunk − 2), so a tight window, not its memory cap, was binding). A chunk beyond the window → `503` + `X-Next-Offset`; sessions capped (4, a 256 MiB ceiling) and GC'd after 2 min idle |
 | Idempotent duplicates | Range already absorbed into the prefix → read-and-discard, `200` + `X-Upload-Received` (no re-hash). Duplicate of a *held* chunk → overwrite in place. Overlapping-but-unequal range → `409` |
 | Finalize | The chunk whose ack makes the prefix reach N answers the existing `{"bytes":N,"sha256":…}` JSON. `GET /upload/status?id=` returns the same counters for a resume probe |
 | Compatibility | Plain `POST /upload` with no `id`/`Content-Range` keeps the current single-stream behaviour — it stays the generic-POST control arm |
@@ -100,7 +100,7 @@ PR 2 can merge without 3 (it uses `pickRecv` until then); PR 1 must land first s
 |---|---|
 | **Classification false positive** — chunking to a server that did not opt in corrupts data | Opt-in is a single explicit header; absence ⇒ B3. Never infer from a 2xx |
 | Partial-write duplicates (a chunk half-written, then re-sent) | The sink is offset-addressed and idempotent by range; a partial PUT never advances the prefix hash (`Content-Length` short ⇒ 400, chunk retried) |
-| Sink memory on a 2c/4G exit (#4252 history) | Prefix hashing means O(window), not O(object); `--upload-window` 16 MiB, 8 sessions, 60 s GC, 503 back-pressure |
+| Sink memory on a 2c/4G exit (#4252 history) | Prefix hashing means O(window), not O(object); `--upload-window` 64 MiB, 4 sessions (a 256 MiB ceiling), 2 min GC, 503 back-pressure |
 | Standby-pool promoter interaction | A promoted standby leg changes the tunnel's carrier mid-chunk; `guardTunnel` only fires on session close, so a leg swap is invisible (correct). But `pickSend` reads a meter whose samples came from the pre-promotion leg — treat a promotion as a meter reset, as `#4965` does for stale idle tunnels |
 | The 5 % single-upload bar | Chunking adds one pipelined RTT + an ack per chunk (12 for 50 MB). Overlapped at concurrency 2 it should hide, but if it does not, raise `rsUploadChunkSize` to 8 MiB and drop per-tunnel inflight to 1 (A5 ceiling) |
 | Replay double-apply | Bounded to ≤8 MiB, zero-response-bytes only, 2 attempts, documented |

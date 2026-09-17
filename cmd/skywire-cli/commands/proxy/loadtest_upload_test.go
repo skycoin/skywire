@@ -2,13 +2,18 @@ package skysocksc
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -113,14 +118,15 @@ func TestLoadtestUploadAbsorbsOutOfOrderAndDuplicates(t *testing.T) {
 	body := loadtestUploadBody(total)
 	at := func(i int) []byte { return body[i*chunk : (i+1)*chunk] }
 
-	// Chunk 1 arrives first and waits in the window: nothing is durable yet.
+	// Chunk 1 arrives first and waits in the window: 202, not 200 — it is held,
+	// not durable, and the sender may not drop it yet.
 	rec := loadtestUploadPut("obj", at(1), chunk, total)
-	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusAccepted, rec.Code)
 	require.Equal(t, uint64(0), loadtestUploadReceived(t, rec))
 
 	// A re-send of a held chunk replaces it in place.
 	rec = loadtestUploadPut("obj", at(1), chunk, total)
-	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusAccepted, rec.Code)
 	require.Equal(t, uint64(0), loadtestUploadReceived(t, rec))
 
 	// Chunk 0 is the frontier: it absorbs itself and drains chunk 1 behind it.
@@ -171,8 +177,9 @@ func TestLoadtestUploadWindowFullBacksOff(t *testing.T) {
 	body := loadtestUploadBody(total)
 	at := func(i int) []byte { return body[i*chunk : (i+1)*chunk] }
 
-	// The window is a byte range: [acked, acked+window). Chunk 1 is inside it.
-	require.Equal(t, http.StatusOK, loadtestUploadPut("obj", at(1), chunk, total).Code)
+	// The window is a byte range: [acked, acked+window). Chunk 1 is inside it —
+	// held, so 202: received, not committed.
+	require.Equal(t, http.StatusAccepted, loadtestUploadPut("obj", at(1), chunk, total).Code)
 
 	// Chunk 2 ends past the window's reach — refused, with the offset to resume
 	// from and a Retry-After, so the sender backs off instead of being dropped.
@@ -183,16 +190,19 @@ func TestLoadtestUploadWindowFullBacksOff(t *testing.T) {
 
 	// Overlapping re-sends inside the reach are held until the buffered bytes
 	// would exceed the window, then refused the same way.
-	require.Equal(t, http.StatusOK, loadtestUploadPut("obj", body[5000:2*chunk], 5000, total).Code)
+	require.Equal(t, http.StatusAccepted, loadtestUploadPut("obj", body[5000:2*chunk], 5000, total).Code)
 	rec = loadtestUploadPut("obj", body[6000:2*chunk], 6000, total)
 	require.Equal(t, http.StatusTooEarly, rec.Code, "the window is full")
 	require.Equal(t, "1", rec.Header().Get("Retry-After"))
 
-	// The frontier is never refused: it evicts held chunks rather than stall,
-	// and an evicted chunk was never acked, so the sender simply re-sends it.
+	// The frontier is never refused: it evicts a held chunk rather than stall.
+	// Eviction is only sound because held chunks were answered 202 and never
+	// 200 — a 200'd chunk is durable and may never be dropped.
+	evicted := loadtestUploadEvicted.Load()
 	rec = loadtestUploadPut("obj", at(0), 0, total)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, uint64(2*chunk), loadtestUploadReceived(t, rec), "chunk 1 drained behind it")
+	require.Greater(t, loadtestUploadEvicted.Load(), evicted, "the drop is counted, not silent")
 
 	for i := 2; i < 8; i++ {
 		rec = loadtestUploadPut("obj", at(i), uint64(i*chunk), total)
@@ -241,6 +251,182 @@ func TestLoadtestUploadBoundsMemory(t *testing.T) {
 	loadtestUploadMu.Unlock()
 	require.False(t, stale, "the idle session was expired")
 	require.Equal(t, 1, live)
+}
+
+// TestLoadtestUploadSlowChunkIsNotIdle is the mid-read eviction: a chunk read
+// slower than --upload-idle (the degrade bench's whole shape) must not have its
+// session swept out from under it. If it does, the slow reader commits into an
+// orphan while the next chunk opens a fresh session at acked=0, and the durable
+// prefix walks backwards with no error and no log.
+func TestLoadtestUploadSlowChunkIsNotIdle(t *testing.T) {
+	const total, chunk = 1 << 20, 3 * loadtestUploadReadStep
+	loadtestUploadRig(t, 1<<20, 4)
+	body := loadtestUploadBody(total)
+
+	// The handler reads the clock from another goroutine, so the test moves a
+	// guarded value rather than swapping the function.
+	t0 := time.Now()
+	var clockMu sync.Mutex
+	clock := t0
+	setClock := func(at time.Time) {
+		clockMu.Lock()
+		defer clockMu.Unlock()
+		clock = at
+	}
+	loadtestNow = func() time.Time {
+		clockMu.Lock()
+		defer clockMu.Unlock()
+		return clock
+	}
+
+	pr, pw := io.Pipe()
+	req := httptest.NewRequest(http.MethodPut, "/upload?id=slow&bytes="+strconv.Itoa(total), pr)
+	req.Header.Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", chunk-1, total))
+	rec := httptest.NewRecorder()
+	served := make(chan struct{})
+	go func() {
+		defer close(served)
+		loadtestUpload(rec, req)
+	}()
+
+	session := func() *loadtestUploadSession {
+		loadtestUploadMu.Lock()
+		defer loadtestUploadMu.Unlock()
+		return loadtestUploads["slow"]
+	}
+	require.Eventually(t, func() bool {
+		s := session()
+		if s == nil {
+			return false
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.inflight > 0
+	}, 5*time.Second, time.Millisecond, "the chunk is admitted and being read")
+
+	// One read step lands, then the clock jumps past the idle limit.
+	_, err := pw.Write(body[:loadtestUploadReadStep])
+	require.NoError(t, err)
+	t1 := t0.Add(2 * loadtestUploadIdle)
+	setClock(t1)
+	_, err = pw.Write(body[loadtestUploadReadStep : 2*loadtestUploadReadStep])
+	require.NoError(t, err)
+
+	// Progress, not admission, is what liveness is measured on: the second step
+	// re-stamps the session while the chunk is still incomplete.
+	s := session()
+	require.NotNil(t, s)
+	require.Eventually(t, func() bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.last.Equal(t1)
+	}, 5*time.Second, time.Millisecond, "arriving bytes re-stamp the session")
+
+	// A second upload sweeps, at a clock well past the reading session's last
+	// progress. It survives only because it has a chunk in flight.
+	setClock(t1.Add(2 * loadtestUploadIdle))
+	require.Equal(t, http.StatusOK, loadtestUploadPut("other", body[:1024], 0, total).Code)
+	require.Same(t, s, session(), "a session with a chunk in flight is never idle")
+
+	_, err = pw.Write(body[2*loadtestUploadReadStep : chunk])
+	require.NoError(t, err)
+	require.NoError(t, pw.Close())
+	<-served
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, uint64(chunk), loadtestUploadReceived(t, rec))
+	require.Same(t, s, session(), "it committed into the session it was admitted to")
+}
+
+// TestLoadtestUploadSealedSessionFreesItsSlot: a completed upload has nothing
+// left to receive and holds no buffers, so it must not spend a concurrency slot
+// until it idles out — four completed uploads used to refuse the fifth with 503
+// for two minutes. It stays answerable for a late re-send or a resume probe.
+func TestLoadtestUploadSealedSessionFreesItsSlot(t *testing.T) {
+	const total = 4096
+	loadtestUploadRig(t, 1<<20, 2)
+	body := loadtestUploadBody(total)
+	sum := sha256.Sum256(body)
+
+	for i := 0; i < 2*loadtestUploadSealedMemo; i++ {
+		id := fmt.Sprintf("obj%d", i)
+		rec := loadtestUploadPut(id, body, 0, total)
+		require.Equal(t, http.StatusOK, rec.Code, "upload %d is refused by nothing", i)
+		require.Equal(t, hex.EncodeToString(sum[:]), rec.Header().Get("X-Sha256"))
+	}
+
+	// The most recent completions still answer a late re-send and a resume
+	// probe, and the memo of them is bounded.
+	last := fmt.Sprintf("obj%d", 2*loadtestUploadSealedMemo-1)
+	rec := loadtestUploadPut(last, body, 0, total)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), hex.EncodeToString(sum[:]))
+
+	rec = httptest.NewRecorder()
+	loadtestUpload(rec, httptest.NewRequest(http.MethodGet, "/upload?id="+last, nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, uint64(total), loadtestUploadReceived(t, rec))
+
+	loadtestUploadMu.Lock()
+	live := len(loadtestUploads)
+	loadtestUploadMu.Unlock()
+	require.LessOrEqual(t, live, loadtestUploadSealedMemo+1, "sealed sessions are a bounded memo")
+
+	// And an unsealed session still costs a slot: the cap is not defeated.
+	require.Equal(t, http.StatusAccepted, loadtestUploadPut("partA", body[2048:], 2048, total).Code)
+	require.Equal(t, http.StatusAccepted, loadtestUploadPut("partB", body[2048:], 2048, total).Code)
+	require.Equal(t, http.StatusServiceUnavailable, loadtestUploadPut("partC", body[2048:], 2048, total).Code)
+}
+
+// TestLoadtestUploadRefusalKeepsTheConnection is the back-pressure protocol over
+// a real socket, which every other test skips by calling the handler directly.
+// Go's server gives up on a connection once more than 256 KiB of a declared body
+// is left unread, so a refusal that did not drain closed the socket under a
+// sender still writing its chunk: it takes EPIPE and never reads the
+// X-Next-Offset/Retry-After it was supposed to back off on.
+func TestLoadtestUploadRefusalKeepsTheConnection(t *testing.T) {
+	const total, chunk = 4 << 20, 300 << 10 // a chunk well past the 256 KiB cliff
+	loadtestUploadRig(t, 512<<10, 4)
+	body := loadtestUploadBody(total)
+
+	srv := httptest.NewServer(http.HandlerFunc(loadtestUpload))
+	defer srv.Close()
+
+	var dials atomic.Int64
+	client := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			dials.Add(1)
+			return (&net.Dialer{}).DialContext(ctx, network, addr)
+		},
+	}}
+
+	put := func(start uint64) *http.Response {
+		t.Helper()
+		end := start + chunk - 1
+		req, err := http.NewRequest(http.MethodPut, //nolint:noctx // the test server is local
+			srv.URL+"/upload?id=sock&bytes="+strconv.Itoa(total), bytes.NewReader(body[start:end+1]))
+		require.NoError(t, err)
+		req.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, total))
+		resp, err := client.Do(req)
+		require.NoError(t, err, "the sender reads the answer instead of taking EPIPE")
+		_, err = io.Copy(io.Discard, resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		return resp
+	}
+
+	// Far past the window's reach: refused, with the offset to resume from.
+	resp := put(2 << 20)
+	require.Equal(t, http.StatusTooEarly, resp.StatusCode)
+	require.Equal(t, "0", resp.Header.Get("X-Next-Offset"))
+	require.Equal(t, "1", resp.Header.Get("Retry-After"))
+	require.False(t, resp.Close, "the refusal does not close the connection")
+
+	// The frontier chunk then goes down the SAME connection.
+	resp = put(0)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, strconv.Itoa(chunk), resp.Header.Get("X-Upload-Received"))
+	require.EqualValues(t, 1, dials.Load(), "one connection carried both")
 }
 
 // TestLoadtestUploadRejectsMalformedChunks pins the refusals that keep a partial
@@ -314,12 +500,21 @@ func TestLoadtestUploadConcurrentChunks(t *testing.T) {
 	for _, i := range order {
 		go func(i uint64) {
 			defer func() { done <- struct{}{} }()
+			// The reference client: a chunk is done only when it is inside the
+			// durable prefix — a 200, or an X-Upload-Received past its end. A 202
+			// (held, still evictable) and a 425 (refused) both mean re-send.
 			for {
 				rec := loadtestUploadPut("obj", body[i*chunk:(i+1)*chunk], i*chunk, total)
-				if rec.Code == http.StatusOK {
+				switch rec.Code {
+				case http.StatusOK:
 					return
-				}
-				if rec.Code != http.StatusTooEarly {
+				case http.StatusAccepted:
+					v, err := strconv.ParseUint(rec.Header().Get("X-Upload-Received"), 10, 63)
+					if err == nil && v >= (i+1)*chunk {
+						return
+					}
+				case http.StatusTooEarly:
+				default:
 					t.Errorf("chunk %d: unexpected %d", i, rec.Code)
 					return
 				}
@@ -334,4 +529,55 @@ func TestLoadtestUploadConcurrentChunks(t *testing.T) {
 	sum := sha256.Sum256(body)
 	require.Equal(t, uint64(total), loadtestUploadReceived(t, rec))
 	require.True(t, strings.Contains(rec.Body.String(), hex.EncodeToString(sum[:])))
+}
+
+// TestLoadtestUploadEvictionNamesTheOffsets: a held chunk dropped to admit the
+// frontier is NAMED on the very next response. Without it the sender learns of
+// the drop only from a prefix that stopped moving — a multi-second timeout per
+// eviction, which is what turned a cut tunnel into a failed 50 MB object
+// (bench/2026-09-16/3194b7cc8-smoke).
+func TestLoadtestUploadEvictionNamesTheOffsets(t *testing.T) {
+	const chunk = 4096
+	loadtestUploadRig(t, 4*chunk, 4)
+	const total = 8 * chunk
+	body := loadtestUploadBody(total)
+	at := func(i int) []byte { return body[i*chunk : (i+1)*chunk] }
+
+	// Three chunks ahead of the frontier, all inside the window's reach.
+	for i := 1; i <= 3; i++ {
+		require.Equal(t, http.StatusAccepted,
+			loadtestUploadPut("obj", at(i), uint64(i*chunk), total).Code)
+	}
+
+	// A frontier chunk that does not fit beside them evicts the furthest held
+	// one — and says which one, on its own ack.
+	rec := loadtestUploadPut("obj", body[:2*chunk], 0, total)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, strconv.Itoa(3*chunk), rec.Header().Get("X-Upload-Evicted"),
+		"the dropped chunk is named on the ack, not left to a timeout")
+	require.Equal(t, uint64(3*chunk), loadtestUploadReceived(t, rec), "chunks 1 and 2 drained behind it")
+
+	// The notice is drained: the re-send's own ack does not repeat it.
+	rec = loadtestUploadPut("obj", at(3), 3*chunk, total)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Empty(t, rec.Header().Get("X-Upload-Evicted"), "a notice is delivered once")
+
+	// Nothing was evicted on a clean object, so an old client sees no new header.
+	rec = loadtestUploadPut("clean", at(0), 0, total)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Empty(t, rec.Header().Get("X-Upload-Evicted"))
+}
+
+// TestLoadtestUploadEvictionNoticeIsBounded: the notice queue cannot grow
+// without limit however many chunks are dropped.
+func TestLoadtestUploadEvictionNoticeIsBounded(t *testing.T) {
+	s := &loadtestUploadSession{held: map[uint64][]byte{}}
+	for i := 0; i < loadtestUploadEvictNotices*3; i++ {
+		s.held[uint64(i)] = []byte{0}
+		s.heldBytes++
+		s.evictFurthest()
+	}
+	require.Len(t, s.evicted, loadtestUploadEvictNotices)
+	require.NotEmpty(t, s.takeEvicted())
+	require.Empty(t, s.takeEvicted(), "draining leaves nothing behind")
 }
