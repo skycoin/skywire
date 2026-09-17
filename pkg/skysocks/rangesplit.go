@@ -40,6 +40,10 @@ type rangeSplitConfig struct {
 	enabled     bool
 	concurrency int   // number of concurrent range streams
 	chunkSize   int64 // bytes per range request
+	// plainPort is the destination port treated as plaintext HTTP for splitting
+	// (0 = the default 80). Configurable so a bench origin on another port can
+	// be split; production stays on 80.
+	plainPort int
 
 	// HTTPS (:443) range-splitting is off unless the operator opts in — it needs a
 	// forge-any-host root the browser is told to trust (see rangesplit_https.go).
@@ -75,13 +79,23 @@ func defaultRangeSplitConfig() rangeSplitConfig {
 	return rangeSplitConfig{enabled: true, concurrency: defaultRSConcurrency, chunkSize: defaultRSChunkSize}
 }
 
-// isPort80 reports whether target ("host:port") is plaintext HTTP.
-func isPort80(target string) bool {
+// rangePlainPort is the port the splitter treats as plaintext HTTP (80 unless
+// SetRangeSplitPort chose another).
+func (c *Client) rangePlainPort() int {
+	if c.rs.plainPort > 0 {
+		return c.rs.plainPort
+	}
+	return 80
+}
+
+// isPlainPort reports whether target ("host:port") is on the plaintext HTTP port
+// the splitter handles.
+func (c *Client) isPlainPort(target string) bool {
 	_, port, err := net.SplitHostPort(target)
 	if err != nil {
 		return false
 	}
-	return port == "80"
+	return port == strconv.Itoa(c.rangePlainPort())
 }
 
 // serveHTTPRangeSplit takes ownership of a freshly-CONNECTed browser conn and the
@@ -398,7 +412,7 @@ func (c *Client) streamTailOnce(w net.Conn, req *http.Request, host, validator s
 	defer st.Close() //nolint:errcheck,gosec
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
-	if err := c.exitConnect(st, host, 80); err != nil {
+	if err := c.exitConnect(st, host, c.rangePlainPort()); err != nil {
 		return 0, err
 	}
 	if _, err := st.Write(buildRangedGet(req, host, validator, start, total-1)); err != nil {
@@ -472,7 +486,7 @@ func (c *Client) fetchChunk(req *http.Request, host, validator string, start, en
 	defer st.Close() //nolint:errcheck,gosec
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
-	if err := c.exitConnect(st, host, 80); err != nil {
+	if err := c.exitConnect(st, host, c.rangePlainPort()); err != nil {
 		return nil, err
 	}
 	if _, err := st.Write(buildRangedGet(req, host, validator, start, end)); err != nil {
