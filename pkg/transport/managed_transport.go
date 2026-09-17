@@ -106,6 +106,11 @@ type ManagedTransport struct {
 
 	latencyStats LatencyStats
 	latencyMx    sync.RWMutex
+	// latencySeq counts accepted latency samples. ProbeLatency watches it to
+	// tell "the pong for MY ping landed" from "the record is still the stale one
+	// I read a moment ago", without threading per-ping in-flight state through
+	// handleTransportPong.
+	latencySeq atomic.Uint64
 
 	// Passive throughput estimate: the peak goodput this transport has been
 	// OBSERVED to carry (real traffic, no active probe → zero overhead). Guarded
@@ -295,6 +300,61 @@ func (mt *ManagedTransport) SetLatency(latencyMs float64) {
 	if latencyMs > mt.latencyStats.Max {
 		mt.latencyStats.Max = latencyMs
 	}
+	mt.latencySeq.Add(1)
+}
+
+// probeLatencyPoll is how often ProbeLatency re-reads the latency record while
+// waiting for its pong. Short enough that a LAN RTT is not rounded up into tens
+// of milliseconds of apparent latency, long enough to cost nothing.
+const probeLatencyPoll = 5 * time.Millisecond
+
+// ProbeLatency actively measures this transport's RTT: it sends one
+// transport-level ping and waits for the pong to land, bounded by ctx. It
+// returns the milliseconds the new sample recorded.
+//
+// Why it exists: the periodic ping (transportPingInterval) only samples a
+// transport that is READY, so a transport this visor holds but has never carried
+// traffic over can sit with no measurement at all — which is exactly the state a
+// multi-tunnel dial finds its candidate first hops in when it must choose one
+// (measured 2026-09-17: every candidate intermediate reported "unmeasured" at
+// dial time and the ranking had nothing to rank on). One round trip on demand
+// fills that gap.
+//
+// It returns the transport's existing sample immediately when it already has
+// one, so callers can probe a whole candidate set unconditionally. The error
+// path is "no measurement obtained" — ctx expired, or the transport is not
+// serving; callers treat that exactly as unmeasured, never as a dial failure.
+func (mt *ManagedTransport) ProbeLatency(ctx context.Context) (float64, error) {
+	if ms := mt.GetLatency(); ms > 0 {
+		return ms, nil
+	}
+	if mt.getTransport() == nil {
+		return 0, errors.New("transport not serving")
+	}
+	before := mt.latencySeq.Load()
+	mt.sendTransportPing()
+
+	ticker := time.NewTicker(probeLatencyPoll)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			// One last read: the pong may have landed between the final tick
+			// and the deadline.
+			if ms := mt.GetLatency(); ms > 0 && mt.latencySeq.Load() != before {
+				return ms, nil
+			}
+			return 0, ctx.Err()
+		case <-mt.done:
+			return 0, errors.New("transport closed")
+		case <-ticker.C:
+			if mt.latencySeq.Load() != before {
+				if ms := mt.GetLatency(); ms > 0 {
+					return ms, nil
+				}
+			}
+		}
+	}
 }
 
 // SetLatencyStats sets the full latency statistics. A snapshot with any
@@ -312,6 +372,7 @@ func (mt *ManagedTransport) SetLatencyStats(stats LatencyStats) {
 	mt.latencyMx.Lock()
 	defer mt.latencyMx.Unlock()
 	mt.latencyStats = stats
+	mt.latencySeq.Add(1)
 }
 
 // GetBandwidth returns the current cumulative bandwidth for this transport.
