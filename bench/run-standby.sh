@@ -96,6 +96,7 @@ tunnels=${TUNNELS:-2}
 chaos_row=${CHAOS_ROW:-$((trials * 2 + 1))}
 chaos_size=50000000
 chaos_after=${CHAOS_AFTER_S:-5}
+chaos_pct=${CHAOS_PCT:-40}
 chaos_ttfb_max=${CHAOS_TTFB_MAX_S:-2}
 # pool fill: poll every POOL_POLL s until the group count has not moved for
 # POOL_QUIET s, giving up after POOL_WAIT s either way.
@@ -381,7 +382,7 @@ chaos_row() {
 		p=0; [ -f "$w/b" ] && p=$(wc -c < "$w/b" | tr -d ' ')
 		case $p in '' | *[!0-9]*) p=0 ;; esac
 		if [ "$cut_done" -eq 0 ]; then
-			if ge "$e" "$chaos_after"; then
+			if [ "$p" -ge "$((chaos_size * chaos_pct / 100))" ] || ge "$e" "$chaos_after"; then
 				bytes_at_cut=$p; cut_at=$e; cut_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 				timeout 60 $CLI cli tp rm "$cut_tp" >> "$out/$set_name.cut.log" 2>&1 && cut_ok=1 || cut_ok=0
 				cut_done=1
