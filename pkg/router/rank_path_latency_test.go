@@ -150,7 +150,7 @@ func TestNotePathRanking_RecordsTheTrail(t *testing.T) {
 	require.Equal(t, fast, ranked[0][0].TpID)
 	require.Len(t, opts.dialNotes, 1)
 	require.Equal(t,
-		"ranked by path latency: "+fast.String()[:8]+"=39+10ms, "+slow.String()[:8]+"=470+10ms; chose "+fast.String()[:8],
+		"ranked by carrier class then path latency: "+fast.String()[:8]+"=39+10ms, "+slow.String()[:8]+"=470+10ms; chose "+fast.String()[:8],
 		opts.dialNotes[0])
 
 	// Nil-safe: a dial with no options still ranks.
@@ -486,7 +486,7 @@ func TestProbeFirstHopLatencies_RanksIdleTransports(t *testing.T) {
 
 	// The trail says which numbers the probe supplied.
 	require.Equal(t,
-		"ranked by path latency: "+atlanta.String()[:8]+"=39p+10ms, "+
+		"ranked by carrier class then path latency: "+atlanta.String()[:8]+"=39p+10ms, "+
 			amsterdam.String()[:8]+"=148p+10ms, "+sydney.String()[:8]+"=470p+10ms, "+
 			dead.String()[:8]+"=unmeasured; chose "+atlanta.String()[:8],
 		opts.dialNotes[0])
@@ -641,5 +641,5 @@ func TestFilterLANFirstHops_ExcludesNeighbours(t *testing.T) {
 	require.Equal(t,
 		"excluding 1 same-LAN first hop(s) (share our uplink): "+lanTp.String()[:8],
 		opts.dialNotes[0])
-	require.Contains(t, opts.dialNotes[1], "ranked by path latency: "+viaA.String()[:8]+"=39+10ms")
+	require.Contains(t, opts.dialNotes[1], "ranked by carrier class then path latency: "+viaA.String()[:8]+"=39+10ms")
 }
