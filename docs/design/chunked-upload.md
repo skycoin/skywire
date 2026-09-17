@@ -58,7 +58,7 @@ Striping/resume is therefore an **opt-in-host feature**, never inferred. Silentl
 |---|---|
 | Advertise | `HEAD`/`OPTIONS /upload` → `Accept-Ranges: bytes` + **`X-Chunked-Upload: bytes`**. This header is the ONLY opt-in signal the client accepts |
 | Verb | `PUT /upload?id=<opaque>&bytes=<N>` with `Content-Range: bytes s-e/N` |
-| Ack | 2xx per chunk, echoing `Content-Range` + `X-Upload-Received: <contiguous prefix bytes>`. A chunk is durable only on 2xx |
+| Ack | `200` once the chunk is inside the contiguous prefix, `202 Accepted` while it is only held in the reorder window; both echo `Content-Range` + `X-Upload-Received: <contiguous prefix bytes>`. A chunk is durable only on `200` (or on an `X-Upload-Received` past its end) — a held chunk can still be evicted to admit the frontier, so the sender keeps it until then |
 | Reassembly + hash once | Rolling `sha256` over the **contiguous prefix** only; out-of-order chunks held in a bounded reorder window keyed by start offset. Hash is computed exactly once, incrementally — never a second pass, never the whole object in memory |
 | Memory bound (exit is 2c/4G, cf. #4252 OOM) | `--upload-window` default **16 MiB** (= 2 × client concurrency × chunk). A chunk beyond the window → `503` + `X-Next-Offset`; sessions capped (8) and GC'd after 60 s idle |
 | Idempotent duplicates | Range already absorbed into the prefix → read-and-discard, `200` + `X-Upload-Received` (no re-hash). Duplicate of a *held* chunk → overwrite in place. Overlapping-but-unequal range → `409` |
