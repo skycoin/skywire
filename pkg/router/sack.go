@@ -40,6 +40,15 @@ type sackTracker struct {
 	lastContiguous uint32
 	highest        uint32 // highest sequence ever recorded (0 = none yet)
 	received       map[uint32]bool
+	// maxReceived caps the out-of-order set at the reorder window, mirroring
+	// reorderBuffer.maxGap. Without it the map is pruned ONLY by
+	// AdvanceContiguous, which cannot run while the frontier is stuck: a wedge
+	// then adds one entry per arriving sequence for its whole duration —
+	// unbounded memory per stalled transfer, on top of the reorder buffer's own
+	// bounded 32768 entries. Above the cap RecordReceived refuses the sequence
+	// instead of recording it, exactly as Insert drops it: an unrecorded seq is
+	// simply not SACKed, so the sender keeps it and retransmits.
+	maxReceived int
 
 	// DSACK (duplicate-SACK, RFC 8985 §7.2): a sequence received AGAIN. On the
 	// mux's reliable, ordered legs a duplicate is almost always the sender's own
@@ -52,7 +61,8 @@ type sackTracker struct {
 
 func newSACKTracker() *sackTracker {
 	return &sackTracker{
-		received: make(map[uint32]bool),
+		received:    make(map[uint32]bool),
+		maxReceived: reorderWindow,
 	}
 }
 
@@ -104,7 +114,14 @@ func (st *sackTracker) RecordReceived(seq uint32) (gapDetected bool) {
 		return false
 	}
 
-	// Out-of-order: buffer it
+	// Out-of-order: buffer it, unless the set is already at the reorder window.
+	// Refusing above the cap keeps a stuck frontier from growing the map without
+	// bound; the seq stays un-SACKed, so the sender holds it for retransmit. The
+	// gap is still reported so the SACK goes out and the missing frontier
+	// sequence is re-requested.
+	if st.maxReceived > 0 && len(st.received) >= st.maxReceived {
+		return true
+	}
 	st.received[seq] = true
 	return true
 }

@@ -49,13 +49,27 @@ func newReorderBuffer(maxGap int) *reorderBuffer {
 
 // Insert adds a packet with the given sequence number. Returns payloads ready
 // for in-order delivery. Common case (in-order arrival) requires no allocation.
+// Callers that must know whether the packet was DROPPED at maxGap (rather than
+// buffered) use InsertOrDrop.
 func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
+	delivered, _ := rb.InsertOrDrop(seq, data)
+	return delivered
+}
+
+// InsertOrDrop is Insert, plus whether this packet was DROPPED because the
+// buffer was already at maxGap. The distinction matters to the SACK path: a
+// dropped seq must NOT be recorded as received, or the next SACK sets its bit,
+// the sender purges it from its retransmit buffer, and the no-skip frontier
+// wedges on a sequence nobody can ever resend. dropped is false for a
+// duplicate/late packet (seq < nextSeq), which is discarded because it has
+// already been delivered, not because the buffer is full.
+func (rb *reorderBuffer) InsertOrDrop(seq uint32, data []byte) (delivered [][]byte, dropped bool) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 
 	// Duplicate or late packet — discard
 	if seq < rb.nextSeq {
-		return nil
+		return nil, false
 	}
 
 	// Buffer out-of-order packet
@@ -70,7 +84,7 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 		// cleanly — a stall, never corruption. maxGap (reorderWindow) is sized to the
 		// aggregate BDP so this is only reached on a genuine mid-stream leg death.
 		if len(rb.buf) >= rb.maxGap {
-			return nil
+			return nil, true
 		}
 		// Make a copy since the underlying packet buffer may be reused
 		cp := make([]byte, len(data))
@@ -108,11 +122,10 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 		// only ever closed by the missing seq actually arriving (skew or retransmit),
 		// never by skipping it.
 
-		return nil
+		return nil, false
 	}
 
 	// In-order: deliver this packet and any consecutive buffered packets
-	var delivered [][]byte
 	delivered = append(delivered, data)
 	rb.nextSeq = seq + 1
 
@@ -135,7 +148,7 @@ func (rb *reorderBuffer) Insert(seq uint32, data []byte) [][]byte {
 		rb.gapSince = time.Now()
 	}
 
-	return delivered
+	return delivered, false
 }
 
 // GapAge reports how long the current frontier gap has been open, or 0 if the
