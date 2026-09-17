@@ -34,6 +34,21 @@
 #   tp     `tp rm <id>`: removes the first-hop transport under a whole tunnel,
 #          because `proxy mux rm` cannot be aimed at a tunnel. Restored with
 #          `tp add -t <type> <pk>`.
+# CUT_REF_FENCE (1) keeps the cut away from the PAIRED REFERENCE's own route.
+# campaign21 cut Atlanta's first hop 95839ad0-b588-0b1d-8475-45fba6ae993c while
+# paired-ref.txt named that same route (0371ab4b) for the :1081 reference
+# instance, so the reference lost its route at row 11 and rows 12-16 measured
+# the mux session against a rebuilt reference — their ratios are not comparable
+# to rows 1-10. Excluded from the candidates while it is on:
+#   - the first-hop transport of the reference route resolved for slot 1 (the
+#     same pin file lib-paired.sh starts the instance on), and
+#   - every transport the reference instances hold right now
+#     (PAIRED_SLOT1_NAME / PAIRED_SLOT2_NAME route groups).
+# When no reference is in play — run-degrade.sh, which sources this library
+# without lib-paired.sh — the list resolves empty and choose_cut behaves exactly
+# as it did. When it empties the candidates the set carries NO cut row: cutting
+# the reference costs more evidence than the cut row buys.
+CUT_REF_FENCE=${CUT_REF_FENCE:-1}
 CUT_FENCE=${CUT_FENCE:-auto}
 CUT_PCT=${CUT_PCT:-40}
 CUT_AFTER_S=${CUT_AFTER_S:-3}
@@ -70,12 +85,47 @@ pin_pk() { jq -r '.[0].forward[0].To' "$pins/via-$1.json" 2>/dev/null; }
 up_progress() { echo 0; }
 tp_sent_all() { :; }
 
+# --- the paired reference is never a cut target (campaign21) -------------------
+# ref_pin_first_hop: the first-hop transport of the paired reference route, or
+# empty. The token is the caller's $paired_ref when it has one (run-mux.sh
+# resolves it once for the whole run), else paired_resolve's — the pin file is
+# resolved exactly as lib-paired.sh resolves it to start the instance. `direct`
+# has no pin of its own: it rides the transport to the EXIT, which choose_cut
+# already refuses outright.
+ref_pin_first_hop() {
+	_rt=${paired_ref:-}
+	if [ -z "$_rt" ] && command -v paired_resolve >/dev/null 2>&1; then
+		_rt=$(paired_resolve "$out" 1 2>/dev/null)
+	fi
+	case ${_rt:-} in '' | direct) return 0 ;; esac
+	_rp=$_rt
+	[ -f "$_rp" ] || _rp="$pins/via-$_rt.json"
+	[ -f "$_rp" ] || return 0
+	jq -r '.[0].forward[0].TpID // empty' "$_rp" 2>/dev/null
+}
+# ref_held_tps: every transport the two reference instances hold right now. A
+# stopped instance answers nothing, which is the run-degrade.sh case.
+ref_held_tps() {
+	for _rn in "${PAIRED_SLOT1_NAME:-skysocks-client-ref}" "${PAIRED_SLOT2_NAME:-skysocks-client-ref2}"; do
+		$CLI cli proxy mux info -n "$_rn" --json 2>/dev/null |
+			jq -r '.[]?.legs[]?.transport_id // empty' 2>/dev/null
+	done
+}
+# cut_ref_tps: the fenced list, space separated. Empty with CUT_REF_FENCE=0.
+cut_ref_tps() {
+	[ "$CUT_REF_FENCE" = 1 ] || return 0
+	{ ref_pin_first_hop; ref_held_tps; } | grep -v '^$' | sort -u | tr '\n' ' ' | sed 's/ *$//'
+}
+# is_ref_tp <tp id>: 0 when that transport belongs to the paired reference.
+is_ref_tp() { case " ${ref_tps:-} " in *" $1 "*) return 0 ;; esac; return 1; }
+
 # choose_cut <shape>: pick the leg or tunnel first hop this set cuts, and prove
 # it is safe to cut. shape is leg | tp | auto, and the run-degrade.sh subject
 # names legs-N / tunnels-N are accepted as the same thing.
 # Sets cut_kind cut_rg cut_tp cut_pk cut_short cut_type. Returns 1 when nothing
-# may be cut — the caller then runs the set with no cut rather than cutting
-# something it cannot put back.
+# may be cut, with the reason in cut_skip_reason — the caller then runs the set
+# with no cut rather than cutting something it cannot put back, or the
+# reference every row of the set is measured against.
 choose_cut() {
 	# ACTIVE groups only: a standby tunnel (#4986) is dialed and kept alive but
 	# carries no streams, so cutting one would measure nothing. tunnel_role is
@@ -83,6 +133,9 @@ choose_cut() {
 	# the behaviour every binary before the pool had.
 	info=$(mux_info "$name" | jq -c '[.[]?] as $rgs | if ($rgs | map(select(.tunnel_role != null)) | length) == 0 then $rgs else ($rgs | map(select(.tunnel_role == "active"))) end' 2>/dev/null)
 	cut_rg=""; cut_tp=""; cut_pk=""; cut_short=""; cut_type=stcpr
+	cut_skip_reason=""; _cref_blocked=0
+	ref_tps=$(cut_ref_tps)
+	[ -z "$ref_tps" ] || echo "$set_name: the paired reference holds $(printf '%s' "$ref_tps" | wc -w | tr -d ' ') transport(s), fenced off the cut: $ref_tps"
 	_cshape=$1
 	case $_cshape in
 	legs-*) _cshape=leg ;;
@@ -96,34 +149,67 @@ choose_cut() {
 	leg)
 		cut_kind=leg
 		cut_rg=$(echo "$info" | jq -r '.[0].desc.dst_port // empty')
-		cut_tp=$(echo "$info" | jq -r '.[0].legs[1].transport_id // empty')
-		cut_pk=$(echo "$info" | jq -r '.[0].legs[1].remote_pk // empty')
-		cut_type=$(echo "$info" | jq -r '.[0].legs[1].tp_type // "stcpr"')
+		# every leg but the first is a candidate; take the first that is not the
+		# paired reference's.
+		_cn=$(echo "$info" | jq '.[0].legs | length' 2>/dev/null)
+		case ${_cn:-} in '' | *[!0-9]*) _cn=0 ;; esac
+		_ci=1
+		while [ "$_ci" -lt "$_cn" ]; do
+			_ct=$(echo "$info" | jq -r --argjson i "$_ci" '.[0].legs[$i].transport_id // empty')
+			if [ -n "$_ct" ] && ! is_ref_tp "$_ct"; then
+				cut_tp=$_ct
+				cut_pk=$(echo "$info" | jq -r --argjson i "$_ci" '.[0].legs[$i].remote_pk // empty')
+				cut_type=$(echo "$info" | jq -r --argjson i "$_ci" '.[0].legs[$i].tp_type // "stcpr"')
+				break
+			fi
+			if [ -n "$_ct" ]; then
+				echo "$set_name: leg $_ct is the paired reference's own route — not a cut target"
+				_cref_blocked=1
+			fi
+			_ci=$((_ci + 1))
+		done
 		;;
 	tp)
 		cut_kind=tp
 		# every group but the first is a candidate; take the first whose hop-1
-		# transport is not shared with another group.
+		# transport is neither shared with another group nor the reference's.
 		_cn=$(echo "$info" | jq 'length' 2>/dev/null || echo 0)
 		_ci=1
 		while [ "$_ci" -lt "$_cn" ]; do
 			_ct=$(echo "$info" | jq -r --argjson i "$_ci" '.[$i].legs[0].transport_id // empty')
 			_cshared=$(echo "$info" | jq -r --argjson i "$_ci" '[to_entries[] | select(.key != $i) | .value.legs[].transport_id] | join(" ")')
-			if [ -n "$_ct" ] && ! echo " $_cshared " | grep -q " $_ct "; then
+			if [ -n "$_ct" ] && ! echo " $_cshared " | grep -q " $_ct " && ! is_ref_tp "$_ct"; then
 				cut_tp=$_ct
 				cut_rg=$(echo "$info" | jq -r --argjson i "$_ci" '.[$i].desc.dst_port // empty')
 				cut_pk=$(echo "$info" | jq -r --argjson i "$_ci" '.[$i].legs[0].remote_pk // empty')
 				cut_type=$(echo "$info" | jq -r --argjson i "$_ci" '.[$i].legs[0].tp_type // "stcpr"')
 				break
 			fi
-			[ -n "$_ct" ] && echo "$set_name: rg $(echo "$info" | jq -r --argjson i "$_ci" '.[$i].desc.dst_port') rides $_ct, which another group also holds — not a cut target"
+			if [ -n "$_ct" ] && is_ref_tp "$_ct"; then
+				echo "$set_name: rg $(echo "$info" | jq -r --argjson i "$_ci" '.[$i].desc.dst_port') rides $_ct, the paired reference's own first hop — not a cut target"
+				_cref_blocked=1
+			elif [ -n "$_ct" ]; then
+				echo "$set_name: rg $(echo "$info" | jq -r --argjson i "$_ci" '.[$i].desc.dst_port') rides $_ct, which another group also holds — not a cut target"
+			fi
 			_ci=$((_ci + 1))
 		done
 		;;
-	*) echo "$set_name: unknown cut shape '$1'"; return 1 ;;
+	*) cut_skip_reason="unknown cut shape '$1'"; echo "$set_name: $cut_skip_reason"; return 1 ;;
 	esac
-	[ -n "$cut_tp" ] || { echo "$set_name: no second leg/tunnel to cut — no cut row"; return 1; }
-	[ "$cut_pk" != "$exit_pk" ] || { echo "$set_name: the target rides the transport to the EXIT ($cut_tp) — refusing to cut it"; return 1; }
+	if [ -z "$cut_tp" ]; then
+		if [ "$_cref_blocked" = 1 ]; then
+			cut_skip_reason="every candidate $cut_kind is the paired reference's route (fenced: $ref_tps)"
+		else
+			cut_skip_reason="no second leg/tunnel to cut"
+		fi
+		echo "$set_name: $cut_skip_reason — no cut row"
+		return 1
+	fi
+	[ "$cut_pk" != "$exit_pk" ] || {
+		cut_skip_reason="the target rides the transport to the EXIT ($cut_tp)"
+		echo "$set_name: $cut_skip_reason — refusing to cut it"
+		return 1
+	}
 	cut_short=$(pin_short "$cut_tp" || true)
 	if [ -n "${cut_short:-}" ]; then
 		# restore by the PIN's pk, not mux info's: `tp add` has to rebuild the
@@ -132,7 +218,8 @@ choose_cut() {
 		cut_type=stcpr
 	else
 		if [ "$CUT_FENCE" = pins ]; then
-			echo "$set_name: $cut_kind $cut_tp is not one of the $(ls "$pins"/via-*.json 2>/dev/null | wc -l) pinned hop-1 transports — it could not be restored, no cut row"
+			cut_skip_reason="$cut_kind $cut_tp is not one of the $(ls "$pins"/via-*.json 2>/dev/null | wc -l | tr -d ' ') pinned hop-1 transports"
+			echo "$set_name: $cut_skip_reason — it could not be restored, no cut row"
 			return 1
 		fi
 		# `proxy mux add` can only re-add a leg from a route FILE, so an unpinned
@@ -140,11 +227,13 @@ choose_cut() {
 		# transport can be rebuilt without a pin (`tp add` gives back the same
 		# deterministic id).
 		if [ "$cut_kind" = leg ]; then
-			echo "$set_name: leg $cut_tp is not pinned and 'proxy mux add' needs a route file to put it back — no cut row"
+			cut_skip_reason="leg $cut_tp is not pinned and 'proxy mux add' needs a route file to put it back"
+			echo "$set_name: $cut_skip_reason — no cut row"
 			return 1
 		fi
 		[ -n "$cut_pk" ] && [ -n "$cut_type" ] || {
-			echo "$set_name: $cut_kind $cut_tp has no known remote pk/type — it could not be restored, no cut row"
+			cut_skip_reason="$cut_kind $cut_tp has no known remote pk/type"
+			echo "$set_name: $cut_skip_reason — it could not be restored, no cut row"
 			return 1
 		}
 		echo "$set_name: $cut_tp is not a pinned hop-1 transport; CUT_FENCE=$CUT_FENCE restores it with 'tp add -t $cut_type $cut_pk'"

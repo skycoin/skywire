@@ -183,6 +183,52 @@ mux_info() {
 			then .legs |= map(. + {remote_ip: ($ips[.transport_id // ""] // "")})
 			else . end)' 2>/dev/null || echo "$_mi"
 }
+# --- carrier tracking (campaign21) ---------------------------------------------
+# <set>.carrier.tsv used to read the byte deltas of a FIXED list of transports
+# captured at set start. After campaign21's cut row the visor dialed a
+# REPLACEMENT group (49172) whose first hop was a transport that did not exist
+# when the list was taken (sudph 93139b56-acc0-00e5-8ca0-cd0bad229d62), so the
+# three 50 MB uploads that rode it show no sender at all in carrier.tsv.
+#
+# The tracked list is therefore a UNION: the app's route groups are re-read
+# before and after every row and every transport they hold is added to it. It is
+# never shortened — a cut transport keeps its (empty) rows, and a transport that
+# appears mid-set simply becomes new carrier rows from the row it appeared at, so
+# the column layout summarize.sh and verdict.sh read is unchanged.
+#
+# <set>.tps.tsv names each tracked transport ONCE — tp, type, remote pk and the
+# row it was first seen at (0 = held at set start) — so a README can say what
+# carried which row.
+tracked=""      # every transport this set has been measured over, space separated
+late_rgs=""     # route groups created after row 1: "<port>@<first hop>(<type>)"
+rgs_seen=""     # the ports the set held through row 1
+# tps_note <tp> <type> <remote pk> <row>: track a transport on first sight.
+tps_note() {
+	case " $tracked " in *" $1 "*) return 0 ;; esac
+	tracked="$tracked $1"
+	printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$out/$set_name.tps.tsv"
+}
+# track_row <row> <mux info json>: union this reading's transports into the
+# tracked list, and — from row 2 on — name any route group the session has
+# grown since. Row 0 is the set-start snapshot.
+track_row() {
+	for _tt in $(echo "$2" | jq -r '.[]?.legs[]?.transport_id // empty' 2>/dev/null); do
+		case " $tracked " in *" $_tt "*) continue ;; esac
+		_tty=$(echo "$2" | jq -r --arg id "$_tt" 'first(.[]?.legs[]? | select(.transport_id==$id) | .tp_type) // "?"' 2>/dev/null)
+		_ttp=$(echo "$2" | jq -r --arg id "$_tt" 'first(.[]?.legs[]? | select(.transport_id==$id) | .remote_pk) // "?"' 2>/dev/null)
+		tps_note "$_tt" "${_tty:-?}" "${_ttp:-?}" "$1"
+		[ "$1" -le 1 ] || echo "$set_name row $1: new carrier $_tt (${_tty:-?}, remote ${_ttp:-?}) — tracked from this row"
+	done
+	for _tr in $(echo "$2" | jq -r '.[]?.desc.dst_port // empty' 2>/dev/null); do
+		case " $rgs_seen " in *" $_tr "*) continue ;; esac
+		rgs_seen="$rgs_seen $_tr"
+		[ "$1" -le 1 ] && continue
+		_trh=$(echo "$2" | jq -r --argjson p "$_tr" 'first(.[]? | select(.desc.dst_port==$p) | .legs[0] | (.transport_id // "?") + "(" + (.tp_type // "?") + ")") // "?"' 2>/dev/null)
+		late_rgs="${late_rgs:+$late_rgs }$_tr@${_trh:-?}"
+		echo "$set_name row $1: route group $_tr was created after row 1, first hop ${_trh:-?}"
+	done
+	return 0
+}
 # --- standby pool (#4986) ------------------------------------------------------
 # `proxy start --standby-pool` holds MORE route groups than --tunnels N: the
 # active set plus standby tunnels that are dialed, kept alive and measured on the
@@ -292,10 +338,13 @@ warm() {
 	[ $bad -eq 0 ]
 }
 # mux_events <set> <app>: the router's leg events for this app since the set began (criterion 7: churn with reasons)
+# and, when the session grew a route group after row 1, that group's port, first
+# hop and transport type — campaign21's cut row left its replacement group
+# (49172, sudph 93139b56-acc0-00e5-8ca0-cd0bad229d62) unnamed in every summary.
 mux_events() {
 	$CLI cli visor state --select diag --json 2>/dev/null |
 		jq --arg app "$2" --arg since "${setup_started:-$set_started}" '[.diag.mux_events[]? | select(.app==$app and .at[0:19] >= $since)]' > "$out/$1.mux_events.json" 2>/dev/null
-	echo "$1: $(jq 'length' "$out/$1.mux_events.json" 2>/dev/null || echo 0) mux events: $(jq -r '[.[] | .event + "(" + (.reason // "") + ")"] | join(" ")' "$out/$1.mux_events.json" 2>/dev/null | cut -c1-300)"
+	echo "$1: $(jq 'length' "$out/$1.mux_events.json" 2>/dev/null || echo 0) mux events: $(jq -r '[.[] | .event + "(" + (.reason // "") + ")"] | join(" ")' "$out/$1.mux_events.json" 2>/dev/null | cut -c1-300)${late_rgs:+ | route group(s) created after row 1 (port@first hop): $late_rgs}"
 }
 # cut_transfer_row <label> <dir> <bytes>: the campaign's ONE cut row. The
 # transfer is a normal hash-verified row of its cell — it lands in <set>.tsv
@@ -325,6 +374,13 @@ run_set() { # <set> <socks> <tp ids> <header>
 	f="$out/$set_name.tsv"; c="$out/$set_name.carrier.tsv"
 	echo "# $header" > "$f"
 	echo "# row	tp	sent_delta	recv_delta" > "$c"
+	# The carriers are a UNION re-read every row, not the fixed list of the set's
+	# tps argument: see track_row. <set>.tps.tsv names each one on first sight.
+	tracked=""; late_rgs=""; rgs_seen=""
+	printf '# transports %s was measured over; first_seen_row 0 = held at set start\n' "$set_name" > "$out/$set_name.tps.tsv"
+	printf '# tp\ttype\tremote_pk\tfirst_seen_row\n' >> "$out/$set_name.tps.tsv"
+	if [ -f "$out/$set_name.legs.json" ]; then track_row 0 "$(cat "$out/$set_name.legs.json")"; fi
+	for tp in $tps; do tps_note "$tp" '?' '?' 0; done
 	[ "$EXIT_SNAP" = 1 ] && printf '# row\texit_mux_route_groups\n' > "$out/$set_name.exit-recovery.tsv"
 	set_paired=0
 	if [ "$PAIRED" = 1 ]; then
@@ -342,6 +398,14 @@ run_set() { # <set> <socks> <tp ids> <header>
 			cut_at_row=${CUT_ROW:-$(cut_row_number)}
 			printf '# row\ttp\tfirst_hop_pk\tts\tttfb_after_cut_s\trg_ports_before\trg_ports_after\tcut_ok\trestored\n' > "$out/$set_name.cut.tsv"
 			echo "$set_name: the cut row is row $cut_at_row (trial $CUT_TRIAL of the $CUT_CELL cell), ${cut_after}s in"
+		else
+			# choose_cut refused: the only targets left were the paired
+			# reference's route (CUT_REF_FENCE), or nothing could be put back.
+			# The set runs with NO cut row and says so where the cut row would
+			# have been recorded — cutting the reference would cost every later
+			# paired row of the set.
+			printf '# row\ttp\tfirst_hop_pk\tts\tttfb_after_cut_s\trg_ports_before\trg_ports_after\tcut_ok\trestored\n' > "$out/$set_name.cut.tsv"
+			printf '# cut=skipped:%s\n' "${cut_skip_reason:-no cut target}" >> "$out/$set_name.cut.tsv"
 		fi
 	fi
 	exit_snap_row start
@@ -358,8 +422,11 @@ run_set() { # <set> <socks> <tp ids> <header>
 					_pv=$(paired_row 1 "$row" "$n" "$dir")
 					pref=${_pv%% *}; _pv=${_pv#* }; pok=${_pv%% *}; plegs=${_pv##* }
 				fi
+				# the carriers this row may ride: everything tracked so far plus
+				# whatever the session has dialed since the last row
+				track_row "$row" "$(mux_info "$cur_app")"
 				before=""
-				for tp in $tps; do before="$before $tp:$(tp_counters "$tp" | tr ' ' ',')"; done
+				for tp in $tracked; do before="$before $tp:$(tp_counters "$tp" | tr ' ' ',')"; done
 				if [ "$row" = "$cut_at_row" ]; then
 					cut_transfer_row "$set_name-t$t" "$dir" "$n"
 				else
@@ -370,7 +437,7 @@ run_set() { # <set> <socks> <tp ids> <header>
 					paired_emit "$row" "$(paired_cell "$n" "$dir")" "$pref" "$pok" "$plegs" \
 						"$(echo "$_mlast" | awk -F'\t' '{printf "%.2f", $4/1e6}')" "$(echo "$_mlast" | cut -f8)"
 				fi
-				for tp in $tps; do
+				for tp in $tracked; do
 					b=$(echo "$before" | tr ' ' '\n' | grep "^$tp:" | cut -d: -f2)
 					a=$(tp_counters "$tp" | tr ' ' ',')
 					[ -n "$a" ] && [ -n "$b" ] || { echo "$row	$tp	?	?" >> "$c"; continue; }
@@ -378,6 +445,9 @@ run_set() { # <set> <socks> <tp ids> <header>
 				done
 				# legs held + loss-recovery counters (sender retx window + SACK feedback, receiver frontier) after every row
 				info=$(mux_info "$cur_app")
+				# a group dialed DURING the row (the cut row's replacement) is
+				# tracked from this row, so its deltas start with the next one
+				track_row "$row" "$info"
 				echo "$row	legs	$(echo "$info" | jq -r '[.[] | (.desc.dst_port|tostring) + ":" + ([.legs[].transport_id[0:8]] | join(","))] | join(" ")')	-" >> "$c"
 				echo "$row	$(echo "$info" | jq -c '[.[] | {rg: .desc.dst_port, recovery}]')" >> "$out/$set_name.recovery.tsv"
 				p=$(echo "$info" | jq -c '[.[].desc.dst_port]')
@@ -540,6 +610,7 @@ done
 # per-trial sum and its ratio go to mux-tunnels-2-up2.up2.tsv.
 if [ "${UP2:-0}" = 1 ]; then
 	set_name="mux-tunnels-2-up2"; name=$(app_name tun2up2); socks=$(app_addr 1141); cur_app=$name
+	late_rgs="" # this set writes no per-row carrier deltas, so it tracks no late groups
 	up2_size=$(norm_sizes "${UP2_SIZE:-50000000}"); up2_size=${up2_size% }
 	setup_started=$(date +%Y-%m-%dT%H:%M:%S)
 	f="$out/$set_name.tsv"; u="$out/$set_name.up2.tsv"
