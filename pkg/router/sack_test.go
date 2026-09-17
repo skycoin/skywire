@@ -352,3 +352,36 @@ func TestRackThresholdTracksAckDelay(t *testing.T) {
 		t.Fatalf("HoL nudge inside the measured ack delay must be suppressed, got %v", got)
 	}
 }
+
+// TestRetxBufferPerTransportAccounting proves the buffer attributes held and
+// acknowledged bytes to the transport each entry last rode — the leg's real
+// in-flight (what the per-leg send window bounds) and its delivered total
+// (what the window is sized from) — across store, re-tag, eviction and purge.
+func TestRetxBufferPerTransportAccounting(t *testing.T) {
+	a, b := uuid.New(), uuid.New()
+	rb := newRetxBuffer(3)
+	rb.Store(1, make([]byte, 100), a)
+	rb.Store(2, make([]byte, 200), a)
+	rb.Store(3, make([]byte, 300), b)
+	if got := rb.HeldBytes([]uuid.UUID{a, b}); got[0] != 300 || got[1] != 300 {
+		t.Fatalf("held after stores = %v, want [300 300]", got)
+	}
+	rb.SetTpID(2, b) // a retransmit moved seq 2 onto b
+	if got := rb.HeldBytes([]uuid.UUID{a, b}); got[0] != 100 || got[1] != 500 {
+		t.Fatalf("held after re-tag = %v, want [100 500]", got)
+	}
+	rb.Store(4, make([]byte, 50), a) // full: evicts the lowest (seq 1, on a)
+	if got := rb.HeldBytes([]uuid.UUID{a, b}); got[0] != 50 || got[1] != 500 {
+		t.Fatalf("held after eviction = %v, want [50 500]", got)
+	}
+	rb.ProcessSACK(3, nil, 0) // seqs 2 and 3 acknowledged (both on b)
+	if got := rb.HeldBytes([]uuid.UUID{a, b}); got[0] != 50 || got[1] != 0 {
+		t.Fatalf("held after SACK = %v, want [50 0]", got)
+	}
+	if got := rb.AckedBytes(b); got != 500 {
+		t.Fatalf("acked on b = %d, want 500", got)
+	}
+	if got := rb.AckedBytes(a); got != 0 {
+		t.Fatalf("acked on a = %d, want 0 (eviction is not delivery)", got)
+	}
+}

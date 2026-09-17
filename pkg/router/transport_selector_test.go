@@ -397,3 +397,36 @@ func TestTransportSelector_CapacityFloor(t *testing.T) {
 	assert.Positive(t, counts[1], "zero-throughput leg must keep a floor share")
 	assert.Greater(t, counts[0], counts[1])
 }
+
+// TestSelectorRealInflightSaturation proves the mux-fed in-flight replaces the
+// rate-drain estimate: with every ready leg holding a full window the selector
+// reports saturation (the writer parks), and a SACK-freed leg clears it.
+func TestSelectorRealInflightSaturation(t *testing.T) {
+	ts := newTransportSelector()
+	ts.SetMode(WeightModeECF)
+	ts.SetECFState([]ecfLegState{
+		{rttMs: 20, rttMinMs: 20, rateBps: 1e6, cwndBytes: 1000, ready: true},
+		{rttMs: 80, rttMinMs: 80, rateBps: 1e6, cwndBytes: 4000, ready: true},
+		{rttMs: 30, rttMinMs: 30, rateBps: 1e6, cwndBytes: 1000, ready: false}, // standby: ignored
+	})
+	if ts.AllReadySaturated() {
+		t.Fatal("nothing in flight, must not be saturated")
+	}
+	ts.SetInflight([]int64{1000, 4000, 0})
+	if !ts.AllReadySaturated() {
+		t.Fatal("both ready legs at their window, must be saturated")
+	}
+	ts.mu.Lock()
+	ts.drainInflightLocked() // the model must not erode real in-flight
+	ts.mu.Unlock()
+	if !ts.AllReadySaturated() {
+		t.Fatal("rate-drain model eroded the real in-flight")
+	}
+	ts.SetInflight([]int64{1000, 2000, 0}) // a SACK freed half of leg 1
+	if ts.AllReadySaturated() {
+		t.Fatal("leg 1 below its window, must not be saturated")
+	}
+	if in, win := ts.LegWindow(1); in != 2000 || win != 4000 {
+		t.Fatalf("LegWindow(1) = %v/%v, want 2000/4000", in, win)
+	}
+}
