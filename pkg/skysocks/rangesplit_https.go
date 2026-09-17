@@ -256,7 +256,7 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 		chunks := 1 + numChunks(total-chunk0Len, chunkSize)
 		if c.appCl != nil {
 			c.appCl.Log().Debugf("https range-split: %s %d bytes → %d chunks of %d bytes × %d streams",
-				host, total, chunks, chunkSize, c.rs.concurrency)
+				host, total, chunks, chunkSize, c.rsConcurrency())
 		}
 		c.rsSplits.Add(1)
 		c.rsChunks.Add(uint64(chunks)) //nolint:gosec // chunks>=2 here (total>chunk0Len)

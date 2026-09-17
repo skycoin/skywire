@@ -233,6 +233,16 @@ type Client struct {
 	muxNote  func(port routing.Port, event, reason, role string) error
 	muxNoteC chan tunnelNote
 
+	// appSettings PULLS the live tuning knobs the visor holds for this app.
+	// Indirected like muxNote so a test can drive it without an app RPC, and
+	// nil on any build with no visor to ask (wasm, unit tests) — pullSettings
+	// is then a no-op and every knob keeps its compiled default.
+	// settingsApplied is the version last installed, reported back on each pull
+	// so the visor can answer nothing when nothing moved; it is touched only by
+	// the keepalive loop.
+	appSettings     func(applied uint64) (map[string]int64, uint64, error)
+	settingsApplied uint64
+
 	// The promoter's hysteresis state, all guarded by sessionsMu and keyed
 	// like standby/recvStamp. See tunnel_promoter.go.
 	//
@@ -445,7 +455,7 @@ func (m *tunnelMeter) recordRTT(d time.Duration) {
 	if m.rttMs == 0 {
 		m.rttMs = ms
 	} else {
-		m.rttMs += tunnelRTTAlpha * (ms - m.rttMs)
+		m.rttMs += setTunnelRTTAlpha() * (ms - m.rttMs)
 	}
 	m.rttWin.push(ms, time.Now())
 	m.mu.Unlock()
@@ -504,7 +514,7 @@ func (m *tunnelMeter) sample(now time.Time, busy bool) {
 		return
 	}
 	dt := now.Sub(m.lastAt)
-	if dt < meterSampleMin {
+	if dt < setMeterSampleMin() {
 		return
 	}
 	secs := dt.Seconds()
@@ -517,10 +527,10 @@ func (m *tunnelMeter) sample(now time.Time, busy bool) {
 	m.busyAt = now
 	stalled := rxRate <= 0 && txRate <= 0
 	if rxRate > 0 || stalled {
-		m.rxCapBps *= meterCapDecay
+		m.rxCapBps *= setMeterCapDecay()
 	}
 	if txRate > 0 || stalled {
-		m.txCapBps *= meterCapDecay
+		m.txCapBps *= setMeterCapDecay()
 	}
 	if rxRate > m.rxCapBps {
 		m.rxCapBps = rxRate
@@ -549,7 +559,7 @@ const exitOpenPenalty = 10 * time.Second
 // exitOpenPenalty.
 func (m *tunnelMeter) bench(now time.Time) {
 	m.openTimeouts.Add(1)
-	m.penaltyUntil.Store(now.Add(exitOpenPenalty).UnixNano())
+	m.penaltyUntil.Store(now.Add(setExitOpenPenalty()).UnixNano())
 }
 
 // unbench returns the tunnel to the picks; called when an exit open on it
@@ -568,7 +578,7 @@ func (m *tunnelMeter) onBench(now time.Time) bool {
 func (m *tunnelMeter) capacity(now time.Time) (bps float64, fresh bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	fresh = !m.busyAt.IsZero() && now.Sub(m.busyAt) <= meterFresh
+	fresh = !m.busyAt.IsZero() && now.Sub(m.busyAt) <= setMeterFresh()
 	return m.rxCapBps, fresh
 }
 
@@ -658,6 +668,7 @@ func NewClient(conn net.Conn, appCl *app.Client) (*Client, error) {
 
 	if appCl != nil {
 		c.muxNote = appCl.NoteMuxEvent
+		c.appSettings = appCl.AppSettings
 	}
 	c.startMuxNotes()
 
@@ -934,12 +945,13 @@ const (
 // poolRetryDelay is the wait before failure round n (1-based): 30s, 60s, 120s,
 // capped at poolRetryBackoffMax.
 func poolRetryDelay(round int) time.Duration {
-	d := poolRetryBackoffBase
-	for i := 1; i < round && d < poolRetryBackoffMax; i++ {
+	ceil := setPoolRetryBackoffMax()
+	d := setPoolRetryBackoffBase()
+	for i := 1; i < round && d < ceil; i++ {
 		d *= 2
 	}
-	if d > poolRetryBackoffMax {
-		d = poolRetryBackoffMax
+	if d > ceil {
+		d = ceil
 	}
 	return d
 }
@@ -1092,7 +1104,7 @@ func (c *Client) promoteBestStandby(reason string) *yamux.Session {
 			}
 			if ms, ok := m.rtt(); ok {
 				k[2] = ms
-				if ns := m.stamp.Load(); ns > 0 && now.Sub(time.Unix(0, ns)) <= standbyRTTStale {
+				if ns := m.stamp.Load(); ns > 0 && now.Sub(time.Unix(0, ns)) <= setStandbyRTTStale() {
 					k[1] = 0
 				}
 			}
@@ -1305,7 +1317,7 @@ func (c *Client) notePoolDialFailure(err error) {
 		c.poolFails = 0
 		c.poolRetryRound++
 		round = c.poolRetryRound
-		if round >= poolRetryRounds {
+		if round >= setPoolRetryRounds() {
 			giveUp = true
 		} else {
 			wait = poolRetryDelay(round)
@@ -1323,7 +1335,7 @@ func (c *Client) notePoolDialFailure(err error) {
 	}
 	if wait > 0 {
 		c.appCl.Log().Warnf("Standby pool dial failed %d times; pausing the fill for %v (round %d/%d): %v",
-			maxRedialFails, wait, round, poolRetryRounds, err)
+			maxRedialFails, wait, round, setPoolRetryRounds(), err)
 		return
 	}
 	c.appCl.Log().Warnf("Standby pool dial failed (%d/%d): %v", fails, maxRedialFails, err)
@@ -1987,7 +1999,7 @@ func (c *Client) sessionKeepAliveLoop() {
 	// The RTT probe rides the same loop on its own cadence: Session.Ping already
 	// returns the round-trip, so measuring the tunnel latency a lone stream is
 	// picked on costs one extra ping frame per tunnel per tick.
-	rttTicker := time.NewTicker(tunnelRTTProbeInterval)
+	rttTicker := time.NewTicker(setTunnelRTTProbeInterval())
 	defer rttTicker.Stop()
 	rttInFlight := make(map[*yamux.Session]bool)
 	rttDoneC := make(chan *yamux.Session, 64)
@@ -1996,13 +2008,13 @@ func (c *Client) sessionKeepAliveLoop() {
 	// ticker only paces it — maybePoolFill is a no-op unless the fill is armed
 	// (SetStandbyPool at start, a tunnel death after that), so after the pool
 	// settles this costs a function call every poolFillInterval.
-	poolTicker := time.NewTicker(poolFillInterval)
+	poolTicker := time.NewTicker(setPoolFillInterval())
 	defer poolTicker.Stop()
 
 	// The promoter rides the same loop, on the cadence the RTT it reads is
 	// refreshed at. Inert with no pool: maybePromote returns at once when
 	// there is no standby tunnel or no active one.
-	promoteTicker := time.NewTicker(tunnelPromoteInterval)
+	promoteTicker := time.NewTicker(setTunnelPromoteInterval())
 	defer promoteTicker.Stop()
 
 	type probeResult struct {
@@ -2032,6 +2044,16 @@ func (c *Client) sessionKeepAliveLoop() {
 				c.recordTunnelRTT(r.s, r.rtt)
 			}
 		case <-rttTicker.C:
+			// The settings pull rides this tick: the app is the RPC client, so a
+			// live knob change reaches a running client by being FETCHED here.
+			// Intervals are knobs too, so a change re-cadences the tickers that
+			// read them — including this one.
+			if c.pullSettings() {
+				rttTicker.Reset(setTunnelRTTProbeInterval())
+				poolTicker.Reset(setPoolFillInterval())
+				promoteTicker.Reset(setTunnelPromoteInterval())
+				ticker.Reset(c.livenessInterval())
+			}
 			// Refresh every live tunnel's RTT, at most one probe outstanding per
 			// tunnel: a ping wedged behind a reorder gap must not pile up.
 			for _, s := range c.snapshotSessions() {
@@ -2481,7 +2503,7 @@ func (c *Client) noteExitOpenTimeout(stream net.Conn, elapsed time.Duration, err
 		tunnel = fmt.Sprintf("tunnel %d/%d", idx+1, len(c.snapshotSessions()))
 	}
 	c.appCl.Log().Warnf("Exit never answered the SOCKS5 greeting on %s after %s (%v); benching it for %s — %d exit-open timeout(s) so far",
-		tunnel, elapsed.Round(100*time.Millisecond), err, exitOpenPenalty, c.exitOpenTimeouts.Load())
+		tunnel, elapsed.Round(100*time.Millisecond), err, setExitOpenPenalty(), c.exitOpenTimeouts.Load())
 }
 
 // forwardExitHandshake is the transparent fallback for a browser that offers no
@@ -2589,8 +2611,8 @@ func (c *Client) rangeSplitSnapshot() *proxystatus.RangeSplit {
 		TotalSplits:     c.rsSplits.Load(),
 		TotalChunks:     c.rsChunks.Load(),
 		TotalBytes:      c.rsBytes.Load(),
-		StreamsPerSplit: c.rs.concurrency,
-		ChunkSize:       c.rs.chunkSize,
+		StreamsPerSplit: c.rsConcurrency(),
+		ChunkSize:       c.rsChunkSize(),
 	}
 }
 
