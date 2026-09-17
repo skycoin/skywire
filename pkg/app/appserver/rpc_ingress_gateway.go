@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -77,6 +78,13 @@ type RPCIngressGateway struct {
 	lm   *idmanager.Manager // contains listeners associated with their IDs
 	cm   *idmanager.Manager // contains connections associated with their IDs
 	log  *logging.Logger
+	// dialedPorts is the set of local route-group ports this app process was
+	// handed by its own dials. It is the ownership proof NoteMuxEvent checks:
+	// a tunnel event names a port, and the router's lookup is by port alone.
+	// Kept past the conn's death on purpose (the retire event arrives after the
+	// app closed the tunnel) and bounded by the 16-bit port space.
+	dialedPorts   map[routing.Port]struct{}
+	dialedPortsMx sync.Mutex
 }
 
 // NewRPCGateway constructs new server RPC interface.
@@ -85,10 +93,11 @@ func NewRPCGateway(log *logging.Logger, proc *Proc) *RPCIngressGateway {
 		log = logging.MustGetLogger("app_rpc_ingress_gateway")
 	}
 	return &RPCIngressGateway{
-		proc: proc,
-		lm:   idmanager.New(),
-		cm:   idmanager.New(),
-		log:  log,
+		proc:        proc,
+		lm:          idmanager.New(),
+		cm:          idmanager.New(),
+		log:         log,
+		dialedPorts: make(map[routing.Port]struct{}),
 	}
 }
 
@@ -200,6 +209,86 @@ type NoteMuxEventReq struct {
 	Role      string
 }
 
+// Tunnel event and role vocabulary accepted from an app. The events mirror
+// router.MuxEventTunnel* and the roles skysocks.TunnelRole* — named here as
+// literals because pkg/skysocks imports this package, not the other way round.
+//
+// Anything outside these sets is rejected rather than stored: the strings land
+// in the router's shared 256-entry mux-event ring and in `visor state`, so an
+// app that could write arbitrary ones could both invent event kinds and, by
+// looping, evict every other group's leg and wedge history.
+const (
+	maxMuxEventReasonLen = 256
+	tunnelRoleActive     = "active"
+	tunnelRoleStandby    = "standby"
+)
+
+// truncateMuxEventReason bounds the app-supplied reason kept in the router's
+// mux-event ring. The ring never shrinks and lives as long as the visor, so an
+// app could otherwise park hundreds of MB of strings in router memory.
+func truncateMuxEventReason(reason string) string {
+	if len(reason) > maxMuxEventReasonLen {
+		return reason[:maxMuxEventReasonLen]
+	}
+	return reason
+}
+
+// validTunnelEvent reports whether event is one of the tunnel-level mux events
+// an app is allowed to record.
+func validTunnelEvent(event string) bool {
+	switch event {
+	case router.MuxEventTunnelPromoted, router.MuxEventTunnelParked, router.MuxEventTunnelRetired:
+		return true
+	default:
+		return false
+	}
+}
+
+// ownsLocalPort reports whether localPort belongs to THIS app process: either a
+// conn the gateway still holds for it, or a port one of its own dials was
+// handed. The ledger is what makes the retire case work — the app closes the
+// tunnel's conn before it reports the death, so the conn is already gone from
+// r.cm by the time the event arrives.
+func (r *RPCIngressGateway) ownsLocalPort(localPort routing.Port) bool {
+	if localPort == 0 {
+		return false
+	}
+	r.dialedPortsMx.Lock()
+	_, ok := r.dialedPorts[localPort]
+	r.dialedPortsMx.Unlock()
+	if ok {
+		return true
+	}
+	r.cm.DoRange(func(_ uint16, v interface{}) bool {
+		conn, isConn := v.(net.Conn)
+		if !isConn || conn == nil {
+			return true
+		}
+		addr, isAddr := conn.LocalAddr().(appnet.Addr)
+		if isAddr && addr.Port == localPort {
+			ok = true
+			return false
+		}
+		return true
+	})
+	return ok
+}
+
+// noteDialedPort remembers a local port this app process dialed, so a tunnel
+// event naming it later can be proven to be its own. The set is bounded by the
+// port space and lives as long as the proc's gateway.
+func (r *RPCIngressGateway) noteDialedPort(localPort routing.Port) {
+	if localPort == 0 {
+		return
+	}
+	r.dialedPortsMx.Lock()
+	if r.dialedPorts == nil {
+		r.dialedPorts = make(map[routing.Port]struct{})
+	}
+	r.dialedPorts[localPort] = struct{}{}
+	r.dialedPortsMx.Unlock()
+}
+
 // NoteMuxEvent records an app-decided tunnel event on the route group the app
 // dialed from req.LocalPort, and re-stamps that group's tunnel role.
 //
@@ -209,11 +298,29 @@ type NoteMuxEventReq struct {
 // error — a tunnel whose route group has already been reaped is exactly the
 // case a retire event reports, and failing the call would turn a race into a
 // log line in the app.
+//
+// The request is validated first, because the router's lookup is by PORT
+// ALONE: NoteTunnelEvent matches any route group whose source or destination
+// port equals it, across every app on this visor. Without the ownership check
+// any app process could re-stamp another app's tunnel role and write events
+// attributed to the victim's app name. Reason is truncated because it is
+// stored verbatim in a ring that never shrinks; Event and Role need no
+// truncation once they are whitelisted against a fixed vocabulary.
 func (r *RPCIngressGateway) NoteMuxEvent(req *NoteMuxEventReq, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "NoteMuxEvent", req)(nil, &err)
 	if req == nil {
 		return errors.New("NoteMuxEvent: nil request")
 	}
+	if !validTunnelEvent(req.Event) {
+		return fmt.Errorf("NoteMuxEvent: unknown event %q", req.Event)
+	}
+	if req.Role != "" && req.Role != tunnelRoleActive && req.Role != tunnelRoleStandby {
+		return fmt.Errorf("NoteMuxEvent: unknown role %q", req.Role)
+	}
+	if !r.ownsLocalPort(req.LocalPort) {
+		return fmt.Errorf("NoteMuxEvent: local port %d is not this app's", req.LocalPort)
+	}
+	reason := truncateMuxEventReason(req.Reason)
 	nw, nerr := appnet.ResolveNetworker(appnet.TypeSkynet)
 	if nerr != nil {
 		return nerr
@@ -228,7 +335,7 @@ func (r *RPCIngressGateway) NoteMuxEvent(req *NoteMuxEventReq, _ *struct{}) (err
 	if rt == nil {
 		return nil
 	}
-	rt.NoteTunnelEvent(req.LocalPort, req.Event, req.Reason, req.Role)
+	rt.NoteTunnelEvent(req.LocalPort, req.Event, reason, req.Role)
 	return nil
 }
 
@@ -388,6 +495,9 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 
 	resp.ConnID = *reservedConnID
 	resp.LocalPort = localAddr.Port
+	// This app now owns that port, which is what lets it report tunnel events
+	// on the route group behind it (NoteMuxEvent).
+	r.noteDialedPort(localAddr.Port)
 
 	return nil
 }
