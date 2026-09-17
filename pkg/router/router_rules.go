@@ -160,6 +160,44 @@ func (r *router) RouteGroupMuxInfoAll() []MuxInfo {
 	return out
 }
 
+// NoteTunnelEvent implements Router. Finds the established route group this
+// visor dialed from localPort and records the app's tunnel event on it,
+// stamped with the group's first-hop transport and that leg's forward path.
+//
+// The local port is the descriptor's SOURCE port on the dialing side. A group
+// keyed by the mirrored descriptor (the accept side) has it as the DESTINATION
+// port instead, so both are matched — an exit never calls this, but a route
+// group is keyed by whichever descriptor its end created and the lookup should
+// not depend on that.
+//
+// role, when non-empty, also re-stamps the group's TunnelRole, so
+// `visor state --select mux_route_groups` shows what a tunnel is NOW rather
+// than what it was labeled at dial time. A promote that changed the answer
+// and did not say so would be worse than no field at all.
+func (r *router) NoteTunnelEvent(localPort routing.Port, event, reason, role string) bool {
+	if localPort == 0 || event == "" {
+		return false
+	}
+	r.mx.Lock()
+	var rg *RouteGroup
+	for desc, nrg := range r.rgsNs {
+		if nrg == nil || nrg.rg == nil {
+			continue
+		}
+		if desc.SrcPort() == localPort || desc.DstPort() == localPort {
+			rg = nrg.rg
+			break
+		}
+	}
+	r.mx.Unlock()
+	if rg == nil {
+		return false
+	}
+	rg.SetTunnelRole(role)
+	rg.noteTunnelEvent(event, reason)
+	return true
+}
+
 // appRouteGroupCloseTimeout bounds the wait for an app's route groups to
 // finish their close handshake. The de-registration itself is immediate (the
 // map entries are dropped before any close runs), so this only bounds how long

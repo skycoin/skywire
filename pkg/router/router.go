@@ -703,6 +703,24 @@ type Router interface {
 	// minutes, this holds the events.
 	MuxEvents() []MuxEvent
 
+	// NoteTunnelEvent records an event the APP that holds a tunnel decided —
+	// a standby tunnel promoted into the active set, an active one parked, a
+	// dead one retired — on the route group dialed from localPort, and
+	// updates that group's TunnelRole when role is non-empty.
+	//
+	// It exists because the two halves of the answer live in different
+	// processes. Only the app knows which of its tunnels carries streams;
+	// only the router knows which transport and route the tunnel leaves over,
+	// and only the router owns the event ring `visor state --select diag`
+	// reads. The app names the tunnel by the local port it dialed from — the
+	// one identifier it is handed at dial time (DialResp.LocalPort) — and the
+	// router fills in the rest.
+	//
+	// Reports whether a route group with that local port was found. Both
+	// sides of the descriptor are tried, so it works for a group keyed by
+	// either the dialing or the mirrored descriptor.
+	NoteTunnelEvent(localPort routing.Port, event, reason, role string) bool
+
 	// Routing table related methods
 	RoutesCount() int
 	Rules() []routing.Rule

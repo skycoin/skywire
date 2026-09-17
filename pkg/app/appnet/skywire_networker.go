@@ -67,6 +67,12 @@ func NewSkywireNetworker(l logrus.FieldLogger, r router.Router) Networker {
 	}
 }
 
+// Router returns the router this networker dials through. Exposed for the
+// app-server ingress paths that must reach the router for something other than
+// a dial — reporting an app-decided tunnel event onto the router's mux-event
+// ring — which resolve the networker exactly the way dialWithMuxRoutes does.
+func (r *SkywireNetworker) Router() router.Router { return r.r }
+
 // Dial dials remote `addr` via `skynet`.
 func (r *SkywireNetworker) Dial(addr Addr) (net.Conn, error) {
 	return r.DialContext(context.Background(), addr)

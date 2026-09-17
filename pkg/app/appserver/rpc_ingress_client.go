@@ -43,6 +43,11 @@ type RPCIngressClient interface {
 	// option set grows: every new dial option used to mean a new parameter on
 	// this method, its mock and every call site.
 	DialWithOptions(req DialOptionsReq) (connID uint16, localPort routing.Port, err error)
+	// NoteMuxEvent records a TUNNEL event the app decided — a standby tunnel
+	// promoted, an active one parked, a dead one retired — on the route group
+	// the app dialed from req.LocalPort, and re-labels that group's tunnel
+	// role. See NoteMuxEventReq.
+	NoteMuxEvent(req NoteMuxEventReq) error
 	Listen(local appnet.Addr) (uint16, error)
 	Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error)
 	Write(connID uint16, b []byte) (int, error)
@@ -136,6 +141,11 @@ func (c *rpcIngressClient) DialWithOptions(req DialOptionsReq) (connID uint16, l
 	}
 
 	return resp.ConnID, resp.LocalPort, nil
+}
+
+// NoteMuxEvent sends `NoteMuxEvent` command to the server.
+func (c *rpcIngressClient) NoteMuxEvent(req NoteMuxEventReq) error {
+	return c.rpc.Call(c.formatMethod("NoteMuxEvent"), &req, nil)
 }
 
 // Listen sends `Listen` command to the server.

@@ -281,10 +281,13 @@ func TestPoolFill_SuccessClearsTheFailureLedger(t *testing.T) {
 	c.redialMu.Unlock()
 }
 
-// A pool dial lands in the ACTIVE set while that set is short — so the same
-// loop that grows the pool also restores the aggregation width after a death,
-// and only the surplus is standby.
-func TestPoolFill_RefillsTheActiveSetFirst(t *testing.T) {
+// A pool dial ALWAYS lands in standby — and when the active set is short, the
+// tunnel that fills it is chosen by rank from the whole pool, in the same call.
+// A fresh dial is not evidence that a route carries traffic: measured on the
+// rig 2026-09-17, a refill that joined the active set directly put every later
+// upload on a brand-new sudph tunnel at 0.45 MB/s while six measured stcpr
+// tunnels sat in the pool.
+func TestPoolFill_RefillsTheActiveSetFromThePool(t *testing.T) {
 	var closers []func()
 	defer func() {
 		for _, fn := range closers {
@@ -305,7 +308,7 @@ func TestPoolFill_RefillsTheActiveSetFirst(t *testing.T) {
 	waitFill(t, c)
 	held, standby, _, _, _ := c.StandbyPoolState()
 	require.Equal(t, 2, held)
-	require.Zero(t, standby, "the active set was short, so the new tunnel is active")
+	require.Zero(t, standby, "the active set was short, so a promote followed the dial in the same call")
 	require.Equal(t, 2, c.activeLiveCount())
 
 	c.maybePoolFill()

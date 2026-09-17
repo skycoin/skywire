@@ -183,6 +183,55 @@ func (r *RPCIngressGateway) SetAppPort(port routing.Port, _ *struct{}) (err erro
 	return nil
 }
 
+// NoteMuxEventReq is an app reporting a TUNNEL event — one of its tunnels
+// promoted out of standby, parked back into it, or retired dead — onto the
+// router's mux-event ring, and re-labeling that tunnel's role.
+//
+// LocalPort names the tunnel: it is the port the app was handed when it dialed
+// (DialResp.LocalPort), which is the route group's source port, and the only
+// identifier the app has for a route group it knows nothing else about. Event
+// is one of router.MuxEventTunnel*; Reason is what decided it, in the words of
+// the code that did ("failover: active tunnel died"). Role, when set, is the
+// tunnel's role AFTER the event ("active" / "standby").
+type NoteMuxEventReq struct {
+	LocalPort routing.Port
+	Event     string
+	Reason    string
+	Role      string
+}
+
+// NoteMuxEvent records an app-decided tunnel event on the route group the app
+// dialed from req.LocalPort, and re-stamps that group's tunnel role.
+//
+// Only the app knows which of its tunnels carries streams; only the router
+// knows the route behind it and owns the event ring `visor state --select
+// diag` reads. This is the one seam between them. Unknown ports are not an
+// error — a tunnel whose route group has already been reaped is exactly the
+// case a retire event reports, and failing the call would turn a race into a
+// log line in the app.
+func (r *RPCIngressGateway) NoteMuxEvent(req *NoteMuxEventReq, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "NoteMuxEvent", req)(nil, &err)
+	if req == nil {
+		return errors.New("NoteMuxEvent: nil request")
+	}
+	nw, nerr := appnet.ResolveNetworker(appnet.TypeSkynet)
+	if nerr != nil {
+		return nerr
+	}
+	sw, ok := nw.(*appnet.SkywireNetworker)
+	if !ok {
+		// A test-mock or alternative networker has no route groups to note
+		// anything on; mirrors dialWithMuxRoutes's degrade-quietly contract.
+		return nil
+	}
+	rt := sw.Router()
+	if rt == nil {
+		return nil
+	}
+	rt.NoteTunnelEvent(req.LocalPort, req.Event, req.Reason, req.Role)
+	return nil
+}
+
 // DialResp contains response parameters for `Dial`.
 type DialResp struct {
 	ConnID    uint16

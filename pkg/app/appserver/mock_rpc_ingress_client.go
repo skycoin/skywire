@@ -264,6 +264,24 @@ func (_m *MockRPCIngressClient) Read(connID uint16, b []byte) (int, error) {
 	return r0, r1
 }
 
+// NoteMuxEvent provides a mock function with given fields: req
+func (_m *MockRPCIngressClient) NoteMuxEvent(req NoteMuxEventReq) error {
+	ret := _m.Called(req)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NoteMuxEvent")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(NoteMuxEventReq) error); ok {
+		r0 = rf(req)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SetAppPort provides a mock function with given fields: appPort
 func (_m *MockRPCIngressClient) SetAppPort(appPort routing.Port) error {
 	ret := _m.Called(appPort)
