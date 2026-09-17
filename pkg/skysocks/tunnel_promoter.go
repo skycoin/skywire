@@ -356,6 +356,16 @@ func (c *Client) promoteTunnel(s *yamux.Session, reason string) bool {
 // within the promote margin of the best active tunnel whose capacity is still
 // unproven. One offer per tunnel per tunnelAuditionEvery, expiring after
 // tunnelAuditionWindow if no stream arrives.
+//
+// "Every tunnel" means every tunnel, standby ones included. This loop used to
+// scan only the ACTIVE set for streams, so a standby already carrying the
+// transfer of its own audition read as idle: the offer re-armed underneath it,
+// the window was refreshed while it was busy, and the next lone stream landed
+// on the same still-unproven tunnel. On the rig 2026-09-17 (fe53f42dc) that is
+// how one standby took two consecutive 50 MB uploads. Counting a busy standby
+// as busy also makes the one-per-tunnelAuditionEvery rule mean what it says:
+// by the time the tunnel is idle again its transfer has proven a capacity, and
+// a proven standby is not a candidate at all.
 func (c *Client) armAudition(now time.Time, active, standby []tunnelCandidate) {
 	if len(active) == 0 || len(standby) == 0 {
 		return
@@ -367,6 +377,11 @@ func (c *Client) armAudition(now time.Time, active, standby []tunnelCandidate) {
 		}
 		if a.rtt > 0 && (bestActive == 0 || a.rtt < bestActive) {
 			bestActive = a.rtt
+		}
+	}
+	for _, sb := range standby {
+		if sb.streams > 0 {
+			return // a standby mid-audition is in flight too
 		}
 	}
 	if bestActive <= 0 {

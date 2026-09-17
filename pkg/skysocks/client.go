@@ -760,15 +760,38 @@ func (c *Client) AddTunnel(conn net.Conn) error {
 	return c.addTunnel(conn, false)
 }
 
+// ErrClientClosed is returned by AddTunnel / AddStandbyTunnel when the client
+// has already been closed. The caller owns the conn it was about to hand over
+// and must close it.
+var ErrClientClosed = errors.New("skysocks: client is closed")
+
 // addTunnel is the body of AddTunnel / AddStandbyTunnel: it wraps conn in a
 // yamux session and registers its meter and its standby mark together, so a
 // pool tunnel is never briefly visible to the picker as an active one.
+//
+// A dial that lands after Close is refused. The pool-fill and re-dial dials run
+// in goroutines that nothing joins, so one of them can complete after Close has
+// taken its snapshot of the tunnel set and closed it — and the fresh route
+// group appended behind that snapshot would then be closed by nothing at all
+// (the keepalive loop has returned and --reconnect builds a whole new Client),
+// leaving it registered on the exit and the setup node until its rules expire.
+// Reconnect is exactly when a dial is in flight. The closeC check sits INSIDE
+// the sessionsMu hold because Close closes closeC before it takes that lock:
+// either this append happens first and Close's snapshot covers it, or Close
+// snapshots first and this call sees the closed channel.
 func (c *Client) addTunnel(conn net.Conn, standby bool) error {
 	session, stamp, err := newYamuxSession(conn)
 	if err != nil {
 		return err
 	}
 	c.sessionsMu.Lock()
+	select {
+	case <-c.closeC:
+		c.sessionsMu.Unlock()
+		_ = session.Close() //nolint:errcheck,gosec
+		return ErrClientClosed
+	default:
+	}
 	c.sessions = append(c.sessions, session)
 	if c.recvStamp == nil {
 		c.recvStamp = make(map[*yamux.Session]*tunnelMeter)
@@ -1149,11 +1172,17 @@ func (c *Client) parkTunnel(s *yamux.Session, reason string) bool {
 // first hop it held is free again — dials the replacement into the pool TAIL
 // in the background. So the surviving route groups are left exactly as they
 // were.
-// Retiring is once-only per tunnel: a closed session stays in the session
-// slice (nothing prunes it), so the keepalive loop sees it again every tick,
-// and a promote per tick would drain the pool over one death. The meter's
-// presence is the ledger — this drops it — so the second
-// sighting reports false and does nothing.
+// Retiring is once-only per tunnel: the meter's presence is the ledger — this
+// drops it — so a second sighting (a keepalive tick iterating a snapshot taken
+// before the retire) reports false and does nothing. A promote per tick would
+// drain the pool over one death.
+//
+// The session pointer goes with it. Nothing else prunes c.sessions, and a dead
+// yamux session left in the slice keeps its stream map and its recv buffers
+// alive for the life of the client while pickSessionFor walks it — taking
+// yamux's locks — on every stream open, one per range chunk. Every reader of
+// c.sessions holds sessionsMu for the whole read and none of them keeps an
+// index across the lock, so compacting here desynchronises nothing.
 func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
 	if s == nil {
 		return false
@@ -1168,11 +1197,37 @@ func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
 	port := m.port
 	delete(c.recvStamp, s)
 	delete(c.standby, s)
+	for i, held := range c.sessions {
+		if held == s {
+			c.sessions = append(c.sessions[:i], c.sessions[i+1:]...)
+			break
+		}
+	}
 	c.sessionsMu.Unlock()
 
 	_ = s.Close() //nolint:errcheck
 	c.forgetTunnel(s)
 	c.queueTunnelNote(port, router.MuxEventTunnelRetired, reason, "")
+	// The death itself re-arms the fill and the re-dial backoff. The keepalive
+	// loop's level check (live < prevLive across two 15 s ticks) is a backstop,
+	// not the trigger: a death whose replacement lands inside the same window
+	// leaves the level unchanged, and the pool — already settled at "pool
+	// ceiling" — would then stay one tunnel short for good. This path observes
+	// every death exactly once.
+	//
+	// The fill is armed one probe interval LATER, though, and that hold-off is
+	// the point of routing it through here rather than dialing on the spot.
+	// Measured on the rig 2026-09-17 (fe53f42dc): arming inline put the refill
+	// dial 11 s after the group closed, while the first hop the cut tunnel had
+	// occupied was not dialable again yet. The diversify search therefore had
+	// all seven held first hops excluded and nothing left but a sudph leg — the
+	// 0.4-0.5 MB/s route maybePoolFill's comment describes — and two 50 MB
+	// uploads rode it. Healthy builds refilled at 21-22 s, one keepalive tick
+	// after the death, which is about what the freed hop needs to come back.
+	// Liveness never waits on this: the failover promote below is immediate and
+	// this only schedules a dial that GROWS the pool.
+	c.resetRedialBackoff()
+	c.armPoolFillAfter(c.probeInterval)
 	if !wasStandby {
 		c.promoteBestStandby("failover: active tunnel died")
 	}
@@ -1184,13 +1239,25 @@ func (c *Client) retireTunnel(s *yamux.Session, reason string) bool {
 // "no disjoint first hop left" answer the router gave is stale — the hop the
 // dead tunnel occupied is free again. Everything else leaves the pool resting,
 // which is what keeps this from being a dial loop.
-func (c *Client) armPoolFill() {
+func (c *Client) armPoolFill() { c.armPoolFillAfter(0) }
+
+// armPoolFillAfter is armPoolFill with a hold-off: the fill is armed now, but
+// maybePoolFill serves out delay before the first dial, through the same
+// poolRetryAt gate a failure round already uses. A retire arms it one probe
+// interval out so the first hop the dead tunnel held gets its restore window
+// before the diversify search is asked which hops are still free; every other
+// caller arms with delay 0. A second death inside the window re-arms with a
+// fresh window, which is right — the newest freed hop is the one to wait for.
+func (c *Client) armPoolFillAfter(delay time.Duration) {
 	c.redialMu.Lock()
 	if c.poolMax > 0 {
 		c.poolArmed = true
 		c.poolFails = 0
 		c.poolRetryRound = 0
 		c.poolRetryAt = time.Time{}
+		if delay > 0 {
+			c.poolRetryAt = time.Now().Add(delay)
+		}
 		c.poolSettledAt = time.Time{}
 		c.poolSettledLogged = false
 	}
@@ -2056,16 +2123,15 @@ func (c *Client) sessionKeepAliveLoop() {
 
 				return
 			}
-			// A FRESH death (live count dropped since the last tick) re-arms the
-			// re-dial backoff, so an exit that had gone quiet is retried once it
-			// loses another tunnel instead of staying permanently backed off.
+			// BACKSTOP. retireTunnel arms both of these on the death itself,
+			// which is the trigger that cannot be missed; this level check
+			// only catches a tunnel that left the set some other way (the
+			// count dropped without a retire). It is edge-triggered on a 15 s
+			// sample, so on its own it misses a death whose replacement lands
+			// inside the window — which is why it is no longer the trigger.
 			live := c.liveSessionCount()
 			if prevLive >= 0 && live < prevLive {
 				c.resetRedialBackoff()
-				// The one event that can change the router's "no disjoint
-				// first hop left" answer: the hop the dead tunnel held is free
-				// again. Re-arm the fill so the pool grows back to what the
-				// topology now offers — and only here, never on a timer.
 				c.armPoolFill()
 			}
 			prevLive = live
