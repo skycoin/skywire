@@ -304,16 +304,14 @@ func (c *Client) fetchChunkTLSRetry(req *http.Request, host, validator string, s
 // fetchChunkTLS opens a new exit stream, SOCKS5-CONNECTs to host:443, wraps it in a
 // verified TLS client to the origin, issues a ranged GET carrying the original
 // request's headers plus If-Range, and returns exactly the requested bytes.
-func (c *Client) fetchChunkTLS(req *http.Request, host, validator string, start, end int64) ([]byte, error) {
-	sess := c.pickSessionFor(pickRecv)
-	if sess == nil {
-		return nil, errAllTunnelsDown
-	}
-	st, err := sess.Open()
+func (c *Client) fetchChunkTLS(req *http.Request, host, validator string, start, end int64) (out []byte, err error) {
+	sess, st, err := c.openChunkStream()
 	if err != nil {
 		return nil, err
 	}
 	defer st.Close() //nolint:errcheck,gosec
+	g := guardTunnel(sess, st)
+	defer func() { err = g.err(err) }()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
 	// Greeting and CONNECT go out together (one round trip instead of two); the
@@ -349,16 +347,14 @@ func (c *Client) fetchChunkTLS(req *http.Request, host, validator string, start,
 // sequential rescue when a parallel chunk exhausts its retries. The body is
 // copied straight through under a progress-refreshed idle timeout; returns the
 // bytes written so the caller resumes from start+written.
-func (c *Client) streamTailTLSOnce(w net.Conn, req *http.Request, host, validator string, start, total int64) (int64, error) {
-	sess := c.pickSessionFor(pickRecv)
-	if sess == nil {
-		return 0, errAllTunnelsDown
-	}
-	st, err := sess.Open()
+func (c *Client) streamTailTLSOnce(w net.Conn, req *http.Request, host, validator string, start, total int64) (n int64, err error) {
+	sess, st, err := c.openChunkStream()
 	if err != nil {
 		return 0, err
 	}
 	defer st.Close() //nolint:errcheck,gosec
+	g := guardTunnel(sess, st)
+	defer func() { err = g.err(err) }()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
 	if err := c.exitConnect(st, host, 443); err != nil {

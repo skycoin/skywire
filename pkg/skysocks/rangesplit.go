@@ -22,6 +22,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -30,7 +31,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/0magnet/yamux"
 
 	"github.com/skycoin/skywire/pkg/skynetca"
 )
@@ -74,7 +78,23 @@ const (
 	rsProbeTimeout         = 20 * time.Second
 	rsClassifyTimeout      = 5 * time.Second  // wait for the client's first request bytes
 	rsHeadReadTimeout      = 10 * time.Second // finish reading the header block
+	// rsFreeRetries bounds how many attempts a tunnel's death may buy a chunk
+	// for free (see retryWithBudget). Each free retry needs a tunnel that was
+	// live at the pick and closed under the attempt, so the count is naturally
+	// bounded by the tunnel set; the cap only stops a pathological churn loop
+	// from spinning.
+	rsFreeRetries = 8
 )
+
+// errSessionClosed marks an attempt that ended because the TUNNEL it ran on
+// died, not because the fetch is failing. It says nothing about the chunk — the
+// bytes are still at the origin and any other live tunnel can carry them — so
+// retryWithBudget refetches AT ONCE, without backing off and without charging
+// the death to the chunk's retry budget. Waiting instead (the old behavior)
+// burned the budget on a tunnel that was already gone and pushed the download
+// into the sequential rescue, which finishes the file on ONE stream at
+// single-tunnel speed.
+var errSessionClosed = errors.New("skysocks: tunnel closed under the fetch")
 
 func defaultRangeSplitConfig() rangeSplitConfig {
 	return rangeSplitConfig{enabled: true, concurrency: defaultRSConcurrency, chunkSize: defaultRSChunkSize}
@@ -443,10 +463,22 @@ func (c *Client) fetchChunkRetry(req *http.Request, host, validator string, star
 func retryWithBudget(fetch func() ([]byte, error), budget, backoff, backoffMax time.Duration) ([]byte, error) {
 	deadline := time.Now().Add(budget)
 	var err error
+	free := 0
 	for attempt := 1; ; attempt++ {
 		var buf []byte
 		if buf, err = fetch(); err == nil {
 			return buf, nil
+		}
+		// The tunnel died under the attempt: refetch immediately on another
+		// one. No backoff (there is nothing to wait for — the next pick skips
+		// the dead tunnel) and no attempt charged, so a mid-download tunnel
+		// loss costs the chunk one round trip instead of a sleep plus a slice
+		// of its budget. Bounded by rsFreeRetries.
+		if errors.Is(err, errSessionClosed) && free < rsFreeRetries {
+			free++
+			attempt--
+
+			continue
 		}
 		if attempt >= rsChunkRetries && time.Now().After(deadline) {
 			return nil, err
@@ -460,6 +492,82 @@ func retryWithBudget(fetch func() ([]byte, error), budget, backoff, backoffMax t
 	}
 }
 
+// openChunkStream picks a live tunnel for a receive-heavy range stream and opens
+// a stream on it, returning the tunnel alongside the stream so the caller can
+// watch it die. A tunnel that is closed — or that closes between the pick and
+// the open — yields errSessionClosed rather than a generic error, so the caller
+// refetches at once on another tunnel instead of backing off.
+func (c *Client) openChunkStream() (*yamux.Session, net.Conn, error) {
+	sess := c.pickSessionFor(pickRecv)
+	if sess == nil {
+		return nil, nil, errAllTunnelsDown
+	}
+	if sess.IsClosed() {
+		return nil, nil, fmt.Errorf("%w: closed between the pick and the open", errSessionClosed)
+	}
+	st, err := sess.Open()
+	if err != nil {
+		if sess.IsClosed() {
+			return nil, nil, fmt.Errorf("%w: %v", errSessionClosed, err)
+		}
+
+		return nil, nil, err
+	}
+
+	return sess, st, nil
+}
+
+// tunnelGuard closes an in-flight range stream the moment its tunnel dies, and
+// remembers that it did so.
+//
+// A chunk read on a dead tunnel must not wait out rsProbeTimeout or
+// rsChunkIdleTimeout: those deadlines exist to fail a SLOW tunnel, and a tunnel
+// whose route group is gone is not slow, it is gone. Closing the stream unblocks
+// whatever the attempt is parked on — the SOCKS5 handshake, the response header,
+// the body read, or a TLS handshake on the HTTPS path, which sits above the
+// stream and so cannot see yamux's own shutdown error — and fired() then tells
+// the caller the failure was the tunnel, not the fetch.
+type tunnelGuard struct {
+	sess  *yamux.Session
+	fired atomic.Bool
+	done  chan struct{}
+	once  sync.Once
+}
+
+// guardTunnel starts watching sess for st. The caller must call err (or stop) to
+// release the watcher.
+func guardTunnel(sess *yamux.Session, st net.Conn) *tunnelGuard {
+	g := &tunnelGuard{sess: sess, done: make(chan struct{})}
+	go func() {
+		select {
+		case <-sess.CloseChan():
+			g.fired.Store(true)
+			st.Close() //nolint:errcheck,gosec
+		case <-g.done:
+		}
+	}()
+
+	return g
+}
+
+// stop releases the watcher.
+func (g *tunnelGuard) stop() { g.once.Do(func() { close(g.done) }) }
+
+// err releases the watcher and classifies the attempt's outcome: an error on a
+// tunnel that is gone becomes errSessionClosed, which retries free of backoff
+// and free of budget. The session is re-checked here rather than trusting the
+// watcher alone — yamux usually unblocks the read with its own shutdown error
+// before the watcher goroutine gets to run, so fired() on its own would miss the
+// common case and charge the death to the chunk.
+func (g *tunnelGuard) err(err error) error {
+	g.stop()
+	if err == nil || (!g.fired.Load() && !g.sess.IsClosed()) {
+		return err
+	}
+
+	return fmt.Errorf("%w: %v", errSessionClosed, err)
+}
+
 // rsRescueIdleTimeout is the per-read progress window of a sequential rescue
 // stream: each successful read refreshes it, so a slow-but-moving tail runs to
 // completion while a genuinely silent stream fails within one window (the same
@@ -471,16 +579,14 @@ const rsRescueIdleTimeout = 60 * time.Second
 // through (never buffered — the tail can be most of the file) under a
 // progress-refreshed idle timeout. Returns the bytes actually written, so the
 // caller resumes from start+written on failure.
-func (c *Client) streamTailOnce(w net.Conn, req *http.Request, host, validator string, start, total int64) (int64, error) {
-	sess := c.pickSessionFor(pickRecv)
-	if sess == nil {
-		return 0, errAllTunnelsDown
-	}
-	st, err := sess.Open()
+func (c *Client) streamTailOnce(w net.Conn, req *http.Request, host, validator string, start, total int64) (n int64, err error) {
+	sess, st, err := c.openChunkStream()
 	if err != nil {
 		return 0, err
 	}
 	defer st.Close() //nolint:errcheck,gosec
+	g := guardTunnel(sess, st)
+	defer func() { err = g.err(err) }()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
 	if err := c.exitConnect(st, host, c.rangePlainPort()); err != nil {
@@ -545,16 +651,17 @@ func copyWithIdleTimeout(dst io.Writer, body io.Reader, under net.Conn, limit in
 // fetchChunk opens a new exit stream, SOCKS5-CONNECTs to host:80, issues a ranged
 // GET carrying the original request's headers plus If-Range, and returns exactly
 // the requested bytes.
-func (c *Client) fetchChunk(req *http.Request, host, validator string, start, end int64) ([]byte, error) {
-	sess := c.pickSessionFor(pickRecv)
-	if sess == nil {
-		return nil, errAllTunnelsDown
-	}
-	st, err := sess.Open()
+func (c *Client) fetchChunk(req *http.Request, host, validator string, start, end int64) (out []byte, err error) {
+	sess, st, err := c.openChunkStream()
 	if err != nil {
 		return nil, err
 	}
 	defer st.Close() //nolint:errcheck,gosec
+	// A tunnel that dies under this fetch fails it AT ONCE — the deadlines below
+	// are for a slow tunnel, not a gone one — and the failure is labelled
+	// errSessionClosed so the chunk is refetched immediately on a live tunnel.
+	g := guardTunnel(sess, st)
+	defer func() { err = g.err(err) }()
 
 	_ = st.SetDeadline(time.Now().Add(rsProbeTimeout)) //nolint:errcheck
 	// ONE round trip: the SOCKS5 greeting, the CONNECT and the ranged GET go out

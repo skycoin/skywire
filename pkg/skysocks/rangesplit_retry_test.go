@@ -2,6 +2,7 @@ package skysocks
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -62,5 +63,48 @@ func TestRetryWithBudget_MinAttemptsBeforeGivingUp(t *testing.T) {
 	}
 	if calls != rsChunkRetries {
 		t.Fatalf("want exactly %d min attempts, got %d", rsChunkRetries, calls)
+	}
+}
+
+// TestRetryWithBudget_SessionCloseRetriesFree: a tunnel that dies under the
+// attempt must be refetched AT ONCE — no backoff sleep and no attempt charged to
+// the chunk's budget — so a mid-download tunnel loss costs one round trip
+// instead of pushing the chunk into the sequential rescue.
+func TestRetryWithBudget_SessionCloseRetriesFree(t *testing.T) {
+	calls := 0
+	start := time.Now()
+	buf, err := retryWithBudget(func() ([]byte, error) {
+		calls++
+		if calls < 4 {
+			return nil, fmt.Errorf("%w: gone", errSessionClosed)
+		}
+		return []byte("chunk"), nil
+	}, 0, 500*time.Millisecond, time.Second)
+	if err != nil {
+		t.Fatalf("expected recovery, got err=%v after %d calls", err, calls)
+	}
+	if string(buf) != "chunk" {
+		t.Fatalf("got %q, want %q", buf, "chunk")
+	}
+	// A zero budget would have ended the loop at rsChunkRetries, and three
+	// backoffs would have cost at least 1.5s. Neither may happen.
+	if el := time.Since(start); el > 100*time.Millisecond {
+		t.Fatalf("session-close retries backed off: took %v", el)
+	}
+}
+
+// TestRetryWithBudget_SessionCloseIsBounded: the free retries are capped, so a
+// tunnel set that keeps dying cannot spin the loop forever.
+func TestRetryWithBudget_SessionCloseIsBounded(t *testing.T) {
+	calls := 0
+	_, err := retryWithBudget(func() ([]byte, error) {
+		calls++
+		return nil, fmt.Errorf("%w: gone", errSessionClosed)
+	}, 0, time.Millisecond, time.Millisecond)
+	if !errors.Is(err, errSessionClosed) {
+		t.Fatalf("want errSessionClosed, got %v", err)
+	}
+	if calls != rsFreeRetries+rsChunkRetries {
+		t.Fatalf("want %d attempts, got %d", rsFreeRetries+rsChunkRetries, calls)
 	}
 }
