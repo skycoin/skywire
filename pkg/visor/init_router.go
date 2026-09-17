@@ -322,6 +322,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		RulesGCInterval:       0, // 0 = DefaultRulesGCInterval (10s)
 		SetupHooks:            routeSetupHooks,
 		EnableRSNOracleRoutes: v.conf.Routing.EnableRSNOracleRoutes,
+		MuxFEC:                v.conf.Routing.MuxFEC,
 		// Default ON: a nil field (older configs) or explicit true excludes
 		// same-LAN peers as routing intermediates. See Routing.ExcludeSameLanHops.
 		ExcludeSameLANHops: v.conf.Routing.ExcludeSameLanHops == nil || *v.conf.Routing.ExcludeSameLanHops,

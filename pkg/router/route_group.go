@@ -169,6 +169,9 @@ type sendServicePacketFn func(interval time.Duration)
 type RouteGroupConfig struct {
 	ReadChBufSize     int
 	KeepAliveInterval time.Duration
+	// FEC advertises CapFEC in the mux handshake so repair frames are striped
+	// alongside data. Off by default (router Config.MuxFEC).
+	FEC bool
 }
 
 // DefaultRouteGroupConfig returns default RouteGroup config.
@@ -3724,11 +3727,16 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		}
 
 		rule := rg.fwd[i]
-		// CapFEC is advertised unconditionally, like the other mux capabilities:
-		// it only ACTIVATES when the peer also advertises it (both ends on a build
-		// that has it), so an old peer simply never negotiates it and is
-		// unaffected. No config knob — on by default wherever both edges support it.
-		caps := routing.CapMux | routing.CapSACK | routing.CapHOLRetx | routing.CapFEC | routing.CapLegState | routing.CapUniDir
+		// CapFEC is advertised only when this group's config opts in (router
+		// Config.MuxFEC, visor config routing.mux_fec): FEC repair frames are a
+		// flat 25%+ wire overhead on every multi-leg group and the legs ride
+		// reliable transports whose gaps SACK recovery refills, so it is off by
+		// default. It still only ACTIVATES when the peer also advertises it, so an
+		// old or non-opted peer simply never negotiates it and is unaffected.
+		caps := routing.CapMux | routing.CapSACK | routing.CapHOLRetx | routing.CapLegState | routing.CapUniDir
+		if rg.cfg != nil && rg.cfg.FEC {
+			caps |= routing.CapFEC
+		}
 		var packet routing.Packet
 		if pfn := rg.perFrameNoiseCap(encrypt); pfn != 0 {
 			msg, mErr := rg.nextPerFrameNoiseMsg()

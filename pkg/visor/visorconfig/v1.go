@@ -747,6 +747,15 @@ type Routing struct {
 	// still used for routes with >=2 intermediates.
 	EnableRSNOracleRoutes bool `json:"enable_rsn_oracle_routes,omitempty"`
 
+	// MuxFEC opts INTO forward error correction on mux route groups: repair
+	// frames (K=8, R=2) are striped alongside data so a lost frame can be
+	// rebuilt without a retransmit. OFF by default: the legs ride reliable
+	// transports and SACK recovery already refills a gap, so the repair
+	// traffic was a flat 25%+ wire overhead on every multi-leg group (measured
+	// live: 5 MB of repair for 6 MB of payload on one leg). Both ends must
+	// enable it for a group to negotiate it.
+	MuxFEC bool `json:"mux_fec,omitempty"`
+
 	// EnableCascadeRouteSetup opts INTO the source-driven cascade route-setup
 	// path (RSN signs, source injects the cascade down its own transports,
 	// avoiding the RSN's dmsg dependency). It is OFF by default: the cascade
