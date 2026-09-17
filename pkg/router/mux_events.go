@@ -89,6 +89,13 @@ const (
 	MuxByOperator = "operator"
 	MuxByAdaptive = "adaptive"
 	MuxByPolicy   = "policy"
+	// MuxByPeer is a state change this side did not decide: the REMOTE end parked
+	// or promoted the leg and signalled it over CapLegState, and we mirrored it.
+	// Distinct from MuxByRemote (which marks a remote-initiated group/leg
+	// teardown) so a leg that is standby purely because the peer says so is
+	// attributable from `visor state` — it was previously adopted silently, which
+	// is how a leg stayed parked for five minutes with zero park events logged.
+	MuxByPeer = "peer"
 )
 
 // MuxEventRingSize is how many mux events the router keeps.
