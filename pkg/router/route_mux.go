@@ -51,10 +51,13 @@ type LegStats struct {
 	// receiving" is answerable from telemetry.
 	DupBytes    uint64
 	RepairBytes uint64
-	// Retransmits is how many SACK retransmit packets THIS leg has
-	// carried. A high retransmits:sentPackets ratio marks a lossy leg —
-	// the signal a routing policy needs to shed lossy intermediates and
-	// the scheduler needs to deweight them.
+	// Retransmits is how many frames sent on THIS leg had to be repaired —
+	// charged to the leg that LOST them, never to the leg that carried the
+	// repair (repairs ride the fastest live leg, so charging the carrier
+	// reported the healthiest leg as the lossiest one). A high
+	// retransmits:sentPackets ratio marks a lossy leg — the signal a routing
+	// policy needs to shed lossy intermediates and the scheduler needs to
+	// deweight them.
 	Retransmits uint64
 	// GoodputUpBps / GoodputDownBps are this leg's recent goodput split by
 	// direction — the EWMA of the SENT (up) and RECV (down) byte deltas per
@@ -553,9 +556,11 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 	// Use weighted selector if available
 	if m.tpSelector != nil && m.tpSelector.Len() > 0 {
 		idx := m.tpSelector.Select()
-		// A weighted pick that lands on a leg at its send window moves to a
-		// leg with room, so the window bounds every mode, not only the
-		// predictive ones that consult saturation themselves.
+		// A weighted pick that lands on a leg at its send window (or on a
+		// congestion-shed leg) moves to the best available target: an un-shed
+		// leg with room, else any leg with room. The window and the shed bound
+		// every mode, not only the predictive ones that consult saturation
+		// themselves. Only when NO leg has headroom does the pick stand.
 		if m.retxBuf != nil && m.sackEnabled {
 			m.feedInflight(tps)
 			if m.tpSelector.Saturated(idx) {
@@ -988,9 +993,12 @@ func (m *routeMux) recordRepair(idx int, n uint64) {
 	m.legMu.RUnlock()
 }
 
-// recordRetransmit atomically increments the retransmit counter for leg
-// idx (the leg that carried a SACK retransmit). The retransmitted bytes
-// are still recorded via recordSent; this is the separate loss signal.
+// recordRetransmit atomically increments the retransmit counter for leg idx —
+// the leg whose frame went MISSING, not the leg that carries the repair (see
+// RouteGroup.resendSeqs). The retransmitted bytes are still recorded via
+// recordSent against the carrier, since they really did go out there; this is
+// the separate loss signal, and it follows the gap. A negative idx (unknown
+// origin) charges nobody.
 func (m *routeMux) recordRetransmit(idx int) {
 	if idx < 0 {
 		return
@@ -1606,6 +1614,21 @@ func (m *routeMux) heldRetxSeqsOnTps(tpIDs []uuid.UUID) []uint32 {
 	return m.retxBuf.HeldSeqsOnTps(set)
 }
 
+// retxOriginTp returns the transport a still-held sequence LAST rode — the leg
+// whose gap a repair of that sequence fills, and so the leg the repair is
+// charged to for loss accounting. uuid.Nil when the sequence is not held (or
+// retx is off): nobody is charged rather than blaming the carrier.
+func (m *routeMux) retxOriginTp(seq uint32) uuid.UUID {
+	if m.retxBuf == nil {
+		return uuid.Nil
+	}
+	_, tpID, ok := m.retxBuf.SentInfo(seq)
+	if !ok {
+		return uuid.Nil
+	}
+	return tpID
+}
+
 // retxSetTp re-tags a held sequence's last-send transport after a retransmit
 // moved it to a different leg, keeping the demote-flush attribution honest.
 func (m *routeMux) retxSetTp(seq uint32, tpID uuid.UUID) {
@@ -1980,9 +2003,17 @@ func (m *routeMux) signalWindow() {
 	}
 }
 
-// waitSendWindow parks a writer while every ready leg is at its in-flight
-// window, until a SACK frees capacity, the group closes, or sendWindowWaitMax
-// elapses. A no-op unless SACK accounting and a predictive scheduler are on.
+// waitSendWindow parks a writer only while EVERY ready leg has filled its
+// in-flight window — i.e. no leg could carry the frame now — until a SACK frees
+// capacity, the group closes, or sendWindowWaitMax elapses. A no-op unless SACK
+// accounting and a predictive scheduler are on.
+//
+// The gate asks AllReadyWindowFull (window headroom only), not the scheduler's
+// ecfSaturated: a leg flagged by the RTT congestion shed is one ECF should
+// steer away from, not a reason to stop writing while its window is empty.
+// Parking on the shed cost a measured 23.8 s of a 55 s download phase
+// (send_window_waits 173, send_window_timeouts 95) with ~8 MiB of the fast
+// leg's window free throughout.
 func (m *routeMux) waitSendWindow(tps []*transport.ManagedTransport, closed <-chan struct{}) {
 	if m.retxBuf == nil || !m.sackEnabled || m.tpSelector == nil {
 		return

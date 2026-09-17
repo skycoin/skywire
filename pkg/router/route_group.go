@@ -1806,6 +1806,22 @@ func (rg *RouteGroup) nextFastestTransport() (*transport.ManagedTransport, routi
 	return rg.tps[0], rg.fwd[0], 0, nil
 }
 
+// legIndexForTpLocked returns the leg index carrying transport id, or -1 when
+// no live leg does (an unknown id, or a leg that has since been retired —
+// compaction shifts indices, so the lookup is always by UUID). Caller holds
+// rg.mu.
+func (rg *RouteGroup) legIndexForTpLocked(id uuid.UUID) int {
+	if id == uuid.Nil {
+		return -1
+	}
+	for i, tp := range rg.tps {
+		if tp != nil && tp.Entry.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
 // RouteHops returns the list of visor public keys that form the route path.
 // The first element is the first hop from the source, and the last element
 // is the destination visor.
@@ -4750,8 +4766,13 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 			continue
 		}
 
+		// The leg this sequence last rode is the leg that LOST it — read the
+		// tag BEFORE the resend re-tags it to the carrier below.
+		originTp := rg.mux.retxOriginTp(seq)
+
 		rg.mu.Lock()
 		tp, rule, leg, err := rg.nextFastestTransport()
+		lossLeg := rg.legIndexForTpLocked(originTp)
 		rg.mu.Unlock()
 		if err != nil {
 			atomic.AddUint64(&rg.mux.retxSendErrors, 1)
@@ -4768,11 +4789,18 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 			atomic.AddUint64(&rg.mux.retxSendErrors, 1)
 			rg.logger.WithError(err).Warnf("failed to retransmit seq %d", seq)
 		} else if leg >= 0 {
-			// Count retransmits against the leg that carried them
-			// (which may differ from the original send leg — the
-			// retx selector picks fresh, mirroring the data path).
+			// Bytes are charged to the leg that carried them (they really
+			// went out there), but the LOSS signal follows the gap: the
+			// repair counts against the leg whose frame went missing, never
+			// against the volunteer that healed it. Repairs ride the FASTEST
+			// live leg, so charging the carrier made the healthiest leg look
+			// the lossiest — measured live, a fast leg that carried 1813
+			// repairs for a bloated 2.4s first hop (whose own count stayed at
+			// 9) was demoted to standby by the coupled controller's loss
+			// ratio and sat out a whole download phase. An unknown origin
+			// (sequence no longer tagged) charges nobody.
 			rg.mux.recordSent(leg, uint64(retxPacket.Size()))
-			rg.mux.recordRetransmit(leg) // separate loss signal for leg health
+			rg.mux.recordRetransmit(lossLeg) // separate loss signal for leg health
 			// Re-tag the sequence's last-send transport so a later demote
 			// flush attributes it to where it now rides, not where it started.
 			if tp != nil {

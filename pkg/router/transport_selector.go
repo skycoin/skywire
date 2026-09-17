@@ -1016,20 +1016,38 @@ func ecfPick(legs []ecfLegState, waiting bool, waitOut *bool) int {
 	return xs
 }
 
-// ecfSaturated reports whether a leg is carrying a full bandwidth-delay product
-// of un-delivered bytes (no send capacity right now). A leg whose capacity is
+// ecfShed reports whether a leg's live RTT has ballooned well past its own
+// uncongested baseline — the queue-building signature of a bandwidth-congested
+// leg. It is a PLACEMENT brake, not a capacity statement: ECF must stop feeding
+// such a leg while a healthier one can take the frame, because cwnd = rate*RTT
+// grows with RTT, so a congesting leg's rising RTT would otherwise raise its
+// apparent capacity and ECF would feed it more, stalling the reorder frontier
+// (the observed HoL collapse).
+//
+// Measured live why this must stay a brake: with the shed removed from the
+// selection path the exit put 44.1 MB of a 50 MB download on the bloated leg
+// against 7.1 MB on the healthy one (86/14) and ran 5.86 MB/s, where the
+// shed-braked build migrated the same transfer 70/30 -> 26/74 across trials and
+// ran 7.62 MB/s.
+func ecfShed(l ecfLegState) bool {
+	return l.rttMinMs > 0 && l.rttMs > ecfCongestRttFactor*l.rttMinMs
+}
+
+// ecfSaturated reports whether a leg should not take the next frame: it is
+// either congestion-shed or out of window room. A leg whose capacity is
 // unknown (no rate/RTT sample yet) is never saturated, so a cold leg is used
 // and measured instead of being assumed full.
 func ecfSaturated(l ecfLegState) bool {
-	// Congestion shed: a leg whose live RTT has ballooned well past its own
-	// uncongested baseline is queue-building — treat it as full so ECF spills
-	// to a healthier leg. This must come before the cwnd check: cwnd grows
-	// with RTT, so without this a congesting leg's rising RTT would raise its
-	// apparent capacity and ECF would feed it more, stalling the reorder
-	// frontier (the observed HoL collapse).
-	if l.rttMinMs > 0 && l.rttMs > ecfCongestRttFactor*l.rttMinMs {
-		return true
-	}
+	return ecfShed(l) || ecfNoWindowRoom(l)
+}
+
+// ecfNoWindowRoom reports whether a leg has NO send-window headroom right now:
+// its unacknowledged bytes already fill its window, so another frame cannot go
+// out on it until feedback frees space. The pure capacity question, without the
+// shed — the two are separated because the writer's park gate and the spill
+// target need them apart: a shed leg with an empty window is a leg to avoid,
+// never a reason to stop writing.
+func ecfNoWindowRoom(l ecfLegState) bool {
 	if l.cwndBytes <= 0 {
 		// Unmeasured leg: allow only a bounded probe budget so cold start fans
 		// out across the ready legs instead of dumping the whole stream on the
@@ -1094,12 +1112,29 @@ func (ts *transportSelector) SetInflight(bytes []int64) {
 	ts.mu.Unlock()
 }
 
-// AllReadySaturated reports whether every ready leg is at its in-flight
-// window (no leg has send capacity now). False when fewer than two legs are
-// ready or the mode is not predictive: a lone leg has nowhere to shed to, and
-// parking its writer only adds latency on top of the transport's own
-// backpressure (measured: single-leg tunnels lost a third of their upload
-// rate to parks). A caller never waits on a mode without windows.
+// AllReadySaturated reports whether NO ready leg is both un-shed and holding
+// window room — the only condition under which parking a writer is free,
+// because every leg that could take the frame now is either queue-building or
+// out of window.
+//
+// The two halves are deliberately different questions. The window half is
+// capacity: a leg past its cwnd cannot carry the frame at all. The shed half is
+// the placement brake: a leg whose RTT has ballooned past
+// ecfCongestRttFactor x its baseline still has room, but feeding it deepens the
+// queue that is already stalling the reorder frontier. Dropping the shed from
+// this gate was measured to make things worse, not better — the exit put 86 %
+// of a 50 MB download on the bloated leg and ran 5.86 MB/s (the braked build:
+// 7.62 MB/s), and parking ROSE from 12.4 to 22 waits per download because both
+// windows then filled. The park is the backpressure that migrates load off a
+// congesting leg; what it must never do is stall the writer while a leg it
+// would happily use sits idle, which is what FirstUnsaturated's room fallback
+// now guarantees.
+//
+// False when fewer than two legs are ready or the mode is not predictive: a
+// lone leg has nowhere to shed to, and parking its writer only adds latency on
+// top of the transport's own backpressure (measured: single-leg tunnels lost a
+// third of their upload rate to parks). A caller never waits on a mode without
+// windows.
 func (ts *transportSelector) AllReadySaturated() bool {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
@@ -1141,18 +1176,35 @@ func (ts *transportSelector) Saturated(i int) bool {
 	return ecfSaturated(ts.ecfLegs[i])
 }
 
-// FirstUnsaturated returns the lowest-index ready leg with room under its
-// send window, or -1 when every ready leg is saturated (or none is known).
+// FirstUnsaturated returns the spill target for a frame whose picked leg cannot
+// take it: the lowest-index ready leg that is un-shed AND has window room, and
+// failing that the lowest-index ready leg with window ROOM even if the shed
+// flags it. -1 only when no ready leg has any headroom at all.
+//
+// The fallback is what keeps the shed a brake instead of a stall. With a strict
+// un-shed-only rule, a moment when every ready leg is congestion-shed answers
+// "nowhere to go", the caller keeps its original pick, and the frame lands on a
+// queue-building leg while another one sits with an empty window — the shape
+// that put 44.1 MB of a 50 MB download on the bloated leg against 7.1 MB on the
+// healthy one. Preferring an un-shed leg first keeps the brake; falling back to
+// room keeps bytes moving.
 func (ts *transportSelector) FirstUnsaturated() int {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	if !ts.realInflight {
 		return -1
 	}
+	withRoom := -1
 	for i := range ts.ecfLegs {
-		if ts.ecfLegs[i].ready && !ecfSaturated(ts.ecfLegs[i]) {
-			return i
+		if !ts.ecfLegs[i].ready || ecfNoWindowRoom(ts.ecfLegs[i]) {
+			continue
+		}
+		if !ecfShed(ts.ecfLegs[i]) {
+			return i // un-shed and has room: the best target
+		}
+		if withRoom == -1 {
+			withRoom = i
 		}
 	}
-	return -1
+	return withRoom
 }

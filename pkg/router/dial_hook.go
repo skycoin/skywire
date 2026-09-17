@@ -345,7 +345,8 @@ type LegInfo struct {
 	// rather than purely on elapsed time.
 	SentBytes uint64
 	RecvBytes uint64
-	// Retransmits is how many SACK retransmit packets this leg has carried.
+	// Retransmits is how many frames sent on this leg had to be repaired —
+	// charged to the leg that LOST them, not the leg that carried the repair.
 	// A high retransmits-to-traffic ratio marks a lossy leg, letting an
 	// on_tick policy shed lossy intermediates (not just slow ones).
 	Retransmits uint64
