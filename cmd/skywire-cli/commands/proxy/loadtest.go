@@ -476,6 +476,8 @@ func parseByteRange(h string, n uint64) (start, end uint64, ok bool) {
 //	                                   200 = in the durable prefix, 202 = only
 //	                                   held out of order (evictable, re-send it);
 //	                                   both carry X-Upload-Received: <acked prefix>
+//	                                   and, when a held chunk was just dropped,
+//	                                   X-Upload-Evicted: <start>[,<start>...]
 //	GET /upload?id=<id>             -> the same counters, for a resume probe
 //	POST /upload                    -> unchanged whole-body sink (the control arm)
 //
@@ -520,6 +522,10 @@ const (
 	// and walk its prefix backwards, so liveness is measured on BYTES ARRIVING,
 	// not on when the chunk was admitted.
 	loadtestUploadReadStep = 256 << 10
+	// loadtestUploadEvictNotices bounds the eviction notices one session queues
+	// for its next response. Past it the sender falls back to noticing the drop
+	// itself, so the header can never grow without limit.
+	loadtestUploadEvictNotices = 32
 	// loadtestUploadSealedMemo is how many completed objects stay answerable for
 	// a late re-send or a resume probe. Sealed sessions hold no chunk buffers and
 	// do not occupy a concurrency slot; past this many, the oldest is dropped.
@@ -556,7 +562,13 @@ type loadtestUploadSession struct {
 	held      map[uint64][]byte
 	heldBytes uint64
 	inflight  uint64 // admitted chunks still being read off the wire
-	last      time.Time
+	// evicted names the start offsets dropped from held since the last response
+	// went out. A dropped chunk was answered 202 and only its sender can put it
+	// back, so the drop is TOLD to the sender on the very next ack
+	// (X-Upload-Evicted) instead of being inferred from a prefix that stopped
+	// moving — which costs the sender a multi-second timeout per eviction.
+	evicted []uint64
+	last    time.Time
 }
 
 var (
@@ -662,8 +674,9 @@ func loadtestUploadStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	s.last = loadtestNow()
-	acked, sum, total := s.acked, s.sum, s.total
+	acked, sum, total, drops := s.acked, s.sum, s.total, s.takeEvicted()
 	s.mu.Unlock()
+	loadtestUploadSetEvicted(w, drops)
 	loadtestUploadAck(w, http.StatusOK, id, "", acked, total, sum)
 }
 
@@ -715,9 +728,10 @@ func loadtestUploadChunk(w http.ResponseWriter, r *http.Request, id, cr string) 
 	s.mu.Lock()
 	s.last = loadtestNow()
 	if s.sum != "" || end < s.acked { // already durable: absorb the resend, do not re-hash
-		acked, sum := s.acked, s.sum
+		acked, sum, drops := s.acked, s.sum, s.takeEvicted()
 		s.mu.Unlock()
 		_, _ = io.Copy(io.Discard, r.Body) //nolint:errcheck
+		loadtestUploadSetEvicted(w, drops)
 		loadtestUploadAck(w, http.StatusOK, id, cr, acked, total, sum)
 		return
 	}
@@ -725,8 +739,9 @@ func loadtestUploadChunk(w http.ResponseWriter, r *http.Request, id, cr string) 
 		// Ahead of the frontier: it must fit the window, or the client backs off
 		// and re-sends it later.
 		if end >= s.acked+loadtestWindow() || s.inflight+s.heldBytes+length > loadtestWindow() {
-			acked := s.acked
+			acked, drops := s.acked, s.takeEvicted()
 			s.mu.Unlock()
+			loadtestUploadSetEvicted(w, drops)
 			w.Header().Set("X-Next-Offset", strconv.FormatUint(acked, 10))
 			w.Header().Set("X-Upload-Received", strconv.FormatUint(acked, 10))
 			w.Header().Set("Retry-After", "1")
@@ -741,8 +756,9 @@ func loadtestUploadChunk(w http.ResponseWriter, r *http.Request, id, cr string) 
 			s.evictFurthest()
 		}
 		if s.inflight+s.heldBytes+length > loadtestWindow() {
-			acked := s.acked
+			acked, drops := s.acked, s.takeEvicted()
 			s.mu.Unlock()
+			loadtestUploadSetEvicted(w, drops)
 			w.Header().Set("X-Next-Offset", strconv.FormatUint(acked, 10))
 			w.Header().Set("X-Upload-Received", strconv.FormatUint(acked, 10))
 			w.Header().Set("Retry-After", "1")
@@ -784,8 +800,9 @@ func loadtestUploadChunk(w http.ResponseWriter, r *http.Request, id, cr string) 
 		ackCode = http.StatusAccepted
 	}
 	s.finish()
-	acked, sum := s.acked, s.sum
+	acked, sum, drops := s.acked, s.sum, s.takeEvicted()
 	s.mu.Unlock()
+	loadtestUploadSetEvicted(w, drops)
 	loadtestUploadAck(w, ackCode, id, cr, acked, total, sum)
 }
 
@@ -867,7 +884,37 @@ func (s *loadtestUploadSession) evictFurthest() {
 	}
 	s.heldBytes -= uint64(len(s.held[at]))
 	delete(s.held, at)
+	if len(s.evicted) < loadtestUploadEvictNotices {
+		s.evicted = append(s.evicted, at)
+	}
 	loadtestUploadEvicted.Add(1)
+}
+
+// takeEvicted drains the pending eviction notices as a header value, called
+// with s.mu held. Empty when nothing was dropped, which is the common case —
+// the header is then absent and an old client sees exactly what it saw before.
+func (s *loadtestUploadSession) takeEvicted() string {
+	if len(s.evicted) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, off := range s.evicted {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.FormatUint(off, 10))
+	}
+	s.evicted = s.evicted[:0]
+	return b.String()
+}
+
+// loadtestUploadSetEvicted names the dropped chunks on the response being
+// built. It is set before the status line is written, so it rides every answer
+// the handler makes — an ack, or the 425 the eviction was making room for.
+func loadtestUploadSetEvicted(w http.ResponseWriter, list string) {
+	if list != "" {
+		w.Header().Set("X-Upload-Evicted", list)
+	}
 }
 
 // finish seals the object once the prefix is whole.

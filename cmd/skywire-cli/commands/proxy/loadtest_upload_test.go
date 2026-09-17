@@ -530,3 +530,54 @@ func TestLoadtestUploadConcurrentChunks(t *testing.T) {
 	require.Equal(t, uint64(total), loadtestUploadReceived(t, rec))
 	require.True(t, strings.Contains(rec.Body.String(), hex.EncodeToString(sum[:])))
 }
+
+// TestLoadtestUploadEvictionNamesTheOffsets: a held chunk dropped to admit the
+// frontier is NAMED on the very next response. Without it the sender learns of
+// the drop only from a prefix that stopped moving — a multi-second timeout per
+// eviction, which is what turned a cut tunnel into a failed 50 MB object
+// (bench/2026-09-16/3194b7cc8-smoke).
+func TestLoadtestUploadEvictionNamesTheOffsets(t *testing.T) {
+	const chunk = 4096
+	loadtestUploadRig(t, 4*chunk, 4)
+	const total = 8 * chunk
+	body := loadtestUploadBody(total)
+	at := func(i int) []byte { return body[i*chunk : (i+1)*chunk] }
+
+	// Three chunks ahead of the frontier, all inside the window's reach.
+	for i := 1; i <= 3; i++ {
+		require.Equal(t, http.StatusAccepted,
+			loadtestUploadPut("obj", at(i), uint64(i*chunk), total).Code)
+	}
+
+	// A frontier chunk that does not fit beside them evicts the furthest held
+	// one — and says which one, on its own ack.
+	rec := loadtestUploadPut("obj", body[:2*chunk], 0, total)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, strconv.Itoa(3*chunk), rec.Header().Get("X-Upload-Evicted"),
+		"the dropped chunk is named on the ack, not left to a timeout")
+	require.Equal(t, uint64(3*chunk), loadtestUploadReceived(t, rec), "chunks 1 and 2 drained behind it")
+
+	// The notice is drained: the re-send's own ack does not repeat it.
+	rec = loadtestUploadPut("obj", at(3), 3*chunk, total)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Empty(t, rec.Header().Get("X-Upload-Evicted"), "a notice is delivered once")
+
+	// Nothing was evicted on a clean object, so an old client sees no new header.
+	rec = loadtestUploadPut("clean", at(0), 0, total)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Empty(t, rec.Header().Get("X-Upload-Evicted"))
+}
+
+// TestLoadtestUploadEvictionNoticeIsBounded: the notice queue cannot grow
+// without limit however many chunks are dropped.
+func TestLoadtestUploadEvictionNoticeIsBounded(t *testing.T) {
+	s := &loadtestUploadSession{held: map[uint64][]byte{}}
+	for i := 0; i < loadtestUploadEvictNotices*3; i++ {
+		s.held[uint64(i)] = []byte{0}
+		s.heldBytes++
+		s.evictFurthest()
+	}
+	require.Len(t, s.evicted, loadtestUploadEvictNotices)
+	require.NotEmpty(t, s.takeEvicted())
+	require.Empty(t, s.takeEvicted(), "draining leaves nothing behind")
+}
