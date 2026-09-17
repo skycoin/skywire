@@ -1,0 +1,5 @@
+# ts	label	rss_anon_kb	cpu_s	load1	idle_cps
+1789668125	mux-tunnels-2-pre	306260	6.17	0.09	0.048
+1789668262	mux-tunnels-2-post	360512	16.84	0.34	0.044
+1789668282	mux-legs-2-pre	360512	17.92	0.24	0.046
+1789668377	mux-legs-2-post	373820	26.13	0.05	0.034
