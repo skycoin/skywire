@@ -292,27 +292,96 @@ func loadtestFixed(w http.ResponseWriter, r *http.Request, nStr string) {
 		loadtestPattern(buf[:m], n, off)
 		h.Write(buf[:m]) //nolint:errcheck,gosec // hash.Hash never errors
 	}
+	// Byte ranges (RFC 9110 §14): the proxy's transparent range-splitter fetches
+	// a range-capable :80 origin as concurrent chunks over separate tunnels, so
+	// the sink serves any byte range of the same deterministic body. The
+	// pattern is seeded per 256 KiB chunk, so a range is produced from its
+	// aligned chunks and sliced. X-Sha256 always certifies the WHOLE body.
+	w.Header().Set("Accept-Ranges", "bytes")
+	start, end := uint64(0), n-1
+	status := http.StatusOK
+	if rh := r.Header.Get("Range"); rh != "" {
+		s, e, ok := parseByteRange(rh, n)
+		if !ok {
+			w.Header().Set("Content-Range", "bytes */"+strconv.FormatUint(n, 10))
+			http.Error(w, "range not satisfiable", http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		start, end, status = s, e, http.StatusPartialContent
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, n))
+	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Length", strconv.FormatUint(n, 10))
+	w.Header().Set("Content-Length", strconv.FormatUint(end-start+1, 10))
 	w.Header().Set("X-Sha256", hex.EncodeToString(h.Sum(nil)))
+	w.WriteHeader(status)
 	if r.Method == http.MethodHead {
 		return
 	}
 	fl, _ := w.(http.Flusher)
-	for off := uint64(0); off < n; off += chunk {
+	for off := start - start%chunk; off <= end; off += chunk {
 		m := uint64(chunk)
 		if n-off < m {
 			m = n - off
 		}
 		loadtestPattern(buf[:m], n, off)
-		if _, err := w.Write(buf[:m]); err != nil {
+		lo, hi := uint64(0), m
+		if off < start {
+			lo = start - off
+		}
+		if off+m-1 > end {
+			hi = end - off + 1
+		}
+		if _, err := w.Write(buf[lo:hi]); err != nil {
 			return
 		}
 		if fl != nil {
 			fl.Flush()
 		}
 	}
+}
+
+// parseByteRange parses one "bytes=a-b", "bytes=a-" or "bytes=-k" range
+// against a body of n bytes into an inclusive [start, end]. ok is false for a
+// multi-range, an unparseable or an unsatisfiable request.
+func parseByteRange(h string, n uint64) (start, end uint64, ok bool) {
+	spec, found := strings.CutPrefix(h, "bytes=")
+	if !found || strings.Contains(spec, ",") {
+		return 0, 0, false
+	}
+	a, b, found := strings.Cut(spec, "-")
+	if !found {
+		return 0, 0, false
+	}
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	switch {
+	case a == "" && b != "": // suffix: the last k bytes
+		k, err := strconv.ParseUint(b, 10, 63)
+		if err != nil || k == 0 {
+			return 0, 0, false
+		}
+		if k > n {
+			k = n
+		}
+		return n - k, n - 1, true
+	case a != "":
+		s, err := strconv.ParseUint(a, 10, 63)
+		if err != nil || s >= n {
+			return 0, 0, false
+		}
+		e := n - 1
+		if b != "" {
+			v, err := strconv.ParseUint(b, 10, 63)
+			if err != nil || v < s {
+				return 0, 0, false
+			}
+			if v < e {
+				e = v
+			}
+		}
+		return s, e, true
+	}
+	return 0, 0, false
 }
 
 // loadtestUpload is the upload-direction sink: it reads and discards the body
