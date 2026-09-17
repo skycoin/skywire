@@ -1,0 +1,7 @@
+# row	subject	cut_at_s	what_cut	bytes_before_cut	ttfb_after_s	goodput_before_Bps	goodput_after_Bps	restored	rg_ports_after
+1	mux-degrade-tunnels-2	3.110	tp:95839ad0-b588-0b1d-8475-45fba6ae993c(ok=1)	15024128	0.626	4830909	7070118	1	49213,49214
+2	mux-degrade-tunnels-2	3.153	tp:95839ad0-b588-0b1d-8475-45fba6ae993c(ok=1)	18944000	1.192	6008246	7868254	1	49213,49214
+3	mux-degrade-tunnels-2	3.256	tp:95839ad0-b588-0b1d-8475-45fba6ae993c(ok=1)	11190272	1.058	3436816	3219121	1	49213,49216
+4	mux-degrade-tunnels-2	3.676	tp:95839ad0-b588-0b1d-8475-45fba6ae993c(ok=1)	19003895	-	5169721	8613904	1	49217,49219
+5	mux-degrade-tunnels-2	3.462	tp:95839ad0-b588-0b1d-8475-45fba6ae993c(ok=1)	36569934	-	10563239	10384887	1	49220,49223
+6	mux-degrade-tunnels-2	3.000	tp:95839ad0-b588-0b1d-8475-45fba6ae993c(ok=1)	34516384	-	11505461	8883048	1	49224,49226
