@@ -401,7 +401,7 @@ const rsRescueIdleTimeout = 60 * time.Second
 // progress-refreshed idle timeout. Returns the bytes actually written, so the
 // caller resumes from start+written on failure.
 func (c *Client) streamTailOnce(w net.Conn, req *http.Request, host, validator string, start, total int64) (int64, error) {
-	sess := c.pickSession()
+	sess := c.pickSessionFor(pickRecv)
 	if sess == nil {
 		return 0, errAllTunnelsDown
 	}
@@ -475,7 +475,7 @@ func copyWithIdleTimeout(dst io.Writer, body io.Reader, under net.Conn, limit in
 // GET carrying the original request's headers plus If-Range, and returns exactly
 // the requested bytes.
 func (c *Client) fetchChunk(req *http.Request, host, validator string, start, end int64) ([]byte, error) {
-	sess := c.pickSession()
+	sess := c.pickSessionFor(pickRecv)
 	if sess == nil {
 		return nil, errAllTunnelsDown
 	}
