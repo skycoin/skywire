@@ -80,6 +80,17 @@
 #   <set>.chaos.tsv       what was cut, when, and what the row did afterwards
 #   <set>.assert.tsv      the set's pass/fail table (see below)
 #   <set>.cut.log         raw output of the tp rm / tp add calls
+#   <set>.paired.tsv      PAIRED=1 only: the contemporaneous reference row beside
+#                         every pool row, and the ratio verdict.sh scores
+#   <set>.paired-rows.tsv PAIRED=1 only: those reference transfers, bench.sh rows
+#
+# PAIRED=1 measures this set the way every other mux set is measured — one
+# reference row of the SAME cell, on one single route, in a second proxy
+# instance on :1081, immediately before each pool row (bench/lib-paired.sh) —
+# so the pool is scored by the paired ratio instead of the day's reference bar.
+# The reference's own route is fenced off the chaos cut. PAIRED unset keeps the
+# bar, which is the only thing a dir with no ref-* rows can be scored against —
+# and a SMOKE dir has none, which is why chain AL's pool set came back NOBAR.
 #
 # Asserts (<set>.assert.tsv: assert, value, want, verdict):
 #   hashes_after_cut      rows 11-15 hash-verified, want trials/trials
@@ -113,6 +124,18 @@ order=${6:-$(ls "$pins"/via-*.json | sed 's|.*/via-||; s|\.json$||' | tr '\n' ' 
 here=$(dirname "$0")
 mkdir -p "$out"
 local_commit=$(git -C "$here/.." rev-parse --short=9 HEAD)
+# PAIRED=1 measures this set the way every other set is measured: one reference
+# row of the same cell on one single route immediately before each pool row,
+# into <set>.paired.tsv, and verdict.sh scores the ratio instead of the bar.
+# Chain AL exported PAIRED=1 and this script ignored it, so the pool set was
+# scored `bar`/NOBAR in a smoke dir that holds no ref-* rows at all — a set with
+# no verdict. UNSET still means bar, so a standby run in a full campaign dir
+# keeps the artefacts it has always produced.
+PAIRED=${PAIRED:-0}
+PAIRED_HERE=$here # read by the library below
+export PAIRED_HERE
+# shellcheck source=bench/lib-paired.sh
+. "$here/lib-paired.sh"
 # shellcheck source=bench/lib-settings.sh
 . "$here/lib-settings.sh"
 # shellcheck source=bench/lib-blackout.sh
@@ -324,9 +347,31 @@ wait_pool() {
 }
 
 # --- chaos --------------------------------------------------------------------
+# ref_fenced_tps: the transports the paired reference rides — its pin's first
+# hop, and every leg the reference instance holds right now. Cutting one takes
+# the reference's own route out from under every LATER row of the set, so the
+# ratios stop being comparable (campaign21, and the same fence lib-cut.sh
+# applies for run-mux.sh). Empty when the set is unpaired, which is the
+# behaviour this script had before.
+ref_fenced_tps() {
+	[ "${set_paired:-0}" = 1 ] || return 0
+	{
+		case ${paired_ref:-} in
+		'' | direct) ;;
+		*)
+			_rfp=$paired_ref
+			[ -f "$_rfp" ] || _rfp="$pins/via-$paired_ref.json"
+			[ -f "$_rfp" ] && jq -r '.[0].forward[0].TpID // empty' "$_rfp" 2>/dev/null
+			;;
+		esac
+		$CLI cli proxy mux info -n "${PAIRED_SLOT1_NAME:-skysocks-client-ref}" --json 2>/dev/null |
+			jq -r '.[]?.legs[]?.transport_id // empty' 2>/dev/null
+	} | grep -v '^$' | sort -u | tr '\n' ' ' | sed 's/ *$//'
+}
 # fenced_candidates <mux info json>: "dst_port tp_id remote_pk pin_short" for
-# every route group whose FIRST HOP passes all three fences. Printed in group
-# order; the caller decides which of them is the active tunnel.
+# every route group whose FIRST HOP passes all three fences — four, with a
+# paired reference: never its route either. Printed in group order; the caller
+# decides which of them is the active tunnel.
 fenced_candidates() {
 	_n=$(echo "$1" | jq 'length' 2>/dev/null || echo 0)
 	_i=0
@@ -339,6 +384,7 @@ fenced_candidates() {
 		[ -n "$_t" ] && [ -n "$_p" ] || continue
 		[ "$_k" != "$exit_pk" ] || continue                     # never the transport to the exit
 		echo " $_shared " | grep -q " $_t " && continue          # never one another group also holds
+		case " ${ref_tps:-} " in *" $_t "*) continue ;; esac     # never the paired reference's own route
 		_s=$(pin_short "$_t" || true)
 		[ -n "${_s:-}" ] || continue                             # never one no pin can restore
 		echo "$_p $_t $(pin_pk "$_s") $_s"
@@ -370,6 +416,9 @@ carrier_rank() {
 choose_chaos() {
 	_info=$(mux_info "$name")
 	_state=$(state_rgs 60); [ -n "$_state" ] || _state='[]'
+	ref_tps=$(ref_fenced_tps)
+	[ -z "$ref_tps" ] ||
+		echo "$set_name: the paired reference holds $(printf '%s' "$ref_tps" | wc -w | tr -d ' ') transport(s), fenced off the cut: $ref_tps"
 	fenced_candidates "$_info" > "$tmp/cand"
 	[ -s "$tmp/cand" ] || { echo "no route group passes the cut fences"; return 1; }
 	cut_rg=""; cut_tp=""; cut_pk=""; cut_short=""; cut_by=""; cut_target_role=""; _line=""
@@ -536,12 +585,31 @@ run_set() { # <tp ids> <header>
 	: > "$out/$set_name.cut.log"
 	: > "$out/$set_name.recovery.tsv"
 	[ "$EXIT_SNAP" = 1 ] && printf '# row\texit_mux_route_groups\n' > "$out/$set_name.exit-recovery.tsv"
+	# the contemporaneous reference, exactly as run-mux.sh runs it: a second
+	# proxy instance on :1081 pinned to ONE route, one row of the same cell
+	# immediately before every pool row, never at the same time as one.
+	set_paired=0
+	if [ "$PAIRED" = 1 ]; then
+		if paired_start 1 "$paired_ref" "$exit_pk" "$pins" "$sink"; then
+			set_paired=1
+			paired_header "$paired_ref" "${paired_route:-?}"
+		else
+			echo "$set_name: unpaired — no contemporaneous reference came up; the set is measured against the bar instead (verdict.sh)"
+		fi
+	fi
 	row=0
 	for n in $sizes; do
 		for dir in down up; do
 			t=1
 			while [ $t -le "$trials" ]; do
 				row=$((row + 1))
+				# the reference row FIRST, and before the carrier snapshot below,
+				# so the reference's own bytes are never counted as this row's
+				pref=-; pok=0; plegs=-
+				if [ "$set_paired" = 1 ]; then
+					_pv=$(paired_row 1 "$row" "$n" "$dir")
+					pref=${_pv%% *}; _pv=${_pv#* }; pok=${_pv%% *}; plegs=${_pv##* }
+				fi
 				before=""
 				for tp in $tps; do before="$before $tp:$(tp_counters "$tp" | tr ' ' ',')"; done
 				# the chaos row is a 50 MB DOWNLOAD by construction; a hand-aimed
@@ -560,6 +628,11 @@ run_set() { # <tp ids> <header>
 					fi
 				else
 					"$here/bench.sh" "$socks" "$sink" "$n" "$dir" "$set_name-t$t" >> "$f"
+				fi
+				if [ "$set_paired" = 1 ]; then
+					_mlast=$(tail -1 "$f")
+					paired_emit "$row" "$(paired_cell "$n" "$dir")" "$pref" "$pok" "$plegs" \
+						"$(echo "$_mlast" | awk -F'\t' '{printf "%.2f", $4/1e6}')" "$(echo "$_mlast" | cut -f8)"
 				fi
 				for tp in $tps; do
 					b=$(echo "$before" | tr ' ' '\n' | grep "^$tp:" | cut -d: -f2)
@@ -595,7 +668,11 @@ run_set() { # <tp ids> <header>
 			done
 		done
 	done
+	[ "$set_paired" = 1 ] && paired_stop 1
 	echo "$set_name: $(grep -vc '^#' "$f") rows, hash_ok=$(grep -v '^#' "$f" | awk -F'\t' '$8==1' | wc -l)"
+	if [ -f "$out/$set_name.paired.tsv" ]; then
+		echo "$set_name: paired ratios vs $paired_ref: $(grep -v '^#' "$out/$set_name.paired.tsv" | awk -F'\t' '$5!="-" {v[$2]=v[$2]" "$5} END{for (k in v) printf "%s:%s ", k, v[k]}')"
+	fi
 	ports=$(mux_info "$name" | jq -c '[.[].desc.dst_port]')
 	mux_events "$set_name" "$name" "$ports"
 	# the EXIT's view of the same group(s) at the end of the set
@@ -694,6 +771,12 @@ write_asserts() {
 ec=$(exit_commit)
 echo "local=$local_commit exit=$ec app=$name addr=$socks tunnels=$tunnels chaos_row=$chaos_row order=$order"
 [ "$(echo "$order" | tr ' ' '\n' | grep -vc '^$')" -ge 1 ] || { echo "no pins in $pins — the cut could not be restored, refusing to run"; exit 2; }
+paired_ref=""
+if [ "$PAIRED" = 1 ]; then
+	paired_ref=$(paired_resolve "$out" 1)
+	echo "paired references: PAIRED_REF=$PAIRED_REF resolved to '$paired_ref'; ranking was:"
+	paired_rank "$out" | sed 's/^/  /'
+fi
 
 setup_started=$(date +%Y-%m-%dT%H:%M:%S)
 set_name=mux-standby-pending

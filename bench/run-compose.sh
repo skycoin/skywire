@@ -421,6 +421,14 @@ for spec in $compose; do
 	case "$T$L" in *[!0-9]*) echo "compose entry '$spec' is not <tunnels>x<legs> — skipping"; continue ;; esac
 	name=$(app_name "comp$spec"); socks=$(app_addr "$port"); set_name="mux-compose-T${T}xL${L}"; cur_app=$name
 	setup_started=$(date +%Y-%m-%dT%H:%M:%S)
+	# TxL pinned first hops or no composition cell. Running the spec anyway
+	# pins what there is and records the engine's own shape under the
+	# composition set's name, which is how a cell that measured something else
+	# reached the verdict table. Say the number out loud instead.
+	if [ $((T * L)) -gt "$npins" ]; then
+		invalid_set "$set_name" "need $((T * L)) ranked pins for $spec, have $npins (${order:-none}) — see the pin order lines above; PIN_ALLOW_UNRANKED=1 or an explicit 6th-argument order overrides"
+		port=$((port + 1)); continue
+	fi
 	# a group left over from the previous set would be dialed instead of this
 	# set's own tunnels (and breaks any later `--route` reconcile): refuse to
 	# measure until the app owns nothing.

@@ -48,14 +48,26 @@ deltas of every first-hop transport. `TUNNELS` and `LEGS` choose the counts
 shorts best route first.
 
 Given no `[pin order]`, `run-mux.sh` and `run-compose.sh` derive one from the
-run's own numbers instead of `ls` order (`pin_order`, `bench/lib-pins.sh`): the
-candidates `pick-ref.sh` probed, best median first (`paired-ref.tsv`), then the
-rest in `ls` order — and a route whose reference failed a 50 MB download cell or
-median under `PIN_MIN_MBPS` (1 MB/s) is dropped outright. Alphabetical order is
-not a ranking: on 2026-09-18 it seated via-0255117b, a route whose own reference
-measured 0.05 MB/s and failed all three 50 MB downloads that hour, in the
-composition cell's second tunnel, and the cell measured that route. The chosen
-order and the reason for every route are printed on stderr.
+run's own numbers instead of `ls` order (`pin_order`, `bench/lib-pins.sh`). A
+pin is **ranked** by its `paired-ref.tsv` probe median, or the suite rank that
+file records for a candidate it did not re-probe, or the median of its own
+`ref-via-<tok>.tsv` — best number first. It is **dropped** when a number says
+the route is broken: a probe that ran and did not verify every trial, a failed
+50 MB reference cell, or a median under `PIN_MIN_MBPS` (1 MB/s). It is
+**unranked** when nothing in the out dir measured it at all, and an unranked pin
+is left out unless `PIN_ALLOW_UNRANKED=1`.
+
+Alphabetical order is not a ranking: on 2026-09-18 it seated via-0255117b, a
+route whose own reference measured 0.05 MB/s and failed all three 50 MB
+downloads that hour, in the composition cell's second tunnel. Neither is
+"unranked": chain AL ran its smoke sets in a dir holding only a copied
+`paired-ref.tsv` and no `ref-via-*.tsv`, and the same route came back as the
+cell's fourth pin for want of a number. A runner short of ranked pins now fails
+the set loudly — "need 4 ranked pins for 2x2, have 3" — instead of taking a
+stray one, and `pick-ref.sh` records EVERY candidate it probed or skipped
+(failed ones with `0/N`, unprobed ones with `0/0` and whatever rank is known) so
+that file ranks a bad route as bad rather than leaving it unmeasured. The chosen
+order and the reason for every pin are printed on stderr.
 
 The carrier list is a **union, re-read every row**, not the list captured at set
 start: the app's route groups are read before and after each row and every
@@ -268,6 +280,14 @@ recorded as `mux-standby-2`, marked INVALID, and cannot be mistaken for a full
 pool. `<set>.legs.json` is the settled pool in `run-mux.sh`'s shape — groups,
 legs, hops with full public keys, `remote_ip` per leg — plus each group's
 `tunnel_role` when the visor reports one (`STANDBY_POOL=0` is the control run).
+
+`PAIRED=1` gives the pool set the same contemporaneous reference every other mux
+set gets — one reference row of the same cell on one single route, in a second
+instance on :1081, immediately before each pool row — so `verdict.sh` scores it
+by ratio and its `<set>.paired.tsv` is written like any other. The reference's
+own route is fenced off the chaos cut. Unset, the set is scored against the
+day's bar as before; chain AL exported `PAIRED=1`, this script ignored it, and
+the pool set came back `bar`/`NOBAR` in a smoke dir that holds no `ref-*` rows.
 
 Rows are `run-mux.sh`'s twenty in the same order (1–5 10 MB down, 6–10 10 MB up,
 11–15 50 MB down, 16–20 50 MB up). Row 11 — the first 50 MB download — is the
