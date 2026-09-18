@@ -526,7 +526,7 @@ class WalletRepository private constructor(private val context: Context) {
      * Fetch balance and history; persist and return the fresh snapshot.
      *
      * The two halves fail independently, because they cost wildly different
-     * amounts. The balance is one small fixed-size answer — 256 bytes for a
+     * amounts. The balance is one small fixed-size answer — 268 bytes for a
      * whole address book — and it is the half everything depends on: the
      * screen's numbers, and whether Send is allowed at all. The history is
      * unbounded and routinely megabytes (see the client above).
@@ -537,7 +537,7 @@ class WalletRepository private constructor(private val context: Context) {
      * many times it was reloaded. So the history is allowed to miss: the
      * balance lands, the last history we did get is kept, and the snapshot
      * records when that was. A balance that will not fetch is still fatal —
-     * at 256 bytes, that is the network being down.
+     * at 268 bytes, that is the network being down.
      */
     suspend fun refresh(walletId: String): WalletSnapshot = withContext(Dispatchers.IO) {
         val found = wallet(walletId) ?: error("unknown wallet")

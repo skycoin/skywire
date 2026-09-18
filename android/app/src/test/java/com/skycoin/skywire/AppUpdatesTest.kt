@@ -85,6 +85,17 @@ class AppUpdatesTest {
     }
 
     @Test
+    fun aVisorReleaseMentioningMobileIsNotAnAppUpdate() {
+        // The trap an independent review found: the title match used to be a
+        // bare contains("mobile"), so a visor release note reading
+        // "v1.3.95 - mobile fixes" passed the gate. Those releases really do
+        // attach an android-arm64.apk signed with the same keystore, so it
+        // would have installed, and 1.3.95 outranks every 0.0.x forever
+        // after. Nobody writing that release note would think twice.
+        assertNull(AppUpdates.selectUpdate(FIXTURE_VISOR_MENTIONS_MOBILE, Version(0, 0, 1)))
+    }
+
+    @Test
     fun aMobileReleaseIsFoundByItsTitleToo() {
         // Same release, tagged without the prefix but still titled for what
         // it is — one publishing habit changing should not silently end
@@ -211,6 +222,27 @@ class AppUpdatesTest {
                 "MOBILE-V1.2.2",
                 asset("skywire-1.2.2-arm64-v8a.apk"),
                 name = "SKYWIRE MOBILE 1.2.2",
+            )
+        }
+            ]
+        """.trimIndent()
+
+        /** The visor's own release, whose notes happen to say "mobile". */
+        val FIXTURE_VISOR_MENTIONS_MOBILE = """
+            [
+              ${
+            release(
+                "v1.3.95",
+                asset("skywire-v1.3.95-android-arm64.apk", 58_000_000) + "," +
+                    asset("skywire-v1.3.95-android-arm64.apk.sha256", 94),
+                name = "v1.3.95 - mobile fixes and routing",
+            )
+        },
+              ${
+            release(
+                "v1.3.96",
+                asset("skywire-v1.3.96-android-arm64.apk", 58_000_000),
+                name = "Mobile-friendly release",
             )
         }
             ]
