@@ -25,7 +25,8 @@ for f in "$dir"/*.tsv; do
 	# companion files of a set, not sets: they hold other columns entirely
 	case $f in
 	*.carrier.tsv | *.recovery.tsv | *.exit-recovery.tsv | *.paired.tsv | *.paired-rows.tsv | *.cut.tsv | *.up2.tsv | *.tps.tsv) continue ;;
-	*/exit-resources.tsv | */paired-ref.tsv) continue ;;
+	*.assert.tsv | *.direction.tsv | *.settings.tsv) continue ;;
+	*/exit-resources.tsv | */paired-ref.tsv | */ceiling.tsv | */direction.tsv) continue ;;
 	esac
 	set_name=$(basename "$f" .tsv)
 	[ -f "$dir/$set_name.INVALID" ] && continue
