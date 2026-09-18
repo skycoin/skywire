@@ -3452,6 +3452,19 @@ func (rg *RouteGroup) demoteStalledLegs(deadIDs []uuid.UUID) {
 	for _, id := range deadIDs {
 		deadSet[id] = struct{}{}
 	}
+	if rg.honorsMirrorActiveSet() {
+		// ACCEPTOR: the active set is the initiator's mirror, not ours to size —
+		// the same rule enforceBottleneckGroups and enforceLatencyBand already
+		// obey. Parking here is worse than re-admitting, because the park is
+		// mirrored BACK over CapLegState (sendLegState below) and the initiator
+		// adopts it: measured on a composed 2x2 run, seven leg_parked events all
+		// arrived as by=peer mirrors, four of them mid-set on one 201.8 ms leg,
+		// and a 15 s all-paths blackout sat inside one such park window. Report
+		// the stall so it stays attributable from `visor state`, and leave the
+		// decision to the initiator, whose own stalled-leg policy is unchanged.
+		rg.reportStalledLegs(deadSet)
+		return
+	}
 	rg.mu.Lock()
 	var idxs []int
 	var parkedIDs []uuid.UUID
@@ -3484,6 +3497,36 @@ func (rg *RouteGroup) demoteStalledLegs(deadIDs []uuid.UUID) {
 			rg.mux.rebuildWeights(rg.tps)
 		}
 		rg.mu.Unlock()
+	}
+}
+
+// reportStalledLegs records the stall WITHOUT acting on it: one MuxEventLegStalled
+// per stalled leg, naming the leg and the reorder gap age. Used by the side that
+// honors the peer's mirrored active set (the acceptor), where a local park would
+// be signaled back to the initiator and override the set the initiator owns.
+func (rg *RouteGroup) reportStalledLegs(deadSet map[uuid.UUID]struct{}) {
+	if rg.mux == nil {
+		return
+	}
+	gap := rg.mux.gapAge()
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	reported := 0
+	for i, tp := range rg.tps {
+		if i == 0 || tp == nil {
+			continue // the primary anchor is never parked anyway
+		}
+		if _, dead := deadSet[tp.Entry.ID]; !dead {
+			continue
+		}
+		rg.noteLegEvent(MuxEventLegStalled,
+			fmt.Sprintf("data progress stalled with an open reorder gap (age %v) — acceptor honors the initiator's mirrored active set, so the leg is reported, not parked", gap),
+			MuxByAdaptive, i, len(rg.tps), tp, rg.legHopsLocked(tp.Entry.ID))
+		reported++
+	}
+	if reported > 0 {
+		rg.logger.Infof("leg-dataprogress: NOT parking %d stalled leg(s) — this side honors the initiator's mirrored active set (reorder gap age %v); recorded as leg_stalled",
+			reported, gap)
 	}
 }
 
