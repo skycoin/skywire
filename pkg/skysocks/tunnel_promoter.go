@@ -49,12 +49,14 @@ const (
 // state, and it is also why the promoter can rank only on RTT: there is
 // nothing else to rank on.
 //
-// The audition closes that gap for free. When nothing is busy, the next lone
-// stream is a stream some tunnel will carry regardless; giving it to a plausible
-// standby costs no extra bytes and produces the missing sample. Bounded three
-// ways: only while NO tunnel has a stream (so no measured transfer is ever
-// touched), only for one stream per offer, and at most one offer per tunnel per
-// tunnelAuditionEvery.
+// The audition closes that gap for free. The offer is made only from a quiet
+// moment, and the stream that takes it is one some tunnel will carry
+// regardless; giving it to a plausible standby costs no extra bytes and
+// produces the missing sample. Bounded four ways: the offer is armed only while
+// NO tunnel has a stream (so no measured transfer is ever touched), it is taken
+// only by a SIBLING stream — one of several parallel chunk streams, never the
+// entry stream the browser's first byte comes through (pickKind) — only one
+// stream per offer, and at most one offer per tunnel per tunnelAuditionEvery.
 const (
 	tunnelAuditionWindow = 30 * time.Second
 	tunnelAuditionEvery  = 60 * time.Second
@@ -346,9 +348,9 @@ func (c *Client) promoteTunnel(s *yamux.Session, reason string) bool {
 	return true
 }
 
-// armAudition offers the next LONE stream to one standby tunnel, so a tunnel
-// the promoter might switch in has a capacity measurement rather than only a
-// ping.
+// armAudition offers the next SIBLING chunk stream to one standby tunnel, so a
+// tunnel the promoter might switch in has a capacity measurement rather than
+// only a ping.
 //
 // The offer is made only when every tunnel is idle — a stream arriving now
 // would be placed on some tunnel anyway, so nothing extra is sent and no
@@ -416,19 +418,26 @@ func (c *Client) armAudition(now time.Time, active, standby []tunnelCandidate) {
 	c.auditionedAt[pick] = now
 }
 
-// auditionPickLocked returns the standby tunnel currently on offer for a lone
-// stream, or nil. Callers MUST hold sessionsMu (pickSessionFor does).
+// auditionPickLocked returns the standby tunnel currently on offer, or nil.
+// Callers MUST hold sessionsMu (pickSessionKind does), and may call it only for
+// a SIBLING stream — one of several parallel chunk streams (pickKind).
 //
-// The offer is consumed by the pick, so exactly one stream auditions per offer,
-// and it is withdrawn the moment anything is busy: a stream placed while a
-// transfer is running would be a real change to how load is spread, not a free
-// measurement.
-func (c *Client) auditionPickLocked(now time.Time, anyBusy bool) *yamux.Session {
+// The offer is consumed by the pick, so exactly one stream auditions per offer.
+//
+// What keeps the measurement free is armAudition: it makes no offer unless
+// every tunnel, standby ones included, is idle. It is NOT re-tested here. A
+// sibling chunk is concurrent by construction — its siblings, and for a split
+// GET the entry stream carrying chunk0, are in flight the moment it is picked —
+// so withdrawing the offer "because something is busy" would withdraw every
+// offer before any stream could ever take it, which is how the audition used to
+// end up on the entry stream instead: that was the only pick idle enough to
+// consume it, and it is the one pick the download cannot absorb.
+func (c *Client) auditionPickLocked(now time.Time) *yamux.Session {
 	s := c.audition
 	if s == nil {
 		return nil
 	}
-	if anyBusy || now.After(c.auditionUntil) || s.IsClosed() || !c.standby[s] {
+	if now.After(c.auditionUntil) || s.IsClosed() || !c.standby[s] {
 		c.audition = nil
 		return nil
 	}

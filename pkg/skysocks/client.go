@@ -603,6 +603,35 @@ const (
 	pickRecv                // a range chunk: the tunnel will mostly deliver
 )
 
+// pickKind says whether the new stream is ONE OF SEVERAL parallel streams for
+// the same transfer, or the only stream that transfer has. It decides nothing
+// about weighting — that is pickDir — and only one thing: whether the stream
+// may take a standby tunnel's audition offer (tunnel_promoter.go).
+//
+// A LONE stream may not. The entry stream is the worst possible audition: it
+// is what the browser's connection is answered on, and for a splittable GET it
+// is ALSO chunk0 — the 2 MiB probe whose body is copied straight to the browser
+// ahead of every other chunk (rangesplit.go step 7), so a cold standby under it
+// holds up the whole download rather than one eighth of it. Measured on the rig
+// 2026-09-16 (bench/2026-09-16/03ece1e95-smoke, mux-tunnels-2 rows 10 and 13,
+// 50 MB downloads): the two rows whose 2 MiB probe landed on a standby ran at
+// 5.1 and 5.3 MB/s against 8.3-8.4 for the rows either side of them, with no
+// retire, snub, promote or evict event on either — placement, not loss. A
+// sequential rescue tail, an upload probe, an upload's completion fetch and a
+// replayed POST body are lone in exactly the same way.
+//
+// A SIBLING stream may. It is one of N chunk streams the splitter (or the
+// upload stripe) is spreading over the tunnels right now, so the bytes were
+// going to be carried by some tunnel either way, nothing is holding the
+// browser's next byte on its own, and a chunk whose tunnel disappoints is
+// refetched on another one for free.
+type pickKind int
+
+const (
+	pickLone    pickKind = iota // the entry stream, a rescue tail, an upload probe/replay
+	pickSibling                 // one of several parallel chunk streams
+)
+
 // newYamuxSession wraps a dialed route-group conn in a yamux client session with
 // skysocks's flow-control window, metering the tunnel's bytes for the keepalive
 // loop's receive stamp and pickSession's capacity estimate. Shared by NewClient
@@ -1662,7 +1691,16 @@ func (c *Client) pickSession() *yamux.Session {
 // same way a closed tunnel is, unless it is the only live one — otherwise the
 // stale-idle credit above steers the next stream straight back onto the tunnel
 // that just failed to deliver a byte.
+// pickSessionFor picks for a LONE stream of the given shape: it never takes a
+// standby's audition offer. pickSessionKind is the form that says otherwise.
 func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
+	return c.pickSessionKind(dir, pickLone)
+}
+
+// pickSessionKind is pickSessionFor with the stream's kind (pickKind) spelled
+// out: only a SIBLING stream — one of several parallel chunk streams — may
+// consume a standby tunnel's audition offer.
+func (c *Client) pickSessionKind(dir pickDir, kind pickKind) *yamux.Session {
 	c.sessionsMu.Lock()
 	defer c.sessionsMu.Unlock()
 	if len(c.sessions) == 0 {
@@ -1686,23 +1724,20 @@ func (c *Client) pickSessionFor(dir pickDir) *yamux.Session {
 	// matters as much as the skip: once no active tunnel is live, the pool is
 	// what the proxy runs on rather than a reason to fail.
 	//
-	// The ONE exception is an audition (tunnel_promoter.go): while every
-	// tunnel is idle, the promoter may offer the next lone stream to a standby
-	// tunnel whose capacity has never been measured, because a standby tunnel
-	// otherwise has only a ping and the promoter has nothing to check its
-	// ranking against. The stream was going to be carried by some tunnel
-	// anyway, so the measurement is free — and the offer is withdrawn the
-	// instant anything is busy, so no measured transfer is ever touched.
-	busyNow := false
-	for _, s := range c.sessions {
-		if s != nil && !s.IsClosed() && s.NumStreams() > 0 {
-			busyNow = true
-			break
-		}
-	}
+	// The ONE exception is an audition (tunnel_promoter.go): the promoter may
+	// offer ONE stream to a standby tunnel whose capacity has never been
+	// measured, because a standby tunnel otherwise has only a ping and the
+	// promoter has nothing to check its ranking against. The stream was going
+	// to be carried by some tunnel anyway, so the measurement is free.
+	//
+	// Only a SIBLING stream may take that offer. The idleness that makes an
+	// audition free is tested once, at arm time — armAudition offers nothing
+	// unless every tunnel, standby ones included, is idle — and the stream that
+	// consumes the offer must be one the transfer can absorb: one of N parallel
+	// chunks, never the entry stream the browser's first byte comes through.
 	var auditioning *yamux.Session
-	if dir == pickAny {
-		auditioning = c.auditionPickLocked(now, busyNow)
+	if kind == pickSibling {
+		auditioning = c.auditionPickLocked(now)
 	}
 	sitOut := make([]bool, len(c.sessions))
 	spare := 0

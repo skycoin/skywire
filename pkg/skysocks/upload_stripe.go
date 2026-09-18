@@ -262,7 +262,7 @@ func (c *Client) uploadProbeResult(res <-chan uploadProbeEntry) uploadProbeEntry
 // says it will hold — what keeps us from offering more out-of-order bytes than
 // it can take.
 func (c *Client) probeChunkedUpload(u *uploadCandidate) (e uploadProbeEntry) {
-	sess, st, err := c.openChunkStream()
+	sess, st, err := c.openChunkStream(pickLone)
 	if err != nil {
 		return e
 	}
@@ -796,7 +796,7 @@ func uploadRetryWait(d time.Duration) time.Duration {
 // under a rolling write deadline WHILE the handshake replies and the ack are
 // read back — so the chunk costs no idle round trip of its own at either end.
 func (s *uploadStripe) putChunk(start, end int64, buf []byte) (ack chunkAck, err error) {
-	sess, st, err := s.c.openChunkStream()
+	sess, st, err := s.c.openChunkStream(pickSibling)
 	if err != nil {
 		return ack, err
 	}
@@ -935,7 +935,7 @@ func readChunkAck(resp *http.Response, body []byte) chunkAck {
 // fetchFinal asks the sink for the object's completion record, for the case
 // where the completing chunk's ack was lost with its tunnel.
 func (s *uploadStripe) fetchFinal() ([]byte, error) {
-	sess, st, err := s.c.openChunkStream()
+	sess, st, err := s.c.openChunkStream(pickLone)
 	if err != nil {
 		return nil, err
 	}
@@ -1043,7 +1043,7 @@ func (c *Client) spliceReplayable(conn, stream net.Conn, u *uploadCandidate) {
 			return
 		}
 		var st net.Conn
-		if sess, st, err = c.openChunkStream(); err != nil {
+		if sess, st, err = c.openChunkStream(pickLone); err != nil {
 			return
 		}
 		if err := c.exitConnectPipelined(st, u.host, c.rangePlainPort(), u.head); err != nil {
