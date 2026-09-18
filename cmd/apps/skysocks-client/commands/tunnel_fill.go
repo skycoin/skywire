@@ -108,3 +108,22 @@ func (f tunnelFill) logf() logrus.FieldLogger {
 type nopWriter struct{}
 
 func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+// firstTunnelGroupDecays reports whether this dial may fall back from a route
+// group to the AppDirect shortcut when the group cannot be set up.
+//
+// It is true for exactly one dial: the session's FIRST tunnel, whose route
+// group was asked for by the `--tunnels 2` default rather than by the operator.
+// Every other dial keeps its meaning —
+//
+//   - --routed names the route group explicitly;
+//   - --direct is the shortcut already (and pins a 1-hop control route);
+//   - a widening, re-dial or standby-pool dial (diversify / standby) is never
+//     the session's only tunnel, so its failure costs nothing but width;
+//   - --tunnels 1 asks for no route group at all, so there is nothing to decay.
+func firstTunnelGroupDecays(cfg *clientConfig, diversify, standby bool) bool {
+	if cfg == nil || diversify || standby {
+		return false
+	}
+	return cfg.tunnels > 1 && !cfg.routed && !cfg.direct
+}

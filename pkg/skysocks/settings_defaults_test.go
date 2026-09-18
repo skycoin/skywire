@@ -107,7 +107,7 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 71)
+	require.Len(t, skysettings.Catalog(), 72)
 
 	// The shape knobs default to the flags they twin (skyenv.SkysocksClientTunnels,
 	// skyenv.SkysocksClientStandbyPool), the per-app mux pair defaults to

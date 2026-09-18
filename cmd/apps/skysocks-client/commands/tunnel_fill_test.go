@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
 )
 
 // pipeConn is one end of a net.Pipe, standing in for a dialed route-group conn.
@@ -166,4 +168,45 @@ func TestTunnelFillStopsWhenTheCycleIsCanceled(t *testing.T) {
 	}.run()
 
 	require.Equal(t, 1, dials, "the fill stops at the first tunnel after cancellation")
+}
+
+// Only the session's first tunnel may give up its route group, and only when
+// nothing asked for one by name. This is the policy the e2e regression turned
+// on: `--tunnels 2` being the default made tunnel 1 a route-group dial where it
+// used to be the AppDirect shortcut, and on a topology that can build no route
+// group the session never came up at all.
+func TestFirstTunnelGroupDecaysOnlyForTheImplicitUpgrade(t *testing.T) {
+	two := func() *clientConfig { return &clientConfig{tunnels: 2} }
+
+	require.True(t, firstTunnelGroupDecays(two(), false, false),
+		"the default --tunnels 2 asked for the route group, not the operator")
+
+	require.False(t, firstTunnelGroupDecays(&clientConfig{tunnels: 1}, false, false),
+		"--tunnels 1 asks for no route group, so there is nothing to decay")
+
+	routed := two()
+	routed.routed = true
+	require.False(t, firstTunnelGroupDecays(routed, false, false), "--routed names the route group")
+
+	direct := two()
+	direct.direct = true
+	require.False(t, firstTunnelGroupDecays(direct, false, false), "--direct is the shortcut already")
+
+	require.False(t, firstTunnelGroupDecays(two(), true, false),
+		"a widening or re-dial is not the session's only tunnel")
+	require.False(t, firstTunnelGroupDecays(two(), false, true),
+		"a standby-pool dial is not the session's only tunnel")
+	require.False(t, firstTunnelGroupDecays(nil, false, false))
+}
+
+// The ceiling that bounds the implicit upgrade is a live knob with a real
+// default, not a bare constant: an operator can widen or disable the decay on a
+// running client without restarting it.
+func TestFirstTunnelGroupCeilingIsALiveKnob(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	require.Equal(t, 20*time.Second, skysettings.Dur(skysettings.TunnelGroupDialCeiling))
+	require.True(t, skysettings.Apply(map[string]int64{
+		skysettings.TunnelGroupDialCeiling: int64(45 * time.Second),
+	}))
+	require.Equal(t, 45*time.Second, skysettings.Dur(skysettings.TunnelGroupDialCeiling))
 }

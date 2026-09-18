@@ -35,6 +35,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/skysocks"
+	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
 )
 
 const (
@@ -585,47 +586,49 @@ func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk ci
 	// dial one network to the server. On skynet, --direct forces a 1-hop
 	// direct-transport-only dial (create-on-demand, bypass the route-finder +
 	// setup node, self-heals on server restart); dmsg is a plain relay stream.
-	dial := func(_ context.Context, a appnet.Addr) (net.Conn, error) {
-		if a.Net == netType && (cfg.direct || diversify || cfg.routed || cfg.tunnels > 1) {
-			// --routed asks for an explicit single-route group (MuxRoutes=1): the
-			// networker skips the direct shortcut for any explicit mux count, so
-			// the session has a route group whose legs can be pinned or reconciled.
-			// --tunnels N (N>1) implies it for EVERY tunnel: a tunnel is a route
-			// group by definition, and without it the first tunnel took the direct
-			// shortcut and the extras dialed with mux 0 and took it too, so N
-			// "tunnels" were N streams on one direct transport with no route group
-			// anywhere (measured live 2026-09-16: --tunnels 2, 0 route groups).
-			mux := 0
-			if cfg.routed || cfg.tunnels > 1 {
-				// 1 = "form a route group". The LEG COUNT is decided visor-side:
-				// the mux width lives in the router's adaptive preset, which this
-				// process cannot read, so `route settings dial --dial-tunnel-legs`
-				// raises this to the tunnel width at dial time (see
-				// router.applyDialTunnelLegs).
-				// TODO(mux): pass the per-app width here once the proxy mux ops
-				// expose one (visor.SetMuxWidth is still process-global).
-				mux = 1
+	// group = "form a route group for this tunnel". --routed asks for one
+	// explicitly (MuxRoutes=1): the networker skips the direct shortcut for any
+	// explicit mux count, so the session has a route group whose legs can be
+	// pinned or reconciled. --tunnels N (N>1) implies it for EVERY tunnel: a
+	// tunnel is a route group by definition, and without it the first tunnel took
+	// the direct shortcut and the extras dialed with mux 0 and took it too, so N
+	// "tunnels" were N streams on one direct transport with no route group
+	// anywhere (measured live 2026-09-16: --tunnels 2, 0 route groups).
+	dialWith := func(group bool) func(context.Context, appnet.Addr) (net.Conn, error) {
+		return func(_ context.Context, a appnet.Addr) (net.Conn, error) {
+			if a.Net == netType && (cfg.direct || diversify || group) {
+				mux := 0
+				if group {
+					// 1 = "form a route group". The LEG COUNT is decided visor-side:
+					// the mux width lives in the router's adaptive preset, which this
+					// process cannot read, so `route settings dial --dial-tunnel-legs`
+					// raises this to the tunnel width at dial time (see
+					// router.applyDialTunnelLegs).
+					// TODO(mux): pass the per-app width here once the proxy mux ops
+					// expose one (visor.SetMuxWidth is still process-global).
+					mux = 1
+				}
+				return appCl.DialWithOptions(a, appserver.DialOptionsReq{
+					MuxRoutes:           mux,
+					Direct:              cfg.direct,
+					DiversifyTransports: diversify,
+					// The live pool candidate filter (pool.exclude_pks,
+					// pool.require_tp_types), read per dial from the running
+					// client so a change lands on the next dial and not at the
+					// next restart. Empty on the initial dials, which have no
+					// client to read yet — and therefore no settings pulled.
+					ExcludeFirstHopPKs:   filter.excludePKs,
+					RequireFirstHopTypes: filter.requireTpTypes,
+					// A standby-pool dial REQUIRES a first hop no sibling tunnel
+					// holds: a shared extra tunnel aggregates nothing, and the
+					// refusal is how the pool learns it has reached the topology's
+					// disjoint bound and stops.
+					RequireDisjointFirstHop: standby,
+					TunnelRole:              role,
+				})
 			}
-			return appCl.DialWithOptions(a, appserver.DialOptionsReq{
-				MuxRoutes:           mux,
-				Direct:              cfg.direct,
-				DiversifyTransports: diversify,
-				// The live pool candidate filter (pool.exclude_pks,
-				// pool.require_tp_types), read per dial from the running
-				// client so a change lands on the next dial and not at the
-				// next restart. Empty on the initial dials, which have no
-				// client to read yet — and therefore no settings pulled.
-				ExcludeFirstHopPKs:   filter.excludePKs,
-				RequireFirstHopTypes: filter.requireTpTypes,
-				// A standby-pool dial REQUIRES a first hop no sibling tunnel
-				// holds: a shared extra tunnel aggregates nothing, and the
-				// refusal is how the pool learns it has reached the topology's
-				// disjoint bound and stops.
-				RequireDisjointFirstHop: standby,
-				TunnelRole:              role,
-			})
+			return appCl.Dial(a)
 		}
-		return appCl.Dial(a)
 	}
 	nets := []appnet.Type{netType}
 	if cfg.dmsgFallback {
@@ -637,6 +640,37 @@ func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk ci
 	// retrier at once (by reporting success to it) and is returned to the
 	// caller as-is.
 	var exhausted error
+	group := cfg.routed || cfg.tunnels > 1
+
+	// The FIRST tunnel's route group is an IMPLICIT upgrade — nobody asked for
+	// it, `--tunnels 2` being the default did — so it must not be able to cost
+	// the operator the session. Where no route group to the exit can be set up
+	// (a two-node lab, the three-visor docker e2e, a setup node that is not
+	// answering) the route-group dial fails or hangs, the app never reports
+	// Running, and `proxy start` times out on a peer this visor holds a
+	// transport to. Before --tunnels defaulted to 2 that same start came up over
+	// the AppDirect shortcut.
+	//
+	// So the implicit upgrade is ATTEMPTED ONCE, under its own ceiling, and a
+	// failure decays to the shortcut with the retrier behind it: a working
+	// single-tunnel session beats a route group nobody can build. Nothing is
+	// given up permanently — the background widening dial and the standby pool
+	// both form route groups, so the session grows into one as soon as the
+	// topology allows. An EXPLICIT request keeps its meaning and never decays:
+	// --routed was asked for by name, --direct is the shortcut already, and a
+	// widening/re-dial/pool dial is not the session's only tunnel.
+	if firstTunnelGroupDecays(cfg, diversify, standby) {
+		gctx, gcancel := context.WithTimeout(ctx, skysettings.Dur(skysettings.TunnelGroupDialCeiling))
+		c, _, gerr := appnet.DialWithFallback(gctx, dialWith(true), pk, serverPort, nets...)
+		gcancel()
+		if gerr == nil {
+			return c, nil
+		}
+		appCl.Log().Warnf("The first tunnel's route group could not be set up (%v); falling back to a direct session over one transport. Aggregation resumes as soon as a route group can be built.", gerr)
+		group = false
+	}
+
+	dial := dialWith(group)
 	err := cfg.retrier.Do(ctx, func() error {
 		var err error
 		conn, _, err = appnet.DialWithFallback(ctx, dial, pk, serverPort, nets...)
