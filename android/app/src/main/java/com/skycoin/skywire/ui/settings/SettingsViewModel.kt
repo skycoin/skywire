@@ -12,6 +12,7 @@ import com.skycoin.skywire.core.AppLock
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.AppVisibility
 import com.skycoin.skywire.core.BatteryOptimization
+import com.skycoin.skywire.core.FullScreenCalls
 import com.skycoin.skywire.core.ConfigManager
 import com.skycoin.skywire.core.ConfigVault
 import com.skycoin.skywire.core.CoreServiceState
@@ -55,6 +56,9 @@ data class SettingsUiState(
     val batteryExempt: Boolean = true,
     /** The user has already declined the exemption once; stop offering. */
     val batteryPromptDismissed: Boolean = false,
+    /** Whether a ringing call may take the screen — see [FullScreenCalls]. */
+    val fullScreenCalls: Boolean = true,
+    val fullScreenCallsDismissed: Boolean = false,
     val appVersion: String = "",
     /** From the running visor's own summary; empty while the core is down. */
     val coreVersion: String = "",
@@ -139,16 +143,27 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 mutable.update { it.copy(batteryPromptDismissed = dismissed) }
             }
         }
+        viewModelScope.launch {
+            prefs.boolean(FullScreenCalls.PREF_DISMISSED, false).collectLatest { dismissed ->
+                mutable.update { it.copy(fullScreenCallsDismissed = dismissed) }
+            }
+        }
         // The exemption is granted in a system screen, not in this app, so the
         // only reliable moment to re-read it is when the user comes back from
         // there. That has to be every resume, not every return to the
         // foreground: the system's own dialog covers the Activity without
         // stopping it, so a grant made there never changes the foreground
         // flag and the card would keep offering until the app restarts.
+        // Both of these are granted in a system screen, not in this app, so
+        // the only reliable moment to re-read them is a resume.
         viewModelScope.launch {
-            AppVisibility.resumes.collectLatest { refreshBatteryExemption() }
+            AppVisibility.resumes.collectLatest {
+                refreshBatteryExemption()
+                refreshFullScreenCalls()
+            }
         }
         refreshBatteryExemption()
+        refreshFullScreenCalls()
         viewModelScope.launch { loadVersions() }
     }
 
@@ -197,6 +212,28 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     /** "Not now" — stop offering, in Settings and on Home. */
     fun dismissBatteryPrompt() {
         viewModelScope.launch { prefs.putBoolean(BatteryOptimization.PREF_DISMISSED, true) }
+    }
+
+    // --- calls taking the screen ---
+
+    fun refreshFullScreenCalls() {
+        mutable.update { it.copy(fullScreenCalls = FullScreenCalls.isGranted(getApplication())) }
+    }
+
+    /**
+     * Hand the user to the system switch. Nothing is recorded here: the answer
+     * lives in the platform and [refreshFullScreenCalls] reads it back on the
+     * way home.
+     */
+    fun requestFullScreenCalls() {
+        val context = getApplication<Application>()
+        if (!FullScreenCalls.openRequest(context)) {
+            report(context.getString(R.string.settings_calls_no_screen))
+        }
+    }
+
+    fun dismissFullScreenCallsPrompt() {
+        viewModelScope.launch { prefs.putBoolean(FullScreenCalls.PREF_DISMISSED, true) }
     }
 
     // --- identity ---

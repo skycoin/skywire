@@ -730,6 +730,11 @@
     <string name="help_fleet_title">关于集群</string>
     <string name="help_fleet_body">你在其他机器上运行的节点——台式机、服务器、Skyminer——从这部手机看过去的样子。它是一扇窗，不是遥控器：传回来的是状态，唯一能做的操作是重启。\n\n默认关闭。开启会重启这部手机的核心，因为这项设置只在节点自我构建时读取一次。\n\n节点自己的日志在这里的卡片上，因为那条日志来自远程机器；本应用的日志在“设置 \u25b8 诊断”里。你给节点起的名字保存在本机，不会跟着它走。</string>
     <!-- Battery / Doze. -->
+    <string name="settings_calls">来电</string>
+    <string name="settings_calls_hint">来电目前只是一条需要你留意的通知。允许 Skywire 显示来电界面后，来电会接管屏幕并响铃，就像普通电话一样——即使应用已关闭。</string>
+    <string name="settings_calls_granted_hint">来电会接管屏幕并响铃，即使应用已关闭。</string>
+    <string name="settings_calls_allow">显示来电界面</string>
+    <string name="settings_calls_no_screen">本机没有该设置的界面。</string>
     <string name="settings_battery">电池</string>
     <string name="settings_battery_hint">Skywire 会在后台持续运行，但屏幕熄灭一段时间后，Android 仍可能暂停它的网络——消息和通话会等到手机下次唤醒时才到达，而不是在发出时到达。允许 Skywire 忽略电池优化可以消除这段延迟。这会更耗电；不允许也一样能用。</string>
     <string name="settings_battery_exempt_hint">Skywire 已获准忽略电池优化，因此屏幕熄灭时连接仍会保持。Android 的电池设置随时可能收回这项权限。</string>
