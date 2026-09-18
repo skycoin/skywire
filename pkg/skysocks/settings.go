@@ -67,6 +67,31 @@ func setTunnelPromoteHold() time.Duration {
 func setTunnelParkMinHold() time.Duration {
 	return skysettings.Dur(skysettings.TunnelParkMinHold)
 }
+
+// The capacity-aware half of the promotion rule (tunnel_promoter.go). Every
+// one of these is a knob rather than a constant because the numbers they carry
+// are exactly the ones a rig sweep has to move: the margin a swap needs, how
+// long a measurement stays good, how much traffic counts as mid-transfer, and
+// where "productive" starts.
+
+func setTunnelGoodputAlpha() float64 {
+	return skysettings.Ratio(skysettings.TunnelGoodputAlpha)
+}
+func setTunnelGoodputFresh() time.Duration {
+	return skysettings.Dur(skysettings.TunnelGoodputFresh)
+}
+func setTunnelGoodputMinWindows() int {
+	return skysettings.Count(skysettings.TunnelGoodputMinWindows)
+}
+func setTunnelPromoteGoodputMargin() float64 {
+	return skysettings.Ratio(skysettings.TunnelPromoteGoodputMargin)
+}
+func setTunnelPromoteQuietBytes() int64 {
+	return skysettings.Bytes(skysettings.TunnelPromoteQuietBytes)
+}
+func setTunnelPromoteIdleBps() int64 {
+	return skysettings.Bytes(skysettings.TunnelPromoteIdleBps)
+}
 func setTunnelAuditionWindow() time.Duration {
 	return skysettings.Dur(skysettings.TunnelAuditionWindow)
 }

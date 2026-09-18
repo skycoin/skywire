@@ -270,6 +270,14 @@ type Client struct {
 	// #4968 (14 parks in 65 s).
 	promoteSince map[*yamux.Session]time.Time
 	parkedAt     map[*yamux.Session]time.Time
+	// tickBytes is each tunnel's cumulative rx+tx as of the PREVIOUS promoter
+	// tick, so the tick can tell how many bytes the tunnel moved since — the
+	// mid-transfer test. yamux stream counts alone are not that test: a range
+	// split opens and closes a stream per chunk, so between two chunks a
+	// tunnel carrying the whole object reads as idle for exactly as long as it
+	// takes to open the next one, and a promoter tick landing in that gap
+	// parks the tunnel that is delivering. Bytes on the wire have no such gap.
+	tickBytes map[*yamux.Session]uint64
 
 	// The idle capacity audition. A standby tunnel has an RTT but never a
 	// capacity — tunnelMeter.sample only learns from a window in which the
@@ -466,6 +474,31 @@ type tunnelMeter struct {
 	// took in legRTTWindow after one leg's samples walked 37 → 955 ms inside a
 	// single download and flapped a park every 30 s.
 	rttWin tunnelRTTWindow
+	// gpBps is the tunnel's DELIVERED GOODPUT: an EWMA of the bytes it moved
+	// per second, both directions together, over the windows in which it
+	// actually carried streams. gpAt is when that estimate last moved and
+	// gpWins counts the carrying windows folded into it.
+	//
+	// It is deliberately NOT rxCapBps/txCapBps. Those are PEAKS — the best
+	// second a tunnel ever had, decayed — which is the right input for sizing
+	// the next chunk and the wrong one for deciding that a tunnel should keep
+	// its place in the active set: a tunnel that peaked at 9 MB/s once and has
+	// delivered 300 kB/s ever since still reads 9 by peak and 300 by this. And
+	// unlike the peak, a carrying window that delivered NOTHING is folded in
+	// at its true value of zero, so a tunnel that stops delivering under load
+	// says so here within a few windows instead of coasting on its best
+	// moment.
+	//
+	// Bytes, not RTT, are what the promoter is finally allowed to park a
+	// tunnel on. On the rig 2026-09-18 (bench/2026-09-18/9f4848dfa-smoke) the
+	// promoter parked an active tunnel because a standby pinged 2.92x faster
+	// (132 ms against 384 ms) — and the parked tunnel was the one carrying the
+	// object. RTT is a property of the path's length; goodput is a property of
+	// what the path delivers, and the two are not the same number on a mesh
+	// whose nearest route is not its fattest.
+	gpBps  float64
+	gpAt   time.Time
+	gpWins int
 	// snubC is closed while the tunnel is snubbed and replaced on un-snub, so a
 	// chunk in flight on the tunnel can select on the snub the way it selects
 	// on the session dying. Guarded by mu like the rest of this block.
@@ -557,6 +590,17 @@ func (m *tunnelMeter) sample(now time.Time, busy bool) {
 		return
 	}
 	m.busyAt = now
+	// The carrying window is also one goodput sample, folded in whole the
+	// first time and by the alpha afterwards. A window that delivered nothing
+	// counts as the zero it was: this is what the tunnel DELIVERED while it
+	// was asked to carry, not the best it has ever managed.
+	if rate := rxRate + txRate; m.gpWins == 0 {
+		m.gpBps, m.gpWins, m.gpAt = rate, 1, now
+	} else {
+		m.gpBps += setTunnelGoodputAlpha() * (rate - m.gpBps)
+		m.gpWins++
+		m.gpAt = now
+	}
 	stalled := rxRate <= 0 && txRate <= 0
 	if rxRate > 0 || stalled {
 		m.rxCapBps *= setMeterCapDecay()
@@ -612,6 +656,33 @@ func (m *tunnelMeter) capacity(now time.Time) (bps float64, fresh bool) {
 	defer m.mu.Unlock()
 	fresh = !m.busyAt.IsZero() && now.Sub(m.busyAt) <= setMeterFresh()
 	return m.rxCapBps, fresh
+}
+
+// goodput returns the tunnel's delivered goodput in bytes/s and whether that
+// number is a MEASUREMENT rather than an absence of one.
+//
+// ok requires two things: at least tunnel.goodput_min_windows carrying windows
+// (one window can be a sliver of a transfer, and a single sliver is how the
+// capacity meter once "proved" 23 B/s from a keepalive — #4965), and a
+// measurement no older than tunnel.goodput_fresh. Past that the tunnel is
+// unmeasured again and the audition is what re-measures it.
+//
+// The VALUE may legitimately be zero while ok is true: a tunnel that carried
+// streams and delivered nothing is measured at nothing, and that is exactly
+// the tunnel the promoter should be allowed to replace.
+func (m *tunnelMeter) goodput(now time.Time) (bps float64, ok bool) {
+	if m == nil {
+		return 0, false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.gpAt.IsZero() || m.gpWins < setTunnelGoodputMinWindows() {
+		return 0, false
+	}
+	if now.Sub(m.gpAt) > setTunnelGoodputFresh() {
+		return m.gpBps, false
+	}
+	return m.gpBps, true
 }
 
 // capacityTx returns the tunnel's proven UPLOAD capacity in bytes/s — what a

@@ -11,6 +11,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skysocks/skysettings"
 )
 
 // newClosingPeerSession is newTestSession with one difference that matters
@@ -244,7 +245,9 @@ func TestPromoter_SwapReportsAParkAndAPromote(t *testing.T) {
 	require.Equal(t, router.MuxEventTunnelParked, got[0].event, "the park comes first: the active set is never momentarily two wide")
 	require.EqualValues(t, 1000, got[0].port)
 	require.Equal(t, TunnelRoleStandby, got[0].role)
-	require.Contains(t, got[0].reason, "promoter: standby beat active by 5.00x")
+	require.Contains(t, got[0].reason, "promoter: standby beat an unproductive active by 5.00x")
+	require.Contains(t, got[0].reason, "goodput unmeasured vs unmeasured",
+		"an RTT swap says so, and says that neither side had bytes behind it")
 
 	require.Equal(t, router.MuxEventTunnelPromoted, got[1].event)
 	require.EqualValues(t, 1001, got[1].port)
@@ -323,16 +326,13 @@ func TestPromoter_NoAuditionIsOfferedWhileAnythingIsBusy(t *testing.T) {
 	require.True(t, c.IsStandby(standby))
 }
 
-// A standby whose capacity IS proven needs no audition.
+// A standby whose GOODPUT is measured needs no audition: the audition exists
+// to produce that number, and re-running it inside tunnel.goodput_fresh would
+// spend a chunk stream re-learning what is already known.
 func TestPromoter_NoAuditionForAProvenStandby(t *testing.T) {
 	c, _, standby, cleanup := promoterClient(t, 100, 95)
 	defer cleanup()
-	c.sessionsMu.Lock()
-	m := c.recvStamp[standby]
-	m.mu.Lock()
-	m.rxCapBps, m.busyAt = 8e6, time.Now()
-	m.mu.Unlock()
-	c.sessionsMu.Unlock()
+	setGoodput(c, standby, 8e6)
 
 	c.maybePromote()
 	c.sessionsMu.Lock()
@@ -471,4 +471,277 @@ func TestPromoter_NoAuditionWhileTheAuditionedStandbyIsStillBusy(t *testing.T) {
 	}
 	require.Same(t, active, c.pickSessionKind(pickRecv, pickSibling), "so the next chunk stream goes to the measured tunnel")
 	require.NoError(t, st.Close())
+}
+
+// --- the capacity-aware rule -----------------------------------------------
+
+// setGoodput gives one tunnel a MEASURED delivered goodput, the way an
+// audition (or a spell in the active set) would have.
+func setGoodput(c *Client, s *yamux.Session, bps float64) {
+	c.sessionsMu.Lock()
+	m := c.recvStamp[s]
+	c.sessionsMu.Unlock()
+	m.mu.Lock()
+	m.gpBps, m.gpWins, m.gpAt = bps, tunnelGoodputMinWindows, time.Now()
+	m.mu.Unlock()
+}
+
+// moveBytes puts n bytes on a tunnel's wire counters, so the next promoter
+// tick sees them as traffic that happened since the previous one.
+func moveBytes(c *Client, s *yamux.Session, n uint64) {
+	c.sessionsMu.Lock()
+	m := c.recvStamp[s]
+	c.sessionsMu.Unlock()
+	m.rx.Add(n)
+}
+
+// THE DEFECT, as a test. On the rig 2026-09-18 the promoter parked the tunnel
+// that was carrying the object because a standby pinged 2.92x better (132 ms
+// against 384 ms). RTT is a property of the path's length and says nothing
+// about its width: here the near standby has been measured at a third of the
+// far active tunnel's throughput, and no number of ticks may swap it in.
+func TestPromoter_RTTBetterButSlowerStandbyIsNotPromoted(t *testing.T) {
+	c, active, standby, cleanup := promoterClient(t, 384, 132) // 2.91x on RTT
+	defer cleanup()
+	setGoodput(c, active, 9<<20)  // 9 MB/s — the tunnel carrying the bytes
+	setGoodput(c, standby, 3<<20) // 3 MB/s — near, and a third as fat
+
+	for i := 0; i < 10; i++ {
+		c.maybePromote()
+		backdatePromoteClock(c, 2*tunnelPromoteHold)
+	}
+	require.True(t, c.IsStandby(standby), "a measured comparison decides, and RTT gets no second vote")
+	require.False(t, c.IsStandby(active))
+}
+
+// ...and the same pair the other way round: when the standby has actually been
+// measured delivering more, the swap is exactly what should happen — after the
+// hold, like every other swap.
+func TestPromoter_GoodputBetterStandbyIsPromotedAfterTheHold(t *testing.T) {
+	c, active, standby, cleanup := promoterClient(t, 40, 384) // RTT says KEEP the active one
+	defer cleanup()
+	setGoodput(c, active, 2<<20)
+	setGoodput(c, standby, 9<<20) // 4.5x, clear of the 1.5x margin
+
+	c.maybePromote()
+	require.True(t, c.IsStandby(standby), "the first qualifying tick only starts the clock")
+
+	backdatePromoteClock(c, tunnelPromoteHold)
+	c.maybePromote()
+	require.False(t, c.IsStandby(standby), "held for the whole window; swap")
+	require.True(t, c.IsStandby(active))
+	require.Equal(t, 1, c.activeLiveCount(), "a swap, not a widening")
+}
+
+// An advantage inside the goodput margin is noise, however long it lasts.
+func TestPromoter_GoodputInsideTheMarginNeverSwaps(t *testing.T) {
+	c, active, standby, cleanup := promoterClient(t, 200, 40)
+	defer cleanup()
+	setGoodput(c, active, 6<<20)
+	setGoodput(c, standby, 8<<20) // 1.33x — inside 1.5x
+
+	for i := 0; i < 10; i++ {
+		c.maybePromote()
+		backdatePromoteClock(c, 2*tunnelPromoteHold)
+	}
+	require.True(t, c.IsStandby(standby),
+		"1.33x is inside the goodput margin, and the 5x RTT advantage does not rescue it")
+	require.False(t, c.IsStandby(active))
+}
+
+// The mid-transfer guard, which is the case yamux stream counts miss. A
+// striped upload opens and closes a stream per chunk, so between two chunks
+// the tunnel carrying the whole object reads as idle — and a promoter tick
+// landing in that gap used to park it. Bytes on the wire have no such gap.
+func TestPromoter_NoSwapWhileBytesAreMovingOnTheActiveTunnel(t *testing.T) {
+	c, active, standby, cleanup := promoterClient(t, 200, 40)
+	defer cleanup()
+
+	// A first tick establishes the byte baseline. The active tunnel is idle
+	// and unmeasured here, so the RTT rule is live and would otherwise swap.
+	c.maybePromote()
+	require.True(t, c.IsStandby(standby))
+
+	// Now the upload is in flight: no stream is open at this instant, but the
+	// tunnel has moved a chunk's worth of bytes since the last tick.
+	for i := 0; i < 10; i++ {
+		moveBytes(c, active, uint64(tunnelPromoteQuietBytes)*4) //nolint:gosec // a positive test constant
+		c.maybePromote()
+		backdatePromoteClock(c, 2*tunnelPromoteHold)
+		require.Zero(t, active.NumStreams(), "the gap between two chunks: no stream is open")
+	}
+	require.True(t, c.IsStandby(standby), "a tunnel moving bytes is mid-transfer, and mid-transfer is never parked")
+
+	// The upload finishes. One quiet tick and the same advantage goes through.
+	c.maybePromote()
+	backdatePromoteClock(c, tunnelPromoteHold)
+	c.maybePromote()
+	require.False(t, c.IsStandby(standby), "between transfers the swap is free, and it happens")
+}
+
+// Outstanding chunk or upload work is mid-transfer too, even before its first
+// byte: a chunk that has been handed to a tunnel and is waiting on the first
+// round trip moves nothing yet, and parking under it is the same defect.
+func TestPromoter_NoSwapWhileTheActiveTunnelHoldsOutstandingWork(t *testing.T) {
+	c, active, standby, cleanup := promoterClient(t, 200, 40)
+	defer cleanup()
+	c.sessionsMu.Lock()
+	m := c.recvStamp[active]
+	c.sessionsMu.Unlock()
+	m.startWork(time.Now())
+
+	for i := 0; i < 10; i++ {
+		c.maybePromote()
+		backdatePromoteClock(c, 2*tunnelPromoteHold)
+	}
+	require.True(t, c.IsStandby(standby), "a chunk is outstanding on it; the swap waits")
+
+	m.endWork()
+	c.maybePromote()
+	backdatePromoteClock(c, tunnelPromoteHold)
+	c.maybePromote()
+	require.False(t, c.IsStandby(standby))
+}
+
+// pool.freeze stops every discretionary swap, the capacity-driven one
+// included: the operator is holding the active set still.
+func TestPromoter_FreezeBlocksAGoodputSwap(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	c, active, standby, cleanup := promoterClient(t, 200, 40)
+	defer cleanup()
+	setGoodput(c, active, 1<<20)
+	setGoodput(c, standby, 9<<20) // 9x: as clear as an advantage gets
+
+	require.True(t, skysettings.Apply(map[string]int64{skysettings.PoolFreeze: 1}))
+	for i := 0; i < 10; i++ {
+		c.maybePromote()
+		backdatePromoteClock(c, 2*tunnelPromoteHold)
+	}
+	require.True(t, c.IsStandby(standby), "frozen: no discretionary swap, whatever was measured")
+
+	require.True(t, skysettings.Reset())
+	c.maybePromote()
+	backdatePromoteClock(c, tunnelPromoteHold)
+	c.maybePromote()
+	require.False(t, c.IsStandby(standby), "un-frozen, the same advantage swaps")
+}
+
+// ...but a DEAD active tunnel is replaced in the same tick regardless: the
+// failover path is untouched by any of this, freeze and measurements alike.
+func TestPromoter_DeadActiveIsReplacedEvenFrozen(t *testing.T) {
+	t.Cleanup(func() { skysettings.Reset() })
+	c, active, standby, cleanup := promoterClient(t, 40, 200) // the standby is WORSE; only a failover explains a promote
+	defer cleanup()
+	setGoodput(c, active, 9<<20)
+	require.True(t, skysettings.Apply(map[string]int64{skysettings.PoolFreeze: 1}))
+
+	require.NoError(t, active.Close())
+	require.Eventually(t, active.IsClosed, time.Second, 5*time.Millisecond)
+
+	c.maybePromote()
+	require.False(t, c.IsStandby(standby), "a dead active is replaced on the very tick that sees it, frozen or not")
+	require.Equal(t, 1, c.activeLiveCount())
+}
+
+// The rule itself, as a table. Everything above drives it through a live
+// client; this pins the decision on its own.
+func TestChooseSwap(t *testing.T) {
+	gp := func(bps float64, rtt float64) tunnelCandidate {
+		return tunnelCandidate{gp: bps, gpOK: true, rtt: rtt}
+	}
+	unmeasured := func(rtt float64) tunnelCandidate { return tunnelCandidate{rtt: rtt} }
+
+	t.Run("goodput decides and RTT does not overrule it", func(t *testing.T) {
+		worst, best, byGoodput := chooseSwap(
+			[]tunnelCandidate{gp(9<<20, 384)}, []tunnelCandidate{gp(3<<20, 132)})
+		require.Nil(t, worst)
+		require.Nil(t, best)
+		require.False(t, byGoodput)
+	})
+	t.Run("a measured advantage past the margin swaps", func(t *testing.T) {
+		worst, best, byGoodput := chooseSwap(
+			[]tunnelCandidate{gp(2<<20, 40)}, []tunnelCandidate{gp(9<<20, 384)})
+		require.NotNil(t, worst)
+		require.NotNil(t, best)
+		require.True(t, byGoodput)
+	})
+	t.Run("an active measured delivering nothing is replaced by any measured standby", func(t *testing.T) {
+		_, best, byGoodput := chooseSwap(
+			[]tunnelCandidate{gp(0, 40)}, []tunnelCandidate{gp(1<<20, 900)})
+		require.NotNil(t, best)
+		require.True(t, byGoodput)
+	})
+	t.Run("RTT decides only when the active was never measured productive", func(t *testing.T) {
+		worst, best, byGoodput := chooseSwap(
+			[]tunnelCandidate{unmeasured(200)}, []tunnelCandidate{unmeasured(40)})
+		require.NotNil(t, worst)
+		require.NotNil(t, best)
+		require.False(t, byGoodput)
+	})
+	t.Run("a productive active is never parked on RTT alone", func(t *testing.T) {
+		worst, _, _ := chooseSwap(
+			[]tunnelCandidate{gp(9<<20, 384)}, []tunnelCandidate{unmeasured(40)})
+		require.Nil(t, worst, "the standby has no measurement to beat 9 MB/s with")
+	})
+	t.Run("a trickling active is below the productive floor, so RTT may still park it", func(t *testing.T) {
+		worst, _, byGoodput := chooseSwap(
+			[]tunnelCandidate{gp(float64(tunnelPromoteIdleBps)/2, 200)}, []tunnelCandidate{unmeasured(40)})
+		require.NotNil(t, worst)
+		require.False(t, byGoodput)
+	})
+	t.Run("a carrying active is not a candidate at all", func(t *testing.T) {
+		a := gp(0, 900)
+		a.carrying = true
+		worst, _, _ := chooseSwap([]tunnelCandidate{a}, []tunnelCandidate{gp(9<<20, 40)})
+		require.Nil(t, worst)
+	})
+	t.Run("the weakest active is the one given up", func(t *testing.T) {
+		worst, _, byGoodput := chooseSwap(
+			[]tunnelCandidate{gp(9<<20, 100), gp(1<<20, 50)}, []tunnelCandidate{gp(8<<20, 300)})
+		require.NotNil(t, worst)
+		require.EqualValues(t, 1<<20, worst.gp, "the 1 MB/s tunnel goes, not the 9 MB/s one beside it")
+		require.True(t, byGoodput)
+	})
+}
+
+// Two tunnels within a whisker of each other must not trade places for ever.
+// The margin, the hold and the park hold are three separate reasons they
+// cannot, and this drives all three over many ticks.
+func TestPromoter_MeasuredTunnelsDoNotPingPong(t *testing.T) {
+	c, active, standby, cleanup := promoterClient(t, 100, 100)
+	defer cleanup()
+
+	// swaps counts every change of role across the whole run.
+	was := c.IsStandby(standby)
+	swaps := 0
+	tick := func() {
+		c.maybePromote()
+		backdatePromoteClock(c, 2*tunnelPromoteHold)
+		if now := c.IsStandby(standby); now != was {
+			swaps++
+			was = now
+		}
+	}
+
+	// The standby is better, but only by 1.4x — inside the 1.5x margin.
+	setGoodput(c, active, 5<<20)
+	setGoodput(c, standby, 7<<20)
+	for i := 0; i < 40; i++ {
+		tick()
+	}
+	require.True(t, c.IsStandby(standby))
+	require.Zero(t, swaps, "inside the margin nothing moves at all")
+
+	// Now make it clearly better, and reverse the numbers the moment it wins.
+	// One swap follows and the park hold refuses the trade back, so the pair
+	// settles instead of oscillating however many ticks it is given.
+	setGoodput(c, standby, 9<<20)
+	for i := 0; i < 40; i++ {
+		tick()
+		if !c.IsStandby(standby) {
+			setGoodput(c, active, 9<<20) // the parked tunnel now looks best
+			setGoodput(c, standby, 1<<20)
+		}
+	}
+	require.Equal(t, 1, swaps, "exactly one swap, and no trade back inside the park hold")
 }

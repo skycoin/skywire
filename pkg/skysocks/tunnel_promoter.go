@@ -6,6 +6,7 @@ package skysocks
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/0magnet/yamux"
@@ -40,14 +41,55 @@ const (
 	tunnelParkMinHold     = 30 * time.Second
 )
 
+// The capacity half of the rule, and the two guards that keep a swap off a
+// working transfer. Each is the default of the knob of the same name, and each
+// number is the answer to something the rig measured on 2026-09-18:
+//
+//   - tunnelPromoteGoodputMargin 1.5 is deliberately larger than the RTT
+//     margin. A latency advantage is cheap to observe and cheap to be wrong
+//     about; a throughput advantage is an assertion that the OTHER tunnel
+//     should stop carrying the object, and on paired 50 MB rows the pool's own
+//     choice scored 0.81 of the best single route, so the bar for overruling
+//     what is already working is half again as much, not a quarter.
+//   - tunnelGoodputFresh 2 min outlives an audition cycle (60 s) twice over,
+//     so a standby that was measured stays measured across the gap between two
+//     transfers, while a route whose quality swings — the rig's references move
+//     2x inside an hour — is re-auditioned long before its number is stale
+//     enough to mislead.
+//   - tunnelGoodputMinWindows 2 is the smallest number that is not one sliver.
+//   - tunnelPromoteQuietBytes 256 KiB is three orders of magnitude above the
+//     keepalive traffic an idle tunnel moves between two 5 s ticks (~100 B) and
+//     well below one range chunk, so it separates "idle" from "carrying"
+//     without a tuning argument.
+//   - tunnelPromoteIdleBps 64 KiB/s is the floor under PRODUCTIVE. Below it a
+//     tunnel is delivering trickle — a status poll, a stalled chunk — and
+//     latency may still decide its place; at or above it, bytes decide.
+const (
+	tunnelGoodputAlpha         = 0.25
+	tunnelGoodputFresh         = 2 * time.Minute
+	tunnelGoodputMinWindows    = 2
+	tunnelPromoteGoodputMargin = 1.5
+	tunnelPromoteQuietBytes    = int64(256 << 10)
+	tunnelPromoteIdleBps       = int64(64 << 10)
+)
+
 // The audition — how a tunnel that carries nothing gets a capacity number.
 //
 // tunnelMeter.sample only updates the estimates from a window in which the
 // tunnel carried streams (#4965: keepalives at 23 B/s once "proved" a
 // kilobyte per second and starved the tunnel forever), so a standby tunnel's
-// capacity is 0 and unproven for as long as it is held. That is the honest
-// state, and it is also why the promoter can rank only on RTT: there is
-// nothing else to rank on.
+// capacity and goodput are unmeasured for as long as it is held. That is the
+// honest state, and it is why a standby with no audition behind it can be
+// ranked only on RTT.
+//
+// THE AUDITION IS THE ONLY HONEST CAPACITY PROBE A STANDBY HAS. A keepalive
+// ping measures the path's length, not its width; there is no sink at the exit
+// outside the bench rig, and a synthetic probe transfer to some configured URL
+// would both cost bytes the user did not ask for and measure that URL. The
+// audition instead hands the standby ONE stream the client was going to open
+// anyway, and the bytes that stream moves are a real measurement of a real
+// path — which is why the promotion rule below treats an audition result, and
+// nothing else, as a standby's capacity.
 //
 // The audition closes that gap for free. The offer is made only from a quiet
 // moment, and the stream that takes it is one some tunnel will carry
@@ -129,30 +171,181 @@ func (w *tunnelRTTWindow) minMs(now time.Time) float64 {
 type tunnelCandidate struct {
 	s       *yamux.Session
 	rtt     float64
+	gp      float64 // delivered goodput, bytes/s
+	gpOK    bool    // ...and whether that is a measurement at all
 	streams int
-	proven  bool // a busy window has measured its capacity
+	moved   uint64 // bytes the tunnel moved since the previous promoter tick
+	// carrying is the mid-transfer test: an open stream, outstanding chunk or
+	// upload work, or more than tunnel.promote_quiet_bytes on the wire since
+	// the last tick. A carrying tunnel is never a swap candidate.
+	carrying bool
+	proven   bool // its goodput is measured, so an audition would teach nothing
+}
+
+// productive reports whether the tunnel has been MEASURED delivering real
+// throughput — the state in which RTT alone may never park it.
+func (t tunnelCandidate) productive() bool {
+	return t.gpOK && t.gp >= float64(setTunnelPromoteIdleBps())
+}
+
+// weakest ranks two actives for demotion: an unmeasured tunnel counts as zero
+// (nothing says it is carrying the object, so it is the one to give up), and a
+// tie between two zeroes is broken on the longer round trip.
+func (t tunnelCandidate) weakerThan(o tunnelCandidate) bool {
+	a, b := 0.0, 0.0
+	if t.gpOK {
+		a = t.gp
+	}
+	if o.gpOK {
+		b = o.gp
+	}
+	if a != b {
+		return a < b
+	}
+	return t.rtt > o.rtt
+}
+
+// chooseSwap is the promotion rule, as a pure function of what was measured.
+//
+// The order is the whole point, and it is the inversion of what shipped before:
+//
+//  1. the demotion candidate is the weakest SWAPPABLE active — one that is not
+//     mid-transfer — ranked on delivered goodput, not on latency.
+//  2. when BOTH sides carry a goodput measurement, that comparison decides and
+//     nothing overrules it. A standby must beat the weakest active by
+//     tunnel.promote_goodput_margin (1.5) to take its place, and a measured
+//     comparison that FAILS ends the tick: RTT does not get a second vote.
+//  3. only when the comparison cannot be made — the standby was never
+//     auditioned, or its audition has aged out — does RTT decide, and then
+//     only over an active that has NOT been measured being productive. This is
+//     the guard the live defect needed: on the rig the parked tunnel was
+//     carrying ~9 MB/s through a 44 ms first hop while the standby that
+//     replaced it merely pinged 2.92x better.
+//
+// A standby with no measurement of its own can therefore still take an idle,
+// never-productive slot on latency alone — which is what fills a cold active
+// set — but it can no longer displace throughput that has been observed.
+func chooseSwap(active, standby []tunnelCandidate) (worst, best *tunnelCandidate, byGoodput bool) {
+	for i := range active {
+		if active[i].carrying {
+			continue
+		}
+		if worst == nil || active[i].weakerThan(*worst) {
+			worst = &active[i]
+		}
+	}
+	if worst == nil {
+		return nil, nil, false
+	}
+
+	var byGP *tunnelCandidate
+	for i := range standby {
+		if !standby[i].gpOK || standby[i].gp <= 0 {
+			continue
+		}
+		if byGP == nil || standby[i].gp > byGP.gp {
+			byGP = &standby[i]
+		}
+	}
+	if byGP != nil && worst.gpOK {
+		if byGP.gp >= setTunnelPromoteGoodputMargin()*worst.gp {
+			return worst, byGP, true
+		}
+		return nil, nil, false
+	}
+
+	if worst.productive() {
+		// Measured productive, and no standby measurement to beat it with.
+		// Latency is not evidence about throughput, so the tick ends here.
+		return nil, nil, false
+	}
+	var byRTT *tunnelCandidate
+	for i := range standby {
+		if standby[i].rtt <= 0 {
+			continue
+		}
+		if byRTT == nil || standby[i].rtt < byRTT.rtt {
+			byRTT = &standby[i]
+		}
+	}
+	if byRTT == nil || worst.rtt < setTunnelPromoteMargin()*byRTT.rtt {
+		return nil, nil, false
+	}
+	return worst, byRTT, false
+}
+
+// movedOver reports whether n bytes moved is more than the quiet threshold. A
+// threshold of zero or less means every byte counts as traffic, which is the
+// most conservative reading of a knob set to nonsense: nothing is ever parked.
+func movedOver(n uint64, limit int64) bool {
+	if limit <= 0 {
+		return n > 0
+	}
+	return n > uint64(limit)
+}
+
+// bpsText prints a goodput for an event reason, naming an absence as one.
+func bpsText(bps float64, ok bool) string {
+	if !ok {
+		return "unmeasured"
+	}
+	return fmt.Sprintf("%.2f MB/s", bps/(1<<20))
+}
+
+// swapReason is the sentence a park and its promote both carry: which
+// statistic decided, by how much, and what the OTHER statistic said — so a
+// bench row can tell a goodput swap from a latency one without a second event.
+func swapReason(worst, best *tunnelCandidate, byGoodput bool, since time.Duration) string {
+	held := since.Truncate(time.Second)
+	if byGoodput {
+		ratio := math.Inf(1)
+		if worst.gp > 0 {
+			ratio = best.gp / worst.gp
+		}
+		return fmt.Sprintf("promoter: standby goodput beat active by %s (%s vs %s; rtt %.0fms vs %.0fms) for %s",
+			ratioText(ratio), bpsText(best.gp, best.gpOK), bpsText(worst.gp, worst.gpOK),
+			best.rtt, worst.rtt, held)
+	}
+	ratio := 0.0
+	if best.rtt > 0 {
+		ratio = worst.rtt / best.rtt
+	}
+	return fmt.Sprintf("promoter: standby beat an unproductive active by %s (%.0fms vs %.0fms min-rtt; goodput %s vs %s) for %s",
+		ratioText(ratio), best.rtt, worst.rtt,
+		bpsText(best.gp, best.gpOK), bpsText(worst.gp, worst.gpOK), held)
+}
+
+// ratioText prints a ratio, naming the divide-by-nothing case rather than
+// printing "+Infx".
+func ratioText(r float64) string {
+	if math.IsInf(r, 1) {
+		return "any margin (the active delivered nothing)"
+	}
+	return fmt.Sprintf("%.2fx", r)
 }
 
 // maybePromote is the promoter: one tick, at most one swap.
 //
 // What it does, in order:
 //
-//  1. score every live tunnel by its windowed MINIMUM yamux ping. Never by the
-//     router's per-leg route_latency_ms: sendPong always replies on leg 0, so
-//     that number is leg-i forward + leg-0 reverse and says nothing about the
-//     tunnel. Never by capacity either — a standby tunnel has none, which is
-//     what the audition below is for.
-//  2. the demotion candidate is the worst IDLE active tunnel. An active tunnel
-//     carrying streams is not a candidate at all, so a swap during a transfer
-//     is deferred until the streams drain rather than disturbing them; range
-//     chunks drain within a round trip, and a lone stream keeps its tunnel for
-//     as long as it lives. Nothing in flight is ever migrated.
+//  1. measure every live tunnel two ways: its DELIVERED GOODPUT over the
+//     windows it carried streams (tunnelMeter.goodput), and its windowed
+//     MINIMUM yamux ping. Never the router's per-leg route_latency_ms:
+//     sendPong always replies on leg 0, so that number is leg-i forward +
+//     leg-0 reverse and says nothing about the tunnel.
+//  2. the demotion candidate is the weakest active tunnel that is not
+//     CARRYING — no open stream, no outstanding chunk or upload slot, and
+//     under tunnel.promote_quiet_bytes on the wire since the last tick. A swap
+//     during a transfer is deferred until the transfer ends rather than
+//     disturbing it. Nothing in flight is ever migrated.
 //  3. the promotion candidate is the best standby with a FRESH statistic
 //     (a tunnel silent for standbyRTTStale is not promoted voluntarily — that
 //     is the "standby silently black-holes and is switched into a transfer"
 //     case), not benched by an exit-open timeout, and past its park hold.
-//  4. the advantage must be at least tunnelPromoteMargin and must have held
-//     for tunnelPromoteHold; otherwise the candidate's clock is reset.
+//  4. chooseSwap applies the rule: goodput against goodput where both are
+//     measured, latency only over an active that has never been measured
+//     productive. The advantage must then hold for tunnelPromoteHold;
+//     otherwise the candidate's clock is reset.
 //  5. the swap is two map entries and two events. No route work, no setup node.
 //
 // Then, whether or not a swap happened, it arms the idle audition.
@@ -180,25 +373,8 @@ func (c *Client) maybePromote() {
 		return
 	}
 
-	// The worst IDLE active tunnel is the only one that may be parked.
-	var worst *tunnelCandidate
-	for i := range active {
-		if active[i].streams > 0 {
-			continue
-		}
-		if worst == nil || active[i].rtt > worst.rtt {
-			worst = &active[i]
-		}
-	}
-	// The best eligible standby.
-	var best *tunnelCandidate
-	for i := range standby {
-		if best == nil || standby[i].rtt < best.rtt {
-			best = &standby[i]
-		}
-	}
-
-	if worst == nil || best == nil || best.rtt <= 0 || worst.rtt < setTunnelPromoteMargin()*best.rtt {
+	worst, best, byGoodput := chooseSwap(active, standby)
+	if worst == nil || best == nil {
 		// Nobody qualifies this tick, so nobody keeps a clock: an advantage
 		// that lapses starts its hold again from zero.
 		c.clearPromoteClocks(nil)
@@ -212,9 +388,7 @@ func (c *Client) maybePromote() {
 		return
 	}
 
-	ratio := worst.rtt / best.rtt
-	reason := fmt.Sprintf("promoter: standby beat active by %.2fx (%.0fms vs %.0fms min-rtt) for %s",
-		ratio, best.rtt, worst.rtt, since.Truncate(time.Second))
+	reason := swapReason(worst, best, byGoodput, since)
 	// Park first: the active set must never be momentarily two wide, since the
 	// picker would stripe a stream onto a tunnel that is about to leave.
 	if !c.parkTunnel(worst.s, reason) {
@@ -271,9 +445,24 @@ func (c *Client) tunnelCandidates(now time.Time) (active, standby []tunnelCandid
 		}
 		streams := s.NumStreams()
 		m.sample(now, streams > 0)
-		_, proven := m.capacity(now)
+		gp, gpOK := m.goodput(now)
 		rtt, ok := m.minRTT(now)
-		cand := tunnelCandidate{s: s, rtt: rtt, streams: streams, proven: proven}
+		// Bytes since the previous tick. A tunnel seen for the first time has
+		// moved nothing KNOWN, not everything it ever moved.
+		total := m.rx.Load() + m.tx.Load()
+		var moved uint64
+		if prev, seen := c.tickBytes[s]; seen && total > prev {
+			moved = total - prev
+		}
+		if c.tickBytes == nil {
+			c.tickBytes = make(map[*yamux.Session]uint64)
+		}
+		c.tickBytes[s] = total
+		cand := tunnelCandidate{
+			s: s, rtt: rtt, gp: gp, gpOK: gpOK, streams: streams, moved: moved,
+			carrying: streams > 0 || m.outstandingWork() > 0 || movedOver(moved, setTunnelPromoteQuietBytes()),
+			proven:   gpOK,
+		}
 		if !c.standby[s] {
 			active = append(active, cand)
 			continue
@@ -379,27 +568,29 @@ func (c *Client) armAudition(now time.Time, active, standby []tunnelCandidate) {
 	if len(active) == 0 || len(standby) == 0 {
 		return
 	}
-	bestActive := 0.0
 	for _, a := range active {
-		if a.streams > 0 {
+		if a.carrying {
 			return // something is in flight; an audition must not touch it
-		}
-		if a.rtt > 0 && (bestActive == 0 || a.rtt < bestActive) {
-			bestActive = a.rtt
 		}
 	}
 	for _, sb := range standby {
-		if sb.streams > 0 {
+		if sb.carrying {
 			return // a standby mid-audition is in flight too
 		}
 	}
-	if bestActive <= 0 {
-		return
-	}
+	// Who is a plausible candidate. This used to be "a standby within the
+	// promote margin of the best ACTIVE tunnel's RTT", which begged the
+	// question the audition exists to answer: a tunnel is auditioned precisely
+	// because its latency does not tell us what it can carry, so screening the
+	// candidates on latency first kept the fattest far route permanently
+	// unmeasured and therefore permanently unpromotable. Any standby whose
+	// goodput is unmeasured is a candidate; the lowest ping goes first only so
+	// that the cheapest chunk is tried first, and tunnel.audition_every
+	// rotates the rest in over the following ticks.
 	var pick *yamux.Session
 	pickRTT := 0.0
 	for _, sb := range standby {
-		if sb.proven || sb.rtt <= 0 || sb.rtt > setTunnelPromoteMargin()*bestActive {
+		if sb.proven || sb.rtt <= 0 {
 			continue
 		}
 		if pick == nil || sb.rtt < pickRTT {
@@ -459,6 +650,7 @@ func (c *Client) forgetTunnel(s *yamux.Session) {
 	delete(c.promoteSince, s)
 	delete(c.parkedAt, s)
 	delete(c.auditionedAt, s)
+	delete(c.tickBytes, s)
 	if c.audition == s {
 		c.audition = nil
 	}
