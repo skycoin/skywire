@@ -8,6 +8,9 @@ package router
 import (
 	"sync"
 
+	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -34,6 +37,11 @@ type IntakeStats struct {
 	// intake_drops on one group and healthy transfers elsewhere is the
 	// expected shape of a single wedged app.
 	RouteGroupQueues []RouteGroupQueue `json:"route_group_queues,omitempty"`
+	// ForwardQueues is the TRANSIT write side: one entry per next-hop
+	// transport this visor is relaying frames to. Non-zero drops name a peer
+	// that stopped draining; they used to be a visor-wide freeze instead
+	// (see router_forward.go).
+	ForwardQueues []ForwardQueue `json:"forward_queues,omitempty"`
 }
 
 // RouteGroupQueue is one route group's inbound queue depths.
@@ -101,6 +109,7 @@ func (c *intakeCounters) snapshot() (unknown, control map[string]int64, stale in
 func (r *router) IntakeStats() IntakeStats {
 	unknown, control, stale := r.intake.snapshot()
 	out := IntakeStats{StaleRouteDrops: stale}
+	out.ForwardQueues = r.forward.snapshot()
 	if len(unknown) > 0 {
 		out.UnknownPacketTypes = unknown
 	}
@@ -139,4 +148,23 @@ func (r *router) IntakeStats() IntakeStats {
 // readQueue is the depth and capacity of the group's inbound app queue.
 func (rg *RouteGroup) readQueue() (int, int) {
 	return len(rg.readCh), cap(rg.readCh)
+}
+
+// ForwardQueue is one next-hop transport's transit write queue: what this
+// visor is relaying for other people's routes, and what it had to drop. A
+// climbing DropsQueueFull or DropsWriteTimeout on one transport with healthy
+// transfers elsewhere is the expected shape of a single wedged transit peer —
+// which is exactly what it must look like, since that peer used to take the
+// whole dataplane down with it.
+type ForwardQueue struct {
+	TpID     uuid.UUID     `json:"tp_id"`
+	TpType   string        `json:"tp_type,omitempty"`
+	Remote   cipher.PubKey `json:"remote_pk,omitempty"`
+	Queue    int           `json:"queue"`
+	Capacity int           `json:"capacity"`
+	Sent     uint64        `json:"sent"`
+	// The named drop reasons, one counter each.
+	DropsQueueFull    uint64 `json:"forward_drop_queue_full"`
+	DropsWriteTimeout uint64 `json:"forward_drop_write_timeout"`
+	DropsWriteError   uint64 `json:"forward_drop_write_error"`
 }

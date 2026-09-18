@@ -132,6 +132,17 @@ var (
 	ForwardSwitchMargin  = RegisterRatioRange("forward.switch_margin", 0.2, 0, 1, "how much lower a challenger leg must measure before the forward direction moves to it")
 	ForwardSwitchSamples = RegisterMin("forward.switch_samples", KindCount, 2, 1, "consecutive refreshes a challenger must clear forward.switch_margin for")
 
+	// The TRANSIT write path (router_forward.go). A packet this visor only
+	// relays used to be written to the next hop SYNCHRONOUSLY from the single
+	// inbound packet loop, with a context that never cancels, so one peer that
+	// stopped draining froze every route group on the visor for up to
+	// managed_transport writeTimeout (1 minute). The write is now handed to a
+	// bounded per-transport queue with one writer goroutine, and the write
+	// itself carries forward.write_timeout as its deadline.
+	ForwardWriteTimeout    = RegisterMin("forward.write_timeout", KindDuration, int64(2*time.Second), int64(50*time.Millisecond), "how long ONE transit (forward/intermediary) write may take before the frame is dropped; it is also the deadline charged to the underlying conn, so it caps how long a wedged peer can hold the transport write lock")
+	ForwardQueueDepth      = RegisterMin("forward.queue_depth", KindCount, 1024, 1, "frames the per-next-hop transit queue holds before a further frame is dropped as forward_drop_queue_full (read when a transport first forwards; a change applies to queues created after it)")
+	ForwardDropEventWindow = RegisterMin("forward.drop_event_window", KindDuration, int64(time.Minute), int64(time.Second), "how often ONE transport may record a forward_drops mux event, so a peer that black-holes a bulk transfer costs one line per window, not one per frame")
+
 	// Route exclusion after an early death (dead_route_cache.go).
 	DeadRouteHold    = RegisterMin("route.dead_hold", KindDuration, int64(60*time.Second), int64(time.Second), "how long a route that died young is kept out of the next diversify search")
 	DeadRouteHoldMax = RegisterMin("route.dead_hold_max", KindDuration, int64(8*time.Minute), int64(time.Second), "ceiling on the doubling applied to that window on each repeat death")

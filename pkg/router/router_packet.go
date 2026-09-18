@@ -380,13 +380,19 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 		return fmt.Errorf("packet of type %s can't be forwarded", packet.Type())
 	}
 
-	if err := tp.WritePacket(ctx, p); err != nil {
+	// A canceled serve context means the router is going away; do not queue
+	// work for a writer that is about to stop.
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	if err := r.UpdateRuleActivity(rule.KeyRouteID()); err != nil {
-		r.logger.Debugf("Failed to update activity for rule with route ID %d: %v", rule.KeyRouteID(), err)
-	}
+	// Hand the frame to this next hop's own queue and return. Writing it here
+	// would put the visor's SINGLE inbound packet loop on one peer's conn (see
+	// router_forward.go and the contract in router_serve.go): a transit peer
+	// that stopped draining froze every route group on the visor for up to a
+	// minute. The rule's activity is refreshed by the writer, once the frame is
+	// actually on the wire.
+	r.forwardWrite(tp, p, rule.KeyRouteID())
 
 	return nil
 }
