@@ -37,6 +37,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cliout/cliproxy"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -51,8 +52,17 @@ type legReconcile struct {
 // (prune=true) the target set, keyed by each leg's first-hop transport id.
 // It is the shared engine behind `proxy mux set` and `proxy start --route`.
 // The route group must already exist (start the proxy first). Per-leg RPC
+// muxLegAPI is the slice of visor.API that reconciling legs needs: read the
+// app's route groups, add a leg, remove a leg. Narrow so the reconcile can be
+// driven by a stub in a test.
+type muxLegAPI interface {
+	RouteGroupMuxInfo(appName string) ([]visor.MuxRouteGroupInfo, error)
+	AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error
+	RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error
+}
+
 // errors are logged to stderr and skipped rather than aborting the batch.
-func reconcileLegs(rpcClient visor.API, app string, rgPort uint16, targets []routePair, prune bool) (legReconcile, error) {
+func reconcileLegs(rpcClient muxLegAPI, app string, rgPort uint16, targets []routePair, prune bool) (legReconcile, error) {
 	var res legReconcile
 	want := make(map[uuid.UUID]routePair, len(targets))
 	for _, t := range targets {
