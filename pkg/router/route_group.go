@@ -465,6 +465,16 @@ type RouteGroup struct {
 	// latency band judges on — the latest sample (and the EWMA over it) is
 	// queue-inflated under load and made the band flap. Guarded by legLivenessMu.
 	legRTTWin map[uuid.UUID]*legRTTWindow
+	// sbdTrialMu guards sbdTrials and sbdIndependent. Leaf lock: NEVER held while
+	// taking rg.mu, legLivenessMu or adaptiveParkMu.
+	sbdTrialMu sync.Mutex
+	// sbdTrials holds, per PARKED leg transport ID, the standing shared-bottleneck
+	// park trial: a park is provisional until the group's aggregate goodput is
+	// re-read with the leg out (see sbd_trial.go).
+	sbdTrials map[uuid.UUID]sbdTrial
+	// sbdIndependent holds, per leg PAIR, the verified-independent window a failed
+	// park trial opened: while it runs, no SBD ruling may merge those two legs.
+	sbdIndependent map[sbdPairKey]sbdSuppression
 	// adaptiveParkMu guards adaptiveParks. Leaf lock: NEVER held while taking
 	// rg.mu or legLivenessMu.
 	adaptiveParkMu sync.Mutex
@@ -539,6 +549,8 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		legForwardHops:     make(map[uuid.UUID][]routing.Hop),
 		legRemoteTp:        make(map[uuid.UUID]uuid.UUID),
 		legRecvSnap:        make(map[uuid.UUID]uint64),
+		sbdTrials:          make(map[uuid.UUID]sbdTrial),
+		sbdIndependent:     make(map[sbdPairKey]sbdSuppression),
 	}
 
 	// The intake worker starts with the group: a handshake or data packet can
@@ -3189,6 +3201,13 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	rg.mu.Lock()
 	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
 	rg.mu.Unlock()
+
+	// Read the verdict on any park this controller is still holding as a TRIAL
+	// BEFORE ruling again: a leg the goodput evidence vindicates is back in the
+	// active set, and its pair exempt, by the time this tick's grouping runs.
+	aggRate := sbdAggRate(recvDeltas)
+	rg.evaluateSBDTrials(aggRate, tpsCopy)
+
 	if len(tpsCopy) < 2 {
 		rg.mux.SetLegGroups(nil) // fewer than two legs — nothing to group
 		return
@@ -3207,7 +3226,15 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	}
 	rg.legLivenessMu.Unlock()
 
-	groups := groupLegsBySBD(stats)
+	// Pairs a failed park trial already proved independent are vetoed out of the
+	// clustering for their backoff window, so the detector cannot re-park a leg
+	// the measurement just paid for.
+	groups := groupLegsBySBDExcept(stats, func(i, j int) bool {
+		if tpsCopy[i] == nil || tpsCopy[j] == nil {
+			return false
+		}
+		return rg.sbdSuppressed(tpsCopy[i].Entry.ID, tpsCopy[j].Entry.ID)
+	})
 	rg.mux.SetLegGroups(groups)
 
 	// Distinct-group admission: park any redundant co-bottlenecked active legs.
@@ -3228,10 +3255,19 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	demote := pickBottleneckDemotions(legs)
 	demote = rg.keepReverseFloor(demote, recvDeltas)
 	for _, idx := range demote {
-		rg.logger.Infof("shared-bottleneck: parking leg %d to warm standby (co-bottlenecked with a kept active leg in group %d — one pipe, not two; striping it adds only reorder cost)", idx, groups[idx])
+		rg.logger.Infof("shared-bottleneck: parking leg %d to warm standby on TRIAL (co-bottlenecked with a kept active leg in group %d — one pipe, not two; striping it adds only reorder cost). Aggregate goodput now %.0f B/s; if it falls more than %.0f%% within %v the park is undone",
+			idx, groups[idx], aggRate, SBDTrialLoss()*100, SBDTrialWindow())
 		rg.mux.setLegStandby(idx, true)
 		if idx < len(tpsCopy) && tpsCopy[idx] != nil {
-			rg.noteLegEvent(MuxEventLegParked, "shared bottleneck: co-bottlenecked with a kept active leg (one pipe, not two)", MuxByAdaptive, idx, len(tpsCopy), tpsCopy[idx], nil)
+			// The ruling is provisional: record the pre-park aggregate rate and the
+			// active leg this one was judged redundant against, so the next tick can
+			// undo the park if it cost the group capacity (see sbd_trial.go).
+			var keeperID uuid.UUID
+			if k := sbdGroupKeeper(legs, demote, idx); k >= 0 && k < len(tpsCopy) && tpsCopy[k] != nil {
+				keeperID = tpsCopy[k].Entry.ID
+			}
+			rg.beginSBDTrial(tpsCopy[idx].Entry.ID, keeperID, aggRate)
+			rg.noteLegEvent(MuxEventLegParked, "shared bottleneck: co-bottlenecked with a kept active leg (one pipe, not two) — on trial until the aggregate goodput is re-read", MuxByAdaptive, idx, len(tpsCopy), tpsCopy[idx], nil)
 			// Start the park's minimum hold so the latency band — which runs later
 			// in THIS same data-progress tick and is blind to the grouping — cannot
 			// re-admit the leg on the spot (the measured 5s park/promote flap).

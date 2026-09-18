@@ -2,9 +2,12 @@
 package router
 
 import (
+	"bytes"
 	"math"
 	"sort"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Shared-bottleneck detection (SBD) for mux legs, after RFC 8382.
@@ -268,6 +271,16 @@ func sbdSimilar(a, b sbdStats) bool {
 // A leg with too few samples is its own singleton (never merged): absent
 // evidence, its capacity is counted in full.
 func groupLegsBySBD(stats []sbdStats) []int {
+	return groupLegsBySBDExcept(stats, nil)
+}
+
+// groupLegsBySBDExcept is groupLegsBySBD with a veto: blocked(i, j) reports that
+// a pair may NOT be merged however alike their statistics look, because a park
+// trial already PROVED the two legs carry independent capacity (see the trial
+// comment above) and the pair's suppression window has not expired. The veto is
+// pairwise rather than per-leg so a leg proven independent of one sibling can
+// still be grouped with another.
+func groupLegsBySBDExcept(stats []sbdStats, blocked func(i, j int) bool) []int {
 	n := len(stats)
 	groups := make([]int, n)
 	// Union-find parent array; each leg starts as its own root.
@@ -297,6 +310,9 @@ func groupLegsBySBD(stats []sbdStats) []int {
 	}
 	for i := 0; i < n; i++ {
 		for j := i + 1; j < n; j++ {
+			if blocked != nil && blocked(i, j) {
+				continue
+			}
 			if sbdSimilar(stats[i], stats[j]) {
 				union(i, j)
 			}
@@ -381,4 +397,147 @@ func betterKeeper(a, b bottleneckLeg) bool {
 		return a.latMs < b.latMs
 	}
 	return a.idx < b.idx
+}
+
+// A shared-bottleneck park is a TRIAL, not a verdict.
+//
+// The detector above rules on delay CO-VARIATION, and co-variation is evidence
+// of a shared queue, not proof of one: two routes that leave over different
+// first hops and different intermediates can still breathe together (a common
+// far-side downlink, a peer's egress shaper, plain diurnal load) while each
+// carries its own capacity. When the ruling is wrong the cost is a whole leg —
+// measured on the frozen two-leg rig (2026-09-18, bench 195b1094c-sbdsweep,
+// 50 MB downloads paired against the best single route): with the detector
+// parked out (--sbd-min-samples 1000000) the group ran 9.30 MB/s, x1.13 against
+// the paired reference, every row above x1.09; with the default floor of 4 the
+// SBD park landed and the same group ran 6.80 MB/s, x0.86. The endpoint's own
+// downlink measured 9.55 MB/s over three concurrent single-route clients that
+// night, so the two legs were NOT behind one pipe — the ruling was simply wrong,
+// and it cost a third of the throughput.
+//
+// So the park is provisional: GOODPUT arbitrates. The group's aggregate
+// delivered-bytes rate over the interval before the park is recorded, the leg is
+// parked, and after sbdTrialWindow the rate is read again with the leg out. If it
+// FELL by more than sbdTrialLoss the legs were carrying independent capacity — the
+// leg is unparked at once (the trial verdict overrides legParkMinHold, which
+// exists to damp controllers trading a leg, not to hold a park the evidence just
+// refuted) and the PAIR is marked verified-independent: no further SBD ruling may
+// merge those two legs for sbdBackoff, doubling on each repeat, capped at
+// sbdBackoffMax. If the rate did not fall, the park stands exactly as before —
+// one pipe really was being striped twice, and nothing was lost by proving it.
+//
+// Both ends run this code and a download is EXIT-sent, so the trial runs wherever
+// the ruling was made; neither end needs to know about the other's.
+
+const (
+	// sbdTrialWindow is how long a park is held before its goodput verdict is
+	// read. The readings it compares are the data-progress tick's own per-leg
+	// recv deltas (legDataProgressInterval, 5s), so the default of 3s means "the
+	// first tick at least 3s after the park" — one full interval of post-park
+	// bytes, which is the shortest honest measurement the existing counters
+	// support. The default of the --sbd-trial-window knob; the live value is
+	// SBDTrialWindow().
+	sbdTrialWindow = 3 * time.Second
+	// sbdTrialLoss is the fraction of aggregate goodput a park may cost before it
+	// is judged wrong. 0.15 sits above the tick-to-tick noise of a bulk transfer
+	// (the paired reference rows swing a few percent) and far below the ~27% the
+	// misruling above actually cost, so an honest park is never undone and a
+	// leg-losing one always is. The default of the --sbd-trial-loss knob; the
+	// live value is SBDTrialLoss().
+	sbdTrialLoss = 0.15
+	// sbdBackoff is how long a pair whose park trial FAILED is exempt from
+	// further shared-bottleneck merging. Five minutes is long enough that a
+	// transfer does not re-litigate the same wrong verdict every tick and short
+	// enough that a genuine bottleneck appearing later is still caught. The
+	// default of the --sbd-backoff knob; the live value is SBDBackoff().
+	sbdBackoff = 5 * time.Minute
+	// sbdBackoffMax caps the doubling applied on each repeat failure for one
+	// pair, so a pair the detector keeps misjudging is suppressed for an hour at
+	// most and never permanently. Not a knob: it is the ceiling of the knob
+	// above, like deadRouteMaxTTL.
+	sbdBackoffMax = time.Hour
+)
+
+// sbdAggRate turns one data-progress tick's per-leg recv deltas into the group's
+// aggregate delivered-bytes rate in B/s — the quantity a park trial arbitrates
+// on. Pure.
+func sbdAggRate(recvDeltas map[uuid.UUID]uint64) float64 {
+	if len(recvDeltas) == 0 {
+		return 0
+	}
+	var total uint64
+	for _, d := range recvDeltas {
+		total += d
+	}
+	return float64(total) / legDataProgressInterval.Seconds()
+}
+
+// sbdTrialFailed reports whether a park COST the group goodput: the aggregate
+// rate measured with the leg parked fell more than loss below the rate measured
+// over the interval before the park. A non-positive base rate is no evidence at
+// all (the group was idle when the park landed), so a trial can never fail on
+// it — an idle park stands and is re-judged the next time the detector rules.
+// Pure.
+func sbdTrialFailed(baseRate, trialRate, loss float64) bool {
+	if baseRate <= 0 {
+		return false
+	}
+	return trialRate < baseRate*(1-loss)
+}
+
+// nextSBDBackoff returns the suppression window for a pair whose park trial just
+// failed: SBDBackoff() the first time, double the previous window on each
+// repeat, capped at sbdBackoffMax. Pure.
+func nextSBDBackoff(prev time.Duration) time.Duration {
+	if prev <= 0 {
+		return SBDBackoff()
+	}
+	d := prev * 2
+	if d > sbdBackoffMax {
+		d = sbdBackoffMax
+	}
+	return d
+}
+
+// sbdPairKey identifies an unordered pair of legs by their transport IDs
+// (transport IDs survive the leg-index shifts a rebuild causes).
+type sbdPairKey struct{ a, b uuid.UUID }
+
+// sbdPair normalizes two leg transport IDs into an order-independent key.
+func sbdPair(x, y uuid.UUID) sbdPairKey {
+	if bytes.Compare(x[:], y[:]) > 0 {
+		x, y = y, x
+	}
+	return sbdPairKey{a: x, b: y}
+}
+
+// sbdGroupKeeper returns the index of the ACTIVE leg a parked leg was judged
+// redundant against — the member of its shared-bottleneck group that
+// pickBottleneckDemotions kept — or -1 when there is none. That leg is the other
+// half of the pair a failed trial marks verified-independent. Pure.
+func sbdGroupKeeper(legs []bottleneckLeg, demote []int, idx int) int {
+	parked := make(map[int]struct{}, len(demote))
+	for _, d := range demote {
+		parked[d] = struct{}{}
+	}
+	group, found := 0, false
+	for _, l := range legs {
+		if l.idx == idx {
+			group, found = l.group, true
+			break
+		}
+	}
+	if !found {
+		return -1
+	}
+	for _, l := range legs {
+		if l.idx == idx || l.standby || l.group != group {
+			continue
+		}
+		if _, off := parked[l.idx]; off {
+			continue
+		}
+		return l.idx
+	}
+	return -1
 }

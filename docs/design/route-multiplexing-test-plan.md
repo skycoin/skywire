@@ -284,7 +284,9 @@ cannot over-subscribe the sink's window and make it evict an acked chunk.
 
 `--ecf-max-window` · `--ecf-min-window` · `--ecf-window-margin` ·
 `--send-window-wait-max` · `--leg-park-min-hold` · `--dead-route-hold` ·
-`--dead-route-hold-max` · `--mux-fec`. Visor-wide and
+`--dead-route-hold-max` · `--mux-fec` · `--sbd-min-samples` ·
+`--sbd-sample-interval` · `--sbd-trial-window` · `--sbd-trial-loss` ·
+`--sbd-backoff`. Visor-wide and
 per-end, like `proxy mux cap`; `--mux-fec` reaches route groups built after it,
 since FEC is negotiated when a group is created. `windowRefreshInterval` is
 NOT here: it becomes a per-route-group ticker when the group is built.
@@ -465,6 +467,27 @@ candidates above.
   with reasons, and the bound in §1 is enforced against it.
 - A manual pin (`proxy mux set`, `--route`, `--routing-policy none`) is
   respected by the adaptive growth. It was not, live.
+
+**A shared-bottleneck park is a trial, arbitrated by goodput.** The 2026-09-18
+sweep (int-J, `bench/2026-09-16/195b1094c-sbdsweep/`) ran the same two-leg group
+— distinct intermediates, distinct first hops — both ways over 50 MB downloads
+paired against the best single route: with the detector parked out
+(`--sbd-min-samples 1000000` on both ends) **9.30 MB/s, x1.13, every row above
+x1.09**; with the default floor of 4 the SBD park landed and the same group ran
+**6.80 MB/s, x0.86**, while the endpoint's downlink measured 9.55 MB/s over
+three concurrent single-route clients, so the two legs were never behind one
+pipe. Delay co-variation is evidence of a shared queue, not proof of one, and a
+wrong ruling costs a whole leg — so the park is now provisional: the group's
+aggregate delivered-bytes rate before the park is recorded, and after
+`--sbd-trial-window` (3 s, read on the next 5 s data-progress tick) it is read
+again with the leg out; a fall past `--sbd-trial-loss` (0.15) unparks the leg
+immediately (the trial verdict overrides the 30 s `leg-park-min-hold`) and
+exempts that PAIR from further SBD merging for `--sbd-backoff` (5 min, doubling
+per repeat, capped at 1 h), while a park that costs nothing stands as before.
+Both ends run it, which matters because a download is exit-sent and the ruling
+that cost the 2.5 MB/s was made at the exit; each failed trial emits a
+`park_trial_failed` mux event naming both rates, so a bench run can count wrong
+rulings and what each one cost.
 
 ### 3.5 Direction, proven
 

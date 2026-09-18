@@ -62,6 +62,14 @@ type RouterSettings struct {
 	SBDMinSamples     int           `json:"sbd_min_samples,omitempty"`
 	SBDSampleInterval time.Duration `json:"sbd_sample_interval,omitempty"`
 
+	// The terms of the park TRIAL that qualifies a shared-bottleneck ruling: how
+	// long the park is held before the aggregate goodput is re-read, the fraction
+	// of goodput it may cost before it is undone, and the first exemption window
+	// the vindicated pair earns. Same zero-means-unchanged rule.
+	SBDTrialWindow time.Duration `json:"sbd_trial_window,omitempty"`
+	SBDTrialLoss   float64       `json:"sbd_trial_loss,omitempty"`
+	SBDBackoff     time.Duration `json:"sbd_backoff,omitempty"`
+
 	// MuxFEC advertises FEC on mux route groups created from now on; unlike
 	// the rest it is a tri-state on PUT, see SetRouterSettings.
 	MuxFEC *bool `json:"mux_fec,omitempty"`
@@ -102,6 +110,9 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 		DeadRouteHoldMax:    router.DeadRouteHoldMax(),
 		SBDMinSamples:       router.SBDMinSamples(),
 		SBDSampleInterval:   router.SBDSampleInterval(),
+		SBDTrialWindow:      router.SBDTrialWindow(),
+		SBDTrialLoss:        router.SBDTrialLoss(),
+		SBDBackoff:          router.SBDBackoff(),
 		MuxFEC:              &fec,
 	}, nil
 }
@@ -145,6 +156,9 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 		{"dead_route_hold_max", s.DeadRouteHoldMax == 0, func() bool { return router.SetDeadRouteHoldMax(s.DeadRouteHoldMax) }},
 		{"sbd_min_samples", s.SBDMinSamples == 0, func() bool { return router.SetSBDMinSamples(s.SBDMinSamples) }},
 		{"sbd_sample_interval", s.SBDSampleInterval == 0, func() bool { return router.SetSBDSampleInterval(s.SBDSampleInterval) }},
+		{"sbd_trial_window", s.SBDTrialWindow == 0, func() bool { return router.SetSBDTrialWindow(s.SBDTrialWindow) }},
+		{"sbd_trial_loss", s.SBDTrialLoss == 0, func() bool { return router.SetSBDTrialLoss(s.SBDTrialLoss) }},
+		{"sbd_backoff", s.SBDBackoff == 0, func() bool { return router.SetSBDBackoff(s.SBDBackoff) }},
 	} {
 		if k.zero {
 			continue

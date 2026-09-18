@@ -32,6 +32,9 @@ var (
 	settingsMuxFEC    string
 	settingsSBDMinN   int
 	settingsSBDEvery  time.Duration
+	settingsSBDTrialW time.Duration
+	settingsSBDTrialL float64
+	settingsSBDBackof time.Duration
 )
 
 func init() {
@@ -50,6 +53,9 @@ func init() {
 	settingsCmd.Flags().StringVar(&settingsMuxFEC, "mux-fec", "", "true|false: advertise FEC on NEW mux route groups")
 	settingsCmd.Flags().IntVar(&settingsSBDMinN, "sbd-min-samples", 0, "per-leg delay samples a shared-bottleneck verdict needs before it may park a leg")
 	settingsCmd.Flags().DurationVar(&settingsSBDEvery, "sbd-sample-interval", 0, "minimum spacing between two per-SACK delay samples folded into a leg's shared-bottleneck window")
+	settingsCmd.Flags().DurationVar(&settingsSBDTrialW, "sbd-trial-window", 0, "how long a shared-bottleneck park is held as a trial before the aggregate goodput is re-read")
+	settingsCmd.Flags().Float64Var(&settingsSBDTrialL, "sbd-trial-loss", 0, "fraction of aggregate goodput a park may cost before it is undone (e.g. 0.15)")
+	settingsCmd.Flags().DurationVar(&settingsSBDBackof, "sbd-backoff", 0, "how long a pair whose park trial failed is exempt from shared-bottleneck merging (doubles per repeat)")
 }
 
 var settingsCmd = &cobra.Command{
@@ -74,7 +80,7 @@ effect at once; the preference is written to routing.transport_preference.`,
 		for _, f := range []string{"prefer", "min-hops", "existing-tp-only", "force-local",
 			"ecf-max-window", "ecf-min-window", "ecf-window-margin", "send-window-wait-max",
 			"leg-park-min-hold", "dead-route-hold", "dead-route-hold-max", "mux-fec",
-			"sbd-min-samples", "sbd-sample-interval"} {
+			"sbd-min-samples", "sbd-sample-interval", "sbd-trial-window", "sbd-trial-loss", "sbd-backoff"} {
 			changed = changed || cmd.Flags().Changed(f)
 		}
 		if changed {
@@ -132,6 +138,15 @@ effect at once; the preference is written to routing.transport_preference.`,
 			if cmd.Flags().Changed("sbd-sample-interval") {
 				next.SBDSampleInterval = settingsSBDEvery
 			}
+			if cmd.Flags().Changed("sbd-trial-window") {
+				next.SBDTrialWindow = settingsSBDTrialW
+			}
+			if cmd.Flags().Changed("sbd-trial-loss") {
+				next.SBDTrialLoss = settingsSBDTrialL
+			}
+			if cmd.Flags().Changed("sbd-backoff") {
+				next.SBDBackoff = settingsSBDBackof
+			}
 			if err := rpcClient.SetRouterSettings(next); err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
@@ -155,6 +170,9 @@ effect at once; the preference is written to routing.transport_preference.`,
 			MuxFEC:              fec,
 			SBDMinSamples:       cur.SBDMinSamples,
 			SBDSampleInterval:   cur.SBDSampleInterval.String(),
+			SBDTrialWindow:      cur.SBDTrialWindow.String(),
+			SBDTrialLoss:        cur.SBDTrialLoss,
+			SBDBackoff:          cur.SBDBackoff.String(),
 		}))
 	},
 }

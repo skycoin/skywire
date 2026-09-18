@@ -105,8 +105,11 @@ type Settings struct {
 	MuxFEC            bool    `json:"mux_fec"`
 
 	// Shared-bottleneck detection.
-	SBDMinSamples     int    `json:"sbd_min_samples"`
-	SBDSampleInterval string `json:"sbd_sample_interval"`
+	SBDMinSamples     int     `json:"sbd_min_samples"`
+	SBDSampleInterval string  `json:"sbd_sample_interval"`
+	SBDTrialWindow    string  `json:"sbd_trial_window"`
+	SBDTrialLoss      float64 `json:"sbd_trial_loss"`
+	SBDBackoff        string  `json:"sbd_backoff"`
 }
 
 // Human writes one knob per line.
@@ -115,10 +118,12 @@ func (s Settings) Human(w io.Writer) error {
 		"ecf_max_window_bytes: %d\necf_min_window_bytes: %d\necf_window_margin: %g\n"+
 		"send_window_wait_max: %s\nleg_park_min_hold: %s\n"+
 		"dead_route_hold: %s\ndead_route_hold_max: %s\nmux_fec: %v\n"+
-		"sbd_min_samples: %d\nsbd_sample_interval: %s\n",
+		"sbd_min_samples: %d\nsbd_sample_interval: %s\n"+
+		"sbd_trial_window: %s\nsbd_trial_loss: %g\nsbd_backoff: %s\n",
 		s.MinHops, s.ExistingTPOnly, s.ForceLocalRoutes, strings.Join(s.TransportPreference, ","),
 		s.EcfMaxWindowBytes, s.EcfMinWindowBytes, s.EcfWindowMargin,
 		s.SendWindowWaitMax, s.LegParkMinHold, s.DeadRouteHold, s.DeadRouteHoldMax, s.MuxFEC,
-		s.SBDMinSamples, s.SBDSampleInterval)
+		s.SBDMinSamples, s.SBDSampleInterval,
+		s.SBDTrialWindow, s.SBDTrialLoss, s.SBDBackoff)
 	return err
 }

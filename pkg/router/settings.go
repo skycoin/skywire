@@ -44,6 +44,15 @@ var (
 	// so a sweep can move either on a running visor.
 	sbdMinSamplesV     atomic.Int64
 	sbdSampleIntervalV atomic.Int64 // nanoseconds
+
+	// sbdTrialWindowV, sbdTrialLossV and sbdBackoffV shadow sbdTrialWindow,
+	// sbdTrialLoss and sbdBackoff in bottleneck.go — the terms of the park TRIAL
+	// that qualifies every shared-bottleneck ruling. The trial evaluator re-reads
+	// all three on every data-progress tick, so a sweep can move them on a running
+	// visor; both ends of a group must carry the same code, not the same values.
+	sbdTrialWindowV atomic.Int64  // nanoseconds
+	sbdTrialLossV   atomic.Uint64 // float64 bits
+	sbdBackoffV     atomic.Int64  // nanoseconds
 )
 
 func init() {
@@ -56,6 +65,9 @@ func init() {
 	deadRouteHoldMaxV.Store(int64(deadRouteMaxTTL))
 	sbdMinSamplesV.Store(sbdMinSamples)
 	sbdSampleIntervalV.Store(int64(sbdSampleInterval))
+	sbdTrialWindowV.Store(int64(sbdTrialWindow))
+	sbdTrialLossV.Store(math.Float64bits(sbdTrialLoss))
+	sbdBackoffV.Store(int64(sbdBackoff))
 }
 
 // EcfWindowMargin is the multiplier on SACK-proven delivery-per-RTT that sets a
@@ -180,5 +192,46 @@ func SetSBDSampleInterval(d time.Duration) bool {
 		return false
 	}
 	sbdSampleIntervalV.Store(int64(d))
+	return true
+}
+
+// SBDTrialWindow is how long a shared-bottleneck park is held as a trial before
+// the group's aggregate goodput is re-read to judge it.
+func SBDTrialWindow() time.Duration { return time.Duration(sbdTrialWindowV.Load()) }
+
+// SetSBDTrialWindow installs the park-trial window. Non-positive is refused.
+func SetSBDTrialWindow(d time.Duration) bool {
+	if d <= 0 {
+		return false
+	}
+	sbdTrialWindowV.Store(int64(d))
+	return true
+}
+
+// SBDTrialLoss is the fraction of aggregate goodput a shared-bottleneck park may
+// cost before the park is undone and the pair marked verified-independent.
+func SBDTrialLoss() float64 { return math.Float64frombits(sbdTrialLossV.Load()) }
+
+// SetSBDTrialLoss installs that fraction. Only a value in (0, 1) is accepted: 0
+// would undo every park on measurement noise and 1 could never be reached.
+func SetSBDTrialLoss(v float64) bool {
+	if v <= 0 || v >= 1 || math.IsNaN(v) {
+		return false
+	}
+	sbdTrialLossV.Store(math.Float64bits(v))
+	return true
+}
+
+// SBDBackoff is the first window a pair whose park trial failed is exempt from
+// shared-bottleneck merging for; it doubles on each repeat, capped at
+// sbdBackoffMax.
+func SBDBackoff() time.Duration { return time.Duration(sbdBackoffV.Load()) }
+
+// SetSBDBackoff installs that first window. Non-positive is refused.
+func SetSBDBackoff(d time.Duration) bool {
+	if d <= 0 {
+		return false
+	}
+	sbdBackoffV.Store(int64(d))
 	return true
 }
