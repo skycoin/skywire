@@ -45,6 +45,14 @@ type setupNodeDialer struct {
 	// relays the inner payload to the first hop. Set by the router at Serve time
 	// (the visor's CascadeHandler implements it). nil until then.
 	cascadeOrigin cascadeOriginProcessor
+
+	// batcher collects the concurrent sibling dials a multi-route request makes
+	// to one exit (a standby-pool fill, --tunnels N, the mux leg self-heal) and
+	// sends them as ONE batched setup request when the setup node advertises
+	// CapBatchRouteSetup. See setup_batch_client.go. nil disables batching, and
+	// nil is what the embedded-RSN dialer gets: an embedded setup node is a
+	// local call, so there is no per-request round trip to coalesce.
+	batcher *setupBatcher
 }
 
 // SetCascadeOrigin wires the visor's CascadeHandler in as the source-origin
@@ -113,13 +121,20 @@ func NewSetupNodeDialerFull(embedded EmbeddedSetupNode, relayCache *RSNRelayCach
 			log.Info("Source-driven cascade disabled (default): using legacy setup-node dialing for every route")
 		}
 	}
-	return &setupNodeDialer{
+	d := &setupNodeDialer{
 		embeddedSetup: embedded,
 		relayCache:    relayCache,
 		tm:            tm,
 		setupRPCMux:   mux,
 		srcCascade:    srcCascade,
 	}
+	// Batching only pays where there is a per-request round trip to coalesce.
+	// An embedded RSN answers in-process, so a dialer holding one keeps sending
+	// singles.
+	if embedded == nil {
+		d.batcher = newSetupBatcher()
+	}
+	return d
 }
 
 // Dial dials RouteGroup and returns the connected setup node's public key.
@@ -131,6 +146,36 @@ func (d *setupNodeDialer) Dial(
 	setupNodes []cipher.PubKey,
 	req routing.BidirectionalRoute,
 ) (routing.EdgeRules, cipher.PubKey, error) {
+	// Batched setup first, when there is anything to batch with. The batcher
+	// parks this dial for setup.batch_window so the siblings a multi-route
+	// request makes to the same exit (pool fill, --tunnels N, leg self-heal)
+	// leave as ONE request the setup node coalesces per hop. A setup node that
+	// does not advertise the capability answers errBatchUnsupported for the
+	// whole group and every member falls through to the single path below —
+	// which is exactly today's behavior, concurrently.
+	//
+	// The source-driven cascade is skipped here for the same reason it is
+	// preferred below when enabled: the cascade's work is the SOURCE's, not the
+	// setup node's, so there is no per-hop RPC to coalesce. A visor running the
+	// cascade takes the single path.
+	if d.batcher != nil && !d.cascadeEnabled(ctx) && dmsgC != nil {
+		rules, node, err := d.batcher.dial(ctx, log, dmsgC, setupNodes, req, sendBatchOverSetupClient)
+		switch {
+		case err == nil:
+			return rules, node, nil
+		case errors.Is(err, errBatchUnsupported):
+			log.Debug("Setup node lacks batched route setup; falling back to a single request")
+		case ctx.Err() != nil:
+			return routing.EdgeRules{}, cipher.PubKey{}, err
+		default:
+			// A batched request that failed for a real reason (one member's
+			// intermediate refused, the node timed out) still deserves the
+			// single-request retry the caller would have got before batching
+			// existed: the batch is an optimization, never a new failure mode.
+			log.WithError(err).Debug("Batched route setup failed; retrying as a single request")
+		}
+	}
+
 	// Try embedded setup-node first if available
 	if d.embeddedSetup != nil {
 		log.Debug("Using embedded route setup-node")

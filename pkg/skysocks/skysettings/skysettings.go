@@ -224,11 +224,11 @@ func init() {
 		"rounds of failed dials before the pool fill rests until a death")
 	register(PoolStandbyRTTStale, KindDuration, int64(15*time.Second),
 		"how long a standby tunnel may be silent and still be promoted")
-	// The live twin of --standby-pool. Default 8 is skyenv.SkysocksClientStandbyPool
+	// The live twin of --standby-pool. Default 32 is skyenv.SkysocksClientStandbyPool
 	// (restated rather than imported: this package takes no skywire import so the
 	// CLI can read the catalog without linking the client). Unset, the boot flag
 	// still wins; set, the pool grows or shrinks to it on the next fill tick.
-	registerZeroable(PoolSize, 8,
+	registerZeroable(PoolSize, 32,
 		"CEILING on tunnels held to the exit including the active ones; overrides --standby-pool once set (0 = active tunnels only)")
 	register(PoolFreeze, KindBool, boolVal(false),
 		"hold the active set still: the promoter makes no discretionary swap and the pool neither fills nor shrinks. A dead tunnel is still replaced, and a reconcile the operator asks for still runs")

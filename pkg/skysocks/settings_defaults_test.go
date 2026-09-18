@@ -113,7 +113,7 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 	// skyenv.SkysocksClientStandbyPool), the per-app mux pair defaults to
 	// "inherit the visor-wide value", and every filter admits everything.
 	require.Equal(t, 2, setTunnelCount())
-	require.Equal(t, 8, setPoolSize())
+	require.Equal(t, 32, setPoolSize())
 	require.False(t, setPoolFreeze(), "pool.freeze holds nothing still until it is set")
 	require.Empty(t, poolExcludePKs())
 	require.Empty(t, poolRequireTpTypes())

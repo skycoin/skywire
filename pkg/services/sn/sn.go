@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -340,36 +341,32 @@ func statsHandler(collector *setupmetrics.Collector, whitelist []cipher.PubKey) 
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(publicSnapshot(collector.Snapshot())) //nolint:errcheck,gosec
+		// Not whitelisted: the aggregate, plus this caller's OWN rows. See
+		// setupmetrics/own_view.go — a visor asking about the routes IT set up
+		// learns nothing it did not already know, and the empty
+		// top_destinations[].pk / recent_failures[].src_pk an ordinary operator
+		// used to get is what made the endpoint useless to everyone off the
+		// seven-key survey whitelist.
+		json.NewEncoder(w).Encode(collector.SnapshotFor(remotePK(r), false)) //nolint:errcheck,gosec
 	})
 }
 
-// publicSnapshot is the half of the route-setup snapshot that carries no
-// topology: counters, rates, latency percentiles, the failure-reason tally and
-// the hop-count histogram. It answers "is route setup working, how fast, and
-// failing for what reason" — which is the question anyone on the network has a
-// stake in, since every visor depends on this shared layer. A setup node that
-// silently fails 100% of requests for a month (as one did) is exactly what an
-// ungated health surface is for.
-//
-// What it drops is the who-talks-to-whom half: TopDestinations,
-// TopFailedDestinations, RecentFailures and Breakers (which name the visors
-// route setup is currently refusing). The RSN participates in EVERY route
-// setup, so its view of which visors set up routes to which is unusually
-// complete — publishing it is traffic-analysis material, and a routing overlay
-// handing that out undermines the property it exists to provide. Those fields
-// stay behind the survey whitelist, along with the FailureEvent.Error strings
-// that embed the same keys in prose.
-//
-// This is the split the original stripping was reaching for. That code blanked
-// the structured PK fields on a public endpoint but left Error untouched, so
-// the topology went out anyway and only the machine-readable half was lost.
-func publicSnapshot(s setupmetrics.StatsSnapshot) setupmetrics.StatsSnapshot {
-	s.TopDestinations = nil
-	s.TopFailedDestinations = nil
-	s.RecentFailures = nil
-	s.Breakers = nil
-	return s
+// remotePK extracts the caller's public key from a dmsg RemoteAddr
+// ("<pk>:<port>"). Returns the null key when the address will not parse — the
+// caller then gets the aggregate alone.
+func remotePK(r *http.Request) cipher.PubKey {
+	if r == nil {
+		return cipher.PubKey{}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return cipher.PubKey{}
+	}
+	var pk cipher.PubKey
+	if err := pk.Set(host); err != nil {
+		return cipher.PubKey{}
+	}
+	return pk
 }
 
 // getHTTPClient returns an *http.Client for the given service URL,

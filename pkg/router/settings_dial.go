@@ -244,3 +244,83 @@ func pathPrefersPK(path []routing.Hop) bool {
 	}
 	return false
 }
+
+// ---------------------------------------------------------------------------
+// Batched route setup.
+
+// Compiled defaults for the batched-setup knobs. TestCatalogDefaultsMatchConstants
+// asserts each against its catalog entry.
+const (
+	// setupBatchWindowDefault is how long a route setup waits for siblings to
+	// the same exit before sending. It is short on purpose: the window is paid
+	// by the FIRST dial of a burst, and a standby-pool fill or a --tunnels N
+	// dial launches its siblings within a few milliseconds of each other, so
+	// 40 ms collects the burst while adding nothing measurable to a lone dial
+	// (which would otherwise be waiting on a p50 0.6-2.1 s setup round trip).
+	setupBatchWindowDefault = 40 * time.Millisecond
+
+	// setupBatchMaxDefault is the most routes one batched request carries. Half
+	// of routing.MaxBatchRoutes, so raising the pool size does not by itself
+	// push a single request to the protocol limit.
+	setupBatchMaxDefault = 16
+
+	// setupFillInflightDefault is how many standby-pool dials run at once. It
+	// is also the batch size a fill can offer: the pool used to dial ONE tunnel
+	// per ~7 s tick, which gave the coalescer nothing to collect.
+	setupFillInflightDefault = 8
+
+	// setupPlanClaimTTLDefault is how long one concurrent dial holds its claim
+	// on an oracle candidate path. Long enough to cover a slow setup (max 7.8 s
+	// observed) with headroom, short enough that a dial which died without
+	// releasing frees its intermediate well inside a fill round.
+	setupPlanClaimTTLDefault = 20 * time.Second
+)
+
+// SetupBatchWindow is how long a route setup collects sibling dials to the same
+// exit before sending them as one batched request.
+func SetupBatchWindow() time.Duration { return routersettings.SetupBatchWindow.Duration() }
+
+// SetSetupBatchWindow installs that window. Non-positive is refused.
+func SetSetupBatchWindow(d time.Duration) bool {
+	return setInt(routersettings.SetupBatchWindow, int64(d))
+}
+
+// SetupBatchMax is the most routes one batched setup request carries. 1 means
+// "send singles" — the batch form is never used.
+func SetupBatchMax() int { return routersettings.SetupBatchMax.Int() }
+
+// SetSetupBatchMax installs that cap. Non-positive is refused; values above
+// routing.MaxBatchRoutes are clamped by the sender.
+func SetSetupBatchMax(n int) bool { return setInt(routersettings.SetupBatchMax, int64(n)) }
+
+// SetupFillInflight is how many standby-pool tunnel dials run concurrently.
+func SetupFillInflight() int { return routersettings.SetupFillInflight.Int() }
+
+// SetSetupFillInflight installs that bound. Non-positive is refused.
+func SetSetupFillInflight(n int) bool { return setInt(routersettings.SetupFillInflight, int64(n)) }
+
+// SetupPlanClaimTTL is how long a concurrent dial holds its claim on an oracle
+// candidate path, so N dials in one fill take N distinct intermediates.
+func SetupPlanClaimTTL() time.Duration { return routersettings.SetupPlanClaimTTL.Duration() }
+
+// SetSetupPlanClaimTTL installs that TTL. Non-positive is refused.
+func SetSetupPlanClaimTTL(d time.Duration) bool {
+	return setInt(routersettings.SetupPlanClaimTTL, int64(d))
+}
+
+// setupFirstHopFilterMaxDefault is how many held first hops a dial may exclude
+// as a HARD filter before first-hop diversity becomes a ranking term instead.
+// Eight is the old standby-pool ceiling: up to that depth, refusing a reused
+// first hop is what the pool was for; past it the constraint has been satisfied
+// many times over and a distinct intermediate is the property that still
+// matters. See freeFirstHops.
+const setupFirstHopFilterMaxDefault = 8
+
+// SetupFirstHopFilterMax is the held-first-hop count beyond which first-hop
+// diversity is a ranking term rather than a filter.
+func SetupFirstHopFilterMax() int { return routersettings.SetupFirstHopFilterMax.Int() }
+
+// SetSetupFirstHopFilterMax installs that threshold. Non-positive is refused.
+func SetSetupFirstHopFilterMax(n int) bool {
+	return setInt(routersettings.SetupFirstHopFilterMax, int64(n))
+}

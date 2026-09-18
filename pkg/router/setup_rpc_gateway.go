@@ -36,10 +36,98 @@ type SetupRPCGateway struct {
 	Timeout time.Duration
 }
 
+// Setup-node capability names. A client sends a newer request shape only when
+// the node has advertised the matching capability, so an un-upgraded setup node
+// never receives a message it cannot decode and no flag has to be flipped on
+// either side (see Capabilities / HealthCheck).
+const (
+	// CapBatchRouteSetup means DialRouteGroupBatch is implemented: N routes to
+	// one destination in one request, with the per-hop work coalesced.
+	CapBatchRouteSetup = "batch-route-setup"
+	// CapCascadeSign means the CascadeSign* RPCs are implemented (the
+	// source-driven cascade, where the node signs and the source injects).
+	CapCascadeSign = "cascade-sign"
+	// CapTransportQuery means SignTransportQuery is implemented (the RSN-oracle
+	// destination-transport query).
+	CapTransportQuery = "transport-query"
+)
+
+// setupCaps is what this build advertises. Order is stable so the list reads
+// the same on every node.
+func (g *SetupRPCGateway) setupCaps() []string {
+	caps := []string{CapBatchRouteSetup}
+	if g.Cascade != nil {
+		caps = append(caps, CapCascadeSign, CapTransportQuery)
+	}
+	return caps
+}
+
+// CapabilitiesArgs is the request for the Capabilities RPC.
+type CapabilitiesArgs struct{}
+
+// CapabilitiesReply lists the request shapes this setup node understands.
+type CapabilitiesReply struct {
+	Caps []string `json:"caps"`
+}
+
+// Capabilities is the handshake a client uses before sending a newer request
+// shape. A setup node that predates this method answers with net/rpc's
+// "can't find method" error, which the client reads as "no capabilities beyond
+// the original DialRouteGroup" — so the negotiation needs no version number and
+// no flag.
+func (g *SetupRPCGateway) Capabilities(_ *CapabilitiesArgs, reply *CapabilitiesReply) error {
+	reply.Caps = g.setupCaps()
+	return nil
+}
+
+// DialRouteGroupBatch sets up every route in the batch in ONE request, with the
+// per-hop work coalesced: one id reservation per distinct hop covering every
+// route that traverses it, one intermediary-rule install per distinct hop
+// carrying that hop's rules for every route.
+//
+// Partial success is normal and is NOT an RPC error: a member whose intermediate
+// is unreachable comes back with a per-route Error while its siblings come back
+// installed. An error return means the batch as a whole was refused (malformed,
+// or oversized).
+func (g *SetupRPCGateway) DialRouteGroupBatch(batch *routing.BidirectionalRouteBatch, reply *routing.BidirectionalRouteBatchReply) error {
+	log := logging.MustGetLogger("batch-request:" + g.ReqPK.String())
+	if batch == nil {
+		return routing.ErrBatchEmpty
+	}
+	if err := batch.Check(); err != nil {
+		log.WithError(err).Warn("DialRouteGroupBatch: invalid batch")
+		return err
+	}
+
+	// The batch shares one deadline with its members: the whole point is that
+	// they run as one piece of work. Scale it with the batch size so a large
+	// batch is not judged by a single route's budget, capped so a client cannot
+	// pin a handler open by asking for MaxBatchRoutes.
+	timeout := g.Timeout
+	if n := len(batch.Routes); n > 1 {
+		timeout = time.Duration(n) * g.Timeout / 2
+		if ceil := 4 * g.Timeout; timeout > ceil {
+			timeout = ceil
+		}
+	}
+	ctx, cancel := context.WithTimeout(g.Ctx, timeout)
+	defer cancel()
+
+	results, savings := CreateRouteGroupBatch(ctx, g.Dialer, g.Pool, *batch, g.Metrics)
+	reply.Results = results
+	log.WithField("routes", savings.Routes).
+		WithField("rpcs_saved", savings.Saved()).
+		Debug("Batched route setup answered")
+	return nil
+}
+
 // DialRouteGroup dials RouteGroups for route and rules.
 func (g *SetupRPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules *routing.EdgeRules) (err error) {
 	log := logging.MustGetLogger("request:" + g.ReqPK.String())
 	defer g.Metrics.RecordRequest()(rules, &err)
+	if c, ok := g.Metrics.(*setupmetrics.Collector); ok {
+		c.RecordSetupKind(setupmetrics.SetupKindSingle, 1)
+	}
 
 	ctx, cancel := context.WithTimeout(g.Ctx, g.Timeout)
 	defer cancel()
@@ -83,6 +171,9 @@ type CascadeSignReserveReply struct {
 // the session IDs. It never dials hops or sends anything itself.
 func (g *SetupRPCGateway) CascadeSignReserve(args *CascadeSignReserveArgs, reply *CascadeSignReserveReply) error {
 	log := logging.MustGetLogger("cascade-sign-reserve:" + g.ReqPK.String())
+	if c, ok := g.Metrics.(*setupmetrics.Collector); ok {
+		c.RecordSetupKind(setupmetrics.SetupKindCascadeSign, 1)
+	}
 	if g.Cascade == nil {
 		return errCascadeUnavailable
 	}
@@ -233,10 +324,14 @@ type HealthCheckArgs struct{}
 
 // HealthCheckReply is returned by the HealthCheck RPC method.
 type HealthCheckReply struct {
-	Status  string `json:"status"`
-	Version string `json:"version,omitempty"`
-	Commit  string `json:"commit,omitempty"`
-	Date    string `json:"date,omitempty"`
+	Status string `json:"status"`
+	// Caps lists the request shapes this node understands, the same list the
+	// Capabilities RPC returns — carried here too so a health probe doubles as
+	// the negotiation for a client that is already making one.
+	Caps    []string `json:"caps,omitempty"`
+	Version string   `json:"version,omitempty"`
+	Commit  string   `json:"commit,omitempty"`
+	Date    string   `json:"date,omitempty"`
 }
 
 // HealthCheck to test if the setup node is responsive.
@@ -245,6 +340,7 @@ func (g *SetupRPCGateway) HealthCheck(_ *HealthCheckArgs, reply *HealthCheckRepl
 	log.WithField("remote_pk", g.ReqPK.String()).Info("Health check received from RSN")
 	info := buildinfo.Get()
 	reply.Status = "OK"
+	reply.Caps = g.setupCaps()
 	reply.Version = info.Version
 	reply.Commit = info.Commit
 	reply.Date = info.Date

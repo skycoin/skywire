@@ -182,6 +182,16 @@ type StatsSnapshot struct {
 	// RouteLengthHist maps hop count → number of successful setups.
 	RouteLengthHist map[int]uint64 `json:"route_length_hist"`
 
+	// RequestsByKind / RoutesByKind split the request count by the setup PATH
+	// it took — single, batch, cascade_sign (see kinds.go). Aggregate, so both
+	// are part of the PUBLIC view: they name no visor.
+	RequestsByKind map[SetupKind]uint64 `json:"requests_by_kind"`
+	RoutesByKind   map[SetupKind]uint64 `json:"routes_by_kind"`
+
+	// Batch is the batched-path summary: sizes seen and per-hop RPCs the
+	// coalescing saved. Also aggregate, also public.
+	Batch BatchStats `json:"batch"`
+
 	// Top destinations sorted by total request count (descending).
 	// Capped at the collector's top-N config.
 	TopDestinations []DestStat `json:"top_destinations"`
@@ -232,6 +242,11 @@ type Collector struct {
 	dests        map[string]*DestStat
 	destCapacity int
 
+	// Per-(source, destination) counters, so a non-whitelisted caller can be
+	// served its OWN rows instead of an empty table (own_view.go). Shares
+	// destCapacity; cleared with dests by Reset.
+	pairs map[string]*DestStat
+
 	// Per-destination circuit breaker state. Shares the dests cap —
 	// when a new destination is added to dests we also add a breaker
 	// entry; Reset() clears both maps atomically.
@@ -245,6 +260,18 @@ type Collector struct {
 
 	lastSuccessAt time.Time
 	lastFailureAt time.Time
+
+	// Which setup PATH each request took (see kinds.go). Lazily allocated so
+	// a collector that never sees a request carries no maps.
+	requestsByKind map[SetupKind]uint64
+	routesByKind   map[SetupKind]uint64
+
+	// Batched-path counters (see kinds.go).
+	batches         uint64
+	batchRoutes     uint64
+	batchInstalled  uint64
+	routesPerBatch  map[int]uint64
+	perHopRPCsSaved uint64
 }
 
 // CollectorConfig configures the ring buffer / destination cap sizes.
@@ -517,12 +544,18 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 	c.total++
 	dstStr := dstPK.String()
 	destStat := c.touchDest(dstStr)
+	// The same counters keyed by (source, destination), so a caller that is not
+	// on the survey whitelist can still be served its OWN rows (own_view.go).
+	pairStat := c.touchPair(srcPK.String(), dstStr)
 
 	if err == nil {
 		c.success++
 		c.lastSuccessAt = time.Now()
 		if destStat != nil {
 			destStat.Total++
+		}
+		if pairStat != nil {
+			pairStat.Total++
 		}
 		// Any success closes an open/half-open breaker and resets
 		// the consecutive failure counter — for the destination and
@@ -545,6 +578,9 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 	// Failure path.
 	c.failed++
 	c.lastFailureAt = time.Now()
+	if pairStat != nil {
+		pairStat.Total++
+	}
 	if destStat != nil {
 		destStat.Total++
 		// destStat.Failed is incremented below, but only when the
@@ -630,6 +666,9 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 	c.resolveProbesLocked(probes, blamedPK, false)
 	if blameDst && destStat != nil {
 		destStat.Failed++
+	}
+	if blameDst && pairStat != nil {
+		pairStat.Failed++
 	}
 	c.failsByReason[reason]++
 
@@ -892,6 +931,10 @@ func (c *Collector) Snapshot() StatsSnapshot {
 	}
 	snap.LatencyMs = c.latencyStatsLocked()
 
+	// Which setup path each request took, and what batching bought.
+	snap.RequestsByKind, snap.RoutesByKind = c.kindCountsLocked()
+	snap.Batch = c.batchStatsLocked()
+
 	// Top destinations (by total) and top failed destinations.
 	snap.TopDestinations, snap.TopFailedDestinations = c.topDestsLocked(10)
 
@@ -932,6 +975,7 @@ func (c *Collector) Reset() {
 	c.latencyRingLen = 0
 	c.routeLenHist = make(map[int]uint64)
 	c.dests = make(map[string]*DestStat)
+	c.pairs = nil
 	c.breakers = make(map[string]*circuitBreaker)
 	for i := range c.failureRing {
 		c.failureRing[i] = FailureEvent{}
@@ -940,6 +984,10 @@ func (c *Collector) Reset() {
 	c.failureRingLen = 0
 	c.lastSuccessAt = time.Time{}
 	c.lastFailureAt = time.Time{}
+	c.requestsByKind = nil
+	c.routesByKind = nil
+	c.batches, c.batchRoutes, c.batchInstalled, c.perHopRPCsSaved = 0, 0, 0, 0
+	c.routesPerBatch = nil
 }
 
 func (c *Collector) latencyStatsLocked() LatencyStats {
@@ -996,15 +1044,7 @@ func (c *Collector) topDestsLocked(n int) (byTotal, byFailed []DestStat) {
 	// Sort-by-total copy.
 	byTotal = make([]DestStat, len(all))
 	copy(byTotal, all)
-	sort.Slice(byTotal, func(i, j int) bool {
-		if byTotal[i].Total != byTotal[j].Total {
-			return byTotal[i].Total > byTotal[j].Total
-		}
-		return byTotal[i].PK < byTotal[j].PK
-	})
-	if len(byTotal) > n {
-		byTotal = byTotal[:n]
-	}
+	byTotal = sortDestStats(byTotal, false, n)
 
 	// Sort-by-failed copy, skipping any with zero failures.
 	byFailed = make([]DestStat, 0, len(all))
@@ -1013,16 +1053,31 @@ func (c *Collector) topDestsLocked(n int) (byTotal, byFailed []DestStat) {
 			byFailed = append(byFailed, d)
 		}
 	}
-	sort.Slice(byFailed, func(i, j int) bool {
-		if byFailed[i].Failed != byFailed[j].Failed {
-			return byFailed[i].Failed > byFailed[j].Failed
-		}
-		return byFailed[i].PK < byFailed[j].PK
-	})
-	if len(byFailed) > n {
-		byFailed = byFailed[:n]
-	}
+	byFailed = sortDestStats(byFailed, true, n)
 	return byTotal, byFailed
+}
+
+// sortDestStats orders rows by total (or by failure count when byFailed) and
+// truncates to n, breaking ties on the key so the output is deterministic.
+// Shared by the whitelisted table and the caller-scoped one in own_view.go.
+func sortDestStats(rows []DestStat, byFailed bool, n int) []DestStat {
+	sort.Slice(rows, func(i, j int) bool {
+		a, b := rows[i].Total, rows[j].Total
+		if byFailed {
+			a, b = rows[i].Failed, rows[j].Failed
+		}
+		if a != b {
+			return a > b
+		}
+		return rows[i].PK < rows[j].PK
+	})
+	if n > 0 && len(rows) > n {
+		rows = rows[:n]
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	return rows
 }
 
 // breakerStatesLocked copies the non-closed breakers out for

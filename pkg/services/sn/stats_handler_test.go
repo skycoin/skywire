@@ -126,3 +126,85 @@ func TestStatsHandlerServesStructuredPKs(t *testing.T) {
 	require.True(t, strings.Contains(snap.RecentFailures[0].Error, dst.Hex()),
 		"error string is expected to embed the destination key")
 }
+
+// The fix for the empty structured keys: a caller that is NOT on the survey
+// whitelist — which is every ordinary visor, the whitelist holds seven
+// deployment keys — used to get `"top_destinations": null` and
+// `"recent_failures": null`, so pk / src_pk / dst_pk were empty for everyone
+// who could actually have used them. It now gets its OWN rows, which tell it
+// nothing it did not already know, and still nobody else's.
+func TestStatsHandlerServesTheCallersOwnRows(t *testing.T) {
+	c := setupmetrics.NewCollector(setupmetrics.CollectorConfig{})
+	caller, _ := cipher.GenerateKeyPair()
+	stranger, _ := cipher.GenerateKeyPair()
+	mine, _ := cipher.GenerateKeyPair()
+	theirs, _ := cipher.GenerateKeyPair()
+
+	myErr := errors.New("failed to reserve route ids: reserve routeID from " + mine.Hex() + " failed: context deadline exceeded")
+	c.RecordRouteContext(context.Background(), caller, mine, 2)(&myErr)
+	theirErr := errors.New("failed to reserve route ids: reserve routeID from " + theirs.Hex() + " failed: context deadline exceeded")
+	c.RecordRouteContext(context.Background(), stranger, theirs, 2)(&theirErr)
+
+	allowed, _ := cipher.GenerateKeyPair()
+	h := statsHandler(c, []cipher.PubKey{allowed})
+
+	rec := requestAs(h, caller)
+	require.Equal(t, http.StatusOK, rec.Code)
+	snap := decodeStats(t, rec)
+
+	require.Len(t, snap.RecentFailures, 1, "only the caller's own failure")
+	require.Equal(t, caller.Hex(), snap.RecentFailures[0].SrcPK, "src_pk must not be empty")
+	require.Equal(t, mine.Hex(), snap.RecentFailures[0].DstPK, "dst_pk must not be empty")
+
+	require.Len(t, snap.TopDestinations, 1)
+	require.Equal(t, mine.Hex(), snap.TopDestinations[0].PK, "pk must not be empty")
+	require.Len(t, snap.TopFailedDestinations, 1)
+	require.Equal(t, mine.Hex(), snap.TopFailedDestinations[0].PK)
+
+	// The aggregate is still there, and the other visor's topology is not.
+	require.EqualValues(t, 2, snap.TotalRequests)
+	require.NotContains(t, rec.Body.String(), stranger.Hex(), "another visor's source key")
+	require.NotContains(t, rec.Body.String(), theirs.Hex(), "another visor's destination key")
+}
+
+// A caller whose RemoteAddr does not parse gets the aggregate alone — never
+// somebody else's rows by accident.
+func TestStatsHandlerUnknownCallerGetsAggregateOnly(t *testing.T) {
+	c, _, dst := collectorWithFailure(t)
+	allowed, _ := cipher.GenerateKeyPair()
+
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
+	req.RemoteAddr = "not-a-public-key"
+	rec := httptest.NewRecorder()
+	statsHandler(c, []cipher.PubKey{allowed}).ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	snap := decodeStats(t, rec)
+	require.EqualValues(t, 1, snap.TotalRequests)
+	require.Empty(t, snap.RecentFailures)
+	require.Empty(t, snap.TopDestinations)
+	require.NotContains(t, rec.Body.String(), dst.Hex())
+}
+
+// The setup-path counters are aggregate, so they are public: an operator on any
+// visor can see whether clients are negotiating the batched form.
+func TestStatsHandlerPublishesSetupKindCounters(t *testing.T) {
+	c := setupmetrics.NewCollector(setupmetrics.CollectorConfig{})
+	c.RecordSetupKind(setupmetrics.SetupKindSingle, 1)
+	c.RecordSetupKind(setupmetrics.SetupKindBatch, 6)
+	c.RecordBatch(6, 5, 11)
+	c.RecordSetupKind(setupmetrics.SetupKindCascadeSign, 1)
+
+	stranger, _ := cipher.GenerateKeyPair()
+	allowed, _ := cipher.GenerateKeyPair()
+	snap := decodeStats(t, requestAs(statsHandler(c, []cipher.PubKey{allowed}), stranger))
+
+	require.EqualValues(t, 1, snap.RequestsByKind[setupmetrics.SetupKindSingle])
+	require.EqualValues(t, 1, snap.RequestsByKind[setupmetrics.SetupKindBatch])
+	require.EqualValues(t, 6, snap.RoutesByKind[setupmetrics.SetupKindBatch])
+	require.EqualValues(t, 1, snap.RequestsByKind[setupmetrics.SetupKindCascadeSign])
+	require.EqualValues(t, 1, snap.Batch.Batches)
+	require.EqualValues(t, 5, snap.Batch.Installed)
+	require.EqualValues(t, 1, snap.Batch.RoutesPerBatch[6])
+	require.EqualValues(t, 11, snap.Batch.PerHopRPCsSaved)
+}
