@@ -78,9 +78,13 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 	require.Equal(t, skysettings.SpreadWeightRate, setSpreadWeight(), "spread.weight")
 	require.False(t, spreadPolicyNow().steers(), "with nothing set the planner steers nothing")
 
+	// The snub.
+	require.Equal(t, tunnelSnubAfter, setTunnelSnubAfter())
+	require.Equal(t, tunnelSnubHold, setTunnelSnubHold())
+
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 47)
+	require.Len(t, skysettings.Catalog(), 49)
 }
 
 // The two range-split knobs OVERRIDE a per-client boot flag rather than
