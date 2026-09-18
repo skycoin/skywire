@@ -500,9 +500,13 @@ func ServeBrowseOrigin(ctx context.Context, cfg BrowseOriginConfig) error {
 	//
 	// The worker sits at /browse-sw.js rather than the library's default, because
 	// /sw.js on this origin is already the PWA's app-shell worker.
+	vOrigins, err := normalizeVOrigins(cfg.VOrigin)
+	if err != nil {
+		return err
+	}
 	roCfg := realorigin.Config{
 		Suffix:    suffix,
-		AppOrigin: cfg.VOrigin,
+		AppOrigin: vOrigins,
 		SWPath:    "/browse-sw.js",
 		Shell:     wasmhv.BrowseBootstrapHTML,
 	}

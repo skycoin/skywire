@@ -78,7 +78,15 @@
 <script>
 (function () {
   'use strict';
-  var V_ORIGIN = "__APP_ORIGIN__";      // visor origin (holds the SharedWorker visor + key)
+  var V_ORIGIN = "__APP_ORIGIN__";      // visor origin(s) (holds the SharedWorker visor + key)
+  // Which app origins this browse origin will be fed content by. It is the
+  // only thing deciding who may inject into B, so it is worth stating plainly
+  // what each form means.
+  //
+  //   "https://app.example"        one app, exact.
+  //   "https://a.example,https://b.example"   several, each exact.
+  //   "*"                          any parent. See the note below.
+  //
   // Loopback-family equivalence for the LOCAL model. Browse origins are
   // *.mesh.localhost (which resolves to 127.0.0.1), but the visor app V may be
   // loaded at localhost, 127.0.0.1 or [::1] — DISTINCT origins to the browser.
@@ -87,17 +95,33 @@
   // whole browser on "Connecting to the mesh…". Treat the loopback hosts as
   // equivalent: post the hello to each and accept a reply from any of them.
   // (Non-loopback / hosted V_ORIGIN is left exact — no relaxation.)
+  //
+  // On "*": a browse origin serves a static shell and a worker and never any
+  // content, so an open deployment lets any page drive its own transport into
+  // an origin under this domain. Third-party storage partitioning keys storage
+  // by (top-level site, frame origin), so such a page cannot reach a visitor's
+  // real browsing state — what is left is that arbitrary content can be served
+  // from a subdomain of yours, which is a reputation question rather than a
+  // confidentiality one. Deliberate for a deployment shared between apps;
+  // a poor default, which is why it is not one.
+  var V_OPEN = false;
   var V_ORIGINS = (function () {
-    var set = [V_ORIGIN];
-    try {
-      var u = new URL(V_ORIGIN);
-      if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '[::1]') {
-        ['localhost', '127.0.0.1', '[::1]'].forEach(function (h) {
-          var o = u.protocol + '//' + h + (u.port ? ':' + u.port : '');
-          if (set.indexOf(o) < 0) { set.push(o); }
-        });
-      }
-    } catch (e) {}
+    var set = [];
+    function add(o) { if (o && set.indexOf(o) < 0) { set.push(o); } }
+    String(V_ORIGIN).split(',').forEach(function (raw) {
+      var o = raw.trim();
+      if (!o) { return; }
+      if (o === '*') { V_OPEN = true; return; }
+      add(o);
+      try {
+        var u = new URL(o);
+        if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '[::1]') {
+          ['localhost', '127.0.0.1', '[::1]'].forEach(function (h) {
+            add(u.protocol + '//' + h + (u.port ? ':' + u.port : ''));
+          });
+        }
+      } catch (e) {}
+    });
     return set;
   })();
   var SUFFIX   = "__SUFFIX__" || ".mesh.localhost";
@@ -227,7 +251,7 @@
       }
       var to = setTimeout(function () { reject(new Error('visor parent timeout')); }, 30000);
       window.addEventListener('message', function onmsg(e) {
-        if (V_ORIGINS.indexOf(e.origin) < 0) return;     // only trust V (loopback family)
+        if (!V_OPEN && V_ORIGINS.indexOf(e.origin) < 0) return;  // only trust V (loopback family), unless open
         if (!e.data || e.data.type !== 'realorigin-ready') return;
         if (e.data.error) {                              // V rejected our shortid
           clearTimeout(to);
@@ -247,7 +271,7 @@
       (function hello() {
         if (helperPort || tries > 30) return;
         tries++;
-        V_ORIGINS.forEach(function (o) { try { window.parent.postMessage({ type: 'realorigin-hello', shortid: SHORTID }, o); } catch (e) {} });
+        (V_OPEN ? ["*"] : V_ORIGINS).forEach(function (o) { try { window.parent.postMessage({ type: 'realorigin-hello', shortid: SHORTID }, o); } catch (e) {} });
         setTimeout(hello, 300);
       })();
     });

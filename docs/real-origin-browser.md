@@ -182,6 +182,31 @@ or via the visor config (`hypervisor.wasm_serve`):
 }
 ```
 
+
+### Sharing one browse domain between apps
+
+`browse_v_origin` (and `--v-origin`) names the app origins a browse origin
+will accept content from. It is the only thing deciding who may feed a browse
+origin, since the bootstrap serves a static shell and the content arrives from
+whichever parent completes the handshake.
+
+```
+"browse_v_origin": "https://<V-domain>"                      one app
+"browse_v_origin": "https://<V-domain>,https://<other-app>"  several
+"browse_v_origin": "*"                                       any parent
+```
+
+A second app on a different registrable domain — a store whose in-page server
+wants its own pages rendered natively, say — either gets added to the list or
+the deployment is opened with `*`.
+
+`*` is a decision rather than a shortcut. An uninvited page cannot reach a
+visitor's browsing state: third-party storage partitioning keys storage by
+(top-level site, frame origin), so a page embedding a browse origin gets its
+own empty partition rather than the one the visor filled. What it can do is
+serve its own content from a subdomain of your browse domain, which makes the
+domain's reputation everyone's to spend. Open a browse domain you are willing
+to share; list origins on one you are not.
 The `*.<browse-domain>` wildcard needs a wildcard TLS cert, which requires the
 **DNS-01** ACME challenge (HTTP-01 cannot issue wildcards). With Caddy and the
 `caddy-dns/cloudflare` provider that is a few lines; one wildcard covers every
