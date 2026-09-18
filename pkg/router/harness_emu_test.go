@@ -22,8 +22,8 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"math/rand"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,6 +36,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/emu"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -150,6 +151,18 @@ const (
 // down by t.Cleanup.
 func newEmuRig(t *testing.T, opts emuOpts) *emuRig {
 	t.Helper()
+	// The netem links pace every frame with its own timer: at 3 MB/s a frame's
+	// service time is a few hundred microseconds, so the emulation needs a timer
+	// that fires on that order. Go's Windows runtime does not have one — its
+	// timers are bounded by the system timer-interrupt period — and the measured
+	// result is an emulated link running ~25x under its configured rate: the
+	// windows lane's cut-busiest-leg row delivered 7.5 of 8 MB in 25 s (~300 KB/s
+	// against a 9 MB/s nominal), so the scenario's deadline and its 2 s
+	// resume-after-cut bar are measuring the runner's clock, not the scheduler.
+	// The linux and darwin lanes run the whole suite, race detector included.
+	if runtime.GOOS == "windows" {
+		t.Skip("emulated-link pacing needs sub-millisecond timers; the windows runtime's are interrupt-period bound")
+	}
 	if len(opts.Legs) == 0 {
 		t.Fatal("emu rig needs at least one leg")
 	}

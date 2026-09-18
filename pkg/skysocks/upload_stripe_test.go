@@ -391,7 +391,13 @@ func socks5Upload(t *testing.T, proxyAddr string, body []byte) *http.Response {
 		}
 	}
 	if _, err := c.Write(body); err != nil {
-		t.Fatalf("body: %v", err)
+		// A terminal upload failure is answered and the tunnel torn down while the
+		// body is still going out. Whether that reaches this writer depends on the
+		// platform, not on the proxy: linux parks the remaining bytes in the socket
+		// buffer, darwin answers the peer's RST with EPIPE here and the case failed
+		// on the darwin lane alone. The response the proxy already sent is what the
+		// test is about, so read it and let the assertions speak.
+		t.Logf("body write ended early (%v); reading the response the proxy already sent", err)
 	}
 	resp, err := http.ReadResponse(br, &http.Request{Method: http.MethodPost})
 	if err != nil {
