@@ -1,0 +1,28 @@
+[
+  {
+    "forward": [
+      {
+        "TpID": "fdab37dd-c35e-05bc-9e51-cd6b024e3eec",
+        "From": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c",
+        "To": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf"
+      },
+      {
+        "TpID": "7420f415-abd5-014f-bc55-e6132477485f",
+        "From": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+        "To": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1"
+      }
+    ],
+    "reverse": [
+      {
+        "TpID": "7420f415-abd5-014f-bc55-e6132477485f",
+        "From": "022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1",
+        "To": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf"
+      },
+      {
+        "TpID": "fdab37dd-c35e-05bc-9e51-cd6b024e3eec",
+        "From": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+        "To": "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c"
+      }
+    ]
+  }
+]
