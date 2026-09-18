@@ -112,16 +112,32 @@ has moved, and a paired campaign has no stale bar. The probe is a download only
 
 ## The endpoint ceiling (v4, 2026-09-18)
 
-    bench/run-ceiling.sh <exit pk> <out dir> [trials] [sink]
+    bench/run-ceiling.sh <exit pk> <out dir> [trials] [sink] [pins dir]
 
-starts `CEIL_N` (3) `--direct` proxy clients on their own SOCKS ports, warms
-each, then per trial runs one 50 MB transfer alone and then all N at the same
-instant — uploads (`kind=uplink`) first, then downloads (`kind=downlink`) —
-every transfer hash-verified against the sink. `ceiling.tsv` holds
-`kind clients trial bytes sum_MBps rates_MBps hashes_ok/n` plus a `# ceiling`
-line per kind saying whether the sum grew from one client to N, and the ceiling
-itself is the **median of the concurrent sums**. `verdict.sh` reads it from the
-mux dir (or the refs dir) automatically.
+starts `CEIL_N` (3) proxy clients on their own SOCKS ports, warms each, then per
+trial runs one 50 MB transfer alone and then all N at the same instant — uploads
+(`kind=uplink`) first, then downloads (`kind=downlink`) — every transfer
+hash-verified against the sink. `ceiling.tsv` holds
+`kind clients trial bytes sum_MBps route:rate_MBps hashes_ok/n` plus a
+`# ceiling` line per kind saying whether the sum grew from one client to N, and
+the ceiling itself is the **median of the concurrent sums**. `verdict.sh` reads
+it from the mux dir (or the refs dir) automatically.
+
+**Which routes it rides.** The uplink is the local card, so its clients are
+`--direct` (9.04 alone / 10.70 concurrent on 2026-09-16). The downlink is not:
+over three direct clients it read 4.72 alone / 5.04 concurrent while a single
+download via the best intermediate did 8–9.5 MB/s in the same hour — the direct
+stcpr path is itself the download bottleneck, and a downlink ceiling taken
+through it would let the composition criterion pass trivially. So the **downlink
+clients are pinned to the N best distinct routes of the paired ranking**
+(`<dir>/paired-ref.tsv` when `pick-ref.sh` has written one, else `paired_rank`'s
+`ref-*.tsv`/`drift.tsv` medians, looked for in the out dir and then its parent):
+slot 1 the best, slot 2 the second best, and `direct` last when the ranking
+holds fewer than N routes. `CEIL_ROUTES` overrides the list; `CEIL_PINS` (or the
+5th argument) says where the `via-<short>.json` pins are. Each rate in the file
+carries its route, and one extra `uplink-via` row per trial uploads over the
+best via route alone, so the file says whether the direct uplink is a
+bottleneck too.
 
 The v4 bars that need it: the two-upload cell is scored against
 `min(ref1 + ref2, 0.95 x the uplink ceiling)` and the line names the binding
