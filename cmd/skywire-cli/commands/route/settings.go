@@ -39,6 +39,8 @@ var (
 	settingsSBDDemote string
 	settingsFwdSpill  string
 	settingsFwdMargin float64
+	settingsStarveRat float64
+	settingsProbeByte string
 )
 
 func init() {
@@ -64,6 +66,8 @@ func init() {
 	settingsCmd.Flags().StringVar(&settingsSBDDemote, "sbd-demote", "", "true|false: let a shared-bottleneck ruling PARK a leg (default false — rulings are recorded as sbd_ruling mux events only)")
 	settingsCmd.Flags().StringVar(&settingsFwdSpill, "forward-spill", "", "true|false: let a FORWARD frame leave its confined leg when that leg is at its send window (default false — the writer waits instead)")
 	settingsCmd.Flags().Float64Var(&settingsFwdMargin, "forward-switch-margin", 0, "how much lower a challenger leg must measure, for two consecutive samples, before the forward direction moves to it (e.g. 0.2)")
+	settingsCmd.Flags().Float64Var(&settingsStarveRat, "leg-starve-ratio", 0, "delay-basis multiple AND inverse goodput fraction at which a leg is cut to a probe per window (e.g. 6.0)")
+	settingsCmd.Flags().StringVar(&settingsProbeByte, "leg-probe-bytes", "", "what a leg cut to probe-only may carry per window (e.g. 64KiB)")
 }
 
 var settingsCmd = &cobra.Command{
@@ -89,7 +93,8 @@ effect at once; the preference is written to routing.transport_preference.`,
 			"ecf-max-window", "ecf-min-window", "ecf-window-margin", "send-window-wait-max",
 			"leg-park-min-hold", "dead-route-hold", "dead-route-hold-max", "mux-fec",
 			"sbd-min-samples", "sbd-sample-interval", "sbd-trial-window", "sbd-trial-loss", "sbd-backoff",
-			"sbd-min-evidence-rate", "sbd-demote", "forward-spill", "forward-switch-margin"} {
+			"sbd-min-evidence-rate", "sbd-demote", "forward-spill", "forward-switch-margin",
+			"leg-starve-ratio", "leg-probe-bytes"} {
 			changed = changed || cmd.Flags().Changed(f)
 		}
 		if changed {
@@ -170,6 +175,12 @@ effect at once; the preference is written to routing.transport_preference.`,
 			if cmd.Flags().Changed("forward-switch-margin") {
 				next.ForwardSwitchMargin = settingsFwdMargin
 			}
+			if cmd.Flags().Changed("leg-starve-ratio") {
+				next.LegStarveRatio = settingsStarveRat
+			}
+			if cmd.Flags().Changed("leg-probe-bytes") {
+				next.LegProbeBytes = mustBytes(cmd, settingsProbeByte)
+			}
 			if err := rpcClient.SetRouterSettings(next); err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
@@ -202,6 +213,8 @@ effect at once; the preference is written to routing.transport_preference.`,
 			SBDDemote:           sbdDemote,
 			ForwardSpill:        fwdSpill,
 			ForwardSwitchMargin: cur.ForwardSwitchMargin,
+			LegStarveRatio:      cur.LegStarveRatio,
+			LegProbeBytes:       cur.LegProbeBytes,
 		}))
 	},
 }

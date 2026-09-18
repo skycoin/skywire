@@ -174,6 +174,15 @@ type ecfLegState struct {
 	// inflightBytes is the selector's estimate of bytes sent-but-not-yet-
 	// delivered on this leg. NOT set by SetECFState — carried across refreshes.
 	inflightBytes float64
+	// delivBps is what the peer's SACKs PROVE this leg delivered, in bytes/sec,
+	// EWMA-smoothed over the refresh window — the productivity half of the
+	// outclassed-leg gate. Distinct from rateBps, which counts what we handed
+	// the transport (a bloated leg's queue reads as capacity there). delivKnown
+	// says the leg has acknowledged at least once, so a delivBps of 0 means
+	// "delivering nothing", not "not measured yet"; a leg without it is never
+	// ruled outclassed. Neither is read by the schedulers.
+	delivBps   float64
+	delivKnown bool
 }
 
 // transportSelector implements weighted transport selection based on latency.
