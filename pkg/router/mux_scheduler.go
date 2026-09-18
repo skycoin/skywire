@@ -1,7 +1,11 @@
 // Package router pkg/router/mux_scheduler.go c2-net-routing
 package router
 
-import "math"
+import (
+	"math"
+
+	"github.com/skycoin/skywire/pkg/router/routersettings"
+)
 
 // This file holds two additional completion-time predictive mux schedulers that
 // reason over the SAME per-leg estimator snapshot ECF maintains (ecfLegState:
@@ -62,7 +66,7 @@ func legArrivalMs(l ecfLegState) float64 {
 	}
 	rate := l.rateBps
 	if rate <= 0 {
-		rate = ecfColdBootstrapBytes / (rtt / 1000.0)
+		rate = float64(routersettings.EcfColdBootstrapBytes.Bytes()) / (rtt / 1000.0)
 	}
 	queueMs := 0.0
 	if rate > 0 {

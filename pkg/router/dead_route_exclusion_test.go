@@ -29,7 +29,7 @@ func deadRoutePath(tpID uuid.UUID, mid cipher.PubKey) []routing.Hop {
 // closed at exactly handshakeAwaitTimeout. The diversify filter must not hand
 // that route back on the next dial.
 func TestDeadRouteExcludedFromDiversifyPick(t *testing.T) {
-	r := &router{deadRoutes: newDeadRouteCache(deadRouteTTL, deadRouteMaxTTL)}
+	r := &router{deadRoutes: newDeadRouteCache(deadRouteTTLDefault, deadRouteMaxTTLDefault)}
 	mid, _ := cipher.GenerateKeyPair()
 	deadTp, liveTp := uuid.New(), uuid.New()
 	dead := deadRoutePath(deadTp, mid)
@@ -54,7 +54,7 @@ func TestDeadRouteExcludedFromDiversifyPick(t *testing.T) {
 // A route that carried payload, or that lived a normal life before closing, is
 // not remembered — only a young death with no bytes is evidence.
 func TestDeadRouteOnlyRemembersYoungDeaths(t *testing.T) {
-	c := newDeadRouteCache(deadRouteTTL, deadRouteMaxTTL)
+	c := newDeadRouteCache(deadRouteTTLDefault, deadRouteMaxTTLDefault)
 	mid, _ := cipher.GenerateKeyPair()
 	p := deadRoutePath(uuid.New(), mid)
 
@@ -98,7 +98,7 @@ func TestDeadRouteBackoffAndExpiry(t *testing.T) {
 // The key is first hop AND the rest of the path: a different route over the
 // same transport is a different experiment and stays dialable.
 func TestDeadRouteKeyedOnWholeRouteNotJustFirstHop(t *testing.T) {
-	c := newDeadRouteCache(deadRouteTTL, deadRouteMaxTTL)
+	c := newDeadRouteCache(deadRouteTTLDefault, deadRouteMaxTTLDefault)
 	midA, _ := cipher.GenerateKeyPair()
 	midB, _ := cipher.GenerateKeyPair()
 	tp := uuid.New()
@@ -114,7 +114,7 @@ func TestDeadRouteKeyedOnWholeRouteNotJustFirstHop(t *testing.T) {
 // The filter never fails a dial outright: if every candidate is excluded the
 // set passes through so the caller retries the least-bad route.
 func TestDeadRouteFilterNeverEmptiesTheCandidateSet(t *testing.T) {
-	r := &router{deadRoutes: newDeadRouteCache(deadRouteTTL, deadRouteMaxTTL)}
+	r := &router{deadRoutes: newDeadRouteCache(deadRouteTTLDefault, deadRouteMaxTTLDefault)}
 	mid, _ := cipher.GenerateKeyPair()
 	a := deadRoutePath(uuid.New(), mid)
 	b := deadRoutePath(uuid.New(), mid)

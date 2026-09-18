@@ -79,7 +79,7 @@ func TestMuxRecordCountersAndSnapshot(t *testing.T) {
 // between two adjacent statements — true on Linux, routinely false on Windows,
 // whose timer granularity is coarse ("0s is not greater than 0s"). Nothing in
 // production wants a positive age here: every caller compares gapAge against a
-// threshold (legDataStallGapAge, holGapThreshold), where a brand-new gap reading
+// threshold (legDataStallGapAgeDefault, holGapThreshold), where a brand-new gap reading
 // 0 is correct and must not trip a stall.
 func TestMuxGapAge(t *testing.T) {
 	m := newBareMux(true)
@@ -119,7 +119,7 @@ func TestMuxShouldSendSACK(t *testing.T) {
 	require.False(t, m.shouldSendSACK(), "immediate second SACK is rate-limited")
 
 	// Backdate the last-SACK timestamp past the min interval.
-	m.lastSACKNano = time.Now().Add(-2 * sackMinInterval).UnixNano()
+	m.lastSACKNano = time.Now().Add(-2 * sackMinIntervalDefault).UnixNano()
 	require.True(t, m.shouldSendSACK(), "SACK allowed again after the min interval")
 }
 

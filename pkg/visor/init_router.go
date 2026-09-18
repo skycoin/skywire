@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/policy"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -293,6 +294,11 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		dialHook = hook
 	}
 
+	// Replay the persisted router knobs BEFORE the router is built, so a group
+	// created during startup already sees the operator's values rather than the
+	// compiled defaults (the 17 router atomics used to reset on every restart).
+	restoreRouterKnobs(v, log)
+
 	routeSetupHooks := getRouteSetupHooks(ctx, v, log)
 
 	// Assemble + serve the router through the shared visorcore.BuildRouter so the
@@ -546,4 +552,27 @@ func initNodeHealth(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.nodeHealthTracker.Start(ctx)
 
 	return nil
+}
+
+// restoreRouterKnobs replays routing.router_settings and
+// routing.router_app_settings into the knob catalog. A value the running binary
+// no longer accepts (a knob renamed or its floor raised) is logged and skipped
+// rather than failing the boot: a stale config must never keep a visor down.
+func restoreRouterKnobs(v *Visor, log *logging.Logger) {
+	if v.conf == nil || v.conf.Routing == nil {
+		return
+	}
+	for name, val := range v.conf.Routing.RouterSettings {
+		if err := routersettings.Set(name, val); err != nil {
+			log.WithError(err).WithField("knob", name).Warn("Persisted router setting rejected; the compiled default stands.")
+		}
+	}
+	for app, vals := range v.conf.Routing.RouterAppSettings {
+		for name, val := range vals {
+			if err := routersettings.SetApp(app, name, val); err != nil {
+				log.WithError(err).WithField("app", app).WithField("knob", name).
+					Warn("Persisted per-app router setting rejected; the visor-wide value stands.")
+			}
+		}
+	}
 }

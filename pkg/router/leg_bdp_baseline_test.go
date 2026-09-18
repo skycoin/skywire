@@ -60,16 +60,16 @@ func TestSendWindowFollowsFeedbackDelayOverFirstHopBaseline(t *testing.T) {
 	var last float64
 	for _, ad := range []float64{200, 400, 800, 1500, 3000} {
 		got, fb := step(ad)
-		want := delivPerSec * fb / 1000.0 * ecfWindowMargin
-		if want > ecfMaxWindowBytes {
-			want = ecfMaxWindowBytes
+		want := delivPerSec * fb / 1000.0 * ecfWindowMarginDefault
+		if want > ecfMaxWindowBytesDefault {
+			want = ecfMaxWindowBytesDefault
 		}
 		require.InDelta(t, want, got, want*0.05,
 			"the window must be the delivered rate over the %g ms feedback delay", fb)
 		require.Greater(t, got, last, "a longer feedback delay must not shrink the window")
 		last = got
 	}
-	require.Greater(t, last, delivPerSec*0.040*ecfWindowMargin*10,
+	require.Greater(t, last, delivPerSec*0.040*ecfWindowMarginDefault*10,
 		"a 470ms-class path must not be sized as if it were its 40 ms first hop")
 
 	// ...while the baseline it is anchored to never left the first hop.
@@ -93,7 +93,7 @@ func TestSendWindowFollowsFeedbackDelayOverFirstHopBaseline(t *testing.T) {
 	require.Zero(t, m.ackDelayMsTp(tpID), "a stale estimate describes a queue that has drained")
 
 	got, _ := step(0)
-	require.InDelta(t, delivPerSec*0.040*ecfWindowMargin, got, float64(delivPerSec)*0.05,
+	require.InDelta(t, delivPerSec*0.040*ecfWindowMarginDefault, got, float64(delivPerSec)*0.05,
 		"once the ack-delay estimate expires the window is sized on the first hop again")
 }
 

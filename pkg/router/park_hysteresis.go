@@ -37,7 +37,7 @@ import (
 // decision is revisited; six ticks is short enough that a leg whose bottleneck
 // really cleared rejoins within half a minute. Not a flag: this is the
 // controllers' own damping constant, like legDataStallGapAge.
-const legParkMinHold = 30 * time.Second
+const legParkMinHoldDefault = 30 * time.Second
 
 // adaptivePark is one leg's standing adaptive park: when it happened and the
 // reason the controller named for it.

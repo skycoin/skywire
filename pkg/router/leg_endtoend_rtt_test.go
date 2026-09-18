@@ -21,7 +21,7 @@ import (
 // so the second frame spills.
 //
 // RACK's threshold is checked on the same rig: it must never presume loss
-// inside one real feedback delay (rackReorderFactor x 170 ms).
+// inside one real feedback delay (rackReorderFactorDefault x 170 ms).
 func TestRefreshLegWindowsUsesEndToEndFeedbackDelay(t *testing.T) {
 	rg, mts, _ := createMuxRouteGroup(t, 2)
 
@@ -66,12 +66,12 @@ func TestRefreshLegWindowsUsesEndToEndFeedbackDelay(t *testing.T) {
 	require.Equal(t, 0, ecfPick(legs, false, nil), "an unsaturated fast leg keeps the frame")
 
 	// RACK must not presume loss inside one real feedback delay on either leg.
-	// rackReorderFactor x 170 ms = 212.5 ms; the threshold is computed in whole
+	// rackReorderFactorDefault x 170 ms = 212.5 ms; the threshold is computed in whole
 	// milliseconds, so the bound is the floor of that.
-	wantRack := time.Duration(math.Floor(rackReorderFactor*170)) * time.Millisecond
+	wantRack := time.Duration(math.Floor(rackReorderFactorDefault*170)) * time.Millisecond
 	for _, tp := range mts {
 		require.GreaterOrEqual(t, rg.mux.rackThresholdFor(tp.Entry.ID), wantRack,
-			"per-leg RACK threshold must be at least %v (rackReorderFactor x the 170ms feedback delay)", wantRack)
+			"per-leg RACK threshold must be at least %v (rackReorderFactorDefault x the 170ms feedback delay)", wantRack)
 	}
 }
 

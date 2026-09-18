@@ -134,7 +134,7 @@ func TestSBDParkTrialUndoneWhenGoodputDrops(t *testing.T) {
 	// The backoff doubles on a repeat and never merges the pair while it runs.
 	sbdTick(rg, ids, 25_000_000, 21_500_000)
 	require.False(t, rg.mux.isLegStandby(1), "the suppressed pair stays two pipes for the backoff window")
-	require.Equal(t, 2*sbdBackoff, rg.noteSBDIndependent(ids[0], ids[1]), "a repeat failure doubles the exemption")
+	require.Equal(t, 2*sbdBackoffDefault, rg.noteSBDIndependent(ids[0], ids[1]), "a repeat failure doubles the exemption")
 }
 
 // TestSBDParkStandsWhenGoodputHolds is the other half: when the legs really were
@@ -164,9 +164,9 @@ func TestSBDParkStandsWhenGoodputHolds(t *testing.T) {
 // defaults are the constants the package compiled with, and each refuses a value
 // that would make the trial meaningless.
 func TestSBDTrialKnobs(t *testing.T) {
-	require.Equal(t, sbdTrialWindow, SBDTrialWindow())
-	require.Equal(t, sbdTrialLoss, SBDTrialLoss())
-	require.Equal(t, sbdBackoff, SBDBackoff())
+	require.Equal(t, sbdTrialWindowDefault, SBDTrialWindow())
+	require.Equal(t, sbdTrialLossDefault, SBDTrialLoss())
+	require.Equal(t, sbdBackoffDefault, SBDBackoff())
 
 	pw, pl, pb := SBDTrialWindow(), SBDTrialLoss(), SBDBackoff()
 	t.Cleanup(func() { SetSBDTrialWindow(pw); SetSBDTrialLoss(pl); SetSBDBackoff(pb) })
@@ -210,8 +210,8 @@ func TestSBDNoParkWithoutTrafficToRuleOn(t *testing.T) {
 	require.Zero(t, countEvents(rg, MuxEventLegParked))
 
 	// A trickle below the floor is no better: 64 KiB/s is the bar, and a tick
-	// carrying half of it over legDataProgressInterval does not clear it.
-	sbdTick(rg, ids, uint64(sbdMinEvidenceRate*legDataProgressInterval/time.Second)/2, 0)
+	// carrying half of it over legDataProgressIntervalDefault does not clear it.
+	sbdTick(rg, ids, uint64(sbdMinEvidenceRateDefault*legDataProgressIntervalDefault/time.Second)/2, 0)
 	require.False(t, rg.mux.isLegStandby(1), "a trickle below the evidence floor is not evidence")
 	require.Zero(t, countEvents(rg, MuxEventLegParked))
 
@@ -449,7 +449,7 @@ func TestSBDDemoteKnob(t *testing.T) {
 // the constant the package compiled with, and zero — the value that let an idle
 // park stand for a whole transfer — is refused.
 func TestSBDMinEvidenceRateKnob(t *testing.T) {
-	require.Equal(t, int64(sbdMinEvidenceRate), SBDMinEvidenceRate())
+	require.Equal(t, int64(sbdMinEvidenceRateDefault), SBDMinEvidenceRate())
 	require.Equal(t, int64(64<<10), SBDMinEvidenceRate(), "the documented default is 64 KiB/s")
 
 	prev := SBDMinEvidenceRate()

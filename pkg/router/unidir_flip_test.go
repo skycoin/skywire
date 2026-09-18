@@ -19,26 +19,26 @@ func TestFlipStep(t *testing.T) {
 
 	up, down := 5_000_000.0, 100_000.0 // upload-heavy (>2×), well above the floor
 
-	// Needs flipHysteresis consecutive qualifying ticks before flipping.
-	for i := 0; i < flipHysteresis-1; i++ {
+	// Needs flipHysteresisDefault consecutive qualifying ticks before flipping.
+	for i := 0; i < flipHysteresisDefault-1; i++ {
 		if _, changed := m.flipStep(up, down); changed {
-			t.Fatalf("flipped after only %d ticks, want %d", i+1, flipHysteresis)
+			t.Fatalf("flipped after only %d ticks, want %d", i+1, flipHysteresisDefault)
 		}
 	}
 	flipped, changed := m.flipStep(up, down)
 	if !changed || !flipped {
-		t.Fatalf("expected flip on tick %d: flipped=%v changed=%v", flipHysteresis, flipped, changed)
+		t.Fatalf("expected flip on tick %d: flipped=%v changed=%v", flipHysteresisDefault, flipped, changed)
 	}
 
 	// Cooldown: no immediate re-flip even if the signal reverses hard.
-	for i := 0; i < flipCooldownTicks; i++ {
+	for i := 0; i < flipCooldownTicksDefault; i++ {
 		if _, changed := m.flipStep(down, up); changed { // download-heavy now
 			t.Fatalf("re-flipped during cooldown at tick %d", i+1)
 		}
 	}
 	// After cooldown, a sustained download-heavy signal reverts.
 	var reverted bool
-	for i := 0; i < flipHysteresis; i++ {
+	for i := 0; i < flipHysteresisDefault; i++ {
 		if f, c := m.flipStep(down, up); c {
 			reverted = !f
 		}
@@ -50,8 +50,8 @@ func TestFlipStep(t *testing.T) {
 	// Balanced traffic (below the ratio) never flips.
 	m2 := newRouteMux(log, true)
 	m2.setDirectional(true, dst, src)
-	for i := 0; i < flipHysteresis*3; i++ {
-		if _, c := m2.flipStep(1_000_000, 900_000); c { // ~1.1×, under flipRatio
+	for i := 0; i < flipHysteresisDefault*3; i++ {
+		if _, c := m2.flipStep(1_000_000, 900_000); c { // ~1.1×, under flipRatioDefault
 			t.Fatal("flipped on near-balanced traffic")
 		}
 	}
@@ -59,8 +59,8 @@ func TestFlipStep(t *testing.T) {
 	// Near-idle traffic (below the floor) never flips even at a high ratio.
 	m3 := newRouteMux(log, true)
 	m3.setDirectional(true, dst, src)
-	for i := 0; i < flipHysteresis*3; i++ {
-		if _, c := m3.flipStep(flipMinGoodput/2, 1); c {
+	for i := 0; i < flipHysteresisDefault*3; i++ {
+		if _, c := m3.flipStep(flipMinGoodputDefault/2, 1); c {
 			t.Fatal("flipped on sub-floor idle traffic")
 		}
 	}

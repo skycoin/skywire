@@ -41,7 +41,7 @@ func TestFECMuxWiredReconstructsSlowLegFrame(t *testing.T) {
 	require.True(t, recv.fecEnabled, "receiver FEC must initialize")
 
 	const routeID = routing.RouteID(7)
-	const k = fecDefaultK // one full block
+	const k = fecDefaultKDefault // one full block
 
 	// Sender: wrap K frames. The striper (fed the sealed payload) returns the R
 	// repair frames when the block completes; capture them.
@@ -55,7 +55,7 @@ func TestFECMuxWiredReconstructsSlowLegFrame(t *testing.T) {
 		packets[i] = pkt
 	}
 	repair := send.fecDrainRepairs()
-	require.Len(t, repair, fecDefaultR, "a completed block must queue R repair frames")
+	require.Len(t, repair, fecDefaultRDefault, "a completed block must queue R repair frames")
 
 	// Receiver: deliver every data frame EXCEPT the "slow leg" victim (seq 3).
 	// deliverData records each sealed payload into the reassembler (fecOnRecvData)
@@ -98,7 +98,7 @@ func TestFECMuxWiredInertWhenDisabled(t *testing.T) {
 	recv := newRouteMux(log, true)
 
 	const routeID = routing.RouteID(9)
-	const n = fecDefaultK * 2
+	const n = fecDefaultKDefault * 2
 	plain := make([][]byte, n)
 	for i := 0; i < n; i++ {
 		plain[i] = []byte(fmt.Sprintf("plain-%02d", i))
@@ -133,7 +133,7 @@ func TestFECMuxTailFlushProtectsPartialBlock(t *testing.T) {
 	recv.fecInit()
 
 	const routeID = routing.RouteID(11)
-	const k = fecDefaultK
+	const k = fecDefaultKDefault
 	const jReal = 5 // a partial block: 5 real frames, then the stream goes idle
 
 	// helper: collect only non-empty delivered frames (the mux loop filters empties)
@@ -171,7 +171,7 @@ func TestFECMuxTailFlushProtectsPartialBlock(t *testing.T) {
 		padPkts = append(padPkts, pkt)
 	}
 	repair := send.fecDrainRepairs()
-	require.Len(t, repair, fecDefaultR, "the flush must complete the block and emit R repair frames")
+	require.Len(t, repair, fecDefaultRDefault, "the flush must complete the block and emit R repair frames")
 
 	// Receiver: deliver every real frame EXCEPT the slow-leg victim (seq 2), plus
 	// all padding frames. Frontier stalls at seq 2.
@@ -215,7 +215,7 @@ func TestFECMuxSingleLegNoRepair(t *testing.T) {
 	send.growLegs(1) // single leg → FEC must not emit repair
 
 	const routeID = routing.RouteID(13)
-	for i := 0; i < fecDefaultK*3; i++ {
+	for i := 0; i < fecDefaultKDefault*3; i++ {
 		_, _, err := send.wrapPayload(routeID, []byte(fmt.Sprintf("f-%02d", i)), uuid.Nil)
 		require.NoError(t, err)
 	}

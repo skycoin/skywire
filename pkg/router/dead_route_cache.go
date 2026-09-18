@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -42,8 +43,8 @@ const (
 
 	// deadRouteTTL is the first exclusion window; deadRouteMaxTTL caps the
 	// doubling applied on each repeat death.
-	deadRouteTTL    = 60 * time.Second
-	deadRouteMaxTTL = 8 * time.Minute
+	deadRouteTTLDefault    = 60 * time.Second
+	deadRouteMaxTTLDefault = 8 * time.Minute
 )
 
 // deadRouteKey identifies one route: its first-hop transport plus a digest of

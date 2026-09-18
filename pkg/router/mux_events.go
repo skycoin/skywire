@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -163,18 +164,23 @@ const (
 )
 
 // MuxEventRingSize is how many mux events the router keeps.
-const MuxEventRingSize = 256
+const MuxEventRingSizeDefault = 256
 
 // muxEventsPerGroup is how many of a group's own events ride along in its
 // MuxStats snapshot (`proxy mux info --json`) — enough to show the churn next
 // to the legs without turning a per-second poll into a log dump.
-const muxEventsPerGroup = 8
+const muxEventsPerGroupDefault = 8
 
 type muxEventRing struct {
 	mu   sync.Mutex
 	buf  []MuxEvent
 	next int
 	full bool
+	// perGroup marks a ring owned by ONE route group rather than the router.
+	// It sizes itself from mux.event_ring_per_group, and it is the ring a
+	// group's own mux info reads — so a chatty group evicts only its own
+	// history, never another group's.
+	perGroup bool
 }
 
 func (r *muxEventRing) add(e MuxEvent) {
@@ -183,8 +189,8 @@ func (r *muxEventRing) add(e MuxEvent) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.buf == nil {
-		r.buf = make([]MuxEvent, MuxEventRingSize)
+	if want := r.size(); r.buf == nil || len(r.buf) != want {
+		r.resizeLocked(want)
 	}
 	r.buf[r.next] = e
 	r.next = (r.next + 1) % len(r.buf)
@@ -200,16 +206,7 @@ func (r *muxEventRing) snapshot() []MuxEvent {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.buf == nil {
-		return nil
-	}
-	if !r.full {
-		return append([]MuxEvent(nil), r.buf[:r.next]...)
-	}
-	out := make([]MuxEvent, 0, len(r.buf))
-	out = append(out, r.buf[r.next:]...)
-	out = append(out, r.buf[:r.next]...)
-	return out
+	return r.orderedLocked()
 }
 
 // forDesc returns the last n events belonging to desc, oldest first.
@@ -259,6 +256,10 @@ func (rg *RouteGroup) noteMuxEvent(e MuxEvent) {
 		SrcPort: rg.desc.SrcPort(),
 	}
 	rg.muxEvents.add(e)
+	// …and on the group's OWN ring, which is what its mux info reads: a
+	// chatty sibling filling the shared ring can no longer evict this group's
+	// history out from under `proxy mux info`.
+	rg.ownEvents.add(e)
 }
 
 // noteLegEvent is noteMuxEvent for a leg-scoped event: it fills the first-hop
@@ -423,4 +424,59 @@ func (rg *RouteGroup) activatePinnedLeg(tpID uuid.UUID) {
 	rg.mux.setLegStandby(idx, false)
 	rg.sendLegState(idx, false)
 	rg.noteLegEvent(MuxEventLegPromoted, "operator: pinned leg active", MuxByOperator, idx, rg.legCount(), tp, nil)
+}
+
+// size is the ring's capacity from the live catalog: the shared router ring
+// reads mux.event_ring_size, a per-GROUP ring mux.event_ring_per_group. The
+// per-group ring is why a chatty group can no longer evict another group's
+// history — `mux info` reads the group's own ring, not the shared one.
+func (r *muxEventRing) size() int {
+	if r.perGroup {
+		return routersettings.MuxEventRingPerGroup.Int()
+	}
+	return routersettings.MuxEventRingSize.Int()
+}
+
+// resizeLocked re-sizes the ring to n, keeping the newest min(n, held) events
+// in order. Caller holds r.mu.
+func (r *muxEventRing) resizeLocked(n int) {
+	if n <= 0 {
+		return
+	}
+	held := r.orderedLocked()
+	if len(held) > n {
+		held = held[len(held)-n:]
+	}
+	r.buf = make([]MuxEvent, n)
+	copy(r.buf, held)
+	r.next = len(held) % n
+	r.full = len(held) == n
+}
+
+// orderedLocked returns the held events oldest first. Caller holds r.mu.
+func (r *muxEventRing) orderedLocked() []MuxEvent {
+	if r.buf == nil {
+		return nil
+	}
+	if !r.full {
+		return append([]MuxEvent(nil), r.buf[:r.next]...)
+	}
+	out := make([]MuxEvent, 0, len(r.buf))
+	out = append(out, r.buf[r.next:]...)
+	out = append(out, r.buf[:r.next]...)
+	return out
+}
+
+// lastN returns the newest n events of this ring, oldest first.
+func (r *muxEventRing) lastN(n int) []MuxEvent {
+	if r == nil || n <= 0 {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	all := r.orderedLocked()
+	if len(all) > n {
+		all = all[len(all)-n:]
+	}
+	return all
 }

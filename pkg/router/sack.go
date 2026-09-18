@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 )
 
 // retxMinAge is the FALLBACK reorder-tolerant retransmit age, used only when the
@@ -22,7 +24,7 @@ import (
 // ~7x traffic storm that wedged mux>1). Holding off until a sequence is overdue
 // by more than the realistic inter-leg skew — which the RTT-derived threshold
 // measures directly — means a merely reordered packet is acked (purged) first.
-const retxMinAge = 750 * time.Millisecond
+const retxMinAgeDefault = 750 * time.Millisecond
 
 // sackMaxWords bounds the generated bitmap to the reorder window (32 words *
 // 64 = 2048 sequences). Mirrors routing.SACKMaxWords; kept local to avoid a
@@ -62,7 +64,7 @@ type sackTracker struct {
 func newSACKTracker() *sackTracker {
 	return &sackTracker{
 		received:    make(map[uint32]bool),
-		maxReceived: reorderWindow,
+		maxReceived: routersettings.ReorderWindow.Int(),
 	}
 }
 
@@ -218,7 +220,7 @@ type retxEntry struct {
 // bounds the worst-case waste per sequence at ~4 copies even when the loss
 // threshold underestimates the true (bufferbloated) RTT, while a genuinely lost
 // retransmit is still retried on a TCP-like doubling schedule.
-const retxBackoffMaxShift = 3
+const retxBackoffMaxShiftDefault = 3
 
 // retxBuffer is a bounded buffer of unacknowledged sent packets for
 // retransmission on SACK-detected loss.
@@ -396,7 +398,7 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 // bytes not put on the wire (reported as retx_deferred_young).
 func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, threshold time.Duration, thresholdFor func(uuid.UUID) time.Duration) (retransmit []uint32, deferredYoung int) {
 	if threshold <= 0 {
-		threshold = retxMinAge
+		threshold = routersettings.RackRetxMinAge.Duration()
 	}
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
@@ -482,8 +484,8 @@ func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, thr
 					ref = e.lastTxAt
 				}
 				shift := e.retxCount
-				if shift > retxBackoffMaxShift {
-					shift = retxBackoffMaxShift
+				if shift > uint8(routersettings.RackRetxBackoffMaxShift.Int()) { //nolint:gosec
+					shift = uint8(routersettings.RackRetxBackoffMaxShift.Int()) //nolint:gosec
 				}
 				// The hole is judged against the basis of the leg it was SENT on:
 				// a frame younger than that leg's own delay (plus the reorder

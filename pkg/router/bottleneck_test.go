@@ -19,16 +19,16 @@ import (
 
 func TestSBDWindowPushAndSamples(t *testing.T) {
 	w := newSBDWindow()
-	// Push more than the window depth; only the most recent sbdWindowSamples
+	// Push more than the window depth; only the most recent sbdWindowSamplesDefault
 	// remain, in chronological (oldest-first) order.
-	for i := 1; i <= sbdWindowSamples+3; i++ {
+	for i := 1; i <= sbdWindowSamplesDefault+3; i++ {
 		w.push(float64(i))
 	}
 	got := w.samples()
-	require.Len(t, got, sbdWindowSamples)
+	require.Len(t, got, sbdWindowSamplesDefault)
 	// The first three (1,2,3) were overwritten; the window holds 4..(N+3).
 	assert.Equal(t, float64(4), got[0])
-	assert.Equal(t, float64(sbdWindowSamples+3), got[len(got)-1])
+	assert.Equal(t, float64(sbdWindowSamplesDefault+3), got[len(got)-1])
 	// Non-positive samples are ignored.
 	before := len(w.samples())
 	w.push(0)
@@ -98,11 +98,11 @@ func TestGroupLegsBySBD_IndependentStaySeparate(t *testing.T) {
 }
 
 func TestGroupLegsBySBD_InsufficientSamples(t *testing.T) {
-	// A leg with fewer than sbdMinSamples must stay a singleton even if its
+	// A leg with fewer than sbdMinSamplesDefault must stay a singleton even if its
 	// (thin) stats would otherwise resemble a well-sampled peer.
 	full := computeSBDStats([]float64{50, 52, 51, 90, 50, 53, 51, 88})
-	thin := computeSBDStats([]float64{50, 90}) // n=2 < sbdMinSamples
-	require.Less(t, thin.n, sbdMinSamples)
+	thin := computeSBDStats([]float64{50, 90}) // n=2 < sbdMinSamplesDefault
+	require.Less(t, thin.n, sbdMinSamplesDefault)
 	groups := groupLegsBySBD([]sbdStats{full, thin})
 	assert.NotEqual(t, groups[0], groups[1], "under-sampled leg must not merge")
 }

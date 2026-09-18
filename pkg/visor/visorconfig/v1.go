@@ -756,6 +756,25 @@ type Routing struct {
 	// enable it for a group to negotiate it.
 	MuxFEC bool `json:"mux_fec,omitempty"`
 
+	// RouterSettings is the visor-wide router knob catalog: one map of
+	// catalog-name to formatted value, holding only the knobs an operator has
+	// explicitly SET (`skywire cli route settings k=v`). A knob absent from the
+	// map runs the value the binary compiled with, so the file stays small and a
+	// new release's changed default is picked up rather than pinned. Restored at
+	// boot by init_router, which is what makes a sweep survive a restart — the
+	// 17 router atomics used to reset.
+	//
+	// It is one map rather than a field per knob on purpose: the catalog grows
+	// every time a constant becomes live, and a field per knob would mean a
+	// config migration each time.
+	RouterSettings map[string]string `json:"router_settings,omitempty"`
+
+	// RouterAppSettings holds the same shape per APP name: the overrides
+	// `route settings --app <name> k=v` installs for the route groups that app
+	// owns, so a subject client and its paired reference keep their different
+	// values across a restart.
+	RouterAppSettings map[string]map[string]string `json:"router_app_settings,omitempty"`
+
 	// EnableCascadeRouteSetup opts INTO the source-driven cascade route-setup
 	// path (RSN signs, source injects the cascade down its own transports,
 	// avoiding the RSN's dmsg dependency). It is OFF by default: the cascade

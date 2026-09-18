@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 )
 
 // Shared-bottleneck detection (SBD) for mux legs, after RFC 8382.
@@ -67,13 +69,13 @@ const (
 	// While data flows the SACK path feeds the same window at sbdSampleInterval,
 	// so the window spans ~0.4s instead — RFC 8382's own timescale — with no change
 	// to the math below. Tuning parameter, not an on/off gate.
-	sbdWindowSamples = 8
+	sbdWindowSamplesDefault = 8
 	// sbdMinSamples is the fewest samples a leg needs before its statistics are
 	// trusted for grouping. Below it the leg is treated as its OWN singleton group
 	// (insufficient evidence to merge — the conservative default: never collapse a
 	// leg's capacity on a guess). The default of the --sbd-min-samples knob; the
 	// live value is SBDMinSamples().
-	sbdMinSamples = 4
+	sbdMinSamplesDefault = 4
 	// sbdSampleInterval is the minimum spacing between two per-SACK delay samples
 	// folded into ONE leg's window. The SACK path produces samples far faster than
 	// the window is meant to summarize (tens per second on a bulk transfer), so
@@ -84,22 +86,22 @@ const (
 	// legLivenessInterval, sbdMinSamples of them) into one that lands within a few
 	// seconds of the transfer starting. The default of the --sbd-sample-interval
 	// knob; the live value is SBDSampleInterval().
-	sbdSampleInterval = 50 * time.Millisecond
+	sbdSampleIntervalDefault = 50 * time.Millisecond
 	// sbdSkewTol is the maximum |skew_i - skew_j| for two legs to be judged
 	// co-bottlenecked. skew_est is in [-1, 1] (fraction of samples below the mean
 	// minus fraction above), so 0.5 is a half-scale band — legs behind the same
 	// queue share a skew sign and rough magnitude.
-	sbdSkewTol = 0.5
+	sbdSkewTolDefault = 0.5
 	// sbdCVTolFrac is the maximum RELATIVE difference in coefficient of variation
 	// (stddev/mean) for two legs to be judged co-bottlenecked. Using CV rather than
 	// raw variance makes the test scale-invariant, so a fast and a slow leg behind
 	// the same bottleneck (different base RTT, same fractional jitter) still match.
-	sbdCVTolFrac = 0.5
+	sbdCVTolFracDefault = 0.5
 	// sbdFreqTol is the maximum |freq_i - freq_j| for two legs to be judged
 	// co-bottlenecked. freq_est is the fraction of consecutive-sample transitions
 	// that cross the mean (0..1) — the oscillation frequency of the queue. 0.4 is a
 	// wide band appropriate to the small windows the coarse pong cadence yields.
-	sbdFreqTol = 0.4
+	sbdFreqTolDefault = 0.4
 )
 
 // sbdWindow is a fixed-capacity ring of a single leg's most recent raw OWD (RTT)
@@ -113,7 +115,7 @@ type sbdWindow struct {
 
 // newSBDWindow returns an empty window sized to sbdWindowSamples.
 func newSBDWindow() *sbdWindow {
-	return &sbdWindow{buf: make([]float64, sbdWindowSamples)}
+	return &sbdWindow{buf: make([]float64, routersettings.SBDWindowSamples.Int())}
 }
 
 // push appends one raw OWD sample (ms), overwriting the oldest when full.
@@ -124,7 +126,7 @@ func (w *sbdWindow) push(sampleMs float64) {
 		return
 	}
 	if len(w.buf) == 0 {
-		w.buf = make([]float64, sbdWindowSamples)
+		w.buf = make([]float64, routersettings.SBDWindowSamples.Int())
 	}
 	w.buf[w.next] = sampleMs
 	w.next = (w.next + 1) % len(w.buf)
@@ -248,10 +250,10 @@ func sbdSimilar(a, b sbdStats) bool {
 	if a.n < minN || b.n < minN {
 		return false
 	}
-	if math.Abs(a.skew-b.skew) > sbdSkewTol {
+	if math.Abs(a.skew-b.skew) > routersettings.SBDSkewTol.Ratio() {
 		return false
 	}
-	if math.Abs(a.freq-b.freq) > sbdFreqTol {
+	if math.Abs(a.freq-b.freq) > routersettings.SBDFreqTol.Ratio() {
 		return false
 	}
 	maxCV := math.Max(a.cv, b.cv)
@@ -261,7 +263,7 @@ func sbdSimilar(a, b sbdStats) bool {
 		// NOT merge. Flat legs stay independent.
 		return false
 	}
-	if math.Abs(a.cv-b.cv)/maxCV > sbdCVTolFrac {
+	if math.Abs(a.cv-b.cv)/maxCV > routersettings.SBDCVTolFrac.Ratio() {
 		return false
 	}
 	return true
@@ -447,20 +449,20 @@ const (
 	// bytes, which is the shortest honest measurement the existing counters
 	// support. The default of the --sbd-trial-window knob; the live value is
 	// SBDTrialWindow().
-	sbdTrialWindow = 3 * time.Second
+	sbdTrialWindowDefault = 3 * time.Second
 	// sbdTrialLoss is the fraction of aggregate goodput a park may cost before it
 	// is judged wrong. 0.15 sits above the tick-to-tick noise of a bulk transfer
 	// (the paired reference rows swing a few percent) and far below the ~27% the
 	// misruling above actually cost, so an honest park is never undone and a
 	// leg-losing one always is. The default of the --sbd-trial-loss knob; the
 	// live value is SBDTrialLoss().
-	sbdTrialLoss = 0.15
+	sbdTrialLossDefault = 0.15
 	// sbdBackoff is how long a pair whose park trial FAILED is exempt from
 	// further shared-bottleneck merging. Five minutes is long enough that a
 	// transfer does not re-litigate the same wrong verdict every tick and short
 	// enough that a genuine bottleneck appearing later is still caught. The
 	// default of the --sbd-backoff knob; the live value is SBDBackoff().
-	sbdBackoff = 5 * time.Minute
+	sbdBackoffDefault = 5 * time.Minute
 	// sbdBackoffMax caps the doubling applied on each repeat failure for one
 	// pair, so a pair the detector keeps misjudging is suppressed for an hour at
 	// most and never permanently. Not a knob: it is the ceiling of the knob
@@ -486,7 +488,7 @@ const (
 	// admits every real transfer and refuses every ruling made on silence. The
 	// default of the --sbd-min-evidence-rate knob; the live value is
 	// SBDMinEvidenceRate().
-	sbdMinEvidenceRate = 64 << 10
+	sbdMinEvidenceRateDefault = 64 << 10
 	// sbdDemoteDefault is whether a shared-bottleneck ruling may PARK a leg.
 	//
 	// It is FALSE, and that is a measurement, not caution. Over four rig runs on
@@ -526,7 +528,7 @@ func sbdAggRate(recvDeltas map[uuid.UUID]uint64) float64 {
 	for _, d := range recvDeltas {
 		total += d
 	}
-	return float64(total) / legDataProgressInterval.Seconds()
+	return float64(total) / routersettings.LegDataProgressInterval.Duration().Seconds()
 }
 
 // sbdTrialFailed reports whether a park COST the group goodput: the aggregate

@@ -20,16 +20,16 @@ func TestHolGapThreshold(t *testing.T) {
 		fastestMs float64
 		want      time.Duration
 	}{
-		{"no measurement -> floor", 0, holRetxGapFloor},
-		{"negative -> floor", -5, holRetxGapFloor},
-		{"tiny LAN RTT clamps to floor", 1, holRetxGapFloor},
+		{"no measurement -> floor", 0, holRetxGapFloorDefault},
+		{"negative -> floor", -5, holRetxGapFloorDefault},
+		{"tiny LAN RTT clamps to floor", 1, holRetxGapFloorDefault},
 		{"at floor boundary", 4, 4 * time.Millisecond},
 		{"one fast-leg RTT", 20, 20 * time.Millisecond},
 		{"wan RTT", 150, 150 * time.Millisecond},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := holGapThreshold(tt.fastestMs); got != tt.want {
+			if got := (&routeMux{}).holGapThreshold(tt.fastestMs); got != tt.want {
 				t.Errorf("holGapThreshold(%v) = %v, want %v", tt.fastestMs, got, tt.want)
 			}
 		})
@@ -44,13 +44,13 @@ func TestHolPerSeqInterval(t *testing.T) {
 		fastestMs float64
 		want      time.Duration
 	}{
-		{"no measurement -> floor", 0, holRetxPerSeqFloor},
-		{"tiny RTT clamps to floor", 2, holRetxPerSeqFloor},
+		{"no measurement -> floor", 0, holRetxPerSeqFloorDefault},
+		{"tiny RTT clamps to floor", 2, holRetxPerSeqFloorDefault},
 		{"one fast-leg RTT", 40, 40 * time.Millisecond},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := holPerSeqInterval(tt.fastestMs); got != tt.want {
+			if got := (&routeMux{}).holPerSeqInterval(tt.fastestMs); got != tt.want {
 				t.Errorf("holPerSeqInterval(%v) = %v, want %v", tt.fastestMs, got, tt.want)
 			}
 		})

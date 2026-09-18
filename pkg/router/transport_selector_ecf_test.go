@@ -139,7 +139,7 @@ func TestECFPick(t *testing.T) {
 }
 
 // TestECFPick_Hysteresis verifies the beta hysteresis: once waiting is latched,
-// the slow leg's delivery estimate is inflated by (1+ecfBeta), so a frame that
+// the slow leg's delivery estimate is inflated by (1+ecfBetaDefault), so a frame that
 // would spill when not waiting is instead held when waiting.
 func TestECFPick_Hysteresis(t *testing.T) {
 	// Tune so the predicate is just BELOW the spill boundary once hysteresis
@@ -246,7 +246,7 @@ func TestECFSaturated_ColdBootstrap(t *testing.T) {
 	cold := ecfLegState{rttMs: 80, cwndBytes: 0, inflightBytes: 0}
 	assert.False(t, ecfSaturated(cold), "cold leg with no backlog is usable")
 
-	probed := ecfLegState{rttMs: 80, cwndBytes: 0, inflightBytes: ecfColdBootstrapBytes}
+	probed := ecfLegState{rttMs: 80, cwndBytes: 0, inflightBytes: ecfColdBootstrapBytesDefault}
 	assert.True(t, ecfSaturated(probed), "cold leg spills once its probe budget is spent")
 }
 
@@ -260,7 +260,7 @@ func TestSelectECF_ColdStartFansOut(t *testing.T) {
 	ts := newTransportSelector()
 	ts.SetMode(WeightModeECF)
 	ts.SetECFState([]ecfLegState{
-		{rttMs: 40, cwndBytes: 0, inflightBytes: ecfColdBootstrapBytes, ready: true},
+		{rttMs: 40, cwndBytes: 0, inflightBytes: ecfColdBootstrapBytesDefault, ready: true},
 		{rttMs: 45, cwndBytes: 0, inflightBytes: 0, ready: true},
 	})
 	idx := ts.SelectForPayload(make([]byte, 512))
@@ -275,7 +275,7 @@ func TestSelectECF_ColdStartHoldsFarSlowerLeg(t *testing.T) {
 	ts := newTransportSelector()
 	ts.SetMode(WeightModeECF)
 	ts.SetECFState([]ecfLegState{
-		{rttMs: 40, cwndBytes: 0, inflightBytes: ecfColdBootstrapBytes, ready: true},
+		{rttMs: 40, cwndBytes: 0, inflightBytes: ecfColdBootstrapBytesDefault, ready: true},
 		{rttMs: 300, cwndBytes: 0, inflightBytes: 0, ready: true},
 	})
 	idx := ts.SelectForPayload(make([]byte, 512))

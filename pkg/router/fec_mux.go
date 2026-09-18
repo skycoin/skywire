@@ -29,6 +29,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -37,9 +38,9 @@ import (
 // 4–8 leg group (~1 frame in 8 striped onto it) at a 25% repair overhead. These
 // are the defaults; the negotiated values could later be carried in the handshake.
 const (
-	fecDefaultK  = 8
-	fecDefaultR  = 2
-	fecLenPrefix = 2 // uint16 BE frame length inside each symbol
+	fecDefaultKDefault = 8
+	fecDefaultRDefault = 2
+	fecLenPrefix       = 2 // uint16 BE frame length inside each symbol
 	// fecMaxSymLen caps a block's ADAPTIVE symbol length. A routing DataPacket
 	// payload is at most ~64 KiB, so this covers any on-wire mux frame; a frame
 	// that somehow exceeded it is excluded from coding (stored empty) rather than
@@ -370,8 +371,8 @@ func (f *fecReassembler) Reconstruct(seq uint32) ([]byte, bool) {
 // Called once at handshake when CapFEC is negotiated. On bad dims it disables
 // FEC rather than leaving half-built state.
 func (m *routeMux) fecInit() {
-	m.fecStriper = newFECStriper(fecDefaultK, fecDefaultR)
-	m.fecReassembler = newFECReassembler(fecDefaultK, fecDefaultR)
+	m.fecStriper = newFECStriper(m.knInt(routersettings.FECK), m.knInt(routersettings.FECR))
+	m.fecReassembler = newFECReassembler(m.knInt(routersettings.FECK), m.knInt(routersettings.FECR))
 	if m.fecStriper == nil || m.fecReassembler == nil {
 		m.fecStriper = nil
 		m.fecReassembler = nil
@@ -428,11 +429,11 @@ func (m *routeMux) fecStripeReassign(tps []*transport.ManagedTransport, idx int)
 	if !m.fecStripeActive() || idx < 0 || idx >= len(tps) {
 		return idx, false
 	}
-	block := atomic.LoadUint32(&m.writeSeq) / fecDefaultK
+	block := atomic.LoadUint32(&m.writeSeq) / uint32(m.knInt(routersettings.FECK)) //nolint:gosec
 	m.fecStripeMu.Lock()
 	defer m.fecStripeMu.Unlock()
 	m.fecStripeSyncLocked(block)
-	if m.fecStripeUsed[idx] < fecDefaultR {
+	if m.fecStripeUsed[idx] < m.knInt(routersettings.FECR) {
 		return idx, false // the raw pick still has room this block
 	}
 	// idx is full for this block — search round-robin from just past it for an
@@ -448,7 +449,7 @@ func (m *routeMux) fecStripeReassign(tps []*transport.ManagedTransport, idx int)
 		if tp == nil || tp.IsClosed() || !m.legReadyAt(j) {
 			continue
 		}
-		if m.fecStripeUsed[j] < fecDefaultR {
+		if m.fecStripeUsed[j] < m.knInt(routersettings.FECR) {
 			return j, true
 		}
 	}
@@ -462,7 +463,7 @@ func (m *routeMux) fecStripeUse(idx int) {
 	if !m.fecStripeActive() || idx < 0 {
 		return
 	}
-	block := atomic.LoadUint32(&m.writeSeq) / fecDefaultK
+	block := atomic.LoadUint32(&m.writeSeq) / uint32(m.knInt(routersettings.FECK)) //nolint:gosec
 	m.fecStripeMu.Lock()
 	m.fecStripeSyncLocked(block)
 	m.fecStripeUsed[idx]++

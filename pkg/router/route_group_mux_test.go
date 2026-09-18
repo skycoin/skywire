@@ -398,13 +398,13 @@ func TestPruneLivenessPreservesLastLeg(t *testing.T) {
 }
 
 // TestLegLivenessPrunesSilentLegs verifies the probe loop prunes legs that
-// never echo after legPongMissThreshold cycles (here the mock transports never
+// never echo after legPongMissThresholdDefault cycles (here the mock transports never
 // echo, so all legs are silent and the group collapses to the last leg).
 func TestLegLivenessPrunesSilentLegs(t *testing.T) {
 	rg, _, _ := createMuxRouteGroup(t, 3)
 
-	for i := 0; i < legPongMissThreshold+2; i++ {
-		rg.legLivenessServiceFn(legLivenessInterval)
+	for i := 0; i < legPongMissThresholdDefault+2; i++ {
+		rg.legLivenessServiceFn(legLivenessIntervalDefault)
 	}
 
 	rg.mu.Lock()
@@ -418,11 +418,11 @@ func TestLegLivenessKeepsEchoingLeg(t *testing.T) {
 	rg, mts, _ := createMuxRouteGroup(t, 3)
 	keep := mts[0].Entry.ID
 
-	for i := 0; i < legPongMissThreshold+3; i++ {
+	for i := 0; i < legPongMissThresholdDefault+3; i++ {
 		rg.legLivenessMu.Lock()
 		rg.legPongSeen[keep] = true // simulate this leg's echo arriving each cycle
 		rg.legLivenessMu.Unlock()
-		rg.legLivenessServiceFn(legLivenessInterval)
+		rg.legLivenessServiceFn(legLivenessIntervalDefault)
 	}
 
 	rg.mu.Lock()

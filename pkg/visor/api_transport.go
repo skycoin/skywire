@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/policy/preset"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -102,6 +103,49 @@ type RouterSettings struct {
 	// MuxFEC advertises FEC on mux route groups created from now on; unlike
 	// the rest it is a tri-state on PUT, see SetRouterSettings.
 	MuxFEC *bool `json:"mux_fec,omitempty"`
+
+	// Knobs is the whole catalog as one map of catalog-name to formatted value.
+	// On PUT it is applied as a PARTIAL set — a knob the map does not name is
+	// left alone — which is what lets a sweep move one value without restating
+	// the other eighty. On GET it carries every knob's live value, so a bench
+	// runner can save it and restore it verbatim.
+	Knobs map[string]string `json:"knobs,omitempty"`
+
+	// KnobApp scopes a PUT's Knobs to the route groups owned by one app rather
+	// than the whole visor. Empty is the visor-wide set.
+	KnobApp string `json:"knob_app,omitempty"`
+
+	// KnobReset restores every knob to its compiled default and drops every
+	// per-app override, before Knobs (if any) is applied. With KnobApp set it
+	// drops only that app's overrides.
+	KnobReset bool `json:"knob_reset,omitempty"`
+
+	// KnobState is the GET-side detail: every knob with its live value, its
+	// compiled default, whether it was explicitly set, and what is written in
+	// the config — the persisted-vs-live comparison an operator needs before a
+	// restart.
+	KnobState []RouterKnob `json:"knob_state,omitempty"`
+
+	// AppKnobs is every app's override map on GET, app name to knob map.
+	AppKnobs map[string]map[string]string `json:"app_knobs,omitempty"`
+}
+
+// RouterKnob is one row of RouterSettings.KnobState.
+type RouterKnob struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+	// Value is the live value, formatted the way `route settings` takes it back.
+	Value string `json:"value"`
+	// Default is what the binary compiled with.
+	Default string `json:"default"`
+	// Set reports an explicit set, as opposed to a value that merely equals the
+	// default.
+	Set bool `json:"set"`
+	// Persisted is what the visor config holds for this knob, empty when nothing
+	// is written. A Persisted that differs from Value is a change that will be
+	// lost — or gained — at the next restart.
+	Persisted string `json:"persisted,omitempty"`
+	Doc       string `json:"doc,omitempty"`
 }
 
 // GetRouterSettings returns the current runtime values of the four
@@ -151,7 +195,45 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 		LegStarveRatio:      router.LegStarveRatio(),
 		LegProbeBytes:       router.LegProbeBytes(),
 		MuxFEC:              &fec,
+		Knobs:               knobMap(),
+		KnobState:           v.knobState(),
+		AppKnobs:            routersettings.AppOverrides(),
 	}, nil
+}
+
+// knobMap is every knob's live value, formatted the way `route settings k=v`
+// takes it back — Format then Parse is the identity on every kind, so the map a
+// bench runner saves restores the visor exactly.
+func knobMap() map[string]string {
+	out := map[string]string{}
+	for _, e := range routersettings.Snapshot() {
+		out[e.Name] = e.Formatted
+	}
+	return out
+}
+
+// knobState pairs every knob's live value with what the config holds for it, so
+// an operator can see before a restart which live values are persisted and which
+// are not.
+func (v *Visor) knobState() []RouterKnob {
+	var persisted map[string]string
+	if v.conf != nil && v.conf.Routing != nil {
+		persisted = v.conf.Routing.RouterSettings
+	}
+	snap := routersettings.Snapshot()
+	out := make([]RouterKnob, 0, len(snap))
+	for _, e := range snap {
+		out = append(out, RouterKnob{
+			Name:      e.Name,
+			Kind:      string(e.Kind),
+			Value:     e.Formatted,
+			Default:   e.DefaultStr,
+			Set:       e.Set,
+			Persisted: persisted[e.Name],
+			Doc:       e.Doc,
+		})
+	}
+	return out
 }
 
 // SetRouterSettings is the unified setter behind PUT
@@ -221,7 +303,41 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 			return err
 		}
 	}
-	return nil
+	// The catalog half: a reset first (so `--reset k=v` means "defaults, then
+	// these"), then the partial map, then one flush of both persistence maps.
+	if !s.KnobReset && len(s.Knobs) == 0 {
+		return nil
+	}
+	if s.KnobReset {
+		routersettings.ResetApp(s.KnobApp) // "" resets everything, including app overrides
+	}
+	if len(s.Knobs) > 0 {
+		if err := routersettings.ApplyApp(s.KnobApp, s.Knobs); err != nil {
+			return err
+		}
+	}
+	return v.persistRouterKnobs()
+}
+
+// persistRouterKnobs writes the knobs an operator has explicitly set — and every
+// per-app override — to the visor config as two maps, so a sweep survives a
+// restart. Only SET knobs are written: a knob left alone keeps following the
+// binary's default, including a default a later release changes.
+func (v *Visor) persistRouterKnobs() error {
+	if v.conf == nil || v.conf.Routing == nil {
+		return nil
+	}
+	over := routersettings.Overrides()
+	apps := routersettings.AppOverrides()
+	if len(over) == 0 {
+		over = nil
+	}
+	if len(apps) == 0 {
+		apps = nil
+	}
+	v.conf.Routing.RouterSettings = over
+	v.conf.Routing.RouterAppSettings = apps
+	return v.conf.Flush()
 }
 
 // SetTransportPreference installs the transport-type priority order and

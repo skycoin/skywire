@@ -284,18 +284,77 @@ sink addresses a chunk by its offset), and `slots()`/`headroom()` read chunk,
 memory and concurrency from ONE snapshot per call, so a sweep landing mid-upload
 cannot over-subscribe the sink's window and make it evict an acked chunk.
 
-**Router knobs — `skywire cli route settings`**
+**Router knobs — `skywire cli route settings [key=value ...]`**
 
-`--ecf-max-window` · `--ecf-min-window` · `--ecf-window-margin` ·
-`--send-window-wait-max` · `--leg-park-min-hold` · `--dead-route-hold` ·
-`--dead-route-hold-max` · `--mux-fec` · `--sbd-min-samples` ·
-`--sbd-sample-interval` · `--sbd-trial-window` · `--sbd-trial-loss` ·
-`--sbd-backoff` · `--sbd-min-evidence-rate`. Visor-wide and
-per-end, like `proxy mux cap`; `--mux-fec` reaches route groups built after it,
-since FEC is negotiated when a group is created. `windowRefreshInterval` is
-NOT here: it becomes a per-route-group ticker when the group is built.
+The whole router/mux dataplane is a catalog now, not a flag list: every entry's
+default is the constant the binary compiled with, values are set as `key=value`
+arguments (the same spellings `proxy settings` takes — `8MiB`, `250ms`, `0.2`,
+`true`), and `route settings --json` reads back EVERY knob as a stable map under
+`knobs`, with each knob's default, whether it was explicitly set, and what the
+config holds for it under `knob_detail`. That map is the save/restore unit
+`bench/lib-settings.sh` uses.
 
-One sweep cell, start to finish:
+| group | knobs |
+|---|---|
+| send window | `ecf.max_window_bytes` · `ecf.min_window_bytes` · `ecf.window_margin` · `send.window_wait_max` · `send.window_poll` · `send.window_refresh_interval` |
+| latency band | `band.demote_ratio` · `band.admit_ratio` · `band.demote_ratio_tight` · `band.admit_ratio_tight` · `band.goodput_gate_frac` · `band.min_legs` |
+| leg liveness / failover | `leg.liveness_interval` · `leg.pong_miss_threshold` · `leg.data_progress_interval` · `leg.data_stall_gap_age` · `leg.blackhole_min_top_bytes` · `leg.sole_blackhole_sent_floor` · `leg.sole_blackhole_ticks` · `leg.state_resync_interval` · `leg.park_min_hold` |
+| outclassed-leg gate | `leg.starve_ratio` · `leg.probe_bytes` · `leg.probe_min_basis_ms` · `leg.probe_min_window` |
+| forward confinement | `forward.spill` · `forward.switch_margin` · `forward.switch_samples` |
+| RACK / retransmit | `rack.reorder_factor` · `rack.floor` · `rack.ceil` · `rack.default_no_rtt` · `rack.factor_max` · `rack.dsack_grow_step` · `rack.decay_step` · `rack.retx_min_age` · `rack.retx_backoff_max_shift` |
+| reorder buffer | `reorder.window` · `reorder.timeout` · `reorder.stall_interval` |
+| SACK cadence | `sack.min_interval` · `sack.delayed_ack_delay` |
+| tail-loss probe | `tlp.pto_factor` · `tlp.min_pto` · `tlp.max_pto` · `tlp.max_probes` · `tlp.check_interval` |
+| HoL retransmit | `hol.gap_floor` · `hol.rtt_factor` · `hol.max_fill` · `hol.per_seq_floor` |
+| shared bottleneck | `sbd.enabled` · `sbd.min_samples` · `sbd.sample_interval` · `sbd.window_samples` · `sbd.skew_tol` · `sbd.cv_tol_frac` · `sbd.freq_tol` · `sbd.trial_window` · `sbd.trial_loss` · `sbd.backoff` · `sbd.min_evidence_rate` · `sbd.demote` |
+| FEC | `fec.enabled` · `fec.k` · `fec.r` |
+| ECF selector | `ecf.beta` · `ecf.default_frame_bytes` · `ecf.rtt_alpha` · `ecf.jitter_alpha` · `ecf.cold_bootstrap_bytes` · `ecf.congest_rtt_factor` · `ecf.rtt_min_creep` |
+| unidirectional flip | `unidir.flip_interval` · `unidir.flip_ratio` · `unidir.flip_hysteresis` · `unidir.flip_cooldown_ticks` · `unidir.flip_min_goodput` |
+| route exclusion | `route.dead_hold` · `route.dead_hold_max` |
+| mux event history | `mux.event_ring_size` · `mux.event_ring_per_group` · `mux.events_per_group` |
+| negotiated capabilities | `mux.per_frame_noise` · `mux.sack` · `mux.hol_retx` |
+
+Three things changed with the catalog:
+
+`send.window_refresh_interval` is live. It used to be excluded because it
+becomes a route group's ticker when the group is built; the group's loop now
+re-reads it each tick and resets the ticker when it moves, with a 10 ms floor so
+a mistyped value cannot spin the loop. The same holds for every other service
+cadence here (`leg.liveness_interval`, `leg.data_progress_interval`,
+`reorder.stall_interval`, `leg.state_resync_interval`, `unidir.flip_interval`,
+`tlp.check_interval`).
+
+`sbd.enabled` is an explicit off switch — the rig used to fake one with an
+unreachable `--sbd-min-samples 1000000`. Off stops the sampling as well as the
+rulings. The four capability toggles (`mux.per_frame_noise`, `mux.sack`,
+`mux.hol_retx`, `fec.enabled`) are read where a handshake is BUILT, so they
+degrade NEW route groups and leave groups already running with what they
+negotiated; `mux.hol_retx` is never advertised without `mux.sack`, which it
+reuses. `mux info` reports what each group actually negotiated.
+
+`--app <name>` scopes a set to the route groups that app owns, which is what
+lets a subject client and its paired reference run different values on one
+visor — the visor-wide value stands for every knob the app does not override.
+The resolution happens once when a group is built and again only when the
+catalog moves, never per packet, and `mux info` reports which override set a
+group resolved against. Everything set here is written to
+`routing.router_settings` (and `routing.router_app_settings`) and replayed at
+the next start, so a sweep survives a restart; `--reset` restores every default
+and drops every override. The older per-knob flags (`--ecf-max-window` and the
+rest) still work and name the same knobs.
+
+One router sweep cell:
+
+```
+skywire cli route settings --json | jq -c '.knobs' > /tmp/before.json
+skywire cli route settings ecf.max_window_bytes=16MiB rack.ceil=800ms
+skywire cli route settings --app skysocks-client leg.starve_ratio=3
+... run the set ...
+skywire cli route settings --reset
+skywire cli route settings $(jq -r 'to_entries[]|"\(.key)=\(.value)"' /tmp/before.json)
+```
+
+One client sweep cell, start to finish:
 
 ```
 skywire cli proxy settings                                  # the table, with pending/applied
@@ -322,9 +381,11 @@ nothing reads `pending`, capped at three `tunnel.probe_interval` ticks or
 `SETTINGS_WAIT`, 20 s), records them in the set's `#` header line and dumps the
 full table to `<set>.settings.json`. A set whose knob never landed says
 `settings_pending=` in its header rather than quietly measuring the compiled
-default. `ROUTE_SETTINGS="--flag value ..."` does the same for the router knobs
-and is RESTORED at set end from the `route settings --json` state read before it,
-because a router knob outlives the app it was set for. The paired reference
+default. `ROUTE_SETTINGS` does the same for the router knobs (key=value arguments as
+well as the older flags) and is RESTORED at set end from the `route settings
+--json` state read before it — now the whole `knobs` map rather than the
+readable subset, because a router knob outlives the app it was set for AND
+survives a restart. The paired reference
 instances receive neither: they are the control, and a sweep is only readable if
 the reference is the same on every value. Every consumer of a pin file — the
 paired reference, `run-mux.sh`'s legs pinning, `run-compose.sh`'s per-tunnel

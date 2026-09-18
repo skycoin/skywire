@@ -38,7 +38,7 @@ func TestSACKDefersFrameYoungerThanItsLegBasis(t *testing.T) {
 	fast, slow := uuid.New(), uuid.New()
 	m.setLegE2ERTT(fast, 30)
 	m.setLegE2ERTT(slow, 150)
-	require.Equal(t, rackFloor, m.rackThreshold(), "group threshold at its floor")
+	require.Equal(t, rackFloorDefault, m.rackThreshold(), "group threshold at its floor")
 
 	// Seq 7 rode the slow leg, seq 8 the fast one; both 100 ms old — past the
 	// group's 60 ms, well inside the slow leg's 150×1.25 = 187.5 ms.
@@ -68,7 +68,7 @@ func TestSACKRetransmitsOncePastLegBasis(t *testing.T) {
 }
 
 // TestQueueDeepLegWaitsBasisPlusMargin pins the clamp that produced the storm:
-// a leg whose measured delay is past rackCeil used to have its wait pulled back
+// a leg whose measured delay is past rackCeilDefault used to have its wait pulled back
 // to exactly one basis — the MEAN of its delay distribution — so every frame
 // slower than that mean was resent while in flight (the 14.6 MB-on-the-wire
 // 10 MB upload). The wait is now the basis PLUS the reorder margin in that
@@ -82,7 +82,7 @@ func TestQueueDeepLegWaitsBasisPlusMargin(t *testing.T) {
 		m.recordAckDelayTp(deep, 2*time.Second) // a queue-deep leg: basis ≈ 2 s
 	}
 	require.Greater(t, m.rackThresholdFor(deep), 2*time.Second,
-		"a basis past rackCeil still earns its reorder margin")
+		"a basis past rackCeilDefault still earns its reorder margin")
 
 	storeAged(m, 7, deep, 2200*time.Millisecond) // above the bare basis, below basis×1.25
 	require.Empty(t, m.onSACKReceived(6, []uint64{0b100}, 0, false),

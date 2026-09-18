@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
 	"github.com/skycoin/skywire/pkg/dmsg/noise"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/deadline"
@@ -52,26 +53,26 @@ const (
 	// open, so the leg silently black-holes. This probe sends a Ping down each
 	// leg that the destination echoes (Pong) — purely source-side, no wire or
 	// remote-version change (every visor already echoes pings).
-	legLivenessInterval = 30 * time.Second
+	legLivenessIntervalDefault = 30 * time.Second
 	// legPongMissThreshold is the number of consecutive liveness probes with no
 	// echo after which a leg is treated as black-holing and dropped (mirrors
 	// transport-level pongMissThreshold). The leg is removed from the mux but
 	// its (possibly shared) transport is NOT closed, so a false positive simply
 	// triggers a self-heal re-dial — never an outage, and never the last leg.
-	legPongMissThreshold = 3
+	legPongMissThresholdDefault = 3
 	// legDataProgressInterval is how often the fast data-progress prune samples
 	// each leg's rg-scoped RecvBytes. Much tighter than legLivenessInterval so a
 	// leg that black-holes bulk DATA (while still echoing the tiny liveness ping)
 	// is caught in seconds, not the ~90s the pong-miss path takes — the
 	// difference between a mux that limps at the fragile leg's retransmit tax and
 	// one that sheds the leg and runs at the reliable legs' rate.
-	legDataProgressInterval = 5 * time.Second
+	legDataProgressIntervalDefault = 5 * time.Second
 	// legDataStallGapAge is how long a reorder frontier gap must stay open before
 	// the data-progress prune's STALLED path acts. Long enough that ordinary
 	// latency-skew interleave (which closes in well under a second) never trips
 	// it; short enough to react quickly once a leg genuinely stops delivering its
 	// share.
-	legDataStallGapAge = 3 * time.Second
+	legDataStallGapAgeDefault = 3 * time.Second
 	// legBlackHoleMinTopBytes gates the frontier-HEALTHY black-hole prune: even
 	// when the reorder frontier is not stuck, a leg delivering essentially nothing
 	// (< 1/64 of the leader) while a clearly-moving leader carries the group is a
@@ -81,7 +82,7 @@ const (
 	// shed without waiting for a full stall. The leader must have moved at least
 	// this much over one legDataProgressInterval so top/64 is a meaningful floor
 	// and a merely-slow or idle group is never judged (~128KB over 5s ≈ 25KB/s).
-	legBlackHoleMinTopBytes = 128 * 1024
+	legBlackHoleMinTopBytesDefault = 128 * 1024
 	// soleBlackHole* gate the sole-leg black-hole reaping (see soleLegBlackHoled).
 	// A group down to one active leg whose route has SENT more than
 	// soleBlackHoleSentFloor (a real request went out) but DELIVERED no payload at
@@ -97,14 +98,14 @@ const (
 	// (≥15s at a 5s cadence) rejects a merely-slow origin. Both counters are
 	// CUMULATIVE, so a route that ever delivered payload is never flagged — this
 	// targets dead-from-establishment routes.
-	soleBlackHoleSentFloor = 256
-	soleBlackHoleTicks     = 3
+	soleBlackHoleSentFloorDefault = 256
+	soleBlackHoleTicksDefault     = 3
 	// reorderStallInterval is how often the receive side checks for a reorder
 	// frontier gap stuck past reorderTimeout and, if so, emits a SACK to prompt
 	// the sender to retransmit the missing seq IN ORDER (see
 	// RouteGroup.reorderStallServiceFn). Shorter than reorderTimeout (1.5s) so a
 	// stalled gap is nudged within ~one reorderTimeout of going silent.
-	reorderStallInterval = 500 * time.Millisecond
+	reorderStallIntervalDefault = 500 * time.Millisecond
 
 	// legStateResyncInterval is how often the active-set side re-asserts its
 	// COMPLETE leg standby/active set to the peer (CapLegState). The park/promote
@@ -114,7 +115,7 @@ const (
 	// striping its send traffic across legs this side has parked (the wide-mux
 	// download over-subscription; measured the peer holding 33 active legs while
 	// this side had ~8). A periodic full resync lets any lost event self-correct.
-	legStateResyncInterval = 7 * time.Second
+	legStateResyncIntervalDefault = 7 * time.Second
 
 	// bandDemoteRatio: an ACTIVE leg whose end-to-end latency is more than this
 	// factor off the active-set median (either tail) is demoted to warm standby
@@ -125,12 +126,12 @@ const (
 	// collapse-to-~0 measured against a healthy single-leg reference. 3.0 matches
 	// the adaptive engine's own high-side outlier multiplier so the two never
 	// fight over the same leg.
-	bandDemoteRatio = 3.0
+	bandDemoteRatioDefault = 3.0
 	// bandAdmitRatio: a warm-standby leg is re-admitted to the active set only
 	// once it is within this tighter factor of the median. The gap between admit
 	// and demote is hysteresis — it stops a leg hovering at the band edge from
 	// flip-flopping active/standby every interval.
-	bandAdmitRatio = 2.5
+	bandAdmitRatioDefault = 2.5
 	// bandDemoteRatioTight / bandAdmitRatioTight are the SAME hysteresis pair but
 	// tighter, used when the mux is in capacity (aggregation) mode. Aggregating a
 	// single stream across M active legs requires the arrivals to be near-in-order
@@ -140,18 +141,18 @@ const (
 	// active to 1). A ~2x active band keeps the stripe set homogeneous enough that
 	// the frontier holds and the prune never fires, so the multi-active set is
 	// HELD. Failover mode (1 active + standbys) is unaffected — it never stripes.
-	bandDemoteRatioTight = 2.0
-	bandAdmitRatioTight  = 1.6
+	bandDemoteRatioTightDefault = 2.0
+	bandAdmitRatioTightDefault  = 1.6
 	// goodputGateFrac: an active leg delivering at least this fraction of the
 	// best active leg's recent goodput is spared from latency demotion (its high
 	// measured latency is self-inflicted queuing, not a bad route — BBR/bufferbloat
 	// principle). 0.15 matches the capacity scheduler's cold-leg floor share.
-	goodputGateFrac = 0.15
+	goodputGateFracDefault = 0.15
 	// bandMinLegs: latency-band admission only runs with at least this many legs
 	// carrying a measured latency. Below it the median is not a meaningful cluster
 	// anchor, and the 1-2 leg pathologies are already handled by the sole-leg
 	// black-hole heal and the data-progress prune.
-	bandMinLegs = 3
+	bandMinLegsDefault = 3
 )
 
 var (
@@ -218,6 +219,11 @@ type RouteGroup struct {
 	// info lookups since the descriptor's SrcPort is ephemeral and
 	// doesn't resolve through procManager.AppByPort.
 	appName string
+	// knobHolder carries this group's resolved router knobs — the visor-wide
+	// catalog with the owning app's `route settings --app <name>` overrides
+	// folded in. Resolved when the group is built, again when appName arrives,
+	// and thereafter only when the catalog version moves (settings_group.go).
+	knobHolder *routersettings.Holder
 	// tunnelRole is the DIALING app's own label for this route group:
 	// "active" (it carries streams) or "standby" (held open, measured, ready
 	// to take over). Empty for every route group that is not one of a
@@ -519,6 +525,10 @@ type RouteGroup struct {
 	// (see mux_events.go). Set by the router that owns this group; nil for a
 	// route group built outside one, in which case nothing is recorded.
 	muxEvents *muxEventRing
+	// ownEvents is this group's private event ring, sized by
+	// mux.event_ring_per_group. MuxInfo reads it rather than filtering the
+	// router-wide ring, so one busy group cannot evict another's history.
+	ownEvents muxEventRing
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -562,6 +572,10 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		sbdTrials:          make(map[uuid.UUID]sbdTrial),
 		sbdIndependent:     make(map[sbdPairKey]sbdSuppression),
 		sbdRuledAt:         make(map[sbdPairKey]time.Time),
+		// Knobs start on the visor-wide view; setKnobApp re-resolves against the
+		// owning app's overrides the moment the dial tag arrives.
+		knobHolder: routersettings.NewHolder(""),
+		ownEvents:  muxEventRing{perGroup: true},
 	}
 
 	// The intake worker starts with the group: a handshake or data packet can
@@ -587,6 +601,7 @@ func (rg *RouteGroup) SetAppName(name string) {
 		return
 	}
 	rg.appName = name
+	rg.setKnobApp(name)
 	rg.logger = &logging.Logger{FieldLogger: rg.logger.WithField("app_name", name)}
 }
 
@@ -639,6 +654,11 @@ type MuxInfo struct {
 	// inverse-multiplexer path, network.EncryptConn bypassed). False means the
 	// group runs the classic stream-noise wrap.
 	PerFrameNoise bool
+	// KnobApp names the app whose `route settings --app <name>` override set this
+	// group resolved against; empty means it runs the visor-wide values. It is
+	// how a paired subject/reference run proves the two clients really did get
+	// different knobs.
+	KnobApp string
 	// Directional is true when unidirectional send selection (CapUniDir) is
 	// active on this mux: each direction rides a disjoint leg class instead of
 	// both striping every leg. Flipped reports the current direction->leg-class
@@ -812,7 +832,8 @@ type MuxLeg struct {
 // MuxStats returns a point-in-time snapshot of the rg's per-leg
 // counters paired with each leg's transport identity.
 func (rg *RouteGroup) MuxStats() MuxInfo {
-	info := MuxInfo{Desc: rg.desc, Events: rg.muxEvents.forDesc(rg.desc, muxEventsPerGroup)}
+	info := MuxInfo{Desc: rg.desc, Events: rg.ownEvents.lastN(rg.knInt(routersettings.MuxEventsPerGroup))}
+	info.KnobApp = rg.knobs().App()
 	rg.mu.Lock()
 	if rg.mux != nil {
 		info.MuxEnabled = true
@@ -1328,7 +1349,7 @@ func (rg *RouteGroup) fecFlushServiceFn(_ time.Duration) {
 	if !fecShouldFlush(time.Now(), lastSent, fecDefaultIdleFlush, rg.mux.fecStriper.hasPartialBlock()) {
 		return
 	}
-	for i := 0; i < fecDefaultK && rg.mux.fecStriper.hasPartialBlock(); i++ {
+	for i := 0; i < rg.knInt(routersettings.FECK) && rg.mux.fecStriper.hasPartialBlock(); i++ {
 		if err := rg.writePaddingFrame(); err != nil {
 			return
 		}
@@ -2118,32 +2139,32 @@ func (rg *RouteGroup) startOffServiceLoops() {
 	// Per-leg end-to-end liveness (issue #2): detect mux legs that black-hole
 	// BEYOND the first hop (invisible to pruneDeadTransports' local tp.IsClosed
 	// check) and drop them so self-heal re-dials a live replacement.
-	go rg.servicePacketLoop("leg-liveness", legLivenessInterval, rg.legLivenessServiceFn, nil)
+	go rg.serviceKnobLoop("leg-liveness", routersettings.LegLivenessInterval, rg.legLivenessServiceFn)
 	// Fast data-progress prune: catch a leg that black-holes bulk DATA (while
 	// still echoing the tiny liveness ping, so the pong-miss path above never
 	// sees it) in seconds, by watching per-leg recv progress against an open
 	// reorder gap. Restores mux throughput to the reliable legs' rate instead of
 	// limping at the fragile leg's retransmit tax.
-	go rg.servicePacketLoop("leg-dataprogress", legDataProgressInterval, rg.legDataProgressServiceFn, nil)
+	go rg.serviceKnobLoop("leg-dataprogress", routersettings.LegDataProgressInterval, rg.legDataProgressServiceFn)
 	// Send-window refresh: a leg's window grows with what the peer's SACKs
 	// prove delivered; refreshed only at the rebuild cadence (seconds) it
 	// doubled from 128 KiB every ~5 s and pinned an upload at ~1.7 MB/s, so
 	// refresh four times a second.
-	go rg.servicePacketLoop("send-window", windowRefreshInterval, rg.windowServiceFn, nil)
+	go rg.serviceKnobLoop("send-window", routersettings.SendWindowRefreshInterval, rg.windowServiceFn)
 	// Timer-driven reorder-stall recovery: when a frontier gap is stuck past
 	// reorderTimeout with no packet arriving to trigger the arrival-driven SACK,
 	// emit a SACK so the sender retransmits the missing seq in order (never skip).
-	go rg.servicePacketLoop("reorder-stall", reorderStallInterval, rg.reorderStallServiceFn, nil)
+	go rg.serviceKnobLoop("reorder-stall", routersettings.ReorderStallInterval, rg.reorderStallServiceFn)
 	// Periodic leg-state resync: re-assert the full standby/active set to the peer
 	// so a lost park/promote signal self-corrects instead of desyncing the mirror
 	// permanently (CapLegState). No-op unless negotiated; see legStateResyncServiceFn.
-	go rg.servicePacketLoop("legstate-resync", legStateResyncInterval, rg.legStateResyncServiceFn, nil)
+	go rg.serviceKnobLoop("legstate-resync", routersettings.LegStateResyncInterval, rg.legStateResyncServiceFn)
 	// Unidirectional flip controller (CapUniDir): both ends run this, so the
 	// direction→leg-class mapping flips together when the traffic asymmetry
 	// inverts (upload outweighs download → the heavy upload gets the mux). No-op
 	// unless directional; the fn self-gates. Cadence matches the reorder-stall
 	// tick so the hysteresis is a small number of seconds.
-	go rg.servicePacketLoop("unidir-flip", unidirFlipInterval, rg.unidirFlipServiceFn, nil)
+	go rg.serviceKnobLoop("unidir-flip", routersettings.UnidirFlipInterval, rg.unidirFlipServiceFn)
 	// Note: Automatic ping loop removed. Latency is now measured once at transport creation.
 	// Rotation loop is NOT started here — startOffServiceLoops runs
 	// during initial route-group setup, before the router-side
@@ -2427,7 +2448,7 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 			rg.legMissed[p.id] = 0
 		} else if _, probed := rg.legMissed[p.id]; probed {
 			rg.legMissed[p.id]++
-			if rg.legMissed[p.id] >= legPongMissThreshold {
+			if rg.legMissed[p.id] >= rg.knInt(routersettings.LegPongMissThreshold) {
 				dead = append(dead, p.id)
 			}
 		}
@@ -2440,7 +2461,7 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 		}
 	}
 	staleBeforeMs := time.Now().UTC().UnixNano()/int64(time.Millisecond) -
-		int64(legPongMissThreshold+2)*legLivenessInterval.Milliseconds()
+		int64(rg.knInt(routersettings.LegPongMissThreshold)+2)*rg.knDur(routersettings.LegLivenessInterval).Milliseconds()
 	for ts := range rg.inflightPings {
 		if ts < staleBeforeMs {
 			delete(rg.inflightPings, ts)
@@ -2519,7 +2540,7 @@ func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 	// delivering past a hole corrupts the stream. The leg-dataprogress prune
 	// concurrently removes a genuinely dead leg so its seqs retransmit on survivors.
 	gapAge := rg.mux.gapAge()
-	if gapAge > reorderTimeout {
+	if gapAge > routersettings.ReorderTimeout.Duration() {
 		// Observability for the reorder WEDGE (the multi-leg-collapse-to-0-B/s
 		// failure): the frontier has been stuck past the timeout, so the sender's
 		// retransmit isn't refilling the missing seq. Log the stuck seq, how many
@@ -2528,7 +2549,7 @@ func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 		// (the service fires every reorderStallInterval) via a transition/decay
 		// counter so a sustained wedge doesn't spam.
 		ticks := atomic.AddInt64(&rg.reorderWedgeTicks, 1)
-		if ticks == 1 || gapAge > rg.reorderWedgeLoggedAt+reorderTimeout {
+		if ticks == 1 || gapAge > rg.reorderWedgeLoggedAt+routersettings.ReorderTimeout.Duration() {
 			active := rg.mux.activeLegCount()
 			seq := rg.mux.reorderNextSeq()
 			pending := rg.mux.reorderPending()
@@ -2644,7 +2665,7 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	}
 
 	// Only judge when the receiver is genuinely stuck on a missing sequence.
-	gapStuck := rg.mux.gapAge() >= legDataStallGapAge
+	gapStuck := rg.mux.gapAge() >= rg.knDur(routersettings.LegDataStallGapAge)
 
 	// Compute per-leg recv deltas vs the last sample and refresh the snapshot.
 	rg.legLivenessMu.Lock()
@@ -2710,7 +2731,7 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	} else {
 		rg.dirFanoutTicks = 0
 	}
-	dead := selectDataStalledLegs(deltas, gapStuck)
+	dead := selectDataStalledLegsWith(rg.knobs(), deltas, gapStuck)
 	if len(dead) > 0 {
 		// PARK (don't remove) whenever REMOVING a stalled leg would orphan the
 		// sequences the sender already stripe-assigned to it — which permanently
@@ -2751,7 +2772,7 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 			rg.demoteStalledLegs(dead)
 		default:
 			rg.logger.Infof("leg-dataprogress: fast-pruning %d data-black-holing leg(s) (delivered a negligible share of the fastest leg over %v while group moved %dB; reorder gap age %v, stuck=%v)",
-				len(dead), legDataProgressInterval, aggDelta, rg.mux.gapAge(), gapStuck)
+				len(dead), rg.knDur(routersettings.LegDataProgressInterval), aggDelta, rg.mux.gapAge(), gapStuck)
 			rg.pruneLivenessDeadLegs(dead)
 		}
 	}
@@ -2785,9 +2806,9 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 		rg.soleBHTicks = 0
 	} else if soleLegBlackHoled(activeCnt, soleSent, soleRecv) {
 		rg.soleBHTicks++
-		if rg.soleBHTicks >= soleBlackHoleTicks {
+		if rg.soleBHTicks >= rg.knInt(routersettings.LegSoleBlackHoleTicks) {
 			rg.logger.Warnf("sole-leg black-hole: only active route sent %dB but delivered %dB of payload over %v — dialing a replacement route",
-				soleSent, soleRecv, time.Duration(soleBlackHoleTicks)*legDataProgressInterval)
+				soleSent, soleRecv, time.Duration(rg.knInt(routersettings.LegSoleBlackHoleTicks))*rg.knDur(routersettings.LegDataProgressInterval))
 			rg.soleBHTicks = 0
 			go rg.healReplaceSoleLeg()
 		}
@@ -2843,7 +2864,7 @@ type legRecvDelta struct {
 // unit-tested directly; the caller applies the consecutive-interval hysteresis
 // and the dial.
 func soleLegBlackHoled(activeCnt int, sent, payload uint64) bool {
-	return activeCnt == 1 && sent > soleBlackHoleSentFloor && payload == 0
+	return activeCnt == 1 && sent > uint64(routersettings.LegSoleBlackHoleSentFloor.Bytes()) && payload == 0 //nolint:gosec
 }
 
 // legStallAction is what the receive-side data-progress detector does with the
@@ -2889,6 +2910,12 @@ func stalledLegAction(manual, gapStuck bool) legStallAction {
 }
 
 func selectDataStalledLegs(legs []legRecvDelta, gapStuck bool) []uuid.UUID {
+	return selectDataStalledLegsWith(nil, legs, gapStuck)
+}
+
+// selectDataStalledLegsWith is selectDataStalledLegs resolved against one route
+// group's knob view; the pure form above reads the visor-wide values.
+func selectDataStalledLegsWith(kn *routersettings.View, legs []legRecvDelta, gapStuck bool) []uuid.UUID {
 	var agg, top uint64
 	active := 0
 	for _, l := range legs {
@@ -2918,7 +2945,7 @@ func selectDataStalledLegs(legs []legRecvDelta, gapStuck bool) []uuid.UUID {
 	if gapStuck {
 		threshold = top / 16
 	} else {
-		if top < legBlackHoleMinTopBytes {
+		if top < uint64(kn.Bytes(routersettings.LegBlackHoleMinTopBytes)) { //nolint:gosec
 			return nil
 		}
 		threshold = top / 64
@@ -3001,9 +3028,15 @@ func fastClusterAnchor(known []float64, demoteRatio float64) float64 {
 // never dumps the pool, so it is safe to run always). Pure (no locks / rg state)
 // so it is unit-tested directly. Never demotes the primary or the last active leg.
 func partitionLatencyBand(legs []bandLeg, manualMode, tight bool) (demote, promote []int) {
-	demoteRatio, admitRatio := bandDemoteRatio, bandAdmitRatio
+	return partitionLatencyBandWith(nil, legs, manualMode, tight)
+}
+
+// partitionLatencyBandWith is partitionLatencyBand resolved against one route
+// group's knob view; the pure form above reads the visor-wide values.
+func partitionLatencyBandWith(kn *routersettings.View, legs []bandLeg, manualMode, tight bool) (demote, promote []int) {
+	demoteRatio, admitRatio := kn.Ratio(routersettings.BandDemoteRatio), kn.Ratio(routersettings.BandAdmitRatio)
 	if tight {
-		demoteRatio, admitRatio = bandDemoteRatioTight, bandAdmitRatioTight
+		demoteRatio, admitRatio = kn.Ratio(routersettings.BandDemoteRatioTight), kn.Ratio(routersettings.BandAdmitRatioTight)
 	}
 	known := make([]float64, 0, len(legs))
 	for _, l := range legs {
@@ -3011,7 +3044,7 @@ func partitionLatencyBand(legs []bandLeg, manualMode, tight bool) (demote, promo
 			known = append(known, l.latMs)
 		}
 	}
-	if len(known) < bandMinLegs {
+	if len(known) < kn.Int(routersettings.BandMinLegs) {
 		return nil, nil
 	}
 	sort.Float64s(known)
@@ -3057,7 +3090,7 @@ func partitionLatencyBand(legs []bandLeg, manualMode, tight bool) (demote, promo
 		inBand := l.latMs >= anchor && l.latMs <= demoteHi
 		// Under load, spare a busy (>= goodputGateFrac of the best) active leg from
 		// latency demotion — its latency is self-queuing, not route quality.
-		busy := maxDelta > 0 && float64(l.recvDelta) >= goodputGateFrac*float64(maxDelta)
+		busy := maxDelta > 0 && float64(l.recvDelta) >= kn.Ratio(routersettings.BandGoodputGateFrac)*float64(maxDelta)
 		switch {
 		case !l.standby && !l.primary && active > 1 && !inBand && !busy:
 			demote = append(demote, l.idx)
@@ -3088,9 +3121,15 @@ func partitionLatencyBand(legs []bandLeg, manualMode, tight bool) (demote, promo
 // anchor names the real fast leg to promote into the primary slot. Pure (no locks
 // / rg state) so it is unit-tested directly.
 func pickPrimaryReelection(legs []bandLeg, tight bool) (newPrimaryIdx int, ok bool) {
-	demoteRatio, admitRatio := bandDemoteRatio, bandAdmitRatio
+	return pickPrimaryReelectionWith(nil, legs, tight)
+}
+
+// pickPrimaryReelectionWith is pickPrimaryReelection resolved against one route
+// group's knob view; the pure form above reads the visor-wide values.
+func pickPrimaryReelectionWith(kn *routersettings.View, legs []bandLeg, tight bool) (newPrimaryIdx int, ok bool) {
+	demoteRatio, admitRatio := kn.Ratio(routersettings.BandDemoteRatio), kn.Ratio(routersettings.BandAdmitRatio)
 	if tight {
-		demoteRatio, admitRatio = bandDemoteRatioTight, bandAdmitRatioTight
+		demoteRatio, admitRatio = kn.Ratio(routersettings.BandDemoteRatioTight), kn.Ratio(routersettings.BandAdmitRatioTight)
 	}
 	known := make([]float64, 0, len(legs))
 	var primary *bandLeg
@@ -3102,7 +3141,7 @@ func pickPrimaryReelection(legs []bandLeg, tight bool) (newPrimaryIdx int, ok bo
 			known = append(known, legs[i].latMs)
 		}
 	}
-	if primary == nil || primary.latMs <= 0 || len(known) < bandMinLegs {
+	if primary == nil || primary.latMs <= 0 || len(known) < kn.Int(routersettings.BandMinLegs) {
 		return 0, false
 	}
 	sort.Float64s(known)
@@ -3205,6 +3244,11 @@ func (rg *RouteGroup) foldLegDelaySample(tpID uuid.UUID, ms float64) {
 	if tpID == uuid.Nil || ms <= 0 || rg.isClosed() {
 		return
 	}
+	// sbd.enabled off stops the SAMPLING as well as the rulings — the explicit
+	// switch that replaces faking it with an unreachable sbd.min_samples.
+	if !rg.knBool(routersettings.SBDEnabled) {
+		return
+	}
 	rg.legLivenessMu.Lock()
 	if rg.legOWD == nil {
 		rg.legOWD = make(map[uuid.UUID]*sbdWindow)
@@ -3219,7 +3263,7 @@ func (rg *RouteGroup) foldLegDelaySample(tpID uuid.UUID, ms float64) {
 }
 
 func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
-	if rg.isClosed() || rg.mux == nil {
+	if rg.isClosed() || rg.mux == nil || !rg.knBool(routersettings.SBDEnabled) {
 		return
 	}
 	if rg.honorsMirrorActiveSet() {
@@ -3429,7 +3473,7 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 	// band forever. After the swap the leg indices have changed, so rebuild the
 	// list; the displaced old primary is now an ordinary leg the band pass can
 	// park.
-	if newPrimary, ok := pickPrimaryReelection(legs, tight); ok {
+	if newPrimary, ok := pickPrimaryReelectionWith(rg.knobs(), legs, tight); ok {
 		rg.reelectPrimary(newPrimary)
 		rg.mu.Lock()
 		legs = legs[:0]
@@ -3450,7 +3494,7 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 		rg.mu.Unlock()
 	}
 
-	demote, promote := partitionLatencyBand(legs, manual, tight)
+	demote, promote := partitionLatencyBandWith(rg.knobs(), legs, manual, tight)
 	demote = rg.keepReverseFloor(demote, recvDeltas)
 	// Per-leg diagnostics: the rendered statistic each decision was taken on, so
 	// the log line and the leg event name the number AND what it is.
@@ -3728,9 +3772,9 @@ func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
 			}
 			if tp != nil {
 				rg.logger.Infof("leg-liveness: pruning black-holing leg %v (no echo for %d probes; transport stays up)",
-					tp.Entry.ID, legPongMissThreshold)
+					tp.Entry.ID, rg.knInt(routersettings.LegPongMissThreshold))
 			}
-			reason := fmt.Sprintf("liveness: no echo for %d probes (transport stays up)", legPongMissThreshold)
+			reason := fmt.Sprintf("liveness: no echo for %d probes (transport stays up)", rg.knInt(routersettings.LegPongMissThreshold))
 			rg.noteLegEvent(MuxEventLegRemoved, reason, MuxByAdaptive, i, remaining-1, tp,
 				rg.legHopsLocked(tpEntryID(tp)))
 			if i == 0 {
@@ -3830,6 +3874,45 @@ func (rg *RouteGroup) healSoleBlackHoledLeg(deadID uuid.UUID) {
 // promotes a warm standby at once rather than on the next interval. Pass nil for
 // loops that only need the periodic cadence (a nil channel never fires in the
 // select, so those loops are unchanged).
+// serviceKnobLoop is servicePacketLoop whose cadence is a live knob: it
+// re-resolves the group's view on every tick (the change notification the
+// dataplane reads from) and resets the ticker when the cadence itself moved.
+// That is what makes send.window_refresh_interval — handed to a goroutine when
+// the group was built, and excluded from the first live set for exactly that
+// reason — settable on a running visor.
+func (rg *RouteGroup) serviceKnobLoop(name string, k *routersettings.Knob, f sendServicePacketFn) {
+	interval := rg.knDur(k)
+	if interval <= 0 {
+		select {
+		case <-rg.remoteClosed:
+		case <-rg.closed:
+		}
+		return
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-rg.remoteClosed:
+			rg.logger.Debugf("Remote got closed, stopping %s loop", name)
+			return
+		case <-rg.closed:
+			rg.logger.Debugf("RouteGroup closed, stopping %s loop", name)
+			return
+		case <-ticker.C:
+			f(interval)
+		}
+		if rg.refreshKnobs() {
+			if next := rg.knDur(k); next > 0 && next != interval {
+				interval = next
+				ticker.Reset(interval)
+				rg.logger.Debugf("%s loop cadence moved to %s (%s)", name, interval, k.Name())
+			}
+		}
+	}
+}
+
 func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f sendServicePacketFn, trigger <-chan struct{}) {
 	if interval <= 0 {
 		// No keep-alive — routes persist indefinitely. Just wait for close.
@@ -4195,7 +4278,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		// reliable transports whose gaps SACK recovery refills, so it is off by
 		// default. It still only ACTIVATES when the peer also advertises it, so an
 		// old or non-opted peer simply never negotiates it and is unaffected.
-		caps := routing.CapMux | routing.CapSACK | routing.CapHOLRetx | routing.CapLegState | routing.CapUniDir
+		caps := muxHandshakeCaps() | routing.CapLegState | routing.CapUniDir
 		if rg.cfg != nil && rg.cfg.FEC {
 			caps |= routing.CapFEC
 		}
@@ -4492,6 +4575,9 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 			if remoteCaps&routing.CapMux != 0 {
 				sack := remoteCaps&routing.CapSACK != 0
 				rg.mux = newRouteMux(rg.logger, sack)
+				// One holder for the group and its mux, so `route settings --app <n>`
+				// moves the dataplane and the service loops together.
+				rg.mux.knobHolder = rg.knobHolder
 				// The mux's own latency signal is the first-hop transport RTT,
 				// which says nothing about a multihop leg's far side. Give it
 				// the end-to-end route latency the leg-liveness pongs already
@@ -4530,7 +4616,7 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 					// lost burst-tail (which the receiver never reports — its bitmap ends
 					// at the last seq it got) recovers in one PTO instead of stalling until
 					// the retx entry ages out (RFC 8985). Reuses the SACK retransmit path.
-					go rg.servicePacketLoop("tlp", tlpCheckInterval, rg.tlpServiceFn, nil)
+					go rg.serviceKnobLoop("tlp", routersettings.TLPCheckInterval, rg.tlpServiceFn)
 					// Proactive HoL retransmit reuses the SACK channel, so it is only
 					// enabled when SACK is too. Both peers must advertise CapHOLRetx;
 					// otherwise the group keeps the reactive SACK behavior.
@@ -4757,8 +4843,8 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 			rg.mu.Lock()
 			fastMs := rg.mux.fastestLegLatency(rg.tps)
 			rg.mu.Unlock()
-			interval := holPerSeqInterval(fastMs)
-			if rg.mux.gapAge() > holGapThreshold(fastMs) && rg.mux.shouldSendHolSACK(interval) {
+			interval := rg.mux.holPerSeqInterval(fastMs)
+			if rg.mux.gapAge() > rg.mux.holGapThreshold(fastMs) && rg.mux.shouldSendHolSACK(interval) {
 				go rg.sendSACK() //nolint:errcheck
 			}
 		}
@@ -5230,7 +5316,7 @@ func (rg *RouteGroup) unidirFlipServiceFn(_ time.Duration) {
 // delayed ack fires (see the scheduleDelayedAck call site). Long enough to
 // coalesce a burst into one SACK, short against every sender timer it must
 // beat (TLP's PTO, the RACK threshold).
-const delayedAckDelay = 100 * time.Millisecond
+const delayedAckDelayDefault = 100 * time.Millisecond
 
 // scheduleDelayedAck arms the one-shot delayed-ack timer; a no-op while one
 // is already outstanding, so bulk in-order traffic costs at most one extra
@@ -5240,7 +5326,7 @@ func (rg *RouteGroup) scheduleDelayedAck() {
 	if !atomic.CompareAndSwapInt32(&rg.delayedAckArmed, 0, 1) {
 		return
 	}
-	time.AfterFunc(delayedAckDelay, func() {
+	time.AfterFunc(rg.knDur(routersettings.SackDelayedAckDelay), func() {
 		atomic.StoreInt32(&rg.delayedAckArmed, 0)
 		if rg.isClosed() {
 			return

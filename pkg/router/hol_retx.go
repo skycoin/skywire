@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -44,35 +45,35 @@ const (
 	// proactive HoL retransmit. Below any realistic inter-leg latency skew a gap
 	// is ordinary interleave, not a stall, so never nudge faster than this even
 	// when the fastest leg's RTT is tiny (LAN legs). A few ms.
-	holRetxGapFloor = 4 * time.Millisecond
+	holRetxGapFloorDefault = 4 * time.Millisecond
 	// holRetxRTTFactor scales the fastest-live-leg RTT into the gap-age threshold.
 	// ~1.0 == "one fast-leg RTT": long enough that genuine skew (the missing seq
 	// arriving on its own slower leg) usually resolves without a retransmit, short
 	// enough that a real stall is healed in about one fast round-trip.
-	holRetxRTTFactor = 1.0
+	holRetxRTTFactorDefault = 1.0
 	// holRetxMaxFill bounds how many contiguous missing seqs one proactive nudge
 	// retransmits: the frontier seq plus the next few holes behind it. Small so a
 	// nudge heals the head of the stall without dumping the whole in-flight window
 	// (that is what the demote-time forced flush is for), and so a single SACK
 	// can't provoke a large retransmit burst.
-	holRetxMaxFill = 4
+	holRetxMaxFillDefault = 4
 	// holRetxPerSeqFloor is the low floor on the per-seq re-nudge interval, so a
 	// persistently-stuck frontier seq is not resent in a storm even on tiny-RTT
 	// legs. Mirrors holRetxGapFloor.
-	holRetxPerSeqFloor = 4 * time.Millisecond
+	holRetxPerSeqFloorDefault = 4 * time.Millisecond
 )
 
 // holGapThreshold returns the frontier-gap age past which a proactive HoL
 // retransmit is warranted, given the fastest live leg's RTT in ms. It is
 // max(floor, RTT*factor): a few ms floor, otherwise about one fast-leg RTT. A
 // non-positive RTT (no latency measured yet) falls back to the floor.
-func holGapThreshold(fastestRTTms float64) time.Duration {
+func (m *routeMux) holGapThreshold(fastestRTTms float64) time.Duration {
 	if fastestRTTms <= 0 {
-		return holRetxGapFloor
+		return m.knDur(routersettings.HolRetxGapFloor)
 	}
-	d := time.Duration(fastestRTTms*holRetxRTTFactor) * time.Millisecond
-	if d < holRetxGapFloor {
-		return holRetxGapFloor
+	d := time.Duration(fastestRTTms*m.knRatio(routersettings.HolRetxRTTFactor)) * time.Millisecond
+	if d < m.knDur(routersettings.HolRetxGapFloor) {
+		return m.knDur(routersettings.HolRetxGapFloor)
 	}
 	return d
 }
@@ -82,13 +83,13 @@ func holGapThreshold(fastestRTTms float64) time.Duration {
 // should not be re-nudged before a fresh retransmit could plausibly have arrived
 // and been acked — about one fast-leg RTT — so this is max(floor, RTT). A
 // non-positive RTT falls back to the floor.
-func holPerSeqInterval(fastestRTTms float64) time.Duration {
+func (m *routeMux) holPerSeqInterval(fastestRTTms float64) time.Duration {
 	if fastestRTTms <= 0 {
-		return holRetxPerSeqFloor
+		return m.knDur(routersettings.HolRetxPerSeqFloor)
 	}
 	d := time.Duration(fastestRTTms) * time.Millisecond
-	if d < holRetxPerSeqFloor {
-		return holRetxPerSeqFloor
+	if d < m.knDur(routersettings.HolRetxPerSeqFloor) {
+		return m.knDur(routersettings.HolRetxPerSeqFloor)
 	}
 	return d
 }
@@ -231,12 +232,12 @@ func (m *routeMux) proactiveRetxSeqs(lastContiguous uint32, words []uint64, fast
 		return nil
 	}
 	m.holRetx.Purge(lastContiguous)
-	cand := frontierMissingSeqs(lastContiguous, words, holRetxMaxFill)
+	cand := frontierMissingSeqs(lastContiguous, words, m.knInt(routersettings.HolRetxMaxFill))
 	if len(cand) == 0 {
 		return nil
 	}
-	interval := holPerSeqInterval(fastestRTTms)
-	fallbackTh := holGapThreshold(fastestRTTms)
+	interval := m.holPerSeqInterval(fastestRTTms)
+	fallbackTh := m.holGapThreshold(fastestRTTms)
 	// Measured send→ack delay floors every gate: when our own sending is
 	// saturated the queue delays acks by seconds, and a frontier hole younger
 	// than that is queued, not lost — nudging it duplicates the queue.
@@ -264,7 +265,7 @@ func (m *routeMux) proactiveRetxSeqs(lastContiguous uint32, words []uint64, fast
 		// but the slowest leg's own frames.
 		gapTh := fallbackTh
 		if rtt, ok := legRTTms[tpID]; ok && rtt > 0 {
-			gapTh = holGapThreshold(rtt * rackReorderFactor)
+			gapTh = m.holGapThreshold(rtt * m.knRatio(routersettings.RackReorderFactor))
 		}
 		// The leg's own delay basis floors the gate too: judged by the group-wide
 		// estimate a slow leg's queued frame reads as stalled. The basis is

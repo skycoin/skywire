@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -101,16 +102,16 @@ const (
 	// hold a frame on the fast leg (waiting latched), it inflates the slow
 	// leg's delivery estimate by (1+ecfBeta) on the next pick, so a marginal
 	// leg does not flap in and out of the spill set packet-to-packet.
-	ecfBeta = 0.25
+	ecfBetaDefault = 0.25
 	// ecfDefaultFrameBytes is the in-flight increment charged to a leg for a
 	// frame whose size the caller did not supply (control/handshake frames
 	// never reach the ECF pick, so this is only a defensive fallback).
-	ecfDefaultFrameBytes = 1024
+	ecfDefaultFrameBytesDefault = 1024
 	// ecfRttAlpha / ecfJitterAlpha weight the newest sample in the per-leg
 	// mean-RTT and jitter (sigma) EWMAs the mux maintains for ECF (see
 	// route_mux.go rebuildWeights). Jitter is the ECF sigma margin.
-	ecfRttAlpha    = 0.3
-	ecfJitterAlpha = 0.3
+	ecfRttAlphaDefault    = 0.3
+	ecfJitterAlphaDefault = 0.3
 	// ecfColdBootstrapBytes bounds how much a leg of unknown capacity (no rate
 	// sample yet, cwndBytes==0) may carry before ecfSaturated forces a spill.
 	// Without it a cold leg is "unlimited", so at download start — when every
@@ -119,20 +120,20 @@ const (
 	// then congests and stalls the global reorder frontier. A bounded probe
 	// budget makes cold start fan out across the ready legs (measuring each)
 	// instead of hammering one. ~1 BDP of a 250ms/2Mbps leg.
-	ecfColdBootstrapBytes = 64 * 1024
+	ecfColdBootstrapBytesDefault = 64 * 1024
 	// ecfCongestRttFactor marks a leg saturated (shed load off it) once its
 	// current mean RTT has ballooned past this multiple of its own baseline
 	// (minimum observed) RTT — the queue-buildup signature of a bandwidth-
 	// congested leg. Guards against the BDP trap: cwnd = rate*RTT grows with
 	// RTT, so an inflating RTT would otherwise raise a stalling leg's apparent
 	// capacity and make ECF feed it more, not less.
-	ecfCongestRttFactor = 4.0
+	ecfCongestRttFactorDefault = 4.0
 	// ecfRttMinCreep is the per-refresh fraction of the (mean-baseline) RTT gap
 	// by which a leg's baseline RTT creeps upward when no lower sample is seen.
 	// Keeps the baseline a true floor against transient congestion while still
 	// tracking a leg whose genuine latency has risen for good. Applied on the
 	// ~5s rebuildWeights cadence, so ~0.02 ≈ a minutes-scale adaptation.
-	ecfRttMinCreep = 0.02
+	ecfRttMinCreepDefault = 0.02
 )
 
 // ecfLegState is the per-leg snapshot the ECF scheduler reasons over — one
@@ -907,7 +908,7 @@ func (ts *transportSelector) drainInflightLocked() {
 // the defensive default. Caller holds ts.mu.
 func (ts *transportSelector) chargeInflightLocked(idx, size int) {
 	if size <= 0 {
-		size = ecfDefaultFrameBytes
+		size = int(routersettings.EcfDefaultFrameBytes.Bytes())
 	}
 	ts.ecfLegs[idx].inflightBytes += float64(size)
 }
@@ -1001,7 +1002,7 @@ func ecfPick(legs []ecfLegState, waiting bool, waitOut *bool) int {
 	// would hold every cold-start frame on the single fastest leg).
 	drain := legs[xf].cwndBytes
 	if drain <= 0 {
-		drain = ecfColdBootstrapBytes
+		drain = float64(routersettings.EcfColdBootstrapBytes.Bytes())
 	}
 	n := 1.0
 	if drain > 0 {
@@ -1013,7 +1014,7 @@ func ecfPick(legs []ecfLegState, waiting bool, waitOut *bool) int {
 	}
 	hyst := 1.0
 	if waiting {
-		hyst = 1 + ecfBeta
+		hyst = 1 + routersettings.EcfBeta.Ratio()
 	}
 	if n*rttF < hyst*(rttS+d) {
 		// Fast leg wins the race: hold the frame on xf (filter variant — the
@@ -1036,14 +1037,14 @@ func ecfSaturated(l ecfLegState) bool {
 	// with RTT, so without this a congesting leg's rising RTT would raise its
 	// apparent capacity and ECF would feed it more, stalling the reorder
 	// frontier (the observed HoL collapse).
-	if l.rttMinMs > 0 && l.rttMs > ecfCongestRttFactor*l.rttMinMs {
+	if l.rttMinMs > 0 && l.rttMs > routersettings.EcfCongestRttFactor.Ratio()*l.rttMinMs {
 		return true
 	}
 	if l.cwndBytes <= 0 {
 		// Unmeasured leg: allow only a bounded probe budget so cold start fans
 		// out across the ready legs instead of dumping the whole stream on the
 		// single lowest-RTT leg until the first rate refresh.
-		return l.inflightBytes >= ecfColdBootstrapBytes
+		return l.inflightBytes >= float64(routersettings.EcfColdBootstrapBytes.Bytes())
 	}
 	return l.inflightBytes >= l.cwndBytes
 }

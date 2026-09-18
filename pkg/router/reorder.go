@@ -15,7 +15,7 @@ import (
 // the gap IN ORDER. Comfortably larger than any realistic inter-leg latency skew,
 // so ordinary reordering never reads as a stall. A var (not const) so tests can
 // shrink it.
-var reorderTimeout = 1500 * time.Millisecond
+var reorderTimeoutDefault = 1500 * time.Millisecond
 
 // reorderBuffer holds out-of-order packets and delivers them in sequence order.
 // When mux mode distributes packets across multiple transports, they may arrive
