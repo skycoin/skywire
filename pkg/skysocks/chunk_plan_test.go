@@ -125,3 +125,62 @@ func TestChunkPlanFollowsTheKnobs(t *testing.T) {
 	require.EqualValues(t, 4<<20, chunkTarget(40<<20, 2, 4<<20))
 	require.EqualValues(t, 2<<20, chunkTarget(4<<20, 2, 4<<20), "the floor knob governs")
 }
+
+// TestPlanUploadChunkFollowsTheObject is the 2026-09-17 sweep as a table
+// (bench/2026-09-16/2ca6cf7b3-sweep): the 10 MB cell wants ~2 MiB chunks, which
+// at the fixed 4 MiB step it could not have (three chunks over two tunnels split
+// 2+1), while 50 MB wants the ceiling and gets it.
+func TestPlanUploadChunkFollowsTheObject(t *testing.T) {
+	const ceiling = int64(defaultRSChunkSize) // 4 MiB, the upload.chunk_bytes default
+	cases := []struct {
+		name       string
+		total      int64
+		tunnels    int
+		ceiling    int64
+		wantSize   int64
+		wantChunks int64
+	}{
+		// The 10 MB cell: 2.5 MB chunks, four of them, two per tunnel — the
+		// granularity the sweep measured at 6.47 MB/s against 5.25 at 4 MiB.
+		{"10MB over 2 tunnels", 10_000_000, 2, ceiling, 2_500_000, 4},
+		// 50 MB: the target is 12.5 MB, the ceiling holds it at 4 MiB, and evening
+		// the remainder turns 12 chunks and a runt into 12 equal ones.
+		{"50MB over 2 tunnels", 50_000_000, 2, ceiling, 4_166_667, 12},
+		{"100MB over 2 tunnels", 100_000_000, 2, ceiling, 4_166_667, 24},
+		// A 4 MiB object is exactly upload.stripe_min_bytes, so it IS striped: the
+		// 1 MiB floor is what stops it being cut finer than a chunk's prelude pays.
+		{"4MiB over 2 tunnels floors at 1MiB", 4 << 20, 2, ceiling, 1 << 20, 4},
+		{"4MiB over 1 tunnel", 4 << 20, 1, ceiling, 2 << 20, 2},
+		// One tunnel, 10 MB: the target is half the object, so the ceiling binds.
+		{"10MB over 1 tunnel", 10_000_000, 1, ceiling, 3_333_334, 3},
+		// The knob as a CEILING: set to 1 MiB it caps the plan, it never raises it.
+		{"a 1MiB ceiling caps the plan", 10_000_000, 2, 1 << 20, 1_000_000, 10},
+	}
+	for _, tc := range cases {
+		size := planUploadChunk(tc.total, tc.tunnels, tc.ceiling)
+		if size != tc.wantSize {
+			t.Errorf("%s: planUploadChunk = %d, want %d", tc.name, size, tc.wantSize)
+			continue
+		}
+		if size > tc.ceiling {
+			t.Errorf("%s: planned chunk %d exceeds the %d ceiling", tc.name, size, tc.ceiling)
+		}
+		n := numChunks(tc.total, size)
+		if n != tc.wantChunks {
+			t.Errorf("%s: %d chunks of %d, want %d", tc.name, n, size, tc.wantChunks)
+		}
+		// The chunks cover the object and the last one is no runt.
+		if last := tc.total - (n-1)*size; last <= 0 || last > size || last < size/2 {
+			t.Errorf("%s: last chunk %d beside %d", tc.name, last, size)
+		}
+	}
+}
+
+// TestPlanUploadChunkWithoutALength: a body whose length is unknown has nothing
+// to plan against, and the ceiling is then the chunk — the behaviour every
+// upload had before the plan existed.
+func TestPlanUploadChunkWithoutALength(t *testing.T) {
+	if got := planUploadChunk(0, 2, 4<<20); got != 4<<20 {
+		t.Errorf("planUploadChunk with no total = %d, want the %d ceiling", got, 4<<20)
+	}
+}

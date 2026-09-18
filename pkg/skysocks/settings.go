@@ -195,7 +195,9 @@ func setUploadBusyTries() int   { return skysettings.Count(skysettings.UploadBus
 func setUploadReplayTries() int { return skysettings.Count(skysettings.UploadReplayTries) }
 
 // uploadTunables is ONE coherent read of the three knobs the slot arithmetic
-// mixes. slots() divides the memory ceiling by the chunk size and subtracts a
+// mixes. Its chunk is upload.chunk_bytes as read — the CEILING; the stripe's
+// tunables() replaces it with the size planned for the object in hand.
+// slots() divides the memory ceiling by the chunk size and subtracts a
 // headroom counted in the same chunks, so each of those numbers has to come
 // from the same instant: a settings pull landing between the two reads would
 // otherwise divide the sink's window by a new chunk size and subtract a

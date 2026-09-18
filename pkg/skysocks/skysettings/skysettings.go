@@ -179,7 +179,7 @@ func init() {
 	register(UploadStripeMinBytes, KindBytes, 4<<20,
 		"smallest POST body addressed in chunks rather than sent as one stream")
 	register(UploadChunkBytes, KindBytes, 4<<20,
-		"one striped-upload chunk, and so one buffer")
+		"CEILING on one striped-upload chunk; the size is planned from the object under it")
 	register(UploadMemBytes, KindBytes, 32<<20,
 		"ceiling on the upload chunk buffers alive at once, whatever the body size")
 	register(UploadConcurrency, KindCount, 4,

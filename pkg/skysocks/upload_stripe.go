@@ -50,7 +50,9 @@ var (
 	// uploadStripeMinBytes is the smallest body worth addressing in chunks. Below
 	// it the per-chunk ack round trips cost more than the striping wins.
 	uploadStripeMinBytes int64 = 4 << 20
-	// uploadChunkBytes is one chunk, and so one buffer.
+	// uploadChunkBytes is the CEILING on one chunk, and so on one buffer. The
+	// chunk an object is actually cut with is planned from its length
+	// (planUploadChunk) and never exceeds this.
 	uploadChunkBytes int64 = 4 << 20
 	// uploadMemBytes bounds the chunk buffers alive at once, independent of the
 	// body size: the producer reads the browser's body only into a free slot, and
@@ -331,9 +333,16 @@ type uploadStripe struct {
 	u    *uploadCandidate
 	id   string
 	body io.Reader
-	// chunk is the chunk size this object was cut with, snapshotted by run so a
-	// mid-upload knob change cannot move a boundary the sink already addressed.
+	// chunk is the chunk size this object was cut with: planned from the object
+	// under the upload.chunk_bytes ceiling, then snapshotted by run so neither a
+	// mid-upload knob change nor a tunnel arriving late can move a boundary the
+	// sink has already addressed.
 	chunk int64
+	// planned is that size, held across every reader of the tunables so slots(),
+	// headroom() and the send loop all divide by the SAME chunk. Zero until the
+	// first read; an object with no known total never plans one (the knob is then
+	// the chunk, as it was before the plan existed).
+	planned atomic.Int64
 
 	mu       sync.Mutex
 	cond     *sync.Cond
@@ -382,7 +391,8 @@ func (c *Client) serveStripedUpload(conn net.Conn, u *uploadCandidate) {
 		return
 	}
 	if c.appCl != nil {
-		c.appCl.Log().Debugf("striped upload: %s %d bytes in %d chunks completed", u.host, u.total, numChunks(u.total, s.chunk))
+		c.appCl.Log().Debugf("striped upload: %s %d bytes in %d chunks of %d bytes completed",
+			u.host, u.total, numChunks(u.total, s.chunk), s.chunk)
 	}
 	_, _ = conn.Write(final) //nolint:errcheck
 }
@@ -390,10 +400,10 @@ func (c *Client) serveStripedUpload(conn net.Conn, u *uploadCandidate) {
 // run reads the body into bounded buffers and sends the chunks. It returns the
 // serialized response the browser gets — the ack that completed the object.
 func (s *uploadStripe) run() ([]byte, error) {
-	// The chunk size is snapshotted for the whole object: the sink addresses a
-	// chunk by its offset, so re-reading the knob mid-body would cut the next
-	// chunk on a boundary the sink is not expecting.
-	t := uploadSnapshot()
+	// The chunk size is planned from the object and snapshotted for the whole of
+	// it: the sink addresses a chunk by its offset, so re-planning mid-body would
+	// cut the next chunk on a boundary the sink is not expecting.
+	t := s.tunables()
 	s.chunk = t.chunk
 	mem := make(chan struct{}, s.slotsFrom(t))
 
@@ -469,7 +479,7 @@ func (s *uploadStripe) run() ([]byte, error) {
 // The three knobs come from ONE snapshot per call and are handed down, so a
 // settings pull landing mid-call cannot divide the window by a new chunk size
 // and subtract a headroom counted in the old one.
-func (s *uploadStripe) slots() int { return s.slotsFrom(uploadSnapshot()) }
+func (s *uploadStripe) slots() int { return s.slotsFrom(s.tunables()) }
 
 func (s *uploadStripe) slotsFrom(t uploadTunables) int {
 	n := t.mem / t.chunk
@@ -488,7 +498,7 @@ func (s *uploadStripe) slotsFrom(t uploadTunables) int {
 // one tunnel's worth, but never more than half the window — otherwise raising
 // perTunnel would narrow an OLD sink (a 16 MiB window) to a single live buffer,
 // which is the pipeline stall this is meant to remove.
-func (s *uploadStripe) headroom() int { return s.headroomFrom(uploadSnapshot()) }
+func (s *uploadStripe) headroom() int { return s.headroomFrom(s.tunables()) }
 
 func (s *uploadStripe) headroomFrom(t uploadTunables) int {
 	n := t.perTunnel()
@@ -501,7 +511,47 @@ func (s *uploadStripe) headroomFrom(t uploadTunables) int {
 }
 
 // perTunnel is how many chunks one tunnel may carry at once.
-func (s *uploadStripe) perTunnel() int { return uploadSnapshot().perTunnel() }
+func (s *uploadStripe) perTunnel() int { return s.tunables().perTunnel() }
+
+// tunables is this object's coherent read of the upload knobs, with the chunk
+// size PLANNED from the object instead of taken as the knob's own value:
+// upload.chunk_bytes is the CEILING, and an object that is only a few ceilings
+// long is cut finer so every tunnel has chunks to carry (a 10 MB object at the
+// fixed 4 MiB chunk split 2+1 over two tunnels and ran at half the single-route
+// reference — bench/2026-09-16/2ca6cf7b3-sweep).
+//
+// The size is planned ONCE and then held: a tunnel promoted mid-upload must not
+// move a boundary the sink has already taken bytes at. An object with no known
+// total — nothing the plan can divide — keeps reading the knob live, so a bare
+// stripe in a unit test still follows a knob that moves under it.
+func (s *uploadStripe) tunables() uploadTunables {
+	t := uploadSnapshot()
+	if s.u == nil || s.u.total <= 0 {
+		return t
+	}
+	if p := s.planned.Load(); p > 0 {
+		t.chunk = p
+		return t
+	}
+	p := planUploadChunk(s.u.total, s.activeTunnels(), t.chunk)
+	if p < 1 {
+		p = t.chunk
+	}
+	if !s.planned.CompareAndSwap(0, p) {
+		p = s.planned.Load()
+	}
+	t.chunk = p
+	return t
+}
+
+// activeTunnels is how many tunnels can carry a chunk right now; 1 for a stripe
+// built without a client, which is what a unit test hands the arithmetic.
+func (s *uploadStripe) activeTunnels() int {
+	if s.c == nil {
+		return 1
+	}
+	return s.c.activeTunnels()
+}
 
 // takeSlot blocks until the chunks in flight are fewer than the tunnels can
 // carry. The count is re-read every wait, so losing a tunnel narrows the upload

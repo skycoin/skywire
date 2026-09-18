@@ -1,5 +1,6 @@
 // Package skysocks pkg/skysocks/chunk_plan.go — chunk granularity for a
-// range-split download.
+// range-split download and for a striped upload (planUploadChunk, at the foot
+// of this file, is the same arithmetic without the probe chunk).
 //
 // A fixed 4 MiB chunk is right for a 100 MB object and wrong for a 10 MB one:
 // three chunks over two tunnels split 2+1, so one tunnel carries two thirds of
@@ -106,4 +107,27 @@ func evenChunkSize(remaining, target int64) int64 {
 // divide the remainder evenly.
 func (c *Client) planChunkSize(total, chunk0Len int64) int64 {
 	return evenChunkSize(total-chunk0Len, chunkTarget(total, c.activeTunnels(), c.rsChunkSize()))
+}
+
+// planUploadChunk is the chunk size a STRIPED UPLOAD cuts one object with. It is
+// the download plan without the probe: an upload knows the total from
+// Content-Length before it sends a byte, so every chunk follows the object
+// rather than all but the first.
+//
+// Measured live 2026-09-17 (bench/2026-09-16/2ca6cf7b3-sweep/sweep): at the fixed
+// 4 MiB chunk a 10 MB upload over two tunnels ran 5.25 MB/s — half to two thirds
+// of the single-route reference — because three chunks over two tunnels split
+// 2+1 and the object finished at one tunnel's rate. At 2 MiB the same upload ran
+// 6.47 (+23 %). A 50 MB upload wants the ceiling either way (9.84 at 4 MiB, 8.80
+// at 2 MiB), which is what a ceiling-clamped target gives it. upload.concurrency
+// moved neither cell (10 MB 5.02 at 2 vs 5.38 at 8; 50 MB 9.84 vs 8.87), so the
+// granularity is the object's business and not the depth in flight.
+//
+// ceiling is upload.chunk_bytes, which stays the operator's CEILING: the planned
+// size never exceeds it, and an operator who caps it lower gets the cap.
+func planUploadChunk(total int64, tunnels int, ceiling int64) int64 {
+	if total <= 0 {
+		return ceiling
+	}
+	return evenChunkSize(total, chunkTarget(total, tunnels, ceiling))
 }
