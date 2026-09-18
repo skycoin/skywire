@@ -620,6 +620,10 @@ func writeMuxSection(b *strings.Builder, snap Snapshot) {
 	// LEVEL its own hue (see hopClassMap). Captured in the StyleCell closure so the
 	// PK label cells can be wrapped without disturbing bitree's plain-text layout.
 	hopClasses := hopClassMap(snap)
+	// The tunnel census, above the tree: how many route groups this proxy holds
+	// and how they are SPLIT by role. Inside the live region, so each ~1s push
+	// re-renders it from the fresh snapshot.
+	writeTunnelCount(b, snap)
 	// When more than one stream is present, name the two multiplexing LAYERS above
 	// the tree so the stream-boundary nodes and per-stream leg bands below are
 	// self-explanatory.
@@ -718,6 +722,37 @@ func writeGraphSection(b *strings.Builder) {
 	b.WriteString(`<div id="rgtip" class="rgtip" role="tooltip"></div>`)
 }
 
+// writeTunnelCount prints the tunnel census above the route tree: how many
+// route groups (--tunnels streams) the proxy holds right now and, when the
+// client labeled them, the split by ROLE — "8 tunnels · 2 active, 6 standby".
+// The counts come from Tunnel.Role, not from the legs: a standby tunnel's own
+// leg is leg-active inside its group, so counting leg glyphs reported every
+// tunnel as active. Unlabeled tunnels (a single-tunnel session, or a route
+// group belonging to something else) are counted but carry no role word.
+// Omitted for a single tunnel, which has nothing to count.
+func writeTunnelCount(b *strings.Builder, snap Snapshot) {
+	if len(snap.Tunnels) < 2 {
+		return
+	}
+	var active, standby int
+	for _, t := range snap.Tunnels {
+		switch tunnelRole(t.Role) {
+		case RoleActive:
+			active++
+		case RoleStandby:
+			standby++
+		}
+	}
+	fmt.Fprintf(b, `<p class="tcount"><b>%d tunnels</b>`, len(snap.Tunnels))
+	if active+standby > 0 {
+		fmt.Fprintf(b, ` · <span class="ok">%d active</span>, <span class="standby">%d standby</span>`, active, standby)
+		if n := len(snap.Tunnels) - active - standby; n > 0 {
+			fmt.Fprintf(b, `, <span class="tunlab">%d unlabeled</span>`, n)
+		}
+	}
+	b.WriteString(`</p>`)
+}
+
 // writeTreeLegend prints a compact legend BELOW the route tree. The words
 // themselves are colored in their tree colors — "source · this visor" in the
 // source accent, the hop-DEPTH colors ("hop 1/2/3" per level) and "exit" (red)
@@ -761,9 +796,12 @@ func htmlStyleCell(text string, kind bitree.CellKind, hopClasses map[string]stri
 	case bitree.CellLabel:
 		// A stream-boundary header (the STREAM layer): a different KIND of node than a
 		// hop PK — give it the stream's accent + badge styling rather than PK coloring.
+		// The header also carries the TUNNEL's own role ("● active" / "○ standby"),
+		// which is tinted by state INSIDE the accent-colored badge, so the stream
+		// accent and the tunnel's role coding compose instead of overriding.
 		if strings.HasPrefix(strings.TrimSpace(text), StreamHeaderGlyph) {
 			return `<span class="streamhdr ` + streamAccentClass(streamIdxOf(text, "stream ")) + `">` +
-				html.EscapeString(text) + `</span>`
+				htmlTunnelRole(html.EscapeString(text)) + `</span>`
 		}
 		// A hop PK: color it by its role/depth (exit red, intermediates by level).
 		// The class wraps copyablePK so the click-to-copy PK is unchanged; the span
@@ -833,6 +871,26 @@ func htmlLegSummary(text string) string {
 	dot := `<span class="tstate ` + cls + `">` + glyph + `</span>`
 	esc = strings.Replace(esc, glyph, dot, 1)
 	return bandHTML + `<span class="lsum ` + cls + `">` + esc + `</span>`
+}
+
+// htmlTunnelRole tints the TUNNEL-role token on an (already escaped) stream-
+// header label: "● active" green, "○ standby" amber, matching the leg-state
+// colors so both multiplexing levels read in one color language. The tunnel's
+// role is a different fact from its legs' — a standby tunnel's only leg is
+// leg-active inside its own group — so the header says the role in words while
+// the leg rows keep their own glyph. Text with no role token is unchanged (an
+// unlabeled tunnel renders exactly as before).
+func htmlTunnelRole(esc string) string {
+	for _, r := range []struct{ word, cls string }{
+		{tunnelRoleLabel(RoleStandby), "standby"},
+		{tunnelRoleLabel(RoleActive), "ok"},
+	} {
+		if strings.Contains(esc, r.word) {
+			return strings.Replace(esc, r.word,
+				`<span class="trole `+r.cls+`">`+r.word+`</span>`, 1)
+		}
+	}
+	return esc
 }
 
 // streamIdxOf extracts the stream index that follows prefix in s (e.g. "stream "
@@ -1399,6 +1457,16 @@ const css = `:root{--bg:#0b0d17;--fg:#c7cbe6;--muted:#a2a8cc;--accent:#7c83ff;--
 	`pre.bitree .streamhdr.s2,pre.bitree .stream.s2{color:var(--stream2)}` +
 	`pre.bitree .streamhdr.s3,pre.bitree .stream.s3{color:var(--stream3)}` +
 	`pre.bitree .streamhdr.s4,pre.bitree .stream.s4{color:var(--stream4)}` +
+	// The TUNNEL's own role on the stream-header line ("● active" / "○ standby"),
+	// tinted by state INSIDE the stream-accent badge — the same color language as
+	// a leg's state dot, one level up. A leg keeps its own glyph, so a parked leg
+	// inside an active tunnel and an active leg inside a standby tunnel both stay
+	// legible.
+	`pre.bitree .trole{font-weight:700}` +
+	`pre.bitree .trole.ok{color:var(--ok)}pre.bitree .trole.standby{color:var(--standby)}` +
+	// Tunnel census above the tree ("8 tunnels · 2 active, 6 standby").
+	`.tcount{margin:.35rem 0 .1rem;font-size:12px}` +
+	`.tcount .ok{color:var(--ok)}.tcount .standby{color:var(--standby)}.tcount .tunlab{color:var(--muted)}` +
 	// Two-layer legend above the tree: names the stream (route-group) layer and the
 	// leg (packet-striping) layer so the ▚ header nodes and ▏sN leg bands are
 	// self-explanatory. The markers themselves carry the layer's accent.
