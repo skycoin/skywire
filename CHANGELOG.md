@@ -8,6 +8,8 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## Unreleased
 
+## 1.3.95
+
 Develop after v1.3.94. Headlines: **routes through a folded dmsg-server visor work again** — every dmsg client built on the seeded discovery answered a lookup for such a key from its server-only seed and never asked the live discovery, so the route setup nodes failed id reservation for every hop through one of the seven folded servers and opened their circuit breakers (#4923); **a peer that re-dials after a restart keeps its new transport** instead of having it reset by the old connection's close (#4925); **`route settings`** shows and sets the router knobs, transport preference included (#4920); **`visor state --select diag`** carries the transport open/close event ring with close reasons (#4919); **sudph transports are kept alive** and autoconnect tries stcpr and squicr before sudph (#4921); **`proxy start --route`** pins a session to exactly the supplied routes (#4924); **`loadtest serve`** certifies transfers by hash so the mux campaign's rows are verified (#4917). The live route-multiplexing campaign and its intended default policy are in `docs/design/`; measurements land in `bench/`.
 
 The same day, measured on the live rig and fixed: **a v1.3.94 client culls every dmsg-over-QUIC session about every two minutes** because the liveness ping had no QUIC branch (#4926), on top of the ALPN collision (#4916) — both are reasons for a point release; **the QUIC transport ran on quic-go's 768 KB default receive window**, which caps a 150 ms path at 5 MB/s (#4929); **a pinned proxy exit is never rotated** by the visor's auto-exit loop, which had been moving operators' proxies to random exits and persisting the change (#4931); **`proxy start` watches the app it started** rather than the default one (#4933); **`visor state --select diag` carries mux leg events with reasons** and the last close per transport (#4930, #4928); **a transport's write no longer blocks its reads** (#4932); **a setup node releases a half-open probe** when the request that took it ends, instead of refusing every route through that hop for 30 minutes (#4935). The campaign's reference measurements are in `bench/2026-09-16/4e052d65b/`.
@@ -132,6 +134,38 @@ Then the mux sets themselves, run through the default proxy instance: `--tunnels
 -   ci(release): the linux jobs lost their C compiler to checkout; rebuild a tag's assets by dispatch  [#4911](https://github.com/skycoin/skywire/pull/4911)
 -   docs(changelog): #4908, #4909, and the 2026-09-15 history rewrite  [#4910](https://github.com/skycoin/skywire/pull/4910)
 
+
+
+Route multiplexing campaign v4 closed on the frozen rig (bench/2026-09-18/898591982-smoke is the reported run; criteria status in docs/design/route-multiplexing-test-plan.md): two tunnels beat the paired reference on every cell, the standby pool is the default, a transport cut mid-transfer now costs 0.22 s to first byte (#5061), and the route setup node's destination circuit breaker — which locked a visor out of an exit it held 32 live route groups to — ships off (#5067, live knobs `setup.circuit_*`).
+
+- fix(router): forward traffic stays on its confined leg — a full window waits instead of spilling, and the choice has hysteresis (`--forward-spill`, `--forward-switch-margin`) (#5035)
+- bench: results and READMEs for chains AH–AK; criterion status at develop 1008cc8e5 (#5036)
+- fix(router): a leg whose delay basis is a multiple of its sibling's is fed a probe, not a proportional share (`--leg-starve-ratio`, `--leg-probe-bytes`; events `leg_probe_only`/`leg_full_share`) (#5037)
+- bench: the default pin order follows the paired-reference rank and drops failed routes; the chaos cut lands at 40 % of the expected duration and a late cut is INVALID, not FAIL; a tunnels set reconciles the session shape once (#5038)
+- bench: full paired campaign on develop 1008cc8e5 (2026-09-18) (#PENDING-results)
+- bench: full paired campaign on develop 1008cc8e5 (2026-09-18) (#5039)
+- bench: an unranked pin is left out, not used; pick-ref records every candidate; run-standby honours PAIRED (#5041)
+- fix(skysocks,proxystatus,proxyinterstitial): status.skysocks and the interstitial survive a visor/proxy restart — the disconnected page serves the reconnect gap, the page reconnects forever and never reloads blind, the interstitial probes before navigating (#5040)
+- feat(router): 86 live knobs in one catalog (`route settings`, `--app` per-app overrides, `--reset`, persisted to config, `--json` value/default/persisted) incl. `sbd.enabled`, FEC K/R, live per-frame-noise/SACK/HOL-retx toggles at negotiation, per-group event rings (#5043)
+- feat(skysocks): per-app `mux.cap`/`mux.width`, live `tunnel.count`/`pool.size`/`range.port`, `pool.freeze`, `pool.exclude_pks`, `pool.require_tp_types`; proxy knobs survive `proxy stop` and persist to config; `proxy tunnel rm --rg` (#5042)
+- feat(router): dial-time knobs (`route settings dial`: ranking priors, candidates, `dial-prefer-pks`, `dial-tunnel-legs`, warm-pool/dead-route), `proxy mux weights`, `proxy mux add --forward-only`, `proxy mux negotiated` (#5044)
+- #5047 skysocks: the standby-pool promoter swaps on measured delivered goodput (tunnel.promote_goodput_margin, tunnel.promote_idle_bps, tunnel.promote_quiet_bytes, tunnel.goodput_*), never on round trip alone
+- #5049 router: a transit write to a wedged peer no longer parks the visor's inbound packet loop (bounded forward writes, forward.write_timeout / forward.drop_event_window knobs; liveness needs a failed probe: tunnel.probe_fail_window)
+- #5052 cli: `skywire cli config set <path>=<value>` edits the running visor's config field by field over RPC (live vs restart-required, `--restart`); `config show` file fallback no longer prints the secret key
+- #5053 config: `config gen`/`autoconfig` honour OUTPUT from the skyenv file (the -o flag default was clobbered by `config update`); regen keeps router_settings, router_app_settings, transport_preference and app_settings; dev-visor-loop.sh runs autoconfig before each visor start
+- #5055 ci: SBD and clock-driven tests no longer assume a nanosecond clock (darwin/windows lanes)
+- #5056 bench: mux runners reset per-app `mux.width`/`mux.cap` before dialing and on exit, so a pooled set never inherits a previous set's width
+- #5057 skysocks-client/cli: `proxy start` returns Running on the first tunnel and widens in the background; `--routed`/`--direct`/`--route` selections never decay to the available routes; `--route` pin install is bounded (90 s) and fails loudly; `tunnel.group_dial_ceiling` knob
+- #5058 wasmhv/geoip: embedded blobs (js/wasm module, GeoLite2) are served without copying — about 96 MB less resident heap on an exit
+- #5059 bench: `run-variants.sh` A/B sweep runner and the `bench/screen` fractional-factorial design/analysis tool
+- #5060 router: emulator netem preserves per-link ordering; `closeDoneCh` race; `forward.queue_bytes` / `forward.writer_idle` knobs
+- #5061 router: a leg dies when its transport closes (transport-closed subscription), not when a timeout above it fires — time to first byte after a cut 0.22 s on the rig
+- #5062 wasmhv: a browse domain can serve more than one app
+- #5063 build: `make embed-exec-wasm` refuses a dirty tree (`EMBED_REQUIRE_CLEAN=0` overrides), so the committed module never reports -dirty
+- #5064 bench: the paired reference is re-picked after the pool settles so it never rides an active tunnel's route (cut row stays cuttable); `proxy start --route` failures are shown, not filtered
+- #5065 deps: otlptracehttp 1.45.0, hono 4.13.7, js-yaml 4.3.2 (supersedes dependabot #5000/#4687/#4686)
+- #5067 router/setup-node: the route-setup destination circuit breaker ships off (`setup.circuit_breaker` false; `setup.circuit_fail_threshold`/`_open_duration`/`_max_open_duration`/`_fail_window` knobs keep today's constants); a failed route-id reservation names the hop that failed instead of blaming the destination
+- docs/bench: campaign v4 close — result directories for 2026-09-18 and the criteria table
 
 ## 1.3.94
 
