@@ -263,16 +263,22 @@ type routeMux struct {
 	// retransmit path ASKED to resend (reactive SACK holes past the RACK
 	// threshold, the proactive head-of-line nudge, the demote-time flush), so a
 	// retransmit storm names its source from visor state.
-	retxReqSACK      uint64
-	retxReqHOL       uint64
-	retxReqFlush     uint64
-	retxSendErrors   uint64
-	tlpProbes        uint64
-	sacksRecv        uint64
-	lastSACKRecvNano int64
-	sacksSent        uint64
-	sackSendErrors   uint64
-	lastSACKSentNano int64
+	retxReqSACK  uint64
+	retxReqHOL   uint64
+	retxReqFlush uint64
+	// retxDeferredYoung counts the holes a SACK named that were NOT resent
+	// because the frame is still younger than the delay basis of the leg it was
+	// sent on (legDelayBasisMs × the reorder factor) — the duplicates that used
+	// to leave on the group's clock. Rising here while retx_req_sack stays low
+	// is the fix working; both rising together is a genuinely lossy leg.
+	retxDeferredYoung uint64
+	retxSendErrors    uint64
+	tlpProbes         uint64
+	sacksRecv         uint64
+	lastSACKRecvNano  int64
+	sacksSent         uint64
+	sackSendErrors    uint64
+	lastSACKSentNano  int64
 
 	// Incoming packet reordering
 	reorderBuf *reorderBuffer
@@ -1788,13 +1794,22 @@ func (m *routeMux) rackThresholdForWith(th time.Duration, tpID uuid.UUID) time.D
 		return th
 	}
 	own := time.Duration(ad*m.rackFactor()) * time.Millisecond
-	ceil := rackCeil
-	if adDur := time.Duration(ad) * time.Millisecond; adDur > ceil {
-		ceil = adDur
-	}
-	if own > ceil {
-		own = ceil
-	}
+	// The ceiling bounds how long we wait for a frame that really is lost, but
+	// it must never pull the wait BELOW the leg's own basis plus the reordering
+	// margin. Clamped at one bare basis (the previous max(rackCeil, basis)),
+	// a queue-deep leg — basis past rackCeil is exactly the loaded case — waited
+	// for the MEAN of its own delay distribution: every frame slower than that
+	// mean was SACK-retransmitted while in perfectly ordinary flight on its own
+	// leg, and the original then landed as a duplicate. Measured live
+	// (2026-09-16 mux-legs-2, legs at 128/152 ms): a 10 MB upload that actually
+	// striped 51/49 put 14.6 MB on the wire, retx_sent +337 of which
+	// retx_req_sack +306, the duplicates saturating both send windows until the
+	// writer parked (send_window_timeouts +6). A row that happened to keep 100 %
+	// on one leg sent 10.02 MB with one retransmit.
+	//
+	// There is no separate cap left to apply: rackCeil is below basis×factor
+	// exactly when the clamp used to bite, and the wait is already bounded by
+	// the leg's own measured delay, which decays as the queue drains.
 	if own < th {
 		return th
 	}

@@ -381,7 +381,8 @@ func (rb *retxBuffer) HeldSeqsOnTps(tps map[uuid.UUID]bool) []uint32 {
 // supplies an RTT-derived value (routeMux.rackThreshold); a zero/negative
 // threshold falls back to the fixed retxMinAge for any caller that doesn't.
 func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, threshold time.Duration) []uint32 {
-	return rb.ProcessSACKWith(lastContiguous, words, threshold, nil)
+	retx, _ := rb.ProcessSACKWith(lastContiguous, words, threshold, nil)
+	return retx
 }
 
 // ProcessSACKWith is ProcessSACK with a per-transport loss threshold:
@@ -389,7 +390,11 @@ func (rb *retxBuffer) ProcessSACK(lastContiguous uint32, words []uint64, thresho
 // delay of the leg it was last sent on instead of the group-wide threshold —
 // a frame queued on a slow leg is not lost because the fast leg's acks are
 // quick.
-func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, threshold time.Duration, thresholdFor func(uuid.UUID) time.Duration) []uint32 {
+//
+// deferredYoung counts the holes this SACK named that the GROUP threshold would
+// have retransmitted and the sending leg's own basis held back — the duplicate
+// bytes not put on the wire (reported as retx_deferred_young).
+func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, threshold time.Duration, thresholdFor func(uuid.UUID) time.Duration) (retransmit []uint32, deferredYoung int) {
 	if threshold <= 0 {
 		threshold = retxMinAge
 	}
@@ -459,7 +464,6 @@ func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, thr
 	// decision and the mark are atomic; if the caller then fails to send (no
 	// active leg), the seq simply retries after its backoff.
 	now := time.Now()
-	var retransmit []uint32
 	for w, word := range words {
 		base := lastContiguous + 1 + uint32(w)*64
 		for i := uint32(0); i < 64; i++ {
@@ -481,18 +485,30 @@ func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, thr
 				if shift > retxBackoffMaxShift {
 					shift = retxBackoffMaxShift
 				}
+				// The hole is judged against the basis of the leg it was SENT on:
+				// a frame younger than that leg's own delay (plus the reorder
+				// margin) is still in ordinary flight there, not lost, and
+				// re-sending it only puts a duplicate on the wire. Deferring is
+				// safe: the next SACK — or the RACK timer — catches it once it
+				// ages past the basis.
 				th := threshold
+				legTh := time.Duration(0)
 				if thresholdFor != nil && e.tpID != uuid.Nil {
 					if t := thresholdFor(e.tpID); t > 0 {
-						th = t
+						legTh, th = t, t
 					}
 				}
-				if now.Sub(ref) >= th<<shift {
+				age := now.Sub(ref)
+				switch {
+				case age >= th<<shift:
 					retransmit = append(retransmit, checkSeq)
 					e.lastTxAt = now
 					if e.retxCount < math.MaxUint8 {
 						e.retxCount++
 					}
+				case legTh > threshold && age >= threshold<<shift:
+					// Overdue on the group's clock, young on its own leg's.
+					deferredYoung++
 				}
 			}
 		}
@@ -502,7 +518,7 @@ func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, thr
 		rb.onAckDelay(ackDelayMax)
 	}
 
-	return retransmit
+	return retransmit, deferredYoung
 }
 
 // MaxSeq returns the highest unacknowledged sequence still held (the in-flight

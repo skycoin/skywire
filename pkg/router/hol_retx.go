@@ -3,6 +3,7 @@ package router
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -265,16 +266,27 @@ func (m *routeMux) proactiveRetxSeqs(lastContiguous uint32, words []uint64, fast
 		if rtt, ok := legRTTms[tpID]; ok && rtt > 0 {
 			gapTh = holGapThreshold(rtt * rackReorderFactor)
 		}
-		// The leg's own measured send→ack delay floors the gate too: judged by
-		// the group-wide estimate a slow leg's queued frame reads as stalled.
+		// The leg's own delay basis floors the gate too: judged by the group-wide
+		// estimate a slow leg's queued frame reads as stalled. The basis is
+		// max(send→ack delay, end-to-end pong RTT) — the same number the reactive
+		// SACK path judges holes against (routeMux.rackThresholdForWith) — times
+		// the reorder margin, because the basis is an EWMA (a mean) and half the
+		// frames on a loaded leg are slower than it.
 		legAckTh := ackTh
-		if ad := time.Duration(m.ackDelayMsTp(tpID)) * time.Millisecond; ad > legAckTh {
-			legAckTh = ad
+		if basis := m.legDelayBasisMs(tpID); basis > 0 {
+			if own := time.Duration(basis*m.rackFactor()) * time.Millisecond; own > legAckTh {
+				legAckTh = own
+			}
 		}
 		if legAckTh > gapTh {
 			gapTh = legAckTh
 		}
 		if now.Sub(sentAt) < gapTh {
+			// Young on its own leg. Counted when the fastest-leg fallback would
+			// have nudged it, so retx_deferred_young covers both request paths.
+			if gapTh > fallbackTh && now.Sub(sentAt) >= fallbackTh {
+				atomic.AddUint64(&m.retxDeferredYoung, 1)
+			}
 			continue
 		}
 		if m.holRetx.Due(seq, interval, now) {
