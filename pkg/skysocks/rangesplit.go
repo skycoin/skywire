@@ -910,10 +910,28 @@ type chunkPlacement struct {
 	// never falls back to the picker: with the pin gone there is nothing to
 	// duplicate onto and the original attempt stands alone.
 	pin *yamux.Session
+	// prefer is the tunnel the OBJECT's burst plan named for this chunk
+	// (uploadStripe.burst). Unlike a pin it is a preference and not a
+	// requirement: a burst plan is written before any chunk has reported back,
+	// so a tunnel that has gone away since falls through to the picker rather
+	// than failing the attempt.
+	prefer *yamux.Session
 	// lost is closed when another attempt won this chunk. The loser stops
 	// retrying and its stream is closed under it, so a duplicate cannot go on
 	// spending a tunnel on bytes that have already arrived.
 	lost <-chan struct{}
+}
+
+// pickDir is the direction the picker must weigh for this chunk, taken from
+// the object's planner: a striped upload's chunk is scored on the tunnels'
+// UPLOAD capacity, a range chunk on their download capacity. With no planner
+// (an upload probe, a replay, a rescue tail) it is the download direction,
+// which is what every caller got before the upload direction existed.
+func (p chunkPlacement) pickDir() pickDir {
+	if p.pl != nil && p.pl.dir == spreadUp {
+		return pickSend
+	}
+	return pickRecv
 }
 
 // raceLost reports whether another attempt already won this chunk.
@@ -955,6 +973,12 @@ func (c *Client) openChunkStreamFor(p chunkPlacement, size int64, kind pickKind)
 		sess = p.pl.pick(size)
 		booked = sess != nil
 	}
+	if sess == nil && p.prefer != nil && !p.prefer.IsClosed() {
+		// The object's burst plan named this tunnel. It is consulted only after
+		// the spread policy, which is the operator's instruction and outranks
+		// it, and only when the plan's tunnel is still there.
+		sess = p.prefer
+	}
 	if sess == nil || sess.IsClosed() {
 		if booked {
 			p.pl.uncharge(sess, size)
@@ -963,7 +987,7 @@ func (c *Client) openChunkStreamFor(p chunkPlacement, size int64, kind pickKind)
 		if p.pin != nil {
 			return nil, nil, fmt.Errorf("%w: the pinned tunnel is gone", errSessionClosed)
 		}
-		sess = c.pickSessionKind(pickRecv, kind)
+		sess = c.pickSessionKind(p.pickDir(), kind)
 	}
 	if sess == nil {
 		return nil, nil, errAllTunnelsDown
