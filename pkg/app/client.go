@@ -50,7 +50,17 @@ func NewClient(eventSubs *appevent.Subscriber) *Client {
 		log.WithError(err).Fatal("Failed to obtain proc config.")
 	}
 	// Add app name to logger for identification (uses _module key for bracket display)
-	appLog := log.WithField("_module", conf.AppName)
+	var appLog logrus.FieldLogger = log.WithField("_module", conf.AppName)
+	// An in-process app is a goroutine of the visor, so the logger above is the
+	// visor's console and nothing else: no stderr pipe exists for the proc
+	// manager to read back into the app's log store and local/log/skywire.log.
+	// The proc manager publishes that collected logger under our ProcKey
+	// (appcommon.RegisterInProcessLogger) precisely so this line can take it;
+	// external apps find nothing here and keep logging to stderr, which the
+	// proc manager reads.
+	if plog := appcommon.GetInProcessLogger(conf.ProcKey); plog != nil {
+		appLog = plog
+	}
 	client, err := NewClientFromConfig(appLog, conf, eventSubs)
 	if err != nil {
 		log.WithError(err).Panic("Failed to create app client.")
