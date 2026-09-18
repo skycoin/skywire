@@ -164,6 +164,18 @@ internal class VoiceCallWatcher(context: Context) {
     private val notifications = NotificationManagerCompat.from(app)
     private var namesAt = 0L
 
+    /**
+     * The call the ringing notification is currently showing, if any.
+     *
+     * The watcher polls, so without this the notification was re-posted every
+     * two seconds for the whole of a forty-five second ring. With the
+     * full-screen intent granted that is not a redundant post — the platform
+     * acts on it, and the call screen is raised again, and again, roughly
+     * twenty times for one call. A caller who dialled once looked like a
+     * caller who would not stop.
+     */
+    private var showing: String? = null
+
     fun watch(scope: CoroutineScope): Job = scope.launch(Dispatchers.IO) {
         ensureChannels(app)
         var wasInCall = false
@@ -200,6 +212,7 @@ internal class VoiceCallWatcher(context: Context) {
             // ringing on screen and no service holding the microphone.
             VoiceCalls.clear()
             notifications.cancel(RINGING_NOTIFICATION_ID)
+            showing = null
             if (wasInCall) VoiceCallService.stop(app)
         }
     }
@@ -234,8 +247,22 @@ internal class VoiceCallWatcher(context: Context) {
      */
     private fun showRinging(invite: VoiceInvite?) {
         if (invite == null || AppVisibility.isForeground.value) {
-            notifications.cancel(RINGING_NOTIFICATION_ID)
+            if (showing != null) {
+                notifications.cancel(RINGING_NOTIFICATION_ID)
+                showing = null
+            }
             return
+        }
+        // Once per call, not once per poll. Posting is what raises the call
+        // screen, so re-posting an unchanged call re-raises it — see [showing].
+        // A new call id is a new call and does get its own.
+        if (invite.callId == showing) return
+        showing = invite.callId
+        if (!FullScreenCalls.isGranted(app)) {
+            // The platform will accept the notification and drop the intent,
+            // leaving a banner. Worth a line: it is the difference between
+            // "the call screen is broken" and "this phone has not been asked".
+            Log.i(TAG, "no full-screen-intent permission — the call arrives as a banner")
         }
         val screen = PendingIntent.getActivity(
             app,

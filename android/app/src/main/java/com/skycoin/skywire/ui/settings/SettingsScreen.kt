@@ -1,6 +1,7 @@
 package com.skycoin.skywire.ui.settings
 
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -206,6 +207,11 @@ fun SettingsScreen(
                 )
             }
             item {
+                CallScreenCard(
+                    state = state,
+                    onGrant = viewModel::requestFullScreenCalls,
+                    onDismiss = viewModel::dismissFullScreenCallsPrompt,
+                )
                 BatteryCard(
                     state = state,
                     onGrant = viewModel::requestBatteryExemption,
@@ -793,6 +799,52 @@ private fun AboutCard(state: SettingsUiState) {
  * The "Not now" button is what stops this being a nag — it silences the Home
  * prompt too. The card itself stays, because Settings is where you go looking.
  */
+/**
+ * Whether a ringing call may take over the screen.
+ *
+ * Android 14 made this a permission of its own, granted by default only to
+ * apps whose core function is calling. Without it the platform quietly drops
+ * the full-screen intent and an incoming call arrives as a banner to notice
+ * rather than a phone that rings — see [FullScreenCalls] for what that looks
+ * like from the platform's side.
+ *
+ * Shown only where it can be acted on: below API 34 there is nothing to grant
+ * and nothing to say, so the card is simply absent.
+ */
+@Composable
+private fun CallScreenCard(
+    state: SettingsUiState,
+    onGrant: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+    SectionCard {
+        Text(stringResource(R.string.settings_calls), style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            stringResource(
+                if (state.fullScreenCalls) R.string.settings_calls_granted_hint
+                else R.string.settings_calls_hint,
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!state.fullScreenCalls) {
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FilledTonalButton(onClick = onGrant) {
+                    Text(stringResource(R.string.settings_calls_allow))
+                }
+                if (!state.fullScreenCallsDismissed) {
+                    FilledTonalButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.settings_battery_not_now))
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun BatteryCard(
     state: SettingsUiState,
