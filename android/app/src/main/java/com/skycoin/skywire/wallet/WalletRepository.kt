@@ -36,10 +36,28 @@ class WalletRepository private constructor(private val context: Context) {
     private val seeds = WalletSeedStore(context)
     private val json = Json { ignoreUnknownKeys = true }
 
+    // connect and read bound the ways a call can STALL; nothing bounds how
+    // long a call that is making progress may take, because nothing bounds
+    // how big the answer is. A Skycoin node's /api/v1/transactions has no
+    // pagination — it returns every transaction every address has ever been
+    // in — and one ordinary address measured 8.5 MB, another 19 MB and still
+    // arriving. The old 30-second callTimeout cut those off mid-download on
+    // any link that was not fast, which is why a wallet with real history
+    // would not sync at all on a throttled connection while a fresh one-
+    // address wallet synced instantly: the difference was payload size, not
+    // the network being up.
+    //
+    // readTimeout is the real guard and is an IDLE timeout — it fires when
+    // 20 seconds pass with no bytes at all, so a slow but progressing
+    // download survives and a dead socket still fails. callTimeout stays
+    // only as a backstop against a server dripping bytes forever, at a value
+    // that can actually accommodate the payload. Same shape as the fix for
+    // skychat's large file transfers: an idle deadline does the work, the
+    // absolute one is a last resort.
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
-        .callTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(BULK_CALL_BACKSTOP_MINUTES, TimeUnit.MINUTES)
         .build()
 
     // --- coins ---
@@ -413,33 +431,32 @@ class WalletRepository private constructor(private val context: Context) {
         json.decodeFromString(WalletSnapshot.serializer(), f.readText())
     }.getOrNull()
 
-    /** Fetch balance and history; persist and return the fresh snapshot. */
+    /**
+     * Fetch balance and history; persist and return the fresh snapshot.
+     *
+     * The two halves fail independently, because they cost wildly different
+     * amounts. The balance is one small fixed-size answer — 256 bytes for a
+     * whole address book — and it is the half everything depends on: the
+     * screen's numbers, and whether Send is allowed at all. The history is
+     * unbounded and routinely megabytes (see the client above).
+     *
+     * Fetching them together meant one slow history download took the
+     * balance with it, and a wallet with enough history to be worth having
+     * would sit at "not synced yet" with sending disabled, forever, however
+     * many times it was reloaded. So the history is allowed to miss: the
+     * balance lands, the last history we did get is kept, and the snapshot
+     * records when that was. A balance that will not fetch is still fatal —
+     * at 256 bytes, that is the network being down.
+     */
     suspend fun refresh(walletId: String): WalletSnapshot = withContext(Dispatchers.IO) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
         val core = coreFor(spec)
         val book = AddressBook(meta.receiveAddresses, meta.changeAddresses)
         val balance = core.balance(book)
-        val history = core.history(book)
-        val snapshot = WalletSnapshot(
-            confirmed = balance.confirmed,
-            predicted = balance.predicted,
-            hours = balance.hours,
-            spendableOutputs = balance.spendableOutputs,
-            txs = history.map {
-                CachedTx(
-                    txid = it.txid,
-                    incoming = it.incoming,
-                    amount = it.amount,
-                    party = it.party,
-                    timestamp = it.timestamp,
-                    confirmed = it.confirmed,
-                    confirmations = it.confirmations,
-                    fee = it.fee,
-                )
-            },
-            fetchedAtMs = System.currentTimeMillis(),
-        )
+        val previous = cachedSnapshot(walletId)
+        val history = runCatching { core.history(book) }.getOrNull()
+        val snapshot = mergeSnapshot(balance, history, previous, System.currentTimeMillis())
         cacheFile(walletId).writeText(json.encodeToString(WalletSnapshot.serializer(), snapshot))
         snapshot
     }
@@ -490,6 +507,15 @@ class WalletRepository private constructor(private val context: Context) {
     }
 
     companion object {
+        /**
+         * Last resort, not a budget: a node that keeps sending is allowed to
+         * finish. Sized so the largest history the endpoint can hand back
+         * still arrives over a genuinely slow link — 19 MB at 100 KB/s is
+         * about three minutes — while a server that drips forever eventually
+         * lets go.
+         */
+        private const val BULK_CALL_BACKSTOP_MINUTES = 5L
+
         private val KEY_WALLETS = stringPreferencesKey("wallets")
         private val KEY_FIBER_COINS = stringPreferencesKey("fiber_coins")
         private val KEY_SELECTED_COIN = stringPreferencesKey("selected_coin")

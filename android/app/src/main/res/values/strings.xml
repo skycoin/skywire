@@ -631,6 +631,13 @@
     <string name="wallet_filter_sent">Sent</string>
     <string name="wallet_filter_received">Received</string>
     <string name="wallet_filter_pending">Pending</string>
+    <!-- Shown instead of "Nothing here yet" when the transaction list is
+         simply not the one the balance beside it came from: the history
+         endpoint has no pagination and can be megabytes, so it is the half of
+         a refresh that can fail on a slow connection. Claiming an empty chain
+         in that case would be a lie about someone's money. -->
+    <string name="wallet_history_unfetched_title">Transactions not loaded</string>
+    <string name="wallet_history_unfetched_body">The balance is up to date, but this wallet\'s %1$s transaction list has not come through yet. It can be large on a slow connection — pull to refresh to try again.</string>
     <string name="wallet_history_empty_title">Nothing here yet</string>
     <string name="wallet_history_empty_all">No %1$s has moved in or out of this wallet.</string>
     <string name="wallet_history_empty_filter">No %1$s transactions match this filter.</string>
