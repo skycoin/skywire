@@ -30,6 +30,8 @@ var (
 	settingsDeadHold  time.Duration
 	settingsDeadMax   time.Duration
 	settingsMuxFEC    string
+	settingsSBDMinN   int
+	settingsSBDEvery  time.Duration
 )
 
 func init() {
@@ -46,6 +48,8 @@ func init() {
 	settingsCmd.Flags().DurationVar(&settingsDeadHold, "dead-route-hold", 0, "how long a route that died young is kept out of the next diversify search")
 	settingsCmd.Flags().DurationVar(&settingsDeadMax, "dead-route-hold-max", 0, "ceiling on the doubling applied to that window on each repeat death")
 	settingsCmd.Flags().StringVar(&settingsMuxFEC, "mux-fec", "", "true|false: advertise FEC on NEW mux route groups")
+	settingsCmd.Flags().IntVar(&settingsSBDMinN, "sbd-min-samples", 0, "per-leg delay samples a shared-bottleneck verdict needs before it may park a leg")
+	settingsCmd.Flags().DurationVar(&settingsSBDEvery, "sbd-sample-interval", 0, "minimum spacing between two per-SACK delay samples folded into a leg's shared-bottleneck window")
 }
 
 var settingsCmd = &cobra.Command{
@@ -69,7 +73,8 @@ effect at once; the preference is written to routing.transport_preference.`,
 		changed := false
 		for _, f := range []string{"prefer", "min-hops", "existing-tp-only", "force-local",
 			"ecf-max-window", "ecf-min-window", "ecf-window-margin", "send-window-wait-max",
-			"leg-park-min-hold", "dead-route-hold", "dead-route-hold-max", "mux-fec"} {
+			"leg-park-min-hold", "dead-route-hold", "dead-route-hold-max", "mux-fec",
+			"sbd-min-samples", "sbd-sample-interval"} {
 			changed = changed || cmd.Flags().Changed(f)
 		}
 		if changed {
@@ -121,6 +126,12 @@ effect at once; the preference is written to routing.transport_preference.`,
 				fec := settingsMuxFEC == "true"
 				next.MuxFEC = &fec
 			}
+			if cmd.Flags().Changed("sbd-min-samples") {
+				next.SBDMinSamples = settingsSBDMinN
+			}
+			if cmd.Flags().Changed("sbd-sample-interval") {
+				next.SBDSampleInterval = settingsSBDEvery
+			}
 			if err := rpcClient.SetRouterSettings(next); err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
@@ -142,6 +153,8 @@ effect at once; the preference is written to routing.transport_preference.`,
 			DeadRouteHold:       cur.DeadRouteHold.String(),
 			DeadRouteHoldMax:    cur.DeadRouteHoldMax.String(),
 			MuxFEC:              fec,
+			SBDMinSamples:       cur.SBDMinSamples,
+			SBDSampleInterval:   cur.SBDSampleInterval.String(),
 		}))
 	},
 }

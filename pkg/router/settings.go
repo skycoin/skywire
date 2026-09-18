@@ -37,6 +37,13 @@ var (
 	// death, so a change reaches the router already running.
 	deadRouteHoldV    atomic.Int64 // nanoseconds
 	deadRouteHoldMaxV atomic.Int64 // nanoseconds
+
+	// sbdMinSamplesV and sbdSampleIntervalV shadow sbdMinSamples and
+	// sbdSampleInterval in bottleneck.go. sbdSimilar re-reads the first on every
+	// pairwise test and the per-SACK fold re-reads the second on every sample,
+	// so a sweep can move either on a running visor.
+	sbdMinSamplesV     atomic.Int64
+	sbdSampleIntervalV atomic.Int64 // nanoseconds
 )
 
 func init() {
@@ -47,6 +54,8 @@ func init() {
 	legParkMinHoldV.Store(int64(legParkMinHold))
 	deadRouteHoldV.Store(int64(deadRouteTTL))
 	deadRouteHoldMaxV.Store(int64(deadRouteMaxTTL))
+	sbdMinSamplesV.Store(sbdMinSamples)
+	sbdSampleIntervalV.Store(int64(sbdSampleInterval))
 }
 
 // EcfWindowMargin is the multiplier on SACK-proven delivery-per-RTT that sets a
@@ -144,5 +153,32 @@ func SetDeadRouteHoldMax(d time.Duration) bool {
 		return false
 	}
 	deadRouteHoldMaxV.Store(int64(d))
+	return true
+}
+
+// SBDMinSamples is how many delay samples a leg needs before its statistics are
+// trusted for shared-bottleneck grouping.
+func SBDMinSamples() int { return int(sbdMinSamplesV.Load()) }
+
+// SetSBDMinSamples installs the shared-bottleneck sample floor. Non-positive is
+// refused.
+func SetSBDMinSamples(n int) bool {
+	if n <= 0 {
+		return false
+	}
+	sbdMinSamplesV.Store(int64(n))
+	return true
+}
+
+// SBDSampleInterval is the minimum spacing between two per-SACK delay samples
+// folded into one leg's shared-bottleneck window.
+func SBDSampleInterval() time.Duration { return time.Duration(sbdSampleIntervalV.Load()) }
+
+// SetSBDSampleInterval installs that spacing. Non-positive is refused.
+func SetSBDSampleInterval(d time.Duration) bool {
+	if d <= 0 {
+		return false
+	}
+	sbdSampleIntervalV.Store(int64(d))
 	return true
 }

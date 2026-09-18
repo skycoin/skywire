@@ -56,6 +56,12 @@ type RouterSettings struct {
 	DeadRouteHold    time.Duration `json:"dead_route_hold,omitempty"`
 	DeadRouteHoldMax time.Duration `json:"dead_route_hold_max,omitempty"`
 
+	// Shared-bottleneck detection: how many per-leg delay samples a verdict
+	// needs, and the minimum spacing between two per-SACK samples for one leg.
+	// Same zero-means-unchanged rule.
+	SBDMinSamples     int           `json:"sbd_min_samples,omitempty"`
+	SBDSampleInterval time.Duration `json:"sbd_sample_interval,omitempty"`
+
 	// MuxFEC advertises FEC on mux route groups created from now on; unlike
 	// the rest it is a tri-state on PUT, see SetRouterSettings.
 	MuxFEC *bool `json:"mux_fec,omitempty"`
@@ -94,6 +100,8 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 		LegParkMinHold:      router.LegParkMinHold(),
 		DeadRouteHold:       router.DeadRouteHold(),
 		DeadRouteHoldMax:    router.DeadRouteHoldMax(),
+		SBDMinSamples:       router.SBDMinSamples(),
+		SBDSampleInterval:   router.SBDSampleInterval(),
 		MuxFEC:              &fec,
 	}, nil
 }
@@ -135,6 +143,8 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 		{"leg_park_min_hold", s.LegParkMinHold == 0, func() bool { return router.SetLegParkMinHold(s.LegParkMinHold) }},
 		{"dead_route_hold", s.DeadRouteHold == 0, func() bool { return router.SetDeadRouteHold(s.DeadRouteHold) }},
 		{"dead_route_hold_max", s.DeadRouteHoldMax == 0, func() bool { return router.SetDeadRouteHoldMax(s.DeadRouteHoldMax) }},
+		{"sbd_min_samples", s.SBDMinSamples == 0, func() bool { return router.SetSBDMinSamples(s.SBDMinSamples) }},
+		{"sbd_sample_interval", s.SBDSampleInterval == 0, func() bool { return router.SetSBDSampleInterval(s.SBDSampleInterval) }},
 	} {
 		if k.zero {
 			continue

@@ -199,6 +199,18 @@ type routeMux struct {
 	// holes are judged against its own estimate (rackThresholdFor).
 	ackDelayByTp   map[uuid.UUID]*ackDelayEst
 	ackDelayByTpMu sync.Mutex
+	// sbdFoldNano records, per leg, when the last send→ack delay sample was
+	// handed to onLegDelaySample, so the SACK path folds at most one sample per
+	// SBDSampleInterval into a leg's shared-bottleneck window instead of
+	// overwriting the whole window with one burst. Guarded by ackDelayByTpMu.
+	sbdFoldNano map[uuid.UUID]int64
+	// onLegDelaySample, when set, receives the rate-limited per-leg send→ack
+	// delay samples (ms). The route group points it at its SBD windows
+	// (RouteGroup.foldLegDelaySample), which is what lets shared-bottleneck
+	// detection rule within seconds of a transfer starting rather than waiting
+	// out sbdMinSamples liveness pongs (~110s). Set once, before the mux carries
+	// traffic; nil on a mux nobody wired (unit tests).
+	onLegDelaySample func(uuid.UUID, float64)
 
 	// windowCh wakes a writer parked in waitSendWindow when a SACK may have
 	// freed per-leg window; sendWindowWaits / sendWindowTimeouts count the waits
@@ -1662,7 +1674,26 @@ func (m *routeMux) recordAckDelayTp(tpID uuid.UUID, d time.Duration) {
 		cur.ms += alpha * (ms - cur.ms)
 	}
 	cur.lastNano = now
+	// One sample per leg per SBDSampleInterval is also the shared-bottleneck
+	// detector's delay series while data flows (see bottleneck.go): the SACK
+	// feedback is the only per-leg delay signal fast enough for SBD to rule
+	// before a transfer is over. The decision is taken under this lock (so two
+	// concurrent SACK handlers cannot both pass it) and the hook is called after
+	// the unlock (it takes the route group's legLivenessMu).
+	fold := false
+	if m.onLegDelaySample != nil {
+		if iv := int64(SBDSampleInterval()); now-m.sbdFoldNano[tpID] >= iv {
+			if m.sbdFoldNano == nil {
+				m.sbdFoldNano = make(map[uuid.UUID]int64)
+			}
+			m.sbdFoldNano[tpID] = now
+			fold = true
+		}
+	}
 	m.ackDelayByTpMu.Unlock()
+	if fold {
+		m.onLegDelaySample(tpID, ms)
+	}
 }
 
 // ackDelayMsTp returns the leg's EWMA send→ack delay in milliseconds (0 = no
@@ -1678,7 +1709,7 @@ func (m *routeMux) ackDelayMsTp(tpID uuid.UUID) float64 {
 	return e.ms
 }
 
-// rackThresholdFor is rackThreshold judged for one leg: when the leg's own
+// rackThresholdFor is rackThreshold judged for one leg: when the leg.s own
 // measured send→ack delay exceeds the group-wide basis, its holes wait for
 // that delay (× the reorder factor, the ceiling raised to it) before they are
 // presumed lost. Never below the group-wide threshold.

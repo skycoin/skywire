@@ -3138,8 +3138,12 @@ func (rg *RouteGroup) reelectPrimary(newIdx int) {
 // the grouping to the mux (so rebuildWeights counts each bottleneck as ONE unit
 // of capacity instead of N independent competing pipes), and parks redundant
 // co-bottlenecked ACTIVE legs to warm standby (admission prefers legs from
-// DISTINCT groups). Reuses the leg-liveness pong samples already collected — no
-// new probe traffic. Runs on the data-progress cadence, just before the weight
+// DISTINCT groups). Reuses samples already collected — the leg-liveness pong and
+// every SACK's per-leg send→ack delay (foldLegDelaySample) — so no new probe
+// traffic, and while data flows the windows fill in about a second rather than
+// the ~110s the pong cadence alone took to clear sbdMinSamples, which is most of
+// a transfer spent striping across a pipe that is not there. Runs on the
+// data-progress cadence (5s), just before the weight
 // rebuild and the latency band; the caller rebuilds the weights immediately after
 // so the parks and grouping take effect the same tick. Never parks the primary or
 // below one active leg per group (pickBottleneckDemotions guarantees this).
@@ -3148,6 +3152,33 @@ func (rg *RouteGroup) reelectPrimary(newIdx int) {
 // that check only catches a co-located INTERMEDIATE at leg-creation time; this
 // catches two disjoint routes that funnel through the same uplink, at runtime,
 // from their shared delay-variation signature.
+// foldLegDelaySample folds one per-SACK send→ack delay sample (ms) for one leg
+// into that leg's shared-bottleneck window — the same window, and the same
+// statistics, the liveness pong feeds (see bottleneck.go). It is the mux's
+// onLegDelaySample hook, already rate-limited there to one sample per leg per
+// SBDSampleInterval, so a bulk transfer's SACK rate cannot swamp the window.
+//
+// Both sources measure a round trip over the leg with its queueing included,
+// which is the delay VARIATION signature RFC 8382 clusters on; what the SACK
+// source adds is cadence. A leg with no window yet gets one, exactly as the pong
+// path does, so a leg that only ever carries data is grouped too.
+func (rg *RouteGroup) foldLegDelaySample(tpID uuid.UUID, ms float64) {
+	if tpID == uuid.Nil || ms <= 0 || rg.isClosed() {
+		return
+	}
+	rg.legLivenessMu.Lock()
+	if rg.legOWD == nil {
+		rg.legOWD = make(map[uuid.UUID]*sbdWindow)
+	}
+	w := rg.legOWD[tpID]
+	if w == nil {
+		w = newSBDWindow()
+		rg.legOWD[tpID] = w
+	}
+	w.push(ms)
+	rg.legLivenessMu.Unlock()
+}
+
 func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	if rg.isClosed() || rg.mux == nil {
 		return
@@ -4331,6 +4362,11 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 				// measure, so the no-direct-leg forward confinement can pick
 				// the fastest leg rather than whichever was added first.
 				rg.mux.SetLegLatencyFn(rg.legEndToEndLatencyMs)
+				// Every SACK's per-leg send→ack delay also feeds the leg's
+				// shared-bottleneck window (rate-limited to one sample per
+				// SBDSampleInterval), so the detector can rule while a transfer
+				// is running instead of after sbdMinSamples liveness pongs.
+				rg.mux.onLegDelaySample = rg.foldLegDelaySample
 				// If a promoting rotation engine was already wired (SetRotation
 				// before the handshake), route new aux legs through warm standby
 				// on add. Set BEFORE growLegs so it governs any aux legs already

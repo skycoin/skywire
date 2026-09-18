@@ -4,6 +4,7 @@ package router
 import (
 	"math"
 	"sort"
+	"time"
 )
 
 // Shared-bottleneck detection (SBD) for mux legs, after RFC 8382.
@@ -26,6 +27,19 @@ import (
 // in for OWD: the variation we key on is dominated by queueing, which RTT and
 // OWD share. No new probe traffic is added.
 //
+// The pong alone is too slow to be useful, though: at one sample per leg per
+// legLivenessInterval (30s) the sbdMinSamples floor is only cleared after ~110s,
+// and the operator-pinned two-leg-over-one-uplink compositions that SBD exists
+// to catch spend that whole time striping across a pipe that is not there. So
+// while data flows the SENDER's own feedback is folded too: every SACK yields a
+// send→ack delay sample for the leg it acknowledges (the per-leg ack-delay
+// estimate the RACK threshold already keeps — routeMux.recordAckDelayTp), and
+// one such sample per leg per sbdSampleInterval goes into the same window, with
+// the same statistics. The two sources measure the same thing (a round trip over
+// that leg, queueing included) and a transfer floods the window with the SACK
+// source within a second, so the verdict arrives in seconds rather than minutes
+// and the park event/reason is unchanged.
+//
 // Because raw cross-correlation would need time-aligned samples (our per-leg
 // pongs are sampled independently), we follow RFC 8382 and cluster on the
 // distribution-shape summary statistics instead — legs sharing a bottleneck
@@ -34,17 +48,30 @@ import (
 const (
 	// sbdWindowSamples is the moving-window depth (per leg) over which the OWD
 	// summary statistics are computed. The per-leg liveness pong lands roughly
-	// once per legLivenessInterval (30s), so 8 samples is ~4 minutes of history:
-	// enough to estimate variance/skew/oscillation, short enough to follow a real
-	// path change within a few minutes. A finer per-leg OWD sampler (were one ever
-	// added) would let this window shrink toward RFC 8382's ~15s without any change
+	// once per legLivenessInterval (30s), so 8 samples is ~4 minutes of history
+	// when the pong is the only source: enough to estimate variance/skew/
+	// oscillation, short enough to follow a real path change within a few minutes.
+	// While data flows the SACK path feeds the same window at sbdSampleInterval,
+	// so the window spans ~0.4s instead — RFC 8382's own timescale — with no change
 	// to the math below. Tuning parameter, not an on/off gate.
 	sbdWindowSamples = 8
 	// sbdMinSamples is the fewest samples a leg needs before its statistics are
 	// trusted for grouping. Below it the leg is treated as its OWN singleton group
 	// (insufficient evidence to merge — the conservative default: never collapse a
-	// leg's capacity on a guess).
+	// leg's capacity on a guess). The default of the --sbd-min-samples knob; the
+	// live value is SBDMinSamples().
 	sbdMinSamples = 4
+	// sbdSampleInterval is the minimum spacing between two per-SACK delay samples
+	// folded into ONE leg's window. The SACK path produces samples far faster than
+	// the window is meant to summarize (tens per second on a bulk transfer), so
+	// without a limiter one burst would overwrite the whole window with samples
+	// from a few milliseconds of one queue state. At 50 ms a window of 8 fills in
+	// ~0.4 s of sustained transfer and still spans a range of queue states — which
+	// is what turns an SBD verdict that needed ~110 s of pongs (one per leg per
+	// legLivenessInterval, sbdMinSamples of them) into one that lands within a few
+	// seconds of the transfer starting. The default of the --sbd-sample-interval
+	// knob; the live value is SBDSampleInterval().
+	sbdSampleInterval = 50 * time.Millisecond
 	// sbdSkewTol is the maximum |skew_i - skew_j| for two legs to be judged
 	// co-bottlenecked. skew_est is in [-1, 1] (fraction of samples below the mean
 	// minus fraction above), so 0.5 is a half-scale band — legs behind the same
@@ -204,7 +231,8 @@ func sbdMeanEps(mean float64) float64 {
 // conjunction is what makes an accidental match on any single axis insufficient
 // to collapse a leg's capacity.
 func sbdSimilar(a, b sbdStats) bool {
-	if a.n < sbdMinSamples || b.n < sbdMinSamples {
+	minN := SBDMinSamples()
+	if a.n < minN || b.n < minN {
 		return false
 	}
 	if math.Abs(a.skew-b.skew) > sbdSkewTol {
