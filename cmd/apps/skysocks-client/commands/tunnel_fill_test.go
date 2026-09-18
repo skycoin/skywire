@@ -210,3 +210,31 @@ func TestFirstTunnelGroupCeilingIsALiveKnob(t *testing.T) {
 	}))
 	require.Equal(t, 45*time.Second, skysettings.Dur(skysettings.TunnelGroupDialCeiling))
 }
+
+// A `proxy start --route <pin file>` start must NEVER decay. The operator named
+// the hops; starting on anything else discards the pin silently, which on the
+// bench showed up as a reference client Running with no legs at all
+// ("pinned leg … NOT present (legs: )") on the first, cold-setup set.
+//
+// The CLI hands that start to the app as `--routed` plus `--tunnels 1`
+// (effectiveTunnels narrows the default width for a single-route-group mode),
+// so both halves are pinned here — and so is the combination the CLI rejects
+// today, `--routed` with a width above one, since the guard must not depend on
+// that rejection staying in place.
+func TestFirstTunnelGroupNeverDecaysForAPinnedRouteStart(t *testing.T) {
+	pinned := &clientConfig{}
+	require.NoError(t, pinned.parseArgs([]string{"--routed", "--tunnels", "1"}))
+	require.True(t, pinned.routed)
+	require.EqualValues(t, 1, pinned.tunnels)
+	require.False(t, firstTunnelGroupDecays(pinned, false, false),
+		"a --route start must fail or keep retrying, never start on an unpinned route")
+
+	wide := &clientConfig{}
+	require.NoError(t, wide.parseArgs([]string{"--routed", "--tunnels", "3"}))
+	require.False(t, firstTunnelGroupDecays(wide, false, false),
+		"an explicit route selection outranks the implicit width upgrade")
+
+	require.True(t, explicitRouteSelection(pinned))
+	require.True(t, explicitRouteSelection(&clientConfig{direct: true}))
+	require.False(t, explicitRouteSelection(&clientConfig{tunnels: 2}))
+}

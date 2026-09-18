@@ -109,6 +109,18 @@ type nopWriter struct{}
 
 func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
+// explicitRouteSelection reports whether this invocation was told which route
+// to take. `--routed` says "a route group, always"; `--direct` says "the direct
+// transport, always"; and `proxy start --route <pin file>` — the operator
+// naming the hops themselves — reaches the app as `--routed` plus `--tunnels 1`
+// (cmd/skywire-cli/commands/proxy: effectiveTunnels narrows the default width,
+// and the pin is reconciled onto the group once it is up). All three are a
+// choice the app must honor or fail on; none of them may be quietly traded for
+// a route the operator did not ask for.
+func explicitRouteSelection(cfg *clientConfig) bool {
+	return cfg != nil && (cfg.routed || cfg.direct)
+}
+
 // firstTunnelGroupDecays reports whether this dial may fall back from a route
 // group to the AppDirect shortcut when the group cannot be set up.
 //
@@ -116,8 +128,9 @@ func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
 // group was asked for by the `--tunnels 2` default rather than by the operator.
 // Every other dial keeps its meaning —
 //
-//   - --routed names the route group explicitly;
-//   - --direct is the shortcut already (and pins a 1-hop control route);
+//   - an explicit route selection (--routed, --direct, or a `--route <pin>`
+//     start, which arrives as both) names what the session must run on, so it
+//     fails or keeps retrying rather than starting on something else;
 //   - a widening, re-dial or standby-pool dial (diversify / standby) is never
 //     the session's only tunnel, so its failure costs nothing but width;
 //   - --tunnels 1 asks for no route group at all, so there is nothing to decay.
@@ -125,5 +138,8 @@ func firstTunnelGroupDecays(cfg *clientConfig, diversify, standby bool) bool {
 	if cfg == nil || diversify || standby {
 		return false
 	}
-	return cfg.tunnels > 1 && !cfg.routed && !cfg.direct
+	if explicitRouteSelection(cfg) {
+		return false
+	}
+	return cfg.tunnels > 1
 }
