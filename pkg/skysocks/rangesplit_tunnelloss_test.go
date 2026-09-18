@@ -349,3 +349,193 @@ func socks5GetStreaming(t *testing.T, proxyAddr, path string) (net.Conn, *http.R
 	}
 	return c, resp
 }
+
+// TestTunnelGuardRetiresTunnelAtTheClose pins the failover TRIGGER to the data
+// plane. A chunk's read is the first thing in the client to learn that a route
+// group is gone; before this, the retire that replaces the tunnel from the
+// standby pool hung off the keepalive loop's own sighting of s.IsClosed(), up
+// to tunnelRTTProbeInterval later, and until that promote every refetched chunk
+// piled onto the one surviving active tunnel (measured on the rig: group closed
+// at +3.65 s, tunnel_retired/tunnel_promoted at +8.6 s).
+func TestTunnelGuardRetiresTunnelAtTheClose(t *testing.T) {
+	mk := func() (net.Conn, func()) {
+		a, b := net.Pipe()
+		go func() {
+			sess, e := yamux.Server(b, yamux.DefaultConfig())
+			if e != nil {
+				return
+			}
+			for {
+				if _, ae := sess.Accept(); ae != nil {
+					return
+				}
+			}
+		}()
+		return a, func() { _ = a.Close(); _ = b.Close() } //nolint:errcheck
+	}
+	ca, closeA := mk()
+	defer closeA()
+	cb, closeB := mk()
+	defer closeB()
+
+	client, err := NewMultiClient([]net.Conn{ca, cb}, nil)
+	if err != nil {
+		t.Fatalf("new multi client: %v", err)
+	}
+	defer client.Close() //nolint:errcheck
+	sessions := client.snapshotSessions()
+	if len(sessions) != 2 {
+		t.Fatalf("tunnels = %d, want 2", len(sessions))
+	}
+	doomed := sessions[1]
+
+	// A chunk fetch rides `doomed`: the guard is what watches it.
+	chunkStream, exitEnd := net.Pipe()
+	defer exitEnd.Close() //nolint:errcheck
+	g := client.guardTunnel(doomed, chunkStream)
+	defer g.stop()
+
+	_ = doomed.Close() //nolint:errcheck
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		held := client.snapshotSessions()
+		gone := true
+		for _, s := range held {
+			if s == doomed {
+				gone = false
+			}
+		}
+		if gone {
+			// The stream the chunk was parked on is closed too, so its read
+			// fails now rather than waiting out rsChunkIdleTimeout.
+			_ = chunkStream.SetReadDeadline(time.Now().Add(time.Second)) //nolint:errcheck
+			if _, rerr := chunkStream.Read(make([]byte, 1)); rerr == nil {
+				t.Fatal("the guard left the chunk's stream open after the tunnel closed")
+			}
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("the tunnel was not retired at the close — the chunk path still waits for the keepalive loop (up to %v)", tunnelRTTProbeInterval)
+}
+
+// TestRangeSplitChunkRefetchResumesFromReceivedOffset is the second half of the
+// loss path: a chunk that died mid-body must re-ask only for what it is still
+// missing. Re-pulling the megabytes that already arrived is what made the
+// in-order head chunk's recovery cost a whole chunk time on the survivor
+// (19.7 s to the first byte after a first-hop cut, rig 2026-09-17).
+func TestRangeSplitChunkRefetchResumesFromReceivedOffset(t *testing.T) {
+	const blobSize = 8 << 20
+	const chunkSize = 512 << 10
+	blob := make([]byte, blobSize)
+	for i := range blob {
+		blob[i] = byte(i*29 + 7)
+	}
+	want := sha256.Sum256(blob)
+
+	var (
+		rmu    sync.Mutex
+		ranges []string
+	)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if rg := r.Header.Get("Range"); rg != "" {
+			rmu.Lock()
+			ranges = append(ranges, rg)
+			rmu.Unlock()
+		}
+		w.Header().Set("Etag", "\"blobv1\"")
+		http.ServeContent(w, r, "blob.bin", time.Unix(0, 0), bytes.NewReader(blob))
+	}))
+	defer backend.Close()
+
+	proxy, _, bSess, bAccepted := newRSTwoTunnelClient(t, backend.Listener.Addr().String(), 4, chunkSize)
+	park, err := bSess.Open()
+	if err != nil {
+		t.Fatalf("park stream: %v", err)
+	}
+	conn, resp := socks5GetStreaming(t, proxy, "/blob.bin")
+	defer conn.Close() //nolint:errcheck
+	defer resp.Body.Close()
+	park.Close() //nolint:errcheck,gosec
+
+	var (
+		mu  sync.Mutex
+		got []byte
+	)
+	readErr := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 32<<10)
+		for {
+			n, rerr := resp.Body.Read(buf)
+			if n > 0 {
+				mu.Lock()
+				got = append(got, buf[:n]...)
+				mu.Unlock()
+			}
+			if rerr != nil {
+				if rerr == io.EOF {
+					rerr = nil
+				}
+				readErr <- rerr
+				return
+			}
+		}
+	}()
+
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+		mu.Lock()
+		n := len(got)
+		mu.Unlock()
+		if n > 0 && n < blobSize && bAccepted.Load() >= 2 && bSess.NumStreams() > 0 {
+			break
+		}
+	}
+	// The doomed tunnel is paced at ~320 KB/s, so a moment more guarantees the
+	// chunks on it are genuinely MID-body rather than freshly opened.
+	time.Sleep(300 * time.Millisecond)
+	if bSess.NumStreams() == 0 {
+		t.Skip("no chunk was in flight on the doomed tunnel")
+	}
+	_ = bSess.Close() //nolint:errcheck
+
+	select {
+	case err := <-readErr:
+		if err != nil {
+			t.Fatalf("body read: %v", err)
+		}
+	case <-time.After(60 * time.Second):
+		t.Fatal("download never finished after the tunnel died")
+	}
+	mu.Lock()
+	final := got
+	mu.Unlock()
+	if len(final) != blobSize || sha256.Sum256(final) != want {
+		t.Fatalf("body len = %d, want %d — and it must be byte-identical", len(final), blobSize)
+	}
+
+	// A resumed chunk asks for [start+received, end]: a BOUNDED range whose
+	// start is not a chunk boundary. (The sequential rescue also issues
+	// unaligned ranges, but its end is always the last byte of the object, so
+	// the two cannot be confused — and with the resume in place the rescue is
+	// not reached at all.)
+	rmu.Lock()
+	seen := append([]string(nil), ranges...)
+	rmu.Unlock()
+	resumed := ""
+	for _, rg := range seen {
+		var start, end int64
+		if _, serr := fmt.Sscanf(rg, "bytes=%d-%d", &start, &end); serr != nil {
+			continue
+		}
+		if start%chunkSize != 0 && end != blobSize-1 {
+			resumed = rg
+			break
+		}
+	}
+	if resumed == "" {
+		t.Fatalf("no chunk resumed from its received offset after the tunnel died; ranges asked: %v", seen)
+	}
+	t.Logf("resumed range after the cut: %s (of %d ranges)", resumed, len(seen))
+}
