@@ -171,7 +171,11 @@ object, never mid-object.
 
 The four upload knobs a test shrinks — `upload.stripe_min_bytes`,
 `upload.chunk_bytes`, `upload.mem_bytes`, `upload.concurrency` — override the
-compiled value the same way. `upload.chunk_bytes` is snapshotted per object (the
+compiled value the same way. `upload.chunk_bytes` is a CEILING, not a fixed step:
+each object's chunk is planned from its Content-Length the way a download's is
+(`planUploadChunk` — the object over two chunks per active tunnel, floored at
+`chunk.min_bytes`, capped here), so 10 MB over two tunnels is cut at 2.5 MB while
+50 MB stays at the 4 MiB ceiling. The planned size is snapshotted per object (the
 sink addresses a chunk by its offset), and `slots()`/`headroom()` read chunk,
 memory and concurrency from ONE snapshot per call, so a sweep landing mid-upload
 cannot over-subscribe the sink's window and make it evict an acked chunk.
