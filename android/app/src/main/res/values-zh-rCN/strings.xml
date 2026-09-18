@@ -253,6 +253,9 @@
     <string name="chat_core_offline">Skywire 核心未运行。请从“首页”启动。</string>
     <string name="chat_error_password">SkyChat 拒绝了已保存的密码。</string>
     <string name="chat_error_no_answer">SkyChat 未在 %1$s 上响应。</string>
+    <string name="webview_leave_title">放弃这段录制？</string>
+    <string name="webview_leave_body">录制仍在进行。现在离开此页面会将其丢弃。</string>
+    <string name="webview_leave_confirm">放弃</string>
     <string name="chat_media_channel_name">SkyChat 播放</string>
     <string name="chat_media_channel_description">语音消息或片段播放期间，可播放、暂停和跳过。</string>
     <string name="chat_media_default_title">音频</string>

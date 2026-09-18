@@ -249,6 +249,13 @@
     <string name="chat_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
     <string name="chat_error_password">SkyChat rejected the stored password</string>
     <string name="chat_error_no_answer">SkyChat did not answer on %1$s</string>
+    <!-- Asked when a page is navigated away from while it has something
+         unsaved. Only skychat raises it, and only while a voice or video
+         message is recording; the page cannot pass its own wording (browsers
+         stopped honouring that), so the app says what it means. -->
+    <string name="webview_leave_title">Discard the recording?</string>
+    <string name="webview_leave_body">A recording is still running. Leaving this page now throws it away.</string>
+    <string name="webview_leave_confirm">Discard</string>
     <string name="chat_media_channel_name">SkyChat playback</string>
     <string name="chat_media_channel_description">Play, pause and skip a voice message or clip while it is playing.</string>
     <string name="chat_media_default_title">Audio</string>
