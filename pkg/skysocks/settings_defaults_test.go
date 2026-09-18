@@ -90,9 +90,13 @@ func TestSettingDefaultsMatchConstants(t *testing.T) {
 	require.False(t, setChunkDepthDynamic(), "chunk.depth_dynamic is off until the operator says otherwise")
 	require.False(t, setUploadDepthDynamic(), "upload.depth_dynamic is off until the operator says otherwise")
 
+	// The ONE default that is deliberately ON: the burst placement, whose
+	// predecessor is the measured defect and not a baseline.
+	require.True(t, setUploadBurstPlan(), "upload.burst_plan places a one-burst object by capacity")
+
 	// Every knob in the catalog is reachable: a name registered with no use site
 	// reading it is a knob the bench can set and nothing obeys.
-	require.Len(t, skysettings.Catalog(), 55)
+	require.Len(t, skysettings.Catalog(), 56)
 }
 
 // The two range-split knobs OVERRIDE a per-client boot flag rather than

@@ -254,5 +254,12 @@ func setTunnelDepthMargin() time.Duration {
 }
 func setChunkDepthDynamic() bool  { return skysettings.Bool(skysettings.ChunkDepthDynamic) }
 func setUploadDepthDynamic() bool { return skysettings.Bool(skysettings.UploadDepthDynamic) }
-func setChunkDepthMin() int       { return skysettings.Count(skysettings.ChunkDepthMin) }
-func setChunkDepthMax() int       { return skysettings.Count(skysettings.ChunkDepthMax) }
+
+// setUploadBurstPlan is the ONE knob of the burst placement, and it defaults
+// to TRUE: the behavior it replaces is the defect (a 10 MB upload placing a
+// chunk on a route four times slower than the one beside it), not a baseline
+// worth reproducing. Off, a striped upload places every chunk through the
+// picker exactly as it did.
+func setUploadBurstPlan() bool { return skysettings.Bool(skysettings.UploadBurstPlan) }
+func setChunkDepthMin() int    { return skysettings.Count(skysettings.ChunkDepthMin) }
+func setChunkDepthMax() int    { return skysettings.Count(skysettings.ChunkDepthMax) }
