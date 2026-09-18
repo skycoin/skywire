@@ -127,6 +127,29 @@ func (l *emuLeg) CutDown() { l.rig.B.conns[l.idx].Egress().Cut() }
 // Cut black-holes both directions — the whole leg goes away.
 func (l *emuLeg) Cut() { l.CutUp(); l.CutDown() }
 
+// RemoveTransport is `skywire cli tp rm` on this leg: the leg's transport is
+// closed at both ends and the transport manager's close hook fires, which is
+// what the router registers for (router.closeLegsOnTransport). Unlike Cut —
+// which black-holes a link whose socket is still open, the shape the liveness
+// probe exists for — this is a link the visor itself took away.
+func (l *emuLeg) RemoveTransport() {
+	l.Cut()
+	l.rig.A.tps[l.idx].CloseForTest()
+	l.rig.B.tps[l.idx].CloseForTest()
+	id := l.rig.ids[l.idx]
+	l.rig.A.rg.handleTransportClosed(id)
+	l.rig.B.rg.handleTransportClosed(id)
+}
+
+// LegsOn is how many legs the given end still holds.
+func (r *emuRig) LegsOn(initiator bool) int {
+	a, b := r.AddedLegs()
+	if initiator {
+		return a
+	}
+	return b
+}
+
 // Restore lifts a Cut on both directions.
 func (l *emuLeg) Restore() {
 	l.rig.A.conns[l.idx].Egress().Restore()
