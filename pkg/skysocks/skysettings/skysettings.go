@@ -79,16 +79,17 @@ const (
 	TunnelPromoteQuietBytes    = "tunnel.promote_quiet_bytes"
 	TunnelPromoteIdleBps       = "tunnel.promote_idle_bps"
 
-	TunnelAuditionWindow  = "tunnel.audition_window"
-	TunnelAuditionEvery   = "tunnel.audition_every"
-	TunnelExitOpenPenalty = "tunnel.exit_open_penalty"
-	TunnelMeterSampleMin  = "tunnel.meter_sample_min"
-	TunnelMeterCapDecay   = "tunnel.meter_cap_decay"
-	TunnelMeterFresh      = "tunnel.meter_fresh"
-	TunnelSnubAfter       = "tunnel.snub_after"
-	TunnelSnubHold        = "tunnel.snub_hold"
-	TunnelDepthMargin     = "tunnel.depth_margin"
-	TunnelCount           = "tunnel.count"
+	TunnelAuditionWindow   = "tunnel.audition_window"
+	TunnelAuditionEvery    = "tunnel.audition_every"
+	TunnelExitOpenPenalty  = "tunnel.exit_open_penalty"
+	TunnelMeterSampleMin   = "tunnel.meter_sample_min"
+	TunnelMeterCapDecay    = "tunnel.meter_cap_decay"
+	TunnelMeterFresh       = "tunnel.meter_fresh"
+	TunnelSnubAfter        = "tunnel.snub_after"
+	TunnelSnubHold         = "tunnel.snub_hold"
+	TunnelDepthMargin      = "tunnel.depth_margin"
+	TunnelCount            = "tunnel.count"
+	TunnelGroupDialCeiling = "tunnel.group_dial_ceiling"
 
 	MuxCap   = "mux.cap"
 	MuxWidth = "mux.width"
@@ -289,6 +290,17 @@ func init() {
 	// restarting the app.
 	register(TunnelCount, KindCount, 2,
 		"size of the ACTIVE tunnel set; overrides --tunnels once set, reconciled by promote/park on the next tick")
+
+	// How long the FIRST tunnel of a session may spend trying to form a route
+	// group before the dial decays to the AppDirect shortcut. The route group
+	// of tunnel 1 is an implicit upgrade — `--tunnels 2` being the default
+	// asked for it, not the operator — so it must not be able to cost the
+	// session: where no route group can be set up the dial used to hang until
+	// `proxy start --timeout` gave up on a peer this visor holds a transport
+	// to. A widening, re-dial or pool dial is never the session's only tunnel
+	// and is not bounded by this; nor is an explicit --routed.
+	register(TunnelGroupDialCeiling, KindDuration, int64(20*time.Second),
+		"how long the first tunnel may spend forming a route group before the dial decays to a direct session")
 
 	// Per-APP mux width. The visor-wide adaptive ceiling and floor
 	// (`proxy mux cap|width --visor-wide`) remain the default for every app

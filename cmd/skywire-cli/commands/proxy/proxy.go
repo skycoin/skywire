@@ -542,18 +542,17 @@ var startCmd = &cobra.Command{
 			if rErr != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--route: %w", rErr))
 			}
-			// The route group is up once the app reached Running; allow a brief
-			// lag before it is queryable.
-			var res legReconcile
-			for i := 0; i < 30; i++ {
-				res, rErr = reconcileLegs(rpcClient, clientName, 0, targets, true)
-				if rErr == nil {
-					break
-				}
-				time.Sleep(500 * time.Millisecond)
-			}
-			if rErr != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--route reconcile: %w", rErr))
+			// The route group is up once the app reached Running, but the pin
+			// still has to be INSTALLED on it — a leg install is a route setup
+			// through the setup node, and on a cold start that is the slowest
+			// thing this command does. pinRoutes bounds the whole install,
+			// says it is waiting, and fails when the pinned leg is not on the
+			// group afterwards: a pin the operator gave is not advisory, and a
+			// session quietly running on the auto route instead is the failure
+			// this used to print as success.
+			res, pErr := pinRoutes(rpcClient, clientName, targets, routePinBudget, os.Stderr)
+			if pErr != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--route: %w", pErr))
 			}
 			if !startVerbose {
 				fmt.Printf("route pinned: %d leg(s) added, %d pruned, %d already present\n",
