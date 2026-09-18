@@ -99,16 +99,30 @@ downloads and uploads, at 3, 10, 50 and 100 MB, five trials each:
 
 Since **v4 (2026-09-18)** two of those bars are measured against the ENDPOINT
 rather than against another skywire number, so a campaign also runs
-`bench/run-ceiling.sh <exit pk> <out dir> [trials] [sink]`: `CEIL_N` (3)
-concurrent DIRECT proxy clients, one 50 MB transfer alone and then all N at the
+`bench/run-ceiling.sh <exit pk> <out dir> [trials] [sink] [pins dir]`: `CEIL_N`
+(3) concurrent proxy clients, one 50 MB transfer alone and then all N at the
 same instant, uploads first and then downloads, every transfer hash-verified
 against the sink. It writes `ceiling.tsv` into the campaign directory — one row
-per (kind, clients, trial) carrying the sum, the per-client rates and the
-hashes, plus a `# ceiling` line per kind saying whether the sum grew from one
-client to N — and `bench/verdict.sh` takes the median of the concurrent sums as
-the uplink and the downlink ceiling. With no `ceiling.tsv` both verdicts keep
-the pre-v4 rule and print "no ceiling row": a ceiling quoted from an older
+per (kind, clients, trial) carrying the sum, the per-client `route:rate` pairs
+and the hashes, plus a `# ceiling` line per kind saying whether the sum grew
+from one client to N — and `bench/verdict.sh` takes the median of the concurrent
+sums as the uplink and the downlink ceiling. With no `ceiling.tsv` both verdicts
+keep the pre-v4 rule and print "no ceiling row": a ceiling quoted from an older
 campaign is not a bar, because the bars move by 2x inside an hour.
+
+The two kinds do **not** ride the same path, and that is the point. The uplink
+is the local card, so its N clients are `--direct` (9.04 alone / 10.70
+concurrent on 2026-09-16). The downlink over those same direct clients came out
+at 4.72 alone / 5.04 concurrent while one download through the best intermediate
+was doing 8–9.5 MB/s in the same hour: the direct stcpr path is **itself** the
+download bottleneck, so a downlink ceiling measured through it measures that
+path rather than the endpoint, and criterion 4 would clear it trivially. So the
+downlink clients are pinned to the **N best distinct routes of the paired
+ranking** — `paired-ref.tsv` when `bench/pick-ref.sh` has probed one, else
+`paired_rank`'s medians, read from the out dir and then its parent; slot 1 the
+best, slot 2 the second best, `direct` appended last when fewer than N ranked
+routes exist. One extra `uplink-via` row per trial uploads over the best via
+route alone, so the file also says whether the direct uplink is a bottleneck.
 
 Criterion 10's spread policy is `SPREAD=1 bench/run-mux.sh …`, which adds the
 `mux-spread-3` set — the default pool session, no pins and no `--tunnels`, with

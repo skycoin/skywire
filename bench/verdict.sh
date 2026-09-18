@@ -32,9 +32,12 @@
 # concurrent uploads against the bar below.
 #
 # THE ENDPOINT CEILING (v4, 2026-09-18). When the directory holds a
-# `ceiling.tsv` — bench/run-ceiling.sh, N concurrent DIRECT clients measured in
-# the SAME campaign — two verdicts are scored against the endpoint instead of
-# against skywire alone:
+# `ceiling.tsv` — bench/run-ceiling.sh, N concurrent clients measured in the
+# SAME campaign: the uplink over N DIRECT clients, the downlink over the N best
+# DISTINCT routes of the paired ranking, because the direct stcpr path is itself
+# the download bottleneck (2026-09-17: 5.04 MB/s over three direct clients while
+# one download via-0371ab4b did 8-9.5 in the same hour) — two verdicts are then
+# scored against the endpoint instead of against skywire alone:
 #
 #   two uploads   sum >= min(ref1 + ref2, 0.95 x the uplink ceiling), and the
 #                 line says which of the two bounds bound it.
@@ -85,7 +88,9 @@ ceil_of() {
 }
 ceil_up=$(ceil_of uplink); ceil_down=$(ceil_of downlink)
 if [ -n "$ceil_file" ]; then
-	echo "endpoint ceiling ($ceil_file): uplink ${ceil_up:--} MB/s, downlink ${ceil_down:--} MB/s (median of the concurrent sums)"
+	# the header line run-ceiling.sh writes names the downlink routes after its dash
+	ceil_routes=$(awk -F' — ' '/^# downlink rows:/ {print $NF; exit}' "$ceil_file")
+	echo "endpoint ceiling ($ceil_file): uplink ${ceil_up:--} MB/s over direct clients, downlink ${ceil_down:--} MB/s over ${ceil_routes:-the routes it recorded} (median of the concurrent sums)"
 else
 	echo "no ceiling row: no ceiling.tsv in $mux or $refs — the two-upload and composition cells keep the pre-v4 rule"
 fi
