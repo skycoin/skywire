@@ -42,6 +42,13 @@ var (
 	LegProbeMinBasisMs = RegisterRatio("leg.probe_min_basis_ms", 250.0, 1.0, "absolute delay basis in ms under which no leg is ever cut to a probe, so two fast legs with a large ratio are left alone")
 	LegProbeMinWindow  = RegisterMin("leg.probe_min_window", KindDuration, int64(250*time.Millisecond), int64(10*time.Millisecond), "floor on the probe window for a leg whose delay basis is short")
 	LegDelivAlpha      = RegisterRatioRange("leg.deliv_alpha", 0.3, 0, 1, "weight of the newest sample in the per-leg SACK-proven delivery EWMA the goodput half of the gate reads")
+	// The two readings a leg queued past any useful depth produces when the
+	// paired delay/goodput ruling above cannot: an extreme goodput gap (which
+	// rules on its own, because at that ratio no delay reading excuses it) and a
+	// leg holding unacknowledged bytes for many RTprops with nothing confirmed.
+	LegStarveGoodputOnlyRatio = RegisterRatio("leg.starve_goodput_only_ratio", 20.0, 1.0, "goodput gap against the best active leg at which the goodput half of the ruling cuts a leg ALONE, without the delay half agreeing")
+	LegStallRTpropFactor      = RegisterScale("leg.stall_rtprop_factor", 4.0, "multiples of a leg's RTprop it may hold unacknowledged bytes with nothing confirmed before it counts as stalled and is cut to a probe; 0 turns the stall reading off")
+	LegStallMinSilence        = RegisterMin("leg.stall_min_silence", KindDuration, int64(150*time.Millisecond), int64(10*time.Millisecond), "absolute floor on the silence a leg must show before the stall reading cuts it, so a low-RTprop leg is not judged inside one delayed-ack interval")
 
 	// RACK-TLP retransmit threshold (route_mux.go, rack_tlp.go, sack.go).
 	RackReorderFactor       = RegisterRatio("rack.reorder_factor", 1.25, 1.0, "slowest active leg's RTT times this is the reordering tolerance before a sequence is presumed lost")
@@ -72,6 +79,18 @@ var (
 	// re-reads it each tick and resets the ticker on a change, so it is live now;
 	// the 10 ms floor is what keeps a mistyped value from spinning the loop.
 	SendWindowRefreshInterval = RegisterMin("send.window_refresh_interval", KindDuration, int64(100*time.Millisecond), int64(10*time.Millisecond), "how often each leg's send window is recomputed; a window can double per refresh, so this paces the ramp")
+
+	// The per-leg BBR-style path model (leg_rate.go). BtlBw is a windowed MAX
+	// filter of the SACK-proven delivery rate, RTprop a windowed MIN filter of
+	// the leg's out-of-band path RTT, and BDP their product. path.model governs
+	// whether the SCHEDULERS read them (the model is measured and reported
+	// either way); path.bdp_gain is the cwnd gain the send window targets over
+	// the measured BDP, applied as a floor under the delivery-proven window.
+	PathModel            = RegisterBool("path.model", true, "let the schedulers read the per-leg BtlBw/RTprop path model where they previously read the conflated send→ack delay basis")
+	PathBDPGain          = RegisterScale("path.bdp_gain", 2.0, "gain on the measured BDP (BtlBw x RTprop) the per-leg send window targets, as a FLOOR under the delivery-proven window; 0 drops the term and sizes the window exactly as it was before the path model")
+	PathBtlBwWindowRound = RegisterMin("path.btlbw_window_rounds", KindCount, 10, 1, "round trips the delivery-rate MAX filter keeps a sample for")
+	PathRTpropWindow     = RegisterMin("path.rtprop_window", KindDuration, int64(10*time.Second), int64(time.Second), "how far back the path-RTT MIN filter looks for RTprop")
+	PathAppLimitedFrac   = RegisterRatioRange("path.app_limited_frac", 0.75, 0, 1, "a delivery sample taken with in-flight under this fraction of the leg's send window is APP-LIMITED: it may raise BtlBw but never lower it")
 
 	// SACK feedback cadence (route_mux.go, route_group.go).
 	SackMinInterval     = RegisterMin("sack.min_interval", KindDuration, int64(25*time.Millisecond), int64(time.Millisecond), "minimum spacing between receiver-side SACKs")
@@ -126,6 +145,7 @@ var (
 	UnidirFlipHysteresis    = RegisterMin("unidir.flip_hysteresis", KindCount, 3, 1, "consecutive qualifying ticks before flipping")
 	UnidirFlipCooldownTicks = RegisterMin("unidir.flip_cooldown_ticks", KindCount, 3, 1, "ticks to hold after a flip before another")
 	UnidirFlipMinGoodput    = RegisterMin("unidir.flip_min_goodput", KindBytes, 8192, 1, "bytes/sec floor under which the flip controller ignores the asymmetry as idle noise")
+	UnidirReverseECF        = RegisterBool("unidir.reverse_ecf", true, "place the REVERSE (acceptor/download) direction's frames with the same predictive scheduler the forward path uses, instead of the unweighted round-robin schedule")
 
 	// FORWARD-direction confinement (route_mux.go selectConfinedForward).
 	ForwardSpill         = RegisterBool("forward.spill", false, "let a FORWARD frame leave its confined leg when that leg is at its send window; off means the writer waits")

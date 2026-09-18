@@ -184,6 +184,38 @@ type ecfLegState struct {
 	// ruled outclassed. Neither is read by the schedulers.
 	delivBps   float64
 	delivKnown bool
+	// The BBR-style path model (leg_rate.go), the pair of readings that replace
+	// the conflated delay basis where a consumer meant "how fast is this path"
+	// or "how far away is it":
+	//
+	//	btlbwBps — the windowed MAX of the SACK-proven delivery rate: the leg's
+	//	   bottleneck bandwidth. Unlike delivBps (an EWMA that an idle moment
+	//	   pulls down) it is a capacity estimate, and unlike rateBps it counts
+	//	   only bytes the peer confirmed.
+	//	rtpropMs — the windowed MIN of the leg's OUT-OF-BAND path RTT (the
+	//	   end-to-end liveness pong, else the first-hop transport RTT): the
+	//	   propagation delay our own queue cannot inflate.
+	//
+	// Both 0 until measured, which every consumer reads as "fall back to the
+	// pre-model behavior" rather than reasoning from half a path.
+	btlbwBps float64
+	rtpropMs float64
+	// heldBytes is the leg's REAL unacknowledged bytes (the retx buffer's
+	// per-transport total) and silentMs how long it has held them with no new
+	// acknowledgement. Together they are the stall reading: a leg with bytes in
+	// flight and no ack for many RTprops is queued past any useful depth,
+	// whatever its (stale, or never-sampled) delay basis says — the hole the
+	// emulated dead-leg scenario found in the #5037 ruling. 0/0 on a leg with
+	// nothing outstanding.
+	//
+	// unackedBytes is the same evidence counted from the SEND side — bytes put
+	// on the leg since the last ack it produced — which a retransmit cannot
+	// drain away by re-tagging its entry to another leg (see legCounters).
+	// heldBytes is the honest current queue (it sizes the queueing basis);
+	// unackedBytes is what the stall test reads.
+	heldBytes    float64
+	unackedBytes float64
+	silentMs     float64
 }
 
 // transportSelector implements weighted transport selection based on latency.
@@ -828,6 +860,56 @@ func (ts *transportSelector) SelectECF(size int) int {
 	return idx
 }
 
+// SelectPredictiveAmong is SelectECF/SelectOTIAS/SelectSTMS restricted to the
+// legs allow() accepts — the entry point for a direction that may only use one
+// CLASS of leg (the acceptor's download under CapUniDir rides the multihop legs
+// and never the direct one). Legs outside the set are hidden from the pick by
+// clearing their ready flag on a copy, so the scheduler reasons over exactly
+// the candidates the caller may use.
+//
+// Returns -1 when the mode is not predictive, there is no estimator state yet,
+// or no allowed leg is ready — the caller then keeps its own fallback rather
+// than taking a pick it cannot use.
+func (ts *transportSelector) SelectPredictiveAmong(size int, allow func(int) bool) int {
+	mode := ts.Mode()
+	if !mode.isPredictive() || allow == nil {
+		return -1
+	}
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if len(ts.ecfLegs) == 0 {
+		return -1
+	}
+	ts.drainInflightLocked()
+	legs := make([]ecfLegState, len(ts.ecfLegs))
+	copy(legs, ts.ecfLegs)
+	any := false
+	for i := range legs {
+		if legs[i].ready && allow(i) {
+			any = true
+			continue
+		}
+		legs[i].ready = false
+	}
+	if !any {
+		return -1
+	}
+	var idx int
+	switch mode {
+	case WeightModeOTIAS:
+		idx = otiasPick(legs)
+	case WeightModeSTMS:
+		idx = stmsPick(legs)
+	default:
+		idx = ecfPick(legs, ts.ecfWaiting, &ts.ecfWaiting)
+	}
+	if idx < 0 {
+		return -1
+	}
+	ts.chargeInflightLocked(idx, size)
+	return idx
+}
+
 // SelectOTIAS returns the leg index for the next DATA frame under the OTIAS
 // scheduler (WeightModeOTIAS): the ready leg whose estimated ARRIVAL time is
 // soonest (queueing + one-way delay), computed from the same ecfLegState the
@@ -994,6 +1076,29 @@ func ecfPick(legs []ecfLegState, waiting bool, waitOut *bool) int {
 	// ECF hold-back predicate. n = how many xf-RTTs to drain the fast leg's
 	// backlog; if xf clears that backlog before xs delivers even one frame
 	// (its RTT plus the jitter margin d), hold on xf instead of spilling.
+	// With both legs' path models measured, the race is run on ARRIVAL TIMES
+	// built from RTprop and BtlBw rather than on a backlog expressed in
+	// fast-leg RTTs: hold on xf when the frame would land there no later than
+	// it would on xs (plus the jitter margin, plus the hysteresis). It is the
+	// same judgement the paper's predicate makes, with each term measured
+	// instead of inferred from a delay basis that is itself queue depth.
+	if PathModelEnabled() && legs[xf].btlbwBps > 0 && legs[xf].rtpropMs > 0 &&
+		legs[xs].btlbwBps > 0 && legs[xs].rtpropMs > 0 {
+		d := legs[xf].jitterMs
+		if legs[xs].jitterMs > d {
+			d = legs[xs].jitterMs
+		}
+		hyst := 1.0
+		if waiting {
+			hyst = 1 + routersettings.EcfBeta.Ratio()
+		}
+		if legArrivalMs(legs[xf]) < hyst*(legArrivalMs(legs[xs])+d) {
+			setWait(true)
+			return xf
+		}
+		setWait(false)
+		return xs
+	}
 	rttF, rttS := legs[xf].rttMs, legs[xs].rttMs
 	// n = how many fast-leg RTTs to drain its current backlog. The drain
 	// denominator is the fast leg's cwnd; for a cold leg (cwnd unknown) fall
@@ -1037,6 +1142,17 @@ func ecfSaturated(l ecfLegState) bool {
 	// with RTT, so without this a congesting leg's rising RTT would raise its
 	// apparent capacity and ECF would feed it more, stalling the reorder
 	// frontier (the observed HoL collapse).
+	// The baseline stays rttMinMs — the running minimum of the SAME send→ack
+	// series rttMs is measured on — and deliberately NOT the path model's
+	// RTprop. Both readings are correct and they answer different questions:
+	// RTprop is the propagation delay, so rttMs/RTprop is simply how full the
+	// pipe is, and a BULK transfer keeping a pipe full sits at many times its
+	// RTprop by definition. Tried on the emulated testbed (2026-09-18) it shed
+	// every busy leg: the healthy 44/166 ms pair fell from x1.8 to x0.62 of one
+	// leg alone with 47 writer parks, and the dead-leg scenario stopped
+	// completing at all. This test is "is this leg's delay growing against its
+	// own recent normal", which is a queueing question, and the queue-tracking
+	// baseline is the right one for it.
 	if l.rttMinMs > 0 && l.rttMs > routersettings.EcfCongestRttFactor.Ratio()*l.rttMinMs {
 		return true
 	}

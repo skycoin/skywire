@@ -60,6 +60,14 @@ const schedDefaultRttMs = 100.0
 // start fans out across the ready legs instead of dumping the whole stream on
 // the single lowest-RTT leg until the first rate refresh.
 func legArrivalMs(l ecfLegState) float64 {
+	// With the path model measured, both terms come from it: the queue drains
+	// at the leg's BOTTLENECK rate (not at the rate we happened to hand the
+	// transport, which counts bytes we queued as capacity) and the propagation
+	// term is RTprop (not a delay our own queue inflated). This is the estimate
+	// the schedulers were reaching for; see leg_rate.go.
+	if PathModelEnabled() && l.btlbwBps > 0 && l.rtpropMs > 0 {
+		return l.inflightBytes/l.btlbwBps*1000.0 + l.rtpropMs/2.0
+	}
 	rtt := l.rttMs
 	if rtt <= 0 {
 		rtt = schedDefaultRttMs

@@ -146,6 +146,25 @@ type legCounters struct {
 	// refreshes that see no new ack.
 	ecfLastAckedNano int64
 	ecfCwndBytes     float64
+	// ecfHeldSinceNano opens the leg's current SILENCE: it is stamped when the
+	// leg first holds unacknowledged bytes and re-stamped by every refresh that
+	// sees a new ack, so now-it is how long the leg has been sitting on bytes
+	// the peer has not confirmed. It is the reading a leg queued past any useful
+	// depth has when nothing else does: such a leg never acknowledges, so its
+	// send→ack basis is never sampled (it reads as the group's FASTEST leg on
+	// the stale first-hop value) and delivKnown never turns true (so the goodput
+	// half declines to rule what looks merely cold). 0 = nothing outstanding.
+	//
+	// The outstanding bytes are counted as sentBytes-ecfSentAtAck (the sent
+	// counter as it stood at the leg's last confirmed ack), NOT as the retx
+	// buffer's per-leg in-flight: a retransmit RE-TAGS its entry to the leg it
+	// moves to (retxBuffer.SetTpID), so a stalled leg's in-flight is drained to
+	// zero by the very retransmits its stalling caused — which would clear the
+	// evidence and let the scheduler feed it again on the next refresh. Bytes
+	// SENT on a leg since it last confirmed anything only ever grow while it is
+	// not delivering.
+	ecfHeldSinceNano int64
+	ecfSentAtAck     uint64
 	// ecfDelivBps is an EWMA of that same delivery rate (bytes acknowledged per
 	// second), kept apart from the window it sizes because the outclassed-leg
 	// gate judges PRODUCTIVITY with it: a leg whose delay basis is inflated by
@@ -178,6 +197,29 @@ type legCounters struct {
 	probeBasisBits uint64 // atomic (float64 bits)
 	probeWinNano   int64  // atomic
 	probeWinBytes  uint64 // atomic
+	// probeStalled marks the ruling that came from the STALL reading rather
+	// than from the delay/goodput pair, and it takes the probe budget to zero:
+	// such a leg carries no DATA frame at all while any other leg can take one.
+	//
+	// A probe is a bulk frame on the writer's own path, and a write to a leg
+	// whose socket buffer is full BLOCKS the route group's writer until the
+	// far end drains it. That is the difference between a leg that is merely
+	// slow (a probe costs its own bandwidth) and one queued past any useful
+	// depth (a probe costs the WHOLE GROUP seconds): on the emulated live-scale
+	// dead leg, four 64 KiB probes into a 540 KB buffer draining at 60 KB/s
+	// stalled the writer for ~4 s of a transfer the healthy leg finished in 1.2.
+	// Such a leg is still measured — the liveness pong runs on every leg, and
+	// the bytes it is already holding are acknowledged as its queue drains,
+	// which is what lifts the ruling. atomic; 1 = stalled.
+	probeStalled uint32
+	// model is the leg's BBR-style path model (leg_rate.go): a windowed MAX
+	// filter of the SACK-proven delivery rate (BtlBw), a windowed MIN filter of
+	// the leg's out-of-band path RTT (RTprop), and the BDP and queueing delay
+	// derived from them. Written only by refreshLegWindows and read only by
+	// snapshot readers, both under legMu — the fields above answer "how deep is
+	// the queue", this answers "how fast is the path and how far away is it",
+	// which is the distinction every consumer of ecfRttMs was missing.
+	model legPathModel
 }
 
 // routeMux encapsulates route multiplexing state and logic.
@@ -487,10 +529,22 @@ type routeMux struct {
 	// first time a leg is chosen (no event is emitted for that).
 	onForwardRehome func(prev, next int, tp *transport.ManagedTransport, legs int, reason string)
 
+	// ruledTps is the set of transports whose leg is currently ruled probe-only,
+	// republished by each window refresh. It exists so the SACK path can ask
+	// the question WITHOUT the leg table's lock — it holds the retx buffer's
+	// lock while it asks, and taking legMu under it is the inversion that froze
+	// a group (see refreshLegWindows). Nil until the first refresh.
+	ruledTps atomic.Pointer[map[uuid.UUID]bool]
+
 	// onLegProbeRuling, when wired (SetLegProbeRulingFn), is called from the
 	// window refresh with legMu dropped whenever a leg is ruled probe-only or
 	// restored to a full share, so the route group can record the event.
 	onLegProbeRuling func(idx, legs int, tp *transport.ManagedTransport, probeOnly bool, reason string)
+
+	// onLegStranded, when wired (SetLegStrandedFn), is called with the transport
+	// id of a leg just ruled STALLED so the route group can re-send the window
+	// stranded on it. Must not block — see reportProbeRulings.
+	onLegStranded func(uuid.UUID)
 }
 
 const (
@@ -776,10 +830,43 @@ func (m *routeMux) selectFastestTransport(tps []*transport.ManagedTransport, fwd
 	if len(fwd) == 0 {
 		return nil, nil, -1, ErrNoRules
 	}
-	bestIdx, firstReady := -1, -1
+	// A leg RULED probe-only is one this group has already judged unable to
+	// carry the stream — a black hole, or a path queued past any useful depth.
+	// A retransmit is the one frame that must not go there: it is already the
+	// recovery of a frame the receiver is waiting on, and putting it back on
+	// the leg that stranded it makes the frontier gap permanent. Measured on
+	// the emulated testbed (2026-09-18): a mid-transfer cut of the group's
+	// LOWEST-latency leg wedged one run in five, because every SACK-driven
+	// resend of the stranded window was handed straight back to the cut leg —
+	// it is still the fastest thing in the group by first-hop RTT, which is the
+	// only reading this pick had. The ruled legs are skipped on the first pass
+	// and kept as the last resort, so a group where every leg is ruled still
+	// retransmits somewhere.
+	bestIdx, firstReady := m.fastestLeg(tps, true)
+	if bestIdx < 0 {
+		bestIdx, firstReady = m.fastestLeg(tps, false)
+	}
+	if bestIdx < 0 {
+		bestIdx = firstReady
+	}
+	if bestIdx < 0 {
+		return nil, nil, -1, ErrNoSuitableTransport
+	}
+	return tps[bestIdx], fwd[bestIdx], bestIdx, nil
+}
+
+// fastestLeg returns the lowest-first-hop-RTT live, ready leg and the first
+// ready leg of any latency (the fallback when none reports one). skipRuled
+// leaves out the legs currently ruled probe-only; both are -1 when no leg
+// qualifies.
+func (m *routeMux) fastestLeg(tps []*transport.ManagedTransport, skipRuled bool) (best, firstReady int) {
+	best, firstReady = -1, -1
 	bestLat := -1.0
 	for idx, tp := range tps {
 		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
+			continue
+		}
+		if skipRuled && m.legRuledProbeOnly(idx) {
 			continue
 		}
 		if firstReady < 0 {
@@ -790,16 +877,25 @@ func (m *routeMux) selectFastestTransport(tps []*transport.ManagedTransport, fwd
 			continue // unknown latency — only a last resort
 		}
 		if bestLat < 0 || lat < bestLat {
-			bestLat, bestIdx = lat, idx
+			bestLat, best = lat, idx
 		}
 	}
-	if bestIdx < 0 {
-		bestIdx = firstReady
+	return best, firstReady
+}
+
+// legRuledProbeOnly reports whether leg idx currently carries an outclassed
+// ruling — regardless of whether its probe budget for this window is spent
+// (which is legProbeExhausted's question). Bounds-checked.
+func (m *routeMux) legRuledProbeOnly(idx int) bool {
+	if idx < 0 {
+		return false
 	}
-	if bestIdx < 0 {
-		return nil, nil, -1, ErrNoSuitableTransport
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	if idx >= len(m.legs) || m.legs[idx] == nil {
+		return false
 	}
-	return tps[bestIdx], fwd[bestIdx], bestIdx, nil
+	return math.Float64frombits(atomic.LoadUint64(&m.legs[idx].probeBasisBits)) > 0
 }
 
 // SetLegLatencyFn wires the per-leg END-TO-END route latency lookup (ms by
@@ -1988,6 +2084,18 @@ func (m *routeMux) rackThresholdFor(tpID uuid.UUID) time.Duration {
 // and the window refresh reads the buffer under that table's lock — the
 // inversion that froze a group).
 func (m *routeMux) rackThresholdForWith(th time.Duration, tpID uuid.UUID) time.Duration {
+	// A leg RULED probe-only is one this group has judged unable to carry the
+	// stream. Its holes are not "in ordinary flight on a slow leg" — that is
+	// precisely what the ruling decided they are not — so they are presumed
+	// lost at the anti-storm floor and recovered on a healthy leg at once.
+	// Without it the frames a dead leg stranded waited out the GROUP threshold
+	// (the slowest active leg's feedback delay × the reorder factor) and then
+	// doubled per retry: on the emulated live-scale dead leg that was ~4 s of
+	// frontier stall on an 8 MB download the good leg alone finished in 1.2 s,
+	// with the stranded frames recovering one backoff at a time.
+	if ruled := m.ruledTps.Load(); ruled != nil && (*ruled)[tpID] {
+		return m.knDur(routersettings.RackFloor)
+	}
 	// The leg's own delay is max(send→ack delay, end-to-end pong RTT). Judged on
 	// the send→ack delay alone this was per-leg in form only: that estimate is
 	// empty until a never-retransmitted frame is acked and expires
@@ -2233,6 +2341,34 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 			adByIdx[i] = m.ackDelayMsTp(tp.Entry.ID)
 		}
 	}
+	// The path model's two inputs, both read OUTSIDE legMu for the same
+	// lock-order reason as the acked bytes above: the leg's real in-flight
+	// (the retx buffer's per-transport held bytes, which says whether a
+	// delivery sample was window-limited or app-limited) and its out-of-band
+	// PATH RTT — the end-to-end liveness pong when the leg has one, else the
+	// first-hop transport RTT. Never the send→ack delay: that series is the one
+	// our own queue inflates, and a min filter over it measures the queue.
+	heldByIdx := make([]int64, len(tps))
+	if m.retxBuf != nil {
+		ids := make([]uuid.UUID, len(tps))
+		for i, tp := range tps {
+			if tp != nil {
+				ids[i] = tp.Entry.ID
+			}
+		}
+		heldByIdx = m.retxBuf.HeldBytes(ids)
+	}
+	pathRTTByIdx := make([]float64, len(tps))
+	for i, tp := range tps {
+		if tp == nil {
+			continue
+		}
+		if e2e := m.legE2ERttMsTp(tp.Entry.ID); e2e > 0 {
+			pathRTTByIdx[i] = e2e
+			continue
+		}
+		pathRTTByIdx[i] = tp.GetLatency()
+	}
 	{
 		m.legMu.Lock()
 		now := time.Now().UnixNano()
@@ -2245,8 +2381,34 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 			if lc == nil {
 				continue
 			}
+			// Path model, ahead of everything that reads it: age the round
+			// counter (the delivery-rate max filter's window) and fold this
+			// refresh's out-of-band path RTT into the RTprop min filter. The
+			// leg's real in-flight is recorded here too so the queue estimate
+			// (inflight/BtlBw) is current even on a refresh that sees no new
+			// ack; the delivery sample itself is taken below, where the acked
+			// delta proves one.
+			held := 0.0
+			if i < len(heldByIdx) && heldByIdx[i] > 0 {
+				held = float64(heldByIdx[i])
+			}
+			lc.model.inflightBytes = held
+			lc.model.advanceRound(now, m.knDur(routersettings.SendWindowRefreshInterval))
+			if i < len(pathRTTByIdx) {
+				lc.model.sampleRTT(pathRTTByIdx[i], now, m.knDur(routersettings.PathRTpropWindow))
+			}
 			// Send rate over the refresh window (bytes/sec).
 			sent := atomic.LoadUint64(&lc.sentBytes)
+			// …and the leg's UNCONFIRMED send: bytes put on it since the last
+			// ack it produced. A leg with none is silent because it is idle, not
+			// because it is stalled, so its silence clock is cleared.
+			unackedSent := byteDelta(sent, lc.ecfSentAtAck)
+			switch {
+			case unackedSent == 0:
+				lc.ecfHeldSinceNano = 0
+			case lc.ecfHeldSinceNano == 0:
+				lc.ecfHeldSinceNano = now
+			}
 			var rate float64
 			if elapsed > 0 {
 				rate = float64(byteDelta(sent, lc.ecfLastSentBytes)) / elapsed
@@ -2342,15 +2504,24 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 			// capacity, which is how a slow leg was fed seconds deep. Cold legs
 			// (no acked bytes yet) keep the send-rate BDP and the probe budget.
 			cwnd := rate * bdpRttMs / 1000.0
+			cold := true
 			if m.retxBuf != nil && i < len(tps) && tps[i] != nil {
 				acked := ackedByIdx[i]
 				switch {
 				case acked == 0:
 					// cold: nothing acknowledged yet, send-rate BDP + probe budget
 				case lc.ecfLastAckedBytes == 0:
+					cold = false
 					lc.ecfLastAckedBytes = acked
 					lc.ecfLastAckedNano = now
+					// The leg's FIRST ack also opens its silence accounting:
+					// without this the bytes sent before it stayed counted as
+					// unconfirmed for the rest of the transfer, and a healthy
+					// leg whose first ack merely took a while read as stalled.
+					lc.ecfSentAtAck = sent
+					lc.ecfHeldSinceNano = now
 				default:
+					cold = false
 					// The window changes only on EVIDENCE: the delivery rate is the
 					// bytes acknowledged since the last refresh that saw an ack, over
 					// the time since that refresh. A refresh with no new ack (the
@@ -2381,7 +2552,19 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 						lc.ecfCwndBytes = cwnd
 						lc.ecfLastAckedBytes = acked
 						lc.ecfLastAckedNano = now
+						// The peer confirmed something: the silence ends here and
+						// the unconfirmed-send baseline moves to the current
+						// sent counter.
+						lc.ecfHeldSinceNano = now
+						lc.ecfSentAtAck = sent
 						lc.ecfDelivBps = foldDeliv(lc.ecfDelivBps, deliv)
+						// The same evidence, in the path model's terms: this is
+						// a DELIVERY-RATE sample, and it feeds BtlBw's max filter
+						// unless the sender was app-limited when it was taken
+						// (in which case it may raise the estimate but not lower
+						// it — see leg_rate.go).
+						lc.model.sampleDelivery(deliv, float64(heldByIdx[i]), lc.ecfCwndBytes,
+							uint64(m.knInt(routersettings.PathBtlBwWindowRound))) //nolint:gosec // the knob floor is 1
 					} else if lc.ecfCwndBytes > 0 {
 						cwnd = lc.ecfCwndBytes
 					}
@@ -2395,12 +2578,40 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 					}
 				}
 			}
+			// …and the BBR target: gain x BtlBw x RTprop, the in-flight that
+			// keeps the bottleneck busy through one round of PROPAGATION delay
+			// rather than one round of whatever delay our own queue has built.
+			// It is applied as a FLOOR under the delivery-proven window above,
+			// never as a replacement: the proven window is the one measurement
+			// that cannot overstate the leg, and on a loaded path it is the
+			// larger of the two anyway (its feedback-delay term exceeds RTprop
+			// by exactly the queue). What the floor stops is the collapse at the
+			// other end — a leg whose ack-delay estimate expired between
+			// transfers, or whose first hop is short beside a long route, being
+			// re-sized to the 128 KiB floor and starved (#5011's 470 ms path at
+			// 0.23 MB/s). path.bdp_gain=0 removes the term entirely.
+			if gain := m.knRatio(routersettings.PathBDPGain); gain > 0 {
+				if target := gain * lc.model.bdpBytes(); target > cwnd {
+					cwnd = target
+				}
+			}
 			// Clamp EVERY path to the window bounds, not just the evidence branch
 			// above: a cold leg (nothing acked yet), the first-ack seeding branch
 			// and a group with no retx buffer all reached here with a raw
 			// rate×BDP window and no ceiling, so a just-promoted leg was handed an
 			// unbounded send window and over-subscribed the no-skip frontier.
-			if lo := float64(EcfMinWindowBytes()); cwnd < lo {
+			// …except a leg that has never acknowledged ANYTHING, which is held
+			// to the cold-start probe budget instead of the floor. The floor
+			// exists so a thin but PROVEN leg keeps a usable window; a leg that
+			// has confirmed nothing has proven nothing, and the floor was what
+			// let an emulated 60 KB/s path be handed 128 KiB — two seconds of
+			// its queue — before a single ack could say otherwise. Once its
+			// first ack lands the ordinary floor applies again.
+			if cold && m.retxBuf != nil {
+				if hi := float64(routersettings.EcfColdBootstrapBytes.Bytes()); cwnd > hi || cwnd <= 0 {
+					cwnd = hi
+				}
+			} else if lo := float64(EcfMinWindowBytes()); cwnd < lo {
 				cwnd = lo
 			}
 			if hi := float64(EcfMaxWindowBytes()); cwnd > hi {
@@ -2413,18 +2624,53 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 			if i < len(m.ready) && !m.ready[i] {
 				ready = false
 			}
+			silentMs := 0.0
+			if lc.ecfHeldSinceNano != 0 {
+				silentMs = float64(now-lc.ecfHeldSinceNano) / float64(time.Millisecond)
+			}
 			states[i] = ecfLegState{
-				rttMs:      lc.ecfRttMs,
-				rttMinMs:   lc.ecfRttMinMs,
-				jitterMs:   lc.ecfJitterMs,
-				rateBps:    rate,
-				cwndBytes:  cwnd,
-				ready:      ready,
-				delivBps:   lc.ecfDelivBps,
-				delivKnown: lc.ecfLastAckedNano != 0,
+				rttMs:        lc.ecfRttMs,
+				rttMinMs:     lc.ecfRttMinMs,
+				jitterMs:     lc.ecfJitterMs,
+				rateBps:      rate,
+				cwndBytes:    cwnd,
+				ready:        ready,
+				delivBps:     lc.ecfDelivBps,
+				delivKnown:   lc.ecfLastAckedNano != 0,
+				btlbwBps:     lc.model.btlbwBps(),
+				rtpropMs:     lc.model.rtpropMs(),
+				heldBytes:    held,
+				unackedBytes: float64(unackedSent),
+				silentMs:     silentMs,
 			}
 		}
 		rulings := m.ruleProbeOnlyLegsLocked(states)
+		// Publish the ruled set by TRANSPORT id, lock-free: the SACK handler
+		// reads it while it holds the retx buffer's lock, and reading the leg
+		// table there is the inversion that froze a group (see the acked-bytes
+		// note at the top of this function).
+		ruled := make(map[uuid.UUID]bool, len(m.legs))
+		for i, lc := range m.legs {
+			if lc == nil {
+				continue
+			}
+			// A leg ruled by the STALL reading is not selectable at all, so the
+			// scheduler sees it as it sees a standby leg. That is not only about
+			// placement: AllReadySaturated asks whether EVERY ready leg is at
+			// its window, and a permanently-full leg we refuse to use made the
+			// writer park on a group that had somewhere perfectly good to send
+			// (measured: 21 parks and +0.4 s on an emulated 1.2 s download).
+			if i < len(states) && atomic.LoadUint32(&lc.probeStalled) == 1 {
+				states[i].ready = false
+			}
+			if i >= len(tps) || tps[i] == nil {
+				continue
+			}
+			if math.Float64frombits(atomic.LoadUint64(&lc.probeBasisBits)) > 0 {
+				ruled[tps[i].Entry.ID] = true
+			}
+		}
+		m.ruledTps.Store(&ruled)
 		m.ecfLastRebuildNano = now
 		m.legMu.Unlock()
 		m.tpSelector.SetECFState(states)
@@ -2438,7 +2684,13 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 type legProbeRuling struct {
 	idx       int
 	probeOnly bool
-	reason    string
+	// stalled marks the STALL variant of the ruling — the leg is not merely
+	// outclassed, it is sitting on bytes it has not confirmed. Everything it
+	// holds is stranded, so the route group re-sends that window on a healthy
+	// leg the moment the ruling lands instead of letting each sequence age out
+	// of RACK one backoff at a time.
+	stalled bool
+	reason  string
 }
 
 // ruleProbeOnlyLegsLocked decides, once per window refresh, which legs are so
@@ -2493,16 +2745,34 @@ type legProbeRuling struct {
 // Caller holds legMu; returns the transitions for reportProbeRulings to record.
 func (m *routeMux) ruleProbeOnlyLegsLocked(states []ecfLegState) []legProbeRuling {
 	ratio := LegStarveRatio()
-	best, bestDeliv := 0.0, 0.0
+	extreme := m.knRatio(routersettings.LegStarveGoodputOnlyRatio)
+	stallFactor := m.knRatio(routersettings.LegStallRTpropFactor)
+	best, bestDeliv, bestRTprop := 0.0, 0.0, 0.0
 	for i := range states {
 		if !states[i].ready {
 			continue
 		}
-		if states[i].rttMs > 0 && (best == 0 || states[i].rttMs < best) {
-			best = states[i].rttMs
+		if b := legRulingBasisMs(states[i]); b > 0 && (best == 0 || b < best) {
+			best = b
 		}
-		if states[i].delivKnown && states[i].delivBps > bestDeliv {
-			bestDeliv = states[i].delivBps
+		if d, ok := legRulingGoodputBps(states[i]); ok && d > bestDeliv {
+			bestDeliv = d
+		}
+		if r := states[i].rtpropMs; r > 0 && (bestRTprop == 0 || r < bestRTprop) {
+			bestRTprop = r
+		}
+	}
+	// The stall reading is relative: it says this leg is sitting on bytes while
+	// the group has somewhere better to send them. Deciding that needs one pass
+	// over every leg first, because "somewhere better" means a ready sibling
+	// that is NOT itself stalled — during a whole-group outage every leg is
+	// silent and none of them should be cut.
+	silent := make([]bool, len(states))
+	healthy := 0
+	for i := range states {
+		silent[i] = m.legSilentLocked(states[i], stallFactor, bestRTprop)
+		if states[i].ready && !silent[i] {
+			healthy++
 		}
 	}
 	var out []legProbeRuling
@@ -2510,42 +2780,126 @@ func (m *routeMux) ruleProbeOnlyLegsLocked(states []ecfLegState) []legProbeRulin
 		if lc == nil || i >= len(states) {
 			continue
 		}
-		basis, deliv := states[i].rttMs, states[i].delivBps
+		basis := legRulingBasisMs(states[i])
+		deliv, delivKnown := legRulingGoodputBps(states[i])
 		outclassedByDelay := basis >= m.knRatio(routersettings.LegProbeMinBasisMs) && basis > ratio*best
-		unproductive := states[i].delivKnown && bestDeliv > 0 && deliv*ratio < bestDeliv
-		probeOnly := ratio > 1 && best > 0 && states[i].ready &&
-			outclassedByDelay && unproductive
+		unproductive := delivKnown && bestDeliv > 0 && deliv*ratio < bestDeliv
+		// The goodput half rules ALONE once the gap is extreme. The delay half
+		// vetoing at 6x is right for a leg reading 6-7x while carrying a third
+		// of the bytes; it is not right for one carrying 1 % of them, and on the
+		// emulated dead leg the two bases inflate together (1700 ms against
+		// 350 ms — under 6x) while the goodput ratio is 98.
+		//
+		// A leg reading exactly ZERO is deliberately NOT ruled here: a
+		// momentary zero is what a healthy leg produces between two ack
+		// batches, and judged on its own it cut a leg carrying 45 % of an
+		// emulated transfer. A leg that really is delivering nothing is the
+		// stall reading's case below, which needs unacknowledged bytes and
+		// sustained silence before it says so.
+		unproductiveExtreme := extreme > 1 && delivKnown && deliv > 0 && bestDeliv > 0 &&
+			deliv*extreme < bestDeliv
+		// …and the stall reading, which is the only one a leg queued past any
+		// useful depth ever produces: it holds unacknowledged bytes and has not
+		// had one confirmed in many RTprops. Judged against its OWN RTprop where
+		// it has one, else the best ready leg's (a leg that never acks may never
+		// have measured itself either).
+		rtpropBasis := states[i].rtpropMs
+		if rtpropBasis <= 0 {
+			rtpropBasis = bestRTprop
+		}
+		// …and it is cut only while a ready sibling is still delivering, so a
+		// group whose every leg has gone quiet is left alone rather than cut to
+		// nothing.
+		stalled := silent[i] && healthy > 0
+		probeOnly := ratio > 1 && states[i].ready &&
+			((best > 0 && outclassedByDelay && unproductive) || unproductiveExtreme || stalled)
+		// The stored basis is also the PROBE WINDOW: one budget per basis-worth
+		// of time. A stalled leg's own basis understates it badly (a leg that
+		// never acknowledges has no queueing term to add, so it reads as the
+		// fast first-hop value and would be re-probed four times a second into
+		// a path that cannot carry it), so the silence it has actually shown is
+		// the window instead.
+		winBasis := basis
+		if stalled && states[i].silentMs > winBasis {
+			winBasis = states[i].silentMs
+		}
 		was := math.Float64frombits(atomic.LoadUint64(&lc.probeBasisBits)) > 0
 		switch {
 		case probeOnly:
-			atomic.StoreUint64(&lc.probeBasisBits, math.Float64bits(basis))
+			atomic.StoreUint64(&lc.probeBasisBits, math.Float64bits(winBasis))
 		default:
 			atomic.StoreUint64(&lc.probeBasisBits, 0)
+		}
+		if stalled && probeOnly {
+			atomic.StoreUint32(&lc.probeStalled, 1)
+		} else {
+			atomic.StoreUint32(&lc.probeStalled, 0)
 		}
 		if probeOnly == was {
 			continue
 		}
-		r := legProbeRuling{idx: i, probeOnly: probeOnly}
-		if probeOnly {
-			r.reason = fmt.Sprintf("delay basis %.0f ms against the best active leg's %.0f ms (more than %.1fx) AND delivering %.0f B/s against its %.0f B/s (under 1/%.1f) — capped at %d bytes per %.0f ms window instead of a proportional share; not parked, the probe keeps measuring it",
-				basis, best, ratio, deliv, bestDeliv, ratio, LegProbeBytes(), m.probeWindowMs(basis))
-		} else {
-			why := fmt.Sprintf("delay basis %.0f ms is back within %.1fx of the best active leg's %.0f ms", basis, ratio, best)
-			if outclassedByDelay {
-				why = fmt.Sprintf("delivering %.0f B/s against the best active leg's %.0f B/s — slow but productive", deliv, bestDeliv)
-			}
-			r.reason = why + " — full share restored"
+		r := legProbeRuling{idx: i, probeOnly: probeOnly, stalled: stalled}
+		switch {
+		case probeOnly && stalled:
+			r.reason = fmt.Sprintf("%.0f bytes sent and nothing confirmed for %.0f ms — over %.0fx its %.0f ms RTprop, so the path is queued past any depth that can serve this stream (btlbw %.0f B/s, %.0f bytes still in flight); capped at %d bytes per %.0f ms window, not parked, the probe keeps measuring it",
+				states[i].unackedBytes, states[i].silentMs, stallFactor, rtpropBasis, states[i].btlbwBps, states[i].heldBytes, LegProbeBytes(), m.probeWindowMs(winBasis))
+		case probeOnly && !outclassedByDelay:
+			r.reason = fmt.Sprintf("delivering %.0f B/s against the best active leg's %.0f B/s (under 1/%.0f) — the goodput gap is past the point a delay reading can excuse it (basis %.0f ms, rtprop %.0f ms, btlbw %.0f B/s); capped at %d bytes per %.0f ms window",
+				deliv, bestDeliv, extreme, basis, states[i].rtpropMs, states[i].btlbwBps, LegProbeBytes(), m.probeWindowMs(basis))
+		case probeOnly:
+			r.reason = fmt.Sprintf("queueing basis %.0f ms against the best active leg's %.0f ms (more than %.1fx; rtprop %.0f ms, btlbw %.0f B/s) AND delivering %.0f B/s against its %.0f B/s (under 1/%.1f) — capped at %d bytes per %.0f ms window instead of a proportional share; not parked, the probe keeps measuring it",
+				basis, best, ratio, states[i].rtpropMs, states[i].btlbwBps, deliv, bestDeliv, ratio, LegProbeBytes(), m.probeWindowMs(basis))
+		case outclassedByDelay:
+			r.reason = fmt.Sprintf("delivering %.0f B/s against the best active leg's %.0f B/s — slow but productive — full share restored", deliv, bestDeliv)
+		default:
+			r.reason = fmt.Sprintf("queueing basis %.0f ms is back within %.1fx of the best active leg's %.0f ms — full share restored", basis, ratio, best)
 		}
 		out = append(out, r)
 	}
 	return out
 }
 
+// legRulingBasisMs is the delay the outclassed-leg ruling judges a leg on.
+//
+// Where the path model has measured the leg it is RTprop + the HONEST queueing
+// delay (the bytes outstanding divided by the leg's measured bottleneck rate),
+// which is what the send→ack basis was always standing in for. The difference
+// is not cosmetic: on the healthy 44/166 ms pair both legs carry a similar
+// queue, so their bases differ by the propagation term alone (~1.3x) instead of
+// the 6-7x the send→ack readings showed while the slower leg was delivering a
+// third of the bytes.
+//
+// Without the model it is the pre-model reading, ecfRttMs, exactly.
+func legRulingBasisMs(l ecfLegState) float64 {
+	if !PathModelEnabled() || l.btlbwBps <= 0 || l.rtpropMs <= 0 {
+		return l.rttMs
+	}
+	return l.rtpropMs + l.heldBytes/l.btlbwBps*1000.0
+}
+
+// legRulingGoodputBps is the CAPACITY reading the goodput half of the ruling
+// judges on, and whether the leg has one at all.
+//
+// Where the path model has measured it that is BtlBw — the windowed MAX of the
+// leg's SACK-proven delivery rate — and not delivBps, which is an EWMA of the
+// instantaneous rate. The difference decides whether a good leg survives: on
+// the emulated healthy 44/166 ms pair the EWMA dipped to 11 KB/s against a
+// sibling's 251 KB/s for one refresh and cut a leg that was carrying 48 % of
+// the transfer, while its BtlBw over the same window read 6.5 MB/s. A capacity
+// question wants the best recent evidence, not the latest sample; the leg that
+// must be cut has no good samples at all.
+func legRulingGoodputBps(l ecfLegState) (float64, bool) {
+	if PathModelEnabled() && l.btlbwBps > 0 {
+		return l.btlbwBps, true
+	}
+	return l.delivBps, l.delivKnown
+}
+
 // reportProbeRulings records each probe-only transition as a mux event. Called
 // with legMu dropped; the hook is the route group's noteLegEvent, which takes no
 // locks of its own.
 func (m *routeMux) reportProbeRulings(tps []*transport.ManagedTransport, rulings []legProbeRuling) {
-	if len(rulings) == 0 || m.onLegProbeRuling == nil {
+	if len(rulings) == 0 {
 		return
 	}
 	for _, r := range rulings {
@@ -2553,9 +2907,29 @@ func (m *routeMux) reportProbeRulings(tps []*transport.ManagedTransport, rulings
 		if r.idx < len(tps) {
 			tp = tps[r.idx]
 		}
-		m.onLegProbeRuling(r.idx, len(tps), tp, r.probeOnly, r.reason)
+		if m.onLegProbeRuling != nil {
+			m.onLegProbeRuling(r.idx, len(tps), tp, r.probeOnly, r.reason)
+		}
+		// A leg ruled STALLED is one we have stopped sending on, and everything
+		// it is holding is stranded: the receiver's frontier is waiting on
+		// sequences that will arrive, if at all, at the far end of a queue we
+		// have just judged unusable. Re-send that window on a healthy leg now.
+		// Without it each stranded sequence waits out its own RACK threshold
+		// and then doubles per retry — the same recovery the demote-time flush
+		// does for a leg that is PARKED, which this ruling is the send-side
+		// equivalent of.
+		if r.probeOnly && r.stalled && m.onLegStranded != nil && tp != nil {
+			m.onLegStranded(tp.Entry.ID)
+		}
 	}
 }
+
+// SetLegStrandedFn wires the callback the mux fires when a leg is ruled
+// STALLED, carrying that leg's transport id so the route group can re-send the
+// window stranded on it. Called once by the route group when the mux is built.
+// The callback must not block: it runs from the window refresh, which can hold
+// the route group's lock.
+func (m *routeMux) SetLegStrandedFn(fn func(uuid.UUID)) { m.onLegStranded = fn }
 
 // SetLegProbeRulingFn wires the callback the mux fires when a leg is ruled
 // probe-only or restored to a full share, so the route group can record a
@@ -2610,6 +2984,13 @@ func (m *routeMux) legProbeExhausted(idx int) bool {
 	basis := math.Float64frombits(atomic.LoadUint64(&lc.probeBasisBits))
 	if basis <= 0 {
 		return false
+	}
+	if atomic.LoadUint32(&lc.probeStalled) == 1 {
+		// Ruled by the STALL reading: no data frame at all while another leg
+		// can take one (see probeStalled). The callers all fall back to this
+		// leg when nothing else is available, so the group never runs out of
+		// somewhere to send.
+		return true
 	}
 	now := time.Now().UnixNano()
 	win := int64(m.probeWindowMs(basis) * float64(time.Millisecond))
@@ -2671,12 +3052,19 @@ const (
 // alone; legProbeMinWindow floors the window for a leg whose basis is short; and
 // legDelivAlpha weights the newest sample in the per-leg delivery EWMA the
 // goodput half reads.
+// legStarveGoodputOnlyRatioDefault is the gap at which the goodput half rules
+// alone and legStallRTpropFactorDefault the RTprop multiple of unacknowledged
+// silence that counts as a stall — the two readings the paired ruling above
+// cannot produce for a leg queued so deep it never acknowledges at all.
 const (
-	legStarveRatioDefault     = 6.0
-	legProbeBytesDefault      = 64 * 1024
-	legProbeMinBasisMsDefault = 250.0
-	legProbeMinWindowDefault  = 250 * time.Millisecond
-	legDelivAlphaDefault      = 0.3
+	legStarveRatioDefault            = 6.0
+	legProbeBytesDefault             = 64 * 1024
+	legProbeMinBasisMsDefault        = 250.0
+	legProbeMinWindowDefault         = 250 * time.Millisecond
+	legDelivAlphaDefault             = 0.3
+	legStarveGoodputOnlyRatioDefault = 20.0
+	legStallRTpropFactorDefault      = 4.0
+	legStallMinSilenceDefault        = 150 * time.Millisecond
 )
 
 // feedInflight hands the predictive selector each leg's REAL unacknowledged

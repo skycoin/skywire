@@ -83,3 +83,6 @@ func (m *routeMux) knInt(k *routersettings.Knob) int { return m.knobs().Int(k) }
 
 // knBytes reads a KindBytes knob through the owning group's view.
 func (m *routeMux) knBytes(k *routersettings.Knob) int64 { return m.knobs().Bytes(k) }
+
+// knBool reads a KindBool knob through the owning group's view.
+func (m *routeMux) knBool(k *routersettings.Knob) bool { return m.knobs().Bool(k) }

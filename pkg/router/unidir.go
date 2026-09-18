@@ -342,6 +342,19 @@ func (m *routeMux) selectByDirection(tps []*transport.ManagedTransport, fwd []ro
 	// measured and the ruling lifts by itself when it recovers.
 	activeReady := func(idx int) bool { return classOK(idx) && m.legReadyAt(idx) }
 	withBudget := func(idx int) bool { return activeReady(idx) && !m.legProbeExhausted(idx) }
+	// The reverse direction places with the SAME predictive scheduler the
+	// forward path uses, restricted to its own leg class. It used to read the
+	// unweighted round-robin schedule: the exit's download therefore reached
+	// ECF at ALL — every leg took every other frame whatever its state said,
+	// which is what let a 60 KB/s leg carry 0.5-2.2 MB of each 10 MB download
+	// (bench/2026-09-18/1008cc8e5). The probe budget bounded that after the
+	// fact; this decides it up front, on the per-leg windows and the path
+	// model. unidir.reverse_ecf=false restores the round-robin schedule.
+	if m.tpSelector != nil && m.knBool(routersettings.UnidirReverseECF) {
+		if idx := m.tpSelector.SelectPredictiveAmong(int(m.knBytes(routersettings.EcfDefaultFrameBytes)), withBudget); idx >= 0 && idx < n {
+			return tps[idx], fwd[idx], idx, true
+		}
+	}
 	if m.tpSelector != nil && m.tpSelector.Len() > 0 {
 		if idx := m.tpSelector.Select(); idx >= 0 && idx < n && withBudget(idx) {
 			return tps[idx], fwd[idx], idx, true
