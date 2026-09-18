@@ -97,6 +97,8 @@ mkdir -p "$out"
 local_commit=$(git -C "$here/.." rev-parse --short=9 HEAD)
 # shellcheck source=bench/lib-settings.sh
 . "$here/lib-settings.sh"
+# shellcheck source=bench/lib-blackout.sh
+. "$here/lib-blackout.sh"
 sizes="10000000 50000000"
 tunnels=${TUNNELS:-2}
 # the chaos row is the first 50 MB download: trials 10 MB downs, trials 10 MB
@@ -469,6 +471,14 @@ run_set() { # <tp ids> <header>
 				printf '%s\tlegs\t%s\t-\n' "$row" "$(echo "$info" | jq -r '[.[] | (.desc.dst_port|tostring) + ":" + ([.legs[].transport_id[0:8]] | join(","))] | join(" ")')" >> "$c"
 				printf '%s\t%s\n' "$row" "$(echo "$info" | jq -c '[.[] | {rg: .desc.dst_port, recovery}]')" >> "$out/$set_name.recovery.tsv"
 				p=$(echo "$info" | jq -c '[.[].desc.dst_port]')
+				# A failed row's LOCAL proof comes before anything that talks to
+				# the exit: the parked receive-loop goroutine and the route
+				# group at capacity clear within a minute, and the snapshot
+				# below can spend EXIT_SNAP_TIMEOUT of that
+				# (bench/lib-blackout.sh).
+				if [ "$(tail -1 "$f" | cut -f8)" != 1 ]; then
+					blackout_capture "$out" "$set_name" "$row"
+				fi
 				xr=""
 				if [ "$EXIT_SNAP" = 1 ]; then
 					xr=$(exit_rgs "$EXIT_SNAP_TIMEOUT" "$p")
