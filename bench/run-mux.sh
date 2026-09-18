@@ -171,7 +171,7 @@ EXIT_SNAP_TIMEOUT=${EXIT_SNAP_TIMEOUT:-40}
 # that subtree (~75 KB) instead of the ~900 KB full snapshot. Empty on failure.
 exit_rgs() {
 	timeout "$1" $CLI cli visor state --via "dmsg://$exit_pk" --select mux_route_groups --json 2>/dev/null |
-		jq -c --argjson p "$2" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, recovery, legs: [.legs[] | {tp: .transport_id[0:8], standby, retransmits, dup_bytes, ack_delay_ms}]}]' 2>/dev/null
+		jq -c --argjson p "$2" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, recovery, legs: [.legs[] | {tp: .transport_id[0:8], standby, retransmits, dup_bytes, ack_delay_ms, sent_bytes, sent_packets, recv_bytes, recv_packets}]}]' 2>/dev/null
 }
 # exit_snap_row <start|cut|end>: ONE exit-side snapshot of the set's current
 # route group(s), tagged with the moment rather than a row number. Bounded and
@@ -490,7 +490,7 @@ run_set() { # <set> <socks> <tp ids> <header>
 	# our desc.dst_port (the ephemeral local port) is the exit's desc.src_port for the same group
 	ports=$(mux_info "$cur_app" | jq -c '[.[].desc.dst_port]')
 	x=""; for try in 1 2 3; do
-		x=$(timeout 90 $CLI cli visor state --via "dmsg://$exit_pk" --select mux_route_groups --json 2>/dev/null | jq -c --argjson p "$ports" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, recovery, legs: [.legs[] | {tp: .transport_id[0:8], standby, retransmits, dup_bytes, ack_delay_ms}]}]')
+		x=$(timeout 90 $CLI cli visor state --via "dmsg://$exit_pk" --select mux_route_groups --json 2>/dev/null | jq -c --argjson p "$ports" '[.mux_route_groups[]? | select(.desc.src_port as $s | $p | index($s)) | {rg: .desc.src_port, recovery, legs: [.legs[] | {tp: .transport_id[0:8], standby, retransmits, dup_bytes, ack_delay_ms, sent_bytes, sent_packets, recv_bytes, recv_packets}]}]')
 		[ -n "$x" ] && [ "$x" != "[]" ] && break
 		sleep 3
 	done
