@@ -1,0 +1,8 @@
+HTTP/1.1 100 Continue
+
+HTTP/1.1 502 Bad Gateway
+Content-Type: text/plain; charset=utf-8
+X-Upload-Error: striped upload 127.0.0.1: 50000000 bytes failed with 0 acked: chunk 0-4166666: sink answered 400
+Content-Length: 97
+Connection: close
+

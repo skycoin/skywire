@@ -638,6 +638,59 @@ against the **endpoint ceiling measured in the same campaign**
 one and says which bound bound each verdict; criterion 10 is the `mux-spread-3`
 set of `bench/run-mux.sh` and its `.assert.tsv`.
 
+### Criterion status as of develop 868e326dc (the 2026-09-18 chains)
+
+Twenty-one chains ran on 2026-09-18, `bench/2026-09-16/README-2026-09-18-chains.md`; the
+rows below score the ten criteria (1–8 as measured in the 2026-09-16/17 campaign, 2, 4 and
+10 as re-worded above) against that day's result dirs. Ceilings are chain Z's
+`bench/2026-09-16/f9107c982-ceiling2/ceiling.tsv` — uplink 11.23, downlink 9.55 MB/s.
+
+1. **Refs — MET.** Every set of every chain ran against a paired reference measured on the
+   same commit in the same window, `PAIRED_REF=auto` resolving to
+   `0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13`
+   (`bench/2026-09-16/*/paired-ref.txt`). The one chain whose pins were stubbed,
+   `f9107c982-smoke`, reports every row NOBAR rather than a number — which is the
+   mechanism working.
+2. **Tunnels ≥ best ref — MET at 50 MB.** tunnels-2 runs **x1.11–1.13 down** and
+   **x1.02–1.04 up** on 50 MB across `0cbbf925a-smoke` (x1.106/x1.037), `0251e5da4-smoke`
+   (x1.090/x1.015) and `dfb0755c2-smoke` (x1.126/x1.020). 10 MB up is met (x0.97–1.18); 10
+   MB down is borderline at **x0.91–0.95** and is the one cell still short.
+3. **Legs ≥ best ref — OPEN, and now diagnosed.** legs-2 sits at **x0.70–0.81** on the
+   50 MB download wherever #5012's shared-bottleneck parking is active (`195b1094c-smoke`
+   x0.777, `0251e5da4-smoke` x0.812, `dfb0755c2-smoke` x0.703). Chain AD's two-arm live
+   sweep, `bench/2026-09-16/195b1094c-sbdsweep/`, ran the same binary with parking off
+   (`--sbd-min-samples 1000000` both ends) and got **x1.130 PASS** against x0.862 with the
+   default — so two legs do aggregate and the park verdict is the cost. #5012's rework
+   (demotion off by default, per-leg sampling) is pending.
+4. **Composition — OPEN.** The 100 MB cell cleared the ceiling-aware bar once, x0.986 in
+   `0251e5da4-smoke`; the 50 MB cell ran x0.39–1.09 across `195b1094c-smoke`,
+   `0251e5da4-smoke` and `dfb0755c2-smoke`, and in the last of those the composition
+   uploads hit the sink's short-chunk 400 (17 of 21 rows hash-clean, 50 MB up 0/3). #5027
+   makes that 400 a retry rather than a terminal failure and is pending.
+5. **Direction, from both ends — MET.** #5010 (`48872035e`, measured in
+   `bench/2026-09-16/845dd383e-smoke/`) sends forward traffic down the lowest-latency leg
+   when no leg is direct: legs-2 scores 9 of 12 forward rows PASS where every earlier run
+   failed most of them, and the exit's per-leg byte counters make the attribution measured
+   at both ends.
+6. **Degradation — MET.** #5023 (`8a8b1daf9`) streams the frontier chunk as it arrives, so
+   a cut costs one detection rather than one chunk. In `bench/2026-09-16/0cbbf925a-smoke/`
+   the active-tunnel cut gives `ttfb_after_cut_s` **0.643 PASS**, `promote_event
+   tunnel_promoted x1`, `survivors_kept 7/7`, `hashes_after_cut 3/3` and zero reorder
+   wedges at either end — against 6.784 s on the same set two chains earlier.
+7. **Does not amplify — MET.** Wire/goodput is **1.00–1.03** in every tunnels-2, legs-2,
+   standby and spread cell of the day. The exceptions are all inside the composition set
+   (up to 1.29 in `dfb0755c2-smoke`) and belong to criterion 4.
+8. **The default — SHIPPED.** The standby pool is the default: the pool settles at 8–9
+   groups with no pins in `f9107c982-smoke`, `03ece1e95-smoke` and `0cbbf925a-smoke`, and
+   the cut row is chosen by `tunnel_role=active` rather than by hand.
+9. **The final no-pins campaign — PENDING.** Chain AG is the full paired suite on merged
+   develop with no pins on any set; it has not run.
+10. **Spread policy — MET.** `bench/2026-09-16/0cbbf925a-smoke/mux-spread-3.assert.tsv`:
+    `routes_active min 3 max 3 PASS`, `max_share 0.4410 <= 0.484 PASS`, `ratio_50down
+    0.866 PASS`, `ratio_50up 0.951 PASS`, `hashes 8/8 PASS`, `spread_policy applied PASS` —
+    three routes held, no route over its cap, x0.87 down and x0.95 up against the paired
+    reference, with the policy set live through `proxy settings`.
+
 ### Direction (criterion 5)
 
 `bench/direction.sh <result dir> [set…]` turns the artefacts a run already writes into the per-row

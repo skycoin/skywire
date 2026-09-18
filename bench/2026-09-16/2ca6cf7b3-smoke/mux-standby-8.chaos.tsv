@@ -1,0 +1,2 @@
+# row	tp_id	first_hop_pk	ts	rg	chosen_by	cut_ok	cut_at_s	bytes_before_cut	ttfb_after_s	goodput_before_Bps	goodput_after_Bps	restored
+7	95839ad0-b588-0b1d-8475-45fba6ae993c	0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13	2026-09-18T01:20:34Z	49176	tunnel_role=active	1	5.215	10080256	1.139	1932935	28575336	1

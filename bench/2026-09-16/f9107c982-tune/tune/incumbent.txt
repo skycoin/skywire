@@ -1,0 +1,1 @@
+SETTINGS="upload.chunk_bytes=4MiB upload.concurrency=2 chunk.max_bytes=2MiB"

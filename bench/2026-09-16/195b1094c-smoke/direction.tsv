@@ -1,0 +1,4 @@
+# set	rows	fwd_pass	fwd_fail	fwd_info	dominant_fwd_leg	dominant_kind	rev_pass	rev_fail	rev_info	max_rev_fanout	flips	flip_rows
+mux-compose-T2xL2	21	0	9	12	fdab37dd	other	9	1	11	4	4	15,18,19,20
+mux-legs-2	16	0	16	0	fdab37dd	other	0	5	11	2	0	-
+mux-tunnels-2	16	3	1	12	95839ad0	lowest-latency	5	0	11	3	4	4,5,10,14

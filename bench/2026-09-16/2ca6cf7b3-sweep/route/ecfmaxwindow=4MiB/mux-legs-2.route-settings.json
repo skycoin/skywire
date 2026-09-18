@@ -1,0 +1,1 @@
+{"force_local_routes":false,"existing_tp_only":false,"min_hops":1,"transport_preference":["stcpr","squicr","sudph","stcp","swtr","swsr","webrtc","dmsg"],"ecf_max_window_bytes":8388608,"ecf_min_window_bytes":131072,"ecf_window_margin":2,"send_window_wait_max":"250ms","leg_park_min_hold":"30s","dead_route_hold":"1m0s","dead_route_hold_max":"8m0s","mux_fec":false}

@@ -1,0 +1,5 @@
+# reference transfers of mux-compose-T2xL2, bench.sh rows: direct (direct stcpr to the exit (AppDirect shortcut, no route group))
+mux-compose-T2xL2-ref-r1	down	50000000	5409624	200	50000000	9.242789	1
+mux-compose-T2xL2-ref-r2	down	50000000	5640374	200	50000000	8.864666	1
+mux-compose-T2xL2-ref-r3	down	100000000	7254516	200	100000000	13.784521	1
+mux-compose-T2xL2-ref-r4	down	100000000	4481872	200	100000000	22.312108	1

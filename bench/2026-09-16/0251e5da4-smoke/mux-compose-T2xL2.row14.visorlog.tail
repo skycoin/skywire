@@ -1,0 +1,400 @@
+[2026-09-18T01:12:11-05:00] DEBUG [public_autoconnect]: Transport creation canceled (shutdown) error="save transport: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://206.1.97.18:27029/": context deadline exceeded" pk=037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf type=swsr
+[2026-09-18T01:12:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #681 accepted from 127.0.0.1:34378 (active: 1)
+[2026-09-18T01:12:11-05:00] DEBUG [cli_rpc]: CLI RPC conn #681 closed after 32ms (active: 0)
+[2026-09-18T01:12:12-05:00] DEBUG [transport_manager]: Error dialing transport to 032cff1d9701c64c8e5ee998873e6b2e5c80e148e06fad01e4f6223b6e74f1be5e via swsr: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://46.252.8.7:55351/": context deadline exceeded
+[2026-09-18T01:12:12-05:00] DEBUG [public_autoconnect]: Transport creation canceled (shutdown) error="save transport: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://46.252.8.7:55351/": context deadline exceeded" pk=032cff1d9701c64c8e5ee998873e6b2e5c80e148e06fad01e4f6223b6e74f1be5e type=swsr
+[2026-09-18T01:12:12-05:00] DEBUG [transport_manager]: Error dialing transport to 024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa via swsr: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://114.125.187.27:35273/": context deadline exceeded
+[2026-09-18T01:12:12-05:00] DEBUG [public_autoconnect]: Transport creation canceled (shutdown) error="save transport: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://114.125.187.27:35273/": context deadline exceeded" pk=024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa type=swsr
+[2026-09-18T01:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49183, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: RouteGroup closed, stopping leg-dataprogress loop app_name=skysocks-client
+[2026-09-18T01:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49183, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: RouteGroup closed, stopping unidir-flip loop app_name=skysocks-client
+[2026-09-18T01:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49183, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: RouteGroup closed, stopping sack loop app_name=skysocks-client
+[2026-09-18T01:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49183, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: RouteGroup closed, stopping legstate-resync loop app_name=skysocks-client
+[2026-09-18T01:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49183, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: RouteGroup closed, stopping keep-alive loop app_name=skysocks-client
+[2026-09-18T01:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49183, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: RouteGroup closed, stopping leg-liveness loop app_name=skysocks-client
+[2026-09-18T01:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49183, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: RouteGroup closed, stopping tlp loop app_name=skysocks-client
+[2026-09-18T01:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49183, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: RouteGroup closed, stopping reorder-stall loop app_name=skysocks-client
+[2026-09-18T01:12:12-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49183, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: RouteGroup closed, stopping send-window loop app_name=skysocks-client
+[2026-09-18T01:12:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #682 accepted from 127.0.0.1:34384 (active: 1)
+[2026-09-18T01:12:13-05:00] DEBUG [cli_rpc]: CLI RPC conn #682 closed after 2ms (active: 0)
+[2026-09-18T01:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #683 accepted from 127.0.0.1:34396 (active: 1)
+[2026-09-18T01:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #683 closed after 37ms (active: 0)
+[2026-09-18T01:12:14-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49174, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T01:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #684 accepted from 127.0.0.1:34404 (active: 1)
+[2026-09-18T01:12:14-05:00] DEBUG [transport_manager]: Error dialing transport to 030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802 via swsr: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://206.1.97.18:22132/": context deadline exceeded
+[2026-09-18T01:12:14-05:00] DEBUG [public_autoconnect]: Transport creation canceled (shutdown) error="save transport: mt.client.Dial: failed to WebSocket dial: failed to send handshake request: Get "http://206.1.97.18:22132/": context deadline exceeded" pk=030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802 type=swsr
+[2026-09-18T01:12:14-05:00] DEBUG [public_autoconnect]: Phase 4: WebRTC fallback to direct-unreachable visors
+[2026-09-18T01:12:14-05:00] DEBUG [public_autoconnect]: Public autoconnect cycle completed public_visors=24 squicr=4 stcpr=21 sudph=335 swsr=0 swtr=0 webrtc=23
+[2026-09-18T01:12:14-05:00] DEBUG [public_autoconnect]: Autoconnect: resolved public visors from CXO snapshot count=27
+[2026-09-18T01:12:14-05:00] DEBUG [public_autoconnect]: Found public visors=27
+[2026-09-18T01:12:14-05:00] DEBUG [public_autoconnect]: Fetching all transport discovery data for caching
+[2026-09-18T01:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #684 closed after 37ms (active: 0)
+[2026-09-18T01:12:14-05:00] DEBUG [sudph]: Accepted connection from 182.8.227.241:22004
+[2026-09-18T01:12:14-05:00] DEBUG [public_autoconnect]: Successfully cached transport discovery data cached_keys=944
+[2026-09-18T01:12:14-05:00] DEBUG [public_autoconnect]: Found visors to connect to total=505
+[2026-09-18T01:12:14-05:00] DEBUG [public_autoconnect]: Phase 1: Connecting to public visors via STCPR
+[2026-09-18T01:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #685 accepted from 127.0.0.1:34416 (active: 1)
+[2026-09-18T01:12:14-05:00] DEBUG [cli_rpc]: CLI RPC conn #685 closed after 37ms (active: 0)
+[2026-09-18T01:12:15-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa type=stcpr
+[2026-09-18T01:12:15-05:00] DEBUG [transport_manager]: Initializing TP with ID 379f5004-ddb5-0b0f-855d-f330510a0149
+[2026-09-18T01:12:15-05:00] DEBUG [tp:024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa]: no prior transport log entry; starting fresh transport=379f5004-ddb5-0b0f-855d-f330510a0149
+[2026-09-18T01:12:15-05:00] DEBUG [transport_manager]: Dialing transport to 024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa via stcpr
+[2026-09-18T01:12:15-05:00] DEBUG [stcpr]: Dialing PK 024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa
+[2026-09-18T01:12:15-05:00] DEBUG [cli_rpc]: CLI RPC conn #686 accepted from 127.0.0.1:34418 (active: 1)
+[2026-09-18T01:12:15-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13 type=stcpr
+[2026-09-18T01:12:15-05:00] DEBUG [transport_manager]: Initializing TP with ID 062c57d2-0c3c-05ac-8df4-d322cd8da1aa
+[2026-09-18T01:12:15-05:00] DEBUG [transport_manager]: Dialing transport to 03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13 via stcpr
+[2026-09-18T01:12:15-05:00] DEBUG [stcpr]: Dialing PK 03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13
+[2026-09-18T01:12:15-05:00] DEBUG [cli_rpc]: CLI RPC conn #686 closed after 32ms (active: 0)
+[2026-09-18T01:12:15-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=03cd2cecdae07a5b17ded726d37939df19123fe4055b71ada3356cd460936bb182 type=stcpr
+[2026-09-18T01:12:15-05:00] DEBUG [transport_manager]: Initializing TP with ID 82eb4cb2-6ef7-0bad-bcf1-83d5d190a887
+[2026-09-18T01:12:15-05:00] DEBUG [transport_manager]: Dialing transport to 03cd2cecdae07a5b17ded726d37939df19123fe4055b71ada3356cd460936bb182 via stcpr
+[2026-09-18T01:12:15-05:00] DEBUG [stcpr]: Dialing PK 03cd2cecdae07a5b17ded726d37939df19123fe4055b71ada3356cd460936bb182
+[2026-09-18T01:12:15-05:00] DEBUG [cli_rpc]: CLI RPC conn #687 accepted from 127.0.0.1:34434 (active: 1)
+[2026-09-18T01:12:15-05:00] DEBUG [cli_rpc]: CLI RPC conn #687 closed after 38ms (active: 0)
+[2026-09-18T01:12:15-05:00] DEBUG [tp:0377be08d4f1cddfbfa088e8fbc301efa0a01e107d036a4e02a09eeb8c25df7077]: Stopped serving. remaining_tps=372 remote_pk=0377be08d4f1cddfbfa088e8fbc301efa0a01e107d036a4e02a09eeb8c25df7077 tp_id=34a367ac-88b7-021a-bb99-0aa0041f275f tp_index=287
+[2026-09-18T01:12:15-05:00] DEBUG [transport_manager]: Deletion nudge received, debouncing...
+[2026-09-18T01:12:15-05:00] DEBUG readPacket [tp:0377be08d4f1cddfbfa088e8fbc301efa0a01e107d036a4e02a09eeb8c25df7077]: Failed to read packet header. error="io: read/write on closed pipe"
+[2026-09-18T01:12:15-05:00] DEBUG [tp:0377be08d4f1cddfbfa088e8fbc301efa0a01e107d036a4e02a09eeb8c25df7077]: Transport closed, stopping read loop error="io: read/write on closed pipe" src="read_loop"
+[2026-09-18T01:12:15-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 type=stcpr
+[2026-09-18T01:12:15-05:00] DEBUG [transport_manager]: Initializing TP with ID 95839ad0-b588-0b1d-8475-45fba6ae993c
+[2026-09-18T01:12:15-05:00] DEBUG [transport_manager]: Found an old mTp from internal map.
+[2026-09-18T01:12:15-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 type=stcpr
+[2026-09-18T01:12:16-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49180, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=8 after idle PTO app_name=skysocks-client
+[2026-09-18T01:12:16-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba type=stcpr
+[2026-09-18T01:12:16-05:00] DEBUG [transport_manager]: Initializing TP with ID 77037c49-06bb-0eb6-894c-444dedad2ee8
+[2026-09-18T01:12:16-05:00] DEBUG [transport_manager]: Dialing transport to 027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba via stcpr
+[2026-09-18T01:12:16-05:00] DEBUG [stcpr]: Dialing PK 027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba
+[2026-09-18T01:12:16-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49174, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=2 reverse_STANDBY=0 direct=0 legs (moved 142748B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T01:12:16-05:00] DEBUG [router]: transport-query: answered entries=372 requester=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
+[2026-09-18T01:12:16-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf type=stcpr
+[2026-09-18T01:12:16-05:00] DEBUG [transport_manager]: Initializing TP with ID 1a934a30-3879-0720-a4d6-483a3a7c09e8
+[2026-09-18T01:12:16-05:00] DEBUG [transport_manager]: Dialing transport to 037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf via stcpr
+[2026-09-18T01:12:16-05:00] DEBUG [stcpr]: Dialing PK 037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf
+[2026-09-18T01:12:16-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49180, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=8 after idle PTO app_name=skysocks-client
+[2026-09-18T01:12:16-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802 type=stcpr
+[2026-09-18T01:12:16-05:00] DEBUG [transport_manager]: Initializing TP with ID dab5887c-4ee3-0ec5-845c-3a2e7b2e915f
+[2026-09-18T01:12:16-05:00] DEBUG [transport_manager]: Dialing transport to 030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802 via stcpr
+[2026-09-18T01:12:16-05:00] DEBUG [stcpr]: Dialing PK 030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802
+[2026-09-18T01:12:16-05:00] DEBUG [transport_manager]: Deleted 1 unused transport entries
+[2026-09-18T01:12:17-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=49 after idle PTO app_name=skysocks-client
+[2026-09-18T01:12:17-05:00] DEBUG [public_autoconnect]: Skipping same-LAN visor pk=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
+[2026-09-18T01:12:17-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=02c4569e268fd666c229d76e4c65c1da8cf7f13a9a24c117e01bccb4ce99b464c7 type=stcpr
+[2026-09-18T01:12:17-05:00] DEBUG [transport_manager]: Initializing TP with ID 7aeb822f-eace-0363-8eee-3092e5a4a504
+[2026-09-18T01:12:17-05:00] DEBUG [tp:02c4569e268fd666c229d76e4c65c1da8cf7f13a9a24c117e01bccb4ce99b464c7]: no prior transport log entry; starting fresh transport=7aeb822f-eace-0363-8eee-3092e5a4a504
+[2026-09-18T01:12:17-05:00] DEBUG [transport_manager]: Dialing transport to 02c4569e268fd666c229d76e4c65c1da8cf7f13a9a24c117e01bccb4ce99b464c7 via stcpr
+[2026-09-18T01:12:17-05:00] DEBUG [stcpr]: Dialing PK 02c4569e268fd666c229d76e4c65c1da8cf7f13a9a24c117e01bccb4ce99b464c7
+[2026-09-18T01:12:17-05:00] DEBUG [sudph]: Accepted connection from 110.138.88.56:38909
+[2026-09-18T01:12:17-05:00] DEBUG [rpc_client:0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7]: Accepted.
+[2026-09-18T01:12:17-05:00] DEBUG [stcpr]: Resolved PK 024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa to visor data {114.125.187.27  false {35273 [192.168.1.105 114.125.187.27] 114.125.187.27  }}
+[2026-09-18T01:12:17-05:00] DEBUG [stcpr]: Dialing v4-only public address: 114.125.187.27:35273
+[2026-09-18T01:12:18-05:00] DEBUG [stcpr]: Resolved PK 03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13 to visor data {94.32.70.55  false {7178 [192.168.1.201 2a01:7d0:d20f:6900:181e:a4ff:fe12:37fe 2a01:7d0:d20f:6900:e08e:b33e:a96:5276 94.32.70.55] 94.32.70.55  }}
+[2026-09-18T01:12:18-05:00] DEBUG [stcpr]: Dialing v4-only public address: 94.32.70.55:7178
+[2026-09-18T01:12:18-05:00] DEBUG [transport_manager]: Error dialing transport to 03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13 via stcpr: mt.client.Dial: dial tcp 94.32.70.55:7178: connect: connection refused
+[2026-09-18T01:12:18-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T01:12:18-05:00] DEBUG [stcpr]: Resolved PK 03cd2cecdae07a5b17ded726d37939df19123fe4055b71ada3356cd460936bb182 to visor data {129.152.28.221  false {7778 [192.168.100.31 129.152.28.221] 129.152.28.221  }}
+[2026-09-18T01:12:18-05:00] DEBUG [stcpr]: Dialing v4-only public address: 129.152.28.221:7778
+[2026-09-18T01:12:18-05:00] DEBUG [transport_manager]: Error dialing transport to 03cd2cecdae07a5b17ded726d37939df19123fe4055b71ada3356cd460936bb182 via stcpr: mt.client.Dial: dial tcp 129.152.28.221:7778: connect: connection refused
+[2026-09-18T01:12:18-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c type=stcpr
+[2026-09-18T01:12:18-05:00] DEBUG [transport_manager]: Initializing TP with ID f75ed4eb-9c14-036e-8ede-1ea22f52fadb
+[2026-09-18T01:12:18-05:00] DEBUG [transport_manager]: Dialing transport to 020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c via stcpr
+[2026-09-18T01:12:18-05:00] DEBUG [stcpr]: Dialing PK 020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c
+[2026-09-18T01:12:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #688 accepted from 127.0.0.1:34448 (active: 1)
+[2026-09-18T01:12:18-05:00] DEBUG [cli_rpc]: CLI RPC conn #688 closed after 36ms (active: 0)
+[2026-09-18T01:12:19-05:00] DEBUG [stcpr]: Resolved PK 027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba to visor data {206.1.97.18  false {50269 [10.1.1.165 206.1.97.18] 206.1.97.18  }}
+[2026-09-18T01:12:19-05:00] DEBUG [stcpr]: Dialing v4-only public address: 206.1.97.18:50269
+[2026-09-18T01:12:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #689 accepted from 127.0.0.1:34458 (active: 1)
+[2026-09-18T01:12:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #690 accepted from 127.0.0.1:34460 (active: 2)
+[2026-09-18T01:12:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #689 closed after 55ms (active: 1)
+[2026-09-18T01:12:19-05:00] DEBUG [stcpr]: Resolved PK 037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf to visor data {206.1.97.18  false {27029 [10.1.1.164 206.1.97.18] 206.1.97.18  }}
+[2026-09-18T01:12:19-05:00] DEBUG [stcpr]: Dialing v4-only public address: 206.1.97.18:27029
+[2026-09-18T01:12:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #690 closed after 26ms (active: 0)
+[2026-09-18T01:12:19-05:00] DEBUG [rpc_bridge]: rpc bridge: stream established scheme=0 target_pk=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1
+[2026-09-18T01:12:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #691 accepted from 127.0.0.1:34492 (active: 1)
+[2026-09-18T01:12:19-05:00] DEBUG [cli_rpc]: CLI RPC conn #691 closed after 37ms (active: 0)
+[2026-09-18T01:12:19-05:00] DEBUG [stcpr]: Resolved PK 030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802 to visor data {206.1.97.18  false {22132 [10.1.1.163 206.1.97.18] 206.1.97.18  }}
+[2026-09-18T01:12:19-05:00] DEBUG [stcpr]: Dialing v4-only public address: 206.1.97.18:22132
+[2026-09-18T01:12:20-05:00] DEBUG [cli_rpc]: CLI RPC conn #692 accepted from 127.0.0.1:34494 (active: 1)
+[2026-09-18T01:12:20-05:00] DEBUG [cli_rpc]: CLI RPC conn #692 closed after 34ms (active: 0)
+[2026-09-18T01:12:20-05:00] DEBUG [stcpr]: Resolved PK 02c4569e268fd666c229d76e4c65c1da8cf7f13a9a24c117e01bccb4ce99b464c7 to visor data {60.53.214.200  false {23500 [192.168.88.3 2402:4e20:b00b:6900:32aa:9e6:2a5d:eae4 10.182.0.1 10.182.1.1 10.182.2.1 60.53.214.200] 60.53.214.200  }}
+[2026-09-18T01:12:20-05:00] DEBUG [stcpr]: Dialing v4-only public address: 60.53.214.200:23500
+[2026-09-18T01:12:20-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=2 reverse_STANDBY=0 direct=0 legs (moved 1976863B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T01:12:20-05:00] DEBUG [cli_rpc]: CLI RPC conn #693 accepted from 127.0.0.1:34502 (active: 1)
+[2026-09-18T01:12:20-05:00] DEBUG [cli_rpc]: CLI RPC conn #693 closed after 33ms (active: 0)
+[2026-09-18T01:12:20-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01 type=stcpr
+[2026-09-18T01:12:20-05:00] DEBUG [transport_manager]: Initializing TP with ID 140e5d4f-80a5-0530-980a-3193d6029f69
+[2026-09-18T01:12:20-05:00] DEBUG [tp:0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01]: no prior transport log entry; starting fresh transport=140e5d4f-80a5-0530-980a-3193d6029f69
+[2026-09-18T01:12:20-05:00] DEBUG [transport_manager]: Dialing transport to 0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01 via stcpr
+[2026-09-18T01:12:20-05:00] DEBUG [stcpr]: Dialing PK 0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01
+[2026-09-18T01:12:20-05:00] DEBUG [transport_manager]: Error dialing transport to 02c4569e268fd666c229d76e4c65c1da8cf7f13a9a24c117e01bccb4ce99b464c7 via stcpr: mt.client.Dial: dial tcp 60.53.214.200:23500: connect: connection refused
+[2026-09-18T01:12:20-05:00] DEBUG [transport_manager]: Deregistering 1 transports via CXO transport-list snapshot
+[2026-09-18T01:12:20-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=0378d563c2a80082e327650198807d8509a9eb1d07ef0828736dd8409093955f0b type=stcpr
+[2026-09-18T01:12:20-05:00] DEBUG [transport_manager]: Initializing TP with ID 3e59e96d-95fb-0e0e-beaf-e18630d8a8a7
+[2026-09-18T01:12:20-05:00] DEBUG [transport_manager]: Dialing transport to 0378d563c2a80082e327650198807d8509a9eb1d07ef0828736dd8409093955f0b via stcpr
+[2026-09-18T01:12:20-05:00] DEBUG [stcpr]: Dialing PK 0378d563c2a80082e327650198807d8509a9eb1d07ef0828736dd8409093955f0b
+[2026-09-18T01:12:20-05:00] DEBUG [cli_rpc]: CLI RPC conn #694 accepted from 127.0.0.1:34518 (active: 1)
+[2026-09-18T01:12:20-05:00] DEBUG [cli_rpc]: CLI RPC conn #694 closed after 3ms (active: 0)
+[2026-09-18T01:12:21-05:00] DEBUG [stcpr]: Resolved PK 020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c to visor data {206.1.97.18  false {19896 [10.1.1.162 206.1.97.18] 206.1.97.18  }}
+[2026-09-18T01:12:21-05:00] DEBUG [stcpr]: Dialing v4-only public address: 206.1.97.18:19896
+[2026-09-18T01:12:21-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49174, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T01:12:21-05:00] DEBUG [cli_rpc]: CLI RPC conn #695 accepted from 127.0.0.1:34526 (active: 1)
+[2026-09-18T01:12:21-05:00] DEBUG [cli_rpc]: CLI RPC conn #695 closed after 30ms (active: 0)
+[2026-09-18T01:12:21-05:00] DEBUG [stcpr]: Resolved PK 0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01 to visor data {38.134.43.137  false {23500 [38.134.43.137 2602:f9f3:0:2::8b5] 38.134.43.137  }}
+[2026-09-18T01:12:21-05:00] DEBUG [stcpr]: Dialing v4-only public address: 38.134.43.137:23500
+[2026-09-18T01:12:21-05:00] DEBUG [stcpr]: Performing handshake with 38.134.43.137:23500
+[2026-09-18T01:12:21-05:00] DEBUG [stcpr]: Performing handshake with 206.1.97.18:19896
+[2026-09-18T01:12:21-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb type=stcpr
+[2026-09-18T01:12:21-05:00] DEBUG [transport_manager]: Initializing TP with ID 9b1ba629-f381-06da-a463-57f5c62d0d70
+[2026-09-18T01:12:21-05:00] DEBUG [tp:02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb]: no prior transport log entry; starting fresh transport=9b1ba629-f381-06da-a463-57f5c62d0d70
+[2026-09-18T01:12:21-05:00] DEBUG [transport_manager]: Dialing transport to 02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb via stcpr
+[2026-09-18T01:12:21-05:00] DEBUG [stcpr]: Dialing PK 02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb
+[2026-09-18T01:12:21-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5 took=300.838756ms yamux_id=311
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Resolved PK 0378d563c2a80082e327650198807d8509a9eb1d07ef0828736dd8409093955f0b to visor data {38.134.43.138  false {23500 [38.134.43.138 2602:f9f3:0:2::8b6] 38.134.43.138  }}
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Dialing v4-only public address: 38.134.43.138:23500
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Performing handshake with 38.134.43.138:23500
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Sent handshake to 38.134.43.138:23500, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49181, remote addr 0378d563c2a80082e327650198807d8509a9eb1d07ef0828736dd8409093955f0b:45
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Performing handshake with 206.1.97.18:22132
+[2026-09-18T01:12:22-05:00] DEBUG [tp:0378d563c2a80082e327650198807d8509a9eb1d07ef0828736dd8409093955f0b]: Sent signal to 'mt.transportCh'.
+[2026-09-18T01:12:22-05:00] DEBUG [transport_manager]: saved transport: remote(0378d563c2a80082e327650198807d8509a9eb1d07ef0828736dd8409093955f0b) type(stcpr) tpID(3e59e96d-95fb-0e0e-beaf-e18630d8a8a7)
+[2026-09-18T01:12:22-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=0378d563c2a80082e327650198807d8509a9eb1d07ef0828736dd8409093955f0b type=stcpr
+[2026-09-18T01:12:22-05:00] DEBUG [tp:0378d563c2a80082e327650198807d8509a9eb1d07ef0828736dd8409093955f0b]: Serving. remote_pk=0378d563c2a80082e327650198807d8509a9eb1d07ef0828736dd8409093955f0b tp_id=3e59e96d-95fb-0e0e-beaf-e18630d8a8a7 tp_index=373
+[2026-09-18T01:12:22-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Resolved PK 02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb to visor data {92.112.126.5  false {37919 [92.112.126.5 10.182.1.1 10.182.0.1] 92.112.126.5  }}
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Dialing v4-only public address: 92.112.126.5:37919
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Sent handshake to 206.1.97.18:19896, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49180, remote addr 020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c:45
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Performing handshake with 206.1.97.18:50269
+[2026-09-18T01:12:22-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=032cff1d9701c64c8e5ee998873e6b2e5c80e148e06fad01e4f6223b6e74f1be5e type=stcpr
+[2026-09-18T01:12:22-05:00] DEBUG [transport_manager]: Initializing TP with ID c7cd6a61-1247-093a-85e8-eac68f65e1ef
+[2026-09-18T01:12:22-05:00] DEBUG [tp:032cff1d9701c64c8e5ee998873e6b2e5c80e148e06fad01e4f6223b6e74f1be5e]: no prior transport log entry; starting fresh transport=c7cd6a61-1247-093a-85e8-eac68f65e1ef
+[2026-09-18T01:12:22-05:00] DEBUG [transport_manager]: Dialing transport to 032cff1d9701c64c8e5ee998873e6b2e5c80e148e06fad01e4f6223b6e74f1be5e via stcpr
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Dialing PK 032cff1d9701c64c8e5ee998873e6b2e5c80e148e06fad01e4f6223b6e74f1be5e
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Performing handshake with 206.1.97.18:27029
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Resolved PK 032cff1d9701c64c8e5ee998873e6b2e5c80e148e06fad01e4f6223b6e74f1be5e to visor data {46.252.8.7  false {55351 [10.168.168.15 46.252.8.7] 46.252.8.7  }}
+[2026-09-18T01:12:22-05:00] DEBUG [stcpr]: Dialing v4-only public address: 46.252.8.7:55351
+[2026-09-18T01:12:23-05:00] DEBUG [transport_manager]: Error dialing transport to 032cff1d9701c64c8e5ee998873e6b2e5c80e148e06fad01e4f6223b6e74f1be5e via stcpr: mt.client.Dial: dial tcp 46.252.8.7:55351: connect: no route to host
+[2026-09-18T01:12:23-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb type=stcpr
+[2026-09-18T01:12:23-05:00] DEBUG [transport_manager]: Initializing TP with ID f1012467-de9d-09a9-8b49-62a43945c24b
+[2026-09-18T01:12:23-05:00] DEBUG [transport_manager]: Found an old mTp from internal map.
+[2026-09-18T01:12:23-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb type=stcpr
+[2026-09-18T01:12:23-05:00] DEBUG [tp:020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c]: Sent signal to 'mt.transportCh'.
+[2026-09-18T01:12:23-05:00] DEBUG [transport_manager]: saved transport: remote(020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c) type(stcpr) tpID(f75ed4eb-9c14-036e-8ede-1ea22f52fadb)
+[2026-09-18T01:12:23-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c type=stcpr
+[2026-09-18T01:12:23-05:00] DEBUG [tp:020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c]: Serving. remote_pk=020415335d295854c110aca04aae1cf60abc13db9e2bd52604f25109708123907c tp_id=f75ed4eb-9c14-036e-8ede-1ea22f52fadb tp_index=374
+[2026-09-18T01:12:23-05:00] DEBUG [cli_rpc]: CLI RPC conn #696 accepted from 127.0.0.1:56578 (active: 1)
+[2026-09-18T01:12:23-05:00] DEBUG [cli_rpc]: CLI RPC conn #696 closed after 1ms (active: 0)
+[2026-09-18T01:12:23-05:00] DEBUG [stcpr]: Sent handshake to 206.1.97.18:50269, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49183, remote addr 027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba:45
+[2026-09-18T01:12:23-05:00] DEBUG [stcpr]: Sent handshake to 206.1.97.18:22132, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49182, remote addr 030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802:45
+[2026-09-18T01:12:23-05:00] DEBUG [cli_rpc]: CLI RPC conn #697 accepted from 127.0.0.1:56594 (active: 1)
+[2026-09-18T01:12:23-05:00] DEBUG [cli_rpc]: CLI RPC conn #697 closed after 41ms (active: 0)
+[2026-09-18T01:12:24-05:00] DEBUG [cli_rpc]: CLI RPC conn #698 accepted from 127.0.0.1:56610 (active: 1)
+[2026-09-18T01:12:24-05:00] DEBUG [cli_rpc]: CLI RPC conn #698 closed after 32ms (active: 0)
+[2026-09-18T01:12:24-05:00] DEBUG [tp:030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802]: Sent signal to 'mt.transportCh'.
+[2026-09-18T01:12:24-05:00] DEBUG [transport_manager]: saved transport: remote(030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802) type(stcpr) tpID(dab5887c-4ee3-0ec5-845c-3a2e7b2e915f)
+[2026-09-18T01:12:24-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802 type=stcpr
+[2026-09-18T01:12:24-05:00] DEBUG [tp:030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802]: Serving. remote_pk=030c894f8587241615e187332e20a03037b4d58a8cb680824cade7ce535de9c802 tp_id=dab5887c-4ee3-0ec5-845c-3a2e7b2e915f tp_index=375
+[2026-09-18T01:12:24-05:00] DEBUG [tp:027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba]: Sent signal to 'mt.transportCh'.
+[2026-09-18T01:12:24-05:00] DEBUG [transport_manager]: saved transport: remote(027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba) type(stcpr) tpID(77037c49-06bb-0eb6-894c-444dedad2ee8)
+[2026-09-18T01:12:24-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba type=stcpr
+[2026-09-18T01:12:24-05:00] DEBUG [tp:027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba]: Serving. remote_pk=027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba tp_id=77037c49-06bb-0eb6-894c-444dedad2ee8 tp_index=376
+[2026-09-18T01:12:24-05:00] DEBUG [stcpr]: Sent handshake to 206.1.97.18:27029, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, remote addr 037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf:45
+[2026-09-18T01:12:24-05:00] DEBUG [cli_rpc]: CLI RPC conn #699 accepted from 127.0.0.1:56624 (active: 1)
+[2026-09-18T01:12:24-05:00] DEBUG [cli_rpc]: CLI RPC conn #699 closed after 36ms (active: 0)
+[2026-09-18T01:12:25-05:00] DEBUG [cli_rpc]: CLI RPC conn #700 accepted from 127.0.0.1:56632 (active: 1)
+[2026-09-18T01:12:25-05:00] DEBUG [cli_rpc]: CLI RPC conn #700 closed after 32ms (active: 0)
+[2026-09-18T01:12:25-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T01:12:25-05:00] DEBUG [cli_rpc]: CLI RPC conn #701 accepted from 127.0.0.1:56644 (active: 1)
+[2026-09-18T01:12:25-05:00] DEBUG [cli_rpc]: CLI RPC conn #701 closed after 39ms (active: 0)
+[2026-09-18T01:12:25-05:00] DEBUG [tp:037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf]: Sent signal to 'mt.transportCh'.
+[2026-09-18T01:12:25-05:00] DEBUG [transport_manager]: saved transport: remote(037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf) type(stcpr) tpID(1a934a30-3879-0720-a4d6-483a3a7c09e8)
+[2026-09-18T01:12:25-05:00] DEBUG [public_autoconnect]: Added transport to visor pk=037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf type=stcpr
+[2026-09-18T01:12:25-05:00] DEBUG [tp:037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf]: Serving. remote_pk=037574e95f00fbe4ea6e4c2e17915195ae69c48d257fc2f960e7d9e6e87b8c35bf tp_id=1a934a30-3879-0720-a4d6-483a3a7c09e8 tp_index=377
+[2026-09-18T01:12:25-05:00] DEBUG [cli_rpc]: CLI RPC stats: active=0, total=701, errors=0, peak=2
+[2026-09-18T01:12:26-05:00] DEBUG [dmsgC]: Session stopped. error="dmsg: relay candidates changed"
+[2026-09-18T01:12:26-05:00] DEBUG [dmsgC]: Discovering dmsg servers...
+[2026-09-18T01:12:26-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49174, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=101 after idle PTO app_name=skysocks-client
+[2026-09-18T01:12:26-05:00] DEBUG [router]: Diversifying multi-tunnel dial over disjoint first-hop transports. app_name=skysocks-client exclude_first_hop_peers=10 exclude_intermediates=9 exclude_tps=10 sibling_tunnels=8
+[2026-09-18T01:12:26-05:00] DEBUG [router]: Established transport exist. Type: stcpr
+[2026-09-18T01:12:27-05:00] DEBUG [transport_manager]: Publishing 377 transports to TPD via CXO transport-list snapshot
+[2026-09-18T01:12:27-05:00] DEBUG [cli_rpc]: CLI RPC conn #702 accepted from 127.0.0.1:56654 (active: 1)
+[2026-09-18T01:12:27-05:00] DEBUG [cli_rpc]: CLI RPC conn #702 closed after 40ms (active: 0)
+[2026-09-18T01:12:28-05:00] DEBUG [cli_rpc]: CLI RPC conn #703 accepted from 127.0.0.1:56668 (active: 1)
+[2026-09-18T01:12:28-05:00] DEBUG [cli_rpc]: CLI RPC conn #703 closed after 36ms (active: 0)
+[2026-09-18T01:12:28-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49174, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T01:12:28-05:00] DEBUG [cli_rpc]: CLI RPC conn #704 accepted from 127.0.0.1:56670 (active: 1)
+[2026-09-18T01:12:28-05:00] DEBUG [cli_rpc]: CLI RPC conn #704 closed after 38ms (active: 0)
+[2026-09-18T01:12:28-05:00] DEBUG [cli_rpc]: CLI RPC conn #705 accepted from 127.0.0.1:56686 (active: 1)
+[2026-09-18T01:12:28-05:00] DEBUG [cli_rpc]: CLI RPC conn #705 closed after 33ms (active: 0)
+[2026-09-18T01:12:29-05:00] DEBUG [cli_rpc]: CLI RPC conn #706 accepted from 127.0.0.1:56692 (active: 1)
+[2026-09-18T01:12:29-05:00] DEBUG [cli_rpc]: CLI RPC conn #706 closed after 34ms (active: 0)
+[2026-09-18T01:12:29-05:00] DEBUG [cli_rpc]: CLI RPC conn #707 accepted from 127.0.0.1:56694 (active: 1)
+[2026-09-18T01:12:29-05:00] DEBUG [cli_rpc]: CLI RPC conn #707 closed after 4ms (active: 0)
+[2026-09-18T01:12:30-05:00] DEBUG [cli_rpc]: CLI RPC conn #708 accepted from 127.0.0.1:56702 (active: 1)
+[2026-09-18T01:12:30-05:00] DEBUG [cli_rpc]: CLI RPC conn #708 closed after 31ms (active: 0)
+[2026-09-18T01:12:31-05:00] DEBUG [transport_manager]: Error dialing transport to 0287c62844c64f0a0c399d8d2173a9d31529a1a0a62afd682bc795e6a74a30af01 via stcpr: mt.client.Dial: handshake failed: read tcp 192.168.1.117:38320->38.134.43.137:23500: i/o timeout
+[2026-09-18T01:12:31-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49176, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T01:12:32-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T01:12:32-05:00] DEBUG [cli_rpc]: CLI RPC conn #709 accepted from 127.0.0.1:34950 (active: 1)
+[2026-09-18T01:12:32-05:00] DEBUG [cli_rpc]: CLI RPC conn #709 closed after 1ms (active: 0)
+[2026-09-18T01:12:32-05:00] DEBUG [cli_rpc]: CLI RPC conn #710 accepted from 127.0.0.1:34954 (active: 1)
+[2026-09-18T01:12:32-05:00] DEBUG [cli_rpc]: CLI RPC conn #710 closed after 36ms (active: 0)
+[2026-09-18T01:12:32-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58721
+[2026-09-18T01:12:33-05:00] DEBUG [cli_rpc]: CLI RPC conn #711 accepted from 127.0.0.1:34958 (active: 1)
+[2026-09-18T01:12:33-05:00] DEBUG [cli_rpc]: CLI RPC conn #711 closed after 37ms (active: 0)
+[2026-09-18T01:12:33-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58724
+[2026-09-18T01:12:33-05:00] DEBUG [cli_rpc]: CLI RPC conn #712 accepted from 127.0.0.1:34968 (active: 1)
+[2026-09-18T01:12:33-05:00] DEBUG [cli_rpc]: CLI RPC conn #712 closed after 32ms (active: 0)
+[2026-09-18T01:12:33-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58724
+[2026-09-18T01:12:34-05:00] DEBUG [cli_rpc]: CLI RPC conn #713 accepted from 127.0.0.1:34970 (active: 1)
+[2026-09-18T01:12:34-05:00] DEBUG [cli_rpc]: CLI RPC conn #713 closed after 47ms (active: 0)
+[2026-09-18T01:12:34-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58724
+[2026-09-18T01:12:34-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58724
+[2026-09-18T01:12:34-05:00] DEBUG [cli_rpc]: CLI RPC conn #714 accepted from 127.0.0.1:34982 (active: 1)
+[2026-09-18T01:12:34-05:00] DEBUG [cli_rpc]: CLI RPC conn #714 closed after 44ms (active: 0)
+[2026-09-18T01:12:34-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58724
+[2026-09-18T01:12:35-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58724
+[2026-09-18T01:12:35-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49178, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=25 after idle PTO app_name=skysocks-client
+[2026-09-18T01:12:36-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49178, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: TLP: probing tail seq=25 after idle PTO app_name=skysocks-client
+[2026-09-18T01:12:36-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58727
+[2026-09-18T01:12:36-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58727
+[2026-09-18T01:12:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #715 accepted from 127.0.0.1:34996 (active: 1)
+[2026-09-18T01:12:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #715 closed after 34ms (active: 0)
+[2026-09-18T01:12:37-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58727
+[2026-09-18T01:12:37-05:00] DEBUG [dmsgC]: reaping idle dmsg session (streamless, over min_sessions) remote_pk=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+[2026-09-18T01:12:37-05:00] DEBUG [dmsgC]: Session shut down, stopping accept loop. error="session shutdown" session=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+[2026-09-18T01:12:37-05:00] DEBUG [dmsgC]: Session ping failed consecutive_fails=1 error="yamux ping: open stream: session shutdown" server=0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+[2026-09-18T01:12:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #716 accepted from 127.0.0.1:35002 (active: 1)
+[2026-09-18T01:12:37-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58727
+[2026-09-18T01:12:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #716 closed after 36ms (active: 0)
+[2026-09-18T01:12:37-05:00] DEBUG [dmsg_servers_cache]: dmsg-servers cache refreshed count=9
+[2026-09-18T01:12:37-05:00] DEBUG [cli_rpc]: CLI RPC conn #717 accepted from 127.0.0.1:35012 (active: 1)
+[2026-09-18T01:12:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #717 closed after 41ms (active: 0)
+[2026-09-18T01:12:38-05:00] DEBUG [dmsgC]: Updating entry. entry=	version: 0.0.1
+	sequence: 87763
+	registered at: 1789711836384539219
+	static public key: 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c
+	signature: 18543919ead88190b3c7901a7190da910b7f68bf644650b56726a51179a36e014f41e964b7c8c71f8d473ecd50684c57802456c3dd2f5620fe7811779ed5ef8800
+	entry is registered as client. Related info: 
+		delegated servers: 
+			0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7
+			0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb
+			02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0
+			0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
+
+
+[2026-09-18T01:12:38-05:00] DEBUG [lan_dmsg_server]: Updating entry.
+[2026-09-18T01:12:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #718 accepted from 127.0.0.1:35024 (active: 1)
+[2026-09-18T01:12:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #718 closed after 37ms (active: 0)
+[2026-09-18T01:12:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #719 accepted from 127.0.0.1:35034 (active: 1)
+[2026-09-18T01:12:38-05:00] DEBUG [cli_rpc]: CLI RPC conn #719 closed after 33ms (active: 0)
+[2026-09-18T01:12:39-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49180, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T01:12:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #720 accepted from 127.0.0.1:35050 (active: 1)
+[2026-09-18T01:12:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #720 closed after 3ms (active: 0)
+[2026-09-18T01:12:39-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58739
+[2026-09-18T01:12:39-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5 took=76.317229ms yamux_id=313
+[2026-09-18T01:12:39-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T01:12:39-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5 took=82.096228ms yamux_id=315
+[2026-09-18T01:12:39-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5 took=79.657667ms yamux_id=317
+[2026-09-18T01:12:39-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"02d2174162c90ed93dc589a1b76b82239d7868b187bcb2d2fe43ace3d6029937da","Addr":"1.21.119.157:36846"}
+[2026-09-18T01:12:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #721 accepted from 127.0.0.1:35056 (active: 1)
+[2026-09-18T01:12:39-05:00] DEBUG [cli_rpc]: CLI RPC conn #721 closed after 35ms (active: 0)
+[2026-09-18T01:12:40-05:00] DEBUG [dmsgC]: Stream closed. error=<nil> session=038f80aceacab51d681a3995c37fb2baf34edd4655055489e82378e5cabe8a20a5 took=714.342µs yamux_id=319
+[2026-09-18T01:12:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49174, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: leg-dataprogress: 1 leg(s) idle but frontier healthy (gap age 0s) — idle is not stalled, not parking app_name=skysocks-client
+[2026-09-18T01:12:41-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58749
+[2026-09-18T01:12:41-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49182, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 109B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client-ref
+[2026-09-18T01:12:41-05:00] DEBUG [address_resolver]: New SUDPH message: {"PK":"02d2174162c90ed93dc589a1b76b82239d7868b187bcb2d2fe43ace3d6029937da","Addr":"1.21.119.157:36846"}
+[2026-09-18T01:12:41-05:00] DEBUG [sudph]: Accepted connection from 1.21.119.157:36846
+[2026-09-18T01:12:41-05:00] DEBUG [sudph]: Sent handshake to 1.21.119.157:36846, local addr 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:45, remote addr 02d2174162c90ed93dc589a1b76b82239d7868b187bcb2d2fe43ace3d6029937da:58018
+[2026-09-18T01:12:41-05:00] DEBUG [cli_rpc]: CLI RPC conn #722 accepted from 127.0.0.1:40852 (active: 1)
+[2026-09-18T01:12:41-05:00] DEBUG [cli_rpc]: CLI RPC conn #722 closed after 2ms (active: 0)
+[2026-09-18T01:12:41-05:00] DEBUG [transport_manager]: recv transport request: type(sudph) remote(02d2174162c90ed93dc589a1b76b82239d7868b187bcb2d2fe43ace3d6029937da)
+[2026-09-18T01:12:41-05:00] DEBUG [transport_manager]: No TP found, creating new one
+[2026-09-18T01:12:41-05:00] DEBUG [tp:02d2174162c90ed93dc589a1b76b82239d7868b187bcb2d2fe43ace3d6029937da]: Performing settlement handshake...
+[2026-09-18T01:12:41-05:00] DEBUG [tp:02d2174162c90ed93dc589a1b76b82239d7868b187bcb2d2fe43ace3d6029937da]: Serving. remote_pk=02d2174162c90ed93dc589a1b76b82239d7868b187bcb2d2fe43ace3d6029937da tp_id=f50bbc8b-1bae-02e6-bd69-aa3cdf5ed5a8 tp_index=378
+[2026-09-18T01:12:42-05:00] DEBUG [tp:02d2174162c90ed93dc589a1b76b82239d7868b187bcb2d2fe43ace3d6029937da]: Setting underlying transport...
+[2026-09-18T01:12:42-05:00] DEBUG [tp:02d2174162c90ed93dc589a1b76b82239d7868b187bcb2d2fe43ace3d6029937da]: Sent signal to 'mt.transportCh'.
+[2026-09-18T01:12:42-05:00] DEBUG [transport_manager]: accepted tp: type(sudph) remote(02d2174162c90ed93dc589a1b76b82239d7868b187bcb2d2fe43ace3d6029937da) tpID(f50bbc8b-1bae-02e6-bd69-aa3cdf5ed5a8) new(true)
+[2026-09-18T01:12:42-05:00] DEBUG [transport_manager]: Registration nudge received, debouncing...
+[2026-09-18T01:12:42-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58749
+[2026-09-18T01:12:42-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49174, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T01:12:42-05:00] DEBUG [cli_rpc]: CLI RPC conn #723 accepted from 127.0.0.1:40862 (active: 1)
+[2026-09-18T01:12:42-05:00] DEBUG [cli_rpc]: CLI RPC conn #723 closed after 64ms (active: 0)
+[2026-09-18T01:12:42-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58749
+[2026-09-18T01:12:42-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58756
+[2026-09-18T01:12:43-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58757
+[2026-09-18T01:12:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #724 accepted from 127.0.0.1:40866 (active: 1)
+[2026-09-18T01:12:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #724 closed after 61ms (active: 0)
+[2026-09-18T01:12:43-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58758
+[2026-09-18T01:12:43-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58763
+[2026-09-18T01:12:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #725 accepted from 127.0.0.1:40876 (active: 1)
+[2026-09-18T01:12:43-05:00] DEBUG [cli_rpc]: CLI RPC conn #725 closed after 53ms (active: 0)
+[2026-09-18T01:12:44-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58769
+[2026-09-18T01:12:44-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49178, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 24B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T01:12:44-05:00] DEBUG [dmsgC]: Stream handshake failed, continuing. dst_port=63225 error="dmsg error 306 - request has no associated listener" session=0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7 src_pk=0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb src_port=58770
+[2026-09-18T01:12:44-05:00] DEBUG [cli_rpc]: CLI RPC conn #726 accepted from 127.0.0.1:40888 (active: 1)
+[2026-09-18T01:12:44-05:00] DEBUG [cli_rpc]: CLI RPC conn #726 closed after 68ms (active: 0)
+[2026-09-18T01:12:45-05:00] DEBUG [transport_manager]: Error dialing transport to 024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa via stcpr: mt.client.Dial: dial tcp 114.125.187.27:35273: i/o timeout
+[2026-09-18T01:12:45-05:00] DEBUG [public_autoconnect]: Transport creation canceled (shutdown) error="save transport: mt.client.Dial: dial tcp 114.125.187.27:35273: i/o timeout" pk=024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa type=stcpr
+[2026-09-18T01:12:45-05:00] DEBUG [cli_rpc]: CLI RPC conn #727 accepted from 127.0.0.1:40896 (active: 1)
+[2026-09-18T01:12:45-05:00] DEBUG [cli_rpc]: CLI RPC conn #727 closed after 64ms (active: 0)
+[2026-09-18T01:12:46-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49175, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T01:12:47-05:00] DEBUG [transport_manager]: Publishing 378 transports to TPD via CXO transport-list snapshot
+[2026-09-18T01:12:47-05:00] DEBUG [router]: Saved routing rule: keyRtID=76 type=Forward (total rules: 23)
+[2026-09-18T01:12:47-05:00] DEBUG [router]: Save new Routing Rule with ID 76 FWD(keyRtID:76, nxtRtID:78, nxtTpID:797a3969-3f39-0a33-bf84-0827fdcdf7de, rAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3, lAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184)
+[2026-09-18T01:12:47-05:00] DEBUG [router]: Saved routing rule: keyRtID=77 type=Consume (total rules: 24)
+[2026-09-18T01:12:47-05:00] DEBUG [router]: Save new Routing Rule with ID 77 REV(keyRtID:77, rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3)
+[2026-09-18T01:12:47-05:00] DEBUG [router]: Saving route group rules with desc: rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3 app_name=skysocks-client
+[2026-09-18T01:12:47-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: Sent handshake via transport 797a3969-3f39-0a33-bf84-0827fdcdf7de app_name=skysocks-client
+[2026-09-18T01:12:47-05:00] DEBUG [cli_rpc]: CLI RPC conn #728 accepted from 127.0.0.1:40906 (active: 1)
+[2026-09-18T01:12:47-05:00] DEBUG [cli_rpc]: CLI RPC conn #728 closed after 34ms (active: 0)
+[2026-09-18T01:12:47-05:00] DEBUG [cli_rpc]: CLI RPC conn #729 accepted from 127.0.0.1:40920 (active: 1)
+[2026-09-18T01:12:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #729 closed after 35ms (active: 0)
+[2026-09-18T01:12:48-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: Sent handshake via transport 797a3969-3f39-0a33-bf84-0827fdcdf7de app_name=skysocks-client
+[2026-09-18T01:12:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #730 accepted from 127.0.0.1:40928 (active: 1)
+[2026-09-18T01:12:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #730 closed after 32ms (active: 0)
+[2026-09-18T01:12:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #731 accepted from 127.0.0.1:40936 (active: 1)
+[2026-09-18T01:12:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #731 closed after 14ms (active: 0)
+[2026-09-18T01:12:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #732 accepted from 127.0.0.1:40946 (active: 1)
+[2026-09-18T01:12:48-05:00] DEBUG [cli_rpc]: CLI RPC conn #732 closed after 35ms (active: 0)
+[2026-09-18T01:12:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #733 accepted from 127.0.0.1:40952 (active: 1)
+[2026-09-18T01:12:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #733 closed after 31ms (active: 0)
+[2026-09-18T01:12:49-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49174, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: LegState: peer marked leg 1 active app_name=skysocks-client
+[2026-09-18T01:12:49-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: Sent handshake via transport 797a3969-3f39-0a33-bf84-0827fdcdf7de app_name=skysocks-client
+[2026-09-18T01:12:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #734 accepted from 127.0.0.1:40956 (active: 1)
+[2026-09-18T01:12:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #734 closed after 3ms (active: 0)
+[2026-09-18T01:12:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #735 accepted from 127.0.0.1:40958 (active: 1)
+[2026-09-18T01:12:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #735 closed after 25ms (active: 0)
+[2026-09-18T01:12:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #736 accepted from 127.0.0.1:40974 (active: 1)
+[2026-09-18T01:12:49-05:00] DEBUG [cli_rpc]: CLI RPC conn #736 closed after 31ms (active: 0)
+[2026-09-18T01:12:50-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49179, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: unidir fan-out: download on reverse_active=1 reverse_STANDBY=0 direct=0 legs (moved 12B; STANDBY/direct recv should be 0 — nonzero = exit not honoring the mirrored active set → reorder-frontier over-subscription) app_name=skysocks-client
+[2026-09-18T01:12:50-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: Sent handshake via transport 797a3969-3f39-0a33-bf84-0827fdcdf7de app_name=skysocks-client
+[2026-09-18T01:12:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: Sent handshake via transport 797a3969-3f39-0a33-bf84-0827fdcdf7de app_name=skysocks-client
+[2026-09-18T01:12:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: Route multiplexing enabled (both peers support CapMux) app_name=skysocks-client
+[2026-09-18T01:12:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: SACK retransmission enabled (both peers support CapSACK) app_name=skysocks-client
+[2026-09-18T01:12:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: Proactive HoL retransmit enabled (both peers support CapHOLRetx) app_name=skysocks-client
+[2026-09-18T01:12:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: Leg-state signaling enabled (both peers support CapLegState) app_name=skysocks-client
+[2026-09-18T01:12:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: Unidirectional send selection enabled (both peers support CapUniDir) app_name=skysocks-client
+[2026-09-18T01:12:51-05:00] DEBUG [RouteGroup rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3]: Per-frame noise active: mux seal/open wired, EncryptConn bypassed app_name=skysocks-client
+[2026-09-18T01:12:51-05:00] DEBUG [router]: Per-frame noise route group ready (rAddr:0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c:49184, lAddr:022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1:3): EncryptConn bypassed app_name=skysocks-client
+[2026-09-18T01:12:51-05:00] DEBUG [router]: Created new routes to 022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 on port 49184 app_name=skysocks-client
+[2026-09-18T01:12:51-05:00] DEBUG [cli_rpc]: CLI RPC conn #737 accepted from 127.0.0.1:50438 (active: 1)
+[2026-09-18T01:12:51-05:00] DEBUG [cli_rpc]: CLI RPC conn #737 closed after 1ms (active: 0)
+[2026-09-18T01:12:51-05:00] DEBUG [transport_manager]: Error dialing transport to 02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb via stcpr: mt.client.Dial: dial tcp 92.112.126.5:37919: i/o timeout
+[2026-09-18T01:12:51-05:00] DEBUG [public_autoconnect]: Transport creation canceled (shutdown) error="save transport: mt.client.Dial: dial tcp 92.112.126.5:37919: i/o timeout" pk=02197045b9be7b63ff5db89bf9f862b81b8579d919fd3e5787da85dea8102fdcfb type=stcpr
+[2026-09-18T01:12:51-05:00] DEBUG [public_autoconnect]: Phase 2: Connecting to public visors via QUIC (squicr)
+[2026-09-18T01:12:52-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13 type=squicr
+[2026-09-18T01:12:52-05:00] DEBUG [transport_manager]: Initializing TP with ID 33fe1331-1d50-0ad5-8292-f0948be4fa7c
+[2026-09-18T01:12:52-05:00] DEBUG [tp:03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13]: no prior transport log entry; starting fresh transport=33fe1331-1d50-0ad5-8292-f0948be4fa7c
+[2026-09-18T01:12:52-05:00] DEBUG [transport_manager]: Dialing transport to 03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13 via squicr
+[2026-09-18T01:12:52-05:00] DEBUG [squicr]: Dialing PK 03dc3488e49ded9250f3cca2827ab16f6331b7ccefdad614353c785a5fc76c1b13 over QUIC
+[2026-09-18T01:12:52-05:00] DEBUG [cli_rpc]: CLI RPC conn #738 accepted from 127.0.0.1:50450 (active: 1)
+[2026-09-18T01:12:52-05:00] DEBUG [cli_rpc]: CLI RPC conn #738 closed after 33ms (active: 0)
+[2026-09-18T01:12:52-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba type=squicr
+[2026-09-18T01:12:52-05:00] DEBUG [transport_manager]: Initializing TP with ID 7a98e8d5-5f8a-0067-9954-f0329d6c1d99
+[2026-09-18T01:12:52-05:00] DEBUG [tp:027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba]: no prior transport log entry; starting fresh transport=7a98e8d5-5f8a-0067-9954-f0329d6c1d99
+[2026-09-18T01:12:52-05:00] DEBUG [transport_manager]: Dialing transport to 027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba via squicr
+[2026-09-18T01:12:52-05:00] DEBUG [squicr]: Dialing PK 027ecc009842d646f0d6d0250dd45a98e650926ecdf7c5f362bcfd70a4db2116ba over QUIC
+[2026-09-18T01:12:52-05:00] DEBUG [cli_rpc]: CLI RPC conn #739 accepted from 127.0.0.1:50452 (active: 1)
+[2026-09-18T01:12:52-05:00] DEBUG [cli_rpc]: CLI RPC conn #739 closed after 37ms (active: 0)
+[2026-09-18T01:12:52-05:00] DEBUG [public_autoconnect]: Trying to add transport pk=024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa type=squicr
+[2026-09-18T01:12:52-05:00] DEBUG [transport_manager]: Initializing TP with ID b9d10e38-603d-0c90-888a-c0e3fc0bfc0c
+[2026-09-18T01:12:52-05:00] DEBUG [tp:024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa]: no prior transport log entry; starting fresh transport=b9d10e38-603d-0c90-888a-c0e3fc0bfc0c
+[2026-09-18T01:12:52-05:00] DEBUG [transport_manager]: Dialing transport to 024c423cf850b986c1bbd6f17f444e1107c994f945e101086201f32abd8f289faa via squicr

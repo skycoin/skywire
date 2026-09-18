@@ -1,0 +1,5 @@
+# sweep of chunk.concurrency over 4,16 with run-compose.sh, one complete run per value under bench/2026-09-16/2ca6cf7b3-sweep/sweep/<value>/
+# each cell: median_MBps;paired_ratio;hashes_ok/n;wire_goodput ("-" = the value never produced that cell)
+value	mux-compose-T2xL2/50down	mux-compose-T2xL2/100down
+4	5.27;-;2/2;1.17	7.41;-;2/2;1.08
+16	4.05;-;2/2;1.47	5.55;-;2/2;1.02

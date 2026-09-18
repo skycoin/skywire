@@ -1,0 +1,15 @@
+# bench/tune — one runner invocation per round, Thompson sampling over the knob grid
+# objective: mux-tunnels-2/50up:ratio,mux-tunnels-2/10up:ratio (geometric mean of the cells)
+# round	knob	value	settings	route_settings	objective	cells
+1	upload.chunk_bytes	4MiB	upload.chunk_bytes=4MiB		1.5604	mux-tunnels-2/50up=1.152(ratio),mux-tunnels-2/10up=2.114(ratio)
+2	upload.concurrency	8	upload.chunk_bytes=4MiB upload.concurrency=8		0.6717	mux-tunnels-2/50up=0.635(ratio),mux-tunnels-2/10up=0.711(ratio)
+3	chunk.max_bytes	2MiB	upload.chunk_bytes=4MiB upload.concurrency=8 chunk.max_bytes=2MiB		0.7903	mux-tunnels-2/50up=0.902(ratio),mux-tunnels-2/10up=0.693(ratio)
+4	upload.chunk_bytes	2MiB	upload.chunk_bytes=2MiB upload.concurrency=8 chunk.max_bytes=2MiB		0.8933	mux-tunnels-2/50up=1.005(ratio),mux-tunnels-2/10up=0.794(ratio)
+5	upload.concurrency	2	upload.chunk_bytes=4MiB upload.concurrency=2 chunk.max_bytes=2MiB		0.8918	mux-tunnels-2/50up=0.956(ratio),mux-tunnels-2/10up=0.832(ratio)
+6	chunk.max_bytes	2MiB	upload.chunk_bytes=4MiB upload.concurrency=2 chunk.max_bytes=2MiB		0.8722	mux-tunnels-2/50up=0.879(ratio),mux-tunnels-2/10up=0.866(ratio)
+7	upload.chunk_bytes	4MiB	upload.chunk_bytes=4MiB upload.concurrency=2 chunk.max_bytes=2MiB		0.8721	mux-tunnels-2/50up=0.997(ratio),mux-tunnels-2/10up=0.762(ratio)
+8	upload.concurrency	2	upload.chunk_bytes=4MiB upload.concurrency=2 chunk.max_bytes=2MiB		0.8541	mux-tunnels-2/50up=1.055(ratio),mux-tunnels-2/10up=0.692(ratio)
+9	chunk.max_bytes	8MiB	upload.chunk_bytes=4MiB upload.concurrency=2 chunk.max_bytes=8MiB		0.6820	mux-tunnels-2/50up=0.646(ratio),mux-tunnels-2/10up=0.720(ratio)
+10	upload.chunk_bytes	4MiB	upload.chunk_bytes=4MiB upload.concurrency=2 chunk.max_bytes=2MiB		1.0404	mux-tunnels-2/50up=1.341(ratio),mux-tunnels-2/10up=0.807(ratio)
+11	upload.concurrency	4	upload.chunk_bytes=4MiB upload.concurrency=4 chunk.max_bytes=2MiB		0.5991	mux-tunnels-2/50up=0.858(ratio),mux-tunnels-2/10up=0.418(ratio)
+12	chunk.max_bytes	8MiB	upload.chunk_bytes=4MiB upload.concurrency=2 chunk.max_bytes=8MiB		0.7828	mux-tunnels-2/50up=0.905(ratio),mux-tunnels-2/10up=0.677(ratio)

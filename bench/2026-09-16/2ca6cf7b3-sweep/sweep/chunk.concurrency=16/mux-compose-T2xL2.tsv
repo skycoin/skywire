@@ -1,0 +1,5 @@
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=4d3e517d1 exit_commit=2ca6cf7b3 session=skysocks-client compose=2x2 tunnels=2 width=2 route_groups=8 active=2 standby=6 legs_per_rg=2+2 pinned=yes rg_ports=49291,49292 pin_assign=rg49291=03f57e7c,0371ab4b rg49292=0281a102,02c48393 groups=rg49291/active=[stcpr>03f57e7c@fdab37dd;stcpr>0371ab4b@95839ad0] rg49292/active=[stcpr>0281a102@f1012467;stcpr>02c48393@ac40965a] rg49293/standby=[stcpr>0255117b@50cdb857] rg49294/standby=[stcpr>02a2d4c3@2c4ae7a5] rg49295/standby=[stcpr>02c48393@ac40965a] rg49296/standby=[stcpr>0281a102@f1012467] rg49297/standby=[stcpr>02c4569e@7aeb822f] rg49298/standby=[stcpr>03f57e7c@fdab37dd] sink=http://127.0.0.1:18080 settings=chunk.concurrency=16 settings_landed=8s
+mux-compose-T2xL2-t1	down	50000000	4036922	200	50000000	12.385728	1
+mux-compose-T2xL2-t2	down	50000000	4059303	200	50000000	12.317448	1
+mux-compose-T2xL2-t1	down	100000000	7070044	200	100000000	14.144255	1
+mux-compose-T2xL2-t2	down	100000000	4022094	200	100000000	24.862718	1

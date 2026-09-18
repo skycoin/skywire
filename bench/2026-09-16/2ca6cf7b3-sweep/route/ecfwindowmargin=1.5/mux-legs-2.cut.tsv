@@ -1,0 +1,2 @@
+# row	tp	first_hop_pk	ts	ttfb_after_cut_s	rg_ports_before	rg_ports_after	cut_ok	restored
+# cut=skipped:every candidate leg is the paired reference's route (fenced: 95839ad0-b588-0b1d-8475-45fba6ae993c)

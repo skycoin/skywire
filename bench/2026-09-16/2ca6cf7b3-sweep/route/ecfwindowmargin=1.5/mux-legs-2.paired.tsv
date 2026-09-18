@@ -1,0 +1,10 @@
+# paired reference: 0371ab4b (0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c>0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13@95839ad0-b588-0b1d-8475-45fba6ae993c,0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13>022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1@dc5330cf-5d85-0b70-88e9-e4ab169d17fd) via skysocks-client-ref@127.0.0.1:1081 — one reference row of the same cell immediately before every mux row
+# row	cell	ref_MBps	mux_MBps	ratio	ref_ok	mux_ok	ref_legs
+1	10down	4.97	4.74	0.954	1	1	1
+2	10down	4.29	2.14	0.499	1	1	1
+3	10up	6.72	4.62	0.688	1	1	1
+4	10up	5.29	4.74	0.896	1	1	1
+5	50down	6.80	5.54	0.815	1	1	1
+6	50down	8.02	5.68	0.708	1	1	1
+7	50up	1.17	1.51	1.291	1	1	1
+8	50up	7.84	8.81	1.124	1	1	1

@@ -1,0 +1,21 @@
+# ceiling.tsv — the endpoint ceiling: 3 concurrent clients, 50000000 bytes each, 2 trial(s)
+# exit=022716fba0f9a5d46ae7b8a4412296847d63d96c763d49068e851e9be7542080b1 local=ebe2f1fa5 exit_commit=f9107c982 sink=http://127.0.0.1:18080
+# uplink rows: 3 DIRECT clients (the uplink is the local card), warm=3/3, stcpr tps: ceil1=b414796d-14fc-080e-9ce6-a7162e3e562b ceil2=b414796d-14fc-080e-9ce6-a7162e3e562b ceil3=b414796d-14fc-080e-9ce6-a7162e3e562b
+# downlink rows: the 3 best DISTINCT routes of the paired ranking, slot 1 first — via-0371ab4b via-03f57e7c via-0281a102
+# uplink-via rows: one upload over via-0371ab4b alone, so the direct uplink can be seen for what it is
+# a clients=1 row is the same transfer alone, immediately before the concurrent one of the same trial
+# kind	clients	trial	bytes	sum_MBps	route:rate_MBps	hashes_ok/n
+uplink	1	1	50000000	9.10	direct:9.10	1/1
+uplink	3	1	50000000	11.25	direct:3.84,direct:3.70,direct:3.71	3/3
+uplink	1	2	50000000	10.60	direct:10.60	1/1
+uplink	3	2	50000000	11.21	direct:3.75,direct:3.70,direct:3.76	3/3
+# downlink clients warm=3/3 on via-0371ab4b via-03f57e7c via-0281a102
+downlink	1	1	50000000	3.22	via-0371ab4b:3.22	1/1
+downlink	3	1	50000000	9.26	via-0371ab4b:3.44,via-03f57e7c:2.15,via-0281a102:3.67	3/3
+uplink-via	1	1	50000000	10.33	via-0371ab4b:10.33	1/1
+downlink	1	2	50000000	5.80	via-0371ab4b:5.80	1/1
+downlink	3	2	50000000	9.85	via-0371ab4b:3.76,via-03f57e7c:2.85,via-0281a102:3.24	3/3
+uplink-via	1	2	50000000	10.28	via-0371ab4b:10.28	1/1
+# ceiling uplink: single 9.85 MB/s, 3 concurrent 11.23 MB/s over 3 direct clients, grew=yes (x1.14) — the ceiling is the concurrent median
+# ceiling downlink: single 4.51 MB/s, 3 concurrent 9.55 MB/s over via-0371ab4b via-03f57e7c via-0281a102, grew=yes (x2.12) — the ceiling is the concurrent median
+# uplink over via-0371ab4b alone: 10.30 MB/s vs 9.85 MB/s direct — the direct uplink IS a bottleneck
