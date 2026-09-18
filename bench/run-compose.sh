@@ -55,6 +55,8 @@ export PAIRED_HERE
 . "$here/lib-paired.sh"
 # shellcheck source=bench/lib-settings.sh
 . "$here/lib-settings.sh"
+# shellcheck source=bench/lib-blackout.sh
+. "$here/lib-blackout.sh"
 # norm_sizes: SIZES takes megabytes ("10 50 100") or bytes ("10000000 50000000");
 # an entry below 1000 is megabytes. Anything non-numeric is dropped.
 norm_sizes() {
@@ -296,6 +298,9 @@ run_set() { # <set> <socks> <tp ids> <header>
 				# (see exit_snap_row), because a per-row query costs up to
 				# EXIT_SNAP_TIMEOUT seconds of dead time whenever dmsg is slow.
 				if [ "$(tail -1 "$f" | cut -f8)" != 1 ]; then
+					# the local receive-loop proof first — it clears within a
+					# minute, and the exit query can spend 60 s of that
+					blackout_capture "$out" "$set_name" "$row"
 					printf '# exit-on-fail %s\t%s\n' "$row" "$(exit_rgs 60 "$p")" >> "$out/$set_name.recovery.tsv"
 				fi
 				t=$((t + 1))

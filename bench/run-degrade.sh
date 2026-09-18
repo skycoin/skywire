@@ -82,6 +82,8 @@ export CUT_HERE CUT_FENCE
 . "$here/lib-cut.sh"
 # shellcheck source=bench/lib-settings.sh
 . "$here/lib-settings.sh"
+# shellcheck source=bench/lib-blackout.sh
+. "$here/lib-blackout.sh"
 subjects=${SUBJECTS:-"legs-2 tunnels-2"}
 size=${DEGRADE_SIZE:-50000000}
 dirs=${DIRS:-"down up"}
@@ -278,6 +280,14 @@ for subject in $subjects; do
 			info=$(mux_info "$name")
 			printf '%s\tlegs\t%s\t-\n' "$row" "$(echo "$info" | jq -r '[.[] | (.desc.dst_port|tostring) + ":" + ([.legs[].transport_id[0:8]] | join(",")) ] | join(" ")')" >> "$c"
 			printf '%s\t%s\n' "$row" "$(echo "$info" | jq -c '[.[] | {rg: .desc.dst_port, recovery}]')" >> "$out/$set_name.recovery.tsv"
+			# A row that did not verify is not always the cut's doing: capture
+			# this end's receive-loop state before it clears, exactly as the
+			# other runners do on a failed row (bench/lib-blackout.sh). Every
+			# step is bounded; BLACKOUT=0 turns it off for a run where the cut
+			# is expected to fail the row.
+			if [ "$(tail -1 "$f" | cut -f8)" != 1 ]; then
+				blackout_capture "$out" "$set_name" "$row"
+			fi
 			# the session has to be back in its shape before the next row, or the
 			# next row measures an already-degraded session
 			if [ "$cut_kind" = leg ] && ! echo "$info" | jq -e --arg id "$cut_tp" 'any(.[].legs[]; .transport_id==$id)' >/dev/null 2>&1; then
