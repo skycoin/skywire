@@ -87,17 +87,21 @@ const rgSpaceSize = 8192.0
 
 // rgLink is one hop segment of a leg's forward route (from → to). Color is the
 // leg's STREAM accent; Width reflects the leg's live byte-rate; Active is false
-// for a standby leg (the driver dims it). Stream is the tunnel index; Tip is the
-// segment's transport/leg detail (also folded into each endpoint node's tip,
-// since the engine hovers points, not links).
+// when the segment carries nothing — either the LEG is parked or the whole
+// TUNNEL is standby (the driver dims it either way). Stream is the tunnel index
+// and TunnelRole that tunnel's own role ("active"/"standby", empty when the
+// client did not label it); Tip is the segment's transport/leg detail (also
+// folded into each endpoint node's tip, since the engine hovers points, not
+// links).
 type rgLink struct {
-	Source string  `json:"source"`
-	Target string  `json:"target"`
-	Color  string  `json:"color"`
-	Width  float64 `json:"width"`
-	Active bool    `json:"active"`
-	Stream int     `json:"stream"`
-	Tip    string  `json:"tip"`
+	Source     string  `json:"source"`
+	Target     string  `json:"target"`
+	Color      string  `json:"color"`
+	Width      float64 `json:"width"`
+	Active     bool    `json:"active"`
+	Stream     int     `json:"stream"`
+	TunnelRole string  `json:"tunnel_role,omitempty"`
+	Tip        string  `json:"tip"`
 }
 
 // rgGraph is the whole route subgraph. Sig is a topology signature (node ids +
@@ -201,6 +205,12 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 
 	for ord, t := range tunnels {
 		streamIdx := t.Index
+		// The TUNNEL's own role: a standby tunnel carries no streams, so EVERY leg
+		// of it is drawn as inactive (dim + thin) even though the leg is active
+		// inside its own group — the fact the page was missing. The role also rides
+		// on each link so the driver and the tooltips can name it.
+		tRole := tunnelRole(t.Role)
+		tStandby := tRole == RoleStandby
 		// Walk legs in a stable identity order (intermediate, then transport) so the
 		// deterministic seed layout places each route at the same spot across
 		// refreshes — otherwise a churning leg set reshuffled node first-encounter
@@ -232,7 +242,7 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 				if remote == "" {
 					continue
 				}
-				line := legLine(streamIdx, l, "", "", l.TpType, l.LatencyMS)
+				line := legLine(streamIdx, tRole, l, "", "", l.TpType, l.LatencyMS)
 				if l.Direct || realExit == "" || remote == realExit {
 					ex := get(remote)
 					ex.isExit = true
@@ -240,7 +250,7 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 					ex.lines = append(ex.lines, line)
 					links = append(links, rgLink{
 						Source: src, Target: remote, Stream: streamIdx,
-						Color: streamColor(streamIdx), Active: !l.Standby, Width: rate, Tip: line,
+						Color: streamColor(streamIdx), Active: !l.Standby && !tStandby, Width: rate, Tip: line, TunnelRole: tRole,
 					})
 					continue
 				}
@@ -257,8 +267,8 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 				mid.lines = append(mid.lines, line)
 				ex.lines = append(ex.lines, line)
 				links = append(links,
-					rgLink{Source: src, Target: remote, Stream: streamIdx, Color: streamColor(streamIdx), Active: !l.Standby, Width: rate, Tip: line},
-					rgLink{Source: remote, Target: realExit, Stream: streamIdx, Color: streamColor(streamIdx), Active: !l.Standby, Width: rate, Tip: line},
+					rgLink{Source: src, Target: remote, Stream: streamIdx, Color: streamColor(streamIdx), Active: !l.Standby && !tStandby, Width: rate, Tip: line, TunnelRole: tRole},
+					rgLink{Source: remote, Target: realExit, Stream: streamIdx, Color: streamColor(streamIdx), Active: !l.Standby && !tStandby, Width: rate, Tip: line, TunnelRole: tRole},
 				)
 				continue
 			}
@@ -280,12 +290,12 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 				if from == "" {
 					from = src
 				}
-				line := legLine(streamIdx, l, h.TpID, h.To, h.TpType, h.LatencyMS)
+				line := legLine(streamIdx, tRole, l, h.TpID, h.To, h.TpType, h.LatencyMS)
 				get(from).lines = append(get(from).lines, line)
 				to.lines = append(to.lines, line)
 				links = append(links, rgLink{
 					Source: from, Target: h.To, Stream: streamIdx,
-					Color: streamColor(streamIdx), Active: !l.Standby, Width: rate, Tip: line,
+					Color: streamColor(streamIdx), Active: !l.Standby && !tStandby, Width: rate, Tip: line, TunnelRole: tRole,
 				})
 			}
 		}
@@ -423,11 +433,14 @@ func nodeTip(a *nodeAcc, nStreams int) string {
 	return b.String()
 }
 
-// legLine is one incident-leg detail line: stream, R[idx], state, direction,
-// transport (type + id), hop rtt, route rtt, and the leg's cumulative ↑/↓ bytes
-// with live rate. Shown in the endpoint nodes' tooltips (the engine hovers
-// points, not links) and carried on the link's own Tip.
-func legLine(streamIdx int, l Leg, tpID, to, tpType string, hopRTT float64) string {
+// legLine is one incident-leg detail line: stream (with the TUNNEL's own role
+// when the client labeled it), R[idx], the LEG's state, direction, transport
+// (type + id), hop rtt, route rtt, and the leg's cumulative ↑/↓ bytes with live
+// rate. The two states are kept apart on purpose: "s3[standby] R[0] active"
+// is a leg striping normally inside a tunnel that carries no streams. Shown in
+// the endpoint nodes' tooltips (the engine hovers points, not links) and carried
+// on the link's own Tip.
+func legLine(streamIdx int, tRole string, l Leg, tpID, to, tpType string, hopRTT float64) string {
 	state := "active"
 	if l.Standby {
 		state = "standby"
@@ -440,9 +453,13 @@ func legLine(streamIdx int, l Leg, tpID, to, tpType string, hopRTT float64) stri
 	if tpID != "" {
 		tp += " " + tpID
 	}
+	role := ""
+	if tRole != "" {
+		role = "[" + tRole + "]"
+	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "s%d R[%d] %s %s · %s · hop %s · route %s · ↑%s(%s) ↓%s(%s)",
-		streamIdx, l.Index, state, dir, tp,
+	fmt.Fprintf(&b, "s%d%s R[%d] %s %s · %s · hop %s · route %s · ↑%s(%s) ↓%s(%s)",
+		streamIdx, role, l.Index, state, dir, tp,
 		tpRTT(hopRTT), routeRTTCompact(l.RouteLatencyMS),
 		compactBytes(l.SentBytes), compactRate(l.GoodputUpBps),
 		compactBytes(l.RecvBytes), compactRate(l.GoodputDownBps))

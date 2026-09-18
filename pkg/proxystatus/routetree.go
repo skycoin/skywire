@@ -40,15 +40,64 @@ import (
 	"github.com/0magnet/bitree"
 )
 
-// Route-state glyphs. The caller supplies them into the left annotation; a
-// surface's StyleCell colors active vs standby by detecting which glyph is
-// present, so no "active"/"standby" word ever appears in the tree.
+// Route-state glyphs, used at BOTH multiplexing levels and colored by each
+// surface's StyleCell by detecting which glyph is present:
+//
+//   - On a LEG's left annotation the glyph stands alone — that leg's own state
+//     within its route group (● striping / ○ parked), no state word.
+//   - On a STREAM-boundary header the glyph is followed by the TUNNEL's role
+//     word (Tunnel.Role: "● active" / "○ standby"), because the tunnel's own
+//     state is a DIFFERENT fact from its legs' — a standby tunnel's single leg
+//     is leg-active inside its own group, which is why a page that drew only
+//     leg glyphs showed every tunnel as active.
 const (
 	// GlyphActive marks an alive, in-rotation route.
 	GlyphActive = "●"
 	// GlyphStandby marks an alive but standby (warm spare) route.
 	GlyphStandby = "○"
 )
+
+// Tunnel.Role values, as the dialing app labels a route group (pkg/skysocks
+// TunnelRoleActive / TunnelRoleStandby). An empty or unrecognized role is
+// unlabeled — a single-tunnel session or a route group belonging to something
+// else — and renders with no role word at all.
+const (
+	// RoleActive is a tunnel the picker may put streams on.
+	RoleActive = "active"
+	// RoleStandby is a tunnel held open, kept alive and measured, carrying
+	// nothing, so it can be switched in without a route setup.
+	RoleStandby = "standby"
+)
+
+// tunnelRole normalizes a Tunnel.Role for comparison; "" for unlabeled.
+func tunnelRole(role string) string {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case RoleActive:
+		return RoleActive
+	case RoleStandby:
+		return RoleStandby
+	default:
+		return ""
+	}
+}
+
+// TunnelStandby reports whether a tunnel is labeled standby — held open but
+// carrying no streams. Exported so the route graph (and any other renderer)
+// rules on the tunnel's own state the same way the tree does.
+func TunnelStandby(t Tunnel) bool { return tunnelRole(t.Role) == RoleStandby }
+
+// tunnelRoleLabel renders a tunnel's role for the stream-header line: the state
+// glyph plus the role word ("● active" / "○ standby"), or "" when unlabeled.
+func tunnelRoleLabel(role string) string {
+	switch tunnelRole(role) {
+	case RoleActive:
+		return GlyphActive + " " + RoleActive
+	case RoleStandby:
+		return GlyphStandby + " " + RoleStandby
+	default:
+		return ""
+	}
+}
 
 // The two route-multiplexing LAYERS are made visually distinct in the tree:
 //
@@ -149,9 +198,11 @@ func treeSrc(snap Snapshot) string {
 // kind of node than a leg/hop. Its label is marked with StreamHeaderGlyph so a
 // renderer can style it as a stream header (the page gives it the stream's
 // accent + a badge; the terminal shows the glyph) and names the stream index,
-// its packet-level leg count, and whether packet mux is on. It carries no left
+// THIS TUNNEL'S OWN ROLE (● active / ○ standby, from Tunnel.Role — the only
+// place the tunnel's state is shown, since its legs carry leg-level state), its
+// packet-level leg count, and whether packet mux is on. It carries no left
 // summary and no hop chain, so it reads plainly as a layer boundary above the
-// legs that follow it.
+// legs that follow it. An unlabeled tunnel (empty Role) shows no role segment.
 func streamHeaderNode(t Tunnel, nLegs int) *bitree.Node {
 	legWord := "legs"
 	if nLegs == 1 {
@@ -161,7 +212,12 @@ func streamHeaderNode(t Tunnel, nLegs int) *bitree.Node {
 	if t.MuxEnabled {
 		mux = "mux on"
 	}
-	return &bitree.Node{Label: fmt.Sprintf("%s stream %d · %d %s · %s", StreamHeaderGlyph, t.Index, nLegs, legWord, mux)}
+	parts := []string{fmt.Sprintf("%s stream %d", StreamHeaderGlyph, t.Index)}
+	if role := tunnelRoleLabel(t.Role); role != "" {
+		parts = append(parts, role)
+	}
+	parts = append(parts, fmt.Sprintf("%d %s", nLegs, legWord), mux)
+	return &bitree.Node{Label: strings.Join(parts, " · ")}
 }
 
 // streamTag is the per-stream accent band prefixed onto a leg's left summary
