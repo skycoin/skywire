@@ -261,6 +261,48 @@ per (set, size, direction) cell, each holding
 the median — the bar swings 2x inside an hour, and only the paired ratio says
 whether a value moved the result or the network did.
 
+**Spending the rig minutes where they pay — `bench/tune`**
+
+A sweep pays the same price for every value of every knob, and three knobs at
+three values is nine runs that still say nothing about how the three interact.
+`bench/tune` spends the same budget as a bandit instead: one arm per (knob,
+value), a Gaussian posterior per arm, and Thompson sampling — each round draws
+one value from each arm's posterior, runs the runner ONCE at the argmax with
+every other knob held at its incumbent (that knob's posterior-mean-best value so
+far; a knob never yet measured is simply left out, so the app keeps its compiled
+default), and updates that one arm. The knob under test rotates round-robin.
+
+```
+go run ./bench/tune -exit <exit> -out bench/2026-09-18/<commit> -pins $S/pins \
+    -runner run-mux.sh -trials 2 -rounds 12 -env 'TUNNELS=2 LEGS=' \
+    -args 'http://127.0.0.1:18080 "<order>"' \
+    -objective 'mux-tunnels-2/50up:ratio,mux-tunnels-2/10up:ratio' \
+    -knobs 'upload.chunk_bytes=1MiB,2MiB,4MiB;upload.concurrency=2,4,8;chunk.max_bytes=2MiB,4MiB,8MiB'
+```
+
+The objective is the geometric mean of the named cells' MEDIAN PAIRED RATIOS —
+the same verdict the sweep table's ratio column carries, for the same reason,
+and geometric so a proportional loss in the 10 MB cell costs what a proportional
+gain in the 50 MB cell pays. A cell with no paired file falls back to that
+cell's median goodput; a run that produced no cell at all (the rig dropped, the
+set went INVALID) is a MISSING observation and updates nothing — never a zero,
+which would retire a value on one bad night. Each round runs into
+`<out>/tune/r<round>-<knob>=<value>/` with the campaign's `paired-ref.txt`
+copied in, exactly as a sweep value gets it: the reference is the control and
+has to be the same route in every round or the rounds are not comparable.
+`-route-knobs '--ecf-max-window=4MiB,8MiB,16MiB'` puts router flags on the same
+grid, through `ROUTE_SETTINGS`.
+
+The output is `<out>/tune/tune.tsv` (round, knob, value, the settings applied,
+the objective and every cell that fed it), `<out>/tune/incumbent.txt` (a
+`SETTINGS=` line to paste into the campaign) and a table per knob: value, n,
+mean, ±stderr, and which value the posterior currently calls best. Read n first
+— a bandit deliberately stops paying for a losing value, so a row with n=1 has
+not been ruled out, it has been given less of the budget, and only the arms with n≥3 and a
+stderr well inside the gap between them have said anything. The incumbent is a
+place to point a campaign, not a verdict: the verdict is still a full run under
+`bench/verdict.sh`.
+
 ## 3. The work, in order, each step judged by the rig
 
 ### 3.1 Bound what is in flight per leg
