@@ -164,6 +164,13 @@ func (c *Client) maybePromote() {
 	// decision ahead of the failover. The retire is once-only, so this costs a
 	// map lookup when there is nothing to do.
 	c.sweepClosedTunnels()
+	if setPoolFreeze() {
+		// pool.freeze: no discretionary swap and no audition while the
+		// operator holds the active set still. The sweep above still runs — a
+		// dead tunnel is not part of any set — and the failover promote in
+		// retireTunnel is untouched, so a frozen client still heals.
+		return
+	}
 	now := time.Now()
 	active, standby := c.tunnelCandidates(now)
 	if len(active) == 0 || len(standby) == 0 {

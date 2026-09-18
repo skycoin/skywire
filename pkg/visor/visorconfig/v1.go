@@ -100,6 +100,14 @@ type V1 struct {
 	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
 	MemoryLimit      string `json:"memory_limit,omitempty"` // Go memory limit (e.g., "256MiB", "auto" for 60% of available RAM)
 
+	// AppSettings holds the live tuning knobs an operator set per app
+	// (`skywire cli proxy settings`), so they survive a visor restart the way
+	// routing.mux_fec does. The visor restores them into the proc manager at
+	// boot and the app pulls them on its first tick; a `--reset` removes the
+	// entry. Absent on every config written before it existed, which means
+	// exactly "no knob was ever set".
+	AppSettings map[string]AppSettingsEntry `json:"app_settings,omitempty"`
+
 	Hypervisor *HypervisorConfig `json:"hypervisor,omitempty"`
 }
 
@@ -1041,3 +1049,42 @@ const V1Name = V111Name
 //Remove previous version parsing compatibility - visor no longer updates it's own config
 // Config will be updated on new version via script provided with the installation
 */
+
+// AppSettingsEntry is one app's persisted live knobs: the numeric payloads and
+// the list ones, exactly as pkg/skysocks/skysettings encodes them. The config
+// carries them without knowing what any of them mean — a knob added to the
+// client needs no change here.
+type AppSettingsEntry struct {
+	Values map[string]int64  `json:"values,omitempty"`
+	Text   map[string]string `json:"text,omitempty"`
+}
+
+// UpdateAppSettings replaces the persisted per-app live knobs wholesale and
+// flushes. An app with neither map is dropped, so a reset leaves no husk.
+func (v1 *V1) UpdateAppSettings(vals map[string]map[string]int64, text map[string]map[string]string) error {
+	v1.mu.Lock()
+	next := make(map[string]AppSettingsEntry, len(vals)+len(text))
+	for app, v := range vals {
+		if len(v) == 0 {
+			continue
+		}
+		e := next[app]
+		e.Values = v
+		next[app] = e
+	}
+	for app, t := range text {
+		if len(t) == 0 {
+			continue
+		}
+		e := next[app]
+		e.Text = t
+		next[app] = e
+	}
+	if len(next) == 0 {
+		next = nil
+	}
+	v1.AppSettings = next
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}

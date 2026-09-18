@@ -111,10 +111,13 @@ type API interface {
 	SetAppDNS(appName string, dnsaddr string) error
 	DoCustomSetting(appName string, customSetting map[string]any) error
 	SetAppArgs(appName string, args []string) error
-	// GetAppSettings / SetAppSettings carry the live tuning knobs held for a
-	// running app (process-scoped, pulled by the app; see api_app_settings.go).
+	// GetAppSettings / SetAppSettings carry the live tuning knobs held for an
+	// app (pulled by the app, persisted by the visor; see api_app_settings.go).
 	GetAppSettings(appName string) (AppSettings, error)
-	SetAppSettings(appName string, vals map[string]int64) (AppSettings, error)
+	SetAppSettings(appName string, vals map[string]int64, text map[string]string) (AppSettings, error)
+	// CutAppTunnel closes exactly one of an app's tunnels — the route group
+	// whose port is rgPort — and lets the app's own pool replace it.
+	CutAppTunnel(appName string, rgPort uint16) (uint64, error)
 	SetAppEnv(appName, key, value string) error
 	SetAppEnvBatch(appName string, env map[string]string) error
 	SetAppEnvFull(appName string, env []string) error

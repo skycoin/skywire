@@ -59,9 +59,13 @@ away (5 s by default).
 Values take units: bytes as 8MiB / 512KiB / a plain byte count, durations in Go
 syntax (250ms, 5s, 4m), ratios and counts as plain numbers.
 
-Nothing here is persisted: a knob lives for as long as the app process does, so
-a restart is always a return to the compiled defaults. The visor-wide router
-knobs are the separate 'skywire cli route settings'.
+Knobs PERSIST: they outlive 'proxy stop' and the app restart it implies, and
+the visor writes them to its config so they outlive the visor too. --reset is
+the one thing that forgets one. The visor-wide router knobs are the separate
+'skywire cli route settings'.
+
+A LIST knob (pool.exclude_pks, pool.require_tp_types) takes comma-separated
+tokens; an empty value clears it.
 
 Examples:
   skywire cli proxy settings
@@ -81,54 +85,81 @@ Examples:
 		}
 
 		if len(args) > 0 || settingsReset {
-			next, err := applySettingArgs(cur.Values, args, settingsReset)
+			next, nextText, err := applySettingArgs(cur.Values, cur.Text, args, settingsReset)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
-			if cur, err = rpcClient.SetAppSettings(settingsApp, next); err != nil {
+			if cur, err = rpcClient.SetAppSettings(settingsApp, next, nextText); err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
 		}
-		internal.Catch(cmd.Flags(), cliout.Print(cmd, settingsRows(settingsApp, cur.Values, cur.Version, cur.Applied)))
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, settingsRows(settingsApp, cur.Values, cur.Text, cur.Version, cur.Applied)))
 	},
 }
 
 // applySettingArgs folds `key=value` arguments (or, under reset, bare keys)
-// into the value set the visor already holds. A reset with no keys clears
+// into the value sets the visor already holds. A reset with no keys clears
 // everything; with keys it drops exactly those.
 //
+// The LIST knobs (pool.exclude_pks, pool.require_tp_types) go into the second
+// map: their payload is a token set rather than an int64, and the split is
+// what keeps the wire honest about which is which.
+//
 // Split out of the command body so the parsing is testable without an RPC.
-func applySettingArgs(current map[string]int64, args []string, reset bool) (map[string]int64, error) {
+func applySettingArgs(current map[string]int64, currentText map[string]string, args []string, reset bool) (map[string]int64, map[string]string, error) {
 	next := make(map[string]int64, len(current)+len(args))
 	for k, v := range current {
 		next[k] = v
 	}
+	nextText := make(map[string]string, len(currentText)+len(args))
+	for k, v := range currentText {
+		nextText[k] = v
+	}
 	if reset && len(args) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	for _, a := range args {
 		name, raw, ok := strings.Cut(a, "=")
 		name = strings.TrimSpace(name)
 		if reset {
 			if ok {
-				return nil, fmt.Errorf("--reset takes bare knob names, got %q", a)
+				return nil, nil, fmt.Errorf("--reset takes bare knob names, got %q", a)
 			}
 			if !knownSetting(name) {
-				return nil, fmt.Errorf("unknown setting %q", name)
+				return nil, nil, fmt.Errorf("unknown setting %q", name)
 			}
 			delete(next, name)
+			delete(nextText, name)
 			continue
 		}
 		if !ok {
-			return nil, fmt.Errorf("expected key=value, got %q", a)
+			return nil, nil, fmt.Errorf("expected key=value, got %q", a)
+		}
+		if skysettings.IsList(name) {
+			v, err := skysettings.ParseList(name, raw)
+			if err != nil {
+				return nil, nil, err
+			}
+			if v == "" {
+				delete(nextText, name) // an empty list IS the default
+				continue
+			}
+			nextText[name] = v
+			continue
 		}
 		v, err := skysettings.Parse(name, raw)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		next[name] = v
 	}
-	return next, nil
+	if len(next) == 0 {
+		next = nil
+	}
+	if len(nextText) == 0 {
+		nextText = nil
+	}
+	return next, nextText, nil
 }
 
 func knownSetting(name string) bool {
@@ -143,7 +174,7 @@ func knownSetting(name string) bool {
 // settingsRows renders the catalog against the values the visor holds. A knob
 // the visor does not name is at its compiled default; one it names is pending
 // until the app reports a version that carries it.
-func settingsRows(app string, vals map[string]int64, version, applied uint64) cliproxy.Settings {
+func settingsRows(app string, vals map[string]int64, text map[string]string, version, applied uint64) cliproxy.Settings {
 	out := cliproxy.Settings{App: app, Version: version, Applied: applied}
 	for _, d := range skysettings.Catalog() {
 		row := cliproxy.SettingsEntry{
@@ -153,6 +184,21 @@ func settingsRows(app string, vals map[string]int64, version, applied uint64) cl
 			Kind:    string(d.Kind),
 			State:   "default",
 			Doc:     d.Doc,
+		}
+		if d.Kind == skysettings.KindList {
+			// A list knob's default is the empty set, and its value comes from
+			// the visor's text map — never from this process's own registry,
+			// which the CLI never applies anything to.
+			row.Value, row.Default = "", ""
+			if v, ok := text[d.Name]; ok {
+				row.Value = v
+				row.State = "pending"
+				if applied >= version {
+					row.State = "applied"
+				}
+			}
+			out.Knobs = append(out.Knobs, row)
+			continue
 		}
 		if v, ok := vals[d.Name]; ok {
 			row.Value = skysettings.Format(d.Name, v)

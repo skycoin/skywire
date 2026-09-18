@@ -314,8 +314,13 @@ func (proxyDefaultAPI) GetAppSettings(_ string) (AppSettings, error) {
 	return AppSettings{}, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) SetAppSettings(_ string, _ map[string]int64) (AppSettings, error) {
+func (proxyDefaultAPI) SetAppSettings(_ string, _ map[string]int64, _ map[string]string) (AppSettings, error) {
 	return AppSettings{}, ErrProxyNotSupported
+}
+
+// CutAppTunnel implements API.
+func (proxyDefaultAPI) CutAppTunnel(_ string, _ uint16) (uint64, error) {
+	return 0, ErrProxyNotSupported
 }
 
 func (proxyDefaultAPI) SetAppEnv(_ string, _ string, _ string) error {

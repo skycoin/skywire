@@ -73,16 +73,22 @@ type ProcManager interface {
 	// ProxyStatus returns the visor-built status snapshot for appName. ok is
 	// false when no builder is wired (wasm/tests) or it has no data for the app.
 	ProxyStatus(appName string) (proxystatus.Snapshot, bool)
-	// SetAppSettings replaces the live tuning knobs held for a running app and
-	// returns the new version. Process-scoped, not persisted; see
-	// app_settings.go.
-	SetAppSettings(appName string, vals map[string]int64) uint64
+	// SetAppSettings replaces the live tuning knobs held for an app — the
+	// numeric map and the list map together — and returns the new version. The
+	// set OUTLIVES the app process (the visor persists it); see app_settings.go.
+	SetAppSettings(appName string, vals map[string]int64, text map[string]string) uint64
 	// AppSettings answers the app POLLING for its knobs, recording the version
-	// it reports having applied. Values are nil when applied is already current.
-	AppSettings(appName string, applied uint64) (map[string]int64, uint64)
+	// and the op sequence it reports having applied. Values are nil when applied
+	// is already current; pending ops are returned on every poll until acked.
+	AppSettings(appName string, applied, opsApplied uint64) (map[string]int64, map[string]string, []AppOp, uint64)
 	// AppSettingsState reports the intended values, their version, and the
 	// version the app last acknowledged — the CLI's pending/applied column.
-	AppSettingsState(appName string) (map[string]int64, uint64, uint64)
+	AppSettingsState(appName string) (map[string]int64, map[string]string, uint64, uint64)
+	// QueueAppOp queues one edge-triggered instruction (AppOpCutTunnel) for an
+	// app, returning its sequence. The app applies it on its next pull.
+	QueueAppOp(appName, kind string, arg int64) uint64
+	// AllAppSettings returns every app's intended set, for the visor to persist.
+	AllAppSettings() (map[string]map[string]int64, map[string]map[string]string)
 }
 
 // procManager manages skywire applications. It implements `ProcManager`.
@@ -423,9 +429,12 @@ func (m *procManager) Stop(name string) error {
 	if err != nil {
 		return err
 	}
-	// Live tuning knobs are process-scoped: a stopped app returns to the
-	// compiled defaults rather than silently inheriting a bench sweep.
-	m.settings.clear(name)
+	// The live tuning knobs deliberately SURVIVE the stop. They used to be
+	// cleared here, which made every `proxy stop` (and every app restart the
+	// launcher does on its own) a silent reset: a sweep the operator set was
+	// gone the moment the app bounced, and the bench grew a post-warm hook
+	// whose whole job was re-applying it. A knob is set on the app, not on one
+	// run of its process — `proxy settings --reset` forgets one.
 
 	return p.Stop()
 }
