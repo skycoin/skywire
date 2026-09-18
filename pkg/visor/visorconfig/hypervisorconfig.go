@@ -160,6 +160,12 @@ type WasmServeConf struct {
 	// VOrigin is the public origin of the visor app V (e.g.
 	// "https://theskywirenetwork.net") that B's bootstrap postMessages to — used
 	// only with BrowseOriginAddr behind a proxy. Empty = derive from Addr.
+	//
+	// Comma-separated for several apps sharing one browse domain, or "*" to
+	// accept any parent. It is the only thing deciding who may feed content
+	// into a browse origin, so "*" is a decision: an uninvited page cannot
+	// reach a visitor's browsing state (storage is partitioned by top-level
+	// site) but it can serve its own content from a subdomain of yours.
 	VOrigin string `json:"browse_v_origin,omitempty"`
 }
 
