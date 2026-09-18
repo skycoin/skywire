@@ -12,6 +12,7 @@
 package emu
 
 import (
+	"container/heap"
 	"errors"
 	"math/rand"
 	"sync"
@@ -86,6 +87,9 @@ type link struct {
 	room     *sync.Cond
 	queued   int64
 	nextFree time.Time
+	seq      uint64
+	arrivals inflightHeap
+	wake     chan struct{}
 
 	cut atomic.Bool
 
@@ -111,10 +115,122 @@ func newLink(cfg LinkConfig, dst *inbox) *link {
 		cfg:    cfg,
 		rnd:    rand.New(rand.NewSource(cfg.Seed)), //nolint:gosec // G404: emulation, not cryptography
 		dst:    dst,
+		wake:   make(chan struct{}, 1),
 		closed: make(chan struct{}),
 	}
 	l.room = sync.NewCond(&l.mu)
+	go l.deliver()
 	return l
+}
+
+// inflight is one frame between its departure and its arrival.
+type inflight struct {
+	at   time.Time
+	seq  uint64
+	b    []byte
+	lost bool
+}
+
+// inflightHeap orders frames by arrival instant, ties broken by send order.
+//
+// Delivery used to be one time.AfterFunc per frame. On a direction with no
+// delay and no jitter every one of those timers is already expired when it is
+// created, so N of them become runnable at once and the runtime ran their
+// callbacks — the pushes into the peer's inbox — in whatever order it liked:
+// a bare NewPair with no impairment configured at all reordered 64 back-to-back
+// frames in 20 runs out of 20, which is what made
+// TestTransitWriteStillRelaysInOrder fail on CI. One goroutine draining this
+// heap delivers in arrival order instead, so a direction reorders only when
+// ReorderPct, Jitter or a rate limit says it does.
+type inflightHeap []*inflight
+
+func (h inflightHeap) Len() int      { return len(h) }
+func (h inflightHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+func (h inflightHeap) Less(i, j int) bool {
+	if h[i].at.Equal(h[j].at) {
+		return h[i].seq < h[j].seq
+	}
+	return h[i].at.Before(h[j].at)
+}
+
+func (h *inflightHeap) Push(x any) { *h = append(*h, x.(*inflight)) } //nolint:forcetypeassert
+
+func (h *inflightHeap) Pop() any {
+	old := *h
+	n := len(old)
+	it := old[n-1]
+	old[n-1] = nil
+	*h = old[:n-1]
+	return it
+}
+
+// schedule queues a frame for delivery and nudges the delivery goroutine.
+func (l *link) schedule(f *inflight) {
+	l.mu.Lock()
+	heap.Push(&l.arrivals, f)
+	l.mu.Unlock()
+	select {
+	case l.wake <- struct{}{}:
+	default:
+	}
+}
+
+// deliver is the direction's single delivery goroutine: it hands the peer's
+// inbox whichever in-flight frame is due next, and sleeps until the one after
+// that is due.
+func (l *link) deliver() {
+	for {
+		l.mu.Lock()
+		var (
+			due  *inflight
+			wait time.Duration
+		)
+		if len(l.arrivals) > 0 {
+			if d := time.Until(l.arrivals[0].at); d <= 0 {
+				due, _ = heap.Pop(&l.arrivals).(*inflight)
+			} else {
+				wait = d
+			}
+		}
+		l.mu.Unlock()
+
+		if due != nil {
+			l.land(due)
+			continue
+		}
+		if wait <= 0 {
+			// Nothing in flight: park until a frame is scheduled or the
+			// direction closes.
+			wait = time.Hour
+		}
+		t := time.NewTimer(wait)
+		select {
+		case <-l.closed:
+			t.Stop()
+			return
+		case <-l.wake:
+		case <-t.C:
+		}
+		t.Stop()
+	}
+}
+
+// land is one frame arriving — or not, if the direction lost or cut it.
+func (l *link) land(f *inflight) {
+	n := uint64(len(f.b))
+	if f.lost || l.cut.Load() {
+		l.droppedFrames.Add(1)
+		l.droppedBytes.Add(n)
+		return
+	}
+	select {
+	case <-l.closed:
+		return
+	default:
+	}
+	l.deliveredFrames.Add(1)
+	l.deliveredBytes.Add(n)
+	l.dst.push(f.b)
 }
 
 // Cut makes the direction black-hole every frame — the one already in
@@ -224,6 +340,11 @@ func (l *link) send(b []byte, deadline time.Time) error {
 	}
 	departure := l.nextFree.Add(service)
 	l.nextFree = departure
+	// The send order is fixed here, under the same lock that orders
+	// departures, so it can break ties between frames that arrive in the
+	// same instant.
+	l.seq++
+	seq := l.seq
 	l.mu.Unlock()
 
 	lost := cfg.LossPct > 0 && l.roll() < cfg.LossPct
@@ -243,21 +364,7 @@ func (l *link) send(b []byte, deadline time.Time) error {
 		l.room.Broadcast()
 		l.mu.Unlock()
 	})
-	time.AfterFunc(time.Until(arrival), func() {
-		if lost || l.cut.Load() {
-			l.droppedFrames.Add(1)
-			l.droppedBytes.Add(uint64(n)) //nolint:gosec
-			return
-		}
-		select {
-		case <-l.closed:
-			return
-		default:
-		}
-		l.deliveredFrames.Add(1)
-		l.deliveredBytes.Add(uint64(n)) //nolint:gosec
-		l.dst.push(frame)
-	})
+	l.schedule(&inflight{at: arrival, seq: seq, b: frame, lost: lost})
 	return nil
 }
 
