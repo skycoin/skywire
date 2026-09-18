@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -106,11 +107,28 @@ type BreakerState struct {
 	ProbeInFlight    bool         `json:"probe_in_flight"`
 }
 
-// Circuit breaker tuning. Kept as constants for simplicity — can be
-// promoted to CollectorConfig if tests need to vary them.
+// Circuit breaker defaults. These are what the setup.circuit_* knobs in
+// the router settings catalog ship with; the live values are read through
+// the accessors below, so an operator can retune the breaker — or turn it
+// back on — without a restart.
 const (
-	// circuitFailureThreshold is the number of consecutive failures
-	// to a destination that trips the breaker to OPEN.
+	// CircuitBreakerEnabledDefault is OFF.
+	//
+	// The breaker is a per-destination lockout owned by whichever route
+	// setup node served the request, and that node cannot see what the
+	// SOURCE visor already has: on 2026-09-18 a visor holding 32 live
+	// route groups to one exit was refused every further setup to it for
+	// minutes, and a fresh proxy start got 0 route groups for 180s. The
+	// deployment RSN's own counters at the time read 481 failures of
+	// which 457 were circuit_open — the breaker's refusals, not route
+	// setups that were tried and failed, and they had evicted the real
+	// failures out of the diagnostic ring. A setup that is attempted and
+	// fails costs one id-reservation timeout; a breaker that opens on a
+	// misattributed failure costs every caller of that destination. Off
+	// is the safer default.
+	CircuitBreakerEnabledDefault = false
+	// CircuitFailureThresholdDefault is the number of consecutive
+	// failures to a destination that trips the breaker to OPEN.
 	//
 	// Lowered from 5 → 3 after the 1.3.59-era observation that
 	// dmsg-error-202 (intermediate's stale dmsg session) consistently
@@ -118,9 +136,9 @@ const (
 	// two setup attempts on doomed routes. With the open duration
 	// tuned to dmsg-session-refresh cadence (below), tripping earlier
 	// is the right balance.
-	circuitFailureThreshold = 3
-	// circuitOpenDuration is how long the breaker stays OPEN before
-	// transitioning to HALF_OPEN to allow a probe setup.
+	CircuitFailureThresholdDefault = 3
+	// CircuitOpenDurationDefault is how long the breaker stays OPEN
+	// before transitioning to HALF_OPEN to allow a probe setup.
 	//
 	// Bumped from 60s → 5min to align with dmsg's own session-refresh
 	// cadence (~5min). dmsg-error-202 means a visor is registered in
@@ -128,24 +146,45 @@ const (
 	// session re-publishes itself on a ~5min cycle, so retrying inside
 	// that window is doomed to hit the same stale state. 60s let
 	// half-open probes burn through the same failure on every cycle.
-	circuitOpenDuration = 5 * time.Minute
-	// circuitMaxOpenDuration is the maximum time a breaker can stay
-	// in the open/half_open cycle before being force-reset to closed.
-	// This prevents permanent lockout when the RSN's own DMSG sessions
-	// are stale but the destination is actually alive — fresh traffic
-	// will establish new DMSG paths.
+	CircuitOpenDurationDefault = 5 * time.Minute
+	// CircuitMaxOpenDurationDefault is the maximum time a breaker can
+	// stay in the open/half_open cycle before being force-reset to
+	// closed. This prevents permanent lockout when the RSN's own DMSG
+	// sessions are stale but the destination is actually alive — fresh
+	// traffic will establish new DMSG paths.
 	//
 	// Bumped from 10min → 30min in concert with the longer open
 	// duration; with 5min between half-open probes, 10min is only two
 	// retry windows which is tight for a genuinely-down peer waiting
 	// to come back. 30min gives ~6 half-open probes before force-reset.
-	circuitMaxOpenDuration = 30 * time.Minute
-	// circuitFailureWindow bounds how long consecutive failures must
-	// occur within to count toward the threshold. Failures older than
-	// this window are considered stale and the consecutive counter is
-	// reset on the next record.
-	circuitFailureWindow = 5 * time.Minute
+	CircuitMaxOpenDurationDefault = 30 * time.Minute
+	// CircuitFailureWindowDefault bounds how long consecutive failures
+	// must occur within to count toward the threshold. Failures older
+	// than this window are considered stale and the consecutive counter
+	// is reset on the next record.
+	CircuitFailureWindowDefault = 5 * time.Minute
 )
+
+// circuitEnabled reports whether the per-destination breaker may open at
+// all. When it is off, failures are still classified, counted and kept in
+// the failure ring — only the lockout is gone: no breaker ever opens, no
+// caller is ever refused with "circuit open", and the half-open probe slot
+// is never taken.
+func circuitEnabled() bool { return routersettings.SetupCircuitBreaker.Bool() }
+
+// circuitFailureThreshold is the live setup.circuit_fail_threshold.
+func circuitFailureThreshold() int { return routersettings.SetupCircuitFailThreshold.Int() }
+
+// circuitOpenDuration is the live setup.circuit_open_duration.
+func circuitOpenDuration() time.Duration { return routersettings.SetupCircuitOpenDuration.Duration() }
+
+// circuitMaxOpenDuration is the live setup.circuit_max_open_duration.
+func circuitMaxOpenDuration() time.Duration {
+	return routersettings.SetupCircuitMaxOpenDuration.Duration()
+}
+
+// circuitFailureWindow is the live setup.circuit_fail_window.
+func circuitFailureWindow() time.Duration { return routersettings.SetupCircuitFailWindow.Duration() }
 
 // circuitBreaker tracks per-destination consecutive-failure state
 // separately from DestStat counters so the breaker's view isn't
@@ -407,6 +446,12 @@ func (c *Collector) allowPK(pubKey cipher.PubKey, held *ProbeHolder) (bool, stri
 	if pk == "" {
 		return true, ""
 	}
+	// setup.circuit_breaker off: nobody is ever refused and no probe slot
+	// is taken, so every caller reaches the dial path and finds out for
+	// itself. Failures are still classified and counted below.
+	if !circuitEnabled() {
+		return true, ""
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -417,7 +462,7 @@ func (c *Collector) allowPK(pubKey cipher.PubKey, held *ProbeHolder) (bool, stri
 	// Force-reset after circuitMaxOpenDuration — the destination may
 	// be alive but the RSN's own DMSG sessions are stale. Letting
 	// fresh traffic through will establish new DMSG paths.
-	if !br.firstOpenedAt.IsZero() && time.Since(br.firstOpenedAt) >= circuitMaxOpenDuration {
+	if !br.firstOpenedAt.IsZero() && time.Since(br.firstOpenedAt) >= circuitMaxOpenDuration() {
 		br.state = CircuitClosed
 		br.openedAt = time.Time{}
 		br.firstOpenedAt = time.Time{}
@@ -430,7 +475,7 @@ func (c *Collector) allowPK(pubKey cipher.PubKey, held *ProbeHolder) (bool, stri
 		return true, ""
 	}
 	if br.state == CircuitOpen {
-		if time.Since(br.openedAt) < circuitOpenDuration {
+		if time.Since(br.openedAt) < circuitOpenDuration() {
 			return false, "circuit open: " + pk + " unreachable"
 		}
 		// Time's up — transition to half-open and let THIS caller be the
@@ -767,6 +812,12 @@ func (c *Collector) recordCircuitFailureLocked(pk string) {
 	if pk == "" {
 		return
 	}
+	// setup.circuit_breaker off: no breaker ever opens. The failure is
+	// still classified, attributed and counted by the caller — only the
+	// lockout is gone.
+	if !circuitEnabled() {
+		return
+	}
 	br, ok := c.breakers[pk]
 	if !ok {
 		// Destination cap was reached and touchDest returned nil;
@@ -776,7 +827,7 @@ func (c *Collector) recordCircuitFailureLocked(pk string) {
 	now := time.Now()
 	// Reset the consecutive counter if the oldest failure is outside
 	// the window — breaker only fires on a burst, not on a slow trickle.
-	if br.consecutiveFails > 0 && now.Sub(br.firstFailAt) > circuitFailureWindow {
+	if br.consecutiveFails > 0 && now.Sub(br.firstFailAt) > circuitFailureWindow() {
 		br.consecutiveFails = 0
 	}
 	if br.consecutiveFails == 0 {
@@ -797,7 +848,7 @@ func (c *Collector) recordCircuitFailureLocked(pk string) {
 		return
 	}
 	// Closed → trip to open once the threshold is reached.
-	if br.state == CircuitClosed && br.consecutiveFails >= circuitFailureThreshold {
+	if br.state == CircuitClosed && br.consecutiveFails >= circuitFailureThreshold() {
 		br.state = CircuitOpen
 		br.openedAt = now
 		br.firstOpenedAt = now
