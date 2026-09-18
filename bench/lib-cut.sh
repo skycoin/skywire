@@ -52,6 +52,15 @@ CUT_REF_FENCE=${CUT_REF_FENCE:-1}
 CUT_FENCE=${CUT_FENCE:-auto}
 CUT_PCT=${CUT_PCT:-40}
 CUT_AFTER_S=${CUT_AFTER_S:-3}
+# A cut that lands with CUT_LATE_PCT or more of the object already delivered
+# measured nothing: no traffic is left for the recovery to carry, so an empty
+# ct_ttfb is a property of the cut's timing and not of the router. Such a row
+# reports ct_ttfb as `late` — INVALID, not a failure. CUT_POLL is the download
+# poll cadence; the progress signal is the size of curl's output file and the
+# bytes reach it in bursts, so sampling it coarsely is how a 40 % trigger gets
+# missed entirely (bench/run-standby.sh cut_deadline).
+CUT_LATE_PCT=${CUT_LATE_PCT:-90}
+CUT_POLL=${CUT_POLL:-0.1}
 CUT_HERE=${CUT_HERE:-$(dirname "$0")}
 CLI=${CLI:-/home/d0mo/go/bin/skywire}
 # cut_transfer reads these lowercase names; a caller that sets them itself (as
@@ -299,7 +308,7 @@ cut_transfer() {
 	_clabel=$1; _cdir=$2; _csize=$3
 	w="$tmp/row"; rm -rf "$w"; mkdir -p "$w"
 	want_bytes=$((_csize * cut_pct / 100))
-	poll=0.25
+	poll=$CUT_POLL
 	if [ "$_cdir" = up ]; then
 		poll=1; tp_sent_all > "$tmp/base" 2>/dev/null; : > "$tmp/last"
 	fi
@@ -347,4 +356,13 @@ cut_transfer() {
 	fi
 	ct_ok=0; [ -n "$_cwant" ] && [ "$_cwant" = "$_chave" ] && ct_ok=1
 	ct_cut_ok=$cut_ok
+	# the tail-of-the-object case: the row timed the cut, not the recovery.
+	# Downloads only — an upload's progress is the carriers' wire counters, which
+	# count more than the payload and cannot be read as a fraction of it.
+	ct_pct_at_cut=$((ct_bytes_at_cut * 100 / _csize))
+	ct_ttfb_measured=$ct_ttfb
+	if [ "$_cdir" = down ] && [ "$ct_pct_at_cut" -ge "$CUT_LATE_PCT" ]; then
+		ct_ttfb=late
+		echo "$set_name $_clabel: the cut landed at ${ct_pct_at_cut}% of the object (>= ${CUT_LATE_PCT}%) — too late to measure recovery, ttfb recorded as 'late'"
+	fi
 }
