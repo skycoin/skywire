@@ -111,6 +111,13 @@ type Settings struct {
 	SBDTrialLoss       float64 `json:"sbd_trial_loss"`
 	SBDBackoff         string  `json:"sbd_backoff"`
 	SBDMinEvidenceRate int64   `json:"sbd_min_evidence_rate"`
+	// ForwardSpill reports whether a forward frame may leave the confined leg when
+	// that leg is at its send window; ForwardSwitchMargin is how much lower a
+	// challenger leg must measure, for two consecutive samples, to take the
+	// direction.
+	ForwardSpill        bool    `json:"forward_spill"`
+	ForwardSwitchMargin float64 `json:"forward_switch_margin"`
+
 	// SBDDemote reports whether a shared-bottleneck ruling may park a leg at all.
 	// False (the default) means rulings are recorded as sbd_ruling mux events and
 	// nothing is demoted.
@@ -125,11 +132,13 @@ func (s Settings) Human(w io.Writer) error {
 		"dead_route_hold: %s\ndead_route_hold_max: %s\nmux_fec: %v\n"+
 		"sbd_min_samples: %d\nsbd_sample_interval: %s\n"+
 		"sbd_trial_window: %s\nsbd_trial_loss: %g\nsbd_backoff: %s\n"+
-		"sbd_min_evidence_rate: %d\nsbd_demote: %v\n",
+		"sbd_min_evidence_rate: %d\nsbd_demote: %v\n"+
+		"forward_spill: %v\nforward_switch_margin: %g\n",
 		s.MinHops, s.ExistingTPOnly, s.ForceLocalRoutes, strings.Join(s.TransportPreference, ","),
 		s.EcfMaxWindowBytes, s.EcfMinWindowBytes, s.EcfWindowMargin,
 		s.SendWindowWaitMax, s.LegParkMinHold, s.DeadRouteHold, s.DeadRouteHoldMax, s.MuxFEC,
 		s.SBDMinSamples, s.SBDSampleInterval,
-		s.SBDTrialWindow, s.SBDTrialLoss, s.SBDBackoff, s.SBDMinEvidenceRate, s.SBDDemote)
+		s.SBDTrialWindow, s.SBDTrialLoss, s.SBDBackoff, s.SBDMinEvidenceRate, s.SBDDemote,
+		s.ForwardSpill, s.ForwardSwitchMargin)
 	return err
 }
