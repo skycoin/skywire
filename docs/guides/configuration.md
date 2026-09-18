@@ -60,6 +60,28 @@ or mac installer, prefer `skywire autoconfig` as above. If you do run
 `skywire cli config gen` there, include the `-p` flag and run it as
 root — and expect the next package update to replace the result.
 
+## Refreshing a config from its SKYENV file
+
+`SKYENV=<file> skywire autoconfig --no-restart` is the way to re-derive a
+JSON config from a conf file without touching systemd. Both autoconfig and
+`cli config gen` read `OUTPUT` from the conf file and write there — an `-o`
+on the command line still wins, and a relative `OUTPUT` resolves against the
+current working directory, exactly as a relative `-o` does — so a
+checkout that keeps its own `skywire.conf` and `skywire-config.json` side by
+side does not need the system paths at all. `--no-restart` leaves the service
+alone, which is what you want whenever something other than systemd owns the
+visor process — a dev loop, a container entrypoint, or an update applied over
+the visor's own dmsgpty session. The regen retains the keys, the app list, the
+resolver settings and the maps the visor persists itself
+(`routing.router_settings`, `launcher.app_settings`), so it is safe to run on
+every start. `scripts/dev-visor-loop.sh` does exactly that before each visor
+start, which makes `./skywire.conf` the source of truth for the dev visor:
+edit it, let the loop restart, and the change is in the JSON.
+
+TODO: the CI e2e visors still build their configs with `config gen` directly
+and so do not pick up conf-file changes the same way; they need the same
+refresh step.
+
 ## Where the rest went
 
 This page is about producing a config. The things you configure with one have
